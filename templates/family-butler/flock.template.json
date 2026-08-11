@@ -153,26 +153,6 @@
       "thinkingLevel": "none"
     },
     {
-      "name": "Grocery Stock Check",
-      "schedule": "0 10 * * 6",
-      "prompt": "It's time for the weekly grocery review:\n1. Check recent grocery orders from the past week\n2. Review the family's typical staples and recurring items\n3. Note anything that was ordered last week that might be running low\n4. Suggest a shopping list for this week based on usual consumption patterns\n\nKeep the list practical — group by category (produce, dairy, pantry, household).\nFlag any items that were on the list last week but not ordered.",
-      "deliverTo": null,
-      "timezone": "Asia/Kolkata",
-      "enabled": true,
-      "model": "claude-sonnet-4-6",
-      "thinkingLevel": "none"
-    },
-    {
-      "name": "Weekly Summary",
-      "schedule": "0 20 * * 0",
-      "prompt": "Prepare the weekly family summary:\n\n## Activity Recap\n1. Orders placed this week — grocery, food delivery, and other services\n2. Approximate spending across all tracked services\n3. Tasks completed and any still pending\n4. Upcoming events and reminders for next week\n\n## Memory Curation\nReview what you learned about the family this week and present memory updates for confirmation:\n\n5. **New patterns detected** — Look through this week's interactions for recurring preferences or habits.\n   For each pattern found, ask: \"I noticed [specific observation, e.g. you ordered organic milk 3 times this week]. Should I remember this as a preference?\"\n   Present each as a yes/no question so the user can confirm or reject.\n\n6. **Stale memory check** — Review stored preferences and memories. Flag any that haven't been referenced or relevant in the last 30 days.\n   For each stale item, ask: \"I have [memory item] saved, but it hasn't come up recently. Should I keep it, update it, or remove it?\"\n\n7. **Memory stats** — End the memory section with a brief summary:\n   - Total memory items stored\n   - New items added this week\n   - Breakdown by category (preferences, routines, dietary, household, etc.)\n\n## Look Ahead\nEnd with a quick preview of next week's schedule and any upcoming deadlines.\n\nFormat as a clear weekly digest. Use sections with headers.\nFor memory curation items, wait for user responses before saving or removing anything.",
-      "deliverTo": null,
-      "timezone": "Asia/Kolkata",
-      "enabled": true,
-      "model": "claude-sonnet-4-6",
-      "thinkingLevel": "none"
-    },
-    {
       "name": "Evening Reminder",
       "schedule": "0 21 * * *",
       "prompt": "Evening check-in for the family:\n1. List any pending items that weren't completed today\n2. Preview tomorrow's calendar — events, appointments, deadlines\n3. Remind about anything time-sensitive for the morning (early meetings, school events, deliveries)\n4. Note any recurring tasks due tomorrow (bills, subscriptions, refills)\n\nKeep it brief and actionable. Only mention items that need attention.",
