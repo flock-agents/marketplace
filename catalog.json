@@ -30,8 +30,8 @@
       "icon": "🍽️",
       "repo": "flock-agents/marketplace",
       "path": "apps/meal-planner",
-      "latestVersion": "1.0.0",
-      "latestTag": "meal-planner-v1.0.0",
+      "latestVersion": "1.0.1",
+      "latestTag": "meal-planner-v1.0.1",
       "minFlockVersion": "0.7.0",
       "publishedAt": "2026-08-11T17:00:00Z",
       "updatedAt": "2026-08-11T17:00:00Z"
