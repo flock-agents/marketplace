@@ -1,0 +1,11 @@
+{
+  "name": "Meal Planner",
+  "type": "fullstack",
+  "access": "private",
+  "buildCommand": "cd frontend && npm install && npm run build",
+  "buildDir": "frontend/dist",
+  "processConfig": {
+    "command": "bun run server/index.ts",
+    "readyPattern": "listening"
+  }
+}

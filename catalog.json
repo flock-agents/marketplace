@@ -18,6 +18,23 @@
       "minFlockVersion": "0.7.0",
       "publishedAt": "2026-08-11T17:00:00Z",
       "updatedAt": "2026-08-11T17:00:00Z"
+    },
+    {
+      "slug": "meal-planner",
+      "type": "app",
+      "name": "Meal Planner",
+      "description": "Plan meals for the week and manage your shopping list",
+      "author": "flock",
+      "category": "lifestyle",
+      "tags": ["meals", "shopping", "planning", "food"],
+      "icon": "🍽️",
+      "repo": "flock-agents/marketplace",
+      "path": "apps/meal-planner",
+      "latestVersion": "1.0.0",
+      "latestTag": "meal-planner-v1.0.0",
+      "minFlockVersion": "0.7.0",
+      "publishedAt": "2026-08-11T17:00:00Z",
+      "updatedAt": "2026-08-11T17:00:00Z"
     }
   ]
 }
