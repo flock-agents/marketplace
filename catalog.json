@@ -1,5 +1,23 @@
 {
   "version": 1,
   "updatedAt": "2026-08-11T17:00:00Z",
-  "items": []
+  "items": [
+    {
+      "slug": "linear",
+      "type": "skill",
+      "name": "Linear",
+      "description": "Create/update issues, list assigned work, track cycles, and search in Linear",
+      "author": "flock",
+      "category": "integration",
+      "tags": ["productivity", "linear", "project-management"],
+      "icon": "📐",
+      "repo": "flock-agents/marketplace",
+      "path": "skills/linear",
+      "latestVersion": "1.0.0",
+      "latestTag": "linear-v1.0.0",
+      "minFlockVersion": "0.7.0",
+      "publishedAt": "2026-08-11T17:00:00Z",
+      "updatedAt": "2026-08-11T17:00:00Z"
+    }
+  ]
 }

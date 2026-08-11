@@ -1,0 +1,18 @@
+{
+  "name": "Linear",
+  "slug": "linear",
+  "description": "Create/update issues, list assigned work, track cycles, and search in Linear",
+  "version": "1.0.0",
+  "author": "flock",
+  "category": "integration",
+  "tags": ["productivity", "linear", "project-management"],
+  "minFlockVersion": "0.7.0",
+  "tier": "installable",
+  "requires": {
+    "auth": {
+      "type": "api_key",
+      "keys": ["LINEAR_API_KEY"],
+      "setup_instructions": "I'll need a Linear API key to manage your issues, track cycles, and search your workspace."
+    }
+  }
+}
