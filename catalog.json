@@ -35,6 +35,23 @@
       "minFlockVersion": "0.7.0",
       "publishedAt": "2026-08-11T17:00:00Z",
       "updatedAt": "2026-08-11T17:00:00Z"
+    },
+    {
+      "slug": "family-butler",
+      "type": "template",
+      "name": "Family Butler",
+      "description": "A household assistant that manages groceries, meals, and family routines through Telegram",
+      "author": "flock",
+      "category": "family",
+      "tags": ["household", "grocery", "family", "meal-planning"],
+      "icon": "🏠",
+      "repo": "flock-agents/marketplace",
+      "path": "templates/family-butler",
+      "latestVersion": "1.0.0",
+      "latestTag": "family-butler-v1.0.0",
+      "minFlockVersion": "0.7.0",
+      "publishedAt": "2026-08-11T17:00:00Z",
+      "updatedAt": "2026-08-11T17:00:00Z"
     }
   ]
 }

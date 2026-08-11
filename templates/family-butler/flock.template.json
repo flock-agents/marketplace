@@ -1,0 +1,258 @@
+{
+  "name": "Family Butler",
+  "slug": "family-butler",
+  "description": "A household assistant that manages groceries, meals, and family routines through Telegram",
+  "version": "1.0.0",
+  "author": "flock",
+  "icon": "🏠",
+  "category": "family",
+  "tags": ["household", "grocery", "family", "meal-planning"],
+  "minFlockVersion": "0.7.0",
+  "sortOrder": 0,
+
+  "agent": {
+    "defaultName": "Asha",
+    "model": "claude-sonnet-4-6",
+    "role": "main",
+    "tone": "warm, helpful, concise",
+    "personalityOptions": {
+      "dietaryOptions": [
+        "vegetarian",
+        "vegan",
+        "jain-no-onion-garlic",
+        "nut-allergy",
+        "lactose-free",
+        "gluten-free",
+        "halal"
+      ],
+      "customFields": [
+        {
+          "id": "family_name",
+          "label": "Family Name",
+          "type": "free-text"
+        },
+        {
+          "id": "dietary_preferences",
+          "label": "Dietary Preferences",
+          "type": "checkbox-group",
+          "options": [
+            "vegetarian",
+            "vegan",
+            "jain-no-onion-garlic",
+            "nut-allergy",
+            "lactose-free",
+            "gluten-free",
+            "halal"
+          ]
+        }
+      ]
+    },
+    "examplePrompts": [
+      "I need tomatoes, onions, and milk",
+      "Compare prices for my weekly groceries",
+      "What's in my Zepto cart?",
+      "Check the status of my BigBasket order",
+      "We need to restock — what are we running low on?"
+    ]
+  },
+
+  "skills": [
+    { "skillId": "memory" },
+    { "skillId": "reminders" },
+    { "skillId": "quick-capture" },
+    {
+      "skillId": "google-calendar",
+      "preSelected": true,
+      "description": "Manage family calendar, events, and appointments"
+    },
+    {
+      "skillId": "google-sheets",
+      "preSelected": true,
+      "description": "Track household expenses and grocery lists"
+    },
+    {
+      "skillId": "expense-tracker",
+      "preSelected": true,
+      "description": "Log and categorize household spending"
+    },
+    {
+      "skillId": "todoist",
+      "preSelected": false,
+      "description": "Manage family to-do lists and tasks"
+    },
+    {
+      "skillId": "weather",
+      "preSelected": true,
+      "description": "Weather forecasts for daily briefings"
+    },
+    {
+      "skillId": "swiggy-instamart",
+      "preSelected": false,
+      "description": "Search, compare, and build carts on Swiggy Instamart",
+      "accountRequirement": {
+        "type": "browser-session",
+        "provider": "swiggy-instamart",
+        "setupGuide": "Log in to Swiggy Instamart in the Flock dashboard browser session"
+      }
+    },
+    {
+      "skillId": "zepto",
+      "preSelected": false,
+      "description": "Search, compare, and build carts on Zepto",
+      "accountRequirement": {
+        "type": "browser-session",
+        "provider": "zepto",
+        "setupGuide": "Log in to Zepto in the Flock dashboard browser session"
+      }
+    },
+    {
+      "skillId": "bigbasket",
+      "preSelected": false,
+      "description": "Search, compare, and build carts on BigBasket",
+      "accountRequirement": {
+        "type": "browser-session",
+        "provider": "bigbasket",
+        "setupGuide": "Log in to BigBasket in the Flock dashboard browser session"
+      }
+    },
+    {
+      "skillId": "zomato-blinkit",
+      "preSelected": false,
+      "description": "Search, compare, and build carts on Zomato Blinkit",
+      "accountRequirement": {
+        "type": "browser-session",
+        "provider": "zomato-blinkit",
+        "setupGuide": "Log in to Zomato Blinkit in the Flock dashboard browser session"
+      }
+    }
+  ],
+
+  "apps": [
+    { "slug": "meal-planner", "required": false }
+  ],
+
+  "channels": [
+    {
+      "type": "telegram",
+      "connectionType": "bot-token",
+      "defaultSessionMode": "chat_routed",
+      "outboundPrefix": false,
+      "setupGuide": "Create a bot via @BotFather on Telegram, paste the token, then add the bot to your family group"
+    }
+  ],
+
+  "tasks": [
+    {
+      "name": "Morning Briefing",
+      "schedule": "0 8 * * *",
+      "prompt": "Good morning! Prepare today's briefing for the family:\n1. Check the weather forecast for today and tomorrow\n2. Review today's calendar events and reminders\n3. List any pending tasks or follow-ups from yesterday\n4. Note any upcoming birthdays, appointments, or deadlines this week\n\nFormat as a concise, friendly summary. Keep it scannable — bullet points, not paragraphs.",
+      "deliverTo": null,
+      "timezone": "Asia/Kolkata",
+      "enabled": true,
+      "model": "claude-sonnet-4-6",
+      "thinkingLevel": "none"
+    },
+    {
+      "name": "Grocery Stock Check",
+      "schedule": "0 10 * * 6",
+      "prompt": "It's time for the weekly grocery review:\n1. Check recent grocery orders from the past week\n2. Review the family's typical staples and recurring items\n3. Note anything that was ordered last week that might be running low\n4. Suggest a shopping list for this week based on usual consumption patterns\n\nKeep the list practical — group by category (produce, dairy, pantry, household).\nFlag any items that were on the list last week but not ordered.",
+      "deliverTo": null,
+      "timezone": "Asia/Kolkata",
+      "enabled": true,
+      "model": "claude-sonnet-4-6",
+      "thinkingLevel": "none"
+    },
+    {
+      "name": "Weekly Summary",
+      "schedule": "0 20 * * 0",
+      "prompt": "Prepare the weekly family summary:\n\n## Activity Recap\n1. Orders placed this week — grocery, food delivery, and other services\n2. Approximate spending across all tracked services\n3. Tasks completed and any still pending\n4. Upcoming events and reminders for next week\n\n## Memory Curation\nReview what you learned about the family this week and present memory updates for confirmation:\n\n5. **New patterns detected** — Look through this week's interactions for recurring preferences or habits.\n   For each pattern found, ask: \"I noticed [specific observation, e.g. you ordered organic milk 3 times this week]. Should I remember this as a preference?\"\n   Present each as a yes/no question so the user can confirm or reject.\n\n6. **Stale memory check** — Review stored preferences and memories. Flag any that haven't been referenced or relevant in the last 30 days.\n   For each stale item, ask: \"I have [memory item] saved, but it hasn't come up recently. Should I keep it, update it, or remove it?\"\n\n7. **Memory stats** — End the memory section with a brief summary:\n   - Total memory items stored\n   - New items added this week\n   - Breakdown by category (preferences, routines, dietary, household, etc.)\n\n## Look Ahead\nEnd with a quick preview of next week's schedule and any upcoming deadlines.\n\nFormat as a clear weekly digest. Use sections with headers.\nFor memory curation items, wait for user responses before saving or removing anything.",
+      "deliverTo": null,
+      "timezone": "Asia/Kolkata",
+      "enabled": true,
+      "model": "claude-sonnet-4-6",
+      "thinkingLevel": "none"
+    },
+    {
+      "name": "Evening Reminder",
+      "schedule": "0 21 * * *",
+      "prompt": "Evening check-in for the family:\n1. List any pending items that weren't completed today\n2. Preview tomorrow's calendar — events, appointments, deadlines\n3. Remind about anything time-sensitive for the morning (early meetings, school events, deliveries)\n4. Note any recurring tasks due tomorrow (bills, subscriptions, refills)\n\nKeep it brief and actionable. Only mention items that need attention.",
+      "deliverTo": null,
+      "timezone": "Asia/Kolkata",
+      "enabled": true,
+      "model": "claude-sonnet-4-6",
+      "thinkingLevel": "none"
+    }
+  ],
+
+  "wizard": [
+    { "id": "personality", "type": "personality", "label": "Personality" },
+    { "id": "skills", "type": "skills", "label": "Grocery Services" },
+    { "id": "channels", "type": "channels", "label": "Messaging" },
+    { "id": "tasks", "type": "scheduled-tasks", "label": "Scheduled Tasks" },
+    { "id": "review", "type": "review", "label": "Review & Create" }
+  ],
+
+  "setupChecklist": [
+    {
+      "id": "identity-configured",
+      "label": "Identity configured",
+      "description": "Set a name, avatar, and description for your agent",
+      "deepLink": "/agents/:id"
+    },
+    {
+      "id": "instructions-set",
+      "label": "Agent instructions set",
+      "description": "Agent instructions define how your butler behaves",
+      "deepLink": "/agents/:id"
+    },
+    {
+      "id": "connect-grocery",
+      "label": "Connect a grocery service",
+      "description": "Link at least one service (Swiggy, Zepto, BigBasket, or Blinkit) so the butler can search and build carts",
+      "deepLink": "/agents/:id?tab=skills"
+    },
+    {
+      "id": "connect-channel",
+      "label": "Add a messaging channel",
+      "description": "Connect Telegram so your family can reach the butler",
+      "deepLink": "/agents/:id?tab=channels"
+    },
+    {
+      "id": "review-tasks",
+      "label": "Review scheduled tasks",
+      "description": "Check the morning briefing, grocery reminders, and weekly summary schedules",
+      "deepLink": "/agents/:id?tab=tasks",
+      "skippable": true
+    }
+  ],
+
+  "defaultAccessPolicy": {
+    "inbound": {
+      "mode": "allowlist",
+      "allowedUsers": []
+    },
+    "outbound": {
+      "allowAutomationDelivery": true,
+      "allowProactivePush": true
+    }
+  },
+
+  "coldStart": {
+    "memoryFiles": [
+      "family-profile.md",
+      "item-preferences.md",
+      "ordering-patterns.md",
+      "service-preferences.md",
+      "MEMORY.md"
+    ],
+    "dietaryLabels": {
+      "vegetarian": "Vegetarian (no meat, fish, or eggs unless ovo-vegetarian)",
+      "vegan": "Vegan (no animal products)",
+      "jain-no-onion-garlic": "Jain (no onion, garlic, root vegetables, fermented foods)",
+      "nut-allergy": "Nut allergy (flag all nut-containing products)",
+      "lactose-free": "Lactose-free (no dairy, suggest dairy alternatives)",
+      "gluten-free": "Gluten-free (flag wheat/gluten products)",
+      "halal": "Halal (no pork, no non-halal meat)"
+    }
+  }
+}

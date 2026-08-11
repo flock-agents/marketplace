@@ -1,0 +1,60 @@
+{
+  "skills": [
+    {
+      "slug": "swiggy-instamart",
+      "reason": "Search, compare prices, and build grocery carts on Swiggy Instamart"
+    },
+    {
+      "slug": "zepto",
+      "reason": "Search, compare prices, and build grocery carts on Zepto"
+    },
+    {
+      "slug": "bigbasket",
+      "reason": "Search, compare prices, and build grocery carts on BigBasket"
+    },
+    {
+      "slug": "zomato-blinkit",
+      "reason": "Search, compare prices, and build grocery carts on Zomato Blinkit"
+    },
+    {
+      "slug": "google-calendar",
+      "reason": "Manage family calendar for daily briefings and event reminders"
+    },
+    {
+      "slug": "google-sheets",
+      "reason": "Track household expenses and grocery lists in spreadsheets"
+    },
+    {
+      "slug": "expense-tracker",
+      "reason": "Log and categorize household spending automatically"
+    },
+    {
+      "slug": "weather",
+      "reason": "Include weather forecasts in morning briefings"
+    }
+  ],
+  "tasks": [
+    {
+      "name": "Morning Briefing",
+      "reason": "Daily summary with weather, calendar, and pending tasks at 8 AM"
+    },
+    {
+      "name": "Grocery Stock Check",
+      "reason": "Weekly Saturday grocery review and shopping list suggestions"
+    },
+    {
+      "name": "Weekly Summary",
+      "reason": "Sunday evening digest with spending, activity recap, and memory curation"
+    },
+    {
+      "name": "Evening Reminder",
+      "reason": "Daily evening check-in with tomorrow's preview at 9 PM"
+    }
+  ],
+  "apps": [
+    {
+      "slug": "meal-planner",
+      "reason": "Plan weekly meals and manage a grocery shopping list"
+    }
+  ]
+}
