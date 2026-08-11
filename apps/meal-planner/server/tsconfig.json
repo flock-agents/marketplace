@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "types": ["bun-types"],
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "outDir": "./dist",
+    "rootDir": "..",
+    "paths": {
+      "../../shared/*": ["../shared/*"]
+    }
+  },
+  "include": ["./**/*.ts", "../shared/**/*.ts"]
+}

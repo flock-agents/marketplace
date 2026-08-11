@@ -1,7 +1,16 @@
-const BASE = "";
+import type {
+  Meal,
+  ShoppingItem,
+  CreateMealRequest,
+  UpdateMealRequest,
+  CreateShoppingItemRequest,
+  UpdateShoppingItemRequest,
+} from "../../shared/types";
+
+export type { Meal, ShoppingItem };
 
 async function request(path: string, opts?: RequestInit) {
-  const res = await fetch(`${BASE}${path}`, {
+  const res = await fetch(path, {
     ...opts,
     headers: { "Content-Type": "application/json", ...opts?.headers },
   });
@@ -12,31 +21,12 @@ async function request(path: string, opts?: RequestInit) {
   return res.json();
 }
 
-export interface Meal {
-  id: number;
-  date: string;
-  slot: string;
-  name: string;
-  notes: string | null;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface ShoppingItem {
-  id: number;
-  name: string;
-  quantity: string | null;
-  status: "pending" | "bought";
-  created_at: string;
-  updated_at: string;
-}
-
 export const meals = {
   list: (from: string, to: string): Promise<Meal[]> =>
     request(`/api/meals?from=${from}&to=${to}`),
-  create: (data: { date: string; slot: string; name: string; notes?: string }): Promise<Meal> =>
+  create: (data: CreateMealRequest): Promise<Meal> =>
     request("/api/meals", { method: "POST", body: JSON.stringify(data) }),
-  update: (id: number, data: Partial<Meal>): Promise<Meal> =>
+  update: (id: number, data: UpdateMealRequest): Promise<Meal> =>
     request(`/api/meals/${id}`, { method: "PUT", body: JSON.stringify(data) }),
   delete: (id: number): Promise<{ ok: boolean }> =>
     request(`/api/meals/${id}`, { method: "DELETE" }),
@@ -45,9 +35,9 @@ export const meals = {
 export const shopping = {
   list: (): Promise<ShoppingItem[]> =>
     request("/api/shopping"),
-  create: (data: { name: string; quantity?: string }): Promise<ShoppingItem> =>
+  create: (data: CreateShoppingItemRequest): Promise<ShoppingItem> =>
     request("/api/shopping", { method: "POST", body: JSON.stringify(data) }),
-  update: (id: number, data: Partial<ShoppingItem>): Promise<ShoppingItem> =>
+  update: (id: number, data: UpdateShoppingItemRequest): Promise<ShoppingItem> =>
     request(`/api/shopping/${id}`, { method: "PUT", body: JSON.stringify(data) }),
   delete: (id: number): Promise<{ ok: boolean }> =>
     request(`/api/shopping/${id}`, { method: "DELETE" }),
