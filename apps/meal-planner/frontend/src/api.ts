@@ -26,6 +26,8 @@ async function request(path: string, opts?: RequestInit) {
 export const meals = {
   list: (from: string, to: string): Promise<Meal[]> =>
     request(`/api/meals?from=${from}&to=${to}`),
+  labels: (): Promise<string[]> =>
+    request("/api/meals/labels"),
   create: (data: CreateMealRequest): Promise<Meal> =>
     request("/api/meals", { method: "POST", body: JSON.stringify(data) }),
   update: (id: number, data: UpdateMealRequest): Promise<Meal> =>

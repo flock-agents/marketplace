@@ -1,11 +1,18 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { meals, type Meal } from "./api";
 
-const SLOTS = ["breakfast", "lunch", "dinner", "snack"] as const;
-const SLOT_LABELS: Record<string, string> = { breakfast: "Breakfast", lunch: "Lunch", dinner: "Dinner", snack: "Snack" };
+const FIXED_SLOTS = ["breakfast", "lunch", "dinner"] as const;
+const SLOT_CONFIG: Record<string, { label: string; icon: string; color: string }> = {
+  breakfast: { label: "BREAKFAST", icon: "☀️", color: "#f59e0b" },
+  lunch: { label: "LUNCH", icon: "🥗", color: "#16a34a" },
+  dinner: { label: "DINNER", icon: "🌙", color: "#6366f1" },
+};
 
 function formatDate(d: Date): string {
-  return d.toISOString().slice(0, 10);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
 function addDays(d: Date, n: number): Date {
@@ -26,10 +33,16 @@ export default function MealPlan() {
     return d;
   });
   const [data, setData] = useState<Meal[]>([]);
-  const [adding, setAdding] = useState<{ date: string; slot: string } | null>(null);
+  const [adding, setAdding] = useState<{ date: string; slot: string; label?: string } | null>(null);
   const [editing, setEditing] = useState<number | null>(null);
   const [formName, setFormName] = useState("");
   const [formNotes, setFormNotes] = useState("");
+
+  const [addingCustom, setAddingCustom] = useState<string | null>(null);
+  const [customLabel, setCustomLabel] = useState("");
+  const [labelSuggestions, setLabelSuggestions] = useState<string[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const labelInputRef = useRef<HTMLInputElement>(null);
 
   const from = formatDate(startDate);
   const to = formatDate(addDays(startDate, range - 1));
@@ -41,6 +54,10 @@ export default function MealPlan() {
 
   useEffect(() => { load(); }, [load]);
 
+  useEffect(() => {
+    meals.labels().then(setLabelSuggestions).catch(console.error);
+  }, []);
+
   const days = Array.from({ length: range }, (_, i) => {
     const d = addDays(startDate, i);
     return { date: formatDate(d), label: dayLabel(d), isToday: formatDate(d) === todayStr };
@@ -50,9 +67,26 @@ export default function MealPlan() {
     return data.filter((m) => m.date === date && m.slot === slot);
   }
 
-  function startAdd(date: string, slot: string) {
-    setAdding({ date, slot });
+  function customMealsForDate(date: string) {
+    const customs = data.filter((m) => m.date === date && m.slot === "custom");
+    const grouped: { label: string; meals: Meal[] }[] = [];
+    const seen = new Map<string, number>();
+    for (const m of customs) {
+      const lbl = m.label ?? "Other";
+      if (seen.has(lbl)) {
+        grouped[seen.get(lbl)!].meals.push(m);
+      } else {
+        seen.set(lbl, grouped.length);
+        grouped.push({ label: lbl, meals: [m] });
+      }
+    }
+    return grouped;
+  }
+
+  function startAdd(date: string, slot: string, label?: string) {
+    setAdding({ date, slot, label });
     setEditing(null);
+    setAddingCustom(null);
     setFormName("");
     setFormNotes("");
   }
@@ -60,6 +94,7 @@ export default function MealPlan() {
   function startEdit(meal: Meal) {
     setEditing(meal.id);
     setAdding(null);
+    setAddingCustom(null);
     setFormName(meal.name);
     setFormNotes(meal.notes ?? "");
   }
@@ -67,15 +102,24 @@ export default function MealPlan() {
   function cancel() {
     setAdding(null);
     setEditing(null);
+    setAddingCustom(null);
     setFormName("");
     setFormNotes("");
+    setCustomLabel("");
   }
 
   async function saveNew() {
     if (!adding || !formName.trim()) return;
-    await meals.create({ date: adding.date, slot: adding.slot, name: formName.trim(), notes: formNotes.trim() || undefined });
+    await meals.create({
+      date: adding.date,
+      slot: adding.slot,
+      name: formName.trim(),
+      notes: formNotes.trim() || undefined,
+      label: adding.label,
+    });
     cancel();
     load();
+    meals.labels().then(setLabelSuggestions).catch(console.error);
   }
 
   async function saveEdit() {
@@ -90,18 +134,96 @@ export default function MealPlan() {
     load();
   }
 
+  async function deleteGroup(groupLabel: string, groupMeals: Meal[]) {
+    if (!confirm(`Remove all "${groupLabel}" entries?`)) return;
+    for (const m of groupMeals) {
+      await meals.delete(m.id);
+    }
+    load();
+  }
+
   function goToToday() {
     const d = new Date();
     d.setHours(0, 0, 0, 0);
     setStartDate(d);
   }
 
+  function startAddCustom(date: string) {
+    setAddingCustom(date);
+    setAdding(null);
+    setEditing(null);
+    setCustomLabel("");
+    setShowSuggestions(true);
+    setTimeout(() => labelInputRef.current?.focus(), 50);
+  }
+
+  function confirmCustomLabel(date: string) {
+    if (!customLabel.trim()) return;
+    startAdd(date, "custom", customLabel.trim());
+  }
+
+  function selectSuggestion(date: string, label: string) {
+    setCustomLabel(label);
+    setShowSuggestions(false);
+    startAdd(date, "custom", label);
+  }
+
+  const filteredSuggestions = customLabel.trim()
+    ? labelSuggestions.filter((s) => s.toLowerCase().includes(customLabel.toLowerCase()) && s.toLowerCase() !== customLabel.toLowerCase())
+    : labelSuggestions;
+
+  function renderMealItem(meal: Meal) {
+    if (editing === meal.id) {
+      return (
+        <div key={meal.id} className="meal-form">
+          <input autoFocus placeholder="Meal name" value={formName} onChange={(e) => setFormName(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && saveEdit()} />
+          <input placeholder="Notes (optional)" value={formNotes} onChange={(e) => setFormNotes(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && saveEdit()} />
+          <div className="form-actions">
+            <button className="btn-save" onClick={saveEdit}>Save</button>
+            <button className="btn-cancel" onClick={cancel}>Cancel</button>
+          </div>
+        </div>
+      );
+    }
+    return (
+      <div key={meal.id} className="meal-item">
+        <div className="meal-text">
+          <span className="meal-name">{meal.name}</span>
+          {meal.notes && <span className="meal-notes"> {meal.notes}</span>}
+        </div>
+        <div className="meal-actions">
+          <button className="icon-btn" onClick={() => startEdit(meal)} title="Edit">✎</button>
+          <button className="icon-btn delete" onClick={() => deleteMeal(meal.id)} title="Delete">✕</button>
+        </div>
+      </div>
+    );
+  }
+
+  function renderAddForm(date: string, slot: string, label?: string) {
+    const isAdding = adding?.date === date && adding.slot === slot && adding.label === label;
+    if (!isAdding) return null;
+    return (
+      <div className="meal-form">
+        <input autoFocus placeholder="Meal name" value={formName} onChange={(e) => setFormName(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && saveNew()} />
+        <input placeholder="Notes (optional)" value={formNotes} onChange={(e) => setFormNotes(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && saveNew()} />
+        <div className="form-actions">
+          <button className="btn-save" onClick={saveNew}>Add</button>
+          <button className="btn-cancel" onClick={cancel}>Cancel</button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+      <div className="plan-toolbar">
         <div className="range-toggle">
-          <button className={`range-btn ${range === 7 ? "active" : ""}`} onClick={() => setRange(7)}>7 days</button>
-          <button className={`range-btn ${range === 14 ? "active" : ""}`} onClick={() => setRange(14)}>14 days</button>
+          <button className={`range-btn ${range === 7 ? "active" : ""}`} onClick={() => { setRange(7); goToToday(); }}>7 days</button>
+          <button className={`range-btn ${range === 14 ? "active" : ""}`} onClick={() => { setRange(14); goToToday(); }}>14 days</button>
         </div>
         <div className="nav-arrows">
           <button className="nav-btn" onClick={() => setStartDate(addDays(startDate, -range))}>←</button>
@@ -110,67 +232,106 @@ export default function MealPlan() {
         </div>
       </div>
 
-      {days.map(({ date, label, isToday }) => (
-        <div key={date} className={`day-card ${isToday ? "today" : ""}`}>
-          <div className="day-header">
-            <div>
-              <span className="day-date">{label}</span>{" "}
-              <span className="day-label">{date}</span>
+      {days.map(({ date, label, isToday }) => {
+        const customGroups = customMealsForDate(date);
+        return (
+          <div key={date} className={`day-card ${isToday ? "today" : ""}`}>
+            <div className={`day-card-header ${isToday ? "today" : ""}`}>
+              <span className="day-card-date">{label}</span>
+              <div className="day-header-right">
+                {isToday && <span className="day-badge today">TODAY</span>}
+                <button className="header-add-btn" onClick={() => startAddCustom(date)} title="Add entry">+</button>
+              </div>
             </div>
-            {isToday && <span className="today-badge">Today</span>}
-          </div>
-          <div className="slots">
-            {SLOTS.map((slot) => {
-              const slotMeals = mealsForSlot(date, slot);
-              const isAdding = adding?.date === date && adding.slot === slot;
-              return (
-                <div key={slot} className="slot">
-                  <div className="slot-label">{SLOT_LABELS[slot]}</div>
-                  {slotMeals.map((meal) =>
-                    editing === meal.id ? (
-                      <div key={meal.id} className="meal-form">
-                        <input autoFocus placeholder="Meal name" value={formName} onChange={(e) => setFormName(e.target.value)}
-                          onKeyDown={(e) => e.key === "Enter" && saveEdit()} />
-                        <input placeholder="Notes (optional)" value={formNotes} onChange={(e) => setFormNotes(e.target.value)}
-                          onKeyDown={(e) => e.key === "Enter" && saveEdit()} />
-                        <div className="form-actions">
-                          <button className="btn-save" onClick={saveEdit}>Save</button>
-                          <button className="btn-cancel" onClick={cancel}>Cancel</button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div key={meal.id} className="meal-item">
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div className="meal-name">{meal.name}</div>
-                          {meal.notes && <div className="meal-notes">{meal.notes}</div>}
-                        </div>
-                        <div className="meal-actions">
-                          <button className="icon-btn" onClick={() => startEdit(meal)} title="Edit">✎</button>
-                          <button className="icon-btn delete" onClick={() => deleteMeal(meal.id)} title="Delete">✕</button>
-                        </div>
-                      </div>
-                    )
-                  )}
-                  {isAdding ? (
-                    <div className="meal-form">
-                      <input autoFocus placeholder="Meal name" value={formName} onChange={(e) => setFormName(e.target.value)}
-                        onKeyDown={(e) => e.key === "Enter" && saveNew()} />
-                      <input placeholder="Notes (optional)" value={formNotes} onChange={(e) => setFormNotes(e.target.value)}
-                        onKeyDown={(e) => e.key === "Enter" && saveNew()} />
-                      <div className="form-actions">
-                        <button className="btn-save" onClick={saveNew}>Add</button>
-                        <button className="btn-cancel" onClick={cancel}>Cancel</button>
-                      </div>
+
+            <div className="day-card-body">
+              {FIXED_SLOTS.map((slot) => {
+                const cfg = SLOT_CONFIG[slot];
+                const slotMeals = mealsForSlot(date, slot);
+                const isAddingHere = adding?.date === date && adding.slot === slot && !adding.label;
+                return (
+                  <div key={slot} className="category-section">
+                    <div className="category-header">
+                      <span className="category-icon" style={{ background: cfg.color }}>{cfg.icon}</span>
+                      <span className="category-label">{cfg.label}</span>
+                      {!isAddingHere && (
+                        <button className="add-inline-btn" onClick={() => startAdd(date, slot)} title="Edit meal">✎</button>
+                      )}
                     </div>
-                  ) : (
-                    <button className="add-meal-btn" onClick={() => startAdd(date, slot)}>+ Add</button>
-                  )}
+                    {slotMeals.map(renderMealItem)}
+                    {renderAddForm(date, slot, undefined)}
+                  </div>
+                );
+              })}
+
+              {customGroups.map(({ label: groupLabel, meals: groupMeals }) => {
+                const isAddingToGroup = adding?.date === date && adding.slot === "custom" && adding.label === groupLabel;
+                return (
+                  <div key={groupLabel} className="category-section custom">
+                    <div className="category-header">
+                      <span className="category-icon custom">🍴</span>
+                      <span className="category-label">{groupLabel.toUpperCase()}</span>
+                      {!isAddingToGroup && (
+                        <button className="add-inline-btn" onClick={() => startAdd(date, "custom", groupLabel)}>+</button>
+                      )}
+                      <button className="icon-btn delete section-delete" onClick={() => deleteGroup(groupLabel, groupMeals)} title={`Remove ${groupLabel}`}>✕</button>
+                    </div>
+                    {groupMeals.map(renderMealItem)}
+                    {renderAddForm(date, "custom", groupLabel)}
+                  </div>
+                );
+              })}
+
+              {addingCustom === date ? (
+                <div className="custom-label-form">
+                  <div className="label-input-wrap">
+                    <input
+                      ref={labelInputRef}
+                      placeholder="Label (e.g. Snacks, Pre-workout)"
+                      value={customLabel}
+                      onChange={(e) => { setCustomLabel(e.target.value); setShowSuggestions(true); }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") confirmCustomLabel(date);
+                        if (e.key === "Escape") cancel();
+                      }}
+                      onFocus={() => setShowSuggestions(true)}
+                      onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
+                    />
+                    {showSuggestions && filteredSuggestions.length > 0 && (
+                      <div className="label-suggestions">
+                        {filteredSuggestions.map((s) => (
+                          <button key={s} className="label-suggestion" onClick={() => selectSuggestion(date, s)}>{s}</button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <div className="form-actions">
+                    <button className="btn-save" onClick={() => confirmCustomLabel(date)} disabled={!customLabel.trim()}>Next</button>
+                    <button className="btn-cancel" onClick={cancel}>Cancel</button>
+                  </div>
                 </div>
-              );
-            })}
+              ) : adding?.date === date && adding.slot === "custom" && adding.label && !customGroups.some((g) => g.label === adding.label) ? (
+                <div className="category-section custom">
+                  <div className="category-header">
+                    <span className="category-icon custom">🍴</span>
+                    <span className="category-label">{adding.label.toUpperCase()}</span>
+                  </div>
+                  <div className="meal-form">
+                    <input autoFocus placeholder="Meal name" value={formName} onChange={(e) => setFormName(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && saveNew()} />
+                    <input placeholder="Notes (optional)" value={formNotes} onChange={(e) => setFormNotes(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && saveNew()} />
+                    <div className="form-actions">
+                      <button className="btn-save" onClick={saveNew}>Add</button>
+                      <button className="btn-cancel" onClick={cancel}>Cancel</button>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+            </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
 
       {days.length === 0 && (
         <div className="empty-state">
