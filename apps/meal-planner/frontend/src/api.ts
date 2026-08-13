@@ -9,8 +9,10 @@ import type {
 
 export type { Meal, ShoppingItem };
 
+const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+
 async function request(path: string, opts?: RequestInit) {
-  const res = await fetch(path, {
+  const res = await fetch(BASE + path, {
     ...opts,
     headers: { "Content-Type": "application/json", ...opts?.headers },
   });

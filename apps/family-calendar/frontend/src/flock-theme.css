@@ -1,0 +1,115 @@
+:root {
+  --flock-bg: #0a0a0f;
+  --flock-bg-card: #141420;
+  --flock-bg-card-hover: #1a1a2e;
+  --flock-bg-input: #1a1a2e;
+  --flock-bg-elevated: #1e1e32;
+  --flock-text: #e8e8ed;
+  --flock-text-secondary: #a0a0b0;
+  --flock-text-muted: #606070;
+  --flock-accent: #6366f1;
+  --flock-accent-hover: #818cf8;
+  --flock-accent-glow: rgba(99, 102, 241, 0.15);
+  --flock-accent-subtle: rgba(99, 102, 241, 0.08);
+  --flock-success: #22c55e;
+  --flock-success-subtle: rgba(34, 197, 94, 0.12);
+  --flock-error: #ef4444;
+  --flock-error-subtle: rgba(239, 68, 68, 0.12);
+  --flock-warning: #f59e0b;
+  --flock-warning-subtle: rgba(245, 158, 11, 0.12);
+  --flock-info: #3b82f6;
+  --flock-border: #1e1e30;
+  --flock-border-hover: #2e2e48;
+  --flock-radius: 8px;
+  --flock-radius-sm: 6px;
+  --flock-radius-lg: 12px;
+  --flock-radius-xl: 16px;
+  --flock-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  --flock-shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.4);
+  --flock-font: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --flock-transition: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: var(--flock-font);
+  background: var(--flock-bg);
+  color: var(--flock-text);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.flock-card {
+  background: var(--flock-bg-card);
+  border: 1px solid var(--flock-border);
+  border-radius: var(--flock-radius-lg);
+  padding: 1rem;
+}
+
+.flock-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  padding: 0.5rem 1rem;
+  border-radius: var(--flock-radius);
+  border: 1px solid var(--flock-border);
+  background: var(--flock-bg-input);
+  color: var(--flock-text);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--flock-transition);
+  white-space: nowrap;
+  user-select: none;
+}
+.flock-btn:hover {
+  border-color: var(--flock-border-hover);
+  background: var(--flock-bg-elevated);
+}
+.flock-btn:active {
+  transform: scale(0.97);
+}
+
+.flock-btn-primary {
+  background: var(--flock-accent);
+  border-color: var(--flock-accent);
+  color: white;
+}
+.flock-btn-primary:hover {
+  background: var(--flock-accent-hover);
+  border-color: var(--flock-accent-hover);
+}
+
+.flock-btn-ghost {
+  background: transparent;
+  border-color: transparent;
+}
+.flock-btn-ghost:hover { background: var(--flock-bg-input); }
+
+.flock-input {
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--flock-radius);
+  border: 1px solid var(--flock-border);
+  background: var(--flock-bg-input);
+  color: var(--flock-text);
+  font-size: 0.875rem;
+  width: 100%;
+  transition: border-color var(--flock-transition);
+}
+.flock-input:focus {
+  outline: none;
+  border-color: var(--flock-accent);
+  box-shadow: 0 0 0 3px var(--flock-accent-glow);
+}
+
+.flock-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.125rem 0.5rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+}

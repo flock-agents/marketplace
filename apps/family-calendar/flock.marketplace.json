@@ -1,0 +1,11 @@
+{
+  "name": "Family Calendar",
+  "slug": "family-calendar",
+  "description": "Family events, schedules, and reminders at a glance",
+  "version": "1.0.0",
+  "author": "flock",
+  "category": "family",
+  "tags": ["calendar", "family", "events", "reminders", "scheduling"],
+  "minFlockVersion": "0.7.0",
+  "customizable": true
+}

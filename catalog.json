@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updatedAt": "2026-08-13T09:00:00Z",
+  "updatedAt": "2026-08-13T15:30:00Z",
   "items": [
     {
       "slug": "linear",
@@ -30,11 +30,28 @@
       "icon": "🍽️",
       "repo": "flock-agents/marketplace",
       "path": "apps/meal-planner",
-      "latestVersion": "1.0.1",
-      "latestTag": "meal-planner-v1.0.1",
+      "latestVersion": "1.0.2",
+      "latestTag": "meal-planner-v1.0.2",
       "minFlockVersion": "0.7.0",
       "publishedAt": "2026-08-11T17:00:00Z",
-      "updatedAt": "2026-08-11T17:00:00Z"
+      "updatedAt": "2026-08-13T15:30:00Z"
+    },
+    {
+      "slug": "family-calendar",
+      "type": "app",
+      "name": "Family Calendar",
+      "description": "Family events, schedules, and reminders at a glance",
+      "author": "flock",
+      "category": "family",
+      "tags": ["calendar", "family", "events", "reminders", "scheduling"],
+      "icon": "📅",
+      "repo": "flock-agents/marketplace",
+      "path": "apps/family-calendar",
+      "latestVersion": "1.0.0",
+      "latestTag": "family-calendar-v1.0.0",
+      "minFlockVersion": "0.7.0",
+      "publishedAt": "2026-08-13T15:30:00Z",
+      "updatedAt": "2026-08-13T15:30:00Z"
     },
     {
       "slug": "family-butler",
