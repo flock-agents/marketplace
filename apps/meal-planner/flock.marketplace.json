@@ -2,7 +2,7 @@
   "name": "Meal Planner",
   "slug": "meal-planner",
   "description": "Plan meals for the week and manage your shopping list",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "author": "flock",
   "category": "lifestyle",
   "tags": ["meals", "shopping", "planning", "food"],

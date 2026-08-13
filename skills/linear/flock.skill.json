@@ -3,7 +3,7 @@
   "slug": "linear",
   "icon": "⚡",
   "description": "Create/update issues, list assigned work, track cycles, and search in Linear",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "author": "flock",
   "category": "integration",
   "tags": ["productivity", "linear", "project-management"],
