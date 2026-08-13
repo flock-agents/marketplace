@@ -9,10 +9,8 @@ import type {
 
 export type { Meal, ShoppingItem };
 
-const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
-
 async function request(path: string, opts?: RequestInit) {
-  const res = await fetch(BASE + path, {
+  const res = await fetch(path, {
     ...opts,
     headers: { "Content-Type": "application/json", ...opts?.headers },
   });
@@ -25,26 +23,26 @@ async function request(path: string, opts?: RequestInit) {
 
 export const meals = {
   list: (from: string, to: string): Promise<Meal[]> =>
-    request(`/api/meals?from=${from}&to=${to}`),
+    request(`./api/meals?from=${from}&to=${to}`),
   labels: (): Promise<string[]> =>
-    request("/api/meals/labels"),
+    request("./api/meals/labels"),
   create: (data: CreateMealRequest): Promise<Meal> =>
-    request("/api/meals", { method: "POST", body: JSON.stringify(data) }),
+    request("./api/meals", { method: "POST", body: JSON.stringify(data) }),
   update: (id: number, data: UpdateMealRequest): Promise<Meal> =>
-    request(`/api/meals/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+    request(`./api/meals/${id}`, { method: "PUT", body: JSON.stringify(data) }),
   delete: (id: number): Promise<{ ok: boolean }> =>
-    request(`/api/meals/${id}`, { method: "DELETE" }),
+    request(`./api/meals/${id}`, { method: "DELETE" }),
 };
 
 export const shopping = {
   list: (): Promise<ShoppingItem[]> =>
-    request("/api/shopping"),
+    request("./api/shopping"),
   create: (data: CreateShoppingItemRequest): Promise<ShoppingItem> =>
-    request("/api/shopping", { method: "POST", body: JSON.stringify(data) }),
+    request("./api/shopping", { method: "POST", body: JSON.stringify(data) }),
   update: (id: number, data: UpdateShoppingItemRequest): Promise<ShoppingItem> =>
-    request(`/api/shopping/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+    request(`./api/shopping/${id}`, { method: "PUT", body: JSON.stringify(data) }),
   delete: (id: number): Promise<{ ok: boolean }> =>
-    request(`/api/shopping/${id}`, { method: "DELETE" }),
+    request(`./api/shopping/${id}`, { method: "DELETE" }),
   clearBought: (): Promise<{ ok: boolean; removed: number }> =>
-    request("/api/shopping/clear-bought", { method: "POST" }),
+    request("./api/shopping/clear-bought", { method: "POST" }),
 };

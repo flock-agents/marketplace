@@ -24,25 +24,46 @@ export default function ShoppingList() {
 
   async function addItem() {
     if (!newName.trim()) return;
-    await shopping.create({ name: newName.trim(), quantity: newQty.trim() || undefined });
+    const name = newName.trim();
+    const quantity = newQty.trim() || undefined;
     setNewName("");
     setNewQty("");
-    load();
+    try {
+      const created = await shopping.create({ name, quantity });
+      setItems((prev) => [created, ...prev]);
+    } catch {
+      load();
+    }
   }
 
   async function toggleStatus(item: ShoppingItem) {
-    await shopping.update(item.id, { status: item.status === "pending" ? "bought" : "pending" });
-    load();
+    const newStatus = item.status === "pending" ? "bought" : "pending";
+    setItems((prev) =>
+      prev.map((i) => (i.id === item.id ? { ...i, status: newStatus } : i))
+    );
+    try {
+      await shopping.update(item.id, { status: newStatus });
+    } catch {
+      load();
+    }
   }
 
   async function deleteItem(id: number) {
-    await shopping.delete(id);
-    load();
+    setItems((prev) => prev.filter((i) => i.id !== id));
+    try {
+      await shopping.delete(id);
+    } catch {
+      load();
+    }
   }
 
   async function clearBought() {
-    await shopping.clearBought();
-    load();
+    setItems((prev) => prev.filter((i) => i.status !== "bought"));
+    try {
+      await shopping.clearBought();
+    } catch {
+      load();
+    }
   }
 
   function startEdit(id: number, field: "name" | "quantity", currentValue: string) {
@@ -117,18 +138,13 @@ export default function ShoppingList() {
 
       <div className="shopping-list">
         {filtered.map((item) => (
-          <div key={item.id} className={`shopping-item ${item.status === "bought" ? "bought" : ""}`}>
-            <button
+          <div key={item.id} className={`shopping-item ${item.status === "bought" ? "bought" : ""}`} onClick={() => toggleStatus(item)}>
+            <span
               className={`checkbox ${item.status === "bought" ? "checked" : ""}`}
-              onPointerUp={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                toggleStatus(item);
-              }}
               aria-label={item.status === "bought" ? "Mark as pending" : "Mark as bought"}
             >
               {item.status === "bought" ? "✓" : ""}
-            </button>
+            </span>
 
             <div className="item-detail">
               <div className="item-content">
@@ -140,11 +156,12 @@ export default function ShoppingList() {
                     onChange={(e) => setEditValue(e.target.value)}
                     onBlur={commitEdit}
                     onKeyDown={onEditKeyDown}
+                    onClick={(e) => e.stopPropagation()}
                   />
                 ) : (
                   <span
                     className={`item-name ${item.status === "bought" ? "bought-text" : ""}`}
-                    onClick={() => startEdit(item.id, "name", item.name)}
+                    onClick={(e) => { e.stopPropagation(); startEdit(item.id, "name", item.name); }}
                   >
                     {item.name}
                   </span>
@@ -159,10 +176,11 @@ export default function ShoppingList() {
                     onChange={(e) => setEditValue(e.target.value)}
                     onBlur={commitEdit}
                     onKeyDown={onEditKeyDown}
+                    onClick={(e) => e.stopPropagation()}
                   />
                 ) : (
                   item.quantity && (
-                    <span className="item-qty" onClick={() => startEdit(item.id, "quantity", item.quantity ?? "")}>
+                    <span className="item-qty" onClick={(e) => { e.stopPropagation(); startEdit(item.id, "quantity", item.quantity ?? ""); }}>
                       {item.quantity}
                     </span>
                   )
@@ -180,7 +198,7 @@ export default function ShoppingList() {
               )}
             </div>
 
-            <button className="delete-item-btn" onClick={() => deleteItem(item.id)} aria-label="Delete">✕</button>
+            <button className="delete-item-btn" onClick={(e) => { e.stopPropagation(); deleteItem(item.id); }} aria-label="Delete">✕</button>
           </div>
         ))}
       </div>
