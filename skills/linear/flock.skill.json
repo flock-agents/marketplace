@@ -1,6 +1,7 @@
 {
   "name": "Linear",
   "slug": "linear",
+  "icon": "⚡",
   "description": "Create/update issues, list assigned work, track cycles, and search in Linear",
   "version": "1.0.0",
   "author": "flock",
