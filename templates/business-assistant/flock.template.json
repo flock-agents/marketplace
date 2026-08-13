@@ -1,0 +1,113 @@
+{
+  "name": "Business Assistant",
+  "slug": "business-assistant",
+  "description": "A professional assistant for email drafts, meeting notes, document review, research, and scheduling",
+  "version": "1.0.0",
+  "author": "flock",
+  "icon": "💼",
+  "category": "professional",
+  "tags": ["business", "email", "meetings", "documents", "scheduling"],
+  "minFlockVersion": "0.7.0",
+  "sortOrder": 20,
+
+  "agent": {
+    "defaultName": "Noor",
+    "model": "claude-sonnet-4-6",
+    "role": "main",
+    "tone": "professional, precise, formal",
+    "examplePrompts": [
+      "Check my inbox for anything urgent",
+      "What meetings do I have today?",
+      "Draft a reply to the latest email from [name]",
+      "Summarize this document for me",
+      "Find a 30-minute slot for a meeting this week"
+    ]
+  },
+
+  "skills": [
+    { "skillId": "gmail", "preSelected": true, "description": "Manage professional email" },
+    { "skillId": "google-calendar", "preSelected": true, "description": "Schedule and manage meetings" },
+    { "skillId": "google-docs", "preSelected": true, "description": "Review and draft documents" },
+    { "skillId": "google-drive", "preSelected": true, "description": "Access files and documents" },
+    { "skillId": "memory", "preSelected": true },
+    {
+      "skillId": "web-clipper",
+      "preSelected": false,
+      "description": "Save and retrieve research sources"
+    },
+    {
+      "skillId": "reminders",
+      "preSelected": false,
+      "description": "Set reminders for deadlines and follow-ups"
+    }
+  ],
+
+  "channels": [
+    {
+      "type": "telegram",
+      "connectionType": "bot-token",
+      "defaultSessionMode": "chat_routed",
+      "outboundPrefix": false,
+      "setupGuide": "Create a bot via @BotFather on Telegram and paste the token"
+    }
+  ],
+
+  "tasks": [
+    {
+      "name": "Morning Brief",
+      "schedule": "0 8 * * 1-5",
+      "prompt": "Prepare today's business brief:\n1. Today's meetings — time, attendees, and any prep needed\n2. Urgent emails that need a response\n3. Deadlines approaching this week\n4. Action items carried over from yesterday\n\nFormat as a clear, scannable summary. Lead with the most time-sensitive items.",
+      "deliverTo": null,
+      "timezone": "Asia/Kolkata",
+      "enabled": true,
+      "model": "claude-sonnet-4-6",
+      "thinkingLevel": "none"
+    },
+    {
+      "name": "Weekly Review",
+      "schedule": "0 10 * * 1",
+      "prompt": "Prepare the weekly business review:\n1. Key meetings and outcomes from last week\n2. Emails that still need follow-up\n3. This week's schedule overview — busy days, open blocks\n4. Upcoming deadlines and deliverables\n\nKeep it structured and actionable.",
+      "deliverTo": null,
+      "timezone": "Asia/Kolkata",
+      "enabled": true,
+      "model": "claude-sonnet-4-6",
+      "thinkingLevel": "none"
+    }
+  ],
+
+  "wizard": [
+    { "id": "personality", "type": "personality", "label": "Personality" },
+    { "id": "skills", "type": "skills", "label": "Integrations" },
+    { "id": "channels", "type": "channels", "label": "Messaging" },
+    { "id": "tasks", "type": "scheduled-tasks", "label": "Scheduled Tasks" },
+    { "id": "review", "type": "review", "label": "Review & Create" }
+  ],
+
+  "setupChecklist": [
+    {
+      "id": "identity-configured",
+      "label": "Identity configured",
+      "description": "Set a name, avatar, and description for your assistant",
+      "deepLink": "/agents/:id"
+    },
+    {
+      "id": "instructions-set",
+      "label": "Agent instructions set",
+      "description": "Agent instructions define how your business assistant behaves",
+      "deepLink": "/agents/:id"
+    },
+    {
+      "id": "connect-email",
+      "label": "Connect your work email",
+      "description": "Link Gmail so your assistant can manage your professional inbox",
+      "deepLink": "/agents/:id?tab=skills"
+    },
+    {
+      "id": "connect-calendar",
+      "label": "Connect your calendar",
+      "description": "Link Google Calendar for scheduling and meeting management",
+      "deepLink": "/agents/:id?tab=skills",
+      "skippable": true
+    }
+  ]
+}

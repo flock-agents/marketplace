@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updatedAt": "2026-08-11T17:00:00Z",
+  "updatedAt": "2026-08-13T09:00:00Z",
   "items": [
     {
       "slug": "linear",
@@ -52,6 +52,57 @@
       "minFlockVersion": "0.7.0",
       "publishedAt": "2026-08-11T17:00:00Z",
       "updatedAt": "2026-08-11T17:00:00Z"
+    },
+    {
+      "slug": "personal-assistant",
+      "type": "template",
+      "name": "Personal Assistant",
+      "description": "A general-purpose helper for tasks, reminders, notes, web research, email, and calendar",
+      "author": "flock",
+      "category": "personal",
+      "tags": ["productivity", "email", "calendar", "reminders", "notes"],
+      "icon": "✨",
+      "repo": "flock-agents/marketplace",
+      "path": "templates/personal-assistant",
+      "latestVersion": "1.0.0",
+      "latestTag": "personal-assistant-v1.0.0",
+      "minFlockVersion": "0.7.0",
+      "publishedAt": "2026-08-13T09:00:00Z",
+      "updatedAt": "2026-08-13T09:00:00Z"
+    },
+    {
+      "slug": "business-assistant",
+      "type": "template",
+      "name": "Business Assistant",
+      "description": "A professional assistant for email drafts, meeting notes, document review, research, and scheduling",
+      "author": "flock",
+      "category": "professional",
+      "tags": ["business", "email", "meetings", "documents", "scheduling"],
+      "icon": "💼",
+      "repo": "flock-agents/marketplace",
+      "path": "templates/business-assistant",
+      "latestVersion": "1.0.0",
+      "latestTag": "business-assistant-v1.0.0",
+      "minFlockVersion": "0.7.0",
+      "publishedAt": "2026-08-13T09:00:00Z",
+      "updatedAt": "2026-08-13T09:00:00Z"
+    },
+    {
+      "slug": "creative-assistant",
+      "type": "template",
+      "name": "Creative Assistant",
+      "description": "A creative partner for writing, brainstorming, content creation, and social media",
+      "author": "flock",
+      "category": "personal",
+      "tags": ["writing", "content", "social-media", "brainstorming", "creative"],
+      "icon": "🎨",
+      "repo": "flock-agents/marketplace",
+      "path": "templates/creative-assistant",
+      "latestVersion": "1.0.0",
+      "latestTag": "creative-assistant-v1.0.0",
+      "minFlockVersion": "0.7.0",
+      "publishedAt": "2026-08-13T09:00:00Z",
+      "updatedAt": "2026-08-13T09:00:00Z"
     }
   ]
 }

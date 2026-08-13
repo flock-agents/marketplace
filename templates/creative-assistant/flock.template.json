@@ -1,0 +1,90 @@
+{
+  "name": "Creative Assistant",
+  "slug": "creative-assistant",
+  "description": "A creative partner for writing, brainstorming, content creation, and social media",
+  "version": "1.0.0",
+  "author": "flock",
+  "icon": "🎨",
+  "category": "personal",
+  "tags": ["writing", "content", "social-media", "brainstorming", "creative"],
+  "minFlockVersion": "0.7.0",
+  "sortOrder": 30,
+
+  "agent": {
+    "defaultName": "Luna",
+    "model": "claude-sonnet-4-6",
+    "role": "main",
+    "tone": "casual, creative, enthusiastic",
+    "examplePrompts": [
+      "Help me write a LinkedIn post about [topic]",
+      "I need 5 blog post ideas about [subject]",
+      "Polish this draft for me",
+      "Write a Twitter thread about [topic]",
+      "Brainstorm taglines for [product/project]"
+    ]
+  },
+
+  "skills": [
+    { "skillId": "twitter", "preSelected": true, "description": "Draft and post tweets and threads" },
+    { "skillId": "linkedin", "preSelected": true, "description": "Publish professional content on LinkedIn" },
+    { "skillId": "quick-capture", "preSelected": true, "description": "Save ideas and drafts" },
+    { "skillId": "memory", "preSelected": true },
+    {
+      "skillId": "web-clipper",
+      "preSelected": false,
+      "description": "Save reference articles and inspiration"
+    }
+  ],
+
+  "channels": [
+    {
+      "type": "telegram",
+      "connectionType": "bot-token",
+      "defaultSessionMode": "chat_routed",
+      "outboundPrefix": false,
+      "setupGuide": "Create a bot via @BotFather on Telegram and paste the token"
+    }
+  ],
+
+  "tasks": [
+    {
+      "name": "Weekly Creative Inspiration",
+      "schedule": "0 10 * * 5",
+      "prompt": "It's Friday — time for the weekly creative inspiration roundup!\n\nShare 3-5 interesting creative prompts, trends, or ideas the user might enjoy:\n1. A writing prompt or storytelling angle they haven't tried\n2. A content format or platform trend worth experimenting with\n3. A brainstorming exercise or creative challenge for the weekend\n\nDraw from what you know about their interests and past projects.\nKeep it energizing and actionable — each idea should be something they could start in 10 minutes.\nEnd with: \"Pick one and let's run with it — or tell me what you're working on this weekend.\"",
+      "deliverTo": null,
+      "timezone": "Asia/Kolkata",
+      "enabled": true,
+      "model": "claude-sonnet-4-6",
+      "thinkingLevel": "none"
+    }
+  ],
+
+  "wizard": [
+    { "id": "personality", "type": "personality", "label": "Personality" },
+    { "id": "skills", "type": "skills", "label": "Platforms" },
+    { "id": "channels", "type": "channels", "label": "Messaging" },
+    { "id": "review", "type": "review", "label": "Review & Create" }
+  ],
+
+  "setupChecklist": [
+    {
+      "id": "identity-configured",
+      "label": "Identity configured",
+      "description": "Set a name, avatar, and description for your creative assistant",
+      "deepLink": "/agents/:id"
+    },
+    {
+      "id": "instructions-set",
+      "label": "Agent instructions set",
+      "description": "Agent instructions define your creative assistant's style and approach",
+      "deepLink": "/agents/:id"
+    },
+    {
+      "id": "connect-social",
+      "label": "Connect a social platform",
+      "description": "Link Twitter or LinkedIn so your assistant can publish content",
+      "deepLink": "/agents/:id?tab=skills",
+      "skippable": true
+    }
+  ]
+}

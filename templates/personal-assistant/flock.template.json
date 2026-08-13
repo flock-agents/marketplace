@@ -1,0 +1,114 @@
+{
+  "name": "Personal Assistant",
+  "slug": "personal-assistant",
+  "description": "A general-purpose helper for tasks, reminders, notes, web research, email, and calendar",
+  "version": "1.0.0",
+  "author": "flock",
+  "icon": "✨",
+  "category": "personal",
+  "tags": ["productivity", "email", "calendar", "reminders", "notes"],
+  "minFlockVersion": "0.7.0",
+  "sortOrder": 10,
+
+  "agent": {
+    "defaultName": "Kai",
+    "model": "claude-sonnet-4-6",
+    "role": "main",
+    "tone": "friendly, helpful, efficient",
+    "examplePrompts": [
+      "What's on my schedule today?",
+      "Remind me to call the dentist tomorrow at 10am",
+      "Check my inbox for anything urgent",
+      "Save this idea for later: ...",
+      "What's the weather like this weekend?"
+    ]
+  },
+
+  "skills": [
+    { "skillId": "gmail", "preSelected": true, "description": "Read, send, and organize emails" },
+    { "skillId": "google-calendar", "preSelected": true, "description": "Manage your schedule and events" },
+    { "skillId": "reminders", "preSelected": true, "description": "Set time-based and recurring reminders" },
+    { "skillId": "quick-capture", "preSelected": true, "description": "Save notes, links, and ideas" },
+    { "skillId": "memory", "preSelected": true },
+    {
+      "skillId": "web-clipper",
+      "preSelected": false,
+      "description": "Save and retrieve web articles"
+    },
+    {
+      "skillId": "weather",
+      "preSelected": false,
+      "description": "Current weather and forecasts"
+    }
+  ],
+
+  "channels": [
+    {
+      "type": "telegram",
+      "connectionType": "bot-token",
+      "defaultSessionMode": "chat_routed",
+      "outboundPrefix": false,
+      "setupGuide": "Create a bot via @BotFather on Telegram and paste the token"
+    }
+  ],
+
+  "tasks": [
+    {
+      "name": "Morning Briefing",
+      "schedule": "0 8 * * *",
+      "prompt": "Good morning! Prepare today's briefing:\n1. Today's calendar — meetings, events, deadlines\n2. Urgent or unread emails that need attention\n3. Active reminders and pending tasks\n4. Weather forecast for today\n\nKeep it concise and scannable.",
+      "deliverTo": null,
+      "timezone": "Asia/Kolkata",
+      "enabled": true,
+      "model": "claude-sonnet-4-6",
+      "thinkingLevel": "none"
+    },
+    {
+      "name": "Evening Wrap-up",
+      "schedule": "0 21 * * *",
+      "prompt": "Evening check-in:\n1. Anything pending from today that wasn't completed\n2. Tomorrow's schedule preview\n3. Reminders due tomorrow morning\n\nKeep it brief — only items that need attention.",
+      "deliverTo": null,
+      "timezone": "Asia/Kolkata",
+      "enabled": true,
+      "model": "claude-sonnet-4-6",
+      "thinkingLevel": "none"
+    }
+  ],
+
+  "wizard": [
+    { "id": "personality", "type": "personality", "label": "Personality" },
+    { "id": "skills", "type": "skills", "label": "Skills" },
+    { "id": "channels", "type": "channels", "label": "Messaging" },
+    { "id": "tasks", "type": "scheduled-tasks", "label": "Scheduled Tasks" },
+    { "id": "review", "type": "review", "label": "Review & Create" }
+  ],
+
+  "setupChecklist": [
+    {
+      "id": "identity-configured",
+      "label": "Identity configured",
+      "description": "Set a name, avatar, and description for your assistant",
+      "deepLink": "/agents/:id"
+    },
+    {
+      "id": "instructions-set",
+      "label": "Agent instructions set",
+      "description": "Agent instructions define how your assistant behaves",
+      "deepLink": "/agents/:id"
+    },
+    {
+      "id": "connect-email",
+      "label": "Connect your email",
+      "description": "Link Gmail so your assistant can manage your inbox",
+      "deepLink": "/agents/:id?tab=skills",
+      "skippable": true
+    },
+    {
+      "id": "connect-channel",
+      "label": "Add a messaging channel",
+      "description": "Connect Telegram to reach your assistant on the go",
+      "deepLink": "/agents/:id?tab=channels",
+      "skippable": true
+    }
+  ]
+}
