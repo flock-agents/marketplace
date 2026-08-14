@@ -2,7 +2,7 @@
   "name": "Personal Assistant",
   "slug": "personal-assistant",
   "description": "A general-purpose helper for tasks, reminders, notes, web research, email, and calendar",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "flock",
   "icon": "✨",
   "category": "personal",
@@ -27,19 +27,7 @@
   "skills": [
     { "skillId": "gmail", "preSelected": true, "description": "Read, send, and organize emails" },
     { "skillId": "google-calendar", "preSelected": true, "description": "Manage your schedule and events" },
-    { "skillId": "reminders", "preSelected": true, "description": "Set time-based and recurring reminders" },
-    { "skillId": "quick-capture", "preSelected": true, "description": "Save notes, links, and ideas" },
-    { "skillId": "memory", "preSelected": true },
-    {
-      "skillId": "web-clipper",
-      "preSelected": false,
-      "description": "Save and retrieve web articles"
-    },
-    {
-      "skillId": "weather",
-      "preSelected": false,
-      "description": "Current weather and forecasts"
-    }
+    { "skillId": "reminders", "preSelected": true, "description": "Set time-based and recurring reminders" }
   ],
 
   "channels": [

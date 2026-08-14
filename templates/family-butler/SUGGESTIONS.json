@@ -25,10 +25,6 @@
       "reason": "Track household expenses and grocery lists in spreadsheets"
     },
     {
-      "slug": "expense-tracker",
-      "reason": "Log and categorize household spending automatically"
-    },
-    {
       "slug": "weather",
       "reason": "Include weather forecasts in morning briefings"
     }

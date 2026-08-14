@@ -2,7 +2,7 @@
   "name": "Family Butler",
   "slug": "family-butler",
   "description": "A household assistant that manages groceries, meals, and family routines through Telegram",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "flock",
   "icon": "🏠",
   "category": "family",
@@ -57,9 +57,7 @@
   },
 
   "skills": [
-    { "skillId": "memory" },
     { "skillId": "reminders" },
-    { "skillId": "quick-capture" },
     {
       "skillId": "google-calendar",
       "preSelected": true,
@@ -69,21 +67,6 @@
       "skillId": "google-sheets",
       "preSelected": true,
       "description": "Track household expenses and grocery lists"
-    },
-    {
-      "skillId": "expense-tracker",
-      "preSelected": true,
-      "description": "Log and categorize household spending"
-    },
-    {
-      "skillId": "todoist",
-      "preSelected": false,
-      "description": "Manage family to-do lists and tasks"
-    },
-    {
-      "skillId": "weather",
-      "preSelected": true,
-      "description": "Weather forecasts for daily briefings"
     },
     {
       "skillId": "swiggy-instamart",

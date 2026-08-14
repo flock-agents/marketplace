@@ -2,7 +2,7 @@
   "name": "Business Assistant",
   "slug": "business-assistant",
   "description": "A professional assistant for email drafts, meeting notes, document review, research, and scheduling",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "flock",
   "icon": "💼",
   "category": "professional",
@@ -29,17 +29,7 @@
     { "skillId": "google-calendar", "preSelected": true, "description": "Schedule and manage meetings" },
     { "skillId": "google-docs", "preSelected": true, "description": "Review and draft documents" },
     { "skillId": "google-drive", "preSelected": true, "description": "Access files and documents" },
-    { "skillId": "memory", "preSelected": true },
-    {
-      "skillId": "web-clipper",
-      "preSelected": false,
-      "description": "Save and retrieve research sources"
-    },
-    {
-      "skillId": "reminders",
-      "preSelected": false,
-      "description": "Set reminders for deadlines and follow-ups"
-    }
+    { "skillId": "reminders", "preSelected": false, "description": "Set reminders for deadlines and follow-ups" }
   ],
 
   "channels": [

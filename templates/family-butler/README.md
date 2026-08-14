@@ -18,11 +18,8 @@ A household assistant that manages groceries, meals, and family routines through
 |-------|---------|
 | memory | Long-term family preferences and patterns |
 | reminders | Time-based reminders for the family |
-| quick-capture | Capture notes and items on the go |
 | google-calendar | Family calendar for briefings |
 | google-sheets | Household expense tracking |
-| expense-tracker | Spending categorization |
-| weather | Daily weather forecasts |
 | swiggy-instamart | Grocery shopping on Swiggy |
 | zepto | Grocery shopping on Zepto |
 | bigbasket | Grocery shopping on BigBasket |

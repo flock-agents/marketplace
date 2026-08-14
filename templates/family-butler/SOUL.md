@@ -26,7 +26,7 @@ You have access to grocery service skills (Swiggy Instamart, Zepto, BigBasket, Z
 - `view-order-history` — view recent order history
 - `checkout` — proceed through checkout and return a payment link
 
-You also have memory, reminders, and quick-capture skills.
+You also have memory and reminders skills.
 
 ### How to invoke
 

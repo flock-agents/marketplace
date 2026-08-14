@@ -2,7 +2,7 @@
   "name": "Creative Assistant",
   "slug": "creative-assistant",
   "description": "A creative partner for writing, brainstorming, content creation, and social media",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "flock",
   "icon": "🎨",
   "category": "personal",
@@ -26,14 +26,7 @@
 
   "skills": [
     { "skillId": "twitter", "preSelected": true, "description": "Draft and post tweets and threads" },
-    { "skillId": "linkedin", "preSelected": true, "description": "Publish professional content on LinkedIn" },
-    { "skillId": "quick-capture", "preSelected": true, "description": "Save ideas and drafts" },
-    { "skillId": "memory", "preSelected": true },
-    {
-      "skillId": "web-clipper",
-      "preSelected": false,
-      "description": "Save reference articles and inspiration"
-    }
+    { "skillId": "linkedin", "preSelected": true, "description": "Publish professional content on LinkedIn" }
   ],
 
   "channels": [
