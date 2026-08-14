@@ -1,0 +1,18 @@
+{
+  "name": "Amazon Shopping",
+  "slug": "amazon",
+  "icon": "📦",
+  "description": "Search products, add to cart, place orders, and track deliveries on Amazon.in",
+  "version": "1.0.0",
+  "author": "flock",
+  "category": "integration",
+  "tags": ["shopping", "delivery", "amazon", "ecommerce"],
+  "minFlockVersion": "0.7.0",
+  "tier": "installable",
+  "requires": {
+    "type": "browser_session",
+    "service": "amazon.in",
+    "description": "Log in to Amazon.in via the dashboard browser session to access shopping and orders",
+    "rationale": "Amazon has no public shopping API — a saved browser session is how the agent shops on your behalf."
+  }
+}

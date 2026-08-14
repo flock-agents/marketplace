@@ -1,0 +1,18 @@
+{
+  "name": "Zepto",
+  "slug": "zepto",
+  "icon": "🛒",
+  "description": "Search products, manage cart, and place grocery orders on Zepto",
+  "version": "1.0.0",
+  "author": "flock",
+  "category": "integration",
+  "tags": ["grocery", "delivery", "shopping", "zepto"],
+  "minFlockVersion": "0.7.0",
+  "tier": "installable",
+  "requires": {
+    "type": "browser_session",
+    "service": "zepto",
+    "description": "Log in to Zepto via the dashboard browser session to access grocery delivery",
+    "rationale": "Zepto has no public API — a saved browser session is how the agent shops on your behalf."
+  }
+}

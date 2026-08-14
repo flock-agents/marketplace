@@ -1,0 +1,18 @@
+{
+  "name": "BigBasket",
+  "slug": "bigbasket",
+  "icon": "🧺",
+  "description": "Search products, manage cart, and place grocery orders on BigBasket",
+  "version": "1.0.0",
+  "author": "flock",
+  "category": "integration",
+  "tags": ["grocery", "delivery", "shopping", "bigbasket"],
+  "minFlockVersion": "0.7.0",
+  "tier": "installable",
+  "requires": {
+    "type": "browser_session",
+    "service": "bigbasket",
+    "description": "Log in to BigBasket via the dashboard browser session to access grocery shopping",
+    "rationale": "BigBasket has no public API — a saved browser session is how the agent shops on your behalf."
+  }
+}

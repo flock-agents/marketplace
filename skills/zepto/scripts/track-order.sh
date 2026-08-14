@@ -1,0 +1,89 @@
+#!/bin/bash
+set -euo pipefail
+source "$(dirname "$0")/_helpers.sh"
+
+PARAMS="${SKILL_PARAMS:-"{}"}"
+ORDER_ID=$(echo "$PARAMS" | jq -r '.orderId // ""')
+
+_require_browser_session
+_validate_param "$ORDER_ID" "orderId"
+_validate_id "$ORDER_ID" "orderId"
+
+ORDERS_URL="${BASE_URL}/account/orders"
+
+EVAL_SCRIPT="(() => {
+  const targetOrderId = '${ORDER_ID}'.toUpperCase();
+  const orderCards = document.querySelectorAll('[class*=\"order\"], [class*=\"Order\"], [data-testid=\"order-card\"]');
+
+  let orderData = null;
+
+  orderCards.forEach(el => {
+    if (orderData) return;
+    const text = el.textContent || '';
+    if (!text.toUpperCase().includes(targetOrderId)) return;
+
+    const statusEl = el.querySelector('[class*=\"status\"], [class*=\"Status\"], [class*=\"state\"]');
+    const dateEl = el.querySelector('[class*=\"date\"], [class*=\"Date\"], [class*=\"time\"], time');
+    const totalEl = el.querySelector('[class*=\"total\"], [class*=\"Total\"], [class*=\"amount\"], [class*=\"price\"]');
+    const deliveryEl = el.querySelector('[class*=\"delivery\"], [class*=\"eta\"], [class*=\"estimate\"]');
+    const partnerEl = el.querySelector('[class*=\"partner\"], [class*=\"rider\"], [class*=\"driver\"]');
+
+    const itemEls = el.querySelectorAll('[class*=\"item\"], li');
+    const items = [];
+    itemEls.forEach(itemEl => {
+      const itemName = (itemEl.querySelector('[class*=\"name\"], span')?.textContent || '').trim().substring(0, 200);
+      const itemQty = parseInt((itemEl.querySelector('[class*=\"qty\"], [class*=\"quantity\"]')?.textContent || '1').replace(/[^\\d]/g, '')) || 1;
+      const itemPriceText = (itemEl.querySelector('[class*=\"price\"]')?.textContent || '').replace(/[^\\d.]/g, '');
+      if (itemName && itemName.length > 1) {
+        items.push({
+          name: itemName,
+          quantity: itemQty,
+          price: itemPriceText ? parseFloat(itemPriceText) : 0
+        });
+      }
+    });
+
+    const statusText = (statusEl?.textContent || '').trim().toLowerCase();
+    let status = 'placed';
+    if (statusText.includes('deliver')) status = statusText.includes('out') ? 'out_for_delivery' : 'delivered';
+    else if (statusText.includes('cancel')) status = 'cancelled';
+    else if (statusText.includes('refund')) status = 'refunded';
+    else if (statusText.includes('pack')) status = 'being_packed';
+    else if (statusText.includes('confirm')) status = 'confirmed';
+
+    const totalText = (totalEl?.textContent || '').replace(/[^\\d.]/g, '');
+
+    orderData = {
+      orderId: targetOrderId,
+      status: status,
+      statusLabel: (statusEl?.textContent || '').trim().substring(0, 50),
+      placedAt: (dateEl?.textContent || dateEl?.getAttribute('datetime') || '').trim().substring(0, 50) || null,
+      estimatedDelivery: (deliveryEl?.textContent || '').trim().substring(0, 100) || null,
+      items: items,
+      total: totalText ? parseFloat(totalText) : 0,
+      deliveryPartner: (partnerEl?.textContent || '').trim().substring(0, 50) || null,
+      trackingUrl: null
+    };
+  });
+
+  if (!orderData) {
+    return JSON.stringify({ error: true, code: 'ORDER_NOT_FOUND', message: 'Order ' + targetOrderId + ' not found' });
+  }
+
+  return JSON.stringify(orderData);
+})()"
+
+RESULT=$(_browser_write "$ORDERS_URL" "$EVAL_SCRIPT" "") || exit $?
+CONTENT=$(echo "$RESULT" | jq -r '.content // "{}"')
+
+PARSED=$(echo "$CONTENT" | jq -c '.' 2>/dev/null) || {
+  _error_json "PAGE_CHANGED" "Could not read order details. The service may have updated its layout."
+}
+
+IS_ERROR=$(echo "$PARSED" | jq -r '.error // false')
+if [ "$IS_ERROR" = "true" ]; then
+  echo "$PARSED"
+  exit 1
+fi
+
+echo "$PARSED" | jq -c '.'

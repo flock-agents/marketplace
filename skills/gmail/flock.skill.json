@@ -1,0 +1,34 @@
+{
+  "name": "Gmail",
+  "slug": "gmail",
+  "icon": "📧",
+  "description": "Read, send, search, and organize emails via Gmail",
+  "version": "1.0.0",
+  "author": "flock",
+  "category": "integration",
+  "tags": ["email", "gmail", "productivity", "google"],
+  "minFlockVersion": "0.7.0",
+  "tier": "installable",
+  "requires": {
+    "anyOf": [
+      {
+        "type": "browser_session",
+        "service": "google",
+        "description": "Full Gmail experience via browser session — rich compose, CC/BCC, attachments, formatting",
+        "recommended": true,
+        "rationale": "Uses your existing Google login — no app passwords or extra setup needed."
+      },
+      {
+        "type": "account",
+        "credentialSubtype": "imap",
+        "service": "imap",
+        "description": "Direct email access via IMAP with app password",
+        "setupInstructions": "Use a Google App Password for IMAP access — not your normal Google password. Go to myaccount.google.com/apppasswords to generate one.",
+        "fields": [
+          { "name": "email", "type": "email", "label": "Email address", "required": true },
+          { "name": "password", "type": "password", "label": "App password (16 characters)", "required": true }
+        ]
+      }
+    ]
+  }
+}
