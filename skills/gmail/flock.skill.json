@@ -1,7 +1,7 @@
 {
   "name": "Gmail",
   "slug": "gmail",
-  "icon": "📧",
+  "icon": "icon.svg",
   "description": "Read, send, search, and organize emails via Gmail",
   "version": "1.0.0",
   "author": "flock",

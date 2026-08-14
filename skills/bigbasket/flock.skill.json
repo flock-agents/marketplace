@@ -1,7 +1,7 @@
 {
   "name": "BigBasket",
   "slug": "bigbasket",
-  "icon": "🧺",
+  "icon": "icon.svg",
   "description": "Search products, manage cart, and place grocery orders on BigBasket",
   "version": "1.0.0",
   "author": "flock",

@@ -4,7 +4,7 @@
   "description": "A household assistant that manages groceries, meals, and family routines through Telegram",
   "version": "1.1.0",
   "author": "flock",
-  "icon": "🏠",
+  "icon": "icon.svg",
   "category": "family",
   "tags": ["household", "grocery", "family", "meal-planning"],
   "minFlockVersion": "0.7.0",

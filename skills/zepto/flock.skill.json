@@ -1,7 +1,7 @@
 {
   "name": "Zepto",
   "slug": "zepto",
-  "icon": "🛒",
+  "icon": "icon.svg",
   "description": "Search products, manage cart, and place grocery orders on Zepto",
   "version": "1.0.0",
   "author": "flock",

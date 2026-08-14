@@ -1,7 +1,7 @@
 {
   "name": "Amazon Shopping",
   "slug": "amazon",
-  "icon": "📦",
+  "icon": "icon.svg",
   "description": "Search products, add to cart, place orders, and track deliveries on Amazon.in",
   "version": "1.0.0",
   "author": "flock",

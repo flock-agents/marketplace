@@ -4,7 +4,7 @@
   "description": "A general-purpose helper for tasks, reminders, notes, web research, email, and calendar",
   "version": "1.1.0",
   "author": "flock",
-  "icon": "✨",
+  "icon": "icon.svg",
   "category": "personal",
   "tags": ["productivity", "email", "calendar", "reminders", "notes"],
   "minFlockVersion": "0.7.0",
