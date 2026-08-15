@@ -1,4 +1,1 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
-  <rect width="48" height="48" rx="8" fill="#7B2D8E"/>
-  <text x="24" y="33" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-weight="800" font-size="24" fill="#fff">Z</text>
-</svg>
+<svg role="img" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><title>Zepto</title><rect width="24" height="24" rx="4" fill="#8B2FA8"/><path d="M5.5 7.5h8.2L5.5 16.5v1.5h13v-2.5H10L18.5 6V4.5H5.5z" fill="#FFC700"/></svg>
