@@ -242,6 +242,7 @@ export default function MealPlan() {
         </div>
         <div className={`slot-meal ${meal ? "" : "placeholder"}`}>
           {meal ? meal.name : "Add meal"}
+          {meal?.notes && <div className="slot-notes">{meal.notes}</div>}
         </div>
       </div>
     );

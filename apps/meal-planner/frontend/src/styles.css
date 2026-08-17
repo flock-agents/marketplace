@@ -316,6 +316,17 @@ input {
   font-style: italic;
 }
 
+.slot-notes {
+  font-size: 0.75rem;
+  font-weight: 400;
+  color: var(--text-light);
+  margin-top: 2px;
+  font-style: italic;
+  overflow-wrap: break-word;
+  word-wrap: break-word;
+  white-space: normal;
+}
+
 .slot-edit-btn {
   width: 28px;
   height: 28px;
@@ -672,9 +683,9 @@ input {
   font-size: 0.72rem;
   color: var(--text-light);
   padding-left: 4px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: break-word;
+  word-wrap: break-word;
+  white-space: normal;
 }
 
 .item-name {

@@ -32,11 +32,11 @@
       "iconUrl": "https://raw.githubusercontent.com/AlfredoSystems/flock-agents/main/marketplace/apps/meal-planner/icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "apps/meal-planner",
-      "latestVersion": "1.2.0",
-      "latestTag": "meal-planner-v1.2.0",
+      "latestVersion": "1.2.1",
+      "latestTag": "meal-planner-v1.2.1",
       "minFlockVersion": "0.7.0",
       "publishedAt": "2026-08-11T17:00:00Z",
-      "updatedAt": "2026-08-14T20:20:00Z"
+      "updatedAt": "2026-08-17T14:35:00Z"
     },
     {
       "slug": "family-calendar",
