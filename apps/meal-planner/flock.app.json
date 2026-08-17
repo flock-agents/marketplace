@@ -1,6 +1,6 @@
 {
   "name": "Meal Planner",
-  "icon": "🍽️",
+  "icon": "icon.svg",
   "type": "fullstack",
   "access": "private",
   "buildCommand": "bun install && cd frontend && bun install && bun run build",
