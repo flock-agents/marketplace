@@ -1,6 +1,6 @@
 {
   "name": "Meal Planner",
-  "icon": "icon.svg",
+  "icon": "🍽️",
   "type": "fullstack",
   "access": "private",
   "buildCommand": "cd frontend && npm install && npm run build",
