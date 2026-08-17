@@ -2,7 +2,7 @@
   "name": "Family Calendar",
   "slug": "family-calendar",
   "description": "Family events, schedules, and reminders at a glance",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "author": "flock",
   "category": "family",
   "tags": ["calendar", "family", "events", "reminders", "scheduling"],

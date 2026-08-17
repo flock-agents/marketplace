@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updatedAt": "2026-08-14T10:00:00Z",
+  "updatedAt": "2026-08-17T17:52:00Z",
   "items": [
     {
       "slug": "linear",
@@ -32,11 +32,11 @@
       "iconUrl": "https://raw.githubusercontent.com/AlfredoSystems/flock-agents/main/marketplace/apps/meal-planner/icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "apps/meal-planner",
-      "latestVersion": "1.2.1",
-      "latestTag": "meal-planner-v1.2.1",
+      "latestVersion": "1.2.2",
+      "latestTag": "meal-planner-v1.2.2",
       "minFlockVersion": "0.7.0",
       "publishedAt": "2026-08-11T17:00:00Z",
-      "updatedAt": "2026-08-17T14:35:00Z"
+      "updatedAt": "2026-08-17T17:20:00Z"
     },
     {
       "slug": "family-calendar",
@@ -50,11 +50,11 @@
       "iconUrl": "https://raw.githubusercontent.com/AlfredoSystems/flock-agents/main/marketplace/apps/family-calendar/icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "apps/family-calendar",
-      "latestVersion": "1.0.1",
-      "latestTag": "family-calendar-v1.0.1",
+      "latestVersion": "1.0.2",
+      "latestTag": "family-calendar-v1.0.2",
       "minFlockVersion": "0.7.0",
       "publishedAt": "2026-08-13T15:30:00Z",
-      "updatedAt": "2026-08-13T16:30:00Z"
+      "updatedAt": "2026-08-17T17:52:00Z"
     },
     {
       "slug": "family-butler",

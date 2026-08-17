@@ -3,7 +3,7 @@
   "icon": "🍽️",
   "type": "fullstack",
   "access": "private",
-  "buildCommand": "cd frontend && npm install && npm run build",
+  "buildCommand": "bun install && cd frontend && bun install && bun run build",
   "buildDir": "frontend/dist",
   "processConfig": {
     "command": "bun run server/index.ts",
