@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updatedAt": "2026-08-17T18:33:00Z",
+  "updatedAt": "2026-08-19T05:23:00Z",
   "items": [
     {
       "slug": "linear",
@@ -217,6 +217,24 @@
       "minFlockVersion": "0.7.0",
       "publishedAt": "2026-08-14T10:00:00Z",
       "updatedAt": "2026-08-14T10:00:00Z"
+    },
+    {
+      "slug": "linkedin",
+      "type": "skill",
+      "name": "LinkedIn",
+      "description": "Read notifications, browse feed, publish posts, send messages, check messages, monitor post comments, and reply to comments on LinkedIn",
+      "author": "flock",
+      "category": "integration",
+      "tags": ["social", "linkedin", "professional"],
+      "icon": "icon.svg",
+      "iconUrl": "https://raw.githubusercontent.com/AlfredoSystems/flock-agents/main/marketplace/skills/linkedin/icon.svg",
+      "repo": "flock-agents/marketplace",
+      "path": "skills/linkedin",
+      "latestVersion": "1.0.0",
+      "latestTag": "linkedin-v1.0.0",
+      "minFlockVersion": "0.7.0",
+      "publishedAt": "2026-08-19T05:23:00Z",
+      "updatedAt": "2026-08-19T05:23:00Z"
     }
   ]
 }
