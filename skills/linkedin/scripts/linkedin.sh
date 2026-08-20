@@ -30,7 +30,17 @@ check_session_expired() {
   local session_name="${BROWSER_SESSION:-linkedin}"
   local agent_id="${FLOCK_AGENT_ID:-}"
 
-  if echo "$page_content" | grep -qi 'sign in\|log in\|login\|session_redirect\|"authwall"'; then
+  # Only mark outdated on a real auth wall — not an authenticated page that merely
+  # contains "login"/"sign in" in nav/footer. Matching those anywhere false-positived
+  # and logged the user out. Mirror linkedin.ts's isAuthWall check.
+  local is_authwall=false
+  if echo "$page_content" | grep -qi '"authwall"\|session_redirect'; then
+    is_authwall=true
+  elif echo "$page_content" | head -c 2000 | grep -qiE 'sign in to linkedin|log in to linkedin|join now|create account'; then
+    is_authwall=true
+  fi
+
+  if [ "$is_authwall" = true ]; then
     curl -s -X POST "${FLOCK_API}/api/internal/browser-sessions/${session_name}/mark-outdated" \
       -H "Content-Type: application/json" \
       -H "Authorization: Bearer ${FLOCK_AUTH_TOKEN:-}" \

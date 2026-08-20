@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updatedAt": "2026-08-19T05:23:00Z",
+  "updatedAt": "2026-08-20T15:16:00Z",
   "items": [
     {
       "slug": "linear",
@@ -230,11 +230,11 @@
       "iconUrl": "https://raw.githubusercontent.com/AlfredoSystems/flock-agents/main/marketplace/skills/linkedin/icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "skills/linkedin",
-      "latestVersion": "1.0.0",
-      "latestTag": "linkedin-v1.0.0",
+      "latestVersion": "1.0.1",
+      "latestTag": "linkedin-v1.0.1",
       "minFlockVersion": "0.7.0",
       "publishedAt": "2026-08-19T05:23:00Z",
-      "updatedAt": "2026-08-19T05:23:00Z"
+      "updatedAt": "2026-08-20T15:16:00Z"
     }
   ]
 }

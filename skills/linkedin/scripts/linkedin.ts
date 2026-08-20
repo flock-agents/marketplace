@@ -58,7 +58,10 @@ function checkError(httpCode: number, body: any, context: string): void {
 
 function checkSessionExpired(pageContent: string): void {
   const { sessionName, agentId } = getSessionAndAgent();
-  if (/sign in|log in|login|session_redirect|"authwall"/i.test(pageContent)) {
+  // Only mark outdated if the page is a full auth redirect, not just containing the word "login" in nav/footer
+  const isAuthWall = /"authwall"/i.test(pageContent) || /session_redirect/i.test(pageContent) ||
+    /^[\s\S]{0,2000}(sign in to linkedin|log in to linkedin|join now|create account)/i.test(pageContent);
+  if (isAuthWall) {
     fetch(`${FLOCK_API}/api/internal/browser-sessions/${sessionName}/mark-outdated`, {
       method: "POST",
       headers: {
