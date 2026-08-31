@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48" role="img" aria-label="Draft Desk">
+  <rect width="48" height="48" rx="10" fill="#0E9F8E"/>
+  <!-- document -->
+  <rect x="12" y="9" width="20" height="26" rx="3" fill="#fff"/>
+  <!-- text lines on the document -->
+  <g stroke="#0E9F8E" stroke-width="2" stroke-linecap="round" opacity="0.5">
+    <path d="M16 15h12"/>
+    <path d="M16 20h12"/>
+    <path d="M16 25h8"/>
+  </g>
+  <!-- pen (nib pointing to the document, drafting) -->
+  <g>
+    <rect x="30.5" y="20.2" width="4.2" height="18" rx="2.1" transform="rotate(45 32.6 29.2)" fill="#FFC857"/>
+    <path d="M36.8 22.4l3 3-1.9 1.9-3-3z" fill="#F4A61E"/>
+    <path d="M25.6 33.6l-1.4 4 4-1.4z" fill="#2B2B2B"/>
+  </g>
+</svg>

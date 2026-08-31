@@ -1,0 +1,497 @@
+/* App-specific styles layered on top of the Flock theme tokens. */
+
+/* ---- Queue header ---- */
+.app-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+}
+.app-title h1 {
+  font-size: 1.6rem;
+  margin: 0 0 0.25rem;
+  letter-spacing: -0.01em;
+}
+.app-title .subtitle {
+  color: var(--flock-text-muted);
+  font-size: 0.9rem;
+}
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+.awaiting-badge {
+  display: inline-flex;
+  align-items: center;
+  background: rgba(210, 153, 34, 0.14);
+  color: var(--flock-warning);
+  border: 1px solid rgba(210, 153, 34, 0.4);
+  padding: 0.35rem 0.75rem;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+/* ---- Fetch-more status note ---- */
+.fetch-note {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  background: var(--flock-bg-card);
+  border: 1px solid var(--flock-border);
+  border-radius: var(--flock-radius);
+  padding: 0.7rem 1rem;
+  margin-bottom: 1.25rem;
+  font-size: 0.9rem;
+  color: var(--flock-text-secondary);
+}
+.fetch-note.checking {
+  border-left: 3px solid var(--flock-info);
+  color: var(--flock-info);
+}
+.link-btn {
+  background: none;
+  border: none;
+  color: var(--flock-info);
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 0;
+  margin-left: auto;
+}
+
+/* ---- Filters ---- */
+.filters {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  margin-bottom: 1.5rem;
+}
+.filter-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.filter-label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--flock-text-muted);
+  width: 3.5rem;
+}
+.seg {
+  border: 1px solid var(--flock-border);
+  background: transparent;
+  color: var(--flock-text-secondary);
+  padding: 0.32rem 0.8rem;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+.seg:hover:not(.active) {
+  border-color: var(--flock-text-muted);
+  color: var(--flock-text);
+}
+.seg.active {
+  background: var(--flock-accent);
+  border-color: var(--flock-accent);
+  color: #fff;
+}
+
+/* ---- Queue list ---- */
+.queue-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+.draft-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem 1.15rem;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  border: 1px solid var(--flock-border);
+  background: var(--flock-bg-card);
+  border-radius: var(--flock-radius);
+  transition: border-color 0.15s ease, transform 0.05s ease;
+}
+.draft-row:hover {
+  border-color: var(--flock-accent);
+}
+.draft-row:focus-visible {
+  outline: 2px solid var(--flock-accent);
+  outline-offset: 2px;
+}
+.draft-row .main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+.draft-row .sender {
+  font-weight: 700;
+  font-size: 1rem;
+}
+.draft-row .subject {
+  color: var(--flock-text-secondary);
+  font-size: 0.9rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.draft-row .row-open {
+  margin-top: 0.15rem;
+}
+.draft-row .meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.45rem;
+  flex-shrink: 0;
+}
+.draft-row .age {
+  color: var(--flock-text-muted);
+  font-size: 0.75rem;
+}
+
+.badges {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.empty,
+.loading {
+  text-align: center;
+  color: var(--flock-text-muted);
+  padding: 3rem 1rem;
+}
+
+/* ---- Open-original link ---- */
+.open-original {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--flock-info);
+  text-decoration: none;
+  width: fit-content;
+}
+.open-original:hover {
+  text-decoration: underline;
+}
+
+/* ---- Draft detail ---- */
+.detail .back {
+  background: none;
+  border: none;
+  color: var(--flock-info);
+  cursor: pointer;
+  font-size: 0.88rem;
+  font-weight: 600;
+  padding: 0;
+  margin-bottom: 1.25rem;
+}
+.detail-head {
+  margin-bottom: 1.5rem;
+}
+.detail-head h2 {
+  margin: 0.6rem 0 0.5rem;
+  font-size: 1.5rem;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+}
+.from-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+.from-row .from {
+  color: var(--flock-text-muted);
+  font-size: 0.9rem;
+}
+
+/* Cards that separate original context from the editable draft. */
+.context-card,
+.draft-card,
+.comment-card {
+  border: 1px solid var(--flock-border);
+  border-radius: var(--flock-radius-lg);
+  padding: 1.25rem 1.35rem;
+  margin-bottom: 1.25rem;
+}
+.context-card {
+  background: var(--flock-bg-input);
+  border-left: 3px solid var(--flock-info);
+}
+.draft-card {
+  background: var(--flock-bg-card);
+  border-left: 3px solid var(--flock-accent);
+}
+.comment-card {
+  background: var(--flock-bg-card);
+}
+
+.card-label {
+  font-size: 0.74rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 700;
+  color: var(--flock-text-muted);
+  margin-bottom: 0.7rem;
+}
+.card-label.accent {
+  color: var(--flock-accent);
+}
+
+.thread-summary {
+  margin: 0;
+  font-size: 1rem;
+  line-height: 1.65;
+  color: var(--flock-text);
+  white-space: pre-wrap;
+  max-width: 62ch;
+}
+
+/* Recent messages — each real message as a small labeled block (sender in bold, then the text
+   with its line breaks preserved), visually distinct from the editable draft below. */
+.thread-messages {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  max-width: 62ch;
+}
+.thread-message {
+  padding: 0.6rem 0.85rem;
+  background: var(--flock-bg-card);
+  border: 1px solid var(--flock-border);
+  border-radius: var(--flock-radius);
+}
+.thread-message .msg-sender {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--flock-text);
+  margin-bottom: 0.25rem;
+}
+.thread-message .msg-text {
+  font-size: 0.95rem;
+  line-height: 1.6;
+  color: var(--flock-text-secondary);
+  white-space: pre-wrap;
+}
+.thread-empty {
+  margin: 0;
+  font-size: 0.9rem;
+  font-style: italic;
+  color: var(--flock-text-muted);
+}
+
+.thread-ref-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  margin-top: 1rem;
+  padding-top: 0.85rem;
+  border-top: 1px dashed var(--flock-border);
+  flex-wrap: wrap;
+}
+.thread-ref-label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--flock-text-muted);
+}
+.thread-ref {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.78rem;
+  color: var(--flock-text-secondary);
+  word-break: break-all;
+}
+
+/* Editable areas — comfortable height, readable measure. */
+textarea.draft-editor {
+  min-height: 220px;
+  resize: vertical;
+  font-size: 1rem;
+  line-height: 1.7;
+  padding: 0.9rem 1rem;
+}
+textarea.comment-editor {
+  min-height: 90px;
+  resize: vertical;
+  font-size: 0.95rem;
+  line-height: 1.6;
+}
+
+.action-bar {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  margin-top: 1rem;
+}
+.action-bar .spacer {
+  flex: 1;
+}
+.action-bar.sending-bar {
+  margin-top: 0.9rem;
+}
+.sending-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--flock-accent);
+}
+.sending-note::before {
+  content: "";
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 50%;
+  border: 2px solid var(--flock-accent);
+  border-top-color: transparent;
+  animation: reply-spin 0.8s linear infinite;
+}
+@keyframes reply-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Status/context banners: the owner's revision request, a system note, or a discarded notice.
+   Each is clearly labeled and visually distinct so a system message never reads as owner text. */
+.note-banner {
+  background: var(--flock-bg-card);
+  border: 1px solid var(--flock-border);
+  border-left: 3px solid var(--flock-info);
+  border-radius: var(--flock-radius);
+  padding: 0.7rem 1rem;
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+  color: var(--flock-text-secondary);
+}
+.note-banner .note-label {
+  display: block;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 700;
+  color: var(--flock-text-muted);
+  margin-bottom: 0.3rem;
+}
+/* The owner's revision request — informational accent. */
+.note-banner.comment-note {
+  border-left-color: var(--flock-info);
+}
+/* A subtle system/status message (e.g. a send/revise failure). Muted, never alarming. */
+.note-banner.system-note {
+  border-left-color: var(--flock-text-muted);
+  color: var(--flock-text-secondary);
+  font-size: 0.85rem;
+}
+/* A recoverable, discarded draft — quiet and muted. */
+.note-banner.discarded-note {
+  border-left-color: var(--flock-text-muted);
+  color: var(--flock-text-muted);
+  font-size: 0.85rem;
+}
+
+/* ---- Revision history ---- */
+.history {
+  margin-top: 1.75rem;
+  border-top: 1px solid var(--flock-border);
+  padding-top: 1.25rem;
+}
+.history .section-label,
+.section-label {
+  font-size: 0.74rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 700;
+  color: var(--flock-text-muted);
+  margin-bottom: 0.75rem;
+}
+.rev {
+  display: flex;
+  gap: 0.85rem;
+  padding: 0.7rem 0;
+  border-bottom: 1px dashed var(--flock-border);
+}
+.rev:last-child {
+  border-bottom: none;
+}
+.rev .who {
+  flex-shrink: 0;
+  width: 3.5rem;
+  font-size: 0.74rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.rev .who.milo {
+  color: var(--flock-accent);
+}
+.rev .who.user {
+  color: var(--flock-info);
+}
+.rev .body {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.92rem;
+  line-height: 1.6;
+  color: var(--flock-text-secondary);
+  white-space: pre-wrap;
+}
+.rev .when {
+  font-size: 0.72rem;
+  color: var(--flock-text-muted);
+  flex-shrink: 0;
+}
+
+/* ---- Toast ---- */
+.toast {
+  position: fixed;
+  bottom: 1.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--flock-bg-card);
+  border: 1px solid var(--flock-border);
+  border-radius: var(--flock-radius);
+  padding: 0.7rem 1.15rem;
+  font-size: 0.9rem;
+  box-shadow: var(--flock-shadow);
+  z-index: 50;
+}
+.toast.error {
+  border-color: var(--flock-error);
+  color: var(--flock-error);
+}
+
+/* ---- Update banner (auto-update) ---- */
+.update-banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  text-align: center;
+  background: var(--flock-accent, var(--flock-bg-card));
+  color: #fff;
+  padding: 0.5rem 1rem;
+  font-size: 0.85rem;
+  font-weight: 500;
+  box-shadow: var(--flock-shadow);
+  z-index: 60;
+}

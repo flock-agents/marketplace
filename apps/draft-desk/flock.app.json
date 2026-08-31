@@ -1,0 +1,103 @@
+{
+  "name": "Draft Desk",
+  "icon": "icon.svg",
+  "type": "fullstack",
+  "access": "private",
+  "description": "Outbound-draft approval desk — your agent drafts email, LinkedIn, and X messages; you approve, nothing sends without you.",
+  "spa": true,
+  "apiPrefix": "/api",
+  "buildCommand": "bun install && bun run build",
+  "buildDir": "dist",
+  "processConfig": {
+    "command": "bun run server/index.ts",
+    "healthCheckPath": "/api/health",
+    "readyPattern": "listening"
+  },
+  "config": {
+    "requires": {
+      "agent": {
+        "required": true,
+        "label": "Agent that drafts and sends outbound messages for you",
+        "default": { "pairDefaultAgent": true }
+      },
+      "skills": ["gmail", "linkedin", "twitter"]
+    },
+    "provisions": ["agentWebhook"]
+  },
+  "agentInterface": {
+    "intents": [
+      {
+        "name": "drafts_requested",
+        "description": "The owner asked for more drafts. Scan the connected sources (email, LinkedIn, X) for messages that need a reply and create a draft for each via the drafts API, skipping anything already queued.",
+        "payloadSchema": { "properties": { "taskId": "string" } }
+      },
+      {
+        "name": "draft_revision_requested",
+        "description": "The owner commented on a draft and wants it rewritten. Read the owner's comment on the draft and rewrite the draft body in the owner's voice, then set it back to needs_review.",
+        "payloadSchema": {
+          "required": ["draftId"],
+          "properties": { "draftId": "string", "taskId": "string" }
+        }
+      },
+      {
+        "name": "draft_send_requested",
+        "description": "The owner approved a draft from the workbench. Send the draft to its captured recipient via the matching skill (email->gmail, linkedin/linkedin_comment->linkedin, x->twitter), then mark it sent. Never modify the draft body.",
+        "payloadSchema": {
+          "required": ["draftId"],
+          "properties": { "draftId": "string", "taskId": "string" }
+        }
+      }
+    ],
+    "operations": [
+      {
+        "name": "listQueue",
+        "description": "List drafts the agent still needs to work (revision queue).",
+        "invoke": "GET /api/drafts/queue"
+      },
+      {
+        "name": "listDrafts",
+        "description": "List drafts, optionally filtered by status and source.",
+        "invoke": "GET /api/drafts?status=&source="
+      },
+      {
+        "name": "getDraft",
+        "description": "Get one draft with its full revision history.",
+        "invoke": "GET /api/drafts/:id"
+      },
+      {
+        "name": "createDraft",
+        "description": "Create an outbound draft after processing one thread. Capture source, recipient/send_target, the real recent thread messages, and the draft body.",
+        "invoke": "POST /api/drafts"
+      },
+      {
+        "name": "updateDraft",
+        "description": "Update a draft's body or status (e.g. set a rewritten body back to needs_review). Author 'milo' marks an agent rewrite.",
+        "invoke": "PATCH /api/drafts/:id"
+      },
+      {
+        "name": "markSent",
+        "description": "Mark a draft sent after the underlying skill delivers it.",
+        "invoke": "POST /api/drafts/:id/sent"
+      },
+      {
+        "name": "sendFailed",
+        "description": "Report a failed send; returns the draft to needs_review with the reason recorded so the owner can retry.",
+        "invoke": "POST /api/drafts/:id/send-failed"
+      },
+      {
+        "name": "markFulfilled",
+        "description": "Mark a fetch-more request fulfilled after creating new drafts for it.",
+        "invoke": "POST /api/requests/:id/fulfilled"
+      }
+    ],
+    "instructions": "You draft outbound messages into Draft Desk and never send them without an approved task action. When Draft Desk sends you a `drafts_requested` intent, scan the connected sources for messages that need a reply and create one draft per thread via POST /api/drafts (capture the source, the exact recipient/send_target, the real recent thread messages, and a reply written in the owner's voice). When it sends `draft_revision_requested`, read the owner's comment on that draft and rewrite the body in their voice, then set it back to needs_review. When it sends `draft_send_requested`, send the named draft to its captured recipient via the matching skill (email->gmail, linkedin and linkedin_comment->linkedin, x->twitter) and then POST /api/drafts/:id/sent; if the send fails, POST /api/drafts/:id/send-failed with the reason. NEVER send, post, or deliver a message unless the owner approved it - approval always originates from a Draft Desk task action or an explicit send intent, never on your own initiative. Never invent recipients; use the send_target captured on the draft."
+  },
+  "widgets": [
+    {
+      "id": "approvals",
+      "dataUrl": "/api/widgets/approvals",
+      "title": "Draft approvals",
+      "template": "list"
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+node_modules/
+dist/
+bun.lock
+data/
+*.db
+*.db-shm
+*.db-wal
+agent-webhook.json
+*-webhook.json
+.env
+.env.*
