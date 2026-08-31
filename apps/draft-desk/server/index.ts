@@ -30,8 +30,9 @@ mountStaticSite(app);
 const port = Number(process.env.PORT);
 if (!port) throw new Error("PORT env var is required");
 
-export default {
-  port,
-  hostname: "127.0.0.1",
-  fetch: app.fetch,
-};
+// Serve explicitly (not `export default {port, fetch}`) so we can emit a stable startup line the
+// platform's app-process watches for. `readyPattern:"listening"` in flock.app.json matches this
+// exact log — without it the process never signals ready, times out after 30s, and churns
+// restarts (which races credential injection). Mirrors the meal-planner/family-calendar convention.
+Bun.serve({ fetch: app.fetch, port, hostname: "127.0.0.1" });
+console.log(`draft-desk listening on port ${port}`);
