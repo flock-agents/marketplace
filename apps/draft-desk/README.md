@@ -17,7 +17,7 @@ The deep workbench (thread context, revision history, inline editing, per-source
 
 On install, Draft Desk requires:
 
-- **An agent** to draft and send for you (defaults to your chief-of-staff agent; editable). A bundled `draft-assistant` definition (`agent/`) is available for a fresh agent.
+- **An agent** to draft and send for you (defaults to your chief-of-staff agent; editable). For a fresh, purpose-built assistant, install the **Draft Assistant** template — the canonical `draft-assistant` persona — which creates the agent and installs + pairs Draft Desk in one step.
 - **Skills:** `gmail`, `linkedin`, `twitter` — scoped, consented at setup, borrowed through the paired agent (the app never holds your account credentials).
 
 The platform provisions the agent-webhook binding invisibly. No webhook, token, or secret is ever shown to you.
