@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updatedAt": "2026-08-20T15:16:00Z",
+  "updatedAt": "2026-09-01T12:00:00Z",
   "items": [
     {
       "slug": "linear",
@@ -68,11 +68,11 @@
       "iconUrl": "https://raw.githubusercontent.com/AlfredoSystems/flock-agents/main/marketplace/apps/draft-desk/icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "apps/draft-desk",
-      "latestVersion": "1.0.0",
-      "latestTag": "draft-desk-v1.0.0",
+      "latestVersion": "1.0.1",
+      "latestTag": "draft-desk-v1.0.1",
       "minFlockVersion": "0.7.0",
       "publishedAt": "2026-09-01T00:00:00Z",
-      "updatedAt": "2026-09-01T00:00:00Z"
+      "updatedAt": "2026-09-01T12:00:00Z"
     },
     {
       "slug": "draft-assistant",
