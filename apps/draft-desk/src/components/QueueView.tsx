@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ReplyDraft } from "../../shared/types";
 import { api } from "../lib/api";
+import { useAgentInfo, agentDisplayName, intentFailureMessage } from "../lib/useAgentInfo";
 import { DraftRow } from "./DraftRow";
 import { Filters, type FilterState } from "./Filters";
 
@@ -11,9 +12,6 @@ const MAX_POLLS = 30; // ~2 min safety net
 
 type FetchState = "idle" | "checking" | "no_new";
 
-const CHECKING_NOTE = "Your agent's checking for new messages…";
-const ALREADY_NOTE = "Your agent's already on it.";
-
 export function QueueView({
   onOpen,
   onError,
@@ -21,11 +19,19 @@ export function QueueView({
   onOpen: (id: string) => void;
   onError: (msg: string) => void;
 }) {
+  const agent = useAgentInfo();
+  const agentName = agentDisplayName(agent);
+  const unpaired = agent !== null && !agent.paired;
+  // Progress notes personalized with the real agent name. Derived (not constants) so they reflect
+  // whatever agent is paired; capitalized for sentence start.
+  const nameCap = agentName.charAt(0).toUpperCase() + agentName.slice(1);
+  const checkingDefault = `${nameCap} is checking for new messages…`;
+
   const [filters, setFilters] = useState<FilterState>({ status: "", source: "" });
   const [drafts, setDrafts] = useState<ReplyDraft[] | null>(null);
   const [awaiting, setAwaiting] = useState<number | null>(null);
   const [fetchState, setFetchState] = useState<FetchState>("idle");
-  const [checkingNote, setCheckingNote] = useState(CHECKING_NOTE);
+  const [checkingNote, setCheckingNote] = useState<string | null>(null);
 
   // The pending request we're currently watching (null when nothing is in flight) and the
   // draft count captured when the fetch began, so we can tell when NEW drafts arrive.
@@ -65,7 +71,7 @@ export function QueueView({
         if (!active || pending.length === 0) return;
         activeRequestRef.current = pending[0].id;
         baselineRef.current = 0; // unknown prior count — any current drafts count as "already there"
-        setCheckingNote(CHECKING_NOTE);
+        setCheckingNote(null);
         setFetchState("checking");
       } catch {
         // Non-fatal: the button simply starts in its idle state.
@@ -123,12 +129,20 @@ export function QueueView({
 
   const getMore = async () => {
     baselineRef.current = drafts?.length ?? 0;
-    setCheckingNote(CHECKING_NOTE);
+    setCheckingNote(null);
     setFetchState("checking");
     try {
       const res = await api.requestMore();
       activeRequestRef.current = res.request.id;
-      if (res.reason === "already_pending") setCheckingNote(ALREADY_NOTE);
+      if (res.reason === "already_pending") {
+        setCheckingNote(`${nameCap} is already on it.`);
+      } else if (!res.triggered && res.reason) {
+        // The request couldn't reach the agent — don't leave the UI spinning silently. Stop the
+        // fetch state and surface WHY (not paired vs unreachable) so the owner can act.
+        activeRequestRef.current = null;
+        setFetchState("idle");
+        onError(intentFailureMessage(res.reason, agentName));
+      }
     } catch (e) {
       activeRequestRef.current = null;
       setFetchState("idle");
@@ -141,7 +155,11 @@ export function QueueView({
       <div className="app-header">
         <div className="app-title">
           <h1>Draft Desk</h1>
-          <div className="subtitle">Your agent drafts · you approve · nothing sends without you</div>
+          <div className="subtitle">
+            {unpaired
+              ? "Not connected to an agent yet — connect one in Flock to have it draft for you"
+              : `${nameCap} drafts · you approve · nothing sends without you`}
+          </div>
         </div>
         <div className="header-actions">
           {awaiting !== null && (
@@ -152,14 +170,24 @@ export function QueueView({
           <button
             className="flock-btn flock-btn-primary"
             onClick={getMore}
-            disabled={fetchState === "checking"}
+            disabled={fetchState === "checking" || unpaired}
+            title={unpaired ? "Connect an agent in Flock to fetch drafts" : undefined}
           >
-            {fetchState === "checking" ? "Your agent's checking…" : "Get more drafts"}
+            {fetchState === "checking" ? `${nameCap} is checking…` : "Get more drafts"}
           </button>
         </div>
       </div>
 
-      {fetchState === "checking" && <div className="fetch-note checking">{checkingNote}</div>}
+      {unpaired && (
+        <div className="fetch-note">
+          No agent is connected yet, so drafts won't be created automatically. Connect an agent in
+          Flock — then it can scan your channels and draft replies for you to approve.
+        </div>
+      )}
+
+      {fetchState === "checking" && (
+        <div className="fetch-note checking">{checkingNote ?? checkingDefault}</div>
+      )}
       {fetchState === "no_new" && (
         <div className="fetch-note">
           No new messages right now.

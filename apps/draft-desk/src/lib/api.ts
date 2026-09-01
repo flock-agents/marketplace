@@ -1,6 +1,7 @@
 // The ONLY place fetch appears in the frontend. Relative paths only ("./api/...") so
 // requests resolve under /a/draft-desk/ via the injected <base> tag.
 import type {
+  AgentInfo,
   CommentInput,
   CommentResponse,
   DraftDetail,
@@ -78,5 +79,11 @@ export const api = {
 
   pendingRequests(): Promise<DraftRequest[]> {
     return request<DraftRequest[]>(`requests?status=pending`);
+  },
+
+  // The paired agent's identity (real name, or unpaired). Powers the revision-trail author labels,
+  // the revision affordance, and the honest "not connected to an agent yet" state.
+  agentInfo(): Promise<AgentInfo> {
+    return request<AgentInfo>(`agent-info`);
   },
 };

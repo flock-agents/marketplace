@@ -11,9 +11,13 @@ export type DraftStatus =
   | "sent"
   | "discarded";
 
+// Who authored a revision. STORED DISCRIMINATOR — persisted in draft_revisions.author, validated
+// on PATCH, and used as a CSS hook. "milo" is the stable legacy value for an AGENT-authored
+// revision (kept for backward-compat with existing rows + the server contract); the UI maps it to
+// the paired agent's real display name (see /api/agent-info) — the value is never shown raw.
 export type RevisionAuthor = "milo" | "user";
 
-// The EXACT address to deliver a reply to, captured when the draft is created (Milo is
+// The EXACT address to deliver a reply to, captured when the draft is created (the agent is
 // already inside the thread then). Used for a DIRECT send — no re-searching at send time.
 // Every field is optional; only the sub-object for the draft's `source` is populated.
 // Old drafts predate this and carry `null` — the send path falls back to locating the thread.
@@ -26,7 +30,7 @@ export interface SendTarget {
   x?: { conversationId?: string; tweetId?: string; handle?: string };
 }
 
-// One actual message from the original thread, captured by Milo at draft time. We show the
+// One actual message from the original thread, captured by the agent at draft time. We show the
 // REAL recent messages (chronological, oldest→newest, last 3–5) instead of an LLM-written
 // summary that could hallucinate context and poison the draft. Nullable — legacy drafts predate
 // this and fall back to `thread_summary`.
@@ -70,7 +74,7 @@ export interface ReplyDraft {
 
 export type DraftRequestStatus = "pending" | "fulfilled";
 
-// A "fetch-more" signal — created when the owner asks for more drafts; Milo fulfills it
+// A "fetch-more" signal — created when the owner asks for more drafts; the agent fulfills it
 // by scanning sources and creating new drafts, then marks it fulfilled.
 export interface DraftRequest {
   id: string;
@@ -81,11 +85,11 @@ export interface DraftRequest {
 
 // Response to POST /api/drafts/request-more. `request` is the pending DraftRequest (either
 // newly created, or the one already in flight). `reason` explains a non-triggered outcome:
-//   - already_pending: a fetch is already running; Milo was NOT re-spawned (dedupe).
-//   - no_token / spawn_failed: request stays pending; Milo will pick it up next run.
+//   - already_pending: a fetch is already running; the agent was NOT re-triggered (dedupe).
+//   - an IntentFailureReason: the request stays pending and the agent picks it up next run.
 export interface RequestMoreResponse {
   triggered: boolean;
-  reason?: "already_pending" | "no_token" | "spawn_failed";
+  reason?: "already_pending" | IntentFailureReason;
   request: DraftRequest;
 }
 
@@ -111,7 +115,7 @@ export interface CreateDraftInput {
   send_target?: SendTarget | null;
   sender: string;
   subject: string;
-  // Optional now: Milo SHOULD send `thread_messages` (the real recent messages) instead. When
+  // Optional now: the agent SHOULD send `thread_messages` (the real recent messages) instead. When
   // omitted it defaults to an empty string. Kept only for backward-compat with older callers.
   thread_summary?: string;
   // The real recent messages of the thread — the preferred context to capture (see ThreadMessage).
@@ -123,7 +127,7 @@ export interface PatchDraftInput {
   draft_body?: string;
   status?: Extract<DraftStatus, "approved" | "needs_review" | "discarded">;
   // Who authored a body edit, for the revision trail. Owner UI omits it (defaults to
-  // "user"); Milo sets "milo" when it rewrites a draft after a revision request.
+  // "user"); the agent sets "milo" when it rewrites a draft after a revision request.
   author?: RevisionAuthor;
   // Backfill the exact send address / permalink onto an existing (needs_review) draft.
   // Partial: only the fields provided are written. See SendTarget / ReplyDraft.source_url.
@@ -138,17 +142,40 @@ export interface CommentInput {
   comment: string;
 }
 
+// Response of GET /api/agent-info — the paired agent's identity for the UI. `paired` is false and
+// the ids are null when the app isn't paired with an agent (platform env absent), so the UI can
+// render the real agent name and degrade honestly to a "not connected to an agent yet" state.
+export interface AgentInfo {
+  paired: boolean;
+  agentId: string | null;
+  agentName: string | null;
+}
+
+// Why an agent intent (revise / send / fetch-more) wasn't delivered — shared with the UI so it can
+// distinguish "no agent set up yet, go pair one" from "couldn't reach your agent, try again".
+//   - not_paired:        the app isn't paired with an agent — the owner must set one up in Flock.
+//   - not_configured:    the platform edge isn't wired (paired but token/base missing).
+//   - no_signing_secret: the webhook signing secret isn't available to the app.
+//   - rejected:          the platform rejected the intent (bad signature, unknown intent, 4xx).
+//   - unreachable:       a network/timeout failure reaching the platform.
+export type IntentFailureReason =
+  | "not_paired"
+  | "not_configured"
+  | "no_signing_secret"
+  | "rejected"
+  | "unreachable";
+
 // Response to POST /api/drafts/:id/comment. The comment sets the draft to `needs_revision`
-// and fires an event-driven revise spawn (mirrors approve→send). `triggered` reflects whether
-// Milo was spawned; on a soft-fail the draft is reverted to `needs_review` (see `reason`) so it
+// and fires an event-driven revise intent (mirrors approve→send). `triggered` reflects whether the
+// agent was reached; on a soft-fail the draft is reverted to `needs_review` (see `reason`) so it
 // re-enters "awaiting you" rather than being stranded in `needs_revision` with no one working it.
 export interface CommentResponse {
   draft: ReplyDraft;
   triggered: boolean;
-  reason?: "no_token" | "spawn_failed";
+  reason?: IntentFailureReason;
 }
 
-// Body of POST /api/drafts/:id/send-failed — Milo reports why a send failed in ONE call.
+// Body of POST /api/drafts/:id/send-failed — the agent reports why a send failed in ONE call.
 // The draft is returned to needs_review with the reason recorded so the owner can retry.
 export interface SendFailedInput {
   error: string;
@@ -171,7 +198,7 @@ export const STATUSES: DraftStatus[] = [
   "discarded",
 ];
 
-// Statuses that make up Milo's work queue (revision work only). Sending is event-driven —
+// Statuses that make up the agent's work queue (revision work only). Sending is event-driven —
 // approval triggers a one-shot send-only spawn (the send intent) and never rests as a queued
 // "approved" item — so the queue no longer includes it. See docs/design.md "Event-driven send".
 export const QUEUE_STATUSES: DraftStatus[] = ["needs_revision"];

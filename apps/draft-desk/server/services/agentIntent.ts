@@ -1,6 +1,6 @@
-// Agent intent channel — the replacement for the old spawnMilo webhook file (§6.6, §14.1). Where
-// Reply Desk fired a hand-placed HMAC webhook at "Milo", Draft Desk drives its PAIRED agent
-// through the platform's standard, signed intent channel. The platform routes each typed intent to
+// Agent intent channel — the replacement for the old hand-placed HMAC webhook file (§6.6, §14.1).
+// Where Reply Desk fired a bespoke webhook at a hard-coded agent, Draft Desk drives its PAIRED
+// agent through the platform's standard, signed intent channel. The platform routes each typed intent to
 // the paired agent's session (reusing the draft's task session when a taskId is supplied), so the
 // app never holds an agent token and never hard-codes a webhook binding.
 //
@@ -23,25 +23,50 @@
 // the platform edge is down.
 
 import { sendIntent } from "./platformClient";
+import { isPaired } from "./agentIdentity";
+
+// Failure taxonomy the UI distinguishes (§14.1): the owner must be able to tell "no agent is set
+// up yet — go pair one in Flock" (not_paired) from "the agent couldn't be reached — try again"
+// (unreachable/rejected). `not_paired` is the honest state when the app isn't paired at all.
+export type TriggerReason =
+  | "not_paired"
+  | "not_configured"
+  | "no_signing_secret"
+  | "rejected"
+  | "unreachable";
 
 export type TriggerResult =
   | { triggered: true }
-  | { triggered: false; reason: "not_configured" | "no_signing_secret" | "rejected" | "unreachable" };
+  | { triggered: false; reason: TriggerReason };
 
-function toResult(outcome: Awaited<ReturnType<typeof sendIntent>>): TriggerResult {
+function toResult(intent: string, outcome: Awaited<ReturnType<typeof sendIntent>>): TriggerResult {
   if (outcome.ok) return { triggered: true };
-  if ("skipped" in outcome && outcome.skipped) return { triggered: false, reason: outcome.reason };
-  // A timeout means the agent session was accepted and is running server-side — treat as success,
-  // same as the old webhook's synchronous-endpoint timeout path.
-  if (outcome.reason === "timeout") return { triggered: true };
-  if (outcome.reason.startsWith("platform 4")) return { triggered: false, reason: "rejected" };
-  return { triggered: false, reason: "unreachable" };
+
+  let reason: TriggerReason;
+  if ("skipped" in outcome && outcome.skipped) {
+    // not_configured means no token/base URL. If we ALSO have no paired agent, the honest, actionable
+    // message is "not paired yet" — prefer that so the UI can point the owner at pairing setup.
+    reason = outcome.reason === "not_configured" && !isPaired() ? "not_paired" : outcome.reason;
+  } else if (outcome.reason === "timeout") {
+    // A timeout means the agent session was accepted and is running server-side — treat as success,
+    // same as the old webhook's synchronous-endpoint timeout path.
+    return { triggered: true };
+  } else if (outcome.reason.startsWith("platform 4")) {
+    // 404 from the intent route = no active pairing on the platform side; other 4xx = rejected.
+    reason = outcome.reason === "platform 404" && !isPaired() ? "not_paired" : "rejected";
+  } else {
+    reason = "unreachable";
+  }
+
+  // Log the reason server-side so a broken pairing/intent is diagnosable (§13 structured logs).
+  console.warn(`[agentIntent] intent "${intent}" not delivered: reason=${reason}`);
+  return { triggered: false, reason };
 }
 
 // Ask the paired agent to scan sources and add more drafts. No taskId — this is a fresh request
 // not bound to an existing draft's session.
 export async function triggerDraftsRequested(): Promise<TriggerResult> {
-  return toResult(await sendIntent("drafts_requested", {}));
+  return toResult("drafts_requested", await sendIntent("drafts_requested", {}));
 }
 
 // Ask the paired agent to revise one draft the owner commented on. Passing draftId lets the agent
@@ -49,11 +74,11 @@ export async function triggerDraftsRequested(): Promise<TriggerResult> {
 // exists (payload.taskId maps to it server-side — we pass the draft's task source ref as taskId
 // hint via `draftId`; the platform resolves the session from the task the app published).
 export async function triggerDraftRevision(draftId: string): Promise<TriggerResult> {
-  return toResult(await sendIntent("draft_revision_requested", { draftId, taskId: draftId }));
+  return toResult("draft_revision_requested", await sendIntent("draft_revision_requested", { draftId, taskId: draftId }));
 }
 
 // Ask the paired agent to send one approved draft via its granted skill, then mark it sent. Fired
 // on the workbench's in-app approve (the dashboard approve uses the Task action executor instead).
 export async function triggerDraftSend(draftId: string): Promise<TriggerResult> {
-  return toResult(await sendIntent("draft_send_requested", { draftId, taskId: draftId }));
+  return toResult("draft_send_requested", await sendIntent("draft_send_requested", { draftId, taskId: draftId }));
 }

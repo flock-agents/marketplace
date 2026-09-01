@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { DraftDetail as DraftDetailData, ReplyDraft, SendTarget } from "../../shared/types";
 import { api } from "../lib/api";
 import { SOURCE_LABEL } from "../lib/format";
+import { useAgentInfo, agentDisplayName, intentFailureMessage } from "../lib/useAgentInfo";
 import { OpenOriginalLink } from "./OpenOriginalLink";
 import { RevisionHistory } from "./RevisionHistory";
 import { SourceBadge } from "./SourceBadge";
@@ -56,6 +57,11 @@ export function DraftDetail({
   const [body, setBody] = useState("");
   const [comment, setComment] = useState("");
   const [busy, setBusy] = useState(false);
+  const agent = useAgentInfo();
+  const agentName = agentDisplayName(agent);
+  // A loaded, unpaired app (no agent will act) — used to degrade honestly. null (loading) or
+  // paired both leave this false so we don't flash the unpaired state before info arrives.
+  const unpaired = agent !== null && !agent.paired;
 
   const load = () => {
     api
@@ -135,11 +141,13 @@ export function DraftDetail({
     run(async () => {
       const res = await api.comment(id, { comment });
       setComment("");
-      onToast(
-        res.triggered
-          ? "Sent to your agent — revising now…"
-          : "Saved your comment, but your agent couldn't be reached — add it again to retry.",
-      );
+      if (res.triggered) {
+        onToast(`Sent to ${agentName} — revising now…`);
+      } else {
+        // Surface the SPECIFIC failure (not paired vs unreachable) as a visible error, so the
+        // owner knows whether to set up an agent or just retry. Their comment is saved either way.
+        onError(`Saved your comment, but it wasn't sent. ${intentFailureMessage(res.reason, agentName)}`);
+      }
     }, "");
 
   const discard = () =>
@@ -225,7 +233,7 @@ export function DraftDetail({
       <section className="draft-card">
         <div className="card-label accent">
           {draft.source === "linkedin_comment" ? "Your comment draft" : "Your draft"}{" "}
-          {isSending ? "(sending…)" : isRevising ? "(agent revising…)" : locked ? "" : "(editable)"}
+          {isSending ? "(sending…)" : isRevising ? `(${agentName} revising…)` : locked ? "" : "(editable)"}
         </div>
         <textarea
           className="flock-input draft-editor"
@@ -237,14 +245,14 @@ export function DraftDetail({
 
         {isSending && (
           <div className="action-bar sending-bar">
-            <span className="sending-note">Sending… your agent is delivering this draft.</span>
+            <span className="sending-note">Sending… {agentName} is delivering this draft.</span>
           </div>
         )}
 
         {isRevising && (
           <div className="action-bar sending-bar">
             <span className="sending-note">
-              Your agent's revising… this updates automatically when the new draft is ready.
+              {agentName} is revising… this updates automatically when the new draft is ready.
             </span>
           </div>
         )}
@@ -281,7 +289,17 @@ export function DraftDetail({
 
       {!locked && (
         <section className="comment-card">
-          <div className="card-label">Request a revision from your agent</div>
+          <div className="card-label">
+            {unpaired ? "Request a revision" : `Ask ${agentName} to revise`}
+          </div>
+          {unpaired && (
+            <div className="note-banner system-note">
+              <span className="note-label">Not connected</span>
+              No agent is connected yet, so no one can act on a revision request. Connect an agent
+              in Flock — then it can draft, revise, and (once you approve) send. You can still edit
+              and send this draft yourself above.
+            </div>
+          )}
           <textarea
             className="flock-input comment-editor"
             placeholder="e.g. warmer tone, push the meeting to Friday"
@@ -294,14 +312,15 @@ export function DraftDetail({
               className="flock-btn"
               disabled={busy || comment.trim().length === 0}
               onClick={requestRevision}
+              title={unpaired ? "Connect an agent in Flock to have it revise this draft" : undefined}
             >
-              Add comment / request revision
+              {unpaired ? "Save comment" : `Send to ${agentName} to revise`}
             </button>
           </div>
         </section>
       )}
 
-      <RevisionHistory revisions={draft.revisions} />
+      <RevisionHistory revisions={draft.revisions} agentName={agent?.agentName ?? null} />
     </div>
   );
 }

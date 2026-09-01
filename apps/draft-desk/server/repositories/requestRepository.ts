@@ -27,7 +27,7 @@ export function listPendingRequests(): DraftRequest[] {
 }
 
 // Auto-fulfill any pending request older than `cutoff` (a ms timestamp) so a hung or
-// dead Milo run that never called /fulfilled can't leave a request pending forever.
+// dead agent run that never called /fulfilled can't leave a request pending forever.
 // Returns how many were expired. Fulfilled is used (not a new status) so these rows
 // simply drop out of listPendingRequests without needing a schema/type change.
 export function expireStalePending(cutoff: number): number {

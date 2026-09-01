@@ -34,7 +34,7 @@ const migrations: string[] = [
   `CREATE INDEX IF NOT EXISTS idx_revisions_draft ON draft_revisions(draft_id)`,
   // Clickable permalink to the original thread. Nullable so pre-existing rows survive.
   `ALTER TABLE drafts ADD COLUMN source_url TEXT`,
-  // "Fetch-more" signals raised by the owner and fulfilled by Milo.
+  // "Fetch-more" signals raised by the owner and fulfilled by the agent.
   `CREATE TABLE IF NOT EXISTS draft_requests (
     id           TEXT PRIMARY KEY,
     status       TEXT NOT NULL,

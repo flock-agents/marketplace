@@ -31,7 +31,7 @@ const LIST_STATUSES = new Set<DraftStatus>([
 ]);
 
 // A draft that has been "sending" longer than this is treated as failed and recovered to
-// needs_review (so a hung/dead spawned Milo run can't strand it forever). Checked lazily on
+// needs_review (so a hung/dead agent run can't strand it forever). Checked lazily on
 // the read + approve paths — same self-healing pattern as STALE_PENDING_MS for fetch-more.
 const SENDING_STALE_MS = 10 * 60 * 1000; // 10 minutes
 
@@ -77,7 +77,7 @@ function normalizeThreadMessages(v: unknown): ThreadMessage[] | null {
   return v.map((m) => ({ sender: m.sender, text: m.text }));
 }
 
-// POST /api/drafts — Milo creates a draft after processing ONE thread.
+// POST /api/drafts — the agent creates a draft after processing ONE thread.
 drafts.post("/", async (c) => {
   const body = await c.req.json().catch(() => null);
   if (!body || typeof body !== "object") return c.json({ error: "invalid JSON body" }, 400);
@@ -87,7 +87,7 @@ drafts.post("/", async (c) => {
   if (!VALID_SOURCES.has(source)) {
     return c.json({ error: "source must be one of email | linkedin | linkedin_comment | x" }, 400);
   }
-  // thread_summary is no longer required — Milo sends the real thread_messages instead.
+  // thread_summary is no longer required — the agent sends the real thread_messages instead.
   for (const [key, val] of Object.entries({ thread_ref, sender, subject, draft_body })) {
     if (!isNonEmptyString(val)) return c.json({ error: `${key} is required` }, 400);
   }
@@ -140,7 +140,7 @@ drafts.post("/", async (c) => {
   return c.json({ ...draft, duplicate: false, draft }, 201);
 });
 
-// GET /api/drafts/queue — Milo's ONLY work-poll endpoint. Must precede /:id.
+// GET /api/drafts/queue — the agent's ONLY work-poll endpoint. Must precede /:id.
 drafts.get("/queue", (c) => c.json(repo.listQueue()));
 
 // GET /api/drafts/count — number of drafts awaiting the owner (header badge). Precede /:id.
@@ -149,9 +149,9 @@ drafts.get("/count", (c) => {
   return c.json({ count: repo.countAwaiting() });
 });
 
-// GET /api/drafts/by-url?source_url=<url> — all-status dedup lookup for Milo's social-listening
+// GET /api/drafts/by-url?source_url=<url> — all-status dedup lookup for the agent's social-listening
 // flow. Returns every draft whose source_url OR send_target.linkedin_comment.postUrl matches the
-// given URL, across ALL statuses (incl. approved/sent/discarded), so Milo can skip a post it has
+// given URL, across ALL statuses (incl. approved/sent/discarded), so the agent can skip a post it has
 // already drafted for regardless of what happened to that draft. Read-only. Must precede /:id.
 drafts.get("/by-url", (c) => {
   const sourceUrl = c.req.query("source_url");
@@ -162,17 +162,17 @@ drafts.get("/by-url", (c) => {
   return c.json({ matches, exists: matches.length > 0 });
 });
 
-// A pending fetch-more request only counts as "in flight" for this long. If a triggered
-// Milo run hangs or dies without calling /fulfilled, the request would otherwise block the
+// A pending fetch-more request only counts as "in flight" for this long. If a triggered agent
+// run hangs or dies without calling /fulfilled, the request would otherwise block the
 // button forever — so anything older is auto-expired (self-healing) before we dedupe.
 const STALE_PENDING_MS = 10 * 60 * 1000; // 10 minutes
 
-// POST /api/drafts/request-more — owner asks Milo for more drafts. Precede /:id.
+// POST /api/drafts/request-more — owner asks the agent for more drafts. Precede /:id.
 // Deduped: if a FRESH fetch is in flight (a DraftRequest is `pending` and newer than
-// STALE_PENDING_MS), we return it WITHOUT spawning Milo again — at most one fetch runs at
-// a time. Stale pending requests are auto-fulfilled first so a hung Milo run can't deadlock
-// the button. Otherwise we create a pending DraftRequest and trigger Milo; if the trigger
-// can't fire, the request stays pending (Milo picks it up next run) and we still return 200.
+// STALE_PENDING_MS), we return it WITHOUT re-triggering the agent — at most one fetch runs at
+// a time. Stale pending requests are auto-fulfilled first so a hung agent run can't deadlock
+// the button. Otherwise we create a pending DraftRequest and trigger the agent; if the trigger
+// can't fire, the request stays pending (the agent picks it up next run) and we still return 200.
 drafts.post("/request-more", async (c) => {
   requests.expireStalePending(Date.now() - STALE_PENDING_MS);
 

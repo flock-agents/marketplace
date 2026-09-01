@@ -3,6 +3,7 @@ import drafts from "./routes/drafts";
 import requests from "./routes/requests";
 import version from "./routes/version";
 import widgets from "./routes/widgets";
+import agentInfo from "./routes/agentInfo";
 import { mountStaticSite } from "./staticSite";
 
 // Entry point: health + route mounting only. No business logic here.
@@ -23,6 +24,8 @@ app.route("/api/drafts", drafts);
 app.route("/api/requests", requests);
 // Declarative dashboard widget data (§7.4) — fetched server-side by the platform's widget proxy.
 app.route("/api/widgets", widgets);
+// Paired-agent identity for the UI (real agent name, honest unpaired state).
+app.route("/api/agent-info", agentInfo);
 
 // Static build (shell + hashed assets). Registered LAST so the SPA catch-all never shadows /api.
 mountStaticSite(app);

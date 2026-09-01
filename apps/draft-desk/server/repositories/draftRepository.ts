@@ -77,7 +77,7 @@ function insertRevision(
 // --- Thread-identity dedup ---
 //
 // A single real conversation must map to a single ACTIVE draft. thread_ref is NOT a reliable
-// key: Milo's fetch-more generates a fresh slug per run for the same thread. The stable key is
+// key: the agent's fetch-more generates a fresh slug per run for the same thread. The stable key is
 // the conversation URL / thread id captured in send_target; source_url (a specific permalink)
 // and thread_ref are only weaker fallbacks. See docs/design.md "Thread-identity dedup".
 
@@ -166,7 +166,7 @@ export function findActiveByThreadIdentity(identity: string): ReplyDraft | null 
 // --- All-status URL lookup (social-listening dedup) ---
 //
 // Unlike findActiveByThreadIdentity (which only guards the small ACTIVE set to keep ONE live
-// draft per thread), this answers a different question for Milo's social-listening flow: "have I
+// draft per thread), this answers a different question for the agent's social-listening flow: "have I
 // EVER drafted for this post URL, under ANY status — including approved/sent/discarded?" A post
 // that was already handled (posted, rejected, or awaiting review) must never be re-drafted, so
 // terminal states are deliberately INCLUDED here. Read-only; no schema change.
@@ -215,7 +215,7 @@ export function createDraft(input: CreateDraftInput): ReplyDraft {
       now,
       now,
     );
-    // Seed the revision trail with Milo's original draft.
+    // Seed the revision trail with the agent's original draft.
     insertRevision(draftId, "milo", input.draft_body, null, now);
   });
   tx();
@@ -240,7 +240,7 @@ export function listDrafts(filters: { status?: DraftStatus; source?: string }): 
   return rows.map((r) => hydrate(r)!);
 }
 
-// Milo's work queue — the ONLY endpoint Milo polls. Excludes parked/needs_review/terminal.
+// the agent's work queue — the ONLY endpoint the agent polls. Excludes parked/needs_review/terminal.
 export function listQueue(): ReplyDraft[] {
   const placeholders = QUEUE_STATUSES.map(() => "?").join(", ");
   const rows = db
@@ -358,8 +358,8 @@ export function beginSending(draftId: string): ReplyDraft | null {
 }
 
 // Return a draft to needs_review after a system failure, with an explanatory note recorded in
-// system_note (NEVER user_comment) and a Milo revision for the trail. Used when a send can't
-// start, when Milo reports a send failure, when a send goes stale, and when a revise can't start.
+// system_note (NEVER user_comment) and an agent-authored revision for the trail. Used when a send can't
+// start, when the agent reports a send failure, when a send goes stale, and when a revise can't start.
 // A failure NEVER discards the draft and NEVER touches draft_body or user_comment — the owner's
 // edited text and revision instruction are preserved exactly, and they can always retry.
 export function revertSendToReview(draftId: string, systemNote: string): ReplyDraft | null {
@@ -378,7 +378,7 @@ export function revertSendToReview(draftId: string, systemNote: string): ReplyDr
 
 // Self-heal stuck sends: any draft that has been "sending" since before `cutoff` (a ms
 // timestamp) is treated as failed and returned to needs_review so the owner can retry,
-// rather than being stuck forever if the spawned Milo run hung or died silently.
+// rather than being stuck forever if a spawned agent run hung or died silently.
 export function recoverStaleSending(cutoff: number): number {
   const stale = db
     .query(`SELECT id FROM drafts WHERE status = 'sending' AND updated_at <= ?`)
