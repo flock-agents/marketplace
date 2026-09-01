@@ -75,6 +75,24 @@
       "updatedAt": "2026-09-01T00:00:00Z"
     },
     {
+      "slug": "draft-assistant",
+      "type": "template",
+      "name": "Draft Assistant",
+      "description": "An assistant that drafts your outbound email, LinkedIn, and X messages into Draft Desk — you approve, nothing sends without you",
+      "author": "flock",
+      "category": "productivity",
+      "tags": ["email", "linkedin", "messaging", "drafts", "approvals", "outbound"],
+      "icon": "icon.svg",
+      "iconUrl": "https://raw.githubusercontent.com/AlfredoSystems/flock-agents/main/marketplace/templates/draft-assistant/icon.svg",
+      "repo": "flock-agents/marketplace",
+      "path": "templates/draft-assistant",
+      "latestVersion": "1.0.0",
+      "latestTag": "draft-assistant-v1.0.0",
+      "minFlockVersion": "0.7.0",
+      "publishedAt": "2026-09-01T00:00:00Z",
+      "updatedAt": "2026-09-01T00:00:00Z"
+    },
+    {
       "slug": "family-butler",
       "type": "template",
       "name": "Family Butler",

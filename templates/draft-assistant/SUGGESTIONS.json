@@ -1,0 +1,28 @@
+{
+  "skills": [
+    {
+      "slug": "gmail",
+      "reason": "Read and send email so the assistant can draft and, once approved, deliver replies"
+    },
+    {
+      "slug": "linkedin",
+      "reason": "Read and send LinkedIn messages and comments"
+    },
+    {
+      "slug": "twitter",
+      "reason": "Read and send messages on X"
+    }
+  ],
+  "tasks": [
+    {
+      "name": "Morning Draft Sweep",
+      "reason": "Daily scan of email, LinkedIn, and X to draft replies that need one — nothing sends without approval"
+    }
+  ],
+  "apps": [
+    {
+      "slug": "draft-desk",
+      "reason": "The approval desk where drafts wait for your review before they send"
+    }
+  ]
+}

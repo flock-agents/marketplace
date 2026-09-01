@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48" role="img" aria-label="Draft Assistant">
+  <rect width="48" height="48" rx="10" fill="#0E9F8E"/>
+  <!-- document -->
+  <rect x="11" y="8" width="20" height="27" rx="3" fill="#fff"/>
+  <!-- text lines -->
+  <g stroke="#0E9F8E" stroke-width="2" stroke-linecap="round" opacity="0.5">
+    <path d="M15 14h12"/>
+    <path d="M15 19h12"/>
+    <path d="M15 24h7"/>
+  </g>
+  <!-- pen drafting into the document -->
+  <g>
+    <rect x="30.5" y="19.2" width="4.2" height="18" rx="2.1" transform="rotate(45 32.6 28.2)" fill="#FFC857"/>
+    <path d="M36.8 21.4l3 3-1.9 1.9-3-3z" fill="#F4A61E"/>
+    <path d="M25.6 32.6l-1.4 4 4-1.4z" fill="#2B2B2B"/>
+  </g>
+</svg>

@@ -1,0 +1,129 @@
+{
+  "name": "Draft Assistant",
+  "slug": "draft-assistant",
+  "description": "An assistant that drafts your outbound email, LinkedIn, and X messages into Draft Desk — you approve, nothing sends without you",
+  "version": "1.0.0",
+  "author": "flock",
+  "icon": "icon.svg",
+  "category": "productivity",
+  "tags": ["email", "linkedin", "messaging", "drafts", "approvals", "outbound"],
+  "minFlockVersion": "0.7.0",
+  "sortOrder": 5,
+
+  "agent": {
+    "defaultName": "Drafter",
+    "model": "claude-opus-4-8",
+    "role": "main",
+    "tone": "concise, professional, writes in your voice",
+    "examplePrompts": [
+      "Draft replies to anything in my inbox that needs one",
+      "Check LinkedIn for messages I should respond to",
+      "Rewrite this draft to sound warmer",
+      "What's waiting for my approval?",
+      "Draft a reply to the last message from Priya"
+    ]
+  },
+
+  "skills": [
+    {
+      "skillId": "gmail",
+      "preSelected": true,
+      "description": "Read and send email so the assistant can draft and deliver replies",
+      "accountRequirement": {
+        "type": "oauth",
+        "provider": "gmail",
+        "setupGuide": "Connect your Google account in the Flock dashboard"
+      }
+    },
+    {
+      "skillId": "linkedin",
+      "preSelected": true,
+      "description": "Read and send LinkedIn messages and comments",
+      "accountRequirement": {
+        "type": "browser-session",
+        "provider": "linkedin",
+        "setupGuide": "Log in to LinkedIn in the Flock dashboard browser session"
+      }
+    },
+    {
+      "skillId": "twitter",
+      "preSelected": true,
+      "description": "Read and send messages on X",
+      "accountRequirement": {
+        "type": "browser-session",
+        "provider": "twitter",
+        "setupGuide": "Log in to X in the Flock dashboard browser session"
+      }
+    }
+  ],
+
+  "apps": [
+    { "slug": "draft-desk", "required": true }
+  ],
+
+  "channels": [
+    {
+      "type": "telegram",
+      "connectionType": "bot-token",
+      "defaultSessionMode": "chat_routed",
+      "outboundPrefix": false,
+      "setupGuide": "Create a bot via @BotFather on Telegram and paste the token to reach your assistant on the go"
+    }
+  ],
+
+  "tasks": [
+    {
+      "name": "Morning Draft Sweep",
+      "schedule": "0 8 * * *",
+      "prompt": "Good morning! Scan the connected sources for messages that need a reply:\n1. Email — threads awaiting a response\n2. LinkedIn — unread messages and comments on my posts\n3. X — direct messages and mentions worth replying to\n\nFor each one that genuinely needs a reply, create a draft in Draft Desk in my voice (capture the recipient and the real recent thread messages). Skip anything already queued. Do not send anything — every reply waits for my approval.",
+      "deliverTo": null,
+      "timezone": "Asia/Kolkata",
+      "enabled": true,
+      "model": "claude-opus-4-8",
+      "thinkingLevel": "none"
+    }
+  ],
+
+  "wizard": [
+    { "id": "personality", "type": "personality", "label": "Personality" },
+    { "id": "skills", "type": "skills", "label": "Channels to draft for" },
+    { "id": "channels", "type": "channels", "label": "Messaging" },
+    { "id": "tasks", "type": "scheduled-tasks", "label": "Scheduled Tasks" },
+    { "id": "review", "type": "review", "label": "Review & Create" }
+  ],
+
+  "setupChecklist": [
+    {
+      "id": "identity-configured",
+      "label": "Identity configured",
+      "description": "Set a name, avatar, and description for your assistant",
+      "deepLink": "/agents/:id"
+    },
+    {
+      "id": "instructions-set",
+      "label": "Agent instructions set",
+      "description": "Agent instructions define how your assistant drafts and when it may send",
+      "deepLink": "/agents/:id"
+    },
+    {
+      "id": "connect-sources",
+      "label": "Connect your channels",
+      "description": "Link Gmail, LinkedIn, and X so the assistant can draft (and, once approved, send) replies",
+      "deepLink": "/agents/:id?tab=skills"
+    },
+    {
+      "id": "install-draft-desk",
+      "label": "Draft Desk installed",
+      "description": "The approval desk where you review and approve drafts before they send",
+      "deepLink": "/a/draft-desk/",
+      "skippable": true
+    },
+    {
+      "id": "review-tasks",
+      "label": "Review scheduled tasks",
+      "description": "Check the morning draft sweep schedule",
+      "deepLink": "/agents/:id?tab=tasks",
+      "skippable": true
+    }
+  ]
+}
