@@ -86,8 +86,8 @@
       "iconUrl": "https://raw.githubusercontent.com/flock-agents/marketplace/main/templates/draft-assistant/icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "templates/draft-assistant",
-      "latestVersion": "1.0.0",
-      "latestTag": "draft-assistant-v1.0.0",
+      "latestVersion": "1.0.1",
+      "latestTag": "draft-assistant-v1.0.1",
       "minFlockVersion": "0.7.0",
       "publishedAt": "2026-09-01T00:00:00Z",
       "updatedAt": "2026-09-01T00:00:00Z"
