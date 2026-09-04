@@ -2,16 +2,17 @@
   "name": "Draft Replies",
   "slug": "draft-replies",
   "icon": "icon.svg",
-  "description": "Drafts replies to messages that need one, in your voice, into Draft Desk — you approve, nothing sends without you",
-  "version": "1.0.0",
+  "description": "Drafts replies to email (instant) and LinkedIn (scheduled sweep) in your voice into Draft Desk — you approve, nothing sends without you",
+  "version": "1.1.0",
   "author": "flock",
   "category": "productivity",
-  "tags": ["email", "drafts", "replies", "approvals", "outbound"],
+  "tags": ["email", "linkedin", "drafts", "replies", "approvals", "outbound"],
   "minFlockVersion": "0.7.0",
   "tier": "installable",
   "nature": "agentic",
   "connectorDeps": [
-    { "connectorId": "gmail", "required": true }
+    { "connectorId": "gmail", "required": true },
+    { "connectorId": "linkedin", "required": false }
   ],
   "skillDeps": [],
   "apps": [
@@ -27,6 +28,15 @@
       "prompt": "New mail arrived. Review what needs a reply and draft responses in Draft Desk in my voice for my approval. Skip anything automated or already queued. Never send.",
       "configSchema": [
         { "key": "ignoreAutomated", "type": "boolean", "label": "Ignore automated / no-reply senders", "default": true }
+      ]
+    },
+    {
+      "id": "linkedin-sweep",
+      "name": "LinkedIn draft sweep",
+      "schedule": "0 */4 * * *",
+      "prompt": "Check LinkedIn messages and comments that need a reply. For each one that genuinely needs a response, draft a reply in Draft Desk in my voice for my approval. Skip anything already queued. Never send.",
+      "configSchema": [
+        { "key": "ignoreAutomated", "type": "boolean", "label": "Ignore automated notifications", "default": true }
       ]
     }
   ]
