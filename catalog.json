@@ -1,10 +1,46 @@
 {
-  "version": 1,
-  "updatedAt": "2026-09-01T12:00:00Z",
+  "version": 2,
+  "updatedAt": "2026-09-04T00:00:00Z",
   "items": [
     {
-      "slug": "linear",
+      "slug": "draft-replies",
       "type": "skill",
+      "name": "Draft Replies",
+      "description": "Drafts replies to messages that need one, in your voice, into Draft Desk — you approve, nothing sends without you",
+      "author": "flock",
+      "category": "productivity",
+      "tags": ["email", "drafts", "replies", "approvals", "outbound"],
+      "icon": "icon.svg",
+      "iconUrl": "https://raw.githubusercontent.com/flock-agents/marketplace/v2/skills/draft-replies/icon.svg",
+      "repo": "flock-agents/marketplace",
+      "path": "skills/draft-replies",
+      "latestVersion": "1.0.0",
+      "latestTag": "draft-replies-v1.0.0",
+      "minFlockVersion": "0.7.0",
+      "publishedAt": "2026-09-04T00:00:00Z",
+      "updatedAt": "2026-09-04T00:00:00Z"
+    },
+    {
+      "slug": "user-memory",
+      "type": "skill",
+      "name": "User Memory",
+      "description": "Learns your voice and preferences from how you write and edit, and shares that with your other skills",
+      "author": "flock",
+      "category": "productivity",
+      "tags": ["memory", "voice", "preferences", "personalization"],
+      "icon": "icon.svg",
+      "iconUrl": "https://raw.githubusercontent.com/flock-agents/marketplace/v2/skills/user-memory/icon.svg",
+      "repo": "flock-agents/marketplace",
+      "path": "skills/user-memory",
+      "latestVersion": "1.0.0",
+      "latestTag": "user-memory-v1.0.0",
+      "minFlockVersion": "0.7.0",
+      "publishedAt": "2026-09-04T00:00:00Z",
+      "updatedAt": "2026-09-04T00:00:00Z"
+    },
+    {
+      "slug": "linear",
+      "type": "connector",
       "name": "Linear",
       "description": "Create/update issues, list assigned work, track cycles, and search in Linear",
       "author": "flock",
@@ -68,11 +104,12 @@
       "iconUrl": "https://raw.githubusercontent.com/flock-agents/marketplace/main/apps/draft-desk/icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "apps/draft-desk",
+      "ownerSkillId": "draft-replies",
       "latestVersion": "1.0.1",
       "latestTag": "draft-desk-v1.0.1",
       "minFlockVersion": "0.7.0",
       "publishedAt": "2026-09-01T00:00:00Z",
-      "updatedAt": "2026-09-01T12:00:00Z"
+      "updatedAt": "2026-09-04T00:00:00Z"
     },
     {
       "slug": "draft-assistant",
@@ -122,11 +159,11 @@
       "iconUrl": "https://raw.githubusercontent.com/flock-agents/marketplace/main/templates/personal-assistant/icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "templates/personal-assistant",
-      "latestVersion": "1.1.0",
-      "latestTag": "personal-assistant-v1.1.0",
+      "latestVersion": "1.2.0",
+      "latestTag": "personal-assistant-v1.2.0",
       "minFlockVersion": "0.7.0",
       "publishedAt": "2026-08-13T09:00:00Z",
-      "updatedAt": "2026-08-14T10:20:00Z"
+      "updatedAt": "2026-09-04T00:00:00Z"
     },
     {
       "slug": "business-assistant",
@@ -166,7 +203,7 @@
     },
     {
       "slug": "gmail",
-      "type": "skill",
+      "type": "connector",
       "name": "Gmail",
       "description": "Read, send, search, and organize emails via Gmail",
       "author": "flock",
@@ -184,7 +221,7 @@
     },
     {
       "slug": "zepto",
-      "type": "skill",
+      "type": "connector",
       "name": "Zepto",
       "description": "Search products, manage cart, and place grocery orders on Zepto",
       "author": "flock",
@@ -202,7 +239,7 @@
     },
     {
       "slug": "zomato-blinkit",
-      "type": "skill",
+      "type": "connector",
       "name": "Zomato Blinkit",
       "description": "Search products, manage cart, and place grocery orders on Blinkit (by Zomato)",
       "author": "flock",
@@ -220,7 +257,7 @@
     },
     {
       "slug": "bigbasket",
-      "type": "skill",
+      "type": "connector",
       "name": "BigBasket",
       "description": "Search products, manage cart, and place grocery orders on BigBasket",
       "author": "flock",
@@ -238,7 +275,7 @@
     },
     {
       "slug": "amazon",
-      "type": "skill",
+      "type": "connector",
       "name": "Amazon Shopping",
       "description": "Search products, add to cart, place orders, and track deliveries on Amazon.in",
       "author": "flock",
@@ -256,7 +293,7 @@
     },
     {
       "slug": "linkedin",
-      "type": "skill",
+      "type": "connector",
       "name": "LinkedIn",
       "description": "Read notifications, browse feed, publish posts, send messages, check messages, monitor post comments, and reply to comments on LinkedIn",
       "author": "flock",

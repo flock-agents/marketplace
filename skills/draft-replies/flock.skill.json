@@ -1,0 +1,31 @@
+{
+  "name": "Draft Replies",
+  "slug": "draft-replies",
+  "icon": "icon.svg",
+  "description": "Drafts replies to messages that need one, in your voice, into Draft Desk — you approve, nothing sends without you",
+  "version": "1.0.0",
+  "author": "flock",
+  "category": "productivity",
+  "tags": ["email", "drafts", "replies", "approvals", "outbound"],
+  "minFlockVersion": "0.7.0",
+  "tier": "installable",
+  "nature": "agentic",
+  "connectorDeps": [
+    { "connectorId": "gmail", "required": true }
+  ],
+  "skillDeps": [
+    { "skillId": "user-memory" }
+  ],
+  "apps": [
+    { "slug": "draft-desk" }
+  ],
+  "routines": [
+    {
+      "id": "on-new-mail",
+      "trigger": { "connectorId": "gmail", "eventId": "new-mail" },
+      "configSchema": [
+        { "key": "ignoreAutomated", "type": "boolean", "label": "Ignore automated / no-reply senders", "default": true }
+      ]
+    }
+  ]
+}
