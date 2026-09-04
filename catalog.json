@@ -27,29 +27,6 @@
       "updatedAt": "2026-09-04T00:00:00Z"
     },
     {
-      "slug": "user-memory",
-      "type": "skill",
-      "name": "User Memory",
-      "description": "Learns your voice and preferences from how you write and edit, and shares that with your other skills",
-      "author": "flock",
-      "category": "productivity",
-      "tags": [
-        "memory",
-        "voice",
-        "preferences",
-        "personalization"
-      ],
-      "icon": "icon.svg",
-      "iconUrl": "https://raw.githubusercontent.com/flock-agents/marketplace/v2/skills/user-memory/icon.svg",
-      "repo": "flock-agents/marketplace",
-      "path": "skills/user-memory",
-      "latestVersion": "1.0.0",
-      "latestTag": "user-memory-v1.0.0",
-      "minFlockVersion": "0.7.0",
-      "publishedAt": "2026-09-04T00:00:00Z",
-      "updatedAt": "2026-09-04T00:00:00Z"
-    },
-    {
       "slug": "linear",
       "type": "connector",
       "name": "Linear",

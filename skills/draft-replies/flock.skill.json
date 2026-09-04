@@ -13,9 +13,7 @@
   "connectorDeps": [
     { "connectorId": "gmail", "required": true }
   ],
-  "skillDeps": [
-    { "skillId": "user-memory" }
-  ],
+  "skillDeps": [],
   "apps": [
     { "slug": "draft-desk" }
   ],

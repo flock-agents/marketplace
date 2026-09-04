@@ -14,8 +14,6 @@ approval.
 ## What it depends on
 
 - **Connector:** `gmail` (required) — the data source it reads from and drafts into.
-- **Skill:** `user-memory` — supplies your writing voice so drafts sound like you, and learns from the
-  edits you make to drafts.
 
 ## How it behaves
 
