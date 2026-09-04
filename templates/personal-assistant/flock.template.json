@@ -2,7 +2,7 @@
   "name": "Personal Assistant",
   "slug": "personal-assistant",
   "description": "A general-purpose helper for tasks, reminders, notes, web research, email, and calendar",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "author": "flock",
   "icon": "icon.svg",
   "category": "personal",
@@ -29,6 +29,8 @@
     { "skillId": "google-calendar", "preSelected": true, "description": "Manage your schedule and events" },
     { "skillId": "reminders", "preSelected": true, "description": "Set time-based and recurring reminders" }
   ],
+
+  "useCaseSkills": ["draft-replies"],
 
   "channels": [
     {

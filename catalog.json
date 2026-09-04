@@ -9,7 +9,13 @@
       "description": "Drafts replies to messages that need one, in your voice, into Draft Desk — you approve, nothing sends without you",
       "author": "flock",
       "category": "productivity",
-      "tags": ["email", "drafts", "replies", "approvals", "outbound"],
+      "tags": [
+        "email",
+        "drafts",
+        "replies",
+        "approvals",
+        "outbound"
+      ],
       "icon": "icon.svg",
       "iconUrl": "https://raw.githubusercontent.com/flock-agents/marketplace/v2/skills/draft-replies/icon.svg",
       "repo": "flock-agents/marketplace",
@@ -27,7 +33,12 @@
       "description": "Learns your voice and preferences from how you write and edit, and shares that with your other skills",
       "author": "flock",
       "category": "productivity",
-      "tags": ["memory", "voice", "preferences", "personalization"],
+      "tags": [
+        "memory",
+        "voice",
+        "preferences",
+        "personalization"
+      ],
       "icon": "icon.svg",
       "iconUrl": "https://raw.githubusercontent.com/flock-agents/marketplace/v2/skills/user-memory/icon.svg",
       "repo": "flock-agents/marketplace",
@@ -45,7 +56,11 @@
       "description": "Create/update issues, list assigned work, track cycles, and search in Linear",
       "author": "flock",
       "category": "integration",
-      "tags": ["productivity", "linear", "project-management"],
+      "tags": [
+        "productivity",
+        "linear",
+        "project-management"
+      ],
       "icon": "icon.svg",
       "iconUrl": "https://raw.githubusercontent.com/flock-agents/marketplace/main/skills/linear/icon.svg",
       "repo": "flock-agents/marketplace",
@@ -63,7 +78,12 @@
       "description": "Plan meals for the week and manage your shopping list",
       "author": "flock",
       "category": "lifestyle",
-      "tags": ["meals", "shopping", "planning", "food"],
+      "tags": [
+        "meals",
+        "shopping",
+        "planning",
+        "food"
+      ],
       "icon": "icon.svg",
       "iconUrl": "https://raw.githubusercontent.com/flock-agents/marketplace/main/apps/meal-planner/icon.svg",
       "repo": "flock-agents/marketplace",
@@ -81,7 +101,13 @@
       "description": "Family events, schedules, and reminders at a glance",
       "author": "flock",
       "category": "family",
-      "tags": ["calendar", "family", "events", "reminders", "scheduling"],
+      "tags": [
+        "calendar",
+        "family",
+        "events",
+        "reminders",
+        "scheduling"
+      ],
       "icon": "icon.svg",
       "iconUrl": "https://raw.githubusercontent.com/flock-agents/marketplace/main/apps/family-calendar/icon.svg",
       "repo": "flock-agents/marketplace",
@@ -99,7 +125,14 @@
       "description": "Your agent drafts outbound email, LinkedIn, and X messages; you approve, nothing sends without you",
       "author": "flock",
       "category": "productivity",
-      "tags": ["email", "linkedin", "messaging", "approvals", "drafts", "outbound"],
+      "tags": [
+        "email",
+        "linkedin",
+        "messaging",
+        "approvals",
+        "drafts",
+        "outbound"
+      ],
       "icon": "icon.svg",
       "iconUrl": "https://raw.githubusercontent.com/flock-agents/marketplace/main/apps/draft-desk/icon.svg",
       "repo": "flock-agents/marketplace",
@@ -118,16 +151,23 @@
       "description": "An assistant that drafts your outbound email, LinkedIn, and X messages into Draft Desk — you approve, nothing sends without you",
       "author": "flock",
       "category": "productivity",
-      "tags": ["email", "linkedin", "messaging", "drafts", "approvals", "outbound"],
+      "tags": [
+        "email",
+        "linkedin",
+        "messaging",
+        "drafts",
+        "approvals",
+        "outbound"
+      ],
       "icon": "icon.svg",
       "iconUrl": "https://raw.githubusercontent.com/flock-agents/marketplace/main/templates/draft-assistant/icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "templates/draft-assistant",
-      "latestVersion": "1.0.2",
-      "latestTag": "draft-assistant-v1.0.2",
+      "latestVersion": "1.1.0",
+      "latestTag": "draft-assistant-v1.1.0",
       "minFlockVersion": "0.7.0",
       "publishedAt": "2026-09-01T00:00:00Z",
-      "updatedAt": "2026-09-01T00:00:00Z"
+      "updatedAt": "2026-09-04T00:00:00Z"
     },
     {
       "slug": "family-butler",
@@ -136,7 +176,12 @@
       "description": "A household assistant that manages groceries, meals, and family routines through Telegram",
       "author": "flock",
       "category": "family",
-      "tags": ["household", "grocery", "family", "meal-planning"],
+      "tags": [
+        "household",
+        "grocery",
+        "family",
+        "meal-planning"
+      ],
       "icon": "🏠",
       "iconUrl": "https://raw.githubusercontent.com/flock-agents/marketplace/main/templates/family-butler/icon.svg",
       "repo": "flock-agents/marketplace",
@@ -154,7 +199,12 @@
       "description": "A general-purpose helper for email, calendar, and reminders",
       "author": "flock",
       "category": "personal",
-      "tags": ["productivity", "email", "calendar", "reminders"],
+      "tags": [
+        "productivity",
+        "email",
+        "calendar",
+        "reminders"
+      ],
       "icon": "✨",
       "iconUrl": "https://raw.githubusercontent.com/flock-agents/marketplace/main/templates/personal-assistant/icon.svg",
       "repo": "flock-agents/marketplace",
@@ -172,7 +222,13 @@
       "description": "A professional assistant for email drafts, meeting notes, document review, and scheduling",
       "author": "flock",
       "category": "professional",
-      "tags": ["business", "email", "meetings", "documents", "scheduling"],
+      "tags": [
+        "business",
+        "email",
+        "meetings",
+        "documents",
+        "scheduling"
+      ],
       "icon": "💼",
       "iconUrl": "https://raw.githubusercontent.com/flock-agents/marketplace/main/templates/business-assistant/icon.svg",
       "repo": "flock-agents/marketplace",
@@ -190,7 +246,12 @@
       "description": "A creative partner for writing, content creation, and social media publishing",
       "author": "flock",
       "category": "personal",
-      "tags": ["writing", "content", "social-media", "creative"],
+      "tags": [
+        "writing",
+        "content",
+        "social-media",
+        "creative"
+      ],
       "icon": "🎨",
       "iconUrl": "https://raw.githubusercontent.com/flock-agents/marketplace/main/templates/creative-assistant/icon.svg",
       "repo": "flock-agents/marketplace",
@@ -208,7 +269,12 @@
       "description": "Read, send, search, and organize emails via Gmail",
       "author": "flock",
       "category": "integration",
-      "tags": ["email", "gmail", "productivity", "google"],
+      "tags": [
+        "email",
+        "gmail",
+        "productivity",
+        "google"
+      ],
       "icon": "icon.svg",
       "iconUrl": "https://raw.githubusercontent.com/flock-agents/marketplace/main/skills/gmail/icon.svg",
       "repo": "flock-agents/marketplace",
@@ -226,7 +292,12 @@
       "description": "Search products, manage cart, and place grocery orders on Zepto",
       "author": "flock",
       "category": "integration",
-      "tags": ["grocery", "delivery", "shopping", "zepto"],
+      "tags": [
+        "grocery",
+        "delivery",
+        "shopping",
+        "zepto"
+      ],
       "icon": "icon.svg",
       "iconUrl": "https://raw.githubusercontent.com/flock-agents/marketplace/main/skills/zepto/icon.svg",
       "repo": "flock-agents/marketplace",
@@ -244,7 +315,13 @@
       "description": "Search products, manage cart, and place grocery orders on Blinkit (by Zomato)",
       "author": "flock",
       "category": "integration",
-      "tags": ["grocery", "delivery", "shopping", "blinkit", "zomato"],
+      "tags": [
+        "grocery",
+        "delivery",
+        "shopping",
+        "blinkit",
+        "zomato"
+      ],
       "icon": "icon.svg",
       "iconUrl": "https://raw.githubusercontent.com/flock-agents/marketplace/main/skills/zomato-blinkit/icon.svg",
       "repo": "flock-agents/marketplace",
@@ -262,7 +339,12 @@
       "description": "Search products, manage cart, and place grocery orders on BigBasket",
       "author": "flock",
       "category": "integration",
-      "tags": ["grocery", "delivery", "shopping", "bigbasket"],
+      "tags": [
+        "grocery",
+        "delivery",
+        "shopping",
+        "bigbasket"
+      ],
       "icon": "icon.svg",
       "iconUrl": "https://raw.githubusercontent.com/flock-agents/marketplace/main/skills/bigbasket/icon.svg",
       "repo": "flock-agents/marketplace",
@@ -280,7 +362,12 @@
       "description": "Search products, add to cart, place orders, and track deliveries on Amazon.in",
       "author": "flock",
       "category": "integration",
-      "tags": ["shopping", "delivery", "amazon", "ecommerce"],
+      "tags": [
+        "shopping",
+        "delivery",
+        "amazon",
+        "ecommerce"
+      ],
       "icon": "icon.svg",
       "iconUrl": "https://raw.githubusercontent.com/flock-agents/marketplace/main/skills/amazon/icon.svg",
       "repo": "flock-agents/marketplace",
@@ -298,7 +385,11 @@
       "description": "Read notifications, browse feed, publish posts, send messages, check messages, monitor post comments, and reply to comments on LinkedIn",
       "author": "flock",
       "category": "integration",
-      "tags": ["social", "linkedin", "professional"],
+      "tags": [
+        "social",
+        "linkedin",
+        "professional"
+      ],
       "icon": "icon.svg",
       "iconUrl": "https://raw.githubusercontent.com/flock-agents/marketplace/main/skills/linkedin/icon.svg",
       "repo": "flock-agents/marketplace",

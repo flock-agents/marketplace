@@ -2,7 +2,7 @@
   "name": "Draft Assistant",
   "slug": "draft-assistant",
   "description": "An assistant that drafts your outbound email, LinkedIn, and X messages into Draft Desk — you approve, nothing sends without you",
-  "version": "1.0.2",
+  "version": "1.1.0",
   "author": "flock",
   "icon": "icon.svg",
   "category": "productivity",
@@ -58,9 +58,7 @@
     }
   ],
 
-  "apps": [
-    { "slug": "draft-desk", "required": true }
-  ],
+  "useCaseSkills": ["draft-replies"],
 
   "channels": [
     {
@@ -82,14 +80,6 @@
       "enabled": true,
       "model": "claude-sonnet-4-6",
       "thinkingLevel": "none"
-    },
-    {
-      "name": "Watch my inbox",
-      "trigger": { "type": "event", "sourceId": "gmail", "eventKinds": ["email"] },
-      "prompt": "New mail arrived. Review what needs a reply and draft responses in Draft Desk for my approval.",
-      "deliverTo": null,
-      "timezone": "Asia/Kolkata",
-      "enabled": true
     }
   ],
 
