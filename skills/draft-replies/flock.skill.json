@@ -22,7 +22,11 @@
   "routines": [
     {
       "id": "on-new-mail",
+      "name": "Watch my inbox",
       "trigger": { "connectorId": "gmail", "eventId": "new-mail" },
+      "eventKinds": ["email"],
+      "executionMode": "llm",
+      "prompt": "New mail arrived. Review what needs a reply and draft responses in Draft Desk in my voice for my approval. Skip anything automated or already queued. Never send.",
       "configSchema": [
         { "key": "ignoreAutomated", "type": "boolean", "label": "Ignore automated / no-reply senders", "default": true }
       ]
