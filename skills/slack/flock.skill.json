@@ -1,0 +1,35 @@
+{
+  "name": "Slack",
+  "slug": "slack",
+  "icon": "icon.svg",
+  "description": "Connect to your Slack workspace via browser session — search, read channels, and list users",
+  "version": "1.0.0",
+  "author": "flock",
+  "category": "integration",
+  "tags": ["messaging", "slack", "productivity", "team"],
+  "minFlockVersion": "0.7.0",
+  "tier": "installable",
+  "requires": {
+    "type": "browser_session",
+    "service": "slack",
+    "loginUrl": "https://app.slack.com",
+    "description": "Log into your Slack workspace via the dashboard browser session",
+    "rationale": "Many Slack workspaces block bot token installs — a saved browser session uses your existing login with no admin approval needed."
+  },
+  "ingest": {
+    "kind": "slack_message",
+    "label": "Slack",
+    "eventKinds": [
+      { "id": "slack_message", "label": "New message" },
+      { "id": "slack_mention", "label": "Mention" }
+    ],
+    "poll": { "functionName": "listMessages" },
+    "result": "array",
+    "map": {
+      "eventId": { "from": "message_id" },
+      "actor": { "from": "user" },
+      "ts": { "from": "ts", "transform": "parseDateOrNow" },
+      "preview": { "from": "text", "transform": "trim" }
+    }
+  }
+}

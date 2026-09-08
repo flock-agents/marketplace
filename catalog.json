@@ -377,6 +377,52 @@
       "minFlockVersion": "0.7.0",
       "publishedAt": "2026-08-19T05:23:00Z",
       "updatedAt": "2026-08-20T15:16:00Z"
+    },
+    {
+      "slug": "slack",
+      "type": "connector",
+      "name": "Slack",
+      "description": "Connect to your Slack workspace via browser session — search, read channels, and list users",
+      "author": "flock",
+      "category": "integration",
+      "tags": [
+        "messaging",
+        "slack",
+        "productivity",
+        "team"
+      ],
+      "icon": "icon.svg",
+      "iconUrl": "https://raw.githubusercontent.com/flock-agents/marketplace/main/skills/slack/icon.svg",
+      "repo": "flock-agents/marketplace",
+      "path": "skills/slack",
+      "latestVersion": "1.0.0",
+      "latestTag": "slack-v1.0.0",
+      "minFlockVersion": "0.7.0",
+      "publishedAt": "2026-09-07T00:00:00Z",
+      "updatedAt": "2026-09-07T00:00:00Z"
+    },
+    {
+      "slug": "slack-watcher",
+      "type": "skill",
+      "name": "Slack Watcher",
+      "description": "Watch Slack channels for actionable items and create Flock tasks",
+      "author": "flock",
+      "category": "productivity",
+      "tags": [
+        "slack",
+        "tasks",
+        "automation",
+        "monitoring"
+      ],
+      "icon": "icon.svg",
+      "iconUrl": "https://raw.githubusercontent.com/flock-agents/marketplace/main/skills/slack-watcher/icon.svg",
+      "repo": "flock-agents/marketplace",
+      "path": "skills/slack-watcher",
+      "latestVersion": "1.0.0",
+      "latestTag": "slack-watcher-v1.0.0",
+      "minFlockVersion": "0.7.0",
+      "publishedAt": "2026-09-07T00:00:00Z",
+      "updatedAt": "2026-09-07T00:00:00Z"
     }
   ]
 }
