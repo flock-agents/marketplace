@@ -26,7 +26,7 @@ export interface ActionExecutor {
   args?: string[];
   // Duplicate submits collapse to one side effect (§9 idempotency).
   idempotencyKey?: string;
-  onFailure?: "agent" | "retry" | "needs_user";
+  onFailure?: "agent" | "retry" | "blocked";
   // Immutable at task creation (§5.2, §10 T2) — the seed for the escalation session if the script
   // send fails.
   agentSeed?: string;
