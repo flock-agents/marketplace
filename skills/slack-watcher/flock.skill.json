@@ -3,7 +3,7 @@
   "slug": "slack-watcher",
   "icon": "icon.svg",
   "description": "Watch Slack channels for actionable items and create Flock tasks",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "author": "flock",
   "category": "productivity",
   "tags": ["slack", "tasks", "automation", "monitoring"],
@@ -21,7 +21,6 @@
       "trigger": { "connectorId": "slack", "eventId": "slack_message" },
       "eventKinds": ["slack_message", "slack_mention"],
       "executionMode": "llm",
-      "schedule": "*/30 * * * *",
       "prompt": "New Slack activity detected. Review the messages, identify actionable items (tasks, follow-ups, reminders, learnings), and create Flock tasks for each one.",
       "configSchema": [
         {
