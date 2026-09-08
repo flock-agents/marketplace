@@ -3,7 +3,7 @@
   "slug": "slack-watcher",
   "icon": "icon.svg",
   "description": "Watch Slack channels for actionable items and create Flock tasks",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "author": "flock",
   "category": "productivity",
   "tags": ["slack", "tasks", "automation", "monitoring"],
@@ -42,7 +42,13 @@
           "label": "Keyword filter (comma-separated)",
           "help": "Only surface messages containing these keywords. Leave blank for all."
         }
-      ]
+      ],
+      "pollingCadence": {
+        "recommended": 86400000,
+        "min": 3600000,
+        "max": 604800000,
+        "userConfigurable": true
+      }
     }
   ]
 }

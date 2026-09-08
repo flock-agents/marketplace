@@ -22,7 +22,7 @@ const body = JSON.stringify({
 });
 
 (async () => {
-  const apiBase = process.env.FLOCK_API || "http://localhost:35625";
+  const apiBase = process.env.FLOCK_API_URL || process.env.FLOCK_API || "http://localhost:35625";
   const res = await fetch(`${apiBase}/api/internal/skill-exec`, {
     method: "POST",
     headers: {

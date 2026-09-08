@@ -1,8 +1,17 @@
 #!/bin/bash
 # Slack skill helpers — browser session token extraction + Slack Web API via xoxc/xoxd.
 
-_HELPERS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$(cd "$_HELPERS_DIR/../../_shared" && pwd)/_helpers.sh"
+# Self-contained: marketplace-installed skills live under DATA_DIR/skills where
+# there is no ../../_shared/_helpers.sh (that only exists in the platform's
+# bundled skills tree). Slack only needs FLOCK_API from it, so define it here
+# directly — keeps the skill working whether installed from the marketplace or
+# bundled. FLOCK_API_URL is injected by the skill executor.
+FLOCK_API="${FLOCK_API_URL:-http://localhost:35625}"
+if [[ ! "$FLOCK_API" =~ ^https?://(localhost|127\.0\.0\.1)(:[0-9]+)?$ ]]; then
+  jq -nc --arg api "$FLOCK_API" \
+    '{error:true, code:"BAD_FLOCK_API", message:("FLOCK_API_URL must be localhost — refusing to send auth token to " + $api)}' >&2
+  exit 1
+fi
 
 SLACK_API_BASE="https://slack.com/api"
 SLACK_ORIGIN="https://app.slack.com"
@@ -16,9 +25,16 @@ TOKEN_FILE="${_SLACK_TOKEN_DIR}/tokens.json"
 RATE_FILE="${_SLACK_TOKEN_DIR}/rate"
 TOKEN_TTL_SECONDS=14400
 
+# Error JSON goes to STDERR (not stdout) and exits non-zero. The skill executor
+# returns a script's STDOUT as the success payload on exit 0, and its STDERR as the
+# error on any non-zero exit (skill-executor.ts). Writing errors to stdout would get
+# them discarded on the failure path; writing to stderr surfaces the real reason to
+# the agent. This also means the entry scripts' `RESULT=$(_slack_api ...)` capture
+# (stdout only) never swallows an error — it lands on stderr and set -e aborts, with
+# the reason already delivered.
 _error_json() {
   local code="$1" msg="$2"
-  jq -nc --arg code "$code" --arg msg "$msg" '{error:true, code:$code, message:$msg}'
+  jq -nc --arg code "$code" --arg msg "$msg" '{error:true, code:$code, message:$msg}' >&2
   exit 1
 }
 
