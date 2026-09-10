@@ -3,7 +3,7 @@
   "slug": "slack-watcher",
   "icon": "icon.svg",
   "description": "Watch Slack channels for actionable items and create Flock tasks",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "author": "flock",
   "category": "productivity",
   "tags": ["slack", "tasks", "automation", "monitoring"],
@@ -28,7 +28,7 @@
           "type": "multi-select",
           "label": "Channels to watch",
           "help": "Select which Slack channels to monitor",
-          "options": { "kind": "dynamic", "from": "listChannels" }
+          "options": { "kind": "dynamic", "from": "channels_list" }
         },
         {
           "key": "ignoreBots",

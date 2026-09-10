@@ -67,17 +67,22 @@ _require_browser_session() {
 
 _rate_delay() {
   local min_delay="${1:-3}"
-  local now last diff
+  local now last diff lockdir
   now=$(date +%s)
-  (
-    flock -w 5 200 || exit 0
+  lockdir="${RATE_FILE}.lockdir"
+
+  # Atomic lock via mkdir (POSIX-portable; works on macOS + Linux without flock)
+  if mkdir "$lockdir" 2>/dev/null; then
     last=$(cat "$RATE_FILE" 2>/dev/null || echo 0)
     diff=$((now - last))
     if [ "$diff" -lt "$min_delay" ]; then
-      sleep "$min_delay"
+      sleep "$((min_delay - diff))"
     fi
     date +%s > "$RATE_FILE"
-  ) 200>"${RATE_FILE}.lock"
+    rmdir "$lockdir" 2>/dev/null || true
+  fi
+  # If mkdir fails (lock held by concurrent call), skip delay — browser session
+  # serializes requests anyway via its own queue.
 }
 
 _check_session_expired() {

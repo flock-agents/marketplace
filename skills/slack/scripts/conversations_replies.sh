@@ -20,7 +20,14 @@ fi
 
 RESULT=$(_slack_api "conversations.replies" "$API_PARAMS")
 
-MESSAGES=$(echo "$RESULT" | jq -c '[.messages[]? | {ts: .ts, user: (.user // ""), text: (.text // ""), type: (.type // "message"), thread_ts: (.thread_ts // null), bot_id: (.bot_id // null)}]')
+MESSAGES=$(echo "$RESULT" | jq -c '[.messages[]? | {
+  ts:        .ts,
+  user:      (.user // ""),
+  text:      (.text // ""),
+  type:      (.type // "message"),
+  thread_ts: (.thread_ts // null),
+  bot_id:    (.bot_id // null)
+}]')
 NEXT_CURSOR=$(echo "$RESULT" | jq -r '.response_metadata.next_cursor // ""')
 HAS_MORE=$(echo "$RESULT" | jq -r '.has_more // false')
 
