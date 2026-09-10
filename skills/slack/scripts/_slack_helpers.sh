@@ -14,7 +14,6 @@ if [[ ! "$FLOCK_API" =~ ^https?://(localhost|127\.0\.0\.1)(:[0-9]+)?$ ]]; then
 fi
 
 SLACK_API_BASE="https://slack.com/api"
-SLACK_ORIGIN="https://app.slack.com"
 SKILL_ID="${SKILL_ID:-slack}"
 
 _SLACK_TOKEN_DIR="${SKILL_DATA_DIR:-/tmp}/slack-tokens"
@@ -83,21 +82,6 @@ _rate_delay() {
   fi
   # If mkdir fails (lock held by concurrent call), skip delay — browser session
   # serializes requests anyway via its own queue.
-}
-
-_check_session_expired() {
-  local content="$1"
-  local session_name="${BROWSER_SESSION:-slack}"
-  local agent_id="${FLOCK_AGENT_ID:-}"
-
-  if echo "$content" | grep -qiE 'sign.in.to.slack|signin_find|signin_team'; then
-    curl -s -X POST "${FLOCK_API}/api/internal/browser-sessions/${session_name}/mark-outdated" \
-      -H "Content-Type: application/json" \
-      -H "Authorization: Bearer ${FLOCK_AUTH_TOKEN:-}" \
-      -d "$(jq -n --arg agent "$agent_id" --arg reason "Slack returned sign-in page instead of authenticated content" \
-            '{agentId: $agent, reason: $reason}')" >/dev/null 2>&1 || true
-    _error_json "SESSION_OUTDATED" "Slack session has expired. Marked as outdated — user needs to re-login via the dashboard."
-  fi
 }
 
 _save_tokens() {
@@ -255,32 +239,97 @@ _extract_tokens_from_browser() {
     _error_json "SESSION_OUTDATED" "Slack session has expired. Marked as outdated — user needs to re-login via the dashboard."
   fi
 
-  local xoxc xoxd
+  local xoxc
   xoxc=$(echo "$content" | jq -r '.xoxc // ""' 2>/dev/null || echo "")
-  xoxd=$(echo "$content" | jq -r '.xoxd // ""' 2>/dev/null || echo "")
 
   if [ -z "$xoxc" ]; then
     _error_json "TOKEN_NOT_FOUND" "Could not extract xoxc token from Slack localStorage. The user may need to open Slack in the browser session and ensure they are logged in."
   fi
 
-  # xoxd (the d= cookie) is httpOnly and cannot be read via document.cookie.
-  # We save xoxc only; API calls go through the browser so the cookie is
-  # attached automatically.
-  _save_tokens "$xoxc" ""
+  # xoxd (the `d=` cookie) is httpOnly, so document.cookie can't see it. But the
+  # server captured it when the session was established — read it back via the
+  # session-cookie endpoint. With both tokens in hand we call the Slack Web API
+  # directly (see _slack_api), avoiding a ~20s SPA navigation per call.
+  local cookie_resp cookie_http cookie_body xoxd
+  cookie_resp=$(curl -s -w "\n%{http_code}" -X POST \
+    "${FLOCK_API}/api/internal/browser-sessions/${session_name}/cookie" \
+    -H "Content-Type: application/json" \
+    -H "Authorization: Bearer ${FLOCK_AUTH_TOKEN:-}" \
+    -d "$(jq -n --arg agent "$agent_id" '{agentId: $agent, cookieName: "d", domain: "slack.com"}')")
+  cookie_http=$(echo "$cookie_resp" | tail -1)
+  cookie_body=$(echo "$cookie_resp" | sed '$d')
+
+  if [ "$cookie_http" -ge 400 ]; then
+    local cookie_err
+    cookie_err=$(echo "$cookie_body" | jq -r '.message // .error // "(no message)"' 2>/dev/null || echo "(unparseable)")
+    _error_json "COOKIE_READ_FAILED" "Could not read Slack session cookie (HTTP $cookie_http): $cookie_err"
+  fi
+
+  xoxd=$(echo "$cookie_body" | jq -r 'if .found then .value else "" end' 2>/dev/null || echo "")
+  if [ -z "$xoxd" ]; then
+    _error_json "TOKEN_NOT_FOUND" "Slack session is missing the 'd' auth cookie. The user may need to reconnect Slack via the dashboard browser session."
+  fi
+  _validate_xoxd "$xoxd"
+
+  _save_tokens "$xoxc" "$xoxd"
 }
 
 _ensure_tokens() {
-  local xoxc
+  # Both tokens are required for a direct API call. They're saved atomically, so
+  # normally it's both-or-neither — but a token file cached by an older skill
+  # version may carry an empty xoxd, so check both and re-extract if either is missing.
+  local xoxc xoxd
   xoxc=$(_get_xoxc)
+  xoxd=$(_get_xoxd)
 
-  if [ -z "$xoxc" ]; then
+  if [ -z "$xoxc" ] || [ -z "$xoxd" ]; then
     _extract_tokens_from_browser
     xoxc=$(_get_xoxc)
+    xoxd=$(_get_xoxd)
   fi
 
-  if [ -z "$xoxc" ]; then
-    _error_json "NO_TOKENS" "Could not obtain Slack xoxc token. Connect Slack via the dashboard browser session."
+  if [ -z "$xoxc" ] || [ -z "$xoxd" ]; then
+    _error_json "NO_TOKENS" "Could not obtain Slack tokens (xoxc/xoxd). Connect Slack via the dashboard browser session."
   fi
+}
+
+# Single direct call to the Slack Web API. Emits the raw JSON response body on
+# stdout (no ok/error interpretation — the caller does that so it can decide
+# whether to re-extract tokens and retry). xoxc goes in the POST body as `token`;
+# xoxd rides along as the `d=` cookie.
+#
+# Caller params arrive as an unencoded url-style string ("query=foo bar&count=20").
+# We split on "&", each pair on its FIRST "=", and hand each to --data-urlencode so
+# curl encodes the VALUE (spaces, "#", ":", "<@...>") but not the key — matching the
+# browser path's URLSearchParams.append() and tolerating values that contain "="
+# (e.g. cursor tokens). Pairs without "=" are skipped, as the JSON conversion did.
+_slack_api_call() {
+  local method="$1" params="$2" xoxc="$3" xoxd="$4"
+  local response http_code body
+  local -a curl_data=(--data-urlencode "token=${xoxc}")
+  if [ -n "$params" ]; then
+    local pair
+    # `|| [ -n "$pair" ]` so the final pair isn't dropped (tr output has no
+    # trailing newline, and plain `read` returns non-zero on the last line).
+    while IFS= read -r pair || [ -n "$pair" ]; do
+      [ -z "$pair" ] && continue
+      [[ "$pair" != *=* ]] && continue
+      curl_data+=(--data-urlencode "$pair")
+    done < <(printf '%s' "$params" | tr '&' '\n')
+  fi
+  response=$(curl -s -w "\n%{http_code}" -X POST "${SLACK_API_BASE}/${method}" \
+    -H "Cookie: d=${xoxd}" \
+    "${curl_data[@]}")
+  http_code=$(echo "$response" | tail -1)
+  body=$(echo "$response" | sed '$d')
+
+  if [ "$http_code" -ge 400 ]; then
+    _error_json "SLACK_HTTP_ERROR" "Slack API returned HTTP $http_code for ${method}"
+  fi
+  if [ -z "$body" ]; then
+    _error_json "EMPTY_RESPONSE" "Slack API returned an empty body for ${method}"
+  fi
+  echo "$body"
 }
 
 _slack_api() {
@@ -302,107 +351,41 @@ _slack_api() {
   esac
   _rate_delay "$tier_delay"
 
-  # Convert url-encoded params to a JSON object for safe embedding in the JS script.
-  # Values may contain "=" (e.g. cursor tokens), so split only on the first "=".
-  local params_json
-  if [ -n "$params" ]; then
-    params_json=$(printf '%s' "$params" | tr '&' '\n' | \
-      jq -Rn '[inputs | index("=") as $i | select($i != null) |
-               {key: .[:$i], value: .[($i+1):]}] | from_entries // {}')
-  else
-    params_json="{}"
-  fi
+  _ensure_tokens
+  local xoxc xoxd
+  xoxc=$(_get_xoxc)
+  xoxd=$(_get_xoxd)
 
-  # Make the API call from within the browser session using a relative URL.
-  # The browser automatically attaches the httpOnly d= cookie, which cannot
-  # be read via document.cookie but is required for auth alongside xoxc.
-  local eval_script
-  eval_script=$(printf '(() => {
-  try {
-    let xoxc = "";
-    for (const k of Object.keys(localStorage)) {
-      if (k.startsWith("localConfig_v2")) {
-        try {
-          const val = JSON.parse(localStorage.getItem(k));
-          const teams = val.teams || {};
-          for (const tid of Object.keys(teams)) {
-            const t = teams[tid];
-            if (t && t.token && t.token.startsWith("xoxc-")) { xoxc = t.token; break; }
-          }
-        } catch(e) {}
-      }
-      if (xoxc) break;
-    }
-    if (!xoxc) return Promise.resolve(JSON.stringify({ok:false,error:"no_xoxc_in_localstorage"}));
-    const params = %s;
-    const fd = new URLSearchParams();
-    fd.append("token", xoxc);
-    for (const [k,v] of Object.entries(params)) { fd.append(k, v); }
-    return fetch("/api/%s", {
-      method: "POST", credentials: "include",
-      body: fd.toString(),
-      headers: {"Content-Type": "application/x-www-form-urlencoded"}
-    }).then(r => r.json()).then(d => JSON.stringify(d)).catch(e => JSON.stringify({ok:false,error:e.toString()}));
-  } catch(e) { return JSON.stringify({ok:false,error:e.toString()}); }
-})()' "$params_json" "$method")
-
-  local payload response http_code body content ok err
-  payload=$(jq -n \
-    --arg url "https://app.slack.com/client" \
-    --arg session "$session_name" \
-    --arg agent "$agent_id" \
-    --arg evalScript "$eval_script" \
-    '{url: $url, sessionName: $session, agentId: $agent, evaluateScript: $evalScript}')
-
-  response=$(curl -s -w "\n%{http_code}" -X POST "${FLOCK_API}/api/internal/browser-fetch" \
-    -H "Content-Type: application/json" \
-    -H "Authorization: Bearer ${FLOCK_AUTH_TOKEN:-}" \
-    -d "$payload")
-  http_code=$(echo "$response" | tail -1)
-  body=$(echo "$response" | sed '$d')
-
-  if [ "$http_code" = "403" ]; then
-    local err_code
-    err_code=$(echo "$body" | jq -r '.code // ""' 2>/dev/null || echo "")
-    if [ "$err_code" = "session_not_ready" ]; then
-      _error_json "SESSION_NOT_READY" "Slack browser session is not ready. User needs to log in via the dashboard."
+  # Call directly, no browser navigation. On an auth failure re-extract tokens
+  # from the live session once (the cached xoxc/xoxd may have rotated) and retry.
+  local attempt content ok err
+  for attempt in 1 2; do
+    content=$(_slack_api_call "$method" "$params" "$xoxc" "$xoxd")
+    ok=$(echo "$content" | jq -r '.ok // false' 2>/dev/null || echo "false")
+    err=$(echo "$content" | jq -r '.error // ""' 2>/dev/null || echo "")
+    if [ "$ok" = "true" ]; then
+      echo "$content"
+      return
     fi
-    _error_json "CRAWL_ERROR" "Access denied (HTTP 403). Check browser session access settings."
-  fi
+    if [ "$attempt" = "1" ] && { [ "$err" = "invalid_auth" ] || [ "$err" = "not_authed" ] || [ "$err" = "token_expired" ]; }; then
+      rm -f "$TOKEN_FILE"
+      _extract_tokens_from_browser
+      xoxc=$(_get_xoxc)
+      xoxd=$(_get_xoxd)
+      continue
+    fi
+    break
+  done
 
-  if [ "$http_code" -ge 400 ]; then
-    local err_msg
-    err_msg=$(echo "$body" | jq -r '.error // "(no error message)"' 2>/dev/null || echo "(unparseable)")
-    _error_json "CRAWL_ERROR" "Browser-mediated API call failed (HTTP $http_code): $err_msg"
-  fi
-
-  local final_url
-  content=$(echo "$body" | jq -r '.content // ""')
-  final_url=$(echo "$body" | jq -r '.url // ""')
-
-  # Detect session redirect to sign-in page
-  if echo "$final_url" | grep -qiE 'signin|sign_in|login'; then
+  # Persisted failure: if it's still an auth error after a fresh extract, the
+  # session itself is dead — mark it outdated so the user is prompted to re-login.
+  if [ "$err" = "invalid_auth" ] || [ "$err" = "token_revoked" ] || [ "$err" = "not_authed" ] || [ "$err" = "token_expired" ]; then
     curl -s -X POST "${FLOCK_API}/api/internal/browser-sessions/${session_name}/mark-outdated" \
       -H "Content-Type: application/json" \
       -H "Authorization: Bearer ${FLOCK_AUTH_TOKEN:-}" \
-      -d "$(jq -n --arg agent "$agent_id" --arg reason "Slack redirected to sign-in during API call" \
+      -d "$(jq -n --arg agent "$agent_id" --arg reason "Slack API returned ${err}" \
             '{agentId: $agent, reason: $reason}')" >/dev/null 2>&1 || true
-    _error_json "SESSION_OUTDATED" "Slack session has expired. User needs to re-login via the dashboard."
+    _error_json "AUTH_EXPIRED" "Slack authentication failed (${err}). User needs to re-login via the dashboard."
   fi
-
-  if [ -z "$content" ]; then
-    _error_json "EMPTY_RESPONSE" "Browser returned no content for Slack API call"
-  fi
-
-  ok=$(echo "$content" | jq -r '.ok // false' 2>/dev/null || echo "false")
-  err=$(echo "$content" | jq -r '.error // ""' 2>/dev/null || echo "")
-
-  if [ "$ok" = "false" ]; then
-    if [ "$err" = "invalid_auth" ] || [ "$err" = "token_revoked" ] || [ "$err" = "not_authed" ]; then
-      _error_json "AUTH_EXPIRED" "Slack authentication failed. User needs to re-login via the dashboard."
-    fi
-    _error_json "SLACK_API_ERROR" "Slack API error: ${err}"
-  fi
-
-  echo "$content"
+  _error_json "SLACK_API_ERROR" "Slack API error: ${err:-unknown}"
 }

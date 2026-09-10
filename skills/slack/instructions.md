@@ -16,11 +16,11 @@ Full workspace integration via browser session authentication. Equivalent featur
 
 ## Connection
 
-Browser session only. The user logs into `app.slack.com` via the Flock dashboard. API calls are made from within the browser session (relative `/api/...` fetch with `credentials: include`) so the httpOnly `d=` auth cookie is attached automatically.
+Browser session only. The user logs into `app.slack.com` via the Flock dashboard. On first use the skill extracts both auth tokens from that session — the `xoxc` token from the page's localStorage and the httpOnly `d=` (`xoxd`) cookie via the server (which captured it when the session was established, since page JS can't read httpOnly cookies). Subsequent API calls go **directly** to `slack.com/api` with those tokens (no per-call browser navigation).
 
 No bot tokens or OAuth app installs required — works on workspaces that restrict bot installs.
 
-> **Performance note:** Each API call takes ~10s via the browser session. Functions that make many calls (e.g. `conversations_unreads`) can take several minutes on large workspaces.
+> **Performance note:** Calls hit the Slack Web API directly and return in well under a second. Tokens are cached and auto re-extracted if they rotate; if the session itself expires it's marked outdated and the user is prompted to re-login.
 
 ## Environment Flags (opt-in write operations)
 
@@ -37,7 +37,7 @@ Set these env vars to enable write/mutation actions:
 ### Auth & Health
 
 #### `extractTokens`
-Extract xoxc tokens from the browser session and validate. Params: `{}`
+Extract xoxc + xoxd tokens from the browser session and validate. Params: `{}`
 
 #### `checkTokenHealth`
 Verify stored tokens via auth.test. Params: `{}`
