@@ -4,6 +4,7 @@ import {
   validateId,
   browserInteract,
 } from "../../_shared/_google_helpers";
+import { invalidateCachedThreadForMessage } from "./_threadCache";
 
 const params = JSON.parse(process.env.SKILL_PARAMS || "{}");
 const messageId: string = params.messageId || "";
@@ -35,5 +36,8 @@ const evalScript = `(() => {
   );
   const content = result?.content || "{}";
   const parsed = typeof content === "string" ? JSON.parse(content) : content;
+  // Archiving changes the thread's state, so drop any cached copy — a stale hit is the one thing the
+  // cache must never serve after a write. Fs-only and swallowed; never touches this script's output.
+  invalidateCachedThreadForMessage(messageId, "archiveMessage");
   console.log(JSON.stringify(parsed));
 })();

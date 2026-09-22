@@ -4,6 +4,7 @@ import {
   validateId,
   browserInteract,
 } from "../../_shared/_google_helpers";
+import { invalidateCachedThreadForMessage } from "./_threadCache";
 
 const params = JSON.parse(process.env.SKILL_PARAMS || "{}");
 const messageId: string = params.messageId || "";
@@ -41,5 +42,7 @@ const evalScript = `(() => { return JSON.stringify({ success: true, message: 'La
   );
   const content = result?.content || "{}";
   const parsed = typeof content === "string" ? JSON.parse(content) : content;
+  // Applying a label changed the thread's state; drop any cached copy so the next read reflects it.
+  invalidateCachedThreadForMessage(messageId, "applyLabel");
   console.log(JSON.stringify(parsed));
 })();

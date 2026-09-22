@@ -4,6 +4,7 @@ import {
   validateId,
   browserWrite,
 } from "../../_shared/_google_helpers";
+import { invalidateCachedThreadForMessage } from "./_threadCache";
 
 const params = JSON.parse(process.env.SKILL_PARAMS || "{}");
 const messageId: string = params.messageId || "";
@@ -28,5 +29,7 @@ const evalScript = `(() => {
   );
   const content = result?.content || "{}";
   const parsed = typeof content === "string" ? JSON.parse(content) : content;
+  // The read/unread flag changed; drop any cached copy so the next read reflects it. Swallowed fs-only.
+  invalidateCachedThreadForMessage(messageId, "markRead");
   console.log(JSON.stringify(parsed));
 })();

@@ -1,34 +1,200 @@
 {
-  "name": "Gmail",
-  "slug": "gmail",
-  "icon": "icon.svg",
-  "description": "Read, send, search, and organize emails via Gmail",
-  "version": "1.0.0",
-  "author": "flock",
-  "category": "integration",
-  "tags": ["email", "gmail", "productivity", "google"],
-  "minFlockVersion": "0.7.0",
-  "tier": "installable",
-  "requires": {
-    "anyOf": [
+  "id": "gmail",
+  "description": "Read, send, and organize emails via Gmail",
+  "category": "core",
+  "scope": "per-agent",
+  "hasScripts": true,
+  "secretRefs": [],
+  "networkAccess": true,
+  "paramSchema": [],
+  "requiresInstance": true,
+  "enabled": true,
+  "requiresAny": true,
+  "requires": [
+    {
+      "type": "browser_session",
+      "service": "google",
+      "description": "Read, send, and organize emails via browser session",
+      "recommended": true,
+      "rationale": "Uses your existing Google login — no app passwords or extra setup needed."
+    },
+    {
+      "type": "account",
+      "credentialSubtype": "imap",
+      "service": "imap",
+      "description": "Direct email access via IMAP with app password",
+      "documentationUrl": "https://myaccount.google.com/apppasswords",
+      "setupInstructions": "Use a Google App Password for IMAP access — not your normal Google password.",
+      "setupSteps": [
+        {
+          "title": "Open Google App Passwords",
+          "description": "Visit myaccount.google.com/apppasswords"
+        },
+        {
+          "title": "Generate a password",
+          "description": "Create a 16-character app password for \"Mail\""
+        },
+        {
+          "title": "Enter it below",
+          "description": "Use your Gmail address and the generated app password"
+        }
+      ],
+      "fields": [
+        {
+          "name": "email",
+          "type": "email",
+          "label": "Email address",
+          "placeholder": "your.email@gmail.com",
+          "sensitive": false,
+          "required": true
+        },
+        {
+          "name": "password",
+          "type": "password",
+          "label": "App password",
+          "placeholder": "App password (16 characters)",
+          "sensitive": true,
+          "required": true
+        }
+      ]
+    }
+  ],
+  "auth": {
+    "type": "imap+browser",
+    "imap": {
+      "setup_instructions": "Use a Google App Password for IMAP access. Go to myaccount.google.com/apppasswords to generate one."
+    },
+    "browser": {
+      "sessionName": "google",
+      "setup_instructions": "Log in to Gmail via the dashboard browser session."
+    }
+  },
+  "security": {
+    "allowedFunctions": [
+      "applyLabel",
+      "archiveMessage",
+      "createDraft",
+      "createReplyDraft",
+      "createLabel",
+      "discardDraft",
+      "getDraft",
+      "findDraftForThread",
+      "getEmail",
+      "getThread",
+      "getThreads",
+      "listInbox",
+      "listLabels",
+      "checkEngagedDomains",
+      "markRead",
+      "markUnread",
+      "searchEmails",
+      "sendDraft",
+      "shouldTrigger",
+      "starMessage",
+      "storeThreadBody",
+      "updateDraft"
+    ]
+  },
+  "network": {
+    "endpoints": [
       {
-        "type": "browser_session",
-        "service": "google",
-        "description": "Full Gmail experience via browser session — rich compose, CC/BCC, attachments, formatting",
-        "recommended": true,
-        "rationale": "Uses your existing Google login — no app passwords or extra setup needed."
+        "hostname": "www.googleapis.com",
+        "purpose": "Gmail API",
+        "methods": [
+          "GET",
+          "POST"
+        ]
       },
       {
-        "type": "account",
-        "credentialSubtype": "imap",
-        "service": "imap",
-        "description": "Direct email access via IMAP with app password",
-        "setupInstructions": "Use a Google App Password for IMAP access — not your normal Google password. Go to myaccount.google.com/apppasswords to generate one.",
-        "fields": [
-          { "name": "email", "type": "email", "label": "Email address", "required": true },
-          { "name": "password", "type": "password", "label": "App password (16 characters)", "required": true }
+        "hostname": "mail.google.com",
+        "purpose": "Gmail Web UI (browser session)",
+        "methods": [
+          "GET",
+          "POST"
+        ]
+      },
+      {
+        "hostname": "imap.gmail.com",
+        "purpose": "IMAP access for app-password connections",
+        "methods": [
+          "TCP"
+        ]
+      },
+      {
+        "hostname": "smtp.gmail.com",
+        "purpose": "SMTP for sending via app-password connections",
+        "methods": [
+          "TCP"
         ]
       }
     ]
-  }
+  },
+  "ingest": {
+    "kind": "email",
+    "label": "Gmail",
+    "skillId": "gmail",
+    "eventKinds": [
+      {
+        "id": "email",
+        "label": "New email"
+      }
+    ],
+    "poll": {
+      "functionName": "listInbox",
+      "params": {
+        "maxResults": 25
+      }
+    },
+    "result": "array",
+    "map": {
+      "eventId": {
+        "transform": "threadMessageId",
+        "from": [
+          "id",
+          "subject",
+          "snippet",
+          "date"
+        ]
+      },
+      "actor": {
+        "transform": "rfc5322Actor",
+        "from": "from"
+      },
+      "ts": {
+        "transform": "parseMessageTimestamp",
+        "from": [
+          "dateFull",
+          "date"
+        ]
+      },
+      "preview": {
+        "transform": "emailPreview",
+        "from": [
+          "subject",
+          "snippet"
+        ]
+      },
+      "permalink": {
+        "transform": "templateString",
+        "from": "id",
+        "template": "https://mail.google.com/mail/u/0/#inbox/{id}",
+        "keys": [
+          "id"
+        ]
+      },
+      "threadKey": {
+        "transform": "trimOrNull",
+        "from": "id"
+      }
+    }
+  },
+  "observe": {
+    "url": "https://mail.google.com/mail/u/0/#inbox",
+    "readySelector": "tr.zA",
+    "extract": "scripts/observe-extract.js"
+  },
+  "name": "Gmail",
+  "slug": "gmail",
+  "version": "1.1.0",
+  "author": "flock"
 }
