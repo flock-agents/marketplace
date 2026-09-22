@@ -5,6 +5,7 @@ import {
   persistentCreate,
   persistentInteract,
 } from "../../_shared/_google_helpers";
+import { invalidateCachedThreadForMessage } from "./_threadCache";
 
 const params = JSON.parse(process.env.SKILL_PARAMS || "{}");
 const messageId: string = params.messageId || "";
@@ -59,5 +60,7 @@ validateId(messageId, "messageId");
   let parsed: any;
   try { parsed = typeof content === "string" ? JSON.parse(content) : content; }
   catch { parsed = { success: null, message: "Action completed, but could not confirm the result — verify in Gmail." }; } // CRAFO-988
+  // A reply added a message to the thread; drop any cached copy so the next read includes it. Swallowed.
+  invalidateCachedThreadForMessage(messageId, "replyToMessage");
   console.log(JSON.stringify(parsed));
 })();

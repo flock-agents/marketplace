@@ -5,6 +5,7 @@ import {
   persistentCreate,
   persistentInteract,
 } from "../../_shared/_google_helpers";
+import { invalidateCachedThreadForDraft } from "./_threadCache";
 
 const params = JSON.parse(process.env.SKILL_PARAMS || "{}");
 const draftId: string = params.draftId || "";
@@ -52,6 +53,8 @@ const openAndSend = `(function(){
   const sendOk = parsed?.ok ?? false;
 
   if (sendOk) {
+    // Sending moved the draft into the thread as a real message; drop the thread's cached copy.
+    invalidateCachedThreadForDraft(draftId, "sendDraft");
     console.log(JSON.stringify({ ok: true, draftId, message: "Draft sent successfully" }));
   } else {
     const sendMsg = parsed?.message || "unknown error";

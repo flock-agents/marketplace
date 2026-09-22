@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "updatedAt": "2026-09-10T11:18:08Z",
+  "updatedAt": "2026-09-22T13:37:22Z",
   "items": [
     {
       "slug": "draft-replies",
@@ -126,7 +126,7 @@
       "slug": "draft-assistant",
       "type": "template",
       "name": "Draft Assistant",
-      "description": "An assistant that drafts your outbound email, LinkedIn, and X messages into Draft Desk — you approve, nothing sends without you",
+      "description": "An assistant that drafts your outbound email, LinkedIn, and X messages into Draft Desk \u2014 you approve, nothing sends without you",
       "author": "flock",
       "category": "productivity",
       "tags": [
@@ -160,7 +160,7 @@
         "family",
         "meal-planning"
       ],
-      "icon": "🏠",
+      "icon": "\ud83c\udfe0",
       "iconUrl": "https://raw.githubusercontent.com/flock-agents/marketplace/main/templates/family-butler/icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "templates/family-butler",
@@ -183,7 +183,7 @@
         "calendar",
         "reminders"
       ],
-      "icon": "✨",
+      "icon": "\u2728",
       "iconUrl": "https://raw.githubusercontent.com/flock-agents/marketplace/main/templates/personal-assistant/icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "templates/personal-assistant",
@@ -207,7 +207,7 @@
         "documents",
         "scheduling"
       ],
-      "icon": "💼",
+      "icon": "\ud83d\udcbc",
       "iconUrl": "https://raw.githubusercontent.com/flock-agents/marketplace/main/templates/business-assistant/icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "templates/business-assistant",
@@ -230,7 +230,7 @@
         "social-media",
         "creative"
       ],
-      "icon": "🎨",
+      "icon": "\ud83c\udfa8",
       "iconUrl": "https://raw.githubusercontent.com/flock-agents/marketplace/main/templates/creative-assistant/icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "templates/creative-assistant",
@@ -244,7 +244,7 @@
       "slug": "gmail",
       "type": "connector",
       "name": "Gmail",
-      "description": "Read, send, search, and organize emails via Gmail",
+      "description": "Read, search, draft and organize Gmail through your own signed-in browser session: thread reads, batch reads, reply drafts, engaged-domain checks and inbox ingest",
       "author": "flock",
       "category": "integration",
       "tags": [
@@ -257,11 +257,11 @@
       "iconUrl": "https://raw.githubusercontent.com/flock-agents/marketplace/main/skills/gmail/icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "skills/gmail",
-      "latestVersion": "1.0.0",
-      "latestTag": "gmail-v1.0.0",
+      "latestVersion": "1.1.0",
+      "latestTag": "gmail-v1.1.0",
       "minFlockVersion": "0.7.0",
       "publishedAt": "2026-08-14T10:00:00Z",
-      "updatedAt": "2026-08-14T10:00:00Z"
+      "updatedAt": "2026-09-22T13:37:22Z"
     },
     {
       "slug": "zepto",
@@ -382,7 +382,7 @@
       "slug": "slack",
       "type": "connector",
       "name": "Slack",
-      "description": "Full Slack workspace integration — read channels, search messages, manage saved items, post messages, add reactions, and manage user groups. Equivalent to the korotovsky/slack-mcp-server feature set, via browser session auth.",
+      "description": "Full Slack workspace integration \u2014 read channels, search messages, manage saved items, post messages, add reactions, and manage user groups. Equivalent to the korotovsky/slack-mcp-server feature set, via browser session auth.",
       "author": "flock",
       "category": "integration",
       "tags": [

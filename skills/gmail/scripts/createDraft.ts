@@ -5,6 +5,7 @@ import {
   persistentInteract,
 } from "../../_shared/_google_helpers";
 import { existsSync } from "fs";
+import { SAVE_AND_CLOSE_SCRIPT } from "./_composeSave";
 
 const params = JSON.parse(process.env.SKILL_PARAMS || "{}");
 const to: string = params.to || "";
@@ -126,13 +127,15 @@ if (!to || !subject) {
     await persistentInteract(persistentId, attachActions);
   }
 
-  // Close compose (save draft)
+  // Close compose (save draft). The popup composer has a real Save & close X,
+  // so this path always had one -- which is the only reason it never hit the
+  // discard control the old shared lookup ended in. See _composeSave.ts.
   const evalScript = `(() => {
   return JSON.stringify({ success: true, message: 'Draft created via browser session' });
 })()`;
 
   const closeActions = [
-    { action: "evaluate", script: `(() => { const closeBtn = document.querySelector('.Ha img.Ha-Jj') || document.querySelector('[aria-label="Save & close"]') || document.querySelector('.og.T-I-J3'); if (closeBtn) { closeBtn.click(); return {ok:true}; } return {ok:true,message:"Draft saved (compose left open)"}; })()` },
+    { action: "evaluate", script: SAVE_AND_CLOSE_SCRIPT },
     { action: "wait", delay: 1500 },
   ];
 
