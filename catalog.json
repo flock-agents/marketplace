@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "updatedAt": "2026-09-23T00:00:00Z",
+  "updatedAt": "2026-09-24T00:00:00Z",
   "items": [
     {
       "slug": "draft-replies",
@@ -425,29 +425,6 @@
       "updatedAt": "2026-09-10T11:18:08Z"
     },
     {
-      "slug": "slack-memory",
-      "type": "skill",
-      "name": "Slack memory",
-      "description": "Reads your Slack conversations once a day, remembers what matters, and surfaces tasks you missed \u2014 never posts",
-      "author": "flock",
-      "category": "productivity",
-      "tags": [
-        "slack",
-        "memory",
-        "tasks",
-        "team"
-      ],
-      "icon": "icon.svg",
-      "iconUrl": "https://raw.githubusercontent.com/flock-agents/marketplace/v2/skills/slack-memory/icon.svg",
-      "repo": "flock-agents/marketplace",
-      "path": "skills/slack-memory",
-      "latestVersion": "1.0.0",
-      "latestTag": "slack-memory-v1.0.0",
-      "minFlockVersion": "0.7.0",
-      "publishedAt": "2026-09-23T00:00:00Z",
-      "updatedAt": "2026-09-23T00:00:00Z"
-    },
-    {
       "slug": "slack-desk",
       "type": "app",
       "name": "Slack Desk",
@@ -464,12 +441,11 @@
       "iconUrl": "https://raw.githubusercontent.com/flock-agents/marketplace/v2/apps/slack-desk/icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "apps/slack-desk",
-      "ownerSkillId": "slack-memory",
-      "latestVersion": "1.0.1",
-      "latestTag": "slack-desk-v1.0.1",
+      "latestVersion": "1.0.2",
+      "latestTag": "slack-desk-v1.0.2",
       "minFlockVersion": "0.7.0",
       "publishedAt": "2026-09-23T00:00:00Z",
-      "updatedAt": "2026-09-23T00:00:00Z"
+      "updatedAt": "2026-09-24T00:00:00Z"
     },
     {
       "slug": "slack-assistant",
@@ -488,11 +464,11 @@
       "iconUrl": "https://raw.githubusercontent.com/flock-agents/marketplace/v2/templates/slack-assistant/icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "templates/slack-assistant",
-      "latestVersion": "1.0.0",
-      "latestTag": "slack-assistant-v1.0.0",
+      "latestVersion": "1.1.0",
+      "latestTag": "slack-assistant-v1.1.0",
       "minFlockVersion": "0.7.0",
       "publishedAt": "2026-09-23T00:00:00Z",
-      "updatedAt": "2026-09-23T00:00:00Z"
+      "updatedAt": "2026-09-24T00:00:00Z"
     }
   ]
 }

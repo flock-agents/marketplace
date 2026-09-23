@@ -2,7 +2,7 @@
   "name": "Slack Assistant",
   "slug": "slack-assistant",
   "description": "Remembers what happens in your Slack and tells you what you missed",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "flock",
   "icon": "icon.svg",
   "category": "productivity",
@@ -38,8 +38,11 @@
       }
     }
   ],
-  "useCaseSkills": [
-    "slack-memory"
+  "apps": [
+    {
+      "slug": "slack-desk",
+      "required": true
+    }
   ],
   "channels": [],
   "tasks": [],

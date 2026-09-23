@@ -8,7 +8,7 @@
   "bundled": false,
   "deletable": true,
   "apiPrefix": "/api",
-  "_comment": "Runs OUT OF PROCESS, spawned by app-process.ts like any marketplace app: own port, own store, reachable only over the lifecycle and data seams. Built entirely on @flock/app-sdk, which the PLATFORM supplies into node_modules at build time — its correct version is whatever this Flock build speaks, so it is not resolved from a registry.",
+  "_comment": "Runs OUT OF PROCESS, spawned by app-process.ts: own port, own store, reachable only over the lifecycle and data seams. Built entirely on @flock/app-sdk, which the PLATFORM supplies into node_modules at build time — its correct version is whatever this Flock build speaks, so it is not resolved from a registry. THE APP IS THE INSTALLABLE UNIT: no owning skill, because `config.requires` below declares the connector it needs and `routines` declares the work it does, and pairing grants both to the agent.",
   "config": {
     "requires": {
       "skills": [

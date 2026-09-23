@@ -8,6 +8,12 @@ reads like a task you have not done. It never posts, replies, reacts, or marks a
 A **companion app**: it runs in its own process, on its own port, with its own store. Flock
 spawns it, and the two talk over two narrow seams:
 
+Install the app — that is the whole unit. It is not owned by a skill and there is no separate
+skill to install: the manifest declares the connector it needs (`config.requires.skills`) and the
+routine it owns, and pairing the app to an agent grants that agent the connector. A template
+names the app directly (`apps: [{ slug: "slack-desk" }]`), the way family-butler names
+meal-planner.
+
 | direction | how | what crosses |
 |---|---|---|
 | platform → app | HTTP `POST /lifecycle/initialize`, `/lifecycle/tick`, `GET /lifecycle/progress` | "start", "do a pass", "how far along are you" |
