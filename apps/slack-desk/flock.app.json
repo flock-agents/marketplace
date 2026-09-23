@@ -1,0 +1,78 @@
+{
+  "name": "Slack Desk",
+  "slug": "slack-desk",
+  "type": "managed",
+  "visibility": "headless",
+  "icon": "icon.svg",
+  "description": "Builds memory from your Slack conversations and surfaces anything that looks like a task you missed. Reads only — it never posts.",
+  "bundled": false,
+  "deletable": true,
+  "apiPrefix": "/api",
+  "_comment": "Runs OUT OF PROCESS, spawned by app-process.ts like any marketplace app: own port, own store, reachable only over the lifecycle and data seams. Built entirely on @flock/app-sdk, which the PLATFORM supplies into node_modules at build time — its correct version is whatever this Flock build speaks, so it is not resolved from a registry.",
+  "config": {
+    "requires": {
+      "skills": [
+        "slack"
+      ],
+      "agent": {
+        "required": true,
+        "label": "Agent that reads your Slack and remembers what matters",
+        "default": {
+          "pairDefaultAgent": true
+        }
+      }
+    }
+  },
+  "lifecycle": {
+    "initialize": true,
+    "tick": true,
+    "progress": true
+  },
+  "dataStore": {
+    "accountPartitioned": true
+  },
+  "processConfig": {
+    "command": "bun run server/index.ts",
+    "healthCheckPath": "/health",
+    "readyPattern": "slack-desk listening on",
+    "readyTimeoutMs": 15000,
+    "maxRestarts": 3
+  },
+  "routines": [
+    {
+      "id": "memory-extraction",
+      "name": "Build memory from Slack",
+      "description": "Once a day, reads the channels you chose and remembers what matters — plus anything that reads like a task you have not done. No AI cost beyond the daily extraction; nothing is ever posted.",
+      "trigger": {
+        "type": "schedule",
+        "cron": "0 5 * * *"
+      },
+      "executionMode": "app-relay",
+      "_triggerComment": "schedule + app-relay (executor: cron.ts dispatchScheduledAppRelays). NOT event + app-relay: this app fetches its own Slack data through /apps/:id/skill-exec, so a platform connector poll on its behalf would be a second read of the same messages.",
+      "configSchema": [
+        {
+          "key": "channels",
+          "type": "multi-select",
+          "label": "Channels to read",
+          "options": {
+            "kind": "dynamic",
+            "from": "channels_list"
+          }
+        },
+        {
+          "key": "ignoreBots",
+          "type": "boolean",
+          "label": "Ignore bot messages",
+          "default": true
+        },
+        {
+          "key": "lookbackHours",
+          "type": "number",
+          "label": "How far back to read each day (hours)",
+          "default": 24
+        }
+      ]
+    }
+  ],
+  "buildCommand": "bun install"
+}

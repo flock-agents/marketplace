@@ -1,0 +1,89 @@
+{
+  "name": "Slack Assistant",
+  "slug": "slack-assistant",
+  "description": "Remembers what happens in your Slack and tells you what you missed",
+  "version": "1.0.0",
+  "author": "flock",
+  "icon": "icon.svg",
+  "category": "productivity",
+  "tags": [
+    "slack",
+    "memory",
+    "tasks",
+    "team"
+  ],
+  "minFlockVersion": "0.7.0",
+  "sortOrder": 40,
+  "agent": {
+    "defaultName": "Vega",
+    "model": "claude-sonnet-4-6",
+    "role": "main",
+    "tone": "direct, warm, concise",
+    "examplePrompts": [
+      "What did I miss in Slack today?",
+      "Did anyone ask me for something this week?",
+      "Summarise the thread about the launch",
+      "What have I promised people on Slack?"
+    ]
+  },
+  "skills": [
+    {
+      "skillId": "slack",
+      "preSelected": true,
+      "description": "Read your Slack workspace — channels, DMs, mentions and saved items",
+      "accountRequirement": {
+        "type": "browser-session",
+        "provider": "slack",
+        "setupGuide": "Log in to Slack in the Flock dashboard browser session"
+      }
+    }
+  ],
+  "useCaseSkills": [
+    "slack-memory"
+  ],
+  "channels": [],
+  "tasks": [],
+  "wizard": [
+    {
+      "id": "personality",
+      "type": "personality",
+      "label": "Personality"
+    },
+    {
+      "id": "skills",
+      "type": "skills",
+      "label": "Slack"
+    },
+    {
+      "id": "review",
+      "type": "review",
+      "label": "Review & Create"
+    }
+  ],
+  "setupChecklist": [
+    {
+      "id": "identity-configured",
+      "label": "Identity configured",
+      "description": "Set a name, avatar, and description for your assistant",
+      "deepLink": "/agents/:id"
+    },
+    {
+      "id": "instructions-set",
+      "label": "Agent instructions set",
+      "description": "Agent instructions define what your assistant watches for and how it reports back",
+      "deepLink": "/agents/:id"
+    },
+    {
+      "id": "connect-sources",
+      "label": "Connect Slack",
+      "description": "Log in to Slack so your assistant can read the conversations you choose",
+      "deepLink": "/agents/:id?tab=skills"
+    },
+    {
+      "id": "review-tasks",
+      "label": "Choose what it reads",
+      "description": "Open the daily Slack routine and pick your channels. Leave it empty and it reads what is already addressed to you — DMs, mentions and saved items.",
+      "deepLink": "/agents/:id?tab=routines"
+    }
+  ]
+}

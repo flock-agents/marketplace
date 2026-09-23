@@ -1,0 +1,23 @@
+{
+  "name": "slack-desk",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev:server": "bun --watch server/index.ts"
+  },
+  "dependencies": {
+    "hono": "^4.7.4"
+  },
+  "peerDependencies": {
+    "@flock/app-sdk": "*"
+  },
+  "devDependencies": {
+    "bun-types": "^1.3.14",
+    "typescript": "^5.6.3"
+  },
+  "peerDependenciesMeta": {
+    "@flock/app-sdk": {
+      "optional": true
+    }
+  }
+}

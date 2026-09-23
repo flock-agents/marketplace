@@ -1,0 +1,30 @@
+{
+  "name": "Slack memory",
+  "slug": "slack-memory",
+  "icon": "icon.svg",
+  "description": "Reads your Slack conversations once a day, remembers what matters, and surfaces tasks you missed. Never posts.",
+  "version": "1.0.0",
+  "author": "flock",
+  "category": "productivity",
+  "tags": [
+    "slack",
+    "memory",
+    "tasks"
+  ],
+  "minFlockVersion": "0.7.0",
+  "tier": "installable",
+  "nature": "deterministic",
+  "_comment": "The USE CASE that owns Slack Desk. Installing it pulls the whole graph — installSkillGraph reads connectorDeps then apps — so one install brings the connector, the app and its routine rather than three separate steps. Deterministic: the daily routine is declared by the APP (schedule + app-relay) and wakes no agent; this skill carries no routines of its own.",
+  "connectorDeps": [
+    {
+      "connectorId": "slack",
+      "required": true
+    }
+  ],
+  "skillDeps": [],
+  "apps": [
+    {
+      "slug": "slack-desk"
+    }
+  ]
+}
