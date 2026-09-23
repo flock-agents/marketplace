@@ -3,7 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev:server": "bun --watch server/index.ts"
+    "dev:server": "bun --watch server/index.ts",
+    "test": "bun test"
   },
   "dependencies": {
     "hono": "^4.7.4"
