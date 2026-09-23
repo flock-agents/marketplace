@@ -56,6 +56,32 @@ const migrations: string[] = [
      published  INTEGER NOT NULL DEFAULT 0,
      PRIMARY KEY (account_id, day)
    )`,
+  // WHO THE OWNER IS, AND WHAT EVERYONE ELSE IS CALLED.
+  //
+  // Extraction was attributing every message in a thread to the owner, because the block it
+  // sent said `U0C2S2W19EZ: <text>` and nothing anywhere said which of those opaque ids was
+  // the owner. A colleague's bug report became "Yogesh reports…". The fix needs two facts the
+  // app never held: the owner's own user id, and a display name per author. Both are stable,
+  // so they are cached here rather than re-fetched per message.
+  //
+  // `url` is the workspace base ("https://acme.slack.com/"), the only way to build a permalink.
+  `CREATE TABLE IF NOT EXISTS workspace (
+     account_id TEXT PRIMARY KEY,
+     user_id    TEXT,
+     user_name  TEXT,
+     team       TEXT,
+     team_id    TEXT,
+     url        TEXT,
+     updated_at INTEGER NOT NULL
+   )`,
+  `CREATE TABLE IF NOT EXISTS user_names (
+     account_id TEXT NOT NULL,
+     user_id    TEXT NOT NULL,
+     name       TEXT,
+     is_bot     INTEGER NOT NULL DEFAULT 0,
+     updated_at INTEGER NOT NULL,
+     PRIMARY KEY (account_id, user_id)
+   )`,
 ];
 
 function applyMigrations(): void {
@@ -165,15 +191,71 @@ export function markHarvestRan(accountId: string, day: string, published: number
   ).run(accountId, day, Date.now(), published);
 }
 
-/** Messages worth extracting from, newest window first. Grouped by thread by the caller. */
+/**
+ * Messages inside the lookback window, ordered so the caller can group them.
+ *
+ * The window is on `ts` — WHEN THE MESSAGE WAS SENT — not on `seen_at`, when this app happened
+ * to store the row. Filtering on seen_at made `lookbackHours` mean "whatever I fetched recently",
+ * which is a different thing wearing the same name: a backfill that pulled a week of history in
+ * one pass put all of it inside a 24-hour window, and a re-run that fetched nothing new excluded
+ * messages that genuinely were from today.
+ *
+ * `ts` is Slack's epoch-seconds-with-fraction, stored as TEXT, so it is compared as a real.
+ */
 export function messagesSince(accountId: string, sinceMs: number): SlackMessage[] {
   return (db.query(
     `SELECT channel_id, ts, thread_ts, author, text, permalink FROM messages
-      WHERE account_id = ? AND seen_at >= ? ORDER BY channel_id, ts`,
-  ).all(accountId, sinceMs) as any[]).map((r) => ({
+      WHERE account_id = ? AND CAST(ts AS REAL) >= ? ORDER BY channel_id, CAST(ts AS REAL)`,
+  ).all(accountId, sinceMs / 1000) as any[]).map((r) => ({
     channelId: r.channel_id, ts: r.ts, threadTs: r.thread_ts,
     author: r.author, text: r.text, permalink: r.permalink,
   }));
+}
+
+// --- Identity ---
+
+export interface Workspace {
+  userId: string | null;
+  userName: string | null;
+  team: string | null;
+  teamId: string | null;
+  url: string | null;
+}
+
+export function getWorkspace(accountId: string): Workspace | null {
+  const r = db.query("SELECT user_id, user_name, team, team_id, url FROM workspace WHERE account_id = ?")
+    .get(accountId) as any;
+  return r ? { userId: r.user_id, userName: r.user_name, team: r.team, teamId: r.team_id, url: r.url } : null;
+}
+
+export function setWorkspace(accountId: string, w: Workspace): void {
+  db.query(
+    `INSERT INTO workspace (account_id, user_id, user_name, team, team_id, url, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(account_id) DO UPDATE SET
+       user_id = excluded.user_id, user_name = excluded.user_name, team = excluded.team,
+       team_id = excluded.team_id, url = excluded.url, updated_at = excluded.updated_at`,
+  ).run(accountId, w.userId, w.userName, w.team, w.teamId, w.url, Date.now());
+}
+
+/** Cached display names for the given ids. Ids with no cached name are simply absent. */
+export function getUserNames(accountId: string, userIds: string[]): Map<string, string> {
+  const out = new Map<string, string>();
+  if (userIds.length === 0) return out;
+  const q = db.query(`SELECT user_id, name FROM user_names WHERE account_id = ? AND user_id = ?`);
+  for (const id of userIds) {
+    const r = q.get(accountId, id) as any;
+    if (r?.name) out.set(r.user_id, r.name);
+  }
+  return out;
+}
+
+export function setUserName(accountId: string, userId: string, name: string | null, isBot = false): void {
+  db.query(
+    `INSERT INTO user_names (account_id, user_id, name, is_bot, updated_at) VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT(account_id, user_id) DO UPDATE SET
+       name = excluded.name, is_bot = excluded.is_bot, updated_at = excluded.updated_at`,
+  ).run(accountId, userId, name, isBot ? 1 : 0, Date.now());
 }
 
 export { db as _db };

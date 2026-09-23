@@ -13,6 +13,7 @@ import {
   upsertMessages, getCursor, setCursor, messagesSince,
   harvestRanToday, markHarvestRan, type SlackMessage,
 } from "./store";
+import { loadDirectory, permalinkFor, type Directory } from "./identity";
 
 export interface HarvestConfig {
   /** Channel ids the owner chose. Empty means "nothing to read" — never "read everything". */
@@ -56,41 +57,160 @@ export function isWorthRemembering(m: SlackMessage, cfg: HarvestConfig): boolean
   return true;
 }
 
-/** Thread-first grouping: a thread is the unit of meaning, a lone message is a thread of one. */
+/**
+ * How long a channel can go quiet before the next message starts a new conversation.
+ *
+ * Only used for messages that are NOT in a thread. Slack's own reply threads already say where a
+ * conversation begins and ends; a busy channel where nobody uses threads says nothing at all, and
+ * has to be inferred from the clock.
+ */
+export const CONVERSATION_GAP_MS = 30 * 60_000;
+
+/**
+ * Group messages into the units a reader would call conversations.
+ *
+ * THREADS FIRST, because a Slack thread is an explicit statement that these messages belong
+ * together. Then, for messages with no thread, CONSECUTIVE RUNS in the same channel: a gap longer
+ * than CONVERSATION_GAP_MS starts a new group.
+ *
+ * The run-grouping is not a nicety. Keying every unthreaded message on its own ts made each one
+ * its own extraction block, which is how a real exchange —
+ *
+ *     Yogesh:   @colleague - Are you fixing these bugs? Or do you want me to fix it?
+ *     colleague: I am just noting down observed issues. Not picking these immediately.
+ *
+ * — reached the extractor as two unrelated fragments. Neither fragment alone says a thing has
+ * landed on the owner's plate, so nothing was ever surfaced to act on. Together they say it
+ * plainly. Channels where nobody threads are the common case, not the edge one.
+ */
 export function groupByThread(msgs: SlackMessage[]): SlackMessage[][] {
-  const groups = new Map<string, SlackMessage[]>();
+  const threads = new Map<string, SlackMessage[]>();
+  const loose: SlackMessage[] = [];
+
   for (const m of msgs) {
-    const key = `${m.channelId}:${m.threadTs || m.ts}`;
-    const g = groups.get(key);
-    if (g) g.push(m); else groups.set(key, [m]);
+    if (m.threadTs) {
+      const key = `${m.channelId}:${m.threadTs}`;
+      const g = threads.get(key);
+      if (g) g.push(m); else threads.set(key, [m]);
+      continue;
+    }
+    loose.push(m);
   }
-  return [...groups.values()];
+
+  // A thread PARENT carries no thread_ts of its own, so it arrives in `loose`; fold it back in
+  // rather than letting a thread's first message drift into a neighbouring run.
+  const remaining: SlackMessage[] = [];
+  for (const m of loose) {
+    const own = threads.get(`${m.channelId}:${m.ts}`);
+    if (own) own.unshift(m); else remaining.push(m);
+  }
+
+  const runs: SlackMessage[][] = [];
+  let current: SlackMessage[] = [];
+  const sorted = [...remaining].sort(
+    (a, b) => a.channelId.localeCompare(b.channelId) || Number(a.ts) - Number(b.ts),
+  );
+  for (const m of sorted) {
+    const prev = current[current.length - 1];
+    const sameRun = prev
+      && prev.channelId === m.channelId
+      && (Number(m.ts) - Number(prev.ts)) * 1000 <= CONVERSATION_GAP_MS;
+    if (sameRun) current.push(m);
+    else { if (current.length > 0) runs.push(current); current = [m]; }
+  }
+  if (current.length > 0) runs.push(current);
+
+  for (const t of threads.values()) t.sort((a, b) => Number(a.ts) - Number(b.ts));
+  return [...threads.values(), ...runs];
 }
 
 /**
- * One extraction ITEM per thread, in the shape `/api/memory/extract` actually validates:
- * `{ id, text, timestamp }` — all three required, timestamp a parseable ISO string.
+ * One extraction ITEM per conversation, in the shape `/api/memory/extract` actually reads.
  *
- * The first cut emitted `{text, permalink, sourceType}`, which the route rejects outright with
+ * REQUIRED: `{ id, text, timestamp }` — all three, timestamp a parseable ISO string. The first cut
+ * emitted `{text, permalink, sourceType}`, which the route rejects outright with
  * `items[0].id is required` — a 400 the app logged as "extraction failed" and carried on from, so
  * every harvest read Slack correctly and then dropped everything on the floor.
  *
- * `id` is the thread's own identity (channel:thread-ts) so re-extracting the same thread is
- * recognisably the same item rather than a new memory each day.
+ * ATTRIBUTION. Lines are labelled with who said them, and the owner's own lines are labelled
+ * `You`. Labelling them `U0C2S2W19EZ` — which is what the first cut did — left the extractor no
+ * way to tell the owner from anyone else, so it attributed the whole conversation to the owner and
+ * a colleague's bug report came back as a thing the owner had reported. `participants` and
+ * `context.addressing` carry the same judgement in the fields the prompt builder reads
+ * (wiki-extraction-prompts.ts renders both into METADATA).
+ *
+ * THE LINK. `reference` — NOT `context.permalink`, which the route drops on the floor. It is
+ * `reference` that becomes `wiki_entry_sources.external_link` and, for anything that turns into a
+ * task, `tasks.deeplink`: the "open this in Slack" the task card otherwise has nothing to show.
+ *
+ * `id` is the conversation's own identity (channel:first-ts) so re-extracting the same
+ * conversation is recognisably the same item rather than a new memory each day.
  */
-export function toBlock(thread: SlackMessage[]): { id: string; text: string; timestamp: string; context?: Record<string, unknown> } {
+export function toBlock(
+  thread: SlackMessage[],
+  dir?: Directory,
+): {
+  id: string;
+  text: string;
+  timestamp: string;
+  reference?: string;
+  participants?: string[];
+} {
   const head = thread[0]!;
+  const ownerId = dir?.ownerId ?? null;
+
+  const label = (author?: string): string => {
+    if (!author) return "someone";
+    if (ownerId && author === ownerId) return "You";
+    return dir?.names.get(author) ?? author;
+  };
+
   const text = thread
-    .map((m) => `${m.author ?? "someone"}: ${(m.text ?? "").trim()}`)
+    .map((m) => `${label(m.author)}: ${(m.text ?? "").trim()}`)
     .join("\n");
+
+  // Everyone who spoke, named once, owner included and marked as such.
+  const participants = [...new Set(thread.map((m) => label(m.author)))];
+
   // Slack ts is epoch seconds with microseconds after the dot.
   const startedMs = Math.round(Number(head.threadTs || head.ts) * 1000);
+  const anchorTs = head.threadTs || head.ts;
+
   return {
-    id: `${head.channelId}:${head.threadTs || head.ts}`,
+    id: `${head.channelId}:${anchorTs}`,
     text,
     timestamp: new Date(Number.isFinite(startedMs) ? startedMs : Date.now()).toISOString(),
-    ...(head.permalink ? { context: { permalink: head.permalink } } : {}),
+    ...(participants.length > 0 ? { participants } : {}),
+    // A permalink the app already stored wins; otherwise build one from the workspace URL.
+    ...((head.permalink || permalinkFor(dir?.url ?? null, head.channelId, anchorTs))
+      ? { reference: head.permalink || permalinkFor(dir?.url ?? null, head.channelId, anchorTs) }
+      : {}),
+    ...addressingOf(thread, ownerId),
   };
+}
+
+/**
+ * Was this conversation addressed to the owner?
+ *
+ * Deliberately conservative, and computed HERE rather than inferred by the model, for the same
+ * reason email-desk computes it from To/Cc: the app can see the facts and the model can only
+ * guess. `unknown` is expressed by saying nothing at all — the prompt builder prints no line for
+ * it, because a line saying "unknown" is a line the model will reason about for no reason.
+ *
+ *   to             the owner is @-mentioned, or it is a DM (a synthetic "im" channel)
+ *   not-addressed  the owner is neither a speaker nor mentioned — a conversation they overheard
+ *   (omitted)      the owner spoke but was not mentioned: present, but not being asked anything
+ */
+function addressingOf(
+  thread: SlackMessage[],
+  ownerId: string | null,
+): { context?: { addressing: "to" | "not-addressed" } } {
+  if (!ownerId) return {};
+  const mentioned = thread.some((m) => (m.text ?? "").includes(`<@${ownerId}>`));
+  const isDm = thread[0]?.channelId === "im" || thread[0]?.channelId.startsWith("D");
+  if (mentioned || isDm) return { context: { addressing: "to" } };
+  const spoke = thread.some((m) => m.author === ownerId);
+  return spoke ? {} : { context: { addressing: "not-addressed" } };
 }
 
 export interface HarvestDeps {
@@ -199,7 +319,10 @@ export async function harvestOnce(
 
   const since = now.getTime() - cfg.lookbackHours * 3600_000;
   const eligible = messagesSince(accountId, since).filter((m) => isWorthRemembering(m, cfg));
-  const blocks = groupByThread(eligible).map(toBlock);
+  // WHO IS WHO, resolved once for the whole pass — before any block is built, because a block
+  // built without it is a block that attributes everyone's words to the owner.
+  const dir = await loadDirectory(accountId, eligible.map((m) => m.author), deps);
+  const blocks = groupByThread(eligible).map((t) => toBlock(t, dir));
 
   if (blocks.length > 0) {
     const extracted = await deps.platform.memory.extract(blocks, {
@@ -253,9 +376,11 @@ export async function readOwnActivity(
       raw = await call("conversations_unreads", { channel_types: "im" });
       fallbackChannel = "im";
     } else if (src === "mentions") {
-      const me = await call("getUserInfo", {});
-      const myId = typeof (me as any)?.id === "string" ? (me as any).id
-        : typeof (me as any)?.user?.id === "string" ? (me as any).user.id : null;
+      // The owner's OWN id comes from auth.test (checkTokenHealth), not users.info: the
+      // connector's getUserInfo requires a `user` param and refuses the call without one, so
+      // asking it "who am I" failed validation every time and the mentions source silently
+      // never ran. loadDirectory caches the answer, so this is free after the first pass.
+      const { ownerId: myId } = await loadDirectory(accountId, [], deps);
       // Without an id there is no "my mentions" to ask for — skip rather than search blindly.
       if (!myId) continue;
       raw = await call("conversations_search_messages", { query: `<@${myId}>`, count: 50 });

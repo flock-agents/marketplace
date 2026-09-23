@@ -24,6 +24,29 @@ applies the per-account guard server-side, so the app never sees a token and can
 rate limit. There is no platform-side poll feeding this app — one read, made by the thing that
 needs it.
 
+### Who said it
+
+Extraction decides what to remember *about the owner*, so every block says who spoke. The owner's
+own lines are labelled `You`; everyone else keeps their display name. Both come from the connector
+and are cached in this app's store — the owner's user id from `auth.test` (`checkTokenHealth`),
+display names from `users.info` — so it is one lookup per new person, not one per message.
+
+Each block also carries `participants` and an `addressing` verdict (`to` when the owner is
+@-mentioned or it is a DM, `not-addressed` when they never appear, nothing at all when they spoke
+but nobody asked them anything). Both are **computed here, never inferred by the model**: the app
+can see who is in the conversation and the model can only guess.
+
+Without this the extractor is handed `U0C2S2W19EZ: <text>` with no statement of which opaque id is
+the owner, and files a colleague's bug report as something the owner reported.
+
+### The link back to Slack
+
+Every block carries `reference` — a message permalink, built as
+`<workspace url>archives/<channel>/p<ts>` from the workspace URL `checkTokenHealth` returns. That
+field, and only that field, becomes `tasks.deeplink`, which is the "Open" link on a task card.
+(`context.permalink` looks right and is dropped by the route.) Slack connector **1.3.0 or newer**
+is required for the workspace URL; an older one simply yields no link.
+
 Two things worth knowing about the Slack API here:
 
 - `conversations.history` returns **thread parents only**. A channel whose day happened inside
@@ -31,6 +54,11 @@ Two things worth knowing about the Slack API here:
   parent with `reply_count > 0`. The harvest does this; skipping it loses almost everything.
 - With no channels configured the app does not read everything — it reads what is already
   addressed to you: DMs, mentions and saved items.
+- **A channel where nobody uses threads says nothing about where a conversation begins.** Threads
+  group explicitly; unthreaded messages are grouped into runs, with a gap longer than
+  `CONVERSATION_GAP_MS` (30 minutes) starting a new one. One block per message is not a smaller
+  version of this — it is a different thing, in which a question and its answer arrive as two
+  unrelated fragments and neither says anything has landed on the owner's plate.
 
 ## The routine
 
