@@ -357,9 +357,20 @@ export async function readOwnActivity(
   let fetched = 0;
   let newMessages = 0;
 
+  // conversations_unreads IS SLOW, AND SAYING SO IS NOT OPTIONAL.
+  //
+  // The connector's own script documents it as "inherently slow… 1-5+ minutes for large
+  // workspaces". Abandoning it does not cancel it: the platform holds a single-flight
+  // account-guard lease for the real duration, so an app that gives up at the transport
+  // default locks ITSELF out of its own account for everything it tries next. Measured live:
+  // a 10s give-up followed by 8 consecutive `guard_busy` 429s and a harvest of nothing.
+  const SLOW_MS = 240_000;
   const call = async (functionName: string, params: Record<string, unknown>) => {
     const res = await deps.platform.connectors.exec({
       skillId: "slack", functionName, params, accountHint: accountId,
+      ...(functionName === "conversations_unreads" || functionName === "conversations_search_messages"
+        ? { timeoutMs: SLOW_MS }
+        : {}),
     });
     if (!res.ok) {
       console.warn(`[slack-desk] ${functionName}: ${res.reason}`);
