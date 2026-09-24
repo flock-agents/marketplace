@@ -224,6 +224,16 @@ export interface HarvestOutcome {
   blocks: number;
   /** Which reading this pass did: the chosen channels, or the owner's own activity. */
   scope?: "channels" | "activity";
+  /**
+   * Connector calls that FAILED in this pass.
+   *
+   * A harvest degrades rather than throws — one refused channel must not cost the others — but a
+   * pass where everything was refused is not the same as a quiet workspace, and initialize must
+   * be able to tell them apart before it writes "Slack is set up" over a read that never happened.
+   */
+  errors: number;
+  /** How many channels this pass actually read history from. */
+  channelsRead?: number;
   skipped?: "already-ran-today" | "not-configured";
 }
 
@@ -243,7 +253,20 @@ export interface HarvestOutcome {
  *
  * Each is independent: one failing costs that source, not the pass.
  */
-const ACTIVITY_SOURCES = ["dms", "mentions", "saved"] as const;
+const ACTIVITY_SOURCES = ["dms", "mentions", "engaged", "saved"] as const;
+
+/**
+ * How far back the two discovery searches look. Deliberately longer than the daily window: the
+ * question they answer is "which channels does this person actually live in", and that is not
+ * answerable from yesterday alone. Slack's `after:` is a date, so this is in days.
+ */
+const DISCOVERY_DAYS = 30;
+
+/** Slack search's `after:` wants YYYY-MM-DD. */
+function searchDateAfter(now: Date, days: number): string {
+  const d = new Date(now.getTime() - days * 86_400_000);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
 
 /**
  * One workspace's daily pass. Idempotent per day by construction: the day record is checked
@@ -255,20 +278,33 @@ export async function harvestOnce(
   deps: HarvestDeps,
 ): Promise<HarvestOutcome> {
   const now = (deps.now ?? (() => new Date()))();
-  if (!deps.platform.configured) return { fetched: 0, newMessages: 0, blocks: 0, skipped: "not-configured" };
-  if (harvestRanToday(accountId, dayKey(now))) return { fetched: 0, newMessages: 0, blocks: 0, skipped: "already-ran-today" };
+  if (!deps.platform.configured) return { fetched: 0, newMessages: 0, blocks: 0, errors: 0, skipped: "not-configured" };
+  if (harvestRanToday(accountId, dayKey(now))) return { fetched: 0, newMessages: 0, blocks: 0, errors: 0, skipped: "already-ran-today" };
 
   const scope: "channels" | "activity" = cfg.channels.length > 0 ? "channels" : "activity";
   let fetched = 0;
   let newMessages = 0;
+  let errors = 0;
+
+  // The channels this pass will read in full. A picked list is an instruction and is obeyed
+  // exactly; an empty one is a question, and the activity pass answers it by finding the
+  // channels the owner actually speaks in or is tagged in.
+  let channelsToRead: string[] = cfg.channels;
 
   if (scope === "activity") {
-    const got = await readOwnActivity(accountId, deps);
+    const got = await readOwnActivity(accountId, deps, now);
     fetched += got.fetched;
     newMessages += got.newMessages;
+    errors += got.errors;
+    // A search match is one message out of its context. Reading the channel around it is what
+    // turns "you were mentioned" into a conversation worth remembering.
+    channelsToRead = got.channels;
+    if (channelsToRead.length > 0) {
+      console.log(`[slack-desk] discovered ${channelsToRead.length} active channel(s) from own activity`);
+    }
   }
 
-  for (const channelId of cfg.channels) {
+  for (const channelId of channelsToRead) {
     const oldest = getCursor(accountId, channelId)
       ?? String((now.getTime() - cfg.lookbackHours * 3600_000) / 1000);
 
@@ -280,7 +316,9 @@ export async function harvestOnce(
     });
     if (!res.ok) {
       // A channel that refuses is one channel, not the run. The next day tries again from the
-      // same cursor, so nothing is lost by moving on.
+      // same cursor, so nothing is lost by moving on — but it IS counted, so a pass in which
+      // every channel refused cannot be mistaken for a pass over a quiet workspace.
+      errors++;
       console.warn(`[slack-desk] ${channelId}: ${res.reason}`);
       continue;
     }
@@ -307,6 +345,7 @@ export async function harvestOnce(
         accountHint: accountId,
       });
       if (!rep.ok) {
+        errors++;
         console.warn(`[slack-desk] ${channelId} thread ${parent.ts}: ${rep.reason}`);
         continue;
       }
@@ -340,7 +379,7 @@ export async function harvestOnce(
   // genuinely quiet workspace simply stays retryable; the trigger is a daily cron plus the manual
   // button, so retrying is cheap and being wedged is not.
   if (fetched > 0) markHarvestRan(accountId, dayKey(now), blocks.length);
-  return { fetched, newMessages, blocks: blocks.length, scope };
+  return { fetched, newMessages, blocks: blocks.length, scope, errors, channelsRead: channelsToRead.length };
 }
 
 /**
@@ -353,9 +392,13 @@ export async function harvestOnce(
 export async function readOwnActivity(
   accountId: string,
   deps: HarvestDeps,
-): Promise<{ fetched: number; newMessages: number }> {
+  now: Date,
+): Promise<{ fetched: number; newMessages: number; errors: number; channels: string[] }> {
   let fetched = 0;
   let newMessages = 0;
+  let errors = 0;
+  /** Channels the two searches proved the owner is actually part of the conversation in. */
+  const discovered = new Set<string>();
 
   // conversations_unreads IS SLOW, AND SAYING SO IS NOT OPTIONAL.
   //
@@ -373,6 +416,7 @@ export async function readOwnActivity(
         : {}),
     });
     if (!res.ok) {
+      errors++;
       console.warn(`[slack-desk] ${functionName}: ${res.reason}`);
       return null;
     }
@@ -386,16 +430,29 @@ export async function readOwnActivity(
     if (src === "dms") {
       raw = await call("conversations_unreads", { channel_types: "im" });
       fallbackChannel = "im";
-    } else if (src === "mentions") {
+    } else if (src === "mentions" || src === "engaged") {
       // The owner's OWN id comes from auth.test (checkTokenHealth), not users.info: the
       // connector's getUserInfo requires a `user` param and refuses the call without one, so
       // asking it "who am I" failed validation every time and the mentions source silently
       // never ran. loadDirectory caches the answer, so this is free after the first pass.
       const { ownerId: myId } = await loadDirectory(accountId, [], deps);
-      // Without an id there is no "my mentions" to ask for — skip rather than search blindly.
+      // Without an id there is no "me" to search for — skip rather than search blindly.
       if (!myId) continue;
-      raw = await call("conversations_search_messages", { query: `<@${myId}>`, count: 50 });
-      fallbackChannel = "mention";
+      const after = searchDateAfter(now, DISCOVERY_DAYS);
+      raw = src === "mentions"
+        // WHERE THE OWNER WAS TAGGED.
+        ? await call("conversations_search_messages", {
+            query: `<@${myId}>`, count: 100, sort: "timestamp", filter_date_after: after,
+          })
+        // WHERE THE OWNER HAS BEEN ENGAGING. A person's own messages are the truest signal of
+        // which channels matter to them, and it needs no picker: a workspace-wide search for
+        // `from:` the owner names those channels directly. This is what makes "no channels
+        // selected" mean "work it out" instead of "read only what was pushed at me".
+        : await call("conversations_search_messages", {
+            query: `from:<@${myId}>`, count: 100, sort: "timestamp",
+            filter_users_from: myId, filter_date_after: after,
+          });
+      fallbackChannel = src === "mentions" ? "mention" : "engaged";
     } else {
       raw = await call("saved_list", { filter: "saved", include_messages: true });
       fallbackChannel = "saved";
@@ -405,15 +462,28 @@ export async function readOwnActivity(
     const msgs = normalizeHistory(fallbackChannel, raw).map((m) => ({ ...m, channelId: m.channelId || fallbackChannel }));
     fetched += msgs.length;
     if (msgs.length > 0) newMessages += upsertMessages(accountId, msgs);
+
+    // A search match names a real conversation; the placeholder labels do not. Collecting them
+    // turns "the owner said something here once" into "read this channel properly this pass".
+    if (src === "mentions" || src === "engaged") {
+      for (const m of msgs) {
+        if (m.channelId && m.channelId !== fallbackChannel) discovered.add(m.channelId);
+      }
+    }
   }
 
-  return { fetched, newMessages };
+  return { fetched, newMessages, errors, channels: [...discovered] };
 }
 
 /** Shape whatever `conversations_history` returned into our own rows. Tolerant by design: a
  *  connector version bump must degrade to fewer fields, never throw. */
 export function normalizeHistory(channelId: string, raw: unknown): SlackMessage[] {
-  const rows = Array.isArray(raw) ? raw : Array.isArray((raw as any)?.messages) ? (raw as any).messages : [];
+  // `matches` is search.messages' own envelope. Missing it meant every mention the search found
+  // was normalised to nothing: the source ran, the call succeeded, and zero rows came back.
+  const rows = Array.isArray(raw) ? raw
+    : Array.isArray((raw as any)?.messages) ? (raw as any).messages
+    : Array.isArray((raw as any)?.matches) ? (raw as any).matches
+    : [];
   const out: SlackMessage[] = [];
   for (const r of rows as any[]) {
     const ts = typeof r?.ts === "string" ? r.ts : null;

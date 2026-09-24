@@ -170,7 +170,14 @@ export function listInit(): InitRecord[] {
 export function markInitStarted(accountId: string, note?: string): void {
   db.query(
     `INSERT INTO init_state (account_id, started_at, finished_at, outcome, note) VALUES (?, ?, NULL, NULL, ?)
-     ON CONFLICT(account_id) DO UPDATE SET note = excluded.note`,
+     ON CONFLICT(account_id) DO UPDATE SET
+       started_at  = excluded.started_at,
+       -- A RETRY IS A FRESH ATTEMPT. Leaving the previous run's verdict in place would show the
+       -- owner a stale "failed" while the retry is in flight, and would make the record read as
+       -- finished to anything checking finished_at.
+       finished_at = NULL,
+       outcome     = NULL,
+       note        = excluded.note`,
   ).run(accountId, Date.now(), note ?? null);
 }
 

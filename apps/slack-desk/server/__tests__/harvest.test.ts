@@ -140,7 +140,8 @@ describe("harvest — one workspace's daily pass", () => {
 
   test("no channels chosen ⇒ it reads the OWNER'S OWN activity, not nothing and not everything", async () => {
     // Owner, 2026-09-23. "Read nothing" made a freshly installed app do nothing at all, silently.
-    // The default is the part of Slack already addressed to this person: DMs, mentions, saved.
+    // The default is the part of Slack this person is actually in: DMs, mentions, their own
+    // messages, saved — and then the channels those searches named.
     const calls: string[] = [];
     const ctx = {
       appId: "slack-desk", pairedAgent: { id: "a", name: "A" }, dataDir: ".", configured: true,
@@ -152,7 +153,12 @@ describe("harvest — one workspace's daily pass", () => {
           if (req.functionName === "checkTokenHealth") return ok({ healthy: true, userId: "U-ME", url: "https://acme.slack.com/" });
           if (req.functionName === "getUserInfo") return ok({ user: { id: req.params.user, real_name: `Name-${req.params.user}` } });
           if (req.functionName === "conversations_unreads") return ok([{ ts: ago(400), channel: "D1", user: "U9", text: "dm to me" }]);
-          if (req.functionName === "conversations_search_messages") return ok([{ ts: ago(300), channel: "C7", user: "U8", text: "hey <@U-ME>" }]);
+          if (req.functionName === "conversations_search_messages") {
+            // Real search.messages replies are `{matches:[…]}`, not a bare array. Normalising
+            // only arrays/`messages` dropped every match silently.
+            return ok({ total: 1, matches: [{ ts: ago(300), channel: { id: "C7" }, user: "U8", text: "hey <@U-ME>" }] });
+          }
+          if (req.functionName === "conversations_history") return ok([{ ts: ago(250), channel: "C7", user: "U8", text: "more context" }]);
           return ok([{ ts: ago(200), channel: "C9", user: "U7", text: "saved for later" }]);
         },
       },
@@ -165,12 +171,110 @@ describe("harvest — one workspace's daily pass", () => {
     // "who am I" is answered by auth.test (checkTokenHealth), not by users.info with no argument —
     // the connector validates `user` and refused that call every time, so mentions never ran.
     expect(calls.filter((c) => c !== "getUserInfo")).toEqual([
-      "conversations_unreads", "checkTokenHealth", "conversations_search_messages", "saved_list",
+      "conversations_unreads",
+      "checkTokenHealth",
+      "conversations_search_messages",   // mentions: where the owner was tagged
+      "conversations_search_messages",   // engaged: where the owner has been speaking
+      "saved_list",
+      "conversations_history",           // …and the channel those searches discovered
     ]);
     // ...and ONCE: the workspace's identity is cached in the store, so building the blocks after
     // the read does not ask again.
     expect(calls.filter((c) => c === "checkTokenHealth")).toHaveLength(1);
-    expect(out.newMessages).toBe(3);
+    // 4, not 5: the DM, the mention, the saved item and the discovered channel's own message.
+    // Both searches surface the SAME C7 match here and the store dedupes it on (channel, ts) —
+    // overlapping discovery sources must not double-count a message.
+    expect(out.newMessages).toBe(4);
+    // THE POINT OF THE DISCOVERY PASS: it read a channel nobody picked, because the owner is
+    // demonstrably part of the conversation there.
+    expect(out.channelsRead).toBe(1);
+  });
+
+  test("with no picker, the channels the OWNER speaks in are found and read in full", async () => {
+    // Owner, 2026-09-24: "even without the slack channels selection, it should look at every
+    // channel and see where the user has been engaging in the past or the user was tagged".
+    // A mention search alone only finds where OTHERS pulled them in; a person's own messages are
+    // the truer signal of which channels matter to them.
+    const searches: any[] = [];
+    const read: string[] = [];
+    const ctx = {
+      appId: "slack-desk", pairedAgent: null, dataDir: ".", configured: true,
+      progress: { report: async () => ok(undefined as void) },
+      tasks: { publish: async () => ok(undefined as void), withdraw: async () => ok(undefined as void) },
+      connectors: {
+        exec: async (req: any) => {
+          if (req.functionName === "checkTokenHealth") return ok({ healthy: true, userId: "U-ME", url: "https://acme.slack.com/" });
+          if (req.functionName === "getUserInfo") return ok({ user: { id: req.params.user, real_name: "N" } });
+          if (req.functionName === "conversations_unreads") return ok([]);
+          if (req.functionName === "saved_list") return ok([]);
+          if (req.functionName === "conversations_search_messages") {
+            searches.push(req.params);
+            const tagged = { ts: ago(300), channel: { id: "C-TAGGED" }, user: "U8", text: "<@U-ME> thoughts?" };
+            const mine = { ts: ago(280), channel: { id: "C-MINE" }, user: "U-ME", text: "shipping friday" };
+            return ok({ matches: [req.params.filter_users_from ? mine : tagged] });
+          }
+          read.push(req.params.channel);
+          return ok([{ ts: ago(200), channel: req.params.channel, user: "U8", text: "context" }]);
+        },
+      },
+      memory: { extract: async () => ok(undefined as unknown) },
+    } as unknown as PlatformContext;
+
+    const out = await harvestOnce("acct-discovery", readConfig({ channels: [] }), { platform: ctx });
+
+    // One search for mentions of the owner, one for messages FROM the owner.
+    expect(searches).toHaveLength(2);
+    expect(searches.some((p) => !p.filter_users_from && String(p.query).includes("U-ME"))).toBe(true);
+    expect(searches.some((p) => p.filter_users_from === "U-ME")).toBe(true);
+    // Both look further back than the daily window — "which channels do you live in" is not a
+    // question yesterday can answer.
+    expect(searches.every((p) => /^\d{4}-\d{2}-\d{2}$/.test(p.filter_date_after))).toBe(true);
+
+    // BOTH channels get read, though neither was ever picked.
+    expect(read.sort()).toEqual(["C-MINE", "C-TAGGED"]);
+    expect(out.channelsRead).toBe(2);
+    expect(out.blocks).toBeGreaterThan(0);
+  });
+
+  test("a picked channel list is an instruction — discovery does not widen it", async () => {
+    // The flip side: someone who chose channels chose them. Discovery is what fills the vacuum
+    // when nothing was chosen, never something that overrides an explicit answer.
+    const read: string[] = [];
+    const ctx = {
+      appId: "slack-desk", pairedAgent: null, dataDir: ".", configured: true,
+      progress: { report: async () => ok(undefined as void) },
+      tasks: { publish: async () => ok(undefined as void), withdraw: async () => ok(undefined as void) },
+      connectors: {
+        exec: async (req: any) => {
+          if (req.functionName === "checkTokenHealth") return ok({ healthy: true, userId: "U-ME" });
+          if (req.functionName === "getUserInfo") return ok({ user: { id: req.params.user, real_name: "N" } });
+          if (req.functionName === "conversations_search_messages") throw new Error("must not search");
+          read.push(req.params.channel);
+          return ok([{ ts: ago(200), channel: req.params.channel, user: "U8", text: "hi" }]);
+        },
+      },
+      memory: { extract: async () => ok(undefined as unknown) },
+    } as unknown as PlatformContext;
+
+    const out = await harvestOnce("acct-picked", readConfig({ channels: ["C-PICKED"] }), { platform: ctx });
+    expect(out.scope).toBe("channels");
+    expect(read).toEqual(["C-PICKED"]);
+  });
+
+  test("a pass where every call was refused reports its errors rather than looking quiet", async () => {
+    // This is what initialize needs to tell "nobody said anything" apart from "Slack refused me",
+    // which are identical from the outside: both read zero messages.
+    const ctx = {
+      appId: "slack-desk", pairedAgent: null, dataDir: ".", configured: true,
+      progress: { report: async () => ok(undefined as void) },
+      tasks: { publish: async () => ok(undefined as void), withdraw: async () => ok(undefined as void) },
+      connectors: { exec: async () => ({ ok: false, reason: "guard_busy" }) },
+      memory: { extract: async () => ok(undefined as unknown) },
+    } as unknown as PlatformContext;
+
+    const out = await harvestOnce("acct-refused", readConfig({ channels: ["C1", "C2"] }), { platform: ctx });
+    expect(out.fetched).toBe(0);
+    expect(out.errors).toBeGreaterThan(0);
   });
 
   test("DM unreads are scoped to IM — reading every channel type is documented as minutes-slow", async () => {

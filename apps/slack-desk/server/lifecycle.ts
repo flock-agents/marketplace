@@ -12,22 +12,32 @@ import { dayKey, harvestOnce, readConfig } from "./harvest";
 const FIRST_RUN_LOOKBACK_HOURS = 14 * 24;
 
 /** Workspaces this app has been told about but has not finished. */
+/**
+ * Accounts initialize still owes work to: never started, or started and failed. A failed record
+ * stays pending precisely so the next initialize picks it up — a transient refusal (a busy
+ * account guard, an expired token, Slack itself being slow) must not permanently convince the
+ * app that this workspace was set up.
+ */
 function pending(): string[] {
-  return listInit().filter((r) => !r.finishedAt).map((r) => r.accountId);
+  return listInit()
+    .filter((r) => !r.finishedAt || r.outcome === "failed")
+    .map((r) => r.accountId);
 }
 
 export const slackDeskHooks: AppLifecycleHooks = {
   /**
-   * IDEMPOTENT BY CONSTRUCTION. A workspace with a finished record is already ready and is
-   * skipped; one with a started-but-unfinished record is work this app OWES — from a process that
-   * died mid-run — and is resumed. The platform does not need to tell us which case it is, and
-   * deliberately does not: `reason` is for the log.
+   * IDEMPOTENT BY CONSTRUCTION. A workspace that finished SUCCESSFULLY is already ready and is
+   * skipped; one that is unfinished (a process that died mid-run) or that finished having read
+   * nothing is work this app still OWES, and is resumed. The platform does not need to tell us
+   * which case it is, and deliberately does not: `reason` is for the log.
    */
   async initialize(ctx) {
     const named = ctx.accountIds ?? [];
     for (const accountId of named) {
       const rec = getInit(accountId);
-      if (rec?.finishedAt) continue;                       // already ready → nothing to do
+      // Only a `done` record ends the obligation. `failed` is finished-but-not-ready, and
+      // treating it as ready is what made one bad first pass permanent.
+      if (rec?.finishedAt && rec.outcome === "done") continue;
       markInitStarted(accountId, "Connecting to Slack");
     }
 
@@ -49,8 +59,22 @@ export const slackDeskHooks: AppLifecycleHooks = {
         // Everything else is deliberately identical to the daily recipe — same sources, same
         // filters — so there is no separate first-run path to keep in step.
         const cfg = { ...readConfig(undefined), lookbackHours: FIRST_RUN_LOOKBACK_HOURS };
-        await harvestOnce(accountId, cfg, { platform: ctx.platform });
-        markInitFinished(accountId, "done", "Slack is set up");
+        const out = await harvestOnce(accountId, cfg, { platform: ctx.platform });
+
+        // "SET UP" MUST MEAN SOMETHING WAS READ.
+        //
+        // A harvest degrades instead of throwing, so a pass in which every connector call was
+        // refused returns normally with nothing in it. Marking that "done" was the reason the
+        // memory never appeared AND never recovered: `pending()` only returns records with no
+        // `finishedAt`, so the first failed pass was also the last one. A pass that read
+        // nothing because it was refused is recorded as failed, which leaves it retryable on
+        // the next boot or connect; a genuinely quiet workspace read fine and is done.
+        if (out.errors > 0 && out.fetched === 0) {
+          console.warn(`[slack-desk] initialize read nothing for ${accountId} (${out.errors} refused call(s)) — will retry`);
+          markInitFinished(accountId, "failed", "Could not read Slack yet");
+        } else {
+          markInitFinished(accountId, "done", "Slack is set up");
+        }
       } catch (e: any) {
         console.error(`[slack-desk] initialize failed for ${accountId}: ${e?.message ?? e}`);
         markInitFinished(accountId, "failed", "Could not finish reading Slack");
