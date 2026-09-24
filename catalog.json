@@ -3,31 +3,6 @@
   "updatedAt": "2026-09-24T00:00:00Z",
   "items": [
     {
-      "slug": "draft-replies",
-      "type": "skill",
-      "name": "Draft Replies",
-      "description": "Drafts replies to email (instant) and LinkedIn (scheduled) in your voice into Draft Desk",
-      "author": "flock",
-      "category": "productivity",
-      "tags": [
-        "email",
-        "linkedin",
-        "drafts",
-        "replies",
-        "approvals",
-        "outbound"
-      ],
-      "icon": "icon.svg",
-      "iconUrl": "https://raw.githubusercontent.com/flock-agents/marketplace/v2/skills/draft-replies/icon.svg",
-      "repo": "flock-agents/marketplace",
-      "path": "skills/draft-replies",
-      "latestVersion": "1.1.0",
-      "latestTag": "draft-replies-v1.1.0",
-      "minFlockVersion": "0.7.0",
-      "publishedAt": "2026-09-04T00:00:00Z",
-      "updatedAt": "2026-09-04T00:00:00Z"
-    },
-    {
       "slug": "linear",
       "type": "connector",
       "name": "Linear",
@@ -97,57 +72,6 @@
       "updatedAt": "2026-08-17T17:52:00Z"
     },
     {
-      "slug": "draft-desk",
-      "type": "app",
-      "name": "Draft Desk",
-      "description": "Your agent drafts outbound email, LinkedIn, and X messages; you approve, nothing sends without you",
-      "author": "flock",
-      "category": "productivity",
-      "tags": [
-        "email",
-        "linkedin",
-        "messaging",
-        "approvals",
-        "drafts",
-        "outbound"
-      ],
-      "icon": "icon.svg",
-      "iconUrl": "https://raw.githubusercontent.com/flock-agents/marketplace/main/apps/draft-desk/icon.svg",
-      "repo": "flock-agents/marketplace",
-      "path": "apps/draft-desk",
-      "ownerSkillId": "draft-replies",
-      "latestVersion": "1.0.1",
-      "latestTag": "draft-desk-v1.0.1",
-      "minFlockVersion": "0.7.0",
-      "publishedAt": "2026-09-01T00:00:00Z",
-      "updatedAt": "2026-09-04T00:00:00Z"
-    },
-    {
-      "slug": "draft-assistant",
-      "type": "template",
-      "name": "Draft Assistant",
-      "description": "An assistant that drafts your outbound email, LinkedIn, and X messages into Draft Desk — you approve, nothing sends without you",
-      "author": "flock",
-      "category": "productivity",
-      "tags": [
-        "email",
-        "linkedin",
-        "messaging",
-        "drafts",
-        "approvals",
-        "outbound"
-      ],
-      "icon": "icon.svg",
-      "iconUrl": "https://raw.githubusercontent.com/flock-agents/marketplace/main/templates/draft-assistant/icon.svg",
-      "repo": "flock-agents/marketplace",
-      "path": "templates/draft-assistant",
-      "latestVersion": "1.1.0",
-      "latestTag": "draft-assistant-v1.1.0",
-      "minFlockVersion": "0.7.0",
-      "publishedAt": "2026-09-01T00:00:00Z",
-      "updatedAt": "2026-09-04T00:00:00Z"
-    },
-    {
       "slug": "family-butler",
       "type": "template",
       "name": "Family Butler",
@@ -160,7 +84,7 @@
         "family",
         "meal-planning"
       ],
-      "icon": "🏠",
+      "icon": "\ud83c\udfe0",
       "iconUrl": "https://raw.githubusercontent.com/flock-agents/marketplace/main/templates/family-butler/icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "templates/family-butler",
@@ -169,29 +93,6 @@
       "minFlockVersion": "0.7.0",
       "publishedAt": "2026-08-11T17:00:00Z",
       "updatedAt": "2026-08-14T10:20:00Z"
-    },
-    {
-      "slug": "personal-assistant",
-      "type": "template",
-      "name": "Personal Assistant",
-      "description": "A general-purpose helper for email, calendar, and reminders",
-      "author": "flock",
-      "category": "personal",
-      "tags": [
-        "productivity",
-        "email",
-        "calendar",
-        "reminders"
-      ],
-      "icon": "✨",
-      "iconUrl": "https://raw.githubusercontent.com/flock-agents/marketplace/main/templates/personal-assistant/icon.svg",
-      "repo": "flock-agents/marketplace",
-      "path": "templates/personal-assistant",
-      "latestVersion": "1.2.0",
-      "latestTag": "personal-assistant-v1.2.0",
-      "minFlockVersion": "0.7.0",
-      "publishedAt": "2026-08-13T09:00:00Z",
-      "updatedAt": "2026-09-04T00:00:00Z"
     },
     {
       "slug": "business-assistant",
@@ -207,7 +108,7 @@
         "documents",
         "scheduling"
       ],
-      "icon": "💼",
+      "icon": "\ud83d\udcbc",
       "iconUrl": "https://raw.githubusercontent.com/flock-agents/marketplace/main/templates/business-assistant/icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "templates/business-assistant",
@@ -230,7 +131,7 @@
         "social-media",
         "creative"
       ],
-      "icon": "🎨",
+      "icon": "\ud83c\udfa8",
       "iconUrl": "https://raw.githubusercontent.com/flock-agents/marketplace/main/templates/creative-assistant/icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "templates/creative-assistant",
@@ -382,7 +283,7 @@
       "slug": "slack",
       "type": "connector",
       "name": "Slack",
-      "description": "Full Slack workspace integration — read channels, search messages, manage saved items, post messages, add reactions, and manage user groups. Equivalent to the korotovsky/slack-mcp-server feature set, via browser session auth.",
+      "description": "Full Slack workspace integration \u2014 read channels, search messages, manage saved items, post messages, add reactions, and manage user groups. Equivalent to the korotovsky/slack-mcp-server feature set, via browser session auth.",
       "author": "flock",
       "category": "integration",
       "tags": [
@@ -405,7 +306,7 @@
       "slug": "slack-desk",
       "type": "app",
       "name": "Slack Desk",
-      "description": "Builds memory from your Slack conversations and surfaces tasks you missed — reads only, never posts",
+      "description": "Builds memory from your Slack conversations and surfaces tasks you missed \u2014 reads only, never posts",
       "author": "flock",
       "category": "productivity",
       "tags": [
