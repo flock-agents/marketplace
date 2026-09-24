@@ -88,8 +88,8 @@
       "iconUrl": "https://raw.githubusercontent.com/flock-agents/marketplace/main/templates/family-butler/icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "templates/family-butler",
-      "latestVersion": "1.1.0",
-      "latestTag": "family-butler-v1.1.0",
+      "latestVersion": "1.2.0",
+      "latestTag": "family-butler-v1.2.0",
       "minFlockVersion": "0.7.0",
       "publishedAt": "2026-08-11T17:00:00Z",
       "updatedAt": "2026-08-14T10:20:00Z"

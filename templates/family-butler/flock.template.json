@@ -2,7 +2,7 @@
   "name": "Family Butler",
   "slug": "family-butler",
   "description": "A household assistant that manages groceries, meals, and family routines through Telegram",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "author": "flock",
   "icon": "icon.svg",
   "category": "family",
@@ -169,10 +169,11 @@
       "deepLink": "/agents/:id"
     },
     {
-      "id": "connect-grocery",
+      "id": "connect-sources",
       "label": "Connect a grocery service",
       "description": "Link at least one service (Swiggy, Zepto, BigBasket, or Blinkit) so the butler can search and build carts",
-      "deepLink": "/agents/:id?tab=skills"
+      "deepLink": "/agents/:id?tab=skills",
+      "skills": ["swiggy-instamart", "zepto", "bigbasket", "zomato-blinkit"]
     },
     {
       "id": "connect-channel",
