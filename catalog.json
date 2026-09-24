@@ -95,29 +95,6 @@
       "updatedAt": "2026-08-14T10:20:00Z"
     },
     {
-      "slug": "creative-assistant",
-      "type": "template",
-      "name": "Creative Assistant",
-      "description": "A creative partner for writing, content creation, and social media publishing",
-      "author": "flock",
-      "category": "personal",
-      "tags": [
-        "writing",
-        "content",
-        "social-media",
-        "creative"
-      ],
-      "icon": "\ud83c\udfa8",
-      "iconUrl": "https://raw.githubusercontent.com/flock-agents/marketplace/main/templates/creative-assistant/icon.svg",
-      "repo": "flock-agents/marketplace",
-      "path": "templates/creative-assistant",
-      "latestVersion": "1.1.0",
-      "latestTag": "creative-assistant-v1.1.0",
-      "minFlockVersion": "0.7.0",
-      "publishedAt": "2026-08-13T09:00:00Z",
-      "updatedAt": "2026-08-14T10:20:00Z"
-    },
-    {
       "slug": "gmail",
       "type": "connector",
       "name": "Gmail",
