@@ -82,8 +82,17 @@ if [ "$FILTER_THREADS_ONLY" = "true" ]; then
   FULL_QUERY="$FULL_QUERY has:thread"
 fi
 
-ENCODED_QUERY=$(printf '%s' "$FULL_QUERY" | jq -sRr @uri)
-API_PARAMS="query=${ENCODED_QUERY}&count=${COUNT}&page=${PAGE}&sort=${SORT}"
+# DO NOT PRE-ENCODE. _slack_api splits API_PARAMS on "&", then hands each pair to curl's
+# --data-urlencode, which encodes the VALUE — its own comment says so: "spaces, '#', ':',
+# '<@...>'". Encoding here as well sent Slack the literal text `%3C%40U0C2S2W19EZ%3E`
+# instead of `<@U0C2S2W19EZ>`, so it searched for the percent-escapes and matched nothing.
+# Every query containing a space, a colon, a "#" or a user mention was affected — which is
+# every compound query this script builds, including all of the filter modifiers above.
+#
+# The one value that still cannot be passed literally is "&", because _slack_api splits this
+# string on it. Slack search treats "&" as a term separator anyway, and before this fix EVERY
+# query was mangled, so this is strictly better rather than complete.
+API_PARAMS="query=${FULL_QUERY}&count=${COUNT}&page=${PAGE}&sort=${SORT}"
 
 RESULT=$(_slack_api "search.messages" "$API_PARAMS")
 

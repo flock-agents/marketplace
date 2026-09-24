@@ -448,9 +448,13 @@ export async function readOwnActivity(
         // which channels matter to them, and it needs no picker: a workspace-wide search for
         // `from:` the owner names those channels directly. This is what makes "no channels
         // selected" mean "work it out" instead of "read only what was pushed at me".
+        // `filter_users_from` is the connector's OWN way of saying from: — it appends
+        // `from:<@UID>` to the query itself. Passing both produced
+        // `from:<@U…> from:<@U…>`, which Slack reads as two conjunctive filters and
+        // matches nothing. One or the other, never both.
         : await call("conversations_search_messages", {
             query: `from:<@${myId}>`, count: 100, sort: "timestamp",
-            filter_users_from: myId, filter_date_after: after,
+            filter_date_after: after,
           });
       fallbackChannel = src === "mentions" ? "mention" : "engaged";
     } else {

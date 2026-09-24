@@ -1,11 +1,16 @@
 {
   "name": "Slack Desk",
   "slug": "slack-desk",
-  "description": "Builds memory from your Slack conversations and surfaces tasks you missed — reads only, never posts",
-  "version": "1.2.0",
+  "description": "Builds memory from your Slack conversations and surfaces tasks you missed \u2014 reads only, never posts",
+  "version": "1.2.1",
   "author": "flock",
   "category": "productivity",
-  "tags": ["slack", "memory", "tasks", "conversations"],
+  "tags": [
+    "slack",
+    "memory",
+    "tasks",
+    "conversations"
+  ],
   "minFlockVersion": "0.7.0",
   "customizable": true
 }

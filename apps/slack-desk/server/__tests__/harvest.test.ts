@@ -211,7 +211,7 @@ describe("harvest — one workspace's daily pass", () => {
             searches.push(req.params);
             const tagged = { ts: ago(300), channel: { id: "C-TAGGED" }, user: "U8", text: "<@U-ME> thoughts?" };
             const mine = { ts: ago(280), channel: { id: "C-MINE" }, user: "U-ME", text: "shipping friday" };
-            return ok({ matches: [req.params.filter_users_from ? mine : tagged] });
+            return ok({ matches: [String(req.params.query).startsWith("from:") ? mine : tagged] });
           }
           read.push(req.params.channel);
           return ok([{ ts: ago(200), channel: req.params.channel, user: "U8", text: "context" }]);
@@ -224,8 +224,13 @@ describe("harvest — one workspace's daily pass", () => {
 
     // One search for mentions of the owner, one for messages FROM the owner.
     expect(searches).toHaveLength(2);
-    expect(searches.some((p) => !p.filter_users_from && String(p.query).includes("U-ME"))).toBe(true);
-    expect(searches.some((p) => p.filter_users_from === "U-ME")).toBe(true);
+    expect(searches.some((p) => String(p.query) === "<@U-ME>")).toBe(true);          // mentions
+    expect(searches.some((p) => String(p.query) === "from:<@U-ME>")).toBe(true);      // engaged
+
+    // NEVER BOTH. `filter_users_from` is the connector's own way of writing from: — it
+    // appends `from:<@UID>` to the query. Sending the filter alongside a query that already
+    // says from: produced `from:<@U…> from:<@U…>`, two conjunctive filters that match nothing.
+    expect(searches.every((p) => p.filter_users_from === undefined)).toBe(true);
     // Both look further back than the daily window — "which channels do you live in" is not a
     // question yesterday can answer.
     expect(searches.every((p) => /^\d{4}-\d{2}-\d{2}$/.test(p.filter_date_after))).toBe(true);

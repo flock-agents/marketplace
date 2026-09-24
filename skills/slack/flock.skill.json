@@ -2,11 +2,16 @@
   "name": "Slack",
   "slug": "slack",
   "icon": "icon.svg",
-  "description": "Full Slack workspace integration — read channels, search messages, manage saved items, post messages, add reactions, and manage user groups. Equivalent to the korotovsky/slack-mcp-server feature set, via browser session auth.",
-  "version": "1.3.0",
+  "description": "Full Slack workspace integration \u2014 read channels, search messages, manage saved items, post messages, add reactions, and manage user groups. Equivalent to the korotovsky/slack-mcp-server feature set, via browser session auth.",
+  "version": "1.3.1",
   "author": "flock",
   "category": "integration",
-  "tags": ["messaging", "slack", "productivity", "team"],
+  "tags": [
+    "messaging",
+    "slack",
+    "productivity",
+    "team"
+  ],
   "minFlockVersion": "0.7.0",
   "tier": "installable",
   "requires": [
@@ -15,23 +20,41 @@
       "service": "slack",
       "loginUrl": "https://app.slack.com",
       "description": "Log into your Slack workspace via the dashboard browser session",
-      "rationale": "Many Slack workspaces block bot token installs — a saved browser session uses your existing login with no admin approval needed."
+      "rationale": "Many Slack workspaces block bot token installs \u2014 a saved browser session uses your existing login with no admin approval needed."
     }
   ],
   "ingest": {
     "kind": "slack_message",
     "label": "Slack",
     "eventKinds": [
-      { "id": "slack_message", "label": "New message" },
-      { "id": "slack_mention", "label": "Mention" }
+      {
+        "id": "slack_message",
+        "label": "New message"
+      },
+      {
+        "id": "slack_mention",
+        "label": "Mention"
+      }
     ],
-    "poll": { "functionName": "conversations_history" },
+    "poll": {
+      "functionName": "conversations_history"
+    },
     "result": "array",
     "map": {
-      "eventId": { "from": "message_id" },
-      "actor": { "from": "user" },
-      "ts": { "from": "ts", "transform": "parseDateOrNow" },
-      "preview": { "from": "text", "transform": "trim" }
+      "eventId": {
+        "from": "message_id"
+      },
+      "actor": {
+        "from": "user"
+      },
+      "ts": {
+        "from": "ts",
+        "transform": "parseDateOrNow"
+      },
+      "preview": {
+        "from": "text",
+        "transform": "trim"
+      }
     }
   }
 }
