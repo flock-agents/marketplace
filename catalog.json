@@ -95,30 +95,6 @@
       "updatedAt": "2026-08-14T10:20:00Z"
     },
     {
-      "slug": "business-assistant",
-      "type": "template",
-      "name": "Business Assistant",
-      "description": "A professional assistant for email drafts, meeting notes, document review, and scheduling",
-      "author": "flock",
-      "category": "professional",
-      "tags": [
-        "business",
-        "email",
-        "meetings",
-        "documents",
-        "scheduling"
-      ],
-      "icon": "\ud83d\udcbc",
-      "iconUrl": "https://raw.githubusercontent.com/flock-agents/marketplace/main/templates/business-assistant/icon.svg",
-      "repo": "flock-agents/marketplace",
-      "path": "templates/business-assistant",
-      "latestVersion": "1.1.0",
-      "latestTag": "business-assistant-v1.1.0",
-      "minFlockVersion": "0.7.0",
-      "publishedAt": "2026-08-13T09:00:00Z",
-      "updatedAt": "2026-08-14T10:20:00Z"
-    },
-    {
       "slug": "creative-assistant",
       "type": "template",
       "name": "Creative Assistant",
