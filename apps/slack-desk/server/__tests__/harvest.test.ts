@@ -360,3 +360,29 @@ describe("harvest — one workspace's daily pass", () => {
     expect(calls).toEqual([]);
   });
 });
+
+// DAY ONE HAS A BACKLOG; A DAILY PASS DOES NOT.
+//
+// initialize used the steady-state recipe verbatim — readConfig(undefined), a 24-hour window.
+// That is right for a routine that ran yesterday and useless on the day you install: a workspace
+// whose last real conversation was two days ago produced an agent with no memory at all, which
+// reads as "it didn't work" rather than "there was nothing in the last 24 hours".
+describe("the first harvest reaches further back than a daily one", () => {
+  test("a message from three days ago is eligible on the first pass, not on a daily one", async () => {
+    const threeDaysAgo = `${NOW - 3 * 24 * 3600}.000100`;
+    const { ctx } = fakePlatform({ C1: [{ ts: threeDaysAgo, user: "U1", text: "the thing from Monday" }] });
+
+    // Daily recipe: outside the 24h window, so nothing is extracted.
+    const daily = await harvestOnce(ACCT, readConfig({ channels: ["C1"] }), { platform: ctx });
+    expect(daily.fetched).toBe(1);
+    expect(daily.blocks).toBe(0);
+
+    // First-run recipe: the same message is in range.
+    wipe();
+    const { ctx: ctx2 } = fakePlatform({ C1: [{ ts: threeDaysAgo, user: "U1", text: "the thing from Monday" }] });
+    const first = await harvestOnce(
+      ACCT, { ...readConfig({ channels: ["C1"] }), lookbackHours: 14 * 24 }, { platform: ctx2 },
+    );
+    expect(first.blocks).toBe(1);
+  });
+});

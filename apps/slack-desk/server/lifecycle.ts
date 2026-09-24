@@ -8,6 +8,9 @@ import type { AppLifecycleHooks, ProgressItem } from "@flock/app-sdk";
 import { getInit, listInit, markInitFinished, markInitStarted, harvestRanToday } from "./store";
 import { dayKey, harvestOnce, readConfig } from "./harvest";
 
+/** How far back the FIRST harvest reads. Steady state is 24h; day one has a backlog. */
+const FIRST_RUN_LOOKBACK_HOURS = 14 * 24;
+
 /** Workspaces this app has been told about but has not finished. */
 function pending(): string[] {
   return listInit().filter((r) => !r.finishedAt).map((r) => r.accountId);
@@ -36,9 +39,16 @@ export const slackDeskHooks: AppLifecycleHooks = {
 
     for (const accountId of todo) {
       try {
-        // The first pass is the same work as the daily one — there is no separate "first run"
-        // recipe to keep in step with the steady-state one.
-        const cfg = readConfig(undefined);
+        // THE FIRST PASS LOOKS FURTHER BACK THAN A DAILY ONE, because it is the only pass with a
+        // backlog to find. The steady-state window is 24 hours — right for a routine that ran
+        // yesterday, useless on the day you install: a workspace whose last real conversation was
+        // two days ago yields an agent with no memory at all, which reads as "it didn't work"
+        // rather than "there was nothing in the last 24 hours".
+        //
+        // email-desk draws the same distinction (a 14-day onboarding window) for the same reason.
+        // Everything else is deliberately identical to the daily recipe — same sources, same
+        // filters — so there is no separate first-run path to keep in step.
+        const cfg = { ...readConfig(undefined), lookbackHours: FIRST_RUN_LOOKBACK_HOURS };
         await harvestOnce(accountId, cfg, { platform: ctx.platform });
         markInitFinished(accountId, "done", "Slack is set up");
       } catch (e: any) {
