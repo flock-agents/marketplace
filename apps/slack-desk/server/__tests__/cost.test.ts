@@ -532,3 +532,43 @@ describe("a deferred conversation comes back even when the window moved past it"
     expect(p.sent.flat()).toHaveLength(0);
   });
 });
+
+// ---------------------------------------------------------------------------
+// ONE BAD BATCH IS NOT THE PASS.
+//
+// Found on a live enforced pass: batch 3 of 5 timed out, the loop broke, and 6 of 10
+// conversations went unextracted with nothing deferred — so they were neither done nor queued.
+// Batches are independent and the ledger only records successes, so a failure should cost that
+// batch and nothing else.
+describe("a failing extract batch does not abandon the ones after it", () => {
+  test("later batches still land, and only the failed ones are missing from the ledger", async () => {
+    // Six conversations, far enough apart to be separate groups, so EXTRACT_CHUNK=2 makes 3 batches.
+    const msgs = Array.from({ length: 6 }, (_, i) => ({
+      ts: ago(70_000 - i * 5_000), user: "U-ME", text: `conversation ${i}`,
+    }));
+    let call = 0;
+    const p = platform(
+      { "conversations_history:C1": msgs },
+      { onExtract: () => (++call === 2 ? { ok: false, reason: "timeout" } : { ok: true }) },
+    );
+    const out = await harvestOnce(ACCT, readConfig({ channels: ["C1"] }), { platform: p.ctx });
+
+    // All three batches were attempted — the failure did not stop the loop.
+    expect(p.sent).toHaveLength(3);
+    // Four of six recorded: the two in the failed batch are not in the ledger, so they retry.
+    expect(out.blocks).toBe(4);
+    const { _db } = await import("../store");
+    expect((_db.query("SELECT COUNT(*) AS n FROM ledger WHERE text_hash IS NOT NULL").get() as any).n).toBe(4);
+    // A partial pass is not a failed one, but the day stays owed so the rest is retried.
+    expect(out.stopReason).toBe("batches-failed");
+    expect(harvestRanToday(ACCT, dayKey(new Date()))).toBe(false);
+  });
+
+  test("when every batch fails it IS a failed pass, and nothing is recorded", async () => {
+    upsertMessages(ACCT, [{ channelId: "C1", ts: ago(300), author: "U-ME", text: "mine" }]);
+    const p = platform({ "conversations_history:C1": [] }, { onExtract: () => ({ ok: false, reason: "500" }) });
+    const out = await harvestOnce(ACCT, readConfig({ channels: ["C1"] }), { platform: p.ctx });
+    expect(out.stopReason).toBe("extract-failed");
+    expect(out.blocks).toBe(0);
+  });
+});

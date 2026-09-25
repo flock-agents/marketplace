@@ -792,23 +792,28 @@ async function extractPass(
   for (const d of deferred) bumpDeferred(accountId, d.block.id);
 
   let extracted = 0;
-  let extractFailed = false;
+  let failedBatches = 0;
   for (let i = 0; i < chosen.length; i += EXTRACT_CHUNK) {
     const batch = chosen.slice(i, i + EXTRACT_CHUNK);
     const res = await deps.platform.memory.extract(batch.map((c) => c.block), {
       type: "slack", connectorSkill: "slack", account: accountId,
     });
     if (!res.ok) {
-      extractFailed = true;
-      console.warn(`[slack-desk] extraction failed: ${res.reason}`);
-      break;
+      // ONE BAD BATCH IS NOT THE PASS. This used to `break`, so a single slow or refused batch
+      // abandoned every conversation after it — measured live: batch 3 of 5 timed out and 6 of 10
+      // conversations went unextracted, with nothing deferred, because the loop stopped rather
+      // than skipping. The batches are independent and the ledger only records successes, so the
+      // honest response is to lose that batch and carry on.
+      failedBatches++;
+      console.warn(`[slack-desk] batch of ${batch.length} failed (${res.reason}) — skipping it, continuing`);
+      continue;
     }
     // THE LEDGER IS WRITTEN ONLY FOR WHAT WE CAN PROVE LANDED. The route reports counts with no
     // per-item ids, so a partially-failed batch cannot be attributed — and marking it all done
     // would be permanent silent loss. A batch with any failure writes nothing and retries.
     const r = res.data as { failedItems?: number } | undefined;
     if (r && typeof r.failedItems === "number" && r.failedItems > 0) {
-      extractFailed = true;
+      failedBatches++;
       console.warn(`[slack-desk] ${r.failedItems} item(s) failed in a batch of ${batch.length} — not recording them`);
       continue;
     }
@@ -816,8 +821,11 @@ async function extractPass(
     extracted += batch.length;
   }
 
+  // A pass is only "failed" if nothing survived. Some batches failing while others landed is a
+  // partial pass: the day stays unclaimed so the rest is retried, but it is not a failure.
   const stopReason = st.guardExhausted ? "reads-exhausted"
-    : extractFailed ? "extract-failed"
+    : (failedBatches > 0 && extracted === 0) ? "extract-failed"
+    : failedBatches > 0 ? "batches-failed"
     : deferred.length > 0 ? "block-budget"
     : null;
 
@@ -826,7 +834,7 @@ async function extractPass(
     + `fetched=${st.fetched} new=${st.newMessages} groups=${groups.length} `
     + `candidates=${candidates.length} extracted=${extracted} deferred=${deferred.length} `
     + `skip_tier=${skippedByTier} skip_ledger=${skippedByLedger} reads=${st.reads} `
-    + `errors=${st.errors}${stopReason ? ` stop=${stopReason}` : ""}`,
+    + `errors=${st.errors} failed_batches=${failedBatches}${stopReason ? ` stop=${stopReason}` : ""}`,
   );
 
   // ONLY A PASS THAT FINISHED ITS WORK CLAIMS THE DAY. A pass that ran out of reads, failed to
