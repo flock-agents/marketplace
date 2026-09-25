@@ -134,13 +134,35 @@ describe("triage decides, and shadow mode proves it before it acts", () => {
     expect(tierOf(att, { channelWasPicked: false })).toBe("facts");
   });
 
-  test("a first run treats discovered channels as picked, or it would gut the first harvest", () => {
-    // `readConfig(undefined)` yields NO picked channels, so on a first pass every channel is
-    // discovered — and every unsignalled conversation would land in skip on the one harvest whose
-    // whole job is to make the agent visibly know something.
+  test("a first run does NOT widen the tier — the window is the whole adaptation", async () => {
+    // An earlier cut made a first pass treat every channel as picked, so nothing could ever be
+    // skipped on it: widest window times widest tier, exactly once, on the pass the owner is
+    // watching. The rule is now identical on every pass; `lifecycle.ts` narrows the WINDOW instead
+    // (48h, widening only when a pass finds nothing) and never the rule.
     const quiet = attentionOf([m({ author: "U2", text: "shipping friday" })], dir);
     expect(tierOf(quiet, { channelWasPicked: false })).toBe("skip");
-    expect(tierOf(quiet, { channelWasPicked: false, firstRun: true })).toBe("full");
+    // No `firstRun` option exists to override it any more.
+    expect(tierOf(quiet, { channelWasPicked: true })).toBe("full");
+  });
+
+  test("a channel the owner is historically very active in earns FACTS, not silence and not tasks", () => {
+    // The third thing "engaged" means, and the one the app computed and never read: the owner may
+    // not be named in this conversation, but they live in this channel, so a decision here is worth
+    // remembering. Not tasks: no ask was directed at anyone, and a task minted here would belong to
+    // somebody else.
+    const att = attentionOf([m({ author: "U2", text: "we are moving the window to 02:00" })], dir,
+      { activeChannel: true });
+    expect(att.signals).toContain("active-channel");
+    expect(tierOf(att, { channelWasPicked: false })).toBe("facts");
+  });
+
+  test("interaction must be RECENT — speaking once a year ago is history, not engagement", () => {
+    const longAgo = attentionOf(
+      [m({ author: "U-ME", ts: ago(40 * 86_400), text: "spoke here once" })], dir);
+    expect(longAgo.signals).not.toContain("owner-spoke");
+    expect(tierOf(longAgo, { channelWasPicked: false })).toBe("skip");
+    const recent = attentionOf([m({ author: "U-ME", text: "spoke here today" })], dir);
+    expect(recent.signals).toContain("owner-spoke");
   });
 
   test("shadow mode extracts what it would have skipped, and enforce does not", async () => {
@@ -170,10 +192,17 @@ describe("triage decides, and shadow mode proves it before it acts", () => {
 
     // Same input, same verdict, different spend. That asymmetry is the whole reason shadow exists:
     // a week of it says what enforcing WOULD have cost in memory, at no risk to any of it.
+    // Both conversations survive here, but NOT at the same price: C1 is in the active set (the
+    // owner talks there), so the conversation they are absent from drops to facts-only rather than
+    // being skipped. Shadow extracts everything at full price; enforce prices by engagement.
     expect(shadowIds.length).toBe(2);
-    expect(enforceIds.length).toBe(1);
-    // And the one it kept is the one the owner is in.
-    expect(enforceIds[0]).toBe("C1:" + ago(70_000));
+    const enforced = enforce.sent.flat() as any[];
+    const own = enforced.find((b) => b.id === "C1:" + ago(70_000));
+    const other = enforced.find((b) => b.id !== "C1:" + ago(70_000));
+    expect(own?.hints?.extractTasks).toBeUndefined();   // full: tasks on
+    expect(other?.hints?.extractTasks).toBe(false);     // facts only
+    // In shadow, nothing is priced down — that is what makes it the expensive diagnostic.
+    expect((shadow.sent.flat() as any[]).every((b) => b.hints?.extractTasks === undefined)).toBe(true);
   });
 });
 
@@ -444,5 +473,47 @@ describe("bot content: the filter was excluding the one class that is reliably a
         { channelId: "C1", ts: ago(10), author: "U2", text: "here is the spec", subtype } as any, cfg, dir,
       )).toBe(true);
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// THE DEFERRAL THAT WOULD HAVE BEEN A LOSS.
+//
+// Found on a real first run, not in review: the pass deferred 12 conversations from a 14-day
+// backfill, and the NEXT pass builds candidates from `messagesSince(now - 24h)`. Eleven of the
+// twelve sat outside that window, so `deferred_count` was counting debts that could never be
+// paid — a cap behaving as silent truncation, which is the exact failure the cap exists to avoid.
+describe("a deferred conversation comes back even when the window moved past it", () => {
+  test("the window widens to cover what is owed, and the ledger keeps it cheap", async () => {
+    const { oldestDeferredTs, bumpDeferred } = await import("../store");
+
+    // A conversation from six days ago — well outside a 24-hour lookback.
+    const oldTs = ago(6 * 86_400);
+    upsertMessages(ACCT, [{ channelId: "C1", ts: oldTs, author: "U-ME", text: "my old thread" }]);
+    bumpDeferred(ACCT, `C1:${oldTs}`);
+
+    // The store can say how far back the pass must reach.
+    const owed = oldestDeferredTs(ACCT);
+    expect(owed).not.toBeNull();
+    expect(owed! * 1000).toBeLessThan(Date.now() - 24 * 3600_000);
+
+    // A DAILY pass (24h lookback, not a first run) must still extract it.
+    const p = platform({ "conversations_history:C1": [] });
+    await harvestOnce(ACCT, { ...readConfig({ channels: ["C1"] }), lookbackHours: 24 } as any,
+      { platform: p.ctx });
+    const ids = p.sent.flat().map((b: any) => b.id);
+    expect(ids).toContain(`C1:${oldTs}`);
+  });
+
+  test("nothing owed leaves the window exactly where the config put it", async () => {
+    const { oldestDeferredTs } = await import("../store");
+    expect(oldestDeferredTs(ACCT)).toBeNull();
+    // A conversation older than the lookback and NOT deferred stays out — widening is for debts,
+    // not a back door that re-reads history every pass.
+    upsertMessages(ACCT, [{ channelId: "C2", ts: ago(6 * 86_400), author: "U-ME", text: "old, not owed" }]);
+    const p = platform({ "conversations_history:C2": [] });
+    await harvestOnce(ACCT, { ...readConfig({ channels: ["C2"] }), lookbackHours: 24 } as any,
+      { platform: p.ctx });
+    expect(p.sent.flat()).toHaveLength(0);
   });
 });

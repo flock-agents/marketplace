@@ -5,11 +5,22 @@
 // landing, and again whenever a workspace is connected.
 
 import type { AppLifecycleHooks, ProgressItem } from "@flock/app-sdk";
-import { getInit, listInit, markInitFinished, markInitStarted, harvestRanToday } from "./store";
+import { getInit, listInit, markInitFinished, markInitStarted, harvestRanToday, clearHarvestDay } from "./store";
 import { dayKey, harvestOnce, readConfig, FIRST_RUN_MAX_BLOCKS } from "./harvest";
 
-/** How far back the FIRST harvest reads. Steady state is 24h; day one has a backlog. */
-const FIRST_RUN_LOOKBACK_HOURS = 14 * 24;
+/**
+ * How far back the FIRST harvest reads — NARROW, then widening only if it finds nothing.
+ *
+ * This was a flat 14 days, paired with a rule that treated every channel as picked, so the first
+ * pass was the widest window times the widest tier: the biggest spend the app ever makes, on the
+ * one pass the owner is watching, on a source where most content concerns nobody in particular.
+ *
+ * The tension that produced it is real — a 48-hour window on a quiet install finds nothing, and an
+ * empty memory reads as broken. The answer is to widen the WINDOW and never the rule: a normally
+ * active workspace pays for two days of engaged conversations, and only a genuinely quiet one
+ * reaches further back, where reaching back is cheap precisely because it is quiet.
+ */
+const FIRST_RUN_WINDOWS_HOURS = [48, 7 * 24, 14 * 24];
 
 /** Workspaces this app has been told about but has not finished. */
 /**
@@ -64,22 +75,25 @@ export const slackDeskHooks: AppLifecycleHooks = {
         // whose whole job is to make the agent visibly know something would extract almost
         // nothing. So a first run treats discovered channels as picked and lets the BLOCK CAP
         // bound the spend instead of the tier, which is what email-desk's onboarding does.
-        const cfg = {
-          ...readConfig(undefined),
-          lookbackHours: FIRST_RUN_LOOKBACK_HOURS,
-          firstRun: true,
+        // Escalate only on an EMPTY result: each window is tried with the same engaged-only rule,
+        // and the first one that finds anything wins. `firstRun` no longer widens the tier — the
+        // window is the whole of the first-run adaptation.
+        let out = await harvestOnce(accountId, {
+          ...readConfig(undefined), lookbackHours: FIRST_RUN_WINDOWS_HOURS[0]!,
           maxBlocks: FIRST_RUN_MAX_BLOCKS,
-        };
-        const out = await harvestOnce(accountId, cfg, { platform: ctx.platform });
+        }, { platform: ctx.platform });
 
-        // "SET UP" MUST MEAN SOMETHING WAS READ.
-        //
-        // A harvest degrades instead of throwing, so a pass in which every connector call was
-        // refused returns normally with nothing in it. Marking that "done" was the reason the
-        // memory never appeared AND never recovered: `pending()` only returns records with no
-        // `finishedAt`, so the first failed pass was also the last one. A pass that read
-        // nothing because it was refused is recorded as failed, which leaves it retryable on
-        // the next boot or connect; a genuinely quiet workspace read fine and is done.
+        for (const hours of FIRST_RUN_WINDOWS_HOURS.slice(1)) {
+          if (out.blocks > 0 || out.stopReason) break;
+          console.log(`[slack-desk] first pass found nothing in ${FIRST_RUN_WINDOWS_HOURS[0]}h — widening to ${hours}h`);
+          // The day guard would refuse a second pass, and this is still the FIRST harvest: the
+          // previous attempt remembered nothing, so there is nothing to protect from a re-read.
+          clearHarvestDay(accountId, dayKey(new Date()));
+          out = await harvestOnce(accountId, {
+            ...readConfig(undefined), lookbackHours: hours, maxBlocks: FIRST_RUN_MAX_BLOCKS,
+          }, { platform: ctx.platform });
+        }
+
         // A pass that stopped on its read budget has not finished initialising either — it must
         // stay pending so the next boot or connect resumes it, exactly like a refused pass.
         if (out.stopReason === "reads-exhausted") {

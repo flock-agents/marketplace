@@ -76,9 +76,9 @@
           "key": "enforceTriage",
           "type": "boolean",
           "label": "Only remember conversations that involve you",
-          "help": "Off: read everything in the channels above and log what would have been skipped. On: skip conversations in channels you did not pick where you are neither mentioned nor speaking.",
-          "default": false,
-          "_comment": "OFF IS THE DEFAULT ON PURPOSE. Off computes the same verdict and ignores it, so a week of logs says what turning it on WOULD have cost in memory before anyone risks it. A channel picked above always keeps full extraction either way — a pick is the owner saying watch this."
+          "help": "On (recommended): reads conversations you were tagged in, recently took part in, or that happen in channels you are very active in — plus any channel you picked above. Off: reads everything in range and logs what it would have skipped, which costs considerably more.",
+          "default": true,
+          "_comment": "ON BY DEFAULT (owner, 2026-09-25). Slack is high volume and most of it concerns nobody in particular, so reading everything is a guaranteed cost for a speculative benefit — the conservative default is to read LESS. Off is a diagnostic: it computes the same verdict, extracts everything at full price anyway, and logs what would have been skipped, which is the only honest way to measure what the rule costs in memory before trusting it."
         },
         {
           "key": "maxBlocks",

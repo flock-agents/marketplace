@@ -34,7 +34,11 @@ const NOW = Math.floor(Date.now() / 1000);
 const ago = (secondsAgo: number): string => `${NOW - secondsAgo}.000100`;
 
 function wipe() {
-  for (const t of ["messages", "cursors", "init_state", "harvest_days", "workspace", "user_names"]) {
+  // Every table, including the ones the cost work added. Leaving `threads` behind leaked state
+  // between tests: a thread registered by one test was re-polled by the next, which added
+  // conversations_replies calls and doubled `fetched` in assertions about a single read.
+  for (const t of ["messages", "cursors", "init_state", "harvest_days", "workspace", "user_names",
+                   "threads", "ledger", "channel_engagement"]) {
     _db.exec(`DELETE FROM ${t}`);
   }
 }

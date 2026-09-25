@@ -2,7 +2,7 @@
   "name": "Slack Desk",
   "slug": "slack-desk",
   "description": "Builds memory from your Slack conversations and surfaces tasks you missed \u2014 reads only, never posts",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "author": "flock",
   "category": "productivity",
   "tags": [

@@ -13,7 +13,7 @@ import {
   decayEngagement, upsertMessages, getCursor, setCursor, messagesSince, threadMessages,
   harvestRanToday, markHarvestRan, markPartialSpend, callsSpentToday,
   upsertThread, threadsToPoll, isThreadAttended,
-  getLedger, writeLedger, bumpDeferred, deferredCount,
+  getLedger, writeLedger, bumpDeferred, deferredCount, oldestDeferredTs,
   bumpEngagement, rankedChannels,
   type SlackMessage,
 } from "./store";
@@ -46,11 +46,14 @@ export function readConfig(filter: Record<string, unknown> | undefined): Harvest
     channels,
     ignoreBots: raw.ignoreBots !== false,
     lookbackHours: typeof raw.lookbackHours === "number" && raw.lookbackHours > 0 ? raw.lookbackHours : 24,
-    // Enforcing requires an explicit opt-in. Anything else, a missing value included, shadows.
+    // ENGAGED-ONLY IS THE DEFAULT. Shadow mode — compute the verdict and extract everything anyway
+    // — survives as a diagnostic, because a skip is never revisited and a week of shadow says what
+    // the rule would have dropped. But nobody should pay for it without asking: on a source this
+    // noisy, reading everything is a guaranteed cost for a speculative benefit.
     // `enforceTriage` is the boolean the routine form renders (the config field types are
     // boolean/text/number/checkbox-group/multi-select — there is no select); `triageMode` is
     // accepted too so a test or a caller can say it directly.
-    triageMode: raw.enforceTriage === true || raw.triageMode === "enforce" ? "enforce" : "shadow",
+    triageMode: raw.enforceTriage === false || raw.triageMode === "shadow" ? "shadow" : "enforce",
     maxBlocks: typeof raw.maxBlocks === "number" && raw.maxBlocks > 0 ? raw.maxBlocks : MAX_BLOCKS_PER_PASS,
     firstRun: false,
   };
@@ -179,8 +182,14 @@ export const MAX_CHARS_PER_BLOCK = 12_000;
 export const MAX_BLOCKS_PER_PASS = 40;
 /** The first pass has the only backlog there is, so it is capped harder — email-desk uses 10. */
 export const FIRST_RUN_MAX_BLOCKS = 12;
-/** Route ceiling. Above this the whole request 400s, which used to lose the entire day. */
-export const EXTRACT_CHUNK = 20;
+/** How many blocks go in one extract request.
+ *
+ * TWO, not the route's 100. The platform budgets ~120s PER ITEM and serves with a 255s socket
+ * limit, so about two items are all that can actually complete in one HTTP call — the SDK says so
+ * out loud, and said so on the live run: "got 12 items; about 2 can be served in one call".
+ * Small batches also make the HTTP status a near-per-item answer, which is the only attribution
+ * available while the route reports counts without ids. */
+export const EXTRACT_CHUNK = 2;
 
 export type Tier = "full" | "facts" | "skip";
 
@@ -202,22 +211,40 @@ export interface Attention {
 export function attentionOf(
   msgs: SlackMessage[],
   dir?: { ownerId: string | null; ownerName: string | null; groupIds?: Set<string> },
-  opts: { attended?: boolean } = {},
+  opts: { attended?: boolean; activeChannel?: boolean; nowMs?: number } = {},
 ): Attention {
   const signals: string[] = [];
   let score = 0;
   const add = (name: string, weight: number) => { signals.push(name); score += weight; };
+  const now = opts.nowMs ?? Date.now();
+  const recentCut = (now - INTERACTION_RECENCY_DAYS * 86_400_000) / 1000;
 
-  // Sticky: a thread that has ever carried a signal keeps it.
+  // Sticky: a thread that has ever carried a signal keeps it. A conversation the owner is part of
+  // does not stop being theirs because they went quiet for a day.
   if (opts.attended) add("attended", 6);
-  if (dir?.ownerId && msgs.some((m) => m.author === dir.ownerId)) add("owner-spoke", 5);
+  // RECENTLY interacted, not ever. Any-time participation keeps a channel the owner abandoned a
+  // year ago in the read set forever; recency is what makes this "engaged" rather than "was once".
+  if (dir?.ownerId && msgs.some((m) => m.author === dir.ownerId && Number(m.ts) >= recentCut)) {
+    add("owner-spoke", 5);
+  }
   if (msgs.some((m) => namesOwner(m, dir))) add("owner-named", 6);
   if (msgs.some((m) => isDirectMessage(m))) add("dm", 6);
   if (msgs.some((m) => m.source === "saved")) add("saved", 5);
-  // Weak: enough to promote out of skip, not enough to buy task extraction.
+  // CHANNEL-LEVEL ENGAGEMENT, which the app computed and then never read. A channel the owner is
+  // historically very active in matters to them even in a conversation nobody named them in — so
+  // it earns facts (below), not silence. Weaker than a direct signal, and deliberately so: no ask
+  // was directed at anyone here.
+  if (opts.activeChannel) add("active-channel", 2);
+  // Weakest: addressed to everyone rather than to them.
   if (msgs.some((m) => isBroadcast(m))) add("broadcast", 1);
   return { signals, score };
 }
+
+/** How recently the owner must have spoken for it to count as interaction rather than history. */
+export const INTERACTION_RECENCY_DAYS = 14;
+
+/** Signals that mean an ask could be directed at the owner. Everything else is context. */
+const DIRECT_SIGNALS = new Set(["attended", "owner-spoke", "owner-named", "dm", "saved"]);
 
 /**
  * What to spend on a conversation.
@@ -228,18 +255,22 @@ export function attentionOf(
  * full tier. Facts-only is the PROMOTION PATH out of skip: a discovered channel with weak
  * evidence and no direct signal.
  *
- * `firstRun` treats discovered channels as picked, because a first pass has no picked channels
- * at all (`readConfig(undefined)` yields none) — so without this every conversation on the one
- * harvest whose whole job is to make the agent visibly know something would land in `skip`.
+ * THERE IS NO FIRST-RUN ESCALATION HERE. An earlier cut made a first pass treat every channel as
+ * picked, so nothing could ever be skipped on it — widest window times widest tier, exactly once,
+ * on the pass the owner is watching. The first run adapts its WINDOW instead (lifecycle.ts); the
+ * rule is the same on every pass, which also means there is no second code path to keep in step.
  */
 export function tierOf(
   att: Attention,
-  opts: { channelWasPicked: boolean; firstRun?: boolean },
+  opts: { channelWasPicked: boolean },
 ): Tier {
-  const direct = att.signals.some((sg) => sg !== "broadcast");
-  if (direct) return "full";
-  if (opts.channelWasPicked || opts.firstRun) return "full";
-  if (att.signals.includes("broadcast")) return "facts";
+  // An ask could be directed at the owner ⇒ facts AND tasks.
+  if (att.signals.some((sg) => DIRECT_SIGNALS.has(sg))) return "full";
+  // A picked channel is the owner saying "watch this", so it keeps tasks too.
+  if (opts.channelWasPicked) return "full";
+  // Worth remembering, but no ask was aimed at anyone: a task minted here would belong to someone
+  // else, and a board filling with other people's work is worse than a thinner one.
+  if (att.signals.includes("active-channel") || att.signals.includes("broadcast")) return "facts";
   return "skip";
 }
 
@@ -658,13 +689,34 @@ async function extractPass(
   },
 ): Promise<HarvestOutcome> {
   const day = dayKey(now);
-  const since = now.getTime() - cfg.lookbackHours * 3600_000;
+  let since = now.getTime() - cfg.lookbackHours * 3600_000;
+
+  // REACH BACK FAR ENOUGH TO SEE WHAT WE OWE. The window alone makes a deferral a loss: a
+  // conversation pushed out of a 14-day first run is not postponed by a 24-hour window, it is
+  // unreachable, and `deferred_count` then counts debts that can never be paid. So the window is
+  // widened to cover the oldest thing still owed. It costs nothing in model calls — the ledger's
+  // hash check below drops everything already extracted before any of it reaches an extraction.
+  const owed = oldestDeferredTs(accountId);
+  if (owed !== null) {
+    const owedMs = owed * 1000;
+    if (owedMs < since) {
+      console.log(`[slack-desk] widening the window to cover ${new Date(owedMs).toISOString()} — deferred work is owed`);
+      since = owedMs;
+    }
+  }
+
   const dir = await loadDirectory(accountId, messagesSince(accountId, since).map((m) => m.author), deps);
   const eligible = messagesSince(accountId, since).filter((m) => isWorthRemembering(m, cfg, dir));
 
   // Group, then split anything oversized rather than truncating it: the end of a conversation
   // is usually where the decision is.
   const groups = groupByThread(eligible).flatMap(splitOversized);
+
+  // WHERE THE OWNER IS HISTORICALLY VERY ACTIVE. A ranking, not a threshold: on a busy workspace a
+  // threshold qualifies everywhere, so this is the top N by decayed score and nothing else. The
+  // floor lives in `rankedChannels` — a channel with any lifetime mention outranks a bare score, so
+  // the twice-a-year incident channel does not fall off by day 40.
+  const activeChannels = new Set(rankedChannels(accountId, ACTIVE_CHANNEL_TOP_N).map((c) => c.channelId));
 
   type Candidate = { block: ReturnType<typeof toBlock>; tier: Tier; att: Attention; lastTs: string; hash: string };
   const candidates: Candidate[] = [];
@@ -678,8 +730,12 @@ async function extractPass(
     // Tuesday's answers are one conversation, and scoring only Tuesday finds no owner in it.
     const whole = threadMessages(accountId, head.channelId, anchorTs);
     const scored = whole.length > group.length ? whole : group;
-    const att = attentionOf(scored, dir, { attended: isThreadAttended(accountId, head.channelId, anchorTs) });
-    const tier = tierOf(att, { channelWasPicked: st.picked.has(head.channelId), firstRun: cfg.firstRun });
+    const att = attentionOf(scored, dir, {
+      attended: isThreadAttended(accountId, head.channelId, anchorTs),
+      activeChannel: activeChannels.has(head.channelId),
+      nowMs: now.getTime(),
+    });
+    const tier = tierOf(att, { channelWasPicked: st.picked.has(head.channelId) });
     // Sticky from now on: a thread that showed a signal keeps it.
     if (att.signals.some((sg) => sg !== "broadcast")) {
       upsertThread(accountId, head.channelId, anchorTs, { attended: true });
@@ -692,7 +748,10 @@ async function extractPass(
       if (cfg.triageMode === "enforce") continue;
     }
 
-    const effectiveTier: Tier = cfg.triageMode === "enforce" ? tier : (tier === "skip" ? "full" : tier);
+    // SHADOW IS A TRUE BASELINE: everything at full price, exactly as the app behaved before any
+    // of this. A shadow pass that quietly priced some conversations down to facts would not be the
+    // thing enforce is being compared against, and the diff between the two would mean nothing.
+    const effectiveTier: Tier = cfg.triageMode === "enforce" ? tier : "full";
     const block = toBlock(group, dir, { tier: effectiveTier });
     const lastTs = group[group.length - 1]!.ts;
     const hash = blockHash(block.text);
@@ -795,6 +854,9 @@ export async function readOwnActivity(
   let fetched = 0;
   let newMessages = 0;
   const discovered = new Set<string>();
+  // PER SOURCE, because the aggregate cannot answer the only question that matters about the two
+  // sources this work repaired: did `dms` and `saved` return nothing, or parse nothing?
+  const perSource: Record<string, number> = {};
 
   // conversations_unreads IS SLOW, AND SAYING SO IS NOT OPTIONAL. It fans out to one
   // conversations.history per unread channel and the connector paces every call by 3s, so its
@@ -837,6 +899,7 @@ export async function readOwnActivity(
     const msgs = normalizeHistory(fallbackChannel, raw, src)
       .map((m) => ({ ...m, channelId: m.channelId || fallbackChannel }));
     fetched += msgs.length;
+    perSource[src] = (perSource[src] ?? 0) + msgs.length;
     if (msgs.length > 0) newMessages += upsertMessages(accountId, msgs);
 
     for (const m of msgs) {
@@ -858,7 +921,10 @@ export async function readOwnActivity(
   // spoken or been tagged, so a channel they read religiously and never post in — #incidents,
   // #leadership-updates — is never discovered at all, with or without decay. channels_list
   // ships with the connector and was never called.
-  const chans = await exec("channels_list", { exclude_archived: true, limit: 200 });
+  // ONLY WHAT THE SCRIPT READS. It takes limit/cursor/types/sort and hardcodes exclude_archived;
+  // passing an unknown key made it exit 1 with no output at all on the live run. This is pure
+  // enrichment — the ranking degrades without it — so a failure here must not read as a pass error.
+  const chans = await exec("channels_list", { limit: 200 });
   if (chans !== null) {
     const rows: any[] = Array.isArray(chans) ? chans
       : Array.isArray((chans as any)?.channels) ? (chans as any).channels : [];
@@ -878,6 +944,7 @@ export async function readOwnActivity(
   // #security-incidents does not fall off on day 40, which is when the incident happens.
   decayEngagement(accountId, ENGAGEMENT_DECAY);
 
+  console.log(`[slack-desk] activity sources: ${ACTIVITY_SOURCES.map((k) => `${k}=${perSource[k] ?? 0}`).join(" ")}`);
   const ranked = rankedChannels(accountId, MAX_DISCOVERED_CHANNELS).map((c) => c.channelId);
   // Anything a search actually hit this pass is in; the rest of the slate comes from the ranking.
   const out = [...discovered];
@@ -889,6 +956,8 @@ export async function readOwnActivity(
 export const ENGAGEMENT_DECAY = 0.95;
 /** How many channels one pass will read, however many discovery turns up. */
 export const MAX_DISCOVERED_CHANNELS = 12;
+/** How many channels count as "historically very active" for the facts tier. */
+export const ACTIVE_CHANNEL_TOP_N = 12;
 
 /**
  * Shape whatever a connector returned into our own rows. Tolerant by design: a connector

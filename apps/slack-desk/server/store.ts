@@ -349,6 +349,12 @@ export function markPartialSpend(accountId: string, day: string, callsSpent: num
   ).run(accountId, day, Date.now(), callsSpent, stopReason);
 }
 
+/** Let the FIRST harvest try a wider window: it remembered nothing, so there is nothing to
+ *  protect from a re-read. Never used by the daily path, where the guard is the point. */
+export function clearHarvestDay(accountId: string, day: string): void {
+  db.query("DELETE FROM harvest_days WHERE account_id = ? AND day = ?").run(accountId, day);
+}
+
 /** What today's passes have already spent, so a resumed pass does not start its budget over. */
 export function callsSpentToday(accountId: string, day: string): number {
   const r = db.query("SELECT calls_spent FROM harvest_days WHERE account_id = ? AND day = ?")
@@ -560,6 +566,31 @@ export function bumpDeferred(accountId: string, blockId: string): void {
      VALUES (?, ?, 0, 1)
      ON CONFLICT(account_id, block_id) DO UPDATE SET deferred_count = ledger.deferred_count + 1`,
   ).run(accountId, blockId);
+}
+
+/**
+ * How far back the candidate window must reach to still SEE the blocks we deferred.
+ *
+ * THE QUEUE NEEDS SOMEWHERE TO COME BACK FROM. The pass builds candidates from
+ * `messagesSince(now - lookbackHours)`, so with a 24-hour window a conversation deferred out of
+ * a 14-day first run is not merely postponed — it is unreachable, and `deferred_count` counts
+ * a loss instead of a debt. Measured on a real first pass: 11 of 12 deferred conversations sat
+ * outside the next window.
+ *
+ * Returns the oldest anchor timestamp among still-deferred blocks (epoch seconds), or null when
+ * nothing is owed. Widening the window costs only local SQLite work: the ledger's hash check
+ * drops everything already extracted before any of it reaches a model.
+ */
+export function oldestDeferredTs(accountId: string): number | null {
+  const r = db.query(
+    `SELECT MIN(CAST(m.ts AS REAL)) AS oldest
+       FROM ledger l
+       JOIN messages m
+         ON m.account_id = l.account_id
+        AND l.block_id = m.channel_id || ':' || COALESCE(m.thread_ts, m.ts)
+      WHERE l.account_id = ? AND l.deferred_count > 0`,
+  ).get(accountId) as { oldest?: number } | null;
+  return r?.oldest ?? null;
 }
 
 export function deferredCount(accountId: string, blockId: string): number {
