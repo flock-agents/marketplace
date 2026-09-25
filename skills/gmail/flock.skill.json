@@ -95,6 +95,57 @@
       "updateDraft"
     ]
   },
+  "functions": {
+    "createDraft": {
+      "timeoutMs": 90000,
+      "reason": "Drives a real browser DOM to write a message: 8-30s+ per call and growing with the content written. A timeout shorter than the write turns one intent into two drafts, because the caller sees a timeout on a write that actually landed."
+    },
+    "createReplyDraft": {
+      "timeoutMs": 90000,
+      "reason": "Drives a real browser DOM to write a message: 8-30s+ per call and growing with the content written. A timeout shorter than the write turns one intent into two drafts, because the caller sees a timeout on a write that actually landed."
+    },
+    "updateDraft": {
+      "timeoutMs": 90000,
+      "reason": "Drives a real browser DOM to write a message: 8-30s+ per call and growing with the content written. A timeout shorter than the write turns one intent into two drafts, because the caller sees a timeout on a write that actually landed."
+    },
+    "replyToMessage": {
+      "timeoutMs": 90000,
+      "reason": "Drives a real browser DOM to write a message: 8-30s+ per call and growing with the content written. A timeout shorter than the write turns one intent into two drafts, because the caller sees a timeout on a write that actually landed."
+    },
+    "getThread": {
+      "timeoutMs": 90000,
+      "reason": "Expands EVERY message in the thread before scraping, so cost scales with thread length - and a long many-participant thread is exactly the one whose per-message Cc lines drafting needs for reply-all."
+    },
+    "getEmail": {
+      "timeoutMs": 90000,
+      "reason": "A browser read that outlives a 30s kill: killed mid-flight it keeps holding the mailbox's single-flight guard, so the agent's next read is refused busy and it drafts from snippets (2026-09-23)."
+    },
+    "searchEmails": {
+      "timeoutMs": 90000,
+      "reason": "A browser read that outlives a 30s kill: killed mid-flight it keeps holding the mailbox's single-flight guard, so the agent's next read is refused busy and it drafts from snippets (2026-09-23)."
+    },
+    "checkEngagedDomains": {
+      "timeoutMs": 90000,
+      "reason": "Runs ONE Gmail search per unknown domain, sequentially, so cost scales with the batch. engaged-domains.ts caps it at MAX_LOOKUPS_PER_PASS and sizes that cap against this timeout: raising the cap without raising this buys nothing."
+    },
+    "discardDraft": {
+      "timeoutMs": 90000,
+      "reason": "Operations on one browser session are serialized, so this call's latency includes waiting for whoever else holds the mailbox. Four concurrent callers at ~10s each put the ones at the back past 30s (2026-09-09)."
+    },
+    "findDraftForThread": {
+      "timeoutMs": 90000,
+      "reason": "Operations on one browser session are serialized, so this call's latency includes waiting for whoever else holds the mailbox. Four concurrent callers at ~10s each put the ones at the back past 30s (2026-09-09)."
+    },
+    "getDraft": {
+      "timeoutMs": 90000,
+      "reason": "Operations on one browser session are serialized, so this call's latency includes waiting for whoever else holds the mailbox. Four concurrent callers at ~10s each put the ones at the back past 30s (2026-09-09)."
+    },
+    "getThreads": {
+      "timeoutMs": 330000,
+      "maxResultBytes": 1048576,
+      "reason": "A BATCH read: opens MANY threads in one held session, so one call legitimately runs minutes. Its result is DATA for its caller, not agent context - ten threads of JSON pass the 100KB context cap and the truncation is silent, which discarded 153s of reads as 'an empty page' (voice crawl, 2026-09-20)."
+    }
+  },
   "network": {
     "endpoints": [
       {
@@ -195,6 +246,6 @@
   },
   "name": "Gmail",
   "slug": "gmail",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "author": "flock"
 }

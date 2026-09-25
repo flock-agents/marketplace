@@ -3,7 +3,7 @@
   "slug": "slack",
   "icon": "icon.svg",
   "description": "Full Slack workspace integration \u2014 read channels, search messages, manage saved items, post messages, add reactions, and manage user groups. Equivalent to the korotovsky/slack-mcp-server feature set, via browser session auth.",
-  "version": "1.3.1",
+  "version": "1.4.0",
   "author": "flock",
   "category": "integration",
   "tags": [
@@ -23,6 +23,16 @@
       "rationale": "Many Slack workspaces block bot token installs \u2014 a saved browser session uses your existing login with no admin approval needed."
     }
   ],
+  "functions": {
+    "conversations_unreads": {
+      "timeoutMs": 300000,
+      "reason": "Fans out to one conversations.history call per unread channel (max_channels defaults to 50) and _slack_api paces EVERY call by 3s, so cost scales with how many channels are unread rather than with the request. Documented as inherently slow: 1-5+ minutes on a large workspace."
+    },
+    "conversations_search_messages": {
+      "timeoutMs": 60000,
+      "reason": "A single search.messages call, but paced 3s by _slack_api and slow to return at count=100 on a large workspace - enough to pass 30s without being a fan-out."
+    }
+  },
   "ingest": {
     "kind": "slack_message",
     "label": "Slack",
