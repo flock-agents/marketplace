@@ -11,6 +11,6 @@
     "tasks",
     "conversations"
   ],
-  "minFlockVersion": "0.7.0",
+  "minFlockVersion": "0.8.2",
   "customizable": true
 }
