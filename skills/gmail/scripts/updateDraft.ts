@@ -37,20 +37,12 @@ import {
 } from "../../_shared/_google_helpers";
 import { SAVE_AND_CLOSE_SCRIPT } from "./_composeSave";
 import { invalidateCachedThreadForDraft } from "./_threadCache";
+import { bodyToComposeHtml } from "./_bodyHtml";
 
 // --- Pure splice (unit-tested, no browser) ---
 
 const QUOTE_MARKER_RE = /<blockquote[^>]*class="[^"]*gmail_quote[^"]*"/i;
 
-function escapeHtml(text: string): string {
-  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
-
-/** Plain text -> minimal Gmail-compatible compose HTML (one <div> per line). */
-function textToComposeHtml(text: string): string {
-  const lines = (text || "").split("\n");
-  return lines.map((line) => `<div>${line ? escapeHtml(line) : "<br>"}</div>`).join("");
-}
 
 /**
  * Compute the new compose HTML for `newBody`, preserving Gmail's quoted
@@ -63,7 +55,7 @@ function textToComposeHtml(text: string): string {
  */
 export function spliceDraftBody(existingHtml: string, newBody: string): string {
   const html = existingHtml || "";
-  const composedHtml = textToComposeHtml(newBody);
+  const composedHtml = bodyToComposeHtml(newBody);
   const quoteIdx = html.search(QUOTE_MARKER_RE);
   if (quoteIdx === -1) return composedHtml;
   return composedHtml + html.slice(quoteIdx);

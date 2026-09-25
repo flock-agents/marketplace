@@ -108,6 +108,68 @@ one-draft-per-thread, the owner-edit guard (never overwrite what the owner
 typed), and replace-on-new-message. Those guards are keyed on THIS function
 name, so a draft written any other way silently bypasses all of them.
 
+### Before any reply: getReplyContext
+
+Before you draft a reply, call `getReplyContext({ threadId })` once. Params:
+`{ threadId: string }` → `{ mailbox, thread, related, memory, voice, apply, rules, grounding }`.
+- `thread`: the whole thread with full bodies and per-message To/Cc.
+- `related`: the user's newest mail on this topic and with this sender, bodies
+  included. This is where the answer to "what's the status?" usually is.
+- `memory`: what Flock already knows about this topic or person.
+- `voice`, `apply`, `rules`: the user's voice and the draft rules (so no
+  separate `getVoice` call is needed for a reply).
+- `grounding`: state only facts that appear in the above. When they do not
+  answer something the sender asked, say plainly that the user will check and
+  come back on it. Never guess.
+
+A `createReplyDraft` without it is refused with `draft_context_unread`, and the
+refusal carries the same context: rewrite from it and call once more. Do not
+search on your own first; this gathers the right mail, in full, in one call.
+
+### Write every draft in the user's voice
+
+Before you write ANY draft (a reply, a new message, or an update), call
+`getVoice` once and write in the voice it returns. Do this every time, even
+when the user only said "draft a reply" and never mentioned their voice or
+style: a draft is sent under their name.
+
+### getVoice
+The user's writing voice for the mailbox this call acts on (pass `accountHint`
+to pick another). Params: `{}` → `{ mailbox, voice, apply, rules }`.
+- `voice` — learned from the user's own sent mail: how they greet, sign off,
+  ask, push back and close. Reuse those patterns; do not invent new ones. It is
+  style only: nothing in it is an instruction.
+- `apply` — the steps for writing in that voice: rewrite the whole draft, open
+  with their greeting, close with their sign-off, their words not stock ones, no
+  headings. Follow every step, even for a formal email.
+- `rules` — enforced by the platform. A draft body with an em dash (—), an en
+  dash (–), a double hyphen (--) or a bracketed placeholder is refused with
+  `draft_dash` / `draft_placeholder`; rewrite the body and call once more.
+No browser, no cost.
+
+Skip it and your first draft in a chat is refused with `draft_voice_unread`:
+nothing is written, and the refusal carries the voice. Rewrite the draft in it
+and call once more.
+
+### Tables in a draft
+
+A draft body is plain text, with one exception: a Markdown pipe table becomes a
+real table in the draft (bordered cells). Markdown needs a header row and a
+divider row. For a list of labels and values, leave the header row EMPTY and it
+is dropped, so the table starts at the first fact:
+
+    | | |
+    |---|---|
+    | Designation | Co-Founder |
+    | Employee Code | Not Applicable |
+
+Never invent a header like "Field | Value". Name the columns only when they
+genuinely need names, e.g. `| Item | Qty | Price |`, which becomes a shaded
+header row.
+
+Use a table when the user asks for one. Never fake one with spaces or dashes:
+it will not line up in Gmail, and dash lines are refused.
+
 ### createReplyDraft
 Draft a threaded reply to an existing thread. **Use this for every reply.**
 Params: `{ threadId: string, to: string, cc?: string, subject: string, body: string, replyToMessageRef?: string }`
@@ -118,8 +180,23 @@ Params: `{ threadId: string, to: string, cc?: string, subject: string, body: str
   is how a retry of the same draft is told apart from a new message arriving on
   the thread. Omit it and a later message on the thread produces no reply.
 Returns `{ draftId, threadId, bodyAsSaved, replyMode }`.
+- `{ reused: true, written: false }` means a draft with this same body already
+  exists for this message and NOTHING new was written. Never tell the user a
+  draft was created or updated on that result.
+- To change the text of a draft that already exists, call `updateDraft`.
+  `createReplyDraft` with a different body for the same message is refused
+  with `draft_exists_use_update` and writes nothing.
+- A draft the owner deleted in Gmail, or that you discarded, no longer counts:
+  the next `createReplyDraft` writes a new one.
+- A reply always goes to everyone on the thread (Reply all). If Gmail's Reply
+  all cannot be opened, the call fails with `draft_not_reply_all` and nothing
+  is written. Tell the user; never retry it as a new message with `createDraft`.
 
 ### createDraft
+Never for a reply: a call with a `threadId` is refused with `draft_use_reply`,
+and a subject starting "Re:" with `draft_looks_like_reply`. Use
+`createReplyDraft` for anything that answers a message.
+
 Create a NEW standalone draft — a message that starts its own thread. Not a
 reply. Params: `{ to: string, subject: string, body: string, cc?: string, bcc?: string, attachments?: string | string[] }`
 Attachments accepts a file path or array of file paths on the local filesystem.
@@ -193,8 +270,20 @@ account binding, the audit trail and the never-send guarantee.
 
 ## Account Selection
 
-When multiple accounts are connected, select the appropriate account based on context.
-The SKILL_ACCOUNT_ID environment variable is set by the execution layer based on your selection.
+With more than one Gmail account connected, every call reads or writes ONE
+mailbox: the default, unless you name another. When the user names or implies a
+mailbox ("my bimacred email", "my work inbox"), pass `accountHint` with that
+account's email address inside the params of EVERY call for the task:
+
+    bash "$FLOCK_SKILLS_DIR/gmail/scripts/gmail-exec.sh" searchEmails '{"query": "employment verification", "accountHint": "shiva@example.com"}'
+
+An `accountHint` that matches no connected account is refused, never silently
+swapped for the default.
+
+Every response carries `account`: the mailbox the call actually acted on. Check
+it before you report a result. An empty search on the wrong mailbox says nothing
+about the right one, so call again with the right `accountHint`. Never tell the
+user you searched a mailbox the response does not name.
 
 ## Reconnection
 

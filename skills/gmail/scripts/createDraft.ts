@@ -6,6 +6,7 @@ import {
 } from "../../_shared/_google_helpers";
 import { existsSync } from "fs";
 import { SAVE_AND_CLOSE_SCRIPT } from "./_composeSave";
+import { hasTable, bodyToComposeHtml, writeComposeHtmlScript } from "./_bodyHtml";
 
 const params = JSON.parse(process.env.SKILL_PARAMS || "{}");
 const to: string = params.to || "";
@@ -111,7 +112,10 @@ if (!to || !subject) {
     { action: "click", selector: "input[name=subjectbox]" },
     { action: "insertText", text: subject },
     { action: "click", selector: "div[aria-label*=\"Message\"]" },
-    { action: "insertText", text: bodyText },
+    // A Markdown table is written as HTML so it is a real table (_bodyHtml.ts).
+    hasTable(bodyText)
+      ? { action: "evaluate", script: writeComposeHtmlScript(bodyToComposeHtml(bodyText)) }
+      : { action: "insertText", text: bodyText },
     { action: "wait", delay: 1000 },
   ];
   await persistentInteract(persistentId, contentActions);
