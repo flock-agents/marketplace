@@ -272,8 +272,8 @@
       "iconUrl": "https://raw.githubusercontent.com/flock-agents/marketplace/v2/apps/slack-desk/icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "apps/slack-desk",
-      "latestVersion": "1.4.0",
-      "latestTag": "slack-desk-v1.4.0",
+      "latestVersion": "1.4.1",
+      "latestTag": "slack-desk-v1.4.1",
       "minFlockVersion": "0.8.2",
       "publishedAt": "2026-09-23T00:00:00Z",
       "updatedAt": "2026-09-24T12:00:00Z"

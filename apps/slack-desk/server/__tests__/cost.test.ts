@@ -128,10 +128,25 @@ describe("triage decides, and shadow mode proves it before it acts", () => {
     expect(tierOf(overheard, { channelWasPicked: true })).toBe("full");
   });
 
-  test("@here alone promotes out of skip to facts — weak evidence, not an ask", () => {
-    const att = attentionOf([m({ author: "U2", text: "<!here> deploying" })], dir);
-    expect(att.signals).toEqual(["broadcast"]);
-    expect(tierOf(att, { channelWasPicked: false })).toBe("facts");
+  test("@here / @channel earns FULL — it is addressed at the reader, and it is rare", () => {
+    // Filed with active-channel as "not an ask" in an earlier cut. Wrong: that reasoning is about
+    // a conversation nobody aimed at anyone, and @channel is aimed at the reader — Slack itself
+    // decided to interrupt them. "Please fill this in by Friday" is a task. Measured rare on real
+    // traffic (0 of 76 messages), so the volume cost of being generous here is close to nothing.
+    for (const t of ["<!here> can someone fill the form by Friday", "<!channel> deploy freeze today"]) {
+      const att = attentionOf([m({ author: "U2", text: t })], dir);
+      expect(att.signals).toContain("broadcast");
+      expect(tierOf(att, { channelWasPicked: false })).toBe("full");
+    }
+  });
+
+  test("an unaddressed BOT broadcast is still dropped — alert channels are not asks", () => {
+    // The generosity above is for humans. A bot @channel post does not name the owner, so it fails
+    // the bot filter before any of this — which is what keeps a noisy alert channel out.
+    const cfg = { channels: [], ignoreBots: true, lookbackHours: 24, triageMode: "enforce", maxBlocks: 40, firstRun: false } as any;
+    expect(isWorthRemembering(
+      { channelId: "C1", ts: ago(10), botId: "B1", text: "<!channel> build #42 failed" } as any, cfg, dir,
+    )).toBe(false);
   });
 
   test("a first run does NOT widen the tier — the window is the whole adaptation", async () => {

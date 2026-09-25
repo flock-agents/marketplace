@@ -235,16 +235,23 @@ export function attentionOf(
   // it earns facts (below), not silence. Weaker than a direct signal, and deliberately so: no ask
   // was directed at anyone here.
   if (opts.activeChannel) add("active-channel", 2);
-  // Weakest: addressed to everyone rather than to them.
-  if (msgs.some((m) => isBroadcast(m))) add("broadcast", 1);
+  // ADDRESSED TO EVERYONE IS STILL ADDRESSED TO THEM (owner, 2026-09-25). An earlier cut filed
+  // this with active-channel as "worth remembering, not an ask" — but that reasoning is about a
+  // conversation nobody aimed at anyone, and @channel is aimed at the reader. Slack itself decided
+  // to interrupt them. "Please fill this in by Friday" is a real task, and these are rare enough
+  // to be cheap: zero in 76 messages of real traffic. Bot-driven @channel spam does not reach here
+  // — `namesOwner` does not match a broadcast, so an unaddressed bot post fails the bot filter.
+  if (msgs.some((m) => isBroadcast(m))) add("broadcast", 4);
   return { signals, score };
 }
 
 /** How recently the owner must have spoken for it to count as interaction rather than history. */
 export const INTERACTION_RECENCY_DAYS = 14;
 
-/** Signals that mean an ask could be directed at the owner. Everything else is context. */
-const DIRECT_SIGNALS = new Set(["attended", "owner-spoke", "owner-named", "dm", "saved"]);
+/** Signals that mean an ask could be directed at the owner. Everything else is context.
+ *  `broadcast` belongs here: @here/@channel is addressed AT the reader, unlike merely happening
+ *  in a channel they are active in. */
+const DIRECT_SIGNALS = new Set(["attended", "owner-spoke", "owner-named", "dm", "saved", "broadcast"]);
 
 /**
  * What to spend on a conversation.
@@ -269,8 +276,9 @@ export function tierOf(
   // A picked channel is the owner saying "watch this", so it keeps tasks too.
   if (opts.channelWasPicked) return "full";
   // Worth remembering, but no ask was aimed at anyone: a task minted here would belong to someone
-  // else, and a board filling with other people's work is worse than a thinner one.
-  if (att.signals.includes("active-channel") || att.signals.includes("broadcast")) return "facts";
+  // else, and a board filling with other people's work is worse than a thinner one. This is the
+  // channel-level signal ONLY — a broadcast is handled above, because it names the reader.
+  if (att.signals.includes("active-channel")) return "facts";
   return "skip";
 }
 
