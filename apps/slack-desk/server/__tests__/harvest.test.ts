@@ -54,6 +54,12 @@ function fakePlatform(history: Record<string, any[]>, calls: string[] = []): { c
           return ok({ healthy: true, userId: "U-ME", user: "owner", team: "T", teamId: "T1", url: "https://acme.slack.com/" });
         }
         if (req.functionName === "getUserInfo") return ok({ user: { id: req.params.user, real_name: `Name-${req.params.user}` } });
+        // Names are resolved for the whole pass in ONE call now, not one per author — a serial
+        // getUserInfo loop spent a lease and one of the account's 60 daily reads per person.
+        if (req.functionName === "users_list") {
+          const wanted = String(req.params?.users ?? "").split(",").filter(Boolean);
+          return ok({ users: wanted.map((id) => ({ id, real_name: `Name-${id}` })), count: wanted.length, nextCursor: "" });
+        }
         calls.push(`${req.functionName}:${req.params.channel}:${req.accountHint}`);
         return ok(history[req.params.channel] ?? []);
       },
@@ -152,6 +158,7 @@ describe("harvest — one workspace's daily pass", () => {
           calls.push(req.functionName);
           if (req.functionName === "checkTokenHealth") return ok({ healthy: true, userId: "U-ME", url: "https://acme.slack.com/" });
           if (req.functionName === "getUserInfo") return ok({ user: { id: req.params.user, real_name: `Name-${req.params.user}` } });
+          if (req.functionName === "users_list") return ok({ users: [], count: 0, nextCursor: "" });
           if (req.functionName === "conversations_unreads") return ok([{ ts: ago(400), channel: "D1", user: "U9", text: "dm to me" }]);
           if (req.functionName === "conversations_search_messages") {
             // Real search.messages replies are `{matches:[…]}`, not a bare array. Normalising
@@ -170,13 +177,20 @@ describe("harvest — one workspace's daily pass", () => {
     expect(out.skipped).toBeUndefined();
     // "who am I" is answered by auth.test (checkTokenHealth), not by users.info with no argument —
     // the connector validates `user` and refused that call every time, so mentions never ran.
-    expect(calls.filter((c) => c !== "getUserInfo")).toEqual([
+    expect(calls.filter((c) => c !== "getUserInfo" && c !== "users_list")).toEqual([
       "conversations_unreads",
       "checkTokenHealth",
       "conversations_search_messages",   // mentions: where the owner was tagged
       "conversations_search_messages",   // engaged: where the owner has been speaking
       "saved_list",
-      "conversations_history",           // …and the channel those searches discovered
+      "channels_list",                   // membership: the channels the owner is IN, read or not
+      // …and then the CONVERSATIONS those reads named. Not just the search hits: the DM itself
+      // is read too, because `conversations_unreads` returns only what is UNREAD — an ask the
+      // owner already opened in Slack would otherwise never be seen at all — and the channel a
+      // saved item lives in is read for the same reason.
+      "conversations_history",           // D1, the DM
+      "conversations_history",           // C7, where a search found a mention
+      "conversations_history",           // C9, where the saved item lives
     ]);
     // ...and ONCE: the workspace's identity is cached in the store, so building the blocks after
     // the read does not ask again.
@@ -185,9 +199,11 @@ describe("harvest — one workspace's daily pass", () => {
     // Both searches surface the SAME C7 match here and the store dedupes it on (channel, ts) —
     // overlapping discovery sources must not double-count a message.
     expect(out.newMessages).toBe(4);
-    // THE POINT OF THE DISCOVERY PASS: it read a channel nobody picked, because the owner is
-    // demonstrably part of the conversation there.
-    expect(out.channelsRead).toBe(1);
+    // THE POINT OF THE DISCOVERY PASS: it read conversations nobody picked, because the owner is
+    // demonstrably part of them — the DM, the channel a mention was found in, and the channel the
+    // saved item lives in. Three, not one: reading the DM's own history is what makes an ask the
+    // owner had already opened in Slack visible at all, since unreads returns only the unread.
+    expect(out.channelsRead).toBe(3);
   });
 
   test("with no picker, the channels the OWNER speaks in are found and read in full", async () => {
@@ -282,7 +298,7 @@ describe("harvest — one workspace's daily pass", () => {
     expect(out.errors).toBeGreaterThan(0);
   });
 
-  test("DM unreads are scoped to IM — reading every channel type is documented as minutes-slow", async () => {
+  test("DM unreads cover group DMs too — a four-person DM is where nobody needs to @-mention", async () => {
     let params: any = null;
     const ctx = {
       appId: "slack-desk", pairedAgent: null, dataDir: ".", configured: true,
@@ -295,7 +311,7 @@ describe("harvest — one workspace's daily pass", () => {
       memory: { extract: async () => ok(undefined as unknown) },
     } as unknown as PlatformContext;
     await harvestOnce(ACCT, readConfig({ channels: [] }), { platform: ctx });
-    expect(params?.channel_types).toBe("im");
+    expect(params?.channel_types).toBe("im,mpim");
   });
 
   test("one activity source failing costs that source, not the pass", async () => {
@@ -381,7 +397,7 @@ describe("harvest — one workspace's daily pass", () => {
     const spoke = toBlock(
       [{ channelId: "C1", ts: "1758000000.000100", author: "U-ME", text: "deploying now" }], dir,
     ) as any;
-    expect(spoke.context).toBeUndefined();
+    expect((spoke.context as any)?.addressing).toBeUndefined();
 
     // With no owner id there is nothing to be addressed to — say nothing.
     const blind = toBlock(

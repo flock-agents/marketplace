@@ -73,8 +73,42 @@ async function resolveNames(
 ): Promise<Map<string, string>> {
   const names = getUserNames(accountId, userIds);
   const missing = userIds.filter((id) => !names.has(id));
+  if (missing.length === 0) return names;
 
-  for (const id of missing) {
+  // ONE CALL FOR THE WHOLE ROSTER, NOT ONE PER PERSON.
+  //
+  // This was a serial loop of `getUserInfo`, one per unresolved author — and each one takes a
+  // single-flight account lease and spends one of the account's 60 daily reads. On a first run
+  // with a few hundred new authors that was the largest read cost in the app, and it ran BEFORE
+  // any extraction, so the pass could exhaust its budget without remembering anything.
+  //
+  // `users.list` has no server-side id filter, so the connector pages and filters client-side —
+  // which means this is cheap for a normal workspace and capped rather than unbounded for a huge
+  // one. Whatever it cannot answer falls back to the per-user lookup below.
+  if (missing.length > 1) {
+    const res = await deps.platform.connectors.exec({
+      skillId: "slack", functionName: "users_list",
+      params: { users: missing.join(","), limit: 200 },
+      accountHint: accountId,
+      timeoutMs: 120_000,
+    });
+    if (res.ok) {
+      const rows: any[] = Array.isArray((res.data as any)?.users) ? (res.data as any).users
+        : Array.isArray(res.data) ? (res.data as any) : [];
+      for (const u of rows) {
+        if (typeof u?.id !== "string") continue;
+        setUserName(accountId, u.id, pickName(u), Boolean(u.is_bot));
+        const n = pickName(u);
+        if (n) names.set(u.id, n);
+      }
+    } else {
+      console.warn(`[slack-desk] users_list: ${res.reason}`);
+    }
+  }
+
+  // Anyone the batch could not name — a deactivated account, a page the cap cut off — is worth
+  // one direct lookup each. Bounded, because the batch has already done the bulk.
+  for (const id of missing.filter((m) => !names.has(m))) {
     const res = await deps.platform.connectors.exec({
       skillId: "slack", functionName: "getUserInfo", params: { user: id }, accountHint: accountId,
     });
@@ -83,16 +117,25 @@ async function resolveNames(
       continue;
     }
     const u = (res.data as any)?.user ?? res.data;
-    // Slack's own order of preference: what a human chose to be called, then their real name,
-    // then the handle. An id is never a name — leaving it unresolved is better than pretending.
-    const name: string | null =
-      (typeof u?.display_name === "string" && u.display_name) ||
-      (typeof u?.real_name === "string" && u.real_name) ||
-      (typeof u?.name === "string" && u.name) || null;
+    const name = pickName(u);
+    // CACHE THE NEGATIVE. The comment here used to claim a failed lookup was remembered as "no
+    // name"; it was not — `setUserName` ran only on success, so an unresolvable id was retried
+    // every pass, spending a lease each time. Worse, the block then read `U123: …` one day and
+    // `Alice: …` the next, which changed the text hash and re-extracted the whole thread with
+    // day one's facts attributed to an opaque id.
     setUserName(accountId, id, name, Boolean(u?.is_bot));
     if (name) names.set(id, name);
   }
   return names;
+}
+
+/** Slack's own order of preference: what a human chose to be called, then their real name, then
+ *  the handle. An id is never a name — leaving it unresolved is better than pretending. */
+function pickName(u: any): string | null {
+  return (typeof u?.display_name === "string" && u.display_name)
+    || (typeof u?.real_name === "string" && u.real_name)
+    || (typeof u?.name === "string" && u.name)
+    || null;
 }
 
 /** Resolve everything one harvest pass needs to attribute its messages. */

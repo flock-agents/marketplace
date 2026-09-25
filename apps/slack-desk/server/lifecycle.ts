@@ -6,7 +6,7 @@
 
 import type { AppLifecycleHooks, ProgressItem } from "@flock/app-sdk";
 import { getInit, listInit, markInitFinished, markInitStarted, harvestRanToday } from "./store";
-import { dayKey, harvestOnce, readConfig } from "./harvest";
+import { dayKey, harvestOnce, readConfig, FIRST_RUN_MAX_BLOCKS } from "./harvest";
 
 /** How far back the FIRST harvest reads. Steady state is 24h; day one has a backlog. */
 const FIRST_RUN_LOOKBACK_HOURS = 14 * 24;
@@ -58,7 +58,18 @@ export const slackDeskHooks: AppLifecycleHooks = {
         // email-desk draws the same distinction (a 14-day onboarding window) for the same reason.
         // Everything else is deliberately identical to the daily recipe — same sources, same
         // filters — so there is no separate first-run path to keep in step.
-        const cfg = { ...readConfig(undefined), lookbackHours: FIRST_RUN_LOOKBACK_HOURS };
+        // FIRST-RUN TIERING, and it is not a detail. `readConfig(undefined)` yields NO picked
+        // channels, so on a first pass every channel is discovered — and under the tier rules
+        // every conversation without a direct owner signal would land in `skip`. The one harvest
+        // whose whole job is to make the agent visibly know something would extract almost
+        // nothing. So a first run treats discovered channels as picked and lets the BLOCK CAP
+        // bound the spend instead of the tier, which is what email-desk's onboarding does.
+        const cfg = {
+          ...readConfig(undefined),
+          lookbackHours: FIRST_RUN_LOOKBACK_HOURS,
+          firstRun: true,
+          maxBlocks: FIRST_RUN_MAX_BLOCKS,
+        };
         const out = await harvestOnce(accountId, cfg, { platform: ctx.platform });
 
         // "SET UP" MUST MEAN SOMETHING WAS READ.
@@ -69,7 +80,12 @@ export const slackDeskHooks: AppLifecycleHooks = {
         // `finishedAt`, so the first failed pass was also the last one. A pass that read
         // nothing because it was refused is recorded as failed, which leaves it retryable on
         // the next boot or connect; a genuinely quiet workspace read fine and is done.
-        if (out.errors > 0 && out.fetched === 0) {
+        // A pass that stopped on its read budget has not finished initialising either — it must
+        // stay pending so the next boot or connect resumes it, exactly like a refused pass.
+        if (out.stopReason === "reads-exhausted") {
+          console.warn(`[slack-desk] initialize for ${accountId} stopped on its read budget — will resume`);
+          markInitFinished(accountId, "failed", "Still reading your Slack");
+        } else if (out.errors > 0 && out.fetched === 0) {
           console.warn(`[slack-desk] initialize read nothing for ${accountId} (${out.errors} refused call(s)) — will retry`);
           markInitFinished(accountId, "failed", "Could not read Slack yet");
         } else {

@@ -45,8 +45,9 @@
       "description": "Once a day, reads the channels you chose and remembers what matters — plus anything that reads like a task you have not done. No AI cost beyond the daily extraction; nothing is ever posted.",
       "trigger": {
         "type": "schedule",
-        "cron": "0 5 * * *"
+        "cron": "17 * * * *"
       },
+      "_cronComment": "HOURLY DISPATCH, DAILY WORK (2026-09-25). The work is still once a day — harvestRanToday gates it — but a pass that stops on its read or block budget leaves the day UNCLAIMED so a later tick finishes it. At 0 5 * * * there was no later tick: a capped first landing waited until tomorrow. Email Desk resolved the same tension the same way. :17 rather than :00 to sit off the hour with everything else.",
       "executionMode": "app-relay",
       "_triggerComment": "schedule + app-relay (executor: cron.ts dispatchScheduledAppRelays). NOT event + app-relay: this app fetches its own Slack data through /apps/:id/skill-exec, so a platform connector poll on its behalf would be a second read of the same messages.",
       "configSchema": [
@@ -70,6 +71,21 @@
           "type": "number",
           "label": "How far back to read each day (hours)",
           "default": 24
+        },
+        {
+          "key": "enforceTriage",
+          "type": "boolean",
+          "label": "Only remember conversations that involve you",
+          "help": "Off: read everything in the channels above and log what would have been skipped. On: skip conversations in channels you did not pick where you are neither mentioned nor speaking.",
+          "default": false,
+          "_comment": "OFF IS THE DEFAULT ON PURPOSE. Off computes the same verdict and ignores it, so a week of logs says what turning it on WOULD have cost in memory before anyone risks it. A channel picked above always keeps full extraction either way — a pick is the owner saying watch this."
+        },
+        {
+          "key": "maxBlocks",
+          "type": "number",
+          "label": "Most conversations to extract in one pass",
+          "default": 40,
+          "_comment": "A ceiling on a day's spend. A pass that hits it defers the rest, records why it stopped, and leaves the day claimable so the next hourly tick resumes it — ranked so what concerns the owner goes first and a deferred conversation ages into priority."
         }
       ]
     }

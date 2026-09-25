@@ -3,7 +3,7 @@
   "slug": "slack",
   "icon": "icon.svg",
   "description": "Full Slack workspace integration \u2014 read channels, search messages, manage saved items, post messages, add reactions, and manage user groups. Equivalent to the korotovsky/slack-mcp-server feature set, via browser session auth.",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "author": "flock",
   "category": "integration",
   "tags": [
@@ -24,6 +24,10 @@
     }
   ],
   "functions": {
+    "users_list": {
+      "timeoutMs": 120000,
+      "reason": "Unfiltered this is a single users.list call, but _slack_api paces every call by 3s and a cold call first extracts tokens from the browser session (~20s), which on its own passes the 30s default. With a `users` filter it keeps paging until every requested id is found \u2014 users.list has no server-side id filter, so a wanted id may sit on any page \u2014 and max_pages caps that at 20 pages of ~4s each. 120s covers that capped worst case without needing conversations_unreads' fan-out budget."
+    },
     "conversations_unreads": {
       "timeoutMs": 300000,
       "reason": "Fans out to one conversations.history call per unread channel (max_channels defaults to 50) and _slack_api paces EVERY call by 3s, so cost scales with how many channels are unread rather than with the request. Documented as inherently slow: 1-5+ minutes on a large workspace."
