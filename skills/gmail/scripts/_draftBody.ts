@@ -39,6 +39,11 @@ export function extractDraftBody(bodyHtml: string): string {
   const composedHtml = quoteIdx === -1 ? html : html.slice(0, quoteIdx);
 
   return composedHtml
+    // A table (see _bodyHtml.ts) reads back as one "| a | b |" line per row,
+    // not as its cells' text run together.
+    .replace(/<tr[^>]*>\s*<t[dh][^>]*>/gi, "\n| ")
+    .replace(/<\/t[dh]>\s*<t[dh][^>]*>/gi, " | ")
+    .replace(/<\/t[dh]>\s*<\/tr>/gi, " |\n")
     .replace(/<br\s*\/?>/gi, "\n")
     .replace(/<\/div>/gi, "\n")
     .replace(/<div[^>]*>/gi, "")

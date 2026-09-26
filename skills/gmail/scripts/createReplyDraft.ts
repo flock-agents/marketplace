@@ -21,6 +21,8 @@
 import { draftRowForThread, DRAFT_ROWS_EXPR, type DraftListRow } from "./_draftRows";
 import { gmailViewUrl, pollInPageScript, parsePollResult, DRAFTS_VIEW_READY_EXPR, NAV_TO_DRAFTS_SCRIPT } from "./_gmailNav";
 import { extractDraftBody, COMPOSE_BODY_SCRAPE } from "./_draftBody";
+import { hasTable, bodyToComposeHtml, writeComposeHtmlScript } from "./_bodyHtml";
+import { findReplyAll, findReplyAllMenuItem } from "./_replyAll";
 import { SAVE_AND_CLOSE_SCRIPT, waitForDraftSavedScript } from "./_composeSave";
 import {
   errorJson,
@@ -146,25 +148,63 @@ function runScript(): void {
       // Falls back to plain Reply when no Reply-all control is present, which is
       // Gmail's own behaviour for a single-recipient thread -- there, the two are
       // identical by construction.
-      const replyOpenActions = [
+      // FINDING "REPLY ALL" (owner, 2026-09-23). Live, a thread with two people
+      // in Cc was drafted to the sender alone: Gmail's reply-all control at the
+      // foot of a thread is a text link with neither of the attributes this used
+      // to look for, so it fell back to plain Reply. The control is found by
+      // attribute or by its text, "Reply to all" or "Reply all" (_replyAll.ts,
+      // matched against the live element), then through the newest message's
+      // "More" menu. When the executor says the thread needs
+      // reply-all (requireReplyAll), plain Reply is never the fallback: the script
+      // stops before typing anything, so no draft is written without the Cc.
+      const requireReplyAll = params.requireReplyAll === true || params.requireReplyAll === "true";
+      const findReplyAllScript = `(() => {
+          const visible = (el) => !!el && el.offsetParent !== null;
+          const lastOf = (sel) => { const all = [...document.querySelectorAll(sel)].filter(visible); return all[all.length - 1] || null; };
+          const direct = (${findReplyAll.toString()})(document);
+          if (direct) { direct.click(); window.__flockReplyMode = "reply-all"; return JSON.stringify({ step: "direct" }); }
+          const more = lastOf('[aria-label="More message options"]') || lastOf('[aria-label="More"]') || lastOf('[data-tooltip="More"]');
+          if (more) { more.click(); window.__flockReplyMode = "menu"; return JSON.stringify({ step: "menu-opened" }); }
+          window.__flockReplyMode = "none";
+          return JSON.stringify({ step: "none" });
+        })()`;
+      const settleReplyModeScript = `(() => {
+          const visible = (el) => !!el && el.offsetParent !== null;
+          let mode = window.__flockReplyMode || "none";
+          if (mode === "menu") {
+            const item = (${findReplyAllMenuItem.toString()})(document);
+            if (item) { item.click(); mode = "reply-all"; }
+            else { document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); mode = "none"; }
+          }
+          if (mode === "reply-all") return JSON.stringify({ ok: true, mode });
+          if (${requireReplyAll ? "true" : "false"}) return JSON.stringify({ ok: false, mode: "none" });
+          const all = [...document.querySelectorAll('[aria-label="Reply"]')].filter(visible);
+          const one = all[all.length - 1] || document.querySelector('.T-I-JW[data-tooltip="Reply"]');
+          if (one) { one.click(); return JSON.stringify({ ok: true, mode: "reply" }); }
+          return JSON.stringify({ ok: false, message: "no reply control found" });
+        })()`;
+      const openResult = await persistentInteract(persistentId, [
         { action: "waitForSelector", selector: `[aria-label="Reply"],[aria-label="Reply all"],.T-I-JW[data-tooltip="Reply"]`, delay: 20000 },
-        { action: "evaluate", script: `(() => {
-            const pick = (sel) => { const all = document.querySelectorAll(sel); return all[all.length - 1] || null; };
-            const all = pick('[aria-label="Reply all"]') || pick('[data-tooltip="Reply all"]');
-            if (all) { all.click(); return JSON.stringify({ok:true, mode:"reply-all"}); }
-            const one = pick('[aria-label="Reply"]') || document.querySelector('.T-I-JW[data-tooltip="Reply"]');
-            if (one) { one.click(); return JSON.stringify({ok:true, mode:"reply"}); }
-            return JSON.stringify({ok:false, message:"no reply control found"});
-          })()` },
-        { action: "waitForSelector", selector: `div[aria-label*="Message"][contenteditable=true]`, delay: 15000 },
-      ];
-      const openResult = await persistentInteract(persistentId, replyOpenActions);
-      openMode = (() => {
+        { action: "evaluate", script: findReplyAllScript },
+        { action: "wait", delay: 800 },
+        { action: "evaluate", script: settleReplyModeScript },
+      ]);
+      const opened = (() => {
         try {
-          const parsed = JSON.parse(typeof openResult?.content === "string" ? openResult.content : "{}");
-          return typeof parsed?.mode === "string" ? parsed.mode : "";
-        } catch { return ""; }
+          return JSON.parse(typeof openResult?.content === "string" ? openResult.content : "{}") || {};
+        } catch { return {}; }
       })();
+      if (opened.ok !== true) {
+        await persistentClose(persistentId).catch(() => {});
+        if (requireReplyAll && opened.mode === "none") {
+          errorJson("NOT_REPLY_ALL", "Could not open Reply all on this thread, and a plain Reply would leave out people on it. Nothing was typed and no draft was written.");
+        }
+        errorJson("BROWSER_ERROR", opened.message || "Could not open a reply on this thread.");
+      }
+      openMode = typeof opened.mode === "string" ? opened.mode : "";
+      await persistentInteract(persistentId, [
+        { action: "waitForSelector", selector: `div[aria-label*="Message"][contenteditable=true]`, delay: 15000 },
+      ]);
 
       // No recipient editing: Gmail's Reply all already set them (see above).
       // NO SUBJECT STEP. Gmail's Reply all already sets the thread's own
@@ -181,9 +221,13 @@ function runScript(): void {
       // step built on these helpers actually kills the whole draft.
 
       // Body
+      // A body with a Markdown table is written as HTML so the table is real
+      // (_bodyHtml.ts); every other body is typed, exactly as before.
       const bodyActions = [
         { action: "click", selector: `div[aria-label*="Message"][contenteditable=true]` },
-        { action: "insertText", text: bodyText },
+        hasTable(bodyText)
+          ? { action: "evaluate", script: writeComposeHtmlScript(bodyToComposeHtml(bodyText)) }
+          : { action: "insertText", text: bodyText },
         // Belt-and-braces, NOT the fix. insertText delivers the text and fires
         // `input` but not keydown/keyup, and this pair was once believed to be
         // why Drafts stayed empty -- Gmail supposedly never being told the

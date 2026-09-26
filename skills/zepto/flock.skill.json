@@ -3,16 +3,97 @@
   "slug": "zepto",
   "icon": "icon.svg",
   "description": "Search products, manage cart, and place grocery orders on Zepto",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "flock",
   "category": "integration",
-  "tags": ["grocery", "delivery", "shopping", "zepto"],
+  "tags": [
+    "grocery",
+    "delivery",
+    "shopping",
+    "zepto"
+  ],
   "minFlockVersion": "0.7.0",
   "tier": "installable",
-  "requires": {
+  "requires": [
+    {
+      "type": "browser_session",
+      "service": "zepto",
+      "description": "Log in to Zepto via the dashboard browser session to access grocery delivery",
+      "recommended": true,
+      "rationale": "Zepto has no public API \u2014 a saved browser session is how the agent shops on your behalf."
+    }
+  ],
+  "auth": {
     "type": "browser_session",
-    "service": "zepto",
-    "description": "Log in to Zepto via the dashboard browser session to access grocery delivery",
-    "rationale": "Zepto has no public API — a saved browser session is how the agent shops on your behalf."
+    "browser": {
+      "sessionName": "zepto",
+      "setup_instructions": "Log in to your Zepto account via the dashboard. Ensure your delivery address is set to the correct location before connecting."
+    }
+  },
+  "enabled": true,
+  "hasScripts": true,
+  "id": "zepto",
+  "networkAccess": true,
+  "paramSchema": [],
+  "rateLimits": {
+    "search-products": {
+      "limit": 60,
+      "abuseThreshold": 300
+    },
+    "add-to-cart": {
+      "limit": 30,
+      "abuseThreshold": 150
+    },
+    "view-cart": {
+      "limit": 60,
+      "abuseThreshold": 300
+    },
+    "remove-from-cart": {
+      "limit": 30,
+      "abuseThreshold": 150
+    },
+    "track-order": {
+      "limit": 60,
+      "abuseThreshold": 300
+    },
+    "view-order-history": {
+      "limit": 30,
+      "abuseThreshold": 150
+    },
+    "checkout": {
+      "abuseThreshold": 30,
+      "limit": 10
+    },
+    "keep-alive": {
+      "abuseThreshold": 600,
+      "limit": 120
+    }
+  },
+  "requiresAny": false,
+  "requiresInstance": true,
+  "scope": "per-agent",
+  "secretRefs": [],
+  "security": {
+    "allowedFunctions": [
+      "search-products",
+      "add-to-cart",
+      "view-cart",
+      "remove-from-cart",
+      "track-order",
+      "view-order-history",
+      "checkout",
+      "keep-alive"
+    ],
+    "trustLevel": "third-party",
+    "networkEndpoints": [
+      {
+        "hostname": "www.zepto.com",
+        "purpose": "Zepto grocery delivery",
+        "methods": [
+          "GET",
+          "POST"
+        ]
+      }
+    ]
   }
 }

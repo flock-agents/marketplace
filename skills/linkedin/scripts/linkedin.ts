@@ -58,10 +58,7 @@ function checkError(httpCode: number, body: any, context: string): void {
 
 function checkSessionExpired(pageContent: string): void {
   const { sessionName, agentId } = getSessionAndAgent();
-  // Only mark outdated if the page is a full auth redirect, not just containing the word "login" in nav/footer
-  const isAuthWall = /"authwall"/i.test(pageContent) || /session_redirect/i.test(pageContent) ||
-    /^[\s\S]{0,2000}(sign in to linkedin|log in to linkedin|join now|create account)/i.test(pageContent);
-  if (isAuthWall) {
+  if (/sign in|log in|login|session_redirect|"authwall"/i.test(pageContent)) {
     fetch(`${FLOCK_API}/api/internal/browser-sessions/${sessionName}/mark-outdated`, {
       method: "POST",
       headers: {
@@ -423,9 +420,13 @@ async function cmdComments(postUrl: string): Promise<void> {
   try { parsed = JSON.parse(String(content)); } catch { parsed = null; }
   if (parsed && typeof parsed === "object") {
     console.log(JSON.stringify({ source: "linkedin_post_comments", url: postUrl, ...parsed }));
-  } else {
-    console.log(JSON.stringify({ source: "linkedin_post_comments", url: postUrl, error: true, code: "PARSE_ERROR", message: "Could not parse extracted comments", raw: content }));
+    return;
   }
+  // Unparseable content: if the page fell back to an auth/login wall (session died mid-session,
+  // or the post redirected to authwall while the feed didn't), report SESSION_OUTDATED + mark the
+  // session — never dump the raw login page into `raw`. checkSessionExpired exits on a match.
+  checkSessionExpired(String(content));
+  console.log(JSON.stringify({ source: "linkedin_post_comments", url: postUrl, error: true, code: "PARSE_ERROR", message: "Could not parse extracted comments", raw: content }));
 }
 
 async function cmdReplyComment(
@@ -518,7 +519,16 @@ async function cmdReplyComment(
   const openRes = await persistentInteract(persistentId, settleActions, false, openReplyScript);
   let open: any;
   try { open = JSON.parse(String(openRes?.content ?? "")); } catch { open = null; }
-  if (!open || !open.found) {
+  // Unparseable Step-1 result usually means the post fell back to an auth wall — surface
+  // SESSION_OUTDATED (and mark the session) instead of a misleading COMMENT_NOT_FOUND.
+  // checkSessionExpired exits the process on a match; if it returns, fall through to the
+  // COMMENT_NOT_FOUND branch below (which performs the single session close).
+  if (!open) {
+    await persistentClose(persistentId);
+    checkSessionExpired(String(openRes?.content ?? ""));
+    errorJson("COMMENT_NOT_FOUND", "Could not read the post's comments (unexpected response). Re-read with 'comments' and retry.");
+  }
+  if (!open.found) {
     await persistentClose(persistentId);
     errorJson("COMMENT_NOT_FOUND", `Could not find the target comment on the post${targetCommentId ? ` (id ${targetCommentId})` : targetName ? ` by "${targetName}"` : ""}. It may have been deleted, or the commentId/name didn't match — re-read with 'comments' and retry.`);
   }

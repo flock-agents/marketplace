@@ -1,6 +1,8 @@
 ---
 name: LinkedIn
 description: Read notifications, browse feed, publish posts, send messages, check messages, monitor post comments, and reply to comments on LinkedIn
+icon: 💼
+tags: [social, linkedin, professional]
 category: integration
 requiresInstance: true
 auth:
@@ -38,7 +40,7 @@ curl -s -X POST http://localhost:35625/api/internal/skill-exec \
   -H "Authorization: Bearer $FLOCK_AUTH_TOKEN" \
   -d '{
     "skillId": "linkedin",
-    "scriptName": "linkedin.sh",
+    "scriptName": "linkedin.ts",
     "args": ["linkedin", "<command>", ...commandArgs],
     "agentId": "'"$FLOCK_AGENT_ID"'"
   }'
@@ -51,55 +53,55 @@ For example, to read a post's comments: `"args": ["linkedin", "comments", "https
 ### notifications
 Get recent LinkedIn notifications.
 
-    linkedin.sh notifications
+    linkedin.ts notifications
 
 ### feed
 Get recent posts from your feed.
 
-    linkedin.sh feed [count]
+    linkedin.ts feed [count]
 
 ### profile
 Get a user's profile info.
 
-    linkedin.sh profile <profileUrl>
+    linkedin.ts profile <profileUrl>
 
 ### post
 Publish a LinkedIn post using a persistent browser session.
 
-    linkedin.sh post "<text>"
+    linkedin.ts post "<text>"
 
 Returns: `{success: true/false, message: "..."}`
 
 ### draft-post
 Draft a LinkedIn post (saves locally, does NOT publish).
 
-    linkedin.sh draft-post "<text>"
+    linkedin.ts draft-post "<text>"
 
 Returns: `{draft: {text, charCount, savedTo}}`
 
 ### send-message
 Send a direct message to a LinkedIn user via their profile URL.
 
-    linkedin.sh send-message "<profileUrl>" "<message>"
+    linkedin.ts send-message "<profileUrl>" "<message>"
 
 Returns: `{success: true/false, message: "..."}`
 
 ### messages
 Check recent LinkedIn messages.
 
-    linkedin.sh messages
+    linkedin.ts messages
 
 ### search
 Search LinkedIn for people or content.
 
-    linkedin.sh search "<query>" [type]
+    linkedin.ts search "<query>" [type]
 
 Types: people, posts, companies.
 
 ### comments
 Read the comments on a specific LinkedIn post and return structured engagement data (commenter names, headlines, profile URLs, and comment text). Read-only — use it to surface who's engaging with a post and to draft replies.
 
-    linkedin.sh comments "<postUrl>"
+    linkedin.ts comments "<postUrl>"
 
 `<postUrl>` is a LinkedIn post/activity URL — it must contain `/posts/`, `/feed/update/`, or an `activity-<id>` segment (e.g. `https://www.linkedin.com/posts/...-activity-1234567890-abcd` or `https://www.linkedin.com/feed/update/urn:li:activity:1234567890/`).
 
@@ -147,7 +149,7 @@ Notes:
 ### reply-comment
 Post a **threaded reply under a specific comment** on a LinkedIn post. Locates the target comment (by its `commentId` from `comments`, else the commenter's name), opens THAT comment's inline reply box, types, and submits.
 
-    linkedin.sh reply-comment "<postUrl>" "<replyText>" "[commentId]" "[commenterName]"
+    linkedin.ts reply-comment "<postUrl>" "<replyText>" "[commentId]" "[commenterName]"
 
 - `<postUrl>` — the post/activity URL (same format as `comments`).
 - `<replyText>` — the reply body (≤1250 chars).
