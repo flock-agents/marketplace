@@ -173,6 +173,24 @@ Params:
 
 Returns: `{ query, count, users[] }` — each user has `dm_channel_id`.
 
+#### `users_list`
+List workspace users in bulk — use this instead of one `getUserInfo` per user when you need to
+name many authors. No search string required.
+
+Params:
+- `users` — comma-separated user IDs (or a JSON array) to keep; omit to list everyone
+- `limit` — members per page (default 200, max 1000)
+- `cursor` — page cursor from a previous `nextCursor`
+- `max_pages` — pages to walk when `users` is set (default 10, max 20)
+
+Returns: `{ users[], count, nextCursor, hasMore, pages }` — each user has `id`, `name`,
+`real_name`, `display_name`, `is_bot`, `deleted`.
+
+Slack's `users.list` has no server-side ID filter, so `users` filters each page locally: the
+pages are still fetched in full. Because a wanted ID may sit on any page, passing `users` walks
+pages until every requested ID is found (or `max_pages` is hit), so one call answers the whole
+set. With no `users` it returns a single page and you drive paging with `nextCursor`.
+
 ---
 
 ### Saved / Later

@@ -249,8 +249,8 @@
       "iconUrl": "https://raw.githubusercontent.com/flock-agents/marketplace/main/skills/slack/icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "skills/slack",
-      "latestVersion": "1.4.0",
-      "latestTag": "slack-v1.4.0",
+      "latestVersion": "1.5.1",
+      "latestTag": "slack-v1.5.1",
       "minFlockVersion": "0.7.0",
       "publishedAt": "2026-09-10T11:18:08Z",
       "updatedAt": "2026-09-23T00:00:00Z"
@@ -272,8 +272,8 @@
       "iconUrl": "https://raw.githubusercontent.com/flock-agents/marketplace/v2/apps/slack-desk/icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "apps/slack-desk",
-      "latestVersion": "1.2.1",
-      "latestTag": "slack-desk-v1.2.1",
+      "latestVersion": "1.4.2",
+      "latestTag": "slack-desk-v1.4.2",
       "minFlockVersion": "0.8.2",
       "publishedAt": "2026-09-23T00:00:00Z",
       "updatedAt": "2026-09-24T12:00:00Z"

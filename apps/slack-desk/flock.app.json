@@ -45,8 +45,9 @@
       "description": "Once a day, reads the channels you chose and remembers what matters — plus anything that reads like a task you have not done. No AI cost beyond the daily extraction; nothing is ever posted.",
       "trigger": {
         "type": "schedule",
-        "cron": "0 5 * * *"
+        "cron": "17 * * * *"
       },
+      "_cronComment": "HOURLY DISPATCH, DAILY WORK (2026-09-25). The work is still once a day — harvestRanToday gates it — but a pass that stops on its read or block budget leaves the day UNCLAIMED so a later tick finishes it. At 0 5 * * * there was no later tick: a capped first landing waited until tomorrow. Email Desk resolved the same tension the same way. :17 rather than :00 to sit off the hour with everything else.",
       "executionMode": "app-relay",
       "_triggerComment": "schedule + app-relay (executor: cron.ts dispatchScheduledAppRelays). NOT event + app-relay: this app fetches its own Slack data through /apps/:id/skill-exec, so a platform connector poll on its behalf would be a second read of the same messages.",
       "configSchema": [
@@ -70,6 +71,21 @@
           "type": "number",
           "label": "How far back to read each day (hours)",
           "default": 24
+        },
+        {
+          "key": "enforceTriage",
+          "type": "boolean",
+          "label": "Only remember conversations that involve you",
+          "help": "On (recommended): reads conversations you were tagged in, recently took part in, or that happen in channels you are very active in — plus any channel you picked above. Off: reads everything in range and logs what it would have skipped, which costs considerably more.",
+          "default": true,
+          "_comment": "ON BY DEFAULT (owner, 2026-09-25). Slack is high volume and most of it concerns nobody in particular, so reading everything is a guaranteed cost for a speculative benefit — the conservative default is to read LESS. Off is a diagnostic: it computes the same verdict, extracts everything at full price anyway, and logs what would have been skipped, which is the only honest way to measure what the rule costs in memory before trusting it."
+        },
+        {
+          "key": "maxBlocks",
+          "type": "number",
+          "label": "Most conversations to extract in one pass",
+          "default": 40,
+          "_comment": "A ceiling on a day's spend. A pass that hits it defers the rest, records why it stopped, and leaves the day claimable so the next hourly tick resumes it — ranked so what concerns the owner goes first and a deferred conversation ages into priority."
         }
       ]
     }
