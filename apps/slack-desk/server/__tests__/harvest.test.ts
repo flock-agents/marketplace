@@ -18,7 +18,7 @@ import { ok, type PlatformContext } from "@flock/app-sdk";
 process.env.APP_DATA_DIR = mkdtempSync(join(tmpdir(), "slack-desk-test-"));
 
 const {
-  readConfig, dayKey, isWorthRemembering, groupByThread, toBlock, normalizeHistory, harvestOnce,
+  readConfig, harvestDayKey, DEFAULT_HARVEST_HOUR, isWorthRemembering, groupByThread, toBlock, normalizeHistory, harvestOnce,
   CONVERSATION_GAP_MS,
 } = await import("../harvest");
 const { _db, harvestRanToday } = await import("../store");
@@ -140,7 +140,7 @@ describe("harvest — one workspace's daily pass", () => {
     const cfg = readConfig({ channels: ["C1"] });
     const first = fakePlatform({ C1: [{ ts: ago(600), user: "U1", text: "hi" }] });
     await harvestOnce(ACCT, cfg, { platform: first.ctx });
-    expect(harvestRanToday(ACCT, dayKey(new Date()))).toBe(true);
+    expect(harvestRanToday(ACCT, harvestDayKey(new Date(), DEFAULT_HARVEST_HOUR))).toBe(true);
 
     const second = fakePlatform({ C1: [{ ts: ago(500), user: "U1", text: "again" }] });
     const out = await harvestOnce(ACCT, cfg, { platform: second.ctx });
