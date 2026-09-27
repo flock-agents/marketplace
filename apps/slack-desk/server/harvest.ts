@@ -968,7 +968,11 @@ export async function readOwnActivity(
   // ONLY WHAT THE SCRIPT READS. It takes limit/cursor/types/sort and hardcodes exclude_archived;
   // passing an unknown key made it exit 1 with no output at all on the live run. This is pure
   // enrichment — the ranking degrades without it — so a failure here must not read as a pass error.
-  const chans = await exec("channels_list", { limit: 200 });
+  // CHANNELS ONLY, and the connector's own budget. Since slack 1.5.2 channels_list reads every
+  // page and names DMs with a users.list pass; this only wants membership and size, so asking
+  // for DMs would buy a names pass it throws away, and exec's 60s default is short of the worst
+  // case the connector declares (150s).
+  const chans = await exec("channels_list", { limit: 200, types: "public_channel,private_channel" }, 150_000);
   if (chans !== null) {
     const rows: any[] = Array.isArray(chans) ? chans
       : Array.isArray((chans as any)?.channels) ? (chans as any).channels : [];
