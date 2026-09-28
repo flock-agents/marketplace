@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "updatedAt": "2026-09-25T00:00:00Z",
+  "updatedAt": "2026-09-28T00:00:00Z",
   "items": [
     {
       "slug": "linear",
@@ -300,6 +300,30 @@
       "minFlockVersion": "0.7.0",
       "publishedAt": "2026-09-23T00:00:00Z",
       "updatedAt": "2026-09-24T00:00:00Z"
+    },
+    {
+      "slug": "inbox-assistant",
+      "type": "template",
+      "name": "Inbox Assistant",
+      "description": "Watches your inbox and drafts the replies that need writing, in your own voice, for you to approve. Nothing sends without you.",
+      "author": "flock",
+      "category": "professional",
+      "tags": [
+        "email",
+        "gmail",
+        "drafting",
+        "follow-ups",
+        "inbox"
+      ],
+      "icon": "icon.svg",
+      "iconUrl": "https://raw.githubusercontent.com/flock-agents/marketplace/v2/templates/inbox-assistant/icon.svg",
+      "repo": "flock-agents/marketplace",
+      "path": "templates/inbox-assistant",
+      "latestVersion": "1.0.0",
+      "latestTag": "inbox-assistant-v1.0.0",
+      "minFlockVersion": "0.7.0",
+      "publishedAt": "2026-09-28T00:00:00Z",
+      "updatedAt": "2026-09-28T00:00:00Z"
     }
   ]
 }

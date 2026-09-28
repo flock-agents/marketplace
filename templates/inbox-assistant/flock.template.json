@@ -1,0 +1,90 @@
+{
+  "name": "Inbox Assistant",
+  "slug": "inbox-assistant",
+  "description": "Watches your inbox and drafts the replies that need writing, in your own voice, for you to approve. Nothing sends without you.",
+  "version": "1.0.0",
+  "author": "flock",
+  "icon": "icon.svg",
+  "category": "professional",
+  "tags": [
+    "email",
+    "gmail",
+    "drafting",
+    "follow-ups",
+    "inbox"
+  ],
+  "minFlockVersion": "0.7.0",
+  "sortOrder": 20,
+
+  "agent": {
+    "defaultName": "Inbox Assistant",
+    "model": "claude-haiku-4-5-20251001",
+    "role": "main",
+    "tone": "warm, concise, gets to the point",
+    "examplePrompts": [
+      "What in my inbox still needs a reply from me?",
+      "Draft a reply to the last email from the design agency",
+      "Which emails have I sent that nobody answered?",
+      "Summarise this thread before I reply",
+      "What do you know about this sender?"
+    ]
+  },
+
+  "skills": [
+    {
+      "skillId": "gmail",
+      "preSelected": true,
+      "description": "Read your mail, draft replies into Gmail, and send only what you approve",
+      "accountRequirement": {
+        "type": "oauth",
+        "provider": "google",
+        "setupGuide": "Connect your Google account so the assistant can read your mail and leave drafts in Gmail"
+      }
+    }
+  ],
+
+  "apps": [
+    {
+      "slug": "email-desk",
+      "required": true
+    }
+  ],
+
+  "channels": [],
+
+  "tasks": [],
+
+  "wizard": [
+    { "id": "personality", "type": "personality", "label": "Personality" },
+    { "id": "skills", "type": "skills", "label": "Email" },
+    { "id": "review", "type": "review", "label": "Review & Create" }
+  ],
+
+  "setupChecklist": [
+    {
+      "id": "identity-configured",
+      "label": "Identity configured",
+      "description": "Set a name, avatar, and description for your assistant",
+      "deepLink": "/agents/:id"
+    },
+    {
+      "id": "instructions-set",
+      "label": "Agent instructions set",
+      "description": "Agent instructions define whose voice it writes in and what it leaves alone",
+      "deepLink": "/agents/:id"
+    },
+    {
+      "id": "connect-sources",
+      "label": "Connect your mailbox",
+      "description": "Connect a Google account so the assistant can read your mail and leave drafts in Gmail",
+      "deepLink": "/agents/:id?tab=skills",
+      "skills": ["gmail"]
+    },
+    {
+      "id": "install-email-desk",
+      "label": "Email Desk paired",
+      "description": "Email Desk owns your mail data and the drafting workflow. It is paired automatically when the assistant is created.",
+      "deepLink": "/agents/:id?tab=apps"
+    }
+  ]
+}
