@@ -15,7 +15,6 @@
         "project-management"
       ],
       "icon": "icon.svg",
-      "iconUrl": "https://raw.githubusercontent.com/flock-agents/marketplace/main/skills/linear/icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "skills/linear",
       "latestVersion": "1.0.2",
@@ -38,7 +37,6 @@
         "food"
       ],
       "icon": "icon.svg",
-      "iconUrl": "https://raw.githubusercontent.com/flock-agents/marketplace/main/apps/meal-planner/icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "apps/meal-planner",
       "latestVersion": "1.2.3",
@@ -62,7 +60,6 @@
         "scheduling"
       ],
       "icon": "icon.svg",
-      "iconUrl": "https://raw.githubusercontent.com/flock-agents/marketplace/main/apps/family-calendar/icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "apps/family-calendar",
       "latestVersion": "1.0.2",
@@ -84,8 +81,7 @@
         "family",
         "meal-planning"
       ],
-      "icon": "\ud83c\udfe0",
-      "iconUrl": "https://raw.githubusercontent.com/flock-agents/marketplace/main/templates/family-butler/icon.svg",
+      "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "templates/family-butler",
       "latestVersion": "1.2.0",
@@ -108,7 +104,6 @@
         "google"
       ],
       "icon": "icon.svg",
-      "iconUrl": "https://raw.githubusercontent.com/flock-agents/marketplace/main/skills/gmail/icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "skills/gmail",
       "latestVersion": "1.3.0",
@@ -131,7 +126,6 @@
         "zepto"
       ],
       "icon": "icon.svg",
-      "iconUrl": "https://raw.githubusercontent.com/flock-agents/marketplace/main/skills/zepto/icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "skills/zepto",
       "latestVersion": "1.1.0",
@@ -155,7 +149,6 @@
         "zomato"
       ],
       "icon": "icon.svg",
-      "iconUrl": "https://raw.githubusercontent.com/flock-agents/marketplace/main/skills/zomato-blinkit/icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "skills/zomato-blinkit",
       "latestVersion": "1.1.0",
@@ -178,7 +171,6 @@
         "bigbasket"
       ],
       "icon": "icon.svg",
-      "iconUrl": "https://raw.githubusercontent.com/flock-agents/marketplace/main/skills/bigbasket/icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "skills/bigbasket",
       "latestVersion": "1.1.0",
@@ -201,7 +193,6 @@
         "ecommerce"
       ],
       "icon": "icon.svg",
-      "iconUrl": "https://raw.githubusercontent.com/flock-agents/marketplace/main/skills/amazon/icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "skills/amazon",
       "latestVersion": "1.0.0",
@@ -223,7 +214,6 @@
         "professional"
       ],
       "icon": "icon.svg",
-      "iconUrl": "https://raw.githubusercontent.com/flock-agents/marketplace/main/skills/linkedin/icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "skills/linkedin",
       "latestVersion": "1.1.0",
@@ -246,7 +236,6 @@
         "team"
       ],
       "icon": "icon.svg",
-      "iconUrl": "https://raw.githubusercontent.com/flock-agents/marketplace/main/skills/slack/icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "skills/slack",
       "latestVersion": "1.5.1",
@@ -269,7 +258,6 @@
         "conversations"
       ],
       "icon": "icon.svg",
-      "iconUrl": "https://raw.githubusercontent.com/flock-agents/marketplace/v2/apps/slack-desk/icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "apps/slack-desk",
       "latestVersion": "1.4.2",
@@ -292,7 +280,6 @@
         "team"
       ],
       "icon": "icon.svg",
-      "iconUrl": "https://raw.githubusercontent.com/flock-agents/marketplace/v2/templates/slack-assistant/icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "templates/slack-assistant",
       "latestVersion": "1.1.1",
@@ -316,7 +303,6 @@
         "inbox"
       ],
       "icon": "icon.svg",
-      "iconUrl": "https://raw.githubusercontent.com/flock-agents/marketplace/v2/templates/inbox-assistant/icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "templates/inbox-assistant",
       "latestVersion": "1.0.0",
