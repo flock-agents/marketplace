@@ -2,10 +2,10 @@
   "name": "Slack Assistant",
   "slug": "slack-assistant",
   "description": "Remembers what happens in your Slack and tells you what you missed",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "author": "flock",
   "icon": "icon.svg",
-  "category": "productivity",
+  "category": "professional",
   "tags": [
     "slack",
     "memory",
@@ -30,7 +30,7 @@
     {
       "skillId": "slack",
       "preSelected": true,
-      "description": "Read your Slack workspace — channels, DMs, mentions and saved items",
+      "description": "Read your Slack workspace \u2014 channels, DMs, mentions and saved items",
       "accountRequirement": {
         "type": "browser-session",
         "provider": "slack",
@@ -85,7 +85,7 @@
     {
       "id": "review-tasks",
       "label": "Choose what it reads",
-      "description": "Open the daily Slack routine and pick your channels. Leave it empty and it reads what is already addressed to you — DMs, mentions and saved items.",
+      "description": "Open the daily Slack routine and pick your channels. Leave it empty and it reads what is already addressed to you \u2014 DMs, mentions and saved items.",
       "deepLink": "/agents/:id?tab=routines"
     }
   ]
