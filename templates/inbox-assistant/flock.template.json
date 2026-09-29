@@ -2,9 +2,9 @@
   "name": "Inbox Assistant",
   "slug": "inbox-assistant",
   "description": "Watches your inbox and drafts the replies that need writing, in your own voice, for you to approve. Nothing sends without you.",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "author": "flock",
-  "icon": "icon.svg",
+  "icon": "📥",
   "category": "professional",
   "tags": [
     "email",
