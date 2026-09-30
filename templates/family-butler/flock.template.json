@@ -2,9 +2,9 @@
   "name": "Family Butler",
   "slug": "family-butler",
   "description": "A household assistant that manages groceries, meals, and family routines through Telegram",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "author": "flock",
-  "icon": "icon.svg",
+  "icon": "🏠",
   "category": "family",
   "tags": ["household", "grocery", "family", "meal-planning"],
   "minFlockVersion": "0.7.0",
@@ -131,6 +131,7 @@
       "prompt": "Good morning! Prepare today's briefing for the family:\n1. Check the weather forecast for today and tomorrow\n2. Review today's calendar events and reminders\n3. List any pending tasks or follow-ups from yesterday\n4. Note any upcoming birthdays, appointments, or deadlines this week\n\nFormat as a concise, friendly summary. Keep it scannable — bullet points, not paragraphs.",
       "deliverTo": null,
       "timezone": "Asia/Kolkata",
+      "requires": ["google-calendar"],
       "enabled": true,
       "model": "claude-sonnet-4-6",
       "thinkingLevel": "none"
@@ -141,6 +142,7 @@
       "prompt": "Evening check-in for the family:\n1. List any pending items that weren't completed today\n2. Preview tomorrow's calendar — events, appointments, deadlines\n3. Remind about anything time-sensitive for the morning (early meetings, school events, deliveries)\n4. Note any recurring tasks due tomorrow (bills, subscriptions, refills)\n\nKeep it brief and actionable. Only mention items that need attention.",
       "deliverTo": null,
       "timezone": "Asia/Kolkata",
+      "requires": ["google-calendar"],
       "enabled": true,
       "model": "claude-sonnet-4-6",
       "thinkingLevel": "none"
