@@ -3,7 +3,7 @@
   "slug": "linkedin",
   "icon": "icon.svg",
   "description": "Read notifications, browse feed, publish posts, send messages, check messages, monitor post comments, and reply to comments on LinkedIn",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "author": "flock",
   "category": "integration",
   "tags": [
