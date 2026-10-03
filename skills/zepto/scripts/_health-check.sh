@@ -43,7 +43,7 @@ RESULT=$(_browser_navigate "$BASE_URL" 2>&1) || {
 
 FINAL_URL=$(echo "$RESULT" | jq -r '.url // ""')
 
-if echo "$FINAL_URL" | grep -qiE "$LOGIN_PATTERN"; then
+if _matches_login_url "$FINAL_URL"; then
   _mark_degraded "Health-check: Zepto session expired — redirected to login"
   status_json=$(_write_health "degraded" true false false "Session expired — redirected to login")
   echo "$status_json" > "$STATUS_FILE"
@@ -59,7 +59,7 @@ SEARCH_RESULT=$(_browser_navigate "$SEARCH_URL" 2>&1) || {
 }
 
 SEARCH_FINAL_URL=$(echo "$SEARCH_RESULT" | jq -r '.url // ""')
-if echo "$SEARCH_FINAL_URL" | grep -qiE "$LOGIN_PATTERN"; then
+if _matches_login_url "$SEARCH_FINAL_URL"; then
   _mark_degraded "Health-check: Zepto session expired during search"
   status_json=$(_write_health "degraded" true false false "Session expired during search navigation")
   echo "$status_json" > "$STATUS_FILE"
