@@ -19,6 +19,8 @@ function resolveOne(p: Record<string, unknown>): { r: ReturnType<typeof getRemin
   }
   return err("MISSING_ARG", "Give id or match");
 }
+// Lead, day-of and Missed rows share one sourceRef; a row is showing if either ledger kind recorded it.
+const publishedRowFire = (id: string, occ: string) => getFire(id, occ, "row") ?? getFire(id, occ, "missed");
 const isErr = (v: unknown): v is OpError => !!v && typeof v === "object" && "code" in (v as any);
 
 export const ops: Record<string, OpHandler> = {
@@ -41,7 +43,7 @@ export const ops: Record<string, OpHandler> = {
     const r = got.r!;
     updateReminder(r.id, { state: "cancelled" });
     for (const occ of [r.dueDate]) {
-      if (!getFire(r.id, occ, "row")) continue;
+      if (!publishedRowFire(r.id, occ)) continue;
       const res = await platform.tasks.withdraw(rowSourceRef(r.id, occ));
       if (!res.ok) return err("PLATFORM", `Cancelled, but could not withdraw its row: ${res.reason}`, 502);
     }
@@ -53,9 +55,9 @@ export const ops: Record<string, OpHandler> = {
     const untilDate = typeof p.untilDate === "string" ? p.untilDate.trim() : "";
     if (!isRealDate(untilDate)) return err("BAD_DATE", "untilDate must be YYYY-MM-DD");
     if (untilDate <= today()) return err("PAST_DATE", "untilDate must be after today", 422);
-    // A live row (untimed, already on the list) is the platform's to hide; a timed one has no row yet.
+    // A live row (untimed on the list, or a timed one's Missed row) is the platform's to hide; otherwise reschedule.
     const occ = r.dueDate <= today() ? r.dueDate : null;
-    const live = occ && getFire(r.id, occ, "row");
+    const live = occ && publishedRowFire(r.id, occ);
     if (live) {
       const res = await platform.tasks.snooze(rowSourceRef(r.id, occ!), untilDate);
       if (!res.ok) return err("PLATFORM", `Could not snooze the row: ${res.reason}`, 502);

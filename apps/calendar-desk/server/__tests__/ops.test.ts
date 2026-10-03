@@ -54,6 +54,19 @@ describe("cancel / snooze / list / note", () => {
     expect(S.getReminder(t.id)!.dueDate).toBe("2099-10-10");
     expect(await ops.snooze_reminder!({ id: t.id, untilDate: "2001-01-01" }, ctx)).toMatchObject({ code: "PAST_DATE" });
   });
+  test("cancel: a timed reminder whose Missed row is showing → withdraws that row by its sourceRef", async () => {
+    const t: any = await ops.add_reminder!({ title: "Call bank", dueDate: today(), dueTime: "09:00" }, ctx);
+    S.recordFire({ reminderId: t.id, occurrence: today(), kind: "missed", taskSourceRef: rowSourceRef(t.id, today()), sessionId: null, status: "ok" });
+    expect(await ops.cancel_reminder!({ id: t.id }, ctx)).toMatchObject({ ok: true, id: t.id });
+    expect(withdrawn).toEqual([rowSourceRef(t.id, today())]);
+  });
+  test("snooze: a timed reminder whose Missed row is showing → platform snooze on that row, not a reschedule", async () => {
+    const t: any = await ops.add_reminder!({ title: "Call bank", dueDate: today(), dueTime: "09:00" }, ctx);
+    S.recordFire({ reminderId: t.id, occurrence: today(), kind: "missed", taskSourceRef: rowSourceRef(t.id, today()), sessionId: null, status: "ok" });
+    expect(await ops.snooze_reminder!({ id: t.id, untilDate: "2099-10-12" }, ctx)).toMatchObject({ ok: true, via: "row" });
+    expect(snoozes).toEqual([{ ref: rowSourceRef(t.id, today()), untilDate: "2099-10-12" }]);
+    expect(S.getReminder(t.id)!.dueDate).toBe(today());
+  });
   test("list_upcoming merges reminders and events in date order within the window", async () => {
     await ops.add_reminder!({ title: "Renew visa", dueDate: "2099-10-12" }, ctx);
     S.upsertEvents("acct", [{ eventKey: "k", calendar: null, title: "Standup", startAt: null, endAt: null, allDay: true, localDate: "2099-10-10", attendeesText: null, location: null, rawTimeText: null }], 1);
