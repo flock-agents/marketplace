@@ -1,8 +1,8 @@
 {
   "version": 1,
-  "generatedAt": "2026-10-03T20:23:10.302Z",
-  "sourceVersion": "1.5.0",
-  "sourceTag": "gmail-v1.5.0",
+  "generatedAt": "2026-10-03T21:59:48.640Z",
+  "sourceVersion": "1.5.1",
+  "sourceTag": "gmail-v1.5.1",
   "files": {
     "icon.svg": "40c228f85eadb886954e48734e43fcaccd895af7633e3ff3f4ec88b993f55184",
     "scripts/_unreadState.ts": "5341d1049064370a3c231bd54c1bab7e8b3ac1de21ea4c9a21fabed42e149b69",
@@ -29,7 +29,7 @@
     "scripts/_composeWindow.ts": "958c31034b6d1dd7e42bd3aea44e8e19ccf8a98ccbfc4030fcd0a91decf758d5",
     "scripts/_draftRows.ts": "6f7153aa3c05d241330fadf98ea17cabfe65388eafd1638e3142c969bd5c158b",
     "scripts/getEmail.sh": "344fa0be003c20ad9e7369526879262c6eb7babab726114f44b2a317df73f808",
-    "scripts/gmail-exec.sh": "65c98fadaeae6b16522efa6caded435ca74cb1a41284f3e4dad9e18dc7030c29",
+    "scripts/gmail-exec.sh": "f81449463f850a1548a97210d4628f59bae45afa7facbddbd5383587eedb11d0",
     "scripts/getThreads.ts": "83c1dcc85d69887badc35fc62bcd65fcbb8a9a03b1c546dc406cad74e4db27b0",
     "scripts/listInbox.sh": "f12a405f95abb6c1e259e9b1bf7115e329eb3d6d4638ac36ebe8bc61e29db54d",
     "scripts/getDraft.ts": "6a05b45c32212fcf97d05d3c00c4a115120b266eefa4fb01d532d7411410f46a",
@@ -64,7 +64,7 @@
     "scripts/markUnread.ts": "d1db899b0b19da85619f0263e8c2d492db9bdf45325641fa8cece04cdc649016",
     "scripts/markRead.ts": "61c01d8e9488d816aba2986519365dbc15d6fa70e0758eaa97d895d44a63a5e0",
     "scripts/starMessage.sh": "a70a27d76d7511511d823bc2a20384d582258180cbeae6fdbea08b9233b31afe",
-    "flock.skill.json": "ce857354d0a1bd13704218d06bf9da6af162536d0d530cbd5360977aa17533d8",
+    "flock.skill.json": "b43edbf4f18124653b7c008b935287b09b2648a557580e31ecfc8bc1ec69ddd7",
     "instructions.md": "d28001f63525c988e151277fda86b467e401f4691742dae617e4b4a827aabf6d"
   }
 }
