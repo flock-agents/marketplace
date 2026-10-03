@@ -268,6 +268,34 @@ Do not search the filesystem for another copy, and do not use any other Gmail
 tool or connector you may find: this wrapper is the only path that carries the
 account binding, the audit trail and the never-send guarantee.
 
+## Downloading attachments
+
+There is no function for this: open the email in a persistent session of the
+`authenticated-crawl` skill on the Gmail browser session (its **Which session to
+use** says how to pick the session for the right account) and click the
+attachment's download button with a `download` action. Each file is saved into
+your workspace's `downloads/` folder and listed in the response's `downloads`
+as `{fileName, path, size}` (see **Downloading files** there). `path` is
+absolute: attach it to a draft (`attachments`), or `upload` it to another site.
+
+1. Find the thread id with `searchEmails` / `listInbox` (the `id` field).
+2. Create a persistent session on `https://mail.google.com/mail/u/0/#all/<threadId>`
+   with `waitFor: "h2.hP"` (the subject line).
+3. Download each attachment: hover its tile, then the download button:
+
+       [{"action": "hover", "selector": "div.aQH span.aZo:nth-of-type(1)"},
+        {"action": "download", "selector": "div.aQH span.aZo:nth-of-type(1) [aria-label^='Download']"}]
+
+   Gmail's class names change; if a selector misses, `screenshot` the page and
+   use `evaluate` to list the buttons' `aria-label`s (English UI:
+   "Download attachment <name>"; "Download all attachments" gives one .zip).
+   Repeat for the next tile (`nth-of-type(2)`, …), or download all at once.
+4. Check every entry in `downloads` has a `path` (an `error` means it was not
+   kept — over 50 MB, or it timed out), then close the session.
+
+Files over 50 MB are not kept. Attachments that are Google Drive links are not
+files on the email: open the Drive link instead.
+
 ## Account Selection
 
 With more than one Gmail account connected, every call reads or writes ONE
