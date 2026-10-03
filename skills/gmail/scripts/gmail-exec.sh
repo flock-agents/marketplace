@@ -33,8 +33,11 @@ BODY=$(jq -nc \
 # knows its account and owns this session, so the server can look it up rather
 # than asking the model to pass one. Empty outside an agent session, which simply
 # means no routine to derive from (the old behaviour).
+# X-Flock-Session-Key proves the call comes from that session's own process: a send
+# (sendDraft/sendEmail/replyToMessage) runs only while the owner's turn is running there.
 curl -s -X POST "${FLOCK_API}/api/internal/skill-exec" \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer ${FLOCK_AUTH_TOKEN:-}" \
   -H "X-Flock-Session-Id: ${FLOCK_SESSION_ID:-}" \
+  -H "X-Flock-Session-Key: ${FLOCK_SESSION_KEY:-}" \
   -d "$BODY"
