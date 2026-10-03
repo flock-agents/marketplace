@@ -98,6 +98,14 @@ describe("fix round 1 (R14)", () => {
     await publishDueRows(p.ctx, cfg, new Date(2026, 9, 6, 8, 0));
     expect(p.published.filter((t) => t.title.startsWith("Missed:") && t.sourceRef === "rem|rem_x|2026-10-05").length).toBe(1);
   });
+  test("a 09:00 reminder missed all day gets a Missed row at 06:00 and no late chat at 08:00", async () => {
+    rem({ id: "rem_m", dueDate: "2026-10-05", dueTime: "09:00", leadDays: [0] });
+    const p = platform();
+    await publishDueRows(p.ctx, cfg, new Date(2026, 9, 6, 6, 0));
+    expect(p.published.filter((t) => t.title.startsWith("Missed:") && t.sourceRef === "rem|rem_m|2026-10-05").length).toBe(1);
+    expect((await fireTimedReminders(p.ctx, new Date(2026, 9, 6, 8, 0))).fired).toBe(0);
+    expect(p.intents.length).toBe(0);
+  });
   test("a yearly timed reminder misses only its previous occurrence, one day window", async () => {
     rem({ id: "rem_b", dueDate: "1990-05-01", dueTime: "09:00", recurrence: "yearly", leadDays: [0] });
     const p = platform();

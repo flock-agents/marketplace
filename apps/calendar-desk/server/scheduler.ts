@@ -77,7 +77,8 @@ export async function fireTimedReminders(platform: PlatformContext, now: Date) {
     const due = timedFireDue(r, now);
     if (due) cands.push({ ...due, carried: false });
     // A quiet-hours deferral from yesterday evening is delivered the next morning (08:00, 2h grace).
-    if (r.dueTime && now.getHours() < 10 && prevOccurrenceDate(r, today) === yesterday) {
+    // Only a 23:00+ reminder can be deferred across midnight; a Missed row already published ends the catch-up.
+    if (r.dueTime && r.dueTime >= "23:00" && now.getHours() < 10 && prevOccurrenceDate(r, today) === yesterday && !getFire(r.id, yesterday, "row")) {
       const [h, mi] = r.dueTime.split(":").map(Number);
       cands.push({ occurrence: yesterday, dueAt: new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, h!, mi!).getTime(), carried: true });
     }
