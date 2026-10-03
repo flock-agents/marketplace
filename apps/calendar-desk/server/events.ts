@@ -14,24 +14,33 @@ export function parseTimeText(text: string | undefined, localDate: string): { st
   const t = text.replace(/\s+/g, " ").trim().toLowerCase();
   if (!t || /all.day/.test(t)) return none;
   const parts = t.split(/\s*[–—-]\s*/);
-  const parse = (s: string, inheritMeridiem?: "am" | "pm"): { h: number; m: number } | null => {
+  const parse = (s: string, inheritMeridiem?: "am" | "pm"): { h: number; m: number; hadMeridiem: boolean } | null => {
     const m = /^(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/.exec(s.trim());
     if (!m) return null;
     let h = +m[1]!; const min = m[2] ? +m[2] : 0;
+    const hadMeridiem = !!m[3];
     const mer = (m[3] as "am" | "pm" | undefined) ?? inheritMeridiem;
     if (mer === "pm" && h < 12) h += 12;
     if (mer === "am" && h === 12) h = 0;
     if (h > 23 || min > 59) return null;
-    return { h, m: min };
+    return { h, m: min, hadMeridiem };
   };
   const [y, mo, da] = localDate.split("-").map(Number);
   const at = (hm: { h: number; m: number }, dayOffset = 0) => new Date(y!, mo! - 1, da! + dayOffset, hm.h, hm.m).getTime();
   const endMer = /(am|pm)\s*$/.exec(parts[1] ?? "")?.[1] as "am" | "pm" | undefined;
-  const start = parse(parts[0]!, endMer);
+  let start = parse(parts[0]!, endMer);
   if (!start) return none;
   if (parts.length < 2) return { startAt: at(start), endAt: null, allDay: false };
   const end = parse(parts[1]!);
   if (!end) return { startAt: at(start), endAt: null, allDay: false };
+  // Prefer start < end: if start inherited end's meridiem and that puts start >= end (same day), try opposite
+  if (!start.hadMeridiem && endMer && start.h * 60 + start.m >= end.h * 60 + end.m) {
+    const opposite = endMer === "pm" ? "am" : "pm";
+    const altStart = parse(parts[0]!, opposite);
+    if (altStart && altStart.h * 60 + altStart.m < end.h * 60 + end.m) {
+      start = altStart;
+    }
+  }
   const endMs = at(end, end.h * 60 + end.m < start.h * 60 + start.m ? 1 : 0);
   return { startAt: at(start), endAt: endMs, allDay: false };
 }

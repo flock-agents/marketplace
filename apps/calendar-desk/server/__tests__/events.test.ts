@@ -11,6 +11,12 @@ describe("parseTimeText (owner tz = process TZ)", () => {
     expect(parseTimeText("14:00 – 15:00", d)).toEqual({ startAt: local(14), endAt: local(15), allDay: false });
     expect(parseTimeText("11:30pm – 12:30am", d).endAt).toBe(new Date(2026, 9, 6, 0, 30).getTime());
   });
+  test("meridiem inheritance: prefer start < end", () => {
+    expect(parseTimeText("11:30 – 12pm", d)).toEqual({ startAt: local(11, 30), endAt: local(12), allDay: false });
+    expect(parseTimeText("10 – 1pm", d)).toEqual({ startAt: local(10), endAt: local(13), allDay: false });
+    expect(parseTimeText("12 – 1pm", d)).toEqual({ startAt: local(12), endAt: local(13), allDay: false });
+    expect(parseTimeText("11 – 12pm", d)).toEqual({ startAt: local(11), endAt: local(12), allDay: false });
+  });
   test("a lone start time, all-day, and garbage", () => {
     expect(parseTimeText("6:40am", d)).toEqual({ startAt: local(6, 40), endAt: null, allDay: false });
     expect(parseTimeText("All day", d)).toEqual({ startAt: null, endAt: null, allDay: true });
