@@ -1,8 +1,8 @@
 {
   "version": 1,
-  "generatedAt": "2026-10-03T18:34:46.814Z",
-  "sourceVersion": "1.4.0",
-  "sourceTag": "gmail-v1.4.0",
+  "generatedAt": "2026-10-03T18:35:40.316Z",
+  "sourceVersion": "1.4.1",
+  "sourceTag": "gmail-v1.4.1",
   "files": {
     "icon.svg": "40c228f85eadb886954e48734e43fcaccd895af7633e3ff3f4ec88b993f55184",
     "scripts/_unreadState.ts": "5341d1049064370a3c231bd54c1bab7e8b3ac1de21ea4c9a21fabed42e149b69",
@@ -62,7 +62,7 @@
     "scripts/markUnread.ts": "d1db899b0b19da85619f0263e8c2d492db9bdf45325641fa8cece04cdc649016",
     "scripts/markRead.ts": "61c01d8e9488d816aba2986519365dbc15d6fa70e0758eaa97d895d44a63a5e0",
     "scripts/starMessage.sh": "a70a27d76d7511511d823bc2a20384d582258180cbeae6fdbea08b9233b31afe",
-    "flock.skill.json": "580dbf91a3965227c5e44bbe905e7f4e9f2490dcc24a59e5dafdd35899aaaa96",
-    "instructions.md": "c0fcf835c0684944570a182843d3f5115e71a636da5f6d7d7e009b3dad087dc4"
+    "flock.skill.json": "ffc0581256e0420d73ba49bce854a0b92bdb2ef6c2eba99c32271433f035d549",
+    "instructions.md": "2e685aee0625a2e8388bd655c0abda512e69fa279208440dde3a8c0bb216484c"
   }
 }
