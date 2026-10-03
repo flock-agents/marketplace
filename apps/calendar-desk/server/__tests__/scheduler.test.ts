@@ -106,6 +106,27 @@ describe("fix round 1 (R14)", () => {
     expect((await fireTimedReminders(p.ctx, new Date(2026, 9, 6, 8, 0))).fired).toBe(0);
     expect(p.intents.length).toBe(0);
   });
+  test("a 23:30 reminder with a lead day: the lead row does not swallow the late chat", async () => {
+    rem({ id: "rem_l", dueDate: "2026-10-05", dueTime: "23:30", leadDays: [1, 0] });
+    const p = platform();
+    await publishDueRows(p.ctx, cfg, new Date(2026, 9, 4, 9, 0));
+    expect(p.published.map((t) => t.sourceRef)).toEqual(["rem|rem_l|2026-10-05"]);
+    expect((await fireTimedReminders(p.ctx, new Date(2026, 9, 5, 23, 30))).deferred).toBe(1);
+    expect((await fireTimedReminders(p.ctx, new Date(2026, 9, 6, 8, 0))).fired).toBe(1);
+    expect((await fireTimedReminders(p.ctx, new Date(2026, 9, 6, 8, 1))).fired).toBe(0);
+    expect(p.intents.length).toBe(1);
+  });
+  test("a 09:00 reminder with a lead day, missed all day, still gets one Missed row", async () => {
+    rem({ id: "rem_k", dueDate: "2026-10-05", dueTime: "09:00", leadDays: [1, 0] });
+    const p = platform();
+    await publishDueRows(p.ctx, cfg, new Date(2026, 9, 4, 9, 0));
+    expect(p.published.length).toBe(1);
+    await publishDueRows(p.ctx, cfg, new Date(2026, 9, 6, 6, 0));
+    expect(p.published.filter((t) => t.title.startsWith("Missed:")).length).toBe(1);
+    const n = p.published.length;
+    await publishDueRows(p.ctx, cfg, new Date(2026, 9, 6, 6, 1));
+    expect(p.published.length).toBe(n);
+  });
   test("a yearly timed reminder misses only its previous occurrence, one day window", async () => {
     rem({ id: "rem_b", dueDate: "1990-05-01", dueTime: "09:00", recurrence: "yearly", leadDays: [0] });
     const p = platform();

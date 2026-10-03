@@ -61,7 +61,7 @@ applyMigrations();
 
 export interface EventRow { accountId: string; eventKey: string; calendar: string | null; title: string; startAt: number | null; endAt: number | null; allDay: boolean; localDate: string; attendeesText: string | null; location: string | null; rawTimeText: string | null; firstSeenAt: number; lastSeenAt: number; missingSince: number | null }
 export interface ReminderRow { id: string; title: string; body: string | null; dueDate: string; dueTime: string | null; recurrence: "none" | "yearly"; leadDays: number[]; sourceKind: "user" | "fact" | "migrated"; sourceRef: string | null; sourceLink: string | null; accountId: string | null; state: "active" | "done" | "cancelled"; createdAt: number; updatedAt: number }
-export interface FireRow { reminderId: string; occurrence: string; kind: "row" | "chat"; firedAt: number; taskSourceRef: string | null; sessionId: string | null; status: "ok" | "failed"; attempts: number }
+export interface FireRow { reminderId: string; occurrence: string; kind: "row" | "chat" | "missed"; firedAt: number; taskSourceRef: string | null; sessionId: string | null; status: "ok" | "failed"; attempts: number }
 
 function rowToEvent(r: any): EventRow {
   return {
@@ -209,7 +209,7 @@ export function recordFire(f: Omit<FireRow, "firedAt" | "attempts"> & { attempts
     .run(f.reminderId, f.occurrence, f.kind, Date.now(), f.taskSourceRef, f.sessionId, f.status, f.attempts ?? 1);
 }
 
-export function getFire(reminderId: string, occurrence: string, kind: "row" | "chat"): FireRow | null {
+export function getFire(reminderId: string, occurrence: string, kind: "row" | "chat" | "missed"): FireRow | null {
   const r = db.query("SELECT * FROM fires WHERE reminder_id = ? AND occurrence = ? AND kind = ?").get(reminderId, occurrence, kind) as any;
   return r ? rowToFire(r) : null;
 }

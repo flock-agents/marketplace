@@ -45,14 +45,14 @@ export async function publishDueRows(platform: PlatformContext, cfg: RemindersCo
     const occurrences: Array<{ occ: string; missed: boolean }> = rowOccurrencesDue(r, today).map((occ) => ({ occ, missed: false }));
     // A TIMED reminder whose minute passed YESTERDAY with no delivered chat becomes a row (Review Focus 2).
     // One-day window, on the real previous occurrence. A quiet-hours deferral is delivered at 08:00, so wait for it.
-    if (r.dueTime && prevOccurrenceDate(r, today) === yesterday && getFire(r.id, yesterday, "chat")?.status !== "ok" && !getFire(r.id, yesterday, "row")
+    if (r.dueTime && prevOccurrenceDate(r, today) === yesterday && getFire(r.id, yesterday, "chat")?.status !== "ok" && !getFire(r.id, yesterday, "missed")
       && !(now.getHours() < 10 && (r.dueTime >= "23:00" || r.dueTime < "08:00") && (getFire(r.id, yesterday, "chat")?.attempts ?? 0) < 3)) occurrences.push({ occ: yesterday, missed: true });
     for (const { occ, missed } of occurrences) {
-      if (getFire(r.id, occ, "row")) continue;
+      if (getFire(r.id, occ, missed ? "missed" : "row")) continue;
       const sourceRef = rowSourceRef(r.id, occ);
       const title = missed ? `Missed: ${r.title}` : titleForLead(r, occ, today);
       const res = await platform.tasks.publish({ title, sourceRef, type: "reminder", priority: "normal", due: localNine(occ), body: r.body ?? undefined, context: { why: cardFor(r, occ, missed).why, card: cardFor(r, occ, missed) } });
-      if (res.ok) { recordFire({ reminderId: r.id, occurrence: occ, kind: "row", taskSourceRef: sourceRef, sessionId: null, status: "ok" }); out.published++; }
+      if (res.ok) { recordFire({ reminderId: r.id, occurrence: occ, kind: missed ? "missed" : "row", taskSourceRef: sourceRef, sessionId: null, status: "ok" }); out.published++; }
       else { out.failed++; console.warn(`[calendar-desk] publish ${sourceRef} failed: ${res.reason}`); }
     }
   }
@@ -77,8 +77,8 @@ export async function fireTimedReminders(platform: PlatformContext, now: Date) {
     const due = timedFireDue(r, now);
     if (due) cands.push({ ...due, carried: false });
     // A quiet-hours deferral from yesterday evening is delivered the next morning (08:00, 2h grace).
-    // Only a 23:00+ reminder can be deferred across midnight; a Missed row already published ends the catch-up.
-    if (r.dueTime && r.dueTime >= "23:00" && now.getHours() < 10 && prevOccurrenceDate(r, today) === yesterday && !getFire(r.id, yesterday, "row")) {
+    // Only a 23:00+ reminder can be deferred across midnight; the quiet-hours hold in publishDueRows keeps the Missed row back until attempts >= 3, which the loop below skips.
+    if (r.dueTime && r.dueTime >= "23:00" && now.getHours() < 10 && prevOccurrenceDate(r, today) === yesterday) {
       const [h, mi] = r.dueTime.split(":").map(Number);
       cands.push({ occurrence: yesterday, dueAt: new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, h!, mi!).getTime(), carried: true });
     }
