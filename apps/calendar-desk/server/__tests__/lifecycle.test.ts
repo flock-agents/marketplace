@@ -42,6 +42,23 @@ describe("tick", () => {
   });
 });
 
+describe("tick — routine identity on the real wire (C2)", () => {
+  test("routines arrive as {id: <instance uuid>, appRoutineId: <manifest id>}; both are recognized as enabled", async () => {
+    S.insertReminder({ id: "r2", title: "Pay rent", body: null, dueDate: new Date().toISOString().slice(0, 10), dueTime: null, recurrence: "none", leadDays: [0], sourceKind: "user", sourceRef: null, sourceLink: null, accountId: null, state: "active" });
+    const p = platform(() => ok({ ok: true, events: [] }));
+    await calendarDeskHooks.tick!({ readRoutines: [
+      { id: "6b1f0c2e-9a4d-4c7e-8f1a-0d2b3c4e5f60", appId: "calendar-desk", appRoutineId: "reminders", trigger: { type: "schedule", filter: { publishHour: 0 } } },
+      { id: "0e9d8c7b-6a5f-4e3d-2c1b-a09f8e7d6c5b", appId: "calendar-desk", appRoutineId: "meeting-prep", trigger: { type: "schedule", filter: { windowMinutes: 45 } } },
+    ], platform: p.ctx, now: () => { const d = new Date(); d.setHours(9, 7, 0, 0); return d; } } as any);
+    const { readRoutineState } = await import("../scheduler");
+    const st = readRoutineState();
+    expect(st.remindersEnabled).toBe(true);
+    expect(st.prepEnabled).toBe(true);
+    expect(st.prepCfg.windowMinutes).toBe(45);
+    expect(p.published.length).toBe(1);
+  });
+});
+
 describe("progress and legacy migration", () => {
   test("progress names the session fault; migration takes one-shot reminders once and counts recurring ones", () => {
     S.markInitStarted("acct"); S.markInitFinished("acct", "done"); S.setCursor("fault:acct", "login wall");

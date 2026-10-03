@@ -1,6 +1,6 @@
 import type { PlatformContext } from "@flock/app-sdk";
-import { listActiveReminders, getFire, recordFire, listEvents, getEventNote, getPrep, recordPrep, getCursor, setCursor, type ReminderRow } from "./store";
-import { rowOccurrencesDue, timedFireDue, prevOccurrenceDate, titleForLead, readRemindersConfig, type RemindersConfig } from "./rules";
+import { listActiveReminders, getFire, recordFire, rowFireKind, type FireKind, listEvents, getEventNote, getPrep, recordPrep, getCursor, setCursor, type ReminderRow } from "./store";
+import { rowLeadsDue, timedFireDue, prevOccurrenceDate, titleForLead, readRemindersConfig, type RemindersConfig } from "./rules";
 import { syncAccount, shouldScrape } from "./sync";
 import { ymd } from "./events";
 
@@ -10,12 +10,15 @@ export function readPrepConfig(filter: Record<string, unknown> | undefined): Pre
   return { windowMinutes: typeof raw.windowMinutes === "number" && raw.windowMinutes > 0 ? raw.windowMinutes : 30, skipAllDay: raw.skipAllDay !== false, skipNoAttendees: raw.skipNoAttendees !== false };
 }
 export interface RoutineState { remindersEnabled: boolean; remindersCfg: RemindersConfig; prepEnabled: boolean; prepCfg: PrepConfig }
+/** The routine's manifest id ("reminders" / "meeting-prep"). On the wire `id` is the instance UUID
+ *  and `appRoutineId` the manifest id; `id` is only a fallback for a platform that predates it. */
+export const routineKey = (r: { id: string; appRoutineId?: string | null }) => r.appRoutineId ?? r.id;
 /** The tick hands us our routines (enabled ones only — the platform ticks only due, enabled routines);
  *  the minute loop reads this snapshot. A routine the tick stops naming is treated as off after 2h. */
-export function storeRoutineState(readRoutines: ReadonlyArray<{ id: string; trigger: unknown }>): void {
+export function storeRoutineState(readRoutines: ReadonlyArray<{ id: string; appRoutineId?: string | null; trigger: unknown }>): void {
   const prev = JSON.parse(getCursor("routines") ?? "{}");
   const now = Date.now();
-  for (const r of readRoutines) prev[r.id] = { seenAt: now, filter: (r.trigger as any)?.filter ?? {} };
+  for (const r of readRoutines) prev[routineKey(r)] = { seenAt: now, filter: (r.trigger as any)?.filter ?? {} };
   setCursor("routines", JSON.stringify(prev));
 }
 export function readRoutineState(): RoutineState {
@@ -42,17 +45,19 @@ export async function publishDueRows(platform: PlatformContext, cfg: RemindersCo
   const today = ymd(now);
   const yesterday = ymd(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1));
   for (const r of listActiveReminders()) {
-    const occurrences: Array<{ occ: string; missed: boolean }> = rowOccurrencesDue(r, today).map((occ) => ({ occ, missed: false }));
+    // Each lead day publishes once (ledger kind row@<lead>, R21); every one upserts the same sourceRef,
+    // so the platform retitles the live row or recreates one the owner completed or that was withdrawn.
+    const occurrences: Array<{ occ: string; missed: boolean; kind: FireKind }> = rowLeadsDue(r, today).map(({ occ, lead }) => ({ occ, missed: false, kind: rowFireKind(lead) }));
     // A TIMED reminder whose minute passed YESTERDAY with no delivered chat becomes a row (Review Focus 2).
     // One-day window, on the real previous occurrence. A quiet-hours deferral is delivered at 08:00, so wait for it.
     if (r.dueTime && prevOccurrenceDate(r, today) === yesterday && getFire(r.id, yesterday, "chat")?.status !== "ok" && !getFire(r.id, yesterday, "missed")
-      && !(now.getHours() < 10 && (r.dueTime >= "23:00" || r.dueTime < "08:00") && (getFire(r.id, yesterday, "chat")?.attempts ?? 0) < 3)) occurrences.push({ occ: yesterday, missed: true });
-    for (const { occ, missed } of occurrences) {
-      if (getFire(r.id, occ, missed ? "missed" : "row")) continue;
+      && !(now.getHours() < 10 && (r.dueTime >= "23:00" || r.dueTime < "08:00") && (getFire(r.id, yesterday, "chat")?.attempts ?? 0) < 3)) occurrences.push({ occ: yesterday, missed: true, kind: "missed" });
+    for (const { occ, missed, kind } of occurrences) {
+      if (getFire(r.id, occ, kind)) continue;
       const sourceRef = rowSourceRef(r.id, occ);
       const title = missed ? `Missed: ${r.title}` : titleForLead(r, occ, today);
       const res = await platform.tasks.publish({ title, sourceRef, type: "reminder", priority: "normal", due: localNine(occ), body: r.body ?? undefined, context: { why: cardFor(r, occ, missed).why, card: cardFor(r, occ, missed) } });
-      if (res.ok) { recordFire({ reminderId: r.id, occurrence: occ, kind: missed ? "missed" : "row", taskSourceRef: sourceRef, sessionId: null, status: "ok" }); out.published++; }
+      if (res.ok) { recordFire({ reminderId: r.id, occurrence: occ, kind, taskSourceRef: sourceRef, sessionId: null, status: "ok" }); out.published++; }
       else { out.failed++; console.warn(`[calendar-desk] publish ${sourceRef} failed: ${res.reason}`); }
     }
   }
@@ -103,7 +108,8 @@ export async function runPrepWindow(platform: PlatformContext, cfg: PrepConfig, 
   const windowEnd = now.getTime() + cfg.windowMinutes * 60_000;
   const candidates = listEvents({ fromDate: today, toDate: today }).filter((e) =>
     !e.allDay && e.startAt != null && e.startAt > now.getTime() && e.startAt <= windowEnd && !getPrep(e.accountId, e.eventKey)
-    && (!cfg.skipNoAttendees || !!e.attendeesText));
+    // R22: null attendees = UNKNOWN (the scrape reads none), never "nobody invited"; skip only a known-empty list.
+    && (!cfg.skipNoAttendees || e.attendeesText == null || e.attendeesText.trim() !== ""));
   const allDay = cfg.skipAllDay ? [] : listEvents({ fromDate: today, toDate: today }).filter((e) => e.allDay && !getPrep(e.accountId, e.eventKey) && now.getHours() >= 8);
   const pick = [...candidates, ...allDay];
   if (pick.length === 0) return out;
@@ -139,12 +145,23 @@ export function startMinuteLoop(platform: PlatformContext): () => void {
   return () => clearInterval(timer);
 }
 
-/** Facts whose `when.date` is within ±1 day of the meeting — read through the same reader, window-filtered here. */
+/** Facts whose `when.date` is within ±1 day of the meeting — read through the same reader, window-filtered here.
+ *  The reader pages OLDEST first, so one 500-row page would drop the recent facts: page through the
+ *  window (inclusive cursor — dedupe by id), then order newest first for the caller's top-N. */
 export function factsAroundDate(platform: PlatformContext) {
+  type Fact = { id: number; content: string; when: { date: string } | null; dateRole: string | null; recordedAt: string };
   return async (localDate: string): Promise<unknown[]> => {
-    const res = await platform.memory.factsSince<{ facts: Array<{ content: string; when: { date: string } | null; dateRole: string | null }> }>({ sinceIso: new Date(Date.now() - 60 * 86_400_000).toISOString(), limit: 500, datedOnly: true });
-    if (!res.ok) return [];
+    const byId = new Map<number, Fact>();
+    let since = new Date(Date.now() - 60 * 86_400_000).toISOString();
+    for (let page = 0; page < 20; page++) {
+      const res = await platform.memory.factsSince<{ facts: Fact[]; nextSince: string }>({ sinceIso: since, limit: 500, datedOnly: true });
+      if (!res.ok) break;
+      for (const f of res.data.facts) byId.set(f.id, f);
+      if (res.data.facts.length < 500 || res.data.nextSince === since) break;
+      since = res.data.nextSince;
+    }
     const d = new Date(localDate).getTime();
-    return res.data.facts.filter((f) => f.when && Math.abs(new Date(f.when.date).getTime() - d) <= 86_400_000).map((f) => ({ content: f.content, role: f.dateRole }));
+    return [...byId.values()].sort((a, b) => b.recordedAt.localeCompare(a.recordedAt))
+      .filter((f) => f.when && Math.abs(new Date(f.when.date).getTime() - d) <= 86_400_000).map((f) => ({ content: f.content, role: f.dateRole }));
   };
 }

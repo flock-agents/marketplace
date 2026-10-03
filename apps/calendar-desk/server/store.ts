@@ -61,7 +61,16 @@ applyMigrations();
 
 export interface EventRow { accountId: string; eventKey: string; calendar: string | null; title: string; startAt: number | null; endAt: number | null; allDay: boolean; localDate: string; attendeesText: string | null; location: string | null; rawTimeText: string | null; firstSeenAt: number; lastSeenAt: number; missingSince: number | null }
 export interface ReminderRow { id: string; title: string; body: string | null; dueDate: string; dueTime: string | null; recurrence: "none" | "yearly"; leadDays: number[]; sourceKind: "user" | "fact" | "migrated"; sourceRef: string | null; sourceLink: string | null; accountId: string | null; state: "active" | "done" | "cancelled"; createdAt: number; updatedAt: number }
-export interface FireRow { reminderId: string; occurrence: string; kind: "row" | "chat" | "missed"; firedAt: number; taskSourceRef: string | null; sessionId: string | null; status: "ok" | "failed"; attempts: number }
+/** Fire ledger kinds. A row fire is keyed PER LEAD DAY — `row@<lead>` ("row@14", "row@3", "row@0") —
+ *  so each lead day of an occurrence publishes once (R21); all of them upsert the one sourceRef
+ *  `rem|<id>|<occurrence>`. `row@0` is the day-of row AND the overdue-untimed row, which is what bounds
+ *  the overdue republish to once per occurrence. `missed` is a timed reminder's Missed row; `chat` its message.
+ *  A kind suffix rather than a column: the primary key (reminder, occurrence, kind) already makes each
+ *  lead day its own atomic upsert, with no migration. Bare "row" is a pre-R21 ledger entry, still read as a row. */
+export type FireKind = "chat" | "missed" | `row@${number}`;
+export const rowFireKind = (lead: number): FireKind => `row@${lead}`;
+const ROW_FIRE_SQL = "(kind = 'row' OR kind LIKE 'row@%' OR kind = 'missed')";
+export interface FireRow { reminderId: string; occurrence: string; kind: FireKind | "row"; firedAt: number; taskSourceRef: string | null; sessionId: string | null; status: "ok" | "failed"; attempts: number }
 
 function rowToEvent(r: any): EventRow {
   return {
@@ -209,13 +218,23 @@ export function recordFire(f: Omit<FireRow, "firedAt" | "attempts"> & { attempts
     .run(f.reminderId, f.occurrence, f.kind, Date.now(), f.taskSourceRef, f.sessionId, f.status, f.attempts ?? 1);
 }
 
-export function getFire(reminderId: string, occurrence: string, kind: "row" | "chat" | "missed"): FireRow | null {
+export function getFire(reminderId: string, occurrence: string, kind: FireKind): FireRow | null {
   const r = db.query("SELECT * FROM fires WHERE reminder_id = ? AND occurrence = ? AND kind = ?").get(reminderId, occurrence, kind) as any;
   return r ? rowToFire(r) : null;
 }
 
 export function listFiresOn(occurrence: string): FireRow[] {
   return (db.query("SELECT * FROM fires WHERE occurrence = ? ORDER BY fired_at").all(occurrence) as any[]).map(rowToFire);
+}
+
+/** Published rows (any lead day, day-of, or Missed) for one occurrence, newest first. */
+export function listRowFires(reminderId: string, occurrence: string): FireRow[] {
+  return (db.query(`SELECT * FROM fires WHERE reminder_id = ? AND occurrence = ? AND status = 'ok' AND ${ROW_FIRE_SQL} ORDER BY fired_at DESC`).all(reminderId, occurrence) as any[]).map(rowToFire);
+}
+
+/** Rows PUBLISHED in [fromMs, toMs) — by publish time, whatever their occurrence date. */
+export function listRowFiresPublishedBetween(fromMs: number, toMs: number): FireRow[] {
+  return (db.query(`SELECT * FROM fires WHERE fired_at >= ? AND fired_at < ? AND status = 'ok' AND ${ROW_FIRE_SQL} ORDER BY fired_at`).all(fromMs, toMs) as any[]).map(rowToFire);
 }
 
 export function recordPrep(accountId: string, eventKey: string, sessionId: string | null): void {

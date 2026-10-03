@@ -75,14 +75,20 @@ export function prevOccurrenceDate(r: Pick<ReminderRow, "dueDate" | "recurrence"
  *  day itself is a chat (D6). An untimed one gets its day-of row even when today is past the lead
  *  days (created late in the day, or the laptop was shut: Review Focus 1/2). */
 export function rowOccurrencesDue(r: ReminderRow, today: string): string[] {
+  return [...new Set(rowLeadsDue(r, today).map((x) => x.occ))];
+}
+
+/** As rowOccurrencesDue, with the lead day each row is for — the publish ledger keys on it (R21).
+ *  The overdue-untimed row counts as lead 0: it is the day-of row, late, and shares its ledger key. */
+export function rowLeadsDue(r: ReminderRow, today: string): Array<{ occ: string; lead: number }> {
   const occ = nextOccurrenceDate(r, today) ?? r.dueDate;
-  const out: string[] = [];
-  for (const lead of r.leadDays) {
+  const out: Array<{ occ: string; lead: number }> = [];
+  for (const lead of new Set(r.leadDays)) {
     if (lead === 0 && r.dueTime) continue;
-    if (addDays(occ, -lead) === today) out.push(occ);
+    if (addDays(occ, -lead) === today) out.push({ occ, lead });
   }
-  if (!r.dueTime && occ <= today && !out.includes(occ) && r.recurrence === "none") out.push(occ);   // overdue untimed: still today's row
-  return [...new Set(out)];
+  if (!r.dueTime && occ <= today && out.length === 0 && r.recurrence === "none") out.push({ occ, lead: 0 });   // overdue untimed: still today's row
+  return out;
 }
 
 export function timedFireDue(r: ReminderRow, now: Date): { occurrence: string; dueAt: number } | null {

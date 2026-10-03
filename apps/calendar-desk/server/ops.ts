@@ -1,6 +1,7 @@
 import type { OpHandler, OpError } from "@flock/app-sdk";
-import { insertReminder, updateReminder, getReminder, searchActiveReminders, findActiveReminderByTitleDate, listActiveReminders, listEvents, setEventNote, getFire, getEventNote } from "./store";
+import { insertReminder, updateReminder, getReminder, searchActiveReminders, findActiveReminderByTitleDate, listActiveReminders, listEvents, setEventNote, listRowFires, getEventNote, type ReminderRow } from "./store";
 import { rowSourceRef } from "./scheduler";
+import { nextOccurrenceDate, prevOccurrenceDate } from "./rules";
 import { ymd } from "./events";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/, TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -19,8 +20,20 @@ function resolveOne(p: Record<string, unknown>): { r: ReturnType<typeof getRemin
   }
   return err("MISSING_ARG", "Give id or match");
 }
-// Lead, day-of and Missed rows share one sourceRef; a row is showing if either ledger kind recorded it.
-const publishedRowFire = (id: string, occ: string) => getFire(id, occ, "row") ?? getFire(id, occ, "missed");
+// Lead, day-of and Missed rows share one sourceRef per occurrence. The live row is found from the fires
+// ledger, not from dueDate: a lead row is showing BEFORE the due date, and a yearly reminder's dueDate
+// is its anchor year. Candidates are the next and the previous occurrence (a yesterday's Missed row).
+const candidateOccurrences = (r: ReminderRow) => [...new Set([nextOccurrenceDate(r, today()), prevOccurrenceDate(r, today())].filter((o): o is string => !!o))];
+const liveRowOccurrences = (r: ReminderRow) => candidateOccurrences(r).filter((occ) => listRowFires(r.id, occ).length > 0);
+/** The occurrence whose row was published most recently (any lead day, day-of or Missed), or null. */
+function liveRowOccurrence(r: ReminderRow): string | null {
+  let best: { occ: string; at: number } | null = null;
+  for (const occ of candidateOccurrences(r)) {
+    const f = listRowFires(r.id, occ)[0];
+    if (f && (!best || f.firedAt > best.at)) best = { occ, at: f.firedAt };
+  }
+  return best?.occ ?? null;
+}
 const isErr = (v: unknown): v is OpError => !!v && typeof v === "object" && "code" in (v as any);
 
 export const ops: Record<string, OpHandler> = {
@@ -42,8 +55,7 @@ export const ops: Record<string, OpHandler> = {
     const got = resolveOne(p); if (isErr(got)) return got;
     const r = got.r!;
     updateReminder(r.id, { state: "cancelled" });
-    for (const occ of [r.dueDate]) {
-      if (!publishedRowFire(r.id, occ)) continue;
+    for (const occ of liveRowOccurrences(r)) {
       const res = await platform.tasks.withdraw(rowSourceRef(r.id, occ));
       if (!res.ok) return err("PLATFORM", `Cancelled, but could not withdraw its row: ${res.reason}`, 502);
     }
@@ -55,11 +67,11 @@ export const ops: Record<string, OpHandler> = {
     const untilDate = typeof p.untilDate === "string" ? p.untilDate.trim() : "";
     if (!isRealDate(untilDate)) return err("BAD_DATE", "untilDate must be YYYY-MM-DD");
     if (untilDate <= today()) return err("PAST_DATE", "untilDate must be after today", 422);
-    // A live row (untimed on the list, or a timed one's Missed row) is the platform's to hide; otherwise reschedule.
-    const occ = r.dueDate <= today() ? r.dueDate : null;
-    const live = occ && publishedRowFire(r.id, occ);
-    if (live) {
-      const res = await platform.tasks.snooze(rowSourceRef(r.id, occ!), untilDate);
+    // A live row (lead, day-of, or a timed one's Missed row) is the platform's to hide — the reminder's
+    // dueDate is unchanged; with no live row, reschedule the reminder itself.
+    const occ = liveRowOccurrence(r);
+    if (occ) {
+      const res = await platform.tasks.snooze(rowSourceRef(r.id, occ), untilDate);
       if (!res.ok) return err("PLATFORM", `Could not snooze the row: ${res.reason}`, 502);
       return { ok: true, via: "row", id: r.id, untilDate };
     }

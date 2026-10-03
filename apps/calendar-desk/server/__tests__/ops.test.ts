@@ -5,6 +5,7 @@ process.env.APP_DATA_DIR = mkdtempSync(join(tmpdir(), "calendar-desk-ops-"));
 const S = await import("../store");
 const { ops } = await import("../ops");
 const { rowSourceRef } = await import("../scheduler");
+const { nextOccurrenceDate } = await import("../rules");
 
 const snoozes: any[] = []; const withdrawn: string[] = []; let withdrawResult: any = ok(undefined);
 const platform = { configured: true, tasks: { publish: async () => ok(undefined), withdraw: async (ref: string) => { withdrawn.push(ref); return withdrawResult; }, snooze: async (ref: string, untilDate: string) => { snoozes.push({ ref, untilDate }); return ok(undefined); } } } as unknown as PlatformContext;
@@ -31,7 +32,7 @@ describe("add_reminder", () => {
 describe("cancel / snooze / list / note", () => {
   test("cancel by id withdraws any live row; by match needs one hit", async () => {
     const a: any = await ops.add_reminder!({ title: "Call plumber", dueDate: "2099-10-09" }, ctx);
-    S.recordFire({ reminderId: a.id, occurrence: "2099-10-09", kind: "row", taskSourceRef: rowSourceRef(a.id, "2099-10-09"), sessionId: null, status: "ok" });
+    S.recordFire({ reminderId: a.id, occurrence: "2099-10-09", kind: "row@0", taskSourceRef: rowSourceRef(a.id, "2099-10-09"), sessionId: null, status: "ok" });
     expect(await ops.cancel_reminder!({ id: a.id }, ctx)).toMatchObject({ ok: true });
     expect(S.getReminder(a.id)!.state).toBe("cancelled");
     expect(withdrawn).toEqual([rowSourceRef(a.id, "2099-10-09")]);
@@ -39,14 +40,14 @@ describe("cancel / snooze / list / note", () => {
   });
   test("a failed withdraw still cancels the reminder but reports 502", async () => {
     const a: any = await ops.add_reminder!({ title: "Call plumber", dueDate: "2099-10-09" }, ctx);
-    S.recordFire({ reminderId: a.id, occurrence: "2099-10-09", kind: "row", taskSourceRef: rowSourceRef(a.id, "2099-10-09"), sessionId: null, status: "ok" });
+    S.recordFire({ reminderId: a.id, occurrence: "2099-10-09", kind: "row@0", taskSourceRef: rowSourceRef(a.id, "2099-10-09"), sessionId: null, status: "ok" });
     withdrawResult = { ok: false, reason: "x" };
     expect(await ops.cancel_reminder!({ id: a.id }, ctx)).toMatchObject({ code: "PLATFORM", status: 502 });
     expect(S.getReminder(a.id)!.state).toBe("cancelled");
   });
   test("snooze: an untimed reminder with a live row → platform snooze on that row; a timed one → reschedule in the app", async () => {
     const a: any = await ops.add_reminder!({ title: "Pay rent", dueDate: today() }, ctx);
-    S.recordFire({ reminderId: a.id, occurrence: today(), kind: "row", taskSourceRef: rowSourceRef(a.id, today()), sessionId: null, status: "ok" });
+    S.recordFire({ reminderId: a.id, occurrence: today(), kind: "row@0", taskSourceRef: rowSourceRef(a.id, today()), sessionId: null, status: "ok" });
     expect(await ops.snooze_reminder!({ match: "rent", untilDate: "2099-10-12" }, ctx)).toMatchObject({ ok: true, via: "row" });
     expect(snoozes[0]).toEqual({ ref: rowSourceRef(a.id, today()), untilDate: "2099-10-12" });
     const t: any = await ops.add_reminder!({ title: "Join webinar", dueDate: "2099-10-09", dueTime: "15:00" }, ctx);
@@ -66,6 +67,28 @@ describe("cancel / snooze / list / note", () => {
     expect(await ops.snooze_reminder!({ id: t.id, untilDate: "2099-10-12" }, ctx)).toMatchObject({ ok: true, via: "row" });
     expect(snoozes).toEqual([{ ref: rowSourceRef(t.id, today()), untilDate: "2099-10-12" }]);
     expect(S.getReminder(t.id)!.dueDate).toBe(today());
+  });
+  test("snooze: a reminder whose LEAD row is showing → platform snooze of that occurrence's row; the due date stays (I1)", async () => {
+    const a: any = await ops.add_reminder!({ title: "Renew visa", dueDate: "2099-10-19" }, ctx);
+    S.recordFire({ reminderId: a.id, occurrence: "2099-10-19", kind: "row@3", taskSourceRef: rowSourceRef(a.id, "2099-10-19"), sessionId: null, status: "ok" });
+    expect(await ops.snooze_reminder!({ id: a.id, untilDate: "2099-10-18" }, ctx)).toMatchObject({ ok: true, via: "row" });
+    expect(snoozes).toEqual([{ ref: rowSourceRef(a.id, "2099-10-19"), untilDate: "2099-10-18" }]);
+    expect(S.getReminder(a.id)!.dueDate).toBe("2099-10-19");
+  });
+  test("snooze: no live row → reschedule", async () => {
+    const a: any = await ops.add_reminder!({ title: "Renew visa", dueDate: "2099-10-19" }, ctx);
+    expect(await ops.snooze_reminder!({ id: a.id, untilDate: "2099-10-25" }, ctx)).toMatchObject({ ok: true, via: "reschedule" });
+    expect(snoozes).toEqual([]);
+    expect(S.getReminder(a.id)!.dueDate).toBe("2099-10-25");
+  });
+  test("cancel: a yearly reminder withdraws its CURRENT occurrence's row, not the anchor year's (I1)", async () => {
+    const d = new Date(Date.now() + 5 * 86_400_000);
+    const anchor = `2000-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    const b = S.insertReminder({ id: "rem_bday", title: "Asha's birthday", body: null, dueDate: anchor, dueTime: null, recurrence: "yearly", leadDays: [7, 0], sourceKind: "user", sourceRef: null, sourceLink: null, accountId: null, state: "active" });
+    const occ = nextOccurrenceDate(b, today())!;
+    S.recordFire({ reminderId: b.id, occurrence: occ, kind: "row@7", taskSourceRef: rowSourceRef(b.id, occ), sessionId: null, status: "ok" });
+    expect(await ops.cancel_reminder!({ id: b.id }, ctx)).toMatchObject({ ok: true });
+    expect(withdrawn).toEqual([rowSourceRef(b.id, occ)]);
   });
   test("list_upcoming merges reminders and events in date order within the window", async () => {
     await ops.add_reminder!({ title: "Renew visa", dueDate: "2099-10-12" }, ctx);

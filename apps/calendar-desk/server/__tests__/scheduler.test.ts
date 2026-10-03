@@ -4,7 +4,7 @@ import { mkdtempSync } from "fs"; import { tmpdir } from "os"; import { join } f
 import { ok, type PlatformContext } from "@flock/app-sdk";
 process.env.APP_DATA_DIR = mkdtempSync(join(tmpdir(), "calendar-desk-sched-"));
 const S = await import("../store");
-const { publishDueRows, fireTimedReminders, runPrepWindow, quietHoursDefer, readPrepConfig } = await import("../scheduler");
+const { publishDueRows, fireTimedReminders, runPrepWindow, quietHoursDefer, readPrepConfig, factsAroundDate } = await import("../scheduler");
 const { readRemindersConfig } = await import("../rules");
 
 const cfg = readRemindersConfig(undefined);
@@ -30,7 +30,7 @@ describe("publishDueRows", () => {
     expect(p.published[0]).toMatchObject({ sourceRef: "rem|rem_a|2026-10-19", title: "Renew visa — in 14 days (19 Oct)", type: "reminder", due: new Date(2026, 9, 19, 9, 0).getTime() });
     expect(p.published[0].context.card.blocks[0]).toMatchObject({ kind: "fields" });
     expect(await publishDueRows(p.ctx, cfg, new Date(2026, 9, 5, 7, 7))).toEqual({ published: 0, failed: 0 });
-    expect(S.getFire(r.id, "2026-10-19", "row")!.taskSourceRef).toBe("rem|rem_a|2026-10-19");
+    expect(S.getFire(r.id, "2026-10-19", "row@14")!.taskSourceRef).toBe("rem|rem_a|2026-10-19");
   });
   test("a same-day reminder created after publishHour is published on the next pass (Review Focus 1)", async () => {
     rem({ dueDate: "2026-10-05", leadDays: [0] });
@@ -42,6 +42,40 @@ describe("publishDueRows", () => {
     const p = platform(); (p.ctx.tasks as any).publish = async () => ({ ok: false, reason: "platform 503" });
     expect((await publishDueRows(p.ctx, cfg, new Date(2026, 9, 5, 7, 0))).failed).toBe(1);
     expect(S.listFiresOn("2026-10-05").length).toBe(0);
+  });
+});
+
+describe("every lead day publishes (R21)", () => {
+  test("leads [14,3,0]: D-14, D-3 and D each publish once on the shared sourceRef with a fresh title; repeats publish nothing", async () => {
+    rem({ id: "rem_l3" });
+    const p = platform();
+    const at = (d: number) => new Date(2026, 9, d, 7, 0);
+    for (const day of [5, 16, 19]) {
+      expect((await publishDueRows(p.ctx, cfg, at(day))).published).toBe(1);
+      expect((await publishDueRows(p.ctx, cfg, new Date(2026, 9, day, 11, 0))).published).toBe(0);   // same day again
+    }
+    expect(p.published.map((t) => t.sourceRef)).toEqual(["rem|rem_l3|2026-10-19", "rem|rem_l3|2026-10-19", "rem|rem_l3|2026-10-19"]);
+    expect(p.published.map((t) => t.title)).toEqual(["Renew visa — in 14 days (19 Oct)", "Renew visa — in 3 days (19 Oct)", "Renew visa"]);
+  });
+  test("a lead row the owner completed does not stop the later ones (the platform upsert recreates it)", async () => {
+    rem({ id: "rem_c" });
+    const p = platform();
+    await publishDueRows(p.ctx, cfg, new Date(2026, 9, 5, 7, 0));
+    // Owner ticks off the 14-day row on the 6th: the app is not told; the next lead day publishes anyway.
+    expect((await publishDueRows(p.ctx, cfg, new Date(2026, 9, 16, 7, 0))).published).toBe(1);
+    expect((await publishDueRows(p.ctx, cfg, new Date(2026, 9, 19, 7, 0))).published).toBe(1);
+  });
+  test("the overdue-untimed republish stays bounded: a day-of row is not recreated on the days after", async () => {
+    rem({ id: "rem_o" });
+    const p = platform();
+    await publishDueRows(p.ctx, cfg, new Date(2026, 9, 19, 7, 0));
+    for (const day of [20, 21, 25]) expect((await publishDueRows(p.ctx, cfg, new Date(2026, 9, day, 7, 0))).published).toBe(0);
+    // Laptop shut on the day itself: one overdue row the morning after, then nothing more.
+    rem({ id: "rem_s", dueDate: "2026-10-10" });
+    const q = platform();
+    expect((await publishDueRows(q.ctx, cfg, new Date(2026, 9, 11, 7, 0))).published).toBe(1);
+    expect(q.published[0]).toMatchObject({ sourceRef: "rem|rem_s|2026-10-10", title: "Renew visa — 1 day overdue (10 Oct)" });
+    expect((await publishDueRows(q.ctx, cfg, new Date(2026, 9, 12, 7, 0))).published).toBe(0);
   });
 });
 
@@ -154,12 +188,37 @@ describe("runPrepWindow", () => {
     expect((await runPrepWindow(p.ctx, readPrepConfig(undefined), new Date(2026, 9, 5, 14, 45), { facts, sync })).prepped).toBe(0);
     expect(S.getPrep("acct", "k1")!.sessionId).toBe("s-1");
   });
-  test("skips all-day and no-attendee events by default, and a vanished event", async () => {
+  test("skips all-day and known-no-attendee events by default, and a vanished event", async () => {
     ev({ eventKey: "allday", allDay: true, startAt: null, endAt: null });
-    ev({ eventKey: "solo", attendeesText: null });
+    ev({ eventKey: "solo", attendeesText: "" });
     ev({ eventKey: "gone" }); S.markMissingEvents("acct", ["2026-10-05"], ["allday", "solo"], 2);
     const p = platform();
     expect((await runPrepWindow(p.ctx, readPrepConfig(undefined), new Date(2026, 9, 5, 14, 40), { facts: async () => [], sync })).prepped).toBe(0);
     expect((await runPrepWindow(p.ctx, readPrepConfig({ skipNoAttendees: false }), new Date(2026, 9, 5, 14, 40), { facts: async () => [], sync })).prepped).toBe(1);
+  });
+  test("unknown attendees (null — the scrape reads none) are not 'nobody invited': prepped with skipNoAttendees on (R22)", async () => {
+    ev({ eventKey: "unknown", attendeesText: null });
+    const p = platform();
+    const cfgOn = readPrepConfig(undefined);
+    expect(cfgOn.skipNoAttendees).toBe(true);
+    expect((await runPrepWindow(p.ctx, cfgOn, new Date(2026, 9, 5, 14, 40), { facts: async () => [], sync })).prepped).toBe(1);
+    expect(p.intents[0].payload).toMatchObject({ eventKey: "unknown", attendees: "" });
+  });
+});
+
+describe("factsAroundDate", () => {
+  test("reads past the oldest page so recent facts are not dropped, newest first", async () => {
+    const fact = (id: number, recordedAt: string, date: string) => ({ id, content: `fact ${id}`, when: { date }, dateRole: "deadline", recordedAt });
+    const old = Array.from({ length: 500 }, (_, i) => fact(i + 1, `2026-09-01T00:00:${String(i % 60).padStart(2, "0")}.000Z`, "2026-01-01"));
+    const pages: Record<string, any> = {
+      first: { facts: old, nextSince: "2026-09-01T00:00:59.000Z" },
+      "2026-09-01T00:00:59.000Z": { facts: [old[499], fact(900, "2026-10-01T00:00:00.000Z", "2026-10-05"), fact(901, "2026-10-02T00:00:00.000Z", "2026-10-05")], nextSince: "2026-10-02T00:00:00.000Z" },
+    };
+    const asked: string[] = [];
+    const p = platform();
+    (p.ctx as any).memory.factsSince = async (o: { sinceIso: string }) => { asked.push(o.sinceIso); return ok(pages[asked.length === 1 ? "first" : o.sinceIso] ?? { facts: [], nextSince: o.sinceIso }); };
+    const got = await factsAroundDate(p.ctx)("2026-10-05");
+    expect(got.map((f: any) => f.content)).toEqual(["fact 901", "fact 900"]);
+    expect(asked.length).toBe(2);
   });
 });

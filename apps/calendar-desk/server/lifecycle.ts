@@ -2,7 +2,7 @@ import type { AppLifecycleHooks, ProgressItem } from "@flock/app-sdk";
 import { listInit, markInitStarted, markInitFinished, getCursor } from "./store";
 import { syncAccount, lastSyncAt, lastFault } from "./sync";
 import { ingestFacts } from "./ingest";
-import { publishDueRows, storeRoutineState, readRoutineState } from "./scheduler";
+import { publishDueRows, storeRoutineState, readRoutineState, routineKey } from "./scheduler";
 import { migrateLegacyReminders } from "./migrate-legacy";
 import { ymd } from "./events";
 
@@ -29,7 +29,7 @@ export const calendarDeskHooks: AppLifecycleHooks = {
         await syncAccount(rec.accountId, { platform: ctx.platform, now: () => now }, "scheduled");
       }
     }
-    if (st.remindersEnabled || ctx.readRoutines.some((r) => r.id === "reminders")) {
+    if (st.remindersEnabled || ctx.readRoutines.some((r) => routineKey(r) === "reminders")) {
       await ingestFacts(ctx.platform, st.remindersCfg, now);
       await publishDueRows(ctx.platform, st.remindersCfg, now);
     }
