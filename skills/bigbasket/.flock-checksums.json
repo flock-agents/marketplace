@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "generatedAt": "2026-10-03T20:23:11.315Z",
+  "sourceVersion": "1.2.0",
+  "sourceTag": "bigbasket-v1.2.0",
+  "files": {
+    "icon.svg": "05865e6104573352015d59d9dde26a2379b99d1458183318959f4bf015b8a8c6",
+    "scripts/view-cart.sh": "eaaa25929d4b2e8216ef9333b7749139f3e9f67d5c4d6545cbf08047ed2712bd",
+    "scripts/add-to-cart.sh": "e3842b8966eab11481464256f1d6025f4e9aa49ce2c192f8015a1fab80d1fd53",
+    "scripts/_health-check.sh": "f583afcfb661fc5a194fca69f7af60f958c92a49788b7b04938551d6395bce51",
+    "scripts/track-order.ts": "5775d086fbb4d77b342bc4136063cd5bf718c3bf6af8aedf0ab38f6e755e6ca1",
+    "scripts/checkout.sh": "b1a4544102a3c8dee87acafe5a1688b8888ad9195c36eb3f0aa5cb213efb8fc8",
+    "scripts/search-products.sh": "bbb87849cd843fc63f2ee0664b3ee4006bac70e1b91a02825a8cba136f42a768",
+    "scripts/track-order.sh": "37b837264dd60abfd23925f082789afd59d413f9a0c3df4c7c2a989d0b12e268",
+    "scripts/search-products.ts": "5ae4030770b9acdb809c53471f6e79afc9e40706246455589983e078b1bbc8ed",
+    "scripts/checkout.ts": "d9d9ef5df102c3aea9997afd3e656b6369d4d2f6787cb48435ea922f97d82c2a",
+    "scripts/add-to-cart.ts": "3346932eabbb5dd40b5de721d03f1fddb860b7e9f898271e595b5ad4d1a8e001",
+    "scripts/_helpers.sh": "0ae933eb141515fc948b49000318eb04c8d0bccf81cf1e8a3c9da9e02cec5f20",
+    "scripts/view-cart.ts": "838bbfaa64776e0f9a6ba14ea5104601ffb00a20d441d8d4a2a6bb0eedd78100",
+    "scripts/keep-alive.ts": "5f90114c5d7ecdcbee55bea981077355bd29794378fcfc74eafe05eeeef7f95d",
+    "scripts/remove-from-cart.ts": "1fc4f3dd497cdc5c9582049559defa0ae4d74ef2d3a22466d0a88302a222e321",
+    "scripts/view-order-history.sh": "f18adef780202a203e7bdf7989b4361e09e612133adf33eb7cfcda0f938999e4",
+    "scripts/remove-from-cart.sh": "1b4736029699aed77f9ae20dce91a95a96e13c96d7ea97e7db0c0e9b7355043c",
+    "scripts/view-order-history.ts": "be55c5297077b548ead555145032b0a791f745a8c322b826a2c7b422e116a256",
+    "scripts/keep-alive.sh": "47e25c20e070085a17cf6e9b0158ac75cc2d2547df0c9b4399374efcd335b0bb",
+    "flock.skill.json": "e496512066518581e63a47482fd89b31ac6172ae0975a09ab490874f8a2627b4",
+    "instructions.md": "cc95699906497fb70711da84980bb7ee9de350a42db2c1d8b00f9f99da1479be"
+  }
+}

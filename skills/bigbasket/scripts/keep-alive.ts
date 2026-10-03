@@ -19,7 +19,7 @@ const config: GroceryServiceConfig = {
 
 const SKILL_ID = process.env.SKILL_ID || "bigbasket";
 const BROWSER_SESSION = process.env.BROWSER_SESSION || "bigbasket";
-const FLOCK_API = process.env.FLOCK_API_URL || "http://localhost:35625";
+import { FLOCK_API } from "../../_shared/_helpers";
 const FLOCK_AUTH_TOKEN = process.env.FLOCK_AUTH_TOKEN || "";
 const FLOCK_AGENT_ID = process.env.FLOCK_AGENT_ID || "";
 const STATUS_FILE = `/tmp/skill-${SKILL_ID}-keepalive.json`;
@@ -49,7 +49,11 @@ try {
 
 const finalUrl = (result as any)?.url || "";
 
-if (config.loginPattern.test(finalUrl)) {
+// Test the login pattern against the AUTHORITY + PATH only, never the query or
+// fragment: a `?redirect=…%2Flogin` / `continue=` parameter is exactly what a login
+// redirect carries, and matching it read as "we are ON the login page" and marked a
+// working session outdated. See isSignInUrl in skills/_shared/_google_helpers.ts.
+if (config.loginPattern.test(finalUrl.split(/[?#]/)[0])) {
   try {
     await fetch(`${FLOCK_API}/api/internal/browser-sessions/${BROWSER_SESSION}/mark-outdated`, {
       method: "POST",
