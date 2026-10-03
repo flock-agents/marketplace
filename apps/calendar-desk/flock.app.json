@@ -1,0 +1,67 @@
+{
+  "name": "Calendar Desk",
+  "slug": "calendar-desk",
+  "type": "managed",
+  "visibility": "headless",
+  "icon": "icon.svg",
+  "description": "Keeps what has a date — your calendar, the notes you leave on meetings, and reminders you ask for or your agents find — and acts at the right moment: a to-do on the morning it is due, a message at the minute, a prep note before a meeting.",
+  "bundled": false,
+  "deletable": true,
+  "apiPrefix": "/api",
+  "_comment": "Runs OUT OF PROCESS like Slack Desk, on @flock/app-sdk (platform-supplied into node_modules). Two clocks: the platform's hourly app-relay tick does the heavy, lease-taking work (scrape, ingest, publish today's rows); the app's own 1-minute loop fires timed reminders and the meeting-prep window from the local store. TODO rows are platform-owned: this app only publishes and withdraws them by source ref (spec D4/D5).",
+  "config": {
+    "requires": {
+      "skills": ["google-calendar"],
+      "agent": { "required": true, "label": "Agent that reminds you and prepares you for meetings", "default": { "pairDefaultAgent": true } }
+    },
+    "agentInterface": {
+      "intents": [
+        { "name": "reminder_due", "description": "A timed reminder's minute has arrived. Tell the user in one or two lines.", "payloadSchema": { "required": ["reminderId", "title", "dueAt"], "properties": { "reminderId": "string", "title": "string", "body": "string", "dueAt": "string", "sourceLink": "string", "reuseSessionId": "string" } } },
+        { "name": "meeting_prep", "description": "A meeting starts within the prep window. Write a short prep note.", "payloadSchema": { "required": ["eventKey", "title", "startAt"], "properties": { "eventKey": "string", "title": "string", "startAt": "string", "endAt": "string", "attendees": "string", "location": "string", "note": "string", "factsAround": "array", "budget": "object" } } }
+      ],
+      "operations": [
+        { "name": "add_reminder", "description": "Store a reminder: {title, dueDate:'YYYY-MM-DD', dueTime?:'HH:MM', body?, recurrence?:'yearly'}. Resolve relative dates yourself first.", "invoke": "ops/add_reminder" },
+        { "name": "cancel_reminder", "description": "Cancel a reminder by id or by {match:'words from its title'}.", "invoke": "ops/cancel_reminder" },
+        { "name": "snooze_reminder", "description": "Move a reminder to another day: {id? | match?, untilDate:'YYYY-MM-DD'}. Works for a reminder already on the to-do list too.", "invoke": "ops/snooze_reminder" },
+        { "name": "list_upcoming", "description": "Reminders and calendar events in the next {days:14} days.", "invoke": "ops/list_upcoming" },
+        { "name": "set_event_note", "description": "Attach what you should do before a meeting: {match:{date:'YYYY-MM-DD', titleContains:'…'}, note}. Returns AMBIGUOUS with candidates when several match.", "invoke": "ops/set_event_note" }
+      ],
+      "instructions": "When the user asks to be reminded, call add_reminder and confirm the date (and time, if any) you understood in one line. 'Push it to Monday' / 'remind me later' on a reminder is snooze_reminder. 'What's coming up' or 'what reminders do I have' is list_upcoming — answer from it, never by opening the calendar. A note about what to do before a meeting is set_event_note. When you receive a reminder_due intent: say the reminder in one or two lines in this chat, include the source link if there is one, and end with the waiting-on-user block. When you receive meeting_prep: write a prep note within the budget given (who is attending and what memory says about them, the user's note verbatim, open threads with those people from the last 14 days); if memory has nothing, say so in one line rather than nothing; end with the waiting-on-user block."
+    }
+  },
+  "lifecycle": { "initialize": true, "tick": true, "progress": true },
+  "dataStore": { "accountPartitioned": true },
+  "processConfig": { "command": "bun run server/index.ts", "healthCheckPath": "/health", "readyPattern": "calendar-desk listening on", "readyTimeoutMs": 15000, "maxRestarts": 3 },
+  "widgets": [{ "id": "today", "kind": "schedule", "dataUrl": "/api/widget/today", "title": "Your Schedule" }],
+  "routines": [
+    {
+      "id": "reminders",
+      "name": "Add today's reminders to your list",
+      "description": "Each morning, puts the reminders due today on your to-do list — the ones you asked for and the dates your agents found in email and Slack. Reminders with a time of day are sent as a message at that minute instead.",
+      "trigger": { "type": "schedule", "cron": "7 * * * *" },
+      "_cronComment": "HOURLY DISPATCH, DAILY WORK — the tick publishes once the local hour reaches publishHour and leaves the day unclaimed if the platform refused, so a later tick finishes it. A reminder created later the same day is published on the next tick (Review Focus 1).",
+      "executionMode": "app-relay",
+      "configSchema": [
+        { "key": "publishHour", "type": "number", "label": "Add them at (hour, 24h)", "help": "Before your morning brief.", "default": 6 },
+        { "key": "includeFound", "type": "boolean", "label": "Also remind me about dates my agents find in email and Slack", "default": true },
+        { "key": "leadDaysBirthday", "type": "number", "label": "Days before a birthday or anniversary", "default": 7 },
+        { "key": "leadDaysTravel", "type": "number", "label": "Days before travel", "default": 2 },
+        { "key": "leadDaysDeadline", "type": "text", "label": "Days before a deadline (comma-separated)", "default": "14,3" }
+      ]
+    },
+    {
+      "id": "meeting-prep",
+      "name": "Prepare me before meetings",
+      "description": "Shortly before a meeting, your assistant sends a short prep note: who is coming, what you said you wanted to raise, and what memory knows about them.",
+      "trigger": { "type": "schedule", "cron": "*/30 * * * *" },
+      "_cronComment": "The owner-visible cadence. The app's own loop evaluates the window every minute; this routine's enabled flag and config are what the loop reads.",
+      "executionMode": "app-relay",
+      "configSchema": [
+        { "key": "windowMinutes", "type": "number", "label": "Minutes before a meeting", "default": 30 },
+        { "key": "skipAllDay", "type": "boolean", "label": "Skip all-day events", "default": true },
+        { "key": "skipNoAttendees", "type": "boolean", "label": "Skip blocks with nobody else invited", "default": true }
+      ]
+    }
+  ],
+  "buildCommand": "bun install"
+}

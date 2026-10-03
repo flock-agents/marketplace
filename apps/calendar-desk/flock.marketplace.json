@@ -1,0 +1,1 @@
+{ "name": "Calendar Desk", "slug": "calendar-desk", "description": "Reminders on the day, a message at the minute, a prep note before meetings — from your Google Calendar and the dates your agents find", "version": "1.0.0", "author": "flock", "category": "productivity", "tags": ["calendar", "reminders", "meetings", "google"], "minFlockVersion": "0.9.0", "customizable": true }
