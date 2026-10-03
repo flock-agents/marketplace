@@ -9,6 +9,7 @@ import { widgetRoutes } from "./widget";
 import { startMinuteLoop } from "./scheduler";
 
 const flock = createFlockApp({ lifecycle: calendarDeskHooks, ops });
-flock.hono.route("/", widgetRoutes);
+// The linked SDK resolves its own hono copy; the types differ nominally, the runtime is one Hono.
+flock.hono.route("/", widgetRoutes as never);
 flock.listen();
 startMinuteLoop(flock.platform);
