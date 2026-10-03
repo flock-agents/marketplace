@@ -87,5 +87,9 @@ export function titleForLead(r: ReminderRow, occurrence: string, today: string):
   const days = Math.round((toDate(occurrence).getTime() - toDate(today).getTime()) / 86_400_000);
   const d = toDate(occurrence);
   const mon = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][d.getMonth()];
+  if (days < 0) {
+    const overdueDays = -days;
+    return `${r.title} — ${overdueDays} day${overdueDays === 1 ? "" : "s"} overdue (${d.getDate()} ${mon})`;
+  }
   return `${r.title} — in ${days} day${days === 1 ? "" : "s"} (${d.getDate()} ${mon})`;
 }

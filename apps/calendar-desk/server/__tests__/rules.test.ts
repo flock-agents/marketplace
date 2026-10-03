@@ -67,5 +67,7 @@ describe("lead days and occurrences", () => {
   test("titles", () => {
     expect(titleForLead(rem(), "2026-10-19", "2026-10-05")).toBe("Renew visa — in 14 days (19 Oct)");
     expect(titleForLead(rem(), "2026-10-19", "2026-10-19")).toBe("Renew visa");
+    expect(titleForLead(rem(), "2026-10-19", "2026-10-22")).toBe("Renew visa — 3 days overdue (19 Oct)");
+    expect(titleForLead(rem(), "2026-10-19", "2026-10-20")).toBe("Renew visa — 1 day overdue (19 Oct)");
   });
 });
