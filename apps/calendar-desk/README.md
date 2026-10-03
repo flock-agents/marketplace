@@ -13,7 +13,7 @@ spawns it, and the two talk over two narrow seams:
 | app → platform | `@flock/app-sdk`'s `PlatformContext` | `tasks.publish/withdraw/snooze`, `connectors.exec`, `memory.factsSince`, `agent.intent` |
 
 Nothing else is shared. No Google Calendar event ever lands in a platform table — the app keeps its own
-SQLite file under `APP_DATA_DIR` and hands the platform only the extracted memory items and the to-do rows it publishes.
+SQLite file under `APP_DATA_DIR` and hands the platform only the to-do rows it publishes.
 
 ## How it reads Google Calendar
 
@@ -144,8 +144,7 @@ server/
   events.ts          Scrape normalization: eventKey derivation from date/start/title
   ingest.ts          Memory ingestion: found dates from email and Slack
   rules.ts           Lead days and recurrence: which reminders are due today
-  scheduler.ts       The minute loop: fires timed reminders and prep notes
-  lifecycle.ts       Routine state: hourly tick stores config for the minute loop
+  scheduler.ts       The minute loop: fires timed reminders and prep notes; reads routine state from the hourly tick
   store.ts           calendar-desk.db — events, event_notes, reminders, fires, preps, cursors, init_state
   widget.ts          The schedule widget: today's reminders and events
   ops.ts             Agent operations: add/cancel/snooze reminders, set event notes
