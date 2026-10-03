@@ -34,8 +34,10 @@ The exact sequence, every time:
    fields, so a reply built from it cannot address anyone correctly. Each message
    also carries `unsubscribeLink: true` when its body has an unsubscribe / opt-out
    / manage-preferences link — bulk mail, which the platform refuses to draft for.
-   The thread carries `hasDraft: true` when an unsent draft is already open on it;
-   the platform refuses to draft a second one.
+   `getThread`'s default read (print view) never reports an open draft — `hasDraft`
+   is only meaningful when you pass `view: "thread"`. You do not need to check it
+   yourself either way: the platform's own gates already refuse a second draft
+   when one is open.
 2. Read the LAST message in `messages` — that is the one you are answering. Take
    its `from`, `to`, `cc` and `date`.
 3. `createReplyDraft({ threadId, to, cc, subject, body, replyToMessageRef })`,
@@ -112,6 +114,8 @@ name, so a draft written any other way silently bypasses all of them.
 
 Before you draft a reply, call `getReplyContext({ threadId })` once. Params:
 `{ threadId: string }` → `{ mailbox, thread, related, memory, voice, apply, rules, grounding }`.
+Under a follow-up routine's grant, it instead returns the thread as rendered
+text, undated, with the user's last message labelled.
 - `thread`: the whole thread with full bodies and per-message To/Cc.
 - `related`: the user's newest mail on this topic and with this sender, bodies
   included. This is where the answer to "what's the status?" usually is.
@@ -229,7 +233,10 @@ Delete a draft. Params: `{ draftId: string }`. Confirms the draft is actually
 gone before reporting success.
 
 ### findDraftForThread
-Find the draft for a thread when its id was not captured. Params: `{ threadId: string }` → `{ threadId, draftId }`.
+Find the draft for a thread when its id was not captured. Params: `{ threadId: string }` → `{ threadId, draftId }`. Reads the whole drafts list, page by page; fails (rather than answering "no draft") if it could not reach the end.
+
+### listDraftThreads
+Every thread that has a draft right now, without opening any conversation. Params: `{}` → `{ threadIds, complete, pages, reason }`. `complete: false` means the list could not be read to the end — do not treat a missing thread as having no draft.
 
 ### storeThreadBody
 Keep a thread the platform has already read, so nothing reads it twice.

@@ -19,7 +19,7 @@
 // path in this file calls or falls through to sendDraft/sendEmail.
 
 import { draftRowForThread, DRAFT_ROWS_EXPR, type DraftListRow } from "./_draftRows";
-import { gmailViewUrl, pollInPageScript, parsePollResult, DRAFTS_VIEW_READY_EXPR, NAV_TO_DRAFTS_SCRIPT } from "./_gmailNav";
+import { gmailViewUrl, pollInPageScript, parsePollResult, searchViewReadyExpr, DRAFTS_VIEW_READY_EXPR, NAV_TO_DRAFTS_SCRIPT } from "./_gmailNav";
 import { extractDraftBody, COMPOSE_BODY_SCRAPE } from "./_draftBody";
 import { hasTable, bodyToComposeHtml, writeComposeHtmlScript } from "./_bodyHtml";
 import { findReplyAll, findReplyAllMenuItem } from "./_replyAll";
@@ -28,11 +28,36 @@ import {
   errorJson,
   requireBrowserSession,
   validateId,
+  urlencode,
   persistentCreate,
   persistentInteract,
+  persistentInteractRaw,
   persistentClose,
 } from "../../_shared/_google_helpers";
 import { invalidateCachedThread, rememberDraftThread } from "./_threadCache";
+import { unreadProbeQuery, unreadIdsExpr, wasUnread, probeSummary, MARK_UNREAD_SCRIPT, parseMarkResult, type MarkResult, type UnreadDiag } from "./_unreadState";
+
+// Fix round 1 (Critical + Important #3): the probe and restore ride on TOP of the 90s
+// SLOW_SKILL_TIMEOUT_MS ceiling (server/src/skill-executor.ts) — a draft write that is already
+// saved and confirmed must never be lost to a slow restore hop. RESTORE_WAIT_MS is a tight
+// ceiling (not a delay: it resolves the instant the selector is met), and
+// RESTORE_BUDGET_MS skips the restore outright once too much of the 90s is already spent.
+// Final review I1: the probe must never be able to FAIL the operation it rides on. It used to open
+// with a `waitForSelector ".AO"` action -- a timeout there makes persistentCreate call errorJson and
+// the process exits, so a slow Gmail load killed a draft/read that used to succeed. The session is now
+// established by the navigation alone, and the readiness wait lives INSIDE the probe poll, which
+// returns ready:false instead of throwing; an unsettled probe counts as "not unread" (fail-closed).
+// 20s is the skill's usual cold-load ceiling.
+//
+// Async confirmation (2026-09-24 round 3): MARK_UNREAD_SCRIPT itself now polls up to 5000ms for a
+// confirmation signal plus a fixed 1500ms flush wait (~6.5s worst case) before it returns. Started
+// at the RESTORE_BUDGET_MS ceiling (60s), that puts the restore call's own return at ~66.5s —
+// still well inside the 90s SLOW_SKILL_TIMEOUT_MS. The evaluate action's own per-call timeout
+// (server/src/browser-sessions.ts, options.timeout || 30000) already covers the ~6.5s with room to
+// spare, since this call passes no `delay` override — no timeout change needed on either budget.
+const PROBE_POLL_MS = 20_000;
+const RESTORE_WAIT_MS = 10_000;
+const RESTORE_BUDGET_MS = 60_000;
 
 // --- Pure extraction (unit-tested, no browser) ---
 
@@ -89,6 +114,9 @@ async function confirmDraftRow(persistentId: string, threadId: string, attempts 
 }
 
 function runScript(): void {
+  // Fix round 1 (Important #3): clocked from the very top of the script, so the restore-budget
+  // check below measures against the SAME ceiling skill-executor.ts is about to enforce.
+  const startedAt = Date.now();
   const params = JSON.parse(process.env.SKILL_PARAMS || "{}");
   const threadId: string = params.threadId || "";
   const to: string = params.to || "";
@@ -112,19 +140,56 @@ function runScript(): void {
     let openMode = "";
     let autosaveSeen: boolean | null = null;
     let draftRow: DraftListRow | null = null;
-    // gmailViewUrl, not a bare fragment: a reused persistent page would treat
-    // "#inbox/<id>" as a same-document navigation and leave the PREVIOUS view
-    // up (see _gmailNav.ts). Here that is not merely a stale read -- the reply
-    // controls we are about to click would belong to whatever thread was
-    // already open, so the draft could be composed on the wrong thread.
-    const sessionResult = await persistentCreate(gmailViewUrl(`#inbox/${threadId}`), undefined, { holdLock: true });
+    let restoredUnread = false;
+    // Evidence trail for the live bug (2026-09-24): the drafted thread still ends up read and
+    // restoredUnread:false, and stderr on a successful call is discarded, so this has to travel
+    // in the JSON result itself. markResult and friends are set inside restoreUnreadIfNeeded below.
+    let markResult: MarkResult | undefined;
+    let markCands: string | undefined;
+    let markConfirm: string | undefined;
+    let markWaitedMs: number | undefined;
+
+    // 1. PROBE the unread state BEFORE the thread is opened (opening it marks it read — that is
+    //    the very reason this restore exists: a reply only threads when composed from the thread
+    //    view). The probe establishes the held session; the thread itself is opened on the SAME
+    //    session next, so nothing else can interleave between "was it unread" and "mark it read".
+    const probeQuery = unreadProbeQuery();
+    const sessionResult = await persistentCreate(
+      gmailViewUrl(`#search/${urlencode(probeQuery)}`),
+      [
+        { action: "evaluate", script: pollInPageScript(searchViewReadyExpr(probeQuery), unreadIdsExpr(), PROBE_POLL_MS) },
+      ],
+      { holdLock: true },
+    );
     const persistentId: string = sessionResult?.persistentSessionId || "";
 
     if (!persistentId) {
       errorJson("SESSION_ERROR", "Failed to create persistent session for Gmail reply draft");
     }
+    const threadWasUnread = wasUnread(sessionResult?.content, threadId);
+    const probe = probeSummary(sessionResult?.content);
 
     try {
+      // gmailViewUrl, not a bare fragment: a reused persistent page would treat
+      // "#all/<id>" as a same-document navigation and leave the PREVIOUS view
+      // up (see _gmailNav.ts).
+      //
+      // `#all/<id>`, not `#inbox/<id>` (Ruling R22, 2026-09-24): the inbox route renders
+      // nothing for a thread that is no longer in the inbox (live finding, see getThread.ts).
+      // Follow-up nudges target exactly those threads -- ones the owner started and got no
+      // answer on, or archived after replying -- so under #inbox the h2.hP wait below timed
+      // out and no nudge was ever written. #all resolves every thread, inbox or not, so it
+      // is used for every draft, normal and nudge alike. Here that is not merely a stale read -- the reply
+      // controls we are about to click would belong to whatever thread was
+      // already open, so the draft could be composed on the wrong thread.
+      //
+      // h2.hP is the thread's own subject heading -- waiting on it here (rather than trusting the
+      // bare navigate to have landed) is belt-and-braces: replyOpenActions below waits on the reply
+      // control anyway, but that selector can in principle exist on a still-loading page.
+      await persistentInteract(persistentId, [
+        { action: "waitForSelector", selector: "h2.hP", delay: 20000 },
+      ], false, undefined, gmailViewUrl(`#all/${threadId}`));
+
       // Open the in-thread reply editor — same selectors replyToMessage.ts uses.
       // 20s/15s, not the original 5s: a thread took 19.6s to render on a measured
       // authenticated load. Ceilings, not delays -- they resolve as soon as the
@@ -194,7 +259,47 @@ function runScript(): void {
           return JSON.parse(typeof openResult?.content === "string" ? openResult.content : "{}") || {};
         } catch { return {}; }
       })();
+
+      // R13(b): the thread was already opened above (marking it read) by the time we get here,
+      // whichever way this turns out. Shared by every exit that leaves the thread open-and-read —
+      // the refusal right below AND the normal success path further down — so an early refusal
+      // never silently skips the restore the later, success-only code path already had. Degrades
+      // to false rather than take any exit down with it; see the Fix round 1 notes further below
+      // on why this MUST use persistentInteractRaw, never persistentInteract.
+      const restoreUnreadIfNeeded = async (): Promise<boolean> => {
+        if (!threadWasUnread) return false;
+        const elapsedMs = Date.now() - startedAt;
+        if (elapsedMs > RESTORE_BUDGET_MS) {
+          console.error(`[createReplyDraft] skipping unread restore — ${elapsedMs}ms elapsed, past the ${RESTORE_BUDGET_MS}ms restore budget`);
+          markResult = "skipped-budget";
+          return false;
+        }
+        try {
+          const { httpCode, body } = await persistentInteractRaw(persistentId, [
+            { action: "waitForSelector", selector: "h2.hP", delay: RESTORE_WAIT_MS },
+            { action: "evaluate", script: MARK_UNREAD_SCRIPT },
+          ], false, undefined, gmailViewUrl(`#all/${threadId}`));
+          if (httpCode >= 400) {
+            markResult = `http-${httpCode}`;
+            return false;
+          }
+          const content = typeof body?.content === "string" ? body.content : "";
+          const parsedMark = parseMarkResult(content);
+          markResult = parsedMark.marked ? "marked" : "no-control";
+          markCands = parsedMark.cands;
+          if (parsedMark.confirm) markConfirm = parsedMark.confirm;
+          markWaitedMs = parsedMark.waitedMs;
+          return parsedMark.marked;
+        } catch {
+          markResult = "error";
+          return false;
+        }
+      };
+
       if (opened.ok !== true) {
+        // Restore BEFORE closing the session — this exit happens after the thread view already
+        // marked the thread read but before the success path's own restore would ever run.
+        await restoreUnreadIfNeeded();
         await persistentClose(persistentId).catch(() => {});
         if (requireReplyAll && opened.mode === "none") {
           errorJson("NOT_REPLY_ALL", "Could not open Reply all on this thread, and a plain Reply would leave out people on it. Nothing was typed and no draft was written.");
@@ -294,6 +399,25 @@ function runScript(): void {
 
       // Prove the draft exists BEFORE this session dies (see confirmDraftRow).
       draftRow = await confirmDraftRow(persistentId, threadId);
+
+      // Put the thread's unread state BACK the way the probe found it, still inside this same
+      // held session. confirmDraftRow left the page on #drafts, so go back to the thread first.
+      // A failed restore never fails the draft write -- it just leaves the thread read, which is
+      // no worse than today's behaviour.
+      //
+      // Fix round 1 (Critical): this MUST use persistentInteractRaw, never persistentInteract.
+      // persistentInteract calls errorJson on an HTTP >= 400, and errorJson calls process.exit(1)
+      // -- a catch around it is dead code. The draft is already saved and confirmed by this point;
+      // exiting here means no success JSON, `finally`'s persistentClose never runs, and
+      // invalidateCachedThread/rememberDraftThread below never fire, so a caller that sees no
+      // response retries and makes a DUPLICATE draft. A slow restore must degrade to
+      // restoredUnread:false, never take the whole write down with it.
+      //
+      // Fix round 1 (Important #3): skipped outright once too much of the 90s SLOW_SKILL_TIMEOUT_MS
+      // ceiling is already spent -- the draft's own success matters far more than restoring unread.
+      // (Budget/skip logic now lives in restoreUnreadIfNeeded, shared with the early-refusal exit
+      // above — R13(b).)
+      restoredUnread = await restoreUnreadIfNeeded();
     } finally {
       await persistentClose(persistentId).catch(() => {});
     }
@@ -304,6 +428,21 @@ function runScript(): void {
     const draftId = draftRow ? draftRow.draftId : null;
     invalidateCachedThread(threadId, "createReplyDraft");
     if (draftId) rememberDraftThread(draftId, threadId);
+
+    // Evidence trail (2026-09-24): whether the probe even settled and how many unread ids it saw,
+    // whether THIS thread was among them, and what the restore click reported (or why it was
+    // skipped) — server-side logs this per call so a live "still ends up read" report can be
+    // diagnosed without re-running anything. Never replayed from the thread cache (getThread /
+    // getThreads write their own copies there; createReplyDraft's result is never cached).
+    const unreadDiag: UnreadDiag = {
+      probeReady: probe.ready,
+      probeIds: probe.count,
+      wasUnread: threadWasUnread,
+      ...(markResult !== undefined ? { markResult } : {}),
+      ...(markCands !== undefined ? { markCands } : {}),
+      ...(markConfirm !== undefined ? { markConfirm } : {}),
+      ...(markWaitedMs !== undefined ? { markWaitedMs } : {}),
+    };
 
     if (!draftId) {
       // A usable failure, never a lie: the draft may have been composed but
@@ -316,6 +455,8 @@ function runScript(): void {
         bodyAsSaved: savedBody,
         replyMode: openMode,
         autosaveConfirmed: autosaveSeen,
+        restoredUnread,
+        unreadDiag,
         reason: autosaveSeen === false
           ? "Gmail never showed its 'Draft saved' confirmation, and no row appeared in #drafts within 5 attempts (1s apart) — the reply was probably not saved."
           : "Draft was composed but its row did not appear in #drafts within 3 attempts (2s apart) — it may still be indexing.",
@@ -332,6 +473,8 @@ function runScript(): void {
       threadId,
       bodyAsSaved: savedBody,
       replyMode: openMode,
+      restoredUnread,
+      unreadDiag,
     }));
   })();
 }
