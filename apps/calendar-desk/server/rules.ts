@@ -58,6 +58,19 @@ export function nextOccurrenceDate(r: Pick<ReminderRow, "dueDate" | "recurrence"
   return null;
 }
 
+/** The most recent occurrence strictly before `today`, never earlier than the first dueDate; null when none. */
+export function prevOccurrenceDate(r: Pick<ReminderRow, "dueDate" | "recurrence">, today: string): string | null {
+  if (r.recurrence !== "yearly") return r.dueDate < today ? r.dueDate : null;
+  const [, m, d] = r.dueDate.split("-").map(Number);
+  const [ty] = today.split("-").map(Number);
+  for (const y of [ty!, ty! - 1]) {
+    const last = new Date(y, m!, 0).getDate();
+    const cand = `${y}-${pad(m!)}-${pad(Math.min(d!, last))}`;
+    if (cand < today && cand >= r.dueDate) return cand;
+  }
+  return null;
+}
+
 /** Occurrence dates to PUBLISH A ROW for today. A timed reminder gets rows on lead days only — the
  *  day itself is a chat (D6). An untimed one gets its day-of row even when today is past the lead
  *  days (created late in the day, or the laptop was shut: Review Focus 1/2). */

@@ -79,6 +79,36 @@ describe("fireTimedReminders", () => {
   });
 });
 
+describe("fix round 1 (R14)", () => {
+  test("a 23:30 reminder deferred at 23:31 fires once at 08:00 next day, not again at 08:01, and gets no Missed row", async () => {
+    rem({ id: "rem_q", dueDate: "2026-10-05", dueTime: "23:30", leadDays: [0] });
+    const p = platform();
+    expect((await fireTimedReminders(p.ctx, new Date(2026, 9, 5, 23, 31))).deferred).toBe(1);
+    await publishDueRows(p.ctx, cfg, new Date(2026, 9, 6, 6, 5));
+    expect(p.published.some((t) => t.title.startsWith("Missed:"))).toBe(false);
+    expect((await fireTimedReminders(p.ctx, new Date(2026, 9, 6, 8, 0))).fired).toBe(1);
+    expect(p.intents[0].payload.late).toBe(true);
+    expect((await fireTimedReminders(p.ctx, new Date(2026, 9, 6, 8, 1))).fired).toBe(0);
+  });
+  test("a chat that failed 3 times becomes one Missed row next day", async () => {
+    rem({ id: "rem_x", dueDate: "2026-10-05", dueTime: "15:00", leadDays: [0] });
+    const p = platform(); (p.ctx.agent as any).intent = async () => ({ ok: false, reason: "429" });
+    for (let i = 0; i < 3; i++) await fireTimedReminders(p.ctx, new Date(2026, 9, 5, 15, i));
+    await publishDueRows(p.ctx, cfg, new Date(2026, 9, 6, 7, 0));
+    await publishDueRows(p.ctx, cfg, new Date(2026, 9, 6, 8, 0));
+    expect(p.published.filter((t) => t.title.startsWith("Missed:") && t.sourceRef === "rem|rem_x|2026-10-05").length).toBe(1);
+  });
+  test("a yearly timed reminder misses only its previous occurrence, one day window", async () => {
+    rem({ id: "rem_b", dueDate: "1990-05-01", dueTime: "09:00", recurrence: "yearly", leadDays: [0] });
+    const p = platform();
+    await publishDueRows(p.ctx, cfg, new Date(2026, 4, 2, 11, 0));
+    expect(p.published.map((t) => t.sourceRef)).toEqual(["rem|rem_b|2026-05-01"]);
+    const q = platform();
+    await publishDueRows(q.ctx, cfg, new Date(2026, 4, 10, 11, 0));
+    expect(q.published.length).toBe(0);
+  });
+});
+
 describe("runPrepWindow", () => {
   // The refresh path (an honest empty scrape clears the day) is covered by sync.test.ts; stub it here.
   const sync = (async () => ({ ok: true, events: 0, fault: null })) as any;

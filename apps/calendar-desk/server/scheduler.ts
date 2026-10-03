@@ -1,6 +1,6 @@
 import type { PlatformContext } from "@flock/app-sdk";
 import { listActiveReminders, getFire, recordFire, listEvents, getEventNote, getPrep, recordPrep, getCursor, setCursor, type ReminderRow } from "./store";
-import { rowOccurrencesDue, timedFireDue, titleForLead, readRemindersConfig, type RemindersConfig } from "./rules";
+import { rowOccurrencesDue, timedFireDue, prevOccurrenceDate, titleForLead, readRemindersConfig, type RemindersConfig } from "./rules";
 import { syncAccount, shouldScrape } from "./sync";
 import { ymd } from "./events";
 
@@ -40,10 +40,13 @@ export async function publishDueRows(platform: PlatformContext, cfg: RemindersCo
   const out = { published: 0, failed: 0 };
   if (!platform.configured || now.getHours() < cfg.publishHour) return out;
   const today = ymd(now);
+  const yesterday = ymd(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1));
   for (const r of listActiveReminders()) {
     const occurrences: Array<{ occ: string; missed: boolean }> = rowOccurrencesDue(r, today).map((occ) => ({ occ, missed: false }));
-    // A TIMED reminder whose minute passed on an earlier day with no chat sent becomes a row (Review Focus 2).
-    if (r.dueTime && r.dueDate < today && !getFire(r.id, r.dueDate, "chat") && !getFire(r.id, r.dueDate, "row")) occurrences.push({ occ: r.dueDate, missed: true });
+    // A TIMED reminder whose minute passed YESTERDAY with no delivered chat becomes a row (Review Focus 2).
+    // One-day window, on the real previous occurrence. A quiet-hours deferral is delivered at 08:00, so wait for it.
+    if (r.dueTime && prevOccurrenceDate(r, today) === yesterday && getFire(r.id, yesterday, "chat")?.status !== "ok" && !getFire(r.id, yesterday, "row")
+      && !(now.getHours() < 10 && (r.dueTime >= "23:00" || r.dueTime < "08:00") && (getFire(r.id, yesterday, "chat")?.attempts ?? 0) < 3)) occurrences.push({ occ: yesterday, missed: true });
     for (const { occ, missed } of occurrences) {
       if (getFire(r.id, occ, "row")) continue;
       const sourceRef = rowSourceRef(r.id, occ);
@@ -68,17 +71,26 @@ export async function fireTimedReminders(platform: PlatformContext, now: Date) {
   const out = { fired: 0, deferred: 0, failed: 0 };
   if (!platform.configured) return out;
   const today = ymd(now);
+  const yesterday = ymd(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1));
   for (const r of listActiveReminders()) {
+    const cands: Array<{ occurrence: string; dueAt: number; carried: boolean }> = [];
     const due = timedFireDue(r, now);
-    if (!due) continue;
-    const prior = getFire(r.id, due.occurrence, "chat");
-    if (prior && (prior.status === "ok" || prior.attempts >= 3)) continue;
-    if (quietHoursDefer(now)) { out.deferred++; continue; }        // delivered from 08:00 by the same check
-    const reuse = getCursor(`reminder_session:${today}`);
-    const payload: Record<string, unknown> = { reminderId: r.id, title: r.title, body: r.body ?? "", dueAt: new Date(due.dueAt).toISOString(), sourceLink: r.sourceLink ?? "", ...(reuse ? { reuseSessionId: reuse } : {}), ...(now.getTime() - due.dueAt > 20 * 60_000 ? { late: true } : {}) };
-    const res = await platform.agent.intent<{ sessionId: string }>("reminder_due", payload);
-    if (res.ok) { recordFire({ reminderId: r.id, occurrence: due.occurrence, kind: "chat", taskSourceRef: null, sessionId: res.data.sessionId, status: "ok" }); setCursor(`reminder_session:${today}`, res.data.sessionId); out.fired++; }
-    else { recordFire({ reminderId: r.id, occurrence: due.occurrence, kind: "chat", taskSourceRef: null, sessionId: null, status: "failed", attempts: (prior?.attempts ?? 0) + 1 }); out.failed++; console.warn(`[calendar-desk] reminder_due ${r.id} failed: ${res.reason}`); }
+    if (due) cands.push({ ...due, carried: false });
+    // A quiet-hours deferral from yesterday evening is delivered the next morning (08:00, 2h grace).
+    if (r.dueTime && now.getHours() < 10 && prevOccurrenceDate(r, today) === yesterday) {
+      const [h, mi] = r.dueTime.split(":").map(Number);
+      cands.push({ occurrence: yesterday, dueAt: new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, h!, mi!).getTime(), carried: true });
+    }
+    for (const c of cands) {
+      const prior = getFire(r.id, c.occurrence, "chat");
+      if (prior && (prior.status === "ok" || prior.attempts >= 3)) continue;
+      if (quietHoursDefer(now)) { out.deferred++; continue; }        // delivered from 08:00 by the same check
+      const reuse = getCursor(`reminder_session:${today}`);
+      const payload: Record<string, unknown> = { reminderId: r.id, title: r.title, body: r.body ?? "", dueAt: new Date(c.dueAt).toISOString(), sourceLink: r.sourceLink ?? "", ...(reuse ? { reuseSessionId: reuse } : {}), ...(c.carried || now.getTime() - c.dueAt > 20 * 60_000 ? { late: true } : {}) };
+      const res = await platform.agent.intent<{ sessionId: string }>("reminder_due", payload);
+      if (res.ok) { recordFire({ reminderId: r.id, occurrence: c.occurrence, kind: "chat", taskSourceRef: null, sessionId: res.data.sessionId, status: "ok" }); setCursor(`reminder_session:${today}`, res.data.sessionId); out.fired++; }
+      else { recordFire({ reminderId: r.id, occurrence: c.occurrence, kind: "chat", taskSourceRef: null, sessionId: null, status: "failed", attempts: (prior?.attempts ?? 0) + 1 }); out.failed++; console.warn(`[calendar-desk] reminder_due ${r.id} failed: ${res.reason}`); }
+    }
   }
   return out;
 }
