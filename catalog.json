@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "updatedAt": "2026-09-29T00:00:00Z",
+  "updatedAt": "2026-10-03T00:00:00Z",
   "items": [
     {
       "slug": "linear",
@@ -265,6 +265,28 @@
       "minFlockVersion": "0.8.2",
       "publishedAt": "2026-09-23T00:00:00Z",
       "updatedAt": "2026-09-24T12:00:00Z"
+    },
+    {
+      "slug": "calendar-desk",
+      "type": "app",
+      "name": "Calendar Desk",
+      "description": "Reminders on the day, a message at the minute, a prep note before meetings \u2014 from your Google Calendar and the dates your agents find",
+      "author": "flock",
+      "category": "productivity",
+      "tags": [
+        "calendar",
+        "reminders",
+        "meetings",
+        "google"
+      ],
+      "icon": "icon.svg",
+      "repo": "flock-agents/marketplace",
+      "path": "apps/calendar-desk",
+      "latestVersion": "1.0.0",
+      "latestTag": "calendar-desk-v1.0.0",
+      "minFlockVersion": "0.9.0",
+      "publishedAt": "2026-10-03T00:00:00Z",
+      "updatedAt": "2026-10-03T00:00:00Z"
     },
     {
       "slug": "slack-assistant",
