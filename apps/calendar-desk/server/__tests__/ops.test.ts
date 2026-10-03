@@ -6,11 +6,11 @@ const S = await import("../store");
 const { ops } = await import("../ops");
 const { rowSourceRef } = await import("../scheduler");
 
-const snoozes: any[] = [];
-const platform = { configured: true, tasks: { publish: async () => ok(undefined), withdraw: async () => ok(undefined), snooze: async (ref: string, untilDate: string) => { snoozes.push({ ref, untilDate }); return ok(undefined); } } } as unknown as PlatformContext;
+const snoozes: any[] = []; const withdrawn: string[] = []; let withdrawResult: any = ok(undefined);
+const platform = { configured: true, tasks: { publish: async () => ok(undefined), withdraw: async (ref: string) => { withdrawn.push(ref); return withdrawResult; }, snooze: async (ref: string, untilDate: string) => { snoozes.push({ ref, untilDate }); return ok(undefined); } } } as unknown as PlatformContext;
 const ctx = { platform, agentId: "pa" };
 const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
-beforeEach(() => { snoozes.length = 0; for (const t of ["events", "event_notes", "reminders", "fires"]) S._db.exec(`DELETE FROM ${t}`); });
+beforeEach(() => { snoozes.length = 0; withdrawn.length = 0; withdrawResult = ok(undefined); for (const t of ["events", "event_notes", "reminders", "fires"]) S._db.exec(`DELETE FROM ${t}`); });
 
 describe("add_reminder", () => {
   test("stores and returns; rejects a past date, a bad time, a missing title", async () => {
@@ -19,6 +19,7 @@ describe("add_reminder", () => {
     expect(await ops.add_reminder!({ title: "x", dueDate: "2020-01-01" }, ctx)).toMatchObject({ code: "PAST_DATE", status: 422 });
     expect(await ops.add_reminder!({ title: "x", dueDate: "2099-01-01", dueTime: "3pm" }, ctx)).toMatchObject({ code: "BAD_TIME" });
     expect(await ops.add_reminder!({ dueDate: "2099-01-01" }, ctx)).toMatchObject({ code: "MISSING_TITLE" });
+    expect(await ops.add_reminder!({ title: "x", dueDate: "2099-02-31" }, ctx)).toMatchObject({ code: "BAD_DATE" });
   });
   test("the same title+date twice is one reminder", async () => {
     await ops.add_reminder!({ title: "Call plumber", dueDate: "2099-10-09" }, ctx);
@@ -33,7 +34,15 @@ describe("cancel / snooze / list / note", () => {
     S.recordFire({ reminderId: a.id, occurrence: "2099-10-09", kind: "row", taskSourceRef: rowSourceRef(a.id, "2099-10-09"), sessionId: null, status: "ok" });
     expect(await ops.cancel_reminder!({ id: a.id }, ctx)).toMatchObject({ ok: true });
     expect(S.getReminder(a.id)!.state).toBe("cancelled");
+    expect(withdrawn).toEqual([rowSourceRef(a.id, "2099-10-09")]);
     expect(await ops.cancel_reminder!({ match: "nothing like this" }, ctx)).toMatchObject({ code: "NOT_FOUND" });
+  });
+  test("a failed withdraw still cancels the reminder but reports 502", async () => {
+    const a: any = await ops.add_reminder!({ title: "Call plumber", dueDate: "2099-10-09" }, ctx);
+    S.recordFire({ reminderId: a.id, occurrence: "2099-10-09", kind: "row", taskSourceRef: rowSourceRef(a.id, "2099-10-09"), sessionId: null, status: "ok" });
+    withdrawResult = { ok: false, reason: "x" };
+    expect(await ops.cancel_reminder!({ id: a.id }, ctx)).toMatchObject({ code: "PLATFORM", status: 502 });
+    expect(S.getReminder(a.id)!.state).toBe("cancelled");
   });
   test("snooze: an untimed reminder with a live row → platform snooze on that row; a timed one → reschedule in the app", async () => {
     const a: any = await ops.add_reminder!({ title: "Pay rent", dueDate: today() }, ctx);

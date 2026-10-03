@@ -15,8 +15,9 @@ export function migrateLegacyReminders(dataDir: string, today: string): { migrat
     if (e?.recurring) { skippedRecurring++; continue; }
     const at = typeof e?.scheduledFor === "string" ? new Date(e.scheduledFor) : null;
     if (!at || !Number.isFinite(at.getTime())) continue;
-    // The wall-clock the reminder was written with (its own offset), not the server's timezone.
-    const wall = /^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})/.exec(e.scheduledFor);
+        // Only an explicit numeric offset carries a wall-clock worth keeping; "Z" (toISOString, the skill's real
+    // format) and offset-less strings resolve through the local getters.
+    const wall = /[+-]\d\d:?\d\d$/.test(e.scheduledFor) ? /^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})/.exec(e.scheduledFor) : null;
     const pad = (n: number) => String(n).padStart(2, "0");
     const dueDate = wall ? wall[1]! : `${at.getFullYear()}-${pad(at.getMonth() + 1)}-${pad(at.getDate())}`;
     const dueTime = wall ? `${wall[2]}:${wall[3]}` : `${pad(at.getHours())}:${pad(at.getMinutes())}`;

@@ -5,6 +5,7 @@ import { ymd } from "./events";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/, TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 const err = (code: string, message: string, status = 400): OpError => ({ error: message, code, status });
+const isRealDate = (s: string) => { if (!DATE_RE.test(s)) return false; const [y, m, d] = s.split("-").map(Number); return ymd(new Date(y!, m! - 1, d!)) === s; };
 const today = () => ymd(new Date());
 const newId = () => `rem_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 
@@ -25,7 +26,7 @@ export const ops: Record<string, OpHandler> = {
     const title = typeof p.title === "string" ? p.title.replace(/\s+/g, " ").trim().slice(0, 120) : "";
     if (!title) return err("MISSING_TITLE", "A reminder needs a title");
     const dueDate = typeof p.dueDate === "string" ? p.dueDate.trim() : "";
-    if (!DATE_RE.test(dueDate) || !Number.isFinite(Date.parse(dueDate))) return err("BAD_DATE", "dueDate must be YYYY-MM-DD");
+    if (!isRealDate(dueDate)) return err("BAD_DATE", "dueDate must be YYYY-MM-DD");
     if (dueDate < today()) return err("PAST_DATE", `${dueDate} is already past`, 422);
     const dueTime = typeof p.dueTime === "string" && p.dueTime.trim() ? p.dueTime.trim() : null;
     if (dueTime && !TIME_RE.test(dueTime)) return err("BAD_TIME", "dueTime must be HH:MM (24h)");
@@ -39,14 +40,18 @@ export const ops: Record<string, OpHandler> = {
     const got = resolveOne(p); if (isErr(got)) return got;
     const r = got.r!;
     updateReminder(r.id, { state: "cancelled" });
-    for (const occ of [r.dueDate]) if (getFire(r.id, occ, "row")) await platform.tasks.withdraw(rowSourceRef(r.id, occ));
+    for (const occ of [r.dueDate]) {
+      if (!getFire(r.id, occ, "row")) continue;
+      const res = await platform.tasks.withdraw(rowSourceRef(r.id, occ));
+      if (!res.ok) return err("PLATFORM", `Cancelled, but could not withdraw its row: ${res.reason}`, 502);
+    }
     return { ok: true, id: r.id, title: r.title };
   },
   async snooze_reminder(p, { platform }) {
     const got = resolveOne(p); if (isErr(got)) return got;
     const r = got.r!;
     const untilDate = typeof p.untilDate === "string" ? p.untilDate.trim() : "";
-    if (!DATE_RE.test(untilDate)) return err("BAD_DATE", "untilDate must be YYYY-MM-DD");
+    if (!isRealDate(untilDate)) return err("BAD_DATE", "untilDate must be YYYY-MM-DD");
     if (untilDate <= today()) return err("PAST_DATE", "untilDate must be after today", 422);
     // A live row (untimed, already on the list) is the platform's to hide; a timed one has no row yet.
     const occ = r.dueDate <= today() ? r.dueDate : null;
@@ -73,7 +78,7 @@ export const ops: Record<string, OpHandler> = {
     if (!note) return err("MISSING_NOTE", "A note needs text");
     const m = p.match as { date?: string; titleContains?: string } | undefined;
     let hits = typeof p.eventKey === "string" ? listEvents({ fromDate: "0000", toDate: "9999" }).filter((e) => e.eventKey === p.eventKey) : [];
-    if (!hits.length && m?.date && DATE_RE.test(m.date)) {
+    if (!hits.length && m?.date && isRealDate(m.date)) {
       const words = (m.titleContains ?? "").toLowerCase().split(/\s+/).filter(Boolean);
       hits = listEvents({ fromDate: m.date, toDate: m.date }).filter((e) => words.every((w) => e.title.toLowerCase().includes(w)));
     }

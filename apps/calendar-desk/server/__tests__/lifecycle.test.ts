@@ -49,9 +49,12 @@ describe("progress and legacy migration", () => {
     writeFileSync(join(DIR, "legacy-reminders.json"), JSON.stringify([
       { id: "rem_1", message: "Call plumber", scheduledFor: "2099-10-09T09:30:00+05:30", recurring: false },
       { id: "rem_2", message: "Standup", schedule: "0 9 * * 1-5", recurring: true },
+      { id: "rem_4", message: "Call bank", scheduledFor: "2099-10-09T09:00:00Z", recurring: false },
       { id: "rem_3", message: "Old", scheduledFor: "2020-01-01T09:00:00Z", recurring: false }]));
-    expect(migrateLegacyReminders(DIR, "2026-10-05")).toEqual({ migrated: 1, skippedRecurring: 1, absent: false });
-    expect(S.listActiveReminders()[0]).toMatchObject({ title: "Call plumber", dueDate: "2099-10-09", dueTime: "09:30", sourceKind: "migrated" });
+    expect(migrateLegacyReminders(DIR, "2026-10-05")).toEqual({ migrated: 2, skippedRecurring: 1, absent: false });
+    expect(S.listActiveReminders().find((r) => r.title === "Call plumber")).toMatchObject({ dueDate: "2099-10-09", dueTime: "09:30", sourceKind: "migrated" });
+    const z = new Date("2099-10-09T09:00:00Z"), p2 = (n: number) => String(n).padStart(2, "0");
+    expect(S.listActiveReminders().find((r) => r.title === "Call bank")).toMatchObject({ dueDate: `${z.getFullYear()}-${p2(z.getMonth() + 1)}-${p2(z.getDate())}`, dueTime: `${p2(z.getHours())}:${p2(z.getMinutes())}` });
     expect(existsSync(join(DIR, "legacy-reminders.migrated.json"))).toBe(true);
     expect(migrateLegacyReminders(DIR, "2026-10-05").absent).toBe(true);
   });
