@@ -7,15 +7,10 @@ Keeps what has a date — your calendar, reminders you ask for, and the dates yo
 A **companion app**: it runs in its own process, on its own port, with its own store. Flock
 spawns it, and the two talk over two narrow seams:
 
-Install the app — that is the whole unit. It is not owned by a skill and there is no separate
-skill to install: the manifest declares the connector it needs (`config.requires.skills`) and the
-two routines it owns, and pairing the app to an agent grants that agent the connector. A template
-names the app directly (`apps: [{ slug: "calendar-desk" }]`).
-
 | direction | how | what crosses |
 |---|---|---|
-| platform → app | HTTP `POST /lifecycle/initialize`, `/lifecycle/tick`, `GET /lifecycle/progress` | "start", "do a pass", "how far along are you" |
-| app → platform | `@flock/app-sdk`'s `PlatformContext` | `progress.report`, `tasks.publish/withdraw/snooze`, `connectors.exec`, `memory.factsSince`, `agent.intent` |
+| platform → app | HTTP `POST /lifecycle/initialize`, `/lifecycle/tick`, `GET /lifecycle/progress`, `POST /ops/:name` | "start", "do a pass", "how far along are you", agent operations |
+| app → platform | `@flock/app-sdk`'s `PlatformContext` | `tasks.publish/withdraw/snooze`, `connectors.exec`, `memory.factsSince`, `agent.intent` |
 
 Nothing else is shared. No Google Calendar event ever lands in a platform table — the app keeps its own
 SQLite file under `APP_DATA_DIR` and hands the platform only the extracted memory items and the to-do rows it publishes.
@@ -28,16 +23,9 @@ The app calls the Google Calendar connector **itself**, through `platform.connec
 
 Reminders come from three sources: ones you ask for directly (via `add_reminder`), recurring dates the app stores (birthdays, anniversaries, travel, deadlines), and **found dates** — dates your agents extract from email and Slack through `memory.factsSince`. The app ingests these daily during the hourly tick and publishes them as to-do rows the morning they are due.
 
-### The link back to Google Calendar
+### Event identity
 
-Every event carries `eventKey` — a unique identifier built from the calendar and event's internal IDs.
-That field becomes the `sourceRef` on published to-do rows, so a reminder's withdrawal is tied back
-to the right event. A meeting's prep note includes a reference to the event.
-
-Two things worth knowing about Google Calendar here:
-
-- The app syncs the **primary calendar only**. Extended properties and the full attendee list are fetched only for events with a meeting within the next 24 hours, conserving quota.
-- A recurring event (yearly birthday, Monday weekly) is fetched once and expanded locally to the dates it falls on within the lease window, avoiding redundant API calls.
+Event identity is a derived `eventKey` (date + start + title) because the scrape has no stable IDs. Task rows use `sourceRef = rem|<reminderId>|<occurrence>` to tie reminders back to their published rows.
 
 ## The routines
 
@@ -45,9 +33,7 @@ Two routines, declared in `flock.app.json`:
 
 ### **Add today's reminders to your list**
 
-A daily publication (default 6am in your timezone), in `app-relay` mode. The hourly tick checks whether the time has come, and if so, publishes all reminders due today as to-do rows. Reminders with a specific time (not just a date) are sent as a message instead.
-
-Routine is always visible on the agent's routines page, configurable and pausable there, but not deletable — deleting it would leave the app with no way to publish reminders.
+A daily publication (default 6am in your timezone), in `app-relay` mode. The hourly tick checks whether the time has come, and if so, publishes all reminders due today as to-do rows. Reminders with a specific time (not just a date) are sent as a message instead. Routine config reaches the minute loop through the state the hourly tick stores; a routine the tick has not named for 2 hours counts as off.
 
 Its config:
 - `publishHour`: which hour (0-23) to publish each morning
@@ -101,11 +87,15 @@ Agent replies: "Moved to Wednesday."
 
 ### `list_upcoming`
 
-Reminders and calendar events in the next days (default 14).
+Reminders and calendar events in the next days (default 14). Returns `{ from, to, items: [...] }`.
 
 ```
 User: "What's coming up?"
 Agent calls: list_upcoming({ days: 14 })
+Returns: { from: "2026-10-03", to: "2026-10-17", items: [
+  { kind: "event", date: "2026-10-05", title: "Team standup", time: "09:30" },
+  { kind: "reminder", date: "2026-10-06", title: "Call Sarah", time: "09:00", source: "user" }
+] }
 Agent replies with the calendar and list.
 ```
 
@@ -129,21 +119,13 @@ The app has two time sources:
 
 ## The scrape budget
 
-Google Calendar quota is consumed only during the hourly tick:
-
-- One `calendarList` call to list your calendars (primary only is read).
-- One `events.list` call per day in the lease window (30–60 days, depending on config), returning event summaries, start/end times, and attendee counts, **not** full details or extended properties.
-- One `events.get` per event with a meeting time in the next 24 hours, to fetch the full attendee list and custom fields (prep note).
-
-Total: ~2–8 calls per tick, depending on event density and prep load.
+One browser-scrape `listEvents` call per sync via `connectors.exec` on the `google-calendar` skill. Cap: `DAILY_SCRAPE_CAP = 8` per account per day. Pre-prep refresh only when the last scrape is older than 2 hours (`FRESH_MS`). Scheduled scrapes on ticks at local hours 6 and 13 with a 50-minute guard. Window: today + 7 days (`KEEP_DAYS_AHEAD`).
 
 ## What it never does
 
-- Write, create, update or delete anything in Google Calendar
-- Send data to Google Calendar or any other service
-- Invent events or reminders not in your calendar or explicitly stored
-- Read calendar streams other than the primary calendar
-- Trigger on events that have not been synced in the current lease window
+- Write to Google Calendar
+- Create to-do rows for calendar events (only for reminders)
+- Post anything itself (the Personal Assistant speaks)
 
 ## Initialization
 
@@ -156,16 +138,21 @@ the app's initialization state, so a platform restart never re-runs a finished s
 
 ```
 server/
-  index.ts       createFlockApp — wires lifecycle + scheduler, listens on loopback only
-  lifecycle.ts   initialize / tick / progress
-  sync.ts        Google Calendar read: sync windows, events, attendee expansion
-  ingest.ts      Memory ingestion: found dates from email and Slack
-  rules.ts       Recurrence: expand yearly/recurring dates to the lease window
-  store.ts       calendar-desk.db — reminders, events, cursors, sync_state
-  scheduler.ts   The minute loop: fires timed reminders and prep notes
-  widget.ts      The schedule widget: today's reminders and events
-  ops.ts         Agent operations: add/cancel/snooze reminders, set event notes
+  index.ts           createFlockApp — wires lifecycle + scheduler, listens on loopback only
+  lifecycle.ts       initialize / tick / progress
+  sync.ts            Google Calendar scrape: rate limits and window calculation
+  events.ts          Scrape normalization: eventKey derivation from date/start/title
+  ingest.ts          Memory ingestion: found dates from email and Slack
+  rules.ts           Lead days and recurrence: which reminders are due today
+  scheduler.ts       The minute loop: fires timed reminders and prep notes
+  lifecycle.ts       Routine state: hourly tick stores config for the minute loop
+  store.ts           calendar-desk.db — events, event_notes, reminders, fires, preps, cursors, init_state
+  widget.ts          The schedule widget: today's reminders and events
+  ops.ts             Agent operations: add/cancel/snooze reminders, set event notes
+  migrate-legacy.ts  Legacy reminder migration
 ```
+
+Tables: `events, event_notes, reminders, fires, preps, cursors, init_state`.
 
 Everything that *decides* takes its inputs as arguments, so it is testable without Google Calendar or a platform.
 
