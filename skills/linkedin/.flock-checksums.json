@@ -1,13 +1,14 @@
 {
   "version": 1,
-  "generatedAt": "2026-10-03T20:23:14.363Z",
-  "sourceVersion": "1.1.1",
-  "sourceTag": "linkedin-v1.1.1",
+  "generatedAt": "2026-10-04T18:43:58.226Z",
+  "sourceVersion": "1.2.0",
+  "sourceTag": "linkedin-v1.2.0",
   "files": {
     "icon.svg": "6e004c7bf1433180d3f374e267ffa045f376badfe89c7c681afad954d0a13e4e",
     "DISCOVERY.md": "15293fe65bf245bdadf81396e96675eda6ced8607f66020c04a209d095697673",
     "scripts/linkedin.ts": "9bdd13ee83319fbde632398a4aa185505d6bad5c93266b0a608254239463fa40",
-    "flock.skill.json": "0dd4f5dad1c222daccd779ff527a417805d0f8c0505ac4157cfa9c6b181bc124",
-    "instructions.md": "1b772ce7456775eae7351fdf050783a0ce20bf72423859577da45aba80faf46c"
+    "scripts/linkedin-exec.sh": "ea63f13d18b1f2f011a1813c2ebbcf6a4be6f426d77f7bc37c32152c0d657dec",
+    "flock.skill.json": "e0cfa1c4a6d3166475363869c31193a705f84f803d0cfc2666f31478c347e529",
+    "instructions.md": "d5bc6f0807d84a35bc2caa0e429a493d7fed7e9391ec01236ce2eca225228c82"
   }
 }

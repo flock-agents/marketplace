@@ -216,11 +216,11 @@
       "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "skills/linkedin",
-      "latestVersion": "1.1.1",
-      "latestTag": "linkedin-v1.1.1",
-      "minFlockVersion": "0.7.0",
+      "latestVersion": "1.2.0",
+      "latestTag": "linkedin-v1.2.0",
+      "minFlockVersion": "0.10.3",
       "publishedAt": "2026-08-19T05:23:00Z",
-      "updatedAt": "2026-10-04T00:00:00Z"
+      "updatedAt": "2026-10-05T00:00:00Z"
     },
     {
       "slug": "slack",
