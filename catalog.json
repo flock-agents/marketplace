@@ -108,9 +108,9 @@
       "path": "skills/gmail",
       "latestVersion": "1.5.1",
       "latestTag": "gmail-v1.5.1",
-      "minFlockVersion": "0.7.0",
+      "minFlockVersion": "0.10.3",
       "publishedAt": "2026-08-14T10:00:00Z",
-      "updatedAt": "2026-10-04T00:00:00Z"
+      "updatedAt": "2026-10-05T00:00:00Z"
     },
     {
       "slug": "zepto",
