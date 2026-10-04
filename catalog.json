@@ -195,11 +195,11 @@
       "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "skills/amazon",
-      "latestVersion": "1.0.0",
-      "latestTag": "amazon-v1.0.0",
+      "latestVersion": "1.0.1",
+      "latestTag": "amazon-v1.0.1",
       "minFlockVersion": "0.7.0",
       "publishedAt": "2026-08-14T10:00:00Z",
-      "updatedAt": "2026-08-14T10:00:00Z"
+      "updatedAt": "2026-10-04T00:00:00Z"
     },
     {
       "slug": "linkedin",
