@@ -3,7 +3,7 @@ import { mkdtempSync } from "fs"; import { tmpdir } from "os"; import { join } f
 process.env.APP_DATA_DIR = mkdtempSync(join(tmpdir(), "calendar-desk-store-"));
 const S = await import("../store");
 
-function wipe() { for (const t of ["events", "event_notes", "reminders", "fires", "preps", "cursors", "init_state"]) S._db.exec(`DELETE FROM ${t}`); }
+function wipe() { for (const t of ["events", "event_notes", "preps", "cursors", "init_state"]) S._db.exec(`DELETE FROM ${t}`); }
 beforeEach(wipe);
 
 describe("events", () => {
@@ -29,33 +29,16 @@ describe("events", () => {
   });
 });
 
-describe("reminders and fires", () => {
-  const base = { id: "rem_1", title: "Call plumber", body: null, dueDate: "2026-10-09", dueTime: null, recurrence: "none" as const, leadDays: [0], sourceKind: "user" as const, sourceRef: null, sourceLink: null, accountId: null, state: "active" as const };
-  test("insert, find by title+date (case-insensitive), by sourceRef, search", () => {
-    S.insertReminder(base);
-    S.insertReminder({ ...base, id: "rem_2", title: "Renew visa", sourceKind: "fact", sourceRef: "fact:42" });
-    expect(S.findActiveReminderByTitleDate("call PLUMBER", "2026-10-09")!.id).toBe("rem_1");
-    expect(S.findReminderBySourceRef("fact:42")!.id).toBe("rem_2");
-    expect(S.searchActiveReminders("plumb").map((r) => r.id)).toEqual(["rem_1"]);
-    expect(S.listActiveReminders().length).toBe(2);
-  });
-  test("leadDays round-trips as JSON; update patches and bumps updated_at", () => {
-    S.insertReminder({ ...base, leadDays: [14, 3, 0] });
-    expect(S.getReminder("rem_1")!.leadDays).toEqual([14, 3, 0]);
-    const u = S.updateReminder("rem_1", { state: "cancelled" })!;
-    expect(u.state).toBe("cancelled");
-    expect(S.listActiveReminders().length).toBe(0);
-  });
-  test("a fire is unique per (reminder, occurrence, kind)", () => {
-    S.recordFire({ reminderId: "rem_1", occurrence: "2026-10-09", kind: "row", taskSourceRef: "rem|rem_1|2026-10-09", sessionId: null, status: "ok" });
-    S.recordFire({ reminderId: "rem_1", occurrence: "2026-10-09", kind: "row", taskSourceRef: "rem|rem_1|2026-10-09", sessionId: null, status: "ok" });
-    expect(S.listFiresOn("2026-10-09").length).toBe(1);
-    expect(S.getFire("rem_1", "2026-10-09", "chat")).toBeNull();
+describe("schema and cursors", () => {
+  test("the reminders and fires tables are dropped", () => {
+    const names = (S._db.query("SELECT name FROM sqlite_master WHERE type = 'table'").all() as { name: string }[]).map((r) => r.name);
+    expect(names).not.toContain("reminders"); expect(names).not.toContain("fires");
+    expect(names).toEqual(expect.arrayContaining(["events", "event_notes", "preps", "cursors", "init_state"]));
   });
   test("cursors and init records", () => {
-    expect(S.getCursor("facts_since")).toBeNull();
-    S.setCursor("facts_since", "2026-10-05T00:00:00Z");
-    expect(S.getCursor("facts_since")).toBe("2026-10-05T00:00:00Z");
+    expect(S.getCursor("some_cursor")).toBeNull();
+    S.setCursor("some_cursor", "2026-10-05T00:00:00Z");
+    expect(S.getCursor("some_cursor")).toBe("2026-10-05T00:00:00Z");
     S.markInitStarted("acct", "Reading your calendar");
     expect(S.listInit()[0].finishedAt).toBeNull();
     S.markInitFinished("acct", "done", "Calendar is set up");

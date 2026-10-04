@@ -1,6 +1,5 @@
 import type { PlatformContext } from "@flock/app-sdk";
-import { listActiveReminders, getFire, recordFire, rowFireKind, type FireKind, listEvents, getEventNote, getPrep, recordPrep, getCursor, setCursor, type ReminderRow } from "./store";
-import { rowLeadsDue, timedFireDue, prevOccurrenceDate, titleForLead, readRemindersConfig, type RemindersConfig } from "./rules";
+import { listEvents, getEventNote, getPrep, recordPrep, getCursor, setCursor } from "./store";
 import { syncAccount, shouldScrape } from "./sync";
 import { ymd } from "./events";
 
@@ -9,8 +8,8 @@ export function readPrepConfig(filter: Record<string, unknown> | undefined): Pre
   const raw = filter ?? {};
   return { windowMinutes: typeof raw.windowMinutes === "number" && raw.windowMinutes > 0 ? raw.windowMinutes : 30, skipAllDay: raw.skipAllDay !== false, skipNoAttendees: raw.skipNoAttendees !== false };
 }
-export interface RoutineState { remindersEnabled: boolean; remindersCfg: RemindersConfig; prepEnabled: boolean; prepCfg: PrepConfig }
-/** The routine's manifest id ("reminders" / "meeting-prep"). On the wire `id` is the instance UUID
+export interface RoutineState { prepEnabled: boolean; prepCfg: PrepConfig }
+/** The routine's manifest id ("meeting-prep"). On the wire `id` is the instance UUID
  *  and `appRoutineId` the manifest id; `id` is only a fallback for a platform that predates it. */
 export const routineKey = (r: { id: string; appRoutineId?: string | null }) => r.appRoutineId ?? r.id;
 /** The tick hands us our routines (enabled ones only — the platform ticks only due, enabled routines);
@@ -24,81 +23,7 @@ export function storeRoutineState(readRoutines: ReadonlyArray<{ id: string; appR
 export function readRoutineState(): RoutineState {
   const s = JSON.parse(getCursor("routines") ?? "{}");
   const live = (id: string) => s[id] && Date.now() - s[id].seenAt < 2 * 3600_000;
-  return { remindersEnabled: live("reminders"), remindersCfg: readRemindersConfig(s.reminders?.filter), prepEnabled: live("meeting-prep"), prepCfg: readPrepConfig(s["meeting-prep"]?.filter) };
-}
-
-export const rowSourceRef = (id: string, occ: string) => `rem|${id}|${occ}`;
-const localNine = (ymdStr: string) => { const [y, m, d] = ymdStr.split("-").map(Number); return new Date(y!, m! - 1, d!, 9, 0).getTime(); };
-const niceDate = (ymdStr: string) => { const [y, m, d] = ymdStr.split("-").map(Number); return new Date(y!, m! - 1, d!).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" }); };
-
-function cardFor(r: ReminderRow, occ: string, missed: boolean) {
-  const fields = [{ label: "When", value: `${niceDate(occ)}${r.dueTime ? ` ${r.dueTime}` : ""}` }, { label: "From", value: r.sourceKind === "user" ? "You asked" : r.sourceKind === "migrated" ? "Your earlier reminders" : "Found in your email or Slack" }];
-  const blocks: any[] = [{ kind: "fields", items: fields }];
-  if (r.body && r.body !== r.title) blocks.push({ kind: "message", text: r.body.slice(0, 1200) });
-  if (r.sourceLink) blocks.push({ kind: "link", label: "Open the source", href: r.sourceLink });
-  return { why: missed ? "This was due at a time your laptop was off." : r.sourceKind === "fact" ? "A date your agents found; the morning sort decides what to do with it." : "You asked to be reminded.", source: r.sourceLink ? { label: "Source", href: r.sourceLink } : undefined, blocks };
-}
-
-export async function publishDueRows(platform: PlatformContext, cfg: RemindersConfig, now: Date) {
-  const out = { published: 0, failed: 0 };
-  if (!platform.configured || now.getHours() < cfg.publishHour) return out;
-  const today = ymd(now);
-  const yesterday = ymd(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1));
-  for (const r of listActiveReminders()) {
-    // Each lead day publishes once (ledger kind row@<lead>, R21); every one upserts the same sourceRef,
-    // so the platform retitles the live row or recreates one the owner completed or that was withdrawn.
-    const occurrences: Array<{ occ: string; missed: boolean; kind: FireKind }> = rowLeadsDue(r, today).map(({ occ, lead }) => ({ occ, missed: false, kind: rowFireKind(lead) }));
-    // A TIMED reminder whose minute passed YESTERDAY with no delivered chat becomes a row (Review Focus 2).
-    // One-day window, on the real previous occurrence. A quiet-hours deferral is delivered at 08:00, so wait for it.
-    if (r.dueTime && prevOccurrenceDate(r, today) === yesterday && getFire(r.id, yesterday, "chat")?.status !== "ok" && !getFire(r.id, yesterday, "missed")
-      && !(now.getHours() < 10 && (r.dueTime >= "23:00" || r.dueTime < "08:00") && (getFire(r.id, yesterday, "chat")?.attempts ?? 0) < 3)) occurrences.push({ occ: yesterday, missed: true, kind: "missed" });
-    for (const { occ, missed, kind } of occurrences) {
-      if (getFire(r.id, occ, kind)) continue;
-      const sourceRef = rowSourceRef(r.id, occ);
-      const title = missed ? `Missed: ${r.title}` : titleForLead(r, occ, today);
-      const res = await platform.tasks.publish({ title, sourceRef, type: "reminder", priority: "normal", due: localNine(occ), body: r.body ?? undefined, context: { why: cardFor(r, occ, missed).why, card: cardFor(r, occ, missed) } });
-      if (res.ok) { recordFire({ reminderId: r.id, occurrence: occ, kind, taskSourceRef: sourceRef, sessionId: null, status: "ok" }); out.published++; }
-      else { out.failed++; console.warn(`[calendar-desk] publish ${sourceRef} failed: ${res.reason}`); }
-    }
-  }
-  return out;
-}
-
-const QUIET_START = 23, QUIET_END = 8;
-export function quietHoursDefer(now: Date): Date | null {
-  const h = now.getHours();
-  if (h >= QUIET_END && h < QUIET_START) return null;
-  const d = new Date(now); if (h >= QUIET_START) d.setDate(d.getDate() + 1);
-  d.setHours(QUIET_END, 0, 0, 0); return d;
-}
-
-export async function fireTimedReminders(platform: PlatformContext, now: Date) {
-  const out = { fired: 0, deferred: 0, failed: 0 };
-  if (!platform.configured) return out;
-  const today = ymd(now);
-  const yesterday = ymd(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1));
-  for (const r of listActiveReminders()) {
-    const cands: Array<{ occurrence: string; dueAt: number; carried: boolean }> = [];
-    const due = timedFireDue(r, now);
-    if (due) cands.push({ ...due, carried: false });
-    // A quiet-hours deferral from yesterday evening is delivered the next morning (08:00, 2h grace).
-    // Only a 23:00+ reminder can be deferred across midnight; the quiet-hours hold in publishDueRows keeps the Missed row back until attempts >= 3, which the loop below skips.
-    if (r.dueTime && r.dueTime >= "23:00" && now.getHours() < 10 && prevOccurrenceDate(r, today) === yesterday) {
-      const [h, mi] = r.dueTime.split(":").map(Number);
-      cands.push({ occurrence: yesterday, dueAt: new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, h!, mi!).getTime(), carried: true });
-    }
-    for (const c of cands) {
-      const prior = getFire(r.id, c.occurrence, "chat");
-      if (prior && (prior.status === "ok" || prior.attempts >= 3)) continue;
-      if (quietHoursDefer(now)) { out.deferred++; continue; }        // delivered from 08:00 by the same check
-      const reuse = getCursor(`reminder_session:${today}`);
-      const payload: Record<string, unknown> = { reminderId: r.id, title: r.title, body: r.body ?? "", dueAt: new Date(c.dueAt).toISOString(), sourceLink: r.sourceLink ?? "", ...(reuse ? { reuseSessionId: reuse } : {}), ...(c.carried || now.getTime() - c.dueAt > 20 * 60_000 ? { late: true } : {}) };
-      const res = await platform.agent.intent<{ sessionId: string }>("reminder_due", payload);
-      if (res.ok) { recordFire({ reminderId: r.id, occurrence: c.occurrence, kind: "chat", taskSourceRef: null, sessionId: res.data.sessionId, status: "ok" }); setCursor(`reminder_session:${today}`, res.data.sessionId); out.fired++; }
-      else { recordFire({ reminderId: r.id, occurrence: c.occurrence, kind: "chat", taskSourceRef: null, sessionId: null, status: "failed", attempts: (prior?.attempts ?? 0) + 1 }); out.failed++; console.warn(`[calendar-desk] reminder_due ${r.id} failed: ${res.reason}`); }
-    }
-  }
-  return out;
+  return { prepEnabled: live("meeting-prep"), prepCfg: readPrepConfig(s["meeting-prep"]?.filter) };
 }
 
 export async function runPrepWindow(platform: PlatformContext, cfg: PrepConfig, now: Date, deps: { sync?: typeof syncAccount; facts?: (around: string) => Promise<unknown[]> } = {}) {
@@ -137,7 +62,6 @@ export function startMinuteLoop(platform: PlatformContext): () => void {
     if (busy) return; busy = true;
     try {
       const st = readRoutineState(); const now = new Date();
-      if (st.remindersEnabled) await fireTimedReminders(platform, now);
       if (st.prepEnabled) await runPrepWindow(platform, st.prepCfg, now, { facts: factsAroundDate(platform) });
     } catch (e: any) { console.error(`[calendar-desk] minute loop: ${e?.message ?? e}`); }
     finally { busy = false; }
