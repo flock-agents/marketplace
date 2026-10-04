@@ -1,7 +1,10 @@
 import { createHash } from "node:crypto";
 import type { EventRow } from "./store";
 
-export interface ScrapedEvent { eventId?: string; title: string; time?: string; date?: string }
+export interface ScrapedEvent {
+  eventId?: string; title: string; time?: string; date?: string;
+  allDay?: boolean; location?: string | null; calendar?: string | null; attendees?: string | null;
+}
 
 const MONTHS = ["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"];
 const pad = (n: number) => String(n).padStart(2, "0");
@@ -48,8 +51,8 @@ export function parseTimeText(text: string | undefined, localDate: string): { st
 export function parseDateHeader(text: string | undefined, fallbackYear: number): string | null {
   if (!text) return null;
   const t = text.toLowerCase().replace(/,/g, " ").replace(/\s+/g, " ").trim();
-  const m1 = /(\d{1,2}) ([a-z]{3,})(?: (\d{4}))?/.exec(t);          // 5 oct [2026]
-  const m2 = /([a-z]{3,}) (\d{1,2})(?: (\d{4}))?/.exec(t);          // october 5 [2026]
+  const m1 = /(\d{1,2})\s*([a-z]{3,})(?:\s*(\d{4}))?/.exec(t);        // 5 oct, 5oct [2026]
+  const m2 = /([a-z]{3,})\s*(\d{1,2})(?:,?\s*(\d{4}))?/.exec(t);      // october 5, oct5 [2026]
   const pick = (dayS: string, monS: string, yearS?: string) => {
     const mon = MONTHS.indexOf(monS.slice(0, 3)); if (mon < 0) return null;
     const day = +dayS; if (day < 1 || day > 31) return null;
@@ -67,15 +70,25 @@ export function eventKey(p: { calendar: string | null; localDate: string; startA
 export function normalizeScrape(events: ScrapedEvent[], opts: { calendar: string | null; fallbackDate: string; now: Date }) {
   const seen = new Set<string>();
   const out: Array<Omit<EventRow, "accountId" | "firstSeenAt" | "lastSeenAt" | "missingSince">> = [];
+  let unplaceable = 0;
+  let firstBad: string | null = null;
   for (const e of events) {
     const title = (e.title ?? "").replace(/\s+/g, " ").trim();
     if (!title) continue;
-    const localDate = parseDateHeader(e.date, opts.now.getFullYear()) ?? opts.fallbackDate;
-    const { startAt, endAt, allDay } = parseTimeText(e.time, localDate);
+    const dateText = (e.date ?? "").trim();
+    let localDate = opts.fallbackDate;
+    if (dateText) {
+      const parsed = parseDateHeader(dateText, opts.now.getFullYear());
+      if (!parsed) { unplaceable++; if (firstBad === null) firstBad = dateText; continue; }
+      localDate = parsed;
+    }
+    const timed = parseTimeText(e.time, localDate);
+    const { startAt, endAt, allDay } = e.allDay === true ? { startAt: null, endAt: null, allDay: true } : timed;
     const key = eventKey({ calendar: opts.calendar, localDate, startAt, title });
     if (seen.has(key)) continue;
     seen.add(key);
-    out.push({ eventKey: key, calendar: opts.calendar, title, startAt, endAt, allDay, localDate, attendeesText: null, location: null, rawTimeText: e.time ?? null });
+    out.push({ eventKey: key, calendar: opts.calendar, title, startAt, endAt, allDay, localDate, attendeesText: e.attendees ?? null, location: e.location ?? null, rawTimeText: e.time ?? null });
   }
+  if (unplaceable > 0) console.warn(`calendar-desk: skipped ${unplaceable} scraped row(s) with an unparseable date header (first: "${firstBad}")`);
   return out;
 }

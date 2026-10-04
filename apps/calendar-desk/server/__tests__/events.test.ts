@@ -57,3 +57,52 @@ describe("normalizeScrape", () => {
     expect(rows[1]).toMatchObject({ title: "Diwali", localDate: "2026-10-20", allDay: true });
   });
 });
+
+describe("live-fix 6: spaceless agenda headers", () => {
+  test("parseDateHeader accepts a missing space and every older shape", () => {
+    expect(parseDateHeader("4Oct, Sun", 2026)).toBe("2026-10-04");
+    expect(parseDateHeader("4Oct", 2026)).toBe("2026-10-04");
+    expect(parseDateHeader("Oct4", 2026)).toBe("2026-10-04");
+    expect(parseDateHeader("11Oct, Sun", 2026)).toBe("2026-10-11");
+    expect(parseDateHeader("4 Oct", 2026)).toBe("2026-10-04");
+    expect(parseDateHeader("Sun, 4 Oct", 2026)).toBe("2026-10-04");
+    expect(parseDateHeader("4 October 2026", 2026)).toBe("2026-10-04");
+    expect(parseDateHeader("October 4, 2026", 2026)).toBe("2026-10-04");
+    expect(parseDateHeader("garbage text", 2026)).toBeNull();
+  });
+  test("parseTimeText accepts the normalised both-sides-meridiem form", () => {
+    expect(parseTimeText("7pm – 7:30pm", d)).toEqual({ startAt: local(19), endAt: local(19, 30), allDay: false });
+    expect(parseTimeText("1:15pm – 1:45pm", d)).toEqual({ startAt: local(13, 15), endAt: local(13, 45), allDay: false });
+  });
+  const opts = { calendar: null, fallbackDate: d, now: new Date(2026, 9, 4) };
+  test("same-title events on adjacent days stay two rows", () => {
+    const rows = normalizeScrape([
+      { title: "Agastya School PTM", time: "All day", date: "4Oct, Sun" },
+      { title: "Agastya School PTM", time: "All day", date: "5Oct, Mon" },
+    ], opts);
+    expect(rows.map((r) => r.localDate)).toEqual(["2026-10-04", "2026-10-05"]);
+  });
+  test("unparseable dated rows are skipped with one warning; empty date uses the fallback", () => {
+    const warns: unknown[][] = [];
+    const orig = console.warn;
+    console.warn = (...a: unknown[]) => { warns.push(a); };
+    try {
+      const rows = normalizeScrape([
+        { title: "Lost", time: "1pm", date: "garbage text" },
+        { title: "Lost too", time: "2pm", date: "garbage text" },
+        { title: "Nodate", time: "3pm", date: "" },
+        { title: "Undef", time: "4pm" },
+      ], opts);
+      expect(rows.map((r) => r.title)).toEqual(["Nodate", "Undef"]);
+      expect(rows.every((r) => r.localDate === d)).toBe(true);
+    } finally { console.warn = orig; }
+    expect(warns.length).toBe(1);
+    expect(String(warns[0]![0])).toContain("garbage text");
+  });
+  test("allDay flag wins over a time string; attendees and location are carried", () => {
+    const [r] = normalizeScrape([
+      { title: "Offsite", time: "9am – 5pm", date: "4 October 2026", allDay: true, location: "Bangalore", attendees: "a@x.com, b@x.com", calendar: "work" },
+    ], opts);
+    expect(r).toMatchObject({ allDay: true, startAt: null, endAt: null, location: "Bangalore", attendeesText: "a@x.com, b@x.com", rawTimeText: "9am – 5pm" });
+  });
+});
