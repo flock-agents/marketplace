@@ -28,9 +28,9 @@ export const calendarDeskHooks: AppLifecycleHooks = {
       if (SCHEDULED_SCRAPE_HOURS.includes(now.getHours()) && (lastSyncAt(rec.accountId) ?? 0) < now.getTime() - 50 * 60_000) {
         await syncAccount(rec.accountId, { platform: ctx.platform, now: () => now }, "scheduled");
       }
-      // A light re-read at every tick: shouldScrape allows it only when the last scrape is over 2h old and
+      // A light re-read at every tick in waking hours (07:00-20:59): shouldScrape allows it only when the last scrape is over 2h old and
       // the daily cap is not spent, so most ticks do nothing. This is how an event made after 13:00 is seen.
-      if (rec.outcome === "done") await syncAccount(rec.accountId, { platform: ctx.platform, now: () => now }, "light");
+      if (rec.outcome === "done" && now.getHours() >= 7 && now.getHours() < 21) await syncAccount(rec.accountId, { platform: ctx.platform, now: () => now }, "light");
     }
     if (st.remindersEnabled || ctx.readRoutines.some((r) => routineKey(r) === "reminders")) {
       await ingestFacts(ctx.platform, st.remindersCfg, now);

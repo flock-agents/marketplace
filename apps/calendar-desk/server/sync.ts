@@ -20,7 +20,7 @@ export type SyncReason = "scheduled" | "pre-prep" | "init" | "light" | "forced";
 export function shouldScrape(accountId: string, now: Date, reason: SyncReason): boolean {
   if (scrapesToday(accountId, ymd(now)) >= DAILY_SCRAPE_CAP) return false;
   if (reason !== "pre-prep" && reason !== "light") return true;
-  const last = lastSyncAt(accountId);
+  const last = Math.max(lastSyncAt(accountId) ?? 0, Number(getCursor(`last_attempt:${accountId}`) ?? 0)) || null;
   return last == null || now.getTime() - last > FRESH_MS;
 }
 
@@ -30,7 +30,15 @@ function dateRange(now: Date): string[] {
   return out;
 }
 
+const inFlight = new Set<string>();
+/** One scrape per account at a time: an overlapping call is skipped "busy" and costs nothing against the cap. */
 export async function syncAccount(accountId: string, deps: SyncDeps, reason: SyncReason) {
+  if (inFlight.has(accountId)) return { ok: true, events: 0, fault: null, skipped: "busy" as const };
+  inFlight.add(accountId);
+  try { return await runSync(accountId, deps, reason); } finally { inFlight.delete(accountId); }
+}
+
+async function runSync(accountId: string, deps: SyncDeps, reason: SyncReason) {
   const now = (deps.now ?? (() => new Date()))();
   const day = ymd(now);
   if (!deps.platform.configured) return { ok: false, events: 0, fault: "not configured" };
@@ -38,6 +46,7 @@ export async function syncAccount(accountId: string, deps: SyncDeps, reason: Syn
   if (!shouldScrape(accountId, now, reason)) return { ok: true, events: 0, fault: null, skipped: "fresh" as const };
 
   setCursor(`scrapes:${accountId}:${day}`, String(scrapesToday(accountId, day) + 1));
+  setCursor(`last_attempt:${accountId}`, String(now.getTime()));
   const res = await deps.platform.connectors.exec<{ ok?: boolean; events?: ScrapedEvent[] }>({
     skillId: "google-calendar", functionName: "listEvents", accountHint: accountId,
     params: { timeMin: day, maxResults: 100 }, timeoutMs: SCRAPE_TIMEOUT_MS,

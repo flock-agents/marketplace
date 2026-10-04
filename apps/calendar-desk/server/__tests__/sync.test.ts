@@ -101,3 +101,28 @@ describe("shouldScrape light/forced (A13)", () => {
     expect(shouldScrape("accl", now, "forced")).toBe(false);
   });
 });
+
+describe("attempt back-off and in-flight guard (R33)", () => {
+  test("a fault 30 min ago keeps light fresh; forced still runs", async () => {
+    const now = new Date(); let n = 0;
+    const p = platform(() => { n++; return { ok: false, reason: "guard_busy" }; });
+    S.setCursor("last_sync:accb", "0");
+    await syncAccount("accb", { platform: p.ctx, now: () => new Date(now.getTime() - 30 * 60_000) }, "forced");
+    expect(n).toBe(1);
+    const r: any = await syncAccount("accb", { platform: p.ctx, now: () => now }, "light");
+    expect(r.skipped).toBe("fresh"); expect(n).toBe(1);
+    await syncAccount("accb", { platform: p.ctx, now: () => now }, "forced"); expect(n).toBe(2);
+  });
+  test("an overlapping sync is skipped busy and uncounted", async () => {
+    const now = new Date(); let n = 0; let release: () => void = () => {};
+    const gate = new Promise<void>((res) => { release = res; });
+    const p = platform(() => { n++; return gate.then(() => ok({ ok: true, events: [] })); });
+    const first = syncAccount("accc", { platform: p.ctx, now: () => now }, "forced");
+    const second: any = await syncAccount("accc", { platform: p.ctx, now: () => now }, "forced");
+    expect(second).toMatchObject({ ok: true, skipped: "busy" });
+    release(); await first;
+    expect(n).toBe(1);
+    const { ymd } = await import("../events");
+    expect(S.getCursor(`scrapes:accc:${ymd(now)}`)).toBe("1");
+  });
+});

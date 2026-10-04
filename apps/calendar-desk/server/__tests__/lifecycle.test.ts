@@ -49,6 +49,9 @@ describe("tick — light re-read (A13)", () => {
     const p = platform(() => { scrapes++; return ok({ ok: true, events: [] }); });
     const at = new Date(); at.setHours(10, 7, 0, 0);
     const tick = () => calendarDeskHooks.tick!({ readRoutines: [], platform: p.ctx, now: () => at } as any);
+    const night = new Date(at); night.setHours(23, 0, 0, 0);
+    S.setCursor("last_sync:acct", String(night.getTime() - 3 * 3600_000));
+    await calendarDeskHooks.tick!({ readRoutines: [], platform: p.ctx, now: () => night } as any); expect(scrapes).toBe(0);
     S.setCursor("last_sync:acct", String(at.getTime() - 30 * 60_000));
     await tick(); expect(scrapes).toBe(0);
     S.setCursor("last_sync:acct", String(at.getTime() - 3 * 3600_000));

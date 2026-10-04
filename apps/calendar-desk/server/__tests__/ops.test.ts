@@ -110,6 +110,15 @@ describe("cancel / snooze / list / note", () => {
     expect(await ops.snooze_reminder!({ id: b.id, untilDate: "2099-10-12" }, ctx)).toMatchObject({ ok: true, via: "reschedule" });
     expect(snoozes).toEqual([]);
   });
+  test("snooze (A14): the 24h rule applies to a yearly reminder's previous occurrence too", async () => {
+    const d = new Date(Date.now() - 86_400_000); const y = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    const r = S.insertReminder({ id: "rem_yearly", title: "Anniversary", body: null, dueDate: `${d.getFullYear() - 1}-${y.slice(5)}`, dueTime: null, recurrence: "yearly", leadDays: [0], sourceKind: "user", sourceRef: null, sourceLink: null, accountId: null, state: "active" });
+    S.recordFire({ reminderId: r.id, occurrence: y, kind: "missed", taskSourceRef: rowSourceRef(r.id, y), sessionId: null, status: "ok" });
+    ageFire(r.id, 30 * 3600_000);
+    expect(await ops.snooze_reminder!({ id: r.id, untilDate: "2099-10-12" }, ctx)).toMatchObject({ ok: true, via: "reschedule" });
+    S.updateReminder(r.id, { dueDate: `${d.getFullYear() - 1}-${y.slice(5)}` }); ageFire(r.id, 5 * 3600_000);
+    expect(await ops.snooze_reminder!({ id: r.id, untilDate: "2099-10-13" }, ctx)).toMatchObject({ ok: true, via: "row" });
+  });
   test("cancel: a yearly reminder withdraws its CURRENT occurrence's row, not the anchor year's (I1)", async () => {
     const d = new Date(Date.now() + 5 * 86_400_000);
     const anchor = `2000-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
