@@ -122,10 +122,13 @@ describe("live-fix 6: spaceless agenda headers", () => {
         { title: "Dinner @ Prity's", date: "4 October 2026", time: "8 – 9pm", attendees: "Shiva Shankar" },
         { title: "Offsite", date: "4 October 2026", allDay: true, attendees: "a@x.com" },
         { title: "Random banner", date: "4 October 2026", allDay: true },
-        { title: "Shared cal thing", date: "4 October 2026", time: "9am", calendar: "Team" },
+        { title: "Work thing", date: "4 October 2026", time: "9am", calendar: "Work" },
+        { title: "Family day", date: "4 October 2026", allDay: true, calendar: "Family", attendees: "Mum" },
+        { title: "Family banner", date: "4 October 2026", allDay: true, calendar: "Family" },
+        { title: "Anu", date: "4 October 2026", allDay: true, calendar: "Birthdays", attendees: "x" },
       ], o);
-      expect(r.rows.map((x) => x.title)).toEqual(["Dinner @ Prity's", "Offsite"]);
-      expect(r.filtered).toBe(3);
+      expect(r.rows.map((x) => x.title)).toEqual(["Dinner @ Prity's", "Offsite", "Work thing", "Family day"]);
+      expect(r.filtered).toBe(4);
       expect(r.skipped).toBe(0);
     });
   });

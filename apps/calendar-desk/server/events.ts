@@ -67,13 +67,13 @@ export function eventKey(p: { calendar: string | null; localDate: string; startA
   return createHash("sha1").update(`${p.calendar ?? ""}|${p.localDate}|${p.startAt ?? "allday"}|${title}`).digest("hex").slice(0, 16);
 }
 
-/** A16. Dropped at sync, never stored. The scrape's `calendar` is null for the owner's own calendar; a
- *  "Calendar: X" segment appears only for a secondary one, so ANY non-null value (and any name matching
- *  /holiday/i, e.g. "Holidays in India") is a built-in or subscribed calendar, not the owner's. An all-day
- *  row with no attendees/creator is a banner, not an event. Timed rows from the own calendar always stay. */
+/** A16/R34. Dropped at sync, never stored. Only Google's BUILT-IN calendars are dropped by name (holidays,
+ *  birthdays, tasks, contacts); the owner's own or a subscribed calendar ("Work", "Family") is kept. An
+ *  all-day row with no attendees/creator is a banner, not an event; timed rows always stay. */
+const BUILT_IN_CALENDAR = [/holiday/i, /^birthdays?$/i, /^tasks$/i, /^contacts$/i];
 function isNoise(e: ScrapedEvent): boolean {
   const cal = (e.calendar ?? "").trim();
-  if (cal || /holiday/i.test(e.calendar ?? "")) return true;
+  if (cal && BUILT_IN_CALENDAR.some((re) => re.test(cal))) return true;
   return e.allDay === true && !(e.attendees ?? "").trim();
 }
 

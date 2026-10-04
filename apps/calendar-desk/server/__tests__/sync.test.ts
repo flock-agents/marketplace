@@ -41,6 +41,26 @@ describe("syncAccount", () => {
     expect(lastFault("acct")).toMatch(/login/);
     expect(S.listEvents({ fromDate: "2026-10-05", toDate: "2026-10-05" }).length).toBe(1);
   });
+  test("all rows filtered: ok, 0 events, stored rows marked missing, no fault", async () => {
+    await syncAccount("acct", { platform: platform(() => ok({ ok: true, events: [{ title: "Standup", time: "9:30am", date: "Mon, 5 Oct" }] })).ctx, now: () => NOW }, "scheduled");
+    const r = await syncAccount("acct", { platform: platform(() => ok({ ok: true, events: [{ title: "Diwali", date: "Mon, 5 Oct", allDay: true, calendar: "Holidays in India" }] })).ctx, now: () => new Date(NOW.getTime() + 4 * 3600_000) }, "scheduled");
+    expect(r).toMatchObject({ ok: true, events: 0, fault: null });
+    expect(lastFault("acct")).toBeNull();
+    const all = S.listEvents({ fromDate: "2026-10-05", toDate: "2026-10-12", includeMissing: true });
+    expect(all.length).toBe(1);
+    expect(all[0]!.missingSince).not.toBeNull();
+  });
+  test("filtered plus an unreadable row: no missing-marking", async () => {
+    await syncAccount("acct", { platform: platform(() => ok({ ok: true, events: [{ title: "Standup", time: "9:30am", date: "Mon, 5 Oct" }] })).ctx, now: () => NOW }, "scheduled");
+    const orig = console.warn; console.warn = () => {};
+    let r: any;
+    try {
+      r = await syncAccount("acct", { platform: platform(() => ok({ ok: true, events: [
+        { title: "Diwali", date: "Mon, 5 Oct", allDay: true, calendar: "Holidays in India" }, { title: "Garbled", time: "1pm", date: "Sun4" }] })).ctx, now: () => new Date(NOW.getTime() + 4 * 3600_000) }, "scheduled");
+    } finally { console.warn = orig; }
+    expect(r.ok).toBe(true);
+    expect(S.listEvents({ fromDate: "2026-10-05", toDate: "2026-10-12", includeMissing: true })[0]!.missingSince).toBeNull();
+  });
   test("an honest empty scrape clears the day", async () => {
     await syncAccount("acct", { platform: platform(() => ok({ ok: true, events: [{ title: "Standup", time: "9:30am", date: "Mon, 5 Oct" }] })).ctx, now: () => NOW }, "scheduled");
     await syncAccount("acct", { platform: platform(() => ok({ ok: true, events: [] })).ctx, now: () => new Date(NOW.getTime() + 4 * 3600_000) }, "scheduled");
