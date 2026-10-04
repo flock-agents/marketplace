@@ -10,6 +10,7 @@ spawns it, and the two talk over two narrow seams:
 | direction | how | what crosses |
 |---|---|---|
 | platform → app | HTTP `POST /lifecycle/initialize`, `/lifecycle/tick`, `GET /lifecycle/progress`, `POST /ops/:name` | "start", "do a pass", "how far along are you", agent operations |
+| platform → app | HTTP `GET /api/widget/today` | the schedule widget; `connector` says whether Google is linked (`none` / `syncing` / `ok` / `attention`); reminders list in every state |
 | app → platform | `@flock/app-sdk`'s `PlatformContext` | `tasks.publish/withdraw/snooze`, `connectors.exec`, `memory.factsSince`, `agent.intent` |
 
 Nothing else is shared. No Google Calendar event ever lands in a platform table — the app keeps its own

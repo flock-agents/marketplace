@@ -11,7 +11,8 @@ widgetRoutes.get("/api/widget/today", (c) => {
   const date = ymd(new Date());
   const inits = listInit();
   const fault = inits.map((i) => lastFault(i.accountId)).find(Boolean) ?? null;
-  const connected = inits.some((i) => i.outcome === "done") && !fault;
+  // A10: reminders never needed Google. `connected` = the app answered; the Google link is a separate state.
+  const connector = inits.length === 0 ? "none" : fault ? "attention" : inits.some((i) => i.outcome === "done") ? "ok" : "syncing";
   const items: any[] = [];
   for (const e of listEvents({ fromDate: date, toDate: date })) {
     const p = getPrep(e.accountId, e.eventKey);
@@ -32,5 +33,5 @@ widgetRoutes.get("/api/widget/today", (c) => {
       state: chat?.status === "ok" ? "sent" : "open",
       link: row ? { kind: "task", sourceRef: rowSourceRef(r.id, occ) } : chat?.sessionId ? { kind: "chat", sessionId: chat.sessionId } : null });
   }
-  return c.json({ template: "schedule", date, connected, fault: fault ? "Google session needs attention" : null, items });
+  return c.json({ template: "schedule", date, connected: true, fault: null, connector, items });
 });
