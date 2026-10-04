@@ -24,6 +24,7 @@
       { "name": "add_reminder", "description": "Store a reminder: {title, dueDate:'YYYY-MM-DD', dueTime?:'HH:MM', body?, recurrence?:'yearly'}. Resolve relative dates yourself first.", "invoke": "ops/add_reminder" },
       { "name": "cancel_reminder", "description": "Cancel a reminder by id or by {match:'words from its title'}.", "invoke": "ops/cancel_reminder" },
       { "name": "snooze_reminder", "description": "Move a reminder to another day: {id? | match?, untilDate:'YYYY-MM-DD'}. Works for a reminder already on the to-do list too.", "invoke": "ops/snooze_reminder" },
+      { "name": "refresh_calendar", "description": "Re-read Google Calendar now: {force?: true to ignore the 2-hour freshness window}. Daily cap still applies.", "invoke": "ops/refresh_calendar" },
       { "name": "list_upcoming", "description": "Reminders and calendar events in the next {days:14} days.", "invoke": "ops/list_upcoming" },
       { "name": "set_event_note", "description": "Attach what you should do before a meeting: {match:{date:'YYYY-MM-DD', titleContains:'…'}, note}. Returns AMBIGUOUS with candidates when several match.", "invoke": "ops/set_event_note" }
     ],

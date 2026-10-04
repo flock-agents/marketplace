@@ -135,3 +135,34 @@ describe("cancel / snooze / list / note", () => {
     expect(await ops.set_event_note!({ match: { date: "2099-10-11", titleContains: "x" }, note: "y" }, ctx)).toMatchObject({ code: "NOT_FOUND" });
   });
 });
+
+describe("refresh_calendar (A13)", () => {
+  let scrapes = 0;
+  const rp = { configured: true, connectors: { exec: async () => { scrapes++; return ok({ ok: true, events: [] }); } } } as unknown as PlatformContext;
+  const rctx = { platform: rp, agentId: "pa" };
+  beforeEach(() => { scrapes = 0; S._db.exec("DELETE FROM cursors; DELETE FROM init_state"); S.markInitStarted("acct"); S.markInitFinished("acct", "done"); });
+  test("a fresh last scrape and no force → skipped fresh; force → scrapes", async () => {
+    S.setCursor("last_sync:acct", String(Date.now() - 30 * 60_000));
+    expect(await ops.refresh_calendar!({}, rctx)).toMatchObject({ ok: true, accounts: [{ accountId: "acct", ok: true, events: 0, skipped: "fresh" }] });
+    expect(scrapes).toBe(0);
+    const r: any = await ops.refresh_calendar!({ force: true }, rctx);
+    expect(r.accounts[0]).toMatchObject({ ok: true, events: 0, fault: null }); expect(r.accounts[0].skipped).toBeUndefined();
+    expect(scrapes).toBe(1);
+  });
+  test("a stale last scrape syncs without force", async () => {
+    S.setCursor("last_sync:acct", String(Date.now() - 3 * 3600_000));
+    await ops.refresh_calendar!({}, rctx); expect(scrapes).toBe(1);
+  });
+  test("the daily cap wins over force", async () => {
+    const { DAILY_SCRAPE_CAP } = await import("../sync"); const { ymd } = await import("../events");
+    S.setCursor(`scrapes:acct:${ymd(new Date())}`, String(DAILY_SCRAPE_CAP));
+    const r: any = await ops.refresh_calendar!({ force: true }, rctx);
+    expect(r.accounts[0]).toMatchObject({ ok: false, skipped: "cap" }); expect(scrapes).toBe(0);
+  });
+  test("never throws: a failing sync is that account's fault", async () => {
+    const bad = { configured: true, connectors: { exec: async () => { throw new Error("boom"); } } } as unknown as PlatformContext;
+    S.setCursor("last_sync:acct", "0");
+    const r: any = await ops.refresh_calendar!({ force: true }, { platform: bad, agentId: null });
+    expect(r).toMatchObject({ ok: true, accounts: [{ accountId: "acct", ok: false, fault: "boom" }] });
+  });
+});

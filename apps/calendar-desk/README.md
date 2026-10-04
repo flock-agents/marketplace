@@ -86,6 +86,15 @@ Agent calls: snooze_reminder({ match: 'Sarah', untilDate: '2026-10-08' })
 Agent replies: "Moved to Wednesday."
 ```
 
+### `refresh_calendar`
+
+Re-read Google Calendar now: `{ force?: true }`. Without `force` it honours the 2-hour freshness window; the daily scrape cap always applies. Returns `{ ok, accounts: [{ accountId, ok, events, skipped?: 'fresh' | 'cap', fault }] }`. Besides the 06:00 and 13:00 reads, every tick also does a light re-read of any account whose last scrape is over 2 hours old, so a meeting added mid-afternoon is seen the same day.
+
+```
+User: "Check my calendar again."
+Agent calls: refresh_calendar({})
+```
+
 ### `list_upcoming`
 
 Reminders and calendar events in the next days (default 14). Returns `{ from, to, items: [...] }`.
@@ -148,7 +157,7 @@ server/
   scheduler.ts       The minute loop: fires timed reminders and prep notes; reads routine state from the hourly tick
   store.ts           calendar-desk.db — events, event_notes, reminders, fires, preps, cursors, init_state
   widget.ts          The schedule widget: today's reminders and events
-  ops.ts             Agent operations: add/cancel/snooze reminders, set event notes
+  ops.ts             Agent operations: add/cancel/snooze reminders, refresh the calendar, set event notes
   migrate-legacy.ts  Legacy reminder migration
 ```
 

@@ -12,11 +12,14 @@ export function scrapesToday(accountId: string, day: string): number { return Nu
 export function lastSyncAt(accountId: string): number | null { const v = getCursor(`last_sync:${accountId}`); return v ? Number(v) : null; }
 export function lastFault(accountId: string): string | null { return getCursor(`fault:${accountId}`) || null; }
 
-/** Every scrape takes the Google browser lease Gmail also needs: scheduled and init runs always go
- *  (within the cap); a pre-prep refresh only when the last scrape is older than FRESH_MS. */
-export function shouldScrape(accountId: string, now: Date, reason: "scheduled" | "pre-prep" | "init"): boolean {
+export type SyncReason = "scheduled" | "pre-prep" | "init" | "light" | "forced";
+
+/** Every scrape takes the Google browser lease Gmail also needs: scheduled, init and forced runs always
+ *  go (within the cap, which nothing bypasses); a pre-prep or light refresh only when the last scrape is
+ *  older than FRESH_MS. */
+export function shouldScrape(accountId: string, now: Date, reason: SyncReason): boolean {
   if (scrapesToday(accountId, ymd(now)) >= DAILY_SCRAPE_CAP) return false;
-  if (reason !== "pre-prep") return true;
+  if (reason !== "pre-prep" && reason !== "light") return true;
   const last = lastSyncAt(accountId);
   return last == null || now.getTime() - last > FRESH_MS;
 }
@@ -27,7 +30,7 @@ function dateRange(now: Date): string[] {
   return out;
 }
 
-export async function syncAccount(accountId: string, deps: SyncDeps, reason: "scheduled" | "pre-prep" | "init") {
+export async function syncAccount(accountId: string, deps: SyncDeps, reason: SyncReason) {
   const now = (deps.now ?? (() => new Date()))();
   const day = ymd(now);
   if (!deps.platform.configured) return { ok: false, events: 0, fault: "not configured" };

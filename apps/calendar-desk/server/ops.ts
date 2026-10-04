@@ -1,8 +1,9 @@
 import type { OpHandler, OpError } from "@flock/app-sdk";
-import { insertReminder, updateReminder, getReminder, searchActiveReminders, findActiveReminderByTitleDate, listActiveReminders, listEvents, setEventNote, listRowFires, getEventNote, type ReminderRow } from "./store";
+import { insertReminder, updateReminder, getReminder, searchActiveReminders, findActiveReminderByTitleDate, listActiveReminders, listEvents, setEventNote, listRowFires, getEventNote, listInit, type ReminderRow } from "./store";
 import { rowSourceRef } from "./scheduler";
 import { nextOccurrenceDate, prevOccurrenceDate } from "./rules";
 import { ymd } from "./events";
+import { syncAccount } from "./sync";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/, TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 const err = (code: string, message: string, status = 400): OpError => ({ error: message, code, status });
@@ -81,6 +82,17 @@ export const ops: Record<string, OpHandler> = {
     }
     updateReminder(r.id, { dueDate: untilDate });
     return { ok: true, via: "reschedule", id: r.id, untilDate };
+  },
+  async refresh_calendar(p, { platform }) {
+    const force = p.force === true;
+    const accounts: { accountId: string; ok: boolean; events: number; skipped?: string; fault: string | null }[] = [];
+    for (const rec of listInit().filter((r) => r.finishedAt && r.outcome === "done")) {
+      try {
+        const r = await syncAccount(rec.accountId, { platform }, force ? "forced" : "light");
+        accounts.push({ accountId: rec.accountId, ok: r.ok, events: r.events, ...("skipped" in r && r.skipped ? { skipped: r.skipped } : {}), fault: r.fault ?? null });
+      } catch (e: any) { accounts.push({ accountId: rec.accountId, ok: false, events: 0, fault: String(e?.message ?? e) }); }
+    }
+    return { ok: true, accounts };
   },
   async list_upcoming(p) {
     const days = typeof p.days === "number" && p.days > 0 ? Math.min(p.days, 36500) : 14;

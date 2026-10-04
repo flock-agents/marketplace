@@ -42,6 +42,21 @@ describe("tick", () => {
   });
 });
 
+describe("tick — light re-read (A13)", () => {
+  test("a light sync runs only when the last scrape is older than 2h", async () => {
+    S.markInitStarted("acct"); S.markInitFinished("acct", "done");
+    let scrapes = 0;
+    const p = platform(() => { scrapes++; return ok({ ok: true, events: [] }); });
+    const at = new Date(); at.setHours(10, 7, 0, 0);
+    const tick = () => calendarDeskHooks.tick!({ readRoutines: [], platform: p.ctx, now: () => at } as any);
+    S.setCursor("last_sync:acct", String(at.getTime() - 30 * 60_000));
+    await tick(); expect(scrapes).toBe(0);
+    S.setCursor("last_sync:acct", String(at.getTime() - 3 * 3600_000));
+    await tick(); expect(scrapes).toBe(1);
+    await tick(); expect(scrapes).toBe(1);
+  });
+});
+
 describe("tick — routine identity on the real wire (C2)", () => {
   test("routines arrive as {id: <instance uuid>, appRoutineId: <manifest id>}; both are recognized as enabled", async () => {
     S.insertReminder({ id: "r2", title: "Pay rent", body: null, dueDate: new Date().toISOString().slice(0, 10), dueTime: null, recurrence: "none", leadDays: [0], sourceKind: "user", sourceRef: null, sourceLink: null, accountId: null, state: "active" });

@@ -87,3 +87,17 @@ describe("syncAccount", () => {
     expect(shouldScrape("acct", new Date(NOW.getTime() + 3 * 3600_000), "pre-prep")).toBe(true);
   });
 });
+
+describe("shouldScrape light/forced (A13)", () => {
+  test("light needs a 2h-old scrape, forced ignores freshness, both obey the cap", async () => {
+    const now = new Date(); const day = (await import("../events")).ymd(now);
+    S.setCursor("last_sync:accl", String(now.getTime() - 30 * 60_000));
+    expect(shouldScrape("accl", now, "light")).toBe(false);
+    expect(shouldScrape("accl", now, "forced")).toBe(true);
+    S.setCursor("last_sync:accl", String(now.getTime() - 3 * 3600_000));
+    expect(shouldScrape("accl", now, "light")).toBe(true);
+    S.setCursor(`scrapes:accl:${day}`, String(DAILY_SCRAPE_CAP));
+    expect(shouldScrape("accl", now, "light")).toBe(false);
+    expect(shouldScrape("accl", now, "forced")).toBe(false);
+  });
+});
