@@ -67,14 +67,26 @@ export function eventKey(p: { calendar: string | null; localDate: string; startA
   return createHash("sha1").update(`${p.calendar ?? ""}|${p.localDate}|${p.startAt ?? "allday"}|${title}`).digest("hex").slice(0, 16);
 }
 
+/** A16. Dropped at sync, never stored. The scrape's `calendar` is null for the owner's own calendar; a
+ *  "Calendar: X" segment appears only for a secondary one, so ANY non-null value (and any name matching
+ *  /holiday/i, e.g. "Holidays in India") is a built-in or subscribed calendar, not the owner's. An all-day
+ *  row with no attendees/creator is a banner, not an event. Timed rows from the own calendar always stay. */
+function isNoise(e: ScrapedEvent): boolean {
+  const cal = (e.calendar ?? "").trim();
+  if (cal || /holiday/i.test(e.calendar ?? "")) return true;
+  return e.allDay === true && !(e.attendees ?? "").trim();
+}
+
 export function normalizeScrape(events: ScrapedEvent[], opts: { calendar: string | null; fallbackDate: string; now: Date }) {
   const seen = new Set<string>();
   const out: Array<Omit<EventRow, "accountId" | "firstSeenAt" | "lastSeenAt" | "missingSince">> = [];
   let unplaceable = 0;
+  let filtered = 0;
   let firstBad: string | null = null;
   for (const e of events) {
     const title = (e.title ?? "").replace(/\s+/g, " ").trim();
     if (!title) continue;
+    if (isNoise(e)) { filtered++; continue; }
     const dateText = (e.date ?? "").trim();
     let localDate = opts.fallbackDate;
     if (dateText) {
@@ -89,5 +101,5 @@ export function normalizeScrape(events: ScrapedEvent[], opts: { calendar: string
     out.push({ eventKey: key, calendar: opts.calendar, title, startAt, endAt, allDay, localDate, attendeesText: e.attendees ?? null, location: e.location ?? null, rawTimeText: e.time ?? null });
   }
   if (unplaceable > 0) console.warn(`calendar-desk: skipped ${unplaceable} scraped row(s) with an unparseable date header (first: "${firstBad}")`);
-  return { rows: out, skipped: unplaceable };
+  return { rows: out, skipped: unplaceable, filtered };
 }

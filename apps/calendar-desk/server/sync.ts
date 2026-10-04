@@ -59,7 +59,7 @@ async function runSync(accountId: string, deps: SyncDeps, reason: SyncReason) {
     return { ok: false, events: 0, fault };
   }
   const norm = normalizeScrape(res.data.events, { calendar: "primary", fallbackDate: day, now });
-  if (res.data.events.length > 0 && norm.rows.length === 0 && norm.skipped > 0) {
+  if (res.data.events.length > 0 && norm.rows.length === 0 && norm.skipped > 0 && norm.filtered === 0) {
     // Every row had an unreadable date header: that is a parser fault, not an empty calendar.
     const fault = "agenda unreadable";
     setCursor(`fault:${accountId}`, fault);
@@ -74,6 +74,6 @@ async function runSync(accountId: string, deps: SyncDeps, reason: SyncReason) {
   _db.query("DELETE FROM events WHERE account_id = ? AND (local_date < ? OR (missing_since IS NOT NULL AND missing_since < ?))").run(accountId, ymd(new Date(at - 86_400_000)), at - 2 * 86_400_000);
   setCursor(`last_sync:${accountId}`, String(at));
   setCursor(`fault:${accountId}`, "");
-  console.log(`[calendar-desk] sync ${accountId} (${reason}): ${rows.length} event(s), skipped=${norm.skipped}`);
+  console.log(`[calendar-desk] sync ${accountId} (${reason}): ${rows.length} event(s), skipped=${norm.skipped}, filtered=${norm.filtered}`);
   return { ok: true, events: rows.length, fault: null, skippedRows: norm.skipped };
 }

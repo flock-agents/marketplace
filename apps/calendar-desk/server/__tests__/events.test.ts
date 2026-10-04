@@ -109,8 +109,24 @@ describe("live-fix 6: spaceless agenda headers", () => {
   });
   test("allDay flag wins over a time string; attendees and location are carried", () => {
     const { rows: [r] } = normalizeScrape([
-      { title: "Offsite", time: "9am – 5pm", date: "4 October 2026", allDay: true, location: "Bangalore", attendees: "a@x.com, b@x.com", calendar: "work" },
+      { title: "Offsite", time: "9am – 5pm", date: "4 October 2026", allDay: true, location: "Bangalore", attendees: "a@x.com, b@x.com" },
     ], opts);
     expect(r).toMatchObject({ allDay: true, startAt: null, endAt: null, location: "Bangalore", attendeesText: "a@x.com, b@x.com", rawTimeText: "9am – 5pm" });
+  });
+  describe("A16 filtering", () => {
+    const d = "2026-10-04";
+    const o = { calendar: "primary", fallbackDate: d, now: new Date(2026, 9, 4) };
+    test("holiday calendar rows dropped, timed kept, all-day with attendees kept, creator-less all-day dropped", () => {
+      const r = normalizeScrape([
+        { title: "First Day of Sharad Navratri", date: "4 October 2026", allDay: true, calendar: "Holidays in India" },
+        { title: "Dinner @ Prity's", date: "4 October 2026", time: "8 – 9pm", attendees: "Shiva Shankar" },
+        { title: "Offsite", date: "4 October 2026", allDay: true, attendees: "a@x.com" },
+        { title: "Random banner", date: "4 October 2026", allDay: true },
+        { title: "Shared cal thing", date: "4 October 2026", time: "9am", calendar: "Team" },
+      ], o);
+      expect(r.rows.map((x) => x.title)).toEqual(["Dinner @ Prity's", "Offsite"]);
+      expect(r.filtered).toBe(3);
+      expect(r.skipped).toBe(0);
+    });
   });
 });
