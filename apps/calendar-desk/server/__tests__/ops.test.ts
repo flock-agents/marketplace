@@ -7,11 +7,11 @@ const { ops } = await import("../ops");
 const { rowSourceRef } = await import("../scheduler");
 const { nextOccurrenceDate } = await import("../rules");
 
-const snoozes: any[] = []; const withdrawn: string[] = []; let withdrawResult: any = ok(undefined);
-const platform = { configured: true, tasks: { publish: async () => ok(undefined), withdraw: async (ref: string) => { withdrawn.push(ref); return withdrawResult; }, snooze: async (ref: string, untilDate: string) => { snoozes.push({ ref, untilDate }); return ok(undefined); } } } as unknown as PlatformContext;
+const snoozes: any[] = []; const withdrawn: string[] = []; let withdrawResult: any = ok(undefined); let snoozeResult: any = null;
+const platform = { configured: true, tasks: { publish: async () => ok(undefined), withdraw: async (ref: string) => { withdrawn.push(ref); return withdrawResult; }, snooze: async (ref: string, untilDate: string) => { snoozes.push({ ref, untilDate }); return snoozeResult ?? ok(undefined); } } } as unknown as PlatformContext;
 const ctx = { platform, agentId: "pa" };
 const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
-beforeEach(() => { snoozes.length = 0; withdrawn.length = 0; withdrawResult = ok(undefined); for (const t of ["events", "event_notes", "reminders", "fires"]) S._db.exec(`DELETE FROM ${t}`); });
+beforeEach(() => { snoozes.length = 0; withdrawn.length = 0; withdrawResult = ok(undefined); snoozeResult = null; for (const t of ["events", "event_notes", "reminders", "fires"]) S._db.exec(`DELETE FROM ${t}`); });
 
 describe("add_reminder", () => {
   test("stores and returns; rejects a past date, a bad time, a missing title", async () => {
@@ -80,6 +80,35 @@ describe("cancel / snooze / list / note", () => {
     expect(await ops.snooze_reminder!({ id: a.id, untilDate: "2099-10-25" }, ctx)).toMatchObject({ ok: true, via: "reschedule" });
     expect(snoozes).toEqual([]);
     expect(S.getReminder(a.id)!.dueDate).toBe("2099-10-25");
+  });
+  test("snooze (A14): the platform answers 404 (the row was completed) → reschedule the reminder, ok", async () => {
+    const a: any = await ops.add_reminder!({ title: "Pay rent", dueDate: today() }, ctx);
+    S.recordFire({ reminderId: a.id, occurrence: today(), kind: "row@0", taskSourceRef: rowSourceRef(a.id, today()), sessionId: null, status: "ok" });
+    snoozeResult = { ok: false, reason: "not found", status: 404 };
+    expect(await ops.snooze_reminder!({ id: a.id, untilDate: "2099-10-12" }, ctx)).toMatchObject({ ok: true, via: "reschedule", untilDate: "2099-10-12" });
+    expect(snoozes.length).toBe(1);
+    expect(S.getReminder(a.id)!.dueDate).toBe("2099-10-12");
+    snoozeResult = { ok: false, reason: "boom", status: 500 };
+    const b: any = await ops.add_reminder!({ title: "Pay gas", dueDate: today() }, ctx);
+    S.recordFire({ reminderId: b.id, occurrence: today(), kind: "row@0", taskSourceRef: rowSourceRef(b.id, today()), sessionId: null, status: "ok" });
+    expect(await ops.snooze_reminder!({ id: b.id, untilDate: "2099-10-12" }, ctx)).toMatchObject({ code: "PLATFORM", status: 502 });
+  });
+  const yesterday = () => { const d = new Date(Date.now() - 86_400_000); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
+  const pastOne = (title: string, due: string) => S.insertReminder({ id: `rem_${title.replace(/\W/g, "")}`, title, body: null, dueDate: due, dueTime: "09:00", recurrence: "none", leadDays: [0], sourceKind: "user", sourceRef: null, sourceLink: null, accountId: null, state: "active" });
+  const ageFire = (id: string, ms: number) => S._db.query("UPDATE fires SET fired_at = ? WHERE reminder_id = ?").run(Date.now() - ms, id);
+  test("snooze (A14): yesterday's Missed row fired 10h ago is live; a week-old fire is not (→ reschedule)", async () => {
+    const y = yesterday();
+    const a = pastOne("Call bank", y);
+    S.recordFire({ reminderId: a.id, occurrence: y, kind: "missed", taskSourceRef: rowSourceRef(a.id, y), sessionId: null, status: "ok" });
+    ageFire(a.id, 10 * 3600_000);
+    expect(await ops.snooze_reminder!({ id: a.id, untilDate: "2099-10-12" }, ctx)).toMatchObject({ ok: true, via: "row" });
+    expect(snoozes).toEqual([{ ref: rowSourceRef(a.id, y), untilDate: "2099-10-12" }]);
+    snoozes.length = 0;
+    const b = pastOne("Call dentist", y);
+    S.recordFire({ reminderId: b.id, occurrence: y, kind: "missed", taskSourceRef: rowSourceRef(b.id, y), sessionId: null, status: "ok" });
+    ageFire(b.id, 7 * 86_400_000);
+    expect(await ops.snooze_reminder!({ id: b.id, untilDate: "2099-10-12" }, ctx)).toMatchObject({ ok: true, via: "reschedule" });
+    expect(snoozes).toEqual([]);
   });
   test("cancel: a yearly reminder withdraws its CURRENT occurrence's row, not the anchor year's (I1)", async () => {
     const d = new Date(Date.now() + 5 * 86_400_000);

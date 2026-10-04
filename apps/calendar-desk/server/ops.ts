@@ -25,12 +25,15 @@ function resolveOne(p: Record<string, unknown>): { r: ReturnType<typeof getRemin
 // is its anchor year. Candidates are the next and the previous occurrence (a yesterday's Missed row).
 const candidateOccurrences = (r: ReminderRow) => [...new Set([nextOccurrenceDate(r, today()), prevOccurrenceDate(r, today())].filter((o): o is string => !!o))];
 const liveRowOccurrences = (r: ReminderRow) => candidateOccurrences(r).filter((occ) => listRowFires(r.id, occ).length > 0);
-/** The occurrence whose row was published most recently (any lead day, day-of or Missed), or null. */
+/** The occurrence whose row was published most recently (any lead day, day-of or Missed), or null.
+ *  The next/current occurrence's row always counts; the previous one only while its newest fire is at most a day old. */
+const PREV_LIVE_MS = 24 * 3600_000;
 function liveRowOccurrence(r: ReminderRow): string | null {
   let best: { occ: string; at: number } | null = null;
   for (const occ of candidateOccurrences(r)) {
     const f = listRowFires(r.id, occ)[0];
-    if (f && (!best || f.firedAt > best.at)) best = { occ, at: f.firedAt };
+    if (!f || (occ < today() && Date.now() - f.firedAt > PREV_LIVE_MS)) continue;
+    if (!best || f.firedAt > best.at) best = { occ, at: f.firedAt };
   }
   return best?.occ ?? null;
 }
@@ -72,8 +75,9 @@ export const ops: Record<string, OpHandler> = {
     const occ = liveRowOccurrence(r);
     if (occ) {
       const res = await platform.tasks.snooze(rowSourceRef(r.id, occ), untilDate);
-      if (!res.ok) return err("PLATFORM", `Could not snooze the row: ${res.reason}`, 502);
-      return { ok: true, via: "row", id: r.id, untilDate };
+      if (res.ok) return { ok: true, via: "row", id: r.id, untilDate };
+      // 404: the owner already completed that row, so there is nothing for the platform to hide — reschedule instead.
+      if (("status" in res ? res.status : undefined) !== 404) return err("PLATFORM", `Could not snooze the row: ${res.reason}`, 502);
     }
     updateReminder(r.id, { dueDate: untilDate });
     return { ok: true, via: "reschedule", id: r.id, untilDate };
