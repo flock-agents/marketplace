@@ -5,10 +5,9 @@ process.env.APP_DATA_DIR = mkdtempSync(join(tmpdir(), "calendar-desk-ops-"));
 const S = await import("../store");
 const { ops } = await import("../ops");
 
-const snoozes: any[] = []; const withdrawn: string[] = []; let withdrawResult: any = ok(undefined); let snoozeResult: any = null;
-const platform = { configured: true, tasks: { publish: async () => ok(undefined), withdraw: async (ref: string) => { withdrawn.push(ref); return withdrawResult; }, snooze: async (ref: string, untilDate: string) => { snoozes.push({ ref, untilDate }); return snoozeResult ?? ok(undefined); } } } as unknown as PlatformContext;
+const platform = { configured: true } as unknown as PlatformContext;
 const ctx = { platform, agentId: "pa" };
-beforeEach(() => { snoozes.length = 0; withdrawn.length = 0; withdrawResult = ok(undefined); snoozeResult = null; for (const t of ["events", "event_notes"]) S._db.exec(`DELETE FROM ${t}`); });
+beforeEach(() => { for (const t of ["events", "event_notes"]) S._db.exec(`DELETE FROM ${t}`); });
 
 describe("operations", () => {
   test("the reminder operations are gone; the three event operations remain", () => {
