@@ -46,6 +46,34 @@ describe("syncAccount", () => {
     await syncAccount("acct", { platform: platform(() => ok({ ok: true, events: [] })).ctx, now: () => new Date(NOW.getTime() + 4 * 3600_000) }, "scheduled");
     expect(S.listEvents({ fromDate: "2026-10-05", toDate: "2026-10-05" }).length).toBe(0);
   });
+  test("a partly unreadable page upserts what parsed and withdraws nothing", async () => {
+    await syncAccount("acct", { platform: platform(() => ok({ ok: true, events: [{ title: "Standup", time: "9:30am", date: "Mon, 5 Oct" }] })).ctx, now: () => NOW }, "scheduled");
+    const logs: string[] = []; const orig = console.log; console.log = (...a: unknown[]) => { logs.push(a.join(" ")); };
+    let r: any;
+    try {
+      r = await syncAccount("acct", { platform: platform(() => ok({ ok: true, events: [
+        { title: "Review", time: "11am", date: "Mon, 5 Oct" }, { title: "Garbled", time: "1pm", date: "Sun4" }] })).ctx, now: () => new Date(NOW.getTime() + 3 * 3600_000) }, "scheduled");
+    } finally { console.log = orig; }
+    expect(r).toMatchObject({ ok: true, events: 1, skippedRows: 1 });
+    expect(logs.join("\n")).toContain("skipped=1");
+    const all = S.listEvents({ fromDate: "2026-10-05", toDate: "2026-10-12", includeMissing: true });
+    expect(all.find((e) => e.title === "Review")).toBeTruthy();
+    expect(all.find((e) => e.title === "Standup")!.missingSince).toBeNull();
+  });
+  test("all rows unreadable is a fault; stored events and last_sync stay", async () => {
+    await syncAccount("acct", { platform: platform(() => ok({ ok: true, events: [{ title: "Standup", time: "9:30am", date: "Mon, 5 Oct" }] })).ctx, now: () => NOW }, "scheduled");
+    const before = S.getCursor("last_sync:acct");
+    const orig = console.warn; console.warn = () => {};
+    let r: any;
+    try {
+      r = await syncAccount("acct", { platform: platform(() => ok({ ok: true, events: [{ title: "G", date: "Sun4" }, { title: "H", date: "zzz" }] })).ctx, now: () => new Date(NOW.getTime() + 3 * 3600_000) }, "scheduled");
+    } finally { console.warn = orig; }
+    expect(r).toEqual({ ok: false, events: 0, fault: "agenda unreadable" });
+    expect(lastFault("acct")).toBe("agenda unreadable");
+    expect(S.getCursor("last_sync:acct")).toBe(before);
+    const all = S.listEvents({ fromDate: "2026-10-05", toDate: "2026-10-12", includeMissing: true });
+    expect(all.length).toBe(1); expect(all[0]!.missingSince).toBeNull();
+  });
   test("the daily cap and the freshness rule", async () => {
     const p = platform(() => ok({ ok: true, events: [] }));
     for (let i = 0; i < DAILY_SCRAPE_CAP; i++) await syncAccount("acct", { platform: p.ctx, now: () => new Date(NOW.getTime() + i * 30 * 60_000) }, "scheduled");

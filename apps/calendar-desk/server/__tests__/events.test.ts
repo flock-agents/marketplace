@@ -46,7 +46,7 @@ describe("eventKey", () => {
 
 describe("normalizeScrape", () => {
   test("maps rows, carries the raw time text, dedupes identical rows", () => {
-    const rows = normalizeScrape([
+    const { rows } = normalizeScrape([
       { title: "Standup", time: "9:30 – 10am", date: "Mon, 5 Oct" },
       { title: "Standup", time: "9:30 – 10am", date: "Mon, 5 Oct" },
       { title: "Diwali", time: "All day", date: "Tue, 20 Oct" },
@@ -70,13 +70,20 @@ describe("live-fix 6: spaceless agenda headers", () => {
     expect(parseDateHeader("October 4, 2026", 2026)).toBe("2026-10-04");
     expect(parseDateHeader("garbage text", 2026)).toBeNull();
   });
+  test("a glued time is not a year; glued live headers", () => {
+    expect(parseDateHeader("4Oct 1030am", 2026)).toBe("2026-10-04");
+    expect(parseDateHeader("4Oct, Sun7 – 7:30pmDinner @ Prity's", 2026)).toBe("2026-10-04");
+    expect(parseDateHeader("Sun4", 2026)).toBeNull();
+    const { rows, skipped } = normalizeScrape([{ title: "X", date: "Sun4" }], { calendar: null, fallbackDate: d, now: new Date(2026, 9, 4) });
+    expect(rows.length).toBe(0); expect(skipped).toBe(1);
+  });
   test("parseTimeText accepts the normalised both-sides-meridiem form", () => {
     expect(parseTimeText("7pm – 7:30pm", d)).toEqual({ startAt: local(19), endAt: local(19, 30), allDay: false });
     expect(parseTimeText("1:15pm – 1:45pm", d)).toEqual({ startAt: local(13, 15), endAt: local(13, 45), allDay: false });
   });
   const opts = { calendar: null, fallbackDate: d, now: new Date(2026, 9, 4) };
   test("same-title events on adjacent days stay two rows", () => {
-    const rows = normalizeScrape([
+    const { rows } = normalizeScrape([
       { title: "Agastya School PTM", time: "All day", date: "4Oct, Sun" },
       { title: "Agastya School PTM", time: "All day", date: "5Oct, Mon" },
     ], opts);
@@ -87,7 +94,7 @@ describe("live-fix 6: spaceless agenda headers", () => {
     const orig = console.warn;
     console.warn = (...a: unknown[]) => { warns.push(a); };
     try {
-      const rows = normalizeScrape([
+      const { rows, skipped } = normalizeScrape([
         { title: "Lost", time: "1pm", date: "garbage text" },
         { title: "Lost too", time: "2pm", date: "garbage text" },
         { title: "Nodate", time: "3pm", date: "" },
@@ -95,12 +102,13 @@ describe("live-fix 6: spaceless agenda headers", () => {
       ], opts);
       expect(rows.map((r) => r.title)).toEqual(["Nodate", "Undef"]);
       expect(rows.every((r) => r.localDate === d)).toBe(true);
+      expect(skipped).toBe(2);
     } finally { console.warn = orig; }
     expect(warns.length).toBe(1);
     expect(String(warns[0]![0])).toContain("garbage text");
   });
   test("allDay flag wins over a time string; attendees and location are carried", () => {
-    const [r] = normalizeScrape([
+    const { rows: [r] } = normalizeScrape([
       { title: "Offsite", time: "9am – 5pm", date: "4 October 2026", allDay: true, location: "Bangalore", attendees: "a@x.com, b@x.com", calendar: "work" },
     ], opts);
     expect(r).toMatchObject({ allDay: true, startAt: null, endAt: null, location: "Bangalore", attendeesText: "a@x.com, b@x.com", rawTimeText: "9am – 5pm" });

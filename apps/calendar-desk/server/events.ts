@@ -51,8 +51,8 @@ export function parseTimeText(text: string | undefined, localDate: string): { st
 export function parseDateHeader(text: string | undefined, fallbackYear: number): string | null {
   if (!text) return null;
   const t = text.toLowerCase().replace(/,/g, " ").replace(/\s+/g, " ").trim();
-  const m1 = /(\d{1,2})\s*([a-z]{3,})(?:\s*(\d{4}))?/.exec(t);        // 5 oct, 5oct [2026]
-  const m2 = /([a-z]{3,})\s*(\d{1,2})(?:,?\s*(\d{4}))?/.exec(t);      // october 5, oct5 [2026]
+  const m1 = /(\d{1,2})\s*([a-z]{3,})(?:\s*(\d{4})(?![a-z\d]))?/.exec(t);        // 5 oct, 5oct [2026]
+  const m2 = /([a-z]{3,})\s*(\d{1,2})(?:,?\s*(\d{4})(?![a-z\d]))?/.exec(t);      // october 5, oct5 [2026]
   const pick = (dayS: string, monS: string, yearS?: string) => {
     const mon = MONTHS.indexOf(monS.slice(0, 3)); if (mon < 0) return null;
     const day = +dayS; if (day < 1 || day > 31) return null;
@@ -82,13 +82,12 @@ export function normalizeScrape(events: ScrapedEvent[], opts: { calendar: string
       if (!parsed) { unplaceable++; if (firstBad === null) firstBad = dateText; continue; }
       localDate = parsed;
     }
-    const timed = parseTimeText(e.time, localDate);
-    const { startAt, endAt, allDay } = e.allDay === true ? { startAt: null, endAt: null, allDay: true } : timed;
+    const { startAt, endAt, allDay } = e.allDay === true ? { startAt: null, endAt: null, allDay: true } : parseTimeText(e.time, localDate);
     const key = eventKey({ calendar: opts.calendar, localDate, startAt, title });
     if (seen.has(key)) continue;
     seen.add(key);
     out.push({ eventKey: key, calendar: opts.calendar, title, startAt, endAt, allDay, localDate, attendeesText: e.attendees ?? null, location: e.location ?? null, rawTimeText: e.time ?? null });
   }
   if (unplaceable > 0) console.warn(`calendar-desk: skipped ${unplaceable} scraped row(s) with an unparseable date header (first: "${firstBad}")`);
-  return out;
+  return { rows: out, skipped: unplaceable };
 }
