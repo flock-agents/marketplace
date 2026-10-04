@@ -7,13 +7,15 @@
 // oldest first; the sender line, a right-aligned date cell, a `.recipient` block of
 // "To: …" / "Cc: …" lines, then the body. Selectors verified against a live capture in Task 2.
 
-import { UNSUBSCRIBE_LINK_RE_SOURCE, type RawThreadRow, type RawRecipient } from "./_threadScrape";
+import { UNSUBSCRIBE_LINK_RE_SOURCE, messagePartsExpr, type RawThreadRow, type RawRecipient } from "./_threadScrape";
 
 export interface PrintBlock {
   header: string;
   date: string;
   recipientLines: string[];
   bodyText: string;
+  /** Set only when the body's trailing quoted history was split off; bodyText then starts with it (Task 27). */
+  bodyMain?: string;
   linkTexts: string[];
   linkHrefs: string[];
 }
@@ -75,6 +77,7 @@ export function rowsFromPrintBlocks(blocks: PrintBlock[]): RawThreadRow[] {
       fromName,
       date: normalizePrintDate(b.date),
       body: (b.bodyText || "").trim(),
+      ...(typeof b.bodyMain === "string" && b.bodyMain ? { bodyMain: b.bodyMain } : {}),
       recipients,
       recipientsVerified,
       unsubscribeLink,
@@ -104,9 +107,14 @@ export const PRINT_BLOCKS_EXPR = `(() => {
       : [];
     const bodyEl = t.querySelector('table[cellpadding="12"] td') || t.rows[2] || null;
     const links = bodyEl ? Array.from(bodyEl.querySelectorAll('a[href]')) : [];
+    // Task 27: when the body has trailing quoted history, its text comes from the converter, so
+    // bodyText starts with bodyMain exactly; otherwise innerText, as before.
+    const parts = ${messagePartsExpr("bodyEl")};
+    const split = !!(parts.body && parts.quoted);
     blocks.push({
       header, date, recipientLines,
-      bodyText: txt(bodyEl),
+      bodyText: split ? parts.body : txt(bodyEl),
+      bodyMain: split ? parts.bodyMain : '',
       linkTexts: links.map((a) => txt(a)),
       linkHrefs: links.map((a) => a.getAttribute('href') || ''),
     });

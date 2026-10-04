@@ -10,6 +10,7 @@
 // Gmail; the comments record which live failures each line exists to prevent.
 
 import { composeFrom } from "../../_shared/_gmail-sender";
+import { htmlToText } from "./_draftBody";
 
 // --- Pure types ------------------------------------------------------------
 
@@ -23,6 +24,8 @@ export interface RawThreadRow {
   fromName?: string;
   date?: string;
   body?: string;
+  /** The body without its trailing quoted history; set only when one was split off (Task 27). */
+  bodyMain?: string;
   recipients?: RawRecipient[];
   /** Did the recipients come from Gmail's LABELLED header rows, not the merged collapsed summary? */
   recipientsVerified?: boolean;
@@ -35,10 +38,28 @@ export interface ThreadMessage {
   to: string[];
   cc: string[];
   date: string;
+  /** The FULL message text, quoted history included, with its line breaks. */
   body: string;
-  /** False when To and Cc could not be told apart — the To-only rule must refuse rather than guess. */
+  /**
+   * Present only when Gmail's quoted history (`.gmail_quote` / `.gmail_extra`) was split off the
+   * END of the body: the new text alone. `body` always starts with it, and the quoted history is
+   * the rest of `body` (see quotedOf). Carried as one short field rather than a second copy of the
+   * history, so a thread read does not double in size against the result cap.
+   */
+  bodyMain?: string;
+  /**
+   * False when To and Cc could not be told apart for this message. The To-only rule MUST refuse on
+   * it rather than guess: guessing means replying to mail the owner was only cc'd on, which is the
+   * one thing that rule exists to stop.
+   */
   recipientsVerified: boolean;
-  /** Bulk-mail signal: the body holds an unsubscribe/opt-out/manage-preferences link. */
+  /**
+   * BULK-MAIL SIGNAL (owner decision, 2026-09-10). True when the body holds an unsubscribe /
+   * opt-out / manage-preferences link. The browser scrape never sees List-Unsubscribe or
+   * Precedence; the footer link is what every bulk sender renders. draft-eligibility refuses to
+   * draft a reply to a message that carries one, deliberately for a HUMAN sender too: a founder
+   * mailing through a campaign tool is impersonating bulk mail, and the owner ruled it draws no draft.
+   */
   unsubscribeLink: boolean;
 }
 
@@ -87,10 +108,82 @@ export function messagesFromThreadDom(rows: RawThreadRow[]): ThreadMessage[] {
       cc,
       date: row.date || "",
       body: row.body || "",
+      ...(splitMain(row.body, row.bodyMain) !== null ? { bodyMain: row.bodyMain } : {}),
       recipientsVerified: row.recipientsVerified === true,
       unsubscribeLink: row.unsubscribeLink === true,
     };
   });
+}
+
+/** `bodyMain` when it is a real split of `body` (a non-empty prefix with something after it), else null. */
+function splitMain(body: unknown, bodyMain: unknown): string | null {
+  if (typeof body !== "string" || typeof bodyMain !== "string" || !bodyMain) return null;
+  return body.length > bodyMain.length && body.startsWith(bodyMain) && body.slice(bodyMain.length).trim() ? bodyMain : null;
+}
+
+/** The quoted history of a message: the rest of `body` after `bodyMain`, or "" when none was split off. */
+export function quotedOf(m: { body: string; bodyMain?: string }): string {
+  return splitMain(m.body, m.bodyMain) !== null ? m.body.slice(m.bodyMain!.length).trim() : "";
+}
+
+/**
+ * Split a message body's HTML into its text, its new text and its quoted history (Task 27).
+ * Gmail wraps a reply's history in `div.gmail_quote` (with `blockquote.gmail_quote` inside, and
+ * `div.gmail_extra` around it in older mail); a class merely CONTAINING the name counts, because
+ * Gmail prefixes classes in quoted copies (`m_123…gmail_quote`). Only the outermost match is cut:
+ * a nested quote goes with its outer one.
+ *
+ *  - `body`: the full text, history included, with line breaks.
+ *  - `bodyMain`: the text with the history cut out, ONLY when the history trails it — body then
+ *    starts with bodyMain. An inline reply (text after a quote) is not split: hiding the quote
+ *    would hide the question being answered mid-text.
+ *  - `quoted`: the rest of body after bodyMain; "" when nothing was split. A message that is all
+ *    quote (a plain forward) is not split either: bodyMain = body.
+ *
+ * SELF-CONTAINED: runs in the page too, inlined by source with the converter passed in
+ * (`(${messageTextParts})(el.innerHTML, ${htmlToText})`), so it references nothing outside itself.
+ */
+export function messageTextParts(
+  html: string,
+  toText: (html: string) => string,
+): { body: string; bodyMain: string; quoted: string } {
+  const src = String(html || "");
+  const body = toText(src);
+  const openRe = /<([a-zA-Z][\w-]*)\b[^>]*?\bclass\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))[^>]*>/g;
+  let main = "";
+  let last = 0;
+  let cut = false;
+  let m: RegExpExecArray | null;
+  while ((m = openRe.exec(src))) {
+    if (!/gmail_quote|gmail_extra/i.test(m[2] || m[3] || m[4] || "")) continue;
+    const start = m.index;
+    let end = openRe.lastIndex;
+    if (!/\/>$/.test(m[0])) {
+      const tagRe = new RegExp("<(/?)" + m[1] + "\\b[^>]*>", "gi");
+      tagRe.lastIndex = end;
+      let depth = 1;
+      let t: RegExpExecArray | null;
+      while (depth > 0 && (t = tagRe.exec(src))) {
+        if (t[1]) depth--;
+        else if (!/\/>$/.test(t[0])) depth++;
+        end = tagRe.lastIndex;
+      }
+      if (depth > 0) end = src.length;
+    }
+    main += src.slice(last, start);
+    last = end;
+    openRe.lastIndex = end;
+    cut = true;
+  }
+  if (!cut) return { body, bodyMain: body, quoted: "" };
+  const bodyMain = toText(main + src.slice(last));
+  const quoted = bodyMain && body.startsWith(bodyMain) ? body.slice(bodyMain.length).trim() : "";
+  return quoted ? { body, bodyMain, quoted } : { body, bodyMain: body, quoted: "" };
+}
+
+/** The in-page expression for one message body element's parts (null element -> empty parts). */
+export function messagePartsExpr(elExpr: string): string {
+  return `(${elExpr} ? (${messageTextParts.toString()})(${elExpr}.innerHTML, ${htmlToText.toString()}) : { body: '', bodyMain: '', quoted: '' })`;
 }
 
 /**
@@ -148,6 +241,15 @@ export const THREAD_DETAILS_SCRIPT = `(() => {
 
 /** Scrape the expanded thread into { subject, rows, expectedCount, hasDraft }. Recipients come from
  *  Gmail's OWN labelled header rows (verified live 2026-09-09), never guessed from region classes. */
+// Live lessons this script encodes (moved from getThread.ts's former copy, Task 27):
+//  - NESTED MATCHES (2026-09-09): Gmail renders a message as div[role=listitem] CONTAINING .adn.ads,
+//    so both matched and every message was scraped twice; only the outermost match is kept. A doubled
+//    count would also hide a message that failed to expand from assessThreadCompleteness.
+//  - AN OPEN DRAFT (2026-09-10): an unsent draft renders as an editable body with a "Discard draft"
+//    control under the last message; nothing this script clicks opens one, so either means a draft.
+//  - CC (2026-09-09): the labelled "to:"/"cc:" rows of the details panel ARE the classification;
+//    ancestor-class guesses called every cc'd address "to". bcc counts as cc. Without labelled rows
+//    the collapsed summary is used and the row is marked unverified.
 export const THREAD_SCRAPE_SCRIPT = `(() => {
     const subject = document.querySelector('h2.hP')?.textContent?.trim() || '';
     const expectedCount = window.__flockThreadExpectedCount || 0;
@@ -165,7 +267,11 @@ export const THREAD_SCRAPE_SCRIPT = `(() => {
       const dateEl = el.querySelector('.g3, span.g3');
       const date = dateEl?.getAttribute('title') || dateEl?.textContent?.trim() || '';
       const bodyEl = el.querySelector('.a3s.aiL');
-      const body = bodyEl?.textContent?.trim() || '';
+      // Task 27: textContent dropped every line break; the parts keep them and split off the
+      // trailing quoted history. textContent stays the fallback for markup the converter empties.
+      const parts = ${messagePartsExpr("bodyEl")};
+      const body = parts.body || bodyEl?.textContent?.trim() || '';
+      const bodyMain = parts.body && parts.quoted ? parts.bodyMain : '';
       const unsubRe = new RegExp(${JSON.stringify(UNSUBSCRIBE_LINK_RE_SOURCE)}, 'i');
       let unsubscribeLink = false;
       if (bodyEl) {
@@ -195,7 +301,7 @@ export const THREAD_SCRAPE_SCRIPT = `(() => {
           recipients.push({ raw: s.getAttribute('email') || s.textContent.trim(), kind: 'to' });
         });
       }
-      rows.push({ fromEmail, fromName, date, body, recipients, recipientsVerified, unsubscribeLink });
+      rows.push({ fromEmail, fromName, date, body, bodyMain, recipients, recipientsVerified, unsubscribeLink });
     });
     return JSON.stringify({ subject, rows, expectedCount, hasDraft });
   })()`;
