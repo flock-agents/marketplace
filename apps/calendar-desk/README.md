@@ -10,7 +10,7 @@ spawns it, and the two talk over two narrow seams:
 | direction | how | what crosses |
 |---|---|---|
 | platform → app | HTTP `POST /lifecycle/initialize`, `/lifecycle/tick`, `GET /lifecycle/progress`, `POST /ops/:name` | "start", "do a pass", "how far along are you", agent operations |
-| platform → app | HTTP `GET /api/widget/today` | the schedule widget; `connector` says whether Google is linked (`none` / `syncing` / `ok` / `attention`); reminders list in every state |
+| platform → app | HTTP `GET /api/widget/today` | the schedule widget (today through the next 7 days, each item dated); `connector` says whether Google is linked (`none` / `syncing` / `ok` / `attention`); reminders list in every state |
 | app → platform | `@flock/app-sdk`'s `PlatformContext` | `tasks.publish/withdraw/snooze`, `connectors.exec`, `memory.factsSince`, `agent.intent` |
 
 Nothing else is shared. No Google Calendar event ever lands in a platform table — the app keeps its own
@@ -156,7 +156,7 @@ server/
   rules.ts           Lead days and recurrence: which reminders are due today
   scheduler.ts       The minute loop: fires timed reminders and prep notes; reads routine state from the hourly tick
   store.ts           calendar-desk.db — events, event_notes, reminders, fires, preps, cursors, init_state
-  widget.ts          The schedule widget: today's reminders and events
+  widget.ts          The schedule widget: reminders and events, today through the next 7 days
   ops.ts             Agent operations: add/cancel/snooze reminders, refresh the calendar, set event notes
   migrate-legacy.ts  Legacy reminder migration
 ```
