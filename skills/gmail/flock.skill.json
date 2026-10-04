@@ -112,6 +112,10 @@
       "timeoutMs": 90000,
       "reason": "Drives a real browser DOM to write a message: 8-30s+ per call and growing with the content written. A timeout shorter than the write turns one intent into two drafts, because the caller sees a timeout on a write that actually landed."
     },
+    "sendDraft": {
+      "timeoutMs": 120000,
+      "reason": "Opens the draft (up to 25s on a cold Gmail), presses Send, waits up to 13s for Gmail to confirm, then keeps the page open until Gmail's Undo Send window closes (up to 35s): closing the page inside that window can cancel the send. A kill mid-wait is worse than slow: the caller would be told nothing was confirmed after the mail went out."
+    },
     "updateDraft": {
       "timeoutMs": 90000,
       "reason": "Drives a real browser DOM to write a message: 8-30s+ per call and growing with the content written. A timeout shorter than the write turns one intent into two drafts, because the caller sees a timeout on a write that actually landed."
@@ -208,6 +212,23 @@
         "maxResults": 25
       }
     },
+    "resolve": {
+      "flag": "senderUnresolved",
+      "functionName": "getThreads",
+      "idsParam": "threadIds",
+      "idFrom": "id",
+      "freshAfterParam": "freshAfter",
+      "params": {
+        "view": "print",
+        "maxBodyChars": 1,
+        "timeoutMs": 75000
+      },
+      "maxPerPass": 5,
+      "maxCallMs": 105000,
+      "transform": "newestMessageFrom",
+      "into": "from",
+      "reason": "F-SELF (2026-10-04): a read inbox row with several participants and no unread chip cannot say who wrote its newest message, and listInbox's chip guess journaled Pluto's mail as the owner's own (dropped as a self-send). Such a row is read from its thread (print view, one held session) and its newest message's From is stored instead; at most maxPerPass reads per pass, the rest (and any failed read) wait for the next poll rather than being stored with the guess. maxCallMs is one call's worst case (the 75s crawl budget, plus a thread read already in flight at that moment, its 20s wait and the session close): the platform starts a call only if that worst case still ends inside the account-guard lease."
+    },
     "result": "array",
     "map": {
       "eventId": {
@@ -258,6 +279,7 @@
   },
   "name": "Gmail",
   "slug": "gmail",
-  "version": "1.5.1",
+  "version": "1.6.0",
+  "minFlockVersion": "0.10.3",
   "author": "flock"
 }

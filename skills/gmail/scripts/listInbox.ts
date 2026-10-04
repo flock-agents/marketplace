@@ -6,7 +6,7 @@ import {
   emitResult,
 } from "../../_shared/_google_helpers";
 import { classifyInboxScrape } from "../../_shared/_inbox-classify";
-import { composeFrom, senderExtractionFailed, latestSender, participantAddresses } from "../../_shared/_gmail-sender";
+import { composeFrom, senderExtractionFailed, latestSender, participantAddresses, senderNeedsThreadRead } from "../../_shared/_gmail-sender";
 
 const params = JSON.parse(process.env.SKILL_PARAMS || "{}");
 let maxResults = parseInt(params.maxResults, 10);
@@ -109,6 +109,12 @@ const evalScript = `(() => {
       participants: participantAddresses(Array.isArray(r.chips) ? r.chips : []),
     // Every chip as scraped (address, name, text, classes): evidence for the sender rule.
     chips: Array.isArray(r.chips) ? r.chips : [],
+      // F-SELF: the chips cannot say who wrote the newest message (read row, several participants,
+      // no unread mark), so `from` above is only latestSender's guess. The platform's ingest step
+      // (manifest ingest.resolve) reads the thread and replaces it before anything is journaled; a
+      // row it cannot resolve is left out of this pass, never stored with the guess. Reading here
+      // instead would put a thread read per ambiguous row inside this 30s list call.
+      ...(senderNeedsThreadRead(Array.isArray(r.chips) ? r.chips : []) ? { senderUnresolved: true } : {}),
     };
   }));
 })();

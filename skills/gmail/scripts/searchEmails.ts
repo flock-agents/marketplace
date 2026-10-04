@@ -32,6 +32,7 @@ import {
   persistentClose,
 } from "../../_shared/_google_helpers";
 import { gmailViewUrl, pollInPageScript, parsePollResult, searchViewReadyExpr } from "./_gmailNav";
+import { composeFrom, latestSender, participantAddresses, type SenderChip } from "../../_shared/_gmail-sender";
 
 // --- Pure helpers (unit-tested, no browser) ---
 
@@ -62,6 +63,23 @@ export function parseSearchOutcome(content: unknown): { ready: boolean; emails: 
   }
 }
 
+/**
+ * The rows a search hands back: `from` composed from the row's chips by the same rule listInbox
+ * uses (latestSender + composeFrom — never list text in the address slot, never a fabricated
+ * address), plus every participant address and the chips themselves as evidence. On a read row
+ * with several participants `from` is still latestSender's best guess at the newest writer; a
+ * caller that must know (the inbox ingest) reads the thread. A sent-folder caller knows the
+ * sender outright: it is the mailbox (sent-source.ts).
+ */
+export function searchRowsOut(rows: Array<Record<string, any>>): Array<Record<string, any>> {
+  return (Array.isArray(rows) ? rows : []).map((r) => {
+    const chips: SenderChip[] = Array.isArray(r?.chips) ? r.chips : [];
+    const s = latestSender(chips);
+    const { chips: _c, ...rest } = r ?? {};
+    return { ...rest, from: composeFrom(s.email, s.name), participants: participantAddresses(chips), chips };
+  });
+}
+
 // --- Script entrypoint (browser-driven search) ---
 
 // Scrape the result rows. `tr.zA` is the row selector the rest of this skill
@@ -76,8 +94,16 @@ function rowsExpr(maxResults: number): string {
   const emails = [];
   rows.forEach((row, i) => {
     if (i >= maxResults) return;
-    const from = row.querySelector('.yW span')?.getAttribute('email') || row.querySelector('.yW span')?.textContent?.trim() || '';
-    const fromName = row.querySelector('.yW span')?.getAttribute('name') || row.querySelector('.yW span')?.textContent?.trim() || '';
+    // Every participant chip, exactly as listInbox scrapes them (F-SELF B, 2026-10-04). This read
+    // '.yW span', the OUTER span.bA4 with no attributes, and fell back to its text — so a sent row
+    // came out "Shiva, me <Shiva, me>", the chip LIST in the address slot (the same bug spec
+    // 2026-09-07 §3 fixed in listInbox). Composition happens in TypeScript (searchRowsOut).
+    const chips = Array.from(row.querySelectorAll('.yW span[email], .yW .yP')).map((s) => ({
+      email: s.getAttribute('email') || '',
+      name: s.getAttribute('name') || '',
+      text: (s.textContent || '').trim(),
+      cls: s.getAttribute('class') || '',
+    }));
     const subject = row.querySelector('.bog')?.textContent?.trim() || '';
     const snippet = row.querySelector('.y2')?.textContent?.trim() || '';
     const dateEl = row.querySelector('.xW span');
@@ -107,7 +133,7 @@ function rowsExpr(maxResults: number): string {
         id = rawThreadId.indexOf('#thread-f:') === 0 ? rawThreadId.slice('#thread-f:'.length) : rawThreadId;
       }
     }
-    emails.push({ id, from: fromName ? fromName + ' <' + from + '>' : from, subject, snippet, date, dateFull, isUnread });
+    emails.push({ id, chips, subject, snippet, date, dateFull, isUnread });
   });
   return JSON.stringify(emails);
 })()`;
@@ -154,7 +180,7 @@ function runScript(): void {
     if (!ready) {
       errorJson("BROWSER_ERROR", `Gmail search for "${query}" did not finish rendering — refusing to report it as no results.`);
     }
-    emitResult(emails);
+    emitResult(searchRowsOut(emails as Array<Record<string, any>>));
   })().catch((err: any) => {
     errorJson("BROWSER_ERROR", `Gmail search failed: ${err?.message || err}`);
   });

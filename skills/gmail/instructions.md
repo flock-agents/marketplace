@@ -91,6 +91,7 @@ reply to — use `getThread`**, which returns per-message `to`/`cc`.
 
 ### searchEmails
 Search emails with Gmail query syntax. Params: `{ query: string, maxResults?: number }`
+A row's `from` is only a best guess at who wrote the newest message when the thread is read and has several participants (`participants` lists them all) — use `getThread` for the true author.
 
 ### listLabels
 List all Gmail labels. Params: `{}`

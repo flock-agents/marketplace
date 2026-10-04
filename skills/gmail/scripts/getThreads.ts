@@ -126,9 +126,16 @@ const paceFrom = (n: unknown, fallback: number): number => {
   return Number.isFinite(v) && v >= 0 ? Math.floor(v) : fallback;
 };
 
-/** Trim each message body to the caller's cap. Applied once, where a thread joins the result. */
+/** Trim each message body to the caller's cap. Applied once, where a thread joins the result.
+ *  bodyMain (Task 27) is a prefix of body, so it is cut at the same length; once nothing of the
+ *  quoted history is left after it, it says nothing and is dropped. */
 function capBodies(messages: ThreadMessage[], maxChars: number): ThreadMessage[] {
-  return messages.map((m) => (m.body.length > maxChars ? { ...m, body: m.body.slice(0, maxChars) } : m));
+  return messages.map((m) => {
+    if (m.body.length <= maxChars) return m;
+    const { bodyMain, ...rest } = m;
+    const body = m.body.slice(0, maxChars);
+    return bodyMain !== undefined && bodyMain.length < body.length ? { ...rest, body, bodyMain } : { ...rest, body };
+  });
 }
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, Math.max(0, ms)));

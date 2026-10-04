@@ -34,6 +34,8 @@
 // RULE: never reach for a "close" control by guessing. A save affordance is
 // named as one; anything unnamed may be the trash.
 
+import { pressGmailButton } from "./_gmailPress";
+
 /**
  * Gmail's Discard draft control. Exported ONLY so callers and tests can name
  * the thing they must never click. Clicking this destroys the draft.
@@ -57,11 +59,16 @@ export const SAVE_AND_CLOSE_SELECTORS = ['.Ha img.Ha-Jj', '[aria-label="Save & c
  * fallback, it cannot delete anything.
  *
  * Returns JSON: { ok: true, how: "save-and-close" | "autosaved-inline" }.
+ *
+ * Task 28: the control is pressed with mousedown/mouseup/click (pressGmailButton,
+ * _gmailPress.ts), not `.click()`, which Gmail's div[role=button] controls
+ * ignore. An off-screen control is not pressed; the blur path runs instead.
  */
 export const SAVE_AND_CLOSE_SCRIPT = `(() => {
+  const press = ${pressGmailButton.toString()};
   const saveClose = document.querySelector('.Ha img.Ha-Jj') ||
                     document.querySelector('[aria-label="Save & close"]');
-  if (saveClose) { saveClose.click(); return JSON.stringify({ok:true, how:"save-and-close"}); }
+  if (saveClose && press(saveClose)) return JSON.stringify({ok:true, how:"save-and-close"});
   const editor = document.querySelector('div[aria-label*="Message"][contenteditable=true]');
   if (editor && editor.blur) editor.blur();
   if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
