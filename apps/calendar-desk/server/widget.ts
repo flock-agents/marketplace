@@ -19,7 +19,7 @@ widgetRoutes.get("/api/widget/today", (c) => {
   const items: any[] = [];
   for (const e of listEvents({ fromDate: date, toDate: endDate })) {
     const p = getPrep(e.accountId, e.eventKey);
-    items.push({ id: e.eventKey, kind: "event", title: e.title, date: e.localDate, startAt: e.startAt, endAt: e.endAt, allDay: e.allDay,
+    items.push({ id: e.eventKey, kind: "event", title: e.title, date: e.localDate, calendar: e.calendar ?? undefined, startAt: e.startAt, endAt: e.endAt, allDay: e.allDay,
       state: p ? "prepped" : undefined, marks: getEventNote(e.accountId, e.eventKey) ? ["note"] : [], link: p?.sessionId ? { kind: "chat", sessionId: p.sessionId } : null });
   }
   const fires = listFiresOn(date);
