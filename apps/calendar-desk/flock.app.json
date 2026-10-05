@@ -55,7 +55,7 @@
     "operations": [
       {
         "name": "refresh_calendar",
-        "description": "Re-read Google Calendar now: {force?: true to ignore the 2-hour freshness window}. Daily cap still applies.",
+        "description": "Re-read Google Calendar now (always scrapes, ignoring the 2-hour freshness window). Daily cap still applies.",
         "invoke": "ops/refresh_calendar"
       },
       {
