@@ -87,13 +87,20 @@ describe("event details", () => {
     const e = S.getEvent("acc", "k1")!;
     expect([e.location, e.guests, e.detailsAt, e.googleEventId]).toEqual(["New", null, null, null]);
   });
-  test("the popover owns the location: a later read without one clears it, and the agenda does not bring it back", () => {
+  test("a popover without a location keeps this scrape's agenda location; with one, the popover wins", () => {
     S.upsertEvents("acc", [row({ googleEventId: "g1", location: "Agenda place" })], 1);
-    S.saveEventDetails("acc", "k1", { guests: [], location: "HSR Layout" }, 2);
-    S.saveEventDetails("acc", "k1", { guests: [] }, 3);
+    S.saveEventDetails("acc", "k1", { guests: [], location: "HSR Layout" }, 2, "Agenda place");
+    expect(S.getEvent("acc", "k1")!.location).toBe("HSR Layout");
+    S.saveEventDetails("acc", "k1", { guests: [] }, 3, "Agenda place");
+    expect(S.getEvent("acc", "k1")!.location).toBe("Agenda place");
+    S.saveEventDetails("acc", "k1", { guests: [] }, 4, null);
     expect(S.getEvent("acc", "k1")!.location).toBeNull();
-    S.upsertEvents("acc", [row({ googleEventId: "g1", location: "Agenda place" })], 4);
-    expect(S.getEvent("acc", "k1")!.location).toBeNull();
+  });
+  test("details with unknown guests (no guests field) store guests as null, not []", () => {
+    S.upsertEvents("acc", [row({ googleEventId: "g1" })], 1);
+    S.saveEventDetails("acc", "k1", { guestSummary: "3 guests", meetLink: "https://meet.google.com/abc-defg-hij" }, 2);
+    const e = S.getEvent("acc", "k1")!;
+    expect([e.guests, e.guestSummary, e.detailsAt]).toEqual([null, "3 guests", 2]);
   });
   test("detailPlan: first read 60; then 15, skipping fresh and far-off details", () => {
     const now = new Date("2026-10-06T08:00:00+05:30");
@@ -107,6 +114,18 @@ describe("event details", () => {
     S.saveEventDetails("acc", "stale", { guests: [] }, now.getTime() - 30 * 3600e3);
     S.saveEventDetails("acc", "far", { guests: [] }, now.getTime() - 30 * 3600e3);
     expect(S.detailPlan("acc", now)).toEqual({ max: 15, skipIds: ["gF", "gR"] });
+  });
+  test("detailPlan: forceIds are read even when fresh; events already over today are skipped", () => {
+    const now = new Date("2026-10-06T12:00:00+05:30");
+    S.upsertEvents("acc", [
+      row({ eventKey: "fresh", googleEventId: "gF", startAt: now.getTime() + 1800e3, endAt: now.getTime() + 3600e3 }),
+      row({ eventKey: "over", googleEventId: "gO", startAt: now.getTime() - 3 * 3600e3, endAt: now.getTime() - 2 * 3600e3 }),
+      row({ eventKey: "overNoEnd", googleEventId: "gN", startAt: now.getTime() - 3600e3 }),
+      row({ eventKey: "running", googleEventId: "gU", startAt: now.getTime() - 600e3, endAt: now.getTime() + 600e3 }),
+    ], now.getTime());
+    S.saveEventDetails("acc", "fresh", { guests: [] }, now.getTime() - 3600e3);
+    expect(S.detailPlan("acc", now).skipIds.sort()).toEqual(["gF", "gN", "gO"]);
+    expect(S.detailPlan("acc", now, { forceIds: ["gF"] }).skipIds.sort()).toEqual(["gN", "gO"]);
   });
   test("detailPlan: more than 15 upcoming timed rows without details is a first read again", () => {
     const now = new Date(2026, 9, 6, 8, 0);

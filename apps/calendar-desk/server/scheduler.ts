@@ -41,7 +41,12 @@ export async function runPrepWindow(platform: PlatformContext, cfg: PrepConfig, 
   const pick = [...candidates, ...allDay];
   if (pick.length === 0) return out;
   // One refresh so a cancelled meeting is not prepped (lease permitting); stale data otherwise.
-  for (const acct of new Set(pick.map((e) => e.accountId))) if (shouldScrape(acct, now, "pre-prep")) await (deps.sync ?? syncAccount)(acct, { platform, now: () => now }, "pre-prep");
+  // It re-reads the picked meetings' details (guests or location may have changed since the last read).
+  for (const acct of new Set(pick.map((e) => e.accountId))) {
+    if (!shouldScrape(acct, now, "pre-prep")) continue;
+    const forceDetailIds = pick.filter((e) => e.accountId === acct && e.googleEventId).map((e) => e.googleEventId!);
+    await (deps.sync ?? syncAccount)(acct, { platform, now: () => now }, "pre-prep", { forceDetailIds });
+  }
   for (const e0 of pick) {
     const e = listEvents({ fromDate: today, toDate: today, accountId: e0.accountId, source: "google" }).find((x) => x.eventKey === e0.eventKey);
     if (!e) continue;                                             // vanished in the refresh

@@ -77,7 +77,8 @@ applyMigrations();
 // Calendar Desk's own copy of the google-calendar skill's detail types (no import across repos).
 // The owner is never a guest: the skill leaves the signed-in account out.
 export interface EventGuest { email: string; name?: string; rsvp?: "yes" | "no" | "maybe" | "awaiting"; organiser?: true }
-export interface EventDetails { guests: EventGuest[]; guestSummary?: string; location?: string; description?: string; meetLink?: string }
+/** `guests` absent = the skill could not read them reliably: stored as null (unknown), like never read. */
+export interface EventDetails { guests?: EventGuest[]; guestSummary?: string; location?: string; description?: string; meetLink?: string }
 
 /** `guests === null` means the details were never read (not "no guests"). */
 export interface EventRow { accountId: string; eventKey: string; calendar: string | null; title: string; startAt: number | null; endAt: number | null; allDay: boolean; localDate: string; attendeesText: string | null; location: string | null; rawTimeText: string | null; firstSeenAt: number; lastSeenAt: number; missingSince: number | null; source: "google" | "fact"; factId: number | null; sourceLink: string | null;
@@ -120,10 +121,11 @@ export function upsertEvents(accountId: string, rows: ScrapedEventRow[], seenAt:
   return { inserted, updated };
 }
 
-export function saveEventDetails(accountId: string, eventKey: string, d: EventDetails, at: number): void {
+/** `rowLocation` is this scrape's agenda location: the fallback when the popover shows none. */
+export function saveEventDetails(accountId: string, eventKey: string, d: EventDetails, at: number, rowLocation: string | null = null): void {
   db.query(`UPDATE events SET guests_json = ?, guest_summary = ?, description = ?, meet_link = ?, details_at = ?,
       location = ? WHERE account_id = ? AND event_key = ?`)
-    .run(JSON.stringify(d.guests ?? []), d.guestSummary ?? null, d.description ?? null, d.meetLink ?? null, at, d.location ?? null, accountId, eventKey);
+    .run(d.guests ? JSON.stringify(d.guests) : null, d.guestSummary ?? null, d.description ?? null, d.meetLink ?? null, at, d.location ?? rowLocation ?? null, accountId, eventKey);
 }
 
 export const DETAIL_FIRST_READ_MAX = 60;
@@ -141,9 +143,11 @@ const localMidnight = (ymd: string) => { const [y, m, d] = ymd.split("-").map(Nu
 
 /** What the next scrape asks the skill to read. A first read (no details yet, or more than 15 upcoming
  *  timed events in the 7-day window without them) covers up to 60; after that 15 per scrape. Events whose
- *  details are under a day old, or that start more than 48h out, are skipped (ordered by start). */
-export function detailPlan(accountId: string, now: Date): { max: number; skipIds: string[] } {
+ *  details are under a day old, or that start more than 48h out, are skipped (ordered by start), and so are
+ *  events already over. `forceIds` (the meeting about to be prepped) are never skipped. */
+export function detailPlan(accountId: string, now: Date, opts: { forceIds?: string[] } = {}): { max: number; skipIds: string[] } {
   const t = now.getTime();
+  const force = new Set(opts.forceIds ?? []);
   const read = db.query(`SELECT google_event_id, start_at, local_date, details_at FROM events
     WHERE account_id = ? AND source = 'google' AND missing_since IS NULL AND google_event_id IS NOT NULL AND details_at IS NOT NULL`)
     .all(accountId) as { google_event_id: string; start_at: number | null; local_date: string; details_at: number }[];
@@ -152,15 +156,20 @@ export function detailPlan(accountId: string, now: Date): { max: number; skipIds
     .filter((r) => r.detailsAt > t - DETAIL_FRESH_MS || r.start > t + DETAIL_HORIZON_MS)
     .sort((a, b) => a.start - b.start)
     .map((r) => r.id);
+  const over = db.query(`SELECT google_event_id FROM events WHERE account_id = ? AND source = 'google' AND missing_since IS NULL
+      AND google_event_id IS NOT NULL AND COALESCE(end_at, start_at) IS NOT NULL AND COALESCE(end_at, start_at) < ? ORDER BY start_at`)
+    .all(accountId, t) as { google_event_id: string }[];
+  for (const r of over) if (!skip.includes(r.google_event_id)) skip.push(r.google_event_id);
+  const skipIds = skip.filter((id) => !force.has(id));
   const anyRead = (db.query("SELECT 1 FROM events WHERE account_id = ? AND source = 'google' AND details_at IS NOT NULL LIMIT 1").get(accountId)) != null;
   const end = new Date(now); end.setDate(end.getDate() + DETAIL_WINDOW_DAYS);
   const unread = (db.query(`SELECT COUNT(*) AS n FROM events WHERE account_id = ? AND source = 'google' AND missing_since IS NULL
       AND all_day = 0 AND start_at IS NOT NULL AND start_at >= ? AND local_date BETWEEN ? AND ? AND details_at IS NULL`)
     .get(accountId, t, localYmd(now), localYmd(end)) as { n: number }).n;
   const missAt = Number(getCursor(detailMissCursor(accountId)) || 0);
-  if (missAt && t - missAt < DETAIL_MISS_BACKOFF_MS) return { max: DETAIL_PROBE_MAX, skipIds: skip };
+  if (missAt && t - missAt < DETAIL_MISS_BACKOFF_MS) return { max: DETAIL_PROBE_MAX, skipIds };
   const firstRead = !anyRead || unread > DETAIL_STEADY_MAX;
-  return { max: firstRead ? DETAIL_FIRST_READ_MAX : DETAIL_STEADY_MAX, skipIds: skip };
+  return { max: firstRead ? DETAIL_FIRST_READ_MAX : DETAIL_STEADY_MAX, skipIds };
 }
 
 export function markMissingEvents(accountId: string, localDates: string[], presentKeys: string[], at: number): number {

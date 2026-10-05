@@ -57,6 +57,19 @@ describe("runPrepWindow", () => {
     expect((await runPrepWindow(p.ctx, cfgOn, new Date(2026, 9, 5, 14, 40), { facts: async () => [], sync })).prepped).toBe(1);
     expect(p.intents[0].payload).toMatchObject({ eventKey: "unknown", attendees: "" });
   });
+  test("the pre-prep refresh re-reads the candidates' details (forceDetailIds = their Google ids)", async () => {
+    ev({ eventKey: "k1", googleEventId: "gk1" });
+    const seen: any[] = [];
+    const spy = (async (acct: string, _deps: any, reason: string, opts: any) => { seen.push({ acct, reason, opts }); return { ok: true, events: 0, fault: null }; }) as any;
+    await runPrepWindow(platform().ctx, readPrepConfig(undefined), new Date(2026, 9, 5, 14, 40), { facts: async () => [], sync: spy });
+    expect(seen).toEqual([{ acct: "acct", reason: "pre-prep", opts: { forceDetailIds: ["gk1"] } }]);
+  });
+  test("details read but guests unknown (null) still prep (R22)", async () => {
+    ev({ eventKey: "k1" }); S.saveEventDetails("acct", "k1", { guestSummary: "3 guests" }, 1);
+    const p = platform();
+    await runPrepWindow(p.ctx, readPrepConfig(undefined), new Date(2026, 9, 5, 14, 40), { facts: async () => [], sync });
+    expect(p.intents.map((i) => i.payload.eventKey)).toEqual(["k1"]);
+  });
   test("prep payload carries guests, description and Meet link", async () => {
     ev({ eventKey: "k1" });
     S.saveEventDetails("acct", "k1", { guests: [{ email: "yogesh@crafo.ai", rsvp: "awaiting" }, { email: "anita@acme.com", name: "Anita Rao", rsvp: "yes" }], guestSummary: "2 guests", description: "Review the calendar app", meetLink: "https://meet.google.com/abc-defg-hij" }, 1);

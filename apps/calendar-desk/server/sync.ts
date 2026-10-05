@@ -37,13 +37,14 @@ function dateRange(now: Date): string[] {
 
 const inFlight = new Set<string>();
 /** One scrape per account at a time: an overlapping call is skipped "busy" and costs nothing against the cap. */
-export async function syncAccount(accountId: string, deps: SyncDeps, reason: SyncReason) {
+/** `forceDetailIds`: Google event ids whose details are re-read this pass even when fresh (pre-prep). */
+export async function syncAccount(accountId: string, deps: SyncDeps, reason: SyncReason, opts: { forceDetailIds?: string[] } = {}) {
   if (inFlight.has(accountId)) return { ok: true, events: 0, fault: null, skipped: "busy" as const };
   inFlight.add(accountId);
-  try { return await runSync(accountId, deps, reason); } finally { inFlight.delete(accountId); }
+  try { return await runSync(accountId, deps, reason, opts); } finally { inFlight.delete(accountId); }
 }
 
-async function runSync(accountId: string, deps: SyncDeps, reason: SyncReason) {
+async function runSync(accountId: string, deps: SyncDeps, reason: SyncReason, opts: { forceDetailIds?: string[] }) {
   const now = (deps.now ?? (() => new Date()))();
   const day = ymd(now);
   if (!deps.platform.configured) return { ok: false, events: 0, fault: "not configured" };
@@ -52,7 +53,7 @@ async function runSync(accountId: string, deps: SyncDeps, reason: SyncReason) {
 
   setCursor(`scrapes:${accountId}:${day}`, String(scrapesToday(accountId, day) + 1));
   setCursor(`last_attempt:${accountId}`, String(now.getTime()));
-  const plan = detailPlan(accountId, now);
+  const plan = detailPlan(accountId, now, { forceIds: opts.forceDetailIds });
   const res = await deps.platform.connectors.exec<{ ok?: boolean; events?: ScrapedEvent[] }>({
     skillId: "google-calendar", functionName: "listEvents", accountHint: accountId,
     params: { timeMin: day, maxResults: MAX_RESULTS, details: plan },
@@ -77,7 +78,7 @@ async function runSync(accountId: string, deps: SyncDeps, reason: SyncReason) {
   const at = now.getTime();
   upsertEvents(accountId, rows, at);
   // An event without details (not asked, or its popover failed) keeps what was stored.
-  for (const r of rows) if (r.details) saveEventDetails(accountId, r.eventKey, r.details, at);
+  for (const r of rows) if (r.details) saveEventDetails(accountId, r.eventKey, r.details, at, r.location);
   // A pass that was asked for details, had a timed event it could read, and got none back: back off to a
   // probe for a day (detailPlan). Any details clear it. Events in skipIds were not asked for, so they don't count.
   if (rows.some((r) => r.details)) setCursor(detailMissCursor(accountId), "");

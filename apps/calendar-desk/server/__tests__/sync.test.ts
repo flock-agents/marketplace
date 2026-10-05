@@ -145,6 +145,21 @@ describe("event details (Task 8)", () => {
     const e = S.listEvents({ fromDate: "2026-10-05", toDate: "2026-10-05", accountId: "acct" })[0]!;
     expect([e.googleEventId, e.guests, e.location]).toEqual(["g1", [{ email: "yogesh@crafo.ai" }], "HSR Layout"]);
   });
+  test("a popover without a location keeps the agenda's; unknown guests are stored as null", async () => {
+    const p = platform(() => ok({ ok: true, events: [
+      { eventId: "g1", title: "Dentist", time: "4pm – 4:30pm", date: "Mon, 5 Oct", location: "Smile Dental", details: { guestSummary: "2 guests" } },
+    ] }));
+    await syncAccount("acct", { platform: p.ctx, now: () => NOW }, "forced");
+    const e = S.listEvents({ fromDate: "2026-10-05", toDate: "2026-10-05", accountId: "acct" })[0]!;
+    expect([e.location, e.guests, e.guestSummary]).toEqual(["Smile Dental", null, "2 guests"]);
+  });
+  test("forceDetailIds are asked for even when their details are fresh", async () => {
+    const first = platform(() => ok({ ok: true, events: [{ eventId: "g3", title: "Review", time: "4pm", date: "Mon, 5 Oct", details: { guests: [{ email: "a@x.com" }] } }] }));
+    await syncAccount("acct", { platform: first.ctx, now: () => NOW }, "forced");
+    const p = platform(() => ok({ ok: true, events: [{ eventId: "g3", title: "Review", time: "4pm", date: "Mon, 5 Oct" }] }));
+    await syncAccount("acct", { platform: p.ctx, now: () => new Date(NOW.getTime() + 3600_000) }, "forced", { forceDetailIds: ["g3"] });
+    expect(p.calls[0].params.details.skipIds).not.toContain("g3");
+  });
   test("a row without details is kept and is not skipped next time (Review Focus 4)", async () => {
     const p = platform(() => ok({ ok: true, events: [{ eventId: "g2", title: "Standup", time: "11am – 11:15am", date: "Mon, 5 Oct" }] }));
     await syncAccount("acct", { platform: p.ctx, now: () => NOW }, "forced");
