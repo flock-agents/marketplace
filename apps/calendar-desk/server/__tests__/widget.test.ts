@@ -102,6 +102,14 @@ describe("feeds carry event details (Task 9)", () => {
     const it0 = ((await (await widgetRoutes.request("/api/widget/today")).json()) as any).items.find((i: any) => i.id === "bare");
     expect(["guests", "moreGuests", "location", "meetLink"].map((k) => k in it0)).toEqual([false, false, false, false]);
   });
+  test("a Google event whose details were never read says detailsPending; read ones and memory events do not", async () => {
+    seedEvent({ eventKey: "read" });
+    S.upsertEvents("a", [{ accountId: "a", eventKey: "unread", title: "unread", startAt: new Date(`${today}T10:00:00`).getTime(), endAt: null, allDay: false, localDate: today, calendar: "primary", attendeesText: null, location: null, rawTimeText: null } as any], Date.now());
+    S.upsertFactEvent({ accountId: "acc-home", factId: 15, title: "Rent due", localDate: today, startAt: null, sourceLink: null }, 1);
+    const items = ((await (await widgetRoutes.request("/api/widget/horizon")).json()) as any).items;
+    const pending = (id: string) => items.find((i: any) => i.id === id || i.title === id)?.detailsPending;
+    expect([pending("unread"), pending("read"), pending("Rent due")]).toEqual([true, undefined, undefined]);
+  });
   test("horizon reports connector like /today", async () => {
     S.markInitStarted("acc", "x"); S.markInitFinished("acc", "done", "ok"); S.setCursor("fault:acc", "agenda unreadable");
     const body = await (await widgetRoutes.request("/api/widget/horizon")).json() as any;

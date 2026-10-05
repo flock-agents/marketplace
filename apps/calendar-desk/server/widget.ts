@@ -23,6 +23,8 @@ function eventItem(e: ReturnType<typeof listEvents>[number]) {
     ...(guests.length > 8 ? { moreGuests: guests.length - 8 } : {}),
     ...(e.location ? { location: e.location } : {}),
     ...(e.meetLink ? { meetLink: e.meetLink } : {}),
+    // Never read yet (guests null, no detail pass): the planner may wait a little for them (bounded in Flock).
+    ...(e.source === "google" && e.guests == null && e.detailsAt == null ? { detailsPending: true } : {}),
   };
   return { id: e.eventKey, kind: "event", ...(e.accountId ? { accountId: e.accountId } : {}), title: e.title, date: e.localDate, calendar: e.calendar ?? undefined,
     startAt: e.startAt, endAt: e.endAt, allDay: e.allDay, state: p ? "prepped" : undefined, marks: fact ? ["memory", ...note] : note, link, ...extra };
