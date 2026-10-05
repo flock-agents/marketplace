@@ -1,8 +1,8 @@
 {
   "version": 1,
-  "generatedAt": "2026-10-04T19:20:37.049Z",
-  "sourceVersion": "1.6.0",
-  "sourceTag": "gmail-v1.6.0",
+  "generatedAt": "2026-10-05T06:53:33.841Z",
+  "sourceVersion": "1.6.1",
+  "sourceTag": "gmail-v1.6.1",
   "files": {
     "icon.svg": "40c228f85eadb886954e48734e43fcaccd895af7633e3ff3f4ec88b993f55184",
     "scripts/_unreadState.ts": "5341d1049064370a3c231bd54c1bab7e8b3ac1de21ea4c9a21fabed42e149b69",
@@ -14,7 +14,7 @@
     "scripts/discardDraft.ts": "7db148e8513d1cb1a716fe9ed0d86168433691abdb174035e025ba9559772847",
     "scripts/listDraftThreads.ts": "004943cef3f32379f420d15caa267579c2e534b20ffc1ef8f52c01b0bde87d6d",
     "scripts/_composeFlow.ts": "2e211a265103ae564111aabadc4c895f0f027944df5f11fe3ff488b2d0fc1b5a",
-    "scripts/updateDraft.ts": "9e1fa98626b60ccd0deebd091c0419945ed71c72dc52cef8fda58d2eecb33324",
+    "scripts/updateDraft.ts": "65b12702c45b692a4d9627475515c9b1738363ae94ccca5a8137032b78758285",
     "scripts/listLabels.sh": "f7b37f37b3a63b1f010e224dfe7b6e8fca95d77a855fb5ae85c85b22d1211b3e",
     "scripts/_gmailPress.ts": "8a7e8ed60ab763f8f988af6f55768280b45a237992b2e5a3397901b4076db668",
     "scripts/getEmail.ts": "5d3707c5e234e685577f7edb2629af890d15701212b3da877ae0159f7d784443",
@@ -22,7 +22,7 @@
     "scripts/replyToMessage.ts": "a88fa923c462c861ca2135662ea478959869e215f79e6184e903d73ca28097c7",
     "scripts/listLabels.ts": "0ba9675ea7a3cc9db9983cb36484a28e5b20f3c33e80524c05d706ffcc5e7f97",
     "scripts/gmail-imap.py": "b708eea414af8a35d59289ef0373f713a730a99988eb60c29bc06d23e9450d75",
-    "scripts/_composeSave.ts": "d71fbb93d99192560a249c05e188a99ee908798fa8020cad89989720016d2ebd",
+    "scripts/_composeSave.ts": "884cbd952ee3b50ab551acf0ca9deeb56999d1a07463cc600948efb519b9b6cf",
     "scripts/_gmail_helpers.sh": "fd92b68f05ee124e2d3a9c0487a9340ea14bb0fcf6af44a02f9c45c4d9a8e2d6",
     "scripts/checkEngagedDomains.ts": "0464bfe5cd565ffdea71cdefd6c40c55eef40704a5bf230706b8240639f2f3a6",
     "scripts/createReplyDraft.ts": "e7541b975c18038f272e21e3b4a173f065bbc89a121edc77d9f3e23b32aea090",
@@ -65,7 +65,7 @@
     "scripts/markUnread.ts": "d1db899b0b19da85619f0263e8c2d492db9bdf45325641fa8cece04cdc649016",
     "scripts/markRead.ts": "61c01d8e9488d816aba2986519365dbc15d6fa70e0758eaa97d895d44a63a5e0",
     "scripts/starMessage.sh": "a70a27d76d7511511d823bc2a20384d582258180cbeae6fdbea08b9233b31afe",
-    "flock.skill.json": "ea34359093ebfc250a6b8c401882c79fd4a4a95078d78346d5a18e940083a5dc",
+    "flock.skill.json": "666c2ab4ea5b2ac18c68d8b7546f811a961b42de72dec573c5c034f548674023",
     "instructions.md": "5b536d1b0f2ada3ef4a6959233eccc27e94863fc0455a718320f4c7ff35c6f09"
   }
 }
