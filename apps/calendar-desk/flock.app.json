@@ -74,7 +74,9 @@
   "lifecycle": {
     "initialize": true,
     "tick": true,
-    "progress": true
+    "progress": true,
+    "initializeAfter": ["email-desk"],
+    "waiting": { "title": "Calendar", "message": "Waiting for your inbox to be read first" }
   },
   "dataStore": {
     "accountPartitioned": true
