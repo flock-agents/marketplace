@@ -25,6 +25,16 @@ describe("widget week ahead (A15)", () => {
     expect(body.items.map((i: any) => [i.id, i.date])).toEqual([["allday3", day(3)], ["later", day(3)]]);
     expect(body.items.every((i: any) => i.kind === "event")).toBe(true);
   });
+  test("fact events: marks memory, url link to the mail, accountId only when known", async () => {
+    const today = day(0);
+    S.upsertFactEvent({ accountId: "acc-home", factId: 3, title: "Flight 6E-512", localDate: today, startAt: null, sourceLink: "https://mail.google.com/mail/?authuser=a%40b.c#all/x" }, 1);
+    S.upsertFactEvent({ accountId: "", factId: 4, title: "Asha's birthday", localDate: today, startAt: null, sourceLink: null }, 1);
+    const body = await (await widgetRoutes.request("/api/widget/today")).json() as any;
+    const a = body.items.find((i: any) => i.id === "fact:3"), b = body.items.find((i: any) => i.id === "fact:4");
+    expect(a).toMatchObject({ kind: "event", accountId: "acc-home", marks: ["memory"], link: { kind: "url", href: "https://mail.google.com/mail/?authuser=a%40b.c#all/x" } });
+    expect(b.accountId).toBeUndefined();
+    expect(b).toMatchObject({ marks: ["memory"], link: null });
+  });
 });
 
 describe("widget connector state (A10)", () => {

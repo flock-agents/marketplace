@@ -27,7 +27,7 @@ export const ops: Record<string, OpHandler> = {
     const days = typeof p.days === "number" && p.days > 0 ? Math.min(p.days, 36500) : 14;
     const from = today(); const to = ymd(new Date(Date.now() + days * 86_400_000));
     const items = [
-      ...listEvents({ fromDate: from, toDate: to }).map((e) => ({ kind: "event" as const, date: e.localDate, time: e.allDay || e.startAt == null ? null : new Date(e.startAt).toTimeString().slice(0, 5), title: e.title, eventKey: e.eventKey, hasNote: !!getEventNote(e.accountId, e.eventKey) })),
+      ...listEvents({ fromDate: from, toDate: to }).map((e) => ({ kind: "event" as const, date: e.localDate, time: e.allDay || e.startAt == null ? null : new Date(e.startAt).toTimeString().slice(0, 5), title: e.title, eventKey: e.eventKey, source: e.source, hasNote: !!getEventNote(e.accountId, e.eventKey) })),
     ].sort((a, b) => a.date.localeCompare(b.date) || (a.time ?? "").localeCompare(b.time ?? ""));
     return { from, to, items };
   },

@@ -19,6 +19,13 @@ describe("operations", () => {
     const r: any = await ops.list_upcoming!({ days: 36500 }, ctx);
     expect(r.items.map((i: any) => [i.kind, i.eventKey])).toEqual([["event", "first"], ["event", "later"]]);
   });
+  test("list_upcoming returns fact event with source: fact and Google one with source: google", async () => {
+    const row = (eventKey: string, localDate: string) => ({ eventKey, calendar: null, title: eventKey, startAt: null, endAt: null, allDay: true, localDate, attendeesText: null, location: null, rawTimeText: null });
+    S.upsertEvents("acct", [row("google-event", "2099-10-10")], 1);
+    S.upsertFactEvent({ accountId: "acct", factId: 5, title: "Fact event", localDate: "2099-10-10", startAt: null, sourceLink: null }, 1);
+    const r: any = await ops.list_upcoming!({ days: 36500 }, ctx);
+    expect(r.items.map((i: any) => [i.eventKey, i.source])).toEqual([["google-event", "google"], ["fact:5", "fact"]]);
+  });
   test("set_event_note matches by date + title words, reports ambiguity", async () => {
     S.upsertEvents("acct", [
       { eventKey: "p1", calendar: null, title: "Pricing review with Anita", startAt: 1, endAt: 2, allDay: false, localDate: "2099-10-10", attendeesText: null, location: null, rawTimeText: null },

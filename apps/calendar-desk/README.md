@@ -16,6 +16,10 @@ spawns it, and the two talk over two narrow seams:
 Nothing else is shared. No Google Calendar event ever lands in a platform table — the app keeps its own
 SQLite file under `APP_DATA_DIR` and hands the platform nothing but prep intents.
 
+## Dated facts from memory
+
+Calendar Desk also displays events extracted from your email (flights, hotels, meetings) via memory facts. These appear on Your Schedule marked as "memory" events, tagged with their source email account when known, and linked back to the mail. Duplicate events from Google Calendar are dropped.
+
 ## How it reads Google Calendar
 
 The app calls the Google Calendar connector **itself**, through `platform.connectors.exec`. The platform resolves the credential and applies the per-account guard server-side, so the app never sees a token and cannot outrun the rate limit. There is no platform-side poll feeding this app — one read, made by the thing that needs it.
