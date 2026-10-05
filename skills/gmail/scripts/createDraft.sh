@@ -36,7 +36,7 @@ fi
 COMPOSE_ACTIONS=$(jq -nc '[
   {"action":"waitForSelector","selector":".T-I.T-I-KE.L3","delay":5000},
   {"action":"click","selector":".T-I.T-I-KE.L3"},
-  {"action":"waitForSelector","selector":"[aria-label*=\"To\"] input, textarea[aria-label*=\"To\"], [name=to]","delay":5000}
+  {"action":"waitForSelector","selector":"input[aria-label=\"To recipients\"]:visible, div[name=\"to\"] input:visible, textarea[name=\"to\"]:visible","delay":5000}
 ]')
 
 _persistent_interact "$PERSISTENT_ID" "$COMPOSE_ACTIONS" "false" "" >/dev/null 2>&1

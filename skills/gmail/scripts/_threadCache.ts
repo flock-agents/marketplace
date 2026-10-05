@@ -169,9 +169,17 @@ function isCompleteRead(result: unknown): result is Record<string, unknown> {
   );
 }
 
-// Provenance fields are stamped onto a SERVED copy; they must never be written back into the store,
-// or a re-store of a served result would persist a stale `cachedAt` and a lying `fromCache`.
-const PROVENANCE_FIELDS = ["fromCache", "cachedAt", "nav"] as const;
+// Provenance fields are stamped onto a SERVED copy (or true only of the SPECIFIC live read that
+// produced it); they must never be written back into the store, or a re-store of a served result
+// would persist a stale `cachedAt` and a lying `fromCache`. `restoredUnread` (Task 4 fix round 1,
+// Minor #4) is the same shape of bug: it describes whether THIS read's own forced-reload got put
+// back to unread — a later cache HIT never opened the thread at all, so replaying a stored `true`
+// would falsely claim a restore that never happened on the serve that reads it.
+// `unreadDiag` (2026-09-24) is the same shape of bug as `restoredUnread` right beside it: it
+// describes what THIS live read's own probe/restore saw and did — a later cache HIT never probed
+// or opened the thread at all, so replaying a stored `unreadDiag` would fabricate evidence for a
+// read that never happened.
+const PROVENANCE_FIELDS = ["fromCache", "cachedAt", "nav", "restoredUnread", "unreadDiag"] as const;
 
 function stripProvenance(result: Record<string, unknown>): Record<string, unknown> {
   const clean: Record<string, unknown> = { ...result };
@@ -202,10 +210,18 @@ function messageIdsOf(result: Record<string, unknown>): string[] {
  * The cached copy for `threadId`, or null to read live. `params.forceRefresh` / `params.bypassCache`
  * skip the cache; `params.freshAfter` (epoch ms) refuses a copy read before that instant. An expired
  * entry is removed and missed. A hit is the stored result with `fromCache: true` and `cachedAt` added.
+ *
+ * VIEW GATE (2026-09-24 fix). `params.view === "thread"` means the caller needs a REAL `hasDraft` —
+ * a print-view read always reports `hasDraft:false` (see _printView.ts's PRINT_VIEW_SHOWS_DRAFTS),
+ * so an entry stored from a print read must never satisfy a thread-view caller: the owner-mandated
+ * draft_exists safety rule and reply-card-reconcile's "sent" verdict both depend on a trustworthy
+ * hasDraft. An entry with no `readVia` at all predates this branch — every read before it was a
+ * thread-view read, so it is treated as `readVia: "thread"`. A `view: "print"` (or unspecified)
+ * caller is unpicky and may be served either kind.
  */
 export function readCachedThread(
   threadId: string,
-  params: { forceRefresh?: boolean; bypassCache?: boolean; freshAfter?: number } | undefined,
+  params: { forceRefresh?: boolean; bypassCache?: boolean; freshAfter?: number; view?: string } | undefined,
   now: number = Date.now(),
 ): CachedThread | null {
   if (!threadId) return null;
@@ -222,6 +238,15 @@ export function readCachedThread(
   if (now - stored.cachedAt > THREAD_CACHE_TTL_MS) {
     safeUnlink(file);
     return null;
+  }
+
+  if (params?.view === "thread") {
+    const storedReadVia = (stored.result as { readVia?: unknown })?.readVia;
+    const effectiveReadVia = typeof storedReadVia === "string" ? storedReadVia : "thread";
+    if (effectiveReadVia !== "thread") {
+      console.error(`[gmail-cache] BYPASS thread=${threadId} (view=thread, stored readVia=${effectiveReadVia})`);
+      return null;
+    }
   }
 
   const freshAfter = params?.freshAfter;

@@ -1,4 +1,4 @@
-const FLOCK_API = process.env.FLOCK_API_URL || "http://localhost:35625";
+import { FLOCK_API } from "../../_shared/_helpers";
 const RATE_FILE = "/tmp/skill-linkedin-rate";
 const DRAFTS_DIR = `${process.env.SKILL_DATA_DIR || "/tmp"}/linkedin-drafts`;
 
@@ -43,22 +43,60 @@ async function browserFetchPost(body: Record<string, unknown>): Promise<{ httpCo
   return { httpCode: resp.status, body: parsed };
 }
 
+/**
+ * A 4xx/5xx from `/api/internal/browser-fetch` is FLOCK refusing us, not LinkedIn.
+ *
+ * WRONG FIELD (fixed 2026-09-28): server.ts answers
+ * `{ error: "session_not_ready", state, message }` -- the discriminator is **error**,
+ * not `code`. Reading `body?.code` made the SESSION_NOT_READY branch DEAD, so every
+ * not-ready 403 fell through to "Access denied (HTTP 403)" -- and the ingest guard read
+ * `\b403\b` out of THAT and quarantined the account, for a status produced by Flock's
+ * own access list (`access_denied`: "Agent X does not have the 'Y' skill required for
+ * this session"), with the provider never contacted. A connector may only be demoted
+ * when a request REACHED the provider and the PROVIDER answered auth-shaped.
+ *
+ * Flock's own status stays readable for humans, under a code guard-anomaly.ts treats as
+ * non-quarantining (NON_QUARANTINING_CODES).
+ * PRECEDENCE, CAREFULLY (2026-09-28): do not pick one field over the other. `error`
+ * carries the discriminator on the paths server.ts names ("session_not_ready",
+ * "access_denied", "session_not_found") but a bare human MESSAGE on others (its 500
+ * path answers `{ error: e.message }`), and a mock/older caller can put the code in
+ * `code` while `error` holds prose. So TEST BOTH FIELDS for the code, as
+ * _shared/checkout.ts has always done -- reading `error ?? code` silently loses a code
+ * that is sitting in the other field.
+ */
 function checkError(httpCode: number, body: any, context: string): void {
-  if (httpCode === 403) {
-    if (body?.code === "session_not_ready") {
-      errorJson("SESSION_NOT_READY", "LinkedIn browser session is not ready. User needs to log in or re-authenticate via the dashboard.");
-    }
-    errorJson(`${context}_ERROR`, "Access denied (HTTP 403). Check browser session access settings.");
+  if (httpCode < 400) return;
+  const serverCodes = [String(body?.error ?? ""), String(body?.code ?? "")];
+  const detail = String(body?.message ?? body?.error ?? "(unknown)");
+  if (serverCodes.includes("session_not_ready")) {
+    errorJson("SESSION_NOT_READY", "LinkedIn browser session is not ready — Flock has either not finished connecting it or already marked it outdated. Log in via the dashboard.");
   }
-  if (httpCode >= 400) {
-    const errMsg = body?.error || body?.message || "(unknown)";
-    errorJson(`${context}_ERROR`, `${context} failed (HTTP ${httpCode}): ${errMsg}`);
+  if (serverCodes.includes("access_denied")) {
+    errorJson("ACCESS_DENIED", `Flock refused this request and never contacted LinkedIn: ${detail}`);
   }
+  if (serverCodes.includes("session_not_found")) {
+    errorJson("SESSION_NOT_FOUND", `Flock has no such browser session: ${detail}`);
+  }
+  errorJson(`${context}_ERROR`, `${context} failed inside Flock's browser-fetch endpoint (Flock status ${httpCode}): ${detail}`);
 }
+
+/**
+ * Does the PAGE TEXT prove LinkedIn served us its auth wall?
+ *
+ * This used to be `/sign in|log in|login|session_redirect|"authwall"/i` -- and `login`
+ * alone appears in the markup, script bundles and link targets of perfectly
+ * authenticated LinkedIn pages, so the session was condemned by its own chrome. Content
+ * is weak evidence; only LinkedIn's own auth-wall markers and its login ENDPOINTS are
+ * strong enough to mark a session outdated. Same class of bug as the Google
+ * substring match documented on isSignInUrl in skills/_shared/_google_helpers.ts.
+ */
+const LINKEDIN_AUTHWALL_MARKER =
+  /"authwall"|session_redirect|linkedin\.com\/(?:checkpoint\/lg\/login|uas\/login|login)\b|(?:sign|log)\s?-?\s?in to (?:continue|view|see|access)|join now to see/i;
 
 function checkSessionExpired(pageContent: string): void {
   const { sessionName, agentId } = getSessionAndAgent();
-  if (/sign in|log in|login|session_redirect|"authwall"/i.test(pageContent)) {
+  if (LINKEDIN_AUTHWALL_MARKER.test(pageContent)) {
     fetch(`${FLOCK_API}/api/internal/browser-sessions/${sessionName}/mark-outdated`, {
       method: "POST",
       headers: {

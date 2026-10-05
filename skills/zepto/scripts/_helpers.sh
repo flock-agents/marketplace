@@ -5,7 +5,8 @@ _HELPERS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$(cd "$_HELPERS_DIR/../../_shared" && pwd)/_helpers.sh"
 
 BASE_URL="https://www.zepto.com"
-LOGIN_PATTERN="accounts\.google\.com|zepto\.com/auth|auth\.zepto\.co\.in|zepto\.com/login"
+# Anchored: a bare `accounts\.google\.com` matched the string anywhere in a URL.
+LOGIN_PATTERN="^https?://accounts\.google\.com([:/]|$)|zepto\.com/auth|auth\.zepto\.co\.in|zepto\.com/login"
 SKILL_ID="${SKILL_ID:-zepto}"
 
 _error_json() {
@@ -59,12 +60,65 @@ _rate_delay() {
   echo "$now" > "$rate_file"
 }
 
+# Test LOGIN_PATTERN against the AUTHORITY + PATH only, never the query or fragment.
+#
+# LOGIN_PATTERN is host+path shaped, but it used to be grepped against the WHOLE final
+# URL — so any `?redirect=…%2Flogin` or `continue=` parameter, which is exactly what a
+# login redirect carries, read as "we are ON the login page" and marked a working session
+# outdated. Same class of bug as the Google substring match documented on isSignInUrl in
+# skills/_shared/_google_helpers.ts.
+_matches_login_url() {
+  local raw="${1:-}" destination
+  [ -n "$raw" ] || return 1
+  destination="${raw%%[?#]*}"
+  echo "$destination" | grep -qiE "$LOGIN_PATTERN"
+}
+
+# Flock's OWN 403 from /api/internal/browser-fetch — never Zepto's.
+#
+# WRONG FIELD (fixed 2026-09-28): server.ts answers
+# `{ error: "session_not_ready", state, message }` — the discriminator is `error`, not
+# `code`. Reading `.code` made the SESSION_NOT_READY branch dead, so every not-ready 403
+# fell through to "Access denied (HTTP 403)" — and the ingest guard read \b403\b out of
+# THAT and quarantined the account, for a status produced by Flock's own access list
+# (`access_denied`: "Agent X does not have the 'Y' skill required for this session"), with
+# Zepto never contacted. A connector may only be demoted when a request REACHED the
+# provider and the PROVIDER answered auth-shaped. `access_denied` and `session_not_found`
+# were never read at all; all three are now named, and the fallthrough keeps Flock's own
+# status readable under the caller's code, which guard-anomaly.ts treats as
+# non-quarantining (NON_QUARANTINING_CODES).
+#
+# PRECEDENCE, CAREFULLY: test BOTH fields, never one over the other. `error` carries the
+# discriminator on the paths server.ts names but a bare human MESSAGE on others (its 500
+# path answers `{ error: e.message }`), and a caller can put the code in `code` while
+# `error` holds prose — `.error // .code` silently loses the code in the other field.
+# _shared/checkout.ts has always tested both.
+_check_flock_403() {
+  local body="$1" unknown_code="${2:-CRAWL_ERROR}"
+  local err_field code_field detail
+  err_field=$(echo "$body" | jq -r '.error // ""' 2>/dev/null || echo "")
+  code_field=$(echo "$body" | jq -r '.code // ""' 2>/dev/null || echo "")
+  detail=$(echo "$body" | jq -r '.message // .error // "(no error message)"' 2>/dev/null || echo "(unparseable response)")
+
+  if [ "$err_field" = "session_not_ready" ] || [ "$code_field" = "session_not_ready" ]; then
+    _error_json "SESSION_NOT_READY" "Zepto browser session is not ready — Flock has either not finished connecting it or already marked it outdated. Log in via the dashboard."
+  fi
+  if [ "$err_field" = "access_denied" ] || [ "$code_field" = "access_denied" ]; then
+    _error_json "ACCESS_DENIED" "Flock refused this request and never contacted Zepto: $detail"
+  fi
+  if [ "$err_field" = "session_not_found" ] || [ "$code_field" = "session_not_found" ]; then
+    _error_json "SESSION_NOT_FOUND" "Flock has no such browser session: $detail"
+  fi
+
+  _error_json "$unknown_code" "Request refused inside Flock's browser-fetch endpoint (Flock status 403): $detail"
+}
+
 _check_session_expired() {
   local final_url="$1"
   local session_name="${BROWSER_SESSION:-zepto}"
   local agent_id="${FLOCK_AGENT_ID:-}"
 
-  if echo "$final_url" | grep -qiE "$LOGIN_PATTERN"; then
+  if _matches_login_url "$final_url"; then
     curl -s -X POST "${FLOCK_API}/api/internal/browser-sessions/${session_name}/mark-outdated" \
       -H "Content-Type: application/json" \
       -H "Authorization: Bearer ${FLOCK_AUTH_TOKEN:-}" \
@@ -102,12 +156,7 @@ _crawl_url() {
   body=$(echo "$response" | sed '$d')
 
   if [ "$http_code" = "403" ]; then
-    local err_code
-    err_code=$(echo "$body" | jq -r '.code // ""' 2>/dev/null || echo "")
-    if [ "$err_code" = "session_not_ready" ]; then
-      _error_json "SESSION_NOT_READY" "Zepto browser session is not ready. User needs to log in via the dashboard."
-    fi
-    _error_json "CRAWL_ERROR" "Access denied (HTTP 403). Check browser session access settings."
+    _check_flock_403 "$body" "CRAWL_ERROR"
   fi
 
   if [ "$http_code" = "429" ]; then
@@ -163,12 +212,7 @@ _browser_write() {
   body=$(echo "$response" | sed '$d')
 
   if [ "$http_code" = "403" ]; then
-    local err_code
-    err_code=$(echo "$body" | jq -r '.code // ""' 2>/dev/null || echo "")
-    if [ "$err_code" = "session_not_ready" ]; then
-      _error_json "SESSION_NOT_READY" "Zepto browser session is not ready. User needs to log in via the dashboard."
-    fi
-    _error_json "BROWSER_ERROR" "Access denied (HTTP 403). Check browser session access settings."
+    _check_flock_403 "$body" "BROWSER_ERROR"
   fi
 
   if [ "$http_code" = "429" ]; then
@@ -227,12 +271,7 @@ _browser_interact() {
   body=$(echo "$response" | sed '$d')
 
   if [ "$http_code" = "403" ]; then
-    local err_code
-    err_code=$(echo "$body" | jq -r '.code // ""' 2>/dev/null || echo "")
-    if [ "$err_code" = "session_not_ready" ]; then
-      _error_json "SESSION_NOT_READY" "Zepto browser session is not ready. User needs to log in via the dashboard."
-    fi
-    _error_json "BROWSER_ERROR" "Access denied (HTTP 403). Check browser session access settings."
+    _check_flock_403 "$body" "BROWSER_ERROR"
   fi
 
   if [ "$http_code" = "429" ]; then
@@ -277,12 +316,7 @@ _browser_navigate() {
   body=$(echo "$response" | sed '$d')
 
   if [ "$http_code" = "403" ]; then
-    local err_code
-    err_code=$(echo "$body" | jq -r '.code // ""' 2>/dev/null || echo "")
-    if [ "$err_code" = "session_not_ready" ]; then
-      _error_json "SESSION_NOT_READY" "Zepto browser session is not ready. User needs to log in via the dashboard."
-    fi
-    _error_json "CRAWL_ERROR" "Access denied (HTTP 403). Check browser session access settings."
+    _check_flock_403 "$body" "CRAWL_ERROR"
   fi
 
   if [ "$http_code" -ge 400 ]; then
@@ -326,12 +360,7 @@ _persistent_create() {
   body=$(echo "$response" | sed '$d')
 
   if [ "$http_code" = "403" ]; then
-    local err_code
-    err_code=$(echo "$body" | jq -r '.code // ""' 2>/dev/null || echo "")
-    if [ "$err_code" = "session_not_ready" ]; then
-      _error_json "SESSION_NOT_READY" "Zepto browser session is not ready. User needs to log in via the dashboard."
-    fi
-    _error_json "CRAWL_ERROR" "Access denied (HTTP 403). Check browser session access settings."
+    _check_flock_403 "$body" "CRAWL_ERROR"
   fi
 
   if [ "$http_code" = "429" ]; then
@@ -395,12 +424,7 @@ _persistent_interact() {
   body=$(echo "$response" | sed '$d')
 
   if [ "$http_code" = "403" ]; then
-    local err_code
-    err_code=$(echo "$body" | jq -r '.code // ""' 2>/dev/null || echo "")
-    if [ "$err_code" = "session_not_ready" ]; then
-      _error_json "SESSION_NOT_READY" "Zepto browser session is not ready. User needs to log in via the dashboard."
-    fi
-    _error_json "BROWSER_ERROR" "Access denied (HTTP 403). Check browser session access settings."
+    _check_flock_403 "$body" "BROWSER_ERROR"
   fi
 
   if [ "$http_code" = "429" ]; then

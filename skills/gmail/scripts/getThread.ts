@@ -18,12 +18,31 @@ import {
   emitResult,
   requireBrowserSession,
   validateId,
+  urlencode,
   persistentCreate,
+  persistentInteract,
+  persistentInteractRaw,
   persistentClose,
 } from "../../_shared/_google_helpers";
 import { composeFrom } from "../../_shared/_gmail-sender";
-import { gmailViewUrl } from "./_gmailNav";
+import { gmailViewUrl, searchViewReadyExpr, pollInPageScript } from "./_gmailNav";
+import { printViewUrl, PRINT_BLOCKS_EXPR, rowsFromPrintBlocks, PRINT_VIEW_SHOWS_DRAFTS } from "./_printView";
 import { readCachedThread, writeCachedThread } from "./_threadCache";
+import { unreadProbeQuery, unreadIdsExpr, wasUnread, probeSummary, MARK_UNREAD_SCRIPT, parseMarkResult, type MarkResult, type UnreadDiag } from "./_unreadState";
+
+// Fix round 1 (Critical + Important #3): getThread runs under the same 90s
+// SLOW_SKILL_TIMEOUT_MS ceiling as every other slow skill function (server/src/skill-executor.ts).
+// RESTORE_WAIT_MS is a tight ceiling, not a delay; RESTORE_BUDGET_MS skips the restore outright
+// once too much of that budget is already spent on the read itself.
+// Final review I1: the probe must never be able to FAIL the operation it rides on. It used to open
+// with a `waitForSelector ".AO"` action -- a timeout there makes persistentCreate call errorJson and
+// the process exits, so a slow Gmail load killed a draft/read that used to succeed. The session is now
+// established by the navigation alone, and the readiness wait lives INSIDE the probe poll, which
+// returns ready:false instead of throwing; an unsettled probe counts as "not unread" (fail-closed).
+// 20s is the skill's usual cold-load ceiling.
+const PROBE_POLL_MS = 20_000;
+const RESTORE_WAIT_MS = 10_000;
+const RESTORE_BUDGET_MS = 60_000;
 
 // --- Pure types + parsing (unit-tested, no browser) ---
 
@@ -183,6 +202,9 @@ if (process.env.SKILL_PARAMS !== undefined) {
 }
 
 function runScript(): void {
+  // Fix round 1 (Important #3): clocked from the very top of the script, so the restore-budget
+  // check below measures against the SAME ceiling skill-executor.ts is about to enforce.
+  const startedAt = Date.now();
   const params = JSON.parse(process.env.SKILL_PARAMS || "{}");
   const threadId: string = params.threadId || "";
 
@@ -199,6 +221,47 @@ function runScript(): void {
   // miss (or an unusable store) simply falls through to the live scrape below.
   const cached = readCachedThread(threadId, params);
   if (cached) emitResult(cached);
+
+  // PRINT VIEW is the default read path (a read that leaves the thread unread, see _printView.ts) —
+  // the whole point of Task 3. `view: "thread"` opts back into the conversation-view scrape below,
+  // which DOES mark the thread read; Task 4 adds an unread-restore to that branch.
+  const view: "print" | "thread" = params.view === "thread" ? "thread" : "print";
+  if (view === "print") {
+    (async () => {
+      let psId = "";
+      let result: any;
+      try {
+        result = await persistentCreate(printViewUrl(threadId), [
+          { action: "waitForSelector", selector: "table.message", delay: 20000 },
+          { action: "evaluate", script: PRINT_BLOCKS_EXPR },
+        ]);
+        psId = result?.persistentSessionId || "";
+        if (!psId) errorJson("SESSION_ERROR", "Failed to create persistent session for the Gmail print view");
+      } finally {
+        if (psId) await persistentClose(psId).catch(() => {});
+      }
+      let parsed: any;
+      try { parsed = JSON.parse(typeof result?.content === "string" ? result.content : "{}"); }
+      catch { parsed = { subject: "", blocks: [], draftMarker: false }; }
+      const blocks = Array.isArray(parsed.blocks) ? parsed.blocks : [];
+      const messages = messagesFromThreadDom(rowsFromPrintBlocks(blocks));
+      // Print view renders every message expanded, so the only completeness signal left is the
+      // blank-`to` rule; expectedCount = blocks.length.
+      const completeness = assessThreadCompleteness(messages, blocks.length);
+      const threadResult = {
+        threadId,
+        subject: parsed.subject || "",
+        messages,
+        incomplete: completeness.incomplete || messages.length === 0,
+        reason: messages.length === 0 ? "print view returned no messages" : completeness.reason,
+        hasDraft: PRINT_VIEW_SHOWS_DRAFTS ? parsed.draftMarker === true : false,
+        readVia: "print",
+      };
+      writeCachedThread(threadId, threadResult);
+      emitResult(threadResult);
+    })();
+    return;
+  }
 
   // Expand every message before scraping — a collapsed message renders
   // neither its `to` nor its `cc`. Gmail exposes a single "Expand all"
@@ -385,20 +448,84 @@ function runScript(): void {
     // gmailViewUrl, not a bare fragment: on a reused persistent page a
     // fragment-only goto is a same-document navigation that leaves the previous
     // view up (see _gmailNav.ts).
+    // Task 4: opening the thread view marks the thread READ. Probe whether it was unread BEFORE
+    // that happens (the probe establishes the held session, so nothing else can interleave
+    // between "was it unread" and "mark it read"), then restore afterwards on the SAME session.
     let psId = "";
     let result: any;
+    let restoredUnread = false;
+    // Evidence trail (2026-09-24): a live report of a thread that still ends up read despite
+    // restoredUnread:false, with no way to tell which step failed. Hoisted out of the try so the
+    // threadResult built after it can carry them; stderr on a successful call is discarded, so
+    // this has to travel in the JSON result itself.
+    let probeReady = false;
+    let probeIds = 0;
+    let threadWasUnreadFlag = false;
+    let markResult: MarkResult | undefined;
+    let markCands: string | undefined;
+    let markConfirm: string | undefined;
+    let markWaitedMs: number | undefined;
     try {
+      const probeQuery = unreadProbeQuery();
+      const probeResult = await persistentCreate(
+        gmailViewUrl(`#search/${urlencode(probeQuery)}`),
+        [
+          { action: "evaluate", script: pollInPageScript(searchViewReadyExpr(probeQuery), unreadIdsExpr(), PROBE_POLL_MS) },
+        ],
+        { holdLock: true },
+      );
+      psId = probeResult?.persistentSessionId || "";
+      if (!psId) {
+        errorJson("SESSION_ERROR", "Failed to create persistent session for the Gmail thread");
+      }
+      const threadWasUnread = wasUnread(probeResult?.content, threadId);
+      threadWasUnreadFlag = threadWasUnread;
+      const probe = probeSummary(probeResult?.content);
+      probeReady = probe.ready;
+      probeIds = probe.count;
+
       // `#all/<id>`, not `#inbox/<id>` (2026-09-22, live): the inbox route resolves only while
       // the thread is still IN the inbox. A thread the owner replied to and archived — the one
       // a reply-card reconcile most needs to read — rendered nothing for 20s under #inbox and
       // the read failed. getThreads' by-id path has used #all since it was written.
-      result = await persistentCreate(gmailViewUrl(`#all/${threadId}`), [
+      result = await persistentInteract(psId, [
         ...pageActions,
         { action: "evaluate", script: scrapeScript },
-      ]);
-      psId = result?.persistentSessionId || "";
-      if (!psId) {
-        errorJson("SESSION_ERROR", "Failed to create persistent session for the Gmail thread");
+      ], false, undefined, gmailViewUrl(`#all/${threadId}`));
+
+      // Fix round 1 (Critical): persistentInteractRaw, never persistentInteract — persistentInteract
+      // exits the process (errorJson -> process.exit(1)) on an HTTP >= 400, which makes the
+      // surrounding catch dead code. The thread was just read successfully; a slow/failed restore
+      // must degrade to restoredUnread:false, never take the read itself down with it (`finally`'s
+      // persistentClose, and the cache write below, must still run).
+      //
+      // Fix round 1 (Important #3): skipped outright once too much of the 90s
+      // SLOW_SKILL_TIMEOUT_MS ceiling is already spent — the read's own result matters far more
+      // than restoring unread.
+      if (threadWasUnread) {
+        const elapsedMs = Date.now() - startedAt;
+        if (elapsedMs > RESTORE_BUDGET_MS) {
+          console.error(`[getThread] skipping unread restore — ${elapsedMs}ms elapsed, past the ${RESTORE_BUDGET_MS}ms restore budget`);
+          markResult = "skipped-budget";
+        } else {
+          try {
+            const { httpCode, body } = await persistentInteractRaw(psId, [{ action: "evaluate", script: MARK_UNREAD_SCRIPT }]);
+            if (httpCode >= 400) {
+              markResult = `http-${httpCode}`;
+            } else {
+              const c = typeof body?.content === "string" ? body.content : "";
+              const parsedMark = parseMarkResult(c);
+              markResult = parsedMark.marked ? "marked" : "no-control";
+              markCands = parsedMark.cands;
+              if (parsedMark.confirm) markConfirm = parsedMark.confirm;
+              markWaitedMs = parsedMark.waitedMs;
+              restoredUnread = parsedMark.marked;
+            }
+          } catch {
+            markResult = "error";
+            restoredUnread = false;
+          }
+        }
       }
     } finally {
       if (psId) await persistentClose(psId).catch(() => {});
@@ -412,6 +539,15 @@ function runScript(): void {
     }
     const messages = messagesFromThreadDom(Array.isArray(parsed.rows) ? parsed.rows : []);
     const completeness = assessThreadCompleteness(messages, Number(parsed.expectedCount) || 0);
+    const unreadDiag: UnreadDiag = {
+      probeReady,
+      probeIds,
+      wasUnread: threadWasUnreadFlag,
+      ...(markResult !== undefined ? { markResult } : {}),
+      ...(markCands !== undefined ? { markCands } : {}),
+      ...(markConfirm !== undefined ? { markConfirm } : {}),
+      ...(markWaitedMs !== undefined ? { markWaitedMs } : {}),
+    };
     const threadResult = {
       threadId,
       subject: parsed.subject || "",
@@ -419,6 +555,9 @@ function runScript(): void {
       incomplete: completeness.incomplete,
       reason: completeness.reason,
       hasDraft: parsed.hasDraft === true,
+      readVia: "thread",
+      restoredUnread,
+      unreadDiag,
     };
     // Store the fresh read for the next caller (writeCachedThread stores only COMPLETE reads and
     // swallows any fs failure), then hand back the result untouched — a cache write never affects it.

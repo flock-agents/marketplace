@@ -28,7 +28,7 @@ RESULT=$(_browser_navigate "$BASE_URL" 2>&1) || {
 
 FINAL_URL=$(echo "$RESULT" | jq -r '.url // ""')
 
-if echo "$FINAL_URL" | grep -qiE "$LOGIN_PATTERN"; then
+if _matches_login_url "$FINAL_URL"; then
   SESSION_NAME="${BROWSER_SESSION:-zepto}"
   AGENT_ID="${FLOCK_AGENT_ID:-}"
   curl -s -X POST "${FLOCK_API}/api/internal/browser-sessions/${SESSION_NAME}/mark-outdated" \

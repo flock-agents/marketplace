@@ -35,7 +35,7 @@ This skill uses an authenticated browser session (no public API for individuals)
 Invoke via skill-exec. The gated function is `linkedin`, so `args[0]` **must be the literal string `linkedin`** and the subcommand + its arguments follow it:
 
 ```bash
-curl -s -X POST http://localhost:35625/api/internal/skill-exec \
+curl -s -X POST "$FLOCK_API_URL/api/internal/skill-exec" \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $FLOCK_AUTH_TOKEN" \
   -d '{

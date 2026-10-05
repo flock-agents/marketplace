@@ -84,14 +84,22 @@ export const DRAFT_ROWS_EXPR = `(function(){
   rows.forEach(function(row){
     const idEl = row.querySelector('[data-legacy-thread-id]') || row.querySelector('[data-thread-id]');
     const id = (idEl && (idEl.getAttribute('data-legacy-thread-id') || idEl.getAttribute('data-thread-id'))) || '';
-    // In the DRAFTS list the thread's last message IS the draft, so
-    // data-legacy-last-message-id names the draft itself. Verified live against a
-    // real drafts row: thread 1a0825bed76acd3f carried
+    // data-legacy-last-message-id names the draft ONLY while the draft is the thread's newest
+    // item (2026-09-25 live, thread 1a0d78b2e5118d6f): once a reply lands after it -- the settle
+    // scenario, by definition -- that same attribute names the REPLY instead. Verified live
+    // against a real drafts row: thread 1a0825bed76acd3f carried
     // data-legacy-last-message-id=1a0864d6c38b4ef4 alongside
-    // data-legacy-last-non-draft-message-id=1a0825c99ba14014 (the newest real
-    // message). Absent on an older render -> empty string, never a throw.
-    const msgEl = row.querySelector('[data-legacy-last-message-id]');
-    const msgId = (msgEl && msgEl.getAttribute('data-legacy-last-message-id')) || '';
+    // data-legacy-last-non-draft-message-id=1a0825c99ba14014 (the newest real message) while the
+    // draft was still newest. The two ids differ only in that case; equal ids (a reply arrived
+    // after the draft) or a missing attribute mean the row cannot say which message is the draft,
+    // and "" (unknown) is the only honest answer -- isOurDraft fails permissive on it, and the
+    // exact body compare in draftStatus stays the guard on every discard (follow-up-runner.ts
+    // settleOne, skill-executor.ts).
+    const lastEl = row.querySelector('[data-legacy-last-message-id]');
+    const last = (lastEl && lastEl.getAttribute('data-legacy-last-message-id')) || '';
+    const nonDraftEl = row.querySelector('[data-legacy-last-non-draft-message-id]');
+    const lastNonDraft = (nonDraftEl && nonDraftEl.getAttribute('data-legacy-last-non-draft-message-id')) || '';
+    const msgId = (last && lastNonDraft && last !== lastNonDraft) ? last : '';
     if (id) out.push({ draftId: id, threadId: id, draftMessageId: msgId });
   });
   return out;
