@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, test, expect } from "bun:test";
 import { parseTimeText, parseDateHeader, eventKey, normalizeScrape } from "../events";
 
@@ -51,7 +52,7 @@ describe("normalizeScrape", () => {
       { title: "Standup", time: "9:30 – 10am", date: "Mon, 5 Oct" },
       { title: "Diwali", time: "All day", date: "Tue, 20 Oct" },
       { title: "", time: "1pm" },
-    ], { calendar: "primary", fallbackDate: d, now: new Date(2026, 9, 5) });
+    ], { calendar: "primary", now: new Date(2026, 9, 5) });
     expect(rows.length).toBe(2);
     expect(rows[0]).toMatchObject({ title: "Standup", localDate: "2026-10-05", allDay: false, rawTimeText: "9:30 – 10am" });
     expect(rows[1]).toMatchObject({ title: "Diwali", localDate: "2026-10-20", allDay: true });
@@ -74,14 +75,14 @@ describe("live-fix 6: spaceless agenda headers", () => {
     expect(parseDateHeader("4Oct 1030am", 2026)).toBe("2026-10-04");
     expect(parseDateHeader("4Oct, Sun7 – 7:30pmDinner @ Prity's", 2026)).toBe("2026-10-04");
     expect(parseDateHeader("Sun4", 2026)).toBeNull();
-    const { rows, skipped } = normalizeScrape([{ title: "X", date: "Sun4" }], { calendar: null, fallbackDate: d, now: new Date(2026, 9, 4) });
+    const { rows, skipped } = normalizeScrape([{ title: "X", date: "Sun4" }], { calendar: null, now: new Date(2026, 9, 4) });
     expect(rows.length).toBe(0); expect(skipped).toBe(1);
   });
   test("parseTimeText accepts the normalised both-sides-meridiem form", () => {
     expect(parseTimeText("7pm – 7:30pm", d)).toEqual({ startAt: local(19), endAt: local(19, 30), allDay: false });
     expect(parseTimeText("1:15pm – 1:45pm", d)).toEqual({ startAt: local(13, 15), endAt: local(13, 45), allDay: false });
   });
-  const opts = { calendar: null, fallbackDate: d, now: new Date(2026, 9, 4) };
+  const opts = { calendar: null, now: new Date(2026, 9, 4) };
   test("same-title events on adjacent days stay two rows", () => {
     const { rows } = normalizeScrape([
       { title: "Agastya School PTM", time: "All day", date: "4Oct, Sun" },
@@ -89,7 +90,7 @@ describe("live-fix 6: spaceless agenda headers", () => {
     ], opts);
     expect(rows.map((r) => r.localDate)).toEqual(["2026-10-04", "2026-10-05"]);
   });
-  test("unparseable dated rows are skipped with one warning; empty date uses the fallback", () => {
+  test("unparseable dated rows are skipped with one warning; a dateless row is skipped, never placed on today", () => {
     const warns: unknown[][] = [];
     const orig = console.warn;
     console.warn = (...a: unknown[]) => { warns.push(a); };
@@ -100,12 +101,31 @@ describe("live-fix 6: spaceless agenda headers", () => {
         { title: "Nodate", time: "3pm", date: "" },
         { title: "Undef", time: "4pm" },
       ], opts);
-      expect(rows.map((r) => r.title)).toEqual(["Nodate", "Undef"]);
-      expect(rows.every((r) => r.localDate === d)).toBe(true);
-      expect(skipped).toBe(2);
+      expect(rows).toEqual([]);
+      expect(skipped).toBe(4);
     } finally { console.warn = orig; }
     expect(warns.length).toBe(1);
     expect(String(warns[0]![0])).toContain("garbage text");
+  });
+  test("live US-locale scrape: every date-less row is skipped, none lands on today", () => {
+    const live = JSON.parse(readFileSync("/Users/shivashankar/Developer/flock/.claude/worktrees/calendar-desk/.superpowers/sdd/2026-10-03-calendar-desk/live-scrape-us-locale.json", "utf8"));
+    const events = live.result.events;
+    expect(events.length).toBe(40);
+    const r = normalizeScrape(events, opts);
+    expect(r.rows).toEqual([]);
+    expect(r.skipped + r.filtered).toBe(40);
+    expect(r.skipped).toBeGreaterThan(0);
+  });
+  test("all-day row with monthDay and no date: next occurrence on or after today", () => {
+    const o = { calendar: "primary", now: new Date(2026, 9, 4) };
+    const r = normalizeScrape([
+      { title: "Anu birthday", date: "", allDay: true, attendees: "Me", monthDay: "10-04" },
+      { title: "Mum birthday", date: "", allDay: true, attendees: "Me", monthDay: "03-09" },
+      { title: "Leap", date: "", allDay: true, attendees: "Me", monthDay: "02-29" },
+      { title: "Timed", date: "", time: "3pm", monthDay: "10-20" },
+    ], o);
+    expect(r.rows.map((x) => [x.title, x.localDate])).toEqual([["Anu birthday", "2026-10-04"], ["Mum birthday", "2027-03-09"], ["Leap", "2028-02-29"]]);
+    expect(r.skipped).toBe(1);
   });
   test("allDay flag wins over a time string; attendees and location are carried", () => {
     const { rows: [r] } = normalizeScrape([
@@ -114,8 +134,7 @@ describe("live-fix 6: spaceless agenda headers", () => {
     expect(r).toMatchObject({ allDay: true, startAt: null, endAt: null, location: "Bangalore", attendeesText: "a@x.com, b@x.com", rawTimeText: "9am – 5pm" });
   });
   describe("A16 filtering", () => {
-    const d = "2026-10-04";
-    const o = { calendar: "primary", fallbackDate: d, now: new Date(2026, 9, 4) };
+    const o = { calendar: "primary", now: new Date(2026, 9, 4) };
     test("holiday calendar rows dropped, timed kept, all-day with attendees kept, creator-less all-day dropped", () => {
       const r = normalizeScrape([
         { title: "First Day of Sharad Navratri", date: "4 October 2026", allDay: true, calendar: "Holidays in India" },

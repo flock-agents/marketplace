@@ -16,6 +16,7 @@ describe("widget week ahead (A15)", () => {
     const body = await (await widgetRoutes.request("/api/widget/today")).json() as any;
     expect(body.date).toBe(day(0));
     expect(body.items[0].calendar).toBe("primary");
+    expect(body.items.map((i: any) => i.accountId)).toEqual(["a", "a"]);
     expect(body.items.map((i: any) => [i.id, i.date])).toEqual([["tomorrow", day(1)], ["edge", day(7)]]);
   });
   test("order is date, all-day first, time; no reminder items exist", async () => {

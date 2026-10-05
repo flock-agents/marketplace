@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import type { EventRow } from "./store";
 
 export interface ScrapedEvent {
-  eventId?: string; title: string; time?: string; date?: string;
+  eventId?: string; title: string; time?: string; date?: string; monthDay?: string | null;
   allDay?: boolean; location?: string | null; calendar?: string | null; attendees?: string | null;
 }
 
@@ -77,7 +77,21 @@ function isNoise(e: ScrapedEvent): boolean {
   return e.allDay === true && !(e.attendees ?? "").trim();
 }
 
-export function normalizeScrape(events: ScrapedEvent[], opts: { calendar: string | null; fallbackDate: string; now: Date }) {
+/** "MM-DD" -> the next occurrence on or after today (a leap day waits for a leap year). */
+function nextMonthDay(md: string | null | undefined, now: Date): string | null {
+  const m = /^(\d{2})-(\d{2})$/.exec((md ?? "").trim());
+  if (!m) return null;
+  const mon = +m[1]!, day = +m[2]!;
+  const today = ymd(now);
+  for (let y = now.getFullYear(); y <= now.getFullYear() + 8; y++) {
+    const dt = new Date(y, mon - 1, day);
+    if (dt.getMonth() !== mon - 1 || dt.getDate() !== day) continue;
+    if (ymd(dt) >= today) return ymd(dt);
+  }
+  return null;
+}
+
+export function normalizeScrape(events: ScrapedEvent[], opts: { calendar: string | null; now: Date }) {
   const seen = new Set<string>();
   const out: Array<Omit<EventRow, "accountId" | "firstSeenAt" | "lastSeenAt" | "missingSince">> = [];
   let unplaceable = 0;
@@ -88,11 +102,14 @@ export function normalizeScrape(events: ScrapedEvent[], opts: { calendar: string
     if (!title) continue;
     if (isNoise(e)) { filtered++; continue; }
     const dateText = (e.date ?? "").trim();
-    let localDate = opts.fallbackDate;
+    let localDate: string | null;
     if (dateText) {
-      const parsed = parseDateHeader(dateText, opts.now.getFullYear());
-      if (!parsed) { unplaceable++; if (firstBad === null) firstBad = dateText; continue; }
-      localDate = parsed;
+      localDate = parseDateHeader(dateText, opts.now.getFullYear());
+      if (!localDate) { unplaceable++; if (firstBad === null) firstBad = dateText; continue; }
+    } else {
+      // No readable date: never guess "today". Only a yearly-style all-day row with a month-day can be placed.
+      localDate = e.allDay === true ? nextMonthDay(e.monthDay, opts.now) : null;
+      if (!localDate) { unplaceable++; if (firstBad === null) firstBad = "(no date)"; continue; }
     }
     const { startAt, endAt, allDay } = e.allDay === true ? { startAt: null, endAt: null, allDay: true } : parseTimeText(e.time, localDate);
     const key = eventKey({ calendar: opts.calendar, localDate, startAt, title });
@@ -100,6 +117,6 @@ export function normalizeScrape(events: ScrapedEvent[], opts: { calendar: string
     seen.add(key);
     out.push({ eventKey: key, calendar: opts.calendar, title, startAt, endAt, allDay, localDate, attendeesText: e.attendees ?? null, location: e.location ?? null, rawTimeText: e.time ?? null });
   }
-  if (unplaceable > 0) console.warn(`calendar-desk: skipped ${unplaceable} scraped row(s) with an unparseable date header (first: "${firstBad}")`);
+  if (unplaceable > 0) console.warn(`calendar-desk: skipped ${unplaceable} scraped row(s) with no readable date (first: "${firstBad}")`);
   return { rows: out, skipped: unplaceable, filtered };
 }
