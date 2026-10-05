@@ -16,8 +16,16 @@ function eventItem(e: ReturnType<typeof listEvents>[number]) {
   const fact = e.source === "fact";
   const link = p?.sessionId ? { kind: "chat", sessionId: p.sessionId }
     : fact && e.sourceLink && /^https:\/\//.test(e.sourceLink) ? { kind: "url", href: e.sourceLink } : null;
+  // Guests, location and Meet are context for the planner and the rail; the description never leaves the store.
+  const guests = e.guests ?? [];
+  const extra = {
+    ...(guests.length ? { guests: guests.slice(0, 8).map(({ email, name, rsvp }) => ({ email, ...(name ? { name } : {}), ...(rsvp ? { rsvp } : {}) })) } : {}),
+    ...(guests.length > 8 ? { moreGuests: guests.length - 8 } : {}),
+    ...(e.location ? { location: e.location } : {}),
+    ...(e.meetLink ? { meetLink: e.meetLink } : {}),
+  };
   return { id: e.eventKey, kind: "event", ...(e.accountId ? { accountId: e.accountId } : {}), title: e.title, date: e.localDate, calendar: e.calendar ?? undefined,
-    startAt: e.startAt, endAt: e.endAt, allDay: e.allDay, state: p ? "prepped" : undefined, marks: fact ? ["memory", ...note] : note, link };
+    startAt: e.startAt, endAt: e.endAt, allDay: e.allDay, state: p ? "prepped" : undefined, marks: fact ? ["memory", ...note] : note, link, ...extra };
 }
 
 function eventItems(days: number) {
@@ -26,16 +34,20 @@ function eventItems(days: number) {
   return items;
 }
 
+// A10: `connected` = the app answered; the Google link is a separate state, and both feeds report it the same way.
+function connectorState() {
+  const inits = listInit();
+  const fault = inits.map((i) => lastFault(i.accountId)).find(Boolean) ?? null;
+  return inits.length === 0 ? "none" : fault ? "attention" : inits.some((i) => i.outcome === "done") ? "ok" : "syncing";
+}
+
 // Loopback-only, unauthenticated like every widget dataUrl: the platform's widget proxy is the only caller.
 widgetRoutes.get("/api/widget/today", (c) => {
   const date = ymd(new Date());
-  const inits = listInit();
-  const fault = inits.map((i) => lastFault(i.accountId)).find(Boolean) ?? null;
-  // A10: `connected` = the app answered; the Google link is a separate state.
-  const connector = inits.length === 0 ? "none" : fault ? "attention" : inits.some((i) => i.outcome === "done") ? "ok" : "syncing";
+  const connector = connectorState();
   // A15: the rail is the week ahead — today through the next 7 days — each item carrying its own date.
   return c.json({ template: "schedule", date, connected: true, fault: null, connector, items: eventItems(RAIL_DAYS) });
 });
 
 // The platform's event planner reads the long horizon: same events, same items, 90 days.
-widgetRoutes.get("/api/widget/horizon", (c) => c.json({ template: "horizon", date: ymd(new Date()), items: eventItems(HORIZON_DAYS) }));
+widgetRoutes.get("/api/widget/horizon", (c) => c.json({ template: "horizon", date: ymd(new Date()), connector: connectorState(), fault: null, items: eventItems(HORIZON_DAYS) }));

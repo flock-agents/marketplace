@@ -84,3 +84,27 @@ describe("widget 90-day horizon feed (Task 53)", () => {
     expect(h.items).toEqual(t.items);
   });
 });
+
+describe("feeds carry event details (Task 9)", () => {
+  const today = ymd(new Date());
+  const seedEvent = (o: { eventKey: string; guests?: any[]; location?: string; meetLink?: string; description?: string }) => {
+    S.upsertEvents("a", [{ accountId: "a", eventKey: o.eventKey, title: o.eventKey, startAt: new Date(`${today}T09:00:00`).getTime(), endAt: null, allDay: false, localDate: today, calendar: "primary", attendeesText: null, location: null, rawTimeText: null } as any], Date.now());
+    S.saveEventDetails("a", o.eventKey, { guests: o.guests ?? [], location: o.location, meetLink: o.meetLink, description: o.description }, Date.now());
+  };
+  test("event items carry up to 8 guests, the rest counted, location and Meet; never description", async () => {
+    seedEvent({ eventKey: "k1", guests: Array.from({ length: 11 }, (_, i) => ({ email: `g${i}@x.com` })), location: "HSR", meetLink: "https://meet.google.com/abc-defg-hij", description: "secret agenda" });
+    const body = await (await widgetRoutes.request("/api/widget/horizon")).json() as any;
+    const it0 = body.items.find((i: any) => i.id === "k1");
+    expect([it0.guests.length, it0.moreGuests, it0.location, it0.meetLink, "description" in it0]).toEqual([8, 3, "HSR", "https://meet.google.com/abc-defg-hij", false]);
+  });
+  test("an event without details carries no guest, location or Meet fields", async () => {
+    seedEvent({ eventKey: "bare" });
+    const it0 = ((await (await widgetRoutes.request("/api/widget/today")).json()) as any).items.find((i: any) => i.id === "bare");
+    expect(["guests", "moreGuests", "location", "meetLink"].map((k) => k in it0)).toEqual([false, false, false, false]);
+  });
+  test("horizon reports connector like /today", async () => {
+    S.markInitStarted("acc", "x"); S.markInitFinished("acc", "done", "ok"); S.setCursor("fault:acc", "agenda unreadable");
+    const body = await (await widgetRoutes.request("/api/widget/horizon")).json() as any;
+    expect([body.connector, body.fault]).toEqual(["attention", null]);
+  });
+});
