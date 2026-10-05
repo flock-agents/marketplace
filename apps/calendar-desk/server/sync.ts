@@ -71,7 +71,7 @@ async function runSync(accountId: string, deps: SyncDeps, reason: SyncReason) {
   upsertEvents(accountId, rows, at);
   // A partly unreadable page says nothing reliable about absence: only mark missing on a clean read.
   if (norm.skipped === 0) markMissingEvents(accountId, dateRange(now), rows.map((r) => r.eventKey), at);
-  _db.query("DELETE FROM events WHERE account_id = ? AND (local_date < ? OR (missing_since IS NOT NULL AND missing_since < ?))").run(accountId, ymd(new Date(at - 86_400_000)), at - 2 * 86_400_000);
+  _db.query("DELETE FROM events WHERE account_id = ? AND source = 'google' AND (local_date < ? OR (missing_since IS NOT NULL AND missing_since < ?))").run(accountId, ymd(new Date(at - 86_400_000)), at - 2 * 86_400_000);
   setCursor(`last_sync:${accountId}`, String(at));
   setCursor(`fault:${accountId}`, "");
   console.log(`[calendar-desk] sync ${accountId} (${reason}): ${rows.length} event(s), skipped=${norm.skipped}, filtered=${norm.filtered}`);

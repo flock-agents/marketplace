@@ -29,6 +29,43 @@ describe("events", () => {
   });
 });
 
+describe("fact events", () => {
+  const g = (k: string) => ({ eventKey: k, calendar: "primary", title: "Standup", startAt: null, endAt: null, allDay: true, localDate: "2026-10-06", attendeesText: null, location: null, rawTimeText: null });
+  test("migration adds source, fact_id, source_link; existing rows are google", () => {
+    const cols = (S._db.query("PRAGMA table_info(events)").all() as { name: string }[]);
+    expect(cols.map((c) => c.name)).toEqual(expect.arrayContaining(["source", "fact_id", "source_link"]));
+    S.upsertEvents("acct", [g("k1")], 1);
+    expect(S.getEvent("acct", "k1")!.source).toBe("google");
+  });
+  test("insert, unchanged, update, delete; no account stored as ''", () => {
+    const r = { accountId: "", factId: 12, title: "Flight 6E-512 BLR to MAA", localDate: "2026-10-08", startAt: null, sourceLink: null };
+    expect(S.upsertFactEvent(r, 1)).toBe("inserted");
+    expect(S.upsertFactEvent(r, 2)).toBe("unchanged");
+    expect(S.upsertFactEvent({ ...r, localDate: "2026-10-09" }, 3)).toBe("updated");
+    const [row] = S.listFactEvents();
+    expect(row).toMatchObject({ accountId: "", eventKey: "fact:12", source: "fact", factId: 12, localDate: "2026-10-09", calendar: null });
+    S.deleteFactEvent("", "fact:12");
+    expect(S.listFactEvents()).toEqual([]);
+  });
+  test("a fact whose account changes moves: old row gone, one row left", () => {
+    const r = { accountId: "a", factId: 5, title: "Dentist", localDate: "2026-10-06", startAt: null, sourceLink: null };
+    S.upsertFactEvent(r, 1);
+    expect(S.upsertFactEvent({ ...r, accountId: "b" }, 2)).toBe("inserted");
+    expect(S.listFactEvents().map((e) => e.accountId)).toEqual(["b"]);
+  });
+  test("a clean Google scrape never marks a fact event under the same account missing", () => {
+    S.upsertFactEvent({ accountId: "acct", factId: 7, title: "Dentist", localDate: "2026-10-06", startAt: null, sourceLink: null }, 1);
+    expect(S.markMissingEvents("acct", ["2026-10-06"], [], 5)).toBe(0);
+    expect(S.listFactEvents()[0].missingSince).toBeNull();
+  });
+  test("listEvents filters by source", () => {
+    S.upsertEvents("acct", [g("g1")], 1);
+    S.upsertFactEvent({ accountId: "acct", factId: 7, title: "Dentist", localDate: "2026-10-06", startAt: null, sourceLink: null }, 1);
+    expect(S.listEvents({ fromDate: "2026-10-06", toDate: "2026-10-06", source: "google" }).map((e) => e.eventKey)).toEqual(["g1"]);
+    expect(S.listEvents({ fromDate: "2026-10-06", toDate: "2026-10-06" })).toHaveLength(2);
+  });
+});
+
 describe("schema and cursors", () => {
   test("the reminders and fires tables are dropped", () => {
     const names = (S._db.query("SELECT name FROM sqlite_master WHERE type = 'table'").all() as { name: string }[]).map((r) => r.name);

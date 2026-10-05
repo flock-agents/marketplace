@@ -33,6 +33,12 @@ describe("syncAccount", () => {
     expect(all.find((e) => e.title === "Standup")!.missingSince).not.toBeNull();
     expect(all.find((e) => e.title === "Review")!.missingSince).toBeNull();
   });
+  test("a clean sync leaves old fact events alone (they are withdrawn by the reconcile, never by date)", async () => {
+    S.upsertFactEvent({ accountId: "acct", factId: 9, title: "Old fact", localDate: "2026-10-03", startAt: null, sourceLink: null }, 1);
+    const r = await syncAccount("acct", { platform: platform(() => ok({ ok: true, events: [{ title: "Standup", time: "9:30am", date: "Mon, 5 Oct" }] })).ctx, now: () => NOW }, "scheduled");
+    expect(r.ok).toBe(true);
+    expect(S.listFactEvents().map((e) => e.eventKey)).toEqual(["fact:9"]);
+  });
   test("a faulted scrape keeps yesterday's events and records the fault (Review Focus 3)", async () => {
     await syncAccount("acct", { platform: platform(() => ok({ ok: true, events: [{ title: "Standup", time: "9:30am", date: "Mon, 5 Oct" }] })).ctx, now: () => NOW }, "scheduled");
     const r = await syncAccount("acct", { platform: platform(() => ({ ok: false, reason: "BROWSER_ERROR: login wall" })).ctx, now: () => new Date(NOW.getTime() + 4 * 3600_000) }, "scheduled");

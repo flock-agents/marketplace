@@ -46,6 +46,10 @@ const migrations: string[] = [
   `DROP TABLE IF EXISTS reminders`,
   `DROP TABLE IF EXISTS fires`,
   `DELETE FROM cursors WHERE key = 'facts_since' OR key LIKE 'reminder_session:%'`,
+  // Part B: dated facts from memory are events too. Rows the scraper writes keep 'google'.
+  `ALTER TABLE events ADD COLUMN source TEXT NOT NULL DEFAULT 'google';
+   ALTER TABLE events ADD COLUMN fact_id INTEGER;
+   ALTER TABLE events ADD COLUMN source_link TEXT`,
 ];
 
 function applyMigrations(): void {
@@ -63,19 +67,20 @@ function applyMigrations(): void {
 }
 applyMigrations();
 
-export interface EventRow { accountId: string; eventKey: string; calendar: string | null; title: string; startAt: number | null; endAt: number | null; allDay: boolean; localDate: string; attendeesText: string | null; location: string | null; rawTimeText: string | null; firstSeenAt: number; lastSeenAt: number; missingSince: number | null }
+export interface EventRow { accountId: string; eventKey: string; calendar: string | null; title: string; startAt: number | null; endAt: number | null; allDay: boolean; localDate: string; attendeesText: string | null; location: string | null; rawTimeText: string | null; firstSeenAt: number; lastSeenAt: number; missingSince: number | null; source: "google" | "fact"; factId: number | null; sourceLink: string | null }
 function rowToEvent(r: any): EventRow {
   return {
     accountId: r.account_id, eventKey: r.event_key, calendar: r.calendar, title: r.title,
     startAt: r.start_at, endAt: r.end_at, allDay: !!r.all_day, localDate: r.local_date,
     attendeesText: r.attendees_text, location: r.location, rawTimeText: r.raw_time_text,
     firstSeenAt: r.first_seen_at, lastSeenAt: r.last_seen_at, missingSince: r.missing_since,
+    source: r.source ?? "google", factId: r.fact_id ?? null, sourceLink: r.source_link ?? null,
   };
 }
 
 // ── events ────────────────────────────────────────────────────────────────────────────────
 
-export function upsertEvents(accountId: string, rows: Omit<EventRow, "accountId" | "firstSeenAt" | "lastSeenAt" | "missingSince">[], seenAt: number): { inserted: number; updated: number } {
+export function upsertEvents(accountId: string, rows: Omit<EventRow, "accountId" | "firstSeenAt" | "lastSeenAt" | "missingSince" | "source" | "factId" | "sourceLink">[], seenAt: number): { inserted: number; updated: number } {
   let inserted = 0, updated = 0;
   const ins = db.query(`INSERT INTO events (account_id, event_key, calendar, title, start_at, end_at, all_day, local_date, attendees_text, location, raw_time_text, first_seen_at, last_seen_at, missing_since)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
@@ -96,20 +101,45 @@ export function upsertEvents(accountId: string, rows: Omit<EventRow, "accountId"
 export function markMissingEvents(accountId: string, localDates: string[], presentKeys: string[], at: number): number {
   if (localDates.length === 0) return 0;
   const keys = new Set(presentKeys);
-  const rows = db.query(`SELECT event_key FROM events WHERE account_id = ? AND missing_since IS NULL AND local_date IN (${localDates.map(() => "?").join(",")})`).all(accountId, ...localDates) as { event_key: string }[];
+  const rows = db.query(`SELECT event_key FROM events WHERE account_id = ? AND source = 'google' AND missing_since IS NULL AND local_date IN (${localDates.map(() => "?").join(",")})`).all(accountId, ...localDates) as { event_key: string }[];
   const upd = db.query("UPDATE events SET missing_since = ? WHERE account_id = ? AND event_key = ?");
   let n = 0;
   for (const r of rows) if (!keys.has(r.event_key)) { upd.run(at, accountId, r.event_key); n++; }
   return n;
 }
 
-export function listEvents(opts: { fromDate: string; toDate: string; accountId?: string; includeMissing?: boolean }): EventRow[] {
+export function listEvents(opts: { fromDate: string; toDate: string; accountId?: string; includeMissing?: boolean; source?: "google" | "fact" }): EventRow[] {
   const where = ["local_date BETWEEN ? AND ?"];
   const args: (string | number)[] = [opts.fromDate, opts.toDate];
   if (opts.accountId) { where.push("account_id = ?"); args.push(opts.accountId); }
+  if (opts.source) { where.push("source = ?"); args.push(opts.source); }
   if (!opts.includeMissing) where.push("missing_since IS NULL");
   const rows = db.query(`SELECT * FROM events WHERE ${where.join(" AND ")} ORDER BY local_date, all_day DESC, start_at`).all(...args) as any[];
   return rows.map(rowToEvent);
+}
+
+export const factEventKey = (factId: number) => `fact:${factId}`;
+export interface FactEventInput { accountId: string; factId: number; title: string; localDate: string; startAt: number | null; sourceLink: string | null }
+/** One row per fact (key fact:<id>). The account can change if the fact's link changes: the old row goes. */
+export function upsertFactEvent(r: FactEventInput, at: number): "inserted" | "updated" | "unchanged" {
+  const key = factEventKey(r.factId);
+  const prev = db.query("SELECT * FROM events WHERE source = 'fact' AND event_key = ?").get(key) as any;
+  if (prev && prev.account_id !== r.accountId) db.query("DELETE FROM events WHERE account_id = ? AND event_key = ?").run(prev.account_id, key);
+  else if (prev && prev.title === r.title && prev.local_date === r.localDate && (prev.start_at ?? null) === r.startAt && (prev.source_link ?? null) === r.sourceLink) {
+    db.query("UPDATE events SET last_seen_at = ? WHERE account_id = ? AND event_key = ?").run(at, r.accountId, key);
+    return "unchanged";
+  }
+  db.query(`INSERT INTO events (account_id, event_key, calendar, title, start_at, end_at, all_day, local_date, attendees_text, location, raw_time_text, first_seen_at, last_seen_at, missing_since, source, fact_id, source_link)
+    VALUES (?, ?, NULL, ?, ?, NULL, ?, ?, NULL, NULL, NULL, ?, ?, NULL, 'fact', ?, ?)
+    ON CONFLICT(account_id, event_key) DO UPDATE SET title=excluded.title, start_at=excluded.start_at, all_day=excluded.all_day, local_date=excluded.local_date, last_seen_at=excluded.last_seen_at, source_link=excluded.source_link`)
+    .run(r.accountId, key, r.title, r.startAt, r.startAt == null ? 1 : 0, r.localDate, at, at, r.factId, r.sourceLink);
+  return prev && prev.account_id === r.accountId ? "updated" : "inserted";
+}
+export function listFactEvents(): EventRow[] {
+  return (db.query("SELECT * FROM events WHERE source = 'fact' ORDER BY local_date, start_at").all() as any[]).map(rowToEvent);
+}
+export function deleteFactEvent(accountId: string, eventKey: string): void {
+  db.query("DELETE FROM events WHERE source = 'fact' AND account_id = ? AND event_key = ?").run(accountId, eventKey);
 }
 
 export function getEvent(accountId: string, eventKey: string): EventRow | null {

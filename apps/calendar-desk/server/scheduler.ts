@@ -31,17 +31,18 @@ export async function runPrepWindow(platform: PlatformContext, cfg: PrepConfig, 
   if (!platform.configured) return out;
   const today = ymd(now);
   const windowEnd = now.getTime() + cfg.windowMinutes * 60_000;
-  const candidates = listEvents({ fromDate: today, toDate: today }).filter((e) =>
+  // Fact events are planned by the morning sort, not meeting-prepped (Part B call 6).
+  const candidates = listEvents({ fromDate: today, toDate: today, source: "google" }).filter((e) =>
     !e.allDay && e.startAt != null && e.startAt > now.getTime() && e.startAt <= windowEnd && !getPrep(e.accountId, e.eventKey)
     // R22: null attendees = UNKNOWN (the scrape reads none), never "nobody invited"; skip only a known-empty list.
     && (!cfg.skipNoAttendees || e.attendeesText == null || e.attendeesText.trim() !== ""));
-  const allDay = cfg.skipAllDay ? [] : listEvents({ fromDate: today, toDate: today }).filter((e) => e.allDay && !getPrep(e.accountId, e.eventKey) && now.getHours() >= 8);
+  const allDay = cfg.skipAllDay ? [] : listEvents({ fromDate: today, toDate: today, source: "google" }).filter((e) => e.allDay && !getPrep(e.accountId, e.eventKey) && now.getHours() >= 8);
   const pick = [...candidates, ...allDay];
   if (pick.length === 0) return out;
   // One refresh so a cancelled meeting is not prepped (lease permitting); stale data otherwise.
   for (const acct of new Set(pick.map((e) => e.accountId))) if (shouldScrape(acct, now, "pre-prep")) await (deps.sync ?? syncAccount)(acct, { platform, now: () => now }, "pre-prep");
   for (const e0 of pick) {
-    const e = listEvents({ fromDate: today, toDate: today, accountId: e0.accountId }).find((x) => x.eventKey === e0.eventKey);
+    const e = listEvents({ fromDate: today, toDate: today, accountId: e0.accountId, source: "google" }).find((x) => x.eventKey === e0.eventKey);
     if (!e) continue;                                             // vanished in the refresh
     const note = getEventNote(e.accountId, e.eventKey)?.note ?? "";
     const factsAround = deps.facts ? (await deps.facts(e.localDate)).slice(0, 10) : [];

@@ -93,7 +93,7 @@ function nextMonthDay(md: string | null | undefined, now: Date): string | null {
 
 export function normalizeScrape(events: ScrapedEvent[], opts: { calendar: string | null; now: Date }) {
   const seen = new Set<string>();
-  const out: Array<Omit<EventRow, "accountId" | "firstSeenAt" | "lastSeenAt" | "missingSince">> = [];
+  const out: Array<Omit<EventRow, "accountId" | "firstSeenAt" | "lastSeenAt" | "missingSince" | "source" | "factId" | "sourceLink">> = [];
   let unplaceable = 0;
   let filtered = 0;
   let firstBad: string | null = null;

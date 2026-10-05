@@ -42,6 +42,13 @@ describe("runPrepWindow", () => {
     expect((await runPrepWindow(p.ctx, readPrepConfig(undefined), new Date(2026, 9, 5, 14, 40), { facts: async () => [], sync })).prepped).toBe(0);
     expect((await runPrepWindow(p.ctx, readPrepConfig({ skipNoAttendees: false }), new Date(2026, 9, 5, 14, 40), { facts: async () => [], sync })).prepped).toBe(1);
   });
+  test("a fact event inside the prep window is never prepped", async () => {
+    S.upsertFactEvent({ accountId: "acct", factId: 3, title: "Invented fact event", localDate: "2026-10-05", startAt: new Date(2026, 9, 5, 15, 0).getTime(), sourceLink: null }, 1);
+    S.upsertFactEvent({ accountId: "acct", factId: 4, title: "Invented all-day fact", localDate: "2026-10-05", startAt: null, sourceLink: null }, 1);
+    const p = platform();
+    expect((await runPrepWindow(p.ctx, readPrepConfig({ skipAllDay: false, skipNoAttendees: false }), new Date(2026, 9, 5, 14, 40), { facts: async () => [], sync })).prepped).toBe(0);
+    expect(p.intents).toEqual([]);
+  });
   test("unknown attendees (null — the scrape reads none) are not 'nobody invited': prepped with skipNoAttendees on (R22)", async () => {
     ev({ eventKey: "unknown", attendeesText: null });
     const p = platform();
