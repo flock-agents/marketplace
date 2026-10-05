@@ -34,8 +34,9 @@ export async function runPrepWindow(platform: PlatformContext, cfg: PrepConfig, 
   // Fact events are planned by the morning sort, not meeting-prepped (Part B call 6).
   const candidates = listEvents({ fromDate: today, toDate: today, source: "google" }).filter((e) =>
     !e.allDay && e.startAt != null && e.startAt > now.getTime() && e.startAt <= windowEnd && !getPrep(e.accountId, e.eventKey)
-    // R22: null attendees = UNKNOWN (the scrape reads none), never "nobody invited"; skip only a known-empty list.
-    && (!cfg.skipNoAttendees || e.attendeesText == null || e.attendeesText.trim() !== ""));
+    // Ruling 5 (2026-10-06): once details are read, no guest but the owner = a time block, no prep.
+    // R22: details never read = unknown, still prepped (the agenda's organiser-only text says nothing).
+    && (!cfg.skipNoAttendees || (e.guests == null ? (e.attendeesText == null || e.attendeesText.trim() !== "") : e.guests.length > 0)));
   const allDay = cfg.skipAllDay ? [] : listEvents({ fromDate: today, toDate: today, source: "google" }).filter((e) => e.allDay && !getPrep(e.accountId, e.eventKey) && now.getHours() >= 8);
   const pick = [...candidates, ...allDay];
   if (pick.length === 0) return out;
@@ -46,9 +47,11 @@ export async function runPrepWindow(platform: PlatformContext, cfg: PrepConfig, 
     if (!e) continue;                                             // vanished in the refresh
     const note = getEventNote(e.accountId, e.eventKey)?.note ?? "";
     const factsAround = deps.facts ? (await deps.facts(e.localDate)).slice(0, 10) : [];
+    const guestLines = (e.guests ?? []).map((g) => `${g.name ? `${g.name} <${g.email}>` : g.email}${g.rsvp ? ` (${g.rsvp})` : ""}`).join("\n");
     const res = await platform.agent.intent<{ sessionId: string }>("meeting_prep", {
       eventKey: e.eventKey, title: e.title, startAt: new Date(e.startAt ?? now).toISOString(), endAt: e.endAt ? new Date(e.endAt).toISOString() : "",
-      attendees: e.attendeesText ?? "", location: e.location ?? "", note, factsAround, budget: { toolCalls: 3, words: 300 },
+      attendees: guestLines || (e.attendeesText ?? ""), guests: guestLines, guestSummary: e.guestSummary ?? "",
+      description: e.description ?? "", meetLink: e.meetLink ?? "", location: e.location ?? "", note, factsAround, budget: { toolCalls: 3, words: 300 },
     });
     if (res.ok) { recordPrep(e.accountId, e.eventKey, res.data.sessionId); out.prepped++; }
     else console.warn(`[calendar-desk] meeting_prep ${e.eventKey} failed: ${res.reason}`);

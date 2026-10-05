@@ -57,6 +57,21 @@ describe("runPrepWindow", () => {
     expect((await runPrepWindow(p.ctx, cfgOn, new Date(2026, 9, 5, 14, 40), { facts: async () => [], sync })).prepped).toBe(1);
     expect(p.intents[0].payload).toMatchObject({ eventKey: "unknown", attendees: "" });
   });
+  test("prep payload carries guests, description and Meet link", async () => {
+    ev({ eventKey: "k1" });
+    S.saveEventDetails("acct", "k1", { guests: [{ email: "yogesh@crafo.ai", rsvp: "awaiting" }, { email: "anita@acme.com", name: "Anita Rao", rsvp: "yes" }], guestSummary: "2 guests", description: "Review the calendar app", meetLink: "https://meet.google.com/abc-defg-hij" }, 1);
+    const p = platform();
+    await runPrepWindow(p.ctx, readPrepConfig(undefined), new Date(2026, 9, 5, 14, 40), { facts: async () => [], sync });
+    const guests = "yogesh@crafo.ai (awaiting)\nAnita Rao <anita@acme.com> (yes)";
+    expect(p.intents[0].payload).toMatchObject({ guests, attendees: guests, guestSummary: "2 guests", description: "Review the calendar app", meetLink: "https://meet.google.com/abc-defg-hij" });
+  });
+  test("ruling 5: a solo entry (details read, no other guest) gets no prep; unknown details still prep (R22)", async () => {
+    ev({ eventKey: "solo" }); S.saveEventDetails("acct", "solo", { guests: [] }, 1);
+    ev({ eventKey: "unknown", attendeesText: null });
+    const p = platform();
+    await runPrepWindow(p.ctx, readPrepConfig(undefined), new Date(2026, 9, 5, 14, 40), { facts: async () => [], sync });
+    expect(p.intents.map((i) => i.payload.eventKey)).toEqual(["unknown"]);
+  });
 });
 
 describe("factsAroundDate", () => {
