@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs";
 import { describe, test, expect } from "bun:test";
 import { parseTimeText, parseDateHeader, eventKey, normalizeScrape } from "../events";
 
@@ -107,14 +106,19 @@ describe("live-fix 6: spaceless agenda headers", () => {
     expect(warns.length).toBe(1);
     expect(String(warns[0]![0])).toContain("garbage text");
   });
-  test("live US-locale scrape: every date-less row is skipped, none lands on today", () => {
-    const live = JSON.parse(readFileSync("/Users/shivashankar/Developer/flock/.claude/worktrees/calendar-desk/.superpowers/sdd/2026-10-03-calendar-desk/live-scrape-us-locale.json", "utf8"));
-    const events = live.result.events;
-    expect(events.length).toBe(40);
+  test("US-locale scrape shapes (sanitized): date-less rows are skipped or placed by monthDay, none lands on today", () => {
+    const events = [
+      { eventId: "e1", title: "Team offsite (Day 1 of 3)", time: "", date: "", allDay: true, location: "2026", calendar: null, attendees: "Alex Example, Accepted, Location: Example Town, October 12 – 14" },
+      { eventId: "e2", title: "Sam's birthday", time: "", date: "", allDay: true, location: "2026", calendar: null, attendees: "Alex Example, October 20", monthDay: "10-20" },
+      { eventId: "e3", title: "Example Festival", time: "", date: "", allDay: true, location: "2026", calendar: "Holidays in India", attendees: "October 11" },
+      { eventId: "e4", title: "Example conference", time: "", date: "", allDay: true, location: "2026", calendar: null, attendees: "Alex Example, October 25" },
+      { eventId: "e5", title: "Standup", time: "9:30 – 10am", date: "Mon, 5 Oct", allDay: false, location: null, calendar: null, attendees: "Alex Example" },
+    ];
     const r = normalizeScrape(events, opts);
-    expect(r.rows).toEqual([]);
-    expect(r.skipped + r.filtered).toBe(40);
-    expect(r.skipped).toBeGreaterThan(0);
+    expect(r.rows.map((x) => [x.title, x.localDate])).toEqual([["Sam's birthday", "2026-10-20"], ["Standup", "2026-10-05"]]);
+    expect(r.rows.some((x) => x.localDate === "2026-10-04")).toBe(false);
+    expect(r.skipped).toBe(2);
+    expect(r.filtered).toBe(1);
   });
   test("all-day row with monthDay and no date: next occurrence on or after today", () => {
     const o = { calendar: "primary", now: new Date(2026, 9, 4) };
