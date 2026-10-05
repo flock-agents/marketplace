@@ -85,11 +85,16 @@ export const SAVE_AND_CLOSE_SCRIPT = `(() => {
  * Best-effort by design: `saved:false` is NOT an error, because the authority
  * on whether a draft exists is the #drafts list the caller polls afterwards.
  * This only buys the autosave its debounce before the session is torn down.
+ *
+ * `fresh` (updateDraft, 2026-10-05): count only an indicator that appears AFTER one was absent.
+ * An already-open draft can show a "Draft saved" left from before the edit, which proves nothing
+ * about the edit; Gmail swaps it for "Saving…" while the edit's own save runs.
  */
-export function waitForDraftSavedScript(timeoutMs = 12000): string {
+export function waitForDraftSavedScript(timeoutMs = 12000, fresh = false): string {
   return `(async () => {
   const started = Date.now();
   const deadline = started + ${Math.max(0, Math.floor(timeoutMs))};
+  let absentSeen = ${fresh ? "false" : "true"};
   const seen = () => {
     const nodes = document.querySelectorAll('span,div');
     for (const el of nodes) {
@@ -99,7 +104,8 @@ export function waitForDraftSavedScript(timeoutMs = 12000): string {
     return false;
   };
   while (Date.now() < deadline) {
-    if (seen()) return JSON.stringify({saved:true, waitedMs: Date.now() - started});
+    if (!seen()) absentSeen = true;
+    else if (absentSeen) return JSON.stringify({saved:true, waitedMs: Date.now() - started});
     await new Promise((r) => setTimeout(r, 250));
   }
   return JSON.stringify({saved:false, waitedMs: Date.now() - started});

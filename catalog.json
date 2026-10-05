@@ -106,11 +106,11 @@
       "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "skills/gmail",
-      "latestVersion": "1.6.0",
-      "latestTag": "gmail-v1.6.0",
+      "latestVersion": "1.6.1",
+      "latestTag": "gmail-v1.6.1",
       "minFlockVersion": "0.10.3",
       "publishedAt": "2026-08-14T10:00:00Z",
-      "updatedAt": "2026-10-05T00:00:00Z"
+      "updatedAt": "2026-10-05T12:00:00Z"
     },
     {
       "slug": "zepto",

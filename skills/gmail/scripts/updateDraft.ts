@@ -47,6 +47,7 @@ import { invalidateCachedThreadForDraft } from "./_threadCache";
 import { bodyToComposeHtml } from "./_bodyHtml";
 import { COMPOSE_BODY_SCRAPE, extractDraftBody } from "./_draftBody";
 import { openDraftRequest, onDraftComposeExpr, parseOpenedDraft, draftNotOpenMessage, DRAFT_NOT_OPEN_WRITTEN } from "./_openDraft";
+import { pollInPageScript, DRAFTS_VIEW_READY_EXPR, NAV_TO_DRAFTS_SCRIPT } from "./_gmailNav";
 
 // --- Pure splice (unit-tested, no browser) ---
 
@@ -252,6 +253,25 @@ export function readBackMatches(mainHtml: string, requested: string): { match: b
   return { match: normaliseText(read) === normaliseText(requested), read };
 }
 
+/**
+ * Does a draft reopened from Gmail hold `requested`? Same whitespace-insensitive compare as the
+ * read-back, plus the reply attribution line ("On …, … wrote:") Gmail can keep after the body.
+ */
+export function persistedMatches(bodyHtml: string, requested: string): { match: boolean; read: string } {
+  const read = extractDraftBody(bodyHtml || "");
+  const held = normaliseText(read);
+  const want = normaliseText(requested);
+  const match = held === want || (held.startsWith(`${want} `) && /^On .*wrote:$/.test(held.slice(want.length + 1)));
+  return { match, read };
+}
+
+/** Reopen attempts after the edit was committed, the pause between them (Gmail's save can trail) and
+ *  each reopen's budget. Sized to keep the whole call inside the manifest's 90s updateDraft timeout. */
+export const PERSIST_CHECK_ATTEMPTS = 2;
+export const PERSIST_CHECK_DELAY_MS = 3000;
+const PERSIST_REOPEN_TIMEOUT_MS = 15000;
+const DRAFTS_NAV_TIMEOUT_MS = 10000;
+
 /** Parse a persistentInteract evaluate result (a JSON string or an object). Never throws. */
 function parseEval(content: unknown): any {
   if (content && typeof content === "object") return content;
@@ -325,37 +345,58 @@ function runScript(): void {
         await fail(`The draft did not take the new text as asked (it may be partly changed; check it in Gmail). Its compose reads: ${JSON.stringify(compared.read.slice(0, 200))}`);
       }
 
-      // 4. Wait for Gmail's own save indicator. When none shows within 8s the read-back still
-      //    matched and 8s (>= the 2s settle) passed; the result says which.
+      // 4. Wait for Gmail's own save indicator, counting only one that appears after the edit
+      //    (fresh): an open draft can still show a "Draft saved" from before it.
       let saveConfirm: "indicator" | "settle" = "settle";
       try {
-        const saved = await persistentInteract(persistentId, [], false, waitForDraftSavedScript(8000));
+        const saved = await persistentInteract(persistentId, [], false, waitForDraftSavedScript(8000, true));
         if (parseEval(saved?.content)?.saved === true) saveConfirm = "indicator";
       } catch {
         saveConfirm = "settle";
       }
 
-      // 5. What Gmail now holds, through getDraft's scrape + extractor: the owner-edit baseline.
-      const scraped = await step(scrapeComposeScript(draftId));
-      const bodyAsSaved = extractDraftBody(typeof scraped?.bodyHtml === "string" ? scraped.bodyHtml : "");
+      // 5. Commit: finish the compose (never Send, never Discard — see _composeSave.ts), then
+      //    click away to the drafts list in-page, which is what commits an inline edit
+      //    (createReplyDraft's confirmDraftRow). Closing the page instead could drop a save
+      //    still in flight: live 2026-10-05, updateDraft reported ok and Gmail kept the old text.
+      await persistentInteract(persistentId, [{ action: "evaluate", script: SAVE_AND_CLOSE_SCRIPT }]);
+      await persistentInteract(persistentId, [{ action: "evaluate", script: NAV_TO_DRAFTS_SCRIPT }], false,
+        pollInPageScript(DRAFTS_VIEW_READY_EXPR, "true", DRAFTS_NAV_TIMEOUT_MS)).catch(() => null);
 
-      // Close (save) — NEVER Send, and never Discard. This used to fall
-      // through to `.og.T-I-J3`, Gmail's trash: a reply draft opens INLINE, so
-      // editing one wrote the new body and then deleted the draft outright.
-      // See _composeSave.ts.
-      const closeActions = [
-        { action: "evaluate", script: SAVE_AND_CLOSE_SCRIPT },
-        { action: "wait", delay: 1500 },
-      ];
-      await persistentInteract(persistentId, closeActions, true);
+      // 6. Prove it: reopen the draft from Gmail (a fresh load, not this page's copy) and read it.
+      //    Only text Gmail hands back counts as written; it is also the owner-edit baseline.
+      const bodyAsSaved = await reopenUntilPersisted(persistentId, draftId, bodyText);
+      if (bodyAsSaved === null) {
+        await fail("Gmail did not keep the new text: reopened, the draft does not read as asked. Check it in Gmail before sending; the write can be tried again.");
+      }
 
       // The draft's thread now holds a different body; drop its cached copy (via the draft->thread map).
       invalidateCachedThreadForDraft(draftId, "updateDraft");
-      console.log(JSON.stringify({ ok: true, draftId, bodyAsSaved, saveConfirm }));
+      console.log(JSON.stringify({ ok: true, draftId, bodyAsSaved, saveConfirm, persisted: true }));
     } finally {
       await persistentClose(persistentId).catch(() => {});
     }
   })();
+}
+
+/**
+ * Reopen `draftId` from Gmail until it holds `bodyText`; the text Gmail holds (getDraft's
+ * extractor), or null when every attempt still reads otherwise.
+ */
+async function reopenUntilPersisted(persistentId: string, draftId: string, bodyText: string): Promise<string | null> {
+  for (let i = 0; i < PERSIST_CHECK_ATTEMPTS; i++) {
+    if (i > 0) await new Promise((r) => setTimeout(r, PERSIST_CHECK_DELAY_MS));
+    try {
+      const open = updateDraftOpenRequest(draftId, `persist-${Date.now()}-${i}`, PERSIST_REOPEN_TIMEOUT_MS);
+      const res = await persistentInteract(persistentId, open.actions, false, undefined, open.url);
+      const opened = parseOpenedDraft<{ bodyHtml?: string }>(res?.content);
+      const html = opened.opened && typeof opened.result?.bodyHtml === "string" ? opened.result.bodyHtml : null;
+      if (html !== null && persistedMatches(html, bodyText).match) return extractDraftBody(html);
+    } catch {
+      // A failed reopen is "not confirmed yet", never a throw out of the writer.
+    }
+  }
+  return null;
 }
 
 // Last, so every const above is initialised before the script body runs.
