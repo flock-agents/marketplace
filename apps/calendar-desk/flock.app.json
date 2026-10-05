@@ -88,6 +88,11 @@
       "kind": "schedule",
       "dataUrl": "/api/widget/today",
       "title": "Your Schedule"
+    },
+    {
+      "id": "horizon",
+      "kind": "horizon",
+      "dataUrl": "/api/widget/horizon"
     }
   ],
   "routines": [

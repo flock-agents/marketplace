@@ -59,3 +59,28 @@ describe("widget connector state (A10)", () => {
     expect(await get()).toMatchObject({ connected: true, fault: null, connector: "attention" });
   });
 });
+
+describe("widget 90-day horizon feed (Task 53)", () => {
+  const day = (n: number) => ymd(new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate() + n));
+  const feed = async (path: string) => await (await widgetRoutes.request(path)).json() as any;
+  test("a fact event 45 days out is in /horizon and not in /today", async () => {
+    S.upsertFactEvent({ accountId: "acc-home", factId: 11, title: "Mira's wedding", localDate: day(45), startAt: null, sourceLink: null }, 1);
+    const h = await feed("/api/widget/horizon"), t = await feed("/api/widget/today");
+    expect(h).toMatchObject({ template: "horizon", date: day(0) });
+    expect(h.items.map((i: any) => i.id)).toEqual(["fact:11"]);
+    expect(t.items).toEqual([]);
+  });
+  test("events past 90 days are dropped; day 90 is kept", async () => {
+    S.upsertFactEvent({ accountId: "", factId: 12, title: "Edge day", localDate: day(90), startAt: null, sourceLink: null }, 1);
+    S.upsertFactEvent({ accountId: "", factId: 13, title: "Beyond", localDate: day(91), startAt: null, sourceLink: null }, 1);
+    expect((await feed("/api/widget/horizon")).items.map((i: any) => i.id)).toEqual(["fact:12"]);
+  });
+  test("a Google event today is in both feeds with identical item fields", async () => {
+    const startAt = new Date(`${day(0)}T09:00:00`).getTime();
+    S.upsertEvents("a", [{ accountId: "a", eventKey: "standup", title: "Standup", startAt, endAt: null, allDay: false, localDate: day(0), calendar: "primary", attendeesText: null, location: null, rawTimeText: null } as any], Date.now());
+    S.upsertFactEvent({ accountId: "acc-home", factId: 14, title: "Zed's flight", localDate: day(0), startAt: null, sourceLink: "https://mail.google.com/x" }, 1);
+    const h = await feed("/api/widget/horizon"), t = await feed("/api/widget/today");
+    expect(t.items.length).toBe(2);
+    expect(h.items).toEqual(t.items);
+  });
+});
