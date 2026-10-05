@@ -42,13 +42,24 @@ describe("refresh_calendar (A13)", () => {
   const rp = { configured: true, connectors: { exec: async () => { scrapes++; return ok({ ok: true, events: [] }); } } } as unknown as PlatformContext;
   const rctx = { platform: rp, agentId: "pa" };
   beforeEach(() => { scrapes = 0; S._db.exec("DELETE FROM cursors; DELETE FROM init_state"); S.markInitStarted("acct"); S.markInitFinished("acct", "done"); });
-  test("a fresh last scrape and no force → skipped fresh; force → scrapes", async () => {
-    S.setCursor("last_sync:acct", String(Date.now() - 30 * 60_000));
-    expect(await ops.refresh_calendar!({}, rctx)).toMatchObject({ ok: true, accounts: [{ accountId: "acct", ok: true, events: 0, skipped: "fresh" }] });
-    expect(scrapes).toBe(0);
-    const r: any = await ops.refresh_calendar!({ force: true }, rctx);
-    expect(r.accounts[0]).toMatchObject({ ok: true, events: 0, fault: null }); expect(r.accounts[0].skipped).toBeUndefined();
+  test("a refresh the user asks for scrapes even when the last scrape is fresh", async () => {
+    S.setCursor("last_sync:acct", String(Date.now() - 10 * 60_000));
+    const r: any = await ops.refresh_calendar!({}, rctx);
     expect(scrapes).toBe(1);
+    expect(r.accounts[0]).toMatchObject({ ok: true, events: 0, fault: null }); expect(r.accounts[0].skipped).toBeUndefined();
+    expect(r.note).toBeUndefined();
+  });
+  test("a scrape still running at the wait limit is reported as running, never as nothing found", async () => {
+    let finish!: () => void;
+    const slow = { configured: true, connectors: { exec: () => new Promise((res) => { finish = () => res(ok({ ok: true, events: [] })); }) } } as unknown as PlatformContext;
+    S.setCursor("last_sync:acct", "0");
+    const r: any = await ops.refresh_calendar!({}, { platform: slow, agentId: "pa", waitMs: 50 } as any);
+    expect(r.accounts[0]).toMatchObject({ accountId: "acct", ok: true, running: true });
+    expect(r.note).toMatch(/still reading/);
+    // a second ask while the first scrape runs does not start another; it reports running too
+    const r2: any = await ops.refresh_calendar!({}, { platform: slow, agentId: "pa", waitMs: 50 } as any);
+    expect(r2.accounts[0]).toMatchObject({ running: true });
+    finish();
   });
   test("a stale last scrape syncs without force", async () => {
     S.setCursor("last_sync:acct", String(Date.now() - 3 * 3600_000));

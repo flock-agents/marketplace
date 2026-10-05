@@ -7,21 +7,31 @@ import { syncFactEvents } from "./facts";
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const err = (code: string, message: string, status = 400): OpError => ({ error: message, code, status });
 const isRealDate = (s: string) => { if (!DATE_RE.test(s)) return false; const [y, m, d] = s.split("-").map(Number); return ymd(new Date(y!, m! - 1, d!)) === s; };
+const REFRESH_WAIT_MS = 15_000;
 const today = () => ymd(new Date());
 
 export const ops: Record<string, OpHandler> = {
-  async refresh_calendar(p, { platform }) {
-    const force = p.force === true;
-    const accounts: { accountId: string; ok: boolean; events: number; skipped?: string; fault: string | null }[] = [];
+  async refresh_calendar(_p, ctx) {
+    // Only the user (through their agent) calls this: it always scrapes, within the daily cap, and answers within waitMs.
+    // The scrape is never cancelled by the race; it finishes in the background (syncAccount's in-flight guard stops a second one).
+    const { platform } = ctx;
+    const waitMs = (ctx as { waitMs?: number }).waitMs ?? REFRESH_WAIT_MS;
+    const accounts: { accountId: string; ok: boolean; events: number; skipped?: string; fault: string | null; running?: true }[] = [];
     for (const rec of listInit().filter((r) => r.finishedAt && r.outcome === "done")) {
+      let timer: ReturnType<typeof setTimeout> | undefined;
       try {
-        const r = await syncAccount(rec.accountId, { platform }, force ? "forced" : "light");
+        const job = syncAccount(rec.accountId, { platform }, "forced");
+        job.catch(() => {}); // a late failure after the op answered is not an unhandled rejection
+        const r = await Promise.race([job, new Promise<"running">((res) => { timer = setTimeout(() => res("running"), waitMs); })]);
+        if (r === "running" || ("skipped" in r && r.skipped === "busy")) { accounts.push({ accountId: rec.accountId, ok: true, events: 0, fault: null, running: true }); continue; }
         accounts.push({ accountId: rec.accountId, ok: r.ok, events: r.events, ...("skipped" in r && r.skipped ? { skipped: r.skipped } : {}), fault: r.fault ?? null });
       } catch (e: any) { accounts.push({ accountId: rec.accountId, ok: false, events: 0, fault: String(e?.message ?? e) }); }
+      finally { if (timer) clearTimeout(timer); }
     }
     let facts = { created: 0, updated: 0, withdrawn: 0, suppressed: 0 };
     try { const f = await syncFactEvents(platform); facts = { created: f.created, updated: f.updated, withdrawn: f.withdrawn, suppressed: f.suppressed }; } catch (e: any) { console.warn(`[calendar-desk] fact events: ${e?.message ?? e}`); }
-    return { ok: true, accounts, facts };
+    const note = accounts.some((a) => a.running) ? "Google Calendar is still reading; the new events land within a minute." : undefined;
+    return { ok: true, accounts, facts, ...(note ? { note } : {}) };
   },
   async list_upcoming(p) {
     const days = typeof p.days === "number" && p.days > 0 ? Math.min(p.days, 36500) : 14;
