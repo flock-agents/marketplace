@@ -72,7 +72,7 @@ describe("live-fix 6: spaceless agenda headers", () => {
   });
   test("a glued time is not a year; glued live headers", () => {
     expect(parseDateHeader("4Oct 1030am", 2026)).toBe("2026-10-04");
-    expect(parseDateHeader("4Oct, Sun7 – 7:30pmDinner @ Prity's", 2026)).toBe("2026-10-04");
+    expect(parseDateHeader("4Oct, Sun7 – 7:30pmDinner at Example Cafe", 2026)).toBe("2026-10-04");
     expect(parseDateHeader("Sun4", 2026)).toBeNull();
     const { rows, skipped } = normalizeScrape([{ title: "X", date: "Sun4" }], { calendar: null, now: new Date(2026, 9, 4) });
     expect(rows.length).toBe(0); expect(skipped).toBe(1);
@@ -84,8 +84,8 @@ describe("live-fix 6: spaceless agenda headers", () => {
   const opts = { calendar: null, now: new Date(2026, 9, 4) };
   test("same-title events on adjacent days stay two rows", () => {
     const { rows } = normalizeScrape([
-      { title: "Agastya School PTM", time: "All day", date: "4Oct, Sun" },
-      { title: "Agastya School PTM", time: "All day", date: "5Oct, Mon" },
+      { title: "School meeting", time: "All day", date: "4Oct, Sun" },
+      { title: "School meeting", time: "All day", date: "5Oct, Mon" },
     ], opts);
     expect(rows.map((r) => r.localDate)).toEqual(["2026-10-04", "2026-10-05"]);
   });
@@ -123,12 +123,12 @@ describe("live-fix 6: spaceless agenda headers", () => {
   test("all-day row with monthDay and no date: next occurrence on or after today", () => {
     const o = { calendar: "primary", now: new Date(2026, 9, 4) };
     const r = normalizeScrape([
-      { title: "Anu birthday", date: "", allDay: true, attendees: "Me", monthDay: "10-04" },
-      { title: "Mum birthday", date: "", allDay: true, attendees: "Me", monthDay: "03-09" },
+      { title: "Sam birthday", date: "", allDay: true, attendees: "Me", monthDay: "10-04" },
+      { title: "Pat birthday", date: "", allDay: true, attendees: "Me", monthDay: "03-09" },
       { title: "Leap", date: "", allDay: true, attendees: "Me", monthDay: "02-29" },
       { title: "Timed", date: "", time: "3pm", monthDay: "10-20" },
     ], o);
-    expect(r.rows.map((x) => [x.title, x.localDate])).toEqual([["Anu birthday", "2026-10-04"], ["Mum birthday", "2027-03-09"], ["Leap", "2028-02-29"]]);
+    expect(r.rows.map((x) => [x.title, x.localDate])).toEqual([["Sam birthday", "2026-10-04"], ["Pat birthday", "2027-03-09"], ["Leap", "2028-02-29"]]);
     expect(r.skipped).toBe(1);
   });
   test("allDay flag wins over a time string; attendees and location are carried", () => {
@@ -142,15 +142,15 @@ describe("live-fix 6: spaceless agenda headers", () => {
     test("holiday calendar rows dropped, timed kept, all-day with attendees kept, creator-less all-day dropped", () => {
       const r = normalizeScrape([
         { title: "First Day of Sharad Navratri", date: "4 October 2026", allDay: true, calendar: "Holidays in India" },
-        { title: "Dinner @ Prity's", date: "4 October 2026", time: "8 – 9pm", attendees: "Shiva Shankar" },
+        { title: "Dinner at Example Cafe", date: "4 October 2026", time: "8 – 9pm", attendees: "Alex Example" },
         { title: "Offsite", date: "4 October 2026", allDay: true, attendees: "a@x.com" },
         { title: "Random banner", date: "4 October 2026", allDay: true },
         { title: "Work thing", date: "4 October 2026", time: "9am", calendar: "Work" },
-        { title: "Family day", date: "4 October 2026", allDay: true, calendar: "Family", attendees: "Mum" },
+        { title: "Family day", date: "4 October 2026", allDay: true, calendar: "Family", attendees: "Pat" },
         { title: "Family banner", date: "4 October 2026", allDay: true, calendar: "Family" },
-        { title: "Anu", date: "4 October 2026", allDay: true, calendar: "Birthdays", attendees: "x" },
+        { title: "Sam", date: "4 October 2026", allDay: true, calendar: "Birthdays", attendees: "x" },
       ], o);
-      expect(r.rows.map((x) => x.title)).toEqual(["Dinner @ Prity's", "Offsite", "Work thing", "Family day"]);
+      expect(r.rows.map((x) => x.title)).toEqual(["Dinner at Example Cafe", "Offsite", "Work thing", "Family day"]);
       expect(r.filtered).toBe(4);
       expect(r.skipped).toBe(0);
     });

@@ -59,8 +59,8 @@ async function runSync(accountId: string, deps: SyncDeps, reason: SyncReason) {
     return { ok: false, events: 0, fault };
   }
   const norm = normalizeScrape(res.data.events, { calendar: "primary", now });
-  if (res.data.events.length > 0 && norm.rows.length === 0 && norm.skipped > 0 && norm.filtered === 0) {
-    // Every row had an unreadable date header: that is a parser fault, not an empty calendar.
+  if (res.data.events.length > 0 && norm.rows.length === 0 && norm.skipped > 0) {
+    // Every non-noise row was unreadable (filtered noise proves nothing): a parser fault, not an empty calendar.
     const fault = "agenda unreadable";
     setCursor(`fault:${accountId}`, fault);
     console.warn(`[calendar-desk] sync ${accountId} (${reason}) failed: ${fault} (skipped=${norm.skipped})`);

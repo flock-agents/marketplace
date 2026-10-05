@@ -50,7 +50,7 @@ describe("syncAccount", () => {
     expect(all.length).toBe(1);
     expect(all[0]!.missingSince).not.toBeNull();
   });
-  test("filtered plus an unreadable row: no missing-marking", async () => {
+  test("filtered plus a lone unreadable row: a fault now, still no missing-marking", async () => {
     await syncAccount("acct", { platform: platform(() => ok({ ok: true, events: [{ title: "Standup", time: "9:30am", date: "Mon, 5 Oct" }] })).ctx, now: () => NOW }, "scheduled");
     const orig = console.warn; console.warn = () => {};
     let r: any;
@@ -58,8 +58,26 @@ describe("syncAccount", () => {
       r = await syncAccount("acct", { platform: platform(() => ok({ ok: true, events: [
         { title: "Diwali", date: "Mon, 5 Oct", allDay: true, calendar: "Holidays in India" }, { title: "Garbled", time: "1pm", date: "Sun4" }] })).ctx, now: () => new Date(NOW.getTime() + 4 * 3600_000) }, "scheduled");
     } finally { console.warn = orig; }
-    expect(r.ok).toBe(true);
+    expect(r.ok).toBe(false);
     expect(S.listEvents({ fromDate: "2026-10-05", toDate: "2026-10-12", includeMissing: true })[0]!.missingSince).toBeNull();
+  });
+  test("noise rows filtered and every other row unreadable: a fault, events kept, last_sync not advanced, nothing marked missing", async () => {
+    await syncAccount("acct", { platform: platform(() => ok({ ok: true, events: [{ title: "Standup", time: "9:30am", date: "Mon, 5 Oct" }] })).ctx, now: () => NOW }, "scheduled");
+    const before = S.getCursor("last_sync:acct");
+    const orig = console.warn; console.warn = () => {};
+    let r: any;
+    try {
+      r = await syncAccount("acct", { platform: platform(() => ok({ ok: true, events: [
+        { title: "Example Festival", date: "", allDay: true, calendar: "Holidays in India" },
+        { title: "Team offsite", date: "", allDay: true, attendees: "Alex Example" },
+        { title: "Review", time: "1pm", date: "" }] })).ctx, now: () => new Date(NOW.getTime() + 4 * 3600_000) }, "scheduled");
+    } finally { console.warn = orig; }
+    expect(r).toMatchObject({ ok: false, events: 0, fault: "agenda unreadable" });
+    expect(lastFault("acct")).toBe("agenda unreadable");
+    expect(S.getCursor("last_sync:acct")).toBe(before);
+    const all = S.listEvents({ fromDate: "2026-10-05", toDate: "2026-10-12", includeMissing: true });
+    expect(all.length).toBe(1);
+    expect(all[0]!.missingSince).toBeNull();
   });
   test("an honest empty scrape clears the day", async () => {
     await syncAccount("acct", { platform: platform(() => ok({ ok: true, events: [{ title: "Standup", time: "9:30am", date: "Mon, 5 Oct" }] })).ctx, now: () => NOW }, "scheduled");

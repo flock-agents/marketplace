@@ -83,7 +83,7 @@ function nextMonthDay(md: string | null | undefined, now: Date): string | null {
   if (!m) return null;
   const mon = +m[1]!, day = +m[2]!;
   const today = ymd(now);
-  for (let y = now.getFullYear(); y <= now.getFullYear() + 8; y++) {
+  for (let y = now.getFullYear(); y <= now.getFullYear() + 8; y++) { // 8 years always spans a leap day (century non-leap years aside)
     const dt = new Date(y, mon - 1, day);
     if (dt.getMonth() !== mon - 1 || dt.getDate() !== day) continue;
     if (ymd(dt) >= today) return ymd(dt);
