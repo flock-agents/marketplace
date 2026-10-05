@@ -1,9 +1,11 @@
 import { createHash } from "node:crypto";
-import type { EventRow } from "./store";
+import type { EventDetails, ScrapedEventRow } from "./store";
 
 export interface ScrapedEvent {
   eventId?: string; title: string; time?: string; date?: string; monthDay?: string | null;
   allDay?: boolean; location?: string | null; calendar?: string | null; attendees?: string | null;
+  /** Present only when the skill read this event's detail popover (it was asked to, and the read succeeded). */
+  details?: EventDetails;
 }
 
 const MONTHS = ["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"];
@@ -93,7 +95,7 @@ function nextMonthDay(md: string | null | undefined, now: Date): string | null {
 
 export function normalizeScrape(events: ScrapedEvent[], opts: { calendar: string | null; now: Date }) {
   const seen = new Set<string>();
-  const out: Array<Omit<EventRow, "accountId" | "firstSeenAt" | "lastSeenAt" | "missingSince" | "source" | "factId" | "sourceLink">> = [];
+  const out: Array<ScrapedEventRow & { details?: EventDetails }> = [];
   let unplaceable = 0;
   let filtered = 0;
   let firstBad: string | null = null;
@@ -115,7 +117,7 @@ export function normalizeScrape(events: ScrapedEvent[], opts: { calendar: string
     const key = eventKey({ calendar: opts.calendar, localDate, startAt, title });
     if (seen.has(key)) continue;
     seen.add(key);
-    out.push({ eventKey: key, calendar: opts.calendar, title, startAt, endAt, allDay, localDate, attendeesText: e.attendees ?? null, location: e.location ?? null, rawTimeText: e.time ?? null });
+    out.push({ eventKey: key, calendar: opts.calendar, title, startAt, endAt, allDay, localDate, attendeesText: e.attendees ?? null, location: e.location ?? null, rawTimeText: e.time ?? null, googleEventId: e.eventId ?? null, details: e.details });
   }
   if (unplaceable > 0) console.warn(`calendar-desk: skipped ${unplaceable} scraped row(s) with no readable date (first: "${firstBad}")`);
   return { rows: out, skipped: unplaceable, filtered };

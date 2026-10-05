@@ -6,6 +6,12 @@ const S = await import("../store");
 function wipe() { for (const t of ["events", "event_notes", "preps", "cursors", "init_state"]) S._db.exec(`DELETE FROM ${t}`); }
 beforeEach(wipe);
 
+type Row = Parameters<typeof S.upsertEvents>[1][number];
+function row(over: Partial<Row> = {}): Row {
+  return { eventKey: "k1", calendar: "primary", title: "Standup", startAt: null, endAt: null, allDay: false, localDate: "2026-10-06",
+    attendeesText: null, location: null, rawTimeText: null, googleEventId: null, ...over };
+}
+
 describe("events", () => {
   test("upsert is keyed by (account, eventKey); a re-seen event keeps first_seen and clears missing", () => {
     const row = { eventKey: "k1", calendar: "primary", title: "Standup", startAt: 1, endAt: 2, allDay: false, localDate: "2026-10-05", attendeesText: null, location: null, rawTimeText: "9:30am" };
@@ -63,6 +69,46 @@ describe("fact events", () => {
     S.upsertFactEvent({ accountId: "acct", factId: 7, title: "Dentist", localDate: "2026-10-06", startAt: null, sourceLink: null }, 1);
     expect(S.listEvents({ fromDate: "2026-10-06", toDate: "2026-10-06", source: "google" }).map((e) => e.eventKey)).toEqual(["g1"]);
     expect(S.listEvents({ fromDate: "2026-10-06", toDate: "2026-10-06" })).toHaveLength(2);
+  });
+});
+
+describe("event details", () => {
+  test("details: saved, kept across a re-scrape of the same key, location taken from the popover", () => {
+    S.upsertEvents("acc", [row({ eventKey: "k1", googleEventId: "g1", location: null })], 1000);
+    S.saveEventDetails("acc", "k1", { guests: [{ email: "yogesh@crafo.ai" }], location: "HSR Layout", description: "agenda", meetLink: "https://meet.google.com/abc-defg-hij" }, 2000);
+    S.upsertEvents("acc", [row({ eventKey: "k1", googleEventId: "g1", location: null })], 3000);
+    const e = S.listEvents({ fromDate: "2026-10-01", toDate: "2026-10-31", accountId: "acc" })[0]!;
+    expect([e.guests, e.location, e.description, e.meetLink, e.detailsAt, e.googleEventId])
+      .toEqual([[{ email: "yogesh@crafo.ai" }], "HSR Layout", "agenda", "https://meet.google.com/abc-defg-hij", 2000, "g1"]);
+  });
+  test("before details are read, the agenda's location follows the re-scrape; guests stay null", () => {
+    S.upsertEvents("acc", [row({ location: "Old" })], 1);
+    S.upsertEvents("acc", [row({ location: "New" })], 2);
+    const e = S.getEvent("acc", "k1")!;
+    expect([e.location, e.guests, e.detailsAt, e.googleEventId]).toEqual(["New", null, null, null]);
+  });
+  test("detailPlan: first read 60; then 15, skipping fresh and far-off details", () => {
+    const now = new Date("2026-10-06T08:00:00+05:30");
+    expect(S.detailPlan("acc", now)).toEqual({ max: 60, skipIds: [] });
+    S.upsertEvents("acc", [
+      row({ eventKey: "fresh", googleEventId: "gF", startAt: now.getTime() + 3600e3 }),
+      row({ eventKey: "stale", googleEventId: "gS", startAt: now.getTime() + 3600e3 }),
+      row({ eventKey: "far", googleEventId: "gR", startAt: now.getTime() + 72 * 3600e3 }),
+    ], now.getTime());
+    S.saveEventDetails("acc", "fresh", { guests: [] }, now.getTime() - 3600e3);
+    S.saveEventDetails("acc", "stale", { guests: [] }, now.getTime() - 30 * 3600e3);
+    S.saveEventDetails("acc", "far", { guests: [] }, now.getTime() - 30 * 3600e3);
+    expect(S.detailPlan("acc", now)).toEqual({ max: 15, skipIds: ["gF", "gR"] });
+  });
+  test("detailPlan: more than 15 upcoming timed rows without details is a first read again", () => {
+    const now = new Date(2026, 9, 6, 8, 0);
+    const day = (i: number) => `2026-10-${String(6 + (i % 7)).padStart(2, "0")}`;
+    S.upsertEvents("acc", [row({ eventKey: "done", googleEventId: "g0", startAt: now.getTime() + 3600e3 })], 1);
+    S.saveEventDetails("acc", "done", { guests: [] }, now.getTime());
+    S.upsertEvents("acc", Array.from({ length: 15 }, (_, i) => row({ eventKey: `n${i}`, localDate: day(i), startAt: now.getTime() + (i + 2) * 3600e3 })), 1);
+    expect(S.detailPlan("acc", now).max).toBe(15);
+    S.upsertEvents("acc", [row({ eventKey: "n15", startAt: now.getTime() + 20 * 3600e3 })], 1);
+    expect(S.detailPlan("acc", now).max).toBe(60);
   });
 });
 

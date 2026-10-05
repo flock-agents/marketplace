@@ -4,7 +4,7 @@ import { mkdtempSync } from "fs"; import { tmpdir } from "os"; import { join } f
 import { ok, type PlatformContext } from "@flock/app-sdk";
 process.env.APP_DATA_DIR = mkdtempSync(join(tmpdir(), "calendar-desk-sync-"));
 const S = await import("../store");
-const { syncAccount, shouldScrape, DAILY_SCRAPE_CAP, lastFault } = await import("../sync");
+const { syncAccount, shouldScrape, DAILY_SCRAPE_CAP, lastFault, MAX_RESULTS } = await import("../sync");
 
 const NOW = new Date(2026, 9, 5, 9, 0);
 function platform(answer: () => any): { ctx: PlatformContext; calls: any[] } {
@@ -129,6 +129,43 @@ describe("syncAccount", () => {
     await syncAccount("acct", { platform: p.ctx, now: () => NOW }, "scheduled");
     expect(shouldScrape("acct", new Date(NOW.getTime() + 30 * 60_000), "pre-prep")).toBe(false);
     expect(shouldScrape("acct", new Date(NOW.getTime() + 3 * 3600_000), "pre-prep")).toBe(true);
+  });
+});
+
+describe("event details (Task 8)", () => {
+  test("asks for details per detailPlan, stores them, scales the timeout", async () => {
+    const p = platform(() => ok({ ok: true, events: [
+      { eventId: "g1", title: "Design Review", time: "4pm – 4:30pm", date: "Mon, 5 Oct", attendees: "Shiva Shankar", location: null,
+        details: { guests: [{ email: "yogesh@crafo.ai" }], location: "HSR Layout" } },
+    ] }));
+    await syncAccount("acct", { platform: p.ctx, now: () => NOW }, "forced");
+    expect(MAX_RESULTS).toBe(200);
+    expect(p.calls[0].params).toMatchObject({ maxResults: 200, details: { max: 60, skipIds: [] } });
+    expect(p.calls[0].timeoutMs).toBe(45_000 + 110_000 + 15_000);
+    const e = S.listEvents({ fromDate: "2026-10-05", toDate: "2026-10-05", accountId: "acct" })[0]!;
+    expect([e.googleEventId, e.guests, e.location]).toEqual(["g1", [{ email: "yogesh@crafo.ai" }], "HSR Layout"]);
+  });
+  test("a row without details is kept and is not skipped next time (Review Focus 4)", async () => {
+    const p = platform(() => ok({ ok: true, events: [{ eventId: "g2", title: "Standup", time: "11am – 11:15am", date: "Mon, 5 Oct" }] }));
+    await syncAccount("acct", { platform: p.ctx, now: () => NOW }, "forced");
+    const e = S.listEvents({ fromDate: "2026-10-05", toDate: "2026-10-05", accountId: "acct" })[0]!;
+    expect([e.googleEventId, e.guests, e.detailsAt]).toEqual(["g2", null, null]);
+    expect(S.detailPlan("acct", NOW).skipIds).not.toContain("g2");
+  });
+  test("a re-scrape that skipped an event's details keeps the stored ones; the next plan skips it", async () => {
+    const withDetails = platform(() => ok({ ok: true, events: [{ eventId: "g3", title: "Review", time: "4pm", date: "Mon, 5 Oct", details: { guests: [{ email: "a@x.com" }], meetLink: "https://meet.google.com/x" } }] }));
+    await syncAccount("acct", { platform: withDetails.ctx, now: () => NOW }, "forced");
+    const p = platform(() => ok({ ok: true, events: [{ eventId: "g3", title: "Review", time: "4pm", date: "Mon, 5 Oct" }] }));
+    await syncAccount("acct", { platform: p.ctx, now: () => new Date(NOW.getTime() + 3600_000) }, "forced");
+    expect(p.calls[0].params.details).toEqual({ max: 15, skipIds: ["g3"] });
+    const e = S.getEvent("acct", S.listEvents({ fromDate: "2026-10-05", toDate: "2026-10-05" })[0]!.eventKey)!;
+    expect([e.guests, e.meetLink, e.detailsAt]).toEqual([[{ email: "a@x.com" }], "https://meet.google.com/x", NOW.getTime()]);
+  });
+  test("a read that hit maxResults marks nothing missing (Review Focus 5)", async () => {
+    S.upsertEvents("acct", [{ eventKey: "late", calendar: "primary", title: "Late", startAt: null, endAt: null, allDay: false, localDate: "2026-10-09", attendeesText: null, location: null, rawTimeText: null, googleEventId: null }], 1);
+    const many = Array.from({ length: 200 }, (_, i) => ({ eventId: `g${i}`, title: `E${i}`, time: "9am – 10am", date: "Mon, 5 Oct" }));
+    await syncAccount("acct", { platform: platform(() => ok({ ok: true, events: many })).ctx, now: () => NOW }, "forced");
+    expect(S.listEvents({ fromDate: "2026-10-09", toDate: "2026-10-09", accountId: "acct" }).length).toBe(1);
   });
 });
 

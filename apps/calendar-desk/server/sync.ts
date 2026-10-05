@@ -1,5 +1,5 @@
 import type { PlatformContext } from "@flock/app-sdk";
-import { getCursor, setCursor, upsertEvents, markMissingEvents, _db } from "./store";
+import { getCursor, setCursor, upsertEvents, markMissingEvents, saveEventDetails, detailPlan, _db } from "./store";
 import { normalizeScrape, ymd, type ScrapedEvent } from "./events";
 
 export interface SyncDeps { platform: PlatformContext; now?: () => Date }
@@ -7,6 +7,12 @@ export const DAILY_SCRAPE_CAP = 8;
 export const KEEP_DAYS_AHEAD = 7;
 const FRESH_MS = 2 * 3600_000;
 const SCRAPE_TIMEOUT_MS = 45_000;
+export const MAX_RESULTS = 200;
+// These mirror the google-calendar skill's detail-pick.ts: each popover costs ~3.5s and the in-page
+// detail read stops at 110s, so a first read of 60 gets ~30 and skipIds lets the next scrape continue.
+const DETAIL_MS_PER_EVENT = 3_500;
+const DETAIL_BUDGET_CAP_MS = 110_000;
+const DETAIL_SLACK_MS = 15_000;
 
 export function scrapesToday(accountId: string, day: string): number { return Number(getCursor(`scrapes:${accountId}:${day}`) ?? 0); }
 export function lastSyncAt(accountId: string): number | null { const v = getCursor(`last_sync:${accountId}`); return v ? Number(v) : null; }
@@ -47,9 +53,11 @@ async function runSync(accountId: string, deps: SyncDeps, reason: SyncReason) {
 
   setCursor(`scrapes:${accountId}:${day}`, String(scrapesToday(accountId, day) + 1));
   setCursor(`last_attempt:${accountId}`, String(now.getTime()));
+  const plan = detailPlan(accountId, now);
   const res = await deps.platform.connectors.exec<{ ok?: boolean; events?: ScrapedEvent[] }>({
     skillId: "google-calendar", functionName: "listEvents", accountHint: accountId,
-    params: { timeMin: day, maxResults: 100 }, timeoutMs: SCRAPE_TIMEOUT_MS,
+    params: { timeMin: day, maxResults: MAX_RESULTS, details: plan },
+    timeoutMs: SCRAPE_TIMEOUT_MS + Math.min(plan.max * DETAIL_MS_PER_EVENT, DETAIL_BUDGET_CAP_MS) + DETAIL_SLACK_MS,
   });
   if (!res.ok || !res.data || res.data.ok === false || !Array.isArray(res.data.events)) {
     // A refused or faulted read says NOTHING about the calendar: keep what we had.
@@ -69,8 +77,10 @@ async function runSync(accountId: string, deps: SyncDeps, reason: SyncReason) {
   const rows = norm.rows.filter((r) => r.localDate >= day && dateRange(now).includes(r.localDate));
   const at = now.getTime();
   upsertEvents(accountId, rows, at);
-  // A partly unreadable page says nothing reliable about absence: only mark missing on a clean read.
-  if (norm.skipped === 0) markMissingEvents(accountId, dateRange(now), rows.map((r) => r.eventKey), at);
+  // An event without details (not asked, or its popover failed) keeps what was stored.
+  for (const r of rows) if (r.details) saveEventDetails(accountId, r.eventKey, r.details, at);
+  // A partly unreadable page, or one cut off at maxResults, says nothing reliable about absence.
+  if (norm.skipped === 0 && res.data.events.length < MAX_RESULTS) markMissingEvents(accountId, dateRange(now), rows.map((r) => r.eventKey), at);
   _db.query("DELETE FROM events WHERE account_id = ? AND source = 'google' AND (local_date < ? OR (missing_since IS NOT NULL AND missing_since < ?))").run(accountId, ymd(new Date(at - 86_400_000)), at - 2 * 86_400_000);
   setCursor(`last_sync:${accountId}`, String(at));
   setCursor(`fault:${accountId}`, "");
