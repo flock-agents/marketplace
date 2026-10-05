@@ -87,6 +87,14 @@ describe("event details", () => {
     const e = S.getEvent("acc", "k1")!;
     expect([e.location, e.guests, e.detailsAt, e.googleEventId]).toEqual(["New", null, null, null]);
   });
+  test("the popover owns the location: a later read without one clears it, and the agenda does not bring it back", () => {
+    S.upsertEvents("acc", [row({ googleEventId: "g1", location: "Agenda place" })], 1);
+    S.saveEventDetails("acc", "k1", { guests: [], location: "HSR Layout" }, 2);
+    S.saveEventDetails("acc", "k1", { guests: [] }, 3);
+    expect(S.getEvent("acc", "k1")!.location).toBeNull();
+    S.upsertEvents("acc", [row({ googleEventId: "g1", location: "Agenda place" })], 4);
+    expect(S.getEvent("acc", "k1")!.location).toBeNull();
+  });
   test("detailPlan: first read 60; then 15, skipping fresh and far-off details", () => {
     const now = new Date("2026-10-06T08:00:00+05:30");
     expect(S.detailPlan("acc", now)).toEqual({ max: 60, skipIds: [] });

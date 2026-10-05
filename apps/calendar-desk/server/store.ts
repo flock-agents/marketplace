@@ -98,14 +98,14 @@ function rowToEvent(r: any): EventRow {
 
 // ── events ────────────────────────────────────────────────────────────────────────────────
 
-/** A re-scrape never clobbers stored details; once details are read, the popover's location wins over the agenda's. */
+/** A re-scrape never clobbers stored details; once details are read, the popover owns the location (even when it has none). */
 export function upsertEvents(accountId: string, rows: ScrapedEventRow[], seenAt: number): { inserted: number; updated: number } {
   let inserted = 0, updated = 0;
   const ins = db.query(`INSERT INTO events (account_id, event_key, calendar, title, start_at, end_at, all_day, local_date, attendees_text, location, raw_time_text, first_seen_at, last_seen_at, missing_since, google_event_id)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)
     ON CONFLICT(account_id, event_key) DO UPDATE SET calendar=excluded.calendar, title=excluded.title, start_at=excluded.start_at, end_at=excluded.end_at, all_day=excluded.all_day,
       local_date=excluded.local_date, attendees_text=excluded.attendees_text,
-      location=CASE WHEN events.details_at IS NOT NULL AND events.location IS NOT NULL THEN events.location ELSE excluded.location END,
+      location=CASE WHEN events.details_at IS NOT NULL THEN events.location ELSE excluded.location END,
       raw_time_text=excluded.raw_time_text, last_seen_at=excluded.last_seen_at, missing_since=NULL,
       google_event_id=COALESCE(excluded.google_event_id, events.google_event_id)`);
   const exists = db.query("SELECT 1 FROM events WHERE account_id = ? AND event_key = ?");
@@ -122,12 +122,16 @@ export function upsertEvents(accountId: string, rows: ScrapedEventRow[], seenAt:
 
 export function saveEventDetails(accountId: string, eventKey: string, d: EventDetails, at: number): void {
   db.query(`UPDATE events SET guests_json = ?, guest_summary = ?, description = ?, meet_link = ?, details_at = ?,
-      location = COALESCE(?, location) WHERE account_id = ? AND event_key = ?`)
+      location = ? WHERE account_id = ? AND event_key = ?`)
     .run(JSON.stringify(d.guests ?? []), d.guestSummary ?? null, d.description ?? null, d.meetLink ?? null, at, d.location ?? null, accountId, eventKey);
 }
 
 export const DETAIL_FIRST_READ_MAX = 60;
 export const DETAIL_STEADY_MAX = 15;
+/** After a detail pass that got nothing back, the next scrapes only probe this many for a day. */
+export const DETAIL_PROBE_MAX = 3;
+const DETAIL_MISS_BACKOFF_MS = 24 * 3600_000;
+export const detailMissCursor = (accountId: string) => `detail_miss:${accountId}`;
 const DETAIL_FRESH_MS = 24 * 3600_000;
 const DETAIL_HORIZON_MS = 48 * 3600_000;
 const DETAIL_WINDOW_DAYS = 7;
@@ -153,6 +157,8 @@ export function detailPlan(accountId: string, now: Date): { max: number; skipIds
   const unread = (db.query(`SELECT COUNT(*) AS n FROM events WHERE account_id = ? AND source = 'google' AND missing_since IS NULL
       AND all_day = 0 AND start_at IS NOT NULL AND start_at >= ? AND local_date BETWEEN ? AND ? AND details_at IS NULL`)
     .get(accountId, t, localYmd(now), localYmd(end)) as { n: number }).n;
+  const missAt = Number(getCursor(detailMissCursor(accountId)) || 0);
+  if (missAt && t - missAt < DETAIL_MISS_BACKOFF_MS) return { max: DETAIL_PROBE_MAX, skipIds: skip };
   const firstRead = !anyRead || unread > DETAIL_STEADY_MAX;
   return { max: firstRead ? DETAIL_FIRST_READ_MAX : DETAIL_STEADY_MAX, skipIds: skip };
 }

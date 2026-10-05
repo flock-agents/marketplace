@@ -141,7 +141,7 @@ describe("event details (Task 8)", () => {
     await syncAccount("acct", { platform: p.ctx, now: () => NOW }, "forced");
     expect(MAX_RESULTS).toBe(200);
     expect(p.calls[0].params).toMatchObject({ maxResults: 200, details: { max: 60, skipIds: [] } });
-    expect(p.calls[0].timeoutMs).toBe(45_000 + 110_000 + 15_000);
+    expect(p.calls[0].timeoutMs).toBe(195_000);
     const e = S.listEvents({ fromDate: "2026-10-05", toDate: "2026-10-05", accountId: "acct" })[0]!;
     expect([e.googleEventId, e.guests, e.location]).toEqual(["g1", [{ email: "yogesh@crafo.ai" }], "HSR Layout"]);
   });
@@ -160,6 +160,27 @@ describe("event details (Task 8)", () => {
     expect(p.calls[0].params.details).toEqual({ max: 15, skipIds: ["g3"] });
     const e = S.getEvent("acct", S.listEvents({ fromDate: "2026-10-05", toDate: "2026-10-05" })[0]!.eventKey)!;
     expect([e.guests, e.meetLink, e.detailsAt]).toEqual([[{ email: "a@x.com" }], "https://meet.google.com/x", NOW.getTime()]);
+  });
+  test("a detail pass that got nothing back probes 3 for a day; a pass with details returns to the normal rule", async () => {
+    const miss = platform(() => ok({ ok: true, events: [{ eventId: "g4", title: "Sync", time: "4pm", date: "Mon, 5 Oct" }] }));
+    await syncAccount("acct", { platform: miss.ctx, now: () => NOW }, "forced");
+    expect(miss.calls[0].params.details.max).toBe(60);
+    expect(S.getCursor("detail_miss:acct")).toBe(String(NOW.getTime()));
+    const later = new Date(NOW.getTime() + 3600_000);
+    expect(S.detailPlan("acct", later).max).toBe(3);
+    const hit = platform(() => ok({ ok: true, events: [{ eventId: "g4", title: "Sync", time: "4pm", date: "Mon, 5 Oct", details: { guests: [] } }] }));
+    await syncAccount("acct", { platform: hit.ctx, now: () => later }, "forced");
+    expect(hit.calls[0].params.details.max).toBe(3);
+    expect(hit.calls[0].timeoutMs).toBe(195_000);
+    expect(S.getCursor("detail_miss:acct")).toBe("");
+    expect(S.detailPlan("acct", later).max).toBe(15);
+  });
+  test("the probe ends after a day; an all-day-only read is not a miss", async () => {
+    S.setCursor("detail_miss:acct", String(NOW.getTime() - 25 * 3600_000));
+    expect(S.detailPlan("acct", NOW).max).toBe(60);
+    S.setCursor("detail_miss:acct", "");
+    await syncAccount("acct", { platform: platform(() => ok({ ok: true, events: [{ eventId: "g5", title: "Offsite", date: "Mon, 5 Oct", allDay: true, attendees: "Pat" }] })).ctx, now: () => NOW }, "forced");
+    expect(S.getCursor("detail_miss:acct")).toBe("");
   });
   test("a read that hit maxResults marks nothing missing (Review Focus 5)", async () => {
     S.upsertEvents("acct", [{ eventKey: "late", calendar: "primary", title: "Late", startAt: null, endAt: null, allDay: false, localDate: "2026-10-09", attendeesText: null, location: null, rawTimeText: null, googleEventId: null }], 1);
