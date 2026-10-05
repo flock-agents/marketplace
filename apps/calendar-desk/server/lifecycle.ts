@@ -2,6 +2,7 @@ import type { AppLifecycleHooks, ProgressItem } from "@flock/app-sdk";
 import { listInit, markInitStarted, markInitFinished } from "./store";
 import { syncAccount, lastSyncAt, lastFault } from "./sync";
 import { storeRoutineState } from "./scheduler";
+import { syncFactEvents } from "./facts";
 
 const SCHEDULED_SCRAPE_HOURS = [6, 13];
 const pending = () => listInit().filter((r) => !r.finishedAt || r.outcome === "failed").map((r) => r.accountId);
@@ -14,6 +15,7 @@ export const calendarDeskHooks: AppLifecycleHooks = {
       const r = await syncAccount(a, { platform: ctx.platform }, "init");
       markInitFinished(a, r.ok ? "done" : "failed", r.ok ? "Calendar is set up" : "Could not read your calendar yet");
     }
+    try { await syncFactEvents(ctx.platform, new Date()); } catch (err: any) { console.warn(`[calendar-desk] fact events: ${err?.message ?? err}`); }
   },
   async tick(ctx) {
     storeRoutineState(ctx.readRoutines);
@@ -27,6 +29,7 @@ export const calendarDeskHooks: AppLifecycleHooks = {
       // the daily cap is not spent, so most ticks do nothing. This is how an event made after 13:00 is seen.
       if (rec.outcome === "done" && now.getHours() >= 7 && now.getHours() < 21) await syncAccount(rec.accountId, { platform: ctx.platform, now: () => now }, "light");
     }
+    try { await syncFactEvents(ctx.platform, now); } catch (err: any) { console.warn(`[calendar-desk] fact events: ${err?.message ?? err}`); }
   },
   status(accountId) { const rec = listInit().find((r) => r.accountId === accountId); return !rec || !!rec.finishedAt; },
   progress(): ProgressItem[] {

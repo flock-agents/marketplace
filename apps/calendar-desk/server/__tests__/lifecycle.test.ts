@@ -10,7 +10,7 @@ function platform(scrape: () => any) {
   const published: any[] = [];
   const ctx = { configured: true, pairedAgent: { id: "pa", name: "PA" },
     progress: { report: async () => ok(undefined) }, tasks: { publish: async (t: any) => { published.push(t); return ok(undefined); }, withdraw: async () => ok(undefined) },
-    connectors: { exec: async () => scrape() }, memory: { factsSince: async () => ok({ facts: [], nextSince: "" }), extract: async () => ok(undefined) }, agent: { intent: async () => ok({ sessionId: "s", reused: false }) },
+    connectors: { exec: async () => scrape() }, memory: { eventFacts: async () => ok({ facts: [{ id: 7, content: "Passport renewal appointment.", kind: "event", dateRole: "appointment", when: null, validFrom: null, validUntil: null, salience: 0.8, domain: null, sourceLink: null, entityIds: [], recordedAt: "2026-10-04T00:00:00.000Z", eventDate: "2026-10-20", eventTime: null, accountId: null }], snapshot: true }), factsSince: async () => ok({ facts: [], nextSince: "" }), extract: async () => ok(undefined) }, agent: { intent: async () => ok({ sessionId: "s", reused: false }) },
   } as unknown as PlatformContext;
   return { ctx, published };
 }
@@ -69,6 +69,14 @@ describe("tick — routine identity on the real wire (C2)", () => {
     expect(st.prepEnabled).toBe(true);
     expect(st.prepCfg.windowMinutes).toBe(45);
     expect(p.published.length).toBe(0);
+  });
+});
+
+describe("tick — fact events", () => {
+  test("the tick reconciles the fact snapshot into events even with no accounts", async () => {
+    const p = platform(() => ok({ ok: true, events: [] }));
+    await calendarDeskHooks.tick!({ readRoutines: [], platform: p.ctx, now: () => new Date(2026, 9, 5, 10, 0) } as any);
+    expect(S.listFactEvents()).toHaveLength(1);
   });
 });
 

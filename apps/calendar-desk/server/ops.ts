@@ -2,6 +2,7 @@ import type { OpHandler, OpError } from "@flock/app-sdk";
 import { listEvents, setEventNote, getEventNote, listInit } from "./store";
 import { ymd } from "./events";
 import { syncAccount } from "./sync";
+import { syncFactEvents } from "./facts";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const err = (code: string, message: string, status = 400): OpError => ({ error: message, code, status });
@@ -18,7 +19,9 @@ export const ops: Record<string, OpHandler> = {
         accounts.push({ accountId: rec.accountId, ok: r.ok, events: r.events, ...("skipped" in r && r.skipped ? { skipped: r.skipped } : {}), fault: r.fault ?? null });
       } catch (e: any) { accounts.push({ accountId: rec.accountId, ok: false, events: 0, fault: String(e?.message ?? e) }); }
     }
-    return { ok: true, accounts };
+    let facts = { created: 0, updated: 0, withdrawn: 0, suppressed: 0 };
+    try { const f = await syncFactEvents(platform); facts = { created: f.created, updated: f.updated, withdrawn: f.withdrawn, suppressed: f.suppressed }; } catch (e: any) { console.warn(`[calendar-desk] fact events: ${e?.message ?? e}`); }
+    return { ok: true, accounts, facts };
   },
   async list_upcoming(p) {
     const days = typeof p.days === "number" && p.days > 0 ? Math.min(p.days, 36500) : 14;
