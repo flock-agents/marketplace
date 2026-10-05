@@ -59,7 +59,27 @@ describe("refresh_calendar (A13)", () => {
     // a second ask while the first scrape runs does not start another; it reports running too
     const r2: any = await ops.refresh_calendar!({}, { platform: slow, agentId: "pa", waitMs: 50 } as any);
     expect(r2.accounts[0]).toMatchObject({ running: true });
-    finish();
+    finish(); await new Promise((r) => setTimeout(r, 20)); // let the background scrape settle so inFlight is clean
+  });
+  test("two slow accounts share one wait and both report running", async () => {
+    S.markInitStarted("acct2"); S.markInitFinished("acct2", "done");
+    const fins: (() => void)[] = [];
+    const slow = { configured: true, connectors: { exec: () => new Promise((res) => { fins.push(() => res(ok({ ok: true, events: [] }))); }) } } as unknown as PlatformContext;
+    const t0 = Date.now();
+    const r: any = await ops.refresh_calendar!({}, { platform: slow, agentId: "pa", waitMs: 100 } as any);
+    expect(Date.now() - t0).toBeLessThan(200);
+    expect(r.accounts.map((a: any) => a.running)).toEqual([true, true]);
+    fins.forEach((f) => f()); await new Promise((res) => setTimeout(res, 20));
+  });
+  test("one fast and one slow account: the fast one is reported normally, the slow one running", async () => {
+    S.markInitStarted("acct2"); S.markInitFinished("acct2", "done");
+    const fins: (() => void)[] = [];
+    let n = 0;
+    const mixed = { configured: true, connectors: { exec: () => (n++ === 0 ? Promise.resolve(ok({ ok: true, events: [] })) : new Promise((res) => { fins.push(() => res(ok({ ok: true, events: [] }))); })) } } as unknown as PlatformContext;
+    const r: any = await ops.refresh_calendar!({}, { platform: mixed, agentId: "pa", waitMs: 100 } as any);
+    expect(r.accounts.filter((a: any) => a.running).length).toBe(1);
+    expect(r.accounts.find((a: any) => !a.running)).toMatchObject({ ok: true, events: 0, fault: null });
+    fins.forEach((f) => f()); await new Promise((res) => setTimeout(res, 20));
   });
   test("a stale last scrape syncs without force", async () => {
     S.setCursor("last_sync:acct", String(Date.now() - 3 * 3600_000));
