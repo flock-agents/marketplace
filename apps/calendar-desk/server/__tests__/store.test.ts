@@ -155,3 +155,22 @@ describe("schema and cursors", () => {
     expect(S.listInit()[0].outcome).toBe("done");
   });
 });
+
+describe("migration idx16: Google event id becomes the key", () => {
+  test("a DB at idx15 is re-keyed: row, note and prep move to the Google id; rows without one keep their key", () => {
+    const dir = mkdtempSync(join(tmpdir(), "calendar-desk-mig-"));
+    const storePath = join(import.meta.dir, "..", "store.ts");
+    const run = (code: string) => {
+      const r = Bun.spawnSync(["bun", "-e", `const S = await import(${JSON.stringify(storePath)}); const db = S._db; ${code}`], { env: { ...process.env, APP_DATA_DIR: dir } });
+      if (r.exitCode !== 0) throw new Error(r.stderr.toString());
+      return r.stdout.toString().trim();
+    };
+    run(`db.exec("DELETE FROM _migrations WHERE idx >= 16");
+      const ins = db.query("INSERT INTO events (account_id, event_key, title, local_date, first_seen_at, last_seen_at, google_event_id) VALUES (?,?,?,?,1,1,?)");
+      ins.run("a", "hash1", "Standup", "2026-10-06", "g1"); ins.run("a", "hash2", "No id", "2026-10-06", null);
+      db.exec("INSERT INTO event_notes (account_id, event_key, note, set_by, set_at) VALUES ('a','hash1','n','user',1)");
+      db.exec("INSERT INTO preps (account_id, event_key, prepared_at) VALUES ('a','hash1',1)");`);
+    const out = run(`console.log(JSON.stringify([db.query("SELECT event_key FROM events ORDER BY event_key").all().map(r=>r.event_key), db.query("SELECT event_key FROM event_notes").all().map(r=>r.event_key), db.query("SELECT event_key FROM preps").all().map(r=>r.event_key)]))`);
+    expect(JSON.parse(out)).toEqual([["g1", "hash2"], ["g1"], ["g1"]]);
+  });
+});

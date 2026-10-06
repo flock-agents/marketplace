@@ -51,12 +51,5 @@ widgetRoutes.get("/api/widget/today", (c) => {
   return c.json({ template: "schedule", date, connected: true, fault: null, connector, items: eventItems(RAIL_DAYS) });
 });
 
-// Google events Google itself said it can't find (sync's checkAbsences, confirmed), today onward: the planner drops
-// their steps on the first read (owner 2026-10-06). Rows stay missing ≤2 days before sync deletes them.
-function removedItems(days: number) {
-  return listEvents({ fromDate: daysAhead(0), toDate: daysAhead(days), source: "google", includeMissing: true })
-    .filter((e) => e.missingSince != null && e.missingConfirmed).map((e) => ({ id: e.eventKey, date: e.localDate }));
-}
-
 // The platform's event planner reads the long horizon: same events, same items, 90 days.
-widgetRoutes.get("/api/widget/horizon", (c) => c.json({ template: "horizon", date: ymd(new Date()), connector: connectorState(), fault: null, items: eventItems(HORIZON_DAYS), removed: removedItems(HORIZON_DAYS) }));
+widgetRoutes.get("/api/widget/horizon", (c) => c.json({ template: "horizon", date: ymd(new Date()), connector: connectorState(), fault: null, items: eventItems(HORIZON_DAYS) }));

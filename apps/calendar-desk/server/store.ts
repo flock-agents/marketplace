@@ -59,6 +59,13 @@ const migrations: string[] = [
    ALTER TABLE events ADD COLUMN details_at INTEGER`,
   // 2026-10-06: a missing mark from a read that saw rows is a confirmed removal; a blank read only hides the day.
   `ALTER TABLE events ADD COLUMN missing_confirmed INTEGER`,
+  // 2026-10-06: Google's event id is the event's identity (a rename or move keeps it). Re-key rows that have one.
+  `UPDATE OR IGNORE event_notes SET event_key = (SELECT google_event_id FROM events e WHERE e.account_id = event_notes.account_id AND e.event_key = event_notes.event_key)
+     WHERE EXISTS (SELECT 1 FROM events e WHERE e.account_id = event_notes.account_id AND e.event_key = event_notes.event_key AND e.google_event_id IS NOT NULL);
+   UPDATE OR IGNORE preps SET event_key = (SELECT google_event_id FROM events e WHERE e.account_id = preps.account_id AND e.event_key = preps.event_key)
+     WHERE EXISTS (SELECT 1 FROM events e WHERE e.account_id = preps.account_id AND e.event_key = preps.event_key AND e.google_event_id IS NOT NULL);
+   UPDATE OR IGNORE events SET event_key = google_event_id WHERE source = 'google' AND google_event_id IS NOT NULL;
+   DELETE FROM events WHERE source = 'google' AND google_event_id IS NOT NULL AND event_key <> google_event_id`,
 ];
 
 function applyMigrations(): void {

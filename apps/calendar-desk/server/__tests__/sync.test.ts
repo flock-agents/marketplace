@@ -251,7 +251,7 @@ describe("an event missing from a read is checked with Google (owner 2026-10-06)
     await syncAccount("acct", { platform: platform(() => ok({ ok: true, events })).ctx, now: () => NOW }, "scheduled");
   };
   const state = () => Object.fromEntries(S.listEvents({ fromDate: "2026-10-05", toDate: "2026-10-12", includeMissing: true })
-    .map((e) => [e.title, e.missingSince == null ? "present" : e.missingConfirmed ? "removed" : "superseded"]));
+    .map((e) => [e.title, e.missingSince == null ? "present" : "removed"]));
   const read = (events: any[], answers: Record<string, any> = {}) => platform((req) => req.functionName === "listEvents" ? ok({ ok: true, events }) : answers[req.params.eid]);
   const checked = (p: { calls: any[] }) => p.calls.filter((c) => c.functionName === "getEvent").map((c) => c.params.eid);
 
@@ -288,11 +288,12 @@ describe("an event missing from a read is checked with Google (owner 2026-10-06)
     const v = Object.values(state());
     expect([v.filter((x) => x === "removed").length, v.filter((x) => x === "present").length]).toEqual([10, 2]);
   });
-  test("renamed or moved (its Google id is in the read under a new key): the old row leaves the feed, not as a removal, unchecked", async () => {
+  test("renamed or moved: the Google id is the key, so it is one row, updated, present, with no getEvent call", async () => {
     await seed(1);
     const p = read([{ title: "E0 renamed", time: "5pm", date: "Mon, 5 Oct", eventId: "id0" }]);
     await syncAccount("acct", { platform: p.ctx, now: LATER }, "scheduled");
     expect(checked(p)).toEqual([]);
-    expect(state()).toEqual({ E0: "superseded", "E0 renamed": "present" });
+    const rows = S.listEvents({ fromDate: "2026-10-05", toDate: "2026-10-12", includeMissing: true });
+    expect(rows.map((e) => [e.eventKey, e.title, e.missingSince])).toEqual([["id0", "E0 renamed", null]]);
   });
 });

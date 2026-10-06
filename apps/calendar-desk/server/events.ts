@@ -63,7 +63,7 @@ export function parseDateHeader(text: string | undefined, fallbackYear: number):
   return (m1 && pick(m1[1]!, m1[2]!, m1[3])) || (m2 && pick(m2[2]!, m2[1]!, m2[3])) || null;
 }
 
-/** No stable ids from the scrape (spec D2): identity is where+when+what. */
+/** An event key is Google's own event id; this hash (where+when+what) is only for a row read without one. */
 export function eventKey(p: { calendar: string | null; localDate: string; startAt: number | null; title: string }): string {
   const title = p.title.toLowerCase().replace(/\s+/g, " ").trim();
   return createHash("sha1").update(`${p.calendar ?? ""}|${p.localDate}|${p.startAt ?? "allday"}|${title}`).digest("hex").slice(0, 16);
@@ -114,7 +114,7 @@ export function normalizeScrape(events: ScrapedEvent[], opts: { calendar: string
       if (!localDate) { unplaceable++; if (firstBad === null) firstBad = "(no date)"; continue; }
     }
     const { startAt, endAt, allDay } = e.allDay === true ? { startAt: null, endAt: null, allDay: true } : parseTimeText(e.time, localDate);
-    const key = eventKey({ calendar: opts.calendar, localDate, startAt, title });
+    const key = e.eventId || eventKey({ calendar: opts.calendar, localDate, startAt, title });
     if (seen.has(key)) continue;
     seen.add(key);
     out.push({ eventKey: key, calendar: opts.calendar, title, startAt, endAt, allDay, localDate, attendeesText: e.attendees ?? null, location: e.location ?? null, rawTimeText: e.time ?? null, googleEventId: e.eventId ?? null, details: e.details });

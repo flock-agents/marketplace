@@ -51,17 +51,15 @@ export async function syncAccount(accountId: string, deps: SyncDeps, reason: Syn
  * Owner 2026-10-06: the agenda read can come back blank or half-drawn, so an event missing from it is not taken as
  * deleted. Its own page is opened (≤ ABSENCE_CHECK_MAX per read): only Google saying it can't find the event, as
  * that calendar's account, marks it missing (a confirmed removal: its steps go). Found, unsure, no id, or over the
- * limit → nothing changes and the next read asks again. An event whose Google id is in this read under a new key
- * (renamed or moved) is superseded: the old row leaves the feed, unconfirmed, and Flock's moved-event rules apply.
+ * limit → nothing changes and the next read asks again. A rename or move keeps the Google id, which is the key, so
+ * it is never absent.
  */
-async function checkAbsences(accountId: string, deps: SyncDeps, dates: string[], rows: { eventKey: string; googleEventId?: string | null }[], at: number): Promise<void> {
+async function checkAbsences(accountId: string, deps: SyncDeps, dates: string[], rows: { eventKey: string }[], at: number): Promise<void> {
   const presentKeys = new Set(rows.map((r) => r.eventKey));
-  const presentIds = new Set(rows.map((r) => r.googleEventId).filter(Boolean));
   const absent = unmissedEvents(accountId, dates).filter((e) => !presentKeys.has(e.eventKey));
-  const gone: string[] = [], superseded: string[] = [];
+  const gone: string[] = [];
   let checks = 0, kept = 0;
   for (const e of absent) {
-    if (e.googleEventId && presentIds.has(e.googleEventId)) { superseded.push(e.eventKey); continue; }
     if (!e.googleEventId || checks >= ABSENCE_CHECK_MAX) continue;
     checks++;
     const r = await deps.platform.connectors.exec<{ ok?: boolean; exists?: boolean }>({
@@ -71,8 +69,7 @@ async function checkAbsences(accountId: string, deps: SyncDeps, dates: string[],
     if (r.ok && r.data?.ok === true && r.data.exists === false) gone.push(e.eventKey); else kept++;
   }
   markEventsMissing(accountId, gone, at, true);
-  markEventsMissing(accountId, superseded, at, false);
-  if (absent.length) console.log(`[calendar-desk] ${absent.length} event(s) missing from the read for ${accountId}: ${superseded.length} renamed/moved, ${checks} checked — ${gone.length} gone, ${kept} kept`);
+  if (absent.length) console.log(`[calendar-desk] ${absent.length} event(s) missing from the read for ${accountId}: ${checks} checked — ${gone.length} gone, ${kept} kept`);
 }
 
 async function runSync(accountId: string, deps: SyncDeps, reason: SyncReason, opts: { forceDetailIds?: string[] }) {

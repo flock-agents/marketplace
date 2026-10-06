@@ -156,3 +156,15 @@ describe("live-fix 6: spaceless agenda headers", () => {
     });
   });
 });
+
+describe("Google event id is the event key", () => {
+  const opts = { calendar: "primary", now: new Date(2026, 9, 4) };
+  test("a scraped row with an id is keyed by it; a rename or move keeps the key; no id falls back to the hash", () => {
+    const a = normalizeScrape([{ eventId: "abc", title: "Standup", time: "9am", date: "Mon, 5 Oct" }], opts).rows[0]!;
+    const b = normalizeScrape([{ eventId: "abc", title: "Standup renamed", time: "5pm", date: "Tue, 6 Oct" }], opts).rows[0]!;
+    const c = normalizeScrape([{ title: "Standup", time: "9am", date: "Mon, 5 Oct" }], opts).rows[0]!;
+    expect([a.eventKey, b.eventKey]).toEqual(["abc", "abc"]);
+    expect(c.eventKey).toBe(eventKey({ calendar: "primary", localDate: "2026-10-05", startAt: new Date(2026, 9, 5, 9).getTime(), title: "Standup" }));
+  });
+});
+
