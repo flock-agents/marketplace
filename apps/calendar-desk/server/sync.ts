@@ -1,11 +1,11 @@
 import type { PlatformContext } from "@flock/app-sdk";
-import { getCursor, setCursor, upsertEvents, markMissingEvents, markEventsMissing, unmissedEvents, saveEventDetails, detailPlan, detailMissCursor, _db } from "./store";
+import { getCursor, setCursor, upsertEvents, markEventsMissing, unmissedEvents, saveEventDetails, detailPlan, detailMissCursor, _db } from "./store";
 import { normalizeScrape, ymd, type ScrapedEvent } from "./events";
 
 export interface SyncDeps { platform: PlatformContext; now?: () => Date }
 export const DAILY_SCRAPE_CAP = 8;
-/** After a blank read, at most this many stored events are opened one by one to see whether Google still has them. */
-export const BLANK_READ_CHECK_MAX = 10;
+/** Per read, at most this many missing events are opened one by one to ask Google whether they still exist. */
+export const ABSENCE_CHECK_MAX = 10;
 const EXISTS_CHECK_TIMEOUT_MS = 30_000;
 export const KEEP_DAYS_AHEAD = 7;
 const FRESH_MS = 2 * 3600_000;
@@ -48,28 +48,31 @@ export async function syncAccount(accountId: string, deps: SyncDeps, reason: Syn
 }
 
 /**
- * A blank read: Google is asked about each stored event (≤ BLANK_READ_CHECK_MAX). Found → kept; Google can't find
- * it (signed in as its calendar) → a confirmed removal; anything else, or past the cap, or no id → only hidden
- * (missing, unconfirmed: Flock's two-read guard decides).
+ * Owner 2026-10-06: the agenda read can come back blank or half-drawn, so an event missing from it is not taken as
+ * deleted. Its own page is opened (≤ ABSENCE_CHECK_MAX per read): only Google saying it can't find the event, as
+ * that calendar's account, marks it missing (a confirmed removal: its steps go). Found, unsure, no id, or over the
+ * limit → nothing changes and the next read asks again. An event whose Google id is in this read under a new key
+ * (renamed or moved) is superseded: the old row leaves the feed, unconfirmed, and Flock's moved-event rules apply.
  */
-async function checkAfterBlankRead(accountId: string, deps: SyncDeps, dates: string[], at: number): Promise<void> {
-  const candidates = unmissedEvents(accountId, dates);
-  const gone: string[] = [], hidden: string[] = [];
+async function checkAbsences(accountId: string, deps: SyncDeps, dates: string[], rows: { eventKey: string; googleEventId?: string | null }[], at: number): Promise<void> {
+  const presentKeys = new Set(rows.map((r) => r.eventKey));
+  const presentIds = new Set(rows.map((r) => r.googleEventId).filter(Boolean));
+  const absent = unmissedEvents(accountId, dates).filter((e) => !presentKeys.has(e.eventKey));
+  const gone: string[] = [], superseded: string[] = [];
   let checks = 0, kept = 0;
-  for (const e of candidates) {
-    if (!e.googleEventId || checks >= BLANK_READ_CHECK_MAX) { hidden.push(e.eventKey); continue; }
+  for (const e of absent) {
+    if (e.googleEventId && presentIds.has(e.googleEventId)) { superseded.push(e.eventKey); continue; }
+    if (!e.googleEventId || checks >= ABSENCE_CHECK_MAX) continue;
     checks++;
     const r = await deps.platform.connectors.exec<{ ok?: boolean; exists?: boolean }>({
       skillId: "google-calendar", functionName: "getEvent", accountHint: accountId,
       params: { eid: e.googleEventId, check: true }, timeoutMs: EXISTS_CHECK_TIMEOUT_MS,
     });
-    if (r.ok && r.data?.ok === true && r.data.exists === true) kept++;
-    else if (r.ok && r.data?.ok === true && r.data.exists === false) gone.push(e.eventKey);
-    else hidden.push(e.eventKey);
+    if (r.ok && r.data?.ok === true && r.data.exists === false) gone.push(e.eventKey); else kept++;
   }
   markEventsMissing(accountId, gone, at, true);
-  markEventsMissing(accountId, hidden, at, false);
-  if (candidates.length) console.log(`[calendar-desk] blank read ${accountId}: checked ${checks} event(s) — ${kept} still there, ${gone.length} removed, ${hidden.length} unconfirmed`);
+  markEventsMissing(accountId, superseded, at, false);
+  if (absent.length) console.log(`[calendar-desk] ${absent.length} event(s) missing from the read for ${accountId}: ${superseded.length} renamed/moved, ${checks} checked — ${gone.length} gone, ${kept} kept`);
 }
 
 async function runSync(accountId: string, deps: SyncDeps, reason: SyncReason, opts: { forceDetailIds?: string[] }) {
@@ -111,11 +114,9 @@ async function runSync(accountId: string, deps: SyncDeps, reason: SyncReason, op
   // probe for a day (detailPlan). Any details clear it. Events in skipIds were not asked for, so they don't count.
   if (rows.some((r) => r.details)) setCursor(detailMissCursor(accountId), "");
   else if (plan.max > 0 && rows.some((r) => !r.allDay && !(r.googleEventId && plan.skipIds.includes(r.googleEventId)))) setCursor(detailMissCursor(accountId), String(at));
-  // A partly unreadable page, or one cut off at maxResults, says nothing reliable about absence. A page with no
-  // rows at all (not even filtered noise) may be a blank page after a browser error (2026-10-06, the Hampi stay):
-  // each stored event is checked on its own instead.
-  if (norm.skipped === 0 && res.data.events.length > 0 && res.data.events.length < MAX_RESULTS) markMissingEvents(accountId, dateRange(now), rows.map((r) => r.eventKey), at);
-  else if (res.data.events.length === 0) await checkAfterBlankRead(accountId, deps, dateRange(now), at);
+  // A read cut off at maxResults says nothing about the events past the cut; any other read is followed by
+  // asking Google about each stored event it didn't show.
+  if (res.data.events.length < MAX_RESULTS) await checkAbsences(accountId, deps, dateRange(now), rows, at);
   _db.query("DELETE FROM events WHERE account_id = ? AND source = 'google' AND (local_date < ? OR (missing_since IS NOT NULL AND missing_since < ?))").run(accountId, ymd(new Date(at - 86_400_000)), at - 2 * 86_400_000);
   setCursor(`last_sync:${accountId}`, String(at));
   setCursor(`fault:${accountId}`, "");

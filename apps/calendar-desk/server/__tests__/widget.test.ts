@@ -135,7 +135,7 @@ describe("horizon lists removed events (owner 2026-10-06: a deleted event's step
     expect((await feed("/api/widget/horizon")).removed).toEqual([]);
     expect("removed" in (await feed("/api/widget/today"))).toBe(false);
   });
-  test("an event a blank read hid is off the feed but not in `removed`", async () => {
+  test("a superseded (renamed or moved) event is off the feed but not in `removed`", async () => {
     S.upsertEvents("a", [g("hampi", 6)], Date.now());
     S.markMissingEvents("a", [day(6)], [], Date.now(), false);
     const h = await feed("/api/widget/horizon");

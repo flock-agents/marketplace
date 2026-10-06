@@ -181,13 +181,13 @@ export function unmissedEvents(accountId: string, localDates: string[]): { event
     .all(accountId, ...localDates) as { event_key: string; google_event_id: string | null }[]).map((r) => ({ eventKey: r.event_key, googleEventId: r.google_event_id }));
 }
 
-/** `confirmed`: the event is known gone (a read that saw rows, or Google said so); otherwise it is only hidden. */
+/** `confirmed`: Google said it can't find the event (a removal); unconfirmed = superseded by a renamed/moved copy. */
 export function markEventsMissing(accountId: string, eventKeys: string[], at: number, confirmed: boolean): void {
   const upd = db.query("UPDATE events SET missing_since = ?, missing_confirmed = ? WHERE account_id = ? AND event_key = ? AND missing_since IS NULL");
   for (const k of eventKeys) upd.run(at, confirmed ? 1 : 0, accountId, k);
 }
 
-/** `confirmed`: the read saw rows, so an absence is a removal; a blank read hides the day without confirming one. */
+/** Marks every stored event on these dates that is not in `presentKeys` (tests and seeding; sync asks Google per event). */
 export function markMissingEvents(accountId: string, localDates: string[], presentKeys: string[], at: number, confirmed = true): number {
   const keys = new Set(presentKeys);
   const gone = unmissedEvents(accountId, localDates).map((r) => r.eventKey).filter((k) => !keys.has(k));

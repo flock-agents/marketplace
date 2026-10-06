@@ -4,7 +4,7 @@ import { mkdtempSync } from "fs"; import { tmpdir } from "os"; import { join } f
 import { ok, type PlatformContext } from "@flock/app-sdk";
 process.env.APP_DATA_DIR = mkdtempSync(join(tmpdir(), "calendar-desk-sync-"));
 const S = await import("../store");
-const { syncAccount, shouldScrape, DAILY_SCRAPE_CAP, lastFault, MAX_RESULTS, BLANK_READ_CHECK_MAX } = await import("../sync");
+const { syncAccount, shouldScrape, DAILY_SCRAPE_CAP, lastFault, MAX_RESULTS, ABSENCE_CHECK_MAX } = await import("../sync");
 
 const NOW = new Date(2026, 9, 5, 9, 0);
 function platform(answer: (req: any) => any): { ctx: PlatformContext; calls: any[] } {
@@ -20,14 +20,14 @@ function platform(answer: (req: any) => any): { ctx: PlatformContext; calls: any
 beforeEach(() => { for (const t of ["events", "cursors"]) S._db.exec(`DELETE FROM ${t}`); });
 
 describe("syncAccount", () => {
-  test("stores the scrape, asks for today, and marks events that vanished", async () => {
-    const p = platform(() => ok({ ok: true, events: [{ title: "Standup", time: "9:30 – 10am", date: "Mon, 5 Oct" }], source: "browser_session" }));
+  test("stores the scrape, asks for today, and marks events Google says are gone", async () => {
+    const p = platform(() => ok({ ok: true, events: [{ eventId: "su", title: "Standup", time: "9:30 – 10am", date: "Mon, 5 Oct" }], source: "browser_session" }));
     const r = await syncAccount("acct", { platform: p.ctx, now: () => NOW }, "scheduled");
     expect(r).toMatchObject({ ok: true, events: 1, fault: null });
     expect(p.calls[0]).toMatchObject({ skillId: "google-calendar", functionName: "listEvents", accountHint: "acct", params: { timeMin: "2026-10-05" } });
     expect(p.calls[0].timeoutMs).toBeGreaterThanOrEqual(45_000);
-    // Next scrape: Standup gone, Review present → Standup missing, not deleted.
-    const p2 = platform(() => ok({ ok: true, events: [{ title: "Review", time: "11am", date: "Mon, 5 Oct" }] }));
+    // Next scrape: Standup absent and Google can't find it → missing, not deleted.
+    const p2 = platform((req) => req.functionName === "getEvent" ? ok({ ok: true, exists: false }) : ok({ ok: true, events: [{ title: "Review", time: "11am", date: "Mon, 5 Oct" }] }));
     await syncAccount("acct", { platform: p2.ctx, now: () => new Date(NOW.getTime() + 3 * 3600_000) }, "pre-prep");
     const all = S.listEvents({ fromDate: "2026-10-05", toDate: "2026-10-12", includeMissing: true });
     expect(all.find((e) => e.title === "Standup")!.missingSince).not.toBeNull();
@@ -47,9 +47,9 @@ describe("syncAccount", () => {
     expect(lastFault("acct")).toMatch(/login/);
     expect(S.listEvents({ fromDate: "2026-10-05", toDate: "2026-10-05" }).length).toBe(1);
   });
-  test("all rows filtered: ok, 0 events, stored rows marked missing, no fault", async () => {
-    await syncAccount("acct", { platform: platform(() => ok({ ok: true, events: [{ title: "Standup", time: "9:30am", date: "Mon, 5 Oct" }] })).ctx, now: () => NOW }, "scheduled");
-    const r = await syncAccount("acct", { platform: platform(() => ok({ ok: true, events: [{ title: "Diwali", date: "Mon, 5 Oct", allDay: true, calendar: "Holidays in India" }] })).ctx, now: () => new Date(NOW.getTime() + 4 * 3600_000) }, "scheduled");
+  test("all rows filtered: ok, 0 events, stored rows Google can't find marked missing, no fault", async () => {
+    await syncAccount("acct", { platform: platform(() => ok({ ok: true, events: [{ eventId: "su", title: "Standup", time: "9:30am", date: "Mon, 5 Oct" }] })).ctx, now: () => NOW }, "scheduled");
+    const r = await syncAccount("acct", { platform: platform((req) => req.functionName === "getEvent" ? ok({ ok: true, exists: false }) : ok({ ok: true, events: [{ title: "Diwali", date: "Mon, 5 Oct", allDay: true, calendar: "Holidays in India" }] })).ctx, now: () => new Date(NOW.getTime() + 4 * 3600_000) }, "scheduled");
     expect(r).toMatchObject({ ok: true, events: 0, fault: null });
     expect(lastFault("acct")).toBeNull();
     const all = S.listEvents({ fromDate: "2026-10-05", toDate: "2026-10-12", includeMissing: true });
@@ -85,23 +85,10 @@ describe("syncAccount", () => {
     expect(all.length).toBe(1);
     expect(all[0]!.missingSince).toBeNull();
   });
-  test("an honest empty scrape clears the day", async () => {
-    await syncAccount("acct", { platform: platform(() => ok({ ok: true, events: [{ title: "Standup", time: "9:30am", date: "Mon, 5 Oct" }] })).ctx, now: () => NOW }, "scheduled");
-    await syncAccount("acct", { platform: platform(() => ok({ ok: true, events: [] })).ctx, now: () => new Date(NOW.getTime() + 4 * 3600_000) }, "scheduled");
+  test("an honest empty scrape clears the day once Google confirms each event is gone", async () => {
+    await syncAccount("acct", { platform: platform(() => ok({ ok: true, events: [{ eventId: "su", title: "Standup", time: "9:30am", date: "Mon, 5 Oct" }] })).ctx, now: () => NOW }, "scheduled");
+    await syncAccount("acct", { platform: platform((req) => req.functionName === "getEvent" ? ok({ ok: true, exists: false }) : ok({ ok: true, events: [] })).ctx, now: () => new Date(NOW.getTime() + 4 * 3600_000) }, "scheduled");
     expect(S.listEvents({ fromDate: "2026-10-05", toDate: "2026-10-05" }).length).toBe(0);
-  });
-  test("only a read that saw rows confirms a removal; a blank read hides the day but confirms nothing (2026-10-06 Hampi)", async () => {
-    await syncAccount("acct", { platform: platform(() => ok({ ok: true, events: [{ title: "Standup", time: "9:30am", date: "Mon, 5 Oct" }, { title: "Review", time: "11am", date: "Mon, 5 Oct" }] })).ctx, now: () => NOW }, "scheduled");
-    await syncAccount("acct", { platform: platform(() => ok({ ok: true, events: [{ title: "Review", time: "11am", date: "Mon, 5 Oct" }] })).ctx, now: () => new Date(NOW.getTime() + 3 * 3600_000) }, "scheduled");
-    await syncAccount("acct", { platform: platform(() => ok({ ok: true, events: [] })).ctx, now: () => new Date(NOW.getTime() + 6 * 3600_000) }, "scheduled");
-    const all = S.listEvents({ fromDate: "2026-10-05", toDate: "2026-10-12", includeMissing: true });
-    const of = (t: string) => all.find((e) => e.title === t)!;
-    expect([of("Standup").missingConfirmed, of("Review").missingConfirmed]).toEqual([true, false]);
-    expect(of("Review").missingSince).not.toBeNull();
-    // Seen again: the missing mark and its confirmation clear together.
-    await syncAccount("acct", { platform: platform(() => ok({ ok: true, events: [{ title: "Review", time: "11am", date: "Mon, 5 Oct" }] })).ctx, now: () => new Date(NOW.getTime() + 9 * 3600_000) }, "scheduled");
-    const back = S.listEvents({ fromDate: "2026-10-05", toDate: "2026-10-12", includeMissing: true }).find((e) => e.title === "Review")!;
-    expect([back.missingSince, back.missingConfirmed]).toEqual([null, false]);
   });
   test("a partly unreadable page upserts what parsed and withdraws nothing", async () => {
     await syncAccount("acct", { platform: platform(() => ok({ ok: true, events: [{ title: "Standup", time: "9:30am", date: "Mon, 5 Oct" }] })).ctx, now: () => NOW }, "scheduled");
@@ -257,38 +244,55 @@ describe("attempt back-off and in-flight guard (R33)", () => {
   });
 });
 
-describe("a blank read checks each event before calling it removed (2026-10-06)", () => {
+describe("an event missing from a read is checked with Google (owner 2026-10-06)", () => {
   const LATER = () => new Date(NOW.getTime() + 4 * 3600_000);
   const seed = async (n: number, extra: any[] = []) => {
     const events = [...Array.from({ length: n }, (_, i) => ({ title: `E${i}`, time: `${(i % 12) + 1}pm`, date: "Mon, 5 Oct", eventId: `id${i}` })), ...extra];
     await syncAccount("acct", { platform: platform(() => ok({ ok: true, events })).ctx, now: () => NOW }, "scheduled");
   };
   const state = () => Object.fromEntries(S.listEvents({ fromDate: "2026-10-05", toDate: "2026-10-12", includeMissing: true })
-    .map((e) => [e.title, e.missingSince == null ? "present" : e.missingConfirmed ? "removed" : "hidden"]));
-  test("found stays, not found is a removal, an uncertain answer or no id only hides", async () => {
-    await seed(3, [{ title: "No id", time: "11pm", date: "Mon, 5 Oct" }]);
-    const answers: Record<string, any> = { id0: ok({ ok: true, exists: true }), id1: ok({ ok: true, exists: false }), id2: { ok: false, reason: "UNKNOWN: Could not tell" } };
-    const p = platform((req) => req.functionName === "listEvents" ? ok({ ok: true, events: [] }) : answers[req.params.eid]);
+    .map((e) => [e.title, e.missingSince == null ? "present" : e.missingConfirmed ? "removed" : "superseded"]));
+  const read = (events: any[], answers: Record<string, any> = {}) => platform((req) => req.functionName === "listEvents" ? ok({ ok: true, events }) : answers[req.params.eid]);
+  const checked = (p: { calls: any[] }) => p.calls.filter((c) => c.functionName === "getEvent").map((c) => c.params.eid);
+
+  test("only Google saying it can't find the event removes it; found, unsure or no id changes nothing", async () => {
+    await seed(4, [{ title: "No id", time: "11pm", date: "Mon, 5 Oct" }]);
+    const p = read([{ title: "E3", time: "4pm", date: "Mon, 5 Oct", eventId: "id3" }],
+      { id0: ok({ ok: true, exists: true }), id1: ok({ ok: true, exists: false }), id2: { ok: false, reason: "UNKNOWN: Could not tell" } });
     const r = await syncAccount("acct", { platform: p.ctx, now: LATER }, "scheduled");
     expect(r.ok).toBe(true);
-    const checks = p.calls.filter((c) => c.functionName === "getEvent");
-    expect(checks.map((c) => [c.skillId, c.accountHint, c.params])).toEqual(["id0", "id1", "id2"].map((eid) => ["google-calendar", "acct", { eid, check: true }]));
-    expect(state()).toEqual({ E0: "present", E1: "removed", E2: "hidden", "No id": "hidden" });
+    expect(p.calls.filter((c) => c.functionName === "getEvent").map((c) => [c.skillId, c.accountHint, c.params]))
+      .toEqual(["id0", "id1", "id2"].map((eid) => ["google-calendar", "acct", { eid, check: true }]));
+    expect(state()).toEqual({ E0: "present", E1: "removed", E2: "present", E3: "present", "No id": "present" });
   });
-  test(`at most ${10} checks per blank read; the rest only hide`, async () => {
-    expect(BLANK_READ_CHECK_MAX).toBe(10);
-    await seed(12);
-    const p = platform((req) => req.functionName === "listEvents" ? ok({ ok: true, events: [] }) : ok({ ok: true, exists: false }));
-    await syncAccount("acct", { platform: p.ctx, now: LATER }, "scheduled");
-    expect(p.calls.filter((c) => c.functionName === "getEvent").length).toBe(10);
-    const v = Object.values(state());
-    expect([v.filter((x) => x === "removed").length, v.filter((x) => x === "hidden").length]).toEqual([10, 2]);
-  });
-  test("a read that saw rows confirms absences itself, with no checks", async () => {
+  test("a blank read is the same rule: every event is checked on its own", async () => {
     await seed(2);
-    const p = platform(() => ok({ ok: true, events: [{ title: "E0", time: "1pm", date: "Mon, 5 Oct", eventId: "id0" }] }));
+    const p = read([], { id0: ok({ ok: true, exists: true }), id1: ok({ ok: true, exists: false }) });
     await syncAccount("acct", { platform: p.ctx, now: LATER }, "scheduled");
-    expect(p.calls.some((c) => c.functionName === "getEvent")).toBe(false);
     expect(state()).toEqual({ E0: "present", E1: "removed" });
+  });
+  test("an unsure answer is asked again on the next read", async () => {
+    await seed(1);
+    const p1 = read([{ title: "Other", time: "9pm", date: "Mon, 5 Oct", eventId: "o" }], { id0: { ok: false, reason: "BROWSER_ERROR" } });
+    await syncAccount("acct", { platform: p1.ctx, now: LATER }, "forced");
+    const p2 = read([{ title: "Other", time: "9pm", date: "Mon, 5 Oct", eventId: "o" }], { id0: ok({ ok: true, exists: false }) });
+    await syncAccount("acct", { platform: p2.ctx, now: () => new Date(LATER().getTime() + 3 * 3600_000) }, "forced");
+    expect([checked(p1), checked(p2), state().E0]).toEqual([["id0"], ["id0"], "removed"]);
+  });
+  test(`at most ${10} checks per read; the rest wait for the next one`, async () => {
+    expect(ABSENCE_CHECK_MAX).toBe(10);
+    await seed(12);
+    const p = read([], Object.fromEntries(Array.from({ length: 12 }, (_, i) => [`id${i}`, ok({ ok: true, exists: false })])));
+    await syncAccount("acct", { platform: p.ctx, now: LATER }, "scheduled");
+    expect(checked(p).length).toBe(10);
+    const v = Object.values(state());
+    expect([v.filter((x) => x === "removed").length, v.filter((x) => x === "present").length]).toEqual([10, 2]);
+  });
+  test("renamed or moved (its Google id is in the read under a new key): the old row leaves the feed, not as a removal, unchecked", async () => {
+    await seed(1);
+    const p = read([{ title: "E0 renamed", time: "5pm", date: "Mon, 5 Oct", eventId: "id0" }]);
+    await syncAccount("acct", { platform: p.ctx, now: LATER }, "scheduled");
+    expect(checked(p)).toEqual([]);
+    expect(state()).toEqual({ E0: "superseded", "E0 renamed": "present" });
   });
 });

@@ -51,8 +51,8 @@ widgetRoutes.get("/api/widget/today", (c) => {
   return c.json({ template: "schedule", date, connected: true, fault: null, connector, items: eventItems(RAIL_DAYS) });
 });
 
-// Google events a clean read that saw rows found gone (markMissingEvents, confirmed), today onward: the planner drops their steps on the
-// first read instead of waiting out a second one (owner 2026-10-06). Rows stay missing ≤2 days before sync deletes them.
+// Google events Google itself said it can't find (sync's checkAbsences, confirmed), today onward: the planner drops
+// their steps on the first read (owner 2026-10-06). Rows stay missing ≤2 days before sync deletes them.
 function removedItems(days: number) {
   return listEvents({ fromDate: daysAhead(0), toDate: daysAhead(days), source: "google", includeMissing: true })
     .filter((e) => e.missingSince != null && e.missingConfirmed).map((e) => ({ id: e.eventKey, date: e.localDate }));
