@@ -50,15 +50,20 @@ Get details for a single user. Params: `{ user: string }`
 ### Channels
 
 #### `channels_list`
-List visible channels (public, private, DMs, group DMs).
+List visible channels (public, private, DMs, group DMs), named the way Slack names them.
 
 Params:
-- `limit` — number of channels (default 100)
-- `cursor` — pagination cursor
+- `limit` — rows per page (default 200)
+- `cursor` — fetch just this one page (for callers that page themselves). Without it, every page is read up to `max_pages`
+- `max_pages` — page cap when reading everything (default 10)
 - `types` — comma-separated: `public_channel,private_channel,mpim,im` (default: all)
-- `sort` — `"name"` | `"members"` | `""` (default: API order)
+- `sort` — `"name"` | `"members"` | `""` (default: by group, then by label)
 
-Returns: `{ channels[], nextCursor, hasMore }`
+Returns: `{ channels[], nextCursor, hasMore, pages }`. Each row keeps Slack's raw `name` (a user id for a DM, `mpdm-…` for a group DM) and adds:
+- `label` — `#general`, `🔒 finance`, `Yogesh Kumar` (DM; `(you)` on your own), `Yogesh, Anil, Priya` (group DM, without you)
+- `group` — `Channels`, `Direct messages` or `Group DMs`
+
+Show people `label`, never the raw `name` of a DM.
 
 ---
 

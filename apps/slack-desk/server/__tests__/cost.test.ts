@@ -13,7 +13,7 @@ import { ok, type PlatformContext } from "@flock/app-sdk";
 process.env.APP_DATA_DIR = mkdtempSync(join(tmpdir(), "slack-desk-cost-"));
 
 const {
-  readConfig, dayKey, harvestOnce, normalizeHistory, attentionOf, tierOf, isWorthRemembering,
+  readConfig, harvestDayKey, DEFAULT_HARVEST_HOUR, harvestOnce, normalizeHistory, attentionOf, tierOf, isWorthRemembering,
   splitOversized, blockHash, toBlock, MAX_MESSAGES_PER_BLOCK,
 } = await import("../harvest");
 const {
@@ -330,9 +330,9 @@ describe("the budget bounds a pass, and an unfinished pass stays resumable", () 
     expect(out.stopReason).toBe("block-budget");
     // THE POINT: a cap with no resumption is just truncation. The day must stay claimable or the
     // surplus is lost rather than deferred — which is how a first landing came to be mostly unread.
-    expect(harvestRanToday(ACCT, dayKey(new Date()))).toBe(false);
+    expect(harvestRanToday(ACCT, harvestDayKey(new Date(), DEFAULT_HARVEST_HOUR))).toBe(false);
     // …and the reads it spent are still recorded, so the resuming pass does not start over.
-    expect(callsSpentToday(ACCT, dayKey(new Date()))).toBeGreaterThan(0);
+    expect(callsSpentToday(ACCT, harvestDayKey(new Date(), DEFAULT_HARVEST_HOUR))).toBeGreaterThan(0);
   });
 
   test("a deferred block ages into priority instead of losing the same lottery forever", async () => {
@@ -351,7 +351,7 @@ describe("the budget bounds a pass, and an unfinished pass stays resumable", () 
     const out = await harvestOnce(ACCT, readConfig({ channels: ["C1"] }), { platform: p.ctx });
     expect(out.stopReason).toBe("extract-failed");
     expect(getLedger(ACCT, "C1:" + ago(300))).toBeNull();
-    expect(harvestRanToday(ACCT, dayKey(new Date()))).toBe(false);
+    expect(harvestRanToday(ACCT, harvestDayKey(new Date(), DEFAULT_HARVEST_HOUR))).toBe(false);
   });
 
   test("a batch reporting failedItems records NONE of it — counts cannot attribute a failure", async () => {
@@ -375,7 +375,7 @@ describe("the budget bounds a pass, and an unfinished pass stays resumable", () 
     } as unknown as PlatformContext;
     const out = await harvestOnce(ACCT, readConfig({ channels: ["C1", "C2", "C3"] }), { platform: ctx });
     expect(out.stopReason).toBe("reads-exhausted");
-    expect(harvestRanToday(ACCT, dayKey(new Date()))).toBe(false);
+    expect(harvestRanToday(ACCT, harvestDayKey(new Date(), DEFAULT_HARVEST_HOUR))).toBe(false);
   });
 
   test("ONE refusing channel is still not the whole run", async () => {
@@ -561,7 +561,7 @@ describe("a failing extract batch does not abandon the ones after it", () => {
     expect((_db.query("SELECT COUNT(*) AS n FROM ledger WHERE text_hash IS NOT NULL").get() as any).n).toBe(4);
     // A partial pass is not a failed one, but the day stays owed so the rest is retried.
     expect(out.stopReason).toBe("batches-failed");
-    expect(harvestRanToday(ACCT, dayKey(new Date()))).toBe(false);
+    expect(harvestRanToday(ACCT, harvestDayKey(new Date(), DEFAULT_HARVEST_HOUR))).toBe(false);
   });
 
   test("when every batch fails it IS a failed pass, and nothing is recorded", async () => {
