@@ -1,5 +1,6 @@
 import type { PlatformContext } from "@flock/app-sdk";
-import { getCursor, setCursor, upsertEvents, markEventsMissing, unmissedEvents, saveEventDetails, detailPlan, detailMissCursor, _db } from "./store";
+import { getCursor, setCursor, upsertEvents, markEventsMissing, unmissedEvents, getEvent, saveEventDetails, detailPlan, detailMissCursor, _db } from "./store";
+import { withdrawStepsOf } from "./step-upkeep";
 import { normalizeScrape, ymd, type ScrapedEvent } from "./events";
 
 export interface SyncDeps { platform: PlatformContext; now?: () => Date }
@@ -68,7 +69,9 @@ async function checkAbsences(accountId: string, deps: SyncDeps, dates: string[],
     });
     if (r.ok && r.data?.ok === true && r.data.exists === false) gone.push(e.eventKey); else kept++;
   }
+  const titles = new Map(gone.map((k) => [k, getEvent(accountId, k)?.title ?? ""]));
   markEventsMissing(accountId, gone, at, true);
+  for (const k of gone) await withdrawStepsOf(deps.platform, accountId, k, titles.get(k) || "An event");
   if (absent.length) console.log(`[calendar-desk] ${absent.length} event(s) missing from the read for ${accountId}: ${checks} checked — ${gone.length} gone, ${kept} kept`);
 }
 
