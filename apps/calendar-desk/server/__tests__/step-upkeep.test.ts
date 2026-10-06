@@ -10,10 +10,10 @@ const { handlePlanReport } = await import("../plan-report");
 beforeEach(() => { for (const t of ["events", "cursors", "planned", "plans", "plan_steps"]) S._db.exec(`DELETE FROM ${t}`); });
 const NOW = new Date(2026, 9, 6, 12, 0, 0);
 const TITLE = "Stay at The Loft - Aadhya Homestay Hampi";
-function platform(getEventExists = false) {
+function platform(getEventExists = false, wd?: (ref: string) => any) {
   const published: any[] = [], withdrawn: any[] = [];
   const ctx = { configured: true,
-    tasks: { publish: async (t: any) => { published.push(t); return ok({}); }, withdraw: async (ref: string, o: any) => { withdrawn.push([ref, o]); return ok({}); },
+    tasks: { publish: async (t: any) => { published.push(t); return ok({}); }, withdraw: async (ref: string, o: any) => { withdrawn.push([ref, o]); return wd ? wd(ref) : ok({}); },
       list: async () => ok({ tasks: [] }) },
     connectors: { exec: async (req: any) => req.functionName === "getEvent" ? ok({ ok: true, exists: getEventExists }) : ok({ ok: true, events: [{ title: "Other", time: "11am", date: "Tue, 6 Oct" }] }) },
   } as unknown as PlatformContext;
@@ -64,5 +64,38 @@ describe("step upkeep", () => {
     await handlePlanReport({ planId: pl2.planId, events: [{ event: "e1", steps: [pack("2026-10-08")] }] }, p.ctx, NOW);
     expect(p.published.length).toBe(2);
     expect(p.published[1]).toMatchObject({ sourceRef: "step:g1:pack", due: new Date(2026, 9, 8).getTime(), maxDue: new Date(2026, 9, 9, 23, 59, 59, 999).getTime() });
+  });
+  test("a withdraw that fails once keeps its key and is withdrawn on the next sync", async () => {
+    seed("g1", "2026-10-07"); P.markPlanned([{ accountId: "acct", eventKey: "g1", date: "2026-10-07", startAt: null }], 1);
+    P.recordStep("acct", "g1", "pack");
+    let fail = true;
+    const p = platform(false, () => fail ? { ok: false, reason: "down" } : ok({}));
+    await syncAccount("acct", { platform: p.ctx, now: () => NOW }, "scheduled");
+    expect(P.stepKeysFor("acct", "g1")).toEqual(["pack"]);
+    expect(P.plannedMark("acct", "g1")).not.toBeNull();
+    fail = false;
+    await syncAccount("acct", { platform: p.ctx, now: () => new Date(NOW.getTime() + 3 * 3600_000) }, "scheduled");
+    expect(p.withdrawn.length).toBe(2);
+    expect(P.stepKeysFor("acct", "g1")).toEqual([]);
+    expect(P.plannedMark("acct", "g1")).toBeNull();
+  });
+  test("a throwing withdraw does not stop the other gone event's withdrawal", async () => {
+    seed("g1", "2026-10-07"); seed("g2", "2026-10-07"); P.recordStep("acct", "g1", "pack"); P.recordStep("acct", "g2", "pack");
+    const p = platform(false, (ref) => { if (ref === "step:g1:pack") throw new Error("boom"); return ok({}); });
+    const orig = console.warn; console.warn = () => {};
+    try { await syncAccount("acct", { platform: p.ctx, now: () => NOW }, "scheduled"); } finally { console.warn = orig; }
+    expect(P.stepKeysFor("acct", "g1")).toEqual(["pack"]);
+    expect(P.stepKeysFor("acct", "g2")).toEqual([]);
+    expect(p.withdrawn.map((w) => w[0])).toContain("step:g2:pack");
+  });
+  test("an absent event with no Google id, or over the check limit, never withdraws", async () => {
+    S.upsertEvents("acct", [{ eventKey: "noid", calendar: null, title: "x", startAt: null, endAt: null, allDay: true, localDate: "2026-10-07", attendeesText: null, location: null, rawTimeText: null }], NOW.getTime());
+    P.recordStep("acct", "noid", "pack");
+    for (let i = 0; i < 11; i++) { seed(`o${i}`, "2026-10-08"); P.recordStep("acct", `o${i}`, "pack"); }
+    const p = platform(true); // Google still has everything it is asked about
+    await syncAccount("acct", { platform: p.ctx, now: () => NOW }, "scheduled");
+    expect(p.withdrawn).toEqual([]);
+    expect(P.stepKeysFor("acct", "noid")).toEqual(["pack"]);
+    expect(P.stepKeysFor("acct", "o10")).toEqual(["pack"]);
   });
 });

@@ -138,6 +138,21 @@ export function stepKeysFor(accountId: string, eventKey: string): string[] {
   return (db.query("SELECT step_key FROM plan_steps WHERE account_id = ? AND event_key = ? ORDER BY rowid").all(accountId, eventKey) as { step_key: string }[]).map((r) => r.step_key);
 }
 
+/** Forgets one recorded step key; the event's planned mark goes only when no keys remain. */
+export function forgetStep(accountId: string, eventKey: string, stepKey: string): void {
+  db.transaction(() => {
+    db.query("DELETE FROM plan_steps WHERE account_id = ? AND event_key = ? AND step_key = ?").run(accountId, eventKey, stepKey);
+    if (stepKeysFor(accountId, eventKey).length === 0) forgetEvent(accountId, eventKey);
+  })();
+}
+
+/** Recorded step keys of events Google confirmed deleted (missing_confirmed = 1), for a withdrawal that failed earlier. */
+export function pendingWithdrawals(accountId: string): { eventKey: string; stepKey: string }[] {
+  return (db.query(`SELECT s.event_key, s.step_key FROM plan_steps s JOIN events e ON e.account_id = s.account_id AND e.event_key = s.event_key
+    WHERE s.account_id = ? AND e.missing_confirmed = 1 ORDER BY s.rowid`).all(accountId) as { event_key: string; step_key: string }[])
+    .map((r) => ({ eventKey: r.event_key, stepKey: r.step_key }));
+}
+
 /** Forgets the event's mark, tries and step keys: one that comes back is planned afresh. */
 export function forgetEvent(accountId: string, eventKey: string): void {
   db.transaction(() => {

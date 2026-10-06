@@ -1,6 +1,6 @@
 import type { PlatformContext } from "@flock/app-sdk";
 import { getCursor, setCursor, upsertEvents, markEventsMissing, unmissedEvents, getEvent, saveEventDetails, detailPlan, detailMissCursor, _db } from "./store";
-import { withdrawStepsOf } from "./step-upkeep";
+import { withdrawStepsOf, retryPendingWithdrawals } from "./step-upkeep";
 import { normalizeScrape, ymd, type ScrapedEvent } from "./events";
 
 export interface SyncDeps { platform: PlatformContext; now?: () => Date }
@@ -116,6 +116,8 @@ async function runSync(accountId: string, deps: SyncDeps, reason: SyncReason, op
   else if (plan.max > 0 && rows.some((r) => !r.allDay && !(r.googleEventId && plan.skipIds.includes(r.googleEventId)))) setCursor(detailMissCursor(accountId), String(at));
   // A read cut off at maxResults says nothing about the events past the cut; any other read is followed by
   // asking Google about each stored event it didn't show.
+  // Steps whose withdrawal failed on an earlier read are retried first, so a failure just now waits for the next read.
+  await retryPendingWithdrawals(deps.platform, accountId);
   if (res.data.events.length < MAX_RESULTS) await checkAbsences(accountId, deps, dateRange(now), rows, at);
   _db.query("DELETE FROM events WHERE account_id = ? AND source = 'google' AND (local_date < ? OR (missing_since IS NOT NULL AND missing_since < ?))").run(accountId, ymd(new Date(at - 86_400_000)), at - 2 * 86_400_000);
   setCursor(`last_sync:${accountId}`, String(at));
