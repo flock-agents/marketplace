@@ -22,7 +22,7 @@ export const localMs = (date: string, time = "00:00") => { const [y, m, d] = dat
 export const NOW = localMs(TODAY, "07:50");
 
 export interface Step { key: string; title: string; dueDate: string; dueTime?: string; showFrom?: string; why: string }
-export interface ExistingStep { key: string; title: string; duePlus: number; showPlus?: number; closed?: true }
+export interface ExistingStep { key: string; title: string; duePlus: number; dueTime?: string; showPlus?: number; closed?: true }
 export interface Guest { email: string; name?: string; rsvp?: "yes" | "no" | "maybe" | "awaiting" }
 export interface EventSpec {
   ref: string; title: string; source: "google" | "memory"; plus: number; date: string; time?: string; facts: string[]; guests?: Guest[]; location?: string;
@@ -82,7 +82,6 @@ const holiday = ev("e1", { title: "Gandhi Jayanti (holiday)", source: "google", 
 const checkin = (due: number, show = due) => step("checkin", "Web check-in: 6E-512", D(due), D(show));
 const HAMPI = "Stay at The Loft - Homestay Hampi (Day 1 of 3)";
 const hampi = () => ev("e1", { title: HAMPI, source: "google", plus: 7, steps: [{ key: "travel", title: "Arrange travel to Hampi", duePlus: 6, showPlus: 4 }, { key: "pack", title: "Pack for Hampi trip", duePlus: 6, showPlus: 4 }] });
-const KNOWN_HAMPI = new Set(["travel", "pack"]);
 const GUESTS_YOGESH: Guest[] = [{ name: "Yogesh", email: "yogesh@crafo.ai", rsvp: "yes" }, { email: "ravi@acme.com", rsvp: "awaiting" }];
 const LOFT = ev("e1", { title: "Stay at The Loft - Aadhya Homestay Hampi (Day 1 of 3)", source: "google", plus: 6, location: "Huligi, Karnataka 583234, India" });
 
@@ -91,6 +90,7 @@ export const PLAN_CASES: PlanCase[] = [
     id: "flight-in-2-days", events: [flight2],
     expect: (o) => {
       const p: string[] = [];
+      if (stepsFor(o, "e1").length !== 1) p.push(`flight-in-2-days: ${stepsFor(o, "e1").length} steps for e1, expected exactly 1`);
       if (!stepsFor(o, "e1").some((s) => CHECK_IN.test(text(s)))) p.push("flight-in-2-days: no check-in step");
       return [...p, ...stepDateProblems("flight-in-2-days", o, flight2)];
     },
@@ -238,7 +238,7 @@ export const PLAN_CASES: PlanCase[] = [
   },
   {
     id: "changed-event-redates-same-step",
-    events: [ev("e1", { title: FLIGHT, source: "memory", plus: 4, time: "06:10", movedFrom: { plus: 2, time: "06:10" }, steps: [{ key: "checkin", title: "Web check-in: 6E-512", duePlus: 1, showPlus: 1 }] })],
+    events: [ev("e1", { title: FLIGHT, source: "memory", plus: 4, time: "06:10", movedFrom: { plus: 2, time: "06:10" }, steps: [{ key: "checkin", title: "Web check-in: 6E-512", duePlus: 1, dueTime: "20:00", showPlus: 1 }] })],
     expect: (o) => {
       const p: string[] = [];
       const steps = stepsFor(o, "e1");
@@ -364,16 +364,17 @@ export const PLAN_CASES: PlanCase[] = [
       .map((id) => `same-place-is-not-the-same-occasion: ${id} ("Go to the Inprime office") was tied to the Calendar app review e1`),
     answer: none,
   },
-  // --- an event that already has its steps (core's "planned" cases): offered here as a new event with `steps` made ---------
-  // Core offered already-planned events only for linking; Calendar Desk offers an event once, so the equivalent is an event
-  // whose own steps exist: a new TODO about it is tied, an unrelated one is not, and no step is added.
+  // --- an event that already has its steps (core's "planned" cases) ---------------------------------------------------
+  // A real already-planned, unchanged event is never re-offered by Calendar Desk (core offered it only for linking). These two
+  // present it anyway, with its steps listed and change "new" (the bundle needs a value), to test that the agent adds nothing
+  // when existing steps already cover the event: it did not move, so e1 gets steps: [] (any step, even a re-dated one, fails).
   {
     id: "new-todo-ties-to-event-with-steps", events: [hampi()],
     todos: [{ id: "task-o1-site", title: "Finish launch website before Hampi trip", duePlus: 5, by: "you" }],
     expect: (o) => {
       const p: string[] = [];
       if (!tieFor(o, "task-o1-site", "e1")) p.push("new-todo-ties-to-event-with-steps: o1 is not tied to the Hampi stay e1");
-      for (const s of stepsFor(o, "e1")) if (!KNOWN_HAMPI.has(s.key)) p.push(`new-todo-ties-to-event-with-steps: new step "${s.key}" for an event that already has its steps`);
+      if (stepsFor(o, "e1").length) p.push(`new-todo-ties-to-event-with-steps: steps for an event whose steps already cover it: ${stepsFor(o, "e1").map((s) => s.key).join(", ")}`);
       return p;
     },
     answer: { steps: { e1: [] }, ties: [{ todo: "task-o1-site", ref: "e1" }] },
@@ -383,7 +384,7 @@ export const PLAN_CASES: PlanCase[] = [
     todos: [{ id: "task-o1-gym", title: "Renew gym membership", duePlus: 20, by: "you" }],
     expect: (o) => {
       const p: string[] = [];
-      for (const s of stepsFor(o, "e1")) if (!KNOWN_HAMPI.has(s.key)) p.push(`event-with-steps-gets-no-new-steps: new step "${s.key}" for an event that already has its steps`);
+      if (stepsFor(o, "e1").length) p.push(`event-with-steps-gets-no-new-steps: steps for an event whose steps already cover it: ${stepsFor(o, "e1").map((s) => s.key).join(", ")}`);
       if (tieFor(o, "task-o1-gym", "e1")) p.push("event-with-steps-gets-no-new-steps: the unrelated gym TODO was tied to the Hampi stay");
       return p;
     },

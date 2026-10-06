@@ -19,10 +19,13 @@ const ENABLED = process.env.LIVE_EVALS === "1" && !!FLOCK;
 const RUNS = 2;
 const TIMEOUT = 150_000;
 
-// The planning store opens its database on import, and flock's modules want a scratch DATA_DIR: both before any import below.
-process.env.APP_DATA_DIR ??= mkdtempSync(join(tmpdir(), "calendar-desk-eval-"));
-process.env.DATA_DIR ??= mkdtempSync(join(tmpdir(), "flock-eval-data-"));
-const { PLAN_CASES } = await import("./fixtures");
+// The planning store opens its database on import, and flock's modules want a scratch DATA_DIR: both are set before any
+// import, and only when the evals are enabled, so a disabled run touches nothing.
+if (ENABLED) {
+  process.env.APP_DATA_DIR ??= mkdtempSync(join(tmpdir(), "calendar-desk-eval-"));
+  process.env.DATA_DIR ??= mkdtempSync(join(tmpdir(), "flock-eval-data-"));
+}
+const PLAN_CASES = ENABLED ? (await import("./fixtures")).PLAN_CASES : [];
 
 let H: typeof import("./harness");
 let live: { callInternalLLM: any; compilePaPrompt: (label: string) => Promise<string>; SONNET: string } | null = null;
@@ -42,6 +45,7 @@ beforeAll(async () => {
 });
 
 describe.skipIf(!ENABLED)("Calendar Desk planner (live)", () => {
+  if (!ENABLED) test("skipped: set LIVE_EVALS=1 and FLOCK_APP_DIR", () => {});
   for (const c of PLAN_CASES) {
     test(c.id, async () => {
       let passed = 0;

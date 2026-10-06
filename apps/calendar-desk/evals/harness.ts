@@ -51,7 +51,7 @@ export async function plan(c: PlanCase): Promise<Planned> {
     else if (e.movedFrom) { const old = at(e.movedFrom.plus, e.movedFrom.time); P.markPlanned([{ accountId: ACCOUNT, eventKey: key, date: old.localDate, startAt: old.startAt }], nowMs - 86400_000); }
     for (const s of e.steps ?? []) {
       P.recordStep(ACCOUNT, key, s.key);
-      states.push({ sourceRef: `step:${key}:${s.key}`, status: s.closed ? "dismissed" : "open", title: s.title, due: localMs(isoAdd(TODAY, s.duePlus)), dueTimed: false, showFrom: s.showPlus != null ? localMs(isoAdd(TODAY, s.showPlus)) : null, updatedAt: nowMs });
+      states.push({ sourceRef: `step:${key}:${s.key}`, status: s.closed ? "dismissed" : "open", title: s.title, due: localMs(isoAdd(TODAY, s.duePlus), s.dueTime), dueTimed: !!s.dueTime, showFrom: s.showPlus != null ? localMs(isoAdd(TODAY, s.showPlus)) : null, updatedAt: nowMs });
     }
   }
   let payload: any = null;
@@ -109,9 +109,7 @@ export function extractCalls(text: string): Call[] | null {
 export function callsFor(c: PlanCase, pl: Planned): Call[] {
   const a: Answer = c.answer;
   const calls: Call[] = a.ties.map((t) => ({ method: "PATCH", path: `/api/internal/todos/${t.todo}`, body: { event: pl.pointerOf[t.ref] } }));
-  const bundleRef = (fixtureRef: string) => Object.entries(pl.refOf).find(([, f]) => f === fixtureRef)![0];
   calls.push({ method: "POST", path: "/api/apps/calendar-desk/ops/plan_events_done", body: { planId: pl.payload.planId, events: pl.payload.events.map((be: any) => ({ event: be.ref, steps: a.steps[pl.refOf[be.ref]!] ?? [] })) } });
-  void bundleRef;
   return calls;
 }
 
