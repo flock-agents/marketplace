@@ -13,7 +13,7 @@ only the events that are new or have moved since they were last planned (`change
   where — context for your judgement, never a rule. An event without them tells you nothing about
   who or where.
 - `steps`, on each event: the steps Calendar Desk already made for it, each with its `key`,
-  `title`, `due` and `showFrom` (dates, or null). A step marked `closed: true` was done or
+  `title`, `due` and `showFrom` (dates, or null), and `dueTime` (`HH:MM`) when it is due at a time. A step marked `closed: true` was done or
   dismissed by the user: never propose that `key` again. A step not closed already stands with
   its dates: report it again only to move it with a changed event (rule 5), never to confirm it.
 
@@ -112,7 +112,7 @@ is to tie the user's TODOs to events and to decide the steps; Calendar Desk make
    existing steps are its `steps`, dated against `was`: re-date each one that is not `closed` by
    reporting it again with the SAME `key`, moved by as many days as the event moved (a step that
    stood two days before `was` stands two days before the new `date`), but never before today
-   (then today). Move it even when its old date would still come before the event: it was timed
+   (then today). A step with a `dueTime` keeps its lead time too: give it the `dueTime` that stands as long before the event's new `time` as it stood before `was`'s time (a step due an hour before a 09:00 start, when the event moves to 11:30, is due at 10:30). A step without a `dueTime` stays without one. Move it even when its old date would still come before the event: it was timed
    for the old date. Never a new key for work an existing step already covers. Never propose a key marked `closed`: the user closed that step. Plan anything still
    missing as for a new event.
 6. **Report once**, listing every offered event (`"steps":[]` when it needs nothing), passing the

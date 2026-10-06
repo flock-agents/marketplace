@@ -7,10 +7,11 @@ const { PLAN_CASES, TODAY, isoAdd } = await import("../../evals/fixtures");
 const H = await import("../../evals/harness");
 
 describe("planner eval fixtures", () => {
-  test("27 cases with unique ids", () => {
-    expect(PLAN_CASES.length).toBe(27);
-    expect(new Set(PLAN_CASES.map((c) => c.id)).size).toBe(27);
+  test("28 cases with unique ids", () => {
+    expect(PLAN_CASES.length).toBe(28);
+    expect(new Set(PLAN_CASES.map((c) => c.id)).size).toBe(28);
     expect(PLAN_CASES.map((c) => c.id)).toContain("multi-day-stay-gets-a-packing-step");
+    expect(PLAN_CASES.map((c) => c.id)).toContain("moved-timed-step-keeps-lead-time");
   });
   for (const c of PLAN_CASES) {
     test(`${c.id}: its own answer passes the grader`, async () => {
@@ -26,6 +27,12 @@ describe("planner eval fixtures", () => {
     expect(payload.events[0]).toMatchObject({ ref: "e1", change: "changed", allDay: false, time: "06:10", was: { date: isoAdd(TODAY, 2), time: "06:10" }, steps: [{ key: "checkin", title: "Web check-in: 6E-512" }] });
     expect(payload.events[0].event).toStartWith("calendar-desk:");
   });
+  test("a timed existing step shows its time in the bundle", async () => {
+    const c = PLAN_CASES.find((x) => x.id === "moved-timed-step-keeps-lead-time")!;
+    const { payload } = await H.plan(c);
+    expect(payload.events[0].steps[0]).toMatchObject({ key: "cab", dueTime: "17:30" });
+    expect(payload.events[0].was).toMatchObject({ time: "18:00" });
+  });
   test("a reply without calls, or with a bad step, fails", async () => {
     const c = PLAN_CASES[0]!;
     const pl = await H.plan(c);
@@ -34,7 +41,7 @@ describe("planner eval fixtures", () => {
     expect((await H.grade(c, pl, bad)).some((p) => p.startsWith("refused e1/x"))).toBe(true);
   });
   test("a do-nothing answer fails the cases that need a step", async () => {
-    for (const id of ["flight-in-2-days", "multi-day-stay-gets-a-packing-step", "birthday-close-family"]) {
+    for (const id of ["flight-in-2-days", "multi-day-stay-gets-a-packing-step", "birthday-close-family", "moved-timed-step-keeps-lead-time"]) {
       const c = PLAN_CASES.find((x) => x.id === id)!;
       const pl = await H.plan(c);
       const empty = [{ method: "POST", path: "/api/apps/calendar-desk/ops/plan_events_done", body: { planId: pl.payload.planId, events: pl.payload.events.map((e: any) => ({ event: e.ref, steps: [] })) } }];

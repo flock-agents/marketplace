@@ -276,6 +276,26 @@ export const PLAN_CASES: PlanCase[] = [
     },
     answer: { steps: { e1: [step("cab", "Book a cab to the dentist", D(9), D(9))] }, ties: [] },
   },
+  // A timed step keeps its lead time when its event moves to another day AND another time (live 2026-10-07).
+  {
+    id: "moved-timed-step-keeps-lead-time",
+    events: [ev("e1", { title: "Dinner with Arjun Example", source: "google", plus: 4, time: "14:15", location: "Olive Table, Indiranagar",
+      movedFrom: { plus: 3, time: "18:00" },
+      steps: [{ key: "cab", title: "Book a cab to Olive Table, Indiranagar", duePlus: 3, dueTime: "17:30", showPlus: 3 }] })],
+    expect: (o) => {
+      const p: string[] = [];
+      const steps = stepsFor(o, "e1");
+      const cab = steps.filter((s) => s.key === "cab");
+      if (cab.length !== 1) p.push(`moved-timed-step-keeps-lead-time: expected the existing "cab" step re-dated once, got ${cab.length}`);
+      for (const s of cab) {
+        if (s.dueDate !== D(4)) p.push(`moved-timed-step-keeps-lead-time: "cab" dueDate ${s.dueDate}, expected the event's new day ${D(4)}`);
+        if (s.dueTime !== "13:45") p.push(`moved-timed-step-keeps-lead-time: "cab" dueTime ${s.dueTime ?? "(none)"}, expected 13:45 (30 min before the new 14:15 start)`);
+      }
+      for (const s of steps) if (s.key !== "cab" && CAB.test(titleOf(s))) p.push(`moved-timed-step-keeps-lead-time: a new key "${s.key}" for the cab "cab" covers`);
+      return [...p, ...stepDateProblems("moved-timed-step-keeps-lead-time", o, { date: D(4), ref: "e1" })];
+    },
+    answer: { steps: { e1: [step("cab", "Book a cab to Olive Table, Indiranagar", D(4), D(4), "13:45")] }, ties: [] },
+  },
   // A recurring event: the earlier session's step shows in the user's TODOs already tied to ITS event, so it is never tied
   // to the new one; the new session gets its own cab under the same key (owner 2026-10-05).
   {
