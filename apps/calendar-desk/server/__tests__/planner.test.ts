@@ -146,6 +146,20 @@ describe("runPlanning", () => {
       { key: "cab", title: "Book a cab", due: "2026-10-11", showFrom: null },
     ]);
   });
+
+  test("an existing timed step carries its time; an all-day one has none", async () => {
+    seed("g1", "Dinner", "2026-10-10", new Date(2026, 9, 10, 18, 0).getTime());
+    P.markPlanned([{ accountId: "acct", eventKey: "g1", date: "2026-10-09", startAt: new Date(2026, 9, 9, 18, 0).getTime() }], NOW.getTime() - HOUR);
+    const p = platform({ tasks: [
+      { sourceRef: "step:g1:cab", status: "open", title: "Book a cab", due: new Date(2026, 9, 10, 17, 30).getTime(), dueTimed: true, showFrom: null, updatedAt: 0 },
+      { sourceRef: "step:g1:gift", status: "open", title: "Buy a gift", due: new Date(2026, 9, 10).getTime(), dueTimed: false, showFrom: null, updatedAt: 0 },
+    ] });
+    await runPlanning(p.ctx, NOW);
+    const steps = p.intents[0].payload.events[0].steps;
+    expect(steps[0]).toEqual({ key: "cab", title: "Book a cab", due: "2026-10-10", showFrom: null, dueTime: "17:30" });
+    expect(steps[1]).toEqual({ key: "gift", title: "Buy a gift", due: "2026-10-10", showFrom: null });
+    expect("dueTime" in steps[1]).toBe(false);
+  });
 });
 
 describe("withdrawn steps", () => {

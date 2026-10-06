@@ -21,7 +21,7 @@ interface PlanningPlatform {
   agent: { intent<T>(name: string, payload: Record<string, unknown>): Promise<Res<T>> };
 }
 
-export interface BundleStep { key: string; title: string; due: string | null; showFrom: string | null; closed?: true }
+export interface BundleStep { key: string; title: string; due: string | null; dueTime?: string; showFrom: string | null; closed?: true }
 export interface BundleEvent {
   ref: string; event: string; title: string; date: string; time?: string; allDay: boolean;
   location?: string; guests?: string[]; change: "new" | "changed";
@@ -48,7 +48,7 @@ export async function runPlanning(platform: PlatformContext, now: Date): Promise
     // A withdrawn step belonged to the event before it was deleted; a restored event is planned afresh, so it is left out.
     const steps = states.filter((s) => s.sourceRef.startsWith(prefix) && !s.sourceRef.slice(prefix.length).includes(":") && !s.withdrawn).map((s): BundleStep => ({
       key: s.sourceRef.slice(prefix.length), title: s.title,
-      due: s.due != null ? ymd(new Date(s.due)) : null, showFrom: s.showFrom != null ? ymd(new Date(s.showFrom)) : null,
+      due: s.due != null ? ymd(new Date(s.due)) : null, ...(s.dueTimed && s.due != null ? { dueTime: hhmm(s.due) } : {}), showFrom: s.showFrom != null ? ymd(new Date(s.showFrom)) : null,
       ...(s.status !== "open" ? { closed: true as const } : {}),
     }));
     events.push({
