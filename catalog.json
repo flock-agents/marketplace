@@ -113,6 +113,27 @@
       "updatedAt": "2026-10-05T00:00:00Z"
     },
     {
+      "slug": "google-calendar",
+      "type": "connector",
+      "name": "Google Calendar",
+      "description": "Read your Google Calendar agenda and event details, and create or update events, through your own signed-in browser session.",
+      "author": "flock",
+      "category": "integration",
+      "tags": [
+        "calendar",
+        "google",
+        "productivity"
+      ],
+      "icon": "icon.svg",
+      "repo": "flock-agents/marketplace",
+      "path": "skills/google-calendar",
+      "latestVersion": "1.0.0",
+      "latestTag": "google-calendar-v1.0.0",
+      "minFlockVersion": "0.11.0",
+      "publishedAt": "2026-10-06T00:00:00Z",
+      "updatedAt": "2026-10-06T00:00:00Z"
+    },
+    {
       "slug": "zepto",
       "type": "connector",
       "name": "Zepto",
