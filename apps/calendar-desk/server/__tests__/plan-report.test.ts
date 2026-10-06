@@ -41,6 +41,67 @@ describe("maxDueOf", () => {
   });
 });
 
+describe("a moved event's other steps get the new limit (final review finding 2)", () => {
+  const ms = (y: number, m: number, d: number, h = 0, mi = 0) => new Date(y, m, d, h, mi).getTime();
+  const openStep = (ref: string, title: string, due: number, showFrom: number | null, dueTimed = false): TaskState => ({ sourceRef: ref, status: "open", title, due, dueTimed, showFrom, updatedAt: 0 });
+  const plannedAt = (key: string, date: string, startAt: number | null = null) => P.markPlanned([{ accountId: "acct", eventKey: key, date, startAt }], NOW.getTime() - 86_400_000);
+
+  test("moved later: a recorded open step the report leaves out is re-published with the new cap only, no dates", async () => {
+    hampi(); plannedAt("g1", "2026-10-10"); P.recordStep("acct", "g1", "cab");
+    const pl = plan("g1");
+    const p = platform({ tasks: [openStep("step:g1:cab", "Book a cab", ms(2026, 9, 9), ms(2026, 9, 8))] });
+    const r: any = await handlePlanReport({ planId: pl.planId, events: [{ event: "e1", steps: [pack] }] }, p.ctx, NOW);
+    expect(r).toEqual({ accepted: ["e1/pack"], refused: [], done: true });
+    expect(p.published.map((t) => t.sourceRef)).toEqual(["step:g1:pack", "step:g1:cab"]);
+    expect(p.published[1]).toEqual({ sourceRef: "step:g1:cab", title: "Book a cab", maxDue: ms(2026, 9, 12, 23, 59) + 59_999, maxDueReason: "Stay at The Loft - Aadhya Homestay Hampi, Mon 12 Oct" });
+  });
+
+  test("moved earlier past a step's due: the due comes back to the event's day (date only), show-from with it", async () => {
+    seed("g2", "Dentist", "2026-10-09", ms(2026, 9, 9, 18, 0)); plannedAt("g2", "2026-10-12", ms(2026, 9, 12, 18, 0)); P.recordStep("acct", "g2", "cab");
+    const pl = plan("g2");
+    const p = platform({ tasks: [openStep("step:g2:cab", "Book a cab", ms(2026, 9, 11, 8, 0), ms(2026, 9, 10), true)] });
+    const r: any = await handlePlanReport({ planId: pl.planId, events: [{ event: "e1", steps: [] }] }, p.ctx, NOW);
+    expect(r).toEqual({ accepted: [], refused: [], done: true });
+    expect(p.published).toEqual([{ sourceRef: "step:g2:cab", title: "Book a cab", maxDue: ms(2026, 9, 9, 18, 0), maxDueReason: "Dentist, Fri 9 Oct 18:00",
+      due: ms(2026, 9, 9), dueTimed: false, showFrom: "2026-10-09" }]);
+  });
+
+  test("moved earlier, the step still fits: only the cap; a show-from already before the new day is kept", async () => {
+    seed("g2", "Dentist", "2026-10-09", ms(2026, 9, 9, 18, 0)); plannedAt("g2", "2026-10-12", ms(2026, 9, 12, 18, 0)); P.recordStep("acct", "g2", "cab");
+    const pl = plan("g2");
+    const p = platform({ tasks: [openStep("step:g2:cab", "Book a cab", ms(2026, 9, 8), ms(2026, 9, 7))] });
+    await handlePlanReport({ planId: pl.planId, events: [{ event: "e1", steps: [] }] }, p.ctx, NOW);
+    expect(p.published).toEqual([{ sourceRef: "step:g2:cab", title: "Book a cab", maxDue: ms(2026, 9, 9, 18, 0), maxDueReason: "Dentist, Fri 9 Oct 18:00" }]);
+  });
+
+  test("re-reported, closed and unrecorded steps are not touched again", async () => {
+    hampi(); plannedAt("g1", "2026-10-10"); P.recordStep("acct", "g1", "pack"); P.recordStep("acct", "g1", "done-one");
+    const pl = plan("g1");
+    const p = platform({ tasks: [
+      openStep("step:g1:pack", "Pack", ms(2026, 9, 9), null),
+      { ...closedTask("step:g1:done-one", "done") },
+      openStep("step:g1:stranger", "Not ours", ms(2026, 9, 9), null),
+    ] });
+    await handlePlanReport({ planId: pl.planId, events: [{ event: "e1", steps: [pack] }] }, p.ctx, NOW);
+    expect(p.published.map((t) => t.sourceRef)).toEqual(["step:g1:pack"]);
+  });
+
+  test("a cap update Flock refuses is reported and leaves the event unplanned for the next run, with no bad report", async () => {
+    hampi(); plannedAt("g1", "2026-10-10"); P.recordStep("acct", "g1", "cab");
+    const pl = plan("g1");
+    let n = 0;
+    const p = platform({ tasks: [openStep("step:g1:cab", "Book a cab", ms(2026, 9, 9), null)], publish: () => (++n === 1 ? ok({}) : failed("nope")) });
+    const r: any = await handlePlanReport({ planId: pl.planId, events: [{ event: "e1", steps: [pack] }] }, p.ctx, NOW);
+    expect(r.accepted).toEqual(["e1/pack"]);
+    expect(r.refused).toHaveLength(1);
+    expect(r.refused[0].item).toBe("e1/cab");
+    expect(r.refused[0].reason).toMatch(/^could not update its limit: /);
+    expect(r.done).toBe(false);
+    expect(P.plannedMark("acct", "g1")!.date).toBe("2026-10-10");
+    expect(P.openPlan()!.badReports).toBe(0);
+  });
+});
+
 describe("handlePlanReport", () => {
   test("Hampi example: published, recorded, planned, plan answered", async () => {
     hampi(); const pl = plan("g1"); const p = platform();

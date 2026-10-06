@@ -5,10 +5,10 @@ import type { PlatformContext, OpError, AppTask } from "@flock/app-sdk";
 import { getEvent, type EventRow } from "./store";
 import { ymd } from "./events";
 import { pointer } from "./planner";
-import { openPlan, plannedMark, markPlanned, recordStep, noteBadReport, answerPlan, abandonPlan, BAD_REPORTS_MAX, type PlanRecord, type PlanEventRef } from "./planning-store";
+import { openPlan, plannedMark, markPlanned, recordStep, stepKeysFor, noteBadReport, answerPlan, abandonPlan, BAD_REPORTS_MAX, type PlanRecord, type PlanEventRef } from "./planning-store";
 
 // `withdrawn`: a dismissed row Calendar Desk itself withdrew (its event was deleted), not one the owner closed.
-type AppTaskState = { sourceRef: string; status: "open" | "done" | "dismissed"; withdrawn?: true };
+export type StepState = { sourceRef: string; status: "open" | "done" | "dismissed"; withdrawn?: true; title: string; due: number | null; showFrom: number | null };
 const MAX_REASON = 120;
 const MAX_STEPS_PER_EVENT = 3, MAX_WHY = 500, MAX_TITLE = 200;
 const KEY = /^[a-z0-9-]{1,40}$/;
@@ -58,6 +58,39 @@ export function stepTask(e: EventRow, s: StepSpec): AppTask {
     showFrom: s.showFrom ?? s.dueDate, status: "backlog", maxDue, maxDueReason,
     context: { eventKey: pointer(e.eventKey), why: s.why },
   };
+}
+
+/**
+ * A step already published for the event, brought to the event's current limit: the cap and its reason only, its dates
+ * left as they are. If the event moved earlier than the step's due, Flock would refuse the cap, so the due comes back
+ * to the event's day (date only) and a show-from after it with it: the step stays on the board, on the last day it can
+ * still be done, rather than keep a limit that protects nothing.
+ */
+export function capUpdate(e: EventRow, t: StepState): AppTask {
+  const { maxDue, maxDueReason } = maxDueOf(e);
+  const out: AppTask = { sourceRef: t.sourceRef, title: t.title, maxDue, maxDueReason };
+  if (t.due != null && t.due > maxDue) {
+    const day = localAt(e.localDate);
+    out.due = day; out.dueTimed = false;
+    if (t.showFrom != null && t.showFrom > day) out.showFrom = e.localDate;
+  }
+  return out;
+}
+
+/** Re-publishes the limit of every open step Calendar Desk recorded for the event, except `skip` (just published in full).
+ *  Returns the ones Flock did not take. */
+export async function refreshStepCaps(platform: PlatformContext, e: EventRow, states: StepState[], skip: Set<string>): Promise<{ key: string; reason: string }[]> {
+  const prefix = `step:${e.eventKey}:`;
+  const recorded = new Set(stepKeysFor(e.accountId, e.eventKey));
+  const failed: { key: string; reason: string }[] = [];
+  for (const t of states) {
+    if (t.status !== "open" || !t.sourceRef.startsWith(prefix)) continue;
+    const key = t.sourceRef.slice(prefix.length);
+    if (!recorded.has(key) || skip.has(key)) continue;
+    const res = await platform.tasks.publish(capUpdate(e, t));
+    if (!res.ok) failed.push({ key, reason: (res as any).reason ?? "unknown" });
+  }
+  return failed;
 }
 
 /** Why a step is unusable, or null. `closed` = keys the owner already closed; `seen` = keys earlier in this entry. */
@@ -111,7 +144,7 @@ export async function handlePlanReport(p: Record<string, unknown>, platform: Pla
     if (steps.length > MAX_STEPS_PER_EVENT) { refused.push({ item: ref.ref, reason: `at most ${MAX_STEPS_PER_EVENT} steps per event` }); bad++; continue; }
 
     const prefix = `step:${ev.eventKey}:`;
-    const listed = await (platform as any).tasks.list({ prefix }) as { ok: boolean; data?: { tasks: AppTaskState[] }; reason?: string };
+    const listed = await (platform as any).tasks.list({ prefix }) as { ok: boolean; data?: { tasks: StepState[] }; reason?: string };
     if (!listed.ok) return err("TASKS_UNAVAILABLE", `could not read existing steps: ${listed.reason ?? "unknown"}`, 503);
     const existing = listed.data!.tasks.filter((t) => t.sourceRef.startsWith(prefix) && !t.sourceRef.slice(prefix.length).includes(":"));
     // A step Calendar Desk withdrew is not the owner's close: an event restored in Google gets it again.
@@ -136,7 +169,12 @@ export async function handlePlanReport(p: Record<string, unknown>, platform: Pla
       recordStep(ev.accountId, ev.eventKey, s.key);
       accepted.push(item);
     }
-    if (allOk) markPlanned([{ accountId: ref.accountId, eventKey: ref.eventKey, date: ref.date, startAt: ref.startAt }], now.getTime());
+    if (!allOk) continue;
+    // A moved or renamed event: the steps the report left out still carry the old limit. A refused update is the
+    // platform's answer, not a bad report: the event stays unplanned and is offered again next run.
+    const capFails = await refreshStepCaps(platform, ev, existing, seen);
+    for (const f of capFails) refused.push({ item: `${ref.ref}/${f.key}`, reason: `could not update its limit: ${f.reason}` });
+    if (capFails.length === 0) markPlanned([{ accountId: ref.accountId, eventKey: ref.eventKey, date: ref.date, startAt: ref.startAt }], now.getTime());
   }
 
   // Everything planned answers the plan, whatever else was refused; only then do bad reports count toward giving up.

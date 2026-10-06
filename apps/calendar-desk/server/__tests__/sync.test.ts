@@ -4,6 +4,7 @@ import { mkdtempSync } from "fs"; import { tmpdir } from "os"; import { join } f
 import { ok, type PlatformContext } from "@flock/app-sdk";
 process.env.APP_DATA_DIR = mkdtempSync(join(tmpdir(), "calendar-desk-sync-"));
 const S = await import("../store");
+const P = await import("../planning-store");
 const { syncAccount, shouldScrape, DAILY_SCRAPE_CAP, lastFault, MAX_RESULTS, ABSENCE_CHECK_MAX } = await import("../sync");
 
 const NOW = new Date(2026, 9, 5, 9, 0);
@@ -295,5 +296,43 @@ describe("an event missing from a read is checked with Google (owner 2026-10-06)
     expect(checked(p)).toEqual([]);
     const rows = S.listEvents({ fromDate: "2026-10-05", toDate: "2026-10-12", includeMissing: true });
     expect(rows.map((e) => [e.eventKey, e.title, e.missingSince])).toEqual([["id0", "E0 renamed", null]]);
+  });
+});
+
+describe("a renamed planned event re-publishes its steps' limit reason (final review finding 2)", () => {
+  const LATER = () => new Date(NOW.getTime() + 4 * 3600_000);
+  function planningPlatform(events: any[], tasks: any[]) {
+    const published: any[] = [];
+    const base = platform((req) => req.functionName === "listEvents" ? ok({ ok: true, events }) : ok({ ok: true, exists: true }));
+    (base.ctx as any).tasks = {
+      publish: async (t: any) => { published.push(t); return ok(undefined); },
+      withdraw: async () => ok(undefined),
+      list: async (o: { prefix?: string } = {}) => ok({ tasks: tasks.filter((t) => t.sourceRef.startsWith(o.prefix ?? "")) }),
+    };
+    return { ...base, published };
+  }
+  const cab = { sourceRef: "step:id0:cab", status: "open", title: "Book a cab", due: new Date(2026, 9, 5).getTime(), dueTimed: false, showFrom: null, updatedAt: 0 };
+  beforeEach(() => { for (const t of ["planned", "plans", "plan_steps"]) S._db.exec(`DELETE FROM ${t}`); });
+  async function seedPlanned() {
+    await syncAccount("acct", { platform: platform(() => ok({ ok: true, events: [{ title: "Physio", time: "5pm", date: "Mon, 5 Oct", eventId: "id0" }] })).ctx, now: () => NOW }, "scheduled");
+    const e = S.getEvent("acct", "id0")!;
+    P.markPlanned([{ accountId: "acct", eventKey: "id0", date: e.localDate, startAt: e.startAt }], NOW.getTime());
+    P.recordStep("acct", "id0", "cab");
+  }
+
+  test("same time, new title: each open recorded step gets the cap with the new title", async () => {
+    await seedPlanned();
+    const p = planningPlatform([{ title: "Physio session", time: "5pm", date: "Mon, 5 Oct", eventId: "id0" }], [cab]);
+    await syncAccount("acct", { platform: p.ctx, now: LATER }, "scheduled");
+    expect(p.published).toEqual([{ sourceRef: "step:id0:cab", title: "Book a cab", maxDue: new Date(2026, 9, 5, 17, 0).getTime(), maxDueReason: "Physio session, Mon 5 Oct 17:00" }]);
+  });
+
+  test("unchanged title, or renamed and moved (the planning run re-dates it): nothing published here", async () => {
+    await seedPlanned();
+    const same = planningPlatform([{ title: "Physio", time: "5pm", date: "Mon, 5 Oct", eventId: "id0" }], [cab]);
+    await syncAccount("acct", { platform: same.ctx, now: LATER }, "scheduled");
+    const moved = planningPlatform([{ title: "Physio session", time: "6pm", date: "Mon, 5 Oct", eventId: "id0" }], [cab]);
+    await syncAccount("acct", { platform: moved.ctx, now: () => new Date(LATER().getTime() + 3 * 3600_000) }, "scheduled");
+    expect([same.published, moved.published]).toEqual([[], []]);
   });
 });

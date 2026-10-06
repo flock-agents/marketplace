@@ -1,6 +1,6 @@
 import type { PlatformContext } from "@flock/app-sdk";
 import { getCursor, setCursor, upsertEvents, markEventsMissing, unmissedEvents, getEvent, saveEventDetails, detailPlan, detailMissCursor, _db } from "./store";
-import { withdrawStepsOf, retryPendingWithdrawals } from "./step-upkeep";
+import { withdrawStepsOf, retryPendingWithdrawals, refreshRenamedSteps } from "./step-upkeep";
 import { normalizeScrape, ymd, type ScrapedEvent } from "./events";
 
 export interface SyncDeps { platform: PlatformContext; now?: () => Date }
@@ -107,6 +107,7 @@ async function runSync(accountId: string, deps: SyncDeps, reason: SyncReason, op
   }
   const rows = norm.rows.filter((r) => r.localDate >= day && dateRange(now).includes(r.localDate));
   const at = now.getTime();
+  const renamed = rows.filter((r) => { const was = getEvent(accountId, r.eventKey)?.title; return was != null && was !== r.title; }).map((r) => r.eventKey);
   upsertEvents(accountId, rows, at);
   // An event without details (not asked, or its popover failed) keeps what was stored.
   for (const r of rows) if (r.details) saveEventDetails(accountId, r.eventKey, r.details, at, r.location);
@@ -118,6 +119,7 @@ async function runSync(accountId: string, deps: SyncDeps, reason: SyncReason, op
   // asking Google about each stored event it didn't show.
   // Steps whose withdrawal failed on an earlier read are retried first, so a failure just now waits for the next read.
   await retryPendingWithdrawals(deps.platform, accountId);
+  if (renamed.length) await refreshRenamedSteps(deps.platform, accountId, renamed);
   if (res.data.events.length < MAX_RESULTS) await checkAbsences(accountId, deps, dateRange(now), rows, at);
   _db.query("DELETE FROM events WHERE account_id = ? AND source = 'google' AND (local_date < ? OR (missing_since IS NOT NULL AND missing_since < ?))").run(accountId, ymd(new Date(at - 86_400_000)), at - 2 * 86_400_000);
   setCursor(`last_sync:${accountId}`, String(at));

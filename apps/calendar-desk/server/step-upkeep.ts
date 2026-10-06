@@ -1,8 +1,10 @@
 // A planned event Google confirmed deleted: its steps are withdrawn from the owner's TODOs and the event is forgotten.
-// (A moved event needs nothing here: eventsToPlan offers it again as "changed" and its report re-publishes the steps.)
+// A moved event is offered again as "changed"; its report re-publishes every step's limit (plan-report refreshStepCaps).
+// A renamed one that kept its time is not re-offered, so its steps' limit reason is re-published here.
 import type { PlatformContext } from "@flock/app-sdk";
-import { stepKeysFor, forgetStep, forgetEvent, pendingWithdrawals } from "./planning-store";
+import { stepKeysFor, forgetStep, forgetEvent, pendingWithdrawals, plannedMark } from "./planning-store";
 import { getEvent } from "./store";
+import { refreshStepCaps, type StepState } from "./plan-report";
 
 type Withdraw = (sourceRef: string, opts?: { reason?: string }) => Promise<{ ok: boolean }>;
 
@@ -32,6 +34,24 @@ export async function retryPendingWithdrawals(platform: PlatformContext, account
   for (const { eventKey, stepKey } of pendingWithdrawals(accountId)) {
     const title = getEvent(accountId, eventKey)?.title || "An event";
     if (await withdrawOne(platform, accountId, eventKey, stepKey, title)) n++;
+  }
+  return n;
+}
+
+/** Events renamed in this read: a planned one whose date and time did not change gets its open steps' limit re-published,
+ *  since the reason Flock shows carries the title. One that also moved is left to the planning run. */
+export async function refreshRenamedSteps(platform: PlatformContext, accountId: string, eventKeys: string[]): Promise<number> {
+  type List = (o: { prefix?: string }) => Promise<{ ok: true; data: { tasks: StepState[] } } | { ok: false; reason: string }>;
+  let n = 0;
+  for (const k of eventKeys) {
+    const ev = getEvent(accountId, k), mark = plannedMark(accountId, k);
+    if (!ev || !mark || stepKeysFor(accountId, k).length === 0) continue;
+    if (mark.date !== ev.localDate || mark.startAt !== (ev.allDay ? null : ev.startAt)) continue;
+    const listed = await (platform.tasks as unknown as { list: List }).list({ prefix: `step:${k}:` });
+    if (!listed.ok) { console.warn(`[calendar-desk] renamed ${k}: could not read its steps: ${listed.reason}`); continue; }
+    const failed = await refreshStepCaps(platform, ev, listed.data.tasks, new Set());
+    for (const f of failed) console.warn(`[calendar-desk] renamed ${k}: step ${f.key} kept its old limit: ${f.reason}`);
+    n++;
   }
   return n;
 }
