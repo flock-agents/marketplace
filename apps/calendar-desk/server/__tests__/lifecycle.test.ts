@@ -105,3 +105,57 @@ describe("tick — event planning", () => {
     expect(readRoutineState().planEnabled).toBe(true);
   });
 });
+
+describe("initialize — plans right after the first read", () => {
+  const NOW = () => new Date(2026, 9, 5, 10, 30);
+  const wipe = () => { for (const t of ["planned", "plans", "plan_steps"]) S._db.exec(`DELETE FROM ${t}`); S.setCursor("routines", "{}"); };
+  const planCalls = (p: { intents: any[] }) => p.intents.filter((i) => i.name === "plan_events");
+  const init = (p: any, extra: Record<string, unknown> = {}) => calendarDeskHooks.initialize({ reason: "onboarding", accountIds: ["acct"], platform: p.ctx, now: NOW, ...extra } as any);
+  beforeEach(wipe);
+
+  test("a first read that finishes done plans at once", async () => {
+    const p = platform(() => ok({ ok: true, events: [] }));
+    await init(p, { enabledRoutines: ["event-planning"] });
+    expect(planCalls(p)).toHaveLength(1);
+  });
+  test("planning off: no plan", async () => {
+    const p = platform(() => ok({ ok: true, events: [] }));
+    await init(p, { enabledRoutines: ["meeting-prep"] });
+    expect(planCalls(p)).toHaveLength(0);
+  });
+  test("a failed read: no plan", async () => {
+    const p = platform(() => ({ ok: false, reason: "guard_busy" }));
+    await init(p, { enabledRoutines: ["event-planning"] });
+    expect(planCalls(p)).toHaveLength(0);
+  });
+  test("older platform: falls back to the tick snapshot", async () => {
+    const { storeRoutineState } = await import("../scheduler");
+    const a = platform(() => ok({ ok: true, events: [] }));
+    await init(a);
+    expect(planCalls(a)).toHaveLength(0);
+    S._db.exec("DELETE FROM init_state");
+    storeRoutineState([{ id: "x", appRoutineId: "event-planning", trigger: {} }]);
+    const b = platform(() => ok({ ok: true, events: [] }));
+    await init(b);
+    expect(planCalls(b)).toHaveLength(1);
+  });
+  test("an account already done is not a first read", async () => {
+    S.markInitStarted("acct"); S.markInitFinished("acct", "done");
+    const p = platform(() => ok({ ok: true, events: [] }));
+    await init(p, { enabledRoutines: ["event-planning"] });
+    expect(planCalls(p)).toHaveLength(0);
+  });
+  test("guards hold: a young open plan blocks a second wake", async () => {
+    const P = await import("../planning-store");
+    P.createPlan([{ ref: "r", accountId: "acct", eventKey: "k", date: "2026-10-06", startAt: null }], NOW().getTime() - 30 * 60_000);
+    const p = platform(() => ok({ ok: true, events: [] }));
+    await init(p, { enabledRoutines: ["event-planning"] });
+    expect(planCalls(p)).toHaveLength(0);
+  });
+  test("a planning throw does not fail initialize", async () => {
+    const p = platform(() => ok({ ok: true, events: [] }));
+    (p.ctx as any).agent.intent = async () => { throw new Error("boom"); };
+    await init(p, { enabledRoutines: ["event-planning"] });
+    expect(S.listInit()[0]).toMatchObject({ outcome: "done" });
+  });
+});

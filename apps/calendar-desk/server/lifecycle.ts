@@ -1,7 +1,7 @@
 import type { AppLifecycleHooks, ProgressItem } from "@flock/app-sdk";
 import { listInit, markInitStarted, markInitFinished } from "./store";
 import { syncAccount, lastSyncAt, lastFault } from "./sync";
-import { storeRoutineState, routineKey } from "./scheduler";
+import { storeRoutineState, routineKey, readRoutineState } from "./scheduler";
 import { runPlanning } from "./planner";
 import { syncFactEvents } from "./facts";
 
@@ -12,11 +12,21 @@ export const calendarDeskHooks: AppLifecycleHooks = {
   async initialize(ctx) {
     for (const a of ctx.accountIds ?? []) { const rec = listInit().find((r) => r.accountId === a); if (!(rec?.finishedAt && rec.outcome === "done")) markInitStarted(a, "Reading your calendar"); }
     const todo = (ctx.accountIds?.length ? pending().filter((a) => ctx.accountIds!.includes(a)) : pending());
+    const now = ((ctx as any).now as (() => Date) | undefined)?.() ?? new Date();
+    let anyDone = false;
     for (const a of todo) {
       const r = await syncAccount(a, { platform: ctx.platform }, "init");
       markInitFinished(a, r.ok ? "done" : "failed", r.ok ? "Calendar is set up" : "Could not read your calendar yet");
+      if (r.ok) anyDone = true;
     }
-    try { await syncFactEvents(ctx.platform, new Date()); } catch (err: any) { console.warn(`[calendar-desk] fact events: ${err?.message ?? err}`); }
+    try { await syncFactEvents(ctx.platform, now); } catch (err: any) { console.warn(`[calendar-desk] fact events: ${err?.message ?? err}`); }
+    // First read done: plan now instead of waiting for the hourly routine. Only when the owner has planning on
+    // (the platform's list of enabled routines; an older platform sends none, so the last tick's snapshot decides),
+    // and through runPlanning so its guards (open plan, give-up, limits) still apply.
+    const ids = (ctx as any).enabledRoutines as string[] | undefined;
+    if (anyDone && (ids ? ids.includes("event-planning") : readRoutineState().planEnabled)) {
+      try { await runPlanning(ctx.platform, now); } catch (err: any) { console.warn(`[calendar-desk] planning: ${err?.message ?? err}`); }
+    }
   },
   async tick(ctx) {
     storeRoutineState(ctx.readRoutines);
@@ -31,7 +41,7 @@ export const calendarDeskHooks: AppLifecycleHooks = {
       if (rec.outcome === "done" && now.getHours() >= 7 && now.getHours() < 21) await syncAccount(rec.accountId, { platform: ctx.platform, now: () => now }, "light");
     }
     try { await syncFactEvents(ctx.platform, now); } catch (err: any) { console.warn(`[calendar-desk] fact events: ${err?.message ?? err}`); }
-    // Planning runs after this tick's read, when the tick names the routine (it names only due, enabled routines; Run now is a tick too).
+    // Planning runs after this tick's read (initialize also plans once, right after a first read), when the tick names the routine (it names only due, enabled routines; Run now is a tick too).
     if (ctx.readRoutines.some((r) => routineKey(r) === "event-planning")) {
       try { await runPlanning(ctx.platform, now); } catch (err: any) { console.warn(`[calendar-desk] planning: ${err?.message ?? err}`); }
     }
