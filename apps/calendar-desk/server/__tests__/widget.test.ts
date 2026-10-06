@@ -116,3 +116,23 @@ describe("feeds carry event details (Task 9)", () => {
     expect([body.connector, body.fault]).toEqual(["attention", null]);
   });
 });
+
+describe("horizon lists removed events (owner 2026-10-06: a deleted event's steps go at once)", () => {
+  const day = (n: number) => ymd(new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate() + n));
+  const g = (key: string, n: number) => ({ accountId: "a", eventKey: key, title: key, startAt: new Date(`${day(n)}T18:00:00`).getTime(), endAt: null, allDay: false, localDate: day(n), calendar: "primary", attendeesText: null, location: null, rawTimeText: null } as any);
+  const feed = async (path: string) => await (await widgetRoutes.request(path)).json() as any;
+  test("a Google event a clean read marked missing is in `removed` (today included), not in items", async () => {
+    S.upsertEvents("a", [g("dentist", 2), g("physio", 3), g("standup", 0)], Date.now());
+    S.markMissingEvents("a", [day(0), day(2), day(3)], ["physio"], Date.now());
+    const h = await feed("/api/widget/horizon");
+    expect(h.items.map((i: any) => i.id)).toEqual(["physio"]);
+    expect(h.removed).toEqual([{ id: "standup", date: day(0) }, { id: "dentist", date: day(2) }]);
+  });
+  test("an event seen again leaves `removed`; a past one is never listed; /today has no `removed`", async () => {
+    S.upsertEvents("a", [g("back", 2), g("old", -1)], Date.now());
+    S.markMissingEvents("a", [day(-1), day(2)], [], Date.now());
+    S.upsertEvents("a", [g("back", 2)], Date.now());
+    expect((await feed("/api/widget/horizon")).removed).toEqual([]);
+    expect("removed" in (await feed("/api/widget/today"))).toBe(false);
+  });
+});

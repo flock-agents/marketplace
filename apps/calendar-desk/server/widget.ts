@@ -51,5 +51,12 @@ widgetRoutes.get("/api/widget/today", (c) => {
   return c.json({ template: "schedule", date, connected: true, fault: null, connector, items: eventItems(RAIL_DAYS) });
 });
 
+// Google events a clean read found gone (markMissingEvents), today onward: the planner drops their steps on the
+// first read instead of waiting out a second one (owner 2026-10-06). Rows stay missing ≤2 days before sync deletes them.
+function removedItems(days: number) {
+  return listEvents({ fromDate: daysAhead(0), toDate: daysAhead(days), source: "google", includeMissing: true })
+    .filter((e) => e.missingSince != null).map((e) => ({ id: e.eventKey, date: e.localDate }));
+}
+
 // The platform's event planner reads the long horizon: same events, same items, 90 days.
-widgetRoutes.get("/api/widget/horizon", (c) => c.json({ template: "horizon", date: ymd(new Date()), connector: connectorState(), fault: null, items: eventItems(HORIZON_DAYS) }));
+widgetRoutes.get("/api/widget/horizon", (c) => c.json({ template: "horizon", date: ymd(new Date()), connector: connectorState(), fault: null, items: eventItems(HORIZON_DAYS), removed: removedItems(HORIZON_DAYS) }));
