@@ -23,7 +23,10 @@ interface PlanningPlatform {
 export interface BundleStep { key: string; title: string; due: string | null; showFrom: string | null; closed?: true }
 export interface BundleEvent {
   ref: string; event: string; title: string; date: string; time?: string; allDay: boolean;
-  location?: string; guests?: string[]; change: "new" | "changed"; facts: string[]; steps: BundleStep[];
+  location?: string; guests?: string[]; change: "new" | "changed";
+  /** A changed event's date (and time) when it was last planned: its steps were dated against this. */
+  was?: { date: string; time?: string };
+  facts: string[]; steps: BundleStep[];
 }
 export type PlanningResult = { woke: boolean; planId?: string; skipped?: "in-flight" | "nothing" | "usage" | "failed" };
 
@@ -51,7 +54,9 @@ export async function runPlanning(platform: PlatformContext, now: Date): Promise
       ...(e.startAt != null && !e.allDay ? { time: hhmm(e.startAt) } : {}), allDay: e.allDay,
       ...(e.location ? { location: e.location } : {}),
       ...(e.guests?.length ? { guests: e.guests.map((g) => (g.name ? `${g.name} <${g.email}>` : g.email)) } : {}),
-      change: e.change, facts: await factsFor(p, e.title), steps,
+      change: e.change,
+      ...(e.was ? { was: { date: e.was.date, ...(e.was.startAt != null && !e.allDay ? { time: hhmm(e.was.startAt) } : {}) } } : {}),
+      facts: await factsFor(p, e.title), steps,
     });
   }
 

@@ -6,7 +6,10 @@
  * calls it would make (harness.ts). Skipped unless LIVE_EVALS=1 and FLOCK_APP_DIR (a flock-app checkout) is set:
  *
  *   FLOCK_APP_DIR=/path/to/flock/flock-app FLOCK_EVAL_CLAUDE_CONFIG=~/.flock-<instance>/data/claude-config \
- *     LIVE_EVALS=1 bun test ./evals/planner.eval.test.ts
+ *     TMUX_TMPDIR=$(mktemp -d) bun run eval
+ *
+ * (`bun run eval` is `LIVE_EVALS=1 bun test ./evals/planner.eval.test.ts`.) flock's paths.ts refuses a FLOCK_HOME outside
+ * the temp dir in a test run, so an unset FLOCK_HOME is set here to a fresh temp dir; a FLOCK_HOME you set must be one.
  *
  * Never symlink a claude-config: borrow its path with FLOCK_EVAL_CLAUDE_CONFIG. A failing case is fixed in
  * planning-instructions.md (then `bun scripts/embed-instructions.ts`), never by loosening a case.
@@ -19,11 +22,12 @@ const ENABLED = process.env.LIVE_EVALS === "1" && !!FLOCK;
 const RUNS = 2;
 const TIMEOUT = 150_000;
 
-// The planning store opens its database on import, and flock's modules want a scratch DATA_DIR: both are set before any
+// The planning store opens its database on import, and flock's modules want a scratch DATA_DIR and FLOCK_HOME: all are set before any
 // import, and only when the evals are enabled, so a disabled run touches nothing.
 if (ENABLED) {
   process.env.APP_DATA_DIR ??= mkdtempSync(join(tmpdir(), "calendar-desk-eval-"));
   process.env.DATA_DIR ??= mkdtempSync(join(tmpdir(), "flock-eval-data-"));
+  process.env.FLOCK_HOME ??= mkdtempSync(join(tmpdir(), "flock-eval-home-"));
 }
 const PLAN_CASES = ENABLED ? (await import("./fixtures")).PLAN_CASES : [];
 

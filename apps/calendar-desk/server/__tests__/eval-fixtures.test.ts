@@ -3,7 +3,7 @@
 import { describe, test, expect } from "bun:test";
 import { mkdtempSync } from "fs"; import { tmpdir } from "os"; import { join } from "path";
 process.env.APP_DATA_DIR = mkdtempSync(join(tmpdir(), "calendar-desk-eval-fixtures-"));
-const { PLAN_CASES } = await import("../../evals/fixtures");
+const { PLAN_CASES, TODAY, isoAdd } = await import("../../evals/fixtures");
 const H = await import("../../evals/harness");
 
 describe("planner eval fixtures", () => {
@@ -23,7 +23,7 @@ describe("planner eval fixtures", () => {
     const c = PLAN_CASES.find((x) => x.id === "changed-event-redates-same-step")!;
     const { payload } = await H.plan(c);
     expect(Object.keys(payload).sort()).toEqual(["events", "nowLocal", "planId", "timezone", "today"]);
-    expect(payload.events[0]).toMatchObject({ ref: "e1", change: "changed", allDay: false, time: "06:10", steps: [{ key: "checkin", title: "Web check-in: 6E-512" }] });
+    expect(payload.events[0]).toMatchObject({ ref: "e1", change: "changed", allDay: false, time: "06:10", was: { date: isoAdd(TODAY, 2), time: "06:10" }, steps: [{ key: "checkin", title: "Web check-in: 6E-512" }] });
     expect(payload.events[0].event).toStartWith("calendar-desk:");
   });
   test("a reply without calls, or with a bad step, fails", async () => {
@@ -41,8 +41,11 @@ describe("planner eval fixtures", () => {
       expect((await H.grade(c, pl, empty)).length).toBeGreaterThan(0);
     }
   });
-  test("extractCalls reads the first calls block", () => {
+  test("extractCalls reads every calls block, in order", () => {
     expect(H.extractCalls("x\n```calls\n[{\"method\":\"GET\",\"path\":\"/a\"}]\n```")).toEqual([{ method: "GET", path: "/a" }]);
+    expect(H.extractCalls("```calls\n[{\"method\":\"PATCH\",\"path\":\"/t\"}]\n```\n```calls\n[{\"method\":\"POST\",\"path\":\"/r\"}]\n```"))
+      .toEqual([{ method: "PATCH", path: "/t" }, { method: "POST", path: "/r" }]);
+    expect(H.extractCalls("```calls\n[]\n```\n```calls\nnot json\n```")).toBeNull();
     expect(H.extractCalls("no block")).toBeNull();
   });
 });

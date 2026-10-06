@@ -98,11 +98,16 @@ export const HARNESS = `\n\n## Evaluation harness\nYou have no tools in this eva
 
 export const userMessage = (c: PlanCase, pl: Planned) => `${intentMessage(pl.payload)}\n\nReply to \`flock-api GET /api/internal/todos\`:\n\`\`\`json\n${todosReply(c, pl)}\n\`\`\``;
 
-/** The calls in the model's reply: the first ```calls block, parsed; null when absent or not a JSON array. */
+/** The calls in the model's reply: every ```calls block, parsed and joined in order (a live agent makes its calls one after
+ *  another, so a tie written in its own block before the report is still made); null when there is none or one is not a JSON array. */
 export function extractCalls(text: string): Call[] | null {
-  const m = text.match(/```calls\s*\n([\s\S]*?)```/);
-  if (!m) return null;
-  try { const v = JSON.parse(m[1]!); return Array.isArray(v) ? v : null; } catch { return null; }
+  const blocks = [...text.matchAll(/```calls\s*\n([\s\S]*?)```/g)];
+  if (!blocks.length) return null;
+  const calls: Call[] = [];
+  for (const m of blocks) {
+    try { const v = JSON.parse(m[1]!); if (!Array.isArray(v)) return null; calls.push(...v); } catch { return null; }
+  }
+  return calls;
 }
 
 /** The calls a correct answer to the case would make (the fixture's own `answer`). */

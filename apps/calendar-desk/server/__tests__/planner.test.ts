@@ -51,6 +51,23 @@ describe("runPlanning", () => {
     expect(plan.events).toEqual([{ ref: "e1", accountId: "acct", eventKey: "g1", date: "2026-10-12", startAt: null }]);
   });
 
+  test("a changed event carries `was`, the date and time it was planned at; a new one has none", async () => {
+    const start = new Date(2026, 9, 10, 6, 10).getTime();
+    seed("g3", "Flight", "2026-10-10", start);
+    P.markPlanned([{ accountId: "acct", eventKey: "g3", date: "2026-10-08", startAt: new Date(2026, 9, 8, 6, 10).getTime() }], NOW.getTime() - HOUR);
+    seed("g4", "Stay", "2026-10-12");
+    P.markPlanned([{ accountId: "acct", eventKey: "g4", date: "2026-10-11", startAt: null }], NOW.getTime() - HOUR);
+    seed("g5", "Dentist", "2026-10-13");
+    const p = platform();
+    await runPlanning(p.ctx, NOW);
+    const [flight, stay, dentist] = p.intents[0].payload.events;
+    expect(flight).toMatchObject({ change: "changed", date: "2026-10-10", time: "06:10", was: { date: "2026-10-08", time: "06:10" } });
+    expect(stay).toMatchObject({ change: "changed", was: { date: "2026-10-11" } });
+    expect(stay.was.time).toBeUndefined();
+    expect(dentist.change).toBe("new");
+    expect(dentist.was).toBeUndefined();
+  });
+
   test("a timed event carries its time, location and guests", async () => {
     const start = new Date(2026, 9, 9, 9, 30).getTime();
     seed("g2", "Dentist", "2026-10-09", start, { location: "Sunrise Dental, Jayanagar", guests: [{ email: "desk@sunrise.example", name: "Sunrise Desk" }, { email: "x@y.example" }] });

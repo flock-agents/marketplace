@@ -42,13 +42,14 @@ const waitCursor = (accountId: string, eventKey: string) => `details_wait:${acco
 
 /**
  * Events today..+90d (not missing) that are new or whose date/start moved since they were planned, nearest first, at most
- * PLAN_EVENTS_MAX. A Google event whose details were never read waits for them, unless it is due by tomorrow or has waited 2h
+ * PLAN_EVENTS_MAX; a changed one carries `was`, its planned date and start. A Google event whose details were never read waits for them, unless it is due by tomorrow or has waited 2h
  * (the wait starts when first considered, kept in a cursor so a restart does not reset it).
  */
-export function eventsToPlan(now: Date): (EventRow & { change: "new" | "changed" })[] {
+export type PlanPick = EventRow & { change: "new" | "changed"; /** a changed event's date and start when it was planned */ was?: { date: string; startAt: number | null } };
+export function eventsToPlan(now: Date): PlanPick[] {
   const today = ymd(now), tomorrow = ymd(addDays(now, 1));
   const t = now.getTime();
-  const out: (EventRow & { change: "new" | "changed" })[] = [];
+  const out: PlanPick[] = [];
   for (const e of listEvents({ fromDate: today, toDate: ymd(addDays(now, HORIZON_DAYS)) })) {
     const pending = e.source === "google" && e.detailsAt == null;
     const cur = waitCursor(e.accountId, e.eventKey);
@@ -61,7 +62,7 @@ export function eventsToPlan(now: Date): (EventRow & { change: "new" | "changed"
     }
     const mark = plannedMark(e.accountId, e.eventKey);
     if (!mark) out.push({ ...e, change: "new" });
-    else if (mark.date !== e.localDate || mark.startAt !== (e.startAt ?? null)) out.push({ ...e, change: "changed" });
+    else if (mark.date !== e.localDate || mark.startAt !== (e.startAt ?? null)) out.push({ ...e, change: "changed", was: { date: mark.date, startAt: mark.startAt } });
   }
   out.sort((a, b) => a.localDate.localeCompare(b.localDate) || (a.startAt ?? 0) - (b.startAt ?? 0));
   return out.slice(0, PLAN_EVENTS_MAX);
