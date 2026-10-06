@@ -83,8 +83,10 @@ async function runSync(accountId: string, deps: SyncDeps, reason: SyncReason, op
   // probe for a day (detailPlan). Any details clear it. Events in skipIds were not asked for, so they don't count.
   if (rows.some((r) => r.details)) setCursor(detailMissCursor(accountId), "");
   else if (plan.max > 0 && rows.some((r) => !r.allDay && !(r.googleEventId && plan.skipIds.includes(r.googleEventId)))) setCursor(detailMissCursor(accountId), String(at));
-  // A partly unreadable page, or one cut off at maxResults, says nothing reliable about absence.
-  if (norm.skipped === 0 && res.data.events.length < MAX_RESULTS) markMissingEvents(accountId, dateRange(now), rows.map((r) => r.eventKey), at);
+  // A partly unreadable page, or one cut off at maxResults, says nothing reliable about absence. A page with no
+  // rows at all (not even filtered noise) still hides the day, but can't confirm a removal: a blank page after a
+  // browser error looks the same (2026-10-06, the Hampi stay).
+  if (norm.skipped === 0 && res.data.events.length < MAX_RESULTS) markMissingEvents(accountId, dateRange(now), rows.map((r) => r.eventKey), at, res.data.events.length > 0);
   _db.query("DELETE FROM events WHERE account_id = ? AND source = 'google' AND (local_date < ? OR (missing_since IS NOT NULL AND missing_since < ?))").run(accountId, ymd(new Date(at - 86_400_000)), at - 2 * 86_400_000);
   setCursor(`last_sync:${accountId}`, String(at));
   setCursor(`fault:${accountId}`, "");

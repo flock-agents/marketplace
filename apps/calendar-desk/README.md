@@ -10,7 +10,7 @@ spawns it, and the two talk over two narrow seams:
 | direction | how | what crosses |
 |---|---|---|
 | platform → app | HTTP `POST /lifecycle/initialize`, `/lifecycle/tick`, `GET /lifecycle/progress`, `POST /ops/:name` | "start", "do a pass", "how far along are you", agent operations |
-| platform → app | HTTP `GET /api/widget/horizon` | the event planner's feed: the same events and items, today through the next 90 days (fact events are stored that far; Google only 7), plus `removed: [{ id, date }]` — Google events a clean read found gone, so the planner drops their steps at once |
+| platform → app | HTTP `GET /api/widget/horizon` | the event planner's feed: the same events and items, today through the next 90 days (fact events are stored that far; Google only 7), plus `removed: [{ id, date }]` — Google events a clean read that saw rows found gone (a blank read hides the day but is not listed), so the planner drops their steps at once |
 | platform → app | HTTP `GET /api/widget/today` | the schedule widget (today through the next 7 days, each item dated); `connector` says whether Google is linked (`none` / `syncing` / `ok` / `attention`) |
 | app → platform | `@flock/app-sdk`'s `PlatformContext` | `connectors.exec`, `memory.factsSince` (prep context), `agent.intent` |
 

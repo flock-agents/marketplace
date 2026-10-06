@@ -90,6 +90,19 @@ describe("syncAccount", () => {
     await syncAccount("acct", { platform: platform(() => ok({ ok: true, events: [] })).ctx, now: () => new Date(NOW.getTime() + 4 * 3600_000) }, "scheduled");
     expect(S.listEvents({ fromDate: "2026-10-05", toDate: "2026-10-05" }).length).toBe(0);
   });
+  test("only a read that saw rows confirms a removal; a blank read hides the day but confirms nothing (2026-10-06 Hampi)", async () => {
+    await syncAccount("acct", { platform: platform(() => ok({ ok: true, events: [{ title: "Standup", time: "9:30am", date: "Mon, 5 Oct" }, { title: "Review", time: "11am", date: "Mon, 5 Oct" }] })).ctx, now: () => NOW }, "scheduled");
+    await syncAccount("acct", { platform: platform(() => ok({ ok: true, events: [{ title: "Review", time: "11am", date: "Mon, 5 Oct" }] })).ctx, now: () => new Date(NOW.getTime() + 3 * 3600_000) }, "scheduled");
+    await syncAccount("acct", { platform: platform(() => ok({ ok: true, events: [] })).ctx, now: () => new Date(NOW.getTime() + 6 * 3600_000) }, "scheduled");
+    const all = S.listEvents({ fromDate: "2026-10-05", toDate: "2026-10-12", includeMissing: true });
+    const of = (t: string) => all.find((e) => e.title === t)!;
+    expect([of("Standup").missingConfirmed, of("Review").missingConfirmed]).toEqual([true, false]);
+    expect(of("Review").missingSince).not.toBeNull();
+    // Seen again: the missing mark and its confirmation clear together.
+    await syncAccount("acct", { platform: platform(() => ok({ ok: true, events: [{ title: "Review", time: "11am", date: "Mon, 5 Oct" }] })).ctx, now: () => new Date(NOW.getTime() + 9 * 3600_000) }, "scheduled");
+    const back = S.listEvents({ fromDate: "2026-10-05", toDate: "2026-10-12", includeMissing: true }).find((e) => e.title === "Review")!;
+    expect([back.missingSince, back.missingConfirmed]).toEqual([null, false]);
+  });
   test("a partly unreadable page upserts what parsed and withdraws nothing", async () => {
     await syncAccount("acct", { platform: platform(() => ok({ ok: true, events: [{ title: "Standup", time: "9:30am", date: "Mon, 5 Oct" }] })).ctx, now: () => NOW }, "scheduled");
     const logs: string[] = []; const orig = console.log; console.log = (...a: unknown[]) => { logs.push(a.join(" ")); };

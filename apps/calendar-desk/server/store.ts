@@ -57,6 +57,8 @@ const migrations: string[] = [
    ALTER TABLE events ADD COLUMN description TEXT;
    ALTER TABLE events ADD COLUMN meet_link TEXT;
    ALTER TABLE events ADD COLUMN details_at INTEGER`,
+  // 2026-10-06: a missing mark from a read that saw rows is a confirmed removal; a blank read only hides the day.
+  `ALTER TABLE events ADD COLUMN missing_confirmed INTEGER`,
 ];
 
 function applyMigrations(): void {
@@ -81,16 +83,16 @@ export interface EventGuest { email: string; name?: string; rsvp?: "yes" | "no" 
 export interface EventDetails { guests?: EventGuest[]; guestSummary?: string; location?: string; description?: string; meetLink?: string }
 
 /** `guests === null` means the details were never read (not "no guests"). */
-export interface EventRow { accountId: string; eventKey: string; calendar: string | null; title: string; startAt: number | null; endAt: number | null; allDay: boolean; localDate: string; attendeesText: string | null; location: string | null; rawTimeText: string | null; firstSeenAt: number; lastSeenAt: number; missingSince: number | null; source: "google" | "fact"; factId: number | null; sourceLink: string | null;
+export interface EventRow { accountId: string; eventKey: string; calendar: string | null; title: string; startAt: number | null; endAt: number | null; allDay: boolean; localDate: string; attendeesText: string | null; location: string | null; rawTimeText: string | null; firstSeenAt: number; lastSeenAt: number; missingSince: number | null; missingConfirmed: boolean; source: "google" | "fact"; factId: number | null; sourceLink: string | null;
   googleEventId: string | null; guests: EventGuest[] | null; guestSummary: string | null; description: string | null; meetLink: string | null; detailsAt: number | null }
 /** What a scrape writes: everything but the store's own bookkeeping and the details (saveEventDetails). */
-export type ScrapedEventRow = Omit<EventRow, "accountId" | "firstSeenAt" | "lastSeenAt" | "missingSince" | "source" | "factId" | "sourceLink" | "googleEventId" | "guests" | "guestSummary" | "description" | "meetLink" | "detailsAt"> & { googleEventId?: string | null }
+export type ScrapedEventRow = Omit<EventRow, "accountId" | "firstSeenAt" | "lastSeenAt" | "missingSince" | "missingConfirmed" | "source" | "factId" | "sourceLink" | "googleEventId" | "guests" | "guestSummary" | "description" | "meetLink" | "detailsAt"> & { googleEventId?: string | null }
 function rowToEvent(r: any): EventRow {
   return {
     accountId: r.account_id, eventKey: r.event_key, calendar: r.calendar, title: r.title,
     startAt: r.start_at, endAt: r.end_at, allDay: !!r.all_day, localDate: r.local_date,
     attendeesText: r.attendees_text, location: r.location, rawTimeText: r.raw_time_text,
-    firstSeenAt: r.first_seen_at, lastSeenAt: r.last_seen_at, missingSince: r.missing_since,
+    firstSeenAt: r.first_seen_at, lastSeenAt: r.last_seen_at, missingSince: r.missing_since, missingConfirmed: r.missing_confirmed === 1,
     source: r.source ?? "google", factId: r.fact_id ?? null, sourceLink: r.source_link ?? null,
     googleEventId: r.google_event_id ?? null, guests: r.guests_json ? JSON.parse(r.guests_json) : null, guestSummary: r.guest_summary ?? null,
     description: r.description ?? null, meetLink: r.meet_link ?? null, detailsAt: r.details_at ?? null,
@@ -107,7 +109,7 @@ export function upsertEvents(accountId: string, rows: ScrapedEventRow[], seenAt:
     ON CONFLICT(account_id, event_key) DO UPDATE SET calendar=excluded.calendar, title=excluded.title, start_at=excluded.start_at, end_at=excluded.end_at, all_day=excluded.all_day,
       local_date=excluded.local_date, attendees_text=excluded.attendees_text,
       location=CASE WHEN events.details_at IS NOT NULL THEN events.location ELSE excluded.location END,
-      raw_time_text=excluded.raw_time_text, last_seen_at=excluded.last_seen_at, missing_since=NULL,
+      raw_time_text=excluded.raw_time_text, last_seen_at=excluded.last_seen_at, missing_since=NULL, missing_confirmed=NULL,
       google_event_id=COALESCE(excluded.google_event_id, events.google_event_id)`);
   const exists = db.query("SELECT 1 FROM events WHERE account_id = ? AND event_key = ?");
   const tx = db.transaction(() => {
@@ -172,13 +174,14 @@ export function detailPlan(accountId: string, now: Date, opts: { forceIds?: stri
   return { max: firstRead ? DETAIL_FIRST_READ_MAX : DETAIL_STEADY_MAX, skipIds };
 }
 
-export function markMissingEvents(accountId: string, localDates: string[], presentKeys: string[], at: number): number {
+/** `confirmed`: the read saw rows, so an absence is a removal; a blank read hides the day without confirming one. */
+export function markMissingEvents(accountId: string, localDates: string[], presentKeys: string[], at: number, confirmed = true): number {
   if (localDates.length === 0) return 0;
   const keys = new Set(presentKeys);
   const rows = db.query(`SELECT event_key FROM events WHERE account_id = ? AND source = 'google' AND missing_since IS NULL AND local_date IN (${localDates.map(() => "?").join(",")})`).all(accountId, ...localDates) as { event_key: string }[];
-  const upd = db.query("UPDATE events SET missing_since = ? WHERE account_id = ? AND event_key = ?");
+  const upd = db.query("UPDATE events SET missing_since = ?, missing_confirmed = ? WHERE account_id = ? AND event_key = ?");
   let n = 0;
-  for (const r of rows) if (!keys.has(r.event_key)) { upd.run(at, accountId, r.event_key); n++; }
+  for (const r of rows) if (!keys.has(r.event_key)) { upd.run(at, confirmed ? 1 : 0, accountId, r.event_key); n++; }
   return n;
 }
 
