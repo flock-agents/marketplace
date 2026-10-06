@@ -87,6 +87,7 @@
       "latestVersion": "1.2.0",
       "latestTag": "family-butler-v1.2.0",
       "minFlockVersion": "0.7.0",
+      "onboardingCard": { "id": "household", "label": "Run the household", "description": "Groceries, meals, family routines", "emoji": "🏠", "order": 40, "agentName": "Asha", "services": ["zepto", "swiggy-instamart", "zomato-blinkit", "bigbasket", "google-calendar"] },
       "publishedAt": "2026-08-11T17:00:00Z",
       "updatedAt": "2026-08-14T10:20:00Z"
     },
@@ -303,8 +304,10 @@
       "repo": "flock-agents/marketplace",
       "path": "apps/calendar-desk",
       "latestVersion": "2.0.0",
-      "latestTag": "calendar-desk-v2.0.0-rc1",
+      "latestTag": "calendar-desk-v2.0.0-rc2",
       "minFlockVersion": "0.12.0",
+      "personalAssistant": { "always": true, "useCase": "calendar", "skills": ["google-calendar"] },
+      "onboardingCard": { "id": "calendar", "label": "Manage my calendar", "description": "What's coming up, reminders, prep before meetings", "emoji": "📅", "order": 30 },
       "publishedAt": "2026-10-03T00:00:00Z",
       "updatedAt": "2026-10-06T00:00:00Z"
     },
@@ -327,6 +330,7 @@
       "latestVersion": "1.1.1",
       "latestTag": "slack-assistant-v1.1.1",
       "minFlockVersion": "0.7.0",
+      "onboardingCard": { "id": "slack", "label": "Catch up on Slack", "description": "What you missed, what's asked of you", "emoji": "💬", "order": 20, "agentName": "Vega", "services": ["slack"] },
       "publishedAt": "2026-09-23T00:00:00Z",
       "updatedAt": "2026-09-29T00:00:00Z"
     },
@@ -350,6 +354,7 @@
       "latestVersion": "1.0.0",
       "latestTag": "inbox-assistant-v1.0.0",
       "minFlockVersion": "0.7.0",
+      "onboardingCard": { "id": "email", "label": "Stay on top of email", "description": "Finds what needs you, drafts replies", "emoji": "📥", "order": 10, "agentName": "Inbox Assistant", "services": ["gmail"] },
       "publishedAt": "2026-09-28T00:00:00Z",
       "updatedAt": "2026-09-28T00:00:00Z"
     }

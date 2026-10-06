@@ -149,6 +149,18 @@ An app's own routines are materialized separately. A **scheduled** app routine (
 **event** app routine (with a `trigger.connectorId`) is created **per connected account** — so the
 agent's routines page is legitimately empty until the user connects one.
 
+## Onboarding card and Personal Assistant
+
+Both fields live in `catalog.json` only, never in the manifest. Flock reads them from the catalog
+before anything is installed.
+
+- `onboardingCard` on a template adds a card to the onboarding Problems step. Picking it sets up
+  that template's agent. It carries `id`, `label`, `description`, `emoji`, `order`, and optionally
+  `agentName` and `services` (the sign-ins the agent needs).
+- `personalAssistant` on an app joins that app to the Personal Assistant, either always
+  (`always: true`) or when the card whose id matches `useCase` is picked. Its `skills` are added to
+  the assistant.
+
 ## Publishing
 
 1. Bump `version` in `flock.template.json` (major = breaking, minor = new capability, patch = fix)
