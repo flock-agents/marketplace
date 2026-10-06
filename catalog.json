@@ -128,7 +128,7 @@
       "repo": "flock-agents/marketplace",
       "path": "skills/google-calendar",
       "latestVersion": "1.0.0",
-      "latestTag": "google-calendar-v1.0.0",
+      "latestTag": "google-calendar-v1.0.0-rc1",
       "minFlockVersion": "0.12.0",
       "publishedAt": "2026-10-06T00:00:00Z",
       "updatedAt": "2026-10-06T00:00:00Z"
