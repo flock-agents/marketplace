@@ -174,15 +174,25 @@ export function detailPlan(accountId: string, now: Date, opts: { forceIds?: stri
   return { max: firstRead ? DETAIL_FIRST_READ_MAX : DETAIL_STEADY_MAX, skipIds };
 }
 
+/** Stored Google events on these dates not yet marked missing (what a read that saw none of them would mark). */
+export function unmissedEvents(accountId: string, localDates: string[]): { eventKey: string; googleEventId: string | null }[] {
+  if (localDates.length === 0) return [];
+  return (db.query(`SELECT event_key, google_event_id FROM events WHERE account_id = ? AND source = 'google' AND missing_since IS NULL AND local_date IN (${localDates.map(() => "?").join(",")}) ORDER BY local_date, start_at`)
+    .all(accountId, ...localDates) as { event_key: string; google_event_id: string | null }[]).map((r) => ({ eventKey: r.event_key, googleEventId: r.google_event_id }));
+}
+
+/** `confirmed`: the event is known gone (a read that saw rows, or Google said so); otherwise it is only hidden. */
+export function markEventsMissing(accountId: string, eventKeys: string[], at: number, confirmed: boolean): void {
+  const upd = db.query("UPDATE events SET missing_since = ?, missing_confirmed = ? WHERE account_id = ? AND event_key = ? AND missing_since IS NULL");
+  for (const k of eventKeys) upd.run(at, confirmed ? 1 : 0, accountId, k);
+}
+
 /** `confirmed`: the read saw rows, so an absence is a removal; a blank read hides the day without confirming one. */
 export function markMissingEvents(accountId: string, localDates: string[], presentKeys: string[], at: number, confirmed = true): number {
-  if (localDates.length === 0) return 0;
   const keys = new Set(presentKeys);
-  const rows = db.query(`SELECT event_key FROM events WHERE account_id = ? AND source = 'google' AND missing_since IS NULL AND local_date IN (${localDates.map(() => "?").join(",")})`).all(accountId, ...localDates) as { event_key: string }[];
-  const upd = db.query("UPDATE events SET missing_since = ?, missing_confirmed = ? WHERE account_id = ? AND event_key = ?");
-  let n = 0;
-  for (const r of rows) if (!keys.has(r.event_key)) { upd.run(at, confirmed ? 1 : 0, accountId, r.event_key); n++; }
-  return n;
+  const gone = unmissedEvents(accountId, localDates).map((r) => r.eventKey).filter((k) => !keys.has(k));
+  markEventsMissing(accountId, gone, at, confirmed);
+  return gone.length;
 }
 
 export function listEvents(opts: { fromDate: string; toDate: string; accountId?: string; includeMissing?: boolean; source?: "google" | "fact" }): EventRow[] {

@@ -1,9 +1,12 @@
 import type { PlatformContext } from "@flock/app-sdk";
-import { getCursor, setCursor, upsertEvents, markMissingEvents, saveEventDetails, detailPlan, detailMissCursor, _db } from "./store";
+import { getCursor, setCursor, upsertEvents, markMissingEvents, markEventsMissing, unmissedEvents, saveEventDetails, detailPlan, detailMissCursor, _db } from "./store";
 import { normalizeScrape, ymd, type ScrapedEvent } from "./events";
 
 export interface SyncDeps { platform: PlatformContext; now?: () => Date }
 export const DAILY_SCRAPE_CAP = 8;
+/** After a blank read, at most this many stored events are opened one by one to see whether Google still has them. */
+export const BLANK_READ_CHECK_MAX = 10;
+const EXISTS_CHECK_TIMEOUT_MS = 30_000;
 export const KEEP_DAYS_AHEAD = 7;
 const FRESH_MS = 2 * 3600_000;
 const SCRAPE_TIMEOUT_MS = 45_000;
@@ -42,6 +45,31 @@ export async function syncAccount(accountId: string, deps: SyncDeps, reason: Syn
   if (inFlight.has(accountId)) return { ok: true, events: 0, fault: null, skipped: "busy" as const };
   inFlight.add(accountId);
   try { return await runSync(accountId, deps, reason, opts); } finally { inFlight.delete(accountId); }
+}
+
+/**
+ * A blank read: Google is asked about each stored event (≤ BLANK_READ_CHECK_MAX). Found → kept; Google can't find
+ * it (signed in as its calendar) → a confirmed removal; anything else, or past the cap, or no id → only hidden
+ * (missing, unconfirmed: Flock's two-read guard decides).
+ */
+async function checkAfterBlankRead(accountId: string, deps: SyncDeps, dates: string[], at: number): Promise<void> {
+  const candidates = unmissedEvents(accountId, dates);
+  const gone: string[] = [], hidden: string[] = [];
+  let checks = 0, kept = 0;
+  for (const e of candidates) {
+    if (!e.googleEventId || checks >= BLANK_READ_CHECK_MAX) { hidden.push(e.eventKey); continue; }
+    checks++;
+    const r = await deps.platform.connectors.exec<{ ok?: boolean; exists?: boolean }>({
+      skillId: "google-calendar", functionName: "getEvent", accountHint: accountId,
+      params: { eid: e.googleEventId, check: true }, timeoutMs: EXISTS_CHECK_TIMEOUT_MS,
+    });
+    if (r.ok && r.data?.ok === true && r.data.exists === true) kept++;
+    else if (r.ok && r.data?.ok === true && r.data.exists === false) gone.push(e.eventKey);
+    else hidden.push(e.eventKey);
+  }
+  markEventsMissing(accountId, gone, at, true);
+  markEventsMissing(accountId, hidden, at, false);
+  if (candidates.length) console.log(`[calendar-desk] blank read ${accountId}: checked ${checks} event(s) — ${kept} still there, ${gone.length} removed, ${hidden.length} unconfirmed`);
 }
 
 async function runSync(accountId: string, deps: SyncDeps, reason: SyncReason, opts: { forceDetailIds?: string[] }) {
@@ -84,9 +112,10 @@ async function runSync(accountId: string, deps: SyncDeps, reason: SyncReason, op
   if (rows.some((r) => r.details)) setCursor(detailMissCursor(accountId), "");
   else if (plan.max > 0 && rows.some((r) => !r.allDay && !(r.googleEventId && plan.skipIds.includes(r.googleEventId)))) setCursor(detailMissCursor(accountId), String(at));
   // A partly unreadable page, or one cut off at maxResults, says nothing reliable about absence. A page with no
-  // rows at all (not even filtered noise) still hides the day, but can't confirm a removal: a blank page after a
-  // browser error looks the same (2026-10-06, the Hampi stay).
-  if (norm.skipped === 0 && res.data.events.length < MAX_RESULTS) markMissingEvents(accountId, dateRange(now), rows.map((r) => r.eventKey), at, res.data.events.length > 0);
+  // rows at all (not even filtered noise) may be a blank page after a browser error (2026-10-06, the Hampi stay):
+  // each stored event is checked on its own instead.
+  if (norm.skipped === 0 && res.data.events.length > 0 && res.data.events.length < MAX_RESULTS) markMissingEvents(accountId, dateRange(now), rows.map((r) => r.eventKey), at);
+  else if (res.data.events.length === 0) await checkAfterBlankRead(accountId, deps, dateRange(now), at);
   _db.query("DELETE FROM events WHERE account_id = ? AND source = 'google' AND (local_date < ? OR (missing_since IS NOT NULL AND missing_since < ?))").run(accountId, ymd(new Date(at - 86_400_000)), at - 2 * 86_400_000);
   setCursor(`last_sync:${accountId}`, String(at));
   setCursor(`fault:${accountId}`, "");
