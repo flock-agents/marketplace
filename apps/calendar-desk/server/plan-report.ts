@@ -8,6 +8,7 @@ import { pointer } from "./planner";
 import { openPlan, plannedMark, markPlanned, recordStep, noteBadReport, answerPlan, abandonPlan, BAD_REPORTS_MAX, type PlanRecord, type PlanEventRef } from "./planning-store";
 
 type AppTaskState = { sourceRef: string; status: "open" | "done" | "dismissed" };
+const MAX_REASON = 120;
 const MAX_STEPS_PER_EVENT = 3, MAX_WHY = 500, MAX_TITLE = 200;
 const KEY = /^[a-z0-9-]{1,40}$/;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -16,6 +17,12 @@ const err = (code: string, message: string, status = 400): OpError => ({ error: 
 
 export interface StepSpec { key: string; title: string; dueDate: string; dueTime?: string; showFrom?: string; why: string }
 export type PlanReportResult = { accepted: string[]; refused: { item: string; reason: string }[]; done: boolean };
+
+// The model cites bundle refs ("(e1)", "[[e1]]") for code and evals; they are never shown to the owner. Ported from core's refs.ts.
+const REF = String.raw`[a-z]\d+`, REFS = String.raw`${REF}(?:\s*,\s*${REF})*`;
+const BRACKETS = new RegExp(String.raw`[ \t]*\[\[\s*(${REFS})\s*\]\]`, "g");
+const PARENS = new RegExp(String.raw`[ \t]*\(\s*(${REFS.replaceAll("[a-z]", "[cayteso]")})\s*\)`, "g");
+const clean = (text: string) => text.replace(BRACKETS, "").replace(PARENS, "").replace(/\s+([.,;:!?])/g, "$1").trim();
 
 const isRealDate = (s: unknown): s is string => {
   if (typeof s !== "string" || !DATE.test(s)) return false;
@@ -27,17 +34,22 @@ const localAt = (date: string, time?: string) => new Date(`${date}T${time ?? "00
 
 /** The latest a step for the event may be due or shown: its start (timed) or the end of its day (all-day), with the reason Flock shows. */
 export function maxDueOf(e: EventRow): { maxDue: number; maxDueReason: string } {
-  const day = new Date(`${e.localDate}T00:00:00`);
+  const [y, m, d] = e.localDate.split("-").map(Number);
+  const day = new Date(y!, m! - 1, d!);
   const label = day.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" }).replace(",", "");
+  let maxDue: number, tail: string;
   if (!e.allDay && e.startAt != null) {
     const t = new Date(e.startAt); const hm = `${String(t.getHours()).padStart(2, "0")}:${String(t.getMinutes()).padStart(2, "0")}`;
-    return { maxDue: e.startAt, maxDueReason: `${e.title}, ${label} ${hm}` };
-  }
-  return { maxDue: day.getTime() + 86_399_999, maxDueReason: `${e.title}, ${label}` };
+    maxDue = e.startAt; tail = `, ${label} ${hm}`;
+  } else { maxDue = new Date(y!, m! - 1, d!, 23, 59, 59, 999).getTime(); tail = `, ${label}`; }
+  // Flock refuses a reason over 120 characters: shorten the title, not the date.
+  const room = MAX_REASON - tail.length;
+  const title = e.title.length > room ? `${e.title.slice(0, Math.max(0, room - 1)).trimEnd()}…` : e.title;
+  return { maxDue, maxDueReason: `${title}${tail}` };
 }
 
-/** The TODO Calendar Desk publishes for a step. Dates are the owner's local day (the process runs in the owner's zone). */
-export function stepTask(e: EventRow, s: StepSpec, _tz: string): AppTask {
+/** The TODO Calendar Desk publishes for a step. Calendar Desk computes local dates in the process zone (the desktop install's zone = the owner's). */
+export function stepTask(e: EventRow, s: StepSpec): AppTask {
   const { maxDue, maxDueReason } = maxDueOf(e);
   return {
     sourceRef: `step:${e.eventKey}:${s.key}`, title: s.title.trim(),
@@ -54,9 +66,8 @@ function stepRefusal(s: any, e: EventRow, now: Date, closed: Set<string>, seen: 
   if (seen.has(s.key)) return `key ${s.key} is used twice`;
   seen.add(s.key);
   if (closed.has(s.key)) return `step ${s.key} was already done or dismissed by the owner`;
-  if (typeof s.title !== "string" || s.title.trim().length < 1) return "title is required";
-  if (s.title.trim().length > MAX_TITLE) return `title is longer than ${MAX_TITLE}`;
-  if (typeof s.why !== "string" || !s.why.trim()) return "why is required";
+  if (typeof s.title !== "string" || s.title.length < 1) return "title is required";
+  if (s.title.length > MAX_TITLE) return `title is longer than ${MAX_TITLE}`;
   if (s.why.length > MAX_WHY) return `why is longer than ${MAX_WHY}`;
   if (!isRealDate(s.dueDate)) return "dueDate must be a real date, YYYY-MM-DD";
   if (s.dueTime !== undefined && !isRealTime(s.dueTime)) return "dueTime must be HH:MM";
@@ -85,17 +96,18 @@ export async function handlePlanReport(p: Record<string, unknown>, platform: Pla
   const accepted: string[] = [];
   const refused: { item: string; reason: string }[] = [];
   const handled = new Set<string>();
+  let bad = 0; // validation refusals only
   for (const entry of p.events as any[]) {
     const ref = typeof entry?.event === "string" ? plan.events.find((x) => x.ref === entry.event) : undefined;
-    if (!ref) { refused.push({ item: String(entry?.event ?? "?"), reason: "event is not in this plan" }); continue; }
-    if (handled.has(ref.ref)) { refused.push({ item: ref.ref, reason: "event listed twice" }); continue; }
+    if (!ref) { refused.push({ item: String(entry?.event ?? "?"), reason: "event is not in this plan" }); bad++; continue; }
+    if (handled.has(ref.ref)) { refused.push({ item: ref.ref, reason: "event listed twice" }); bad++; continue; }
     handled.add(ref.ref);
-    if (planDone(plan, ref)) continue; // answered by an earlier report
+    if (planDone(plan, ref)) { refused.push({ item: ref.ref, reason: "already planned" }); continue; }
     const ev = getEvent(ref.accountId, ref.eventKey);
     if (!ev || ev.missingSince != null) continue; // gone: nothing to plan, settled below
     const steps = entry.steps;
-    if (!Array.isArray(steps)) { refused.push({ item: ref.ref, reason: "steps must be a list" }); continue; }
-    if (steps.length > MAX_STEPS_PER_EVENT) { refused.push({ item: ref.ref, reason: `at most ${MAX_STEPS_PER_EVENT} steps per event` }); continue; }
+    if (!Array.isArray(steps)) { refused.push({ item: ref.ref, reason: "steps must be a list" }); bad++; continue; }
+    if (steps.length > MAX_STEPS_PER_EVENT) { refused.push({ item: ref.ref, reason: `at most ${MAX_STEPS_PER_EVENT} steps per event` }); bad++; continue; }
 
     const prefix = `step:${ev.eventKey}:`;
     const listed = await (platform as any).tasks.list({ prefix }) as { ok: boolean; data?: { tasks: AppTaskState[] }; reason?: string };
@@ -106,28 +118,33 @@ export async function handlePlanReport(p: Record<string, unknown>, platform: Pla
 
     const seen = new Set<string>();
     let allOk = true, fresh = 0;
-    for (const s of steps) {
-      const item = `${ref.ref}/${typeof s?.key === "string" ? s.key : "?"}`;
+    for (const raw of steps) {
+      const item = `${ref.ref}/${typeof raw?.key === "string" ? raw.key : "?"}`;
+      // Cited refs come out of the title and why; a title that was only refs is empty and refused; an empty why gets a plain one.
+      const s = raw && typeof raw === "object" ? { ...raw, title: typeof raw.title === "string" ? clean(raw.title) : raw.title, why: (typeof raw.why === "string" ? clean(raw.why) : "") || `planned for ${ev.title}`.slice(0, MAX_WHY) } : raw;
+
       let why = stepRefusal(s, ev, now, closed, seen);
       if (!why && !openKeys.has(s.key)) {
         if (openKeys.size + fresh + 1 > MAX_STEPS_PER_EVENT) why = `event already has ${openKeys.size} live steps (max ${MAX_STEPS_PER_EVENT})`;
         else fresh++;
       }
-      if (why) { refused.push({ item, reason: why }); allOk = false; continue; }
-      const res = await platform.tasks.publish(stepTask(ev, s as StepSpec, Intl.DateTimeFormat().resolvedOptions().timeZone));
-      if (!res.ok) { refused.push({ item, reason: `could not publish: ${(res as any).reason ?? "unknown"}` }); allOk = false; continue; }
+      if (why) { refused.push({ item, reason: why }); bad++; allOk = false; continue; }
+      const res = await platform.tasks.publish(stepTask(ev, s as StepSpec));
+      if (!res.ok) { refused.push({ item, reason: `could not publish: ${(res as any).reason ?? "unknown"}` }); allOk = false; continue; } // the platform's fault: no bad report, the event stays unplanned for the next run
       recordStep(ev.accountId, ev.eventKey, s.key);
       accepted.push(item);
     }
     if (allOk) markPlanned([{ accountId: ref.accountId, eventKey: ref.eventKey, date: ref.date, startAt: ref.startAt }], now.getTime());
   }
 
-  let done = false;
-  if (refused.length > 0 && noteBadReport(plan.planId) >= BAD_REPORTS_MAX) abandonPlan(plan.planId, now.getTime());
-  else if (plan.events.every((r) => {
+  // Everything planned answers the plan, whatever else was refused; only then do bad reports count toward giving up.
+  const allPlanned = plan.events.every((r) => {
     if (planDone(plan, r)) return true;
     const ev = getEvent(r.accountId, r.eventKey);
     return !ev || ev.missingSince != null;
-  })) { answerPlan(plan.planId, now.getTime()); done = true; }
+  });
+  let done = false;
+  if (allPlanned) { answerPlan(plan.planId, now.getTime()); done = true; }
+  else if (bad > 0 && noteBadReport(plan.planId) >= BAD_REPORTS_MAX) abandonPlan(plan.planId, now.getTime());
   return { accepted, refused, done };
 }

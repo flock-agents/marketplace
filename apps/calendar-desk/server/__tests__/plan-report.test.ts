@@ -146,6 +146,62 @@ describe("handlePlanReport", () => {
     expect(P.stepKeysFor("acct", "g1")).toEqual([]);
   });
 
+  test("a 150-char title keeps the reason within 120 chars, ending in the date", () => {
+    seed("g3", "A".repeat(150), "2026-10-12");
+    const r = maxDueOf(S.getEvent("acct", "g3")!).maxDueReason;
+    expect(r.length).toBeLessThanOrEqual(120);
+    expect(r).toMatch(/…, Mon 12 Oct$/);
+  });
+
+  test("a publish failure is shown but is not a bad report; the plan stays open and the event unplanned", async () => {
+    hampi(); const pl = plan("g1");
+    const r: any = await handlePlanReport({ planId: pl.planId, events: [{ event: "e1", steps: [pack] }] }, platform({ publish: () => failed("boom") }).ctx, NOW);
+    expect(r.refused[0].reason).toMatch(/could not publish/);
+    expect(r.done).toBe(false);
+    expect(P.openPlan()!.badReports).toBe(0);
+    expect(P.plannedMark("acct", "g1")).toBeNull();
+  });
+
+  test("re-posting after a partial acceptance re-publishes the same sourceRef, no duplicates", async () => {
+    hampi(); const pl = plan("g1"); const p = platform();
+    await handlePlanReport({ planId: pl.planId, events: [{ event: "e1", steps: [pack, { ...pack, key: "BAD" }] }] }, p.ctx, NOW);
+    const r: any = await handlePlanReport({ planId: pl.planId, events: [{ event: "e1", steps: [pack, { ...pack, key: "cab", title: "Book a cab" }] }] }, p.ctx, NOW);
+    expect(r.done).toBe(true);
+    expect(p.published.map((t) => t.sourceRef)).toEqual(["step:g1:pack", "step:g1:pack", "step:g1:cab"]);
+    expect(P.stepKeysFor("acct", "g1")).toEqual(["pack", "cab"]);
+  });
+
+  test("an already planned event re-listed is refused as already planned, without a bad report", async () => {
+    hampi(); seed("g2", "Dentist", "2026-10-09"); const pl = plan("g1", "g2"); const p = platform();
+    await handlePlanReport({ planId: pl.planId, events: [{ event: "e1", steps: [] }] }, p.ctx, NOW);
+    const r: any = await handlePlanReport({ planId: pl.planId, events: [{ event: "e1", steps: [] }] }, p.ctx, NOW);
+    expect(r.refused).toEqual([{ item: "e1", reason: "already planned" }]);
+    expect(P.openPlan()!.badReports).toBe(0);
+  });
+
+  test("a third report that plans everything with a stray refusal answers the plan", async () => {
+    hampi(); seed("g2", "Dentist", "2026-10-09"); const pl = plan("g1", "g2"); const p = platform();
+    const bad = { planId: pl.planId, events: [{ event: "e1", steps: [{ ...pack, key: "BAD" }] }] };
+    await handlePlanReport(bad, p.ctx, NOW); await handlePlanReport(bad, p.ctx, NOW);
+    const r: any = await handlePlanReport({ planId: pl.planId, events: [{ event: "e1", steps: [] }, { event: "e2", steps: [] }, { event: "e9", steps: [] }] }, p.ctx, NOW);
+    expect(r.done).toBe(true);
+    expect(P.getPlan(pl.planId)!.answeredAt).not.toBeNull();
+    expect(P.getPlan(pl.planId)!.abandonedAt).toBeNull();
+  });
+
+  test("refs are stripped from title and why; a title of only refs is refused; an empty why gets a plain one", async () => {
+    hampi(); const pl = plan("g1"); const p = platform();
+    const r: any = await handlePlanReport({ planId: pl.planId, events: [{ event: "e1", steps: [
+      { key: "a", title: "Pack the bag (e1)", dueDate: "2026-10-11", why: "a trip (e1)" },
+      { key: "b", title: "(e1)", dueDate: "2026-10-11", why: "w" },
+      { key: "c", title: "Book a cab [[e1]]", dueDate: "2026-10-11", why: "(e1)" },
+    ] }] }, p.ctx, NOW);
+    expect(r.accepted).toEqual(["e1/a", "e1/c"]);
+    expect(r.refused).toEqual([{ item: "e1/b", reason: "title is required" }]);
+    expect(p.published[0]).toMatchObject({ title: "Pack the bag", context: { why: "a trip" } });
+    expect(p.published[1]).toMatchObject({ title: "Book a cab", context: { why: "planned for Stay at The Loft - Aadhya Homestay Hampi" } });
+  });
+
   test("registered as the plan_events_done op", async () => {
     hampi(); const pl = plan("g1"); const p = platform();
     const r = await ops.plan_events_done!({ planId: pl.planId, events: [{ event: "e1", steps: [] }] }, { platform: p.ctx } as any);
