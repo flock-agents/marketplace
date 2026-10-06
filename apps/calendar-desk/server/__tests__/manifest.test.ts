@@ -20,3 +20,15 @@ describe("Calendar Desk manifest lifecycle", () => {
     expect(manifest.lifecycle.progress).toBe(true);
   });
 });
+
+describe("Calendar Desk manifest planning", () => {
+  test("the plan_events intent carries planning-instructions.md verbatim (run scripts/embed-instructions.ts after editing it)", () => {
+    const intent = manifest.agentInterface.intents.find((i: any) => i.name === "plan_events");
+    expect(intent.instructions).toBe(readFileSync(join(import.meta.dir, "../../planning-instructions.md"), "utf8"));
+    expect(intent.payloadSchema.required).toEqual(["planId", "events"]);
+  });
+  test("declares the hourly Plan upcoming events routine and the plan_events_done operation", () => {
+    expect(manifest.routines.find((r: any) => r.id === "event-planning")).toMatchObject({ name: "Plan upcoming events", trigger: { type: "schedule", cron: "30 * * * *" }, executionMode: "app-relay" });
+    expect(manifest.agentInterface.operations.find((o: any) => o.name === "plan_events_done")).toMatchObject({ invoke: "ops/plan_events_done" });
+  });
+});

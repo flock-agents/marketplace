@@ -7,12 +7,14 @@ const S = await import("../store");
 const { calendarDeskHooks } = await import("../lifecycle");
 
 function platform(scrape: () => any) {
-  const published: any[] = [];
+  const published: any[] = [], intents: any[] = [];
   const ctx = { configured: true, pairedAgent: { id: "pa", name: "PA" },
     progress: { report: async () => ok(undefined) }, tasks: { publish: async (t: any) => { published.push(t); return ok(undefined); }, withdraw: async () => ok(undefined) },
-    connectors: { exec: async () => scrape() }, memory: { eventFacts: async () => ok({ facts: [{ id: 7, content: "Passport renewal appointment.", kind: "event", dateRole: "appointment", when: null, validFrom: null, validUntil: null, salience: 0.8, domain: null, sourceLink: null, entityIds: [], recordedAt: "2026-10-04T00:00:00.000Z", eventDate: "2026-10-20", eventTime: null, accountId: null }], snapshot: true }), factsSince: async () => ok({ facts: [], nextSince: "" }), extract: async () => ok(undefined) }, agent: { intent: async () => ok({ sessionId: "s", reused: false }) },
+    connectors: { exec: async () => scrape() }, memory: { eventFacts: async () => ok({ facts: [{ id: 7, content: "Passport renewal appointment.", kind: "event", dateRole: "appointment", when: null, validFrom: null, validUntil: null, salience: 0.8, domain: null, sourceLink: null, entityIds: [], recordedAt: "2026-10-04T00:00:00.000Z", eventDate: "2026-10-20", eventTime: null, accountId: null }], snapshot: true }), factsSince: async () => ok({ facts: [], nextSince: "" }), extract: async () => ok(undefined), search: async () => ok({ facts: [] }) },
+    agent: { intent: async (name: string, payload: any) => { intents.push({ name, payload }); return ok({ sessionId: "s", reused: false }); } },
   } as unknown as PlatformContext;
-  return { ctx, published };
+  (ctx as any).tasks.list = async () => ok({ tasks: [] });
+  return { ctx, published, intents };
 }
 beforeEach(() => { for (const t of ["events", "cursors", "init_state"]) S._db.exec(`DELETE FROM ${t}`); });
 
@@ -86,5 +88,20 @@ describe("progress", () => {
     expect((calendarDeskHooks.progress!() as { state: string; message: string }[])[0]).toMatchObject({ state: "done", message: "Watching your calendar" });
     S.setCursor("fault:acct", "login wall");
     expect((calendarDeskHooks.progress!() as { state: string; message: string }[])[0]).toMatchObject({ state: "error", message: expect.stringMatching(/Google session/) });
+  });
+});
+
+describe("tick — event planning", () => {
+  test("the tick plans only when it names the event-planning routine", async () => {
+    for (const t of ["planned", "plans", "plan_steps"]) S._db.exec(`DELETE FROM ${t}`);
+    const p = platform(() => ok({ ok: true, events: [] }));
+    const now = () => new Date(2026, 9, 5, 10, 30);
+    await calendarDeskHooks.tick!({ readRoutines: [{ id: "u1", appId: "calendar-desk", appRoutineId: "meeting-prep", trigger: {} }], platform: p.ctx, now } as any);
+    expect(p.intents).toEqual([]);
+    await calendarDeskHooks.tick!({ readRoutines: [{ id: "u2", appId: "calendar-desk", appRoutineId: "event-planning", trigger: {} }], platform: p.ctx, now } as any);
+    expect(p.intents.map((i: any) => i.name)).toEqual(["plan_events"]);
+    expect(p.intents[0].payload.events.map((e: any) => e.event)).toEqual(["calendar-desk:fact:7"]);
+    const { readRoutineState } = await import("../scheduler");
+    expect(readRoutineState().planEnabled).toBe(true);
   });
 });

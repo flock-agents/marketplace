@@ -8,7 +8,7 @@ export function readPrepConfig(filter: Record<string, unknown> | undefined): Pre
   const raw = filter ?? {};
   return { windowMinutes: typeof raw.windowMinutes === "number" && raw.windowMinutes > 0 ? raw.windowMinutes : 30, skipAllDay: raw.skipAllDay !== false, skipNoAttendees: raw.skipNoAttendees !== false };
 }
-export interface RoutineState { prepEnabled: boolean; prepCfg: PrepConfig }
+export interface RoutineState { prepEnabled: boolean; prepCfg: PrepConfig; planEnabled: boolean }
 /** The routine's manifest id ("meeting-prep"). On the wire `id` is the instance UUID
  *  and `appRoutineId` the manifest id; `id` is only a fallback for a platform that predates it. */
 export const routineKey = (r: { id: string; appRoutineId?: string | null }) => r.appRoutineId ?? r.id;
@@ -22,8 +22,8 @@ export function storeRoutineState(readRoutines: ReadonlyArray<{ id: string; appR
 }
 export function readRoutineState(): RoutineState {
   const s = JSON.parse(getCursor("routines") ?? "{}");
-  const live = (id: string) => s[id] && Date.now() - s[id].seenAt < 2 * 3600_000;
-  return { prepEnabled: live("meeting-prep"), prepCfg: readPrepConfig(s["meeting-prep"]?.filter) };
+  const live = (id: string) => !!(s[id] && Date.now() - s[id].seenAt < 2 * 3600_000);
+  return { prepEnabled: live("meeting-prep"), prepCfg: readPrepConfig(s["meeting-prep"]?.filter), planEnabled: live("event-planning") };
 }
 
 export async function runPrepWindow(platform: PlatformContext, cfg: PrepConfig, now: Date, deps: { sync?: typeof syncAccount; facts?: (around: string) => Promise<unknown[]> } = {}) {

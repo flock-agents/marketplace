@@ -1,7 +1,8 @@
 import type { AppLifecycleHooks, ProgressItem } from "@flock/app-sdk";
 import { listInit, markInitStarted, markInitFinished } from "./store";
 import { syncAccount, lastSyncAt, lastFault } from "./sync";
-import { storeRoutineState } from "./scheduler";
+import { storeRoutineState, routineKey } from "./scheduler";
+import { runPlanning } from "./planner";
 import { syncFactEvents } from "./facts";
 
 const SCHEDULED_SCRAPE_HOURS = [6, 13];
@@ -30,6 +31,10 @@ export const calendarDeskHooks: AppLifecycleHooks = {
       if (rec.outcome === "done" && now.getHours() >= 7 && now.getHours() < 21) await syncAccount(rec.accountId, { platform: ctx.platform, now: () => now }, "light");
     }
     try { await syncFactEvents(ctx.platform, now); } catch (err: any) { console.warn(`[calendar-desk] fact events: ${err?.message ?? err}`); }
+    // Planning runs after this tick's read, when the tick names the routine (it names only due, enabled routines; Run now is a tick too).
+    if (ctx.readRoutines.some((r) => routineKey(r) === "event-planning")) {
+      try { await runPlanning(ctx.platform, now); } catch (err: any) { console.warn(`[calendar-desk] planning: ${err?.message ?? err}`); }
+    }
   },
   status(accountId) { const rec = listInit().find((r) => r.accountId === accountId); return !rec || !!rec.finishedAt; },
   progress(): ProgressItem[] {
