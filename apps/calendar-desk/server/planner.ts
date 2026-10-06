@@ -12,7 +12,8 @@ export const pointer = (eventKey: string) => `${APP}:${eventKey}`;
 const hhmm = (ms: number) => { const d = new Date(ms); return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
 
 // The SDK methods this routine uses; typed here so the app does not depend on an SDK build that has them yet.
-interface AppTaskState { sourceRef: string; status: "open" | "done" | "dismissed"; title: string; due: number | null; dueTimed: boolean; showFrom: number | null; updatedAt: number }
+// `withdrawn`: a dismissed row Calendar Desk itself withdrew (its event was deleted), not one the owner closed.
+interface AppTaskState { sourceRef: string; status: "open" | "done" | "dismissed"; withdrawn?: true; title: string; due: number | null; dueTimed: boolean; showFrom: number | null; updatedAt: number }
 type Res<T> = { ok: true; data: T } | { ok: false; reason: string };
 interface PlanningPlatform {
   tasks: { list(opts?: { prefix?: string }): Promise<Res<{ tasks: AppTaskState[] }>> };
@@ -44,7 +45,8 @@ export async function runPlanning(platform: PlatformContext, now: Date): Promise
   const events: BundleEvent[] = [];
   for (const [i, e] of picks.entries()) {
     const prefix = `step:${e.eventKey}:`;
-    const steps = states.filter((s) => s.sourceRef.startsWith(prefix) && !s.sourceRef.slice(prefix.length).includes(":")).map((s): BundleStep => ({
+    // A withdrawn step belonged to the event before it was deleted; a restored event is planned afresh, so it is left out.
+    const steps = states.filter((s) => s.sourceRef.startsWith(prefix) && !s.sourceRef.slice(prefix.length).includes(":") && !s.withdrawn).map((s): BundleStep => ({
       key: s.sourceRef.slice(prefix.length), title: s.title,
       due: s.due != null ? ymd(new Date(s.due)) : null, showFrom: s.showFrom != null ? ymd(new Date(s.showFrom)) : null,
       ...(s.status !== "open" ? { closed: true as const } : {}),

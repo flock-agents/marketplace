@@ -12,7 +12,7 @@ beforeEach(wipe);
 const NOW = new Date(2026, 9, 6, 12, 0, 0);
 const HOUR = 3600_000;
 
-type TaskState = { sourceRef: string; status: "open" | "done" | "dismissed"; title: string; due: number | null; dueTimed: boolean; showFrom: number | null; updatedAt: number };
+type TaskState = { sourceRef: string; status: "open" | "done" | "dismissed"; withdrawn?: true; title: string; due: number | null; dueTimed: boolean; showFrom: number | null; updatedAt: number };
 function platform(o: { intent?: () => any; tasks?: TaskState[]; facts?: (q: string) => string[] } = {}) {
   const intents: any[] = [], searches: any[] = [], lists: any[] = [];
   const ctx = { configured: true, pairedAgent: { id: "pa", name: "PA" },
@@ -144,6 +144,21 @@ describe("runPlanning", () => {
     expect(p.intents[0].payload.events[0].steps).toEqual([
       { key: "pack", title: "Pack for Hampi", due: "2026-10-11", showFrom: "2026-10-10", closed: true },
       { key: "cab", title: "Book a cab", due: "2026-10-11", showFrom: null },
+    ]);
+  });
+});
+
+describe("withdrawn steps", () => {
+  test("a step Calendar Desk withdrew is left out of the bundle: a restored event is planned afresh", async () => {
+    seed("g1", "Stay at Hampi", "2026-10-12");
+    const due = new Date(2026, 9, 11).getTime();
+    const p = platform({ tasks: [
+      { sourceRef: "step:g1:pack", status: "dismissed", withdrawn: true, title: "Pack for Hampi", due, dueTimed: false, showFrom: null, updatedAt: 1 },
+      { sourceRef: "step:g1:cab", status: "dismissed", title: "Book a cab", due, dueTimed: false, showFrom: null, updatedAt: 1 },
+    ] });
+    await runPlanning(p.ctx, NOW);
+    expect(p.intents[0].payload.events[0].steps).toEqual([
+      { key: "cab", title: "Book a cab", due: "2026-10-11", showFrom: null, closed: true },
     ]);
   });
 });

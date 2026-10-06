@@ -11,7 +11,7 @@ function wipe() { for (const t of ["events", "cursors", "planned", "plans", "pla
 beforeEach(wipe);
 
 const NOW = new Date(2026, 9, 6, 12, 0, 0);
-type TaskState = { sourceRef: string; status: "open" | "done" | "dismissed"; title: string; due: number | null; dueTimed: boolean; showFrom: number | null; updatedAt: number };
+type TaskState = { sourceRef: string; status: "open" | "done" | "dismissed"; withdrawn?: true; title: string; due: number | null; dueTimed: boolean; showFrom: number | null; updatedAt: number };
 function platform(o: { tasks?: TaskState[]; publish?: () => any } = {}) {
   const published: any[] = [];
   const ctx = { tasks: {
@@ -86,6 +86,13 @@ describe("handlePlanReport", () => {
     expect(r.accepted).toEqual([]);
     expect(r.refused.map((x: any) => x.reason)).toEqual(["key must match /^[a-z0-9-]{1,40}$/", "step gone was already done or dismissed by the owner", "dueDate is before today"]);
     expect(p.published).toEqual([]);
+  });
+
+  test("a step Calendar Desk withdrew (event deleted, then restored in Google) is not owner-closed: it is published again", async () => {
+    hampi(); const pl = plan("g1"); const p = platform({ tasks: [{ ...closedTask("step:g1:pack"), withdrawn: true }] });
+    const r: any = await handlePlanReport({ planId: pl.planId, events: [{ event: "e1", steps: [pack] }] }, p.ctx, NOW);
+    expect(r).toEqual({ accepted: ["e1/pack"], refused: [], done: true });
+    expect(p.published.map((t) => t.sourceRef)).toEqual(["step:g1:pack"]);
   });
 
   test("four steps refuse the event; dueTime today must be after now; timed event refuses a step after its start", async () => {

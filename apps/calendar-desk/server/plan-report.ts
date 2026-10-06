@@ -7,7 +7,8 @@ import { ymd } from "./events";
 import { pointer } from "./planner";
 import { openPlan, plannedMark, markPlanned, recordStep, noteBadReport, answerPlan, abandonPlan, BAD_REPORTS_MAX, type PlanRecord, type PlanEventRef } from "./planning-store";
 
-type AppTaskState = { sourceRef: string; status: "open" | "done" | "dismissed" };
+// `withdrawn`: a dismissed row Calendar Desk itself withdrew (its event was deleted), not one the owner closed.
+type AppTaskState = { sourceRef: string; status: "open" | "done" | "dismissed"; withdrawn?: true };
 const MAX_REASON = 120;
 const MAX_STEPS_PER_EVENT = 3, MAX_WHY = 500, MAX_TITLE = 200;
 const KEY = /^[a-z0-9-]{1,40}$/;
@@ -113,7 +114,8 @@ export async function handlePlanReport(p: Record<string, unknown>, platform: Pla
     const listed = await (platform as any).tasks.list({ prefix }) as { ok: boolean; data?: { tasks: AppTaskState[] }; reason?: string };
     if (!listed.ok) return err("TASKS_UNAVAILABLE", `could not read existing steps: ${listed.reason ?? "unknown"}`, 503);
     const existing = listed.data!.tasks.filter((t) => t.sourceRef.startsWith(prefix) && !t.sourceRef.slice(prefix.length).includes(":"));
-    const closed = new Set(existing.filter((t) => t.status !== "open").map((t) => t.sourceRef.slice(prefix.length)));
+    // A step Calendar Desk withdrew is not the owner's close: an event restored in Google gets it again.
+    const closed = new Set(existing.filter((t) => t.status !== "open" && !t.withdrawn).map((t) => t.sourceRef.slice(prefix.length)));
     const openKeys = new Set(existing.filter((t) => t.status === "open").map((t) => t.sourceRef.slice(prefix.length)));
 
     const seen = new Set<string>();
