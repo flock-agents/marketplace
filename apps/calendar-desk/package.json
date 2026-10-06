@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "dev:server": "bun --watch server/index.ts",
-    "test": "bun test"
+    "test": "bun test",
+    "eval": "LIVE_EVALS=1 bun test ./evals/planner.eval.test.ts"
   },
   "dependencies": {
     "hono": "^4.7.4"
