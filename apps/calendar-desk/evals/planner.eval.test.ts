@@ -29,6 +29,7 @@ if (ENABLED) {
   process.env.DATA_DIR ??= mkdtempSync(join(tmpdir(), "flock-eval-data-"));
   process.env.FLOCK_HOME ??= mkdtempSync(join(tmpdir(), "flock-eval-home-"));
 }
+if (ENABLED) (await import("./machine-tz")).pinMachineZone();
 const PLAN_CASES = ENABLED ? (await import("./fixtures")).PLAN_CASES : [];
 
 let H: typeof import("./harness");
