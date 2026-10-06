@@ -10,8 +10,8 @@ const ctx = { platform, agentId: "pa" };
 beforeEach(() => { for (const t of ["events", "event_notes"]) S._db.exec(`DELETE FROM ${t}`); });
 
 describe("operations", () => {
-  test("the reminder operations are gone; the three event operations remain", () => {
-    expect(Object.keys(ops).sort()).toEqual(["list_upcoming", "refresh_calendar", "set_event_note"]);
+  test("the reminder operations are gone; the event operations remain", () => {
+    expect(Object.keys(ops).sort()).toEqual(["list_upcoming", "plan_events_done", "refresh_calendar", "set_event_note"]);
   });
   test("list_upcoming lists events only, in date order within the window", async () => {
     const row = (eventKey: string, localDate: string) => ({ eventKey, calendar: null, title: eventKey, startAt: null, endAt: null, allDay: true, localDate, attendeesText: null, location: null, rawTimeText: null });

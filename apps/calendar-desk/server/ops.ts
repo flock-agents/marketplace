@@ -3,6 +3,7 @@ import { listEvents, setEventNote, getEventNote, listInit } from "./store";
 import { ymd } from "./events";
 import { syncAccount } from "./sync";
 import { syncFactEvents } from "./facts";
+import { handlePlanReport } from "./plan-report";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const err = (code: string, message: string, status = 400): OpError => ({ error: message, code, status });
@@ -54,6 +55,7 @@ export const ops: Record<string, OpHandler> = {
     ].sort((a, b) => a.date.localeCompare(b.date) || (a.time ?? "").localeCompare(b.time ?? ""));
     return { from, to, items };
   },
+  async plan_events_done(p, ctx) { return handlePlanReport(p, ctx.platform, new Date()); },
   async set_event_note(p) {
     const note = typeof p.note === "string" ? p.note.trim().slice(0, 2000) : "";
     if (!note) return err("MISSING_NOTE", "A note needs text");
