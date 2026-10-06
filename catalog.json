@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "updatedAt": "2026-10-03T00:00:00Z",
+  "updatedAt": "2026-10-06T00:00:00Z",
   "items": [
     {
       "slug": "linear",
@@ -129,7 +129,7 @@
       "path": "skills/google-calendar",
       "latestVersion": "1.0.0",
       "latestTag": "google-calendar-v1.0.0",
-      "minFlockVersion": "0.11.0",
+      "minFlockVersion": "0.12.0",
       "publishedAt": "2026-10-06T00:00:00Z",
       "updatedAt": "2026-10-06T00:00:00Z"
     },
@@ -302,11 +302,11 @@
       "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "apps/calendar-desk",
-      "latestVersion": "1.3.2",
-      "latestTag": "calendar-desk-v1.3.2-rc1",
-      "minFlockVersion": "0.9.0",
+      "latestVersion": "2.0.0",
+      "latestTag": "calendar-desk-v2.0.0-rc1",
+      "minFlockVersion": "0.12.0",
       "publishedAt": "2026-10-03T00:00:00Z",
-      "updatedAt": "2026-10-05T12:00:00Z"
+      "updatedAt": "2026-10-06T00:00:00Z"
     },
     {
       "slug": "slack-assistant",
