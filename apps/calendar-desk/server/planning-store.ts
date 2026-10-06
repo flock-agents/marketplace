@@ -1,0 +1,145 @@
+// Planning bookkeeping, ported from core's pa-brief planned-events.ts and the selection in pipeline.ts startPlanningRun:
+// which events were planned (and at which date/start), the plans handed to the working agent, the step keys already made.
+import { _db as db, listEvents, getCursor, setCursor, type EventRow } from "./store";
+
+export const PLAN_EVENTS_MAX = 20;
+export const SILENT_END_MAX = 2;
+export const DETAILS_PENDING_WAIT_MS = 2 * 3600_000;
+export const PLAN_GIVE_UP_MS = 2 * 3600_000;
+export const BAD_REPORTS_MAX = 3;
+const HORIZON_DAYS = 90;
+
+export interface PlanEventRef { ref: string; accountId: string; eventKey: string; date: string; startAt: number | null }
+export interface PlanRecord { planId: string; createdAt: number; sessionId: string | null; events: PlanEventRef[]; answeredAt: number | null; abandonedAt: number | null; badReports: number }
+type EventId = { accountId: string; eventKey: string; date: string; startAt: number | null };
+
+// ── planned marks ─────────────────────────────────────────────────────────────────────────
+
+export function plannedMark(accountId: string, eventKey: string): { date: string; startAt: number | null; plannedAt: number } | null {
+  const r = db.query("SELECT date, start_at, planned_at FROM planned WHERE account_id = ? AND event_key = ? AND planned_at IS NOT NULL").get(accountId, eventKey) as any;
+  return r ? { date: r.date, startAt: r.start_at ?? null, plannedAt: r.planned_at } : null;
+}
+
+export function markPlanned(events: EventId[], at: number): void {
+  const up = db.query(`INSERT INTO planned (account_id, event_key, date, start_at, planned_at, failed_tries) VALUES (?, ?, ?, ?, ?, 0)
+    ON CONFLICT(account_id, event_key) DO UPDATE SET date = excluded.date, start_at = excluded.start_at, planned_at = excluded.planned_at, failed_tries = 0`);
+  db.transaction(() => { for (const e of events) up.run(e.accountId, e.eventKey, e.date, e.startAt ?? null, at); })();
+}
+
+/** Drops marks (and counted tries) whose date is before `todayDate`. */
+export function prunePlanned(todayDate: string): void {
+  db.query("DELETE FROM planned WHERE date < ?").run(todayDate);
+}
+
+// ── selection ─────────────────────────────────────────────────────────────────────────────
+
+const pad2 = (n: number) => String(n).padStart(2, "0");
+const ymd = (d: Date) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+const addDays = (d: Date, n: number) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
+const waitCursor = (accountId: string, eventKey: string) => `details_wait:${accountId}:${eventKey}`;
+
+/**
+ * Events today..+90d (not missing) that are new or whose date/start moved since they were planned, nearest first, at most
+ * PLAN_EVENTS_MAX. A Google event whose details were never read waits for them, unless it is due by tomorrow or has waited 2h
+ * (the wait starts when first considered, kept in a cursor so a restart does not reset it).
+ */
+export function eventsToPlan(now: Date): (EventRow & { change: "new" | "changed" })[] {
+  const today = ymd(now), tomorrow = ymd(addDays(now, 1));
+  const t = now.getTime();
+  const out: (EventRow & { change: "new" | "changed" })[] = [];
+  for (const e of listEvents({ fromDate: today, toDate: ymd(addDays(now, HORIZON_DAYS)) })) {
+    const pending = e.source === "google" && e.detailsAt == null;
+    const cur = waitCursor(e.accountId, e.eventKey);
+    if (pending && e.localDate > tomorrow) {
+      let since = Number(getCursor(cur));
+      if (!since) { since = t; setCursor(cur, String(t)); }
+      if (t - since <= DETAILS_PENDING_WAIT_MS) continue;
+    } else if (!pending && getCursor(cur) !== null) {
+      db.query("DELETE FROM cursors WHERE key = ?").run(cur);
+    }
+    const mark = plannedMark(e.accountId, e.eventKey);
+    if (!mark) out.push({ ...e, change: "new" });
+    else if (mark.date !== e.localDate || mark.startAt !== (e.startAt ?? null)) out.push({ ...e, change: "changed" });
+  }
+  out.sort((a, b) => a.localDate.localeCompare(b.localDate) || (a.startAt ?? 0) - (b.startAt ?? 0));
+  return out.slice(0, PLAN_EVENTS_MAX);
+}
+
+// ── plans ─────────────────────────────────────────────────────────────────────────────────
+
+function rowToPlan(r: any): PlanRecord {
+  return { planId: r.plan_id, createdAt: r.created_at, sessionId: r.session_id ?? null, events: JSON.parse(r.events_json), answeredAt: r.answered_at ?? null, abandonedAt: r.abandoned_at ?? null, badReports: r.bad_reports };
+}
+
+export function getPlan(planId: string): PlanRecord | null {
+  const r = db.query("SELECT * FROM plans WHERE plan_id = ?").get(planId);
+  return r ? rowToPlan(r) : null;
+}
+
+/** The plan still waiting for its report: not answered, not abandoned. */
+export function openPlan(): PlanRecord | null {
+  const r = db.query("SELECT * FROM plans WHERE answered_at IS NULL AND abandoned_at IS NULL ORDER BY created_at DESC LIMIT 1").get();
+  return r ? rowToPlan(r) : null;
+}
+
+export function createPlan(events: PlanEventRef[], at: number): PlanRecord {
+  const planId = crypto.randomUUID();
+  db.query("INSERT INTO plans (plan_id, created_at, events_json) VALUES (?, ?, ?)").run(planId, at, JSON.stringify(events));
+  return getPlan(planId)!;
+}
+
+export function setPlanSession(planId: string, sessionId: string): void {
+  db.query("UPDATE plans SET session_id = ? WHERE plan_id = ?").run(sessionId, planId);
+}
+
+export function answerPlan(planId: string, at: number): void {
+  db.query("UPDATE plans SET answered_at = ? WHERE plan_id = ?").run(at, planId);
+}
+
+export function noteBadReport(planId: string): number {
+  db.query("UPDATE plans SET bad_reports = bad_reports + 1 WHERE plan_id = ?").run(planId);
+  return (db.query("SELECT bad_reports FROM plans WHERE plan_id = ?").get(planId) as { bad_reports: number } | null)?.bad_reports ?? 0;
+}
+
+/**
+ * The plan ended without a report. countTry (default true) counts one failed try per event at its offered date/start (a moved
+ * event starts again at 1); at SILENT_END_MAX the event is marked planned with no steps, so one event the model never answers
+ * cannot hold the planner. A refused wake passes countTry: false.
+ */
+export function abandonPlan(planId: string, at: number, opts: { countTry?: boolean } = {}): void {
+  const plan = getPlan(planId);
+  if (!plan) return;
+  db.transaction(() => {
+    db.query("UPDATE plans SET abandoned_at = ? WHERE plan_id = ? AND abandoned_at IS NULL").run(at, planId);
+    if (opts.countTry === false) return;
+    for (const e of plan.events) {
+      const startAt = e.startAt ?? null;
+      const cur = db.query("SELECT date, start_at, failed_tries, planned_at FROM planned WHERE account_id = ? AND event_key = ?").get(e.accountId, e.eventKey) as any;
+      const same = cur && cur.planned_at == null && cur.date === e.date && (cur.start_at ?? null) === startAt;
+      const count = same ? cur.failed_tries + 1 : 1;
+      if (count >= SILENT_END_MAX) markPlanned([e], at);
+      else db.query(`INSERT INTO planned (account_id, event_key, date, start_at, planned_at, failed_tries) VALUES (?, ?, ?, ?, NULL, ?)
+        ON CONFLICT(account_id, event_key) DO UPDATE SET date = excluded.date, start_at = excluded.start_at, planned_at = NULL, failed_tries = excluded.failed_tries`)
+        .run(e.accountId, e.eventKey, e.date, startAt, count);
+    }
+  })();
+}
+
+// ── step keys ─────────────────────────────────────────────────────────────────────────────
+
+export function recordStep(accountId: string, eventKey: string, stepKey: string): void {
+  db.query("INSERT OR IGNORE INTO plan_steps (account_id, event_key, step_key) VALUES (?, ?, ?)").run(accountId, eventKey, stepKey);
+}
+
+export function stepKeysFor(accountId: string, eventKey: string): string[] {
+  return (db.query("SELECT step_key FROM plan_steps WHERE account_id = ? AND event_key = ? ORDER BY rowid").all(accountId, eventKey) as { step_key: string }[]).map((r) => r.step_key);
+}
+
+/** Forgets the event's mark, tries and step keys: one that comes back is planned afresh. */
+export function forgetEvent(accountId: string, eventKey: string): void {
+  db.transaction(() => {
+    db.query("DELETE FROM planned WHERE account_id = ? AND event_key = ?").run(accountId, eventKey);
+    db.query("DELETE FROM plan_steps WHERE account_id = ? AND event_key = ?").run(accountId, eventKey);
+    db.query("DELETE FROM cursors WHERE key = ?").run(waitCursor(accountId, eventKey));
+  })();
+}

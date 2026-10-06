@@ -66,6 +66,10 @@ const migrations: string[] = [
      WHERE EXISTS (SELECT 1 FROM events e WHERE e.account_id = preps.account_id AND e.event_key = preps.event_key AND e.google_event_id IS NOT NULL);
    UPDATE OR IGNORE events SET event_key = google_event_id WHERE source = 'google' AND google_event_id IS NOT NULL;
    DELETE FROM events WHERE source = 'google' AND google_event_id IS NOT NULL AND event_key <> google_event_id`,
+  // 2026-10-06 (planning): which events were planned (planned_at NULL = failed tries only), the plans handed to the working agent, and the step keys already made.
+  `CREATE TABLE IF NOT EXISTS planned (account_id TEXT NOT NULL, event_key TEXT NOT NULL, date TEXT NOT NULL, start_at INTEGER, planned_at INTEGER, failed_tries INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (account_id, event_key))`,
+  `CREATE TABLE IF NOT EXISTS plans (plan_id TEXT PRIMARY KEY, created_at INTEGER NOT NULL, session_id TEXT, events_json TEXT NOT NULL, answered_at INTEGER, abandoned_at INTEGER, bad_reports INTEGER NOT NULL DEFAULT 0)`,
+  `CREATE TABLE IF NOT EXISTS plan_steps (account_id TEXT NOT NULL, event_key TEXT NOT NULL, step_key TEXT NOT NULL, PRIMARY KEY (account_id, event_key, step_key))`,
 ];
 
 function applyMigrations(): void {
