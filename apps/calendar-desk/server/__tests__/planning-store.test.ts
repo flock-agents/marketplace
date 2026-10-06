@@ -141,6 +141,26 @@ describe("plans and steps", () => {
     P.abandonPlan(P.createPlan([{ ref: "e1", ...ref("a", "2026-11-02") }], 3).planId, 4);
     expect(P.plannedMark("acct", "a")).toBeNull();
   });
+  test("abandoning a moved, planned event keeps its mark; SILENT_END_MAX marks it at the new date/start", () => {
+    seed("a", "2026-11-02", 9);
+    P.markPlanned([ref("a", "2026-11-01", 5)], 10);
+    const e = [{ ref: "e1", ...ref("a", "2026-11-02", 9) }];
+    P.abandonPlan(P.createPlan(e, 1).planId, 2);
+    expect(P.plannedMark("acct", "a")).toEqual({ date: "2026-11-01", startAt: 5, plannedAt: 10 });
+    expect(P.eventsToPlan(NOW).map((x) => x.change)).toEqual(["changed"]);
+    P.abandonPlan(P.createPlan(e, 3).planId, 4);
+    expect(P.plannedMark("acct", "a")).toEqual({ date: "2026-11-02", startAt: 9, plannedAt: 4 });
+    expect(keys()).toEqual([]);
+    expect(P.stepKeysFor("acct", "a")).toEqual([]);
+  });
+  test("prune also drops details_wait cursors of past events", () => {
+    seed("p", "2026-10-05", null, { details: false });
+    S.setCursor("details_wait:acct:p", "1"); S.setCursor("details_wait:acct:q", "1");
+    seed("q", "2026-10-09", null, { details: false });
+    P.prunePlanned("2026-10-06");
+    expect(S.getCursor("details_wait:acct:p")).toBeNull();
+    expect(S.getCursor("details_wait:acct:q")).toBe("1");
+  });
   test("step keys: record, list, forget with the mark", () => {
     P.markPlanned([ref("a", "2026-11-01")], 1);
     P.recordStep("acct", "a", "book-cab"); P.recordStep("acct", "a", "book-cab"); P.recordStep("acct", "a", "pack");

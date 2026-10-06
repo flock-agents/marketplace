@@ -21,14 +21,16 @@ export function plannedMark(accountId: string, eventKey: string): { date: string
 }
 
 export function markPlanned(events: EventId[], at: number): void {
-  const up = db.query(`INSERT INTO planned (account_id, event_key, date, start_at, planned_at, failed_tries) VALUES (?, ?, ?, ?, ?, 0)
-    ON CONFLICT(account_id, event_key) DO UPDATE SET date = excluded.date, start_at = excluded.start_at, planned_at = excluded.planned_at, failed_tries = 0`);
+  const up = db.query(`INSERT INTO planned (account_id, event_key, date, start_at, planned_at, failed_tries, try_date, try_start_at) VALUES (?, ?, ?, ?, ?, 0, NULL, NULL)
+    ON CONFLICT(account_id, event_key) DO UPDATE SET date = excluded.date, start_at = excluded.start_at, planned_at = excluded.planned_at, failed_tries = 0, try_date = NULL, try_start_at = NULL`);
   db.transaction(() => { for (const e of events) up.run(e.accountId, e.eventKey, e.date, e.startAt ?? null, at); })();
 }
 
 /** Drops marks (and counted tries) whose date is before `todayDate`. */
 export function prunePlanned(todayDate: string): void {
   db.query("DELETE FROM planned WHERE date < ?").run(todayDate);
+  db.query(`DELETE FROM cursors WHERE key LIKE 'details_wait:%' AND EXISTS (SELECT 1 FROM events e
+    WHERE e.local_date < ? AND cursors.key = 'details_wait:' || e.account_id || ':' || e.event_key)`).run(todayDate);
 }
 
 // ── selection ─────────────────────────────────────────────────────────────────────────────
@@ -114,13 +116,14 @@ export function abandonPlan(planId: string, at: number, opts: { countTry?: boole
     if (opts.countTry === false) return;
     for (const e of plan.events) {
       const startAt = e.startAt ?? null;
-      const cur = db.query("SELECT date, start_at, failed_tries, planned_at FROM planned WHERE account_id = ? AND event_key = ?").get(e.accountId, e.eventKey) as any;
-      const same = cur && cur.planned_at == null && cur.date === e.date && (cur.start_at ?? null) === startAt;
+      const cur = db.query("SELECT failed_tries, try_date, try_start_at FROM planned WHERE account_id = ? AND event_key = ?").get(e.accountId, e.eventKey) as any;
+      const same = cur && cur.try_date === e.date && (cur.try_start_at ?? null) === startAt;
       const count = same ? cur.failed_tries + 1 : 1;
       if (count >= SILENT_END_MAX) markPlanned([e], at);
-      else db.query(`INSERT INTO planned (account_id, event_key, date, start_at, planned_at, failed_tries) VALUES (?, ?, ?, ?, NULL, ?)
-        ON CONFLICT(account_id, event_key) DO UPDATE SET date = excluded.date, start_at = excluded.start_at, planned_at = NULL, failed_tries = excluded.failed_tries`)
-        .run(e.accountId, e.eventKey, e.date, startAt, count);
+      // Tries live apart from the mark: an existing mark (date/start/planned_at) survives; with none, the row is tries-only (planned_at NULL).
+      else db.query(`INSERT INTO planned (account_id, event_key, date, start_at, planned_at, failed_tries, try_date, try_start_at) VALUES (?, ?, ?, ?, NULL, ?, ?, ?)
+        ON CONFLICT(account_id, event_key) DO UPDATE SET failed_tries = excluded.failed_tries, try_date = excluded.try_date, try_start_at = excluded.try_start_at`)
+        .run(e.accountId, e.eventKey, e.date, startAt, count, e.date, startAt);
     }
   })();
 }
