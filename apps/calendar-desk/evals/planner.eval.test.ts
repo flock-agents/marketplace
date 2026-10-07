@@ -55,7 +55,8 @@ describe.skipIf(!ENABLED)("Calendar Desk planner (live)", () => {
     test(c.id, async () => {
       let passed = 0;
       const failures: string[] = [];
-      for (let i = 0; i < RUNS; i++) {
+      const runs = c.runs ?? RUNS;
+      for (let i = 0; i < runs; i++) {
         const pl = await H.plan(c);
         const { text, model } = await live!.callInternalLLM({ taskType: "agent-test", tierOverride: "mid", system: `${PROMPT}\n\n${H.INSTRUCTIONS}${H.HARNESS}`, user: H.userMessage(c, pl), maxTokens: 3000, timeoutMs: 140_000 });
         expect(model).toBe(live!.SONNET);
@@ -65,8 +66,8 @@ describe.skipIf(!ENABLED)("Calendar Desk planner (live)", () => {
           failures.push(...problems.map((p) => `run ${i + 1}: ${p}`));
         } else passed++;
       }
-      console.log(`[calendar-desk-planner-live] ${c.id}: ${passed}/${RUNS}`);
+      console.log(`[calendar-desk-planner-live] ${c.id}: ${passed}/${runs}`);
       expect(failures).toEqual([]);
-    }, TIMEOUT * RUNS);
+    }, TIMEOUT * (c.runs ?? RUNS));
   }
 });
