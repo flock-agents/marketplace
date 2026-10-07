@@ -155,10 +155,11 @@ describe("settleAsks", () => {
     expect(f.extracted).toHaveLength(1);
     expect(f.extracted[0]!.items).toHaveLength(1);
     const item = f.extracted[0]!.items[0];
-    expect(item.text).toBe("The owner wants a reminder to book a cab before appointments.");
+    expect(item.text).toBe("Wants a reminder to book a cab before appointments.");
+    expect(item.hints).toEqual({ extractTasks: false });
     expect(typeof item.id).toBe("string");
     expect(new Date(item.timestamp).getTime()).toBe(NOW + DAY);
-    expect(f.extracted[0]!.source.type).toBeDefined();
+    expect(f.extracted[0]!.source).toEqual({ type: "external", connectorSkill: "calendar-desk" });
 
     const again = await settleAsks(f.ctx, await asks(f), new Map(), NOW + 2 * DAY);
     expect(again.answered).toEqual([]);
@@ -173,11 +174,12 @@ describe("settleAsks", () => {
     const r = await settleAsks(f.ctx, await asks(f), new Map(), NOW + DAY);
     expect(r.answered).toEqual([{ kind: "gift", yes: false }]);
     await flush();
-    expect(f.extracted.map((e) => e.items[0].text)).toEqual(["The owner does not want a reminder to buy a gift before family birthdays."]);
+    expect(f.extracted.map((e) => e.items[0].text)).toEqual(["Does not want a reminder to buy a gift before family birthdays."]);
   });
 
-  test("a failed memory write logs and does not block the answer", async () => {
-    const f = flock({ extract: () => failed("memory down") });
+  test("a failed memory write logs, does not block the answer, and is retried next run without re-reporting", async () => {
+    let down = true;
+    const f = flock({ extract: () => (down ? failed("memory down") : ok({})) });
     const warn = console.warn; const logged: string[] = []; console.warn = (m: string) => { logged.push(m); };
     try {
       await publishAsk(f.ctx, "gift", NOW, []);
@@ -187,6 +189,30 @@ describe("settleAsks", () => {
       await flush();
     } finally { console.warn = warn; }
     expect(logged.some((m) => m.includes("gift"))).toBe(true);
+    expect(f.extracted).toHaveLength(1);
+
+    down = false;
+    const retry = await settleAsks(f.ctx, await asks(f), new Map(), NOW + 2 * DAY);
+    expect(retry.answered).toEqual([]);
+    await flush();
+    expect(f.extracted).toHaveLength(2);
+
+    await settleAsks(f.ctx, await asks(f), new Map(), NOW + 3 * DAY);
+    await flush();
+    expect(f.extracted).toHaveLength(2); // written: not sent again
+  });
+
+  test("a write still in flight is not sent again by an overlapping run", async () => {
+    let release!: () => void;
+    const f = flock({ extract: () => new Promise((r) => { release = () => r(ok({})); }) });
+    await publishAsk(f.ctx, "gift", NOW, []);
+    f.close("ask:gift", "no");
+    await settleAsks(f.ctx, await asks(f), new Map(), NOW + DAY);
+    await flush();
+    await settleAsks(f.ctx, await asks(f), new Map(), NOW + DAY);
+    await flush();
+    expect(f.extracted).toHaveLength(1);
+    release(); await flush();
   });
 
   test("a close without an action id writes nothing", async () => {

@@ -4,7 +4,7 @@
 // after 14 days, and withdraws it early when a fact it did not see at publish shows the owner answered in chat.
 import type { PlatformContext } from "@flock/app-sdk";
 import { KINDS, kindSpec } from "./kinds";
-import { recordAsk, askRecord, markAnswerWritten } from "./planning-store";
+import { recordAsk, askRecord, markAnswerReported, markMemoryWritten } from "./planning-store";
 
 export const ASK_TTL_MS = 14 * 86400_000;
 const PREFIX = "ask:";
@@ -54,26 +54,30 @@ export async function publishAsk(platform: PlatformContext, kind: string, now: n
   else console.warn(`[calendar-desk] ask ${kind} not published: ${(res as any).reason ?? "unknown"}`);
 }
 
-/** "Remind you to book a cab before appointments?" → the owner's answer as one plain statement. */
-function preference(title: string, yes: boolean): string {
+/** "Remind you to book a cab before appointments?" → the answer as one subject-less statement (memory drops "The owner wants …"). */
+export function preference(title: string, yes: boolean): string {
   const what = title.replace(/^Remind you to /, "").replace(/\?$/, "");
-  return `The owner ${yes ? "wants" : "does not want"} a reminder to ${what}.`;
+  return `${yes ? "Wants" : "Does not want"} a reminder to ${what}.`;
 }
 
-/** Writes the answer to memory once. Fire-and-forget: a failure logs and is not retried; the card's actionId stays the truth. */
-function writeAnswer(platform: PlatformContext, kind: string, yes: boolean, now: number): void {
+const writing = new Set<string>(); // kinds whose memory write is in flight, so an overlapping run does not send it twice
+
+/** Writes the answer to memory, not awaited. Only a successful write marks it written; a failure logs and the next run retries. */
+function writeAnswer(platform: PlatformContext, kind: string, answer: "yes" | "no", now: number): void {
   const ask = kindSpec(kind)?.ask;
-  if (!ask) return;
-  const text = preference(ask.title, yes);
-  const item = { id: `calendar-desk:${askRef(kind)}:${yes ? "yes" : "no"}`, text, timestamp: new Date(now).toISOString() };
+  if (!ask || writing.has(kind)) return;
+  writing.add(kind);
+  // A preference, not a to-do: task extraction is off so the answer cannot mint a TODO.
+  const item = { id: `calendar-desk:${askRef(kind)}:${answer}`, text: preference(ask.title, answer === "yes"), timestamp: new Date(now).toISOString(), hints: { extractTasks: false } };
   const warn = (why: string) => console.warn(`[calendar-desk] ask ${kind}: answer not written to memory: ${why}`);
   Promise.resolve()
     .then(() => platform.memory.extract([item], { type: "external", connectorSkill: "calendar-desk" }, { timeoutMs: 130_000 }))
-    .then((res) => { if (!res.ok) warn((res as any).reason ?? "unknown"); }, (e) => warn(e?.message ?? String(e)));
+    .then((res) => { if (res.ok) markMemoryWritten(kind, answer); else warn((res as any).reason ?? "unknown"); }, (e) => warn(e?.message ?? String(e)))
+    .finally(() => writing.delete(kind));
 }
 
 /**
- * Each run: reports kinds newly answered by button (and writes each answer to memory once), withdraws an open card past its
+ * Each run: reports kinds newly answered by button (once each) and writes each answer to memory until a write succeeds; withdraws an open card past its
  * 14 days ("expired") or one a new fact for its kind already answers ("answered in chat"). A withdrawn card's state becomes
  * `unanswered` in `states`.
  */
@@ -81,9 +85,8 @@ export async function settleAsks(platform: PlatformContext, states: Map<string, 
   const answered: { kind: string; yes: boolean }[] = [];
   for (const st of states.values()) {
     if (st.status === "yes" || st.status === "no") {
-      if (!markAnswerWritten(st.kind, st.status, now)) continue;
-      answered.push({ kind: st.kind, yes: st.status === "yes" });
-      writeAnswer(platform, st.kind, st.status === "yes", now);
+      if (markAnswerReported(st.kind, st.status, now)) answered.push({ kind: st.kind, yes: st.status === "yes" });
+      if (askRecord(st.kind)?.memoryWritten !== st.status) writeAnswer(platform, st.kind, st.status, now);
     } else if (st.status === "waiting") {
       const seen = new Set(st.factsAtPublish ?? []);
       const reason = (factsByKind.get(st.kind) ?? []).some((f) => !seen.has(f)) ? "answered in chat"
