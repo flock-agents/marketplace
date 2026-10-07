@@ -208,7 +208,7 @@ export const PLAN_CASES: PlanCase[] = [
   {
     id: "birthday-in-6-days", events: [flight2, bday6],
     expect: (o) => [
-      ...(kindsFor(o, "e1").includes("checkin") ? [] : ["birthday-in-6-days: no check-in step for the flight (guard: the model must act on events)"]),
+      ...exactKinds("birthday-in-6-days", o, "e1", ["checkin", "cab-airport"]),
       ...nothingFor("birthday-in-6-days", o, "e2"),
     ],
     answer: { steps: { e1: [checkin(1), cabAirport(1)], e2: [] }, ties: [] },
@@ -224,11 +224,11 @@ export const PLAN_CASES: PlanCase[] = [
   {
     id: "newsletter-webinar", events: [flight2, webinar],
     expect: (o) => [
-      ...(kindsFor(o, "e1").includes("checkin") ? [] : ["newsletter-webinar: no check-in step for the flight (guard: the model must act on events)"]),
+      ...exactKinds("newsletter-webinar", o, "e1", ["checkin", "cab-airport"]),
       ...nothingFor("newsletter-webinar", o, "e2"),
     ],
     answer: { steps: { e1: [checkin(1), cabAirport(1)], e2: [] }, ties: [] },
-    wrong: { steps: { e1: [checkin(1), cabAirport(1)], e2: [] }, ties: [], types: { e2: "meeting" } },
+    wrong: { steps: { e1: [checkin(1), cabAirport(1)], e2: [step("register", "other", "Register for the webinar", D(1), D(1))] }, ties: [], types: { e2: "occasion" } },
   },
   {
     // The daughter's birthday has a gift habit (done last time), so it is the positive guard beside the holiday.
@@ -250,6 +250,7 @@ export const PLAN_CASES: PlanCase[] = [
       const p: string[] = [];
       if (!tieFor(o, "task-o1-checkin", "e1")) p.push("user-todo-exists-for-event: o1 is not tied to e1");
       if (kindsFor(o, "e1").includes("checkin")) p.push("user-todo-exists-for-event: a check-in step although the user has their own check-in TODO");
+      if (!kindsFor(o, "e1").includes("cab-airport")) p.push("user-todo-exists-for-event: no cab-airport step (the TODO covers check-in only)");
       return p;
     },
     answer: { steps: { e1: [cabAirport(1)] }, ties: [{ todo: "task-o1-checkin", ref: "e1" }] },
@@ -305,11 +306,11 @@ export const PLAN_CASES: PlanCase[] = [
     id: "colleague-conference-nothing-to-prepare",
     events: [flight2, ev("e2", { title: "Conference: Cloud Native Day (Meera Example is speaking)", type: "other", source: "google", plus: 45 })],
     expect: (o) => [
-      ...(kindsFor(o, "e1").includes("checkin") ? [] : ["colleague-conference-nothing-to-prepare: no check-in step for the flight (guard: the model must act on events)"]),
+      ...exactKinds("colleague-conference-nothing-to-prepare", o, "e1", ["checkin", "cab-airport"]),
       ...nothingFor("colleague-conference-nothing-to-prepare", o, "e2"),
     ],
     answer: { steps: { e1: [checkin(1), cabAirport(1)], e2: [] }, ties: [] },
-    wrong: { steps: { e1: [checkin(1), cabAirport(1)], e2: [] }, ties: [], types: { e2: "meeting" } },
+    wrong: { steps: { e1: [checkin(1), cabAirport(1)], e2: [step("register", "other", "Register for Cloud Native Day", D(10), D(10))] }, ties: [], types: { e2: "occasion" } },
   },
   {
     id: "flight-tomorrow-0600-seen-at-2100", now: localMs(TODAY, "21:00"),
@@ -526,7 +527,7 @@ export const PLAN_CASES: PlanCase[] = [
   },
   {
     id: "event-with-steps-gets-no-new-steps", events: [hampi()],
-    todos: [{ id: "task-o1-gym", title: "Renew gym membership", duePlus: 20, by: "you" }],
+    todos: [{ id: "task-o1-gym", title: "Renew gym membership", duePlus: 5, by: "you" }],
     expect: (o) => {
       const p: string[] = [];
       if (stepsFor(o, "e1").length) p.push(`event-with-steps-gets-no-new-steps: steps for an event whose steps already cover it: ${stepsFor(o, "e1").map((s) => s.key).join(", ")}`);
