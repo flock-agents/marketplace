@@ -49,6 +49,32 @@ describe("retryUnfinishedInits backoff", () => {
     expect(await retryUnfinishedInits(p.ctx, at(4, 50))).toBe(0);
     expect(await retryUnfinishedInits(p.ctx, at(5, 1))).toBe(1);
   });
+  test("busy and failure keep their own ladders: a failure after busy refusals waits 5 minutes, a busy after failures waits 1", async () => {
+    await retryUnfinishedInits(busy().ctx, at(0));
+    await retryUnfinishedInits(busy().ctx, at(1, 1));
+    await retryUnfinishedInits(busy().ctx, at(3, 2));
+    await retryUnfinishedInits(fails().ctx, at(7, 3));
+    expect(await retryUnfinishedInits(fails().ctx, at(12, 0))).toBe(0);
+    expect(await retryUnfinishedInits(fails().ctx, at(12, 5))).toBe(1);
+    expect(await retryUnfinishedInits(busy().ctx, at(22, 10))).toBe(1);
+    expect(await retryUnfinishedInits(busy().ctx, at(23, 0))).toBe(0);
+    expect(await retryUnfinishedInits(busy().ctx, at(23, 15))).toBe(1);
+  });
+  test("a row that became done during the loop is not read again, and a done row is never demoted", async () => {
+    S.markInitStarted("acct2", "Reading your calendar");
+    const seen: string[] = [];
+    const sync = async (a: string) => {
+      seen.push(a);
+      if (a === "acct") S.markInitFinished("acct2", "done", "Calendar is set up");
+      return { ok: true, events: 0, fault: null };
+    };
+    expect(await retryUnfinishedInits(works().ctx, at(0), { sync: sync as any })).toBe(1);
+    expect(seen).toEqual(["acct"]);
+    const { completeFirstRead } = await import("../init-retry");
+    expect(await completeFirstRead(works().ctx, "acct2", { ok: false, events: 0, fault: "timeout" }, () => at(1))).toBe("done");
+    expect(await completeFirstRead(works().ctx, "acct2", { ok: false, events: 0, fault: "guard_busy", busy: true }, () => at(1))).toBe("done");
+    expect(S.listInit().find((r) => r.accountId === "acct2")).toMatchObject({ outcome: "done" });
+  });
   test("done rows are not retried", async () => {
     S.markInitFinished("acct", "done", "Calendar is set up");
     const p = works();

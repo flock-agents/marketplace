@@ -355,4 +355,13 @@ describe("busy refusals (post-test Task 3)", () => {
     expect(faultKind("agenda unreadable")).toBe("other");
     expect(faultKind("timeout")).toBe("other");
   });
+  test("faultKind: the executor's busy refusal and a full queue are busy", () => {
+    expect(faultKind("Account is busy (google-calendar)")).toBe("busy");
+    expect(faultKind("queue_full")).toBe("busy");
+  });
+  test("faultKind reads the guard's reason, not the quoted session name", () => {
+    expect(faultKind('BROWSER_ERROR: Account guard blocked fetch for "busy-login-signin": quarantined after a login wall')).toBe("session");
+    expect(faultKind('BROWSER_ERROR: Account guard blocked fetch for "busy-login-signin": navigation timeout')).toBe("other");
+    expect(faultKind('BROWSER_ERROR: Account guard blocked fetch for "login-signin": busy, retry in 30s')).toBe("busy");
+  });
 });

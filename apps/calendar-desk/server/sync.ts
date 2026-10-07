@@ -29,8 +29,12 @@ export type FaultKind = "busy" | "session" | "other";
 /** Busy is checked first: the busy refusal itself says "the sign-in is fine ... do not reset or reconnect it". */
 export function faultKind(reason: string): FaultKind {
   const t = reason.trim();
-  if (/another read is using this account/i.test(t) || (/Account guard blocked fetch/i.test(t) && /busy/i.test(t)) || /^(guard_busy|busy)$/i.test(t)) return "busy";
-  if (/quarantin|auth_wall|captcha|login|log in|sign[- ]?in|signed out|session expired|reconnect/i.test(t)) return "session";
+  // The guard's text quotes the session name before its reason; only the reason is read, so a name can't decide.
+  const guard = t.match(/Account guard blocked fetch for "[^"]*":\s*([\s\S]*)$/i);
+  const body = guard ? guard[1]!.trim() : t;
+  if (/another read is using this account/i.test(body) || (guard && /^busy\b/i.test(body)) || /^(guard_busy|busy|queue_full)$/i.test(body)
+    || /(^|:\s*)Account is busy\b/i.test(body) || /\bqueue_full\b/i.test(body)) return "busy";
+  if (/quarantin|auth_wall|captcha|login|log in|sign[- ]?in|signed out|session expired|reconnect/i.test(body)) return "session";
   return "other";
 }
 

@@ -13,14 +13,21 @@ const BUSY_BACKOFF = { firstMs: 1 * MIN, capMs: 10 * MIN };
 const FAIL_BACKOFF = { firstMs: 5 * MIN, capMs: 60 * MIN };
 
 const retryKey = (a: string) => `init_retry:${a}`;
-function readRetry(a: string): { n: number; at: number } | null {
-  try { const v = JSON.parse(getCursor(retryKey(a)) || "null"); return v && typeof v.at === "number" ? { n: Number(v.n) || 0, at: v.at } : null; } catch { return null; }
+type Retry = { n: number; at: number; kind: "busy" | "failed" };
+function readRetry(a: string): Retry | null {
+  try {
+    const v = JSON.parse(getCursor(retryKey(a)) || "null");
+    return v && typeof v.at === "number" ? { n: Number(v.n) || 0, at: v.at, kind: v.kind === "busy" ? "busy" : "failed" } : null;
+  } catch { return null; }
 }
+/** Busy and failed reads climb their own ladders: a change of kind starts the new one from the bottom. */
 function scheduleRetry(a: string, busy: boolean, now: Date): void {
-  const n = readRetry(a)?.n ?? 0;
+  const kind = busy ? "busy" : "failed";
+  const prev = readRetry(a);
+  const n = prev && prev.kind === kind ? prev.n : 0;
   const b = busy ? BUSY_BACKOFF : FAIL_BACKOFF;
   const wait = Math.min(b.firstMs * 2 ** n, b.capMs);
-  setCursor(retryKey(a), JSON.stringify({ n: n + 1, at: now.getTime() + wait }));
+  setCursor(retryKey(a), JSON.stringify({ n: n + 1, at: now.getTime() + wait, kind }));
 }
 
 /** The routines the platform named on the last initialize, kept so a retried first read knows planning is on before any tick. */
@@ -44,7 +51,10 @@ export async function planAfterFirstRead(platform: PlatformContext, clock: () =>
 export async function completeFirstRead(platform: PlatformContext, accountId: string, r: SyncResult, clock: () => Date, enabled?: string[], opts: { defer?: boolean } = {}): Promise<"done" | "waiting" | "failed"> {
   const rec = listInit().find((x) => x.accountId === accountId);
   // Another read of this account is already running (the in-flight guard): that read records the outcome.
-  if (r.skipped === "busy") return rec?.finishedAt && rec.outcome === "done" ? "done" : "waiting";
+  const done = !!(rec?.finishedAt && rec.outcome === "done");
+  if (r.skipped === "busy") return done ? "done" : "waiting";
+  // Already done (another path finished it meanwhile): a later miss never demotes it.
+  if (done && !r.ok) return "done";
   if (r.ok) {
     markInitFinished(accountId, "done", "Calendar is set up");
     setCursor(retryKey(accountId), "");
@@ -68,13 +78,17 @@ export async function retryUnfinishedInits(platform: PlatformContext, now: Date,
   // A fresh clock that starts at `now`: planning and the next retry time take the time they happen.
   const clock = deps.clock ?? (() => new Date(now.getTime() + (Date.now() - started)));
   const due = listInit().filter((r) => !(r.finishedAt && r.outcome === "done")).filter((r) => (readRetry(r.accountId)?.at ?? 0) <= now.getTime());
-  let anyDone = false;
+  let anyDone = false, attempted = 0;
   for (const rec of due) {
+    // The reads are long: a row finished by another path meanwhile is not read again.
+    const cur = listInit().find((x) => x.accountId === rec.accountId);
+    if (!cur || (cur.finishedAt && cur.outcome === "done")) continue;
+    attempted++;
     try {
       const r = await (deps.sync ?? syncAccount)(rec.accountId, { platform, now: () => now }, "init");
       if ((await completeFirstRead(platform, rec.accountId, r, clock, undefined, { defer: true })) === "done") anyDone = true;
     } catch (err: any) { console.warn(`[calendar-desk] first-read retry ${rec.accountId}: ${err?.message ?? err}`); }
   }
   if (anyDone) await planAfterFirstRead(platform, clock);
-  return due.length;
+  return attempted;
 }
