@@ -3,7 +3,7 @@
 // asked-but-unanswered and is never asked again. Flock has no app-task expiry, so Calendar Desk withdraws its own open card
 // after 14 days, and withdraws it early when a fact it did not see at publish shows the owner answered in chat.
 import type { PlatformContext } from "@flock/app-sdk";
-import { KINDS, kindSpec, kindsToAsk, type EventType } from "./kinds";
+import { KINDS, KIND_FACTS_LIMIT, kindSpec, kindsToAsk, type EventType } from "./kinds";
 import { recordAsk, askRecord, markAnswerReported, markMemoryWritten, stepKindsFor, holdEvent } from "./planning-store";
 import type { EventRow } from "./store";
 import type { KindState } from "./tally";
@@ -120,25 +120,25 @@ export function statedAnswers(asks: ReadonlyMap<string, AskState> | null): Map<s
 
 /**
  * For one plan report: after an event is planned, each personal kind its type and title need (kindsToAsk) that it did not get,
- * with no evidence (pooled tally none, no memory fact from the kind's search, no answer on its card), holds the event; the kind's
+ * with no evidence (effective state none, no memory fact from the kind's search, no answer on its card), holds the event; the kind's
  * card is published the first time. A card already open holds the event without a second card. A card answered, or closed
- * unanswered, never holds or asks again. When the cards (`asks` null) or memory cannot be read, nothing is asked: asking a run
- * later is better than asking twice. Each kind's facts are read once per report.
+ * unanswered, never holds or asks again. When memory cannot be read, nothing is asked: asking a run later is better than
+ * asking twice. Each kind's facts are read once per report.
  */
-export function askHolder(platform: PlatformContext, now: number, asks: Map<string, AskState> | null): (ev: EventRow, type: EventType, tallied: ReadonlyMap<string, { state: KindState }>) => Promise<void> {
+export function askHolder(platform: PlatformContext, now: number, asks: Map<string, AskState> | null): (ev: EventRow, type: EventType, effective: ReadonlyMap<string, KindState>) => Promise<void> {
   const p = platform as unknown as MemoryPlatform;
   const facts = new Map<string, string[] | null>();
-  return async (ev, type, tallied) => {
+  return async (ev, type, effective) => {
     const want = kindsToAsk(type, ev.title, ev.location);
     if (want.length === 0 || !asks) return;
     const prefix = `step:${ev.eventKey}:`;
     const made = new Set([...stepKindsFor(ev.accountId)].filter(([ref]) => ref.startsWith(prefix)).map(([, kind]) => kind));
     for (const kind of want) {
-      if (made.has(kind) || (tallied.get(kind)?.state ?? "none") !== "none") continue;
+      if (made.has(kind) || (effective.get(kind) ?? "none") !== "none") continue;
       const st = asks.get(kind);
       if (!st || (st.status !== "none" && st.status !== "waiting")) continue;
       if (!facts.has(kind)) {
-        const r = await p.memory.search(kindSpec(kind)!.query!, { limit: 3 });
+        const r = await p.memory.search(kindSpec(kind)!.query!, { limit: KIND_FACTS_LIMIT });
         facts.set(kind, r.ok ? r.data.facts : null);
       }
       const known = facts.get(kind);

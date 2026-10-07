@@ -5,6 +5,17 @@ import { kindSpec } from "./kinds";
 export type TallyRow = StepState & { skipped?: true; closedAt?: number; updatedAt?: number };
 export type KindState = "on" | "off" | "none";
 
+/**
+ * The state the planner shows and the validator enforces: a card's answer is the owner's stated preference and beats the
+ * tally (yes reads on, no reads off); a kind with no answer keeps its tallied state.
+ */
+export function withAnswers(tallied: ReadonlyMap<string, { state: KindState }>, said: ReadonlyMap<string, "yes" | "no">): Map<string, KindState> {
+  const out = new Map<string, KindState>();
+  for (const [kind, v] of tallied) out.set(kind, v.state);
+  for (const [kind, a] of said) out.set(kind, a === "yes" ? "on" : "off");
+  return out;
+}
+
 export const TALLY_WINDOW_MS = 90 * 86400_000, TALLY_PER_KIND = 10;
 
 /**

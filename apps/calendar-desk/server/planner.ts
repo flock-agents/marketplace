@@ -5,9 +5,9 @@ import type { PlatformContext } from "@flock/app-sdk";
 import { eventsToPlan, openPlan, createPlan, setPlanSession, abandonPlan, plannedMark, allStepKinds, allCoveredStepRefs, unkindedCabSteps, backfillKind, heldEvents, dropHeld, PLAN_GIVE_UP_MS, PLAN_EVENTS_MAX, type PlanEventRef, type PlanPick } from "./planning-store";
 import { ymd } from "./events";
 import { getEvent } from "./store";
-import { KINDS, type EventType, type Tier } from "./kinds";
-import { tally, type KindState } from "./tally";
-import { askStates, settleAsks, preference, answeredInChat, type AskRow, type AskState } from "./asks";
+import { KINDS, KIND_FACTS_LIMIT, type EventType, type Tier } from "./kinds";
+import { tally, withAnswers, type KindState } from "./tally";
+import { askStates, settleAsks, preference, answeredInChat, statedAnswers, type AskRow, type AskState } from "./asks";
 
 const APP = "calendar-desk";
 const EVENT_FACTS_MAX = 3;
@@ -69,7 +69,7 @@ async function planOnce(platform: PlatformContext, now: Date): Promise<PlanningR
   const factsByKind = new Map<string, string[]>();
   for (const k of KINDS) {
     if (!k.query) continue;
-    const r = await p.memory.search(k.query, { limit: EVENT_FACTS_MAX });
+    const r = await p.memory.search(k.query, { limit: KIND_FACTS_LIMIT });
     factsByKind.set(k.kind, r.ok ? r.data.facts : []);
   }
   if (askListed.ok) await settleAsks(platform, asks, factsByKind, t);
@@ -79,12 +79,14 @@ async function planOnce(platform: PlatformContext, now: Date): Promise<PlanningR
   const offeredHolds: { accountId: string; eventKey: string; kind: string }[] = [];
   if (askListed.ok) {
     for (const h of heldEvents()) {
-      const status = asks.get(h.kind)?.status;
-      if (status === "none" || status === "waiting") continue;
+      // A past or gone event's hold ends whatever its card says (also when the card never got published).
       const e = getEvent(h.accountId, h.eventKey);
       const ahead = !!e && e.missingSince == null && e.localDate >= ymd(now) && (e.allDay || e.startAt == null || e.startAt > t);
+      if (!ahead) { dropHeld(h.accountId, h.eventKey, h.kind); continue; }
+      const status = asks.get(h.kind)?.status;
+      if (status === "none" || status === "waiting") continue;
       const answered = status === "yes" || answeredInChat(asks.get(h.kind), factsByKind.get(h.kind) ?? []);
-      if (!answered || !ahead) { dropHeld(h.accountId, h.eventKey, h.kind); continue; }
+      if (!answered) { dropHeld(h.accountId, h.eventKey, h.kind); continue; }
       const already = picks.some((x) => x.accountId === h.accountId && x.eventKey === h.eventKey);
       if (!already) {
         if (picks.length >= PLAN_EVENTS_MAX) continue; // offered on a later run
@@ -106,7 +108,8 @@ async function planOnce(platform: PlatformContext, now: Date): Promise<PlanningR
     if (row) backfillKind(u.accountId, u.eventKey, u.stepKey, row.title);
   }
   const kinds = allStepKinds();
-  const tallied = tally(states, kinds, t, allCoveredStepRefs());
+  // The effective state, the same one the report's validator enforces: a card's answer beats the tally.
+  const effective = withAnswers(tally(states, kinds, t, allCoveredStepRefs()), statedAnswers(asks));
   const habits: Record<string, Habit> = {};
   for (const k of [...KINDS].sort((a, b) => (a.kind < b.kind ? -1 : 1))) {
     if (k.tier === "judgement") continue;
@@ -118,7 +121,7 @@ async function planOnce(platform: PlatformContext, now: Date): Promise<PlanningR
       if (!facts.includes(said)) facts.push(said);
     }
     const asked = k.tier === 2 ? (st?.status === "waiting" ? "waiting" as const : st && st.status !== "none" ? true as const : false as const) : undefined;
-    const state = tallied.get(k.kind)?.state ?? "none";
+    const state = effective.get(k.kind) ?? "none";
     if (state === "none" && facts.length === 0 && !asked) continue;
     habits[k.kind] = { tier: k.tier, tally: state, facts, ...(asked !== undefined ? { asked } : {}) };
   }

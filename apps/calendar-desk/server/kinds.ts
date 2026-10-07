@@ -15,6 +15,8 @@ export interface KindSpec {
 }
 
 const DONT = "Don't remind me";
+/** How many facts each kind's fixed memory search returns. */
+export const KIND_FACTS_LIMIT = 3;
 export const KINDS: readonly KindSpec[] = [
   { kind: "checkin", tier: 1, types: ["journey", "stay"], for: "web check-in for a flight", defaultKey: "checkin" },
   { kind: "cab-airport", tier: 1, types: ["journey", "stay"], for: "ride to the airport for the user's flight", defaultKey: "cab-airport", query: "drive airport cab" },

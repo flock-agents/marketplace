@@ -6,7 +6,7 @@ import { getEvent, type EventRow } from "./store";
 import { ymd } from "./events";
 import { pointer } from "./planner";
 import { EVENT_TYPES, KINDS, kindSpec, type EventType } from "./kinds";
-import { tally } from "./tally";
+import { tally, withAnswers, type KindState } from "./tally";
 import { askHolder, askStates, statedAnswers, type AskRow } from "./asks";
 import { openPlan, plannedMark, markPlanned, recordStep, setStepCovered, stepKeysFor, allStepKinds, allCoveredStepRefs, noteBadReport, answerPlan, abandonPlan, BAD_REPORTS_MAX, type PlanRecord, type PlanEventRef } from "./planning-store";
 
@@ -155,7 +155,7 @@ export async function handlePlanReport(p: Record<string, unknown>, platform: Pla
   // One read of every step row serves the per-event lists and the outcome tally behind the off guard.
   let allSteps: StepState[] | null = null;
   // The owner's habits, built once per report and pooled across accounts (habits are the person's, not an account's).
-  let habits: { kinds: Map<string, string>; states: ReturnType<typeof tally>; off: Set<string>; saidNo: Set<string>; holdForAsks: ReturnType<typeof askHolder> } | null = null;
+  let habits: { kinds: Map<string, string>; effective: Map<string, KindState>; off: Set<string>; saidNo: Set<string>; holdForAsks: ReturnType<typeof askHolder> } | null = null;
   for (const entry of p.events as any[]) {
     const ref = typeof entry?.event === "string" ? plan.events.find((x) => x.ref === entry.event) : undefined;
     if (!ref) { refused.push({ item: String(entry?.event ?? "?"), reason: "event is not in this plan" }); bad++; continue; }
@@ -183,17 +183,17 @@ export async function handlePlanReport(p: Record<string, unknown>, platform: Pla
     const openKeys = new Set(existing.filter((t) => t.status === "open").map((t) => t.sourceRef.slice(prefix.length)));
 
     if (!habits) {
-      const kinds = allStepKinds();
-      const states = tally(allSteps as any, kinds, now.getTime(), allCoveredStepRefs());
-      // A button answer is a stated preference and beats the tally: no refuses the kind, yes keeps skips from switching it off.
-      // Unreadable cards: no answers are known, and nothing is asked.
+      // A button answer is a stated preference and beats the tally (withAnswers, the same states the bundle showed): no refuses
+      // the kind, yes keeps skips from switching it off. Unreadable cards would drop a binding no, so the report waits like for steps.
       const cards = await (platform as any).tasks.list({ prefix: "ask:" }) as { ok: boolean; data?: { tasks: AskRow[] }; reason?: string };
-      if (!cards.ok) console.warn(`[calendar-desk] plan report: could not read cards: ${cards.reason ?? "unknown"}`);
-      const asks = cards.ok ? askStates(cards.data!.tasks) : null;
+      if (!cards.ok) return err("TASKS_UNAVAILABLE", `could not read cards: ${cards.reason ?? "unknown"}`, 503);
+      const asks = askStates(cards.data!.tasks);
       const said = statedAnswers(asks);
+      const kinds = allStepKinds();
+      const effective = withAnswers(tally(allSteps as any, kinds, now.getTime(), allCoveredStepRefs()), said);
       habits = {
-        kinds, states,
-        off: new Set([...states].filter(([kind, v]) => v.state === "off" && said.get(kind) !== "yes").map(([kind]) => kind)),
+        kinds, effective,
+        off: new Set([...effective].filter(([kind, st]) => st === "off" && !said.has(kind)).map(([kind]) => kind)),
         saidNo: new Set([...said].filter(([, a]) => a === "no").map(([kind]) => kind)),
         holdForAsks: askHolder(platform, now.getTime(), asks),
       };
@@ -231,7 +231,7 @@ export async function handlePlanReport(p: Record<string, unknown>, platform: Pla
     for (const f of capFails) refused.push({ item: `${ref.ref}/${f.key}`, reason: `could not update its limit: ${f.reason}` });
     if (capFails.length === 0) markPlanned([{ accountId: ref.accountId, eventKey: ref.eventKey, date: ref.date, startAt: ref.startAt, type }], now.getTime());
     // Planned without a personal step it needed and has no evidence for: ask once, and hold the event for the answer.
-    if (capFails.length === 0) await habits.holdForAsks(ev, type, habits.states);
+    if (capFails.length === 0) await habits.holdForAsks(ev, type, habits.effective);
   }
 
   // Everything planned answers the plan, whatever else was refused; only then do bad reports count toward giving up.

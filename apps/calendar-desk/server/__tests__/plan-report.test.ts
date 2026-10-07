@@ -515,6 +515,18 @@ describe("a personal step with no evidence: ask once, hold the event (planning s
     expect((await report([{ key: "d1", type: "appointment", steps: [cab] }], platform({ tasks: [...skips, yes] }))).r.accepted).toEqual(["e1/cab"]);
   });
 
+  test("cards that cannot be read: the report waits (TASKS_UNAVAILABLE), so a stated no stays binding", async () => {
+    dentist();
+    const p = platform();
+    const list = (p.ctx as any).tasks.list;
+    (p.ctx as any).tasks.list = async (o: { prefix?: string }) => (o.prefix === "ask:" ? failed("board offline") : list(o));
+    const cab = { key: "cab", kind: "cab-local", title: "Book a cab", dueDate: "2026-10-09", dueTime: "09:15", why: "w" };
+    const { r } = await report([{ key: "d1", type: "appointment", steps: [cab] }], p);
+    expect(r).toMatchObject({ code: "TASKS_UNAVAILABLE", status: 503 });
+    expect(p.published).toEqual([]);
+    expect(P.plannedMark("acct", "d1")).toBeNull();
+  });
+
   test("an event left unplanned (a refused step) publishes no card", async () => {
     dentist();
     const { r, asks } = await report([{ key: "d1", type: "appointment", steps: [{ key: "BAD", kind: "other", title: "t", dueDate: "2026-10-08", why: "w" }] }]);
