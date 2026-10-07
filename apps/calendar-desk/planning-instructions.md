@@ -167,16 +167,22 @@ payload's machinery, in a step's `title` or `why`: the user reads those.
    journey's event carries them).
 5. **Tier 2: depends on the person.** `cab-local` (an appointment, or a meeting under rule 3.3, at
    its `location`), `gift` (a birthday or anniversary) and `table-booking` (a dinner, lunch or
-   brunch out). Decide each from the strongest evidence there is, in this order, and stop at the
-   first that speaks:
+   brunch out). A gift is only ever for someone a fact places in the user's life, or someone the
+   event's `pattern` shows gift `"on"` for (the user gave them one before); a `tally` `"on"` alone
+   is not enough for a new person. Decide each from the strongest evidence there is, in this
+   order, and stop at the first that speaks:
    1. **What the user said**: a fact (in `habits` or the event's `facts`) in which the user says
       they want the step or do it another way. A user who says they go in their own car gets no
-      cab, whatever else shows; one who says they take a cab to such visits gets one.
+      cab, whatever else shows; one who says they take a cab to such visits gets one. A stated
+      no always takes a step away, but a stated wish cannot bring back a kind the event's
+      `pattern` shows `"off"`, or one `"off"` in `tally` with no `pattern` `"on"`: Calendar Desk
+      refuses it.
    2. **The pattern at this place**: the event's `pattern`. `"on"` means propose the step, every
       time the user goes there. `"off"` means no step.
    3. **The pattern for this kind**: the kind's `tally` in `habits`. `"on"` means propose it;
       `"off"` means no step.
-   4. **Indirect clues** in the kind's `facts`: a ride receipt, a past table booking, a gift order.
+   4. **Indirect clues** in the kind's `facts` (a ride receipt, a past table booking, a gift
+      order): a clue that the user does it means propose it.
    5. **Your judgement, only when none of the above exist** (no such fact, no `pattern` for the
       kind, its `tally` missing or `"none"`):
       - `cab-local`: an appointment or an in-person meeting at a real place away from home and
@@ -187,9 +193,7 @@ payload's machinery, in a step's `title` or `why`: the user reads those.
         (family, a partner, a close friend) gets one gift step. Nobody known, nothing.
       - `table-booking`: a dinner, lunch or brunch out at a named restaurant with other people
         gets one table step, unless a fact says it is already booked.
-   A `pattern` or a `tally` speaks only for a kind the event's type allows: a cab pattern at a
-   restaurant says nothing about a dinner's table. The same event with the same evidence gets the
-   same steps on every run.
+   The same event with the same evidence gets the same steps on every run.
 6. **Judgement kinds** (`documents`, `payment`, and the kind `other`, not the type): the event is the user's own or concerns
    someone in their life, and a careful assistant would make sure the user is not caught
    unprepared (a form, a payment, documents, a renewal, a booking the event needs). Let the event's
@@ -209,10 +213,10 @@ payload's machinery, in a step's `title` or `why`: the user reads those.
    did or said only when a `pattern`, a `tally` or a fact shows it; on your own judgement, what in
    this event calls for it (who it is for, where it is). One example each, never reused for
    another kind of step:
-   - a cab to a place: "You booked a cab the last time you went here."
+   - a cab to a place, only when its `pattern` shows it: "You booked a cab the last time you went here."
    - a gift: "You bought your sister a gift for her last birthday."
    - a table: "You booked a table for your last dinner out."
-   Never an amount, an order or booking number, or another person's words.
+   Write the sentence for this event. Never an amount, an order or booking number, or another person's words.
 8. **When each step is due and when it shows.** Date each step at the earliest sensible moment:
    never late, maybe early. When you do not know the window, take the earliest plausible and say
    "around" in the why. Something that must be in hand at the event (a gift, documents, a booking)
