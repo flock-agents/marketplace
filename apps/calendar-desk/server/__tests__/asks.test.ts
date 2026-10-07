@@ -3,7 +3,7 @@ import { mkdtempSync } from "fs"; import { tmpdir } from "os"; import { join } f
 import { ok, failed, type PlatformContext } from "@flock/app-sdk";
 process.env.APP_DATA_DIR = mkdtempSync(join(tmpdir(), "calendar-desk-asks-"));
 const S = await import("../store");
-const { askStates, publishAsk, settleAsks, ASK_TTL_MS } = await import("../asks");
+const { askStates, publishAsk, settleAsks, statedAnswers, answeredInChat, ASK_TTL_MS } = await import("../asks");
 const { kindSpec } = await import("../kinds");
 
 beforeEach(() => { S._db.exec("DELETE FROM plan_asks"); });
@@ -260,5 +260,94 @@ describe("settleAsks", () => {
     await publishAsk(f.ctx, "cab-local", NOW, []);
     await settleAsks(f.ctx, await asks(f), new Map([["gift", ["Buys gifts on Amazon."]]]), NOW + DAY);
     expect(f.withdrawn).toEqual([]);
+  });
+});
+
+describe("an answer in chat must speak to the kind (I4)", () => {
+  test("an unrelated new fact does not withdraw the card; one with an action word does", async () => {
+    const f = flock();
+    await publishAsk(f.ctx, "cab-local", NOW, []);
+    await settleAsks(f.ctx, await asks(f), new Map([["cab-local", ["Moved to Indiranagar"]]]), NOW + DAY);
+    expect(f.withdrawn).toEqual([]);
+    await settleAsks(f.ctx, await asks(f), new Map([["cab-local", ["Moved to Indiranagar", "Prefers to take a cab to appointments"]]]), NOW + 2 * DAY);
+    expect(f.withdrawn).toEqual([{ ref: "ask:cab-local", reason: "answered in chat" }]);
+  });
+  test("a held event's card closed unanswered: only a new fact that speaks to the kind reads as answered", () => {
+    const st = { kind: "cab-local", status: "unanswered" as const, factsAtPublish: [] };
+    expect(answeredInChat(st, ["Moved to Indiranagar"])).toBe(false);
+    expect(answeredInChat(st, ["Takes an Uber to the dentist."])).toBe(true);
+  });
+});
+
+describe("a button answer binds while its memory fact stands (I1)", () => {
+  const SAID = "Wants a reminder to book a cab before appointments.";
+  const written = () => flock({ extract: () => ok({ facts: { writtenFacts: [SAID] } }) });
+  /** Card answered yes on day 1 (memory not yet written: binds), memory written by day 2. */
+  async function answered(f: ReturnType<typeof flock>, factsDay1: string[] = []) {
+    await publishAsk(f.ctx, "cab-local", NOW, []);
+    f.close("ask:cab-local", "yes");
+    const st = await asks(f);
+    await settleAsks(f.ctx, st, new Map([["cab-local", factsDay1]]), NOW + DAY);
+    expect(st.get("cab-local")!.binds).toBe(true); // the write has not happened yet
+    await flush();
+    return st;
+  }
+  test("while the written fact is found the answer binds", async () => {
+    const f = written();
+    await answered(f);
+    const st = await asks(f);
+    await settleAsks(f.ctx, st, new Map([["cab-local", [SAID]]]), NOW + 2 * DAY);
+    expect(st.get("cab-local")!.binds).toBe(true);
+    expect(statedAnswers(st)).toEqual(new Map([["cab-local", "yes"]]));
+  });
+  test("forgetting the fact releases the answer: evidence only, never asked again", async () => {
+    const f = written();
+    await answered(f);
+    const st = await asks(f);
+    await settleAsks(f.ctx, st, new Map([["cab-local", []]]), NOW + 2 * DAY);
+    expect(st.get("cab-local")!.status).toBe("yes");
+    expect(st.get("cab-local")!.binds).toBe(false);
+    expect(statedAnswers(st)).toEqual(new Map());
+    // A fresh read (the report's guard) sees the same verdict.
+    expect(statedAnswers(await asks(f))).toEqual(new Map());
+    await publishAsk(f.ctx, "cab-local", NOW + 3 * DAY, []);
+    expect(f.published).toHaveLength(1);
+  });
+  test("a newer fact for the kind releases the answer; an older one or an unrelated new one does not", async () => {
+    const f = written();
+    await answered(f, ["Takes the metro to work."]);
+    const run = async (facts: string[], day: number) => { const st = await asks(f); await settleAsks(f.ctx, st, new Map([["cab-local", facts]]), NOW + day * DAY); return st.get("cab-local")!.binds; };
+    expect(await run([SAID, "Takes the metro to work."], 2)).toBe(true);
+    expect(await run([SAID, "Moved to Indiranagar"], 3)).toBe(true);
+    expect(await run([SAID, "Would rather drive to appointments."], 4)).toBe(false);
+    expect(statedAnswers(await asks(f))).toEqual(new Map());
+  });
+  test("memory that cannot be read keeps the last verdict", async () => {
+    const f = written();
+    await answered(f);
+    const st = await asks(f);
+    await settleAsks(f.ctx, st, new Map([["cab-local", null]]), NOW + 2 * DAY);
+    expect(st.get("cab-local")!.binds).toBe(true);
+    await settleAsks(f.ctx, await asks(f), new Map([["cab-local", []]]), NOW + 3 * DAY);
+    const again = await asks(f);
+    await settleAsks(f.ctx, again, new Map([["cab-local", null]]), NOW + 4 * DAY);
+    expect(again.get("cab-local")!.binds).toBe(false);
+  });
+  test("a write memory reworded: the reworded fact is the one looked for", async () => {
+    const f = flock({ extract: () => ok({ facts: { writtenFacts: ["Owner wants cab reminders before appointments"] } }) });
+    await answered(f);
+    const st = await asks(f);
+    await settleAsks(f.ctx, st, new Map([["cab-local", ["Owner wants cab reminders before appointments"]]]), NOW + 2 * DAY);
+    expect(st.get("cab-local")!.binds).toBe(true);
+  });
+  test("an unanswered card is unaffected: no binding, nothing stated", async () => {
+    const f = written();
+    await publishAsk(f.ctx, "cab-local", NOW, []);
+    f.close("ask:cab-local");
+    const st = await asks(f);
+    await settleAsks(f.ctx, st, new Map([["cab-local", []]]), NOW + DAY);
+    expect(st.get("cab-local")!.status).toBe("unanswered");
+    expect(st.get("cab-local")!.binds).toBeUndefined();
+    expect(statedAnswers(st)).toEqual(new Map());
   });
 });

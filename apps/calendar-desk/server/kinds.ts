@@ -8,15 +8,19 @@ export type Tier = 1 | 2 | "rule" | "judgement";
 export interface KindSpec {
   kind: string; tier: Tier; types: EventType[]; for: string;
   defaultKey: string | null; // null: the key is free
-  query?: string; // fixed memory search for the kind's habits
+  query?: string; // fixed memory search for the kind's habits (any of its words); never a word naming the event itself
+  // Personal kinds: the words that make a fact speak to the kind (Flock's matcher lists the same ones), with the query's words.
+  actionWords?: string[];
   // The one-time card for a Tier 2 kind, and when an event needs the kind: its type is `on` and, with `words`, its title has one
   // of them as a whole word (case-folded). A meeting is never listed: its cab-local needs evidence and never asks.
   ask?: { title: string; yes: string; no: string; on: EventType; words?: string[] };
 }
 
 const DONT = "Don't remind me";
-/** How many facts each kind's fixed memory search returns. */
+/** How many facts of each kind's fixed memory search the planner is shown. */
 export const KIND_FACTS_LIMIT = 3;
+/** How many facts each run reads per kind: enough that a stated answer's own fact is still found among the kind's other facts. */
+export const KIND_SEARCH_LIMIT = 10;
 export const KINDS: readonly KindSpec[] = [
   { kind: "checkin", tier: 1, types: ["journey", "stay"], for: "web check-in for a flight", defaultKey: "checkin" },
   { kind: "cab-airport", tier: 1, types: ["journey", "stay"], for: "ride to the airport for the user's flight", defaultKey: "cab-airport", query: "drive airport cab" },
@@ -26,11 +30,11 @@ export const KINDS: readonly KindSpec[] = [
   // A journey qualifies only when it comes with a stay; the prompt states that rule.
   { kind: "pack", tier: 1, types: ["stay", "journey"], for: "pack for a stay away from home", defaultKey: "pack" },
   { kind: "cab-local", tier: 2, types: ["appointment", "meeting"], for: "ride to an in-person place at its location", defaultKey: "cab",
-    query: "cab Uber Ola drive appointment", ask: { title: "Remind you to book a cab before appointments?", yes: "Book a cab reminder", no: DONT, on: "appointment" } },
+    query: "cab Uber Ola drive", actionWords: ["cab", "uber", "ola", "taxi", "ride", "drive"], ask: { title: "Remind you to book a cab before appointments?", yes: "Book a cab reminder", no: DONT, on: "appointment" } },
   { kind: "gift", tier: 2, types: ["occasion"], for: "gift for a birthday or anniversary", defaultKey: "gift",
-    query: "gift birthday", ask: { title: "Remind you to buy a gift before family birthdays?", yes: "Gift reminder", no: DONT, on: "occasion", words: ["birthday", "anniversary"] } },
+    query: "gift", actionWords: ["gift", "present"], ask: { title: "Remind you to buy a gift before family birthdays?", yes: "Gift reminder", no: DONT, on: "occasion", words: ["birthday", "anniversary"] } },
   { kind: "table-booking", tier: 2, types: ["occasion"], for: "reserve a table for a dinner or outing", defaultKey: "book-table",
-    query: "restaurant table reservation", ask: { title: "Remind you to book a table before dinners out?", yes: "Table reminder", no: DONT, on: "occasion",
+    query: "table reservation", actionWords: ["table", "reservation"], ask: { title: "Remind you to book a table before dinners out?", yes: "Table reminder", no: DONT, on: "occasion",
       words: ["dinner", "lunch", "brunch", "restaurant", "table", "outing"] } },
   { kind: "prepare-ahead", tier: "rule", types: ["meeting"], for: "prepare a presentation, demo, pitch or board deck", defaultKey: "prepare" },
   { kind: "documents", tier: "judgement", types: ["journey", "stay", "appointment"], for: "passport, visa, forms, papers to carry", defaultKey: null },
@@ -40,6 +44,16 @@ export const KINDS: readonly KindSpec[] = [
 
 export function kindSpec(kind: string): KindSpec | undefined {
   return KINDS.find((k) => k.kind === kind);
+}
+
+const wordsOf = (s: string) => new Set(s.toLowerCase().match(/\p{L}+/gu) ?? []);
+
+/** A fact speaks to a kind when it holds one of the kind's action words or query words as a whole word, case-folded. */
+export function speaksToKind(kind: string, fact: string): boolean {
+  const k = kindSpec(kind);
+  if (!k) return false;
+  const words = wordsOf(fact);
+  return [...(k.actionWords ?? []), ...wordsOf(k.query ?? "")].some((w) => words.has(w));
 }
 
 /**

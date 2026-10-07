@@ -218,7 +218,7 @@ describe("withdrawn steps", () => {
 describe("habits: what the owner did with past steps of each kind (planning step tiers M7)", () => {
   const DAY = 86_400_000;
   const row = (ref: string, status: TaskState["status"], extra: Partial<TaskState> = {}): TaskState => ({ sourceRef: ref, status, title: "x", due: null, dueTimed: false, showFrom: null, updatedAt: 0, ...extra });
-  const CAB_Q = "cab Uber Ola drive appointment";
+  const CAB_Q = "cab Uber Ola drive";
 
   test("(a) one done cab-local step and a fact: tier 2, tally on, the facts, not asked", async () => {
     seed("g1", "Dentist", "2026-10-12");
@@ -267,13 +267,31 @@ describe("habits: what the owner did with past steps of each kind (planning step
     expect(stay.type).toBeUndefined();
   });
 
-  test("(d) one memory search per kind with a query, each limit 3", async () => {
+  test("(d) one any-word memory search per kind with a query, up to 10 facts read, 3 shown", async () => {
     seed("g1", "dentist", "2026-10-12");
-    const p = platform();
+    const p = platform({ facts: (q) => (q === CAB_Q ? ["f1 cab", "f2 cab", "f3 cab", "f4 cab"] : []) });
     await runPlanning(p.ctx, NOW);
     const kindSearches = p.searches.filter((x) => !("person" in x.opts));
-    expect(kindSearches.map((x) => x.q).sort()).toEqual(["cab Uber Ola drive appointment", "drive airport cab", "gift birthday", "restaurant table reservation"]);
-    for (const x of kindSearches) expect(x.opts).toEqual({ limit: 3 });
+    expect(kindSearches.map((x) => x.q).sort()).toEqual(["cab Uber Ola drive", "drive airport cab", "gift", "table reservation"]);
+    for (const x of kindSearches) expect(x.opts).toEqual({ limit: 10, any: true });
+    expect(p.intents[0].payload.habits["cab-local"].facts).toEqual(["f1 cab", "f2 cab", "f3 cab"]);
+  });
+
+  test("I1: a yes whose memory fact was forgotten no longer binds: no stated preference in the facts, the tally decides", async () => {
+    seed("g1", "Dentist", "2026-10-12");
+    const SAID = "Wants a reminder to book a cab before appointments.";
+    P.markAnswerReported("cab-local", "yes", NOW.getTime() - 2 * DAY);
+    P.setFactsAtAnswer("cab-local", []);
+    P.markMemoryWritten("cab-local", "yes", [SAID]);
+    const tasks = [row("ask:cab-local", "done", { actionId: "yes" })];
+    const kept = platform({ tasks, facts: (q) => (q === CAB_Q ? [SAID] : []) });
+    await runPlanning(kept.ctx, NOW);
+    expect(kept.intents[0].payload.habits["cab-local"]).toEqual({ tier: 2, tally: "on", facts: [SAID], asked: true });
+    S._db.exec("DELETE FROM plans");
+    const forgot = platform({ tasks });
+    await runPlanning(forgot.ctx, NOW);
+    expect(forgot.intents[0].payload.habits["cab-local"]).toEqual({ tier: 2, tally: "none", facts: [], asked: true });
+    expect(forgot.published).toEqual([]); // never asked again
   });
 
   test("(g) a held event is offered once as answered when the card's answer is yes", async () => {
@@ -403,7 +421,7 @@ describe("habits: what the owner did with past steps of each kind (planning step
     P.recordStep("acct", "g0", "cab", "cab-local");
     P.recordStep("acct", "g0", "gift", "gift");
     const tasks = [row("step:g0:cab", "done", { closedAt: NOW.getTime() - DAY }), row("step:g0:gift", "dismissed", { skipped: true, closedAt: NOW.getTime() - 2 * DAY }), row("ask:table-booking", "open")];
-    const facts = (q: string) => (q === "gift birthday" ? ["Buys books as gifts."] : q === "Asha" ? ["Asha is your sister"] : []);
+    const facts = (q: string) => (q === "gift" ? ["Buys books as gifts."] : q === "Asha" ? ["Asha is your sister"] : []);
     const bundle = (x: any) => JSON.stringify({ events: x.events, habits: x.habits });
     const a = platform({ tasks, facts });
     await runPlanning(a.ctx, NOW);

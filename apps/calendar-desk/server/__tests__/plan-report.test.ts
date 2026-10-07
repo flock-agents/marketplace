@@ -421,7 +421,7 @@ describe("a personal step with no evidence: ask once, hold the event (planning s
     expect(asks[0]).toMatchObject({ sourceRef: "ask:cab-local", title: "Remind you to book a cab before appointments?",
       actions: [{ id: "yes", label: "Book a cab reminder" }, { id: "no", label: "Don't remind me" }] });
     expect(P.heldEvents()).toEqual([{ accountId: "acct", eventKey: "d1", kind: "cab-local" }]);
-    expect(p.searches).toEqual([{ q: "cab Uber Ola drive appointment", opts: { limit: 3 } }]);
+    expect(p.searches).toEqual([{ q: "cab Uber Ola drive", opts: { limit: 3, any: true } }]);
   });
 
   test("(f) an appointment and a birthday with no evidence: two cards, one per kind, both events held", async () => {
@@ -513,6 +513,15 @@ describe("a personal step with no evidence: ask once, hold the event (planning s
     expect((await report([{ key: "d1", type: "appointment", steps: [cab] }], platform({ tasks: skips }))).r.refused[0].reason).toBe("the user dismissed the last two cab-local steps");
     const yes = { ...closedTask("ask:cab-local", "done"), actionId: "yes" };
     expect((await report([{ key: "d1", type: "appointment", steps: [cab] }], platform({ tasks: [...skips, yes] }))).r.accepted).toEqual(["e1/cab"]);
+  });
+
+  test("I1: a no released by the last planning run (its fact forgotten, or a newer fact) no longer refuses the kind", async () => {
+    dentist();
+    const cab = { key: "cab", kind: "cab-local", title: "Book a cab to Apollo", dueDate: "2026-10-09", dueTime: "09:15", why: "w" };
+    const no = { ...closedTask("ask:cab-local", "done"), actionId: "no" };
+    P.markAnswerReported("cab-local", "no", NOW.getTime() - DAY);
+    P.setAnswerBinds("cab-local", false);
+    expect((await report([{ key: "d1", type: "appointment", steps: [cab] }], platform({ tasks: [no] }))).r.accepted).toEqual(["e1/cab"]);
   });
 
   test("cards that cannot be read: the report waits (TASKS_UNAVAILABLE), so a stated no stays binding", async () => {

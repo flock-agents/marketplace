@@ -1,5 +1,5 @@
 import { describe, test, expect } from "bun:test";
-import { KINDS, EVENT_TYPES, kindSpec, kindTable } from "../kinds";
+import { KINDS, EVENT_TYPES, kindSpec, kindTable, speaksToKind } from "../kinds";
 
 describe("kinds", () => {
   test("13 kinds, unique", () => {
@@ -36,6 +36,22 @@ describe("kinds", () => {
     expect(kindSpec("prepare-ahead")?.tier).toBe("rule");
     expect(kindSpec("payment")?.tier).toBe("judgement");
     expect(kindSpec("nope")).toBeUndefined();
+  });
+  test("a personal kind's search never names the event itself, or every appointment, birthday or dinner fact would read as evidence", () => {
+    expect(kindSpec("cab-local")?.query).toBe("cab Uber Ola drive");
+    expect(kindSpec("gift")?.query).toBe("gift");
+    expect(kindSpec("table-booking")?.query).toBe("table reservation");
+  });
+  test("speaksToKind: a whole action or query word, case-folded", () => {
+    expect(speaksToKind("cab-local", "Prefers to take a CAB to appointments")).toBe(true);
+    expect(speaksToKind("cab-local", "Takes an Uber to the dentist.")).toBe(true);
+    expect(speaksToKind("cab-local", "Moved to Indiranagar")).toBe(false);
+    expect(speaksToKind("cab-local", "Dentist appointment at Apollo Clinic")).toBe(false);
+    expect(speaksToKind("cab-local", "Ordered a cabinet")).toBe(false); // whole words only
+    expect(speaksToKind("gift", "Asha's birthday is 12 Oct")).toBe(false);
+    expect(speaksToKind("gift", "No gift for office birthdays")).toBe(true);
+    expect(speaksToKind("table-booking", "Likes a table by the window")).toBe(true);
+    expect(speaksToKind("checkin", "anything")).toBe(false); // no personal kind: no words
   });
   test("kindTable lists every kind once", () => {
     const table = kindTable();

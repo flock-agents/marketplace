@@ -5,7 +5,7 @@ import type { PlatformContext } from "@flock/app-sdk";
 import { eventsToPlan, openPlan, createPlan, setPlanSession, abandonPlan, plannedMark, allStepKinds, allCoveredStepRefs, unkindedCabSteps, backfillKind, heldEvents, dropHeld, PLAN_GIVE_UP_MS, PLAN_EVENTS_MAX, type PlanEventRef, type PlanPick } from "./planning-store";
 import { ymd } from "./events";
 import { getEvent } from "./store";
-import { KINDS, KIND_FACTS_LIMIT, type EventType, type Tier } from "./kinds";
+import { KINDS, KIND_FACTS_LIMIT, KIND_SEARCH_LIMIT, type EventType, type Tier } from "./kinds";
 import { tally, withAnswers, type KindState } from "./tally";
 import { askStates, settleAsks, preference, answeredInChat, statedAnswers, type AskRow, type AskState } from "./asks";
 
@@ -22,7 +22,7 @@ interface AppTaskState { sourceRef: string; status: "open" | "done" | "dismissed
 type Res<T> = { ok: true; data: T } | { ok: false; reason: string };
 interface PlanningPlatform {
   tasks: { list(opts?: { prefix?: string }): Promise<Res<{ tasks: AppTaskState[] }>> };
-  memory: { search(query: string, opts?: { person?: boolean; limit?: number }): Promise<Res<{ facts: string[] }>> };
+  memory: { search(query: string, opts?: { person?: boolean; limit?: number; any?: boolean }): Promise<Res<{ facts: string[] }>> };
   agent: { intent<T>(name: string, payload: Record<string, unknown>): Promise<Res<T>> };
 }
 
@@ -66,11 +66,12 @@ async function planOnce(platform: PlatformContext, now: Date): Promise<PlanningR
   const askListed = await p.tasks.list({ prefix: "ask:" });
   if (!askListed.ok) console.warn(`[calendar-desk] planning: could not read cards: ${askListed.reason}`);
   const asks = askListed.ok ? askStates(askListed.data.tasks as AskRow[]) : new Map<string, AskState>();
-  const factsByKind = new Map<string, string[]>();
+  // Any of the query's words (an older Flock ignores `any` and needs all of them). null: memory could not be read.
+  const factsByKind = new Map<string, string[] | null>();
   for (const k of KINDS) {
     if (!k.query) continue;
-    const r = await p.memory.search(k.query, { limit: KIND_FACTS_LIMIT });
-    factsByKind.set(k.kind, r.ok ? r.data.facts : []);
+    const r = await p.memory.search(k.query, { limit: KIND_SEARCH_LIMIT, any: true });
+    factsByKind.set(k.kind, r.ok ? r.data.facts : null);
   }
   if (askListed.ok) await settleAsks(platform, asks, factsByKind, t);
 
@@ -113,10 +114,10 @@ async function planOnce(platform: PlatformContext, now: Date): Promise<PlanningR
   const habits: Record<string, Habit> = {};
   for (const k of [...KINDS].sort((a, b) => (a.kind < b.kind ? -1 : 1))) {
     if (k.tier === "judgement") continue;
-    const facts = [...(factsByKind.get(k.kind) ?? [])];
+    const facts = (factsByKind.get(k.kind) ?? []).slice(0, KIND_FACTS_LIMIT);
     const st = asks.get(k.kind);
-    // A card answered by button is the owner's stated preference: it reads as a fact, the same words written to memory.
-    if (k.ask && (st?.status === "yes" || st?.status === "no")) {
+    // A card answered by button is the owner's stated preference while it binds: it reads as a fact, the same words written to memory.
+    if (k.ask && (st?.status === "yes" || st?.status === "no") && st.binds !== false) {
       const said = preference(k.ask.title, st.status === "yes");
       if (!facts.includes(said)) facts.push(said);
     }

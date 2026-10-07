@@ -224,25 +224,60 @@ export function forgetEvent(accountId: string, eventKey: string): void {
 // Flock's list does not return a task's context, so the publish time and the facts the card saw are kept here.
 // Created here, not as a store migration: the table is new and only this section reads it.
 db.exec("CREATE TABLE IF NOT EXISTS plan_asks (kind TEXT PRIMARY KEY, published_at INTEGER NOT NULL, facts_json TEXT NOT NULL, answer_reported TEXT, memory_written TEXT)");
+// Whether a button answer still binds: answer_facts_json = the kind's facts when the answer was first read (what "newer" is measured
+// against), written_facts_json = what memory stored for the answer, answer_binds = the last run's verdict (null: binds).
+{
+  const cols = new Set((db.query("PRAGMA table_info(plan_asks)").all() as { name: string }[]).map((c) => c.name));
+  for (const [col, type] of [["answer_facts_json", "TEXT"], ["written_facts_json", "TEXT"], ["answer_binds", "INTEGER"]] as const) {
+    if (!cols.has(col)) db.exec(`ALTER TABLE plan_asks ADD COLUMN ${col} ${type}`);
+  }
+}
 
 export function recordAsk(kind: string, publishedAt: number, facts: string[]): void {
   db.query("INSERT OR IGNORE INTO plan_asks (kind, published_at, facts_json) VALUES (?, ?, ?)").run(kind, publishedAt, JSON.stringify(facts));
 }
 
-export function askRecord(kind: string): { publishedAt: number; factsAtPublish: string[]; answerReported: string | null; memoryWritten: string | null } | null {
-  const r = db.query("SELECT published_at, facts_json, answer_reported, memory_written FROM plan_asks WHERE kind = ?").get(kind) as any;
-  return r ? { publishedAt: r.published_at, factsAtPublish: JSON.parse(r.facts_json), answerReported: r.answer_reported ?? null, memoryWritten: r.memory_written ?? null } : null;
+export interface AskRecord {
+  publishedAt: number; factsAtPublish: string[]; answerReported: string | null; memoryWritten: string | null;
+  /** The kind's facts when the answer was first read; null until then. */
+  factsAtAnswer: string[] | null;
+  /** What memory stored for the answer (its own wording); null when not known. */
+  writtenFacts: string[] | null;
+  /** The last run's verdict on whether the answer still binds; null: never judged (binds). */
+  answerBinds: boolean | null;
+}
+
+export function askRecord(kind: string): AskRecord | null {
+  const r = db.query("SELECT * FROM plan_asks WHERE kind = ?").get(kind) as any;
+  return r ? {
+    publishedAt: r.published_at, factsAtPublish: JSON.parse(r.facts_json), answerReported: r.answer_reported ?? null, memoryWritten: r.memory_written ?? null,
+    factsAtAnswer: r.answer_facts_json != null ? JSON.parse(r.answer_facts_json) : null,
+    writtenFacts: r.written_facts_json != null ? JSON.parse(r.written_facts_json) : null,
+    answerBinds: r.answer_binds == null ? null : r.answer_binds === 1,
+  } : null;
+}
+
+/** Keeps the kind's facts as they were when the answer was first read (only the first time). */
+export function setFactsAtAnswer(kind: string, facts: readonly string[]): void {
+  db.query("UPDATE plan_asks SET answer_facts_json = ? WHERE kind = ? AND answer_facts_json IS NULL").run(JSON.stringify(facts), kind);
+}
+
+/** The run's verdict on whether the button answer still binds. */
+export function setAnswerBinds(kind: string, binds: boolean): void {
+  db.query("UPDATE plan_asks SET answer_binds = ? WHERE kind = ?").run(binds ? 1 : 0, kind);
 }
 
 /** Marks the answer as reported; false when it already was. A card with no record (store reset) gets one. */
 export function markAnswerReported(kind: string, answer: string, at: number): boolean {
   db.query("INSERT OR IGNORE INTO plan_asks (kind, published_at, facts_json) VALUES (?, ?, '[]')").run(kind, at);
-  return db.query("UPDATE plan_asks SET answer_reported = ? WHERE kind = ? AND answer_reported IS NOT ?").run(answer, kind, answer).changes > 0;
+  // A new answer is judged afresh: its own "facts when answered" and verdict.
+  return db.query("UPDATE plan_asks SET answer_reported = ?, answer_facts_json = NULL, answer_binds = NULL WHERE kind = ? AND answer_reported IS NOT ?").run(answer, kind, answer).changes > 0;
 }
 
-/** Marks the answer as taken by memory (only after a successful write). */
-export function markMemoryWritten(kind: string, answer: string): void {
-  db.query("UPDATE plan_asks SET memory_written = ? WHERE kind = ?").run(answer, kind);
+/** Marks the answer as taken by memory (only after a successful write), with the facts memory wrote for it when known. */
+export function markMemoryWritten(kind: string, answer: string, writtenFacts: readonly string[] = []): void {
+  db.query("UPDATE plan_asks SET memory_written = ?, written_facts_json = ? WHERE kind = ?")
+    .run(answer, writtenFacts.length ? JSON.stringify(writtenFacts) : null, kind);
 }
 
 // ── held events ───────────────────────────────────────────────────────────────────────────
