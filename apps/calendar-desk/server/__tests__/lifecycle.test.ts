@@ -63,6 +63,31 @@ describe("tick", () => {
   });
 });
 
+const RETRY_KEY = (a: string) => `init_retry:${a}`; // init-retry.ts retryKey
+describe("tick — a failed first read belongs to the retry (final review F4)", () => {
+  const at6 = () => { const d = new Date(); d.setHours(6, 7, 0, 0); return d; };
+  test("before its backoff passes, the 06:00 scheduled read leaves a failed row alone", async () => {
+    S.markInitStarted("acct"); S.markInitFinished("acct", "failed", "Could not read your calendar yet");
+    const now = at6();
+    S.setCursor(RETRY_KEY("acct"), JSON.stringify({ n: 1, at: now.getTime() + 30 * 60_000, kind: "failed" }));
+    let scrapes = 0;
+    const p = platform(() => { scrapes++; return ok({ ok: true, events: [] }); });
+    await calendarDeskHooks.tick!({ readRoutines: [], platform: p.ctx, now: () => now } as any);
+    expect(scrapes).toBe(0);
+    expect(S.listInit()[0]).toMatchObject({ outcome: "failed" });
+  });
+  test("once due, the retry reads it ONCE and marks it done (no second scheduled scrape)", async () => {
+    S.markInitStarted("acct"); S.markInitFinished("acct", "failed", "Could not read your calendar yet");
+    const now = at6();
+    S.setCursor(RETRY_KEY("acct"), JSON.stringify({ n: 1, at: now.getTime() - 1, kind: "failed" }));
+    let scrapes = 0;
+    const p = platform(() => { scrapes++; return ok({ ok: true, events: [] }); });
+    await calendarDeskHooks.tick!({ readRoutines: [], platform: p.ctx, now: () => now } as any);
+    expect(scrapes).toBe(1);
+    expect(S.listInit()[0]).toMatchObject({ outcome: "done" });
+  });
+});
+
 describe("tick — light re-read (A13)", () => {
   test("a light sync runs only when the last scrape is older than 2h", async () => {
     S.markInitStarted("acct"); S.markInitFinished("acct", "done");

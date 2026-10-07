@@ -36,13 +36,15 @@ export const calendarDeskHooks: AppLifecycleHooks = {
     // A first read that did not land (busy, or failed) is read again once its backoff has passed.
     try { await retryUnfinishedInits(ctx.platform, now, { clock }); } catch (err: any) { console.warn(`[calendar-desk] first-read retry: ${err?.message ?? err}`); }
     for (const rec of listInit()) {
-      if (!rec.finishedAt) continue;
+      // Only a landed first read gets the scheduled and light reads. A busy or failed one belongs to the retry above,
+      // which records its outcome; a scheduled read here would spend a scrape and leave the row failed.
+      if (!(rec.finishedAt && rec.outcome === "done")) continue;
       if (SCHEDULED_SCRAPE_HOURS.includes(now.getHours()) && (lastSyncAt(rec.accountId) ?? 0) < now.getTime() - 50 * 60_000) {
         await syncAccount(rec.accountId, { platform: ctx.platform, now: () => now }, "scheduled");
       }
       // A light re-read at every tick in waking hours (07:00-20:59): shouldScrape allows it only when the last scrape is over 2h old and
       // the daily cap is not spent, so most ticks do nothing. This is how an event made after 13:00 is seen.
-      if (rec.outcome === "done" && now.getHours() >= 7 && now.getHours() < 21) await syncAccount(rec.accountId, { platform: ctx.platform, now: () => now }, "light");
+      if (now.getHours() >= 7 && now.getHours() < 21) await syncAccount(rec.accountId, { platform: ctx.platform, now: () => now }, "light");
     }
     try { await syncFactEvents(ctx.platform, now); } catch (err: any) { console.warn(`[calendar-desk] fact events: ${err?.message ?? err}`); }
     // Planning runs after this tick's read (initialize also plans once, right after a first read), when the tick names the routine (it names only due, enabled routines; Run now is a tick too).
