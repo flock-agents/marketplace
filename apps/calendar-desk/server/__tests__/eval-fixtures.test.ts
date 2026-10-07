@@ -37,7 +37,7 @@ describe("planner eval fixtures", () => {
     const c = PLAN_CASES[0]!;
     const pl = await H.plan(c);
     expect((await H.grade(c, pl, null))[0]).toContain("no parseable");
-    const bad = [{ method: "POST", path: "/api/apps/calendar-desk/ops/plan_events_done", body: { planId: pl.payload.planId, events: [{ event: "e1", steps: [{ key: "x", title: "Late", dueDate: "2000-01-01", why: "w" }] }] } }];
+    const bad = [{ method: "POST", path: "/api/apps/calendar-desk/ops/plan_events_done", body: { planId: pl.payload.planId, events: [{ event: "e1", type: "journey", steps: [{ key: "x", kind: "other", title: "Late", dueDate: "2000-01-01", why: "w" }] }] } }];
     expect((await H.grade(c, pl, bad)).some((p) => p.startsWith("refused e1/x"))).toBe(true);
   });
   test("a do-nothing answer fails the cases that need a step", async () => {

@@ -315,7 +315,7 @@ describe("steps must fit the event's type and kind (planning step tiers M4)", ()
   test("a kind that does not fit the type is refused: checkin on a meeting, pack on an appointment, cab-local on a stay", async () => {
     meeting();
     expect((await report("meeting", [step("checkin")])).r.refused[0].reason).toBe("checkin does not fit a meeting");
-    expect((await report("appointment", [step("pack")])).r.refused[0].reason).toBe("pack does not fit a appointment");
+    expect((await report("appointment", [step("pack")])).r.refused[0].reason).toBe("pack does not fit an appointment");
     hampi(); S._db.exec("DELETE FROM plans");
     const pl = plan("g1"); const p = platform();
     const r: any = await handlePlanReport({ planId: pl.planId, events: [{ event: "e1", type: "stay", steps: [step("cab-local", "cab")] }] }, p.ctx, NOW);

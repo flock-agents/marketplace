@@ -110,11 +110,20 @@ export function extractCalls(text: string): Call[] | null {
   return calls;
 }
 
+// Planning step tiers M4: every scripted report names its event's type and each step's kind. Mechanical, from the
+// existing cases' titles and step keys; M9 rewrites the expectations. A cab step on an event with no location (the
+// dentist and physio cases) takes the nearest fitting kind, `other`, since `cab-local` needs the event's location.
+const typeOfTitle = (title: string): string =>
+  /holiday|webinar|conference/i.test(title) ? "other" : /\bblock\b/i.test(title) ? "block" : /birthday/i.test(title) ? "occasion"
+  : /flight|train|trip to lisbon/i.test(title) ? "journey" : /hampi|stay at/i.test(title) ? "stay"
+  : /dentist|physio|dinner|ptm/i.test(title) ? "appointment" : "meeting";
+const KIND_OF_KEY: Record<string, string> = { checkin: "checkin", gift: "gift", passport: "documents", "book-tickets": "book-opening", cab: "cab-local", pack: "pack" };
+
 /** The calls a correct answer to the case would make (the fixture's own `answer`). */
 export function callsFor(c: PlanCase, pl: Planned): Call[] {
   const a: Answer = c.answer;
   const calls: Call[] = a.ties.map((t) => ({ method: "PATCH", path: `/api/internal/todos/${t.todo}`, body: { event: pl.pointerOf[t.ref] } }));
-  calls.push({ method: "POST", path: "/api/apps/calendar-desk/ops/plan_events_done", body: { planId: pl.payload.planId, events: pl.payload.events.map((be: any) => ({ event: be.ref, steps: a.steps[pl.refOf[be.ref]!] ?? [] })) } });
+  calls.push({ method: "POST", path: "/api/apps/calendar-desk/ops/plan_events_done", body: { planId: pl.payload.planId, events: pl.payload.events.map((be: any) => ({ event: be.ref, type: typeOfTitle(c.events.find((e) => e.ref === pl.refOf[be.ref])?.title ?? ""), steps: (a.steps[pl.refOf[be.ref]!] ?? []).map((s) => ({ ...s, kind: s.key === "cab" && !c.events.find((e) => e.ref === pl.refOf[be.ref])?.location ? "other" : KIND_OF_KEY[s.key] ?? "other" })) })) } });
   return calls;
 }
 

@@ -102,7 +102,7 @@ interface KindCtx { type: EventType; off: ReadonlySet<string>; prepareKeys: Read
 function kindRefusal(s: any, e: EventRow, k: KindCtx): string | null {
   const spec = typeof s.kind === "string" ? kindSpec(s.kind) : undefined;
   if (!spec) return `kind must be one of ${KINDS.map((x) => x.kind).join(", ")}`;
-  if (!spec.types.includes(k.type)) return `${spec.kind} does not fit a ${k.type}`;
+  if (!spec.types.includes(k.type)) return `${spec.kind} does not fit ${/^[aeiou]/.test(k.type) ? "an" : "a"} ${k.type}`;
   if (spec.kind === "cab-local" && !e.location?.trim()) return "cab-local needs the event's location";
   if (spec.kind === "prepare-ahead" && [...k.prepareKeys].some((key) => key !== s.key)) return "at most one prepare-ahead per meeting";
   if (k.off.has(spec.kind)) return `the user dismissed the last two ${spec.kind} steps`;
