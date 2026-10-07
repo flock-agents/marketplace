@@ -17,7 +17,8 @@ const db = new Database(`${dataDir}/calendar-desk.db`);
 db.exec("PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000; PRAGMA foreign_keys = ON;");
 
 // Append-only. Add at the end; never edit or reorder an existing entry.
-const migrations: string[] = [
+// An entry is SQL, or a function when the change needs a check first (SQLite has no ADD COLUMN IF NOT EXISTS).
+const migrations: (string | (() => void))[] = [
   `CREATE TABLE IF NOT EXISTS events (
      account_id TEXT NOT NULL, event_key TEXT NOT NULL, calendar TEXT, title TEXT NOT NULL,
      start_at INTEGER, end_at INTEGER, all_day INTEGER NOT NULL DEFAULT 0, local_date TEXT NOT NULL,
@@ -70,6 +71,16 @@ const migrations: string[] = [
   `CREATE TABLE IF NOT EXISTS planned (account_id TEXT NOT NULL, event_key TEXT NOT NULL, date TEXT NOT NULL, start_at INTEGER, planned_at INTEGER, failed_tries INTEGER NOT NULL DEFAULT 0, try_date TEXT, try_start_at INTEGER, PRIMARY KEY (account_id, event_key))`,
   `CREATE TABLE IF NOT EXISTS plans (plan_id TEXT PRIMARY KEY, created_at INTEGER NOT NULL, session_id TEXT, events_json TEXT NOT NULL, answered_at INTEGER, abandoned_at INTEGER, bad_reports INTEGER NOT NULL DEFAULT 0)`,
   `CREATE TABLE IF NOT EXISTS plan_steps (account_id TEXT NOT NULL, event_key TEXT NOT NULL, step_key TEXT NOT NULL, PRIMARY KEY (account_id, event_key, step_key))`,
+  // 2026-10-07 (step tiers): a step remembers its kind and whether a matching TODO already covers it; a planned event remembers its type.
+  // Existing steps get their kind from their key; cab and travel stay null until the planner sees their published title (backfillKind).
+  () => {
+    const has = (table: string, col: string) => (db.query(`PRAGMA table_info(${table})`).all() as { name: string }[]).some((c) => c.name === col);
+    if (!has("plan_steps", "kind")) db.exec("ALTER TABLE plan_steps ADD COLUMN kind TEXT");
+    if (!has("plan_steps", "covered")) db.exec("ALTER TABLE plan_steps ADD COLUMN covered INTEGER");
+    if (!has("planned", "type")) db.exec("ALTER TABLE planned ADD COLUMN type TEXT");
+    db.exec(`UPDATE plan_steps SET kind = CASE step_key WHEN 'checkin' THEN 'checkin' WHEN 'pack' THEN 'pack' WHEN 'gift' THEN 'gift' WHEN 'book-tickets' THEN 'book-opening' END
+      WHERE kind IS NULL AND step_key IN ('checkin', 'pack', 'gift', 'book-tickets')`);
+  },
 ];
 
 function applyMigrations(): void {
@@ -79,7 +90,7 @@ function applyMigrations(): void {
   const tx = db.transaction(() => {
     migrations.forEach((sql, idx) => {
       if (idx <= row.max) return;
-      db.exec(sql);
+      if (typeof sql === "function") sql(); else db.exec(sql);
       db.query("INSERT INTO _migrations (idx, applied_at) VALUES (?, ?)").run(idx, now);
     });
   });

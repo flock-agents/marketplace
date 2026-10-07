@@ -1,6 +1,7 @@
 // Planning bookkeeping, ported from core's pa-brief planned-events.ts and the selection in pipeline.ts startPlanningRun:
 // which events were planned (and at which date/start), the plans handed to the working agent, the step keys already made.
 import { _db as db, listEvents, getCursor, setCursor, type EventRow } from "./store";
+import type { EventType } from "./kinds";
 
 export const PLAN_EVENTS_MAX = 20;
 export const SILENT_END_MAX = 2;
@@ -11,19 +12,20 @@ const HORIZON_DAYS = 90;
 
 export interface PlanEventRef { ref: string; accountId: string; eventKey: string; date: string; startAt: number | null }
 export interface PlanRecord { planId: string; createdAt: number; sessionId: string | null; events: PlanEventRef[]; answeredAt: number | null; abandonedAt: number | null; badReports: number }
-type EventId = { accountId: string; eventKey: string; date: string; startAt: number | null };
+type EventId = { accountId: string; eventKey: string; date: string; startAt: number | null; type?: EventType | null };
 
 // ── planned marks ─────────────────────────────────────────────────────────────────────────
 
-export function plannedMark(accountId: string, eventKey: string): { date: string; startAt: number | null; plannedAt: number } | null {
-  const r = db.query("SELECT date, start_at, planned_at FROM planned WHERE account_id = ? AND event_key = ? AND planned_at IS NOT NULL").get(accountId, eventKey) as any;
-  return r ? { date: r.date, startAt: r.start_at ?? null, plannedAt: r.planned_at } : null;
+export function plannedMark(accountId: string, eventKey: string): { date: string; startAt: number | null; plannedAt: number; type: EventType | null } | null {
+  const r = db.query("SELECT date, start_at, planned_at, type FROM planned WHERE account_id = ? AND event_key = ? AND planned_at IS NOT NULL").get(accountId, eventKey) as any;
+  return r ? { date: r.date, startAt: r.start_at ?? null, plannedAt: r.planned_at, type: r.type ?? null } : null;
 }
 
 export function markPlanned(events: EventId[], at: number): void {
-  const up = db.query(`INSERT INTO planned (account_id, event_key, date, start_at, planned_at, failed_tries, try_date, try_start_at) VALUES (?, ?, ?, ?, ?, 0, NULL, NULL)
-    ON CONFLICT(account_id, event_key) DO UPDATE SET date = excluded.date, start_at = excluded.start_at, planned_at = excluded.planned_at, failed_tries = 0, try_date = NULL, try_start_at = NULL`);
-  db.transaction(() => { for (const e of events) up.run(e.accountId, e.eventKey, e.date, e.startAt ?? null, at); })();
+  const up = db.query(`INSERT INTO planned (account_id, event_key, date, start_at, planned_at, failed_tries, try_date, try_start_at, type) VALUES (?, ?, ?, ?, ?, 0, NULL, NULL, ?)
+    ON CONFLICT(account_id, event_key) DO UPDATE SET date = excluded.date, start_at = excluded.start_at, planned_at = excluded.planned_at, failed_tries = 0, try_date = NULL, try_start_at = NULL,
+      type = COALESCE(excluded.type, planned.type)`);
+  db.transaction(() => { for (const e of events) up.run(e.accountId, e.eventKey, e.date, e.startAt ?? null, at, e.type ?? null); })();
 }
 
 /** Drops marks (and counted tries) whose date is before `todayDate`. */
@@ -131,8 +133,33 @@ export function abandonPlan(planId: string, at: number, opts: { countTry?: boole
 
 // ── step keys ─────────────────────────────────────────────────────────────────────────────
 
-export function recordStep(accountId: string, eventKey: string, stepKey: string): void {
-  db.query("INSERT OR IGNORE INTO plan_steps (account_id, event_key, step_key) VALUES (?, ?, ?)").run(accountId, eventKey, stepKey);
+/** A step already recorded keeps its kind (the first one wins); backfillKind fills a null one. */
+export function recordStep(accountId: string, eventKey: string, stepKey: string, kind?: string | null): void {
+  db.query("INSERT OR IGNORE INTO plan_steps (account_id, event_key, step_key, kind) VALUES (?, ?, ?, ?)").run(accountId, eventKey, stepKey, kind ?? null);
+}
+
+/** Each step's kind by its TODO source ref (`step:<eventKey>:<stepKey>`). Steps with no kind yet are left out. */
+export function stepKindsFor(accountId: string): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const r of db.query("SELECT event_key, step_key, kind FROM plan_steps WHERE account_id = ? AND kind IS NOT NULL ORDER BY rowid").all(accountId) as { event_key: string; step_key: string; kind: string }[]) {
+    out.set(`step:${r.event_key}:${r.step_key}`, r.kind);
+  }
+  return out;
+}
+
+/** Marks a step as covered by an existing TODO (so it was not published). */
+export function setStepCovered(accountId: string, eventKey: string, stepKey: string): void {
+  db.query("UPDATE plan_steps SET covered = 1 WHERE account_id = ? AND event_key = ? AND step_key = ?").run(accountId, eventKey, stepKey);
+}
+
+/**
+ * Fills the kind of a step recorded before kinds existed (cab, travel) from its published title: airport, station, else local.
+ * Only a null kind is filled, never overwritten. Returns the kind written, or null when the step has one already or is unknown.
+ */
+export function backfillKind(accountId: string, eventKey: string, stepKey: string, title: string): string | null {
+  const kind = /airport/i.test(title) ? "cab-airport" : /station/i.test(title) ? "cab-station" : "cab-local";
+  const r = db.query("UPDATE plan_steps SET kind = ? WHERE account_id = ? AND event_key = ? AND step_key = ? AND kind IS NULL").run(kind, accountId, eventKey, stepKey);
+  return r.changes > 0 ? kind : null;
 }
 
 export function stepKeysFor(accountId: string, eventKey: string): string[] {

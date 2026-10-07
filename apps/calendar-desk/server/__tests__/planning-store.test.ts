@@ -31,7 +31,7 @@ describe("planned-event markers", () => {
     seed("a", "2026-11-01", 5);
     P.markPlanned([ref("a", "2026-11-01", 5)], 1000);
     expect(keys()).toEqual([]);
-    expect(P.plannedMark("acct", "a")).toEqual({ date: "2026-11-01", startAt: 5, plannedAt: 1000 });
+    expect(P.plannedMark("acct", "a")).toEqual({ date: "2026-11-01", startAt: 5, plannedAt: 1000, type: null });
   });
   test("a moved date is changed", () => {
     seed("a", "2026-11-02");
@@ -146,10 +146,10 @@ describe("plans and steps", () => {
     P.markPlanned([ref("a", "2026-11-01", 5)], 10);
     const e = [{ ref: "e1", ...ref("a", "2026-11-02", 9) }];
     P.abandonPlan(P.createPlan(e, 1).planId, 2);
-    expect(P.plannedMark("acct", "a")).toEqual({ date: "2026-11-01", startAt: 5, plannedAt: 10 });
+    expect(P.plannedMark("acct", "a")).toEqual({ date: "2026-11-01", startAt: 5, plannedAt: 10, type: null });
     expect(P.eventsToPlan(NOW).map((x) => x.change)).toEqual(["changed"]);
     P.abandonPlan(P.createPlan(e, 3).planId, 4);
-    expect(P.plannedMark("acct", "a")).toEqual({ date: "2026-11-02", startAt: 9, plannedAt: 4 });
+    expect(P.plannedMark("acct", "a")).toEqual({ date: "2026-11-02", startAt: 9, plannedAt: 4, type: null });
     expect(keys()).toEqual([]);
     expect(P.stepKeysFor("acct", "a")).toEqual([]);
   });
@@ -168,5 +168,70 @@ describe("plans and steps", () => {
     P.forgetEvent("acct", "a");
     expect(P.stepKeysFor("acct", "a")).toEqual([]);
     expect(P.plannedMark("acct", "a")).toBeNull();
+  });
+});
+
+describe("step kinds and event types", () => {
+  test("recordStep remembers a kind and stepKindsFor maps source refs to it", () => {
+    P.recordStep("acct", "e1", "gift", "gift");
+    P.recordStep("acct", "e1", "x");
+    P.recordStep("other", "e1", "pack", "pack");
+    expect(P.stepKindsFor("acct")).toEqual(new Map([["step:e1:gift", "gift"]]));
+    expect(P.stepKeysFor("acct", "e1")).toEqual(["gift", "x"]);
+  });
+  test("a recorded step keeps its first kind", () => {
+    P.recordStep("acct", "e1", "k", "pack"); P.recordStep("acct", "e1", "k", "gift");
+    expect(P.stepKindsFor("acct").get("step:e1:k")).toBe("pack");
+  });
+  test("a planned mark carries its type; an old mark reads null; re-marking without a type keeps it", () => {
+    P.markPlanned([{ ...ref("a", "2026-11-01"), type: "meeting" }, ref("b", "2026-11-01")], 5);
+    expect(P.plannedMark("acct", "a")?.type).toBe("meeting");
+    expect(P.plannedMark("acct", "b")?.type).toBeNull();
+    P.markPlanned([ref("a", "2026-11-02")], 6);
+    expect(P.plannedMark("acct", "a")?.type).toBe("meeting");
+    P.markPlanned([{ ...ref("a", "2026-11-02"), type: "stay" }], 7);
+    expect(P.plannedMark("acct", "a")?.type).toBe("stay");
+  });
+  test("setStepCovered marks only that step", () => {
+    P.recordStep("acct", "e1", "a", "gift"); P.recordStep("acct", "e1", "b", "pack");
+    P.setStepCovered("acct", "e1", "a");
+    const rows = S._db.query("SELECT step_key, covered FROM plan_steps ORDER BY step_key").all();
+    expect(rows).toEqual([{ step_key: "a", covered: 1 }, { step_key: "b", covered: null }]);
+  });
+  test("backfillKind reads the title: airport, station, else local", () => {
+    for (const k of ["c1", "c2", "c3"]) P.recordStep("acct", "e1", k);
+    expect(P.backfillKind("acct", "e1", "c1", "Book a cab to the Airport")).toBe("cab-airport");
+    expect(P.backfillKind("acct", "e1", "c2", "Ride to Pune station")).toBe("cab-station");
+    expect(P.backfillKind("acct", "e1", "c3", "Book a cab for the dentist")).toBe("cab-local");
+  });
+  test("backfillKind never overwrites a kind", () => {
+    P.recordStep("acct", "e1", "cab", "cab-station");
+    expect(P.backfillKind("acct", "e1", "cab", "cab to the airport")).toBeNull();
+    expect(P.stepKindsFor("acct").get("step:e1:cab")).toBe("cab-station");
+  });
+});
+
+describe("migration of a database from before kinds", () => {
+  test("gains the columns and backfills kinds from keys, leaving cab and travel null", async () => {
+    const { Database } = await import("bun:sqlite");
+    const { spawnSync } = await import("child_process");
+    const dir = mkdtempSync(join(tmpdir(), "calendar-desk-old-"));
+    const old = new Database(join(dir, "calendar-desk.db"));
+    const upto = (S._db.query("SELECT MAX(idx) AS m FROM _migrations").get() as { m: number }).m; // every migration but the last (this one)
+    old.exec("CREATE TABLE _migrations (idx INTEGER PRIMARY KEY, applied_at INTEGER NOT NULL)");
+    for (let i = 0; i < upto; i++) old.query("INSERT INTO _migrations VALUES (?, 1)").run(i);
+    old.exec(`CREATE TABLE planned (account_id TEXT NOT NULL, event_key TEXT NOT NULL, date TEXT NOT NULL, start_at INTEGER, planned_at INTEGER, failed_tries INTEGER NOT NULL DEFAULT 0, try_date TEXT, try_start_at INTEGER, PRIMARY KEY (account_id, event_key));
+      CREATE TABLE plan_steps (account_id TEXT NOT NULL, event_key TEXT NOT NULL, step_key TEXT NOT NULL, PRIMARY KEY (account_id, event_key, step_key));
+      INSERT INTO planned (account_id, event_key, date, planned_at) VALUES ('a', 'e', '2026-11-01', 9);`);
+    for (const k of ["checkin", "pack", "gift", "book-tickets", "cab", "travel"]) old.query("INSERT INTO plan_steps VALUES ('a', 'e', ?)").run(k);
+    old.close();
+    const script = `const S = await import(${JSON.stringify(join(import.meta.dir, "../store"))}); const P = await import(${JSON.stringify(join(import.meta.dir, "../planning-store"))});
+      console.log(JSON.stringify({ kinds: [...P.stepKindsFor("a")], mark: P.plannedMark("a", "e"), covered: S._db.query("SELECT covered FROM plan_steps LIMIT 1").get() }));`;
+    const r = spawnSync(process.execPath, ["-e", script], { env: { ...process.env, APP_DATA_DIR: dir }, encoding: "utf8" });
+    expect(r.stderr).toBe("");
+    expect(JSON.parse(r.stdout)).toEqual({
+      kinds: [["step:e:checkin", "checkin"], ["step:e:pack", "pack"], ["step:e:gift", "gift"], ["step:e:book-tickets", "book-opening"]],
+      mark: { date: "2026-11-01", startAt: null, plannedAt: 9, type: null }, covered: { covered: null },
+    });
   });
 });
