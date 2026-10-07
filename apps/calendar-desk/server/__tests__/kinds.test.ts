@@ -1,5 +1,5 @@
 import { describe, test, expect } from "bun:test";
-import { KINDS, EVENT_TYPES, kindSpec, kindTable } from "../kinds";
+import { KINDS, EVENT_TYPES, kindSpec, kindTable, placeOf, PLACE_KINDS } from "../kinds";
 
 describe("kinds", () => {
   test("13 kinds, unique", () => {
@@ -39,5 +39,26 @@ describe("kinds", () => {
     for (const k of KINDS) {
       expect(table.split("`" + k.kind + "`").length - 1).toBe(1);
     }
+  });
+
+  test("placeOf: the venue for a ride or a table, the person for a gift, nothing for other kinds", () => {
+    const cases: [string, { title: string; location?: string | null }, string | null][] = [
+      ["cab-local", { title: "Physio", location: "Apollo Clinic, Bannerghatta Road" }, "apollo clinic"],
+      ["cab-local", { title: "Physio", location: "Apollo Clinic, Indiranagar" }, "apollo clinic"],
+      ["cab-local", { title: "Physio", location: "  Apollo   CLINIC " }, "apollo clinic"],
+      ["cab-local", { title: "Physio", location: null }, null],
+      ["cab-local", { title: "Physio", location: "   " }, null],
+      ["cab-local", { title: "Sync", location: "https://meet.google.com/abc-defg-hij" }, null],
+      ["table-booking", { title: "Dinner", location: "Olive Table, Indiranagar" }, "olive table"],
+      ["gift", { title: "Asha's birthday" }, "asha"],
+      ["gift", { title: "Asha\u2019s Birthday" }, "asha"],
+      ["gift", { title: "Birthday: Asha" }, "asha"],
+      ["gift", { title: "Mom and Dad's anniversary" }, "mom and dad"],
+      ["gift", { title: "Birthday" }, null],
+      ["checkin", { title: "Flight", location: "BLR" }, null],
+      ["pack", { title: "Stay", location: "Hampi" }, null],
+    ];
+    for (const [kind, ev, want] of cases) expect(`${kind} ${JSON.stringify(ev)} -> ${placeOf(kind, ev)}`).toBe(`${kind} ${JSON.stringify(ev)} -> ${want}`);
+    expect([...PLACE_KINDS]).toEqual(["cab-local", "gift", "table-booking"]);
   });
 });

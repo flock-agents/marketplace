@@ -42,3 +42,26 @@ export function kindTable(): string {
   });
   return ["| kind | tier | allowed on types | for | default key |", "|---|---|---|---|---|", ...rows].join("\n");
 }
+
+/** The person-dependent kinds whose steps record where they were for: a venue for a ride or a table, a person for a gift. */
+export const PLACE_KINDS: readonly string[] = ["cab-local", "gift", "table-booking"];
+
+const fold = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
+
+/**
+ * Where a step of this kind is for, so the owner's habit there can be learned: the venue (the location up to its first comma)
+ * for cab-local and table-booking, the person (the title without a possessive, "birthday" or "anniversary") for gift.
+ * Null for other kinds, an empty location, or a location that is a link.
+ */
+export function placeOf(kind: string, event: { title: string; location?: string | null }): string | null {
+  if (kind === "cab-local" || kind === "table-booking") {
+    const loc = event.location?.trim() ?? "";
+    if (!loc || /^[a-z][a-z0-9+.-]*:\/\//i.test(loc)) return null;
+    return fold(loc.split(",")[0]!) || null;
+  }
+  if (kind === "gift") {
+    const person = event.title.replace(/['\u2019]s\b/gi, "").replace(/\b(birthday|anniversary)\b/gi, " ").replace(/[^\p{L}\p{N}\s]/gu, " ");
+    return fold(person) || null;
+  }
+  return null;
+}

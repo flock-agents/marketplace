@@ -291,6 +291,19 @@ describe("steps must fit the event's type and kind (planning step tiers M4)", ()
     return { r, p };
   };
 
+  test("a cab-local step records its venue, a gift the person, a pack nothing", async () => {
+    meeting("Acme Corp, 4th floor, MG Road");
+    await report("meeting", [step("cab-local", "cab", { dueDate: "2026-10-09", dueTime: "14:00" })]);
+    seed("b1", "Asha's birthday", "2026-10-12"); S._db.exec("DELETE FROM plans");
+    await handlePlanReport({ planId: plan("b1").planId, events: [{ event: "e1", type: "occasion", steps: [step("gift", "gift", { dueDate: "2026-10-11" })] }] }, platform().ctx, NOW);
+    hampi(); S._db.exec("DELETE FROM plans");
+    await handlePlanReport({ planId: plan("g1").planId, events: [{ event: "e1", type: "stay", steps: [pack] }] }, platform().ctx, NOW);
+    expect(P.allStepPlaces()).toEqual(new Map([
+      ["step:m1:cab", { kind: "cab-local", place: "acme corp" }],
+      ["step:b1:gift", { kind: "gift", place: "asha" }],
+    ]));
+  });
+
   test("an entry with no type, or an unknown one, is refused and the event stays unplanned", async () => {
     meeting();
     for (const type of [undefined, "trip"]) {

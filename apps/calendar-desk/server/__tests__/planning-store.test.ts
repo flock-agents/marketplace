@@ -211,15 +211,24 @@ describe("step kinds and event types", () => {
   });
 });
 
+describe("step places", () => {
+  test("recordStep keeps a place; allStepPlaces maps source refs to kind and place; a step without one is left out", () => {
+    P.recordStep("acct", "e1", "cab", "cab-local", "apollo clinic");
+    P.recordStep("acct", "e1", "pack", "pack");
+    P.recordStep("acct", "e1", "cab", "cab-local", "other place"); // first one wins
+    expect(P.allStepPlaces()).toEqual(new Map([["step:e1:cab", { kind: "cab-local", place: "apollo clinic" }]]));
+  });
+});
+
 describe("migration of a database from before kinds", () => {
   test("gains the columns and backfills kinds from keys, leaving cab and travel null", async () => {
     const { Database } = await import("bun:sqlite");
     const { spawnSync } = await import("child_process");
     const dir = mkdtempSync(join(tmpdir(), "calendar-desk-old-"));
     const old = new Database(join(dir, "calendar-desk.db"));
-    const upto = (S._db.query("SELECT MAX(idx) AS m FROM _migrations").get() as { m: number }).m; // every migration but the last (this one)
+    const upto = (S._db.query("SELECT MAX(idx) AS m FROM _migrations").get() as { m: number }).m; // every migration before the kinds one
     old.exec("CREATE TABLE _migrations (idx INTEGER PRIMARY KEY, applied_at INTEGER NOT NULL)");
-    for (let i = 0; i < upto; i++) old.query("INSERT INTO _migrations VALUES (?, 1)").run(i);
+    for (let i = 0; i < upto - 1; i++) old.query("INSERT INTO _migrations VALUES (?, 1)").run(i);
     old.exec(`CREATE TABLE planned (account_id TEXT NOT NULL, event_key TEXT NOT NULL, date TEXT NOT NULL, start_at INTEGER, planned_at INTEGER, failed_tries INTEGER NOT NULL DEFAULT 0, try_date TEXT, try_start_at INTEGER, PRIMARY KEY (account_id, event_key));
       CREATE TABLE plan_steps (account_id TEXT NOT NULL, event_key TEXT NOT NULL, step_key TEXT NOT NULL, PRIMARY KEY (account_id, event_key, step_key));
       INSERT INTO planned (account_id, event_key, date, planned_at) VALUES ('a', 'e', '2026-11-01', 9);`);
@@ -233,6 +242,26 @@ describe("migration of a database from before kinds", () => {
       kinds: [["step:e:checkin", "checkin"], ["step:e:pack", "pack"], ["step:e:gift", "gift"], ["step:e:book-tickets", "book-opening"]],
       mark: { date: "2026-11-01", startAt: null, plannedAt: 9, type: null }, covered: { covered: null },
     });
+  });
+});
+
+describe("migration of a database from before places", () => {
+  test("a database from before places gains plan_steps.place, existing rows null", async () => {
+    const { Database } = await import("bun:sqlite");
+    const { spawnSync } = await import("child_process");
+    const dir = mkdtempSync(join(tmpdir(), "calendar-desk-old-place-"));
+    const old = new Database(join(dir, "calendar-desk.db"));
+    const upto = (S._db.query("SELECT MAX(idx) AS m FROM _migrations").get() as { m: number }).m; // every migration but this one
+    old.exec("CREATE TABLE _migrations (idx INTEGER PRIMARY KEY, applied_at INTEGER NOT NULL)");
+    for (let i = 0; i < upto; i++) old.query("INSERT INTO _migrations VALUES (?, 1)").run(i);
+    old.exec(`CREATE TABLE plan_steps (account_id TEXT NOT NULL, event_key TEXT NOT NULL, step_key TEXT NOT NULL, kind TEXT, covered INTEGER, PRIMARY KEY (account_id, event_key, step_key));
+      INSERT INTO plan_steps VALUES ('a', 'e', 'cab', 'cab-local', NULL);`);
+    old.close();
+    const script = `const S = await import(${JSON.stringify(join(import.meta.dir, "../store"))});
+      console.log(JSON.stringify(S._db.query("SELECT step_key, place FROM plan_steps").all()));`;
+    const r = spawnSync(process.execPath, ["-e", script], { env: { ...process.env, APP_DATA_DIR: dir }, encoding: "utf8" });
+    expect(r.stderr).toBe("");
+    expect(JSON.parse(r.stdout)).toEqual([{ step_key: "cab", place: null }]);
   });
 });
 

@@ -81,6 +81,11 @@ const migrations: (string | (() => void))[] = [
     db.exec(`UPDATE plan_steps SET kind = CASE step_key WHEN 'checkin' THEN 'checkin' WHEN 'pack' THEN 'pack' WHEN 'gift' THEN 'gift' WHEN 'book-tickets' THEN 'book-opening' END
       WHERE kind IS NULL AND step_key IN ('checkin', 'pack', 'gift', 'book-tickets')`);
   },
+  // 2026-10-07 (amendment 1): a ride, table or gift step remembers where it was for (a venue, or the person). Older steps stay null.
+  () => {
+    const has = (db.query("PRAGMA table_info(plan_steps)").all() as { name: string }[]).some((c) => c.name === "place");
+    if (!has) db.exec("ALTER TABLE plan_steps ADD COLUMN place TEXT");
+  },
 ];
 
 function applyMigrations(): void {

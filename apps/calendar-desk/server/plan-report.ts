@@ -5,7 +5,7 @@ import type { PlatformContext, OpError, AppTask } from "@flock/app-sdk";
 import { getEvent, type EventRow } from "./store";
 import { ymd } from "./events";
 import { pointer } from "./planner";
-import { EVENT_TYPES, KINDS, kindSpec, type EventType } from "./kinds";
+import { EVENT_TYPES, KINDS, kindSpec, placeOf, type EventType } from "./kinds";
 import { tally, type TallyRow } from "./tally";
 import { openPlan, plannedMark, markPlanned, recordStep, setStepCovered, stepKeysFor, allStepKinds, allCoveredStepRefs, noteBadReport, answerPlan, abandonPlan, BAD_REPORTS_MAX, type PlanRecord, type PlanEventRef } from "./planning-store";
 
@@ -206,7 +206,7 @@ export async function handlePlanReport(p: Record<string, unknown>, platform: Pla
       if (kindSpec(s.kind)!.tier !== "judgement") task.cover = { kind: s.kind, eventTitle: ev.title, eventLocation: ev.location ?? undefined, eventDate: ev.localDate };
       const res = await platform.tasks.publish(task);
       if (!res.ok) { refused.push({ item, reason: `could not publish: ${(res as any).reason ?? "unknown"}` }); allOk = false; continue; } // the platform's fault: no bad report, the event stays unplanned for the next run
-      recordStep(ev.accountId, ev.eventKey, s.key, s.kind);
+      recordStep(ev.accountId, ev.eventKey, s.key, s.kind, placeOf(s.kind, ev));
       // An older Flock ignores `cover` and answers without `covered`: the step is then simply published.
       if ((res as any).data?.covered) { setStepCovered(ev.accountId, ev.eventKey, s.key); accepted.push(`${item} covered by a TODO`); }
       else accepted.push(item);
