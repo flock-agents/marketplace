@@ -158,6 +158,27 @@ export function coveredStepRefs(accountId: string): Set<string> {
   return new Set(rows.map((r) => `step:${r.event_key}:${r.step_key}`));
 }
 
+/** Every account's step kinds by source ref: habits are the person's, not an account's. */
+export function allStepKinds(): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const r of db.query("SELECT event_key, step_key, kind FROM plan_steps WHERE kind IS NOT NULL ORDER BY rowid").all() as { event_key: string; step_key: string; kind: string }[]) {
+    out.set(`step:${r.event_key}:${r.step_key}`, r.kind);
+  }
+  return out;
+}
+
+/** Every account's covered step refs. */
+export function allCoveredStepRefs(): Set<string> {
+  const rows = db.query("SELECT event_key, step_key FROM plan_steps WHERE covered = 1").all() as { event_key: string; step_key: string }[];
+  return new Set(rows.map((r) => `step:${r.event_key}:${r.step_key}`));
+}
+
+/** Steps keyed cab or travel still without a kind: the only ones backfillKind may fill. */
+export function unkindedCabSteps(): { accountId: string; eventKey: string; stepKey: string }[] {
+  return (db.query("SELECT account_id, event_key, step_key FROM plan_steps WHERE kind IS NULL AND step_key IN ('cab', 'travel') ORDER BY rowid").all() as { account_id: string; event_key: string; step_key: string }[])
+    .map((r) => ({ accountId: r.account_id, eventKey: r.event_key, stepKey: r.step_key }));
+}
+
 /**
  * Fills the kind of a step recorded before kinds existed (cab, travel) from its published title: airport, station, else local.
  * Only a null kind is filled, never overwritten. Returns the kind written, or null when the step has one already or is unknown.

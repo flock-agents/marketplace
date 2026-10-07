@@ -2,12 +2,12 @@
 // Calendar Desk already made, read back from Flock) and wakes the paired agent with plan_events. Its report arrives
 // through the plan_events_done operation (plan-report.ts).
 import type { PlatformContext } from "@flock/app-sdk";
-import { eventsToPlan, openPlan, createPlan, setPlanSession, abandonPlan, plannedMark, stepKindsFor, coveredStepRefs, backfillKind, heldEvents, dropHeld, PLAN_GIVE_UP_MS, PLAN_EVENTS_MAX, type PlanEventRef, type PlanPick } from "./planning-store";
+import { eventsToPlan, openPlan, createPlan, setPlanSession, abandonPlan, plannedMark, allStepKinds, allCoveredStepRefs, unkindedCabSteps, backfillKind, heldEvents, dropHeld, PLAN_GIVE_UP_MS, PLAN_EVENTS_MAX, type PlanEventRef, type PlanPick } from "./planning-store";
 import { ymd } from "./events";
 import { getEvent } from "./store";
 import { KINDS, type EventType, type Tier } from "./kinds";
 import { tally, type KindState } from "./tally";
-import { askStates, settleAsks, preference, type AskRow, type AskState } from "./asks";
+import { askStates, settleAsks, preference, answeredInChat, type AskRow, type AskState } from "./asks";
 
 const APP = "calendar-desk";
 const EVENT_FACTS_MAX = 3;
@@ -74,7 +74,8 @@ async function planOnce(platform: PlatformContext, now: Date): Promise<PlanningR
   }
   if (askListed.ok) await settleAsks(platform, asks, factsByKind, t);
 
-  // Held events whose card was answered yes come back once, while still ahead; any other close drops the hold.
+  // Held events come back once, while still ahead, when their card was answered: yes by button, or in chat (a fact the card
+  // did not see withdrew it; the agent reads the fact). No, Mark done or expiry drop the hold.
   const offeredHolds: { accountId: string; eventKey: string; kind: string }[] = [];
   if (askListed.ok) {
     for (const h of heldEvents()) {
@@ -82,7 +83,8 @@ async function planOnce(platform: PlatformContext, now: Date): Promise<PlanningR
       if (status === "none" || status === "waiting") continue;
       const e = getEvent(h.accountId, h.eventKey);
       const ahead = !!e && e.missingSince == null && e.localDate >= ymd(now) && (e.allDay || e.startAt == null || e.startAt > t);
-      if (status !== "yes" || !ahead) { dropHeld(h.accountId, h.eventKey, h.kind); continue; }
+      const answered = status === "yes" || answeredInChat(asks.get(h.kind), factsByKind.get(h.kind) ?? []);
+      if (!answered || !ahead) { dropHeld(h.accountId, h.eventKey, h.kind); continue; }
       const already = picks.some((x) => x.accountId === h.accountId && x.eventKey === h.eventKey);
       if (!already) {
         if (picks.length >= PLAN_EVENTS_MAX) continue; // offered on a later run
@@ -97,19 +99,14 @@ async function planOnce(platform: PlatformContext, now: Date): Promise<PlanningR
   const states = listed.ok ? listed.data.tasks : [];
   if (!listed.ok) console.warn(`[calendar-desk] planning: could not read steps: ${listed.reason}`);
 
-  // The owner's habits across the accounts being planned. A cab or travel step recorded before kinds existed gets its kind from its title first.
-  const accounts = [...new Set(picks.map((e) => e.accountId))].sort();
-  const known = accounts.map((a) => ({ a, kinds: stepKindsFor(a) }));
-  for (const s of states) {
-    const m = /^step:(.+):(cab|travel)$/.exec(s.sourceRef);
-    if (m) for (const { a, kinds } of known) if (!kinds.has(s.sourceRef)) backfillKind(a, m[1]!, m[2]!, s.title);
+  // The owner's habits, pooled across accounts (the same tally the report's guard uses). A cab or travel step recorded before
+  // kinds existed gets its kind from its listed title first.
+  for (const u of unkindedCabSteps()) {
+    const row = states.find((s) => s.sourceRef === `step:${u.eventKey}:${u.stepKey}`);
+    if (row) backfillKind(u.accountId, u.eventKey, u.stepKey, row.title);
   }
-  const kinds = new Map<string, string>(), covered = new Set<string>();
-  for (const a of accounts) {
-    for (const [ref, kind] of stepKindsFor(a)) kinds.set(ref, kind);
-    for (const ref of coveredStepRefs(a)) covered.add(ref);
-  }
-  const tallied = tally(states, kinds, t, covered);
+  const kinds = allStepKinds();
+  const tallied = tally(states, kinds, t, allCoveredStepRefs());
   const habits: Record<string, Habit> = {};
   for (const k of [...KINDS].sort((a, b) => (a.kind < b.kind ? -1 : 1))) {
     if (k.tier === "judgement") continue;

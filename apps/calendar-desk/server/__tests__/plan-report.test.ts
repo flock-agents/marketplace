@@ -487,6 +487,34 @@ describe("a personal step with no evidence: ask once, hold the event (planning s
     expect(P.heldEvents()).toEqual([]);
   });
 
+  test("C4: the tally is pooled across accounts: another account's done cab-local step is evidence, its skips switch a kind off here", async () => {
+    dentist();
+    P.recordStep("acct2", "h0", "cab", "cab-local");
+    const done: any = { ...closedTask("step:h0:cab", "done"), closedAt: NOW.getTime() - DAY };
+    expect((await report([{ key: "d1", type: "appointment" }], platform({ tasks: [done] }))).asks).toEqual([]);
+    expect(P.heldEvents()).toEqual([]);
+    hampi();
+    for (const k of ["a", "b"]) P.recordStep("acct2", "h1", k, "cab-airport");
+    const skip = (k: string, ago: number): any => ({ ...closedTask(`step:h1:${k}`), skipped: true, closedAt: NOW.getTime() - ago * DAY });
+    const cab = { key: "cab", kind: "cab-airport", title: "Cab to the airport", dueDate: "2026-10-11", why: "w" };
+    const { r } = await report([{ key: "g1", type: "stay", steps: [cab] }], platform({ tasks: [skip("a", 3), skip("b", 2)] }));
+    expect(r.refused).toEqual([{ item: "e1/cab", reason: "the user dismissed the last two cab-airport steps" }]);
+  });
+
+  test("C6: a card answered no refuses the kind; answered yes, two skips no longer switch it off", async () => {
+    dentist();
+    const cab = { key: "cab", kind: "cab-local", title: "Book a cab to Apollo", dueDate: "2026-10-09", dueTime: "09:15", why: "w" };
+    const no = { ...closedTask("ask:cab-local", "done"), actionId: "no" };
+    const refusedNo = await report([{ key: "d1", type: "appointment", steps: [cab] }], platform({ tasks: [no] }));
+    expect(refusedNo.r.refused).toEqual([{ item: "e1/cab", reason: "the user said no to cab-local steps" }]);
+    for (const k of ["a", "b"]) P.recordStep("acct", "g0", k, "cab-local");
+    const skip = (k: string, ago: number): any => ({ ...closedTask(`step:g0:${k}`), skipped: true, closedAt: NOW.getTime() - ago * DAY });
+    const skips = [skip("a", 3), skip("b", 2)];
+    expect((await report([{ key: "d1", type: "appointment", steps: [cab] }], platform({ tasks: skips }))).r.refused[0].reason).toBe("the user dismissed the last two cab-local steps");
+    const yes = { ...closedTask("ask:cab-local", "done"), actionId: "yes" };
+    expect((await report([{ key: "d1", type: "appointment", steps: [cab] }], platform({ tasks: [...skips, yes] }))).r.accepted).toEqual(["e1/cab"]);
+  });
+
   test("an event left unplanned (a refused step) publishes no card", async () => {
     dentist();
     const { r, asks } = await report([{ key: "d1", type: "appointment", steps: [{ key: "BAD", kind: "other", title: "t", dueDate: "2026-10-08", why: "w" }] }]);

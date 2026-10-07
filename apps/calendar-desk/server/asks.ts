@@ -102,36 +102,40 @@ export async function settleAsks(platform: PlatformContext, states: Map<string, 
   return { answered };
 }
 
-type Res<T> = { ok: true; data: T } | { ok: false; reason: string };
-interface AskPlatform {
-  tasks: { list(opts?: { prefix?: string }): Promise<Res<{ tasks: AskRow[] }>> };
-  memory: { search(query: string, opts?: { limit?: number }): Promise<Res<{ facts: string[] }>> };
+interface MemoryPlatform { memory: { search(query: string, opts?: { limit?: number }): Promise<{ ok: true; data: { facts: string[] } } | { ok: false; reason: string }> } }
+
+/** A card closed without a button whose kind's memory now holds a fact the card did not see: the owner answered in chat. */
+export function answeredInChat(st: AskState | undefined, facts: readonly string[]): boolean {
+  if (!st || st.status !== "unanswered") return false;
+  const seen = new Set(st.factsAtPublish ?? []);
+  return facts.some((f) => !seen.has(f));
+}
+
+/** The answers given by button: the owner's stated preference per kind. */
+export function statedAnswers(asks: ReadonlyMap<string, AskState> | null): Map<string, "yes" | "no"> {
+  const out = new Map<string, "yes" | "no">();
+  for (const st of asks?.values() ?? []) if (st.status === "yes" || st.status === "no") out.set(st.kind, st.status);
+  return out;
 }
 
 /**
  * For one plan report: after an event is planned, each personal kind its type and title need (kindsToAsk) that it did not get,
- * with no evidence (tally none, no memory fact from the kind's search, no answer on its card), holds the event; the kind's
+ * with no evidence (pooled tally none, no memory fact from the kind's search, no answer on its card), holds the event; the kind's
  * card is published the first time. A card already open holds the event without a second card. A card answered, or closed
- * unanswered, never holds or asks again. When the board or memory cannot be read, nothing is asked: asking a run later is
- * better than asking twice. The ask rows and each kind's facts are read once per report.
+ * unanswered, never holds or asks again. When the cards (`asks` null) or memory cannot be read, nothing is asked: asking a run
+ * later is better than asking twice. Each kind's facts are read once per report.
  */
-export function askHolder(platform: PlatformContext, now: number): (ev: EventRow, type: EventType, tallied: ReadonlyMap<string, { state: KindState }>) => Promise<void> {
-  const p = platform as unknown as AskPlatform;
-  let states: Map<string, AskState> | null | undefined; // undefined: not read yet; null: unreadable
+export function askHolder(platform: PlatformContext, now: number, asks: Map<string, AskState> | null): (ev: EventRow, type: EventType, tallied: ReadonlyMap<string, { state: KindState }>) => Promise<void> {
+  const p = platform as unknown as MemoryPlatform;
   const facts = new Map<string, string[] | null>();
   return async (ev, type, tallied) => {
     const want = kindsToAsk(type, ev.title, ev.location);
-    if (want.length === 0) return;
+    if (want.length === 0 || !asks) return;
     const prefix = `step:${ev.eventKey}:`;
     const made = new Set([...stepKindsFor(ev.accountId)].filter(([ref]) => ref.startsWith(prefix)).map(([, kind]) => kind));
     for (const kind of want) {
       if (made.has(kind) || (tallied.get(kind)?.state ?? "none") !== "none") continue;
-      if (states === undefined) {
-        const listed = await p.tasks.list({ prefix: PREFIX });
-        states = listed.ok ? askStates(listed.data.tasks) : null;
-        if (!listed.ok) console.warn(`[calendar-desk] asks: could not read cards: ${listed.reason}`);
-      }
-      const st = states?.get(kind);
+      const st = asks.get(kind);
       if (!st || (st.status !== "none" && st.status !== "waiting")) continue;
       if (!facts.has(kind)) {
         const r = await p.memory.search(kindSpec(kind)!.query!, { limit: 3 });

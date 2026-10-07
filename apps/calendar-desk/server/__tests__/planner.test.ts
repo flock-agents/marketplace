@@ -14,13 +14,20 @@ const HOUR = 3600_000;
 
 type TaskState = { sourceRef: string; status: "open" | "done" | "dismissed"; withdrawn?: true; skipped?: true; closedAt?: number; actionId?: string; title: string; due: number | null; dueTimed: boolean; showFrom: number | null; updatedAt: number };
 function platform(o: { intent?: () => any; tasks?: TaskState[]; facts?: (q: string) => string[] } = {}) {
-  const intents: any[] = [], searches: any[] = [], lists: any[] = [];
+  const intents: any[] = [], searches: any[] = [], lists: any[] = [], withdrawals: any[] = [];
   const ctx = { configured: true, pairedAgent: { id: "pa", name: "PA" },
     agent: { intent: async (name: string, payload: any) => { intents.push({ name, payload }); return o.intent ? o.intent() : ok({ sessionId: `s-${intents.length}`, reused: false }); } },
-    tasks: { list: async (opts: { prefix?: string } = {}) => { lists.push(opts); return ok({ tasks: (o.tasks ?? []).filter((t) => t.sourceRef.startsWith(opts.prefix ?? "")) }); } },
+    tasks: { list: async (opts: { prefix?: string } = {}) => { lists.push(opts); return ok({ tasks: (o.tasks ?? []).filter((t) => t.sourceRef.startsWith(opts.prefix ?? "")) }); },
+      withdraw: async (ref: string, opts?: { reason?: string }) => {
+        withdrawals.push({ ref, reason: opts?.reason });
+        const r = (o.tasks ?? []).find((t) => t.sourceRef === ref && t.status === "open");
+        if (!r) return failed("not found");
+        r.status = "dismissed"; r.withdrawn = true;
+        return ok({});
+      } },
     memory: { search: async (q: string, opts: any) => { searches.push({ q, opts }); return ok({ facts: o.facts ? o.facts(q) : [] }); }, extract: async () => ok({}) },
   } as unknown as PlatformContext;
-  return { ctx, intents, searches, lists };
+  return { ctx, intents, searches, lists, withdrawals };
 }
 function seed(key: string, title: string, localDate: string, startAt: number | null = null, details: Parameters<typeof S.saveEventDetails>[2] = {}) {
   S.upsertEvents("acct", [{ eventKey: key, calendar: null, title, startAt, endAt: null, allDay: startAt == null, localDate, attendeesText: null, location: null, rawTimeText: null, googleEventId: key }], NOW.getTime());
@@ -294,6 +301,44 @@ describe("habits: what the owner did with past steps of each kind (planning step
     const yes = platform({ tasks: [row("ask:cab-local", "done", { actionId: "yes" })] });
     expect(await runPlanning(yes.ctx, later)).toEqual({ woke: false, skipped: "nothing" });
     expect(P.heldEvents()).toEqual([]);
+  });
+
+  test("C3: an answer in chat (a new fact withdraws the open card) offers the held event once as answered, even after a refused wake", async () => {
+    seed("g1", "Dentist", "2026-10-12");
+    P.markPlanned([{ accountId: "acct", eventKey: "g1", date: "2026-10-12", startAt: null, type: "appointment" }], NOW.getTime() - HOUR);
+    P.holdEvent("acct", "g1", "cab-local", NOW.getTime() - DAY);
+    P.recordAsk("cab-local", NOW.getTime() - DAY, []);
+    const tasks = [row("ask:cab-local", "open", { due: NOW.getTime() - DAY })];
+    const facts = (q: string) => (q === CAB_Q ? ["Wants a cab reminder before appointments."] : []);
+    const paused = platform({ tasks, facts, intent: () => failed("USAGE_PAUSED try later") });
+    expect(await runPlanning(paused.ctx, NOW)).toEqual({ woke: false, skipped: "usage" });
+    expect(paused.withdrawals).toEqual([{ ref: "ask:cab-local", reason: "answered in chat" }]);
+    expect(P.heldEvents()).toHaveLength(1);
+    const p = platform({ tasks, facts });
+    expect((await runPlanning(p.ctx, NOW)).woke).toBe(true);
+    const ev = p.intents[0].payload.events[0];
+    expect(ev).toMatchObject({ event: "calendar-desk:g1", change: "answered", type: "appointment" });
+    expect(p.intents[0].payload.habits["cab-local"]).toEqual({ tier: 2, tally: "none", facts: ["Wants a cab reminder before appointments."], asked: true });
+    S._db.exec("DELETE FROM plans");
+    expect(await runPlanning(platform({ tasks, facts }).ctx, NOW)).toEqual({ woke: false, skipped: "nothing" });
+  });
+
+  test("C3: a card closed unanswered with no new fact drops the hold", async () => {
+    seed("g1", "Dentist", "2026-10-12");
+    P.markPlanned([{ accountId: "acct", eventKey: "g1", date: "2026-10-12", startAt: null, type: "appointment" }], NOW.getTime() - HOUR);
+    P.holdEvent("acct", "g1", "cab-local", NOW.getTime() - DAY);
+    P.recordAsk("cab-local", NOW.getTime() - DAY, ["Old fact."]);
+    const p = platform({ tasks: [row("ask:cab-local", "dismissed", { withdrawn: true })], facts: (q) => (q === CAB_Q ? ["Old fact."] : []) });
+    expect(await runPlanning(p.ctx, NOW)).toEqual({ woke: false, skipped: "nothing" });
+    expect(P.heldEvents()).toEqual([]);
+  });
+
+  test("C4: habits pool every account's steps, not only the accounts being planned", async () => {
+    seed("g1", "Dentist", "2026-10-12");
+    P.recordStep("acct2", "h0", "cab", "cab-local");
+    const p = platform({ tasks: [row("step:h0:cab", "done", { closedAt: NOW.getTime() - DAY })] });
+    await runPlanning(p.ctx, NOW);
+    expect(p.intents[0].payload.habits["cab-local"]).toEqual({ tier: 2, tally: "on", facts: [], asked: false });
   });
 
   test("(h) the bundle is byte-identical across two runs with the same rows", async () => {
