@@ -113,7 +113,7 @@ export function extractCalls(text: string): Call[] | null {
 // Planning step tiers M4: every scripted report names its event's type and each step's kind. Mechanical, from the
 // existing cases' titles and step keys; M9 rewrites the expectations. A cab step on an event with no location (the
 // dentist and physio cases) takes the nearest fitting kind, `other`, since `cab-local` needs the event's location.
-const typeOfTitle = (title: string): string =>
+export const typeOfTitle = (title: string): string =>
   /holiday|webinar|conference/i.test(title) ? "other" : /\bblock\b/i.test(title) ? "block" : /birthday/i.test(title) ? "occasion"
   : /flight|train|trip to lisbon/i.test(title) ? "journey" : /hampi|stay at/i.test(title) ? "stay"
   : /dentist|physio|dinner|ptm/i.test(title) ? "appointment" : "meeting";

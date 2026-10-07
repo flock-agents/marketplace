@@ -359,6 +359,15 @@ describe("steps must fit the event's type and kind (planning step tiers M4)", ()
     expect(((await handlePlanReport({ planId: pl.planId, events: [{ event: "e1", type: "stay", steps: [step("cab-airport", "cab")] }] }, p2.ctx, NOW)) as any).accepted).toEqual(["e1/cab"]);
   });
 
+  test("judgement kinds are never switched off: two skipped other steps do not refuse a third", async () => {
+    hampi();
+    const closed = (key: string): any => ({ ...closedTask(`step:g0:${key}`), skipped: true, closedAt: NOW.getTime() - 86_400_000 });
+    for (const k of ["a", "b"]) P.recordStep("acct", "g0", k, "other");
+    const pl = plan("g1");
+    const r: any = await handlePlanReport({ planId: pl.planId, events: [{ event: "e1", type: "stay", steps: [step("other", "misc")] }] }, platform({ tasks: [closed("a"), closed("b")] }).ctx, NOW);
+    expect(r.accepted).toEqual(["e1/misc"]);
+  });
+
   test("skips of steps recorded as covered do not switch a kind off", async () => {
     hampi();
     const closed = (key: string): any => ({ ...closedTask(`step:g0:${key}`), skipped: true, closedAt: NOW.getTime() - 86_400_000 });

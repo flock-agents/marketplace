@@ -1,4 +1,5 @@
 import type { StepState } from "./plan-report";
+import { kindSpec } from "./kinds";
 
 /** A step row from `tasks.list`. `skipped` and `closedAt` come from newer Flock; `updatedAt` is read only as a fallback. */
 export type TallyRow = StepState & { skipped?: true; closedAt?: number; updatedAt?: number };
@@ -10,13 +11,13 @@ export const TALLY_WINDOW_MS = 90 * 86400_000, TALLY_PER_KIND = 10;
  * How the owner closed past steps of each kind: done counts as done, "Not important" as a skip; withdrawn, covered,
  * other dismissals and open rows count nothing. Only closes inside the window count, the newest 10 per kind.
  * `off` when the two newest counted closes are skips, `on` when the newest is a done, else `none`.
- * Pure: `covered` holds the sourceRefs of steps recorded as covered by an existing TODO.
+ * Judgement kinds are recorded, never tallied. Pure: `covered` holds the sourceRefs of steps recorded as covered by an existing TODO.
  */
 export function tally(rows: TallyRow[], kinds: Map<string, string>, now: number, covered: ReadonlySet<string> = new Set()): Map<string, { state: KindState; done: number; skips: number }> {
   const byKind = new Map<string, { at: number; skip: boolean }[]>();
   for (const r of rows) {
     const kind = kinds.get(r.sourceRef);
-    if (!kind || r.withdrawn || covered.has(r.sourceRef)) continue;
+    if (!kind || kindSpec(kind)?.tier === "judgement" || r.withdrawn || covered.has(r.sourceRef)) continue;
     let skip: boolean;
     let at: number | undefined;
     if (r.status === "done") { skip = false; at = r.closedAt ?? r.updatedAt; }

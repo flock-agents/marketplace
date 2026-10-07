@@ -151,6 +151,7 @@ export async function handlePlanReport(p: Record<string, unknown>, platform: Pla
   let bad = 0; // validation refusals only
   // One read of every step row serves the per-event lists and the outcome tally behind the off guard.
   let allSteps: StepState[] | null = null;
+  const accountState = new Map<string, { kinds: Map<string, string>; off: Set<string> }>();
   for (const entry of p.events as any[]) {
     const ref = typeof entry?.event === "string" ? plan.events.find((x) => x.ref === entry.event) : undefined;
     if (!ref) { refused.push({ item: String(entry?.event ?? "?"), reason: "event is not in this plan" }); bad++; continue; }
@@ -177,9 +178,15 @@ export async function handlePlanReport(p: Record<string, unknown>, platform: Pla
     const closed = new Set(existing.filter((t) => t.status !== "open" && !t.withdrawn).map((t) => t.sourceRef.slice(prefix.length)));
     const openKeys = new Set(existing.filter((t) => t.status === "open").map((t) => t.sourceRef.slice(prefix.length)));
 
-    const kinds = stepKindsFor(ev.accountId);
-    const states = tally(allSteps as any, kinds, now.getTime(), coveredStepRefs(ev.accountId));
-    const off = new Set([...states].filter(([, v]) => v.state === "off").map(([kind]) => kind));
+    // Built once per account per report; the account's own step kinds are what select its rows from the list.
+    let acct = accountState.get(ev.accountId);
+    if (!acct) {
+      const kinds = stepKindsFor(ev.accountId);
+      const states = tally(allSteps as any, kinds, now.getTime(), coveredStepRefs(ev.accountId));
+      acct = { kinds, off: new Set([...states].filter(([, v]) => v.state === "off").map(([kind]) => kind)) };
+      accountState.set(ev.accountId, acct);
+    }
+    const { kinds, off } = acct;
     const prepareKeys = new Set([...openKeys].filter((key) => kinds.get(`${prefix}${key}`) === "prepare-ahead"));
     const seen = new Set<string>();
     let allOk = true, fresh = 0;
@@ -189,11 +196,11 @@ export async function handlePlanReport(p: Record<string, unknown>, platform: Pla
       const s = raw && typeof raw === "object" ? { ...raw, title: typeof raw.title === "string" ? clean(raw.title) : raw.title, why: (typeof raw.why === "string" ? clean(raw.why) : "") || `planned for ${ev.title}`.slice(0, MAX_WHY) } : raw;
 
       let why = stepRefusal(s, ev, now, closed, seen, { type, off, prepareKeys });
-      if (!why && s.kind === "prepare-ahead") prepareKeys.add(s.key);
       if (!why && !openKeys.has(s.key)) {
         if (openKeys.size + fresh + 1 > MAX_STEPS_PER_EVENT) why = `event already has ${openKeys.size} live steps (max ${MAX_STEPS_PER_EVENT})`;
         else fresh++;
       }
+      if (!why && s.kind === "prepare-ahead") prepareKeys.add(s.key);
       if (why) { refused.push({ item, reason: why }); bad++; allOk = false; continue; }
       const res = await platform.tasks.publish(stepTask(ev, s as StepSpec));
       if (!res.ok) { refused.push({ item, reason: `could not publish: ${(res as any).reason ?? "unknown"}` }); allOk = false; continue; } // the platform's fault: no bad report, the event stays unplanned for the next run

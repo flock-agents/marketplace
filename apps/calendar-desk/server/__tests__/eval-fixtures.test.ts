@@ -44,7 +44,7 @@ describe("planner eval fixtures", () => {
     for (const id of ["flight-in-2-days", "multi-day-stay-gets-a-packing-step", "birthday-close-family", "moved-timed-step-keeps-lead-time"]) {
       const c = PLAN_CASES.find((x) => x.id === id)!;
       const pl = await H.plan(c);
-      const empty = [{ method: "POST", path: "/api/apps/calendar-desk/ops/plan_events_done", body: { planId: pl.payload.planId, events: pl.payload.events.map((e: any) => ({ event: e.ref, steps: [] })) } }];
+      const empty = [{ method: "POST", path: "/api/apps/calendar-desk/ops/plan_events_done", body: { planId: pl.payload.planId, events: pl.payload.events.map((e: any) => ({ event: e.ref, type: H.typeOfTitle(c.events.find((x) => x.ref === pl.refOf[e.ref])?.title ?? ""), steps: [] })) } }];
       expect((await H.grade(c, pl, empty)).length).toBeGreaterThan(0);
     }
   });
