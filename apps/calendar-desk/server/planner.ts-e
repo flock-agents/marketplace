@@ -4,9 +4,14 @@
 import type { PlatformContext } from "@flock/app-sdk";
 import { eventsToPlan, openPlan, createPlan, setPlanSession, abandonPlan, plannedMark, allStepKinds, allStepPlaces, allCoveredStepRefs, unkindedCabSteps, backfillKind, PLAN_GIVE_UP_MS, type PlanEventRef, type PlanPick } from "./planning-store";
 import { ymd } from "./events";
-import { retireAskCards } from "./retire-asks";
+<<<<<<< HEAD
 import { KINDS, KIND_FACTS_LIMIT, PLACE_KINDS, placeOf, type EventType, type Tier } from "./kinds";
 import { tally, placeTally, placeState, type KindState } from "./tally";
+=======
+import { retireAskCards } from "./retire-asks";
+import { KINDS, KIND_FACTS_LIMIT, type EventType, type Tier } from "./kinds";
+import { tally, type KindState } from "./tally";
+>>>>>>> calendar-desk
 
 const APP = "calendar-desk";
 const EVENT_FACTS_MAX = 3;
