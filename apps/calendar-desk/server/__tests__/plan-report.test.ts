@@ -294,6 +294,19 @@ describe("steps must fit the event's type and kind (planning step tiers M4)", ()
     return { r, p };
   };
 
+  test("a cab-local step records its venue, a gift the person, a pack nothing", async () => {
+    meeting("Acme Corp, 4th floor, MG Road");
+    await report("meeting", [step("cab-local", "cab", { dueDate: "2026-10-09", dueTime: "14:00" })]);
+    seed("b1", "Asha's birthday", "2026-10-12"); S._db.exec("DELETE FROM plans");
+    await handlePlanReport({ planId: plan("b1").planId, events: [{ event: "e1", type: "occasion", steps: [step("gift", "gift", { dueDate: "2026-10-11" })] }] }, platform().ctx, NOW);
+    hampi(); S._db.exec("DELETE FROM plans");
+    await handlePlanReport({ planId: plan("g1").planId, events: [{ event: "e1", type: "stay", steps: [pack] }] }, platform().ctx, NOW);
+    expect(P.allStepPlaces()).toEqual(new Map([
+      ["step:m1:cab", { kind: "cab-local", place: "acme corp" }],
+      ["step:b1:gift", { kind: "gift", place: "asha" }],
+    ]));
+  });
+
   test("an entry with no type, or an unknown one, is refused and the event stays unplanned", async () => {
     meeting();
     for (const type of [undefined, "trip"]) {
@@ -492,10 +505,68 @@ describe("tie: the owner's TODOs that match a planned event are tied to it (amen
       expect(warned).toHaveLength(1);
     } finally { console.warn = warn; }
   });
+  test("a 400 from Flock is logged and the event stays planned", async () => {
+    const warn = console.warn; const warned: unknown[] = []; console.warn = (...a: unknown[]) => { warned.push(a); };
+    try {
+      hampi();
+      const p = platform({ tie: () => failed("platform 400: bad pointer", 400) });
+      const r: any = await handlePlanReport({ planId: plan("g1").planId, events: [{ event: "e1", type: "stay", steps: [] }] }, p.ctx, NOW);
+      expect(r.done).toBe(true);
+      expect(P.plannedMark("acct", "g1")).toBeTruthy();
+      expect(warned).toHaveLength(1);
+    } finally { console.warn = warn; }
+  });
   test("an event left unplanned (a refused step) is not tied", async () => {
     hampi();
     const p = platform({ tie: () => ok({ tied: 0 }) });
     await handlePlanReport({ planId: plan("g1").planId, events: [{ event: "e1", type: "stay", steps: [{ ...pack, dueDate: "2000-01-01" }] }] }, p.ctx, NOW);
     expect(p.ties).toEqual([]);
+  });
+});
+
+describe("a place the owner skipped twice refuses the kind there; one they went by cab lifts a kind-wide switch-off (amendment 1, A3)", () => {
+  const DAY = 86_400_000;
+  const dentist = () => {
+    seed("d1", "Dentist", "2026-10-09", new Date(2026, 9, 9, 10, 0).getTime());
+    S._db.query("UPDATE events SET location = ? WHERE event_key = 'd1'").run("Apollo Clinic, Jayanagar");
+  };
+  const cab = { key: "cab", kind: "cab-local", title: "Book a cab to Apollo Clinic", dueDate: "2026-10-09", dueTime: "09:15", why: "w" };
+  const closed = (ref: string, ago: number, skipped: boolean, over: object = {}): any => ({ ...closedTask(ref, skipped ? "dismissed" : "done"), ...(skipped ? { skipped: true } : {}), closedAt: NOW.getTime() - ago * DAY, ...over });
+  const past = (ev: string, place: string) => P.recordStep("acct", ev, "cab", "cab-local", place);
+  const report = async (tasks: any[]) => {
+    S._db.exec("DELETE FROM plans");
+    return await handlePlanReport({ planId: plan("d1").planId, events: [{ event: "e1", type: "appointment", steps: [cab] }] }, platform({ tasks }).ctx, NOW) as any;
+  };
+
+  test("the last two here skipped: refused for this place", async () => {
+    dentist(); past("p1", "apollo clinic"); past("p2", "apollo clinic");
+    const r = await report([closed("step:p1:cab", 20, true), closed("step:p2:cab", 10, true)]);
+    expect(r.refused).toEqual([{ item: "e1/cab", reason: "the user dismissed the last two cab-local steps for this place" }]);
+  });
+  test("place off beats kind on: cabs done elsewhere more recently, skipped twice here", async () => {
+    dentist(); past("p1", "apollo clinic"); past("p2", "apollo clinic"); past("p3", "smile dental"); past("p4", "skin clinic");
+    const r = await report([closed("step:p1:cab", 30, true), closed("step:p2:cab", 20, true), closed("step:p3:cab", 8, false), closed("step:p4:cab", 5, false)]);
+    expect(r.refused).toEqual([{ item: "e1/cab", reason: "the user dismissed the last two cab-local steps for this place" }]);
+  });
+  test("place on beats kind off: skipped twice elsewhere, done here", async () => {
+    dentist(); past("p1", "apollo clinic"); past("p2", "smile dental"); past("p3", "skin clinic");
+    const r = await report([closed("step:p1:cab", 40, false), closed("step:p2:cab", 10, true), closed("step:p3:cab", 5, true)]);
+    expect(r).toEqual({ accepted: ["e1/cab"], refused: [], done: true });
+  });
+  test("skips elsewhere and nothing here keep the kind-wide refusal", async () => {
+    dentist(); past("p2", "smile dental"); past("p3", "skin clinic");
+    const r = await report([closed("step:p2:cab", 10, true), closed("step:p3:cab", 5, true)]);
+    expect(r.refused).toEqual([{ item: "e1/cab", reason: "the user dismissed the last two cab-local steps" }]);
+  });
+  test("a done here 364 days ago still lifts the kind-wide refusal; skips here older than 90 days no longer refuse", async () => {
+    dentist(); past("p1", "apollo clinic"); past("p2", "smile dental"); past("p3", "skin clinic");
+    expect((await report([closed("step:p1:cab", 364, false), closed("step:p2:cab", 10, true), closed("step:p3:cab", 5, true)])).accepted).toEqual(["e1/cab"]);
+    S._db.exec("DELETE FROM planned; DELETE FROM plan_steps"); past("p1", "apollo clinic"); past("p2", "apollo clinic");
+    expect((await report([closed("step:p1:cab", 100, true), closed("step:p2:cab", 95, true)])).accepted).toEqual(["e1/cab"]);
+  });
+  test("older Flock rows (no skipped, no closedAt) never refuse for a place", async () => {
+    dentist(); past("p1", "apollo clinic"); past("p2", "apollo clinic");
+    const bare = (ref: string): any => closedTask(ref, "dismissed");
+    expect((await report([bare("step:p1:cab"), bare("step:p2:cab")])).accepted).toEqual(["e1/cab"]);
   });
 });
