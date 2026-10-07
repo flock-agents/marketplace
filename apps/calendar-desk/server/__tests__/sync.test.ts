@@ -359,6 +359,23 @@ describe("busy refusals (post-test Task 3)", () => {
     expect(faultKind("Account is busy (google-calendar)")).toBe("busy");
     expect(faultKind("queue_full")).toBe("busy");
   });
+  test("faultKind: the skill's no-session codes and their sentences are session faults (final review F2)", () => {
+    // skills/google-calendar/scripts/_google_helpers.sh
+    for (const r of [
+      "NO_AUTH",
+      "NO_AUTH: No browser session available. Set up a Google browser session via the dashboard.",
+      "No browser session available. Set up a Google browser session via the dashboard.",
+      "SESSION_NOT_FOUND",
+      "SESSION_NOT_FOUND: Flock has no such browser session: gcal-x",
+      "Flock has no such browser session: gcal-x",
+      "SESSION_NOT_READY",
+      "session_not_ready",
+      "SESSION_OUTDATED",
+      '{"error":true,"code":"NO_AUTH","message":"No browser session available. Set up a Google browser session via the dashboard."}',
+    ]) expect([r, faultKind(r)]).toEqual([r, "session"]);
+    // a busy refusal still wins
+    expect(faultKind("Account is busy (google-calendar)")).toBe("busy");
+  });
   test("faultKind reads the guard's reason, not the quoted session name", () => {
     expect(faultKind('BROWSER_ERROR: Account guard blocked fetch for "busy-login-signin": quarantined after a login wall')).toBe("session");
     expect(faultKind('BROWSER_ERROR: Account guard blocked fetch for "busy-login-signin": navigation timeout')).toBe("other");

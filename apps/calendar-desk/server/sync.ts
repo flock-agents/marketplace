@@ -35,6 +35,8 @@ export function faultKind(reason: string): FaultKind {
   if (/another read is using this account/i.test(body) || (guard && /^busy\b/i.test(body)) || /^(guard_busy|busy|queue_full)$/i.test(body)
     || /(^|:\s*)Account is busy\b/i.test(body) || /\bqueue_full\b/i.test(body)) return "busy";
   if (/quarantin|auth_wall|captcha|login|log in|sign[- ]?in|signed out|session expired|reconnect/i.test(body)) return "session";
+  // The google-calendar skill's own no-session refusals (_google_helpers.sh): codes and sentences.
+  if (/no browser session|no such browser session|session_not_found|session_not_ready|session_outdated|no_auth/i.test(body)) return "session";
   return "other";
 }
 
