@@ -31,7 +31,18 @@ export interface BundleEvent {
 }
 export type PlanningResult = { woke: boolean; planId?: string; skipped?: "in-flight" | "nothing" | "usage" | "failed" };
 
-export async function runPlanning(platform: PlatformContext, now: Date): Promise<PlanningResult> {
+// Single flight: the open-plan check below is followed by awaits (steps, memory) before the plan is stored, so two
+// callers (the minute-loop retry, the tick, refresh_calendar's per-account plan) could both pass it and both wake the agent.
+let running: Promise<PlanningResult> | null = null;
+
+export function runPlanning(platform: PlatformContext, now: Date): Promise<PlanningResult> {
+  if (running) return Promise.resolve({ woke: false, skipped: "in-flight" });
+  const mine = planOnce(platform, now).finally(() => { if (running === mine) running = null; });
+  running = mine;
+  return mine;
+}
+
+async function planOnce(platform: PlatformContext, now: Date): Promise<PlanningResult> {
   const p = platform as unknown as PlanningPlatform;
   const open = openPlan();
   if (open && now.getTime() - open.createdAt < PLAN_GIVE_UP_MS) return { woke: false, skipped: "in-flight" };

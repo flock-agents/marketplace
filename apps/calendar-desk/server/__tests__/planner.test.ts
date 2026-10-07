@@ -77,6 +77,28 @@ describe("runPlanning", () => {
     expect(P.openPlan()!.events[0].startAt).toBe(start);
   });
 
+  test("two concurrent runs send ONE plan_events: the second skips as in-flight (final review F3)", async () => {
+    seed("g1", "Stay at Hampi", "2026-10-12");
+    const p = platform();
+    const [a, b] = await Promise.all([runPlanning(p.ctx, NOW), runPlanning(p.ctx, NOW)]);
+    expect(p.intents).toHaveLength(1);
+    expect([a, b].filter((r) => r.woke)).toHaveLength(1);
+    expect([a, b].find((r) => !r.woke)).toEqual({ woke: false, skipped: "in-flight" });
+    // The lock is released: a later run is guarded by the open plan as before, not by a stuck lock.
+    expect(await runPlanning(p.ctx, new Date(NOW.getTime() + HOUR))).toEqual({ woke: false, skipped: "in-flight" });
+    expect(p.intents).toHaveLength(1);
+  });
+
+  test("the lock is released after a run that throws", async () => {
+    seed("g1", "Stay at Hampi", "2026-10-12");
+    const p = platform();
+    let boom = true;
+    (p.ctx as any).tasks.list = async () => { if (boom) throw new Error("socket closed"); return ok({ tasks: [] }); };
+    await expect(runPlanning(p.ctx, NOW)).rejects.toThrow("socket closed");
+    boom = false;
+    expect((await runPlanning(p.ctx, NOW)).woke).toBe(true);
+  });
+
   test("an open plan younger than 2 h blocks the run; an older one is given up (a try counted) and a new plan opens", async () => {
     seed("g1", "Stay at Hampi", "2026-10-12");
     const p = platform();
