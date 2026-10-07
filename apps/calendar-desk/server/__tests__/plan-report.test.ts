@@ -463,13 +463,28 @@ describe("cover: a step the owner already has as a TODO is recorded as covered",
 });
 
 describe("tie: the owner's TODOs that match a planned event are tied to it (amendment 1, B2)", () => {
-  test("a planned event is tied once, with its pointer, title, date and limit; no location or link when it has none", async () => {
+  test("a planned event is tied once, with its pointer, title, date and byName; never a limit; no location or link when it has none", async () => {
     hampi(); const pl = plan("g1");
     const p = platform({ tie: () => ok({ tied: 1 }) });
     const r: any = await handlePlanReport({ planId: pl.planId, events: [{ event: "e1", type: "stay", steps: [pack] }] }, p.ctx, NOW);
     expect(r).toEqual({ accepted: ["e1/pack"], refused: [], done: true });
-    expect(p.ties).toEqual([{ pointer: "calendar-desk:g1", eventTitle: "Stay at The Loft - Aadhya Homestay Hampi", eventDate: "2026-10-12",
-      maxDue: new Date(2026, 9, 12, 23, 59, 59, 999).getTime(), maxDueReason: "Stay at The Loft - Aadhya Homestay Hampi, Mon 12 Oct" }]);
+    expect(p.ties).toEqual([{ pointer: "calendar-desk:g1", eventTitle: "Stay at The Loft - Aadhya Homestay Hampi", eventDate: "2026-10-12", byName: true }]);
+  });
+  test("a meeting ties by its thread only (byName false); other, block and reminder events are never tied", async () => {
+    const at = (d: number) => new Date(2026, 9, d, 10, 0).getTime();
+    seed("m1", "1:1 with Rahul", "2026-10-09", at(9));
+    seed("o1", "Rahul OOO", "2026-10-10");
+    seed("b1", "Focus time", "2026-10-11", at(11));
+    seed("r1", "Call mom", "2026-10-12", at(12));
+    const pl = plan("m1", "o1", "b1", "r1");
+    const p = platform({ tie: () => ok({ tied: 0 }) });
+    const r: any = await handlePlanReport({ planId: pl.planId, events: [
+      { event: "e1", type: "meeting", steps: [] }, { event: "e2", type: "other", steps: [] },
+      { event: "e3", type: "block", steps: [] }, { event: "e4", type: "reminder", steps: [] },
+    ] }, p.ctx, NOW);
+    expect(r.done).toBe(true);
+    for (const k of ["m1", "o1", "b1", "r1"]) expect(P.plannedMark("acct", k)).toBeTruthy();
+    expect(p.ties.map((t) => [t.pointer, t.byName])).toEqual([["calendar-desk:m1", false]]);
   });
   test("an event from a memory fact sends its mail link; a located event sends its location; steps: [] is tied too", async () => {
     S.upsertFactEvent({ accountId: "acct", factId: 7, title: "Flight to Goa", localDate: "2026-10-12", startAt: null, sourceLink: "https://mail.google.com/mail/?authuser=a%40b.com#all/thr7" }, NOW.getTime());

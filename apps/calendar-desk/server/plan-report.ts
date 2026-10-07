@@ -95,23 +95,31 @@ export async function refreshStepCaps(platform: PlatformContext, e: EventRow, st
   return failed;
 }
 
-/** What Calendar Desk sends to tie the owner's matching TODOs to an event it planned (Flock: POST /apps/:appId/tasks/tie). */
-export interface TieRequest { pointer: string; eventTitle: string; eventLocation?: string; eventDate: string; sourceLink?: string; maxDue: number; maxDueReason: string }
+/** What Calendar Desk sends to tie the owner's matching TODOs to an event it planned (Flock: POST /apps/:appId/tasks/tie).
+ *  A tie never carries a limit: Flock only sets the TODO's eventKey. `byName: false` ties same-thread TODOs only. */
+export interface TieRequest { pointer: string; eventTitle: string; eventLocation?: string; eventDate: string; sourceLink?: string; byName: boolean }
 type TieResult = { ok: true; data: { tied: number } } | { ok: false; status?: number; skipped?: boolean; reason: string };
 
+/** Event types whose title names the occasion itself, so a TODO sharing a word with it is about it. A meeting's title is
+ *  mostly a person's name: it ties by its mail thread only. Other, block and reminder events are never tied. */
+const TIE_BY_NAME: ReadonlySet<EventType> = new Set(["journey", "stay", "occasion", "appointment"]);
+const TIE_THREAD_ONLY: ReadonlySet<EventType> = new Set(["meeting"]);
+
 /**
- * Ties the owner's open TODOs that match the event (same mail thread, or the same occasion within the week before) to it, once
- * the event is planned. An SDK without `tie` or a Flock that answers 404 is older: ignored. Any other failure is logged; it
- * never unplans the event. Returns how many were tied, or null. The pointer is `calendar-desk:<event key>`, as Flock requires.
+ * Ties the owner's open TODOs that match the event (same mail thread, or for a journey, stay, occasion or appointment the
+ * same occasion within the week before) to it, once the event is planned. Other, block and reminder events are not tied.
+ * An SDK without `tie` or a Flock that answers 404 is older: ignored. Any other failure is logged; it never unplans the
+ * event. Returns how many were tied, or null. The pointer is `calendar-desk:<event key>`, as Flock requires.
  */
-export async function tieOwnerTodos(platform: PlatformContext, e: EventRow): Promise<number | null> {
+export async function tieOwnerTodos(platform: PlatformContext, e: EventRow, type: EventType): Promise<number | null> {
+  const byName = TIE_BY_NAME.has(type);
+  if (!byName && !TIE_THREAD_ONLY.has(type)) return null;
   const tie = (platform.tasks as unknown as { tie?: (req: TieRequest) => Promise<TieResult> }).tie;
   if (typeof tie !== "function") return null;
-  const { maxDue, maxDueReason } = maxDueOf(e);
   try {
     const res = await tie.call(platform.tasks, {
       pointer: pointer(e.eventKey), eventTitle: e.title, ...(e.location?.trim() ? { eventLocation: e.location } : {}),
-      eventDate: e.localDate, ...(e.sourceLink ? { sourceLink: e.sourceLink } : {}), maxDue, maxDueReason,
+      eventDate: e.localDate, ...(e.sourceLink ? { sourceLink: e.sourceLink } : {}), byName,
     });
     if (res.ok) return res.data.tied;
     if (res.status !== 404 && res.skipped !== true) console.warn(`[calendar-desk] tie for ${e.eventKey} failed: ${res.reason}`);
@@ -248,7 +256,7 @@ export async function handlePlanReport(p: Record<string, unknown>, platform: Pla
     for (const f of capFails) refused.push({ item: `${ref.ref}/${f.key}`, reason: `could not update its limit: ${f.reason}` });
     if (capFails.length === 0) {
       markPlanned([{ accountId: ref.accountId, eventKey: ref.eventKey, date: ref.date, startAt: ref.startAt, type }], now.getTime());
-      await tieOwnerTodos(platform, ev);
+      await tieOwnerTodos(platform, ev, type);
     }
   }
 
