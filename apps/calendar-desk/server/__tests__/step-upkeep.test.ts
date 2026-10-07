@@ -23,7 +23,7 @@ function seed(key: string, localDate: string) {
   S.upsertEvents("acct", [{ eventKey: key, calendar: null, title: TITLE, startAt: null, endAt: null, allDay: true, localDate, attendeesText: null, location: null, rawTimeText: null, googleEventId: key }], NOW.getTime());
   S.saveEventDetails("acct", key, { guestSummary: "" }, NOW.getTime());
 }
-const pack = (due: string) => ({ key: "pack", title: "Pack", dueDate: due, why: "w" });
+const pack = (due: string) => ({ key: "pack", kind: "pack", title: "Pack", dueDate: due, why: "w" });
 
 describe("step upkeep", () => {
   test("a deletion Google confirms withdraws each step with the reason and forgets the event", async () => {
@@ -48,7 +48,7 @@ describe("step upkeep", () => {
   test("an unchanged planned event is never re-offered or re-published across two runs", async () => {
     seed("g1", "2026-10-12"); const p = platform();
     const pl = P.createPlan([{ ref: "e1", accountId: "acct", eventKey: "g1", date: "2026-10-12", startAt: null }], NOW.getTime());
-    await handlePlanReport({ planId: pl.planId, events: [{ event: "e1", steps: [pack("2026-10-11")] }] }, p.ctx, NOW);
+    await handlePlanReport({ planId: pl.planId, events: [{ event: "e1", type: "stay", steps: [pack("2026-10-11")] }] }, p.ctx, NOW);
     expect(p.published.length).toBe(1);
     for (let i = 0; i < 2; i++) expect(P.eventsToPlan(NOW)).toEqual([]);
     expect(p.published.length).toBe(1);
@@ -56,12 +56,12 @@ describe("step upkeep", () => {
   test("an event moved earlier is offered changed and re-published with the new due and maxDue", async () => {
     seed("g1", "2026-10-12"); const p = platform();
     const pl = P.createPlan([{ ref: "e1", accountId: "acct", eventKey: "g1", date: "2026-10-12", startAt: null }], NOW.getTime());
-    await handlePlanReport({ planId: pl.planId, events: [{ event: "e1", steps: [pack("2026-10-11")] }] }, p.ctx, NOW);
+    await handlePlanReport({ planId: pl.planId, events: [{ event: "e1", type: "stay", steps: [pack("2026-10-11")] }] }, p.ctx, NOW);
     seed("g1", "2026-10-09");
     const offered = P.eventsToPlan(NOW);
     expect(offered.map((e) => [e.eventKey, e.change])).toEqual([["g1", "changed"]]);
     const pl2 = P.createPlan([{ ref: "e1", accountId: "acct", eventKey: "g1", date: "2026-10-09", startAt: null }], NOW.getTime());
-    await handlePlanReport({ planId: pl2.planId, events: [{ event: "e1", steps: [pack("2026-10-08")] }] }, p.ctx, NOW);
+    await handlePlanReport({ planId: pl2.planId, events: [{ event: "e1", type: "stay", steps: [pack("2026-10-08")] }] }, p.ctx, NOW);
     expect(p.published.length).toBe(2);
     expect(p.published[1]).toMatchObject({ sourceRef: "step:g1:pack", due: new Date(2026, 9, 8).getTime(), maxDue: new Date(2026, 9, 9, 23, 59, 59, 999).getTime() });
   });

@@ -152,6 +152,12 @@ export function setStepCovered(accountId: string, eventKey: string, stepKey: str
   db.query("UPDATE plan_steps SET covered = 1 WHERE account_id = ? AND event_key = ? AND step_key = ?").run(accountId, eventKey, stepKey);
 }
 
+/** The source refs (`step:<eventKey>:<stepKey>`) of steps recorded as covered by an existing TODO. */
+export function coveredStepRefs(accountId: string): Set<string> {
+  const rows = db.query("SELECT event_key, step_key FROM plan_steps WHERE account_id = ? AND covered = 1").all(accountId) as { event_key: string; step_key: string }[];
+  return new Set(rows.map((r) => `step:${r.event_key}:${r.step_key}`));
+}
+
 /**
  * Fills the kind of a step recorded before kinds existed (cab, travel) from its published title: airport, station, else local.
  * Only a null kind is filled, never overwritten. Returns the kind written, or null when the step has one already or is unknown.
