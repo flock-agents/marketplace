@@ -18,13 +18,16 @@ describe("tally", () => {
   test("skip, done, skip (newest first) is none", () => expect(state([skip("gift", DAY), done("gift", 2 * DAY), skip("gift", 3 * DAY)])?.state).toBe("none"));
   test("a skip then a newer done is on", () => expect(state([done("gift", DAY), skip("gift", 2 * DAY)])?.state).toBe("on"));
   test("one skip alone is none", () => expect(state([skip("gift", DAY)])?.state).toBe("none"));
-  test("withdrawn only counts nothing", () => expect(state([row("gift", { status: "dismissed", withdrawn: true, closedAt: NOW - DAY })])?.state ?? "none").toBe("none"));
+  test("withdrawn rows count nothing, even flagged skipped or done", () => {
+    const rows = [row("gift", { status: "dismissed", skipped: true, withdrawn: true, closedAt: NOW - DAY }), row("gift", { status: "dismissed", skipped: true, withdrawn: true, closedAt: NOW - 2 * DAY }), row("gift", { status: "done", withdrawn: true, closedAt: NOW - 3 * DAY })];
+    expect(state(rows)).toBeUndefined();
+  });
   test("covered only counts nothing", () => {
     const r = done("gift", DAY);
-    expect(state([r], new Set([r.sourceRef]))?.state ?? "none").toBe("none");
+    expect(state([r], new Set([r.sourceRef]))).toBeUndefined();
   });
-  test("an expiry dismissal counts nothing", () => expect(state([row("gift", { status: "dismissed", closedAt: NOW - DAY })])?.state ?? "none").toBe("none"));
-  test("an open row counts nothing", () => expect(state([row("gift", {})])?.state ?? "none").toBe("none"));
+  test("an expiry dismissal counts nothing", () => expect(state([row("gift", { status: "dismissed", closedAt: NOW - DAY })])).toBeUndefined());
+  test("an open row counts nothing", () => expect(state([row("gift", {})])).toBeUndefined());
   test("a skip exactly 90 days old counts, 1 ms older does not", () => {
     expect(state([skip("gift", DAY), skip("gift", TALLY_WINDOW_MS)])?.state).toBe("off");
     expect(state([skip("gift", DAY), skip("gift", TALLY_WINDOW_MS + 1)])?.state).toBe("none");
@@ -34,12 +37,15 @@ describe("tally", () => {
     expect(state(rows)).toEqual({ state: "on", done: 10, skips: 0 });
   });
   test("rows without skipped or closedAt never switch off", () => {
-    const rows = [row("gift", { status: "dismissed" }), row("gift", { status: "dismissed" })];
-    expect(state(rows)?.state ?? "none").toBe("none");
+    const rows = [row("gift", { status: "dismissed" }), row("gift", { status: "dismissed" }), row("gift", { status: "done", updatedAt: NOW - DAY })];
+    expect(state(rows)).toEqual({ state: "on", done: 1, skips: 0 });
   });
   test("an older Flock done falls back to updatedAt", () => {
     expect(state([row("gift", { status: "done", updatedAt: NOW - DAY })])?.state).toBe("on");
-    expect(state([row("gift", { status: "done", updatedAt: NOW - 100 * DAY })])?.state ?? "none").toBe("none");
+    expect(state([row("gift", { status: "done", updatedAt: NOW - 100 * DAY })])).toBeUndefined();
+  });
+  test("equal closedAt treats the skip as older than the done", () => {
+    expect(state([skip("gift", DAY), done("gift", DAY)])?.state).toBe("on");
   });
   test("kinds are tallied separately and unknown refs ignored", () => {
     const t = tally([skip("cab-local", DAY), skip("cab-local", 2 * DAY), done("gift", DAY), { sourceRef: "step:x:y", status: "done", title: "", due: null, showFrom: null, closedAt: NOW }], K, NOW);

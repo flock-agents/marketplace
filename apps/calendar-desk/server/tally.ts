@@ -27,7 +27,7 @@ export function tally(rows: TallyRow[], kinds: Map<string, string>, now: number,
   }
   const out = new Map<string, { state: KindState; done: number; skips: number }>();
   for (const [kind, list] of byKind) {
-    const newest = list.sort((a, b) => b.at - a.at).slice(0, TALLY_PER_KIND);
+    const newest = list.sort((a, b) => b.at - a.at || Number(a.skip) - Number(b.skip)).slice(0, TALLY_PER_KIND);
     const skips = newest.filter((c) => c.skip).length;
     const state: KindState = newest.length >= 2 && newest[0].skip && newest[1].skip ? "off" : !newest[0].skip ? "on" : "none";
     out.set(kind, { state, done: newest.length - skips, skips });
