@@ -397,3 +397,33 @@ describe("steps must fit the event's type and kind (planning step tiers M4)", ()
     expect(P.plannedMark("acct", "g1")!.type).toBe("stay");
   });
 });
+
+describe("cover: a step the owner already has as a TODO is recorded as covered", () => {
+  const cab = { key: "cab", kind: "cab-airport", title: "Book a cab to the airport", dueDate: "2026-10-11", why: "a flight" };
+  const coveredRow = (S._db.query("SELECT covered FROM plan_steps WHERE account_id = 'acct' AND event_key = ? AND step_key = ?"));
+
+  test("covered answer: reported as covered, plan_steps.covered = 1, the event is planned", async () => {
+    seed("g1", "Flight to Goa", "2026-10-12"); const pl = plan("g1");
+    const p = platform({ publish: () => ok({ covered: { todoId: "t1" } }) });
+    const r: any = await handlePlanReport({ planId: pl.planId, events: [{ event: "e1", type: "journey", steps: [cab] }] }, p.ctx, NOW);
+    expect(r).toEqual({ accepted: ["e1/cab covered by a TODO"], refused: [], done: true });
+    expect(p.published[0].cover).toEqual({ kind: "cab-airport", eventTitle: "Flight to Goa", eventLocation: undefined, eventDate: "2026-10-12" });
+    expect((coveredRow.get("g1", "cab") as any).covered).toBe(1);
+    expect(P.plannedMark("acct", "g1")).toBeTruthy();
+  });
+
+  test("a judgement kind sends no cover", async () => {
+    seed("g1", "Flight to Goa", "2026-10-12"); const pl = plan("g1");
+    const p = platform();
+    await handlePlanReport({ planId: pl.planId, events: [{ event: "e1", type: "journey", steps: [{ key: "docs", kind: "documents", title: "Carry passport", dueDate: "2026-10-11", why: "abroad" }] }] }, p.ctx, NOW);
+    expect("cover" in p.published[0]).toBe(false);
+  });
+
+  test("an answer without data (older Flock) is recorded as published", async () => {
+    seed("g1", "Flight to Goa", "2026-10-12"); const pl = plan("g1");
+    const p = platform();
+    const r: any = await handlePlanReport({ planId: pl.planId, events: [{ event: "e1", type: "journey", steps: [cab] }] }, p.ctx, NOW);
+    expect(r.accepted).toEqual(["e1/cab"]);
+    expect((coveredRow.get("g1", "cab") as any).covered).toBeNull();
+  });
+});
