@@ -60,6 +60,22 @@ describe("tick — light re-read (A13)", () => {
   });
 });
 
+describe("tick — plans with the time planning starts", () => {
+  test("a tick that reads then plans stamps the plan after the read", async () => {
+    for (const t of ["planned", "plans", "plan_steps"]) S._db.exec(`DELETE FROM ${t}`);
+    S.markInitStarted("acct"); S.markInitFinished("acct", "done");
+    let t = new Date(2026, 9, 5, 10, 30).getTime();
+    S.setCursor("last_sync:acct", String(t - 3 * 3600_000));
+    const p = platform(() => { t += 90_000; return ok({ ok: true, events: [] }); });
+    await calendarDeskHooks.tick!({ readRoutines: [{ id: "x", appRoutineId: "event-planning", trigger: {} }], platform: p.ctx, now: () => new Date(t) } as any);
+    const calls = p.intents.filter((i) => i.name === "plan_events");
+    expect(calls).toHaveLength(1);
+    expect(calls[0].payload.nowLocal).toBe("10:31");
+    const P = await import("../planning-store");
+    expect(P.openPlan()?.createdAt).toBe(t);
+  });
+});
+
 describe("tick — routine identity on the real wire (C2)", () => {
   test("routines arrive as {id: <instance uuid>, appRoutineId: <manifest id>}; the prep routine is recognized as enabled", async () => {
     const p = platform(() => ok({ ok: true, events: [] }));

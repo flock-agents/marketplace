@@ -33,7 +33,8 @@ export const calendarDeskHooks: AppLifecycleHooks = {
   },
   async tick(ctx) {
     storeRoutineState(ctx.readRoutines);
-    const now = ((ctx as any).now as (() => Date) | undefined)?.() ?? new Date();
+    const clock = () => ((ctx as any).now as (() => Date) | undefined)?.() ?? new Date();
+    const now = clock();
     for (const rec of listInit()) {
       if (!rec.finishedAt) continue;
       if (SCHEDULED_SCRAPE_HOURS.includes(now.getHours()) && (lastSyncAt(rec.accountId) ?? 0) < now.getTime() - 50 * 60_000) {
@@ -46,7 +47,7 @@ export const calendarDeskHooks: AppLifecycleHooks = {
     try { await syncFactEvents(ctx.platform, now); } catch (err: any) { console.warn(`[calendar-desk] fact events: ${err?.message ?? err}`); }
     // Planning runs after this tick's read (initialize also plans once, right after a first read), when the tick names the routine (it names only due, enabled routines; Run now is a tick too).
     if (ctx.readRoutines.some((r) => routineKey(r) === "event-planning")) {
-      try { await runPlanning(ctx.platform, now); } catch (err: any) { console.warn(`[calendar-desk] planning: ${err?.message ?? err}`); }
+      try { await runPlanning(ctx.platform, clock()); } catch (err: any) { console.warn(`[calendar-desk] planning: ${err?.message ?? err}`); }
     }
   },
   status(accountId) { const rec = listInit().find((r) => r.accountId === accountId); return !rec || !!rec.finishedAt; },
