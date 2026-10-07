@@ -748,10 +748,11 @@ export const PLAN_CASES: PlanCase[] = [
     // Cabs done elsewhere (kind on), skipped twice here (place off): the place wins.
     id: "place-off-beats-kind-on", events: [clinic()],
     habits: [doneAt("cab-local", 5, SMILE), doneAt("cab-local", 8, SKIN), skippedAt("cab-local", 20, APOLLO), skippedAt("cab-local", 30, APOLLO)],
-    expect: (o) => [...nothingFor("place-off-beats-kind-on", o, "e1"), ...patternIs("place-off-beats-kind-on", o, "e1", "cab-local", "off")],
+    expect: (o) => [...nothingFor("place-off-beats-kind-on", o, "e1"), ...patternIs("place-off-beats-kind-on", o, "e1", "cab-local", "off"),
+      ...(habitOf(o, "cab-local")?.tally === "on" ? [] : [`place-off-beats-kind-on: the bundle shows cab-local ${JSON.stringify(habitOf(o, "cab-local"))}, expected tally on`])],
     answer: { steps: { e1: [] }, ties: [] },
     wrong: only("e1", [cabTo(APOLLO, 3, "09:15")]),
-    dry: [dryStep("cab-local here after two skips here", "e1", [cabTo(APOLLO, 3, "09:15")], /for this place/)],
+    dry: [dryStep("cab-local here after two skips here", "e1", [cabTo(APOLLO, 3, "09:15")], /dismissed the last two cab-local steps for this place/)],
   },
   {
     // Cabs done to two other clinics, a new clinic: the kind pattern carries it.
@@ -774,7 +775,8 @@ export const PLAN_CASES: PlanCase[] = [
     id: "first-time-dinner-restaurant",
     events: [ev("e1", { title: "Dinner with college friends", type: "occasion", source: "google", plus: 5, time: "20:00", location: "Rasa Kitchen, Koramangala",
       guests: [{ name: "Meera Example", email: "meera@example.com", rsvp: "yes" }, { name: "Rohan Example", email: "rohan@example.com", rsvp: "yes" }] })],
-    expect: (o) => [...exactKinds("first-time-dinner-restaurant", o, "e1", ["table-booking"]), ...stepDateProblems("first-time-dinner-restaurant", o, { ref: "e1", date: D(5) })],
+    expect: (o) => [...exactKinds("first-time-dinner-restaurant", o, "e1", ["table-booking"]), ...namesPlace("first-time-dinner-restaurant", o, "e1", "table-booking", /rasa kitchen/i),
+      ...stepDateProblems("first-time-dinner-restaurant", o, { ref: "e1", date: D(5) })],
     answer: only("e1", [step("book-table", "table-booking", "Book a table at Rasa Kitchen", D(3), D(2), undefined, "Dinner out with friends at Rasa Kitchen.")]),
     wrong: { steps: { e1: [] }, ties: [] },
   },
