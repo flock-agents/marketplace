@@ -57,7 +57,7 @@ office calendar is a `journey`; a meeting with a client is a `meeting`.
 
 - `journey`: the user travels: a flight, a train, a long-distance bus, for work or not.
 - `stay`: the user stays away from home: a hotel, a homestay, a trip, an offsite with nights away.
-  A hotel, a homestay or any other night away is a `stay`, never an appointment.
+  A hotel, a homestay or any other night away is a `stay`, never an appointment, even when it names the trip.
 - `occasion`: a birthday, an anniversary, a dinner or an outing.
 - `appointment`: the user goes somewhere for a service or a visit: a doctor, dentist, physio, salon,
   an in-person visit to a place. The title leads: an invite from a clinic, a school or a booking
@@ -67,10 +67,11 @@ office calendar is a `journey`; a meeting with a client is a `meeting`.
   review, a 1:1, an interview, a call.
 - `reminder`: a note to the user to do something at a time ("Call the bank").
 - `block`: time the user holds for themselves: its title names it ("Focus", "Hold", "Busy", "Gym",
-  "Deep work", a prep block); missing guests alone never make a block.
+  "Deep work", a prep block); missing guests alone never make a block. When no type above fits, an
+  entry of the user's own with no guests, no video link and no place is a `block`.
 - `other`: anything the user takes no part in or that asks nothing of them: a holiday, an FYI, an
-  optional or newsletter invitation, a colleague's leave or talk, a conference the user only knows
-  about, a shared calendar's note.
+  optional or newsletter invitation, a webinar or event invite the user only receives, a colleague's
+  leave or talk, a conference the user only knows about, a shared calendar's note.
 
 **Step kinds.** Every step carries a `kind` from this table; Calendar Desk refuses one that is not listed or
 does not fit the event's type. The columns:
@@ -133,7 +134,8 @@ payload's machinery, in a step's `title` or `why`: the user reads those.
       is about that occasion: the same appointment, trip or meeting; sharing a place, a person
       or a word of the title is not enough, and a TODO due after the event's day is never its.
       A TODO whose own words set its deadline by the occasion ("before the trip", "for the
-      meeting") is about that occasion even when the work itself is something else: tie it.
+      meeting") is about that occasion even when the work itself is something else: tie it. Tie only
+      a TODO due on or before the event's day (or undated), never a later one.
       Check the list first, every time: an existing TODO is tied, never duplicated. A TODO the list
       already shows tied to this event needs no tying again. A step Calendar Desk made is never
       tied here: it already belongs to its event. One for another event (even one with the same
