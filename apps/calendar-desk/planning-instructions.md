@@ -57,13 +57,14 @@ office calendar is a `journey`; a meeting with a client is a `meeting`.
 
 - `journey`: the user travels: a flight, a train, a long-distance bus, for work or not.
 - `stay`: the user stays away from home: a hotel, a homestay, a trip, an offsite with nights away.
+  A hotel, a homestay or any other night away is a `stay`, never an appointment.
 - `occasion`: a birthday, an anniversary, a dinner or an outing.
 - `appointment`: the user goes somewhere for a service or a visit: a doctor, dentist, physio, salon,
   an in-person visit to a place. The title leads: an invite from a clinic, a school or a booking
   service is still the user's own appointment, and an entry of the user's own at a place, with no
   one else invited and not reading like a talk with others, is a visit.
 - `meeting`: the user talks with others: guests, a video link, or a title that reads like a sync, a
-  review, a 1:1, an interview, a parent-teacher meeting, a call.
+  review, a 1:1, an interview, a call.
 - `reminder`: a note to the user to do something at a time ("Call the bank").
 - `block`: time the user holds for themselves: its title names it ("Focus", "Hold", "Busy", "Gym",
   "Deep work", a prep block); missing guests alone never make a block.
@@ -76,8 +77,7 @@ does not fit the event's type. The columns:
 - `tier` says what decides the kind. `1`: it follows from the event, for every user (rule 4).
   `2`: it depends on the person and needs evidence in `habits` (rule 5). `rule`: a fixed rule
   decides it (rule 3.3). `judgement`: the event's `facts` and title decide it (rule 6).
-- `allowed on types`: the event types the kind may be used on; no kind is allowed on a `reminder`, a
-  `block` or an `other`.
+- `allowed on types`: the event types the kind may be used on.
 - `default key`: the `key` to give the step. "same as kind": the key is the kind's own name.
   A key in backticks: use that key. "free": choose a short key yourself (lowercase letters,
   digits and hyphens, such as `passport`). A step re-dated with its event keeps the key it has.
@@ -120,7 +120,7 @@ payload's machinery, in a step's `title` or `why`: the user reads those.
 2. Every event offered here is marked planned after this run, and is not offered again unless it
    moves. An event that needs nothing gets `"steps":[]`, and that is the right answer for most
    events. An event that does need steps gets them now, even when they are weeks away: a step
-   stays hidden until its `showFrom`. Every event you report carries its `type`, also with `"steps":[]`.
+   stays hidden until its `showFrom`.
 3. For each event, in this order:
    1. **Already covered**: a TODO of the user's (their own, or from mail) is about this event →
       tie it to the event so it shows with the event, and never propose a step that repeats its work:
@@ -145,9 +145,11 @@ payload's machinery, in a step's `title` or `why`: the user reads those.
    3. **A meeting or a call gets nothing**: meeting prep, its own routine, covers it. Readying what
       to say or ask at it (questions, notes, an agenda, reviewing beforehand) is meeting prep's work,
       never a step. Two exceptions only:
-      - `cab-local`, when the meeting is in person at its `location`, a real place (not a video
-        link) other than where the user usually works (when nothing says where that is, any real
-        place), and `habits` shows evidence for `cab-local` (rule 5). Without evidence: nothing.
+      - `cab-local`, only with evidence under rule 5, when the meeting is in person somewhere the
+        user must travel to: its `location` is a street address or a named place outside the
+        user's office. A room, a floor, a desk or a booked resource ("Conf Room 4B", "Floor 3
+        East"), a video link, or a place a fact names as where the user works never counts.
+        When unsure, nothing.
       - One `prepare-ahead`, when the title, the details or the `facts` say the user presents,
         demos, pitches or presents at a board review, and no TODO on the list covers that work (a
         TODO that does is tied instead, rule 3.1, and the meeting gets no `prepare-ahead`).
@@ -165,23 +167,25 @@ payload's machinery, in a step's `title` or `why`: the user reads those.
    - a stay or a trip away from home: `pack`.
 
    A kind is left out when `habits` shows it `"off"`, or a fact there says the user does not want
-   it or does it another way (a user who drives to the airport gets no `cab-airport`). A ride to
+   it or does it another way (a user who goes to the airport in their own car gets no `cab-airport`). A ride to
    the airport or a station needs no `location`: the pickup is home; name the flight or train.
    A journey alone is not a stay: it gets no `pack` unless its `facts` say the user stays away. A
    stay gets `pack` and never a ride to its own `location`; ride, check-in and ticket steps come
-   only from a journey event or a fact that says how the user travels there.
+   only from a journey event or a fact that says how the user travels there, and a stay gets them
+   only when that journey has no event of its own in this payload or on the TODO list (the
+   journey's event carries them).
 5. **Tier 2: depends on the person.** `cab-local` (an appointment, or a meeting under rule 3.3, at
    its `location`), `gift` (a birthday or anniversary of someone the event's `facts` say is in the
-   user's life) and `table-booking` (a dinner or an outing). Propose one only with evidence in
+   user's life; with no such fact, no gift step, even when `habits` say yes) and `table-booking` (a dinner or an outing). Propose one only with evidence in
    `habits` for that kind: `tally` `"on"`, or a fact in which the user wants it or does it (takes a
    cab to such places, buys gifts, books tables, wants the reminder). Never when the `tally` is
-   `"off"` or a fact says no (they drive, the family does not exchange gifts, they do not want the
+   `"off"` or a fact says no (they prefer to drive themselves, they say they skip gifts, they do not want the
    reminder). No evidence (the kind missing from `habits`, or `tally` `"none"` with no such fact,
    whatever `asked` says) → no step. Decide from `habits` alone, never from how the event looks this
    time (its guests, its address, how far or how important it seems): the same
    event with the same evidence gets the same steps on every run. The event's own `facts` say
    whether it is the kind's occasion (whose birthday it is), never whether the user wants the step.
-6. **Judgement kinds** (`documents`, `payment`, `other`): the event is the user's own or concerns
+6. **Judgement kinds** (`documents`, `payment`, and the kind `other`, not the type): the event is the user's own or concerns
    someone in their life, and a careful assistant would make sure the user is not caught
    unprepared (a form, a payment, documents, a renewal, a booking the event needs). Let the event's
    `facts` decide which fit (what the trip needs). When its `facts` are empty, plan only for what
@@ -194,18 +198,17 @@ payload's machinery, in a step's `title` or `why`: the user reads those.
    it needs gets `"steps":[]`, even when its `change` is `"new"`. Each step:
    `{"key":"checkin","kind":"checkin","title":"Web check-in: UK-835","dueDate":"YYYY-MM-DD","dueTime":"HH:MM","showFrom":"YYYY-MM-DD","why":"…"}`.
    The `title` is short and plain and names what it is for: the flight or train, the person, and
-   for a `cab-local` the place from the event's `location` ("Book a cab to Sunrise Dental,
-   Jayanagar"). The `why` is one plain sentence for the user. For a person-dependent step it says
-   plainly what decided it, from what `habits` shows: "You booked a cab for your last
-   appointment.", "You asked for a cab reminder before appointments.", "You usually take a cab
-   there." Never an amount, an order or booking number, or another person's words.
+   for a `cab-local` the place from the event's `location` ("Book a cab to Lakeview Eye Hospital,
+   Banashankari"). The `why` is one plain sentence for the user. For a person-dependent step it says
+   plainly what decided it, from what `habits` shows: "You booked a cab last time.",
+   "You asked to be reminded to book a cab.", "You usually take a cab there." Never an amount, an order or booking number, or another person's words.
 8. **When each step is due and when it shows.** Date each step at the earliest sensible moment:
    never late, maybe early. When you do not know the window, take the earliest plausible and say
    "around" in the why. Something that must be in hand at the event (a gift, documents, a booking)
    is due before the event's day, not on it. A step only the user can do is still a step.
    `dueTime` is optional: give it as `HH:MM` only when the step has a real time, and otherwise
    leave the key out. `showFrom` is the day it appears (default: its due day); it must not be after
-   `dueDate`, and a step is never due after its event: a ride or a check-in is due before departure.
+   `dueDate`, and a step is never due after its event.
    A step that can only be done close to the
    event (a check-in whose window opens a day before) shows when it can be done, not today.
    Showing a step a little early on purpose because it takes time (a gift to buy, documents to
@@ -235,7 +238,7 @@ payload's machinery, in a step's `title` or `why`: the user reads those.
    cab?"). When a person-dependent kind has no evidence, Calendar Desk puts its own one-time
    question to the user, from the event you planned without that step: your part is only to leave
    the step out. The event is still planned.
-11. **Report once**, listing every offered event with its `type` (`"steps":[]` when it needs nothing), passing the
+11. **Report once**, listing every offered event (`"steps":[]` when it needs nothing), passing the
    JSON through a quoted heredoc so apostrophes and quotes in your text are safe (never wrap the
    JSON in single quotes):
 
@@ -253,10 +256,7 @@ payload's machinery, in a step's `title` or `why`: the user reads those.
    which steps were accepted (`"e1/pack"`) and which were refused, each with its reason. A step
    accepted as `"e1/checkin covered by a TODO"` matched a TODO the user already has: Calendar Desk
    tied that TODO to the event instead of making the step. That is a right outcome: do not report
-   that step again. Calendar Desk refuses, among others: an unknown `type` or `kind`; a kind that
-   does not fit the event's type; any step on a `reminder`, a `block` or an `other`; a `cab-local`
-   on an event with no `location`; a second `prepare-ahead` on a meeting; a kind the user switched
-   off or said no to. When some were refused, fix those (or drop the step when the reason says the
+   that step again. A refusal names the rule above the step broke. When some were refused, fix those (or drop the step when the reason says the
    user does not want it) and report again with the events that had them, at most 3 reports in
    all. Then end your turn with one short line ("Planned 3 events: 2 tied, 4 steps.") and stop.
 
