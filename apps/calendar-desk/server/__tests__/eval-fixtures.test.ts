@@ -23,7 +23,7 @@ describe("planner eval fixtures", () => {
   test("the bundle carries the shape the instructions describe", async () => {
     const c = PLAN_CASES.find((x) => x.id === "changed-event-redates-same-step")!;
     const { payload } = await H.plan(c);
-    expect(Object.keys(payload).sort()).toEqual(["events", "nowLocal", "planId", "timezone", "today"]);
+    expect(Object.keys(payload).sort()).toEqual(["events", "habits", "nowLocal", "planId", "timezone", "today"]);
     expect(payload.events[0]).toMatchObject({ ref: "e1", change: "changed", allDay: false, time: "06:10", was: { date: isoAdd(TODAY, 2), time: "06:10" }, steps: [{ key: "checkin", title: "Web check-in: 6E-512" }] });
     expect(payload.events[0].event).toStartWith("calendar-desk:");
   });

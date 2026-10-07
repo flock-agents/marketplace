@@ -192,6 +192,7 @@ export function forgetEvent(accountId: string, eventKey: string): void {
   db.transaction(() => {
     db.query("DELETE FROM planned WHERE account_id = ? AND event_key = ?").run(accountId, eventKey);
     db.query("DELETE FROM plan_steps WHERE account_id = ? AND event_key = ?").run(accountId, eventKey);
+    db.query("DELETE FROM plan_held WHERE account_id = ? AND event_key = ?").run(accountId, eventKey);
     db.query("DELETE FROM cursors WHERE key = ?").run(waitCursor(accountId, eventKey));
   })();
 }
@@ -221,4 +222,23 @@ export function markAnswerReported(kind: string, answer: string, at: number): bo
 /** Marks the answer as taken by memory (only after a successful write). */
 export function markMemoryWritten(kind: string, answer: string): void {
   db.query("UPDATE plan_asks SET memory_written = ? WHERE kind = ?").run(answer, kind);
+}
+
+// ── held events ───────────────────────────────────────────────────────────────────────────
+// An event planned without a personal step its type needed, because there was no evidence and the owner is being asked.
+// When the card's answer is yes and the event is still ahead, it is offered once more; on any other outcome the hold is dropped.
+db.exec("CREATE TABLE IF NOT EXISTS plan_held (account_id TEXT NOT NULL, event_key TEXT NOT NULL, kind TEXT NOT NULL, held_at INTEGER NOT NULL, PRIMARY KEY (account_id, event_key, kind))");
+
+export function holdEvent(accountId: string, eventKey: string, kind: string, at: number): void {
+  db.query("INSERT OR IGNORE INTO plan_held (account_id, event_key, kind, held_at) VALUES (?, ?, ?, ?)").run(accountId, eventKey, kind, at);
+}
+
+/** Every hold, in a fixed order. */
+export function heldEvents(): { accountId: string; eventKey: string; kind: string }[] {
+  return (db.query("SELECT account_id, event_key, kind FROM plan_held ORDER BY account_id, event_key, kind").all() as { account_id: string; event_key: string; kind: string }[])
+    .map((r) => ({ accountId: r.account_id, eventKey: r.event_key, kind: r.kind }));
+}
+
+export function dropHeld(accountId: string, eventKey: string, kind: string): void {
+  db.query("DELETE FROM plan_held WHERE account_id = ? AND event_key = ? AND kind = ?").run(accountId, eventKey, kind);
 }

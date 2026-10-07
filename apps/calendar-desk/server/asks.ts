@@ -3,8 +3,10 @@
 // asked-but-unanswered and is never asked again. Flock has no app-task expiry, so Calendar Desk withdraws its own open card
 // after 14 days, and withdraws it early when a fact it did not see at publish shows the owner answered in chat.
 import type { PlatformContext } from "@flock/app-sdk";
-import { KINDS, kindSpec } from "./kinds";
-import { recordAsk, askRecord, markAnswerReported, markMemoryWritten } from "./planning-store";
+import { KINDS, kindSpec, kindsToAsk, type EventType } from "./kinds";
+import { recordAsk, askRecord, markAnswerReported, markMemoryWritten, stepKindsFor, holdEvent } from "./planning-store";
+import type { EventRow } from "./store";
+import type { KindState } from "./tally";
 
 export const ASK_TTL_MS = 14 * 86400_000;
 const PREFIX = "ask:";
@@ -98,4 +100,50 @@ export async function settleAsks(platform: PlatformContext, states: Map<string, 
     }
   }
   return { answered };
+}
+
+type Res<T> = { ok: true; data: T } | { ok: false; reason: string };
+interface AskPlatform {
+  tasks: { list(opts?: { prefix?: string }): Promise<Res<{ tasks: AskRow[] }>> };
+  memory: { search(query: string, opts?: { limit?: number }): Promise<Res<{ facts: string[] }>> };
+}
+
+/**
+ * For one plan report: after an event is planned, each personal kind its type and title need (kindsToAsk) that it did not get,
+ * with no evidence (tally none, no memory fact from the kind's search, no answer on its card), holds the event; the kind's
+ * card is published the first time. A card already open holds the event without a second card. A card answered, or closed
+ * unanswered, never holds or asks again. When the board or memory cannot be read, nothing is asked: asking a run later is
+ * better than asking twice. The ask rows and each kind's facts are read once per report.
+ */
+export function askHolder(platform: PlatformContext, now: number): (ev: EventRow, type: EventType, tallied: ReadonlyMap<string, { state: KindState }>) => Promise<void> {
+  const p = platform as unknown as AskPlatform;
+  let states: Map<string, AskState> | null | undefined; // undefined: not read yet; null: unreadable
+  const facts = new Map<string, string[] | null>();
+  return async (ev, type, tallied) => {
+    const want = kindsToAsk(type, ev.title, ev.location);
+    if (want.length === 0) return;
+    const prefix = `step:${ev.eventKey}:`;
+    const made = new Set([...stepKindsFor(ev.accountId)].filter(([ref]) => ref.startsWith(prefix)).map(([, kind]) => kind));
+    for (const kind of want) {
+      if (made.has(kind) || (tallied.get(kind)?.state ?? "none") !== "none") continue;
+      if (states === undefined) {
+        const listed = await p.tasks.list({ prefix: PREFIX });
+        states = listed.ok ? askStates(listed.data.tasks) : null;
+        if (!listed.ok) console.warn(`[calendar-desk] asks: could not read cards: ${listed.reason}`);
+      }
+      const st = states?.get(kind);
+      if (!st || (st.status !== "none" && st.status !== "waiting")) continue;
+      if (!facts.has(kind)) {
+        const r = await p.memory.search(kindSpec(kind)!.query!, { limit: 3 });
+        facts.set(kind, r.ok ? r.data.facts : null);
+      }
+      const known = facts.get(kind);
+      if (known == null || known.length > 0) continue;
+      if (st.status === "none") {
+        await publishAsk(platform, kind, now, []);
+        if (askRecord(kind)) st.status = "waiting";
+      }
+      holdEvent(ev.accountId, ev.eventKey, kind, now);
+    }
+  };
 }

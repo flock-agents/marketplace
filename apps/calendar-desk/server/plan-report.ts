@@ -7,6 +7,7 @@ import { ymd } from "./events";
 import { pointer } from "./planner";
 import { EVENT_TYPES, KINDS, kindSpec, type EventType } from "./kinds";
 import { tally } from "./tally";
+import { askHolder } from "./asks";
 import { openPlan, plannedMark, markPlanned, recordStep, stepKeysFor, stepKindsFor, coveredStepRefs, noteBadReport, answerPlan, abandonPlan, BAD_REPORTS_MAX, type PlanRecord, type PlanEventRef } from "./planning-store";
 
 // `withdrawn`: a dismissed row Calendar Desk itself withdrew (its event was deleted), not one the owner closed.
@@ -151,7 +152,8 @@ export async function handlePlanReport(p: Record<string, unknown>, platform: Pla
   let bad = 0; // validation refusals only
   // One read of every step row serves the per-event lists and the outcome tally behind the off guard.
   let allSteps: StepState[] | null = null;
-  const accountState = new Map<string, { kinds: Map<string, string>; off: Set<string> }>();
+  const accountState = new Map<string, { kinds: Map<string, string>; off: Set<string>; states: ReturnType<typeof tally> }>();
+  const holdForAsks = askHolder(platform, now.getTime());
   for (const entry of p.events as any[]) {
     const ref = typeof entry?.event === "string" ? plan.events.find((x) => x.ref === entry.event) : undefined;
     if (!ref) { refused.push({ item: String(entry?.event ?? "?"), reason: "event is not in this plan" }); bad++; continue; }
@@ -183,7 +185,7 @@ export async function handlePlanReport(p: Record<string, unknown>, platform: Pla
     if (!acct) {
       const kinds = stepKindsFor(ev.accountId);
       const states = tally(allSteps as any, kinds, now.getTime(), coveredStepRefs(ev.accountId));
-      acct = { kinds, off: new Set([...states].filter(([, v]) => v.state === "off").map(([kind]) => kind)) };
+      acct = { kinds, off: new Set([...states].filter(([, v]) => v.state === "off").map(([kind]) => kind)), states };
       accountState.set(ev.accountId, acct);
     }
     const { kinds, off } = acct;
@@ -213,6 +215,8 @@ export async function handlePlanReport(p: Record<string, unknown>, platform: Pla
     const capFails = await refreshStepCaps(platform, ev, existing, seen);
     for (const f of capFails) refused.push({ item: `${ref.ref}/${f.key}`, reason: `could not update its limit: ${f.reason}` });
     if (capFails.length === 0) markPlanned([{ accountId: ref.accountId, eventKey: ref.eventKey, date: ref.date, startAt: ref.startAt, type }], now.getTime());
+    // Planned without a personal step it needed and has no evidence for: ask once, and hold the event for the answer.
+    if (capFails.length === 0) await holdForAsks(ev, type, acct.states);
   }
 
   // Everything planned answers the plan, whatever else was refused; only then do bad reports count toward giving up.

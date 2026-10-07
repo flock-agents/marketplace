@@ -6,19 +6,19 @@ const S = await import("../store");
 const P = await import("../planning-store");
 const { runPlanning, capitalisedRuns } = await import("../planner");
 
-function wipe() { for (const t of ["events", "cursors", "planned", "plans", "plan_steps"]) S._db.exec(`DELETE FROM ${t}`); }
+function wipe() { for (const t of ["events", "cursors", "planned", "plans", "plan_steps", "plan_asks", "plan_held"]) S._db.exec(`DELETE FROM ${t}`); }
 beforeEach(wipe);
 
 const NOW = new Date(2026, 9, 6, 12, 0, 0);
 const HOUR = 3600_000;
 
-type TaskState = { sourceRef: string; status: "open" | "done" | "dismissed"; withdrawn?: true; title: string; due: number | null; dueTimed: boolean; showFrom: number | null; updatedAt: number };
+type TaskState = { sourceRef: string; status: "open" | "done" | "dismissed"; withdrawn?: true; skipped?: true; closedAt?: number; actionId?: string; title: string; due: number | null; dueTimed: boolean; showFrom: number | null; updatedAt: number };
 function platform(o: { intent?: () => any; tasks?: TaskState[]; facts?: (q: string) => string[] } = {}) {
   const intents: any[] = [], searches: any[] = [], lists: any[] = [];
   const ctx = { configured: true, pairedAgent: { id: "pa", name: "PA" },
     agent: { intent: async (name: string, payload: any) => { intents.push({ name, payload }); return o.intent ? o.intent() : ok({ sessionId: `s-${intents.length}`, reused: false }); } },
     tasks: { list: async (opts: { prefix?: string } = {}) => { lists.push(opts); return ok({ tasks: (o.tasks ?? []).filter((t) => t.sourceRef.startsWith(opts.prefix ?? "")) }); } },
-    memory: { search: async (q: string, opts: any) => { searches.push({ q, opts }); return ok({ facts: o.facts ? o.facts(q) : [] }); } },
+    memory: { search: async (q: string, opts: any) => { searches.push({ q, opts }); return ok({ facts: o.facts ? o.facts(q) : [] }); }, extract: async () => ok({}) },
   } as unknown as PlatformContext;
   return { ctx, intents, searches, lists };
 }
@@ -140,7 +140,7 @@ describe("runPlanning", () => {
     seed("g2", "dentist cleaning", "2026-10-11");
     const p = platform({ facts: (q) => q === "Asha's" || q === "Asha" ? ["Asha is your sister"] : ["Teeth cleaning every 6 months"] });
     await runPlanning(p.ctx, NOW);
-    expect(p.searches[0]).toEqual({ q: "Asha", opts: { person: true, limit: 3 } });
+    expect(p.searches.find((x) => "person" in x.opts)).toEqual({ q: "Asha", opts: { person: true, limit: 3 } });
     expect(p.searches).toContainEqual({ q: "dentist cleaning", opts: { person: false, limit: 3 } });
     const [e1, e2] = p.intents[0].payload.events;
     expect(e1.facts).toEqual(["Asha is your sister"]);
@@ -196,6 +196,139 @@ describe("withdrawn steps", () => {
     expect(p.intents[0].payload.events[0].steps).toEqual([
       { key: "cab", title: "Book a cab", due: "2026-10-11", showFrom: null, closed: true },
     ]);
+  });
+});
+
+describe("habits: what the owner did with past steps of each kind (planning step tiers M7)", () => {
+  const DAY = 86_400_000;
+  const row = (ref: string, status: TaskState["status"], extra: Partial<TaskState> = {}): TaskState => ({ sourceRef: ref, status, title: "x", due: null, dueTimed: false, showFrom: null, updatedAt: 0, ...extra });
+  const CAB_Q = "cab Uber Ola drive appointment";
+
+  test("(a) one done cab-local step and a fact: tier 2, tally on, the facts, not asked", async () => {
+    seed("g1", "Dentist", "2026-10-12");
+    P.recordStep("acct", "g0", "cab", "cab-local");
+    const p = platform({ tasks: [row("step:g0:cab", "done", { closedAt: NOW.getTime() - DAY })], facts: (q) => (q === CAB_Q ? ["Takes an Uber to the dentist."] : []) });
+    await runPlanning(p.ctx, NOW);
+    expect(p.intents[0].payload.habits["cab-local"]).toEqual({ tier: 2, tally: "on", facts: ["Takes an Uber to the dentist."], asked: false });
+  });
+
+  test("(b) a kind with nothing to say is left out; Tier 1 carries no asked; keys are sorted", async () => {
+    seed("g1", "Dentist", "2026-10-12");
+    P.recordStep("acct", "g0", "pack", "pack");
+    P.recordStep("acct", "g0", "checkin", "checkin");
+    const p = platform({ tasks: [row("step:g0:pack", "done", { closedAt: NOW.getTime() - DAY }), row("step:g0:checkin", "done", { closedAt: NOW.getTime() - DAY })] });
+    await runPlanning(p.ctx, NOW);
+    const habits = p.intents[0].payload.habits;
+    expect(Object.keys(habits)).toEqual(["checkin", "pack"]);
+    expect(habits.pack).toEqual({ tier: 1, tally: "on", facts: [] });
+    const empty = platform();
+    wipe(); seed("g1", "Dentist", "2026-10-12");
+    await runPlanning(empty.ctx, NOW);
+    expect(empty.intents[0].payload.habits).toEqual({});
+  });
+
+  test("an open card reads asked: waiting; a closed one asked: true, and a yes adds the stated preference to the facts", async () => {
+    seed("g1", "Dentist", "2026-10-12");
+    const p = platform({ tasks: [row("ask:cab-local", "open"), row("ask:gift", "done", { actionId: "yes" }), row("ask:table-booking", "dismissed", { withdrawn: true })] });
+    await runPlanning(p.ctx, NOW);
+    const h = p.intents[0].payload.habits;
+    expect(h["cab-local"]).toEqual({ tier: 2, tally: "none", facts: [], asked: "waiting" });
+    expect(h.gift).toEqual({ tier: 2, tally: "none", facts: ["Wants a reminder to buy a gift before family birthdays."], asked: true });
+    expect(h["table-booking"]).toEqual({ tier: 2, tally: "none", facts: [], asked: true });
+  });
+
+  test("(c) steps carry their kind; a re-offered event carries its stored type", async () => {
+    const start = new Date(2026, 9, 12, 10, 0).getTime();
+    seed("g1", "Dentist", "2026-10-12", start);
+    P.markPlanned([{ accountId: "acct", eventKey: "g1", date: "2026-10-11", startAt: start - DAY, type: "appointment" }], NOW.getTime() - HOUR);
+    P.recordStep("acct", "g1", "cab", "cab-local");
+    seed("g2", "Stay at Hampi", "2026-10-13");
+    const p = platform({ tasks: [row("step:g1:cab", "open", { title: "Book a cab", due: start - HOUR, dueTimed: true })] });
+    await runPlanning(p.ctx, NOW);
+    const [dentist, stay] = p.intents[0].payload.events;
+    expect(dentist.type).toBe("appointment");
+    expect(dentist.steps).toEqual([{ key: "cab", kind: "cab-local", title: "Book a cab", due: "2026-10-12", dueTime: "09:00", showFrom: null }]);
+    expect(stay.type).toBeUndefined();
+  });
+
+  test("(d) one memory search per kind with a query, each limit 3", async () => {
+    seed("g1", "dentist", "2026-10-12");
+    const p = platform();
+    await runPlanning(p.ctx, NOW);
+    const kindSearches = p.searches.filter((x) => !("person" in x.opts));
+    expect(kindSearches.map((x) => x.q).sort()).toEqual(["cab Uber Ola drive appointment", "drive airport cab", "gift birthday", "restaurant table reservation"]);
+    for (const x of kindSearches) expect(x.opts).toEqual({ limit: 3 });
+  });
+
+  test("(g) a held event is offered once as answered when the card's answer is yes", async () => {
+    seed("g1", "Dentist", "2026-10-12");
+    P.markPlanned([{ accountId: "acct", eventKey: "g1", date: "2026-10-12", startAt: null, type: "appointment" }], NOW.getTime() - HOUR);
+    P.holdEvent("acct", "g1", "cab-local", NOW.getTime() - HOUR);
+    const tasks = [row("ask:cab-local", "done", { actionId: "yes" })];
+    const p = platform({ tasks });
+    expect((await runPlanning(p.ctx, NOW)).woke).toBe(true);
+    expect(p.intents[0].payload.events).toEqual([expect.objectContaining({ event: "calendar-desk:g1", change: "answered", type: "appointment" })]);
+    expect(P.openPlan()!.events).toEqual([{ ref: "e1", accountId: "acct", eventKey: "g1", date: "2026-10-12", startAt: null }]);
+    S._db.exec("DELETE FROM plans");
+    const again = platform({ tasks });
+    expect(await runPlanning(again.ctx, NOW)).toEqual({ woke: false, skipped: "nothing" });
+  });
+
+  test("(g) answered no: the held event is not offered and the hold is dropped", async () => {
+    seed("g1", "Dentist", "2026-10-12");
+    P.markPlanned([{ accountId: "acct", eventKey: "g1", date: "2026-10-12", startAt: null, type: "appointment" }], NOW.getTime() - HOUR);
+    P.holdEvent("acct", "g1", "cab-local", NOW.getTime() - HOUR);
+    const p = platform({ tasks: [row("ask:cab-local", "done", { actionId: "no" })] });
+    expect(await runPlanning(p.ctx, NOW)).toEqual({ woke: false, skipped: "nothing" });
+    expect(P.heldEvents()).toEqual([]);
+  });
+
+  test("a held event already past is not offered; a card still open keeps the hold", async () => {
+    seed("g1", "Dentist", "2026-10-12");
+    P.markPlanned([{ accountId: "acct", eventKey: "g1", date: "2026-10-12", startAt: null, type: "appointment" }], NOW.getTime() - HOUR);
+    P.holdEvent("acct", "g1", "cab-local", NOW.getTime() - HOUR);
+    const waiting = platform({ tasks: [row("ask:cab-local", "open")] });
+    expect(await runPlanning(waiting.ctx, NOW)).toEqual({ woke: false, skipped: "nothing" });
+    expect(P.heldEvents()).toHaveLength(1);
+    const later = new Date(2026, 9, 13, 9, 0);
+    const yes = platform({ tasks: [row("ask:cab-local", "done", { actionId: "yes" })] });
+    expect(await runPlanning(yes.ctx, later)).toEqual({ woke: false, skipped: "nothing" });
+    expect(P.heldEvents()).toEqual([]);
+  });
+
+  test("(h) the bundle is byte-identical across two runs with the same rows", async () => {
+    seed("g1", "Asha's birthday", "2026-10-12");
+    seed("g2", "Dentist", "2026-10-13", new Date(2026, 9, 13, 10, 0).getTime());
+    P.recordStep("acct", "g0", "cab", "cab-local");
+    P.recordStep("acct", "g0", "gift", "gift");
+    const tasks = [row("step:g0:cab", "done", { closedAt: NOW.getTime() - DAY }), row("step:g0:gift", "dismissed", { skipped: true, closedAt: NOW.getTime() - 2 * DAY }), row("ask:table-booking", "open")];
+    const facts = (q: string) => (q === "gift birthday" ? ["Buys books as gifts."] : q === "Asha" ? ["Asha is your sister"] : []);
+    const bundle = (x: any) => JSON.stringify({ events: x.events, habits: x.habits });
+    const a = platform({ tasks, facts });
+    await runPlanning(a.ctx, NOW);
+    S._db.exec("DELETE FROM plans");
+    const b = platform({ tasks, facts });
+    await runPlanning(b.ctx, NOW);
+    expect(bundle(b.intents[0].payload)).toBe(bundle(a.intents[0].payload));
+    expect(Object.keys(a.intents[0].payload.habits)).toEqual(["cab-local", "gift", "table-booking"]);
+  });
+
+  test("(i) a listed cab or travel step with no kind gets one from its title; other keys stay null", async () => {
+    seed("g1", "Dentist", "2026-10-12");
+    P.recordStep("acct", "g0", "cab");
+    P.recordStep("acct", "g0", "travel");
+    P.recordStep("acct", "g0", "misc");
+    const p = platform({ tasks: [
+      row("step:g0:cab", "done", { title: "Cab to the airport", closedAt: NOW.getTime() - DAY }),
+      row("step:g0:travel", "open", { title: "Book a ride to Apollo" }),
+      row("step:g0:misc", "open", { title: "Airport lounge" }),
+    ] });
+    await runPlanning(p.ctx, NOW);
+    const kinds = P.stepKindsFor("acct");
+    expect(kinds.get("step:g0:cab")).toBe("cab-airport");
+    expect(kinds.get("step:g0:travel")).toBe("cab-local");
+    expect(kinds.has("step:g0:misc")).toBe(false);
+    expect(p.intents[0].payload.habits["cab-airport"]).toEqual({ tier: 1, tally: "on", facts: [] });
   });
 });
 
