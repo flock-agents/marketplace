@@ -73,7 +73,7 @@ const migrations: (string | (() => void))[] = [
   `CREATE TABLE IF NOT EXISTS plan_steps (account_id TEXT NOT NULL, event_key TEXT NOT NULL, step_key TEXT NOT NULL, PRIMARY KEY (account_id, event_key, step_key))`,
   // 2026-10-07 (step tiers): a step remembers its kind and whether a matching TODO already covers it; a planned event remembers its type.
   // Existing steps get their kind from their key; cab and travel stay null until the planner sees their published title (backfillKind).
-  () => {
+  function addKindColumns() {
     const has = (table: string, col: string) => (db.query(`PRAGMA table_info(${table})`).all() as { name: string }[]).some((c) => c.name === col);
     if (!has("plan_steps", "kind")) db.exec("ALTER TABLE plan_steps ADD COLUMN kind TEXT");
     if (!has("plan_steps", "covered")) db.exec("ALTER TABLE plan_steps ADD COLUMN covered INTEGER");
@@ -81,7 +81,15 @@ const migrations: (string | (() => void))[] = [
     db.exec(`UPDATE plan_steps SET kind = CASE step_key WHEN 'checkin' THEN 'checkin' WHEN 'pack' THEN 'pack' WHEN 'gift' THEN 'gift' WHEN 'book-tickets' THEN 'book-opening' END
       WHERE kind IS NULL AND step_key IN ('checkin', 'pack', 'gift', 'book-tickets')`);
   },
+  // 2026-10-07 (amendment 1): a ride, table or gift step remembers where it was for (a venue, or the person). Older steps stay null.
+  () => {
+    const has = (db.query("PRAGMA table_info(plan_steps)").all() as { name: string }[]).some((c) => c.name === "place");
+    if (!has) db.exec("ALTER TABLE plan_steps ADD COLUMN place TEXT");
+  },
 ];
+
+/** Index of the kinds migration (tests build a database from before it). */
+export const KINDS_MIGRATION_IDX = migrations.findIndex((m) => typeof m === "function" && m.name === "addKindColumns");
 
 function applyMigrations(): void {
   db.exec("CREATE TABLE IF NOT EXISTS _migrations (idx INTEGER PRIMARY KEY, applied_at INTEGER NOT NULL)");

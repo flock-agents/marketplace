@@ -42,3 +42,30 @@ export function kindTable(): string {
   });
   return ["| kind | tier | allowed on types | for | default key |", "|---|---|---|---|---|", ...rows].join("\n");
 }
+
+/** The person-dependent kinds whose steps record where they were for: a venue for a ride or a table, a person for a gift. */
+export const PLACE_KINDS: readonly string[] = ["cab-local", "gift", "table-booking"];
+
+const fold = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
+/** Letters, combining marks, digits and spaces only: punctuation (a full stop, a hyphen, an en-dash) never splits one place in two. */
+const plain = (s: string) => fold(s.replace(/[^\p{L}\p{M}\p{N}\s]/gu, " "));
+const MEETING_HOST = /\b(meet\.google\.com|zoom\.us|teams\.microsoft\.com)\b/i;
+
+/**
+ * Where a step of this kind is for, so the owner's habit there can be learned: the venue (the location up to its first comma)
+ * for cab-local and table-booking, the person (the title without a possessive, an age, "birthday", "anniversary" and the like) for gift.
+ * Null for other kinds, an empty location, or a location that is a link or a meeting host.
+ */
+export function placeOf(kind: string, event: { title: string; location?: string | null }): string | null {
+  if (kind === "cab-local" || kind === "table-booking") {
+    const loc = event.location?.trim() ?? "";
+    if (!loc || loc.includes("://") || MEETING_HOST.test(loc)) return null;
+    return plain(loc.split(",")[0]!) || null;
+  }
+  if (kind === "gift") {
+    const person = event.title.replace(/&/g, " and ").replace(/['\u2019]s\b/gi, "").replace(/\b\d+(st|nd|rd|th)\b/gi, " ")
+      .replace(/\b(birthday|anniversary|party|bash|celebration|day)\b/gi, " ");
+    return plain(person) || null;
+  }
+  return null;
+}

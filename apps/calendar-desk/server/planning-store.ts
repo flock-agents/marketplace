@@ -133,9 +133,9 @@ export function abandonPlan(planId: string, at: number, opts: { countTry?: boole
 
 // ── step keys ─────────────────────────────────────────────────────────────────────────────
 
-/** A step already recorded keeps its kind (the first one wins); backfillKind fills a null one. */
-export function recordStep(accountId: string, eventKey: string, stepKey: string, kind?: string | null): void {
-  db.query("INSERT OR IGNORE INTO plan_steps (account_id, event_key, step_key, kind) VALUES (?, ?, ?, ?)").run(accountId, eventKey, stepKey, kind ?? null);
+/** A step already recorded keeps its kind and place (the first one wins); backfillKind fills a null kind. */
+export function recordStep(accountId: string, eventKey: string, stepKey: string, kind?: string | null, place?: string | null): void {
+  db.query("INSERT OR IGNORE INTO plan_steps (account_id, event_key, step_key, kind, place) VALUES (?, ?, ?, ?, ?)").run(accountId, eventKey, stepKey, kind ?? null, place ?? null);
 }
 
 /** Each step's kind by its TODO source ref (`step:<eventKey>:<stepKey>`). Steps with no kind yet are left out. */
@@ -171,6 +171,15 @@ export function allStepKinds(): Map<string, string> {
 export function allCoveredStepRefs(): Set<string> {
   const rows = db.query("SELECT event_key, step_key FROM plan_steps WHERE covered = 1").all() as { event_key: string; step_key: string }[];
   return new Set(rows.map((r) => `step:${r.event_key}:${r.step_key}`));
+}
+
+/** Every account's steps that recorded a place, by source ref (`step:<eventKey>:<stepKey>`): the person's habits, not an account's. */
+export function allStepPlaces(): Map<string, { kind: string; place: string }> {
+  const out = new Map<string, { kind: string; place: string }>();
+  for (const r of db.query("SELECT event_key, step_key, kind, place FROM plan_steps WHERE kind IS NOT NULL AND place IS NOT NULL ORDER BY rowid").all() as { event_key: string; step_key: string; kind: string; place: string }[]) {
+    out.set(`step:${r.event_key}:${r.step_key}`, { kind: r.kind, place: r.place });
+  }
+  return out;
 }
 
 /** Steps keyed cab or travel still without a kind: the only ones backfillKind may fill. */
