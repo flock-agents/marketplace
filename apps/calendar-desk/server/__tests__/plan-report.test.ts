@@ -108,7 +108,8 @@ describe("handlePlanReport", () => {
     const r = await handlePlanReport({ planId: pl.planId, events: [{ event: "e1", type: "stay", steps: [pack] }] }, p.ctx, NOW);
     expect(r).toEqual({ accepted: ["e1/pack"], refused: [], done: true });
     expect(p.published).toEqual([{ sourceRef: "step:g1:pack", title: "Pack for Hampi trip", due: new Date(2026, 9, 11).getTime(), dueTimed: false, showFrom: "2026-10-10", status: "backlog",
-      maxDue: new Date(2026, 9, 12, 23, 59, 59, 999).getTime(), maxDueReason: "Stay at The Loft - Aadhya Homestay Hampi, Mon 12 Oct", context: { eventKey: "calendar-desk:g1", why: "a trip", kind: "pack" } }]);
+      maxDue: new Date(2026, 9, 12, 23, 59, 59, 999).getTime(), maxDueReason: "Stay at The Loft - Aadhya Homestay Hampi, Mon 12 Oct", context: { eventKey: "calendar-desk:g1", why: "a trip", kind: "pack" },
+      cover: { kind: "pack", eventTitle: "Stay at The Loft - Aadhya Homestay Hampi", eventLocation: undefined, eventDate: "2026-10-12" } }]);
     expect(P.stepKeysFor("acct", "g1")).toEqual(["pack"]);
     expect(P.plannedMark("acct", "g1")).not.toBeNull();
     expect(P.openPlan()).toBeNull();
