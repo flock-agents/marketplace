@@ -189,3 +189,30 @@ export function forgetEvent(accountId: string, eventKey: string): void {
     db.query("DELETE FROM cursors WHERE key = ?").run(waitCursor(accountId, eventKey));
   })();
 }
+
+// ── asks ──────────────────────────────────────────────────────────────────────────────────
+// What Calendar Desk published for each kind's one-time card. The answer lives on the card (its actionId). answer_reported stops
+// the same answer being reported twice; memory_written is set only once memory took the answer, so a failed write is retried.
+// Flock's list does not return a task's context, so the publish time and the facts the card saw are kept here.
+// Created here, not as a store migration: the table is new and only this section reads it.
+db.exec("CREATE TABLE IF NOT EXISTS plan_asks (kind TEXT PRIMARY KEY, published_at INTEGER NOT NULL, facts_json TEXT NOT NULL, answer_reported TEXT, memory_written TEXT)");
+
+export function recordAsk(kind: string, publishedAt: number, facts: string[]): void {
+  db.query("INSERT OR IGNORE INTO plan_asks (kind, published_at, facts_json) VALUES (?, ?, ?)").run(kind, publishedAt, JSON.stringify(facts));
+}
+
+export function askRecord(kind: string): { publishedAt: number; factsAtPublish: string[]; answerReported: string | null; memoryWritten: string | null } | null {
+  const r = db.query("SELECT published_at, facts_json, answer_reported, memory_written FROM plan_asks WHERE kind = ?").get(kind) as any;
+  return r ? { publishedAt: r.published_at, factsAtPublish: JSON.parse(r.facts_json), answerReported: r.answer_reported ?? null, memoryWritten: r.memory_written ?? null } : null;
+}
+
+/** Marks the answer as reported; false when it already was. A card with no record (store reset) gets one. */
+export function markAnswerReported(kind: string, answer: string, at: number): boolean {
+  db.query("INSERT OR IGNORE INTO plan_asks (kind, published_at, facts_json) VALUES (?, ?, '[]')").run(kind, at);
+  return db.query("UPDATE plan_asks SET answer_reported = ? WHERE kind = ? AND answer_reported IS NOT ?").run(answer, kind, answer).changes > 0;
+}
+
+/** Marks the answer as taken by memory (only after a successful write). */
+export function markMemoryWritten(kind: string, answer: string): void {
+  db.query("UPDATE plan_asks SET memory_written = ? WHERE kind = ?").run(answer, kind);
+}
