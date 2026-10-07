@@ -1,5 +1,5 @@
 import { describe, test, expect } from "bun:test";
-import { KINDS, EVENT_TYPES, kindSpec, kindTable, speaksToKind } from "../kinds";
+import { KINDS, EVENT_TYPES, kindSpec, kindTable } from "../kinds";
 
 describe("kinds", () => {
   test("13 kinds, unique", () => {
@@ -12,20 +12,12 @@ describe("kinds", () => {
       expect(KINDS.filter((k) => k.types.includes(t))).toEqual([]);
     }
   });
-  test("every Tier 2 kind has a query and an ask", () => {
+  test("every Tier 2 kind has a query and nothing to ask", () => {
     const t2 = KINDS.filter((k) => k.tier === 2);
     expect(t2.map((k) => k.kind)).toEqual(["cab-local", "gift", "table-booking"]);
     for (const k of t2) {
       expect(k.query).toBeTruthy();
-      expect(k.ask).toBeTruthy();
-    }
-  });
-  test("ask copy is plain: no jargon, no em-dash", () => {
-    for (const k of KINDS) {
-      if (!k.ask) continue;
-      for (const s of [k.ask.title, k.ask.yes, k.ask.no]) {
-        expect(s).not.toMatch(/tier|kind|tally|type|—/i);
-      }
+      expect(Object.keys(k).sort()).toEqual(["defaultKey", "for", "kind", "query", "tier", "types"]);
     }
   });
   test("spec values", () => {
@@ -41,17 +33,6 @@ describe("kinds", () => {
     expect(kindSpec("cab-local")?.query).toBe("cab Uber Ola drive");
     expect(kindSpec("gift")?.query).toBe("gift");
     expect(kindSpec("table-booking")?.query).toBe("table reservation");
-  });
-  test("speaksToKind: a whole action or query word, case-folded", () => {
-    expect(speaksToKind("cab-local", "Prefers to take a CAB to appointments")).toBe(true);
-    expect(speaksToKind("cab-local", "Takes an Uber to the dentist.")).toBe(true);
-    expect(speaksToKind("cab-local", "Moved to Indiranagar")).toBe(false);
-    expect(speaksToKind("cab-local", "Dentist appointment at Apollo Clinic")).toBe(false);
-    expect(speaksToKind("cab-local", "Ordered a cabinet")).toBe(false); // whole words only
-    expect(speaksToKind("gift", "Asha's birthday is 12 Oct")).toBe(false);
-    expect(speaksToKind("gift", "No gift for office birthdays")).toBe(true);
-    expect(speaksToKind("table-booking", "Likes a table by the window")).toBe(true);
-    expect(speaksToKind("checkin", "anything")).toBe(false); // no personal kind: no words
   });
   test("kindTable lists every kind once", () => {
     const table = kindTable();

@@ -2,12 +2,10 @@
 // Calendar Desk already made, read back from Flock) and wakes the paired agent with plan_events. Its report arrives
 // through the plan_events_done operation (plan-report.ts).
 import type { PlatformContext } from "@flock/app-sdk";
-import { eventsToPlan, openPlan, createPlan, setPlanSession, abandonPlan, plannedMark, allStepKinds, allCoveredStepRefs, unkindedCabSteps, backfillKind, heldEvents, dropHeld, PLAN_GIVE_UP_MS, PLAN_EVENTS_MAX, type PlanEventRef, type PlanPick } from "./planning-store";
+import { eventsToPlan, openPlan, createPlan, setPlanSession, abandonPlan, plannedMark, allStepKinds, allCoveredStepRefs, unkindedCabSteps, backfillKind, PLAN_GIVE_UP_MS, type PlanEventRef, type PlanPick } from "./planning-store";
 import { ymd } from "./events";
-import { getEvent } from "./store";
-import { KINDS, KIND_FACTS_LIMIT, KIND_SEARCH_LIMIT, type EventType, type Tier } from "./kinds";
-import { tally, withAnswers, type KindState } from "./tally";
-import { askStates, settleAsks, preference, answeredInChat, statedAnswers, type AskRow, type AskState } from "./asks";
+import { KINDS, KIND_FACTS_LIMIT, type EventType, type Tier } from "./kinds";
+import { tally, type KindState } from "./tally";
 
 const APP = "calendar-desk";
 const EVENT_FACTS_MAX = 3;
@@ -17,8 +15,8 @@ const hhmm = (ms: number) => { const d = new Date(ms); return `${String(d.getHou
 
 // The SDK methods this routine uses; typed here so the app does not depend on an SDK build that has them yet.
 // `withdrawn`: a dismissed row Calendar Desk itself withdrew (its event was deleted), not one the owner closed.
-// `skipped`, `closedAt` and `actionId` come from newer Flock; an older one leaves them out.
-interface AppTaskState { sourceRef: string; status: "open" | "done" | "dismissed"; withdrawn?: true; skipped?: true; closedAt?: number; actionId?: string; title: string; due: number | null; dueTimed: boolean; showFrom: number | null; updatedAt: number }
+// `skipped` and `closedAt` come from newer Flock; an older one leaves them out.
+interface AppTaskState { sourceRef: string; status: "open" | "done" | "dismissed"; withdrawn?: true; skipped?: true; closedAt?: number; title: string; due: number | null; dueTimed: boolean; showFrom: number | null; updatedAt: number }
 type Res<T> = { ok: true; data: T } | { ok: false; reason: string };
 interface PlanningPlatform {
   tasks: { list(opts?: { prefix?: string }): Promise<Res<{ tasks: AppTaskState[] }>> };
@@ -30,16 +28,15 @@ export interface BundleStep { key: string; /** absent for a step recorded before
 export interface BundleEvent {
   ref: string; event: string; title: string; date: string; time?: string; allDay: boolean;
   location?: string; guests?: string[];
-  /** "answered": planned before, held for a card the owner has now answered yes, offered once more. */
-  change: "new" | "changed" | "answered";
+  change: "new" | "changed";
   /** The type stored when the event was last planned. */
   type?: EventType;
   /** A changed event's date (and time) when it was last planned: its steps were dated against this. */
   was?: { date: string; time?: string };
   facts: string[]; steps: BundleStep[];
 }
-/** What the owner did with past steps of a kind: the tally, the kind's memory facts, and (personal kinds) whether the card asked. */
-export interface Habit { tier: Tier; tally: KindState; facts: string[]; asked?: false | "waiting" | true }
+/** What the owner did with past steps of a kind: the tally and the kind's memory facts. */
+export interface Habit { tier: Tier; tally: KindState; facts: string[] }
 export type PlanningResult = { woke: boolean; planId?: string; skipped?: "in-flight" | "nothing" | "usage" | "failed" };
 
 // Single flight: the open-plan check below is followed by awaits (steps, memory) before the plan is stored, so two
@@ -59,43 +56,7 @@ async function planOnce(platform: PlatformContext, now: Date): Promise<PlanningR
   if (open && now.getTime() - open.createdAt < PLAN_GIVE_UP_MS) return { woke: false, skipped: "in-flight" };
   if (open) abandonPlan(open.planId, now.getTime());
   const t = now.getTime();
-  type Pick = Omit<PlanPick, "change"> & { change: BundleEvent["change"] };
-  const picks: Pick[] = eventsToPlan(now);
-
-  // The cards: settled every run (expiry, an answer in chat, an answer by button written to memory), whatever there is to plan.
-  const askListed = await p.tasks.list({ prefix: "ask:" });
-  if (!askListed.ok) console.warn(`[calendar-desk] planning: could not read cards: ${askListed.reason}`);
-  const asks = askListed.ok ? askStates(askListed.data.tasks as AskRow[]) : new Map<string, AskState>();
-  // Any of the query's words (an older Flock ignores `any` and needs all of them). null: memory could not be read.
-  const factsByKind = new Map<string, string[] | null>();
-  for (const k of KINDS) {
-    if (!k.query) continue;
-    const r = await p.memory.search(k.query, { limit: KIND_SEARCH_LIMIT, any: true });
-    factsByKind.set(k.kind, r.ok ? r.data.facts : null);
-  }
-  if (askListed.ok) await settleAsks(platform, asks, factsByKind, t);
-
-  // Held events come back once, while still ahead, when their card was answered: yes by button, or in chat (a fact the card
-  // did not see withdrew it; the agent reads the fact). No, Mark done or expiry drop the hold.
-  const offeredHolds: { accountId: string; eventKey: string; kind: string }[] = [];
-  if (askListed.ok) {
-    for (const h of heldEvents()) {
-      // A past or gone event's hold ends whatever its card says (also when the card never got published).
-      const e = getEvent(h.accountId, h.eventKey);
-      const ahead = !!e && e.missingSince == null && e.localDate >= ymd(now) && (e.allDay || e.startAt == null || e.startAt > t);
-      if (!ahead) { dropHeld(h.accountId, h.eventKey, h.kind); continue; }
-      const status = asks.get(h.kind)?.status;
-      if (status === "none" || status === "waiting") continue;
-      const answered = status === "yes" || answeredInChat(asks.get(h.kind), factsByKind.get(h.kind) ?? []);
-      if (!answered) { dropHeld(h.accountId, h.eventKey, h.kind); continue; }
-      const already = picks.some((x) => x.accountId === h.accountId && x.eventKey === h.eventKey);
-      if (!already) {
-        if (picks.length >= PLAN_EVENTS_MAX) continue; // offered on a later run
-        picks.push({ ...e!, change: "answered" });
-      }
-      offeredHolds.push(h);
-    }
-  }
+  const picks: PlanPick[] = eventsToPlan(now);
   if (picks.length === 0) return { woke: false, skipped: "nothing" };
 
   const listed = await p.tasks.list({ prefix: "step:" });
@@ -109,22 +70,16 @@ async function planOnce(platform: PlatformContext, now: Date): Promise<PlanningR
     if (row) backfillKind(u.accountId, u.eventKey, u.stepKey, row.title);
   }
   const kinds = allStepKinds();
-  // The effective state, the same one the report's validator enforces: a card's answer beats the tally.
-  const effective = withAnswers(tally(states, kinds, t, allCoveredStepRefs()), statedAnswers(asks));
+  const tallied = tally(states, kinds, t, allCoveredStepRefs());
   const habits: Record<string, Habit> = {};
   for (const k of [...KINDS].sort((a, b) => (a.kind < b.kind ? -1 : 1))) {
     if (k.tier === "judgement") continue;
-    const facts = (factsByKind.get(k.kind) ?? []).slice(0, KIND_FACTS_LIMIT);
-    const st = asks.get(k.kind);
-    // A card answered by button is the owner's stated preference while it binds: it reads as a fact, the same words written to memory.
-    if (k.ask && (st?.status === "yes" || st?.status === "no") && st.binds !== false) {
-      const said = preference(k.ask.title, st.status === "yes");
-      if (!facts.includes(said)) facts.push(said);
-    }
-    const asked = k.tier === 2 ? (st?.status === "waiting" ? "waiting" as const : st && st.status !== "none" ? true as const : false as const) : undefined;
-    const state = effective.get(k.kind) ?? "none";
-    if (state === "none" && facts.length === 0 && !asked) continue;
-    habits[k.kind] = { tier: k.tier, tally: state, facts, ...(asked !== undefined ? { asked } : {}) };
+    // Any of the query's words (an older Flock ignores `any` and needs all of them).
+    const r = k.query ? await p.memory.search(k.query, { limit: KIND_FACTS_LIMIT, any: true }) : null;
+    const facts = r?.ok ? r.data.facts.slice(0, KIND_FACTS_LIMIT) : [];
+    const state = tallied.get(k.kind)?.state ?? "none";
+    if (state === "none" && facts.length === 0) continue;
+    habits[k.kind] = { tier: k.tier, tally: state, facts };
   }
 
   const events: BundleEvent[] = [];
@@ -162,8 +117,6 @@ async function planOnce(platform: PlatformContext, now: Date): Promise<PlanningR
     return { woke: false, skipped: usage ? "usage" : "failed" };
   }
   setPlanSession(plan.planId, res.data.sessionId);
-  // Offered once: the hold ends with the wake that offered it.
-  for (const h of offeredHolds) dropHeld(h.accountId, h.eventKey, h.kind);
   return { woke: true, planId: plan.planId };
 }
 

@@ -7,11 +7,11 @@ const P = await import("../planning-store");
 const { handlePlanReport, maxDueOf } = await import("../plan-report");
 const { ops } = await import("../ops");
 
-function wipe() { for (const t of ["events", "cursors", "planned", "plans", "plan_steps", "plan_asks", "plan_held"]) S._db.exec(`DELETE FROM ${t}`); }
+function wipe() { for (const t of ["events", "cursors", "planned", "plans", "plan_steps"]) S._db.exec(`DELETE FROM ${t}`); }
 beforeEach(wipe);
 
 const NOW = new Date(2026, 9, 6, 12, 0, 0);
-type TaskState = { sourceRef: string; status: "open" | "done" | "dismissed"; withdrawn?: true; actionId?: string; title: string; due: number | null; dueTimed: boolean; showFrom: number | null; updatedAt: number };
+type TaskState = { sourceRef: string; status: "open" | "done" | "dismissed"; withdrawn?: true; title: string; due: number | null; dueTimed: boolean; showFrom: number | null; updatedAt: number };
 function platform(o: { tasks?: TaskState[]; publish?: () => any; facts?: (q: string) => string[] } = {}) {
   const published: any[] = [], searches: any[] = [];
   const ctx = { tasks: {
@@ -397,150 +397,22 @@ describe("steps must fit the event's type and kind (planning step tiers M4)", ()
     expect(p2.published[0]).not.toHaveProperty("context");
     expect(P.plannedMark("acct", "g1")!.type).toBe("stay");
   });
-});
-
-describe("a personal step with no evidence: ask once, hold the event (planning step tiers M7)", () => {
-  const DAY = 86_400_000;
-  const dentist = (loc: string | null = "Apollo Clinic, Jayanagar") => {
-    seed("d1", "Dentist", "2026-10-09", new Date(2026, 9, 9, 10, 0).getTime());
-    if (loc) S._db.query("UPDATE events SET location = ? WHERE event_key = 'd1'").run(loc);
-  };
-  const report = async (entries: { key: string; type: string; steps?: any[] }[], p = platform()) => {
-    S._db.exec("DELETE FROM plans");
-    const pl = plan(...entries.map((e) => e.key));
-    const r: any = await handlePlanReport({ planId: pl.planId, events: entries.map((e, i) => ({ event: `e${i + 1}`, type: e.type, steps: e.steps ?? [] })) }, p.ctx, NOW);
-    return { r, p, asks: p.published.filter((t) => t.sourceRef.startsWith("ask:")) };
-  };
-
-  test("(e) an appointment with no evidence and no steps: planned, one cab card with its two buttons, the event held", async () => {
-    dentist();
-    const { r, asks, p } = await report([{ key: "d1", type: "appointment" }]);
-    expect(r).toEqual({ accepted: [], refused: [], done: true });
-    expect(P.plannedMark("acct", "d1")!.type).toBe("appointment");
-    expect(asks).toHaveLength(1);
-    expect(asks[0]).toMatchObject({ sourceRef: "ask:cab-local", title: "Remind you to book a cab before appointments?",
-      actions: [{ id: "yes", label: "Book a cab reminder" }, { id: "no", label: "Don't remind me" }] });
-    expect(P.heldEvents()).toEqual([{ accountId: "acct", eventKey: "d1", kind: "cab-local" }]);
-    expect(p.searches).toEqual([{ q: "cab Uber Ola drive", opts: { limit: 3, any: true } }]);
-  });
-
-  test("(f) an appointment and a birthday with no evidence: two cards, one per kind, both events held", async () => {
-    dentist();
-    seed("b1", "Asha's birthday", "2026-10-12");
-    const { r, asks } = await report([{ key: "d1", type: "appointment" }, { key: "b1", type: "occasion" }]);
-    expect(r.done).toBe(true);
-    expect(asks.map((t) => t.sourceRef)).toEqual(["ask:cab-local", "ask:gift"]);
-    expect(P.heldEvents()).toEqual([{ accountId: "acct", eventKey: "b1", kind: "gift" }, { accountId: "acct", eventKey: "d1", kind: "cab-local" }]);
-  });
-
-  test("an occasion asks by its title: dinner or lunch for a table, a birthday or anniversary for a gift, both can apply, neither asks nothing", async () => {
-    seed("o1", "Anniversary dinner", "2026-10-12");
-    expect((await report([{ key: "o1", type: "occasion" }])).asks.map((t) => t.sourceRef)).toEqual(["ask:gift", "ask:table-booking"]);
-    wipe(); seed("o2", "Team outing", "2026-10-12");
-    expect((await report([{ key: "o2", type: "occasion" }])).asks.map((t) => t.sourceRef)).toEqual(["ask:table-booking"]);
-    wipe(); seed("o3", "Diwali party", "2026-10-12");
-    const none = await report([{ key: "o3", type: "occasion" }]);
-    expect(none.asks).toEqual([]);
-    expect(P.heldEvents()).toEqual([]);
-    wipe(); seed("o4", "Birthdays board", "2026-10-12"); // whole words only
-    expect((await report([{ key: "o4", type: "occasion" }])).asks).toEqual([]);
-  });
-
-  test("a meeting never asks, even in person; an appointment with no location does not ask", async () => {
-    dentist();
-    expect((await report([{ key: "d1", type: "meeting" }])).asks).toEqual([]);
-    wipe(); dentist(null);
-    expect((await report([{ key: "d1", type: "appointment" }])).asks).toEqual([]);
-    expect(P.heldEvents()).toEqual([]);
-  });
-
-  test("evidence means no ask: a tally, a memory fact, or an answered card", async () => {
-    dentist();
-    P.recordStep("acct", "g0", "cab", "cab-local");
-    const done: any = { ...closedTask("step:g0:cab", "done"), closedAt: NOW.getTime() - DAY };
-    expect((await report([{ key: "d1", type: "appointment" }], platform({ tasks: [done] }))).asks).toEqual([]);
-    wipe(); dentist();
-    expect((await report([{ key: "d1", type: "appointment" }], platform({ facts: () => ["Drives to appointments."] }))).asks).toEqual([]);
-    wipe(); dentist();
-    const answered = { ...closedTask("ask:cab-local", "done"), actionId: "no" };
-    expect((await report([{ key: "d1", type: "appointment" }], platform({ tasks: [answered] }))).asks).toEqual([]);
-    expect(P.heldEvents()).toEqual([]);
-  });
-
-  test("a card already open: no second card, the event is held; a card closed unanswered: no card, no hold", async () => {
-    dentist();
-    const open: TaskState = { sourceRef: "ask:cab-local", status: "open", title: "q", due: NOW.getTime(), dueTimed: false, showFrom: null, updatedAt: 0 };
-    expect((await report([{ key: "d1", type: "appointment" }], platform({ tasks: [open] }))).asks).toEqual([]);
-    expect(P.heldEvents()).toEqual([{ accountId: "acct", eventKey: "d1", kind: "cab-local" }]);
-    wipe(); dentist();
-    const expired = { ...open, status: "dismissed" as const, withdrawn: true as const };
-    expect((await report([{ key: "d1", type: "appointment" }], platform({ tasks: [expired] }))).asks).toEqual([]);
-    expect(P.heldEvents()).toEqual([]);
-  });
-
-  test("an event that got the kind's step is not held", async () => {
-    dentist();
-    const cab = { key: "cab", kind: "cab-local", title: "Book a cab to Apollo", dueDate: "2026-10-09", dueTime: "09:15", why: "w" };
-    const { r, asks } = await report([{ key: "d1", type: "appointment", steps: [cab] }]);
-    expect(r.accepted).toEqual(["e1/cab"]);
-    expect(asks).toEqual([]);
-    expect(P.heldEvents()).toEqual([]);
-  });
-
-  test("C4: the tally is pooled across accounts: another account's done cab-local step is evidence, its skips switch a kind off here", async () => {
-    dentist();
-    P.recordStep("acct2", "h0", "cab", "cab-local");
-    const done: any = { ...closedTask("step:h0:cab", "done"), closedAt: NOW.getTime() - DAY };
-    expect((await report([{ key: "d1", type: "appointment" }], platform({ tasks: [done] }))).asks).toEqual([]);
-    expect(P.heldEvents()).toEqual([]);
+  test("C4: another account's two skips switch a kind off here", async () => {
     hampi();
     for (const k of ["a", "b"]) P.recordStep("acct2", "h1", k, "cab-airport");
-    const skip = (k: string, ago: number): any => ({ ...closedTask(`step:h1:${k}`), skipped: true, closedAt: NOW.getTime() - ago * DAY });
-    const cab = { key: "cab", kind: "cab-airport", title: "Cab to the airport", dueDate: "2026-10-11", why: "w" };
-    const { r } = await report([{ key: "g1", type: "stay", steps: [cab] }], platform({ tasks: [skip("a", 3), skip("b", 2)] }));
+    const skip = (k: string, ago: number): any => ({ ...closedTask(`step:h1:${k}`), skipped: true, closedAt: NOW.getTime() - ago * 86_400_000 });
+    const pl = plan("g1");
+    const r: any = await handlePlanReport({ planId: pl.planId, events: [{ event: "e1", type: "stay", steps: [step("cab-airport", "cab")] }] }, platform({ tasks: [skip("a", 3), skip("b", 2)] }).ctx, NOW);
     expect(r.refused).toEqual([{ item: "e1/cab", reason: "the user dismissed the last two cab-airport steps" }]);
   });
-
-  test("C6: a card answered no refuses the kind; answered yes, two skips no longer switch it off", async () => {
-    dentist();
-    const cab = { key: "cab", kind: "cab-local", title: "Book a cab to Apollo", dueDate: "2026-10-09", dueTime: "09:15", why: "w" };
-    const no = { ...closedTask("ask:cab-local", "done"), actionId: "no" };
-    const refusedNo = await report([{ key: "d1", type: "appointment", steps: [cab] }], platform({ tasks: [no] }));
-    expect(refusedNo.r.refused).toEqual([{ item: "e1/cab", reason: "the user said no to cab-local steps" }]);
-    for (const k of ["a", "b"]) P.recordStep("acct", "g0", k, "cab-local");
-    const skip = (k: string, ago: number): any => ({ ...closedTask(`step:g0:${k}`), skipped: true, closedAt: NOW.getTime() - ago * DAY });
-    const skips = [skip("a", 3), skip("b", 2)];
-    expect((await report([{ key: "d1", type: "appointment", steps: [cab] }], platform({ tasks: skips }))).r.refused[0].reason).toBe("the user dismissed the last two cab-local steps");
-    const yes = { ...closedTask("ask:cab-local", "done"), actionId: "yes" };
-    expect((await report([{ key: "d1", type: "appointment", steps: [cab] }], platform({ tasks: [...skips, yes] }))).r.accepted).toEqual(["e1/cab"]);
-  });
-
-  test("I1: a no released by the last planning run (its fact forgotten, or a newer fact) no longer refuses the kind", async () => {
-    dentist();
-    const cab = { key: "cab", kind: "cab-local", title: "Book a cab to Apollo", dueDate: "2026-10-09", dueTime: "09:15", why: "w" };
-    const no = { ...closedTask("ask:cab-local", "done"), actionId: "no" };
-    P.markAnswerReported("cab-local", "no", NOW.getTime() - DAY);
-    P.setAnswerBinds("cab-local", false);
-    expect((await report([{ key: "d1", type: "appointment", steps: [cab] }], platform({ tasks: [no] }))).r.accepted).toEqual(["e1/cab"]);
-  });
-
-  test("cards that cannot be read: the report waits (TASKS_UNAVAILABLE), so a stated no stays binding", async () => {
-    dentist();
+  test("a report reads no ask: rows", async () => {
+    hampi();
+    const lists: any[] = [];
     const p = platform();
     const list = (p.ctx as any).tasks.list;
-    (p.ctx as any).tasks.list = async (o: { prefix?: string }) => (o.prefix === "ask:" ? failed("board offline") : list(o));
-    const cab = { key: "cab", kind: "cab-local", title: "Book a cab", dueDate: "2026-10-09", dueTime: "09:15", why: "w" };
-    const { r } = await report([{ key: "d1", type: "appointment", steps: [cab] }], p);
-    expect(r).toMatchObject({ code: "TASKS_UNAVAILABLE", status: 503 });
-    expect(p.published).toEqual([]);
-    expect(P.plannedMark("acct", "d1")).toBeNull();
-  });
-
-  test("an event left unplanned (a refused step) publishes no card", async () => {
-    dentist();
-    const { r, asks } = await report([{ key: "d1", type: "appointment", steps: [{ key: "BAD", kind: "other", title: "t", dueDate: "2026-10-08", why: "w" }] }]);
-    expect(r.done).toBe(false);
-    expect(asks).toEqual([]);
+    (p.ctx as any).tasks.list = async (o: any) => { lists.push(o); return list(o); };
+    await handlePlanReport({ planId: plan("g1").planId, events: [{ event: "e1", type: "stay", steps: [pack] }] }, p.ctx, NOW);
+    expect(lists.map((o) => o.prefix)).toEqual(["step:"]);
   });
 });
 

@@ -235,3 +235,21 @@ describe("migration of a database from before kinds", () => {
     });
   });
 });
+
+describe("an instance upgraded from the ask card", () => {
+  test("plan_asks and plan_held rows on disk are left alone and nothing fails without them", () => {
+    S._db.exec(`CREATE TABLE IF NOT EXISTS plan_asks (kind TEXT PRIMARY KEY, published_at INTEGER NOT NULL, facts_json TEXT NOT NULL, answer_reported TEXT, memory_written TEXT);
+      CREATE TABLE IF NOT EXISTS plan_held (account_id TEXT NOT NULL, event_key TEXT NOT NULL, kind TEXT NOT NULL, held_at INTEGER NOT NULL, PRIMARY KEY (account_id, event_key, kind));
+      INSERT OR IGNORE INTO plan_asks VALUES ('cab-local', 1, '[]', 'yes', 'yes');
+      INSERT OR IGNORE INTO plan_held VALUES ('acct', 'a', 'cab-local', 1);`);
+    P.markPlanned([ref("a", "2026-11-01")], 1);
+    P.recordStep("acct", "a", "cab", "cab-local");
+    P.forgetEvent("acct", "a");
+    expect(P.plannedMark("acct", "a")).toBeNull();
+    expect(S._db.query("SELECT COUNT(*) AS n FROM plan_held").get()).toEqual({ n: 1 });
+    expect(S._db.query("SELECT COUNT(*) AS n FROM plan_asks").get()).toEqual({ n: 1 });
+    S._db.exec("DROP TABLE plan_asks; DROP TABLE plan_held");
+    P.markPlanned([ref("b", "2026-11-01")], 1);
+    expect(() => P.forgetEvent("acct", "b")).not.toThrow();
+  });
+});

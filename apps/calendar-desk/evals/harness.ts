@@ -29,11 +29,11 @@ export interface Planned {
   /** source refs Calendar Desk withdrew (its own cards, during the run or the report) */ withdrawn: string[];
 }
 
-export function reset(): void { for (const t of ["events", "cursors", "planned", "plans", "plan_steps", "plan_asks", "plan_held"]) S._db.exec(`DELETE FROM ${t}`); }
+export function reset(): void { for (const t of ["events", "cursors", "planned", "plans", "plan_steps"]) S._db.exec(`DELETE FROM ${t}`); }
 
 const DAY = 86400_000;
 type Row = { sourceRef: string; status: "open" | "done" | "dismissed"; title: string; due: number | null; dueTimed: boolean; showFrom: number | null; updatedAt: number;
-  withdrawn?: true; skipped?: true; closedAt?: number; actionId?: string };
+  withdrawn?: true; skipped?: true; closedAt?: number };
 
 /** Seeds the case into the store and runs the real planning routine; `payload` is what the agent would be woken with. */
 export async function plan(c: PlanCase): Promise<Planned> {
@@ -56,11 +56,6 @@ export async function plan(c: PlanCase): Promise<Planned> {
       S.saveEventDetails(ACCOUNT, key, { guests: e.guests ?? [], ...(e.location ? { location: e.location } : {}) }, nowMs - 3600_000, e.location ?? null);
     }
     if (e.offered === false) P.markPlanned([{ accountId: ACCOUNT, eventKey: key, date: cur.localDate, startAt: cur.startAt, type: e.type ?? null }], nowMs - 3600_000);
-    else if (e.held) {
-      // Planned on an earlier run with its type, held for the kind's card.
-      P.markPlanned([{ accountId: ACCOUNT, eventKey: key, date: cur.localDate, startAt: cur.startAt, type: e.type ?? null }], nowMs - 2 * DAY);
-      P.holdEvent(ACCOUNT, key, e.held, nowMs - 2 * DAY);
-    }
     else if (e.movedFrom) { const old = at(e.movedFrom.plus, e.movedFrom.time); P.markPlanned([{ accountId: ACCOUNT, eventKey: key, date: old.localDate, startAt: old.startAt }], nowMs - 86400_000); }
     for (const s of e.steps ?? []) {
       P.recordStep(ACCOUNT, key, s.key);
@@ -74,14 +69,6 @@ export async function plan(c: PlanCase): Promise<Planned> {
     states.push({ sourceRef: `step:${eventKey}:${key}`, status: h.outcome === "done" ? "done" : "dismissed", title: `Past ${h.kind} step`, due: at, dueTimed: false, showFrom: null, updatedAt: at, closedAt: at,
       ...(h.outcome === "skipped" ? { skipped: true as const } : {}), ...(h.outcome === "withdrawn" ? { withdrawn: true as const } : {}) });
   }
-  // The one-time cards: an open one was published 2 days ago (an expired one 15), an answered one 5 days ago.
-  for (const a of c.asks ?? []) {
-    const open = a.state === "open" || a.state === "expired";
-    const publishedAt = nowMs - (a.state === "expired" ? 15 : open ? 2 : 5) * DAY;
-    P.recordAsk(a.kind, publishedAt, a.openFacts ?? []);
-    states.push({ sourceRef: `ask:${a.kind}`, status: open ? "open" : "done", title: kindSpec(a.kind)?.ask?.title ?? a.kind, due: publishedAt, dueTimed: false, showFrom: null, updatedAt: publishedAt,
-      ...(open ? {} : { closedAt: nowMs - 3 * DAY }), ...(a.state === "yes" || a.state === "no" ? { actionId: a.state } : {}) });
-  }
   let payload: any = null;
   const published: any[] = [];
   const withdrawn: string[] = [];
@@ -91,7 +78,6 @@ export async function plan(c: PlanCase): Promise<Planned> {
       list: async (o: { prefix?: string } = {}) => ok({ tasks: states.filter((t) => t.sourceRef.startsWith(o.prefix ?? "")).map((t) => ({ ...t })) }),
       publish: async (t: any) => {
         published.push(t);
-        if (String(t.sourceRef).startsWith("ask:") && !states.some((r) => r.sourceRef === t.sourceRef)) states.push({ sourceRef: t.sourceRef, status: "open", title: t.title, due: t.due ?? null, dueTimed: false, showFrom: null, updatedAt: nowMs });
         return ok({});
       },
       withdraw: async (ref: string) => {
@@ -187,7 +173,7 @@ export async function grade(c: PlanCase, pl: Planned, calls: Call[] | null): Pro
   const problems: string[] = [];
   const bundleEvents: Record<string, any> = {};
   for (const be of pl.payload.events) bundleEvents[pl.refOf[be.ref]!] = be;
-  const out: Outcome = { steps: {}, ties: [], types: {}, cards: [], withdrawn: [], bundle: { events: bundleEvents, habits: pl.payload.habits ?? {} } };
+  const out: Outcome = { steps: {}, ties: [], types: {}, bundle: { events: bundleEvents, habits: pl.payload.habits ?? {} } };
   let reported = false, done = false;
   for (const call of calls) {
     const method = String(call?.method ?? "").toUpperCase(), path = String(call?.path ?? "").replace(/^flock-api\s+/, "");
@@ -222,9 +208,6 @@ export async function grade(c: PlanCase, pl: Planned, calls: Call[] | null): Pro
       }
     } else problems.push(`unexpected call ${method} ${path}`);
   }
-  for (const t of pl.published) if (String(t.sourceRef).startsWith("ask:"))
-    out.cards.push({ kind: t.sourceRef.slice(4), title: t.title, buttons: (t.actions ?? []).map((a: any) => a.label), expiresInDays: t.maxDue != null && t.due != null ? Math.round((t.maxDue - t.due) / DAY) : null });
-  out.withdrawn = pl.withdrawn.filter((r) => r.startsWith("ask:")).map((r) => r.slice(4));
   if (!reported) problems.push(`${c.id}: no plan_events_done report`);
   else if (!done) problems.push(`${c.id}: the plan was not answered (an offered event was left unplanned)`);
   return [...problems, ...c.expect(out)];

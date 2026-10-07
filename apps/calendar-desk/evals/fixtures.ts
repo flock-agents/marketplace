@@ -7,7 +7,7 @@
  * planning-instructions.md (then re-embedded), never by loosening a case. All names are invented.
  *
  * A case describes the STATE (events in the store, steps already made, the user's TODOs, how the owner closed past steps,
- * memory facts per step kind, the one-time cards); harness.ts builds the real bundle from it with runPlanning. Every case
+ * memory facts per step kind); harness.ts builds the real bundle from it with runPlanning. Every case
  * carries `answer` (a correct reply) and `wrong` (a plausible incorrect one): the dry test proves the grader passes the
  * first and fails the second without a model. `dry` lists scripted reports Calendar Desk's own checks must refuse.
  *
@@ -44,30 +44,22 @@ export interface EventSpec {
   steps?: ExistingStep[];
   /** Already planned and unchanged: in the store (so a TODO can name it) but never offered. */
   offered?: false;
-  /** Planned before (with its type) and held for this kind's card: offered again only once the card is answered. */
-  held?: string;
 }
 export interface TodoSpec { id: string; title: string; duePlus?: number; by: "you" | "mail" | "calendar-desk"; /** the pointer it is already tied to */ tiedTo?: string }
 /** A Calendar Desk step of `kind` the owner closed `daysAgo` days before the run: done, "Not important", or withdrawn by Calendar Desk. */
 export interface HabitSpec { kind: string; outcome: "done" | "skipped" | "withdrawn"; daysAgo: number }
-/** The kind's one-time card: open (published 2 days ago), answered by a button, closed with Mark done, or open past its 14 days. */
-export interface AskSpec { kind: string; state: "open" | "yes" | "no" | "markdone" | "expired"; /** the kind's facts memory held when the card was published */ openFacts?: string[] }
 export interface Answer { steps: Record<string, Step[]>; ties: { todo: string; ref: string }[]; /** a type other than the event's own (wrong answers only) */ types?: Record<string, EventType> }
-/** A card Calendar Desk published during the report. */
-export interface Card { kind: string; title: string; buttons: string[]; expiresInDays: number | null }
 /** What the model did, translated back to fixture refs, plus what Calendar Desk did around it. */
 export interface Outcome {
   steps: Record<string, Step[]>; ties: { todo: string; ref: string }[];
   /** the type the report gave each event */ types: Record<string, string>;
-  /** cards published after the report */ cards: Card[];
-  /** kinds whose open card Calendar Desk withdrew during the run (expired, or answered in chat) */ withdrawn: string[];
   /** the bundle the agent was woken with: events by fixture ref, and habits */ bundle: { events: Record<string, any>; habits: Record<string, any> };
 }
 /** A scripted report (fixture ref -> type and steps; events left out report no steps) Calendar Desk must refuse with `refused`. */
 export interface DryReport { name: string; report: Record<string, { type?: EventType; steps: Step[] }>; refused: RegExp }
 export interface PlanCase {
   id: string; events: EventSpec[]; todos?: TodoSpec[]; /** Epoch ms the run happens at (default NOW, 07:50). */ now?: number;
-  habits?: HabitSpec[]; asks?: AskSpec[];
+  habits?: HabitSpec[];
   /** Live runs of this case (default: the live file's RUNS); the same evidence must give the same plan every run. */ runs?: number;
   expect: (o: Outcome) => string[]; answer: Answer; wrong: Answer; dry?: DryReport[];
 }
@@ -113,26 +105,6 @@ export function namesPlace(id: string, o: Outcome, ref: string, kind: string, pl
   if (!ks.length) return [`${id}: no ${kind} step for ${ref}`];
   return ks.some((s) => place.test(text(s))) ? [] : [`${id}: the ${kind} step does not name the place`];
 }
-/** Exactly these cards were published after the report. */
-export function cardsExactly(id: string, o: Outcome, kinds: string[]): string[] {
-  const got = o.cards.map((c) => c.kind).sort(), w = [...kinds].sort();
-  return got.join(",") === w.join(",") ? [] : [`${id}: cards published [${got.join(", ")}], expected [${w.join(", ")}]`];
-}
-// Spec §4: one plain question per kind, two buttons naming the answer, expiring 14 days after publishing.
-const CARD_COPY: Record<string, { title: string; buttons: string[] }> = {
-  "cab-local": { title: "Remind you to book a cab before appointments?", buttons: ["Book a cab reminder", "Don't remind me"] },
-  gift: { title: "Remind you to buy a gift before family birthdays?", buttons: ["Gift reminder", "Don't remind me"] },
-  "table-booking": { title: "Remind you to book a table before dinners out?", buttons: ["Table reminder", "Don't remind me"] },
-};
-export function cardCopy(id: string, o: Outcome, kind: string): string[] {
-  const c = o.cards.find((x) => x.kind === kind), want = CARD_COPY[kind]!;
-  if (!c) return [`${id}: no ${kind} card`];
-  const p: string[] = [];
-  if (c.title !== want.title) p.push(`${id}: ${kind} card asks "${c.title}", expected "${want.title}"`);
-  if (c.buttons.join(" | ") !== want.buttons.join(" | ")) p.push(`${id}: ${kind} card buttons [${c.buttons.join(" | ")}], expected [${want.buttons.join(" | ")}]`);
-  if (c.expiresInDays !== 14) p.push(`${id}: ${kind} card expires in ${c.expiresInDays} days, expected 14`);
-  return p;
-}
 const habitOf = (o: Outcome, kind: string) => o.bundle.habits[kind];
 
 // --- builders -----------------------------------------------------------------------------
@@ -169,10 +141,7 @@ const APOLLO = "Apollo Clinic, Indiranagar", SMILE = "Smile Dental, Koramangala"
 const clinic = (ref = "e1") => ev(ref, { title: "Physio session", type: "appointment", source: "google", plus: 3, time: "10:00", guests: [{ name: "Apollo Front Desk", email: "frontdesk@apolloclinic.in", rsvp: "yes" }], location: APOLLO });
 const inprimeVisit = () => ev("e1", { title: "Visit Inprime office", type: "appointment", source: "google", plus: 2, time: "11:30", location: INPRIME });
 const dentist = (o: Partial<EvOpts> = {}) => ev("e1", { title: "Dentist appointment", type: "appointment", source: "google", plus: 3, time: "17:00", location: SMILE, ...o });
-const SKIN = "Skin Clinic, Jayanagar";
-const derm = (ref = "e1", o: Partial<EvOpts> = {}) => ev(ref, { title: "Dermatologist appointment", type: "appointment", source: "google", plus: 4, time: "11:00", location: SKIN, ...o });
-const derma = () => cabTo(SKIN, 4, "10:15");
-// In-person client meetings elsewhere (cab-local only with evidence; a meeting never asks).
+// In-person client meetings elsewhere (cab-local only with evidence).
 const ACME = "Acme Corp, 4th floor, Prestige Tower, MG Road";
 const acmeVisit = (o: Partial<EvOpts> = {}) => ev("e1", { title: "Acme quarterly business review", type: "meeting", source: "google", plus: 3, time: "11:00",
   guests: [{ name: "Yogesh", email: "yogesh@crafo.ai", rsvp: "yes" }, { name: "Priya Example", email: "priya@acme.com", rsvp: "yes" }], location: ACME, ...o });
@@ -217,7 +186,7 @@ export const PLAN_CASES: PlanCase[] = [
   // Spec §7 birthday-daughter A (was birthday-close-family): the relation alone is no evidence for a gift: no step, one card.
   {
     id: "birthday-daughter-A", events: [bday4()],
-    expect: (o) => [...nothingFor("birthday-daughter-A", o, "e1"), ...cardsExactly("birthday-daughter-A", o, ["gift"]), ...cardCopy("birthday-daughter-A", o, "gift")],
+    expect: (o) => [...nothingFor("birthday-daughter-A", o, "e1")],
     answer: { steps: { e1: [] }, ties: [] },
     wrong: only("e1", [step("gift", "gift", "Buy a birthday gift for Kavya", D(3), D(1))]),
   },
@@ -371,7 +340,7 @@ export const PLAN_CASES: PlanCase[] = [
       const p: string[] = [];
       for (const s of stepsFor(o, "e1")) if (s.key !== "cab" && (s.kind === "cab-local" || CAB.test(titleOf(s)))) p.push(`moved-event-later-keeps-step: a new key "${s.key}" for a cab that "cab" already covers`);
       for (const s of stepsFor(o, "e1")) if (s.key === "cab" && s.kind !== "cab-local") p.push(`moved-event-later-keeps-step: the cab step re-dated as kind ${s.kind}, expected cab-local`);
-      return [...p, ...cardsExactly("moved-event-later-keeps-step", o, []), ...stepDateProblems("moved-event-later-keeps-step", o, { date: D(10), ref: "e1" })];
+      return [...p, ...stepDateProblems("moved-event-later-keeps-step", o, { date: D(10), ref: "e1" })];
     },
     answer: only("e1", [cabTo("the dentist", 9)]),
     wrong: only("e1", [{ ...cabTo("the dentist", 9), key: "cab-2" }]),
@@ -419,7 +388,7 @@ export const PLAN_CASES: PlanCase[] = [
   {
     id: "meeting-with-guests-gets-nothing",
     events: [ev("e1", { title: "Design review", type: "meeting", source: "google", plus: 2, time: "16:00", guests: GUESTS_YOGESH })],
-    expect: (o) => [...nothingFor("meeting-with-guests-gets-nothing", o, "e1"), ...cardsExactly("meeting-with-guests-gets-nothing", o, [])],
+    expect: (o) => [...nothingFor("meeting-with-guests-gets-nothing", o, "e1")],
     answer: none,
     // Reviewing a design is not presenting it: no prepare-ahead.
     wrong: only("e1", [step("prepare", "prepare-ahead", "Prepare for the design review", D(1), D(1))]),
@@ -428,21 +397,21 @@ export const PLAN_CASES: PlanCase[] = [
   // Appointments with a place, with and without evidence for a cab (spec §7 "cab-local variants").
   {
     id: "clinic-invite-is-an-appointment", events: [clinic()],
-    expect: (o) => [...nothingFor("clinic-invite-is-an-appointment", o, "e1"), ...cardsExactly("clinic-invite-is-an-appointment", o, ["cab-local"])],
+    expect: (o) => [...nothingFor("clinic-invite-is-an-appointment", o, "e1")],
     answer: { steps: { e1: [] }, ties: [] },
     wrong: only("e1", [cabTo(APOLLO, 3, "09:15")]),
   },
   {
     id: "clinic-invite-is-an-appointment-cab-on", events: [clinic()], habits: [did("cab-local", 12)],
     expect: (o) => [...exactKinds("clinic-invite-is-an-appointment-cab-on", o, "e1", ["cab-local"]), ...namesPlace("clinic-invite-is-an-appointment-cab-on", o, "e1", "cab-local", /apollo|indiranagar/i),
-      ...beforeStart("clinic-invite-is-an-appointment-cab-on", o, clinic()), ...cardsExactly("clinic-invite-is-an-appointment-cab-on", o, [])],
+      ...beforeStart("clinic-invite-is-an-appointment-cab-on", o, clinic())],
     answer: only("e1", [cabTo(APOLLO, 3, "09:15")]),
     wrong: { steps: { e1: [] }, ties: [] },
   },
   {
     // A solo entry at a place is an in-person visit (an appointment), not a meeting: no guests, does not read like a sync.
     id: "solo-entry-with-location", events: [inprimeVisit()],
-    expect: (o) => [...nothingFor("solo-entry-with-location", o, "e1"), ...cardsExactly("solo-entry-with-location", o, ["cab-local"])],
+    expect: (o) => [...nothingFor("solo-entry-with-location", o, "e1")],
     answer: { steps: { e1: [] }, ties: [] },
     wrong: only("e1", [step("prepare", "other", "Prepare notes for the Inprime visit", D(1), D(1))]),
   },
@@ -456,7 +425,7 @@ export const PLAN_CASES: PlanCase[] = [
   {
     // A self-entered appointment has no guests: the title, not the missing guests, says what it is (I2).
     id: "self-entered-appointment-with-location", events: [dentist()],
-    expect: (o) => [...nothingFor("self-entered-appointment-with-location", o, "e1"), ...cardsExactly("self-entered-appointment-with-location", o, ["cab-local"])],
+    expect: (o) => [...nothingFor("self-entered-appointment-with-location", o, "e1")],
     answer: { steps: { e1: [] }, ties: [] },
     wrong: { steps: { e1: [] }, ties: [], types: { e1: "meeting" } },
     dry: [dryStep("pack on an appointment", "e1", [step("pack", "pack", "Pack a bag", D(2))], /pack does not fit an appointment/)],
@@ -489,7 +458,7 @@ export const PLAN_CASES: PlanCase[] = [
     // A parent-teacher meeting with guests is a meeting: nothing (meeting prep is its own routine), no card.
     id: "school-ptm-with-teachers",
     events: [ev("e1", { title: "Agastya School PTM", type: "meeting", source: "google", plus: 3, time: "13:15", guests: [{ name: "Class Teacher", email: "teacher@school.edu.in", rsvp: "yes" }, { name: "Coordinator", email: "coord@school.edu.in", rsvp: "yes" }] })],
-    expect: (o) => [...nothingFor("school-ptm-with-teachers", o, "e1"), ...cardsExactly("school-ptm-with-teachers", o, [])],
+    expect: (o) => [...nothingFor("school-ptm-with-teachers", o, "e1")],
     answer: none,
     wrong: only("e1", [step("prepare", "prepare-ahead", "Prepare questions for the PTM", D(2), D(2))]),
   },
@@ -504,7 +473,7 @@ export const PLAN_CASES: PlanCase[] = [
     ],
     expect: (o) => [
       ...["task-o1-inprime-tue", "task-o2-inprime-thu"].filter((id) => tieFor(o, id, "e1")).map((id) => `same-place-is-not-the-same-occasion: ${id} ("Go to the Inprime office") was tied to the Calendar app review e1`),
-      ...nothingFor("same-place-is-not-the-same-occasion", o, "e1"), ...cardsExactly("same-place-is-not-the-same-occasion", o, []),
+      ...nothingFor("same-place-is-not-the-same-occasion", o, "e1"),
     ],
     answer: none,
     wrong: { steps: {}, ties: [{ todo: "task-o1-inprime-tue", ref: "e1" }] },
@@ -575,15 +544,14 @@ export const PLAN_CASES: PlanCase[] = [
   {
     id: "client-meeting-video-link",
     events: [ev("e1", { title: "Acme weekly sync", type: "meeting", source: "google", plus: 2, time: "15:00", guests: [{ name: "Priya Example", email: "priya@acme.com", rsvp: "yes" }], location: "https://meet.google.com/abc-defg-hij" })],
-    expect: (o) => [...nothingFor("client-meeting-video-link", o, "e1"), ...cardsExactly("client-meeting-video-link", o, [])],
+    expect: (o) => [...nothingFor("client-meeting-video-link", o, "e1")],
     answer: none,
     wrong: only("e1", [step("cab", "cab-local", "Book a cab to the Acme sync", D(2), D(2), "14:15")]),
   },
   {
-    // In person at the client's office, no evidence, and the card was already asked and closed unanswered: nothing, no card.
-    // (A meeting never asks either way.)
-    id: "client-visit-in-person-no-evidence", events: [acmeVisit()], asks: [{ kind: "cab-local", state: "markdone" }],
-    expect: (o) => [...nothingFor("client-visit-in-person-no-evidence", o, "e1"), ...cardsExactly("client-visit-in-person-no-evidence", o, [])],
+    // In person at the client's office, no evidence: nothing.
+    id: "client-visit-in-person-no-evidence", events: [acmeVisit()],
+    expect: (o) => [...nothingFor("client-visit-in-person-no-evidence", o, "e1")],
     answer: none,
     wrong: only("e1", [cabTo(ACME, 3, "10:15")]),
   },
@@ -649,64 +617,6 @@ export const PLAN_CASES: PlanCase[] = [
     answer: only("e1", [step("pnr-check", "pnr-check", "Check the chart and PNR status for 12007", D(2), D(2), "20:00"), step("cab-station", "cab-station", "Book a cab to the station for 12007", D(2), D(2), "21:00")]),
     wrong: only("e1", [step("pnr-check", "pnr-check", "Check the chart and PNR status for 12007", D(2), D(2), "20:00"), step("cab-station", "cab-station", "Book a cab to the station for 12007", D(2), D(2), "21:00"), step("checkin", "checkin", "Web check-in for 12007", D(2), D(2))]),
   },
-  // --- asking once ------------------------------------------------------------------------------------------------------------
-  {
-    id: "appointment-no-evidence", events: [derm()],
-    expect: (o) => [...nothingFor("appointment-no-evidence", o, "e1"), ...cardsExactly("appointment-no-evidence", o, ["cab-local"]), ...cardCopy("appointment-no-evidence", o, "cab-local")],
-    answer: { steps: { e1: [] }, ties: [] },
-    wrong: only("e1", [derma()]),
-  },
-  {
-    id: "appointment-asked-waiting", events: [derm()], asks: [{ kind: "cab-local", state: "open" }],
-    expect: (o) => [...nothingFor("appointment-asked-waiting", o, "e1"), ...cardsExactly("appointment-asked-waiting", o, []),
-      ...(habitOf(o, "cab-local")?.asked === "waiting" ? [] : [`appointment-asked-waiting: the bundle shows cab-local ${JSON.stringify(habitOf(o, "cab-local"))}, expected asked "waiting"`])],
-    answer: { steps: { e1: [] }, ties: [] },
-    wrong: only("e1", [derma()]),
-  },
-  {
-    // Held on an earlier run for the card; the owner pressed "Book a cab reminder": the event comes back once as "answered".
-    id: "ask-answered-yes", events: [derm("e1", { held: "cab-local" })], asks: [{ kind: "cab-local", state: "yes" }],
-    expect: (o) => [
-      ...(o.bundle.events.e1?.change === "answered" ? [] : [`ask-answered-yes: the held event came back with change ${o.bundle.events.e1?.change}, expected "answered"`]),
-      ...(o.bundle.events.e1?.type === "appointment" ? [] : [`ask-answered-yes: the held event shows type ${o.bundle.events.e1?.type}, expected its stored "appointment"`]),
-      ...(habitOf(o, "cab-local")?.tally === "on" ? [] : [`ask-answered-yes: the bundle shows cab-local ${JSON.stringify(habitOf(o, "cab-local"))}, expected tally on (a yes is a stated preference)`]),
-      ...exactKinds("ask-answered-yes", o, "e1", ["cab-local"]), ...namesPlace("ask-answered-yes", o, "e1", "cab-local", /skin clinic|jayanagar/i), ...cardsExactly("ask-answered-yes", o, []),
-    ],
-    answer: only("e1", [cabTo(SKIN, 4, "10:15", 4, "You asked for a cab reminder before appointments.")]),
-    wrong: { steps: { e1: [] }, ties: [] },
-  },
-  {
-    id: "ask-answered-no", events: [derm()], asks: [{ kind: "cab-local", state: "no" }],
-    expect: (o) => [...nothingFor("ask-answered-no", o, "e1"), ...cardsExactly("ask-answered-no", o, []),
-      ...(habitOf(o, "cab-local")?.tally === "off" ? [] : [`ask-answered-no: the bundle shows cab-local ${JSON.stringify(habitOf(o, "cab-local"))}, expected tally off (a no is a stated preference)`])],
-    answer: { steps: { e1: [] }, ties: [] },
-    wrong: only("e1", [derma()]),
-    dry: [dryStep("cab-local after a no", "e1", [derma()], /said no to cab-local/)],
-  },
-  {
-    // Mark done on the card is not an answer: the kind stays held back (no step) and is never asked again.
-    id: "ask-mark-done", events: [derm()], asks: [{ kind: "cab-local", state: "markdone" }],
-    expect: (o) => [...nothingFor("ask-mark-done", o, "e1"), ...cardsExactly("ask-mark-done", o, []),
-      ...(habitOf(o, "cab-local")?.asked === true && habitOf(o, "cab-local")?.tally === "none" ? [] : [`ask-mark-done: the bundle shows cab-local ${JSON.stringify(habitOf(o, "cab-local"))}, expected asked true, tally none`])],
-    answer: { steps: { e1: [] }, ties: [] },
-    wrong: only("e1", [derma()]),
-  },
-  {
-    // The owner told the Personal Assistant instead: a fact the open card did not see answers it; Calendar Desk withdraws its card.
-    id: "ask-answered-in-chat", events: [derm("e1", { memory: { "cab-local": ["Wants a cab reminder before appointments."] } })], asks: [{ kind: "cab-local", state: "open", openFacts: [] }],
-    expect: (o) => [...(o.withdrawn.includes("cab-local") ? [] : ["ask-answered-in-chat: the open cab-local card was not withdrawn"]),
-      ...exactKinds("ask-answered-in-chat", o, "e1", ["cab-local"]), ...namesPlace("ask-answered-in-chat", o, "e1", "cab-local", /skin clinic|jayanagar/i), ...cardsExactly("ask-answered-in-chat", o, [])],
-    answer: only("e1", [cabTo(SKIN, 4, "10:15", 4, "You asked for a cab reminder before appointments.")]),
-    wrong: { steps: { e1: [] }, ties: [] },
-  },
-  {
-    // The card has been open 15 days: this run expires it. The kind stays held back and is never asked again.
-    id: "ask-expired", events: [derm()], asks: [{ kind: "cab-local", state: "expired" }],
-    expect: (o) => [...(o.withdrawn.includes("cab-local") ? [] : ["ask-expired: the card open past 14 days was not withdrawn"]),
-      ...nothingFor("ask-expired", o, "e1"), ...cardsExactly("ask-expired", o, [])],
-    answer: { steps: { e1: [] }, ties: [] },
-    wrong: only("e1", [derma()]),
-  },
   // --- types that get nothing at all --------------------------------------------------------------------------------------
   {
     id: "reminder-call-mom", events: [ev("e1", { title: "Call mom", type: "reminder", source: "google", plus: 1, time: "19:00" })],
@@ -732,19 +642,19 @@ export const PLAN_CASES: PlanCase[] = [
   // --- evidence for a cab to an appointment ---------------------------------------------------------------------------------
   {
     id: "appointment-tally-on", events: [ev("e1", { title: "Salon appointment", type: "appointment", source: "google", plus: 2, time: "16:00", location: "Toni and Guy, Indiranagar" })], habits: [did("cab-local", 14)],
-    expect: (o) => [...exactKinds("appointment-tally-on", o, "e1", ["cab-local"]), ...namesPlace("appointment-tally-on", o, "e1", "cab-local", /toni|indiranagar/i), ...cardsExactly("appointment-tally-on", o, [])],
+    expect: (o) => [...exactKinds("appointment-tally-on", o, "e1", ["cab-local"]), ...namesPlace("appointment-tally-on", o, "e1", "cab-local", /toni|indiranagar/i)],
     answer: only("e1", [cabTo("Toni and Guy, Indiranagar", 2, "15:15")]),
     wrong: { steps: { e1: [] }, ties: [] },
   },
   {
     id: "appointment-uber-fact", events: [dentist({ memory: { "cab-local": ["Takes an Uber to the dentist."] } })],
-    expect: (o) => [...exactKinds("appointment-uber-fact", o, "e1", ["cab-local"]), ...namesPlace("appointment-uber-fact", o, "e1", "cab-local", /smile|koramangala/i), ...cardsExactly("appointment-uber-fact", o, [])],
+    expect: (o) => [...exactKinds("appointment-uber-fact", o, "e1", ["cab-local"]), ...namesPlace("appointment-uber-fact", o, "e1", "cab-local", /smile|koramangala/i)],
     answer: only("e1", [cabTo(SMILE, 3, "16:15", 3, "You take a cab to the dentist.")]),
     wrong: { steps: { e1: [] }, ties: [] },
   },
   {
     id: "appointment-drives", events: [dentist({ memory: { "cab-local": ["Drives to appointments."] } })],
-    expect: (o) => [...nothingFor("appointment-drives", o, "e1"), ...cardsExactly("appointment-drives", o, [])],
+    expect: (o) => [...nothingFor("appointment-drives", o, "e1")],
     answer: { steps: { e1: [] }, ties: [] },
     wrong: only("e1", [cabTo(SMILE, 3, "16:15")]),
   },
@@ -761,7 +671,7 @@ export const PLAN_CASES: PlanCase[] = [
   {
     id: "birthday-daughter-B", events: [bday4()], habits: [did("gift", 60)],
     expect: (o) => {
-      const p = [...exactKinds("birthday-daughter-B", o, "e1", ["gift"]), ...cardsExactly("birthday-daughter-B", o, [])];
+      const p = [...exactKinds("birthday-daughter-B", o, "e1", ["gift"])];
       for (const s of stepsFor(o, "e1")) if (!(s.dueDate < bday4().date)) p.push(`birthday-daughter-B: gift step dueDate ${s.dueDate} is not before the birthday (${bday4().date})`);
       return p;
     },
@@ -770,21 +680,15 @@ export const PLAN_CASES: PlanCase[] = [
   },
   {
     id: "birthday-daughter-C", events: [bday4("e1", { memory: { gift: ["The family does not exchange birthday gifts."] } })],
-    expect: (o) => [...nothingFor("birthday-daughter-C", o, "e1"), ...cardsExactly("birthday-daughter-C", o, [])],
+    expect: (o) => [...nothingFor("birthday-daughter-C", o, "e1")],
     answer: { steps: { e1: [] }, ties: [] },
     wrong: only("e1", [step("gift", "gift", "Buy a birthday gift for Kavya", D(3), D(1))]),
-  },
-  {
-    id: "two-kinds-two-cards", events: [derm("e1"), bday4("e2", { plus: 6 })],
-    expect: (o) => [...nothingFor("two-kinds-two-cards", o, "e1"), ...nothingFor("two-kinds-two-cards", o, "e2"), ...cardsExactly("two-kinds-two-cards", o, ["cab-local", "gift"])],
-    answer: { steps: { e1: [], e2: [] }, ties: [] },
-    wrong: { steps: { e1: [derma()], e2: [] }, ties: [] },
   },
   {
     // A dinner out is an occasion; the owner booked a table last time.
     id: "dinner-table-on", habits: [did("table-booking", 20)],
     events: [ev("e1", { title: "Dinner with Arjun Example", type: "occasion", source: "google", plus: 5, time: "20:00", location: "Olive Table, Indiranagar" })],
-    expect: (o) => [...exactKinds("dinner-table-on", o, "e1", ["table-booking"]), ...cardsExactly("dinner-table-on", o, []), ...stepDateProblems("dinner-table-on", o, { ref: "e1", date: D(5) })],
+    expect: (o) => [...exactKinds("dinner-table-on", o, "e1", ["table-booking"]), ...stepDateProblems("dinner-table-on", o, { ref: "e1", date: D(5) })],
     answer: only("e1", [step("book-table", "table-booking", "Book a table at Olive Table, Indiranagar", D(3), D(2), undefined, "You booked a table for your last dinner out.")]),
     wrong: only("e1", [step("cab", "cab-local", "Book a cab to Olive Table, Indiranagar", D(5), D(5), "19:15")]),
   },

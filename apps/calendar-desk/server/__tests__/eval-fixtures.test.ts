@@ -8,12 +8,12 @@ const { PLAN_CASES, TODAY, isoAdd } = await import("../../evals/fixtures");
 const H = await import("../../evals/harness");
 
 describe("planner eval fixtures", () => {
-  test("61 cases with unique ids, every event typed", () => {
-    expect(PLAN_CASES.length).toBe(61);
-    expect(new Set(PLAN_CASES.map((c) => c.id)).size).toBe(61);
+  test("53 cases with unique ids, every event typed", () => {
+    expect(PLAN_CASES.length).toBe(53);
+    expect(new Set(PLAN_CASES.map((c) => c.id)).size).toBe(53);
     const ids = PLAN_CASES.map((c) => c.id);
     for (const id of ["multi-day-stay-gets-a-packing-step", "moved-timed-step-keeps-lead-time", "stay-far-away-pack-only", "birthday-daughter-A", "birthday-daughter-B", "birthday-daughter-C",
-      "appointment-tally-on", "appointment-uber-fact", "two-kinds-two-cards", "dinner-table-on", "work-flight-office-calendar"]) expect(ids).toContain(id);
+      "appointment-tally-on", "appointment-uber-fact", "dinner-table-on", "work-flight-office-calendar"]) expect(ids).toContain(id);
     expect(ids).not.toContain("birthday-close-family");
     for (const c of PLAN_CASES) for (const e of c.events) expect(`${c.id}/${e.ref}:${e.type ?? "untyped"}`).not.toEndWith(":untyped");
   });

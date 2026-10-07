@@ -6,8 +6,7 @@ import { getEvent, type EventRow } from "./store";
 import { ymd } from "./events";
 import { pointer } from "./planner";
 import { EVENT_TYPES, KINDS, kindSpec, type EventType } from "./kinds";
-import { tally, withAnswers, type KindState } from "./tally";
-import { askHolder, askStates, statedAnswers, type AskRow } from "./asks";
+import { tally, type TallyRow } from "./tally";
 import { openPlan, plannedMark, markPlanned, recordStep, setStepCovered, stepKeysFor, allStepKinds, allCoveredStepRefs, noteBadReport, answerPlan, abandonPlan, BAD_REPORTS_MAX, type PlanRecord, type PlanEventRef } from "./planning-store";
 
 // `withdrawn`: a dismissed row Calendar Desk itself withdrew (its event was deleted), not one the owner closed.
@@ -96,9 +95,9 @@ export async function refreshStepCaps(platform: PlatformContext, e: EventRow, st
   return failed;
 }
 
-/** What the kind checks need beyond the step itself: the event's type, the kinds the owner switched off by skips, the kinds the
- *  owner said no to on their card, and the prepare-ahead steps already on the event. */
-interface KindCtx { type: EventType; off: ReadonlySet<string>; saidNo: ReadonlySet<string>; prepareKeys: ReadonlySet<string> }
+/** What the kind checks need beyond the step itself: the event's type, the kinds the owner switched off by skips, and the
+ *  prepare-ahead steps already on the event. */
+interface KindCtx { type: EventType; off: ReadonlySet<string>; prepareKeys: ReadonlySet<string> }
 
 /** Why a step's kind is unusable for the event, or null. Agent-facing wording. */
 function kindRefusal(s: any, e: EventRow, k: KindCtx): string | null {
@@ -107,7 +106,6 @@ function kindRefusal(s: any, e: EventRow, k: KindCtx): string | null {
   if (!spec.types.includes(k.type)) return `${spec.kind} does not fit ${/^[aeiou]/.test(k.type) ? "an" : "a"} ${k.type}`;
   if (spec.kind === "cab-local" && !e.location?.trim()) return "cab-local needs the event's location";
   if (spec.kind === "prepare-ahead" && [...k.prepareKeys].some((key) => key !== s.key)) return "at most one prepare-ahead per meeting";
-  if (k.saidNo.has(spec.kind)) return `the user said no to ${spec.kind} steps`;
   if (k.off.has(spec.kind)) return `the user dismissed the last two ${spec.kind} steps`;
   return null;
 }
@@ -155,7 +153,7 @@ export async function handlePlanReport(p: Record<string, unknown>, platform: Pla
   // One read of every step row serves the per-event lists and the outcome tally behind the off guard.
   let allSteps: StepState[] | null = null;
   // The owner's habits, built once per report and pooled across accounts (habits are the person's, not an account's).
-  let habits: { kinds: Map<string, string>; effective: Map<string, KindState>; off: Set<string>; saidNo: Set<string>; holdForAsks: ReturnType<typeof askHolder> } | null = null;
+  let habits: { kinds: Map<string, string>; off: Set<string> } | null = null;
   for (const entry of p.events as any[]) {
     const ref = typeof entry?.event === "string" ? plan.events.find((x) => x.ref === entry.event) : undefined;
     if (!ref) { refused.push({ item: String(entry?.event ?? "?"), reason: "event is not in this plan" }); bad++; continue; }
@@ -183,22 +181,11 @@ export async function handlePlanReport(p: Record<string, unknown>, platform: Pla
     const openKeys = new Set(existing.filter((t) => t.status === "open").map((t) => t.sourceRef.slice(prefix.length)));
 
     if (!habits) {
-      // A button answer is a stated preference and beats the tally (withAnswers, the same states the bundle showed): no refuses
-      // the kind, yes keeps skips from switching it off. Unreadable cards would drop a binding no, so the report waits like for steps.
-      const cards = await (platform as any).tasks.list({ prefix: "ask:" }) as { ok: boolean; data?: { tasks: AskRow[] }; reason?: string };
-      if (!cards.ok) return err("TASKS_UNAVAILABLE", `could not read cards: ${cards.reason ?? "unknown"}`, 503);
-      const asks = askStates(cards.data!.tasks);
-      const said = statedAnswers(asks);
       const kinds = allStepKinds();
-      const effective = withAnswers(tally(allSteps as any, kinds, now.getTime(), allCoveredStepRefs()), said);
-      habits = {
-        kinds, effective,
-        off: new Set([...effective].filter(([kind, st]) => st === "off" && !said.has(kind)).map(([kind]) => kind)),
-        saidNo: new Set([...said].filter(([, a]) => a === "no").map(([kind]) => kind)),
-        holdForAsks: askHolder(platform, now.getTime(), asks),
-      };
+      const tallied = tally(allSteps as TallyRow[], kinds, now.getTime(), allCoveredStepRefs());
+      habits = { kinds, off: new Set([...tallied].filter(([, v]) => v.state === "off").map(([kind]) => kind)) };
     }
-    const { kinds, off, saidNo } = habits;
+    const { kinds, off } = habits;
     const prepareKeys = new Set([...openKeys].filter((key) => kinds.get(`${prefix}${key}`) === "prepare-ahead"));
     const seen = new Set<string>();
     let allOk = true, fresh = 0;
@@ -207,7 +194,7 @@ export async function handlePlanReport(p: Record<string, unknown>, platform: Pla
       // Cited refs come out of the title and why; a title that was only refs is empty and refused; an empty why gets a plain one.
       const s = raw && typeof raw === "object" ? { ...raw, title: typeof raw.title === "string" ? clean(raw.title) : raw.title, why: (typeof raw.why === "string" ? clean(raw.why) : "") || `planned for ${ev.title}`.slice(0, MAX_WHY) } : raw;
 
-      let why = stepRefusal(s, ev, now, closed, seen, { type, off, saidNo, prepareKeys });
+      let why = stepRefusal(s, ev, now, closed, seen, { type, off, prepareKeys });
       if (!why && !openKeys.has(s.key)) {
         if (openKeys.size + fresh + 1 > MAX_STEPS_PER_EVENT) why = `event already has ${openKeys.size} live steps (max ${MAX_STEPS_PER_EVENT})`;
         else fresh++;
@@ -230,8 +217,6 @@ export async function handlePlanReport(p: Record<string, unknown>, platform: Pla
     const capFails = await refreshStepCaps(platform, ev, existing, seen);
     for (const f of capFails) refused.push({ item: `${ref.ref}/${f.key}`, reason: `could not update its limit: ${f.reason}` });
     if (capFails.length === 0) markPlanned([{ accountId: ref.accountId, eventKey: ref.eventKey, date: ref.date, startAt: ref.startAt, type }], now.getTime());
-    // Planned without a personal step it needed and has no evidence for: ask once, and hold the event for the answer.
-    if (capFails.length === 0) await habits.holdForAsks(ev, type, habits.effective);
   }
 
   // Everything planned answers the plan, whatever else was refused; only then do bad reports count toward giving up.
