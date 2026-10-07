@@ -2,6 +2,7 @@
 import { describe, test, expect } from "bun:test";
 import { readFileSync } from "fs";
 import { join } from "path";
+import { kindTable } from "../kinds";
 
 const manifest = JSON.parse(readFileSync(join(import.meta.dir, "../../flock.app.json"), "utf-8"));
 
@@ -26,6 +27,15 @@ describe("Calendar Desk manifest planning", () => {
     const intent = manifest.agentInterface.intents.find((i: any) => i.name === "plan_events");
     expect(intent.instructions).toBe(readFileSync(join(import.meta.dir, "../../planning-instructions.md"), "utf8"));
     expect(intent.payloadSchema.required).toEqual(["planId", "events"]);
+  });
+  test("the prompt's kind table is rendered from kindTable(), in the .md and in the embedded copy", () => {
+    const intent = manifest.agentInterface.intents.find((i: any) => i.name === "plan_events");
+    const md = readFileSync(join(import.meta.dir, "../../planning-instructions.md"), "utf8");
+    for (const text of [md, intent.instructions]) {
+      const m = text.match(/<!-- kinds -->\n([\s\S]*?)\n<!-- \/kinds -->/);
+      expect(m).not.toBeNull();
+      expect(m![1]).toContain(kindTable());
+    }
   });
   test("declares the hourly Plan upcoming events routine and the plan_events_done operation", () => {
     expect(manifest.routines.find((r: any) => r.id === "event-planning")).toMatchObject({ name: "Plan upcoming events", trigger: { type: "schedule", cron: "30 * * * *" }, executionMode: "app-relay" });

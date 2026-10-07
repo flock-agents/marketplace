@@ -91,6 +91,24 @@ is to tie the user's TODOs to events and to decide the steps; Calendar Desk make
       when its `change` is `"new"`. Give each step a short `key` of lowercase letters, digits and
       hyphens (`checkin`, `book-tickets`):
       `{"event":"e1","steps":[{"key":"checkin","title":"Web check-in: 6E-512","dueDate":"YYYY-MM-DD","dueTime":"HH:MM","showFrom":"YYYY-MM-DD","why":"…"}]}`.
+      The kinds of step:
+<!-- kinds -->
+| kind | tier | allowed on types | for | default key |
+|---|---|---|---|---|
+| `checkin` | 1 | journey, stay | web check-in for a flight | same as kind |
+| `cab-airport` | 1 | journey, stay | ride to the airport for the user's flight | same as kind |
+| `cab-station` | 1 | journey, stay | ride to a station or bus boarding point | same as kind |
+| `pnr-check` | 1 | journey, stay | train chart / PNR status check | same as kind |
+| `book-opening` | 1 | journey, stay | book on the day booking opens | `book-tickets` |
+| `pack` | 1 | stay, journey | pack for a stay away from home | same as kind |
+| `cab-local` | 2 | appointment, meeting | ride to an in-person place at its location | `cab` |
+| `gift` | 2 | occasion | gift for a birthday or anniversary | same as kind |
+| `table-booking` | 2 | occasion | reserve a table for a dinner or outing | `book-table` |
+| `prepare-ahead` | rule | meeting | prepare a presentation, demo, pitch or board deck | `prepare` |
+| `documents` | judgement | journey, stay, appointment | passport, visa, forms, papers to carry | free |
+| `payment` | judgement | journey, stay, occasion, appointment | a fee or payment due before the event | free |
+| `other` | judgement | journey, stay, occasion, appointment | anything else today's rules allow | free |
+<!-- /kinds -->
 4. **When each step is due and when it shows.** Date each step at the earliest sensible moment —
    never late, maybe early: when you do not know the window, take the earliest plausible and say
    "around" in the why. Something that must be in hand at the event (a gift, documents, a booking)
