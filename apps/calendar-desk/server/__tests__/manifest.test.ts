@@ -37,6 +37,13 @@ describe("Calendar Desk manifest planning", () => {
       expect(m![1]).toContain(kindTable());
     }
   });
+  test("the instructions never mention the retired question, and explain the place pattern (amendment 1)", () => {
+    const text = manifest.agentInterface.intents.find((i: any) => i.name === "plan_events").instructions as string;
+    expect(text).not.toMatch(/`asked`|"answered"|held back|one-time question|Calendar Desk's question|wants the reminder/);
+    expect(text).toContain("`pattern`");
+    expect(text).toMatch(/only when none of the above exist/);
+    expect(text).not.toMatch(/—/);
+  });
   test("declares the hourly Plan upcoming events routine and the plan_events_done operation", () => {
     expect(manifest.routines.find((r: any) => r.id === "event-planning")).toMatchObject({ name: "Plan upcoming events", trigger: { type: "schedule", cron: "30 * * * *" }, executionMode: "app-relay" });
     expect(manifest.agentInterface.operations.find((o: any) => o.name === "plan_events_done")).toMatchObject({ invoke: "ops/plan_events_done" });
