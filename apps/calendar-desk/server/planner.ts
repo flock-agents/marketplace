@@ -4,6 +4,7 @@
 import type { PlatformContext } from "@flock/app-sdk";
 import { eventsToPlan, openPlan, createPlan, setPlanSession, abandonPlan, plannedMark, allStepKinds, allCoveredStepRefs, unkindedCabSteps, backfillKind, PLAN_GIVE_UP_MS, type PlanEventRef, type PlanPick } from "./planning-store";
 import { ymd } from "./events";
+import { retireAskCards } from "./retire-asks";
 import { KINDS, KIND_FACTS_LIMIT, type EventType, type Tier } from "./kinds";
 import { tally, type KindState } from "./tally";
 
@@ -55,6 +56,7 @@ async function planOnce(platform: PlatformContext, now: Date): Promise<PlanningR
   const open = openPlan();
   if (open && now.getTime() - open.createdAt < PLAN_GIVE_UP_MS) return { woke: false, skipped: "in-flight" };
   if (open) abandonPlan(open.planId, now.getTime());
+  await retireAskCards(platform);
   const t = now.getTime();
   const picks: PlanPick[] = eventsToPlan(now);
   if (picks.length === 0) return { woke: false, skipped: "nothing" };

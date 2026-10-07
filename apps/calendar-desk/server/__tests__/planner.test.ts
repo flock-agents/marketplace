@@ -247,7 +247,7 @@ describe("habits: what the owner did with past steps of each kind (planning step
     seed("g1", "Dentist", "2026-10-12", new Date(2026, 9, 12, 10, 0).getTime(), { location: "Apollo Clinic, Jayanagar" });
     const p = platform();
     const r = await runPlanning(p.ctx, NOW);
-    expect(p.lists.filter((o) => o.prefix === "ask:")).toHaveLength(0); // M2 makes this 1: its one-time retirement read
+    expect(p.lists.filter((o) => o.prefix === "ask:")).toHaveLength(1); // the one-time retirement read
     const r2: any = await handlePlanReport({ planId: r.planId, events: [{ event: "e1", type: "appointment", steps: [] }] }, p.ctx, NOW);
     expect(r2).toEqual({ accepted: [], refused: [], done: true });
     expect(p.published).toEqual([]);
@@ -327,5 +327,16 @@ describe("capitalisedRuns (ported from core)", () => {
     expect(capitalisedRuns("Asha birthday")).toEqual(["Asha"]);
     expect(capitalisedRuns("Design Review with Asha Rao")).toEqual(["Design Review", "Asha Rao"]);
     expect(capitalisedRuns("all lower case")).toEqual([]);
+  });
+});
+
+describe("the ask cards of an older Calendar Desk", () => {
+  test("the first run withdraws an open ask card even with nothing to plan; later runs do not read ask: again", async () => {
+    wipe();
+    const p = platform({ tasks: [{ sourceRef: "ask:cab-local", status: "open", title: "q", due: 0, dueTimed: false, showFrom: null, updatedAt: 0 }] });
+    expect(await runPlanning(p.ctx, NOW)).toEqual({ woke: false, skipped: "nothing" });
+    expect(p.withdrawals).toEqual([{ ref: "ask:cab-local", reason: "no longer used" }]);
+    await runPlanning(p.ctx, NOW);
+    expect(p.lists.filter((o) => o.prefix === "ask:")).toHaveLength(1);
   });
 });
