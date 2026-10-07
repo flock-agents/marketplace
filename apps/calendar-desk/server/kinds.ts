@@ -3,7 +3,7 @@
 export type EventType = "journey" | "stay" | "occasion" | "appointment" | "meeting" | "reminder" | "block" | "other";
 export const EVENT_TYPES: readonly EventType[] = ["journey", "stay", "occasion", "appointment", "meeting", "reminder", "block", "other"];
 
-// 1 = follows from the event; 2 = depends on the person (needs evidence); rule = fixed rule; judgement = facts and title decide.
+// 1 = follows from the event; 2 = depends on the person (the planner judges it, the first time included: rule 5); rule = fixed rule; judgement = facts and title decide.
 export type Tier = 1 | 2 | "rule" | "judgement";
 export interface KindSpec {
   kind: string; tier: Tier; types: EventType[]; for: string;
