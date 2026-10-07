@@ -2,10 +2,10 @@
 // Calendar Desk already made, read back from Flock) and wakes the paired agent with plan_events. Its report arrives
 // through the plan_events_done operation (plan-report.ts).
 import type { PlatformContext } from "@flock/app-sdk";
-import { eventsToPlan, openPlan, createPlan, setPlanSession, abandonPlan, plannedMark, allStepKinds, allCoveredStepRefs, unkindedCabSteps, backfillKind, PLAN_GIVE_UP_MS, type PlanEventRef, type PlanPick } from "./planning-store";
+import { eventsToPlan, openPlan, createPlan, setPlanSession, abandonPlan, plannedMark, allStepKinds, allStepPlaces, allCoveredStepRefs, unkindedCabSteps, backfillKind, PLAN_GIVE_UP_MS, type PlanEventRef, type PlanPick } from "./planning-store";
 import { ymd } from "./events";
-import { KINDS, KIND_FACTS_LIMIT, type EventType, type Tier } from "./kinds";
-import { tally, type KindState } from "./tally";
+import { KINDS, KIND_FACTS_LIMIT, PLACE_KINDS, placeOf, type EventType, type Tier } from "./kinds";
+import { tally, placeTally, placeState, type KindState } from "./tally";
 
 const APP = "calendar-desk";
 const EVENT_FACTS_MAX = 3;
@@ -31,6 +31,9 @@ export interface BundleEvent {
   change: "new" | "changed";
   /** The type stored when the event was last planned. */
   type?: EventType;
+  /** What the owner did with a person-dependent step at this event's place (its venue, or the person for a gift):
+   *  "on" = done there last time, "off" = the last two there dismissed. Absent when nothing counts. */
+  pattern?: Record<string, "on" | "off">;
   /** A changed event's date (and time) when it was last planned: its steps were dated against this. */
   was?: { date: string; time?: string };
   facts: string[]; steps: BundleStep[];
@@ -71,6 +74,7 @@ async function planOnce(platform: PlatformContext, now: Date): Promise<PlanningR
   }
   const kinds = allStepKinds();
   const tallied = tally(states, kinds, t, allCoveredStepRefs());
+  const places = placeTally(states, allStepPlaces(), t, allCoveredStepRefs());
   const habits: Record<string, Habit> = {};
   for (const k of [...KINDS].sort((a, b) => (a.kind < b.kind ? -1 : 1))) {
     if (k.tier === "judgement") continue;
@@ -92,6 +96,11 @@ async function planOnce(platform: PlatformContext, now: Date): Promise<PlanningR
       ...(s.status !== "open" ? { closed: true as const } : {}),
     }));
     const type = plannedMark(e.accountId, e.eventKey)?.type ?? null;
+    const pattern: Record<string, "on" | "off"> = {};
+    for (const kind of PLACE_KINDS) {
+      const st = placeState(places, kind, placeOf(kind, e));
+      if (st !== "none") pattern[kind] = st;
+    }
     events.push({
       ref: `e${i + 1}`, event: pointer(e.eventKey), title: e.title, date: e.localDate,
       ...(e.startAt != null && !e.allDay ? { time: hhmm(e.startAt) } : {}), allDay: e.allDay,
@@ -99,6 +108,7 @@ async function planOnce(platform: PlatformContext, now: Date): Promise<PlanningR
       ...(e.guests?.length ? { guests: e.guests.map((g) => (g.name ? `${g.name} <${g.email}>` : g.email)) } : {}),
       change: e.change,
       ...(type ? { type } : {}),
+      ...(Object.keys(pattern).length ? { pattern } : {}),
       ...("was" in e && e.was ? { was: { date: e.was.date, ...(e.was.startAt != null && !e.allDay ? { time: hhmm(e.was.startAt) } : {}) } } : {}),
       facts: await factsFor(p, e.title), steps,
     });

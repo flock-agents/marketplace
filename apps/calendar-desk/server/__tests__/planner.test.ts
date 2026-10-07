@@ -286,10 +286,39 @@ describe("habits: what the owner did with past steps of each kind (planning step
     expect(p.intents[0].payload.habits["cab-local"]).toEqual({ tier: 2, tally: "on", facts: [] });
   });
 
+  test("pattern: an event at a place the owner went by cab shows on; one skipped twice there shows off; no history, no pattern", async () => {
+    const at = (h: number) => new Date(2026, 9, 12, h, 0).getTime();
+    seed("g1", "Dentist", "2026-10-12", at(10), { location: "Apollo Clinic, Jayanagar" });
+    seed("g2", "Physio", "2026-10-12", at(12), { location: "Smile Dental, Koramangala" });
+    seed("g3", "Salon", "2026-10-12", at(15), { location: "Toni and Guy, Indiranagar" });
+    P.recordStep("acct", "p1", "cab", "cab-local", "apollo clinic");
+    P.recordStep("acct", "p2", "cab", "cab-local", "smile dental");
+    P.recordStep("acct", "p3", "cab", "cab-local", "smile dental");
+    const p = platform({ tasks: [
+      row("step:p1:cab", "done", { closedAt: NOW.getTime() - 60 * DAY }),
+      row("step:p2:cab", "dismissed", { skipped: true, closedAt: NOW.getTime() - 3 * DAY }),
+      row("step:p3:cab", "dismissed", { skipped: true, closedAt: NOW.getTime() - 2 * DAY }),
+    ] });
+    await runPlanning(p.ctx, NOW);
+    const [dentist, physio, salon] = p.intents[0].payload.events;
+    expect(dentist.pattern).toEqual({ "cab-local": "on" });
+    expect(physio.pattern).toEqual({ "cab-local": "off" });
+    expect(salon).not.toHaveProperty("pattern");
+  });
+
+  test("pattern: a gift done for the same person 300 days ago shows on, while the kind-wide tally has forgotten it", async () => {
+    seed("g1", "Asha's birthday", "2026-10-12");
+    P.recordStep("acct", "p1", "gift", "gift", "asha");
+    const p = platform({ tasks: [row("step:p1:gift", "done", { closedAt: NOW.getTime() - 300 * DAY })] });
+    await runPlanning(p.ctx, NOW);
+    expect(p.intents[0].payload.events[0].pattern).toEqual({ gift: "on" });
+    expect(p.intents[0].payload.habits.gift).toBeUndefined();
+  });
+
   test("(h) the bundle is byte-identical across two runs with the same rows", async () => {
     seed("g1", "Asha's birthday", "2026-10-12");
-    seed("g2", "Dentist", "2026-10-13", new Date(2026, 9, 13, 10, 0).getTime());
-    P.recordStep("acct", "g0", "cab", "cab-local");
+    seed("g2", "Dentist", "2026-10-13", new Date(2026, 9, 13, 10, 0).getTime(), { location: "Apollo Clinic, Jayanagar" });
+    P.recordStep("acct", "g0", "cab", "cab-local", "apollo clinic");
     P.recordStep("acct", "g0", "gift", "gift");
     const tasks = [row("step:g0:cab", "done", { closedAt: NOW.getTime() - DAY }), row("step:g0:gift", "dismissed", { skipped: true, closedAt: NOW.getTime() - 2 * DAY })];
     const facts = (q: string) => (q === "gift" ? ["Buys books as gifts."] : q === "Asha" ? ["Asha is your sister"] : []);
@@ -301,6 +330,7 @@ describe("habits: what the owner did with past steps of each kind (planning step
     await runPlanning(b.ctx, NOW);
     expect(bundle(b.intents[0].payload)).toBe(bundle(a.intents[0].payload));
     expect(Object.keys(a.intents[0].payload.habits)).toEqual(["cab-local", "gift"]);
+    expect(a.intents[0].payload.events.find((e: any) => e.title === "Dentist").pattern).toEqual({ "cab-local": "on" });
   });
 
   test("(i) a listed cab or travel step with no kind gets one from its title; other keys stay null", async () => {
