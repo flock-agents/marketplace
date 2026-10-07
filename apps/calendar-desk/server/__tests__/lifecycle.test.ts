@@ -19,12 +19,33 @@ function platform(scrape: () => any) {
 beforeEach(() => { for (const t of ["events", "cursors", "init_state"]) S._db.exec(`DELETE FROM ${t}`); });
 
 describe("initialize", () => {
-  test("a refused first scrape is finished-but-failed and retried; a working one is done", async () => {
+  test("a busy first read stays unfinished and reads as reading; a working one is done", async () => {
     await calendarDeskHooks.initialize({ reason: "account-added", accountIds: ["acct"], platform: platform(() => ({ ok: false, reason: "guard_busy" })).ctx } as any);
-    expect(S.listInit()[0]).toMatchObject({ outcome: "failed" });
+    expect(S.listInit()[0]!.finishedAt).toBeNull();
+    expect((calendarDeskHooks.progress!() as any[])[0]).toMatchObject({ state: "running", message: "Reading your calendar…" });
+    expect(calendarDeskHooks.status!("acct")).toBe(false);
     await calendarDeskHooks.initialize({ reason: "onboarding", platform: platform(() => ok({ ok: true, events: [] })).ctx } as any);
     expect(S.listInit()[0]).toMatchObject({ outcome: "done" });
     expect(calendarDeskHooks.status!("acct")).toBe(true);
+  });
+  test("a non-busy refused first read is failed and does not blame the Google session", async () => {
+    await calendarDeskHooks.initialize({ reason: "account-added", accountIds: ["acct"], platform: platform(() => ({ ok: false, reason: "timeout" })).ctx } as any);
+    expect(S.listInit()[0]).toMatchObject({ outcome: "failed" });
+    expect((calendarDeskHooks.progress!() as any[])[0]).toMatchObject({ state: "error", message: "Could not read your calendar yet" });
+  });
+});
+
+describe("tick — retries a first read", () => {
+  test("a tick retries a busy first read and plans once it lands", async () => {
+    for (const t of ["planned", "plans", "plan_steps"]) S._db.exec(`DELETE FROM ${t}`);
+    const t0 = new Date(2026, 9, 5, 10, 30);
+    await calendarDeskHooks.initialize({ reason: "onboarding", accountIds: ["acct"], platform: platform(() => ({ ok: false, reason: "guard_busy" })).ctx, now: () => t0, enabledRoutines: ["event-planning"] } as any);
+    expect(S.listInit()[0]!.finishedAt).toBeNull();
+    const later = new Date(t0.getTime() + 3 * 60_000);
+    const p = platform(() => ok({ ok: true, events: [] }));
+    await calendarDeskHooks.tick!({ readRoutines: [{ id: "x", appRoutineId: "event-planning", trigger: {} }], platform: p.ctx, now: () => later } as any);
+    expect(S.listInit()[0]).toMatchObject({ outcome: "done" });
+    expect(p.intents.filter((i) => i.name === "plan_events")).toHaveLength(1);
   });
 });
 

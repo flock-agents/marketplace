@@ -7,9 +7,10 @@ import { calendarDeskHooks } from "./lifecycle";
 import { ops } from "./ops";
 import { widgetRoutes } from "./widget";
 import { startMinuteLoop } from "./scheduler";
+import { retryUnfinishedInits } from "./init-retry";
 
 const flock = createFlockApp({ lifecycle: calendarDeskHooks, ops });
 // The linked SDK resolves its own hono copy; the types differ nominally, the runtime is one Hono.
 flock.hono.route("/", widgetRoutes as never);
 flock.listen();
-startMinuteLoop(flock.platform);
+startMinuteLoop(flock.platform, () => retryUnfinishedInits(flock.platform, new Date()));

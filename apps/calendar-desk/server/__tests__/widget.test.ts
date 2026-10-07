@@ -58,6 +58,14 @@ describe("widget connector state (A10)", () => {
     S.markInitStarted("acct-1", "x"); S.markInitFinished("acct-1", "done", "ok"); S.setCursor("fault:acct-1", "login wall");
     expect(await get()).toMatchObject({ connected: true, fault: null, connector: "attention" });
   });
+  test("a non-session fault after a done read stays ok", async () => {
+    S.markInitStarted("acct-1", "x"); S.markInitFinished("acct-1", "done", "ok"); S.setCursor("fault:acct-1", "timeout");
+    expect((await get()).connector).toBe("ok");
+  });
+  test("an unfinished busy init reads syncing", async () => {
+    S.markInitStarted("acct-1", "Reading your calendar"); S.setCursor("init_retry:acct-1", JSON.stringify({ n: 1, at: Date.now() + 60_000 }));
+    expect((await get()).connector).toBe("syncing");
+  });
 });
 
 describe("widget 90-day horizon feed (Task 53)", () => {
@@ -111,7 +119,7 @@ describe("feeds carry event details (Task 9)", () => {
     expect([pending("unread"), pending("read"), pending("Rent due")]).toEqual([true, undefined, undefined]);
   });
   test("horizon reports connector like /today", async () => {
-    S.markInitStarted("acc", "x"); S.markInitFinished("acc", "done", "ok"); S.setCursor("fault:acc", "agenda unreadable");
+    S.markInitStarted("acc", "x"); S.markInitFinished("acc", "done", "ok"); S.setCursor("fault:acc", "login wall");
     const body = await (await widgetRoutes.request("/api/widget/horizon")).json() as any;
     expect([body.connector, body.fault]).toEqual(["attention", null]);
   });

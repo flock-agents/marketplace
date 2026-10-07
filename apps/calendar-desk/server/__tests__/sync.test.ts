@@ -5,7 +5,7 @@ import { ok, type PlatformContext } from "@flock/app-sdk";
 process.env.APP_DATA_DIR = mkdtempSync(join(tmpdir(), "calendar-desk-sync-"));
 const S = await import("../store");
 const P = await import("../planning-store");
-const { syncAccount, shouldScrape, DAILY_SCRAPE_CAP, lastFault, MAX_RESULTS, ABSENCE_CHECK_MAX } = await import("../sync");
+const { syncAccount, shouldScrape, DAILY_SCRAPE_CAP, lastFault, MAX_RESULTS, ABSENCE_CHECK_MAX, scrapesToday, faultKind } = await import("../sync");
 
 const NOW = new Date(2026, 9, 5, 9, 0);
 function platform(answer: (req: any) => any): { ctx: PlatformContext; calls: any[] } {
@@ -223,7 +223,7 @@ describe("shouldScrape light/forced (A13)", () => {
 describe("attempt back-off and in-flight guard (R33)", () => {
   test("a fault 30 min ago keeps light fresh; forced still runs", async () => {
     const now = new Date(); let n = 0;
-    const p = platform(() => { n++; return { ok: false, reason: "guard_busy" }; });
+    const p = platform(() => { n++; return { ok: false, reason: "timeout" }; });
     S.setCursor("last_sync:accb", "0");
     await syncAccount("accb", { platform: p.ctx, now: () => new Date(now.getTime() - 30 * 60_000) }, "forced");
     expect(n).toBe(1);
@@ -334,5 +334,25 @@ describe("a renamed planned event re-publishes its steps' limit reason (final re
     const moved = planningPlatform([{ title: "Physio session", time: "6pm", date: "Mon, 5 Oct", eventId: "id0" }], [cab]);
     await syncAccount("acct", { platform: moved.ctx, now: () => new Date(LATER().getTime() + 3 * 3600_000) }, "scheduled");
     expect([same.published, moved.published]).toEqual([[], []]);
+  });
+});
+
+describe("busy refusals (post-test Task 3)", () => {
+  const BUSY = "BROWSER_ERROR: Browser error: Account guard blocked fetch for \"s\": busy — another read is using this account; retry in 297s. The sign-in is fine: do not reset or reconnect it.";
+  test("a busy refusal costs no scrape and records no fault", async () => {
+    S.setCursor("scrapes:acct:2026-10-05", "2");
+    const r: any = await syncAccount("acct", { platform: platform(() => ({ ok: false, reason: BUSY })).ctx, now: () => NOW }, "init");
+    expect(r).toMatchObject({ ok: false, events: 0, busy: true });
+    expect(scrapesToday("acct", "2026-10-05")).toBe(2);
+    expect(lastFault("acct")).toBeNull();
+    expect(S.getCursor("last_attempt:acct") ?? null).toBeNull();
+  });
+  test("faultKind", () => {
+    expect(faultKind(BUSY)).toBe("busy");
+    expect(faultKind("guard_busy")).toBe("busy");
+    expect(faultKind("login wall")).toBe("session");
+    expect(faultKind("quarantined")).toBe("session");
+    expect(faultKind("agenda unreadable")).toBe("other");
+    expect(faultKind("timeout")).toBe("other");
   });
 });

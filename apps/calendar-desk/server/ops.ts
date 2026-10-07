@@ -2,6 +2,7 @@ import type { OpHandler, OpError } from "@flock/app-sdk";
 import { listEvents, setEventNote, getEventNote, listInit } from "./store";
 import { ymd } from "./events";
 import { syncAccount } from "./sync";
+import { completeFirstRead } from "./init-retry";
 import { syncFactEvents } from "./facts";
 import { handlePlanReport } from "./plan-report";
 
@@ -23,16 +24,20 @@ export const ops: Record<string, OpHandler> = {
     const within = <T,>(job: Promise<T>, ms: number) => Promise.race([job, new Promise<"late">((res) => { timers.push(setTimeout(() => res("late"), Math.max(0, ms))); })]);
     type Row = { accountId: string; ok: boolean; events: number; skipped?: string; fault: string | null; running?: true };
     try {
-      const jobs = listInit().filter((r) => r.finishedAt && r.outcome === "done").map((rec) => {
-        const job = Promise.resolve().then(() => syncAccount(rec.accountId, { platform }, "forced"));
+      // An account whose first read has not landed is read as a first read: a success marks it done and plans, even after the op answered.
+      const jobs = listInit().map((rec) => {
+        const first = !(rec.finishedAt && rec.outcome === "done");
+        const job = first
+          ? Promise.resolve().then(async () => { const r = await syncAccount(rec.accountId, { platform }, "init"); await completeFirstRead(platform, rec.accountId, r, () => new Date()); return r; })
+          : Promise.resolve().then(() => syncAccount(rec.accountId, { platform }, "forced"));
         job.catch(() => {}); // a late failure after the op answered is not an unhandled rejection
-        return { rec, job };
+        return { rec, first, job };
       });
-      const accounts: Row[] = await Promise.all(jobs.map(async ({ rec, job }): Promise<Row> => {
+      const accounts: Row[] = await Promise.all(jobs.map(async ({ rec, first, job }): Promise<Row> => {
         try {
           const r = await within(job, deadline - Date.now());
-          if (r === "late" || ("skipped" in r && r.skipped === "busy")) return { accountId: rec.accountId, ok: true, events: 0, fault: null, running: true };
-          return { accountId: rec.accountId, ok: r.ok, events: r.events, ...("skipped" in r && r.skipped ? { skipped: r.skipped } : {}), fault: r.fault ?? null };
+          if (r === "late" || r.skipped === "busy" || (first && r.busy)) return { accountId: rec.accountId, ok: true, events: 0, fault: null, running: true };
+          return { accountId: rec.accountId, ok: r.ok, events: r.events, ...(r.skipped ? { skipped: r.skipped } : {}), fault: r.fault ?? null };
         } catch (e: any) { return { accountId: rec.accountId, ok: false, events: 0, fault: String(e?.message ?? e) }; }
       }));
       let facts: { created: number; updated: number; withdrawn: number; suppressed: number; running?: true } = { created: 0, updated: 0, withdrawn: 0, suppressed: 0 };

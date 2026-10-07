@@ -23,6 +23,17 @@ export function lastFault(accountId: string): string | null { return getCursor(`
 
 export type SyncReason = "scheduled" | "pre-prep" | "init" | "light" | "forced";
 
+export interface SyncResult { ok: boolean; events: number; fault: string | null; skipped?: "busy" | "cap" | "fresh"; busy?: true; skippedRows?: number }
+
+export type FaultKind = "busy" | "session" | "other";
+/** Busy is checked first: the busy refusal itself says "the sign-in is fine ... do not reset or reconnect it". */
+export function faultKind(reason: string): FaultKind {
+  const t = reason.trim();
+  if (/another read is using this account/i.test(t) || (/Account guard blocked fetch/i.test(t) && /busy/i.test(t)) || /^(guard_busy|busy)$/i.test(t)) return "busy";
+  if (/quarantin|auth_wall|captcha|login|log in|sign[- ]?in|signed out|session expired|reconnect/i.test(t)) return "session";
+  return "other";
+}
+
 /** Every scrape takes the Google browser lease Gmail also needs: scheduled, init and forced runs always
  *  go (within the cap, which nothing bypasses); a pre-prep or light refresh only when the last scrape is
  *  older than FRESH_MS. */
@@ -39,11 +50,15 @@ function dateRange(now: Date): string[] {
   return out;
 }
 
+function restoreCursor(key: string, prev: string | null): void {
+  if (prev == null) _db.query("DELETE FROM cursors WHERE key = ?").run(key); else setCursor(key, prev);
+}
+
 const inFlight = new Set<string>();
 /** One scrape per account at a time: an overlapping call is skipped "busy" and costs nothing against the cap. */
 /** `forceDetailIds`: Google event ids whose details are re-read this pass even when fresh (pre-prep). */
-export async function syncAccount(accountId: string, deps: SyncDeps, reason: SyncReason, opts: { forceDetailIds?: string[] } = {}) {
-  if (inFlight.has(accountId)) return { ok: true, events: 0, fault: null, skipped: "busy" as const };
+export async function syncAccount(accountId: string, deps: SyncDeps, reason: SyncReason, opts: { forceDetailIds?: string[] } = {}): Promise<SyncResult> {
+  if (inFlight.has(accountId)) return { ok: true, events: 0, fault: null, skipped: "busy" };
   inFlight.add(accountId);
   try { return await runSync(accountId, deps, reason, opts); } finally { inFlight.delete(accountId); }
 }
@@ -75,15 +90,17 @@ async function checkAbsences(accountId: string, deps: SyncDeps, dates: string[],
   if (absent.length) console.log(`[calendar-desk] ${absent.length} event(s) missing from the read for ${accountId}: ${checks} checked — ${gone.length} gone, ${kept} kept`);
 }
 
-async function runSync(accountId: string, deps: SyncDeps, reason: SyncReason, opts: { forceDetailIds?: string[] }) {
+async function runSync(accountId: string, deps: SyncDeps, reason: SyncReason, opts: { forceDetailIds?: string[] }): Promise<SyncResult> {
   const now = (deps.now ?? (() => new Date()))();
   const day = ymd(now);
   if (!deps.platform.configured) return { ok: false, events: 0, fault: "not configured" };
-  if (scrapesToday(accountId, day) >= DAILY_SCRAPE_CAP) return { ok: false, events: 0, fault: null, skipped: "cap" as const };
-  if (!shouldScrape(accountId, now, reason)) return { ok: true, events: 0, fault: null, skipped: "fresh" as const };
+  if (scrapesToday(accountId, day) >= DAILY_SCRAPE_CAP) return { ok: false, events: 0, fault: null, skipped: "cap" };
+  if (!shouldScrape(accountId, now, reason)) return { ok: true, events: 0, fault: null, skipped: "fresh" };
 
-  setCursor(`scrapes:${accountId}:${day}`, String(scrapesToday(accountId, day) + 1));
-  setCursor(`last_attempt:${accountId}`, String(now.getTime()));
+  const scrapeKey = `scrapes:${accountId}:${day}`, attemptKey = `last_attempt:${accountId}`;
+  const prevScrapes = getCursor(scrapeKey), prevAttempt = getCursor(attemptKey);
+  setCursor(scrapeKey, String(scrapesToday(accountId, day) + 1));
+  setCursor(attemptKey, String(now.getTime()));
   const plan = detailPlan(accountId, now, { forceIds: opts.forceDetailIds });
   const res = await deps.platform.connectors.exec<{ ok?: boolean; events?: ScrapedEvent[] }>({
     skillId: "google-calendar", functionName: "listEvents", accountHint: accountId,
@@ -93,6 +110,12 @@ async function runSync(accountId: string, deps: SyncDeps, reason: SyncReason, op
   if (!res.ok || !res.data || res.data.ok === false || !Array.isArray(res.data.events)) {
     // A refused or faulted read says NOTHING about the calendar: keep what we had.
     const fault = !res.ok ? res.reason : "scrape returned no event list";
+    if (faultKind(fault) === "busy") {
+      // Another read holds the account: nothing was read, so it costs no scrape and says nothing about the session.
+      restoreCursor(scrapeKey, prevScrapes); restoreCursor(attemptKey, prevAttempt);
+      console.warn(`[calendar-desk] sync ${accountId} (${reason}) busy: ${fault}`);
+      return { ok: false, events: 0, fault, busy: true };
+    }
     setCursor(`fault:${accountId}`, fault);
     console.warn(`[calendar-desk] sync ${accountId} (${reason}) failed: ${fault}`);
     return { ok: false, events: 0, fault };

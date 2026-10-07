@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { listEvents, getPrep, getEventNote, listInit } from "./store";
-import { lastFault } from "./sync";
+import { lastFault, faultKind } from "./sync";
 import { ymd } from "./events";
 
 export const widgetRoutes = new Hono();
@@ -39,8 +39,9 @@ function eventItems(days: number) {
 // A10: `connected` = the app answered; the Google link is a separate state, and both feeds report it the same way.
 function connectorState() {
   const inits = listInit();
-  const fault = inits.map((i) => lastFault(i.accountId)).find(Boolean) ?? null;
-  return inits.length === 0 ? "none" : fault ? "attention" : inits.some((i) => i.outcome === "done") ? "ok" : "syncing";
+  // Only a sign-in or session fault needs the owner; a busy or failed read is retried on its own.
+  const session = inits.some((i) => { const f = lastFault(i.accountId); return !!f && faultKind(f) === "session"; });
+  return inits.length === 0 ? "none" : session ? "attention" : inits.some((i) => i.outcome === "done") ? "ok" : "syncing";
 }
 
 // Loopback-only, unauthenticated like every widget dataUrl: the platform's widget proxy is the only caller.

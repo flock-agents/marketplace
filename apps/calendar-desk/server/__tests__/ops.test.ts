@@ -91,6 +91,15 @@ describe("refresh_calendar (A13)", () => {
     const r: any = await ops.refresh_calendar!({ force: true }, rctx);
     expect(r.accounts[0]).toMatchObject({ ok: false, skipped: "cap" }); expect(scrapes).toBe(0);
   });
+  test("refresh_calendar also reads an account whose first read is not done, and a success marks it done", async () => {
+    S.markInitStarted("acct2", "Reading your calendar");
+    S.markInitStarted("acct3"); S.markInitFinished("acct3", "failed", "Could not read your calendar yet");
+    S.setCursor("last_sync:acct", String(Date.now() - 3 * 3600_000));
+    const r: any = await ops.refresh_calendar!({}, rctx);
+    expect(scrapes).toBe(3);
+    expect(r.accounts.map((a: any) => a.accountId).sort()).toEqual(["acct", "acct2", "acct3"]);
+    expect(S.listInit().every((x) => x.outcome === "done")).toBe(true);
+  });
   test("never throws: a failing sync is that account's fault", async () => {
     const bad = { configured: true, connectors: { exec: async () => { throw new Error("boom"); } } } as unknown as PlatformContext;
     S.setCursor("last_sync:acct", "0");

@@ -64,12 +64,14 @@ export async function runPrepWindow(platform: PlatformContext, cfg: PrepConfig, 
   return out;
 }
 
-/** The app's own clock: cheap, local-store work every minute. The platform tick does the rest. */
-export function startMinuteLoop(platform: PlatformContext): () => void {
+/** The app's own clock: cheap, local-store work every minute. The platform tick does the rest.
+ *  `extra` runs first each minute (index.ts: retrying first reads that have not landed). */
+export function startMinuteLoop(platform: PlatformContext, extra?: () => Promise<unknown>): () => void {
   let busy = false;
   const timer = setInterval(async () => {
     if (busy) return; busy = true;
     try {
+      if (extra) await extra();
       const st = readRoutineState(); const now = new Date();
       if (st.prepEnabled) await runPrepWindow(platform, st.prepCfg, now, { facts: factsAroundDate(platform) });
     } catch (e: any) { console.error(`[calendar-desk] minute loop: ${e?.message ?? e}`); }
