@@ -226,7 +226,8 @@ describe("migration of a database from before kinds", () => {
     const { spawnSync } = await import("child_process");
     const dir = mkdtempSync(join(tmpdir(), "calendar-desk-old-"));
     const old = new Database(join(dir, "calendar-desk.db"));
-    const upto = (S._db.query("SELECT MAX(idx) AS m FROM _migrations").get() as { m: number }).m; // every migration before the kinds one
+    const upto = S.KINDS_MIGRATION_IDX + 1; // every migration before the kinds one
+    expect(upto).toBeGreaterThan(0);
     old.exec("CREATE TABLE _migrations (idx INTEGER PRIMARY KEY, applied_at INTEGER NOT NULL)");
     for (let i = 0; i < upto - 1; i++) old.query("INSERT INTO _migrations VALUES (?, 1)").run(i);
     old.exec(`CREATE TABLE planned (account_id TEXT NOT NULL, event_key TEXT NOT NULL, date TEXT NOT NULL, start_at INTEGER, planned_at INTEGER, failed_tries INTEGER NOT NULL DEFAULT 0, try_date TEXT, try_start_at INTEGER, PRIMARY KEY (account_id, event_key));
