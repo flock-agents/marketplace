@@ -10,7 +10,7 @@ import { readFileSync } from "fs";
 import { join } from "path";
 import { ok, type PlatformContext } from "@flock/app-sdk";
 import { NOW, TODAY, isoAdd, localMs, type PlanCase, type Outcome, type Step, type Answer, type EventSpec, type DryReport } from "./fixtures";
-import { KINDS, kindSpec } from "../server/kinds";
+import { KINDS, kindSpec, placeOf } from "../server/kinds";
 import * as S from "../server/store";
 import * as P from "../server/planning-store";
 import { runPlanning, pointer } from "../server/planner";
@@ -62,10 +62,10 @@ export async function plan(c: PlanCase): Promise<Planned> {
       states.push({ sourceRef: `step:${key}:${s.key}`, status: s.closed ? "dismissed" : "open", title: s.title, due: localMs(isoAdd(TODAY, s.duePlus), s.dueTime), dueTimed: !!s.dueTime, showFrom: s.showPlus != null ? localMs(isoAdd(TODAY, s.showPlus)) : null, updatedAt: nowMs });
     }
   }
-  // How the owner closed past steps: each on its own past event, with its kind recorded as Calendar Desk records it.
+  // How the owner closed past steps: each on its own past event, with its kind (and its place, when the case names one) recorded as Calendar Desk records it.
   for (const [i, h] of (c.habits ?? []).entries()) {
     const key = kindSpec(h.kind)?.defaultKey ?? h.kind, eventKey = `g-past-${i}`, at = nowMs - h.daysAgo * DAY;
-    P.recordStep(ACCOUNT, eventKey, key, h.kind);
+    P.recordStep(ACCOUNT, eventKey, key, h.kind, h.at ? placeOf(h.kind, { title: h.at, location: h.at }) : null);
     states.push({ sourceRef: `step:${eventKey}:${key}`, status: h.outcome === "done" ? "done" : "dismissed", title: `Past ${h.kind} step`, due: at, dueTimed: false, showFrom: null, updatedAt: at, closedAt: at,
       ...(h.outcome === "skipped" ? { skipped: true as const } : {}), ...(h.outcome === "withdrawn" ? { withdrawn: true as const } : {}) });
   }

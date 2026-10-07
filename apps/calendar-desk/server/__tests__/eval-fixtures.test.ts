@@ -8,12 +8,14 @@ const { PLAN_CASES, TODAY, isoAdd } = await import("../../evals/fixtures");
 const H = await import("../../evals/harness");
 
 describe("planner eval fixtures", () => {
-  test("53 cases with unique ids, every event typed", () => {
-    expect(PLAN_CASES.length).toBe(53);
-    expect(new Set(PLAN_CASES.map((c) => c.id)).size).toBe(53);
+  test("62 cases with unique ids, every event typed", () => {
+    expect(PLAN_CASES.length).toBe(62);
+    expect(new Set(PLAN_CASES.map((c) => c.id)).size).toBe(62);
     const ids = PLAN_CASES.map((c) => c.id);
     for (const id of ["multi-day-stay-gets-a-packing-step", "moved-timed-step-keeps-lead-time", "stay-far-away-pack-only", "birthday-daughter-A", "birthday-daughter-B", "birthday-daughter-C",
-      "appointment-tally-on", "appointment-uber-fact", "dinner-table-on", "work-flight-office-calendar"]) expect(ids).toContain(id);
+      "appointment-tally-on", "appointment-uber-fact", "dinner-table-on", "work-flight-office-calendar",
+      "place-done-once", "place-skipped-twice", "place-on-beats-kind-off", "place-off-beats-kind-on", "kind-on-new-place", "first-time-office-room",
+      "first-time-dinner-restaurant", "birthday-yearly-gift", "stated-no-beats-place"]) expect(ids).toContain(id);
     expect(ids).not.toContain("birthday-close-family");
     for (const c of PLAN_CASES) for (const e of c.events) expect(`${c.id}/${e.ref}:${e.type ?? "untyped"}`).not.toEndWith(":untyped");
   });
@@ -42,6 +44,11 @@ describe("planner eval fixtures", () => {
     expect(Object.keys(payload).sort()).toEqual(["events", "habits", "nowLocal", "planId", "timezone", "today"]);
     expect(payload.events[0]).toMatchObject({ ref: "e1", change: "changed", allDay: false, time: "06:10", was: { date: isoAdd(TODAY, 2), time: "06:10" }, steps: [{ key: "checkin", title: "Web check-in: 6E-512" }] });
     expect(payload.events[0].event).toStartWith("calendar-desk:");
+  });
+  test("a habit recorded at a place reaches the bundle as that event's pattern", async () => {
+    const c = PLAN_CASES.find((x) => x.id === "place-done-once")!;
+    const { payload } = await H.plan(c);
+    expect(payload.events[0].pattern).toEqual({ "cab-local": "on" });
   });
   test("a timed existing step shows its time in the bundle", async () => {
     const c = PLAN_CASES.find((x) => x.id === "moved-timed-step-keeps-lead-time")!;
