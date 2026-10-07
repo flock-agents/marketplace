@@ -12,7 +12,8 @@ export const calendarDeskHooks: AppLifecycleHooks = {
   async initialize(ctx) {
     for (const a of ctx.accountIds ?? []) { const rec = listInit().find((r) => r.accountId === a); if (!(rec?.finishedAt && rec.outcome === "done")) markInitStarted(a, "Reading your calendar"); }
     const todo = (ctx.accountIds?.length ? pending().filter((a) => ctx.accountIds!.includes(a)) : pending());
-    const now = ((ctx as any).now as (() => Date) | undefined)?.() ?? new Date();
+    const clock = () => ((ctx as any).now as (() => Date) | undefined)?.() ?? new Date();
+    const now = clock();
     let anyDone = false;
     for (const a of todo) {
       const r = await syncAccount(a, { platform: ctx.platform }, "init");
@@ -25,7 +26,9 @@ export const calendarDeskHooks: AppLifecycleHooks = {
     // and through runPlanning so its guards (open plan, give-up, limits) still apply.
     const ids = (ctx as any).enabledRoutines as string[] | undefined;
     if (anyDone && (ids ? ids.includes("event-planning") : readRoutineState().planEnabled)) {
-      try { await runPlanning(ctx.platform, now); } catch (err: any) { console.warn(`[calendar-desk] planning: ${err?.message ?? err}`); }
+      // A fresh clock: the first read can take minutes, and the plan's age and the wake's nowLocal start when planning does.
+      const planNow = clock();
+      try { await runPlanning(ctx.platform, planNow); } catch (err: any) { console.warn(`[calendar-desk] planning: ${err?.message ?? err}`); }
     }
   },
   async tick(ctx) {

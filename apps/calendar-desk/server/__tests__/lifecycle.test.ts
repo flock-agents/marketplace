@@ -152,6 +152,17 @@ describe("initialize — plans right after the first read", () => {
     await init(p, { enabledRoutines: ["event-planning"] });
     expect(planCalls(p)).toHaveLength(0);
   });
+  test("planning takes the time it starts, not the time the read started", async () => {
+    let t = new Date(2026, 9, 5, 10, 30).getTime();
+    const tick = () => new Date(t);
+    const p = platform(() => { t += 90_000; return ok({ ok: true, events: [] }); });
+    await init(p, { now: tick, enabledRoutines: ["event-planning"] });
+    const calls = planCalls(p);
+    expect(calls).toHaveLength(1);
+    expect(calls[0].payload.nowLocal).toBe("10:31");
+    const P = await import("../planning-store");
+    expect(P.openPlan()?.createdAt).toBe(t);
+  });
   test("a planning throw does not fail initialize", async () => {
     const p = platform(() => ok({ ok: true, events: [] }));
     (p.ctx as any).agent.intent = async () => { throw new Error("boom"); };
