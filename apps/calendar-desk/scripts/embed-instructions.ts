@@ -15,6 +15,10 @@ const markers = /<!-- kinds -->[\s\S]*?<!-- \/kinds -->/;
 const source = readFileSync(mdPath, "utf8");
 if (!markers.test(source)) throw new Error("planning-instructions.md has no <!-- kinds --> marker pair");
 const rendered = source.replace(markers, () => `<!-- kinds -->\n${kindTable()}\n<!-- /kinds -->`);
+// Flock drops (with only a server warning) per-intent instructions longer than its INTENT_INSTRUCTIONS_MAX
+// (64k since flock 9f17f6213; 20k before, which silently cost the agent every planning rule).
+const FLOCK_INTENT_INSTRUCTIONS_MAX = 64_000;
+if (rendered.length > FLOCK_INTENT_INSTRUCTIONS_MAX) throw new Error(`planning-instructions.md is ${rendered.length} chars; Flock keeps at most ${FLOCK_INTENT_INSTRUCTIONS_MAX}`);
 writeFileSync(mdPath, rendered);
 intent.instructions = rendered;
 writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + "\n");

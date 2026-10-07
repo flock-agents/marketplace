@@ -44,6 +44,15 @@ describe("Calendar Desk manifest planning", () => {
     expect(text).toMatch(/only when none of the above exist/);
     expect(text).not.toMatch(/—/);
   });
+  test("the plan_events rules fit Flock's per-intent limit (64k from flock 9f17f6213; 20k before dropped them silently)", () => {
+    const intent = manifest.agentInterface.intents.find((i: any) => i.name === "plan_events");
+    expect(intent.instructions.length).toBeLessThanOrEqual(64_000);
+  });
+  test("the plan_events_done description names each event's type and each step's kind", () => {
+    const d = manifest.agentInterface.operations.find((o: any) => o.name === "plan_events_done").description as string;
+    expect(d).toMatch(/event:'e1', ?type,/);
+    expect(d).toMatch(/steps:\[\{key, ?kind, ?title/);
+  });
   test("declares the hourly Plan upcoming events routine and the plan_events_done operation", () => {
     expect(manifest.routines.find((r: any) => r.id === "event-planning")).toMatchObject({ name: "Plan upcoming events", trigger: { type: "schedule", cron: "30 * * * *" }, executionMode: "app-relay" });
     expect(manifest.agentInterface.operations.find((o: any) => o.name === "plan_events_done")).toMatchObject({ invoke: "ops/plan_events_done" });

@@ -99,7 +99,7 @@
       },
       {
         "name": "plan_events_done",
-        "description": "Report the steps you decided for a plan_events run: {planId, events:[{event:'e1', steps:[{key,title,dueDate,dueTime?,showFrom,why}]}]}. Every offered event is listed; steps: [] means nothing needed.",
+        "description": "Report the steps you decided for a plan_events run: {planId, events:[{event:'e1', type, steps:[{key, kind, title, dueDate, dueTime?, showFrom, why}]}]}; type is the event's type and kind the step's kind, both from the plan_events instructions. Every offered event is listed; steps: [] means nothing needed.",
         "invoke": "ops/plan_events_done"
       }
     ],
