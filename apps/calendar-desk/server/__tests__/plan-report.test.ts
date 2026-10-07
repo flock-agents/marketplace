@@ -458,3 +458,50 @@ describe("cover: a step the owner already has as a TODO is recorded as covered",
     expect((coveredRow.get("g1", "cab") as any).covered).toBeNull();
   });
 });
+
+describe("a place the owner skipped twice refuses the kind there; one they went by cab lifts a kind-wide switch-off (amendment 1, A3)", () => {
+  const DAY = 86_400_000;
+  const dentist = () => {
+    seed("d1", "Dentist", "2026-10-09", new Date(2026, 9, 9, 10, 0).getTime());
+    S._db.query("UPDATE events SET location = ? WHERE event_key = 'd1'").run("Apollo Clinic, Jayanagar");
+  };
+  const cab = { key: "cab", kind: "cab-local", title: "Book a cab to Apollo Clinic", dueDate: "2026-10-09", dueTime: "09:15", why: "w" };
+  const closed = (ref: string, ago: number, skipped: boolean, over: object = {}): any => ({ ...closedTask(ref, skipped ? "dismissed" : "done"), ...(skipped ? { skipped: true } : {}), closedAt: NOW.getTime() - ago * DAY, ...over });
+  const past = (ev: string, place: string) => P.recordStep("acct", ev, "cab", "cab-local", place);
+  const report = async (tasks: any[]) => {
+    S._db.exec("DELETE FROM plans");
+    return await handlePlanReport({ planId: plan("d1").planId, events: [{ event: "e1", type: "appointment", steps: [cab] }] }, platform({ tasks }).ctx, NOW) as any;
+  };
+
+  test("the last two here skipped: refused for this place", async () => {
+    dentist(); past("p1", "apollo clinic"); past("p2", "apollo clinic");
+    const r = await report([closed("step:p1:cab", 20, true), closed("step:p2:cab", 10, true)]);
+    expect(r.refused).toEqual([{ item: "e1/cab", reason: "the user dismissed the last two cab-local steps for this place" }]);
+  });
+  test("place off beats kind on: cabs done elsewhere more recently, skipped twice here", async () => {
+    dentist(); past("p1", "apollo clinic"); past("p2", "apollo clinic"); past("p3", "smile dental"); past("p4", "skin clinic");
+    const r = await report([closed("step:p1:cab", 30, true), closed("step:p2:cab", 20, true), closed("step:p3:cab", 8, false), closed("step:p4:cab", 5, false)]);
+    expect(r.refused).toEqual([{ item: "e1/cab", reason: "the user dismissed the last two cab-local steps for this place" }]);
+  });
+  test("place on beats kind off: skipped twice elsewhere, done here", async () => {
+    dentist(); past("p1", "apollo clinic"); past("p2", "smile dental"); past("p3", "skin clinic");
+    const r = await report([closed("step:p1:cab", 40, false), closed("step:p2:cab", 10, true), closed("step:p3:cab", 5, true)]);
+    expect(r).toEqual({ accepted: ["e1/cab"], refused: [], done: true });
+  });
+  test("skips elsewhere and nothing here keep the kind-wide refusal", async () => {
+    dentist(); past("p2", "smile dental"); past("p3", "skin clinic");
+    const r = await report([closed("step:p2:cab", 10, true), closed("step:p3:cab", 5, true)]);
+    expect(r.refused).toEqual([{ item: "e1/cab", reason: "the user dismissed the last two cab-local steps" }]);
+  });
+  test("a done here 364 days ago still lifts the kind-wide refusal; skips here older than 90 days no longer refuse", async () => {
+    dentist(); past("p1", "apollo clinic"); past("p2", "smile dental"); past("p3", "skin clinic");
+    expect((await report([closed("step:p1:cab", 364, false), closed("step:p2:cab", 10, true), closed("step:p3:cab", 5, true)])).accepted).toEqual(["e1/cab"]);
+    S._db.exec("DELETE FROM planned; DELETE FROM plan_steps"); past("p1", "apollo clinic"); past("p2", "apollo clinic");
+    expect((await report([closed("step:p1:cab", 100, true), closed("step:p2:cab", 95, true)])).accepted).toEqual(["e1/cab"]);
+  });
+  test("older Flock rows (no skipped, no closedAt) never refuse for a place", async () => {
+    dentist(); past("p1", "apollo clinic"); past("p2", "apollo clinic");
+    const bare = (ref: string): any => closedTask(ref, "dismissed");
+    expect((await report([bare("step:p1:cab"), bare("step:p2:cab")])).accepted).toEqual(["e1/cab"]);
+  });
+});
