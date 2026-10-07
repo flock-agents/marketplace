@@ -12,13 +12,16 @@ beforeEach(wipe);
 
 const NOW = new Date(2026, 9, 6, 12, 0, 0);
 type TaskState = { sourceRef: string; status: "open" | "done" | "dismissed"; withdrawn?: true; title: string; due: number | null; dueTimed: boolean; showFrom: number | null; updatedAt: number };
-function platform(o: { tasks?: TaskState[]; publish?: () => any; facts?: (q: string) => string[] } = {}) {
-  const published: any[] = [], searches: any[] = [];
-  const ctx = { tasks: {
+function platform(o: { tasks?: TaskState[]; publish?: () => any; facts?: (q: string) => string[]; tie?: (req: any) => any } = {}) {
+  const published: any[] = [], searches: any[] = [], ties: any[] = [];
+  const tasks: any = {
     publish: async (t: any) => { published.push(t); return o.publish ? o.publish() : ok({}); },
     list: async (opts: { prefix?: string } = {}) => ok({ tasks: (o.tasks ?? []).filter((t) => t.sourceRef.startsWith(opts.prefix ?? "")) }),
-  }, memory: { search: async (q: string, opts: any) => { searches.push({ q, opts }); return ok({ facts: o.facts ? o.facts(q) : [] }); } } } as unknown as PlatformContext;
-  return { ctx, published, searches };
+  };
+  // Only a newer SDK has tie: leave it out unless the test gives one.
+  if (o.tie) tasks.tie = async (req: any) => { ties.push(req); return o.tie!(req); };
+  const ctx = { tasks, memory: { search: async (q: string, opts: any) => { searches.push({ q, opts }); return ok({ facts: o.facts ? o.facts(q) : [] }); } } } as unknown as PlatformContext;
+  return { ctx, published, searches, ties };
 }
 const closedTask = (ref: string, status: "done" | "dismissed" = "dismissed"): TaskState => ({ sourceRef: ref, status, title: "x", due: null, dueTimed: false, showFrom: null, updatedAt: 0 });
 function seed(key: string, title: string, localDate: string, startAt: number | null = null) {
@@ -443,5 +446,56 @@ describe("cover: a step the owner already has as a TODO is recorded as covered",
     const r: any = await handlePlanReport({ planId: pl.planId, events: [{ event: "e1", type: "journey", steps: [cab] }] }, p.ctx, NOW);
     expect(r.accepted).toEqual(["e1/cab"]);
     expect((coveredRow.get("g1", "cab") as any).covered).toBeNull();
+  });
+});
+
+describe("tie: the owner's TODOs that match a planned event are tied to it (amendment 1, B2)", () => {
+  test("a planned event is tied once, with its pointer, title, date and limit; no location or link when it has none", async () => {
+    hampi(); const pl = plan("g1");
+    const p = platform({ tie: () => ok({ tied: 1 }) });
+    const r: any = await handlePlanReport({ planId: pl.planId, events: [{ event: "e1", type: "stay", steps: [pack] }] }, p.ctx, NOW);
+    expect(r).toEqual({ accepted: ["e1/pack"], refused: [], done: true });
+    expect(p.ties).toEqual([{ pointer: "calendar-desk:g1", eventTitle: "Stay at The Loft - Aadhya Homestay Hampi", eventDate: "2026-10-12",
+      maxDue: new Date(2026, 9, 12, 23, 59, 59, 999).getTime(), maxDueReason: "Stay at The Loft - Aadhya Homestay Hampi, Mon 12 Oct" }]);
+  });
+  test("an event from a memory fact sends its mail link; a located event sends its location; steps: [] is tied too", async () => {
+    S.upsertFactEvent({ accountId: "acct", factId: 7, title: "Flight to Goa", localDate: "2026-10-12", startAt: null, sourceLink: "https://mail.google.com/mail/?authuser=a%40b.com#all/thr7" }, NOW.getTime());
+    seed("d1", "Dentist", "2026-10-09", new Date(2026, 9, 9, 10, 0).getTime());
+    S._db.query("UPDATE events SET location = ? WHERE event_key = 'd1'").run("Apollo Clinic, Jayanagar");
+    const pl = plan(S.factEventKey(7), "d1");
+    const p = platform({ tie: () => ok({ tied: 0 }) });
+    await handlePlanReport({ planId: pl.planId, events: [{ event: "e1", type: "journey", steps: [] }, { event: "e2", type: "appointment", steps: [] }] }, p.ctx, NOW);
+    expect(p.ties.map((t) => [t.pointer, t.sourceLink, t.eventLocation])).toEqual([
+      [`calendar-desk:${S.factEventKey(7)}`, "https://mail.google.com/mail/?authuser=a%40b.com#all/thr7", undefined],
+      ["calendar-desk:d1", undefined, "Apollo Clinic, Jayanagar"],
+    ]);
+  });
+  test("an older Flock (404) or an older SDK (no tie) plans the event as before, without a warning for the 404", async () => {
+    const warn = console.warn; const warned: unknown[] = []; console.warn = (...a: unknown[]) => { warned.push(a); };
+    try {
+      hampi();
+      const p404 = platform({ tie: () => failed("platform 404: Not Found", 404) });
+      expect(await handlePlanReport({ planId: plan("g1").planId, events: [{ event: "e1", type: "stay", steps: [] }] }, p404.ctx, NOW)).toEqual({ accepted: [], refused: [], done: true });
+      expect(warned).toEqual([]);
+      S._db.exec("DELETE FROM plans; DELETE FROM planned");
+      expect(await handlePlanReport({ planId: plan("g1").planId, events: [{ event: "e1", type: "stay", steps: [] }] }, platform().ctx, NOW)).toEqual({ accepted: [], refused: [], done: true });
+    } finally { console.warn = warn; }
+  });
+  test("any other failure is logged once and the event stays planned", async () => {
+    const warn = console.warn; const warned: unknown[] = []; console.warn = (...a: unknown[]) => { warned.push(a); };
+    try {
+      hampi();
+      const p = platform({ tie: () => failed("platform 500", 500) });
+      const r: any = await handlePlanReport({ planId: plan("g1").planId, events: [{ event: "e1", type: "stay", steps: [] }] }, p.ctx, NOW);
+      expect(r.done).toBe(true);
+      expect(P.plannedMark("acct", "g1")).toBeTruthy();
+      expect(warned).toHaveLength(1);
+    } finally { console.warn = warn; }
+  });
+  test("an event left unplanned (a refused step) is not tied", async () => {
+    hampi();
+    const p = platform({ tie: () => ok({ tied: 0 }) });
+    await handlePlanReport({ planId: plan("g1").planId, events: [{ event: "e1", type: "stay", steps: [{ ...pack, dueDate: "2000-01-01" }] }] }, p.ctx, NOW);
+    expect(p.ties).toEqual([]);
   });
 });

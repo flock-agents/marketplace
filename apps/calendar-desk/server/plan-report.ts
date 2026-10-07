@@ -95,6 +95,32 @@ export async function refreshStepCaps(platform: PlatformContext, e: EventRow, st
   return failed;
 }
 
+/** What Calendar Desk sends to tie the owner's matching TODOs to an event it planned (Flock: POST /apps/:appId/tasks/tie). */
+export interface TieRequest { pointer: string; eventTitle: string; eventLocation?: string; eventDate: string; sourceLink?: string; maxDue: number; maxDueReason: string }
+type TieResult = { ok: true; data: { tied: number } } | { ok: false; status?: number; skipped?: boolean; reason: string };
+
+/**
+ * Ties the owner's open TODOs that match the event (same mail thread, or the same occasion within the week before) to it, once
+ * the event is planned. An SDK without `tie` or a Flock that answers 404 is older: ignored. Any other failure is logged; it
+ * never unplans the event. Returns how many were tied, or null. The pointer is `calendar-desk:<event key>`, as Flock requires.
+ */
+export async function tieOwnerTodos(platform: PlatformContext, e: EventRow): Promise<number | null> {
+  const tie = (platform.tasks as unknown as { tie?: (req: TieRequest) => Promise<TieResult> }).tie;
+  if (typeof tie !== "function") return null;
+  const { maxDue, maxDueReason } = maxDueOf(e);
+  try {
+    const res = await tie.call(platform.tasks, {
+      pointer: pointer(e.eventKey), eventTitle: e.title, ...(e.location?.trim() ? { eventLocation: e.location } : {}),
+      eventDate: e.localDate, ...(e.sourceLink ? { sourceLink: e.sourceLink } : {}), maxDue, maxDueReason,
+    });
+    if (res.ok) return res.data.tied;
+    if (res.status !== 404 && res.skipped !== true) console.warn(`[calendar-desk] tie for ${e.eventKey} failed: ${res.reason}`);
+  } catch (err) {
+    console.warn(`[calendar-desk] tie for ${e.eventKey} threw: ${err instanceof Error ? err.message : err}`);
+  }
+  return null;
+}
+
 /** What the kind checks need beyond the step itself: the event's type, the kinds the owner switched off by skips, and the
  *  prepare-ahead steps already on the event. */
 interface KindCtx { type: EventType; off: ReadonlySet<string>; prepareKeys: ReadonlySet<string> }
@@ -216,7 +242,10 @@ export async function handlePlanReport(p: Record<string, unknown>, platform: Pla
     // platform's answer, not a bad report: the event stays unplanned and is offered again next run.
     const capFails = await refreshStepCaps(platform, ev, existing, seen);
     for (const f of capFails) refused.push({ item: `${ref.ref}/${f.key}`, reason: `could not update its limit: ${f.reason}` });
-    if (capFails.length === 0) markPlanned([{ accountId: ref.accountId, eventKey: ref.eventKey, date: ref.date, startAt: ref.startAt, type }], now.getTime());
+    if (capFails.length === 0) {
+      markPlanned([{ accountId: ref.accountId, eventKey: ref.eventKey, date: ref.date, startAt: ref.startAt, type }], now.getTime());
+      await tieOwnerTodos(platform, ev);
+    }
   }
 
   // Everything planned answers the plan, whatever else was refused; only then do bad reports count toward giving up.

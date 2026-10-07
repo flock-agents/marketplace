@@ -12,7 +12,7 @@ spawns it, and the two talk over two narrow seams:
 | platform → app | HTTP `POST /lifecycle/initialize`, `/lifecycle/tick`, `GET /lifecycle/progress`, `POST /ops/:name` | "start", "do a pass", "how far along are you", agent operations |
 | platform → app | HTTP `GET /api/widget/horizon` | the event feed Flock resolves `calendar-desk:<event id>` pointers through (labels, rail nesting, the todos skill's link check): today through the next 90 days (fact events are stored that far; Google only 7). It has no `removed` list; a deleted event's steps are withdrawn by the app |
 | platform → app | HTTP `GET /api/widget/today` | the schedule widget (today through the next 7 days, each item dated); `connector` says whether Google is linked (`none` / `syncing` / `ok` / `attention`) |
-| app → platform | `@flock/app-sdk`'s `PlatformContext` | `connectors.exec`, `memory.factsSince` (prep context), `memory.search` (planning facts), `agent.intent`, `tasks.publish` / `tasks.list` / `tasks.withdraw` (its own steps) |
+| app → platform | `@flock/app-sdk`'s `PlatformContext` | `connectors.exec`, `memory.factsSince` (prep context), `memory.search` (planning facts), `agent.intent`, `tasks.publish` / `tasks.list` / `tasks.withdraw` (its own steps), `tasks.tie` (ties the owner's matching TODOs to an event it planned) |
 
 Nothing else is shared. No Google Calendar event ever lands in a platform table — the app keeps its own
 SQLite file under `APP_DATA_DIR` and hands the platform only intents and its own steps.
