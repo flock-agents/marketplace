@@ -108,7 +108,8 @@ describe("handlePlanReport", () => {
     const r = await handlePlanReport({ planId: pl.planId, events: [{ event: "e1", type: "stay", steps: [pack] }] }, p.ctx, NOW);
     expect(r).toEqual({ accepted: ["e1/pack"], refused: [], done: true });
     expect(p.published).toEqual([{ sourceRef: "step:g1:pack", title: "Pack for Hampi trip", due: new Date(2026, 9, 11).getTime(), dueTimed: false, showFrom: "2026-10-10", status: "backlog",
-      maxDue: new Date(2026, 9, 12, 23, 59, 59, 999).getTime(), maxDueReason: "Stay at The Loft - Aadhya Homestay Hampi, Mon 12 Oct", context: { eventKey: "calendar-desk:g1", why: "a trip", kind: "pack" } }]);
+      maxDue: new Date(2026, 9, 12, 23, 59, 59, 999).getTime(), maxDueReason: "Stay at The Loft - Aadhya Homestay Hampi, Mon 12 Oct", context: { eventKey: "calendar-desk:g1", why: "a trip", kind: "pack" },
+      cover: { kind: "pack", eventTitle: "Stay at The Loft - Aadhya Homestay Hampi", eventLocation: undefined, eventDate: "2026-10-12" } }]);
     expect(P.stepKeysFor("acct", "g1")).toEqual(["pack"]);
     expect(P.plannedMark("acct", "g1")).not.toBeNull();
     expect(P.openPlan()).toBeNull();
@@ -491,5 +492,35 @@ describe("a personal step with no evidence: ask once, hold the event (planning s
     const { r, asks } = await report([{ key: "d1", type: "appointment", steps: [{ key: "BAD", kind: "other", title: "t", dueDate: "2026-10-08", why: "w" }] }]);
     expect(r.done).toBe(false);
     expect(asks).toEqual([]);
+  });
+});
+
+describe("cover: a step the owner already has as a TODO is recorded as covered", () => {
+  const cab = { key: "cab", kind: "cab-airport", title: "Book a cab to the airport", dueDate: "2026-10-11", why: "a flight" };
+  const coveredRow = (S._db.query("SELECT covered FROM plan_steps WHERE account_id = 'acct' AND event_key = ? AND step_key = ?"));
+
+  test("covered answer: reported as covered, plan_steps.covered = 1, the event is planned", async () => {
+    seed("g1", "Flight to Goa", "2026-10-12"); const pl = plan("g1");
+    const p = platform({ publish: () => ok({ covered: { todoId: "t1" } }) });
+    const r: any = await handlePlanReport({ planId: pl.planId, events: [{ event: "e1", type: "journey", steps: [cab] }] }, p.ctx, NOW);
+    expect(r).toEqual({ accepted: ["e1/cab covered by a TODO"], refused: [], done: true });
+    expect(p.published[0].cover).toEqual({ kind: "cab-airport", eventTitle: "Flight to Goa", eventLocation: undefined, eventDate: "2026-10-12" });
+    expect((coveredRow.get("g1", "cab") as any).covered).toBe(1);
+    expect(P.plannedMark("acct", "g1")).toBeTruthy();
+  });
+
+  test("a judgement kind sends no cover", async () => {
+    seed("g1", "Flight to Goa", "2026-10-12"); const pl = plan("g1");
+    const p = platform();
+    await handlePlanReport({ planId: pl.planId, events: [{ event: "e1", type: "journey", steps: [{ key: "docs", kind: "documents", title: "Carry passport", dueDate: "2026-10-11", why: "abroad" }] }] }, p.ctx, NOW);
+    expect("cover" in p.published[0]).toBe(false);
+  });
+
+  test("an answer without data (older Flock) is recorded as published", async () => {
+    seed("g1", "Flight to Goa", "2026-10-12"); const pl = plan("g1");
+    const p = platform();
+    const r: any = await handlePlanReport({ planId: pl.planId, events: [{ event: "e1", type: "journey", steps: [cab] }] }, p.ctx, NOW);
+    expect(r.accepted).toEqual(["e1/cab"]);
+    expect((coveredRow.get("g1", "cab") as any).covered).toBeNull();
   });
 });

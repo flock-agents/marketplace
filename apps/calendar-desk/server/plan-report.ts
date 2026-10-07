@@ -8,7 +8,7 @@ import { pointer } from "./planner";
 import { EVENT_TYPES, KINDS, kindSpec, type EventType } from "./kinds";
 import { tally } from "./tally";
 import { askHolder } from "./asks";
-import { openPlan, plannedMark, markPlanned, recordStep, stepKeysFor, stepKindsFor, coveredStepRefs, noteBadReport, answerPlan, abandonPlan, BAD_REPORTS_MAX, type PlanRecord, type PlanEventRef } from "./planning-store";
+import { openPlan, plannedMark, markPlanned, recordStep, setStepCovered, stepKeysFor, stepKindsFor, coveredStepRefs, noteBadReport, answerPlan, abandonPlan, BAD_REPORTS_MAX, type PlanRecord, type PlanEventRef } from "./planning-store";
 
 // `withdrawn`: a dismissed row Calendar Desk itself withdrew (its event was deleted), not one the owner closed.
 export type StepState = { sourceRef: string; status: "open" | "done" | "dismissed"; withdrawn?: true; title: string; due: number | null; showFrom: number | null };
@@ -204,10 +204,15 @@ export async function handlePlanReport(p: Record<string, unknown>, platform: Pla
       }
       if (!why && s.kind === "prepare-ahead") prepareKeys.add(s.key);
       if (why) { refused.push({ item, reason: why }); bad++; allOk = false; continue; }
-      const res = await platform.tasks.publish(stepTask(ev, s as StepSpec));
+      // A step that follows from the event or the owner's habits is offered to Flock as a cover: if the owner already has that TODO, Flock ties it to the event and creates nothing.
+      const task: AppTask & { cover?: unknown } = stepTask(ev, s as StepSpec);
+      if (kindSpec(s.kind)!.tier !== "judgement") task.cover = { kind: s.kind, eventTitle: ev.title, eventLocation: ev.location ?? undefined, eventDate: ev.localDate };
+      const res = await platform.tasks.publish(task);
       if (!res.ok) { refused.push({ item, reason: `could not publish: ${(res as any).reason ?? "unknown"}` }); allOk = false; continue; } // the platform's fault: no bad report, the event stays unplanned for the next run
       recordStep(ev.accountId, ev.eventKey, s.key, s.kind);
-      accepted.push(item);
+      // An older Flock ignores `cover` and answers without `covered`: the step is then simply published.
+      if ((res as any).data?.covered) { setStepCovered(ev.accountId, ev.eventKey, s.key); accepted.push(`${item} covered by a TODO`); }
+      else accepted.push(item);
     }
     if (!allOk) continue;
     // A moved or renamed event: the steps the report left out still carry the old limit. A refused update is the
