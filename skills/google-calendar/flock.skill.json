@@ -1,0 +1,21 @@
+{
+  "id": "google-calendar",
+  "description": "View and manage Google Calendar events",
+  "category": "core",
+  "scope": "per-agent",
+  "hasScripts": true,
+  "secretRefs": [],
+  "networkAccess": true,
+  "paramSchema": [],
+  "requiresInstance": true,
+  "enabled": true,
+  "requires": [{ "type": "browser_session", "service": "google", "description": "View and manage calendar events", "recommended": true, "rationale": "A saved Google browser session is the reliable path for Calendar — no per-scope OAuth app review, and one session covers all Google skills." }],
+  "auth": { "type": "browser_session", "session_name": "google", "setup_instructions": "Log in to your Google account via the browser session manager to access Calendar." },
+  "functions": { "listEvents": { "timeoutMs": 200000, "reason": "Reads the agenda, then may open up to 60 event detail popovers (~2s each) on a first read; a kill mid-read loses the whole scrape." } },
+  "security": { "allowedFunctions": ["listEvents", "getEvent", "createEvent", "updateEvent"] },
+  "network": { "endpoints": [{ "hostname": "www.googleapis.com", "purpose": "Google Calendar API", "methods": ["GET", "POST", "PUT", "DELETE"] }] },
+  "name": "Google Calendar",
+  "slug": "google-calendar",
+  "version": "1.0.0",
+  "author": "flock"
+}

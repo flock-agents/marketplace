@@ -1,0 +1,7 @@
+node_modules/
+# The store falls back to the app dir when APP_DATA_DIR is unset (a bare `bun run
+# server/index.ts`), so keep the db and its WAL sidecars out of the repo — *.db alone
+# is not enough.
+*.db
+*.db-wal
+*.db-shm
