@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-label="Calendar Desk">
+  <!-- Calendar glyph: rounded square with header bar and a dot -->
+  <rect x="3" y="4" width="18" height="17" rx="2" ry="2" fill="none" stroke="currentColor" stroke-width="1.5"/>
+  <!-- Header bar -->
+  <rect x="3" y="4" width="18" height="4" rx="2" ry="2" fill="currentColor" opacity="0.8"/>
+  <!-- Dot representing a date -->
+  <circle cx="9" cy="13" r="1.5" fill="currentColor"/>
+</svg>
