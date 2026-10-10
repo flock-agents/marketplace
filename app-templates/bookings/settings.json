@@ -1,0 +1,13 @@
+{
+  "hours": {
+    "type": "json"
+  },
+  "slot_minutes": {
+    "type": "integer",
+    "rules": {
+      "minimum": 5,
+      "maximum": 240,
+      "message": "slot_minutes must be a whole number from 5 to 240"
+    }
+  }
+}

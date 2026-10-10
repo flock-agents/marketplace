@@ -48,11 +48,14 @@ export const slotProblem = (v: unknown): string | null =>
   typeof v === "number" && Number.isInteger(v) && v >= MIN_SLOT && v <= MAX_SLOT ? null : `slot_minutes must be a whole number from ${MIN_SLOT} to ${MAX_SLOT}`;
 
 /** The settings this template declares (passed to mountKit, and listed in template.json without the checks). Defaults are today's constants.
+ *  `rules` is the declarative twin of a check (minimum, maximum, minLength, pattern, enum, message), written into settings.json for the
+ *  planner, which never runs a template's code. A check with no rules is only type-checked at planning; the kit still runs it at make.
  *  The kit runs each `check` on PATCH /api/_app/settings (400 naming the field), on the boot import (the import fails) and on read. */
 export const SETTINGS = [
   { key: "hours", type: "json" as const, default: HOURS, scope: "owner" as const,
     label: 'Opening hours by weekday, "0" (Sunday) to "6" (Saturday): ["HH:MM", "HH:MM"] for open and close, or null when closed', check: hoursProblem },
-  { key: "slot_minutes", type: "integer" as const, default: SLOT_MINUTES, scope: "owner" as const, label: "Minutes between the start times offered (5 to 240)", check: slotProblem },
+  { key: "slot_minutes", type: "integer" as const, default: SLOT_MINUTES, scope: "owner" as const, label: "Minutes between the start times offered (5 to 240)", check: slotProblem,
+    rules: { minimum: MIN_SLOT, maximum: MAX_SLOT, message: `slot_minutes must be a whole number from ${MIN_SLOT} to ${MAX_SLOT}` } },
 ];
 
 /** The settings as the helpers use them: a stored value that is not usable falls back to its default, so the slot loop always ends. */

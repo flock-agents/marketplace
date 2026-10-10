@@ -1,0 +1,39 @@
+{
+  "business.name": {
+    "type": "string",
+    "rules": {
+      "pattern": "\\S",
+      "message": "business.name must not be empty"
+    }
+  },
+  "business.gstin": {
+    "type": "string",
+    "rules": {
+      "pattern": "^(\\d{2}[A-Z]{5}\\d{4}[A-Z][1-9A-Z]Z[0-9A-Z])?$",
+      "message": "business.gstin must be 15 characters like 29AAEPB4172K1ZB (capitals), or empty when not registered"
+    }
+  },
+  "business.address": {
+    "type": "string"
+  },
+  "business.email": {
+    "type": "string"
+  },
+  "business.pay": {
+    "type": "string"
+  },
+  "seller_state": {
+    "type": "string",
+    "rules": {
+      "pattern": "^(0[1-9]|[12]\\d|3[0-8]|97)$",
+      "message": "seller_state must be a two-digit GST state code, 01 to 38 or 97 (29 is Karnataka)"
+    }
+  },
+  "number_prefix": {
+    "type": "string",
+    "rules": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9/]{0,5}[-\\s]*$",
+      "message": "number_prefix must be 1 to 6 letters or digits (\"/\" allowed after the first), with no spaces, dashes or other marks (a trailing dash or space is dropped)"
+    }
+  }
+}
