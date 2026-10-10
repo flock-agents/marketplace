@@ -8,7 +8,8 @@ import { SETTINGS, BUSINESS, SELLER_STATE, NUMBER_PREFIX } from "../server/db/co
 describe("invoices settings", () => {
   it("template.json lists exactly the settings the server declares to mountKit, with today's defaults", () => {
     const meta = JSON.parse(readFileSync(join(import.meta.dir, "..", "template.json"), "utf8"));
-    expect(meta.settings).toEqual(JSON.parse(JSON.stringify(SETTINGS)));
+    // `rules` (the declarative twin of a check) live in settings.json, not template.json
+    expect(meta.settings).toEqual(JSON.parse(JSON.stringify(SETTINGS)).map(({ rules: _r, ...d }: Record<string, unknown>) => d));
     expect(meta.settings.map((s: { key: string }) => s.key)).toEqual(
       ["business.name", "business.gstin", "business.address", "business.email", "business.pay", "seller_state", "number_prefix"]);
     const def = (k: string) => meta.settings.find((s: { key: string }) => s.key === k).default;
