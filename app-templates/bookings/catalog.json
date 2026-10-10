@@ -1,6 +1,6 @@
 {
   "name": "bookings",
-  "version": 1,
+  "version": "1.0.0",
   "description": "Lets your clients book time slots at your clinic, salon or tuition, and shows today's bookings first; one client per slot (not group classes with a capacity); not for noting your own appointments.",
   "objects": [
     "calendar"

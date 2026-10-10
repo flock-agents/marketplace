@@ -1,6 +1,6 @@
 {
   "name": "money",
-  "version": 1,
+  "version": "1.0.0",
   "description": "A household's money (not a business's books): transactions, budgets, investments and goals.",
   "objects": [
     "receipt"

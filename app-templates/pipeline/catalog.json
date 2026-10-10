@@ -1,6 +1,6 @@
 {
   "name": "pipeline",
-  "version": 1,
+  "version": "1.0.0",
   "description": "Deals moving through stages: leads, proposals, orders, applications.",
   "objects": [
     "briefcase"

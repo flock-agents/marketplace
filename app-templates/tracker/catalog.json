@@ -1,6 +1,6 @@
 {
   "name": "tracker",
-  "version": 1,
+  "version": "1.0.0",
   "description": "Rows with a status: vendors, candidates, applications.",
   "objects": [
     "clipboard"
