@@ -1,0 +1,5 @@
+{ "entries": [
+  { "$key": "raju", "name": "Raju Electricals", "kind": "Electrician", "phone": "+91 98450 12345", "notes": "Fixed the inverter wiring; comes same day." },
+  { "$key": "annapurna", "name": "Annapurna Tiffin Service", "kind": "Tiffin service", "phone": "+91 99001 55667", "notes": "Lunch at 12:30, ₹110 a meal, Sunday off." },
+  { "$key": "shine", "name": "Shine Home Cleaning", "kind": "Cleaning", "phone": "+91 80 4110 2233", "url": "https://shinehome.example.in" }
+] }

@@ -1,0 +1,6 @@
+{ "deals": [
+  { "$key": "nair", "title": "Nair Textiles: website revamp", "stage": "Proposal", "owner": "Arjun", "value": 240000, "next_step": "Send revised proposal with Hindi pages", "due": "2026-10-14" },
+  { "$key": "dosa", "title": "Dosa Point: Swiggy menu photos", "stage": "Lead", "owner": "Divya", "value": 35000, "next_step": "Call Mr Krishnan after 4 pm" },
+  { "$key": "ganesh", "title": "Ganesh Jewellers: Diwali campaign", "stage": "Talking", "owner": "Arjun", "value": 180000, "next_step": "Mood board review", "due": "2026-10-18" },
+  { "$key": "apollo", "title": "Apollo Pharmacy Jayanagar: signage", "stage": "Won", "owner": "Divya", "value": 95000 }
+] }

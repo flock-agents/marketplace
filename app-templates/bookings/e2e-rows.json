@@ -1,0 +1,5 @@
+{ "services": [
+  { "$key": "hatha", "name": "Hatha yoga, group class", "minutes": 60, "price": 500 },
+  { "$key": "private", "name": "Private yoga session", "minutes": 60, "price": 1500 },
+  { "$key": "pranayama", "name": "Pranayama and meditation", "minutes": 30, "price": 300 }
+] }

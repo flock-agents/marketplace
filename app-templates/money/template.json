@@ -1,0 +1,3 @@
+{ "name": "money", "version": "1.0.0", "description": "A household's money (not a business's books): transactions, budgets, investments and goals.", "pages": ["overview", "transactions", "budgets", "investments", "goals"], "tables": ["transactions", "budgets", "holdings", "goals"], "objects": ["receipt"], "nav": "auto", "chat": "side",
+  "labels": { "nav.overview": "Overview", "nav.transactions": "Transactions", "nav.budgets": "Budgets", "nav.investments": "Investments", "nav.goals": "Goals", "title.overview": "Overview", "title.transactions": "Transactions", "title.budgets": "Budgets", "title.investments": "Investments", "title.goals": "Goals" }
+}

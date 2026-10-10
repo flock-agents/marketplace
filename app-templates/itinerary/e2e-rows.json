@@ -1,0 +1,15 @@
+{ "plan": [
+  { "$key": "flight", "day": "2026-11-14", "time": "06:10", "kind": "flight", "title": "IndiGo 6E 5312 BLR to Kochi", "detail": "Terminal 1, web check-in done" },
+  { "$key": "stay", "day": "2026-11-14", "time": "14:00", "kind": "stay", "title": "Check in at Spice Coast Homestay, Fort Kochi" },
+  { "$key": "boat", "day": "2026-11-15", "time": "10:30", "kind": "do", "title": "Alleppey houseboat day cruise" }
+], "bookings": [
+  { "$key": "b1", "what": "IndiGo BLR to Kochi, 3 seats", "ref": "PNR K7XQ2M", "when": "2026-11-14", "status": "Confirmed", "cost": 14850, "plan_id": { "$ref": "plan/flight" } },
+  { "$key": "b2", "what": "Houseboat, Alleppey", "ref": "KTDC-55821", "when": "2026-11-15", "status": "Pending", "cost": 9500, "plan_id": { "$ref": "plan/boat" } }
+], "packing": [
+  { "$key": "p1", "item": "Sunscreen", "who": "Shared" },
+  { "$key": "p2", "item": "Mosquito repellent", "who": "Shared" },
+  { "$key": "p3", "item": "Aadhaar cards", "who": "Shared", "packed": true }
+], "trip_budget": [
+  { "$key": "tb1", "category": "Flights", "spent": 14850, "limit_amount": 16000 },
+  { "$key": "tb2", "category": "Stay", "spent": 0, "limit_amount": 20000 }
+] }

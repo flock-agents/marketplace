@@ -1,0 +1,46 @@
+/* The app's own CSS (outside src/flock/, so design updates keep it). Tokens only, never a literal colour. */
+.inv-sheet { background: var(--surface); border: 1px solid var(--line-2); border-radius: var(--radius-lg); padding: 28px; display: flex; flex-direction: column; gap: 22px; min-width: 0; }
+.inv-top { display: flex; justify-content: space-between; gap: 20px; flex-wrap: wrap; }
+.inv-biz { display: flex; flex-direction: column; gap: 2px; font-size: 13.5px; color: var(--ink-2); min-width: 0; }
+.inv-biz b { font-size: 17px; color: var(--ink); font-weight: 650; }
+.inv-title { text-align: right; display: flex; flex-direction: column; gap: 2px; font-size: 13.5px; color: var(--ink-2); }
+.inv-title h2 { margin: 0; font: 600 12px var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--ink-3); }
+.inv-title b { font: 600 20px var(--mono); color: var(--ink); }
+.inv-parties { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.inv-party { display: flex; flex-direction: column; gap: 2px; font-size: 14px; color: var(--ink-2); min-width: 0; overflow-wrap: anywhere; }
+.inv-party h3 { margin: 0 0 4px; font: 600 12px var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); }
+.inv-party b { color: var(--ink); font-weight: 600; font-size: 15px; }
+.inv-due { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 14px 0 0; border-top: 1px solid var(--line-2); font-variant-numeric: tabular-nums; }
+.inv-due span { font-size: 14px; color: var(--ink-2); }
+.inv-due b { font-size: 22px; font-weight: 700; color: var(--ink); }
+.inv-due-late b { color: var(--block); }
+.inv-foot { font-size: 13px; color: var(--ink-3); display: flex; flex-direction: column; gap: 4px; overflow-wrap: anywhere; }
+.inv-chip { display: inline-block; vertical-align: middle; }
+.inv-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.inv-pay-row { display: flex; justify-content: space-between; gap: 12px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+.inv-pay-row:last-child { border-bottom: 0; }
+.inv-pay-row small { display: block; color: var(--ink-3); font-size: 12.5px; }
+.inv-edit { display: flex; flex-direction: column; gap: 18px; }
+.inv-head-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.inv-note { font-size: 13px; color: var(--ink-3); margin: 0; }
+
+@media (max-width: 720px) {
+  .inv-sheet { padding: 16px; gap: 18px; }
+  .inv-title { text-align: left; }
+  .inv-parties, .inv-head-row { grid-template-columns: 1fr; }
+  .inv-due b { font-size: 20px; }
+}
+
+/* Print / Save as PDF: the invoice sheet alone, in normal flow on a plain A4 page. */
+@media print {
+  @page { size: A4; margin: 14mm; }
+  :root, :root[data-theme] { color-scheme: light !important; }
+  html, body, .fl-shell, .fl-page, .fl-page-body { background: Canvas !important; color: CanvasText; height: auto; }
+  .fl-shell-head, .fl-shell-tabs, .fl-shell-rail, .fl-shell-agent, .fl-shell-launch, .fl-shell-chat, .fl-shell-scrim, .fl-shell-sheet-wrap,
+  .fl-page-head, .no-print { display: none !important; }
+  .fl-shell, .fl-shell-col, .fl-shell-grid, .fl-shell-main { display: block !important; height: auto !important; min-height: 0 !important; overflow: visible !important; padding: 0 !important; margin: 0 !important; }
+  .inv-sheet { border: 0; padding: 0; border-radius: 0; gap: 16px; max-width: 182mm; break-inside: avoid-page;
+    --ink: CanvasText; --ink-2: CanvasText; --ink-3: GrayText; --line: GrayText; --line-2: GrayText; --surface: Canvas; --block: CanvasText; --tint: Canvas; background: Canvas; color: CanvasText; }
+  .inv-sheet .fl-li-row { break-inside: avoid; }
+  .fl-page { padding: 0 !important; }
+}

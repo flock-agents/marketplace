@@ -1,0 +1,19 @@
+/* The week toolbar's Prev / Today / Next stay 40px tall and wide enough to tap. */
+.pl-nav { display: flex; align-items: center; gap: 0; }
+.pl-nav .fl-btn { min-height: 40px; min-width: 40px; justify-content: center; }
+/* "Add ingredients to groceries" is a phone tap target too. */
+.pl-tap .fl-btn { min-height: 40px; }
+/* A meal's dishes on one line, each a button that opens that dish; on a phone they wrap. */
+.pl-dishes { display: inline-flex; flex-wrap: wrap; align-items: baseline; column-gap: 2px; row-gap: 0; }
+.pl-dishw { display: inline-flex; align-items: baseline; }
+.pl-sep { padding: 0 6px 0 4px; color: var(--ink-4); font-weight: 400; }
+.fl-sch .pl-dish { all: unset; box-sizing: border-box; min-height: 40px; min-width: 40px; display: inline-flex; align-items: center; justify-content: flex-start; padding: 0 2px; border-radius: 6px; cursor: pointer; font: inherit; color: inherit; overflow-wrap: anywhere; }
+.fl-sch .pl-dish:hover { text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--ink-4); }
+.fl-sch .pl-dish:focus-visible { outline: 2px solid var(--ua); outline-offset: 1px; }
+.fl-sch .pl-dish[aria-current="true"] { color: var(--ua); text-decoration: underline; text-underline-offset: 3px; }
+/* "+ Add" another dish to a meal that has some: quiet until hovered, still a 40px tap target. */
+.fl-sch .pl-more { min-height: 40px; display: inline-flex; align-items: center; gap: 6px; padding: 0 10px; border: 0; border-radius: 10px; background: transparent; color: var(--ink-3); font-size: 13.5px; cursor: pointer; white-space: nowrap; }
+.fl-sch .pl-more > span[aria-hidden] { font-size: 16px; line-height: 1; }
+.fl-sch .pl-more:hover, .fl-sch .pl-more:focus-visible { background: var(--ua-soft); color: var(--ua); }
+/* On a phone the dishes need the width: "+ Add" shrinks to "+" (its label still says what it adds). */
+@media (max-width: 720px) { .fl-sch .pl-more { min-width: 40px; justify-content: center; padding: 0; } .fl-sch .pl-more-t { display: none; } }

@@ -1,0 +1,8 @@
+{ "metrics": [
+  { "$key": "o1", "label": "Orders today", "value": 87, "unit": "orders" },
+  { "$key": "r1", "label": "Revenue today", "value": 21450, "unit": "₹" },
+  { "$key": "d1", "label": "Avg. delivery time", "value": 34, "unit": "min" }
+], "events": [
+  { "$key": "e1", "title": "Zomato rating up to 4.4 after the new thali", "at": "2026-10-09T13:20", "kind": "Milestone" },
+  { "$key": "e2", "title": "Two late deliveries in HSR Layout at lunch", "at": "2026-10-09T14:05", "kind": "Alert" }
+] }
