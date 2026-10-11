@@ -1,7 +1,7 @@
 {
   "name": "tracker",
   "version": "1.0.0",
-  "description": "Rows with a status: vendors, candidates, applications.",
+  "description": "Rows with a status: vendors, quotes, orders, collections. Not for hiring (use pipeline).",
   "objects": [
     "clipboard"
   ],

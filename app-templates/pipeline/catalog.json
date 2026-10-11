@@ -1,7 +1,7 @@
 {
   "name": "pipeline",
   "version": "1.0.0",
-  "description": "Deals moving through stages: leads, proposals, orders, applications.",
+  "description": "People or deals moving through stages: hiring candidates, leads, proposals, orders, applications.",
   "objects": [
     "briefcase"
   ],
