@@ -23,6 +23,9 @@ Four tables (server/db/schema.ts), each with the kit's `id`, `created_at`, `upda
 `GET /api/budget-status` and `GET /api/monthly-totals`, both with `?month=YYYY-MM` (the viewer's own current month).
 Income is money in under `INCOME_CATEGORIES` (server/db/constants.ts: Salary, Freelance, Interest & dividends, Other income); investments (and their redemptions) count as saved, not spent. Any other money in, such as a refund, nets against its own category, so a category's spent never goes below zero.
 
+## Settings
+`overviewLead` (`PATCH /api/_app/settings`, no code change): what the Overview leads with. `spending` for a budget or running-costs app, `netWorth` for investments and wealth, `auto` (the default) = net worth once the owner has real holdings, spending before that (the sample holdings do not count). When the app is made, set it from what it is for.
+
 ## What to change first
 1. The categories and holding kinds, all in server/db/constants.ts (new kinds of income also go in `INCOME_CATEGORIES`).
    Renaming a column or table needs the owner's approval, so do it before the app has real rows.

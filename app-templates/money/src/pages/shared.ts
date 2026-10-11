@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { kitFetch, subscribeEvents } from "../flock/ui";
+import { leadSetting, type LeadSetting } from "./lead";
 import { CATEGORIES as CATS, KINDS as KINDS_, changePct } from "../../server/db/constants";
 
 export interface Transaction { id: string; date: string; merchant: string; category: string; amount: number }
@@ -65,3 +66,16 @@ export const GOAL_FIELDS: FieldDef[] = [
   { type: "money", name: "target", label: "Target", required: true },
   { type: "date", name: "by", label: "By" },
 ];
+
+/** The overviewLead setting, kept current when it changes. */
+export function useOverviewLead(): LeadSetting {
+  const [v, setV] = useState<LeadSetting>("auto");
+  useEffect(() => {
+    let live = true;
+    const load = () => { kitFetch<{ settings?: Record<string, unknown> }>("_app").then((r) => { if (live) setV(leadSetting(r.settings?.overviewLead)); }).catch(() => { /* keep what we have */ }); };
+    load();
+    const off = subscribeEvents((e) => { if (e.table === "_settings") load(); }, load);
+    return () => { live = false; off(); };
+  }, []);
+  return v;
+}

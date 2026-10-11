@@ -1,3 +1,6 @@
-{ "name": "money", "version": "1.0.0", "description": "A household's money (not a business's books): transactions, budgets, investments and goals.", "pages": ["overview", "transactions", "budgets", "investments", "goals"], "tables": ["transactions", "budgets", "holdings", "goals"], "objects": ["receipt"], "nav": "auto", "chat": "side",
+{ "name": "money", "version": "1.0.0", "description": "A household's money (not a business's books): transactions, budgets, investments and goals. Set overviewLead: spending (budget, running costs) or netWorth (investments).", "pages": ["overview", "transactions", "budgets", "investments", "goals"], "tables": ["transactions", "budgets", "holdings", "goals"], "objects": ["receipt"], "nav": "auto", "chat": "side",
+  "settings": [
+    { "key": "overviewLead", "type": "string", "default": "auto", "scope": "owner", "label": "What the Overview leads with: \"spending\" (this month's spending: a budget or running-costs app), \"netWorth\" (investments and wealth), or \"auto\" (net worth once real holdings are added). Set it from what the app is for" }
+  ],
   "labels": { "nav.overview": "Overview", "nav.transactions": "Transactions", "nav.budgets": "Budgets", "nav.investments": "Investments", "nav.goals": "Goals", "title.overview": "Overview", "title.transactions": "Transactions", "title.budgets": "Budgets", "title.investments": "Investments", "title.goals": "Goals" }
 }
