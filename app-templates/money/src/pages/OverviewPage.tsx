@@ -1,4 +1,5 @@
 import { Callout, Chart, Empty, ErrorCard, HeroStat, Page, RowList, Section, Skeleton, StatStrip, Value, useTable, label } from "../flock/ui";
+import { overviewLead } from "./lead";
 import { monthName, useRoute, type Holding, type MonthTotals, type Selected, type Transaction } from "./shared";
 
 export function OverviewPage({ selected, onSelect }: { selected: Selected; onSelect: (s: Selected) => void }) {
@@ -8,20 +9,26 @@ export function OverviewPage({ selected, onSelect }: { selected: Selected; onSel
   const worth = holdings.rows.reduce((a, h) => a + h.value, 0), invested = holdings.rows.reduce((a, h) => a + h.invested, 0);
   const gain = invested ? ((worth - invested) / invested) * 100 : undefined;
   const now = months?.[months.length - 1];
+  const lead = overviewLead(holdings.rows.length, now);
+  const prev = months && months.length > 1 ? months[months.length - 2] : undefined;
   return (
     <Page title={label("title.overview", "Overview")} subtitle={now ? `${monthName(now.month, true)} so far` : undefined}>
       {holdings.error ? <ErrorCard title="Couldn't load your net worth" message={holdings.error} onRetry={holdings.refetch} />
         : holdings.loading && !holdings.rows.length ? <Skeleton variant="card" lines={2} />
-        : <HeroStat
+        : lead.hero === "netWorth" ? <HeroStat
           label="Net worth" value={worth} kind="compact" delta={gain}
-          caption={holdings.rows.length ? `${holdings.rows.length} ${holdings.rows.length === 1 ? "holding" : "holdings"} · change is since invested` : "Add your investments to see this"}
+          caption={`${holdings.rows.length} ${holdings.rows.length === 1 ? "holding" : "holdings"} · change is since invested`}
+        />
+        : <HeroStat
+          label={now ? `Spent in ${monthName(now.month, true)}` : "Spent this month"} value={now?.expenses ?? 0} kind="compact"
+          caption={prev ? `${monthName(prev.month, true)}: ₹${prev.expenses.toLocaleString("en-IN")}` : "Add transactions to see this"}
         />}
       {monthsError ? <Callout tone="danger" title="Couldn't load this month's totals">{monthsError}</Callout> : null}
-      {now ? (
+      {lead.strip.length ? (
         <StatStrip stats={[
-          { label: "income", value: now.income, kind: "compact" },
-          { label: "spent", value: now.expenses, kind: "compact" },
-          { label: "saved", value: now.income - now.expenses, kind: "compact", hint: "Income minus spending. Money put into investments counts as saved." },
+          ...(lead.strip.includes("income") ? [{ label: "income", value: now!.income, kind: "compact" as const }] : []),
+          ...(lead.strip.includes("spent") ? [{ label: "spent", value: now!.expenses, kind: "compact" as const }] : []),
+          ...(lead.strip.includes("saved") ? [{ label: "saved", value: now!.income - now!.expenses, kind: "compact" as const, hint: "Income minus spending. Money put into investments counts as saved." }] : []),
         ]} />
       ) : null}
       <Section title="Income and spending">
