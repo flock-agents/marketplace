@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { Button, Callout, Field, LineItems, kitFetch, useTable, type LineItem } from "../flock/ui";
-import { GST_RATES } from "../../server/db/constants";
+import { GST_RATES, defaultGstRate, followRegistration } from "../../server/db/constants";
 import { computeTotals, isInterState } from "../../server/db/invoice-math";
 import { cap, localToday, many, one, useInvoiceSettings, type Customer, type InvoiceDetail, type InvoiceRow } from "./shared";
 
-const blankLine = (): LineItem => ({ description: "", qty: 1, unit_price: null, gst_rate: 18 });
+const blankLine = (registered: boolean): LineItem => ({ description: "", qty: 1, unit_price: null, gst_rate: defaultGstRate(registered) });
 const addDays = (iso: string, n: number) => { const [y, m, d] = iso.split("-").map(Number); const x = new Date(y, m - 1, d + n); return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, "0")}-${String(x.getDate()).padStart(2, "0")}`; };
 
 /** Names for the customer picker; a repeated name gets its GSTIN or a counter so each option is distinct. */
@@ -25,7 +25,7 @@ export function InvoiceEditor({ detail, onSaved, onCancel }: { detail: InvoiceDe
   const [issue, setIssue] = useState<string | null>(detail?.invoice.issue_date ?? today);
   const [due, setDue] = useState<string | null>(detail?.invoice.due_date ?? addDays(today, 15));
   const [notes, setNotes] = useState<string | null>(detail?.invoice.notes ?? null);
-  const [lines, setLines] = useState<LineItem[]>(detail ? detail.lines.map((l) => ({ id: l.id, description: l.description, qty: l.qty, unit_price: l.unit_price, gst_rate: l.gst_rate })) : [blankLine()]);
+  const [lines, setLines] = useState<LineItem[]>(detail ? detail.lines.map((l) => ({ id: l.id, description: l.description, qty: l.qty, unit_price: l.unit_price, gst_rate: l.gst_rate })) : [blankLine(!!settings.business.gstin)]);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
@@ -39,6 +39,7 @@ export function InvoiceEditor({ detail, onSaved, onCancel }: { detail: InvoiceDe
   const inter = isInterState(settings, customer?.gstin);
   // An issued invoice keeps the registration it was issued under; a new invoice or a draft follows the settings.
   const registered = detail && detail.invoice.status !== "draft" && detail.gst_registered !== undefined ? detail.gst_registered : !!settings.business.gstin;
+  useEffect(() => { if (!detail) setLines((ls) => followRegistration(ls, registered)); }, [detail, registered]);   // the settings arrive after the first render
   const totals = computeTotals(lines, inter, registered);
 
   const save = async () => {

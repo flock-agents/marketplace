@@ -83,3 +83,12 @@ export function invoiceSettings(raw: Record<string, unknown>): InvoiceSettings {
     number_prefix: normalPrefix(pick("number_prefix", NUMBER_PREFIX)),
   };
 }
+
+/** The rate a new line starts at: 18% for a GST-registered seller, none for an unregistered one (who cannot collect GST). */
+export const defaultGstRate = (registered: boolean): number => (registered ? 18 : 0);
+
+/** Untouched blank lines (no id, no description, no price) follow the seller's registration once the settings arrive; a line the owner has started, or a saved one, is left as it is. */
+export function followRegistration<L extends { id?: string; description: string; unit_price: number | null; gst_rate: number | null }>(lines: L[], registered: boolean): L[] {
+  const rate = defaultGstRate(registered);
+  return lines.map((l) => (!l.id && !l.description && l.unit_price === null && l.gst_rate !== rate ? { ...l, gst_rate: rate } : l));
+}

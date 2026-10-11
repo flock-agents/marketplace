@@ -37,3 +37,25 @@ describe("the sample business notice", () => {
     expect(readFileSync(join(pages, "InvoicePage.tsx"), "utf8")).toContain("<SampleBusinessNotice />");
   });
 });
+
+describe("new invoice lines follow the seller's registration", () => {
+  it("defaults to 18% when registered and no tax when the seller has no GSTIN", async () => {
+    const { defaultGstRate } = await import("../server/db/constants");
+    expect(defaultGstRate(true)).toBe(18);
+    expect(defaultGstRate(false)).toBe(0);
+  });
+  it("retargets only untouched blank lines; started and saved lines keep their rate", async () => {
+    const { followRegistration } = await import("../server/db/constants");
+    const blank = { description: "", qty: 1, unit_price: null, gst_rate: 18 };
+    const started = { description: "Shoot", qty: 1, unit_price: null, gst_rate: 18 };
+    const priced = { description: "", qty: 1, unit_price: 500, gst_rate: 18 };
+    const saved = { id: "l1", description: "", qty: 1, unit_price: null, gst_rate: 18 };
+    expect(followRegistration([blank, started, priced, saved], false)).toEqual([{ ...blank, gst_rate: 0 }, started, priced, saved]);
+    expect(followRegistration([{ ...blank, gst_rate: 0 }], true)).toEqual([blank]);
+  });
+  it("the editor starts its first line from the registration, and re-follows when the settings load", () => {
+    const src = readFileSync(join(import.meta.dir, "..", "src", "pages", "InvoiceEditor.tsx"), "utf8");
+    expect(src).toContain("followRegistration(");
+    expect(src).not.toContain("gst_rate: 18 }");
+  });
+});
