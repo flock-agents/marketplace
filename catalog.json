@@ -573,7 +573,7 @@
       "type": "app-template",
       "template": "pipeline",
       "name": "Pipeline",
-      "description": "Deals moving through stages: leads, proposals, orders, applications.",
+      "description": "People or deals moving through stages: hiring candidates, leads, proposals, orders, applications.",
       "author": "flock",
       "category": "business",
       "tags": [
@@ -619,7 +619,7 @@
       "type": "app-template",
       "template": "tracker",
       "name": "Tracker",
-      "description": "Rows with a status: vendors, candidates, applications.",
+      "description": "Rows with a status: vendors, repairs, collections, anything to follow up. Not for hiring (use pipeline).",
       "author": "flock",
       "category": "productivity",
       "tags": [

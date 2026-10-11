@@ -1,6 +1,6 @@
 # Tracker
 
-For rows with a status that move through stages: vendors, candidates, applications, leads, quotes.
+For rows with a status that move through stages: vendors, repairs, collections, follow-ups. Not for hiring: candidates moving through stages belong in `pipeline`.
 Start here when the owner says "keep track of…". It has a list with filters and search, and a page per row.
 
 ## Data
