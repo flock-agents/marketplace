@@ -550,7 +550,7 @@
       "type": "app-template",
       "template": "money",
       "name": "Money",
-      "description": "A household's money (not a business's books): transactions, budgets, investments and goals.",
+      "description": "A household's money (not a business's books): transactions, budgets, investments and goals. Set overviewLead: spending (budget, running costs) or netWorth (investments).",
       "author": "flock",
       "category": "finance",
       "tags": [

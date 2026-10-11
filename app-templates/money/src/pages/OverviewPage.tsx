@@ -1,6 +1,6 @@
-import { Callout, Chart, Empty, ErrorCard, HeroStat, Page, RowList, Section, Skeleton, StatStrip, Value, useTable, label } from "../flock/ui";
+import { Callout, Chart, Empty, ErrorCard, HeroStat, Page, RowList, Section, Skeleton, StatStrip, Value, isSample, useTable, label } from "../flock/ui";
 import { overviewLead } from "./lead";
-import { monthName, useRoute, type Holding, type MonthTotals, type Selected, type Transaction } from "./shared";
+import { monthName, useOverviewLead, useRoute, type Holding, type MonthTotals, type Selected, type Transaction } from "./shared";
 
 export function OverviewPage({ selected, onSelect }: { selected: Selected; onSelect: (s: Selected) => void }) {
   const holdings = useTable<Holding>("holdings", { limit: 200 });
@@ -9,19 +9,20 @@ export function OverviewPage({ selected, onSelect }: { selected: Selected; onSel
   const worth = holdings.rows.reduce((a, h) => a + h.value, 0), invested = holdings.rows.reduce((a, h) => a + h.invested, 0);
   const gain = invested ? ((worth - invested) / invested) * 100 : undefined;
   const now = months?.[months.length - 1];
-  const lead = overviewLead(holdings.rows.length, now);
+  const leadWith = useOverviewLead();
+  const lead = overviewLead(holdings.rows.filter((h) => !isSample(h)).length, now, leadWith);
   const prev = months && months.length > 1 ? months[months.length - 2] : undefined;
   return (
     <Page title={label("title.overview", "Overview")} subtitle={now ? `${monthName(now.month, true)} so far` : undefined}>
       {holdings.error ? <ErrorCard title="Couldn't load your net worth" message={holdings.error} onRetry={holdings.refetch} />
-        : holdings.loading && !holdings.rows.length ? <Skeleton variant="card" lines={2} />
+        : (holdings.loading && !holdings.rows.length) || (lead.hero === "spending" && !months && !monthsError) ? <Skeleton variant="card" lines={2} />
         : lead.hero === "netWorth" ? <HeroStat
           label="Net worth" value={worth} kind="compact" delta={gain}
-          caption={`${holdings.rows.length} ${holdings.rows.length === 1 ? "holding" : "holdings"} · change is since invested`}
+          caption={holdings.rows.length ? `${holdings.rows.length} ${holdings.rows.length === 1 ? "holding" : "holdings"} · change is since invested` : "Add your investments to see this"}
         />
         : <HeroStat
           label={now ? `Spent in ${monthName(now.month, true)}` : "Spent this month"} value={now?.expenses ?? 0} kind="compact"
-          caption={prev ? `${monthName(prev.month, true)}: ₹${prev.expenses.toLocaleString("en-IN")}` : "Add transactions to see this"}
+          caption={!now?.expenses && !prev?.expenses ? "Add transactions to see this" : prev ? `${monthName(prev.month, true)}: ₹${prev.expenses.toLocaleString("en-IN")}` : undefined}
         />}
       {monthsError ? <Callout tone="danger" title="Couldn't load this month's totals">{monthsError}</Callout> : null}
       {lead.strip.length ? (
