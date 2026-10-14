@@ -1,0 +1,12 @@
+{ "recipes": [
+  { "$key": "sambar", "name": "Drumstick sambar", "ingredients": "Toor dal\nDrumsticks\nTamarind\nSambar powder", "method": "Pressure-cook the dal, simmer with the vegetables and tamarind, temper with mustard and curry leaves." },
+  { "$key": "upma", "name": "Rava upma", "ingredients": "Rava\nOnion\nGreen chillies\nCurry leaves" }
+], "meals": [
+  { "$key": "m1", "date": "2026-10-12", "slot": "Lunch", "dish": "Drumstick sambar" },
+  { "$key": "m1r", "date": "2026-10-12", "slot": "Lunch", "dish": "Rice" },
+  { "$key": "m2", "date": "2026-10-13", "slot": "Breakfast", "dish": "Rava upma" }
+], "groceries": [
+  { "$key": "g1", "item": "Toor dal, 1 kg", "aisle": "Staples", "for_dish": "Drumstick sambar" },
+  { "$key": "g2", "item": "Drumsticks, 4", "aisle": "Vegetables", "for_dish": "Drumstick sambar" },
+  { "$key": "g3", "item": "Curd, 500 g", "aisle": "Dairy" }
+] }

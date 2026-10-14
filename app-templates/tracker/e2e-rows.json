@@ -1,0 +1,8 @@
+{
+  "items": [
+    { "$key": "sharma", "title": "Sharma Builders: kitchen, 4.2 lakh", "status": "Waiting", "owner": "Ravi Sharma", "due": "2026-10-16", "priority": "High", "notes": "Quoted 4.2 lakh for the modular kitchen with granite top. Wants 40% advance." },
+    { "$key": "fixit", "title": "Fixit Co: kitchen quote", "status": "New", "owner": "Anil Mehta", "priority": "Normal", "notes": "Site visit done Tuesday; still to send their quote." },
+    { "$key": "lakshmi", "title": "Lakshmi Tiles: bathroom flooring", "status": "In progress", "owner": "Meena", "due": "2026-10-20", "priority": "Normal", "notes": "Anti-skid vitrified tiles, 120 sq ft, ₹68 per sq ft." },
+    { "$key": "verma", "title": "Verma Electricals: full rewiring", "status": "Done", "owner": "Sunil Verma", "due": "2026-10-05", "priority": "Low", "notes": "Paid ₹38,500 by UPI." }
+  ]
+}

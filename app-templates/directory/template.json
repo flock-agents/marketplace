@@ -1,0 +1,3 @@
+{ "name": "directory", "version": "1.0.0", "description": "A browsable set of people, places or things with a picture and contact details.", "pages": ["gallery", "detail"], "tables": ["entries"], "objects": ["toolbox", "light-bulb", "thali", "chai-cup", "tiffin-box", "broom", "washing-machine", "plant", "phone"], "nav": "auto", "chat": "side", "titleFromName": "title.gallery",
+  "labels": { "nav.gallery": "All", "title.gallery": "Directory" }
+}

@@ -1,0 +1,6 @@
+{ "tasks": [
+  { "$key": "pandit", "label": "Book the pandit for griha pravesh", "group_name": "Before the move", "who": "Amma", "due": "2026-10-20" },
+  { "$key": "bescom", "label": "Transfer the BESCOM connection", "group_name": "Before the move", "who": "Rahul", "due": "2026-10-22" },
+  { "$key": "packers", "label": "Confirm Agarwal Packers for Sunday 7 am", "group_name": "Move day", "who": "Rahul", "done": true },
+  { "$key": "gas", "label": "Move the Indane gas connection", "group_name": "After the move", "who": "Sneha" }
+] }

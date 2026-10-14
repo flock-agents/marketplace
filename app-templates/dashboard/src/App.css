@@ -1,0 +1,8 @@
+/* The app's own CSS (outside src/flock/, so design updates keep it). Tokens only, never a literal colour. */
+/* Recent: on a phone the Sample chip, the kind chip, Edit and Delete left the title a word per line. The title keeps the row's width
+   (less the Sample chip) and the actions sit on their own line under it. */
+@media (max-width: 480px) {
+  .db-recent .fl-row { flex-wrap: wrap; row-gap: 6px; align-items: flex-start; }
+  .db-recent .fl-row-main { flex: 1 1 0; min-width: 0; overflow-wrap: anywhere; }
+  .db-recent .fl-row-trail { flex-basis: 100%; justify-content: flex-start; flex-wrap: wrap; }
+}

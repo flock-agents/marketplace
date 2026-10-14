@@ -2,16 +2,16 @@
   "name": "Family Butler",
   "slug": "family-butler",
   "description": "A household assistant that manages groceries, meals, and family routines through Telegram",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "author": "flock",
   "icon": "icon.svg",
   "category": "family",
   "tags": ["household", "grocery", "family", "meal-planning"],
-  "minFlockVersion": "0.7.0",
+  "minFlockVersion": "0.14.0",
   "sortOrder": 0,
 
   "agent": {
-    "defaultName": "Asha",
+    "defaultName": "Family Butler",
     "model": "claude-sonnet-4-6",
     "role": "main",
     "tone": "warm, helpful, concise",
@@ -111,7 +111,7 @@
   ],
 
   "apps": [
-    { "slug": "meal-planner", "required": false }
+    { "template": "planner", "name": "Meal Planner", "required": false }
   ],
 
   "channels": [

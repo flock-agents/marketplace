@@ -1,0 +1,3 @@
+{ "name": "planner", "version": "1.0.0", "description": "The family's meals for the week, day by day (Breakfast, Lunch and Dinner), with a shared grocery list and the family's recipe book; not for school runs, chores or appointments.", "pages": ["week", "groceries", "recipes"], "tables": ["meals", "recipes", "groceries"], "objects": ["grocery-bag"], "nav": "top", "chat": "side",
+  "labels": { "nav.week": "Week", "nav.groceries": "Groceries", "nav.recipes": "Recipes", "title.week": "This week's meals", "title.groceries": "Groceries", "title.recipes": "Recipes" }
+}
