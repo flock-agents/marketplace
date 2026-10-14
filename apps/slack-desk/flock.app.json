@@ -47,7 +47,11 @@
         "type": "schedule",
         "cron": "17 * * * *"
       },
-      "_cronComment": "HOURLY DISPATCH, DAILY WORK (2026-09-25). The work is still once a day — harvestRanToday gates it — but a pass that stops on its read or block budget leaves the day UNCLAIMED so a later tick finishes it. At 0 5 * * * there was no later tick: a capped first landing waited until tomorrow. Email Desk resolved the same tension the same way. :17 rather than :00 to sit off the hour with everything else.",
+      "_cronComment": "HOURLY TRIGGER, DAILY WORK. The hourly tick is how a day gets finished, not how often Slack is read: a new day's harvest starts at the first tick on or after harvestHour (local), and a pass that stops on its read or block budget leaves the day unclaimed so the next hourly tick resumes it. Once the day is claimed every later tick that day is a no-op. workSchedule tells the platform to label the card by the daily work, not by this cron. :17 to sit off the hour.",
+      "workSchedule": {
+        "every": "day",
+        "hourKey": "harvestHour"
+      },
       "executionMode": "app-relay",
       "_triggerComment": "schedule + app-relay (executor: cron.ts dispatchScheduledAppRelays). NOT event + app-relay: this app fetches its own Slack data through /apps/:id/skill-exec, so a platform connector poll on its behalf would be a second read of the same messages.",
       "configSchema": [
@@ -71,6 +75,13 @@
           "type": "number",
           "label": "How far back to read each day (hours)",
           "default": 24
+        },
+        {
+          "key": "harvestHour",
+          "type": "number",
+          "label": "Hour to read Slack each day (0–23)",
+          "default": 5,
+          "help": "Local time. A new day is read from this hour on; a day that did not finish keeps catching up every hour."
         },
         {
           "key": "enforceTriage",
