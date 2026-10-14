@@ -24,13 +24,17 @@ export function ManageGroceries({ rows, update, remove }: Props) {
   };
   return (
     <>
-      {editing ? (
-        <Card title="Edit item">
-          <Form fields={[...GROCERY_FIELDS]} initial={{ ...editing }} onCancel={() => setEditing(null)} onSubmit={async (v) => { await update(editing.id, v as Partial<Grocery>); setEditing(null); }} />
-        </Card>
-      ) : null}
       <Table
         rows={rows}
+        // Edit opens in place, under the item's own row.
+        expanded={editing ? {
+          at: editing.id, label: `Edit ${editing.item}`, onClose: () => setEditing(null),
+          content: (
+            <Card title="Edit item">
+              <Form fields={[...GROCERY_FIELDS]} initial={{ ...editing }} onCancel={() => setEditing(null)} onSubmit={async (v) => { await update(editing.id, v as Partial<Grocery>); setEditing(null); }} />
+            </Card>
+          ),
+        } : null}
         columns={[
           { key: "item", label: "Item", width: "wide" },
           { key: "aisle", label: "Aisle" },

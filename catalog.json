@@ -48,6 +48,11 @@
         "since": "1.3.0",
         "replacedBy": "app-template:planner",
         "note": "Family Butler now makes its Meal Planner from the planner app template; existing installs keep running and updating."
+      },
+      "replacedBy": {
+        "template": "planner",
+        "since": "2026-10-15",
+        "note": "Move your meals and grocery list across? Nothing in the old one is deleted."
       }
     },
     {
@@ -416,8 +421,8 @@
       "icon": "📅",
       "repo": "flock-agents/marketplace",
       "path": "app-templates/bookings",
-      "latestVersion": "1.0.0",
-      "latestTag": "bookings-v1.0.0",
+      "latestVersion": "1.0.1",
+      "latestTag": "bookings-v1.0.1",
       "minFlockVersion": "0.14.0",
       "publishedAt": "2026-10-11T00:00:00Z",
       "updatedAt": "2026-10-11T00:00:00Z"
@@ -439,8 +444,8 @@
       "icon": "✅",
       "repo": "flock-agents/marketplace",
       "path": "app-templates/checklist",
-      "latestVersion": "1.0.0",
-      "latestTag": "checklist-v1.0.0",
+      "latestVersion": "1.0.1",
+      "latestTag": "checklist-v1.0.1",
       "minFlockVersion": "0.14.0",
       "publishedAt": "2026-10-11T00:00:00Z",
       "updatedAt": "2026-10-11T00:00:00Z"
@@ -461,8 +466,8 @@
       "icon": "📊",
       "repo": "flock-agents/marketplace",
       "path": "app-templates/dashboard",
-      "latestVersion": "1.0.0",
-      "latestTag": "dashboard-v1.0.0",
+      "latestVersion": "1.0.1",
+      "latestTag": "dashboard-v1.0.1",
       "minFlockVersion": "0.14.0",
       "publishedAt": "2026-10-11T00:00:00Z",
       "updatedAt": "2026-10-11T00:00:00Z"
@@ -483,8 +488,8 @@
       "icon": "📇",
       "repo": "flock-agents/marketplace",
       "path": "app-templates/directory",
-      "latestVersion": "1.0.0",
-      "latestTag": "directory-v1.0.0",
+      "latestVersion": "1.0.1",
+      "latestTag": "directory-v1.0.1",
       "minFlockVersion": "0.14.0",
       "publishedAt": "2026-10-11T00:00:00Z",
       "updatedAt": "2026-10-11T00:00:00Z"
@@ -506,8 +511,8 @@
       "icon": "🧾",
       "repo": "flock-agents/marketplace",
       "path": "app-templates/invoices",
-      "latestVersion": "1.0.0",
-      "latestTag": "invoices-v1.0.0",
+      "latestVersion": "1.0.1",
+      "latestTag": "invoices-v1.0.1",
       "minFlockVersion": "0.14.0",
       "publishedAt": "2026-10-11T00:00:00Z",
       "updatedAt": "2026-10-11T00:00:00Z"
@@ -529,8 +534,8 @@
       "icon": "✈️",
       "repo": "flock-agents/marketplace",
       "path": "app-templates/itinerary",
-      "latestVersion": "1.0.0",
-      "latestTag": "itinerary-v1.0.0",
+      "latestVersion": "1.0.1",
+      "latestTag": "itinerary-v1.0.1",
       "minFlockVersion": "0.14.0",
       "publishedAt": "2026-10-11T00:00:00Z",
       "updatedAt": "2026-10-11T00:00:00Z"
@@ -552,8 +557,8 @@
       "icon": "💰",
       "repo": "flock-agents/marketplace",
       "path": "app-templates/money",
-      "latestVersion": "1.0.0",
-      "latestTag": "money-v1.0.0",
+      "latestVersion": "1.0.1",
+      "latestTag": "money-v1.0.1",
       "minFlockVersion": "0.14.0",
       "publishedAt": "2026-10-11T00:00:00Z",
       "updatedAt": "2026-10-11T00:00:00Z"
@@ -575,8 +580,8 @@
       "icon": "🧭",
       "repo": "flock-agents/marketplace",
       "path": "app-templates/pipeline",
-      "latestVersion": "1.0.0",
-      "latestTag": "pipeline-v1.0.0",
+      "latestVersion": "1.0.1",
+      "latestTag": "pipeline-v1.0.1",
       "minFlockVersion": "0.14.0",
       "publishedAt": "2026-10-11T00:00:00Z",
       "updatedAt": "2026-10-11T00:00:00Z"
@@ -598,8 +603,8 @@
       "icon": "🍽️",
       "repo": "flock-agents/marketplace",
       "path": "app-templates/planner",
-      "latestVersion": "1.0.0",
-      "latestTag": "planner-v1.0.0",
+      "latestVersion": "1.0.1",
+      "latestTag": "planner-v1.0.1",
       "minFlockVersion": "0.14.0",
       "publishedAt": "2026-10-11T00:00:00Z",
       "updatedAt": "2026-10-11T00:00:00Z"
@@ -621,8 +626,8 @@
       "icon": "📌",
       "repo": "flock-agents/marketplace",
       "path": "app-templates/tracker",
-      "latestVersion": "1.0.0",
-      "latestTag": "tracker-v1.0.0",
+      "latestVersion": "1.0.1",
+      "latestTag": "tracker-v1.0.1",
       "minFlockVersion": "0.14.0",
       "publishedAt": "2026-10-11T00:00:00Z",
       "updatedAt": "2026-10-11T00:00:00Z"

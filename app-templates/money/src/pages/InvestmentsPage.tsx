@@ -19,17 +19,21 @@ export function InvestmentsPage({ selected, onSelect }: { selected: Selected; on
       <Section title="Where the money is">
         <Chart type="share" kind="compact" data={[...byKind].sort((a, b) => b[1] - a[1]).map(([label, value]) => ({ label, value }))} series={[{ key: "value", label: "Value" }]} />
       </Section>
-      {selected?.table === "holdings" ? (
-        <RowPanel<Holding>
-          key={selected.id} table="holdings" id={selected.id} noun="Holding" onClose={() => onSelect(null)}
-          heading={(h) => h.name}
-          detail={(h) => [
-            { label: "Kind", value: h.kind }, { label: "Invested", value: h.invested, kind: "money" }, { label: "Worth today", value: h.value, kind: "money" },
-          ]}
-          fields={HOLDING_FIELDS}
-        />
-      ) : null}
       <Table
+        // The picked row opens in place, under the row itself.
+        expanded={selected?.table === "holdings" ? {
+          at: selected.id, label: selected.label, onClose: () => onSelect(null),
+          content: (
+            <RowPanel<Holding>
+              key={selected.id} table="holdings" id={selected.id} noun="Holding" onClose={() => onSelect(null)}
+              heading={(h) => h.name}
+              detail={(h) => [
+                { label: "Kind", value: h.kind }, { label: "Invested", value: h.invested, kind: "money" }, { label: "Worth today", value: h.value, kind: "money" },
+              ]}
+              fields={HOLDING_FIELDS}
+            />
+          ),
+        } : null}
         rows={list.rows.map(withChange)} loading={list.loading} error={list.error}
         selectedId={selected?.table === "holdings" ? selected.id : undefined}
         onRowClick={(h) => onSelect(selected?.id === h.id ? null : { table: "holdings", id: h.id, label: h.name })}

@@ -1,4 +1,4 @@
-{ "name": "pipeline", "version": "1.0.0", "description": "People or deals moving through stages: hiring candidates, leads, proposals, orders, applications.", "pages": ["board", "table"], "tables": ["deals"], "objects": ["briefcase"], "nav": "auto", "chat": "side", "titleFromName": "title.board",
+{ "name": "pipeline", "version": "1.0.1", "description": "People or deals moving through stages: hiring candidates, leads, proposals, orders, applications.", "pages": ["board", "table"], "tables": ["deals"], "objects": ["briefcase"], "nav": "auto", "chat": "side", "titleFromName": "title.board",
   "labels": { "nav.board": "Board", "nav.table": "Table", "title.board": "Deals", "title.table": "All deals",
     "noun.one": "deal", "noun.many": "deals",
     "stage.Lead": "Lead", "stage.Talking": "Talking", "stage.Proposal": "Proposal", "stage.Won": "Won", "stage.Lost": "Lost" }

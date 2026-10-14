@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Button, Calendar, Card, Empty, Form, Icon, Page, Skeleton, ErrorCard, useTable, label } from "../flock/ui";
+import { Button, Calendar, Card, Empty, Form, InlinePanel, Icon, Page, Skeleton, ErrorCard, useTable, label } from "../flock/ui";
 import { RowPanel } from "./RowPanel";
 import { KIND_LOOK, PLAN_FIELDS, normaliseTime, today, type PlanItem, type Selected } from "./shared";
 
@@ -10,29 +10,35 @@ export function PlanPage({ selected, onSelect }: { selected: Selected; onSelect:
   return (
     <Page title={label("title.plan", "Plan")} subtitle={`${list.rows.length} ${list.rows.length === 1 ? "thing" : "things"}, day by day`} actions={<Button variant="app" icon="plus" onClick={() => setAdding(true)}>Add</Button>}>
       {adding ? (
-        <Card title="New plan item">
-          <Form
-            fields={PLAN_FIELDS}
-            initial={{ kind: "do" }} submitLabel="Add" onSubmit={add} onCancel={() => setAdding(false)}
-          />
-        </Card>
-      ) : null}
-      {selected?.table === "plan" ? (
-        <RowPanel<PlanItem>
-          key={selected.id} table="plan" id={selected.id} noun="Plan item" onClose={() => onSelect(null)}
-          heading={(r) => r.title}
-          detail={(r) => [
-            { label: "Day", value: r.day, kind: "date" }, { label: "Time", value: r.time }, { label: "Kind", value: KIND_LOOK[r.kind]?.label ?? r.kind }, { label: "Detail", value: r.detail },
-          ]}
-          fields={PLAN_FIELDS}
-          fromForm={(v) => ({ ...v, time: normaliseTime(v.time) }) as Partial<PlanItem>}
-        />
+        <InlinePanel label="New plan item" onClose={() => setAdding(false)}>
+          <Card title="New plan item">
+            <Form
+              fields={PLAN_FIELDS}
+              initial={{ kind: "do" }} submitLabel="Add" onSubmit={add} onCancel={() => setAdding(false)}
+            />
+          </Card>
+        </InlinePanel>
       ) : null}
       {list.error ? <ErrorCard title="Couldn't load the plan" message={list.error} onRetry={list.refetch} />
         : list.loading && !list.rows.length ? <Skeleton variant="card" lines={5} />
         : !list.rows.length ? <Empty title="Nothing planned yet" hint="Add a flight, a stay or a dinner, or ask the assistant to." object="plane" />
         : (
           <Calendar
+            // The picked item opens in place, under it in its day.
+            expanded={selected?.table === "plan" ? {
+              at: selected.id, label: selected.label, onClose: () => onSelect(null),
+              content: (
+                <RowPanel<PlanItem>
+                  key={selected.id} table="plan" id={selected.id} noun="Plan item" onClose={() => onSelect(null)}
+                  heading={(r) => r.title}
+                  detail={(r) => [
+                    { label: "Day", value: r.day, kind: "date" }, { label: "Time", value: r.time }, { label: "Kind", value: KIND_LOOK[r.kind]?.label ?? r.kind }, { label: "Detail", value: r.detail },
+                  ]}
+                  fields={PLAN_FIELDS}
+                  fromForm={(v) => ({ ...v, time: normaliseTime(v.time) }) as Partial<PlanItem>}
+                />
+              ),
+            } : null}
             view="timeline" rows={list.rows} today={today()}
             date={(r) => r.day} time={(r) => r.time ?? ""} tone={(r) => KIND_LOOK[r.kind]?.tone ?? "neutral"}
             onSelect={(r) => onSelect(selected?.id === r.id ? null : { table: "plan", id: r.id, label: r.title })}

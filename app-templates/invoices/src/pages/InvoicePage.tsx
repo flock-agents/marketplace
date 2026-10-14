@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Button, Callout, Card, Confirm, Empty, ErrorCard, LineItems, Page, Skeleton, Value, formatINR, kitFetch, useToast } from "../flock/ui";
+import { Button, Callout, Card, Confirm, Empty, ErrorCard, InlinePanel, LineItems, Page, Skeleton, Value, formatINR, kitFetch, useToast } from "../flock/ui";
 import { NAME_PLACEHOLDER } from "../../server/db/constants";
 import { InvoiceEditor } from "./InvoiceEditor";
 import { PaymentForm } from "./PaymentForm";
@@ -19,7 +19,7 @@ function InvoiceBody({ id, onClose, onOpen, retry }: { id: string | null; onClos
   const toast = useToast();
   const { data, loading, error, reload } = useApi<InvoiceDetail>(id ? `invoice/${id}?today=${localToday()}` : null, ["invoices", "invoice_lines", "payments", "customers", "_settings"]);   // a draft shows the business settings as they are now
   const [editing, setEditing] = useState(false);
-  const [paying, setPaying] = useState(false);
+  const [paying, setPaying] = useState<false | "top" | "card">(false);   // where the payment form opens: under the button pressed
   const [asking, setAsking] = useState<null | "delete" | "void" | "payment">(null);
   const [payToDelete, setPayToDelete] = useState<string | null>(null);
   const settings = useInvoiceSettings();
@@ -119,10 +119,15 @@ function InvoiceBody({ id, onClose, onOpen, retry }: { id: string | null; onClos
           {status === "overdue" ? <div className="no-print"><Callout tone="danger" title={`${data.days_overdue} day${data.days_overdue === 1 ? "" : "s"} overdue`}>{exact(balance)} is still owed. Ask the assistant to draft a reminder; it will not send anything without your yes.</Callout></div> : null}
           <div className="inv-actions no-print">
             {status === "draft" ? <Button variant="app" icon="send" onClick={markSent}>Mark as sent</Button> : null}
-            {canPay ? <Button variant="app" icon="indian-rupee" onClick={() => setPaying(true)}>Record payment</Button> : null}
+            {canPay ? <Button variant="app" icon="indian-rupee" onClick={() => setPaying("top")}>Record payment</Button> : null}
             {status !== "void" ? <Button variant="ghost" icon="ban" onClick={() => setAsking("void")}>Void</Button> : null}
             {status === "draft" ? <Button variant="ghost" icon="trash" onClick={() => setAsking("delete")}>Delete</Button> : null}{/* an issued number is voided, never freed: invoice serials run without gaps */}
           </div>
+          {paying === "top" ? (
+            <div className="no-print"><InlinePanel label="Record payment" onClose={() => setPaying(false)}>
+              <Card title="Record payment"><PaymentForm balance={balance} onSubmit={recordPayment} onCancel={() => setPaying(false)} /></Card>
+            </InlinePanel></div>
+          ) : null}
           <article className="inv-sheet" aria-label={`Invoice ${invoice.number}`}>
             <div className="inv-top">
               <div className="inv-biz"><b>{seller.name.trim() ? seller.name : <span className="inv-placeholder">{NAME_PLACEHOLDER}</span>}</b>{seller.address ? <span>{seller.address}</span> : null}{seller.gstin ? <span>GSTIN {seller.gstin}</span> : null}{seller.email ? <span>{seller.email}</span> : null}</div>
@@ -147,10 +152,10 @@ function InvoiceBody({ id, onClose, onOpen, retry }: { id: string | null; onClos
             {invoice.notes ? <div className="inv-foot"><span>{invoice.notes}</span></div> : null}
             {seller.pay ? <div className="inv-foot"><span>Pay to: {seller.pay}</span></div> : null}
           </article>
-          <div className="no-print"><Card title="Payments" meta={payments.length ? `${exact(paid)} received of ${exact(total)}` : "Nothing received yet"} actions={canPay ? <span className="no-print"><Button size="sm" variant="soft" icon="plus" onClick={() => setPaying(true)}>Record payment</Button></span> : undefined}>
+          <div className="no-print"><Card title="Payments" meta={payments.length ? `${exact(paid)} received of ${exact(total)}` : "Nothing received yet"} actions={canPay ? <span className="no-print"><Button size="sm" variant="soft" icon="plus" onClick={() => setPaying("card")}>Record payment</Button></span> : undefined}>
             <div className="no-print">
-              {paying ? <PaymentForm balance={balance} onSubmit={recordPayment} onCancel={() => setPaying(false)} /> : null}
-              {payments.length === 0 && !paying ? <p className="inv-note">{status === "draft" ? "Payments can be recorded once the invoice is sent." : status === "void" ? "This invoice is void." : "No payments recorded yet."}</p> : null}
+              {paying === "card" ? <InlinePanel label="Record payment" onClose={() => setPaying(false)}><PaymentForm balance={balance} onSubmit={recordPayment} onCancel={() => setPaying(false)} /></InlinePanel> : null}
+              {payments.length === 0 && paying !== "card" ? <p className="inv-note">{status === "draft" ? "Payments can be recorded once the invoice is sent." : status === "void" ? "This invoice is void." : "No payments recorded yet."}</p> : null}
               {payments.map((p) => (
                 <div className="inv-pay-row" key={p.id}>
                   <span><b>{exact(p.amount)}</b><small>{longDate(p.date)} · {METHOD_LABEL[p.method] ?? p.method}{p.ref ? ` · ${p.ref}` : ""}</small></span>

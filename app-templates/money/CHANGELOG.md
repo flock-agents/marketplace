@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.1
+
+- Editors open in place: a picked transaction or holding opens under its row, and a goal's Edit opens under that goal (they opened above the list). Add a transaction opens right under the page header. Escape closes them. Needs the Flock component library 1.3.0 (`expanded`, `InlinePanel`).
+
 ## 1.0.0
 
 - First release as a marketplace app template (moved from the Flock repo).

@@ -1,3 +1,3 @@
-{ "name": "dashboard", "version": "1.0.0", "description": "A live page of key numbers, a trend and recent events that an agent keeps current.", "pages": ["overview"], "tables": ["metrics", "events"], "objects": ["globe"], "nav": "none", "chat": "side", "titleFromName": "title.overview",
+{ "name": "dashboard", "version": "1.0.1", "description": "A live page of key numbers, a trend and recent events that an agent keeps current.", "pages": ["overview"], "tables": ["metrics", "events"], "objects": ["globe"], "nav": "none", "chat": "side", "titleFromName": "title.overview",
   "labels": { "title.overview": "Dashboard" }
 }

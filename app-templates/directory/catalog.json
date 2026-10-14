@@ -1,6 +1,6 @@
 {
   "name": "directory",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "A browsable set of people, places or things with a picture and contact details.",
   "objects": [
     "toolbox",

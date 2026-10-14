@@ -1,6 +1,6 @@
 {
   "name": "dashboard",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "A live page of key numbers, a trend and recent events that an agent keeps current.",
   "objects": [
     "globe"

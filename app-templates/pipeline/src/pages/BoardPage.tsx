@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Board, Button, Callout, Card, Empty, Form, Page, Skeleton, StatStrip, Value, useTable, label } from "../flock/ui";
+import { Board, Button, Callout, Card, Empty, Form, InlinePanel, Page, Skeleton, StatStrip, Value, useTable, label } from "../flock/ui";
 import { DealPanel } from "./DealPanel";
 import { anyValue, cap, fields, many, one, stageLabel, STAGES, STAGE_TONES, valueByStage, type Deal, type Selected } from "./shared";
 
@@ -10,19 +10,27 @@ export function BoardPage({ selected, onSelect }: { selected: Selected; onSelect
   const add = async (values: Record<string, any>) => { await list.create(values as Partial<Deal>); setAdding(false); };
   return (
     <Page title={label("title.board", "Deals")} subtitle={`${onBoard.length}${list.hasMore ? "+" : ""} ${onBoard.length === 1 && !list.hasMore ? one() : many()}`} actions={<Button variant="app" icon="plus" onClick={() => setAdding(true)}>Add</Button>} width="full">
-      {anyValue(list.rows) ? <StatStrip stats={valueByStage(list.rows)} /> : null}
       {adding ? (
-        <Card title={`New ${one()}`}>
-          <Form fields={[...fields()]} initial={{ stage: "Lead" }} submitLabel="Add" onSubmit={add} onCancel={() => setAdding(false)} />
-        </Card>
+        <InlinePanel label={`New ${one()}`} onClose={() => setAdding(false)}>
+          <Card title={`New ${one()}`}>
+            <Form fields={[...fields()]} initial={{ stage: "Lead" }} submitLabel="Add" onSubmit={add} onCancel={() => setAdding(false)} />
+          </Card>
+        </InlinePanel>
       ) : null}
-      {selected?.table === "deals" ? <DealPanel key={selected.id} id={selected.id} onClose={() => onSelect(null)} onSelect={onSelect} /> : null}
+      {anyValue(list.rows) ? <StatStrip stats={valueByStage(list.rows)} /> : null}
       {list.error ? <Callout tone="danger" title={`Couldn't load the ${many()}`}>{list.error}</Callout>
         : list.loading && !list.rows.length ? <Skeleton variant="card" lines={4} />
         : list.rows.length === 0 ? (
         <Empty title={`No ${many()} yet`} hint="Add the first one, or ask the assistant to." object="briefcase" action={<Button onClick={() => setAdding(true)}>{`Add a ${one()}`}</Button>} />
       ) : (
         <Board
+          // The picked card opens in place, under the card in its column.
+          expanded={selected?.table === "deals" ? {
+            at: selected.id, label: selected.label, onClose: () => onSelect(null),
+            content: (
+              <DealPanel key={selected.id} id={selected.id} onClose={() => onSelect(null)} onSelect={onSelect} />
+            ),
+          } : null}
           columns={STAGES.map((s) => ({ id: s, label: stageLabel(s), tone: STAGE_TONES[s as keyof typeof STAGE_TONES] }))}
           rows={list.rows}
           columnOf={(d) => d.stage}

@@ -27,11 +27,9 @@ export function MealEditor({ title, date, today, meal, others, askSlot, onSave, 
   const [busy, setBusy] = useState(false);
   const [adding, setAdding] = useState(false);
   const box = useRef<HTMLDivElement>(null);
-  // The editor opens above the week; on a phone the tapped day can be far below, so bring it into view with the dish focused.
-  useEffect(() => {
-    box.current?.scrollIntoView({ block: "start", behavior: "smooth" });
-    box.current?.querySelector<HTMLInputElement>('input[name="dish"]')?.focus({ preventScroll: true });
-  }, []);
+  // The week opens the editor in place, under the meal or "+ Add" tapped, and brings it into view; the dish is the field to type in
+  // first, even when the Meal select comes before it.
+  useEffect(() => { box.current?.querySelector<HTMLInputElement>('input[name="dish"]')?.focus({ preventScroll: true }); }, []);
   const recipes = useTable<Recipe>("recipes", { sort: "name", limit: 500 });
   const recent = useTable<Meal>("meals", { where: { "date[gte]": addDays(date < today ? date : today, -56) }, sort: "-date", limit: 500 });
   const groceries = useTable<Grocery>("groceries", { limit: 500 });
@@ -83,7 +81,7 @@ export function MealEditor({ title, date, today, meal, others, askSlot, onSave, 
   };
 
   return (
-    <div ref={box} style={{ scrollMarginTop: 8 }}><Card title={title}>
+    <div ref={box}><Card title={title}>
       <form onSubmit={save} noValidate style={{ display: "flex", flexDirection: "column", gap: 12 }}>
         {askSlot !== undefined ? <Field type="select" name="slot" label="Meal" options={SLOTS} required value={slot} onChange={(v) => setSlot(v as string | null)} /> : null}
         <Field type="text" name="dish" label="Dish" required placeholder="Pick a recipe below or type a dish" value={dish} error={error}
