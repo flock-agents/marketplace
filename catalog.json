@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "updatedAt": "2026-10-11T00:00:00Z",
+  "updatedAt": "2026-10-14T00:00:00Z",
   "items": [
     {
       "slug": "linear",
@@ -279,8 +279,8 @@
       "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "skills/slack",
-      "latestVersion": "1.5.1",
-      "latestTag": "slack-v1.5.1",
+      "latestVersion": "1.5.2",
+      "latestTag": "slack-v1.5.2",
       "minFlockVersion": "0.7.0",
       "publishedAt": "2026-09-10T11:18:08Z",
       "updatedAt": "2026-09-23T00:00:00Z"
@@ -301,8 +301,8 @@
       "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "apps/slack-desk",
-      "latestVersion": "1.4.2",
-      "latestTag": "slack-desk-v1.4.2",
+      "latestVersion": "1.4.3",
+      "latestTag": "slack-desk-v1.4.3",
       "minFlockVersion": "0.8.2",
       "publishedAt": "2026-09-23T00:00:00Z",
       "updatedAt": "2026-09-24T12:00:00Z"
@@ -358,22 +358,12 @@
       "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "templates/slack-assistant",
-      "latestVersion": "1.1.1",
-      "latestTag": "slack-assistant-v1.1.1",
+      "latestVersion": "1.1.2",
+      "latestTag": "slack-assistant-v1.1.2",
       "minFlockVersion": "0.7.0",
-      "onboardingCard": {
-        "id": "slack",
-        "label": "Catch up on Slack",
-        "description": "What you missed, what's asked of you",
-        "emoji": "💬",
-        "order": 20,
-        "agentName": "Vega",
-        "services": [
-          "slack"
-        ]
-      },
+      "onboardingCard": { "id": "slack", "label": "Catch up on Slack", "description": "What you missed, what's asked of you", "emoji": "💬", "order": 20, "agentName": "Slack Assistant", "services": ["slack"] },
       "publishedAt": "2026-09-23T00:00:00Z",
-      "updatedAt": "2026-09-29T00:00:00Z"
+      "updatedAt": "2026-10-14T00:00:00Z"
     },
     {
       "slug": "inbox-assistant",

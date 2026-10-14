@@ -2,7 +2,7 @@
   "name": "Slack Assistant",
   "slug": "slack-assistant",
   "description": "Remembers what happens in your Slack and tells you what you missed",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "author": "flock",
   "icon": "icon.svg",
   "category": "professional",
@@ -15,7 +15,7 @@
   "minFlockVersion": "0.7.0",
   "sortOrder": 40,
   "agent": {
-    "defaultName": "Vega",
+    "defaultName": "Slack Assistant",
     "model": "claude-sonnet-4-6",
     "role": "main",
     "tone": "direct, warm, concise",
