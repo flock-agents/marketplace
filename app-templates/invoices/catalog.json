@@ -173,10 +173,10 @@
     {
       "key": "business.name",
       "type": "string",
-      "default": "Brindavan Design Studio",
-      "label": "Your business name, printed at the top of every invoice",
+      "default": "",
+      "label": "Your business name, printed at the top of every invoice (required before an invoice can be issued)",
       "scope": "owner",
-      "constraint": "business.name must not be empty",
+      "constraint": "business.name must be text",
       "requiredWhen": {
         "table": "invoices",
         "column": "status",
@@ -192,7 +192,7 @@
     {
       "key": "business.gstin",
       "type": "string",
-      "default": "29AAEPB4172K1ZB",
+      "default": "",
       "label": "Your GSTIN (15 characters), or empty when the business is not registered for GST",
       "scope": "owner",
       "constraint": "business.gstin must be 15 characters like 29AAEPB4172K1ZB (capitals), or empty when not registered",
@@ -211,7 +211,7 @@
     {
       "key": "business.address",
       "type": "string",
-      "default": "14, 2nd Cross, Indiranagar, Bengaluru 560038",
+      "default": "",
       "label": "Your business address, printed under the name",
       "scope": "owner",
       "constraint": "business.address must be text",
@@ -230,7 +230,7 @@
     {
       "key": "business.email",
       "type": "string",
-      "default": "billing@brindavan.example",
+      "default": "",
       "label": "The email address printed on invoices",
       "scope": "owner",
       "constraint": "business.email must be text",
@@ -249,7 +249,7 @@
     {
       "key": "business.pay",
       "type": "string",
-      "default": "UPI brindavan@okaxis · HDFC Bank A/c 50200041872233 · IFSC HDFC0000412",
+      "default": "",
       "label": "Where customers pay you (UPI id, bank account and IFSC), printed at the foot of every invoice",
       "scope": "owner",
       "constraint": "business.pay must be text",

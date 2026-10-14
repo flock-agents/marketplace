@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
-import { Callout, kitFetch, subscribeEvents } from "../flock/ui";
-import { invoiceSettings, sampleBusinessFields, type InvoiceSettings } from "../../server/db/constants";
+import { Button, Callout, kitFetch, subscribeEvents } from "../flock/ui";
+import { NAME_PLACEHOLDER, invoiceSettings, sampleBusinessFields, type InvoiceSettings } from "../../server/db/constants";
+
+export const openSettings = () => { location.hash = "#/settings"; };
 
 /** "Sample business details": shown while the business settings are still the template's sample, on the list and on a draft. Nothing
  *  until the settings have loaded, so a real business never sees it flash. Hidden when printing. */
@@ -14,7 +16,16 @@ export function SampleBusinessNotice() {
     return () => { live = false; off(); };
   }, []);
   const fields = s ? sampleBusinessFields(s) : [];
-  if (!s || !fields.length) return null;
+  if (!s) return null;
+  if (!s.business.name.trim()) return (
+    <div className="no-print">
+      <Callout tone="warning" title={`${NAME_PLACEHOLDER} is not set`}>
+        Add your company name in Settings before issuing. Drafts can still be created and edited.{" "}
+        <Button size="sm" variant="soft" onClick={openSettings}>Open settings</Button>
+      </Callout>
+    </div>
+  );
+  if (!fields.length) return null;
   const words: Record<string, string> = { name: "business name", gstin: "GSTIN", address: "address", pay: "payment details" };
   return (
     <div className="no-print">

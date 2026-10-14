@@ -1,5 +1,10 @@
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import { customers, invoices, invoice_lines, payments } from "./schema";
+import { SAMPLE_BUSINESS, SELLER_STATE } from "./constants";
+
+/** The sample's issued invoices carry the sample seller as issued (bill-to.ts copies the live settings only onto an invoice with none),
+ *  so they show Brindavan whatever the owner's own settings say, and the owner's settings never need to hold sample data. */
+const SAMPLE_SELLER = JSON.stringify({ ...SAMPLE_BUSINESS, state: SELLER_STATE });
 
 /** An ISO date `days` from today, so the sample rows never look stale. */
 export const inDays = (days: number, from = new Date()): string => {
@@ -41,7 +46,7 @@ export function sampleData(from = new Date()) {
   const ordered = [...specs].sort((x, y) => x.issue - y.issue);
   const numbers = new Map<string, string>();
   for (const s of ordered) { const y = yr(s.issue); const n = (counters.get(y) ?? 40) + 1; counters.set(y, n); numbers.set(s.key, `INV-${y}-${String(n).padStart(4, "0")}`); }
-  const invoiceRows = specs.map((s) => ({ id: id(), number: numbers.get(s.key)!, customer_id: s.cust, issue_date: d(s.issue), due_date: d(s.due), status: s.status, notes: s.notes ?? null }));
+  const invoiceRows = specs.map((s) => ({ id: id(), number: numbers.get(s.key)!, customer_id: s.cust, issue_date: d(s.issue), due_date: d(s.due), status: s.status, notes: s.notes ?? null, ...(s.status === "draft" ? {} : { seller: SAMPLE_SELLER }) }));
   const lineRows = specs.flatMap((s, i) => s.lines.map(([description, qty, unit_price, gst_rate]) => ({ id: id(), invoice_id: invoiceRows[i].id, description, qty, unit_price, gst_rate })));
   const paymentRows = specs.flatMap((s, i) => (s.paid ?? []).map(([day, amount, method, ref]) => ({ id: id(), invoice_id: invoiceRows[i].id, date: d(day), amount, method, ref })));
   return { customers: customerRows, invoices: invoiceRows, invoice_lines: lineRows, payments: paymentRows };

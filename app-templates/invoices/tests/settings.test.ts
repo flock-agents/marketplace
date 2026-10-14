@@ -1,7 +1,7 @@
 import { describe, it, expect } from "bun:test";
 import { readFileSync } from "fs";
 import { join } from "path";
-import { SETTINGS, BUSINESS, SELLER_STATE, NUMBER_PREFIX } from "../server/db/constants";
+import { SETTINGS, BUSINESS, SAMPLE_BUSINESS, NAME_PLACEHOLDER, SELLER_STATE, NUMBER_PREFIX } from "../server/db/constants";
 
 // template.json is never copied into an app, so the server declares its settings from constants.ts; the plan and the catalogue read
 // template.json. The two lists must be the same.
@@ -22,13 +22,13 @@ describe("invoices settings", () => {
 });
 
 describe("the sample business notice", () => {
-  it("is on while the name and GSTIN are the template's, off once the owner has set either", async () => {
-    const { usesSampleBusiness, invoiceSettings, DEFAULT_SETTINGS } = await import("../server/db/constants");
-    expect(usesSampleBusiness(DEFAULT_SETTINGS)).toBe(true);
-    // only the name set: GSTIN, address and bank details are still Brindavan's, so the notice stays
-    expect(usesSampleBusiness(invoiceSettings({ "business.name": "Acme Tiles" }))).toBe(true);
-    const { sampleBusinessFields } = await import("../server/db/constants");
-    expect(sampleBusinessFields(invoiceSettings({ "business.name": "Acme Tiles" }))).toEqual(["gstin", "address", "pay"]);
+  it("is off for the empty defaults; an app that stored the sample details keeps it until each is replaced", async () => {
+    const { usesSampleBusiness, sampleBusinessFields, invoiceSettings, DEFAULT_SETTINGS, SAMPLE_BUSINESS: S } = await import("../server/db/constants");
+    expect(usesSampleBusiness(DEFAULT_SETTINGS)).toBe(false);
+    const stored = { "business.name": S.name, "business.gstin": S.gstin, "business.address": S.address, "business.pay": S.pay };
+    expect(usesSampleBusiness(invoiceSettings(stored))).toBe(true);
+    // only the name replaced: GSTIN, address and bank details are still Brindavan's, so the notice stays
+    expect(sampleBusinessFields(invoiceSettings({ ...stored, "business.name": "Acme Tiles" }))).toEqual(["gstin", "address", "pay"]);
     expect(usesSampleBusiness(invoiceSettings({ "business.name": "Acme", "business.gstin": "", "business.address": "1 Road", "business.pay": "UPI acme@upi" }))).toBe(false);
   });
   it("the list and a draft show it", () => {
@@ -57,5 +57,29 @@ describe("new invoice lines follow the seller's registration", () => {
     const src = readFileSync(join(import.meta.dir, "..", "src", "pages", "InvoiceEditor.tsx"), "utf8");
     expect(src).toContain("followRegistration(");
     expect(src).not.toContain("gst_rate: 18 }");
+  });
+});
+
+describe("a missing company name", () => {
+  const src = (f: string) => readFileSync(join(import.meta.dir, "..", "src", "pages", f), "utf8");
+  it("no business setting defaults to sample data; the sample identity is its own constant", () => {
+    expect(Object.values(BUSINESS).every((v) => v === "")).toBe(true);
+    expect(SAMPLE_BUSINESS.name).toBe("Brindavan Design Studio");
+    const meta = JSON.parse(readFileSync(join(import.meta.dir, "..", "template.json"), "utf8"));
+    for (const s of meta.settings.filter((x: { key: string }) => x.key.startsWith("business."))) expect(s.default).toBe("");
+    expect(JSON.parse(readFileSync(join(import.meta.dir, "..", "template.json"), "utf8"))).not.toHaveProperty("brindavan");
+    expect(readFileSync(join(import.meta.dir, "..", "template.json"), "utf8")).not.toContain("Brindavan");
+  });
+  it("settings.json no longer demands a non-empty name", () => {
+    const s = JSON.parse(readFileSync(join(import.meta.dir, "..", "settings.json"), "utf8"));
+    expect(s["business.name"].rules).toBeUndefined();
+  });
+  it("the UI refuses to issue without a name, offers settings, and prints a placeholder for a draft", () => {
+    const page = src("InvoicePage.tsx");
+    expect(page).toContain("Add your company name in Settings before issuing");
+    expect(page).toContain("NAME_PLACEHOLDER");
+    expect(NAME_PLACEHOLDER).toBe("Your company name");
+    expect(src("SampleBusinessNotice.tsx")).toContain("Add your company name in Settings before issuing");
+    expect(readFileSync(join(import.meta.dir, "..", "src", "App.tsx"), "utf8")).toContain("settings");
   });
 });

@@ -9,9 +9,12 @@ export const STATUSES = ["draft", "sent", "paid", "overdue", "void"] as const;
  *  such as 3 for gold. A line stored at an older rate (12, 28) keeps it; rates are never re-mapped. */
 export const GST_RATES = [0, 5, 18, 40] as const;
 export const METHODS = ["upi", "bank", "cash", "card"] as const;
-/** Today's defaults for the business issuing the invoices. The owner's values are the app settings `business.*` (GET /api/_app,
- *  PATCH /api/_app/settings); always read them through the settings, never these. */
-export const BUSINESS = {
+/** The business issuing the invoices starts EMPTY: the owner's identity is never guessed. The owner's values are the app settings `business.*`
+ *  (GET /api/_app, PATCH /api/_app/settings); always read them through the settings, never these. An empty name stops a real invoice
+ *  being issued (invoice-routes.ts) and a draft prints "Your company name" in its place. */
+export const BUSINESS = { name: "", gstin: "", address: "", email: "", pay: "" } as const;
+/** The seller printed on SAMPLE invoices only (seed.ts copies it onto the issued ones): never a default of any setting. */
+export const SAMPLE_BUSINESS = {
   name: "Brindavan Design Studio",
   gstin: "29AAEPB4172K1ZB",
   address: "14, 2nd Cross, Indiranagar, Bengaluru 560038",
@@ -19,6 +22,10 @@ export const BUSINESS = {
   /** Where payments go, printed at the foot of the invoice. */
   pay: "UPI brindavan@okaxis · HDFC Bank A/c 50200041872233 · IFSC HDFC0000412",
 } as const;
+/** Shown wherever a draft prints the seller and the name is not set yet. */
+export const NAME_PLACEHOLDER = "Your company name";
+/** The refusal when a real invoice would be issued with no company name. */
+export const NAME_MISSING_MESSAGE = "Add your company name in Settings before issuing. Drafts can still be created and edited.";
 /** Default two-digit GST state code of the business (29 = Karnataka): the setting `seller_state`. A customer whose GSTIN starts with
  *  another code is billed IGST, otherwise CGST + SGST. */
 export const SELLER_STATE = "29";
@@ -30,10 +37,10 @@ export interface Business { name: string; gstin: string; address: string; email:
 export interface InvoiceSettings { business: Business; seller_state: string; number_prefix: string }
 export const DEFAULT_SETTINGS: InvoiceSettings = { business: { ...BUSINESS }, seller_state: SELLER_STATE, number_prefix: NUMBER_PREFIX };
 
-/** The business fields (name, GSTIN, address, payment details) that are still the template's sample. Any one of them would print
- *  Brindavan's details under the owner's name, so the pages say so until every one is set. */
+/** The business fields (name, GSTIN, address, payment details) that are still the template's sample (an app made before the defaults
+ *  were emptied may have stored them). Any one of them would print Brindavan's details under the owner's name, so the pages say so. */
 export const sampleBusinessFields = (s: Pick<InvoiceSettings, "business">): string[] =>
-  (["name", "gstin", "address", "pay"] as const).filter((k) => s.business[k] === BUSINESS[k]);
+  (["name", "gstin", "address", "pay"] as const).filter((k) => s.business[k] === SAMPLE_BUSINESS[k]);
 export const usesSampleBusiness = (s: Pick<InvoiceSettings, "business">): boolean => sampleBusinessFields(s).length > 0;
 
 /** Why `v` is not a GST state code a business can be in (01 to 38, or 97 for Other Territory), or null when it is. */
@@ -52,16 +59,15 @@ export const normalPrefix = (v: string): string => v.replace(/[-\s]+$/, "");
 export const numberPrefixProblem = (v: unknown): string | null =>
   typeof v === "string" && /^[A-Za-z0-9][A-Za-z0-9/]{0,5}$/.test(normalPrefix(v)) ? null
     : "number_prefix must be 1 to 6 letters or digits (\"/\" allowed after the first), with no spaces, dashes or other marks (a trailing dash or space is dropped)";
-const nameProblem = (key: string) => (v: unknown): string | null => (typeof v === "string" && v.trim() ? null : `${key} must not be empty`);
 const textProblem = (key: string) => (v: unknown): string | null => (typeof v === "string" ? null : `${key} must be text`);
 
-/** The settings this template declares (passed to mountKit, and listed in template.json without the checks). Defaults are today's constants.
+/** The settings this template declares (passed to mountKit, and listed in template.json without the checks). Business defaults are empty (an empty name is valid: it only stops issuing).
  *  The kit runs each `check` on PATCH /api/_app/settings (400 naming the field), on the boot import (the import fails) and on read. */
 /** An issued invoice keeps a copy of the seller for good (bill-to.ts), so an import with sent, paid, overdue or void invoices must give
  *  every setting that copy takes: left to the defaults, it would freeze the sample business, its GSTIN and its bank details. */
 const ISSUED = { table: "invoices", column: "status", in: ["sent", "paid", "overdue", "void"], rows: "an issued invoice" };
 export const SETTINGS = [
-  { key: "business.name", type: "string" as const, default: BUSINESS.name, scope: "owner" as const, label: "Your business name, printed at the top of every invoice", check: nameProblem("business.name"), requiredWhen: ISSUED, rules: { pattern: "\\S", message: "business.name must not be empty" } },
+  { key: "business.name", type: "string" as const, default: BUSINESS.name, scope: "owner" as const, label: "Your business name, printed at the top of every invoice (required before an invoice can be issued)", check: textProblem("business.name"), requiredWhen: ISSUED },
   { key: "business.gstin", type: "string" as const, default: BUSINESS.gstin, scope: "owner" as const, label: "Your GSTIN (15 characters), or empty when the business is not registered for GST", check: gstinProblem, requiredWhen: ISSUED, rules: { pattern: "^(\\d{2}[A-Z]{5}\\d{4}[A-Z][1-9A-Z]Z[0-9A-Z])?$", message: "business.gstin must be 15 characters like 29AAEPB4172K1ZB (capitals), or empty when not registered" } },
   { key: "business.address", type: "string" as const, default: BUSINESS.address, scope: "owner" as const, label: "Your business address, printed under the name", check: textProblem("business.address"), requiredWhen: ISSUED },
   { key: "business.email", type: "string" as const, default: BUSINESS.email, scope: "owner" as const, label: "The email address printed on invoices", check: textProblem("business.email"), requiredWhen: ISSUED },

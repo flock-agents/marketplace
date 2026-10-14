@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { Button, Callout, Card, Confirm, Empty, ErrorCard, LineItems, Page, Skeleton, Value, formatINR, kitFetch, useToast } from "../flock/ui";
+import { NAME_PLACEHOLDER } from "../../server/db/constants";
 import { InvoiceEditor } from "./InvoiceEditor";
 import { PaymentForm } from "./PaymentForm";
-import { SampleBusinessNotice } from "./SampleBusinessNotice";
+import { SampleBusinessNotice, openSettings } from "./SampleBusinessNotice";
 import { STATUS_TONES, localToday, longDate, one, removeRow, undoChange, useApi, useInvoiceSettings, type InvoiceDetail, type Seller } from "./shared";
 
 const exact = (n: number) => formatINR(n, { exact: true });
@@ -65,7 +66,15 @@ function InvoiceBody({ id, onClose, onOpen, retry }: { id: string | null; onClos
       toast.show({ message: "Deleted the payment", tone: "success", action: changeId ? { label: "Undo", onClick: () => { void undoChange(changeId).then(reload).catch(() => fail("Couldn't undo")); } } : undefined });
     } catch (e) { fail((e as Error).message || "Couldn't delete the payment"); }
   };
-  const markSent = async () => { try { await patchInvoice({ status: "sent" }); toast.show({ message: `${invoice.number} is marked as sent`, tone: "success" }); } catch (e) { fail((e as Error).message || "Couldn't update"); } };
+  // The server refuses a real invoice with no company name ("Add your company name in Settings before issuing…"); say so with a way to Settings.
+  const markSent = async () => {
+    try { await patchInvoice({ status: "sent" }); toast.show({ message: `${invoice.number} is marked as sent`, tone: "success" }); }
+    catch (e) {
+      const m = (e as Error).message || "Couldn't update";
+      if (/company name/i.test(m)) toast.show({ message: "Add your company name in Settings before issuing", tone: "danger", action: { label: "Open settings", onClick: openSettings } });
+      else fail(m);
+    }
+  };
   const voidIt = async () => {
     setAsking(null);
     try {
@@ -116,7 +125,7 @@ function InvoiceBody({ id, onClose, onOpen, retry }: { id: string | null; onClos
           </div>
           <article className="inv-sheet" aria-label={`Invoice ${invoice.number}`}>
             <div className="inv-top">
-              <div className="inv-biz"><b>{seller.name}</b>{seller.address ? <span>{seller.address}</span> : null}{seller.gstin ? <span>GSTIN {seller.gstin}</span> : null}{seller.email ? <span>{seller.email}</span> : null}</div>
+              <div className="inv-biz"><b>{seller.name.trim() ? seller.name : <span className="inv-placeholder">{NAME_PLACEHOLDER}</span>}</b>{seller.address ? <span>{seller.address}</span> : null}{seller.gstin ? <span>GSTIN {seller.gstin}</span> : null}{seller.email ? <span>{seller.email}</span> : null}</div>
               <div className="inv-title">
                 <h2>{registered ? "Tax invoice" : "Invoice"}</h2><b>{invoice.number}</b>
                 <span>Issued {longDate(invoice.issue_date)}</span><span>Due {longDate(invoice.due_date)}</span>

@@ -1,9 +1,9 @@
 import type { Hono } from "hono";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { customers, invoices, invoice_lines, payments } from "./db/schema";
-import { STATUSES, invoiceSettings, type InvoiceSettings } from "./db/constants";
-import { billedParty, issuingSeller, watchIssued, type CurrentSettings } from "./bill-to";
+import { STATUSES, invoiceSettings, NAME_MISSING_MESSAGE, type InvoiceSettings } from "./db/constants";
+import { billedParty, issuingSeller, sampleIssuing, watchIssued, type CurrentSettings } from "./bill-to";
 import { computeTotals, effectiveStatus, nextNumber, round2, daysOverdue, type Status, type TotalsRow } from "./db/invoice-math";
 
 const DATE_RE = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
@@ -74,10 +74,19 @@ export const SERVER_COLUMNS = { invoices: ["bill_to", "seller"] };
 /** Only a draft may be deleted or rewritten. An issued invoice is voided instead, so its number is never freed and the serial has no gaps.
  *  Register before mountKit so it runs ahead of the kit's /api/_data writes to invoices and invoice_lines; `db` is read at request time.
  *  (`bill_to` and `seller` are kept server-side by the kit's `serverColumns` option, see server/index.ts.) */
-export function guardInvoiceWrites(hono: Hono, db: () => BunSQLiteDatabase<any> | null) {
+export function guardInvoiceWrites(hono: Hono, db: () => BunSQLiteDatabase<any> | null, settings?: () => { all(): Record<string, unknown> } | null) {
+  /** A real (non-sample) invoice may not be issued while business.name is empty: it would print under no company. */
+  const nameMissing = () => { const s = settings?.(); return !!s && !invoiceSettings(s.all()).business.name.trim(); };
+  const isSample = (id: string) => (db()?.all(sql`SELECT 1 AS x FROM _samples WHERE table_name = 'invoices' AND row_id = ${id}`) ?? []).length > 0;
+  const noName = { error: "business_name_missing", field: "business.name", message: NAME_MISSING_MESSAGE };
   const statusOf = (id: unknown) => typeof id === "string" ? db()?.select({ status: invoices.status }).from(invoices).where(eq(invoices.id, id)).get()?.status : undefined;
   const issued = (status: string | undefined) => status !== undefined && status !== "draft";
   const body = async (c: { req: { json(): Promise<unknown> } }) => { try { const b = await c.req.json(); return b && typeof b === "object" && !Array.isArray(b) ? b as Record<string, unknown> : null; } catch { return null; } };
+  hono.post("/api/_data/invoices", async (c, next) => {
+    const b = await body(c);
+    if (b && typeof b.status === "string" && issued(b.status) && nameMissing()) return c.json(noName, 409);
+    await next();
+  });
   hono.delete("/api/_data/invoices/:id", async (c, next) => {
     if (issued(statusOf(c.req.param("id")))) return c.json({ error: "issued", message: "Only a draft can be deleted. Void an issued invoice instead (PATCH status: \"void\")." }, 409);
     await next();
@@ -89,6 +98,12 @@ export function guardInvoiceWrites(hono: Hono, db: () => BunSQLiteDatabase<any> 
     const d = db();
     const cur = d?.select().from(invoices).where(eq(invoices.id, c.req.param("id"))).get() as Record<string, unknown> | undefined;
     const b = await body(c);
+    if (cur && b && !issued(cur.status as string) && typeof b.status === "string" && issued(b.status) && nameMissing()) {
+      if (!isSample(cur.id as string)) return c.json(noName, 409);
+      sampleIssuing.add(cur.id as string);   // a sample draft may be issued; it is issued under the sample seller (bill-to.ts)
+      try { await next(); } finally { sampleIssuing.delete(cur.id as string); }
+      return;
+    }
     if (!cur || !b || !issued(cur.status as string)) return next();
     const free = new Set(["status", "notes", ...SERVER_COLUMNS.invoices]);   // server columns are dropped by the kit anyway
     const fixed = Object.keys(b).filter((k) => !free.has(k) && JSON.stringify(b[k] ?? null) !== JSON.stringify(cur[k] ?? null));

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { AppShell, AgentChat, useApp, useHashRoute, label, type AppShellProps } from "./flock/ui";
 import { InvoicesPage } from "./pages/InvoicesPage";
 import { CustomersPage } from "./pages/CustomersPage";
+import { SettingsPage } from "./pages/SettingsPage";
 import { cap, many, type Selected } from "./pages/shared";
 
 // The name, object, accent, starters and labels come from the app's display (GET /api/_app); these are the fallbacks.
@@ -16,6 +17,7 @@ export default function App() {
     { id: "invoices", label: label("nav.invoices", "Invoices"), icon: "receipt" },
     { id: "customers", label: label("nav.customers", "Customers") === "Customers" ? cap(many()) : label("nav.customers", "Customers"),   // follows a renamed noun unless the nav name itself was reworded
       icon: "users" },
+    { id: "settings", label: "Settings", icon: "settings" },
   ];
   return (
     <AppShell
@@ -32,7 +34,7 @@ export default function App() {
         ),
       }}
     >
-      {page === "customers" ? <CustomersPage selected={selected} onSelect={setSelected} /> : <InvoicesPage selected={selected} onSelect={setSelected} />}
+      {page === "settings" ? <SettingsPage /> : page === "customers" ? <CustomersPage selected={selected} onSelect={setSelected} /> : <InvoicesPage selected={selected} onSelect={setSelected} />}
     </AppShell>
   );
 }

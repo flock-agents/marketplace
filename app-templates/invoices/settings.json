@@ -1,10 +1,6 @@
 {
   "business.name": {
-    "type": "string",
-    "rules": {
-      "pattern": "\\S",
-      "message": "business.name must not be empty"
-    }
+    "type": "string"
   },
   "business.gstin": {
     "type": "string",
