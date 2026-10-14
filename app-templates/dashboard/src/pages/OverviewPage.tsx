@@ -45,13 +45,17 @@ export function OverviewPage() {
         </>
       )}
       <Section title="Recent">
-        {editing ? (
-          <Card title="Edit event">
-            <Form fields={[...EVENT_FIELDS]} initial={{ ...editing }} onCancel={() => setEditing(null)} onSubmit={async (v) => { await events.update(editing.id, v as Partial<DashEvent>); setEditing(null); }} />
-          </Card>
-        ) : null}
         <div className="db-recent"><RowList
           rows={events.rows} loading={events.loading} error={events.error}
+          // Edit opens in place, under the event's own row.
+          expanded={editing ? {
+            at: editing.id, label: `Edit ${editing.title}`, onClose: () => setEditing(null),
+            content: (
+              <Card title="Edit event">
+                <Form fields={[...EVENT_FIELDS]} initial={{ ...editing }} onCancel={() => setEditing(null)} onSubmit={async (v) => { await events.update(editing.id, v as Partial<DashEvent>); setEditing(null); }} />
+              </Card>
+            ),
+          } : null}
           title={(e) => e.title}
           meta={(e) => whenText(e.at)}
           trailing={(e) => (

@@ -24,13 +24,17 @@ export function ManageItems({ rows, update, remove }: Props) {
   };
   return (
     <>
-      {editing ? (
-        <Card title="Edit item">
-          <Form fields={[...FIELDS]} initial={{ ...editing }} onCancel={() => setEditing(null)} onSubmit={async (v) => { await update(editing.id, v as Partial<Task>); setEditing(null); }} />
-        </Card>
-      ) : null}
       <Table
         rows={rows}
+        // Edit opens in place, under the item's own row.
+        expanded={editing ? {
+          at: editing.id, label: `Edit ${editing.label}`, onClose: () => setEditing(null),
+          content: (
+            <Card title="Edit item">
+              <Form fields={[...FIELDS]} initial={{ ...editing }} onCancel={() => setEditing(null)} onSubmit={async (v) => { await update(editing.id, v as Partial<Task>); setEditing(null); }} />
+            </Card>
+          ),
+        } : null}
         columns={[
           { key: "label", label: "Item", width: "wide" },
           { key: "group_name", label: "Group" },

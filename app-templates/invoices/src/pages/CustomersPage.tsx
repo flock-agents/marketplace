@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Button, Card, Confirm, Detail, Empty, ErrorCard, Form, Page, Search, Skeleton, Table, useRecord, useTable, useToast, label } from "../flock/ui";
+import { Button, Card, Confirm, Detail, Empty, ErrorCard, Form, InlinePanel, Page, Search, Skeleton, Table, useRecord, useTable, useToast, label } from "../flock/ui";
 import { countText } from "../../server/db/constants";
 import { cap, many, one, undoChange, type Customer, type Selected } from "./shared";
 
@@ -29,10 +29,20 @@ export function CustomersPage({ selected, onSelect }: { selected: Selected; onSe
   };
   return (
     <Page title={label("title.customers", "Customers") === "Customers" ? cap(many()) : label("title.customers", "Customers")} subtitle={countText(list.rows.length, list.hasMore, one(), many())} actions={<Button variant="app" icon="plus" onClick={() => setAdding(true)}>Add</Button>}>
-      {selected?.table === "customers" ? <CustomerPanel key={selected.id} id={selected.id} onClose={() => onSelect(null)} /> : null}
-      {adding ? <Card title={`New ${one()}`}><Form fields={[...FIELDS]} errors={errors} submitLabel="Add" onSubmit={add} onCancel={() => { setAdding(false); setErrors({}); }} /></Card> : null}
+      {adding ? (
+        <InlinePanel label={`New ${one()}`} onClose={() => { setAdding(false); setErrors({}); }}>
+          <Card title={`New ${one()}`}><Form fields={[...FIELDS]} errors={errors} submitLabel="Add" onSubmit={add} onCancel={() => { setAdding(false); setErrors({}); }} /></Card>
+        </InlinePanel>
+      ) : null}
       <Search value={q} onChange={setQ} placeholder={`Search ${many()}`} />
       <Table
+        // The picked row opens in place, under the row itself.
+        expanded={selected?.table === "customers" ? {
+          at: selected.id, label: selected.label, onClose: () => onSelect(null),
+          content: (
+            <CustomerPanel key={selected.id} id={selected.id} onClose={() => onSelect(null)} />
+          ),
+        } : null}
         rows={list.rows} loading={list.loading} error={list.error} hasMore={list.hasMore} onLoadMore={list.loadMore}
         selectedId={selected?.table === "customers" ? selected.id : undefined}
         onRowClick={(c: Customer) => onSelect(selected?.id === c.id ? null : { table: "customers", id: c.id, label: c.name })}

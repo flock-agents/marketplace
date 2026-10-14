@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Button, Card, Empty, FilterPill, Form, Page, Search, StatStrip, Table, label, useTable } from "../flock/ui";
+import { Button, Card, Empty, FilterPill, Form, InlinePanel, Page, Search, StatStrip, Table, label, useTable } from "../flock/ui";
 import { FIELDS, STATUSES, STATUS_TONES, PRIORITY_TONES, today, type Item } from "./shared";
 
 export function ListPage({ onOpen }: { onOpen: (row: { id: string; title: string }) => void }) {
@@ -23,12 +23,14 @@ export function ListPage({ onOpen }: { onOpen: (row: { id: string; title: string
   const add = async (values: Record<string, any>) => { await list.create(values as Partial<Item>); setAdding(false); };
   return (
     <Page title={label("title.list", "Tracker")} subtitle={`${all.hasMore ? `${all.rows.length}+` : all.rows.length} in the list`} actions={<Button variant="app" icon="plus" onClick={() => setAdding(true)}>Add</Button>}>
-      <StatStrip stats={stats} />
       {adding ? (
-        <Card title="New row">
-          <Form fields={[...FIELDS]} initial={{ status: "New", priority: "Normal" }} submitLabel="Add" onSubmit={add} onCancel={() => setAdding(false)} />
-        </Card>
+        <InlinePanel label="New row" onClose={() => setAdding(false)}>
+          <Card title="New row">
+            <Form fields={[...FIELDS]} initial={{ status: "New", priority: "Normal" }} submitLabel="Add" onSubmit={add} onCancel={() => setAdding(false)} />
+          </Card>
+        </InlinePanel>
       ) : null}
+      <StatStrip stats={stats} />
       <div className="row" style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
         <Search value={q} onChange={setQ} placeholder="Search the list" />
         <FilterPill label="Status" options={STATUSES} value={status} onChange={setStatus} />

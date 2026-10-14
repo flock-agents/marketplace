@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Button, Card, Empty, Callout, FilterPill, Form, Gallery, Page, Search, Skeleton, Value, useTable, label } from "../flock/ui";
+import { Button, Card, Empty, Callout, FilterPill, Form, InlinePanel, Gallery, Page, Search, Skeleton, Value, useTable, label } from "../flock/ui";
 import { fieldsFor, kindsIn, matches, objectFor, type Entry } from "./shared";
 
 export function GalleryPage({ onOpen }: { onOpen: (row: { id: string; name: string }) => void }) {
@@ -15,9 +15,11 @@ export function GalleryPage({ onOpen }: { onOpen: (row: { id: string; name: stri
   return (
     <Page title={label("title.gallery", "Directory")} subtitle={`${shown.length}${list.hasMore ? "+" : ""} ${shown.length === 1 && !list.hasMore ? "entry" : "entries"}`} actions={<Button variant="app" icon="plus" onClick={() => setAdding(true)}>Add</Button>}>
       {adding ? (
-        <Card title="New entry">
-          <Form fields={[...fieldsFor(kinds)]} initial={{ kind: "Other" }} submitLabel="Add" onSubmit={add} onCancel={() => setAdding(false)} />
-        </Card>
+        <InlinePanel label="New entry" onClose={() => setAdding(false)}>
+          <Card title="New entry">
+            <Form fields={[...fieldsFor(kinds)]} initial={{ kind: "Other" }} submitLabel="Add" onSubmit={add} onCancel={() => setAdding(false)} />
+          </Card>
+        </InlinePanel>
       ) : null}
       <div className="row" style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
         <Search value={q} onChange={setQ} placeholder="Search" />

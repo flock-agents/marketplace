@@ -25,11 +25,17 @@ export function TodayPage({ selected, onSelect, onBook }: { selected: Selected; 
             { label: "tomorrow", value: day(addDays(today, 1)).length },
           ]} />
           {list.truncated ? <Callout tone="warning" title="Showing the first 500 bookings">Narrow the dates to see the rest.</Callout> : null}
-          {picked ? <BookingPanel key={picked.id} booking={picked} onClose={() => onSelect(null)} /> : null}
           {shown.length === 0 ? (
             <Empty title="Nothing booked this week" hint="Book the first appointment, or ask the assistant to." object="calendar" action={<Button onClick={() => onBook(today)}>Book a slot</Button>} />
           ) : (
             <Schedule
+              // The picked booking opens in place, under it in its day.
+              expanded={picked ? {
+                at: picked.id, label: `${picked.customer_name} at ${timeOf(picked.start)}`, onClose: () => onSelect(null),
+                content: (
+                  <BookingPanel key={picked.id} booking={picked} onClose={() => onSelect(null)} />
+                ),
+              } : null}
               rows={shown} date={(b) => dateOf(b.start)} today={today} days={7} selectedId={selected?.id}
               title={(b) => b.customer_name} time={(b) => rangeLabel(b).split(" to ")[0]} start={(b) => minutesOf(timeOf(b.start))}
               secondary={(b) => `${b.service_name} · ${b.minutes} min${b.notes ? ` · ${b.notes}` : ""}${b.status === "booked" ? "" : ` · ${b.status.replace("_", "-")}`}`}
