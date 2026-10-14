@@ -1,0 +1,49 @@
+{
+  "name": "calendar",
+  "version": "1.0.0",
+  "description": "A plain calendar of events by month or week; no reminders or members.",
+  "objects": [
+    "calendar"
+  ],
+  "labels": {
+    "title.calendar": "Calendar"
+  },
+  "titleFromName": "title.calendar",
+  "tables": {
+    "events": {
+      "note": "One event. All day: `start` (and `end`) are ISO dates YYYY-MM-DD. Timed: local date-times YYYY-MM-DDTHH:MM (24h, no zone).",
+      "columns": {
+        "title": {
+          "type": "string",
+          "required": true,
+          "nullable": false
+        },
+        "start": {
+          "type": "string",
+          "required": true,
+          "nullable": false,
+          "note": "YYYY-MM-DD (all day) or YYYY-MM-DDTHH:MM"
+        },
+        "end": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "optional, same forms, never before start; a date alone is a multi-day event's last day"
+        },
+        "all_day": {
+          "type": "boolean",
+          "required": false,
+          "nullable": false,
+          "default": false,
+          "note": "true when start is a date"
+        },
+        "notes": {
+          "type": "string",
+          "required": false,
+          "nullable": true
+        }
+      }
+    }
+  },
+  "settings": []
+}

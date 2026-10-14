@@ -1,0 +1,5 @@
+{ "events": [
+  { "$key": "ptm", "title": "Parent-teacher meeting", "start": "2026-11-14T10:00", "end": "2026-11-14T11:00", "all_day": false, "notes": "Room 12, bring the report card" },
+  { "$key": "diwali", "title": "Diwali at Amma's", "start": "2026-11-08", "end": "2026-11-09", "all_day": true },
+  { "$key": "vaccine", "title": "Flu shot for Kavya", "start": "2026-11-20T17:30", "all_day": false, "notes": "Dr. Rao's clinic" }
+] }

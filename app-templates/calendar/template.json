@@ -1,0 +1,3 @@
+{ "name": "calendar", "version": "1.0.0", "description": "A plain calendar of events by month or week; no reminders or members.", "pages": ["calendar"], "tables": ["events"], "objects": ["calendar"], "nav": "none", "chat": "side", "titleFromName": "title.calendar",
+  "labels": { "title.calendar": "Calendar" }
+}

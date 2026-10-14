@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "updatedAt": "2026-10-14T00:00:00Z",
+  "updatedAt": "2026-10-15T00:00:00Z",
   "items": [
     {
       "slug": "linear",
@@ -76,7 +76,17 @@
       "latestTag": "family-calendar-v1.0.2",
       "minFlockVersion": "0.7.0",
       "publishedAt": "2026-08-13T15:30:00Z",
-      "updatedAt": "2026-08-17T17:52:00Z"
+      "updatedAt": "2026-08-17T17:52:00Z",
+      "deprecated": {
+        "since": "2026-10-15",
+        "replacedBy": "app-template:calendar",
+        "note": "Replaced by the calendar app template; existing installs keep running and updating."
+      },
+      "replacedBy": {
+        "template": "calendar",
+        "since": "2026-10-15",
+        "note": "Move your events across? Reminders and member colours are not kept; each event's member name goes into its notes. Nothing in the old one is deleted."
+      }
     },
     {
       "slug": "family-butler",
@@ -426,6 +436,29 @@
       "minFlockVersion": "0.14.0",
       "publishedAt": "2026-10-11T00:00:00Z",
       "updatedAt": "2026-10-11T00:00:00Z"
+    },
+    {
+      "slug": "calendar",
+      "type": "app-template",
+      "template": "calendar",
+      "name": "Calendar",
+      "description": "A plain calendar of events by month or week; no reminders or members.",
+      "author": "flock",
+      "category": "family",
+      "tags": [
+        "calendar",
+        "events",
+        "family",
+        "schedule"
+      ],
+      "icon": "🗓️",
+      "repo": "flock-agents/marketplace",
+      "path": "app-templates/calendar",
+      "latestVersion": "1.0.0",
+      "latestTag": "calendar-v1.0.0-rc6",
+      "minFlockVersion": "0.14.0",
+      "publishedAt": "2026-10-15T00:00:00Z",
+      "updatedAt": "2026-10-15T00:00:00Z"
     },
     {
       "slug": "checklist",
