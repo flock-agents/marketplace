@@ -44,3 +44,5 @@
   .inv-sheet .fl-li-row { break-inside: avoid; }
   .fl-page { padding: 0 !important; }
 }
+
+.inv-biz b .inv-placeholder { color: var(--ink-2); font-style: italic; font-weight: 500; }

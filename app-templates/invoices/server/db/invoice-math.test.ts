@@ -115,12 +115,12 @@ describe("invoiceSettings and the checks", () => {
     const s = invoiceSettings({ "business.name": "Kanchi Studio", "business.gstin": "", "seller_state": "Karnataka", "number_prefix": "KS" });
     expect(s.business.name).toBe("Kanchi Studio");
     expect(s.business.gstin).toBe("");
-    expect(s.business.address).toBe(DEFAULT_SETTINGS.business.address);   // not given: the default
+    expect(s.business.address).toBe("");   // not given: the default, which is empty
     expect(s.seller_state).toBe("29");                                     // not a state code: the default
     expect(s.number_prefix).toBe("KS");
     expect(invoiceSettings({})).toEqual(DEFAULT_SETTINGS);
     expect(invoiceSettings({ number_prefix: "INV 2026" }).number_prefix).toBe("INV");
-    expect(invoiceSettings({ "business.name": "  " }).business.name).toBe(DEFAULT_SETTINGS.business.name);
+    expect(invoiceSettings({ "business.name": 5 }).business.name).toBe(DEFAULT_SETTINGS.business.name);
   });
   it("checks a state code, a GSTIN and a prefix", () => {
     for (const ok of ["29", "01", "33", "38", "97"]) expect(sellerStateProblem(ok)).toBeNull();

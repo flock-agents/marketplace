@@ -11,18 +11,23 @@ import { customers, invoices, invoice_lines, payments } from "./db/schema";
 import { watchIssued } from "./bill-to";
 import { mountInvoiceRoutes, enrichInvoices, guardInvoiceWrites, SERVER_COLUMNS } from "./invoice-routes";
 import { sampleData, seed, inDays } from "./db/seed";
-import { SETTINGS, BUSINESS, DEFAULT_SETTINGS, invoiceSettings } from "./db/constants";
+import { SETTINGS, BUSINESS, SAMPLE_BUSINESS, DEFAULT_SETTINGS, invoiceSettings } from "./db/constants";
 
 const TODAY = "2026-10-09";
-async function boot(withSeed: boolean | Date = false, importFile?: unknown) {
+/** The settings of an owner who has set the sample studio's details as their own (the default for these tests; see `boot`). */
+const OWNER = { ...DEFAULT_SETTINGS, business: { ...SAMPLE_BUSINESS } };
+/** `blank`: a new app whose owner has set nothing. Otherwise the owner has set the sample studio's details as their own, so the older tests judge issuing. */
+async function boot(withSeed: boolean | Date = false, importFile?: unknown, blank = false) {
   const hono = new Hono();
   const dataDir = mkdtempSync(join(tmpdir(), "invoice-routes-"));
   if (importFile) { mkdirSync(join(dataDir, ".flock"), { recursive: true }); writeFileSync(join(dataDir, ".flock", "import.json"), JSON.stringify(importFile)); }
   let db: any = null;
-  guardInvoiceWrites(hono, () => db);   // registered before the kit's routes, as in server/index.ts
+  let settings: any = null;
+  guardInvoiceWrites(hono, () => db, () => settings);   // registered before the kit's routes, as in server/index.ts
   const kit = await mountKit({ hono, env: { appId: "t", dataDir, apiUrl: null, token: null, agent: null } }, { schema, dbFile: ":memory:", appName: "T", serverColumns: SERVER_COLUMNS, settings: SETTINGS, ...(withSeed ? { seed: (db: any) => seed(db, withSeed === true ? undefined : withSeed) } : {}) });
-  db = kit.db;
+  db = kit.db; settings = kit.settings;
   mountInvoiceRoutes(hono, kit.db, kit.settings, kit.ctx.events, kit.status);
+  if (!blank && kit.status.state === "ok") await hono.request("/api/_app/settings", { method: "PATCH", headers: { "Content-Type": "application/json", "X-Flock-User": "maya" }, body: JSON.stringify(Object.fromEntries(Object.entries(SAMPLE_BUSINESS).map(([k, v]) => [`business.${k}`, v]))) });
   return { hono, db: kit.db, kit };
 }
 const get = async (hono: Hono, path: string) => { const r = await hono.request(path); return { status: r.status, body: (await r.json()) as any }; };
@@ -61,7 +66,7 @@ async function fixture() {
 describe("overdue is derived", () => {
   it("is overdue when sent, unpaid and past due; paid when the payments cover the total", async () => {
     const { db } = await fixture();
-    const by = Object.fromEntries(enrichInvoices(db, DEFAULT_SETTINGS, TODAY).map((r) => [r.number, r]));
+    const by = Object.fromEntries(enrichInvoices(db, OWNER, TODAY).map((r) => [r.number, r]));
     expect(by["INV-2026-0001"]).toMatchObject({ status: "overdue", total: 11800, paid: 4000, balance: 7800, days_overdue: 9 });
     expect(by["INV-2026-0002"]).toMatchObject({ status: "sent", total: 11800, balance: 11800, days_overdue: 0 });
     expect(by["INV-2026-0003"]).toMatchObject({ status: "paid", balance: 0 });
@@ -70,9 +75,9 @@ describe("overdue is derived", () => {
   });
   it("moves with the date the viewer sends", async () => {
     const { db } = await fixture();
-    expect(enrichInvoices(db, DEFAULT_SETTINGS, "2026-09-29").find((r) => r.number === "INV-2026-0001")!.status).toBe("sent");
-    expect(enrichInvoices(db, DEFAULT_SETTINGS, "2026-09-30").find((r) => r.number === "INV-2026-0001")!.status).toBe("sent");     // due that day
-    expect(enrichInvoices(db, DEFAULT_SETTINGS, "2026-10-01").find((r) => r.number === "INV-2026-0001")!.status).toBe("overdue");
+    expect(enrichInvoices(db, OWNER, "2026-09-29").find((r) => r.number === "INV-2026-0001")!.status).toBe("sent");
+    expect(enrichInvoices(db, OWNER, "2026-09-30").find((r) => r.number === "INV-2026-0001")!.status).toBe("sent");     // due that day
+    expect(enrichInvoices(db, OWNER, "2026-10-01").find((r) => r.number === "INV-2026-0001")!.status).toBe("overdue");
   });
 });
 
@@ -267,12 +272,12 @@ describe("an issued invoice keeps the seller as it was when issued", () => {
   it("issuing copies the seller; renaming the business afterwards leaves the issued invoice and moves the draft", async () => {
     const { hono, db, issued, draft } = await two();
     const copy = JSON.parse(db.select().from(invoices).all().find((i) => i.id === issued)!.seller!);
-    expect(copy).toEqual({ name: BUSINESS.name, gstin: BUSINESS.gstin, address: BUSINESS.address, email: BUSINESS.email, pay: BUSINESS.pay, state: "29" });
+    expect(copy).toEqual({ name: SAMPLE_BUSINESS.name, gstin: SAMPLE_BUSINESS.gstin, address: SAMPLE_BUSINESS.address, email: SAMPLE_BUSINESS.email, pay: SAMPLE_BUSINESS.pay, state: "29" });
     expect(db.select().from(invoices).all().find((i) => i.id === draft)!.seller).toBeNull();
     // The owner moves the business to Chennai under a new name.
     expect((await setSettings(hono, { "business.name": "Kanchi Studio", "business.gstin": "33AAEPB4172K1ZB", "business.pay": "UPI kanchi@okicici", seller_state: "33" })).status).toBe(200);
     const i = (await get(hono, `/api/invoice/${issued}?today=${TODAY}`)).body;
-    expect(i.seller).toMatchObject({ name: BUSINESS.name, gstin: BUSINESS.gstin, pay: BUSINESS.pay, state: "29" });
+    expect(i.seller).toMatchObject({ name: SAMPLE_BUSINESS.name, gstin: SAMPLE_BUSINESS.gstin, pay: SAMPLE_BUSINESS.pay, state: "29" });
     expect(i.inter_state).toBe(true);                                   // still IGST: Karnataka to Tamil Nadu, as issued
     expect(i.totals.map((t: any) => t.label)).toEqual(["Subtotal", "IGST 18%", "Total"]);
     const d = (await get(hono, `/api/invoice/${draft}?today=${TODAY}`)).body;
@@ -328,11 +333,11 @@ describe("an issued invoice keeps the seller as it was when issued", () => {
     const forged = JSON.stringify({ name: "Forged Pvt Ltd", gstin: "29AAAAA0000A1Z5", address: null, email: null, pay: "UPI thief@okaxis", state: "29" });
     await send(hono, "PATCH", `/api/_data/invoices/${issued}`, { seller: forged, notes: "edited" });
     let d = (await get(hono, `/api/invoice/${issued}?today=${TODAY}`)).body;
-    expect(d.seller.name).toBe(BUSINESS.name);
+    expect(d.seller.name).toBe(SAMPLE_BUSINESS.name);
     expect(d.invoice.notes).toBe("edited");
     const w = (await send(hono, "POST", "/api/_data/invoices", { number: "INV-2026-0009", customer_id: k, issue_date: "2026-10-01", due_date: "2026-10-31", status: "sent", seller: forged })).body.row.id;
     d = (await get(hono, `/api/invoice/${w}?today=${TODAY}`)).body;
-    expect(d.seller.pay).toBe(BUSINESS.pay);
+    expect(d.seller.pay).toBe(SAMPLE_BUSINESS.pay);
     expect(SERVER_COLUMNS.invoices).toEqual(expect.arrayContaining(["bill_to", "seller"]));
   });
   it("a new prefix numbers new invoices only: issued numbers keep theirs", async () => {
@@ -346,7 +351,7 @@ describe("an issued invoice keeps the seller as it was when issued", () => {
   it("the sample's issued invoices carry the seller from the first boot, drafts none", async () => {
     const { db } = await boot(new Date(2026, 9, 9));
     const all = db.select().from(invoices).all();
-    expect(all.filter((i) => i.status !== "draft").every((i) => JSON.parse(i.seller!).name === BUSINESS.name)).toBe(true);
+    expect(all.filter((i) => i.status !== "draft").every((i) => JSON.parse(i.seller!).name === SAMPLE_BUSINESS.name)).toBe(true);
     expect(all.filter((i) => i.status === "draft").every((i) => i.seller === null)).toBe(true);
   });
   it("an import with an issued invoice but not every business setting is refused: the sample seller is never frozen onto it", async () => {
@@ -393,13 +398,13 @@ describe("an issued invoice keeps the seller as it was when issued", () => {
 describe("the settings' own checks", () => {
   it("refuses a bad state code, GSTIN or prefix with a 400 naming the field, and changes nothing", async () => {
     const { hono } = await boot();
-    for (const [field, value] of [["seller_state", "KA"], ["business.gstin", "29aaepb4172k1zb"], ["number_prefix", "INV 2026"], ["business.name", " "]] as const) {
+    for (const [field, value] of [["seller_state", "KA"], ["business.gstin", "29aaepb4172k1zb"], ["number_prefix", "INV 2026"]] as const) {
       const r = await setSettings(hono, { [field]: value });
       expect(r.status).toBe(400);
       expect(((await r.json()) as any).field).toBe(field);
     }
     const app = (await get(hono, "/api/_app")).body;
-    expect(app.settings).toMatchObject({ seller_state: "29", "business.gstin": BUSINESS.gstin, number_prefix: "INV", "business.name": BUSINESS.name });
+    expect(app.settings).toMatchObject({ seller_state: "29", "business.gstin": SAMPLE_BUSINESS.gstin, number_prefix: "INV", "business.name": SAMPLE_BUSINESS.name });
   });
   it("fails a boot import whose settings break a check, and imports nothing", async () => {
     const { kit, db } = await boot(false, { importId: "imp-bad", by: "flock-helper", settings: { seller_state: "99" }, rows: { customers: [{ $key: "a", name: "A" }] } });
@@ -430,7 +435,7 @@ describe("an app made before the settings", () => {
     const kit = await mountKit({ hono, env }, { schema, appName: "T", approvals: pending, serverColumns: SERVER_COLUMNS, settings: SETTINGS });
     expect(kit.status.state).toBe("ok");
     mountInvoiceRoutes(hono, kit.db, kit.settings, kit.ctx.events, kit.status);
-    expect((await get(hono, `/api/invoice/x?today=${TODAY}`)).body).toMatchObject({ seller: { name: BUSINESS.name }, customer: { name: "Kanchi Looms" }, inter_state: true, total: 1180 });
+    expect((await get(hono, `/api/invoice/x?today=${TODAY}`)).body).toMatchObject({ seller: { name: "" }, customer: { name: "Kanchi Looms" }, inter_state: true, gst_registered: false, total: 1000 });
   });
 });
 
@@ -459,7 +464,7 @@ describe("the sample data", () => {
   const story = async (from?: Date) => {
     const s = sampleData(from);
     const { db } = await boot(from ?? true);
-    const rows = enrichInvoices(db, DEFAULT_SETTINGS, inDays(0, from));
+    const rows = enrichInvoices(db, OWNER, inDays(0, from));
     expect(new Set(rows.map((r) => r.status))).toEqual(new Set(["draft", "sent", "paid", "overdue", "void"]));
     expect(rows.length).toBe(s.invoices.length);
     expect(rows.some((r) => r.status === "overdue" && r.paid > 0)).toBe(true);
@@ -571,5 +576,56 @@ describe("boot repairs an already-issued sample invoice whose lines are still ma
     const other = list.body.rows.find((r: any) => r.id !== draft.id && r._sample);
     const otherMarked = (db.all(sql`SELECT 1 FROM _samples WHERE table_name = 'invoice_lines' AND row_id IN (SELECT id FROM invoice_lines WHERE invoice_id = ${other.id})`) as unknown[]).length;
     expect(otherMarked).toBeGreaterThan(0);
+  });
+});
+
+describe("a new app has no business identity of its own (the sample company is never the owner's)", () => {
+  const KEYS = ["business.name", "business.gstin", "business.address", "business.email", "business.pay"];
+  const draftIn = async (hono: Hono) => {
+    const c = (await send(hono, "POST", "/api/_data/customers", { name: "Kanchi Looms" })).body.row.id;
+    const make = (number: string, status = "draft") => send(hono, "POST", "/api/_data/invoices", { number, customer_id: c, issue_date: "2026-10-01", due_date: "2026-10-31", status });
+    return { c, make };
+  };
+  it("every business setting defaults to empty, and an empty value is valid", async () => {
+    const { hono } = await boot(false, undefined, true);
+    const app = (await get(hono, "/api/_app")).body;
+    for (const k of KEYS) expect(app.settings[k]).toBe("");
+    expect(BUSINESS).toEqual({ name: "", gstin: "", address: "", email: "", pay: "" });
+    for (const k of KEYS) expect((await setSettings(hono, { [k]: "" })).status).toBe(200);
+    expect((await setSettings(hono, { "business.name": "   " })).status).toBe(200);
+  });
+  it("refuses to issue a real invoice while the company name is empty, and says what to do; drafts are fine", async () => {
+    const { hono } = await boot(false, undefined, true);
+    const { make } = await draftIn(hono);
+    const id = (await make("INV-2026-0001")).body.row.id;
+    await send(hono, "POST", "/api/_data/invoice_lines", { invoice_id: id, description: "Work", qty: 1, unit_price: 100, gst_rate: 0 });
+    expect((await send(hono, "PATCH", `/api/_data/invoices/${id}`, { notes: "still editable" })).status).toBe(200);
+    const r = await send(hono, "PATCH", `/api/_data/invoices/${id}`, { status: "sent" });
+    expect(r.status).toBe(409);
+    expect(r.body).toMatchObject({ error: "business_name_missing", field: "business.name" });
+    expect(r.body.message).toContain("Add your company name in Settings before issuing");
+    expect((await send(hono, "PATCH", `/api/_data/invoices/${id}`, { status: "paid" })).status).toBe(409);
+    expect((await make("INV-2026-0002", "sent")).status).toBe(409);               // created already issued
+    expect((await get(hono, `/api/invoice/${id}?today=${TODAY}`)).body.invoice.status).toBe("draft");
+    expect((await setSettings(hono, { "business.name": "Kanchi Studio" })).status).toBe(200);
+    expect((await send(hono, "PATCH", `/api/_data/invoices/${id}`, { status: "sent" })).status).toBe(200);
+    expect((await get(hono, `/api/invoice/${id}?today=${TODAY}`)).body.seller.name).toBe("Kanchi Studio");
+  });
+  it("sample invoices still show the sample seller (as issued), the app's own settings stay empty", async () => {
+    const { hono, db } = await boot(true, undefined, true);
+    const rows = db.select().from(invoices).all();
+    const issuedRows = rows.filter((i) => i.status !== "draft");
+    expect(issuedRows.length).toBeGreaterThan(0);
+    for (const i of issuedRows) expect(JSON.parse(i.seller!)).toMatchObject({ name: SAMPLE_BUSINESS.name, gstin: SAMPLE_BUSINESS.gstin });
+    const one = (await get(hono, `/api/invoice/${issuedRows[0].id}?today=${TODAY}`)).body;
+    expect(one.seller.name).toBe(SAMPLE_BUSINESS.name);
+    expect(one.gst_registered).toBe(true);
+    const app = (await get(hono, "/api/_app")).body;
+    expect(app.settings["business.name"]).toBe("");
+    // a sample draft may be issued (it is sample, not the owner's real invoice) and keeps the sample seller
+    const draft = rows.find((i) => i.status === "draft")!;
+    const r = await send(hono, "PATCH", `/api/_data/invoices/${draft.id}`, { status: "sent" });
+    expect(r.status).toBe(200);
+    expect((await get(hono, `/api/invoice/${draft.id}?today=${TODAY}`)).body.seller.name).toBe(SAMPLE_BUSINESS.name);
   });
 });

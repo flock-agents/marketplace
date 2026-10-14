@@ -1,7 +1,7 @@
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import { eq, sql } from "drizzle-orm";
 import { customers, invoices } from "./db/schema";
-import type { InvoiceSettings } from "./db/constants";
+import { SAMPLE_BUSINESS, type InvoiceSettings } from "./db/constants";
 import { isInterState } from "./db/invoice-math";
 
 /** The customer as billed: copied onto an invoice when it leaves draft, so a later edit or delete of the customer never rewrites an issued tax invoice. */
@@ -60,7 +60,9 @@ export function syncIssued(db: BunSQLiteDatabase<any>, s: CurrentSettings, id: s
   const patch: { bill_to?: string; seller?: string } = {};
   const settings = s();
   const copied = parseSeller(inv.seller);
-  if (!copied) patch.seller = JSON.stringify(sellerOf(settings));
+  // No company name set: a real invoice is refused at issue (invoice-routes.ts), so one that gets here and is still a marked sample is
+  // issued under the sample seller; any other (an older or imported row) keeps the settings as they are.
+  if (!copied) patch.seller = JSON.stringify(!settings.business.name.trim() && isMarkedSample(db, id) ? { ...SAMPLE_BUSINESS, state: settings.seller_state } : sellerOf(settings));
   if (parse(inv.bill_to)?.customer_id !== inv.customer_id) {
     const c = db.select().from(customers).where(eq(customers.id, inv.customer_id)).get();
     // The supply is judged from the state the invoice was issued from: a later change of `seller_state` never moves an issued invoice.
@@ -80,11 +82,14 @@ export function watchIssued(db: BunSQLiteDatabase<any>, s: CurrentSettings, even
   });
 }
 
+/** Sample drafts being issued right now: the kit drops the sample mark as it writes, so the guard names them here for the copy that follows. */
+export const sampleIssuing = new Set<string>();
+const isMarkedSample = (db: BunSQLiteDatabase<any>, invoiceId: string) => sampleIssuing.has(invoiceId) || db.all(sql`SELECT 1 AS x FROM _samples WHERE table_name = 'invoices' AND row_id = ${invoiceId}`).length > 0;
+
 /** The kit drops a sample row's mark when the row is edited (issuing a sample draft does): it is the owner's now. Its lines and payments
  *  belong to it, so they go the same way. Left marked, Clear samples would delete them and leave an issued invoice of nothing. */
 function adoptSampleChildren(db: BunSQLiteDatabase<any>, invoiceId: string) {
-  const marked = db.all(sql`SELECT 1 AS x FROM _samples WHERE table_name = 'invoices' AND row_id = ${invoiceId}`);
-  if (marked.length) return;
+  if (isMarkedSample(db, invoiceId)) return;
   for (const t of ["invoice_lines", "payments"] as const)
     db.run(sql`DELETE FROM _samples WHERE table_name = ${t} AND row_id IN (SELECT id FROM ${sql.raw(t)} WHERE invoice_id = ${invoiceId})`);
 }
