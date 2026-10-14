@@ -37,6 +37,16 @@ export interface HarvestConfig {
   maxBlocks: number;
   /** First pass: treat discovered channels as picked, since a first run has no picked ones. */
   firstRun: boolean;
+  /** Local hour (0-23) before which a NEW day's harvest does not start. See harvestDayKey. */
+  harvestHour: number;
+}
+
+/** Email Desk's default, so the owner's two morning harvests land together. */
+export const DEFAULT_HARVEST_HOUR = 5;
+
+/** Only a real integer 0-23 counts. 0 is midnight and valid, so this is never a truthiness test. */
+export function parseHarvestHour(raw: unknown): number {
+  return typeof raw === "number" && Number.isInteger(raw) && raw >= 0 && raw <= 23 ? raw : DEFAULT_HARVEST_HOUR;
 }
 
 export function readConfig(filter: Record<string, unknown> | undefined): HarvestConfig {
@@ -56,6 +66,7 @@ export function readConfig(filter: Record<string, unknown> | undefined): Harvest
     triageMode: raw.enforceTriage === false || raw.triageMode === "shadow" ? "shadow" : "enforce",
     maxBlocks: typeof raw.maxBlocks === "number" && raw.maxBlocks > 0 ? raw.maxBlocks : MAX_BLOCKS_PER_PASS,
     firstRun: false,
+    harvestHour: parseHarvestHour(raw.harvestHour),
   };
 }
 
@@ -72,6 +83,23 @@ export function dayKey(now: Date): string {
   const m = String(now.getMonth() + 1).padStart(2, "0");
   const d = String(now.getDate()).padStart(2, "0");
   return `${y}-${m}-${d}`;
+}
+
+/**
+ * The HARVEST day a moment belongs to: a day that starts at `hour`, not at midnight.
+ *
+ * This one shift is the whole of the harvest-hour rule. Before 05:00 the key is still
+ * yesterday's, so a day that finished is refused as already-ran (no new day starts early) and
+ * a day that stopped on its budget keeps resuming on the hourly ticks, exactly as it did
+ * before midnight. At 05:00 the key turns over and the new day's pass runs.
+ *
+ * The routine is dispatched hourly and the work is daily; before this, the day turned over at
+ * midnight and the "daily" read happened at 00:17. Local time is the app process's clock: the
+ * platform passes only TZ through, not the owner's Flock timezone. A DST change moves the
+ * boundary by at most an hour on that one day.
+ */
+export function harvestDayKey(now: Date, hour: number): string {
+  return dayKey(new Date(now.getTime() - hour * 3_600_000));
 }
 
 /**
@@ -569,7 +597,7 @@ export async function harvestOnce(
   deps: HarvestDeps,
 ): Promise<HarvestOutcome> {
   const now = (deps.now ?? (() => new Date()))();
-  const day = dayKey(now);
+  const day = harvestDayKey(now, cfg.harvestHour);
   if (!deps.platform.configured) return { fetched: 0, newMessages: 0, blocks: 0, errors: 0, skipped: "not-configured" };
   if (harvestRanToday(accountId, day)) return { fetched: 0, newMessages: 0, blocks: 0, errors: 0, skipped: "already-ran-today" };
 
@@ -696,7 +724,7 @@ async function extractPass(
     guardExhausted: boolean; scope: "channels" | "activity"; channelsRead: number;
   },
 ): Promise<HarvestOutcome> {
-  const day = dayKey(now);
+  const day = harvestDayKey(now, cfg.harvestHour);
   let since = now.getTime() - cfg.lookbackHours * 3600_000;
 
   // REACH BACK FAR ENOUGH TO SEE WHAT WE OWE. The window alone makes a deferral a loss: a
@@ -940,7 +968,11 @@ export async function readOwnActivity(
   // ONLY WHAT THE SCRIPT READS. It takes limit/cursor/types/sort and hardcodes exclude_archived;
   // passing an unknown key made it exit 1 with no output at all on the live run. This is pure
   // enrichment — the ranking degrades without it — so a failure here must not read as a pass error.
-  const chans = await exec("channels_list", { limit: 200 });
+  // CHANNELS ONLY, and the connector's own budget. Since slack 1.5.2 channels_list reads every
+  // page and names DMs with a users.list pass; this only wants membership and size, so asking
+  // for DMs would buy a names pass it throws away, and exec's 60s default is short of the worst
+  // case the connector declares (150s).
+  const chans = await exec("channels_list", { limit: 200, types: "public_channel,private_channel" }, 150_000);
   if (chans !== null) {
     const rows: any[] = Array.isArray(chans) ? chans
       : Array.isArray((chans as any)?.channels) ? (chans as any).channels : [];

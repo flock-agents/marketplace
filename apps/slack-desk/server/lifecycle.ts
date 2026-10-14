@@ -6,7 +6,7 @@
 
 import type { AppLifecycleHooks, ProgressItem } from "@flock/app-sdk";
 import { getInit, listInit, markInitFinished, markInitStarted, harvestRanToday, clearHarvestDay } from "./store";
-import { dayKey, harvestOnce, readConfig, FIRST_RUN_MAX_BLOCKS } from "./harvest";
+import { harvestDayKey, harvestOnce, readConfig, FIRST_RUN_MAX_BLOCKS, DEFAULT_HARVEST_HOUR } from "./harvest";
 
 /**
  * How far back the FIRST harvest reads — NARROW, then widening only if it finds nothing.
@@ -21,6 +21,12 @@ import { dayKey, harvestOnce, readConfig, FIRST_RUN_MAX_BLOCKS } from "./harvest
  * reaches further back, where reaching back is cheap precisely because it is quiet.
  */
 const FIRST_RUN_WINDOWS_HOURS = [48, 7 * 24, 14 * 24];
+
+/**
+ * The harvest hour the routine last handed us. progress() has no routine to read, and must key
+ * the day the same way the tick did or it reports "reading again tomorrow" for a day that ran.
+ */
+let lastHarvestHour = DEFAULT_HARVEST_HOUR;
 
 /** Workspaces this app has been told about but has not finished. */
 /**
@@ -88,7 +94,7 @@ export const slackDeskHooks: AppLifecycleHooks = {
           console.log(`[slack-desk] first pass found nothing in ${FIRST_RUN_WINDOWS_HOURS[0]}h — widening to ${hours}h`);
           // The day guard would refuse a second pass, and this is still the FIRST harvest: the
           // previous attempt remembered nothing, so there is nothing to protect from a re-read.
-          clearHarvestDay(accountId, dayKey(new Date()));
+          clearHarvestDay(accountId, harvestDayKey(new Date(), readConfig(undefined).harvestHour));
           out = await harvestOnce(accountId, {
             ...readConfig(undefined), lookbackHours: hours, maxBlocks: FIRST_RUN_MAX_BLOCKS,
           }, { platform: ctx.platform });
@@ -122,6 +128,7 @@ export const slackDeskHooks: AppLifecycleHooks = {
     for (const r of ctx.readRoutines) {
       const trigger = r.trigger as { filter?: Record<string, unknown> } | undefined;
       const cfg = readConfig(trigger?.filter);
+      lastHarvestHour = cfg.harvestHour;
       // A routine names its workspace through the app's own init records: this app is
       // account-partitioned and a scheduled routine carries no accountId.
       for (const rec of listInit()) {
@@ -146,7 +153,7 @@ export const slackDeskHooks: AppLifecycleHooks = {
    * these with every other app's and the user is watching their setup, not our app.
    */
   progress(): ProgressItem[] {
-    const today = dayKey(new Date());
+    const today = harvestDayKey(new Date(), lastHarvestHour);
     return listInit().map((rec) => {
       if (!rec.finishedAt) {
         return { id: rec.accountId, title: "Slack", message: rec.note ?? "Reading your channels…", state: "running" as const };
