@@ -1,0 +1,69 @@
+{
+  "name": "Itinerary",
+  "icon": "✈️",
+  "description": "A trip reference: day-by-day plan, bookings, packing and budget. Opens with a Goa family trip as samples: give samples for any other trip.",
+  "version": "1.1.0",
+  "minFlockVersion": "0.15.0",
+  "type": "fullstack",
+  "access": "private",
+  "spa": true,
+  "apiPrefix": "/api",
+  "buildCommand": "bun run app:build",
+  "buildDir": "dist",
+  "deployDir": ".flock-out",
+  "processConfig": {
+    "command": "bun",
+    "args": [
+      "server/index.js"
+    ],
+    "healthCheckPath": "/api/health"
+  },
+  "config": {
+    "requires": {
+      "agent": {
+        "required": true
+      }
+    }
+  },
+  "assemble": true,
+  "pages": [
+    "plan",
+    "bookings",
+    "packing",
+    "budget"
+  ],
+  "tables": [
+    "plan",
+    "bookings",
+    "packing",
+    "trip_budget"
+  ],
+  "objects": [
+    "plane"
+  ],
+  "nav": "auto",
+  "chat": "side",
+  "labels": {
+    "nav.plan": "Plan",
+    "nav.bookings": "Bookings",
+    "nav.packing": "Packing",
+    "nav.budget": "Budget",
+    "title.plan": "Plan",
+    "title.bookings": "Bookings",
+    "title.packing": "Packing",
+    "title.budget": "Budget"
+  },
+  "useCases": {
+    "for": [
+      "A trip reference: the day-by-day plan with times and places",
+      "Flights, stays and other bookings with their references and status",
+      "A packing list per traveller with progress",
+      "A trip budget by category, spent against the limit"
+    ],
+    "notFor": [
+      "Clients booking time slots with you (use bookings)",
+      "A household's everyday money (use money)",
+      "A standing weekly schedule such as meals (use planner)"
+    ]
+  }
+}

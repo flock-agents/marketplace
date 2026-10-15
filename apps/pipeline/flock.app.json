@@ -1,0 +1,68 @@
+{
+  "name": "Pipeline",
+  "icon": "🧭",
+  "description": "People or deals moving through stages: hiring candidates, leads, proposals, orders, applications.",
+  "version": "1.1.0",
+  "minFlockVersion": "0.15.0",
+  "type": "fullstack",
+  "access": "private",
+  "spa": true,
+  "apiPrefix": "/api",
+  "buildCommand": "bun run app:build",
+  "buildDir": "dist",
+  "deployDir": ".flock-out",
+  "processConfig": {
+    "command": "bun",
+    "args": [
+      "server/index.js"
+    ],
+    "healthCheckPath": "/api/health"
+  },
+  "config": {
+    "requires": {
+      "agent": {
+        "required": true
+      }
+    }
+  },
+  "assemble": true,
+  "pages": [
+    "board",
+    "table"
+  ],
+  "tables": [
+    "deals"
+  ],
+  "objects": [
+    "briefcase"
+  ],
+  "nav": "auto",
+  "chat": "side",
+  "titleFromName": "title.board",
+  "labels": {
+    "nav.board": "Board",
+    "nav.table": "Table",
+    "title.board": "Deals",
+    "title.table": "All deals",
+    "noun.one": "deal",
+    "noun.many": "deals",
+    "stage.Lead": "Lead",
+    "stage.Talking": "Talking",
+    "stage.Proposal": "Proposal",
+    "stage.Won": "Won",
+    "stage.Lost": "Lost"
+  },
+  "useCases": {
+    "for": [
+      "Sales leads or deals moving through stages on a board",
+      "Hiring candidates, client proposals, orders or applications in stages",
+      "Seeing the value in each stage and what the next step is",
+      "Dragging a card to move it to the next stage"
+    ],
+    "notFor": [
+      "Rows with a simple status to follow up (use tracker)",
+      "A one-off list to tick off (use checklist)",
+      "Invoicing a deal once it is won (use invoices)"
+    ]
+  }
+}

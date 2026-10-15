@@ -1,0 +1,59 @@
+{
+  "name": "Tracker",
+  "icon": "📌",
+  "description": "Rows with a status: vendors, repairs, collections, anything to follow up. Not for hiring (use pipeline).",
+  "version": "1.1.0",
+  "minFlockVersion": "0.15.0",
+  "type": "fullstack",
+  "access": "private",
+  "spa": true,
+  "apiPrefix": "/api",
+  "buildCommand": "bun run app:build",
+  "buildDir": "dist",
+  "deployDir": ".flock-out",
+  "processConfig": {
+    "command": "bun",
+    "args": [
+      "server/index.js"
+    ],
+    "healthCheckPath": "/api/health"
+  },
+  "config": {
+    "requires": {
+      "agent": {
+        "required": true
+      }
+    }
+  },
+  "assemble": true,
+  "pages": [
+    "list",
+    "detail"
+  ],
+  "tables": [
+    "items"
+  ],
+  "objects": [
+    "clipboard"
+  ],
+  "nav": "auto",
+  "chat": "side",
+  "titleFromName": "title.list",
+  "labels": {
+    "nav.list": "All",
+    "title.list": "Tracker"
+  },
+  "useCases": {
+    "for": [
+      "Rows with a status to follow up: vendors, repairs, collections, applications",
+      "Who owns each item, its priority and when it is due",
+      "Open, waiting, overdue and due-this-week counts at the top",
+      "Any list of things in progress when no other app fits"
+    ],
+    "notFor": [
+      "Hiring candidates or deals moving through stages (use pipeline)",
+      "A simple list to tick off (use checklist)",
+      "Contacts with a picture and a phone number (use directory)"
+    ]
+  }
+}

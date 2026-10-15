@@ -1,0 +1,58 @@
+{
+  "name": "Dashboard",
+  "icon": "📊",
+  "description": "A live page of key numbers, a trend and recent events that an agent keeps current.",
+  "version": "1.1.0",
+  "minFlockVersion": "0.15.0",
+  "type": "fullstack",
+  "access": "private",
+  "spa": true,
+  "apiPrefix": "/api",
+  "buildCommand": "bun run app:build",
+  "buildDir": "dist",
+  "deployDir": ".flock-out",
+  "processConfig": {
+    "command": "bun",
+    "args": [
+      "server/index.js"
+    ],
+    "healthCheckPath": "/api/health"
+  },
+  "config": {
+    "requires": {
+      "agent": {
+        "required": true
+      }
+    }
+  },
+  "assemble": true,
+  "pages": [
+    "overview"
+  ],
+  "tables": [
+    "metrics",
+    "events"
+  ],
+  "objects": [
+    "globe"
+  ],
+  "nav": "none",
+  "chat": "side",
+  "titleFromName": "title.overview",
+  "labels": {
+    "title.overview": "Dashboard"
+  },
+  "useCases": {
+    "for": [
+      "A page of key numbers an agent keeps current: orders today, revenue, sign-ups",
+      "A trend of one metric over time",
+      "A feed of recent events: sales, alerts, milestones",
+      "Keeping an eye on how a shop, a campaign or a project is going"
+    ],
+    "notFor": [
+      "Rows the owner edits by hand: here the agent writes and the page reads",
+      "Things to follow up one by one (use tracker)",
+      "A household's money (use money)"
+    ]
+  }
+}
