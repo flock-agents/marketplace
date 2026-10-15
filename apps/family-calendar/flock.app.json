@@ -1,5 +1,6 @@
 {
   "name": "Family Calendar",
+  "usage": "app",
   "icon": "icon.svg",
   "description": "Family events, schedules, and reminders at a glance",
   "version": "2.0.0",

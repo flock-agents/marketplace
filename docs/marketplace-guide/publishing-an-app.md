@@ -63,6 +63,11 @@ apps/<slug>/
 | `processConfig` | No | Backend process config (fullstack apps only) |
 | `assemble` | No | `true` for an app built on Flock's app kit: Flock copies the component library into `src/flock/` before `buildCommand` (see "Kit apps") |
 | `useCases` | No | `{ "for": [...], "notFor": [...] }`: what the app is right for and wrong for, read by the Flock Assistant when it picks a starting point |
+| `usage` | No | `"app"` (default) or `"template"`: whether the package is installed once or used as an app template (see "App or app template") |
+
+## App or app template
+
+`usage` says how an owner takes the package. `"app"` (the default when the field is absent) is installed once: the Marketplace lists it under **Apps** with an Install button, one copy per Flock, updated from the marketplace. `"template"` is an *app template*: never installed as it is, but used to make the owner's own app, named and filled for their purpose (the ten kit apps are templates). The Marketplace lists it under **App templates** with a **Use template** button that opens the Use dialog (icon, name, what it is for, the agent it works with), and the Flock Assistant plans an app from it on a card that reads "From the <name> template". An app made from a template keeps receiving the template's improvements until the owner changes how the app itself works. The owner can also use an `"app"` package as a template (**Use as template** in its row), so a plain app gets the same copy with "app" in place of "template". Put the field in `flock.app.json` and on the catalog item; adding it is not a version bump.
 
 ## Kit apps
 

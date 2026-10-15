@@ -1,5 +1,6 @@
 {
   "name": "Invoices",
+  "usage": "template",
   "icon": "🧾",
   "description": "Bills your own customers with GST (you are the seller), tracks who has paid you, and lets an agent chase what's overdue; not for bills you pay.",
   "version": "1.1.0",

@@ -26,6 +26,7 @@
     {
       "slug": "meal-planner",
       "type": "app",
+      "usage": "app",
       "name": "Meal Planner",
       "description": "Plan meals for the week and manage your shopping list",
       "author": "flock",
@@ -58,6 +59,7 @@
     {
       "slug": "family-calendar",
       "type": "app",
+      "usage": "app",
       "name": "Family Calendar",
       "description": "Family events, schedules, and reminders at a glance",
       "author": "flock",
@@ -293,6 +295,7 @@
     {
       "slug": "slack-desk",
       "type": "app",
+      "usage": "app",
       "name": "Slack Desk",
       "description": "Builds memory from your Slack conversations and surfaces tasks you missed \u2014 reads only, never posts",
       "author": "flock",
@@ -315,6 +318,7 @@
     {
       "slug": "calendar-desk",
       "type": "app",
+      "usage": "app",
       "name": "Calendar Desk",
       "description": "Reads your Google Calendar, shows the week on Your Schedule, sends a prep note before meetings, and keeps the notes you leave on events",
       "author": "flock",
@@ -417,6 +421,7 @@
     {
       "slug": "bookings",
       "type": "app",
+      "usage": "template",
       "name": "Bookings",
       "description": "Lets your clients book time slots at your clinic, salon or tuition, and shows today's bookings first; one client per slot (not group classes with a capacity); not for noting your own appointments.",
       "author": "flock",
@@ -439,6 +444,7 @@
     {
       "slug": "checklist",
       "type": "app",
+      "usage": "template",
       "name": "Checklist",
       "description": "One list of things to tick off, grouped, with who and by when: a move, a trip, a launch.",
       "author": "flock",
@@ -461,6 +467,7 @@
     {
       "slug": "dashboard",
       "type": "app",
+      "usage": "template",
       "name": "Dashboard",
       "description": "A live page of key numbers, a trend and recent events that an agent keeps current.",
       "author": "flock",
@@ -482,6 +489,7 @@
     {
       "slug": "directory",
       "type": "app",
+      "usage": "template",
       "name": "Directory",
       "description": "A browsable set of people, places or things with a picture and contact details.",
       "author": "flock",
@@ -503,6 +511,7 @@
     {
       "slug": "invoices",
       "type": "app",
+      "usage": "template",
       "name": "Invoices",
       "description": "Bills your own customers with GST (you are the seller), tracks who has paid you, and lets an agent chase what's overdue; not for bills you pay.",
       "author": "flock",
@@ -525,6 +534,7 @@
     {
       "slug": "itinerary",
       "type": "app",
+      "usage": "template",
       "name": "Itinerary",
       "description": "A trip reference: day-by-day plan, bookings, packing and budget. Opens with a Goa family trip as samples: give samples for any other trip.",
       "author": "flock",
@@ -547,6 +557,7 @@
     {
       "slug": "money",
       "type": "app",
+      "usage": "template",
       "name": "Money",
       "description": "A household's money (not a business's books): transactions, budgets, investments and goals. Set overviewLead: spending (budget, running costs) or netWorth (investments).",
       "author": "flock",
@@ -569,6 +580,7 @@
     {
       "slug": "pipeline",
       "type": "app",
+      "usage": "template",
       "name": "Pipeline",
       "description": "People or deals moving through stages: hiring candidates, leads, proposals, orders, applications.",
       "author": "flock",
@@ -591,6 +603,7 @@
     {
       "slug": "planner",
       "type": "app",
+      "usage": "template",
       "name": "Meal Planner",
       "description": "The family's meals for the week, day by day (Breakfast, Lunch and Dinner), with a shared grocery list and the family's recipe book; not for school runs, chores or appointments.",
       "author": "flock",
@@ -613,6 +626,7 @@
     {
       "slug": "tracker",
       "type": "app",
+      "usage": "template",
       "name": "Tracker",
       "description": "Rows with a status: vendors, repairs, collections, anything to follow up. Not for hiring (use pipeline).",
       "author": "flock",

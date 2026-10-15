@@ -1,5 +1,6 @@
 {
   "name": "Directory",
+  "usage": "template",
   "icon": "📇",
   "description": "A browsable set of people, places or things with a picture and contact details.",
   "version": "1.1.0",

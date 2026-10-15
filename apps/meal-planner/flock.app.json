@@ -1,5 +1,6 @@
 {
   "name": "Meal Planner",
+  "usage": "app",
   "icon": "icon.svg",
   "type": "fullstack",
   "access": "private",

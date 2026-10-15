@@ -1,5 +1,6 @@
 {
   "name": "Slack Desk",
+  "usage": "app",
   "slug": "slack-desk",
   "type": "managed",
   "visibility": "headless",

@@ -1,5 +1,6 @@
 {
   "name": "Pipeline",
+  "usage": "template",
   "icon": "🧭",
   "description": "People or deals moving through stages: hiring candidates, leads, proposals, orders, applications.",
   "version": "1.1.0",
