@@ -74,8 +74,8 @@
       "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "apps/family-calendar",
-      "latestVersion": "2.0.0",
-      "latestTag": "family-calendar-v2.0.0",
+      "latestVersion": "2.0.1",
+      "latestTag": "family-calendar-v2.0.1",
       "minFlockVersion": "0.15.0",
       "publishedAt": "2026-08-13T15:30:00Z",
       "updatedAt": "2026-10-16T00:00:00Z"

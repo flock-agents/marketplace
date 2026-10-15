@@ -88,6 +88,8 @@ Three tables (server/db/schema.ts), each with the kit's `id`, `created_at`, `upd
   Something that happens every week (football every Tuesday at 5pm) is one row per date: add the next few weeks' rows, never one row with a rule.
 - `reminders`: `title` (required), `due` (required, a local date-time "2026-10-17T08:00": the first or only time it is due), `repeat` (none, daily, weekly, monthly; the default is none) and `who`. A repeating reminder is one row; the pages work out when it next comes round from `due` (a monthly one on the 31st falls on the last day of a shorter month).
 
+An install updated from 1.x also has `v1_members`, `v1_events` and `v1_reminders`: the 1.x tables, kept as they were (server/db/migrate-v1.ts renames them and carries their rows into the three tables above on the first start after the update; mountKit's `keepTables` keeps them). The pages and `/api/_data` never read them; leave them alone.
+
 For the agent: write `who` exactly as the member's `name` (the week view matches on it); times are 24-hour "HH:MM" and dates "YYYY-MM-DD" in the family's own time, never UTC. "Remind everyone about the dentist on Friday" is a `reminders` row due the evening before (or `reminder_minutes` on the dentist's `events` row, when the event is there). "When is grandma's birthday" is `GET /api/_data/events?q=birthday`. "Who is picking up the kids on Thursday" is the `events` on that date whose `who` is set.
 
 ### Pages

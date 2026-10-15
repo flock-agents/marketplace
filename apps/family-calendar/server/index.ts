@@ -1,9 +1,12 @@
 import { createFlockApp } from "@flock/app-sdk";
-import { mountKit } from "@flock/app-kit";
+import { mountKit, schemaModeFromEnv } from "@flock/app-kit";
 import * as schema from "./db/schema";
 import { seed } from "./db/seed";
+import { prepareV1Data, KEPT_V1_TABLES } from "./db/migrate-v1";
 
 const flock = createFlockApp();
-await mountKit(flock, { schema, seed });
+// An install updated from 1.x: its tables move aside (kept) and their rows become the boot import mountKit applies.
+prepareV1Data(flock.env.dataDir, { writeImport: schemaModeFromEnv() === "apply" });
+await mountKit(flock, { schema, seed, keepTables: KEPT_V1_TABLES });
 // App-specific routes go here, e.g. flock.hono.get("/api/summary", …). Agents use /api/_data for rows.
 flock.listen();

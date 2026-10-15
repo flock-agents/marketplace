@@ -3,7 +3,7 @@
   "usage": "app",
   "icon": "icon.svg",
   "description": "Family events, schedules, and reminders at a glance",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "minFlockVersion": "0.15.0",
   "type": "fullstack",
   "access": "private",
