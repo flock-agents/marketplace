@@ -72,11 +72,11 @@
       "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "apps/family-calendar",
-      "latestVersion": "1.0.3",
-      "latestTag": "family-calendar-v1.0.3",
+      "latestVersion": "2.0.0",
+      "latestTag": "family-calendar-v2.0.0",
       "minFlockVersion": "0.15.0",
       "publishedAt": "2026-08-13T15:30:00Z",
-      "updatedAt": "2026-10-15T12:00:00Z"
+      "updatedAt": "2026-10-16T00:00:00Z"
     },
     {
       "slug": "family-butler",

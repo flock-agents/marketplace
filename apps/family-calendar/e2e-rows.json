@@ -1,0 +1,11 @@
+{ "members": [
+  { "$key": "anita", "name": "Anita", "colour": "accent", "emoji": "👩" },
+  { "$key": "aarav", "name": "Aarav", "colour": "success", "emoji": "⚽" }
+], "events": [
+  { "$key": "dentist", "title": "Dentist", "date": "2026-10-16", "start_time": "16:30", "end_time": "17:00", "who": "Aarav", "location": "Smile Dental", "reminder_minutes": 60 },
+  { "$key": "football", "title": "Football practice", "date": "2026-10-13", "start_time": "17:00", "end_time": "18:00", "who": "Aarav", "location": "Sports ground" },
+  { "$key": "birthday", "title": "Grandma's birthday", "date": "2026-10-17", "location": "Grandma's house", "notes": "Cake from Iyengar's" }
+], "reminders": [
+  { "$key": "dentist", "title": "Dentist tomorrow: insurance card in the bag", "due": "2026-10-15T19:00", "repeat": "none", "who": "Anita" },
+  { "$key": "pekit", "title": "Pack the PE kit", "due": "2026-10-12T07:30", "repeat": "weekly", "who": "Aarav" }
+] }
