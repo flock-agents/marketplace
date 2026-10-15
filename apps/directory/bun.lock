@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "__APP_ID__",
+      "name": "directory",
       "dependencies": {
         "drizzle-kit": "0.31.11",
         "drizzle-orm": "0.45.3",

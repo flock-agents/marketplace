@@ -1,5 +1,5 @@
 {
-  "name": "__APP_ID__",
+  "name": "directory",
   "private": true,
   "type": "module",
   "scripts": {
