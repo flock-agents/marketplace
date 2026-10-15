@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.0
+
+- Published as a marketplace app: `flock.app.json` carries what `template.json` did plus `assemble: true` and `useCases`; `ARCHITECTURE.md` (shared kit architecture, then this app's own notes) replaces `TEMPLATE.md`, which stays as a pointer for one release. `template.json` is kept, identical in the shared fields, until the Flock tooling reads `flock.app.json`. Needs Flock 0.15.0.
+
 ## 1.0.1
 
 - Editors open in place: a picked customer opens under its row (it opened above the list); Add opens right under the page header. On an invoice, the top Record payment opens the payment form right under that button, and the Payments card's own button opens it in the card. Escape closes them. Needs the Flock component library 1.3.0 (`expanded`, `InlinePanel`).
