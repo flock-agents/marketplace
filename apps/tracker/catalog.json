@@ -1,6 +1,6 @@
 {
   "name": "tracker",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "description": "Rows with a status: vendors, repairs, collections, anything to follow up. Not for hiring (use pipeline).",
   "objects": [
     "clipboard"
