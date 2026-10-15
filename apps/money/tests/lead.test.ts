@@ -32,8 +32,8 @@ describe("money overview lead", () => {
 });
 
 describe("overviewLead setting", () => {
-  it("is declared to the kit and repeated in template.json, default auto", () => {
-    const meta = JSON.parse(readFileSync(join(import.meta.dir, "..", "template.json"), "utf8"));
+  it("is declared to the kit and repeated in flock.app.json, default auto", () => {
+    const meta = JSON.parse(readFileSync(join(import.meta.dir, "..", "flock.app.json"), "utf8"));
     expect(meta.settings).toEqual(JSON.parse(JSON.stringify(SETTINGS)).map(({ rules: _r, ...d }: Record<string, unknown>) => d));
     const s = SETTINGS.find((d) => d.key === "overviewLead")!;
     expect(s.default).toBe("auto");

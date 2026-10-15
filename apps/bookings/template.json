@@ -1,9 +1,0 @@
-{ "name": "bookings", "version": "1.1.0", "description": "Lets your clients book time slots at your clinic, salon or tuition, and shows today's bookings first; one client per slot (not group classes with a capacity); not for noting your own appointments.", "pages": ["today", "book", "services"], "tables": ["services"], "privateTables": ["bookings"], "objects": ["calendar"], "nav": "auto", "chat": "side",
-  "settings": [
-    { "key": "hours", "type": "json", "scope": "owner",
-      "default": { "0": ["10:00", "13:00"], "1": ["09:00", "18:00"], "2": ["09:00", "18:00"], "3": ["09:00", "18:00"], "4": ["09:00", "18:00"], "5": ["09:00", "18:00"], "6": ["09:00", "14:00"] },
-      "label": "Opening hours by weekday, \"0\" (Sunday) to \"6\" (Saturday): [\"HH:MM\", \"HH:MM\"] for open and close, or null when closed" },
-    { "key": "slot_minutes", "type": "integer", "default": 30, "scope": "owner", "label": "Minutes between the start times offered (5 to 240)" }
-  ],
-  "labels": { "nav.today": "Today", "nav.book": "Book", "nav.services": "Services", "title.today": "Today's bookings", "title.book": "Book an appointment", "title.services": "Services" }
-}

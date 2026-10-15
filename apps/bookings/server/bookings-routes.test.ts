@@ -18,7 +18,7 @@ async function boot() {
   const hono = new Hono();
   const dataDir = mkdtempSync(join(tmpdir(), "bookings-routes-"));
   const events: string[] = [];
-  const kit = await mountKit({ hono, env: { appId: "t", dataDir, apiUrl: null, token: null, agent: null } }, { schema, dbFile: ":memory:", appName: "T", settings: SETTINGS, privateTables: { bookings: "GET/POST/PATCH/DELETE /api/bookings and GET /api/slots (see TEMPLATE.md)" } });
+  const kit = await mountKit({ hono, env: { appId: "t", dataDir, apiUrl: null, token: null, agent: null } }, { schema, dbFile: ":memory:", appName: "T", settings: SETTINGS, privateTables: { bookings: "GET/POST/PATCH/DELETE /api/bookings and GET /api/slots (see ARCHITECTURE.md)" } });
   mountBookingRoutes(hono, kit.db, (t, id, op) => events.push(`${t}:${op}:${id}`), kit.settings);
   const svc = (name: string, minutes: number) => kit.db.insert(services).values({ name, minutes }).returning().get()!.id;
   const half = svc("Consultation", 30), hour = svc("Check-up", 60);
@@ -348,7 +348,7 @@ describe("sample rows are marked, flagged by the app's routes, and cleared (T2b)
     const { seed } = await import("./db/seed");
     const hono = new Hono();
     const dataDir = mkdtempSync(join(tmpdir(), "bookings-samples-"));
-      const kit = await mountKit({ hono, env: { appId: "t", dataDir, apiUrl: null, token: null, agent: null } }, { schema, seed, appName: "T", settings: SETTINGS, privateTables: { bookings: "GET/POST/PATCH/DELETE /api/bookings and GET /api/slots (see TEMPLATE.md)" } });
+      const kit = await mountKit({ hono, env: { appId: "t", dataDir, apiUrl: null, token: null, agent: null } }, { schema, seed, appName: "T", settings: SETTINGS, privateTables: { bookings: "GET/POST/PATCH/DELETE /api/bookings and GET /api/slots (see ARCHITECTURE.md)" } });
     mountBookingRoutes(hono, kit.db, kit.emitChange, kit.settings, kit.flagSamples);
     const owner = { "Content-Type": "application/json", "X-Flock-User": "maya" };
     const n = (q: string) => (kit.sqlite.query(q).get() as { n: number }).n;

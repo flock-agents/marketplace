@@ -47,7 +47,7 @@ export function hoursProblem(v: unknown): string | null {
 export const slotProblem = (v: unknown): string | null =>
   typeof v === "number" && Number.isInteger(v) && v >= MIN_SLOT && v <= MAX_SLOT ? null : `slot_minutes must be a whole number from ${MIN_SLOT} to ${MAX_SLOT}`;
 
-/** The settings this template declares (passed to mountKit, and listed in template.json without the checks). Defaults are today's constants.
+/** The settings this template declares (passed to mountKit, and listed in flock.app.json without the checks). Defaults are today's constants.
  *  `rules` is the declarative twin of a check (minimum, maximum, minLength, pattern, enum, message), written into settings.json for the
  *  planner, which never runs a template's code. A check with no rules is only type-checked at planning; the kit still runs it at make.
  *  The kit runs each `check` on PATCH /api/_app/settings (400 naming the field), on the boot import (the import fails) and on read. */

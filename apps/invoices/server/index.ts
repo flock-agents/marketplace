@@ -9,7 +9,7 @@ const flock = createFlockApp();
 let db: Awaited<ReturnType<typeof mountKit>>["db"] | null = null;
 let kitSettings: Awaited<ReturnType<typeof mountKit>>["settings"] | null = null;
 guardInvoiceWrites(flock.hono, () => db, () => kitSettings);   // before the kit's routes: only drafts can be deleted; bill_to and seller are the server's own (serverColumns)
-// The business, its GST state code and the number prefix are settings (also listed in template.json), each with its own check.
+// The business, its GST state code and the number prefix are settings (also listed in flock.app.json), each with its own check.
 const kit = await mountKit(flock, { schema, seed, serverColumns: SERVER_COLUMNS, settings: SETTINGS });
 db = kit.db;
 kitSettings = kit.settings;

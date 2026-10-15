@@ -3,12 +3,12 @@ import { readFileSync } from "fs";
 import { join } from "path";
 import { SETTINGS, BUSINESS, SAMPLE_BUSINESS, NAME_PLACEHOLDER, SELLER_STATE, NUMBER_PREFIX } from "../server/db/constants";
 
-// template.json is never copied into an app, so the server declares its settings from constants.ts; the plan and the catalogue read
-// template.json. The two lists must be the same.
+// The server declares its settings from constants.ts; the plan and the catalogue read the kit fields of flock.app.json. The two
+// lists must be the same.
 describe("invoices settings", () => {
-  it("template.json lists exactly the settings the server declares to mountKit, with today's defaults", () => {
-    const meta = JSON.parse(readFileSync(join(import.meta.dir, "..", "template.json"), "utf8"));
-    // `rules` (the declarative twin of a check) live in settings.json, not template.json
+  it("flock.app.json lists exactly the settings the server declares to mountKit, with today's defaults", () => {
+    const meta = JSON.parse(readFileSync(join(import.meta.dir, "..", "flock.app.json"), "utf8"));
+    // `rules` (the declarative twin of a check) live in settings.json, not flock.app.json
     expect(meta.settings).toEqual(JSON.parse(JSON.stringify(SETTINGS)).map(({ rules: _r, ...d }: Record<string, unknown>) => d));
     expect(meta.settings.map((s: { key: string }) => s.key)).toEqual(
       ["business.name", "business.gstin", "business.address", "business.email", "business.pay", "seller_state", "number_prefix"]);
@@ -65,10 +65,10 @@ describe("a missing company name", () => {
   it("no business setting defaults to sample data; the sample identity is its own constant", () => {
     expect(Object.values(BUSINESS).every((v) => v === "")).toBe(true);
     expect(SAMPLE_BUSINESS.name).toBe("Brindavan Design Studio");
-    const meta = JSON.parse(readFileSync(join(import.meta.dir, "..", "template.json"), "utf8"));
+    const meta = JSON.parse(readFileSync(join(import.meta.dir, "..", "flock.app.json"), "utf8"));
     for (const s of meta.settings.filter((x: { key: string }) => x.key.startsWith("business."))) expect(s.default).toBe("");
-    expect(JSON.parse(readFileSync(join(import.meta.dir, "..", "template.json"), "utf8"))).not.toHaveProperty("brindavan");
-    expect(readFileSync(join(import.meta.dir, "..", "template.json"), "utf8")).not.toContain("Brindavan");
+    expect(JSON.parse(readFileSync(join(import.meta.dir, "..", "flock.app.json"), "utf8"))).not.toHaveProperty("brindavan");
+    expect(readFileSync(join(import.meta.dir, "..", "flock.app.json"), "utf8")).not.toContain("Brindavan");
   });
   it("settings.json no longer demands a non-empty name", () => {
     const s = JSON.parse(readFileSync(join(import.meta.dir, "..", "settings.json"), "utf8"));

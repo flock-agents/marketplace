@@ -1,3 +1,0 @@
-{ "name": "itinerary", "version": "1.1.0", "description": "A trip reference: day-by-day plan, bookings, packing and budget. Opens with a Goa family trip as samples: give samples for any other trip.", "pages": ["plan", "bookings", "packing", "budget"], "tables": ["plan", "bookings", "packing", "trip_budget"], "objects": ["plane"], "nav": "auto", "chat": "side",
-  "labels": { "nav.plan": "Plan", "nav.bookings": "Bookings", "nav.packing": "Packing", "nav.budget": "Budget", "title.plan": "Plan", "title.bookings": "Bookings", "title.packing": "Packing", "title.budget": "Budget" }
-}

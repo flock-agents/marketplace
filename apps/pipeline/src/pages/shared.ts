@@ -18,7 +18,7 @@ export const many = () => label("noun.many", "deals");
 export const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 /** The words shown for a stage (label stage.<Value>); the stored value never changes, so agents and rows keep using STAGES. A call per
- *  stage, each a literal key, because labels are checked against template.json. Read at render time (labels load with the app info). */
+ *  stage, each a literal key, because labels are checked against flock.app.json. Read at render time (labels load with the app info). */
 export function stageLabel(s: string): string {
   switch (s) {
     case "Lead": return label("stage.Lead", "Lead");

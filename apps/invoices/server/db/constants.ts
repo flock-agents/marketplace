@@ -61,7 +61,7 @@ export const numberPrefixProblem = (v: unknown): string | null =>
     : "number_prefix must be 1 to 6 letters or digits (\"/\" allowed after the first), with no spaces, dashes or other marks (a trailing dash or space is dropped)";
 const textProblem = (key: string) => (v: unknown): string | null => (typeof v === "string" ? null : `${key} must be text`);
 
-/** The settings this template declares (passed to mountKit, and listed in template.json without the checks). Business defaults are empty (an empty name is valid: it only stops issuing).
+/** The settings this template declares (passed to mountKit, and listed in flock.app.json without the checks). Business defaults are empty (an empty name is valid: it only stops issuing).
  *  The kit runs each `check` on PATCH /api/_app/settings (400 naming the field), on the boot import (the import fails) and on read. */
 /** An issued invoice keeps a copy of the seller for good (bill-to.ts), so an import with sent, paid, overdue or void invoices must give
  *  every setting that copy takes: left to the defaults, it would freeze the sample business, its GSTIN and its bank details. */
