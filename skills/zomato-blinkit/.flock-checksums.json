@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "generatedAt": "2026-10-03T20:23:13.346Z",
+  "sourceVersion": "1.2.0",
+  "sourceTag": "zomato-blinkit-v1.2.0",
+  "files": {
+    "icon.svg": "02c183b473fc849d6f3c94dd98cbf8028ec0a9ea1e47f59be1d5efd777d46c1a",
+    "scripts/view-cart.sh": "8c19ec50fb6c6a9c8a892a13a1eae7672e5f70fbb4b5868da8b7fd341c3de7b3",
+    "scripts/add-to-cart.sh": "0002eee20589a2251b3976360d25997a09b7905e56915b269184680f90cc4c87",
+    "scripts/_health-check.sh": "71df9d2a4a2528659efbfa995f4a02da569c3456454926489d8729bfc9f57d00",
+    "scripts/track-order.ts": "e7657de2a98de064a81017c6559e46f8d6e182352018e3d5c0bf9878ff09b5d6",
+    "scripts/checkout.sh": "2be9ea0924e91ce96a5ed65d0a2258098e930261adc78eb59d4b96dc9c324717",
+    "scripts/search-products.sh": "859c7a9fba6cf46e801a5530a0c465e287ee9e3f0c8d7ddde552b15a66d0618a",
+    "scripts/track-order.sh": "01e7bfb8b526b8bd894504425cc3153ee1cf41a6b9f70cd9369f89260c90a916",
+    "scripts/search-products.ts": "c8d1f7c0a5b95d50f8494feea791bb4b88a3e6db0deeacbd5970dcbfdaafa1f7",
+    "scripts/checkout.ts": "62a548d688f8bb28204298c310fb59fa7b1f5f2138eac33c6af6a49d98bf4a6f",
+    "scripts/add-to-cart.ts": "9fb73eb57411ff15025d60f803a5b171c2b60b19c59d5ada1d30b03e18acecad",
+    "scripts/_helpers.sh": "fc38f9ebb7d46debb9dd751fe4ddb6ad00250e535954228a96496311307bc40a",
+    "scripts/view-cart.ts": "1cf3466aaa51a44099625d849e0c24fe8e387b97e8b466756a93eff9788934c7",
+    "scripts/keep-alive.ts": "f3f754a1787585e383c25b591dce92b7bf5b4a487469b0b5e61970fd2e7f1251",
+    "scripts/remove-from-cart.ts": "614e780b3adedb326c280edb69e9171bffc15b2e4b635a521b82443386f8cf17",
+    "scripts/view-order-history.sh": "657e5bb9e6d5d3358bea32a44c3480572162b970f4c0e8e6519afb1666d2dab3",
+    "scripts/remove-from-cart.sh": "64f9025c61ce2a49a5ff78c1e5cb882c8fbaecd7493b9fccbed37e9f827429f9",
+    "scripts/view-order-history.ts": "23425099c3386fe0a8646016c114d7fbbe127c6f8908d4fe40bb9407d32eac34",
+    "scripts/keep-alive.sh": "eec48efedb3f163047f8bfd3bf821c48e95c1cf6586c3fd75cedd7c2225065dd",
+    "flock.skill.json": "cae7b27cd3776a140a266e1d15b195083a0e918db5eb73c28fb471c15b7b0390",
+    "instructions.md": "3559a30a861621c20b1ce9814f6f8d55df9cff75172c6c5371abd71c181c0485"
+  }
+}

@@ -36,7 +36,7 @@ fi
 COMPOSE_ACTIONS=$(jq -nc '[
   {"action":"waitForSelector","selector":".T-I.T-I-KE.L3","delay":5000},
   {"action":"click","selector":".T-I.T-I-KE.L3"},
-  {"action":"waitForSelector","selector":"[aria-label*=\"To\"] input, textarea[aria-label*=\"To\"], [name=to]","delay":5000}
+  {"action":"waitForSelector","selector":"input[aria-label=\"To recipients\"]:visible, div[name=\"to\"] input:visible, textarea[name=\"to\"]:visible","delay":5000}
 ]')
 
 _persistent_interact "$PERSISTENT_ID" "$COMPOSE_ACTIONS" "false" "" >/dev/null 2>&1
@@ -131,12 +131,15 @@ if [ -n "$ATTACHMENTS" ]; then
   done <<< "$ATTACHMENTS"
 fi
 
+# Mirrors SAVE_AND_CLOSE_SCRIPT in _composeSave.ts (a .sh cannot import it).
+# It must never reach for `.og.T-I-J3` -- that is Gmail's Discard draft trash,
+# not a save control, and the old shared lookup ended in it.
 EVAL_SCRIPT="(() => {
   return JSON.stringify({ success: true, message: 'Draft created via browser session' });
 })()"
 
 CLOSE_ACTIONS=$(jq -nc '[
-  {"action":"evaluate","script":"(() => { const closeBtn = document.querySelector('"'"'.Ha img.Ha-Jj'"'"') || document.querySelector('"'"'[aria-label=\"Save & close\"]'"'"') || document.querySelector('"'"'.og.T-I-J3'"'"'); if (closeBtn) { closeBtn.click(); return {ok:true}; } return {ok:true,message:\"Draft saved (compose left open)\"}; })()"},
+  {"action":"evaluate","script":"(() => { const saveClose = document.querySelector('"'"'.Ha img.Ha-Jj'"'"') || document.querySelector('"'"'[aria-label=\"Save & close\"]'"'"'); if (saveClose) { saveClose.click(); return JSON.stringify({ok:true, how:\"save-and-close\"}); } const editor = document.querySelector('"'"'div[aria-label*=\"Message\"][contenteditable=true]'"'"'); if (editor && editor.blur) editor.blur(); if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); return JSON.stringify({ok:true, how:\"autosaved-inline\"}); })()"},
   {"action":"wait","delay":1500},
   {"action":"screenshot"}
 ]')

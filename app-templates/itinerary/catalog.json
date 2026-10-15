@@ -1,0 +1,143 @@
+{
+  "name": "itinerary",
+  "version": "1.0.1",
+  "description": "A trip reference: day-by-day plan, bookings, packing and budget. Opens with a Goa family trip as samples: give samples for any other trip.",
+  "objects": [
+    "plane"
+  ],
+  "labels": {
+    "nav.plan": "Plan",
+    "nav.bookings": "Bookings",
+    "nav.packing": "Packing",
+    "nav.budget": "Budget",
+    "title.plan": "Plan",
+    "title.bookings": "Bookings",
+    "title.packing": "Packing",
+    "title.budget": "Budget"
+  },
+  "tables": {
+    "plan": {
+      "note": "One thing on the trip. `day` is an ISO date (YYYY-MM-DD) and `time` is 24h HH:MM.",
+      "columns": {
+        "day": {
+          "type": "string",
+          "required": true,
+          "nullable": false
+        },
+        "time": {
+          "type": "string",
+          "required": false,
+          "nullable": true
+        },
+        "kind": {
+          "type": "string",
+          "required": true,
+          "nullable": false,
+          "enum": [
+            "flight",
+            "stay",
+            "food",
+            "do"
+          ],
+          "note": "flight | stay | food | do"
+        },
+        "title": {
+          "type": "string",
+          "required": true,
+          "nullable": false
+        },
+        "detail": {
+          "type": "string",
+          "required": false,
+          "nullable": true
+        }
+      }
+    },
+    "bookings": {
+      "note": "Whole rupees. `when` is an ISO date. `plan_id` links a booking to the plan item it is for.",
+      "columns": {
+        "what": {
+          "type": "string",
+          "required": true,
+          "nullable": false
+        },
+        "ref": {
+          "type": "string",
+          "required": false,
+          "nullable": true
+        },
+        "when": {
+          "type": "string",
+          "required": false,
+          "nullable": true
+        },
+        "status": {
+          "type": "string",
+          "required": false,
+          "nullable": false,
+          "default": "Pending",
+          "enum": [
+            "Confirmed",
+            "Pending",
+            "Cancelled"
+          ]
+        },
+        "cost": {
+          "type": "integer",
+          "required": false,
+          "nullable": true,
+          "default": 0
+        },
+        "plan_id": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "references": "plan"
+        }
+      }
+    },
+    "packing": {
+      "columns": {
+        "item": {
+          "type": "string",
+          "required": true,
+          "nullable": false
+        },
+        "who": {
+          "type": "string",
+          "required": false,
+          "nullable": false,
+          "default": "Shared"
+        },
+        "packed": {
+          "type": "boolean",
+          "required": false,
+          "nullable": true,
+          "default": false
+        }
+      }
+    },
+    "trip_budget": {
+      "note": "What has been spent against a limit, per category, in whole rupees.",
+      "columns": {
+        "category": {
+          "type": "string",
+          "required": true,
+          "nullable": false
+        },
+        "spent": {
+          "type": "integer",
+          "required": false,
+          "nullable": true,
+          "default": 0
+        },
+        "limit_amount": {
+          "type": "integer",
+          "required": true,
+          "nullable": false
+        }
+      }
+    }
+  },
+  "settings": []
+}

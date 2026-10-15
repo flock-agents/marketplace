@@ -1,0 +1,14 @@
+{ "transactions": [
+  { "$key": "t1", "date": "2026-10-01", "merchant": "Infosys salary", "category": "Salary", "amount": 185000 },
+  { "$key": "t2", "date": "2026-10-03", "merchant": "Prestige Lakeside rent", "category": "Rent", "amount": -42000 },
+  { "$key": "t3", "date": "2026-10-06", "merchant": "BigBasket", "category": "Groceries", "amount": -3640 }
+], "budgets": [
+  { "$key": "b1", "category": "Groceries", "month": "2026-10", "limit_amount": 15000 },
+  { "$key": "b2", "category": "Eating out", "month": "2026-10", "limit_amount": 6000 }
+], "holdings": [
+  { "$key": "h1", "name": "HDFC Index Nifty 50", "kind": "Index funds", "value": 412000, "invested": 350000 },
+  { "$key": "h2", "name": "SBI fixed deposit", "kind": "Fixed deposits", "value": 210000, "invested": 200000 }
+], "goals": [
+  { "$key": "g1", "goal": "Kerala trip in December", "saved": 45000, "target": 80000, "by": "2026-12-01" },
+  { "$key": "g2", "goal": "Emergency fund", "saved": 300000, "target": 600000 }
+] }

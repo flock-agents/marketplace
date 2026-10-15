@@ -1,0 +1,1 @@
+{ "name": "Calendar Desk", "slug": "calendar-desk", "description": "Reads your Google Calendar, shows the week on Your Schedule, sends a prep note before meetings, and keeps the notes you leave on events", "version": "2.0.2", "author": "flock", "category": "productivity", "tags": ["calendar", "meetings", "google"], "minFlockVersion": "0.12.0", "customizable": true }

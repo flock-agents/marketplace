@@ -1,0 +1,105 @@
+{
+  "name": "Slack Desk",
+  "slug": "slack-desk",
+  "type": "managed",
+  "visibility": "headless",
+  "icon": "icon.svg",
+  "description": "Builds memory from your Slack conversations and surfaces anything that looks like a task you missed. Reads only — it never posts.",
+  "bundled": false,
+  "deletable": true,
+  "apiPrefix": "/api",
+  "_comment": "Runs OUT OF PROCESS, spawned by app-process.ts: own port, own store, reachable only over the lifecycle and data seams. Built entirely on @flock/app-sdk, which the PLATFORM supplies into node_modules at build time — its correct version is whatever this Flock build speaks, so it is not resolved from a registry. THE APP IS THE INSTALLABLE UNIT: no owning skill, because `config.requires` below declares the connector it needs and `routines` declares the work it does, and pairing grants both to the agent.",
+  "config": {
+    "requires": {
+      "skills": [
+        "slack"
+      ],
+      "agent": {
+        "required": true,
+        "label": "Agent that reads your Slack and remembers what matters",
+        "default": {
+          "pairDefaultAgent": true
+        }
+      }
+    }
+  },
+  "lifecycle": {
+    "initialize": true,
+    "tick": true,
+    "progress": true
+  },
+  "dataStore": {
+    "accountPartitioned": true
+  },
+  "processConfig": {
+    "command": "bun run server/index.ts",
+    "healthCheckPath": "/health",
+    "readyPattern": "slack-desk listening on",
+    "readyTimeoutMs": 15000,
+    "maxRestarts": 3
+  },
+  "routines": [
+    {
+      "id": "memory-extraction",
+      "name": "Build memory from Slack",
+      "description": "Once a day, reads the channels you chose and remembers what matters — plus anything that reads like a task you have not done. No AI cost beyond the daily extraction; nothing is ever posted.",
+      "trigger": {
+        "type": "schedule",
+        "cron": "17 * * * *"
+      },
+      "_cronComment": "HOURLY TRIGGER, DAILY WORK. The hourly tick is how a day gets finished, not how often Slack is read: a new day's harvest starts at the first tick on or after harvestHour (local), and a pass that stops on its read or block budget leaves the day unclaimed so the next hourly tick resumes it. Once the day is claimed every later tick that day is a no-op. workSchedule tells the platform to label the card by the daily work, not by this cron. :17 to sit off the hour.",
+      "workSchedule": {
+        "every": "day",
+        "hourKey": "harvestHour"
+      },
+      "executionMode": "app-relay",
+      "_triggerComment": "schedule + app-relay (executor: cron.ts dispatchScheduledAppRelays). NOT event + app-relay: this app fetches its own Slack data through /apps/:id/skill-exec, so a platform connector poll on its behalf would be a second read of the same messages.",
+      "configSchema": [
+        {
+          "key": "channels",
+          "type": "multi-select",
+          "label": "Channels to read",
+          "options": {
+            "kind": "dynamic",
+            "from": "channels_list"
+          }
+        },
+        {
+          "key": "ignoreBots",
+          "type": "boolean",
+          "label": "Ignore bot messages",
+          "default": true
+        },
+        {
+          "key": "lookbackHours",
+          "type": "number",
+          "label": "How far back to read each day (hours)",
+          "default": 24
+        },
+        {
+          "key": "harvestHour",
+          "type": "number",
+          "label": "Hour to read Slack each day (0–23)",
+          "default": 5,
+          "help": "Local time. A new day is read from this hour on; a day that did not finish keeps catching up every hour."
+        },
+        {
+          "key": "enforceTriage",
+          "type": "boolean",
+          "label": "Only remember conversations that involve you",
+          "help": "On (recommended): reads conversations you were tagged in, recently took part in, or that happen in channels you are very active in — plus any channel you picked above. Off: reads everything in range and logs what it would have skipped, which costs considerably more.",
+          "default": true,
+          "_comment": "ON BY DEFAULT (owner, 2026-09-25). Slack is high volume and most of it concerns nobody in particular, so reading everything is a guaranteed cost for a speculative benefit — the conservative default is to read LESS. Off is a diagnostic: it computes the same verdict, extracts everything at full price anyway, and logs what would have been skipped, which is the only honest way to measure what the rule costs in memory before trusting it."
+        },
+        {
+          "key": "maxBlocks",
+          "type": "number",
+          "label": "Most conversations to extract in one pass",
+          "default": 40,
+          "_comment": "A ceiling on a day's spend. A pass that hits it defers the rest, records why it stopped, and leaves the day claimable so the next hourly tick resumes it — ranked so what concerns the owner goes first and a deferred conversation ages into priority."
+        }
+      ]
+    }
+  ],
+  "buildCommand": "bun install"
+}

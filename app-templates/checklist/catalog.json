@@ -1,0 +1,48 @@
+{
+  "name": "checklist",
+  "version": "1.0.1",
+  "description": "One list of things to tick off, grouped, with who and by when: a move, a trip, a launch.",
+  "objects": [
+    "notebook"
+  ],
+  "labels": {
+    "title.list": "Checklist"
+  },
+  "titleFromName": "title.list",
+  "tables": {
+    "tasks": {
+      "columns": {
+        "label": {
+          "type": "string",
+          "required": true,
+          "nullable": false
+        },
+        "group_name": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "the heading the item sits under"
+        },
+        "done": {
+          "type": "boolean",
+          "required": false,
+          "nullable": true,
+          "default": false
+        },
+        "who": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "a person's name"
+        },
+        "due": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "ISO date"
+        }
+      }
+    }
+  },
+  "settings": []
+}

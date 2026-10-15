@@ -1,0 +1,9 @@
+{
+  "overviewLead": {
+    "type": "string",
+    "rules": {
+      "pattern": "^(auto|spending|netWorth)$",
+      "message": "overviewLead must be one of auto, spending, netWorth"
+    }
+  }
+}

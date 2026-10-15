@@ -24,7 +24,7 @@ const config: GroceryServiceConfig = {
   loginPattern: /bigbasket\.com\/signin|bigbasket\.com\/login/i,
 };
 
-const FLOCK_API = process.env.FLOCK_API_URL || "http://localhost:35625";
+import { FLOCK_API } from "../../_shared/_helpers";
 const FLOCK_AUTH_TOKEN = process.env.FLOCK_AUTH_TOKEN || "";
 const FLOCK_AGENT_ID = process.env.FLOCK_AGENT_ID || "";
 const BROWSER_SESSION = process.env.BROWSER_SESSION || "bigbasket";

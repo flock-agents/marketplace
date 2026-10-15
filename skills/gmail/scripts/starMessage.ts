@@ -4,6 +4,7 @@ import {
   validateId,
   browserInteract,
 } from "../../_shared/_google_helpers";
+import { invalidateCachedThreadForMessage } from "./_threadCache";
 
 const params = JSON.parse(process.env.SKILL_PARAMS || "{}");
 const messageId: string = params.messageId || "";
@@ -28,5 +29,7 @@ const actions = [
   );
   const content = result?.content || "{}";
   const parsed = typeof content === "string" ? JSON.parse(content) : content;
+  // Starring changed the thread's state; drop any cached copy so the next read reflects it. Swallowed.
+  invalidateCachedThreadForMessage(messageId, "starMessage");
   console.log(JSON.stringify(parsed));
 })();

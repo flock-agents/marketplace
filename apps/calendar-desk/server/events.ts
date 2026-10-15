@@ -1,0 +1,124 @@
+import { createHash } from "node:crypto";
+import type { EventDetails, ScrapedEventRow } from "./store";
+
+export interface ScrapedEvent {
+  eventId?: string; title: string; time?: string; date?: string; monthDay?: string | null;
+  allDay?: boolean; location?: string | null; calendar?: string | null; attendees?: string | null;
+  /** Present only when the skill read this event's detail popover (it was asked to, and the read succeeded). */
+  details?: EventDetails;
+}
+
+const MONTHS = ["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"];
+const pad = (n: number) => String(n).padStart(2, "0");
+export const ymd = (dt: Date) => `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}`;
+
+/** "9:30 – 10am", "3 – 3:30pm", "14:00 – 15:00", "6:40am", "All day". Local time (TZ is the owner's). */
+export function parseTimeText(text: string | undefined, localDate: string): { startAt: number | null; endAt: number | null; allDay: boolean } {
+  const none = { startAt: null, endAt: null, allDay: true };
+  if (!text) return none;
+  const t = text.replace(/\s+/g, " ").trim().toLowerCase();
+  if (!t || /all.day/.test(t)) return none;
+  const parts = t.split(/\s*[–—-]\s*/);
+  const parse = (s: string, inheritMeridiem?: "am" | "pm"): { h: number; m: number; hadMeridiem: boolean } | null => {
+    const m = /^(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/.exec(s.trim());
+    if (!m) return null;
+    let h = +m[1]!; const min = m[2] ? +m[2] : 0;
+    const hadMeridiem = !!m[3];
+    const mer = (m[3] as "am" | "pm" | undefined) ?? inheritMeridiem;
+    if (mer === "pm" && h < 12) h += 12;
+    if (mer === "am" && h === 12) h = 0;
+    if (h > 23 || min > 59) return null;
+    return { h, m: min, hadMeridiem };
+  };
+  const [y, mo, da] = localDate.split("-").map(Number);
+  const at = (hm: { h: number; m: number }, dayOffset = 0) => new Date(y!, mo! - 1, da! + dayOffset, hm.h, hm.m).getTime();
+  const endMer = /(am|pm)\s*$/.exec(parts[1] ?? "")?.[1] as "am" | "pm" | undefined;
+  let start = parse(parts[0]!, endMer);
+  if (!start) return none;
+  if (parts.length < 2) return { startAt: at(start), endAt: null, allDay: false };
+  const end = parse(parts[1]!);
+  if (!end) return { startAt: at(start), endAt: null, allDay: false };
+  // Prefer start < end: if start inherited end's meridiem and that puts start >= end (same day), try opposite
+  if (!start.hadMeridiem && endMer && start.h * 60 + start.m >= end.h * 60 + end.m) {
+    const opposite = endMer === "pm" ? "am" : "pm";
+    const altStart = parse(parts[0]!, opposite);
+    if (altStart && altStart.h * 60 + altStart.m < end.h * 60 + end.m) {
+      start = altStart;
+    }
+  }
+  const endMs = at(end, end.h * 60 + end.m < start.h * 60 + start.m ? 1 : 0);
+  return { startAt: at(start), endAt: endMs, allDay: false };
+}
+
+export function parseDateHeader(text: string | undefined, fallbackYear: number): string | null {
+  if (!text) return null;
+  const t = text.toLowerCase().replace(/,/g, " ").replace(/\s+/g, " ").trim();
+  const m1 = /(\d{1,2})\s*([a-z]{3,})(?:\s*(\d{4})(?![a-z\d]))?/.exec(t);        // 5 oct, 5oct [2026]
+  const m2 = /([a-z]{3,})\s*(\d{1,2})(?:,?\s*(\d{4})(?![a-z\d]))?/.exec(t);      // october 5, oct5 [2026]
+  const pick = (dayS: string, monS: string, yearS?: string) => {
+    const mon = MONTHS.indexOf(monS.slice(0, 3)); if (mon < 0) return null;
+    const day = +dayS; if (day < 1 || day > 31) return null;
+    return `${yearS ? +yearS : fallbackYear}-${pad(mon + 1)}-${pad(day)}`;
+  };
+  return (m1 && pick(m1[1]!, m1[2]!, m1[3])) || (m2 && pick(m2[2]!, m2[1]!, m2[3])) || null;
+}
+
+/** An event key is Google's own event id; this hash (where+when+what) is only for a row read without one. */
+export function eventKey(p: { calendar: string | null; localDate: string; startAt: number | null; title: string }): string {
+  const title = p.title.toLowerCase().replace(/\s+/g, " ").trim();
+  return createHash("sha1").update(`${p.calendar ?? ""}|${p.localDate}|${p.startAt ?? "allday"}|${title}`).digest("hex").slice(0, 16);
+}
+
+/** A16/R34. Dropped at sync, never stored. Only Google's BUILT-IN calendars are dropped by name (holidays,
+ *  birthdays, tasks, contacts); the owner's own or a subscribed calendar ("Work", "Family") is kept. An
+ *  all-day row with no attendees/creator is a banner, not an event; timed rows always stay. */
+const BUILT_IN_CALENDAR = [/holiday/i, /^birthdays?$/i, /^tasks$/i, /^contacts$/i];
+function isNoise(e: ScrapedEvent): boolean {
+  const cal = (e.calendar ?? "").trim();
+  if (cal && BUILT_IN_CALENDAR.some((re) => re.test(cal))) return true;
+  return e.allDay === true && !(e.attendees ?? "").trim();
+}
+
+/** "MM-DD" -> the next occurrence on or after today (a leap day waits for a leap year). */
+function nextMonthDay(md: string | null | undefined, now: Date): string | null {
+  const m = /^(\d{2})-(\d{2})$/.exec((md ?? "").trim());
+  if (!m) return null;
+  const mon = +m[1]!, day = +m[2]!;
+  const today = ymd(now);
+  for (let y = now.getFullYear(); y <= now.getFullYear() + 8; y++) { // 8 years always spans a leap day (century non-leap years aside)
+    const dt = new Date(y, mon - 1, day);
+    if (dt.getMonth() !== mon - 1 || dt.getDate() !== day) continue;
+    if (ymd(dt) >= today) return ymd(dt);
+  }
+  return null;
+}
+
+export function normalizeScrape(events: ScrapedEvent[], opts: { calendar: string | null; now: Date }) {
+  const seen = new Set<string>();
+  const out: Array<ScrapedEventRow & { details?: EventDetails }> = [];
+  let unplaceable = 0;
+  let filtered = 0;
+  let firstBad: string | null = null;
+  for (const e of events) {
+    const title = (e.title ?? "").replace(/\s+/g, " ").trim();
+    if (!title) continue;
+    if (isNoise(e)) { filtered++; continue; }
+    const dateText = (e.date ?? "").trim();
+    let localDate: string | null;
+    if (dateText) {
+      localDate = parseDateHeader(dateText, opts.now.getFullYear());
+      if (!localDate) { unplaceable++; if (firstBad === null) firstBad = dateText; continue; }
+    } else {
+      // No readable date: never guess "today". Only a yearly-style all-day row with a month-day can be placed.
+      localDate = e.allDay === true ? nextMonthDay(e.monthDay, opts.now) : null;
+      if (!localDate) { unplaceable++; if (firstBad === null) firstBad = "(no date)"; continue; }
+    }
+    const { startAt, endAt, allDay } = e.allDay === true ? { startAt: null, endAt: null, allDay: true } : parseTimeText(e.time, localDate);
+    const key = e.eventId || eventKey({ calendar: opts.calendar, localDate, startAt, title });
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ eventKey: key, calendar: opts.calendar, title, startAt, endAt, allDay, localDate, attendeesText: e.attendees ?? null, location: e.location ?? null, rawTimeText: e.time ?? null, googleEventId: e.eventId ?? null, details: e.details });
+  }
+  if (unplaceable > 0) console.warn(`calendar-desk: skipped ${unplaceable} scraped row(s) with no readable date (first: "${firstBad}")`);
+  return { rows: out, skipped: unplaceable, filtered };
+}

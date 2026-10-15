@@ -1,34 +1,285 @@
 {
-  "name": "Gmail",
-  "slug": "gmail",
-  "icon": "icon.svg",
-  "description": "Read, send, search, and organize emails via Gmail",
-  "version": "1.0.0",
-  "author": "flock",
-  "category": "integration",
-  "tags": ["email", "gmail", "productivity", "google"],
-  "minFlockVersion": "0.7.0",
-  "tier": "installable",
-  "requires": {
-    "anyOf": [
+  "id": "gmail",
+  "description": "Read, send, and organize emails via Gmail",
+  "category": "core",
+  "scope": "per-agent",
+  "hasScripts": true,
+  "secretRefs": [],
+  "networkAccess": true,
+  "paramSchema": [],
+  "requiresInstance": true,
+  "enabled": true,
+  "requiresAny": true,
+  "requires": [
+    {
+      "type": "browser_session",
+      "service": "google",
+      "description": "Read, send, and organize emails via browser session",
+      "recommended": true,
+      "rationale": "Uses your existing Google login \u2014 no app passwords or extra setup needed."
+    },
+    {
+      "type": "account",
+      "credentialSubtype": "imap",
+      "service": "imap",
+      "description": "Direct email access via IMAP with app password",
+      "documentationUrl": "https://myaccount.google.com/apppasswords",
+      "setupInstructions": "Use a Google App Password for IMAP access \u2014 not your normal Google password.",
+      "setupSteps": [
+        {
+          "title": "Open Google App Passwords",
+          "description": "Visit myaccount.google.com/apppasswords"
+        },
+        {
+          "title": "Generate a password",
+          "description": "Create a 16-character app password for \"Mail\""
+        },
+        {
+          "title": "Enter it below",
+          "description": "Use your Gmail address and the generated app password"
+        }
+      ],
+      "fields": [
+        {
+          "name": "email",
+          "type": "email",
+          "label": "Email address",
+          "placeholder": "your.email@gmail.com",
+          "sensitive": false,
+          "required": true
+        },
+        {
+          "name": "password",
+          "type": "password",
+          "label": "App password",
+          "placeholder": "App password (16 characters)",
+          "sensitive": true,
+          "required": true
+        }
+      ]
+    }
+  ],
+  "auth": {
+    "type": "imap+browser",
+    "imap": {
+      "setup_instructions": "Use a Google App Password for IMAP access. Go to myaccount.google.com/apppasswords to generate one."
+    },
+    "browser": {
+      "sessionName": "google",
+      "setup_instructions": "Log in to Gmail via the dashboard browser session."
+    }
+  },
+  "security": {
+    "allowedFunctions": [
+      "applyLabel",
+      "archiveMessage",
+      "createDraft",
+      "createReplyDraft",
+      "createLabel",
+      "discardDraft",
+      "getDraft",
+      "findDraftForThread",
+      "listDraftThreads",
+      "getEmail",
+      "getThread",
+      "getThreads",
+      "getVoice",
+      "getReplyContext",
+      "listInbox",
+      "listLabels",
+      "checkEngagedDomains",
+      "markRead",
+      "markUnread",
+      "searchEmails",
+      "sendDraft",
+      "shouldTrigger",
+      "starMessage",
+      "storeThreadBody",
+      "updateDraft"
+    ],
+    "systemInvokeOnlyFunctions": [
+      "sendDraft",
+      "sendEmail",
+      "replyToMessage"
+    ]
+  },
+  "functions": {
+    "createDraft": {
+      "timeoutMs": 90000,
+      "reason": "Drives a real browser DOM to write a message: 8-30s+ per call and growing with the content written. A timeout shorter than the write turns one intent into two drafts, because the caller sees a timeout on a write that actually landed."
+    },
+    "createReplyDraft": {
+      "timeoutMs": 90000,
+      "reason": "Drives a real browser DOM to write a message: 8-30s+ per call and growing with the content written. A timeout shorter than the write turns one intent into two drafts, because the caller sees a timeout on a write that actually landed."
+    },
+    "sendDraft": {
+      "timeoutMs": 120000,
+      "reason": "Opens the draft (up to 25s on a cold Gmail), presses Send, waits up to 13s for Gmail to confirm, then keeps the page open until Gmail's Undo Send window closes (up to 35s): closing the page inside that window can cancel the send. A kill mid-wait is worse than slow: the caller would be told nothing was confirmed after the mail went out."
+    },
+    "updateDraft": {
+      "timeoutMs": 90000,
+      "reason": "Drives a real browser DOM to write a message: 8-30s+ per call and growing with the content written. A timeout shorter than the write turns one intent into two drafts, because the caller sees a timeout on a write that actually landed."
+    },
+    "replyToMessage": {
+      "timeoutMs": 90000,
+      "reason": "Drives a real browser DOM to write a message: 8-30s+ per call and growing with the content written. A timeout shorter than the write turns one intent into two drafts, because the caller sees a timeout on a write that actually landed."
+    },
+    "getThread": {
+      "timeoutMs": 90000,
+      "reason": "Expands EVERY message in the thread before scraping, so cost scales with thread length - and a long many-participant thread is exactly the one whose per-message Cc lines drafting needs for reply-all."
+    },
+    "getEmail": {
+      "timeoutMs": 90000,
+      "reason": "A browser read that outlives a 30s kill: killed mid-flight it keeps holding the mailbox's single-flight guard, so the agent's next read is refused busy and it drafts from snippets (2026-09-23)."
+    },
+    "searchEmails": {
+      "timeoutMs": 90000,
+      "reason": "A browser read that outlives a 30s kill: killed mid-flight it keeps holding the mailbox's single-flight guard, so the agent's next read is refused busy and it drafts from snippets (2026-09-23)."
+    },
+    "checkEngagedDomains": {
+      "timeoutMs": 90000,
+      "reason": "Runs ONE Gmail search per unknown domain, sequentially, so cost scales with the batch. engaged-domains.ts caps it at MAX_LOOKUPS_PER_PASS and sizes that cap against this timeout: raising the cap without raising this buys nothing."
+    },
+    "discardDraft": {
+      "timeoutMs": 90000,
+      "reason": "Operations on one browser session are serialized, so this call's latency includes waiting for whoever else holds the mailbox. Four concurrent callers at ~10s each put the ones at the back past 30s (2026-09-09)."
+    },
+    "findDraftForThread": {
+      "timeoutMs": 90000,
+      "reason": "Operations on one browser session are serialized, so this call's latency includes waiting for whoever else holds the mailbox. Four concurrent callers at ~10s each put the ones at the back past 30s (2026-09-09)."
+    },
+    "getDraft": {
+      "timeoutMs": 90000,
+      "reason": "Operations on one browser session are serialized, so this call's latency includes waiting for whoever else holds the mailbox. Four concurrent callers at ~10s each put the ones at the back past 30s (2026-09-09)."
+    },
+    "listDraftThreads": {
+      "timeoutMs": 90000,
+      "reason": "Walks every page of #drafts (up to MAX_DRAFT_PAGES) on one held browser session, so it needs the same budget as findDraftForThread; its latency also includes waiting for whoever else holds the mailbox (2026-09-24)."
+    },
+    "getThreads": {
+      "timeoutMs": 330000,
+      "maxResultBytes": 1048576,
+      "reason": "A BATCH read: opens MANY threads in one held session, so one call legitimately runs minutes. Its result is DATA for its caller, not agent context - ten threads of JSON pass the 100KB context cap and the truncation is silent, which discarded 153s of reads as 'an empty page' (voice crawl, 2026-09-20)."
+    }
+  },
+  "network": {
+    "endpoints": [
       {
-        "type": "browser_session",
-        "service": "google",
-        "description": "Full Gmail experience via browser session — rich compose, CC/BCC, attachments, formatting",
-        "recommended": true,
-        "rationale": "Uses your existing Google login — no app passwords or extra setup needed."
+        "hostname": "www.googleapis.com",
+        "purpose": "Gmail API",
+        "methods": [
+          "GET",
+          "POST"
+        ]
       },
       {
-        "type": "account",
-        "credentialSubtype": "imap",
-        "service": "imap",
-        "description": "Direct email access via IMAP with app password",
-        "setupInstructions": "Use a Google App Password for IMAP access — not your normal Google password. Go to myaccount.google.com/apppasswords to generate one.",
-        "fields": [
-          { "name": "email", "type": "email", "label": "Email address", "required": true },
-          { "name": "password", "type": "password", "label": "App password (16 characters)", "required": true }
+        "hostname": "mail.google.com",
+        "purpose": "Gmail Web UI (browser session)",
+        "methods": [
+          "GET",
+          "POST"
+        ]
+      },
+      {
+        "hostname": "imap.gmail.com",
+        "purpose": "IMAP access for app-password connections",
+        "methods": [
+          "TCP"
+        ]
+      },
+      {
+        "hostname": "smtp.gmail.com",
+        "purpose": "SMTP for sending via app-password connections",
+        "methods": [
+          "TCP"
         ]
       }
     ]
-  }
+  },
+  "ingest": {
+    "kind": "email",
+    "label": "Gmail",
+    "skillId": "gmail",
+    "eventKinds": [
+      {
+        "id": "email",
+        "label": "New email"
+      }
+    ],
+    "poll": {
+      "functionName": "listInbox",
+      "params": {
+        "maxResults": 25
+      }
+    },
+    "resolve": {
+      "flag": "senderUnresolved",
+      "functionName": "getThreads",
+      "idsParam": "threadIds",
+      "idFrom": "id",
+      "freshAfterParam": "freshAfter",
+      "params": {
+        "view": "print",
+        "maxBodyChars": 1,
+        "timeoutMs": 75000
+      },
+      "maxPerPass": 5,
+      "maxCallMs": 105000,
+      "transform": "newestMessageFrom",
+      "into": "from",
+      "reason": "F-SELF (2026-10-04): a read inbox row with several participants and no unread chip cannot say who wrote its newest message, and listInbox's chip guess journaled Pluto's mail as the owner's own (dropped as a self-send). Such a row is read from its thread (print view, one held session) and its newest message's From is stored instead; at most maxPerPass reads per pass, the rest (and any failed read) wait for the next poll rather than being stored with the guess. maxCallMs is one call's worst case (the 75s crawl budget, plus a thread read already in flight at that moment, its 20s wait and the session close): the platform starts a call only if that worst case still ends inside the account-guard lease."
+    },
+    "result": "array",
+    "map": {
+      "eventId": {
+        "transform": "threadMessageId",
+        "from": [
+          "id",
+          "subject",
+          "snippet",
+          "date"
+        ]
+      },
+      "actor": {
+        "transform": "rfc5322Actor",
+        "from": "from"
+      },
+      "ts": {
+        "transform": "parseMessageTimestamp",
+        "from": [
+          "dateFull",
+          "date"
+        ]
+      },
+      "preview": {
+        "transform": "emailPreview",
+        "from": [
+          "subject",
+          "snippet"
+        ]
+      },
+      "permalink": {
+        "transform": "templateString",
+        "from": "id",
+        "template": "https://mail.google.com/mail/u/0/#inbox/{id}",
+        "keys": [
+          "id"
+        ]
+      },
+      "threadKey": {
+        "transform": "trimOrNull",
+        "from": "id"
+      }
+    }
+  },
+  "observe": {
+    "url": "https://mail.google.com/mail/u/0/#inbox",
+    "readySelector": "tr.zA",
+    "extract": "scripts/observe-extract.js"
+  },
+  "name": "Gmail",
+  "slug": "gmail",
+  "version": "1.6.1",
+  "minFlockVersion": "0.10.3",
+  "author": "flock"
 }

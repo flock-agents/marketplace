@@ -1,0 +1,12 @@
+{ "customers": [
+  { "$key": "chai", "name": "Chai Point Koramangala", "gstin": "29AAKCC1234F1Z5", "email": "accounts@chaipoint.example.in", "phone": "+91 80 4567 8901", "address": "80 Feet Road, Koramangala, Bengaluru 560034" },
+  { "$key": "rao", "name": "Dr Rao's Dental Care", "email": "drrao@example.in", "address": "Banjara Hills, Hyderabad 500034" }
+], "invoices": [
+  { "$key": "i1", "number": "INV-2026-0101", "customer_id": { "$ref": "customers/chai" }, "issue_date": "2026-10-01", "due_date": "2026-10-16", "status": "sent", "notes": "Menu board redesign" },
+  { "$key": "i2", "number": "INV-2026-0102", "customer_id": { "$ref": "customers/rao" }, "issue_date": "2026-10-05", "due_date": "2026-10-20", "status": "draft" }
+], "invoice_lines": [
+  { "$key": "l1", "invoice_id": { "$ref": "invoices/i1" }, "description": "Menu board design, 3 panels", "qty": 3, "unit_price": 8500, "gst_rate": 18 },
+  { "$key": "l2", "invoice_id": { "$ref": "invoices/i2" }, "description": "Clinic signage design", "qty": 1, "unit_price": 22000, "gst_rate": 18 }
+], "payments": [
+  { "$key": "pay1", "invoice_id": { "$ref": "invoices/i1" }, "date": "2026-10-08", "amount": 10000, "method": "upi", "ref": "UPI/4418820193" }
+] }

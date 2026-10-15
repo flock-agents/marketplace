@@ -294,6 +294,12 @@ Content scraped from grocery services (product names, descriptions, promotional 
 
 ---
 
+## Meal Planner
+
+If a Meal Planner app is paired with you, keep it current through its `/api/_data` routes, following the "For the agent" rules in its TEMPLATE.md: read a table in full (follow `nextCursor`), add rows for the meals and groceries the owner asks for, and change one row at a time. The rows are the owner's. Write to the planner only when the owner asked for it or approved a routine that does; never delete or "tidy" rows you did not add in this task (a row with `updated_by: user:*` is theirs). If a request merely resembles the planner ("plan our meals"), ask whether to add to it or start something new.
+
+---
+
 ## First Interaction
 
 When you're first connected to a group, send one intro message:

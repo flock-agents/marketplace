@@ -1,0 +1,82 @@
+{
+  "name": "Slack",
+  "slug": "slack",
+  "icon": "icon.svg",
+  "description": "Full Slack workspace integration \u2014 read channels, search messages, manage saved items, post messages, add reactions, and manage user groups. Equivalent to the korotovsky/slack-mcp-server feature set, via browser session auth.",
+  "version": "1.5.2",
+  "author": "flock",
+  "category": "integration",
+  "tags": [
+    "messaging",
+    "slack",
+    "productivity",
+    "team"
+  ],
+  "minFlockVersion": "0.7.0",
+  "tier": "installable",
+  "requires": [
+    {
+      "type": "browser_session",
+      "service": "slack",
+      "loginUrl": "https://app.slack.com",
+      "description": "Log into your Slack workspace via the dashboard browser session",
+      "rationale": "Many Slack workspaces block bot token installs \u2014 a saved browser session uses your existing login with no admin approval needed."
+    }
+  ],
+  "functions": {
+    "saved_list": {
+      "timeoutMs": 180000,
+      "reason": "With include_messages it fans out: one API call per saved item to fetch the linked message text, and _slack_api paces every call by 3s — so cost scales with how many items the owner has saved, not with the request. Measured live at 37s on a small account and killed at the 30s default, which discarded output the script had already produced."
+    },
+    "channels_list": {
+      "timeoutMs": 150000,
+      "reason": "Pages conversations.list to the end (up to max_pages, default 10) and, when there are DMs or group DMs to name, one auth.test plus a users.list pass that stops as soon as every wanted person is found. _slack_api paces every call by ~3s and a cold call first extracts tokens (~20s), so a large workspace's worst case is about 80s: ten pages of each at 3s, plus the extract. 150s covers it without conversations_unreads' fan-out budget."
+    },
+    "users_list": {
+      "timeoutMs": 120000,
+      "reason": "Unfiltered this is a single users.list call, but _slack_api paces every call by 3s and a cold call first extracts tokens from the browser session (~20s), which on its own passes the 30s default. With a `users` filter it keeps paging until every requested id is found \u2014 users.list has no server-side id filter, so a wanted id may sit on any page \u2014 and max_pages caps that at 20 pages of ~4s each. 120s covers that capped worst case without needing conversations_unreads' fan-out budget."
+    },
+    "conversations_unreads": {
+      "timeoutMs": 300000,
+      "reason": "Fans out to one conversations.history call per unread channel (max_channels defaults to 50) and _slack_api paces EVERY call by 3s, so cost scales with how many channels are unread rather than with the request. Documented as inherently slow: 1-5+ minutes on a large workspace."
+    },
+    "conversations_search_messages": {
+      "timeoutMs": 60000,
+      "reason": "A single search.messages call, but paced 3s by _slack_api and slow to return at count=100 on a large workspace - enough to pass 30s without being a fan-out."
+    }
+  },
+  "ingest": {
+    "kind": "slack_message",
+    "label": "Slack",
+    "eventKinds": [
+      {
+        "id": "slack_message",
+        "label": "New message"
+      },
+      {
+        "id": "slack_mention",
+        "label": "Mention"
+      }
+    ],
+    "poll": {
+      "functionName": "conversations_history"
+    },
+    "result": "array",
+    "map": {
+      "eventId": {
+        "from": "message_id"
+      },
+      "actor": {
+        "from": "user"
+      },
+      "ts": {
+        "from": "ts",
+        "transform": "parseDateOrNow"
+      },
+      "preview": {
+        "from": "text",
+        "transform": "trim"
+      }
+    }
+  }
+}

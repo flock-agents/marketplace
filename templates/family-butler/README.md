@@ -10,7 +10,7 @@ A household assistant that manages groceries, meals, and family routines through
 - **Family memory:** Learns dietary restrictions, brand preferences, ordering patterns over time
 - **Daily briefings:** Morning summary with weather, calendar, and tasks; evening preview of tomorrow
 - **Weekly reviews:** Grocery stock check on Saturdays, full weekly summary on Sundays with memory curation
-- **Meal planning:** Companion Meal Planner app for weekly meal plans and shopping lists
+- **Meal planning:** A Meal Planner app (made from the Flock `planner` app template) holds the week's meals, the grocery list and the family's recipe book. Family Butler fills it when you ask; the rows are yours
 
 ## Skills
 
@@ -42,4 +42,4 @@ All times in Asia/Kolkata (IST).
 2. Connect at least one grocery service (requires browser session login)
 3. Create a Telegram bot via @BotFather and connect it
 4. Review and customize scheduled tasks
-5. Optionally install the Meal Planner companion app
+5. Optionally add the Meal Planner app: Flock makes it from the `planner` template and pairs it with Family Butler (needs Flock 0.14.0 or later)

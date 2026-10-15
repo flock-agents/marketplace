@@ -18,6 +18,73 @@ _validate_id() {
   fi
 }
 
+# A 4xx/5xx from /api/internal/browser-fetch is FLOCK refusing us, not Google.
+#
+# TWO BUGS LIVED HERE, and they compounded (fixed 2026-09-28).
+#   1. WRONG FIELD. server.ts answers `{ error: "session_not_ready", state, message }` --
+#      the discriminator is `error`, not `code`. These helpers read `.code`, so the
+#      SESSION_NOT_READY branch was DEAD and every not-ready 403 fell through to
+#      CRAWL_ERROR "Access denied (HTTP 403)".
+#   2. WHOSE 403? That message reached the ingest guard, which read \b(401|403)\b out of
+#      it and quarantined the account -- for a status produced by FLOCK's own access
+#      list (`access_denied`: "Agent X does not have the 'Y' skill required for this
+#      session") or by Flock's own not-ready check. The provider was never contacted.
+#      A connector may only be demoted when a request REACHED the provider and the
+#      PROVIDER answered auth-shaped.
+#
+# So: read `error` first with `code` as a fallback, name the local refusals explicitly,
+# and keep the status readable for humans under a code the guard treats as
+# non-quarantining (see NON_QUARANTINING_CODES in server/src/guard-anomaly.ts).
+#
+# PRECEDENCE, CAREFULLY: test BOTH fields, never one over the other. `error` carries the
+# discriminator on the paths server.ts names but a bare human MESSAGE on others (its 500
+# path answers `{ error: e.message }`), and a caller can put the code in `code` while
+# `error` holds prose — `.error // .code` silently loses the code in the other field.
+# _shared/checkout.ts has always tested both.
+_check_flock_refusal() {
+  local http_code="$1" body="$2" unknown_code="$3" what="$4"
+  [ "$http_code" -ge 400 ] 2>/dev/null || return 0
+
+  local err_field code_field detail
+  err_field=$(echo "$body" | jq -r '.error // ""' 2>/dev/null || echo "")
+  code_field=$(echo "$body" | jq -r '.code // ""' 2>/dev/null || echo "")
+  detail=$(echo "$body" | jq -r '.message // .error // "(no error message)"' 2>/dev/null || echo "(unparseable response)")
+
+  if [ "$err_field" = "session_not_ready" ] || [ "$code_field" = "session_not_ready" ]; then
+    _error_json "SESSION_NOT_READY" "Google browser session is not ready — Flock has either not finished connecting it or already marked it outdated. Log in via the dashboard."
+  fi
+  if [ "$err_field" = "access_denied" ] || [ "$code_field" = "access_denied" ]; then
+    _error_json "ACCESS_DENIED" "Flock refused this request and never contacted Google: $detail"
+  fi
+  if [ "$err_field" = "session_not_found" ] || [ "$code_field" = "session_not_found" ]; then
+    _error_json "SESSION_NOT_FOUND" "Flock has no such browser session: $detail"
+  fi
+
+  _error_json "$unknown_code" "$what failed inside Flock's browser-fetch endpoint (Flock status $http_code): $detail"
+}
+
+# Is this URL actually Google's sign-in page? HOST-EXACT, authority only.
+#
+# `grep -qi 'accounts\.google\.com'` on the final URL is a SUBSTRING match, so any URL
+# merely CONTAINING that string triggered a mark-outdated -- and Google puts it in
+# `continue=` / `redirect_uri=` query parameters constantly, as does a Gmail search for
+# mail to an @accounts.google.com address. See isSignInUrl in
+# skills/_shared/_google_helpers.ts for what that cost: five re-logins in one afternoon
+# and three fixes aimed at a cause that was never there.
+_is_signin_url() {
+  local raw="${1:-}" authority host
+  [ -n "$raw" ] || return 1
+  authority="${raw#*://}"          # drop the scheme
+  authority="${authority%%[/?#]*}" # authority ONLY -- never past / ? or #
+  host="${authority##*@}"          # drop userinfo
+  host="${host%%:*}"               # drop port
+  host=$(printf '%s' "$host" | tr '[:upper:]' '[:lower:]')
+  case "$host" in
+    accounts.google.com|*.accounts.google.com) return 0 ;;
+  esac
+  return 1
+}
+
 _crawl_url() {
   local url="$1"
   local session_name="${BROWSER_SESSION:-google}"
@@ -31,33 +98,28 @@ _crawl_url() {
   response=$(curl -s -w "\n%{http_code}" -X POST "${FLOCK_API}/api/internal/browser-fetch" \
     -H "Content-Type: application/json" \
     -H "Authorization: Bearer ${FLOCK_AUTH_TOKEN:-}" \
+    -H "X-Flock-Job-Id: ${FLOCK_JOB_ID:-}" \
     -d "$(jq -n --arg url "$url" --arg session "$session_name" --arg agent "$agent_id" \
           '{url: $url, sessionName: $session, agentId: $agent, extractText: true}')")
   http_code=$(echo "$response" | tail -1)
   body=$(echo "$response" | sed '$d')
 
-  if [ "$http_code" = "403" ]; then
-    local err_code
-    err_code=$(echo "$body" | jq -r '.code // ""' 2>/dev/null || echo "")
-    if [ "$err_code" = "session_not_ready" ]; then
-      _error_json "SESSION_NOT_READY" "Google browser session is not ready. User needs to log in via the dashboard."
-    fi
-    _error_json "CRAWL_ERROR" "Access denied (HTTP 403). Check browser session access settings."
-  fi
-
-  if [ "$http_code" -ge 400 ]; then
-    local err_msg
-    err_msg=$(echo "$body" | jq -r '.error // "(no error message)"' 2>/dev/null || echo "(unparseable)")
-    _error_json "CRAWL_ERROR" "Failed to fetch page (HTTP $http_code): $err_msg"
-  fi
+  _check_flock_refusal "$http_code" "$body" "CRAWL_ERROR" "Fetch page"
 
   local page_content
   page_content=$(echo "$body" | jq -r '.content // ""')
 
-  if echo "$page_content" | grep -qi 'sign.in\|accounts\.google\.com/signin\|accounts\.google\.com/v3/signin'; then
+  # The final URL is the STRONG signal (host-exact); page text is the weak one. The
+  # first alternative here used to be `sign.in` -- an unescaped `.`, so it matched
+  # "sign in"/"sign-in"/"signin" ANYWHERE in the extracted text, which Google's own
+  # authenticated chrome (account switcher, help and footer links) carries routinely.
+  local final_page_url
+  final_page_url=$(echo "$body" | jq -r '.url // ""')
+  if _is_signin_url "$final_page_url" || echo "$page_content" | grep -qiE 'accounts\.google\.com/(v3/)?signin|accounts\.google\.com/ServiceLogin'; then
     curl -s -X POST "${FLOCK_API}/api/internal/browser-sessions/${session_name}/mark-outdated" \
       -H "Content-Type: application/json" \
       -H "Authorization: Bearer ${FLOCK_AUTH_TOKEN:-}" \
+    -H "X-Flock-Job-Id: ${FLOCK_JOB_ID:-}" \
       -d "$(jq -n --arg agent "$agent_id" --arg reason "Google returned sign-in page instead of authenticated content" \
             '{agentId: $agent, reason: $reason}')" >/dev/null 2>&1 || true
     _error_json "SESSION_OUTDATED" "Google session has expired. Marked as outdated — user needs to re-login via the dashboard."
@@ -102,25 +164,13 @@ _browser_api() {
   response=$(curl -s -w "\n%{http_code}" -X POST "${FLOCK_API}/api/internal/browser-fetch" \
     -H "Content-Type: application/json" \
     -H "Authorization: Bearer ${FLOCK_AUTH_TOKEN:-}" \
+    -H "X-Flock-Job-Id: ${FLOCK_JOB_ID:-}" \
     -d "$payload")
   http_code=$(echo "$response" | tail -1)
   local resp_body
   resp_body=$(echo "$response" | sed '$d')
 
-  if [ "$http_code" = "403" ]; then
-    local err_code
-    err_code=$(echo "$resp_body" | jq -r '.code // ""' 2>/dev/null || echo "")
-    if [ "$err_code" = "session_not_ready" ]; then
-      _error_json "SESSION_NOT_READY" "Google browser session is not ready. User needs to log in via the dashboard."
-    fi
-    _error_json "CRAWL_ERROR" "Access denied (HTTP 403). Check browser session access settings."
-  fi
-
-  if [ "$http_code" -ge 400 ]; then
-    local err_msg
-    err_msg=$(echo "$resp_body" | jq -r '.error // "(no error message)"' 2>/dev/null || echo "(unparseable)")
-    _error_json "BROWSER_API_ERROR" "Browser API call failed (HTTP $http_code): $err_msg"
-  fi
+  _check_flock_refusal "$http_code" "$resp_body" "BROWSER_API_ERROR" "Browser API call"
 
   local content status_code
   content=$(echo "$resp_body" | jq -r '.content // ""')
@@ -149,26 +199,14 @@ _browser_navigate() {
   response=$(curl -s -w "\n%{http_code}" -X POST "${FLOCK_API}/api/internal/browser-fetch" \
     -H "Content-Type: application/json" \
     -H "Authorization: Bearer ${FLOCK_AUTH_TOKEN:-}" \
+    -H "X-Flock-Job-Id: ${FLOCK_JOB_ID:-}" \
     -d "$(jq -n --arg url "$url" --arg session "$session_name" --arg agent "$agent_id" \
           '{url: $url, sessionName: $session, agentId: $agent, extractText: false}')")
   http_code=$(echo "$response" | tail -1)
   local resp_body
   resp_body=$(echo "$response" | sed '$d')
 
-  if [ "$http_code" = "403" ]; then
-    local err_code
-    err_code=$(echo "$resp_body" | jq -r '.code // ""' 2>/dev/null || echo "")
-    if [ "$err_code" = "session_not_ready" ]; then
-      _error_json "SESSION_NOT_READY" "Google browser session is not ready. User needs to log in via the dashboard."
-    fi
-    _error_json "CRAWL_ERROR" "Access denied (HTTP 403). Check browser session access settings."
-  fi
-
-  if [ "$http_code" -ge 400 ]; then
-    local err_msg
-    err_msg=$(echo "$resp_body" | jq -r '.error // "(no error message)"' 2>/dev/null || echo "(unparseable)")
-    _error_json "CRAWL_ERROR" "Failed to navigate (HTTP $http_code): $err_msg"
-  fi
+  _check_flock_refusal "$http_code" "$resp_body" "CRAWL_ERROR" "Navigate"
 
   echo "$resp_body"
 }
@@ -199,31 +237,20 @@ _browser_write() {
   response=$(curl -s -w "\n%{http_code}" -X POST "${FLOCK_API}/api/internal/browser-fetch" \
     -H "Content-Type: application/json" \
     -H "Authorization: Bearer ${FLOCK_AUTH_TOKEN:-}" \
+    -H "X-Flock-Job-Id: ${FLOCK_JOB_ID:-}" \
     -d "$payload")
   http_code=$(echo "$response" | tail -1)
   body=$(echo "$response" | sed '$d')
 
-  if [ "$http_code" = "403" ]; then
-    local err_code
-    err_code=$(echo "$body" | jq -r '.code // ""' 2>/dev/null || echo "")
-    if [ "$err_code" = "session_not_ready" ]; then
-      _error_json "SESSION_NOT_READY" "Google browser session is not ready. User needs to log in via the dashboard."
-    fi
-    _error_json "BROWSER_ERROR" "Access denied (HTTP 403). Check browser session access settings."
-  fi
-
-  if [ "$http_code" -ge 400 ]; then
-    local err_msg
-    err_msg=$(echo "$body" | jq -r '.error // .message // "(unknown)"' 2>/dev/null || echo "HTTP $http_code")
-    _error_json "BROWSER_ERROR" "Browser operation failed (HTTP $http_code): $err_msg"
-  fi
+  _check_flock_refusal "$http_code" "$body" "BROWSER_ERROR" "Browser operation"
 
   local final_url
   final_url=$(echo "$body" | jq -r '.url // ""')
-  if echo "$final_url" | grep -qi 'accounts\.google\.com'; then
+  if _is_signin_url "$final_url"; then
     curl -s -X POST "${FLOCK_API}/api/internal/browser-sessions/${session_name}/mark-outdated" \
       -H "Content-Type: application/json" \
       -H "Authorization: Bearer ${FLOCK_AUTH_TOKEN:-}" \
+    -H "X-Flock-Job-Id: ${FLOCK_JOB_ID:-}" \
       -d "$(jq -n --arg agent "$agent_id" --arg reason "Google redirected to sign-in during write operation" \
             '{agentId: $agent, reason: $reason}')" >/dev/null 2>&1 || true
     _error_json "SESSION_OUTDATED" "Google session has expired. Marked as outdated — user needs to re-login via the dashboard."
@@ -260,31 +287,20 @@ _browser_interact() {
   response=$(curl -s -w "\n%{http_code}" -X POST "${FLOCK_API}/api/internal/browser-fetch" \
     -H "Content-Type: application/json" \
     -H "Authorization: Bearer ${FLOCK_AUTH_TOKEN:-}" \
+    -H "X-Flock-Job-Id: ${FLOCK_JOB_ID:-}" \
     -d "$payload")
   http_code=$(echo "$response" | tail -1)
   body=$(echo "$response" | sed '$d')
 
-  if [ "$http_code" = "403" ]; then
-    local err_code
-    err_code=$(echo "$body" | jq -r '.error // ""' 2>/dev/null || echo "")
-    if [ "$err_code" = "session_not_ready" ]; then
-      _error_json "SESSION_NOT_READY" "Google browser session is not ready. User needs to log in via the dashboard."
-    fi
-    _error_json "BROWSER_ERROR" "Access denied (HTTP 403). Check browser session access settings."
-  fi
-
-  if [ "$http_code" -ge 400 ]; then
-    local err_msg
-    err_msg=$(echo "$body" | jq -r '.error // .message // "(unknown)"' 2>/dev/null || echo "HTTP $http_code")
-    _error_json "BROWSER_ERROR" "Browser interaction failed (HTTP $http_code): $err_msg"
-  fi
+  _check_flock_refusal "$http_code" "$body" "BROWSER_ERROR" "Browser interaction"
 
   local final_url
   final_url=$(echo "$body" | jq -r '.url // ""')
-  if echo "$final_url" | grep -qi 'accounts\.google\.com'; then
+  if _is_signin_url "$final_url"; then
     curl -s -X POST "${FLOCK_API}/api/internal/browser-sessions/${session_name}/mark-outdated" \
       -H "Content-Type: application/json" \
       -H "Authorization: Bearer ${FLOCK_AUTH_TOKEN:-}" \
+    -H "X-Flock-Job-Id: ${FLOCK_JOB_ID:-}" \
       -d "$(jq -n --arg agent "$agent_id" --arg reason "Google redirected to sign-in during interaction" \
             '{agentId: $agent, reason: $reason}')" >/dev/null 2>&1 || true
     _error_json "SESSION_OUTDATED" "Google session has expired. Marked as outdated — user needs to re-login via the dashboard."
@@ -318,31 +334,20 @@ _persistent_create() {
   response=$(curl -s -w "\n%{http_code}" -X POST "${FLOCK_API}/api/internal/browser-fetch" \
     -H "Content-Type: application/json" \
     -H "Authorization: Bearer ${FLOCK_AUTH_TOKEN:-}" \
+    -H "X-Flock-Job-Id: ${FLOCK_JOB_ID:-}" \
     -d "$payload")
   http_code=$(echo "$response" | tail -1)
   body=$(echo "$response" | sed '$d')
 
-  if [ "$http_code" = "403" ]; then
-    local err_code
-    err_code=$(echo "$body" | jq -r '.code // ""' 2>/dev/null || echo "")
-    if [ "$err_code" = "session_not_ready" ]; then
-      _error_json "SESSION_NOT_READY" "Google browser session is not ready. User needs to log in via the dashboard."
-    fi
-    _error_json "CRAWL_ERROR" "Access denied (HTTP 403). Check browser session access settings."
-  fi
-
-  if [ "$http_code" -ge 400 ]; then
-    local err_msg
-    err_msg=$(echo "$body" | jq -r '.error // "(no error message)"' 2>/dev/null || echo "(unparseable)")
-    _error_json "PERSISTENT_SESSION_ERROR" "Failed to create persistent session (HTTP $http_code): $err_msg"
-  fi
+  _check_flock_refusal "$http_code" "$body" "PERSISTENT_SESSION_ERROR" "Persistent session creation"
 
   local final_url
   final_url=$(echo "$body" | jq -r '.url // ""')
-  if echo "$final_url" | grep -qi 'accounts\.google\.com'; then
+  if _is_signin_url "$final_url"; then
     curl -s -X POST "${FLOCK_API}/api/internal/browser-sessions/${session_name}/mark-outdated" \
       -H "Content-Type: application/json" \
       -H "Authorization: Bearer ${FLOCK_AUTH_TOKEN:-}" \
+    -H "X-Flock-Job-Id: ${FLOCK_JOB_ID:-}" \
       -d "$(jq -n --arg agent "$agent_id" --arg reason "Google redirected to sign-in during persistent session creation" \
             '{agentId: $agent, reason: $reason}')" >/dev/null 2>&1 || true
     _error_json "SESSION_OUTDATED" "Google session has expired. Marked as outdated — user needs to re-login via the dashboard."
@@ -383,31 +388,20 @@ _persistent_interact() {
   response=$(curl -s -w "\n%{http_code}" -X POST "${FLOCK_API}/api/internal/browser-fetch" \
     -H "Content-Type: application/json" \
     -H "Authorization: Bearer ${FLOCK_AUTH_TOKEN:-}" \
+    -H "X-Flock-Job-Id: ${FLOCK_JOB_ID:-}" \
     -d "$payload")
   http_code=$(echo "$response" | tail -1)
   body=$(echo "$response" | sed '$d')
 
-  if [ "$http_code" = "403" ]; then
-    local err_code
-    err_code=$(echo "$body" | jq -r '.code // ""' 2>/dev/null || echo "")
-    if [ "$err_code" = "session_not_ready" ]; then
-      _error_json "SESSION_NOT_READY" "Google browser session is not ready. User needs to log in via the dashboard."
-    fi
-    _error_json "BROWSER_ERROR" "Access denied (HTTP 403). Check browser session access settings."
-  fi
-
-  if [ "$http_code" -ge 400 ]; then
-    local err_msg
-    err_msg=$(echo "$body" | jq -r '.error // .message // "(unknown)"' 2>/dev/null || echo "HTTP $http_code")
-    _error_json "BROWSER_ERROR" "Persistent session interaction failed (HTTP $http_code): $err_msg"
-  fi
+  _check_flock_refusal "$http_code" "$body" "BROWSER_ERROR" "Persistent session interaction"
 
   local final_url
   final_url=$(echo "$body" | jq -r '.url // ""')
-  if echo "$final_url" | grep -qi 'accounts\.google\.com'; then
+  if _is_signin_url "$final_url"; then
     curl -s -X POST "${FLOCK_API}/api/internal/browser-sessions/${session_name}/mark-outdated" \
       -H "Content-Type: application/json" \
       -H "Authorization: Bearer ${FLOCK_AUTH_TOKEN:-}" \
+    -H "X-Flock-Job-Id: ${FLOCK_JOB_ID:-}" \
       -d "$(jq -n --arg agent "$agent_id" --arg reason "Google redirected to sign-in during persistent session interaction" \
             '{agentId: $agent, reason: $reason}')" >/dev/null 2>&1 || true
     _error_json "SESSION_OUTDATED" "Google session has expired. Marked as outdated — user needs to re-login via the dashboard."
@@ -428,6 +422,7 @@ _persistent_close() {
   curl -s -X POST "${FLOCK_API}/api/internal/browser-fetch" \
     -H "Content-Type: application/json" \
     -H "Authorization: Bearer ${FLOCK_AUTH_TOKEN:-}" \
+    -H "X-Flock-Job-Id: ${FLOCK_JOB_ID:-}" \
     -d "$(jq -n --arg session "$session_name" --arg agent "$agent_id" --arg pid "$persistent_id" \
           '{sessionName: $session, agentId: $agent, persistentSessionId: $pid, closePersistentSession: true}')" >/dev/null 2>&1 || true
 }
