@@ -1,6 +1,6 @@
 # Kit app architecture (shared)
 
-This is the shared part of every kit app's `ARCHITECTURE.md`: the ten apps under `apps/` that carry `"assemble": true` copy everything below the marker word for word above their own section. Change it here, then in every copy (`scripts` in the Flock repo will generate the copies from one source later).
+This is the shared part of every kit app's `ARCHITECTURE.md`: the ten apps under `apps/` that carry `"assemble": true`, and Flock's base scaffold (`packages/scaffolds/base` in the Flock repo), copy everything below the marker word for word above their own section. Change it here, then in every copy (`scripts` in the Flock repo will generate the copies from one source later).
 
 <!-- shared-start -->
 
