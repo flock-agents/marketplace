@@ -61,6 +61,18 @@ apps/<slug>/
 | `visibility` | Yes | `"public"` or `"private"` (private = requires Flock auth) |
 | `buildCommand` | No | Shell command to build the frontend (must work via `sh -c`) |
 | `processConfig` | No | Backend process config (fullstack apps only) |
+| `assemble` | No | `true` for an app built on Flock's app kit: Flock copies the component library into `src/flock/` before `buildCommand` (see "Kit apps") |
+| `useCases` | No | `{ "for": [...], "notFor": [...] }`: what the app is right for and wrong for, read by the Flock Assistant when it picks a starting point |
+
+## Kit apps
+
+An app built on Flock's app kit and component library (`@flock/app-kit`, `@flock/ui`) is published like any other app, with three additions:
+
+- **`"assemble": true`** in `flock.app.json`. The package ships without the library; at build time Flock copies `@flock/ui`, the theme and the objects named in the manifest's `objects` into `src/flock/`, fills in the app's id and name, supplies `@flock/app-kit` and `@flock/app-sdk` into `node_modules`, and only then runs `buildCommand`. The manifest also carries the kit fields (`pages`, `tables`, `objects`, `nav`, `chat`, `labels`, `settings`, `privateTables`, `titleFromName`) and the platform fields the build relies on (`type: "fullstack"`, `access: "private"`, `spa`, `apiPrefix`, `buildDir`, `deployDir`, `processConfig`, `config.requires.agent`); copy them from an existing kit app and do not change them.
+- **`useCases`**: three to five concrete requests the app is right for (`for`) and two or three it is wrong for (`notFor`), each naming the better app where there is one. The Flock Assistant chooses the closest starting point from these, so write them as an owner would ask ("Let clients book appointment slots at a clinic"), not as features.
+- **`ARCHITECTURE.md`**: the shared kit architecture (request lifecycle, where the UI, API and data layers live, how to add a page, a table, a setting or a routine, samples and import, what must not be edited), copied verbatim from `docs/marketplace-guide/kit-app-architecture.md`, followed by a section on this app: its tables and columns, its pages, its own routes and what to change first. The paired agent reads it before changing the app, so keep it current with the code.
+
+The package also carries `settings.json` (the declarative rules for each setting), `row-schema.json` (generated from `server/db/schema.ts`), `e2e-rows.json` (the end-to-end import fixture), its own tests (`tests/` runnable from the package, `server/*.test.ts` run inside the built app) and `bun.lock`. The rest of the packaging (two manifests agreeing on the version, a changelog entry per version, the `<slug>-v<x.y.z>` tag, the catalog entry) is unchanged.
 
 #### App Types
 

@@ -9,24 +9,17 @@ catalog.json       Index of all published packages
 skills/            Skill packages (one directory per skill)
 apps/              App packages (one directory per app)
 templates/         Agent template packages (one directory per template)
-app-templates/     App template packages (one directory per template)
 ```
 
 Each package directory contains its manifest (`flock.skill.json`, `flock.app.json`, or `flock.template.json`) and source files. The Flock platform fetches `catalog.json` to discover available packages and downloads individual package tarballs on install.
 
-## App templates
+## Kit apps
 
-`app-templates/<name>/` is the source of a Flock app template: the app's code, its sample rows, its own tests, `TEMPLATE.md`, `CHANGELOG.md` and `bun.lock`. Flock installs the package, builds it with its own app kit and components, and makes apps from it. The user owns the copy.
+Some apps under `apps/` (bookings, checklist, dashboard, directory, invoices, itinerary, money, pipeline, planner, tracker) are built on Flock's app kit and component library. Their `flock.app.json` says `"assemble": true`: before running the app's `buildCommand`, Flock copies the component library, theme and the manifest's `objects` into the app's `src/flock/` and fills in the app's id and name, then builds the package into a deployable bundle. The manifest also lists the app's `pages`, `tables`, `settings`, `labels` and `useCases` (what the app is for and not for, read by the Flock Assistant when it picks a starting point), and each kit app ships an `ARCHITECTURE.md`: a shared part (identical in all of them; source in `docs/marketplace-guide/kit-app-architecture.md`) followed by the app's own notes. The user owns the installed copy; an untouched copy follows the package and the library, a customized one updates only when the owner asks.
 
-Each template carries:
+Packaging is the same as for every other app: `flock.app.json` and `flock.marketplace.json` agree on the semver `version` and `minFlockVersion`, `CHANGELOG.md` has an entry per version, the release is the tag `<name>-v<x.y.z>` plus the matching `catalog.json` entry. A retired app stays in the catalog with `deprecated: {since, replacedBy, note}`: new installs are refused, existing copies keep updating.
 
-- `template.json` with a semver `version`, the platform's description of the template;
-- `flock.marketplace.json` with `name`, `version` (the same semver) and `minFlockVersion`;
-- a `CHANGELOG.md` entry per version.
-
-A release is a tag `<name>-v<x.y.z>`, cut by hand on merge like every other item here, plus the matching entry in `catalog.json` (`type: "app-template"`, `template: "<name>"`, `path: "app-templates/<name>"`). A retired template stays in the catalog with `deprecated: {since, replacedBy, note}`: new installs are refused, existing copies keep updating.
-
-Run the tests from a Flock checkout: `FLOCK_TEMPLATES_DIR=<this clone>/app-templates bun run test:templates` (in `flock-app/`).
+Run the kit apps' tests from a Flock checkout: `FLOCK_APP_SOURCES_DIR=<this clone>/apps bun run test:apps` (in `flock-app/`; on Flock 0.14 the names are `FLOCK_TEMPLATES_DIR` and `test:templates`).
 
 ## License
 
