@@ -6,4 +6,4 @@
 
 ## 1.3.0
 
-- Adds the optional Meal Planner app, made from the planner app template.
+- Adds the optional Meal Planner app, made from the planner kit app.
