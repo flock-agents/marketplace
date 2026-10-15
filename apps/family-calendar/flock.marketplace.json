@@ -5,7 +5,13 @@
   "version": "1.0.3",
   "author": "flock",
   "category": "family",
-  "tags": ["calendar", "family", "events", "reminders", "scheduling"],
-  "minFlockVersion": "0.7.0",
+  "tags": [
+    "calendar",
+    "family",
+    "events",
+    "reminders",
+    "scheduling"
+  ],
+  "minFlockVersion": "0.15.0",
   "customizable": true
 }

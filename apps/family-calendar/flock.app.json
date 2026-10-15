@@ -8,5 +8,6 @@
   "processConfig": {
     "command": "bun run server/index.ts",
     "readyPattern": "listening"
-  }
+  },
+  "minFlockVersion": "0.15.0"
 }

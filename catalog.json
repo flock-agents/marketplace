@@ -74,7 +74,7 @@
       "path": "apps/family-calendar",
       "latestVersion": "1.0.3",
       "latestTag": "family-calendar-v1.0.3",
-      "minFlockVersion": "0.7.0",
+      "minFlockVersion": "0.15.0",
       "publishedAt": "2026-08-13T15:30:00Z",
       "updatedAt": "2026-10-15T12:00:00Z"
     },
@@ -101,7 +101,7 @@
         "id": "household",
         "label": "Run the household",
         "description": "Groceries, meals, family routines",
-        "emoji": "🏠",
+        "emoji": "\ud83c\udfe0",
         "order": 40,
         "agentName": "Family Butler",
         "services": [
@@ -272,7 +272,7 @@
       "slug": "slack",
       "type": "connector",
       "name": "Slack",
-      "description": "Full Slack workspace integration — read channels, search messages, manage saved items, post messages, add reactions, and manage user groups. Equivalent to the korotovsky/slack-mcp-server feature set, via browser session auth.",
+      "description": "Full Slack workspace integration \u2014 read channels, search messages, manage saved items, post messages, add reactions, and manage user groups. Equivalent to the korotovsky/slack-mcp-server feature set, via browser session auth.",
       "author": "flock",
       "category": "integration",
       "tags": [
@@ -294,7 +294,7 @@
       "slug": "slack-desk",
       "type": "app",
       "name": "Slack Desk",
-      "description": "Builds memory from your Slack conversations and surfaces tasks you missed — reads only, never posts",
+      "description": "Builds memory from your Slack conversations and surfaces tasks you missed \u2014 reads only, never posts",
       "author": "flock",
       "category": "productivity",
       "tags": [
@@ -341,7 +341,7 @@
         "id": "calendar",
         "label": "Manage my calendar",
         "description": "What's coming up, reminders, prep before meetings",
-        "emoji": "📅",
+        "emoji": "\ud83d\udcc5",
         "order": 30
       },
       "publishedAt": "2026-10-03T00:00:00Z",
@@ -366,7 +366,17 @@
       "latestVersion": "1.1.2",
       "latestTag": "slack-assistant-v1.1.2",
       "minFlockVersion": "0.7.0",
-      "onboardingCard": { "id": "slack", "label": "Catch up on Slack", "description": "What you missed, what's asked of you", "emoji": "💬", "order": 20, "agentName": "Slack Assistant", "services": ["slack"] },
+      "onboardingCard": {
+        "id": "slack",
+        "label": "Catch up on Slack",
+        "description": "What you missed, what's asked of you",
+        "emoji": "\ud83d\udcac",
+        "order": 20,
+        "agentName": "Slack Assistant",
+        "services": [
+          "slack"
+        ]
+      },
       "publishedAt": "2026-09-23T00:00:00Z",
       "updatedAt": "2026-10-14T00:00:00Z"
     },
@@ -394,7 +404,7 @@
         "id": "email",
         "label": "Stay on top of email",
         "description": "Finds what needs you, drafts replies",
-        "emoji": "📥",
+        "emoji": "\ud83d\udce5",
         "order": 10,
         "agentName": "Inbox Assistant",
         "services": [
@@ -417,7 +427,7 @@
         "clinic",
         "salon"
       ],
-      "icon": "📅",
+      "icon": "\ud83d\udcc5",
       "repo": "flock-agents/marketplace",
       "path": "apps/bookings",
       "latestVersion": "1.1.0",
@@ -439,7 +449,7 @@
         "trip",
         "move"
       ],
-      "icon": "✅",
+      "icon": "\u2705",
       "repo": "flock-agents/marketplace",
       "path": "apps/checklist",
       "latestVersion": "1.1.0",
@@ -460,7 +470,7 @@
         "metrics",
         "trend"
       ],
-      "icon": "📊",
+      "icon": "\ud83d\udcca",
       "repo": "flock-agents/marketplace",
       "path": "apps/dashboard",
       "latestVersion": "1.1.0",
@@ -481,7 +491,7 @@
         "contacts",
         "people"
       ],
-      "icon": "📇",
+      "icon": "\ud83d\udcc7",
       "repo": "flock-agents/marketplace",
       "path": "apps/directory",
       "latestVersion": "1.1.0",
@@ -503,7 +513,7 @@
         "customers",
         "billing"
       ],
-      "icon": "🧾",
+      "icon": "\ud83e\uddfe",
       "repo": "flock-agents/marketplace",
       "path": "apps/invoices",
       "latestVersion": "1.1.0",
@@ -525,7 +535,7 @@
         "packing",
         "budget"
       ],
-      "icon": "✈️",
+      "icon": "\u2708\ufe0f",
       "repo": "flock-agents/marketplace",
       "path": "apps/itinerary",
       "latestVersion": "1.1.0",
@@ -547,7 +557,7 @@
         "investments",
         "goals"
       ],
-      "icon": "💰",
+      "icon": "\ud83d\udcb0",
       "repo": "flock-agents/marketplace",
       "path": "apps/money",
       "latestVersion": "1.1.0",
@@ -569,7 +579,7 @@
         "sales",
         "crm"
       ],
-      "icon": "🧭",
+      "icon": "\ud83e\udded",
       "repo": "flock-agents/marketplace",
       "path": "apps/pipeline",
       "latestVersion": "1.1.0",
@@ -591,7 +601,7 @@
         "recipes",
         "family"
       ],
-      "icon": "🍽️",
+      "icon": "\ud83c\udf7d\ufe0f",
       "repo": "flock-agents/marketplace",
       "path": "apps/planner",
       "latestVersion": "1.1.0",
@@ -613,7 +623,7 @@
         "vendors",
         "applications"
       ],
-      "icon": "📌",
+      "icon": "\ud83d\udccc",
       "repo": "flock-agents/marketplace",
       "path": "apps/tracker",
       "latestVersion": "1.1.0",
