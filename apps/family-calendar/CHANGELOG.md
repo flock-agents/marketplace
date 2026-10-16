@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.0.2
+
+- The move from 1.x holds up when an update does not go straight through:
+  - an import left behind by an update that was rolled back is replaced with the 1.x rows as they are now, so a row added after that attempt comes across too;
+  - when another import is already waiting, the 1.x tables are still set aside (kept), and their rows come across on the next start, once the other import is in;
+  - when the kept names (`v1_members`, `v1_events`, `v1_reminders`) are already taken, the 1.x tables go to the next free names (`v1_members_2` and so on) and the app starts as usual instead of failing on every start.
+- A 1.x reminder with any status other than pending (done, dismissed, cancelled…) whose time has not come is left out, as a done one already was; one whose time has passed comes across as before.
+- Whether the 1.x rows have come across is now read from the kit's own record of applied imports, so a start interrupted at any point is finished by the next.
+
 ## 2.0.1
 
 - An install updated from 1.x keeps its family's data. On the first start after the update, the 1.x members, events and reminders are carried into the new tables:

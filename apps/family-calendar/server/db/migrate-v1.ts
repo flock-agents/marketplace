@@ -1,21 +1,32 @@
-// Carries a 1.x install's rows into 2.0's tables, once, on the first start after the update.
+// Carries a 1.x install's rows into 2.0's tables on the first start after the update.
 //
 // 1.x kept its rows in the same app.db, in tables with the SAME names as 2.0's (members, events, reminders) but another shape
 // (integer ids, hex colours, ISO date-times, a member_id link). Left there, the kit's schema sync would drop their columns. So, before
-// mountKit: the 1.x tables are renamed to v1_* (kept as they are, rows and definition, and listed in mountKit's keepTables so the
-// kit never touches them), and their rows are written as the kit's boot import (.flock/import.json), which mountKit applies in one
-// transaction after creating 2.0's tables. An install whose 1.x tables are empty gets no import, so it starts with the samples like
-// a fresh one. A later boot finds no 1.x-shaped table and does nothing.
+// mountKit, two steps:
+//  1. Move: 1.x-shaped tables under 2.0's names are renamed to a free set of kept names (v1_members, v1_events, v1_reminders; or
+//     v1_members_2 and so on when those are taken), rows and definition as they were. Every v1_* table is listed in mountKit's
+//     keepTables, so the kit never touches them. This step is always safe and always runs.
+//  2. Import: the oldest kept set the kit has not imported yet (its importId is not in the kit's _imports) is written as the kit's
+//     boot import (.flock/import.json), which mountKit applies in one transaction after creating 2.0's tables. A leftover import of
+//     ours (a rolled-back attempt) is replaced with the rows as they are now; someone else's waiting import is left alone, and ours is
+//     written on a later boot, once the kit has applied theirs. A set with no rows to bring gives no import, so an install whose 1.x
+//     tables were empty starts with the samples like a fresh one.
+// Whether a set is done is the kit's own record, never a file, so a crash or a rollback at any point is picked up by the next boot.
 import { Database } from "bun:sqlite";
-import { existsSync, mkdirSync, writeFileSync } from "fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { join } from "path";
 import type { COLOURS } from "./constants";
 
-/** Where each 1.x table goes: kept under this name for good (never dropped, never read by 2.0). */
-export const V1_TABLES = { members: "v1_members", events: "v1_events", reminders: "v1_reminders" } as const;
-/** For mountKit's keepTables, on every boot: the kit would otherwise drop them as tables its schema does not describe. */
-export const KEPT_V1_TABLES: string[] = Object.values(V1_TABLES);
+const TABLES = ["members", "events", "reminders"] as const;
+type V1Table = (typeof TABLES)[number];
+/** The kept names of set `n`: v1_members for the first, v1_members_2 for the second, and so on. */
+export const v1Names = (n = 1): Record<V1Table, string> =>
+  Object.fromEntries(TABLES.map((t) => [t, `v1_${t}${n === 1 ? "" : `_${n}`}`])) as Record<V1Table, string>;
+const KEPT_NAME = /^v1_(members|events|reminders)(?:_(\d+))?$/;
 export const V1_IMPORT_ID = "family-calendar-1x";
+/** The boot import of set `n`. */
+export const v1ImportId = (n = 1) => (n === 1 ? V1_IMPORT_ID : `${V1_IMPORT_ID}-${n}`);
+const isOurImport = (id: unknown) => typeof id === "string" && (id === V1_IMPORT_ID || id.startsWith(`${V1_IMPORT_ID}-`));
 const IMPORT_BY = "app:family-calendar";
 
 export interface V1Member { id: number; name: string; color: string | null; emoji: string | null; created_at?: string | null }
@@ -104,10 +115,11 @@ function eventRow(e: V1Event, who: string | null, now: Date): Row {
  * becomes the nearest tone. An event names its member by name (`who`), splits its start into date and time, keeps its end time when it
  * ends the same day (else says when it ends in the notes), becomes all-day (no times) when it ran midnight to midnight, and keeps its
  * category and a status other than confirmed in the notes.
- * A reminder keeps its title and due time (repeat none) and is for its event's member. A reminder already marked done whose time has
- * not come is left out: 2.0 would remind about it again. Everything stays in the v1_* tables either way.
+ * A reminder keeps its title and due time (repeat none) and is for its event's member. One the family already dealt with (any status
+ * but pending) whose time has not come is left out: 2.0 has no status and would remind about it again. One whose time has passed comes
+ * across either way (2.0 shows a past one-off as done). Everything stays in the v1_* tables either way.
  */
-export function v1Import(v1: V1Rows, now = new Date()): V1Import | null {
+export function v1Import(v1: V1Rows, now = new Date(), importId = V1_IMPORT_ID): V1Import | null {
   const names = new Map(v1.members.map((m) => [m.id, m.name]));
   const whoOf = (memberId: number | null) => (memberId === null ? null : names.get(memberId) ?? null);
   const eventMember = new Map(v1.events.map((e) => [e.id, e.member_id]));
@@ -119,59 +131,111 @@ export function v1Import(v1: V1Rows, now = new Date()): V1Import | null {
   for (const r of v1.reminders) {
     const at = localParts(r.due_time) ?? localParts(r.created_at);
     const due = `${at?.date ?? localDate(now)}T${at?.time ?? "00:00"}`;
-    if (r.status === "done" && due > nowLocal) continue;
+    if (!isPending(r.status) && due > nowLocal) continue;
     reminders.push({ $key: `r${r.id}`, title: r.title, due, repeat: "none", who: whoOf(r.event_id === null ? null : eventMember.get(r.event_id) ?? null) });
   }
   if (!members.length && !events.length && !reminders.length) return null;
-  return { importId: V1_IMPORT_ID, by: IMPORT_BY, rows: { members, events, reminders } };
+  return { importId, by: IMPORT_BY, rows: { members, events, reminders } };
 }
 
+/** 1.x's API stored whatever status it was sent (its own pages wrote "pending" and "done", and listed only those two). Only pending,
+ *  or no status at all, is a reminder still to come; any other (done, dismissed, cancelled…) is one the family has dealt with. */
+const isPending = (status: string | null | undefined) => !status?.trim() || status.trim().toLowerCase() === "pending";
+
 const q = (id: string) => `"${id.replace(/"/g, '""')}"`;
-/** A 1.x table: there under its 2.0 name with 1.x's integer id (2.0's ids are text). */
+const tableNames = (db: Database) => new Set((db.query("SELECT name FROM sqlite_master WHERE type = 'table'").all() as { name: string }[]).map((r) => r.name));
+/** A 1.x table: 1.x's integer id (2.0's ids are text). */
 function isV1Table(db: Database, name: string): boolean {
   const cols = db.query(`PRAGMA table_info(${q(name)})`).all() as { name: string; type: string }[];
   return cols.some((c) => c.name === "id" && /int/i.test(c.type));
 }
-const readAll = <T>(db: Database, table: string, present: boolean): T[] => (present ? (db.query(`SELECT * FROM ${q(table)} ORDER BY id`).all() as T[]) : []);
+const readAll = <T>(db: Database, table: string, ok: boolean): T[] => (ok ? (db.query(`SELECT * FROM ${q(table)} ORDER BY id`).all() as T[]) : []);
+/** The importIds the kit has applied; none before its first start. */
+function importsDone(db: Database): Set<string> {
+  try { return new Set((db.query(`SELECT import_id FROM "_imports"`).all() as { import_id: string }[]).map((r) => r.import_id)); }
+  catch { return new Set(); }
+}
+/** The import file waiting for the kit: absent, ours (any set's), or someone else's (or unreadable, which is never ours to replace). */
+function waitingImport(path: string): "none" | "ours" | "other" {
+  if (!existsSync(path)) return "none";
+  try { return isOurImport(JSON.parse(readFileSync(path, "utf8"))?.importId) ? "ours" : "other"; } catch { return "other"; }
+}
 
-export interface V1Outcome { moved: string[]; imported: { members: number; events: number; reminders: number } | null }
+/** Step 1: rename the 1.x tables under 2.0's names to the first set of kept names that is wholly free. Never fails on a taken name. */
+function moveV1Tables(db: Database): string[] {
+  const live = tableNames(db);
+  const moving = TABLES.filter((t) => live.has(t) && isV1Table(db, t));
+  if (!moving.length) return [];
+  let n = 1;
+  while (TABLES.some((t) => live.has(v1Names(n)[t]))) n++;
+  const to = v1Names(n);
+  // Parents first, so each later table's link is rewritten to the renamed parent (members, then events, then reminders).
+  db.transaction(() => { for (const t of moving) db.exec(`ALTER TABLE ${q(t)} RENAME TO ${q(to[t])}`); })();
+  return moving.map((t) => to[t]);
+}
+
+/** Every kept set's number, oldest first. */
+function keptSets(db: Database): number[] {
+  const ns = new Set<number>();
+  for (const name of tableNames(db)) { const m = KEPT_NAME.exec(name); if (m) ns.add(m[2] ? Number(m[2]) : 1); }
+  return [...ns].sort((a, b) => a - b);
+}
+
+/** Step 2: the oldest kept set not yet imported, written as the boot import; one per boot (the kit applies one file per start). */
+function importNextSet(db: Database, dataDir: string, now?: Date): Pick<V1Outcome, "imported" | "waiting"> {
+  const done = importsDone(db);
+  const live = tableNames(db);
+  for (const n of keptSets(db)) {
+    const id = v1ImportId(n);
+    if (done.has(id)) continue;
+    const names = v1Names(n);
+    const has = (t: V1Table) => live.has(names[t]) && isV1Table(db, names[t]);
+    const plan = v1Import({
+      members: readAll<V1Member>(db, names.members, has("members")),
+      events: readAll<V1Event>(db, names.events, has("events")),
+      reminders: readAll<V1Reminder>(db, names.reminders, has("reminders")),
+    }, now, id);
+    if (!plan) continue;
+    const target = join(dataDir, ".flock", "import.json");
+    if (waitingImport(target) === "other") {
+      console.warn(`[family-calendar] another import is waiting; the 1.x rows (${id}) are imported on a later start`);
+      return { imported: null, waiting: id };
+    }
+    mkdirSync(join(dataDir, ".flock"), { recursive: true });
+    writeFileSync(target, JSON.stringify(plan, null, 2));
+    return { imported: { importId: id, members: plan.rows.members.length, events: plan.rows.events.length, reminders: plan.rows.reminders.length }, waiting: null };
+  }
+  return { imported: null, waiting: null };
+}
+
+export interface V1Outcome {
+  /** The tables this start renamed. */
+  moved: string[];
+  /** The import this start wrote for the kit, if any. */
+  imported: { importId: string; members: number; events: number; reminders: number } | null;
+  /** A set left for a later start because someone else's import is waiting. */
+  waiting: string | null;
+  /** Every kept 1.x table, for mountKit's keepTables: the kit would otherwise drop them as tables its schema does not describe. */
+  keep: string[];
+}
 
 /**
- * Before mountKit: rename any 1.x tables to v1_* and, unless `writeImport` is false, leave their rows as the kit's boot import.
- * Does nothing when there is no app.db or no 1.x table in it. An import.json already waiting (the platform's own) is never replaced.
- * `writeImport` is false in the kit's check mode, which the platform only runs on a throwaway copy of the data: the rename still
- * happens there, so the trial reports 2.0's tables as new rather than 1.x's columns as deleted.
+ * Before mountKit: step 1 (move) and, unless `writeImport` is false, step 2 (import). Does nothing but report the kept tables when
+ * there is no 1.x table left to move and nothing left to import. `writeImport` is false in the kit's check mode, which the platform
+ * only runs on a throwaway copy of the data: the move still happens there, so the trial reports 2.0's tables as new rather than 1.x's
+ * columns as deleted.
  */
 export function prepareV1Data(dataDir: string, o: { writeImport?: boolean; now?: Date } = {}): V1Outcome {
   const file = join(dataDir, "app.db");
-  if (!existsSync(file)) return { moved: [], imported: null };
+  if (!existsSync(file)) return { moved: [], imported: null, waiting: null, keep: [] };
   const db = new Database(file);
   try {
     // legacy_alter_table off, so a rename rewrites the other tables' links to it (some SQLite builds default it on).
     db.exec("PRAGMA busy_timeout = 5000; PRAGMA legacy_alter_table = OFF");
-    const present = Object.fromEntries(Object.keys(V1_TABLES).map((t) => [t, isV1Table(db, t)])) as Record<keyof typeof V1_TABLES, boolean>;
-    const moved = (Object.keys(V1_TABLES) as (keyof typeof V1_TABLES)[]).filter((t) => present[t]);
-    if (!moved.length) return { moved: [], imported: null };
-
-    const plan = v1Import({
-      members: readAll<V1Member>(db, "members", present.members),
-      events: readAll<V1Event>(db, "events", present.events),
-      reminders: readAll<V1Reminder>(db, "reminders", present.reminders),
-    }, o.now);
-    // The import file first, then the renames: a crash between them finds the 1.x tables still there and writes the same file again.
-    let imported: V1Outcome["imported"] = null;
-    if (plan && o.writeImport !== false) {
-      const target = join(dataDir, ".flock", "import.json");
-      if (existsSync(target)) console.warn("[family-calendar] an import is already waiting; the 1.x rows stay in the v1_* tables");
-      else {
-        mkdirSync(join(dataDir, ".flock"), { recursive: true });
-        writeFileSync(target, JSON.stringify(plan, null, 2));
-        imported = { members: plan.rows.members.length, events: plan.rows.events.length, reminders: plan.rows.reminders.length };
-      }
-    }
-    // Parents first, so each later table's link is rewritten to the renamed parent (members, then events, then reminders).
-    db.transaction(() => { for (const t of moved) db.exec(`ALTER TABLE ${q(t)} RENAME TO ${q(V1_TABLES[t])}`); })();
-    console.log(`[family-calendar] kept the 1.x tables as ${moved.map((t) => V1_TABLES[t]).join(", ")}${imported ? `; carrying ${imported.members} members, ${imported.events} events and ${imported.reminders} reminders across` : ""}`);
-    return { moved: moved.map((t) => V1_TABLES[t]), imported };
+    const moved = moveV1Tables(db);
+    const { imported, waiting } = o.writeImport === false ? { imported: null, waiting: null } : importNextSet(db, dataDir, o.now);
+    const keep = [...tableNames(db)].filter((t) => KEPT_NAME.test(t)).sort();
+    if (moved.length || imported) console.log(`[family-calendar] ${moved.length ? `kept the 1.x tables as ${moved.join(", ")}` : "1.x tables already kept"}${imported ? `; carrying ${imported.members} members, ${imported.events} events and ${imported.reminders} reminders across (${imported.importId})` : ""}`);
+    return { moved, imported, waiting, keep };
   } finally { db.close(); }
 }

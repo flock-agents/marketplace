@@ -1,6 +1,6 @@
 // A 1.x install's rows come across into 2.0's tables on the first start after the update; the 1.x tables stay, renamed, untouched.
 import { describe, it, expect } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync } from "fs";
+import { copyFileSync, existsSync, mkdtempSync, readFileSync, writeFileSync, mkdirSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
 import { Database } from "bun:sqlite";
@@ -8,7 +8,9 @@ import { Hono } from "hono";
 import { mountKit, NO_APPROVALS } from "@flock/app-kit";
 import * as schema from "./schema";
 import { seed } from "./seed";
-import { localParts, toneOf, v1Import, prepareV1Data, KEPT_V1_TABLES, V1_IMPORT_ID, type V1Rows } from "./migrate-v1";
+import { localParts, toneOf, v1Import, prepareV1Data, v1Names, v1ImportId, V1_IMPORT_ID, type V1Rows } from "./migrate-v1";
+
+const KEPT = Object.values(v1Names());   // v1_members, v1_events, v1_reminders
 
 process.env.TZ = "Asia/Kolkata";   // the zoned 1.x values below are read in the family's own time
 
@@ -108,6 +110,14 @@ describe("the 1.x rows as 2.0 rows", () => {
       { $key: "r4", title: "Pack the kit", due: "2026-10-13T07:30", repeat: "none", who: "Kabir" },
     ]);
   });
+  it("leaves out any reminder the family dealt with (done, dismissed, …) whose time has not come, and keeps a past one", () => {
+    const r = (id: number, due_time: string, status: string | null) => ({ id, title: `R${id}`, due_time, event_id: null, status });
+    const plan = v1Import({ members: [], events: [], reminders: [
+      r(1, "2026-11-01T09:00", "dismissed"), r(2, "2026-11-01T09:00", "Cancelled"), r(3, "2026-11-01T09:00", "done"),
+      r(4, "2026-10-01T09:00", "dismissed"), r(5, "2026-11-01T09:00", "pending"), r(6, "2026-11-01T09:00", " Pending "), r(7, "2026-11-01T09:00", null),
+    ] }, NOW)!;
+    expect(plan.rows.reminders.map((x) => x.$key)).toEqual(["r4", "r5", "r6", "r7"]);
+  });
   it("is nothing at all when 1.x had no rows", () => {
     expect(v1Import({ members: [], events: [], reminders: [] }, NOW)).toBeNull();
   });
@@ -132,9 +142,10 @@ function v1Snapshot(dir: string, names = ["members", "events", "reminders"]) {
   try { return names.map((t) => db.query(`SELECT * FROM "${t}" ORDER BY id`).all()); } finally { db.close(); }
 }
 const env = (dataDir: string) => ({ appId: "family-calendar", dataDir, apiUrl: null, token: null, agent: null });
+/** One start of the app, as server/index.ts does it. */
 const boot = (dir: string, schemaMode: "apply" | "check" = "apply") => {
-  prepareV1Data(dir, { writeImport: schemaMode === "apply", now: NOW });
-  return mountKit({ hono: new Hono(), env: env(dir) }, { schema, seed, keepTables: KEPT_V1_TABLES, approvals: NO_APPROVALS, schemaMode, appName: "Family Calendar" });
+  const v1 = prepareV1Data(dir, { writeImport: schemaMode === "apply", now: NOW });
+  return mountKit({ hono: new Hono(), env: env(dir) }, { schema, seed, keepTables: v1.keep, approvals: NO_APPROVALS, schemaMode, appName: "Family Calendar" });
 };
 
 describe("the first start after the update", () => {
@@ -142,8 +153,8 @@ describe("the first start after the update", () => {
     const dir = v1DataDir();
     const before = v1Snapshot(dir);
     const out = prepareV1Data(dir, { now: NOW });
-    expect(out).toEqual({ moved: ["v1_members", "v1_events", "v1_reminders"], imported: { members: 3, events: 7, reminders: 3 } });
-    expect(v1Snapshot(dir, KEPT_V1_TABLES)).toEqual(before);
+    expect(out).toEqual({ moved: ["v1_members", "v1_events", "v1_reminders"], imported: { importId: V1_IMPORT_ID, members: 3, events: 7, reminders: 3 }, waiting: null, keep: ["v1_events", "v1_members", "v1_reminders"] });
+    expect(v1Snapshot(dir, KEPT)).toEqual(before);
     const file = JSON.parse(readFileSync(join(dir, ".flock", "import.json"), "utf8"));
     expect(file).toEqual(JSON.parse(JSON.stringify(v1Import(FIXTURE, NOW))));
     // The links follow the renamed parents.
@@ -152,7 +163,8 @@ describe("the first start after the update", () => {
     expect(sql("v1_events")).toContain(`REFERENCES "v1_members"`);
     expect(sql("v1_reminders")).toContain(`REFERENCES "v1_events"`);
     db.close();
-    expect(prepareV1Data(dir, { now: NOW })).toEqual({ moved: [], imported: null });
+    // Before the kit has applied it, the next start writes the same import again; nothing moves twice.
+    expect(prepareV1Data(dir, { now: NOW })).toMatchObject({ moved: [], imported: { importId: V1_IMPORT_ID, events: 7 } });
   });
 
   it("brings the owner's rows into 2.0 through the kit, with no samples, and keeps the 1.x tables as they were", async () => {
@@ -174,7 +186,7 @@ describe("the first start after the update", () => {
     for (const r of [...all("members"), ...all("events"), ...all("reminders")]) expect(r.updated_by).toBe("app:family-calendar");
     expect(all("_samples")).toEqual([]);
     kit.sqlite.close();
-    expect(v1Snapshot(dir, KEPT_V1_TABLES)).toEqual(before);
+    expect(v1Snapshot(dir, KEPT)).toEqual(before);
     expect(existsSync(join(dir, ".flock", `imported-${V1_IMPORT_ID}.json`))).toBe(true);
 
     // The next start: nothing moves, nothing is imported twice, the 1.x tables are still kept.
@@ -182,7 +194,7 @@ describe("the first start after the update", () => {
     expect(again.status.state).toBe("ok");
     expect((again.sqlite.query(`SELECT count(*) AS n FROM "events"`).get() as { n: number }).n).toBe(7);
     again.sqlite.close();
-    expect(v1Snapshot(dir, KEPT_V1_TABLES)).toEqual(before);
+    expect(v1Snapshot(dir, KEPT)).toEqual(before);
   });
 
   it("an install whose 1.x tables were empty starts with the samples, like a fresh one, and keeps the empty 1.x tables", async () => {
@@ -192,7 +204,7 @@ describe("the first start after the update", () => {
     expect(kit.importState.state).toBe("none");
     expect((kit.sqlite.query(`SELECT count(*) AS n FROM "members"`).get() as { n: number }).n).toBe(4);   // the sample family
     const names = (kit.sqlite.query("SELECT name FROM sqlite_master WHERE type = 'table'").all() as { name: string }[]).map((r) => r.name);
-    for (const t of KEPT_V1_TABLES) expect(names).toContain(t);
+    for (const t of KEPT) expect(names).toContain(t);
     kit.sqlite.close();
   });
 
@@ -207,10 +219,73 @@ describe("the first start after the update", () => {
 
   it("a fresh 2.0 install, or a data dir with no database yet, is left alone", async () => {
     const dir = mkdtempSync(join(tmpdir(), "family-calendar-fresh-"));
-    expect(prepareV1Data(dir)).toEqual({ moved: [], imported: null });
+    expect(prepareV1Data(dir)).toEqual({ moved: [], imported: null, waiting: null, keep: [] });
     const kit = await boot(dir);
     expect(kit.status.state).toBe("ok");
     kit.sqlite.close();
-    expect(prepareV1Data(dir)).toEqual({ moved: [], imported: null });
+    expect(prepareV1Data(dir)).toEqual({ moved: [], imported: null, waiting: null, keep: [] });
+  });
+});
+
+const count = (dir: string, table: string) => {
+  const db = new Database(join(dir, "app.db"), { readonly: true });
+  try { return (db.query(`SELECT count(*) AS n FROM "${table}"`).get() as { n: number }).n; } finally { db.close(); }
+};
+const titles = (kit: Awaited<ReturnType<typeof boot>>) => (kit.sqlite.query(`SELECT title FROM "events" ORDER BY title`).all() as { title: string }[]).map((r) => r.title);
+
+describe("an update that did not go straight through", () => {
+  it("a rolled-back attempt's import file is replaced with the rows as they are now, so a row added since comes across", async () => {
+    const dir = v1DataDir();
+    copyFileSync(join(dir, "app.db"), join(dir, "before.db"));
+    prepareV1Data(dir, { now: NOW });   // the attempt: tables renamed, import.json written, then the update is rolled back
+    copyFileSync(join(dir, "before.db"), join(dir, "app.db"));   // the platform restores the database; the import file stays behind
+    expect(existsSync(join(dir, ".flock", "import.json"))).toBe(true);
+    const db = new Database(join(dir, "app.db"));
+    db.run("INSERT INTO events (title, start_time, end_time) VALUES ('Added after the rollback', '2026-10-30T10:00', '2026-10-30T11:00')");
+    db.close();
+    const kit = await boot(dir);
+    expect(kit.importState).toEqual({ state: "done", importId: V1_IMPORT_ID });
+    expect(titles(kit)).toContain("Added after the rollback");
+    expect(titles(kit).length).toBe(8);
+    kit.sqlite.close();
+  });
+
+  it("someone else's waiting import is left alone; the 1.x tables are still kept, and their rows come across on the next start", async () => {
+    const dir = v1DataDir();
+    mkdirSync(join(dir, ".flock"), { recursive: true });
+    const theirs = JSON.stringify({ importId: "make-42", by: "agent:helper", rows: { members: [{ $key: "a", name: "Ada" }] } });
+    writeFileSync(join(dir, ".flock", "import.json"), theirs);
+    const out = prepareV1Data(dir, { now: NOW });
+    expect(out).toMatchObject({ moved: ["v1_members", "v1_events", "v1_reminders"], imported: null, waiting: V1_IMPORT_ID });
+    expect(readFileSync(join(dir, ".flock", "import.json"), "utf8")).toBe(theirs);
+
+    const first = await boot(dir);   // the kit applies theirs
+    expect(first.importState).toEqual({ state: "done", importId: "make-42" });
+    first.sqlite.close();
+    const second = await boot(dir);       // and ours on the next start
+    expect(second.importState).toEqual({ state: "done", importId: V1_IMPORT_ID });
+    expect((second.sqlite.query(`SELECT name FROM "members" ORDER BY name`).all() as { name: string }[]).map((r) => r.name)).toEqual(["Ada", "Kabir", "Nani", "Priya"]);
+    expect(titles(second).length).toBe(7);
+    second.sqlite.close();
+    const third = await boot(dir);        // nothing more after that
+    expect(titles(third).length).toBe(7);
+    third.sqlite.close();
+  });
+
+  it("a kept name already taken does not stop the start: the 1.x tables go to the next free set and their rows still come across", async () => {
+    const dir = v1DataDir();
+    const db = new Database(join(dir, "app.db"));
+    db.exec(`CREATE TABLE v1_members (id TEXT PRIMARY KEY, note TEXT); INSERT INTO v1_members VALUES ('x', 'not ours');`);
+    db.close();
+    const out = prepareV1Data(dir, { now: NOW });
+    expect(out.moved).toEqual(["v1_members_2", "v1_events_2", "v1_reminders_2"]);
+    expect(out.imported).toMatchObject({ importId: v1ImportId(2), members: 3, events: 7, reminders: 3 });
+    const kit = await boot(dir);
+    expect(kit.status.state).toBe("ok");
+    expect(kit.importState).toEqual({ state: "done", importId: v1ImportId(2) });
+    expect(titles(kit).length).toBe(7);
+    kit.sqlite.close();
+    expect(count(dir, "v1_members")).toBe(1);     // the table that was there, untouched
+    expect(count(dir, "v1_events_2")).toBe(7);    // 1.x's rows, kept
   });
 });
