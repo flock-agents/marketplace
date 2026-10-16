@@ -1,0 +1,7 @@
+# App packages are checked byte for byte (checksums, gen-schemas --check, build keys): keep them LF on every OS, also in a
+# Windows clone with core.autocrlf=true. text=auto, not text: git still detects a binary (an icon) and never rewrites it.
+apps/** text=auto eol=lf
+*.png binary
+*.jpg binary
+*.ico binary
+*.woff2 binary
