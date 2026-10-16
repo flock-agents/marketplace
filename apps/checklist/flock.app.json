@@ -3,7 +3,7 @@
   "usage": "template",
   "icon": "✅",
   "description": "One list of things to tick off, grouped, with who and by when: a move, a trip, a launch.",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "minFlockVersion": "0.15.0",
   "type": "fullstack",
   "access": "private",
