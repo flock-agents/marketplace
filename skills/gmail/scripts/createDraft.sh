@@ -2,7 +2,8 @@
 set -euo pipefail
 
 if [ -z "${BROWSER_SESSION:-}" ] && [ -n "${SECRET_IMAP_CREDENTIALS:-}" ]; then
-  exec python3 "$(dirname "$0")/gmail-imap.py"
+  source "$(dirname "$0")/../../_shared/_platform.sh"
+  flock_exec_python "$(dirname "$0")/gmail-imap.py"
 fi
 source "$(dirname "$0")/_gmail_helpers.sh"
 
@@ -120,9 +121,15 @@ _persistent_interact "$PERSISTENT_ID" "$CONTENT_ACTIONS" "false" "" >/dev/null 2
 # Attachments — upload each file via the hidden file input
 if [ -n "$ATTACHMENTS" ]; then
   while IFS= read -r APATH; do
-    APATH=$(echo "$APATH" | xargs)
+    # Trim whitespace (incl. a stray \r) and one layer of quotes in pure bash —
+    # `xargs` ate the backslashes of a Windows path (C:\Users\me\a.pdf).
+    APATH="${APATH#"${APATH%%[![:space:]]*}"}"
+    APATH="${APATH%"${APATH##*[![:space:]]}"}"
+    case "$APATH" in \"*\"|\'*\') APATH="${APATH:1:${#APATH}-2}" ;; esac
     [ -z "$APATH" ] && continue
     [ ! -f "$APATH" ] && continue
+    # The server opens this file itself: hand it a native path (C:/... on Windows).
+    APATH=$(flock_native_path "$APATH")
     ATTACH_ACTIONS=$(jq -nc --arg path "$APATH" '[
       {"action":"upload","selector":"input[type=\"file\"]","filePath":$path},
       {"action":"wait","delay":2000}

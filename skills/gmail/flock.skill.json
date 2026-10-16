@@ -95,13 +95,44 @@
       "shouldTrigger",
       "starMessage",
       "storeThreadBody",
-      "updateDraft"
+      "updateDraft",
+      "downloadAttachment"
     ],
     "systemInvokeOnlyFunctions": [
       "sendDraft",
       "sendEmail",
       "replyToMessage"
-    ]
+    ],
+    "functionEffects": {
+      "applyLabel": "write",
+      "archiveMessage": "write",
+      "createDraft": "draft",
+      "createReplyDraft": "draft",
+      "createLabel": "write",
+      "discardDraft": "write",
+      "downloadAttachment": "read",
+      "getDraft": "read",
+      "findDraftForThread": "read",
+      "listDraftThreads": "read",
+      "getEmail": "read",
+      "getThread": "read",
+      "getThreads": "read",
+      "getVoice": "read",
+      "getReplyContext": "read",
+      "listInbox": "read",
+      "listLabels": "read",
+      "checkEngagedDomains": "read",
+      "markRead": "write",
+      "markUnread": "write",
+      "searchEmails": "read",
+      "sendDraft": "irreversible",
+      "sendEmail": "irreversible",
+      "replyToMessage": "irreversible",
+      "shouldTrigger": "read",
+      "starMessage": "write",
+      "storeThreadBody": "write",
+      "updateDraft": "draft"
+    }
   },
   "functions": {
     "createDraft": {
@@ -127,6 +158,10 @@
     "getThread": {
       "timeoutMs": 90000,
       "reason": "Expands EVERY message in the thread before scraping, so cost scales with thread length - and a long many-participant thread is exactly the one whose per-message Cc lines drafting needs for reply-all."
+    },
+    "downloadAttachment": {
+      "timeoutMs": 150000,
+      "reason": "Opens the thread, then downloads each attachment it asks for (up to 10) through the signed-in page; a large file alone can take a minute."
     },
     "getEmail": {
       "timeoutMs": 90000,
@@ -279,7 +314,7 @@
   },
   "name": "Gmail",
   "slug": "gmail",
-  "version": "1.6.1",
-  "minFlockVersion": "0.10.3",
+  "version": "1.6.2",
+  "minFlockVersion": "0.13.0",
   "author": "flock"
 }

@@ -82,6 +82,8 @@ export interface TriggerConfig {
   // "this address's share of the current batch" — the only signal a pure, DB-free
   // function has available. Defaults to 0 (off), as Stych ships it.
   velocityCap?: number;
+  // P21.3: the platform's one list (server/src/shared/calendar-auto-response.ts); the mirror is the fallback.
+  calendarPrefixes?: string[];
 }
 
 export interface TriggerDecision {
@@ -100,13 +102,14 @@ export interface TriggerDecision {
 // end, so a person named "annoreplyson" is untouched.
 const NO_REPLY_RE = /(^|[._-])(no[-_.]?reply|do[-_.]?not[-_.]?reply)([._-]|$)/i;
 
+import { CALENDAR_AUTO_RESPONSE_PREFIXES, calendarResponseRe } from "./_calendarAutoResponse";
+
 // Google Calendar's automatic responses (2026-09-10, live: "Accepted: 30 min
 // meeting between …" from a real person's address reached the model). The
 // subject is machine-written with a fixed prefix; the sender is a human, often
 // engaged, and there is nothing to reply to. Matched on the preview, which is
 // "subject — snippet", anchored at the very start with the colon so a human
 // subject that merely begins with the word ("Accepted the offer, when …") stays.
-const CALENDAR_RESPONSE_RE = /^(accepted|declined|tentatively accepted|tentative|invitation|updated invitation|cancell?ed event):/i;
 
 // §4.4 role local-parts — exact match on the local part. Deliberately does NOT
 // include founder/product/crew/etc: real humans at small startups use those.
@@ -207,6 +210,8 @@ export function decide(events: TriggerEvent[], config: TriggerConfig): TriggerDe
   );
   const ignoreAutomated = cfg.ignoreAutomated === true;
   const velocityCap = safeVelocityCap(cfg.velocityCap);
+  const handed = normalizeList(cfg.calendarPrefixes);
+  const calendarRe = calendarResponseRe(handed.length > 0 ? handed : CALENDAR_AUTO_RESPONSE_PREFIXES);
 
   // §4.5 velocity, keyed on the FULL sender address (never the domain) — see the
   // TriggerConfig.velocityCap doc above for why this counts within the batch.
@@ -237,7 +242,7 @@ export function decide(events: TriggerEvent[], config: TriggerConfig): TriggerDe
     // A calendar auto-response: machine-written subject, nothing to answer. Above
     // engagement on purpose -- the sender is usually a colleague.
     const preview = typeof e?.preview === "string" ? e.preview.trimStart() : "";
-    if (CALENDAR_RESPONSE_RE.test(preview)) return { eventId, wake: false, reason: "calendar-response" };
+    if (calendarRe.test(preview)) return { eventId, wake: false, reason: "calendar-response" };
 
     // Unresolved: nobody successfully asked whether this domain is engaged, so
     // neither the KEEP path nor the "not engaged" drop below may act on it. The
