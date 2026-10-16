@@ -309,8 +309,8 @@
       "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "apps/slack-desk",
-      "latestVersion": "1.4.3",
-      "latestTag": "slack-desk-v1.4.3",
+      "latestVersion": "1.4.4",
+      "latestTag": "slack-desk-v1.4.4",
       "minFlockVersion": "0.8.2",
       "publishedAt": "2026-09-23T00:00:00Z",
       "updatedAt": "2026-09-24T12:00:00Z"
