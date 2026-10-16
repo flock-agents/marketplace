@@ -1,12 +1,67 @@
 {
   "name": "Family Calendar",
+  "usage": "app",
   "icon": "icon.svg",
+  "description": "Family events, schedules, and reminders at a glance",
+  "version": "2.0.3",
+  "minFlockVersion": "0.15.0",
   "type": "fullstack",
   "access": "private",
-  "buildCommand": "cd frontend && bun install && bun run build",
-  "buildDir": "frontend/dist",
+  "spa": true,
+  "apiPrefix": "/api",
+  "buildCommand": "bun run app:build",
+  "buildDir": "dist",
+  "deployDir": ".flock-out",
   "processConfig": {
-    "command": "bun run server/index.ts",
-    "readyPattern": "listening"
+    "command": "bun",
+    "args": [
+      "server/index.js"
+    ],
+    "healthCheckPath": "/api/health"
+  },
+  "config": {
+    "requires": {
+      "agent": {
+        "required": true
+      }
+    }
+  },
+  "assemble": true,
+  "pages": [
+    "week",
+    "events",
+    "reminders"
+  ],
+  "tables": [
+    "members",
+    "events",
+    "reminders"
+  ],
+  "objects": [
+    "calendar"
+  ],
+  "nav": "auto",
+  "chat": "side",
+  "labels": {
+    "nav.week": "Week",
+    "nav.events": "Events",
+    "nav.reminders": "Reminders",
+    "title.week": "This week",
+    "title.events": "Upcoming events",
+    "title.reminders": "Reminders"
+  },
+  "useCases": {
+    "for": [
+      "Our family's week at a glance",
+      "Remind everyone about the dentist on Friday",
+      "When is grandma's birthday",
+      "Add football practice every Tuesday 5pm",
+      "Who is picking up the kids on Thursday"
+    ],
+    "notFor": [
+      "Booking slots for clients (use bookings)",
+      "A trip plan (use itinerary)",
+      "A personal task list (use checklist)"
+    ]
   }
 }

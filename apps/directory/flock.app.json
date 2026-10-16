@@ -1,0 +1,68 @@
+{
+  "name": "Directory",
+  "usage": "template",
+  "icon": "icon.svg",
+  "description": "A browsable set of people, places or things with a picture and contact details.",
+  "version": "1.1.2",
+  "minFlockVersion": "0.15.0",
+  "type": "fullstack",
+  "access": "private",
+  "spa": true,
+  "apiPrefix": "/api",
+  "buildCommand": "bun run app:build",
+  "buildDir": "dist",
+  "deployDir": ".flock-out",
+  "processConfig": {
+    "command": "bun",
+    "args": [
+      "server/index.js"
+    ],
+    "healthCheckPath": "/api/health"
+  },
+  "config": {
+    "requires": {
+      "agent": {
+        "required": true
+      }
+    }
+  },
+  "assemble": true,
+  "pages": [
+    "gallery",
+    "detail"
+  ],
+  "tables": [
+    "entries"
+  ],
+  "objects": [
+    "toolbox",
+    "light-bulb",
+    "thali",
+    "chai-cup",
+    "tiffin-box",
+    "broom",
+    "washing-machine",
+    "plant",
+    "phone"
+  ],
+  "nav": "auto",
+  "chat": "side",
+  "titleFromName": "title.gallery",
+  "labels": {
+    "nav.gallery": "All",
+    "title.gallery": "Directory"
+  },
+  "useCases": {
+    "for": [
+      "Trusted vendors, restaurants or contacts with a picture and a phone number",
+      "A collection looked up by name or kind: plants, tools, places",
+      "Cards with search and a kind filter, and a page per entry",
+      "A household's address book of services"
+    ],
+    "notFor": [
+      "Rows with a status to follow up (use tracker)",
+      "Deals or candidates moving through stages (use pipeline)",
+      "Entries with no contact details or picture to show"
+    ]
+  }
+}

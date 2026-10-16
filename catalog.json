@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "updatedAt": "2026-10-14T00:00:00Z",
+  "updatedAt": "2026-10-15T12:00:00Z",
   "items": [
     {
       "slug": "linear",
@@ -26,6 +26,7 @@
     {
       "slug": "meal-planner",
       "type": "app",
+      "usage": "app",
       "name": "Meal Planner",
       "description": "Plan meals for the week and manage your shopping list",
       "author": "flock",
@@ -46,11 +47,11 @@
       "updatedAt": "2026-08-17T18:33:00Z",
       "deprecated": {
         "since": "1.3.0",
-        "replacedBy": "app-template:planner",
-        "note": "Family Butler now makes its Meal Planner from the planner app template; existing installs keep running and updating."
+        "replacedBy": "app:planner",
+        "note": "Family Butler now installs the planner app as its Meal Planner; existing installs keep running and updating."
       },
       "replacedBy": {
-        "template": "planner",
+        "app": "planner",
         "since": "2026-10-15",
         "note": "Move your meals and grocery list across? Nothing in the old one is deleted."
       }
@@ -58,6 +59,7 @@
     {
       "slug": "family-calendar",
       "type": "app",
+      "usage": "app",
       "name": "Family Calendar",
       "description": "Family events, schedules, and reminders at a glance",
       "author": "flock",
@@ -72,11 +74,11 @@
       "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "apps/family-calendar",
-      "latestVersion": "1.0.2",
-      "latestTag": "family-calendar-v1.0.2",
-      "minFlockVersion": "0.7.0",
+      "latestVersion": "2.0.3",
+      "latestTag": "family-calendar-v2.0.3",
+      "minFlockVersion": "0.15.0",
       "publishedAt": "2026-08-13T15:30:00Z",
-      "updatedAt": "2026-08-17T17:52:00Z"
+      "updatedAt": "2026-10-16T00:00:00Z"
     },
     {
       "slug": "family-butler",
@@ -94,14 +96,14 @@
       "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "templates/family-butler",
-      "latestVersion": "1.3.0",
-      "latestTag": "family-butler-v1.3.0",
-      "minFlockVersion": "0.14.0",
+      "latestVersion": "1.3.1",
+      "latestTag": "family-butler-v1.3.1",
+      "minFlockVersion": "0.15.0",
       "onboardingCard": {
         "id": "household",
         "label": "Run the household",
         "description": "Groceries, meals, family routines",
-        "emoji": "🏠",
+        "emoji": "\ud83c\udfe0",
         "order": 40,
         "agentName": "Family Butler",
         "services": [
@@ -113,7 +115,7 @@
         ]
       },
       "publishedAt": "2026-08-11T17:00:00Z",
-      "updatedAt": "2026-10-11T00:00:00Z"
+      "updatedAt": "2026-10-15T00:00:00Z"
     },
     {
       "slug": "gmail",
@@ -272,7 +274,7 @@
       "slug": "slack",
       "type": "connector",
       "name": "Slack",
-      "description": "Full Slack workspace integration — read channels, search messages, manage saved items, post messages, add reactions, and manage user groups. Equivalent to the korotovsky/slack-mcp-server feature set, via browser session auth.",
+      "description": "Full Slack workspace integration \u2014 read channels, search messages, manage saved items, post messages, add reactions, and manage user groups. Equivalent to the korotovsky/slack-mcp-server feature set, via browser session auth.",
       "author": "flock",
       "category": "integration",
       "tags": [
@@ -293,8 +295,9 @@
     {
       "slug": "slack-desk",
       "type": "app",
+      "usage": "app",
       "name": "Slack Desk",
-      "description": "Builds memory from your Slack conversations and surfaces tasks you missed — reads only, never posts",
+      "description": "Builds memory from your Slack conversations and surfaces tasks you missed \u2014 reads only, never posts",
       "author": "flock",
       "category": "productivity",
       "tags": [
@@ -306,8 +309,8 @@
       "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "apps/slack-desk",
-      "latestVersion": "1.4.3",
-      "latestTag": "slack-desk-v1.4.3",
+      "latestVersion": "1.4.4",
+      "latestTag": "slack-desk-v1.4.4",
       "minFlockVersion": "0.8.2",
       "publishedAt": "2026-09-23T00:00:00Z",
       "updatedAt": "2026-09-24T12:00:00Z"
@@ -315,6 +318,7 @@
     {
       "slug": "calendar-desk",
       "type": "app",
+      "usage": "app",
       "name": "Calendar Desk",
       "description": "Reads your Google Calendar, shows the week on Your Schedule, sends a prep note before meetings, and keeps the notes you leave on events",
       "author": "flock",
@@ -341,7 +345,7 @@
         "id": "calendar",
         "label": "Manage my calendar",
         "description": "What's coming up, reminders, prep before meetings",
-        "emoji": "📅",
+        "emoji": "\ud83d\udcc5",
         "order": 30
       },
       "publishedAt": "2026-10-03T00:00:00Z",
@@ -366,7 +370,17 @@
       "latestVersion": "1.1.2",
       "latestTag": "slack-assistant-v1.1.2",
       "minFlockVersion": "0.7.0",
-      "onboardingCard": { "id": "slack", "label": "Catch up on Slack", "description": "What you missed, what's asked of you", "emoji": "💬", "order": 20, "agentName": "Slack Assistant", "services": ["slack"] },
+      "onboardingCard": {
+        "id": "slack",
+        "label": "Catch up on Slack",
+        "description": "What you missed, what's asked of you",
+        "emoji": "\ud83d\udcac",
+        "order": 20,
+        "agentName": "Slack Assistant",
+        "services": [
+          "slack"
+        ]
+      },
       "publishedAt": "2026-09-23T00:00:00Z",
       "updatedAt": "2026-10-14T00:00:00Z"
     },
@@ -394,7 +408,7 @@
         "id": "email",
         "label": "Stay on top of email",
         "description": "Finds what needs you, drafts replies",
-        "emoji": "📥",
+        "emoji": "\ud83d\udce5",
         "order": 10,
         "agentName": "Inbox Assistant",
         "services": [
@@ -406,8 +420,8 @@
     },
     {
       "slug": "bookings",
-      "type": "app-template",
-      "template": "bookings",
+      "type": "app",
+      "usage": "template",
       "name": "Bookings",
       "description": "Lets your clients book time slots at your clinic, salon or tuition, and shows today's bookings first; one client per slot (not group classes with a capacity); not for noting your own appointments.",
       "author": "flock",
@@ -418,19 +432,19 @@
         "clinic",
         "salon"
       ],
-      "icon": "📅",
+      "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
-      "path": "app-templates/bookings",
-      "latestVersion": "1.0.1",
-      "latestTag": "bookings-v1.0.1",
-      "minFlockVersion": "0.14.0",
+      "path": "apps/bookings",
+      "latestVersion": "1.1.2",
+      "latestTag": "bookings-v1.1.2",
+      "minFlockVersion": "0.15.0",
       "publishedAt": "2026-10-11T00:00:00Z",
-      "updatedAt": "2026-10-11T00:00:00Z"
+      "updatedAt": "2026-10-16T00:00:00Z"
     },
     {
       "slug": "checklist",
-      "type": "app-template",
-      "template": "checklist",
+      "type": "app",
+      "usage": "template",
       "name": "Checklist",
       "description": "One list of things to tick off, grouped, with who and by when: a move, a trip, a launch.",
       "author": "flock",
@@ -441,19 +455,19 @@
         "trip",
         "move"
       ],
-      "icon": "✅",
+      "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
-      "path": "app-templates/checklist",
-      "latestVersion": "1.0.1",
-      "latestTag": "checklist-v1.0.1",
-      "minFlockVersion": "0.14.0",
+      "path": "apps/checklist",
+      "latestVersion": "1.1.2",
+      "latestTag": "checklist-v1.1.2",
+      "minFlockVersion": "0.15.0",
       "publishedAt": "2026-10-11T00:00:00Z",
-      "updatedAt": "2026-10-11T00:00:00Z"
+      "updatedAt": "2026-10-16T00:00:00Z"
     },
     {
       "slug": "dashboard",
-      "type": "app-template",
-      "template": "dashboard",
+      "type": "app",
+      "usage": "template",
       "name": "Dashboard",
       "description": "A live page of key numbers, a trend and recent events that an agent keeps current.",
       "author": "flock",
@@ -463,19 +477,19 @@
         "metrics",
         "trend"
       ],
-      "icon": "📊",
+      "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
-      "path": "app-templates/dashboard",
-      "latestVersion": "1.0.1",
-      "latestTag": "dashboard-v1.0.1",
-      "minFlockVersion": "0.14.0",
+      "path": "apps/dashboard",
+      "latestVersion": "1.1.2",
+      "latestTag": "dashboard-v1.1.2",
+      "minFlockVersion": "0.15.0",
       "publishedAt": "2026-10-11T00:00:00Z",
-      "updatedAt": "2026-10-11T00:00:00Z"
+      "updatedAt": "2026-10-16T00:00:00Z"
     },
     {
       "slug": "directory",
-      "type": "app-template",
-      "template": "directory",
+      "type": "app",
+      "usage": "template",
       "name": "Directory",
       "description": "A browsable set of people, places or things with a picture and contact details.",
       "author": "flock",
@@ -485,19 +499,19 @@
         "contacts",
         "people"
       ],
-      "icon": "📇",
+      "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
-      "path": "app-templates/directory",
-      "latestVersion": "1.0.1",
-      "latestTag": "directory-v1.0.1",
-      "minFlockVersion": "0.14.0",
+      "path": "apps/directory",
+      "latestVersion": "1.1.2",
+      "latestTag": "directory-v1.1.2",
+      "minFlockVersion": "0.15.0",
       "publishedAt": "2026-10-11T00:00:00Z",
-      "updatedAt": "2026-10-11T00:00:00Z"
+      "updatedAt": "2026-10-16T00:00:00Z"
     },
     {
       "slug": "invoices",
-      "type": "app-template",
-      "template": "invoices",
+      "type": "app",
+      "usage": "template",
       "name": "Invoices",
       "description": "Bills your own customers with GST (you are the seller), tracks who has paid you, and lets an agent chase what's overdue; not for bills you pay.",
       "author": "flock",
@@ -508,19 +522,19 @@
         "customers",
         "billing"
       ],
-      "icon": "🧾",
+      "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
-      "path": "app-templates/invoices",
-      "latestVersion": "1.0.1",
-      "latestTag": "invoices-v1.0.1",
-      "minFlockVersion": "0.14.0",
+      "path": "apps/invoices",
+      "latestVersion": "1.1.2",
+      "latestTag": "invoices-v1.1.2",
+      "minFlockVersion": "0.15.0",
       "publishedAt": "2026-10-11T00:00:00Z",
-      "updatedAt": "2026-10-11T00:00:00Z"
+      "updatedAt": "2026-10-16T00:00:00Z"
     },
     {
       "slug": "itinerary",
-      "type": "app-template",
-      "template": "itinerary",
+      "type": "app",
+      "usage": "template",
       "name": "Itinerary",
       "description": "A trip reference: day-by-day plan, bookings, packing and budget. Opens with a Goa family trip as samples: give samples for any other trip.",
       "author": "flock",
@@ -531,19 +545,19 @@
         "packing",
         "budget"
       ],
-      "icon": "✈️",
+      "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
-      "path": "app-templates/itinerary",
-      "latestVersion": "1.0.1",
-      "latestTag": "itinerary-v1.0.1",
-      "minFlockVersion": "0.14.0",
+      "path": "apps/itinerary",
+      "latestVersion": "1.1.2",
+      "latestTag": "itinerary-v1.1.2",
+      "minFlockVersion": "0.15.0",
       "publishedAt": "2026-10-11T00:00:00Z",
-      "updatedAt": "2026-10-11T00:00:00Z"
+      "updatedAt": "2026-10-16T00:00:00Z"
     },
     {
       "slug": "money",
-      "type": "app-template",
-      "template": "money",
+      "type": "app",
+      "usage": "template",
       "name": "Money",
       "description": "A household's money (not a business's books): transactions, budgets, investments and goals. Set overviewLead: spending (budget, running costs) or netWorth (investments).",
       "author": "flock",
@@ -554,19 +568,19 @@
         "investments",
         "goals"
       ],
-      "icon": "💰",
+      "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
-      "path": "app-templates/money",
-      "latestVersion": "1.0.1",
-      "latestTag": "money-v1.0.1",
-      "minFlockVersion": "0.14.0",
+      "path": "apps/money",
+      "latestVersion": "1.1.2",
+      "latestTag": "money-v1.1.2",
+      "minFlockVersion": "0.15.0",
       "publishedAt": "2026-10-11T00:00:00Z",
-      "updatedAt": "2026-10-11T00:00:00Z"
+      "updatedAt": "2026-10-16T00:00:00Z"
     },
     {
       "slug": "pipeline",
-      "type": "app-template",
-      "template": "pipeline",
+      "type": "app",
+      "usage": "template",
       "name": "Pipeline",
       "description": "People or deals moving through stages: hiring candidates, leads, proposals, orders, applications.",
       "author": "flock",
@@ -577,19 +591,19 @@
         "sales",
         "crm"
       ],
-      "icon": "🧭",
+      "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
-      "path": "app-templates/pipeline",
-      "latestVersion": "1.0.1",
-      "latestTag": "pipeline-v1.0.1",
-      "minFlockVersion": "0.14.0",
+      "path": "apps/pipeline",
+      "latestVersion": "1.1.2",
+      "latestTag": "pipeline-v1.1.2",
+      "minFlockVersion": "0.15.0",
       "publishedAt": "2026-10-11T00:00:00Z",
-      "updatedAt": "2026-10-11T00:00:00Z"
+      "updatedAt": "2026-10-16T00:00:00Z"
     },
     {
       "slug": "planner",
-      "type": "app-template",
-      "template": "planner",
+      "type": "app",
+      "usage": "template",
       "name": "Meal Planner",
       "description": "The family's meals for the week, day by day (Breakfast, Lunch and Dinner), with a shared grocery list and the family's recipe book; not for school runs, chores or appointments.",
       "author": "flock",
@@ -600,19 +614,19 @@
         "recipes",
         "family"
       ],
-      "icon": "🍽️",
+      "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
-      "path": "app-templates/planner",
-      "latestVersion": "1.0.1",
-      "latestTag": "planner-v1.0.1",
-      "minFlockVersion": "0.14.0",
+      "path": "apps/planner",
+      "latestVersion": "1.1.2",
+      "latestTag": "planner-v1.1.2",
+      "minFlockVersion": "0.15.0",
       "publishedAt": "2026-10-11T00:00:00Z",
-      "updatedAt": "2026-10-11T00:00:00Z"
+      "updatedAt": "2026-10-16T00:00:00Z"
     },
     {
       "slug": "tracker",
-      "type": "app-template",
-      "template": "tracker",
+      "type": "app",
+      "usage": "template",
       "name": "Tracker",
       "description": "Rows with a status: vendors, repairs, collections, anything to follow up. Not for hiring (use pipeline).",
       "author": "flock",
@@ -623,14 +637,14 @@
         "vendors",
         "applications"
       ],
-      "icon": "📌",
+      "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
-      "path": "app-templates/tracker",
-      "latestVersion": "1.0.1",
-      "latestTag": "tracker-v1.0.1",
-      "minFlockVersion": "0.14.0",
+      "path": "apps/tracker",
+      "latestVersion": "1.1.2",
+      "latestTag": "tracker-v1.1.2",
+      "minFlockVersion": "0.15.0",
       "publishedAt": "2026-10-11T00:00:00Z",
-      "updatedAt": "2026-10-11T00:00:00Z"
+      "updatedAt": "2026-10-16T00:00:00Z"
     }
   ]
 }

@@ -1,0 +1,58 @@
+{
+  "name": "Checklist",
+  "usage": "template",
+  "icon": "icon.svg",
+  "description": "One list of things to tick off, grouped, with who and by when: a move, a trip, a launch.",
+  "version": "1.1.2",
+  "minFlockVersion": "0.15.0",
+  "type": "fullstack",
+  "access": "private",
+  "spa": true,
+  "apiPrefix": "/api",
+  "buildCommand": "bun run app:build",
+  "buildDir": "dist",
+  "deployDir": ".flock-out",
+  "processConfig": {
+    "command": "bun",
+    "args": [
+      "server/index.js"
+    ],
+    "healthCheckPath": "/api/health"
+  },
+  "config": {
+    "requires": {
+      "agent": {
+        "required": true
+      }
+    }
+  },
+  "assemble": true,
+  "pages": [
+    "list"
+  ],
+  "tables": [
+    "tasks"
+  ],
+  "objects": [
+    "notebook"
+  ],
+  "nav": "none",
+  "chat": "side",
+  "titleFromName": "title.list",
+  "labels": {
+    "title.list": "Checklist"
+  },
+  "useCases": {
+    "for": [
+      "One list of things to tick off for a move, a trip, an event or a launch",
+      "Items grouped under headings, with who does each and by when",
+      "A progress bar and a filter by person",
+      "A shared to-do list a family or a team ticks together"
+    ],
+    "notFor": [
+      "Rows with a status beyond done or not done (use tracker or pipeline)",
+      "Meals or anything planned by day and slot (use planner)",
+      "Several independent lists in one app"
+    ]
+  }
+}

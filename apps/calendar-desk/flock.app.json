@@ -1,5 +1,6 @@
 {
   "name": "Calendar Desk",
+  "usage": "app",
   "slug": "calendar-desk",
   "type": "managed",
   "visibility": "headless",

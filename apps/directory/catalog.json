@@ -1,0 +1,61 @@
+{
+  "name": "directory",
+  "version": "1.1.2",
+  "description": "A browsable set of people, places or things with a picture and contact details.",
+  "objects": [
+    "toolbox",
+    "light-bulb",
+    "thali",
+    "chai-cup",
+    "tiffin-box",
+    "broom",
+    "washing-machine",
+    "plant",
+    "phone"
+  ],
+  "labels": {
+    "nav.gallery": "All",
+    "title.gallery": "Directory"
+  },
+  "titleFromName": "title.gallery",
+  "tables": {
+    "entries": {
+      "columns": {
+        "name": {
+          "type": "string",
+          "required": true,
+          "nullable": false
+        },
+        "kind": {
+          "type": "string",
+          "required": false,
+          "nullable": false,
+          "default": "Other",
+          "note": "free text; suggested: Plumber, Electrician, Restaurant, Cafe, Tiffin service, Cleaning, Appliance repair, Nursery, Other"
+        },
+        "image": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "http(s) url or /root-relative path; empty shows the kind's object"
+        },
+        "phone": {
+          "type": "string",
+          "required": false,
+          "nullable": true
+        },
+        "url": {
+          "type": "string",
+          "required": false,
+          "nullable": true
+        },
+        "notes": {
+          "type": "string",
+          "required": false,
+          "nullable": true
+        }
+      }
+    }
+  },
+  "settings": []
+}

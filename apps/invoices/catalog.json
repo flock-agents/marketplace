@@ -1,0 +1,296 @@
+{
+  "name": "invoices",
+  "version": "1.1.2",
+  "description": "Bills your own customers with GST (you are the seller), tracks who has paid you, and lets an agent chase what's overdue; not for bills you pay.",
+  "objects": [
+    "receipt",
+    "handshake"
+  ],
+  "labels": {
+    "noun.one": "customer",
+    "noun.many": "customers",
+    "nav.invoices": "Invoices",
+    "nav.customers": "Customers",
+    "title.invoices": "Invoices",
+    "title.customers": "Customers"
+  },
+  "tables": {
+    "customers": {
+      "columns": {
+        "name": {
+          "type": "string",
+          "required": true,
+          "nullable": false
+        },
+        "gstin": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "15 characters; the first two are the state code"
+        },
+        "email": {
+          "type": "string",
+          "required": false,
+          "nullable": true
+        },
+        "phone": {
+          "type": "string",
+          "required": false,
+          "nullable": true
+        },
+        "address": {
+          "type": "string",
+          "required": false,
+          "nullable": true
+        }
+      }
+    },
+    "invoices": {
+      "columns": {
+        "number": {
+          "type": "string",
+          "required": true,
+          "nullable": false,
+          "note": "INV-2026-0042"
+        },
+        "customer_id": {
+          "type": "string",
+          "required": true,
+          "nullable": false,
+          "references": "customers"
+        },
+        "issue_date": {
+          "type": "string",
+          "required": true,
+          "nullable": false,
+          "note": "ISO date"
+        },
+        "due_date": {
+          "type": "string",
+          "required": true,
+          "nullable": false,
+          "note": "ISO date"
+        },
+        "status": {
+          "type": "string",
+          "required": false,
+          "nullable": false,
+          "default": "draft",
+          "enum": [
+            "draft",
+            "sent",
+            "paid",
+            "overdue",
+            "void"
+          ],
+          "note": "draft | sent | paid | overdue | void; overdue and paid are worked out"
+        },
+        "notes": {
+          "type": "string",
+          "required": false,
+          "nullable": true
+        }
+      }
+    },
+    "invoice_lines": {
+      "columns": {
+        "invoice_id": {
+          "type": "string",
+          "required": true,
+          "nullable": false,
+          "references": "invoices"
+        },
+        "description": {
+          "type": "string",
+          "required": true,
+          "nullable": false
+        },
+        "qty": {
+          "type": "number",
+          "required": false,
+          "nullable": false,
+          "default": 1
+        },
+        "unit_price": {
+          "type": "number",
+          "required": false,
+          "nullable": false,
+          "default": 0,
+          "note": "rupees, before GST"
+        },
+        "gst_rate": {
+          "type": "number",
+          "required": false,
+          "nullable": false,
+          "default": 18,
+          "note": "percent: 0 | 5 | 18 | 40, or a custom rate such as 3 (two decimals at most)"
+        }
+      }
+    },
+    "payments": {
+      "columns": {
+        "invoice_id": {
+          "type": "string",
+          "required": true,
+          "nullable": false,
+          "references": "invoices"
+        },
+        "date": {
+          "type": "string",
+          "required": true,
+          "nullable": false,
+          "note": "ISO date"
+        },
+        "amount": {
+          "type": "number",
+          "required": true,
+          "nullable": false,
+          "note": "rupees"
+        },
+        "method": {
+          "type": "string",
+          "required": false,
+          "nullable": false,
+          "default": "upi",
+          "enum": [
+            "upi",
+            "bank",
+            "cash",
+            "card"
+          ],
+          "note": "upi | bank | cash | card"
+        },
+        "ref": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "UTR / cheque / transaction reference"
+        }
+      }
+    }
+  },
+  "settings": [
+    {
+      "key": "business.name",
+      "type": "string",
+      "default": "",
+      "label": "Your business name, printed at the top of every invoice (required before an invoice can be issued)",
+      "scope": "owner",
+      "constraint": "business.name must be text",
+      "requiredWhen": {
+        "table": "invoices",
+        "column": "status",
+        "in": [
+          "sent",
+          "paid",
+          "overdue",
+          "void"
+        ],
+        "rows": "an issued invoice"
+      }
+    },
+    {
+      "key": "business.gstin",
+      "type": "string",
+      "default": "",
+      "label": "Your GSTIN (15 characters), or empty when the business is not registered for GST",
+      "scope": "owner",
+      "constraint": "business.gstin must be 15 characters like 29AAEPB4172K1ZB (capitals), or empty when not registered",
+      "requiredWhen": {
+        "table": "invoices",
+        "column": "status",
+        "in": [
+          "sent",
+          "paid",
+          "overdue",
+          "void"
+        ],
+        "rows": "an issued invoice"
+      }
+    },
+    {
+      "key": "business.address",
+      "type": "string",
+      "default": "",
+      "label": "Your business address, printed under the name",
+      "scope": "owner",
+      "constraint": "business.address must be text",
+      "requiredWhen": {
+        "table": "invoices",
+        "column": "status",
+        "in": [
+          "sent",
+          "paid",
+          "overdue",
+          "void"
+        ],
+        "rows": "an issued invoice"
+      }
+    },
+    {
+      "key": "business.email",
+      "type": "string",
+      "default": "",
+      "label": "The email address printed on invoices",
+      "scope": "owner",
+      "constraint": "business.email must be text",
+      "requiredWhen": {
+        "table": "invoices",
+        "column": "status",
+        "in": [
+          "sent",
+          "paid",
+          "overdue",
+          "void"
+        ],
+        "rows": "an issued invoice"
+      }
+    },
+    {
+      "key": "business.pay",
+      "type": "string",
+      "default": "",
+      "label": "Where customers pay you (UPI id, bank account and IFSC), printed at the foot of every invoice",
+      "scope": "owner",
+      "constraint": "business.pay must be text",
+      "requiredWhen": {
+        "table": "invoices",
+        "column": "status",
+        "in": [
+          "sent",
+          "paid",
+          "overdue",
+          "void"
+        ],
+        "rows": "an issued invoice"
+      }
+    },
+    {
+      "key": "seller_state",
+      "type": "string",
+      "default": "29",
+      "label": "Your two-digit GST state code (29 = Karnataka): a customer with a GSTIN from another state is billed IGST",
+      "scope": "owner",
+      "constraint": "seller_state must be a two-digit GST state code, 01 to 38 or 97 (29 is Karnataka)",
+      "requiredWhen": {
+        "table": "invoices",
+        "column": "status",
+        "in": [
+          "sent",
+          "paid",
+          "overdue",
+          "void"
+        ],
+        "rows": "an issued invoice"
+      }
+    },
+    {
+      "key": "number_prefix",
+      "type": "string",
+      "default": "INV",
+      "label": "The start of new invoice numbers: 1 to 6 letters or digits, \"/\" allowed after the first (INV gives INV-2026-0042); issued numbers never change",
+      "scope": "owner",
+      "constraint": "number_prefix must be 1 to 6 letters or digits (\"/\" allowed after the first), with no spaces, dashes or other marks (a trailing dash or space is dropped)"
+    }
+  ]
+}

@@ -1,0 +1,87 @@
+{
+  "name": "bookings",
+  "version": "1.1.2",
+  "description": "Lets your clients book time slots at your clinic, salon or tuition, and shows today's bookings first; one client per slot (not group classes with a capacity); not for noting your own appointments.",
+  "objects": [
+    "calendar"
+  ],
+  "labels": {
+    "nav.today": "Today",
+    "nav.book": "Book",
+    "nav.services": "Services",
+    "title.today": "Today's bookings",
+    "title.book": "Book an appointment",
+    "title.services": "Services"
+  },
+  "tables": {
+    "services": {
+      "columns": {
+        "name": {
+          "type": "string",
+          "required": true,
+          "nullable": false
+        },
+        "minutes": {
+          "type": "integer",
+          "required": false,
+          "nullable": false,
+          "default": 30,
+          "note": "copied from the service when booked, so editing a service does not move old bookings"
+        },
+        "price": {
+          "type": "integer",
+          "required": false,
+          "nullable": true,
+          "note": "rupees, optional"
+        }
+      }
+    }
+  },
+  "settings": [
+    {
+      "key": "hours",
+      "type": "json",
+      "default": {
+        "0": [
+          "10:00",
+          "13:00"
+        ],
+        "1": [
+          "09:00",
+          "18:00"
+        ],
+        "2": [
+          "09:00",
+          "18:00"
+        ],
+        "3": [
+          "09:00",
+          "18:00"
+        ],
+        "4": [
+          "09:00",
+          "18:00"
+        ],
+        "5": [
+          "09:00",
+          "18:00"
+        ],
+        "6": [
+          "09:00",
+          "14:00"
+        ]
+      },
+      "label": "Opening hours by weekday, \"0\" (Sunday) to \"6\" (Saturday): [\"HH:MM\", \"HH:MM\"] for open and close, or null when closed",
+      "scope": "owner",
+      "constraint": "hours must be an object with a key for each weekday \"0\" (Sunday) to \"6\" (Saturday), each [\"HH:MM\", \"HH:MM\"] or null when closed"
+    },
+    {
+      "key": "slot_minutes",
+      "type": "integer",
+      "default": 30,
+      "label": "Minutes between the start times offered (5 to 240)",
+      "scope": "owner",
+      "constraint": "slot_minutes must be a whole number from 5 to 240"
+    }
+  ]
+}

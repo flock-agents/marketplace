@@ -302,9 +302,39 @@ export function markInitStarted(accountId: string, note?: string): void {
   ).run(accountId, Date.now(), note ?? null);
 }
 
-export function markInitFinished(accountId: string, outcome: "done" | "failed", note?: string): void {
+/**
+ * How a first pass ended.
+ *   done    the workspace is set up; only daily harvests from here.
+ *   owed    UNFINISHED, not failed: the pass stopped on its read budget. The next tick resumes it.
+ *   failed  a real failure — every call refused, or the pass threw. Retried, and shown as an error.
+ */
+export type InitOutcome = "done" | "owed" | "failed";
+
+export function markInitFinished(accountId: string, outcome: InitOutcome, note?: string): void {
   db.query("UPDATE init_state SET finished_at = ?, outcome = ?, note = ? WHERE account_id = ?")
     .run(Date.now(), outcome, note ?? null, accountId);
+}
+
+/** Every table keyed by account. Kept beside the schema so a new table is not forgotten here. */
+const ACCOUNT_TABLES = [
+  "init_state", "workspace", "harvest_days", "messages", "cursors", "user_names",
+  "threads", "ledger", "channel_engagement",
+] as const;
+
+/** Every account this app holds any record for. */
+export function knownAccounts(): string[] {
+  const union = ACCOUNT_TABLES.map((t) => `SELECT account_id FROM ${t}`).join(" UNION ");
+  return (db.query(union).all() as Array<{ account_id: string }>).map((r) => r.account_id);
+}
+
+/**
+ * Drop everything this app holds for an account that no longer exists. Without this a deleted
+ * workspace keeps its init record, which keeps a progress row on Home and a harvest on every tick.
+ */
+export function forgetAccount(accountId: string): void {
+  db.transaction(() => {
+    for (const t of ACCOUNT_TABLES) db.query(`DELETE FROM ${t} WHERE account_id = ?`).run(accountId);
+  })();
 }
 
 /** Has today's harvest already run for this workspace? The restart guard. */

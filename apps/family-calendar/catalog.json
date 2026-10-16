@@ -1,0 +1,120 @@
+{
+  "name": "family-calendar",
+  "version": "2.0.3",
+  "description": "Family events, schedules, and reminders at a glance",
+  "objects": [
+    "calendar"
+  ],
+  "labels": {
+    "nav.week": "Week",
+    "nav.events": "Events",
+    "nav.reminders": "Reminders",
+    "title.week": "This week",
+    "title.events": "Upcoming events",
+    "title.reminders": "Reminders"
+  },
+  "tables": {
+    "members": {
+      "note": "The people in the family. An event or reminder names one by `name` in its `who`.",
+      "columns": {
+        "name": {
+          "type": "string",
+          "required": true,
+          "nullable": false
+        },
+        "colour": {
+          "type": "string",
+          "required": false,
+          "nullable": false,
+          "default": "accent",
+          "note": "accent | info | success | warning | danger (a theme tone)"
+        },
+        "emoji": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "one emoji shown before the name"
+        }
+      }
+    },
+    "events": {
+      "note": "One row per event. A recurring event (football every Tuesday) is one row per date.",
+      "columns": {
+        "title": {
+          "type": "string",
+          "required": true,
+          "nullable": false
+        },
+        "date": {
+          "type": "string",
+          "required": true,
+          "nullable": false,
+          "note": "ISO date"
+        },
+        "start_time": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "\"16:30\", 24-hour; empty for an all-day event"
+        },
+        "end_time": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "\"17:30\", 24-hour"
+        },
+        "who": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "a member's name, or empty for everyone"
+        },
+        "location": {
+          "type": "string",
+          "required": false,
+          "nullable": true
+        },
+        "notes": {
+          "type": "string",
+          "required": false,
+          "nullable": true
+        },
+        "reminder_minutes": {
+          "type": "integer",
+          "required": false,
+          "nullable": true,
+          "note": "how long before the start to remind, if at all"
+        }
+      }
+    },
+    "reminders": {
+      "columns": {
+        "title": {
+          "type": "string",
+          "required": true,
+          "nullable": false
+        },
+        "due": {
+          "type": "string",
+          "required": true,
+          "nullable": false,
+          "note": "local date-time \"2026-10-17T08:00\": the first (or only) time it is due"
+        },
+        "repeat": {
+          "type": "string",
+          "required": false,
+          "nullable": false,
+          "default": "none",
+          "note": "none | daily | weekly | monthly"
+        },
+        "who": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "a member's name, or empty for everyone"
+        }
+      }
+    }
+  },
+  "settings": []
+}

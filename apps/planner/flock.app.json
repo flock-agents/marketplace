@@ -1,0 +1,66 @@
+{
+  "name": "Meal Planner",
+  "usage": "template",
+  "icon": "icon.svg",
+  "description": "The family's meals for the week, day by day (Breakfast, Lunch and Dinner), with a shared grocery list and the family's recipe book; not for school runs, chores or appointments.",
+  "version": "1.1.2",
+  "minFlockVersion": "0.15.0",
+  "type": "fullstack",
+  "access": "private",
+  "spa": true,
+  "apiPrefix": "/api",
+  "buildCommand": "bun run app:build",
+  "buildDir": "dist",
+  "deployDir": ".flock-out",
+  "processConfig": {
+    "command": "bun",
+    "args": [
+      "server/index.js"
+    ],
+    "healthCheckPath": "/api/health"
+  },
+  "config": {
+    "requires": {
+      "agent": {
+        "required": true
+      }
+    }
+  },
+  "assemble": true,
+  "pages": [
+    "week",
+    "groceries",
+    "recipes"
+  ],
+  "tables": [
+    "meals",
+    "recipes",
+    "groceries"
+  ],
+  "objects": [
+    "grocery-bag"
+  ],
+  "nav": "top",
+  "chat": "side",
+  "labels": {
+    "nav.week": "Week",
+    "nav.groceries": "Groceries",
+    "nav.recipes": "Recipes",
+    "title.week": "This week's meals",
+    "title.groceries": "Groceries",
+    "title.recipes": "Recipes"
+  },
+  "useCases": {
+    "for": [
+      "The family's meals for the week: Breakfast, Lunch and Dinner, day by day",
+      "A shared grocery list grouped by aisle",
+      "The family's own recipe book, with a recipe's ingredients added to the list",
+      "Planning the week's dishes from the recipe book"
+    ],
+    "notFor": [
+      "School runs, chores or appointments (use checklist or tracker)",
+      "Ordering groceries from a store: a connector does that",
+      "A restaurant's menu or a business kitchen"
+    ]
+  }
+}

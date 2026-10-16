@@ -1,0 +1,82 @@
+{
+  "name": "Money",
+  "usage": "template",
+  "icon": "icon.svg",
+  "description": "A household's money (not a business's books): transactions, budgets, investments and goals. Set overviewLead: spending (budget, running costs) or netWorth (investments).",
+  "version": "1.1.2",
+  "minFlockVersion": "0.15.0",
+  "type": "fullstack",
+  "access": "private",
+  "spa": true,
+  "apiPrefix": "/api",
+  "buildCommand": "bun run app:build",
+  "buildDir": "dist",
+  "deployDir": ".flock-out",
+  "processConfig": {
+    "command": "bun",
+    "args": [
+      "server/index.js"
+    ],
+    "healthCheckPath": "/api/health"
+  },
+  "config": {
+    "requires": {
+      "agent": {
+        "required": true
+      }
+    }
+  },
+  "assemble": true,
+  "pages": [
+    "overview",
+    "transactions",
+    "budgets",
+    "investments",
+    "goals"
+  ],
+  "tables": [
+    "transactions",
+    "budgets",
+    "holdings",
+    "goals"
+  ],
+  "objects": [
+    "receipt"
+  ],
+  "nav": "auto",
+  "chat": "side",
+  "settings": [
+    {
+      "key": "overviewLead",
+      "type": "string",
+      "default": "auto",
+      "scope": "owner",
+      "label": "What the Overview leads with: \"spending\" (this month's spending: a budget or running-costs app), \"netWorth\" (investments and wealth), or \"auto\" (net worth once real holdings are added). Set it from what the app is for"
+    }
+  ],
+  "labels": {
+    "nav.overview": "Overview",
+    "nav.transactions": "Transactions",
+    "nav.budgets": "Budgets",
+    "nav.investments": "Investments",
+    "nav.goals": "Goals",
+    "title.overview": "Overview",
+    "title.transactions": "Transactions",
+    "title.budgets": "Budgets",
+    "title.investments": "Investments",
+    "title.goals": "Goals"
+  },
+  "useCases": {
+    "for": [
+      "A household's money: what came in and what went out, by category",
+      "Monthly budgets per category, spent against the limit",
+      "Investments and holdings with their value and change",
+      "Savings goals with a target and a date"
+    ],
+    "notFor": [
+      "A business's books or GST invoicing (use invoices)",
+      "One trip's budget (use itinerary)",
+      "Bills you issue to customers"
+    ]
+  }
+}
