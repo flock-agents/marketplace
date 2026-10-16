@@ -31,10 +31,22 @@ export interface RawThreadRow {
   recipientsVerified?: boolean;
   /** The message body carries an unsubscribe / opt-out / manage-preferences link. */
   unsubscribeLink?: boolean;
+  /** Addresses on the message's labelled "Reply-To:" / "reply-to:" header row, as written. */
+  replyTo?: string[];
+  /** A Reply-To row/line was seen but no address could be read from it: Reply-To is unknown. */
+  replyToUnparsed?: boolean;
 }
 
 export interface ThreadMessage {
   from: string;
+  /**
+   * The message's Reply-To addresses (bare), from the same labelled header rows as To/Cc. Gmail's
+   * Reply / Reply all answer the Reply-To, not the From, so the platform's reply-all set is only
+   * trusted when this was read: `replyToKnown` is true exactly when the labelled rows were read
+   * (`recipientsVerified`), where a Reply-To row would have shown. Unknown → no standing mail rule.
+   */
+  replyTo: string[];
+  replyToKnown: boolean;
   to: string[];
   cc: string[];
   date: string;
@@ -102,8 +114,14 @@ export function messagesFromThreadDom(rows: RawThreadRow[]): ThreadMessage[] {
       if (!addr) continue;
       (r.kind === "cc" ? cc : to).push(addr);
     }
+    const replyTo = (row.replyTo || []).map((raw) => extractAddress(raw)).filter((a): a is string => !!a);
+    // A Reply-To that was there but read as no address (a name only, no span[email]) is unknown,
+    // never "none": Gmail's reply would go to an address this read did not see.
+    const replyToUnparsed = row.replyToUnparsed === true || replyTo.some((a) => !a.includes("@"));
     return {
       from: composeFrom(row.fromEmail || "", row.fromName || ""),
+      replyTo,
+      replyToKnown: row.recipientsVerified === true && !replyToUnparsed,
       to,
       cc,
       date: row.date || "",
@@ -283,9 +301,19 @@ export const THREAD_SCRAPE_SCRIPT = `(() => {
         });
       }
       const recipients = [];
+      const replyTo = [];
+      let replyToUnparsed = false;
       let recipientsVerified = false;
       el.querySelectorAll('tr').forEach((tr) => {
         const label = (tr.innerText || '').trim().toLowerCase();
+        // Gmail's details panel shows a "reply-to:" row when the message has one (never a recipient).
+        if (label.indexOf('reply-to:') === 0) {
+          const before = replyTo.length;
+          tr.querySelectorAll('span[email]').forEach((s) => { replyTo.push(s.getAttribute('email') || s.textContent.trim()); });
+          // The row is there but holds no address span: Reply-To unknown, never "none".
+          if (replyTo.length === before) replyToUnparsed = true;
+          return;
+        }
         let kind = '';
         if (label.indexOf('to:') === 0) kind = 'to';
         else if (label.indexOf('cc:') === 0) kind = 'cc';
@@ -301,7 +329,7 @@ export const THREAD_SCRAPE_SCRIPT = `(() => {
           recipients.push({ raw: s.getAttribute('email') || s.textContent.trim(), kind: 'to' });
         });
       }
-      rows.push({ fromEmail, fromName, date, body, bodyMain, recipients, recipientsVerified, unsubscribeLink });
+      rows.push({ fromEmail, fromName, date, body, bodyMain, recipients, recipientsVerified, unsubscribeLink, replyTo, replyToUnparsed });
     });
     return JSON.stringify({ subject, rows, expectedCount, hasDraft });
   })()`;

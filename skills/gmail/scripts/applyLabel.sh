@@ -2,7 +2,8 @@
 set -euo pipefail
 
 if [ -z "${BROWSER_SESSION:-}" ] && [ -n "${SECRET_IMAP_CREDENTIALS:-}" ]; then
-  exec python3 "$(dirname "$0")/gmail-imap.py"
+  source "$(dirname "$0")/../../_shared/_platform.sh"
+  flock_exec_python "$(dirname "$0")/gmail-imap.py"
 fi
 source "$(dirname "$0")/_gmail_helpers.sh"
 

@@ -89,6 +89,10 @@ Get a single email's body by ID. Params: `{ messageId: string }`
 Returns no recipient fields. **Do not use this to read a thread you intend to
 reply to — use `getThread`**, which returns per-message `to`/`cc`.
 
+### downloadAttachment
+Save a thread's attachments as local files. Params: `{ threadId: string, name?: string, index?: number }`.
+See **Downloading attachments** below.
+
 ### searchEmails
 Search emails with Gmail query syntax. Params: `{ query: string, maxResults?: number }`
 A row's `from` is only a best guess at who wrote the newest message when the thread is read and has several participants (`participants` lists them all) — use `getThread` for the true author.
@@ -297,7 +301,15 @@ not search the filesystem for another copy of the wrapper.
 
 ## Downloading attachments
 
-There is no function for this: open the email in a persistent session of the
+Use `downloadAttachment({ threadId, name?, index? })`: it opens the thread
+(leaving it unread), saves the attachments into your workspace's `downloads/`
+folder and returns `{ threadId, attachments: [names], files: [{ name, fileName,
+path, size } | { name, error }] }`. `name` (part of a name is enough) or `index`
+(1-based, in `attachments` order) picks one; neither downloads them all (up to
+10). It is a read, so it runs while a card is being prepared. `path` is
+absolute: read it, attach it to a draft (`attachments`), or `upload` it.
+
+If it fails (Gmail changed its page), do it by hand: open the email in a persistent session of the
 `authenticated-crawl` skill on the Gmail browser session (its **Which session to
 use** says how to pick the session for the right account) and click the
 attachment's download button with a `download` action. Each file is saved into

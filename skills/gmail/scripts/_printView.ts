@@ -61,7 +61,18 @@ export function rowsFromPrintBlocks(blocks: PrintBlock[]): RawThreadRow[] {
     // sent mail, but Gmail's Reply all never includes Bcc'd people, so counting them as cc made
     // them reply-all "others" and put them on the card's Cc. A Bcc line alone does not verify
     // recipients either. (The thread-view scrape is unchanged.)
+    // Reply-To is never a recipient, but it is who Gmail's Reply answers: kept apart (Task 22).
+    const replyTo: string[] = [];
+    let replyToUnparsed = false;
     for (const line of b.recipientLines || []) {
+      const rt = line.match(/^\s*reply-to\s*:\s*(.*)$/i);
+      if (rt) {
+        const found = splitAddressList(rt[1]);
+        // A Reply-To line holding no address (a display name only): unknown, never "none".
+        if (found.length === 0) replyToUnparsed = true;
+        replyTo.push(...found);
+        continue;
+      }
       const m = line.match(/^\s*(to|cc)\s*:\s*(.*)$/i);
       if (!m) continue;
       const kind: RawRecipient["kind"] = m[1].toLowerCase() === "to" ? "to" : "cc";
@@ -81,6 +92,8 @@ export function rowsFromPrintBlocks(blocks: PrintBlock[]): RawThreadRow[] {
       recipients,
       recipientsVerified,
       unsubscribeLink,
+      replyTo,
+      ...(replyToUnparsed ? { replyToUnparsed } : {}),
     };
   });
 }
