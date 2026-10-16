@@ -56,7 +56,7 @@ apps/<slug>/
 | `author` | Yes | Publisher identifier |
 | `category` | Yes | Category for discovery |
 | `tags` | Yes | Search tags |
-| `minFlockVersion` | Yes | Minimum Flock version |
+| `minFlockVersion` | Yes | Minimum Flock version. An app whose own code calls an SDK API newer than this also puts it in `flock.app.json` (see "Talking to the paired agent") |
 | `type` | Yes | `"static"`, `"fullstack"`, or `"managed"` |
 | `visibility` | Yes | `"public"` or `"private"` (private = requires Flock auth) |
 | `buildCommand` | No | Shell command to build the frontend (must work via `sh -c`) |
@@ -103,6 +103,29 @@ The package also carries `settings.json` (the declarative rules for each setting
 - Should install dependencies (e.g., `npm install && npm run build`)
 - Output should go to a predictable location (e.g., `frontend/dist/`)
 - Must be idempotent — running twice should produce the same result
+
+## Talking to the paired agent
+
+A kit app that declares `"chat"` in `flock.app.json` (the kit apps say `"chat": "side"`) gets the in-app chat from the kit: nothing to write. On Flock 0.15.0 and later the kit
+sends each message with `platform.agent.message` and the agent's replies are **pushed** back to the app, retried until the app takes
+them, with no reply time limit (on an older Flock the same app keeps the older streamed reply). The package needs no code for this:
+`@flock/app-kit` and `@flock/app-sdk` come from the Flock that builds the app.
+
+An app that talks to its agent from its **own** code (a managed app on `@flock/app-sdk`) uses the same channel:
+
+```ts
+import { createFlockApp, type ChannelEvent } from "@flock/app-sdk";
+
+const flock = createFlockApp({
+  // Delivery is at least once and in order per session: skip an eventId you have already handled.
+  onChannelEvent: async (e: ChannelEvent) => { /* e.type: turn.started | message | turn.ended | turn.failed | notice */ },
+});
+const sent = await flock.platform.agent.message({ userId: "<who is talking>", message: "…" });   // 202: the reply comes as events
+```
+
+Such an app needs Flock 0.15.0 (`CHAT_CHANNEL_MIN_FLOCK` in the SDK), and says so in **all three** places: `flock.app.json`,
+`flock.marketplace.json` and its catalog entry (`"minFlockVersion": "0.15.0"` or later). Flock 0.15.0+ refuses to install or register it
+from `flock.app.json`; older Flocks read only the other two. `check-app` reports an app that uses the channel without it.
 
 ## Data Persistence
 
