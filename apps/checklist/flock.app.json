@@ -1,9 +1,9 @@
 {
   "name": "Checklist",
   "usage": "template",
-  "icon": "✅",
+  "icon": "icon.svg",
   "description": "One list of things to tick off, grouped, with who and by when: a move, a trip, a launch.",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "minFlockVersion": "0.15.0",
   "type": "fullstack",
   "access": "private",

@@ -1,9 +1,9 @@
 {
   "name": "Money",
   "usage": "template",
-  "icon": "💰",
+  "icon": "icon.svg",
   "description": "A household's money (not a business's books): transactions, budgets, investments and goals. Set overviewLead: spending (budget, running costs) or netWorth (investments).",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "minFlockVersion": "0.15.0",
   "type": "fullstack",
   "access": "private",

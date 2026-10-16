@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.2
+
+- The icon is the app's own illustration (`icon.svg`, the calendar drawn in its header), in place of the 📅 emoji.
+
 ## 1.1.1
 
 - Declares itself an app template (`"usage": "template"` in `flock.app.json`), so Flock offers it as a starting point to make apps from, not as an app of its own. 1.1.0's installed copy had no `usage` and read as an app. Nothing else changed.

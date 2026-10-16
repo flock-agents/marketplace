@@ -74,8 +74,8 @@
       "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "apps/family-calendar",
-      "latestVersion": "2.0.2",
-      "latestTag": "family-calendar-v2.0.2",
+      "latestVersion": "2.0.3",
+      "latestTag": "family-calendar-v2.0.3",
       "minFlockVersion": "0.15.0",
       "publishedAt": "2026-08-13T15:30:00Z",
       "updatedAt": "2026-10-16T00:00:00Z"
@@ -432,11 +432,11 @@
         "clinic",
         "salon"
       ],
-      "icon": "\ud83d\udcc5",
+      "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "apps/bookings",
-      "latestVersion": "1.1.1",
-      "latestTag": "bookings-v1.1.1",
+      "latestVersion": "1.1.2",
+      "latestTag": "bookings-v1.1.2",
       "minFlockVersion": "0.15.0",
       "publishedAt": "2026-10-11T00:00:00Z",
       "updatedAt": "2026-10-16T00:00:00Z"
@@ -455,11 +455,11 @@
         "trip",
         "move"
       ],
-      "icon": "\u2705",
+      "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "apps/checklist",
-      "latestVersion": "1.1.1",
-      "latestTag": "checklist-v1.1.1",
+      "latestVersion": "1.1.2",
+      "latestTag": "checklist-v1.1.2",
       "minFlockVersion": "0.15.0",
       "publishedAt": "2026-10-11T00:00:00Z",
       "updatedAt": "2026-10-16T00:00:00Z"
@@ -477,11 +477,11 @@
         "metrics",
         "trend"
       ],
-      "icon": "\ud83d\udcca",
+      "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "apps/dashboard",
-      "latestVersion": "1.1.1",
-      "latestTag": "dashboard-v1.1.1",
+      "latestVersion": "1.1.2",
+      "latestTag": "dashboard-v1.1.2",
       "minFlockVersion": "0.15.0",
       "publishedAt": "2026-10-11T00:00:00Z",
       "updatedAt": "2026-10-16T00:00:00Z"
@@ -499,11 +499,11 @@
         "contacts",
         "people"
       ],
-      "icon": "\ud83d\udcc7",
+      "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "apps/directory",
-      "latestVersion": "1.1.1",
-      "latestTag": "directory-v1.1.1",
+      "latestVersion": "1.1.2",
+      "latestTag": "directory-v1.1.2",
       "minFlockVersion": "0.15.0",
       "publishedAt": "2026-10-11T00:00:00Z",
       "updatedAt": "2026-10-16T00:00:00Z"
@@ -522,11 +522,11 @@
         "customers",
         "billing"
       ],
-      "icon": "\ud83e\uddfe",
+      "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "apps/invoices",
-      "latestVersion": "1.1.1",
-      "latestTag": "invoices-v1.1.1",
+      "latestVersion": "1.1.2",
+      "latestTag": "invoices-v1.1.2",
       "minFlockVersion": "0.15.0",
       "publishedAt": "2026-10-11T00:00:00Z",
       "updatedAt": "2026-10-16T00:00:00Z"
@@ -545,11 +545,11 @@
         "packing",
         "budget"
       ],
-      "icon": "\u2708\ufe0f",
+      "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "apps/itinerary",
-      "latestVersion": "1.1.1",
-      "latestTag": "itinerary-v1.1.1",
+      "latestVersion": "1.1.2",
+      "latestTag": "itinerary-v1.1.2",
       "minFlockVersion": "0.15.0",
       "publishedAt": "2026-10-11T00:00:00Z",
       "updatedAt": "2026-10-16T00:00:00Z"
@@ -568,11 +568,11 @@
         "investments",
         "goals"
       ],
-      "icon": "\ud83d\udcb0",
+      "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "apps/money",
-      "latestVersion": "1.1.1",
-      "latestTag": "money-v1.1.1",
+      "latestVersion": "1.1.2",
+      "latestTag": "money-v1.1.2",
       "minFlockVersion": "0.15.0",
       "publishedAt": "2026-10-11T00:00:00Z",
       "updatedAt": "2026-10-16T00:00:00Z"
@@ -591,11 +591,11 @@
         "sales",
         "crm"
       ],
-      "icon": "\ud83e\udded",
+      "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "apps/pipeline",
-      "latestVersion": "1.1.1",
-      "latestTag": "pipeline-v1.1.1",
+      "latestVersion": "1.1.2",
+      "latestTag": "pipeline-v1.1.2",
       "minFlockVersion": "0.15.0",
       "publishedAt": "2026-10-11T00:00:00Z",
       "updatedAt": "2026-10-16T00:00:00Z"
@@ -614,11 +614,11 @@
         "recipes",
         "family"
       ],
-      "icon": "\ud83c\udf7d\ufe0f",
+      "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "apps/planner",
-      "latestVersion": "1.1.1",
-      "latestTag": "planner-v1.1.1",
+      "latestVersion": "1.1.2",
+      "latestTag": "planner-v1.1.2",
       "minFlockVersion": "0.15.0",
       "publishedAt": "2026-10-11T00:00:00Z",
       "updatedAt": "2026-10-16T00:00:00Z"
@@ -637,11 +637,11 @@
         "vendors",
         "applications"
       ],
-      "icon": "\ud83d\udccc",
+      "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "apps/tracker",
-      "latestVersion": "1.1.1",
-      "latestTag": "tracker-v1.1.1",
+      "latestVersion": "1.1.2",
+      "latestTag": "tracker-v1.1.2",
       "minFlockVersion": "0.15.0",
       "publishedAt": "2026-10-11T00:00:00Z",
       "updatedAt": "2026-10-16T00:00:00Z"

@@ -1,9 +1,9 @@
 {
   "name": "Meal Planner",
   "usage": "template",
-  "icon": "🍽️",
+  "icon": "icon.svg",
   "description": "The family's meals for the week, day by day (Breakfast, Lunch and Dinner), with a shared grocery list and the family's recipe book; not for school runs, chores or appointments.",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "minFlockVersion": "0.15.0",
   "type": "fullstack",
   "access": "private",

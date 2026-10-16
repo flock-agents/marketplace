@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.0.3
+
+- The icon is the app's own illustration (`icon.svg`, the calendar drawn in its header), in place of the 1.x calendar tile.
+
 ## 2.0.2
 
 - The move from 1.x holds up when an update does not go straight through:

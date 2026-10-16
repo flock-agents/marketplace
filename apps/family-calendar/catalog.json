@@ -1,6 +1,6 @@
 {
   "name": "family-calendar",
-  "version": "2.0.2",
+  "version": "2.0.3",
   "description": "Family events, schedules, and reminders at a glance",
   "objects": [
     "calendar"

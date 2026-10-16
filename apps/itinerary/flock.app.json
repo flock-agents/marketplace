@@ -1,9 +1,9 @@
 {
   "name": "Itinerary",
   "usage": "template",
-  "icon": "✈️",
+  "icon": "icon.svg",
   "description": "A trip reference: day-by-day plan, bookings, packing and budget. Opens with a Goa family trip as samples: give samples for any other trip.",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "minFlockVersion": "0.15.0",
   "type": "fullstack",
   "access": "private",

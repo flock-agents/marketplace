@@ -1,9 +1,9 @@
 {
   "name": "Invoices",
   "usage": "template",
-  "icon": "🧾",
+  "icon": "icon.svg",
   "description": "Bills your own customers with GST (you are the seller), tracks who has paid you, and lets an agent chase what's overdue; not for bills you pay.",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "minFlockVersion": "0.15.0",
   "type": "fullstack",
   "access": "private",

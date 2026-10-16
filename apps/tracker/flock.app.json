@@ -1,9 +1,9 @@
 {
   "name": "Tracker",
   "usage": "template",
-  "icon": "📌",
+  "icon": "icon.svg",
   "description": "Rows with a status: vendors, repairs, collections, anything to follow up. Not for hiring (use pipeline).",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "minFlockVersion": "0.15.0",
   "type": "fullstack",
   "access": "private",
