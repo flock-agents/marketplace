@@ -2,88 +2,53 @@
 /**
  * Blinkit — view current cart contents.
  * Params: (none)
+ *
+ * Blinkit has no cart page: the cart is a drawer opened from the header button on the home
+ * page (selectors in _blinkit.ts, confirmed live on 35720, 2026-10-16).
  */
 import {
   requireBrowserSession,
   errorJson,
-  browserWrite,
-  type GroceryServiceConfig,
+  browserInteract,
 } from "../../_shared/_grocery_helpers";
-
-const config: GroceryServiceConfig = {
-  name: "Blinkit",
-  baseUrl: "https://blinkit.com",
-  loginPattern: /blinkit\.com\/login|blinkit\.com\/auth/i,
-};
+import { BLINKIT as config, HOME_URL, OPEN_CART_ACTIONS, READ_CART_SCRIPT, headerShowsItems, rupeeAmount } from "./_blinkit";
 
 requireBrowserSession();
 
-const cartUrl = `${config.baseUrl}/checkout`;
+const result = await browserInteract(config, HOME_URL, OPEN_CART_ACTIONS, undefined, READ_CART_SCRIPT);
 
-const evalScript = `(() => {
-  const items = [];
-  const cartItems = document.querySelectorAll('[class*="cart-item"], [class*="CartItem"], [class*="cart_item"], [data-testid="cart-item"], [class*="CheckoutItem"]');
-
-  cartItems.forEach(el => {
-    const nameEl = el.querySelector('[class*="name"], [class*="Name"], [class*="Title"], h4, h3');
-    const qtyEl = el.querySelector('[class*="quantity"], [class*="Quantity"], [class*="count"], input[type="number"]');
-    const priceEl = el.querySelector('[class*="price"], [class*="Price"], [class*="rupee"]');
-    const imgEl = el.querySelector('img');
-
-    const name = (nameEl?.textContent || '').trim().substring(0, 200);
-    if (!name) return;
-
-    const qtyText = (qtyEl?.textContent || qtyEl?.value || '1').replace(/[^\\d]/g, '');
-    const priceText = (priceEl?.textContent || '').replace(/[^\\d.]/g, '');
-    const qty = parseInt(qtyText) || 1;
-    const price = priceText ? parseFloat(priceText) : 0;
-
-    const link = el.querySelector('a')?.href || '';
-    const idMatch = link.match(/\\/prid\\/(\\d+)/) || link.match(/\\/product\\/([\\w-]+)/) || link.match(/\\/(\\d{5,})/);
-
-    items.push({
-      productId: idMatch ? idMatch[1] : '',
-      name: name,
-      quantity: qty,
-      price: price,
-      subtotal: price * qty
-    });
-  });
-
-  const subtotalEl = document.querySelector('[class*="subtotal"], [class*="Subtotal"], [class*="sub-total"]');
-  const deliveryFeeEl = document.querySelector('[class*="delivery-fee"], [class*="DeliveryFee"], [class*="delivery_fee"], [class*="handling"]');
-  const discountEl = document.querySelector('[class*="discount"], [class*="Discount"], [class*="savings"]');
-  const totalEl = document.querySelector('[class*="grand-total"], [class*="GrandTotal"], [class*="total-amount"], [class*="TotalAmount"], [data-testid="cart-total"], [class*="ToPay"]');
-  const deliveryEstEl = document.querySelector('[class*="delivery-time"], [class*="eta"], [class*="minute"]');
-  const addressEl = document.querySelector('[class*="address"], [class*="Address"], [class*="location"]');
-
-  const subtotalText = (subtotalEl?.textContent || '').replace(/[^\\d.]/g, '');
-  const deliveryFeeText = (deliveryFeeEl?.textContent || '').replace(/[^\\d.]/g, '');
-  const discountText = (discountEl?.textContent || '').replace(/[^\\d.]/g, '');
-  const totalText = (totalEl?.textContent || '').replace(/[^\\d.]/g, '');
-
-  const computedSubtotal = items.reduce((sum, it) => sum + it.subtotal, 0);
-
-  return JSON.stringify({
-    items: items,
-    itemCount: items.length,
-    subtotal: subtotalText ? parseFloat(subtotalText) : computedSubtotal,
-    deliveryFee: deliveryFeeText ? parseFloat(deliveryFeeText) : 0,
-    discount: discountText ? parseFloat(discountText) : 0,
-    total: totalText ? parseFloat(totalText) : computedSubtotal,
-    deliveryEstimate: (deliveryEstEl?.textContent || '').trim().substring(0, 50) || null,
-    deliveryAddress: (addressEl?.textContent || '').trim().substring(0, 200) || null
-  });
-})()`;
-
-const result = await browserWrite(config, cartUrl, evalScript);
-const content: string = result.content || "{}";
-
-let parsed: any;
+let cart: any;
 try {
-  parsed = JSON.parse(content);
+  cart = JSON.parse(result.content || "");
 } catch {
   errorJson("PAGE_CHANGED", "Could not read cart contents. The service may have updated its layout.");
 }
 
-console.log(JSON.stringify(parsed));
+const items: any[] = Array.isArray(cart.items) ? cart.items : [];
+if (items.length === 0 && headerShowsItems(cart.headerText)) {
+  errorJson("PAGE_CHANGED", "The cart has items but they could not be read from its drawer. Blinkit's page may have changed.");
+}
+
+const bill: Array<{ label: string; amount: number | null }> = Array.isArray(cart.bill) ? cart.bill : [];
+const billAmount = (re: RegExp): number | null => bill.find((r) => re.test(r.label))?.amount ?? null;
+const lines = items.map((it) => ({
+  productId: "",
+  name: it.name,
+  variant: it.variant || "",
+  quantity: it.quantity,
+  price: it.price,
+  subtotal: it.price != null ? it.price * it.quantity : null,
+}));
+const computedSubtotal = lines.reduce((sum, it) => sum + (it.subtotal || 0), 0);
+
+console.log(JSON.stringify({
+  items: lines,
+  itemCount: lines.length,
+  subtotal: billAmount(/items total/i) ?? computedSubtotal,
+  deliveryFee: billAmount(/delivery/i) ?? 0,
+  handlingFee: billAmount(/handling/i) ?? 0,
+  discount: billAmount(/discount|saving/i) ?? 0,
+  total: rupeeAmount(cart.orderTotal) ?? computedSubtotal,
+  bill,
+  deliveryEstimate: cart.deliveryEstimate || null,
+}));

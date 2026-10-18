@@ -3,7 +3,7 @@
   "slug": "zepto",
   "icon": "icon.svg",
   "description": "Search products, manage cart, and place grocery orders on Zepto",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "author": "flock",
   "category": "integration",
   "tags": [
@@ -67,6 +67,12 @@
     "keep-alive": {
       "abuseThreshold": 600,
       "limit": 120
+    }
+  },
+  "functions": {
+    "checkout": {
+      "timeoutMs": 90000,
+      "reason": "review opens the cart (up to two browser steps); pay clicks through to the payment page and its UPI option with payment capture on, waiting up to 20s for the payment page. Killed at 30s, the person is left with a half-opened payment page."
     }
   },
   "requiresAny": false,

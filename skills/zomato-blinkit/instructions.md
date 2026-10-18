@@ -82,27 +82,20 @@ Track an existing order by order ID. Params: `{ orderId: string }`
 View recent order history. Params: `{ maxResults?: number }`
 
 ### checkout
-Proceed through checkout and capture a payment link for the user. Params: `{ persistentSessionId?: string }`
+Three phases. Params: `{ phase?: "review" | "pay" | "status", persistentSessionId?: string }`
 
-- If `persistentSessionId` is provided (from a prior add-to-cart), reuses that session
-- Otherwise creates a new session starting at the cart page
-- **Smart Checkout** runs automatically before payment:
-  1. Checks delivery fee and free delivery threshold
-  2. Opens the coupons/offers section
-  3. Discovers all available coupons from Blinkit's UI
-  4. Tries applying the best coupon (up to 3 attempts)
-  5. Reports savings and price breakdown
-- Walks through checkout: proceed → payment method → capture payment URL
-- Returns a payment link (URL or UPI intent) that the user can use to complete payment
-- The agent returns the link in its response — the user pays via whatever channel they're on
-- Response includes `smartCheckout` with coupon and delivery details
+- `review` (default): reads the cart and the full total, goes to the payment-method page and stops there; the session stays open. Nothing is paid.
+- Then read the owner's saved payment preference first (private-browser skill, **Paying at checkout**, step 2), then ask the person once: the items, the total including every fee, and "Blinkit". Paying always needs that one confirmation, even in the owner's own chat.
+- `pay` (optional; needs `persistentSessionId` from review — choosing UPI on the page yourself does the same): only after the yes. Selects UPI with payment capture on and returns `{ success, platform, captured, persistentSessionId }` — never a payment link. Then pay the preferred way (private-browser skill, **Paying at checkout**, steps 2–3): with the preference you read before the yes, in this same persistent session choose UPI (or a gateway that names UPI), read the page again, and press Pay / Confirm / Place order once only when UPI is plainly the selected method, nothing else that pays is still ticked and the total is the one the person said yes to; otherwise ask with the page's options. When the page or the gateway offers a UPI ID option ("UPI ID", "Pay via UPI ID", "Enter UPI ID", "Add UPI ID") and there is a UPI ID to send the request to (the owner's saved one; in a group, only after the person chose the owner's UPI app), unless the saved preference is `upi_qr`, type it there and press that option's own verify / request button. That sends a payment request to the payer's UPI app and charges nothing by itself: tell them to approve it in their UPI app within the time shown. Otherwise — no UPI ID option, no UPI ID saved, or the person picks a QR — choose QR / "Show QR" and, right after your press, run `bash "$FLOCK_SKILLS_DIR/payments/scripts/show-payment-qr.sh" --session <persistentSessionId> --wait 15` (payments skill), before any hand-off: Flock never clicks, it reads the QR your press opened and posts the QR card itself, and you never paste a UPI link. One path per attempt: after a UPI ID request that expired or failed, offer a fresh request or the QR card, and for the QR card ask for a fresh payment screen: open the payment page anew and walk it to the QR again, or hand the page over. On `payment_blocked`, tell the person plainly "<site> blocks automated payment" with the total and the `payUrl`, and offer to hand them the page with `"payment": true` so they press Pay themselves; do not press Pay again or retry in a loop, and after that hand-off ends run `show-payment-qr` once more (private-browser skill, **Paying at checkout**, step 7). On `no_payment_found` after your press, hand the page over with `"payment": true` (private-browser skill, **Paying at checkout**).
+- `status`: reads the already-open payment page, `{ state: "paid" | "pending" | "failed", orderId? }`. Re-read it every 15 seconds for up to 10 minutes after the request is sent or the card is shown, then post the order confirmation.
+- Never end a checkout by reporting a bug: hand the page over instead.
 
 ## No App Handoff — Everything In Chat
 
 - NEVER tell the user to open the app, check the website, or review on the platform
 - Everything happens in this chat — search, cart, checkout, payment
 - If an item is out of stock, offer alternatives or check another connected platform
-- For payment, generate and share the payment link directly — never redirect to app
+- For payment, send the request to the payer's UPI app by UPI ID, or show the QR card (checkout above) — never paste a payment link, never redirect to app
 - If something cannot be done via the browser session, say so explicitly — do not redirect to the app
 
 ## Address-First Flow
@@ -127,7 +120,7 @@ When placing ANY new order, the FIRST thing to do — before searching for items
 When the message came from a channel (Telegram, WhatsApp, etc.) — identified by `[via telegram]`, `[via whatsapp]`, or `SECURITY CONTEXT: You are responding to an EXTERNAL user via` in the prompt:
 
 - Do NOT output intermediate working messages ("Creating session...", "Found the search bar...", "Adding milk to cart...")
-- Only output the FINAL result: cart summary with items, quantities, prices, and payment link
+- Only output the FINAL result: cart summary with items, quantities, prices, and the total, then (after a yes) the payment request or the payment card
 - Keep your response to ONE concise message with the complete result
 - Intermediate messages flood the user's chat — they only want the final outcome
 
@@ -135,17 +128,18 @@ When the message came from a channel (Telegram, WhatsApp, etc.) — identified b
 
 - All prices are in INR
 - Delivery address is confirmed via the Address-First Flow before any items are added
-- The agent can complete the full flow: search → add to cart → checkout → return payment link
-- Payment is completed by the user via the returned link — the agent does not make payments
+- The agent can complete the full flow: search → add to cart → checkout → payment request to the payer's UPI app, or the payment QR card
+- The person pays by approving the request in their UPI app, or by scanning the QR card, with their own UPI PIN — the agent never presses a Pay that charges by itself
 - Blinkit is accessed via blinkit.com (separate domain from Zomato food delivery)
 - Blinkit promises delivery in minutes — product availability depends on the nearest dark store
 
-## Smart Checkout
+## Fees and savings
 
-At checkout, the agent automatically:
-- Checks for available coupons and applies the best one
-- Reports the delivery fee and whether free delivery is available
-- If the user is close to a free delivery threshold, suggests adding a low-cost item
-- Presents a savings breakdown before generating the payment link:
-  subtotal, delivery fee, coupon discount, and final total
-- Coupon codes are discovered from Blinkit's own UI — never hardcoded
+Before the review step, while the cart is still being built:
+- Report the delivery fee and whether free delivery is available
+- If the person is close to a free delivery threshold, suggest adding a low-cost item
+- Coupons are applied only before the review: the person's coupon wins, or a coupon Blinkit shows on the cart page itself (never hardcoded, never guessed)
+
+At the review, present the breakdown: subtotal, delivery fee, discount, and final total.
+
+Once the review is done, run nothing else on the cart until the person's yes and the pay step. `view-cart`, coupon reads and address reads between the review and the pay make the payment page unpayable: the cart is reloaded and the page the pay step needs is gone. Go straight from the person's yes to the payment walk (private-browser skill, **Paying at checkout**, step 3; the `pay` phase is optional).

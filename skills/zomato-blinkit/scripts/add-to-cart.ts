@@ -25,12 +25,17 @@ let quantity: number = parseInt(PARAMS.quantity, 10) || 1;
 
 requireBrowserSession();
 validateParam(productId, "productId");
+if (!/^\d+$/.test(productId)) errorJson("INVALID_ID", "productId must be Blinkit's numeric product id (from search-products)");
 
 if (isNaN(quantity) || quantity < 1) quantity = 1;
 if (quantity > 10) {
   errorJson("QUANTITY_LIMIT", "Maximum quantity per item is 10");
 }
 
+// Product page, confirmed live on 35720 on 2026-10-16: the product's own button reads
+// "Add to cart" (a `div[role="button"]`) in `[class*="ProductWrapperRightSection"]`; the
+// page's other "ADD" buttons belong to similar-product cards. The header cart button
+// (`[class*="CartButton"]`) reads "3 items ₹120" once something is in the cart.
 const productUrl = `${config.baseUrl}/prn/product/prid/${productId}`;
 
 const sessionResult = await persistentCreate(config, productUrl);
@@ -40,20 +45,28 @@ if (!persistentId) {
   errorJson("SESSION_ERROR", "Failed to create persistent session");
 }
 
+const findMainButton = `
+  const section = document.querySelector('[class*="ProductWrapperRightSection"]') || document;
+  const buttons = Array.from(section.querySelectorAll('[role="button"], button'));
+  const addBtn = buttons.find((b) => /^\\s*add to cart\\s*$/i.test(b.textContent || ""))
+    || buttons.find((b) => /^\\s*add\\s*$/i.test(b.textContent || "") && !b.closest('div[role="button"][id]'));
+  const nameEl = document.querySelector('[class*="ProductInfoCard__BreadcrumbProductName"]') || document.querySelector('[class*="tw-font-extrabold"]') || document.querySelector('h1');
+  const name = ((nameEl && nameEl.textContent) || document.title.replace(/^Buy\\s+|\\s+Online\\s*\\|.*$/g, "") || "").trim().substring(0, 200);
+`;
+
 // Check stock availability
 const checkActions = [
-  { action: "waitForSelector", selector: '[class*="AddToCart"], [class*="add-to-cart"], [data-testid="add-btn"], button[class*="add"], button[class*="Add"], [class*="out-of-stock"], [class*="OutOfStock"]', delay: 5000 },
+  { action: "waitForSelector", selector: '[class*="ProductWrapperRightSection"], [class*="ProductInfoCard"]', delay: 15000 },
+  { action: "wait", delay: 1000 },
 ];
 
 const checkScript = `(() => {
-  const outOfStock = document.querySelector('[class*="out-of-stock"], [class*="OutOfStock"], [class*="sold-out"], [class*="SoldOut"], [class*="Unavailable"]');
-  if (outOfStock) {
-    const nameEl = document.querySelector('[class*="name"], [class*="Name"], [class*="Title"], h1, h2');
-    const name = (nameEl?.textContent || 'This product').trim().substring(0, 200);
-    return JSON.stringify({ error: true, code: 'OUT_OF_STOCK', message: name + ' is currently out of stock' });
+  ${findMainButton}
+  const sectionText = (section.innerText || "");
+  if (!addBtn && /out of stock|currently unavailable|notify me/i.test(sectionText)) {
+    return JSON.stringify({ error: true, code: 'OUT_OF_STOCK', message: (name || 'This product') + ' is currently out of stock' });
   }
-  const addBtn = document.querySelector('[class*="AddToCart"], [class*="add-to-cart"], [data-testid="add-btn"], button[class*="add"], button[class*="Add"]');
-  return JSON.stringify({ inStock: true, hasButton: !!addBtn });
+  return JSON.stringify({ inStock: true, hasButton: !!addBtn, name });
 })()`;
 
 const checkResult = await persistentInteract(config, persistentId, checkActions, false, checkScript);
@@ -68,44 +81,46 @@ if (checkParsed.error) {
   process.exit(1);
 }
 
-// Click add-to-cart
-const addScript = `(() => {
+// Click "Add to cart" once, then the stepper's "+" for each further unit. The stepper's
+// +/− are icon-font glyphs: "+" is the last clickable part of the control that replaced
+// the button (not confirmed live; see the task report).
+const addScript = `(async () => {
   const quantity = ${quantity};
-  const addBtn = document.querySelector('[class*="AddToCart"], [class*="add-to-cart"], [data-testid="add-btn"], button[class*="add"], button[class*="Add"]');
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  ${findMainButton}
   if (!addBtn) {
-    return JSON.stringify({ error: true, code: 'PAGE_CHANGED', message: 'Could not find add-to-cart button. The page layout may have changed.' });
+    return JSON.stringify({ error: true, code: 'PAGE_CHANGED', message: 'Could not find the Add to cart button. The page layout may have changed.' });
   }
-
-  for (let i = 0; i < quantity; i++) {
-    addBtn.click();
+  const holder = addBtn.parentElement;
+  addBtn.click();
+  await sleep(1500);
+  const stepperQty = () => {
+    const t = ((holder && holder.innerText) || "").split("\\n").map((s) => s.trim()).find((s) => /^\\d+$/.test(s));
+    return t ? parseInt(t, 10) : 0;
+  };
+  for (let i = 1; i < quantity; i++) {
+    const plus = (holder && (holder.querySelector('[class*="icon-plus"], [aria-label*="add" i], [aria-label*="increase" i]')
+      || Array.from(holder.querySelectorAll('[role="button"], button, div')).filter((e) => !e.children.length || e.getAttribute('role') === 'button').pop()));
+    if (!plus) break;
+    plus.click();
+    await sleep(900);
   }
-
-  return new Promise(resolve => {
-    setTimeout(() => {
-      const nameEl = document.querySelector('[class*="name"], [class*="Name"], [class*="Title"], h1, h2');
-      const cartCountEl = document.querySelector('[class*="cart-count"], [class*="CartCount"], [class*="badge"], [data-testid="cart-count"]');
-      const cartTotalEl = document.querySelector('[class*="cart-total"], [class*="CartTotal"], [class*="total"]');
-
-      const name = (nameEl?.textContent || '').trim().substring(0, 200);
-      const cartCount = parseInt((cartCountEl?.textContent || '').replace(/[^\\d]/g, '')) || 0;
-      const totalText = (cartTotalEl?.textContent || '').replace(/[^\\d.]/g, '');
-      const cartTotal = totalText ? parseFloat(totalText) : 0;
-
-      resolve(JSON.stringify({
-        success: true,
-        productId: '${productId}',
-        name: name,
-        quantityAdded: quantity,
-        cartItemCount: cartCount,
-        cartTotal: cartTotal
-      }));
-    }, 1500);
+  await sleep(600);
+  const header = document.querySelector('[class*="CartButton__Button"]') || document.querySelector('[class*="CartButton"]');
+  const headerText = ((header && header.innerText) || "").replace(/\\s+/g, " ");
+  const countMatch = headerText.match(/(\\d+)\\s*items?/i);
+  const totalMatch = headerText.match(/₹\\s*([\\d,.]+)/);
+  return JSON.stringify({
+    success: true,
+    productId: '${productId}',
+    name: name,
+    quantityAdded: stepperQty() || quantity,
+    cartItemCount: countMatch ? parseInt(countMatch[1], 10) : 0,
+    cartTotal: totalMatch ? parseFloat(totalMatch[1].replace(/,/g, "")) : 0
   });
 })()`;
 
-const addActions = [{ action: "screenshot" }];
-
-const result = await persistentInteract(config, persistentId, addActions, true, addScript);
+const result = await persistentInteract(config, persistentId, [], true, addScript);
 const content: string = result.content || "{}";
 
 let parsed: any;
@@ -117,6 +132,11 @@ try {
 
 if (parsed.error) {
   console.log(JSON.stringify(parsed));
+  process.exit(1);
+}
+
+if (!parsed.cartItemCount) {
+  console.log(JSON.stringify({ ...parsed, success: false, code: "NOT_ADDED", message: "Clicked Add to cart but the cart still shows no items. Check the delivery location or view the cart." }));
   process.exit(1);
 }
 

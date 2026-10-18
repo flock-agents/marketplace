@@ -30,8 +30,15 @@ if (maxResults > 25) maxResults = 25;
 
 const searchUrl = `${config.baseUrl}/s/?q=${urlencode(query)}`;
 
+// Result cards, confirmed live on 35720 on 2026-10-16: each product is a
+// `div[role="button"]` whose id is the product id (450546 = Cornetto), styled with Tailwind
+// utility classes only. A card's text reads, line by line: "20% OFF", "11 MINS", name,
+// pack size, price, MRP, "ADD". The older class names stay as a fallback.
+const CARD_SELECTOR = 'div[role="button"][id]';
+const LEGACY_CARDS = '[data-testid="product-card"], [class*="Product__UpdatedPlpProductContainer"], [class*="plp-product"], [class*="ProductCard"], [class*="product-card"]';
+
 const scrollActions = [
-  { action: "waitForSelector", selector: '[data-testid="product-card"], [class*="Product__UpdatedPlpProductContainer"], [class*="plp-product"], .Product, [class*="ProductCard"], [class*="product-card"]', delay: 5000 },
+  { action: "waitForSelector", selector: `${CARD_SELECTOR}, ${LEGACY_CARDS}`, delay: 15000 },
   { action: "scroll", deltaY: 600 },
   { action: "wait", delay: 1000 },
   { action: "scroll", deltaY: 600 },
@@ -40,44 +47,37 @@ const scrollActions = [
 
 const evalScript = `(() => {
   const maxResults = ${maxResults};
+  const isCard = (el) => /^\\d{3,}$/.test(el.id || "") && /₹/.test(el.innerText || "");
+  let cards = Array.from(document.querySelectorAll('${CARD_SELECTOR}')).filter(isCard);
+  if (!cards.length) cards = Array.from(document.querySelectorAll('${LEGACY_CARDS}'));
   const products = [];
-  const cards = document.querySelectorAll('[data-testid="product-card"], [class*="Product__UpdatedPlpProductContainer"], [class*="plp-product"], .Product, [class*="ProductCard"], [class*="product-card"]');
-  const items = cards.length > 0 ? cards : document.querySelectorAll('[class*="Product"] a, [class*="item"] a');
-
-  items.forEach((el, i) => {
-    if (i >= maxResults) return;
-    const nameEl = el.querySelector('[class*="Product__UpdatedTitle"], [class*="product-name"], [class*="Name"], h3, h4, [class*="Title"]') || el;
-    const priceEl = el.querySelector('[class*="Product__UpdatedPriceAndAtc498"], [class*="price"], [class*="Price"], [class*="rupee"]');
-    const mrpEl = el.querySelector('[class*="Product__UpdatedMrpText"], [class*="mrp"], [class*="strike"], s, del');
-    const stockEl = el.querySelector('[class*="out-of-stock"], [class*="OutOfStock"], [class*="sold-out"], [class*="Unavailable"]');
-    const imgEl = el.querySelector('img');
-    const quantityEl = el.querySelector('[class*="Product__UpdatedPackSizeAndUnitText"], [class*="weight"], [class*="quantity"], [class*="unit"], [class*="Weight"]');
-    const deliveryEl = el.querySelector('[class*="delivery"], [class*="eta"], [class*="minute"]');
-    const discountEl = el.querySelector('[class*="discount"], [class*="offer"], [class*="Offer"]');
-
-    const link = el.closest('a')?.href || el.querySelector('a')?.href || '';
-    const idMatch = link.match(/\\/prn\\/([\\w-]+)\\/prid\\/(\\d+)/) || link.match(/\\/product\\/([\\w-]+)/) || link.match(/\\/(\\d{5,})/);
-
-    const name = (nameEl.textContent || '').trim().substring(0, 200);
+  cards.slice(0, maxResults).forEach((el, i) => {
+    const lines = (el.innerText || "").split("\\n").map((s) => s.trim()).filter(Boolean);
+    const isPrice = (s) => /^₹\\s*[\\d,.]+$/.test(s);
+    const isMeta = (s) => isPrice(s) || /% OFF$/i.test(s) || /^\\d+\\s*MINS?$/i.test(s) || /^(ADD|Out of Stock|Notify)$/i.test(s);
+    const nameEl = el.querySelector('[class*="line-clamp-2"]');
+    const name = ((nameEl && nameEl.textContent) || lines.find((s) => !isMeta(s)) || "").trim().substring(0, 200);
     if (!name) return;
-
-    const priceText = (priceEl?.textContent || '').replace(/[^\\d.]/g, '');
-    const mrpText = (mrpEl?.textContent || '').replace(/[^\\d.]/g, '');
-
+    const after = lines.slice(lines.indexOf(name) + 1);
+    const prices = lines.filter(isPrice).map((s) => parseFloat(s.replace(/[^\\d.]/g, "")));
+    const discount = lines.find((s) => /% OFF$/i.test(s)) || null;
+    const eta = lines.find((s) => /^\\d+\\s*MINS?$/i.test(s)) || null;
+    const quantity = (after.find((s) => !isMeta(s)) || "").substring(0, 50);
+    const img = el.querySelector('img');
     products.push({
-      id: idMatch ? (idMatch[2] || idMatch[1]) : 'unknown-' + i,
-      name: name,
-      brand: '',
-      quantity: (quantityEl?.textContent || '').trim().substring(0, 50),
-      price: priceText ? parseFloat(priceText) : null,
-      mrp: mrpText ? parseFloat(mrpText) : null,
-      discount: (discountEl?.textContent || '').trim().substring(0, 50) || null,
-      inStock: !stockEl,
-      imageUrl: imgEl?.src || null,
-      deliveryEstimate: (deliveryEl?.textContent || '').trim().substring(0, 50) || null
+      id: /^\\d+$/.test(el.id || "") ? el.id : "unknown-" + i,
+      name,
+      brand: "",
+      quantity,
+      price: prices.length ? prices[0] : null,
+      mrp: prices.length > 1 ? prices[1] : null,
+      discount: discount ? discount.substring(0, 50) : null,
+      inStock: !/out of stock|notify me/i.test(el.innerText || ""),
+      imageUrl: (img && img.src) || null,
+      deliveryEstimate: eta ? eta.substring(0, 50) : null,
     });
   });
-  return JSON.stringify({ products, totalResults: items.length });
+  return JSON.stringify({ products, totalResults: cards.length });
 })()`;
 
 const result = await browserInteract(config, searchUrl, scrollActions, undefined, evalScript);
