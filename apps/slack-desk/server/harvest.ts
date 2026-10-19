@@ -423,7 +423,25 @@ export function groupByThread(msgs: SlackMessage[]): SlackMessage[][] {
  *
  * `id` is the conversation's own identity (channel:first-ts) so re-extracting the same
  * conversation is recognisably the same item rather than a new memory each day.
+ *
+ * LINE TIMES. Every line is prefixed `[Sun 18 Oct 13:23] ` — weekday, day, month, 24 h time, in the
+ * process timezone (the owner's, which is also the zone the extractor resolves "tomorrow" in).
+ * Before this, a conversation spanning several days was one undated wall of text stamped with its
+ * FIRST message's time, so "I'll do it tomorrow" said on day three was resolved against day one
+ * and the made-up date landed a day or two early. With the time on each line the extractor can
+ * anchor a relative date on the message that said it. A message whose ts does not parse gets no
+ * prefix rather than a wrong one.
+ *
+ * `timestamp` is the LATEST message's time, not the first: it is what the extractor treats as
+ * "now" for the item, and the newest message is the one that can still be acted on. When no ts
+ * parses it falls back to the thread start, then to the clock, exactly as before. `id` and
+ * `messages[]` are deliberately untouched, so identity and the task gate see no change.
  */
+/** Built once; reads the process TZ at construction, which is fixed for the app's lifetime. */
+const lineTime = new Intl.DateTimeFormat("en-GB", {
+  weekday: "short", day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+});
+
 export function toBlock(
   thread: SlackMessage[],
   dir?: Directory,
@@ -447,9 +465,25 @@ export function toBlock(
     return dir?.names.get(author) ?? author;
   };
 
+  const stamp = (ts: string | undefined): string => {
+    const ms = Math.round(Number(ts) * 1000);
+    if (!ts || !Number.isFinite(ms)) return "";
+    // en-GB renders "Sun 18 Oct at 13:23" on current ICU and "Sun 18 Oct, 13:23" on older ones;
+    // both normalise to the single-space form the extractor is shown.
+    const label = lineTime.format(new Date(ms)).replace(/,/g, "").replace(/ at /, " ").replace(/\s+/g, " ").trim();
+    return `[${label}] `;
+  };
+
   const text = thread
-    .map((m) => `${label(m.author)}: ${(m.text ?? "").trim()}`)
+    .map((m) => `${stamp(m.ts)}${label(m.author)}: ${(m.text ?? "").trim()}`)
     .join("\n");
+
+  // The newest message that has a parseable ts; undefined when none does.
+  const latestMs = thread.reduce<number | undefined>((best, m) => {
+    const ms = Math.round(Number(m.ts) * 1000);
+    if (!m.ts || !Number.isFinite(ms)) return best;
+    return best === undefined || ms > best ? ms : best;
+  }, undefined);
 
   // Everyone who spoke, named once, owner included and marked as such.
   const participants = [...new Set(thread.map((m) => label(m.author)))];
@@ -479,7 +513,7 @@ export function toBlock(
   return {
     id: `${head.channelId}:${anchorTs}`,
     text,
-    timestamp: new Date(Number.isFinite(startedMs) ? startedMs : Date.now()).toISOString(),
+    timestamp: new Date(latestMs ?? (Number.isFinite(startedMs) ? startedMs : Date.now())).toISOString(),
     ...(participants.length > 0 ? { participants } : {}),
     ...(messages.length > 0 ? { messages } : {}),
     // A permalink the app already stored wins; otherwise build one from the workspace URL.
