@@ -527,15 +527,24 @@ describe("toBlock: each line carries its own time; the item time is the latest m
   };
 
   test("lines start with [Ddd DD Mon HH:MM] in the process timezone; timestamp is the latest; id is the first ts", () => {
-    // Needs TZ=Asia/Kolkata (the documented test command); skip the clock assertions elsewhere.
-    if (process.env.TZ !== "Asia/Kolkata") return;
+    // Runs under any TZ: the expected stamp is built the same way, in the process timezone.
+    const stampOf = (sec: number): string => {
+      const p: Record<string, string> = {};
+      const fmt = new Intl.DateTimeFormat("en-GB", {
+        weekday: "short", day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+      });
+      for (const part of fmt.formatToParts(new Date(sec * 1000))) p[part.type] = part.value;
+      return `[${p.weekday} ${p.day} ${p.month} ${p.hour}:${p.minute}]`;
+    };
     const block = toBlock([
       { channelId: "C1", ts: `${t1}.000100`, author: "U-THEM", text: "can you check tomorrow?" },
       { channelId: "C1", ts: `${t2}.000100`, author: "U-ME", text: "yes, will do" },
     ], dir);
     expect(block.text).toBe(
-      "[Sun 18 Oct 12:19] Priya: can you check tomorrow?\n[Sun 18 Oct 13:23] You: yes, will do",
+      `${stampOf(t1)} Priya: can you check tomorrow?\n${stampOf(t2)} You: yes, will do`,
     );
+    // Under the documented test command the stamp is the literal IST wall time.
+    if (process.env.TZ === "Asia/Kolkata") expect(stampOf(t2)).toBe("[Sun 18 Oct 13:23]");
     expect(block.timestamp).toBe(new Date(t2 * 1000).toISOString());
     expect(block.id).toBe(`C1:${t1}.000100`);
     expect(block.messages).toEqual([
