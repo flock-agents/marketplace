@@ -402,6 +402,18 @@ export function groupByThread(msgs: SlackMessage[]): SlackMessage[][] {
   return [...threads.values(), ...runs];
 }
 
+/** Built once; reads the process TZ at construction, which is fixed for the app's lifetime. */
+const lineTime = new Intl.DateTimeFormat("en-GB", {
+  weekday: "short", day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+});
+
+/** A ts as epoch ms, or undefined when it is missing, non-numeric or outside Date's range. */
+function validMs(ts: string | undefined): number | undefined {
+  if (!ts) return undefined;
+  const ms = Math.round(Number(ts) * 1000);
+  return Number.isFinite(ms) && !Number.isNaN(new Date(ms).getTime()) ? ms : undefined;
+}
+
 /**
  * One extraction ITEM per conversation, in the shape `/api/memory/extract` actually reads.
  *
@@ -437,11 +449,6 @@ export function groupByThread(msgs: SlackMessage[]): SlackMessage[][] {
  * parses it falls back to the thread start, then to the clock, exactly as before. `id` and
  * `messages[]` are deliberately untouched, so identity and the task gate see no change.
  */
-/** Built once; reads the process TZ at construction, which is fixed for the app's lifetime. */
-const lineTime = new Intl.DateTimeFormat("en-GB", {
-  weekday: "short", day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23",
-});
-
 export function toBlock(
   thread: SlackMessage[],
   dir?: Directory,
@@ -465,13 +472,14 @@ export function toBlock(
     return dir?.names.get(author) ?? author;
   };
 
+  // Built from parts, not from format(): Node renders "Sun 18 Oct, 13:23" and Bun "Sun 18 Oct at
+  // 13:23", and the parts are identical in both.
   const stamp = (ts: string | undefined): string => {
-    const ms = Math.round(Number(ts) * 1000);
-    if (!ts || !Number.isFinite(ms)) return "";
-    // en-GB renders "Sun 18 Oct at 13:23" on current ICU and "Sun 18 Oct, 13:23" on older ones;
-    // both normalise to the single-space form the extractor is shown.
-    const label = lineTime.format(new Date(ms)).replace(/,/g, "").replace(/ at /, " ").replace(/\s+/g, " ").trim();
-    return `[${label}] `;
+    const ms = validMs(ts);
+    if (ms === undefined) return "";
+    const p: Record<string, string> = {};
+    for (const part of lineTime.formatToParts(new Date(ms))) p[part.type] = part.value;
+    return `[${p.weekday} ${p.day} ${p.month} ${p.hour}:${p.minute}] `;
   };
 
   const text = thread
@@ -480,8 +488,8 @@ export function toBlock(
 
   // The newest message that has a parseable ts; undefined when none does.
   const latestMs = thread.reduce<number | undefined>((best, m) => {
-    const ms = Math.round(Number(m.ts) * 1000);
-    if (!m.ts || !Number.isFinite(ms)) return best;
+    const ms = validMs(m.ts);
+    if (ms === undefined) return best;
     return best === undefined || ms > best ? ms : best;
   }, undefined);
 
@@ -513,7 +521,7 @@ export function toBlock(
   return {
     id: `${head.channelId}:${anchorTs}`,
     text,
-    timestamp: new Date(latestMs ?? (Number.isFinite(startedMs) ? startedMs : Date.now())).toISOString(),
+    timestamp: new Date(latestMs ?? (validMs(String(startedMs / 1000)) ?? Date.now())).toISOString(),
     ...(participants.length > 0 ? { participants } : {}),
     ...(messages.length > 0 ? { messages } : {}),
     // A permalink the app already stored wins; otherwise build one from the workspace URL.

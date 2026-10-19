@@ -546,7 +546,7 @@ describe("toBlock: each line carries its own time; the item time is the latest m
 
   test("the prefix is a single-space, comma-free label", () => {
     const block = toBlock([{ channelId: "C1", ts: `${t1}.000100`, author: "U-THEM", text: "x" }], dir);
-    expect(block.text).toMatch(/^\[[A-Z][a-z]{2} \d{2} [A-Z][a-z]{2} \d{2}:\d{2}\] Priya: x$/);
+    expect(block.text).toMatch(/^\[[A-Z][a-z]{2} \d{2} [A-Z][a-z]{2,4} \d{2}:\d{2}\] Priya: x$/);
   });
 
   test("a message with an unparseable ts gets no prefix; the timestamp uses the ones that parse", () => {
@@ -558,6 +558,18 @@ describe("toBlock: each line carries its own time; the item time is the latest m
     expect(first).toBe("Priya: odd");
     expect(second).toMatch(/^\[.+\] You: ok$/);
     expect(block.timestamp).toBe(new Date(t2 * 1000).toISOString());
+  });
+
+  test("an out-of-range ts (1e20) gets no prefix and never throws", () => {
+    const block = toBlock([
+      { channelId: "C1", ts: "1e20", author: "U-THEM", text: "odd" },
+      { channelId: "C1", ts: `${t2}.000100`, author: "U-ME", text: "ok" },
+    ], dir);
+    expect(block.text.split("\n")[0]).toBe("Priya: odd");
+    expect(block.timestamp).toBe(new Date(t2 * 1000).toISOString());
+    const alone = toBlock([{ channelId: "C1", ts: "1e20", author: "U-THEM", text: "odd" }], dir);
+    expect(alone.text).toBe("Priya: odd");
+    expect(Number.isNaN(Date.parse(alone.timestamp))).toBe(false);
   });
 
   test("when no ts parses, no prefixes and a valid ISO timestamp as before", () => {
