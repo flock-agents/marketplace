@@ -99,7 +99,7 @@ describe("harvest — the pure decisions", () => {
     ]);
     expect(groups.map((g) => g.length).sort()).toEqual([1, 1, 2]);
     const block = toBlock(groups[0]!);
-    expect(block.text).toBe("U1: a\nU2: b");
+    expect(block.text).toMatch(/^\[[^\]]+\] U1: a\n\[[^\]]+\] U2: b$/);
     // The route REJECTS an item without these three — a 400 the app used to log as
     // "extraction failed" and carry on from, dropping every harvest on the floor.
     expect(block.id).toBe("C1:1");
@@ -374,14 +374,14 @@ describe("harvest — one workspace's daily pass", () => {
 
     // THE BUG THIS PINS: both lines used to read `U0C2S2W19EZ: …`, so extraction could not tell
     // the owner from a colleague and filed everyone's words as things the owner had said.
-    expect(block.text).toBe("Priya: Bug: the panel is too crowded\nYou: noted, I'll look");
+    expect(block.text).toMatch(/^\[[^\]]+\] Priya: Bug: the panel is too crowded\n\[[^\]]+\] You: noted, I'll look$/);
     expect(block.participants).toEqual(["Priya", "You"]);
   });
 
   test("an unresolvable author degrades to their id, never to the owner", () => {
     const dir = { ownerId: "U-ME", ownerName: "owner", url: null, names: new Map() };
     const block = toBlock([{ channelId: "C1", ts: "1758000000.000100", author: "U-NEW", text: "hi" }], dir);
-    expect(block.text).toBe("U-NEW: hi");           // opaque, but honest
+    expect(block.text).toMatch(/^\[[^\]]+\] U-NEW: hi$/);         // opaque, but honest
     expect(block.text).not.toContain("You");
   });
 
@@ -513,5 +513,77 @@ describe("the first harvest reaches further back than a daily one", () => {
       ACCT, { ...readConfig({ channels: ["C1"] }), lookbackHours: 14 * 24 }, { platform: ctx2 },
     );
     expect(first.blocks).toBe(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+describe("toBlock: each line carries its own time; the item time is the latest message", () => {
+  // 2026-10-18 is a Sunday. 12:19 and 13:23 IST = 06:49 and 07:53 UTC.
+  const t1 = Date.UTC(2026, 9, 18, 6, 49) / 1000;
+  const t2 = Date.UTC(2026, 9, 18, 7, 53) / 1000;
+  const dir = {
+    ownerId: "U-ME", ownerName: "owner", url: "https://acme.slack.com/",
+    names: new Map([["U-THEM", "Priya"]]),
+  };
+
+  test("lines start with [Ddd DD Mon HH:MM] in the process timezone; timestamp is the latest; id is the first ts", () => {
+    // Runs under any TZ: the expected stamp is built the same way, in the process timezone.
+    const stampOf = (sec: number): string => {
+      const p: Record<string, string> = {};
+      const fmt = new Intl.DateTimeFormat("en-GB", {
+        weekday: "short", day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+      });
+      for (const part of fmt.formatToParts(new Date(sec * 1000))) p[part.type] = part.value;
+      return `[${p.weekday} ${p.day} ${p.month} ${p.hour}:${p.minute}]`;
+    };
+    const block = toBlock([
+      { channelId: "C1", ts: `${t1}.000100`, author: "U-THEM", text: "can you check tomorrow?" },
+      { channelId: "C1", ts: `${t2}.000100`, author: "U-ME", text: "yes, will do" },
+    ], dir);
+    expect(block.text).toBe(
+      `${stampOf(t1)} Priya: can you check tomorrow?\n${stampOf(t2)} You: yes, will do`,
+    );
+    // Under the documented test command the stamp is the literal IST wall time.
+    if (process.env.TZ === "Asia/Kolkata") expect(stampOf(t2)).toBe("[Sun 18 Oct 13:23]");
+    expect(block.timestamp).toBe(new Date(t2 * 1000).toISOString());
+    expect(block.id).toBe(`C1:${t1}.000100`);
+    expect(block.messages).toEqual([
+      { index: 0, from: "Priya", text: "can you check tomorrow?" },
+      { index: 1, from: "You", text: "yes, will do" },
+    ]);
+  });
+
+  test("the prefix is a single-space, comma-free label", () => {
+    const block = toBlock([{ channelId: "C1", ts: `${t1}.000100`, author: "U-THEM", text: "x" }], dir);
+    expect(block.text).toMatch(/^\[[A-Z][a-z]{2} \d{2} [A-Z][a-z]{2,4} \d{2}:\d{2}\] Priya: x$/);
+  });
+
+  test("a message with an unparseable ts gets no prefix; the timestamp uses the ones that parse", () => {
+    const block = toBlock([
+      { channelId: "C1", ts: "garbage", author: "U-THEM", text: "odd" },
+      { channelId: "C1", ts: `${t2}.000100`, author: "U-ME", text: "ok" },
+    ], dir);
+    const [first, second] = block.text.split("\n");
+    expect(first).toBe("Priya: odd");
+    expect(second).toMatch(/^\[.+\] You: ok$/);
+    expect(block.timestamp).toBe(new Date(t2 * 1000).toISOString());
+  });
+
+  test("an out-of-range ts (1e20) gets no prefix and never throws", () => {
+    const block = toBlock([
+      { channelId: "C1", ts: "1e20", author: "U-THEM", text: "odd" },
+      { channelId: "C1", ts: `${t2}.000100`, author: "U-ME", text: "ok" },
+    ], dir);
+    expect(block.text.split("\n")[0]).toBe("Priya: odd");
+    expect(block.timestamp).toBe(new Date(t2 * 1000).toISOString());
+    const alone = toBlock([{ channelId: "C1", ts: "1e20", author: "U-THEM", text: "odd" }], dir);
+    expect(alone.text).toBe("Priya: odd");
+    expect(Number.isNaN(Date.parse(alone.timestamp))).toBe(false);
+  });
+
+  test("when no ts parses, no prefixes and a valid ISO timestamp as before", () => {
+    const block = toBlock([{ channelId: "C1", ts: "garbage", author: "U-THEM", text: "odd" }], dir);
+    expect(block.text).toBe("Priya: odd");
+    expect(Number.isNaN(Date.parse(block.timestamp))).toBe(false);
   });
 });
