@@ -252,7 +252,7 @@ describe("migration of a database from before places", () => {
     const { spawnSync } = await import("child_process");
     const dir = mkdtempSync(join(tmpdir(), "calendar-desk-old-place-"));
     const old = new Database(join(dir, "calendar-desk.db"));
-    const upto = (S._db.query("SELECT MAX(idx) AS m FROM _migrations").get() as { m: number }).m; // every migration but this one
+    const upto = S.PLACES_MIGRATION_IDX; // every migration before the places one
     old.exec("CREATE TABLE _migrations (idx INTEGER PRIMARY KEY, applied_at INTEGER NOT NULL)");
     for (let i = 0; i < upto; i++) old.query("INSERT INTO _migrations VALUES (?, 1)").run(i);
     old.exec(`CREATE TABLE plan_steps (account_id TEXT NOT NULL, event_key TEXT NOT NULL, step_key TEXT NOT NULL, kind TEXT, covered INTEGER, PRIMARY KEY (account_id, event_key, step_key));

@@ -9,6 +9,7 @@
 
 import { Database } from "bun:sqlite";
 import { mkdirSync } from "fs";
+import { prepShape, shapeChanged } from "./prep-shape";
 
 const dataDir = process.env.APP_DATA_DIR ?? ".";
 // An app that only works when someone else made its directory dies at import with no log line.
@@ -82,14 +83,23 @@ const migrations: (string | (() => void))[] = [
       WHERE kind IS NULL AND step_key IN ('checkin', 'pack', 'gift', 'book-tickets')`);
   },
   // 2026-10-07 (amendment 1): a ride, table or gift step remembers where it was for (a venue, or the person). Older steps stay null.
-  () => {
+  function addPlaceColumn() {
     const has = (db.query("PRAGMA table_info(plan_steps)").all() as { name: string }[]).some((c) => c.name === "place");
     if (!has) db.exec("ALTER TABLE plan_steps ADD COLUMN place TEXT");
   },
+  // 2026-10-19: appointment-schedule availability blocks are dropped at sync now; the ones already stored go.
+  () => {
+    if (db.query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'events'").get()) db.exec("DELETE FROM events WHERE source = 'google' AND (title LIKE 'appointment schedule:%' OR google_event_id LIKE 'appt\\_%' ESCAPE '\\')");
+  },
+  // 2026-10-19: series (same title, same calendar) the prep agent judged will never need prep: later occurrences are skipped without the agent.
+  // The judged occurrence's shape is kept: an occurrence that differs from it in any way clears the skip.
+  `CREATE TABLE IF NOT EXISTS skipped_series (account_id TEXT NOT NULL, series_key TEXT NOT NULL, shape_json TEXT NOT NULL, reason TEXT, event_key TEXT NOT NULL, decided_at INTEGER NOT NULL, PRIMARY KEY (account_id, series_key))`,
 ];
 
 /** Index of the kinds migration (tests build a database from before it). */
 export const KINDS_MIGRATION_IDX = migrations.findIndex((m) => typeof m === "function" && m.name === "addKindColumns");
+/** Index of the places migration (tests build a database from before it). */
+export const PLACES_MIGRATION_IDX = migrations.findIndex((m) => typeof m === "function" && m.name === "addPlaceColumn");
 
 function applyMigrations(): void {
   db.exec("CREATE TABLE IF NOT EXISTS _migrations (idx INTEGER PRIMARY KEY, applied_at INTEGER NOT NULL)");
@@ -158,6 +168,48 @@ export function saveEventDetails(accountId: string, eventKey: string, d: EventDe
   db.query(`UPDATE events SET guests_json = ?, guest_summary = ?, description = ?, meet_link = ?, details_at = ?,
       location = ? WHERE account_id = ? AND event_key = ?`)
     .run(d.guests ? JSON.stringify(d.guests) : null, d.guestSummary ?? null, d.description ?? null, d.meetLink ?? null, at, d.location ?? rowLocation ?? null, accountId, eventKey);
+}
+
+// ── prep verdicts ─────────────────────────────────────────────────────────────────────────
+
+const seriesKey = (e: { calendar: string | null; title: string }) => `${e.calendar ?? ""}|${e.title.toLowerCase().replace(/\s+/g, " ").trim()}`;
+
+/** The prep agent's decision on a prepped occurrence: prep it, skip only this one, or skip the whole series from now on. */
+export const PREP_VERDICTS = ["prep", "skip_once", "skip_series"] as const;
+export type PrepVerdict = (typeof PREP_VERDICTS)[number];
+
+/** An occurrence with other people on it (guests or a video link) is never skipped for good: the agent's skip_series is kept as skip_once. */
+const hasOthers = (e: EventRow) => !!e.guests?.length || !!e.meetLink;
+
+/** Only skip_series is remembered, with the occurrence's shape; prep and skip_once clear an earlier series skip.
+ *  Returns the verdict that took effect, or null when no prepped event has this key. */
+export function recordPrepVerdict(eventKey: string, asked: PrepVerdict, reason: string | null, at: number): PrepVerdict | null {
+  const p = db.query("SELECT account_id FROM preps WHERE event_key = ? LIMIT 1").get(eventKey) as { account_id: string } | null;
+  const e = p && getEvent(p.account_id, eventKey);
+  if (!e) return null;
+  const verdict = asked === "skip_series" && hasOthers(e) ? "skip_once" : asked;
+  if (verdict !== "skip_series") {
+    clearSeriesSkip(e);
+    return verdict;
+  }
+  db.query(`INSERT INTO skipped_series (account_id, series_key, shape_json, reason, event_key, decided_at) VALUES (?, ?, ?, ?, ?, ?)
+    ON CONFLICT(account_id, series_key) DO UPDATE SET shape_json = excluded.shape_json, reason = excluded.reason, event_key = excluded.event_key, decided_at = excluded.decided_at`)
+    .run(e.accountId, seriesKey(e), JSON.stringify(prepShape(e)), reason, eventKey, at);
+  return verdict;
+}
+
+function clearSeriesSkip(e: { accountId: string; calendar: string | null; title: string }): void {
+  db.query("DELETE FROM skipped_series WHERE account_id = ? AND series_key = ?").run(e.accountId, seriesKey(e));
+}
+
+/** True when the agent skipped this occurrence's series and the occurrence is unchanged from the one it judged.
+ *  A changed occurrence clears the skip, so the agent decides again. */
+export function isSkippedSeries(e: EventRow): boolean {
+  const r = db.query("SELECT shape_json FROM skipped_series WHERE account_id = ? AND series_key = ?").get(e.accountId, seriesKey(e)) as { shape_json: string } | null;
+  if (!r) return false;
+  if (!shapeChanged(JSON.parse(r.shape_json), prepShape(e))) return true;
+  clearSeriesSkip(e);
+  return false;
 }
 
 export const DETAIL_FIRST_READ_MAX = 60;
