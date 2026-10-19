@@ -16,7 +16,7 @@ function platform() {
   } as unknown as PlatformContext;
   return { ctx, published, intents };
 }
-beforeEach(() => { for (const t of ["events", "event_notes", "preps", "cursors"]) S._db.exec(`DELETE FROM ${t}`); });
+beforeEach(() => { for (const t of ["events", "event_notes", "preps", "cursors", "skipped_series"]) S._db.exec(`DELETE FROM ${t}`); });
 
 describe("runPrepWindow", () => {
   // The refresh path (an honest empty scrape clears the day) is covered by sync.test.ts; stub it here.
@@ -34,27 +34,23 @@ describe("runPrepWindow", () => {
     expect((await runPrepWindow(p.ctx, readPrepConfig(undefined), new Date(2026, 9, 5, 14, 45), { facts, sync })).prepped).toBe(0);
     expect(S.getPrep("acct", "k1")!.sessionId).toBe("s-1");
   });
-  test("skips all-day and known-no-attendee events by default, and a vanished event", async () => {
+  test("skips all-day events by default, and a vanished event", async () => {
     ev({ eventKey: "allday", allDay: true, startAt: null, endAt: null });
-    ev({ eventKey: "solo", attendeesText: "" });
-    ev({ eventKey: "gone" }); S.markMissingEvents("acct", ["2026-10-05"], ["allday", "solo"], 2);
+    ev({ eventKey: "gone" }); S.markMissingEvents("acct", ["2026-10-05"], ["allday"], 2);
     const p = platform();
     expect((await runPrepWindow(p.ctx, readPrepConfig(undefined), new Date(2026, 9, 5, 14, 40), { facts: async () => [], sync })).prepped).toBe(0);
-    expect((await runPrepWindow(p.ctx, readPrepConfig({ skipNoAttendees: false }), new Date(2026, 9, 5, 14, 40), { facts: async () => [], sync })).prepped).toBe(1);
   });
   test("a fact event inside the prep window is never prepped", async () => {
     S.upsertFactEvent({ accountId: "acct", factId: 3, title: "Invented fact event", localDate: "2026-10-05", startAt: new Date(2026, 9, 5, 15, 0).getTime(), sourceLink: null }, 1);
     S.upsertFactEvent({ accountId: "acct", factId: 4, title: "Invented all-day fact", localDate: "2026-10-05", startAt: null, sourceLink: null }, 1);
     const p = platform();
-    expect((await runPrepWindow(p.ctx, readPrepConfig({ skipAllDay: false, skipNoAttendees: false }), new Date(2026, 9, 5, 14, 40), { facts: async () => [], sync })).prepped).toBe(0);
+    expect((await runPrepWindow(p.ctx, readPrepConfig({ skipAllDay: false }), new Date(2026, 9, 5, 14, 40), { facts: async () => [], sync })).prepped).toBe(0);
     expect(p.intents).toEqual([]);
   });
-  test("unknown attendees (null — the scrape reads none) are not 'nobody invited': prepped with skipNoAttendees on (R22)", async () => {
+  test("unknown attendees (null — the scrape reads none) are prepped (R22)", async () => {
     ev({ eventKey: "unknown", attendeesText: null });
     const p = platform();
-    const cfgOn = readPrepConfig(undefined);
-    expect(cfgOn.skipNoAttendees).toBe(true);
-    expect((await runPrepWindow(p.ctx, cfgOn, new Date(2026, 9, 5, 14, 40), { facts: async () => [], sync })).prepped).toBe(1);
+    expect((await runPrepWindow(p.ctx, readPrepConfig(undefined), new Date(2026, 9, 5, 14, 40), { facts: async () => [], sync })).prepped).toBe(1);
     expect(p.intents[0].payload).toMatchObject({ eventKey: "unknown", attendees: "" });
   });
   test("the pre-prep refresh re-reads the candidates' details (forceDetailIds = their Google ids)", async () => {
@@ -78,12 +74,62 @@ describe("runPrepWindow", () => {
     const guests = "yogesh@crafo.ai (awaiting)\nAnita Rao <anita@acme.com> (yes)";
     expect(p.intents[0].payload).toMatchObject({ guests, attendees: guests, guestSummary: "2 guests", description: "Review the calendar app", meetLink: "https://meet.google.com/abc-defg-hij" });
   });
-  test("ruling 5: a solo entry (details read, no other guest) gets no prep; unknown details still prep (R22)", async () => {
-    ev({ eventKey: "solo" }); S.saveEventDetails("acct", "solo", { guests: [] }, 1);
-    ev({ eventKey: "unknown", attendeesText: null });
+  test("guests never decide prep: a solo entry (details read, no other guest, an empty agenda line) is prepped for the agent to judge", async () => {
+    ev({ eventKey: "solo", title: "Interview for Acme" }); S.saveEventDetails("acct", "solo", { guests: [] }, 1);
+    ev({ eventKey: "blank", attendeesText: "" });
     const p = platform();
     await runPrepWindow(p.ctx, readPrepConfig(undefined), new Date(2026, 9, 5, 14, 40), { facts: async () => [], sync });
-    expect(p.intents.map((i) => i.payload.eventKey)).toEqual(["unknown"]);
+    expect(p.intents.map((i) => i.payload.eventKey).sort()).toEqual(["blank", "solo"]);
+  });
+  test("a skipped series is skipped without the agent; an occurrence whose guests become known goes back to it", async () => {
+    const at = (d: number) => ({ localDate: `2026-10-0${d}`, startAt: new Date(2026, 9, d, 15, 0).getTime(), endAt: new Date(2026, 9, d, 15, 30).getTime() });
+    ev({ eventKey: "gym-5", title: "Gym", ...at(5) });
+    const p = platform();
+    expect((await runPrepWindow(p.ctx, readPrepConfig(undefined), new Date(2026, 9, 5, 14, 45), { sync })).prepped).toBe(1);
+    expect(S.recordPrepVerdict("gym-5", "skip_series", "personal time block", 1)).toBe("skip_series");
+    ev({ eventKey: "gym-6", title: "Gym", ...at(6) });
+    expect((await runPrepWindow(p.ctx, readPrepConfig(undefined), new Date(2026, 9, 6, 14, 45), { sync })).prepped).toBe(0);
+    ev({ eventKey: "gym-7", title: "Gym", ...at(7) }); S.saveEventDetails("acct", "gym-7", { guests: [{ email: "coach@gym.com" }] }, 1);
+    expect((await runPrepWindow(p.ctx, readPrepConfig(undefined), new Date(2026, 9, 7, 14, 45), { sync })).prepped).toBe(1);
+    expect(p.intents).toHaveLength(2);
+  });
+  test("any change to an occurrence clears the series skip so the agent decides again; an unchanged one stays skipped", async () => {
+    const at = (d: number, h = 15, mins = 30) => ({ localDate: `2026-10-0${d}`, startAt: new Date(2026, 9, d, h, 0).getTime(), endAt: new Date(2026, 9, d, h, mins).getTime() });
+    ev({ eventKey: "gym-5", title: "Gym", ...at(5) });
+    const p = platform();
+    await runPrepWindow(p.ctx, readPrepConfig(undefined), new Date(2026, 9, 5, 14, 45), { sync });
+    S.recordPrepVerdict("gym-5", "skip_series", "personal time block", 1);
+    ev({ eventKey: "gym-6", title: "Gym", ...at(6) });
+    expect((await runPrepWindow(p.ctx, readPrepConfig(undefined), new Date(2026, 9, 6, 14, 45), { sync })).prepped).toBe(0);
+    ev({ eventKey: "gym-7", title: "Gym", ...at(7, 15, 60) });              // longer this time
+    expect((await runPrepWindow(p.ctx, readPrepConfig(undefined), new Date(2026, 9, 7, 14, 45), { sync })).prepped).toBe(1);
+    ev({ eventKey: "gym-8", title: "Gym", ...at(8) });                      // the skip was cleared: back to the agent
+    expect((await runPrepWindow(p.ctx, readPrepConfig(undefined), new Date(2026, 9, 8, 14, 45), { sync })).prepped).toBe(1);
+  });
+  test("an occurrence with guests or a video link is never skipped for good: skip_series takes effect as skip_once", async () => {
+    ev({ eventKey: "standup-5", title: "Daily standup" }); S.saveEventDetails("acct", "standup-5", { guests: [{ email: "dev@crafo.ai" }] }, 1); S.recordPrep("acct", "standup-5", "s");
+    expect(S.recordPrepVerdict("standup-5", "skip_series", "routine", 2)).toBe("skip_once");
+    expect(S.isSkippedSeries(S.getEvent("acct", "standup-5")!)).toBe(false);
+    ev({ eventKey: "call-5", title: "Sync" }); S.saveEventDetails("acct", "call-5", { guests: [], meetLink: "https://meet.google.com/x" }, 1); S.recordPrep("acct", "call-5", "s");
+    expect(S.recordPrepVerdict("call-5", "skip_series", null, 2)).toBe("skip_once");
+  });
+  test("skip_once skips only that occurrence: the next one still goes to the agent", async () => {
+    const at = (d: number) => ({ localDate: `2026-10-0${d}`, startAt: new Date(2026, 9, d, 15, 0).getTime(), endAt: new Date(2026, 9, d, 15, 30).getTime() });
+    ev({ eventKey: "review-5", title: "Product review", ...at(5) });
+    const p = platform();
+    await runPrepWindow(p.ctx, readPrepConfig(undefined), new Date(2026, 9, 5, 14, 45), { sync });
+    S.recordPrepVerdict("review-5", "skip_once", "nothing new this week", 1);
+    ev({ eventKey: "review-6", title: "Product review", ...at(6) });
+    expect((await runPrepWindow(p.ctx, readPrepConfig(undefined), new Date(2026, 9, 6, 14, 45), { sync })).prepped).toBe(1);
+  });
+  test("a verdict needs a prepped event; prep or skip_once clears an earlier series skip", async () => {
+    ev({ eventKey: "never-prepped" });
+    expect(S.recordPrepVerdict("never-prepped", "skip_series", null, 1)).toBeNull();
+    ev({ eventKey: "sync-5", title: "Weekly sync" }); S.recordPrep("acct", "sync-5", "s");
+    S.recordPrepVerdict("sync-5", "skip_series", "a hold", 1);
+    expect(S.isSkippedSeries(S.getEvent("acct", "sync-5")!)).toBe(true);
+    S.recordPrepVerdict("sync-5", "prep", "a call with the team", 2);
+    expect(S.isSkippedSeries(S.getEvent("acct", "sync-5")!)).toBe(false);
   });
 });
 

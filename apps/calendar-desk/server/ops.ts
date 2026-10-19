@@ -1,5 +1,5 @@
 import type { OpHandler, OpError } from "@flock/app-sdk";
-import { listEvents, setEventNote, getEventNote, listInit } from "./store";
+import { listEvents, setEventNote, getEventNote, listInit, recordPrepVerdict, PREP_VERDICTS, type PrepVerdict } from "./store";
 import { ymd } from "./events";
 import { syncAccount } from "./sync";
 import { completeFirstRead } from "./init-retry";
@@ -61,6 +61,15 @@ export const ops: Record<string, OpHandler> = {
     return { from, to, items };
   },
   async plan_events_done(p, ctx) { return handlePlanReport(p, ctx.platform, new Date()); },
+  async meeting_prep_done(p) {
+    if (typeof p.eventKey !== "string" || !p.eventKey) return err("BAD_EVENT", "eventKey is required");
+    if (!PREP_VERDICTS.includes(p.verdict as PrepVerdict)) return err("BAD_VERDICT", `verdict must be one of ${PREP_VERDICTS.join(", ")}`);
+    const reason = typeof p.reason === "string" ? p.reason.slice(0, 200) : null;
+    const verdict = recordPrepVerdict(p.eventKey, p.verdict as PrepVerdict, reason, Date.now());
+    if (!verdict) return err("UNKNOWN_EVENT", "no prepped event has this eventKey", 404);
+    if (verdict !== p.verdict) return { ok: true, verdict, note: "This event has other people on it, so it is skipped this time only; later occurrences still come to you." };
+    return { ok: true, verdict };
+  },
   async set_event_note(p) {
     const note = typeof p.note === "string" ? p.note.trim().slice(0, 2000) : "";
     if (!note) return err("MISSING_NOTE", "A note needs text");

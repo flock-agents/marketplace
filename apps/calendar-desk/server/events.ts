@@ -73,9 +73,15 @@ export function eventKey(p: { calendar: string | null; localDate: string; startA
  *  birthdays, tasks, contacts); the owner's own or a subscribed calendar ("Work", "Family") is kept. An
  *  all-day row with no attendees/creator is a banner, not an event; timed rows always stay. */
 const BUILT_IN_CALENDAR = [/holiday/i, /^birthdays?$/i, /^tasks$/i, /^contacts$/i];
+/** A booking page's open availability: Google ids each block "appt_…" and labels it "appointment schedule: <page>" (the id
+ *  holds in any language). A slot someone books becomes its own event with its own id and title, so these are never meetings (2026-10-19). */
+const AVAILABILITY_ID = /^appt_/;
+const AVAILABILITY_TITLE = /^appointment schedule:/i;
+const isAvailabilityBlock = (e: ScrapedEvent) => AVAILABILITY_ID.test(e.eventId ?? "") || AVAILABILITY_TITLE.test((e.title ?? "").trim());
 function isNoise(e: ScrapedEvent): boolean {
   const cal = (e.calendar ?? "").trim();
   if (cal && BUILT_IN_CALENDAR.some((re) => re.test(cal))) return true;
+  if (isAvailabilityBlock(e)) return true;
   return e.allDay === true && !(e.attendees ?? "").trim();
 }
 
