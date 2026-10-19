@@ -3,7 +3,7 @@
   "slug": "zomato-blinkit",
   "icon": "icon.svg",
   "description": "Search products, manage cart, and place grocery orders on Blinkit (by Zomato)",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "author": "flock",
   "category": "integration",
   "tags": [
@@ -68,6 +68,24 @@
     "keep-alive": {
       "abuseThreshold": 600,
       "limit": 120
+    }
+  },
+  "functions": {
+    "checkout": {
+      "timeoutMs": 90000,
+      "reason": "Drives the real site: opens the cart drawer, waits for Blinkit's payment page and its zomato.com payment frame (up to ~45s on a slow load), or waits in the payment frame for the UPI option. Killed at 30s, the owner is left with a half-opened payment page."
+    },
+    "view-cart": {
+      "timeoutMs": 60000,
+      "reason": "Loads Blinkit's home page and opens the cart drawer (there is no cart page): timed out at 30s live on 2026-10-16."
+    },
+    "add-to-cart": {
+      "timeoutMs": 60000,
+      "reason": "Opens the product page, clicks Add to cart and the + for each further unit, then reads the header cart: three browser steps with waits."
+    },
+    "search-products": {
+      "timeoutMs": 60000,
+      "reason": "Waits up to 15s for the results grid, then scrolls twice to load more cards."
     }
   },
   "requiresAny": false,
