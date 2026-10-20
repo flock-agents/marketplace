@@ -1,12 +1,12 @@
 import type { PlatformContext } from "@flock/app-sdk";
-import { listEvents, getEventNote, getPrep, recordPrep, getCursor, setCursor } from "./store";
+import { listEvents, getEventNote, getPrep, recordPrep, getCursor, setCursor, isSkippedSeries } from "./store";
 import { syncAccount, shouldScrape } from "./sync";
 import { ymd } from "./events";
 
-export interface PrepConfig { windowMinutes: number; skipAllDay: boolean; skipNoAttendees: boolean }
+export interface PrepConfig { windowMinutes: number; skipAllDay: boolean }
 export function readPrepConfig(filter: Record<string, unknown> | undefined): PrepConfig {
   const raw = filter ?? {};
-  return { windowMinutes: typeof raw.windowMinutes === "number" && raw.windowMinutes > 0 ? raw.windowMinutes : 30, skipAllDay: raw.skipAllDay !== false, skipNoAttendees: raw.skipNoAttendees !== false };
+  return { windowMinutes: typeof raw.windowMinutes === "number" && raw.windowMinutes > 0 ? raw.windowMinutes : 30, skipAllDay: raw.skipAllDay !== false };
 }
 export interface RoutineState { prepEnabled: boolean; prepCfg: PrepConfig; planEnabled: boolean }
 /** The routine's manifest id ("meeting-prep"). On the wire `id` is the instance UUID
@@ -34,9 +34,9 @@ export async function runPrepWindow(platform: PlatformContext, cfg: PrepConfig, 
   // Fact events are planned by the morning sort, not meeting-prepped (Part B call 6).
   const candidates = listEvents({ fromDate: today, toDate: today, source: "google" }).filter((e) =>
     !e.allDay && e.startAt != null && e.startAt > now.getTime() && e.startAt <= windowEnd && !getPrep(e.accountId, e.eventKey)
-    // Ruling 5 (2026-10-06): once details are read, no guest but the owner = a time block, no prep.
-    // R22: details never read = unknown, still prepped (the agenda's organiser-only text says nothing).
-    && (!cfg.skipNoAttendees || (e.guests == null ? (e.attendeesText == null || e.attendeesText.trim() !== "") : e.guests.length > 0)));
+    // Guests never decide prep (2026-10-19): a solo entry can be an interview or a task to ready. A series the agent
+    // skipped stays skipped only while its occurrences are unchanged; any change sends it back to the agent.
+    && !isSkippedSeries(e));
   const allDay = cfg.skipAllDay ? [] : listEvents({ fromDate: today, toDate: today, source: "google" }).filter((e) => e.allDay && !getPrep(e.accountId, e.eventKey) && now.getHours() >= 8);
   const pick = [...candidates, ...allDay];
   if (pick.length === 0) return out;

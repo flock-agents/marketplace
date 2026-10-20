@@ -4,6 +4,11 @@
 // function is built from that same source. No backslashes, single quotes or
 // template syntax in it, so it embeds verbatim in both twins.
 export const AGENDA_PARSE_JS = `function parseAgendaAriaLabel(label, textContent) {
+  // A timed event spanning days names both ends up front, with their dates (live 2026-10-19):
+  // "October 19, 2026 at 5pm to October 23, 2026 at 5:30pm, Gym (Day 1 of 5), Yogesh Personal, No location, ".
+  // It is read from its start: the start time leads and the start date moves to the tail, as on any other row.
+  var span = /^(.+?) at ([0-9:.]+ ?(?:am|pm)?) to (.+?) at ([0-9:.]+ ?(?:am|pm)?), /i.exec(String(label || ""));
+  if (span) label = span[2] + ", " + String(label).slice(span[0].length).replace(/, *$/, "") + ", " + span[1];
   var segs = String(label || "").split(", ");
   var time = segs[0] || "";
   var allDay = /^all day$/i.test(time);

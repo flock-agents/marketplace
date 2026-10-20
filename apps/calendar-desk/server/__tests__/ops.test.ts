@@ -11,7 +11,12 @@ beforeEach(() => { for (const t of ["events", "event_notes"]) S._db.exec(`DELETE
 
 describe("operations", () => {
   test("the reminder operations are gone; the event operations remain", () => {
-    expect(Object.keys(ops).sort()).toEqual(["list_upcoming", "plan_events_done", "refresh_calendar", "set_event_note"]);
+    expect(Object.keys(ops).sort()).toEqual(["list_upcoming", "meeting_prep_done", "plan_events_done", "refresh_calendar", "set_event_note"]);
+  });
+  test("meeting_prep_done checks its input and refuses an event that was never prepped", async () => {
+    expect(await ops.meeting_prep_done!({ verdict: "skip_once" }, {} as any)).toMatchObject({ code: "BAD_EVENT" });
+    expect(await ops.meeting_prep_done!({ eventKey: "k", verdict: "no" }, {} as any)).toMatchObject({ code: "BAD_VERDICT" });
+    expect(await ops.meeting_prep_done!({ eventKey: "nope", verdict: "skip_series" }, {} as any)).toMatchObject({ code: "UNKNOWN_EVENT", status: 404 });
   });
   test("list_upcoming lists events only, in date order within the window", async () => {
     const row = (eventKey: string, localDate: string) => ({ eventKey, calendar: null, title: eventKey, startAt: null, endAt: null, allDay: true, localDate, attendeesText: null, location: null, rawTimeText: null });

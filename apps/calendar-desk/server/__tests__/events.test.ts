@@ -154,6 +154,15 @@ describe("live-fix 6: spaceless agenda headers", () => {
       expect(r.filtered).toBe(4);
       expect(r.skipped).toBe(0);
     });
+    test("appointment-schedule availability blocks are dropped by their appt_ id or their label; a booked slot (its own event) is kept", () => {
+      const r = normalizeScrape([
+        { title: "appointment schedule: Yogesh - 30 min slots", date: "19 October 2026", time: "10:30am – 4pm", attendees: "Yogesh Personal" },
+        { eventId: "appt_41gug4h92rtnt5m5qp761bp8t3_20261019T171500/20261019T174500_eW9n", title: "Yogesh - 30 min slots", date: "19 October 2026", time: "5:15 – 5:45pm" },
+        { eventId: "6k4bq8testbooking", title: "Testing Booking", date: "19 October 2026", time: "12 – 12:30pm", attendees: "Yogesh Personal" },
+      ], o);
+      expect(r.rows.map((x) => x.title)).toEqual(["Testing Booking"]);
+      expect(r.filtered).toBe(2);
+    });
   });
 });
 

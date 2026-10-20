@@ -16,6 +16,6 @@
   "network": { "endpoints": [{ "hostname": "www.googleapis.com", "purpose": "Google Calendar API", "methods": ["GET", "POST", "PUT", "DELETE"] }] },
   "name": "Google Calendar",
   "slug": "google-calendar",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "author": "flock"
 }

@@ -40,7 +40,8 @@ A recurring check every 30 minutes, in `app-relay` mode. The app's own minute lo
 Its config:
 - `windowMinutes`: minutes before a meeting to send prep
 - `skipAllDay`: skip all-day events
-- `skipNoAttendees`: skip blocks with nobody else invited
+
+Guests never decide prep: a solo entry can be an interview or a task the agent can ready. The first time a series (same title, same calendar) comes up, the agent judges it and reports a verdict (`meeting_prep_done`): `prep`, `skip_once` (only this occurrence; the next still comes to the agent) or `skip_series` (later occurrences are skipped without invoking the agent while they look the same as the judged one: time of day, length, attendees, and, when read, guests, location, description and Meet link; any change clears the skip and the agent decides again). A later `prep` or `skip_once` clears a series skip. Appointment-schedule availability blocks are dropped at sync and never reach prep.
 
 ### **Plan upcoming events**
 
