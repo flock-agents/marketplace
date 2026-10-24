@@ -65,6 +65,7 @@ curl -s -X POST "$FLOCK_API_URL/api/internal/skill-exec" \
 
 ### search-products
 Search for products on Zepto. Params: `{ query: string, maxResults?: number }`
+Each product carries an `imageUrl`: show the results as a flock-ui block with that address, exactly as given, as each item's `image` (an ItemPicker to pick how many, or a Choice of cards), never as markdown images.
 
 ### add-to-cart
 Add a product to the cart by searching and clicking ADD from results. Params: `{ query: string, quantity?: number }`

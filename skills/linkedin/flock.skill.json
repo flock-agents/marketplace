@@ -3,7 +3,7 @@
   "slug": "linkedin",
   "icon": "icon.svg",
   "description": "Read notifications, browse feed, publish posts, send messages, check messages, monitor post comments, and reply to comments on LinkedIn",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "author": "flock",
   "category": "integration",
   "tags": [
@@ -27,6 +27,18 @@
   "security": {
     "allowedFunctions": [
       "linkedin"
-    ]
+    ],
+    "functionEffects": {
+      "notifications": "read",
+      "feed": "read",
+      "profile": "read",
+      "messages": "read",
+      "search": "read",
+      "comments": "read",
+      "post": "irreversible",
+      "draft-post": "draft",
+      "send-message": "irreversible",
+      "reply-comment": "irreversible"
+    }
   }
 }
