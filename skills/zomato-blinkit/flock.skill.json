@@ -3,7 +3,7 @@
   "slug": "zomato-blinkit",
   "icon": "icon.svg",
   "description": "Search products, manage cart, and place grocery orders on Blinkit (by Zomato)",
-  "version": "1.3.0",
+  "version": "1.3.1",
   "author": "flock",
   "category": "integration",
   "tags": [
@@ -13,7 +13,7 @@
     "blinkit",
     "zomato"
   ],
-  "minFlockVersion": "0.7.0",
+  "minFlockVersion": "0.18.1",
   "tier": "installable",
   "requires": [
     {

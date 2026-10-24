@@ -1,8 +1,8 @@
 {
   "version": 1,
-  "generatedAt": "2026-10-18T18:22:29.859Z",
-  "sourceVersion": "1.3.0",
-  "sourceTag": "zepto-v1.3.0",
+  "generatedAt": "2026-10-24T15:09:59.606Z",
+  "sourceVersion": "1.3.1",
+  "sourceTag": "zepto-v1.3.1",
   "files": {
     "icon.svg": "ff5a156310a9395aeac4463bfab8a45297a71bb08543267e58b1b4279a0bcae6",
     "scripts/view-cart.sh": "6ef55cdec32684705d6bfbebefc116a840f47c8925772f3871245a57a158563e",
@@ -22,7 +22,7 @@
     "scripts/remove-from-cart.sh": "bd25d9f1a915cc513e6957a0cb47bafef999555ef1a6543e6f4b2fd8474058ba",
     "scripts/view-order-history.ts": "4e06583b8e8320901a61fe2e353429142b525acf200ad327036f58543302dc77",
     "scripts/keep-alive.sh": "18708b1bb179a687a8f48b57a433cfb98b68f8a2212204f793b4677864cfa896",
-    "flock.skill.json": "a58aa53b2408ee69e5e1c4117deda02b873a5748ea25a4faad88e00a36defb67",
-    "instructions.md": "00f5dda92f4c8a8ede81914ee73fc034465feebb44d216c90420140b005da1df"
+    "flock.skill.json": "814a8b5356dd08b1a3c4401ffb1943c42425551afb4dfcedcb463ec7d54e0a76",
+    "instructions.md": "1b96606521670f7c37bd73db1659086838e879974088014f5c8efcfd531d780d"
   }
 }

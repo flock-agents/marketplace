@@ -133,11 +133,11 @@
       "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "skills/gmail",
-      "latestVersion": "1.6.2",
-      "latestTag": "gmail-v1.6.2",
+      "latestVersion": "1.6.3",
+      "latestTag": "gmail-v1.6.3",
       "minFlockVersion": "0.13.0",
       "publishedAt": "2026-08-14T10:00:00Z",
-      "updatedAt": "2026-10-17T12:00:00Z"
+      "updatedAt": "2026-10-24T12:00:00Z"
     },
     {
       "slug": "google-calendar",
@@ -176,11 +176,11 @@
       "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "skills/zepto",
-      "latestVersion": "1.3.0",
-      "latestTag": "zepto-v1.3.0",
-      "minFlockVersion": "0.7.0",
+      "latestVersion": "1.3.1",
+      "latestTag": "zepto-v1.3.1",
+      "minFlockVersion": "0.18.1",
       "publishedAt": "2026-08-14T10:00:00Z",
-      "updatedAt": "2026-10-18T12:00:00Z"
+      "updatedAt": "2026-10-24T12:00:00Z"
     },
     {
       "slug": "zomato-blinkit",
@@ -199,11 +199,11 @@
       "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "skills/zomato-blinkit",
-      "latestVersion": "1.3.0",
-      "latestTag": "zomato-blinkit-v1.3.0",
-      "minFlockVersion": "0.7.0",
+      "latestVersion": "1.3.1",
+      "latestTag": "zomato-blinkit-v1.3.1",
+      "minFlockVersion": "0.18.1",
       "publishedAt": "2026-08-14T10:00:00Z",
-      "updatedAt": "2026-10-18T12:00:00Z"
+      "updatedAt": "2026-10-24T12:00:00Z"
     },
     {
       "slug": "bigbasket",
@@ -221,11 +221,11 @@
       "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "skills/bigbasket",
-      "latestVersion": "1.3.0",
-      "latestTag": "bigbasket-v1.3.0",
-      "minFlockVersion": "0.7.0",
+      "latestVersion": "1.3.1",
+      "latestTag": "bigbasket-v1.3.1",
+      "minFlockVersion": "0.18.1",
       "publishedAt": "2026-08-14T10:00:00Z",
-      "updatedAt": "2026-10-18T12:00:00Z"
+      "updatedAt": "2026-10-24T12:00:00Z"
     },
     {
       "slug": "amazon",
@@ -264,11 +264,11 @@
       "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "skills/linkedin",
-      "latestVersion": "1.2.0",
-      "latestTag": "linkedin-v1.2.0",
+      "latestVersion": "1.2.1",
+      "latestTag": "linkedin-v1.2.1",
       "minFlockVersion": "0.10.3",
       "publishedAt": "2026-08-19T05:23:00Z",
-      "updatedAt": "2026-10-05T00:00:00Z"
+      "updatedAt": "2026-10-24T12:00:00Z"
     },
     {
       "slug": "slack",
