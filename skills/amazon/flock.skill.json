@@ -3,7 +3,7 @@
   "slug": "amazon",
   "icon": "icon.svg",
   "description": "Search products, add to cart, place orders, and track deliveries on Amazon.in",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "author": "flock",
   "category": "integration",
   "tags": [
@@ -12,7 +12,7 @@
     "amazon",
     "ecommerce"
   ],
-  "minFlockVersion": "0.7.0",
+  "minFlockVersion": "0.18.0",
   "tier": "installable",
   "requires": [
     {

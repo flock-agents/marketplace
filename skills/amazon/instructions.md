@@ -31,6 +31,7 @@ The user must:
 ## How to Use
 
 1. **Search products**: Navigate to amazon.in, search for the requested item, and present top results with prices
+   - Show the results with their photos: read the results page's pictures too (`authenticated-crawl`, **Photos of what you found**) and put each item's picture, exactly as Flock gave it, as its `image` in a flock-ui block (a Choice of cards, a RowList, or an ItemPicker to pick how many) — never as markdown images, and no `image` for an item whose picture you could not match
 2. **Add to cart**: Add the selected item to the user's cart
 3. **Place order**: Walk through checkout — always confirm the total and delivery address with the user before placing the order
 4. **Track orders**: Check the Orders page for delivery status updates
