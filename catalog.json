@@ -244,8 +244,8 @@
       "repo": "flock-agents/marketplace",
       "path": "skills/amazon",
       "latestVersion": "1.1.0",
-      "latestTag": "amazon-v1.1.0",
-      "minFlockVersion": "0.19.0",
+      "latestTag": "amazon-v1.1.0-rc1",
+      "minFlockVersion": "0.18.0",
       "publishedAt": "2026-08-14T10:00:00Z",
       "updatedAt": "2026-10-25T00:00:00Z"
     },
