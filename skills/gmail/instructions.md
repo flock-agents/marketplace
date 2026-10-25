@@ -126,6 +126,9 @@ only once Gmail confirmed the move.
   it while it waits.
 - `not_attempted` ids ran out of time: call again with exactly those.
   `not_confirmed`: check Trash before trying again.
+- It needs the Google browser sign-in. On an account connected by app password
+  (IMAP) it is refused (`imap_unsupported`): tell the owner, who can connect
+  the browser sign-in or delete the mail in Gmail themselves.
 - Never delete mail another way: not through the browser, and never with Delete forever.
 
 ### starMessage

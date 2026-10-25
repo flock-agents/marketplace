@@ -9,8 +9,9 @@
 //
 // WHAT IT DOES, AND NEVER DOES. For each thread: open it on ONE held, signed-in Gmail page (one session
 // for the batch, like getThreads), press the toolbar's plain "Delete" — Gmail's move-to-Trash, which the
-// owner can undo from Trash for 30 days — and count the thread only once Gmail confirms it ("Conversation
-// moved to Trash", or the thread view closing with no Delete left). It NEVER presses "Delete forever" and
+// owner can undo from Trash for 30 days — and count the thread only once Gmail SAYS so ("Conversation
+// moved to Trash" / "... to Bin"). The thread view closing is not proof (Gmail rewrites the hash after any
+// toolbar action, review fix round 1, 2026-10-25): no notice, not counted. It NEVER presses "Delete forever" and
 // NEVER "Empty Trash": the control must be labelled exactly "Delete", anything naming forever / permanent
 // / empty is excluded, and a thread already in Trash or Spam (where Gmail offers only "Delete forever") is
 // reported failed and left alone.
@@ -18,9 +19,10 @@
 // GMAIL IGNORES .click() on its toolbar divs (memory "Gmail toolbar needs mouse events", live 2026-09-24):
 // the press is mousedown, mouseup, click on the VISIBLE control — pressGmailButton, inlined.
 //
-// IMAP (app-password connections, no browser session): gmail-imap.py cmd_trash copies each message to the
-// Trash folder FIRST and only then removes it from INBOX, mirroring cmd_archive's copy-first safety. A .ts
-// script always wins over the .sh twin in skill-executor's lookup, so this script hands IMAP off itself.
+// NOT OVER IMAP (controller ruling, review fix round 1, 2026-10-25): an app-password connection's ids are
+// INBOX sequence numbers from an earlier listInbox, and an approval card can sit for days — by then the
+// number may name a different message, and trashing it would delete the wrong mail. So an IMAP-only
+// connection is refused (`imap_unsupported`) before anything is touched; there is no IMAP trash command.
 
 import {
   errorJson,
@@ -44,9 +46,10 @@ const ID_RE = /^[A-Za-z0-9_-]+$/;
 
 /**
  * Validate and dedupe the caller's ids. The ids are the ones listInbox / searchEmails / getThreads
- * return (Gmail's legacy thread id; numeric message ids on an IMAP connection); a `#thread-f:` prefix is
- * stripped exactly as getThreads strips it. ONE malformed id refuses the whole call: a destructive batch
- * is never half-run on input the caller got wrong.
+ * return (Gmail's legacy hex thread id). A `#thread-f:<decimal>` id is refused up front: the in-page check
+ * matches the thread heading's legacy id, which that form can never equal, so it could only ever come back
+ * not_open. ONE malformed id refuses the whole call: a destructive batch is never half-run on input the
+ * caller got wrong.
  */
 export function normalizeThreadIds(raw: unknown):
   | { ok: true; ids: string[] }
@@ -57,9 +60,10 @@ export function normalizeThreadIds(raw: unknown):
   const ids: string[] = [];
   for (const v of raw) {
     if (typeof v !== "string") return { ok: false, code: "INVALID_ID", message: "every threadId must be a string" };
-    let id = v.trim();
-    if (id.startsWith("#thread-f:")) id = id.slice("#thread-f:".length);
-    else if (id.startsWith("thread-f:")) id = id.slice("thread-f:".length);
+    const id = v.trim();
+    if (/^#?thread-f:/.test(id)) {
+      return { ok: false, code: "INVALID_ID", message: `threadId ${JSON.stringify(v).slice(0, 40)} is a #thread-f: id; pass the thread id listInbox / searchEmails / getThreads return` };
+    }
     if (!id || !ID_RE.test(id)) return { ok: false, code: "INVALID_ID", message: `threadId ${JSON.stringify(v).slice(0, 40)} is not a Gmail thread id` };
     if (!ids.includes(id)) ids.push(id);
   }
@@ -84,7 +88,7 @@ const LIVE_TIMING: TrashScriptTiming = { readyMs: 20_000, confirmMs: 8_000, flus
 /**
  * In-page, on `#all/<threadId>`: wait for that thread, press its plain Delete, wait for Gmail's word.
  * Returns a JSON string `{ result, confirm?, notice?, n }`:
- *   result "trashed"          — pressed, and Gmail confirmed (confirm "toast" | "nav")
+ *   result "trashed"          — pressed, and Gmail's "moved to Trash/Bin" notice appeared (confirm "toast")
  *          "unconfirmed"      — pressed, Gmail said nothing within confirmMs: NOT counted as trashed
  *          "in-trash-or-spam" — only "Delete forever" offered: nothing pressed
  *          "no-control"       — no eligible Delete on screen: nothing pressed
@@ -129,10 +133,9 @@ export function trashThreadScript(threadId: string, timing: TrashScriptTiming = 
   function threadShown() {
     var h = document.querySelector('h2.hP');
     if (!h) return false;
-    var shown = h.getAttribute('data-legacy-thread-id') || '';
-    // The heading names its thread: it must be the one asked for. Only a heading that names none falls
-    // back to the URL; a different id on screen is never this thread.
-    return shown ? shown === want : location.hash.indexOf(want) >= 0;
+    // The heading must NAME the asked thread. A heading that names none, or names another, is never
+    // this thread: fail closed (not-open), never fall back to the URL (review fix round 1).
+    return (h.getAttribute('data-legacy-thread-id') || '') === want;
   }
   var readyDeadline = Date.now() + ${Math.max(0, Math.floor(timing.readyMs))};
   while (Date.now() < readyDeadline) {
@@ -153,7 +156,6 @@ export function trashThreadScript(threadId: string, timing: TrashScriptTiming = 
   while (Date.now() < deadline) {
     seen = notice(document, TOAST_RE);
     if (seen) { confirm = 'toast'; break; }
-    if (location.hash.indexOf(want) < 0 && !threadShown() && deleteControls().length === 0) { confirm = 'nav'; break; }
     await sleep(100);
   }
   if (!confirm) return JSON.stringify({ result: 'unconfirmed', n: n });
@@ -252,27 +254,8 @@ const HOLD_GRACE_MS = 30_000;
 const PACE_MIN_MS = 1_000;
 const PACE_MAX_MS = 3_000;
 
-/** IMAP connection (no browser session): run gmail-imap.py's cmd_trash with the validated ids. */
-function runImap(ids: string[]): void {
-  const { join } = require("path") as typeof import("path");
-  const py = Bun.which("python3") ? ["python3"] : Bun.which("python") ? ["python"] : Bun.which("py") ? ["py", "-3"] : null;
-  if (!py) errorJson("PYTHON_NOT_FOUND", "This function needs Python 3 and none was found on PATH (tried python3, python, py -3). Install Python 3, or use a browser session instead.");
-  const proc = Bun.spawnSync([...py, join(import.meta.dir, "gmail-imap.py")], {
-    env: { ...process.env, SKILL_FUNCTION: "trashMessage", SKILL_PARAMS: JSON.stringify({ threadIds: ids }) },
-    stdout: "pipe",
-    stderr: "pipe",
-  });
-  const out = proc.stdout.toString().trim();
-  const err = proc.stderr.toString().trim();
-  if (proc.exitCode !== 0 || !out) {
-    let message = err || out || `gmail-imap.py exited ${proc.exitCode}`;
-    try { message = JSON.parse(err).error || message; } catch { /* plain text */ }
-    errorJson("IMAP_ERROR", String(message).slice(0, 300));
-  }
-  let parsed: unknown;
-  try { parsed = JSON.parse(out); } catch { errorJson("IMAP_ERROR", "gmail-imap.py returned no readable result; check Trash before trying again"); }
-  emitResult(parsed);
-}
+export const IMAP_UNSUPPORTED_MESSAGE =
+  "Moving mail to Trash needs the Google browser sign-in; this account is connected by app password. Ask the owner to connect Gmail with the browser sign-in, or to delete the mail in Gmail themselves.";
 
 if (process.env.SKILL_PARAMS !== undefined) {
   runScript();
@@ -285,10 +268,7 @@ function runScript(): void {
   if (!norm.ok) errorJson(norm.code, norm.message);
   const ids = norm.ids;
 
-  if (!process.env.BROWSER_SESSION && process.env.SECRET_IMAP_CREDENTIALS) {
-    runImap(ids);
-    return;
-  }
+  if (!process.env.BROWSER_SESSION && process.env.SECRET_IMAP_CREDENTIALS) errorJson("imap_unsupported", IMAP_UNSUPPORTED_MESSAGE);
   requireBrowserSession();
 
   let psId = "";

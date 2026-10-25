@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-10-25T14:29:56.418Z",
+  "generatedAt": "2026-10-25T14:34:59.197Z",
   "sourceVersion": "1.7.0",
   "sourceTag": "gmail-v1.7.0",
   "files": {
@@ -22,7 +22,7 @@
     "scripts/_calendarAutoResponse.ts": "5742889b98f0ead7b2a7f897ec33e574de8dc50aa62a5057ba1f83dffa017900",
     "scripts/replyToMessage.ts": "a88fa923c462c861ca2135662ea478959869e215f79e6184e903d73ca28097c7",
     "scripts/listLabels.ts": "0ba9675ea7a3cc9db9983cb36484a28e5b20f3c33e80524c05d706ffcc5e7f97",
-    "scripts/gmail-imap.py": "9645bcc1474328b764f732ee48a2aa46b5ef97d2c6d259fa8218adc4b800c9c4",
+    "scripts/gmail-imap.py": "b708eea414af8a35d59289ef0373f713a730a99988eb60c29bc06d23e9450d75",
     "scripts/_composeSave.ts": "884cbd952ee3b50ab551acf0ca9deeb56999d1a07463cc600948efb519b9b6cf",
     "scripts/_gmail_helpers.sh": "fd92b68f05ee124e2d3a9c0487a9340ea14bb0fcf6af44a02f9c45c4d9a8e2d6",
     "scripts/checkEngagedDomains.ts": "0464bfe5cd565ffdea71cdefd6c40c55eef40704a5bf230706b8240639f2f3a6",
@@ -39,7 +39,7 @@
     "scripts/_openDraft.ts": "eaa89233a5dd9a51d6cb130cffbb55bc7cca6b94849f29448f4de126c780cbfe",
     "scripts/createDraft.sh": "466a0a50e0461cc5b94d75329d36c1ed13948a10cd21ec23afb4e6fc20fa1b6c",
     "scripts/sendEmail.ts": "2ff4d1cec454a611179c0328340e68fd6e75d68936c859cb92e977b07909f053",
-    "scripts/trashMessage.ts": "9d05b5a1db38a567cfb7104c064cccab98af292aa0f6cab6b48e611815d79c3d",
+    "scripts/trashMessage.ts": "40a69ad04daec94ea9e72b584066c2637c76d4650a1323d6a77a280aa1f7592b",
     "scripts/_gmailQuery.ts": "7968c8e3e091bc6f4f243d3d7503961643cc5a768ea0debc007306a5e5a81a73",
     "scripts/markRead.sh": "13fa85d05a6b4dab81114dbe76f60ffd1c588dfaafa3d6743c293983f4cf4153",
     "scripts/starMessage.ts": "45bd5415cd8a304e0a34265897c9a3ad500607952be4993636099996a1aa4010",
@@ -70,6 +70,6 @@
     "scripts/markRead.ts": "61c01d8e9488d816aba2986519365dbc15d6fa70e0758eaa97d895d44a63a5e0",
     "scripts/starMessage.sh": "25638febc50a868cde006b9bc71abb8eece73975a24e7bfa13e2482a216ea274",
     "flock.skill.json": "6c76243add3335efa0ad316b1f0cc6d7baa66f688813b906a576bb10b7d5a686",
-    "instructions.md": "acf105c29361039f8709b488ecc600f93b483d97bf989ee6b3b8a3cb40e339a9"
+    "instructions.md": "f5771e6a53db5f5277e292a0c583acf53126a9e81e70f8f2f131bedec19f5d63"
   }
 }
