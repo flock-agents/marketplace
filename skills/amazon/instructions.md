@@ -30,9 +30,14 @@ The user must:
 
 ## How to Use
 
-1. **Search products**: Navigate to amazon.in, search for the requested item, and present top results with prices
-   - Show the results with their photos: read the results page's pictures too (`authenticated-crawl`, **Photos of what you found**) and put each item's picture, exactly as Flock gave it, as its `image` in a flock-ui block (a Choice of cards, a RowList, or an ItemPicker to pick how many) — never as markdown images, and no `image` for an item whose picture you could not match
+1. **Search products**: ask for filters first, then search, read every variant, and show product cards
+   - **Filters first** (clothes, shoes, anything with sizes): ask once with a Questions block before searching — size, budget, and one question for the category (fit and sleeve for shirts). Pre-pick the owner's remembered size (or a family member's, for a gift). Never ask colour: every colour goes on the card. Never ask what the owner already said; when nothing is missing, search straight away.
+   - **Search** with those filters on amazon.in and keep the best 3–5 results.
+   - **Read each product page** in one persistent session (`authenticated-crawl`, **Reading a product's variants**): photos per colour (up to 4), up to 3 bullets, the details text, rating, badge, and every colour × the owner's size and one size either side — each variant's ASIN, price, MRP, delivery and stock. Close the session when done.
+   - **Show one ProductCards** block (`pickedSize` = the owner's size), each photo's `src` exactly as Flock gave it. Only read values go on the card; never invent an ASIN. The Questions block and the ProductCards are separate turns: one reply-capable block per message.
+   - Groceries and Amazon Fresh: show the results with their photos (`authenticated-crawl`, **Photos of what you found**) in an ItemPicker to pick how many (an item with no colours or sizes: a Choice of cards or a RowList) — never as markdown images, and no `image` for an item whose picture you could not match
 2. **Add to cart**: Add the selected item to the user's cart
+   - **Checkout from product cards**: a message starting `[Checkout from …'s product cards]` has one line per cart item, ending with its ASIN in brackets. Through the connected sign-in, open `https://www.amazon.in/dp/<ASIN>?psc=1` for each line and click Add to Cart — that exact ASIN, never a search for it. Then go to Place order.
 3. **Place order**: Walk through checkout — always confirm the total and delivery address with the user before placing the order
 4. **Track orders**: Check the Orders page for delivery status updates
 
