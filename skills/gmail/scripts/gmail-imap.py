@@ -379,6 +379,101 @@ def cmd_archive(creds, params):
         m.logout()
     print(json.dumps({"success": True}))
 
+MAX_TRASH_IDS = 50
+
+def find_trash_folder(m):
+    # Gmail names Trash per locale ("[Gmail]/Trash", "[Google Mail]/Bin"); the \\Trash special-use
+    # flag on LIST is what stays the same.
+    try:
+        status, data = m.list()
+    except imaplib.IMAP4.error:
+        status, data = "NO", []
+    if status == "OK":
+        for raw in data or []:
+            line = raw.decode("utf-8", errors="replace") if isinstance(raw, bytes) else str(raw)
+            flags = line.split(")")[0]
+            if "\\Trash" in flags:
+                quoted = re.search(r'"((?:[^"\\]|\\.)*)"\s*$', line)
+                if quoted:
+                    return quoted.group(1)
+                bare = re.search(r'(\S+)\s*$', line)
+                if bare:
+                    return bare.group(1)
+    return "[Gmail]/Trash"
+
+def cmd_trash(creds, params):
+    # trashMessage (irreversible-action guard, owner 2026-10-25): move to Trash, never delete for good.
+    # COPY-FIRST, like cmd_archive: each message is copied to Trash, and only a message whose copy
+    # Gmail accepted is flagged \\Deleted and expunged from INBOX. Sequence numbers (the ids
+    # cmd_list_inbox hands out) are turned into UIDs before anything changes, because a COPY into
+    # Trash may let Gmail renumber INBOX mid-batch and a stale sequence number would flag the wrong mail.
+    raw = params.get("threadIds")
+    if not isinstance(raw, list) or not raw:
+        print(json.dumps({"error": f"threadIds is required: an array of 1-{MAX_TRASH_IDS} message ids"}), file=sys.stderr)
+        sys.exit(1)
+    ids = []
+    for v in raw:
+        uid = validate_msg_uid(str(v).strip())
+        if uid not in ids:
+            ids.append(uid)
+    if len(ids) > MAX_TRASH_IDS:
+        print(json.dumps({"error": f"at most {MAX_TRASH_IDS} threadIds per call"}), file=sys.stderr)
+        sys.exit(1)
+    m = connect_imap(creds["email"], creds["password"])
+    trashed, failed = [], []
+    try:
+        trash = find_trash_folder(m)
+        m.select("INBOX")
+        uids = {}
+        for seq in ids:
+            status, data = m.fetch(seq.encode(), "(UID)")
+            found = None
+            if status == "OK":
+                for part in data or []:
+                    text = part.decode("utf-8", errors="replace") if isinstance(part, bytes) else str(part)
+                    mt = re.search(r"UID (\d+)", text)
+                    if mt:
+                        found = mt.group(1)
+                        break
+            if found:
+                uids[seq] = found
+            else:
+                failed.append({"threadId": seq, "reason": "not_found: no such message in INBOX; nothing was done"})
+        copied = []
+        for seq, uid in uids.items():
+            try:
+                status, _ = m.uid("COPY", uid, '"' + trash.replace("\\", "\\\\").replace('"', '\\"') + '"')
+            except imaplib.IMAP4.error:
+                status = "NO"
+            if status != "OK":
+                failed.append({"threadId": seq, "reason": "copy_failed: Gmail did not copy it to Trash, so it was left in INBOX"})
+                continue
+            copied.append((seq, uid))
+        for seq, uid in copied:
+            # In Trash now; removing the INBOX copy is the move's second half. If Gmail already dropped
+            # it from INBOX on the copy, this store is a no-op and the message is still in Trash.
+            try:
+                m.uid("STORE", uid, "+FLAGS", "(\\Deleted)")
+            except imaplib.IMAP4.error:
+                pass
+            trashed.append(seq)
+        if copied:
+            # UID EXPUNGE (UIDPLUS, which Gmail supports) removes only these messages; a plain EXPUNGE
+            # would also remove anything another client had flagged \\Deleted in INBOX.
+            uidset = ",".join(uid for _, uid in copied)
+            try:
+                status, _ = m.uid("EXPUNGE", uidset)
+            except imaplib.IMAP4.error:
+                status = "NO"
+            if status != "OK":
+                m.expunge()
+    finally:
+        try:
+            m.logout()
+        except Exception:
+            pass
+    print(json.dumps({"trashed": trashed, "failed": failed}))
+
 def cmd_star(creds, params):
     msg_id = params.get("messageId", "")
     if not msg_id:
@@ -403,6 +498,7 @@ COMMANDS = {
     "markRead": cmd_mark_read,
     "markUnread": cmd_mark_unread,
     "archiveMessage": cmd_archive,
+    "trashMessage": cmd_trash,
     "starMessage": cmd_star,
     "createLabel": cmd_create_label,
     "applyLabel": cmd_apply_label,

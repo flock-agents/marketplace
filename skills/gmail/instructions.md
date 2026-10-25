@@ -110,6 +110,24 @@ Apply a label to a message. Params: `{ messageId: string, labelName: string }`
 ### archiveMessage
 Archive a message (remove from INBOX). Params: `{ messageId: string }`
 
+### trashMessage
+Move threads to Gmail's Trash. Params: `{ threadIds: string[] }` (1-50, the ids
+`listInbox` / `searchEmails` / `getThreads` return). Returns
+`{ trashed: string[], failed: [{ threadId, reason }] }`; a thread is in `trashed`
+only once Gmail confirmed the move.
+- Use it when the owner wants mail deleted (or a rule they set says to). To get
+  mail out of the inbox but keep it, use `archiveMessage`.
+- It moves to Trash, which the owner can undo from Gmail's Trash for 30 days.
+  It never uses Delete forever and never empties Trash; a thread already in
+  Trash or Spam comes back failed (`already_in_trash_or_spam`) untouched.
+- In the owner's own chat it runs. Anywhere else (a routine, an event wake, work
+  someone else set off) it waits for the owner's approval card
+  (`approval_pending`); Approve runs it and tells you the result. Do not retry
+  it while it waits.
+- `not_attempted` ids ran out of time: call again with exactly those.
+  `not_confirmed`: check Trash before trying again.
+- Never delete mail another way: not through the browser, and never with Delete forever.
+
 ### starMessage
 Star a message. Params: `{ messageId: string }`
 

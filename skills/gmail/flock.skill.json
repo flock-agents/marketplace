@@ -95,6 +95,7 @@
       "shouldTrigger",
       "starMessage",
       "storeThreadBody",
+      "trashMessage",
       "updateDraft",
       "downloadAttachment"
     ],
@@ -131,6 +132,7 @@
       "shouldTrigger": "read",
       "starMessage": "write",
       "storeThreadBody": "write",
+      "trashMessage": "destructive",
       "updateDraft": "draft"
     }
   },
@@ -190,6 +192,10 @@
     "listDraftThreads": {
       "timeoutMs": 90000,
       "reason": "Walks every page of #drafts (up to MAX_DRAFT_PAGES) on one held browser session, so it needs the same budget as findDraftForThread; its latency also includes waiting for whoever else holds the mailbox (2026-09-24)."
+    },
+    "trashMessage": {
+      "timeoutMs": 330000,
+      "reason": "A BATCH write: opens up to 50 threads on one held browser session and presses Delete on each, ~10-25s per thread (cold load, Gmail's confirmation, a flush wait so the next navigation cannot abort the move). The script budgets itself at 280s and reports the ids it did not reach as not_attempted; a kill mid-batch would instead lose which threads already went to Trash."
     },
     "getThreads": {
       "timeoutMs": 330000,
@@ -314,7 +320,7 @@
   },
   "name": "Gmail",
   "slug": "gmail",
-  "version": "1.6.3",
-  "minFlockVersion": "0.13.0",
+  "version": "1.7.0",
+  "minFlockVersion": "0.18.1",
   "author": "flock"
 }
