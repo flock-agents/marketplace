@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "generatedAt": "2026-10-25T14:50:13.057Z",
+  "sourceVersion": "1.0.0",
+  "sourceTag": "google-docs-v1.0.0",
+  "files": {
+    "icon.svg": "99b6b0b447aca91d1e982e5ed8c9cf01ccb7f4de167232d208183bf31d831cf4",
+    "scripts/appendText.sh": "65b27cf1c81cb87317bf3a4a0aa4a7af70e6551c9d1f204f35128ea9a02b4342",
+    "scripts/insertText.sh": "bd6d859db0ade0e133b1ac804a16b25f6ea87af24595e5043da0ae463955df31",
+    "scripts/replaceText.sh": "f13aeb1eacee4ea3ba76367927ca289598f2c1ea55d218188c8159b7d0debf99",
+    "scripts/appendText.ts": "feaf9cc9a234401c8f578c7bb0c31928d9027b90d56135f0afc61ab45d733567",
+    "scripts/replaceText.ts": "f28ba508c050eda1a696d080944afba169dfa2e51b7205f7195da0c886fbc2c1",
+    "scripts/insertText.ts": "498630273fb3280be74d00eeb1df86c3a5b49b54f33e5be686ebe0235b3b5da9",
+    "scripts/docs-exec.sh": "4b1e551c944b0badb98cbe330a139476516b44eb0a396a1cfc2f21edd2617c46",
+    "scripts/getDocument.sh": "c5c10ad6ac65819f8cbe4da8cb92aa8b9479ce93baee5649f05b16a9fa1cb2f2",
+    "scripts/_google_helpers.sh": "f113b310684b88f3a553f736d8aacc88761558caac9ba173253f65183f22ba33",
+    "scripts/listDocuments.sh": "7528820a74846ea14c06d3f42b7253449fd426d0f1fba5cd82212402885a082e",
+    "scripts/listDocuments.ts": "f5200a908ac56b574b2c4725a8517d9c35a72c7fdba9439a0d9f36c8b4541dd8",
+    "scripts/getDocument.ts": "9239e1f96251460b5abf287cb5739d0c7728d842af8c2dd7e21a0cbc6d441ae3",
+    "flock.skill.json": "bcc03dba75710c560c80b99dfc4e05f35314b9aaa6379ce9f45cd684705766c6",
+    "instructions.md": "36a13264934a873e147bd19d5db4632247908985327b4e20c533f1588e45c8fb"
+  }
+}
