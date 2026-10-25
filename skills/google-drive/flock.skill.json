@@ -1,0 +1,68 @@
+{
+  "id": "google-drive",
+  "name": "Google Drive",
+  "slug": "google-drive",
+  "description": "List, search, read, and download files in Google Drive",
+  "version": "1.0.0",
+  "minFlockVersion": "0.18.1",
+  "author": "flock",
+  "category": "integration",
+  "scope": "per-agent",
+  "hasScripts": true,
+  "secretRefs": [],
+  "networkAccess": true,
+  "paramSchema": [],
+  "requiresInstance": true,
+  "enabled": true,
+  "requires": [
+    {
+      "type": "browser_session",
+      "service": "google",
+      "description": "Browse, read, and download files",
+      "recommended": true,
+      "rationale": "A saved Google browser session is the reliable path — no per-scope OAuth app review, and one session covers all Google skills."
+    },
+    {
+      "type": "account",
+      "service": "google",
+      "optional": true,
+      "available": false,
+      "unavailableReason": "Setup needed",
+      "description": "Sign in with your Google account (not yet available)"
+    }
+  ],
+  "auth": {
+    "type": "browser_session",
+    "session_name": "google",
+    "setup_instructions": "Log in to your Google account via the browser session manager to access Drive."
+  },
+  "security": {
+    "allowedFunctions": [
+      "searchFiles",
+      "listFiles",
+      "getFile",
+      "downloadFile"
+    ],
+    "functionEffects": {
+      "searchFiles": "read",
+      "listFiles": "read",
+      "getFile": "read",
+      "downloadFile": "read"
+    },
+    "functionCategories": {}
+  },
+  "network": {
+    "endpoints": [
+      {
+        "hostname": "www.googleapis.com",
+        "purpose": "Google Drive API (metadata, download, multipart upload)",
+        "methods": [
+          "GET",
+          "POST",
+          "PATCH",
+          "DELETE"
+        ]
+      }
+    ]
+  }
+}

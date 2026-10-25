@@ -1,0 +1,81 @@
+{
+  "id": "google-sheets",
+  "name": "Google Sheets",
+  "slug": "google-sheets",
+  "description": "Read and edit Google Sheets spreadsheets",
+  "version": "1.0.0",
+  "minFlockVersion": "0.18.1",
+  "author": "flock",
+  "category": "integration",
+  "scope": "per-agent",
+  "hasScripts": true,
+  "secretRefs": [],
+  "networkAccess": true,
+  "paramSchema": [],
+  "requiresInstance": true,
+  "enabled": true,
+  "requires": [
+    {
+      "type": "browser_session",
+      "service": "google",
+      "description": "Read and edit spreadsheets",
+      "recommended": true,
+      "rationale": "A saved Google browser session is the reliable path for Sheets — no per-scope OAuth app review, and one session covers all Google skills."
+    }
+  ],
+  "auth": {
+    "type": "browser_session",
+    "session_name": "google",
+    "setup_instructions": "Log in to your Google account via the browser session manager to access Sheets."
+  },
+  "security": {
+    "allowedFunctions": [
+      "listSpreadsheets",
+      "getSpreadsheet",
+      "readRange",
+      "appendRows",
+      "updateCells"
+    ],
+    "functionEffects": {
+      "listSpreadsheets": "read",
+      "getSpreadsheet": "read",
+      "readRange": "read",
+      "appendRows": "write",
+      "updateCells": "write"
+    },
+    "functionCategories": {
+      "appendRows": "commit",
+      "updateCells": "commit"
+    }
+  },
+  "functions": {
+    "updateCells": {
+      "timeoutMs": 90000,
+      "reason": "Types into the Sheets grid in the browser, then reads the cells back from the sheet's export to confirm them: 15-45s per call. A shorter limit kills a write that may still land, and the account stays busy for the next call."
+    },
+    "appendRows": {
+      "timeoutMs": 90000,
+      "reason": "Types into the Sheets grid in the browser, then reads the cells back from the sheet's export to confirm them: 15-45s per call. A shorter limit kills a write that may still land, and the account stays busy for the next call."
+    }
+  },
+  "network": {
+    "endpoints": [
+      {
+        "hostname": "sheets.googleapis.com",
+        "purpose": "Google Sheets API",
+        "methods": [
+          "GET",
+          "POST",
+          "PUT"
+        ]
+      },
+      {
+        "hostname": "www.googleapis.com",
+        "purpose": "Drive API (to list spreadsheets) and tokeninfo",
+        "methods": [
+          "GET"
+        ]
+      }
+    ]
+  }
+}

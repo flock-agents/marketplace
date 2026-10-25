@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "updatedAt": "2026-10-15T12:00:00Z",
+  "updatedAt": "2026-10-25T00:00:00Z",
   "items": [
     {
       "slug": "linear",
@@ -161,6 +161,72 @@
       "updatedAt": "2026-10-19T00:00:00Z"
     },
     {
+      "slug": "google-drive",
+      "type": "connector",
+      "name": "Google Drive",
+      "description": "List, search, read and download your Google Drive files through your own signed-in browser session; agents upload, organise and create files in Drive's own pages.",
+      "author": "flock",
+      "category": "integration",
+      "tags": [
+        "drive",
+        "files",
+        "google",
+        "productivity"
+      ],
+      "icon": "icon.svg",
+      "repo": "flock-agents/marketplace",
+      "path": "skills/google-drive",
+      "latestVersion": "1.0.0",
+      "latestTag": "google-drive-v1.0.0",
+      "minFlockVersion": "0.18.1",
+      "publishedAt": "2026-10-25T00:00:00Z",
+      "updatedAt": "2026-10-25T00:00:00Z"
+    },
+    {
+      "slug": "google-docs",
+      "type": "connector",
+      "name": "Google Docs",
+      "description": "Read your Google Docs and add, insert or replace text through your own signed-in browser session; every edit is read back to confirm it.",
+      "author": "flock",
+      "category": "integration",
+      "tags": [
+        "docs",
+        "documents",
+        "google",
+        "productivity"
+      ],
+      "icon": "icon.svg",
+      "repo": "flock-agents/marketplace",
+      "path": "skills/google-docs",
+      "latestVersion": "1.0.0",
+      "latestTag": "google-docs-v1.0.0",
+      "minFlockVersion": "0.18.1",
+      "publishedAt": "2026-10-25T00:00:00Z",
+      "updatedAt": "2026-10-25T00:00:00Z"
+    },
+    {
+      "slug": "google-sheets",
+      "type": "connector",
+      "name": "Google Sheets",
+      "description": "Read your Google Sheets and update or append cells through your own signed-in browser session; every write is read back to confirm it.",
+      "author": "flock",
+      "category": "integration",
+      "tags": [
+        "sheets",
+        "spreadsheets",
+        "google",
+        "productivity"
+      ],
+      "icon": "icon.svg",
+      "repo": "flock-agents/marketplace",
+      "path": "skills/google-sheets",
+      "latestVersion": "1.0.0",
+      "latestTag": "google-sheets-v1.0.0",
+      "minFlockVersion": "0.18.1",
+      "publishedAt": "2026-10-25T00:00:00Z",
+      "updatedAt": "2026-10-25T00:00:00Z"
+    },
+    {
       "slug": "zepto",
       "type": "connector",
       "name": "Zepto",
@@ -309,11 +375,11 @@
       "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "apps/slack-desk",
-      "latestVersion": "1.4.4",
-      "latestTag": "slack-desk-v1.4.4",
+      "latestVersion": "1.4.5",
+      "latestTag": "slack-desk-v1.4.5",
       "minFlockVersion": "0.8.2",
       "publishedAt": "2026-09-23T00:00:00Z",
-      "updatedAt": "2026-09-24T12:00:00Z"
+      "updatedAt": "2026-10-25T00:00:00Z"
     },
     {
       "slug": "calendar-desk",

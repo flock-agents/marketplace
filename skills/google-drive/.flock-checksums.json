@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "generatedAt": "2026-10-25T14:50:13.051Z",
+  "sourceVersion": "1.0.0",
+  "sourceTag": "google-drive-v1.0.0",
+  "files": {
+    "icon.svg": "3b2e3ffcfb624bfbf8dc3d5a284a6f05e7ebfe9c2058e8c0c6e6e28ee6208eaa",
+    "scripts/drive-exec.sh": "3f02fabcea6dea08c71e80bc742e46d61c873aa406994fee811588405ebbc60e",
+    "scripts/getFile.sh": "65de9dabc42bcfea2d5ca996e899aa0b87520baeea6e60516f6dbbfe8c7723ee",
+    "scripts/searchFiles.sh": "62d2448a35fc088e578aad756b47e95287723f6858e5f71dcda2edef4e779b2f",
+    "scripts/_google_helpers.sh": "f113b310684b88f3a553f736d8aacc88761558caac9ba173253f65183f22ba33",
+    "scripts/downloadFile.ts": "97f3de47b78cabf468c1f17948cc32a8d59aee50d184e9f97ef0271af33bab6e",
+    "scripts/listFiles.ts": "0db9780758d08860b06daa59cfeed749bdf52204bf39de5ba3321fb239e2c0ef",
+    "scripts/searchFiles.ts": "bdb7a012ecf52bc08ea943d5af1578291d53948a1dc1d60f90e508b709175c0b",
+    "scripts/listFiles.sh": "e2ab09faa49cfbda86adfb3b21f8894e592abfb74e7505e311201a9949054561",
+    "scripts/downloadFile.sh": "9ed7078ca6ce4e4ae3f54846240b075a68c7fdb43364329cae91c4f0bb819ef6",
+    "scripts/getFile.ts": "ce7542c276defa06a2edf5f50f0f9f45bd8794ee639196e1f31a2b962b71fa98",
+    "flock.skill.json": "6e3962de6c47c6ab5b0f11ff2d421ab8e6b93a9caaf128b16a5e6b58d1f6ae9a",
+    "instructions.md": "b145524135bd5252a238c3604c2ee4d0ab134a712f0ee51e68bb008d63ff0250"
+  }
+}
