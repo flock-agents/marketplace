@@ -31,6 +31,7 @@ The user must:
 ## How to Use
 
 1. **Search products**: ask for filters first, then search, read every variant, and show product cards — for every product but groceries (clothes, gifts, gadgets, home items), sized or not; never a Choice for products
+   - **Every product search runs every step below, whoever asked and however the ask was worded.** A hand-off that lists what to capture ("name, price, rating, photo URL") or asks for "a list" sets the least to find, never the most: still open every product page with the product read and show one ProductCards block with its colours, sizes and variants. Search results alone never make a card.
    - **Every shopping ask is a fresh search.** Never show results from memory notes or an earlier chat: prices, stock and ASINs go stale. What was picked before may only shape the filters (size, brands liked).
    - **Filters first** (clothes, shoes, anything with sizes): ask once with a Questions block before searching — size, budget, and one question for the category (fit and sleeve for shirts). Pre-pick the owner's remembered size (or a family member's, for a gift). Never ask colour: every colour goes on the card. Never ask what the owner already said; when nothing is missing, search straight away.
    - **Search** with those filters on amazon.in and keep the best 3–5 results.
