@@ -63,12 +63,15 @@ describe("the variant table", () => {
     expect(otherOptions(shirt, { asin: "B000000G40", colour: "Grey", size: "40" })).toEqual({ colours: 2, sizes: 2 });
   });
 
-  it("plans every variant when they fit; past the cap, the owner's size in every colour first", () => {
+  it("plans whole colours only, the shown one first: no colour half read", () => {
     const shown = { asin: "B000000G40", colour: "Grey", size: "40" };
     expect(planReads(shirt, { size: "40", shown }).reads.length).toBe(8);
-    const few = planReads(shirt, { size: "40", shown, cap: 4 });
-    expect(few.reads.map((v) => v.asin)).toEqual(["B000000G40", "B000000A40", "B000000W40", "B000000G42"]);
-    expect(few.colours[0]).toBe("Grey");
+    const few = planReads(shirt, { size: "40", shown, cap: 6 });
+    expect(few.colours).toEqual(["Grey", "Aqua"]);            // Grey (2) + Aqua (3); White (3) does not fit
+    expect(few.reads.length).toBe(5);
+    expect(few.coloursAll).toBe(3);
+    const one = planReads(shirt, { size: "42", shown, cap: 1 });  // a first colour bigger than the cap: the owner's size first
+    expect(one.reads.map((v) => v.asin)).toEqual(["B000000G40"]);
   });
 });
 

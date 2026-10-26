@@ -4,13 +4,13 @@
  *
  * Params: asin (the product, as on its card); size? (the owner's size, as for read-products: "40" or
  * ["40", "M"]; read first in every colour);
- * max? (variant pages to open, default 40, at most 48); title? (the block's title).
+ * max? (variant pages to open, default and at most 48, the card's limit); title? (the block's title).
  *
  * Amazon's price, stock and delivery differ per variant, so each variant's page is opened (5 tabs at a
  * time) and read on its own: no variant on the card is priced from another. Works for any dimensions
- * Amazon lists — colour, size, style, pattern (_variants.ts). Past `max`, the owner's size in every
- * colour is read first, then the shown colour's other sizes; colours beyond the card's 8 are counted
- * (moreColours). It takes a minute or two: the owner asked for it on the card's button.
+ * Amazon lists — colour, size, style, pattern (_variants.ts). Whole colours only, the shown one first:
+ * a colour whose sizes do not all fit under `max` is left for the card's "+N more colours" link, so no
+ * size reads as sold out for being unread. It takes a minute or two: the owner asked for it on the card's button.
  *
  * Answer: { block, variants, read, failed, note? }; `block` is the card for this one product, to send
  * as it is.
@@ -22,7 +22,7 @@ import { planReads, variantFor, sizesOf, ownSize } from "./_variants";
 
 const asin = String(PARAMS.asin ?? "").trim().toUpperCase();
 const sizes = sizesOf(PARAMS.size);
-const max = Math.min(48, Math.max(1, parseInt(PARAMS.max, 10) || 40));
+const max = Math.min(48, Math.max(1, parseInt(PARAMS.max, 10) || 48));
 const title: string | undefined = PARAMS.title ? String(PARAMS.title).slice(0, 80) : undefined;
 
 await main(async () => {

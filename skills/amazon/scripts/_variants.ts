@@ -119,29 +119,34 @@ export function otherOptions(t: Twister, shown: Variant): { colours?: number; si
 }
 
 /**
- * The variant pages read-variants opens, at most `cap`: every variant Amazon sells when they fit;
- * beyond that, the owner's size in every colour first, then the shown colour's other sizes, then the
- * rest in table order — so what is left out is the least likely pick. `colours` (at most 8, the card's
- * limit) are the colours kept, in the order shown.
+ * The variant pages read-variants opens, at most `cap`: whole colours only — the shown colour first,
+ * then Amazon's order, each with every size it is sold in — so a size the card strikes out is one
+ * Amazon does not sell or marks sold out, never one left unread. Colours that do not fit (and any past
+ * the card's 8) are counted in `coloursAll` for the card's "+N more colours" link. A first colour with
+ * more variants than `cap` is read up to the cap, the owner's size first.
  */
 export function planReads(t: Twister, opts: { size?: string | string[]; shown?: Variant; cap?: number } = {}): { reads: Variant[]; colours: string[]; coloursAll: number } {
-  const cap = Math.max(1, Math.min(opts.cap ?? 40, 48));
+  const cap = Math.max(1, Math.min(opts.cap ?? 48, 48));
   const sizes = opts.size === undefined ? [] : Array.isArray(opts.size) ? opts.size : [opts.size];
   const all = variantsOf(t);
   const coloursAll = [...new Set(all.map((v) => v.colour).filter((c): c is string => c !== undefined))];
-  // The shown colour first, then Amazon's order; at most 8 colours on one card.
+  if (coloursAll.length === 0) return { reads: all.slice(0, cap), colours: [], coloursAll: 0 };
   const first = opts.shown?.colour;
-  const colours = (first && coloursAll.includes(first) ? [first, ...coloursAll.filter((c) => c !== first)] : coloursAll).slice(0, 8);
-  const inCard = all.filter((v) => v.colour === undefined || colours.includes(v.colour));
-  const rank = (v: Variant) => {
-    if (opts.shown && v.asin === opts.shown.asin) return 0;
-    if (v.size !== undefined && sizes.some((one) => sameSize(v.size!, one))) return 1;
-    if (first && v.colour === first) return 2;
-    return 3;
-  };
-  const reads = inCard.map((v, i) => ({ v, i })).sort((a, b) => rank(a.v) - rank(b.v) || a.i - b.i).slice(0, cap).map((x) => x.v);
-  const kept = colours.filter((c) => reads.some((v) => v.colour === c));
-  return { reads, colours: kept, coloursAll: coloursAll.length };
+  const order = first && coloursAll.includes(first) ? [first, ...coloursAll.filter((c) => c !== first)] : coloursAll;
+  const mine = (v: Variant) => (opts.shown && v.asin === opts.shown.asin ? 0 : v.size !== undefined && sizes.some((one) => sameSize(v.size!, one)) ? 1 : 2);
+  const reads: Variant[] = [];
+  const colours: string[] = [];
+  for (const c of order) {
+    if (colours.length === 8) break;
+    const of = all.filter((v) => v.colour === c);
+    if (reads.length + of.length > cap) {
+      if (colours.length === 0) { reads.push(...of.sort((a, b) => mine(a) - mine(b)).slice(0, cap)); colours.push(c); }
+      break;
+    }
+    reads.push(...of);
+    colours.push(c);
+  }
+  return { reads, colours, coloursAll: coloursAll.length };
 }
 
 /** The owner's size param: one size ("40"), or the same size in several systems (["40", "M"]). */
