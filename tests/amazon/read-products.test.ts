@@ -13,6 +13,9 @@ import { gunzipSync } from "zlib";
 import { toItem, toVariantsItem, toBlock, fitResult, type PageRead } from "../../skills/amazon/scripts/_cards";
 import { variantsOf, onScreen, sameSize, variantFor, pickVariant, otherOptions, planReads, sizesOf, type Twister } from "../../skills/amazon/scripts/_variants";
 import { readProductPageSource, readSearchPageSource } from "../../skills/amazon/scripts/_product-read";
+import { saveCards, findCards } from "../../skills/amazon/scripts/_store";
+import { mkdtempSync, rmSync } from "fs";
+import { tmpdir } from "os";
 
 const fixture = (name: string) => gunzipSync(readFileSync(join(import.meta.dir, "fixtures", `${name}.html.gz`))).toString("utf8");
 const blockSpec = (block: string) => JSON.parse(block.replace(/^```flock-ui\n/, "").replace(/\n```$/, ""));
@@ -135,6 +138,24 @@ describe("cards", () => {
     const { item } = toItem(page(), { asin: "B000000G40", colour: "Grey", size: "40" }, shirt);
     expect(blockSpec(toBlock([item], { size: "40" })).children[0].props.pickedSize).toBe("40");
     expect(blockSpec(toBlock([item], { size: "44" })).children[0].props.pickedSize).toBeUndefined();
+  });
+});
+
+describe("the cards read-variants answers again (owner: keep the other products)", () => {
+  it("finds the newest block holding the product, per agent, for a day", () => {
+    const dir = mkdtempSync(join(tmpdir(), "amazon-cards-"));
+    try {
+      const t0 = 1_000_000_000_000;
+      saveCards("personal-assistant", { title: "Shirts", items: [{ id: "B000000G40" }, { id: "B000000A40" }] }, { dir, now: t0 });
+      saveCards("personal-assistant", { title: "Shorts", items: [{ id: "B0C2YCBW9Y" }] }, { dir, now: t0 + 1000 });
+      expect(findCards("personal-assistant", "B000000A40", { dir, now: t0 + 2000 })?.title).toBe("Shirts");
+      expect(findCards("personal-assistant", "B0C2YCBW9Y", { dir, now: t0 + 2000 })?.items.length).toBe(1);
+      expect(findCards("home-manager", "B000000A40", { dir, now: t0 + 2000 })).toBeNull();          // another agent's
+      expect(findCards("personal-assistant", "B000000A40", { dir, now: t0 + 25 * 3600_000 })).toBeNull(); // a day old
+      saveCards("personal-assistant", { title: "Shirts", items: [{ id: "B000000G40", variants: [1, 2] }, { id: "B000000A40" }] }, { dir, now: t0 + 3000 });
+      expect(findCards("personal-assistant", "B000000G40", { dir, now: t0 + 4000 })?.items[0].variants).toEqual([1, 2]); // newest wins
+      expect(findCards("../x", "B000000G40", { dir })).toBeNull();
+    } finally { rmSync(dir, { recursive: true, force: true }); }
   });
 });
 

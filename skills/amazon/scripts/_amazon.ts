@@ -10,7 +10,7 @@ import type { PageRead } from "./_cards";
 
 export const PARAMS = JSON.parse(process.env.SKILL_PARAMS || "{}");
 const sessionName = process.env.BROWSER_SESSION || "";
-const agentId = process.env.FLOCK_AGENT_ID || "";
+export const agentId = process.env.FLOCK_AGENT_ID || "";
 
 /** A refusal to report: thrown inside the run, so the session closes before the script exits. */
 export class Fail extends Error { constructor(public code: string, msg: string) { super(msg); } }

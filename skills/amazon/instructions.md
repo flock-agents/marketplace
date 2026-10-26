@@ -41,7 +41,7 @@ The user must:
 
      `query` is the search with the owner's filters in it (`"asins": ["B0C2YCBW9Y", …]` instead reads products you already have); `size` (optional) a size the owner named, as they wrote it (`"M"`, `"UK 9"`); `max` the products to show (5; at most 10); `title` the block's title. `notInSize` lists the products shown in their default size because they are not sold in the owner's: say so in a few words.
    - **Send its `block` exactly as it is**, in your reply: never retype parts of it, trim, merge or rebuild it, and never add a card of your own beside it. End the reply with one question (which to add to the cart). `skipped` and `note` say what was left out and why: say so in a few words. When the output is long and saved to a file, read that file with `cat` (Bash), never the Read tool — Read cuts long lines, and a cut block is a broken card.
-   - **"See all colours and sizes: <product> [<ASIN>]"** — the owner pressed the card's button for that product: run `read-variants` for the ASIN in brackets (with `size` when the owner named one) and send its `block` the same way (it is that one product's card, every colour and size read from its own page). Say first, in a few words, that it takes a minute or two.
+   - **"See all colours and sizes: <product> [<ASIN>]"** — the owner pressed the card's button for that product: run `read-variants` for the ASIN in brackets (with `size` when the owner named one) and send its `block` the same way: the same products again, that one now with every colour and size read from its own page. Say first, in a few words, that it takes a minute or two.
 
      ```bash
      bash "$FLOCK_SKILLS_DIR/_shared/skill-exec.sh" amazon read-variants '{"asin": "B07DMZDRV4"}'

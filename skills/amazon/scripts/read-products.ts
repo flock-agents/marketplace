@@ -16,7 +16,8 @@
  * Answer: { block, shown, skipped, health, notInSize?, note? }. `block` is the ```flock-ui fence to send
  * as it is. No product read at all is PAGE_CHANGED: Amazon's pages changed beyond the reader's fallbacks.
  */
-import { PARAMS, fail, main, open, readProducts, isAsin, dp, type Session } from "./_amazon";
+import { PARAMS, agentId, fail, main, open, readProducts, isAsin, dp, type Session } from "./_amazon";
+import { saveCards } from "./_store";
 import { readSearchPageSource } from "./_product-read";
 import { toItem, toBlock, healthOf, fitResult, type Health, type PageRead } from "./_cards";
 import { pickVariant, sizesOf, type Variant } from "./_variants";
@@ -91,9 +92,12 @@ await main(async () => {
   const thin = health.filter((h) => h.missing.includes("price") || h.missing.includes("photos"));
   // Each card is one variant, in the owner's size already: no pickedSize to set.
   const opts = { title };
-  return fitResult({
+  const result = fitResult({
     block: toBlock(items, opts), shown: items.length, skipped, health,
     ...(notInSize.length ? { notInSize: { size: sizeText, asins: notInSize.filter((a) => items.some((it) => it.id === shown.get(a)?.asin || it.id === a)) } } : {}),
     ...(thin.length ? { note: `Some reads came back thin (${thin.map((h) => `${h.asin} missing ${h.missing.join(", ")}`).join("; ")}): Amazon.in's page may have changed.` } : {}),
   }, items, opts);
+  // Kept for read-variants, which answers this whole set again with one product swapped in.
+  saveCards(agentId, { title, items });
+  return result;
 });

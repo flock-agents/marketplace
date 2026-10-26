@@ -12,10 +12,12 @@
  * a colour whose sizes do not all fit under `max` is left for the card's "+N more colours" link, so no
  * size reads as sold out for being unread. It takes a minute or two: the owner asked for it on the card's button.
  *
- * Answer: { block, variants, read, failed, note? }; `block` is the card for this one product, to send
- * as it is.
+ * Answer: { block, variants, read, failed, products, note? }; `block` is the cards the product was shown
+ * with (kept by read-products, _store.ts), this one now with every variant — or this card alone when
+ * none were kept — to send as it is.
  */
-import { PARAMS, fail, main, open, readProducts, isAsin, dp } from "./_amazon";
+import { PARAMS, agentId, fail, main, open, readProducts, isAsin, dp } from "./_amazon";
+import { findCards, saveCards } from "./_store";
 import { readProductPageSource } from "./_product-read";
 import { toVariantsItem, toItem, toBlock, fitResult, type PageRead } from "./_cards";
 import { planReads, variantFor, sizesOf, ownSize } from "./_variants";
@@ -49,12 +51,17 @@ await main(async () => {
   const reads = await readProducts(session, plan.reads.map((v) => v.asin).filter((a) => a !== base!.asin), failed);
   reads.set(base!.asin!, base!);
 
-  // 3. One card.
+  // 3. The card, in the set it was shown in: the other products as they were, this one with every
+  // variant, in its place (owner 2026-10-26: "retain the older options we showed").
   const { item, reason } = toVariantsItem(base!, asin, plan, reads, t);
   if (!item) fail("PAGE_CHANGED", `No variant page gave a ${reason?.replace(/^no /, "") ?? "price"}. Amazon.in's pages may have changed.`);
-  const result = {
-    block: toBlock([item], opts), variants: item.variants.length, read: reads.size, failed,
+  const shownWith = findCards(agentId, asin);
+  const items = shownWith ? shownWith.items.map((it) => (it.id === asin ? item : it)) : [item];
+  const setOpts = { ...opts, title: shownWith ? shownWith.title || title : opts.title };
+  const result = fitResult({
+    block: toBlock(items, setOpts), variants: item.variants.length, read: reads.size, failed, products: items.length,
     ...(failed.length ? { note: `${failed.length} variant page(s) could not be read; they are left off the card.` } : {}),
-  };
-  return fitResult(result, [item], opts);
+  }, items, setOpts);
+  saveCards(agentId, { title: setOpts.title, items });
+  return result;
 });
