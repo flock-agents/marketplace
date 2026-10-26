@@ -1,7 +1,7 @@
 import { createFlockApp } from "@flock/app-sdk";
 import { mountKit } from "@flock/app-kit";
 import * as schema from "./db/schema";
-import { seed, spreadSampleReadings } from "./db/seed";
+import { spreadSampleReadings } from "./db/seed";
 import { trackerRoutes } from "./trackers/routes";
 import { kitStore } from "./trackers/store";
 import { SYNC_ROUTINE, syncNow } from "./trackers/sync-now";
@@ -32,7 +32,7 @@ const stored = (table: string, id: string) => kit.sqlite.query(`SELECT * FROM "$
 flock.hono.use("/api/_data/*", loggingGuard(stored));
 // person/timezone/exercises_note: who the dashboard is for (server/profile); focus: the goals the Today page shows;
 // pace.*: when the hourly sync wakes the coach for being well behind (server/pace/params.ts)
-const kit = await mountKit(flock, { schema, seed, settings: [...profileSettings, focusSetting, ...paceSettings] });
+const kit = await mountKit(flock, { schema, settings: [...profileSettings, focusSetting, ...paceSettings] });
 useTimezone(() => kit.settings.get<string>(TIMEZONE_SETTING));
 const person = () => personName(kit.settings.get<string>(PERSON_SETTING));
 spreadSampleReadings(kit);   // a plan's sample readings arrive with one stamp: spread them so the trend has a time axis

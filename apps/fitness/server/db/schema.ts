@@ -10,14 +10,14 @@ export const metrics = sqliteTable("metrics", {
   ...kitColumns(),
   label: text("label").notNull(),
   value: real("value").notNull(),
-  unit: text("unit"),                                // "₹" shows as money, "%" as a percent, anything else as a number
+  unit: text("unit"),                                // "%" shows as a percent, "min" as minutes, anything else as a number with its unit
 });
 
 export const events = sqliteTable("events", {
   ...kitColumns(),
   title: text("title").notNull(),
   at: text("at").notNull(),                          // ISO date or date-time
-  kind: text("kind").default("Note"),                // Meal | Sale | Alert | Milestone | Note
+  kind: text("kind").default("Note"),                // Meal | Alert | Milestone | Note
   kcal: real("kcal"),                                // a meal's calories; the day's meals add up to Calories in
   protein_g: real("protein_g"),                      // a meal's protein in grams; the day's meals add up to Protein
   fiber_g: real("fiber_g"),                          // a meal's fiber in grams; the day's meals add up to Fiber

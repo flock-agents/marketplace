@@ -6,8 +6,8 @@ const m = (label: string, value: number, created_at: string, unit: string | null
 
 describe("latestPerLabel", () => {
   it("keeps the newest reading of each label, labels in the order they first appeared", () => {
-    const rows = [m("Revenue", 3, "2026-10-08T10:00:00.000Z"), m("Orders", 9, "2026-10-08T10:00:00.000Z"), m("Revenue", 2, "2026-10-07T10:00:00.000Z"), m("Orders", 8, "2026-10-07T10:00:00.000Z")];   // newest first
-    expect(latestPerLabel(rows).map((r) => [r.label, r.value])).toEqual([["Orders", 9], ["Revenue", 3]]);
+    const rows = [m("Sleep", 3, "2026-10-08T10:00:00.000Z"), m("Steps", 9, "2026-10-08T10:00:00.000Z"), m("Sleep", 2, "2026-10-07T10:00:00.000Z"), m("Steps", 8, "2026-10-07T10:00:00.000Z")];   // newest first
+    expect(latestPerLabel(rows).map((r) => [r.label, r.value])).toEqual([["Steps", 9], ["Sleep", 3]]);
   });
   it("is empty for no rows", () => expect(latestPerLabel([])).toEqual([]));
 });
@@ -21,11 +21,11 @@ describe("headlineReadings", () => {
 });
 
 describe("deltaOf", () => {
-  const rows = [m("Orders", 132, "2026-10-08T10:00:00.000Z"), m("Revenue", 5, "2026-10-08T10:00:00.000Z"), m("Orders", 112, "2026-10-07T10:00:00.000Z"), m("Revenue", 0, "2026-10-07T10:00:00.000Z"), m("Solo", 4, "2026-10-08T10:00:00.000Z")];   // newest first
-  it("is the percent change from the label's previous reading, to one decimal", () => expect(deltaOf(rows, "Orders")).toBe(17.9));
+  const rows = [m("Steps", 132, "2026-10-08T10:00:00.000Z"), m("Sleep", 5, "2026-10-08T10:00:00.000Z"), m("Steps", 112, "2026-10-07T10:00:00.000Z"), m("Sleep", 0, "2026-10-07T10:00:00.000Z"), m("Solo", 4, "2026-10-08T10:00:00.000Z")];   // newest first
+  it("is the percent change from the label's previous reading, to one decimal", () => expect(deltaOf(rows, "Steps")).toBe(17.9));
   it("is null with no previous reading, or a previous reading of zero", () => {
     expect(deltaOf(rows, "Solo")).toBeNull();
-    expect(deltaOf(rows, "Revenue")).toBeNull();
+    expect(deltaOf(rows, "Sleep")).toBeNull();
     expect(deltaOf(rows, "Missing")).toBeNull();
   });
 });
@@ -45,12 +45,11 @@ describe("whenText", () => {
 });
 
 describe("statValue", () => {
-  it("formats money and minutes, and puts a unit after other numbers", () => {
-    expect(kindOf("₹")).toBe("money");
-    expect(statValue(m("Revenue", 5, "x", "₹"))).toEqual({ value: 5, kind: "money" });
-    expect(statValue(m("Delivery", 29, "x", "min"))).toEqual({ value: 29, kind: "minutes" });
-    expect(statValue(m("Repeat", 64, "x", "%"))).toEqual({ value: 64, kind: "share" });
-    expect(statValue(m("Stock", 12, "x", "kg"))).toEqual({ value: "12 kg" });
-    expect(statValue(m("Orders today", 132, "x", "orders"))).toEqual({ value: 132 });   // the label already says it
+  it("formats minutes and shares, and puts a unit after other numbers", () => {
+    expect(kindOf("₹")).toBe("number");
+    expect(statValue(m("Workout", 29, "x", "min"))).toEqual({ value: 29, kind: "minutes" });
+    expect(statValue(m("Body fat", 64, "x", "%"))).toEqual({ value: 64, kind: "share" });
+    expect(statValue(m("Weight", 72, "x", "kg"))).toEqual({ value: "72 kg" });
+    expect(statValue(m("Steps", 8000, "x", "steps"))).toEqual({ value: 8000 });   // the label already says it
   });
 });

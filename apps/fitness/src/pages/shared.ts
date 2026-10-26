@@ -17,18 +17,18 @@ export const EVENT_FIELDS = [
   { type: "number", name: "protein_g", label: "Protein (g, for a meal)" },
   { type: "number", name: "fiber_g", label: "Fiber (g, for a meal)" },
 ] as const;
-export const KIND_TONES = { Meal: "info", Sale: "success", Alert: "danger", Milestone: "accent", Note: "muted" } as const;
+export const KIND_TONES = { Meal: "info", Alert: "danger", Milestone: "accent", Note: "muted" } as const;
 
 /** "155 kcal · 9 g protein · 4 g fiber" for a meal, as far as its nutrition is known; null when it carries none. */
 export const nutritionText = (e: Pick<DashEvent, "kcal" | "protein_g" | "fiber_g">): string | null => nutritionLine(e);
 
-/** "₹" shows as money, "%" as a share (a plain 64%), "min" as minutes, anything else as a plain number. */
-export const kindOf = (unit: string | null): "money" | "share" | "minutes" | "number" => (unit === "₹" ? "money" : unit === "%" ? "share" : unit === "min" ? "minutes" : "number");
+/** "%" as a share (a plain 64%), "min" as minutes, anything else as a plain number. */
+export const kindOf = (unit: string | null): "share" | "minutes" | "number" => (unit === "%" ? "share" : unit === "min" ? "minutes" : "number");
 
-/** What the number strip shows for a reading: money, minutes, shares (%) and plain numbers are formatted; any other unit is text with the unit after it. */
-export function statValue(m: Pick<Metric, "value" | "unit" | "label">): { value: number | string; kind?: "money" | "minutes" | "share" } {
+/** What the number strip shows for a reading: minutes, shares (%) and plain numbers are formatted; any other unit is text with the unit after it. */
+export function statValue(m: Pick<Metric, "value" | "unit" | "label">): { value: number | string; kind?: "minutes" | "share" } {
   const k = kindOf(m.unit);
-  if (k === "money" || k === "minutes" || k === "share") return { value: m.value, kind: k };
+  if (k === "minutes" || k === "share") return { value: m.value, kind: k };
   const u = m.unit?.trim();
   return u && !m.label.toLowerCase().includes(u.toLowerCase()) ? { value: `${m.value} ${u}` } : { value: m.value };
 }

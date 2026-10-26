@@ -1,5 +1,5 @@
 // Plain constants, no imports: both the server and the browser pages read these.
-export const KINDS = ["Meal", "Sale", "Alert", "Milestone", "Note"] as const;
+export const KINDS = ["Meal", "Alert", "Milestone", "Note"] as const;
 /** A stored kind as one of KINDS whatever its case ("meal" → "Meal"); an unknown kind is kept as written. */
 export const canonicalKind = (kind: string | null): string => KINDS.find((k) => k.toLowerCase() === kind?.trim().toLowerCase()) ?? kind ?? "Note";
 /** The nutrition columns a meal event carries, summed per day for the food goals. */

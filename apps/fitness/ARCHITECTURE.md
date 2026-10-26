@@ -81,7 +81,7 @@ An installed copy that nobody edited follows its package and the component libra
 
 ## This app: Fitness
 
-One person's fitness dashboard, kept by their coach agent. Built from the dashboard kit app.
+One person's fitness dashboard, kept by their coach agent.
 
 ### Tables
 
