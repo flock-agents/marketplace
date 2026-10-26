@@ -4,7 +4,7 @@
   "usage": "template",
   "icon": "🏋️",
   "description": "Today and Yesterday against the goals in focus (exercise, diet, water, and activity and sleep from a connected tracker): the workout plan and planned meals beside what was done and eaten, tomorrow's plans, history and an exercise library.",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "author": "flock",
   "category": "health",
   "tags": [
@@ -109,6 +109,194 @@
       "executionMode": "app-relay",
       "handler": "tracker-sync",
       "prompt": "The hourly tracker sync on the fitness dashboard found the person you coach well behind a usual day for this time of day. The numbers are below: today so far, where a usual day is by now, and how a usual day ends. This wake is the only model run the hourly sync spends, so make it count.\n\n1. If the numbers look wrong rather than behind (you know they are ill, travelling, resting on purpose, or not wearing the watch), send nothing to them. Instead tune the pace check so it stays quiet in such cases (step 3), and reply with one line on what you changed.\n2. Otherwise send them one short nudge in your usual coaching voice: where today stands against a normal day, and one concrete thing to do in the next hour or two (a brisk 15-minute walk, the stairs, the planned workout). No lecture, no list of numbers they cannot act on.\n3. You own the pace check's parameters. The wake's data carries `api`, this app's own API path (e.g. /a/<app id>/api). See them and what they decide now with: curl -s \"$FLOCK_API_URL<api>/pace\" -H \"Authorization: Bearer $FLOCK_AUTH_TOKEN\". Change one with: curl -s -X PATCH \"$FLOCK_API_URL<api>/_app/settings\" -H \"Authorization: Bearer $FLOCK_AUTH_TOKEN\" -H \"Content-Type: application/json\" -d '{\"pace.<name>\": <value>}'. Tune them when the nudges miss: too many or wrong (lower pace.behind_ratio, raise a min_gap in pace.metrics, set pace.max_nudges_per_day to 0 for a rest day and back the next morning), too few (raise pace.behind_ratio), a changed routine (pace.routine_days, pace.default_curve), or a goal you want the pace to aim at (pace.reference \"goal\")."
+    }
+  ],
+  "settings": [
+    {
+      "key": "person",
+      "type": "string",
+      "scope": "owner",
+      "default": "",
+      "label": "The name of the person this dashboard is for, as the coach's messages say it"
+    },
+    {
+      "key": "timezone",
+      "type": "string",
+      "scope": "owner",
+      "default": "",
+      "label": "The person's time zone (IANA, e.g. Europe/London): their days start and end on this clock"
+    },
+    {
+      "key": "exercises_note",
+      "type": "string",
+      "scope": "owner",
+      "default": "How each move is done",
+      "label": "The line under the Exercises page title (e.g. what the moves are chosen for)"
+    },
+    {
+      "key": "focus",
+      "type": "json",
+      "scope": "owner",
+      "default": [
+        "Workout",
+        "PAI",
+        "Calories in",
+        "Protein",
+        "Fiber",
+        "Water"
+      ],
+      "label": "Goals shown on the Today page; every other goal stays on the History page"
+    },
+    {
+      "key": "pace.enabled",
+      "type": "boolean",
+      "scope": "owner",
+      "default": true,
+      "label": "Pace check on: the hourly sync may wake the coach when the person is well behind their usual pace"
+    },
+    {
+      "key": "pace.metrics",
+      "type": "json",
+      "scope": "owner",
+      "default": [
+        {
+          "label": "Steps",
+          "min_gap": 500
+        },
+        {
+          "label": "Calories burned",
+          "min_gap": 50
+        }
+      ],
+      "label": "Numbers checked, each with the least shortfall worth a nudge in its own unit (steps, kcal, km)"
+    },
+    {
+      "key": "pace.behind_ratio",
+      "type": "number",
+      "scope": "owner",
+      "default": 0.5,
+      "label": "Behind when today's number is below this share of where the person usually is by now (0.5 = under half)"
+    },
+    {
+      "key": "pace.min_expected_share",
+      "type": "number",
+      "scope": "owner",
+      "default": 0.25,
+      "label": "No check until a usual day would have reached this share of its total (keeps slow mornings quiet)"
+    },
+    {
+      "key": "pace.check_from",
+      "type": "string",
+      "scope": "owner",
+      "default": "10:00",
+      "label": "Earliest time of day a nudge can go"
+    },
+    {
+      "key": "pace.check_until",
+      "type": "string",
+      "scope": "owner",
+      "default": "20:30",
+      "label": "Latest time of day a nudge can go (later there is no day left to act on it)"
+    },
+    {
+      "key": "pace.routine_days",
+      "type": "integer",
+      "scope": "owner",
+      "default": 21,
+      "label": "Days of history that make the person's usual routine"
+    },
+    {
+      "key": "pace.min_routine_days",
+      "type": "integer",
+      "scope": "owner",
+      "default": 5,
+      "label": "Usual days needed before a personal routine (or a weekday/weekend split) is trusted over the default"
+    },
+    {
+      "key": "pace.split_weekends",
+      "type": "boolean",
+      "scope": "owner",
+      "default": true,
+      "label": "Compare weekdays with weekdays and weekends with weekends, once there are enough of each"
+    },
+    {
+      "key": "pace.off_day_share",
+      "type": "number",
+      "scope": "owner",
+      "default": 0.3,
+      "label": "A past day below this share of a typical day's total (watch off, ill, travelling) is left out of the usual routine"
+    },
+    {
+      "key": "pace.reference",
+      "type": "string",
+      "scope": "owner",
+      "default": "usual",
+      "label": "What \"on pace\" aims at: the usual day's total, or the day's goal when one is set"
+    },
+    {
+      "key": "pace.max_data_age_minutes",
+      "type": "integer",
+      "scope": "owner",
+      "default": 90,
+      "label": "Staleness cutoff: only judge pace when today's tracker data (its newest reading, uploaded with the steps) is at most this many minutes old. Older, or none from today, is a sync gap, not the person: the cycle is skipped silently"
+    },
+    {
+      "key": "pace.max_nudges_per_day",
+      "type": "integer",
+      "scope": "owner",
+      "default": 1,
+      "label": "Most coach wake-ups a day for being behind"
+    },
+    {
+      "key": "pace.nudge_gap_hours",
+      "type": "number",
+      "scope": "owner",
+      "default": 3,
+      "label": "Least time between two nudges on the same day"
+    },
+    {
+      "key": "pace.default_curve",
+      "type": "json",
+      "scope": "owner",
+      "default": [
+        [
+          "06:00",
+          0
+        ],
+        [
+          "08:00",
+          0.08
+        ],
+        [
+          "10:00",
+          0.2
+        ],
+        [
+          "12:00",
+          0.35
+        ],
+        [
+          "14:00",
+          0.5
+        ],
+        [
+          "16:00",
+          0.62
+        ],
+        [
+          "18:00",
+          0.75
+        ],
+        [
+          "20:00",
+          0.9
+        ],
+        [
+          "22:00",
+          1
+        ]
+      ],
+      "label": "Share of a usual day's total reached by each time, used until the person's own hourly history is long enough"
     }
   ]
 }

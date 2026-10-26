@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "updatedAt": "2026-10-26T00:00:00Z",
+  "updatedAt": "2026-10-27T00:00:00Z",
   "items": [
     {
       "slug": "linear",
@@ -126,7 +126,7 @@
         "id": "household",
         "label": "Run the household",
         "description": "Groceries, meals, family routines",
-        "emoji": "🏠",
+        "emoji": "\ud83c\udfe0",
         "order": 40,
         "agentName": "Family Butler",
         "services": [
@@ -363,7 +363,7 @@
       "slug": "slack",
       "type": "connector",
       "name": "Slack",
-      "description": "Full Slack workspace integration — read channels, search messages, manage saved items, post messages, add reactions, and manage user groups. Equivalent to the korotovsky/slack-mcp-server feature set, via browser session auth.",
+      "description": "Full Slack workspace integration \u2014 read channels, search messages, manage saved items, post messages, add reactions, and manage user groups. Equivalent to the korotovsky/slack-mcp-server feature set, via browser session auth.",
       "author": "flock",
       "category": "integration",
       "tags": [
@@ -386,7 +386,7 @@
       "type": "app",
       "usage": "app",
       "name": "Slack Desk",
-      "description": "Builds memory from your Slack conversations and surfaces tasks you missed — reads only, never posts",
+      "description": "Builds memory from your Slack conversations and surfaces tasks you missed \u2014 reads only, never posts",
       "author": "flock",
       "category": "productivity",
       "tags": [
@@ -434,7 +434,7 @@
         "id": "calendar",
         "label": "Manage my calendar",
         "description": "What's coming up, reminders, prep before meetings",
-        "emoji": "📅",
+        "emoji": "\ud83d\udcc5",
         "order": 30
       },
       "publishedAt": "2026-10-03T00:00:00Z",
@@ -463,7 +463,7 @@
         "id": "slack",
         "label": "Catch up on Slack",
         "description": "What you missed, what's asked of you",
-        "emoji": "💬",
+        "emoji": "\ud83d\udcac",
         "order": 20,
         "agentName": "Slack Assistant",
         "services": [
@@ -497,7 +497,7 @@
         "id": "email",
         "label": "Stay on top of email",
         "description": "Finds what needs you, drafts replies",
-        "emoji": "📥",
+        "emoji": "\ud83d\udce5",
         "order": 10,
         "agentName": "Inbox Assistant",
         "services": [
@@ -754,11 +754,11 @@
       "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "apps/fitness",
-      "latestVersion": "1.0.0",
-      "latestTag": "fitness-v1.0.0",
+      "latestVersion": "1.0.1",
+      "latestTag": "fitness-v1.0.1",
       "minFlockVersion": "0.20.0",
       "publishedAt": "2026-10-26T00:00:00Z",
-      "updatedAt": "2026-10-26T00:00:00Z"
+      "updatedAt": "2026-10-27T00:00:00Z"
     },
     {
       "slug": "fitness-coach",

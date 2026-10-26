@@ -1,1 +1,59 @@
-{}
+{
+  "person": {
+    "type": "string"
+  },
+  "timezone": {
+    "type": "string"
+  },
+  "exercises_note": {
+    "type": "string"
+  },
+  "focus": {
+    "type": "json"
+  },
+  "pace.enabled": {
+    "type": "boolean"
+  },
+  "pace.metrics": {
+    "type": "json"
+  },
+  "pace.behind_ratio": {
+    "type": "number"
+  },
+  "pace.min_expected_share": {
+    "type": "number"
+  },
+  "pace.check_from": {
+    "type": "string"
+  },
+  "pace.check_until": {
+    "type": "string"
+  },
+  "pace.routine_days": {
+    "type": "integer"
+  },
+  "pace.min_routine_days": {
+    "type": "integer"
+  },
+  "pace.split_weekends": {
+    "type": "boolean"
+  },
+  "pace.off_day_share": {
+    "type": "number"
+  },
+  "pace.reference": {
+    "type": "string"
+  },
+  "pace.max_data_age_minutes": {
+    "type": "integer"
+  },
+  "pace.max_nudges_per_day": {
+    "type": "integer"
+  },
+  "pace.nudge_gap_hours": {
+    "type": "number"
+  },
+  "pace.default_curve": {
+    "type": "json"
+  }
+}
