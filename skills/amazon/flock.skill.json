@@ -3,7 +3,7 @@
   "slug": "amazon",
   "icon": "icon.svg",
   "description": "Search products, add to cart, place orders, and track deliveries on Amazon.in",
-  "version": "1.1.6",
+  "version": "1.1.7",
   "author": "flock",
   "category": "integration",
   "tags": [
@@ -21,7 +21,33 @@
       "loginUrl": "https://www.amazon.in/",
       "description": "Log in to Amazon.in via the dashboard browser session to access shopping and orders",
       "recommended": true,
-      "rationale": "Amazon has no public shopping API \u2014 a saved browser session is how the agent shops on your behalf."
+      "rationale": "Amazon has no public shopping API — a saved browser session is how the agent shops on your behalf."
     }
-  ]
+  ],
+  "hasScripts": true,
+  "networkAccess": true,
+  "functions": {
+    "read-products": {
+      "timeoutMs": 120000,
+      "reason": "Searches, then opens up to 10 product pages in two rounds of 5 tabs and reads each in the page: 30-70s on a normal connection. Killed at 30s, the agent would get no cards and read the pages by hand."
+    }
+  },
+  "security": {
+    "allowedFunctions": [
+      "read-products"
+    ],
+    "functionEffects": {
+      "read-products": "read"
+    },
+    "trustLevel": "third-party",
+    "networkEndpoints": [
+      {
+        "hostname": "www.amazon.in",
+        "purpose": "Amazon.in product search and product pages",
+        "methods": [
+          "GET"
+        ]
+      }
+    ]
+  }
 }
