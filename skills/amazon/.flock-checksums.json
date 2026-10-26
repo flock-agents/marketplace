@@ -1,11 +1,11 @@
 {
   "version": 1,
   "generatedAt": "2026-10-26T00:00:00.000Z",
-  "sourceVersion": "1.1.3",
-  "sourceTag": "amazon-v1.1.3-rc1",
+  "sourceVersion": "1.1.4",
+  "sourceTag": "amazon-v1.1.4-rc1",
   "files": {
     "icon.svg": "5d7735254f99d2fb9a467608bc2a73d2543f571ca3b1221ef503c405e1dc7b5f",
-    "flock.skill.json": "5e8dbc035b23adfb454c53c68ba28c60358e94dac42432f8df2a87e498cd3f02",
-    "instructions.md": "0b17898e4cc2aff092294703bee091010355fd506d5e6ab8606903ac0e26bc1d"
+    "flock.skill.json": "0e4228e73083ddbe72b89c7e79f6ac6beed81f7c8b6e30e36a1f8e6c6fb517a5",
+    "instructions.md": "2479a26419d26fdbaa81ce419be82eb69738babf9ac11fc273404259d9349adf"
   }
 }
