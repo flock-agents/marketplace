@@ -4,7 +4,7 @@
   "usage": "template",
   "icon": "🏋️",
   "description": "Today and Yesterday against the goals in focus (exercise, diet, water, and activity and sleep from a connected tracker): the workout plan and planned meals beside what was done and eaten, tomorrow's plans, history and an exercise library.",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "author": "flock",
   "category": "health",
   "tags": [

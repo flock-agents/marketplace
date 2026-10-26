@@ -1,6 +1,6 @@
 {
   "name": "fitness",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Today and Yesterday against the goals in focus (exercise, diet, water, and activity and sleep from a connected tracker): the workout plan and planned meals beside what was done and eaten, tomorrow's plans, history and an exercise library.",
   "objects": [
     "globe"
@@ -29,7 +29,7 @@
           "type": "string",
           "required": false,
           "nullable": true,
-          "note": "\"₹\" shows as money, \"%\" as a percent, anything else as a number"
+          "note": "\"%\" shows as a percent, \"min\" as minutes, anything else as a number with its unit"
         }
       }
     },
@@ -51,7 +51,7 @@
           "required": false,
           "nullable": true,
           "default": "Note",
-          "note": "Meal | Sale | Alert | Milestone | Note"
+          "note": "Meal | Alert | Milestone | Note"
         },
         "kcal": {
           "type": "number",
