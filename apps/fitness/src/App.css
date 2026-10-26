@@ -64,5 +64,5 @@
 .db-log-head { margin: 12px 0 4px; font-size: 13px; font-weight: 600; color: var(--ink-2); }
 .db-log-head:first-child { margin-top: 0; }
 .db-sync { display: inline-flex; flex-direction: column; align-items: flex-end; gap: 2px; }
-.db-sync-error { color: var(--danger, #b42318); font-size: 12px; max-width: 260px; text-align: right; }
+.db-sync-error { color: var(--risk); font-size: 12px; max-width: 260px; text-align: right; }
 .db-hint { font-size: 13px; margin-top: 8px; }
