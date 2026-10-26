@@ -1,11 +1,18 @@
 {
   "version": 1,
-  "generatedAt": "2026-10-04T07:26:23.654Z",
-  "sourceVersion": "1.0.1",
-  "sourceTag": "amazon-v1.0.1",
+  "generatedAt": "2026-10-26T00:00:00.000Z",
+  "sourceVersion": "1.1.12",
+  "sourceTag": "amazon-v1.1.12-rc1",
   "files": {
+    "flock.skill.json": "f93bade44aacd7dcc20f7f8eb8d1ac47ea8715e0e3bbfb0e76f1c24d57dc26a8",
     "icon.svg": "5d7735254f99d2fb9a467608bc2a73d2543f571ca3b1221ef503c405e1dc7b5f",
-    "flock.skill.json": "9c54f900082a624df28a1e4d0b8fbb957312b000f0be69decfbc6ac9a55113f6",
-    "instructions.md": "3ff8f4778c4a18dee2e539632f6c5ae80e1f9aca963580333ea6963eff4859f3"
+    "instructions.md": "213f0315ed085c035ed094ab7b56778a1d4d6ea979b9ad5db6058a382ec3eb7b",
+    "scripts/_amazon.ts": "e42d789c6848aae3e117de2eba784468383e35fe9a0f35ad3e9d00d7dd67fea1",
+    "scripts/_cards.ts": "218a843f47efbcd7817d4d285e8065a4557ba2f6d8c86501e53d9b98db1aaa45",
+    "scripts/_product-read.ts": "48b3caa875b0265741350e73a5a05c57d284e15d8ab8c2442414ed7ca0a21cf8",
+    "scripts/_store.ts": "7a3ce9412f7df4aff01fe9c64d91ff333d87d6d06852f9b918dd0cde9e0a1a34",
+    "scripts/_variants.ts": "8278c13b427b650c179700c52751b6b80ca46d10e8bf35fab8e982e876e69933",
+    "scripts/read-products.ts": "d44f7c7474f4287094bee9a5ad03379e7dc975e46f6cea625605adf890e2da43",
+    "scripts/read-variants.ts": "1b971793588e27ca07994abf7709af23f8db0bcbc4b3aaf810a5ec06939a81da"
   }
 }
