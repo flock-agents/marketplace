@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "updatedAt": "2026-10-25T00:00:00Z",
+  "updatedAt": "2026-10-26T00:00:00Z",
   "items": [
     {
       "slug": "linear",
@@ -711,6 +711,54 @@
       "minFlockVersion": "0.15.0",
       "publishedAt": "2026-10-11T00:00:00Z",
       "updatedAt": "2026-10-16T00:00:00Z"
+    },
+    {
+      "slug": "fitness",
+      "type": "app",
+      "usage": "template",
+      "name": "Fitness",
+      "description": "One person's fitness dashboard: goals in focus, workout plan, planned meals, water, history and an exercise library, with optional tracker sync (Zepp).",
+      "author": "flock",
+      "category": "health",
+      "tags": [
+        "fitness",
+        "health",
+        "coach",
+        "nutrition",
+        "workout",
+        "zepp"
+      ],
+      "icon": "icon.svg",
+      "repo": "flock-agents/marketplace",
+      "path": "apps/fitness",
+      "latestVersion": "1.0.0",
+      "latestTag": "fitness-v1.0.0",
+      "minFlockVersion": "0.20.0",
+      "publishedAt": "2026-10-26T00:00:00Z",
+      "updatedAt": "2026-10-26T00:00:00Z"
+    },
+    {
+      "slug": "fitness-coach",
+      "type": "template",
+      "name": "Fitness Coach",
+      "description": "A personal coach that plans your workouts and meals, logs what you eat, drink and do, and keeps a fitness dashboard current, with steps, sleep and PAI from a connected tracker",
+      "author": "flock",
+      "category": "personal",
+      "tags": [
+        "fitness",
+        "health",
+        "coach",
+        "nutrition",
+        "workout"
+      ],
+      "icon": "icon.svg",
+      "repo": "flock-agents/marketplace",
+      "path": "templates/fitness-coach",
+      "latestVersion": "1.0.0",
+      "latestTag": "fitness-coach-v1.0.0",
+      "minFlockVersion": "0.20.0",
+      "publishedAt": "2026-10-26T00:00:00Z",
+      "updatedAt": "2026-10-26T00:00:00Z"
     }
   ]
 }
