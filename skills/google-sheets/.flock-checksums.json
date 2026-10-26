@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "generatedAt": "2026-10-25T14:50:13.060Z",
+  "sourceVersion": "1.0.0",
+  "sourceTag": "google-sheets-v1.0.0",
+  "files": {
+    "icon.svg": "5c9ea33e945d4b39d3b1c8a9357c8b355717d4fc6f47ea2df3e5a58790b5a7bb",
+    "scripts/readRange.ts": "430ea39ff0f50fb622393b57e15cdd3587bddf484aa5e777957780fb5697aaa2",
+    "scripts/updateCells.ts": "be3cf443718d5136b47b75e32694d3fc04c4b8b3d0da8cb542dbc0c4c62ae683",
+    "scripts/appendRows.ts": "7ffea6c6a9b5c1d25af74793cba0a7a0be97356377ca70874a383fa8be3fb323",
+    "scripts/listSpreadsheets.ts": "0b53efb6d72a75fdc34527c990e0da20452ef6abb41da8b46606a12bcf1e51f2",
+    "scripts/listSpreadsheets.sh": "2851de30999ab7e49dfb9793cd94447069b1103ddc1f86c437442f4152348d91",
+    "scripts/appendRows.sh": "59c5d2ffb27f87a6e69756cda770e772ee6ffc668f7ef53123434868858f6f44",
+    "scripts/updateCells.sh": "ff1e8c821023c6275bd0110ed0149f831f00f74eed0dfc7fd43e3c11d9aefee2",
+    "scripts/readRange.sh": "d2f589995a56687c4f0e9f2ce4ecc368b34d21575307816591351506a0b0e93f",
+    "scripts/getSpreadsheet.sh": "e89841a9d6aeb335f28202f87716cc2070055b49faa0a55c3f5b6cc796f42ebe",
+    "scripts/_google_helpers.sh": "f113b310684b88f3a553f736d8aacc88761558caac9ba173253f65183f22ba33",
+    "scripts/sheets-exec.sh": "6b4dda5c62b4a444a077ced5ebe577d733e7dbe88ff4e351c4b665216fba6ffd",
+    "scripts/getSpreadsheet.ts": "322771d20339e68f00cc4d1e09ddd1fa09dc7a2cd6f3880449e49ee6ad292a40",
+    "flock.skill.json": "99ef70617c54755ea736e4d67fa18337984e0670e8623578ed6b3dcd02ccec8e",
+    "instructions.md": "cf9d6a6b08eb22823f7de5d27f8b3f26e416709ece09a227a311de4c5b4e4437"
+  }
+}

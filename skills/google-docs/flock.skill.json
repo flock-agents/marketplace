@@ -1,0 +1,85 @@
+{
+  "id": "google-docs",
+  "name": "Google Docs",
+  "slug": "google-docs",
+  "description": "Read and edit Google Docs documents",
+  "version": "1.0.0",
+  "minFlockVersion": "0.18.1",
+  "author": "flock",
+  "category": "integration",
+  "scope": "per-agent",
+  "hasScripts": true,
+  "secretRefs": [],
+  "networkAccess": true,
+  "paramSchema": [],
+  "requiresInstance": true,
+  "enabled": true,
+  "requires": [
+    {
+      "type": "browser_session",
+      "service": "google",
+      "description": "Read and edit documents",
+      "recommended": true,
+      "rationale": "A saved Google browser session is the reliable path for Docs — no per-scope OAuth app review, and one session covers all Google skills."
+    }
+  ],
+  "auth": {
+    "type": "browser_session",
+    "session_name": "google",
+    "setup_instructions": "Log in to your Google account via the browser session manager to access Docs."
+  },
+  "security": {
+    "allowedFunctions": [
+      "listDocuments",
+      "getDocument",
+      "appendText",
+      "insertText",
+      "replaceText"
+    ],
+    "functionEffects": {
+      "listDocuments": "read",
+      "getDocument": "read",
+      "appendText": "write",
+      "insertText": "write",
+      "replaceText": "write"
+    },
+    "functionCategories": {
+      "appendText": "commit",
+      "insertText": "commit",
+      "replaceText": "commit"
+    }
+  },
+  "functions": {
+    "appendText": {
+      "timeoutMs": 90000,
+      "reason": "Types into the Docs editor in the browser, then reads the document back to confirm the edit: 15-45s per call. A shorter limit kills a write that may still land, and the account stays busy for the next call."
+    },
+    "insertText": {
+      "timeoutMs": 90000,
+      "reason": "Types into the Docs editor in the browser, then reads the document back to confirm the edit: 15-45s per call. A shorter limit kills a write that may still land, and the account stays busy for the next call."
+    },
+    "replaceText": {
+      "timeoutMs": 90000,
+      "reason": "Types into the Docs editor in the browser, then reads the document back to confirm the edit: 15-45s per call. A shorter limit kills a write that may still land, and the account stays busy for the next call."
+    }
+  },
+  "network": {
+    "endpoints": [
+      {
+        "hostname": "docs.googleapis.com",
+        "purpose": "Google Docs API",
+        "methods": [
+          "GET",
+          "POST"
+        ]
+      },
+      {
+        "hostname": "www.googleapis.com",
+        "purpose": "Drive API (to list docs) and tokeninfo",
+        "methods": [
+          "GET"
+        ]
+      }
+    ]
+  }
+}
