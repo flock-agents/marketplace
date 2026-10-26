@@ -1,11 +1,11 @@
 # Zepp
 
-Zepp / Amazfit watch data for Flock via [zepp-mcp](https://github.com/flock-agents/zepp-mcp) (stdio MCP, pinned commit). One skill, one account per person; each agent picks its account.
+Zepp / Amazfit watch data for Flock via [zepp-mcp](https://github.com/flock-agents/zepp-mcp) (stdio MCP, vendored in `server/` at commit 9ba4f58). One skill, one account per person; each agent picks its account.
 
 ## Setup
 
 Requires `python3` with `uv` installed (`python3 -m pip install uv`). Add an account per person with:
-`ZEPP_EMAIL`, `ZEPP_PASSWORD`, optional `ZEPP_COUNTRY`, and a `ZEPP_TOKEN_CACHE` path unique to that account.
+`ZEPP_EMAIL`, `ZEPP_PASSWORD` and optional `ZEPP_COUNTRY`. Tokens are cached per account under `~/.zepp-mcp/<email hash>/`.
 
 ## Tools
 
