@@ -243,8 +243,8 @@
       "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "skills/amazon",
-      "latestVersion": "1.1.4",
-      "latestTag": "amazon-v1.1.4-rc1",
+      "latestVersion": "1.1.5",
+      "latestTag": "amazon-v1.1.5-rc1",
       "minFlockVersion": "0.18.0",
       "publishedAt": "2026-08-14T10:00:00Z",
       "updatedAt": "2026-10-25T00:00:00Z"
