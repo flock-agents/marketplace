@@ -1,0 +1,40 @@
+{
+  "name": "Zepp",
+  "slug": "zepp",
+  "icon": "icon.svg",
+  "description": "Read Zepp / Amazfit watch data: daily activity, workouts, sleep, heart rate and body composition",
+  "version": "1.0.0",
+  "author": "flock",
+  "category": "integration",
+  "tags": ["fitness", "health", "zepp", "amazfit", "wearable"],
+  "minFlockVersion": "0.20.0",
+  "tier": "installable",
+  "requires": {
+    "type": "mcp_server",
+    "description": "Zepp account (one per person)",
+    "mcp": {
+      "archetype": "stdio-apikey",
+      "transport": "stdio",
+      "command": "python3",
+      "args": [
+        "-m", "uv", "tool", "run", "--quiet", "--python", "3.11",
+        "--from", "git+https://github.com/flock-agents/zepp-mcp@9ba4f58ec19c300a74751386fc9a8d22aebbbfff",
+        "zepp-mcp"
+      ],
+      "credentialsRequired": true,
+      "documentationUrl": "https://github.com/flock-agents/zepp-mcp",
+      "setupInstructions": "Add one account per person, using that person's Zepp app sign-in. Each account needs its own token cache path so tokens never cross between people.",
+      "setupSteps": [
+        { "title": "Zepp sign-in", "description": "Enter the email and password used in the Zepp app (email sign-in; Google/Apple sign-in accounts need a Zepp password set first)." },
+        { "title": "Region", "description": "Two-letter country code of the Zepp account, e.g. IN or US." },
+        { "title": "Token cache", "description": "A file path unique to this person, e.g. ~/.zepp-mcp/<name>/token.json. Never reuse another account's path." }
+      ],
+      "envVars": [
+        { "name": "ZEPP_EMAIL", "label": "Zepp email", "description": "Email used to sign in to the Zepp app", "sensitive": false },
+        { "name": "ZEPP_PASSWORD", "label": "Zepp password", "description": "Password used to sign in to the Zepp app", "sensitive": true },
+        { "name": "ZEPP_COUNTRY", "label": "Country code", "description": "Two-letter region of the Zepp account (default US)", "placeholder": "IN", "sensitive": false, "optional": true },
+        { "name": "ZEPP_TOKEN_CACHE", "label": "Token cache path", "description": "Per-account token cache file; must differ for every account", "placeholder": "~/.zepp-mcp/<name>/token.json", "sensitive": false }
+      ]
+    }
+  }
+}
