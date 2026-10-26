@@ -1,0 +1,114 @@
+{
+  "name": "Fitness",
+  "slug": "fitness",
+  "usage": "template",
+  "icon": "🏋️",
+  "description": "Today and Yesterday against the goals in focus (exercise, diet, water, and activity and sleep from a connected tracker): the workout plan and planned meals beside what was done and eaten, tomorrow's plans, history and an exercise library.",
+  "version": "1.0.0",
+  "author": "flock",
+  "category": "health",
+  "tags": [
+    "fitness",
+    "health",
+    "coach",
+    "nutrition",
+    "workout",
+    "zepp"
+  ],
+  "minFlockVersion": "0.20.0",
+  "type": "fullstack",
+  "access": "private",
+  "spa": true,
+  "apiPrefix": "/api",
+  "buildCommand": "bun run app:build",
+  "buildDir": "dist",
+  "deployDir": ".flock-out",
+  "processConfig": {
+    "command": "bun",
+    "args": [
+      "server/index.js"
+    ],
+    "healthCheckPath": "/api/health"
+  },
+  "config": {
+    "requires": {
+      "agent": {
+        "required": true
+      },
+      "skills": [
+        {
+          "skillId": "zepp",
+          "optional": true
+        }
+      ]
+    }
+  },
+  "assemble": true,
+  "pages": [
+    "today",
+    "yesterday",
+    "history",
+    "exercises"
+  ],
+  "tables": [
+    "metrics",
+    "events",
+    "plan_items",
+    "meal_plan_items",
+    "water_logs",
+    "pace_samples",
+    "pace_nudges"
+  ],
+  "objects": [
+    "globe"
+  ],
+  "nav": "top",
+  "chat": "side",
+  "titleFromName": "title.overview",
+  "labels": {
+    "title.overview": "Fitness"
+  },
+  "useCases": {
+    "for": [
+      "Coach one person's daily diet, water and workouts against their goals",
+      "Keep a workout plan and planned meals beside what was actually done and eaten",
+      "Pull steps, sleep, weight and PAI from a fitness tracker (Zepp) automatically",
+      "Nudge someone who is well behind their usual activity for the time of day"
+    ],
+    "notFor": [
+      "A household's meal planning for everyone (use meal-planner)",
+      "A page of business numbers (use dashboard)",
+      "Things to follow up one by one (use tracker)"
+    ]
+  },
+  "design": "1.3.1",
+  "display": {
+    "object": "globe",
+    "labels": {
+      "title.overview": "Fitness"
+    }
+  },
+  "agentInterface": {
+    "intents": [
+      {
+        "name": "log-planned-meal",
+        "description": "The owner tapped Eaten on a planned meal that has no numbers yet: estimate the person's portion, with its full nutrient breakdown, and log it as eaten.",
+        "instructions": "The owner tapped Eaten on the dashboard for a planned meal that has no numbers yet (or no full nutrient breakdown). The payload has `date`, `slot`, `name` (the dishes), `at` (when to file it) and `api` (this app's own API path, e.g. /a/<app id>/api). Estimate the portion the person you coach usually eats of those dishes (use what you know of their food and portions): its calories, protein and fiber, AND its full nutrient breakdown, every key in the example below in the unit its name ends with (g, mg, mcg; 0 when the food has none; a rough estimate is fine). Then log it in ONE call, exactly this shape, and reply with one line: what you logged and its calories, protein and fiber. No messages, no questions, nothing else.\n\n```bash\ncurl -s -X POST \"$FLOCK_API_URL<api>/_data/events\" -H \"Authorization: Bearer $FLOCK_AUTH_TOKEN\" -H \"Content-Type: application/json\" -d '{\"title\": \"<slot>: <name>\", \"at\": \"<at>\", \"kind\": \"Meal\", \"kcal\": <kcal>, \"protein_g\": <g>, \"fiber_g\": <g>, \"carbs_g\": <g>, \"sugar_g\": <g>, \"fat_g\": <g>, \"sat_fat_g\": <g>, \"mufa_g\": <g>, \"pufa_g\": <g>, \"omega3_g\": <g>, \"cholesterol_mg\": <mg>, \"vitamin_a_mcg\": <mcg>, \"vitamin_c_mg\": <mg>, \"vitamin_d_mcg\": <mcg>, \"vitamin_e_mg\": <mg>, \"vitamin_k_mcg\": <mcg>, \"thiamin_mg\": <mg>, \"riboflavin_mg\": <mg>, \"niacin_mg\": <mg>, \"pantothenic_acid_mg\": <mg>, \"vitamin_b6_mg\": <mg>, \"biotin_mcg\": <mcg>, \"folate_mcg\": <mcg>, \"vitamin_b12_mcg\": <mcg>, \"choline_mg\": <mg>, \"calcium_mg\": <mg>, \"iron_mg\": <mg>, \"magnesium_mg\": <mg>, \"phosphorus_mg\": <mg>, \"potassium_mg\": <mg>, \"sodium_mg\": <mg>, \"zinc_mg\": <mg>, \"copper_mg\": <mg>, \"manganese_mg\": <mg>, \"selenium_mcg\": <mcg>, \"iodine_mcg\": <mcg>}'\n```\n\nThe reply must carry the stored row; a `not_counted` reply says what is missing: fix it and send it again."
+      }
+    ]
+  },
+  "routines": [
+    {
+      "id": "tracker-sync",
+      "name": "Tracker sync to the fitness dashboard",
+      "description": "Every hour from 6:30 AM to 10:30 PM the dashboard reads each connected tracker itself (Zepp: steps, calories, sleep, workouts, weight and PAI) and files the numbers, with no agent run. With no tracker connected it does nothing. Between 10 AM and 8:30 PM it also checks the pace of the day, and wakes the coach only when the person is well behind a usual day for the time.",
+      "trigger": {
+        "type": "schedule",
+        "cron": "30 6-22 * * *"
+      },
+      "executionMode": "app-relay",
+      "handler": "tracker-sync",
+      "prompt": "The hourly tracker sync on the fitness dashboard found the person you coach well behind a usual day for this time of day. The numbers are below: today so far, where a usual day is by now, and how a usual day ends. This wake is the only model run the hourly sync spends, so make it count.\n\n1. If the numbers look wrong rather than behind (you know they are ill, travelling, resting on purpose, or not wearing the watch), send nothing to them. Instead tune the pace check so it stays quiet in such cases (step 3), and reply with one line on what you changed.\n2. Otherwise send them one short nudge in your usual coaching voice: where today stands against a normal day, and one concrete thing to do in the next hour or two (a brisk 15-minute walk, the stairs, the planned workout). No lecture, no list of numbers they cannot act on.\n3. You own the pace check's parameters. The wake's data carries `api`, this app's own API path (e.g. /a/<app id>/api). See them and what they decide now with: curl -s \"$FLOCK_API_URL<api>/pace\" -H \"Authorization: Bearer $FLOCK_AUTH_TOKEN\". Change one with: curl -s -X PATCH \"$FLOCK_API_URL<api>/_app/settings\" -H \"Authorization: Bearer $FLOCK_AUTH_TOKEN\" -H \"Content-Type: application/json\" -d '{\"pace.<name>\": <value>}'. Tune them when the nudges miss: too many or wrong (lower pace.behind_ratio, raise a min_gap in pace.metrics, set pace.max_nudges_per_day to 0 for a rest day and back the next morning), too few (raise pace.behind_ratio), a changed routine (pace.routine_days, pace.default_curve), or a goal you want the pace to aim at (pace.reference \"goal\")."
+    }
+  ]
+}

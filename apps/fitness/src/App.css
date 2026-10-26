@@ -1,0 +1,68 @@
+/* The app's own CSS (outside src/flock/, so design updates keep it). Tokens only, never a literal colour. */
+/* Recent: on a phone the Sample chip, the kind chip, Edit and Delete left the title a word per line. The title keeps the row's width
+   (less the Sample chip) and the actions sit on their own line under it. */
+@media (max-width: 480px) {
+  .db-recent .fl-row { flex-wrap: wrap; row-gap: 6px; align-items: flex-start; }
+  .db-recent .fl-row-main { flex: 1 1 0; min-width: 0; overflow-wrap: anywhere; }
+  .db-recent .fl-row-trail { flex-basis: 100%; justify-content: flex-start; flex-wrap: wrap; }
+}
+
+/* Targets: one card per goal, two across on a wide screen. */
+.db-goals { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+.db-goal { display: grid; gap: 8px; padding: 12px 16px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+.db-goal-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.db-goal-label { font-weight: 600; color: var(--ink); }
+.db-goal-text { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px; font-size: 13px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.db-goal-rest { color: var(--ink-3); }
+
+/* Today: the day tabs and the sync button side by side in the page heading. */
+.db-actions { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.db-quiet { margin: 0; font-size: 13px; color: var(--ink-3); }
+
+/* Today's plan: one line per exercise, its picture and name linking to the library. */
+.db-plan { display: grid; gap: 8px; margin-top: 12px; padding: 12px 16px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+.db-plan-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.db-plan-count { font-size: 13px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.db-plan-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.db-plan-item { display: grid; grid-template-columns: auto 56px 1fr auto; align-items: center; gap: 10px; padding: 4px 0; }
+.db-plan-item input { width: 18px; height: 18px; accent-color: var(--accent); }
+.db-plan-thumb { display: block; width: 56px; height: 40px; object-fit: cover; border-radius: calc(var(--radius) / 2); background: var(--line); }
+.db-plan-name { font-weight: 500; color: var(--ink); overflow-wrap: anywhere; }
+.db-plan-name a { color: inherit; text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 3px; }
+.db-plan-dose { font-size: 13px; color: var(--ink-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.db-plan-item.is-done .db-plan-name { color: var(--ink-3); text-decoration: line-through; }
+
+/* Exercises: a card per exercise, its moving picture on top. */
+.db-exercises { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
+.db-exercise { display: grid; grid-template-rows: auto 1fr; overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); scroll-margin-top: 80px; }
+.db-exercise.is-focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+.db-exercise img { display: block; width: 100%; aspect-ratio: 16 / 10; object-fit: cover; background: var(--line); }
+.db-exercise-body { display: grid; align-content: start; gap: 6px; padding: 12px 16px 16px; }
+.db-exercise-body h3 { margin: 0; font-size: 16px; color: var(--ink); }
+.db-exercise-body ul { margin: 0; padding-left: 18px; font-size: 14px; color: var(--ink-2); display: grid; gap: 2px; }
+.db-exercise-back { margin: 4px 0 0; font-size: 13px; color: var(--ink); }
+.db-exercise-credit { margin: 0; font-size: 12px; color: var(--ink-3); }
+
+/* Planned meals: the same card as the workout plan, without a picture column. */
+.db-meal-item { grid-template-columns: 1fr auto; }
+.db-meal-slot { margin-right: 6px; font-size: 12px; font-weight: 600; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.04em; }
+
+/* Past days: each finished day's number, toned against its target. */
+.db-day-cell { font-variant-numeric: tabular-nums; }
+.db-day-cell.is-empty { color: var(--ink-4); }
+.db-day-cell.is-good { color: var(--ok); }
+.db-day-cell.is-short { color: var(--risk); }
+.db-day-cell.is-over { color: var(--block); }
+.db-meal-numbers { display: block; margin-top: 2px; font-size: 12px; font-weight: 400; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.db-meal-item.is-done .db-plan-name { text-decoration: none; }
+.db-water { display: grid; gap: 10px; }
+.db-glasses { display: flex; flex-wrap: wrap; gap: 6px; }
+.db-glass { display: inline-grid; place-items: center; width: 40px; height: 44px; padding: 0; border: 1px solid var(--line); border-radius: calc(var(--radius) / 2); background: var(--surface); color: var(--ink-3); cursor: pointer; }
+.db-glass.is-full { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, var(--surface)); color: var(--accent); }
+.db-glass:disabled { cursor: default; }
+.db-glass:not(:disabled):hover { border-color: var(--accent); }
+.db-log-head { margin: 12px 0 4px; font-size: 13px; font-weight: 600; color: var(--ink-2); }
+.db-log-head:first-child { margin-top: 0; }
+.db-sync { display: inline-flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+.db-sync-error { color: var(--danger, #b42318); font-size: 12px; max-width: 260px; text-align: right; }
+.db-hint { font-size: 13px; margin-top: 8px; }
