@@ -120,7 +120,7 @@ describe("stale data never reads as falling behind", () => {
     expect(paceVerdict([steps(1000, routine)], ctx([14, 0], {}, 0), defaults()).metrics[0]).toMatchObject({ expected: 2000, ratio: 0.5 });
   });
   it("skips silently with no watch data from today, even when the day's total reads zero", () => {
-    // The Kritika case: PAI and workouts uploaded recently, but nothing from the watch today, so no steps.
+    // A real case: PAI and workouts uploaded recently, but nothing from the watch today, so no steps.
     expect(paceVerdict([steps(0, routine)], ctx([14, 0], {}, null), defaults()).nudge).toBe(false);
   });
   it("never treats a missing total for today as zero", () => {
