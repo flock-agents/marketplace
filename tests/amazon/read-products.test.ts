@@ -11,7 +11,7 @@ import { readFileSync, existsSync } from "fs";
 import { join } from "path";
 import { gunzipSync } from "zlib";
 import { toItem, toVariantsItem, toBlock, fitResult, type PageRead } from "../../skills/amazon/scripts/_cards";
-import { variantsOf, onScreen, sameSize, variantFor, otherOptions, planReads, sizesOf, ownSize, type Twister } from "../../skills/amazon/scripts/_variants";
+import { variantsOf, onScreen, sameSize, variantFor, pickVariant, otherOptions, planReads, sizesOf, type Twister } from "../../skills/amazon/scripts/_variants";
 import { readProductPageSource, readSearchPageSource } from "../../skills/amazon/scripts/_product-read";
 
 const fixture = (name: string) => gunzipSync(readFileSync(join(import.meta.dir, "fixtures", `${name}.html.gz`))).toString("utf8");
@@ -36,27 +36,26 @@ describe("the variant table", () => {
   });
 
   it("matches a size however Amazon writes it", () => {
-    for (const [a, b] of [["M", "Medium"], ["2XL", "XX-Large"], ["XXL", "2XL"], ["40", "40 cm"], ["UK 9", "9"], ["L", "l"]]) expect(sameSize(a, b)).toBe(true);
-    for (const [a, b] of [["M", "L"], ["40", "42"], ["S", "XS"], ["9", "9.5"]]) expect(sameSize(a, b)).toBe(false);
+    for (const [a, b] of [["M", "Medium"], ["2XL", "XX-Large"], ["XXL", "2XL"], ["40", "40 cm"], ["UK 9", "uk9"], ["L", "l"]]) expect(sameSize(a, b)).toBe(true);
+    // Never across sizing systems: a wrong match is worse than none.
+    for (const [a, b] of [["M", "L"], ["40", "42"], ["S", "XS"], ["9", "9.5"], ["UK 10", "US 10"], ["UK 9", "9"], ["40", "M"]]) expect(sameSize(a, b)).toBe(false);
   });
 
-  it("shows the owner's size in the colour on screen; else a colour that has it; null when none does", () => {
+  it("shows the owner's size when sold under that name; else the default variant, never nothing", () => {
     expect(variantFor(shirt, "40", "B000000G40")?.asin).toBe("B000000G40");
     expect(variantFor(shirt, "38", "B000000G40")?.asin).toBe("B000000A38");   // no Grey 38
     expect(variantFor(shirt, "42", "B000000G40")?.asin).toBe("B000000A42");   // Grey 42 marked sold out
-    expect(variantFor(shirt, "44", "B000000G40")).toBeNull();
+    expect(pickVariant(shirt, "44", "B000000G40")).toEqual({ variant: { asin: "B000000G40", size: "40", colour: "Grey" }, matched: false });
+    expect(pickVariant(shirt, "42", "B000000G40").matched).toBe(true);
     expect(variantFor(shirt, undefined, "B000000G40")?.asin).toBe("B000000G40");
   });
 
-  it("the owner's size in several systems: the first this product sells wins", () => {
+  it("a size the product does not sell under that name: the default variant (no conversion 40 → M)", () => {
     const letters: Twister = { ...shirt, values: { size_name: ["S", "M", "L"], color_name: ["Aqua", "Grey", "White"] } };
-    expect(variantFor(letters, ["40", "M"], "B000000G40")).toMatchObject({ asin: "B000000G40", size: "M" });
-    expect(variantFor(shirt, ["40", "M"], "B000000G40")).toMatchObject({ asin: "B000000G40", size: "40" });
-    expect(variantFor(letters, ["40"], "B000000G40")).toBeNull();
-    expect(sizesOf(["40", " M "])).toEqual(["40", "M"]);
-    expect(sizesOf("40")).toEqual(["40"]);
+    expect(pickVariant(letters, "40", "B000000G40")).toMatchObject({ variant: { asin: "B000000G40", size: "M" }, matched: false });
+    expect(pickVariant(letters, "Medium", "B000000G40")).toMatchObject({ variant: { asin: "B000000G40" }, matched: true });
+    expect(sizesOf("M")).toEqual(["M"]);
     expect(sizesOf(undefined)).toEqual([]);
-    expect(ownSize(letters, ["40", "Medium"])).toBe("M");
   });
 
   it("counts the other colours and sizes for the card's button", () => {

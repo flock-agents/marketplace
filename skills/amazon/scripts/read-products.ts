@@ -1,25 +1,25 @@
 #!/usr/bin/env bun
 /**
- * Amazon.in — search, and show each result in the owner's size, read from that variant's own page.
+ * Amazon.in — search, and show each result as one variant, read from that variant's own page.
  *
- * Params: query (what to search) or asins (product ids to read, up to 10); size (the owner's size —
- * ask it first for anything sold in sizes — as one size, "40", or as it is written in each sizing
- * system, ["40", "M"]: the first a product sells is used); max? (products to show, default 5, at most 10); title? (the
- * block's title).
+ * Params: query (what to search) or asins (product ids to read, up to 10); size? (a size the owner
+ * named, written as they wrote it — a preference only); max? (products to show, default 5, at most 10);
+ * title? (the block's title).
  *
- * Amazon's price, stock and delivery differ per colour and size, so a product's card is the variant for
- * the owner's size (the colour on screen in that size, else the first colour that has it), read from
- * its own page: the search result's page first, then — when that is another size — the right variant's
- * page in a second round. A product not sold in that size is left off (`skipped`). The card's other
- * colours and sizes are counted on it (moreOptions) for its "See more" button: read-variants reads them.
+ * Size is a variant like colour (owner 2026-10-26): Amazon's price, stock and delivery differ per
+ * colour and size, so a card shows the variant the page opens on, read from its own page. When the
+ * owner named a size this product sells under that very name ("M" = "Medium", never "40" = "M"), that
+ * variant is shown instead (its own page, in a second round); a product without it still shows, in its
+ * default variant, and is listed in `notInSize`. The card counts its other colours and sizes
+ * (moreOptions) for its "See more" button: read-variants reads them.
  *
- * Answer: { block, shown, skipped, health, note? }. `block` is the ```flock-ui fence to send as it is.
- * No product read at all is PAGE_CHANGED: Amazon's pages changed beyond the reader's fallbacks.
+ * Answer: { block, shown, skipped, health, notInSize?, note? }. `block` is the ```flock-ui fence to send
+ * as it is. No product read at all is PAGE_CHANGED: Amazon's pages changed beyond the reader's fallbacks.
  */
 import { PARAMS, fail, main, open, readProducts, isAsin, dp, type Session } from "./_amazon";
 import { readSearchPageSource } from "./_product-read";
 import { toItem, toBlock, healthOf, fitResult, type Health, type PageRead } from "./_cards";
-import { variantFor, sizesOf, type Variant } from "./_variants";
+import { pickVariant, sizesOf, type Variant } from "./_variants";
 
 const query: string = String(PARAMS.query ?? "").trim();
 const asinsIn: string[] = Array.isArray(PARAMS.asins) ? PARAMS.asins.map((a: unknown) => String(a).trim().toUpperCase()) : [];
@@ -55,12 +55,14 @@ await main(async () => {
   const shown = new Map<string, Variant | null>();
   const skipped = [...failed];
   const second: string[] = [];
+  const notInSize: string[] = [];
   for (const a of asins) {
     const r = first.get(a);
     if (!r) continue;
     if (!r.twister) { shown.set(a, null); continue; }
-    const v = variantFor(r.twister, sizes, r.asin);
-    if (!v) { skipped.push({ asin: a, reason: `not sold in size ${sizeText}` }); continue; }
+    const { variant: v, matched } = pickVariant(r.twister, sizes, r.asin);
+    if (!v) { shown.set(a, null); continue; }
+    if (sizes.length && !matched) notInSize.push(a);
     shown.set(a, v);
     if (v.asin !== r.asin) second.push(v.asin);
   }
@@ -74,7 +76,7 @@ await main(async () => {
     const base = first.get(a)!;
     const v = shown.get(a) ?? null;
     const own = v && v.asin !== base.asin ? variantReads.get(v.asin) : base;
-    if (!own) { skipped.push({ asin: a, reason: `its size ${sizeText} page could not be read` }); continue; }
+    if (!own) { skipped.push({ asin: a, reason: "its variant's page could not be read" }); continue; }
     // A variant page leaves product-level text out sometimes: the first page fills it in.
     const read: PageRead = { ...base, ...Object.fromEntries(Object.entries(own).filter(([, x]) => x !== undefined && x !== "")) };
     health.push(healthOf(a, own));
@@ -84,9 +86,6 @@ await main(async () => {
   }
   if (items.length === 0) {
     if (skipped.some((s) => s.reason === "CAPTCHA")) fail("CAPTCHA_DETECTED", "Amazon.in is showing a CAPTCHA. Solve it in the dashboard browser session, then try again.");
-    if (sizes.length && skipped.length && skipped.every((s) => s.reason.startsWith("not sold in size"))) {
-      return { block: null, shown: 0, skipped, health, note: `None of the results is sold in size ${sizeText}.` };
-    }
     fail("PAGE_CHANGED", `No product page gave a title and a price (${skipped.map((s) => `${s.asin}: ${s.reason}`).join("; ") || "nothing read"}). Amazon.in's pages may have changed: read them with the skill's manual steps instead.`);
   }
   const thin = health.filter((h) => h.missing.includes("price") || h.missing.includes("photos"));
@@ -94,6 +93,7 @@ await main(async () => {
   const opts = { title };
   return fitResult({
     block: toBlock(items, opts), shown: items.length, skipped, health,
+    ...(notInSize.length ? { notInSize: { size: sizeText, asins: notInSize.filter((a) => items.some((it) => it.id === shown.get(a)?.asin || it.id === a)) } } : {}),
     ...(thin.length ? { note: `Some reads came back thin (${thin.map((h) => `${h.asin} missing ${h.missing.join(", ")}`).join("; ")}): Amazon.in's page may have changed.` } : {}),
   }, items, opts);
 });

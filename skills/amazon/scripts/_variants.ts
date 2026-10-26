@@ -67,47 +67,54 @@ const ALIASES: Record<string, string> = {
   xl: "xl", xlarge: "xl", extralarge: "xl", xxl: "xxl", "2xl": "xxl", xxlarge: "xxl", "2xlarge": "xxl",
   xxxl: "xxxl", "3xl": "xxxl", xxxlarge: "xxxl", "3xlarge": "xxxl", "4xl": "4xl", xxxxl: "4xl", "5xl": "5xl",
 };
-/** One size written two ways: "M" and "Medium", "2XL" and "XX-Large", "40" and "40 cm". */
+/** One size written two ways: "M" and "Medium", "2XL" and "XX-Large", "40" and "40 cm". Never across
+ *  sizing systems (no "40" ↔ "M", no UK ↔ US): a wrong match is worse than none. */
 export function sameSize(a: string, b: string): boolean {
   const key = (s: string) => s.toLowerCase().replace(/[\s\-_]/g, "");
   const ka = key(a), kb = key(b);
   if (ka === kb) return true;
   if (ALIASES[ka] && ALIASES[ka] === ALIASES[kb]) return true;
-  // Units around a number ("40 cm", "UK 9", "32 Inch") say nothing more than the number.
-  const bare = (k: string) => k.replace(/(cm|inches|inch|uk|us|eu|india|ind)/g, "");
-  return /\d/.test(ka) && bare(ka) !== "" && bare(ka) === bare(kb);
+  // A length unit says nothing more than the number ("40 cm" is 40). A sizing system does: UK 10, US 10
+  // and EU 10 are different sizes, so they are never stripped and never matched to each other.
+  const bare = (k: string) => k.replace(/(cm|inches|inch)$/g, "");
+  return /^\d+(\.\d+)?$/.test(bare(ka)) && bare(ka) === bare(kb);
 }
 
 /** Does the product come in sizes at all? */
 export const hasSizes = (t: Twister) => t.dims.some(isSize);
 
 /**
- * The variant to show for the owner's size: the colour on screen in that size, else the first colour
- * that sells that size; with no size asked (or a product with no sizes), the variant on screen. Null
- * when the product is not sold in that size.
+ * The variant a card shows: the one the page opens on (Amazon's default), or — when the owner named a
+ * size and this product sells that very size — that size in the colour on screen, else in the first
+ * colour that has it in stock. Size is a variant like colour (owner 2026-10-26): no size is asked, a
+ * named one is a preference, and a product that does not sell it still shows, in its default variant.
+ * `matched` says whether the owner's size was found.
  */
 export function variantFor(t: Twister, size: string | string[] | undefined, loadedAsin?: string): Variant | null {
-  // The owner's size as each sizing system writes it ("40" and "M" for a shirt): the first that this
-  // product sells wins.
-  if (Array.isArray(size)) {
-    for (const one of size) { const v = variantFor(t, one, loadedAsin); if (v) return v; }
-    return size.length ? null : variantFor(t, undefined, loadedAsin);
-  }
+  return pickVariant(t, size, loadedAsin).variant;
+}
+
+export function pickVariant(t: Twister, size: string | string[] | undefined, loadedAsin?: string): { variant: Variant | null; matched: boolean } {
   const all = variantsOf(t);
-  if (all.length === 0) return null;
+  if (all.length === 0) return { variant: null, matched: false };
   const here = onScreen(t);
   const loaded = all.find((v) => v.asin === loadedAsin);
-  if (!size || !hasSizes(t)) return loaded ?? all.find((v) => v.colour === here.colour && v.size === here.size) ?? all[0];
-  const fits = all.filter((v) => v.size !== undefined && sameSize(v.size, size));
-  if (fits.length === 0) return null;
+  const fallback = loaded ?? all.find((v) => v.colour === here.colour && v.size === here.size) ?? all[0];
+  const wanted = (Array.isArray(size) ? size : size ? [size] : []).filter(Boolean);
+  if (wanted.length === 0 || !hasSizes(t)) return { variant: fallback, matched: false };
+  const sizeDim = t.dims.find(isSize)!;
   const colour = loaded?.colour ?? here.colour;
   // Amazon marks the sizes of the colour on screen: one it marks unavailable there is shown in a colour
   // that has it, when one does.
-  const sizeDim = t.dims.find(isSize)!;
   const state = (v: Variant) => (v.colour === here.colour && v.size !== undefined ? t.states?.[sizeDim]?.[v.size] : undefined);
-  const mine = fits.find((v) => v.colour === colour);
-  if (mine && state(mine) !== "UNAVAILABLE") return mine;
-  return fits.find((v) => v !== mine) ?? mine ?? fits[0];
+  for (const one of wanted) {
+    const fits = all.filter((v) => v.size !== undefined && sameSize(v.size, one));
+    if (fits.length === 0) continue;
+    const mine = fits.find((v) => v.colour === colour);
+    if (mine && state(mine) !== "UNAVAILABLE") return { variant: mine, matched: true };
+    return { variant: fits.find((v) => v !== mine) ?? mine ?? fits[0], matched: true };
+  }
+  return { variant: fallback, matched: false };
 }
 
 /** The colours and sizes Amazon sells beyond the one variant on the card (for its "See more" button). */
