@@ -3,7 +3,7 @@
   "slug": "amazon",
   "icon": "icon.svg",
   "description": "Search products, add to cart, place orders, and track deliveries on Amazon.in",
-  "version": "1.1.8",
+  "version": "1.1.9",
   "author": "flock",
   "category": "integration",
   "tags": [
@@ -28,16 +28,22 @@
   "networkAccess": true,
   "functions": {
     "read-products": {
-      "timeoutMs": 120000,
-      "reason": "Searches, then opens up to 10 product pages in two rounds of 5 tabs and reads each in the page: 30-70s on a normal connection. Killed at 30s, the agent would get no cards and read the pages by hand."
+      "timeoutMs": 180000,
+      "reason": "Searches, then opens up to 13 product pages in rounds of 5 tabs (and a variant's own page when the result is another size) and reads each in the page: 30-90s. Killed at 30s, the agent would get no cards and read the pages by hand."
+    },
+    "read-variants": {
+      "timeoutMs": 300000,
+      "reason": "Opens every colour and size's own page (up to 40), 5 tabs at a time, and reads each: 1-3 minutes. The owner asked for it on the card's button and is told it takes a minute or two."
     }
   },
   "security": {
     "allowedFunctions": [
-      "read-products"
+      "read-products",
+      "read-variants"
     ],
     "functionEffects": {
-      "read-products": "read"
+      "read-products": "read",
+      "read-variants": "read"
     },
     "trustLevel": "third-party",
     "networkEndpoints": [

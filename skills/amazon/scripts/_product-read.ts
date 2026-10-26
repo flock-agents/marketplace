@@ -12,7 +12,6 @@
 
 /* eslint-disable */
 export function readProductPage(): string {
-  const MAX_COLOURS = 4;
   const out: any = { found: [], missing: [] };
   const take = (name: string, fn: () => any) => {
     let v: any;
@@ -153,62 +152,26 @@ export function readProductPage(): string {
     return (photos.length ? photos : main ? [main] : []).slice(0, 4);
   });
 
-  // Colours, sizes and one variant per colour and size Amazon sells, from the twister's data.
+  // The variant table (the twister's data): every dimension, its values, the ASIN of each pair sold, the
+  // values on screen, and the states Amazon gives the values of the row being picked. Which variants to
+  // show, and reading each one's own page, is read-products' and read-variants' work (_variants.ts).
   try {
     const dims: string[] = grab("dimensions") || [];
-    const vv = grab("variationValues") || {};
+    const values = grab("variationValues") || {};
     const map = grab("dimensionToAsinMap") || {};
-    const cd = dims.find((d) => /color|colour|style|pattern/.test(d));
-    const sd = dims.find((d) => /size/.test(d));
-    if (dims.length && (cd || sd) && dims.every((d) => d === cd || d === sd) && Object.keys(map).length) {
-      const sel = grab("selectedVariationValues") || {};
-      const colours: any[] = cd ? vv[cd] || [] : [null];
-      const sizes: any[] = sd ? vv[sd] || [] : [null];
-      const curC = cd ? colours[sel[cd]] : null;
-      const curS = sd ? sizes[sel[sd]] : null;
-      // Sold out: known for the colour on screen only (its size row's states).
+    if (dims.length && Object.keys(map).length && dims.every((d) => Array.isArray(values[d]))) {
+      const selected = grab("selectedVariationValues") || {};
       const sorted = grab("sortedDimValuesForAllDims") || {};
-      const off: any = {};
-      for (const v of (sd && sorted[sd]) || []) if (v.dimensionValueState && v.dimensionValueState !== "AVAILABLE" && v.dimensionValueState !== "SELECTED") off[v.dimensionValueDisplayText] = true;
-      const swatchPrice: any = {};
-      for (const li of Array.from(document.querySelectorAll("li.inline-twister-swatch, li[data-asin], li[data-defaultasin]"))) {
-        const name = clean(li.getAttribute("title") || ((li.querySelector("img") as any) || {}).alt || "").replace(/^Click to select\s*/i, "");
-        const p = money((li as any).innerText || li.textContent);
-        if (name && p) swatchPrice[name] = p;
-      }
-      const ci = grab("colorImages") || {};
-      let order = colours.map((_c, i) => i);
-      if (curC != null) order = [colours.indexOf(curC)].concat(order.filter((i) => colours[i] !== curC));
-      // The colour on screen and the next three (owner 2026-10-26): the card says how many more there are.
-      order = order.slice(0, Math.min(MAX_COLOURS, Math.max(1, Math.floor(48 / Math.max(1, Math.min(sizes.length, 10))))));
-      const outColours: any[] = [], variants: any[] = [];
-      for (const ix of order) {
-        const c = colours[ix];
-        if (cd) {
-          const own = (ci[c] || []).map((p: any) => p.large || p.hiRes).filter(Boolean);
-          const ps = c === curC && out.photos && out.photos.length ? out.photos : own;
-          outColours.push({ name: c, photos: ps.slice(0, 4).map((u: string) => ({ image: u })) });
+      const states: any = {};
+      for (const d of dims) {
+        for (const v of sorted[d] || []) {
+          if (v && v.dimensionValueDisplayText && v.dimensionValueState) (states[d] = states[d] || {})[v.dimensionValueDisplayText] = v.dimensionValueState;
         }
-        sizes.slice(0, 10).forEach((s, si) => {
-          const asin = map[dims.map((d) => (d === cd ? ix : si)).join("_")];
-          if (!asin) return;
-          const v: any = { id: asin, available: !(c === curC && s && off[s]) };
-          if (c != null) v.colour = c;
-          if (s != null) v.size = s;
-          if (c != null && swatchPrice[c]) v.price = swatchPrice[c];
-          variants.push(v);
-        });
       }
-      if (variants.length) {
-        if (cd) out.colours = outColours;
-        if (sd) out.sizes = sizes.slice(0, 10);
-        out.variants = variants;
-        out.current = { colour: curC, size: curS };
-        out.coloursAll = cd ? colours.length : 0;
-        out.found.push("variants");
-      } else out.missing.push("variants");
+      out.twister = { dims, values, map, selected, states };
+      out.found.push("twister");
     }
-  } catch (e) { out.missing.push("variants"); }
+  } catch (e) { out.missing.push("twister"); }
 
   out.captcha = /validateCaptcha|Enter the characters you see below/i.test(location.href + " " + (document.body ? document.body.innerText.slice(0, 2000) : ""));
   return JSON.stringify(out);
