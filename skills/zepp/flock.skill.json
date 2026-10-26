@@ -25,7 +25,7 @@
       "documentationUrl": "https://github.com/flock-agents/zepp-mcp",
       "setupInstructions": "Add one account per person, using that person's Zepp app sign-in. Each account needs its own token cache path so tokens never cross between people.",
       "setupSteps": [
-        { "title": "Zepp sign-in", "description": "Enter the email and password used in the Zepp app (email sign-in; Google/Apple sign-in accounts need a Zepp password set first)." },
+        { "title": "Zepp sign-in", "description": "Enter the email and password used in the Zepp app." },
         { "title": "Region", "description": "Two-letter country code of the Zepp account, e.g. IN or US." },
         { "title": "Token cache", "description": "A file path unique to this person, e.g. ~/.zepp-mcp/<name>/token.json. Never reuse another account's path." }
       ],
