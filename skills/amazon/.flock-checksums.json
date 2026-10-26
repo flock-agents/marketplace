@@ -4,7 +4,7 @@
   "sourceVersion": "1.1.12",
   "sourceTag": "amazon-v1.1.12-rc1",
   "files": {
-    "flock.skill.json": "dec9c03ee1349a3fdb6cc63c0817c404ace47ddc8a41d4d6102319fc4ab9b9ae",
+    "flock.skill.json": "f93bade44aacd7dcc20f7f8eb8d1ac47ea8715e0e3bbfb0e76f1c24d57dc26a8",
     "icon.svg": "5d7735254f99d2fb9a467608bc2a73d2543f571ca3b1221ef503c405e1dc7b5f",
     "instructions.md": "213f0315ed085c035ed094ab7b56778a1d4d6ea979b9ad5db6058a382ec3eb7b",
     "scripts/_amazon.ts": "e42d789c6848aae3e117de2eba784468383e35fe9a0f35ad3e9d00d7dd67fea1",
