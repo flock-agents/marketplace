@@ -26,6 +26,7 @@ the cached token expires.
 from __future__ import annotations
 
 import datetime as dt
+import hashlib
 import json
 import os
 import time
@@ -236,7 +237,10 @@ def cache_path() -> Path:
     override = os.environ.get("ZEPP_TOKEN_CACHE")
     if override:
         return Path(override).expanduser()
-    return Path.home() / ".zepp-mcp" / "token.json"
+    # Default is per account: one person's token must never be read by another's server.
+    email = os.environ.get("ZEPP_EMAIL", "").strip().lower()
+    account = hashlib.sha256(email.encode("utf-8")).hexdigest()[:16]
+    return Path.home() / ".zepp-mcp" / account / "token.json"
 
 
 def cache_enabled() -> bool:
