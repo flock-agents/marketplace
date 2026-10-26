@@ -12,6 +12,7 @@
 
 /* eslint-disable */
 export function readProductPage(): string {
+  const MAX_COLOURS = 4;
   const out: any = { found: [], missing: [] };
   const take = (name: string, fn: () => any) => {
     let v: any;
@@ -178,7 +179,8 @@ export function readProductPage(): string {
       const ci = grab("colorImages") || {};
       let order = colours.map((_c, i) => i);
       if (curC != null) order = [colours.indexOf(curC)].concat(order.filter((i) => colours[i] !== curC));
-      order = order.slice(0, Math.min(8, Math.max(1, Math.floor(48 / Math.max(1, Math.min(sizes.length, 10))))));
+      // The colour on screen and the next three (owner 2026-10-26): the card says how many more there are.
+      order = order.slice(0, Math.min(MAX_COLOURS, Math.max(1, Math.floor(48 / Math.max(1, Math.min(sizes.length, 10))))));
       const outColours: any[] = [], variants: any[] = [];
       for (const ix of order) {
         const c = colours[ix];

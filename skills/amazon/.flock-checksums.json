@@ -1,14 +1,14 @@
 {
   "version": 1,
   "generatedAt": "2026-10-26T00:00:00.000Z",
-  "sourceVersion": "1.1.7",
-  "sourceTag": "amazon-v1.1.7-rc1",
+  "sourceVersion": "1.1.8",
+  "sourceTag": "amazon-v1.1.8-rc1",
   "files": {
-    "flock.skill.json": "200a83e83ecccde589b137605024c90311d89563035cb414efc10a7d1363e2b3",
+    "flock.skill.json": "1b4d6aea4396195d66b4fdc9b0cad4d00d82e986dd9a135b0eb83f5ab43112ae",
     "icon.svg": "5d7735254f99d2fb9a467608bc2a73d2543f571ca3b1221ef503c405e1dc7b5f",
     "instructions.md": "013b64367c0ef82cbab0ba1c3d49d2da5592b0dfbcc394ab3d541313c3182167",
-    "scripts/_cards.ts": "708a2e6e50f647f8340a2fbac3cb52b30c602d200a15137ef213125db0950235",
-    "scripts/_product-read.ts": "cb4806c68b0ca85a0d8bb6dcb8a7af63c4725526992b08421134644fb26ebe57",
+    "scripts/_cards.ts": "289c96a75ff8c93ad1ecbb8df1a74d676a9ed45a7626f39e7ff6ea9e9462c955",
+    "scripts/_product-read.ts": "dabd568159ba86305eeba1cb87d870f8bb3c73091583e7d4690f9b93dd21e760",
     "scripts/read-products.ts": "2e64572d798ac55a970e17ec849f58f4795e57f7fcf4749082b74d16240d654d"
   }
 }

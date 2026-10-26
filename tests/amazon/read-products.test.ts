@@ -42,6 +42,11 @@ describe("toItem: a page read becomes a card, only with what was read", () => {
     expect(item.mrp).toBeUndefined();
   });
 
+  it("colours beyond those on the card become moreColours", () => {
+    expect(toItem({ ...shorts, coloursAll: 8 }, "B0C2YCBW9Y").item.moreColours).toBe(6);
+    expect(toItem({ ...shorts, coloursAll: 2 }, "B0C2YCBW9Y").item.moreColours).toBeUndefined();
+  });
+
   it("a product sold in neither colours nor sizes is one variant with its photos on the item", () => {
     const { item } = toItem({ asin: "B00NHQFA1I", title: "LEGO box", price: 2238, mrp: 3199, photos: ["u1", "u2", "u3", "u4", "u5"], stock: "In stock" }, "B00NHQFA1I");
     expect(item.photos).toEqual([{ image: "u1" }, { image: "u2" }, { image: "u3" }, { image: "u4" }]);
@@ -119,10 +124,11 @@ describe.skipIf(!canBrowse)("the in-page reader on saved Amazon.in pages (script
     expect(r.rating).toEqual({ stars: 4.2, count: 117 });
     expect(r.bullets.length).toBe(3);
     expect(r.photos.length).toBe(4);
-    expect(r.colours.length).toBe(8);
+    expect(r.colours.length).toBe(4);                 // the first 4 of 8 …
+    expect(r.coloursAll).toBe(8);                      // … and how many there are
     expect(r.colours[0].name).toBe("Black");          // the colour on screen first
     expect(r.sizes).toEqual(["S", "M", "L", "XL", "2XL"]);
-    expect(r.variants.length).toBe(40);
+    expect(r.variants.length).toBe(20);
     expect(r.current).toEqual({ colour: "Black", size: "M" });
     expect(r.missing).not.toContain("price");
   });

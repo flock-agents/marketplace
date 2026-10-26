@@ -53,6 +53,9 @@ export function toItem(r: PageRead, fallbackAsin: string): { item?: any; reason?
     if (r.colours?.length) {
       item.colours = r.colours.filter((c) => colourNames.has(c.name)).slice(0, 8)
         .map((c) => ({ name: c.name, ...(c.photos?.length ? { photos: c.photos.slice(0, 4) } : {}) }));
+      // The colours not on the card: the card says "+N more colours on Amazon", linked to the page.
+      const more = (r.coloursAll ?? 0) - item.colours.length;
+      if (more > 0) item.moreColours = more;
     } else if (r.photos?.length) item.photos = r.photos.slice(0, 4).map((image) => ({ image }));
     if (sizes.length) item.sizes = sizes;
     item.variants = variants;
