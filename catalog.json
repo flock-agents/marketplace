@@ -433,8 +433,8 @@
       "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "templates/slack-assistant",
-      "latestVersion": "1.1.2",
-      "latestTag": "slack-assistant-v1.1.2",
+      "latestVersion": "1.1.3",
+      "latestTag": "slack-assistant-v1.1.3",
       "minFlockVersion": "0.7.0",
       "onboardingCard": {
         "id": "slack",
@@ -448,7 +448,7 @@
         ]
       },
       "publishedAt": "2026-09-23T00:00:00Z",
-      "updatedAt": "2026-10-14T00:00:00Z"
+      "updatedAt": "2026-10-27T00:00:00Z"
     },
     {
       "slug": "inbox-assistant",
@@ -467,8 +467,8 @@
       "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "templates/inbox-assistant",
-      "latestVersion": "1.0.0",
-      "latestTag": "inbox-assistant-v1.0.0",
+      "latestVersion": "1.0.1",
+      "latestTag": "inbox-assistant-v1.0.1",
       "minFlockVersion": "0.7.0",
       "onboardingCard": {
         "id": "email",
@@ -482,7 +482,7 @@
         ]
       },
       "publishedAt": "2026-09-28T00:00:00Z",
-      "updatedAt": "2026-09-28T00:00:00Z"
+      "updatedAt": "2026-10-27T00:00:00Z"
     },
     {
       "slug": "bookings",
