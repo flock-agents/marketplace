@@ -80,5 +80,5 @@ When the message came from a channel (Telegram, WhatsApp, etc.):
 
 - All prices are in INR (Amazon.in)
 - Amazon has a complex checkout flow — always verify address and payment before confirming
-- The agent does not make payments directly — it walks through checkout and confirms with the user
+- Payment follows the `payments` skill: walk through checkout and pay only after the user confirms the total
 - Product availability and pricing can change between search and checkout

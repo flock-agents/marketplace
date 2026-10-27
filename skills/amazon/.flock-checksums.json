@@ -1,12 +1,12 @@
 {
   "version": 1,
-  "generatedAt": "2026-10-26T00:00:00.000Z",
-  "sourceVersion": "1.1.12",
-  "sourceTag": "amazon-v1.1.12-rc1",
+  "generatedAt": "2026-10-27T00:00:00.000Z",
+  "sourceVersion": "1.1.13",
+  "sourceTag": "amazon-v1.1.13",
   "files": {
-    "flock.skill.json": "f93bade44aacd7dcc20f7f8eb8d1ac47ea8715e0e3bbfb0e76f1c24d57dc26a8",
+    "flock.skill.json": "cbb608fbb57565402cf04e5c8c879e08178560a81b96f1ab03c9c7581bbbb154",
     "icon.svg": "5d7735254f99d2fb9a467608bc2a73d2543f571ca3b1221ef503c405e1dc7b5f",
-    "instructions.md": "213f0315ed085c035ed094ab7b56778a1d4d6ea979b9ad5db6058a382ec3eb7b",
+    "instructions.md": "54e51dbb572bc5bf67b47229de07021f064284460c003a18a9cf890337b2a8fd",
     "scripts/_amazon.ts": "e42d789c6848aae3e117de2eba784468383e35fe9a0f35ad3e9d00d7dd67fea1",
     "scripts/_cards.ts": "218a843f47efbcd7817d4d285e8065a4557ba2f6d8c86501e53d9b98db1aaa45",
     "scripts/_product-read.ts": "48b3caa875b0265741350e73a5a05c57d284e15d8ab8c2442414ed7ca0a21cf8",
