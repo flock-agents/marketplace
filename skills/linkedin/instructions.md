@@ -187,4 +187,4 @@ The script handles browser session lifecycle states automatically:
 - No official API — uses page scraping which can be fragile
 - Rate limiting is aggressive (wait 3+ seconds between requests)
 - Post publishing and messaging use persistent browser sessions for multi-step flows
-- Connection requests are not automated for safety
+- No connection-request command (accept, ignore or send)
