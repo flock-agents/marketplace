@@ -12,7 +12,7 @@ export interface PlanStore {
 
 export function kitPlanStore(kit: Kit): PlanStore {
   // Prepared on first use: a new build is first tried against the previous database, before this table exists.
-  const dayQuery = () => kit.sqlite.query(`SELECT id, name, dose, done, position FROM plan_items WHERE day = ?1`);
+  const dayQuery = () => kit.sqlite.query(`SELECT id, name, dose, done, position, exercise FROM plan_items WHERE day = ?1`);
   return {
     rows: (day) => dayQuery().all(day) as PlanRow[],
     async replace(day, items) {
@@ -20,7 +20,7 @@ export function kitPlanStore(kit: Kit): PlanStore {
       await kit.db.delete(plan_items).where(eq(plan_items.day, day));
       for (const r of old) kit.emitChange("plan_items", r.id, "delete", PLAN_AUTHOR);
       for (const [position, it] of items.entries()) {
-        const [row] = await kit.db.insert(plan_items).values({ day, name: it.name, dose: it.dose ?? null, position, done: false, updated_by: PLAN_AUTHOR }).returning({ id: plan_items.id });
+        const [row] = await kit.db.insert(plan_items).values({ day, name: it.name, dose: it.dose ?? null, exercise: it.exercise ?? null, position, done: false, updated_by: PLAN_AUTHOR }).returning({ id: plan_items.id });
         kit.emitChange("plan_items", row.id, "insert", PLAN_AUTHOR);
       }
     },

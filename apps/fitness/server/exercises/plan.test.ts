@@ -57,7 +57,7 @@ describe("plan", () => {
     expect(shareText("2026-10-22", [])).toBe("No workout plan set for 2026-10-22.");
   });
   it("accepts a whole day's items and refuses one without a name", () => {
-    expect(parseItems({ items: [{ name: " Dead bug ", dose: "3x10/side" }, { name: "Plank" }] })).toEqual([{ name: "Dead bug", dose: "3x10/side" }, { name: "Plank", dose: null }]);
+    expect(parseItems({ items: [{ name: " Dead bug ", dose: "3x10/side", exercise: "Dead bug" }, { name: "Plank" }] })).toEqual([{ name: "Dead bug", dose: "3x10/side", exercise: "dead-bug" }, { name: "Plank", dose: null, exercise: null }]);
     expect(parseItems({ items: [{ dose: "3x10" }] })).toBeNull();
     expect(parseItems({})).toBeNull();
   });

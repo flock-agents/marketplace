@@ -17,6 +17,7 @@ import { todayRoutes } from "./today/routes";
 import { loggingGuard } from "./guard/logging";
 import { exerciseRoutes } from "./exercises/routes";
 import { kitPlanStore } from "./exercises/store";
+import { kitExerciseStore } from "./exercises/added";
 import { mealPlanRoutes, type PlannedMeal } from "./meals/routes";
 import { kitMealPlanStore } from "./meals/store";
 import { ESTIMATE_INTENT } from "./meals/config";
@@ -73,6 +74,7 @@ flock.hono.route("/api", todayRoutes(kit));                   // the day's numbe
 // a tapped planned meal with no numbers yet: `api` is this app's own path for the coach's logging call
 const askCoach = (meal: PlannedMeal) => flock.platform.agent.intent(ESTIMATE_INTENT, { ...meal, api: apiPath() });
 flock.hono.route("/api", mealPlanRoutes(kitMealPlanStore(kit), askCoach));   // the day's planned meals
-flock.hono.route("/api", exerciseRoutes(kitPlanStore(kit)));   // the exercise library and the day's workout plan
+const dataDir = flock.platform.dataDir;
+flock.hono.route("/api", exerciseRoutes({ plans: kitPlanStore(kit), added: kitExerciseStore(kit, dataDir), dataDir }));   // the library (preloaded + added) and the day's plan
 flock.hono.route("/api", nutritionRoutes(kit));                // every nutrient of the logged meals, day by day, for review
 flock.listen();

@@ -29,9 +29,23 @@ export const plan_items = sqliteTable("plan_items", {
   ...kitColumns(),
   day: text("day").notNull(),                        // YYYY-MM-DD, local
   name: text("name").notNull(),                      // "Goblet squat"; a library exercise is linked by its name
+  exercise: text("exercise"),                        // the library exercise's slug, when the coach names it; else matched by name
   dose: text("dose"),                                // "3x12", "3x10/side", "20 min"
   position: real("position").default(0),             // order within the day
   done: integer("done", { mode: "boolean" }).default(false),
+});
+
+/** Exercises the coach added to the library (the preloaded ones ship with the app): a moving picture is downloaded by the
+ *  app into its data dir, never into the code, so the app stays an untouched copy that keeps updating. */
+export const exercises = sqliteTable("exercises", {
+  ...kitColumns(),
+  slug: text("slug").notNull(),                      // "cable-face-pull": from the name, one row per slug
+  name: text("name").notNull(),                      // "Cable face pull"
+  notes: text("notes"),                              // muscles worked, cues, what to watch
+  gif_url: text("gif_url"),                          // where the picture was found
+  file: text("file"),                                // the downloaded picture in the data dir; null when none was found
+  added_by: text("added_by"),                        // who added it: "agent:<id>" or "owner"
+  added_at: text("added_at"),                        // ISO time it was added
 });
 
 /** The day's planned meals, one row per meal: what the coach planned, ticked off as it is eaten. */
