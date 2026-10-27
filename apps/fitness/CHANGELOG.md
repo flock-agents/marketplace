@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.3
+
+- Adds the Morning plan (07:00 daily) and Weekly summary (Sunday 19:00) routines, moved from the fitness-coach template; they wake the paired coach. Cron times run on the Flock's clock: the routine format has only a fixed `trigger.timezone`, not the app's `timezone` setting.
+
 ## 1.0.2
 
 - A fresh install starts empty: the dashboard kit's sample rows (a tiffin kitchen's orders and events) are gone, and so are the leftover `Sale` kind and money formatting.

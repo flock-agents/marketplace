@@ -4,7 +4,7 @@
   "usage": "template",
   "icon": "🏋️",
   "description": "Today and Yesterday against the goals in focus (exercise, diet, water, and activity and sleep from a connected tracker): the workout plan and planned meals beside what was done and eaten, tomorrow's plans, history and an exercise library.",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "author": "flock",
   "category": "health",
   "tags": [
@@ -73,7 +73,8 @@
       "Coach one person's daily diet, water and workouts against their goals",
       "Keep a workout plan and planned meals beside what was actually done and eaten",
       "Pull steps, sleep, weight and PAI from a fitness tracker (Zepp) automatically",
-      "Nudge someone who is well behind their usual activity for the time of day"
+      "Nudge someone who is well behind their usual activity for the time of day",
+      "A coach that asks for and remembers the person's health notes and food preferences, and plans around them"
     ],
     "notFor": [
       "A household's meal planning for everyone (use meal-planner)",
@@ -109,6 +110,28 @@
       "executionMode": "app-relay",
       "handler": "tracker-sync",
       "prompt": "The hourly tracker sync on the fitness dashboard found the person you coach well behind a usual day for this time of day. The numbers are below: today so far, where a usual day is by now, and how a usual day ends. This wake is the only model run the hourly sync spends, so make it count.\n\n1. If the numbers look wrong rather than behind (you know they are ill, travelling, resting on purpose, or not wearing the watch), send nothing to them. Instead tune the pace check so it stays quiet in such cases (step 3), and reply with one line on what you changed.\n2. Otherwise send them one short nudge in your usual coaching voice: where today stands against a normal day, and one concrete thing to do in the next hour or two (a brisk 15-minute walk, the stairs, the planned workout). No lecture, no list of numbers they cannot act on.\n3. You own the pace check's parameters. The wake's data carries `api`, this app's own API path (e.g. /a/<app id>/api). See them and what they decide now with: curl -s \"$FLOCK_API_URL<api>/pace\" -H \"Authorization: Bearer $FLOCK_AUTH_TOKEN\". Change one with: curl -s -X PATCH \"$FLOCK_API_URL<api>/_app/settings\" -H \"Authorization: Bearer $FLOCK_AUTH_TOKEN\" -H \"Content-Type: application/json\" -d '{\"pace.<name>\": <value>}'. Tune them when the nudges miss: too many or wrong (lower pace.behind_ratio, raise a min_gap in pace.metrics, set pace.max_nudges_per_day to 0 for a rest day and back the next morning), too few (raise pace.behind_ratio), a changed routine (pace.routine_days, pace.default_curve), or a goal you want the pace to aim at (pace.reference \"goal\")."
+    },
+    {
+      "id": "morning-plan",
+      "name": "Morning plan",
+      "description": "Each morning the coach sets the day's workout plan and planned meals in the app and sends the person a short plan for the day.",
+      "trigger": {
+        "type": "schedule",
+        "cron": "0 7 * * *"
+      },
+      "executionMode": "llm",
+      "prompt": "Morning plan. Your Fitness app's API is `$FLOCK_API_URL/a/<its app id>/api` (find it under your apps); read its settings first (`GET <api>/_app`: `person`, `timezone`) and work on the person's own day in their time zone. Set today's workout plan (`PUT <api>/plan`), keeping to the health notes you remember for them, and today's and tomorrow's planned meals with their numbers (`PUT <api>/meal-plan`) if they plan meals, keeping to their food preferences. Then send them one short message: today's workout and the day's targets. No lecture. If you do not know their health notes or food preferences yet, ask once and remember the answer."
+    },
+    {
+      "id": "weekly-summary",
+      "name": "Weekly summary",
+      "description": "Every Sunday evening the coach sends a short progress summary from the last seven finished days.",
+      "trigger": {
+        "type": "schedule",
+        "cron": "0 19 * * 0"
+      },
+      "executionMode": "llm",
+      "prompt": "Weekly progress summary. Your Fitness app's API is `$FLOCK_API_URL/a/<its app id>/api` (find it under your apps); read its settings first (`GET <api>/_app`: `person`, `timezone`) and work on the person's own day in their time zone. Read the last 7 finished days (`GET <api>/days?days=7`, `GET <api>/nutrition?days=7`) and send the person one short summary: what went well, what slipped against the goals, the weight trend if there is one, and one change for next week. Adjust a target only when the trend calls for it, and say so."
     }
   ],
   "settings": [
