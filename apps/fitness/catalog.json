@@ -1,6 +1,6 @@
 {
   "name": "fitness",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Today and Yesterday against the goals in focus (exercise, diet, water, and activity and sleep from a connected tracker): the workout plan and planned meals beside what was done and eaten, tomorrow's plans, history and an exercise library.",
   "objects": [
     "globe"
@@ -252,6 +252,12 @@
           "required": true,
           "nullable": false,
           "note": "\"Besan chilla + curd\""
+        },
+        "exercise": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "the library exercise's slug, when the coach names it; else matched by name"
         },
         "dose": {
           "type": "string",
@@ -564,6 +570,52 @@
           "required": true,
           "nullable": false,
           "note": "what the coach was told"
+        }
+      }
+    },
+    "exercises": {
+      "columns": {
+        "slug": {
+          "type": "string",
+          "required": true,
+          "nullable": false,
+          "note": "\"cable-face-pull\": from the name, one row per slug"
+        },
+        "name": {
+          "type": "string",
+          "required": true,
+          "nullable": false,
+          "note": "\"Besan chilla + curd\""
+        },
+        "notes": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "muscles worked, cues, what to watch"
+        },
+        "gif_url": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "where the picture was found"
+        },
+        "file": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "the downloaded picture in the data dir; null when none was found"
+        },
+        "added_by": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "who added it: \"agent:<id>\" or \"owner\""
+        },
+        "added_at": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "ISO time it was added"
         }
       }
     }

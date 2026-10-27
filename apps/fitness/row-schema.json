@@ -515,6 +515,12 @@
           "name": {
             "type": "string"
           },
+          "exercise": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "dose": {
             "type": [
               "string",
@@ -1122,6 +1128,61 @@
           "at",
           "labels",
           "message"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "exercises": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "$key": {
+            "type": "string",
+            "minLength": 1,
+            "description": "This row's name within the request, for $ref"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "notes": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "gif_url": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "file": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "added_by": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "added_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "$key",
+          "slug",
+          "name"
         ],
         "additionalProperties": false
       }

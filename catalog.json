@@ -754,8 +754,8 @@
       "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "apps/fitness",
-      "latestVersion": "1.0.3",
-      "latestTag": "fitness-v1.0.3",
+      "latestVersion": "1.0.4",
+      "latestTag": "fitness-v1.0.4",
       "minFlockVersion": "0.20.0",
       "publishedAt": "2026-10-26T00:00:00Z",
       "updatedAt": "2026-10-27T00:00:00Z"

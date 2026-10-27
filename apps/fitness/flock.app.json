@@ -4,7 +4,7 @@
   "usage": "template",
   "icon": "🏋️",
   "description": "Today and Yesterday against the goals in focus (exercise, diet, water, and activity and sleep from a connected tracker): the workout plan and planned meals beside what was done and eaten, tomorrow's plans, history and an exercise library.",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "author": "flock",
   "category": "health",
   "tags": [
@@ -57,7 +57,8 @@
     "meal_plan_items",
     "water_logs",
     "pace_samples",
-    "pace_nudges"
+    "pace_nudges",
+    "exercises"
   ],
   "objects": [
     "globe"
@@ -74,7 +75,8 @@
       "Keep a workout plan and planned meals beside what was actually done and eaten",
       "Pull steps, sleep, weight and PAI from a fitness tracker (Zepp) automatically",
       "Nudge someone who is well behind their usual activity for the time of day",
-      "A coach that asks for and remembers the person's health notes and food preferences, and plans around them"
+      "A coach that asks for and remembers the person's health notes and food preferences, and plans around them",
+      "A workout plan with the best exercises for the person, each with a moving picture: the coach adds new exercises with a GIF it finds on the web"
     ],
     "notFor": [
       "A household's meal planning for everyone (use meal-planner)",
@@ -120,7 +122,7 @@
         "cron": "0 7 * * *"
       },
       "executionMode": "llm",
-      "prompt": "Morning plan. Your Fitness app's API is `$FLOCK_API_URL/a/<its app id>/api` (find it under your apps); read its settings first (`GET <api>/_app`: `person`, `timezone`) and work on the person's own day in their time zone. Set today's workout plan (`PUT <api>/plan`), keeping to the health notes you remember for them, and today's and tomorrow's planned meals with their numbers (`PUT <api>/meal-plan`) if they plan meals, keeping to their food preferences. Then send them one short message: today's workout and the day's targets. No lecture. If you do not know their health notes or food preferences yet, ask once and remember the answer."
+      "prompt": "Morning plan. Your Fitness app's API is `$FLOCK_API_URL/a/<its app id>/api` (find it under your apps); read its settings first (`GET <api>/_app`: `person`, `timezone`) and work on the person's own day in their time zone. Choose today's best exercises for them, suited to the health notes, equipment and level you remember (ask once and remember if you do not know them). Reuse the library first: `GET <api>/exercises` lists the preloaded and added exercises with their `slug`. For an exercise not in it, search the web for a GIF that clearly shows correct form, from a reputable source (link the .gif/.webp/.mp4 file itself, not its page), and add it: `POST <api>/exercises` with `{\"name\": \"Cable face pull\", \"notes\": \"muscles worked and key cues\", \"gifUrl\": \"https://…/face-pull.gif\"}`. The app downloads the picture itself; if it refuses it (a 422 says why), try one other picture or add the exercise without `gifUrl`. Never hold up the plan for a picture. Then set today's workout plan with each item's `exercise` slug: `PUT <api>/plan` `{\"date\": \"YYYY-MM-DD\", \"items\": [{\"name\": \"Goblet squat\", \"dose\": \"3x12\", \"exercise\": \"goblet-squat\"}]}`. Set today's and tomorrow's planned meals with their numbers (`PUT <api>/meal-plan`) if they plan meals, keeping to their food preferences. Then send them one short message: today's workout and the day's targets. No lecture."
     },
     {
       "id": "weekly-summary",

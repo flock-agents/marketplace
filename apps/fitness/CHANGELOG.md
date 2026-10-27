@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.4
+
+- The coach can add exercises to the library as data: `POST /api/exercises {name, notes?, gifUrl?}` downloads the picture (http(s), GIF/WebP/MP4, up to 10 MB) into the app's data dir, deduped by slug, served from `/api/exercises/media/<file>`. Plan items can name their exercise by `exercise` slug. The Exercises page lists preloaded and added ones; the owner can remove an added one. The Morning plan picks exercises for the person and adds new ones with a GIF it finds on the web.
+
 ## 1.0.3
 
 - Adds the Morning plan (07:00 daily) and Weekly summary (Sunday 19:00) routines, moved from the fitness-coach template; they wake the paired coach. Cron times run on the Flock's clock: the routine format has only a fixed `trigger.timezone`, not the app's `timezone` setting.
