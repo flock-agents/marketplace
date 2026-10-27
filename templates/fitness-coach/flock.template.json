@@ -2,14 +2,19 @@
   "name": "Fitness Coach",
   "slug": "fitness-coach",
   "description": "A personal coach that plans your workouts and meals, logs what you eat, drink and do, and keeps a fitness dashboard current, with steps, sleep and PAI from a connected tracker",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "author": "flock",
   "icon": "icon.svg",
   "category": "personal",
-  "tags": ["fitness", "health", "coach", "nutrition", "workout"],
+  "tags": [
+    "fitness",
+    "health",
+    "coach",
+    "nutrition",
+    "workout"
+  ],
   "minFlockVersion": "0.20.0",
   "sortOrder": 30,
-
   "agent": {
     "defaultName": "Coach",
     "model": "claude-sonnet-4-6",
@@ -17,10 +22,26 @@
     "tone": "encouraging, direct, concise",
     "personalityOptions": {
       "customFields": [
-        { "id": "person_name", "label": "Who is being coached (name)", "type": "free-text" },
-        { "id": "timezone", "label": "Their time zone (e.g. Europe/London)", "type": "free-text" },
-        { "id": "health_notes", "label": "Health notes (injuries, conditions, goals)", "type": "free-text" },
-        { "id": "food_preferences", "label": "Food preferences (diet, cuisine, allergies)", "type": "free-text" }
+        {
+          "id": "person_name",
+          "label": "Who is being coached (name)",
+          "type": "free-text"
+        },
+        {
+          "id": "timezone",
+          "label": "Their time zone (e.g. Europe/London)",
+          "type": "free-text"
+        },
+        {
+          "id": "health_notes",
+          "label": "Health notes (injuries, conditions, goals)",
+          "type": "free-text"
+        },
+        {
+          "id": "food_preferences",
+          "label": "Food preferences (diet, cuisine, allergies)",
+          "type": "free-text"
+        }
       ]
     },
     "examplePrompts": [
@@ -31,7 +52,6 @@
       "Show me how to do a dead bug"
     ]
   },
-
   "skills": [
     {
       "skillId": "zepp",
@@ -44,38 +64,31 @@
       }
     }
   ],
-
-  "apps": [{ "slug": "fitness", "required": true }],
-  "channels": [],
-
-  "tasks": [
+  "apps": [
     {
-      "name": "Morning plan",
-      "schedule": "0 7 * * *",
-      "prompt": "Morning plan. Set today's workout plan in the Fitness app (keep it to the health notes), and today's and tomorrow's planned meals with their numbers if the person plans meals. Then send one short message: today's workout and the day's targets. No lecture.",
-      "deliverTo": null,
-      "enabled": true,
-      "model": "claude-sonnet-4-6",
-      "thinkingLevel": "none"
-    },
-    {
-      "name": "Weekly summary",
-      "schedule": "0 19 * * 0",
-      "prompt": "Weekly progress summary. Read the last 7 finished days from the Fitness app (days and nutrition) and send one short summary: what went well, what slipped against the goals, the weight trend if there is one, and one change for next week. Adjust a target only when the trend calls for it, and say so.",
-      "deliverTo": null,
-      "enabled": true,
-      "model": "claude-sonnet-4-6",
-      "thinkingLevel": "none"
+      "slug": "fitness",
+      "required": true
     }
   ],
-
+  "channels": [],
+  "tasks": [],
   "wizard": [
-    { "id": "personality", "type": "personality", "label": "About you" },
-    { "id": "skills", "type": "skills", "label": "Fitness tracker" },
-    { "id": "tasks", "type": "scheduled-tasks", "label": "Scheduled Tasks" },
-    { "id": "review", "type": "review", "label": "Review & Create" }
+    {
+      "id": "personality",
+      "type": "personality",
+      "label": "About you"
+    },
+    {
+      "id": "skills",
+      "type": "skills",
+      "label": "Fitness tracker"
+    },
+    {
+      "id": "review",
+      "type": "review",
+      "label": "Review & Create"
+    }
   ],
-
   "setupChecklist": [
     {
       "id": "identity-configured",
@@ -94,14 +107,9 @@
       "label": "Connect a fitness tracker (optional)",
       "description": "Connect Zepp so steps, sleep, weight and PAI arrive on their own. Without one, log by chat.",
       "deepLink": "/agents/:id?tab=skills",
-      "skills": ["zepp"],
-      "skippable": true
-    },
-    {
-      "id": "review-tasks",
-      "label": "Review scheduled tasks",
-      "description": "Check the morning plan and the weekly summary times",
-      "deepLink": "/agents/:id?tab=tasks",
+      "skills": [
+        "zepp"
+      ],
       "skippable": true
     }
   ]

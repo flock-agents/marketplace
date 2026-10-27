@@ -754,8 +754,8 @@
       "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "apps/fitness",
-      "latestVersion": "1.0.2",
-      "latestTag": "fitness-v1.0.2",
+      "latestVersion": "1.0.3",
+      "latestTag": "fitness-v1.0.3",
       "minFlockVersion": "0.20.0",
       "publishedAt": "2026-10-26T00:00:00Z",
       "updatedAt": "2026-10-27T00:00:00Z"
@@ -777,8 +777,8 @@
       "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "templates/fitness-coach",
-      "latestVersion": "1.0.0",
-      "latestTag": "fitness-coach-v1.0.0",
+      "latestVersion": "1.0.1",
+      "latestTag": "fitness-coach-v1.0.1",
       "minFlockVersion": "0.20.0",
       "publishedAt": "2026-10-26T00:00:00Z",
       "updatedAt": "2026-10-26T00:00:00Z"
