@@ -10,7 +10,7 @@ import { mountJobRoutes } from "./jobRoutes";
 import { mountMealRoutes } from "./mealRoutes";
 
 const manifest = JSON.parse(readFileSync(join(import.meta.dir, "..", "flock.app.json"), "utf-8"));
-const ctx = { platform: {} as any, agentId: "key-butler", pressToken: null } as any;
+const ctx = { platform: {} as any, agentId: "meal-agent", pressToken: null } as any;
 
 describe("agentInterface", () => {
   it("declares at most 20 operations (all Flock shows), guide first, each with a handler; instructions fit 2,000 characters", () => {
@@ -36,7 +36,7 @@ describe("agentOps", () => {
     mountMealRoutes(hono, kit.db);
     const ops = agentOps(() => hono);
     const meal = await ops.save_meal({ date: "2026-11-02", slot: "Lunch", dish: "Rajma" }, ctx) as { row: { id: string } };
-    expect(all(schema.meals)[0]).toMatchObject({ dish: "Rajma", updated_by: "agent:key-butler" });
+    expect(all(schema.meals)[0]).toMatchObject({ dish: "Rajma", updated_by: "agent:meal-agent" });
     const recipe = await ops.write_recipe({ name: "Rajma", lines: [] }, ctx) as { recipe_id: string };
     expect((await ops.set_meal_recipes({ meal_id: meal.row.id, recipes: [{ recipe_id: recipe.recipe_id }] }, ctx) as { ok: boolean }).ok).toBe(true);
     expect(all(schema.meal_recipes)).toHaveLength(1);
