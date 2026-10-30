@@ -37,6 +37,10 @@ export function ManageGroceries({ rows, update, remove }: Props) {
         } : null}
         columns={[
           { key: "item", label: "Item", width: "wide" },
+          { key: "qty", label: "Qty", phone: "hide" },
+          { key: "category", label: "Category", phone: "hide" },
+          { key: "needed_by", label: "Needed by", kind: "date", phone: "hide" },
+          { key: "in_stock_until", label: "Have it until", kind: "date", phone: "hide" },
           { key: "aisle", label: "Aisle" },
           { key: "for_dish", label: "For" },
           { key: "id", label: "", align: "end", render: (r: Grocery) => (

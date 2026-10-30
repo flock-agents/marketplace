@@ -3,8 +3,8 @@
   "usage": "template",
   "icon": "icon.svg",
   "description": "The family's meals for the week, day by day (Breakfast, Lunch and Dinner), with a shared grocery list and the family's recipe book; not for school runs, chores or appointments.",
-  "version": "1.1.2",
-  "minFlockVersion": "0.15.0",
+  "version": "2.0.0",
+  "minFlockVersion": "0.22.0",
   "type": "fullstack",
   "access": "private",
   "spa": true,
@@ -30,12 +30,20 @@
   "pages": [
     "week",
     "groceries",
-    "recipes"
+    "pantry",
+    "recipes",
+    "ingredients"
   ],
   "tables": [
     "meals",
     "recipes",
-    "groceries"
+    "groceries",
+    "ingredients",
+    "recipe_ingredients",
+    "diners",
+    "diner_portions",
+    "staples",
+    "carts"
   ],
   "objects": [
     "grocery-bag"
@@ -44,11 +52,14 @@
   "chat": "side",
   "labels": {
     "nav.week": "Week",
-    "nav.groceries": "Groceries",
+    "nav.groceries": "Shopping",
+    "nav.pantry": "Pantry",
     "nav.recipes": "Recipes",
     "title.week": "This week's meals",
-    "title.groceries": "Groceries",
-    "title.recipes": "Recipes"
+    "title.groceries": "Shopping",
+    "title.pantry": "Pantry",
+    "title.recipes": "Recipes",
+    "nav.ingredients": "Ingredients"
   },
   "useCases": {
     "for": [
@@ -62,5 +73,488 @@
       "Ordering groceries from a store: a connector does that",
       "A restaurant's menu or a business kitchen"
     ]
-  }
+  },
+  "settings": [
+    {
+      "key": "cook.morning",
+      "type": "string",
+      "default": "07:30",
+      "scope": "owner",
+      "label": "When breakfast and lunch are cooked"
+    },
+    {
+      "key": "cook.lunch",
+      "type": "string",
+      "default": "13:00",
+      "scope": "owner",
+      "label": "When lunch is eaten (meal time default)"
+    },
+    {
+      "key": "cook.evening",
+      "type": "string",
+      "default": "19:00",
+      "scope": "owner",
+      "label": "When dinner is cooked"
+    },
+    {
+      "key": "quiet.start",
+      "type": "string",
+      "default": "22:30",
+      "scope": "owner",
+      "label": "Quiet hours start: no reminders after this"
+    },
+    {
+      "key": "quiet.end",
+      "type": "string",
+      "default": "06:30",
+      "scope": "owner",
+      "label": "Quiet hours end"
+    },
+    {
+      "key": "reminder.buffer_min",
+      "type": "integer",
+      "default": 30,
+      "scope": "owner",
+      "label": "Extra minutes before a prep step must start"
+    },
+    {
+      "key": "spend.weekly_limit",
+      "type": "number",
+      "default": 2000,
+      "scope": "owner",
+      "label": "₹ a week (Mon-Sun) a cart is flagged for crossing"
+    },
+    {
+      "key": "price.jump_pct",
+      "type": "number",
+      "default": 20,
+      "scope": "owner",
+      "label": "% above usual price an item is flagged, not added"
+    },
+    {
+      "key": "services",
+      "type": "json",
+      "default": [
+        "zepto",
+        "zomato-blinkit",
+        "bigbasket"
+      ],
+      "scope": "owner",
+      "label": "Grocery services compared at order time"
+    },
+    {
+      "key": "buy.delivery_lead_min",
+      "type": "integer",
+      "default": 60,
+      "scope": "owner",
+      "label": "Minutes an item must arrive before the cooking slot that uses it"
+    },
+    {
+      "key": "buy.fresh_window_days",
+      "type": "json",
+      "default": {
+        "dairy": 1,
+        "vegetables": 2,
+        "pantry": 7,
+        "spices": 14
+      },
+      "scope": "owner",
+      "label": "Days one order may cover, per category"
+    },
+    {
+      "key": "buy.earliest_order",
+      "type": "string",
+      "default": "06:30",
+      "scope": "owner",
+      "label": "No order is placed earlier than this"
+    },
+    {
+      "key": "buy.preferred_order_time",
+      "type": "string",
+      "default": "18:00",
+      "scope": "owner",
+      "label": "The evening before an item is needed, order it at this time instead of waiting for the morning (Zepto's evening deals, and the family's own habit) — falls back to the morning cutoff once this slot has already passed"
+    },
+    {
+      "key": "meal.latest.breakfast",
+      "type": "string",
+      "scope": "owner",
+      "label": "Breakfast can be cooked as late as",
+      "default": "11:00"
+    },
+    {
+      "key": "meal.latest.lunch",
+      "type": "string",
+      "scope": "owner",
+      "label": "Lunch can be cooked as late as",
+      "default": "15:00"
+    },
+    {
+      "key": "meal.latest.dinner",
+      "type": "string",
+      "scope": "owner",
+      "label": "Dinner can be cooked as late as",
+      "default": "23:00"
+    },
+    {
+      "key": "shop.reminder_time",
+      "type": "string",
+      "scope": "owner",
+      "label": "The evening before a shopping window, the reminder goes out at",
+      "default": "20:00"
+    },
+    {
+      "key": "shop.heads_up_min",
+      "type": "integer",
+      "scope": "owner",
+      "label": "Minutes before a shopping window the draft is shared",
+      "default": 15
+    },
+    {
+      "key": "shop.yes_wait_h",
+      "type": "number",
+      "scope": "owner",
+      "label": "Hours to wait for a yes before the draft is let go quietly",
+      "default": 3
+    },
+    {
+      "key": "plan.horizon_days",
+      "type": "integer",
+      "default": 7,
+      "scope": "owner",
+      "label": "Rolling plan length, in days"
+    },
+    {
+      "key": "plan.confirm_ahead_days",
+      "type": "integer",
+      "default": 2,
+      "scope": "owner",
+      "label": "Days within which an unconfirmed day is raised with the family"
+    },
+    {
+      "key": "prefs.category_defaults",
+      "type": "json",
+      "scope": "owner",
+      "label": "Default shopping prefs per category (an ingredient's own prefs override these)",
+      "default": {
+        "vegetables": {
+          "pack_min": 250,
+          "pack_max": 1000,
+          "pack_unit": "g",
+          "stock_days": 2,
+          "price": "balanced",
+          "brands_preferred": [],
+          "brands_avoid": [],
+          "substitutions": "ask",
+          "service": "any",
+          "never_auto_add": false
+        },
+        "leafy_greens": {
+          "pack_min": 1,
+          "pack_max": 2,
+          "pack_unit": "pc",
+          "stock_days": 1,
+          "price": "balanced",
+          "brands_preferred": [],
+          "brands_avoid": [],
+          "substitutions": "ask",
+          "service": "any",
+          "never_auto_add": false
+        },
+        "fruits": {
+          "pack_min": 500,
+          "pack_max": 2000,
+          "pack_unit": "g",
+          "stock_days": 3,
+          "price": "balanced",
+          "brands_preferred": [],
+          "brands_avoid": [],
+          "substitutions": "ask",
+          "service": "any",
+          "never_auto_add": false
+        },
+        "dairy": {
+          "pack_min": 500,
+          "pack_max": 2000,
+          "pack_unit": "ml",
+          "stock_days": 1,
+          "price": "balanced",
+          "brands_preferred": [
+            "Amul",
+            "Mother Dairy"
+          ],
+          "brands_avoid": [],
+          "substitutions": "ask",
+          "service": "any",
+          "never_auto_add": false
+        },
+        "bakery": {
+          "pack_min": 1,
+          "pack_max": 2,
+          "pack_unit": "pc",
+          "stock_days": 2,
+          "price": "balanced",
+          "brands_preferred": [],
+          "brands_avoid": [],
+          "substitutions": "allowed",
+          "service": "any",
+          "never_auto_add": false
+        },
+        "grains": {
+          "pack_min": 1000,
+          "pack_max": 5000,
+          "pack_unit": "g",
+          "stock_days": 30,
+          "price": "balanced",
+          "brands_preferred": [
+            "Aashirvaad",
+            "India Gate"
+          ],
+          "brands_avoid": [],
+          "substitutions": "ask",
+          "service": "any",
+          "never_auto_add": false
+        },
+        "pulses": {
+          "pack_min": 500,
+          "pack_max": 2000,
+          "pack_unit": "g",
+          "stock_days": 30,
+          "price": "balanced",
+          "brands_preferred": [
+            "Tata Sampann"
+          ],
+          "brands_avoid": [],
+          "substitutions": "ask",
+          "service": "any",
+          "never_auto_add": false
+        },
+        "pantry": {
+          "pack_min": 500,
+          "pack_max": 2000,
+          "pack_unit": "g",
+          "stock_days": 30,
+          "price": "cheapest",
+          "brands_preferred": [],
+          "brands_avoid": [],
+          "substitutions": "allowed",
+          "service": "any",
+          "never_auto_add": false
+        },
+        "oils": {
+          "pack_min": 1000,
+          "pack_max": 5000,
+          "pack_unit": "ml",
+          "stock_days": 45,
+          "price": "balanced",
+          "brands_preferred": [
+            "Fortune"
+          ],
+          "brands_avoid": [],
+          "substitutions": "ask",
+          "service": "any",
+          "never_auto_add": false
+        },
+        "spices": {
+          "pack_min": 50,
+          "pack_max": 200,
+          "pack_unit": "g",
+          "stock_days": 60,
+          "price": "balanced",
+          "brands_preferred": [
+            "MDH",
+            "Everest"
+          ],
+          "brands_avoid": [],
+          "substitutions": "ask",
+          "service": "any",
+          "never_auto_add": false
+        },
+        "meat": {
+          "pack_min": 250,
+          "pack_max": 1000,
+          "pack_unit": "g",
+          "stock_days": 1,
+          "price": "premium",
+          "brands_preferred": [
+            "Licious"
+          ],
+          "brands_avoid": [],
+          "substitutions": "never",
+          "service": "any",
+          "never_auto_add": true
+        },
+        "snacks": {
+          "pack_min": 1,
+          "pack_max": 3,
+          "pack_unit": "pc",
+          "stock_days": 7,
+          "price": "balanced",
+          "brands_preferred": [],
+          "brands_avoid": [],
+          "substitutions": "allowed",
+          "service": "any",
+          "never_auto_add": true
+        },
+        "household": {
+          "pack_min": 1,
+          "pack_max": 2,
+          "pack_unit": "pc",
+          "stock_days": 30,
+          "price": "cheapest",
+          "brands_preferred": [],
+          "brands_avoid": [],
+          "substitutions": "allowed",
+          "service": "any",
+          "never_auto_add": true
+        }
+      }
+    }
+  ],
+  "routines": [
+    {
+      "id": "rolling-plan",
+      "name": "Daily meal-plan check",
+      "description": "Fills the next few days of meals, checks them against each diner's targets, asks the family to confirm the near days, loops in both coaches on Sunday, and gives the owner the first look at the shopping any of that creates.",
+      "trigger": {
+        "type": "schedule",
+        "cron": "0 20 * * *"
+      },
+      "executionMode": "app-relay",
+      "handler": "rolling-plan",
+      "prompt": "The nightly meal-plan check is in server/routines/rolling-plan.ts: read its wake message and the data it sends (missing slots, meals pending a coach check, unconfirmed days, whether it's Sunday, and the diners' targets), then do exactly what it asks through this app's operations (save_meal, set_meal_recipes, write_recipe, set_shelf_life; read rows at its _data routes) — fill, check, ask, and only then tell the owner what shopping it created."
+    },
+    {
+      "id": "prep-reminders",
+      "name": "Prep reminders",
+      "description": "Every 30 minutes, rings any advance-prep step (soak the batter, set it to ferment) whose moment has arrived for a meal in the next 48 hours. No model call unless something is actually due.",
+      "trigger": {
+        "type": "schedule",
+        "cron": "*/30 * * * *"
+      },
+      "executionMode": "app-relay",
+      "handler": "prep-reminders"
+    },
+    {
+      "id": "shopping-timeline",
+      "name": "Shopping timeline",
+      "description": "A 15-minute heartbeat that keeps the shopping drafts current and wakes the agent for at most three messages per shopping window: the reminder the evening before, the heads-up shortly before (the draft as a checklist), and the price step at the window (quotes, best service, one ask for a yes). A draft with no yes in time is let go silently and its items roll into the next one.",
+      "trigger": {
+        "type": "schedule",
+        "cron": "*/15 * * * *"
+      },
+      "executionMode": "app-relay",
+      "handler": "shopping-timeline",
+      "prompt": "The shopping-timeline routine woke you to send ONE message, named in its message with its slot (reminder, heads_up or price) and a message id — or with the owner's yes from the app. Send exactly what it asks and nothing else; when sent, POST /api/messages/<id>/sent. Every list you share is the app's (the wake's data, or GET /api/shopping/draft), never from memory; every change the family asks for goes through POST /api/shopping/draft/items or POST /api/shopping/windows/move, and you reply with the app's updated draft. At most one question card per message; silence means carry on — never follow up, never answer your own question. Price step: fill a cart on each connected service, POST /api/carts/<id>/quotes for each, share the best service, rough total and screenshot, ask once for a yes. Never place or pay anything without a family member's explicit yes; on a yes in chat, POST /api/carts/<id>/yes first. The instant an order is placed, POST /api/carts/<id>/ordered with service, total, order_ref and delivery_eta before telling anyone it's done."
+    },
+    {
+      "id": "agent-jobs",
+      "name": "Background jobs",
+      "description": "Every 15 minutes, wakes the agent only when the app has background jobs waiting for its judgement (a meal to review, a recipe to fill, patterns to find), all in one wake; the app also wakes it right after queueing one. Never messages the family.",
+      "trigger": {
+        "type": "schedule",
+        "cron": "*/15 * * * *"
+      },
+      "executionMode": "app-relay",
+      "handler": "agent-jobs",
+      "prompt": "The meal planner's background jobs (server/routines/agent-jobs.ts): its message lists each open job in data.jobs with its facts and how to answer that kind. Answer every one with POST /api/jobs/<id>/answer, then any more_jobs the reply lists (GET /api/jobs/<id>). This is background work: never message the family and never ask anyone anything to answer a job — make an informed guess from the facts and what you know of this family. A 400 says what to fix; a 409 means the job went stale, skip it. Reply with one line on what you answered."
+    }
+  ],
+  "agentInterface": {
+    "intents": [],
+    "operations": [
+      {
+        "name": "guide",
+        "description": "The full guide for working with this app: read it before shopping, answering a job or changing meals. {}"
+      },
+      {
+        "name": "get_draft",
+        "description": "The next shopping draft: span ('Thu breakfast → Sat dinner'), lines with qty ranges, quotes, best service, next message. {}"
+      },
+      {
+        "name": "edit_draft",
+        "description": "Add / drop / restore draft items from a chat reply: {add:[{item|ingredient_id, qty?}], remove:[ref], restore:[ref], cart_id?}"
+      },
+      {
+        "name": "move_window",
+        "description": "Move a shopping window: {order_at:'YYYY-MM-DDTHH:MM', cart_id?}; lists meals it can't reach in time."
+      },
+      {
+        "name": "add_quote",
+        "description": "A service's filled cart: {cart_id, service, total, fees?, lines?, screenshot_url?}; returns all quotes and the best."
+      },
+      {
+        "name": "record_yes",
+        "description": "A family member said yes in chat: {cart_id, service, by}. Then place the order and record_order."
+      },
+      {
+        "name": "record_order",
+        "description": "The order was placed: {cart_id, service, total, order_ref?, delivery_eta?}. Do it right after placing."
+      },
+      {
+        "name": "skip_order",
+        "description": "Skip this window's order (the family asked): {cart_id}; still-useful items move to the next order."
+      },
+      {
+        "name": "ack_message",
+        "description": "Mark the message a shopping wake asked for as sent: {message_id}."
+      },
+      {
+        "name": "list_jobs",
+        "description": "Open background jobs the app wants your judgement on (review_meal, fill_recipe, find_patterns). {}"
+      },
+      {
+        "name": "answer_job",
+        "description": "Answer a background job: {job_id, answer:{…}} (shapes in the guide). Never message the family about one."
+      },
+      {
+        "name": "pantry",
+        "description": "What is in the kitchen, how sure, and the items due for a check. {}"
+      },
+      {
+        "name": "pantry_answer",
+        "description": "The family's answer about stock: {items:[{ingredient_id, have:'yes'|'low'|'out'}]}; low/out go on the list."
+      },
+      {
+        "name": "have_item",
+        "description": "'We already have X': {ingredient_id, item, use_by?}; covers its meals until use_by."
+      },
+      {
+        "name": "search",
+        "description": "Find dishes, recipes, ingredients (Hindi aliases, typos), pantry, orders: {q}."
+      },
+      {
+        "name": "save_meal",
+        "description": "Create or change a meal: {meal_id?, date, slot, dish, note?, time?, outcome?, outcome_source?, coach_check?}."
+      },
+      {
+        "name": "remove_meal",
+        "description": "Remove a meal from the plan: {meal_id}."
+      },
+      {
+        "name": "set_meal_recipes",
+        "description": "A meal's recipes, as a set in order: {meal_id, recipes:[{recipe_id, servings?}]}."
+      },
+      {
+        "name": "write_recipe",
+        "description": "A new recipe with its lines (search first), or lines for one: {name|recipe_id, lines:[{ingredient_id, item, qty_per_adult, unit, category}]}."
+      },
+      {
+        "name": "set_shelf_life",
+        "description": "How long an ingredient keeps in this home (your informed guess): {ingredient_id, shelf_life_days, note}."
+      }
+    ],
+    "instructions": "Meal Planner owns this family's meals, recipes, shopping list, drafts, orders, pantry stock and shopping preferences. Never keep any of it in memory or chat: read the app before you answer, change it only through its operations, then tell the family what the app now says. Read the guide operation before shopping, answering a job or changing meals. A meal is a set of recipes plus a note: when plans change, change the recipes and note (set_meal_recipes, save_meal), not just the dish text. Only you add recipes, and only after searching for the same dish under another spelling. Background jobs (review_meal, fill_recipe, find_patterns) and background facts (shelf life, recipe lines) are your informed guesses: never ask the family about them and never message anyone for them. Message the family only when a Shopping timeline wake asks (at most 3 per window: reminder, heads-up, price), then ack_message; or when they talk to you. Silence means carry on. Never order without a family member's explicit yes; record it (record_yes), place the order, then record_order at once."
+  },
+  "privateTables": [
+    "prep_reminders",
+    "message_log",
+    "agent_jobs",
+    "choice_log",
+    "learned_prefs",
+    "stock",
+    "shopping_prefs",
+    "standing_consumption",
+    "meal_recipes"
+  ]
 }
