@@ -1,0 +1,94 @@
+/* Group heading: a checkbox, the title, and (cart groups only) a collapse chevron. No buttons live here — every
+   action is in the bulk action bar once something is selected. */
+.pl-grp-h { display: flex; align-items: center; gap: 10px; padding: 2px 0; cursor: default; }
+.pl-grp-h-collapsible { cursor: pointer; }
+.pl-grp-h-title { flex: 1; font: 600 15px var(--body); letter-spacing: -.01em; color: var(--ink); min-width: 0; }
+.pl-grp-h-sm { padding-bottom: 9px; }
+.pl-grp-h-sm .pl-grp-h-title { font: 600 13px var(--body); letter-spacing: .01em; color: var(--ink-2); text-transform: uppercase; }
+.pl-grp-h > svg { color: var(--ink-3); flex: none; }
+/* The tri-state checkbox reuses Checklist's own checkbox look (fl-check/fl-cbx) but is never itself a list row. */
+.pl-tri-cbx { all: unset; display: inline-flex; cursor: pointer; }
+.pl-tri-cbx .fl-cbx { margin-top: 0; }
+
+/* One grocery item: indented one step further than its subgroup, so an item reads as the subgroup's child. Every
+   row carries the same top/bottom padding — the only source of vertical rhythm — so the gap never changes with
+   how many lines a row's meta text wraps to; the divider sits only between rows, never after the last one. */
+.pl-row { display: flex; flex-direction: column; padding-left: 10px; }
+.pl-row-focus { box-shadow: inset 3px 0 0 var(--fl-accent, var(--accent)); }
+.pl-row-main { display: flex; align-items: flex-start; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.pl-row:last-child .pl-row-main { border-bottom: 0; }
+.pl-row-name { all: unset; flex: 1; display: flex; flex-direction: column; min-width: 0; cursor: pointer; font-size: 14.5px; color: var(--ink); }
+.pl-row-name small { font-size: 12.5px; color: var(--ink-3); margin-top: 1px; }
+.pl-row-done .pl-row-name > span { text-decoration: line-through; color: var(--ink-3); }
+.pl-row-chip { flex: none; margin-top: 1px; }
+.pl-row-panel { display: flex; flex-direction: column; gap: 12px; padding: 10px 0 14px 32px; }
+.pl-row-panel-sec { display: flex; flex-direction: column; gap: 6px; }
+.pl-row-panel-lbl { font: 600 12px var(--body); color: var(--ink-3); }
+
+/* A row of quick date picks, used both in the per-item panel and the bulk action bar. */
+.pl-qd-wrap { display: flex; flex-direction: column; gap: 6px; }
+.pl-qd { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.pl-qd-custom { display: flex; gap: 6px; align-items: center; }
+.pl-qd-input { flex: 1 1 160px; min-width: 0; }
+.pl-qd-unit { flex: none; width: auto; }
+
+/* The bulk action bar: slides in at the bottom the moment anything is selected. */
+.pl-bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 25; display: flex; flex-direction: column;
+  background: var(--surface); border-top: 1px solid var(--line-2); box-shadow: var(--panel-shadow);
+  padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px)); }
+.pl-bar-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.pl-bar-count { font: 600 13.5px var(--body); color: var(--ink); margin-right: 4px; white-space: nowrap; }
+.pl-bar-panel { padding-bottom: 10px; border-bottom: 1px solid var(--line); margin-bottom: 10px; }
+.pl-bar-more { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* The Groceries toolbar: the one "Show" filter. */
+.pl-groc-toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 12px 0; }
+
+/* The one filter — a plain button + a plain options list, no native <select>. Its own markup, not a
+   shared component, so the whole pill is genuinely one click target and the options render exactly as styled. */
+.pl-catf { position: relative; display: inline-flex; }
+.pl-catf-trigger { all: unset; box-sizing: border-box; display: inline-flex; align-items: center; gap: 7px; font: 500 13.5px var(--body); border: 1px solid var(--line-2); border-radius: var(--radius-pill); padding: 6px 10px 6px 13px; min-height: 34px; background: var(--surface); color: var(--ink); cursor: pointer; }
+.pl-catf-trigger:hover { background: var(--bg-warm); }
+.pl-catf-trigger[aria-expanded="true"] { border-color: var(--ua); }
+.pl-catf-lbl { color: var(--ink-3); }
+.pl-catf-val { text-transform: capitalize; }
+.pl-catf-trigger svg { color: var(--ink-3); flex: none; }
+.pl-catf-opts { position: absolute; top: calc(100% + 6px); left: 0; z-index: 20; display: flex; flex-direction: column; gap: 2px; min-width: 160px; padding: 4px; background: var(--surface); border: 1px solid var(--line-2); border-radius: 12px; box-shadow: var(--panel-shadow); }
+.pl-catf-opt { all: unset; box-sizing: border-box; display: block; text-align: left; text-transform: capitalize; padding: 8px 10px; border-radius: 8px; font: 500 14px var(--body); color: var(--ink); cursor: pointer; }
+.pl-catf-opt:hover { background: var(--tint); }
+.pl-catf-opt-on { font-weight: 600; background: var(--tint); }
+@media (max-width: 720px), (pointer: coarse) { .pl-catf-trigger { min-height: 40px; } .pl-catf-opt { min-height: 40px; display: flex; align-items: center; } }
+
+/* The action bar sits fixed at the bottom; keep it from covering the last items once anything is selected. */
+.pl-groc-list { padding-bottom: 64px; }
+
+/* Under an order's heading: its plain-language status and its one primary action. */
+.pl-order { display: flex; flex-direction: column; gap: 8px; margin: 6px 0 4px 32px; }
+.pl-order-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.pl-order-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-left: auto; }
+.pl-order-text { font-size: 13.5px; color: var(--ink-2); margin-right: 4px; }
+.pl-order-success { color: var(--ok); }
+.pl-order-warning { color: var(--risk); font-weight: 600; }
+.pl-order-muted { color: var(--ink-3); }
+/* Past and missed orders sit behind one quiet toggle at the bottom. */
+.pl-past { all: unset; box-sizing: border-box; display: block; margin: 14px 0 6px; padding: 8px 2px; min-height: 40px; font: 500 13.5px var(--body); color: var(--ink-3); cursor: pointer; }
+.pl-past:hover, .pl-past:focus-visible { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
+
+/* A cart snapshot (Groceries and the chat card): lines with pack, qty, price and substitutions. */
+.pl-snap { display: flex; flex-direction: column; gap: 6px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); padding: 10px 12px; }
+.pl-snap-head { font: 600 13.5px var(--body); color: var(--ink); }
+.pl-snap-shot { max-width: 100%; border-radius: 8px; border: 1px solid var(--line); }
+.pl-snap-lines { list-style: none; margin: 0; padding: 0; }
+.pl-snap-line { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 6px 0; font-size: 13.5px; }
+.pl-snap-line + .pl-snap-line { border-top: 1px solid var(--line); }
+.pl-snap-name { flex: 1 1 140px; display: flex; flex-direction: column; min-width: 0; overflow-wrap: anywhere; }
+.pl-snap-name small { color: var(--ink-3); font-size: 12px; }
+.pl-snap-qty { display: inline-flex; align-items: center; gap: 2px; font-variant-numeric: tabular-nums; }
+.pl-snap-price { min-width: 56px; text-align: right; font-variant-numeric: tabular-nums; }
+.pl-snap-acts, .pl-snap-swap { display: inline-flex; align-items: center; gap: 4px; }
+.pl-snap-swap .fl-inp { width: 140px; }
+.pl-snap-foot { display: flex; justify-content: flex-end; gap: 12px; font-size: 13.5px; padding-top: 4px; border-top: 1px solid var(--line); }
+.pl-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.pl-usual-note { margin: 4px 2px 10px; font: 400 13.5px var(--body); color: var(--ink-3); }
+.pl-usual-list { list-style: none; margin: 0 0 10px; padding: 0; }
+.pl-usual-list li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 6px 2px; font: 400 14px var(--body); color: var(--ink); }

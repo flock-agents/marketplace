@@ -5,7 +5,7 @@ A household assistant that manages groceries, meals, and family routines through
 ## What It Does
 
 - **Grocery comparison:** Searches and compares prices across Swiggy Instamart, Zepto, BigBasket, and Zomato Blinkit
-- **Cart building:** Builds shopping carts on the chosen service (user completes checkout in the app)
+- **Cart building and checkout:** Builds shopping carts on the chosen service and places the order in chat after the family confirms the total
 - **Order tracking:** Checks delivery status when given an order ID
 - **Family memory:** Learns dietary restrictions, brand preferences, ordering patterns over time
 - **Daily briefings:** Morning summary with weather, calendar, and tasks; evening preview of tomorrow
