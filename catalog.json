@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "updatedAt": "2026-10-27T00:00:00Z",
+  "updatedAt": "2026-10-30T11:53:39Z",
   "items": [
     {
       "slug": "linear",
@@ -683,11 +683,11 @@
       "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "apps/planner",
-      "latestVersion": "1.1.2",
-      "latestTag": "planner-v1.1.2",
-      "minFlockVersion": "0.15.0",
+      "latestVersion": "2.0.0",
+      "latestTag": "planner-v2.0.0",
+      "minFlockVersion": "0.22.0",
       "publishedAt": "2026-10-11T00:00:00Z",
-      "updatedAt": "2026-10-16T00:00:00Z"
+      "updatedAt": "2026-10-30T11:53:39Z"
     },
     {
       "slug": "tracker",

@@ -11,7 +11,8 @@ async function boot(importFile?: unknown) {
   const hono = new Hono();
   const dataDir = mkdtempSync(join(tmpdir(), "planner-schema-"));
   if (importFile) { mkdirSync(join(dataDir, ".flock"), { recursive: true }); writeFileSync(join(dataDir, ".flock", "import.json"), JSON.stringify(importFile)); }
-  await mountKit({ hono, env: { appId: "t", dataDir, apiUrl: null, token: null, agent: null } }, { schema, seed, dbFile: ":memory:", appName: "T" });
+  await mountKit({ hono, env: { appId: "t", dataDir, apiUrl: null, token: null, agent: null } },
+    { schema, seed, dbFile: ":memory:", appName: "T", privateTables: { prep_reminders: "server-only" } });
   const call = async (method: string, path: string, body?: unknown) => {
     const r = await hono.request(path, { method, headers: { "Content-Type": "application/json", "X-Flock-User": "tester" }, body: body === undefined ? undefined : JSON.stringify(body) });
     return { status: r.status, body: (await r.json()) as any };
@@ -24,9 +25,9 @@ describe("planner data, as agents see it", () => {
   it("lists meals, recipes and groceries in /_schema; a meal is a dish only, linked to a recipe", async () => {
     const { call } = await boot();
     const s = (await call("GET", "/api/_data/_schema")).body;
-    expect(Object.keys(s.tables).sort()).toEqual(["groceries", "meals", "recipes"]);
+    expect(Object.keys(s.tables).sort()).toEqual(["agent_jobs", "carts", "choice_log", "diner_portions", "diners", "groceries", "ingredients", "learned_prefs", "meal_recipes", "meals", "message_log", "prep_reminders", "recipe_ingredients", "recipes", "shopping_prefs", "standing_consumption", "staples", "stock"]);
     expect(columns(s, "meals")).toEqual(expect.arrayContaining(["date", "slot", "dish", "recipe_id"]));
-    for (const gone of ["tags", "cook", "note"]) expect(columns(s, "meals")).not.toContain(gone);
+    for (const gone of ["tags", "cook"]) expect(columns(s, "meals")).not.toContain(gone);
     expect(columns(s, "recipes")).toEqual(expect.arrayContaining(["name", "ingredients", "method", "notes"]));
     const req = (s.tables.recipes.columns as { name: string; required: boolean }[]).filter((c) => c.required).map((c) => c.name);
     expect(req).toEqual(["name"]);
