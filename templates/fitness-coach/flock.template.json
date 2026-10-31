@@ -1,0 +1,116 @@
+{
+  "name": "Fitness Coach",
+  "slug": "fitness-coach",
+  "description": "A personal coach that plans your workouts and meals, logs what you eat, drink and do, and keeps a fitness dashboard current, with steps, sleep and PAI from a connected tracker",
+  "version": "1.0.0",
+  "author": "flock",
+  "icon": "icon.svg",
+  "category": "personal",
+  "tags": [
+    "fitness",
+    "health",
+    "coach",
+    "nutrition",
+    "workout"
+  ],
+  "minFlockVersion": "0.22.0",
+  "sortOrder": 30,
+  "agent": {
+    "defaultName": "Coach",
+    "model": "claude-sonnet-4-6",
+    "role": "main",
+    "tone": "encouraging, direct, concise",
+    "personalityOptions": {
+      "customFields": [
+        {
+          "id": "person_name",
+          "label": "Who is being coached (name)",
+          "type": "free-text"
+        },
+        {
+          "id": "timezone",
+          "label": "Their time zone (e.g. Europe/London)",
+          "type": "free-text"
+        },
+        {
+          "id": "health_notes",
+          "label": "Health notes (injuries, conditions, goals)",
+          "type": "free-text"
+        },
+        {
+          "id": "food_preferences",
+          "label": "Food preferences (diet, cuisine, allergies)",
+          "type": "free-text"
+        }
+      ]
+    },
+    "examplePrompts": [
+      "What's my workout today?",
+      "I had two eggs and toast for breakfast",
+      "How am I doing on protein this week?",
+      "Set my calorie target to 1800",
+      "Show me how to do a dead bug"
+    ]
+  },
+  "skills": [
+    {
+      "skillId": "zepp",
+      "preSelected": false,
+      "description": "Sync steps, calories, sleep, workouts, weight and PAI from a Zepp / Amazfit watch",
+      "accountRequirement": {
+        "type": "browser-session",
+        "provider": "zepp",
+        "setupGuide": "Sign in to your Zepp account"
+      }
+    }
+  ],
+  "apps": [
+    {
+      "slug": "fitness",
+      "required": true
+    }
+  ],
+  "channels": [],
+  "tasks": [],
+  "wizard": [
+    {
+      "id": "personality",
+      "type": "personality",
+      "label": "About you"
+    },
+    {
+      "id": "skills",
+      "type": "skills",
+      "label": "Fitness tracker"
+    },
+    {
+      "id": "review",
+      "type": "review",
+      "label": "Review & Create"
+    }
+  ],
+  "setupChecklist": [
+    {
+      "id": "identity-configured",
+      "label": "Identity configured",
+      "description": "Set a name and avatar for your coach",
+      "deepLink": "/agents/:id"
+    },
+    {
+      "id": "instructions-set",
+      "label": "Coach instructions set",
+      "description": "The instructions define how your coach works with you",
+      "deepLink": "/agents/:id"
+    },
+    {
+      "id": "connect-sources",
+      "label": "Connect a fitness tracker (optional)",
+      "description": "Connect Zepp so steps, sleep, weight and PAI arrive on their own. Without one, log by chat.",
+      "deepLink": "/agents/:id?tab=skills",
+      "skills": [
+        "zepp"
+      ],
+      "skippable": true
+    }
+  ]
+}
