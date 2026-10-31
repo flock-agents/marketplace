@@ -3,7 +3,7 @@
   "slug": "zepp",
   "icon": "icon.svg",
   "description": "Read Zepp / Amazfit watch data: daily activity, workouts, sleep, heart rate and body composition",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "author": "flock",
   "category": "integration",
   "tags": ["fitness", "health", "zepp", "amazfit", "wearable"],
@@ -16,7 +16,7 @@
       "archetype": "stdio-apikey",
       "transport": "stdio",
       "command": "python3",
-      "args": ["-m", "uv", "run", "--quiet", "--python", "3.11", "--directory", "${SKILL_DIR}/server", "zepp-mcp"],
+      "args": ["-m", "uv", "tool", "run", "--quiet", "--python", "3.11", "--from", "git+https://github.com/flock-agents/marketplace@zepp-v1.0.1#subdirectory=skills/zepp/server", "zepp-mcp"],
       "credentialsRequired": true,
       "documentationUrl": "https://github.com/flock-agents/zepp-mcp",
       "setupInstructions": "Add one account per person, using that person's Zepp app sign-in. Tokens are cached per account automatically, so they never cross between people.",
@@ -25,7 +25,7 @@
         { "title": "Region", "description": "Two-letter country code of the Zepp account, e.g. IN or US." }
       ],
       "envVars": [
-        { "name": "ZEPP_EMAIL", "label": "Zepp email", "description": "Email used to sign in to the Zepp app", "sensitive": false },
+        { "name": "ZEPP_EMAIL", "label": "Zepp email", "description": "Email used to sign in to the Zepp app", "sensitive": true },
         { "name": "ZEPP_PASSWORD", "label": "Zepp password", "description": "Password used to sign in to the Zepp app", "sensitive": true },
         { "name": "ZEPP_COUNTRY", "label": "Country code", "description": "Two-letter region of the Zepp account (default US)", "placeholder": "IN", "sensitive": false, "optional": true }
       ]

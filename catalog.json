@@ -40,8 +40,8 @@
       "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "skills/zepp",
-      "latestVersion": "1.0.0",
-      "latestTag": "zepp-v1.0.0",
+      "latestVersion": "1.0.1",
+      "latestTag": "zepp-v1.0.1",
       "minFlockVersion": "0.20.0",
       "publishedAt": "2026-10-26T00:00:00Z",
       "updatedAt": "2026-10-26T00:00:00Z"
