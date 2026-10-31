@@ -2,7 +2,7 @@
   "name": "Fitness Coach",
   "slug": "fitness-coach",
   "description": "A personal coach that plans your workouts and meals, logs what you eat, drink and do, and keeps a fitness dashboard current, with steps, sleep and PAI from a connected tracker",
-  "version": "1.0.1",
+  "version": "1.0.0",
   "author": "flock",
   "icon": "icon.svg",
   "category": "personal",
@@ -13,7 +13,7 @@
     "nutrition",
     "workout"
   ],
-  "minFlockVersion": "0.20.0",
+  "minFlockVersion": "0.22.0",
   "sortOrder": 30,
   "agent": {
     "defaultName": "Coach",

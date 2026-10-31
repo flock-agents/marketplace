@@ -1,6 +1,6 @@
 {
   "name": "fitness",
-  "version": "1.0.4",
+  "version": "1.0.0",
   "description": "Today and Yesterday against the goals in focus (exercise, diet, water, and activity and sleep from a connected tracker): the workout plan and planned meals beside what was done and eaten, tomorrow's plans, history and an exercise library.",
   "objects": [
     "globe"

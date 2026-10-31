@@ -1,23 +1,10 @@
 # Changelog
 
-## 1.0.4
-
-- The coach can add exercises to the library as data: `POST /api/exercises {name, notes?, gifUrl?}` downloads the picture (http(s), GIF/WebP/MP4, up to 10 MB) into the app's data dir, deduped by slug, served from `/api/exercises/media/<file>`. Plan items can name their exercise by `exercise` slug. The Exercises page lists preloaded and added ones; the owner can remove an added one. The Morning plan picks exercises for the person and adds new ones with a GIF it finds on the web.
-
-## 1.0.3
-
-- Adds the Morning plan (07:00 daily) and Weekly summary (Sunday 19:00) routines, moved from the fitness-coach template; they wake the paired coach. Cron times run on the Flock's clock: the routine format has only a fixed `trigger.timezone`, not the app's `timezone` setting.
-
-## 1.0.2
-
-- A fresh install starts empty: the dashboard kit's sample rows (a tiffin kitchen's orders and events) are gone, and so are the leftover `Sale` kind and money formatting.
-
-## 1.0.1
-
-- Declares its settings in `flock.app.json` and ships the generated `catalog.json`, so the template can install and adopt it.
-
 ## 1.0.0
 
-- First release, generalised from a hand-built coach dashboard: person, time zone and exercise note are settings; trackers
-  are adapters (Zepp first, optional) run by the `tracker-sync` routine and the Sync button, each isolated; goals show
-  when their metrics have data. Needs Flock 0.20.0 (`connectors.list()`).
+- First release, generalised from a hand-built coach dashboard. Person, time zone and exercise note are settings, so nothing about one person is in the code.
+- Trackers are optional adapters (Zepp first), run by the `tracker-sync` routine and the Sync button; each adapter runs on its own. Goals show only when their metrics have data, so the app also works with no tracker.
+- Routines that wake the paired coach: Morning plan (07:00 daily) and Weekly summary (Sunday 19:00). Their times run on the Flock's clock.
+- The Morning plan picks exercises for the person and adds new ones to the library with a GIF it finds on the web: `POST /api/exercises {name, notes?, gifUrl?}`. The app downloads the picture (http(s), GIF/WebP/MP4, up to 10 MB) into its data folder. Plan items link to exercises by slug, and the owner can remove an added exercise.
+- A fresh install starts empty, with no sample rows.
+- Needs Flock 0.22.0 (`connectors.list()`, optional connectors).

@@ -1,5 +1,5 @@
 {
   "name": "zepp",
-  "version": "1.0.1",
-  "minFlockVersion": "0.20.0"
+  "version": "1.0.0",
+  "minFlockVersion": "0.22.0"
 }
