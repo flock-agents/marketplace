@@ -1,8 +1,8 @@
 # Changelog
 
-## 1.0.2
+## 1.0.3
 
-- Does nothing until it knows who it is for (`person` and `timezone`): no tracker sync, no coach wakes, so no model runs. The page asks for both first, with the browser's time zone filled in; the coach can also set them.
+- Does nothing until it knows who it is for (`person` and `timezone`): no tracker sync, no coach wakes, so no model runs. Until then the app shows that it is idle, with a button that opens the coach's chat to tell it who the dashboard is for; the coach saves both.
 - The daily plan and weekly summary are now app routines (`daily-plan`, `weekly-review`) that wake the coach only once the app is set up. They replace `morning-plan` and `weekly-summary`, which an update removes; same times and prompts.
 
 ## 1.0.1
