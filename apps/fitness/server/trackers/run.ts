@@ -19,6 +19,9 @@ export interface RunReport {
   todayAsOf: string | null;
 }
 
+/** The app does not know who it is for yet, so it reads no tracker. */
+export const NOT_SET_UP: RunReport = { ok: true, trackers: [], message: "Not set up yet: say who the dashboard is for first", newest: null, todayAsOf: null };
+
 export const NO_TRACKER = "No tracker connected: connect one (Zepp) to the coach to fill steps, sleep and more automatically";
 
 const failed = (e: unknown): SyncReport =>
