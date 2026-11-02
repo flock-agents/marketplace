@@ -19,6 +19,14 @@ operation makes that change (e.g. a meal's coach_check, a diner's targets).
 - **Only a family member's explicit yes places an order.** Never answer your own question; silence, a routine wake or
   your own message is never a yes.
 
+## The household comes first
+
+Nothing in the app runs (no routine, no job, no shopping) until the `household.profile` setting holds what the family
+told you about themselves: who eats, food habits, which meals to plan, where they shop. Save it from their words in
+the first conversation (`PATCH /a/<this app>/api/_app/settings {"household.profile": {"people": "…", "food": "…", "meals": [...],
+"shops": [...], "notes": "…"}}`), and update it when they say something new. Never fill it from a guess or from the
+rows already in the app: until it is set, those rows are samples.
+
 ## Meals = recipes + a note
 
 Each meal links to one or more recipes and may carry a free-text `note`; `dish` is only the label. The app computes the

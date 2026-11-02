@@ -8,6 +8,7 @@ import { RecipePage } from "./pages/RecipePage";
 import { IngredientsPage } from "./pages/IngredientsPage";
 import { IngredientPage } from "./pages/IngredientPage";
 import { GlobalSearch } from "./pages/GlobalSearch";
+import { IdleNotice } from "./pages/IdleNotice";
 
 // The name, object, accent, starters and labels come from the app's display (GET /api/_app); these are the fallbacks.
 const STARTERS = ["Plan next week without repeats", "Plan next week from our recipes", "Make the grocery list"];
@@ -45,6 +46,7 @@ export default function App() {
       }}
     >
       <GlobalSearch onOpen={(route) => { setSelected(null); go(route); }} />
+      <IdleNotice settings={app.settings} loading={app.loading} />
       {ingredientId ? <IngredientPage id={ingredientId} onBack={() => go("ingredients")} onOpenRecipe={(id) => go(`recipe/${id}`)} />
         : recipeId ? <RecipePage id={recipeId} onBack={() => go("recipes")} onSelect={setSelected} />
         : current === "groceries" ? <GroceriesPage focus={groceryFocus} />

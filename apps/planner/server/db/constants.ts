@@ -57,6 +57,9 @@ const numProblem = (key: string, min: number, max: number) => (v: unknown): stri
 /** The app's owner-facing settings (ARCHITECTURE.md "A setting"): declared here with their checks, passed to mountKit, and
  *  repeated without the checks in flock.app.json "settings" for the planner's catalogue. */
 export const SETTINGS = [
+  { key: "household.profile", type: "json" as const, default: null, scope: "owner" as const,
+    label: "Your household, in your words (who eats, food habits, meals to plan, where you shop): nothing is planned until it's set",
+    check: (v: unknown) => v === null || (typeof v === "object" && !Array.isArray(v)) ? null : "household.profile must be an object of the family's answers" },
   { key: "cook.morning", type: "string" as const, default: "07:30", scope: "owner" as const,
     label: "When breakfast and lunch are cooked", check: timeProblem("cook.morning") },
   { key: "cook.lunch", type: "string" as const, default: "13:00", scope: "owner" as const,

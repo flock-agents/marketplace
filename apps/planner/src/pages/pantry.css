@@ -10,6 +10,7 @@
 .pl-gsearch-list { min-width: 280px; }
 .pl-gsearch-group { padding: 6px 10px 2px; font-size: 11.5px; text-transform: uppercase; letter-spacing: .04em; color: var(--ink-3); }
 .pl-gsearch-inline { margin: 0 0 12px; }
+.pl-gsearch-subgroup { list-style: none; margin: 0; padding: 0; }
 
 /* Recipe ingredient rows and the ingredient editor. */
 .pl-ri { display: grid; grid-template-columns: minmax(0, 2fr) minmax(70px, 1fr) minmax(70px, 1fr) auto; gap: 8px; align-items: end; padding: 8px 0; border-bottom: 1px solid var(--line); }
@@ -17,4 +18,5 @@
 @media (max-width: 560px) { .pl-ri { grid-template-columns: 1fr 1fr; } }
 .pl-form-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-end; }
 .pl-form-row > * { flex: 1 1 160px; }
+.pl-form-row-top { margin-top: var(--space-2); }
 .pl-pantry-actions { display: flex; gap: 8px; flex-wrap: wrap; padding: 4px 0 10px; }

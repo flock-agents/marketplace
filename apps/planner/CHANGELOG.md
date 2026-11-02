@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.0.1
+
+- **Nothing runs until the family has told the agent about themselves.** The new `household.profile` setting holds what the
+  family said in their first conversation (who eats, food habits, meals to plan, where they shop); the agent saves it in
+  their words, never from guesses. Until it is set every routine is a silent no-op, no job reaches the agent, the shopping
+  list is not rebuilt, and every page says the app is waiting and what to tell the agent. When it arrives the samples are
+  cleared (one undoable change) and the work starts from the family's own rows.
+- **Installs without a profile stop generating.** At the first start of 2.0.1, what the app and its agent generated before
+  is marked as samples (cleared with the template's), the owner's own rows and the install import's stay, and an install
+  that already holds its family's diners carries on.
+- Layout-lint fixes on the Recipes, Ingredients, Pantry and grocery pages.
+
 ## 2.0.0
 
 - **The app owns how its agent works.** `agentInterface` declares 20 operations and the agent's instructions; Flock 0.22.0
