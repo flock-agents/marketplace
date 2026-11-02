@@ -5,6 +5,7 @@
   "version": "1.3.2",
   "author": "flock",
   "icon": "icon.svg",
+  "bird": "bird:penguin;color=night;face=monocle;neck=bowtie;pose=proper",
   "category": "family",
   "tags": ["household", "grocery", "family", "meal-planning"],
   "minFlockVersion": "0.15.0",
