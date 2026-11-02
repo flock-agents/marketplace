@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.0.2
+
+- The "waiting to hear about your household" notice is inset like the samples banner above it, and no longer repeats it.
+
 ## 2.0.1
 
 - **Nothing runs until the family has told the agent about themselves.** The new `household.profile` setting holds what the
