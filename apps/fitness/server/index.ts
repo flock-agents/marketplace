@@ -26,7 +26,6 @@ import { nutritionRoutes } from "./nutrition/routes";
 import { PERSON_SETTING, TIMEZONE_SETTING, personName, profileSettings } from "./profile/settings";
 import { apiPath } from "./profile/app-url";
 import { isSetUp } from "./profile/setup";
-import { routineHold, type RoutineHold } from "./profile/routine-hold";
 import { DAILY_PLAN_ROUTINE, WEEKLY_REVIEW_ROUTINE, coachRoutine } from "./coach/routines";
 import { useTimezone } from "./time/dates";
 
@@ -40,10 +39,6 @@ const kit = await mountKit(flock, { schema, settings: [...profileSettings, focus
 useTimezone(() => kit.settings.get<string>(TIMEZONE_SETTING));
 const person = () => personName(kit.settings.get<string>(PERSON_SETTING));
 const setUp = () => isSetUp(kit.settings.get);
-// Every routine stays off until the app is set up, and comes back on when it is (server/profile/routine-hold.ts).
-const applyRoutineHold = routineHold(flock.platform.routines as RoutineHold | undefined, setUp);
-void applyRoutineHold();
-kit.ctx.events.subscribe((e) => { if (e.table === "_settings") void applyRoutineHold(); });
 spreadSampleReadings(kit);   // a plan's sample readings arrive with one stamp: spread them so the trend has a time axis
 // App-specific routes go here. Agents use /api/_data for rows.
 // Tracker sync, run by the app itself through the coach's connectors: the button and the scheduled routine share one pass
