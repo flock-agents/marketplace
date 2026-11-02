@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Button, Card, Field, RowList, Section, useApp, useTable, useToast } from "../flock/ui";
+import { Button, Card, Field, Heading, Row, RowList, Stack, useApp, useTable, useToast } from "../flock/ui";
 import { SLOTS, addDays, saidText, type Diner, type DinerPortionRow, type Grocery, type Meal, type Recipe, type RecipeIngredient } from "./shared";
 import { ingredientLines, linkFor, normalizeTime, slotDefaultTime, suggestRecipes } from "./recipes";
 import { buildGroceryChanges, familyMultiplier } from "./portions";
@@ -93,37 +93,42 @@ export function MealEditor({ title, date, today, meal, others, askSlot, onSave, 
 
   return (
     <div ref={box} className="pl-meal-editor"><Card title={title}>
-      <form onSubmit={save} noValidate style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-        {askSlot !== undefined ? <Field type="select" name="slot" label="Meal" options={SLOTS} required value={slot} onChange={(v) => setSlot(v as string | null)} /> : null}
-        <Field type="text" name="dish" label="Dish" required placeholder="Pick a recipe below or type a dish" value={dish} error={error}
-          onChange={(v) => { setDish((v as string | null) ?? ""); setError(null); }} />
-        <div style={{ maxWidth: 180 }}>
-          <Field type="text" name="time" label="Time" value={time} error={timeError} placeholder={slotDefaultTime(mealSlot, settings) ?? "HH:MM"}
-            onChange={(v) => { setTime(v as string | null); setTimeError(null); }} />
-        </div>
-        <Field type="text" name="note" label="Note" placeholder="leftovers from tonight, only for kids…" value={note} onChange={(v) => setNote(v as string | null)} />
-        {linked ? (
-          <div className="pl-tap" style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-            <Button variant="soft" icon="shopping-basket" loading={adding} disabled={groceries.loading && !groceries.rows.length} onClick={() => void addIngredients(linked)}>Add ingredients to groceries</Button>
-            {mealRecipes.length > 1 ? <Button variant="ghost" icon="list-plus" disabled={adding || (groceries.loading && !groceries.rows.length)} onClick={() => void addAll()}>Add all for this meal</Button> : null}
+      <form onSubmit={save} noValidate>
+        <Stack gap="md">
+          {askSlot !== undefined ? <Field type="select" name="slot" label="Meal" options={SLOTS} required value={slot} onChange={(v) => setSlot(v as string | null)} /> : null}
+          <Field type="text" name="dish" label="Dish" required placeholder="Pick a recipe below or type a dish" value={dish} error={error}
+            onChange={(v) => { setDish((v as string | null) ?? ""); setError(null); }} />
+          <div style={{ maxWidth: 180 }}>
+            <Field type="text" name="time" label="Time" value={time} error={timeError} placeholder={slotDefaultTime(mealSlot, settings) ?? "HH:MM"}
+              onChange={(v) => { setTime(v as string | null); setTimeError(null); }} />
           </div>
-        ) : typed && !recipes.loading ? (
-          <Field type="checkbox" name="keep" label="Save as a recipe" value={keep} onChange={(v) => setKeep(v === true)} />
-        ) : null}
-        {ideas.length ? (
-          <Section title={typed && !linked ? "Matching recipes" : "From your recipes"} emphasis="subtle">
-            <RowList rows={ideas.map((s) => ({ id: s.recipe.id, name: s.recipe.name, said: s.said }))}
-              title={(s) => s.name}
-              meta={(s) => saidText(s.said, today)}
-              onRowClick={(s) => { setDish(s.name); setError(null); setKeep(false); }}
-            />
-          </Section>
-        ) : null}
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <Button type="submit" loading={busy}>{meal ? "Save" : "Add"}</Button>
-          <Button variant="ghost" onClick={onCancel} disabled={busy}>Cancel</Button>
-          {onRemove ? <Button variant="ghost" icon="trash" onClick={onRemove} disabled={busy}>Remove from the plan</Button> : null}
-        </div>
+          <Field type="text" name="note" label="Note" placeholder="leftovers from tonight, only for kids…" value={note} onChange={(v) => setNote(v as string | null)} />
+          {linked ? (
+            <div className="pl-tap">
+              <Row gap="sm">
+                <Button variant="soft" icon="shopping-basket" loading={adding} disabled={groceries.loading && !groceries.rows.length} onClick={() => void addIngredients(linked)}>Add ingredients to groceries</Button>
+                {mealRecipes.length > 1 ? <Button variant="ghost" icon="list-plus" disabled={adding || (groceries.loading && !groceries.rows.length)} onClick={() => void addAll()}>Add all for this meal</Button> : null}
+              </Row>
+            </div>
+          ) : typed && !recipes.loading ? (
+            <Field type="checkbox" name="keep" label="Save as a recipe" value={keep} onChange={(v) => setKeep(v === true)} />
+          ) : null}
+          {ideas.length ? (
+            <Stack gap="sm">
+              <Heading level={3}>{typed && !linked ? "Matching recipes" : "From your recipes"}</Heading>
+              <RowList rows={ideas.map((s) => ({ id: s.recipe.id, name: s.recipe.name, said: s.said }))}
+                title={(s) => s.name}
+                meta={(s) => saidText(s.said, today)}
+                onRowClick={(s) => { setDish(s.name); setError(null); setKeep(false); }}
+              />
+            </Stack>
+          ) : null}
+          <Row gap="sm">
+            <Button type="submit" loading={busy}>{meal ? "Save" : "Add"}</Button>
+            <Button variant="ghost" onClick={onCancel} disabled={busy}>Cancel</Button>
+            {onRemove ? <Button variant="ghost" icon="trash" onClick={onRemove} disabled={busy}>Remove from the plan</Button> : null}
+          </Row>
+        </Stack>
       </form>
     </Card></div>
   );

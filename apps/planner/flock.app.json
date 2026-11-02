@@ -3,7 +3,7 @@
   "usage": "template",
   "icon": "icon.svg",
   "description": "The family's meals for the week, day by day (Breakfast, Lunch and Dinner), with a shared grocery list and the family's recipe book; not for school runs, chores or appointments.",
-  "version": "2.0.0",
+  "version": "2.0.2",
   "minFlockVersion": "0.22.0",
   "type": "fullstack",
   "access": "private",
@@ -75,6 +75,13 @@
     ]
   },
   "settings": [
+    {
+      "key": "household.profile",
+      "type": "json",
+      "default": null,
+      "scope": "owner",
+      "label": "Your household, in your words (who eats, food habits, meals to plan, where you shop): nothing is planned until it's set"
+    },
     {
       "key": "cook.morning",
       "type": "string",
@@ -544,7 +551,7 @@
         "description": "How long an ingredient keeps in this home (your informed guess): {ingredient_id, shelf_life_days, note}."
       }
     ],
-    "instructions": "Meal Planner owns this family's meals, recipes, shopping list, drafts, orders, pantry stock and shopping preferences. Never keep any of it in memory or chat: read the app before you answer, change it only through its operations, then tell the family what the app now says. Read the guide operation before shopping, answering a job or changing meals. A meal is a set of recipes plus a note: when plans change, change the recipes and note (set_meal_recipes, save_meal), not just the dish text. Only you add recipes, and only after searching for the same dish under another spelling. Background jobs (review_meal, fill_recipe, find_patterns) and background facts (shelf life, recipe lines) are your informed guesses: never ask the family about them and never message anyone for them. Message the family only when a Shopping timeline wake asks (at most 3 per window: reminder, heads-up, price), then ack_message; or when they talk to you. Silence means carry on. Never order without a family member's explicit yes; record it (record_yes), place the order, then record_order at once."
+    "instructions": "Meal Planner owns this family's meals, recipes, shopping list, drafts, orders, pantry stock and shopping preferences. Never keep any of it in memory or chat: read the app before you answer, change it only through its operations, then tell the family what the app now says. Read the guide operation before shopping, answering a job or changing meals. A meal is a set of recipes plus a note: when plans change, change the recipes and note (set_meal_recipes, save_meal), not just the dish text. Only you add recipes, and only after searching for the same dish under another spelling. Nothing in the app runs until it knows the household: when the family tells you who eats, their food habits, which meals to plan and where they shop, save it in their words as the household.profile setting (PATCH /a/<this app>/api/_app/settings); never fill it from guesses or the app's own rows. Background jobs (review_meal, fill_recipe, find_patterns) and background facts (shelf life, recipe lines) are your informed guesses: never ask the family about them and never message anyone for them. Message the family only when a Shopping timeline wake asks (at most 3 per window: reminder, heads-up, price), then ack_message; or when they talk to you. Silence means carry on. Never order without a family member's explicit yes; record it (record_yes), place the order, then record_order at once."
   },
   "privateTables": [
     "prep_reminders",

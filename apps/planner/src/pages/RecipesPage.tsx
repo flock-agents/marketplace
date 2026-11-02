@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Button, Card, Empty, Form, InlinePanel, Page, RowList, Search, useTable, useToday, label } from "../flock/ui";
+import { Button, Empty, Form, InlinePanel, Page, RowList, Search, useTable, useToday, label } from "../flock/ui";
 import { RECIPE_FIELDS, addDays, saidText, type Meal, type Recipe } from "./shared";
 import { suggestRecipes, type RecipeV2 } from "./recipes";
 import { splitList } from "./ingredients";
@@ -35,9 +35,7 @@ export function RecipesPage({ onOpen }: { onOpen: (r: Recipe) => void }) {
       actions={<Button variant="app" icon="plus" onClick={() => setAdding(true)}>Add</Button>}>
       {adding ? (
         <InlinePanel label="New recipe" onClose={() => setAdding(false)}>
-          <Card title="New recipe">
-            <Form fields={[...RECIPE_FIELDS]} submitLabel="Add" onSubmit={add} onCancel={() => setAdding(false)} />
-          </Card>
+          <Form fields={[...RECIPE_FIELDS]} submitLabel="Add" onSubmit={add} onCancel={() => setAdding(false)} />
         </InlinePanel>
       ) : null}
       <Search value={q} onChange={setQ} placeholder="Search recipes or ingredients" />

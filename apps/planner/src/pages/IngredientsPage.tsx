@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Button, Card, Empty, Form, InlinePanel, Page, RowList, Search, useTable } from "../flock/ui";
+import { Button, Empty, Form, InlinePanel, Page, RowList, Search, useTable } from "../flock/ui";
 import { CATEGORIES, CATEGORY_LABELS } from "./shared";
 import { aliasesOf, matchIngredients, parseJson, prefsSummary, type Ingredient, type ShoppingPrefs } from "./ingredients";
 
@@ -30,7 +30,7 @@ export function IngredientsPage({ onOpen }: { onOpen: (i: Ingredient) => void })
       actions={<Button variant="app" icon="plus" onClick={() => setAdding(true)}>Add</Button>}>
       {adding ? (
         <InlinePanel label="New ingredient" onClose={() => setAdding(false)}>
-          <Card title="New ingredient"><Form fields={[...NEW_FIELDS]} submitLabel="Add" onSubmit={add} onCancel={() => setAdding(false)} /></Card>
+          <Form fields={[...NEW_FIELDS]} submitLabel="Add" onSubmit={add} onCancel={() => setAdding(false)} />
         </InlinePanel>
       ) : null}
       <Search value={q} onChange={setQ} placeholder="Search ingredients or aliases" debounceMs={100} />

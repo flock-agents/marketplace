@@ -1,6 +1,6 @@
 {
   "name": "planner",
-  "version": "2.0.0",
+  "version": "2.0.2",
   "description": "The family's meals for the week, day by day (Breakfast, Lunch and Dinner), with a shared grocery list and the family's recipe book; not for school runs, chores or appointments.",
   "objects": [
     "grocery-bag"
@@ -745,6 +745,14 @@
     }
   },
   "settings": [
+    {
+      "key": "household.profile",
+      "type": "json",
+      "default": null,
+      "label": "Your household, in your words (who eats, food habits, meals to plan, where you shop): nothing is planned until it's set",
+      "scope": "owner",
+      "constraint": "household.profile must be an object of the family's answers"
+    },
     {
       "key": "cook.morning",
       "type": "string",

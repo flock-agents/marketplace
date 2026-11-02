@@ -1,6 +1,7 @@
 import { eq, gte } from "drizzle-orm";
 import { createFlockApp } from "@flock/app-sdk";
 import { agentOps } from "./agentOps";
+import { clearSamplesAs, gateRoutines, householdKnown, PROFILE_KEY, settleExistingInstall } from "./setupGate";
 import { setAppEmit } from "./appEmit";
 import { mountKit } from "@flock/app-kit";
 import * as schema from "./db/schema";
@@ -41,7 +42,8 @@ const kit = await mountKit(flock, {
     standing_consumption: "consumption no meal plans for (milk daily); background data for the stock estimate",
     meal_recipes: "a meal's recipes: POST /api/meals/:id/recipes (the set_meal_recipes operation)",
   },
-  routines: { "rolling-plan": rollingPlan as any, "prep-reminders": prepReminders as any, "shopping-timeline": shoppingTimeline as any, "agent-jobs": agentJobs as any },
+  // Silent until the household is known (setupGate.ts): a fresh install plans, shops and asks nothing about samples.
+  routines: gateRoutines({ "rolling-plan": rollingPlan as any, "prep-reminders": prepReminders as any, "shopping-timeline": shoppingTimeline as any, "agent-jobs": agentJobs as any }),
 });
 
 // Background jobs (meal reviews, recipe fills, pattern runs) wake the agent shortly after they're queued, not only on
@@ -59,53 +61,73 @@ const emitApp = (table: string, id: string, op: "insert" | "update" | "delete") 
   kit.ctx.events.emit({ table, op, id, by: "app", at: new Date().toISOString() });
 setAppEmit(emitApp);
 
+function upcomingMealIds(): string[] {
+  return (kit.db.select({ id: meals.id }).from(meals).where(gte(meals.date, todayStr())).all() as { id: string }[]).map((m) => m.id);
+}
+
+/** The agent's background work on the plan: a review for every upcoming meal whose note/dish needs one, recipe fills, then
+ *  one wake. At boot once the household is known, and again the moment it becomes known (setupGate.ts). */
+function startAgentWork(): void {
+  for (const id of upcomingMealIds()) queueMealReview(kit.db, id);
+  queueUpcomingRecipeFills(kit.db);
+  jobsWaker.poke();
+}
+
 // Any recipe_ingredients row still written as plain text (no ingredient_id) gets linked to the catalog — matching
 // an existing entry over creating a near-duplicate. Idempotent; cheap once there's nothing left to backfill.
 // Only once the schema sync actually landed — a schema-"check" boot (a dry-run smoke test, say) never applies the
 // new columns this reads, and querying them anyway would crash the boot outright.
 if (kit.status.state === "ok") {
+  settleExistingInstall(kit.sqlite, (kit.ctx.allTables ?? kit.ctx.tables).keys(), flock.platform.dataDir);
   migrateCartStatuses(kit.db);   // upcoming/discussed/building/awaiting_yes → draft; skipped/missed → let_go (idempotent)
   backfillRecipeIngredientCatalog(kit.db, emitApp as any);
   seedIngredientKnowledge(kit.db, emitApp as any);   // aliases / unit conversions / shelf life: fills nulls only
   relinkLegacyMeals(kit.db, todayStr(), emitApp as any);         // a dish edited before links were stamped gets its own recipe
-  // Every upcoming meal: its recipe set (from recipe_id on first boot) and a review if its note/dish needs one.
-  for (const m of kit.db.select({ id: meals.id }).from(meals).where(gte(meals.date, todayStr())).all() as { id: string }[]) {
-    syncMealRecipes(kit.db, m.id, emitApp);
-    queueMealReview(kit.db, m.id);
-  }
-  queueUpcomingRecipeFills(kit.db);
-  jobsWaker.poke();
+  // Every upcoming meal's recipe set (from recipe_id on first boot).
+  for (const m of upcomingMealIds()) syncMealRecipes(kit.db, m, emitApp);
   refreshOrderPatterns(kit.db);                      // learned order windows from history
 }
+let known = householdKnown(kit.sqlite);
+if (known) startAgentWork();
+
+/** The plan's shopping follows the meals only once the household is known: before that the meals are samples. */
+const refreshPlan = () => { if (known) refreshShopping(kit.db, kit.settings, new Date(), emitApp as any); };
 
 const mealChanged = (mealId: string) => {
   ensureRecipeForMeal(kit.db, mealId, emitApp);
   syncMealRecipes(kit.db, mealId, emitApp);
+  if (!known) return;
   queueMealReview(kit.db, mealId);
   queueRecipeFillsForMeal(kit.db, mealId);
   jobsWaker.poke();
-  refreshShopping(kit.db, kit.settings, new Date(), emitApp as any);
+  refreshPlan();
 };
 
 kit.ctx.events.subscribe((e) => {
+  // The household profile just arrived (the agent saving what the family told it, Flock's install of a
+  // planned app): the samples go, then the work held back so far starts on the family's own rows.
+  if (!known && e.table === "_settings" && e.id === PROFILE_KEY && householdKnown(kit.sqlite)) {
+    known = true;
+    void clearSamplesAs(flock.hono, e.by).then(() => { refreshPlan(); startAgentWork(); });
+  }
   if (e.table === "meals" && (e.op === "insert" || e.op === "update") && (e as { by?: string }).by !== "app") mealChanged(e.id);
   if (e.table === "meal_recipes" && (e as { by?: string }).by !== "app") {
     const row = kit.db.select({ meal_id: meal_recipes.meal_id }).from(meal_recipes).where(eq(meal_recipes.id, e.id)).get() as { meal_id: string } | undefined;
     if (row) mealChanged(row.meal_id);
-    else refreshShopping(kit.db, kit.settings, new Date(), emitApp as any);
+    else refreshPlan();
   }
   // A moved or deleted meal moves/removes its own open grocery rows on the very next recompute.
-  if (e.table === "meals" && e.op === "delete") refreshShopping(kit.db, kit.settings, new Date(), emitApp as any);
-  if (e.table === "stock" && (e as { by?: string }).by !== "app") refreshShopping(kit.db, kit.settings, new Date(), emitApp as any);
+  if (e.table === "meals" && e.op === "delete") refreshPlan();
+  if (e.table === "stock" && (e as { by?: string }).by !== "app") refreshPlan();
   if (e.table === "recipe_ingredients" || (e.table === "ingredients" && e.op === "update" && (e as { by?: string }).by !== "app")) {
-    refreshShopping(kit.db, kit.settings, new Date(), emitApp as any);
+    refreshPlan();
   }
 });
 
 // The frontend calls this after a meal or grocery edit so the Groceries timeline reflects it immediately; the
 // three routines above also recompute it on their own schedule, so this is a convenience, never the only path.
 flock.hono.post("/api/timeline/recalc", (c) => {
-  refreshShopping(kit.db, kit.settings, new Date(), emitApp as any);
+  refreshPlan();
   return c.json({ ok: true });
 });
 
@@ -120,6 +142,6 @@ const shoppingWake = async (message: string, data: unknown) => {
 mountShoppingRoutes(flock.hono, kit.db, kit.settings, emitApp as any, undefined, shoppingWake);
 mountPantryRoutes(flock.hono, kit.db, kit.settings, emitApp);
 mountMealRoutes(flock.hono, kit.db, emitApp, mealChanged);
-mountJobRoutes(flock.hono, kit.db, emitApp, () => refreshShopping(kit.db, kit.settings, new Date(), emitApp as any));
+mountJobRoutes(flock.hono, kit.db, emitApp, refreshPlan);
 
 flock.listen();

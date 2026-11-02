@@ -150,7 +150,7 @@ function IngredientRowEditor({ catalog, onSave, onCancel }: { catalog: Ingredien
           {subIds.length ? <span>{subIds.map((s) => s.name).join(", ")} <Button size="sm" variant="ghost" onClick={() => setSubIds([])}>Clear</Button></span> : null}
         </div>
       </div>
-      <div className="pl-form-row" style={{ marginTop: 8 }}>
+      <div className="pl-form-row pl-form-row-top">
         <Button loading={busy} disabled={!text.trim()} onClick={() => void save()}>Add</Button>
         <Button variant="ghost" onClick={onCancel}>Cancel</Button>
       </div>
@@ -188,7 +188,7 @@ function ImportBox({ recipe }: { recipe: RecipeV2 }) {
   return (
     <Section title="Import" emphasis="subtle">
       <Field type="longtext" name="import" label="Paste a recipe or a link" value={text} onChange={(v) => setText((v as string | null) ?? "")} placeholder="https://… or the recipe text" />
-      <div style={{ marginTop: 8 }}><Button variant="soft" icon="sparkles" loading={busy} disabled={!text.trim()} onClick={() => void send()}>Ask the agent to fill it in</Button></div>
+      <div className="pl-form-row-top"><Button variant="soft" icon="sparkles" loading={busy} disabled={!text.trim()} onClick={() => void send()}>Ask the agent to fill it in</Button></div>
     </Section>
   );
 }
