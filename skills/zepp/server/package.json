@@ -1,0 +1,22 @@
+{
+  "name": "zepp-mcp",
+  "version": "1.0.0",
+  "description": "MCP server exposing Zepp/Amazfit health and workout data",
+  "type": "module",
+  "bin": {
+    "zepp-mcp": "bin/zepp-mcp.js"
+  },
+  "files": [
+    "bin",
+    "src",
+    "LICENSE",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "license": "MIT",
+  "scripts": {
+    "test": "node --test"
+  }
+}
