@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Button, Card, Field, useTable } from "../flock/ui";
+import { Button, Card, Field, Row, Stack, useTable } from "../flock/ui";
 import { IngredientsPicker } from "./IngredientsPicker";
 import type { Ingredient } from "./ingredients";
 import { CATEGORIES } from "./shared";
@@ -33,23 +33,25 @@ export function AddGroceryItem({ onAdd }: Props) {
 
   return (
     <Card title="Add item">
-      <form onSubmit={submit} style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end" }}>
-          <div style={{ flex: "1 1 220px" }}>
-            <IngredientsPicker name="item" label="Item" value={item} placeholder="2 lemons" ingredients={catalog.rows}
-              onChange={(t) => { setItem(t); setIngredientId(null); }}
-              onPick={(i) => { setItem(i.name); setIngredientId(i.id); if (!category && i.category) setCategory(i.category); }} />
-          </div>
-          <Button type="submit" loading={busy} disabled={!item.trim()}>Add</Button>
-          <Button type="button" variant="ghost" onClick={() => setMore(!more)}>{more ? "Fewer options" : "More options"}</Button>
-        </div>
-        {more ? (
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <Field type="text" name="qty" label="Quantity" value={qty} onChange={(v) => setQty(v as string | null)} />
-            <Field type="select" name="category" label="Category" options={CATEGORIES} value={category} onChange={(v) => setCategory(v as string | null)} />
-            <Field type="date" name="needed_by" label="Needed by" value={neededBy} onChange={(v) => setNeededBy(v as string | null)} />
-          </div>
-        ) : null}
+      <form onSubmit={submit}>
+        <Stack gap="sm">
+          <Row gap="sm" align="end">
+            <div style={{ flex: "1 1 220px" }}>
+              <IngredientsPicker name="item" label="Item" value={item} placeholder="2 lemons" ingredients={catalog.rows}
+                onChange={(t) => { setItem(t); setIngredientId(null); }}
+                onPick={(i) => { setItem(i.name); setIngredientId(i.id); if (!category && i.category) setCategory(i.category); }} />
+            </div>
+            <Button type="submit" loading={busy} disabled={!item.trim()}>Add</Button>
+            <Button type="button" variant="ghost" onClick={() => setMore(!more)}>{more ? "Fewer options" : "More options"}</Button>
+          </Row>
+          {more ? (
+            <Row gap="sm">
+              <Field type="text" name="qty" label="Quantity" value={qty} onChange={(v) => setQty(v as string | null)} />
+              <Field type="select" name="category" label="Category" options={CATEGORIES} value={category} onChange={(v) => setCategory(v as string | null)} />
+              <Field type="date" name="needed_by" label="Needed by" value={neededBy} onChange={(v) => setNeededBy(v as string | null)} />
+            </Row>
+          ) : null}
+        </Stack>
       </form>
     </Card>
   );

@@ -82,6 +82,11 @@ kitchen and the family's recipe book. The app does the deterministic work (lists
 agent brings the judgement (reviewing a meal's note, matching and filling recipes, finding patterns, building carts on
 grocery services) through the app's operations. The agent is replaceable: everything it needs ships with the app.
 
+Nothing runs until the household is known (server/setupGate.ts): the `household.profile` setting holds what the family
+told the agent in their first conversation. Until then the routines are silent no-ops, no job is queued for the agent,
+the shopping list is not rebuilt and every page says the app is waiting (src/pages/IdleNotice.tsx). When the profile
+arrives the samples are cleared and the held-back work starts. Don't fill the profile from guesses or from the app's rows.
+
 ### Data
 
 Public tables (server/db/schema.ts), each with the kit's `id`, `created_at`, `updated_at`, `updated_by`:

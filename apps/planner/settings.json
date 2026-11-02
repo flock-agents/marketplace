@@ -1,4 +1,7 @@
 {
+  "household.profile": {
+    "type": "json"
+  },
   "cook.morning": {
     "type": "string"
   },

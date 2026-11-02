@@ -41,7 +41,7 @@ export function GlobalSearch({ onOpen }: { onOpen: (route: string) => void }) {
           {hits.length ? groupHits(hits).map((g) => (
             <li key={g.kind} role="presentation">
               <div className="pl-gsearch-group">{KIND_LABELS[g.kind]}</div>
-              <ul style={{ listStyle: "none", margin: 0, padding: 0 }} role="group">
+              <ul className="pl-gsearch-subgroup" role="group">
                 {g.hits.map((h, i) => (
                   <li key={`${h.kind}:${h.id}`} role="option" aria-selected={g.start + i === active}>
                     <button type="button" tabIndex={-1} className="pl-picker-opt" data-active={g.start + i === active || undefined}

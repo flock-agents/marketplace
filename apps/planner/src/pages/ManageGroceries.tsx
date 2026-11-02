@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Button, Card, Confirm, Form, Table, kitFetch, useToast } from "../flock/ui";
+import { Button, Card, Confirm, Form, Row, Table, kitFetch, useToast } from "../flock/ui";
 import { GROCERY_FIELDS, type Grocery } from "./shared";
 
 interface Props {
@@ -44,10 +44,10 @@ export function ManageGroceries({ rows, update, remove }: Props) {
           { key: "aisle", label: "Aisle" },
           { key: "for_dish", label: "For" },
           { key: "id", label: "", align: "end", render: (r: Grocery) => (
-            <span style={{ display: "inline-flex", gap: 4 }}>
+            <Row gap="xs">
               <Button size="sm" variant="ghost" icon="pencil" onClick={() => setEditing(r)}>Edit</Button>
               <Button size="sm" variant="ghost" icon="trash" onClick={() => setAsking(r)}>Delete</Button>
-            </span>
+            </Row>
           ) },
         ]}
       />
