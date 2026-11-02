@@ -1,9 +1,9 @@
 # Changelog
 
-## 1.0.1
+## 1.0.2
 
 - Zepp no longer says it needs a browser session in the setup wizard's accounts step (it signs in with email and password; the app's Connect Zepp button connects it).
-- The coach knows the app runs nothing until `person` and `timezone` are set.
+- The coach never guesses the person's name or time zone for the app (it asks), and knows the app runs nothing until both are set.
 
 ## 1.0.0
 
