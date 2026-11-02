@@ -15,10 +15,10 @@
     "mcp": {
       "archetype": "stdio-apikey",
       "transport": "stdio",
-      "command": "python3",
-      "args": ["-m", "uv", "tool", "run", "--quiet", "--python", "3.11", "--from", "git+https://github.com/flock-agents/marketplace@zepp-v1.0.0#subdirectory=skills/zepp/server", "zepp-mcp"],
+      "command": "npx",
+      "args": ["-y", "https://github.com/flock-agents/marketplace/archive/refs/tags/zepp-server-v1.0.0.tar.gz"],
       "credentialsRequired": true,
-      "documentationUrl": "https://github.com/flock-agents/zepp-mcp",
+      "documentationUrl": "https://github.com/flock-agents/marketplace/tree/v2/skills/zepp",
       "setupInstructions": "Add one account per person, using that person's Zepp app sign-in. Tokens are cached per account automatically, so they never cross between people.",
       "setupSteps": [
         { "title": "Zepp sign-in", "description": "Enter the email and password used in the Zepp app." },
