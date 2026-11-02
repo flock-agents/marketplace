@@ -1,0 +1,3 @@
+[test]
+# The tests' fixtures are written on one clock (Asia/Kolkata); the app itself follows the `timezone` setting.
+preload = ["./server/test-timezone.ts"]

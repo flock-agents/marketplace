@@ -1,17 +1,20 @@
 {
   "name": "planner",
-  "version": "1.1.2",
+  "version": "2.0.0",
   "description": "The family's meals for the week, day by day (Breakfast, Lunch and Dinner), with a shared grocery list and the family's recipe book; not for school runs, chores or appointments.",
   "objects": [
     "grocery-bag"
   ],
   "labels": {
     "nav.week": "Week",
-    "nav.groceries": "Groceries",
+    "nav.groceries": "Shopping",
+    "nav.pantry": "Pantry",
     "nav.recipes": "Recipes",
     "title.week": "This week's meals",
-    "title.groceries": "Groceries",
-    "title.recipes": "Recipes"
+    "title.groceries": "Shopping",
+    "title.pantry": "Pantry",
+    "title.recipes": "Recipes",
+    "nav.ingredients": "Ingredients"
   },
   "tables": {
     "meals": {
@@ -32,7 +35,13 @@
             "Lunch",
             "Dinner"
           ],
-          "note": "Breakfast | Lunch | Dinner"
+          "note": "reminder | heads_up | price"
+        },
+        "time": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "\"HH:MM\"; null → the slot's default (cook.morning / cook.lunch / cook.evening)"
         },
         "dish": {
           "type": "string",
@@ -45,6 +54,80 @@
           "required": false,
           "nullable": true,
           "references": "recipes"
+        },
+        "recipe_dish": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "the dish text recipe_id was linked/confirmed for: a later dish edit re-links (recipeStubs.ts)"
+        },
+        "note": {
+          "type": "string",
+          "required": false,
+          "nullable": true
+        },
+        "review": {
+          "type": "string",
+          "required": false,
+          "nullable": true
+        },
+        "review_for": {
+          "type": "string",
+          "required": false,
+          "nullable": true
+        },
+        "status": {
+          "type": "string",
+          "required": false,
+          "nullable": false,
+          "default": "planned",
+          "note": "open | answered | expired | fallback"
+        },
+        "confirmed_by": {
+          "type": "string",
+          "required": false,
+          "nullable": true
+        },
+        "confirmed_at": {
+          "type": "string",
+          "required": false,
+          "nullable": true
+        },
+        "portions": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "JSON: { \"<diner>\": \"2 roti, 100g paneer\", … }"
+        },
+        "coach_check": {
+          "type": "string",
+          "required": false,
+          "nullable": false,
+          "default": "pending",
+          "note": "pending | ok | flagged"
+        },
+        "coach_notes": {
+          "type": "string",
+          "required": false,
+          "nullable": true
+        },
+        "outcome": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "cooked | skipped"
+        },
+        "outcome_source": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "owner | inferred"
+        },
+        "outcome_at": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "ISO: when it was cooked/skipped (or inferred to be)"
         }
       }
     },
@@ -68,6 +151,51 @@
           "note": "how the family makes it"
         },
         "notes": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "free-text preferences the agent reads"
+        },
+        "prep_steps": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "JSON [{step, hours_before_cook}], ordered; null = nothing to prep ahead"
+        },
+        "prep_lead_hours": {
+          "type": "number",
+          "required": false,
+          "nullable": true,
+          "note": "the largest hours_before_cook, for display"
+        },
+        "servings": {
+          "type": "integer",
+          "required": false,
+          "nullable": true,
+          "note": "× the family's usual portion of this recipe"
+        },
+        "prep_min": {
+          "type": "integer",
+          "required": false,
+          "nullable": true
+        },
+        "cook_min": {
+          "type": "integer",
+          "required": false,
+          "nullable": true
+        },
+        "tags": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "JSON string[]"
+        },
+        "cuisine": {
+          "type": "string",
+          "required": false,
+          "nullable": true
+        },
+        "source_url": {
           "type": "string",
           "required": false,
           "nullable": true
@@ -106,9 +234,873 @@
           "type": "string",
           "required": false,
           "nullable": true
+        },
+        "category": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "dairy | vegetables | pantry | spices"
+        },
+        "needed_by": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "ISO date: the earliest meal that uses it, or when a staple runs out"
+        },
+        "buy_at": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "ISO datetime: when the timeline orders it (→ a carts row)"
+        },
+        "qty": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "remaining, in unit"
+        },
+        "suggested_qty": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "the computed draft (recipe_ingredients × diner_portions, scaled) — a hint, never"
+        },
+        "ingredient_id": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "references": "ingredients"
+        },
+        "source": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "default": "manual",
+          "note": "owner | inferred | auto (an applied pattern)"
+        },
+        "added_by": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "who added it by hand"
+        },
+        "status": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "default": "pending",
+          "note": "open | answered | expired | fallback"
+        },
+        "service": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "the service it was (or usually is) ordered from"
+        },
+        "price": {
+          "type": "number",
+          "required": false,
+          "nullable": true
+        },
+        "cart_id": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "references": "carts"
+        },
+        "in_stock_until": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "ISO date: already have it: skip the timeline until this date passes"
+        },
+        "meal_id": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "references": "meals"
+        },
+        "qty_min": {
+          "type": "number",
+          "required": false,
+          "nullable": true,
+          "note": "the engine's rough range (server/quantity.ts), in qty_unit"
+        },
+        "qty_max": {
+          "type": "number",
+          "required": false,
+          "nullable": true
+        },
+        "qty_unit": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "g | ml | pc"
+        }
+      }
+    },
+    "ingredients": {
+      "columns": {
+        "name": {
+          "type": "string",
+          "required": true,
+          "nullable": false
+        },
+        "default_unit": {
+          "type": "string",
+          "required": false,
+          "nullable": true
+        },
+        "category": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "dairy | vegetables | pantry | spices"
+        },
+        "last_ordered_at": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "ISO datetime"
+        },
+        "last_ordered_qty": {
+          "type": "number",
+          "required": false,
+          "nullable": true
+        },
+        "aliases": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "JSON string[]: English/Hindi/regional names (\"palak\", \"spinach\")"
+        },
+        "unit_conversions": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "JSON { \"pc\": 150, \"bunch\": 250 }: grams (or ml) per unit"
+        },
+        "shelf_life_days": {
+          "type": "integer",
+          "required": false,
+          "nullable": true,
+          "note": "in THIS home (weather, season, storage): the agent's informed guess, never asked"
+        },
+        "shelf_life_source": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "default (the seed table) | agent"
+        },
+        "shelf_life_note": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "the agent's one-line reason (\"Bengaluru, humid Oct, kept in fridge\")"
+        },
+        "prefs": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "JSON ShoppingPrefs (server/quantity.ts); falls back to prefs.category_defaults"
+        },
+        "notes": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "free-text preferences the agent reads"
+        },
+        "level": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "pantry rough level: plenty | low | out (null = not checked)"
+        },
+        "last_checked_at": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "ISO datetime; the pantry's own cadence"
+        }
+      }
+    },
+    "recipe_ingredients": {
+      "columns": {
+        "recipe_id": {
+          "type": "string",
+          "required": true,
+          "nullable": false,
+          "references": "recipes"
+        },
+        "ingredient_id": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "references": "ingredients"
+        },
+        "item": {
+          "type": "string",
+          "required": true,
+          "nullable": false
+        },
+        "qty": {
+          "type": "number",
+          "required": false,
+          "nullable": true,
+          "note": "remaining, in unit"
+        },
+        "unit": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "g | ml | pc"
+        },
+        "category": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "dairy | vegetables | pantry | spices"
+        },
+        "qty_per_adult": {
+          "type": "number",
+          "required": false,
+          "nullable": true,
+          "note": "v2 name for qty (one regular adult portion); the engine reads qty_per_adult ?? qty"
+        },
+        "optional": {
+          "type": "integer",
+          "required": false,
+          "nullable": true,
+          "note": "0/1: an optional line never generates a grocery need"
+        },
+        "substitutes": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "JSON string[] of ingredient ids"
+        }
+      }
+    },
+    "diners": {
+      "note": "The standing diet targets a coach set for each diner; read by the rolling-plan routine when it fills and checks meals.",
+      "columns": {
+        "name": {
+          "type": "string",
+          "required": true,
+          "nullable": false
+        },
+        "goal": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "\"fat loss, high protein\" | \"weight gain, high fat and protein\""
+        },
+        "kcal_target": {
+          "type": "number",
+          "required": false,
+          "nullable": true
+        },
+        "protein_g_target": {
+          "type": "number",
+          "required": false,
+          "nullable": true
+        },
+        "fat_note": {
+          "type": "string",
+          "required": false,
+          "nullable": true
+        },
+        "source": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "owner | inferred | auto (an applied pattern)"
+        }
+      }
+    },
+    "diner_portions": {
+      "columns": {
+        "diner_id": {
+          "type": "string",
+          "required": true,
+          "nullable": false,
+          "references": "diners"
+        },
+        "slot": {
+          "type": "string",
+          "required": true,
+          "nullable": false,
+          "note": "reminder | heads_up | price"
+        },
+        "multiplier": {
+          "type": "number",
+          "required": false,
+          "nullable": false,
+          "default": 1
+        }
+      }
+    },
+    "staples": {
+      "note": "Recurring items with a known cadence (milk) or a standing check (the pantry), bought without waiting on a meal.",
+      "columns": {
+        "item": {
+          "type": "string",
+          "required": true,
+          "nullable": false
+        },
+        "pack": {
+          "type": "string",
+          "required": false,
+          "nullable": true
+        },
+        "category": {
+          "type": "string",
+          "required": false,
+          "nullable": false,
+          "default": "pantry",
+          "note": "dairy | vegetables | pantry | spices"
+        },
+        "every_min_days": {
+          "type": "number",
+          "required": false,
+          "nullable": true
+        },
+        "every_max_days": {
+          "type": "number",
+          "required": false,
+          "nullable": true
+        },
+        "max_days_ahead": {
+          "type": "number",
+          "required": false,
+          "nullable": true,
+          "note": "how many days' worth one order may bundle"
+        },
+        "usual_qty": {
+          "type": "string",
+          "required": false,
+          "nullable": true
+        },
+        "usual_price": {
+          "type": "number",
+          "required": false,
+          "nullable": true
+        },
+        "last_ordered_at": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "ISO datetime"
+        },
+        "last_checked_at": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "ISO datetime; the pantry's own cadence"
+        },
+        "active": {
+          "type": "boolean",
+          "required": false,
+          "nullable": false,
+          "default": true
+        },
+        "level": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "pantry rough level: plenty | low | out (null = not checked)"
+        }
+      }
+    },
+    "carts": {
+      "note": "One order on the shopping timeline: a group of grocery rows bought together, one yes, one set of fees.",
+      "columns": {
+        "buy_at": {
+          "type": "string",
+          "required": true,
+          "nullable": false,
+          "note": "ISO datetime: when the timeline orders it (→ a carts row)"
+        },
+        "categories": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "JSON list: [\"dairy\",\"vegetables\"]"
+        },
+        "status": {
+          "type": "string",
+          "required": false,
+          "nullable": false,
+          "default": "draft",
+          "note": "open | answered | expired | fallback"
+        },
+        "checkin_sent_at": {
+          "type": "string",
+          "required": false,
+          "nullable": true
+        },
+        "owner_notes": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "what the owner said at the check-in (add/drop, a service preference)"
+        },
+        "estimate": {
+          "type": "number",
+          "required": false,
+          "nullable": true,
+          "note": "from usual prices, before a cart is built"
+        },
+        "chosen_service": {
+          "type": "string",
+          "required": false,
+          "nullable": true
+        },
+        "items_total": {
+          "type": "number",
+          "required": false,
+          "nullable": true
+        },
+        "fees": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "JSON: {delivery, handling, platform, small_cart, surge, …}"
+        },
+        "grand_total": {
+          "type": "number",
+          "required": false,
+          "nullable": true
+        },
+        "quotes": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "JSON Quote[] (server/quotes.ts): {service, total, fees?, lines?, screenshot_url?, at, lines_key}, one per service"
+        },
+        "delivery_eta": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "set only for an actual scheduled slot (e.g. \"7 AM Thu\"); null for an ordinary quick-commerce ETA"
+        },
+        "confirmed_by": {
+          "type": "string",
+          "required": false,
+          "nullable": true
+        },
+        "order_ref": {
+          "type": "string",
+          "required": false,
+          "nullable": true
+        },
+        "ordered_at": {
+          "type": "string",
+          "required": false,
+          "nullable": true
+        },
+        "order_at": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "local \"YYYY-MM-DDTHH:MM\": the order window start this cart is planned for"
+        },
+        "prepare_at": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "v2 only (unused since v3); kept for existing rows"
+        },
+        "snapshot": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "JSON CartSnapshot {service, lines[], fees, total, screenshot_url?} (server/shopping.ts)"
+        },
+        "build_requested_at": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "ISO: when the agent was last woken to build this cart (one wake per build)"
+        },
+        "yes_at": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "ISO: a family member's explicit yes (confirmed_by says who); the draft is frozen from then"
+        },
+        "moved_at": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "ISO: the owner moved this window (order_at); the timeline no longer re-plans it"
+        },
+        "let_go_at": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "ISO: when the draft was let go (no yes in time, or the owner's \"Let it go\")"
         }
       }
     }
   },
-  "settings": []
+  "settings": [
+    {
+      "key": "cook.morning",
+      "type": "string",
+      "default": "07:30",
+      "label": "When breakfast and lunch are cooked",
+      "scope": "owner",
+      "constraint": "cook.morning must be a 24-hour time, HH:MM"
+    },
+    {
+      "key": "cook.lunch",
+      "type": "string",
+      "default": "13:00",
+      "label": "When lunch is eaten (meal time default)",
+      "scope": "owner",
+      "constraint": "cook.lunch must be a 24-hour time, HH:MM"
+    },
+    {
+      "key": "cook.evening",
+      "type": "string",
+      "default": "19:00",
+      "label": "When dinner is cooked",
+      "scope": "owner",
+      "constraint": "cook.evening must be a 24-hour time, HH:MM"
+    },
+    {
+      "key": "quiet.start",
+      "type": "string",
+      "default": "22:30",
+      "label": "Quiet hours start: no reminders after this",
+      "scope": "owner",
+      "constraint": "quiet.start must be a 24-hour time, HH:MM"
+    },
+    {
+      "key": "quiet.end",
+      "type": "string",
+      "default": "06:30",
+      "label": "Quiet hours end",
+      "scope": "owner",
+      "constraint": "quiet.end must be a 24-hour time, HH:MM"
+    },
+    {
+      "key": "reminder.buffer_min",
+      "type": "integer",
+      "default": 30,
+      "label": "Extra minutes before a prep step must start",
+      "scope": "owner",
+      "constraint": "reminder.buffer_min must be a whole number from 0 to 240"
+    },
+    {
+      "key": "spend.weekly_limit",
+      "type": "number",
+      "default": 2000,
+      "label": "₹ a week (Mon-Sun) a cart is flagged for crossing",
+      "scope": "owner",
+      "constraint": "spend.weekly_limit must be a number from 0 to 1000000"
+    },
+    {
+      "key": "price.jump_pct",
+      "type": "number",
+      "default": 20,
+      "label": "% above usual price an item is flagged, not added",
+      "scope": "owner",
+      "constraint": "price.jump_pct must be a number from 0 to 500"
+    },
+    {
+      "key": "services",
+      "type": "json",
+      "default": [
+        "zepto",
+        "zomato-blinkit",
+        "bigbasket"
+      ],
+      "label": "Grocery services compared at order time",
+      "scope": "owner",
+      "constraint": "services must be a non-empty list of service ids"
+    },
+    {
+      "key": "buy.delivery_lead_min",
+      "type": "integer",
+      "default": 60,
+      "label": "Minutes an item must arrive before the cooking slot that uses it",
+      "scope": "owner",
+      "constraint": "buy.delivery_lead_min must be a whole number from 0 to 480"
+    },
+    {
+      "key": "buy.fresh_window_days",
+      "type": "json",
+      "default": {
+        "dairy": 1,
+        "vegetables": 2,
+        "pantry": 7,
+        "spices": 14
+      },
+      "label": "Days one order may cover, per category",
+      "scope": "owner",
+      "constraint": "buy.fresh_window_days must give a positive number of days for dairy, vegetables, pantry and spices"
+    },
+    {
+      "key": "buy.earliest_order",
+      "type": "string",
+      "default": "06:30",
+      "label": "No order is placed earlier than this",
+      "scope": "owner",
+      "constraint": "buy.earliest_order must be a 24-hour time, HH:MM"
+    },
+    {
+      "key": "buy.preferred_order_time",
+      "type": "string",
+      "default": "18:00",
+      "label": "The evening before an item is needed, order it at this time instead of waiting for the morning (Zepto's evening deals, and the family's own habit) — falls back to the morning cutoff once this slot has already passed",
+      "scope": "owner",
+      "constraint": "buy.preferred_order_time must be a 24-hour time, HH:MM"
+    },
+    {
+      "key": "meal.latest.breakfast",
+      "type": "string",
+      "default": "11:00",
+      "label": "Breakfast can be cooked as late as",
+      "scope": "owner",
+      "constraint": "meal.latest.breakfast must be a 24-hour time, HH:MM"
+    },
+    {
+      "key": "meal.latest.lunch",
+      "type": "string",
+      "default": "15:00",
+      "label": "Lunch can be cooked as late as",
+      "scope": "owner",
+      "constraint": "meal.latest.lunch must be a 24-hour time, HH:MM"
+    },
+    {
+      "key": "meal.latest.dinner",
+      "type": "string",
+      "default": "23:00",
+      "label": "Dinner can be cooked as late as",
+      "scope": "owner",
+      "constraint": "meal.latest.dinner must be a 24-hour time, HH:MM"
+    },
+    {
+      "key": "shop.reminder_time",
+      "type": "string",
+      "default": "20:00",
+      "label": "The evening before a shopping window, the reminder goes out at",
+      "scope": "owner",
+      "constraint": "shop.reminder_time must be a 24-hour time, HH:MM"
+    },
+    {
+      "key": "shop.heads_up_min",
+      "type": "integer",
+      "default": 15,
+      "label": "Minutes before a shopping window the draft is shared",
+      "scope": "owner",
+      "constraint": "shop.heads_up_min must be a whole number from 5 to 240"
+    },
+    {
+      "key": "shop.yes_wait_h",
+      "type": "number",
+      "default": 3,
+      "label": "Hours to wait for a yes before the draft is let go quietly",
+      "scope": "owner",
+      "constraint": "shop.yes_wait_h must be a number from 0.5 to 24"
+    },
+    {
+      "key": "plan.horizon_days",
+      "type": "integer",
+      "default": 7,
+      "label": "Rolling plan length, in days",
+      "scope": "owner",
+      "constraint": "plan.horizon_days must be a whole number from 1 to 30"
+    },
+    {
+      "key": "plan.confirm_ahead_days",
+      "type": "integer",
+      "default": 2,
+      "label": "Days within which an unconfirmed day is raised with the family",
+      "scope": "owner",
+      "constraint": "plan.confirm_ahead_days must be a whole number from 0 to 14"
+    },
+    {
+      "key": "prefs.category_defaults",
+      "type": "json",
+      "default": {
+        "vegetables": {
+          "pack_min": 250,
+          "pack_max": 1000,
+          "pack_unit": "g",
+          "stock_days": 2,
+          "price": "balanced",
+          "brands_preferred": [],
+          "brands_avoid": [],
+          "substitutions": "ask",
+          "service": "any",
+          "never_auto_add": false
+        },
+        "leafy_greens": {
+          "pack_min": 1,
+          "pack_max": 2,
+          "pack_unit": "pc",
+          "stock_days": 1,
+          "price": "balanced",
+          "brands_preferred": [],
+          "brands_avoid": [],
+          "substitutions": "ask",
+          "service": "any",
+          "never_auto_add": false
+        },
+        "fruits": {
+          "pack_min": 500,
+          "pack_max": 2000,
+          "pack_unit": "g",
+          "stock_days": 3,
+          "price": "balanced",
+          "brands_preferred": [],
+          "brands_avoid": [],
+          "substitutions": "ask",
+          "service": "any",
+          "never_auto_add": false
+        },
+        "dairy": {
+          "pack_min": 500,
+          "pack_max": 2000,
+          "pack_unit": "ml",
+          "stock_days": 1,
+          "price": "balanced",
+          "brands_preferred": [
+            "Amul",
+            "Mother Dairy"
+          ],
+          "brands_avoid": [],
+          "substitutions": "ask",
+          "service": "any",
+          "never_auto_add": false
+        },
+        "bakery": {
+          "pack_min": 1,
+          "pack_max": 2,
+          "pack_unit": "pc",
+          "stock_days": 2,
+          "price": "balanced",
+          "brands_preferred": [],
+          "brands_avoid": [],
+          "substitutions": "allowed",
+          "service": "any",
+          "never_auto_add": false
+        },
+        "grains": {
+          "pack_min": 1000,
+          "pack_max": 5000,
+          "pack_unit": "g",
+          "stock_days": 30,
+          "price": "balanced",
+          "brands_preferred": [
+            "Aashirvaad",
+            "India Gate"
+          ],
+          "brands_avoid": [],
+          "substitutions": "ask",
+          "service": "any",
+          "never_auto_add": false
+        },
+        "pulses": {
+          "pack_min": 500,
+          "pack_max": 2000,
+          "pack_unit": "g",
+          "stock_days": 30,
+          "price": "balanced",
+          "brands_preferred": [
+            "Tata Sampann"
+          ],
+          "brands_avoid": [],
+          "substitutions": "ask",
+          "service": "any",
+          "never_auto_add": false
+        },
+        "pantry": {
+          "pack_min": 500,
+          "pack_max": 2000,
+          "pack_unit": "g",
+          "stock_days": 30,
+          "price": "cheapest",
+          "brands_preferred": [],
+          "brands_avoid": [],
+          "substitutions": "allowed",
+          "service": "any",
+          "never_auto_add": false
+        },
+        "oils": {
+          "pack_min": 1000,
+          "pack_max": 5000,
+          "pack_unit": "ml",
+          "stock_days": 45,
+          "price": "balanced",
+          "brands_preferred": [
+            "Fortune"
+          ],
+          "brands_avoid": [],
+          "substitutions": "ask",
+          "service": "any",
+          "never_auto_add": false
+        },
+        "spices": {
+          "pack_min": 50,
+          "pack_max": 200,
+          "pack_unit": "g",
+          "stock_days": 60,
+          "price": "balanced",
+          "brands_preferred": [
+            "MDH",
+            "Everest"
+          ],
+          "brands_avoid": [],
+          "substitutions": "ask",
+          "service": "any",
+          "never_auto_add": false
+        },
+        "meat": {
+          "pack_min": 250,
+          "pack_max": 1000,
+          "pack_unit": "g",
+          "stock_days": 1,
+          "price": "premium",
+          "brands_preferred": [
+            "Licious"
+          ],
+          "brands_avoid": [],
+          "substitutions": "never",
+          "service": "any",
+          "never_auto_add": true
+        },
+        "snacks": {
+          "pack_min": 1,
+          "pack_max": 3,
+          "pack_unit": "pc",
+          "stock_days": 7,
+          "price": "balanced",
+          "brands_preferred": [],
+          "brands_avoid": [],
+          "substitutions": "allowed",
+          "service": "any",
+          "never_auto_add": true
+        },
+        "household": {
+          "pack_min": 1,
+          "pack_max": 2,
+          "pack_unit": "pc",
+          "stock_days": 30,
+          "price": "cheapest",
+          "brands_preferred": [],
+          "brands_avoid": [],
+          "substitutions": "allowed",
+          "service": "any",
+          "never_auto_add": true
+        }
+      },
+      "label": "Default shopping prefs per category (an ingredient's own prefs override these)",
+      "scope": "owner",
+      "constraint": "prefs.category_defaults must be an object keyed by category"
+    }
+  ]
 }

@@ -1,5 +1,7 @@
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
-import { meals, recipes, groceries, SLOTS } from "./schema";
+import { meals, recipes, groceries, ingredients, recipe_ingredients, diners, diner_portions, staples, carts, SLOTS } from "./schema";
+import { SETTINGS } from "./constants";
+import { refreshShopping } from "../shopping";
 
 const iso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
@@ -96,9 +98,44 @@ export const sampleGroceries = () => [
 export const staggered = <T extends object>(rows: T[], from = new Date()) =>
   rows.map((r, i) => ({ ...r, created_at: new Date(from.getTime() - (rows.length - i) * 1000).toISOString() }));
 
+/** The sample recipes' ingredient catalog: [name, category, base unit]. Pantry, grains, pulses and spices are assumed at home. */
+const SAMPLE_INGREDIENTS: [string, string, string][] = [
+  ["Onion", "vegetables", "g"], ["Potato", "vegetables", "g"], ["Tomato", "vegetables", "g"], ["Green chillies", "vegetables", "g"],
+  ["Coriander", "vegetables", "g"], ["Lemon", "vegetables", "pc"], ["Palak (spinach)", "vegetables", "g"], ["Carrot", "vegetables", "g"],
+  ["Beans", "vegetables", "g"], ["Peas", "vegetables", "g"], ["Ginger", "vegetables", "g"], ["Paneer", "dairy", "g"], ["Curd", "dairy", "ml"],
+  ["Fresh cream", "dairy", "ml"], ["Ghee", "dairy", "g"], ["Thick poha", "grains", "g"], ["Basmati rice", "grains", "g"],
+  ["Rajma", "pulses", "g"], ["Kabuli chana", "pulses", "g"], ["Peanuts", "pantry", "g"], ["Jeera", "spices", "g"],
+];
+
+/** One regular adult portion of each sample recipe: [ingredient, qty, unit]. */
+const SAMPLE_LINES: Record<string, [string, number, string][]> = {
+  "Poha": [["Thick poha", 60, "g"], ["Onion", 40, "g"], ["Potato", 40, "g"], ["Peanuts", 10, "g"], ["Green chillies", 3, "g"], ["Lemon", 0.25, "pc"], ["Coriander", 5, "g"]],
+  "Rajma chawal": [["Rajma", 50, "g"], ["Onion", 60, "g"], ["Tomato", 80, "g"], ["Ginger", 5, "g"], ["Basmati rice", 75, "g"], ["Ghee", 8, "g"]],
+  "Palak paneer": [["Palak (spinach)", 150, "g"], ["Paneer", 60, "g"], ["Onion", 30, "g"], ["Tomato", 30, "g"], ["Fresh cream", 10, "ml"], ["Jeera", 2, "g"]],
+  "Chole": [["Kabuli chana", 50, "g"], ["Onion", 60, "g"], ["Tomato", 80, "g"], ["Ginger", 5, "g"]],
+  "Veg pulao": [["Basmati rice", 75, "g"], ["Carrot", 30, "g"], ["Beans", 25, "g"], ["Peas", 25, "g"], ["Onion", 30, "g"], ["Ghee", 8, "g"], ["Curd", 50, "ml"]],
+};
+
+/** The declared settings' defaults: the seed runs before anyone has set anything. */
+const defaultSettings = { get: <T,>(key: string): T => SETTINGS.find((d) => d.key === key)?.default as T };
+
 export async function seed(db: BunSQLiteDatabase<any>) {
   const book = await db.insert(recipes).values(staggered(sampleRecipes())).returning();
   const idOf = new Map(book.map((r) => [r.name, r.id]));
+  const catalog = await db.insert(ingredients).values(SAMPLE_INGREDIENTS.map(([name, category, unit]) => ({ name, category, default_unit: unit }))).returning();
+  const ingredientOf = new Map(catalog.map((i) => [i.name, i]));
+  await db.insert(recipe_ingredients).values(Object.entries(SAMPLE_LINES).flatMap(([recipe, lines]) => lines.map(([item, qty, unit]) => {
+    const ing = ingredientOf.get(item)!;
+    return { recipe_id: idOf.get(recipe)!, ingredient_id: ing.id, item, qty_per_adult: qty, unit, category: ing.category };
+  })));
   await db.insert(meals).values(staggered(sampleMeals().map(({ recipe, ...m }) => ({ ...m, recipe_id: recipe ? idOf.get(recipe) ?? null : null }))));
   await db.insert(groceries).values(staggered(sampleGroceries()));
+  const [family] = await db.insert(diners).values({ name: "Family", goal: "balanced meals" }).returning();
+  await db.insert(diner_portions).values(SLOTS.map((slot) => ({ diner_id: family.id, slot, multiplier: 3 })));
+  await db.insert(staples).values({ item: "Milk", pack: "1 L", category: "dairy", every_min_days: 1, every_max_days: 2, usual_qty: "1 L" });
+  const lastWeek = new Date(Date.now() - 6 * 86_400_000);
+  await db.insert(carts).values({ buy_at: iso(lastWeek) + "T18:00", order_at: iso(lastWeek) + "T18:00", status: "ordered", chosen_service: "zepto",
+    grand_total: 412, ordered_at: lastWeek.toISOString(), snapshot: JSON.stringify({ service: "zepto", total: 412, lines: [{ name: "Paneer", pack: "200 g", qty: 1, price: 95 }, { name: "Palak", pack: "250 g", qty: 2, price: 50 }] }) });
+  // The plan's own rows (shopping list lines, drafts, meal recipe sets) are made now, inside the seed, so they are samples too.
+  refreshShopping(db, defaultSettings);
 }

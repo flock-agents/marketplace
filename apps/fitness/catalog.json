@@ -1,0 +1,826 @@
+{
+  "name": "fitness",
+  "version": "1.0.0",
+  "description": "Today and Yesterday against the goals in focus (exercise, diet, water, and activity and sleep from a connected tracker): the workout plan and planned meals beside what was done and eaten, tomorrow's plans, history and an exercise library.",
+  "objects": [
+    "globe"
+  ],
+  "labels": {
+    "title.overview": "Fitness"
+  },
+  "titleFromName": "title.overview",
+  "tables": {
+    "metrics": {
+      "note": "One row per reading. A number on the page is the newest reading of its label; the trend is the readings over time. List sample readings of a label oldest first: they are spread over past weeks in the order given.",
+      "columns": {
+        "label": {
+          "type": "string",
+          "required": true,
+          "nullable": false,
+          "note": "Steps | Calories burned | Distance"
+        },
+        "value": {
+          "type": "number",
+          "required": true,
+          "nullable": false,
+          "note": "the running total Zepp had then"
+        },
+        "unit": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "\"%\" shows as a percent, \"min\" as minutes, anything else as a number with its unit"
+        }
+      }
+    },
+    "events": {
+      "columns": {
+        "title": {
+          "type": "string",
+          "required": true,
+          "nullable": false
+        },
+        "at": {
+          "type": "string",
+          "required": true,
+          "nullable": false,
+          "note": "ISO date-time of the wake"
+        },
+        "kind": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "default": "Note",
+          "note": "Meal | Alert | Milestone | Note"
+        },
+        "kcal": {
+          "type": "number",
+          "required": false,
+          "nullable": true,
+          "note": "expected calories"
+        },
+        "protein_g": {
+          "type": "number",
+          "required": false,
+          "nullable": true,
+          "note": "expected protein in grams"
+        },
+        "fiber_g": {
+          "type": "number",
+          "required": false,
+          "nullable": true,
+          "note": "expected fiber in grams"
+        },
+        "carbs_g": {
+          "type": "number",
+          "required": false,
+          "nullable": true
+        },
+        "sugar_g": {
+          "type": "number",
+          "required": false,
+          "nullable": true
+        },
+        "fat_g": {
+          "type": "number",
+          "required": false,
+          "nullable": true
+        },
+        "sat_fat_g": {
+          "type": "number",
+          "required": false,
+          "nullable": true
+        },
+        "mufa_g": {
+          "type": "number",
+          "required": false,
+          "nullable": true
+        },
+        "pufa_g": {
+          "type": "number",
+          "required": false,
+          "nullable": true
+        },
+        "omega3_g": {
+          "type": "number",
+          "required": false,
+          "nullable": true
+        },
+        "cholesterol_mg": {
+          "type": "number",
+          "required": false,
+          "nullable": true
+        },
+        "vitamin_a_mcg": {
+          "type": "number",
+          "required": false,
+          "nullable": true
+        },
+        "vitamin_c_mg": {
+          "type": "number",
+          "required": false,
+          "nullable": true
+        },
+        "vitamin_d_mcg": {
+          "type": "number",
+          "required": false,
+          "nullable": true
+        },
+        "vitamin_e_mg": {
+          "type": "number",
+          "required": false,
+          "nullable": true
+        },
+        "vitamin_k_mcg": {
+          "type": "number",
+          "required": false,
+          "nullable": true
+        },
+        "thiamin_mg": {
+          "type": "number",
+          "required": false,
+          "nullable": true
+        },
+        "riboflavin_mg": {
+          "type": "number",
+          "required": false,
+          "nullable": true
+        },
+        "niacin_mg": {
+          "type": "number",
+          "required": false,
+          "nullable": true
+        },
+        "pantothenic_acid_mg": {
+          "type": "number",
+          "required": false,
+          "nullable": true
+        },
+        "vitamin_b6_mg": {
+          "type": "number",
+          "required": false,
+          "nullable": true
+        },
+        "biotin_mcg": {
+          "type": "number",
+          "required": false,
+          "nullable": true
+        },
+        "folate_mcg": {
+          "type": "number",
+          "required": false,
+          "nullable": true
+        },
+        "vitamin_b12_mcg": {
+          "type": "number",
+          "required": false,
+          "nullable": true
+        },
+        "choline_mg": {
+          "type": "number",
+          "required": false,
+          "nullable": true
+        },
+        "calcium_mg": {
+          "type": "number",
+          "required": false,
+          "nullable": true
+        },
+        "iron_mg": {
+          "type": "number",
+          "required": false,
+          "nullable": true
+        },
+        "magnesium_mg": {
+          "type": "number",
+          "required": false,
+          "nullable": true
+        },
+        "phosphorus_mg": {
+          "type": "number",
+          "required": false,
+          "nullable": true
+        },
+        "potassium_mg": {
+          "type": "number",
+          "required": false,
+          "nullable": true
+        },
+        "sodium_mg": {
+          "type": "number",
+          "required": false,
+          "nullable": true
+        },
+        "zinc_mg": {
+          "type": "number",
+          "required": false,
+          "nullable": true
+        },
+        "copper_mg": {
+          "type": "number",
+          "required": false,
+          "nullable": true
+        },
+        "manganese_mg": {
+          "type": "number",
+          "required": false,
+          "nullable": true
+        },
+        "selenium_mcg": {
+          "type": "number",
+          "required": false,
+          "nullable": true
+        },
+        "iodine_mcg": {
+          "type": "number",
+          "required": false,
+          "nullable": true
+        }
+      }
+    },
+    "plan_items": {
+      "note": "Today's prescribed workout, one row per exercise: what the coach set for the day, ticked off as it is done.",
+      "columns": {
+        "day": {
+          "type": "string",
+          "required": true,
+          "nullable": false,
+          "note": "YYYY-MM-DD, local"
+        },
+        "name": {
+          "type": "string",
+          "required": true,
+          "nullable": false,
+          "note": "\"Besan chilla + curd\""
+        },
+        "exercise": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "the library exercise's slug, when the coach names it; else matched by name"
+        },
+        "dose": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "\"3x12\", \"3x10/side\", \"20 min\""
+        },
+        "position": {
+          "type": "number",
+          "required": false,
+          "nullable": true,
+          "default": 0,
+          "note": "order within the day"
+        },
+        "done": {
+          "type": "boolean",
+          "required": false,
+          "nullable": true,
+          "default": false
+        }
+      }
+    },
+    "meal_plan_items": {
+      "note": "The day's planned meals, one row per meal: what the coach planned, ticked off as it is eaten.",
+      "columns": {
+        "day": {
+          "type": "string",
+          "required": true,
+          "nullable": false,
+          "note": "YYYY-MM-DD, local"
+        },
+        "slot": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "Breakfast | Lunch | Snack | Dinner; a logged meal of the same slot ticks it"
+        },
+        "name": {
+          "type": "string",
+          "required": true,
+          "nullable": false,
+          "note": "\"Besan chilla + curd\""
+        },
+        "kcal": {
+          "type": "number",
+          "required": false,
+          "nullable": true,
+          "note": "expected calories"
+        },
+        "protein_g": {
+          "type": "number",
+          "required": false,
+          "nullable": true,
+          "note": "expected protein in grams"
+        },
+        "fiber_g": {
+          "type": "number",
+          "required": false,
+          "nullable": true,
+          "note": "expected fiber in grams"
+        },
+        "carbs_g": {
+          "type": "number",
+          "required": false,
+          "nullable": true
+        },
+        "sugar_g": {
+          "type": "number",
+          "required": false,
+          "nullable": true
+        },
+        "fat_g": {
+          "type": "number",
+          "required": false,
+          "nullable": true
+        },
+        "sat_fat_g": {
+          "type": "number",
+          "required": false,
+          "nullable": true
+        },
+        "mufa_g": {
+          "type": "number",
+          "required": false,
+          "nullable": true
+        },
+        "pufa_g": {
+          "type": "number",
+          "required": false,
+          "nullable": true
+        },
+        "omega3_g": {
+          "type": "number",
+          "required": false,
+          "nullable": true
+        },
+        "cholesterol_mg": {
+          "type": "number",
+          "required": false,
+          "nullable": true
+        },
+        "vitamin_a_mcg": {
+          "type": "number",
+          "required": false,
+          "nullable": true
+        },
+        "vitamin_c_mg": {
+          "type": "number",
+          "required": false,
+          "nullable": true
+        },
+        "vitamin_d_mcg": {
+          "type": "number",
+          "required": false,
+          "nullable": true
+        },
+        "vitamin_e_mg": {
+          "type": "number",
+          "required": false,
+          "nullable": true
+        },
+        "vitamin_k_mcg": {
+          "type": "number",
+          "required": false,
+          "nullable": true
+        },
+        "thiamin_mg": {
+          "type": "number",
+          "required": false,
+          "nullable": true
+        },
+        "riboflavin_mg": {
+          "type": "number",
+          "required": false,
+          "nullable": true
+        },
+        "niacin_mg": {
+          "type": "number",
+          "required": false,
+          "nullable": true
+        },
+        "pantothenic_acid_mg": {
+          "type": "number",
+          "required": false,
+          "nullable": true
+        },
+        "vitamin_b6_mg": {
+          "type": "number",
+          "required": false,
+          "nullable": true
+        },
+        "biotin_mcg": {
+          "type": "number",
+          "required": false,
+          "nullable": true
+        },
+        "folate_mcg": {
+          "type": "number",
+          "required": false,
+          "nullable": true
+        },
+        "vitamin_b12_mcg": {
+          "type": "number",
+          "required": false,
+          "nullable": true
+        },
+        "choline_mg": {
+          "type": "number",
+          "required": false,
+          "nullable": true
+        },
+        "calcium_mg": {
+          "type": "number",
+          "required": false,
+          "nullable": true
+        },
+        "iron_mg": {
+          "type": "number",
+          "required": false,
+          "nullable": true
+        },
+        "magnesium_mg": {
+          "type": "number",
+          "required": false,
+          "nullable": true
+        },
+        "phosphorus_mg": {
+          "type": "number",
+          "required": false,
+          "nullable": true
+        },
+        "potassium_mg": {
+          "type": "number",
+          "required": false,
+          "nullable": true
+        },
+        "sodium_mg": {
+          "type": "number",
+          "required": false,
+          "nullable": true
+        },
+        "zinc_mg": {
+          "type": "number",
+          "required": false,
+          "nullable": true
+        },
+        "copper_mg": {
+          "type": "number",
+          "required": false,
+          "nullable": true
+        },
+        "manganese_mg": {
+          "type": "number",
+          "required": false,
+          "nullable": true
+        },
+        "selenium_mcg": {
+          "type": "number",
+          "required": false,
+          "nullable": true
+        },
+        "iodine_mcg": {
+          "type": "number",
+          "required": false,
+          "nullable": true
+        },
+        "position": {
+          "type": "number",
+          "required": false,
+          "nullable": true,
+          "default": 0,
+          "note": "order within the day"
+        },
+        "done": {
+          "type": "boolean",
+          "required": false,
+          "nullable": true,
+          "default": false
+        }
+      }
+    },
+    "water_logs": {
+      "note": "Water drunk, one row per glass (or bottle) logged: the day's rows add up to Water.",
+      "columns": {
+        "at": {
+          "type": "string",
+          "required": true,
+          "nullable": false,
+          "note": "ISO date-time of the wake"
+        },
+        "ml": {
+          "type": "number",
+          "required": true,
+          "nullable": false,
+          "note": "250 for a glass"
+        }
+      }
+    },
+    "pace_samples": {
+      "columns": {
+        "day": {
+          "type": "string",
+          "required": true,
+          "nullable": false,
+          "note": "YYYY-MM-DD, local"
+        },
+        "minute": {
+          "type": "integer",
+          "required": true,
+          "nullable": false,
+          "note": "local minute of the day the sync ran, 0-1439"
+        },
+        "label": {
+          "type": "string",
+          "required": true,
+          "nullable": false,
+          "note": "Steps | Calories burned | Distance"
+        },
+        "value": {
+          "type": "number",
+          "required": true,
+          "nullable": false,
+          "note": "the running total Zepp had then"
+        }
+      }
+    },
+    "pace_nudges": {
+      "note": "Each time the pace check woke the coach because the person was well behind their usual pace for the time of day.",
+      "columns": {
+        "day": {
+          "type": "string",
+          "required": true,
+          "nullable": false,
+          "note": "YYYY-MM-DD, local"
+        },
+        "at": {
+          "type": "string",
+          "required": true,
+          "nullable": false,
+          "note": "ISO date-time of the wake"
+        },
+        "labels": {
+          "type": "string",
+          "required": true,
+          "nullable": false,
+          "note": "the numbers behind, \"Steps, Calories burned\""
+        },
+        "message": {
+          "type": "string",
+          "required": true,
+          "nullable": false,
+          "note": "what the coach was told"
+        }
+      }
+    },
+    "exercises": {
+      "columns": {
+        "slug": {
+          "type": "string",
+          "required": true,
+          "nullable": false,
+          "note": "\"cable-face-pull\": from the name, one row per slug"
+        },
+        "name": {
+          "type": "string",
+          "required": true,
+          "nullable": false,
+          "note": "\"Besan chilla + curd\""
+        },
+        "notes": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "muscles worked, cues, what to watch"
+        },
+        "gif_url": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "where the picture was found"
+        },
+        "file": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "the downloaded picture in the data dir; null when none was found"
+        },
+        "added_by": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "who added it: \"agent:<id>\" or \"owner\""
+        },
+        "added_at": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "ISO time it was added"
+        }
+      }
+    }
+  },
+  "settings": [
+    {
+      "key": "person",
+      "type": "string",
+      "default": "",
+      "label": "The name of the person this dashboard is for, as the coach's messages say it",
+      "scope": "owner"
+    },
+    {
+      "key": "timezone",
+      "type": "string",
+      "default": "",
+      "label": "The person's time zone (IANA, e.g. Europe/London): their days start and end on this clock",
+      "scope": "owner",
+      "constraint": "must be an IANA time zone such as Europe/London or Asia/Kolkata"
+    },
+    {
+      "key": "exercises_note",
+      "type": "string",
+      "default": "How each move is done",
+      "label": "The line under the Exercises page title (e.g. what the moves are chosen for)",
+      "scope": "owner"
+    },
+    {
+      "key": "focus",
+      "type": "json",
+      "default": [
+        "Workout",
+        "PAI",
+        "Calories in",
+        "Protein",
+        "Fiber",
+        "Water"
+      ],
+      "label": "Goals shown on the Today page; every other goal stays on the History page",
+      "scope": "owner",
+      "constraint": "must be a list of goal labels"
+    },
+    {
+      "key": "pace.enabled",
+      "type": "boolean",
+      "default": true,
+      "label": "Pace check on: the hourly sync may wake the coach when the person is well behind their usual pace",
+      "scope": "owner"
+    },
+    {
+      "key": "pace.metrics",
+      "type": "json",
+      "default": [
+        {
+          "label": "Steps",
+          "min_gap": 500
+        },
+        {
+          "label": "Calories burned",
+          "min_gap": 50
+        }
+      ],
+      "label": "Numbers checked, each with the least shortfall worth a nudge in its own unit (steps, kcal, km)",
+      "scope": "owner",
+      "constraint": "must be a list of {label, min_gap}"
+    },
+    {
+      "key": "pace.behind_ratio",
+      "type": "number",
+      "default": 0.5,
+      "label": "Behind when today's number is below this share of where the person usually is by now (0.5 = under half)",
+      "scope": "owner",
+      "constraint": "must be between 0.05 and 0.95"
+    },
+    {
+      "key": "pace.min_expected_share",
+      "type": "number",
+      "default": 0.25,
+      "label": "No check until a usual day would have reached this share of its total (keeps slow mornings quiet)",
+      "scope": "owner",
+      "constraint": "must be between 0 and 0.9"
+    },
+    {
+      "key": "pace.check_from",
+      "type": "string",
+      "default": "10:00",
+      "label": "Earliest time of day a nudge can go",
+      "scope": "owner",
+      "constraint": "must be a time as HH:MM, 24-hour"
+    },
+    {
+      "key": "pace.check_until",
+      "type": "string",
+      "default": "20:30",
+      "label": "Latest time of day a nudge can go (later there is no day left to act on it)",
+      "scope": "owner",
+      "constraint": "must be a time as HH:MM, 24-hour"
+    },
+    {
+      "key": "pace.routine_days",
+      "type": "integer",
+      "default": 21,
+      "label": "Days of history that make the person's usual routine",
+      "scope": "owner",
+      "constraint": "must be between 3 and 60"
+    },
+    {
+      "key": "pace.min_routine_days",
+      "type": "integer",
+      "default": 5,
+      "label": "Usual days needed before a personal routine (or a weekday/weekend split) is trusted over the default",
+      "scope": "owner",
+      "constraint": "must be between 1 and 60"
+    },
+    {
+      "key": "pace.split_weekends",
+      "type": "boolean",
+      "default": true,
+      "label": "Compare weekdays with weekdays and weekends with weekends, once there are enough of each",
+      "scope": "owner"
+    },
+    {
+      "key": "pace.off_day_share",
+      "type": "number",
+      "default": 0.3,
+      "label": "A past day below this share of a typical day's total (watch off, ill, travelling) is left out of the usual routine",
+      "scope": "owner",
+      "constraint": "must be between 0 and 0.9"
+    },
+    {
+      "key": "pace.reference",
+      "type": "string",
+      "default": "usual",
+      "label": "What \"on pace\" aims at: the usual day's total, or the day's goal when one is set",
+      "scope": "owner",
+      "constraint": "must be usual or goal"
+    },
+    {
+      "key": "pace.max_data_age_minutes",
+      "type": "integer",
+      "default": 90,
+      "label": "Staleness cutoff: only judge pace when today's tracker data (its newest reading, uploaded with the steps) is at most this many minutes old. Older, or none from today, is a sync gap, not the person: the cycle is skipped silently",
+      "scope": "owner",
+      "constraint": "must be between 15 and 240"
+    },
+    {
+      "key": "pace.max_nudges_per_day",
+      "type": "integer",
+      "default": 1,
+      "label": "Most coach wake-ups a day for being behind",
+      "scope": "owner",
+      "constraint": "must be between 0 and 6"
+    },
+    {
+      "key": "pace.nudge_gap_hours",
+      "type": "number",
+      "default": 3,
+      "label": "Least time between two nudges on the same day",
+      "scope": "owner",
+      "constraint": "must be between 0.5 and 12"
+    },
+    {
+      "key": "pace.default_curve",
+      "type": "json",
+      "default": [
+        [
+          "06:00",
+          0
+        ],
+        [
+          "08:00",
+          0.08
+        ],
+        [
+          "10:00",
+          0.2
+        ],
+        [
+          "12:00",
+          0.35
+        ],
+        [
+          "14:00",
+          0.5
+        ],
+        [
+          "16:00",
+          0.62
+        ],
+        [
+          "18:00",
+          0.75
+        ],
+        [
+          "20:00",
+          0.9
+        ],
+        [
+          "22:00",
+          1
+        ]
+      ],
+      "label": "Share of a usual day's total reached by each time, used until the person's own hourly history is long enough",
+      "scope": "owner",
+      "constraint": "must be a list of at least two [\"HH:MM\", share] points"
+    }
+  ]
+}

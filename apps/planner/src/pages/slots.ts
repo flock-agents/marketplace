@@ -27,8 +27,8 @@ export function groupMeals<M extends DishRow>(rows: M[]): MealSlot<M>[] {
 }
 
 /** The row "+ Add" writes: one more dish on the same date and slot, never a change to the dishes already there. */
-export const newDish = (at: { date: string; slot: string }, v: { dish: string; recipe_id: string | null }) =>
-  ({ date: at.date, slot: at.slot, dish: v.dish, recipe_id: v.recipe_id });
+export const newDish = (at: { date: string; slot: string }, v: { dish: string; recipe_id: string | null; time?: string | null }) =>
+  ({ date: at.date, slot: at.slot, dish: v.dish, recipe_id: v.recipe_id, ...(v.time !== undefined ? { time: v.time } : {}) });
 
 /** The meal's other dishes, for the editor of one of them. */
 export const otherDishes = <M extends DishRow>(rows: M[], meal: M): M[] => rows.filter((m) => m.id !== meal.id && slotKey(m) === slotKey(meal));

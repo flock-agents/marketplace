@@ -24,6 +24,12 @@
               "Dinner"
             ]
           },
+          "time": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "dish": {
             "type": "string"
           },
@@ -48,6 +54,78 @@
                 ],
                 "additionalProperties": false
               }
+            ]
+          },
+          "recipe_dish": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "note": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "review": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "review_for": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "type": "string"
+          },
+          "confirmed_by": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "confirmed_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "portions": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "coach_check": {
+            "type": "string"
+          },
+          "coach_notes": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "outcome": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "outcome_source": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "outcome_at": {
+            "type": [
+              "string",
+              "null"
             ]
           }
         },
@@ -86,6 +164,78 @@
             ]
           },
           "notes": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "prep_steps": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "prep_lead_hours": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": -140737488355328,
+                "maximum": 140737488355327
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "servings": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "prep_min": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "cook_min": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "tags": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "cuisine": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "source_url": {
             "type": [
               "string",
               "null"
@@ -137,11 +287,789 @@
               "string",
               "null"
             ]
+          },
+          "category": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "needed_by": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "buy_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "qty": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "suggested_qty": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "ingredient_id": {
+            "anyOf": [
+              {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "$ref": {
+                    "type": "string",
+                    "pattern": "^ingredients/.+"
+                  }
+                },
+                "required": [
+                  "$ref"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          },
+          "source": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "added_by": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "service": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "price": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": -140737488355328,
+                "maximum": 140737488355327
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "cart_id": {
+            "anyOf": [
+              {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "$ref": {
+                    "type": "string",
+                    "pattern": "^carts/.+"
+                  }
+                },
+                "required": [
+                  "$ref"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          },
+          "in_stock_until": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "meal_id": {
+            "anyOf": [
+              {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "$ref": {
+                    "type": "string",
+                    "pattern": "^meals/.+"
+                  }
+                },
+                "required": [
+                  "$ref"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          },
+          "qty_min": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": -140737488355328,
+                "maximum": 140737488355327
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "qty_max": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": -140737488355328,
+                "maximum": 140737488355327
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "qty_unit": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "required": [
           "$key",
           "item"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "ingredients": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "$key": {
+            "type": "string",
+            "minLength": 1,
+            "description": "This row's name within the request, for $ref"
+          },
+          "name": {
+            "type": "string"
+          },
+          "default_unit": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "category": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "last_ordered_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "last_ordered_qty": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": -140737488355328,
+                "maximum": 140737488355327
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "aliases": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "unit_conversions": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "shelf_life_days": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "shelf_life_source": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "shelf_life_note": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "prefs": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "notes": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "level": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "last_checked_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "$key",
+          "name"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "recipe_ingredients": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "$key": {
+            "type": "string",
+            "minLength": 1,
+            "description": "This row's name within the request, for $ref"
+          },
+          "recipe_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "$ref": {
+                    "type": "string",
+                    "pattern": "^recipes/.+"
+                  }
+                },
+                "required": [
+                  "$ref"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          },
+          "ingredient_id": {
+            "anyOf": [
+              {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "$ref": {
+                    "type": "string",
+                    "pattern": "^ingredients/.+"
+                  }
+                },
+                "required": [
+                  "$ref"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          },
+          "item": {
+            "type": "string"
+          },
+          "qty": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": -140737488355328,
+                "maximum": 140737488355327
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "unit": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "category": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "qty_per_adult": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": -140737488355328,
+                "maximum": 140737488355327
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "optional": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "substitutes": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "$key",
+          "recipe_id",
+          "item"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "diners": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "$key": {
+            "type": "string",
+            "minLength": 1,
+            "description": "This row's name within the request, for $ref"
+          },
+          "name": {
+            "type": "string"
+          },
+          "goal": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "kcal_target": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": -140737488355328,
+                "maximum": 140737488355327
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "protein_g_target": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": -140737488355328,
+                "maximum": 140737488355327
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "fat_note": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "source": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "$key",
+          "name"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "diner_portions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "$key": {
+            "type": "string",
+            "minLength": 1,
+            "description": "This row's name within the request, for $ref"
+          },
+          "diner_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "$ref": {
+                    "type": "string",
+                    "pattern": "^diners/.+"
+                  }
+                },
+                "required": [
+                  "$ref"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          },
+          "slot": {
+            "type": "string"
+          },
+          "multiplier": {
+            "type": "number",
+            "minimum": -140737488355328,
+            "maximum": 140737488355327
+          }
+        },
+        "required": [
+          "$key",
+          "diner_id",
+          "slot"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "staples": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "$key": {
+            "type": "string",
+            "minLength": 1,
+            "description": "This row's name within the request, for $ref"
+          },
+          "item": {
+            "type": "string"
+          },
+          "pack": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "category": {
+            "type": "string"
+          },
+          "every_min_days": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": -140737488355328,
+                "maximum": 140737488355327
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "every_max_days": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": -140737488355328,
+                "maximum": 140737488355327
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "max_days_ahead": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": -140737488355328,
+                "maximum": 140737488355327
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "usual_qty": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "usual_price": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": -140737488355328,
+                "maximum": 140737488355327
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "last_ordered_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "last_checked_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "active": {
+            "type": "boolean"
+          },
+          "level": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "$key",
+          "item"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "carts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "$key": {
+            "type": "string",
+            "minLength": 1,
+            "description": "This row's name within the request, for $ref"
+          },
+          "buy_at": {
+            "type": "string"
+          },
+          "categories": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "type": "string"
+          },
+          "checkin_sent_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "owner_notes": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "estimate": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": -140737488355328,
+                "maximum": 140737488355327
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "chosen_service": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "items_total": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": -140737488355328,
+                "maximum": 140737488355327
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "fees": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "grand_total": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": -140737488355328,
+                "maximum": 140737488355327
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "quotes": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "delivery_eta": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "confirmed_by": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "order_ref": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "ordered_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "order_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "prepare_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "snapshot": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "build_requested_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "yes_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "moved_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "let_go_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "$key",
+          "buy_at"
         ],
         "additionalProperties": false
       }

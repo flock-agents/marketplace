@@ -7,11 +7,15 @@ export const ingredientLines = (text: string | null | undefined): string[] =>
 /** "Rajma, 1 cup (soaked)" and "rajma (soaked overnight)" are the same grocery: the name before a comma or bracket. */
 const itemKey = (s: string): string => s.split(/[,(]/)[0].trim().toLowerCase();
 
+/** A grocery row still needs buying — the one place that question is answered, so nothing else has to keep its
+ *  own separate "is this done" flag in sync with `status` by hand. */
+export const isOpen = (status: string | null | undefined): boolean => status !== "ordered" && status !== "skipped";
+
 /**
  * What "Add ingredients to groceries" does with a recipe's lines against the list: add what is missing, skip what is
  * already there and not bought, and put back (`reopen`, by grocery id) an item that was bought before.
  */
-export function groceryChanges(lines: string[], list: { id: string; item: string; done: boolean | null }[]) {
+export function groceryChanges(lines: string[], list: { id: string; item: string; status: string | null }[]) {
   const add: string[] = [], reopen: string[] = [], skipped: string[] = [];
   const seen = new Set<string>();
   for (const line of lines) {
@@ -19,7 +23,7 @@ export function groceryChanges(lines: string[], list: { id: string; item: string
     if (!key || seen.has(key)) continue;
     seen.add(key);
     const there = list.filter((g) => itemKey(g.item) === key);
-    if (there.some((g) => !g.done)) skipped.push(line);
+    if (there.some((g) => isOpen(g.status))) skipped.push(line);
     else if (there.length) reopen.push(there[0].id);
     else add.push(line);
   }
@@ -64,21 +68,76 @@ export function linkFor(dish: string, recipes: { id: string; name: string }[], b
   return before && same(before.dish, dish) && recipes.some((r) => r.id === before.recipe_id) ? before.recipe_id : null;
 }
 
-/**
- * "Add all for this meal": groceryChanges for each recipe in turn, so an item two dishes share goes on the list once
- * (for the first dish). `bare` names the recipes with no ingredients yet.
- */
-export function mealGroceryChanges(recipes: { name: string; ingredients: string | null }[], list: { id: string; item: string; done: boolean | null }[]) {
-  const add: { item: string; for_dish: string }[] = [], reopen: { id: string; for_dish: string }[] = [], bare: string[] = [];
-  let skipped = 0;
-  const now = list.map((g) => ({ ...g }));
-  for (const r of recipes) {
-    const lines = ingredientLines(r.ingredients);
-    if (!lines.length) { bare.push(r.name); continue; }
-    const c = groceryChanges(lines, now);
-    skipped += c.skipped.length;
-    for (const item of c.add) { add.push({ item, for_dish: r.name }); now.push({ id: "", item, done: false }); }
-    for (const id of c.reopen) { reopen.push({ id, for_dish: r.name }); for (const g of now) if (g.id === id) g.done = false; }
-  }
-  return { add, reopen, skipped, bare };
+/** A structured ingredient line (recipe_ingredients). `qty_per_adult` is the v2 column; older rows only carry `qty`, also per adult. */
+export interface IngredientRow {
+  id: string; recipe_id: string; ingredient_id: string | null; item: string;
+  qty?: number | null; qty_per_adult?: number | null; unit: string | null; category: string | null;
+  optional?: number | null; substitutes?: string | null;
+}
+export const perAdult = (r: Pick<IngredientRow, "qty" | "qty_per_adult">): number | null => r.qty_per_adult ?? r.qty ?? null;
+
+/** Quantities rounded for reading: 1.5, 250, 0.25 — never 0.3333333. */
+export const roundQty = (n: number): number => (n >= 10 ? Math.round(n) : Math.round(n * 100) / 100);
+
+/** "500 g" for one line at `servings` adult portions; "to taste" when no quantity is written. */
+export function scaledText(r: Pick<IngredientRow, "qty" | "qty_per_adult" | "unit">, servings: number): string {
+  const q = perAdult(r);
+  if (q === null) return "to taste";
+  return `${roundQty(q * servings)}${r.unit ? ` ${r.unit}` : ""}`;
+}
+
+/** "Prep 15 min · Cook 40 min · Start 8h ahead", leaving out what isn't written. */
+export function timesText(prepMin: number | null | undefined, cookMin: number | null | undefined, leadHours: number | null | undefined): string {
+  return [prepMin ? `Prep ${prepMin} min` : null, cookMin ? `Cook ${cookMin} min` : null, leadHours ? `Start ${leadHours}h ahead` : null]
+    .filter(Boolean).join(" · ");
+}
+
+/** Meals a recipe is used in, split at today: upcoming soonest first, past latest first. */
+export function usedInMeals<M extends { date: string; dish: string; recipe_id: string | null }>(
+  recipe: { id: string; name: string }, meals: M[], today: string,
+): { upcoming: M[]; past: M[] } {
+  const mine = meals.filter((m) => m.recipe_id === recipe.id || m.dish.trim().toLowerCase() === recipe.name.trim().toLowerCase());
+  return {
+    upcoming: mine.filter((m) => m.date >= today).sort((a, b) => a.date.localeCompare(b.date)),
+    past: mine.filter((m) => m.date < today).sort((a, b) => b.date.localeCompare(a.date)),
+  };
+}
+
+/** The chat message "Import" sends: the agent reads the pasted text or link and fills the structured fields. */
+export function importMessage(recipe: { id: string; name: string }, pasted: string): string {
+  const text = pasted.trim();
+  const isLink = /^https?:\/\/\S+$/i.test(text);
+  return [
+    `Please fill in the recipe "${recipe.name}" (recipes id ${recipe.id}) from this ${isLink ? "link" : "pasted text"}:`,
+    "", text, "",
+    "Set servings, prep_min, cook_min, prep_steps, tags, cuisine" + (isLink ? ", source_url" : "") + " and the method on the recipe,",
+    "and write one recipe_ingredients row per ingredient (ingredient_id from the ingredients catalog, qty_per_adult, unit, optional, substitutes).",
+    "Match existing ingredients (including aliases) before adding new ones.",
+  ].join("\n");
+}
+
+const SLOT_TIME_FALLBACK: Record<string, string> = { Breakfast: "08:00", Lunch: "13:00", Dinner: "20:00" };
+
+/** A meal's default time from its slot: settings cook.morning / cook.evening, lunch 13:00. */
+export function slotDefaultTime(slot: string | null | undefined, settings: Record<string, unknown>): string | null {
+  if (!slot) return null;
+  const pick = (key: string) => (typeof settings[key] === "string" && /^\d{1,2}:\d{2}$/.test(settings[key] as string) ? settings[key] as string : null);
+  if (slot === "Breakfast") return pick("cook.morning") ?? SLOT_TIME_FALLBACK.Breakfast;
+  if (slot === "Dinner") return pick("cook.evening") ?? SLOT_TIME_FALLBACK.Dinner;
+  return SLOT_TIME_FALLBACK[slot] ?? null;
+}
+
+/** "7:5" or "0730" → "07:30"-style HH:MM, or null for anything that isn't a time of day. */
+export function normalizeTime(text: string | null | undefined): string | null {
+  const m = (text ?? "").trim().match(/^(\d{1,2}):?(\d{2})$/);
+  if (!m) return null;
+  const h = Number(m[1]), min = Number(m[2]);
+  return h < 24 && min < 60 ? `${String(h).padStart(2, "0")}:${String(min).padStart(2, "0")}` : null;
+}
+
+/** The v2 recipe columns (docs/V2-SPEC.md) on top of the original ones. */
+export interface RecipeV2 {
+  id: string; name: string; ingredients: string | null; method: string | null; notes: string | null;
+  prep_steps: string | null; prep_lead_hours: number | null;
+  servings?: number | null; prep_min?: number | null; cook_min?: number | null; tags?: string | null; cuisine?: string | null; source_url?: string | null;
 }

@@ -17,3 +17,21 @@
 .fl-sch .pl-more:hover, .fl-sch .pl-more:focus-visible { background: var(--ua-soft); color: var(--ua); }
 /* On a phone the dishes need the width: "+ Add" shrinks to "+" (its label still says what it adds). */
 @media (max-width: 720px) { .fl-sch .pl-more { min-width: 40px; justify-content: center; padding: 0; } .fl-sch .pl-more-t { display: none; } }
+/* Under each meal: its time and readiness badge (ready / ordering / missing items). */
+.pl-when { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.pl-ready { font-size: 12px; }
+.pl-ready-link { border: 0; cursor: pointer; font: inherit; font-size: 12px; }
+/* The tapped meal's ingredients, what is in stock and the order covering it, above its editor. */
+.pl-ready-panel { display: flex; flex-direction: column; gap: 8px; padding: 4px 0 12px; border-bottom: 1px solid var(--line); margin-bottom: 12px; }
+.pl-ready-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13px; color: var(--ink-2); }
+.pl-ready-lines { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.pl-ready-lines li { display: flex; justify-content: space-between; gap: 8px; padding: 5px 0; font-size: 13.5px; }
+.pl-ready-lines li + li { border-top: 1px solid var(--line); }
+.pl-ready-lines small { color: var(--ink-3); }
+.pl-ready-lines em { font-style: normal; color: var(--ink-3); font-size: 12.5px; flex: none; }
+
+/* Phone: the floating "Ask your agent" launcher would cover the meal editor's buttons and recipe list; hide it while
+   the editor is open (the chat stays one tap away once it closes). */
+@media (max-width: 720px) {
+  .fl-shell:has(.pl-meal-editor) .fl-shell-launch { display: none; }
+}

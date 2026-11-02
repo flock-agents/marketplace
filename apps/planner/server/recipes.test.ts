@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { groceryChanges, ingredientLines, linkFor, mealGroceryChanges, suggestRecipes } from "../src/pages/recipes";
+import { groceryChanges, ingredientLines, linkFor, suggestRecipes } from "../src/pages/recipes";
 
 const recipe = (id: string, name: string) => ({ id, name });
 
@@ -15,9 +15,9 @@ describe("ingredientLines", () => {
 
 describe("groceryChanges", () => {
   const list = [
-    { id: "g1", item: "Rajma, 1 kg", done: false },
-    { id: "g2", item: "Onions, 1 kg", done: true },
-    { id: "g3", item: "tomatoes", done: false },
+    { id: "g1", item: "Rajma, 1 kg", status: "pending" },
+    { id: "g2", item: "Onions, 1 kg", status: "ordered" },
+    { id: "g3", item: "tomatoes", status: "pending" },
   ];
   it("adds what is missing, skips what is on the list and not bought, puts back what was bought", () => {
     const c = groceryChanges(["Rajma, 1 cup", "Tomatoes, 3", "Onions, 2", "Ginger, 1 inch"], list);
@@ -72,25 +72,5 @@ describe("linkFor", () => {
   });
   it("drops the link of a meal whose recipe was deleted", () => {
     expect(linkFor("Masala dosa", recipes, { dish: "Masala dosa", recipe_id: "gone" })).toBeNull();
-  });
-});
-
-describe("mealGroceryChanges: add all for this meal", () => {
-  const rice = { name: "Rice", ingredients: "Sona masoori, 1 cup" };
-  const sambar = { name: "Sambar", ingredients: "Toor dal, 1/2 cup\nDrumsticks, 2\nTamarind" };
-  const bhindi = { name: "Bhindi fry", ingredients: "Bhindi, 250 g\nTamarind" };
-  it("adds each dish's missing items once, under the first dish that needs them", () => {
-    const c = mealGroceryChanges([rice, sambar, bhindi], [{ id: "g1", item: "Toor dal, 1 kg", done: false }, { id: "g2", item: "Bhindi", done: true }]);
-    expect(c.add).toEqual([
-      { item: "Sona masoori, 1 cup", for_dish: "Rice" },
-      { item: "Drumsticks, 2", for_dish: "Sambar" },
-      { item: "Tamarind", for_dish: "Sambar" },
-    ]);
-    expect(c.reopen).toEqual([{ id: "g2", for_dish: "Bhindi fry" }]);
-    expect(c.skipped).toBe(2);   // toor dal on the list; tamarind already added for the sambar
-    expect(c.bare).toEqual([]);
-  });
-  it("names the recipes with no ingredients yet", () => {
-    expect(mealGroceryChanges([{ name: "Salad", ingredients: null }, rice], []).bare).toEqual(["Salad"]);
   });
 });

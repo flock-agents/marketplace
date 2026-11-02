@@ -1,8 +1,11 @@
 import "./week.css";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button, Confirm, ErrorCard, Page, Schedule, Skeleton, kitFetch, scheduleAddKey, useTable, useToast, useToday, label } from "../flock/ui";
 import { MealEditor } from "./MealEditor";
-import { SLOTS, addDays, shortDate, weekday, type Meal } from "./shared";
+import { SLOTS, addDays, shortDate, weekday, type Cart, type Meal } from "./shared";
+import { combineReadiness, mealTimeLabel, readinessOf, readinessText, rowsByMeal, type GroceryV2, type MealV2, type Readiness } from "./shopping";
+import { mealsReadiness } from "./shoppingApi";
+import { MealReadinessPanel, ReadinessBadge } from "./MealReadiness";
 import { groupMeals, newDish, otherDishes, slotKey, type MealSlot } from "./slots";
 
 /** What the editor is for, and `at`: where it opens in the week (under the meal's line, or under the "+ Add" that was pressed). */
@@ -39,7 +42,28 @@ function Dishes({ line, open, selected }: { line: MealSlot<Meal>; open: (m: Meal
   );
 }
 
-export function WeekPage({ onSelect }: { onSelect: (row: { table: string; id: string; label: string } | null) => void }) {
+const READINESS_POLL_MS = 60_000;   // an order deadline can pass while the page sits open
+
+/** The server's readiness per meal id, refetched when the meals or their groceries/carts change, and each minute. */
+function useServerReadiness(week: Meal[], dataKey: string): Record<string, Readiness> {
+  const [statuses, setStatuses] = useState<Record<string, Readiness>>({});
+  const mealKey = week.map((m) => `${m.id}${m.date}${(m as MealV2).time ?? ""}`).join();
+  useEffect(() => {
+    if (!week.length) return;
+    let live = true;
+    const load = () => mealsReadiness(week.map((m) => m.id)).then((r) => { if (live) setStatuses(r.statuses); }).catch(() => { /* local rows stand in */ });
+    void load();
+    const timer = setInterval(load, READINESS_POLL_MS);
+    return () => { live = false; clearInterval(timer); };
+  }, [mealKey, dataKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  return statuses;
+}
+
+export function WeekPage({ onSelect, onOpenGroceries }: {
+  onSelect: (row: { table: string; id: string; label: string } | null) => void;
+  /** A meal's "Need …" / "On … list" chip opens those items on Groceries. */
+  onOpenGroceries?: (groceryIds: string[]) => void;
+}) {
   const [shift, setShift] = useState(0);   // 7-day steps away from today
   const [target, setTarget] = useState<Target | null>(null);
   const [asking, setAsking] = useState(false);
@@ -51,12 +75,22 @@ export function WeekPage({ onSelect }: { onSelect: (row: { table: string; id: st
   const meals = useTable<Meal>("meals", { where: { "date[gte]": from, "date[lte]": end }, limit: 500, sort: "date" });
   const week = meals.rows;
   const lines = groupMeals(week);   // one line per date and slot, with every dish in it
+  const groceries = useTable<GroceryV2>("groceries", { limit: 1000 });
+  const carts = useTable<Cart>("carts", { limit: 200 });
+  const cartsById = new Map(carts.rows.map((c) => [c.id, c]));
+  const byMeal = rowsByMeal(groceries.rows);
+  const rowsOf = (line: MealSlot<Meal>) => line.dishes.flatMap((d) => byMeal.get(d.id) ?? []);
+  const server = useServerReadiness(week, `${groceries.rows.map((r) => `${r.id}${r.status}${r.cart_id}`).join()}|${carts.rows.map((c) => `${c.id}${c.status}`).join()}`);
+  // The server's rule wins (it knows the order deadline); the local rows only stand in until it answers.
+  const readinessOfLine = (line: MealSlot<Meal>): Readiness => line.dishes.every((d) => server[d.id])
+    ? combineReadiness(line.dishes.map((d) => server[d.id]))
+    : readinessOf(rowsOf(line), cartsById, now);
 
   const close = () => { setTarget(null); setAsking(false); onSelect(null); };
   const open = (m: Meal) => { setTarget({ kind: "edit", meal: m, at: slotKey(m) }); onSelect({ table: "meals", id: m.id, label: `${m.dish} · ${weekday(m.date)} ${m.slot.toLowerCase()}` }); };
-  const save = async (v: { dish: string; recipe_id: string | null; slot?: string }) => {
-    if (target?.kind === "add") await meals.create(newDish({ date: target.date, slot: v.slot ?? target.slot ?? SLOTS[0] }, v));
-    else if (target?.kind === "edit") await meals.update(target.meal.id, { dish: v.dish, recipe_id: v.recipe_id });
+  const save = async (v: { dish: string; recipe_id: string | null; slot?: string; time: string | null; note: string | null }) => {
+    if (target?.kind === "add") await meals.create({ ...newDish({ date: target.date, slot: v.slot ?? target.slot ?? SLOTS[0] }, v), note: v.note });
+    else if (target?.kind === "edit") await meals.update(target.meal.id, { dish: v.dish, recipe_id: v.recipe_id, time: v.time, note: v.note } as Partial<Meal>);
     close();
   };
   const remove = async () => {
@@ -73,10 +107,10 @@ export function WeekPage({ onSelect }: { onSelect: (row: { table: string; id: st
   };
 
   return (
-    <Page title={shift === 0 ? label("title.week", "This week's meals") : `From ${shortDate(from)}`} subtitle={`${shortDate(from)} to ${shortDate(end)}`}>
+    <Page title={shift === 0 ? label("title.week", "This week's meals") : `From ${shortDate(from)}`}>
       <div className="pl-nav">
         <Button variant="ghost" size="sm" icon="chevron-left" onClick={() => setShift(shift - 1)}><span style={SR}>Previous 7 days</span></Button>
-        <Button variant="ghost" size="sm" onClick={() => setShift(0)}>Today</Button>
+        <Button variant="ghost" size="sm" onClick={() => setShift(0)}>{shortDate(from)} – {shortDate(end)}</Button>
         <Button variant="ghost" size="sm" icon="chevron-right" onClick={() => setShift(shift + 1)}><span style={SR}>Next 7 days</span></Button>
       </div>
       {meals.error ? <ErrorCard title="Couldn't load this week" message={meals.error} onRetry={meals.refetch} />
@@ -85,6 +119,13 @@ export function WeekPage({ onSelect }: { onSelect: (row: { table: string; id: st
           key={from} rows={lines} from={from} days={7} today={now} showEarlier={end < now}
           slots={SLOTS} date={(g) => g.date} slot={(g) => g.slot}
           title={(g) => <Dishes line={g} open={open} selected={target?.kind === "edit" ? target.meal.id : undefined} />}
+          secondary={(g) => (
+            <span className="pl-when">
+              <span>{mealTimeLabel(g.dishes[0] as MealV2)}</span>
+              <ReadinessBadge value={readinessText(readinessOfLine(g), rowsOf(g), cartsById, now)} onOpen={onOpenGroceries} />
+              {g.dishes.map((m) => (m.note ? <span key={m.id}>{m.note}</span> : null))}
+            </span>
+          )}
           trailing={(g) => (
             <button type="button" className="pl-more" aria-label={`Add a dish to ${g.slot.toLowerCase()} on ${weekday(g.date)} ${shortDate(g.date)}`}
               aria-expanded={target?.kind === "add" && target.at === g.id ? true : undefined}
@@ -99,6 +140,8 @@ export function WeekPage({ onSelect }: { onSelect: (row: { table: string; id: st
             at: target.at, onClose: close,
             label: target.kind === "add" ? addTitle(target, week) : `Edit ${target.meal.dish}`,
             content: (
+              <>
+              {target.kind === "edit" ? <MealReadinessPanel mealId={target.meal.id} rows={byMeal.get(target.meal.id) ?? []} carts={cartsById} today={now} onOpenGroceries={onOpenGroceries} /> : null}
               <MealEditor
                 others={target.kind === "edit" ? otherDishes(week, target.meal) : undefined}
                 key={target.kind === "edit" ? `edit:${target.meal.id}` : `${target.date}|${target.slot ?? ""}`}
@@ -108,6 +151,7 @@ export function WeekPage({ onSelect }: { onSelect: (row: { table: string; id: st
                 askSlot={target.kind === "add" && !target.slot ? nextSlot(target.date, now) : undefined}
                 onSave={save} onCancel={close} onRemove={target.kind === "edit" ? () => setAsking(true) : undefined}
               />
+              </>
             ),
           } : null}
         />}

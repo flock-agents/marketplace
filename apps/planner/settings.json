@@ -1,1 +1,68 @@
-{}
+{
+  "cook.morning": {
+    "type": "string"
+  },
+  "cook.lunch": {
+    "type": "string"
+  },
+  "cook.evening": {
+    "type": "string"
+  },
+  "quiet.start": {
+    "type": "string"
+  },
+  "quiet.end": {
+    "type": "string"
+  },
+  "reminder.buffer_min": {
+    "type": "integer"
+  },
+  "spend.weekly_limit": {
+    "type": "number"
+  },
+  "price.jump_pct": {
+    "type": "number"
+  },
+  "services": {
+    "type": "json"
+  },
+  "buy.delivery_lead_min": {
+    "type": "integer"
+  },
+  "buy.fresh_window_days": {
+    "type": "json"
+  },
+  "buy.earliest_order": {
+    "type": "string"
+  },
+  "buy.preferred_order_time": {
+    "type": "string"
+  },
+  "meal.latest.breakfast": {
+    "type": "string"
+  },
+  "meal.latest.lunch": {
+    "type": "string"
+  },
+  "meal.latest.dinner": {
+    "type": "string"
+  },
+  "shop.reminder_time": {
+    "type": "string"
+  },
+  "shop.heads_up_min": {
+    "type": "integer"
+  },
+  "shop.yes_wait_h": {
+    "type": "number"
+  },
+  "plan.horizon_days": {
+    "type": "integer"
+  },
+  "plan.confirm_ahead_days": {
+    "type": "integer"
+  },
+  "prefs.category_defaults": {
+    "type": "json"
+  }
+}
