@@ -2,7 +2,7 @@
   "name": "Fitness Coach",
   "slug": "fitness-coach",
   "description": "A personal coach that plans your workouts and meals, logs what you eat, drink and do, and keeps a fitness dashboard current, with steps, sleep and PAI from a connected tracker",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "author": "flock",
   "icon": "icon.svg",
   "category": "personal",
@@ -56,12 +56,7 @@
     {
       "skillId": "zepp",
       "preSelected": false,
-      "description": "Sync steps, calories, sleep, workouts, weight and PAI from a Zepp / Amazfit watch",
-      "accountRequirement": {
-        "type": "browser-session",
-        "provider": "zepp",
-        "setupGuide": "Sign in to your Zepp account"
-      }
+      "description": "Sync steps, calories, sleep, workouts, weight and PAI from a Zepp / Amazfit watch"
     }
   ],
   "apps": [

@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.2
+
+- Does nothing until it knows who it is for (`person` and `timezone`): no tracker sync, no coach wakes, so no model runs. The page asks for both first, with the browser's time zone filled in; the coach can also set them.
+- The daily plan and weekly summary are now app routines (`daily-plan`, `weekly-review`) that wake the coach only once the app is set up. They replace `morning-plan` and `weekly-summary`, which an update removes; same times and prompts.
+
 ## 1.0.1
 
 - With no tracker connected, the Sync button becomes Connect Zepp and opens Flock's Zepp page. A tracker that fails says "Zepp couldn't sync. Check the connection" with a link, instead of the connector's raw error.
