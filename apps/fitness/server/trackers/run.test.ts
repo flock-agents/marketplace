@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { NO_TRACKER, runTrackers, type ConnectorState } from "./run";
+import { NO_TRACKER, runTrackers, trackerStates, type ConnectorState } from "./run";
 import type { SyncReport, Tracker, TrackerContext } from "./types";
 import type { SyncStore } from "./store";
 
@@ -29,9 +29,9 @@ describe("runTrackers", () => {
     ], async () => [state("a"), state("b"), state("c")], context, 7);
     expect(report.ok).toBe(true);
     expect(report.trackers).toEqual([
-      { id: "a", name: "A", ok: false, message: "sync failed: signed out" },
-      { id: "b", name: "B", ok: false, message: "all calls failed" },
-      { id: "c", name: "C", ok: true, message: "Synced C" },
+      { id: "a", name: "A", skillId: "skill-a", ok: false, message: "sync failed: signed out" },
+      { id: "b", name: "B", skillId: "skill-b", ok: false, message: "all calls failed" },
+      { id: "c", name: "C", skillId: "skill-c", ok: true, message: "Synced C" },
     ]);
     expect(report.todayAsOf).toBe("2026-10-21T07:00:00.000Z");
   });
@@ -40,5 +40,22 @@ describe("runTrackers", () => {
     expect(bad.ok).toBe(false);
     const listing = await runTrackers([tracker("a", async () => ok("a"))], async () => { throw new Error("old Flock"); }, context, 7);
     expect(listing.trackers).toEqual([]);
+  });
+});
+
+describe("trackerStates", () => {
+  const none = async () => ok("");
+  it("names every tracker with whether its connector is granted and ready", async () => {
+    const states = await trackerStates([tracker("a", none), tracker("b", none), tracker("c", none)],
+      async () => [state("a"), state("b", false), state("c", true, false)]);
+    expect(states).toEqual([
+      { id: "a", name: "A", skillId: "skill-a", ready: true },
+      { id: "b", name: "B", skillId: "skill-b", ready: false },
+      { id: "c", name: "C", skillId: "skill-c", ready: false },
+    ]);
+  });
+  it("reads a failing listing as nothing ready", async () => {
+    const states = await trackerStates([tracker("a", none)], async () => { throw new Error("old Flock"); });
+    expect(states.map((s) => s.ready)).toEqual([false]);
   });
 });

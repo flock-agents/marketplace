@@ -5,7 +5,7 @@ import { spreadSampleReadings } from "./db/seed";
 import { trackerRoutes } from "./trackers/routes";
 import { kitStore } from "./trackers/store";
 import { SYNC_ROUTINE, syncNow } from "./trackers/sync-now";
-import { CALL_TIMEOUT_MS, runTrackers, type ConnectorState, type ListConnectors } from "./trackers/run";
+import { CALL_TIMEOUT_MS, runTrackers, trackerStates, type ConnectorState, type ListConnectors } from "./trackers/run";
 import { TRACKERS } from "./trackers";
 import type { Tracker } from "./trackers/types";
 import { LOOKBACK_DAYS } from "./trackers/zepp/config";
@@ -68,7 +68,7 @@ flock.setRoutines({
     });
   },
 });
-flock.hono.route("/api/trackers", trackerRoutes(sync));
+flock.hono.route("/api/trackers", trackerRoutes(sync, () => trackerStates(TRACKERS, listConnectors)));
 flock.hono.route("/api", paceRoutes(pace, () => sync.status().last?.todayAsOf ?? null));   // the pace check's parameters and what it decides now
 flock.hono.route("/api", todayRoutes(kit));                   // the day's numbers against their targets: today, and past days
 // a tapped planned meal with no numbers yet: `api` is this app's own path for the coach's logging call

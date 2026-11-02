@@ -6,7 +6,9 @@ import type { CallTool, SyncReport, Tracker, TrackerContext } from "./types";
 export interface ConnectorState { skillId: string; optional: boolean; granted: boolean; ready: boolean }
 export type ListConnectors = () => Promise<ConnectorState[]>;
 
-export interface TrackerResult { id: string; name: string; ok: boolean; message: string }
+export interface TrackerResult { id: string; name: string; skillId: string; ok: boolean; message: string }
+/** Each tracker the app knows and whether its connector is granted and ready: the page offers Connect for one that is not. */
+export interface TrackerState { id: string; name: string; skillId: string; ready: boolean }
 export interface RunReport {
   ok: boolean;
   /** One line per tracker that ran, failed ones included, for the Sync button. Empty when none is connected. */
@@ -22,11 +24,21 @@ export const NO_TRACKER = "No tracker connected: connect one (Zepp) to the coach
 const failed = (e: unknown): SyncReport =>
   ({ ok: false, added: 0, updated: 0, failed: [], message: `sync failed: ${e instanceof Error ? e.message : String(e)}`, newest: null, todayAsOf: null });
 
-/** The trackers whose connector is granted and ready. A listing that fails reads as none ready. */
-export async function readyTrackers(trackers: readonly Tracker[], list: ListConnectors): Promise<Tracker[]> {
+/** The connectors granted and ready. A listing that fails reads as none ready. */
+async function readySkills(list: ListConnectors): Promise<Set<string>> {
   const states = await list().catch(() => [] as ConnectorState[]);
-  const ready = new Set(states.filter((s) => s.granted && s.ready).map((s) => s.skillId));
+  return new Set(states.filter((s) => s.granted && s.ready).map((s) => s.skillId));
+}
+
+/** The trackers whose connector is granted and ready. */
+export async function readyTrackers(trackers: readonly Tracker[], list: ListConnectors): Promise<Tracker[]> {
+  const ready = await readySkills(list);
   return trackers.filter((t) => ready.has(t.skillId));
+}
+
+export async function trackerStates(trackers: readonly Tracker[], list: ListConnectors): Promise<TrackerState[]> {
+  const ready = await readySkills(list);
+  return trackers.map((t) => ({ id: t.id, name: t.name, skillId: t.skillId, ready: ready.has(t.skillId) }));
 }
 
 export async function runTrackers(
@@ -36,7 +48,7 @@ export async function runTrackers(
   if (!ready.length) return { ok: true, trackers: [], message: NO_TRACKER, newest: null, todayAsOf: null };
   const reports: [Tracker, SyncReport][] = [];
   for (const t of ready) reports.push([t, await t.sync(context(t), days).catch(failed)]);   // one at a time, each isolated
-  const results = reports.map(([t, r]) => ({ id: t.id, name: t.name, ok: r.ok, message: r.message }));
+  const results = reports.map(([t, r]) => ({ id: t.id, name: t.name, skillId: t.skillId, ok: r.ok, message: r.message }));
   const newest = reports.map(([, r]) => r.newest).filter((n): n is string => !!n).sort().at(-1) ?? null;
   return {
     ok: results.some((r) => r.ok),
