@@ -5,7 +5,7 @@ import { spreadSampleReadings } from "./db/seed";
 import { trackerRoutes } from "./trackers/routes";
 import { kitStore } from "./trackers/store";
 import { SYNC_ROUTINE, syncNow } from "./trackers/sync-now";
-import { CALL_TIMEOUT_MS, runTrackers, trackerStates, type ConnectorState, type ListConnectors } from "./trackers/run";
+import { CALL_TIMEOUT_MS, NOT_SET_UP, runTrackers, trackerStates, type ConnectorState, type ListConnectors } from "./trackers/run";
 import { TRACKERS } from "./trackers";
 import type { Tracker } from "./trackers/types";
 import { LOOKBACK_DAYS } from "./trackers/zepp/config";
@@ -25,6 +25,8 @@ import { focusSetting } from "./today/focus";
 import { nutritionRoutes } from "./nutrition/routes";
 import { PERSON_SETTING, TIMEZONE_SETTING, personName, profileSettings } from "./profile/settings";
 import { apiPath } from "./profile/app-url";
+import { isSetUp } from "./profile/setup";
+import { DAILY_PLAN_ROUTINE, WEEKLY_REVIEW_ROUTINE, coachRoutine } from "./coach/routines";
 import { useTimezone } from "./time/dates";
 
 const flock = createFlockApp();
@@ -36,11 +38,13 @@ flock.hono.use("/api/_data/*", loggingGuard(stored));
 const kit = await mountKit(flock, { schema, settings: [...profileSettings, focusSetting, ...paceSettings] });
 useTimezone(() => kit.settings.get<string>(TIMEZONE_SETTING));
 const person = () => personName(kit.settings.get<string>(PERSON_SETTING));
+const setUp = () => isSetUp(kit.settings.get);
 spreadSampleReadings(kit);   // a plan's sample readings arrive with one stamp: spread them so the trend has a time axis
 // App-specific routes go here. Agents use /api/_data for rows.
 // Tracker sync, run by the app itself through the coach's connectors: the button and the scheduled routine share one pass
 // over every tracker whose connector is granted and ready (none: a quiet no-op). Each fresh pass keeps today's running
 // totals for the pace check; only the scheduled one may wake the coach, and only when a tracker read today's activity.
+// Nothing runs until the app is set up (server/profile/setup.ts): no connector calls, no wakes.
 const listConnectors: ListConnectors = async () => {
   const list = (flock.platform.connectors as { list?: () => Promise<ConnectorState[]> }).list;
   return list ? list.call(flock.platform.connectors) : [];   // a Flock without connectors.list(): no tracker is known ready
@@ -53,12 +57,14 @@ const context = (t: Tracker) => ({
 });
 const pace = paceService(kitPaceStore(kit), () => paceParams(kit.settings.get), person);
 const sync = syncNow(async () => {
+  if (!setUp()) return NOT_SET_UP;
   const report = await runTrackers(TRACKERS, listConnectors, context, LOOKBACK_DAYS);
   if (report.todayAsOf) await pace.sample(report.todayAsOf);
   return report;
 });
 flock.setRoutines({
   [SYNC_ROUTINE]: async (ctx) => {
+    if (!setUp()) return;
     const report = await sync.run();
     if (!report.ok) throw new Error(report.message);
     if (!report.todayAsOf) return;   // no activity numbers today: nothing to judge the pace by
@@ -67,6 +73,8 @@ flock.setRoutines({
       return woken.ok ? { ok: true } : { ok: false, reason: woken.reason };
     });
   },
+  [DAILY_PLAN_ROUTINE]: coachRoutine(setUp, "Time for today's plan.", apiPath),
+  [WEEKLY_REVIEW_ROUTINE]: coachRoutine(setUp, "Time for the weekly summary.", apiPath),
 });
 flock.hono.route("/api/trackers", trackerRoutes(sync, () => trackerStates(TRACKERS, listConnectors)));
 flock.hono.route("/api", paceRoutes(pace, () => sync.status().last?.todayAsOf ?? null));   // the pace check's parameters and what it decides now

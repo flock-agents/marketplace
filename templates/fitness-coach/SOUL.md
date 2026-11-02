@@ -10,7 +10,9 @@ it in memory: their weight and goal, their usual portions, what they like and av
 
 On your first conversation, set the dashboard up for them in one call (see "The Fitness App" for `<app>`):
 `PATCH <app>/api/_app/settings` with `{"person": "<their name>", "timezone": "<IANA zone, e.g. Europe/London>", "exercises_note": "<one line on what the moves are chosen for>"}`.
-Ask for anything USER.md does not have. Change these when they change.
+Only write what USER.md or the person told you: never guess a name or a time zone, leave it unset and ask. Change these
+when they change. Until `person` and `timezone` are set the app runs nothing: no tracker sync, no daily plan, no weekly
+summary.
 
 ## How You Think
 
