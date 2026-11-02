@@ -3,6 +3,8 @@ import { AppShell, AgentChat, useApp, useHashRoute, type AppShellProps, type She
 import { DayPage } from "./pages/DayPage";
 import { HistoryPage } from "./pages/HistoryPage";
 import { ExercisesPage } from "./pages/ExercisesPage";
+import { SetupPage } from "./pages/SetupPage";
+import { isSetUp } from "../server/profile/setup";
 
 // The name, object, accent, starters and labels come from the app's display (GET /api/_app); these are the fallbacks.
 const STARTERS = ["What's my plan today?", "How am I doing on calories?", "Show me how to do a dead bug"];
@@ -22,7 +24,8 @@ const VIEWS: Record<string, ComponentType> = {
 export default function App() {
   const app = useApp();
   const [page, go] = useHashRoute("today", Object.keys(VIEWS));
-  const View = VIEWS[page];
+  // Nothing to show or run until the app knows who it is for; the page asks for that first.
+  const View = !app.loading && !isSetUp((key) => app.settings[key]) ? SetupPage : VIEWS[page];
   return (
     <AppShell
       name={app.name ?? document.title} object={app.display.object ?? "globe"} accent={app.display.accent as AppShellProps["accent"]}
