@@ -20,3 +20,7 @@
 .pl-form-row > * { flex: 1 1 160px; }
 .pl-form-row-top { margin-top: var(--space-2); }
 .pl-pantry-actions { display: flex; gap: 8px; flex-wrap: wrap; padding: 4px 0 10px; }
+
+/* The idle notice (IdleNotice) sits under the shell's samples banner, inset the same way. */
+.pl-idle { margin: 6px 22px 4px; }
+@media (max-width: 720px) { .pl-idle { margin: 6px 16px 4px; } }
