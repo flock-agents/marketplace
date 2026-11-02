@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.1
+
+- With no tracker connected, the Sync button becomes Connect Zepp and opens Flock's Zepp page. A tracker that fails says "Zepp couldn't sync. Check the connection" with a link, instead of the connector's raw error.
+
 ## 1.0.0
 
 - First release, generalised from a hand-built coach dashboard. Person, time zone and exercise note are settings, so nothing about one person is in the code.
