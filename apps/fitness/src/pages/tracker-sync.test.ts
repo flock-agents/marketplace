@@ -1,6 +1,6 @@
 import { describe, it, expect } from "bun:test";
 import type { SyncStatus } from "../../server/trackers/sync-now";
-import { connectPath, failedTrackers, noneConnected, outcomeToast } from "./tracker-sync";
+import { connectPath, connectToast, failedTrackers, noneConnected, outcomeToast, toConnect } from "./tracker-sync";
 
 const zepp = { id: "zepp", name: "Zepp", skillId: "zepp" };
 const finished = (ok: boolean, trackers = [{ ...zepp, ok, message: ok ? "Synced" : "spawn python3 ENOENT" }]): SyncStatus =>
@@ -23,5 +23,10 @@ describe("the Sync button's state", () => {
   it("says how a good pass went, and nothing while one runs", () => {
     expect(outcomeToast(finished(true))).toEqual({ message: "Synced with Zepp", tone: "success" });
     expect(outcomeToast({ running: true, last: null })).toBeNull();
+  });
+  it("connects the first tracker not connected yet, and says where the coach's request shows up", () => {
+    expect(toConnect([{ ...zepp, ready: true }, { id: "fit", name: "Fit", skillId: "fit", ready: false }])?.id).toBe("fit");
+    expect(toConnect([{ ...zepp, ready: true }])).toBeUndefined();
+    expect(connectToast(zepp)).toContain("Approve its request in Flock");
   });
 });

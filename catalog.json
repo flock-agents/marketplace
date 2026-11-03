@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "updatedAt": "2026-11-02T00:00:00Z",
+  "updatedAt": "2026-11-03T00:00:00Z",
   "items": [
     {
       "slug": "linear",
@@ -754,9 +754,9 @@
       "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "apps/fitness",
-      "latestVersion": "1.0.3",
-      "latestTag": "fitness-v1.0.3",
-      "minFlockVersion": "0.22.0",
+      "latestVersion": "1.0.6",
+      "latestTag": "fitness-v1.0.6",
+      "minFlockVersion": "0.22.1",
       "publishedAt": "2026-10-26T00:00:00Z",
       "updatedAt": "2026-11-02T00:00:00Z"
     },

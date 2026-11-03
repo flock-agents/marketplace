@@ -4,7 +4,7 @@
   "usage": "template",
   "icon": "🏋️",
   "description": "Today and Yesterday against the goals in focus (exercise, diet, water, and activity and sleep from a connected tracker): the workout plan and planned meals beside what was done and eaten, tomorrow's plans, history and an exercise library.",
-  "version": "1.0.3",
+  "version": "1.0.6",
   "author": "flock",
   "category": "health",
   "tags": [
@@ -15,7 +15,7 @@
     "workout",
     "zepp"
   ],
-  "minFlockVersion": "0.22.0",
+  "minFlockVersion": "0.22.1",
   "type": "fullstack",
   "access": "private",
   "spa": true,
@@ -97,6 +97,11 @@
         "name": "log-planned-meal",
         "description": "The owner tapped Eaten on a planned meal that has no numbers yet: estimate the person's portion, with its full nutrient breakdown, and log it as eaten.",
         "instructions": "The owner tapped Eaten on the dashboard for a planned meal that has no numbers yet (or no full nutrient breakdown). The payload has `date`, `slot`, `name` (the dishes), `at` (when to file it) and `api` (this app's own API path, e.g. /a/<app id>/api). Estimate the portion the person you coach usually eats of those dishes (use what you know of their food and portions): its calories, protein and fiber, AND its full nutrient breakdown, every key in the example below in the unit its name ends with (g, mg, mcg; 0 when the food has none; a rough estimate is fine). Then log it in ONE call, exactly this shape, and reply with one line: what you logged and its calories, protein and fiber. No messages, no questions, nothing else.\n\n```bash\ncurl -s -X POST \"$FLOCK_API_URL<api>/_data/events\" -H \"Authorization: Bearer $FLOCK_AUTH_TOKEN\" -H \"Content-Type: application/json\" -d '{\"title\": \"<slot>: <name>\", \"at\": \"<at>\", \"kind\": \"Meal\", \"kcal\": <kcal>, \"protein_g\": <g>, \"fiber_g\": <g>, \"carbs_g\": <g>, \"sugar_g\": <g>, \"fat_g\": <g>, \"sat_fat_g\": <g>, \"mufa_g\": <g>, \"pufa_g\": <g>, \"omega3_g\": <g>, \"cholesterol_mg\": <mg>, \"vitamin_a_mcg\": <mcg>, \"vitamin_c_mg\": <mg>, \"vitamin_d_mcg\": <mcg>, \"vitamin_e_mg\": <mg>, \"vitamin_k_mcg\": <mcg>, \"thiamin_mg\": <mg>, \"riboflavin_mg\": <mg>, \"niacin_mg\": <mg>, \"pantothenic_acid_mg\": <mg>, \"vitamin_b6_mg\": <mg>, \"biotin_mcg\": <mcg>, \"folate_mcg\": <mcg>, \"vitamin_b12_mcg\": <mcg>, \"choline_mg\": <mg>, \"calcium_mg\": <mg>, \"iron_mg\": <mg>, \"magnesium_mg\": <mg>, \"phosphorus_mg\": <mg>, \"potassium_mg\": <mg>, \"sodium_mg\": <mg>, \"zinc_mg\": <mg>, \"copper_mg\": <mg>, \"manganese_mg\": <mg>, \"selenium_mcg\": <mcg>, \"iodine_mcg\": <mcg>}'\n```\n\nThe reply must carry the stored row; a `not_counted` reply says what is missing: fix it and send it again."
+      },
+      {
+        "name": "connect-tracker",
+        "description": "The owner tapped Connect on the dashboard for a tracker that is not connected: ask the owner, through Flock, to connect this person's own account of it to you.",
+        "instructions": "The owner tapped Connect on the Fitness dashboard for a tracker that is not connected to you yet. The payload has `name` (the tracker, e.g. Zepp), `skillId` (its connector, e.g. zepp) and `person` (who the dashboard is for; may be empty). The app reads the tracker through YOUR connector account, so the account must be connected to you. Ask the owner for it with your connect request (target `{\"skillId\": \"<skillId>\"}`); when you are offered or already hold an account that belongs to someone else, ask with `\"anotherAccount\": true` so the owner connects this person's own account. Never use, or ask to share, another person's account: one account per person. Then reply with one short line saying the owner will find your request in Flock. Nothing else."
       }
     ]
   },

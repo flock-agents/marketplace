@@ -20,6 +20,13 @@ export function outcomeToast(s: SyncStatus): Toast | null {
 export const connectPath = (trackers: readonly Pick<TrackerState, "skillId">[]): string =>
   trackers.length === 1 ? `/connectors/${encodeURIComponent(trackers[0].skillId)}` : "/connectors";
 
+/** The tracker Connect asks the coach for: the first one not connected yet. */
+export const toConnect = (trackers: readonly TrackerState[]): TrackerState | undefined => trackers.find((t) => !t.ready);
+
+/** What the owner is told once the coach has been asked: where its request shows up. */
+export const connectToast = (tracker: Pick<TrackerState, "name">): string =>
+  `Asked the coach to connect ${tracker.name}. Approve its request in Flock with this person's own ${tracker.name} sign-in.`;
+
 /** None of the trackers is connected (known only once the page has asked): Sync would have nothing to read. */
 export const noneConnected = (trackers: readonly TrackerState[] | null): boolean => !!trackers && !trackers.some((t) => t.ready);
 

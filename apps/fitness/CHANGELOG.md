@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.0.6
+
+- Needs Flock 0.22.1 (the kit's `useChat`). While the app is idle its chat stays the usual side chat (a sheet on a phone); Tell the coach about you opens it and sends the setup ask, instead of switching to a full-page Chat tab.
+- `flock.marketplace.json` carries the app's version again (it had stayed at 1.0.3).
+
+## 1.0.5
+
+- Connect Zepp asks the coach instead of opening Flock's connector page: an account added there was not given to the coach, so the app could not read it. The coach asks the owner in Flock for this person's own account (`connect-tracker` intent), at most once every 3 minutes, and the button says where to approve it.
+
+## 1.0.4
+
+- The History page's event actions use the kit's `Row` instead of an inline style, so the app passes Flock's layout check unchanged and an installed copy is no longer edited (and flagged customized) to fix it.
+
 ## 1.0.3
 
 - Does nothing until it knows who it is for (`person` and `timezone`): no tracker sync, no coach wakes, so no model runs. Until then the app shows that it is idle, with a button that opens the coach's chat to tell it who the dashboard is for; the coach saves both.
