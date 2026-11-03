@@ -16,7 +16,7 @@ import { queueRecipeFill, queueRecipeFillsForMeal, queueUpcomingRecipeFills } fr
 import { bestMessageTime, learnedRule, queueFindPatterns, queueWeeklyFindPatterns } from "./patterns";
 import { logChoice } from "./choices";
 import { createJobsWaker, runAgentJobs } from "./routines/agent-jobs";
-import rollingPlan from "./routines/rolling-plan";
+import { runRollingPlan } from "./routines/rolling-plan";
 
 const now = new Date(2026, 9, 29, 18, 0);   // Oct 29, 2026, evening
 const later = (min: number) => new Date(now.getTime() + min * 60_000);
@@ -58,7 +58,6 @@ describe("fill_recipe", () => {
     const { kit, call, potato, bare, meal, jobs } = await boot();
     const m = await meal("2026-10-30", bare.id);
     const [jobId] = queueRecipeFillsForMeal(kit.db, m.id, now);
-    expect(jobId).toBeTruthy();
     expect(queueRecipeFill(kit.db, bare.id, now)).toBe(jobId);                 // one open job per recipe
     const facts = (await call("GET", `/api/jobs/${jobId}`)).body.facts;
     expect(facts).toMatchObject({ recipe_id: bare.id, name: "Aloo paratha" });
@@ -205,7 +204,7 @@ describe("find_patterns", () => {
 });
 
 describe("agent-jobs routine", () => {
-  it("wakes only for jobs not asked in the last 30 minutes, all in one wake, never to message the family", async () => {
+  it("asks each job once, all in one wake, never to message the family — one left unanswered is never asked again", async () => {
     const { kit, call, bare, meal, wakes, ctx, jobs } = await boot();
     await runAgentJobs(ctx as any, now);
     expect(wakes).toHaveLength(0);                                            // nothing open: no model call
@@ -220,11 +219,46 @@ describe("agent-jobs routine", () => {
     expect(wakes[0].data.jobs.map((j: { kind: string }) => j.kind).sort()).toEqual(["fill_recipe", "review_meal"]);
     expect(jobs().every((j) => j.asked_at === now.toISOString())).toBe(true);
 
-    await runAgentJobs(ctx as any, later(15));
-    expect(wakes).toHaveLength(1);                                            // asked 15 min ago
-    await runAgentJobs(ctx as any, later(31));
-    expect(wakes).toHaveLength(2);                                            // still unanswered: asked again
-    expect((await call("GET", "/api/jobs")).body.jobs).toHaveLength(2);
+    for (const min of [15, 31, 6 * 60, DAY_MIN - 60]) await runAgentJobs(ctx as any, later(min));
+    expect(wakes).toHaveLength(1);                                            // unanswered all day: never asked again
+    expect((await call("GET", "/api/jobs")).body.jobs).toHaveLength(2);       // still open until expiry, then the plain rule
+
+    queueMealReview(kit.db, m.id, later(60));                                 // the boot pass / meal hook again, nothing changed
+    queueUpcomingRecipeFills(kit.db, later(60));
+    await runAgentJobs(ctx as any, later(61));
+    expect(wakes).toHaveLength(1);
+  });
+
+  it("an unanswered job that expired is not queued again for the same meal or recipe", async () => {
+    const { kit, bare, meal, wakes, ctx, jobs } = await boot();
+    const m = await meal("2026-10-30", bare.id, { note: "kids only" });
+    queueMealReview(kit.db, m.id, now);
+    await runAgentJobs(ctx as any, now);
+    expect(wakes).toHaveLength(1);
+    const twoDaysOn = later(3 * DAY_MIN);
+    await runAgentJobs(ctx as any, twoDaysOn);                                // both past expiry: fall back
+    queueMealReview(kit.db, m.id, twoDaysOn);
+    queueUpcomingRecipeFills(kit.db, twoDaysOn);
+    await runAgentJobs(ctx as any, twoDaysOn);
+    expect(wakes).toHaveLength(1);
+    expect(jobs().filter((j) => j.status === "open")).toHaveLength(0);
+  });
+
+  it("a job whose meal was deleted closes itself and never wakes the agent; answering it is a 409", async () => {
+    const { kit, call, bare, meal, wakes, ctx, jobs } = await boot();
+    const m = await meal("2026-10-30", bare.id, { note: "kids only" });
+    queueMealReview(kit.db, m.id, now);
+    await call("DELETE", `/api/_data/meals/${m.id}`);
+    await runAgentJobs(ctx as any, now);
+    expect(wakes.flatMap((w) => w.data.jobs.map((j: { kind: string }) => j.kind))).not.toContain("review_meal");
+    expect(jobs("review_meal")[0].status).toBe("expired");
+
+    const m2 = await meal("2026-10-31", bare.id, { note: "kids only" });       // answered after its meal went: stale
+    const id2 = queueMealReview(kit.db, m2.id, now)!;
+    kit.db.delete(schema.meals).where(eq(schema.meals.id, m2.id)).run();
+    const res = await call("POST", `/api/jobs/${id2}/answer`, { adjustments: [] });
+    expect(res.status).toBe(409);
+    expect(jobs("review_meal").find((j) => j.id === id2)!.status).toBe("expired");
   });
 
   it("a failed wake un-asks the jobs so the next tick tries again", async () => {
@@ -267,14 +301,70 @@ describe("agent-jobs routine", () => {
 });
 
 describe("rolling-plan", () => {
+  const planCtx = (kit: any, wakeOk = true) => {
+    let state: unknown = null;
+    const wakes: { data: any }[] = [];
+    const notes: string[] = [];
+    const ctx = {
+      wakeAgent: async (_m: string, data?: unknown) => { wakes.push({ data }); return wakeOk ? { ok: true } : { ok: false }; },
+      notify: async (text: string) => { notes.push(text); return { ok: true }; },
+      state: { get: () => state, set: (v: unknown) => { state = v; } },
+      kit: { db: kit.db, sqlite: kit.sqlite, emitChange: () => {} },
+    };
+    return { ctx: ctx as any, wakes, notes };
+  };
+
   it("no longer carries open jobs or recipes needing ingredients", async () => {
     const { kit, bare } = await boot();
     queueRecipeFill(kit.db, bare.id, now);
-    const wakes: { data: any }[] = [];
-    await rollingPlan({ wakeAgent: async (_m: string, data?: unknown) => { wakes.push({ data }); return {}; },
-      kit: { db: kit.db, sqlite: kit.sqlite, emitChange: () => {} } } as any);
+    const { ctx, wakes } = planCtx(kit);
+    await runRollingPlan(ctx, now);
     expect(wakes).toHaveLength(1);                                            // empty slots still wake it
     expect(wakes[0].data).not.toHaveProperty("openJobs");
     expect(wakes[0].data).not.toHaveProperty("needIngredients");
+  });
+
+  it("hands each item over once: the same leftovers the next night are no model call", async () => {
+    const { kit } = await boot();
+    const { ctx, wakes } = planCtx(kit);
+    await runRollingPlan(ctx, now);
+    expect(wakes).toHaveLength(1);
+    expect(wakes[0].data.missingSlots.length).toBeGreaterThan(0);
+    await runRollingPlan(ctx, now);                                            // nothing filled, nothing new
+    expect(wakes).toHaveLength(1);
+  });
+
+  it("only what is new goes in the next wake", async () => {
+    const { kit, call } = await boot();
+    const { ctx, wakes } = planCtx(kit);
+    await runRollingPlan(ctx, now);
+    await call("POST", "/api/_data/ingredients", { name: "Tomato", category: "vegetables", default_unit: "g" });   // looks like Potato
+    await runRollingPlan(ctx, now);
+    expect(wakes).toHaveLength(2);
+    expect(wakes[1].data.missingSlots).toEqual([]);
+    expect(wakes[1].data.duplicateIngredients.map((p: any) => [p.a.name, p.b.name])).toEqual([["Potato", "Tomato"]]);
+  });
+
+  it("a wake that never reached the agent hands the same items over next time", async () => {
+    const { kit } = await boot();
+    const failing = planCtx(kit, false);
+    await runRollingPlan(failing.ctx, now);
+    const ok = planCtx(kit);
+    ok.ctx.state = failing.ctx.state;
+    await runRollingPlan(ok.ctx, now);
+    expect(ok.wakes).toHaveLength(1);
+  });
+
+  it("the near days' menus go out from the app once, with no model call; silence means they stand", async () => {
+    const { kit, meal } = await boot();
+    const { ctx, wakes, notes } = planCtx(kit);
+    await meal("2026-10-30");
+    await runRollingPlan(ctx, now);
+    expect(notes).toHaveLength(1);
+    expect(notes[0]).toContain("2026-10-30 — Breakfast: Aloo paratha");
+    expect(notes[0]).toContain("otherwise the plan stands");
+    expect(wakes[0].data).not.toHaveProperty("unconfirmedDays");
+    await runRollingPlan(ctx, later(DAY_MIN));                                 // no reply by the next night
+    expect(notes).toHaveLength(1);
   });
 });

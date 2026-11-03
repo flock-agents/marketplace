@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.0.3
+
+- **The agent is never woken about the same thing twice.** A background job is asked about once. One left unanswered
+  falls back to the app's plain rule at its expiry instead of being re-asked every 30 minutes. A job whose meal or recipe
+  was deleted (a re-planned day) closes itself, and answering it is a 409, so it is never a 404 that leaves it open.
+  The boot pass and the recipe-fill sweep no longer re-queue work that was already asked.
+- The nightly check hands each item (an empty slot, a link, a quantity, a likely duplicate, a shelf life) to the agent
+  once. What the agent or the family left alone stands, and is not asked again. Nothing new means no model call.
+- The shopping reminder, the heads-up and the near days' menus go out straight from the app, with no model call. Only
+  the price step (filling carts on the services) and placing an order wake the agent. Silence means the plan stands.
+
 ## 2.0.2
 
 - The "waiting to hear about your household" notice is inset like the samples banner above it, and no longer repeats it.

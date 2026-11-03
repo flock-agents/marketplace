@@ -43,19 +43,21 @@ function reviewFacts(db: Db, meal: MealRow, set: MealRecipe[], key: string) {
   };
 }
 
-/** Queue a review for this meal if it needs one and none is open for its current dish/note/recipes. Older open
- *  reviews of the same meal are expired: their facts no longer describe it. Returns the open job's id, if any. */
+/** Queue a review for this meal if it needs one and none was ever queued for its current dish/note/recipes (one left
+ *  unanswered is not asked again). Older open reviews of the same meal are expired: their facts no longer describe it.
+ *  Returns the open job's id, if any. */
 export function queueMealReview(db: Db, mealId: string, now = new Date()): string | null {
   const meal = loadMeal(db, mealId);
   if (!meal) return null;
   const set = recipeSets(db, [mealId]).get(mealId) ?? [];
   const key = mealReviewKey(meal.dish, meal.note, set);
-  const open = db.select().from(agent_jobs).where(and(eq(agent_jobs.kind, "review_meal"), eq(agent_jobs.subject, mealId), eq(agent_jobs.status, "open"))).all() as
-    { id: string; facts: string }[];
-  const current = open.find((j) => parseJson<{ key?: string }>(j.facts, {}).key === key);
-  for (const j of open) if (j !== current) db.update(agent_jobs).set({ status: "expired", updated_by: "app" }).where(eq(agent_jobs.id, j.id)).run();
+  const asked = db.select().from(agent_jobs).where(and(eq(agent_jobs.kind, "review_meal"), eq(agent_jobs.subject, mealId))).all() as
+    { id: string; facts: string; status: string }[];
+  const forKey = asked.filter((j) => parseJson<{ key?: string }>(j.facts, {}).key === key);
+  const current = forKey.find((j) => j.status === "open");
+  for (const j of asked) if (j.status === "open" && j !== current) db.update(agent_jobs).set({ status: "expired", updated_by: "app" }).where(eq(agent_jobs.id, j.id)).run();
   if (current) return current.id;
-  if (meal.review_for === key) return null;
+  if (meal.review_for === key || forKey.length) return null;   // asked once for this dish/note/recipes: never again
   const facts = reviewFacts(db, meal, set, key);
   if (!needsReview(meal.dish, meal.note, facts.recipes.map((r) => r.name ?? ""))) return null;
   const row = db.insert(agent_jobs).values({
@@ -96,7 +98,10 @@ export function answerMealReview(db: Db, job: { id: string; subject: string | nu
   }
   const mealId = job.subject ?? "";
   const meal = loadMeal(db, mealId);
-  if (!meal) return { ok: false, status: 404, reason: "meal_not_found" };
+  if (!meal) {
+    db.update(agent_jobs).set({ status: "expired", updated_by: "app" }).where(eq(agent_jobs.id, job.id)).run();
+    return { ok: false, status: 409, reason: "the meal is gone (re-planned or deleted): nothing to answer" };
+  }
   const facts = parseJson<{ key?: string }>(job.facts, {});
   const before = recipeSets(db, [mealId]).get(mealId) ?? [];
   if (facts.key !== mealReviewKey(meal.dish, meal.note, before)) {

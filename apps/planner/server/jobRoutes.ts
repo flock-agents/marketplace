@@ -4,7 +4,7 @@
 import type { Hono } from "hono";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import { asc, eq, inArray } from "drizzle-orm";
-import { agent_jobs } from "./db/schema";
+import { agent_jobs, meals, recipes } from "./db/schema";
 import { answerMealReview, type JobAnswerResult } from "./mealReview";
 import { answerRecipeFill } from "./recipeFill";
 import { answerFindPatterns } from "./patterns";
@@ -20,27 +20,39 @@ const ANSWERS: Record<string, Answer> = {
   find_patterns: (db, job, answer, _emit, now) => answerFindPatterns(db, job, answer, now),
 };
 
-/** An open job the agent was woken for is not asked again until this long has passed without an answer. */
-export const ASK_AGAIN_MIN = 30;
-
 export const jobView = (j: Job) => ({ ...j, facts: JSON.parse(j.facts) });
 const localStamp = (d: Date) => new Date(d.getTime() - d.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
 
-/** Open jobs past their expiry fall back (the app keeps its plain rule); returns what is still open. */
+/** The row a job is about, per kind; a job whose row was deleted (a meal re-planned away) has nothing left to answer. */
+const SUBJECT_TABLES: Record<string, typeof meals | typeof recipes> = { review_meal: meals, fill_recipe: recipes };
+function subjectGone(db: Db, j: Job): boolean {
+  const table = SUBJECT_TABLES[j.kind];
+  return !!table && !db.select({ id: table.id }).from(table).where(eq(table.id, j.subject ?? "")).get();
+}
+
+const closeJob = (db: Db, id: string, status: "fallback" | "expired") =>
+  db.update(agent_jobs).set({ status, updated_by: "app" }).where(eq(agent_jobs.id, id)).run();
+
+/** Open jobs past their expiry fall back (the app keeps its plain rule), jobs about a deleted row expire; returns
+ *  what is still open. */
 export function openJobs(db: Db, now = new Date()): Job[] {
   const stamp = localStamp(now);
   const open = db.select().from(agent_jobs).where(eq(agent_jobs.status, "open")).orderBy(asc(agent_jobs.created_at)).all() as Job[];
-  for (const j of open) if (j.expires_at < stamp) db.update(agent_jobs).set({ status: "fallback", updated_by: "app" }).where(eq(agent_jobs.id, j.id)).run();
-  return open.filter((j) => j.expires_at >= stamp);
+  return open.filter((j) => {
+    if (j.expires_at < stamp) closeJob(db, j.id, "fallback");
+    else if (subjectGone(db, j)) closeJob(db, j.id, "expired");
+    else return true;
+    return false;
+  });
 }
 
-/** Open jobs the agent hasn't been asked about, or was asked about more than ASK_AGAIN_MIN ago. */
+/** Open jobs the agent hasn't been asked about. Each job is asked ONCE: one the agent leaves unanswered is never asked
+ *  again — it falls back to the app's plain rule at its expiry. Only a wake that never reached the agent un-asks. */
 export function jobsDue(db: Db, now = new Date()): Job[] {
-  const cutoff = new Date(now.getTime() - ASK_AGAIN_MIN * 60_000).toISOString();
-  return openJobs(db, now).filter((j) => !j.asked_at || j.asked_at < cutoff);
+  return openJobs(db, now).filter((j) => !j.asked_at);
 }
 
-/** Stamp asked_at (null un-asks), so a tick or a poke in the next ASK_AGAIN_MIN doesn't ask about them again. */
+/** Stamp asked_at (null un-asks a wake that never reached the agent), so no tick or poke asks about them again. */
 export function markAsked(db: Db, ids: string[], at: string | null): void {
   if (ids.length) db.update(agent_jobs).set({ asked_at: at, updated_by: "app" }).where(inArray(agent_jobs.id, ids)).run();
 }

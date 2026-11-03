@@ -19,9 +19,10 @@ const recipeLines = (db: Db, recipeId: string): Line[] =>
   db.select({ item: recipe_ingredients.item, ingredient_id: recipe_ingredients.ingredient_id, qty: recipe_ingredients.qty, qty_per_adult: recipe_ingredients.qty_per_adult })
     .from(recipe_ingredients).where(eq(recipe_ingredients.recipe_id, recipeId)).all() as Line[];
 
-const openFillJob = (db: Db, recipeId: string) =>
-  db.select({ id: agent_jobs.id }).from(agent_jobs)
-    .where(and(eq(agent_jobs.kind, "fill_recipe"), eq(agent_jobs.subject, recipeId), eq(agent_jobs.status, "open"))).get() as { id: string } | undefined;
+/** The fill jobs ever queued for this recipe, open or not: a recipe is asked about once. */
+const fillJobsFor = (db: Db, recipeId: string) =>
+  db.select({ id: agent_jobs.id, status: agent_jobs.status }).from(agent_jobs)
+    .where(and(eq(agent_jobs.kind, "fill_recipe"), eq(agent_jobs.subject, recipeId))).all() as { id: string; status: string }[];
 
 /** Upcoming meals and the recipes each is made of. */
 function upcomingSets(db: Db, today: string) {
@@ -41,13 +42,13 @@ function fillFacts(db: Db, recipe: { id: string; name: string; ingredients: stri
   };
 }
 
-/** Ask for this recipe's lines if it has none and no fill is open for it. Returns the open job's id, if any. */
+/** Ask for this recipe's lines if it has none and none was ever asked for it. Returns the open job's id, if any. */
 export function queueRecipeFill(db: Db, recipeId: string, now = new Date()): string | null {
   const recipe = db.select({ id: recipes.id, name: recipes.name, ingredients: recipes.ingredients, method: recipes.method })
     .from(recipes).where(eq(recipes.id, recipeId)).get() as { id: string; name: string; ingredients: string | null; method: string | null } | undefined;
   if (!recipe || recipeLines(db, recipeId).length) return null;
-  const open = openFillJob(db, recipeId);
-  if (open) return open.id;
+  const asked = fillJobsFor(db, recipeId);
+  if (asked.length) return asked.find((j) => j.status === "open")?.id ?? null;   // one left unanswered is not asked again
   const today = todayStr(now);
   const row = db.insert(agent_jobs).values({
     kind: "fill_recipe", subject: recipeId, facts: JSON.stringify(fillFacts(db, recipe, today)), status: "open",
