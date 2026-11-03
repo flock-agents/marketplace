@@ -1,17 +1,14 @@
 import { Button } from "../flock/ui";
-import { connectPath, noneConnected } from "./tracker-sync";
+import { connectPath, noneConnected, toConnect } from "./tracker-sync";
 import { useTrackerSync } from "./useTrackerSync";
-
-/** Opens Flock's page for a connector: the app is framed on Flock's own origin, so the whole window goes there. */
-const openInFlock = (path: string) => { window.open(path, "_top"); };
 
 /** Fetch the newest numbers from every connected tracker now; a tracker that failed says why, beside the button, with a way
  *  to fix its connection. With no tracker connected there is nothing to sync, so the button offers to connect one. */
 export function SyncButton() {
-  const { running, failed, trackers, start } = useTrackerSync();
-  if (trackers && noneConnected(trackers)) {
-    const label = trackers.length === 1 ? `Connect ${trackers[0].name}` : "Connect a tracker";
-    return <Button variant="soft" size="sm" icon="plug" onClick={() => openInFlock(connectPath(trackers))}>{label}</Button>;
+  const { running, failed, trackers, start, asking, connect } = useTrackerSync();
+  const missing = trackers && noneConnected(trackers) ? toConnect(trackers) : undefined;
+  if (missing) {
+    return <Button variant="soft" size="sm" icon="plug" loading={asking} onClick={() => connect(missing)}>{`Connect ${missing.name}`}</Button>;
   }
   return (
     <span className="db-sync">

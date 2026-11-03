@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.5
+
+- Connect Zepp asks the coach instead of opening Flock's connector page: an account added there was not given to the coach, so the app could not read it. The coach asks the owner in Flock for this person's own account (`connect-tracker` intent), at most once every 3 minutes, and the button says where to approve it.
+
 ## 1.0.4
 
 - The History page's event actions use the kit's `Row` instead of an inline style, so the app passes Flock's layout check unchanged and an installed copy is no longer edited (and flagged customized) to fix it.

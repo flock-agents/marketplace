@@ -7,6 +7,7 @@ import { kitStore } from "./trackers/store";
 import { SYNC_ROUTINE, syncNow } from "./trackers/sync-now";
 import { CALL_TIMEOUT_MS, NOT_SET_UP, runTrackers, trackerStates, type ConnectorState, type ListConnectors } from "./trackers/run";
 import { TRACKERS } from "./trackers";
+import { CONNECT_INTENT, trackerConnector } from "./trackers/connect";
 import type { Tracker } from "./trackers/types";
 import { LOOKBACK_DAYS } from "./trackers/zepp/config";
 import { paceParams, paceSettings } from "./pace/params";
@@ -76,7 +77,10 @@ flock.setRoutines({
   [DAILY_PLAN_ROUTINE]: coachRoutine(setUp, "Time for today's plan.", apiPath),
   [WEEKLY_REVIEW_ROUTINE]: coachRoutine(setUp, "Time for the weekly summary.", apiPath),
 });
-flock.hono.route("/api/trackers", trackerRoutes(sync, () => trackerStates(TRACKERS, listConnectors)));
+const states = () => trackerStates(TRACKERS, listConnectors);
+// Connect: the coach asks the owner for this person's own account, so it lands on the coach the app reads trackers through
+const askToConnect = (tracker: { name: string; skillId: string }) => flock.platform.agent.intent(CONNECT_INTENT, { ...tracker, person: person() });
+flock.hono.route("/api/trackers", trackerRoutes(sync, states, trackerConnector(states, askToConnect)));
 flock.hono.route("/api", paceRoutes(pace, () => sync.status().last?.todayAsOf ?? null));   // the pace check's parameters and what it decides now
 flock.hono.route("/api", todayRoutes(kit));                   // the day's numbers against their targets: today, and past days
 // a tapped planned meal with no numbers yet: `api` is this app's own path for the coach's logging call

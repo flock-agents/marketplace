@@ -2,10 +2,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { kitFetch, useToast } from "../flock/ui";
 import type { SyncView } from "../../server/trackers/routes";
 import type { TrackerResult, TrackerState } from "../../server/trackers/run";
-import { failedTrackers, outcomeToast } from "./tracker-sync";
+import { connectToast, failedTrackers, outcomeToast } from "./tracker-sync";
 
 const POLL_MS = 5000;
 const STATUS = "trackers/sync-now";
+const CONNECT = "trackers/connect";
 
 /** The Sync button's state: start a pass over every connected tracker, follow it until it finishes, then say how it went. */
 export function useTrackerSync() {
@@ -44,5 +45,16 @@ export function useTrackerSync() {
     catch { setRunning(false); show.current({ message: "Couldn't start the sync", tone: "danger" }); }
   }, [follow]);
 
-  return { running, failed, trackers, start };
+  // Connect goes through the coach: it asks the owner in Flock, so the account lands on the coach the app reads it through.
+  const [asking, setAsking] = useState(false);
+  const connect = useCallback(async (tracker: TrackerState) => {
+    setAsking(true);
+    try {
+      await kitFetch(CONNECT, { method: "POST", body: JSON.stringify({ id: tracker.id }) });
+      show.current({ message: connectToast(tracker), tone: "success" });
+    } catch { show.current({ message: `Couldn't ask the coach to connect ${tracker.name}`, tone: "danger" }); }
+    finally { setAsking(false); }
+  }, []);
+
+  return { running, failed, trackers, start, asking, connect };
 }
