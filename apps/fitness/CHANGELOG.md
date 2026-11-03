@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.6
+
+- Needs Flock 0.22.1 (the kit's `useChat`). While the app is idle its chat stays the usual side chat (a sheet on a phone); Tell the coach about you opens it and sends the setup ask, instead of switching to a full-page Chat tab.
+- `flock.marketplace.json` carries the app's version again (it had stayed at 1.0.3).
+
 ## 1.0.5
 
 - Connect Zepp asks the coach instead of opening Flock's connector page: an account added there was not given to the coach, so the app could not read it. The coach asks the owner in Flock for this person's own account (`connect-tracker` intent), at most once every 3 minutes, and the button says where to approve it.
