@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Button, Card, Chart, Empty, ErrorCard, Form, Page, RowList, Section, Skeleton, StatStrip, Tabs, Value, useTable } from "../flock/ui";
+import { Button, Card, Chart, Empty, ErrorCard, Form, Page, Row, RowList, Section, Skeleton, StatStrip, Tabs, Value, useTable } from "../flock/ui";
 import { RUNNING_TOTALS, canonicalKind } from "../../server/db/constants";
 import { EVENT_FIELDS, KIND_TONES, deltaOf, headlineReadings, kindOf, localDate, nutritionText, statValue, todayLocal, whenText, type DashEvent, type Metric } from "./shared";
 import { useDelete } from "./useDelete";
@@ -71,11 +71,11 @@ export function HistoryPage() {
           title={(e) => e.title}
           meta={(e) => [whenText(e.at), nutritionText(e)].filter(Boolean).join(" · ")}
           trailing={(e) => (
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+            <Row align="center" gap="xs">
               <Value kind="select" value={canonicalKind(e.kind)} tones={KIND_TONES} />
               <Button size="sm" variant="ghost" icon="pencil" onClick={() => setEditing(e)}>Edit</Button>
               <Button size="sm" variant="ghost" icon="trash" onClick={() => delEvent.ask(e)}>Delete</Button>
-            </span>
+            </Row>
           )}
           empty={<Empty title="Nothing has happened yet" hint="Events the assistant posts show up here." object="globe" />}
         /></div>

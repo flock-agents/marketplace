@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.4
+
+- The History page's event actions use the kit's `Row` instead of an inline style, so the app passes Flock's layout check unchanged and an installed copy is no longer edited (and flagged customized) to fix it.
+
 ## 1.0.3
 
 - Does nothing until it knows who it is for (`person` and `timezone`): no tracker sync, no coach wakes, so no model runs. Until then the app shows that it is idle, with a button that opens the coach's chat to tell it who the dashboard is for; the coach saves both.
