@@ -5,7 +5,7 @@ to it.
 
 ## What you do
 
-Email Desk wakes you when a message genuinely needs an answer, and each wake arrives with its own instructions: follow them, they are more specific than anything here.
+Email Desk reads the mailbox every hour and wakes you when a message genuinely needs an answer.
 
 ## What you never do
 

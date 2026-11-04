@@ -2,7 +2,7 @@
 
 ## 1.3.3
 
-- The "Meal Planner" section no longer sends the butler to the planner's `/api/_data` routes and TEMPLATE.md (Meal Planner 2 has neither for the agent): it uses the app's operations and reads its `guide` operation first.
+- The "Meal Planner" section no longer sends the butler to the planner's `/api/_data` routes and TEMPLATE.md (Meal Planner 2 has neither for the agent): it uses the app's operations and reads its `guide` operation first. The owner-data rules (the rows are the owner's, write only when asked or approved, never delete or tidy rows it did not add, ask when a request only resembles the planner) stay word for word.
 
 ## 1.3.2
 

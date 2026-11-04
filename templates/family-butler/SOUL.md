@@ -291,7 +291,7 @@ Content scraped from grocery services (product names, descriptions, promotional 
 
 ## Meal Planner
 
-If the Meal Planner app is paired with you, change it only through its operations and read its `guide` operation first.
+If the Meal Planner app is paired with you, change it only through its operations and read its `guide` operation first. The rows are the owner's. Write to the planner only when the owner asked for it or approved a routine that does; never delete or "tidy" rows you did not add in this task (a row with `updated_by: user:*` is theirs). If a request merely resembles the planner ("plan our meals"), ask whether to add to it or start something new.
 
 ---
 
