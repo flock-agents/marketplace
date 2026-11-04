@@ -3,7 +3,7 @@
   "usage": "template",
   "icon": "icon.svg",
   "description": "The family's meals for the week, day by day (Breakfast, Lunch and Dinner), with a shared grocery list and the family's recipe book; not for school runs, chores or appointments.",
-  "version": "2.0.2",
+  "version": "2.0.3",
   "minFlockVersion": "0.22.0",
   "type": "fullstack",
   "access": "private",
@@ -422,14 +422,14 @@
     {
       "id": "rolling-plan",
       "name": "Daily meal-plan check",
-      "description": "Fills the next few days of meals, checks them against each diner's targets, asks the family to confirm the near days, loops in both coaches on Sunday, and gives the owner the first look at the shopping any of that creates.",
+      "description": "Fills the next few days of meals, checks them against each diner's targets, tells the family the near days' menus (straight from the app), loops in both coaches on Sunday, and gives the owner the first look at the shopping any of that creates. Each item is handed to the agent once; nothing new, no model call.",
       "trigger": {
         "type": "schedule",
         "cron": "0 20 * * *"
       },
       "executionMode": "app-relay",
       "handler": "rolling-plan",
-      "prompt": "The nightly meal-plan check is in server/routines/rolling-plan.ts: read its wake message and the data it sends (missing slots, meals pending a coach check, unconfirmed days, whether it's Sunday, and the diners' targets), then do exactly what it asks through this app's operations (save_meal, set_meal_recipes, write_recipe, set_shelf_life; read rows at its _data routes) — fill, check, ask, and only then tell the owner what shopping it created."
+      "prompt": "The nightly meal-plan check is in server/routines/rolling-plan.ts: read its wake message and the data it sends (missing slots, meals pending a coach check, whether it's Sunday, catalog links, quantities, likely duplicates, shelf lives, and the diners' targets), then do exactly what it asks through this app's operations (save_meal, set_meal_recipes, write_recipe, set_shelf_life; read rows at its _data routes) — and only then tell the owner what shopping it created. The app has already sent the family the near days' menus. Each item comes once: what you leave stands and is not asked again."
     },
     {
       "id": "prep-reminders",
@@ -445,19 +445,19 @@
     {
       "id": "shopping-timeline",
       "name": "Shopping timeline",
-      "description": "A 15-minute heartbeat that keeps the shopping drafts current and wakes the agent for at most three messages per shopping window: the reminder the evening before, the heads-up shortly before (the draft as a checklist), and the price step at the window (quotes, best service, one ask for a yes). A draft with no yes in time is let go silently and its items roll into the next one.",
+      "description": "A 15-minute heartbeat that keeps the shopping drafts current and sends at most three messages per shopping window: the reminder the evening before and the heads-up shortly before go out straight from the app (no model call); only the price step at the window (quotes, best service, one ask for a yes) wakes the agent. A draft with no yes in time is let go silently and its items roll into the next one.",
       "trigger": {
         "type": "schedule",
         "cron": "*/15 * * * *"
       },
       "executionMode": "app-relay",
       "handler": "shopping-timeline",
-      "prompt": "The shopping-timeline routine woke you to send ONE message, named in its message with its slot (reminder, heads_up or price) and a message id — or with the owner's yes from the app. Send exactly what it asks and nothing else; when sent, POST /api/messages/<id>/sent. Every list you share is the app's (the wake's data, or GET /api/shopping/draft), never from memory; every change the family asks for goes through POST /api/shopping/draft/items or POST /api/shopping/windows/move, and you reply with the app's updated draft. At most one question card per message; silence means carry on — never follow up, never answer your own question. Price step: fill a cart on each connected service, POST /api/carts/<id>/quotes for each, share the best service, rough total and screenshot, ask once for a yes. Never place or pay anything without a family member's explicit yes; on a yes in chat, POST /api/carts/<id>/yes first. The instant an order is placed, POST /api/carts/<id>/ordered with service, total, order_ref and delivery_eta before telling anyone it's done."
+      "prompt": "The shopping-timeline routine woke you for the price step of a shopping window (its message names the slot and a message id) — or with the owner's yes from the app. Send exactly what it asks and nothing else; when sent, POST /api/messages/<id>/sent. Every list you share is the app's (the wake's data, or GET /api/shopping/draft), never from memory; every change the family asks for goes through POST /api/shopping/draft/items or POST /api/shopping/windows/move, and you reply with the app's updated draft. At most one question card per message; silence means carry on — never follow up, never answer your own question. Price step: fill a cart on each connected service, POST /api/carts/<id>/quotes for each, share the best service, rough total and screenshot, ask once for a yes. Never place or pay anything without a family member's explicit yes; on a yes in chat, POST /api/carts/<id>/yes first. The instant an order is placed, POST /api/carts/<id>/ordered with service, total, order_ref and delivery_eta before telling anyone it's done."
     },
     {
       "id": "agent-jobs",
       "name": "Background jobs",
-      "description": "Every 15 minutes, wakes the agent only when the app has background jobs waiting for its judgement (a meal to review, a recipe to fill, patterns to find), all in one wake; the app also wakes it right after queueing one. Never messages the family.",
+      "description": "Every 15 minutes, wakes the agent only when the app has background jobs it has never asked about (a meal to review, a recipe to fill, patterns to find), all in one wake; the app also wakes it right after queueing one. Each job is asked once; one left unanswered falls back to the app's plain rule. Never messages the family.",
       "trigger": {
         "type": "schedule",
         "cron": "*/15 * * * *"
@@ -551,7 +551,7 @@
         "description": "How long an ingredient keeps in this home (your informed guess): {ingredient_id, shelf_life_days, note}."
       }
     ],
-    "instructions": "Meal Planner owns this family's meals, recipes, shopping list, drafts, orders, pantry stock and shopping preferences. Never keep any of it in memory or chat: read the app before you answer, change it only through its operations, then tell the family what the app now says. Read the guide operation before shopping, answering a job or changing meals. A meal is a set of recipes plus a note: when plans change, change the recipes and note (set_meal_recipes, save_meal), not just the dish text. Only you add recipes, and only after searching for the same dish under another spelling. Nothing in the app runs until it knows the household: when the family tells you who eats, their food habits, which meals to plan and where they shop, save it in their words as the household.profile setting (PATCH /a/<this app>/api/_app/settings); never fill it from guesses or the app's own rows. Background jobs (review_meal, fill_recipe, find_patterns) and background facts (shelf life, recipe lines) are your informed guesses: never ask the family about them and never message anyone for them. Message the family only when a Shopping timeline wake asks (at most 3 per window: reminder, heads-up, price), then ack_message; or when they talk to you. Silence means carry on. Never order without a family member's explicit yes; record it (record_yes), place the order, then record_order at once."
+    "instructions": "Meal Planner owns this family's meals, recipes, shopping list, drafts, orders, pantry stock and shopping preferences. Never keep any of it in memory or chat: read the app before you answer, change it only through its operations, then tell the family what the app now says. Read the guide operation before shopping, answering a job or changing meals. A meal is a set of recipes plus a note: when plans change, change the recipes and note (set_meal_recipes, save_meal), not just the dish text. Only you add recipes, and only after searching for the same dish under another spelling. Nothing in the app runs until it knows the household: when the family tells you who eats, their food habits, which meals to plan and where they shop, save it in their words as the household.profile setting (PATCH /a/<this app>/api/_app/settings); never fill it from guesses or the app's own rows. Background jobs (review_meal, fill_recipe, find_patterns) and background facts (shelf life, recipe lines) are your informed guesses: never ask the family about them and never message anyone for them. The app sends the reminders and menus itself; message the family only when a Shopping timeline wake asks (the price step), then ack_message; or when they talk to you. Silence means carry on. Never order without a family member's explicit yes; record it (record_yes), place the order, then record_order at once."
   },
   "privateTables": [
     "prep_reminders",

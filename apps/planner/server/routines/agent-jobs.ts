@@ -1,6 +1,6 @@
 // Background jobs, answered promptly (docs/V3-FLOW-SPEC.md "Asking the agent for help"). A 15-minute heartbeat
-// that wakes the agent only when an open job hasn't been asked about in the last ASK_AGAIN_MIN, with every such
-// job in one wake. The app decides WHEN to ask; the wake hands over the facts and the agent decides WHAT. Never a
+// that wakes the agent only when an open job has never been asked about, with every such job in one wake; a job is
+// asked once, and one left unanswered falls back at its expiry (jobRoutes.ts jobsDue). The app decides WHEN to ask; the wake hands over the facts and the agent decides WHAT. Never a
 // message to the family: these are background work, answered with informed guesses.
 // Between ticks, index.ts pokes the same routine right after it queues a job (createJobsWaker, debounced).
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
@@ -57,7 +57,8 @@ export function jobsWake(jobs: Job[]): { message: string; data: unknown } {
   };
 }
 
-/** Wake the agent for every due job, in one wake; nothing due → no wake. A failed wake un-asks them for the next tick. */
+/** Wake the agent for every due job, in one wake; nothing due → no wake. A wake that never reached the agent un-asks
+ *  them for the next tick. */
 export async function askDueJobs(db: Db, wake: Wake, now: Date): Promise<string[]> {
   const due = jobsDue(db, now);
   if (!due.length) return [];
@@ -66,7 +67,7 @@ export async function askDueJobs(db: Db, wake: Wake, now: Date): Promise<string[
   const { message, data } = jobsWake(due);
   const res = await wake(message, data).catch((e) => ({ ok: false, reason: String(e) }) as WakeResult);
   if (res.ok) return ids;
-  for (const j of due) markAsked(db, [j.id], j.asked_at);
+  markAsked(db, ids, null);
   return [];
 }
 

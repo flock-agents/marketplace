@@ -1,7 +1,8 @@
 // A 15-minute heartbeat (docs/V3-FLOW-SPEC.md "Timeline for one shopping window"): keeps the plan current, lets go
-// drafts nobody said yes to (silently, inside refreshShopping), and wakes the agent for exactly the message a window
-// is due — reminder, heads-up or price — each once, inside the budget and quiet hours (server/messages.ts). The agent
-// sends what the app asks, nothing more; nothing due → no model call.
+// drafts nobody said yes to (silently, inside refreshShopping), and sends exactly the message a window is due, each
+// once, inside the budget and quiet hours (server/messages.ts). The reminder and the heads-up are the app's own words
+// (ctx.notify, no model call); only the price step needs the agent (filling carts on the services), so only it wakes
+// the agent. Nothing due → nothing sent.
 import { appEmit } from "../appEmit";
 import { eq } from "drizzle-orm";
 import type { Database } from "bun:sqlite";
@@ -10,12 +11,13 @@ import { carts } from "../db/schema";
 import { settingsReaderFrom } from "../settings";
 import { orderAtOf, refreshShopping } from "../shopping";
 import { draftView, type DraftView } from "../draft";
-import { cancelMessage, requestMessage, type MessageSlot } from "../messages";
+import { cancelMessage, markMessageSent, requestMessage, type MessageSlot } from "../messages";
 import { pantryCheckDue, type PantryDue } from "../stock";
 import { rememberRoutineId } from "../routineRegistry";
 
 interface Ctx {
   wakeAgent(message: string, data?: unknown): Promise<unknown>;
+  notify(text: string): Promise<unknown>;
   routine: { id: string };
   platform: { dataDir: string };
   kit: { db: BunSQLiteDatabase<any>; sqlite: Database; emitChange(table: string, id: string, op: "insert" | "update" | "delete", by: string): void };
@@ -32,32 +34,21 @@ const ack = (id: string) => `When it's sent, call ack_message {message_id: "${id
 const base = (v: DraftView, slot: MessageSlot, messageId: string) =>
   ({ slot, message_id: messageId, cart_id: v.id, order_at: v.order_at, span: v.span, lines: lineFacts(v) });
 
-/** The heads-up card: the draft as a Flock chat Checklist, every line ticked — unticking drops it. */
-export function draftChecklistCard(v: DraftView) {
-  return {
-    type: "MiniApp", id: `draft-${v.id}`, props: { title: v.span ? `Next order · ${v.span.label}` : "Next order" },
-    children: [{ type: "Checklist", id: "lines", props: { items: v.lines.map((l) => ({ id: l.key, label: l.item, done: true, ...(l.range ? { meta: l.range } : {}) })) } }],
-  };
+/** Lines as one readable list, kept well under the platform's 4,000-character message limit. */
+const MAX_LISTED_LINES = 40;
+function linesText(v: DraftView): string {
+  const listed = v.lines.slice(0, MAX_LISTED_LINES).map((l) => (l.range ? `${l.item} (${l.range})` : l.item));
+  const more = v.lines.length - listed.length;
+  return listed.join(", ") + (more > 0 ? ` and ${more} more` : "");
 }
 
-export function reminderWake(v: DraftView, messageId: string, pantry: PantryDue[]): Wake {
-  const ask = pantry.length
-    ? " data.pantry_check lists kitchen items due a check: ask ONE question (one question card) about the few that matter for these meals, and apply the answers through the app."
-    : " Ask nothing unless something in it needs the family.";
-  return {
-    message: `Shopping reminder (message slot: reminder, message id ${messageId}). The next order is due ${when(v.order_at)} (cart ${v.id})${spanText(v)}. `
-      + `Send the family ONE short message: what's due and when, and the meals it covers, from data.lines.${ask} ${RULES} ${ack(messageId)}`,
-    data: { ...base(v, "reminder", messageId), pantry_check: pantry },
-  };
+export function reminderText(v: DraftView, pantry: PantryDue[]): string {
+  const check = pantry.length ? ` Worth a look at home: ${pantry.slice(0, 8).map((p) => p.name).join(", ")} — mark anything low or out in the planner's Pantry.` : "";
+  return `🛒 Next grocery order ${when(v.order_at)}${spanText(v)}: ${linesText(v)}.${check}`;
 }
 
-export function headsUpWake(v: DraftView, messageId: string): Wake {
-  return {
-    message: `Shopping heads-up (message slot: heads_up, message id ${messageId}). The order${spanText(v)} goes out at ${when(v.order_at)} (cart ${v.id}). `
-      + `Post data.card as it is (a flock-ui block: the app's draft, every line ticked) with "Anything to cancel or add?". Unticked lines → edit_draft `
-      + `{cart_id, remove: [their ids]}; anything they name → edit_draft {cart_id, add: [{item, qty}]}. No reply = the list stands. ${RULES} ${ack(messageId)}`,
-    data: { ...base(v, "heads_up", messageId), card: draftChecklistCard(v) },
-  };
+export function headsUpText(v: DraftView): string {
+  return `🛒 The order${spanText(v)} goes out at ${when(v.order_at)}: ${linesText(v)}. Anything to cancel or add? Change it in the planner's Shopping tab — otherwise the list stands.`;
 }
 
 export function priceWake(v: DraftView, messageId: string, services: unknown): Wake {
@@ -100,9 +91,13 @@ export async function runShoppingTimeline(ctx: Ctx, now: Date): Promise<void> {
     const slot = v.next_message.slot;
     const messageId = requestMessage(db, cart.id, slot, now);
     if (!messageId) continue;
-    const wake = slot === "reminder" ? reminderWake(v, messageId, pantryCheckDue(db, now))
-      : slot === "heads_up" ? headsUpWake(v, messageId)
-      : priceWake(v, messageId, settings.get("services"));
+    if (slot !== "price") {
+      const text = slot === "reminder" ? reminderText(v, pantryCheckDue(db, now)) : headsUpText(v);
+      if (delivered(await ctx.notify(text).catch(() => null))) markMessageSent(db, messageId, now);
+      else cancelMessage(db, messageId);   // never sent: tried again next tick
+      continue;
+    }
+    const wake = priceWake(v, messageId, settings.get("services"));
     const res = await ctx.wakeAgent(wake.message, wake.data).catch(() => null);
     if (!delivered(res)) cancelMessage(db, messageId);   // never reached the agent: asked again next tick
   }

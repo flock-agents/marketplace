@@ -74,17 +74,14 @@ only if a meal they're for is still after that order arrives; the family's own a
 `get_draft` → `{draft:{id, order_at, span:{label:"Thu breakfast → Sat dinner"}, lines, removed, quotes, best, yes,
 next_message, …}}`. Always quote the span when sharing a list.
 
-The app's **Shopping timeline** routine wakes you for exactly these messages; each wake names its slot and a message id.
-Send that one message, then `ack_message` `{message_id}`. Send nothing else.
+The app sends a window's first two messages itself, with no wake: the **reminder** the evening before (what's due, the
+span, and the kitchen items worth a look) and the **heads-up** shortly before ("Anything to cancel or add?"). Replies
+reach you as usual: apply them with the operations below.
 
-1. **reminder** (evening before): what's due and when, with the span. If `data.pantry_check` lists items, add ONE short
-   question about the few that matter for the coming meals ("For this week's dal tadka and rajma — enough toor dal and
-   rajma?"). Post their answer: `pantry_answer` `{items:[{ingredient_id, have:"yes"|"low"|"out"}]}` (unmentioned = yes).
-2. **heads_up** (15 min before): post `data.card` as is (a Checklist of the draft, all ticked) with "Anything to cancel or
-   add?". Unticked ids → `edit_draft` `remove`; named items → `add`.
-3. **price** (at the order time): fill a cart on each service in `data.services` (below), post each with `add_quote`
-   `{cart_id, service, total, fees?, lines?, screenshot_url?}`, then share the app's `best` service, the rough total and the
-   screenshot, and ask once for a yes.
+The app's **Shopping timeline** routine wakes you only for the **price** step (at the order time), with its message id:
+fill a cart on each service in `data.services` (below), post each with `add_quote`
+`{cart_id, service, total, fees?, lines?, screenshot_url?}`, then share the app's `best` service, the rough total and the
+screenshot, and ask once for a yes. Then `ack_message` `{message_id}`. Send nothing else.
 
 Chat edits, any time before the yes — then reply with the draft as the app now has it:
 
