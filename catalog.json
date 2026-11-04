@@ -490,8 +490,8 @@
       "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "templates/inbox-assistant",
-      "latestVersion": "1.0.1",
-      "latestTag": "inbox-assistant-v1.0.1",
+      "latestVersion": "1.0.2",
+      "latestTag": "inbox-assistant-v1.0.2",
       "minFlockVersion": "0.7.0",
       "onboardingCard": {
         "id": "email",
@@ -505,7 +505,7 @@
         ]
       },
       "publishedAt": "2026-09-28T00:00:00Z",
-      "updatedAt": "2026-10-27T00:00:00Z"
+      "updatedAt": "2026-11-05T00:00:00Z"
     },
     {
       "slug": "bookings",
