@@ -13,7 +13,7 @@
     "tasks",
     "team"
   ],
-  "minFlockVersion": "0.7.0",
+  "minFlockVersion": "0.23.1",
   "sortOrder": 40,
   "agent": {
     "defaultName": "Slack Assistant",
