@@ -2,7 +2,7 @@
   "name": "Slack Assistant",
   "slug": "slack-assistant",
   "description": "Remembers what happens in your Slack and tells you what you missed",
-  "version": "1.1.3",
+  "version": "1.1.4",
   "author": "flock",
   "icon": "icon.svg",
   "bird": "bird:parrot;color=tomato;head=headphones",
@@ -13,7 +13,7 @@
     "tasks",
     "team"
   ],
-  "minFlockVersion": "0.7.0",
+  "minFlockVersion": "0.23.1",
   "sortOrder": 40,
   "agent": {
     "defaultName": "Slack Assistant",

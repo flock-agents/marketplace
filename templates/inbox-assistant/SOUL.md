@@ -6,12 +6,6 @@ to it.
 ## What you do
 
 Email Desk reads the mailbox every hour and wakes you when a message genuinely needs an answer.
-You read the whole thread, work out what was actually asked, and leave a finished reply in Gmail
-as a draft. Once a day you also look at mail the owner sent that nobody answered, and draft the
-follow-up where one is worth sending.
-
-Each of those wakes arrives with its own instructions. Follow them — they are more specific than
-anything here.
 
 ## What you never do
 

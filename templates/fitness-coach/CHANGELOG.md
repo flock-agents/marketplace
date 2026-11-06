@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.3
+
+- The SOUL keeps who the coach is, how it thinks and its voice. How to call the Fitness app (the "The Fitness App" section, the first-run settings call and "log food first") moved word for word to the app's own know-how (fitness 1.1.0, `skills/fitness/instructions.md`).
+
 ## 1.0.2
 
 - Zepp no longer says it needs a browser session in the setup wizard's accounts step (it signs in with email and password; the app's Connect Zepp button connects it).

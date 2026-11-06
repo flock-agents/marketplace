@@ -4,7 +4,7 @@
   "usage": "template",
   "icon": "🏋️",
   "description": "Today and Yesterday against the goals in focus (exercise, diet, water, and activity and sleep from a connected tracker): the workout plan and planned meals beside what was done and eaten, tomorrow's plans, history and an exercise library.",
-  "version": "1.0.6",
+  "version": "1.1.0",
   "author": "flock",
   "category": "health",
   "tags": [
@@ -15,7 +15,7 @@
     "workout",
     "zepp"
   ],
-  "minFlockVersion": "0.22.1",
+  "minFlockVersion": "0.23.1",
   "type": "fullstack",
   "access": "private",
   "spa": true,
@@ -105,6 +105,13 @@
       }
     ]
   },
+  "publishedSkills": [
+    {
+      "id": "fitness",
+      "name": "Fitness know-how",
+      "description": "How to read and write the Fitness dashboard: readings, meals, workouts, plans, water, goals in focus, trackers and first-run settings."
+    }
+  ],
   "routines": [
     {
       "id": "tracker-sync",
@@ -128,7 +135,7 @@
       },
       "executionMode": "app-relay",
       "handler": "daily-plan",
-      "prompt": "Morning plan. Your Fitness app's API is `$FLOCK_API_URL/a/<its app id>/api` (find it under your apps); read its settings first (`GET <api>/_app`: `person`, `timezone`) and work on the person's own day in their time zone. Choose today's best exercises for them, suited to the health notes, equipment and level you remember (ask once and remember if you do not know them). Reuse the library first: `GET <api>/exercises` lists the preloaded and added exercises with their `slug`. For an exercise not in it, search the web for a GIF that clearly shows correct form, from a reputable source (link the .gif/.webp/.mp4 file itself, not its page), and add it: `POST <api>/exercises` with `{\"name\": \"Cable face pull\", \"notes\": \"muscles worked and key cues\", \"gifUrl\": \"https://…/face-pull.gif\"}`. The app downloads the picture itself; if it refuses it (a 422 says why), try one other picture or add the exercise without `gifUrl`. Never hold up the plan for a picture. Then set today's workout plan with each item's `exercise` slug: `PUT <api>/plan` `{\"date\": \"YYYY-MM-DD\", \"items\": [{\"name\": \"Goblet squat\", \"dose\": \"3x12\", \"exercise\": \"goblet-squat\"}]}`. Set today's and tomorrow's planned meals with their numbers (`PUT <api>/meal-plan`) if they plan meals, keeping to their food preferences. Then send them one short message: today's workout and the day's targets. No lecture."
+      "prompt": "Morning plan. Your Fitness app's API is `<app>/api` (see the app's know-how); read its settings first (`GET <api>/_app`: `person`, `timezone`) and work on the person's own day in their time zone. Choose today's best exercises for them, suited to the health notes, equipment and level you remember (ask once and remember if you do not know them). Reuse the library first: `GET <api>/exercises` lists the preloaded and added exercises with their `slug`. For an exercise not in it, search the web for a GIF that clearly shows correct form, from a reputable source (link the .gif/.webp/.mp4 file itself, not its page), and add it: `POST <api>/exercises` with `{\"name\": \"Cable face pull\", \"notes\": \"muscles worked and key cues\", \"gifUrl\": \"https://…/face-pull.gif\"}`. The app downloads the picture itself; if it refuses it (a 422 says why), try one other picture or add the exercise without `gifUrl`. Never hold up the plan for a picture. Then set today's workout plan with each item's `exercise` slug: `PUT <api>/plan` `{\"date\": \"YYYY-MM-DD\", \"items\": [{\"name\": \"Goblet squat\", \"dose\": \"3x12\", \"exercise\": \"goblet-squat\"}]}`. Set today's and tomorrow's planned meals with their numbers (`PUT <api>/meal-plan`) if they plan meals, keeping to their food preferences. Then send them one short message: today's workout and the day's targets. No lecture."
     },
     {
       "id": "weekly-review",
@@ -140,7 +147,7 @@
       },
       "executionMode": "app-relay",
       "handler": "weekly-review",
-      "prompt": "Weekly progress summary. Your Fitness app's API is `$FLOCK_API_URL/a/<its app id>/api` (find it under your apps); read its settings first (`GET <api>/_app`: `person`, `timezone`) and work on the person's own day in their time zone. Read the last 7 finished days (`GET <api>/days?days=7`, `GET <api>/nutrition?days=7`) and send the person one short summary: what went well, what slipped against the goals, the weight trend if there is one, and one change for next week. Adjust a target only when the trend calls for it, and say so."
+      "prompt": "Weekly progress summary. Your Fitness app's API is `<app>/api` (see the app's know-how); read its settings first (`GET <api>/_app`: `person`, `timezone`) and work on the person's own day in their time zone. Read the last 7 finished days (`GET <api>/days?days=7`, `GET <api>/nutrition?days=7`) and send the person one short summary: what went well, what slipped against the goals, the weight trend if there is one, and one change for next week. Adjust a target only when the trend calls for it, and say so."
     }
   ],
   "settings": [

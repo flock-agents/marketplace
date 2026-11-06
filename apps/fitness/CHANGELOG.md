@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.0
+
+- The app carries its own know-how: `skills/fitness/instructions.md`, published as the `fitness` skill (`publishedSkills`). It holds how to call the app (readings and their labels, meals in one call, workouts, the plan and meal-plan PUTs, water, goals in focus, trackers and the pace check, first-run settings, "log food first"), moved word for word from the Fitness Coach template's SOUL. A Flock that delivers app know-how gives it to whichever agent drives the app.
+- The Morning plan and Weekly summary prompts no longer repeat where the app's API is; they point at the know-how for `<app>`.
+
 ## 1.0.6
 
 - Needs Flock 0.22.1 (the kit's `useChat`). While the app is idle its chat stays the usual side chat (a sheet on a phone); Tell the coach about you opens it and sends the setup ask, instead of switching to a full-page Chat tab.

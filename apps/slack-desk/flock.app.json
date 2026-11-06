@@ -39,6 +39,13 @@
     "readyTimeoutMs": 15000,
     "maxRestarts": 3
   },
+  "publishedSkills": [
+    {
+      "id": "slack-desk",
+      "name": "Slack Desk know-how",
+      "description": "What Slack Desk reads each day, what it remembers and surfaces, and that it reads only."
+    }
+  ],
   "routines": [
     {
       "id": "memory-extraction",
@@ -100,6 +107,18 @@
           "_comment": "A ceiling on a day's spend. A pass that hits it defers the rest, records why it stopped, and leaves the day claimable so the next hourly tick resumes it — ranked so what concerns the owner goes first and a deferred conversation ages into priority."
         }
       ]
+    },
+    {
+      "id": "morning-digest",
+      "name": "Morning digest",
+      "description": "Weekday mornings at 9, the agent reads what Slack Desk holds and gives you a prioritized summary of your Slack TODOs and mentions. One AI run each weekday; nothing is ever posted.",
+      "trigger": {
+        "type": "schedule",
+        "cron": "0 9 * * 1-5"
+      },
+      "executionMode": "llm",
+      "_executionComment": "llm, not app-relay: there is nothing for the app's code to gather or gate, and an app-relay routine would reach this app's tick, which harvests for every routine it is handed.",
+      "prompt": "Morning Slack digest. Read what Slack Desk holds from the last 16 hours: the Slack TODOs it surfaced and the conversations it remembered that mention the owner. Give the owner a prioritized summary of their Slack TODOs and mentions, what needs them first at the top. If there is nothing, say so in one line."
     }
   ],
   "buildCommand": "bun install"
