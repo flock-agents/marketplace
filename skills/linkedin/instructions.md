@@ -7,7 +7,6 @@ category: integration
 requiresInstance: true
 auth:
   type: browser_session
-  provider: authenticated-crawl
   session_name: linkedin
   setup_instructions: "I'll need a LinkedIn browser session to read your notifications, feed, and messages. Log in via the Flock dashboard."
 tier: installable
