@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.0.4
+
+- The week page keeps working when a readiness reply carries no `statuses`: each meal falls back to the local rows instead of the page failing.
+
 ## 2.0.3
 
 - **The agent is never woken about the same thing twice.** A background job is asked about once. One left unanswered
