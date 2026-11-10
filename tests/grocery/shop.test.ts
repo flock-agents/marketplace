@@ -13,7 +13,8 @@ import {
   cartReadScript, emptyCartScript, addressScript,
   type SavedAddress, type ShopSite,
 } from "../../skills/bigbasket/scripts/_shop";
-import { BIGBASKET, searchScript } from "../../skills/bigbasket/scripts/_bigbasket";
+import { BIGBASKET, searchScript, addFromSearchScript } from "../../skills/bigbasket/scripts/_bigbasket";
+import { BLINKIT_SITE } from "../../skills/zomato-blinkit/scripts/_blinkit";
 
 const skills = join(import.meta.dir, "../../skills");
 
@@ -45,6 +46,12 @@ describe("BigBasket search-products", () => {
     expect(run).not.toContain("waitForSelector");
     expect(run).toContain("searchScript(maxResults)");
     expect(run).toContain("note: NO_CARDS_NOTE");
+  });
+
+  it("add-to-cart adds from the search results when given the query, without the product page", () => {
+    const add = readFileSync(join(skills, "bigbasket/scripts/add-to-cart.ts"), "utf8");
+    expect(add).toContain("if (query) await addFromSearch(query);");
+    expect(add).toContain("addFromSearchScript(productId, quantity)");
   });
 });
 
@@ -201,8 +208,46 @@ const BB_SEARCH = `<!doctype html><html><head><meta charset="utf-8"></head><body
     <h3>Amul<br>Butter - Pasteurised<br>100 g</h3><span>₹56</span><button>Add</button></div>
 </main></body></html>`;
 
+/** BigBasket's search results with a working Add: it turns into a stepper (icon-only minus and plus) that counts. */
+const BB_SEARCH_ADD = `<!doctype html><html><head><meta charset="utf-8"></head><body><main>
+  <div class="SKUDeck___StyledDiv-sc-1"><a href="/pd/40000101/fresho-onion-1-kg/">x</a><h3>fresho!<br>Onion<br>1 kg</h3><span>₹38</span> <div class="atc"><button>Add</button></div></div>
+  <div class="SKUDeck___StyledDiv-sc-1"><a href="/pd/40000102/amul-butter/">x</a><h3>Amul<br>Butter<br>100 g</h3><span>₹56</span> <div class="atc"><button>Notify Me</button></div><span>Out of Stock</span></div>
+</main><script>
+  let count = 0;
+  const atc = document.querySelector(".atc");
+  const draw = () => { atc.innerHTML = '<button aria-hidden="true"><svg></svg></button><span class="qty">' + count + '</span><button><svg></svg></button>'; };
+  atc.addEventListener("click", (e) => {
+    const b = e.target.closest("button"); if (!b) return;
+    if (b.textContent.trim() === "Add") { count = 1; return setTimeout(draw, 100); }
+    if (b === atc.lastElementChild) { count++; setTimeout(draw, 100); }
+  });
+</script></body></html>`;
+
 /** A search BigBasket has no groceries for: no product cards at all. */
 const BB_NO_RESULTS = `<!doctype html><html><head><meta charset="utf-8"></head><body><main><h2>Oops! No results found for "laptop"</h2></main></body></html>`;
+
+/** Blinkit's picker as utility classes only: a fixed overlay with no dialog role, entries with no "address"
+ *  class, and a handler that answers mousedown (not a bare click) on the entry's wrapper. */
+const BLINKIT_UTILITY_PICKER = `<!doctype html><html><head><meta charset="utf-8"></head><body>
+<header><div class="flex cursor-pointer"><div class="font-bold">Delivery in 9 minutes</div><div class="text-sm">Bellandur, Bengaluru</div></div></header>
+<div id="overlay" class="fixed inset-0 z-50" style="position:fixed;top:0;left:0;width:100%;height:100%;display:none">
+  <div class="p-4">
+    <div class="font-bold">Change Location</div>
+    <button class="rounded">Detect my location</button>
+    <input placeholder="search delivery location">
+    <div class="text-xs">Your saved addresses</div>
+    <div class="flex gap-2 cursor-pointer" tabindex="0" data-area="Indiranagar"><div><div class="font-semibold">Home</div><div class="text-xs">12 Lake Road, HAL 2nd Stage, Indiranagar, Bengaluru 560038</div></div></div>
+    <div class="flex gap-2 cursor-pointer" tabindex="0" data-area="Bellandur"><div><div class="font-semibold">Work</div><div class="text-xs">Floor 4, Northwind Tower, Bellandur, Bengaluru 560103</div></div></div>
+  </div>
+</div>
+<script>
+  const overlay = document.getElementById("overlay");
+  document.querySelector("header .cursor-pointer").addEventListener("click", () => { overlay.style.display = "block"; });
+  for (const entry of overlay.querySelectorAll("[data-area]")) entry.addEventListener("mousedown", () => {
+    document.querySelector("header .text-sm").textContent = entry.dataset.area + ", Bengaluru";
+    overlay.style.display = "none";
+  });
+</script></body></html>`;
 
 const appDir = process.env.FLOCK_APP_DIR;
 const playwrightPath = appDir ? join(appDir, "node_modules", "playwright-core") : "";
@@ -244,6 +289,24 @@ describe.skipIf(!canBrowse)("the in-page scripts on stand-in pages", () => {
       ["40000101", "fresho! Onion", "1 kg", 38, 47],
       ["40000102", "Amul Butter - Pasteurised", "100 g", 56, null],
     ]);
+  });
+
+  it("BigBasket add-to-cart adds from the search results: the card's Add, then + for each more unit", async () => {
+    const tab = await browser.newPage();
+    try {
+      await tab.route("**/*", (route: any) => route.fulfill({ status: 200, contentType: "text/html; charset=utf-8", body: BB_SEARCH_ADD }));
+      await tab.goto("https://www.bigbasket.com/ps/?q=onion");
+      const out = JSON.parse(await tab.evaluate(addFromSearchScript("40000101", 3, 500)));
+      expect(out).toMatchObject({ success: true, productId: "40000101", quantityAdded: 3, quantityAsked: 3 });
+      expect(await tab.textContent(".qty")).toBe("3");
+    } finally { await tab.close(); }
+  });
+
+  it("BigBasket add-to-cart says out of stock, or not in these results, without clicking anything else", async () => {
+    const out = await run("https://www.bigbasket.com/ps/?q=butter", BB_SEARCH_ADD, addFromSearchScript("40000102", 1, 500));
+    expect(out).toMatchObject({ error: true, code: "OUT_OF_STOCK" });
+    const missing = await run("https://www.bigbasket.com/ps/?q=butter", BB_SEARCH_ADD, addFromSearchScript("49999999", 1, 300));
+    expect(missing).toMatchObject({ error: true, code: "NOT_IN_RESULTS" });
   });
 
   it("BigBasket search with no product cards answers an empty list, not a timeout", async () => {
@@ -295,7 +358,23 @@ describe.skipIf(!canBrowse)("the in-page scripts on stand-in pages", () => {
       const listed = JSON.parse(await tab.evaluate(addressScript(blinkit, null)));
       const match = matchAddress(listed.saved, "12 Lake Road, Indiranagar, Bengaluru 560038");
       expect(match.ok).toBe(true);
-      const picked = JSON.parse(await tab.evaluate(addressScript(blinkit, match.ok ? match.address.index : -1)));
+      const picked = JSON.parse(await tab.evaluate(addressScript(blinkit, match.ok ? match.address : null)));
+      expect(picked.location).toContain("Indiranagar");
+      expect(locationShows(picked.location, picked.selected)).toBe(true);
+    } finally { await tab.close(); }
+  });
+
+  it("Blinkit with utility classes only: lists the saved addresses by their text and selects one on mousedown", async () => {
+    const tab = await browser.newPage();
+    try {
+      await tab.route("**/*", (route: any) => route.fulfill({ status: 200, contentType: "text/html; charset=utf-8", body: BLINKIT_UTILITY_PICKER }));
+      await tab.goto("https://blinkit.com/");
+      const listed = JSON.parse(await tab.evaluate(addressScript(BLINKIT_SITE, null)));
+      expect(listed.saved.map((a: SavedAddress) => a.label)).toEqual(["Home", "Work"]);
+      const match = matchAddress(listed.saved, "12 Lake Road, Indiranagar, Bengaluru 560038");
+      expect(match.ok).toBe(true);
+      const picked = JSON.parse(await tab.evaluate(addressScript(BLINKIT_SITE, match.ok ? match.address : null)));
+      expect(picked.selected.label).toBe("Home");
       expect(picked.location).toContain("Indiranagar");
       expect(locationShows(picked.location, picked.selected)).toBe(true);
     } finally { await tab.close(); }

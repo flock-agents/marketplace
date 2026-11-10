@@ -90,7 +90,7 @@ Two phases. Params: `{ phase?: "review" | "pay", persistentSessionId?: string }`
 When placing ANY new order or quoting a cart, the FIRST thing to do — before searching for items — is settle the delivery address:
 
 1. Use the address agreed with the family (the agent's own notes say which), or ask: "Which address should I deliver to?"
-2. `list-addresses`, then `set-delivery-location` with that address.
+2. With your `run_skill` tool, before any browser use: `list-addresses`, then `set-delivery-location` with that address. Use the browser for the address only when `set-delivery-location` fails twice for a reason other than sign-in: then open the header's location picker, click the saved address's own entry (by its text), and say so.
 3. Then search and fill the cart.
 
 **Rules:**
