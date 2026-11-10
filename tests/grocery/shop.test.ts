@@ -268,7 +268,7 @@ describe.skipIf(!canBrowse)("the in-page scripts on stand-in pages", () => {
     expect(notTheCart(BIGBASKET, asBasket)).toContain("not BigBasket's cart page");
     const asDrawer = await run("https://blinkit.com/cart", HOME_WITH_SUGGESTIONS, cartReadScript(blinkit));
     expect(notTheCart(blinkit, asDrawer)).toContain("did not open");
-  });
+  }, 30_000); // each read waits out its own cart wait (up to 10s) on a page that never shows the cart
 
   it("empties a cart page by each line's remove, and says what it removed", async () => {
     const out = await run("https://www.bigbasket.com/basket/", BASKET, emptyCartScript(BIGBASKET));
