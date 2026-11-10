@@ -106,7 +106,9 @@ export function rupeeAmount(value: unknown): number | null {
  * Blinkit for the shared shop functions (_shop_run.ts). There is no cart page: the cart counts
  * as read only while its drawer is open, or when the header's cart button says it is empty.
  * The address picker is NOT confirmed live: the header's location bar opens it (a guess from the
- * `LocationBar` class family), and its entries are found by the generic reader in _shop.ts.
+ * `LocationBar` class family, else the header's "Delivery in …" text), and its entries are found by
+ * the generic reader in _shop.ts: by class, or by their address text when the page has utility
+ * classes only (tested on a stand-in picker that answers mousedown, tests/grocery).
  * In a cart line the stepper's first icon glyph is taken to be the minus (NOT confirmed live).
  */
 export const BLINKIT_SITE: ShopSite = {

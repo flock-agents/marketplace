@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.4.2
+
+- The instructions name Flock's own tools instead of the hidden private-browser and authenticated-crawl skills and the show-payment-qr script: the `browser` tool on the signed-in session for what the functions cannot do (`open` with `session`, then `act` and `read` with its `persistentSessionId`), `show_qr` and `hand_to_owner` with the checkout's `persistentSessionId`, and the `api` tool for the saved payment preference. The rules are unchanged.
+- `set-delivery-location` finds the saved addresses by their text where the picker has no address classes (a picker of utility classes, as Blinkit's pages now are), picks the address by its own text, never its position, and presses its entry with a full pointer sequence; tested on stand-in pickers (`tests/grocery`), not yet on the live site. The instructions use `list-addresses` and `set-delivery-location` with `run_skill` before any browser use.
+
 ## 1.4.1
 
 - `remove-from-cart` `{ productName?, all? }` removes lines from the cart drawer by name, or every line, and returns what it removed, what is left and the new bill. `view-cart` lines carry no product id, so removing by id always failed.

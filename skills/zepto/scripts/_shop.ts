@@ -269,29 +269,50 @@ export function emptyCartScript(site: ShopSite): string {
 
 /**
  * The saved-address picker: opens it from the header when it is not already open, lists the saved
- * addresses, and (with clickIndex) picks one and confirms a "change address?" prompt.
- * → { saved: [SavedAddress], location, pageUrl } or, with clickIndex, { selected, stillOpen, location, pageUrl }.
+ * addresses, and (with `pick`) selects that one and confirms a "change address?" prompt.
+ * Entries are found by class ("address") or, on pages with utility classes only (Blinkit), by their
+ * text: an address line (a pincode, or two commas) inside the picker. The pick is found again by its
+ * own text, never by position, and pressed on its clickable entry with a full pointer sequence.
+ * → { saved: [SavedAddress], location, pageUrl } or, with pick, { selected, stillOpen, location, pageUrl }.
  */
-export function addressScript(site: ShopSite, clickIndex: number | null): string {
+export function addressScript(site: ShopSite, pick: SavedAddress | null): string {
   return String.raw`(async () => {
   ${PAGE_KIT}
   const OPENERS = ${JSON.stringify(site.addressOpeners)};
+  const PICK = ${JSON.stringify(pick ? pick.text : null)};
   const NOT_AN_ADDRESS = /^\+?\s*add\b|add (a )?new address|current location|detect|search|enter (your )?(area|location|address)/i;
   const LOCATION_TEXT = /deliver(y|ing)? (in|to)|select (your )?location|change location|set location|delivery location/i;
-  const scopes = () => Array.from(document.querySelectorAll('[role="dialog"], [aria-modal="true"], [class*="modal" i], [class*="drawer" i], [class*="popup" i], [class*="sheet" i]')).filter(visible);
-  const entries = () => {
-    const roots = scopes();
-    let found = [];
-    for (const root of (roots.length ? roots : [document.body])) found.push(...root.querySelectorAll('[class*="address" i], [data-testid*="address" i]'));
-    found = Array.from(new Set(found)).filter((el) => visible(el) && !el.matches("input, textarea"))
-      .filter((el) => { const t = text(el); return t.length >= 10 && t.length <= 300 && !NOT_AN_ADDRESS.test(t); });
+  const ADDRESS_LINE = (t) => /\b\d{6}\b/.test(t) || (t.match(/,/g) || []).length >= 2;
+  const overlays = () => Array.from(document.querySelectorAll("body > div, body > div > div")).filter((el) => visible(el) && getComputedStyle(el).position === "fixed" && el.getBoundingClientRect().height > 150);
+  const scopes = () => [...new Set([...document.querySelectorAll('[role="dialog"], [aria-modal="true"], [class*="modal" i], [class*="drawer" i], [class*="popup" i], [class*="sheet" i]'), ...overlays()])].filter(visible);
+  const outermostOfInnermost = (found) => {
     found = found.filter((el) => found.filter((o) => o !== el && el.contains(o)).length < 2);
     return found.filter((el) => !found.some((o) => o !== el && o.contains(el)));
+  };
+  const usable = (el) => { const t = text(el); return visible(el) && !el.matches("input, textarea") && !el.closest("header") && t.length >= 10 && t.length <= 300 && !t.includes("₹") && !NOT_AN_ADDRESS.test(t); };
+  const entries = () => {
+    const roots = scopes();
+    const within = roots.length ? roots : [document.body];
+    const byClass = within.flatMap((root) => Array.from(root.querySelectorAll('[class*="address" i], [data-testid*="address" i]'))).filter(usable);
+    if (byClass.length) return outermostOfInnermost([...new Set(byClass)]);
+    if (!roots.length) return [];
+    const byText = roots.flatMap((root) => Array.from(root.querySelectorAll("div, li, label, button, a, [role='button']"))).filter((el) => usable(el) && ADDRESS_LINE(text(el)));
+    return outermostOfInnermost([...new Set(byText)]);
   };
   const header = () => {
     for (const sel of OPENERS) { const el = document.querySelector(sel); if (visible(el)) return el; }
     return Array.from(document.querySelectorAll('header button, header a, header [role="button"], header div')).filter(visible)
       .find((el) => text(el).length < 120 && LOCATION_TEXT.test(text(el))) || null;
+  };
+  const clickable = (el) => el.closest('button, a, label, [role="button"], [role="radio"], [role="option"], [tabindex]') || el;
+  const pressFully = (el) => {
+    el.scrollIntoView({ block: "center" });
+    const r = el.getBoundingClientRect();
+    const at = { bubbles: true, cancelable: true, view: window, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 };
+    const hit = document.elementFromPoint(at.clientX, at.clientY);
+    const target = hit && el.contains(hit) ? hit : el;
+    for (const type of ["pointerdown", "mousedown", "pointerup", "mouseup"]) target.dispatchEvent(new (type.startsWith("pointer") ? PointerEvent : MouseEvent)(type, at));
+    target.click();
   };
   if (!scopes().length || !entries().length) {
     const opener = await until(header, 10000);
@@ -305,14 +326,14 @@ export function addressScript(site: ShopSite, clickIndex: number | null): string
     const marked = /selected|active|checked|current/i.test(String(el.className)) || el.getAttribute("aria-selected") === "true" || el.getAttribute("aria-checked") === "true" || !!el.querySelector('input:checked, [aria-checked="true"], [aria-selected="true"]');
     return { index, label: (lines[0] || "").substring(0, 40), text: text(el).substring(0, 300), selected: marked };
   });
-  const pick = ${clickIndex == null ? "null" : String(Math.trunc(clickIndex))};
-  if (pick === null) return JSON.stringify({ saved, location: text(header()).substring(0, 120), pageUrl: location.href });
-  const target = list[pick];
-  if (!target) return JSON.stringify({ error: true, code: "PAGE_CHANGED", message: "The saved addresses changed while one was being picked." });
-  press(target);
+  if (PICK === null) return JSON.stringify({ saved, location: text(header()).substring(0, 120), pageUrl: location.href });
+  const at = saved.findIndex((a) => a.text === PICK);
+  const index = at >= 0 ? at : saved.findIndex((a) => a.text.includes(PICK) || PICK.includes(a.text));
+  if (index < 0) return JSON.stringify({ error: true, code: "PAGE_CHANGED", message: "The saved address to pick is no longer in the picker.", saved });
+  pressFully(clickable(list[index]));
   await sleep(2500);
   const prompt = Array.from(document.querySelectorAll('button, [role="button"]')).filter(visible).find((b) => /^(confirm|continue|yes|ok|okay|change address)$/i.test(text(b)));
   if (prompt) { press(prompt); await sleep(2000); }
-  return JSON.stringify({ selected: saved[pick], stillOpen: entries().length > 0, location: text(header()).substring(0, 120), pageUrl: location.href });
+  return JSON.stringify({ selected: saved[index], stillOpen: entries().length > 0, location: text(header()).substring(0, 120), pageUrl: location.href });
 })()`;
 }

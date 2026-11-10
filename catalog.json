@@ -265,11 +265,11 @@
       "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "skills/zepto",
-      "latestVersion": "1.4.0",
-      "latestTag": "zepto-v1.4.0",
+      "latestVersion": "1.4.1",
+      "latestTag": "zepto-v1.4.1",
       "minFlockVersion": "0.24.0",
       "publishedAt": "2026-08-14T10:00:00Z",
-      "updatedAt": "2026-10-24T12:00:00Z"
+      "updatedAt": "2026-11-10T00:00:00Z"
     },
     {
       "slug": "zomato-blinkit",
@@ -288,11 +288,11 @@
       "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "skills/zomato-blinkit",
-      "latestVersion": "1.4.1",
-      "latestTag": "zomato-blinkit-v1.4.1",
+      "latestVersion": "1.4.2",
+      "latestTag": "zomato-blinkit-v1.4.2",
       "minFlockVersion": "0.24.0",
       "publishedAt": "2026-08-14T10:00:00Z",
-      "updatedAt": "2026-10-24T12:00:00Z"
+      "updatedAt": "2026-11-10T00:00:00Z"
     },
     {
       "slug": "bigbasket",
@@ -310,11 +310,11 @@
       "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "skills/bigbasket",
-      "latestVersion": "1.4.1",
-      "latestTag": "bigbasket-v1.4.1",
+      "latestVersion": "1.4.2",
+      "latestTag": "bigbasket-v1.4.2",
       "minFlockVersion": "0.24.0",
       "publishedAt": "2026-08-14T10:00:00Z",
-      "updatedAt": "2026-10-24T12:00:00Z"
+      "updatedAt": "2026-11-10T00:00:00Z"
     },
     {
       "slug": "amazon",
