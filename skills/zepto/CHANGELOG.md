@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.4.1
+
+- With Zepto's own connector (`zepto-mcp`), the cart and the bill come only from the connector: Zepto keeps a cart per device, so the website never sees that cart. The full bill is the connector's order preview (`confirmOrder: false`), never the website; with no fees shown, the items total and a plain note that Zepto shows none.
+- The instructions name Flock's own tools instead of the hidden private-browser and authenticated-crawl skills and the show-payment-qr script: the `browser` tool on the signed-in session for what the functions cannot do (`open` with `session`, then `act` and `read` with its `persistentSessionId`), `show_qr` and `hand_to_owner` with the checkout's `persistentSessionId`, and the `api` tool for the saved payment preference. The rules are unchanged.
+
 ## 1.4.0
 
 - `list-addresses`: the delivery addresses saved on Zepto, and the location the site shows now.
