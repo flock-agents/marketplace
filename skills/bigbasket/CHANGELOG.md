@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.4.2
+
+- Every `search-products` call failed with "evaluate: SyntaxError: Unexpected token 'const'": its page script was a plain template string, so its regexes lost their backslashes. It is `String.raw` now, and the rating in a card's heading ("4.2", "5122 Ratings") is no longer read as the pack size. Checked on the live search page; `tests/grocery/page-scripts.test.ts` keeps every page script's backslashes.
+- The instructions name Flock's own tools instead of the hidden private-browser and authenticated-crawl skills and the show-payment-qr script: the `browser` tool on the signed-in session for what the functions cannot do (`open` with `session`, then `act` and `read` with its `persistentSessionId`), `show_qr` and `hand_to_owner` with the checkout's `persistentSessionId`, and the `api` tool for the saved payment preference. The rules are unchanged.
+
 ## 1.4.1
 
 - `search-products` reads today's product cards (`SKUDeck___StyledDiv`: brand, name and pack from the heading, the id from `/pd/<id>/`, selling price and MRP); the old selectors timed out on every search. Checked live 2026-11-10.

@@ -1,17 +1,17 @@
 {
   "version": 1,
-  "generatedAt": "2026-11-10T17:16:34.730Z",
-  "sourceVersion": "1.4.1",
-  "sourceTag": "bigbasket-v1.4.1",
+  "generatedAt": "2026-11-10T18:07:09.127Z",
+  "sourceVersion": "1.4.2",
+  "sourceTag": "bigbasket-v1.4.2",
   "files": {
-    "CHANGELOG.md": "b13f7e072c6423755d66c22e1380140cc236521a7257c44f855adc52afae7c12",
+    "CHANGELOG.md": "793f32405f7d342e3af17796e67306eea78e296b83bf0ccde929eb7c0dd0ff88",
     "icon.svg": "05865e6104573352015d59d9dde26a2379b99d1458183318959f4bf015b8a8c6",
     "scripts/add-to-cart.sh": "e3842b8966eab11481464256f1d6025f4e9aa49ce2c192f8015a1fab80d1fd53",
     "scripts/_health-check.sh": "f583afcfb661fc5a194fca69f7af60f958c92a49788b7b04938551d6395bce51",
     "scripts/track-order.ts": "5775d086fbb4d77b342bc4136063cd5bf718c3bf6af8aedf0ab38f6e755e6ca1",
     "scripts/search-products.sh": "bbb87849cd843fc63f2ee0664b3ee4006bac70e1b91a02825a8cba136f42a768",
     "scripts/track-order.sh": "37b837264dd60abfd23925f082789afd59d413f9a0c3df4c7c2a989d0b12e268",
-    "scripts/search-products.ts": "7467d820b3442f22f351d7310bd4a6dbbf4a99bf2f575a16179fd2803f7990b5",
+    "scripts/search-products.ts": "6059771379281364ca40f24483ac543e679ed07ec5f080847efe1fdbc799f6a5",
     "scripts/checkout.ts": "4ceb065a16b13dc313859ff6582fbc2e67032278b129f5a5f4886c34dd3a065c",
     "scripts/add-to-cart.ts": "55fdb79d77b4d334c7a287c47f763a2be8b43b3615b717e285e8ebcdd0580c3b",
     "scripts/_helpers.sh": "0ae933eb141515fc948b49000318eb04c8d0bccf81cf1e8a3c9da9e02cec5f20",
@@ -28,7 +28,7 @@
     "scripts/keep-alive.sh": "47e25c20e070085a17cf6e9b0158ac75cc2d2547df0c9b4399374efcd335b0bb",
     "scripts/_shop_run.ts": "90a25088ce26b2c6b31674b9566b2a3810a6cd02afe990a1aad24f8173405cc1",
     "scripts/_shop.ts": "d20abe3b3c844ad61059f5186a0a919c9bb01a1c12607c56b0f196fd5d0d6961",
-    "flock.skill.json": "d0c6fa3ece6e69e87a0f6484eac726528987ccc944dcaf2e32646cef786a9a2c",
-    "instructions.md": "7f44e517b4ca02b69833b2ccfef74e329bcd4d12226e895cd6fda162c44853b9"
+    "flock.skill.json": "dd12e4f2eda6d77f3285437c1787cc8081b35b82e2fb75ae65da5462a4de6636",
+    "instructions.md": "e107fa25b32a50a922db687c5311012beb2fcafd2eb3d233676e48436a69c3c9"
   }
 }

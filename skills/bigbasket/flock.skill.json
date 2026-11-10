@@ -3,7 +3,7 @@
   "slug": "bigbasket",
   "icon": "icon.svg",
   "description": "Search products, manage cart, and place grocery orders on BigBasket",
-  "version": "1.4.1",
+  "version": "1.4.2",
   "author": "flock",
   "category": "integration",
   "tags": [
