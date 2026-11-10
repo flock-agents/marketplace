@@ -24,44 +24,23 @@ The user must:
 
 ## Usage
 
-All functions execute via `POST /api/internal/skill-exec`. Invoke via:
-
-```bash
-curl -s -X POST "$FLOCK_API_URL/api/internal/skill-exec" \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $FLOCK_AUTH_TOKEN" \
-  -d '{
-    "skillId": "zepto",
-    "functionName": "<functionName>",
-    "params": { ... },
-    "agentId": "'"$FLOCK_AGENT_ID"'"
-  }'
-```
-
-Examples:
-```bash
-# Search for products
-curl -s -X POST "$FLOCK_API_URL/api/internal/skill-exec" \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $FLOCK_AUTH_TOKEN" \
-  -d '{"skillId":"zepto","functionName":"search-products","params":{"query":"milk","maxResults":5},"agentId":"'"$FLOCK_AGENT_ID"'"}'
-
-# Add to cart
-curl -s -X POST "$FLOCK_API_URL/api/internal/skill-exec" \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $FLOCK_AUTH_TOKEN" \
-  -d '{"skillId":"zepto","functionName":"add-to-cart","params":{"productId":"12345","quantity":1},"agentId":"'"$FLOCK_AGENT_ID"'"}'
-
-# View cart
-curl -s -X POST "$FLOCK_API_URL/api/internal/skill-exec" \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $FLOCK_AUTH_TOKEN" \
-  -d '{"skillId":"zepto","functionName":"view-cart","params":{},"agentId":"'"$FLOCK_AGENT_ID"'"}'
-```
+Call these functions with your `run_skill` tool: skill `zepto`, the function's name, and its params (for example `search-products` with `{"query": "milk", "maxResults": 5}`). Never call Flock's API, a script or a port yourself.
 
 **Use these functions for these operations, not authenticated-crawl:** the scripts drive the browser for you, with session management and rate limiting. For anything they cannot do, or when one keeps failing for a reason other than sign-in, do it with authenticated-crawl on the same signed-in session. Ask the owner before placing an order or paying.
 
 ## Available Functions
+
+### list-addresses
+The delivery addresses saved on Zepto, and the location the site shows now. Params: `{}`
+Returns `{ addresses: [{ label, address, selected }], currentLocation }`.
+
+### set-delivery-location
+Select the saved address that is the given one, before searching or filling the cart: prices, stock and fees depend on it. Params: `{ address: string }` — the address agreed with the family (its text; a label such as "Home" only when one saved address carries it).
+Matches by the address itself; a different pincode never matches. Returns `{ success, selected, currentLocation, confirmed }`; `confirmed: false` means the header did not visibly change, so check the cart's delivery address. Fails without clicking: `ADDRESS_NOT_SAVED` (with `savedAddresses`) or `AMBIGUOUS_ADDRESS` (pass more of the address).
+
+### empty-cart
+Remove everything from the cart, so a quote counts only the items asked for. Params: `{}`
+Returns `{ success, removed: [names], itemCount: 0 }` only after the cart itself shows empty; fails `NOT_CART_PAGE` or `CART_NOT_EMPTIED` otherwise. Tell the family what was removed when the cart held items they had put there.
 
 ### search-products
 Search for products on Zepto. Params: `{ query: string, maxResults?: number }`
@@ -71,7 +50,8 @@ Each product carries an `imageUrl`: show the results as a flock-ui block with th
 Add a product to the cart by searching and clicking ADD from results. Params: `{ query: string, quantity?: number }`
 
 ### view-cart
-View current cart contents with prices and totals. Params: `{}`
+The cart's items and the full total to pay, every fee included. Params: `{}`
+Returns `{ verifiedCart: true, items, itemCount, subtotal, fees: [{ label, amount }], feeTotal, discount, total, totalSource, bill }`. `total` is what the person pays: the page's own grand total or to-pay line (`totalSource: "page"`), else subtotal + fees − discount (`"computed"`). It reads only the cart page and fails `NOT_CART_PAGE` when the page is anything else (a home page, suggestions): try once more, then report it, never a guessed total.
 
 ### remove-from-cart
 Remove an item from the cart. Params: `{ productId: string }`
@@ -99,17 +79,15 @@ Two phases. Params: `{ phase?: "review" | "pay", persistentSessionId?: string }`
 
 ## Address-First Flow
 
-When placing ANY new order, the FIRST thing to do — before searching for items — is confirm the delivery address:
+When placing ANY new order or quoting a cart, the FIRST thing to do — before searching for items — is settle the delivery address:
 
-1. Ask the user: "Which address should I deliver to?"
-2. Fetch the user's saved addresses from the platform. No function lists them: open the site's address selection with authenticated-crawl on the same signed-in session and extract every saved address via `evaluate`
-3. Present the list: "I found these saved addresses: 1. Home — ... 2. Work — ..."
-4. User picks one → select it on the platform the same way
-5. THEN proceed with item search and cart
+1. Use the address agreed with the family (the agent's own notes say which), or ask: "Which address should I deliver to?"
+2. `list-addresses`, then `set-delivery-location` with that address.
+3. Then search and fill the cart.
 
 **Rules:**
-- ONLY use saved addresses — the agent cannot add new addresses via browser automation (address forms are complex, need GPS pin, etc.)
-- If the user wants an address that's not saved, tell them: "That address isn't saved on Zepto. Please add it in the app first, then I can use it for your order."
+- The same address for every service in a comparison: match the address itself (building, street, area, pincode), not its label. "Home" on Zepto may be another place, and an office is not a home.
+- When the address isn't saved on Zepto, don't quote another one. Adding it needs the owner's yes (one yes may cover several services); then add it on the website in the browser on the same signed-in session, and hand the page over if the form needs a map pin you cannot place.
 - Address selection happens BEFORE any item search — don't build a cart without knowing where to deliver
 - Remember the selected address for the session — don't ask again for subsequent orders in the same conversation
 - If only one address is saved, confirm it: "I'll deliver to Home — <address>. Correct?"

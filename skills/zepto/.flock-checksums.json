@@ -1,11 +1,11 @@
 {
   "version": 1,
-  "generatedAt": "2026-10-24T15:09:59.606Z",
-  "sourceVersion": "1.3.1",
-  "sourceTag": "zepto-v1.3.1",
+  "generatedAt": "2026-11-10T13:01:00.295Z",
+  "sourceVersion": "1.4.0",
+  "sourceTag": "zepto-v1.4.0",
   "files": {
+    "CHANGELOG.md": "05461e087a4dda7cfed9e3aa9fdc7bc1147c0a79bb9cc0cdec64119dc82bbeee",
     "icon.svg": "ff5a156310a9395aeac4463bfab8a45297a71bb08543267e58b1b4279a0bcae6",
-    "scripts/view-cart.sh": "6ef55cdec32684705d6bfbebefc116a840f47c8925772f3871245a57a158563e",
     "scripts/add-to-cart.sh": "2d5b33c814c33fa452e99328961bd8db889d3b9df0ba1801f72fbbdcc2895887",
     "scripts/_health-check.sh": "de9ede02c6c3cc1c6b8d02e4b7ffee1cfbb6064b196178dcfeb1efe9f1312b48",
     "scripts/track-order.ts": "b9d48cdaf0436834aa9b53283d2426b5e8542c4c5b333cc7629bf17112160a28",
@@ -15,14 +15,20 @@
     "scripts/checkout.ts": "675c1212650dc9e472c5c2973aa6e3512778751ff20416f14b045641e5b7c955",
     "scripts/add-to-cart.ts": "044bddc69c0f73573e88b48526fe475c1f77dd559deefb573a0c7de48477891f",
     "scripts/_helpers.sh": "5bf8dd5ac38a111918ba364be298f92b70c0d748c46ca8f2cff5ce8f9f1aed03",
-    "scripts/view-cart.ts": "b7c41870c028acebcba18ca82cba7d701c658eeee429bb7aee174adcc5898de2",
+    "scripts/view-cart.ts": "fe049f045ef95054da1a5c531a911f4e58cbfdfb7959cc89dd6de449bb5e08ac",
+    "scripts/set-delivery-location.ts": "c1305078d0e5ed9dc39c4cba89395680f505851739244d25c90015e2d4d51d82",
     "scripts/keep-alive.ts": "edf0e31fd09f8586be6b1e3bf29ff82574a4dda0a82a5f23dd77233148e17c8b",
+    "scripts/_zepto.ts": "ba1b79a694815b8a578c0b4ca980cf5729d8308c6377a10dd48aadfe46d3c19d",
     "scripts/remove-from-cart.ts": "5310d82bbf066935ea78a3fb68af5e08ac4ccef0e31f6cf1ede719cbea9c89a9",
+    "scripts/empty-cart.ts": "18303c9dcf032913cd522c299950d7f82b09cbd911bc2a069a141db323221683",
     "scripts/view-order-history.sh": "7300ff220c8efa7822b9789852c6d33da4c75ce5c5680f75fd6544e3fbc333fd",
+    "scripts/list-addresses.ts": "57378e1309eb5f0be3bba68a9d5cbbbac1cd2d1e5608a055958b7ce53533a202",
     "scripts/remove-from-cart.sh": "bd25d9f1a915cc513e6957a0cb47bafef999555ef1a6543e6f4b2fd8474058ba",
     "scripts/view-order-history.ts": "4e06583b8e8320901a61fe2e353429142b525acf200ad327036f58543302dc77",
     "scripts/keep-alive.sh": "18708b1bb179a687a8f48b57a433cfb98b68f8a2212204f793b4677864cfa896",
-    "flock.skill.json": "814a8b5356dd08b1a3c4401ffb1943c42425551afb4dfcedcb463ec7d54e0a76",
-    "instructions.md": "1b96606521670f7c37bd73db1659086838e879974088014f5c8efcfd531d780d"
+    "scripts/_shop_run.ts": "90a25088ce26b2c6b31674b9566b2a3810a6cd02afe990a1aad24f8173405cc1",
+    "scripts/_shop.ts": "d20abe3b3c844ad61059f5186a0a919c9bb01a1c12607c56b0f196fd5d0d6961",
+    "flock.skill.json": "5ad2bc69c940fcb2f64d366e01bcaa4f8937de754d3a3e676cd42192df7a26d3",
+    "instructions.md": "759982c574cdff81d0df04f31f09a8b1384418743850e0f1425d95200c79dd0d"
   }
 }
