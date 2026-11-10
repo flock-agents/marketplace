@@ -77,7 +77,7 @@ export async function setDeliveryLocation(site: ShopSite): Promise<void> {
     await finish({ error: true, code: match.code, message, savedAddresses: match.candidates.map(shown) }, 1);
   }
   const address = (match as { ok: true; address: SavedAddress }).address;
-  const picked = parseJson((await persistentInteract(site.config, sessionId, [], false, addressScript(site, address.index)))?.content);
+  const picked = parseJson((await persistentInteract(site.config, sessionId, [], false, addressScript(site, address)))?.content);
   if (!picked || picked.error) {
     await finish({ error: true, code: picked?.code || "PAGE_CHANGED", message: picked?.message || "Could not select the address." }, 1);
   }

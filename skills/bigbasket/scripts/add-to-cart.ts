@@ -1,7 +1,9 @@
 #!/usr/bin/env bun
 /**
  * Add a product to cart on BigBasket.
- * Params: productId, quantity?
+ * Params: productId, quantity?, query?
+ * With `query` (the search the product was found with) it adds from those search results: the card's
+ * Add, then its "+" for each more unit, without opening the product page. Without it, the product page.
  */
 import {
   getParam,
@@ -12,8 +14,11 @@ import {
   persistentCreate,
   persistentInteract,
   persistentClose,
+  browserInteract,
+  urlencode,
   type GroceryServiceConfig,
 } from "../../_shared/_grocery_helpers";
+import { addFromSearchScript } from "./_bigbasket";
 
 const config: GroceryServiceConfig = {
   name: "BigBasket",
@@ -31,6 +36,23 @@ validateId(productId, "productId");
 if (isNaN(quantity) || quantity < 1) quantity = 1;
 if (quantity > 10) {
   errorJson("QUANTITY_LIMIT", "Maximum quantity per item is 10");
+}
+
+const query = getParam("query");
+if (query) await addFromSearch(query);
+
+/** Adds from the search results page and exits: the result line, or the error line with exit 1. */
+async function addFromSearch(searchQuery: string): Promise<never> {
+  const searchUrl = `${config.baseUrl}/ps/?q=${urlencode(searchQuery)}`;
+  const result = await browserInteract(config, searchUrl, [], undefined, addFromSearchScript(productId, quantity));
+  let out: any;
+  try {
+    out = JSON.parse((result as any)?.content || "");
+  } catch {
+    errorJson("PAGE_CHANGED", "Could not read the search results. The service may have updated its layout.");
+  }
+  console.log(JSON.stringify(out));
+  process.exit(out.error ? 1 : 0);
 }
 
 const productUrl = `${config.baseUrl}/pd/${productId}`;

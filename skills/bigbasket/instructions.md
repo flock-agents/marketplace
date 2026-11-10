@@ -47,7 +47,7 @@ Search for products on BigBasket. Params: `{ query: string, maxResults?: number 
 Each product carries an `imageUrl`: show the results as a flock-ui block with that address, exactly as given, as each item's `image` (an ItemPicker to pick how many, or a Choice of cards), never as markdown images.
 
 ### add-to-cart
-Add a product to the cart by product ID. Params: `{ productId: string, quantity?: number }`
+Add a product to the cart. Params: `{ productId: string, quantity?: number, query?: string }`. Pass the `query` you found it with in `search-products`: it adds from those search results (the card's Add, then its "+" for each more unit) without opening the product page, and returns `quantityAdded`. Without `query` it opens the product page.
 
 ### view-cart
 The cart's items and the full total to pay, every fee included. Params: `{}`
@@ -82,7 +82,7 @@ Two phases. Params: `{ phase?: "review" | "pay", persistentSessionId?: string }`
 When placing ANY new order or quoting a cart, the FIRST thing to do — before searching for items — is settle the delivery address:
 
 1. Use the address agreed with the family (the agent's own notes say which), or ask: "Which address should I deliver to?"
-2. `list-addresses`, then `set-delivery-location` with that address.
+2. With your `run_skill` tool, before any browser use: `list-addresses`, then `set-delivery-location` with that address. Use the browser for the address only when `set-delivery-location` fails twice for a reason other than sign-in: then open the header's location picker, click the saved address's own entry (by its text), and say so.
 3. Then search and fill the cart.
 
 **Rules:**

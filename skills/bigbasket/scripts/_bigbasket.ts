@@ -66,3 +66,44 @@ export function searchScript(maxResults: number, waitMs = 10000): string {
   return JSON.stringify({ products, totalResults: cards.length });
 })()`;
 }
+
+/**
+ * add-to-cart's page script on the search results: finds the card whose link is the product's
+ * (/pd/<id>/), presses its "Add" button (found by its text), then the stepper's "+" for each more
+ * unit. It never opens the product page. A card with no Add button is out of stock or changed.
+ * → { success, productId, name, quantityAdded, quantityAsked } or { error, code, message }.
+ */
+export function addFromSearchScript(productId: string, quantity: number, waitMs = 10000): string {
+  return String.raw`(async () => {
+  const ID = ${JSON.stringify(productId)};
+  const QUANTITY = ${quantity};
+  const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  const visible = (el) => !!el && el.getClientRects().length > 0;
+  const text = (el) => ((el && (el.innerText || el.textContent)) || "").replace(/\s+/g, " ").trim();
+  const cardOf = () => Array.from(document.querySelectorAll('${SEARCH_CARD}')).find((el) => Array.from(el.querySelectorAll('a[href*="/pd/"]')).some((a) => (a.getAttribute("href") || "").match(/\/pd\/(\d+)/)?.[1] === ID));
+  let card = null;
+  for (const end = Date.now() + ${waitMs}; !(card = cardOf()) && Date.now() < end; ) await sleep(250);
+  if (!card) return JSON.stringify({ error: true, code: "NOT_IN_RESULTS", message: "That product is not in these search results. Search again with its name, then add it with the same query." });
+  card.scrollIntoView({ block: "center" });
+  const name = text(card.querySelector("h3")).substring(0, 200);
+  const buttons = () => Array.from(card.querySelectorAll('button, [role="button"]')).filter(visible);
+  const add = buttons().find((b) => /^add( to basket)?$/i.test(text(b)));
+  if (!add) {
+    const out = /out of stock|notify me|sold out|currently unavailable/i.test(text(card));
+    return JSON.stringify({ error: true, code: out ? "OUT_OF_STOCK" : "PAGE_CHANGED", message: out ? name + " is out of stock." : "The product card has no Add button: the page may have changed." });
+  }
+  add.click();
+  await sleep(1500);
+  let added = 1;
+  const plus = () => buttons().find((b) => text(b) === "+" || /increase|increment|add one|plus/i.test(b.getAttribute("aria-label") || ""))
+    || (() => { const icons = buttons().filter((b) => !text(b)); return icons.length >= 2 ? icons[icons.length - 1] : null; })();
+  while (added < QUANTITY) {
+    const more = plus();
+    if (!more) break;
+    more.click();
+    await sleep(900);
+    added++;
+  }
+  return JSON.stringify({ success: true, productId: ID, name, quantityAdded: added, quantityAsked: QUANTITY });
+})()`;
+}
