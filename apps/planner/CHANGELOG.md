@@ -6,6 +6,10 @@
   family member asking which service is cheapest, compares services: one delivery address for all of them, one
   background session per connected grocery service with the family's own words for each item, each using that service's
   own skill or connector, then the totals compared at that address. No order without a yes on that exact total.
+- The guide keeps to the app's own data. Checking the cart with `view-cart` after adding moved to the grocery skills
+  (bigbasket, zepto, zomato-blinkit, swiggy-instamart); paying after the yes is each skill's `checkout` and the payments
+  guide; the `skill-sandbox` WARN note is gone (Flock reports a script's own error). From the Family Butler template: the
+  rows are the owner's, so never delete or "tidy" rows the agent did not add.
 
 ## 2.0.5
 
