@@ -17,7 +17,7 @@ import { extractCalls } from "./harness";
 const manifest = JSON.parse(readFileSync(join(import.meta.dir, "..", "flock.app.json"), "utf8"));
 export const INSTRUCTIONS: string = manifest.agentInterface.intents.find((i: any) => i.name === "meeting_prep").instructions;
 
-export const HARNESS = `\n\n## Evaluation harness\nYou have no tools in this evaluation, and memory has nothing on anyone in it. Where your instructions tell you to run \`flock-api\`, do not run anything: write any call you would make instead as an entry of ONE JSON array inside one fenced block opened with \`\`\`calls, each entry {"method":"POST","path":"/api/...","body":{...}} with the body as the object you would send. If the occurrence needs prep, write the prep note.`;
+export const HARNESS = `\n\n## Evaluation harness\nYou have no tools in this evaluation, and memory has nothing on anyone in it. Where your instructions tell you to call the api tool, do not call anything: write any call you would make instead as an entry of ONE JSON array inside one fenced block opened with \`\`\`calls, each entry {"method":"POST","path":"/api/...","body":{...}} with the body as the object you would send. If the occurrence needs prep, write the prep note.`;
 
 const ACCOUNT = "acct";
 const DAY = 86400_000;

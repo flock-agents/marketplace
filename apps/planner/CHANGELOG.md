@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.0.5
+
+- The agent's guide calls operations, reads rows and changes settings with the api tool, not `flock-api`.
+
 ## 2.0.4
 
 - The week page keeps working when a readiness reply carries no `statuses`: each meal falls back to the local rows instead of the page failing.

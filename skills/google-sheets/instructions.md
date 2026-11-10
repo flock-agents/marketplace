@@ -17,7 +17,7 @@ You can read and edit existing spreadsheets using the connected Google account. 
 
 ## Available Functions
 
-All functions execute via `POST /api/internal/skill-exec`. Use the skill execution wrapper script (**Usage** below).
+Run every function with the run_skill tool, skill `google-sheets` (**Usage** below).
 
 ### listSpreadsheets
 List the user's recent spreadsheets via Drive. Params: `{ maxResults?: number }`
@@ -59,23 +59,17 @@ If the skill is not connected or the session has expired, guide the user to set 
 
 ## Usage
 
-To execute a function, run the skill execution wrapper. It lives under
-`$FLOCK_SKILLS_DIR`, which your shell already exports; your working directory
-does NOT contain it, so always use this exact form:
-```bash
-bash "$FLOCK_SKILLS_DIR/google-sheets/scripts/sheets-exec.sh" <functionName> '<paramsJson>'
-```
+To execute a function, call the run_skill tool with skill `google-sheets`, the
+function's name, and its params as an object.
 
-The wrapper is the only way to call a function: it picks the account (pass
+The run_skill tool is the only way to call a function: it picks the account (pass
 `"accountHint"` in the params for a non-default one) and hands the function its
 Google sign-in. Never run the per-function scripts in `scripts/` yourself —
-outside the wrapper they have no sign-in and always answer `NO_AUTH` ("No
-browser session available"), whatever is connected. If `$FLOCK_SKILLS_DIR` is
-unset or the wrapper is missing, tell the owner (the install is broken); do not
-search the filesystem for another copy.
+outside the run_skill tool they have no sign-in and always answer `NO_AUTH` ("No
+browser session available"), whatever is connected. If the run_skill tool cannot
+find the google-sheets skill, tell the owner (the install is broken); do not search the
+filesystem for the skill's scripts.
 
-Example:
-```bash
-bash "$FLOCK_SKILLS_DIR/google-sheets/scripts/sheets-exec.sh" listSpreadsheets '{"maxResults": 10}'
-bash "$FLOCK_SKILLS_DIR/google-sheets/scripts/sheets-exec.sh" appendRows '{"spreadsheetId":"abc","range":"Sheet1!A:C","values":[["Alice",30,"PM"]]}'
-```
+Example (the run_skill tool, skill `google-sheets`):
+- function `listSpreadsheets`, params `{"maxResults": 10}`
+- function `appendRows`, params `{"spreadsheetId":"abc","range":"Sheet1!A:C","values":[["Alice",30,"PM"]]}`

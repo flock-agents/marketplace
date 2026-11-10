@@ -3,7 +3,7 @@
   "name": "Google Docs",
   "slug": "google-docs",
   "description": "Read and edit Google Docs documents",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "minFlockVersion": "0.18.1",
   "author": "flock",
   "category": "integration",

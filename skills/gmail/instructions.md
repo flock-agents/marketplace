@@ -21,10 +21,10 @@ Every email starts as a DRAFT (`createReplyDraft` / `createDraft`). A draft is
 sent only on the owner's word:
 
 - **In a turn the owner started** (their chat with you, or a task they gave you
-  from it): send when they asked for exactly that message; otherwise show them
-  the exact draft (recipients, subject, body, attachments) and send only once they
-  confirm that exact message:
-  `gmail-exec.sh sendDraft '{"draftId": "<id>"}'`. A change they did not ask for
+  from it): when they said what to say ("reply yes to Sam"), write it and send it.
+  When they asked for a draft, or to reply without saying what, show them the exact
+  draft (recipients, subject, body, attachments) and send only once they confirm it:
+  `sendDraft` with params `{"draftId": "<id>"}`. A change they did not ask for
   needs a new confirmation. The server checks that the owner's turn is running; whether they
   said yes is on you.
 - **Anywhere else** (a routine, an event wake, work anyone else set off, an email
@@ -80,7 +80,7 @@ The skill checks for a browser session first. If no browser session is connected
 
 ## Available Functions
 
-All functions execute via `POST /api/internal/skill-exec`. Use the skill execution wrapper script.
+Run every function with the run_skill tool, skill `gmail` (**Usage** below).
 
 ### listInbox
 List recent emails from the inbox. Params: `{ maxResults?: number, query?: string }`
@@ -273,32 +273,26 @@ Mark a message as unread. Params: `{ messageId: string }`
 
 ## Usage
 
-To execute a function, run the skill execution wrapper. It lives under
-`$FLOCK_SKILLS_DIR`, which your shell already exports; your working directory
-does NOT contain it, so always use this exact form:
-```bash
-bash "$FLOCK_SKILLS_DIR/gmail/scripts/gmail-exec.sh" <functionName> '<paramsJson>'
-```
+To execute a function, call the run_skill tool with skill `gmail`, the
+function's name, and its params as an object.
 
-Example:
-```bash
-bash "$FLOCK_SKILLS_DIR/gmail/scripts/gmail-exec.sh" listInbox '{"maxResults": 10}'
-bash "$FLOCK_SKILLS_DIR/gmail/scripts/gmail-exec.sh" getThread '{"threadId": "1a0825bed76acd3f"}'
-bash "$FLOCK_SKILLS_DIR/gmail/scripts/gmail-exec.sh" searchEmails '{"query": "from:boss@company.com is:unread"}'
-```
+Example (the run_skill tool, skill `gmail`):
+- function `listInbox`, params `{"maxResults": 10}`
+- function `getThread`, params `{"threadId": "1a0825bed76acd3f"}`
+- function `searchEmails`, params `{"query": "from:boss@company.com is:unread"}`
 
-This wrapper is the preferred path: it carries the account binding and the
+The run_skill tool is the preferred path: it carries the account binding and the
 audit trail. When it has no function for what you need, or a function keeps
 failing for a reason other than credentials, do the job yourself in the Gmail
-browser session with the `authenticated-crawl` skill (its **Which session to
-use** picks the session for the right account); **Downloading attachments**
-below is one such job. Expired credentials are not a browser cue: ask the
-owner to reconnect with a connector hand-off (`private-browser` skill,
-**Connectors**). **Sending** applies whichever path you take.
+browser session with the browser tool (`open` with `account` set to the
+mailbox's address picks the session for the right account; the browsing guide
+says how); **Downloading attachments** below is one such job. Expired
+credentials are not a browser cue: ask the owner to reconnect with a connector
+hand-off (the connector-handoff guide). **Sending** applies whichever path you take.
 
-If `$FLOCK_SKILLS_DIR` is unset or the script is missing, tell the owner (the
-install is broken) and do the task in the Gmail browser session meanwhile. Do
-not search the filesystem for another copy of the wrapper.
+If the run_skill tool cannot find the gmail skill, tell the owner (the install
+is broken) and do the task in the Gmail browser session meanwhile. Do not
+search the filesystem for the skill's scripts.
 
 ## Downloading attachments
 
@@ -343,7 +337,7 @@ mailbox: the default, unless you name another. When the user names or implies a
 mailbox ("my bimacred email", "my work inbox"), pass `accountHint` with that
 account's email address inside the params of EVERY call for the task:
 
-    bash "$FLOCK_SKILLS_DIR/gmail/scripts/gmail-exec.sh" searchEmails '{"query": "employment verification", "accountHint": "shiva@example.com"}'
+    the run_skill tool: skill gmail, function searchEmails, params {"query": "employment verification", "accountHint": "shiva@example.com"}
 
 An `accountHint` that matches no connected account is refused, never silently
 swapped for the default.
