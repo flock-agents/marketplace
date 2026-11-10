@@ -32,9 +32,9 @@ Call these functions with your `run_skill` tool: skill `zepto`, the function's n
 
 When you also have Zepto's own connector (`zepto-mcp`), shop Zepto through it, not this skill. Zepto keeps a cart per device: the connector's cart never shows on the website, and this skill's cart is not in the connector. For a cart built through the connector, the items and the bill come only from the connector: never open the website, or this skill's `view-cart` or `checkout`, to read that bill.
 
-- The order: `list_saved_addresses`, `select_saved_address`, `search_products`, `update_cart` (leave `deviceId` out: Flock fills it), `view_cart`, then the preview, one yes from the person on that exact total, then the same order tool with `confirmOrder: true`; for a payment link, then `check_payment_status`.
-- The full bill is the preview: the order tool you will use (`create_order` for cash on delivery, `create_online_payment_order` for a payment link, `create_wallet_order` for Zepto Cash) with `confirmOrder: false` and the address id places nothing and returns `toPayAmount` in paise (divide by 100) and `deliveryFee`. `get_payment_methods` also shows the order total. `view_cart` gives the items total only.
-- When the connector shows no fees, give the items total and say Zepto does not show the fees there.
+- The total to pay, every fee included, is the "Order Total" that `get_payment_methods` returns beside the payment methods. `view_cart` gives the items total only. Never create an order to read a price: there is no cancel, so an order created is placed.
+- The order: `list_saved_addresses`, `select_saved_address`, `search_products`, `update_cart` (leave `deviceId` out: Flock fills it), `view_cart`, `get_payment_methods` for the total, one yes from the person on that exact total, then the order tool for the method chosen (`create_order` for cash on delivery, `create_online_payment_order` for a payment link, `create_wallet_order` for Zepto Cash); for a payment link, then `check_payment_status`.
+- When the connector shows no total with fees, give the items total and say Zepto does not show the fees there.
 
 ## Available Functions
 

@@ -1,10 +1,10 @@
 {
   "version": 1,
-  "generatedAt": "2026-11-10T18:07:09.241Z",
+  "generatedAt": "2026-11-10T18:32:30.345Z",
   "sourceVersion": "1.4.1",
   "sourceTag": "zepto-v1.4.1",
   "files": {
-    "CHANGELOG.md": "d1d89efb50e1c0ad41a40629ebbe0426374ce8a6c3ebb937ea9f37f92e831611",
+    "CHANGELOG.md": "28a2dc94b7bfe3a5c59ca7d809d996968db9e8b8aa5ec3b4f720a60dd060e92a",
     "icon.svg": "ff5a156310a9395aeac4463bfab8a45297a71bb08543267e58b1b4279a0bcae6",
     "scripts/add-to-cart.sh": "2d5b33c814c33fa452e99328961bd8db889d3b9df0ba1801f72fbbdcc2895887",
     "scripts/_health-check.sh": "de9ede02c6c3cc1c6b8d02e4b7ffee1cfbb6064b196178dcfeb1efe9f1312b48",
@@ -29,6 +29,6 @@
     "scripts/_shop_run.ts": "90a25088ce26b2c6b31674b9566b2a3810a6cd02afe990a1aad24f8173405cc1",
     "scripts/_shop.ts": "d20abe3b3c844ad61059f5186a0a919c9bb01a1c12607c56b0f196fd5d0d6961",
     "flock.skill.json": "3661d06522618e57ccaf569b65bfe11e448e39c3f0dc6ec5958ecab520bb91b6",
-    "instructions.md": "42584cbd443ad7cf29f177e8e51a138139320407f9d735282791c8efe7f6b709"
+    "instructions.md": "a6ac4dd103c9c08f42f22b18112d479eed7de8418ac1e03d511ed094ff26577e"
   }
 }
