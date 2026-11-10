@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-11-10T19:02:54.130Z",
+  "generatedAt": "2026-11-10T19:05:25.346Z",
   "sourceVersion": "1.6.5",
   "sourceTag": "gmail-v1.6.5",
   "files": {
@@ -70,6 +70,6 @@
     "scripts/markRead.ts": "61c01d8e9488d816aba2986519365dbc15d6fa70e0758eaa97d895d44a63a5e0",
     "scripts/starMessage.sh": "25638febc50a868cde006b9bc71abb8eece73975a24e7bfa13e2482a216ea274",
     "flock.skill.json": "9a2ed24479f48ea3067327b41a7f0334dc901696e5781052afeeba404a03aa8d",
-    "instructions.md": "46d86aa24673ff5e74dfecb6df7148b67900814d948eee7e2b0eadea244a77c2"
+    "instructions.md": "095dd9b5796c1d5dedf88d17118930836213b15d4eafffe8a4cb80a33fd64344"
   }
 }

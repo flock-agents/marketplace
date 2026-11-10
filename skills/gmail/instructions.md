@@ -284,7 +284,7 @@ Example (the run_skill tool, skill `gmail`):
 The run_skill tool is the preferred path: it carries the account binding and the
 audit trail. When it has no function for what you need, or a function keeps
 failing for a reason other than credentials, do the job yourself in the Gmail
-browser session with your `browser` tool: `list` shows the saved sign-ins, each
+browser session with the browser tool: `list` shows the saved sign-ins, each
 with its `accountEmail` and `skills`; pick the one listing `gmail` for the
 mailbox's address. `open` with that `session` and the url gives a
 `persistentSessionId`; `act`, `read` and `close` take it (the browsing guide).
