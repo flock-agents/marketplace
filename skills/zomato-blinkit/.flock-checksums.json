@@ -1,10 +1,10 @@
 {
   "version": 1,
-  "generatedAt": "2026-11-10T17:16:35.405Z",
-  "sourceVersion": "1.4.1",
-  "sourceTag": "zomato-blinkit-v1.4.1",
+  "generatedAt": "2026-11-10T18:07:09.191Z",
+  "sourceVersion": "1.4.2",
+  "sourceTag": "zomato-blinkit-v1.4.2",
   "files": {
-    "CHANGELOG.md": "d7d8609594fb1d23bf7ee7d15e3887c97c6d82510840e577e211131127d3d197",
+    "CHANGELOG.md": "e98cc8d8c198d6967482d870f61fc97c9c99d2f0346761c2a38c5297a6e29fe8",
     "icon.svg": "02c183b473fc849d6f3c94dd98cbf8028ec0a9ea1e47f59be1d5efd777d46c1a",
     "scripts/add-to-cart.sh": "0002eee20589a2251b3976360d25997a09b7905e56915b269184680f90cc4c87",
     "scripts/_health-check.sh": "71df9d2a4a2528659efbfa995f4a02da569c3456454926489d8729bfc9f57d00",
@@ -28,7 +28,7 @@
     "scripts/keep-alive.sh": "eec48efedb3f163047f8bfd3bf821c48e95c1cf6586c3fd75cedd7c2225065dd",
     "scripts/_shop_run.ts": "90a25088ce26b2c6b31674b9566b2a3810a6cd02afe990a1aad24f8173405cc1",
     "scripts/_shop.ts": "d20abe3b3c844ad61059f5186a0a919c9bb01a1c12607c56b0f196fd5d0d6961",
-    "flock.skill.json": "95ce641ebdfc7d65c1298bca8957fa03241b2087264241b41ca46abddba8e6ac",
-    "instructions.md": "2982e6287c0cf6378ba65ff1db1377ecefee2c97445a87996add990c190d24a4"
+    "flock.skill.json": "5305aa40426da2f6eaca86407eb3cb96e19f30319993b182826e80c778f26dcf",
+    "instructions.md": "a0bada55b29174f7808cf734824d78191364aedd40db69d5bb08dbeecbaa033e"
   }
 }
