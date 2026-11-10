@@ -12,7 +12,7 @@ payload also holds:
 - `events` (`e1`…), the events to plan, none before today: each has its `ref` (`e1`), its `event`
   (the pointer, `calendar-desk:<id>`, that ties a TODO to it), its `date`, its `time` when it has
   one (`allDay` says when it has none), its `title`, its `change`, for a changed event `was` (the `date`, and `time` when it has one,
-  it had when its steps were dated), and `facts` (what memory knows
+  it had when its steps were dated), and `facts` (what Flock knows
   about it: whose birthday it is, what the trip needs).
   An event may also show its `guests` (other people invited) and its `location`. They say who and
   where: context for your judgement, never a rule. An event without them tells you nothing about
@@ -34,7 +34,7 @@ payload also holds:
     `"off"` when they dismissed the last two as not important; `"none"` when nothing counts
     yet. A kind that is `"off"` is refused if you propose it, unless the event's `pattern`
     shows it `"on"`.
-  - `facts`, what memory knows about how the user does this (how they travel, whether they buy
+  - `facts`, what Flock knows about how the user does this (how they travel, whether they buy
     gifts, where they eat out). A fact can be off topic: use only one about this kind of step.
 
 The payload does not hold the user's TODOs: you read them yourself (step 1 below). Your work here
