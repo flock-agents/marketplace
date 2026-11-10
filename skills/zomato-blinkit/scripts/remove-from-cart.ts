@@ -1,106 +1,52 @@
 #!/usr/bin/env bun
 /**
- * Blinkit — remove a product from cart by productId.
- * Params: productId
+ * Blinkit — remove products from the cart, by name, or all of them.
+ * Params: { productName?: string, all?: boolean } (productId is read as a name: the cart drawer carries no ids)
+ *
+ * Blinkit has no cart page: the cart is a drawer (_blinkit.ts). A line's stepper is
+ * `AddToCart__UpdatedButtonContainer`: minus, quantity, plus. Pressing its first control until the
+ * line is gone removes the product.
  */
-import {
-  requireBrowserSession,
-  validateParam,
-  errorJson,
-  browserWrite,
-  type GroceryServiceConfig,
-} from "../../_shared/_grocery_helpers";
-
-const config: GroceryServiceConfig = {
-  name: "Blinkit",
-  baseUrl: "https://blinkit.com",
-  loginPattern: /blinkit\.com\/login|blinkit\.com\/auth/i,
-};
+import { requireBrowserSession, errorJson, browserInteract } from "../../_shared/_grocery_helpers";
+import { BLINKIT as config, HOME_URL, OPEN_CART_ACTIONS, READ_CART_SCRIPT } from "./_blinkit";
 
 const PARAMS = JSON.parse(process.env.SKILL_PARAMS || "{}");
-const productId: string = PARAMS.productId || "";
+const all = PARAMS.all === true || PARAMS.all === "true";
+const name: string = String(PARAMS.productName || PARAMS.name || PARAMS.productId || "").trim();
 
 requireBrowserSession();
-validateParam(productId, "productId");
+if (!all && !name) errorJson("MISSING_PARAM", "Give productName (as view-cart shows it), or all: true to empty the cart.");
 
-const cartUrl = `${config.baseUrl}/checkout`;
-
-const removeEvalScript = `(() => {
-  const targetId = '${productId}';
-  const cartItems = document.querySelectorAll('[class*="cart-item"], [class*="CartItem"], [class*="cart_item"], [data-testid="cart-item"], [class*="CheckoutItem"]');
-
-  if (cartItems.length === 0) {
-    return JSON.stringify({ error: true, code: 'CART_EMPTY', message: 'Cart has no items' });
+const REMOVE_SCRIPT = `(async () => {
+  const want = ${JSON.stringify(name.toLowerCase())};
+  const all = ${all};
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const lines = () => Array.from(document.querySelectorAll('[class*="CartProduct__Container"]'));
+  const title = (el) => ((el.querySelector('[class*="ProductTitle"]') || {}).innerText || "").trim();
+  const matches = (el) => all || title(el).toLowerCase().includes(want) || want.includes(title(el).toLowerCase());
+  const removed = [];
+  for (let guard = 0; guard < 60; guard++) {
+    const line = lines().find(matches);
+    if (!line) break;
+    const stepper = line.querySelector('[class*="AddToCart__UpdatedButtonContainer"]');
+    const minus = stepper && (stepper.querySelector('[class*="AddMinusIcon"]') || stepper.firstElementChild);
+    if (!minus) return JSON.stringify({ error: true, code: "PAGE_CHANGED", message: "No minus control on the cart line " + title(line) });
+    const t = title(line);
+    (minus.closest('button,[role="button"]') || minus).click();
+    await sleep(900);
+    if (!lines().includes(line) && !removed.includes(t)) removed.push(t);
   }
-
-  let found = false;
-  let removedName = '';
-
-  cartItems.forEach(el => {
-    if (found) return;
-    const link = el.querySelector('a')?.href || '';
-    const idMatch = link.match(/\\/prid\\/(\\d+)/) || link.match(/\\/product\\/([\\w-]+)/) || link.match(/\\/(\\d{5,})/);
-    const itemId = idMatch ? idMatch[1] : '';
-
-    if (itemId === targetId) {
-      const nameEl = el.querySelector('[class*="name"], [class*="Name"], [class*="Title"], h4, h3');
-      removedName = (nameEl?.textContent || '').trim().substring(0, 200);
-
-      const removeBtn = el.querySelector('[class*="remove"], [class*="Remove"], [class*="delete"], [class*="Delete"], [data-testid="remove-btn"], button[aria-label*="remove"], button[aria-label*="delete"]');
-      if (!removeBtn) {
-        const minusBtn = el.querySelector('[class*="minus"], [class*="Minus"], button[aria-label*="decrease"]');
-        if (minusBtn) {
-          const qtyEl = el.querySelector('[class*="quantity"], [class*="count"], input[type="number"]');
-          const qty = parseInt((qtyEl?.textContent || qtyEl?.value || '1').replace(/[^\\d]/g, '')) || 1;
-          for (let i = 0; i < qty; i++) {
-            minusBtn.click();
-          }
-          found = true;
-          return;
-        }
-      } else {
-        removeBtn.click();
-        found = true;
-      }
-    }
-  });
-
-  if (!found) {
-    return JSON.stringify({ error: true, code: 'PRODUCT_NOT_FOUND', message: 'Product ' + targetId + ' not found in cart' });
-  }
-
-  return new Promise(resolve => {
-    setTimeout(() => {
-      const countEl = document.querySelector('[class*="cart-count"], [class*="CartCount"], [class*="badge"], [data-testid="cart-count"]');
-      const totalEl = document.querySelector('[class*="grand-total"], [class*="GrandTotal"], [class*="total-amount"], [class*="TotalAmount"], [data-testid="cart-total"], [class*="ToPay"]');
-      const cartCount = parseInt((countEl?.textContent || '0').replace(/[^\\d]/g, '')) || 0;
-      const totalText = (totalEl?.textContent || '').replace(/[^\\d.]/g, '');
-      const cartTotal = totalText ? parseFloat(totalText) : 0;
-
-      resolve(JSON.stringify({
-        success: true,
-        productId: targetId,
-        removed: removedName,
-        cartItemCount: cartCount,
-        cartTotal: cartTotal
-      }));
-    }, 1500);
-  });
+  return JSON.stringify({ removed, left: lines().map(title) });
 })()`;
 
-const result = await browserWrite(config, cartUrl, removeEvalScript);
-const content: string = result.content || "{}";
-
+const result = await browserInteract(config, HOME_URL, OPEN_CART_ACTIONS, undefined, REMOVE_SCRIPT);
 let parsed: any;
-try {
-  parsed = JSON.parse(content);
-} catch {
-  errorJson("PAGE_CHANGED", "Could not interact with cart. The service may have updated its layout.");
-}
+try { parsed = JSON.parse(result.content || ""); } catch { errorJson("PAGE_CHANGED", "Could not read the cart drawer. Blinkit's page may have changed."); }
+if (parsed.error) { console.log(JSON.stringify(parsed)); process.exit(1); }
+if (!all && parsed.removed.length === 0) errorJson("PRODUCT_NOT_FOUND", `No cart line matches "${name}". In the cart: ${parsed.left.join(", ") || "nothing"}.`);
 
-if (parsed.error) {
-  console.log(JSON.stringify(parsed));
-  process.exit(1);
-}
-
-console.log(JSON.stringify(parsed));
+// The bill after the change, so the caller needn't read the cart again.
+const after = await browserInteract(config, HOME_URL, OPEN_CART_ACTIONS, undefined, READ_CART_SCRIPT);
+let cart: any = {};
+try { cart = JSON.parse(after.content || "{}"); } catch { /* the removal stands; the bill is just unread */ }
+console.log(JSON.stringify({ success: true, removed: parsed.removed, left: parsed.left, orderTotal: cart.orderTotal ?? null, bill: cart.bill ?? [] }));

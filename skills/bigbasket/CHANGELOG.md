@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.4.1
+
+- `search-products` reads today's product cards (`SKUDeck___StyledDiv`: brand, name and pack from the heading, the id from `/pd/<id>/`, selling price and MRP); the old selectors timed out on every search. Checked live 2026-11-10.
+- `add-to-cart` finds the product page's button by its text ("Add to basket"), checked live 2026-11-10.
+
 ## 1.4.0
 
 - `list-addresses`: the delivery addresses saved on BigBasket, and the location the site shows now.

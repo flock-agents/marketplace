@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.4.1
+
+- `remove-from-cart` `{ productName?, all? }` removes lines from the cart drawer by name, or every line, and returns what it removed, what is left and the new bill. `view-cart` lines carry no product id, so removing by id always failed.
+
 ## 1.4.0
 
 - `list-addresses`: the delivery addresses saved on Blinkit, and the location the site shows now.

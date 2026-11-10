@@ -43,7 +43,7 @@ if (!persistentId) {
 }
 
 const checkActions = [
-  { action: "waitForSelector", selector: `[class*="add-to-cart"], [class*="AddToCart"], [qa="add"], button[class*="add"], [class*="ATCButton"], [data-testid="add-btn"], [class*="out-of-stock"], [class*="OutOfStock"]`, delay: 5000 },
+  { action: "waitForSelector", selector: `h1`, delay: 5000 },
 ];
 
 const checkScript = `(() => {
@@ -53,7 +53,7 @@ const checkScript = `(() => {
     const name = (nameEl?.textContent || 'This product').trim().substring(0, 200);
     return JSON.stringify({ error: true, code: 'OUT_OF_STOCK', message: name + ' is currently out of stock' });
   }
-  const addBtn = document.querySelector('[class*="add-to-cart"], [class*="AddToCart"], [qa="add"], button[class*="add"], [class*="ATCButton"], [data-testid="add-btn"]');
+  const addBtn = Array.from(document.querySelectorAll("button")).find((b) => /^add( to basket)?$/i.test(b.innerText.trim()));
   return JSON.stringify({ inStock: true, hasButton: !!addBtn });
 })()`;
 
@@ -75,7 +75,7 @@ if (checkParsed.error) {
 
 const addScript = `(() => {
   const quantity = ${quantity};
-  const addBtn = document.querySelector('[class*="add-to-cart"], [class*="AddToCart"], [qa="add"], button[class*="add"], [class*="ATCButton"], [data-testid="add-btn"]');
+  const addBtn = Array.from(document.querySelectorAll("button")).find((b) => /^add( to basket)?$/i.test(b.innerText.trim()));
   if (!addBtn) {
     return JSON.stringify({ error: true, code: 'PAGE_CHANGED', message: 'Could not find add-to-cart button. The page layout may have changed.' });
   }

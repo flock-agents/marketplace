@@ -1,10 +1,10 @@
 {
   "version": 1,
-  "generatedAt": "2026-11-10T13:01:00.301Z",
-  "sourceVersion": "1.4.0",
-  "sourceTag": "zomato-blinkit-v1.4.0",
+  "generatedAt": "2026-11-10T17:16:35.405Z",
+  "sourceVersion": "1.4.1",
+  "sourceTag": "zomato-blinkit-v1.4.1",
   "files": {
-    "CHANGELOG.md": "ab87d81d3203d5eed7ef5fbaa76c6cc6457fcc2a8d4ad5bf212f67d0304f7b58",
+    "CHANGELOG.md": "d7d8609594fb1d23bf7ee7d15e3887c97c6d82510840e577e211131127d3d197",
     "icon.svg": "02c183b473fc849d6f3c94dd98cbf8028ec0a9ea1e47f59be1d5efd777d46c1a",
     "scripts/add-to-cart.sh": "0002eee20589a2251b3976360d25997a09b7905e56915b269184680f90cc4c87",
     "scripts/_health-check.sh": "71df9d2a4a2528659efbfa995f4a02da569c3456454926489d8729bfc9f57d00",
@@ -19,7 +19,7 @@
     "scripts/view-cart.ts": "150e55192122cfdcafcf56e5ac87efa30f3e9a5bec8f82a6015d7fde9935ee66",
     "scripts/set-delivery-location.ts": "33e0aae3f336826f225b64cc51baf75abc2e638cc9a73bf178032067bdbf0150",
     "scripts/keep-alive.ts": "f3f754a1787585e383c25b591dce92b7bf5b4a487469b0b5e61970fd2e7f1251",
-    "scripts/remove-from-cart.ts": "614e780b3adedb326c280edb69e9171bffc15b2e4b635a521b82443386f8cf17",
+    "scripts/remove-from-cart.ts": "699cdd3b8102c70f2018659fa4791e81c94f4b6a306274c7a3f6674dd28fdd66",
     "scripts/empty-cart.ts": "5d682d749af84c6be031f365ad771016e1005c765f85eba36996d0ef0a2a1323",
     "scripts/view-order-history.sh": "657e5bb9e6d5d3358bea32a44c3480572162b970f4c0e8e6519afb1666d2dab3",
     "scripts/list-addresses.ts": "da6341a547dddd2eea92909376cb3caacc79dd856fab40845ef9ac4c97e9cd12",
@@ -28,7 +28,7 @@
     "scripts/keep-alive.sh": "eec48efedb3f163047f8bfd3bf821c48e95c1cf6586c3fd75cedd7c2225065dd",
     "scripts/_shop_run.ts": "90a25088ce26b2c6b31674b9566b2a3810a6cd02afe990a1aad24f8173405cc1",
     "scripts/_shop.ts": "d20abe3b3c844ad61059f5186a0a919c9bb01a1c12607c56b0f196fd5d0d6961",
-    "flock.skill.json": "1c8f1e6ccf455512ae0d56f99f65c7290af2fcda429b358f549ead0b41b3dfd3",
-    "instructions.md": "07c683992a9d0ad9b6bb80de4e532f0742dc7cd19b773a676adb8acf120c4019"
+    "flock.skill.json": "95ce641ebdfc7d65c1298bca8957fa03241b2087264241b41ca46abddba8e6ac",
+    "instructions.md": "2982e6287c0cf6378ba65ff1db1377ecefee2c97445a87996add990c190d24a4"
   }
 }

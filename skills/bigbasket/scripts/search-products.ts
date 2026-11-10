@@ -30,55 +30,47 @@ if (maxResults > 25) maxResults = 25;
 
 const searchUrl = `${config.baseUrl}/ps/?q=${urlencode(query)}`;
 
+const CARD = '[class*="SKUDeck___StyledDiv"], [qa="product"], [class*="ProductCard"], .SKUDeck';
+
 const scrollActions = [
-  { action: "waitForSelector", selector: `[qa="product"], [class*="ProductCard"], [class*="product-card"], .SKUDeck, .prod-deck, li[class*="PaginateItems"]`, delay: 5000 },
+  { action: "waitForSelector", selector: CARD, delay: 10000 },
   { action: "scroll", deltaY: 600 },
   { action: "wait", delay: 1000 },
   { action: "scroll", deltaY: 600 },
   { action: "wait", delay: 1000 },
 ];
 
+// Markup checked live 2026-11-10: one `SKUDeck___StyledDiv-…` per product; its h3 holds brand, name
+// and pack on separate lines; the link is /pd/<id>/<slug>/; prices are the ₹ amounts (selling first,
+// then MRP); an in-stock card has an "Add" button.
 const evalScript = `(() => {
   const maxResults = ${maxResults};
+  const rupees = (t) => (t.match(/₹\s*[\d,]+(?:\.\d+)?/g) || []).map((s) => parseFloat(s.replace(/[₹,\s]/g, "")));
+  const cards = Array.from(document.querySelectorAll('${CARD}'));
   const products = [];
-  const cards = document.querySelectorAll('[qa="product"], [class*="ProductCard"], [class*="product-card"], .SKUDeck, .prod-deck, li[class*="PaginateItems"]');
-  const items = cards.length > 0 ? cards : document.querySelectorAll('[class*="Product"] a, [class*="item-info"], .uiv2-list-box-img-container');
-
-  items.forEach((el, i) => {
-    if (i >= maxResults) return;
-    const nameEl = el.querySelector('[class*="BrandName"], [class*="prod-name"], [class*="Name"], h3, h4, .Description') || el;
-    const priceEl = el.querySelector('[class*="DiscountPriceTile"], [class*="selling-price"], [class*="Price"], [class*="sp"]');
-    const mrpEl = el.querySelector('[class*="MRPPrice"], [class*="strike"], s, del, [class*="mp"]');
-    const stockEl = el.querySelector('[class*="out-of-stock"], [class*="OutOfStock"], [class*="sold-out"]');
-    const imgEl = el.querySelector('img');
-    const quantityEl = el.querySelector('[class*="PackChanger"], [class*="weight"], [class*="quantity"], [class*="unit"], [class*="Label"]');
-    const deliveryEl = el.querySelector('[class*="delivery"], [class*="eta"], [class*="minute"]');
-    const discountEl = el.querySelector('[class*="discount"], [class*="offer"], [class*="Offer"], [class*="save"]');
-    const brandEl = el.querySelector('[class*="Brand"], [class*="brand"]');
-
-    const link = el.closest('a')?.href || el.querySelector('a')?.href || '';
-    const idMatch = link.match(/\\/pd\\/[\\w-]+\\/(\\d+)/) || link.match(/\\/(\\d{5,})/) || link.match(/\\/product\\/(\\w+)/);
-
-    const name = (nameEl.textContent || '').trim().substring(0, 200);
-    if (!name) return;
-
-    const priceText = (priceEl?.textContent || '').replace(/[^\\d.]/g, '');
-    const mrpText = (mrpEl?.textContent || '').replace(/[^\\d.]/g, '');
-
+  for (const el of cards) {
+    if (products.length >= maxResults) break;
+    const href = (el.querySelector('a[href*="/pd/"]') || {}).getAttribute?.("href") || "";
+    const id = (href.match(/\/pd\/(\d+)/) || [])[1];
+    const head = ((el.querySelector("h3") || {}).innerText || "").split("\n").map((s) => s.trim()).filter(Boolean);
+    if (!id || head.length === 0) continue;
+    const text = el.innerText || "";
+    const [price, mrp] = rupees(text);
+    const brand = head.length > 2 ? head[0] : "";
+    const name = head.length > 2 ? head[1] : head[0];
+    const pack = head.length > 2 ? head[2] : (head[1] || "");
+    const add = Array.from(el.querySelectorAll("button")).some((b) => /^add$/i.test(b.innerText.trim()));
+    const img = el.querySelector("img");
     products.push({
-      id: idMatch ? idMatch[1] : 'unknown-' + i,
-      name: name,
-      brand: (brandEl?.textContent || '').trim().substring(0, 100),
-      quantity: (quantityEl?.textContent || '').trim().substring(0, 50),
-      price: priceText ? parseFloat(priceText) : null,
-      mrp: mrpText ? parseFloat(mrpText) : null,
-      discount: (discountEl?.textContent || '').trim().substring(0, 50) || null,
-      inStock: !stockEl,
-      imageUrl: imgEl?.src || null,
-      deliveryEstimate: (deliveryEl?.textContent || '').trim().substring(0, 50) || null
+      id, name: (brand ? brand + " " : "") + name, brand, quantity: pack,
+      price: price ?? null, mrp: mrp ?? null,
+      discount: (text.match(/\d+% OFF/i) || [null])[0],
+      inStock: add || !/out of stock|notify me|sold out/i.test(text),
+      imageUrl: img?.src || null,
+      deliveryEstimate: (text.match(/\d+\s*MINS?/i) || [null])[0],
     });
-  });
-  return JSON.stringify({ products, totalResults: items.length });
+  }
+  return JSON.stringify({ products, totalResults: cards.length });
 })()`;
 
 const result = await browserInteract(config, searchUrl, scrollActions, undefined, evalScript);

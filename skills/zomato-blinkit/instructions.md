@@ -54,7 +54,7 @@ The cart's items and the full total to pay, every fee included. Params: `{}`
 Returns `{ verifiedCart: true, items, itemCount, subtotal, fees: [{ label, amount }], feeTotal, discount, total, totalSource, bill }`. `total` is what the person pays: the page's own grand total or to-pay line (`totalSource: "page"`), else subtotal + fees − discount (`"computed"`). It reads only the cart drawer and fails `NOT_CART_PAGE` when the page is anything else (a home page, suggestions): try once more, then report it, never a guessed total. Blinkit has no cart page: `blinkit.com/cart` shows the home page and its suggestions, so never read it as the cart; this function opens the cart drawer and reads only that.
 
 ### remove-from-cart
-Remove an item from the cart. Params: `{ productId: string }`
+Remove items from the cart by name, as view-cart shows it, or all of them. Params: `{ productName?: string, all?: boolean }`. Returns what was removed, what is left and the new bill.
 
 ### track-order
 Track an existing order by order ID. Params: `{ orderId: string }`
