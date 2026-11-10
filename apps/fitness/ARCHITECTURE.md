@@ -19,7 +19,7 @@ A private `fullstack` app: a React page built with Vite (`src/`), a Hono backend
    The app's own routes (`server/*-routes.ts`) are mounted on the same router beside them.
 4. Every write is stamped `updated_by` (`user:<id>` or `agent:<id>`), recorded in the kit's `_changes` table so the page can offer Undo, and announced on `_events` so open pages update live.
 
-Agents write through the same routes with `curl` and an `X-Flock-Agent` header; the per-app section says which routes and values each app expects.
+Agents write through the same routes with their api tool (path `/a/<app-id>/api/...`), which stamps each write with the agent; the per-app section says which routes and values each app expects.
 
 ## Where things live
 

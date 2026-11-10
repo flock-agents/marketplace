@@ -4,6 +4,7 @@
 
 - The app's title reads the `title.overview` label, so it follows the app's own name (`titleFromName`) or a renamed title; until the app info loads it is the app's name, as before.
 - `catalog.json` is regenerated (it still said 1.0.3), and the app ships `e2e-rows.json`, the rows Flock's end-to-end template flow builds it with.
+- The know-how, the Eaten estimate and the pace-check wake call the app with the api tool (method, path `/a/<app id>/api/...`, a JSON body), not curl to `$FLOCK_API_URL` with `$FLOCK_AUTH_TOKEN`, which Flock refuses. ARCHITECTURE.md says agents write with their api tool. Needs Flock 0.24.0.
 
 ## 1.1.0
 
