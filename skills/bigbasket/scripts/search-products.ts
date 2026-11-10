@@ -41,9 +41,9 @@ const scrollActions = [
 ];
 
 // Markup checked live 2026-11-10: one `SKUDeck___StyledDiv-…` per product; its h3 holds brand, name
-// and pack on separate lines; the link is /pd/<id>/<slug>/; prices are the ₹ amounts (selling first,
+// and pack on separate lines, with the rating ("4.2", "5122 Ratings") between them; the link is /pd/<id>/<slug>/; prices are the ₹ amounts (selling first,
 // then MRP); an in-stock card has an "Add" button.
-const evalScript = `(() => {
+const evalScript = String.raw`(() => {
   const maxResults = ${maxResults};
   const rupees = (t) => (t.match(/₹\s*[\d,]+(?:\.\d+)?/g) || []).map((s) => parseFloat(s.replace(/[₹,\s]/g, "")));
   const cards = Array.from(document.querySelectorAll('${CARD}'));
@@ -52,7 +52,7 @@ const evalScript = `(() => {
     if (products.length >= maxResults) break;
     const href = (el.querySelector('a[href*="/pd/"]') || {}).getAttribute?.("href") || "";
     const id = (href.match(/\/pd\/(\d+)/) || [])[1];
-    const head = ((el.querySelector("h3") || {}).innerText || "").split("\n").map((s) => s.trim()).filter(Boolean);
+    const head = ((el.querySelector("h3") || {}).innerText || "").split("\n").map((s) => s.trim()).filter((s) => s && !/^\d+(\.\d+)?$/.test(s) && !/ratings?$/i.test(s));
     if (!id || head.length === 0) continue;
     const text = el.innerText || "";
     const [price, mrp] = rupees(text);
