@@ -1,10 +1,10 @@
 {
   "version": 1,
-  "generatedAt": "2026-11-10T18:46:38.250Z",
+  "generatedAt": "2026-11-10T19:40:57.382Z",
   "sourceVersion": "1.4.2",
   "sourceTag": "bigbasket-v1.4.2",
   "files": {
-    "CHANGELOG.md": "af91d3b07826676534089a8197c506be64a032a0455ddd21706e17bdddff1e34",
+    "CHANGELOG.md": "135c23bae6f28a60c3016331ffe99ea22ff679ec4f6c1ec31c67cc61b06d31c8",
     "icon.svg": "05865e6104573352015d59d9dde26a2379b99d1458183318959f4bf015b8a8c6",
     "scripts/add-to-cart.sh": "e3842b8966eab11481464256f1d6025f4e9aa49ce2c192f8015a1fab80d1fd53",
     "scripts/_health-check.sh": "f583afcfb661fc5a194fca69f7af60f958c92a49788b7b04938551d6395bce51",
@@ -29,6 +29,6 @@
     "scripts/_shop_run.ts": "b87947e303b4210a10a59d16da769b6826dbf0f91c6c1bef03459ca6aa21051e",
     "scripts/_shop.ts": "f56f61447b7eacd399d5e2e8b0e681c8c40132d5ab360f6bcc19a57927bbd60c",
     "flock.skill.json": "dd12e4f2eda6d77f3285437c1787cc8081b35b82e2fb75ae65da5462a4de6636",
-    "instructions.md": "0ca0d8949bf491287f46f2bb2bbf4324be1ca421e2b5f6e4aa37e675fa0e3397"
+    "instructions.md": "056ce26b7ea4329d8b6dd1d6b4602c4b9dcec8f86013c3b9296f0f9fb6fbb442"
   }
 }

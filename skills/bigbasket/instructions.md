@@ -48,6 +48,7 @@ Each product carries an `imageUrl`: show the results as a flock-ui block with th
 
 ### add-to-cart
 Add a product to the cart. Params: `{ productId: string, quantity?: number, query?: string }`. Pass the `query` you found it with in `search-products`: it adds from those search results (the card's Add, then its "+" for each more unit) without opening the product page, and returns `quantityAdded`. Without `query` it opens the product page.
+An add's `success` is not proof: after adding, run `view-cart` and compare it line by line with what you meant to add. Report every mismatch before asking for the yes; never present an assumed cart.
 
 ### view-cart
 The cart's items and the full total to pay, every fee included. Params: `{}`

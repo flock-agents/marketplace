@@ -56,6 +56,7 @@ Each product carries an `imageUrl`: show the results as a flock-ui block with th
 
 ### add-to-cart
 Add a product to the cart by searching and clicking ADD from results. Params: `{ query: string, quantity?: number }`
+An add's `success` is not proof: after adding, run `view-cart` and compare it line by line with what you meant to add. Report every mismatch before asking for the yes; never present an assumed cart.
 
 ### view-cart
 The cart's items and the full total to pay, every fee included. Params: `{}`

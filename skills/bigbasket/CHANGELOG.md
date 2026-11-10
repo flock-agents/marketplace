@@ -2,6 +2,7 @@
 
 ## 1.4.2
 
+- After adding, `view-cart` is compared line by line with what was meant (an add's `success` is not proof), and every mismatch is reported before asking for the yes. Moved here from the Meal Planner app's guide.
 - Every `search-products` call failed with "evaluate: SyntaxError: Unexpected token 'const'": its page script was a plain template string, so its regexes lost their backslashes. It is `String.raw` now, and the rating in a card's heading ("4.2", "5122 Ratings") is no longer read as the pack size. Checked on the live search page; `tests/grocery/page-scripts.test.ts` keeps every page script's backslashes.
 - A search with no product cards (BigBasket sells nothing that matches) returns no products and a `note`, instead of failing on a 10-second wait for cards: the page script waits for the cards itself.
 - The instructions name Flock's own tools instead of the hidden private-browser and authenticated-crawl skills and the show-payment-qr script: the `browser` tool on the signed-in session for what the functions cannot do (`open` with `session`, then `act` and `read` with its `persistentSessionId`), `show_qr` and `hand_to_owner` with the checkout's `persistentSessionId`, and the `api` tool for the saved payment preference. The rules are unchanged.
