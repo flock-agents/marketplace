@@ -72,7 +72,7 @@ When someone asks for groceries, compare prices across all connected services be
 
 **Cache awareness:** Search results are cached for 10 minutes. If you're comparing within a session where you already searched, your data is fresh. If it's been a while, mention it: "Prices from a few minutes ago — want me to refresh?"
 
-**Performance:** Aim for under 30 seconds. If a service is slow or down, don't wait — present what you have and note which service didn't respond.
+**Performance:** If a service is slow or down, don't wait — present what you have and note which service didn't respond.
 
 ---
 
