@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.3.6
+
+- Drops the "under 30 seconds" target: a price comparison runs one background session per service, so it usually takes longer. Slow or down services are still reported without waiting.
+
 ## 1.3.5
 
 - Tools only: the butler uses each service's own tool (a connector's actions, or a website skill's functions through `run_skill`) or the service's website in the browser, never Flock's API, a script, `curl` or a local port.
