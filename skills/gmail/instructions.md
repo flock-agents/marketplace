@@ -284,9 +284,11 @@ Example (the run_skill tool, skill `gmail`):
 The run_skill tool is the preferred path: it carries the account binding and the
 audit trail. When it has no function for what you need, or a function keeps
 failing for a reason other than credentials, do the job yourself in the Gmail
-browser session with the browser tool (`open` with `account` set to the
-mailbox's address picks the session for the right account; the browsing guide
-says how); **Downloading attachments** below is one such job. Expired
+browser session with your `browser` tool: `list` shows the saved sign-ins, each
+with its `accountEmail` and `skills`; pick the one listing `gmail` for the
+mailbox's address. `open` with that `session` and the url gives a
+`persistentSessionId`; `act`, `read` and `close` take it (the browsing guide).
+**Downloading attachments** below is one such job. Expired
 credentials are not a browser cue: ask the owner to reconnect with a connector
 hand-off (the connector-handoff guide). **Sending** applies whichever path you take.
 
@@ -304,18 +306,18 @@ path, size } | { name, error }] }`. `name` (part of a name is enough) or `index`
 10). It is a read, so it runs while a card is being prepared. `path` is
 absolute: read it, attach it to a draft (`attachments`), or `upload` it.
 
-If it fails (Gmail changed its page), do it by hand: open the email in a persistent session of the
-`authenticated-crawl` skill on the Gmail browser session (its **Which session to
-use** says how to pick the session for the right account) and click the
-attachment's download button with a `download` action. Each file is saved into
-your workspace's `downloads/` folder and listed in the response's `downloads`
-as `{fileName, path, size}` (see **Downloading files** there). `path` is
+If it fails (Gmail changed its page), do it by hand with your `browser` tool on
+the Gmail sign-in (**Usage** above says how to pick it from `list`): open the
+email in a persistent session and click the attachment's download button with a
+`download` step. Each file is saved into your workspace's `downloads/` folder and
+listed in the answer's `downloads` as `{fileName, path, size}` (the browsing guide). `path` is
 absolute: attach it to a draft (`attachments`), or `upload` it to another site.
 
 1. Find the thread id with `searchEmails` / `listInbox` (the `id` field).
-2. Create a persistent session on `https://mail.google.com/mail/u/0/#all/<threadId>`
-   with `waitFor: "h2.hP"` (the subject line).
-3. Download each attachment: hover its tile, then the download button:
+2. `open` with that `session`, `url` `https://mail.google.com/mail/u/0/#all/<threadId>`
+   and `waitFor` `"h2.hP"` (the subject line): it gives a `persistentSessionId`.
+3. Download each attachment with `act` on that `persistentSessionId`: hover its tile,
+   then the download button:
 
        [{"action": "hover", "selector": "div.aQH span.aZo:nth-of-type(1)"},
         {"action": "download", "selector": "div.aQH span.aZo:nth-of-type(1) [aria-label^='Download']"}]
@@ -325,7 +327,7 @@ absolute: attach it to a draft (`attachments`), or `upload` it to another site.
    "Download attachment <name>"; "Download all attachments" gives one .zip).
    Repeat for the next tile (`nth-of-type(2)`, …), or download all at once.
 4. Check every entry in `downloads` has a `path` (an `error` means it was not
-   kept — over 50 MB, or it timed out), then close the session.
+   kept — over 50 MB, or it timed out), then `close` the `persistentSessionId`.
 
 Files over 50 MB are not kept. Attachments that are Google Drive links are not
 files on the email: open the Drive link instead.
@@ -350,9 +352,8 @@ user you searched a mailbox the response does not name.
 ## Reconnection
 
 If the Gmail skill is not connected or credentials have expired:
-- Guide the user to reconnect via **Skills & Integrations** in their Flock app
-- For browser session: the user needs to log in again via the Flock dashboard
-- For IMAP: the user needs to update their App Password in the Flock dashboard
+- Ask the owner to reconnect with a connector hand-off (the connector-handoff guide)
+- For IMAP: the owner updates their App Password in **Skills & Integrations**
 - Never tell users to "grant access to" or "approve access for" anything other than Flock
 
 ## Browser Session Notes
