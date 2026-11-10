@@ -1,9 +1,10 @@
 {
   "version": 1,
-  "generatedAt": "2026-10-25T14:50:13.051Z",
-  "sourceVersion": "1.0.0",
-  "sourceTag": "google-drive-v1.0.0",
+  "generatedAt": "2026-11-10T17:50:18.694Z",
+  "sourceVersion": "1.0.1",
+  "sourceTag": "google-drive-v1.0.1",
   "files": {
+    "CHANGELOG.md": "e84500739a7ac56135137170460d858919af93c5da5effdf40c6ab33115a82c1",
     "icon.svg": "3b2e3ffcfb624bfbf8dc3d5a284a6f05e7ebfe9c2058e8c0c6e6e28ee6208eaa",
     "scripts/drive-exec.sh": "3f02fabcea6dea08c71e80bc742e46d61c873aa406994fee811588405ebbc60e",
     "scripts/getFile.sh": "65de9dabc42bcfea2d5ca996e899aa0b87520baeea6e60516f6dbbfe8c7723ee",
@@ -15,7 +16,7 @@
     "scripts/listFiles.sh": "e2ab09faa49cfbda86adfb3b21f8894e592abfb74e7505e311201a9949054561",
     "scripts/downloadFile.sh": "9ed7078ca6ce4e4ae3f54846240b075a68c7fdb43364329cae91c4f0bb819ef6",
     "scripts/getFile.ts": "ce7542c276defa06a2edf5f50f0f9f45bd8794ee639196e1f31a2b962b71fa98",
-    "flock.skill.json": "6e3962de6c47c6ab5b0f11ff2d421ab8e6b93a9caaf128b16a5e6b58d1f6ae9a",
-    "instructions.md": "b145524135bd5252a238c3604c2ee4d0ab134a712f0ee51e68bb008d63ff0250"
+    "flock.skill.json": "8f799b71d6bde8c02618f0719330974ab355c8f363ef87e8edd775672ae379ab",
+    "instructions.md": "083787242239dad27bf8f543e4c437bcdbc8f67228f5bd207b5074bad4b874fe"
   }
 }
