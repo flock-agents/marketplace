@@ -80,7 +80,7 @@ let opened = "";
 /** Runs `body`, closes the session it opened, then answers its result or its refusal. */
 export async function main(body: () => Promise<Record<string, unknown>>): Promise<never> {
   if (!sessionName) errorJson("NO_AUTH", "No Amazon.in browser session. Connect Amazon.in via the dashboard browser session.");
-  if (!agentId) errorJson("MISSING_AGENT", "FLOCK_AGENT_ID is not set; run this through _shared/skill-exec.sh");
+  if (!agentId) errorJson("MISSING_AGENT", "FLOCK_AGENT_ID is not set; run it with the run_skill tool (skill amazon)");
   let result: Record<string, unknown> | null = null;
   let failure: Fail | null = null;
   try {
