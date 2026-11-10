@@ -40,8 +40,9 @@ google-sheets getSpreadsheet (`spreadsheetId`) or google-docs getDocument (`docu
 
 ## In the browser: upload, new folder, rename, move, bin
 
-These have no function here. Do them yourself in the Google browser session (authenticated-crawl,
-on the sessionName under **Available Browser Sessions**), on drive.google.com. Tested 2026-10-25:
+These have no function here. Do them yourself with your `browser` tool on the Google sign-in (`list` shows it: the one
+whose `skills` list google-drive, for the account you want): `open` with that `session` and the url,
+then `act` on its `persistentSessionId`, on drive.google.com. Tested 2026-10-25:
 
 - **Open the folder**: `https://drive.google.com/drive/folders/<id>` (My Drive: `/drive/my-drive`).
 - **New folder**: click `New` → `New folder`, select all in `input[aria-label='New folder']`, type

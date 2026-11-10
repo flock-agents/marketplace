@@ -42,8 +42,9 @@ the document.
 
 ## In the browser: create a document
 
-There is no create function here. Do it yourself in the Google browser session (authenticated-crawl,
-on the sessionName under **Available Browser Sessions**). Tested 2026-10-25:
+There is no create function here. Do it yourself with your `browser` tool on the Google sign-in (`list` shows it: the one
+whose `skills` list google-docs, for the account you want): `open` with that `session` and the url,
+then `act` on its `persistentSessionId`. Tested 2026-10-25:
 
 1. Open `https://docs.google.com/document/create?usp=drive_web&folder=<folderId>` in the same
    tab (the folder's id is in its Drive address; leave `&folder=…` out for My Drive). Do not use

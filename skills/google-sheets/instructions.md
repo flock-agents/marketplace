@@ -44,8 +44,9 @@ otherwise).
 
 ## In the browser: create a spreadsheet
 
-There is no create function here. Do it yourself in the Google browser session (authenticated-crawl,
-on the sessionName under **Available Browser Sessions**). Open
+There is no create function here. Do it yourself with your `browser` tool on the Google sign-in (`list` shows it: the one
+whose `skills` list google-sheets, for the account you want): `open` with that `session` and the url,
+then `act` on its `persistentSessionId`. Open
 `https://docs.google.com/spreadsheets/create?usp=drive_web&folder=<folderId>` in the same tab (leave
 `&folder=…` out for My Drive; Drive's New menu opens a new tab, which the session refuses). Click the
 title (`#docs-title-widget`), select all in `input.docs-title-input`, type the title, press Enter.
