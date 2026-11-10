@@ -51,8 +51,8 @@
     "examplePrompts": [
       "I need tomatoes, onions, and milk",
       "Compare prices for my weekly groceries",
-      "What's in my Zepto cart?",
-      "Check the status of my BigBasket order",
+      "What's on our shopping list this week?",
+      "Which service is cheapest for milk, eggs and bread?",
       "We need to restock — what are we running low on?"
     ]
   },
@@ -185,7 +185,7 @@
     {
       "id": "review-tasks",
       "label": "Review scheduled tasks",
-      "description": "Check the morning briefing, grocery reminders, and weekly summary schedules",
+      "description": "Check the morning briefing and evening reminder schedules",
       "deepLink": "/agents/:id?tab=tasks",
       "skippable": true
     }

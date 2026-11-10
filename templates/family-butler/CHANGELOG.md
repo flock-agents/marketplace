@@ -3,9 +3,10 @@
 ## 1.4.0
 
 - **A slim persona.** Any agent can be a butler; apps and skills bring the use cases. The SOUL keeps who the Family Butler is, its tone, the family it serves (several members), what it doesn't do, and its dietary, prompt-injection and allowlist lines, word for word (the dietary rule no longer names a memory file). It installs the Meal Planner app and points meal, grocery and price comparison work at it.
-- **Moved to the Meal Planner app** (planner 2.0.6, its guide's Price comparison section): one delivery address, one background session per grocery service, the totals compared at that address, no order without a yes on that total.
+- **Moved to the Meal Planner app** (planner 2.0.6): its guide's Price comparison section (one delivery address, one background session per grocery service, the totals compared at that address, no order without a yes on that total), and the rule that the rows are the owner's (never delete or "tidy" rows the agent did not add). The SOUL's Meal Planner section is now one pointer line.
 - **Left to each grocery service's own skill or connector:** selecting the address, emptying and filling the cart, reading the total with fees, checkout, order tracking and what to do when a service fails. The template's "Your Skills" section is gone.
 - **Gone:** the address, comparing, cart, order-tracking, proactive-restock, error-recovery, item-normalization and dietary-while-shopping sections; every memory mention (Memory Usage, the memory files, curation); cold-start memory seeding (`coldStart` in flock.template.json); "Calls that don't need each other run together".
+- SUGGESTIONS.json names the app `planner` (was `meal-planner`). The Grocery Stock Check and Weekly Summary tasks, which the template never defined, are gone from SUGGESTIONS.json, the README and the setup checklist. The example prompts no longer name one service's cart or orders.
 - Installed Butlers keep their own SOUL until updated.
 
 ## 1.3.6

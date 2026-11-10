@@ -6,7 +6,6 @@ A household assistant that manages groceries, meals, and family routines through
 
 - **Meals, groceries and price comparison:** through the Meal Planner app (the Flock `planner` app, installed and paired by Family Butler). It holds the week's meals, the grocery list and the family's recipe book, and compares prices across the connected services (Swiggy Instamart, Zepto, BigBasket, Zomato Blinkit) before an order, which is placed only after the family confirms the total. Family Butler fills it when you ask; the rows are yours
 - **Daily briefings:** Morning summary with weather, calendar, and tasks; evening preview of tomorrow
-- **Weekly reviews:** Grocery stock check on Saturdays, full weekly summary on Sundays
 
 ## Skills
 
@@ -25,8 +24,6 @@ A household assistant that manages groceries, meals, and family routines through
 | Task | Schedule | Description |
 |------|----------|-------------|
 | Morning Briefing | 8:00 AM daily | Weather, calendar, pending tasks |
-| Grocery Stock Check | 10:00 AM Saturdays | Weekly grocery review and shopping list |
-| Weekly Summary | 8:00 PM Sundays | Activity recap, spending |
 | Evening Reminder | 9:00 PM daily | Tomorrow preview, pending items |
 
 All times in Asia/Kolkata (IST).
