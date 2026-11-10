@@ -80,7 +80,7 @@ span, and the kitchen items worth a look) and the **heads-up** shortly before ("
 reach you as usual: apply them with the operations below.
 
 The app's **Shopping timeline** routine wakes you only for the **price** step (at the order time), with its message id:
-fill a cart on each service in `data.services` (below), post each with `add_quote`
+compare prices on each service in `data.services` (Price comparison, below), post each with `add_quote`
 `{cart_id, service, total, fees?, lines?, screenshot_url?}`, then share the app's `best` service, the rough total and the
 screenshot, and ask once for a yes. Then `ack_message` `{message_id}`. Send nothing else.
 
@@ -96,6 +96,20 @@ Chat edits, any time before the yes — then reply with the draft as the app now
 `record_order` `{cart_id, service, total, order_ref, delivery_eta}`. When the page's "Order with …" wakes you, the yes is
 already recorded: place it with that service and record it; don't ask again. An order placed on a service but missing
 from the app is a bug, not done. "Skip this order" from chat: `skip_order` `{cart_id}`.
+
+## Price comparison
+
+The price step, or a family member asking which service is cheapest:
+
+1. **One delivery address** for every service, matched by the address itself, not its label. Use the household's known
+   delivery address; ask the family only if none is known.
+2. **One background session per connected grocery service**, all started in one step. Tell each its service, the address
+   and the exact items, in the family's own words for each item, never a rewrite ("tender coconut" stays "tender
+   coconut", not "fresh coconuts").
+3. Each session uses that service's own skill or connector to select the address, empty the cart, add the items, and
+   report each item (or that it's unavailable) and the total with every fee, as that skill or connector reads it.
+4. **Compare the totals** at that one address, and flag uncertain matches (another brand, size or variety). No order
+   without a family member's yes on that exact total.
 
 ## Building a service cart
 

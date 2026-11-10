@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.0.6
+
+- **Price comparison** (moved here from the Family Butler template): the agent's guide says how the price step, or a
+  family member asking which service is cheapest, compares services: one delivery address for all of them, one
+  background session per connected grocery service with the family's own words for each item, each using that service's
+  own skill or connector, then the totals compared at that address. No order without a yes on that exact total.
+
 ## 2.0.5
 
 - The agent's guide calls operations, reads rows and changes settings with the api tool, not `flock-api`.
