@@ -1,10 +1,10 @@
 {
   "version": 1,
-  "generatedAt": "2026-11-10T17:50:18.156Z",
+  "generatedAt": "2026-11-10T19:02:20.826Z",
   "sourceVersion": "1.1.14",
   "sourceTag": "amazon-v1.1.14",
   "files": {
-    "CHANGELOG.md": "fa3eb17de6a4d4c38bc45a9cd30d327a739eecee702245544727a4b53e50d42f",
+    "CHANGELOG.md": "03e559a84a35ca145a58fc4454327435328bfc8f6fd26eef55add7335c444e30",
     "icon.svg": "5d7735254f99d2fb9a467608bc2a73d2543f571ca3b1221ef503c405e1dc7b5f",
     "scripts/read-products.ts": "d44f7c7474f4287094bee9a5ad03379e7dc975e46f6cea625605adf890e2da43",
     "scripts/read-variants.ts": "1b971793588e27ca07994abf7709af23f8db0bcbc4b3aaf810a5ec06939a81da",
@@ -14,6 +14,6 @@
     "scripts/_variants.ts": "8278c13b427b650c179700c52751b6b80ca46d10e8bf35fab8e982e876e69933",
     "scripts/_amazon.ts": "e42d789c6848aae3e117de2eba784468383e35fe9a0f35ad3e9d00d7dd67fea1",
     "flock.skill.json": "42009ded2799fc3d78a8e400a97085b2e2afca31a1c993f74b706597d6e83ddc",
-    "instructions.md": "2a12d0eebae35bceff4fc9f7c7c39680bf50442a09d8afd7e9f3c133ce113f2f"
+    "instructions.md": "edca011eefd258a83823945e56b36ce522d10b2e63841be19360798421e38aed"
   }
 }
