@@ -1,11 +1,11 @@
 {
   "version": 1,
-  "generatedAt": "2026-10-24T15:09:59.601Z",
-  "sourceVersion": "1.3.1",
-  "sourceTag": "bigbasket-v1.3.1",
+  "generatedAt": "2026-11-10T13:01:00.288Z",
+  "sourceVersion": "1.4.0",
+  "sourceTag": "bigbasket-v1.4.0",
   "files": {
+    "CHANGELOG.md": "cc77a41c21bd8847dfca61e5104b4d52451b57b07865980e054969f4cea5db49",
     "icon.svg": "05865e6104573352015d59d9dde26a2379b99d1458183318959f4bf015b8a8c6",
-    "scripts/view-cart.sh": "eaaa25929d4b2e8216ef9333b7749139f3e9f67d5c4d6545cbf08047ed2712bd",
     "scripts/add-to-cart.sh": "e3842b8966eab11481464256f1d6025f4e9aa49ce2c192f8015a1fab80d1fd53",
     "scripts/_health-check.sh": "f583afcfb661fc5a194fca69f7af60f958c92a49788b7b04938551d6395bce51",
     "scripts/track-order.ts": "5775d086fbb4d77b342bc4136063cd5bf718c3bf6af8aedf0ab38f6e755e6ca1",
@@ -15,14 +15,20 @@
     "scripts/checkout.ts": "4ceb065a16b13dc313859ff6582fbc2e67032278b129f5a5f4886c34dd3a065c",
     "scripts/add-to-cart.ts": "3346932eabbb5dd40b5de721d03f1fddb860b7e9f898271e595b5ad4d1a8e001",
     "scripts/_helpers.sh": "0ae933eb141515fc948b49000318eb04c8d0bccf81cf1e8a3c9da9e02cec5f20",
-    "scripts/view-cart.ts": "838bbfaa64776e0f9a6ba14ea5104601ffb00a20d441d8d4a2a6bb0eedd78100",
+    "scripts/_bigbasket.ts": "1823d499f4fc16fb4dd84d2605caf9afa40b13cafcb603eba3dcf7042e5ee657",
+    "scripts/view-cart.ts": "e227355e782401ea95265c563b0b0ec651af6b8c5d83d10d7a779ffe353d8bd3",
+    "scripts/set-delivery-location.ts": "21ee7af729ff338ea87d27ad20e5b07693bf0a2a34231524901ddec93666a620",
     "scripts/keep-alive.ts": "5f90114c5d7ecdcbee55bea981077355bd29794378fcfc74eafe05eeeef7f95d",
     "scripts/remove-from-cart.ts": "1fc4f3dd497cdc5c9582049559defa0ae4d74ef2d3a22466d0a88302a222e321",
+    "scripts/empty-cart.ts": "579a0055fe821a76d2e1dbd8c093b313dc8bd3074622f110afd710428ae91d06",
     "scripts/view-order-history.sh": "f18adef780202a203e7bdf7989b4361e09e612133adf33eb7cfcda0f938999e4",
+    "scripts/list-addresses.ts": "ceeccd1154d50c4c5333e9a61a6c0eaaa1ef14d61b4f7109efb7e372e76c1436",
     "scripts/remove-from-cart.sh": "1b4736029699aed77f9ae20dce91a95a96e13c96d7ea97e7db0c0e9b7355043c",
     "scripts/view-order-history.ts": "be55c5297077b548ead555145032b0a791f745a8c322b826a2c7b422e116a256",
     "scripts/keep-alive.sh": "47e25c20e070085a17cf6e9b0158ac75cc2d2547df0c9b4399374efcd335b0bb",
-    "flock.skill.json": "3dd7167cba166c4d2cab644e3d450e6a39346ce193bcdf7862c788853086fd41",
-    "instructions.md": "f8006cb32b885503c7298e8e7f660c70cdb43940f9d8e66365178a83e5f108d6"
+    "scripts/_shop_run.ts": "90a25088ce26b2c6b31674b9566b2a3810a6cd02afe990a1aad24f8173405cc1",
+    "scripts/_shop.ts": "d20abe3b3c844ad61059f5186a0a919c9bb01a1c12607c56b0f196fd5d0d6961",
+    "flock.skill.json": "8af7183b0f5d0fb515262d5ec8b7e816451b340f20615bf172ef6f306b23a3ff",
+    "instructions.md": "7f44e517b4ca02b69833b2ccfef74e329bcd4d12226e895cd6fda162c44853b9"
   }
 }

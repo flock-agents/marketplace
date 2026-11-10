@@ -3,7 +3,7 @@
   "slug": "bigbasket",
   "icon": "icon.svg",
   "description": "Search products, manage cart, and place grocery orders on BigBasket",
-  "version": "1.3.1",
+  "version": "1.4.0",
   "author": "flock",
   "category": "integration",
   "tags": [
@@ -67,12 +67,40 @@
     "keep-alive": {
       "abuseThreshold": 600,
       "limit": 120
+    },
+    "list-addresses": {
+      "limit": 30,
+      "abuseThreshold": 150
+    },
+    "set-delivery-location": {
+      "limit": 30,
+      "abuseThreshold": 150
+    },
+    "empty-cart": {
+      "limit": 30,
+      "abuseThreshold": 150
     }
   },
   "functions": {
     "checkout": {
       "timeoutMs": 90000,
       "reason": "pay reads the page, clicks on to the payment page and its UPI option with payment capture on: four browser steps with waits (each 2s apart). Killed at 30s, the person is left with a half-opened payment page."
+    },
+    "list-addresses": {
+      "timeoutMs": 60000,
+      "reason": "Loads the home page, opens the header's address picker and waits up to 8s for its saved addresses."
+    },
+    "set-delivery-location": {
+      "timeoutMs": 60000,
+      "reason": "Opens the address picker, reads the saved addresses, clicks the matching one and waits for the page (and a change-address prompt) to settle: three browser steps with waits."
+    },
+    "empty-cart": {
+      "timeoutMs": 120000,
+      "reason": "Removes cart lines one at a time (each unit, where only a minus is shown), waiting for the page after each: up to 70s for a full cart."
+    },
+    "view-cart": {
+      "timeoutMs": 60000,
+      "reason": "Waits up to 10s for the cart lines or its empty message, then reads the lines and every bill row."
     }
   },
   "requiresAny": false,
@@ -88,7 +116,10 @@
       "track-order",
       "view-order-history",
       "checkout",
-      "keep-alive"
+      "keep-alive",
+      "list-addresses",
+      "set-delivery-location",
+      "empty-cart"
     ],
     "trustLevel": "third-party",
     "networkEndpoints": [
