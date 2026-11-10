@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.1
+
+- The app's title reads the `title.overview` label, so it follows the app's own name (`titleFromName`) or a renamed title; until the app info loads it is the app's name, as before.
+- `catalog.json` is regenerated (it still said 1.0.3), and the app ships `e2e-rows.json`, the rows Flock's end-to-end template flow builds it with.
+
 ## 1.1.0
 
 - The app carries its own know-how: `skills/fitness/instructions.md`, published as the `fitness` skill (`publishedSkills`). It holds how to call the app (readings and their labels, meals in one call, workouts, the plan and meal-plan PUTs, water, goals in focus, trackers and the pace check, first-run settings, "log food first"), moved word for word from the Fitness Coach template's SOUL. A Flock that delivers app know-how gives it to whichever agent drives the app.
