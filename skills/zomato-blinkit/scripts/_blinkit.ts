@@ -14,6 +14,9 @@
  * styled-components: the `Name__Part` prefix before `-sc-` is stable, the hash is not.
  */
 import type { GroceryServiceConfig } from "../../_shared/_grocery_helpers";
+import type { ShopSite } from "./_shop";
+
+export { headerShowsItems } from "./_shop";
 
 export const BLINKIT: GroceryServiceConfig = {
   name: "Blinkit",
@@ -92,14 +95,29 @@ export const READ_CART_SCRIPT = `(() => {
   });
 })()`;
 
-/** The header says the cart has items ("3 items ₹120"), whatever the drawer shows. */
-export function headerShowsItems(headerText: unknown): boolean {
-  return /\d+\s*items?/i.test(String(headerText || ""));
-}
-
 /** Amount in rupees from "₹1,234" (or a number), or null. */
 export function rupeeAmount(value: unknown): number | null {
   if (typeof value === "number") return value;
   const m = String(value ?? "").match(/([\d,]+(?:\.\d+)?)/);
   return m ? parseFloat(m[1].replace(/,/g, "")) : null;
 }
+
+/**
+ * Blinkit for the shared shop functions (_shop_run.ts). There is no cart page: the cart counts
+ * as read only while its drawer is open, or when the header's cart button says it is empty.
+ * The address picker is NOT confirmed live: the header's location bar opens it (a guess from the
+ * `LocationBar` class family), and its entries are found by the generic reader in _shop.ts.
+ * In a cart line the stepper's first icon glyph is taken to be the minus (NOT confirmed live).
+ */
+export const BLINKIT_SITE: ShopSite = {
+  config: BLINKIT,
+  homeUrl: HOME_URL,
+  cartUrl: HOME_URL,
+  cartShown: '[class*="CartWrapper__CartContainer"], [class*="CartProduct__Container"]',
+  cartHeader: '[class*="CartButton__Button"], [class*="CartButton"]',
+  openCart: OPEN_CART_ACTIONS,
+  cartLines: '[class*="CartProduct__Container"]',
+  removeControls: '[class*="AddToCart__UpdatedButtonContainer"] [class*="AddMinusIcon"]',
+  addressOpeners: ['[class*="LocationBar__Container"]', '[class*="LocationBar"]'],
+  productId: (href) => (href.match(/\/prid\/(\d+)/) || [])[1] || "",
+};

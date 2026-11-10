@@ -1,36 +1,33 @@
 #!/usr/bin/env bun
 /**
- * Blinkit — view current cart contents.
- * Params: (none)
+ * Blinkit — the cart's items and its full total with every fee. Params: (none)
  *
- * Blinkit has no cart page: the cart is a drawer opened from the header button on the home
- * page (selectors in _blinkit.ts, confirmed live on 35720, 2026-10-16).
+ * Blinkit has no cart page (blinkit.com/cart shows the home page and its suggestions): the cart
+ * is a drawer opened from the header button (selectors in _blinkit.ts, confirmed live on 35720,
+ * 2026-10-16). Only the open drawer is read; when it did not open, this fails as NOT_CART_PAGE
+ * unless the header itself says the cart is empty.
  */
-import {
-  requireBrowserSession,
-  errorJson,
-  browserInteract,
-} from "../../_shared/_grocery_helpers";
+import { requireBrowserSession, errorJson, browserInteract } from "../../_shared/_grocery_helpers";
 import { BLINKIT as config, HOME_URL, OPEN_CART_ACTIONS, READ_CART_SCRIPT, headerShowsItems, rupeeAmount } from "./_blinkit";
+import { parseJson, summarizeBill, type BillRow } from "./_shop";
 
 requireBrowserSession();
 
 const result = await browserInteract(config, HOME_URL, OPEN_CART_ACTIONS, undefined, READ_CART_SCRIPT);
-
-let cart: any;
-try {
-  cart = JSON.parse(result.content || "");
-} catch {
-  errorJson("PAGE_CHANGED", "Could not read cart contents. The service may have updated its layout.");
-}
+const cart = parseJson(result.content);
+if (!cart) errorJson("PAGE_CHANGED", "Could not read cart contents. The service may have updated its layout.");
 
 const items: any[] = Array.isArray(cart.items) ? cart.items : [];
+if (!cart.drawerOpen) {
+  if (headerShowsItems(cart.headerText) || !cart.headerText) {
+    errorJson("NOT_CART_PAGE", `Blinkit's cart drawer did not open, so the page read is not the cart (header: "${String(cart.headerText || "none").substring(0, 40)}"). Nothing was read from it; try view-cart once more, then report it.`);
+  }
+}
 if (items.length === 0 && headerShowsItems(cart.headerText)) {
   errorJson("PAGE_CHANGED", "The cart has items but they could not be read from its drawer. Blinkit's page may have changed.");
 }
 
-const bill: Array<{ label: string; amount: number | null }> = Array.isArray(cart.bill) ? cart.bill : [];
-const billAmount = (re: RegExp): number | null => bill.find((r) => re.test(r.label))?.amount ?? null;
+const bill: BillRow[] = Array.isArray(cart.bill) ? cart.bill : [];
 const lines = items.map((it) => ({
   productId: "",
   name: it.name,
@@ -39,16 +36,16 @@ const lines = items.map((it) => ({
   price: it.price,
   subtotal: it.price != null ? it.price * it.quantity : null,
 }));
-const computedSubtotal = lines.reduce((sum, it) => sum + (it.subtotal || 0), 0);
+const totals = summarizeBill(bill, lines.reduce((sum, it) => sum + (it.subtotal || 0), 0));
+const toPay = rupeeAmount(cart.orderTotal);
 
 console.log(JSON.stringify({
+  platform: "Blinkit",
+  verifiedCart: true,
   items: lines,
   itemCount: lines.length,
-  subtotal: billAmount(/items total/i) ?? computedSubtotal,
-  deliveryFee: billAmount(/delivery/i) ?? 0,
-  handlingFee: billAmount(/handling/i) ?? 0,
-  discount: billAmount(/discount|saving/i) ?? 0,
-  total: rupeeAmount(cart.orderTotal) ?? computedSubtotal,
+  ...totals,
+  ...(toPay != null && lines.length ? { total: toPay, totalSource: "page" } : {}),
   bill,
   deliveryEstimate: cart.deliveryEstimate || null,
 }));
