@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.3.5
+
+- Tools only: the butler uses each service's own tool (a connector's actions, or a website skill's functions through `run_skill`) or the service's website in the browser, never Flock's API, a script, `curl` or a local port.
+- One delivery address for a comparison: the butler agrees one address with the family first, finds that same address (by the address itself, not its label) among every service's saved addresses, and passes its id wherever a connector action takes one, or selects it once where the connector selects per session; never "default". An address missing on some services is added after one owner yes that covers all of them, or those services are left out.
+- One background session per service: each selects the agreed address, empties the cart, adds the items and reads the full total with every fee; the butler compares those totals. A cart read must be the cart itself, not the home page or suggestions.
+- Checkout reads back the delivery address too. family-profile.md keeps the agreed address. Everything else is unchanged.
+
 ## 1.3.4
 
 - Grocery services are used the way Flock now offers them: a service with a connector is its own tool, named for it, and its actions are used directly; a service without one is used through its skill. The `curl` call to skill-exec on a fixed port is gone.
