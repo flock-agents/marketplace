@@ -30,73 +30,69 @@ Read LinkedIn notifications, browse your feed, publish posts, send messages, and
 
 ## Authentication
 
-This skill uses an authenticated browser session (no public API for individuals). The user must log in via the Flock dashboard's authenticated-crawl session named "linkedin". The session must be in **ready** state — if it is `setting_up` or `outdated`, commands will fail with a session error.
+This skill uses an authenticated browser session (no public API for individuals). The user must be signed in to LinkedIn in Flock's browser session named "linkedin" (the sign-in guide). The session must be in **ready** state — if it is `setting_up` or `outdated`, commands will fail with a session error.
 
-Invoke through the skill's wrapper — the command, then its arguments, each as one shell argument:
+Invoke it with the run_skill tool: skill `linkedin`, function always `linkedin`, and the command first in `params._args`, then its arguments, each as one string:
+`{"_args": ["<command>", ...args]}`.
 
-```bash
-bash "$FLOCK_SKILLS_DIR/linkedin/scripts/linkedin-exec.sh" <command> [args...]
-```
+For example: skill `linkedin`, function `linkedin`, params `{"_args": ["comments", "https://www.linkedin.com/feed/update/urn:li:activity:123/"]}`. The run_skill tool runs it through the Flock server (account, session and permission checks); never run `scripts/linkedin.ts` directly.
 
-For example: `bash "$FLOCK_SKILLS_DIR/linkedin/scripts/linkedin-exec.sh" comments "https://www.linkedin.com/feed/update/urn:li:activity:123/"`. The wrapper runs it through the Flock server (account, session and permission checks); never run `scripts/linkedin.ts` directly.
-
-Calling skill-exec yourself, the function is always `linkedin` and the command goes first in `params._args`:
-`{"skillId": "linkedin", "functionName": "linkedin", "params": {"_args": ["<command>", ...args]}, "agentId": "$FLOCK_AGENT_ID"}`.
+Each command below is shown as the command and its arguments, in `_args` order.
 
 ## Commands
 
 ### notifications
 Get recent LinkedIn notifications.
 
-    linkedin-exec.sh notifications
+    notifications
 
 ### feed
 Get recent posts from your feed.
 
-    linkedin-exec.sh feed [count]
+    feed [count]
 
 ### profile
 Get a user's profile info.
 
-    linkedin-exec.sh profile <profileUrl>
+    profile <profileUrl>
 
 ### post
 Publish a LinkedIn post using a persistent browser session.
 
-    linkedin-exec.sh post "<text>"
+    post "<text>"
 
 Returns: `{success: true/false, message: "..."}`
 
 ### draft-post
 Draft a LinkedIn post (saves locally, does NOT publish).
 
-    linkedin-exec.sh draft-post "<text>"
+    draft-post "<text>"
 
 Returns: `{draft: {text, charCount, savedTo}}`
 
 ### send-message
 Send a direct message to a LinkedIn user via their profile URL.
 
-    linkedin-exec.sh send-message "<profileUrl>" "<message>"
+    send-message "<profileUrl>" "<message>"
 
 Returns: `{success: true/false, message: "..."}`
 
 ### messages
 Check recent LinkedIn messages.
 
-    linkedin-exec.sh messages
+    messages
 
 ### search
 Search LinkedIn for people or content.
 
-    linkedin-exec.sh search "<query>" [type]
+    search "<query>" [type]
 
 Types: people, posts, companies.
 
 ### comments
 Read the comments on a specific LinkedIn post and return structured engagement data (commenter names, headlines, profile URLs, and comment text). Read-only — use it to surface who's engaging with a post and to draft replies.
 
-    linkedin-exec.sh comments "<postUrl>"
+    comments "<postUrl>"
 
 `<postUrl>` is a LinkedIn post/activity URL — it must contain `/posts/`, `/feed/update/`, or an `activity-<id>` segment (e.g. `https://www.linkedin.com/posts/...-activity-1234567890-abcd` or `https://www.linkedin.com/feed/update/urn:li:activity:1234567890/`).
 
@@ -144,7 +140,7 @@ Notes:
 ### reply-comment
 Post a **threaded reply under a specific comment** on a LinkedIn post. Locates the target comment (by its `commentId` from `comments`, else the commenter's name), opens THAT comment's inline reply box, types, and submits.
 
-    linkedin-exec.sh reply-comment "<postUrl>" "<replyText>" "[commentId]" "[commenterName]"
+    reply-comment "<postUrl>" "<replyText>" "[commentId]" "[commenterName]"
 
 - `<postUrl>` — the post/activity URL (same format as `comments`).
 - `<replyText>` — the reply body (≤1250 chars).
