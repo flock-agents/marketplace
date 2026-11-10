@@ -40,7 +40,7 @@ describe("the in-page scripts", () => {
 
   it("are found in every grocery skill", () => {
     for (const skill of SHOPS) expect(scripts.some((s) => s.where.startsWith(`${skill}/`))).toBe(true);
-    expect(scripts.some((s) => s.where === "bigbasket/scripts/search-products.ts")).toBe(true);
+    expect(scripts.some((s) => s.where === "bigbasket/scripts/_bigbasket.ts")).toBe(true);
   });
 
   it("keep every backslash on the way to the page", () => {
@@ -64,7 +64,7 @@ describe("the in-page scripts", () => {
   });
 
   it("BigBasket's search reads the product id with its regex intact", () => {
-    const search = scripts.find((s) => s.where === "bigbasket/scripts/search-products.ts")!;
+    const search = scripts.find((s) => s.where === "bigbasket/scripts/_bigbasket.ts")!;
     expect(asThePageGetsIt(search).sent).toContain(String.raw`href.match(/\/pd\/(\d+)/)`);
   });
 

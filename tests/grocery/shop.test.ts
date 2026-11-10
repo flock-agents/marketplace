@@ -13,7 +13,7 @@ import {
   cartReadScript, emptyCartScript, addressScript,
   type SavedAddress, type ShopSite,
 } from "../../skills/bigbasket/scripts/_shop";
-import { BIGBASKET } from "../../skills/bigbasket/scripts/_bigbasket";
+import { BIGBASKET, searchScript } from "../../skills/bigbasket/scripts/_bigbasket";
 
 const skills = join(import.meta.dir, "../../skills");
 
@@ -36,6 +36,15 @@ describe("the shared shop files", () => {
       }
       expect(doc).not.toContain("api/internal/skill-exec");
     }
+  });
+});
+
+describe("BigBasket search-products", () => {
+  it("waits for the cards in its page script, so a search with none is not a step timeout", () => {
+    const run = readFileSync(join(skills, "bigbasket/scripts/search-products.ts"), "utf8");
+    expect(run).not.toContain("waitForSelector");
+    expect(run).toContain("searchScript(maxResults)");
+    expect(run).toContain("note: NO_CARDS_NOTE");
   });
 });
 
@@ -184,6 +193,17 @@ const ADDRESS_PICKER = `<!doctype html><html><head><meta charset="utf-8"></head>
   });
 </script></body></html>`;
 
+/** BigBasket's search page as checked live 2026-11-10: the card heading holds the rating between brand, name and pack. */
+const BB_SEARCH = `<!doctype html><html><head><meta charset="utf-8"></head><body><main>
+  <div class="SKUDeck___StyledDiv-sc-1e5d9gk-0"><a href="/pd/40000101/fresho-onion-1-kg/"><img src="https://img.example.test/onion.jpg"></a>
+    <h3>fresho!<br>4.2<br>5122 Ratings<br>Onion<br>1 kg</h3><span>₹38</span> <span>₹47</span> <span>19% OFF</span><button>Add</button></div>
+  <div class="SKUDeck___StyledDiv-sc-1e5d9gk-0"><a href="/pd/40000102/amul-butter/"><img src="https://img.example.test/butter.jpg"></a>
+    <h3>Amul<br>Butter - Pasteurised<br>100 g</h3><span>₹56</span><button>Add</button></div>
+</main></body></html>`;
+
+/** A search BigBasket has no groceries for: no product cards at all. */
+const BB_NO_RESULTS = `<!doctype html><html><head><meta charset="utf-8"></head><body><main><h2>Oops! No results found for "laptop"</h2></main></body></html>`;
+
 const appDir = process.env.FLOCK_APP_DIR;
 const playwrightPath = appDir ? join(appDir, "node_modules", "playwright-core") : "";
 const canBrowse = !!appDir && existsSync(playwrightPath);
@@ -217,6 +237,21 @@ describe.skipIf(!canBrowse)("the in-page scripts on stand-in pages", () => {
     addressOpeners: ['[class*="LocationBar__Container"]'],
   };
   const openDrawer = `document.querySelector('[class*="CartButton__Button"]').click()`;
+
+  it("BigBasket search reads each card's id, name and pack, skipping the rating lines", async () => {
+    const out = await run("https://www.bigbasket.com/ps/?q=onion", BB_SEARCH, searchScript(10, 500));
+    expect(out.products.map((p: any) => [p.id, p.name, p.quantity, p.price, p.mrp])).toEqual([
+      ["40000101", "fresho! Onion", "1 kg", 38, 47],
+      ["40000102", "Amul Butter - Pasteurised", "100 g", 56, null],
+    ]);
+  });
+
+  it("BigBasket search with no product cards answers an empty list, not a timeout", async () => {
+    const started = Date.now();
+    const out = await run("https://www.bigbasket.com/ps/?q=laptop", BB_NO_RESULTS, searchScript(10, 500));
+    expect(out).toEqual({ products: [], totalResults: 0, noCards: true });
+    expect(Date.now() - started).toBeLessThan(4000);
+  });
 
   it("reads a cart page: its lines and every fee, FREE delivery as 0, the page's total", async () => {
     const read = await run("https://www.bigbasket.com/basket/", BASKET, cartReadScript(BIGBASKET));
