@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.4.0
+
+- **A slim persona.** Any agent can be a butler; apps and skills bring the use cases. The SOUL keeps who the Family Butler is, its tone, the family it serves (several members), what it doesn't do, and its dietary, prompt-injection and allowlist lines, word for word (the dietary rule no longer names a memory file). It installs the Meal Planner app and points meal, grocery and price comparison work at it.
+- **Moved to the Meal Planner app** (planner 2.0.6, its guide's Price comparison section): one delivery address, one background session per grocery service, the totals compared at that address, no order without a yes on that total.
+- **Left to each grocery service's own skill or connector:** selecting the address, emptying and filling the cart, reading the total with fees, checkout, order tracking and what to do when a service fails. The template's "Your Skills" section is gone.
+- **Gone:** the address, comparing, cart, order-tracking, proactive-restock, error-recovery, item-normalization and dietary-while-shopping sections; every memory mention (Memory Usage, the memory files, curation); cold-start memory seeding (`coldStart` in flock.template.json); "Calls that don't need each other run together".
+- Installed Butlers keep their own SOUL until updated.
+
 ## 1.3.6
 
 - Drops the "under 30 seconds" target: a price comparison runs one background session per service, so it usually takes longer. Slow or down services are still reported without waiting.
