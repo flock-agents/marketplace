@@ -119,8 +119,8 @@
       "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "templates/family-butler",
-      "latestVersion": "1.3.5",
-      "latestTag": "family-butler-v1.3.5",
+      "latestVersion": "1.3.6",
+      "latestTag": "family-butler-v1.3.6",
       "minFlockVersion": "0.15.0",
       "onboardingCard": {
         "id": "household",
