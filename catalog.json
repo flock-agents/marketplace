@@ -288,8 +288,8 @@
       "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "skills/zomato-blinkit",
-      "latestVersion": "1.4.0",
-      "latestTag": "zomato-blinkit-v1.4.0",
+      "latestVersion": "1.4.1",
+      "latestTag": "zomato-blinkit-v1.4.1",
       "minFlockVersion": "0.18.1",
       "publishedAt": "2026-08-14T10:00:00Z",
       "updatedAt": "2026-10-24T12:00:00Z"
@@ -310,8 +310,8 @@
       "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "skills/bigbasket",
-      "latestVersion": "1.4.0",
-      "latestTag": "bigbasket-v1.4.0",
+      "latestVersion": "1.4.1",
+      "latestTag": "bigbasket-v1.4.1",
       "minFlockVersion": "0.18.1",
       "publishedAt": "2026-08-14T10:00:00Z",
       "updatedAt": "2026-10-24T12:00:00Z"
