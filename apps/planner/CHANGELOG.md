@@ -10,6 +10,9 @@
   (bigbasket, zepto, zomato-blinkit, swiggy-instamart); paying after the yes is each skill's `checkout` and the payments
   guide; the `skill-sandbox` WARN note is gone (Flock reports a script's own error). From the Family Butler template: the
   rows are the owner's, so never delete or "tidy" rows the agent did not add.
+- **Price comparison:** each session picks a product matching every word the family used for the item (another kind,
+  such as a brown coconut for "tender coconut", is not the item) and reports it unavailable rather than substituting;
+  every service gets the same quantity in the family's unit, so the totals compare like for like.
 
 ## 2.0.5
 

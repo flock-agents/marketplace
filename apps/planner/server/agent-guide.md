@@ -109,7 +109,10 @@ The price step, or a family member asking which service is cheapest:
    coconut", not "fresh coconuts").
 3. Each session uses that service's own skill or connector to select the address, empty the cart, add the items, and
    report each item (or that it's unavailable) and the total with every fee, as that skill or connector reads it.
-4. **Compare the totals** at that one address, and flag uncertain matches (another brand, size or variety). No order
+   - **The item itself:** a product that matches every word the family used for it; another kind is not the item (a
+     brown coconut is not a "tender coconut"). None on that service: report it unavailable, never a substitute.
+   - **The same quantity on every service**, in the family's unit (pack sizes noted), so the totals compare like for like.
+4. **Compare the totals** at that one address, and flag uncertain matches (another brand or pack size). No order
    without a family member's yes on that exact total.
 
 ## Building a service cart
