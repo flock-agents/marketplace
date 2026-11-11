@@ -1,10 +1,10 @@
 {
   "version": 1,
-  "generatedAt": "2026-11-10T19:40:57.389Z",
+  "generatedAt": "2026-11-11T06:54:57.071Z",
   "sourceVersion": "1.4.1",
   "sourceTag": "zepto-v1.4.1",
   "files": {
-    "CHANGELOG.md": "a9d4c9899e0ef9882199373e975f47533cc250ccea732395c72ebf9ab6b1ca02",
+    "CHANGELOG.md": "3c900b411360c6cc855f4ef8bb782ce3f533e6564a4ead5706b9c2a984d0b3f2",
     "icon.svg": "ff5a156310a9395aeac4463bfab8a45297a71bb08543267e58b1b4279a0bcae6",
     "scripts/add-to-cart.sh": "2d5b33c814c33fa452e99328961bd8db889d3b9df0ba1801f72fbbdcc2895887",
     "scripts/_health-check.sh": "de9ede02c6c3cc1c6b8d02e4b7ffee1cfbb6064b196178dcfeb1efe9f1312b48",
@@ -26,9 +26,9 @@
     "scripts/remove-from-cart.sh": "bd25d9f1a915cc513e6957a0cb47bafef999555ef1a6543e6f4b2fd8474058ba",
     "scripts/view-order-history.ts": "4e06583b8e8320901a61fe2e353429142b525acf200ad327036f58543302dc77",
     "scripts/keep-alive.sh": "18708b1bb179a687a8f48b57a433cfb98b68f8a2212204f793b4677864cfa896",
-    "scripts/_shop_run.ts": "b87947e303b4210a10a59d16da769b6826dbf0f91c6c1bef03459ca6aa21051e",
-    "scripts/_shop.ts": "f56f61447b7eacd399d5e2e8b0e681c8c40132d5ab360f6bcc19a57927bbd60c",
+    "scripts/_shop_run.ts": "16a941b527ed3e9fe15122ee4f620334830f1c33721dfc922e86800a99c6a73b",
+    "scripts/_shop.ts": "905150ed1c6271261cb046099457c5e8b826ea3162f38919e518f5254b4f092f",
     "flock.skill.json": "3661d06522618e57ccaf569b65bfe11e448e39c3f0dc6ec5958ecab520bb91b6",
-    "instructions.md": "7007c1eb9d9aaba785da913a8bfe74632e1826e110b8e6211fdd7adff896e1af"
+    "instructions.md": "5d716dd5dea7cb4a8ec976cf323cea5aacd6618cc6ec502978c6f6b056ac8773"
   }
 }

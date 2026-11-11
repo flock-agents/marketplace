@@ -1,10 +1,10 @@
 {
   "version": 1,
-  "generatedAt": "2026-11-10T19:40:57.382Z",
+  "generatedAt": "2026-11-11T06:54:57.065Z",
   "sourceVersion": "1.4.2",
   "sourceTag": "bigbasket-v1.4.2",
   "files": {
-    "CHANGELOG.md": "135c23bae6f28a60c3016331ffe99ea22ff679ec4f6c1ec31c67cc61b06d31c8",
+    "CHANGELOG.md": "c5f81b5e0760f478a2a7711a2189573a6ac4b9014fc482fcb120e178460521fd",
     "icon.svg": "05865e6104573352015d59d9dde26a2379b99d1458183318959f4bf015b8a8c6",
     "scripts/add-to-cart.sh": "e3842b8966eab11481464256f1d6025f4e9aa49ce2c192f8015a1fab80d1fd53",
     "scripts/_health-check.sh": "f583afcfb661fc5a194fca69f7af60f958c92a49788b7b04938551d6395bce51",
@@ -15,7 +15,7 @@
     "scripts/checkout.ts": "4ceb065a16b13dc313859ff6582fbc2e67032278b129f5a5f4886c34dd3a065c",
     "scripts/add-to-cart.ts": "0ecb455bea6bacbc66fa9729bfe8f2fb960457625cfcd6c17d006f576e8c1b2a",
     "scripts/_helpers.sh": "0ae933eb141515fc948b49000318eb04c8d0bccf81cf1e8a3c9da9e02cec5f20",
-    "scripts/_bigbasket.ts": "0bac70c8d03272a68f5801b36875da3bb9ad6c72f31ebd5ce2c4282bb3488ea2",
+    "scripts/_bigbasket.ts": "f9b4e75e9289e860fb2ef6857cb8a9ac4d479dcc4a3ccb6df4a0f6665753dd63",
     "scripts/view-cart.ts": "e227355e782401ea95265c563b0b0ec651af6b8c5d83d10d7a779ffe353d8bd3",
     "scripts/set-delivery-location.ts": "21ee7af729ff338ea87d27ad20e5b07693bf0a2a34231524901ddec93666a620",
     "scripts/keep-alive.ts": "5f90114c5d7ecdcbee55bea981077355bd29794378fcfc74eafe05eeeef7f95d",
@@ -26,9 +26,9 @@
     "scripts/remove-from-cart.sh": "1b4736029699aed77f9ae20dce91a95a96e13c96d7ea97e7db0c0e9b7355043c",
     "scripts/view-order-history.ts": "be55c5297077b548ead555145032b0a791f745a8c322b826a2c7b422e116a256",
     "scripts/keep-alive.sh": "47e25c20e070085a17cf6e9b0158ac75cc2d2547df0c9b4399374efcd335b0bb",
-    "scripts/_shop_run.ts": "b87947e303b4210a10a59d16da769b6826dbf0f91c6c1bef03459ca6aa21051e",
-    "scripts/_shop.ts": "f56f61447b7eacd399d5e2e8b0e681c8c40132d5ab360f6bcc19a57927bbd60c",
+    "scripts/_shop_run.ts": "16a941b527ed3e9fe15122ee4f620334830f1c33721dfc922e86800a99c6a73b",
+    "scripts/_shop.ts": "905150ed1c6271261cb046099457c5e8b826ea3162f38919e518f5254b4f092f",
     "flock.skill.json": "dd12e4f2eda6d77f3285437c1787cc8081b35b82e2fb75ae65da5462a4de6636",
-    "instructions.md": "056ce26b7ea4329d8b6dd1d6b4602c4b9dcec8f86013c3b9296f0f9fb6fbb442"
+    "instructions.md": "e19969c4f61747b0a8344d227209b1fd84fff0d999b40713662f7eb34102daba"
   }
 }
