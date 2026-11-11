@@ -32,11 +32,11 @@ Call these functions with your `run_skill` tool: skill `bigbasket`, the function
 
 ### list-addresses
 The delivery addresses saved on BigBasket, and the location the site shows now. Params: `{}`
-Returns `{ addresses: [{ label, address, selected }], currentLocation }`.
+Returns `{ addresses: [{ label, address, selected }], currentLocation }`. It opens the header's address picker, reads each saved address and closes it without changing anything. Fails `NO_SAVED_ADDRESSES` only when the opened picker has none, `PICKER_NOT_OPENED` when it did not open.
 
 ### set-delivery-location
-Select the saved address that is the given one, before searching or filling the cart: prices, stock and fees depend on it. Params: `{ address: string }` — the address agreed with the family (its text; a label such as "Home" only when one saved address carries it).
-Matches by the address itself; a different pincode never matches. Returns `{ success, selected, currentLocation, confirmed }`; `confirmed: false` means the header did not visibly change, so check the cart's delivery address. Fails without clicking: `ADDRESS_NOT_SAVED` (with `savedAddresses`) or `AMBIGUOUS_ADDRESS` (pass more of the address).
+Select the saved address that is the given one, before searching or filling the cart: prices, stock and fees depend on it. Params: `{ address: string }` — the address agreed with the family, with its flat or house number and building (a label such as "Home" alone never matches).
+Matches by the flat or house number together with the building name; a different or missing pincode does not stop a match, and another flat number never matches. Returns `{ success, selected, currentLocation, confirmed }`; `confirmed: false` means the header does not show the address, so check the cart's delivery address. Fails without clicking: `ADDRESS_NOT_SAVED` (with `savedAddresses`) or `AMBIGUOUS_ADDRESS` (pass more of the address).
 
 ### empty-cart
 Remove everything from the cart, so a quote counts only the items asked for. Params: `{}`
@@ -87,7 +87,7 @@ When placing ANY new order or quoting a cart, the FIRST thing to do — before s
 3. Then search and fill the cart.
 
 **Rules:**
-- The same address for every service in a comparison: match the address itself (building, street, area, pincode), not its label. "Home" on BigBasket may be another place, and an office is not a home.
+- The same address for every service in a comparison: match the address itself (flat or house number and building), not its label or pincode. "Home" on BigBasket may be another place, and an office is not a home.
 - When the address isn't saved on BigBasket, don't quote another one. Adding it needs the owner's yes (one yes may cover several services); then add it on the website in the browser on the same signed-in session, and hand the page over if the form needs a map pin you cannot place.
 - Address selection happens BEFORE any item search — don't build a cart without knowing where to deliver
 - Remember the selected address for the session — don't ask again for subsequent orders in the same conversation

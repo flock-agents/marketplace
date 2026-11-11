@@ -12,15 +12,16 @@ import {
   persistentClose,
 } from "../../_shared/_grocery_helpers";
 import {
-  addressScript,
+  addressListScript,
   cartReadScript,
   emptyCartScript,
-  locationShows,
-  matchAddress,
+  noSavedAddresses,
   notTheCart,
   parseJson,
+  selectAddress,
   summarizeBill,
   type CartPageRead,
+  type PageStep,
   type SavedAddress,
   type ShopSite,
 } from "./_shop";
@@ -35,61 +36,47 @@ function failOn(read: any, what: string): void {
 
 const shown = (a: SavedAddress) => ({ label: a.label, address: a.text, selected: a.selected });
 
-/** The saved delivery addresses and the one the header shows now. */
+/** list-addresses: opens the header's picker, reads every saved address, closes it without picking. */
 export async function listAddresses(site: ShopSite): Promise<void> {
   requireBrowserSession();
-  const result = await browserInteract(site.config, site.homeUrl, [SETTLE], undefined, addressScript(site, null));
+  const result = await browserInteract(site.config, site.homeUrl, [SETTLE], undefined, addressListScript(site, true));
   const read = parseJson(result?.content);
-  failOn(read, "the saved addresses");
-  const saved: SavedAddress[] = read.saved || [];
-  if (!saved.length) errorJson("NO_SAVED_ADDRESSES", `No saved delivery address was found on ${site.config.name}. Add one there first (with the owner's yes).`);
-  console.log(JSON.stringify({ platform: site.config.name, addresses: saved.map(shown), currentLocation: read.location || null }));
+  const missing = noSavedAddresses(site, read);
+  if (missing) errorJson(missing.code, missing.message);
+  console.log(JSON.stringify({ platform: site.config.name, addresses: read.saved.map(shown), currentLocation: read.location || null }));
 }
 
 /**
- * Selects the saved address that matches `address` (its text, or a label only one address has).
- * Fails without clicking when it is not saved or more than one could be meant.
+ * set-delivery-location: selects the saved address that matches `address` (its flat or house number
+ * and building), then checks the header shows it. Fails without clicking when none or more than one matches.
  */
 export async function setDeliveryLocation(site: ShopSite): Promise<void> {
   requireBrowserSession();
   const wanted = String(PARAMS.address || "").trim();
-  if (!wanted) errorJson("MISSING_PARAM", "address is required: the delivery address agreed with the family (its text, or its saved label)");
+  if (!wanted) errorJson("MISSING_PARAM", "address is required: the delivery address agreed with the family (its flat or house number and building)");
 
   const opened = await persistentCreate(site.config, site.homeUrl, [SETTLE]);
   const sessionId: string = opened?.persistentSessionId || "";
   if (!sessionId) errorJson("SESSION_ERROR", "Failed to create persistent session");
-  const finish = async (out: unknown, exitCode = 0): Promise<never> => {
-    await persistentClose(site.config, sessionId).catch(() => {});
-    console.log(JSON.stringify(out));
-    process.exit(exitCode);
+  const step: PageStep = async (script, waitMs) => {
+    const actions = waitMs ? [{ action: "wait", delay: waitMs }] : [];
+    return parseJson((await persistentInteract(site.config, sessionId, actions, false, script))?.content);
   };
 
-  const listed = parseJson((await persistentInteract(site.config, sessionId, [], false, addressScript(site, null)))?.content);
-  if (!listed || listed.error) {
-    await finish({ error: true, code: listed?.code || "PAGE_CHANGED", message: listed?.message || "Could not read the saved addresses." }, 1);
+  const result = await selectAddress(site, wanted, step);
+  await persistentClose(site.config, sessionId).catch(() => {});
+  if (!result.ok) {
+    console.log(JSON.stringify({ error: true, code: result.code, message: result.message, ...(result.candidates ? { savedAddresses: result.candidates.map(shown) } : {}) }));
+    process.exit(1);
   }
-  const saved: SavedAddress[] = listed.saved || [];
-  const match = matchAddress(saved, wanted);
-  if (!match.ok) {
-    const message = match.code === "AMBIGUOUS_ADDRESS"
-      ? `More than one saved ${site.config.name} address could be "${wanted}". Pass more of the address.`
-      : `"${wanted}" is not among ${site.config.name}'s saved addresses. Adding it needs the owner's yes.`;
-    await finish({ error: true, code: match.code, message, savedAddresses: match.candidates.map(shown) }, 1);
-  }
-  const address = (match as { ok: true; address: SavedAddress }).address;
-  const picked = parseJson((await persistentInteract(site.config, sessionId, [], false, addressScript(site, address)))?.content);
-  if (!picked || picked.error) {
-    await finish({ error: true, code: picked?.code || "PAGE_CHANGED", message: picked?.message || "Could not select the address." }, 1);
-  }
-  const location = String(picked.location || "");
-  await finish({
+  console.log(JSON.stringify({
     success: true,
     platform: site.config.name,
-    selected: shown(address),
-    currentLocation: location || null,
-    confirmed: locationShows(location, address),
-    ...(picked.stillOpen ? { note: "The address picker is still open: read the cart's delivery address before trusting prices." } : {}),
-  });
+    selected: shown(result.address),
+    currentLocation: result.location || null,
+    confirmed: result.confirmed,
+    ...(result.stillOpen ? { note: "The address picker is still open: read the cart's delivery address before trusting prices." } : {}),
+  }));
 }
 
 /** Reads the cart and proves it is the cart; a home page or suggestions fail as NOT_CART_PAGE. */

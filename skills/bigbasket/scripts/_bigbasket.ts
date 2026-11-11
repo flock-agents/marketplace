@@ -1,9 +1,24 @@
 /**
  * BigBasket's pages, as the shared shop functions (_shop.ts, _shop_run.ts) read them.
- * The cart is the /basket page. The address picker and bill selectors are NOT confirmed live:
- * they are the generic ones in _shop.ts plus the header guesses below.
+ * The cart is the /basket page. The bill selectors are NOT confirmed live: they are the generic
+ * ones in _shop.ts.
  */
-import type { ShopSite } from "./_shop";
+import type { AddressPicker, ShopSite } from "./_shop";
+
+/**
+ * The saved-address picker, as captured live (signed in, 2026-11-11): the header's "Delivery in 6 mins /
+ * Home: <area>" control is a Headless UI menu button; the open menu (`ul.overscroll-contain[role="none"]`)
+ * holds one `li[role="menuitem"]` per saved address: `AddressCard___StyledDiv` > the label span, an
+ * `<hr>`, then a div with the name span and the address span (the last one). A "change address?"
+ * confirm after picking was not captured; one is pressed if it shows.
+ */
+const ADDRESS_PICKER: AddressPicker = {
+  opener: 'button[aria-haspopup="menu"]',
+  openerText: "deliver(y|ing)? in",
+  entry: '[role="menuitem"]',
+  label: '[class*="AddressCard"] > span',
+  address: '[class*="AddressCard"] > div > span:last-child',
+};
 
 export const BIGBASKET: ShopSite = {
   config: {
@@ -16,7 +31,7 @@ export const BIGBASKET: ShopSite = {
   cartPath: /^\/basket\b/i,
   openCart: [{ action: "wait", delay: 3000 }],
   cartLines: '[class*="cart-item"], [class*="CartItem"], [class*="BasketItem"], [data-testid="cart-item"], [class*="itemlist"] > div, [class*="ItemList"] > div',
-  addressOpeners: ['[class*="AddressDropdown"]', '[class*="LocationSelector"]', '[class*="DeliveryLocation"]', '[data-testid*="location" i]'],
+  addressPicker: ADDRESS_PICKER,
   productId: (href) => (href.match(/\/pd\/(\d+)/) || href.match(/\/(\d{5,})/) || [])[1] || "",
 };
 

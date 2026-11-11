@@ -105,10 +105,11 @@ export function rupeeAmount(value: unknown): number | null {
 /**
  * Blinkit for the shared shop functions (_shop_run.ts). There is no cart page: the cart counts
  * as read only while its drawer is open, or when the header's cart button says it is empty.
- * The address picker is NOT confirmed live: the header's location bar opens it (a guess from the
- * `LocationBar` class family, else the header's "Delivery in …" text), and its entries are found by
- * the generic reader in _shop.ts: by class, or by their address text when the page has utility
- * classes only (tested on a stand-in picker that answers mousedown, tests/grocery).
+ * The address picker as captured live (signed in, 2026-11-11): the header's `LocationBar__Container`
+ * ("Delivery in 17 minutes", then `LocationBar__AddressLabel` and `LocationBar__Subtitle`) opens it;
+ * a saved address is an `AddressListItem__AddressDetails` holding `AddressListItem__AddressLabel`,
+ * an inner `AddressListItem__AddressDetails` (the address, no pincode) and `AddressListItem__AddressEditIcon`.
+ * The picker's container was not captured, so nothing depends on it.
  * In a cart line the stepper's first icon glyph is taken to be the minus (NOT confirmed live).
  */
 export const BLINKIT_SITE: ShopSite = {
@@ -120,6 +121,11 @@ export const BLINKIT_SITE: ShopSite = {
   openCart: OPEN_CART_ACTIONS,
   cartLines: '[class*="CartProduct__Container"]',
   removeControls: '[class*="AddToCart__UpdatedButtonContainer"] [class*="AddMinusIcon"]',
-  addressOpeners: ['[class*="LocationBar__Container"]', '[class*="LocationBar"]'],
+  addressPicker: {
+    opener: '[class*="LocationBar__Container"]',
+    entry: '[class*="AddressListItem__AddressDetails"]',
+    label: '[class*="AddressListItem__AddressLabel"]',
+    address: '[class*="AddressListItem__AddressDetails"]',
+  },
   productId: (href) => (href.match(/\/prid\/(\d+)/) || [])[1] || "",
 };

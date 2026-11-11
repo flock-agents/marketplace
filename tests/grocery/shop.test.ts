@@ -10,8 +10,8 @@ import { readFileSync, existsSync } from "fs";
 import { join } from "path";
 import {
   matchAddress, summarizeBill, notTheCart, locationShows,
-  cartReadScript, emptyCartScript, addressScript,
-  type SavedAddress, type ShopSite,
+  cartReadScript, emptyCartScript, addressListScript, selectAddress, noSavedAddresses,
+  type PageStep, type SavedAddress, type ShopSite,
 } from "../../skills/bigbasket/scripts/_shop";
 import { BIGBASKET, searchScript, addFromSearchScript } from "../../skills/bigbasket/scripts/_bigbasket";
 import { BLINKIT_SITE } from "../../skills/zomato-blinkit/scripts/_blinkit";
@@ -61,36 +61,63 @@ const saved: SavedAddress[] = [
   { index: 2, label: "Parents", text: "Parents 7 Temple Street, Jayanagar, Bengaluru 560041", selected: false },
 ];
 
+/** One home as two shops store it: with a block letter and no pincode, and with a floor, a block and another pincode. */
+const homeNoPin: SavedAddress = { index: 0, label: "Home", text: "B204, B Block Lotus Grove Residency, Varthur Main Rd, Whitefield, Bengaluru, Karnataka", selected: false };
+const homeOtherPin: SavedAddress = { index: 1, label: "Home", text: "B204, 2nd Floor, Block B, Lotus Grove Residency, Whitefield, Bangalore, 560066", selected: false };
+const office: SavedAddress = { index: 2, label: "Work", text: "Floor 6, Northwind Tech Park, Outer Ring Rd, Marathahalli, Bengaluru 560037", selected: true };
+
 describe("matchAddress", () => {
-  it("finds the agreed address by its text, however it is written", () => {
+  it("finds the agreed address by its flat or house number and building, however it is written", () => {
     expect(matchAddress(saved, "12 Lake Road, Indiranagar, Bengaluru 560038")).toMatchObject({ ok: true, address: { index: 0 } });
     expect(matchAddress(saved, "7 temple st jayanagar")).toMatchObject({ ok: true, address: { index: 2 } });
+    expect(matchAddress([homeNoPin, office], "B-204, Lotus Grove Residency, Whitefield")).toMatchObject({ ok: true, address: { index: 0 } });
   });
 
-  it("finds it by a label only one saved address carries", () => {
-    expect(matchAddress(saved, "Home")).toMatchObject({ ok: true, address: { index: 0 } });
+  it("a different or missing pincode alone does not reject it", () => {
+    expect(matchAddress(saved, "12 Lake Road, Indiranagar, Bengaluru 560008")).toMatchObject({ ok: true, address: { index: 0 } });
+    expect(matchAddress([homeNoPin, office], "B204, Lotus Grove Residency, Varthur Road, Bengaluru 560087")).toMatchObject({ ok: true, address: { index: 0 } });
+    expect(matchAddress([homeOtherPin, office], "B204 Lotus Grove Residency Whitefield 560087")).toMatchObject({ ok: true, address: { index: 1 } });
   });
 
-  it("never takes an address in another pincode, or an office for a home", () => {
-    expect(matchAddress(saved, "12 Lake Road, Indiranagar, Bengaluru 560008")).toMatchObject({ ok: false, code: "ADDRESS_NOT_SAVED" });
+  it("never matches on the label alone", () => {
+    expect(matchAddress(saved, "Home")).toMatchObject({ ok: false, code: "ADDRESS_NOT_SAVED" });
+    expect(matchAddress([homeNoPin, office], "Home")).toMatchObject({ ok: false, code: "ADDRESS_NOT_SAVED" });
+    expect(matchAddress([homeNoPin, office], "Work")).toMatchObject({ ok: false, code: "ADDRESS_NOT_SAVED" });
+  });
+
+  it("never takes another flat, the same flat number in another building, or an office for a home", () => {
+    expect(matchAddress([homeNoPin], "B205, Lotus Grove Residency, Whitefield")).toMatchObject({ ok: false, code: "ADDRESS_NOT_SAVED" });
+    expect(matchAddress([homeNoPin], "B204, Maple Heights, Whitefield")).toMatchObject({ ok: false, code: "ADDRESS_NOT_SAVED" });
     expect(matchAddress([saved[1]], "12 Lake Road, Indiranagar")).toMatchObject({ ok: false, code: "ADDRESS_NOT_SAVED" });
   });
 
-  it("is ambiguous, never a guess, when two saved addresses fit", () => {
-    const twoHomes = [saved[0], { ...saved[2], label: "Home", text: "Home 7 Temple Street, Jayanagar, Bengaluru 560041" }];
-    const result = matchAddress(twoHomes, "Home");
+  it("takes the building alone when the flat number is left out", () => {
+    expect(matchAddress([homeNoPin, office], "Lotus Grove Residency, Whitefield")).toMatchObject({ ok: true, address: { index: 0 } });
+    expect(matchAddress([homeNoPin, office], "Whitefield, Bengaluru")).toMatchObject({ ok: false, code: "ADDRESS_NOT_SAVED" });
+  });
+
+  it("is ambiguous, never a guess, when two saved addresses match equally", () => {
+    const result = matchAddress([homeNoPin, homeOtherPin, office], "B204, Lotus Grove Residency, Bengaluru 560087");
     expect(result).toMatchObject({ ok: false, code: "AMBIGUOUS_ADDRESS" });
-    expect(result.ok ? [] : result.candidates.length).toBe(2);
+    expect(result.ok ? [] : result.candidates.map((a) => a.index)).toEqual([0, 1]);
   });
 
   it("is not saved when nothing is given or nothing is saved", () => {
     expect(matchAddress(saved, "")).toMatchObject({ ok: false, code: "ADDRESS_NOT_SAVED" });
-    expect(matchAddress([], "Home")).toMatchObject({ ok: false, code: "ADDRESS_NOT_SAVED" });
+    expect(matchAddress([], "12 Lake Road, Indiranagar")).toMatchObject({ ok: false, code: "ADDRESS_NOT_SAVED" });
   });
 
   it("checks the header now shows the chosen address", () => {
     expect(locationShows("Delivery in 9 minutes Indiranagar, Bengaluru", saved[0])).toBe(true);
     expect(locationShows("Delivery in 9 minutes Bellandur", saved[0])).toBe(false);
+    expect(locationShows("Delivery in 17 minutes Home B204, B Block Lotus Grove Residency, Whitefield", homeNoPin)).toBe(true);
+  });
+
+  it("a header showing another flat number, or only a city it showed before, is not the chosen address", () => {
+    expect(locationShows("Delivery in 17 minutes Home 25, Varthur Main Rd, Koramangala, Bengaluru 560034, India", homeNoPin)).toBe(false);
+    const before = "Delivery in 8 mins Work: Marathahalli, Bangalore";
+    expect(locationShows(before, homeOtherPin, before)).toBe(false);
+    expect(locationShows("Delivery in 8 mins Home: Whitefield, Bangalore", homeOtherPin, before)).toBe(true);
   });
 });
 
@@ -249,6 +276,81 @@ const BLINKIT_UTILITY_PICKER = `<!doctype html><html><head><meta charset="utf-8"
   });
 </script></body></html>`;
 
+type Entry = { label: string; address: string; area: string };
+const HOME_ENTRY: Entry = { label: "Home", address: "B204, B Block Lotus Grove Residency, Varthur Main Rd, Whitefield, Bengaluru, Karnataka", area: "Whitefield" };
+const WORK_ENTRY: Entry = { label: "Work", address: "Floor 6, Northwind Tech Park, Outer Ring Rd, Marathahalli, Bengaluru, Karnataka", area: "Marathahalli" };
+
+/**
+ * Blinkit's header and saved-address picker in the shapes captured live (2026-11-11), made-up data:
+ * the header's LocationBar shows "Home" over another place (another flat, as live); each entry is an
+ * outer AddressListItem__AddressDetails holding the label, an inner AddressDetails with the address
+ * (no pincode) and an edit icon. The picker's container was not captured: a plain fixed div here.
+ * Picking sets the header to the entry's address; the edit icon opens an editor instead; Escape closes.
+ */
+const blinkitPicker = (entries: Entry[]) => `<!doctype html><html><head><meta charset="utf-8"></head><body>
+<header><div class="LocationBar__Container-sc-x8ezho-6 kPzFcd"><div class="LocationBar__EtaContainer-sc-x8ezho-7">
+  <div class="LocationBar__Title-sc-x8ezho-8">Delivery in 17 minutes</div>
+  <div class="LocationBar__SubtitleContainer-sc-x8ezho-9"><div class="LocationBar__AddressLabel-sc-x8ezho-10">Home</div><div class="LocationBar__Subtitle-sc-x8ezho-11">25, Varthur Main Rd, Koramangala, Bengaluru 560034, India</div><div class="LocationBar__ArrowContainer-sc-x8ezho-12"><div class="LocationBar__DownArrow-sc-x8ezho-13"></div></div></div>
+</div></div></header>
+<div id="picker" style="display:none;position:fixed;top:0;left:0;width:420px;height:100%;background:#fff">
+  <div>Change Location</div><button>Detect my location</button>
+  ${entries.map((e, i) => `<div class="AddressListItem__Container-sc-wi2msz-1" data-i="${i}"><div class="AddressListItem__AddressDetails-sc-wi2msz-3" style="display:flex">
+    <div class="AddressListItem__AddressLabel-sc-wi2msz-4">${e.label}</div><div class="AddressListItem__AddressDetails-sc-wi2msz-3" style="flex:1">${e.address}</div><div class="AddressListItem__AddressEditIcon-sc-wi2msz-5" style="width:24px">✎</div>
+  </div></div>`).join("")}
+</div>
+<script>
+  const entries = ${JSON.stringify(entries)};
+  const picker = document.getElementById("picker");
+  window.edited = false;
+  document.querySelector('[class*="LocationBar__Container"]').addEventListener("click", () => { picker.style.display = "block"; });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") picker.style.display = "none"; });
+  picker.addEventListener("click", (e) => {
+    if (e.target.closest('[class*="AddressEditIcon"]')) { window.edited = true; return; }
+    const item = e.target.closest('[class*="AddressListItem__Container"]'); if (!item) return;
+    const entry = entries[item.dataset.i];
+    setTimeout(() => {
+      document.querySelector('[class*="LocationBar__AddressLabel"]').textContent = entry.label;
+      document.querySelector('[class*="LocationBar__Subtitle-"]').textContent = entry.address.replace(", Karnataka", " 560066, India");
+      picker.style.display = "none";
+    }, 300);
+  });
+</script></body></html>`;
+
+/**
+ * BigBasket's header and address menu in the shapes captured live (2026-11-11), made-up data: a Headless
+ * UI menu button ("Delivery in 8 mins", "Work: Marathahalli, Bangalore") next to another menu button; the
+ * open menu holds ul.overscroll-contain[role="none"] > li[role="menuitem"] > AddressCard (label, hr,
+ * name, address). With `confirm`, picking asks "Change delivery address?" first (not captured live).
+ */
+const bigbasketMenu = (entries: Entry[], confirm = false) => `<!doctype html><html><head><meta charset="utf-8"></head><body>
+<header><nav>
+  <button id="headlessui-menu-button-:r1:" aria-haspopup="menu" aria-expanded="false">Shop by Category</button>
+  <div class="relative">
+    <button id="headlessui-menu-button-:r3:" aria-haspopup="menu" aria-expanded="false" class="sc-fPrdXf hEaOJL"><span class="Label-sc-15v1nk5-0"><span>Delivery in 8 mins</span></span><span><span class="font-bold capitalize">Work:&nbsp;</span><span id="area">Marathahalli, Bangalore</span></span></button>
+    <div role="menu" hidden><ul class="overscroll-contain" role="none">
+      ${entries.map((e, i) => `<li class="m-2 outline-none" role="menuitem" data-i="${i}"><div class="AddressCard___StyledDiv-sc-1udrslf-0"><span class="font-bold capitalize text-base truncate">${e.label}</span><hr/><div class="text-md leading-sm"><span class="line-clamp-1">Asha Rao</span><span class="line-clamp-4">${e.address.replace(", Karnataka", ", 560066").replace("Bengaluru", "Bangalore")}</span></div></div></li>`).join("")}
+    </ul></div>
+  </div>
+</nav></header>
+<div id="confirm" role="dialog" hidden><p>Change delivery address? Items in your basket may change.</p><button>Cancel</button><button id="yes">Confirm</button></div>
+<script>
+  const entries = ${JSON.stringify(entries)};
+  const button = document.getElementById("headlessui-menu-button-:r3:");
+  const menu = document.querySelector('[role="menu"]');
+  const show = (open) => { menu.hidden = !open; button.setAttribute("aria-expanded", String(open)); };
+  let pending = null;
+  const apply = (entry) => { button.querySelector(".font-bold").innerHTML = entry.label + ":&nbsp;"; document.getElementById("area").textContent = entry.area + ", Bangalore"; };
+  button.addEventListener("click", () => show(menu.hidden));
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") show(false); });
+  menu.addEventListener("click", (e) => {
+    const item = e.target.closest('[role="menuitem"]'); if (!item) return;
+    show(false);
+    const entry = entries[item.dataset.i];
+    if (${confirm}) { pending = entry; document.getElementById("confirm").hidden = false; } else apply(entry);
+  });
+  document.getElementById("yes").addEventListener("click", () => { document.getElementById("confirm").hidden = true; apply(pending); });
+</script></body></html>`;
+
 const appDir = process.env.FLOCK_APP_DIR;
 const playwrightPath = appDir ? join(appDir, "node_modules", "playwright-core") : "";
 const canBrowse = !!appDir && existsSync(playwrightPath);
@@ -279,6 +381,7 @@ describe.skipIf(!canBrowse)("the in-page scripts on stand-in pages", () => {
     cartHeader: '[class*="CartButton__Button"], [class*="CartButton"]',
     cartLines: '[class*="CartProduct__Container"]',
     removeControls: '[class*="AddToCart__UpdatedButtonContainer"] [class*="AddMinusIcon"]',
+    addressPicker: undefined,
     addressOpeners: ['[class*="LocationBar__Container"]'],
   };
   const openDrawer = `document.querySelector('[class*="CartButton__Button"]').click()`;
@@ -344,39 +447,113 @@ describe.skipIf(!canBrowse)("the in-page scripts on stand-in pages", () => {
     expect(notTheCart(blinkit, { ...out, items: [], bill: [] })).toBeNull();
   });
 
-  it("lists the saved addresses from the header's picker, skipping 'Add a new address'", async () => {
-    const out = await run("https://blinkit.com/", ADDRESS_PICKER, addressScript(blinkit, null));
-    expect(out.saved.map((a: SavedAddress) => [a.label, a.selected])).toEqual([["Home", false], ["Work", true]]);
-    expect(out.location).toContain("Bellandur");
-  });
-
-  it("selects the matching saved address and the header follows", async () => {
+  /** Runs the page scripts in `tab` as set-delivery-location runs them in the signed-in browser. */
+  const stepOn = (tab: any): PageStep => async (script, waitMs) => {
+    if (waitMs) await tab.waitForTimeout(waitMs);
+    try { return JSON.parse(await tab.evaluate(script)); } catch { return null; }
+  };
+  async function onPage<T>(url: string, html: string, body: (tab: any) => Promise<T>): Promise<T> {
     const tab = await browser.newPage();
     try {
-      await tab.route("**/*", (route: any) => route.fulfill({ status: 200, contentType: "text/html; charset=utf-8", body: ADDRESS_PICKER }));
-      await tab.goto("https://blinkit.com/");
-      const listed = JSON.parse(await tab.evaluate(addressScript(blinkit, null)));
-      const match = matchAddress(listed.saved, "12 Lake Road, Indiranagar, Bengaluru 560038");
-      expect(match.ok).toBe(true);
-      const picked = JSON.parse(await tab.evaluate(addressScript(blinkit, match.ok ? match.address : null)));
-      expect(picked.location).toContain("Indiranagar");
-      expect(locationShows(picked.location, picked.selected)).toBe(true);
+      await tab.route("**/*", (route: any) => route.fulfill({ status: 200, contentType: "text/html; charset=utf-8", body: html }));
+      await tab.goto(url);
+      return await body(tab);
     } finally { await tab.close(); }
+  }
+  const listOn = (site: ShopSite) => (tab: any) => tab.evaluate(addressListScript(site, true)).then(JSON.parse);
+
+  it("Blinkit list-addresses opens the header's picker, reads each saved entry's label and address, and closes it", async () => {
+    await onPage("https://blinkit.com/", blinkitPicker([HOME_ENTRY, WORK_ENTRY]), async (tab) => {
+      const out = await listOn(BLINKIT_SITE)(tab);
+      expect(out.opened).toBe(true);
+      expect(out.saved.map((a: SavedAddress) => [a.label, a.text])).toEqual([["Home", HOME_ENTRY.address], ["Work", WORK_ENTRY.address]]);
+      expect(out.location).toContain("Koramangala");
+      expect(await tab.isVisible("#picker")).toBe(false);
+    });
   });
 
-  it("Blinkit with utility classes only: lists the saved addresses by their text and selects one on mousedown", async () => {
-    const tab = await browser.newPage();
-    try {
-      await tab.route("**/*", (route: any) => route.fulfill({ status: 200, contentType: "text/html; charset=utf-8", body: BLINKIT_UTILITY_PICKER }));
-      await tab.goto("https://blinkit.com/");
-      const listed = JSON.parse(await tab.evaluate(addressScript(BLINKIT_SITE, null)));
-      expect(listed.saved.map((a: SavedAddress) => a.label)).toEqual(["Home", "Work"]);
-      const match = matchAddress(listed.saved, "12 Lake Road, Indiranagar, Bengaluru 560038");
-      expect(match.ok).toBe(true);
-      const picked = JSON.parse(await tab.evaluate(addressScript(BLINKIT_SITE, match.ok ? match.address : null)));
-      expect(picked.selected.label).toBe("Home");
-      expect(picked.location).toContain("Indiranagar");
-      expect(locationShows(picked.location, picked.selected)).toBe(true);
-    } finally { await tab.close(); }
+  it("BigBasket list-addresses opens the address menu (not the other menu), reads each entry, and closes it", async () => {
+    await onPage("https://www.bigbasket.com/", bigbasketMenu([HOME_ENTRY, WORK_ENTRY]), async (tab) => {
+      const out = await listOn(BIGBASKET)(tab);
+      expect(out.opened).toBe(true);
+      expect(out.saved.map((a: SavedAddress) => [a.label, a.text])).toEqual([
+        ["Home", "B204, B Block Lotus Grove Residency, Varthur Main Rd, Whitefield, Bangalore, 560066"],
+        ["Work", "Floor 6, Northwind Tech Park, Outer Ring Rd, Marathahalli, Bangalore, 560066"],
+      ]);
+      expect(out.location).toContain("Work: Marathahalli");
+      expect(await tab.getAttribute("#headlessui-menu-button-\\:r3\\:", "aria-expanded")).toBe("false");
+      expect(await tab.getAttribute("#headlessui-menu-button-\\:r1\\:", "aria-expanded")).toBe("false");
+    });
+  });
+
+  it("an opened picker with no saved entries reads none (NO_SAVED_ADDRESSES); a page without the control is NO_LOCATION_CONTROL", async () => {
+    const none = await onPage("https://blinkit.com/", blinkitPicker([]), listOn(BLINKIT_SITE));
+    expect(none).toMatchObject({ saved: [], opened: true });
+    expect(noSavedAddresses(BLINKIT_SITE, none)).toMatchObject({ code: "NO_SAVED_ADDRESSES" });
+    const bare = await onPage("https://www.bigbasket.com/", "<!doctype html><html><body><main>Hi</main></body></html>", listOn(BIGBASKET));
+    expect(bare).toMatchObject({ error: true, code: "NO_LOCATION_CONTROL" });
+  }, 30_000);
+
+  it("Blinkit set-delivery-location: another pincode still matches by flat and building; it presses that entry (not its edit icon) and the header shows it", async () => {
+    await onPage("https://blinkit.com/", blinkitPicker([WORK_ENTRY, HOME_ENTRY]), async (tab) => {
+      const out = await selectAddress(BLINKIT_SITE, "B-204, Lotus Grove Residency, Varthur Road, Bengaluru 560087", stepOn(tab));
+      expect(out).toMatchObject({ ok: true, address: { label: "Home", text: HOME_ENTRY.address }, confirmed: true, stillOpen: false });
+      expect(out.ok && out.location).toContain("B204, B Block Lotus Grove Residency");
+      expect(await tab.evaluate("window.edited")).toBe(false);
+    });
+  });
+
+  it("BigBasket set-delivery-location picks the matching menu item and the header shows its area", async () => {
+    await onPage("https://www.bigbasket.com/", bigbasketMenu([WORK_ENTRY, HOME_ENTRY]), async (tab) => {
+      const out = await selectAddress(BIGBASKET, "B204, Lotus Grove Residency, Whitefield, Bengaluru 560087", stepOn(tab));
+      expect(out).toMatchObject({ ok: true, address: { label: "Home" }, confirmed: true });
+      expect(out.ok && out.location).toContain("Home: Whitefield");
+    });
+  });
+
+  it("BigBasket set-delivery-location presses a 'change address?' confirm when one shows", async () => {
+    await onPage("https://www.bigbasket.com/", bigbasketMenu([WORK_ENTRY, HOME_ENTRY], true), async (tab) => {
+      const out = await selectAddress(BIGBASKET, "B204 Lotus Grove Residency", stepOn(tab));
+      expect(out).toMatchObject({ ok: true, confirmed: true });
+      expect(await tab.textContent("#area")).toBe("Whitefield, Bangalore");
+      expect(await tab.isVisible("#confirm")).toBe(false);
+    });
+  });
+
+  it("set-delivery-location clicks nothing for a label alone or for two equal matches", async () => {
+    await onPage("https://www.bigbasket.com/", bigbasketMenu([WORK_ENTRY, HOME_ENTRY]), async (tab) => {
+      const out = await selectAddress(BIGBASKET, "Home", stepOn(tab));
+      expect(out).toMatchObject({ ok: false, code: "ADDRESS_NOT_SAVED" });
+      expect(out.ok ? [] : out.candidates?.map((a) => a.label)).toEqual(["Work", "Home"]);
+      expect(await tab.textContent("#area")).toBe("Marathahalli, Bangalore");
+    });
+    const sameHomeOtherPin = { ...HOME_ENTRY, address: HOME_ENTRY.address.replace("Karnataka", "560067") };
+    await onPage("https://blinkit.com/", blinkitPicker([HOME_ENTRY, sameHomeOtherPin, WORK_ENTRY]), async (tab) => {
+      const out = await selectAddress(BLINKIT_SITE, "B204, Lotus Grove Residency, Whitefield", stepOn(tab));
+      expect(out).toMatchObject({ ok: false, code: "AMBIGUOUS_ADDRESS" });
+      expect(out.ok ? 0 : out.candidates?.length).toBe(2);
+      expect(await tab.textContent('[class*="LocationBar__Subtitle-"]')).toContain("Koramangala");
+    });
+  });
+
+  it("the generic reader (a site not checked live) lists a picker by its address classes and selects one", async () => {
+    await onPage("https://blinkit.com/", ADDRESS_PICKER, async (tab) => {
+      const listed = JSON.parse(await tab.evaluate(addressListScript(blinkit, false)));
+      expect(listed.saved.map((a: SavedAddress) => [a.label, a.selected])).toEqual([["Home", false], ["Work", true]]);
+      expect(listed.location).toContain("Bellandur");
+    });
+    await onPage("https://blinkit.com/", ADDRESS_PICKER, async (tab) => {
+      const out = await selectAddress(blinkit, "12 Lake Road, Indiranagar, Bengaluru 560038", stepOn(tab));
+      expect(out).toMatchObject({ ok: true, address: { label: "Home" }, confirmed: true });
+      expect(out.ok && out.location).toContain("Indiranagar");
+    });
+  });
+
+  it("the generic reader on a picker of utility classes only: entries by their text, selected on mousedown", async () => {
+    await onPage("https://blinkit.com/", BLINKIT_UTILITY_PICKER, async (tab) => {
+      const out = await selectAddress({ ...BLINKIT_SITE, addressPicker: undefined }, "12 Lake Road, Indiranagar, Bengaluru 560038", stepOn(tab));
+      expect(out).toMatchObject({ ok: true, address: { label: "Home" }, confirmed: true });
+      expect(out.ok && out.location).toContain("Indiranagar");
+    });
   });
 });
