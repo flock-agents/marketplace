@@ -12,7 +12,7 @@ payload also holds:
 - `events` (`e1`…), the events to plan, none before today: each has its `ref` (`e1`), its `event`
   (the pointer, `calendar-desk:<id>`, that ties a TODO to it), its `date`, its `time` when it has
   one (`allDay` says when it has none), its `title`, its `change`, for a changed event `was` (the `date`, and `time` when it has one,
-  it had when its steps were dated), and `facts` (what memory knows
+  it had when its steps were dated), and `facts` (what Flock knows
   about it: whose birthday it is, what the trip needs).
   An event may also show its `guests` (other people invited) and its `location`. They say who and
   where: context for your judgement, never a rule. An event without them tells you nothing about
@@ -34,7 +34,7 @@ payload also holds:
     `"off"` when they dismissed the last two as not important; `"none"` when nothing counts
     yet. A kind that is `"off"` is refused if you propose it, unless the event's `pattern`
     shows it `"on"`.
-  - `facts`, what memory knows about how the user does this (how they travel, whether they buy
+  - `facts`, what Flock knows about how the user does this (how they travel, whether they buy
     gifts, where they eat out). A fact can be off topic: use only one about this kind of step.
 
 The payload does not hold the user's TODOs: you read them yourself (step 1 below). Your work here
@@ -94,11 +94,7 @@ does not fit the event's type. The columns:
 The words tier, kind, tally, pattern, type and habits are for you. Never put them, or any other word from this
 payload's machinery, in a step's `title` or `why`: the user reads those.
 
-1. **Read the user's TODOs first**, once:
-
-   ```bash
-   flock-api GET /api/internal/todos
-   ```
+1. **Read the user's TODOs first**, once, with the api tool: `GET /api/internal/todos`.
 
    This is the user's own list (their own, from mail, and steps Calendar Desk made). Never
    propose a step the user already has as a TODO. Steps Calendar Desk made for other events show
@@ -114,12 +110,8 @@ payload's machinery, in a step's `title` or `why`: the user reads those.
    stays hidden until its `showFrom`.
 3. For each event, in this order:
    1. **Already covered**: a TODO of the user's (their own, or from mail) is about this event →
-      tie it to the event so it shows with the event, and never propose a step that repeats its work:
-
-      ```bash
-      flock-api PATCH /api/internal/todos/<id> '{"event":"<event>"}'
-      ```
-
+      tie it to the event so it shows with the event, and never propose a step that repeats its work.
+      Tie it with the api tool: `PATCH /api/internal/todos/<id>` with `{"event":"<event>"}`,
       where `<event>` is the event's `event` pointer, for example `calendar-desk:3k9f0abc`. A TODO is about an event only when it
       is about that occasion: the same appointment, trip or meeting; sharing a place, a person
       or a word of the title is not enough, and a TODO due after the event's day is never its.
@@ -252,18 +244,15 @@ payload's machinery, in a step's `title` or `why`: the user reads those.
 10. **You never ask.** Never ask the user anything, and never make a step that asks ("Do you want a
    cab?"). When rule 5 gives no step, leave it out: not suggesting a step is better than asking.
    The event is still planned.
-11. **Report once**, listing every offered event (`"steps":[]` when it needs nothing), passing the
-   JSON through a quoted heredoc so apostrophes and quotes in your text are safe (never wrap the
-   JSON in single quotes):
+11. **Report once**, listing every offered event (`"steps":[]` when it needs nothing), with the api
+   tool: `POST /api/apps/calendar-desk/ops/plan_events_done` with the report as the body (a JSON
+   object, never a string):
 
-   ```bash
-   flock-api POST /api/apps/calendar-desk/ops/plan_events_done "$(cat <<'EOF'
+   ```json
    {"planId":"<planId>","events":[
      {"event":"e1","type":"journey","steps":[{"key":"…","kind":"…","title":"…","dueDate":"YYYY-MM-DD","showFrom":"YYYY-MM-DD","why":"… (e1)"}]},
      {"event":"e2","type":"meeting","steps":[]}
    ]}
-   EOF
-   )"
    ```
 
    `event` is the event's `ref` (`e1`), not its pointer. Each event appears once. The reply says

@@ -40,8 +40,9 @@ google-sheets getSpreadsheet (`spreadsheetId`) or google-docs getDocument (`docu
 
 ## In the browser: upload, new folder, rename, move, bin
 
-These have no function here. Do them yourself in the Google browser session (authenticated-crawl,
-on the sessionName under **Available Browser Sessions**), on drive.google.com. Tested 2026-10-25:
+These have no function here. Do them yourself with your `browser` tool on the Google sign-in (`list` shows it: the one
+whose `skills` list google-drive, for the account you want): `open` with that `session` and the url,
+then `act` on its `persistentSessionId`, on drive.google.com. Tested 2026-10-25:
 
 - **Open the folder**: `https://drive.google.com/drive/folders/<id>` (My Drive: `/drive/my-drive`).
 - **New folder**: click `New` → `New folder`, select all in `input[aria-label='New folder']`, type
@@ -74,23 +75,17 @@ If the skill is not connected or the session has expired, guide the user to set 
 
 ## Usage
 
-To execute a function, run the skill execution wrapper. It lives under
-`$FLOCK_SKILLS_DIR`, which your shell already exports; your working directory
-does NOT contain it, so always use this exact form:
-```bash
-bash "$FLOCK_SKILLS_DIR/google-drive/scripts/drive-exec.sh" <functionName> '<paramsJson>'
-```
+To execute a function, call the run_skill tool with skill `google-drive`, the
+function's name, and its params as an object.
 
-The wrapper is the only way to call a function: it picks the account (pass
+The run_skill tool is the only way to call a function: it picks the account (pass
 `"accountHint"` in the params for a non-default one) and hands the function its
 Google sign-in. Never run the per-function scripts in `scripts/` yourself —
-outside the wrapper they have no sign-in and always answer `NO_AUTH` ("No
-browser session available"), whatever is connected. If `$FLOCK_SKILLS_DIR` is
-unset or the wrapper is missing, tell the owner (the install is broken); do not
-search the filesystem for another copy.
+outside the run_skill tool they have no sign-in and always answer `NO_AUTH` ("No
+browser session available"), whatever is connected. If the run_skill tool cannot
+find the google-drive skill, tell the owner (the install is broken); do not search the
+filesystem for the skill's scripts.
 
-Example:
-```bash
-bash "$FLOCK_SKILLS_DIR/google-drive/scripts/drive-exec.sh" listFiles '{"maxResults": 20}'
-bash "$FLOCK_SKILLS_DIR/google-drive/scripts/drive-exec.sh" searchFiles '{"query": "name contains \\"invoice\\""}'
-```
+Example (the run_skill tool, skill `google-drive`):
+- function `listFiles`, params `{"maxResults": 20}`
+- function `searchFiles`, params `{"query": "name contains \"invoice\""}`

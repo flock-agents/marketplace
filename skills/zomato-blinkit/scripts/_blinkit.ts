@@ -14,6 +14,9 @@
  * styled-components: the `Name__Part` prefix before `-sc-` is stable, the hash is not.
  */
 import type { GroceryServiceConfig } from "../../_shared/_grocery_helpers";
+import type { ShopSite } from "./_shop";
+
+export { headerShowsItems } from "./_shop";
 
 export const BLINKIT: GroceryServiceConfig = {
   name: "Blinkit",
@@ -92,14 +95,39 @@ export const READ_CART_SCRIPT = `(() => {
   });
 })()`;
 
-/** The header says the cart has items ("3 items ₹120"), whatever the drawer shows. */
-export function headerShowsItems(headerText: unknown): boolean {
-  return /\d+\s*items?/i.test(String(headerText || ""));
-}
-
 /** Amount in rupees from "₹1,234" (or a number), or null. */
 export function rupeeAmount(value: unknown): number | null {
   if (typeof value === "number") return value;
   const m = String(value ?? "").match(/([\d,]+(?:\.\d+)?)/);
   return m ? parseFloat(m[1].replace(/,/g, "")) : null;
 }
+
+/**
+ * Blinkit for the shared shop functions (_shop_run.ts). There is no cart page: the cart counts
+ * as read only while its drawer is open, or when the header's cart button says it is empty.
+ * The address picker as captured live (signed in, 2026-11-11): the header's `LocationBar__Container`
+ * ("Delivery in 17 minutes", then `LocationBar__AddressLabel` and `LocationBar__Subtitle`) opens it;
+ * a saved address is an `AddressListItem__AddressDetails` holding `AddressListItem__AddressLabel`,
+ * an inner `AddressListItem__AddressDetails` (the address, no pincode) and `AddressListItem__AddressEditIcon`.
+ * The picker's container was not captured, so nothing depends on it. Pressing the inner address text
+ * did not switch the address live (2026-11-11): the press goes to the entry's outer clickable element.
+ * In a cart line the stepper's first icon glyph is taken to be the minus (NOT confirmed live).
+ */
+export const BLINKIT_SITE: ShopSite = {
+  config: BLINKIT,
+  homeUrl: HOME_URL,
+  cartUrl: HOME_URL,
+  cartShown: '[class*="CartWrapper__CartContainer"], [class*="CartProduct__Container"]',
+  cartHeader: '[class*="CartButton__Button"], [class*="CartButton"]',
+  openCart: OPEN_CART_ACTIONS,
+  cartLines: '[class*="CartProduct__Container"]',
+  removeControls: '[class*="AddToCart__UpdatedButtonContainer"] [class*="AddMinusIcon"]',
+  addressPicker: {
+    opener: '[class*="LocationBar__Container"]',
+    entry: '[class*="AddressListItem__AddressDetails"]',
+    label: '[class*="AddressListItem__AddressLabel"]',
+    address: '[class*="AddressListItem__AddressDetails"]',
+    item: '[class*="AddressListItem__"]',
+  },
+  productId: (href) => (href.match(/\/prid\/(\d+)/) || [])[1] || "",
+};

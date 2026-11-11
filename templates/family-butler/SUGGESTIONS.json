@@ -35,21 +35,13 @@
       "reason": "Daily summary with weather, calendar, and pending tasks at 8 AM"
     },
     {
-      "name": "Grocery Stock Check",
-      "reason": "Weekly Saturday grocery review and shopping list suggestions"
-    },
-    {
-      "name": "Weekly Summary",
-      "reason": "Sunday evening digest with spending, activity recap, and memory curation"
-    },
-    {
       "name": "Evening Reminder",
       "reason": "Daily evening check-in with tomorrow's preview at 9 PM"
     }
   ],
   "apps": [
     {
-      "slug": "meal-planner",
+      "slug": "planner",
       "reason": "Plan weekly meals and manage a grocery shopping list"
     }
   ]
