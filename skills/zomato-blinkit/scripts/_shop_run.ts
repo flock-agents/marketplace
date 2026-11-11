@@ -48,7 +48,8 @@ export async function listAddresses(site: ShopSite): Promise<void> {
 
 /**
  * set-delivery-location: selects the saved address that matches `address` (its flat or house number
- * and building), then checks the header shows it. Fails without clicking when none or more than one matches.
+ * and building) and succeeds only once the header shows it (ADDRESS_NOT_SWITCHED otherwise). Fails
+ * without clicking when none or more than one matches.
  */
 export async function setDeliveryLocation(site: ShopSite): Promise<void> {
   requireBrowserSession();
@@ -66,7 +67,13 @@ export async function setDeliveryLocation(site: ShopSite): Promise<void> {
   const result = await selectAddress(site, wanted, step);
   await persistentClose(site.config, sessionId).catch(() => {});
   if (!result.ok) {
-    console.log(JSON.stringify({ error: true, code: result.code, message: result.message, ...(result.candidates ? { savedAddresses: result.candidates.map(shown) } : {}) }));
+    console.log(JSON.stringify({
+      error: true,
+      code: result.code,
+      message: result.message,
+      ...(result.candidates ? { savedAddresses: result.candidates.map(shown) } : {}),
+      ...(result.location !== undefined ? { currentLocation: result.location || null } : {}),
+    }));
     process.exit(1);
   }
   console.log(JSON.stringify({
@@ -74,8 +81,8 @@ export async function setDeliveryLocation(site: ShopSite): Promise<void> {
     platform: site.config.name,
     selected: shown(result.address),
     currentLocation: result.location || null,
-    confirmed: result.confirmed,
-    ...(result.stillOpen ? { note: "The address picker is still open: read the cart's delivery address before trusting prices." } : {}),
+    alreadySet: result.alreadySet,
+    ...(result.stillOpen ? { note: "The address picker did not close: close it before searching." } : {}),
   }));
 }
 

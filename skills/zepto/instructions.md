@@ -44,7 +44,7 @@ Returns `{ addresses: [{ label, address, selected }], currentLocation }`. It ope
 
 ### set-delivery-location
 Select the saved address that is the given one, before searching or filling the cart: prices, stock and fees depend on it. Params: `{ address: string }` — the address agreed with the family, with its flat or house number and building (a label such as "Home" alone never matches).
-Matches by the flat or house number together with the building name; a different or missing pincode does not stop a match, and another flat number never matches. Returns `{ success, selected, currentLocation, confirmed }`; `confirmed: false` means the header does not show the address, so check the cart's delivery address. Fails without clicking: `ADDRESS_NOT_SAVED` (with `savedAddresses`) or `AMBIGUOUS_ADDRESS` (pass more of the address).
+Matches by the flat or house number together with the building name; a different or missing pincode does not stop a match, and another flat number never matches. Succeeds only once the header shows the address: `{ success, selected, currentLocation, alreadySet }` (`alreadySet`: the header already showed it, nothing was clicked). Fails `ADDRESS_NOT_SWITCHED` (with `currentLocation`) when the header still shows another address after picking it: do not price that service. Fails without clicking: `ADDRESS_NOT_SAVED` (with `savedAddresses`) or `AMBIGUOUS_ADDRESS` (pass more of the address).
 
 ### empty-cart
 Remove everything from the cart, so a quote counts only the items asked for. Params: `{}`

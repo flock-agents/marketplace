@@ -109,7 +109,8 @@ export function rupeeAmount(value: unknown): number | null {
  * ("Delivery in 17 minutes", then `LocationBar__AddressLabel` and `LocationBar__Subtitle`) opens it;
  * a saved address is an `AddressListItem__AddressDetails` holding `AddressListItem__AddressLabel`,
  * an inner `AddressListItem__AddressDetails` (the address, no pincode) and `AddressListItem__AddressEditIcon`.
- * The picker's container was not captured, so nothing depends on it.
+ * The picker's container was not captured, so nothing depends on it. Pressing the inner address text
+ * did not switch the address live (2026-11-11): the press goes to the entry's outer clickable element.
  * In a cart line the stepper's first icon glyph is taken to be the minus (NOT confirmed live).
  */
 export const BLINKIT_SITE: ShopSite = {
@@ -126,6 +127,7 @@ export const BLINKIT_SITE: ShopSite = {
     entry: '[class*="AddressListItem__AddressDetails"]',
     label: '[class*="AddressListItem__AddressLabel"]',
     address: '[class*="AddressListItem__AddressDetails"]',
+    item: '[class*="AddressListItem__"]',
   },
   productId: (href) => (href.match(/\/prid\/(\d+)/) || [])[1] || "",
 };

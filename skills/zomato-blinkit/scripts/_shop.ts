@@ -43,8 +43,10 @@ export interface AddressPicker {
   entry: string;
   /** Inside an entry: its label ("Home"). An element matching `entry` without one is not a saved address. */
   label: string;
-  /** Inside an entry: the address itself, also what is pressed to pick it (never an edit icon). */
+  /** Inside an entry: the address itself. The press is aimed at it (never at an edit icon). */
   address: string;
+  /** The entry's outer container (its outermost match around the address), one of the elements pressed to pick it. */
+  item?: string;
 }
 
 export interface SavedAddress { index: number; label: string; text: string; selected: boolean }
@@ -81,8 +83,8 @@ const KIND_WORDS = new Set([
   "tower", "towers", "wing", "layout", "stage", "phase", "sector", "near", "opp", "opposite", "behind", "house",
   "plot", "door", "level", "the", "and",
 ]);
-/** "Delivery in 17 minutes": the header's delivery time, not part of the location. */
-const DELIVERY_TIME = /deliver(y|ing)?\s+in\s+\d+\s*[a-z]*/gi;
+/** "Delivery in 17 minutes": the header's delivery time, not part of the location. Its unit may run into the next word ("6 minsHome:"). */
+const DELIVERY_TIME = /deliver(y|ing)?\s+in\s+\d+\s*(minutes?|mins?|hours?|hrs?|days?)?/gi;
 
 /** A flat or house number: has a digit; not a pincode or phone number (six digits or more), not "3rd". */
 const isUnit = (t: string): boolean => /\d/.test(t) && t.replace(/\D/g, "").length < 6 && !/^\d+(st|nd|rd|th)$/.test(t);
@@ -155,15 +157,29 @@ export function matchAddress(saved: SavedAddress[], wanted: string): AddressMatc
 }
 
 /**
- * Does the header's location show the chosen address? Its flat number or building name, else a
- * name word of it the header did not show `before` (a city both share proves nothing). A header
- * showing another flat number does not.
+ * The header names this address: its flat number or building, or its label followed by its area
+ * (BigBasket's "Home: Bellandur, Bangalore"). A header showing another flat number does not.
  */
-export function locationShows(location: string, address: SavedAddress, before = ""): boolean {
-  const shown = addressParts(location.replace(DELIVERY_TIME, " "));
+export function headerShows(location: string, address: SavedAddress): boolean {
+  const header = location.replace(DELIVERY_TIME, " ").trim();
+  const shown = addressParts(header);
   const it = addressParts(addressText(address));
   if (unitsConflict(shown, it)) return false;
   if (unitsShared(shown, it) || names(it.building, shown.words)) return true;
+  const label = address.label.trim().toLowerCase();
+  if (!label || !header.toLowerCase().startsWith(label)) return false;
+  return names(addressParts(header.slice(label.length)).building, it.words);
+}
+
+/**
+ * Does the header now show the chosen address? `headerShows`, else a name word of it the header did
+ * not show `before` (a city both share proves nothing).
+ */
+export function locationShows(location: string, address: SavedAddress, before = ""): boolean {
+  if (headerShows(location, address)) return true;
+  const shown = addressParts(location.replace(DELIVERY_TIME, " "));
+  const it = addressParts(addressText(address));
+  if (unitsConflict(shown, it)) return false;
   const was = addressParts(before.replace(DELIVERY_TIME, " "));
   return it.words.some((w) => w.length >= 4 && hasWord(shown.words, w) && !hasWord(was.words, w));
 }
@@ -386,15 +402,37 @@ const addressKit = (site: ShopSite) => String.raw`
   const locationText = () => text(opener()).substring(0, 160);
   const expanded = () => { const el = opener(); return !!el && el.getAttribute("aria-expanded") === "true"; };
   const isOpen = () => entries().length > 0 || expanded() || scopes().length > 0;
-  const pointerPress = (el, andClick) => {
-    el.scrollIntoView({ block: "center" });
-    const r = el.getBoundingClientRect();
-    const at = { bubbles: true, cancelable: true, view: window, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 };
-    const hit = document.elementFromPoint(at.clientX, at.clientY);
-    const target = hit && el.contains(hit) ? hit : el;
-    for (const type of ["pointerdown", "mousedown", "pointerup", "mouseup"]) target.dispatchEvent(new (type.startsWith("pointer") ? PointerEvent : MouseEvent)(type, at));
-    if (andClick) target.click();
+  const EDIT = '[class*="EditIcon" i], [class*="edit-icon" i], [aria-label^="edit" i]';
+  const INTERACTIVE = 'button, a, label, [role="button"], [role="option"], [role="menuitem"], [role="radio"], [tabindex]';
+  const reactHandler = (el) => {
+    const key = Object.keys(el).find((k) => k.startsWith("__reactProps$"));
+    const props = key ? el[key] : null;
+    return !!props && !!(props.onClick || props.onMouseDown || props.onMouseUp || props.onPointerDown || props.onPointerUp);
   };
+  const setsPointer = (el) => getComputedStyle(el).cursor === "pointer" && !(el.parentElement && getComputedStyle(el.parentElement).cursor === "pointer");
+  const addressElOf = (entry) => (PICKER && entry.querySelector(PICKER.address)) || entry;
+  /**
+   * What to press to pick an entry, best first: the nearest element with a React click handler, the
+   * entry's outer container (PICKER.item), the element that is a control or sets the pointer cursor,
+   * the outermost element holding this entry alone, then the address text. Never an edit icon.
+   */
+  const pressTargets = (entry) => {
+    const others = entries().filter((o) => o !== entry);
+    const chain = [];
+    for (let el = addressElOf(entry); el && el !== document.body && !others.some((o) => el.contains(o)); el = el.parentElement) chain.push(el);
+    const item = PICKER && PICKER.item ? chain.filter((el) => el.matches(PICKER.item)).pop() : null;
+    const found = [chain.find(reactHandler), item, chain.find((el) => el.matches(INTERACTIVE) || setsPointer(el)), chain[chain.length - 1], addressElOf(entry)];
+    return [...new Set(found.filter(Boolean))].filter((el) => !el.closest(EDIT));
+  };
+  /** Presses the target itself (no child takes the events), aimed at the middle of aim; click false stops at mouseup. */
+  const pressOn = (target, aim, click = true) => {
+    aim.scrollIntoView({ block: "center" });
+    const r = aim.getBoundingClientRect();
+    const at = { bubbles: true, cancelable: true, view: window, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 };
+    for (const type of ["pointerdown", "mousedown", "pointerup", "mouseup"]) target.dispatchEvent(new (type.startsWith("pointer") ? PointerEvent : MouseEvent)(type, at));
+    if (click) target.dispatchEvent(new MouseEvent("click", at));
+  };
+  const describe = (el) => (el.tagName.toLowerCase() + (el.getAttribute("role") ? "[role=" + el.getAttribute("role") + "]" : "") + "." + String(el.className || "").split(/\s+/)[0]).substring(0, 80);
   /** true when the picker shows its entries, false when it did not, null with no header control. */
   const openPicker = async () => {
     if (entries().length && (PICKER || scopes().length)) return true;
@@ -402,7 +440,7 @@ const addressKit = (site: ShopSite) => String.raw`
     if (!el) return null;
     press(el);
     if (await until(() => entries().length, 3000)) return true;
-    if (!isOpen()) pointerPress(el, false);
+    if (!isOpen()) pressOn(el, el, false);
     return !!(await until(() => entries().length, 8000));
   };
   /** Closes the picker without picking: Escape, else the opener again (a menu) or the picker's close button. */
@@ -438,26 +476,30 @@ export function addressListScript(site: ShopSite, close: boolean): string {
 
 /**
  * Presses the given saved address's entry, found again by its own label and text (never its
- * position), on its address text (never an edit icon), with a full pointer sequence. The press is
- * left to run after the script returns, so a page that reloads on a new address cannot cut it off.
- * → { selected } or { error, code, message, saved }.
+ * position). `attempt` picks the press target (pressTargets, best first), so a retry presses the next
+ * one out. The press is left to run after the script returns, so a page that reloads on a new
+ * address cannot cut it off.
+ * → { selected, pressed, last } or { error, code, message, saved }.
  */
-export function addressPickScript(site: ShopSite, pick: SavedAddress): string {
+export function addressPickScript(site: ShopSite, pick: SavedAddress, attempt = 0): string {
   const wanted = JSON.stringify({ label: pick.label, text: pick.text });
   return String.raw`(async () => {
   ${PAGE_KIT}
   ${addressKit(site)}
   const PICK = ${wanted};
+  const ATTEMPT = ${attempt};
   if ((await openPicker()) === null) return JSON.stringify({ error: true, code: "NO_LOCATION_CONTROL", message: "No delivery-location control in the page header: the page may have changed." });
   const list = entries();
   const saved = readSaved();
   const same = (a) => a.text === PICK.text && a.label === PICK.label;
   const at = saved.findIndex(same) >= 0 ? saved.findIndex(same) : saved.findIndex((a) => a.text === PICK.text || (a.text && (a.text.includes(PICK.text) || PICK.text.includes(a.text))));
   if (at < 0) return JSON.stringify({ error: true, code: "PAGE_CHANGED", message: "The saved address to pick is no longer in the picker.", saved });
-  const entry = list[at];
-  const target = (PICKER && entry.querySelector(PICKER.address)) || entry;
-  setTimeout(() => pointerPress(target, true), 50);
-  return JSON.stringify({ selected: saved[at] });
+  const targets = pressTargets(list[at]);
+  if (!targets.length) return JSON.stringify({ error: true, code: "PAGE_CHANGED", message: "The saved address's entry has nothing to press but its edit icon.", saved });
+  const target = targets[Math.min(ATTEMPT, targets.length - 1)];
+  const aim = addressElOf(list[at]);
+  setTimeout(() => pressOn(target, aim), 50);
+  return JSON.stringify({ selected: saved[at], pressed: describe(target), last: ATTEMPT >= targets.length - 1 });
 })()`;
 }
 
@@ -478,11 +520,22 @@ export function addressSettleScript(site: ShopSite, before: string): string {
 })()`;
 }
 
+/** Closes the picker without picking. → { closed, location }. */
+export function addressCloseScript(site: ShopSite): string {
+  return String.raw`(async () => {
+  ${PAGE_KIT}
+  ${addressKit(site)}
+  const closed = await closePicker();
+  return JSON.stringify({ closed, location: locationText() });
+})()`;
+}
+
 /** Runs one page script on the open page, after waiting `waitMs`; its JSON answer, or null. */
 export type PageStep = (script: string, waitMs?: number) => Promise<any>;
 
-export interface AddressProblem { ok: false; code: string; message: string; candidates?: SavedAddress[] }
-export type AddressPick = { ok: true; address: SavedAddress; location: string; confirmed: boolean; stillOpen: boolean } | AddressProblem;
+export interface AddressProblem { ok: false; code: string; message: string; candidates?: SavedAddress[]; location?: string }
+export interface AddressSet { ok: true; address: SavedAddress; location: string; alreadySet: boolean; stillOpen: boolean }
+export type AddressPick = AddressSet | AddressProblem;
 
 /** Why a picker read has no saved addresses to offer, or null when it has some. */
 export function noSavedAddresses(site: ShopSite, read: any): AddressProblem | null {
@@ -494,30 +547,60 @@ export function noSavedAddresses(site: ShopSite, read: any): AddressProblem | nu
 }
 
 const SETTLE_MS = 1500;
+/** Presses tried per pick, each on the next press target out (pressTargets). */
+const MAX_PRESSES = 4;
+
+/** Presses the address once (target `attempt`), confirms a prompt, and reads the header; null when the page did not settle. */
+async function pressAndSettle(site: ShopSite, address: SavedAddress, before: string, attempt: number, step: PageStep) {
+  const picked = await step(addressPickScript(site, address, attempt));
+  if (!picked || picked.error) return { problem: { ok: false, code: picked?.code || "PAGE_CHANGED", message: picked?.message || "Could not select the address." } as AddressProblem };
+  let settled: any = null;
+  for (let tries = 0; tries < 3 && (!settled || settled.prompted); tries++) settled = await step(addressSettleScript(site, before), SETTLE_MS);
+  if (!settled || settled.prompted) return { problem: { ok: false, code: "PAGE_CHANGED", message: "The page did not settle after picking the address: check the header's location." } as AddressProblem };
+  return { last: !!picked.last, location: String(settled.location || ""), stillOpen: !!settled.stillOpen };
+}
 
 /**
- * set-delivery-location on an open page: lists the saved addresses, picks the one that matches
- * `wanted` (nothing is clicked when none or more than one does), presses it, confirms a "change
- * address?" prompt, then checks the header shows it.
+ * set-delivery-location on an open page: lists the saved addresses and finds the one that matches
+ * `wanted` (nothing is clicked when none or more than one does). When the header already shows it,
+ * that is the delivery address. Otherwise it presses the entry, confirms a "change address?" prompt
+ * and checks the header shows it, pressing the next target out until it does. The picker is closed
+ * after. A header that never shows it is ADDRESS_NOT_SWITCHED, never a success.
  */
 export async function selectAddress(site: ShopSite, wanted: string, step: PageStep): Promise<AddressPick> {
   const listed = await step(addressListScript(site, false));
   const missing = noSavedAddresses(site, listed);
   if (missing) return missing;
-  const match = matchAddress(listed.saved, wanted);
+  const saved: SavedAddress[] = listed.saved;
+  const match = matchAddress(saved, wanted);
   if (!match.ok) {
     const message = match.code === "AMBIGUOUS_ADDRESS"
       ? `More than one saved ${site.config.name} address could be "${wanted}". Pass more of the address (its flat number and building).`
       : `"${wanted}" is not among ${site.config.name}'s saved addresses. Adding it needs the owner's yes.`;
     return { ok: false, code: match.code, message, candidates: match.candidates };
   }
-  const picked = await step(addressPickScript(site, match.address));
-  if (!picked || picked.error) return { ok: false, code: picked?.code || "PAGE_CHANGED", message: picked?.message || "Could not select the address." };
-  const before = String(listed.location || "");
-  let settled: any = null;
-  for (let tries = 0; tries < 3 && (!settled || settled.prompted); tries++) settled = await step(addressSettleScript(site, before), SETTLE_MS);
-  if (!settled || settled.prompted) return { ok: false, code: "PAGE_CHANGED", message: "The page did not settle after picking the address: check the header's location." };
-  const location = String(settled.location || "");
   const address = match.address;
-  return { ok: true, address, location, confirmed: locationShows(location, address, address.selected ? "" : before), stillOpen: !!settled.stillOpen };
+  const before = String(listed.location || "");
+  const close = async (location: string, alreadySet: boolean): Promise<AddressSet> => {
+    const closed = await step(addressCloseScript(site));
+    return { ok: true, address, location: closed?.location || location, alreadySet, stillOpen: closed?.closed === false };
+  };
+  const shownBefore = (a: SavedAddress) => headerShows(before, a);
+  if (shownBefore(address) && !saved.some((a) => a !== address && shownBefore(a))) return close(before, true);
+
+  let location = before;
+  for (let attempt = 0; attempt < MAX_PRESSES; attempt++) {
+    const pressed = await pressAndSettle(site, address, before, attempt, step);
+    if ("problem" in pressed) return pressed.problem!;
+    location = pressed.location;
+    if (locationShows(location, address, address.selected ? "" : before)) return pressed.stillOpen ? close(location, false) : { ok: true, address, location, alreadySet: false, stillOpen: false };
+    if (pressed.last) break;
+  }
+  await step(addressCloseScript(site));
+  return {
+    ok: false,
+    code: "ADDRESS_NOT_SWITCHED",
+    message: `${site.config.name}'s header still does not show "${address.text}" after picking it, so prices would be for another address. Do not price this service.`,
+    location,
+  };
 }

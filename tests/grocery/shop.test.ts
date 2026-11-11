@@ -9,7 +9,7 @@ import { describe, expect, it, beforeAll, afterAll } from "bun:test";
 import { readFileSync, existsSync } from "fs";
 import { join } from "path";
 import {
-  matchAddress, summarizeBill, notTheCart, locationShows,
+  matchAddress, summarizeBill, notTheCart, locationShows, headerShows,
   cartReadScript, emptyCartScript, addressListScript, selectAddress, noSavedAddresses,
   type PageStep, type SavedAddress, type ShopSite,
 } from "../../skills/bigbasket/scripts/_shop";
@@ -111,6 +111,15 @@ describe("matchAddress", () => {
     expect(locationShows("Delivery in 9 minutes Indiranagar, Bengaluru", saved[0])).toBe(true);
     expect(locationShows("Delivery in 9 minutes Bellandur", saved[0])).toBe(false);
     expect(locationShows("Delivery in 17 minutes Home B204, B Block Lotus Grove Residency, Whitefield", homeNoPin)).toBe(true);
+  });
+
+  it("the header already shows an address by its flat number or building, or by its label then its area", () => {
+    expect(headerShows("Delivery in 8 mins Home: Whitefield, Bangalore", homeOtherPin)).toBe(true);
+    expect(headerShows("Delivery in 6 minsHome: Whitefield, Bangalore", homeOtherPin)).toBe(true); // BigBasket's spans run together
+    expect(headerShows("Delivery in 8 mins Home: Marathahalli, Bangalore", homeOtherPin)).toBe(false);
+    expect(headerShows("Delivery in 8 mins Work: Whitefield, Bangalore", homeOtherPin)).toBe(false);
+    expect(headerShows("Delivery in 17 minutes Home B204, B Block Lotus Grove Residency, Whitefield", homeNoPin)).toBe(true);
+    expect(headerShows("Delivery in 17 minutes Home 25, Varthur Main Rd, Whitefield, Bengaluru", homeNoPin)).toBe(false);
   });
 
   it("a header showing another flat number, or only a city it showed before, is not the chosen address", () => {
@@ -281,52 +290,64 @@ const HOME_ENTRY: Entry = { label: "Home", address: "B204, B Block Lotus Grove R
 const WORK_ENTRY: Entry = { label: "Work", address: "Floor 6, Northwind Tech Park, Outer Ring Rd, Marathahalli, Bengaluru, Karnataka", area: "Marathahalli" };
 
 /**
+ * Where a stand-in Blinkit picker listens for the pick: on the whole picker (any press inside an entry
+ * picks it); on each entry's outer container only, for presses on the container itself (as live: pressing
+ * the inner address text did not switch); on a pointer-cursor wrapper around the container only; or nowhere.
+ */
+type BlinkitHandler = "picker" | "outer-only" | "wrapper" | "none";
+
+/**
  * Blinkit's header and saved-address picker in the shapes captured live (2026-11-11), made-up data:
  * the header's LocationBar shows "Home" over another place (another flat, as live); each entry is an
  * outer AddressListItem__AddressDetails holding the label, an inner AddressDetails with the address
  * (no pincode) and an edit icon. The picker's container was not captured: a plain fixed div here.
  * Picking sets the header to the entry's address; the edit icon opens an editor instead; Escape closes.
  */
-const blinkitPicker = (entries: Entry[]) => `<!doctype html><html><head><meta charset="utf-8"></head><body>
+const blinkitPicker = (entries: Entry[], handler: BlinkitHandler = "picker") => `<!doctype html><html><head><meta charset="utf-8"></head><body>
 <header><div class="LocationBar__Container-sc-x8ezho-6 kPzFcd"><div class="LocationBar__EtaContainer-sc-x8ezho-7">
   <div class="LocationBar__Title-sc-x8ezho-8">Delivery in 17 minutes</div>
   <div class="LocationBar__SubtitleContainer-sc-x8ezho-9"><div class="LocationBar__AddressLabel-sc-x8ezho-10">Home</div><div class="LocationBar__Subtitle-sc-x8ezho-11">25, Varthur Main Rd, Koramangala, Bengaluru 560034, India</div><div class="LocationBar__ArrowContainer-sc-x8ezho-12"><div class="LocationBar__DownArrow-sc-x8ezho-13"></div></div></div>
 </div></div></header>
 <div id="picker" style="display:none;position:fixed;top:0;left:0;width:420px;height:100%;background:#fff">
   <div>Change Location</div><button>Detect my location</button>
-  ${entries.map((e, i) => `<div class="AddressListItem__Container-sc-wi2msz-1" data-i="${i}"><div class="AddressListItem__AddressDetails-sc-wi2msz-3" style="display:flex">
+  ${entries.map((e, i) => `${handler === "wrapper" ? `<div class="pick-wrapper" style="cursor:pointer" data-i="${i}">` : ""}<div class="AddressListItem__Container-sc-wi2msz-1" data-i="${i}"><div class="AddressListItem__AddressDetails-sc-wi2msz-3" style="display:flex">
     <div class="AddressListItem__AddressLabel-sc-wi2msz-4">${e.label}</div><div class="AddressListItem__AddressDetails-sc-wi2msz-3" style="flex:1">${e.address}</div><div class="AddressListItem__AddressEditIcon-sc-wi2msz-5" style="width:24px">✎</div>
-  </div></div>`).join("")}
+  </div></div>${handler === "wrapper" ? "</div>" : ""}`).join("")}
 </div>
 <script>
   const entries = ${JSON.stringify(entries)};
   const picker = document.getElementById("picker");
   window.edited = false;
+  window.presses = 0;
   document.querySelector('[class*="LocationBar__Container"]').addEventListener("click", () => { picker.style.display = "block"; });
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") picker.style.display = "none"; });
+  const pick = (entry) => setTimeout(() => {
+    document.querySelector('[class*="LocationBar__AddressLabel"]').textContent = entry.label;
+    document.querySelector('[class*="LocationBar__Subtitle-"]').textContent = entry.address.replace(", Karnataka", " 560066, India");
+    picker.style.display = "none";
+  }, 300);
   picker.addEventListener("click", (e) => {
+    window.presses++;
     if (e.target.closest('[class*="AddressEditIcon"]')) { window.edited = true; return; }
-    const item = e.target.closest('[class*="AddressListItem__Container"]'); if (!item) return;
-    const entry = entries[item.dataset.i];
-    setTimeout(() => {
-      document.querySelector('[class*="LocationBar__AddressLabel"]').textContent = entry.label;
-      document.querySelector('[class*="LocationBar__Subtitle-"]').textContent = entry.address.replace(", Karnataka", " 560066, India");
-      picker.style.display = "none";
-    }, 300);
+    if ("${handler}" !== "picker") return;
+    const item = e.target.closest('[class*="AddressListItem__Container"]'); if (item) pick(entries[item.dataset.i]);
   });
+  const own = { "outer-only": '[class*="AddressListItem__Container"]', wrapper: ".pick-wrapper" }["${handler}"];
+  if (own) for (const el of document.querySelectorAll(own)) el.addEventListener("click", (e) => { if (e.target === el) pick(entries[el.dataset.i]); });
 </script></body></html>`;
 
 /**
  * BigBasket's header and address menu in the shapes captured live (2026-11-11), made-up data: a Headless
- * UI menu button ("Delivery in 8 mins", "Work: Marathahalli, Bangalore") next to another menu button; the
+ * UI menu button ("Delivery in 8 mins", "<label>: <area>, Bangalore") next to another menu button; the
  * open menu holds ul.overscroll-contain[role="none"] > li[role="menuitem"] > AddressCard (label, hr,
- * name, address). With `confirm`, picking asks "Change delivery address?" first (not captured live).
+ * name, address). Options: `confirm` asks "Change delivery address?" first (not captured live);
+ * `keepOpen` leaves the menu open after a pick (as seen live); `current` is the address the header shows.
  */
-const bigbasketMenu = (entries: Entry[], confirm = false) => `<!doctype html><html><head><meta charset="utf-8"></head><body>
+const bigbasketMenu = (entries: Entry[], opts: { confirm?: boolean; keepOpen?: boolean; current?: Entry } = {}) => `<!doctype html><html><head><meta charset="utf-8"></head><body>
 <header><nav>
   <button id="headlessui-menu-button-:r1:" aria-haspopup="menu" aria-expanded="false">Shop by Category</button>
   <div class="relative">
-    <button id="headlessui-menu-button-:r3:" aria-haspopup="menu" aria-expanded="false" class="sc-fPrdXf hEaOJL"><span class="Label-sc-15v1nk5-0"><span>Delivery in 8 mins</span></span><span><span class="font-bold capitalize">Work:&nbsp;</span><span id="area">Marathahalli, Bangalore</span></span></button>
+    <button id="headlessui-menu-button-:r3:" aria-haspopup="menu" aria-expanded="false" class="sc-fPrdXf hEaOJL"><span class="Label-sc-15v1nk5-0"><span>Delivery in 8 mins</span></span><span><span class="font-bold capitalize">${(opts.current || WORK_ENTRY).label}:&nbsp;</span><span id="area">${(opts.current || WORK_ENTRY).area}, Bangalore</span></span></button>
     <div role="menu" hidden><ul class="overscroll-contain" role="none">
       ${entries.map((e, i) => `<li class="m-2 outline-none" role="menuitem" data-i="${i}"><div class="AddressCard___StyledDiv-sc-1udrslf-0"><span class="font-bold capitalize text-base truncate">${e.label}</span><hr/><div class="text-md leading-sm"><span class="line-clamp-1">Asha Rao</span><span class="line-clamp-4">${e.address.replace(", Karnataka", ", 560066").replace("Bengaluru", "Bangalore")}</span></div></div></li>`).join("")}
     </ul></div>
@@ -339,14 +360,16 @@ const bigbasketMenu = (entries: Entry[], confirm = false) => `<!doctype html><ht
   const menu = document.querySelector('[role="menu"]');
   const show = (open) => { menu.hidden = !open; button.setAttribute("aria-expanded", String(open)); };
   let pending = null;
+  window.picked = 0;
   const apply = (entry) => { button.querySelector(".font-bold").innerHTML = entry.label + ":&nbsp;"; document.getElementById("area").textContent = entry.area + ", Bangalore"; };
   button.addEventListener("click", () => show(menu.hidden));
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") show(false); });
   menu.addEventListener("click", (e) => {
     const item = e.target.closest('[role="menuitem"]'); if (!item) return;
-    show(false);
+    window.picked++;
+    if (!${!!opts.keepOpen}) show(false);
     const entry = entries[item.dataset.i];
-    if (${confirm}) { pending = entry; document.getElementById("confirm").hidden = false; } else apply(entry);
+    if (${!!opts.confirm}) { pending = entry; document.getElementById("confirm").hidden = false; } else apply(entry);
   });
   document.getElementById("yes").addEventListener("click", () => { document.getElementById("confirm").hidden = true; apply(pending); });
 </script></body></html>`;
@@ -494,27 +517,64 @@ describe.skipIf(!canBrowse)("the in-page scripts on stand-in pages", () => {
     expect(bare).toMatchObject({ error: true, code: "NO_LOCATION_CONTROL" });
   }, 30_000);
 
-  it("Blinkit set-delivery-location: another pincode still matches by flat and building; it presses that entry (not its edit icon) and the header shows it", async () => {
-    await onPage("https://blinkit.com/", blinkitPicker([WORK_ENTRY, HOME_ENTRY]), async (tab) => {
+  it("Blinkit set-delivery-location: another pincode still matches by flat and building; it presses the entry's outer container (the only one listening, as live), never the edit icon, and the header shows it", async () => {
+    await onPage("https://blinkit.com/", blinkitPicker([WORK_ENTRY, HOME_ENTRY], "outer-only"), async (tab) => {
       const out = await selectAddress(BLINKIT_SITE, "B-204, Lotus Grove Residency, Varthur Road, Bengaluru 560087", stepOn(tab));
-      expect(out).toMatchObject({ ok: true, address: { label: "Home", text: HOME_ENTRY.address }, confirmed: true, stillOpen: false });
+      expect(out).toMatchObject({ ok: true, address: { label: "Home", text: HOME_ENTRY.address }, alreadySet: false, stillOpen: false });
       expect(out.ok && out.location).toContain("B204, B Block Lotus Grove Residency");
       expect(await tab.evaluate("window.edited")).toBe(false);
+      expect(await tab.evaluate("window.presses")).toBe(1);
     });
   });
+
+  it("Blinkit set-delivery-location presses the next element out when a press does not switch: a pointer-cursor wrapper", async () => {
+    await onPage("https://blinkit.com/", blinkitPicker([WORK_ENTRY, HOME_ENTRY], "wrapper"), async (tab) => {
+      const out = await selectAddress(BLINKIT_SITE, "B204, Lotus Grove Residency, Whitefield", stepOn(tab));
+      expect(out).toMatchObject({ ok: true, address: { label: "Home" }, stillOpen: false });
+      expect(out.ok && out.location).toContain("Lotus Grove Residency");
+      expect(await tab.evaluate("window.edited")).toBe(false);
+    });
+  }, 40_000);
+
+  it("Blinkit set-delivery-location fails ADDRESS_NOT_SWITCHED, with the header, when no press switches it, and closes the picker", async () => {
+    await onPage("https://blinkit.com/", blinkitPicker([WORK_ENTRY, HOME_ENTRY], "none"), async (tab) => {
+      const out = await selectAddress(BLINKIT_SITE, "B204, Lotus Grove Residency, Whitefield", stepOn(tab));
+      expect(out).toMatchObject({ ok: false, code: "ADDRESS_NOT_SWITCHED" });
+      expect(!out.ok && out.location).toContain("Koramangala");
+      expect(await tab.isVisible("#picker")).toBe(false);
+      expect(await tab.evaluate("window.edited")).toBe(false);
+    });
+  }, 60_000);
 
   it("BigBasket set-delivery-location picks the matching menu item and the header shows its area", async () => {
     await onPage("https://www.bigbasket.com/", bigbasketMenu([WORK_ENTRY, HOME_ENTRY]), async (tab) => {
       const out = await selectAddress(BIGBASKET, "B204, Lotus Grove Residency, Whitefield, Bengaluru 560087", stepOn(tab));
-      expect(out).toMatchObject({ ok: true, address: { label: "Home" }, confirmed: true });
+      expect(out).toMatchObject({ ok: true, address: { label: "Home" }, alreadySet: false });
       expect(out.ok && out.location).toContain("Home: Whitefield");
     });
   });
 
+  it("BigBasket set-delivery-location closes a menu that stays open after the pick", async () => {
+    await onPage("https://www.bigbasket.com/", bigbasketMenu([WORK_ENTRY, HOME_ENTRY], { keepOpen: true }), async (tab) => {
+      const out = await selectAddress(BIGBASKET, "B204, Lotus Grove Residency, Whitefield", stepOn(tab));
+      expect(out).toMatchObject({ ok: true, address: { label: "Home" }, stillOpen: false });
+      expect(await tab.isVisible('[role="menu"]')).toBe(false);
+    });
+  });
+
+  it("BigBasket set-delivery-location clicks nothing when the header already shows the address (its label and area)", async () => {
+    await onPage("https://www.bigbasket.com/", bigbasketMenu([WORK_ENTRY, HOME_ENTRY], { current: HOME_ENTRY }), async (tab) => {
+      const out = await selectAddress(BIGBASKET, "B204, Lotus Grove Residency, Bengaluru 560087", stepOn(tab));
+      expect(out).toMatchObject({ ok: true, address: { label: "Home" }, alreadySet: true, stillOpen: false });
+      expect(await tab.evaluate("window.picked")).toBe(0);
+      expect(await tab.isVisible('[role="menu"]')).toBe(false);
+    });
+  });
+
   it("BigBasket set-delivery-location presses a 'change address?' confirm when one shows", async () => {
-    await onPage("https://www.bigbasket.com/", bigbasketMenu([WORK_ENTRY, HOME_ENTRY], true), async (tab) => {
+    await onPage("https://www.bigbasket.com/", bigbasketMenu([WORK_ENTRY, HOME_ENTRY], { confirm: true }), async (tab) => {
       const out = await selectAddress(BIGBASKET, "B204 Lotus Grove Residency", stepOn(tab));
-      expect(out).toMatchObject({ ok: true, confirmed: true });
+      expect(out).toMatchObject({ ok: true, alreadySet: false });
       expect(await tab.textContent("#area")).toBe("Whitefield, Bangalore");
       expect(await tab.isVisible("#confirm")).toBe(false);
     });
@@ -544,7 +604,7 @@ describe.skipIf(!canBrowse)("the in-page scripts on stand-in pages", () => {
     });
     await onPage("https://blinkit.com/", ADDRESS_PICKER, async (tab) => {
       const out = await selectAddress(blinkit, "12 Lake Road, Indiranagar, Bengaluru 560038", stepOn(tab));
-      expect(out).toMatchObject({ ok: true, address: { label: "Home" }, confirmed: true });
+      expect(out).toMatchObject({ ok: true, address: { label: "Home" } });
       expect(out.ok && out.location).toContain("Indiranagar");
     });
   });
@@ -552,7 +612,7 @@ describe.skipIf(!canBrowse)("the in-page scripts on stand-in pages", () => {
   it("the generic reader on a picker of utility classes only: entries by their text, selected on mousedown", async () => {
     await onPage("https://blinkit.com/", BLINKIT_UTILITY_PICKER, async (tab) => {
       const out = await selectAddress({ ...BLINKIT_SITE, addressPicker: undefined }, "12 Lake Road, Indiranagar, Bengaluru 560038", stepOn(tab));
-      expect(out).toMatchObject({ ok: true, address: { label: "Home" }, confirmed: true });
+      expect(out).toMatchObject({ ok: true, address: { label: "Home" } });
       expect(out.ok && out.location).toContain("Indiranagar");
     });
   });

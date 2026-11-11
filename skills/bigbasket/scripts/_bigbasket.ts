@@ -18,6 +18,7 @@ const ADDRESS_PICKER: AddressPicker = {
   entry: '[role="menuitem"]',
   label: '[class*="AddressCard"] > span',
   address: '[class*="AddressCard"] > div > span:last-child',
+  item: '[role="menuitem"]',
 };
 
 export const BIGBASKET: ShopSite = {
