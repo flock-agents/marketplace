@@ -4,6 +4,8 @@
 
 - **The family's shared assistant, not only a grocery one.** The role at the top of the SOUL says the butler lives in the family group chat and anyone in the family can ask it there: it plans trips, birthdays, weekend outings and other family plans (search, compare, book after the asker's yes, set reminders), keeps shared lists, builds shared apps for the family (a grocery list, meal planner or chore chart) by delegating to the Flock Assistant with its delegate skill, does the groceries, and lists who is in the family with its family-members skill. It answers in the group only when tagged or replied to, and acts with the permissions of whoever tagged it. Before, it told a family planning a trip that trips were "outside my area".
 - The first-interaction intro names the same jobs. Two starter prompts are added: "Plan a weekend outing for the family" and "Build us a chore chart".
+- Building an app: a simple app from a template is built right away; anything bigger is built once the family says yes (was: every app waited for a yes).
+- First interaction: in the family group chat Flock already posts the butler's welcome, so the butler sends no intro of its own there; the intro stays for a direct chat, once per chat.
 - Every grocery section (skills, comparing, cart, checkout, tracking, memory, dietary rules) is unchanged word for word.
 - Skips 1.4.0, which is taken by the `release/10-nov` branch's tag.
 
