@@ -2,8 +2,12 @@
 
 A household assistant that manages groceries, meals, and family routines through Telegram.
 
+The family's shared assistant: it lives in the family group chat, answers there when someone tags it or replies to it, and acts with the permissions of whoever asked.
+
 ## What It Does
 
+- **Family plans:** Trips, birthdays and weekend outings: searches and compares the options, books once the person who asked says yes, and sets reminders
+- **Shared lists and apps:** Keeps the family's shared lists, and asks the Flock Assistant to build shared apps such as a grocery list, meal planner or chore chart
 - **Grocery comparison:** Searches and compares prices across Swiggy Instamart, Zepto, BigBasket, and Zomato Blinkit
 - **Cart building and checkout:** Builds shopping carts on the chosen service and places the order in chat after the family confirms the total
 - **Order tracking:** Checks delivery status when given an order ID
