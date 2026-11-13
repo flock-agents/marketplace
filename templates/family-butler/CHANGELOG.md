@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.6.0
+
+- **No tag needed in the group.** Flock now wakes the butler on every message in a group where it is the only agent. The SOUL says: answer what's meant for you, tagged or not, and stay quiet when people are just talking to each other; with the group's "answers only when tagged" switch on, it is only woken when tagged or replied to. Whoever asked is the person it acts for (was: answers only when tagged or replied to).
+
 ## 1.5.0
 
 - **The family's shared assistant, not only a grocery one.** The role at the top of the SOUL says the butler lives in the family group chat and anyone in the family can ask it there: it plans trips, birthdays, weekend outings and other family plans (search, compare, book after the asker's yes, set reminders), keeps shared lists, builds shared apps for the family (a grocery list, meal planner or chore chart) by delegating to the Flock Assistant with its delegate skill, does the groceries, and lists who is in the family with its family-members skill. It answers in the group only when tagged or replied to, and acts with the permissions of whoever tagged it. Before, it told a family planning a trip that trips were "outside my area".

@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "updatedAt": "2026-11-12T00:00:00Z",
+  "updatedAt": "2026-11-14T00:00:00Z",
   "items": [
     {
       "slug": "linear",
@@ -119,8 +119,8 @@
       "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "templates/family-butler",
-      "latestVersion": "1.5.0",
-      "latestTag": "family-butler-v1.5.0",
+      "latestVersion": "1.6.0",
+      "latestTag": "family-butler-v1.6.0",
       "minFlockVersion": "0.15.0",
       "onboardingCard": {
         "id": "household",
@@ -138,7 +138,7 @@
         ]
       },
       "publishedAt": "2026-08-11T17:00:00Z",
-      "updatedAt": "2026-11-12T00:00:00Z"
+      "updatedAt": "2026-11-14T00:00:00Z"
     },
     {
       "slug": "gmail",
