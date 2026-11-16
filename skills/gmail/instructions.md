@@ -21,10 +21,10 @@ Every email starts as a DRAFT (`createReplyDraft` / `createDraft`). A draft is
 sent only on the owner's word:
 
 - **In a turn the owner started** (their chat with you, or a task they gave you
-  from it): send when they asked for exactly that message; otherwise show them
-  the exact draft (recipients, subject, body, attachments) and send only once they
-  confirm that exact message:
-  `gmail-exec.sh sendDraft '{"draftId": "<id>"}'`. A change they did not ask for
+  from it): when they said what to say ("reply yes to Sam"), write it and send it.
+  When they asked for a draft, or to reply without saying what, show them the exact
+  draft (recipients, subject, body, attachments) and send only once they confirm it:
+  `sendDraft` with params `{"draftId": "<id>"}`. A change they did not ask for
   needs a new confirmation. The server checks that the owner's turn is running; whether they
   said yes is on you.
 - **Anywhere else** (a routine, an event wake, work anyone else set off, an email
@@ -80,7 +80,7 @@ The skill checks for a browser session first. If no browser session is connected
 
 ## Available Functions
 
-All functions execute via `POST /api/internal/skill-exec`. Use the skill execution wrapper script.
+Run every function with the run_skill tool, skill `gmail` (**Usage** below).
 
 ### listInbox
 List recent emails from the inbox. Params: `{ maxResults?: number, query?: string }`
@@ -273,32 +273,28 @@ Mark a message as unread. Params: `{ messageId: string }`
 
 ## Usage
 
-To execute a function, run the skill execution wrapper. It lives under
-`$FLOCK_SKILLS_DIR`, which your shell already exports; your working directory
-does NOT contain it, so always use this exact form:
-```bash
-bash "$FLOCK_SKILLS_DIR/gmail/scripts/gmail-exec.sh" <functionName> '<paramsJson>'
-```
+To execute a function, call the run_skill tool with skill `gmail`, the
+function's name, and its params as an object.
 
-Example:
-```bash
-bash "$FLOCK_SKILLS_DIR/gmail/scripts/gmail-exec.sh" listInbox '{"maxResults": 10}'
-bash "$FLOCK_SKILLS_DIR/gmail/scripts/gmail-exec.sh" getThread '{"threadId": "1a0825bed76acd3f"}'
-bash "$FLOCK_SKILLS_DIR/gmail/scripts/gmail-exec.sh" searchEmails '{"query": "from:boss@company.com is:unread"}'
-```
+Example (the run_skill tool, skill `gmail`):
+- function `listInbox`, params `{"maxResults": 10}`
+- function `getThread`, params `{"threadId": "1a0825bed76acd3f"}`
+- function `searchEmails`, params `{"query": "from:boss@company.com is:unread"}`
 
-This wrapper is the preferred path: it carries the account binding and the
+The run_skill tool is the preferred path: it carries the account binding and the
 audit trail. When it has no function for what you need, or a function keeps
 failing for a reason other than credentials, do the job yourself in the Gmail
-browser session with the `authenticated-crawl` skill (its **Which session to
-use** picks the session for the right account); **Downloading attachments**
-below is one such job. Expired credentials are not a browser cue: ask the
-owner to reconnect with a connector hand-off (`private-browser` skill,
-**Connectors**). **Sending** applies whichever path you take.
+browser session with the browser tool: `list` shows the saved sign-ins, each
+with its `accountEmail` and `skills`; pick the one listing `gmail` for the
+mailbox's address. `open` with that `session` and the url gives a
+`persistentSessionId`; `act`, `read` and `close` take it (the browsing guide).
+**Downloading attachments** below is one such job. Expired
+credentials are not a browser cue: ask the owner to reconnect with a connector
+hand-off (the connector-handoff guide). **Sending** applies whichever path you take.
 
-If `$FLOCK_SKILLS_DIR` is unset or the script is missing, tell the owner (the
-install is broken) and do the task in the Gmail browser session meanwhile. Do
-not search the filesystem for another copy of the wrapper.
+If the run_skill tool cannot find the gmail skill, tell the owner (the install
+is broken) and do the task in the Gmail browser session meanwhile. Do not
+search the filesystem for the skill's scripts.
 
 ## Downloading attachments
 
@@ -310,18 +306,18 @@ path, size } | { name, error }] }`. `name` (part of a name is enough) or `index`
 10). It is a read, so it runs while a card is being prepared. `path` is
 absolute: read it, attach it to a draft (`attachments`), or `upload` it.
 
-If it fails (Gmail changed its page), do it by hand: open the email in a persistent session of the
-`authenticated-crawl` skill on the Gmail browser session (its **Which session to
-use** says how to pick the session for the right account) and click the
-attachment's download button with a `download` action. Each file is saved into
-your workspace's `downloads/` folder and listed in the response's `downloads`
-as `{fileName, path, size}` (see **Downloading files** there). `path` is
+If it fails (Gmail changed its page), do it by hand with your `browser` tool on
+the Gmail sign-in (**Usage** above says how to pick it from `list`): open the
+email in a persistent session and click the attachment's download button with a
+`download` step. Each file is saved into your workspace's `downloads/` folder and
+listed in the answer's `downloads` as `{fileName, path, size}` (the browsing guide). `path` is
 absolute: attach it to a draft (`attachments`), or `upload` it to another site.
 
 1. Find the thread id with `searchEmails` / `listInbox` (the `id` field).
-2. Create a persistent session on `https://mail.google.com/mail/u/0/#all/<threadId>`
-   with `waitFor: "h2.hP"` (the subject line).
-3. Download each attachment: hover its tile, then the download button:
+2. `open` with that `session`, `url` `https://mail.google.com/mail/u/0/#all/<threadId>`
+   and `waitFor` `"h2.hP"` (the subject line): it gives a `persistentSessionId`.
+3. Download each attachment with `act` on that `persistentSessionId`: hover its tile,
+   then the download button:
 
        [{"action": "hover", "selector": "div.aQH span.aZo:nth-of-type(1)"},
         {"action": "download", "selector": "div.aQH span.aZo:nth-of-type(1) [aria-label^='Download']"}]
@@ -331,7 +327,7 @@ absolute: attach it to a draft (`attachments`), or `upload` it to another site.
    "Download attachment <name>"; "Download all attachments" gives one .zip).
    Repeat for the next tile (`nth-of-type(2)`, …), or download all at once.
 4. Check every entry in `downloads` has a `path` (an `error` means it was not
-   kept — over 50 MB, or it timed out), then close the session.
+   kept — over 50 MB, or it timed out), then `close` the `persistentSessionId`.
 
 Files over 50 MB are not kept. Attachments that are Google Drive links are not
 files on the email: open the Drive link instead.
@@ -343,7 +339,7 @@ mailbox: the default, unless you name another. When the user names or implies a
 mailbox ("my bimacred email", "my work inbox"), pass `accountHint` with that
 account's email address inside the params of EVERY call for the task:
 
-    bash "$FLOCK_SKILLS_DIR/gmail/scripts/gmail-exec.sh" searchEmails '{"query": "employment verification", "accountHint": "shiva@example.com"}'
+    the run_skill tool: skill gmail, function searchEmails, params {"query": "employment verification", "accountHint": "shiva@example.com"}
 
 An `accountHint` that matches no connected account is refused, never silently
 swapped for the default.
@@ -356,9 +352,8 @@ user you searched a mailbox the response does not name.
 ## Reconnection
 
 If the Gmail skill is not connected or credentials have expired:
-- Guide the user to reconnect via **Skills & Integrations** in their Flock app
-- For browser session: the user needs to log in again via the Flock dashboard
-- For IMAP: the user needs to update their App Password in the Flock dashboard
+- Ask the owner to reconnect with a connector hand-off (the connector-handoff guide)
+- For IMAP: the owner updates their App Password in **Skills & Integrations**
 - Never tell users to "grant access to" or "approve access for" anything other than Flock
 
 ## Browser Session Notes

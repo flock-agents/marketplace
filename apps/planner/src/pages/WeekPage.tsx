@@ -51,7 +51,7 @@ function useServerReadiness(week: Meal[], dataKey: string): Record<string, Readi
   useEffect(() => {
     if (!week.length) return;
     let live = true;
-    const load = () => mealsReadiness(week.map((m) => m.id)).then((r) => { if (live) setStatuses(r.statuses); }).catch(() => { /* local rows stand in */ });
+    const load = () => mealsReadiness(week.map((m) => m.id)).then((r) => { if (live) setStatuses(r.statuses ?? {}); }).catch(() => { /* local rows stand in */ });
     void load();
     const timer = setInterval(load, READINESS_POLL_MS);
     return () => { live = false; clearInterval(timer); };

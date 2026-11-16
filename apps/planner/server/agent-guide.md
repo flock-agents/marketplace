@@ -3,9 +3,11 @@
 The Meal Planner app owns meals, recipes, the shopping list, drafts and orders, kitchen stock and every shopping
 preference. You never keep any of that in memory or chat, never guess quantities, and never build a cart from a chat
 message alone. Every meal/grocery/pantry request, in every chat, starts by reading the app; every change goes through an
-operation; then tell the family what the app now says, not what you think it says.
+operation; then tell the family what the app now says, not what you think it says. The rows are the owner's: never
+delete or "tidy" rows you did not add in this task (a row with `updated_by: user:*` is theirs).
 
-Call an operation: `flock-api POST /api/apps/<this app>/ops/<name> '<json>'`. Read rows (never write them) at
+Call operations, read rows and change settings with the api tool. An operation: `POST /api/apps/<this app>/ops/<name>`
+with its input as the body (a JSON object). Read rows (never write them) at
 `/a/<this app>/api/_data/<table>` (`?col=value` filters; fields at `/_schema`). Write a row directly only when no
 operation makes that change (e.g. a meal's coach_check, a diner's targets).
 
@@ -79,7 +81,7 @@ span, and the kitchen items worth a look) and the **heads-up** shortly before ("
 reach you as usual: apply them with the operations below.
 
 The app's **Shopping timeline** routine wakes you only for the **price** step (at the order time), with its message id:
-fill a cart on each service in `data.services` (below), post each with `add_quote`
+compare prices on each service in `data.services` (Price comparison, below), post each with `add_quote`
 `{cart_id, service, total, fees?, lines?, screenshot_url?}`, then share the app's `best` service, the rough total and the
 screenshot, and ask once for a yes. Then `ack_message` `{message_id}`. Send nothing else.
 
@@ -96,6 +98,23 @@ Chat edits, any time before the yes — then reply with the draft as the app now
 already recorded: place it with that service and record it; don't ask again. An order placed on a service but missing
 from the app is a bug, not done. "Skip this order" from chat: `skip_order` `{cart_id}`.
 
+## Price comparison
+
+The price step, or a family member asking which service is cheapest:
+
+1. **One delivery address** for every service, matched by the address itself, not its label. Use the household's known
+   delivery address; ask the family only if none is known.
+2. **One background session per connected grocery service**, all started in one step. Tell each its service, the address
+   and the exact items, in the family's own words for each item, never a rewrite ("tender coconut" stays "tender
+   coconut", not "fresh coconuts").
+3. Each session uses that service's own skill or connector to select the address, empty the cart, add the items, and
+   report each item (or that it's unavailable) and the total with every fee, as that skill or connector reads it.
+   - **The item itself:** a product that matches every word the family used for it; another kind is not the item (a
+     brown coconut is not a "tender coconut"). None on that service: report it unavailable, never a substitute.
+   - **The same quantity on every service**, in the family's unit (pack sizes noted), so the totals compare like for like.
+4. **Compare the totals** at that one address, and flag uncertain matches (another brand or pack size). No order
+   without a family member's yes on that exact total.
+
 ## Building a service cart
 
 For each draft line, use the ingredient's `prefs`, falling back to the `prefs.category_defaults` setting for its category:
@@ -108,9 +127,3 @@ For each draft line, use the ingredient's `prefs`, falling back to the `prefs.ca
 - **service:** if not `any`, only that service may supply the line. **never_auto_add:** only if named in this conversation.
 - Flag (don't add) a price more than `price.jump_pct` above usual; say when the cart crosses `spend.weekly_limit`.
 - Follow the ingredient's free-text `notes`.
-
-**Verify after adding:** run `view-cart` on the service and compare line by line with what you meant. A connector's
-`success` is not proof. Report every mismatch before asking for the yes; never present an assumed cart. A connector error
-that is only `skill-sandbox: WARN: failed to set memory limit …` is noise — read the script's own result code.
-
-**Paying:** after the yes, `checkout` and the payments skill for UPI. Ask again only if the total changed.

@@ -24,44 +24,31 @@ The user must:
 
 ## Usage
 
-All functions execute via `POST /api/internal/skill-exec`. Invoke via:
+Call these functions with your `run_skill` tool: skill `zepto`, the function's name, and its params (for example `search-products` with `{"query": "milk", "maxResults": 5}`). Never call Flock's API, a script or a port yourself.
 
-```bash
-curl -s -X POST "$FLOCK_API_URL/api/internal/skill-exec" \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $FLOCK_AUTH_TOKEN" \
-  -d '{
-    "skillId": "zepto",
-    "functionName": "<functionName>",
-    "params": { ... },
-    "agentId": "'"$FLOCK_AGENT_ID"'"
-  }'
-```
+**Use these functions for these operations, not the browser:** the scripts drive the browser for you, with session management and rate limiting. For anything they cannot do, or when one keeps failing for a reason other than sign-in, do it with your `browser` tool on the same signed-in session: `open` with `session` `zepto` and the page's `url` gives a `persistentSessionId`; then `act`, `read` and `close` with it (browsing guide). Ask the owner before placing an order or paying.
 
-Examples:
-```bash
-# Search for products
-curl -s -X POST "$FLOCK_API_URL/api/internal/skill-exec" \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $FLOCK_AUTH_TOKEN" \
-  -d '{"skillId":"zepto","functionName":"search-products","params":{"query":"milk","maxResults":5},"agentId":"'"$FLOCK_AGENT_ID"'"}'
+## Zepto's own connector: its cart and bill come only from it
 
-# Add to cart
-curl -s -X POST "$FLOCK_API_URL/api/internal/skill-exec" \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $FLOCK_AUTH_TOKEN" \
-  -d '{"skillId":"zepto","functionName":"add-to-cart","params":{"productId":"12345","quantity":1},"agentId":"'"$FLOCK_AGENT_ID"'"}'
+When you also have Zepto's own connector (`zepto-mcp`), shop Zepto through it, not this skill. Zepto keeps a cart per device: the connector's cart never shows on the website, and this skill's cart is not in the connector. For a cart built through the connector, the items and the bill come only from the connector: never open the website, or this skill's `view-cart` or `checkout`, to read that bill.
 
-# View cart
-curl -s -X POST "$FLOCK_API_URL/api/internal/skill-exec" \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $FLOCK_AUTH_TOKEN" \
-  -d '{"skillId":"zepto","functionName":"view-cart","params":{},"agentId":"'"$FLOCK_AGENT_ID"'"}'
-```
-
-**Use these functions for these operations, not authenticated-crawl:** the scripts drive the browser for you, with session management and rate limiting. For anything they cannot do, or when one keeps failing for a reason other than sign-in, do it with authenticated-crawl on the same signed-in session. Ask the owner before placing an order or paying.
+- The total to pay, every fee included, is the "Order Total" that `get_payment_methods` returns beside the payment methods. `view_cart` gives the items total only. Never create an order to read a price: there is no cancel, so an order created is placed.
+- The order: `list_saved_addresses`, `select_saved_address`, `search_products`, `update_cart` (leave `deviceId` out: Flock fills it), `view_cart`, `get_payment_methods` for the total, one yes from the person on that exact total, then the order tool for the method chosen (`create_order` for cash on delivery, `create_online_payment_order` for a payment link, `create_wallet_order` for Zepto Cash); for a payment link, then `check_payment_status`.
+- When the connector shows no total with fees, give the items total and say Zepto does not show the fees there.
 
 ## Available Functions
+
+### list-addresses
+The delivery addresses saved on Zepto, and the location the site shows now. Params: `{}`
+Returns `{ addresses: [{ label, address, selected }], currentLocation }`. It opens the header's address picker, reads each saved address and closes it without changing anything. Fails `NO_SAVED_ADDRESSES` only when the opened picker has none, `PICKER_NOT_OPENED` when it did not open.
+
+### set-delivery-location
+Select the saved address that is the given one, before searching or filling the cart: prices, stock and fees depend on it. Params: `{ address: string }` — the address agreed with the family, with its flat or house number and building (a label such as "Home" alone never matches).
+Matches by the flat or house number together with the building name; a different or missing pincode does not stop a match, and another flat number never matches. Succeeds only once the header shows the address: `{ success, selected, currentLocation, alreadySet }` (`alreadySet`: the header already showed it, nothing was clicked). Fails `ADDRESS_NOT_SWITCHED` (with `currentLocation`) when the header still shows another address after picking it: do not price that service. Fails without clicking: `ADDRESS_NOT_SAVED` (with `savedAddresses`) or `AMBIGUOUS_ADDRESS` (pass more of the address).
+
+### empty-cart
+Remove everything from the cart, so a quote counts only the items asked for. Params: `{}`
+Returns `{ success, removed: [names], itemCount: 0 }` only after the cart itself shows empty; fails `NOT_CART_PAGE` or `CART_NOT_EMPTIED` otherwise. Tell the family what was removed when the cart held items they had put there.
 
 ### search-products
 Search for products on Zepto. Params: `{ query: string, maxResults?: number }`
@@ -69,9 +56,11 @@ Each product carries an `imageUrl`: show the results as a flock-ui block with th
 
 ### add-to-cart
 Add a product to the cart by searching and clicking ADD from results. Params: `{ query: string, quantity?: number }`
+An add's `success` is not proof: after adding, run `view-cart` and compare it line by line with what you meant to add. Report every mismatch before asking for the yes; never present an assumed cart.
 
 ### view-cart
-View current cart contents with prices and totals. Params: `{}`
+The cart's items and the full total to pay, every fee included. Params: `{}`
+Returns `{ verifiedCart: true, items, itemCount, subtotal, fees: [{ label, amount }], feeTotal, discount, total, totalSource, bill }`. `total` is what the person pays: the page's own grand total or to-pay line (`totalSource: "page"`), else subtotal + fees − discount (`"computed"`). It reads only the cart page and fails `NOT_CART_PAGE` when the page is anything else (a home page, suggestions): try once more, then report it, never a guessed total.
 
 ### remove-from-cart
 Remove an item from the cart. Params: `{ productId: string }`
@@ -86,8 +75,8 @@ View recent order history. Params: `{ maxResults?: number }`
 Two phases. Params: `{ phase?: "review" | "pay", persistentSessionId?: string }`
 
 - `review` (default): reads the cart's items and total and stops there; the session stays open. Returns `{ success, platform, orderTotal, itemCount, items, persistentSessionId }`. Nothing is paid or pressed.
-- After review, read the owner's saved payment preference first (private-browser skill, **Paying at checkout**, step 2), then ask the person once: the items, the total including every fee, and "Zepto". Paying always needs that one confirmation, even in the owner's own chat.
-- `pay` (optional; needs `persistentSessionId` from review — choosing UPI on the page yourself does the same): only after the person said yes to the total. Clicks only a "Proceed" / "Checkout" control that names no payment or amount, then the exact "UPI" option, with payment capture on. It never presses "Click to Pay ₹…", Pay Now or Place Order; when no such control or option is on the page it clicks nothing and returns `captured: false`. Returns `{ success, platform, captured, persistentSessionId }` — never a payment link or UPI string. Then pay the preferred way (private-browser skill, **Paying at checkout**, steps 2–3): with the preference you read before the yes, in this same persistent session choose UPI (or a gateway that names UPI), read the page again, and press Pay / Confirm / Place order once only when UPI is plainly the selected method, nothing else that pays is still ticked and the total is the one the person said yes to; otherwise ask with the page's options. When the page or the gateway offers a UPI ID option ("UPI ID", "Pay via UPI ID", "Enter UPI ID", "Add UPI ID") and there is a UPI ID to send the request to (the owner's saved one; in a group, only after the person chose the owner's UPI app), unless the saved preference is `upi_qr`, type it there and press that option's own verify / request button. That sends a payment request to the payer's UPI app and charges nothing by itself: tell them to approve it in their UPI app within the time shown. Otherwise — no UPI ID option, no UPI ID saved, or the person picks a QR — choose QR / "Show QR" and, right after your press, run `bash "$FLOCK_SKILLS_DIR/payments/scripts/show-payment-qr.sh" --session <persistentSessionId> --wait 15` (payments skill), before any hand-off: Flock never clicks, it reads the QR your press opened and posts the QR card itself, and you never paste a UPI link. One path per attempt: after a UPI ID request that expired or failed, offer a fresh request or the QR card, and for the QR card ask for a fresh payment screen: open the payment page anew and walk it to the QR again, or hand the page over. On `payment_blocked`, tell the person plainly "<site> blocks automated payment" with the total and the `payUrl`, and offer to hand them the page with `"payment": true` so they press Pay themselves; do not press Pay again or retry in a loop, and after that hand-off ends run `show-payment-qr` once more (private-browser skill, **Paying at checkout**, step 7). On `no_payment_found` after your press, or when the page needs a step the script did not take (an address or delivery slot, say), hand the page over with `"payment": true` (private-browser skill, **Paying at checkout**). After the request is sent or the card is shown, re-read the open payment page with a page read (private-browser skill), never an evaluate, every 15 seconds for up to 10 minutes and post the order confirmation. Never end a checkout by reporting a bug.
+- After review, read the owner's saved payment preference first (your `api` tool: GET `/api/internal/payments/preference?site=<host>`; payments guide), then ask the person once: the items, the total including every fee, and "Zepto". Paying always needs that one confirmation, even in the owner's own chat.
+- `pay` (optional; needs `persistentSessionId` from review — choosing UPI on the page yourself does the same): only after the person said yes to the total. Clicks only a "Proceed" / "Checkout" control that names no payment or amount, then the exact "UPI" option, with payment capture on. It never presses "Click to Pay ₹…", Pay Now or Place Order; when no such control or option is on the page it clicks nothing and returns `captured: false`. Returns `{ success, platform, captured, persistentSessionId }` — never a payment link or UPI string. Then pay the preferred way (payments guide): with the preference you read before the yes, in this same persistent session (your `browser` tool's `act` and `read` with that `persistentSessionId`) choose UPI (or a gateway that names UPI), read the page again, and press Pay / Confirm / Place order once only when UPI is plainly the selected method, nothing else that pays is still ticked and the total is the one the person said yes to; otherwise ask with the page's options. When the page or the gateway offers a UPI ID option ("UPI ID", "Pay via UPI ID", "Enter UPI ID", "Add UPI ID") and there is a UPI ID to send the request to (the owner's saved one; in a group, only after the person chose the owner's UPI app), unless the saved preference is `upi_qr`, type it there and press that option's own verify / request button. That sends a payment request to the payer's UPI app and charges nothing by itself: tell them to approve it in their UPI app within the time shown. Otherwise — no UPI ID option, no UPI ID saved, or the person picks a QR — choose QR / "Show QR" and, right after your press, call your `browser` tool with action `show_qr`, that `persistentSessionId` and `wait` 15, before any hand-off: Flock never clicks, it reads the QR your press opened and posts the QR card itself, and you never paste a UPI link. One path per attempt: after a UPI ID request that expired or failed, offer a fresh request or the QR card, and for the QR card ask for a fresh payment screen: open the payment page anew and walk it to the QR again, or hand the page over. On `payment_blocked`, tell the person plainly "<site> blocks automated payment" with the total and the `payUrl`, and offer to hand them the page (`hand_to_owner` with that `persistentSessionId` and `payment` true) so they press Pay themselves; do not press Pay again or retry in a loop, and after that hand-off ends call `show_qr` once more. On `no_payment_found` after your press, or when the page needs a step the script did not take (an address or delivery slot, say), hand the page over: `hand_to_owner` with that `persistentSessionId` and `payment` true. After the request is sent or the card is shown, re-read the open payment page with `read` and that `persistentSessionId`, never an evaluate, every 15 seconds for up to 10 minutes and post the order confirmation. Never end a checkout by reporting a bug.
 
 ## No App Handoff — Everything In Chat
 
@@ -99,17 +88,15 @@ Two phases. Params: `{ phase?: "review" | "pay", persistentSessionId?: string }`
 
 ## Address-First Flow
 
-When placing ANY new order, the FIRST thing to do — before searching for items — is confirm the delivery address:
+When placing ANY new order or quoting a cart, the FIRST thing to do — before searching for items — is settle the delivery address:
 
-1. Ask the user: "Which address should I deliver to?"
-2. Fetch the user's saved addresses from the platform. No function lists them: open the site's address selection with authenticated-crawl on the same signed-in session and extract every saved address via `evaluate`
-3. Present the list: "I found these saved addresses: 1. Home — ... 2. Work — ..."
-4. User picks one → select it on the platform the same way
-5. THEN proceed with item search and cart
+1. Use the address agreed with the family (the agent's own notes say which), or ask: "Which address should I deliver to?"
+2. With your `run_skill` tool, before any browser use: `list-addresses`, then `set-delivery-location` with that address. Use the browser for the address only when `set-delivery-location` fails twice for a reason other than sign-in: then open the header's location picker, click the saved address's own entry (by its text), and say so.
+3. Then search and fill the cart.
 
 **Rules:**
-- ONLY use saved addresses — the agent cannot add new addresses via browser automation (address forms are complex, need GPS pin, etc.)
-- If the user wants an address that's not saved, tell them: "That address isn't saved on Zepto. Please add it in the app first, then I can use it for your order."
+- The same address for every service in a comparison: match the address itself (flat or house number and building), not its label or pincode. "Home" on Zepto may be another place, and an office is not a home.
+- When the address isn't saved on Zepto, don't quote another one. Adding it needs the owner's yes (one yes may cover several services); then add it on the website in the browser on the same signed-in session, and hand the page over if the form needs a map pin you cannot place.
 - Address selection happens BEFORE any item search — don't build a cart without knowing where to deliver
 - Remember the selected address for the session — don't ask again for subsequent orders in the same conversation
 - If only one address is saved, confirm it: "I'll deliver to Home — <address>. Correct?"
@@ -134,4 +121,4 @@ When the message came from a channel (Telegram, WhatsApp, etc.) — identified b
 
 ## Reading the Total
 
-At review, report the cart plainly: items, quantities and the total the page shows. Include any delivery or handling fee the page shows. If the person is close to a free-delivery threshold the page mentions, offer a low-cost item. Coupons are not applied by the script: if the person wants one, apply it on the page with authenticated-crawl before review, from Zepto's own UI, never a hardcoded code.
+At review, report the cart plainly: items, quantities and the total the page shows. Include any delivery or handling fee the page shows. If the person is close to a free-delivery threshold the page mentions, offer a low-cost item. Coupons are not applied by the script: if the person wants one, apply it on the page with your `browser` tool on the signed-in session before review, from Zepto's own UI, never a hardcoded code.
