@@ -2,7 +2,7 @@
   "name": "Family Butler",
   "slug": "family-butler",
   "description": "A household assistant that manages groceries, meals, and family routines through Telegram",
-  "version": "1.4.0",
+  "version": "1.7.0",
   "author": "flock",
   "icon": "icon.svg",
   "bird": "bird:penguin;color=night;head=tophat;face=monocle",
@@ -53,7 +53,9 @@
       "Compare prices for my weekly groceries",
       "What's on our shopping list this week?",
       "Which service is cheapest for milk, eggs and bread?",
-      "We need to restock — what are we running low on?"
+      "We need to restock — what are we running low on?",
+      "Plan a weekend outing for the family",
+      "Build us a chore chart"
     ]
   },
 

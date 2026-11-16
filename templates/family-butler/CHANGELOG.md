@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.7.0
+
+- **Both lines together.** The `release/10-nov` slim persona (1.4.0) and the shared family assistant (1.5.0, 1.6.0) in one template. The role at the top and the group rules come from 1.5.0/1.6.0; its Groceries bullet now points at the Meal Planner app, as 1.4.0 does. The Cold-Start section that 1.5.0 kept is gone, as in 1.4.0. Example prompts are 1.4.0's generic ones plus "Plan a weekend outing for the family" and "Build us a chore chart".
+
+## 1.6.0
+
+- **No tag needed in the group.** Flock now wakes the butler on every message in a group where it is the only agent. The SOUL says: answer what's meant for you, tagged or not, and stay quiet when people are just talking to each other; with the group's "answers only when tagged" switch on, it is only woken when tagged or replied to. Whoever asked is the person it acts for (was: answers only when tagged or replied to).
+
+## 1.5.0
+
+- **The family's shared assistant, not only a grocery one.** The role at the top of the SOUL says the butler lives in the family group chat and anyone in the family can ask it there: it plans trips, birthdays, weekend outings and other family plans (search, compare, book after the asker's yes, set reminders), keeps shared lists, builds shared apps for the family (a grocery list, meal planner or chore chart) by delegating to the Flock Assistant with its delegate skill, does the groceries, and lists who is in the family with its family-members skill. It answers in the group only when tagged or replied to, and acts with the permissions of whoever tagged it. Before, it told a family planning a trip that trips were "outside my area".
+- The first-interaction intro names the same jobs. Two starter prompts are added: "Plan a weekend outing for the family" and "Build us a chore chart".
+- Building an app: a simple app from a template is built right away; anything bigger is built once the family says yes (was: every app waited for a yes).
+- First interaction: in the family group chat Flock already posts the butler's welcome, so the butler sends no intro of its own there; the intro stays for a direct chat, once per chat.
+- Skips 1.4.0, which is taken by the `release/10-nov` branch's tag.
+
 ## 1.4.0
 
 - **A slim persona.** Any agent can be a butler; apps and skills bring the use cases. The SOUL keeps who the Family Butler is, its tone, the family it serves (several members), what it doesn't do, and its dietary, prompt-injection and allowlist lines, word for word (the dietary rule no longer names a memory file). It installs the Meal Planner app and points meal, grocery and price comparison work at it.

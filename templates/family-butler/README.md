@@ -2,8 +2,12 @@
 
 A household assistant that manages groceries, meals, and family routines through Telegram.
 
+The family's shared assistant: it lives in the family group chat, answers there when someone tags it or replies to it, and acts with the permissions of whoever asked.
+
 ## What It Does
 
+- **Family plans:** Trips, birthdays and weekend outings: searches and compares the options, books once the person who asked says yes, and sets reminders
+- **Shared lists and apps:** Keeps the family's shared lists, and asks the Flock Assistant to build shared apps such as a grocery list, meal planner or chore chart
 - **Meals, groceries and price comparison:** through the Meal Planner app (the Flock `planner` app, installed and paired by Family Butler). It holds the week's meals, the grocery list and the family's recipe book, and compares prices across the connected services (Swiggy Instamart, Zepto, BigBasket, Zomato Blinkit) before an order, which is placed only after the family confirms the total. Family Butler fills it when you ask; the rows are yours
 - **Daily briefings:** Morning summary with weather, calendar, and tasks; evening preview of tomorrow
 
