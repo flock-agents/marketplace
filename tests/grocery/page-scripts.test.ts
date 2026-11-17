@@ -10,7 +10,7 @@ import { readFileSync, readdirSync } from "fs";
 import { join } from "path";
 
 const skills = join(import.meta.dir, "../../skills");
-const SHOPS = ["bigbasket", "zepto", "zomato-blinkit"];
+const SHOPS = ["bigbasket", "zomato-blinkit"];
 /** A template literal, String.raw or plain, with its escapes. */
 const TEMPLATE = /(String\.raw)?`((?:[^`\\]|\\[\s\S])*)`/g;
 /** A page script is an arrow function the page calls at once: `(() => {…})()` or `(async () => {…})()`. */

@@ -40,7 +40,8 @@ export const UNKNOWN_SHELF_LIFE_DAYS = 3;   // an uncategorised item: assume it 
 // yes by order_at + shop.yes_wait_h (or one the owner lets go) is let go, its open items rolling into the next draft.
 export const CART_STATUSES = ["draft", "ordered", "let_go"] as const;
 
-/** The grocery connectors compared at order time; the owner named these three (Instamart can be added later). */
+/** The grocery services compared at order time; the owner named these three (Instamart can be added later). Zepto and
+ *  Instamart are their official connections, BigBasket and Blinkit their skills. */
 export const DEFAULT_SERVICES = ["zepto", "zomato-blinkit", "bigbasket"];
 
 /** Per-category ShoppingPrefs defaults (server/quantity.ts); mirrors flock.app.json's prefs.category_defaults. */

@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.0.7
+
+- **Zepto and Swiggy Instamart are their official connections.** The agent's guide says to read their cart and bill only
+  from the connection (Zepto's full total is the "Order Total" from `get_payment_methods`), never from their websites,
+  and never to place an order just to see a price. BigBasket and Blinkit still use their skills.
+
 ## 2.0.6
 
 - **Price comparison** (moved here from the Family Butler template): the agent's guide says how the price step, or a

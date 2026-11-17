@@ -109,6 +109,11 @@ The price step, or a family member asking which service is cheapest:
    coconut", not "fresh coconuts").
 3. Each session uses that service's own skill or connector to select the address, empty the cart, add the items, and
    report each item (or that it's unavailable) and the total with every fee, as that skill or connector reads it.
+   - **Zepto and Swiggy Instamart** (`zepto`, `swiggy-instamart`) are their official connections, never their websites:
+     the cart and the bill come only from the connector's own tools. Zepto: `view_cart` gives the items, the total with
+     every fee is the "Order Total" `get_payment_methods` returns. BigBasket and Blinkit (`bigbasket`, `zomato-blinkit`)
+     are skills: `view-cart`, then `checkout` after the yes.
+   - **Never place an order to read a price**: an order on a connector can't be cancelled.
    - **The item itself:** a product that matches every word the family used for it; another kind is not the item (a
      brown coconut is not a "tender coconut"). None on that service: report it unavailable, never a substitute.
    - **The same quantity on every service**, in the family's unit (pack sizes noted), so the totals compare like for like.

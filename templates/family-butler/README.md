@@ -18,10 +18,10 @@ The family's shared assistant: it lives in the family group chat, answers there 
 | reminders | Time-based reminders for the family |
 | google-calendar | Family calendar for briefings |
 | google-sheets | Household expense tracking |
-| swiggy-instamart | Grocery shopping on Swiggy |
-| zepto | Grocery shopping on Zepto |
 | bigbasket | Grocery shopping on BigBasket |
 | zomato-blinkit | Grocery shopping on Blinkit |
+
+Zepto and Swiggy Instamart come through their official connections (`zepto-mcp`, `swiggy-instamart-mcp`), not skills: the butler sets one up when the family asks for it.
 
 ## Scheduled Tasks
 
@@ -35,7 +35,7 @@ All times in Asia/Kolkata (IST).
 ## Setup
 
 1. Choose a name and set dietary preferences in the personality wizard
-2. Connect at least one grocery service (requires browser session login)
+2. Connect at least one grocery service: Zepto or Swiggy Instamart sign in with your phone number; BigBasket or Blinkit sign in in Flock's browser
 3. Create a Telegram bot via @BotFather and connect it
 4. Review and customize scheduled tasks
 5. Optionally add the Meal Planner app: Flock installs the `planner` app and pairs it with Family Butler (needs Flock 0.15.0 or later)
