@@ -58,3 +58,16 @@ describe("Calendar Desk manifest planning", () => {
     expect(manifest.agentInterface.operations.find((o: any) => o.name === "plan_events_done")).toMatchObject({ invoke: "ops/plan_events_done" });
   });
 });
+
+describe("Calendar Desk copies", () => {
+  test("the instructions name the app by {{appId}}, never by a fixed id", () => {
+    for (const intent of manifest.agentInterface.intents) {
+      expect(intent.instructions ?? "").not.toContain("/api/apps/calendar-desk/");
+      expect(intent.instructions ?? "").not.toMatch(/calendar-desk:</);
+    }
+    for (const name of ["meeting_prep", "plan_events"]) {
+      const intent = manifest.agentInterface.intents.find((i: any) => i.name === name);
+      expect(intent.instructions).toContain("/api/apps/{{appId}}/ops/");
+    }
+  });
+});

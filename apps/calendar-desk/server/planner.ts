@@ -8,10 +8,11 @@ import { retireAskCards } from "./retire-asks";
 import { KINDS, KIND_FACTS_LIMIT, PLACE_KINDS, placeOf, type EventType, type Tier } from "./kinds";
 import { tally, placeTally, placeState, type KindState } from "./tally";
 
-const APP = "calendar-desk";
 const EVENT_FACTS_MAX = 3;
-/** The pointer that ties a TODO to an event: `calendar-desk:<event key>`. */
-export const pointer = (eventKey: string) => `${APP}:${eventKey}`;
+/** This app's own id: a person's copy has its own (`calendar-desk-1a2b3c4d`); the platform injects it as APP_ID. */
+const appId = (): string => process.env.APP_ID?.trim() || "calendar-desk";
+/** The pointer that ties a TODO to an event: `<app id>:<event key>`. Read per call so each copy uses its own id. */
+export const pointer = (eventKey: string) => `${appId()}:${eventKey}`;
 const hhmm = (ms: number) => { const d = new Date(ms); return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
 
 // The SDK methods this routine uses; typed here so the app does not depend on an SDK build that has them yet.

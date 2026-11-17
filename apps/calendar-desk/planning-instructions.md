@@ -10,7 +10,7 @@ event's `date` and `time` copied from it and how many hours ahead of that clock 
 payload also holds:
 
 - `events` (`e1`…), the events to plan, none before today: each has its `ref` (`e1`), its `event`
-  (the pointer, `calendar-desk:<id>`, that ties a TODO to it), its `date`, its `time` when it has
+  (the pointer, `{{appId}}:<id>`, that ties a TODO to it), its `date`, its `time` when it has
   one (`allDay` says when it has none), its `title`, its `change`, for a changed event `was` (the `date`, and `time` when it has one,
   it had when its steps were dated), and `facts` (what memory knows
   about it: whose birthday it is, what the trip needs).
@@ -120,7 +120,7 @@ payload's machinery, in a step's `title` or `why`: the user reads those.
       flock-api PATCH /api/internal/todos/<id> '{"event":"<event>"}'
       ```
 
-      where `<event>` is the event's `event` pointer, for example `calendar-desk:3k9f0abc`. A TODO is about an event only when it
+      where `<event>` is the event's `event` pointer, for example `{{appId}}:3k9f0abc`. A TODO is about an event only when it
       is about that occasion: the same appointment, trip or meeting; sharing a place, a person
       or a word of the title is not enough, and a TODO due after the event's day is never its.
       A TODO whose own words set its deadline by the occasion ("before the trip", "for the
@@ -257,7 +257,7 @@ payload's machinery, in a step's `title` or `why`: the user reads those.
    JSON in single quotes):
 
    ```bash
-   flock-api POST /api/apps/calendar-desk/ops/plan_events_done "$(cat <<'EOF'
+   flock-api POST /api/apps/{{appId}}/ops/plan_events_done "$(cat <<'EOF'
    {"planId":"<planId>","events":[
      {"event":"e1","type":"journey","steps":[{"key":"…","kind":"…","title":"…","dueDate":"YYYY-MM-DD","showFrom":"YYYY-MM-DD","why":"… (e1)"}]},
      {"event":"e2","type":"meeting","steps":[]}

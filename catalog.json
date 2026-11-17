@@ -420,9 +420,9 @@
       "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "apps/calendar-desk",
-      "latestVersion": "2.0.3",
-      "latestTag": "calendar-desk-v2.0.3",
-      "minFlockVersion": "0.12.0",
+      "latestVersion": "2.1.0",
+      "latestTag": "calendar-desk-v2.1.0",
+      "minFlockVersion": "0.24.0-beta.2",
       "personalAssistant": {
         "always": true,
         "useCase": "calendar",
