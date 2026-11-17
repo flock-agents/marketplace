@@ -1,4 +1,4 @@
-// Grocery website skills (bigbasket, zepto, zomato-blinkit): the shared shop module (_shop.ts) —
+// Grocery website skills (bigbasket, zomato-blinkit): the shared shop module (_shop.ts) —
 // address matching, the bill with every fee, the cart-page check — and its in-page scripts run on
 // stand-in pages: hand-made pages with the shops' markup as the scripts expect it and made-up
 // data, NOT saved copies of the real sites. A real-site run is still what confirms the selectors.
@@ -22,12 +22,12 @@ describe("the shared shop files", () => {
   it("are the same in every grocery website skill", () => {
     for (const file of ["_shop.ts", "_shop_run.ts"]) {
       const bb = readFileSync(join(skills, "bigbasket/scripts", file), "utf8");
-      for (const skill of ["zepto", "zomato-blinkit"]) expect(readFileSync(join(skills, skill, "scripts", file), "utf8")).toBe(bb);
+      for (const skill of ["zomato-blinkit"]) expect(readFileSync(join(skills, skill, "scripts", file), "utf8")).toBe(bb);
     }
   });
 
   it("every function the manifest allows has a script, and each new one is documented", () => {
-    for (const skill of ["bigbasket", "zepto", "zomato-blinkit"]) {
+    for (const skill of ["bigbasket", "zomato-blinkit"]) {
       const manifest = JSON.parse(readFileSync(join(skills, skill, "flock.skill.json"), "utf8"));
       const doc = readFileSync(join(skills, skill, "instructions.md"), "utf8");
       for (const fn of manifest.security.allowedFunctions) expect(existsSync(join(skills, skill, "scripts", `${fn}.ts`))).toBe(true);

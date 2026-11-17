@@ -1,5 +1,5 @@
 /**
- * What the grocery website skills (BigBasket, Blinkit, Zepto) share: the saved-address picker, the
+ * What the grocery website skills (BigBasket, Blinkit) share: the saved-address picker, the
  * cart page check, emptying the cart, and the bill with every fee. Each skill ships an identical
  * copy (tests/grocery checks they match); the site's own selectors come from its `_<site>.ts`.
  * The in-page scripts are strings Flock's browser runs on the page; the rest is plain logic.

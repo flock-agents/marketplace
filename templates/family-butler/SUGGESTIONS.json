@@ -1,14 +1,6 @@
 {
   "skills": [
     {
-      "slug": "swiggy-instamart",
-      "reason": "Search, compare prices, and build grocery carts on Swiggy Instamart"
-    },
-    {
-      "slug": "zepto",
-      "reason": "Search, compare prices, and build grocery carts on Zepto"
-    },
-    {
       "slug": "bigbasket",
       "reason": "Search, compare prices, and build grocery carts on BigBasket"
     },

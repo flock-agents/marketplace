@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.8.0
+
+- **Zepto and Swiggy Instamart through their official connections.** Their browser skills are gone from the template and its suggestions; the "Connect a grocery service" step counts the Zepto and Swiggy Instamart connections (`zepto-mcp`, `swiggy-instamart-mcp`) beside BigBasket and Blinkit.
+
 ## 1.7.0
 
 - **Both lines together.** The `release/10-nov` slim persona (1.4.0) and the shared family assistant (1.5.0, 1.6.0) in one template. The role at the top and the group rules come from 1.5.0/1.6.0; its Groceries bullet now points at the Meal Planner app, as 1.4.0 does. The Cold-Start section that 1.5.0 kept is gone, as in 1.4.0. Example prompts are 1.4.0's generic ones plus "Plan a weekend outing for the family" and "Build us a chore chart".
