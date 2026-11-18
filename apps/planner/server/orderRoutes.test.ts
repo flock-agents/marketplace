@@ -1,0 +1,515 @@
+// The orders through the agent's operations and the family's edits on the pages: built from a final plan, rebuilt when it
+// changes, asked about once (low or out), added to, placed, recorded and cancelled.
+import { describe, it, expect, spyOn } from "bun:test";
+import { boot } from "./testkit";
+import { rebuildScheduledOrders } from "./orders";
+
+const MON = "2026-11-23", SUN = "2026-11-22", TUE = "2026-11-24", WED = "2026-11-25";
+const SAT_EVENING = new Date(2026, 10, 21, 18, 5);   // Sat 21 Nov, 18:05: the weekly run
+const NOW = "2026-11-21T18:05";
+
+const lunch = { date: MON, slot: "Lunch", dishes: [
+  { name: "Rice", ingredients: [{ item: "rice", amount: 400, unit: "g", keeps: "long" }] },
+  { name: "Aloo gobi", ingredients: [{ item: "cauliflower", amount: 1, unit: "pc" }, { item: "potato", amount: 500, unit: "g" }] },
+  { name: "Sambar", ingredients: [{ item: "toor dal", amount: 200, unit: "g", keeps: "long" }] },
+  { name: "Boiled eggs", for: ["me", "wife"], ingredients: [{ item: "eggs", amount: 5, unit: "pc" }] } ] };
+const dinner = { date: MON, slot: "Dinner", dishes: [{ name: "Rotis", ingredients: [{ item: "atta", amount: 300, unit: "g", keeps: "long" }] }] };
+const tueLunch = { date: TUE, slot: "Lunch", dishes: [
+  { name: "Rice", ingredients: [{ item: "Rice", amount: 300, unit: "g", keeps: "long" }] },
+  { name: "Onion sabzi", ingredients: [{ item: "onion", amount: 2, unit: "pc" }] } ] };
+
+/** A family with milk every day and two remembered Zepto products, at a time the test can move. */
+async function home(at = SAT_EVENING) {
+  const clock = { now: at };
+  const k = await boot({ now: () => clock.now });
+  await k.op("set_regular", { item: "milk", amount: 1, unit: "l", every: "day" });
+  await k.op("remember_product", { item: "atta", app: "zepto", product_id: "z-atta", name_on_app: "Aashirvaad Atta 5 kg", pack: "5 kg", pack_amount: 5, pack_unit: "kg", price: 289 });
+  await k.op("remember_product", { item: "milk", app: "zepto", product_id: "z-milk", name_on_app: "Amul Taaza 500 ml", pack: "500 ml", price: 29 });
+  k.settle();
+  const items = (orderId: string): string[] => k.rows("order_lines").filter((l) => l.order_id === orderId).map((l) => l.item);
+  const line = (orderId: string, item: string) => k.rows("order_lines").find((l) => l.order_id === orderId && l.item === item);
+  const order = (id: string) => k.rows("orders").find((o) => o.id === id);
+  return { ...k, clock, items, line, order };
+}
+
+/** The same family with the week of Mon 23 Nov planned final on Saturday evening: four orders. */
+async function plannedWeek(meals: object[] = [lunch, dinner]) {
+  const k = await home();
+  const r = await k.op("plan_week", { week_start: MON, mode: "final", meals });
+  const [first, second, third, fourth] = r.orders as any[];
+  return { ...k, orders: r.orders as any[], first, second, third, fourth };
+}
+
+describe("a final plan builds the week's orders", () => {
+  it("a final week makes orders: long-life all in the first, fresh by pair, milk per covered day", async () => {
+    const { orders, first, second, rows } = await plannedWeek();
+    expect(orders.map((o) => [o.covers_from, o.covers_to, o.place_at, o.status])).toEqual([
+      [SUN, MON, NOW, "scheduled"], [TUE, WED, `${MON}T18:00`, "scheduled"],
+      ["2026-11-26", "2026-11-27", `${WED}T18:00`, "scheduled"], ["2026-11-28", "2026-11-29", "2026-11-27T18:00", "scheduled"]]);
+    expect(orders.every((o) => o.app === "zepto" && o.week_start === MON)).toBe(true);
+    expect(first.lines.map((l: any) => l.item).sort()).toEqual(["atta", "cauliflower", "eggs", "milk", "potato", "rice", "toor dal"]);
+    expect(first.lines.find((l: any) => l.item === "rice")).toMatchObject({ amount: 400, unit: "g", source: "dish", product_id: null, qty: 1, qty_checked: 0 });
+    expect(JSON.parse(first.lines.find((l: any) => l.item === "cauliflower").sources)).toMatchObject([{ kind: "dish", label: "Mon 23 Nov lunch: Aloo gobi" }]);
+    // 300 g of atta is one 5 kg pack; milk for the two days covered is 2 l, four 500 ml packs.
+    expect(first.lines.find((l: any) => l.item === "atta")).toMatchObject({ product_id: "z-atta", name_on_app: "Aashirvaad Atta 5 kg", pack: "5 kg", price: 289, qty: 1, qty_checked: 1 });
+    const milk = first.lines.find((l: any) => l.item === "milk");
+    expect(milk).toMatchObject({ amount: 2, unit: "l", source: "regular", product_id: "z-milk", qty: 4, qty_checked: 1 });
+    expect(JSON.parse(milk.sources)).toMatchObject([{ kind: "regular", label: "Everyday: milk" }]);
+    expect(first.total).toBe(289 + 4 * 29);
+    // The later orders hold only what their own days need.
+    expect(second.lines.map((l: any) => [l.item, l.amount])).toEqual([["milk", 2]]);
+    // No order covers a date twice, and at most one order is placed on a date.
+    const covered = orders.flatMap((o) => (o.covers_from === o.covers_to ? [o.covers_from] : [o.covers_from, o.covers_to]));
+    expect(new Set(covered).size).toBe(covered.length);
+    expect(new Set(orders.map((o) => o.place_at.slice(0, 10))).size).toBe(orders.length);
+    expect(rows("orders")).toHaveLength(4);
+  });
+
+  it("a long-life item needed later in the week is bought once, in the first order; a fresh one in the order covering its day", async () => {
+    const { first, second } = await plannedWeek([lunch, dinner, tueLunch]);
+    const rice = first.lines.find((l: any) => l.item === "rice");
+    expect(rice.amount).toBe(700);
+    expect(JSON.parse(rice.sources).map((s: any) => s.label)).toEqual(["Mon 23 Nov lunch: Rice", "Tue 24 Nov lunch: Rice"]);
+    expect(first.lines.map((l: any) => l.item)).not.toContain("onion");
+    expect(second.lines.map((l: any) => l.item).sort()).toEqual(["milk", "onion"]);
+  });
+
+  it("a draft builds nothing, an ordered-in meal needs nothing, and a paused everyday item is left out", async () => {
+    const { op, rows } = await home();
+    await op("set_regular", { item: "milk", paused_until: MON });
+    expect((await op("plan_week", { week_start: MON, mode: "draft", meals: [lunch] })).orders).toBeUndefined();
+    expect(rows("orders")).toHaveLength(0);
+    const r = await op("plan_week", { week_start: MON, mode: "final", meals: [{ date: MON, slot: "Lunch", ordered_in: true }, dinner] });
+    expect(r.orders[0].lines.map((l: any) => l.item)).toEqual(["atta"]);
+    expect(r.orders[1].lines.map((l: any) => [l.item, l.amount])).toEqual([["milk", 2]]);
+  });
+
+  it("planning again covers nothing twice: a not-paid order keeps its days, a cancelled one gives them back", async () => {
+    const { op, first, second, rows } = await plannedWeek();
+    expect((await op("plan_week", { week_start: MON, mode: "final", meals: [lunch, dinner] })).orders.map((o: any) => o.id)).toEqual(rows("orders").map((o) => o.id));
+    await op("record_order", { order_id: first.id, placed: true, paid: false });
+    await op("cancel_order", { order_id: second.id });
+    const again = (await op("plan_week", { week_start: MON, mode: "final", meals: [lunch, dinner] })).orders as any[];
+    expect(again.map((o) => [o.covers_from, o.covers_to, o.status])).toEqual([
+      [SUN, MON, "not_paid"], [TUE, WED, "scheduled"], ["2026-11-26", "2026-11-27", "scheduled"], ["2026-11-28", "2026-11-29", "scheduled"]]);
+    // Today's order went out, so the new one for Tue and Wed is placed on Tuesday morning.
+    expect(again[1].place_at).toBe(`${TUE}T08:00`);
+    expect(again[1].id).not.toBe(second.id);
+    expect(rows("orders").find((o) => o.id === second.id).status).toBe("cancelled");
+  });
+
+  it("the first order joins a scheduled order placed today, unless the agent was already woken to place it", async () => {
+    const { op, rows } = await home();
+    const extra = (await op("add_to_order", { item: "paneer" })).order;
+    expect(extra).toMatchObject({ place_at: NOW, week_start: null, status: "scheduled" });
+    const r = await op("plan_week", { week_start: MON, mode: "final", meals: [lunch, dinner] });
+    expect(rows("orders")).toHaveLength(4);
+    expect(r.orders[0]).toMatchObject({ id: extra.id, covers_from: SUN, covers_to: MON, week_start: MON });
+    expect(r.orders[0].lines.map((l: any) => l.item)).toContain("paneer");
+    expect(r.orders[0].lines.map((l: any) => l.item)).toContain("rice");
+
+    const b = await home();
+    const woken = (await b.op("add_to_order", { item: "paneer" })).order;
+    await b.op("place_order", { order_id: woken.id });
+    const s = await b.op("plan_week", { week_start: MON, mode: "final", meals: [lunch, dinner] });
+    expect(b.rows("orders")).toHaveLength(5);
+    expect(s.orders[0]).toMatchObject({ covers_from: SUN, covers_to: MON, place_at: `${SUN}T08:00` });
+    expect(b.items(woken.id)).toEqual(["paneer"]);
+  });
+
+  it("when the orders cannot be built the plan stays, the answer is an error, and no order is half made", async () => {
+    const { op, rows, kit } = await home();
+    kit.sqlite.run("ALTER TABLE order_lines RENAME TO order_lines_gone");
+    const logged = spyOn(console, "error").mockImplementation(() => {});   // the server logs what it could not do
+    const r = await op("plan_week", { week_start: MON, mode: "final", meals: [lunch, dinner] });
+    logged.mockRestore();
+    expect(r.status).toBe(500);
+    expect(rows("orders")).toHaveLength(0);
+    expect(rows("plan_meals").map((m) => m.status)).toEqual(["final", "final"]);
+    kit.sqlite.run("ALTER TABLE order_lines_gone RENAME TO order_lines");
+    expect((await op("plan_week", { week_start: MON, mode: "final", meals: [lunch, dinner] })).orders).toHaveLength(4);
+  });
+});
+
+describe("the orders follow the plan", () => {
+  it("a change by the agent or by the family on a page rebuilds the scheduled orders, once for a burst", async () => {
+    const { op, owner, rows, pending, settle, first, second, line } = await plannedWeek();
+    // The final plan built its orders itself: the rebuild its own changes asked for finds nothing to do.
+    const before = JSON.stringify(rows("order_lines"));
+    settle();
+    expect(JSON.stringify(rows("order_lines"))).toBe(before);
+    expect(pending()).toBe(false);   // the app's own writes ask for no rebuild
+
+    await op("set_dish", { date: TUE, slot: "Lunch", name: "Onion sabzi", ingredients: [{ item: "onion", amount: 2, unit: "pc" }] });
+    await op("set_regular", { item: "curd", amount: 400, unit: "g", every: "day" });
+    expect(pending()).toBe(true);
+    expect(line(second.id, "onion")).toBeUndefined();   // not before the burst is over
+    settle();
+    expect(line(second.id, "onion")).toMatchObject({ amount: 2, unit: "pc", source: "dish" });
+    expect(line(second.id, "curd")).toMatchObject({ amount: 800, unit: "g", source: "regular" });
+
+    // The family changes an amount on the Week page: the kit's data route, not one of the app's.
+    const potato = rows("dish_items").find((i) => i.item === "potato");
+    expect((await owner("PATCH", `/api/_data/dish_items/${potato.id}`, { amount: 750 })).status).toBe(200);
+    expect(pending()).toBe(true);
+    settle();
+    expect(line(first.id, "potato").amount).toBe(750);
+    // ...and takes an everyday item away.
+    const curd = rows("regulars").find((r) => r.item === "curd");
+    await owner("DELETE", `/api/_data/regulars/${curd.id}`);
+    settle();
+    expect(rows("order_lines").filter((l) => l.item === "curd")).toHaveLength(0);
+  });
+
+  it("a rebuild keeps a line and the packs set on it while its amount stays, and counts the packs again when it changes", async () => {
+    const { op, owner, settle, first, line, kit } = await plannedWeek();
+    const milk = line(first.id, "milk"), rice = line(first.id, "rice");
+    await owner("PATCH", `/api/_data/order_lines/${milk.id}`, { qty: 6 });
+    await owner("PATCH", `/api/_data/order_lines/${rice.id}`, { qty: 2, qty_checked: 1 });
+    await op("set_dish", { date: MON, slot: "Dinner", name: "Dal", ingredients: [{ item: "moong dal", amount: 150, unit: "g" }] });
+    settle();
+    expect(line(first.id, "milk")).toMatchObject({ id: milk.id, qty: 6 });
+    expect(line(first.id, "rice")).toMatchObject({ id: rice.id, qty: 2, qty_checked: 1 });
+    // A product remembered since is put on the line that had none; the packs follow it.
+    await op("remember_product", { item: "rice", app: "zepto", product_id: "z-rice", name_on_app: "India Gate 1 kg", pack: "1 kg", price: 120 });
+    rebuildScheduledOrders(kit.db, kit.emitChange);
+    expect(line(first.id, "rice")).toMatchObject({ id: rice.id, product_id: "z-rice", qty: 1, qty_checked: 1 });
+    // More milk a day: the amount changed, so the packs are counted again.
+    await op("set_regular", { item: "milk", amount: 2 });
+    settle();
+    expect(line(first.id, "milk")).toMatchObject({ id: milk.id, amount: 4, qty: 8 });
+  });
+
+  it("a line the family removes from a scheduled order does not come back; undoing the removal brings it back for good", async () => {
+    const { owner, settle, second, third, items, order, kit } = await plannedWeek([lunch, dinner, tueLunch]);
+    const onion = kit.sqlite.query("SELECT id FROM order_lines WHERE order_id = ? AND item = 'onion'").get(second.id) as { id: string };
+    const removed = await owner("DELETE", `/api/_data/order_lines/${onion.id}`);
+    expect(removed.status).toBe(200);
+    expect(JSON.parse(order(second.id).skipped_items)).toEqual(["onion"]);
+    rebuildScheduledOrders(kit.db, kit.emitChange);
+    expect(items(second.id)).toEqual(["milk"]);
+    expect(items(third.id)).toEqual(["milk"]);   // only the order it was removed from skips it
+    expect((await owner("POST", `/api/_data/_changes/${removed.body.changeId}/undo`)).status).toBe(200);
+    expect(JSON.parse(order(second.id).skipped_items)).toEqual([]);
+    settle(); rebuildScheduledOrders(kit.db, kit.emitChange);
+    expect(items(second.id).sort()).toEqual(["milk", "onion"]);
+  });
+
+  it("removing a line the family added skips nothing", async () => {
+    const { op, owner, second, order } = await plannedWeek();
+    const added = await op("add_to_order", { order_id: second.id, item: "onion" });
+    await owner("DELETE", `/api/_data/order_lines/${added.line.id}`);
+    expect(order(second.id).skipped_items).toBeNull();
+  });
+
+  it("re-planning after the first order is placed leaves it and rebuilds the rest, keeping added lines and skips (Review Focus 5)", async () => {
+    const { op, owner, first, second, items, line, rows, order } = await plannedWeek([lunch, dinner, tueLunch]);
+    await op("add_to_order", { order_id: second.id, item: "paneer", qty: 2 });
+    await owner("DELETE", `/api/_data/order_lines/${line(second.id, "milk").id}`);
+    await op("place_order", { order_id: first.id });
+    await op("record_order", { order_id: first.id, placed: true, total: 640 });
+    const placedLines = JSON.stringify(rows("order_lines").filter((l) => l.order_id === first.id));
+
+    // Monday loses its aloo gobi and gains a salad; Tuesday swaps onion for tomato; besan (long-life) is new on Wednesday.
+    const r = await op("plan_week", { week_start: MON, mode: "final", meals: [
+      { ...lunch, dishes: [lunch.dishes[0], { name: "Salad", ingredients: [{ item: "cucumber", amount: 2, unit: "pc" }] }] }, dinner,
+      { date: TUE, slot: "Lunch", dishes: [{ name: "Rice", ingredients: [{ item: "rice", amount: 300, unit: "g", keeps: "long" }] }, { name: "Tomato sabzi", ingredients: [{ item: "tomato", amount: 4, unit: "pc" }] }] },
+      { date: WED, slot: "Dinner", dishes: [{ name: "Chilla", ingredients: [{ item: "besan", amount: 250, unit: "g", keeps: "long" }] }] } ] });
+    expect(r.orders.map((o: any) => o.id)).toEqual([first.id, second.id, r.orders[2].id, r.orders[3].id]);
+    expect(rows("orders")).toHaveLength(4);
+    // The placed order is as it was: still the cauliflower, no cucumber.
+    expect(JSON.stringify(rows("order_lines").filter((l) => l.order_id === first.id))).toBe(placedLines);
+    expect(order(first.id)).toMatchObject({ status: "placed", total: 640 });
+    // The next one follows the new plan, keeps the added paneer, and still leaves out the milk the family removed.
+    expect(items(second.id).sort()).toEqual(["besan", "paneer", "tomato"]);
+    expect(line(second.id, "paneer")).toMatchObject({ source: "added", qty: 2 });
+    expect(JSON.parse(order(second.id).skipped_items)).toEqual(["milk"]);
+    // Rice is already on the placed order, so the extra for Tuesday is not bought a second time.
+    expect(rows("order_lines").filter((l) => l.item.toLowerCase() === "rice")).toHaveLength(1);
+  });
+});
+
+describe("ask_low_or_out", () => {
+  it("ask_low_or_out lists the week's long-life items and removes what is at home (Review Focus 4)", async () => {
+    const { op, first, second, items, order, kit } = await plannedWeek();
+    const q = await op("ask_low_or_out", { week_start: MON });
+    expect(q).toEqual({ order_id: first.id, items: ["atta", "rice", "toor dal"], question: "Atta, rice, toor dal: any low or out?" });
+    const r = await op("ask_low_or_out", { week_start: MON, low_or_out: "ATTA is low" });
+    expect(r.order.id).toBe(first.id);
+    expect(r.order.lines.map((l: any) => l.item)).toContain("atta");
+    expect(r.order.lines.map((l: any) => l.item)).not.toContain("rice");
+    expect(r.order.lines.map((l: any) => l.item)).not.toContain("toor dal");
+    expect(r.order.skipped_items).toEqual(["rice", "toor dal"]);
+    // An item that was not asked about (fresh, or everyday) is never removed.
+    expect(r.order.lines.map((l: any) => l.item).sort()).toEqual(["atta", "cauliflower", "eggs", "milk", "potato"]);
+    expect(items(second.id)).toEqual(["milk"]);
+    // What is at home stays off the order through a rebuild.
+    rebuildScheduledOrders(kit.db, kit.emitChange);
+    expect(items(first.id).sort()).toEqual(["atta", "cauliflower", "eggs", "milk", "potato"]);
+    expect(JSON.parse(order(first.id).skipped_items)).toEqual(["rice", "toor dal"]);
+    // Asked again, only what is still on an order is listed.
+    expect((await op("ask_low_or_out", { week_start: MON })).question).toBe("Atta: any low or out?");
+  });
+
+  it("a later answer brings back an item said to be at home, and a word that names nothing is ignored", async () => {
+    const { op, first } = await plannedWeek();
+    await op("ask_low_or_out", { week_start: MON, low_or_out: ["atta"] });
+    const r = await op("ask_low_or_out", { week_start: MON, low_or_out: "Rice is out too, and ghee, atta" });
+    expect(r.order.id).toBe(first.id);
+    expect(r.order.lines.map((l: any) => l.item).sort()).toEqual(["atta", "cauliflower", "eggs", "milk", "potato", "rice"]);
+    expect(r.order.lines.find((l: any) => l.item === "rice")).toMatchObject({ amount: 400, unit: "g", source: "dish" });
+    expect(r.order.skipped_items).toEqual(["toor dal"]);
+  });
+
+  it("an answer that names nothing means all of it is at home", async () => {
+    const { op } = await plannedWeek();
+    const r = await op("ask_low_or_out", { week_start: MON, low_or_out: [] });
+    expect(r.order.lines.map((l: any) => l.item).sort()).toEqual(["cauliflower", "eggs", "milk", "potato"]);
+    expect(r.order.skipped_items).toEqual(["atta", "rice", "toor dal"]);
+    expect(await op("ask_low_or_out", { week_start: MON })).toMatchObject({ items: [], question: null });
+  });
+
+  it("an answer after the first order is placed leaves that order alone", async () => {
+    const { op, first, second, rows, items, order } = await plannedWeek();
+    await op("record_order", { order_id: first.id, placed: true });
+    const placedLines = JSON.stringify(rows("order_lines").filter((l) => l.order_id === first.id));
+    // The items are still asked about: they are on a live order.
+    expect(await op("ask_low_or_out", { week_start: MON })).toMatchObject({ order_id: second.id, items: ["atta", "rice", "toor dal"] });
+    const r = await op("ask_low_or_out", { week_start: MON, low_or_out: "atta is low" });
+    expect(JSON.stringify(rows("order_lines").filter((l) => l.order_id === first.id))).toBe(placedLines);
+    expect(order(first.id)).toMatchObject({ status: "placed", skipped_items: null });
+    // The next scheduled order is the one the answer is about: atta is already bought, so nothing is added to it.
+    expect(r.order.id).toBe(second.id);
+    expect(items(second.id)).toEqual(["milk"]);
+    expect(r.order.skipped_items).toEqual(["rice", "toor dal"]);
+  });
+
+  it("with no scheduled order left, an item that is out and on no order goes on a new order placed now", async () => {
+    const { op, first, second, third, fourth, rows, clock } = await plannedWeek();
+    await op("ask_low_or_out", { week_start: MON, low_or_out: "atta" });   // rice and toor dal are at home
+    await op("record_order", { order_id: first.id, placed: true });
+    for (const o of [second, third, fourth]) await op("cancel_order", { order_id: o.id });
+    clock.now = new Date(2026, 10, 22, 9, 30);
+    // Atta is on the placed order: naming it again adds nothing.
+    expect((await op("ask_low_or_out", { week_start: MON, low_or_out: "atta" })).order).toBeNull();
+    expect(rows("orders")).toHaveLength(4);
+    const r = await op("ask_low_or_out", { week_start: MON, low_or_out: "we are out of rice after all" });
+    expect(r.order).toMatchObject({ place_at: "2026-11-22T09:30", status: "scheduled", app: "zepto" });
+    expect(r.order.lines.map((l: any) => [l.item, l.amount, l.unit, l.source])).toEqual([["rice", 400, "g", "added"]]);
+    expect(JSON.parse(r.order.lines[0].sources)).toMatchObject([{ kind: "dish", label: "Mon 23 Nov lunch: Rice" }]);
+    expect(rows("orders")).toHaveLength(5);
+  });
+
+  it("refuses a week or an answer it cannot read", async () => {
+    const { op } = await plannedWeek();
+    expect((await op("ask_low_or_out", {})).code).toBe("APP_REFUSED");
+    expect((await op("ask_low_or_out", { week_start: MON, low_or_out: 3 })).code).toBe("APP_REFUSED");
+    expect(await op("ask_low_or_out", { week_start: "2026-11-30" })).toEqual({ order_id: null, items: [], question: null });
+  });
+});
+
+describe("place_order and record_order", () => {
+  it("place_order returns the message and refuses a placed order; record_order returns the intro once", async () => {
+    const { op, first, second, order, rows } = await plannedWeek();
+    const p = await op("place_order", { order_id: first.id });
+    expect(p.message).toMatch(/^Ordering this now: .+, ~₹[\d,]+ on Zepto$/);
+    expect(p.message).toContain("Aashirvaad Atta 5 kg"); expect(p.message).toContain("Amul Taaza 500 ml ×4"); expect(p.message).toContain("~₹405 on Zepto");
+    expect(p.order.wake_sent_at).toBe(NOW);
+    expect(p.needs_product.map((l: any) => l.item).sort()).toEqual(["cauliflower", "eggs", "potato", "rice", "toor dal"]);
+    expect(p.needs_qty.map((l: any) => l.item).sort()).toEqual(["cauliflower", "eggs", "potato", "rice", "toor dal"]);
+    const rec = await op("record_order", { order_id: first.id, placed: true, total: 640, app_order_ref: "ZP-1" });
+    expect(rec.intro).toContain("Your week is planned and Saturday's order is placed.");
+    expect(rec.intro).toContain("I check in at 3 pm about dinner and 7 pm about tomorrow");
+    expect(rec.order).toMatchObject({ status: "placed", placed_at: NOW, recorded_total: 640, app_order_ref: "ZP-1", paid_at: null });
+    expect(rows("house")[0].intro_sent_at).toBeTruthy();
+    const again = await op("place_order", { order_id: first.id });
+    expect(again.status).toBe(409); expect(again.error).toContain("placed, waiting for payment");
+    expect((await op("record_order", { order_id: first.id, placed: true })).status).toBe(409);
+    expect((await op("record_order", { order_id: second.id, placed: true })).intro).toBeUndefined();
+    expect(order(second.id).status).toBe("placed");
+  });
+
+  it("the intro names the times the check-ins really run", async () => {
+    const { op, owner, first, kit } = await plannedWeek();
+    await owner("GET", "/api/family");
+    kit.sqlite.run("UPDATE house SET dinner_check_time = '16:30', tomorrow_check_time = '20:00'");
+    const rec = await op("record_order", { order_id: first.id, placed: true });
+    expect(rec.intro).toContain("I check in at 4:30 pm about dinner and 8 pm about tomorrow");
+  });
+
+  it("a stored time that is not a time of day falls back to the default", async () => {
+    const { op, owner, first, kit } = await plannedWeek();
+    await owner("GET", "/api/family");
+    kit.sqlite.run("UPDATE house SET dinner_check_time = 'hourly', tomorrow_check_time = '20:00'");
+    expect((await op("record_order", { order_id: first.id, placed: true })).intro).toContain("I check in at 3 pm about dinner and 8 pm about tomorrow");
+  });
+
+  it("an order that was not planned from a week brings no intro", async () => {
+    const { op, rows } = await home();
+    const extra = (await op("add_to_order", { item: "paneer" })).order;
+    expect((await op("record_order", { order_id: extra.id, placed: true })).intro).toBeUndefined();
+    expect(rows("house")[0]?.intro_sent_at ?? null).toBeNull();
+  });
+
+  it("placed: false keeps the order scheduled with the note, to be tried again", async () => {
+    const { op, first } = await plannedWeek();
+    await op("place_order", { order_id: first.id });
+    const r = await op("record_order", { order_id: first.id, placed: false, note: "Zepto was down" });
+    expect(r.order).toMatchObject({ status: "scheduled", note: "Zepto was down", wake_sent_at: null, placed_at: null });
+    expect(r.intro).toBeUndefined();
+    expect((await op("place_order", { order_id: first.id })).message).toContain("Ordering this now");
+  });
+
+  it("paid: true closes a placed order as paid; only a placed order is paid or not", async () => {
+    const { op, first, second, clock } = await plannedWeek();
+    expect((await op("record_order", { order_id: first.id, paid: true })).status).toBe(409);
+    await op("record_order", { order_id: first.id, placed: true });
+    clock.now = new Date(2026, 10, 21, 18, 20);
+    const r = await op("record_order", { order_id: first.id, paid: true, total: 655 });
+    expect(r.order).toMatchObject({ status: "paid", placed_at: NOW, paid_at: "2026-11-21T18:20", recorded_total: 655 });
+    expect(r.rolled_into).toBeUndefined();
+    expect((await op("record_order", { order_id: first.id, paid: false })).status).toBe(409);
+    expect((await op("place_order", { order_id: first.id })).status).toBe(409);
+    // Placed and paid in one call.
+    expect((await op("record_order", { order_id: second.id, placed: true, paid: true })).order).toMatchObject({ status: "paid", placed_at: "2026-11-21T18:20", paid_at: "2026-11-21T18:20" });
+  });
+
+  it("refuses what it cannot read, an order that is not there, and an empty order", async () => {
+    const { op, first, items, owner, rows } = await plannedWeek();
+    expect((await op("record_order", { order_id: first.id })).code).toBe("APP_REFUSED");
+    expect((await op("record_order", { order_id: first.id, placed: "yes" })).code).toBe("APP_REFUSED");
+    expect((await op("record_order", { order_id: first.id, placed: false, paid: false })).code).toBe("APP_REFUSED");
+    expect((await op("record_order", { order_id: first.id, placed: true, total: -1 })).code).toBe("APP_REFUSED");
+    expect(rows("orders").find((o) => o.id === first.id).status).toBe("scheduled");
+    for (const name of ["place_order", "record_order", "cancel_order"]) {
+      expect((await op(name, { placed: true })).code).toBe("APP_REFUSED");
+      expect((await op(name, { order_id: "nope", placed: true })).status).toBe(404);
+    }
+    for (const l of rows("order_lines").filter((x) => x.order_id === first.id)) await owner("DELETE", `/api/_data/order_lines/${l.id}`);
+    expect(items(first.id)).toEqual([]);
+    const empty = await op("place_order", { order_id: first.id });
+    expect(empty.status).toBe(409); expect(empty.error).toContain("nothing on it");
+  });
+});
+
+describe("an order that is not paid, or cancelled", () => {
+  it("paid: false closes the order as not paid and rolls its lines into the next scheduled order", async () => {
+    const { op, first, second, items, line, rows, order, kit } = await plannedWeek();
+    await op("record_order", { order_id: first.id, placed: true });
+    const cauliflower = line(first.id, "cauliflower");
+    const r = await op("record_order", { order_id: first.id, paid: false });
+    expect(r.order).toMatchObject({ status: "not_paid", lines: [] });
+    expect(r.rolled_into.id).toBe(second.id);
+    expect(items(second.id).sort()).toEqual(["atta", "cauliflower", "eggs", "milk", "milk", "potato", "rice", "toor dal"]);
+    // A rolled line is the same line, now an added one, still saying what it is for.
+    expect(line(second.id, "cauliflower")).toMatchObject({ id: cauliflower.id, source: "added", sources: cauliflower.sources, amount: 1, unit: "pc" });
+    expect(rows("order_lines").filter((l) => l.order_id === second.id && l.item === "milk").map((l) => l.source).sort()).toEqual(["added", "regular"]);
+    // The rolled lines survive a rebuild, and the long-life ones are not bought twice.
+    rebuildScheduledOrders(kit.db, kit.emitChange);
+    expect(items(second.id).sort()).toEqual(["atta", "cauliflower", "eggs", "milk", "milk", "potato", "rice", "toor dal"]);
+    expect(order(second.id)).toMatchObject({ covers_from: TUE, covers_to: WED });
+    expect(rows("orders")).toHaveLength(4);
+  });
+
+  it("with no scheduled order left, the lines roll into a new order placed now", async () => {
+    const { op, first, second, third, fourth, rows, clock, items, kit } = await plannedWeek();
+    await op("record_order", { order_id: first.id, placed: true });
+    for (const o of [second, third, fourth]) await op("cancel_order", { order_id: o.id });
+    clock.now = new Date(2026, 10, 21, 19, 0);
+    const r = await op("record_order", { order_id: first.id, paid: false });
+    expect(r.rolled_into).toMatchObject({ place_at: "2026-11-21T19:00", status: "scheduled", app: "zepto", week_start: null });
+    expect(r.rolled_into.lines.map((l: any) => l.item).sort()).toEqual(["atta", "cauliflower", "eggs", "milk", "potato", "rice", "toor dal"]);
+    expect(r.rolled_into.lines.every((l: any) => l.source === "added")).toBe(true);
+    expect(rows("orders")).toHaveLength(5);
+    rebuildScheduledOrders(kit.db, kit.emitChange);
+    expect(items(r.rolled_into.id).sort()).toEqual(["atta", "cauliflower", "eggs", "milk", "potato", "rice", "toor dal"]);
+  });
+
+  it("cancel_order cancels a scheduled order; a placed one is not paid and rolls on; the rest are refused", async () => {
+    const { op, first, second, third, items, order } = await plannedWeek();
+    const c = await op("cancel_order", { order_id: third.id });
+    expect(c.order.status).toBe("cancelled"); expect(c.rolled_into).toBeUndefined();
+    const twice = await op("cancel_order", { order_id: third.id });
+    expect(twice.status).toBe(409); expect(twice.error).toContain("already cancelled");
+
+    await op("record_order", { order_id: first.id, placed: true });
+    const r = await op("cancel_order", { order_id: first.id });
+    expect(r.order).toMatchObject({ status: "not_paid", lines: [] });
+    expect(r.rolled_into.id).toBe(second.id);
+    expect(items(second.id)).toContain("cauliflower");
+    const notPaid = await op("cancel_order", { order_id: first.id });
+    expect(notPaid.status).toBe(409); expect(notPaid.error).toContain("not paid");
+
+    await op("record_order", { order_id: second.id, placed: true, paid: true });
+    const paid = await op("cancel_order", { order_id: second.id });
+    expect(paid.status).toBe(409); expect(paid.error).toBe("a paid order can't be cancelled here; cancel it in Zepto");
+    expect(order(second.id).status).toBe("paid");
+  });
+});
+
+describe("add_to_order", () => {
+  it("add_to_order with no order_id goes to the next scheduled order and remembers the product", async () => {
+    const { op, first, second, rows, line } = await plannedWeek();
+    const r = await op("add_to_order", { item: "Paneer", qty: 2, product_id: 4411, name_on_app: "Milky Mist Paneer 200 g", pack: "200 g", price: 95, image: "https://img/p.jpg" });
+    expect(r.order.id).toBe(first.id);
+    expect(r.line).toMatchObject({ order_id: first.id, item: "Paneer", qty: 2, qty_checked: 1, source: "added", sources: null,
+      product_id: "4411", name_on_app: "Milky Mist Paneer 200 g", pack: "200 g", price: 95, image: "https://img/p.jpg" });
+    expect(r.order.total).toBe(405 + 190);
+    // Remembered under the line's item, so the next order that needs paneer has its product.
+    expect(rows("products").find((p) => p.item === "paneer")).toMatchObject({ app: "zepto", product_id: "4411", pack_amount: 200, pack_unit: "g", price: 95 });
+    // Once the first order is placed, the next scheduled one takes what is added; the remembered product comes with it.
+    await op("record_order", { order_id: first.id, placed: true });
+    const next = await op("add_to_order", { item: "paneer" });
+    expect(next.order.id).toBe(second.id);
+    expect(next.line).toMatchObject({ qty: 1, qty_checked: 0, product_id: "4411", price: 95 });
+    expect(line(second.id, "paneer")).toBeDefined();
+  });
+
+  it("goes on the order named while it is scheduled, and is refused on one that is not", async () => {
+    const { op, first, third } = await plannedWeek();
+    const r = await op("add_to_order", { order_id: third.id, item: "coriander" });
+    expect(r.order.id).toBe(third.id);
+    expect(r.line).toMatchObject({ item: "coriander", qty: 1, qty_checked: 0, product_id: null, source: "added" });
+    await op("record_order", { order_id: first.id, placed: true });
+    const refused = await op("add_to_order", { order_id: first.id, item: "coriander" });
+    expect(refused.status).toBe(409); expect(refused.error).toContain("placed, waiting for payment");
+    expect((await op("add_to_order", { order_id: "nope", item: "coriander" })).status).toBe(404);
+  });
+
+  it("with no order waiting, a new order placed now takes it", async () => {
+    const { op, rows } = await home(new Date(2026, 10, 24, 11, 15));
+    const r = await op("add_to_order", { item: "coriander" });
+    expect(r.order).toMatchObject({ place_at: "2026-11-24T11:15", status: "scheduled", app: "zepto", week_start: null });
+    expect(r.order.lines).toHaveLength(1);
+    expect((await op("add_to_order", { item: "mint" })).order.id).toBe(r.order.id);
+    expect(rows("orders")).toHaveLength(1);
+  });
+
+  it("refuses an item with no name, a quantity that is not a whole number, and a product without its name", async () => {
+    const { op, rows } = await plannedWeek();
+    const lines = rows("order_lines").length;
+    expect((await op("add_to_order", {})).code).toBe("APP_REFUSED");
+    expect((await op("add_to_order", { item: "paneer", qty: 1.5 })).code).toBe("APP_REFUSED");
+    expect((await op("add_to_order", { item: "paneer", qty: 0 })).code).toBe("APP_REFUSED");
+    expect((await op("add_to_order", { item: "paneer", product_id: "4411" })).code).toBe("APP_REFUSED");
+    expect(rows("order_lines")).toHaveLength(lines);
+    expect(rows("products").find((p) => p.item === "paneer")).toBeUndefined();
+  });
+});
+
+describe("a rebuild that fails", () => {
+  it("is logged and leaves the orders as they were; the next change tries again", async () => {
+    const { op, settle, second, items, kit } = await plannedWeek();
+    const warned = spyOn(console, "warn").mockImplementation(() => {});
+    await op("set_dish", { date: TUE, slot: "Lunch", name: "Onion sabzi", ingredients: [{ item: "onion", amount: 2, unit: "pc" }] });
+    kit.sqlite.run("ALTER TABLE order_lines RENAME TO order_lines_gone");
+    settle();
+    expect(warned).toHaveBeenCalledTimes(1);
+    warned.mockRestore();
+    kit.sqlite.run("ALTER TABLE order_lines_gone RENAME TO order_lines");
+    expect(items(second.id)).toEqual(["milk"]);
+    await op("set_regular", { item: "curd", amount: 400, unit: "g", every: "day" });
+    settle();
+    expect(items(second.id).sort()).toEqual(["curd", "milk", "onion"]);
+  });
+});

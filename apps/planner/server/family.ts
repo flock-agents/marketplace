@@ -119,8 +119,9 @@ const writer = (c: Context): string => {
   const agent = c.req.header("x-flock-agent")?.trim(); if (agent) return `agent:${agent}`;
   const user = c.req.header("x-flock-user")?.trim(); return user ? `user:${user}` : "app";
 };
-type Answer = { status?: 404; body: Record<string, unknown> };
-/** The app's write routes: a JSON body in, the answer out, a refusal as a 400 with the reason. */
+type Answer = { status?: 404 | 409; body: Record<string, unknown> };
+/** The app's write routes: a JSON body in, the answer out, a refusal as a 400 with the reason. A route answers 404 for a row
+ *  that is not there and 409 for one in a state the write does not fit, each with its reason. */
 export const writeRoutes = (hono: Hono<any>) =>
   (path: string, run: (b: Record<string, unknown>, by: string, c: Context) => Answer | Promise<Answer>) =>
     hono.post(path, async (c) => {

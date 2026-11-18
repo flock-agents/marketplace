@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { addDays, dayLabel, localStamp, nextMonday, todayStr, weekDates, weekdayOf } from "./dates";
+import { addDays, dayLabel, localStamp, mondayOf, nextMonday, todayStr, weekDates, weekdayLong, weekdayOf } from "./dates";
 
 describe("dates", () => {
   it("finds the Monday strictly after a date", () => {
@@ -10,6 +10,9 @@ describe("dates", () => {
   it("names the weekday and the day", () => {
     expect(weekdayOf("2026-11-24")).toBe("Tue");
     expect(weekdayOf("2026-11-22")).toBe("Sun");
+    expect(weekdayLong("2026-11-21")).toBe("Saturday");
+    expect(mondayOf("2026-11-22")).toBe("2026-11-16");   // Sunday → the Monday before
+    expect(mondayOf("2026-11-23")).toBe("2026-11-23");
     expect(dayLabel("2026-11-24")).toBe("Tue 24 Nov");
     expect(dayLabel("2026-12-01")).toBe("Tue 1 Dec");
   });

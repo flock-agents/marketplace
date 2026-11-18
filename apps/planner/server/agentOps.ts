@@ -9,6 +9,11 @@ import guide from "./agent-guide.md" with { type: "text" };
 type Call = { method: "GET" | "POST" | "PATCH" | "DELETE"; path: string; body?: unknown };
 type Route = (p: Record<string, unknown>) => Call | { error: string; code: string; status: number };
 
+/** An operation on one order: its id goes in the path. */
+const onOrder = (action: string): Route => (p) => (typeof p.order_id === "string" && p.order_id.trim()) || typeof p.order_id === "number"
+  ? { method: "POST", path: `/api/orders/${encodeURIComponent(String(p.order_id).trim())}/${action}`, body: p }
+  : { error: "order_id is required: the id of the order", code: "APP_REFUSED", status: 400 };
+
 /** Each operation: where it goes in the app's own API. */
 export const ROUTES: Record<string, Route> = {
   set_person: (p) => ({ method: "POST", path: "/api/family/people", body: p }),
@@ -24,6 +29,11 @@ export const ROUTES: Record<string, Route> = {
   import_order_history: (p) => ({ method: "POST", path: "/api/order-history", body: p }),
   remember_product: (p) => ({ method: "POST", path: "/api/products", body: p }),
   save_recipe: (p) => ({ method: "POST", path: "/api/recipes/save", body: p }),
+  ask_low_or_out: (p) => ({ method: "POST", path: "/api/orders/low-or-out", body: p }),
+  add_to_order: (p) => ({ method: "POST", path: "/api/orders/add", body: p }),
+  place_order: onOrder("place"),
+  record_order: onOrder("record"),
+  cancel_order: onOrder("cancel"),
 };
 
 /** Operations that take more than one call, or none. */

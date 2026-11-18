@@ -1,0 +1,348 @@
+// The orders: what is bought, grouped by when it is needed. A final plan gives each pair of days an order: fresh items go
+// in the order that covers their day, long-life ones once, in the week's first order. The first order is placed right away,
+// the others the evening before their first day. Orders not yet placed follow the plan: every change to a meal, a dish or
+// an everyday item builds their lines again, keeping what the family added and leaving out what they said they have.
+// Nothing about what is at home is stored beyond the order it was said about (skipped_items).
+import { and, asc, desc, eq, inArray, ne, sql } from "drizzle-orm";
+import { _changes } from "@flock/app-kit";
+import { dish_items, dishes, order_lines, orders, plan_meals, regulars } from "./db/schema";
+import { MORNING_TIME, ORDER_TIME } from "./db/constants";
+import { addDays, dayLabel, localStamp, mondayOf, todayStr } from "./dates";
+import { groceryApp, list, type Db, type Emit } from "./family";
+import { normItem, packsFor, parsePack, productFor } from "./products";
+import { regularNeeds } from "./regulars";
+
+/** One thing needed on one day: an ingredient of a dish, or an everyday item. */
+export type Need = { date: string; item: string; amount: number | null; unit: string | null; keeps: "fresh" | "long";
+  source: "dish" | "regular"; source_id: string; label: string };
+/** What a line is for: "Mon 23 Nov lunch: Aloo gobi", "Everyday: milk". */
+export type Source = { kind: "dish" | "regular"; id: string; label: string };
+export type Grouped = { item: string; unit: string | null; amount: number | null; keeps: "fresh" | "long"; sources: Source[] };
+export type OrderRow = typeof orders.$inferSelect;
+export type LineRow = typeof order_lines.$inferSelect;
+/** An order as the routes answer with it. `total` adds up the lines that have a price; `recorded_total` is what the grocery
+ *  app charged, once the agent recorded it. */
+export type OrderView = Omit<OrderRow, "total" | "skipped_items"> & { total: number; recorded_total: number | null; skipped_items: string[]; lines: LineRow[] };
+type Change = Parameters<Emit>;
+
+// ── Pure: grouping needs into lines, days into orders, and reading the low-or-out answer ──
+
+const lineKey = (item: string, unit: string | null): string => `${normItem(item)}|${(unit ?? "").trim().toLowerCase()}`;
+
+/** Needs added up into lines: one line per item and unit. The same item in two units stays two lines (2 pc and 200 g of
+ *  onion are never one number); an amount nobody gave leaves the line's amount unknown. */
+export function groupNeeds(needs: Need[]): Grouped[] {
+  const lines = new Map<string, Grouped>();
+  for (const n of needs) {
+    const key = lineKey(n.item, n.unit);
+    const g = lines.get(key);
+    if (!g) { lines.set(key, { item: n.item.trim(), unit: n.unit, amount: n.amount, keeps: n.keeps, sources: [{ kind: n.source, id: n.source_id, label: n.label }] }); continue; }
+    // Rounded to a millionth, so 0.1 + 0.2 is 0.3.
+    g.amount = g.amount == null || n.amount == null ? null : Math.round((g.amount + n.amount) * 1e6) / 1e6;
+    if (n.keeps === "long") g.keeps = "long";
+    if (!g.sources.some((s) => s.kind === n.source && s.id === n.source_id)) g.sources.push({ kind: n.source, id: n.source_id, label: n.label });
+  }
+  return [...lines.values()];
+}
+
+/** An order there already is, by the date it is placed. Paid and not paid count as placed: that date's order has gone out. */
+export type LiveOrder = { id: string; date: string; status: "scheduled" | "placed" | "paid" | "not_paid" };
+export type PlannedOrder = { days: string[]; place_at: string; merge_into?: string; first: boolean };
+
+/** Days that no order covers yet (ascending), made into orders: two days next to each other share one. The first is placed
+ *  now, each later one the evening before its first day. One order a date at most: a pair that lands on a date with a
+ *  scheduled order joins it; on a date whose order was already placed, it moves to the morning of its first day. */
+export function planOrders(i: { days: string[]; now: string; live: LiveOrder[] }): PlannedOrder[] {
+  const pairs: string[][] = [];
+  for (const day of i.days) {
+    const last = pairs[pairs.length - 1];
+    if (last && last.length === 1 && addDays(last[0], 1) === day) last.push(day); else pairs.push([day]);
+  }
+  const on = (date: string, scheduled: boolean) => i.live.find((o) => o.date === date && (o.status === "scheduled") === scheduled);
+  return pairs.map((days, k) => {
+    let place_at = k === 0 ? i.now : `${addDays(days[0], -1)}T${ORDER_TIME}`;
+    let into = on(place_at.slice(0, 10), true);
+    if (!into && on(place_at.slice(0, 10), false)) {
+      place_at = `${days[0]}T${MORNING_TIME}`;
+      into = on(days[0], true);
+    }
+    return { days, place_at, ...(into ? { merge_into: into.id } : {}), first: k === 0 };
+  });
+}
+
+/** The words of a low-or-out answer: lowercase, without punctuation or "and". */
+function answerWords(answer: string[]): Set<string> {
+  const words = answer.flatMap((a) => a.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").split(" "));
+  return new Set(words.filter((w) => w && w !== "and"));
+}
+
+/** The asked items an answer names. An item is named when the answer has one of its words ("dal" names toor dal; "ATTA is
+ *  low" names atta). A word that names nothing asked is ignored. */
+export function namedItems(asked: string[], answer: string[]): string[] {
+  const words = answerWords(answer);
+  return asked.filter((item) => normItem(item).split(" ").some((w) => words.has(w)));
+}
+
+// ── Reading ──
+
+const dates = (from: string, to: string): string[] => { const out: string[] = []; for (let d = from; d <= to; d = addDays(d, 1)) out.push(d); return out; };
+const skips = (o: OrderRow): string[] => list<string>(o.skipped_items).map(normItem);
+/** An order made from a plan has a week; one made for an added, rolled or missing item has none, and no days of its own. */
+const planned = (o: OrderRow): o is OrderRow & { week_start: string } => !!o.week_start;
+
+/** Everything needed on `days`: the ingredients of the dishes of final meals, and the everyday items due. */
+export function collectNeeds(db: Db, days: string[]): Need[] {
+  if (!days.length) return [];
+  const needs: Need[] = [];
+  const meals = db.select().from(plan_meals).where(and(inArray(plan_meals.date, days), eq(plan_meals.status, "final"))).orderBy(asc(plan_meals.date), asc(plan_meals.created_at), sql`rowid`).all();
+  for (const m of meals) {
+    if (m.ordered_in) continue;
+    for (const d of db.select().from(dishes).where(eq(dishes.meal_id, m.id)).orderBy(asc(dishes.position), asc(dishes.created_at)).all()) {
+      const label = `${dayLabel(m.date)} ${m.slot.charAt(0).toLowerCase()}${m.slot.slice(1)}: ${d.name}`;
+      for (const i of db.select().from(dish_items).where(eq(dish_items.dish_id, d.id)).orderBy(asc(dish_items.created_at), sql`rowid`).all())
+        needs.push({ date: m.date, item: i.item, amount: i.amount, unit: i.unit, keeps: i.keeps === "long" ? "long" : "fresh", source: "dish", source_id: d.id, label });
+    }
+  }
+  for (const r of db.select().from(regulars).orderBy(asc(regulars.created_at), sql`rowid`).all())
+    for (const n of regularNeeds(r, days))
+      needs.push({ date: n.date, item: r.item, amount: n.amount, unit: r.unit, keeps: r.keeps === "long" ? "long" : "fresh", source: "regular", source_id: r.id, label: `Everyday: ${r.item}` });
+  return needs;
+}
+
+function linesOf(db: Db, orderIds: string[]): LineRow[] {
+  return orderIds.length ? db.select().from(order_lines).where(inArray(order_lines.order_id, orderIds)).orderBy(asc(order_lines.created_at), sql`rowid`).all() : [];
+}
+
+export function orderView(db: Db, id: string): OrderView | null {
+  const o = db.select().from(orders).where(eq(orders.id, id)).get();
+  if (!o) return null;
+  const lines = linesOf(db, [id]);
+  const total = lines.reduce((sum, l) => sum + (l.price == null ? 0 : (l.qty ?? 1) * l.price), 0);
+  return { ...o, total, recorded_total: o.total, skipped_items: list<string>(o.skipped_items), lines };
+}
+
+/** A week's orders that were not cancelled, in the order they are placed. */
+export function weekOrders(db: Db, weekStart: string): OrderView[] {
+  return db.select({ id: orders.id }).from(orders).where(and(eq(orders.week_start, weekStart), ne(orders.status, "cancelled"))).orderBy(asc(orders.place_at), sql`rowid`).all()
+    .map((o) => orderView(db, o.id)!);
+}
+
+/** The scheduled order placed soonest: of one week, or of all of them. */
+export function nextScheduled(db: Db, weekStart?: string): OrderRow | null {
+  return db.select().from(orders).where(and(eq(orders.status, "scheduled"), ...(weekStart ? [eq(orders.week_start, weekStart)] : [])))
+    .orderBy(asc(orders.place_at), sql`rowid`).limit(1).get() ?? null;
+}
+
+// ── Building ──
+
+/** A week's long-life side: the orders made for it, the long-life needs of the days they cover, and the scheduled order
+ *  that carries what is not yet bought (the soonest one). A day before the week counts only when its own week has no
+ *  orders: an order taken over from last week does not buy last week's rice again. */
+function weekLong(db: Db, weekStart: string) {
+  const live = db.select().from(orders).where(ne(orders.status, "cancelled")).all().filter(planned);
+  const mine = live.filter((o) => o.week_start === weekStart);
+  const otherWeeks = new Set(live.map((o) => o.week_start));
+  const days = [...new Set(mine.flatMap((o) => dates(o.covers_from, o.covers_to)))].sort().filter((d) => d >= weekStart || !otherWeeks.has(mondayOf(d)));
+  return { mine, lines: linesOf(db, mine.map((o) => o.id)), needs: collectNeeds(db, days).filter((n) => n.keeps === "long"), carrier: nextScheduled(db, weekStart) };
+}
+
+/** The product and the number of packs for a line: the product remembered for the item, with as many packs as cover the
+ *  amount. When the packs cannot be worked out the line keeps the number it had (1 when new), marked for the agent to set. */
+function stocked(db: Db, app: string, g: Grouped, line?: LineRow) {
+  const p = productFor(db, g.item, app);
+  const pack = p ? (p.pack_amount != null ? { amount: p.pack_amount, unit: p.pack_unit } : parsePack(p.pack)) : parsePack(line?.pack);
+  const qty = g.amount == null || !pack ? null : packsFor(g.amount, g.unit, pack.amount, pack.unit);
+  return { ...(p ? { product_id: p.product_id, name_on_app: p.name_on_app, pack: p.pack, price: p.price, image: p.image } : {}),
+    qty: qty ?? line?.qty ?? 1, qty_checked: qty == null ? 0 : 1 };
+}
+
+/** Make an order's dish and everyday lines the ones `wanted`. A line whose amount did not change is left as it is (the
+ *  packs the family or the agent set stay), so building twice from the same plan changes nothing. */
+function syncLines(db: Db, o: OrderRow, wanted: Grouped[], had: LineRow[], changes: Change[]) {
+  const left = new Map<string, LineRow>();
+  const drop = (l: LineRow) => { db.delete(order_lines).where(eq(order_lines.id, l.id)).run(); changes.push(["order_lines", l.id, "delete", "app"]); };
+  for (const l of had) { const key = lineKey(l.item, l.unit); if (left.has(key)) drop(l); else left.set(key, l); }
+  for (const g of wanted) {
+    const key = lineKey(g.item, g.unit), line = left.get(key);
+    const source = g.sources.some((s) => s.kind === "dish") ? "dish" : "regular", sources = JSON.stringify(g.sources);
+    if (!line) {
+      const row = db.insert(order_lines).values({ ...stocked(db, o.app, g), order_id: o.id, item: g.item, amount: g.amount, unit: g.unit, source, sources, updated_by: "app" }).returning().get();
+      changes.push(["order_lines", row.id, "insert", "app"]);
+      continue;
+    }
+    left.delete(key);
+    const restock = line.amount !== g.amount || (!line.product_id && !!productFor(db, g.item, o.app));
+    if (!restock && line.source === source && line.sources === sources) continue;
+    db.update(order_lines).set({ ...(restock ? { ...stocked(db, o.app, g, line), amount: g.amount } : {}), source, sources, updated_at: new Date().toISOString() }).where(eq(order_lines.id, line.id)).run();
+    changes.push(["order_lines", line.id, "update", "app"]);
+  }
+  for (const l of left.values()) drop(l);
+}
+
+/** Give every scheduled order of a plan the lines its days need now. Fresh items go to the order covering their day;
+ *  long-life ones to the week's soonest scheduled order, unless an order already placed has them, a line rolled over from
+ *  an unpaid order has them, or the family said they have them. Lines the family added are not touched. */
+function fillOrders(db: Db, changes: Change[]) {
+  const scheduled = db.select().from(orders).where(eq(orders.status, "scheduled")).orderBy(asc(orders.place_at), sql`rowid`).all().filter(planned);
+  for (const weekStart of new Set(scheduled.map((o) => o.week_start))) {
+    const w = weekLong(db, weekStart);
+    const bought = new Set(w.mine.filter((o) => o.status === "placed" || o.status === "paid").map((o) => o.id));
+    const have = new Set(w.lines.filter((l) => bought.has(l.order_id) || (l.source === "added" && l.sources)).map((l) => normItem(l.item)));
+    const atHome = new Set(w.mine.flatMap(skips));
+    const long = w.needs.filter((n) => !have.has(normItem(n.item)) && !atHome.has(normItem(n.item)));
+    for (const o of scheduled.filter((s) => s.week_start === weekStart)) {
+      const own = new Set(skips(o));
+      const fresh = collectNeeds(db, dates(o.covers_from, o.covers_to)).filter((n) => n.keeps !== "long" && !own.has(normItem(n.item)));
+      syncLines(db, o, groupNeeds([...fresh, ...(o.id === w.carrier?.id ? long : [])]), w.lines.filter((l) => l.order_id === o.id && l.source !== "added"), changes);
+    }
+  }
+}
+
+/** Run a write on the orders in one transaction; the pages hear of its changes only once it is committed. */
+export function commitOrders<T>(db: Db, emit: Emit, run: (tx: Db, changes: Change[]) => T): T {
+  const changes: Change[] = [];
+  const out = db.transaction((tx) => run(tx as unknown as Db, changes));
+  for (const c of changes) emit(...c);
+  return out;
+}
+
+/** After the plan, a dish or an everyday item changed: every order not yet placed gets the lines its days need now. */
+export function rebuildScheduledOrders(db: Db, emit: Emit): void { commitOrders(db, emit, fillOrders); }
+
+/** A scheduled order with no days of its own, placed now: for an item added when no order is waiting, lines rolled over
+ *  from an unpaid order, or a long-life item that turned out to be missing. */
+export function extraOrder(db: Db, app: string, now: Date, by: string, changes: Change[]): OrderRow {
+  const row = db.insert(orders).values({ place_at: localStamp(now), covers_from: todayStr(now), covers_to: todayStr(now), week_start: null, app, status: "scheduled", updated_by: by }).returning().get();
+  changes.push(["orders", row.id, "insert", by]);
+  return row;
+}
+
+/** Once a week's plan is final: an order for every day from tomorrow to the week's Sunday that no order covers yet (a
+ *  cancelled order covers nothing), then the lines of every scheduled order. All of it in one transaction: a failure
+ *  leaves the orders as they were. Answers with the week's orders. */
+export function buildOrdersForWeek(db: Db, weekStart: string, now: Date, emit: Emit): OrderView[] {
+  commitOrders(db, emit, (tx, changes) => {
+    const live = tx.select().from(orders).where(ne(orders.status, "cancelled")).all();
+    const covered = new Set(live.filter(planned).flatMap((o) => dates(o.covers_from, o.covers_to)));
+    const days = dates(addDays(todayStr(now), 1), addDays(weekStart, 6)).filter((d) => !covered.has(d));
+    const app = groceryApp(tx);
+    // An order the agent was already woken to place is as good as placed: nothing joins it now.
+    const there: LiveOrder[] = live.map((o) => ({ id: o.id, date: o.place_at.slice(0, 10), status: o.status === "scheduled" && !o.wake_sent_at ? "scheduled" : "placed" }));
+    for (const p of planOrders({ days, now: localStamp(now), live: there })) {
+      const from = p.days[0], to = p.days[p.days.length - 1];
+      const into = p.merge_into ? live.find((o) => o.id === p.merge_into) : undefined;
+      if (into) {
+        const own = planned(into);
+        tx.update(orders).set({ covers_from: own && into.covers_from < from ? into.covers_from : from, covers_to: own && into.covers_to > to ? into.covers_to : to,
+          week_start: weekStart, updated_at: new Date().toISOString() }).where(eq(orders.id, into.id)).run();
+        changes.push(["orders", into.id, "update", "app"]);
+      } else {
+        const row = tx.insert(orders).values({ place_at: p.place_at, covers_from: from, covers_to: to, week_start: weekStart, app, status: "scheduled", updated_by: "app" }).returning().get();
+        changes.push(["orders", row.id, "insert", "app"]);
+      }
+    }
+    fillOrders(tx, changes);
+  });
+  return weekOrders(db, weekStart);
+}
+
+// ── Low or out ──
+
+/** What ask_low_or_out asks about: the long-life items on the week's orders that are scheduled, placed or paid. */
+export function lowOrOutQuestion(db: Db, weekStart: string): { order_id: string | null; items: string[]; question: string | null } {
+  const w = weekLong(db, weekStart);
+  const long = new Set(w.needs.map((n) => normItem(n.item)));
+  const live = new Set(w.mine.filter((o) => o.status !== "not_paid").map((o) => o.id));
+  const items = new Map<string, string>();
+  for (const l of w.lines) if (live.has(l.order_id) && long.has(normItem(l.item)) && !items.has(normItem(l.item))) items.set(normItem(l.item), l.item.trim());
+  const names = [...items.keys()].sort().map((k) => items.get(k)!);
+  const text = names.join(", ");
+  return { order_id: w.carrier?.id ?? null, items: names, question: text ? `${text.charAt(0).toUpperCase()}${text.slice(1)}: any low or out?` : null };
+}
+
+/** The family's answer, applied to the week's next scheduled order. What was asked is every long-life item on a live order
+ *  or said to be at home earlier. One the answer does not name is at home: its lines leave that order and it is skipped
+ *  there. One it names is ordered: it comes back to that order when no live order has it; with no scheduled order left, a
+ *  new order placed now takes it. Orders already placed are not touched. Answers with the order changed or made, or null. */
+export function applyLowOrOut(db: Db, weekStart: string, answer: string[], now: Date, by: string, emit: Emit): OrderView | null {
+  const id = commitOrders(db, emit, (tx, changes) => {
+    const w = weekLong(tx, weekStart);
+    const long = new Set(w.needs.map((n) => normItem(n.item)));
+    const live = new Set(w.mine.filter((o) => o.status !== "not_paid").map((o) => o.id));
+    const onLive = new Set(w.lines.filter((l) => live.has(l.order_id)).map((l) => normItem(l.item)).filter((i) => long.has(i)));
+    const asked = [...new Set([...onLive, ...w.mine.flatMap(skips).filter((i) => long.has(i))])].sort();
+    const named = new Set(namedItems(asked, answer));
+    const atHome = asked.filter((i) => !named.has(i));
+    for (const o of w.mine) {
+      const was = skips(o);
+      const next = was.filter((i) => !named.has(i));
+      if (o.id === w.carrier?.id) for (const i of atHome) if (!next.includes(i)) next.push(i);
+      if (next.length === was.length && next.every((i, k) => i === was[k])) continue;
+      tx.update(orders).set({ skipped_items: JSON.stringify(next), updated_at: new Date().toISOString() }).where(eq(orders.id, o.id)).run();
+      changes.push(["orders", o.id, "update", by]);
+    }
+    if (w.carrier) {
+      for (const l of w.lines.filter((x) => x.order_id === w.carrier!.id && atHome.includes(normItem(x.item)))) {
+        tx.delete(order_lines).where(eq(order_lines.id, l.id)).run();
+        changes.push(["order_lines", l.id, "delete", "app"]);
+      }
+      fillOrders(tx, changes);
+      return w.carrier.id;
+    }
+    const missing = groupNeeds(w.needs.filter((n) => named.has(normItem(n.item)) && !onLive.has(normItem(n.item))));
+    if (!missing.length) return null;
+    const extra = extraOrder(tx, groceryApp(tx), now, by, changes);
+    for (const g of missing) {
+      const row = tx.insert(order_lines).values({ ...stocked(tx, extra.app, g), order_id: extra.id, item: g.item, amount: g.amount, unit: g.unit, source: "added", sources: JSON.stringify(g.sources), updated_by: by }).returning().get();
+      changes.push(["order_lines", row.id, "insert", by]);
+    }
+    return extra.id;
+  });
+  return id ? orderView(db, id) : null;
+}
+
+// ── Not paid ──
+
+/** An order that was placed and not paid: its lines move to the next scheduled order (a new one placed now when none is
+ *  waiting) as added lines, each still saying what it is for. The unpaid order keeps its days, so nothing is built for them
+ *  again. Answers with the id of the order the lines went to, or null when it had none. */
+export function rollUnpaid(db: Db, o: OrderRow, now: Date, by: string, changes: Change[]): string | null {
+  db.update(orders).set({ status: "not_paid", updated_at: new Date().toISOString(), updated_by: by }).where(eq(orders.id, o.id)).run();
+  changes.push(["orders", o.id, "update", by]);
+  const lines = linesOf(db, [o.id]);
+  if (!lines.length) return null;
+  const target = nextScheduled(db) ?? extraOrder(db, o.app, now, by, changes);
+  for (const l of lines) {
+    db.update(order_lines).set({ order_id: target.id, source: "added", updated_at: new Date().toISOString(), updated_by: by }).where(eq(order_lines.id, l.id)).run();
+    changes.push(["order_lines", l.id, "update", by]);
+  }
+  return target.id;
+}
+
+// ── Lines the family removed on the Shopping page ──
+
+/** A dish or everyday line removed from a scheduled order (through the kit's data routes, which keep the row as it was):
+ *  the order remembers the item as one the family has, so the next rebuild does not bring it back. */
+export function lineRemoved(db: Db, lineId: string, emit: Emit): void {
+  const change = db.select().from(_changes).where(and(eq(_changes.table_name, "order_lines"), eq(_changes.row_id, lineId), eq(_changes.op, "delete"))).orderBy(desc(sql`rowid`)).limit(1).get();
+  let line: Partial<LineRow> | null = null;
+  try { line = change?.before ? JSON.parse(change.before) : null; } catch { /* nothing to read */ }
+  if (!line?.item || !line.order_id || line.source === "added") return;
+  setSkipped(db, line.order_id, (was) => (was.includes(normItem(line!.item!)) ? was : [...was, normItem(line!.item!)]), emit);
+}
+
+/** The line is back (the removal was undone): the item is no longer one the family has. */
+export function lineRestored(db: Db, lineId: string, emit: Emit): void {
+  const line = db.select().from(order_lines).where(eq(order_lines.id, lineId)).get();
+  if (!line || line.source === "added") return;
+  setSkipped(db, line.order_id, (was) => was.filter((i) => i !== normItem(line.item)), emit);
+}
+
+function setSkipped(db: Db, orderId: string, change: (was: string[]) => string[], emit: Emit) {
+  const o = db.select().from(orders).where(eq(orders.id, orderId)).get();
+  if (!o || o.status !== "scheduled") return;
+  const was = skips(o), next = change(was);
+  if (next.length === was.length) return;
+  db.update(orders).set({ skipped_items: JSON.stringify(next), updated_at: new Date().toISOString() }).where(eq(orders.id, o.id)).run();
+  emit("orders", o.id, "update", "app");
+}

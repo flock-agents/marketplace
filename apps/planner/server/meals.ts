@@ -5,7 +5,7 @@ import type { Hono } from "hono";
 import { and, asc, eq, gte, inArray, lte, sql } from "drizzle-orm";
 import { dish_items, dishes, people, plan_meals, regulars, saved_recipes } from "./db/schema";
 import { KEEPS, SLOTS, type GroceryApp } from "./db/constants";
-import { addDays, weekDates, weekdayOf, WEEKDAYS } from "./dates";
+import { addDays, mondayOf, weekDates, weekdayOf } from "./dates";
 import { getHouse, groceryApp, houseView, isObject, list, name, names, refuse, words, writeRoutes,
   type Db, type Emit, type HouseView, type PersonRow } from "./family";
 
@@ -37,7 +37,6 @@ type Meal = { date: string; slot: string; ordered_in?: boolean; note?: string | 
 type Change = Parameters<Emit>;
 
 const now = () => new Date().toISOString();
-const mondayOf = (date: string): string => addDays(date, -WEEKDAYS.indexOf(weekdayOf(date)));
 const inWeek = (weekStart: string) => and(gte(plan_meals.date, weekStart), lte(plan_meals.date, addDays(weekStart, 6)));
 
 /** Every slot a meal can have: the three everyday ones, then the house's own. */

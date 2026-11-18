@@ -20,6 +20,13 @@ export function addDays(date: string, n: number): string {
 
 export function weekdayOf(date: string): Weekday { return WEEKDAYS[(parse(date).getDay() + 6) % 7]; }
 
+const LONG_DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+/** "Saturday". */
+export function weekdayLong(date: string): string { return LONG_DAYS[WEEKDAYS.indexOf(weekdayOf(date))]; }
+
+/** The Monday of the week `date` is in: a Monday gives itself. */
+export function mondayOf(date: string): string { return addDays(date, -WEEKDAYS.indexOf(weekdayOf(date))); }
+
 /** The Monday strictly after `date`: a Monday gives the next one. */
 export function nextMonday(date: string): string { return addDays(date, 7 - WEEKDAYS.indexOf(weekdayOf(date))); }
 
