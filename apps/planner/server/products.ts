@@ -41,11 +41,33 @@ export function productFor(db: Db, item: string, app: string): ProductRow | null
   return db.select().from(products).where(and(eq(products.item, normItem(item)), eq(products.app, app))).get() ?? null;
 }
 
-/** Remember the product an item is bought as on one app: one row per item and app. Only the details given change. */
+/** A pack written as one number and a measure the app can compare ("500 ml", "5 kg", "6 pcs"), read; null for anything
+ *  else ("1 pack", "2 x 500 ml"). */
+export function parsePack(pack: string | null | undefined): { amount: number; unit: string } | null {
+  const m = /^(\d+(?:\.\d+)?)\s*([a-z]+)$/i.exec((pack ?? "").trim());
+  if (!m) return null;
+  const amount = Number(m[1]), unit = m[2].toLowerCase();
+  return amount > 0 && toBase(amount, unit) ? { amount, unit } : null;
+}
+
+const DETAILS = ["pack", "pack_amount", "pack_unit", "price", "image"] as const;
+
+/** Remember the product an item is bought as on one app: one row per item and app. For the same product only the details
+ *  given change; another product takes its place whole, so the details not given are cleared, never the old product's.
+ *  A pack given as text alone is read into its amount and measure when it is plain ("500 ml"). */
 export function rememberProduct(db: Db, p: ProductInput, by = "app"): ProductRow {
-  const set: Partial<typeof products.$inferInsert> = { product_id: p.product_id, name_on_app: p.name_on_app };
-  for (const k of ["pack", "pack_amount", "pack_unit", "price", "image"] as const) if (p[k] !== undefined) (set as Record<string, unknown>)[k] = p[k];
   const had = productFor(db, p.item, p.app);
+  const same = !!had && had.product_id === p.product_id;
+  const set: Partial<typeof products.$inferInsert> = { product_id: p.product_id, name_on_app: p.name_on_app };
+  for (const k of DETAILS) {
+    if (p[k] !== undefined) (set as Record<string, unknown>)[k] = p[k];
+    else if (had && !same) (set as Record<string, unknown>)[k] = null;
+  }
+  if (typeof p.pack === "string" && p.pack_amount === undefined && p.pack_unit === undefined) {
+    const read = parsePack(p.pack);
+    // A pack text that cannot be read leaves no size; the size stays only when the same product's pack text did not change.
+    if (read || !same || had!.pack !== p.pack) { set.pack_amount = read?.amount ?? null; set.pack_unit = read?.unit ?? null; }
+  }
   return had
     ? db.update(products).set({ ...set, updated_at: new Date().toISOString(), updated_by: by }).where(eq(products.id, had.id)).returning().get()
     : db.insert(products).values({ ...set, item: normItem(p.item), app: p.app, product_id: p.product_id, name_on_app: p.name_on_app, updated_by: by }).returning().get();
