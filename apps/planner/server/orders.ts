@@ -3,7 +3,7 @@
 // the others the evening before their first day. Orders not yet placed follow the plan: every change to a meal, a dish or
 // an everyday item builds their lines again, keeping what the family added and leaving out what they said they have.
 // Nothing about what is at home is stored beyond the order it was said about (skipped_items).
-import { and, asc, desc, eq, inArray, ne, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 import { _changes } from "@flock/app-kit";
 import { dish_items, dishes, order_lines, orders, plan_meals, regulars } from "./db/schema";
 import { MORNING_TIME, ORDER_TIME } from "./db/constants";
@@ -127,10 +127,16 @@ export function weekOrders(db: Db, weekStart: string): OrderView[] {
     .map((o) => orderView(db, o.id)!);
 }
 
-/** The scheduled order placed soonest: of one week, or of all of them. */
+/** The scheduled order placed soonest that can still be changed: of one week, or of all of them. An order the agent was
+ *  woken to place (place_order) is being placed as it was read: nothing is added to it or taken off it until it is recorded. */
 export function nextScheduled(db: Db, weekStart?: string): OrderRow | null {
-  return db.select().from(orders).where(and(eq(orders.status, "scheduled"), ...(weekStart ? [eq(orders.week_start, weekStart)] : [])))
+  return db.select().from(orders).where(and(eq(orders.status, "scheduled"), isNull(orders.wake_sent_at), ...(weekStart ? [eq(orders.week_start, weekStart)] : [])))
     .orderBy(asc(orders.place_at), sql`rowid`).limit(1).get() ?? null;
+}
+
+/** Does the week have orders made from its plan (cancelled ones aside)? */
+export function weekHasOrders(db: Db, weekStart: string): boolean {
+  return !!db.select({ id: orders.id }).from(orders).where(and(eq(orders.week_start, weekStart), ne(orders.status, "cancelled"))).limit(1).get();
 }
 
 // ── Building ──
@@ -181,12 +187,13 @@ function syncLines(db: Db, o: OrderRow, wanted: Grouped[], had: LineRow[], chang
 
 /** Give every scheduled order of a plan the lines its days need now. Fresh items go to the order covering their day;
  *  long-life ones to the week's soonest scheduled order, unless an order already placed has them, a line rolled over from
- *  an unpaid order has them, or the family said they have them. Lines the family added are not touched. */
-function fillOrders(db: Db, changes: Change[]) {
-  const scheduled = db.select().from(orders).where(eq(orders.status, "scheduled")).orderBy(asc(orders.place_at), sql`rowid`).all().filter(planned);
+ *  an unpaid order has them, or the family said they have them. Lines the family added are not touched, and neither is an
+ *  order the agent was woken to place: it is caught up by the next rebuild if it comes back not placed. */
+export function fillOrders(db: Db, changes: Change[]) {
+  const scheduled = db.select().from(orders).where(and(eq(orders.status, "scheduled"), isNull(orders.wake_sent_at))).orderBy(asc(orders.place_at), sql`rowid`).all().filter(planned);
   for (const weekStart of new Set(scheduled.map((o) => o.week_start))) {
     const w = weekLong(db, weekStart);
-    const bought = new Set(w.mine.filter((o) => o.status === "placed" || o.status === "paid").map((o) => o.id));
+    const bought = new Set(w.mine.filter((o) => o.status === "placed" || o.status === "paid" || (o.status === "scheduled" && o.wake_sent_at)).map((o) => o.id));
     const have = new Set(w.lines.filter((l) => bought.has(l.order_id) || (l.source === "added" && l.sources)).map((l) => normItem(l.item)));
     const atHome = new Set(w.mine.flatMap(skips));
     const long = w.needs.filter((n) => !have.has(normItem(n.item)) && !atHome.has(normItem(n.item)));
@@ -303,15 +310,16 @@ export function applyLowOrOut(db: Db, weekStart: string, answer: string[], now: 
 
 // ── Not paid ──
 
-/** An order that was placed and not paid: its lines move to the next scheduled order (a new one placed now when none is
- *  waiting) as added lines, each still saying what it is for. The unpaid order keeps its days, so nothing is built for them
+/** An order that was placed and not paid: its lines move to the next scheduled order, of its own week when there is one
+ *  (a new one placed now when none is waiting) as added lines, each still saying what it is for. The unpaid order keeps its days, so nothing is built for them
  *  again. Answers with the id of the order the lines went to, or null when it had none. */
 export function rollUnpaid(db: Db, o: OrderRow, now: Date, by: string, changes: Change[]): string | null {
   db.update(orders).set({ status: "not_paid", updated_at: new Date().toISOString(), updated_by: by }).where(eq(orders.id, o.id)).run();
   changes.push(["orders", o.id, "update", by]);
   const lines = linesOf(db, [o.id]);
   if (!lines.length) return null;
-  const target = nextScheduled(db) ?? extraOrder(db, o.app, now, by, changes);
+  // The same week's next order first: its items are for that week's days.
+  const target = (o.week_start ? nextScheduled(db, o.week_start) : null) ?? nextScheduled(db) ?? extraOrder(db, o.app, now, by, changes);
   for (const l of lines) {
     db.update(order_lines).set({ order_id: target.id, source: "added", updated_at: new Date().toISOString(), updated_by: by }).where(eq(order_lines.id, l.id)).run();
     changes.push(["order_lines", l.id, "update", by]);

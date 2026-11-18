@@ -25,8 +25,9 @@ export type WeekContext = { week_start: string; people: PersonRow[]; house: Hous
   recipes: { id: string; name: string; tags: string[]; for_people: string[] }[]; grocery_app: GroceryApp };
 
 /** What the orders do when the plan changes: `onFinal` builds a week's orders once its plan is final and answers with them;
- *  `onChanged` follows any other change to a meal or a dish. */
-export type MealHooks = { onFinal(weekStart: string): unknown; onChanged(): void };
+ *  `onChanged` follows any other change to a meal or a dish; `weekHasOrders` says a week already has orders made from its
+ *  plan (cancelled ones aside), so a new draft may not take that plan's place. */
+export type MealHooks = { onFinal(weekStart: string): unknown; onChanged(): void; weekHasOrders?(weekStart: string): boolean };
 
 type MealRow = typeof plan_meals.$inferSelect;
 type DishRow = typeof dishes.$inferSelect;
@@ -215,6 +216,9 @@ export function mountMealRoutes(hono: Hono<any>, db: Db, emit: Emit, hooks: Meal
       });
     } else {
       if (!Array.isArray(b.meals) || !b.meals.length) refuse("meals must be a list of the week's meals: { date, slot, ordered_in?, note?, dishes? }; leave it out to read the context");
+      // The orders are built from final meals: a draft in their place would take every dish off the orders not yet placed.
+      if (mode === "draft" && hooks.weekHasOrders?.(weekStart))
+        refuse("this week is already planned and has orders: change a meal with set_meal or set_dish, or send plan_week with mode final and the new meals");
       const slots = slotNames(db);
       const meals = (b.meals as unknown[]).map((m) => mealOf(db, m, slots));
       const seen = new Set<string>();

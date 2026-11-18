@@ -13,8 +13,8 @@ import { dateOf, flag, type MealHooks } from "./meals";
 import { introText, orderingNowText } from "./messages";
 import { productFor, productId, productOf, rememberProduct } from "./products";
 import type { RegularHooks } from "./regulars";
-import { applyLowOrOut, buildOrdersForWeek, commitOrders, extraOrder, lineRemoved, lineRestored, lowOrOutQuestion, nextScheduled, orderView,
-  rebuildScheduledOrders, rollUnpaid, type OrderRow } from "./orders";
+import { applyLowOrOut, buildOrdersForWeek, commitOrders, extraOrder, fillOrders, lineRemoved, lineRestored, lowOrOutQuestion, nextScheduled, orderView,
+  rebuildScheduledOrders, rollUnpaid, weekHasOrders, type OrderRow } from "./orders";
 
 export type OrderOptions = {
   /** The time, for tests. */
@@ -49,10 +49,18 @@ export function mountOrderRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: Orde
   const appName = (o: OrderRow) => APP_NAMES[o.app as GroceryApp] ?? o.app;
 
   // ── Keeping the orders in step with the plan ──
-  const changed = () => schedule(() => {
-    // Nobody is waiting on this run: a failure is logged, and the next change tries again.
-    try { rebuildScheduledOrders(db, emit); } catch (e) { console.warn("[planner] the orders were not rebuilt", e); }
-  });
+  let stale = false;   // the plan changed since the orders were last rebuilt
+  const changed = () => {
+    stale = true;
+    schedule(() => {
+      if (!stale) return;   // rebuilt meanwhile, by an order being placed
+      stale = false;
+      // Nobody is waiting on this run: a failure is logged, and the next change tries again.
+      try { rebuildScheduledOrders(db, emit); } catch (e) { console.warn("[planner] the orders were not rebuilt", e); }
+    });
+  };
+  // The kit runs each listener inside its own try (events.ts): a failure here is logged there, and neither fails the write
+  // that raised the event nor stops later events.
   opts.events?.subscribe((e) => {
     if (e.by === "app") return;
     if (PLAN_TABLES.includes(e.table)) changed();
@@ -103,6 +111,9 @@ export function mountOrderRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: Orde
     const o = find(c.req.param("id"));
     if (!o) return notFound(c.req.param("id"));
     if (o.status !== "scheduled") return conflict(`this order is ${STATUS_TEXT[o.status] ?? o.status}: only a scheduled order is placed`);
+    // What is placed is the plan as it stands now, not as it was up to 2 s ago.
+    stale = false;
+    rebuildScheduledOrders(db, emit);
     if (!orderView(db, o.id)!.lines.length) return conflict("this order has nothing on it yet");
     db.update(orders).set({ wake_sent_at: localStamp(now()), updated_at: new Date().toISOString(), updated_by: by }).where(eq(orders.id, o.id)).run();
     emit("orders", o.id, "update", by);
@@ -135,6 +146,8 @@ export function mountOrderRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: Orde
       if (paid) Object.assign(set, { status: "paid", paid_at: at });
       tx.update(orders).set({ ...set, updated_at: new Date().toISOString(), updated_by: by }).where(eq(orders.id, o.id)).run();
       changes.push(["orders", o.id, "update", by]);
+      // Back among the orders that follow the plan: it catches up with what changed while it was being placed.
+      if (placed === false) fillOrders(tx, changes);
       let intro: string | undefined;
       const home = getHouse(tx);
       if (placed && o.week_start && !home.intro_sent_at) {
@@ -166,7 +179,7 @@ export function mountOrderRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: Orde
   });
 
   return {
-    mealHooks: { onFinal: (weekStart) => buildOrdersForWeek(db, weekStart, now(), emit), onChanged: changed },
+    mealHooks: { onFinal: (weekStart) => buildOrdersForWeek(db, weekStart, now(), emit), onChanged: changed, weekHasOrders: (weekStart) => weekHasOrders(db, weekStart) },
     regularHooks: { onChanged: changed },
   };
 }

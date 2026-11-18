@@ -229,6 +229,105 @@ describe("the orders follow the plan", () => {
   });
 });
 
+describe("orders that are being placed, drafts over a planned week, and failures on the way", () => {
+  it("a draft with meals is refused over a week that has orders, and writes nothing; a week without orders takes it", async () => {
+    const { op, rows, settle, pending, first, second, third, fourth } = await plannedWeek();
+    const meals = JSON.stringify(rows("plan_meals")), lines = JSON.stringify(rows("order_lines"));
+    settle();
+    const r = await op("plan_week", { week_start: MON, mode: "draft", meals: [dinner] });
+    expect(r.code).toBe("APP_REFUSED");
+    expect(r.error).toBe("this week is already planned and has orders: change a meal with set_meal or set_dish, or send plan_week with mode final and the new meals");
+    expect(pending()).toBe(false);
+    expect(JSON.stringify(rows("plan_meals"))).toBe(meals);
+    expect(JSON.stringify(rows("order_lines"))).toBe(lines);
+    // Reading the context in draft mode is not a new plan.
+    expect((await op("plan_week", { week_start: MON, mode: "draft" })).context.week_start).toBe(MON);
+    // A not-paid order is still an order of the week; with every order cancelled the week can be drafted again.
+    await op("record_order", { order_id: first.id, placed: true, paid: false });
+    for (const o of [third, fourth]) await op("cancel_order", { order_id: o.id });
+    expect((await op("plan_week", { week_start: MON, mode: "draft", meals: [dinner] })).code).toBe("APP_REFUSED");
+    await op("cancel_order", { order_id: second.id });
+    expect((await op("plan_week", { week_start: MON, mode: "draft", meals: [dinner] })).code).toBe("APP_REFUSED");   // the not-paid one
+    // Another week, with no orders, takes a draft.
+    expect((await op("plan_week", { week_start: "2026-11-30", mode: "draft", meals: [{ ...dinner, date: "2026-11-30" }] })).week.status).toBe("draft");
+  });
+
+  it("making a draft final without meals builds the week's orders and answers with them", async () => {
+    const { op, rows } = await home();
+    expect((await op("plan_week", { week_start: MON, mode: "draft", meals: [lunch, dinner] })).orders).toBeUndefined();
+    expect(rows("orders")).toHaveLength(0);
+    const r = await op("plan_week", { week_start: MON, mode: "final" });
+    expect(r.week.status).toBe("final");
+    expect(r.orders).toHaveLength(4);
+    expect(r.orders[0].lines.map((l: any) => l.item).sort()).toEqual(["atta", "cauliflower", "eggs", "milk", "potato", "rice", "toor dal"]);
+    expect(rows("orders")).toHaveLength(4);
+  });
+
+  it("an order the agent was woken to place is not rebuilt; recorded not placed, it catches up", async () => {
+    const { op, settle, first, second, items } = await plannedWeek();
+    await op("place_order", { order_id: first.id });
+    const placing = items(first.id).sort();
+    // Monday gains a fresh item and the week a long-life one while the first order is being placed.
+    await op("set_dish", { date: MON, slot: "Dinner", name: "Salad", ingredients: [{ item: "cucumber", amount: 2, unit: "pc" }, { item: "besan", amount: 250, unit: "g", keeps: "long" }] });
+    settle();
+    expect(items(first.id).sort()).toEqual(placing);
+    // The long-life item goes on the next order; what the order being placed has is not bought again.
+    expect(items(second.id).sort()).toEqual(["besan", "milk"]);
+    // What is added without naming an order goes on the next one too, and low or out is about it.
+    expect((await op("add_to_order", { item: "paneer" })).order.id).toBe(second.id);
+    expect((await op("ask_low_or_out", { week_start: MON })).order_id).toBe(second.id);
+    const r = await op("record_order", { order_id: first.id, placed: false, note: "Zepto was down" });
+    expect(r.order.lines.map((l: any) => l.item).sort()).toEqual(["atta", "besan", "cauliflower", "cucumber", "eggs", "milk", "potato", "rice", "toor dal"]);
+    expect(items(second.id).sort()).toEqual(["milk", "paneer"]);
+  });
+
+  it("place_order answers with the plan as it stands now, not as it was before the last change", async () => {
+    const { op, settle, pending, first, rows } = await plannedWeek();
+    settle();
+    await op("set_dish", { date: MON, slot: "Dinner", name: "Salad", ingredients: [{ item: "cucumber", amount: 2, unit: "pc" }] });
+    await op("set_dish", { date: MON, slot: "Lunch", name: "Aloo gobi", remove: true });
+    expect(pending()).toBe(true);
+    const p = await op("place_order", { order_id: first.id });
+    expect(p.order.lines.map((l: any) => l.item).sort()).toEqual(["atta", "cucumber", "eggs", "milk", "rice", "toor dal"]);
+    expect(p.needs_product.map((l: any) => l.item)).toContain("cucumber");
+    // The rebuild that was waiting has nothing left to do, and does not touch the order being placed.
+    const lines = JSON.stringify(rows("order_lines"));
+    settle();
+    expect(JSON.stringify(rows("order_lines"))).toBe(lines);
+  });
+
+  it("an unpaid order's lines roll into the next order of its own week, before an earlier order of another week", async () => {
+    const { op, first, second, items } = await plannedWeek();
+    await op("record_order", { order_id: first.id, placed: true });
+    const next = (await op("plan_week", { week_start: "2026-11-30", mode: "final", meals: [{ ...dinner, date: "2026-11-30" }] })).orders as any[];
+    expect(next[0].place_at > second.place_at).toBe(true);   // the other week's order is the sooner one
+    await op("record_order", { order_id: next[0].id, placed: true });
+    const r = await op("record_order", { order_id: next[0].id, paid: false });
+    expect(r.rolled_into.id).toBe(next[1].id);
+    expect(items(second.id)).toEqual(["milk"]);
+    // With no order of its own week left, the next one of any week takes them.
+    await op("record_order", { order_id: next[1].id, placed: true });
+    for (const o of next.slice(2)) await op("cancel_order", { order_id: o.id });
+    expect((await op("cancel_order", { order_id: next[1].id })).rolled_into.id).toBe(second.id);
+    expect(items(second.id)).toContain("atta");
+  });
+
+  it("a failure while noting a removed line does not fail the family's removal, and later removals are still noted", async () => {
+    const { owner, second, third, line, order, kit } = await plannedWeek();
+    const warned = spyOn(console, "warn").mockImplementation(() => {});
+    const lost = line(second.id, "milk");
+    kit.sqlite.run("ALTER TABLE orders RENAME TO orders_gone");   // the app cannot read the line's order
+    const r = await owner("DELETE", `/api/_data/order_lines/${lost.id}`);
+    kit.sqlite.run("ALTER TABLE orders_gone RENAME TO orders");
+    expect(r.status).toBe(200);
+    expect(warned).toHaveBeenCalledTimes(1);
+    warned.mockRestore();
+    expect(order(second.id).skipped_items).toBeNull();
+    await owner("DELETE", `/api/_data/order_lines/${line(third.id, "milk").id}`);
+    expect(JSON.parse(order(third.id).skipped_items)).toEqual(["milk"]);
+  });
+});
+
 describe("ask_low_or_out", () => {
   it("ask_low_or_out lists the week's long-life items and removes what is at home (Review Focus 4)", async () => {
     const { op, first, second, items, order, kit } = await plannedWeek();
