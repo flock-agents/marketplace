@@ -23,6 +23,7 @@ export const ROUTES: Record<string, Route> = {
   set_regular: (p) => ({ method: "POST", path: "/api/regulars", body: p }),
   import_order_history: (p) => ({ method: "POST", path: "/api/order-history", body: p }),
   remember_product: (p) => ({ method: "POST", path: "/api/products", body: p }),
+  save_recipe: (p) => ({ method: "POST", path: "/api/recipes/save", body: p }),
 };
 
 /** Operations that take more than one call, or none. */
@@ -51,7 +52,12 @@ export function agentOps(hono: () => Hono<any>): Record<string, OpHandler> {
       const c = route(payload ?? {});
       if ("error" in c) return c;
       const res = await caller(ctx.agentId)(c);
-      if (res.status >= 400) return { error: typeof res.body === "object" && res.body ? (res.body.reason ?? res.body.error ?? "refused") : String(res.body), code: "APP_REFUSED", status: res.status, detail: res.body };
+      // A refusal the route gave its own code (NEEDS_NAME) keeps it, so the agent can tell what to do about it.
+      if (res.status >= 400) {
+        const refusal = typeof res.body === "object" && res.body ? res.body : null;
+        return { error: refusal ? (refusal.reason ?? refusal.error ?? "refused") : String(res.body),
+          code: typeof refusal?.code === "string" ? refusal.code : "APP_REFUSED", status: res.status, detail: res.body };
+      }
       return res.body;
     };
   }

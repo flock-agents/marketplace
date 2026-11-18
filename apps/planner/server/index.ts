@@ -7,6 +7,7 @@ import { mountFamilyRoutes } from "./family";
 import { mountMealRoutes } from "./meals";
 import { mountRegularRoutes } from "./regulars";
 import { mountProductRoutes } from "./products";
+import { mountRecipeRoutes } from "./recipes";
 import { migrateOldProfile } from "./gate";
 
 // The app's operations for its agent (agentOps.ts): Flock relays the agent's calls to them.
@@ -23,5 +24,6 @@ mountFamilyRoutes(flock.hono, kit.db, kit.emitChange);
 mountMealRoutes(flock.hono, kit.db, kit.emitChange, { onFinal: () => undefined, onChanged: () => {} });
 mountRegularRoutes(flock.hono, kit.db, kit.emitChange, { onChanged: () => {} });
 mountProductRoutes(flock.hono, kit.db, kit.emitChange);
+mountRecipeRoutes(flock.hono, kit.db, kit.emitChange);
 
 flock.listen();

@@ -13,6 +13,7 @@ import { mountFamilyRoutes } from "./family";
 import { mountMealRoutes, type MealHooks } from "./meals";
 import { mountRegularRoutes, type RegularHooks } from "./regulars";
 import { mountProductRoutes } from "./products";
+import { mountRecipeRoutes } from "./recipes";
 
 /** A fresh temp directory for a test, removed when its test file is done: nothing piles up in the system's temp folder.
  *  The removal is registered here, per directory: this module loads once for the whole run, so a hook at its top level would
@@ -34,6 +35,7 @@ export async function boot(opts: { dbFile?: string; dataDir?: string; mealHooks?
   mountMealRoutes(hono, kit.db, kit.emitChange, opts.mealHooks ?? { onFinal: () => undefined, onChanged: () => {} });
   mountRegularRoutes(hono, kit.db, kit.emitChange, opts.regularHooks ?? { onChanged: () => {} });
   mountProductRoutes(hono, kit.db, kit.emitChange);
+  mountRecipeRoutes(hono, kit.db, kit.emitChange);
   /** A request as the owner. */
   const owner = async (method: string, path: string, body?: unknown) => {
     const r = await hono.request(path, { method, headers: { "Content-Type": "application/json", "X-Flock-User": "tester" }, body: body === undefined ? undefined : JSON.stringify(body) });

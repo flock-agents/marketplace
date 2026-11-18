@@ -45,9 +45,12 @@ export function groceryApp(db: Db): GroceryApp {
   } catch { return fallback; }
 }
 
-/** A write the app will not make: the route answers 400 with the reason. */
-export class Refused extends Error {}
-export const refuse = (reason: string): never => { throw new Refused(reason); };
+/** A write the app will not make: the route answers 400 with the reason, and with a code when the agent acts on the kind of
+ *  refusal (NEEDS_NAME: ask the family for a name). */
+export class Refused extends Error {
+  constructor(reason: string, readonly code?: string) { super(reason); }
+}
+export const refuse = (reason: string, code?: string): never => { throw new Refused(reason, code); };
 
 export const isObject = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
 const DAY_NAMES = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
@@ -128,7 +131,7 @@ export const writeRoutes = (hono: Hono<any>) =>
         const res = await run(b, writer(c), c);
         return c.json(res.status ? { ok: false, ...res.body } : res.body, res.status ?? 200);
       } catch (e) {
-        if (e instanceof Refused) return c.json({ ok: false, reason: e.message }, 400);
+        if (e instanceof Refused) return c.json({ ok: false, reason: e.message, ...(e.code ? { code: e.code } : {}) }, 400);
         throw e;
       }
     });

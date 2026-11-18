@@ -31,3 +31,11 @@ export function localStamp(now: Date = new Date()): string { return `${format(no
 
 /** "Tue 24 Nov". */
 export function dayLabel(date: string): string { const d = parse(date); return `${weekdayOf(date)} ${d.getDate()} ${MONTHS[d.getMonth()]}`; }
+
+/** A time of day ("HH:MM") the way the family says it: "3 pm", "7:30 pm", "8 am". Anything else is given back as it is. */
+export function clockText(time: string): string {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(time);
+  if (!m) return time;
+  const h = Number(m[1]);
+  return `${h % 12 || 12}${m[2] === "00" ? "" : `:${m[2]}`} ${h < 12 ? "am" : "pm"}`;
+}
