@@ -16,7 +16,8 @@ import * as P from "../server/planning-store";
 import { runPlanning, pointer } from "../server/planner";
 import { handlePlanReport } from "../server/plan-report";
 
-export const INSTRUCTIONS = readFileSync(join(import.meta.dir, "..", "planning-instructions.md"), "utf8");
+// Flock substitutes {{appId}} per copy; the evals play the original app.
+export const INSTRUCTIONS = readFileSync(join(import.meta.dir, "..", "planning-instructions.md"), "utf8").replaceAll("{{appId}}", "calendar-desk");
 const ACCOUNT = "acct";
 const keyOf = (e: EventSpec) => (e.source === "memory" ? S.factEventKey(Number(e.ref.slice(1)) + 100) : `g-${e.ref}`);
 
