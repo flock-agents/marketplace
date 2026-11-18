@@ -329,6 +329,19 @@ describe("orders that are being placed, drafts over a planned week, and failures
 });
 
 describe("ask_low_or_out", () => {
+  it("a list names whole items: toor dal is low, moong dal is at home", async () => {
+    const khichdi = { date: MON, slot: "Dinner", dishes: [{ name: "Khichdi", ingredients: [{ item: "moong dal", amount: 150, unit: "g", keeps: "long" }] }] };
+    const { op, first, items } = await plannedWeek([lunch, khichdi]);
+    expect((await op("ask_low_or_out", { week_start: MON })).items).toEqual(["moong dal", "rice", "toor dal"]);
+    const r = await op("ask_low_or_out", { week_start: MON, low_or_out: ["Toor dal"] });
+    expect(r.order.skipped_items).toEqual(["moong dal", "rice"]);
+    expect(items(first.id)).toContain("toor dal");
+    expect(items(first.id)).not.toContain("moong dal");
+    // The same words as a sentence name both dals.
+    const again = await op("ask_low_or_out", { week_start: MON, low_or_out: "toor dal" });
+    expect(again.order.skipped_items).toEqual(["rice"]);
+  });
+
   it("ask_low_or_out lists the week's long-life items and removes what is at home (Review Focus 4)", async () => {
     const { op, first, second, items, order, kit } = await plannedWeek();
     const q = await op("ask_low_or_out", { week_start: MON });
@@ -564,9 +577,59 @@ describe("add_to_order", () => {
     expect(items(first.id)).toHaveLength(count);
     // A line with no product takes the one remembered for its item, and an item not on the order is still an added line.
     await op("remember_product", { item: "potato", app: "zepto", product_id: "z-aloo", name_on_app: "Potato 1 kg", pack: "1 kg", price: 40 });
-    expect((await op("add_to_order", { order_id: first.id, item: "potato" })).line).toMatchObject({ id: line(first.id, "potato").id, product_id: "z-aloo", price: 40, qty_checked: 0 });
+    expect((await op("add_to_order", { order_id: first.id, item: "potato" })).line).toMatchObject({ id: line(first.id, "potato").id, product_id: "z-aloo", price: 40, qty: 1, qty_checked: 1 });
     expect((await op("add_to_order", { order_id: first.id, item: "coriander" })).line).toMatchObject({ source: "added", qty: 1 });
     expect(items(first.id)).toHaveLength(count + 1);
+  });
+
+  it("a product with no qty: the packs are worked out from its pack size, or the line stays unchecked at the number it had", async () => {
+    const { op, first, line } = await plannedWeek();
+    expect(line(first.id, "rice")).toMatchObject({ amount: 400, unit: "g", qty: 1, qty_checked: 0 });
+    // 400 g of rice in 250 g packs is 2 packs.
+    expect((await op("add_to_order", { order_id: first.id, item: "rice", product_id: "z-rice", name_on_app: "Rice 250 g", pack: "250 g" })).line).toMatchObject({ qty: 2, qty_checked: 1, product_id: "z-rice" });
+    // 500 g of potato against "1 bag" cannot be worked out: the product is on the line, the packs still to set.
+    expect((await op("add_to_order", { order_id: first.id, item: "potato", product_id: "z-aloo", name_on_app: "Potato bag", pack: "1 bag" })).line).toMatchObject({ qty: 1, qty_checked: 0, product_id: "z-aloo" });
+    expect((await op("add_to_order", { order_id: first.id, item: "potato", qty: 2 })).line).toMatchObject({ qty: 2, qty_checked: 1, product_id: "z-aloo" });
+    // A line checked before stays checked when its product changes and the packs cannot be worked out.
+    expect((await op("add_to_order", { order_id: first.id, item: "potato", product_id: "z-aloo2", name_on_app: "Potato sack", pack: "1 sack" })).line).toMatchObject({ qty: 2, qty_checked: 1, product_id: "z-aloo2" });
+  });
+
+  it("an order being placed is changed only when it is named", async () => {
+    const { op, first, second, line, order } = await plannedWeek([lunch, dinner, tueLunch]);
+    await op("place_order", { order_id: first.id });
+    // Not named: the item is looked for, and put, on the orders that are not being placed.
+    expect((await op("add_to_order", { item: "potato", remove: true })).status).toBe(404);
+    expect((await op("add_to_order", { item: "potato", qty: 3 })).order.id).toBe(second.id);
+    expect(line(first.id, "potato")).toMatchObject({ qty: 1, source: "dish" });
+    // Named: the line comes off the order being placed, and the order remembers they have it.
+    const r = await op("add_to_order", { order_id: first.id, item: "potato", remove: true });
+    expect(r.removed.order_id).toBe(first.id);
+    expect(line(first.id, "potato")).toBeUndefined();
+    expect(JSON.parse(order(first.id).skipped_items)).toEqual(["potato"]);
+  });
+
+  it("an order that is placed, paid, not paid or cancelled refuses a line set, a removal and a new line, each saying why", async () => {
+    const closed: Record<string, (k: any) => Promise<unknown>> = {
+      "placed, waiting for payment": (k) => k.op("record_order", { order_id: k.first.id, placed: true }),
+      paid: (k) => k.op("record_order", { order_id: k.first.id, placed: true, paid: true }),
+      "not paid": async (k) => { await k.op("record_order", { order_id: k.first.id, placed: true }); await k.op("record_order", { order_id: k.first.id, paid: false }); },
+      cancelled: (k) => k.op("cancel_order", { order_id: k.first.id }),
+    };
+    for (const [status, close] of Object.entries(closed)) {
+      const k = await plannedWeek();
+      await k.op("add_to_order", { order_id: k.first.id, item: "paneer" });
+      await close(k);
+      const before = JSON.stringify(k.rows("order_lines"));
+      const set = await k.op("add_to_order", { order_id: k.first.id, item: "paneer", qty: 3 });
+      const remove = await k.op("add_to_order", { order_id: k.first.id, item: "paneer", remove: true });
+      const add = await k.op("add_to_order", { order_id: k.first.id, item: "saffron" });
+      for (const r of [set, remove, add]) { expect(r.status, status).toBe(409); expect(r.error, status).toContain(`that order is ${status}`); }
+      expect(remove.error).toContain("nothing is taken off it");
+      expect(remove.error).not.toContain("next order");
+      expect(set.error).toContain("its lines no longer change; leave order_id out and paneer goes on the next order");
+      expect(add.error).toContain("leave order_id out and saffron goes on the next order");
+      expect(JSON.stringify(k.rows("order_lines")), status).toBe(before);
+    }
   });
 
   it("the unit, when given, says which of an item's two lines is meant", async () => {

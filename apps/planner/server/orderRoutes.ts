@@ -13,7 +13,7 @@ import { dateOf, flag, type MealHooks } from "./meals";
 import { introText } from "./messages";
 import { normItem, productFor, productId, productOf, rememberProduct } from "./products";
 import type { RegularHooks } from "./regulars";
-import { applyLowOrOut, buildOrdersForWeek, commitOrders, extraOrder, fillOrders, lineRemoved, lineRestored, lowOrOutQuestion, nextScheduled, orderView,
+import { applyLowOrOut, buildOrdersForWeek, commitOrders, extraOrder, fillOrders, lineRemoved, lineRestored, lowOrOutQuestion, nextScheduled, orderView, productPacks,
   rebuildScheduledOrders, rollUnpaid, startPlacing, weekHasOrders, type OrderRow } from "./orders";
 
 export type OrderOptions = {
@@ -73,11 +73,12 @@ export function mountOrderRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: Orde
   });
 
   // ask_low_or_out { week_start, low_or_out? }: without an answer, the week's long-life items and the question to ask about
-  // them. With one (the family's words, or a list of items), the items it names are ordered and the rest are at home.
+  // them. With one, the items it names are ordered and the rest are at home: a list of items names them whole, the
+  // family's own words as one text name an item by any of its words.
   write("/api/orders/low-or-out", (b, by) => {
     const weekStart = dateOf(b.week_start, "week_start");
     if (b.low_or_out == null) return { body: lowOrOutQuestion(db, weekStart) };
-    const answer = typeof b.low_or_out === "string" ? [b.low_or_out]
+    const answer = typeof b.low_or_out === "string" ? b.low_or_out
       : Array.isArray(b.low_or_out) && b.low_or_out.every((a) => typeof a === "string") ? (b.low_or_out as string[])
       : refuse("low_or_out must be the family's answer as text, or a list of the items that are low or out");
     return { body: { order: applyLowOrOut(db, weekStart, answer, now(), by, emit) } };
@@ -88,7 +89,8 @@ export function mountOrderRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: Orde
   // already on the order has its line set (the product, the packs) and stays what it was for; any other item is one more
   // line. With a product_id the product is remembered as the item's; without one the item's remembered product is used.
   // `remove: true` takes the item's line off, and the order remembers the item as one the family has. Only a scheduled
-  // order's lines change: one being placed too, which is when the agent fills what place_order listed.
+  // order's lines change. One being placed changes only when it is named (order_id), which is when the agent fills what
+  // place_order listed: left unnamed, the item goes to, or comes off, an order that is not being placed.
   write("/api/orders/add", (b, by) => {
     const item = name(b.item, "item");
     const unit = b.unit == null ? null : name(b.unit, "unit").toLowerCase();
@@ -96,7 +98,8 @@ export function mountOrderRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: Orde
     const qty = b.qty == null ? null : typeof b.qty === "number" && Number.isInteger(b.qty) && b.qty > 0 ? b.qty : refuse("qty must be a whole number of packs, 1 or more");
     const given = b.order_id == null ? undefined : find(String(b.order_id));
     if (b.order_id != null && !given) return notFound(b.order_id);
-    if (given && given.status !== "scheduled") return conflict(`that order is ${STATUS_TEXT[given.status] ?? given.status}: ${remove ? "its lines no longer change" : "leave order_id out and it goes on the next order"}`);
+    if (given && given.status !== "scheduled") return conflict(`that order is ${STATUS_TEXT[given.status] ?? given.status}: ${remove ? "nothing is taken off it"
+      : `its lines no longer change; leave order_id out and ${item} goes on the next order`}`);
     const lineOn = (orderId: string) => db.select().from(order_lines).where(eq(order_lines.order_id, orderId)).orderBy(asc(order_lines.created_at), sql`rowid`).all()
       .find((l) => normItem(l.item) === normItem(item) && (unit === null || (l.unit ?? "").trim().toLowerCase() === unit));
 
@@ -131,7 +134,11 @@ export function mountOrderRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: Orde
       const product = p && (sent || !there?.product_id) ? { product_id: p.product_id, name_on_app: p.name_on_app, pack: p.pack, price: p.price, image: p.image } : {};
       const checked = qty != null || sent ? { qty_checked: 1 } : {};
       if (there) {
-        tx.update(order_lines).set({ ...product, ...(qty != null ? { qty } : {}), ...checked, updated_at: new Date().toISOString(), updated_by: by }).where(eq(order_lines.id, there.id)).run();
+        // The packs sent are the line's packs. With a product and no packs, they are worked out from its pack size; when
+        // that cannot be done the line keeps its number, and whether that number was ever checked.
+        const worked = qty == null && p && "product_id" in product ? productPacks(p, there.amount, there.unit) : null;
+        const packs = qty ?? worked;
+        tx.update(order_lines).set({ ...product, ...(packs != null ? { qty: packs, qty_checked: 1 } : {}), updated_at: new Date().toISOString(), updated_by: by }).where(eq(order_lines.id, there.id)).run();
         changes.push(["order_lines", there.id, "update", by]);
         return { order: o.id, line: there.id };
       }

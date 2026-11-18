@@ -21,7 +21,7 @@ const kit = await mountKit(flock, { schema, settings: SETTINGS, keepTables: OLD_
 // Only once the schema landed: a boot that is still waiting on it has no house table to write.
 if (kit.status.state === "ok") migrateOldProfile(kit.sqlite);
 
-mountFamilyRoutes(flock.hono, kit.db, kit.emitChange);
+mountFamilyRoutes(flock.hono, kit.db, kit.emitChange, { appToken: flock.env.token ?? process.env.FLOCK_APP_TOKEN ?? null });
 // The orders follow the plan: a final week builds its orders, and a change to a meal, a dish or an everyday item, through
 // these routes or by the family on a page (the kit's change events), rebuilds the ones not yet placed.
 const orders = mountOrderRoutes(flock.hono, kit.db, kit.emitChange, { events: kit.ctx.events });

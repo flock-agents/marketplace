@@ -16,7 +16,7 @@ export const WEEKLY_PROMPT = (weekStart: string): string => [
   `Plan the family's meals for the week of ${dayLabel(weekStart)} (week_start ${weekStart}), place its first order and send them the plan.`,
   `1. The context to plan from is in the data below (people, house rules, the cook, everyday items, last week's dishes, the recipe book); plan_week { week_start: "${weekStart}", mode: "draft" } without meals answers with it again.`,
   `2. plan_week { week_start: "${weekStart}", mode: "final", meals } with the whole week's meals. It answers with the week and its orders.`,
-  "3. place_order { order_id } on the first of those orders right away, and place it on the grocery app as its answer says. Never ask for a yes before placing. An order with nothing on it is refused: leave it.",
+  "3. place_order { order_id } on the first of those orders right away, fill the lines in its needs_product and needs_qty with add_to_order { order_id, item, … }, and place it on the grocery app. Never ask for a yes before placing. An order with nothing on it is refused: leave it.",
   "4. record_order { order_id, placed: true } as soon as it is placed. When the answer has intro, send it to the family word for word.",
   `5. ask_low_or_out { week_start: "${weekStart}" } answers with the week's long-life items and a question. Send the family the plan, for them to change, with that question in the same message.`,
   `6. When they answer, ask_low_or_out { week_start: "${weekStart}", low_or_out: [the items they said are low or out] }: send the names from \`items\`, not their raw words, and an empty list when they have everything.`,

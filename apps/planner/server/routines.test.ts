@@ -272,7 +272,7 @@ describe("order clock", () => {
     expect(data.needs_product).toHaveLength(6);
     expect(data.needs_qty).toHaveLength(6);
     expect(k.order(k.first.id).wake_sent_at).toBe("2026-11-21T18:15");
-    for (const s of ["`message`", "needs_product", "needs_qty", "Zepto", "placed: true", "paid: true", "paid: false", "Cancel nothing on Zepto"]) expect(message).toContain(s);
+    for (const s of ["`message`", "needs_product", "needs_qty", "add_to_order { order_id, item", "Zepto", "placed: true", "paid: true", "paid: false", "Cancel nothing on Zepto"]) expect(message).toContain(s);
     expect(message.indexOf("placed: true")).toBeLessThan(message.indexOf("paid: true"));
 
     await orderClock(k.ctx(), at(18, 30));

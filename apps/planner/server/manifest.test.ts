@@ -40,7 +40,9 @@ describe("the agent's interface", () => {
 
   it("the app is changed only through its operations: no row write is taught", () => {
     for (const method of ["PATCH", "DELETE"]) expect(guide + instructions).not.toContain(method);
+    expect(guide + instructions).not.toContain("_app/settings");
     expect(guide).toContain("remove: true");
+    expect(guide).toContain("set_house_rules { grocery_app");
   });
 
   it("the instructions fit in 1,200 characters and the guide in 150 lines", () => {

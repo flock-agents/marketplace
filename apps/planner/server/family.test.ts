@@ -111,6 +111,40 @@ describe("the house", () => {
     expect((await op("set_slots", {})).code).toBe("APP_REFUSED");
   });
 
+  it("set_house_rules { grocery_app } sets the app the orders go to, as the app's own setting", async () => {
+    const { op, owner, kit } = await boot();
+    const heard: string[] = [];
+    kit.ctx.events.subscribe((e) => { if (e.table === "_settings") heard.push(`${e.id} by ${e.by}`); });
+    const r = await op("set_house_rules", { grocery_app: "bigbasket" });
+    expect(r.grocery_app).toBe("bigbasket");
+    expect(r.house).toMatchObject({ rules: [] });
+    expect((await owner("GET", "/api/family")).body.grocery_app).toBe("bigbasket");
+    expect((await owner("GET", "/api/_app")).body.settings.grocery_app).toBe("bigbasket");
+    // The pages hear of it as of any setting.
+    expect(heard).toEqual(["grocery_app by agent:meal-agent"]);
+    // With rules in the same call, both are saved.
+    expect((await op("set_house_rules", { grocery_app: "zepto", notes: "no leftovers" })).house.notes).toBe("no leftovers");
+    expect((await owner("GET", "/api/family")).body.grocery_app).toBe("zepto");
+  });
+
+  it("refuses a grocery app the orders cannot go to, and saves nothing of that call", async () => {
+    const { op, owner } = await boot();
+    const r = await op("set_house_rules", { grocery_app: "amazon", notes: "x" });
+    expect(r.code).toBe("APP_REFUSED");
+    expect(r.error).toContain("zepto, swiggy-instamart, zomato-blinkit, bigbasket");
+    const { body } = await owner("GET", "/api/family");
+    expect(body.grocery_app).toBe("zepto");
+    expect(body.house.notes).toBeNull();
+  });
+
+  it("on an install paired with Flock the setting is written with the app's own token", async () => {
+    const { op, owner } = await boot({ token: "app-secret" });
+    // The kit's settings route refuses a caller without the token; the operation holds it.
+    expect((await owner("PATCH", "/api/_app/settings", { grocery_app: "bigbasket" })).status).toBe(401);
+    expect((await op("set_house_rules", { grocery_app: "zomato-blinkit" })).grocery_app).toBe("zomato-blinkit");
+    expect((await owner("GET", "/api/family")).body.grocery_app).toBe("zomato-blinkit");
+  });
+
   it("GET /api/family gives the people at home, the house with its lists read, and the grocery app", async () => {
     const { op, owner, rows } = await boot();
     expect((await owner("GET", "/api/family")).body).toMatchObject({ people: [], house: { rules: [], cook_days: [], extra_slots: [], order_in: [], cook_name: null }, grocery_app: "zepto" });

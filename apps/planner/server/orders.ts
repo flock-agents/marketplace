@@ -77,10 +77,12 @@ function answerWords(answer: string[]): Set<string> {
   return new Set(words.filter((w) => w && w !== "and"));
 }
 
-/** The asked items an answer names. An item is named when the answer has one of its words ("dal" names toor dal; "ATTA is
- *  low" names atta). A word that names nothing asked is ignored. */
-export function namedItems(asked: string[], answer: string[]): string[] {
-  const words = answerWords(answer);
+/** The asked items an answer names. A list names whole items: "toor dal" is toor dal, not every dal. The family's own
+ *  words, as one text, name an item when they have one of its words ("dal" names every dal; "ATTA is low" names atta).
+ *  A name or a word that is nothing asked is ignored. */
+export function namedItems(asked: string[], answer: string | string[]): string[] {
+  if (Array.isArray(answer)) { const whole = new Set(answer.map(normItem)); return asked.filter((item) => whole.has(normItem(item))); }
+  const words = answerWords([answer]);
   return asked.filter((item) => normItem(item).split(" ").some((w) => words.has(w)));
 }
 
@@ -153,12 +155,18 @@ function weekLong(db: Db, weekStart: string) {
   return { mine, lines: linesOf(db, mine.map((o) => o.id)), needs: collectNeeds(db, days).filter((n) => n.keeps === "long"), carrier: nextScheduled(db, weekStart) };
 }
 
+/** How many packs of a product cover an amount, from the pack's size (or its text, when plain: "500 ml"); null when the
+ *  amount is not known or the two cannot be compared. */
+export function productPacks(p: { pack_amount: number | null; pack_unit: string | null; pack: string | null }, amount: number | null, unit: string | null): number | null {
+  const pack = p.pack_amount != null ? { amount: p.pack_amount, unit: p.pack_unit } : parsePack(p.pack);
+  return amount == null || !pack ? null : packsFor(amount, unit, pack.amount, pack.unit);
+}
+
 /** The product and the number of packs for a line: the product remembered for the item, with as many packs as cover the
  *  amount. When the packs cannot be worked out the line keeps the number it had (1 when new), marked for the agent to set. */
 function stocked(db: Db, app: string, g: Grouped, line?: LineRow) {
   const p = productFor(db, g.item, app);
-  const pack = p ? (p.pack_amount != null ? { amount: p.pack_amount, unit: p.pack_unit } : parsePack(p.pack)) : parsePack(line?.pack);
-  const qty = g.amount == null || !pack ? null : packsFor(g.amount, g.unit, pack.amount, pack.unit);
+  const qty = p ? productPacks(p, g.amount, g.unit) : productPacks({ pack_amount: null, pack_unit: null, pack: line?.pack ?? null }, g.amount, g.unit);
   return { ...(p ? { product_id: p.product_id, name_on_app: p.name_on_app, pack: p.pack, price: p.price, image: p.image } : {}),
     qty: qty ?? line?.qty ?? 1, qty_checked: qty == null ? 0 : 1 };
 }
@@ -288,7 +296,7 @@ export function lowOrOutQuestion(db: Db, weekStart: string): { order_id: string 
  *  or said to be at home earlier. One the answer does not name is at home: its lines leave that order and it is skipped
  *  there. One it names is ordered: it comes back to that order when no live order has it; with no scheduled order left, a
  *  new order placed now takes it. Orders already placed are not touched. Answers with the order changed or made, or null. */
-export function applyLowOrOut(db: Db, weekStart: string, answer: string[], now: Date, by: string, emit: Emit): OrderView | null {
+export function applyLowOrOut(db: Db, weekStart: string, answer: string | string[], now: Date, by: string, emit: Emit): OrderView | null {
   const id = commitOrders(db, emit, (tx, changes) => {
     const w = weekLong(tx, weekStart);
     const long = new Set(w.needs.map((n) => normItem(n.item)));

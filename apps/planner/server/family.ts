@@ -137,8 +137,19 @@ export const writeRoutes = (hono: Hono<any>) =>
       }
     });
 
-export function mountFamilyRoutes(hono: Hono<any>, db: Db, emit: Emit) {
+/** `appToken`: the token Flock gave this app (null on an install that is not paired). The kit lets a setting change only
+ *  with it, so that settings change through Flock alone; the app holds it, and uses it for the one setting its agent sets. */
+export function mountFamilyRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: { appToken?: string | null } = {}) {
   const write = writeRoutes(hono);
+  /** The grocery app, written as the app's `grocery_app` setting through the kit's own settings route: its check, its
+   *  change log and the event the pages listen to, stamped with whoever asked. */
+  const setGroceryApp = async (app: GroceryApp, c: Context): Promise<void> => {
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (opts.appToken) headers.Authorization = `Bearer ${opts.appToken}`;
+    for (const h of ["x-flock-agent", "x-flock-user"]) { const v = c.req.header(h); if (v) headers[h] = v; }
+    const res = await hono.request("/api/_app/settings", { method: "PATCH", headers, body: JSON.stringify({ grocery_app: app }) });
+    if (!res.ok) refuse(`the grocery app was not saved: ${(await res.json().catch(() => null) as any)?.message ?? res.status}`);
+  };
   const saveHouse = (set: Partial<typeof house.$inferInsert>, by: string) => {
     const row = db.update(house).set({ ...set, updated_at: new Date().toISOString(), updated_by: by }).where(eq(house.id, getHouse(db).id)).returning().get();
     emit("house", row.id, "update", by);
@@ -169,15 +180,21 @@ export function mountFamilyRoutes(hono: Hono<any>, db: Db, emit: Emit) {
     return { body: { person } };
   });
 
-  // set_house_rules { rules?, notes?, structured?: true }: the rules given replace the ones there. `structured: true` says the
-  // profile carried over from Meal Planner 2.0 (gate.ts) is now in the app's own rows, and clears it.
-  write("/api/family/rules", (b, by) => {
+  // set_house_rules { rules?, notes?, grocery_app?, structured?: true }: the rules given replace the ones there. `grocery_app`
+  // is the app the orders go to: the app's one setting, written here so the agent has an operation for it. `structured: true`
+  // says the profile carried over from Meal Planner 2.0 (gate.ts) is now in the app's own rows, and clears it.
+  write("/api/family/rules", async (b, by, c) => {
     const set: Partial<typeof house.$inferInsert> = {};
     if (b.rules !== undefined) set.rules = JSON.stringify(rules(b.rules));
     if (b.notes !== undefined) set.notes = words(b.notes, "notes");
     if (b.structured === true) set.profile_to_structure = null;
-    if (!Object.keys(set).length) refuse("give rules, notes or structured: true");
-    return saveHouse(set, by);
+    // Checked before anything is saved: a call with an app the orders cannot go to changes nothing.
+    const app = b.grocery_app === undefined ? undefined
+      : (GROCERY_APPS as readonly unknown[]).includes(b.grocery_app) ? (b.grocery_app as GroceryApp) : refuse(`grocery_app must be one of: ${GROCERY_APPS.join(", ")}`);
+    if (!Object.keys(set).length && !app) refuse("give rules, notes, grocery_app or structured: true");
+    if (app) await setGroceryApp(app, c);
+    const saved = Object.keys(set).length ? saveHouse(set, by) : { body: { house: houseView(getHouse(db)) } };
+    return app ? { body: { ...saved.body, grocery_app: groceryApp(db) } } : saved;
   });
 
   // set_cook { name, days, arrival, makes_well?, note? }

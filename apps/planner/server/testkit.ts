@@ -28,14 +28,14 @@ export function tempDir(prefix = "planner-test-"): string {
 /** `now` gives the orders their clock and makes them follow the plan as in the app (index.ts); without it a plan or an
  *  everyday item changes nothing beyond itself, unless the test gives its own hooks. A rebuild the app would run 2 s after
  *  a change waits here until the test calls `settle()`. */
-export async function boot(opts: { dbFile?: string; dataDir?: string; mealHooks?: MealHooks; regularHooks?: RegularHooks; now?: () => Date } = {}) {
+export async function boot(opts: { dbFile?: string; dataDir?: string; mealHooks?: MealHooks; regularHooks?: RegularHooks; now?: () => Date; token?: string } = {}) {
   const hono = new Hono();
   const dataDir = opts.dataDir ?? tempDir();
   // The kit opens its database inside dataDir, so a file given by its full path is named from there.
   const dbFile = opts.dbFile && opts.dbFile !== ":memory:" ? relative(dataDir, opts.dbFile) : ":memory:";
-  const kit = await mountKit({ hono, env: { appId: "t", dataDir, apiUrl: null, token: null, agent: null } },
+  const kit = await mountKit({ hono, env: { appId: "t", dataDir, apiUrl: null, token: opts.token ?? null, agent: null } },
     { schema, settings: SETTINGS, keepTables: OLD_TABLES, dbFile, appName: "T" });
-  mountFamilyRoutes(hono, kit.db, kit.emitChange);
+  mountFamilyRoutes(hono, kit.db, kit.emitChange, { appToken: opts.token ?? null });
   let rebuild: (() => void) | null = null;
   const orders = mountOrderRoutes(hono, kit.db, kit.emitChange, { now: opts.now, events: kit.ctx.events, schedule: (run) => { rebuild = run; } });
   mountMealRoutes(hono, kit.db, kit.emitChange, opts.mealHooks ?? (opts.now ? orders.mealHooks : { onFinal: () => undefined, onChanged: () => {} }));

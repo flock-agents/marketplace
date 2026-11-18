@@ -93,15 +93,21 @@ describe("groupNeeds", () => {
 describe("namedItems (Review Focus 4)", () => {
   const asked = ["atta", "rice", "toor dal", "moong dal", "sunflower oil"];
   it("finds the items an answer names, by word, whatever the capitals and punctuation", () => {
-    expect(namedItems(asked, ["ATTA is low"])).toEqual(["atta"]);
-    expect(namedItems(asked, ["Rice, and Atta."])).toEqual(["atta", "rice"]);
-    expect(namedItems(asked, ["we're out of oil"])).toEqual(["sunflower oil"]);
-    expect(namedItems(asked, ["toor dal", "rice"])).toEqual(["rice", "toor dal", "moong dal"]);   // "dal" names every dal
+    expect(namedItems(asked, "ATTA is low")).toEqual(["atta"]);
+    expect(namedItems(asked, "Rice, and Atta.")).toEqual(["atta", "rice"]);
+    expect(namedItems(asked, "we're out of oil")).toEqual(["sunflower oil"]);
+    expect(namedItems(asked, "toor dal, rice")).toEqual(["rice", "toor dal", "moong dal"]);   // in a sentence, "dal" names every dal
   });
   it("a word names an item only as a whole word, and an unknown word names nothing", () => {
-    expect(namedItems(asked, ["price of ghee and sandals"])).toEqual([]);
-    expect(namedItems(asked, [""])).toEqual([]);
+    expect(namedItems(asked, "price of ghee and sandals")).toEqual([]);
+    expect(namedItems(asked, "")).toEqual([]);
+    expect(namedItems(asked, "nothing, all there")).toEqual([]);
+  });
+  it("a list names whole items: one dal is not every dal, and a name that is not an asked item names nothing", () => {
+    expect(namedItems(asked, ["toor dal", " Rice "])).toEqual(["rice", "toor dal"]);
+    expect(namedItems(asked, ["dal"])).toEqual([]);
+    expect(namedItems(asked, ["Sunflower  Oil"])).toEqual(["sunflower oil"]);
+    expect(namedItems(asked, ["atta is low"])).toEqual([]);
     expect(namedItems(asked, [])).toEqual([]);
-    expect(namedItems(asked, ["nothing, all there"])).toEqual([]);
   });
 });
