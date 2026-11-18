@@ -10,7 +10,12 @@ type Call = { method: "GET" | "POST" | "PATCH" | "DELETE"; path: string; body?: 
 type Route = (p: Record<string, unknown>) => Call | { error: string; code: string; status: number };
 
 /** Each operation: where it goes in the app's own API. */
-export const ROUTES: Record<string, Route> = {};
+export const ROUTES: Record<string, Route> = {
+  set_person: (p) => ({ method: "POST", path: "/api/family/people", body: p }),
+  set_house_rules: (p) => ({ method: "POST", path: "/api/family/rules", body: p }),
+  set_cook: (p) => ({ method: "POST", path: "/api/family/cook", body: p }),
+  set_slots: (p) => ({ method: "POST", path: "/api/family/slots", body: p }),
+};
 
 /** Operations that take more than one call, or none. */
 type Multi = (p: Record<string, unknown>, call: (c: Call) => Promise<{ status: number; body: any }>) => Promise<unknown>;

@@ -1,10 +1,8 @@
 // The 3.0 data as an agent sees it, and the upgrade from a 2.0.x database: the old tables stay, untouched and unlisted.
 import { describe, it, expect } from "bun:test";
 import { Database } from "bun:sqlite";
-import { mkdtempSync } from "fs";
 import { join } from "path";
-import { tmpdir } from "os";
-import { boot } from "./testkit";
+import { boot, tempDir } from "./testkit";
 import { OLD_TABLES, ORDER_STATUSES } from "./db/constants";
 
 const columns = (s: any, table: string) => (s.tables[table].columns as { name: string }[]).map((c) => c.name);
@@ -17,7 +15,7 @@ describe("planner 3.0 data", () => {
   });
 
   it("upgrades a 2.0.x database without a block and keeps its old rows", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "planner-up-")); const file = join(dir, "app.db");
+    const dir = tempDir("planner-up-"); const file = join(dir, "app.db");
     const old = new Database(file);
     old.run(`CREATE TABLE meals (id text primary key, date text, slot text, dish text)`);
     old.run(`INSERT INTO meals VALUES ('m1','2026-11-10','Lunch','Rajma')`);
@@ -28,7 +26,7 @@ describe("planner 3.0 data", () => {
   });
 
   it("keeps every one of the 18 old tables through the upgrade", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "planner-up-")); const file = join(dir, "app.db");
+    const dir = tempDir("planner-up-"); const file = join(dir, "app.db");
     const old = new Database(file);
     for (const t of OLD_TABLES) { old.run(`CREATE TABLE "${t}" (id text primary key, v text)`); old.run(`INSERT INTO "${t}" VALUES ('1', '${t}')`); }
     old.close();

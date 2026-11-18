@@ -4,6 +4,8 @@ export const SLOTS = ["Breakfast", "Lunch", "Dinner"] as const;
 
 /** A person's age group: portions and the planning rules follow it. */
 export const GROUPS = ["child", "adult", "elder"] as const;
+/** A house rule: a vegetarian day, an egg day, a fasting day, a day without onion and garlic, or the family's own. */
+export const RULE_KINDS = ["veg", "egg", "fasting", "no_onion_garlic", "other"] as const;
 /** How often an everyday item is needed: every day, a number of times a week, or on named weekdays. */
 export const EVERY = ["day", "week", "weekdays"] as const;
 /** An order's life: scheduled → placed (waiting for the person's payment) → paid, or not paid; or cancelled before it is placed. */

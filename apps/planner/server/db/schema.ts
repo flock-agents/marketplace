@@ -27,6 +27,7 @@ export const house = sqliteTable("house", {
   cook_days: text("cook_days"),                                // JSON weekday[]
   cook_arrival: text("cook_arrival"),                          // "HH:MM"
   cook_makes_well: text("cook_makes_well"),
+  cook_note: text("cook_note"),
   extra_slots: text("extra_slots"),                            // JSON [{ name, days?: string[], for?: string[] }]
   order_in: text("order_in"),                                  // JSON [{ day, slot, note? }]
   notes: text("notes"),
