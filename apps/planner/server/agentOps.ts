@@ -15,6 +15,11 @@ export const ROUTES: Record<string, Route> = {
   set_house_rules: (p) => ({ method: "POST", path: "/api/family/rules", body: p }),
   set_cook: (p) => ({ method: "POST", path: "/api/family/cook", body: p }),
   set_slots: (p) => ({ method: "POST", path: "/api/family/slots", body: p }),
+  plan_week: (p) => typeof p.week_start === "string" || typeof p.week_start === "number"
+    ? { method: "POST", path: `/api/weeks/${encodeURIComponent(String(p.week_start))}/plan`, body: p }
+    : { error: "week_start is required: the week's Monday as YYYY-MM-DD", code: "APP_REFUSED", status: 400 },
+  set_meal: (p) => ({ method: "POST", path: "/api/meals", body: p }),
+  set_dish: (p) => ({ method: "POST", path: "/api/dishes", body: p }),
 };
 
 /** Operations that take more than one call, or none. */

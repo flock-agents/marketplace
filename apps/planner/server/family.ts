@@ -10,7 +10,7 @@ import { house, people } from "./db/schema";
 import { GROCERY_APPS, GROUPS, RULE_KINDS, SETTINGS, SLOTS, type GroceryApp } from "./db/constants";
 import { WEEKDAYS, type Weekday } from "./dates";
 
-type Db = BunSQLiteDatabase<any>;
+export type Db = BunSQLiteDatabase<any>;
 /** Tell live pages a row changed, and who changed it (the kit's emitChange). */
 export type Emit = (table: string, id: string, op: "insert" | "update" | "delete", by: string) => void;
 
@@ -29,7 +29,7 @@ export function getHouse(db: Db): HouseRow {
   return row ?? db.insert(house).values({ updated_by: "app" }).returning().get();
 }
 
-const list = <T>(json: string | null): T[] => { try { const v = json ? JSON.parse(json) : []; return Array.isArray(v) ? v : []; } catch { return []; } };
+export const list = <T>(json: string | null): T[] => { try { const v = json ? JSON.parse(json) : []; return Array.isArray(v) ? v : []; } catch { return []; } };
 
 export function houseView(row: HouseRow): HouseView {
   return { ...row, rules: list(row.rules), cook_days: list(row.cook_days), extra_slots: list(row.extra_slots), order_in: list(row.order_in) };
@@ -45,10 +45,11 @@ export function groceryApp(db: Db): GroceryApp {
   } catch { return fallback; }
 }
 
-class Refused extends Error {}
-const refuse = (reason: string): never => { throw new Refused(reason); };
+/** A write the app will not make: the route answers 400 with the reason. */
+export class Refused extends Error {}
+export const refuse = (reason: string): never => { throw new Refused(reason); };
 
-const isObject = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
+export const isObject = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
 const DAY_NAMES = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
 /** A weekday however it was written ("Tue", "tuesday", "TUES"), or null. */
 const weekday = (v: unknown): Weekday | null => {
@@ -59,11 +60,11 @@ const weekdays = (v: unknown, what: string): Weekday[] => {
   if (!Array.isArray(v)) return refuse(`${what} must be a list of weekdays (${WEEKDAYS.join(", ")})`);
   return v.map((d) => weekday(d) ?? refuse(`${what}: ${JSON.stringify(d)} is not a weekday (${WEEKDAYS.join(", ")})`));
 };
-const name = (v: unknown, what: string): string => (typeof v === "string" && v.trim() ? v.trim() : refuse(`${what} is required`));
+export const name = (v: unknown, what: string): string => (typeof v === "string" && v.trim() ? v.trim() : refuse(`${what} is required`));
 /** A free-text field: text, or null to clear it. Blank text clears it too. */
-const words = (v: unknown, what: string): string | null =>
+export const words = (v: unknown, what: string): string | null =>
   v === null ? null : typeof v === "string" ? v.trim() || null : refuse(`${what} must be text`);
-const names = (v: unknown, what: string): string[] =>
+export const names = (v: unknown, what: string): string[] =>
   Array.isArray(v) && v.every((n) => typeof n === "string" && n.trim()) ? v.map((n: string) => n.trim()) : refuse(`${what} must be a list of names`);
 const optionalNote = (v: unknown, what: string): { note?: string } => {
   const note = v === undefined ? null : words(v, what);
@@ -110,26 +111,30 @@ function orderIn(v: unknown, slotNames: string[]): OrderIn[] {
   });
 }
 
-export function mountFamilyRoutes(hono: Hono<any>, db: Db, emit: Emit) {
-  /** Who is writing: the agent Flock relayed, the person on the page, or the app itself. */
-  const writer = (c: Context): string => {
-    const agent = c.req.header("x-flock-agent")?.trim(); if (agent) return `agent:${agent}`;
-    const user = c.req.header("x-flock-user")?.trim(); return user ? `user:${user}` : "app";
-  };
-  /** A write route: its JSON body in, its answer out, a refusal as a 400 with the reason. */
-  const write = (path: string, run: (b: Record<string, unknown>, by: string) => { status?: 404; body: Record<string, unknown> }) =>
+/** Who is writing: the agent Flock relayed, the person on the page, or the app itself. */
+const writer = (c: Context): string => {
+  const agent = c.req.header("x-flock-agent")?.trim(); if (agent) return `agent:${agent}`;
+  const user = c.req.header("x-flock-user")?.trim(); return user ? `user:${user}` : "app";
+};
+type Answer = { status?: 404; body: Record<string, unknown> };
+/** The app's write routes: a JSON body in, the answer out, a refusal as a 400 with the reason. */
+export const writeRoutes = (hono: Hono<any>) =>
+  (path: string, run: (b: Record<string, unknown>, by: string, c: Context) => Answer | Promise<Answer>) =>
     hono.post(path, async (c) => {
       let b: unknown = null;
       try { b = await c.req.json(); } catch { /* no JSON: refused below */ }
       if (!isObject(b)) return c.json({ ok: false, reason: "send a JSON object" }, 400);
       try {
-        const res = run(b, writer(c));
+        const res = await run(b, writer(c), c);
         return c.json(res.status ? { ok: false, ...res.body } : res.body, res.status ?? 200);
       } catch (e) {
         if (e instanceof Refused) return c.json({ ok: false, reason: e.message }, 400);
         throw e;
       }
     });
+
+export function mountFamilyRoutes(hono: Hono<any>, db: Db, emit: Emit) {
+  const write = writeRoutes(hono);
   const saveHouse = (set: Partial<typeof house.$inferInsert>, by: string) => {
     const row = db.update(house).set({ ...set, updated_at: new Date().toISOString(), updated_by: by }).where(eq(house.id, getHouse(db).id)).returning().get();
     emit("house", row.id, "update", by);

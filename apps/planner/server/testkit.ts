@@ -10,6 +10,7 @@ import * as schema from "./db/schema";
 import { OLD_TABLES, SETTINGS } from "./db/constants";
 import { agentOps } from "./agentOps";
 import { mountFamilyRoutes } from "./family";
+import { mountMealRoutes, type MealHooks } from "./meals";
 
 /** A fresh temp directory for a test, removed when its test file is done: nothing piles up in the system's temp folder.
  *  The removal is registered here, per directory: this module loads once for the whole run, so a hook at its top level would
@@ -20,7 +21,7 @@ export function tempDir(prefix = "planner-test-"): string {
   return dir;
 }
 
-export async function boot(opts: { dbFile?: string; dataDir?: string } = {}) {
+export async function boot(opts: { dbFile?: string; dataDir?: string; mealHooks?: MealHooks } = {}) {
   const hono = new Hono();
   const dataDir = opts.dataDir ?? tempDir();
   // The kit opens its database inside dataDir, so a file given by its full path is named from there.
@@ -28,6 +29,7 @@ export async function boot(opts: { dbFile?: string; dataDir?: string } = {}) {
   const kit = await mountKit({ hono, env: { appId: "t", dataDir, apiUrl: null, token: null, agent: null } },
     { schema, settings: SETTINGS, keepTables: OLD_TABLES, dbFile, appName: "T" });
   mountFamilyRoutes(hono, kit.db, kit.emitChange);
+  mountMealRoutes(hono, kit.db, kit.emitChange, opts.mealHooks ?? { onFinal: () => undefined, onChanged: () => {} });
   /** A request as the owner. */
   const owner = async (method: string, path: string, body?: unknown) => {
     const r = await hono.request(path, { method, headers: { "Content-Type": "application/json", "X-Flock-User": "tester" }, body: body === undefined ? undefined : JSON.stringify(body) });
