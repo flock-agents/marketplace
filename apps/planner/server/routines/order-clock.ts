@@ -5,7 +5,8 @@ import { orders } from "../db/schema";
 import { APP_NAMES, type GroceryApp } from "../db/constants";
 import { localStamp } from "../dates";
 import { startPlacing } from "../orders";
-import type { RoutineCtx } from "./index";
+import { familyKnown } from "../gate";
+import { wake, type RoutineCtx } from "./ctx";
 
 /** An order still scheduled this long after the agent was woken for it was not placed and not recorded: it is handed over again. */
 export const REWAKE_AFTER_MIN = 60;
@@ -19,20 +20,36 @@ const PLACE_PROMPT = (app: string): string => [
 ].join("\n");
 
 export async function orderClock(ctx: RoutineCtx, now: Date = new Date()): Promise<void> {
-  const { db, emitChange: emit } = ctx.kit;
+  const { db, sqlite, emitChange: emit } = ctx.kit;
+  // No order goes out for a family the app does not know yet.
+  if (!familyKnown(sqlite)) return;
+  const unmark = (id: string) => {
+    db.update(orders).set({ wake_sent_at: null, updated_at: new Date().toISOString() }).where(eq(orders.id, id)).run();
+    emit("orders", id, "update", "app");
+  };
+  const failures: string[] = [];
   const longAgo = localStamp(new Date(now.getTime() - REWAKE_AFTER_MIN * 60_000));
   const due = db.select().from(orders)
     .where(and(eq(orders.status, "scheduled"), lte(orders.place_at, localStamp(now)), or(isNull(orders.wake_sent_at), lt(orders.wake_sent_at, longAgo))))
     .orderBy(asc(orders.place_at), sql`rowid`).all();
   for (const o of due) {
-    if (o.wake_sent_at) {
+    // One order that fails does not stop the others.
+    let marked = false;
+    try {
       // Handed over before and never recorded. Back among the orders that follow the plan first, so placing brings it up to
       // what changed since.
-      db.update(orders).set({ wake_sent_at: null, updated_at: new Date().toISOString() }).where(eq(orders.id, o.id)).run();
-      emit("orders", o.id, "update", "app");
+      if (o.wake_sent_at) unmark(o.id);
+      const placing = startPlacing(db, emit, o.id, now, "app");
+      // Nothing on it: nothing to place. It is looked at again on the next run.
+      if (!placing) continue;
+      marked = true;
+      await wake(ctx, PLACE_PROMPT(APP_NAMES[o.app as GroceryApp] ?? o.app), placing);
+    } catch (e: any) {
+      // Nobody is placing it: it follows the plan again, and the next run hands it over.
+      if (marked) unmark(o.id);
+      failures.push(`${o.id}: ${String(e?.message ?? e)}`);
     }
-    const placing = startPlacing(db, emit, o.id, now, "app");
-    // Nothing on it: nothing to place. It is looked at again on the next run.
-    if (placing) await ctx.wakeAgent(PLACE_PROMPT(APP_NAMES[o.app as GroceryApp] ?? o.app), placing);
   }
+  // A failed run in the routine's history, once every due order had its turn.
+  if (failures.length) throw new Error(`${failures.length} of ${due.length} due orders not handed to the agent (${failures.join("; ")})`);
 }

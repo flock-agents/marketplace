@@ -5,11 +5,11 @@ import { and, eq, gte, inArray, lte, ne } from "drizzle-orm";
 import { house, order_lines, orders, saved_recipes } from "../db/schema";
 import { addDays, mondayOf, todayStr, weekdayOf } from "../dates";
 import { getHouse, houseView, isObject, list, type Db } from "../family";
-import { routinesMayRun } from "../gate";
+import { familyKnown } from "../gate";
 import { weekView, type MealView } from "../meals";
 import { dinnerCheckText, tomorrowCheckText } from "../messages";
 import { normItem } from "../products";
-import type { RoutineCtx } from "./index";
+import { wake, type RoutineCtx } from "./ctx";
 
 const SEND = "Send the family this check-in exactly, then handle replies (set_dish, set_meal, add_to_order)";
 
@@ -23,14 +23,14 @@ export function dailyTime(trigger: unknown): string | null {
   return `${m[2].padStart(2, "0")}:${m[1].padStart(2, "0")}`;
 }
 
-/** Write the time this check-in runs at on the house, on every run, family or not. Nothing is written when the routine has
- *  no one daily time, or before the app's tables are there. */
+/** Write the time this check-in runs at on the house, on every run, family or not. A routine with no one daily time has
+ *  none: a time written earlier is cleared, so the intro never names a time that no longer holds. Nothing is written before
+ *  the app's tables are there. */
 function recordTime(ctx: RoutineCtx, column: "dinner_check_time" | "tomorrow_check_time"): void {
   const time = dailyTime(ctx.routine?.trigger);
-  if (!time) return;
   try {
     const home = getHouse(ctx.kit.db);
-    if (home[column] === time) return;
+    if ((home[column] ?? null) === time) return;
     ctx.kit.db.update(house).set({ [column]: time, updated_at: new Date().toISOString() }).where(eq(house.id, home.id)).run();
     ctx.kit.emitChange("house", home.id, "update", "app");
   } catch (e) { console.warn(`[planner] ${column} was not recorded`, e); }
@@ -63,20 +63,20 @@ function videosOf(db: Db, meals: MealView[]): { dish: string; url: string }[] {
 
 export async function dinnerCheck(ctx: RoutineCtx, now: Date = new Date()): Promise<void> {
   recordTime(ctx, "dinner_check_time");
-  if (!routinesMayRun(ctx.kit.sqlite)) return;
+  if (!familyKnown(ctx.kit.sqlite)) return;
   const { db } = ctx.kit, today = todayStr(now);
   const meal = mealsOn(db, today).find((m) => m.slot === "Dinner") ?? null;
   const text = dinnerCheckText({ meal, ...freshItems(db, today, meal ? [meal] : []) });
-  if (text) await ctx.wakeAgent(SEND, { text, meal_id: meal!.id });
+  if (text) await wake(ctx, SEND, { text, meal_id: meal!.id });
 }
 
 export async function tomorrowCheck(ctx: RoutineCtx, now: Date = new Date()): Promise<void> {
   recordTime(ctx, "tomorrow_check_time");
-  if (!routinesMayRun(ctx.kit.sqlite)) return;
+  if (!familyKnown(ctx.kit.sqlite)) return;
   const { db } = ctx.kit, date = addDays(todayStr(now), 1);
   const meals = mealsOn(db, date), home = houseView(getHouse(db));
   // The videos are addressed to the cook only when they come that day, and the app knows who they are and when they arrive.
   const cook = home.cook_name && home.cook_arrival ? { name: home.cook_name, arrival: home.cook_arrival, today: home.cook_days.includes(weekdayOf(date)) } : undefined;
   const text = tomorrowCheckText({ date, meals, cook, videos: videosOf(db, meals), missing: freshItems(db, date, meals).missing });
-  if (text) await ctx.wakeAgent(SEND, { text, date, meal_ids: meals.map((m) => m.id) });
+  if (text) await wake(ctx, SEND, { text, date, meal_ids: meals.map((m) => m.id) });
 }

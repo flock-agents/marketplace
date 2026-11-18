@@ -26,13 +26,14 @@ export function routinesMayRun(sqlite: Database): boolean {
   return familyKnown(sqlite) || profilePending(sqlite);
 }
 
-type Handler<C> = (ctx: C) => void | Promise<void>;
+/** A routine: the kit calls it with its context alone; `now` is the time, for tests. */
+type Handler<C> = (ctx: C, now?: Date) => void | Promise<void>;
 
 /** The routines, each a silent no-op until the family is known or a carried-over profile waits. The gate decides only whether
  *  a routine's body runs: a routine with something to do on every run, family or not, composes `routinesMayRun` itself. */
 export function gateRoutines<C extends { kit: { sqlite: Database } }>(routines: Record<string, Handler<C>>): Record<string, Handler<C>> {
   return Object.fromEntries(Object.entries(routines).map(([id, run]) =>
-    [id, (ctx: C) => (routinesMayRun(ctx.kit.sqlite) ? run(ctx) : undefined)]));
+    [id, (ctx: C, now?: Date) => (routinesMayRun(ctx.kit.sqlite) ? run(ctx, now) : undefined)]));
 }
 
 /** The 2.0 profile as text: a string as it is, anything else as readable JSON. Null when there is none, or nothing in it. */

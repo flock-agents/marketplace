@@ -5,7 +5,7 @@ import { dayLabel, nextMonday, todayStr } from "../dates";
 import { getHouse } from "../family";
 import { profilePending } from "../gate";
 import { weekContext } from "../meals";
-import type { RoutineCtx } from "./index";
+import { wake, type RoutineCtx } from "./ctx";
 
 const STRUCTURE_PROFILE = "Structure the family profile below with set_person / set_house_rules / set_cook / set_slots / set_regular, "
   + "then clear it with set_house_rules { structured: true }. Keep the family's own words, and ask them about anything the profile leaves unclear. "
@@ -26,9 +26,9 @@ export const WEEKLY_PROMPT = (weekStart: string): string => [
 export async function weeklyPlan(ctx: RoutineCtx, now: Date = new Date()): Promise<void> {
   const { db, sqlite } = ctx.kit;
   if (profilePending(sqlite)) {
-    await ctx.wakeAgent(STRUCTURE_PROFILE, { profile: getHouse(db).profile_to_structure });
+    await wake(ctx, STRUCTURE_PROFILE, { profile: getHouse(db).profile_to_structure });
     return;
   }
   const weekStart = nextMonday(todayStr(now));
-  await ctx.wakeAgent(WEEKLY_PROMPT(weekStart), { week_start: weekStart, context: weekContext(db, weekStart) });
+  await wake(ctx, WEEKLY_PROMPT(weekStart), { week_start: weekStart, context: weekContext(db, weekStart) });
 }

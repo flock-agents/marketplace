@@ -31,10 +31,11 @@ async function app(opts: { family?: boolean } = {}) {
   const k = await boot({ now: () => clock.now });
   if (opts.family !== false) await k.op("set_person", { name: "Asha", group: "adult" });
   const wakes: Wake[] = [];
-  const ctx = (trigger: unknown = null) => ({
+  /** `answer` is what the platform says to a wake; by default every wake goes. A wake that did not go is not in `wakes`. */
+  const ctx = (trigger: unknown = null, answer: (data: any) => { ok: boolean; reason?: string; data?: unknown } = () => ({ ok: true, data: {} })) => ({
     kit: { db: k.kit.db, sqlite: k.kit.sqlite, emitChange: k.kit.emitChange },
     routine: { trigger },
-    wakeAgent: async (message: string, data?: unknown) => { wakes.push({ message, data }); return { ok: true as const, data: {} }; },
+    wakeAgent: async (message: string, data?: unknown) => { const r = answer(data); if (r.ok) wakes.push({ message, data }); return r; },
   });
   const order = (id: string) => k.rows("orders").find((o) => o.id === id);
   const house = () => k.rows("house")[0];
@@ -223,13 +224,29 @@ describe("the check-ins record when they really run", () => {
     expect(k.house().dinner_check_time).toBe("15:00");
   });
 
-  it("a non-daily cron, or a trigger that cannot be read, stores nothing", async () => {
+  it("a non-daily cron, or a trigger that cannot be read, stores nothing and clears a time stored before", async () => {
     const k = await app();
     await dinnerCheck(k.ctx({ type: "schedule", cron: "0 15 * * 1-5" }), MON_3PM);
     await tomorrowCheck(k.ctx(null), SUN_7PM);
-    await tomorrowCheck({ ...k.ctx(), routine: undefined } as any, SUN_7PM);
     expect(k.house()?.dinner_check_time ?? null).toBeNull();
     expect(k.house()?.tomorrow_check_time ?? null).toBeNull();
+
+    await dinnerCheck(k.ctx(DAILY_3PM), MON_3PM);
+    await tomorrowCheck(k.ctx(DAILY_7PM), SUN_7PM);
+    expect([k.house().dinner_check_time, k.house().tomorrow_check_time]).toEqual(["15:00", "19:00"]);
+    // The schedules stop being one daily time: the stored times no longer hold.
+    await dinnerCheck(k.ctx({ type: "schedule", cron: "0 15 * * 1-5" }), MON_3PM);
+    expect([k.house().dinner_check_time, k.house().tomorrow_check_time]).toEqual([null, "19:00"]);
+    await tomorrowCheck({ ...k.ctx(), routine: undefined } as any, SUN_7PM);
+    expect([k.house().dinner_check_time, k.house().tomorrow_check_time]).toEqual([null, null]);
+  });
+
+  it("the intro falls back to 3 pm and 7 pm once the stored times are cleared", async () => {
+    const k = await plannedWeek();
+    await dinnerCheck(k.ctx({ type: "schedule", cron: "30 16 * * *" }), SAT_EVENING);
+    await dinnerCheck(k.ctx({ type: "schedule", cron: "*/30 * * * *" }), SAT_EVENING);
+    const r = await k.op("record_order", { order_id: k.first.id, placed: true });
+    expect(r.intro).toContain("I check in at 3 pm about dinner and 7 pm about tomorrow");
   });
 
   it("the intro names the times the check-ins recorded", async () => {
@@ -346,38 +363,102 @@ describe("order clock", () => {
   });
 });
 
+describe("a wake that does not go", () => {
+  const busy = () => ({ ok: false, reason: "agent busy" });
+
+  it("fails the weekly run and a check-in, so the run is not recorded as done", async () => {
+    const k = await plannedWeek();
+    await expect(weeklyPlan(k.ctx(null, busy), SAT_EVENING)).rejects.toThrow("the agent was not woken: agent busy");
+    await expect(dinnerCheck(k.ctx(DAILY_3PM, busy), MON_3PM)).rejects.toThrow("agent busy");
+    await expect(tomorrowCheck(k.ctx(DAILY_7PM, busy), SUN_7PM)).rejects.toThrow("agent busy");
+    expect(k.wakes).toEqual([]);
+    // The time was recorded all the same.
+    expect(k.house().dinner_check_time).toBe("15:00");
+
+    const old = await app({ family: false });
+    carryOldProfile(old, "2 adults");
+    await expect(weeklyPlan(old.ctx(null, busy), SAT_EVENING)).rejects.toThrow("agent busy");
+  });
+
+  it("the order clock takes its mark off the order, still hands over the other due orders, then fails once", async () => {
+    const k = await plannedWeek();
+    const monEvening = at(18, 0, 23);   // both the first order (never placed) and the second are due
+    const run = orderClock(k.ctx(null, (data) => (data.order.id === k.first.id ? busy() : { ok: true })), monEvening);
+    await expect(run).rejects.toThrow(`1 of 2 due orders not handed to the agent (${k.first.id}: the agent was not woken: agent busy)`);
+    expect(k.wakes.map((w) => w.data.order.id)).toEqual([k.second.id]);
+    expect(k.order(k.first.id).wake_sent_at).toBeNull();
+    expect(k.order(k.second.id).wake_sent_at).toBe("2026-11-23T18:00");
+
+    // Not being placed by anyone: it follows the plan again, and the next run hands it over.
+    await k.op("set_dish", { date: MON, slot: "Dinner", name: "Kachumber", ingredients: [{ item: "tomato", amount: 2, unit: "pc" }] });
+    k.settle();
+    expect(k.rows("order_lines").filter((l) => l.order_id === k.first.id).map((l) => l.item)).toContain("tomato");
+    await orderClock(k.ctx(), at(18, 15, 23));
+    expect(k.wakes.map((w) => w.data.order.id)).toEqual([k.second.id, k.first.id]);
+  });
+
+  it("a wake that throws is treated the same", async () => {
+    const k = await plannedWeek();
+    const ctx = { ...k.ctx(), wakeAgent: async () => { throw new Error("socket closed"); } };
+    await expect(orderClock(ctx, at(18, 15))).rejects.toThrow("socket closed");
+    expect(k.order(k.first.id).wake_sent_at).toBeNull();
+  });
+
+  it("a wake held for later went: the order keeps its mark and is not handed over again", async () => {
+    const k = await plannedWeek();
+    await orderClock(k.ctx(null, () => ({ ok: true, data: { heldUntil: "2026-11-21T20:00:00.000Z" } })), at(18, 15));
+    expect(k.wakes).toHaveLength(1);
+    expect(k.order(k.first.id).wake_sent_at).toBe("2026-11-21T18:15");
+    await orderClock(k.ctx(), at(18, 30));
+    expect(k.wakes).toHaveLength(1);
+  });
+});
+
 describe("the family gate", () => {
-  const runAll = async (k: Awaited<ReturnType<typeof app>>, now: Date) => {
-    expect(Object.keys(routines).sort()).toEqual(["dinner-check", "order-clock", "tomorrow-check", "weekly-plan"]);
-    // As the kit calls them: the context alone, the time being now. The check-ins are also run at the times that have meals.
-    for (const run of Object.values(routines)) await run(k.ctx(DAILY_3PM));
-    await dinnerCheck(k.ctx(DAILY_3PM), now);
-    await tomorrowCheck(k.ctx(DAILY_7PM), new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 19, 0));
+  /** Every routine through the app's own map, as the kit calls it, each at a time it has something to say at. */
+  const TIMES: Record<string, Date> = { "weekly-plan": SAT_EVENING, "order-clock": MON_3PM, "dinner-check": MON_3PM, "tomorrow-check": SUN_7PM };
+  const runAll = async (k: Awaited<ReturnType<typeof app>>) => {
+    expect(Object.keys(routines).sort()).toEqual(Object.keys(TIMES).sort());
+    for (const id of Object.keys(TIMES)) await routines[id](k.ctx(id === "tomorrow-check" ? DAILY_7PM : DAILY_3PM), TIMES[id]);
   };
 
   it("gated: no person and no pending profile → no wake from any routine", async () => {
     // A plan and a due order are there, so each routine would have something to say.
     const k = await plannedWeek([monLunch, monDinner], { family: false });
     expect(k.first.lines.length).toBeGreaterThan(0);
-    // Due whatever the day the tests run on: the routines are called as the kit calls them, at the real time.
-    k.kit.sqlite.run(`UPDATE orders SET place_at = '2000-01-01T00:00' WHERE id = ?`, [k.first.id]);
-    await runAll(k, MON_3PM);
+    await runAll(k);
     expect(k.wakes).toEqual([]);
     expect(k.order(k.first.id).wake_sent_at).toBeNull();
+    expect([k.house().dinner_check_time, k.house().tomorrow_check_time]).toEqual(["15:00", "19:00"]);
 
-    // The same app once a person is known: the order clock and the check-ins speak.
+    // The same app once a person is known: every routine speaks.
     await k.op("set_person", { name: "Asha", group: "adult" });
-    await runAll(k, MON_3PM);
-    expect([...new Set(k.wakes.map((w) => Object.keys(w.data).sort().join()))]).toEqual(["context,week_start", "message,needs_product,needs_qty,order", "meal_id,text", "date,meal_ids,text"]);
+    await runAll(k);
+    expect(k.wakes.map((w) => Object.keys(w.data).sort().join())).toEqual(["context,week_start", "message,needs_product,needs_qty,order", "meal_id,text", "date,meal_ids,text"]);
   });
 
   it("a carried-over profile and nobody yet: only the weekly run wakes, to structure it; the check-ins and the clock are silent", async () => {
     const k = await app({ family: false });
     carryOldProfile(k, "2 adults, veg");
-    await runAll(k, MON_3PM);
+    await runAll(k);
     expect(k.wakes.map((w) => Object.keys(w.data))).toEqual([["profile"]]);
     expect(k.wakes[0].data.profile).toBe("2 adults, veg");
     expect(k.house().dinner_check_time).toBe("15:00");
     expect(k.rows("orders")).toEqual([]);
+  });
+
+  it("a carried-over profile, nobody yet, and a final plan with a due order: still only the structure wake", async () => {
+    const k = await plannedWeek([monLunch, monDinner], { family: false });
+    carryOldProfile(k, "2 adults, veg");
+    await runAll(k);
+    expect(k.wakes.map((w) => Object.keys(w.data))).toEqual([["profile"]]);
+    expect(k.order(k.first.id).wake_sent_at).toBeNull();
+    expect([k.house().dinner_check_time, k.house().tomorrow_check_time]).toEqual(["15:00", "19:00"]);
+
+    // Once the profile is structured into a person, the routines speak.
+    await k.op("set_person", { name: "Asha", group: "adult" });
+    await k.op("set_house_rules", { structured: true });
+    await runAll(k);
+    expect(k.wakes.slice(1).map((w) => Object.keys(w.data).sort().join())).toEqual(["context,week_start", "message,needs_product,needs_qty,order", "meal_id,text", "date,meal_ids,text"]);
   });
 });
