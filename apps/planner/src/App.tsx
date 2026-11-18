@@ -1,59 +1,28 @@
-import { useEffect, useState } from "react";
-import { AppShell, AgentChat, useApp, useHashRoute, label, type AppShellProps } from "./flock/ui";
-import { WeekPage } from "./pages/WeekPage";
-import { GroceriesPage } from "./pages/GroceriesPage";
-import { PantryPage } from "./pages/PantryPage";
-import { RecipesPage } from "./pages/RecipesPage";
-import { RecipePage } from "./pages/RecipePage";
-import { IngredientsPage } from "./pages/IngredientsPage";
-import { IngredientPage } from "./pages/IngredientPage";
-import { GlobalSearch } from "./pages/GlobalSearch";
-import { IdleNotice } from "./pages/IdleNotice";
+import { AppShell, AgentChat, Empty, Page, useApp, useHashRoute, label, type AppShellProps } from "./flock/ui";
 
 // The name, object, accent, starters and labels come from the app's display (GET /api/_app); these are the fallbacks.
-const STARTERS = ["Plan next week without repeats", "Plan next week from our recipes", "Make the grocery list"];
-const PAGE_IDS = ["week", "groceries", "pantry", "recipes", "ingredients"];
+const STARTERS = ["Plan next week", "Add paneer to the next order", "Save a recipe video"];
+const PAGES = [
+  { id: "week", nav: "Week", title: "This week's meals", icon: "calendar-days" },
+  { id: "shopping", nav: "Shopping", title: "Shopping", icon: "shopping-basket" },
+  { id: "recipes", nav: "Recipes", title: "Recipes", icon: "book-open" },
+  { id: "family", nav: "Family", title: "Family", icon: "users" },
+];
 
 export default function App() {
   const app = useApp();
   const [page, go] = useHashRoute("week");
-  const recipeId = page.startsWith("recipe/") ? page.slice(7) : null;
-  const ingredientId = page.startsWith("ingredient/") ? page.slice(11) : null;
-  const groceryFocus = page.startsWith("groceries/") ? page.slice(10).split(",").filter(Boolean) : [];
-  const current = recipeId ? "recipes" : ingredientId ? "ingredients" : groceryFocus.length ? "groceries" : PAGE_IDS.includes(page) ? page : "week";
-  const [selected, setSelected] = useState<{ table: string; id: string; label: string } | null>(null);
-  useEffect(() => { if (!recipeId && selected?.table === "recipes") setSelected(null); }, [recipeId]); // eslint-disable-line react-hooks/exhaustive-deps
-  const pages = [
-    { id: "week", label: label("nav.week", "Week"), icon: "calendar-days" },
-    { id: "groceries", label: label("nav.groceries", "Shopping"), icon: "shopping-basket" },
-    { id: "pantry", label: label("nav.pantry", "Pantry"), icon: "package" },
-    { id: "recipes", label: label("nav.recipes", "Recipes"), icon: "book-open" },
-    { id: "ingredients", label: label("nav.ingredients", "Ingredients"), icon: "carrot" },
-  ];
+  const current = PAGES.find((p) => p.id === page) ?? PAGES[0];
   return (
     <AppShell
       name={app.name ?? document.title} object={app.display.object ?? "grocery-bag"} accent={app.display.accent as AppShellProps["accent"]}
-      nav="top" pages={pages} current={current} onNavigate={(id) => { setSelected(null); go(id); }}
-      chat={{
-        placement: "side",
-        render: () => (
-          <AgentChat
-            placement="side"
-            context={selected}
-            starters={app.display.starters ?? STARTERS}
-          />
-        ),
-      }}
+      nav="top" pages={PAGES.map((p) => ({ id: p.id, label: label(`nav.${p.id}`, p.nav), icon: p.icon }))} current={current.id} onNavigate={go}
+      chat={{ placement: "side", render: () => <AgentChat placement="side" starters={app.display.starters ?? STARTERS} /> }}
     >
-      <GlobalSearch onOpen={(route) => { setSelected(null); go(route); }} />
-      <IdleNotice settings={app.settings} loading={app.loading} />
-      {ingredientId ? <IngredientPage id={ingredientId} onBack={() => go("ingredients")} onOpenRecipe={(id) => go(`recipe/${id}`)} />
-        : recipeId ? <RecipePage id={recipeId} onBack={() => go("recipes")} onSelect={setSelected} />
-        : current === "groceries" ? <GroceriesPage focus={groceryFocus} />
-        : current === "pantry" ? <PantryPage />
-        : current === "ingredients" ? <IngredientsPage onOpen={(i) => go(`ingredient/${i.id}`)} />
-        : current === "recipes" ? <RecipesPage onOpen={(r) => go(`recipe/${r.id}`)} />
-        : <WeekPage onSelect={setSelected} onOpenGroceries={(ids) => { setSelected(null); go(`groceries/${ids.join(",")}`); }} />}
+      {/* Placeholders: each page is built on the new tables in a later step of the 3.0 rebuild. */}
+      <Page title={label(`title.${current.id}`, current.title)}>
+        <Empty title="Nothing here yet" hint="Ask the assistant in the chat to plan your week." />
+      </Page>
     </AppShell>
   );
 }
