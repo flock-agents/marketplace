@@ -11,6 +11,8 @@ import { OLD_TABLES, SETTINGS } from "./db/constants";
 import { agentOps } from "./agentOps";
 import { mountFamilyRoutes } from "./family";
 import { mountMealRoutes, type MealHooks } from "./meals";
+import { mountRegularRoutes, type RegularHooks } from "./regulars";
+import { mountProductRoutes } from "./products";
 
 /** A fresh temp directory for a test, removed when its test file is done: nothing piles up in the system's temp folder.
  *  The removal is registered here, per directory: this module loads once for the whole run, so a hook at its top level would
@@ -21,7 +23,7 @@ export function tempDir(prefix = "planner-test-"): string {
   return dir;
 }
 
-export async function boot(opts: { dbFile?: string; dataDir?: string; mealHooks?: MealHooks } = {}) {
+export async function boot(opts: { dbFile?: string; dataDir?: string; mealHooks?: MealHooks; regularHooks?: RegularHooks } = {}) {
   const hono = new Hono();
   const dataDir = opts.dataDir ?? tempDir();
   // The kit opens its database inside dataDir, so a file given by its full path is named from there.
@@ -30,6 +32,8 @@ export async function boot(opts: { dbFile?: string; dataDir?: string; mealHooks?
     { schema, settings: SETTINGS, keepTables: OLD_TABLES, dbFile, appName: "T" });
   mountFamilyRoutes(hono, kit.db, kit.emitChange);
   mountMealRoutes(hono, kit.db, kit.emitChange, opts.mealHooks ?? { onFinal: () => undefined, onChanged: () => {} });
+  mountRegularRoutes(hono, kit.db, kit.emitChange, opts.regularHooks ?? { onChanged: () => {} });
+  mountProductRoutes(hono, kit.db, kit.emitChange);
   /** A request as the owner. */
   const owner = async (method: string, path: string, body?: unknown) => {
     const r = await hono.request(path, { method, headers: { "Content-Type": "application/json", "X-Flock-User": "tester" }, body: body === undefined ? undefined : JSON.stringify(body) });

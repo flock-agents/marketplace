@@ -92,11 +92,11 @@ export function weekContext(db: Db, weekStart: string): WeekContext {
 // ── What was sent, checked ──
 
 /** A real calendar date as "YYYY-MM-DD". */
-const dateOf = (v: unknown, what: string): string =>
+export const dateOf = (v: unknown, what: string): string =>
   typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) && addDays(v, 0) === v ? v : refuse(`${what} must be a date as YYYY-MM-DD`);
 const slotOf = (v: unknown, slots: string[]): string =>
   slots.find((s) => typeof v === "string" && s.toLowerCase() === v.trim().toLowerCase()) ?? refuse(`slot must be one of: ${slots.join(", ")}`);
-const flag = (v: unknown, what: string): boolean => (typeof v === "boolean" ? v : refuse(`${what} must be true or false`));
+export const flag = (v: unknown, what: string): boolean => (typeof v === "boolean" ? v : refuse(`${what} must be true or false`));
 
 function itemsOf(v: unknown, dish: string): Item[] {
   if (!Array.isArray(v)) return refuse(`${dish}: ingredients must be a list of { item, amount?, unit?, keeps? }`);

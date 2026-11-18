@@ -56,7 +56,7 @@ const weekday = (v: unknown): Weekday | null => {
   const w = typeof v === "string" ? v.trim().toLowerCase() : "";
   return w.length < 3 ? null : WEEKDAYS[DAY_NAMES.findIndex((d) => d.startsWith(w))] ?? null;
 };
-const weekdays = (v: unknown, what: string): Weekday[] => {
+export const weekdays = (v: unknown, what: string): Weekday[] => {
   if (!Array.isArray(v)) return refuse(`${what} must be a list of weekdays (${WEEKDAYS.join(", ")})`);
   return v.map((d) => weekday(d) ?? refuse(`${what}: ${JSON.stringify(d)} is not a weekday (${WEEKDAYS.join(", ")})`));
 };

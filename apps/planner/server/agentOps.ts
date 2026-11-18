@@ -20,6 +20,9 @@ export const ROUTES: Record<string, Route> = {
     : { error: "week_start is required: the week's Monday as YYYY-MM-DD", code: "APP_REFUSED", status: 400 },
   set_meal: (p) => ({ method: "POST", path: "/api/meals", body: p }),
   set_dish: (p) => ({ method: "POST", path: "/api/dishes", body: p }),
+  set_regular: (p) => ({ method: "POST", path: "/api/regulars", body: p }),
+  import_order_history: (p) => ({ method: "POST", path: "/api/order-history", body: p }),
+  remember_product: (p) => ({ method: "POST", path: "/api/products", body: p }),
 };
 
 /** Operations that take more than one call, or none. */

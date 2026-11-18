@@ -5,6 +5,8 @@ import * as schema from "./db/schema";
 import { OLD_TABLES, SETTINGS } from "./db/constants";
 import { mountFamilyRoutes } from "./family";
 import { mountMealRoutes } from "./meals";
+import { mountRegularRoutes } from "./regulars";
+import { mountProductRoutes } from "./products";
 import { migrateOldProfile } from "./gate";
 
 // The app's operations for its agent (agentOps.ts): Flock relays the agent's calls to them.
@@ -17,7 +19,9 @@ const kit = await mountKit(flock, { schema, settings: SETTINGS, keepTables: OLD_
 if (kit.status.state === "ok") migrateOldProfile(kit.sqlite);
 
 mountFamilyRoutes(flock.hono, kit.db, kit.emitChange);
-// The orders are not built yet: a plan changes nothing beyond itself, and a final plan answers with no orders.
+// The orders are not built yet: a plan or an everyday item changes nothing beyond itself, and a final plan answers with no orders.
 mountMealRoutes(flock.hono, kit.db, kit.emitChange, { onFinal: () => undefined, onChanged: () => {} });
+mountRegularRoutes(flock.hono, kit.db, kit.emitChange, { onChanged: () => {} });
+mountProductRoutes(flock.hono, kit.db, kit.emitChange);
 
 flock.listen();
