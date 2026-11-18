@@ -7,7 +7,7 @@ clock. Keep none of it in memory or chat: read the app, change it through an ope
 - **An operation:** `POST /api/apps/<this app>/ops/<name>` with its input as the JSON body (the api tool).
 - **Reading:** `plan_week { week_start, mode: "draft" }` without meals answers with all a plan starts from. The family:
   `GET /a/<this app>/api/family`. Rows: `GET /a/<this app>/api/_data/<table>` (`?col=value` filters): people, house,
-  plan_meals, dishes, dish_items, regulars, orders, order_lines, products, saved_recipes.
+  plan_meals, dishes, dish_items, regulars, orders, order_lines, products, saved_recipes. Rows are for reading: never write one.
 - **A refusal** says in plain words what to fix (`error`): fix the call and send it again. 404: no such row. 409: the row
   is in a state the call does not fit (an order that is no longer scheduled).
 - Dates are YYYY-MM-DD, times HH:MM on the 24-hour clock, weekdays Mon to Sun. A week is named by its Monday.
@@ -26,7 +26,7 @@ weekly plan, check-in or order runs until at least one person is saved.
 | The cook: name, days, when they arrive, what they make well | `set_cook`: name, days and arrival every time |
 | A meal beyond Breakfast, Lunch, Dinner ("Agastya's tiffin"); meals ordered in or eaten out every week ("Sunday dinner") | `set_slots`: each list you send is the whole list |
 | What is bought again and again ("milk, 1 litre a day") | `set_regular`, once they confirmed it |
-| The grocery app they order on | `PATCH /a/<this app>/api/_app/settings {"grocery_app": "zepto"}` (`zepto`, `swiggy-instamart`, `zomato-blinkit`, `bigbasket`) |
+| The grocery app they order on | The app's one setting: update `/a/<this app>/api/_app/settings` with `{"grocery_app": "zepto"}` (`zepto`, `swiggy-instamart`, `zomato-blinkit`, `bigbasket`) |
 
 Right after a grocery sign-in, read their past orders there and send them to `import_order_history`. It suggests
 everyday items and makes none: ask the family about each ("You buy milk most days: 1 litre a day?") and `set_regular`
@@ -75,10 +75,10 @@ Each covers a day or two; the week's first is due at once, later ones the evenin
    order that is due, this answer is already in the wake: do not call it again.)
 2. Send the family `message` word for word ("Ordering this now: …").
 3. `needs_product`: lines with no product yet. Search the grocery app for the line's `item` and pick the product that
-   matches every word of it (none: leave it out and tell the family, never a substitute). `remember_product` it, and
-   `PATCH /a/<this app>/api/_data/order_lines/<line id> { product_id, name_on_app, pack, price, qty, "qty_checked": 1 }`.
+   matches every word of it (none: take the line off and tell the family, never a substitute). Save it on the line:
+   `add_to_order { order_id, item, product_id, name_on_app, pack, pack_amount, pack_unit, price, qty }`.
 4. `needs_qty`: lines whose packs the app could not work out from the pack size. Work out how many packs cover the
-   line's `amount` and set it with the same `PATCH`: `{ "qty": 2, "qty_checked": 1 }`.
+   line's `amount`: `add_to_order { order_id, item, qty }`. (`unit` too when the item has two lines.)
 5. Put every line in the grocery app's cart (`qty` packs of its product) and check out: the payment step asks the person.
 6. `record_order { order_id, placed: true, total, app_order_ref }` at once. If it could not be placed:
    `record_order { order_id, placed: false, note }`; it stays scheduled and is tried again.
@@ -97,8 +97,9 @@ ItemPicker block (on WhatsApp the numbered text), then `add_to_order { item, qty
 pack_amount, pack_unit, price, image }` with the pick. Without `order_id` it goes on the next scheduled order, or a new
 one due now. Added after an order's message went out: into that cart and that `order_id` if not yet checked out.
 
-**A line on a scheduled order** they do not want ("we have tomatoes"): `DELETE /a/<this app>/api/_data/order_lines/<id>`;
-the app remembers they have it for that order. More or fewer packs: `PATCH` its `qty`. Never on a placed or paid order.
+**A line already on a scheduled order:** `add_to_order` with its `item` sets that line (its product, its `qty`: the
+packs in all) and adds no second one. An item they do not want ("we have tomatoes"): `add_to_order { item, remove:
+true }`; the app remembers they have it for that order. A placed or paid order's lines never change.
 
 **Low or out.** Nothing about what is at home is kept. `ask_low_or_out { week_start }` answers `{ items, question }`:
 send the question ("Atta, rice, toor dal: any low or out?"). Whenever they answer, `ask_low_or_out { week_start,
@@ -132,7 +133,7 @@ The app wakes you once a week with next week's `week_start` and the context to p
 Each afternoon (tonight's dinner) and each evening (tomorrow's meals, also the cook's brief, with the dishes' videos) the
 app wakes you with a `text`: send it exactly, add nothing. It is silent when nothing is planned. Then handle replies:
 a changed dish is `set_dish` or `set_meal`; an item under "Not on any order yet" that they need is `add_to_order`; an
-item they already have comes off its scheduled order (above).
+item they already have is `add_to_order { item, remove: true }`.
 
 ## Saved recipes
 

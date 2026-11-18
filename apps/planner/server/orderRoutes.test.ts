@@ -547,6 +547,70 @@ describe("an order that is not paid, or cancelled", () => {
 });
 
 describe("add_to_order", () => {
+  it("an item already on the order has its line set, not a second line: product, packs, checked; what it is for stays", async () => {
+    const { op, first, rows, line, items } = await plannedWeek();
+    // The order is being placed: this is when the agent fills the lines place_order listed.
+    const placing = await op("place_order", { order_id: first.id });
+    expect(placing.needs_product.map((l: any) => l.item)).toContain("rice");
+    const rice = line(first.id, "rice"), count = items(first.id).length;
+    const r = await op("add_to_order", { order_id: first.id, item: " Rice ", qty: 2, product_id: "z-rice", name_on_app: "India Gate Rice 1 kg", pack: "1 kg", price: 120, image: "https://img/r.jpg" });
+    expect(r.line).toMatchObject({ id: rice.id, item: "rice", amount: 400, unit: "g", qty: 2, qty_checked: 1, source: "dish", sources: rice.sources,
+      product_id: "z-rice", name_on_app: "India Gate Rice 1 kg", pack: "1 kg", price: 120, image: "https://img/r.jpg", updated_by: "agent:meal-agent" });
+    expect(items(first.id)).toHaveLength(count);
+    expect(rows("products").find((p) => p.item === "rice")).toMatchObject({ app: "zepto", product_id: "z-rice", pack_amount: 1, pack_unit: "kg" });
+    // Packs alone: the line keeps its product. Nothing sent but the item: the line is left as it is.
+    expect((await op("add_to_order", { order_id: first.id, item: "milk", qty: 5 })).line).toMatchObject({ id: line(first.id, "milk").id, qty: 5, qty_checked: 1, product_id: "z-milk", source: "regular" });
+    expect((await op("add_to_order", { order_id: first.id, item: "milk" })).line).toMatchObject({ qty: 5, qty_checked: 1 });
+    expect(items(first.id)).toHaveLength(count);
+    // A line with no product takes the one remembered for its item, and an item not on the order is still an added line.
+    await op("remember_product", { item: "potato", app: "zepto", product_id: "z-aloo", name_on_app: "Potato 1 kg", pack: "1 kg", price: 40 });
+    expect((await op("add_to_order", { order_id: first.id, item: "potato" })).line).toMatchObject({ id: line(first.id, "potato").id, product_id: "z-aloo", price: 40, qty_checked: 0 });
+    expect((await op("add_to_order", { order_id: first.id, item: "coriander" })).line).toMatchObject({ source: "added", qty: 1 });
+    expect(items(first.id)).toHaveLength(count + 1);
+  });
+
+  it("the unit, when given, says which of an item's two lines is meant", async () => {
+    const { op, first, rows } = await plannedWeek([{ date: MON, slot: "Lunch", dishes: [
+      { name: "Sabzi", ingredients: [{ item: "onion", amount: 2, unit: "pc" }] }, { name: "Raita", ingredients: [{ item: "onion", amount: 100, unit: "g" }] }] }]);
+    const grams = rows("order_lines").find((l) => l.order_id === first.id && l.item === "onion" && l.unit === "g");
+    const r = await op("add_to_order", { order_id: first.id, item: "onion", unit: "G", qty: 3 });
+    expect(r.line).toMatchObject({ id: grams.id, unit: "g", qty: 3 });
+    expect(r.order.lines.filter((l: any) => l.item === "onion")).toHaveLength(2);
+  });
+
+  it("remove takes the line off a scheduled order and remembers the item as one they have, through a rebuild", async () => {
+    const { op, first, second, line, order, kit, settle } = await plannedWeek();
+    const r = await op("add_to_order", { order_id: second.id, item: "Milk", remove: true });
+    expect(r.removed).toMatchObject({ item: "milk", order_id: second.id });
+    expect(r.order.lines.map((l: any) => l.item)).not.toContain("milk");
+    expect(JSON.parse(order(second.id).skipped_items)).toEqual(["milk"]);
+    settle(); rebuildScheduledOrders(kit.db, kit.emitChange);
+    expect(line(second.id, "milk")).toBeUndefined();
+    // Without an order named: the soonest scheduled order that has it.
+    expect((await op("add_to_order", { item: "potato", remove: true })).order.id).toBe(first.id);
+    expect(JSON.parse(order(first.id).skipped_items)).toEqual(["potato"]);
+    // A line the family added is just taken off: nothing is remembered about it.
+    await op("add_to_order", { order_id: second.id, item: "paneer" });
+    await op("add_to_order", { order_id: second.id, item: "paneer", remove: true });
+    expect(line(second.id, "paneer")).toBeUndefined();
+    expect(JSON.parse(order(second.id).skipped_items)).toEqual(["milk"]);
+    // Not there: said so.
+    const none = await op("add_to_order", { item: "saffron", remove: true });
+    expect(none.status).toBe(404); expect(none.error).toContain("saffron");
+    expect((await op("add_to_order", { item: "milk", remove: "yes" })).code).toBe("APP_REFUSED");
+  });
+
+  it("a line of an order that is placed is neither set nor removed", async () => {
+    const { op, first, rows } = await plannedWeek();
+    await op("record_order", { order_id: first.id, placed: true });
+    const before = JSON.stringify(rows("order_lines").filter((l) => l.order_id === first.id));
+    expect((await op("add_to_order", { order_id: first.id, item: "rice", qty: 3 })).status).toBe(409);
+    expect((await op("add_to_order", { order_id: first.id, item: "rice", remove: true })).status).toBe(409);
+    expect(JSON.stringify(rows("order_lines").filter((l) => l.order_id === first.id))).toBe(before);
+    // With no order named, the item is looked for on the scheduled orders only.
+    expect((await op("add_to_order", { item: "rice", remove: true })).status).toBe(404);
+  });
+
   it("add_to_order with no order_id goes to the next scheduled order and remembers the product", async () => {
     const { op, first, second, rows, line } = await plannedWeek();
     const r = await op("add_to_order", { item: "Paneer", qty: 2, product_id: 4411, name_on_app: "Milky Mist Paneer 200 g", pack: "200 g", price: 95, image: "https://img/p.jpg" });

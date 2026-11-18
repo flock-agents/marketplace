@@ -3,15 +3,15 @@
 // meal, a dish or an everyday item (by the agent, or by the family on a page) rebuilds the ones not yet placed.
 // An order goes scheduled → placed (waiting for the person's payment) → paid or not paid; or cancelled before it is placed.
 import type { Hono } from "hono";
-import { eq } from "drizzle-orm";
+import { and, asc, eq, isNull, sql } from "drizzle-orm";
 import type { KitEvent } from "@flock/app-kit";
 import { house, order_lines, orders } from "./db/schema";
 import { APP_NAMES, type GroceryApp } from "./db/constants";
 import { localStamp, todayStr, weekdayLong } from "./dates";
-import { getHouse, groceryApp, name, refuse, words, writeRoutes, type Db, type Emit } from "./family";
+import { getHouse, groceryApp, list, name, refuse, words, writeRoutes, type Db, type Emit } from "./family";
 import { dateOf, flag, type MealHooks } from "./meals";
 import { introText } from "./messages";
-import { productFor, productId, productOf, rememberProduct } from "./products";
+import { normItem, productFor, productId, productOf, rememberProduct } from "./products";
 import type { RegularHooks } from "./regulars";
 import { applyLowOrOut, buildOrdersForWeek, commitOrders, extraOrder, fillOrders, lineRemoved, lineRestored, lowOrOutQuestion, nextScheduled, orderView,
   rebuildScheduledOrders, rollUnpaid, startPlacing, weekHasOrders, type OrderRow } from "./orders";
@@ -38,6 +38,10 @@ function debounced(ms: number): (run: () => void) => void {
 }
 
 const timeOr = (v: string | null, fallback: string): string => (v && /^([01]?\d|2[0-3]):[0-5]\d$/.test(v) ? v : fallback);
+
+/** The scheduled orders whose lines can still change without being named: soonest first, the ones being placed aside. */
+const scheduledOrders = (db: Db): OrderRow[] =>
+  db.select().from(orders).where(and(eq(orders.status, "scheduled"), isNull(orders.wake_sent_at))).orderBy(asc(orders.place_at), sql`rowid`).all();
 
 export function mountOrderRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: OrderOptions = {}): { mealHooks: MealHooks; regularHooks: RegularHooks } {
   const write = writeRoutes(hono);
@@ -79,25 +83,59 @@ export function mountOrderRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: Orde
     return { body: { order: applyLowOrOut(db, weekStart, answer, now(), by, emit) } };
   });
 
-  // add_to_order { order_id?, item, qty?, product_id?, name_on_app?, pack?, pack_amount?, pack_unit?, price?, image? }: one more
-  // line, on the order given, else the next scheduled one, else a new order placed now. With a product_id the product is
-  // remembered as the item's; without one the item's remembered product is used.
+  // add_to_order { order_id?, item, unit?, qty?, product_id?, name_on_app?, pack?, pack_amount?, pack_unit?, price?, image?, remove? }:
+  // the one door to an order's lines, on the order given, else the next scheduled one, else a new order placed now. An item
+  // already on the order has its line set (the product, the packs) and stays what it was for; any other item is one more
+  // line. With a product_id the product is remembered as the item's; without one the item's remembered product is used.
+  // `remove: true` takes the item's line off, and the order remembers the item as one the family has. Only a scheduled
+  // order's lines change: one being placed too, which is when the agent fills what place_order listed.
   write("/api/orders/add", (b, by) => {
     const item = name(b.item, "item");
+    const unit = b.unit == null ? null : name(b.unit, "unit").toLowerCase();
+    const remove = b.remove === undefined ? false : flag(b.remove, "remove");
     const qty = b.qty == null ? null : typeof b.qty === "number" && Number.isInteger(b.qty) && b.qty > 0 ? b.qty : refuse("qty must be a whole number of packs, 1 or more");
     const given = b.order_id == null ? undefined : find(String(b.order_id));
     if (b.order_id != null && !given) return notFound(b.order_id);
-    if (given && given.status !== "scheduled") return conflict(`that order is ${STATUS_TEXT[given.status] ?? given.status}: leave order_id out and it goes on the next order`);
+    if (given && given.status !== "scheduled") return conflict(`that order is ${STATUS_TEXT[given.status] ?? given.status}: ${remove ? "its lines no longer change" : "leave order_id out and it goes on the next order"}`);
+    const lineOn = (orderId: string) => db.select().from(order_lines).where(eq(order_lines.order_id, orderId)).orderBy(asc(order_lines.created_at), sql`rowid`).all()
+      .find((l) => normItem(l.item) === normItem(item) && (unit === null || (l.unit ?? "").trim().toLowerCase() === unit));
+
+    if (remove) {
+      // On the order given; else on the soonest scheduled order that has it and is not being placed.
+      const o = given ?? scheduledOrders(db).find((s) => lineOn(s.id));
+      const line = o && lineOn(o.id);
+      if (!o || !line) return { status: 404, body: { reason: `${item} is not on ${given ? "that order" : "a scheduled order"}` } };
+      commitOrders(db, emit, (tx, changes) => {
+        tx.delete(order_lines).where(eq(order_lines.id, line.id)).run();
+        changes.push(["order_lines", line.id, "delete", by]);
+        // A dish's or an everyday line would come back with the next rebuild: the order remembers the family has the item.
+        const skipped = list<string>(o.skipped_items).map(normItem);
+        if (line.source === "added" || skipped.includes(normItem(line.item))) return;
+        tx.update(orders).set({ skipped_items: JSON.stringify([...skipped, normItem(line.item)]), updated_at: new Date().toISOString() }).where(eq(orders.id, o.id)).run();
+        changes.push(["orders", o.id, "update", by]);
+      });
+      return { body: { order: orderView(db, o.id), removed: line } };
+    }
+
     const waiting = given ?? nextScheduled(db);
     const app = waiting?.app ?? groceryApp(db);
     const sent = b.product_id == null ? null : productOf({ ...b, item }, app as GroceryApp);
     const ids = commitOrders(db, emit, (tx, changes) => {
       const o = waiting ?? extraOrder(tx, app, now(), by, changes);
-      const had = productFor(tx, item, app);
-      const p = sent ? rememberProduct(tx, sent, by) : had;
+      const there = waiting ? lineOn(o.id) : undefined;
+      // Remembered under the line's own item, so the next order built from the plan finds it.
+      const had = productFor(tx, there?.item ?? item, app);
+      const p = sent ? rememberProduct(tx, { ...sent, item: there?.item ?? item }, by) : had;
       if (sent) changes.push(["products", p!.id, had ? "update" : "insert", by]);
-      const line = tx.insert(order_lines).values({ order_id: o.id, item, qty: qty ?? 1, qty_checked: qty != null || sent ? 1 : 0, source: "added", updated_by: by,
-        ...(p ? { product_id: p.product_id, name_on_app: p.name_on_app, pack: p.pack, price: p.price, image: p.image } : {}) }).returning().get();
+      // A product sent takes the line's place whole; a remembered one only fills a line that has none.
+      const product = p && (sent || !there?.product_id) ? { product_id: p.product_id, name_on_app: p.name_on_app, pack: p.pack, price: p.price, image: p.image } : {};
+      const checked = qty != null || sent ? { qty_checked: 1 } : {};
+      if (there) {
+        tx.update(order_lines).set({ ...product, ...(qty != null ? { qty } : {}), ...checked, updated_at: new Date().toISOString(), updated_by: by }).where(eq(order_lines.id, there.id)).run();
+        changes.push(["order_lines", there.id, "update", by]);
+        return { order: o.id, line: there.id };
+      }
+      const line = tx.insert(order_lines).values({ order_id: o.id, item, qty: qty ?? 1, qty_checked: 0, ...checked, source: "added", updated_by: by, ...product }).returning().get();
       changes.push(["order_lines", line.id, "insert", by]);
       return { order: o.id, line: line.id };
     });
