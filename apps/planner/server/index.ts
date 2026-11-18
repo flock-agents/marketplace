@@ -10,11 +10,12 @@ import { mountProductRoutes } from "./products";
 import { mountRecipeRoutes } from "./recipes";
 import { mountOrderRoutes } from "./orderRoutes";
 import { migrateOldProfile } from "./gate";
+import { routines } from "./routines";
 
 // The app's operations for its agent (agentOps.ts): Flock relays the agent's calls to them.
 const flock = createFlockApp({ ops: agentOps(() => flock.hono) });
 // Meal Planner 2.0's tables are kept as they are beside the new ones, so an upgrade is never a destructive change.
-const kit = await mountKit(flock, { schema, settings: SETTINGS, keepTables: OLD_TABLES, routines: {} });
+const kit = await mountKit(flock, { schema, settings: SETTINGS, keepTables: OLD_TABLES, routines });
 
 // An install upgraded from 2.0 has its family as profile text only: it is carried over for the agent to structure (gate.ts).
 // Only once the schema landed: a boot that is still waiting on it has no house table to write.

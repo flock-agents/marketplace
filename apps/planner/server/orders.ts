@@ -9,6 +9,7 @@ import { dish_items, dishes, order_lines, orders, plan_meals, regulars } from ".
 import { MORNING_TIME, ORDER_TIME } from "./db/constants";
 import { addDays, dayLabel, localStamp, mondayOf, todayStr } from "./dates";
 import { groceryApp, list, type Db, type Emit } from "./family";
+import { orderingNowText } from "./messages";
 import { normItem, packsFor, parsePack, productFor } from "./products";
 import { regularNeeds } from "./regulars";
 
@@ -215,6 +216,22 @@ export function commitOrders<T>(db: Db, emit: Emit, run: (tx: Db, changes: Chang
 
 /** After the plan, a dish or an everyday item changed: every order not yet placed gets the lines its days need now. */
 export function rebuildScheduledOrders(db: Db, emit: Emit): void { commitOrders(db, emit, fillOrders); }
+
+/** What the agent needs to place an order: the order, the message to send the family first, and the lines that still need a
+ *  product or a number of packs. */
+export type PlacePayload = { order: OrderView; message: string; needs_product: LineRow[]; needs_qty: LineRow[] };
+
+/** The agent is about to place a scheduled order, called by it (place_order) or woken by the order clock: the order is
+ *  brought up to the plan as it stands now, then marked as being placed, so nothing changes under the agent. Null when it
+ *  has nothing on it: such an order is not placed, and not marked. */
+export function startPlacing(db: Db, emit: Emit, id: string, now: Date, by: string): PlacePayload | null {
+  rebuildScheduledOrders(db, emit);
+  if (!orderView(db, id)?.lines.length) return null;
+  db.update(orders).set({ wake_sent_at: localStamp(now), updated_at: new Date().toISOString(), updated_by: by }).where(eq(orders.id, id)).run();
+  emit("orders", id, "update", by);
+  const order = orderView(db, id)!;
+  return { order, message: orderingNowText(order), needs_product: order.lines.filter((l) => !l.product_id), needs_qty: order.lines.filter((l) => !l.qty_checked) };
+}
 
 /** A scheduled order with no days of its own, placed now: for an item added when no order is waiting, lines rolled over
  *  from an unpaid order, or a long-life item that turned out to be missing. */

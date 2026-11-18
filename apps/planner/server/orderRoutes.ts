@@ -10,11 +10,11 @@ import { APP_NAMES, type GroceryApp } from "./db/constants";
 import { localStamp, todayStr, weekdayLong } from "./dates";
 import { getHouse, groceryApp, name, refuse, words, writeRoutes, type Db, type Emit } from "./family";
 import { dateOf, flag, type MealHooks } from "./meals";
-import { introText, orderingNowText } from "./messages";
+import { introText } from "./messages";
 import { productFor, productId, productOf, rememberProduct } from "./products";
 import type { RegularHooks } from "./regulars";
 import { applyLowOrOut, buildOrdersForWeek, commitOrders, extraOrder, fillOrders, lineRemoved, lineRestored, lowOrOutQuestion, nextScheduled, orderView,
-  rebuildScheduledOrders, rollUnpaid, weekHasOrders, type OrderRow } from "./orders";
+  rebuildScheduledOrders, rollUnpaid, startPlacing, weekHasOrders, type OrderRow } from "./orders";
 
 export type OrderOptions = {
   /** The time, for tests. */
@@ -111,14 +111,10 @@ export function mountOrderRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: Orde
     const o = find(c.req.param("id"));
     if (!o) return notFound(c.req.param("id"));
     if (o.status !== "scheduled") return conflict(`this order is ${STATUS_TEXT[o.status] ?? o.status}: only a scheduled order is placed`);
-    // What is placed is the plan as it stands now, not as it was up to 2 s ago.
+    // What is placed is the plan as it stands now, not as it was up to 2 s ago: placing rebuilds the orders first.
     stale = false;
-    rebuildScheduledOrders(db, emit);
-    if (!orderView(db, o.id)!.lines.length) return conflict("this order has nothing on it yet");
-    db.update(orders).set({ wake_sent_at: localStamp(now()), updated_at: new Date().toISOString(), updated_by: by }).where(eq(orders.id, o.id)).run();
-    emit("orders", o.id, "update", by);
-    const order = orderView(db, o.id)!;
-    return { body: { order, message: orderingNowText(order), needs_product: order.lines.filter((l) => !l.product_id), needs_qty: order.lines.filter((l) => !l.qty_checked) } };
+    const placing = startPlacing(db, emit, o.id, now(), by);
+    return placing ? { body: placing } : conflict("this order has nothing on it yet");
   });
 
   // record_order { order_id, placed?: boolean, paid?: boolean, total?, app_order_ref?, note? }: what happened on the grocery app.

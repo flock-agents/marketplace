@@ -82,7 +82,52 @@
       "label": "The grocery app orders go to"
     }
   ],
-  "routines": [],
+  "routines": [
+    {
+      "id": "weekly-plan",
+      "name": "Weekly meal plan",
+      "description": "Once a week, asks the agent to plan next week's meals, place the week's first order and send the family the plan with one question about what is low or out. On an install carried over from the old Meal Planner it first asks for the family's profile to be structured.",
+      "trigger": {
+        "type": "schedule",
+        "cron": "0 18 * * 6"
+      },
+      "executionMode": "app-relay",
+      "handler": "weekly-plan"
+    },
+    {
+      "id": "dinner-check",
+      "name": "Dinner check-in",
+      "description": "Every afternoon, sends the family tonight's dinner and whether its fresh items are on an order. Silent when no dinner is planned or it is ordered in. The time it runs at is the time the app tells the family.",
+      "trigger": {
+        "type": "schedule",
+        "cron": "0 15 * * *"
+      },
+      "executionMode": "app-relay",
+      "handler": "dinner-check"
+    },
+    {
+      "id": "tomorrow-check",
+      "name": "Tomorrow's meals check-in",
+      "description": "Every evening, sends the family tomorrow's meals, with the dishes' videos for the cook on the days they come. Silent when nothing is planned. The time it runs at is the time the app tells the family.",
+      "trigger": {
+        "type": "schedule",
+        "cron": "0 19 * * *"
+      },
+      "executionMode": "app-relay",
+      "handler": "tomorrow-check"
+    },
+    {
+      "id": "order-clock",
+      "name": "Order clock",
+      "description": "Every 15 minutes, hands the agent each grocery order whose time has come, to place it. No model call unless an order is due.",
+      "trigger": {
+        "type": "schedule",
+        "cron": "*/15 * * * *"
+      },
+      "executionMode": "app-relay",
+      "handler": "order-clock"
+    }
+  ],
   "agentInterface": {
     "intents": [],
     "operations": [
