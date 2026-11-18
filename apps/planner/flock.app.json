@@ -2,7 +2,7 @@
   "name": "Meal Planner",
   "usage": "template",
   "icon": "icon.svg",
-  "description": "The family's meals for the week, day by day (Breakfast, Lunch and Dinner), with a shared grocery list and the family's recipe book; not for school runs, chores or appointments.",
+  "description": "The family's meals for the week, day by day, with the groceries for them ordered on the family's grocery app, the everyday items and the family's recipe book; not for school runs, chores or appointments.",
   "version": "2.0.7",
   "minFlockVersion": "0.22.0",
   "type": "fullstack",
@@ -62,14 +62,14 @@
   },
   "useCases": {
     "for": [
-      "The family's meals for the week: Breakfast, Lunch and Dinner, day by day",
-      "A shared grocery list grouped by aisle",
-      "The family's own recipe book, with a recipe's ingredients added to the list",
-      "Planning the week's dishes from the recipe book"
+      "The family's meals for the week: Breakfast, Lunch and Dinner, day by day, each with its dishes",
+      "Groceries for the week's meals, ordered on the family's grocery app when they are needed",
+      "Everyday items (milk, curd, bread) ordered again and again on their own",
+      "The family's saved recipes, with their videos, planned into the week"
     ],
     "notFor": [
       "School runs, chores or appointments (use checklist or tracker)",
-      "Ordering groceries from a store: a connector does that",
+      "Keeping count of what is in the kitchen",
       "A restaurant's menu or a business kitchen"
     ]
   },
@@ -133,47 +133,47 @@
     "operations": [
       {
         "name": "guide",
-        "description": "The full guide for working with this app: read it before shopping, answering a job or changing meals. {}"
+        "description": "The full guide for working with this app: read it before the first conversation, a weekly plan, a check-in or an order. {}"
       },
       {
         "name": "set_person",
-        "description": "Add or change one person who eats at home, found by name. { name, relationship?, group: child | adult | elder, portions?, diet?, allergies?, dislikes?, targets?, note?, remove?: true }. Keep portions, diet and the rest in the family's own words. Only the fields you send change; remove: true takes the person out of the family."
+        "description": "Add or change one person who eats at home, found by name. { name, relationship?, group?: child | adult | elder, portions?, diet?, allergies?, dislikes?, targets?, note?, remove?: true }. group is needed for a new person. Keep portions, diet and the rest in the family's own words. Only the fields you send change; null clears one; remove: true takes the person out of the family."
       },
       {
         "name": "set_house_rules",
-        "description": "The house's food rules; the list you send replaces the one there. { rules?: [{ kind: veg | egg | fasting | no_onion_garlic | other, days: [\"Tue\", \"Thu\"], note? }], notes?, structured?: true }. Send structured: true once a profile carried over from the old app is fully in people, rules, the cook and slots: it clears that text."
+        "description": "The house's food rules; the list you send replaces the one there. { rules?: [{ kind: veg | egg | fasting | no_onion_garlic | other, days: [\"Tue\", \"Thu\"], note? }], notes?, structured?: true }. Send at least one of the three. A rule needs its days: weekdays, or the family's own word for a day (\"Ekadashi\"). Send structured: true once a profile carried over from the old app is fully in people, rules, the cook and slots, and at least one person is saved: it clears that text."
       },
       {
         "name": "set_cook",
-        "description": "The cook: who, which days, when they arrive, what they make well. { name, days: [\"Mon\", ...], arrival: \"HH:MM\", makes_well?, note? }"
+        "description": "The cook: who, which days, when they arrive, what they make well. { name, days: [\"Mon\", ...], arrival: \"HH:MM\", makes_well?, note? }. name, days and arrival are needed every time."
       },
       {
         "name": "set_slots",
-        "description": "Meals beyond Breakfast, Lunch and Dinner, and the meals the family orders in. { extra_slots?: [{ name, days?: [\"Mon\", ...], for?: [names] }], order_in?: [{ day: \"Sun\", slot: \"Dinner\", note? }] }. Each list you send replaces the one there."
+        "description": "Meals beyond Breakfast, Lunch and Dinner, and the meals the family orders in every week. { extra_slots?: [{ name, days?: [\"Mon\", ...], for?: [names] }], order_in?: [{ day: \"Sun\", slot: \"Dinner\", note? }] }. Send at least one of the two; each list you send replaces the one there. An order_in slot is Breakfast, Lunch, Dinner or an extra slot's name."
       },
       {
         "name": "plan_week",
-        "description": "Plan a week of meals. { week_start: the week's Monday as YYYY-MM-DD, mode: draft | final, meals?: [{ date, slot, ordered_in?: true, note?, dishes?: [{ name, for?: [names], portion_note?, recipe_id?, video_url?, ingredients?: [{ item, amount?, unit?, keeps?: fresh | long }] }] }] }. Without meals it answers with the context to plan from (people, house, regulars, last week's dishes, the recipe book), or, when mode is final and the week is a draft, makes that draft final. With meals they become the whole week's plan, in place of what was there. A draft with meals is refused once the week has orders: change a meal with set_meal or set_dish, or send mode final with the new meals. A dish is for everyone unless you name who it is for; ingredient amounts are for this family; an ordered-in meal has no dishes. Answers { week } or { context }; a final plan also answers with orders: the week's orders, built from it (fresh items in the order covering their day, long-life ones in the first)."
+        "description": "Plan a week of meals. { week_start: the week's Monday as YYYY-MM-DD, mode: draft | final, meals?: [{ date, slot, ordered_in?: true, note?, dishes?: [{ name, for?: [names], portion_note?, recipe_id?, video_url?, ingredients?: [{ item, amount?, unit?, keeps?: fresh | long }] }] }] }. Without meals it answers with the context to plan from (people, house, everyday items, last week's dishes, the recipe book), or, when mode is final and the week is a draft, makes that draft final. With meals they become the whole week's plan, in place of what was there. A draft with meals is refused once the week has orders: change a meal with set_meal or set_dish, or send mode final with the new meals. A dish is for everyone unless you name who it is for; amount is a number above 0 with its measure in unit, for this family; an ordered-in meal has no dishes. Answers { week } or { context }; a final plan also answers with orders: the week's orders, built from it (fresh items in the order covering their day, long-life ones in the first)."
       },
       {
         "name": "set_meal",
-        "description": "Change one meal, found by date and slot (or meal_id) and made when it is not there. { date, slot, ordered_in?, note?, dishes?: [as in plan_week] }. Only what you send changes; dishes you send replace the meal's dishes. ordered_in: true takes its dishes away; sending dishes with it is refused, and a meal that is ordered in takes dishes only with ordered_in: false."
+        "description": "Change one meal, found by date and slot (or meal_id) and made when it is not there. { date, slot, or meal_id; ordered_in?, note?, dishes?: [as in plan_week] }. Only what you send changes; dishes you send replace the meal's dishes. ordered_in: true takes its dishes away; sending dishes with it is refused, and a meal that is ordered in takes dishes only with ordered_in: false. A meal keeps its date and slot. Answers { meal }."
       },
       {
         "name": "set_dish",
-        "description": "Add, change or remove one dish. { dish_id, or meal_id, or date and slot; name?, for?: [names], portion_note?, recipe_id?, video_url?, ingredients?: [{ item, amount?, unit?, keeps? }], position?, remove?: true }. In a meal, a dish of the same name is the one changed; otherwise it is added at the end. Only what you send changes; ingredients you send replace the dish's; position 0 is first; for: null means everyone."
+        "description": "Add, change or remove one dish. { dish_id, or meal_id, or date and slot; name?, for?: [names], portion_note?, recipe_id?, video_url?, ingredients?: [{ item, amount?, unit?, keeps? }], position?, remove?: true }. Without dish_id, name is needed: in that meal a dish of the same name is the one changed; otherwise it is added at the end (and the meal made when it is not there). By dish_id a name you send renames it. Only what you send changes; ingredients you send replace the dish's; position 0 is first; for: null means everyone. Answers { dish, meal }."
       },
       {
         "name": "set_regular",
-        "description": "Add or change one everyday item: what the house buys again and again whatever is cooked (milk, curd, bread, eggs). { item, amount, unit, every: day | week | weekdays, times_per_week?, weekdays?: [\"Mon\", ...], for_whom?, keeps?: fresh | long, active?, paused_until?: YYYY-MM-DD, remove?: true }. amount is what is needed each time: 1 l every day; 1 pack with every: week and times_per_week: 2; 6 pc on weekdays: [\"Mon\"]. Found by item and for_whom; only the fields you send change. paused_until leaves it out of the orders up to and including that date (a holiday); active: false stops it until you send active: true; remove: true deletes it. Set one only after the family confirmed it."
+        "description": "Add or change one everyday item: what the house buys again and again whatever is cooked (milk, curd, bread, eggs). { item, amount, unit, every: day | week | weekdays, times_per_week?, weekdays?: [\"Mon\", ...], for_whom?, keeps?: fresh | long, active?, paused_until?: YYYY-MM-DD, remove?: true }. amount (a number above 0), unit and every are needed for a new item. amount is what is needed each time: 1 l every day; 1 pack with every: week and times_per_week: 2; 6 pc with every: weekdays and weekdays: [\"Mon\"]. times_per_week is a whole number from 1 to 7 (1 when left out); weekdays is needed, with at least one day, when every is weekdays. Found by item and for_whom; only the fields you send change. paused_until leaves it out of the orders up to and including that date (a holiday); active: false stops it until you send active: true; remove: true deletes it. Set one only after the family confirmed it."
       },
       {
         "name": "import_order_history",
-        "description": "Give the app the family's past orders on a grocery app. { app: zepto | swiggy-instamart | zomato-blinkit | bigbasket, orders: [{ date: YYYY-MM-DD, items: [{ item, qty?, pack?, product_id?, name_on_app?, pack_amount?, pack_unit?, price?, image? }] }] }. Every item sent with its product_id is remembered as that item's product on the app. Answers { suggestions: [{ item, amount, unit, every: day | week, times_per_week?, orders_seen }] }: what was bought on three or more days, at least once a fortnight. It makes no everyday item itself: ask the family about each suggestion, then set_regular the ones they confirm."
+        "description": "Give the app the family's past orders on a grocery app. { app: zepto | swiggy-instamart | zomato-blinkit | bigbasket, orders: [{ date: YYYY-MM-DD, items: [{ item, qty?, pack?, product_id?, name_on_app?, pack_amount?, pack_unit?, price?, image? }] }] }. item is the product's name as the order has it. Every item sent with its product_id is remembered as a product under that name. Answers { suggestions: [{ item, amount, unit, every: day | week, times_per_week?, orders_seen }] }: what was bought on three or more days, at least once a fortnight; amount is the usual number of packs in an order and unit the usual pack. It makes no everyday item itself: ask the family about each suggestion, set_regular the ones they confirm, and remember_product each one's product again under the item's own name."
       },
       {
         "name": "remember_product",
-        "description": "Remember the product an item is bought as on a grocery app, so the next order reuses it without searching. { item, app: zepto | swiggy-instamart | zomato-blinkit | bigbasket, product_id, name_on_app, pack?, pack_amount?, pack_unit?, price?, image? }. item is the family's word for it (milk); pack_amount and pack_unit are the pack's size as a number and its measure (500, ml), which the app counts packs with. One product per item and app: sending it again takes the place of the one remembered."
+        "description": "Remember the product an item is bought as on a grocery app, so the next order reuses it without searching. { item, app: zepto | swiggy-instamart | zomato-blinkit | bigbasket, product_id, name_on_app, pack?, pack_amount?, pack_unit?, price?, image? }. item is the family's word for it, exactly as on the order line or the everyday item (milk), never the product's name on the app; pack_amount and pack_unit are the pack's size as a number and its measure (500, ml), which the app counts packs with (a plain pack text like \"500 ml\" is read too). One product per item and app: sending it again takes the place of the one remembered. Answers { product }."
       },
       {
         "name": "save_recipe",
@@ -181,25 +181,25 @@
       },
       {
         "name": "ask_low_or_out",
-        "description": "The week's long-life items (atta, rice, dal, oil), to ask the family about once. { week_start, low_or_out? }. Without low_or_out it answers { order_id, items, question }: send the question (\"Atta, rice, toor dal: any low or out?\") with the plan. When they answer, send their words (or a list of items) as low_or_out: the items they name are ordered, the rest are taken off the week's next scheduled order as things they have. An order already placed is never changed; an item that is out and on no order goes on the next one, or on a new order to place now. Answers { order }. Nothing about what is at home is kept beyond that order."
+        "description": "The week's long-life items (atta, rice, dal, oil), to ask the family about once. { week_start, low_or_out?: [items] }. Without low_or_out it answers { order_id, items, question }: send the question (\"Atta, rice, toor dal: any low or out?\") with the plan. When they answer, send as low_or_out the names from items that they said are low or out, spelt as items has them ([] when they have everything): names are matched by word, so a misspelt one reads as an item they have. The items named stay ordered; the rest are taken off the week's next scheduled order as things they have. An order already placed is never changed; an item that is out and on no order goes on the next scheduled one, or on a new order to place now. Answers { order }. Nothing about what is at home is kept beyond that order."
       },
       {
         "name": "add_to_order",
-        "description": "Add one item to an order. { order_id?, item, qty?, product_id?, name_on_app?, pack?, pack_amount?, pack_unit?, price?, image? }. Without order_id it goes on the next scheduled order, or on a new order to place now when none is waiting; an order that is not scheduled is refused. item is the family's word for it; qty is the number of packs (1 when left out). Send the product the family picked (product_id and name_on_app, with its pack and price) and it is remembered as that item's product; without one the item's remembered product is used. Answers { order, line }."
+        "description": "Add one item to an order. { order_id?, item, qty?, product_id?, name_on_app?, pack?, pack_amount?, pack_unit?, price?, image? }. Without order_id it goes on the next scheduled order, or on a new order to place now when none is waiting; an order that is not scheduled is refused. item is the family's word for it (coriander), never the product's name on the app; qty is a whole number of packs (1 when left out). Send the product the family picked (product_id and name_on_app, with its pack and price) and it is remembered as that item's product; without one the item's remembered product is used. Answers { order, line }."
       },
       {
         "name": "place_order",
-        "description": "Call just before you place a scheduled order on the grocery app. { order_id }. Answers { order, message, needs_product, needs_qty }: send message to the family first, word for word; find a product on the grocery app for each line in needs_product and set the packs of each line in needs_qty; then place the order without waiting for a yes, and record_order at once. An order that is not scheduled, or has nothing on it, is refused."
+        "description": "Call just before you place a scheduled order on the grocery app. { order_id }. Answers { order, message, needs_product, needs_qty }: send message to the family first, word for word; needs_product are the lines with no remembered product (find each on the grocery app); needs_qty are the lines whose number of packs the app could not work out from the pack size (work each out); the guide says how to save both. Then place the order without waiting for a yes, and record_order at once. An order that is not scheduled, or has nothing on it, is refused."
       },
       {
         "name": "record_order",
-        "description": "Record what happened to an order on the grocery app. { order_id, placed?: true | false, paid?: true | false, total?, app_order_ref?, note? }. placed: true once it is placed and waiting for the person's payment; placed: false with a note when it could not be placed (it stays scheduled and is tried again). paid: true once the payment went through; paid: false when it was not paid: the order is closed as not paid and its items move to the next scheduled order (or a new one), named in rolled_into. When the answer has intro, send it to the family word for word."
+        "description": "Record what happened to an order on the grocery app. { order_id, placed?: true | false, paid?: true | false, total?, app_order_ref?, note? }. Send placed or paid. placed: true once it is placed and waiting for the person's payment; placed: false with a note when it could not be placed (it stays scheduled and is tried again). paid: true once the payment went through; paid: false when it was not paid, or they said cancel: the order is closed as not paid and its items move to the next scheduled order (or a new one), named in rolled_into; cancel nothing on the grocery app. Only a scheduled order is recorded placed, only a placed one paid or not paid. When the answer has intro, send it to the family word for word."
       },
       {
         "name": "cancel_order",
-        "description": "Cancel an order. { order_id }. A scheduled order is cancelled. A placed order that is not yet paid is closed as not paid and its items move to the next order (rolled_into); cancel nothing on the grocery app. A paid order is refused: the person cancels it in the grocery app."
+        "description": "Cancel an order. { order_id }. A scheduled order is cancelled. A placed order that is not yet paid is closed as not paid and its items move to the next order (rolled_into); cancel nothing on the grocery app. A paid order is refused: the person cancels it in the grocery app itself."
       }
     ],
-    "instructions": "Meal Planner owns this family's meals, recipes, shopping list, drafts, orders, pantry stock and shopping preferences. Never keep any of it in memory or chat: read the app before you answer, change it only through its operations, then tell the family what the app now says. Read the guide operation before shopping, answering a job or changing meals. A meal is a set of recipes plus a note: when plans change, change the recipes and note (set_meal_recipes, save_meal), not just the dish text. Only you add recipes, and only after searching for the same dish under another spelling. Nothing in the app runs until it knows the household: when the family tells you who eats, their food habits, which meals to plan and where they shop, save it in their words as the household.profile setting (PATCH /a/<this app>/api/_app/settings); never fill it from guesses or the app's own rows. Background jobs (review_meal, fill_recipe, find_patterns) and background facts (shelf life, recipe lines) are your informed guesses: never ask the family about them and never message anyone for them. The app sends the reminders and menus itself; message the family only when a Shopping timeline wake asks (the price step), then ack_message; or when they talk to you. Silence means carry on. Never order without a family member's explicit yes; record it (record_yes), place the order, then record_order at once."
+    "instructions": "Meal Planner owns this family's profile, meals, everyday items, grocery orders and recipes. Read the app before you answer and change it only through its operations, then tell the family what the app now says. Call guide before a first conversation, a weekly plan, a check-in or an order. Save the family's own words; never fill anything from guesses. An order goes scheduled → placed (waiting for payment) → paid, or not paid. Placing needs no yes: send the app's message as it is, then place the order; the payment step asks the person. When they pay: record_order { paid: true }. If they do not pay, or say cancel: record_order { paid: false } or cancel_order. Nothing is cancelled on the grocery app (never call a connector's cancel): the order is marked not paid and its items move to the next order. A paid order is cancelled by the person in the grocery app itself. To add an item, search the grocery app and answer with the ItemPicker block (the numbered text on WhatsApp), then add_to_order. A shared reel plus \"save this\" is a save_recipe call."
   }
 }
