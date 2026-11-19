@@ -280,6 +280,51 @@ describe("the reminder", () => {
       "I've ordered curd, bread, atta and toor dal on Zepto, about ₹95."].join("\n"));
   });
 
+  it("an everyday item put on the cart by the reminder is not also asked about", async () => {
+    const k = await start();
+    // Eggs: an everyday item with a confident history, last bought 20 days ago (due).
+    await k.op("import_order_history", { app: "zepto", orders: ["2026-10-28", "2026-10-31", "2026-11-03"].map((date) => ({ date, items: [{ item: "eggs", group: "few_days", pack: "6 pc" }] })) });
+    expect(item(k, "eggs")).toMatchObject({ confident: 1, run_out: "2026-11-06" });
+    await k.op("set_regular", { item: "eggs", amount: 6, unit: "pc", every: "day" });
+    const r = await k.reminder("evening");
+    expect(r.added.map((a: any) => a.item)).toEqual(["curd", "bread", "eggs"]);
+    expect(r.asks.map((a: any) => a.item)).toEqual(["atta", "toor dal"]);
+    expect(item(k, "eggs").asks_unanswered).toBe(0);
+    expect(events(k, "eggs", "ask")).toEqual([]);
+  });
+
+  it("order without asking keeps one order at a time per app: a cart already being ordered leaves the open one open", async () => {
+    const k = await start();
+    await k.op("set_cart_line", { item: "rice", qty: 1 });
+    const first = (await k.op("order_cart", { app: "zepto" })).order_id;
+    await k.owner("PATCH", "/api/_app/settings", { order_without_asking: true });
+    const r = await k.reminder("evening");
+    expect(k.rows("orders").filter((o) => o.status === "ordering").map((o) => o.id)).toEqual([first]);
+    expect(r.ordered).toEqual([]);
+    const open = openCarts(k);
+    expect(open).toHaveLength(1);
+    expect(linesOn(k, open[0].id).map((l) => [l.item, l.qty])).toEqual([["curd", 1], ["bread", 1], ["atta", 1], ["toor dal", 1]]);
+    expect(r.carts.map((c: any) => [c.order_id, c.status])).toEqual([[first, "ordering"], [open[0].id, "open"]]);
+    expect(r.text).toContain("I've added curd, bread, atta and toor dal to your cart.");
+    // order_cart still answers the order being placed, through the same function.
+    expect(await k.op("order_cart", { app: "zepto" })).toMatchObject({ order_id: first, already: true });
+  });
+
+  it("a retry of the reminder that ordered without asking lists the same orders to check out", async () => {
+    const k = await start();
+    await k.owner("PATCH", "/api/_app/settings", { order_without_asking: true });
+    const r = await k.reminder("evening");
+    expect(r.ordered).toHaveLength(1);
+    expect(r.carts.map((c: any) => [c.order_id, c.status])).toEqual([[r.ordered[0].order_id, "ordering"]]);
+    const again = await k.reminder("evening");
+    expect(again.ordered).toEqual(r.ordered);
+    expect(again.text).toBe(r.text);
+    expect(k.rows("orders").map((o) => o.status)).toEqual(["ordering"]);
+    // Another reminder does not claim it.
+    k.clock(24, 15);
+    expect((await k.reminder("afternoon")).ordered).toEqual([]);
+  });
+
   it("dry run changes nothing", async () => {
     const k = await start();
     const tables = ["orders", "order_lines", "items", "item_events"];
@@ -292,6 +337,30 @@ describe("the reminder", () => {
     const real = await k.reminder("evening");
     expect(real.text).toBe(dry.text);
     expect(snap()).not.toBe(before);
+  });
+
+  it("a dry run that would snooze an item changes nothing", async () => {
+    const k = await start();
+    k.clock(23, 15); await k.reminder("afternoon");
+    k.clock(23, 19); await k.reminder("evening");
+    expect(item(k, "atta").asks_unanswered).toBe(2);
+    const snap = () => JSON.stringify(["orders", "order_lines", "items", "item_events"].map((t) => k.rows(t)));
+    const before = snap();
+    const dry = buildReminder(k.kit.db as any, "afternoon", new Date(at(24, 15)), { dryRun: true });
+    expect(dry.asks).toEqual([]);
+    expect(snap()).toBe(before);
+    expect(item(k, "atta")).toMatchObject({ asks_unanswered: 2, snoozed_until: null });
+  });
+
+  it("a dry run with order without asking on changes nothing", async () => {
+    const k = await start();
+    await k.owner("PATCH", "/api/_app/settings", { order_without_asking: true });
+    const snap = () => JSON.stringify(["orders", "order_lines", "items", "item_events"].map((t) => k.rows(t)));
+    const before = snap();
+    const dry = buildReminder(k.kit.db as any, "evening", new Date(at(23, 19)), { dryRun: true });
+    expect(dry.ordered).toHaveLength(1);
+    expect(snap()).toBe(before);
+    expect(k.rows("orders").filter((o) => o.status === "ordering")).toEqual([]);
   });
 
   it("the stock-check block is a Choice for one item and a Questions of 2 to 5 Choice tabs, each with the five options", () => {

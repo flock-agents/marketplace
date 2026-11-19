@@ -5,7 +5,7 @@
 // run (the routine's "anything to say?") answers the same and changes nothing. Lines put on while an app's cart is being
 // ordered go to a new open cart of that app (cart.ts setLine).
 import type { Hono } from "hono";
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { item_events, items, order_lines, orders, regulars } from "./db/schema";
 import { APP_NAMES, CART_SYNC, ESTIMATE, type GroceryApp } from "./db/constants";
 import { addDays, mondayOf, todayStr } from "./dates";
@@ -14,9 +14,9 @@ import { weekView, type MealView } from "./meals";
 import { regularNeeds } from "./regulars";
 import { itemFor, itemStates, recomputeItem } from "./items";
 import { isDue, pickAsks } from "./estimate";
-import { cartOf, cartsView, emitAll, lineApp, lineFor, setLine, startOrdering, type Change, type LineRow } from "./cart";
+import { cartOf, cartsView, emitAll, lineApp, lineFor, orderAnswer, orderCart, setLine, type Change, type LineRow } from "./cart";
 import { normItem, packsFor, productFor } from "./products";
-import { orderingNowText, reminderText, stockBlock } from "./messages";
+import { reminderText, stockBlock } from "./messages";
 
 export const WHICH = ["afternoon", "evening"] as const;
 export type Which = (typeof WHICH)[number];
@@ -25,7 +25,7 @@ export type Reminder = { which: Which; date: string /* the meals' date: today (a
   asks: { item: string; days_ago: number }[]; delivery_gap: { app: string; rupees: number } | null;
   ordered: { order_id: string; app: GroceryApp; message: string }[]; empty: boolean;
   text: string /* WhatsApp: numbered */; app_text: string; block: object | null /* flock-ui JSON */;
-  carts: { order_id: string; app: GroceryApp; lines: LineRow[]; sync: boolean }[] };
+  carts: { order_id: string; app: GroceryApp; status: "open" | "ordering"; lines: LineRow[]; sync: boolean }[] };
 
 const LOW_NOTE = "might be running low";
 const DAY_MS = 86_400_000;
@@ -49,7 +49,9 @@ function coveredMeals(tx: Db, which: Which, date: string): MealView[] {
     : day.filter((m) => m.ordered_in || m.dishes.length);
 }
 
-function build(tx: Db, which: Which, now: Date, by: string, changes: Change[]): Reminder {
+type Schedule = (key: string, run: null, ms: number) => void;
+
+function build(tx: Db, which: Which, now: Date, by: string, changes: Change[], schedule?: Schedule): Reminder {
   const today = todayStr(now), tomorrow = addDays(today, 1);
   const date = which === "afternoon" ? today : tomorrow, key = `${date}:${which}`;
   const opts = { changes, at: now };
@@ -85,13 +87,17 @@ function build(tx: Db, which: Which, now: Date, by: string, changes: Change[]): 
     added.push({ app, item: row.item });
   }
 
-  // Running low: the due items not on a cart.
-  const states = itemStates(tx, today).filter((s) => !onCart.has(normItem(s.name)));
+  // Running low: the due items not on a cart, the everyday items just put on included.
+  const onCartNow = onCarts(tx, ["open", "ordering"]);
+  const states = itemStates(tx, today).filter((s) => !onCartNow.has(normItem(s.name)));
   const asks: Reminder["asks"] = [];
   if (shop.order_without_asking) {
     // Confident due items are ordered, not asked.
-    for (const s of states.filter((s) => isDue(s, date)).sort((x, y) => x.run_out!.localeCompare(y.run_out!)))
-      setLine(tx, { item: s.name, qty: 1, source: "low", for_note: LOW_NOTE }, by, opts);
+    for (const s of states.filter((s) => isDue(s, date)).sort((x, y) => x.run_out!.localeCompare(y.run_out!))) {
+      const app = lineApp(tx, itemFor(tx, s.name));
+      setLine(tx, { item: s.name, qty: 1, app, source: "low", for_note: LOW_NOTE }, by, opts);
+      added.push({ app, item: s.name });
+    }
   } else {
     const done = new Set<string>();
     while (asks.length < ESTIMATE.maxAsks) {
@@ -130,21 +136,20 @@ function build(tx: Db, which: Which, now: Date, by: string, changes: Change[]): 
 
   // The carts this reminder changed are copied to their apps by the agent.
   const touched = new Set(changes.filter((c) => c[0] === "orders").map((c) => c[1]));
-  const ordered: Reminder["ordered"] = [];
+  // Order without asking: each open cart is ordered as her yes would order it (cart.ts orderCart). An app with an order still
+  // being placed keeps its open cart open, ordered at the next yes. `ordered` is every cart this reminder ordered, so a retry
+  // answers the same.
   if (shop.order_without_asking) {
-    for (const c of cartsView(tx).carts) {
-      const lines = c.lines.filter((l) => (l.qty ?? 0) > 0);
-      if (c.status !== "open" || !lines.length) continue;
-      startOrdering(tx, tx.select().from(orders).where(eq(orders.id, c.order_id)).get()!, by, opts);
-      ordered.push({ order_id: c.order_id, app: c.app as GroceryApp, message: orderingNowText({ app: c.app, lines }) });
-    }
+    for (const c of cartsView(tx).carts) if (c.status === "open") orderCart(tx, c.app as GroceryApp, by, { ...opts, reminder_key: key, schedule });
   }
+  const ordered: Reminder["ordered"] = tx.select().from(orders).where(and(eq(orders.status, "ordering"), eq(orders.reminder_key, key))).all()
+    .map((o) => { const a = orderAnswer(tx, o); return { order_id: o.id, app: o.app as GroceryApp, message: a.message }; });
 
   const all = cartsView(tx).carts;
   const open = all.filter((c) => c.status === "open" && c.lines.some((l) => (l.qty ?? 0) > 0));
   const cart_items = [...new Set(open.flatMap((c) => c.lines.filter((l) => (l.qty ?? 0) > 0).map((l) => l.item)))];
   const short = open.find((c) => (c.delivery_gap ?? 0) > 0);
-  const carts = all.map((c) => ({ order_id: c.order_id, app: c.app as GroceryApp, lines: c.lines,
+  const carts = all.map((c) => ({ order_id: c.order_id, app: c.app as GroceryApp, status: c.status as "open" | "ordering", lines: c.lines,
     sync: c.status === "open" && CART_SYNC[c.app as GroceryApp] && touched.has(c.order_id) }));
   const r: Reminder = { which, date, meals, ask_ingredients, added, cart_items, asks,
     delivery_gap: short ? { app: APP_NAMES[short.app as GroceryApp] ?? short.app, rupees: short.delivery_gap! } : null, ordered,
@@ -156,13 +161,13 @@ function build(tx: Db, which: Which, now: Date, by: string, changes: Change[]): 
 }
 
 /** The reminder `which` at `now`. With `dryRun` nothing is kept (everything is rolled back) and the answer is the same; else
- *  the changes are told to `emit` once they are committed. */
-export function buildReminder(db: Db, which: Which, now: Date, opts: { dryRun: boolean; by?: string; emit?: Emit }): Reminder {
+ *  the changes are told to `emit` once they are committed, and a cart it orders drops its app's waiting copy (`schedule`). */
+export function buildReminder(db: Db, which: Which, now: Date, opts: { dryRun: boolean; by?: string; emit?: Emit; schedule?: Schedule }): Reminder {
   const changes: Change[] = [];
   let out = null as Reminder | null;
   try {
     db.transaction((tx) => {
-      out = build(tx as unknown as Db, which, now, opts.by ?? "app", changes);
+      out = build(tx as unknown as Db, which, now, opts.by ?? "app", changes, opts.dryRun ? undefined : opts.schedule);
       if (opts.dryRun) throw new DryRun();
     });
   } catch (e) {
@@ -172,16 +177,13 @@ export function buildReminder(db: Db, which: Which, now: Date, opts: { dryRun: b
   return out!;
 }
 
-/** get_reminder { which } → POST /api/reminders/:which: the reminder, for real. A cart it ordered drops a copy to its app still
- *  waiting (checking out makes the app's cart match). */
+/** get_reminder { which } → POST /api/reminders/:which: the reminder, for real. */
 export function mountReminderRoutes(hono: Hono<any>, db: Db, emit: Emit,
   deps: { now?: () => Date; schedule?: (key: string, run: (() => void) | null, ms: number) => void } = {}) {
   const write = writeRoutes(hono);
   write("/api/reminders/:which", (_b, by, c) => {
     const which = c.req.param("which") ?? "";
     if (!(WHICH as readonly string[]).includes(which)) refuse(`which must be one of: ${WHICH.join(", ")}`);
-    const r = buildReminder(db, which as Which, (deps.now ?? (() => new Date()))(), { dryRun: false, by, emit });
-    for (const o of r.ordered) deps.schedule?.(`sync:${o.app}`, null, 0);
-    return { body: r };
+    return { body: buildReminder(db, which as Which, (deps.now ?? (() => new Date()))(), { dryRun: false, by, emit, schedule: deps.schedule }) };
   });
 }

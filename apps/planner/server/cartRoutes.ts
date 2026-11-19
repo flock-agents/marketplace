@@ -13,9 +13,8 @@ import { itemFor } from "./items";
 import { productId } from "./products";
 import { dateOf } from "./meals";
 import { todayStr } from "./dates";
-import { orderingNowText } from "./messages";
-import { after, applyPicks, cartOf, cartsView, cartView, emitAll, lineApp, lineFor, linesOf, markPaid, markPlaced, moveToOpen, orderById, reopenCart,
-  rollUnpaid, setLine, setOrderRef, startOrdering, type Change, type LineInput, type OrderRow } from "./cart";
+import { after, applyPicks, cartOf, cartsView, cartView, emitAll, lineApp, lineFor, linesOf, markPaid, markPlaced, orderById, orderCart, reopenCart,
+  rollUnpaid, setLine, setOrderRef, type Change, type LineInput, type OrderRow } from "./cart";
 
 export type CartDeps = {
   /** The platform's intent call (flock.platform.agent.intent). */
@@ -180,28 +179,8 @@ export function mountCartRoutes(hono: Hono<any>, db: Db, emit: Emit, deps: CartD
   write("/api/carts/:app/order", (b, by, c) => {
     const app = appParam(c);
     const picks = b.picks == null ? null : picksOf(b.picks), seen = seenOf(b.seen);
-    const answer = (o: OrderRow, already = false) => {
-      const lines = linesOf(db, o.id).filter((l) => (l.qty ?? 0) > 0);
-      return { body: { order_id: o.id, app: o.app, lines, message: orderingNowText({ app: o.app, lines }), ...(already ? { already: true } : {}) } };
-    };
-    const ordering = cartOf(db, app, "ordering");
-    if (ordering) return answer(ordering, true);
-    const cart = cartOf(db, app, "open");
-    const empty = conflict(`there is nothing on your ${APP_NAMES[app]} cart to order`);
-    if (!cart) return empty;
-    const lines = linesOf(db, cart.id);
-    if (picks) for (const p of picks) if (!lines.some((l) => l.id === p.line_id)) return conflict("the cart changed: reload it");
-    const shown = seen ? new Set([...seen, ...(picks ?? []).map((p) => p.line_id)]) : undefined;
-    const unseen = shown ? lines.filter((l) => !shown.has(l.id)).map((l) => l.id) : [];
-    if (!(picks ? picks.some((p) => p.qty > 0) : lines.some((l) => (!shown || shown.has(l.id)) && (l.qty ?? 0) > 0))) return empty;
-    run((tx, changes) => {
-      const opts = { changes, at: now() };
-      if (picks) applyPicks(tx, cart, picks, by, { ...opts, seen: shown });
-      startOrdering(tx, cart, by, opts);
-      moveToOpen(tx, cart, unseen, by, opts);
-    });
-    deps.schedule(`sync:${app}`, null, 0);
-    return answer(orderById(db, cart.id)!);
+    const res = run((tx, changes) => orderCart(tx, app, by, { changes, at: now(), picks, seen, schedule: deps.schedule }));
+    return "refused" in res ? conflict(res.refused) : { body: res };
   });
 
   // sync_cart { order_id, lines: [{ product_id, qty, price?, in_stock? }], total?, delivery_gap?, outside_lines? }: what the app's

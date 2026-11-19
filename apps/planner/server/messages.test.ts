@@ -171,7 +171,7 @@ describe("reminderText", () => {
 
   it("one item running low is one sentence", () => {
     const one = { ...base, meals: [], added: [], cart_items: [], delivery_gap: null, asks: [{ item: "atta", days_ago: 31 }] };
-    expect(reminderText(one)).toBe("Atta was bought 31 days ago.\nStill in stock? If yes, when should I remind you?");
+    expect(reminderText(one)).toBe("Atta, bought 31 days ago.\nStill in stock? If yes, when should I remind you?");
     expect(reminderText(one, { app: true })).toBe("Still in stock? If yes, when should I remind you?");
   });
 

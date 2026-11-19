@@ -11,6 +11,7 @@ import { list, refuse, shoppingApps, type Db, type Emit } from "./family";
 import { itemFor, recomputeItem, recordPurchase, type ItemRow } from "./items";
 import { normItem, parsePack, productFor } from "./products";
 import { todayStr } from "./dates";
+import { orderingNowText } from "./messages";
 
 export type OrderRow = typeof orders.$inferSelect;
 export type LineRow = typeof order_lines.$inferSelect;
@@ -113,11 +114,43 @@ export function applyPicks(tx: Db, cart: OrderRow, picks: { line_id: string; qty
   touchCart(tx, cart, by, opts);
 }
 
-/** Her yes: the cart leaves `open` and is being ordered. */
-export function startOrdering(tx: Db, cart: OrderRow, by: string, opts: CartOpts = {}): void {
-  tx.update(orders).set({ status: "ordering", ordering_at: (opts.at ?? new Date()).toISOString(), updated_at: new Date().toISOString(), updated_by: by })
-    .where(eq(orders.id, cart.id)).run();
+/** Her yes: the cart leaves `open` and is being ordered. `reminder_key`: the reminder that ordered it without asking. */
+export function startOrdering(tx: Db, cart: OrderRow, by: string, opts: CartOpts & { reminder_key?: string } = {}): void {
+  tx.update(orders).set({ status: "ordering", ordering_at: (opts.at ?? new Date()).toISOString(), ...(opts.reminder_key ? { reminder_key: opts.reminder_key } : {}),
+    updated_at: new Date().toISOString(), updated_by: by }).where(eq(orders.id, cart.id)).run();
   opts.changes?.push(["orders", cart.id, "update", by]);
+}
+
+export type OrderAnswer = { order_id: string; app: string; lines: LineRow[]; message: string; already?: true };
+
+/** What is being ordered on a cart, and the message said before it is placed. */
+export function orderAnswer(db: Db, o: OrderRow, already = false): OrderAnswer {
+  const lines = linesOf(db, o.id).filter((l) => (l.qty ?? 0) > 0);
+  return { order_id: o.id, app: o.app, lines, message: orderingNowText({ app: o.app, lines }), ...(already ? { already: true as const } : {}) };
+}
+
+/** A yes to one app's cart: order_cart, and the reminder when Order without asking is on. One order at a time per app: while one
+ *  is being ordered, the answer is that one (`already`) and the open cart stays open. With `picks` (the page's ItemPicker) they
+ *  are saved first; with `seen` (the lines the page showed) a line added since moves to the app's new open cart instead of
+ *  being ordered or zeroed. A copy to the app still waiting is dropped (`schedule`: checking out makes the app's cart match).
+ *  `refused`: nothing to order, or the page's picks name a line no longer on the cart. */
+export function orderCart(tx: Db, app: GroceryApp, by: string, opts: CartOpts & { picks?: { line_id: string; qty: number }[] | null; seen?: Set<string>;
+  reminder_key?: string; schedule?: (key: string, run: null, ms: number) => void } = {}): OrderAnswer | { refused: string } {
+  const ordering = cartOf(tx, app, "ordering");
+  if (ordering) return orderAnswer(tx, ordering, true);
+  const cart = cartOf(tx, app, "open");
+  const empty = { refused: `there is nothing on your ${APP_NAMES[app]} cart to order` };
+  if (!cart) return empty;
+  const lines = linesOf(tx, cart.id), picks = opts.picks ?? null;
+  if (picks) for (const p of picks) if (!lines.some((l) => l.id === p.line_id)) return { refused: "the cart changed: reload it" };
+  const shown = opts.seen ? new Set([...opts.seen, ...(picks ?? []).map((p) => p.line_id)]) : undefined;
+  const unseen = shown ? lines.filter((l) => !shown.has(l.id)).map((l) => l.id) : [];
+  if (!(picks ? picks.some((p) => p.qty > 0) : lines.some((l) => (!shown || shown.has(l.id)) && (l.qty ?? 0) > 0))) return empty;
+  if (picks) applyPicks(tx, cart, picks, by, { ...opts, seen: shown });
+  startOrdering(tx, cart, by, opts);
+  moveToOpen(tx, cart, unseen, by, opts);
+  opts.schedule?.(`sync:${app}`, null, 0);
+  return orderAnswer(tx, orderById(tx, cart.id)!);
 }
 
 /** An `ordering` cart that was not placed is open again. A cart opened for that app meanwhile is folded into it, so the app
@@ -139,7 +172,7 @@ export function reopenCart(tx: Db, o: OrderRow, by: string, opts: CartOpts & { n
     tx.delete(orders).where(eq(orders.id, other.id)).run();
     opts.changes?.push(["orders", other.id, "delete", by]);
   }
-  tx.update(orders).set({ status: "open", ordering_at: null, ...(opts.note !== undefined ? { note: opts.note } : {}) }).where(eq(orders.id, o.id)).run();
+  tx.update(orders).set({ status: "open", ordering_at: null, reminder_key: null, ...(opts.note !== undefined ? { note: opts.note } : {}) }).where(eq(orders.id, o.id)).run();
   touchCart(tx, { ...o, status: "open" }, by, opts);
 }
 
@@ -245,7 +278,7 @@ export function markPaid(tx: Db, o: OrderRow, by: string, opts: CartOpts = {}): 
 
 /** A cart or an order as the pages and the agent read it. `total` is the app's own total, from its last copy. */
 export function cartView(db: Db, o: OrderRow) {
-  return { order_id: o.id, app: o.app, app_name: APP_NAMES[o.app as GroceryApp] ?? o.app, status: o.status, lines: linesOf(db, o.id),
+  return { order_id: o.id, app: o.app, app_name: APP_NAMES[o.app as GroceryApp] ?? o.app, status: o.status, lines: linesOf(db, o.id), reminder_key: o.reminder_key,
     total: o.total, delivery_gap: o.delivery_gap, sync_state: o.sync_state, synced_at: o.synced_at, sync_asked_at: o.sync_asked_at,
     outside_lines: list<{ name: string; qty?: number }>(o.outside_lines), building_at_order: !CART_SYNC[o.app as GroceryApp],
     ordering_at: o.ordering_at, placed_at: o.placed_at, paid_at: o.paid_at, app_order_ref: o.app_order_ref, note: o.note };

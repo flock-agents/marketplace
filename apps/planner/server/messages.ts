@@ -95,7 +95,7 @@ export function reminderText(r: ReminderText, opts: { app?: boolean } = {}): str
   } else if (r.added.length) rest.push(`I've added ${andList([...new Set(r.added.map((a) => a.item))])} to your cart.`);
   else if (r.cart_items.length) rest.push(`Your cart: ${andList(r.cart_items)}.`);
   if (r.asks.length === 1) {
-    if (!opts.app) rest.push(`${capital(r.asks[0].item)} was bought ${daysAgo(r.asks[0].days_ago)}.`);
+    if (!opts.app) rest.push(`${capital(r.asks[0].item)}, bought ${daysAgo(r.asks[0].days_ago)}.`);
     rest.push(STILL_IN_STOCK);
   } else if (r.asks.length) {
     rest.push("A few things were bought a while ago:");

@@ -146,6 +146,7 @@ export const orders = sqliteTable("orders", {
   sync_asked_at: text("sync_asked_at"),
   outside_lines: text("outside_lines"),                        // JSON [{ name, qty }]: already in the cart on the app
   ordering_at: text("ordering_at"),
+  reminder_key: text("reminder_key"),                          // "<date>:<which>": the reminder that ordered it without asking
   placed_at: text("placed_at"),
   paid_at: text("paid_at"),
   app_order_ref: text("app_order_ref"),
