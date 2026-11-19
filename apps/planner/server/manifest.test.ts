@@ -11,7 +11,7 @@ const instructions: string = manifest.agentInterface.instructions;
 const operations: { name: string; description: string }[] = manifest.agentInterface.operations;
 
 // The operations the onboarding plan calls by name, plus the ones this app has always had.
-const FIXED = ["set_person", "set_house_rules", "set_cook", "set_slots", "set_cooking_days", "set_shopping_apps", "set_regular", "import_order_history", "plan_week", "set_meal", "set_dish", "save_recipe", "remember_product"];
+const FIXED = ["set_person", "set_house_rules", "set_cook", "set_slots", "set_cooking_days", "set_shopping_apps", "set_subscription", "set_regular", "import_order_history", "plan_week"];
 
 describe("the agent's interface", () => {
   it("declares every fixed operation and every declared one has a handler", () => {
@@ -28,7 +28,7 @@ describe("the agent's interface", () => {
   });
 
   it("names no 2.0 operation or table anywhere in the guide or instructions", () => {
-    for (const old of ["save_meal", "set_meal_recipes", "write_recipe", "pantry", "household.profile", "diners", "get_draft"])
+    for (const old of ["save_meal", "set_meal_recipes", "write_recipe", "household.profile", "diners", "get_draft"])
       expect(guide + instructions).not.toContain(old);
   });
 
@@ -37,6 +37,24 @@ describe("the agent's interface", () => {
       expect(guide + instructions).not.toContain(old);
       for (const o of operations) expect(o.description, o.name).not.toContain(old);
     }
+  });
+
+  it("names no 3.0 ordering rule anywhere: nothing is bought from the plan, nothing is placed without a yes", () => {
+    const all = [guide, instructions, manifest.description, ...operations.map((o) => o.description), ...manifest.useCases.for, ...manifest.useCases.notFor].join("\n");
+    for (const old of ["ask_low_or_out", "place_order", "add_to_order", "without waiting for a yes", "Saturday", "long-life"]) expect(all, old).not.toContain(old);
+  });
+
+  it("no em dash in the guide, the instructions, the description or any operation description", () => {
+    expect(guide).not.toContain("\u2014");
+    expect(instructions).not.toContain("\u2014");
+    expect(manifest.description).not.toContain("\u2014");
+    for (const o of operations) expect(o.description, o.name).not.toContain("\u2014");
+  });
+
+  it("the Pantry page has its label and the cook is never he or she", () => {
+    expect(manifest.labels["nav.pantry"]).toBe("Pantry");
+    expect(manifest.labels["title.pantry"]).toBe("Pantry");
+    for (const text of [guide, instructions, manifest.description, ...operations.map((o) => o.description)]) expect(text).not.toMatch(/\b(he|she|his|her|him)\b/i);
   });
 
   it("the app is changed only through its operations: no row write is taught", () => {
@@ -99,6 +117,7 @@ describe("the agent's interface", () => {
   it("the guide covers what the agent is asked to do", () => {
     expect(guide.startsWith("# Meal Planner")).toBe(true);
     for (const n of Object.keys(ROUTES)) expect(guide, n).toContain(n);
-    for (const said of ["NEEDS_NAME", "structured: true"]) expect(guide, said).toContain(said);
+    for (const said of ["NEEDS_NAME", "structured: true", "get_reminder", "answer_running_low", "Order my", "sync_cart", "import_order_history", "Fine for a week", "record_order", "STOCK_OPTIONS", "taken_off"]) expect(guide, said).toContain(said);
+    for (const n of ["guide", ...Object.keys(ROUTES)]) expect(operations.map((o) => o.name), n).toContain(n);
   });
 });
