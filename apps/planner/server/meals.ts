@@ -212,7 +212,9 @@ export function mountMealRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: { bas
     const mode = b.mode === "draft" || b.mode === "final" ? b.mode : refuse("mode must be draft or final");
     if (b.meals === undefined) {
       const drafts = mode === "final" ? db.select().from(plan_meals).where(and(inWeek(weekStart), eq(plan_meals.status, "draft"))).all() : [];
-      if (!drafts.length) return { body: { context: weekContext(db, weekStart) } };
+      // A week already final is closed again: the message is answered from it. A week with no meals answers the context.
+      const planned = mode === "final" && !drafts.length && !!db.select().from(plan_meals).where(inWeek(weekStart)).limit(1).get();
+      if (!drafts.length && !planned) return { body: { context: weekContext(db, weekStart) } };
       commit((tx, changes) => {
         for (const m of drafts) {
           tx.update(plan_meals).set({ status: "final", updated_at: now(), updated_by: by }).where(eq(plan_meals.id, m.id)).run();
@@ -254,8 +256,9 @@ export function mountMealRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: { bas
       });
     }
     const week = weekView(db, weekStart);
-    if (mode !== "final") return { body: { week } };
-    // A final week is kept whether or not anyone replies. The answer carries the Sunday message, and the intro once.
+    // The message and the intro come only from the closing call (final, no meals), once the week is whole: a week planned in parts
+    // by final calls with meals carries neither. A final week is kept whether or not anyone replies.
+    if (mode !== "final" || b.meals !== undefined) return { body: { week } };
     const house = getHouse(db), view = houseView(house);
     const monday = view.cooking_days.includes("Mon") ? week.days[0].meals : [];
     const out: Record<string, unknown> = { week, message: weekMessage({ monday, link: weekLink(opts.basePath) }) };

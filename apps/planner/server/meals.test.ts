@@ -41,7 +41,7 @@ describe("plan_week", () => {
 
   it("plan_week final without meals finalises the draft; on an empty week it returns the context", async () => {
     const { op } = await boot();
-    expect((await op("plan_week", { week_start: MON, mode: "final" })).context.week_start).toBe(MON);
+    expect((await op("plan_week", { week_start: MON, mode: "final" })).message).toContain("Next week is planned.");   // already final: closed again, the message
     await op("plan_week", { week_start: MON, mode: "draft", meals: [lunch] });
     expect((await op("plan_week", { week_start: MON, mode: "final" })).week.status).toBe("final");
   });
@@ -53,7 +53,7 @@ describe("plan_week", () => {
     expect(draft.context.week_start).toBe(MON); expect(draft.week).toBeUndefined();
     expect(rows("plan_meals")[0].status).toBe("draft");
     await op("plan_week", { week_start: MON, mode: "final" });
-    expect((await op("plan_week", { week_start: MON, mode: "final" })).context.week_start).toBe(MON);
+    expect((await op("plan_week", { week_start: MON, mode: "final" })).message).toContain("Next week is planned.");   // already final: closed again, the message
     expect(rows("plan_meals")[0].status).toBe("final");
   });
 
@@ -169,23 +169,28 @@ describe("plan_week", () => {
     expect(dishNames((await op("set_meal", { date: "2026-11-24", slot: "Dinner", dishes: [{ name: "Dal" }] })).meal)).toEqual(["Dal"]);
   });
 
-  it("plan_week final answers the Monday message with the Week link, and the intro once", async () => {
+  it("only the closing final call without meals answers the Monday message, and the intro once", async () => {
     const { op, rows } = await boot({ basePath: "/a/xyz" });
     await op("set_regular", { item: "milk", amount: 1, unit: "L", every: "day" });
     await op("set_regular", { item: "curd", amount: 1, unit: "pc", every: "day" });
     await op("set_regular", { item: "bread", amount: 1, unit: "pc", every: "day" });
-    const first = await op("plan_week", { week_start: MON, mode: "final", meals: [
+    const part1 = await op("plan_week", { week_start: MON, mode: "final", meals: [{ date: "2026-11-24", slot: "Lunch", dishes: [{ name: "Dal" }] }] });
+    const part2 = await op("plan_week", { week_start: MON, mode: "final", keep_rest: true, meals: [
       { date: MON, slot: "Breakfast", dishes: [{ name: "Poha" }] }, { date: MON, slot: "Dinner", ordered_in: true }] });
-    expect(first.message).toBe("Next week is planned.\nMonday: Poha · ordering in\n\nThe whole week: [Week page](/a/xyz/?flock_scope=app#/week)\nTell me anything to change.");
-    expect(first.intro).toStartWith("Your week is planned. How it works:");
-    expect(first.intro).toContain("Every Sunday morning");
-    expect(first.intro).toContain("put your milk and curd in the cart");
+    for (const r of [part1, part2]) { expect(r.week.status).toBe("final"); expect(r.message).toBeUndefined(); expect(r.intro).toBeUndefined(); }
+    expect(rows("house")[0]?.intro_sent_at ?? null).toBeNull();
+    const close = await op("plan_week", { week_start: MON, mode: "final" });
+    expect(close.message).toBe("Next week is planned.\nMonday: Poha · ordering in\n\nThe whole week: [Week page](/a/xyz/?flock_scope=app#/week)\nTell me anything to change.");
+    expect(close.intro).toStartWith("Your week is planned. How it works:");
+    expect(close.intro).toContain("Every Sunday morning");
+    expect(close.intro).toContain("put your milk and curd in the cart");
     expect(rows("house")[0].intro_sent_at).toBeTruthy();
-    const second = await op("plan_week", { week_start: "2026-11-30", mode: "final", meals: [{ date: "2026-11-30", slot: "Lunch", dishes: [{ name: "Dal" }] }] });
-    expect(second.message).toContain("Monday: Dal"); expect(second.intro).toBeUndefined();
-    const drafts = await op("plan_week", { week_start: "2026-12-07", mode: "draft", meals: [{ date: "2026-12-08", slot: "Lunch", dishes: [{ name: "Dal" }] }] });
-    expect(drafts.message).toBeUndefined();
+    const again = await op("plan_week", { week_start: MON, mode: "final" });
+    expect(again.message).toBe(close.message); expect(again.intro).toBeUndefined();
+    await op("plan_week", { week_start: "2026-12-07", mode: "draft", meals: [{ date: "2026-12-08", slot: "Lunch", dishes: [{ name: "Dal" }] }] });
+    expect((await op("plan_week", { week_start: "2026-12-07", mode: "draft" })).message).toBeUndefined();
     expect((await op("plan_week", { week_start: "2026-12-07", mode: "final" })).message).toContain("Monday: nothing planned");
+    expect((await op("plan_week", { week_start: "2027-01-04", mode: "final" })).context).toBeDefined();
   });
 
   it("a final week stays final with no reply: nothing waits on an answer", async () => {
