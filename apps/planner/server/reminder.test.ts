@@ -270,14 +270,14 @@ describe("the reminder", () => {
     expect(r.asks).toEqual([]);
     expect(r.block).toBeNull();
     expect(r.ordered).toEqual([{ order_id: cart[0].id, app: "zepto",
-      message: "Ordering this now: Mother Dairy curd, Harvest Gold bread, atta, toor dal, ~₹95 on Zepto" }]);
+      message: "Ordering this now: Mother Dairy curd, Harvest Gold bread, atta, toor dal on Zepto" }]);
     // Nothing was asked, so nothing counted.
     expect(item(k, "atta").asks_unanswered).toBe(0);
     expect(r.text).toBe([
       "Tomorrow: poha · rajma chawal, bhindi",
       "Do you have rajma and bhindi?",
       "",
-      "I've ordered curd, bread, atta and toor dal on Zepto, about ₹95."].join("\n"));
+      "I've ordered curd, bread, atta and toor dal on Zepto."].join("\n"));
   });
 
   it("an everyday item put on the cart by the reminder is not also asked about", async () => {
@@ -361,6 +361,26 @@ describe("the reminder", () => {
     expect(dry.ordered).toHaveLength(1);
     expect(snap()).toBe(before);
     expect(k.rows("orders").filter((o) => o.status === "ordering")).toEqual([]);
+  });
+
+  // Final review I3: a final plan moves a follows-plan item's run-out, though nothing else recomputed it.
+  it("a follows-plan item's run-out moves with a final plan when a reminder is built; a dry run asks the same and keeps nothing", async () => {
+    const k = await start();
+    // Paneer: 500 g every 10 days, last 20 Nov (runs out 30 Nov).
+    await k.op("import_order_history", { app: "zepto", orders: ["2026-11-10", "2026-11-20"].map((date) => ({ date, items: [{ item: "paneer", group: "few_days", pack: "500 g" }] })) });
+    await k.op("set_item", { item: "paneer", follows_plan: true });
+    expect(item(k, "paneer").run_out).toBe("2026-11-30");
+    // Wednesday's dinner uses all of it: it runs out on 25 Nov, so it is due tomorrow.
+    expect((await k.op("plan_week", { week_start: MON, mode: "final", keep_rest: true, meals: [
+      { date: "2026-11-25", slot: "Dinner", dishes: [{ name: "palak paneer", ingredients: [{ item: "paneer", amount: 500, unit: "g" }] }] }] })).error).toBeUndefined();
+    const snap = () => JSON.stringify(["orders", "order_lines", "items", "item_events"].map((t) => k.rows(t)));
+    const before = snap();
+    const dry = buildReminder(k.kit.db as any, "evening", new Date(at(23, 19)), { dryRun: true });
+    expect(dry.asks.map((a) => a.item)).toEqual(["atta", "toor dal", "paneer"]);
+    expect(snap()).toBe(before);
+    const real = await k.reminder("evening");
+    expect(real.asks.map((a: any) => a.item)).toEqual(["atta", "toor dal", "paneer"]);
+    expect(item(k, "paneer").run_out).toBe("2026-11-25");
   });
 
   it("the stock-check block is a Choice for one item and a Questions of 2 to 5 Choice tabs, each with the five options", () => {

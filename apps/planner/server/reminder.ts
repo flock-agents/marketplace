@@ -59,6 +59,12 @@ function build(tx: Db, which: Which, now: Date, by: string, changes: Change[], s
   const date = which === "afternoon" ? today : tomorrow, key = `${date}:${which}`;
   const opts = { changes, at: now };
   const shop = shoppingApps(tx);
+  // A follows-plan item's run-out comes from the final plan, which may have changed since it was last worked out: worked out
+  // again before anything below reads it (inside this transaction, so a dry run keeps none of it).
+  for (const it of tx.select().from(items).where(eq(items.follows_plan, 1)).all()) {
+    const row = recomputeItem(tx, it.id, today);
+    if (row.run_out !== it.run_out) changes.push(["items", it.id, "update", by]);
+  }
   const onCart = onCarts(tx, ["open", "ordering"]);
   const active = tx.select().from(regulars).where(eq(regulars.active, 1)).all();
 
