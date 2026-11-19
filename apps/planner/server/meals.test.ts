@@ -315,6 +315,32 @@ describe("set_dish", () => {
   });
 });
 
+describe("GET /api/weeks/:week_start", () => {
+  it("reads a week for the Week page: seven days, its meals with their dishes, and whether it is a draft", async () => {
+    const { op, owner } = await boot();
+    const empty = await owner("GET", `/api/weeks/${MON}`);
+    expect(empty.status).toBe(200);
+    expect(empty.body).toMatchObject({ week_start: MON, status: null });
+    expect(empty.body.days.map((d: any) => d.date)).toEqual(["2026-11-23", "2026-11-24", "2026-11-25", "2026-11-26", "2026-11-27", "2026-11-28", "2026-11-29"]);
+    await op("plan_week", { week_start: MON, mode: "draft", meals: [lunch, { date: "2026-11-29", slot: "Dinner", ordered_in: true }] });
+    const { body } = await owner("GET", `/api/weeks/${MON}`);
+    expect(body.status).toBe("draft");
+    expect(dishNames(mealOf(body, MON, "Lunch"))).toEqual(["Rice", "Aloo gobi", "Sambar", "Boiled eggs"]);
+    expect(mealOf(body, MON, "Lunch").dishes[1].ingredients.map((i: any) => i.item)).toEqual(["cauliflower", "potato"]);
+    expect(mealOf(body, "2026-11-29", "Dinner")).toMatchObject({ ordered_in: true, dishes: [] });
+    // Another week is another read.
+    expect((await owner("GET", "/api/weeks/2026-11-30")).body.status).toBeNull();
+  });
+
+  it("refuses a week it cannot read", async () => {
+    const { owner } = await boot();
+    const bad = await owner("GET", "/api/weeks/next");
+    expect(bad.status).toBe(400); expect(bad.body.reason).toContain("YYYY-MM-DD");
+    const tue = await owner("GET", "/api/weeks/2026-11-24");
+    expect(tue.status).toBe(400); expect(tue.body.reason).toContain("Monday");
+  });
+});
+
 describe("live pages", () => {
   it("are told of every row once the write is in: the writer's rows as the writer's, what follows from them as the app's", async () => {
     const { kit } = await boot();

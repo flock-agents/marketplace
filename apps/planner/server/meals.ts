@@ -199,6 +199,14 @@ export function mountMealRoutes(hono: Hono<any>, db: Db, emit: Emit, hooks: Meal
   const statusFor = (date: string) => weekStatus(db.select().from(plan_meals).where(inWeek(mondayOf(date))).all()) ?? "draft";
   const notFound = (reason: string) => ({ status: 404 as const, body: { reason } });
 
+  // The Week page's read: one week, by its Monday.
+  hono.get("/api/weeks/:week_start", (c) => {
+    const weekStart = c.req.param("week_start");
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(weekStart) || addDays(weekStart, 0) !== weekStart) return c.json({ ok: false, reason: "week_start must be a date as YYYY-MM-DD" }, 400);
+    if (weekdayOf(weekStart) !== "Mon") return c.json({ ok: false, reason: `week_start must be a Monday: ${weekStart} is a ${weekdayOf(weekStart)}` }, 400);
+    return c.json(weekView(db, weekStart));
+  });
+
   // plan_week { week_start, mode: draft | final, meals? }. With meals: they become the week's plan, in place of what was there.
   // Without: a week of drafts is made final when mode is final; anything else answers with what the agent plans from.
   write("/api/weeks/:week_start/plan", async (b, by, c) => {

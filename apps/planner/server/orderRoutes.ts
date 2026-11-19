@@ -3,11 +3,11 @@
 // meal, a dish or an everyday item (by the agent, or by the family on a page) rebuilds the ones not yet placed.
 // An order goes scheduled → placed (waiting for the person's payment) → paid or not paid; or cancelled before it is placed.
 import type { Hono } from "hono";
-import { and, asc, eq, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, isNull, sql } from "drizzle-orm";
 import type { KitEvent } from "@flock/app-kit";
 import { house, order_lines, orders } from "./db/schema";
 import { APP_NAMES, type GroceryApp } from "./db/constants";
-import { localStamp, todayStr, weekdayLong } from "./dates";
+import { addDays, localStamp, todayStr, weekdayLong } from "./dates";
 import { getHouse, groceryApp, list, name, refuse, words, writeRoutes, type Db, type Emit } from "./family";
 import { dateOf, flag, type MealHooks } from "./meals";
 import { introText } from "./messages";
@@ -70,6 +70,15 @@ export function mountOrderRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: Orde
     if (PLAN_TABLES.includes(e.table)) changed();
     else if (e.table === "order_lines" && e.op === "delete") lineRemoved(db, e.id, emit);
     else if (e.table === "order_lines" && e.op === "insert") lineRestored(db, e.id, emit);
+  });
+
+  // The Shopping page's read: every order with its lines, the newest first. `from` (a date) leaves out the orders placed
+  // before that day. Each is an order view: `total` is the estimate from its lines, `recorded_total` what was charged.
+  hono.get("/api/orders", (c) => {
+    const from = c.req.query("from");
+    if (from !== undefined && (!/^\d{4}-\d{2}-\d{2}$/.test(from) || addDays(from, 0) !== from)) return c.json({ ok: false, reason: "from must be a date as YYYY-MM-DD" }, 400);
+    const ids = db.select({ id: orders.id }).from(orders).where(from ? gte(orders.place_at, from) : undefined).orderBy(desc(orders.place_at), desc(sql`rowid`)).all();
+    return c.json({ orders: ids.map((o) => orderView(db, o.id)!) });
   });
 
   // ask_low_or_out { week_start, low_or_out? }: without an answer, the week's long-life items and the question to ask about

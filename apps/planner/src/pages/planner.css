@@ -1,0 +1,40 @@
+/* The planner's own CSS (outside src/flock/, so design updates keep it). Tokens only, never a literal colour. */
+
+/* Quiet lines: a note beside a heading, what a dish is for, an empty order. */
+.pl-quiet { margin: 0; font-size: 13px; color: var(--ink-3); overflow-wrap: anywhere; }
+.pl-notes { margin: 0; font-size: 14px; color: var(--ink-2); white-space: pre-wrap; overflow-wrap: anywhere; }
+.pl-fail { margin: 0; font-size: 13px; color: var(--block); }
+.pl-price { font-size: 13px; color: var(--ink-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* Week: one block per slot, a dish per line with its Edit at the end. */
+.pl-slot { display: grid; gap: var(--space-2); padding-bottom: var(--space-3); border-bottom: 1px solid var(--line); min-width: 0; }
+.pl-slot:last-child { border-bottom: 0; padding-bottom: 0; }
+.pl-dish { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); min-width: 0; font-size: 14.5px; color: var(--ink); }
+
+/* A link out: a dish's video, a recipe's links. */
+.pl-chip { display: inline-flex; align-items: center; gap: var(--space-1); max-width: 100%; padding: 3px 10px; border-radius: var(--radius-pill); background: var(--ua-soft); color: var(--ua);
+  font-size: 12.5px; font-weight: 500; text-decoration: none; overflow-wrap: anywhere; align-self: flex-start; }
+.pl-chip:hover { text-decoration: underline; }
+.pl-chip:focus-visible { outline: 2px solid var(--ua); outline-offset: 2px; }
+
+/* An editor opened in place in a list the page lays out itself: the look of a card, without being one. */
+.pl-panel { box-sizing: border-box; padding: var(--pad-box); border: 1px solid var(--line-2); border-radius: var(--radius); background: var(--surface); min-width: 0; }
+/* One row of an editor's list: its fields side by side, its Remove at the end; stacked on a phone. */
+.pl-ingredient, .pl-editrow { display: grid; grid-template-columns: 2fr 1fr 1fr 1.2fr auto; align-items: end; gap: var(--space-2); min-width: 0; }
+.pl-editrow { grid-template-columns: 1fr 1.4fr 1.4fr auto; }
+@media (max-width: 720px) {
+  .pl-ingredient, .pl-editrow { grid-template-columns: 1fr 1fr; padding-bottom: var(--space-3); border-bottom: 1px solid var(--line); }
+}
+
+/* Shopping: the packs of a line, less and more. */
+.pl-stepper { display: inline-flex; align-items: center; gap: var(--space-1); border: 1px solid var(--line-2); border-radius: var(--radius-pill); padding: 2px; }
+.pl-stepper > span { min-width: 22px; text-align: center; font-size: 13.5px; font-variant-numeric: tabular-nums; color: var(--ink); }
+.pl-stepper > button { all: unset; box-sizing: border-box; display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; color: var(--ink-2); cursor: pointer; }
+.pl-stepper > button:hover:not(:disabled) { background: var(--hover); color: var(--ink); }
+.pl-stepper > button:focus-visible { outline: 2px solid var(--ua); outline-offset: 1px; }
+.pl-stepper > button:disabled { color: var(--ink-4); cursor: default; }
+/* On a phone what follows a row's name (price, packs, Remove; Order it, Pause, Edit) goes under it. */
+@media (max-width: 560px) {
+  .pl-lines .fl-row { flex-wrap: wrap; row-gap: var(--space-2); }
+  .pl-lines .fl-row-main { flex: 1 1 100%; }
+}

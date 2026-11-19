@@ -559,6 +559,44 @@ describe("an order that is not paid, or cancelled", () => {
   });
 });
 
+describe("GET /api/orders", () => {
+  it("lists the orders with their lines, the newest first, each with its estimate and the amount recorded", async () => {
+    const { op, owner, first, second, third, fourth } = await plannedWeek();
+    await op("record_order", { order_id: first.id, placed: true, total: 512 });
+    await op("cancel_order", { order_id: third.id });
+    const { status, body } = await owner("GET", "/api/orders");
+    expect(status).toBe(200);
+    expect(body.orders.map((o: any) => o.id)).toEqual([fourth.id, third.id, second.id, first.id]);
+    expect(body.orders.map((o: any) => o.status)).toEqual(["scheduled", "cancelled", "scheduled", "placed"]);
+    const placed = body.orders[3];
+    expect(placed.lines.map((l: any) => l.item).sort()).toEqual(["atta", "cauliflower", "eggs", "milk", "potato", "rice", "toor dal"]);
+    // The estimate adds up the lines that have a price; the amount recorded is what the grocery app charged.
+    expect(placed.recorded_total).toBe(512);
+    expect(placed.total).toBe(placed.lines.reduce((sum: number, l: any) => sum + (l.price == null ? 0 : (l.qty ?? 1) * l.price), 0));
+    expect(placed.total).toBeGreaterThan(0);
+    expect(body.orders[0].recorded_total).toBeNull();
+    expect(Array.isArray(body.orders[0].skipped_items)).toBe(true);
+  });
+
+  it("from leaves out the orders placed before that day, and a from that is not a date is refused", async () => {
+    const { owner, first, second, third, fourth } = await plannedWeek();
+    expect((await owner("GET", `/api/orders?from=${MON}`)).body.orders.map((o: any) => o.id)).toEqual([fourth.id, third.id, second.id]);
+    expect((await owner("GET", "/api/orders?from=2026-11-21")).body.orders.map((o: any) => o.id)).toEqual([fourth.id, third.id, second.id, first.id]);
+    expect((await owner("GET", "/api/orders?from=2026-12-01")).body.orders).toEqual([]);
+    const bad = await owner("GET", "/api/orders?from=last-week");
+    expect(bad.status).toBe(400); expect(bad.body.reason).toContain("YYYY-MM-DD");
+  });
+
+  it("an owner's change to a line's packs on the page is kept as checked", async () => {
+    const { owner, first, line } = await plannedWeek();
+    const eggs = line(first.id, "eggs");
+    expect(eggs.qty_checked).toBe(0);
+    expect((await owner("PATCH", `/api/_data/order_lines/${eggs.id}`, { qty: 2, qty_checked: 1 })).status).toBe(200);
+    const read = (await owner("GET", "/api/orders")).body.orders.find((o: any) => o.id === first.id).lines.find((l: any) => l.id === eggs.id);
+    expect(read).toMatchObject({ qty: 2, qty_checked: 1 });
+  });
+});
+
 describe("add_to_order", () => {
   it("an item already on the order has its line set, not a second line: product, packs, checked; what it is for stays", async () => {
     const { op, first, rows, line, items } = await plannedWeek();
