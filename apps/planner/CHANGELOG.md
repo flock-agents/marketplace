@@ -1,5 +1,45 @@
 # Changelog
 
+## 3.0.0
+
+Meal Planner, rebuilt simple. Tell the agent about your family once; it plans the week, orders the groceries and checks in
+every day. Needs Flock 0.24.0 (its betas included).
+
+- **Family.** A Family page holds who eats at home (portions, diet, allergies and dislikes in your own words), the house
+  rules (vegetarian, egg, fasting and no-onion-garlic days), the cook, extra meals such as a tiffin, the meals you order
+  in, and the grocery app your orders go to. The agent fills it from what you tell it; you can edit all of it.
+- **Meals of several dishes.** A meal is a date and a slot with its dishes in order, each for everyone or for named people
+  ("Parathas, for Dad"), with what it needs bought. A meal can be marked ordered in. Change any of it by telling the agent
+  or on the Week page.
+- **Everyday items.** Milk, curd, bread and the like are a list of their own (how much, how often, paused over a holiday)
+  and go into the orders without being asked for. The agent suggests them from your past orders; you confirm each one.
+- **Orders, placed for you.** Once a week (Saturday 6 pm unless you change it) the agent plans next week and groups what
+  it needs into orders: fresh items close to the day they are cooked, long-life items in the first order. The first order
+  is placed right away; the later ones go out the evening before. The agent messages you just before each one and places
+  it without waiting for a yes; the payment step is yours. With the plan it asks once which long-life items are low or
+  out, and takes the ones you have off the next order.
+- **Where an order stands.** Scheduled, then placed and waiting for payment, then paid or not paid; a scheduled order can
+  be cancelled. If you do not pay, or say cancel after it is placed, the order is closed as not paid and its items move to
+  the next order. A paid order is cancelled in the grocery app itself.
+- **Real products.** Each line is a product on your grocery app with its pack and price, remembered for the next order.
+  On the Shopping page you change the packs or remove a line while an order is scheduled; to add something, tell the
+  agent, or press Add on the order, and pick from what it finds.
+- **Daily check-ins.** In the afternoon about tonight's dinner and in the evening about tomorrow's meals (also the cook's
+  brief, with the dishes' videos). The first message after your week is planned explains how it all works and names the
+  times your check-ins really run at; the times are changed in Flock's routines.
+- **Saved recipes with videos.** Share a reel, a short or any link with the agent and say "save this": it is kept on the
+  Recipes page and can be planned into the week.
+- **Nothing about what is at home is kept.** No pantry and no stock: what you say you have changes only the order it is
+  about. Gone with it: diners with portion multipliers, the ingredient catalog, price comparison across apps, prep
+  reminders and all the old settings but the grocery app.
+- For the agent: 17 operations replace the old 20. An order's lines change only through `add_to_order` (add an item, set
+  a line's product or packs, take a line off); the grocery app is set with `set_house_rules { grocery_app }` or on the
+  Family page.
+
+Existing installs: the old tables are kept unread; your household profile is carried over and the agent turns it into
+the new Family page on its next run. Until it has, no week is planned and no order goes out. Old meals, recipes and
+shopping lists are not shown in the new pages.
+
 ## 2.0.7
 
 - **Zepto and Swiggy Instamart are their official connections.** The agent's guide says to read their cart and bill only

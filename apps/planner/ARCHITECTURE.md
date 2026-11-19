@@ -77,65 +77,44 @@ An installed copy that nobody edited follows its package and the component libra
 
 ## This app: Meal Planner
 
-For a household's meals over the week (Breakfast, Lunch and Dinner), the shopping that follows from them, what is in the
-kitchen and the family's recipe book. The app does the deterministic work (lists, quantities, timing, stock); its paired
-agent brings the judgement (reviewing a meal's note, matching and filling recipes, finding patterns, building carts on
-grocery services) through the app's operations. The agent is replaceable: everything it needs ships with the app.
+A household's week of meals, the groceries for them ordered on the family's grocery app, everyday items and saved recipes.
+The agent reasons (plans, sets amounts, picks products, places orders); the app stores, groups into orders and runs the clock.
 
-Nothing runs until the household is known (server/setupGate.ts): the `household.profile` setting holds what the family
-told the agent in their first conversation. Until then the routines are silent no-ops, no job is queued for the agent,
-the shopping list is not rebuilt and every page says the app is waiting (src/pages/IdleNotice.tsx). When the profile
-arrives the samples are cleared and the held-back work starts. Don't fill the profile from guesses or from the app's rows.
+**Files, one job each.** `server/index.ts` mounts the kit (`settings`, `routines`, `keepTables: OLD_TABLES`; no seed) and
+the routes; `agentOps.ts` maps each operation to one of those routes, so the agent and the pages pass the same checks;
+`agent-guide.md` is the `guide` text; `db/schema.ts` the ten tables; `db/constants.ts` the closed lists, the one setting
+(`grocery_app`) and the 2.0 table names; `family.ts` people and the house row; `meals.ts` the week, `plan_week`, `set_meal`,
+`set_dish`; `regulars.ts` everyday items and order-history suggestions; `products.ts` remembered products and pack
+arithmetic (g, ml, pc); `recipes.ts` saved recipes; `orders.ts` how needs become orders and lines; `orderRoutes.ts` the
+order operations and the rebuild after a change; `messages.ts` the texts the agent sends word for word; `dates.ts` local
+dates; `gate.ts` the family gate and the 2.0 profile; `routines/` the four routines; `testkit.ts` boots the app for tests.
+Pages (`src/pages/`): `WeekPage` + `DishPanel`; `ShoppingPage` with `OrderCard` (packs and remove in place, only while
+scheduled; "+ Add" opens the chat) and `EverydayItems`; `RecipesPage`; `FamilyPage`; `format.ts` their wording.
 
-### Data
+**Tables** (all public; lists are JSON text, dates `YYYY-MM-DD`, times `HH:MM`, local). `people` (child | adult | elder;
+portions, diet, allergies in their own words) · `house` (one row: rules, the cook, extra slots, meals ordered in, notes,
+`profile_to_structure`, `intro_sent_at`, the two check-in times) · `plan_meals` (date, slot, draft | final, `ordered_in`) ·
+`dishes` (in order, for everyone or named people, optional recipe or video) · `dish_items` (item, amount, unit, keeps
+fresh | long) · `regulars` (`paused_until`) · `orders`, `order_lines` · `products` (one per item and app) · `saved_recipes`.
 
-Public tables (server/db/schema.ts), each with the kit's `id`, `created_at`, `updated_at`, `updated_by`:
-- `meals`: one row per dish (`date`, `slot`, `dish`, `time`, `note`, `outcome` cooked|skipped with `outcome_source`). Its
-  recipes are the private `meal_recipes` set (`recipe_id` mirrors the first). A meal surely over (its slot's latest time,
-  settings `meal.latest.*`) counts as cooked.
-- `recipes` and `recipe_ingredients` (one regular adult portion per line, each linked to the one `ingredients` entry it
-  means). Only the agent creates recipes (after searching for the same dish under another spelling); a planned recipe with
-  no lines gets a `fill_recipe` job.
-- `ingredients`: the catalog (aliases, unit conversions, pack prefs, home shelf life guessed by the agent).
-- `groceries`: the shopping list. Meal rows are recomputed from the plan every time (server/quantity.ts, mealGroceries.ts):
-  recipes × diners' portions, minus stock still good on the meal's day (server/stock.ts), plus the agent's review of the note.
-- `carts`: one shopping window each: `draft` → `ordered` | `let_go`, with its span, quotes and the yes.
-- `diners`, `diner_portions` (each diner's portion by slot), `staples` (cadence items like milk).
+**Operations** (17). `guide`; `set_person`, `set_house_rules` (also `{ grocery_app }`, the setting the Family page edits
+too), `set_cook`, `set_slots`; `plan_week` (draft | final; without meals it answers the context to plan from), `set_meal`,
+`set_dish`; `set_regular`, `import_order_history` (suggests only), `remember_product`, `save_recipe`; `ask_low_or_out`,
+`place_order`, `record_order`, `cancel_order`, and `add_to_order`, the one door to an order's lines (add, set, remove).
 
-Private tables (server-only, reached through routes/operations): `stock` (what is at home), `agent_jobs`, `choice_log`,
-`learned_prefs`, `message_log`, `shopping_prefs`, `standing_consumption`, `meal_recipes`, `prep_reminders`.
+**Routines and the gate.** `weekly-plan` (Sat 18:00) wakes the agent to plan next week, place its first order and send the
+plan with the low-or-out question. `dinner-check` (15:00) and `tomorrow-check` (19:00) wake it to send a message the app
+wrote, only when a final plan has a meal to check; each records the time it really runs at, which the intro names.
+`order-clock` (every 15 min) hands each due order to the agent, again after 60 min if it was never recorded. The
+gate (`gate.ts`): nothing runs until one person is saved. On an upgrade from 2.0, boot copies the `household.profile` text
+to `house.profile_to_structure`; until cleared, the weekly run only asks the agent to structure it. 2.0's 18 tables stay, unread.
 
-### The agent's interface
+**An order's life.** A final plan gives each pair of days an order: fresh items in the order covering their day, long-life
+items once, in the week's first. The first is placed right away, each later one at 18:00 the evening before; one order a
+date. `scheduled` → `placed` (waiting for payment) → `paid` or `not_paid`; `cancelled` only from scheduled. Scheduled orders
+are rebuilt after every change to the plan or an everyday item, keeping added lines and `skipped_items` (what the family
+said they have). Not paid, or a placed order cancelled: its lines move to the next scheduled order; nothing is cancelled on
+the grocery app. A not-paid order still covers its days, a cancelled one does not. The first one placed answers `intro`.
 
-`agentInterface` in flock.app.json: 20 operations (server/agentOps.ts, each a door onto the app's own route, so a write
-runs the app's checks and hooks) and short instructions; the full guide is the `guide` operation (server/agent-guide.md).
-Routines: `rolling-plan` (nightly plan check), `prep-reminders`, `shopping-timeline` (per window: reminder → heads-up
-Checklist → price step; ≤ 3 messages; a draft with no yes is let go), `agent-jobs` (wakes the agent for background jobs:
-review_meal, fill_recipe, find_patterns — never messages the family).
-
-### Pages
-
-- `week` (WeekPage.tsx): the Schedule; a meal's chip appears only when there is something to tell ("Need Coriander…",
-  "On Sun 6:00 PM list") and opens those items on Shopping. The editor (MealEditor.tsx) has the dish, time and note.
-- `groceries` ("Shopping", GroceriesPage.tsx): orders as groups with their span; the next draft's best quote, "Order with
-  <service>" and "Skip this order" (asks first); one line per ingredient with Mark bought / Already have it / Skip.
-- `pantry` (PantryPage.tsx): what is at home, by kind, with how sure ("bought Tue", "assumed"); tap an item to correct it.
-- `recipes`, `#/recipe/<id>`, `ingredients`, `#/ingredient/<id>`: the book and the catalog.
-
-### What to change first
-
-1. Slots, aisles and categories: server/db/constants.ts; the meal latest times and shopping-window settings there too.
-2. The seed rows in server/db/seed.ts (a sample family's recipes with their lines, two weeks of meals, a diner, a staple).
-3. The grocery services compared at order time (setting `services`) and `prefs.category_defaults`.
-4. The starter prompts in src/App.tsx, page titles and nav names (`label(...)`), the accent and the object.
-
-### Other weekly plans (school runs, chores, appointments): only on the owner's ask
-
-This app is for meals: a school-run rota, chores or appointments are a `checklist` (who and by when) or a `tracker`, not a planner.
-Adapt the planner only when the owner asks for this week view for something else. That is a hand change (a build, or a change after the app is live), never the install: the install keeps `meals`, its Breakfast, Lunch and Dinner slots and a required `dish`.
-The week is generic underneath: each row is a date, a slot and a title, and the rows sharing a date and slot show on one line. To adapt it, before the app has real rows:
-1. `SLOTS` in server/db/constants.ts become the rows of the day: `["Morning drop", "Afternoon pickup"]` for school runs, `["Morning", "Evening"]` for chores, `["Morning", "Afternoon", "Evening"]` for appointments.
-2. Rename in server/db/schema.ts and the pages: `meals` → `plans`, `dish` → `title`, and drop `recipe_id`. Add a column only when the job needs it: for appointments an optional `time` (text, "16:30") and `place`, shown with the title ("16:30 Dentist, Meera").
-3. In src/pages/WeekPage.tsx and src/pages/MealEditor.tsx, swap the words "meal", "dish" and "breakfast" in titles and buttons (all plain strings), and take the recipe suggestions out of the editor.
-4. Drop the pages that do not fit: remove `groceries` and `recipes` from `PAGES` in src/App.tsx (and their files and tables) unless a shopping list helps, and set `nav="none"` on AppShell when one page is left.
-5. Rewrite the seed rows in server/db/seed.ts with the owner's real week.
+**Deliberately not stored.** No inventory: a low-or-out answer or a removed line changes only the order it is about. No
+ingredient catalog, portion multipliers, stock ledger, price comparison or prep reminders; amounts come from the agent.
