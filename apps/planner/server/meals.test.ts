@@ -41,7 +41,7 @@ describe("plan_week", () => {
 
   it("plan_week final without meals finalises the draft; on an empty week it returns the context", async () => {
     const { op } = await boot();
-    expect((await op("plan_week", { week_start: MON, mode: "final" })).message).toContain("Next week is planned.");   // already final: closed again, the message
+    expect((await op("plan_week", { week_start: MON, mode: "final" })).context.week_start).toBe(MON);
     await op("plan_week", { week_start: MON, mode: "draft", meals: [lunch] });
     expect((await op("plan_week", { week_start: MON, mode: "final" })).week.status).toBe("final");
   });
