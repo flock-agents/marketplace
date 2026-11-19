@@ -17,7 +17,7 @@ const tagOf = (tagged: ReturnType<typeof tagEvents>, date: string) => tagged.fin
 
 const item = (o: Partial<ItemState>): ItemState => ({
   id: "i", name: "Atta", group: "monthly", subscription: null, dont_ask: false, snoozed_until: null, wait_factor: 1,
-  run_out: "2026-11-25", confident: true, last_bought: "2026-11-01", ...o,
+  run_out: "2026-11-25", confident: true, last_bought: "2026-11-01", cycles: 2, ...o,
 });
 
 describe("estimate", () => {
@@ -25,6 +25,7 @@ describe("estimate", () => {
     expect(median([25, 24, 24, 24])).toBe(24);
     expect(median([3, 1, 2])).toBe(2);
     expect(median([24, 28])).toBe(26);
+    expect(median([])).toBe(0);
   });
 
   it("the median of the last 5 cycles and amounts makes the pattern: 2 × 5 kg is 10 kg", () => {
@@ -84,15 +85,36 @@ describe("estimate", () => {
     expect(pattern(t)).toMatchObject({ lasts_days: 24, cycles: 3 });
   });
 
+  // Amounts arrive in base units (Task 4 converts "1 kg" to 1000 g); the estimate only compares them.
   it("1 kg and 500 g compare in g; a 'pack' with no size for a g item is a one-off, never a cycle", () => {
     const g = tagEvents([buy("10-01", 1000), buy("10-11", 1000), buy("10-21", 600)], "g");   // 600 g vs the usual 1000 g: 0.6, counted
     expect(tagOf(g, "10-21").tag).not.toBe("one_off");
     expect(tagOf(tagEvents([buy("10-01", 1000), buy("10-11", 1000), buy("10-21", 500)], "g"), "10-21").tag).toBe("one_off");   // 500 g is half
     const t = tagEvents([buy("10-01", 1000), buy("10-11", 1000), buy("10-15", 1, 1, { unit: "pack" }), buy("10-16", 1, 1, { amount: null }), buy("10-21", 1000)], "g");
-    expect(tagOf(t, "10-15")).toMatchObject({ tag: "one_off", cycle_days: null });
-    expect(tagOf(t, "10-16")).toMatchObject({ tag: "one_off", cycle_days: null });   // two in a row stay one-offs: no direction
-    expect(tagOf(t, "10-21").cycle_days).toBe(10);   // the packs did not move the anchor
-    expect(pattern(t)).toMatchObject({ usual_amount: 1000, cycles: 2 });
+    expect(tagOf(t, "10-15")).toMatchObject({ tag: "one_off", cycle_days: null, restocked: true });
+    expect(tagOf(t, "10-16")).toMatchObject({ tag: "one_off", cycle_days: null, restocked: true });   // two in a row stay one-offs: no direction
+    expect(tagOf(t, "10-21")).toMatchObject({ tag: "early_buy", cycle_days: 5 });   // the packs reset the item: the gap runs from 16 Oct
+    expect(pattern(t)).toMatchObject({ usual_amount: 1000, cycles: 2, last_bought: "2026-10-21" });
+    // An unsized purchase last: it is the anchor, counted as the usual amount.
+    const p = pattern(tagEvents([buy("10-01", 1000), buy("10-11", 1000), buy("10-15", 1, 1, { unit: "pack" })], "g"));
+    expect(p).toMatchObject({ last_bought: "2026-10-15", anchor_amount: 1000, usual_amount: 1000, lasts_days: 10 });
+    expect(runOut(p, 1)).toBe("2026-10-25");
+  });
+
+  it("an item never bought with a size is estimated from gaps alone", () => {
+    const unsized = (d: string) => buy(d, 1, 1, { amount: null });
+    const t = tagEvents([unsized("10-01"), unsized("10-11"), unsized("10-21")], "g");
+    expect(t.map((x) => x.tag)).toEqual(["counted", "counted", "counted"]);
+    const p = pattern(t);
+    expect(p).toMatchObject({ usual_amount: null, anchor_amount: null, lasts_days: 10, cycles: 2, confident: true, last_bought: "2026-10-21" });
+    expect(runOut(p, 1)).toBe("2026-10-31");
+    expect(runOut(p, 1.5)).toBe("2026-11-05");
+    // Gap rules still apply: 2 days after a 10-day rhythm is a one-off.
+    expect(tagOf(tagEvents([unsized("10-01"), unsized("10-11"), unsized("10-21"), unsized("10-23")], "g"), "10-23").tag).toBe("one_off");
+    // Once a sized purchase is in the pattern, the normal rules apply: a later unsized buy is a one-off.
+    const mixed = tagEvents([unsized("10-01"), buy("10-11", 1000), unsized("10-21")], "g");
+    expect(tagOf(mixed, "10-11")).toMatchObject({ tag: "counted", cycle_days: 10 });
+    expect(tagOf(mixed, "10-21")).toMatchObject({ tag: "one_off", restocked: true });
   });
 
   it("the same new brand twice in a row becomes the product", () => {

@@ -7,14 +7,18 @@ import { addDays } from "./dates";
 
 export type Ev = { id: string; date: string; kind: "purchase" | "answer" | "ask" | "unanswered"; amount: number | null; unit: string | null;
   product: string | null; app: string | null; days: number | null; void?: boolean };
-export type Tagged = Ev & { tag: "counted" | "early_buy" | "your_answer" | "one_off" | "not_counted" | null; cycle_days: number | null };
+/** `restocked`: the purchase moved the anchor (tagEvents decides; pattern reads it). `sized`: its amount is in the item's unit. */
+export type Tagged = Ev & { tag: "counted" | "early_buy" | "your_answer" | "one_off" | "not_counted" | null; cycle_days: number | null;
+  restocked: boolean; sized: boolean };
 export type Pattern = { usual_amount: number | null; lasts_days: number | null; product: string | null; app: string | null;
   last_bought: string | null; anchor_amount: number | null; cycles: number; confident: boolean };
-/** `cycles` orders asks with the same run-out (more cycles, more sure, first); left out it counts as 0. */
+/** `cycles` (pattern().cycles) orders asks with the same run-out: more cycles, more sure, first. */
 export type ItemState = { id: string; name: string; group: string | null; subscription: string | null; dont_ask: boolean;
-  snoozed_until: string | null; wait_factor: number; run_out: string | null; confident: boolean; last_bought: string | null; cycles?: number };
+  snoozed_until: string | null; wait_factor: number; run_out: string | null; confident: boolean; last_bought: string | null; cycles: number };
 
+/** The median; 0 for no numbers (callers use medianOrNull when the list can be empty). */
 export function median(xs: number[]): number {
+  if (!xs.length) return 0;
   const s = [...xs].sort((a, b) => a - b);
   const m = Math.floor(s.length / 2);
   return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
@@ -33,15 +37,18 @@ const PATTERN_TAGS = new Set<Tagged["tag"]>(["counted", "early_buy"]);
 export function tagEvents(events: Ev[], unit: string | null): Tagged[] {
   const out: Tagged[] = events.filter((e) => !e.void)
     .map((e, i) => ({ e, i })).sort((a, b) => a.e.date.localeCompare(b.e.date) || a.i - b.i)
-    .map(({ e }) => ({ ...e, tag: null, cycle_days: null }));
-  const amounts: number[] = [];   // pattern purchases' amounts, in order
+    .map(({ e }) => ({ ...e, tag: null, cycle_days: null, restocked: false,
+      sized: e.kind === "purchase" && e.amount != null && e.unit === unit }));
+  const amounts: number[] = [];   // sized pattern purchases' amounts, in order
   const cycles: number[] = [];    // cycle lengths, in order
   let anchor = null as Tagged | null;   // `as`: set inside restock(), which TS does not follow
   let askedSinceAnchor = false;
   let answerClosedCycle = false;  // an answer with days closed the anchor's cycle: the next purchase adds no gap
   let prev: { t: Tagged; dir: Dir | null; gap: number | null } | null = null;
 
-  const restock = (t: Tagged) => { anchor = t; askedSinceAnchor = false; answerClosedCycle = false; };
+  const restock = (t: Tagged) => { t.restocked = true; anchor = t; askedSinceAnchor = false; answerClosedCycle = false; };
+  // Enters the pattern: its amount when sized, its cycle when it closes one.
+  const enter = (t: Tagged) => { if (t.sized) amounts.push(t.amount!); if (t.cycle_days != null) cycles.push(t.cycle_days); restock(t); };
 
   for (const t of out) {
     if (t.kind === "ask") { askedSinceAnchor = true; continue; }
@@ -62,9 +69,10 @@ export function tagEvents(events: Ev[], unit: string | null): Tagged[] {
     const usual = medianOrNull(amounts);
     const lasts = medianOrNull(cycles);
     let dir: Dir | null = null;
-    if (t.amount == null || t.unit !== unit) dir = "unit";
-    else if (usual != null && t.amount / usual <= ESTIMATE.oneOffLow) dir = "amount-low";
-    else if (usual != null && t.amount / usual >= ESTIMATE.oneOffHigh) dir = "amount-high";
+    // Until a sized purchase is in the pattern, an unsized one is judged by its gap alone (histories without pack sizes).
+    if (!t.sized && amounts.length) dir = "unit";
+    else if (t.sized && usual != null && t.amount! / usual <= ESTIMATE.oneOffLow) dir = "amount-low";
+    else if (t.sized && usual != null && t.amount! / usual >= ESTIMATE.oneOffHigh) dir = "amount-high";
     else if (gap != null && lasts != null && gap / lasts < ESTIMATE.oneOffLow) dir = "gap-short";
     else if (gap != null && lasts != null && gap / lasts > ESTIMATE.oneOffHigh) dir = "gap-long";
 
@@ -73,24 +81,19 @@ export function tagEvents(events: Ev[], unit: string | null): Tagged[] {
       const p = prev.t;
       p.tag = "counted";
       p.cycle_days = prev.gap;
-      amounts.push(p.amount!);
-      if (p.cycle_days != null) cycles.push(p.cycle_days);
-      restock(p);
+      enter(p);
       t.tag = "counted";
       t.cycle_days = daysBetween(p.date, t.date);
-      amounts.push(t.amount!);
-      cycles.push(t.cycle_days);
-      restock(t);
+      enter(t);
     } else if (dir) {
       t.tag = "one_off";
-      // A top-up (amount below the usual) does not restock; a pack that cannot be put in the item's unit is not known to.
-      if (dir !== "amount-low" && dir !== "unit") restock(t);
+      // Every purchase resets the item but a top-up (amount below the usual). An unsized one closes no cycle and enters
+      // nothing: its cycle_days stays null, and the next purchase's gap runs from it.
+      if (dir !== "amount-low") restock(t);
     } else {
       t.tag = gap != null && lasts != null && gap < lasts && !askedSinceAnchor ? "early_buy" : "counted";
       t.cycle_days = gap;   // the first purchase has no gap
-      amounts.push(t.amount!);
-      if (gap != null) cycles.push(gap);
-      restock(t);
+      enter(t);
     }
     prev = { t, dir, gap };
   }
@@ -109,17 +112,11 @@ function mostFrequent(xs: string[]): string | null {
 /** The item's pattern from its tagged events. `last_bought` is the anchor: the last purchase that restocked. */
 export function pattern(tagged: Tagged[]): Pattern {
   const purchases = tagged.filter((t) => t.kind === "purchase");
-  const inPattern = purchases.filter((t) => PATTERN_TAGS.has(t.tag));
+  const usual = medianOrNull(purchases.filter((t) => PATTERN_TAGS.has(t.tag) && t.sized).map((t) => t.amount!));
   const cycles = tagged.filter((t) => t.cycle_days != null && (PATTERN_TAGS.has(t.tag) || t.tag === "your_answer")).map((t) => t.cycle_days!);
-  // The anchor, walked as tagEvents walks: the last pattern purchase, or a later one-off that restocked (in the pattern's
-  // unit and not a top-up below the usual at its time). A one-off before any pattern purchase cannot be sized: not an anchor.
-  let anchor: Tagged | null = null;
-  let ref: Tagged | null = null;
-  const sofar: number[] = [];
-  for (const t of purchases) {
-    if (PATTERN_TAGS.has(t.tag)) { sofar.push(t.amount!); ref = t; anchor = t; }
-    else if (t.tag === "one_off" && ref && t.amount != null && t.unit === ref.unit && t.amount / medianOrNull(sofar)! > ESTIMATE.oneOffLow) anchor = t;
-  }
+  const anchor = [...purchases].reverse().find((t) => t.restocked) ?? null;
+  // An unsized anchor (a "pack", another unit, bought outside) counts as the usual amount.
+  const anchorAmount = anchor ? (anchor.sized ? anchor.amount : usual) : null;
 
   const products = purchases.slice(-ESTIMATE.cycles).map((t) => t.product).filter((x): x is string => !!x);
   const [a, b] = purchases.slice(-2).map((t) => t.product);
@@ -127,11 +124,11 @@ export function pattern(tagged: Tagged[]): Pattern {
   const app = mostFrequent(purchases.map((t) => t.app).filter((x): x is string => !!x && x !== "outside"));
 
   return {
-    usual_amount: medianOrNull(inPattern.map((t) => t.amount!)),
+    usual_amount: usual,
     lasts_days: medianOrNull(cycles),
     product, app,
     last_bought: anchor?.date ?? null,
-    anchor_amount: anchor?.amount ?? null,
+    anchor_amount: anchorAmount,
     cycles: cycles.length,
     confident: cycles.length >= 1,
   };
@@ -141,8 +138,9 @@ export function pattern(tagged: Tagged[]): Pattern {
  *  anchor on use up what was bought, when that is sooner. */
 export function runOut(p: Pattern, waitFactor: number, plan?: { date: string; amount: number }[]): string | null {
   if (!p.last_bought) return null;
-  const base = p.lasts_days != null && p.usual_amount && p.anchor_amount != null
-    ? addDays(p.last_bought, Math.round(p.lasts_days * (p.anchor_amount / p.usual_amount) * waitFactor)) : null;
+  // No sized purchase yet (no usual): gaps alone, anchor + lasts × wait factor.
+  const ratio = p.usual_amount && p.anchor_amount != null ? p.anchor_amount / p.usual_amount : 1;
+  const base = p.lasts_days != null ? addDays(p.last_bought, Math.round(p.lasts_days * ratio * waitFactor)) : null;
   let byPlan: string | null = null;
   if (plan && p.anchor_amount != null) {
     let used = 0;
