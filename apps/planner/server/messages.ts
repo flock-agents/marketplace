@@ -59,6 +59,65 @@ export function tomorrowCheckText(i: { date: string; meals: MealView[]; cook?: {
   ].join("\n");
 }
 
+// ── The reminder (reminder.ts builds it) ──
+
+/** "a", "a and b", "a, b and c". */
+export const andList = (xs: string[]): string => (xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`);
+const capital = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
+const daysAgo = (n: number): string => `${n} day${n === 1 ? "" : "s"} ago`;
+const STILL_IN_STOCK = "Still in stock? If yes, when should I remind you?";
+
+/** What a reminder's text is made of (reminder.ts Reminder). `carts` holds the lines of the carts it ordered. */
+export type ReminderText = { which: "afternoon" | "evening"; meals: MealView[]; ask_ingredients: string[]; added: { item: string }[];
+  cart_items: string[]; asks: { item: string; days_ago: number }[]; delivery_gap: { app: string; rupees: number } | null;
+  ordered: { order_id: string; app: string }[]; carts: { order_id: string; lines: OrderLineText[] }[]; empty: boolean };
+
+/** The reminder as the agent sends it: the meals it covers and the ingredients to check; then the cart (what was added, else
+ *  what is on it, or what was ordered without asking); the items that may be running low, numbered, asked together; and how
+ *  far the cart is from free delivery. `app`: the app chat's text, without the item lines (its block asks them). Empty: "". */
+export function reminderText(r: ReminderText, opts: { app?: boolean } = {}): string {
+  if (r.empty) return "";
+  const meal = (m: MealView) => (m.ordered_in ? "ordering in" : m.dishes.map(dishText).join(", "));
+  const top: string[] = [];
+  if (r.meals.length) {
+    const meals = r.meals.map(meal).join(" · ");
+    top.push(r.which === "afternoon" ? `Tonight: ${meals}. ${ANYTHING}` : `Tomorrow: ${meals}`);
+    if (r.ask_ingredients.length) top.push(`Do you have ${andList(r.ask_ingredients)}?`);
+  }
+  const rest: string[] = [];
+  if (r.ordered.length) {
+    for (const o of r.ordered) {
+      const lines = (r.carts.find((c) => c.order_id === o.order_id)?.lines ?? []).filter((l) => (l.qty ?? 0) > 0);
+      const priced = lines.filter((l) => l.price != null);
+      const total = priced.length ? `, about ${rupees(priced.reduce((sum, l) => sum + (l.qty ?? 1) * l.price!, 0))}` : "";
+      rest.push(`I've ordered ${andList(lines.map((l) => l.item))} on ${APP_NAMES[o.app as GroceryApp] ?? o.app}${total}.`);
+    }
+  } else if (r.added.length) rest.push(`I've added ${andList([...new Set(r.added.map((a) => a.item))])} to your cart.`);
+  else if (r.cart_items.length) rest.push(`Your cart: ${andList(r.cart_items)}.`);
+  if (r.asks.length === 1) {
+    if (!opts.app) rest.push(`${capital(r.asks[0].item)} was bought ${daysAgo(r.asks[0].days_ago)}.`);
+    rest.push(STILL_IN_STOCK);
+  } else if (r.asks.length) {
+    rest.push("A few things were bought a while ago:");
+    if (!opts.app) r.asks.forEach((a, i) => rest.push(`${i + 1}. ${capital(a.item)}, ${daysAgo(a.days_ago)}`));
+    rest.push(STILL_IN_STOCK);
+  }
+  if (r.delivery_gap) rest.push(`${rupees(r.delivery_gap.rupees)} short of free delivery on ${r.delivery_gap.app}.`);
+  return [top.join("\n"), rest.join("\n")].filter(Boolean).join("\n\n");
+}
+
+/** The stock check's answers, in the app chat. The guide maps them to answer_running_low: low; in_stock with days 3, 7 or 14;
+ *  in_stock without days. */
+export const STOCK_OPTIONS = ["Low, add it", "Fine for 3 days", "Fine for a week", "Fine for 2 weeks", "Fine, not sure how long"];
+
+/** The stock check as a chat block: one item is one Choice, two to five are a Questions of Choice tabs. Null with none. */
+export function stockBlock(asks: { item: string; days_ago: number }[], id: string): object | null {
+  if (!asks.length) return null;
+  if (asks.length === 1) return { type: "Choice", id, props: { question: `${capital(asks[0].item)}, ${daysAgo(asks[0].days_ago)}. Still in stock?`, options: STOCK_OPTIONS } };
+  return { type: "Questions", id, props: { title: "Still in stock?", submitLabel: "Send" },
+    children: asks.map((a) => ({ type: "Choice", props: { tab: capital(a.item), question: `${capital(a.item)}, ${daysAgo(a.days_ago)}`, options: STOCK_OPTIONS } })) };
+}
+
 /** The link to the Week page. `flock_scope=app` marks it for Flock, which signs the person in to this app only and drops the marker. */
 export function weekLink(basePath: string): string { return `${basePath}/?flock_scope=app#/week`; }
 

@@ -200,6 +200,10 @@
         "description": "The family's answers to \"still in stock?\". { answers: [{ item, answer: low | in_stock, days?: how many more days it will last }] }. low: it goes on the cart (answers { to_cart }). in_stock with days (\"fine for a week\": 7) is not asked again until then; in_stock without days (\"still have it\") waits a few days. Answers { to_cart: [items to add to the cart], items }."
       },
       {
+        "name": "get_reminder",
+        "description": "The reminder to send now, built from the plan, the carts and what may be running low. { which: afternoon | evening }. afternoon is tonight's dinner, evening is tomorrow's meals; both put tomorrow's everyday items on the cart and ask about at most 5 items that may be running low, each counted once per reminder however often you call it. Answers { which, date, meals, ask_ingredients, added, cart_items, asks: [{ item, days_ago }], delivery_gap, ordered: [{ order_id, app, message }], empty, text, app_text, block, carts: [{ order_id, app, lines, sync }] }. empty: send nothing. Send text on WhatsApp word for word, or app_text with block in the app chat. Copy each cart with sync: true to its app, then sync_cart. Each ordered cart (Order without asking is on) is already being ordered: say its message, check out, record_order."
+      },
+      {
         "name": "get_cart",
         "description": "The carts: one open cart per shopping app, and any being ordered. { app?: one app by id or name }. Answers { carts: [{ order_id, app, app_name, status: open | ordering, lines: [{ id, item, qty, product_id, name_on_app, pack, price, source, for_note }], total, delivery_gap, sync_state, synced_at, outside_lines, building_at_order }] }. A line at qty 0 is shown, not ordered."
       },

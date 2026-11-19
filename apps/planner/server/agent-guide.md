@@ -78,7 +78,9 @@ Her answers to "still in stock?": `answer_running_low { answers: [{ item, answer
 
 The app wakes you once a week with next week's `week_start`, and the context to plan from when it fits. Plan the week a
 day a call, as under Meals, then send the family the plan, day by day, for them to change with `set_meal` / `set_dish`.
-The daily reminders come with the next steps of this revision.
+The reminders (15:00 tonight's dinner, 19:00 tomorrow's meals): `get_reminder { which }` builds one. Unless it is `empty`,
+send its `text` on WhatsApp word for word, or its `app_text` with its `block` in the app chat, then copy each cart with
+`sync: true` to its app and `sync_cart`.
 
 ## The cart and orders
 

@@ -1,7 +1,8 @@
 // The messages the app writes for the agent to send, word for word: the order going out, the two daily check-ins, the
 // how-to-use intro; and what a recipe link says about itself.
 import { describe, it, expect } from "bun:test";
-import { clockText, dinnerCheckText, dishText, introText, linkSource, orderingNowText, tomorrowCheckText, unpaidText, weekLink, weekMessage, youtubeThumb } from "./messages";
+import { andList, clockText, dinnerCheckText, dishText, introText, linkSource, orderingNowText, reminderText, tomorrowCheckText, unpaidText, weekLink, weekMessage, youtubeThumb,
+  type ReminderText } from "./messages";
 import type { DishView, MealView } from "./meals";
 
 const dish = (name: string, d: Partial<DishView> = {}): DishView =>
@@ -141,9 +142,50 @@ describe("introText", () => {
   });
 });
 
+describe("reminderText", () => {
+  const tue = [meal(TUE, "Breakfast", [dish("poha")]), meal(TUE, "Lunch", [dish("rajma chawal"), dish("bhindi")])];
+  const base: ReminderText = { which: "evening", meals: tue, ask_ingredients: ["rajma", "bhindi"], added: [{ item: "curd" }, { item: "bread" }],
+    cart_items: ["curd", "bread"], asks: [{ item: "atta", days_ago: 31 }, { item: "toor dal", days_ago: 26 }], delivery_gap: { app: "Zepto", rupees: 35 },
+    ordered: [], carts: [], empty: false };
+  const SAMPLE = "Tomorrow: poha · rajma chawal, bhindi\nDo you have rajma and bhindi?\n\nI've added curd and bread to your cart.\nA few things were bought a while ago:\n"
+    + "1. Atta, 31 days ago\n2. Toor dal, 26 days ago\nStill in stock? If yes, when should I remind you?\n₹35 short of free delivery on Zepto.";
+
+  it("is the evening sample word for word, and the app chat's is the same without the numbered lines", () => {
+    expect(reminderText(base)).toBe(SAMPLE);
+    expect(reminderText(base, { app: true })).toBe(SAMPLE.replace("1. Atta, 31 days ago\n2. Toor dal, 26 days ago\n", ""));
+  });
+
+  it("the afternoon asks about tonight; no meals, no meal lines", () => {
+    const dinner = meal("2026-11-23", "Dinner", [dish("methi thepla"), dish("curd")]);
+    expect(reminderText({ ...base, which: "afternoon", meals: [dinner], ask_ingredients: [], asks: [], delivery_gap: null }))
+      .toBe("Tonight: methi thepla, curd. Anything to change?\n\nI've added curd and bread to your cart.");
+    expect(reminderText({ ...base, meals: [], ask_ingredients: [], asks: [], delivery_gap: null })).toBe("I've added curd and bread to your cart.");
+  });
+
+  it("nothing newly added but a cart says the cart; ordered without asking says what and where", () => {
+    expect(reminderText({ ...base, meals: [], added: [], asks: [], delivery_gap: null })).toBe("Your cart: curd and bread.");
+    const lines = [{ item: "curd", qty: 1, price: 50 }, { item: "bread", qty: 1, price: 45 }, { item: "salt", qty: 0, price: 20 }];
+    expect(reminderText({ ...base, meals: [], asks: [], delivery_gap: null, cart_items: [], ordered: [{ order_id: "o1", app: "zepto" }], carts: [{ order_id: "o1", lines }] }))
+      .toBe("I've ordered curd and bread on Zepto, about ₹95.");
+  });
+
+  it("one item running low is one sentence", () => {
+    const one = { ...base, meals: [], added: [], cart_items: [], delivery_gap: null, asks: [{ item: "atta", days_ago: 31 }] };
+    expect(reminderText(one)).toBe("Atta was bought 31 days ago.\nStill in stock? If yes, when should I remind you?");
+    expect(reminderText(one, { app: true })).toBe("Still in stock? If yes, when should I remind you?");
+  });
+
+  it("lists join with commas and a last and; empty is nothing", () => {
+    expect([andList(["a"]), andList(["a", "b"]), andList(["a", "b", "c"])]).toEqual(["a", "a and b", "a, b and c"]);
+    expect(reminderText({ ...base, empty: true })).toBe("");
+  });
+});
+
 describe("no em dashes", () => {
   it("none of the texts has one", () => {
     const texts = [weekMessage({ monday: [], link: "L" }), introText(TIMES, ["milk"]), unpaidText("Zepto", "Monday"),
+      reminderText({ which: "afternoon", meals: [meal(TUE, "Dinner", [dish("Dal")])], ask_ingredients: ["methi"], added: [{ item: "curd" }], cart_items: ["curd"],
+        asks: [{ item: "atta", days_ago: 3 }, { item: "rice", days_ago: 1 }], delivery_gap: { app: "Zepto", rupees: 10 }, ordered: [], carts: [], empty: false }),
       dinnerCheckText({ date: TUE, meals: [meal(TUE, "Dinner", [dish("Dal")])], videos: [], missing: [] }) ?? "",
       tomorrowCheckText({ date: TUE, meals: [meal(TUE, "Lunch", [dish("Dal")])], videos: [], missing: [] }) ?? ""];
     for (const t of texts) expect(t).not.toContain("\u2014");

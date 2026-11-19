@@ -16,6 +16,7 @@ import { mountProductRoutes } from "./products";
 import { mountRecipeRoutes } from "./recipes";
 import { mountItemRoutes } from "./items";
 import { mountCartRoutes } from "./cartRoutes";
+import { mountReminderRoutes } from "./reminder";
 
 /** A fresh temp directory for a test, removed when its test file is done: nothing piles up in the system's temp folder.
  *  The removal is registered here, per directory: this module loads once for the whole run, so a hook at its top level would
@@ -71,5 +72,6 @@ export async function boot(opts: { dbFile?: string; dataDir?: string; regularHoo
   const deps = { basePath: opts.basePath ?? "/a/t", askAgent, schedule, now };
   mountItemRoutes(hono, kit.db, kit.emitChange, { now });
   mountCartRoutes(hono, kit.db, kit.emitChange, deps);
+  mountReminderRoutes(hono, kit.db, kit.emitChange, deps);
   return { kit, hono, owner, op, rows, asked, pending, settle, deps };
 }

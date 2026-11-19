@@ -10,6 +10,7 @@ import { mountProductRoutes } from "./products";
 import { mountRecipeRoutes } from "./recipes";
 import { mountItemRoutes } from "./items";
 import { mountCartRoutes } from "./cartRoutes";
+import { mountReminderRoutes } from "./reminder";
 import { migrateOldProfile } from "./gate";
 import { routines } from "./routines";
 
@@ -31,13 +32,13 @@ mountRecipeRoutes(flock.hono, kit.db, kit.emitChange);
 mountItemRoutes(flock.hono, kit.db, kit.emitChange);
 // The app's real carts are copied by the agent: an edit on the page asks it (the sync-cart intent) once the taps stop.
 const timers = new Map<string, ReturnType<typeof setTimeout>>();
-mountCartRoutes(flock.hono, kit.db, kit.emitChange, {
-  askAgent: (name, p) => flock.platform.agent.intent(name, p),
-  schedule: (key, run, ms) => {
-    clearTimeout(timers.get(key));
-    timers.delete(key);
-    if (run) timers.set(key, setTimeout(() => { timers.delete(key); run(); }, ms));
-  },
-});
+const schedule = (key: string, run: (() => void) | null, ms: number) => {
+  clearTimeout(timers.get(key));
+  timers.delete(key);
+  if (run) timers.set(key, setTimeout(() => { timers.delete(key); run(); }, ms));
+};
+mountCartRoutes(flock.hono, kit.db, kit.emitChange, { askAgent: (name, p) => flock.platform.agent.intent(name, p), schedule });
+// The reminder the agent sends at 15:00 and 19:00 (get_reminder); a cart it orders drops the copy to its app still waiting.
+mountReminderRoutes(flock.hono, kit.db, kit.emitChange, { schedule });
 
 flock.listen();
