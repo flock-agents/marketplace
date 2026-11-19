@@ -220,6 +220,37 @@ describe("ordering", () => {
     expect((await k.op("record_order", { order_id: id, paid: false })).status).toBe(409);
   });
 
+  // Final review I1 (a): a history copy of an unpaid order is the same purchase, and stays void until a late payment.
+  it("a history copy of an order not paid is a duplicate; a late payment leaves one live purchase per ref", async () => {
+    const k = await start();
+    const id = await placed(k, { app_order_ref: "Z1" });
+    await k.op("record_order", { order_id: id, paid: false });
+    const history = { app: "zepto", orders: [{ date: TODAY, order_ref: "Z1", items: [
+      { item: "curd", product: "Mother Dairy curd", pack: "400 g" }, { item: "bread", product: "Harvest Gold bread", pack: "400 g" }] }] };
+    expect(await k.op("import_order_history", history)).toMatchObject({ recorded: 0, duplicates: 2 });
+    expect(k.rows("item_events").map((e) => [e.order_ref, e.void])).toEqual([["Z1", 1], ["Z1", 1]]);
+    expect(item(k, "curd").last_bought).toBeNull();
+    await k.op("record_order", { order_id: id, paid: true });
+    expect(k.rows("item_events").map((e) => [e.order_ref, e.void, !!e.order_id])).toEqual([["Z1", 0, true], ["Z1", 0, true]]);
+    expect(item(k, "curd").last_bought).toBe(TODAY);
+  });
+
+  // Final review I1 (b): an order recorded without its ref, then the app's history names the product another way.
+  it("an app order recorded without a ref and its history copy under another product name are one purchase", async () => {
+    const k = await start();
+    await placed(k);
+    const r = await k.op("import_order_history", { app: "zepto", orders: [{ date: TODAY, order_ref: "Z5", items: [
+      { item: "curd", product: "Curd 400g" }, { item: "bread", product: "Bread" }] }] });
+    expect(r).toMatchObject({ recorded: 0, duplicates: 2 });
+    expect(k.rows("item_events").map((e) => e.order_ref)).toEqual(["Z5", "Z5"]);
+    // Another order the same day, with its own ref, is another purchase.
+    expect(await k.op("import_order_history", { app: "zepto", orders: [{ date: TODAY, order_ref: "Z6", items: [{ item: "curd", product: "Curd 400g" }] }] }))
+      .toMatchObject({ recorded: 1, duplicates: 0 });
+    // A history copy on another date is not this order.
+    expect(await k.op("import_order_history", { app: "zepto", orders: [{ date: "2026-11-20", order_ref: "Z4", items: [{ item: "bread", product: "Bread" }] }] }))
+      .toMatchObject({ recorded: 1 });
+  });
+
   it("cancel_order on an ordering cart puts it back to open; on a placed one it is not paid", async () => {
     const k = await start();
     const id = await fill(k);

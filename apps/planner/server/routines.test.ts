@@ -321,7 +321,7 @@ describe("the reminders", () => {
       expect(p).not.toMatch(/about 20 orders/);
     }
     // Both reminders read the history first: something bought on a connected app is not asked about again.
-    expect(REMINDER_PROMPT("afternoon")).toContain("import_order_history, about 8 orders a call, one app a call");
+    expect(REMINDER_PROMPT("afternoon")).toContain("import_order_history oldest first, delivered or paid orders only, about 8 orders a call, one app a call");
     expect(REMINDER_PROMPT("afternoon")).toContain("15:00");
   });
 

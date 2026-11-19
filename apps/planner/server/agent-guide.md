@@ -8,9 +8,8 @@ clock. Keep none of it in memory or chat: read the app, change it through an ope
 - **Reading:** `plan_week { week_start, mode: "draft" }` without meals answers with all a plan starts from. The family:
   `GET /a/<this app>/api/family`. Rows: `GET /a/<this app>/api/_data/<table>` (`?col=value` filters): people, house,
   plan_meals, dishes, dish_items, regulars, items, item_events, orders, order_lines, products, saved_recipes. Never write one.
-- **A refusal** says in plain words what to fix (`error`): fix the call and send it again. 404: no such row. 409: the row
-  is in a state the call does not fit. Dates are YYYY-MM-DD, times HH:MM (24-hour), weekdays Mon to Sun; a week is named
-  by its Monday.
+- **A refusal** says in plain words what to fix (`error`): fix the call and send it again. 404: no such row. 409: the
+  row is in a state the call does not fit. Dates YYYY-MM-DD, times HH:MM (24-hour), weekdays Mon to Sun; a week is its Monday.
 - **Words to the family are plain:** "everyday items", "your cart", "running low", never an operation's or a field's
   name. Say "you"; the cook is "the cook" or their name. The app writes some messages itself (a plan's `message` and
   `intro`, a reminder's `text`, an order's `message`): send those word for word.
@@ -45,9 +44,10 @@ plan or reminder runs until one person is saved. Do not ask what is at home: the
 ## Reading order history
 
 After a sign-in, and at the start of every reminder, read each connected app's orders placed since the wake's
-`since[app]` (3 months back only for an app not yet in `since`) and give them to `import_order_history`: the most recent first, about 8 orders and
-80 items a call, one app a call. Each order has its `date` and `order_ref`; each item its `item` (the family's word:
-"atta"), `group`, `product`, `product_id`, `pack` and `count`. The same order sent twice is recorded once. Which connectors can read orders:
+`since[app]` (3 months back only for an app not yet in `since`) and give them to `import_order_history`: the oldest
+first, about 8 orders and 80 items a call, one app a call, delivered or paid orders only (never a cancelled or failed
+one). Each order has its `date` and `order_ref`; each item its `item` (the family's word: "atta"), `group`, `product`,
+`product_id`, `pack` and `count`. The same order sent twice is recorded once. Which connectors can read orders:
 - **BigBasket and Blinkit:** `view-order-history`, then `track-order` for each order to get its items.
 - **Zepto and Instamart:** the order tools of their own connection, when it has them; when it has none, skip the app.
 - **Amazon:** cannot. Skip it.
@@ -85,9 +85,8 @@ A meal that is ordered in or eaten out is `ordered_in: true` and has no dishes. 
 `set_regular { item, amount, unit, every }`: `amount` is what is needed each time. `every: "day"`; `every: "week"` with
 `times_per_week` (a whole number, 1 to 7; 1 when left out); `every: "weekdays"` with `weekdays` (needed, at least one).
 A holiday: `paused_until` (left out up to and including that date). `active: false` stops it; `remove: true` deletes it.
-One person's own (`for_whom`) is a separate item. `remember_product { item, app, product_id, name_on_app,
-pack_amount, pack_unit }` keeps the product an item is bought as: `item` is the family's word ("milk"), never the
-product's name on the app.
+One person's own (`for_whom`) is a separate item. `remember_product { item, app, product_id, name_on_app, pack_amount,
+pack_unit }` keeps the product an item is bought as: `item` is the family's word ("milk"), never the name on the app.
 
 ## A reminder
 
@@ -120,6 +119,8 @@ Each shopping app has one open cart (`get_cart`), shown on the Shopping page.
 - **A cart being ordered:** only lower or remove one of its lines ("remove the ghee"); anything else goes to the open
   cart, which `set_cart_line` does for you. **The `sync-cart` ask** (edits on the Cart page): make the app's cart hold
   exactly its lines, then `sync_cart`.
+- **Not on the app today** (`in_stock: false` in `sync_cart`): with a fallback app set, take the line off its app with
+  `set_cart_line { item, qty: 0, app }`, move it with `set_cart_line { item, qty, app: <fallback> }`, copy both carts. Else leave it marked.
 
 To order: `get_cart`, make the app's cart match it, then `order_cart { app }` and send its `message` word for word.
 Check out with the app's connector, and ask the family again only if something changed (out of stock, a substitute, a

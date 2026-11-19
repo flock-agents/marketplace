@@ -64,20 +64,28 @@ export function recomputeItem(db: Db, itemId: string, _today: string): ItemRow {
     .where(eq(items.id, itemId)).returning().get();
 }
 
-/** The one door for a purchase. The same purchase twice is told, not recorded: a purchase of the item that is not void, on
- *  the same app, with the same order_ref; or, when either has no order_ref, the same date and product (see below). The amount
- *  is put in its base unit; one that has none is kept with no amount. The caller recomputes the item. */
+/** The one door for a purchase. The same purchase twice is told, not recorded: a purchase of the item on the same app, with
+ *  the same order_ref; or, when either has no order_ref, the same date and product (see below). A void purchase still counts
+ *  as the one recorded (only a late payment brings it back). The amount is put in its base unit; one that has none is kept
+ *  with no amount. The caller recomputes the item. */
 export function recordPurchase(tx: Db, p: Purchase): { event_id: string } | { duplicate: true } {
   let it = itemFor(tx, p.item, { group: p.group, create: true })!;
   if (p.group && !it.group) it = tx.update(items).set({ group: p.group }).where(eq(items.id, it.id)).returning().get();
   // The same purchase, whichever way it came first: two refs decide alone (different refs are two orders), and so do two
   // orders placed through the app (different order_ids are two orders, even of one product on one day); when either side
-  // has neither, the date and the product do (by product_id when both have one, else by the product's name).
+  // has neither, the date and the product do (by product_id when both have one, else by the product's name). An order placed
+  // through the app with no ref and the app's history copy of it (a ref, no order_id) are one purchase on the same date,
+  // whatever each calls the product. A void purchase matches too (a history copy of an unpaid order must not count again),
+  // after the live ones, so a ref learned goes to the purchase that counts.
   const lower = (v: string | null | undefined) => (v ?? "").trim().toLowerCase();
+  const appOrder = (x: { order_ref?: string | null; order_id?: string | null }) => !!x.order_id && !x.order_ref;
+  const historyCopy = (x: { order_ref?: string | null; order_id?: string | null }) => !!x.order_ref && !x.order_id;
   const same = tx.select().from(item_events).where(and(eq(item_events.item_id, it.id), eq(item_events.kind, "purchase"), eq(item_events.app, p.app))).all()
-    .find((e) => !e.void && (e.order_ref && p.order_ref ? e.order_ref === p.order_ref
+    .sort((x, y) => (x.void ?? 0) - (y.void ?? 0))
+    .find((e) => e.order_ref && p.order_ref ? e.order_ref === p.order_ref
       : e.order_id && p.order_id ? e.order_id === p.order_id
-      : e.date === p.date && (e.product_id && p.product_id ? e.product_id === p.product_id : lower(e.product) === lower(p.product))));
+      : e.date === p.date && ((appOrder(e) && historyCopy(p)) || (historyCopy(e) && appOrder(p))
+        || (e.product_id && p.product_id ? e.product_id === p.product_id : lower(e.product) === lower(p.product))));
   if (same) {
     // A copy with the ref teaches the one recorded without it, so later imports match by ref.
     if (p.order_ref && !same.order_ref) tx.update(item_events).set({ order_ref: p.order_ref }).where(eq(item_events.id, same.id)).run();
@@ -234,8 +242,9 @@ export function mountItemRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: { now
   const itemIds = () => new Set(db.select({ id: items.id }).from(items).all().map((r) => r.id));
   const op = (had: Set<string>, id: string) => (had.has(id) ? "update" : "insert") as "update" | "insert";
 
-  // import_order_history { app, orders: [{ date, order_ref?, items: [...] }] }: each item of each order (3 months back) becomes a
-  // purchase, never twice; an item with its product_id is remembered as that app's product.
+  // import_order_history { app, orders: [{ date, order_ref?, items: [...] }] }: each item of each order (3 months back, and not
+  // after today) becomes a purchase, never twice; an item with its product_id is remembered as that app's product. The agent
+  // sends the oldest orders first, so history_synced (the newest order read, never past today) only moves over what was read.
   write("/api/order-history", (b, by) => {
     const app = appOf(b.app) ?? refuse(`app must be one of: ${SHOP_APPS.join(", ")}`);
     if (!Array.isArray(b.orders)) refuse(HISTORY_SHAPE);
@@ -246,7 +255,9 @@ export function mountItemRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: { now
       const ref = o.order_ref == null ? undefined : typeof o.order_ref === "number" ? String(o.order_ref) : name(o.order_ref, `${date}: order_ref`);
       return { date, ref, lines: o.items.map((i: unknown) => lineOf(i, date, app)) };
     });
-    const kept = read.filter((o) => o.date >= since).sort((x, y) => x.date.localeCompare(y.date));
+    // An order dated after today is a mistyped date: skipped and counted, so it can never move history_synced past today.
+    const future = read.filter((o) => o.date > day).length;
+    const kept = read.filter((o) => o.date >= since && o.date <= day).sort((x, y) => x.date.localeCompare(y.date));
     let recorded = 0, duplicates = 0;
     const touched = new Set<string>(), changed = new Map<string, Parameters<Emit>>(), had = itemIds();
     const out = db.transaction((txRaw) => {
@@ -280,7 +291,7 @@ export function mountItemRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: { now
     const past: PastOrder[] = kept.map((o) => ({ date: o.date, items: o.lines.filter((l) => daily.has(normItem(l.item))).map((l) => ({ item: l.item, qty: l.count, pack: l.pack })) }));
     const probably = out.filter((r) => r.confident && r.run_out && r.run_out <= day && r.group && r.group !== "daily" && !r.subscription && !r.dont_ask && r.last_bought)
       .map((r) => ({ item: r.name, days_ago: daysBetween(r.last_bought!, day) })).sort((x, y) => y.days_ago - x.days_ago);
-    return { body: { recorded, duplicates, skipped_old: read.length - kept.length, needs_group: out.filter((r) => !r.group).map((r) => r.name),
+    return { body: { recorded, duplicates, skipped_old: read.length - kept.length - future, skipped_future: future, needs_group: out.filter((r) => !r.group).map((r) => r.name),
       suggestions: suggestRegulars(past), probably_out: probably } };
   });
 

@@ -93,11 +93,25 @@ describe("the agent's interface", () => {
     expect(week).toBeGreaterThan(16_384);
     for (const text of [guide, operations.find((o) => o.name === "plan_week")!.description]) expect(text).toContain("keep_rest: true");
     expect(guide).toContain("one day a call");
+    // Ruling T6-R1: each day a final call with keep_rest, then a closing final call without meals; draft only to propose a week.
+    const plan = operations.find((o) => o.name === "plan_week")!.description;
+    expect(plan).toContain("each day with mode final and keep_rest: true, then one closing call with mode final and no meals");
+    expect(plan).not.toContain("the first day with mode draft");
+  });
+
+  it("a line the app does not have today moves to the fallback app (guide and the sync-cart ask)", () => {
+    const sync = manifest.agentInterface.intents.find((i: { name: string }) => i.name === "sync-cart").instructions as string;
+    for (const text of [guide, sync]) {
+      expect(text).toContain("in_stock");
+      expect(text).toContain("set_cart_line { item, qty, app: <fallback> }");
+      expect(text).toContain("leave it marked");
+    }
   });
 
   it("import_order_history is taught at most about 8 orders and 80 items a call, one app a call, and that fits", () => {
     const d = operations.find((o) => o.name === "import_order_history")!.description;
-    for (const text of [guide, d]) for (const said of ["8 orders", "80 items", "one app a call", "most recent"]) expect(text).toContain(said);
+    for (const text of [guide, d]) for (const said of ["8 orders", "80 items", "one app a call", "oldest", "delivered or paid"]) expect(text).toContain(said);
+    for (const text of [guide, d]) expect(text).not.toContain("most recent");
     // 8 orders of 10 items in the full shape at its longest (45-character product names, 20-character product ids, group and
     // price given) fit Flock's 16,384 bytes for an operation's body.
     const item = (i: number) => ({ item: `toned milk ${i}`, group: "few_days", product: `Amul Taaza Toned Fresh Milk Pouch Homogenis ${i}`,

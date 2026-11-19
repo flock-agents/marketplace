@@ -34,7 +34,7 @@ describe("import_order_history", () => {
     expect(k.rows("items")[0]).toMatchObject({ name: "atta", group: "monthly", unit: "g", product: "Aashirvaad Select", app: "zepto", run_out: "2026-11-25" });
     // An item with its product id is remembered as that app's product, under the family's word for it.
     expect(k.rows("products")).toEqual([expect.objectContaining({ item: "atta", app: "zepto", product_id: "p1", name_on_app: "Aashirvaad Select", pack: "5 kg", pack_amount: 5, pack_unit: "kg" })]);
-    expect(r).toMatchObject({ duplicates: 0, skipped_old: 0, needs_group: [], suggestions: [], probably_out: [] });
+    expect(r).toMatchObject({ duplicates: 0, skipped_old: 0, skipped_future: 0, needs_group: [], suggestions: [], probably_out: [] });
   });
 
   it("the same order imported twice is recorded once (order_ref; else date and product)", async () => {
@@ -99,6 +99,25 @@ describe("import_order_history", () => {
     // A history of only old orders records nothing and leaves the date as it was.
     expect(await k.op("import_order_history", { app: "zepto", orders: [{ date: "2026-05-01", items: [{ item: "salt", pack: "1 kg" }] }] })).toMatchObject({ recorded: 0, skipped_old: 1 });
     expect(JSON.parse(house(k).history_synced).zepto).toBe("2026-11-01");
+  });
+
+  // Final review I4: history goes oldest first, and the mark never passes today, so an import cut short reads on from where it stopped.
+  it("an order dated after today is skipped and counted, and history_synced never passes today", async () => {
+    const k = await start();
+    const r = await k.op("import_order_history", { app: "zepto", orders: [
+      { date: "2026-11-10", items: [{ item: "salt", pack: "1 kg" }] },
+      { date: "2026-12-01", items: [{ item: "sugar", pack: "1 kg" }] },
+      { date: "2026-08-01", items: [{ item: "salt", pack: "1 kg" }] }] });
+    expect(r).toMatchObject({ recorded: 1, skipped_old: 1, skipped_future: 1 });
+    expect(k.rows("item_events").map((e) => e.date)).toEqual(["2026-11-10"]);
+    expect(JSON.parse(house(k).history_synced)).toEqual({ zepto: "2026-11-10" });
+    // Only a future order: nothing recorded, the mark stays.
+    expect(await k.op("import_order_history", { app: "zepto", orders: [{ date: "2027-01-05", items: [{ item: "salt", pack: "1 kg" }] }] }))
+      .toMatchObject({ recorded: 0, skipped_old: 0, skipped_future: 1 });
+    expect(JSON.parse(house(k).history_synced)).toEqual({ zepto: "2026-11-10" });
+    // Today's order is read.
+    expect(await k.op("import_order_history", { app: "zepto", orders: [{ date: TODAY, items: [{ item: "salt", pack: "1 kg" }] }] })).toMatchObject({ recorded: 1, skipped_future: 0 });
+    expect(JSON.parse(house(k).history_synced)).toEqual({ zepto: TODAY });
   });
 
   it("an item new to the app without a group is saved and listed in needs_group; it is never asked about", async () => {
