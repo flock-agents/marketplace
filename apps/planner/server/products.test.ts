@@ -1,7 +1,6 @@
-// Products: the pack arithmetic, remember_product and import_order_history.
+// Products: the pack arithmetic and remember_product (an order history's products: items.test.ts).
 import { describe, it, expect } from "bun:test";
 import { boot } from "./testkit";
-import { addDays } from "./dates";
 import { normItem, packsFor, parsePack, productFor, rememberProduct, toBase } from "./products";
 
 describe("packs", () => {
@@ -82,7 +81,7 @@ describe("remember_product", () => {
     expect((await op("remember_product", { ...milk, product_id: 101 })).product.product_id).toBe("101");
   });
 
-  it("remember_product upserts per item and app; import_order_history remembers products and only suggests", async () => {
+  it("remember_product upserts per item and app", async () => {
     const { op, rows } = await boot();
     const a = await op("remember_product", milk);
     expect(a.product).toMatchObject({ item: "milk", app: "zepto", product_id: "z-101", pack_amount: 500, pack_unit: "ml", price: 29, updated_by: "agent:meal-agent" });
@@ -90,39 +89,5 @@ describe("remember_product", () => {
     expect(b.product).toMatchObject({ id: a.product.id, product_id: "z-102", price: 31 });
     await op("remember_product", { ...milk, app: "swiggy-instamart", product_id: "s-5" });
     expect(rows("products")).toHaveLength(2);
-
-    const day = (i: number) => addDays("2026-10-01", i);
-    const orders = [
-      ...[0, 1, 2, 3].map((i) => ({ date: day(i), items: [
-        { item: "Amul Taaza Milk", qty: 2, pack: "500 ml", product_id: i < 3 ? "z-old" : "z-new", price: 28 + i, ...(i < 3 ? { image: "https://img.example/old.jpg" } : {}) },
-        { item: "Coriander", qty: 1 }] })),
-      { date: day(5), items: [{ item: "Britannia Bread", qty: 1, pack: "400 g", product_id: 7001, name_on_app: "Britannia 100% Whole Wheat Bread" }] }];
-    const r = await op("import_order_history", { app: "zepto", orders });
-    expect(r.suggestions).toEqual([
-      { item: "amul taaza milk", amount: 2, unit: "500 ml", every: "day", orders_seen: 4 },
-      { item: "coriander", amount: 1, unit: null, every: "day", orders_seen: 4 }]);
-    // Items that came with a product id are remembered, the newest order's product kept; the others are not.
-    const zepto = rows("products").filter((p) => p.app === "zepto");
-    expect(zepto.map((p) => p.item).sort()).toEqual(["amul taaza milk", "britannia bread", "milk"]);
-    expect(zepto.find((p) => p.item === "amul taaza milk")).toMatchObject({ product_id: "z-new", name_on_app: "Amul Taaza Milk", pack: "500 ml", pack_amount: 500, pack_unit: "ml", price: 31, image: null, updated_by: "agent:meal-agent" });
-    expect(zepto.find((p) => p.item === "britannia bread")).toMatchObject({ product_id: "7001", name_on_app: "Britannia 100% Whole Wheat Bread", pack: "400 g", pack_amount: 400, pack_unit: "g" });
-    expect(rows("products")).toHaveLength(4);
-    // It never makes an everyday item: the family confirms each one, and the agent sets it.
-    expect(rows("regulars")).toEqual([]);
-    // The same history again changes the rows it wrote, and adds none.
-    await op("import_order_history", { app: "zepto", orders });
-    expect(rows("products")).toHaveLength(4);
-  });
-
-  it("import_order_history refuses a history it cannot read, and remembers none of it", async () => {
-    const { op, rows } = await boot();
-    const good = { date: "2026-10-01", items: [{ item: "Milk", product_id: "z-1" }] };
-    for (const bad of [{ app: "amazon", orders: [good] }, { app: "zepto" }, { app: "zepto", orders: [{ ...good, date: "last week" }] },
-      { app: "zepto", orders: [good, { date: "2026-10-02" }] }, { app: "zepto", orders: [good, { date: "2026-10-02", items: [{ qty: 1 }] }] },
-      { app: "zepto", orders: [good, { date: "2026-10-02", items: [{ item: "Curd", qty: "two" }] }] },
-      { app: "zepto", orders: [good, { date: "2026-10-02", items: [{ item: "Curd", product_id: "z-2", price: "40" }] }] }])
-      expect([bad, (await op("import_order_history", bad)).code]).toEqual([bad, "APP_REFUSED"]);
-    expect(rows("products")).toEqual([]);
-    expect((await op("import_order_history", { app: "zepto", orders: [] })).suggestions).toEqual([]);
   });
 });

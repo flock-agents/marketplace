@@ -14,6 +14,7 @@ import { mountMealRoutes, type MealHooks } from "./meals";
 import { mountRegularRoutes, type RegularHooks } from "./regulars";
 import { mountProductRoutes } from "./products";
 import { mountRecipeRoutes } from "./recipes";
+import { mountItemRoutes } from "./items";
 
 /** A fresh temp directory for a test, removed when its test file is done: nothing piles up in the system's temp folder.
  *  The removal is registered here, per directory: this module loads once for the whole run, so a hook at its top level would
@@ -27,9 +28,11 @@ export function tempDir(prefix = "planner-test-"): string {
 /** The app on a real kit. `basePath` is the app's own path (as Flock gives it, APP_BASE_PATH). `askAgent` stands in for the
  *  platform's intent call: every call is recorded in `k.asked` as `{ intent, payload }`, and its answer is the function's.
  *  `schedule` stands in for the app's per-key timer (a debounce): it holds the latest `run` for each key until the test calls
- *  `k.settle(key?)`; the routes that need it (carts, the week) take `basePath`, `askAgent` and `schedule` from `k.deps`. */
+ *  `k.settle(key?)`; the routes that need it (carts, the week) take `basePath`, `askAgent` and `schedule` from `k.deps`.
+ *  `now` is the app's clock (the real one unless a test pins it): the routes that need today take it from `k.deps.now`. */
 export async function boot(opts: { dbFile?: string; dataDir?: string; mealHooks?: MealHooks; regularHooks?: RegularHooks; token?: string;
-  basePath?: string; askAgent?: (intent: string, payload: object) => Promise<unknown> } = {}) {
+  basePath?: string; askAgent?: (intent: string, payload: object) => Promise<unknown>; now?: () => Date } = {}) {
+  const now = opts.now ?? (() => new Date());
   const hono = new Hono();
   const dataDir = opts.dataDir ?? tempDir();
   // The kit opens its database inside dataDir, so a file given by its full path is named from there.
@@ -41,6 +44,7 @@ export async function boot(opts: { dbFile?: string; dataDir?: string; mealHooks?
   mountRegularRoutes(hono, kit.db, kit.emitChange, opts.regularHooks ?? { onChanged: () => {} });
   mountProductRoutes(hono, kit.db, kit.emitChange);
   mountRecipeRoutes(hono, kit.db, kit.emitChange);
+  mountItemRoutes(hono, kit.db, kit.emitChange, { now });
   /** A request as the owner. */
   const owner = async (method: string, path: string, body?: unknown) => {
     const r = await hono.request(path, { method, headers: { "Content-Type": "application/json", "X-Flock-User": "tester" }, body: body === undefined ? undefined : JSON.stringify(body) });
@@ -64,6 +68,6 @@ export async function boot(opts: { dbFile?: string; dataDir?: string; mealHooks?
     const keys = key === undefined ? [...timers.keys()] : timers.has(key) ? [key] : [];
     for (const k of keys) { const run = timers.get(k)!; timers.delete(k); run(); }
   };
-  const deps = { basePath: opts.basePath ?? "/a/t", askAgent, schedule };
+  const deps = { basePath: opts.basePath ?? "/a/t", askAgent, schedule, now };
   return { kit, hono, owner, op, rows, asked, pending, settle, deps };
 }

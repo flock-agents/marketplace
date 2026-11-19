@@ -24,6 +24,10 @@ export const ROUTES: Record<string, Route> = {
   set_dish: (p) => ({ method: "POST", path: "/api/dishes", body: p }),
   set_regular: (p) => ({ method: "POST", path: "/api/regulars", body: p }),
   import_order_history: (p) => ({ method: "POST", path: "/api/order-history", body: p }),
+  record_bought_outside: (p) => ({ method: "POST", path: "/api/items/outside", body: p }),
+  set_item: (p) => ({ method: "POST", path: "/api/items", body: p }),
+  set_subscription: (p) => ({ method: "POST", path: "/api/items/subscription", body: p }),
+  answer_running_low: (p) => ({ method: "POST", path: "/api/items/answers", body: p }),
   remember_product: (p) => ({ method: "POST", path: "/api/products", body: p }),
   save_recipe: (p) => ({ method: "POST", path: "/api/recipes/save", body: p }),
 };

@@ -8,6 +8,7 @@ import { mountMealRoutes } from "./meals";
 import { mountRegularRoutes } from "./regulars";
 import { mountProductRoutes } from "./products";
 import { mountRecipeRoutes } from "./recipes";
+import { mountItemRoutes } from "./items";
 import { migrateOldProfile } from "./gate";
 import { routines } from "./routines";
 
@@ -26,5 +27,6 @@ mountMealRoutes(flock.hono, kit.db, kit.emitChange, { onFinal: () => undefined, 
 mountRegularRoutes(flock.hono, kit.db, kit.emitChange, { onChanged: () => {} });
 mountProductRoutes(flock.hono, kit.db, kit.emitChange);
 mountRecipeRoutes(flock.hono, kit.db, kit.emitChange);
+mountItemRoutes(flock.hono, kit.db, kit.emitChange);
 
 flock.listen();

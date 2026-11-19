@@ -1,14 +1,14 @@
 // Everyday items ("regulars"): what the house buys again and again whatever is cooked: milk every day, bread twice a week,
 // fruit on Mondays. Each says how much and how often; an order adds its amount for the days the order covers. The agent
-// writes them with set_regular once the family confirmed them; import_order_history only suggests them from what was bought.
+// writes them with set_regular once the family confirmed them; import_order_history (items.ts) only suggests them.
 import type { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { regulars } from "./db/schema";
 import { EVERY } from "./db/constants";
 import { weekdayOf, WEEKDAYS, type Weekday } from "./dates";
-import { isObject, list, name, refuse, weekdays, words, writeRoutes, type Db, type Emit } from "./family";
+import { list, name, refuse, weekdays, words, writeRoutes, type Db, type Emit } from "./family";
 import { dateOf, flag } from "./meals";
-import { groceryAppOf, normItem, positive, productFor, productOf, rememberProduct } from "./products";
+import { normItem, positive } from "./products";
 
 export type RegularRow = typeof regulars.$inferSelect;
 /** A regular as the routes answer with it: its weekdays read. */
@@ -66,8 +66,6 @@ export function regularView(r: RegularRow): RegularView { return { ...r, weekday
 
 // ── What was sent, checked ──
 
-const HISTORY_SHAPE = "orders must be a list of { date, items: [{ item, qty?, pack?, product_id?, name_on_app?, price?, image? }] }";
-
 export function mountRegularRoutes(hono: Hono<any>, db: Db, emit: Emit, hooks: RegularHooks) {
   const write = writeRoutes(hono);
 
@@ -107,39 +105,5 @@ export function mountRegularRoutes(hono: Hono<any>, db: Db, emit: Emit, hooks: R
     emit("regulars", row.id, existing ? "update" : "insert", by);
     hooks.onChanged();
     return { body: { regular: regularView(row) } };
-  });
-
-  // import_order_history { app, orders: [{ date, items: [{ item, qty?, pack?, product_id?, ... }] }] }: what the family bought on
-  // a grocery app. Every item that came with its product_id is remembered as that item's product there. The answer suggests
-  // the everyday items the history points to; none is made here: the family confirms each, and the agent sets it (set_regular).
-  write("/api/order-history", (b, by) => {
-    const app = groceryAppOf(b.app);
-    if (!Array.isArray(b.orders)) refuse(HISTORY_SHAPE);
-    const found: { date: string; product: ReturnType<typeof productOf> }[] = [];
-    const orders: PastOrder[] = (b.orders as unknown[]).map((o) => {
-      if (!isObject(o) || !Array.isArray(o.items)) return refuse(HISTORY_SHAPE);
-      const date = dateOf(o.date, "an order's date");
-      return { date, items: o.items.map((i: unknown) => {
-        if (!isObject(i)) return refuse(HISTORY_SHAPE);
-        const item = name(i.item, `${date}: an item's name (item)`);
-        const qty = i.qty == null ? undefined : positive(i.qty, `${date}: the qty of ${item}`)!;
-        const pack = i.pack == null ? undefined : words(i.pack, `${date}: the pack of ${item}`) ?? undefined;
-        // In a history the item is the product's own name on the app, unless it came with another.
-        if (i.product_id != null) found.push({ date, product: productOf({ ...i, name_on_app: i.name_on_app ?? item }, app, `${date}: ${item}: `) });
-        return { item, qty, pack };
-      }) };
-    });
-    // Oldest first, so the product of the newest order is the one kept for an item. A row written twice is told once.
-    found.sort((x, y) => x.date.localeCompare(y.date));
-    const changes = new Map<string, Parameters<Emit>>();
-    db.transaction((tx) => {
-      for (const { product } of found) {
-        const had = productFor(tx as unknown as Db, product.item, app);
-        const row = rememberProduct(tx as unknown as Db, product, by);
-        if (!changes.has(row.id)) changes.set(row.id, ["products", row.id, had ? "update" : "insert", by]);
-      }
-    });
-    for (const c of changes.values()) emit(...c);
-    return { body: { suggestions: suggestRegulars(orders) } };
   });
 }

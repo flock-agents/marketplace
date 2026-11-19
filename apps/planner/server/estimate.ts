@@ -154,11 +154,11 @@ export function runOut(p: Pattern, waitFactor: number, plan?: { date: string; am
   return base;
 }
 
-const leadDays = (group: string | null) => ESTIMATE.askLeadDays[group as keyof typeof ESTIMATE.askLeadDays] ?? 0;   // no group: no lead
+const leadDays = (group: string | null) => ESTIMATE.askLeadDays[group as keyof typeof ESTIMATE.askLeadDays] ?? 0;
 
-/** Should the item be asked about on `on`? */
+/** Should the item be asked about on `on`? An item with no group yet (new in a history) is never asked about. */
 export function isDue(i: ItemState, on: string): boolean {
-  if (!i.confident || !i.run_out || i.group === "daily" || i.subscription || i.dont_ask) return false;
+  if (!i.confident || !i.run_out || !i.group || i.group === "daily" || i.subscription || i.dont_ask) return false;
   if (i.snoozed_until && i.snoozed_until >= on) return false;
   return addDays(i.run_out, -leadDays(i.group)) <= on;
 }
