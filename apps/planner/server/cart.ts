@@ -98,11 +98,13 @@ export function setLine(tx: Db, l: LineInput, by: string, opts: CartOpts = {}): 
 }
 
 /** The page's ItemPicker as it was submitted: each picked line takes its qty, every other line of the cart goes to 0 (kept,
- *  shown, not ordered). A pick naming a line of another cart is refused. */
-export function applyPicks(tx: Db, cart: OrderRow, picks: { line_id: string; qty: number }[], by: string, opts: CartOpts = {}): void {
+ *  shown, not ordered). With `seen` (the lines the page showed), a line the page never showed (added by the agent or the
+ *  reminder since it loaded) is left as it is. A pick naming a line of another cart is refused. */
+export function applyPicks(tx: Db, cart: OrderRow, picks: { line_id: string; qty: number }[], by: string, opts: CartOpts & { seen?: Set<string> } = {}): void {
   const lines = linesOf(tx, cart.id), want = new Map(picks.map((p) => [p.line_id, p.qty]));
   for (const id of want.keys()) if (!lines.some((l) => l.id === id)) refuse(`line ${id} is not on this cart`);
   for (const l of lines) {
+    if (opts.seen && !opts.seen.has(l.id) && !want.has(l.id)) continue;
     const qty = want.get(l.id) ?? 0;
     if (l.qty === qty) continue;
     tx.update(order_lines).set({ qty, updated_at: new Date().toISOString(), updated_by: by }).where(eq(order_lines.id, l.id)).run();
@@ -209,16 +211,36 @@ export function rollUnpaid(tx: Db, o: OrderRow, by: string, opts: CartOpts = {})
   touchCart(tx, cart, by, opts);
 }
 
-/** A not-paid order was paid after all: `paid`, its purchases count again, and the lines it returned leave the open cart. */
-export function markPaid(tx: Db, o: OrderRow, by: string, opts: CartOpts = {}): void {
+/** Lines a cart she has not said yes to yet (`unseen`, not shown on her page) move to the app's open cart, made when there is
+ *  none: a cart going to `ordering` takes only what she saw. */
+export function moveToOpen(tx: Db, from: OrderRow, lineIds: string[], by: string, opts: CartOpts = {}): void {
+  if (!lineIds.length) return;
+  const cart = openCart(tx, from.app as GroceryApp, opts);
+  for (const id of lineIds) {
+    tx.update(order_lines).set({ order_id: cart.id, updated_by: by }).where(eq(order_lines.id, id)).run();
+    opts.changes?.push(["order_lines", id, "update", by]);
+  }
+  touchCart(tx, cart, by, opts);
+}
+
+/** A not-paid order was paid after all: `paid`, its purchases count again, and the lines it returned leave every cart not yet
+ *  placed. Answers what left a cart being ordered, so the agent takes it off the checkout too. */
+export function markPaid(tx: Db, o: OrderRow, by: string, opts: CartOpts = {}): { order_id: string; items: string[] }[] {
   tx.update(orders).set({ status: "paid", paid_at: (opts.at ?? new Date()).toISOString(), updated_at: new Date().toISOString(), updated_by: by }).where(eq(orders.id, o.id)).run();
   opts.changes?.push(["orders", o.id, "update", by]);
-  if (o.status !== "not_paid") return;
+  if (o.status !== "not_paid") return [];
   voidPurchases(tx, o, 0, by, opts);
-  const returned = tx.select({ id: order_lines.id, order_id: order_lines.order_id }).from(order_lines).innerJoin(orders, eq(order_lines.order_id, orders.id))
-    .where(and(eq(order_lines.rolled_from, o.id), eq(orders.status, "open"))).all();
+  const returned = tx.select({ id: order_lines.id, order_id: order_lines.order_id, item: order_lines.item, status: orders.status }).from(order_lines)
+    .innerJoin(orders, eq(order_lines.order_id, orders.id))
+    .where(and(eq(order_lines.rolled_from, o.id), inArray(orders.status, ["open", "ordering"]))).all();
   for (const l of returned) { tx.delete(order_lines).where(eq(order_lines.id, l.id)).run(); opts.changes?.push(["order_lines", l.id, "delete", by]); }
-  for (const id of new Set(returned.map((l) => l.order_id))) touchCart(tx, orderById(tx, id)!, by, opts);
+  const taken: { order_id: string; items: string[] }[] = [];
+  for (const id of new Set(returned.map((l) => l.order_id))) {
+    const mine = returned.filter((l) => l.order_id === id);
+    if (mine[0].status === "open") touchCart(tx, orderById(tx, id)!, by, opts);
+    else taken.push({ order_id: id, items: mine.map((l) => l.item) });
+  }
+  return taken;
 }
 
 /** A cart or an order as the pages and the agent read it. `total` is the app's own total, from its last copy. */

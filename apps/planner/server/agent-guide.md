@@ -88,6 +88,7 @@ Each shopping app has one open cart (`get_cart`). Nothing is ordered until the f
 - **Her yes:** `order_cart { app }`, send its `message` word for word, check out on the app, then
   `record_order { order_id, placed: true, app_order_ref }`; later `paid: true`, or `paid: false` when it was not paid.
   `cancel_order` stops one. A line added while an order is being placed goes on a new cart.
+- **A late payment** (`paid: true` after `paid: false`) may answer `taken_off`: take those items off that checkout on the app.
 - **The `sync-cart` ask** (after her edits on the Cart page): make the app's cart hold exactly its lines, then `sync_cart`.
 
 ## Saved recipes

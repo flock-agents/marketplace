@@ -14,7 +14,7 @@ import { productId } from "./products";
 import { dateOf } from "./meals";
 import { todayStr } from "./dates";
 import { orderingNowText } from "./messages";
-import { after, applyPicks, cartOf, cartsView, cartView, emitAll, lineApp, lineFor, linesOf, markPaid, markPlaced, orderById, reopenCart,
+import { after, applyPicks, cartOf, cartsView, cartView, emitAll, lineApp, lineFor, linesOf, markPaid, markPlaced, moveToOpen, orderById, reopenCart,
   rollUnpaid, setLine, setOrderRef, startOrdering, type Change, type LineInput, type OrderRow } from "./cart";
 
 export type CartDeps = {
@@ -34,6 +34,12 @@ const appIn = (v: unknown, what = "app"): GroceryApp => appOf(v) ?? refuse(`${wh
 function picksOf(v: unknown): { line_id: string; qty: number }[] {
   if (!Array.isArray(v)) return refuse(PICKS_SHAPE);
   return v.map((p) => (isObject(p) && typeof p.line_id === "string" ? { line_id: p.line_id, qty: wholeQty(p.qty, "a pick's qty") } : refuse(PICKS_SHAPE)));
+}
+
+/** The lines the page showed when she tapped (optional): what was added since is not hers to have picked. */
+function seenOf(v: unknown): Set<string> | undefined {
+  if (v == null) return undefined;
+  return Array.isArray(v) && v.every((x) => typeof x === "string") ? new Set(v as string[]) : refuse("seen must be a list of line ids");
 }
 
 function lineInput(b: Record<string, unknown>): LineInput {
@@ -127,14 +133,15 @@ export function mountCartRoutes(hono: Hono<any>, db: Db, emit: Emit, deps: CartD
   // ── The cart ──
 
   // set_cart_line { item, qty, app?, source?, for_note?, product_id?, name_on_app?, pack?, price?, image? }: on the app's open cart.
-  // The agent may also change a line of a cart being ordered ("remove the ghee"); anything new goes to the open cart.
+  // The agent may also take off or lower a line of a cart being ordered ("remove the ghee"); anything new, or more of an item
+  // already being ordered, goes to the open cart.
   write("/api/carts/line", (b, by) => {
     const l = lineInput(b);
     const app = l.app ?? lineApp(db, itemFor(db, l.item));
     const agent = by.startsWith("agent:");
     const ordering = agent ? cartOf(db, app, "ordering") : null;
     const onOrdering = ordering ? lineFor(db, ordering.id, l.item) : null;
-    if (ordering && onOrdering) {
+    if (ordering && onOrdering && l.qty < (onOrdering.qty ?? 0)) {
       const line = run((tx, changes) => {
         if (l.qty === 0) {
           tx.delete(order_lines).where(eq(order_lines.id, onOrdering.id)).run();
@@ -152,25 +159,27 @@ export function mountCartRoutes(hono: Hono<any>, db: Db, emit: Emit, deps: CartD
   });
 
   // The Cart page's ItemPicker as she taps it: the picked lines' qty, every other line of the cart at 0; then the copy to the
-  // app, after the taps stop. 409 when the cart has left `open` (the page reloads).
+  // app, after the taps stop. With `seen` (the lines the page showed), a line added since is left as it is. 409 when the cart
+  // has left `open` (the page reloads).
   write("/api/carts/:app/picks", (b, by, c) => {
     const app = appParam(c);
-    const picks = picksOf(b.picks);
+    const picks = picksOf(b.picks), seen = seenOf(b.seen);
     const homes = new Set(picks.map((p) => db.select({ order_id: order_lines.order_id }).from(order_lines).where(eq(order_lines.id, p.line_id)).get()?.order_id ?? null));
     if (homes.has(null) || homes.size > 1) return conflict("the cart changed: reload it");
     const cart = homes.size ? orderById(db, [...homes][0]!) : cartOf(db, app, "open");
     if (!cart || cart.app !== app || cart.status !== "open") return conflict(`your ${APP_NAMES[app]} cart is no longer open: reload it`);
-    run((tx, changes) => applyPicks(tx, cart, picks, by, { changes, at: now() }));
+    run((tx, changes) => applyPicks(tx, cart, picks, by, { changes, at: now(), seen }));
     requestSync(app);
     return { body: { cart: cartView(db, orderById(db, cart.id)!) } };
   });
 
-  // order_cart { app, picks? }: her yes. The page's picks are saved first; the cart leaves `open` (a line added from now on goes
-  // to a new open cart), and a copy to the app still waiting is dropped (checking out makes the app's cart match). One order at
-  // a time per app: while one is being ordered, asking again answers that one.
+  // order_cart { app, picks?, seen? }: her yes. The page's picks are saved first; the cart leaves `open` (a line added from now on
+  // goes to a new open cart), and a copy to the app still waiting is dropped (checking out makes the app's cart match). With
+  // `seen` (the lines the page showed) a line added since she looked moves to the app's new open cart instead of being ordered
+  // or zeroed. One order at a time per app: while one is being ordered, asking again answers that one.
   write("/api/carts/:app/order", (b, by, c) => {
     const app = appParam(c);
-    const picks = b.picks == null ? null : picksOf(b.picks);
+    const picks = b.picks == null ? null : picksOf(b.picks), seen = seenOf(b.seen);
     const answer = (o: OrderRow, already = false) => {
       const lines = linesOf(db, o.id).filter((l) => (l.qty ?? 0) > 0);
       return { body: { order_id: o.id, app: o.app, lines, message: orderingNowText({ app: o.app, lines }), ...(already ? { already: true } : {}) } };
@@ -182,11 +191,14 @@ export function mountCartRoutes(hono: Hono<any>, db: Db, emit: Emit, deps: CartD
     if (!cart) return empty;
     const lines = linesOf(db, cart.id);
     if (picks) for (const p of picks) if (!lines.some((l) => l.id === p.line_id)) return conflict("the cart changed: reload it");
-    if (!(picks ? picks.some((p) => p.qty > 0) : lines.some((l) => (l.qty ?? 0) > 0))) return empty;
+    const shown = seen ? new Set([...seen, ...(picks ?? []).map((p) => p.line_id)]) : undefined;
+    const unseen = shown ? lines.filter((l) => !shown.has(l.id)).map((l) => l.id) : [];
+    if (!(picks ? picks.some((p) => p.qty > 0) : lines.some((l) => (!shown || shown.has(l.id)) && (l.qty ?? 0) > 0))) return empty;
     run((tx, changes) => {
       const opts = { changes, at: now() };
-      if (picks) applyPicks(tx, cart, picks, by, opts);
+      if (picks) applyPicks(tx, cart, picks, by, { ...opts, seen: shown });
       startOrdering(tx, cart, by, opts);
+      moveToOpen(tx, cart, unseen, by, opts);
     });
     deps.schedule(`sync:${app}`, null, 0);
     return answer(orderById(db, cart.id)!);
@@ -265,16 +277,18 @@ export function mountCartRoutes(hono: Hono<any>, db: Db, emit: Emit, deps: CartD
     const status = placed && o.status === "ordering" ? "placed" : o.status;
     if (paid === true && !["placed", "paid", "not_paid"].includes(status)) return conflict(`this order is ${status.replace("_", " ")}, not placed`);
     if (paid === false && !["placed", "not_paid"].includes(status)) return conflict(`this order is ${status.replace("_", " ")}: it cannot be not paid`);
+    const taken: { order_id: string; items: string[] }[] = [];
     run((tx, changes) => {
       const opts = { changes, at: now() };
       if (placed && o.status === "ordering") markPlaced(tx, o, ref, by, opts);
       else if (ref && ref !== o.app_order_ref) setOrderRef(tx, o, ref, by, opts);
       if (total !== undefined) { tx.update(orders).set({ total, updated_by: by }).where(eq(orders.id, o.id)).run(); changes.push(["orders", o.id, "update", by]); }
       const cur = orderById(tx, o.id)!;
-      if (paid === true && cur.status !== "paid") markPaid(tx, cur, by, opts);
+      if (paid === true && cur.status !== "paid") taken.push(...markPaid(tx, cur, by, opts));
       if (paid === false && cur.status === "placed") rollUnpaid(tx, cur, by, opts);
     });
-    return { body: { order: cartView(db, orderById(db, o.id)!) } };
+    // Lines it had returned that were on a cart being ordered: take them off the checkout on the app too.
+    return { body: { order: cartView(db, orderById(db, o.id)!), ...(taken.length ? { taken_off: taken } : {}) } };
   });
 
   // cancel_order { order_id }: an order being ordered goes back to the open cart (nothing was placed); a placed one is not paid.

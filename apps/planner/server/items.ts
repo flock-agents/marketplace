@@ -70,11 +70,13 @@ export function recomputeItem(db: Db, itemId: string, _today: string): ItemRow {
 export function recordPurchase(tx: Db, p: Purchase): { event_id: string } | { duplicate: true } {
   let it = itemFor(tx, p.item, { group: p.group, create: true })!;
   if (p.group && !it.group) it = tx.update(items).set({ group: p.group }).where(eq(items.id, it.id)).returning().get();
-  // The same purchase, whichever way it came first: two refs decide alone (different refs are two orders); when either side
-  // has none, the date and the product do (by product_id when both have one, else by the product's name).
+  // The same purchase, whichever way it came first: two refs decide alone (different refs are two orders), and so do two
+  // orders placed through the app (different order_ids are two orders, even of one product on one day); when either side
+  // has neither, the date and the product do (by product_id when both have one, else by the product's name).
   const lower = (v: string | null | undefined) => (v ?? "").trim().toLowerCase();
   const same = tx.select().from(item_events).where(and(eq(item_events.item_id, it.id), eq(item_events.kind, "purchase"), eq(item_events.app, p.app))).all()
     .find((e) => !e.void && (e.order_ref && p.order_ref ? e.order_ref === p.order_ref
+      : e.order_id && p.order_id ? e.order_id === p.order_id
       : e.date === p.date && (e.product_id && p.product_id ? e.product_id === p.product_id : lower(e.product) === lower(p.product))));
   if (same) {
     // A copy with the ref teaches the one recorded without it, so later imports match by ref.

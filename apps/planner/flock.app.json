@@ -217,7 +217,7 @@
       },
       {
         "name": "record_order",
-        "description": "What happened to an order being placed. { order_id, placed?: true, paid?: true | false, app_order_ref?: the app's order id, total? }. placed: its lines become purchases and the items' estimates restart. paid: false (not paid): the purchases stop counting and the lines go back on the open cart; paid: true later brings both back. Send app_order_ref whenever you have it, also later. Answers { order }."
+        "description": "What happened to an order being placed. { order_id, placed?: true, paid?: true | false, app_order_ref?: the app's order id, total? }. placed: its lines become purchases and the items' estimates restart. paid: false (not paid): the purchases stop counting and the lines go back on the open cart; paid: true later brings both back. Send app_order_ref whenever you have it, also later. Answers { order }, and taken_off: [{ order_id, items }] when a late payment took returned items off a cart being ordered: take them off that checkout on the app too."
       },
       {
         "name": "cancel_order",

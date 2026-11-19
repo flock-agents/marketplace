@@ -375,3 +375,85 @@ describe("the app's real cart, kept in step", () => {
     expect(k.pending()).toBe(false);
   });
 });
+
+describe("review fixes, round 1", () => {
+  // Review Focus 1, the other way: two real orders are never one purchase.
+  it("two orders of one product placed the same day are two purchases; each not-paid voids only its own", async () => {
+    const k = await start();
+    const a = await placed(k);
+    await k.op("set_cart_line", { item: "curd", qty: 1 });
+    const b = (await cartOf(k, "zepto")).order_id;
+    await k.owner("POST", "/api/carts/zepto/order", {});
+    await k.op("record_order", { order_id: b, placed: true });
+    const curd = () => k.rows("item_events").filter((e) => e.item_id === item(k, "curd").id).map((e) => [e.order_id, e.date, e.void]);
+    expect(curd()).toEqual([[a, TODAY, 0], [b, TODAY, 0]]);
+    await k.op("record_order", { order_id: b, paid: false });
+    expect(curd()).toEqual([[a, TODAY, 0], [b, TODAY, 1]]);
+    expect(item(k, "curd").last_bought).toBe(TODAY);
+    // A ref-less history copy of that day's curd is still one of them, never a third.
+    expect(await k.op("import_order_history", { app: "zepto", orders: [{ date: TODAY, items: [{ item: "curd", product: "Mother Dairy curd", product_id: "z-curd", pack: "400 g" }] }] }))
+      .toMatchObject({ recorded: 0, duplicates: 1 });
+  });
+
+  // Review Focus 4: a returned line is taken off a cart not yet placed, ordering too.
+  it("a late payment takes its returned lines off a cart being ordered, and says which", async () => {
+    const k = await start();
+    const a = await placed(k);
+    await k.op("record_order", { order_id: a, paid: false });
+    await k.op("set_cart_line", { item: "eggs", qty: 1 });
+    const b = (await cartOf(k, "zepto")).order_id;
+    await k.owner("POST", "/api/carts/zepto/order", {});
+    expect(k.rows("order_lines").filter((l) => l.order_id === b).map((l) => l.item)).toEqual(["curd", "bread", "eggs"]);
+    const r = await k.op("record_order", { order_id: a, paid: true });
+    expect(r.order).toMatchObject({ status: "paid" });
+    expect(r.taken_off.map((t: any) => [t.order_id, [...t.items].sort()])).toEqual([[b, ["bread", "curd"]]]);
+    expect(k.rows("order_lines").filter((l) => l.order_id === b).map((l) => l.item)).toEqual(["eggs"]);
+    // Paid with nothing on a cart being ordered: no taken_off.
+    const k2 = await start();
+    const a2 = await placed(k2);
+    await k2.op("record_order", { order_id: a2, paid: false });
+    expect((await k2.op("record_order", { order_id: a2, paid: true })).taken_off).toBeUndefined();
+  });
+
+  // Review Focus 5: the agent only takes off or lowers a line of the cart being ordered.
+  it("the agent cannot raise a line on the cart being ordered: more goes to the open cart; less is taken off the order", async () => {
+    const k = await start();
+    const id = await fill(k);
+    await k.op("set_cart_line", { item: "curd", qty: 2 });
+    await k.owner("POST", "/api/carts/zepto/order", {});
+    const curdOn = (orderId: string) => k.rows("order_lines").find((l) => l.order_id === orderId && l.item === "curd")?.qty;
+    await k.op("set_cart_line", { item: "curd", qty: 3 });
+    const open = (await cartOf(k, "zepto")).order_id;
+    expect(open).not.toBe(id);
+    expect([curdOn(id), curdOn(open)]).toEqual([2, 3]);
+    await k.op("set_cart_line", { item: "curd", qty: 1 });
+    expect([curdOn(id), curdOn(open)]).toEqual([1, 3]);
+  });
+
+  // Controller ruling T5-R4: a line the page never showed is never zeroed by her taps or ordered by her Order.
+  it("picks and Order with seen leave a line added since the page loaded alone; Order moves it to a new open cart", async () => {
+    const k = await start();
+    const id = await fill(k);
+    const curd = await lineId(k, "zepto", "curd"), bread = await lineId(k, "zepto", "bread");
+    const seen = [curd, bread];
+    // The reminder adds eggs after the page loaded.
+    await k.op("set_cart_line", { item: "eggs", qty: 1 });
+    const eggs = await lineId(k, "zepto", "eggs");
+    await k.owner("POST", "/api/carts/zepto/picks", { picks: [{ line_id: curd, qty: 2 }], seen });
+    expect(k.rows("order_lines").map((l) => [l.item, l.qty])).toEqual([["curd", 2], ["bread", 0], ["eggs", 1]]);
+    expect((await k.owner("POST", "/api/carts/zepto/picks", { picks: [], seen: "all" })).status).toBe(400);
+    // Order with only unseen lines picked-up is empty for her.
+    expect((await k.owner("POST", "/api/carts/zepto/order", { picks: [], seen })).status).toBe(409);
+    const r = (await k.owner("POST", "/api/carts/zepto/order", { picks: [{ line_id: curd, qty: 2 }], seen })).body;
+    expect(r.lines.map((l: any) => [l.item, l.qty])).toEqual([["curd", 2]]);
+    expect(k.rows("order_lines").filter((l) => l.order_id === id).map((l) => [l.item, l.qty])).toEqual([["curd", 2], ["bread", 0]]);
+    const fresh = await cartOf(k, "zepto");
+    expect(fresh.order_id).not.toBe(id);
+    expect(fresh.lines.map((l: any) => [l.id, l.qty])).toEqual([[eggs, 1]]);
+    // Without seen (the agent's order_cart) every line not picked is zeroed, as before.
+    await k.op("set_cart_line", { item: "salt", qty: 1 });
+    expect(await k.op("record_order", { order_id: id, placed: true })).toMatchObject({ order: { status: "placed" } });
+    await k.owner("POST", "/api/carts/zepto/order", { picks: [{ line_id: eggs, qty: 1 }] });
+    expect(k.rows("order_lines").filter((l) => l.order_id === fresh.order_id).map((l) => [l.item, l.qty])).toEqual([["eggs", 1], ["salt", 0]]);
+  });
+});
