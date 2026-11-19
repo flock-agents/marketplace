@@ -485,11 +485,12 @@ describe("place_order and record_order", () => {
     expect(rows("house")[0]?.intro_sent_at ?? null).toBeNull();
   });
 
-  it("placed: false keeps the order scheduled with the note, to be tried again", async () => {
-    const { op, first } = await plannedWeek();
+  it("placed: false keeps the order scheduled with the note, to be tried again an hour later", async () => {
+    const { op, first, clock } = await plannedWeek();
     await op("place_order", { order_id: first.id });
+    clock.now = new Date(2026, 10, 21, 23, 30);
     const r = await op("record_order", { order_id: first.id, placed: false, note: "Zepto was down" });
-    expect(r.order).toMatchObject({ status: "scheduled", note: "Zepto was down", wake_sent_at: null, placed_at: null });
+    expect(r.order).toMatchObject({ status: "scheduled", note: "Zepto was down", wake_sent_at: null, placed_at: null, place_at: "2026-11-22T00:30" });
     expect(r.intro).toBeUndefined();
     expect((await op("place_order", { order_id: first.id })).message).toContain("Ordering this now");
   });
@@ -545,18 +546,40 @@ describe("an order that is not paid, or cancelled", () => {
     expect(rows("orders")).toHaveLength(4);
   });
 
-  it("with no scheduled order left, the lines roll into a new order placed now", async () => {
-    const { op, first, second, third, fourth, rows, clock, items, kit } = await plannedWeek();
+  it("with no scheduled order left, nothing is rolled and no order is made: the lines stay on the order that was not paid", async () => {
+    const { op, first, second, third, fourth, rows, clock, items, kit, order } = await plannedWeek();
     await op("record_order", { order_id: first.id, placed: true });
     for (const o of [second, third, fourth]) await op("cancel_order", { order_id: o.id });
     clock.now = new Date(2026, 10, 21, 19, 0);
     const r = await op("record_order", { order_id: first.id, paid: false });
-    expect(r.rolled_into).toMatchObject({ place_at: "2026-11-21T19:00", status: "scheduled", app: "zepto", week_start: null });
-    expect(r.rolled_into.lines.map((l: any) => l.item).sort()).toEqual(["atta", "cauliflower", "eggs", "milk", "potato", "rice", "toor dal"]);
-    expect(r.rolled_into.lines.every((l: any) => l.source === "added")).toBe(true);
-    expect(rows("orders")).toHaveLength(5);
+    expect(r.rolled_into).toBeNull();
+    expect(r.note).toBe("there is no later order: its items were not moved; tell me if you still want them");
+    expect(r.order.status).toBe("not_paid");
+    expect(r.order.lines.map((l: any) => l.item).sort()).toEqual(["atta", "cauliflower", "eggs", "milk", "potato", "rice", "toor dal"]);
+    expect(r.order.lines.every((l: any) => l.source !== "added")).toBe(true);
+    expect(rows("orders")).toHaveLength(4);
+    expect(rows("orders").filter((o) => o.status === "scheduled")).toEqual([]);
     rebuildScheduledOrders(kit.db, kit.emitChange);
-    expect(items(r.rolled_into.id).sort()).toEqual(["atta", "cauliflower", "eggs", "milk", "potato", "rice", "toor dal"]);
+    expect(items(first.id).sort()).toEqual(["atta", "cauliflower", "eggs", "milk", "potato", "rice", "toor dal"]);
+    expect(order(first.id).status).toBe("not_paid");
+  });
+
+  it("cancelling a placed order with no later order makes none either, and says so; with a later one there is no note", async () => {
+    const { op, first, second, third, fourth, rows, items } = await plannedWeek();
+    await op("record_order", { order_id: first.id, placed: true });
+    await op("record_order", { order_id: second.id, placed: true });
+    const rolled = await op("cancel_order", { order_id: first.id });
+    expect(rolled.rolled_into.id).toBe(third.id);
+    expect(rolled.note).toBeUndefined();
+    for (const o of [third, fourth]) await op("cancel_order", { order_id: o.id });
+    const r = await op("cancel_order", { order_id: second.id });
+    expect(r.order.status).toBe("not_paid");
+    expect(r.rolled_into).toBeNull();
+    expect(r.note).toBe("there is no later order: its items were not moved; tell me if you still want them");
+    expect(items(second.id).sort()).toEqual(["milk"]);
+    expect(rows("orders")).toHaveLength(4);
+    const again = await op("cancel_order", { order_id: second.id });
+    expect(again.status).toBe(409); expect(again.error).toBe("this order is already closed as not paid");
   });
 
   it("cancel_order cancels a scheduled order; a placed one is not paid and rolls on; the rest are refused", async () => {

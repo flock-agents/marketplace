@@ -14,7 +14,7 @@ import { introText } from "./messages";
 import { normItem, productFor, productId, productOf, rememberProduct } from "./products";
 import type { RegularHooks } from "./regulars";
 import { applyLowOrOut, buildOrdersForWeek, commitOrders, extraOrder, fillOrders, lineRemoved, lineRestored, lowOrOutQuestion, nextScheduled, orderView, productPacks,
-  rebuildScheduledOrders, rollUnpaid, startPlacing, weekHasOrders, type OrderRow } from "./orders";
+  rebuildScheduledOrders, REWAKE_AFTER_MIN, rollUnpaid, startPlacing, weekHasOrders, type OrderRow } from "./orders";
 
 export type OrderOptions = {
   /** The time, for tests. */
@@ -30,6 +30,8 @@ const PLAN_TABLES = ["plan_meals", "dishes", "dish_items", "regulars"];
 const REBUILD_AFTER_MS = 2000;
 /** The check-in times the intro names until each check-in has run once and written its own. */
 const DINNER_CHECK = "15:00", TOMORROW_CHECK = "19:00";
+/** Said with `rolled_into: null`: an order was not paid and there was no later order for its items to move to. */
+const NOT_ROLLED = "there is no later order: its items were not moved; tell me if you still want them";
 const STATUS_TEXT: Record<string, string> = { scheduled: "scheduled", placed: "placed, waiting for payment", paid: "paid", not_paid: "not paid", cancelled: "cancelled" };
 
 function debounced(ms: number): (run: () => void) => void {
@@ -51,6 +53,8 @@ export function mountOrderRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: Orde
   const notFound = (id: unknown) => ({ status: 404 as const, body: { reason: `no order has the id ${JSON.stringify(id)}` } });
   const conflict = (reason: string) => ({ status: 409 as const, body: { reason } });
   const appName = (o: OrderRow) => APP_NAMES[o.app as GroceryApp] ?? o.app;
+  /** Where an unpaid order's lines went: the order they moved to, or null and why not. */
+  const rolledInto = (id: string | null) => (id ? { rolled_into: orderView(db, id) } : { rolled_into: null, note: NOT_ROLLED });
 
   // ── Keeping the orders in step with the plan ──
   let stale = false;   // the plan changed since the orders were last rebuilt
@@ -172,8 +176,9 @@ export function mountOrderRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: Orde
   });
 
   // record_order { order_id, placed?: boolean, paid?: boolean, total?, app_order_ref?, note? }: what happened on the grocery app.
-  // placed: true → placed, waiting for the payment; placed: false → still scheduled, with the note, to be tried again.
-  // paid: true → paid; paid: false → not paid, and its lines move to the next order (`rolled_into`).
+  // placed: true → placed, waiting for the payment; placed: false → still scheduled, with the note, to be tried again in an hour.
+  // paid: true → paid; paid: false → not paid, and its lines move to the next order (`rolled_into`); with no later order
+  // they stay where they are, no order is made, and the answer says so (`rolled_into: null`, `note`).
   // The first order of a planned week recorded placed answers with `intro`, the how-to-use message, once.
   write("/api/orders/:id/record", (b, by, c) => {
     const o = find(c.req.param("id"));
@@ -192,7 +197,8 @@ export function mountOrderRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: Orde
     const at = localStamp(now());
     const out = commitOrders(db, emit, (tx, changes) => {
       if (placed) Object.assign(set, { status: "placed", placed_at: at });
-      if (placed === false) set.wake_sent_at = null;
+      // Not placed: nobody is placing it now, and it is due again in an hour, not at the clock's next run.
+      if (placed === false) Object.assign(set, { wake_sent_at: null, place_at: localStamp(new Date(now().getTime() + REWAKE_AFTER_MIN * 60_000)) });
       if (paid) Object.assign(set, { status: "paid", paid_at: at });
       tx.update(orders).set({ ...set, updated_at: new Date().toISOString(), updated_by: by }).where(eq(orders.id, o.id)).run();
       changes.push(["orders", o.id, "update", by]);
@@ -205,27 +211,27 @@ export function mountOrderRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: Orde
         tx.update(house).set({ intro_sent_at: new Date().toISOString() }).where(eq(house.id, home.id)).run();
         changes.push(["house", home.id, "update", "app"]);
       }
-      return { intro, ...(paid === false ? { rolled: rollUnpaid(tx, o, now(), by, changes) } : {}) };
+      return { intro, ...(paid === false ? { rolled: rollUnpaid(tx, o, by, changes) } : {}) };
     });
-    return { body: { order: orderView(db, o.id), ...(out.intro ? { intro: out.intro } : {}),
-      ...("rolled" in out ? { rolled_into: out.rolled ? orderView(db, out.rolled) : null } : {}) } };
+    return { body: { order: orderView(db, o.id), ...(out.intro ? { intro: out.intro } : {}), ...("rolled" in out ? rolledInto(out.rolled ?? null) : {}) } };
   });
 
   // cancel_order { order_id }: a scheduled order is cancelled, and no longer covers its days. A placed one is not paid for:
-  // exactly record_order paid: false, nothing is cancelled on the grocery app. A paid order is cancelled there, by the person.
+  // exactly record_order paid: false (its lines move to the next order, or stay when there is none), nothing is cancelled
+  // on the grocery app. A paid order is cancelled there, by the person.
   write("/api/orders/:id/cancel", (_b, by, c) => {
     const o = find(c.req.param("id"));
     if (!o) return notFound(c.req.param("id"));
     if (o.status === "paid") return conflict(`a paid order can't be cancelled here; cancel it in ${appName(o)}`);
-    if (o.status === "not_paid") return conflict("this order was not paid: its items already moved to the next order");
+    if (o.status === "not_paid") return conflict("this order is already closed as not paid");
     if (o.status === "cancelled") return conflict("this order is already cancelled");
     const rolled = commitOrders(db, emit, (tx, changes) => {
-      if (o.status === "placed") return rollUnpaid(tx, o, now(), by, changes);
+      if (o.status === "placed") return rollUnpaid(tx, o, by, changes);
       tx.update(orders).set({ status: "cancelled", updated_at: new Date().toISOString(), updated_by: by }).where(eq(orders.id, o.id)).run();
       changes.push(["orders", o.id, "update", by]);
       return undefined;
     });
-    return { body: { order: orderView(db, o.id), ...(rolled === undefined ? {} : { rolled_into: rolled ? orderView(db, rolled) : null }) } };
+    return { body: { order: orderView(db, o.id), ...(rolled === undefined ? {} : rolledInto(rolled)) } };
   });
 
   return {

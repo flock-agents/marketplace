@@ -39,11 +39,10 @@ A meal is a date and a slot; it holds dishes in the order they are served. A dis
 people, and may carry a `portion_note` ("4 for me, 1 for wife"), a saved recipe (`recipe_id`) or a video (`video_url`).
 A meal that is ordered in or eaten out is `ordered_in: true` and has no dishes.
 
-- **A whole week** goes one day a call (a call carries 16 KB at most): the first day `plan_week { week_start, mode:
-  "draft", meals }`, which replaces the week's plan; each other day the same with `keep_rest: true` (only the meals sent
-  are replaced); then `plan_week { week_start, mode: "final" }` without meals: the orders are built from the final plan,
-  and its answer lists them. A week that already has orders refuses a draft with meals: send each day with mode `final`
-  and `keep_rest: true`, or change one meal with `set_meal` / `set_dish`.
+- **A whole week** goes one day a call (16 KB a call at most): first `plan_week { week_start, mode: "draft", meals }`
+  (it replaces the week's plan), each other day the same with `keep_rest: true` (only the meals sent are replaced), then
+  `plan_week { week_start, mode: "final" }` without meals, which builds the orders and lists them. A week that has orders
+  refuses a draft with meals: send each day with mode `final` and `keep_rest: true`, or use `set_meal` / `set_dish`.
 - **One change** ("paneer on Thursday instead", "no dinner on Friday"): `set_meal` (dishes you send replace the meal's) or
   `set_dish` (one dish: add, change, `remove: true`). Orders not yet placed follow every change on their own.
 - **Plan from the family:** diets, allergies, dislikes, the house rules for that weekday, what the cook makes well and
@@ -70,7 +69,8 @@ deletes it. The same item for one person (`for_whom`) is a separate item. Each o
 ## Orders
 
 An order goes **scheduled → placed (waiting for payment) → paid, or not paid**. A scheduled order can be cancelled.
-Each covers a day or two; the week's first is due at once, later ones the evening before their first day.
+Each covers a day or two; the week's first is due at once, later ones the evening before their first day. One whose
+days have passed is cancelled, not placed. An order handed to you a second time is acted on once.
 
 **Placing needs no yes.** For an order you place yourself:
 1. `place_order { order_id }`. It answers `{ order, message, needs_product, needs_qty }`. (An order the app hands you when
@@ -82,12 +82,12 @@ Each covers a day or two; the week's first is due at once, later ones the evenin
 4. `needs_qty`: lines whose packs the app could not work out from the pack size. Work out how many packs cover the
    line's `amount`: `add_to_order { order_id, item, qty }`. (`unit` too when the item has two lines.)
 5. Put every line in the grocery app's cart (`qty` packs of its product) and check out: the payment step asks the person.
-6. `record_order { order_id, placed: true, total, app_order_ref }` at once. If it could not be placed:
-   `record_order { order_id, placed: false, note }`; it stays scheduled and is tried again.
-7. When they pay: `record_order { order_id, paid: true }`. If they do not pay, or say cancel: `record_order { order_id,
-   paid: false }` or `cancel_order { order_id }`. Nothing is cancelled on the grocery app (never call a connection's
-   cancel): the order is marked not paid and its items move to the next order. A paid order is cancelled by the person
-   in the grocery app itself; say so.
+6. `record_order { order_id, placed: true, total, app_order_ref }` at once. Not placed: `placed: false` with a `note`: it
+   is tried again in an hour; if only the family can fix it (sign-in, address), tell them once.
+7. Paid: `record_order { order_id, paid: true }`. Not paid, or they say cancel: `record_order { order_id, paid: false }`
+   or `cancel_order { order_id }`. Never call a connection's cancel: the order is marked not paid and its items move to
+   the next order; with no later order they stay (`rolled_into: null`): say "Not paid. There is no later order for its
+   items." A paid order is cancelled by the person, in the grocery app itself; say so.
 
 **Products.** `remember_product` and `add_to_order` take `item`: the family's word, exactly as on the order line or the
 everyday item ("milk"), never the product's name on the app (`name_on_app`). Give the pack's size as `pack_amount` and
@@ -122,18 +122,17 @@ it"). Items they have leave the week's next scheduled order; one that is out and
 
 The app wakes you once a week with next week's `week_start`, and the context to plan from when it fits. In this order:
 1. Plan the week a day a call, as under Meals; `plan_week { week_start, mode: "final" }` then answers with its orders.
-2. Place the first of those orders right away (the steps under Orders); an order with nothing on it is refused: leave it.
+2. Place the first of those orders right away (the steps under Orders) only if it is scheduled; if it is already placed,
+   paid or being placed (`wake_sent_at` set), place none. The later ones are handed to you when due.
 3. `record_order { placed: true }`. The first time its answer has `intro` (how it works, the real check-in times): send it as is.
 4. `ask_low_or_out { week_start }`, then send the family the plan, day by day, for them to change, with the question in
    the same message. Their changes are `set_meal` / `set_dish`; their answer goes to `ask_low_or_out`, whenever it comes.
-5. The later orders go out on their own: each is handed to you when it is due.
 
 ## The check-ins
 
-Each afternoon (tonight's dinner) and each evening (tomorrow's meals, also the cook's brief, with the dishes' videos) the
-app wakes you with a `text`: send it exactly, add nothing. It is silent when nothing is planned. Then handle replies:
-a changed dish is `set_dish` or `set_meal`; an item under "Not on any order yet" that they need is `add_to_order`; an
-item they already have is `add_to_order { item, remove: true }`.
+Each afternoon (tonight's dinner) and evening (tomorrow's meals, the cook's brief and the dishes' videos) the app wakes
+you with a `text`: send it exactly, add nothing. Then handle replies: a changed dish is `set_dish` or `set_meal`; an item
+"Not on any order yet" that they need is `add_to_order`; one they already have is `add_to_order { item, remove: true }`.
 
 ## Saved recipes
 

@@ -142,6 +142,10 @@ describe("weekly plan", () => {
     expect(p).toContain(MON);
     expect(p).toContain("Mon 23 Nov");
     expect(p).toContain("Never ask for a yes before placing");
+    // A run over a week already under way places nothing early, and an order is acted on once.
+    expect(p).toContain("only if it is scheduled");
+    expect(p).toContain("if it is already placed, paid or being placed, place none: the later ones go out at their own time");
+    expect(p).toContain("If you were already handed this order_id, act once.");
     expect(p).toContain("names from `items`");
     expect(p).toContain("Cancel nothing on the grocery app");
     expect(p).not.toContain("ask_pending");
@@ -359,6 +363,8 @@ describe("order clock", () => {
     expect(k.order(k.first.id).wake_sent_at).toBe("2026-11-21T18:15");
     for (const s of ["`message`", "needs_product", "needs_qty", "add_to_order { order_id, item", "Zepto", "placed: true", "paid: true", "paid: false", "Cancel nothing on Zepto"]) expect(message).toContain(s);
     expect(message.indexOf("placed: true")).toBeLessThan(message.indexOf("paid: true"));
+    expect(message).toContain("If you were already handed this order_id, act once.");
+    expect(message).not.toContain("handed to you before");
 
     await orderClock(k.ctx(), at(18, 30));
     expect(k.wakes).toHaveLength(1);
@@ -452,23 +458,57 @@ describe("order clock", () => {
     expect(k.wakes[1].data.order_id).toBe(k.first.id);
     expect(k.wakes[1].data.lines.map((l: any) => l.item)).toContain("tomato");
     expect(k.wakes[1].data.message).not.toBe(k.wakes[0].data.message);
+    // The second hand-over says it is one, so an order already in the cart is not placed twice.
+    expect(k.wakes[1].message).toStartWith("This order was handed to you before at 6:15 pm on Sat 21 Nov and never recorded. First check the grocery app: if it is already in the cart or placed, do not place it again; record it.\n");
+    expect(k.wakes[1].message.slice(k.wakes[1].message.indexOf("\n") + 1)).toBe(k.wakes[0].message);
     expect(k.order(k.first.id).wake_sent_at).toBe("2026-11-21T19:30");
 
     await orderClock(k.ctx(), at(19, 45));
     expect(k.wakes).toHaveLength(2);
   });
 
-  it("never wakes again for an order recorded placed; one recorded not placed is tried at the next run", async () => {
+  it("never wakes again for an order recorded placed; one recorded not placed is tried again an hour later, not at the next run", async () => {
     const k = await plannedWeek();
     await orderClock(k.ctx(), at(18, 15));
+    k.clock.now = at(18, 20);
     await k.op("record_order", { order_id: k.first.id, placed: false, note: "Zepto was closed" });
-    await orderClock(k.ctx(), at(18, 30));
+    expect(k.order(k.first.id)).toMatchObject({ status: "scheduled", wake_sent_at: null, place_at: "2026-11-21T19:20" });
+    await orderClock(k.ctx(), at(18, 35));    // 15 minutes on
+    await orderClock(k.ctx(), at(19, 15));
+    expect(k.wakes).toHaveLength(1);
+    await orderClock(k.ctx(), at(19, 20));    // 60 minutes on
     expect(k.wakes).toHaveLength(2);
-    k.clock.now = at(18, 40);
+    // It was recorded, so this is a fresh try, not a hand-over that went missing.
+    expect(k.wakes[1].message).toBe(k.wakes[0].message);
+    k.clock.now = at(19, 40);
     await k.op("record_order", { order_id: k.first.id, placed: true });
-    await orderClock(k.ctx(), at(20, 30));
+    await orderClock(k.ctx(), at(21, 30));
     await orderClock(k.ctx(), at(9, 0, 22));
     expect(k.wakes).toHaveLength(2);
+  });
+
+  it("an order whose days have passed is cancelled, not handed over; one for added items has no days and still goes", async () => {
+    const k = await plannedWeek([monLunch, monDinner, tueLunch, { date: "2026-11-26", slot: "Lunch", dishes: [{ name: "Salad", ingredients: [{ item: "cucumber", amount: 2, unit: "pc" }] }] }]);
+    await k.op("record_order", { order_id: k.first.id, placed: true });
+    expect([k.second.covers_from, k.second.covers_to, k.second.place_at]).toEqual([TUE, "2026-11-25", "2026-11-23T18:00"]);
+    const third = k.orders[2];
+    // Nothing ran from Monday evening to Thursday morning: the order for Tuesday and Wednesday is of no use now.
+    await orderClock(k.ctx(), at(9, 0, 26));
+    expect(k.order(k.second.id)).toMatchObject({ status: "cancelled", note: "its days had passed", wake_sent_at: null });
+    // The order for Thursday and Friday is late, and still wanted.
+    expect(k.wakes.map((w) => w.data.order_id)).toEqual([third.id]);
+    // On its last day an order is still placed.
+    const late = await plannedWeek();
+    await late.op("record_order", { order_id: late.first.id, placed: true });
+    await orderClock(late.ctx(), at(23, 45, 25));
+    expect(late.wakes.map((w) => w.data.order_id)).toEqual([late.second.id]);
+
+    const added = await app();
+    const { order } = await added.op("add_to_order", { item: "coriander" });
+    expect(order).toMatchObject({ week_start: null, covers_to: "2026-11-21" });
+    await orderClock(added.ctx(), at(9, 0, 23));
+    expect(added.wakes.map((w) => w.data.order_id)).toEqual([order.id]);
+    expect(added.order(order.id).status).toBe("scheduled");
   });
 
   it("skips an order with nothing on it, and wakes for it once it has lines", async () => {

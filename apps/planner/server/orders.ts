@@ -13,6 +13,10 @@ import { orderingNowText } from "./messages";
 import { normItem, packsFor, parsePack, productFor } from "./products";
 import { regularNeeds } from "./regulars";
 
+/** How long an order waits for a second try: one handed to the agent and never recorded is handed over again after this
+ *  long, and one recorded as not placed is due again this long after. */
+export const REWAKE_AFTER_MIN = 60;
+
 /** One thing needed on one day: an ingredient of a dish, or an everyday item. */
 export type Need = { date: string; item: string; amount: number | null; unit: string | null; keeps: "fresh" | "long";
   source: "dish" | "regular"; source_id: string; label: string };
@@ -241,8 +245,8 @@ export function startPlacing(db: Db, emit: Emit, id: string, now: Date, by: stri
   return { order, message: orderingNowText(order), needs_product: order.lines.filter((l) => !l.product_id), needs_qty: order.lines.filter((l) => !l.qty_checked) };
 }
 
-/** A scheduled order with no days of its own, placed now: for an item added when no order is waiting, lines rolled over
- *  from an unpaid order, or a long-life item that turned out to be missing. */
+/** A scheduled order with no days of its own, placed now: for an item added when no order is waiting, or a long-life item
+ *  that turned out to be missing. */
 export function extraOrder(db: Db, app: string, now: Date, by: string, changes: Change[]): OrderRow {
   const row = db.insert(orders).values({ place_at: localStamp(now), covers_from: todayStr(now), covers_to: todayStr(now), week_start: null, app, status: "scheduled", updated_by: by }).returning().get();
   changes.push(["orders", row.id, "insert", by]);
@@ -335,17 +339,18 @@ export function applyLowOrOut(db: Db, weekStart: string, answer: string | string
 
 // ── Not paid ──
 
-/** An order that was placed and not paid: its lines move to the next scheduled order, of its own week when there is one
- *  (a new one placed now when none is waiting) as added lines, each still saying what it is for. The unpaid order keeps its days, so nothing is built for them
- *  again. Answers with the id of the order the lines went to, or null when it had none. */
-export function rollUnpaid(db: Db, o: OrderRow, now: Date, by: string, changes: Change[]): string | null {
+/** An order that was placed and not paid: its lines move to the next scheduled order, of its own week when there is one,
+ *  as added lines, each still saying what it is for. With no scheduled order waiting nothing moves and no order is made
+ *  (one made now would be placed at once, and ask for the same payment again): the lines stay on the unpaid order. The
+ *  unpaid order keeps its days, so nothing is built for them again. Answers with the id of the order the lines went to,
+ *  or null when they went nowhere. */
+export function rollUnpaid(db: Db, o: OrderRow, by: string, changes: Change[]): string | null {
   db.update(orders).set({ status: "not_paid", updated_at: new Date().toISOString(), updated_by: by }).where(eq(orders.id, o.id)).run();
   changes.push(["orders", o.id, "update", by]);
-  const lines = linesOf(db, [o.id]);
-  if (!lines.length) return null;
   // The same week's next order first: its items are for that week's days.
-  const target = (o.week_start ? nextScheduled(db, o.week_start) : null) ?? nextScheduled(db) ?? extraOrder(db, o.app, now, by, changes);
-  for (const l of lines) {
+  const target = (o.week_start ? nextScheduled(db, o.week_start) : null) ?? nextScheduled(db);
+  if (!target) return null;
+  for (const l of linesOf(db, [o.id])) {
     db.update(order_lines).set({ order_id: target.id, source: "added", updated_at: new Date().toISOString(), updated_by: by }).where(eq(order_lines.id, l.id)).run();
     changes.push(["order_lines", l.id, "update", by]);
   }
