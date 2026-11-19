@@ -15,6 +15,7 @@ import { mountRegularRoutes, type RegularHooks } from "./regulars";
 import { mountProductRoutes } from "./products";
 import { mountRecipeRoutes } from "./recipes";
 import { mountItemRoutes } from "./items";
+import { mountCartRoutes } from "./cartRoutes";
 
 /** A fresh temp directory for a test, removed when its test file is done: nothing piles up in the system's temp folder.
  *  The removal is registered here, per directory: this module loads once for the whole run, so a hook at its top level would
@@ -44,7 +45,6 @@ export async function boot(opts: { dbFile?: string; dataDir?: string; mealHooks?
   mountRegularRoutes(hono, kit.db, kit.emitChange, opts.regularHooks ?? { onChanged: () => {} });
   mountProductRoutes(hono, kit.db, kit.emitChange);
   mountRecipeRoutes(hono, kit.db, kit.emitChange);
-  mountItemRoutes(hono, kit.db, kit.emitChange, { now });
   /** A request as the owner. */
   const owner = async (method: string, path: string, body?: unknown) => {
     const r = await hono.request(path, { method, headers: { "Content-Type": "application/json", "X-Flock-User": "tester" }, body: body === undefined ? undefined : JSON.stringify(body) });
@@ -58,9 +58,9 @@ export async function boot(opts: { dbFile?: string; dataDir?: string; mealHooks?
   /** The agent calls the app asked for, in order. */
   const asked: { intent: string; payload: object }[] = [];
   const askAgent = async (intent: string, payload: object): Promise<unknown> => { asked.push({ intent, payload }); return opts.askAgent?.(intent, payload); };
-  /** The timers waiting, by key: only the latest run for a key is kept. */
+  /** The timers waiting, by key: only the latest run for a key is kept; a null run only clears the key. */
   const timers = new Map<string, () => void>();
-  const schedule = (key: string, run: () => void, _ms: number): void => { timers.set(key, run); };
+  const schedule = (key: string, run: (() => void) | null, _ms: number): void => { if (run) timers.set(key, run); else timers.delete(key); };
   /** Is a run waiting for this key (or any key)? */
   const pending = (key?: string): boolean => (key === undefined ? timers.size > 0 : timers.has(key));
   /** Run what is waiting for this key, or for every key, once. */
@@ -69,5 +69,7 @@ export async function boot(opts: { dbFile?: string; dataDir?: string; mealHooks?
     for (const k of keys) { const run = timers.get(k)!; timers.delete(k); run(); }
   };
   const deps = { basePath: opts.basePath ?? "/a/t", askAgent, schedule, now };
+  mountItemRoutes(hono, kit.db, kit.emitChange, { now });
+  mountCartRoutes(hono, kit.db, kit.emitChange, deps);
   return { kit, hono, owner, op, rows, asked, pending, settle, deps };
 }

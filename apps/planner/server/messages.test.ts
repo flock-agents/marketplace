@@ -126,16 +126,11 @@ describe("introText", () => {
 });
 
 describe("unpaidText", () => {
-  it("is one line: whose order was not paid, and where its items went", () => {
-    expect(unpaidText("Monday", "Wednesday")).toBe("Monday's order wasn't paid, so I've moved its items to Wednesday's.");
-    // The next order is a week on, or later the same day: the day's name would say nothing.
-    expect(unpaidText("Monday", "Monday")).toBe("Monday's order wasn't paid, so I've moved its items to the next order.");
-  });
-
-  it("says so when there was no later order to move them to", () => {
-    const text = unpaidText("Saturday", null);
-    expect(text).toBe("Saturday's order wasn't paid, and there is no later order to move its items to. Tell me if you still want them.");
+  it("is one line: which app's order of which day was not paid, and that its items are back in the cart", () => {
+    const text = unpaidText("Zepto", "Monday");
+    expect(text).toBe("Monday's Zepto order wasn't paid, so its items are back in your cart.");
     expect(text).not.toContain("\n");
+    expect(text).not.toContain("\u2014");
   });
 });
 

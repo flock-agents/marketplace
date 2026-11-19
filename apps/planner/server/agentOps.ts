@@ -28,6 +28,20 @@ export const ROUTES: Record<string, Route> = {
   set_item: (p) => ({ method: "POST", path: "/api/items", body: p }),
   set_subscription: (p) => ({ method: "POST", path: "/api/items/subscription", body: p }),
   answer_running_low: (p) => ({ method: "POST", path: "/api/items/answers", body: p }),
+  get_cart: (p) => ({ method: "GET", path: p.app == null ? "/api/carts" : `/api/carts?app=${encodeURIComponent(String(p.app))}` }),
+  set_cart_line: (p) => ({ method: "POST", path: "/api/carts/line", body: p }),
+  sync_cart: (p) => typeof p.order_id === "string" && p.order_id
+    ? { method: "POST", path: `/api/carts/${encodeURIComponent(p.order_id)}/sync`, body: p }
+    : { error: "order_id is required: the cart's order_id from get_cart", code: "APP_REFUSED", status: 400 },
+  order_cart: (p) => typeof p.app === "string" && p.app.trim()
+    ? { method: "POST", path: `/api/carts/${encodeURIComponent(p.app.trim())}/order`, body: p }
+    : { error: "app is required: the shopping app whose cart she said yes to", code: "APP_REFUSED", status: 400 },
+  record_order: (p) => typeof p.order_id === "string" && p.order_id
+    ? { method: "POST", path: `/api/orders/${encodeURIComponent(p.order_id)}/record`, body: p }
+    : { error: "order_id is required: the order_id order_cart answered", code: "APP_REFUSED", status: 400 },
+  cancel_order: (p) => typeof p.order_id === "string" && p.order_id
+    ? { method: "POST", path: `/api/orders/${encodeURIComponent(p.order_id)}/cancel`, body: p }
+    : { error: "order_id is required: the order_id order_cart answered", code: "APP_REFUSED", status: 400 },
   remember_product: (p) => ({ method: "POST", path: "/api/products", body: p }),
   save_recipe: (p) => ({ method: "POST", path: "/api/recipes/save", body: p }),
 };

@@ -9,6 +9,7 @@ import { mountRegularRoutes } from "./regulars";
 import { mountProductRoutes } from "./products";
 import { mountRecipeRoutes } from "./recipes";
 import { mountItemRoutes } from "./items";
+import { mountCartRoutes } from "./cartRoutes";
 import { migrateOldProfile } from "./gate";
 import { routines } from "./routines";
 
@@ -28,5 +29,15 @@ mountRegularRoutes(flock.hono, kit.db, kit.emitChange, { onChanged: () => {} });
 mountProductRoutes(flock.hono, kit.db, kit.emitChange);
 mountRecipeRoutes(flock.hono, kit.db, kit.emitChange);
 mountItemRoutes(flock.hono, kit.db, kit.emitChange);
+// The app's real carts are copied by the agent: an edit on the page asks it (the sync-cart intent) once the taps stop.
+const timers = new Map<string, ReturnType<typeof setTimeout>>();
+mountCartRoutes(flock.hono, kit.db, kit.emitChange, {
+  askAgent: (name, p) => flock.platform.agent.intent(name, p),
+  schedule: (key, run, ms) => {
+    clearTimeout(timers.get(key));
+    timers.delete(key);
+    if (run) timers.set(key, setTimeout(() => { timers.delete(key); run(); }, ms));
+  },
+});
 
 flock.listen();

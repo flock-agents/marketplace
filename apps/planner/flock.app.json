@@ -127,7 +127,13 @@
     }
   ],
   "agentInterface": {
-    "intents": [],
+    "intents": [
+      {
+        "name": "sync-cart",
+        "description": "The family changed or opened their cart in Meal Planner: make the app's own cart match it.",
+        "instructions": "The payload has order_id, app and lines [{ item, product_id, name_on_app, qty }]. With that app's connector, make its cart hold exactly these lines (qty 0: take it off); touch only lines Meal Planner put there, and list any other line already in the cart as outside_lines. Read the cart back and call sync_cart { order_id, lines, total, delivery_gap, outside_lines }. Send no message."
+      }
+    ],
     "operations": [
       {
         "name": "guide",
@@ -192,6 +198,30 @@
       {
         "name": "answer_running_low",
         "description": "The family's answers to \"still in stock?\". { answers: [{ item, answer: low | in_stock, days?: how many more days it will last }] }. low: it goes on the cart (answers { to_cart }). in_stock with days (\"fine for a week\": 7) is not asked again until then; in_stock without days (\"still have it\") waits a few days. Answers { to_cart: [items to add to the cart], items }."
+      },
+      {
+        "name": "get_cart",
+        "description": "The carts: one open cart per shopping app, and any being ordered. { app?: one app by id or name }. Answers { carts: [{ order_id, app, app_name, status: open | ordering, lines: [{ id, item, qty, product_id, name_on_app, pack, price, source, for_note }], total, delivery_gap, sync_state, synced_at, outside_lines, building_at_order }] }. A line at qty 0 is shown, not ordered."
+      },
+      {
+        "name": "set_cart_line",
+        "description": "Put an item on the cart, change its qty or take it off. { item, qty: packs, a whole number (0 takes it off), app?: the app (else the one the family buys it on, else the main app), source?: added (default) | low | everyday | meal, for_note?, product_id?, name_on_app?, pack?, price?, image? }. It goes on that app's open cart; while a cart is being ordered, a new item goes to a new open cart, and you may change or take off a line of the cart being ordered (\"remove the ghee\"). An item delivered outside the apps is refused (code SUBSCRIPTION). Copy the change to the app's own cart yourself in the same turn, then sync_cart. Answers { line, cart }."
+      },
+      {
+        "name": "order_cart",
+        "description": "The family said yes to ordering one app's cart. { app }. The cart is being ordered from now on, and anything added later goes to a new cart. Send its message word for word, check out on the app, then record_order. Asked again while that order is being placed, it answers the same order. Answers { order_id, app, lines, message }; an empty cart is refused (409)."
+      },
+      {
+        "name": "sync_cart",
+        "description": "What the app's own cart holds after you copied a cart to it, or read it back. { order_id, lines: [{ product_id, qty, price?, in_stock?: false when the app does not have it today }], total?: the app's cart total, delivery_gap?: rupees short of free delivery, outside_lines?: [{ name, qty? }] (lines in the app's cart Meal Planner did not put there) }. Answers { cart }."
+      },
+      {
+        "name": "record_order",
+        "description": "What happened to an order being placed. { order_id, placed?: true, paid?: true | false, app_order_ref?: the app's order id, total? }. placed: its lines become purchases and the items' estimates restart. paid: false (not paid): the purchases stop counting and the lines go back on the open cart; paid: true later brings both back. Send app_order_ref whenever you have it, also later. Answers { order }."
+      },
+      {
+        "name": "cancel_order",
+        "description": "Stop an order. { order_id }. One being ordered goes back to the open cart (nothing was placed); a placed one counts as not paid, its lines back on the cart. Answers { order }."
       },
       {
         "name": "remember_product",

@@ -78,7 +78,17 @@ Her answers to "still in stock?": `answer_running_low { answers: [{ item, answer
 
 The app wakes you once a week with next week's `week_start`, and the context to plan from when it fits. Plan the week a
 day a call, as under Meals, then send the family the plan, day by day, for them to change with `set_meal` / `set_dish`.
-Carts, orders and the daily reminders come with the next steps of this revision; until they do, nothing is ordered.
+The daily reminders come with the next steps of this revision.
+
+## The cart and orders
+
+Each shopping app has one open cart (`get_cart`). Nothing is ordered until the family says yes or taps Order.
+- **Add, change, take off:** `set_cart_line { item, qty }` (qty 0 takes it off); the app picks the shopping app. Then put
+  the same change on that app's own cart with its connector, and `sync_cart` what it holds, in the same turn.
+- **Her yes:** `order_cart { app }`, send its `message` word for word, check out on the app, then
+  `record_order { order_id, placed: true, app_order_ref }`; later `paid: true`, or `paid: false` when it was not paid.
+  `cancel_order` stops one. A line added while an order is being placed goes on a new cart.
+- **The `sync-cart` ask** (after her edits on the Cart page): make the app's cart hold exactly its lines, then `sync_cart`.
 
 ## Saved recipes
 

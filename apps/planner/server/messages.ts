@@ -72,12 +72,10 @@ export function introText(orderDay: string, times: { dinner: string; tomorrow: s
   ].join("\n");
 }
 
-/** The one line said when a placed order was not paid within a day and the app closed it. `orderDay` is the day it was
- *  placed ("Monday"); `nextDay` the day of the order its items moved to, or null when there was no later order (none is
- *  made, and the items stay where they were). */
-export function unpaidText(orderDay: string, nextDay: string | null): string {
-  if (!nextDay) return `${orderDay}'s order wasn't paid, and there is no later order to move its items to. Tell me if you still want them.`;
-  return `${orderDay}'s order wasn't paid, so I've moved its items to ${nextDay === orderDay ? "the next order" : `${nextDay}'s`}.`;
+/** The one line said when a placed order was not paid and the app closed it: its items are back on the app's open cart.
+ *  `appName` is the app's name ("Zepto"), `placedDay` the day it was placed ("Monday"). */
+export function unpaidText(appName: string, placedDay: string): string {
+  return `${placedDay}'s ${appName} order wasn't paid, so its items are back in your cart.`;
 }
 
 // ── Recipe links ──

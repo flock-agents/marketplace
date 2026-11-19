@@ -41,6 +41,7 @@ export const house = sqliteTable("house", {
   history_synced: text("history_synced"),                      // JSON { [app]: "YYYY-MM-DD" }: how far each app's order history was read
   asks_confirmed: integer("asks_confirmed").default(0),
   asks_still_have: integer("asks_still_have").default(0),
+  sync_session_id: text("sync_session_id"),                    // the session the last sync-cart ask started: the next one reuses it
 });
 
 /** One meal of the plan: a date and a slot, made of dishes. */

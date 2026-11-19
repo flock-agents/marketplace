@@ -13,6 +13,7 @@ import { dateOf, flag } from "./meals";
 import { normItem, parsePack, positive, productFor, productId, rememberProduct, toBase, type ProductInput } from "./products";
 import { suggestRegulars, type PastOrder } from "./regulars";
 import { pantryStatus, pattern, runOut, tagEvents, type Ev, type ItemState } from "./estimate";
+import { cartOf, emitAll, lineApp, lineFor, setLine, type Change } from "./cart";
 
 export type ItemRow = typeof items.$inferSelect;
 export type EventRow = typeof item_events.$inferSelect;
@@ -348,7 +349,8 @@ export function mountItemRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: { now
     return { body: { item: res.row } };
   });
 
-  // answer_running_low { answers: [{ item, answer: low | in_stock, days? }] }: her answers to "still in stock?".
+  // answer_running_low { answers: [{ item, answer: low | in_stock, days? }] }: her answers to "still in stock?". A low one goes on
+  // its app's open cart (the agent copies it to the app in the same turn, so nothing is asked of it here).
   write("/api/items/answers", (b, by) => {
     if (!Array.isArray(b.answers) || !b.answers.length) refuse("answers must be a list of { item, answer: low | in_stock, days? }");
     const day = today();
@@ -361,6 +363,7 @@ export function mountItemRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: { now
       return { it, answer, days };
     });
     const to_cart: string[] = [];
+    const lineChanges: Change[] = [];
     const res = db.transaction((txRaw) => {
       const tx = tdb(txRaw);
       const events: string[] = [], rows: ItemRow[] = [];
@@ -372,6 +375,10 @@ export function mountItemRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: { now
           Object.assign(set, { misses_in_row: 0, wait_factor: 1 });
           confirmed++;
           to_cart.push(it.name);
+          // On its app's open cart at 1, unless it is there with a qty already; never a subscribed item.
+          const open = cartOf(tx, lineApp(tx, it), "open");
+          if (!it.subscription && !(open && lineFor(tx, open.id, it.name)?.qty))
+            setLine(tx, { item: it.name, qty: 1, source: "low" }, by, { changes: lineChanges, at: (opts.now ?? (() => new Date()))() });
         } else {
           stillHave++;
           const snooze = days ?? ESTIMATE.snoozeDays[it.group as keyof typeof ESTIMATE.snoozeDays] ?? 1;
@@ -394,6 +401,7 @@ export function mountItemRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: { now
     for (const id of res.events) emit("item_events", id, "insert", by);
     for (const r of res.rows) emit("items", r.id, "update", by);
     emit("house", res.house.id, "update", by);
+    emitAll(emit, lineChanges);
     return { body: { to_cart, items: res.rows } };
   });
 
