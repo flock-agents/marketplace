@@ -264,7 +264,8 @@ export function mountCartRoutes(hono: Hono<any>, db: Db, emit: Emit, deps: CartD
       if (total !== undefined) { tx.update(orders).set({ total, updated_by: by }).where(eq(orders.id, o.id)).run(); changes.push(["orders", o.id, "update", by]); }
       const cur = orderById(tx, o.id)!;
       if (paid === true && cur.status !== "paid") taken.push(...markPaid(tx, cur, by, opts));
-      if (paid === false && cur.status === "placed") rollUnpaid(tx, cur, by, opts);
+      // The agent records it in the conversation and says it there: the clock has nothing more to tell.
+      if (paid === false && cur.status === "placed") rollUnpaid(tx, cur, by, { ...opts, notice: "sent" });
     });
     // Lines it had returned that were on a cart being ordered: take them off the checkout on the app too.
     return { body: { order: cartView(db, orderById(db, o.id)!), ...(taken.length ? { taken_off: taken } : {}) } };
@@ -275,7 +276,7 @@ export function mountCartRoutes(hono: Hono<any>, db: Db, emit: Emit, deps: CartD
     const o = orderById(db, c.req.param("id") ?? "");
     if (!o) return { status: 404, body: { reason: "no such order" } };
     if (o.status !== "ordering" && o.status !== "placed") return conflict(`this cart is ${o.status.replace("_", " ")}: only an order being placed or placed can be cancelled`);
-    run((tx, changes) => (o.status === "ordering" ? reopenCart(tx, o, by, { changes, at: now() }) : rollUnpaid(tx, o, by, { changes, at: now() })));
+    run((tx, changes) => (o.status === "ordering" ? reopenCart(tx, o, by, { changes, at: now() }) : rollUnpaid(tx, o, by, { changes, at: now(), notice: "sent" })));
     return { body: { order: cartView(db, orderById(db, o.id)!) } };
   });
 }

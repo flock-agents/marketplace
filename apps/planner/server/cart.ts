@@ -223,9 +223,10 @@ function voidPurchases(tx: Db, o: OrderRow, value: 0 | 1, by: string, opts: Cart
 }
 
 /** A placed order that was not paid: `not_paid`, its purchases stop counting, and its lines go back on the app's open cart as
- *  `returned` (an item already there with a qty keeps its line). The family is told once (unpaid_notice pending). */
-export function rollUnpaid(tx: Db, o: OrderRow, by: string, opts: CartOpts = {}): void {
-  tx.update(orders).set({ status: "not_paid", unpaid_notice: "pending", updated_at: new Date().toISOString(), updated_by: by }).where(eq(orders.id, o.id)).run();
+ *  `returned` (an item already there with a qty keeps its line). The family is told once: by the order clock (unpaid_notice
+ *  pending), unless `notice: "sent"` (the agent recorded it in the conversation, and says it there itself). */
+export function rollUnpaid(tx: Db, o: OrderRow, by: string, opts: CartOpts & { notice?: "pending" | "sent" } = {}): void {
+  tx.update(orders).set({ status: "not_paid", unpaid_notice: opts.notice ?? "pending", updated_at: new Date().toISOString(), updated_by: by }).where(eq(orders.id, o.id)).run();
   opts.changes?.push(["orders", o.id, "update", by]);
   voidPurchases(tx, o, 1, by, opts);
   const lines = linesOf(tx, o.id).filter((l) => (l.qty ?? 0) > 0 && !itemFor(tx, l.item)?.subscription);

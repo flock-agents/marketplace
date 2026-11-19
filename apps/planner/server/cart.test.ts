@@ -199,7 +199,8 @@ describe("ordering", () => {
     await k.op("set_cart_line", { item: "eggs", qty: 1 });
     const r = await k.op("record_order", { order_id: id, paid: false });
     expect(r.order).toMatchObject({ status: "not_paid" });
-    expect(order(k, id).unpaid_notice).toBe("pending");
+    // The agent recorded it in the conversation and says it there: the clock tells nothing more.
+    expect(order(k, id).unpaid_notice).toBe("sent");
     expect(k.rows("item_events").map((e) => e.void)).toEqual([1, 1]);
     expect(item(k, "curd").last_bought).toBeNull();
     const back = await cartOf(k, "zepto");
@@ -237,7 +238,7 @@ describe("ordering", () => {
     await k.owner("POST", "/api/carts/zepto/order", {});
     await k.op("record_order", { order_id: id, placed: true });
     expect((await k.op("cancel_order", { order_id: id })).order).toMatchObject({ status: "not_paid" });
-    expect(order(k, id).unpaid_notice).toBe("pending");
+    expect(order(k, id).unpaid_notice).toBe("sent");
     expect(k.rows("item_events").every((e) => e.void === 1)).toBe(true);
     expect((await cartOf(k, "zepto")).lines.map((l: any) => [l.item, l.source])).toEqual([["curd", "returned"], ["bread", "returned"], ["eggs", "returned"]]);
     // The Orders tab lists it.

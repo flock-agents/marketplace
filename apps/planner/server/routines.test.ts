@@ -291,7 +291,7 @@ describe("the reminders", () => {
   it("the afternoon run wakes when tonight's dinner is planned, and the dry run puts nothing on a cart", async () => {
     const k = await family({ dinner: true, curd: true });
     await run(k, "afternoon", MON_3PM);
-    expect(k.wakes).toEqual([{ message: REMINDER_PROMPT("afternoon"), data: { which: "afternoon", date: MON } }]);
+    expect(k.wakes).toEqual([{ message: REMINDER_PROMPT("afternoon"), data: { which: "afternoon", date: MON, connected: ["zepto"], since: {} } }]);
     expect(k.rows("orders")).toEqual([]);
     expect(k.rows("order_lines")).toEqual([]);
   });
@@ -305,16 +305,24 @@ describe("the reminders", () => {
     expect(flockRefusal(message, data)).toBeNull();
     expect(data).toEqual({ which: "evening", date: TUE, connected: ["zepto"], since: { zepto: "2026-10-20" } });
     for (const s of ["get_reminder", "`date`", "import_order_history", "about 8 orders a call", "one app a call", "3 months", "`since`", "`empty`", "`text`", "word for word",
-      "`app_text`", "`block`", "sync: true", "sync_cart", "`ordered`", "record_order", "delivery_gap", "read that app's cart again", "answer_running_low", "set_cart_line",
+      "`app_text`", "`block`", "sync: true", "sync_cart", "`ordered`", "record_order", "delivery_gap", "the app's cart as it is", "answer_running_low", "set_cart_line",
       "order_cart", "set_meal", "set_dish"]) expect(message, s).toContain(s);
-    // The steps in their order: history, the reminder, send, copy the carts, check out, replies.
-    const order = ["import_order_history", "get_reminder", "word for word", "sync_cart", "`ordered`", "answer_running_low"].map((s) => message.indexOf(s));
-    expect(order).toEqual([...order].sort((a, b) => a - b));
-    // The afternoon reads no history: that is the evening's, once a day.
-    const afternoon = REMINDER_PROMPT("afternoon");
-    expect(afternoon).toContain("get_reminder");
-    expect(afternoon).not.toContain("import_order_history");
-    for (const p of [message, afternoon]) { expect(p).not.toContain("\u2014"); expect(p).not.toMatch(/about 20 orders/); }
+    // The steps in their order: history, the reminder, copy its carts to the apps, the reminder again, send, check out, replies.
+    // The carts are copied before anything is sent, so the delivery gap the sent text quotes is the app's cart as it now is.
+    for (const p of [message, REMINDER_PROMPT("afternoon")]) {
+      const at = (s: string, from = 0) => p.indexOf(s, from);
+      const first = at("get_reminder"), again = at("get_reminder", first + 1);
+      const steps = [at("import_order_history"), first, at("sync_cart"), again, at("word for word"), at("`ordered`"), at("answer_running_low")];
+      expect(steps.every((i) => i >= 0)).toBe(true);
+      expect(steps).toEqual([...steps].sort((a, b) => a - b));
+      expect(p).toContain("again with the same date");
+      expect(p).toContain("Send that answer's `text`");
+      expect(p).not.toContain("\u2014");
+      expect(p).not.toMatch(/about 20 orders/);
+    }
+    // Both reminders read the history first: something bought on a connected app is not asked about again.
+    expect(REMINDER_PROMPT("afternoon")).toContain("import_order_history, about 8 orders a call, one app a call");
+    expect(REMINDER_PROMPT("afternoon")).toContain("15:00");
   });
 
   it("a reminder whose wake did not go fails the run", async () => {
@@ -396,6 +404,20 @@ describe("the order clock", () => {
     expect(k.wakes.map((w) => w.data.order_id)).toEqual([k.id]);
     expect(k.order().unpaid_notice).toBe("sent");
     expect(JSON.stringify(k.rows("order_lines"))).toBe(lines);
+  });
+
+  it("an order the agent recorded not paid, or cancelled once placed, is not told again by the clock", async () => {
+    const k = await placed();
+    await k.op("record_order", { order_id: k.id, paid: false });
+    expect(k.order()).toMatchObject({ status: "not_paid", unpaid_notice: "sent" });
+    await orderClock(k.ctx(), later(48 * 60));
+    expect(k.wakes).toEqual([]);
+
+    const c = await placed();
+    await c.op("cancel_order", { order_id: c.id });
+    await orderClock(c.ctx(), later(48 * 60));
+    expect(c.order().status).toBe("not_paid");
+    expect(c.wakes).toEqual([]);
   });
 
   it("a paid order is left alone", async () => {

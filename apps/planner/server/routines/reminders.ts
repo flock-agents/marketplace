@@ -35,19 +35,16 @@ export function recordTime(ctx: RoutineCtx, column: "afternoon_time" | "evening_
   } catch (e) { console.warn(`[planner] ${column} was not recorded`, e); }
 }
 
-/** What the agent does when a reminder wakes it, as the app's operations in the order they are called. */
+/** What the agent does when a reminder wakes it, as the app's operations in the order they are called. The reminder's own
+ *  lines are copied to the apps' carts before it is sent, so the delivery gap it quotes is the app's cart as it now is. */
 export const REMINDER_PROMPT = (which: Which): string => [
-  which === "afternoon"
-    ? "The 15:00 reminder about tonight's dinner is due. The data below has `which` and `date` (the reminder's day)."
-    : "The 19:00 reminder about tomorrow's meals is due. The data below has `which`, `date` (the reminder's day), `connected` (the shopping apps the family signed in to) and `since` (how far each app's order history was read).",
-  ...(which === "evening"
-    ? ["1. Order history: for each app in `connected` whose connector can read past orders, read the orders placed since `since[app]` (the last 3 months for an app not in `since`) and give them to import_order_history, about 8 orders a call, one app a call. Skip an app whose connector cannot read orders. Nothing new: go on."]
-    : []),
-  `${which === "evening" ? 2 : 1}. get_reminder { which: "${which}", date } with the \`date\` from the data. If it answers \`empty\`: true, stop and send nothing.`,
-  `${which === "evening" ? 3 : 2}. Send its \`text\` on WhatsApp word for word, or its \`app_text\` with its \`block\` in the app chat. When it has a delivery_gap, read that app's cart again before you send: the gap is from the cart's last copy. If the app's cart says otherwise, sync_cart what it holds and call get_reminder again (the same reminder: nothing is asked twice), then send that one.`,
-  `${which === "evening" ? 4 : 3}. For each cart in \`carts\` with sync: true, put the same lines in that app's cart with its connector, then sync_cart what it holds.`,
-  `${which === "evening" ? 5 : 4}. For each cart in \`ordered\` (Order without asking is on; a retry lists the same ones): send its \`message\` word for word, check out on its app as the guide says, then record_order { order_id, placed: true, app_order_ref }.`,
-  `${which === "evening" ? 6 : 5}. The family's replies: running low or still in stock ("1 low, 2 fine for 2 weeks") is answer_running_low; "add dal" is set_cart_line; a yes to a cart is order_cart { app }; a change to a meal is set_meal / set_dish.`,
+  `The ${which === "afternoon" ? "15:00 reminder about tonight's dinner" : "19:00 reminder about tomorrow's meals"} is due. The data below has \`which\`, \`date\` (the reminder's day), \`connected\` (the shopping apps the family signed in to) and \`since\` (how far each app's order history was read).`,
+  "1. Order history first, so nothing bought already is asked about: for each app in `connected` whose connector can read past orders, read the orders placed since `since[app]` (the last 3 months for an app not in `since`) and give them to import_order_history, about 8 orders a call, one app a call. Skip an app whose connector cannot read orders. Nothing new: go on.",
+  `2. get_reminder { which: "${which}", date } with the \`date\` from the data. If it answers \`empty\`: true, stop and send nothing.`,
+  "3. For each cart in `carts` with sync: true, put the same lines in that app's cart with its connector, then sync_cart what the app's cart now holds (its delivery gap included).",
+  `4. Call get_reminder { which: "${which}", date } again with the same date: the same reminder, nothing is asked or added twice, and its delivery_gap is now the app's cart as it is. Send that answer's \`text\` on WhatsApp word for word, or its \`app_text\` with its \`block\` in the app chat.`,
+  "5. For each cart in `ordered` (Order without asking is on; a retry lists the same ones): send its `message` word for word, check out on its app as the guide says, then record_order { order_id, placed: true, app_order_ref }.",
+  "6. The family's replies: running low or still in stock (\"1 low, 2 fine for 2 weeks\") is answer_running_low; \"add dal\" is set_cart_line; a yes to a cart is order_cart { app }; a change to a meal is set_meal / set_dish.",
 ].join("\n");
 
 /** One reminder's run: record its time; for a family the app knows, wake the agent when the reminder has something to say
@@ -61,9 +58,7 @@ export async function reminder(ctx: RoutineCtx, which: Which, now: Date = new Da
   const { connected } = shoppingApps(db);
   const r = buildReminder(db, which, now, { dryRun: true, date });
   if (r.empty && !(which === "evening" && connected.length)) return;
-  await wake(ctx, REMINDER_PROMPT(which), which === "evening"
-    ? { which, date, connected, since: houseView(getHouse(db)).history_synced }
-    : { which, date });
+  await wake(ctx, REMINDER_PROMPT(which), { which, date, connected, since: houseView(getHouse(db)).history_synced });
 }
 
 export const afternoonReminder = (ctx: RoutineCtx, now?: Date) => reminder(ctx, "afternoon", now);
