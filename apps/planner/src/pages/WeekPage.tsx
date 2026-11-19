@@ -108,7 +108,7 @@ export function WeekPage() {
 
   return (
     <Page
-      title={weekTitle(weekStart)} subtitle={subtitle}
+      title={weekTitle(weekStart, !!house?.cooking_days.includes("Sun"))} subtitle={subtitle}
       actions={
         <Row>
           {status === "draft" ? <Value kind="select" value="Draft" tones={{ Draft: "warning" }} /> : null}

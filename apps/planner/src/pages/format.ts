@@ -212,9 +212,10 @@ export function eventRows(events: { what: string; when: string; tag: string | nu
 /** "23 Nov" from a date. */
 const dayMonth = (date: string): string => dayLabel(date).split(" ").slice(1).join(" ");
 
-/** The Week page's title: the week's dates, Monday to Saturday. "23 – 28 Nov"; across months "30 Nov – 5 Dec". */
-export function weekTitle(weekStart: string): string {
-  const [from, to] = [dayMonth(weekStart), dayMonth(addDays(weekStart, 5))];
+/** The Week page's title: the week's dates, Monday to Saturday ("23 – 28 Nov"; across months "30 Nov – 5 Dec"), or to
+ *  Sunday when Sunday is cooked too ("23 – 29 Nov"). */
+export function weekTitle(weekStart: string, sundayCooked = false): string {
+  const [from, to] = [dayMonth(weekStart), dayMonth(addDays(weekStart, sundayCooked ? 6 : 5))];
   const [fromDay, fromMonth] = from.split(" "), toMonth = to.split(" ")[1];
   return fromMonth === toMonth ? `${fromDay} – ${to}` : `${from} – ${to}`;
 }

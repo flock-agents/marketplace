@@ -61,7 +61,7 @@ export function FamilyPage() {
   /** Save through one of the family routes, then show what the app now holds. A refusal is thrown to the form that asked. */
   const save = async (path: string, body: object) => { await send(path, body); close(); void family.refetch(); };
   const toggle = (key: string) => setEditing(editing === key ? null : key);
-  const edit = (key: string, text = "Edit") => <Button size="sm" variant="soft" icon="pencil" onClick={() => toggle(key)}>{text}</Button>;
+  const edit = (key: string, text = "Edit", disabled = false) => <Button size="sm" variant="soft" icon="pencil" disabled={disabled} onClick={() => toggle(key)}>{text}</Button>;
   /** An editor opened in place, under the part it edits. */
   const panel = (key: string, title: string, content: ReactNode) => editing === key ? (
     <InlinePanel label={title} onClose={close} className="pl-panel">
@@ -84,9 +84,11 @@ export function FamilyPage() {
     const kept = rows.map((r) => ({ item: String(r.item ?? "").trim(), source: String(r.source ?? "").trim() })).filter((r) => r.item || r.source);
     const missing = kept.find((r) => !r.item || !r.source);
     if (missing) throw new Error(missing.item ? `Say who delivers ${missing.item}.` : "Say which item comes from each one.");
-    for (const s of subscriptions) if (!kept.some((k) => same(k.item, s.name))) await send("items/subscription", { item: s.name, active: false });
-    for (const k of kept) if (!subscriptions.some((s) => same(s.name, k.item) && s.subscription === k.source)) await send("items/subscription", { item: k.item, source: k.source, active: true });
-    close(); void items.refetch();
+    try {
+      for (const s of subscriptions) if (!kept.some((k) => same(k.item, s.name))) await send("items/subscription", { item: s.name, active: false });
+      for (const k of kept) if (!subscriptions.some((s) => same(s.name, k.item) && s.subscription === k.source)) await send("items/subscription", { item: k.item, source: k.source, active: true });
+      close();
+    } finally { void items.refetch(); }
   };
   const slotNames = [...SLOTS, ...house.extra_slots.map((s) => s.name)];
   const otherApps = shopping.connected.filter((a) => a !== shopping.main && a !== shopping.fallback);
@@ -172,7 +174,7 @@ export function FamilyPage() {
         ]} />
         <Field type="checkbox" name="order_without_asking" label="Order without asking" value={shopping.order_without_asking} onChange={(v) => void setOrderWithoutAsking(v === true)} />
         <p className="pl-quiet">{shopping.order_without_asking ? `${agent} orders what is in your carts without asking first.` : "Off: nothing is ordered until you reply or tap Order."}</p>
-        <Row>{edit("apps", "Shopping apps")}{edit("subscriptions", "Subscriptions")}</Row>
+        <Row>{edit("apps", "Shopping apps")}{edit("subscriptions", "Subscriptions", items.loading)}</Row>
         {panel("apps", "Shopping apps", (
           <Form fields={APPS_FIELDS} onCancel={close}
             initial={{ main: shopping.main, fallback: shopping.fallback ?? "none", connected: shopping.connected }}

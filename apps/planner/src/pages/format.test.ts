@@ -262,6 +262,11 @@ describe("weekTitle", () => {
   it("names both months when the week crosses one", () => {
     expect(weekTitle("2026-11-30")).toBe("30 Nov – 5 Dec");
   });
+  it("ends on Sunday when Sunday is a cooking day", () => {
+    expect(weekTitle("2026-11-23", true)).toBe("23 – 29 Nov");
+    expect(weekTitle("2026-11-30", true)).toBe("30 Nov – 6 Dec");
+    expect(weekTitle("2026-11-23", false)).toBe("23 – 28 Nov");
+  });
 });
 
 describe("cookingDaysText", () => {
