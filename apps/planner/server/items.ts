@@ -6,7 +6,7 @@
 import type { Hono } from "hono";
 import { and, eq, inArray } from "drizzle-orm";
 import { dish_items, dishes, house, item_events, items, order_lines, orders, plan_meals } from "./db/schema";
-import { appOf, ESTIMATE, HISTORY_DAYS, ITEM_GROUPS, SHOP_APPS, type GroceryApp } from "./db/constants";
+import { appOf, ESTIMATE, HISTORY_DAYS, ITEM_GROUPS, SHOP_APPS, TAG_TEXT, type GroceryApp } from "./db/constants";
 import { addDays, todayStr } from "./dates";
 import { getHouse, houseView, isObject, name, refuse, words, writeRoutes, type Db, type Emit } from "./family";
 import { dateOf, flag } from "./meals";
@@ -152,8 +152,6 @@ export function pantryView(db: Db, today: string): { counts: { all: number; in_s
   return { counts: { all: rows.length, in_stock: n("In stock"), low: n("Low"), snoozed: n("Snoozed") }, rows };
 }
 
-const TAG_TEXT: Record<string, string> = { counted: "counted", early_buy: "early buy", your_answer: "your answer", one_off: "one-off, not counted", not_counted: "not counted" };
-
 /** One item's page: its pattern, and the purchases and answers it was learned from, newest first. */
 export function itemView(db: Db, id: string, today: string) {
   const i = db.select().from(items).where(eq(items.id, id)).get();
@@ -171,7 +169,7 @@ export function itemView(db: Db, id: string, today: string) {
     events: evs.map((e) => ({
       what: e.kind === "answer" ? (e.days != null ? `Fine for ${trim(e.days, 1)} more days` : "Still have it")
         : [e.product ?? i.name, quantityText(e.amount, i.unit) ?? e.note, e.app === "outside" ? "bought outside the apps" : null].filter(Boolean).join(", "),
-      when: e.date, tag: e.tag ? TAG_TEXT[e.tag] ?? null : null })),
+      when: e.date, tag: e.tag ? TAG_TEXT[e.tag as keyof typeof TAG_TEXT] ?? null : null })),
   };
 }
 

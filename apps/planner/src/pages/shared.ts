@@ -1,28 +1,36 @@
-// What the four pages share: the app's own routes (read live, written with the server's reason on a refusal) and the rows as
+// What the pages share: the app's own routes (read live, written with the server's reason on a refusal) and the rows as
 // the pages hold them. The types are the server's, imported as types only: nothing of the server is bundled into a page.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { KitError, kitFetch, subscribeEvents } from "../flock/ui";
-import type { HouseView, PersonRow } from "../../server/family";
+import type { HouseView, PersonRow, shoppingApps } from "../../server/family";
 import type { DishView, MealView, WeekView } from "../../server/meals";
-import type { LineRow, OrderView } from "../../server/orders";
+import type { CartView, LineRow } from "../../server/cart";
+import type { itemView, PantryRow, pantryView } from "../../server/items";
 import type { RegularRow } from "../../server/regulars";
-import type { GroceryApp } from "../../server/db/constants";
 
-export type { DishView, HouseView, LineRow, MealView, OrderView, PersonRow, RegularRow, WeekView };
+export type { CartView, DishView, HouseView, LineRow, MealView, PantryRow, PersonRow, RegularRow, WeekView };
+/** The shopping apps: the main one, the fallback, the connected ones, and Order without asking. */
+export type Shopping = ReturnType<typeof shoppingApps>;
+/** The Pantry (GET /api/pantry) and one item's page (GET /api/items/:id). */
+export type PantryView = ReturnType<typeof pantryView>;
+export type ItemView = NonNullable<ReturnType<typeof itemView>>;
 /** A saved recipe as the kit's data route gives it: its lists still JSON text. */
 export type RecipeRow = { id: string; name: string; links: string | null; source: string | null; thumbnail: string | null; notes: string | null;
   ingredients: string | null; tags: string | null; for_people: string | null };
-export type Family = { people: PersonRow[]; house: HouseView; grocery_app: GroceryApp };
+export type Family = { people: PersonRow[]; house: HouseView; shopping: Shopping };
 
 /** Why a call failed, in the server's own words when it gave a reason. */
 export const why = (e: unknown): string =>
   e instanceof KitError ? String(e.body?.reason ?? e.message) : e instanceof Error && e.message ? e.message : "Something went wrong";
 
-/** A write to one of the app's routes. A refusal throws with the server's reason, which a Form shows under its fields. */
+/** A write to one of the app's routes. A refusal throws with the server's reason, which a Form shows under its fields, and
+ *  its HTTP status (`statusOf`). */
 export async function send<T = unknown>(path: string, body: object = {}, method: "POST" | "PATCH" | "DELETE" = "POST"): Promise<T> {
   try { return await kitFetch<T>(path, { method, body: method === "DELETE" ? undefined : JSON.stringify(body) }); }
-  catch (e) { throw new Error(why(e)); }
+  catch (e) { throw Object.assign(new Error(why(e)), { status: e instanceof KitError ? e.status : undefined }); }
 }
+/** The HTTP status a failed `send` was answered with, when there was one. */
+export const statusOf = (e: unknown): number | undefined => (e as { status?: number } | null)?.status;
 
 /** One of the app's read routes, read again whenever one of `tables` changes (by anyone) and after a reconnect. */
 export function useLive<T>(path: string, tables: string[]) {

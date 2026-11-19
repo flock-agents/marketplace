@@ -22,6 +22,8 @@ export const ITEM_GROUPS = ["daily", "few_days", "monthly"] as const;
 export const EVENT_KINDS = ["purchase", "answer", "ask", "unanswered"] as const;
 /** How an event counts towards the estimate. */
 export const EVENT_TAGS = ["counted", "early_buy", "your_answer", "one_off", "not_counted"] as const;
+/** How an event's tag reads on the item page. */
+export const TAG_TEXT: Record<(typeof EVENT_TAGS)[number], string> = { counted: "counted", early_buy: "early buy", your_answer: "your answer", one_off: "one-off, not counted", not_counted: "not counted" };
 
 /** The shopping apps, by their Flock connection id. */
 export const SHOP_APPS = ["zepto", "swiggy-instamart", "zomato-blinkit", "bigbasket", "amazon"] as const;
