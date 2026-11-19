@@ -263,6 +263,28 @@ describe("orders that are being placed, drafts over a planned week, and failures
     expect(rows("orders")).toHaveLength(4);
   });
 
+  it("a week planned in parts builds no order until it is made final, then all of them once", async () => {
+    const { op, rows } = await home();
+    await op("plan_week", { week_start: MON, mode: "draft", meals: [lunch] });
+    await op("plan_week", { week_start: MON, mode: "draft", keep_rest: true, meals: [dinner] });
+    await op("plan_week", { week_start: MON, mode: "draft", keep_rest: true, meals: [tueLunch] });
+    expect(rows("orders")).toHaveLength(0);
+    const r = await op("plan_week", { week_start: MON, mode: "final" });
+    expect(r.orders).toHaveLength(4);
+    expect(r.orders[0].lines.map((l: any) => l.item).sort()).toEqual(["atta", "cauliflower", "eggs", "milk", "potato", "rice", "toor dal"]);
+    expect(r.orders[1].lines.map((l: any) => l.item).sort()).toEqual(["milk", "onion"]);
+    expect(rows("orders")).toHaveLength(4);
+  });
+
+  it("a week that has orders takes a part with mode final and keep_rest, and still refuses a draft part", async () => {
+    const { op, rows, second, items } = await plannedWeek();
+    expect((await op("plan_week", { week_start: MON, mode: "draft", keep_rest: true, meals: [tueLunch] })).code).toBe("APP_REFUSED");
+    const r = await op("plan_week", { week_start: MON, mode: "final", keep_rest: true, meals: [tueLunch] });
+    expect(r.week.days.flatMap((d: any) => d.meals).map((m: any) => `${m.date} ${m.slot}`)).toEqual([`${MON} Lunch`, `${MON} Dinner`, `${TUE} Lunch`]);
+    expect(rows("orders")).toHaveLength(4);
+    expect(items(second.id).sort()).toEqual(["milk", "onion"]);
+  });
+
   it("an order the agent was woken to place is not rebuilt; recorded not placed, it catches up", async () => {
     const { op, settle, first, second, items } = await plannedWeek();
     await op("place_order", { order_id: first.id });

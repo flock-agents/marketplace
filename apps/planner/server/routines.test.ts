@@ -15,6 +15,14 @@ const MON_3PM = new Date(2026, 10, 23, 15, 0);
 const at = (h: number, min: number, day = 21) => new Date(2026, 10, day, h, min);
 
 type Wake = { message: string; data: any };
+// What Flock carries of a wake (flock-app/server/src/app-routine-runs.ts wakeAppRoutineAgent): a message of 4,000 characters
+// and data of 20,000 characters as JSON.stringify(data, null, 2). A wake over either is refused there, so it is here.
+const WAKE_MESSAGE_MAX_CHARS = 4_000, WAKE_DATA_MAX_CHARS = 20_000;
+const dataChars = (data: unknown): number => (data === undefined ? 0 : JSON.stringify(data, null, 2).length);
+function flockRefusal(message: string, data: unknown): string | null {
+  if (message.trim().length > WAKE_MESSAGE_MAX_CHARS) return `message is longer than ${WAKE_MESSAGE_MAX_CHARS} characters`;
+  return dataChars(data) > WAKE_DATA_MAX_CHARS ? `data is larger than ${WAKE_DATA_MAX_CHARS} characters as JSON` : null;
+}
 const DAILY_3PM = { type: "schedule", cron: "0 15 * * *" }, DAILY_7PM = { type: "schedule", cron: "0 19 * * *" };
 
 const monLunch = { date: MON, slot: "Lunch", dishes: [
@@ -35,7 +43,12 @@ async function app(opts: { family?: boolean } = {}) {
   const ctx = (trigger: unknown = null, answer: (data: any) => { ok: boolean; reason?: string; data?: unknown } = () => ({ ok: true, data: {} })) => ({
     kit: { db: k.kit.db, sqlite: k.kit.sqlite, emitChange: k.kit.emitChange },
     routine: { trigger },
-    wakeAgent: async (message: string, data?: unknown) => { const r = answer(data); if (r.ok) wakes.push({ message, data }); return r; },
+    wakeAgent: async (message: string, data?: unknown) => {
+      const refused = flockRefusal(message, data);
+      const r = refused ? { ok: false, reason: refused } : answer(data);
+      if (r.ok) wakes.push({ message, data });
+      return r;
+    },
   });
   const order = (id: string) => k.rows("orders").find((o) => o.id === id);
   const house = () => k.rows("house")[0];
@@ -64,6 +77,55 @@ describe("weekly plan", () => {
     expect(k.wakes[0].data.context.week_start).toBe("2026-11-23");
     expect(k.wakes[0].data.context.people.map((p: any) => p.name)).toEqual(["Asha"]);
     expect(k.wakes[0].message).toBe(WEEKLY_PROMPT("2026-11-23"));
+  });
+
+  /** A family with long answers, everyday items, saved recipes and last week planned in full. */
+  const family = async (size: { people: number; items: number; recipes: number }) => {
+    const k = await app({ family: false });
+    const everyone = [["Shivashankar", "me", "adult"], ["Ananya", "wife", "adult"], ["Agastya", "son", "child"], ["Meera", "daughter", "child"], ["Lakshmi", "mother", "elder"], ["Raman", "father", "elder"]];
+    for (const [name, relationship, group] of everyone.slice(0, size.people))
+      await k.op("set_person", { name, relationship, group, portions: "3 rotis at dinner, a small bowl of rice at lunch, 2 idlis at breakfast", diet: "vegetarian, eggs on weekends",
+        allergies: "peanuts", dislikes: "bitter gourd, brinjal, anything too spicy", targets: "more protein, around 1800 kcal", note: "eats lunch at the office on weekdays" });
+    await k.op("set_house_rules", { rules: [{ kind: "veg", days: ["Tue", "Thu"], note: "no eggs either" }, { kind: "fasting", days: ["Ekadashi"] }, { kind: "no_onion_garlic", days: ["Mon"] }],
+      notes: "Dinner by 8 pm. Sunday lunch is the big meal of the week." });
+    await k.op("set_cook", { name: "Lakshmi akka", days: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"], arrival: "07:30", makes_well: "sambar, rasam, poriyal, chapati, lemon rice", note: "leaves by 11" });
+    await k.op("set_slots", { extra_slots: [{ name: "Agastya's tiffin", days: ["Mon", "Tue", "Wed", "Thu", "Fri"], for: ["Agastya"] }], order_in: [{ day: "Sun", slot: "Dinner", note: "pizza night" }] });
+    const items = ["milk", "curd", "bread", "eggs", "bananas", "coffee powder", "tender coconut", "paneer", "butter", "idli batter", "tomatoes", "onions", "green chillies", "coriander", "apples"];
+    for (const [i, item] of items.slice(0, size.items).entries()) await k.op("set_regular", i % 3 === 2 ? { item, amount: 6, unit: "pc", every: "weekdays", weekdays: ["Mon", "Wed", "Fri"], for_whom: "Agastya" }
+      : i % 3 ? { item, amount: 500, unit: "g", every: "week", times_per_week: 2 } : { item, amount: 1, unit: "l", every: "day" });
+    for (let i = 0; i < size.recipes; i++) await k.op("save_recipe", { name: `Grandmother's recipe number ${i + 1} with coconut`, links: [`https://www.instagram.com/reel/recipe${i}`], tags: ["breakfast", "tiffin", "quick"], for: ["Agastya", "Meera"] });
+    const lastWeek = ["16", "17", "18", "19", "20", "21", "22"].flatMap((d) => ["Breakfast", "Lunch", "Agastya's tiffin", "Dinner"].map((slot) => ({ date: `2026-11-${d}`, slot,
+      dishes: [{ name: `${slot} main with gravy` }, { name: `${slot} side, dry` }, { name: `${slot} salad or raita` }] })));
+    await k.op("plan_week", { week_start: "2026-11-16", mode: "draft", meals: lastWeek });
+    return k;
+  };
+
+  it("the context goes without the rows' bookkeeping, inside Flock's 20,000 characters of wake data", async () => {
+    const k = await family({ people: 4, items: 8, recipes: 12 });
+    await weeklyPlan(k.ctx(), SAT_EVENING);
+    expect(k.wakes).toHaveLength(1);
+    const { data } = k.wakes[0];
+    expect(dataChars(data)).toBeLessThanOrEqual(WAKE_DATA_MAX_CHARS);
+    const c = data.context;
+    expect([c.people.length, c.regulars.length, c.recipes.length, c.last_week.length]).toEqual([4, 8, 12, 28]);
+    for (const row of [...c.people, ...c.regulars, c.house]) for (const col of ["id", "created_at", "updated_at", "updated_by"]) expect(col in row).toBe(false);
+    // What the plan is made from is all there.
+    expect(c.people[0]).toMatchObject({ name: "Shivashankar", group: "adult", portions: "3 rotis at dinner, a small bowl of rice at lunch, 2 idlis at breakfast", allergies: "peanuts" });
+    expect(c.regulars[0]).toMatchObject({ item: "milk", amount: 1, unit: "l", every: "day" });
+    expect(c.house).toMatchObject({ cook_name: "Lakshmi akka", rules: [{ kind: "veg" }, { kind: "fasting" }, { kind: "no_onion_garlic" }] });
+    expect(c.recipes[0].id).toBeString();
+  });
+
+  it("a family of 6 with 15 everyday items and 40 recipes is still woken: its context is too long for a wake, so the wake names the week and the prompt says where to read it", async () => {
+    const k = await family({ people: 6, items: 15, recipes: 40 });
+    await weeklyPlan(k.ctx(), SAT_EVENING);
+    expect(k.wakes).toEqual([{ message: WEEKLY_PROMPT("2026-11-23"), data: { week_start: "2026-11-23" } }]);
+    expect(dataChars(k.wakes[0].data)).toBeLessThanOrEqual(WAKE_DATA_MAX_CHARS);
+    expect(WEEKLY_PROMPT("2026-11-23")).toContain("when it has `context`");
+    // The whole context is the agent's to read: an operation's answer has no such limit.
+    const { context } = await k.op("plan_week", { week_start: "2026-11-23", mode: "draft" });
+    expect([context.people.length, context.regulars.length, context.recipes.length]).toEqual([6, 15, 40]);
+    expect(dataChars(context)).toBeGreaterThan(WAKE_DATA_MAX_CHARS);
   });
 
   it("a run on a Monday plans the week after", async () => {
@@ -190,6 +252,25 @@ describe("tomorrow's meals check-in", () => {
   });
 });
 
+describe("what a wake carries", () => {
+  it("a check-in for a full day is far below Flock's limits", async () => {
+    const day = (date: string) => ["Breakfast", "Lunch", "Dinner"].map((slot) => ({ date, slot, dishes: ["main with gravy", "side, dry", "salad or raita"].map((d) => ({
+      name: `${slot} ${d}`, for: ["Asha"], portion_note: "4 for me, 1 for wife", video_url: `https://www.youtube.com/watch?v=${slot}${d.length}`,
+      ingredients: ["cauliflower florets", "green chillies", "coriander leaves", "paneer cubes", "fresh cream", "spinach"].map((item) => ({ item: `${item} for ${slot} ${d}`, amount: 200, unit: "g" })) })) }));
+    const k = await plannedWeek(day(MON));
+    await k.op("set_cook", { name: "Lakshmi", days: ["Mon"], arrival: "07:30" });
+    await k.op("cancel_order", { order_id: k.first.id });   // every fresh item is then "not on any order yet": the longest text
+    await dinnerCheck(k.ctx(DAILY_3PM), MON_3PM);
+    await tomorrowCheck(k.ctx(DAILY_7PM), SUN_7PM);
+    expect(k.wakes).toHaveLength(2);
+    for (const w of k.wakes) { expect(dataChars(w.data)).toBeLessThan(WAKE_DATA_MAX_CHARS / 4); expect(w.message.length).toBeLessThan(WAKE_MESSAGE_MAX_CHARS / 4); }
+  });
+
+  it("the weekly prompt fits in a wake's message", () => {
+    expect(WEEKLY_PROMPT(MON).length).toBeLessThanOrEqual(WAKE_MESSAGE_MAX_CHARS);
+  });
+});
+
 describe("the check-ins record when they really run", () => {
   it("reads a fixed daily time from a schedule trigger, and nothing from any other", () => {
     expect(dailyTime({ type: "schedule", cron: "0 15 * * *" })).toBe("15:00");
@@ -265,12 +346,16 @@ describe("order clock", () => {
     await orderClock(k.ctx(), at(18, 15));
     expect(k.wakes).toHaveLength(1);
     const { message, data } = k.wakes[0];
-    expect(data.order.id).toBe(k.first.id);
-    expect(data.order.lines.map((l: any) => l.item).sort()).toEqual(["atta", "cauliflower", "paneer", "potato", "rice", "spinach"]);
+    expect(Object.keys(data)).toEqual(["order_id", "app", "message", "lines", "needs_product", "needs_qty"]);
+    expect(data.order_id).toBe(k.first.id);
+    expect(data.app).toBe("zepto");
+    expect(data.lines.map((l: any) => l.item).sort()).toEqual(["atta", "cauliflower", "paneer", "potato", "rice", "spinach"]);
+    // A line carries what placing needs, and nothing of the row's bookkeeping.
+    expect(data.lines.find((l: any) => l.item === "potato")).toEqual({ item: "potato", unit: "g", amount: 500, qty: 1, qty_checked: 0, product_id: null, name_on_app: null, pack: null, price: null });
     expect(data.message).toStartWith("Ordering this now: ");
     expect(data.message).toEndWith(" on Zepto");
-    expect(data.needs_product).toHaveLength(6);
-    expect(data.needs_qty).toHaveLength(6);
+    expect([...data.needs_product].sort()).toEqual(["atta", "cauliflower", "paneer", "potato", "rice", "spinach"]);
+    expect([...data.needs_qty].sort()).toEqual(["atta", "cauliflower", "paneer", "potato", "rice", "spinach"]);
     expect(k.order(k.first.id).wake_sent_at).toBe("2026-11-21T18:15");
     for (const s of ["`message`", "needs_product", "needs_qty", "add_to_order { order_id, item", "Zepto", "placed: true", "paid: true", "paid: false", "Cancel nothing on Zepto"]) expect(message).toContain(s);
     expect(message.indexOf("placed: true")).toBeLessThan(message.indexOf("paid: true"));
@@ -280,19 +365,67 @@ describe("order clock", () => {
     // The second order (Tue and Wed) is due on Monday evening, not before.
     expect(k.second.place_at).toBe("2026-11-23T18:00");
     await orderClock(k.ctx(), at(17, 45, 23));
-    expect(k.wakes.filter((w) => w.data.order.id === k.second.id)).toEqual([]);
+    expect(k.wakes.filter((w) => w.data.order_id === k.second.id)).toEqual([]);
     await orderClock(k.ctx(), at(18, 0, 23));
-    expect(k.wakes.filter((w) => w.data.order.id === k.second.id)).toHaveLength(1);
+    expect(k.wakes.filter((w) => w.data.order_id === k.second.id)).toHaveLength(1);
   });
 
-  it("gives the same payload as place_order", async () => {
+  it("hands over what place_order answers, slimmed: the same message, lines and needs, and the order marked the same", async () => {
     const a = await plannedWeek(), b = await plannedWeek();
+    for (const k of [a, b]) await k.op("remember_product", { item: "paneer", app: "zepto", product_id: "z-paneer", name_on_app: "Amul Paneer 200 g", pack: "200 g", pack_amount: 200, pack_unit: "g", price: 95 });
     await orderClock(a.ctx(), SAT_EVENING);
     const placed = await b.op("place_order", { order_id: b.first.id });
-    const shape = (p: any) => ({ message: p.message, lines: p.order.lines.map((l: any) => [l.item, l.amount, l.unit, l.qty]), wake_sent_at: p.order.wake_sent_at,
-      needs_product: p.needs_product.map((l: any) => l.item), needs_qty: p.needs_qty.map((l: any) => l.item) });
-    expect(Object.keys(a.wakes[0].data).sort()).toEqual(Object.keys(placed).sort());
-    expect(shape(a.wakes[0].data)).toEqual(shape(placed));
+    const woken = a.wakes[0].data;
+    const slim = (l: any) => ({ item: l.item, unit: l.unit, amount: l.amount, qty: l.qty, qty_checked: l.qty_checked, product_id: l.product_id, name_on_app: l.name_on_app, pack: l.pack, price: l.price });
+    expect(woken.message).toBe(placed.message);
+    expect(woken.app).toBe(placed.order.app);
+    expect(woken.lines).toEqual(placed.order.lines.map(slim));
+    expect(woken.lines.find((l: any) => l.item === "paneer")).toMatchObject({ product_id: "z-paneer", name_on_app: "Amul Paneer 200 g", pack: "200 g", price: 95, qty: 1, qty_checked: 1 });
+    expect(woken.needs_product).toEqual(placed.needs_product.map((l: any) => l.item));
+    expect(woken.needs_qty).toEqual(placed.needs_qty.map((l: any) => l.item));
+    expect(woken.needs_product).not.toContain("paneer");
+    expect(a.order(a.first.id).wake_sent_at).toBe(placed.order.wake_sent_at);
+  });
+
+  /** A week whose first order (Sun and Mon) has `n` lines, none with a product: Monday's lunch and dinner, n ingredients. */
+  const longOrder = async (n: number) => {
+    const names = ["basmati rice", "toor dal", "cauliflower florets", "green chillies", "coriander leaves", "cold pressed mustard oil", "whole wheat atta", "kashmiri red chilli powder"];
+    const ingredients = Array.from({ length: n }, (_, i) => ({ item: `${names[i % names.length]} ${i + 1}`, amount: 250 + i, unit: i % 2 ? "g" : "ml", keeps: i % 3 ? "fresh" : "long" }));
+    const dishes = (from: number, to: number, slot: string) => Array.from({ length: Math.ceil((to - from) / 5) }, (_, d) => ({
+      name: `${slot} dish number ${d + 1} with gravy`, ingredients: ingredients.slice(from + d * 5, Math.min(from + d * 5 + 5, to)) }));
+    const half = Math.ceil(n / 2);
+    return plannedWeek([{ date: MON, slot: "Lunch", dishes: dishes(0, half, "Lunch") }, { date: MON, slot: "Dinner", dishes: dishes(half, n, "Dinner") }]);
+  };
+
+  it("a 40-line order with no products is handed over whole, inside Flock's 20,000 characters of wake data", async () => {
+    const k = await longOrder(40);
+    expect(k.first.lines).toHaveLength(40);
+    await orderClock(k.ctx(), at(18, 15));
+    expect(k.wakes).toHaveLength(1);
+    const { data } = k.wakes[0];
+    expect(data.lines).toHaveLength(40);
+    expect(data.needs_product).toHaveLength(40);
+    expect(data.needs_qty).toHaveLength(40);
+    expect(dataChars(data)).toBeLessThanOrEqual(WAKE_DATA_MAX_CHARS);
+    expect(dataChars(data)).toBeLessThanOrEqual(18_000);
+    expect(k.order(k.first.id).wake_sent_at).toBe("2026-11-21T18:15");
+  });
+
+  it("an order too long for a wake is handed over by its id and message alone, and the prompt says to call place_order", async () => {
+    const k = await longOrder(120);
+    await orderClock(k.ctx(), at(18, 15));
+    expect(k.wakes).toHaveLength(1);
+    const { message, data } = k.wakes[0];
+    expect(Object.keys(data)).toEqual(["order_id", "message"]);
+    expect(data.order_id).toBe(k.first.id);
+    expect(data.message).toStartWith("Ordering this now: ");
+    expect(dataChars(data)).toBeLessThanOrEqual(WAKE_DATA_MAX_CHARS);
+    expect(message).toContain("no `lines`");
+    expect(message).toContain("place_order { order_id }");
+    // The order is still the agent's to read in full.
+    const placed = await k.op("place_order", { order_id: k.first.id });
+    expect(placed.order.lines).toHaveLength(120);
+    expect(placed.needs_product).toHaveLength(120);
   });
 
   it("an order the agent already began placing through place_order is not woken for", async () => {
@@ -316,8 +449,8 @@ describe("order clock", () => {
 
     await orderClock(k.ctx(), at(19, 30));    // 75 minutes on
     expect(k.wakes).toHaveLength(2);
-    expect(k.wakes[1].data.order.id).toBe(k.first.id);
-    expect(k.wakes[1].data.order.lines.map((l: any) => l.item)).toContain("tomato");
+    expect(k.wakes[1].data.order_id).toBe(k.first.id);
+    expect(k.wakes[1].data.lines.map((l: any) => l.item)).toContain("tomato");
     expect(k.wakes[1].data.message).not.toBe(k.wakes[0].data.message);
     expect(k.order(k.first.id).wake_sent_at).toBe("2026-11-21T19:30");
 
@@ -348,7 +481,7 @@ describe("order clock", () => {
     await k.op("set_dish", { date: MON, slot: "Lunch", name: "Salad", ingredients: [{ item: "cucumber", amount: 2, unit: "pc" }] });
     await orderClock(k.ctx(), at(18, 30));   // the clock builds the order from the plan as it stands
     expect(k.wakes).toHaveLength(1);
-    expect(k.wakes[0].data.order.lines.map((l: any) => l.item)).toEqual(["cucumber"]);
+    expect(k.wakes[0].data.lines.map((l: any) => l.item)).toEqual(["cucumber"]);
   });
 
   it("an order woken for, emptied, and still scheduled an hour later is not woken for again", async () => {
@@ -383,9 +516,9 @@ describe("a wake that does not go", () => {
   it("the order clock takes its mark off the order, still hands over the other due orders, then fails once", async () => {
     const k = await plannedWeek();
     const monEvening = at(18, 0, 23);   // both the first order (never placed) and the second are due
-    const run = orderClock(k.ctx(null, (data) => (data.order.id === k.first.id ? busy() : { ok: true })), monEvening);
+    const run = orderClock(k.ctx(null, (data) => (data.order_id === k.first.id ? busy() : { ok: true })), monEvening);
     await expect(run).rejects.toThrow(`1 of 2 due orders not handed to the agent (${k.first.id}: the agent was not woken: agent busy)`);
-    expect(k.wakes.map((w) => w.data.order.id)).toEqual([k.second.id]);
+    expect(k.wakes.map((w) => w.data.order_id)).toEqual([k.second.id]);
     expect(k.order(k.first.id).wake_sent_at).toBeNull();
     expect(k.order(k.second.id).wake_sent_at).toBe("2026-11-23T18:00");
 
@@ -394,7 +527,7 @@ describe("a wake that does not go", () => {
     k.settle();
     expect(k.rows("order_lines").filter((l) => l.order_id === k.first.id).map((l) => l.item)).toContain("tomato");
     await orderClock(k.ctx(), at(18, 15, 23));
-    expect(k.wakes.map((w) => w.data.order.id)).toEqual([k.second.id, k.first.id]);
+    expect(k.wakes.map((w) => w.data.order_id)).toEqual([k.second.id, k.first.id]);
   });
 
   it("a wake that throws is treated the same", async () => {
@@ -434,7 +567,7 @@ describe("the family gate", () => {
     // The same app once a person is known: every routine speaks.
     await k.op("set_person", { name: "Asha", group: "adult" });
     await runAll(k);
-    expect(k.wakes.map((w) => Object.keys(w.data).sort().join())).toEqual(["context,week_start", "message,needs_product,needs_qty,order", "meal_id,text", "date,meal_ids,text"]);
+    expect(k.wakes.map((w) => Object.keys(w.data).sort().join())).toEqual(["context,week_start", "app,lines,message,needs_product,needs_qty,order_id", "meal_id,text", "date,meal_ids,text"]);
   });
 
   it("a carried-over profile and nobody yet: only the weekly run wakes, to structure it; the check-ins and the clock are silent", async () => {
@@ -459,6 +592,6 @@ describe("the family gate", () => {
     await k.op("set_person", { name: "Asha", group: "adult" });
     await k.op("set_house_rules", { structured: true });
     await runAll(k);
-    expect(k.wakes.slice(1).map((w) => Object.keys(w.data).sort().join())).toEqual(["context,week_start", "message,needs_product,needs_qty,order", "meal_id,text", "date,meal_ids,text"]);
+    expect(k.wakes.slice(1).map((w) => Object.keys(w.data).sort().join())).toEqual(["context,week_start", "app,lines,message,needs_product,needs_qty,order_id", "meal_id,text", "date,meal_ids,text"]);
   });
 });

@@ -5,7 +5,7 @@ import { dayLabel, nextMonday, todayStr } from "../dates";
 import { getHouse } from "../family";
 import { profilePending } from "../gate";
 import { weekContext } from "../meals";
-import { wake, type RoutineCtx } from "./ctx";
+import { fitsWake, wake, type RoutineCtx } from "./ctx";
 
 const STRUCTURE_PROFILE = "Structure the family profile below with set_person / set_house_rules / set_cook / set_slots / set_regular, "
   + "then clear it with set_house_rules { structured: true }. Keep the family's own words, and ask them about anything the profile leaves unclear. "
@@ -14,14 +14,18 @@ const STRUCTURE_PROFILE = "Structure the family profile below with set_person / 
 /** What the agent does on the weekly run, as the app's operations in the order they are called. */
 export const WEEKLY_PROMPT = (weekStart: string): string => [
   `Plan the family's meals for the week of ${dayLabel(weekStart)} (week_start ${weekStart}), place its first order and send them the plan.`,
-  `1. The context to plan from is in the data below (people, house rules, the cook, everyday items, last week's dishes, the recipe book); plan_week { week_start: "${weekStart}", mode: "draft" } without meals answers with it again.`,
-  `2. plan_week { week_start: "${weekStart}", mode: "final", meals } with the whole week's meals. It answers with the week and its orders.`,
+  `1. The context to plan from is in the data below when it has \`context\` (people, house rules, the cook, everyday items, last week's dishes, the recipe book); plan_week { week_start: "${weekStart}", mode: "draft" } without meals answers with it, in full.`,
+  `2. Send the week one day a call (a call carries 16 KB at most): plan_week { week_start: "${weekStart}", mode: "draft", meals } with the first day's meals, then each other day the same with keep_rest: true (only the meals sent are replaced). Then plan_week { week_start: "${weekStart}", mode: "final" } without meals: it answers with the week and its orders. If a draft is refused because the week already has orders, send every day with mode: "final" and keep_rest: true instead: each answer has the orders.`,
   "3. place_order { order_id } on the first of those orders right away, fill the lines in its needs_product and needs_qty with add_to_order { order_id, item, … }, and place it on the grocery app. Never ask for a yes before placing. An order with nothing on it is refused: leave it.",
   "4. record_order { order_id, placed: true } as soon as it is placed. When the answer has intro, send it to the family word for word.",
   `5. ask_low_or_out { week_start: "${weekStart}" } answers with the week's long-life items and a question. Send the family the plan, for them to change, with that question in the same message.`,
   `6. When they answer, ask_low_or_out { week_start: "${weekStart}", low_or_out: [the items they said are low or out] }: send the names from \`items\`, not their raw words, and an empty list when they have everything.`,
   "After placing, the payment step asks the person. When they pay, record_order { order_id, paid: true }. If they do not pay, or say cancel, record_order { order_id, paid: false }. Cancel nothing on the grocery app: the items move to the next order.",
 ].join("\n");
+
+/** A row without the kit's own columns: the agent plans from what the family said, not from the row's bookkeeping. */
+const bare = <T extends object>(row: T): Partial<T> =>
+  Object.fromEntries(Object.entries(row).filter(([k]) => !["id", "created_at", "updated_at", "updated_by"].includes(k))) as Partial<T>;
 
 export async function weeklyPlan(ctx: RoutineCtx, now: Date = new Date()): Promise<void> {
   const { db, sqlite } = ctx.kit;
@@ -30,5 +34,8 @@ export async function weeklyPlan(ctx: RoutineCtx, now: Date = new Date()): Promi
     return;
   }
   const weekStart = nextMonday(todayStr(now));
-  await wake(ctx, WEEKLY_PROMPT(weekStart), { week_start: weekStart, context: weekContext(db, weekStart) });
+  const c = weekContext(db, weekStart);
+  // Cut down to fit in a wake; a context still too long is left out, and the agent reads it with plan_week.
+  const data = { week_start: weekStart, context: { ...c, people: c.people.map(bare), regulars: c.regulars.map(bare), house: bare(c.house) } };
+  await wake(ctx, WEEKLY_PROMPT(weekStart), fitsWake(data) ? data : { week_start: weekStart });
 }

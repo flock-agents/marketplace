@@ -50,6 +50,41 @@ describe("the agent's interface", () => {
     expect(guide.trimEnd().split("\n").length).toBeLessThanOrEqual(150);
   });
 
+  // Flock refuses an operation whose body is over 16 KB (flock-app/server/src/routes/app-ops.ts MAX_BODY_BYTES, counted in
+  // UTF-8 bytes of the JSON as sent), so a week is planned a day a call (plan_week keep_rest).
+  it("one day of a week, as plan_week takes it, fits in Flock's 16,384 bytes for an operation's body; the whole week does not", () => {
+    const ingredients = ["basmati rice", "toor dal", "cauliflower florets", "green chillies", "coriander leaves", "mustard oil"]
+      .map((item, i) => ({ item, amount: 250 + i * 50, unit: i % 2 ? "g" : "ml", keeps: i < 2 ? "long" : "fresh" }));
+    const dish = (name: string) => ({ name, for: ["Shivashankar", "Ananya", "Agastya"], portion_note: "4 for me, 2 for Ananya, 1 small one for Agastya",
+      video_url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ&list=PL1234567890", ingredients });
+    const day = (date: string) => ["Breakfast", "Lunch", "Agastya's tiffin", "Dinner"].map((slot) => ({ date, slot, note: "the cook comes late today",
+      dishes: [`${slot} main with gravy`, `${slot} side, dry`, `${slot} salad or raita`].map(dish) }));
+    const bytes = (body: object) => Buffer.byteLength(JSON.stringify(body), "utf8");
+    const oneDay = bytes({ week_start: "2026-11-23", mode: "draft", keep_rest: true, meals: day("2026-11-23") });
+    expect(oneDay).toBeLessThan(16_384);
+    // With room to spare: a day twice as heavy still goes.
+    expect(oneDay).toBeLessThan(16_384 / 2);
+    const week = bytes({ week_start: "2026-11-23", mode: "final", meals: [23, 24, 25, 26, 27, 28, 29].flatMap((d) => day(`2026-11-${d}`)) });
+    expect(week).toBeGreaterThan(16_384);
+    for (const text of [guide, operations.find((o) => o.name === "plan_week")!.description]) expect(text).toContain("keep_rest: true");
+    expect(guide).toContain("one day a call");
+  });
+
+  it("import_order_history is taught slim: date, item, qty and pack, about 20 orders and at most 200 items a call", () => {
+    const d = operations.find((o) => o.name === "import_order_history")!.description;
+    for (const text of [guide, d]) for (const said of ["20 orders", "200 items", "most recent"]) expect(text).toContain(said);
+    // 20 orders of 10 items (200 items, with names as long as the grocery apps') fit an operation's body in the slim shape;
+    // the same orders with each item's product do not, which is why products are remembered afterwards.
+    const history = (item: (i: number) => object) => ({ app: "swiggy-instamart", orders: Array.from({ length: 20 }, (_, k) => ({
+      date: `2026-11-${String(k + 1).padStart(2, "0")}`, items: Array.from({ length: 10 }, (_, i) => item(i)) })) });
+    const slim = (i: number) => ({ item: `Amul Taaza Toned Fresh Milk Pouch ${i}`, qty: 2, pack: "500 ml" });
+    const full = (i: number) => ({ ...slim(i), product_id: `prod_0123456789abcdef${i}`, name_on_app: `Amul Taaza Toned Fresh Milk Pouch ${i}`, pack_amount: 500, pack_unit: "ml",
+      price: 29, image: `https://cdn.grocery.example/images/products/0123456789abcdef${i}.jpg` });
+    const bytes = (body: object) => Buffer.byteLength(JSON.stringify(body), "utf8");
+    expect(bytes(history(slim))).toBeLessThan(16_384);
+    expect(bytes(history(full))).toBeGreaterThan(16_384);
+  });
+
   it("the instructions and the guide name only operations the app has", () => {
     const known = new Set<string>(OPERATION_NAMES);
     // Written like an operation (a verb, then "_"), and not one: the app's tables, and a tool of Zepto's own connection.

@@ -12,6 +12,11 @@ export type RoutineCtx = {
   wakeAgent(message: string, data?: unknown): Promise<{ ok: boolean; reason?: string }>;
 };
 
+/** Flock carries at most 20,000 characters of a wake's data, counted as JSON with two-space indents (its
+ *  WAKE_DATA_MAX_CHARS), and refuses the wake above that. What a routine sends stays under this, with room to spare. */
+export const WAKE_DATA_BUDGET = 18_000;
+export const fitsWake = (data: unknown): boolean => JSON.stringify(data, null, 2).length <= WAKE_DATA_BUDGET;
+
 /** Wake the agent, or throw: a wake that did not go is a failed run in the routine's history, never a message silently lost. */
 export async function wake(ctx: RoutineCtx, message: string, data: unknown): Promise<void> {
   const r = await ctx.wakeAgent(message, data);

@@ -116,6 +116,38 @@ describe("plan_week", () => {
     expect(rows("dish_items").map((i) => i.item).sort()).toEqual(["moong dal", "toor dal"]);
   });
 
+  it("keep_rest plans a week in parts: each part replaces only its own meals, and the parts add up to the week", async () => {
+    const { op, rows } = await boot();
+    const tue = "2026-11-24";
+    const tueDinner = { date: tue, slot: "Dinner", dishes: [{ name: "Dal", ingredients: [{ item: "toor dal", amount: 200, unit: "g", keeps: "long" }] }] };
+    // An older draft of the week: the first part, without keep_rest, takes its place.
+    await op("plan_week", { week_start: MON, mode: "draft", meals: [{ date: "2026-11-29", slot: "Dinner", dishes: [{ name: "Old plan" }] }] });
+    await op("plan_week", { week_start: MON, mode: "draft", meals: [lunch] });
+    const two = await op("plan_week", { week_start: MON, mode: "draft", keep_rest: true, meals: [tueDinner, { date: tue, slot: "Breakfast", dishes: [{ name: "Idli" }] }] });
+    expect(two.week.status).toBe("draft");
+    expect(two.week.days.flatMap((d: any) => d.meals).map((m: any) => `${m.date} ${m.slot}: ${dishNames(m)}`)).toEqual([
+      `${MON} Lunch: Rice,Aloo gobi,Sambar,Boiled eggs`, `${tue} Breakfast: Idli`, `${tue} Dinner: Dal`]);
+    // A part sent again replaces that meal only: its dishes and ingredients go, the other meals keep their rows.
+    const lunchRow = rows("plan_meals").find((m) => m.slot === "Lunch").id;
+    const again = await op("plan_week", { week_start: MON, mode: "draft", keep_rest: true, meals: [{ date: tue, slot: "Dinner", dishes: [{ name: "Rajma" }] }] });
+    expect(again.week.days.flatMap((d: any) => d.meals).map((m: any) => `${m.slot}: ${dishNames(m)}`)).toEqual(["Lunch: Rice,Aloo gobi,Sambar,Boiled eggs", "Breakfast: Idli", "Dinner: Rajma"]);
+    expect(rows("plan_meals").find((m) => m.slot === "Lunch").id).toBe(lunchRow);
+    expect(rows("dishes").map((d) => d.name).sort()).toEqual(["Aloo gobi", "Boiled eggs", "Idli", "Rajma", "Rice", "Sambar"]);
+    expect(rows("dish_items").map((i) => i.item)).not.toContain("toor dal");
+    // Then the week is made final without meals.
+    expect((await op("plan_week", { week_start: MON, mode: "final" })).week.status).toBe("final");
+    expect(rows("plan_meals").map((m) => m.status)).toEqual(["final", "final", "final"]);
+  });
+
+  it("keep_rest with mode final leaves the week final: the meals kept are final too", async () => {
+    const { op, rows } = await boot();
+    await op("plan_week", { week_start: MON, mode: "draft", meals: [lunch] });
+    const r = await op("plan_week", { week_start: MON, mode: "final", keep_rest: true, meals: [{ date: MON, slot: "Dinner", dishes: [{ name: "Rotis" }] }] });
+    expect(r.week.status).toBe("final");
+    expect(rows("plan_meals").map((m) => `${m.slot} ${m.status}`).sort()).toEqual(["Dinner final", "Lunch final"]);
+    expect((await op("plan_week", { week_start: MON, mode: "draft", keep_rest: "yes", meals: [lunch] })).code).toBe("APP_REFUSED");
+  });
+
   it("stamps what the agent planned as the agent's", async () => {
     const { op, rows } = await boot();
     await op("plan_week", { week_start: MON, mode: "draft", meals: [lunch] });

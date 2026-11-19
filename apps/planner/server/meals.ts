@@ -207,8 +207,10 @@ export function mountMealRoutes(hono: Hono<any>, db: Db, emit: Emit, hooks: Meal
     return c.json(weekView(db, weekStart));
   });
 
-  // plan_week { week_start, mode: draft | final, meals? }. With meals: they become the week's plan, in place of what was there.
-  // Without: a week of drafts is made final when mode is final; anything else answers with what the agent plans from.
+  // plan_week { week_start, mode: draft | final, meals?, keep_rest? }. With meals: they become the week's plan, in place of
+  // what was there; with keep_rest they take the place of the meals at their own date and slot only, so a week is planned in
+  // parts (a whole week is more than Flock lets one call carry). Without meals: a week of drafts is made final when mode is
+  // final; anything else answers with what the agent plans from.
   write("/api/weeks/:week_start/plan", async (b, by, c) => {
     const weekStart = dateOf(c.req.param("week_start"), "week_start");
     if (weekdayOf(weekStart) !== "Mon") refuse(`week_start must be a Monday: ${weekStart} is a ${weekdayOf(weekStart)}`);
@@ -227,6 +229,7 @@ export function mountMealRoutes(hono: Hono<any>, db: Db, emit: Emit, hooks: Meal
       // The orders are built from final meals: a draft in their place would take every dish off the orders not yet placed.
       if (mode === "draft" && hooks.weekHasOrders?.(weekStart))
         refuse("this week is already planned and has orders: change a meal with set_meal or set_dish, or send plan_week with mode final and the new meals");
+      const keepRest = b.keep_rest === undefined ? false : flag(b.keep_rest, "keep_rest");
       const slots = slotNames(db);
       const meals = (b.meals as unknown[]).map((m) => mealOf(db, m, slots));
       const seen = new Set<string>();
@@ -237,6 +240,14 @@ export function mountMealRoutes(hono: Hono<any>, db: Db, emit: Emit, hooks: Meal
       }
       commit((tx, changes) => {
         for (const old of tx.select().from(plan_meals).where(inWeek(weekStart)).all()) {
+          if (keepRest && !seen.has(`${old.date} ${old.slot}`)) {
+            // A meal that stays: with a final part the whole week is final, as when a draft is made final.
+            if (mode === "final" && old.status !== "final") {
+              tx.update(plan_meals).set({ status: "final", updated_at: now(), updated_by: by }).where(eq(plan_meals.id, old.id)).run();
+              changes.push(["plan_meals", old.id, "update", by]);
+            }
+            continue;
+          }
           removeDishes(tx, old.id, changes);
           tx.delete(plan_meals).where(eq(plan_meals.id, old.id)).run();
           changes.push(["plan_meals", old.id, "delete", "app"]);
