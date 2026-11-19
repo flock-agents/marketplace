@@ -1,17 +1,19 @@
 {
   "name": "planner",
-  "version": "3.0.0",
-  "description": "The family's meals for the week, day by day, with the groceries for them ordered on the family's grocery app, the everyday items and the family's recipe book; not for school runs, chores or appointments.",
+  "version": "3.1.0",
+  "description": "The family's meals for the week on the days they cook, a running-out guess for the things they buy from their order history, and a reminder each afternoon and evening with one cart per shopping app that is ordered only when they say yes; not for school runs, chores or appointments.",
   "objects": [
     "grocery-bag"
   ],
   "labels": {
     "nav.week": "Week",
     "nav.shopping": "Shopping",
+    "nav.pantry": "Pantry",
     "nav.recipes": "Recipes",
     "nav.family": "Family",
     "title.week": "This week's meals",
     "title.shopping": "Shopping",
+    "title.pantry": "Pantry",
     "title.recipes": "Recipes",
     "title.family": "Family"
   },
@@ -38,7 +40,7 @@
             "adult",
             "elder"
           ],
-          "note": "child | adult | elder (constants.ts GROUPS)"
+          "note": "constants.ts ITEM_GROUPS"
         },
         "portions": {
           "type": "string",
@@ -143,17 +145,59 @@
           "required": false,
           "nullable": true
         },
-        "dinner_check_time": {
+        "afternoon_time": {
           "type": "string",
           "required": false,
           "nullable": true,
-          "note": "\"HH:MM\": when the dinner check-in really runs, written by that routine"
+          "note": "\"HH:MM\": when the afternoon reminder really runs, written by that routine"
         },
-        "tomorrow_check_time": {
+        "evening_time": {
           "type": "string",
           "required": false,
           "nullable": true,
-          "note": "\"HH:MM\": the same for the tomorrow check-in"
+          "note": "\"HH:MM\": the same for the evening reminder"
+        },
+        "plan_time": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "\"HH:MM\": the same for the weekly plan"
+        },
+        "cooking_days": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "JSON weekday[]; Mon to Sat until set"
+        },
+        "connected_apps": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "JSON GroceryApp[]: every shopping app the family has signed in to"
+        },
+        "history_synced": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "JSON { [app]: \"YYYY-MM-DD\" }: how far each app's order history was read"
+        },
+        "asks_confirmed": {
+          "type": "integer",
+          "required": false,
+          "nullable": true,
+          "default": 0
+        },
+        "asks_still_have": {
+          "type": "integer",
+          "required": false,
+          "nullable": true,
+          "default": 0
+        },
+        "sync_session_id": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "the session the last sync-cart ask started: the next one reuses it"
         }
       }
     },
@@ -251,23 +295,14 @@
         "amount": {
           "type": "number",
           "required": false,
-          "nullable": true
+          "nullable": true,
+          "note": "base unit"
         },
         "unit": {
           "type": "string",
           "required": false,
-          "nullable": true
-        },
-        "keeps": {
-          "type": "string",
-          "required": false,
           "nullable": true,
-          "default": "fresh",
-          "enum": [
-            "fresh",
-            "long"
-          ],
-          "note": "fresh | long (constants.ts KEEPS)"
+          "note": "g | ml | pc"
         }
       }
     },
@@ -283,12 +318,14 @@
         "amount": {
           "type": "number",
           "required": false,
-          "nullable": true
+          "nullable": true,
+          "note": "base unit"
         },
         "unit": {
           "type": "string",
           "required": false,
-          "nullable": true
+          "nullable": true,
+          "note": "g | ml | pc"
         },
         "every": {
           "type": "string",
@@ -318,17 +355,6 @@
           "required": false,
           "nullable": true
         },
-        "keeps": {
-          "type": "string",
-          "required": false,
-          "nullable": true,
-          "default": "fresh",
-          "enum": [
-            "fresh",
-            "long"
-          ],
-          "note": "fresh | long (constants.ts KEEPS)"
-        },
         "active": {
           "type": "integer",
           "required": false,
@@ -343,30 +369,236 @@
         }
       }
     },
-    "orders": {
-      "note": "One grocery order: what is bought for the days it covers.",
+    "items": {
+      "note": "What the family buys, one row per item: its group, what a purchase usually is and when it runs out (the cached estimate).",
       "columns": {
-        "place_at": {
+        "item": {
           "type": "string",
           "required": true,
           "nullable": false,
-          "note": "\"YYYY-MM-DDTHH:MM\""
+          "note": "normalised"
         },
-        "covers_from": {
+        "name": {
           "type": "string",
           "required": true,
           "nullable": false
         },
-        "covers_to": {
+        "group": {
           "type": "string",
-          "required": true,
-          "nullable": false
+          "required": false,
+          "nullable": true,
+          "enum": [
+            "daily",
+            "few_days",
+            "monthly"
+          ],
+          "note": "constants.ts ITEM_GROUPS"
         },
-        "week_start": {
+        "unit": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "g | ml | pc"
+        },
+        "follows_plan": {
+          "type": "integer",
+          "required": false,
+          "nullable": true,
+          "default": 0
+        },
+        "subscription": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "the family's words, or null"
+        },
+        "dont_ask": {
+          "type": "integer",
+          "required": false,
+          "nullable": true,
+          "default": 0
+        },
+        "snoozed_until": {
           "type": "string",
           "required": false,
           "nullable": true
         },
+        "asks_unanswered": {
+          "type": "integer",
+          "required": false,
+          "nullable": true,
+          "default": 0
+        },
+        "last_ask_key": {
+          "type": "string",
+          "required": false,
+          "nullable": true
+        },
+        "misses_in_row": {
+          "type": "integer",
+          "required": false,
+          "nullable": true,
+          "default": 0
+        },
+        "wait_factor": {
+          "type": "number",
+          "required": false,
+          "nullable": true,
+          "default": 1
+        },
+        "usual_amount": {
+          "type": "number",
+          "required": false,
+          "nullable": true,
+          "note": "the cached derivation"
+        },
+        "lasts_days": {
+          "type": "number",
+          "required": false,
+          "nullable": true
+        },
+        "product": {
+          "type": "string",
+          "required": false,
+          "nullable": true
+        },
+        "app": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "constants.ts SHOP_APPS"
+        },
+        "last_bought": {
+          "type": "string",
+          "required": false,
+          "nullable": true
+        },
+        "anchor_amount": {
+          "type": "number",
+          "required": false,
+          "nullable": true
+        },
+        "run_out": {
+          "type": "string",
+          "required": false,
+          "nullable": true
+        },
+        "confident": {
+          "type": "integer",
+          "required": false,
+          "nullable": true,
+          "default": 0
+        }
+      }
+    },
+    "item_events": {
+      "note": "What happened to an item: a purchase, an answer to a stock question, a question asked or one that went unanswered.",
+      "columns": {
+        "item_id": {
+          "type": "string",
+          "required": true,
+          "nullable": false,
+          "references": "items"
+        },
+        "date": {
+          "type": "string",
+          "required": true,
+          "nullable": false
+        },
+        "kind": {
+          "type": "string",
+          "required": true,
+          "nullable": false,
+          "enum": [
+            "purchase",
+            "answer",
+            "ask",
+            "unanswered"
+          ],
+          "note": "constants.ts EVENT_KINDS"
+        },
+        "tag": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "enum": [
+            "counted",
+            "early_buy",
+            "your_answer",
+            "one_off",
+            "not_counted"
+          ],
+          "note": "constants.ts EVENT_TAGS"
+        },
+        "app": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "constants.ts SHOP_APPS"
+        },
+        "product": {
+          "type": "string",
+          "required": false,
+          "nullable": true
+        },
+        "product_id": {
+          "type": "string",
+          "required": false,
+          "nullable": true
+        },
+        "amount": {
+          "type": "number",
+          "required": false,
+          "nullable": true,
+          "note": "base unit"
+        },
+        "count": {
+          "type": "integer",
+          "required": false,
+          "nullable": true
+        },
+        "price": {
+          "type": "number",
+          "required": false,
+          "nullable": true
+        },
+        "days": {
+          "type": "number",
+          "required": false,
+          "nullable": true,
+          "note": "an answer's \"enough for N days\""
+        },
+        "cycle_days": {
+          "type": "number",
+          "required": false,
+          "nullable": true
+        },
+        "order_ref": {
+          "type": "string",
+          "required": false,
+          "nullable": true
+        },
+        "order_id": {
+          "type": "string",
+          "required": false,
+          "nullable": true
+        },
+        "note": {
+          "type": "string",
+          "required": false,
+          "nullable": true
+        },
+        "void": {
+          "type": "integer",
+          "required": false,
+          "nullable": true,
+          "default": 0
+        }
+      }
+    },
+    "orders": {
+      "note": "One cart on a shopping app: the open one is being filled; the rest follow the order through ordering, placed and paid.",
+      "columns": {
         "app": {
           "type": "string",
           "required": true,
@@ -375,16 +607,18 @@
             "zepto",
             "swiggy-instamart",
             "zomato-blinkit",
-            "bigbasket"
+            "bigbasket",
+            "amazon"
           ],
-          "note": "constants.ts GROCERY_APPS"
+          "note": "constants.ts SHOP_APPS"
         },
         "status": {
           "type": "string",
           "required": true,
           "nullable": false,
           "enum": [
-            "scheduled",
+            "open",
+            "ordering",
             "placed",
             "paid",
             "not_paid",
@@ -396,6 +630,45 @@
           "type": "number",
           "required": false,
           "nullable": true
+        },
+        "delivery_gap": {
+          "type": "number",
+          "required": false,
+          "nullable": true,
+          "note": "rupees short of free delivery"
+        },
+        "synced_at": {
+          "type": "string",
+          "required": false,
+          "nullable": true
+        },
+        "sync_state": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "in_step | pending | building_at_order"
+        },
+        "sync_asked_at": {
+          "type": "string",
+          "required": false,
+          "nullable": true
+        },
+        "outside_lines": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "JSON [{ name, qty }]: already in the cart on the app"
+        },
+        "ordering_at": {
+          "type": "string",
+          "required": false,
+          "nullable": true
+        },
+        "reminder_key": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "\"<date>:<which>\": the reminder that ordered it without asking"
         },
         "placed_at": {
           "type": "string",
@@ -412,23 +685,11 @@
           "required": false,
           "nullable": true
         },
-        "wake_sent_at": {
-          "type": "string",
-          "required": false,
-          "nullable": true,
-          "note": "the agent was woken to place it"
-        },
         "unpaid_notice": {
           "type": "string",
           "required": false,
           "nullable": true,
-          "note": "pending | sent: the order clock closed it as not paid; has the agent been given the line to say"
-        },
-        "skipped_items": {
-          "type": "string",
-          "required": false,
-          "nullable": true,
-          "note": "JSON string[]: items the family said they have"
+          "note": "pending | sent"
         },
         "note": {
           "type": "string",
@@ -445,34 +706,23 @@
           "nullable": false,
           "references": "orders"
         },
+        "item_id": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "references": "items"
+        },
         "item": {
           "type": "string",
           "required": true,
           "nullable": false,
           "note": "normalised"
         },
-        "amount": {
-          "type": "number",
-          "required": false,
-          "nullable": true
-        },
-        "unit": {
-          "type": "string",
-          "required": false,
-          "nullable": true
-        },
         "qty": {
           "type": "integer",
           "required": false,
           "nullable": true,
-          "note": "packs"
-        },
-        "qty_checked": {
-          "type": "integer",
-          "required": false,
-          "nullable": true,
-          "default": 1,
-          "note": "0: the pack could not be worked out, the agent sets qty when placing"
+          "note": "packs; 0 = shown, not ordered"
         },
         "product_id": {
           "type": "string",
@@ -503,13 +753,25 @@
           "type": "string",
           "required": true,
           "nullable": false,
-          "note": "dish | regular | added"
+          "enum": [
+            "everyday",
+            "meal",
+            "low",
+            "added",
+            "returned"
+          ],
+          "note": "constants.ts LINE_SOURCES"
         },
-        "sources": {
+        "for_note": {
           "type": "string",
           "required": false,
           "nullable": true,
-          "note": "JSON [{ kind, id, label }]"
+          "note": "the line under the name: \"Tue lunch, you said it's missing\""
+        },
+        "for_date": {
+          "type": "string",
+          "required": false,
+          "nullable": true
         },
         "rolled_from": {
           "type": "string",
@@ -532,7 +794,7 @@
           "type": "string",
           "required": true,
           "nullable": false,
-          "note": "constants.ts GROCERY_APPS"
+          "note": "constants.ts SHOP_APPS"
         },
         "product_id": {
           "type": "string",
@@ -588,7 +850,7 @@
           "type": "string",
           "required": false,
           "nullable": true,
-          "note": "dish | regular | added"
+          "note": "constants.ts LINE_SOURCES"
         },
         "thumbnail": {
           "type": "string",
@@ -624,11 +886,26 @@
   "settings": [
     {
       "key": "grocery_app",
-      "type": "string",
+      "type": "choice",
       "default": "zepto",
-      "label": "The grocery app orders go to",
+      "label": "Your main grocery app",
       "scope": "owner",
-      "constraint": "grocery_app must be one of: zepto, swiggy-instamart, zomato-blinkit, bigbasket"
+      "constraint": "grocery_app must be one of: zepto, swiggy-instamart, zomato-blinkit, bigbasket, amazon"
+    },
+    {
+      "key": "fallback_app",
+      "type": "choice",
+      "default": "none",
+      "label": "When something isn't on your main app",
+      "scope": "owner",
+      "constraint": "fallback_app must be one of: none, zepto, swiggy-instamart, zomato-blinkit, bigbasket, amazon"
+    },
+    {
+      "key": "order_without_asking",
+      "type": "boolean",
+      "default": false,
+      "label": "Order without asking",
+      "scope": "owner"
     }
   ]
 }

@@ -1,5 +1,11 @@
 {
   "grocery_app": {
-    "type": "string"
+    "type": "choice"
+  },
+  "fallback_app": {
+    "type": "choice"
+  },
+  "order_without_asking": {
+    "type": "boolean"
   }
 }

@@ -4,6 +4,8 @@
 ], "plan_meals": [
   { "$key": "mon-lunch", "date": "2026-11-23", "slot": "Lunch", "status": "final" },
   { "$key": "mon-dinner", "date": "2026-11-23", "slot": "Dinner", "status": "final" }
+], "items": [
+  { "$key": "atta", "item": "atta", "name": "Atta", "group": "monthly" }
 ], "dishes": [
   { "$key": "rice", "meal_id": { "$ref": "plan_meals/mon-lunch" }, "position": 0, "name": "Rice" },
   { "$key": "sambar", "meal_id": { "$ref": "plan_meals/mon-lunch" }, "position": 1, "name": "Drumstick sambar" },

@@ -166,13 +166,67 @@
               "null"
             ]
           },
-          "dinner_check_time": {
+          "afternoon_time": {
             "type": [
               "string",
               "null"
             ]
           },
-          "tomorrow_check_time": {
+          "evening_time": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "plan_time": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "cooking_days": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "connected_apps": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "history_synced": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "asks_confirmed": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "asks_still_have": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sync_session_id": {
             "type": [
               "string",
               "null"
@@ -377,17 +431,6 @@
               "string",
               "null"
             ]
-          },
-          "keeps": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "enum": [
-              "fresh",
-              "long",
-              null
-            ]
           }
         },
         "required": [
@@ -461,17 +504,6 @@
               "null"
             ]
           },
-          "keeps": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "enum": [
-              "fresh",
-              "long",
-              null
-            ]
-          },
           "active": {
             "anyOf": [
               {
@@ -499,6 +531,373 @@
         "additionalProperties": false
       }
     },
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "$key": {
+            "type": "string",
+            "minLength": 1,
+            "description": "This row's name within the request, for $ref"
+          },
+          "item": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "group": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "daily",
+              "few_days",
+              "monthly",
+              null
+            ]
+          },
+          "unit": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "follows_plan": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "subscription": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "dont_ask": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "snoozed_until": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "asks_unanswered": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "last_ask_key": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "misses_in_row": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "wait_factor": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": -140737488355328,
+                "maximum": 140737488355327
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "usual_amount": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": -140737488355328,
+                "maximum": 140737488355327
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "lasts_days": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": -140737488355328,
+                "maximum": 140737488355327
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "product": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "app": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "last_bought": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "anchor_amount": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": -140737488355328,
+                "maximum": 140737488355327
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "run_out": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "confident": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "$key",
+          "item",
+          "name"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "item_events": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "$key": {
+            "type": "string",
+            "minLength": 1,
+            "description": "This row's name within the request, for $ref"
+          },
+          "item_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "$ref": {
+                    "type": "string",
+                    "pattern": "^items/.+"
+                  }
+                },
+                "required": [
+                  "$ref"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          },
+          "date": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "purchase",
+              "answer",
+              "ask",
+              "unanswered"
+            ]
+          },
+          "tag": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "counted",
+              "early_buy",
+              "your_answer",
+              "one_off",
+              "not_counted",
+              null
+            ]
+          },
+          "app": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "product": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "product_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "amount": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": -140737488355328,
+                "maximum": 140737488355327
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "count": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "price": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": -140737488355328,
+                "maximum": 140737488355327
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "days": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": -140737488355328,
+                "maximum": 140737488355327
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "cycle_days": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": -140737488355328,
+                "maximum": 140737488355327
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "order_ref": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "order_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "note": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "void": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "$key",
+          "item_id",
+          "date",
+          "kind"
+        ],
+        "additionalProperties": false
+      }
+    },
     "orders": {
       "type": "array",
       "items": {
@@ -509,34 +908,21 @@
             "minLength": 1,
             "description": "This row's name within the request, for $ref"
           },
-          "place_at": {
-            "type": "string"
-          },
-          "covers_from": {
-            "type": "string"
-          },
-          "covers_to": {
-            "type": "string"
-          },
-          "week_start": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
           "app": {
             "type": "string",
             "enum": [
               "zepto",
               "swiggy-instamart",
               "zomato-blinkit",
-              "bigbasket"
+              "bigbasket",
+              "amazon"
             ]
           },
           "status": {
             "type": "string",
             "enum": [
-              "scheduled",
+              "open",
+              "ordering",
               "placed",
               "paid",
               "not_paid",
@@ -553,6 +939,54 @@
               {
                 "type": "null"
               }
+            ]
+          },
+          "delivery_gap": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": -140737488355328,
+                "maximum": 140737488355327
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "synced_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sync_state": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sync_asked_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "outside_lines": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "ordering_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "reminder_key": {
+            "type": [
+              "string",
+              "null"
             ]
           },
           "placed_at": {
@@ -573,19 +1007,7 @@
               "null"
             ]
           },
-          "wake_sent_at": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
           "unpaid_notice": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "skipped_items": {
             "type": [
               "string",
               "null"
@@ -600,9 +1022,6 @@
         },
         "required": [
           "$key",
-          "place_at",
-          "covers_from",
-          "covers_to",
           "app",
           "status"
         ],
@@ -639,40 +1058,33 @@
               }
             ]
           },
+          "item_id": {
+            "anyOf": [
+              {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "$ref": {
+                    "type": "string",
+                    "pattern": "^items/.+"
+                  }
+                },
+                "required": [
+                  "$ref"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          },
           "item": {
             "type": "string"
           },
-          "amount": {
-            "anyOf": [
-              {
-                "type": "number",
-                "minimum": -140737488355328,
-                "maximum": 140737488355327
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "unit": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
           "qty": {
-            "anyOf": [
-              {
-                "type": "integer",
-                "minimum": -9007199254740991,
-                "maximum": 9007199254740991
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "qty_checked": {
             "anyOf": [
               {
                 "type": "integer",
@@ -721,9 +1133,22 @@
             ]
           },
           "source": {
-            "type": "string"
+            "type": "string",
+            "enum": [
+              "everyday",
+              "meal",
+              "low",
+              "added",
+              "returned"
+            ]
           },
-          "sources": {
+          "for_note": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "for_date": {
             "type": [
               "string",
               "null"

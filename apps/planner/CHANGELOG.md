@@ -1,51 +1,44 @@
 # Changelog
 
-## 3.0.0
+## 3.1.0
 
-Meal Planner, rebuilt simple. Tell the agent about your family once; it plans the week, orders the groceries and checks in
-every day. Needs Flock 0.24.0 (its betas included).
+3.0.0 was a build that was never released; this is the release. It replaces the 2.0 Meal Planner. Needs Flock 0.24.0 (its
+betas included) and library 1.10.11.
 
-- **Family.** A Family page holds who eats at home (portions, diet, allergies and dislikes in your own words), the house
-  rules (vegetarian, egg, fasting and no-onion-garlic days), the cook, extra meals such as a tiffin, the meals you order
-  in, and the grocery app your orders go to. The agent fills it from what you tell it; you can edit all of it.
-- **Meals of several dishes.** A meal is a date and a slot with its dishes in order, each for everyone or for named people
-  ("Parathas, for Dad"), with what it needs bought. A meal can be marked ordered in. Change any of it by telling the agent
-  or on the Week page.
-- **Everyday items.** Milk, curd, bread and the like are a list of their own (how much, how often, paused over a holiday)
-  and go into the orders without being asked for. The agent suggests them from your past orders; you confirm each one.
-- **Orders, placed for you.** Once a week (Saturday 6 pm unless you change it) the agent plans next week and groups what
-  it needs into orders: fresh items close to the day they are cooked, long-life items once. The first order is placed
-  right away, with what its own days need (the long-life items too) and the everyday items; the later ones go out the
-  evening before. The agent messages you just before each one and places it without waiting for a yes; the payment step
-  is yours. With the plan it asks once which long-life items are low or out: the ones first needed later in the week
-  wait on the second order, so your answer takes off what you have and keeps what you need.
-- **Where an order stands.** Scheduled, then placed and waiting for payment, then paid or not paid; a scheduled order can
-  be cancelled. If you do not pay, or say cancel after it is placed, the order is closed as not paid and its items move to
-  the next order; when no later order is waiting they are not moved, and the agent says so. An order still waiting for
-  payment 24 hours after it was placed is closed the same way on its own, and the agent tells you in one line ("Monday's
-  order wasn't paid, so I've moved its items to Wednesday's."). If you pay it after all, tell the agent: the items come
-  back off the next order, unless that one has already gone out. A paid order is cancelled in
-  the grocery app itself. An order that could not be placed is tried again in an hour; one whose days have passed is
-  cancelled, not placed late.
-- **Real products.** Each line is a product on your grocery app with its pack and price, remembered for the next order.
-  On the Shopping page you change the packs or remove a line while an order is scheduled; to add something, tell the
-  agent, or press Add on the order, and pick from what it finds.
-- **Daily check-ins.** In the afternoon about tonight's dinner and in the evening about tomorrow's meals (also the cook's
-  brief, with the dishes' videos). The first message after your week is planned explains how it all works and names the
-  times your check-ins really run at; the times are changed in Flock's routines.
-- **Saved recipes with videos.** Share a reel, a short or any link with the agent and say "save this": it is kept on the
-  Recipes page and can be planned into the week.
-- **Nothing about what is at home is kept.** No pantry and no stock: what you say you have changes only the order it is
-  about. Gone with it: diners with portion multipliers, the ingredient catalog, price comparison across apps, prep
-  reminders and all the old settings but the grocery app.
-- For the agent: 17 operations replace the old 20. An order's lines change only through `add_to_order` (add an item, set
-  a line's product or packs, take a line off); the grocery app is set with `set_house_rules { grocery_app }` or on the
-  Family page.
+- **Family.** The Family page holds who eats at home, the house rules, the cook, the days you cook (Monday to Saturday
+  until you change them), the shopping apps you use (a main one, one to try when something is not on it, and the others you
+  are signed in to) and the items delivered to you by someone else, such as milk from a milkman, which are left out of
+  running low. Tell the agent or edit it yourself.
+- **The week, planned and kept.** The week is planned on Sunday at 11 am, on your cooking days only, and each day is kept
+  as soon as it is planned: you do not need to reply. The Sunday message is Monday's meals plus a link to the Week page.
+  Nothing is bought by the plan.
+- **Two reminders a day.** At 3 pm (tonight's dinner) and 7 pm (tomorrow's meals), each one complete in one message: the
+  meals, the everyday items put on your cart, and anything that may be running low. Nothing is ordered until you reply or
+  tap Order. A setting, "Order without asking" (off), lets the agent order the items it is sure about on its own.
+- **Running low, estimated per item.** The app reads the last 3 months of your orders on every connected shopping app and
+  works out how long each item lasts for you, from the amounts and the gaps between buys. Early or one-off buys are not
+  counted and your own answers are. When something may be running low, you are asked together in one message, at most 5
+  items at a time. An item you have never bought with a size is estimated from the gaps alone.
+- **One cart per app.** What you need is gathered into one cart for each shopping app. Each cart has its own Order button,
+  and the app's own cart is kept in step with it as you change it (Amazon's cart is built when you order). The agent
+  orders it only on your yes. An order that was not paid within 24 hours goes back to the cart, and you are told once.
+- **Pantry page.** Each item with its status (in stock, low or snoozed), when it was last bought, how long it usually
+  lasts, and what the app learned from each order and each answer of yours.
+- **Saved recipes with videos.** Share a reel, a short or any link and say "save this": it is kept on the Recipes page, now
+  a gallery, and can be planned into the week.
+- **For the agent.** There are 25 operations. Kept from 2.0: `guide` and `record_order` (now about a cart). New: `set_person`,
+  `set_house_rules`, `set_cook`, `set_slots`, `set_cooking_days`, `set_shopping_apps`, `plan_week`, `set_meal`, `set_dish`,
+  `set_regular`, `import_order_history`, `record_bought_outside`, `set_item`, `set_subscription`, `answer_running_low`,
+  `get_reminder`, `get_cart`, `set_cart_line`, `order_cart`, `sync_cart`, `remember_product` and `save_recipe`. Gone:
+  `get_draft`, `edit_draft`, `move_window`, `add_quote`, `record_yes`, `skip_order`, `ack_message`, `list_jobs`,
+  `answer_job`, `pantry`, `pantry_answer`, `have_item`, `search`, `save_meal`, `remove_meal`, `set_meal_recipes`,
+  `write_recipe` and `set_shelf_life`. Past orders are read in calls of about 8 orders and 80 items. The Sunday run ends
+  with a `plan_week` call that carries the message. The reminders read your order history first, copy the carts to the
+  shopping apps, then send.
 
-Existing installs: the old tables are kept unread; your household profile is carried over and the agent turns it into
-the new Family page on its next weekly run (Saturday 6 pm), then plans the week; the Family page says so until then, and
-you can tell the agent to do it now. Until it has, no week is planned and no order goes out. Old meals, recipes and
-shopping lists are not shown in the new pages.
+Existing installs: the 2.0 tables are kept and not read, and your household profile is carried over; the agent turns it into
+the new Family page on its next Sunday run, then plans the week. Until then no week is planned and nothing is ordered. Old
+meals, recipes and shopping lists are not shown in the new pages.
 
 ## 2.0.7
 
