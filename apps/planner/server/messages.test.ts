@@ -1,7 +1,7 @@
 // The messages the app writes for the agent to send, word for word: the order going out, the two daily check-ins, the
 // how-to-use intro; and what a recipe link says about itself.
 import { describe, it, expect } from "bun:test";
-import { clockText, dinnerCheckText, dishText, introText, linkSource, orderingNowText, tomorrowCheckText, youtubeThumb } from "./messages";
+import { clockText, dinnerCheckText, dishText, introText, linkSource, orderingNowText, tomorrowCheckText, unpaidText, youtubeThumb } from "./messages";
 import type { DishView, MealView } from "./meals";
 
 const dish = (name: string, d: Partial<DishView> = {}): DishView =>
@@ -122,6 +122,20 @@ describe("introText", () => {
     const text = introText("Sunday", { dinner: "16:30", tomorrow: "20:00" });
     expect(text.split("\n")[0]).toBe("Your week is planned and Sunday's order is placed. How it works:");
     expect(text.split("\n")[2]).toBe("• I check in at 4:30 pm about dinner and 8 pm about tomorrow; reply to change anything. Times can be changed.");
+  });
+});
+
+describe("unpaidText", () => {
+  it("is one line: whose order was not paid, and where its items went", () => {
+    expect(unpaidText("Monday", "Wednesday")).toBe("Monday's order wasn't paid, so I've moved its items to Wednesday's.");
+    // The next order is a week on, or later the same day: the day's name would say nothing.
+    expect(unpaidText("Monday", "Monday")).toBe("Monday's order wasn't paid, so I've moved its items to the next order.");
+  });
+
+  it("says so when there was no later order to move them to", () => {
+    const text = unpaidText("Saturday", null);
+    expect(text).toBe("Saturday's order wasn't paid, and there is no later order to move its items to. Tell me if you still want them.");
+    expect(text).not.toContain("\n");
   });
 });
 

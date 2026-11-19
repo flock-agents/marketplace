@@ -152,6 +152,14 @@ describe("weekly plan", () => {
     expect(p).toContain("names from `items`");
     expect(p).toContain("Cancel nothing on the grocery app");
     expect(p).not.toContain("ask_pending");
+    // The long-life items are on the second order, where the answer can still change them; an order nobody pays for is closed by the app.
+    expect(p).toContain("the week's long-life items wait on the second order");
+    expect(p).toContain("The items they have come off the second order; the ones low or out stay on it.");
+    expect(p).toContain("still waiting for its payment 24 hours after it was placed is closed as not paid by the app");
+    const g = guide.replace(/\s+/g, " ");
+    for (const said of ["the long-life ones go on the second (a week of one order keeps them)", "bought once, in the week's second order", "The items wait on the week's second order",
+      "still waiting for payment 24 hours after it was placed is closed the same way by the app", "Monday's order wasn't paid, so I've moved its items to Wednesday's."]) expect(g, said).toContain(said);
+    expect(g).not.toContain("week's first order");
   });
 
   it("with a migrated 2.0 profile, the weekly run only asks to structure it", async () => {
@@ -361,13 +369,13 @@ describe("order clock", () => {
     expect(Object.keys(data)).toEqual(["order_id", "app", "message", "lines", "needs_product", "needs_qty"]);
     expect(data.order_id).toBe(k.first.id);
     expect(data.app).toBe("zepto");
-    expect(data.lines.map((l: any) => l.item).sort()).toEqual(["atta", "cauliflower", "paneer", "potato", "rice", "spinach"]);
+    expect(data.lines.map((l: any) => l.item).sort()).toEqual(["cauliflower", "paneer", "potato", "spinach"]);
     // A line carries what placing needs, and nothing of the row's bookkeeping.
     expect(data.lines.find((l: any) => l.item === "potato")).toEqual({ item: "potato", unit: "g", amount: 500, qty: 1, qty_checked: 0, product_id: null, name_on_app: null, pack: null, price: null });
     expect(data.message).toStartWith("Ordering this now: ");
     expect(data.message).toEndWith(" on Zepto");
-    expect([...data.needs_product].sort()).toEqual(["atta", "cauliflower", "paneer", "potato", "rice", "spinach"]);
-    expect([...data.needs_qty].sort()).toEqual(["atta", "cauliflower", "paneer", "potato", "rice", "spinach"]);
+    expect([...data.needs_product].sort()).toEqual(["cauliflower", "paneer", "potato", "spinach"]);
+    expect([...data.needs_qty].sort()).toEqual(["cauliflower", "paneer", "potato", "spinach"]);
     expect(k.order(k.first.id).wake_sent_at).toBe("2026-11-21T18:15");
     for (const s of ["`message`", "needs_product", "needs_qty", "add_to_order { order_id, item", "Zepto", "placed: true", "paid: true", "paid: false", "Cancel nothing on Zepto"]) expect(message).toContain(s);
     expect(message.indexOf("placed: true")).toBeLessThan(message.indexOf("paid: true"));
@@ -401,10 +409,10 @@ describe("order clock", () => {
     expect(a.order(a.first.id).wake_sent_at).toBe(placed.order.wake_sent_at);
   });
 
-  /** A week whose first order (Sun and Mon) has `n` lines, none with a product: Monday's lunch and dinner, n ingredients. */
+  /** A week whose first order (Sun and Mon) has `n` lines, none with a product: Monday's lunch and dinner, n fresh ingredients. */
   const longOrder = async (n: number) => {
     const names = ["basmati rice", "toor dal", "cauliflower florets", "green chillies", "coriander leaves", "cold pressed mustard oil", "whole wheat atta", "kashmiri red chilli powder"];
-    const ingredients = Array.from({ length: n }, (_, i) => ({ item: `${names[i % names.length]} ${i + 1}`, amount: 250 + i, unit: i % 2 ? "g" : "ml", keeps: i % 3 ? "fresh" : "long" }));
+    const ingredients = Array.from({ length: n }, (_, i) => ({ item: `${names[i % names.length]} ${i + 1}`, amount: 250 + i, unit: i % 2 ? "g" : "ml", keeps: "fresh" }));
     const dishes = (from: number, to: number, slot: string) => Array.from({ length: Math.ceil((to - from) / 5) }, (_, d) => ({
       name: `${slot} dish number ${d + 1} with gravy`, ingredients: ingredients.slice(from + d * 5, Math.min(from + d * 5 + 5, to)) }));
     const half = Math.ceil(n / 2);
@@ -497,7 +505,7 @@ describe("order clock", () => {
 
   it("an order whose days have passed is cancelled, not handed over; one for added items has no days and still goes", async () => {
     const k = await plannedWeek([monLunch, monDinner, tueLunch, { date: "2026-11-26", slot: "Lunch", dishes: [{ name: "Salad", ingredients: [{ item: "cucumber", amount: 2, unit: "pc" }] }] }]);
-    await k.op("record_order", { order_id: k.first.id, placed: true });
+    await k.op("record_order", { order_id: k.first.id, placed: true, paid: true });
     expect([k.second.covers_from, k.second.covers_to, k.second.place_at]).toEqual([TUE, "2026-11-25", "2026-11-23T18:00"]);
     const third = k.orders[2];
     // Nothing ran from Monday evening to Thursday morning: the order for Tuesday and Wednesday is of no use now.
@@ -507,7 +515,7 @@ describe("order clock", () => {
     expect(k.wakes.map((w) => w.data.order_id)).toEqual([third.id]);
     // On its last day an order is still placed.
     const late = await plannedWeek();
-    await late.op("record_order", { order_id: late.first.id, placed: true });
+    await late.op("record_order", { order_id: late.first.id, placed: true, paid: true });
     await orderClock(late.ctx(), at(23, 45, 25));
     expect(late.wakes.map((w) => w.data.order_id)).toEqual([late.second.id]);
 
@@ -541,6 +549,82 @@ describe("order clock", () => {
     expect(k.wakes).toHaveLength(1);
     expect(k.rows("order_lines")).toEqual([]);
     expect(k.order(k.first.id).wake_sent_at).toBeNull();
+  });
+});
+
+describe("an order nobody paid for", () => {
+  const SUN_6PM = at(18, 0, 22), SUN_605PM = at(18, 5, 22);   // the first order is placed on Sat 21 Nov at 18:05
+  const linesOf = (k: Awaited<ReturnType<typeof plannedWeek>>, id: string) => k.rows("order_lines").filter((l) => l.order_id === id).map((l) => l.item).sort();
+
+  it("a placed order still waiting for payment 24 hours on is closed as not paid, its lines roll on, and the agent is given one line to say", async () => {
+    const k = await plannedWeek();
+    await k.op("record_order", { order_id: k.first.id, placed: true });
+    expect(k.order(k.first.id).placed_at).toBe("2026-11-21T18:05");
+    await orderClock(k.ctx(), SUN_6PM);   // 23 hours 55 minutes: still waiting
+    expect(k.order(k.first.id).status).toBe("placed");
+    expect(k.wakes).toEqual([]);
+
+    await orderClock(k.ctx(), SUN_605PM);   // 24 hours
+    expect(k.order(k.first.id)).toMatchObject({ status: "not_paid", note: "not paid within 24 hours" });
+    expect(linesOf(k, k.first.id)).toEqual([]);
+    // As for an order the family did not pay: the same lines, now added ones, on the week's next scheduled order.
+    expect(linesOf(k, k.second.id)).toEqual(["atta", "cauliflower", "onion", "paneer", "potato", "rice", "spinach"]);
+    expect(k.rows("order_lines").find((l) => l.item === "spinach")).toMatchObject({ order_id: k.second.id, source: "added" });
+    expect(k.rows("orders")).toHaveLength(k.orders.length);
+    expect(k.wakes).toHaveLength(1);
+    expect(k.wakes[0].data).toEqual({ order_id: k.first.id, rolled_into: k.second.id, message: "Saturday's order wasn't paid, so I've moved its items to Monday's." });
+    for (const s of ["`message`", "word for word", "Cancel nothing on the grocery app", "do not call record_order or cancel_order"]) expect(k.wakes[0].message).toContain(s);
+
+    // Said once: the next runs have nothing to close, and the order it rolled into goes out at its own time, with the lines.
+    await orderClock(k.ctx(), at(18, 20, 22));
+    expect(k.wakes).toHaveLength(1);
+    await orderClock(k.ctx(), at(18, 0, 23));
+    expect(k.wakes).toHaveLength(2);
+    expect(k.wakes[1].data.order_id).toBe(k.second.id);
+    expect(k.wakes[1].data.lines.map((l: any) => l.item)).toContain("spinach");
+  });
+
+  it("with no later scheduled order none is made: the lines stay, and the line says so", async () => {
+    const k = await plannedWeek();
+    await k.op("record_order", { order_id: k.first.id, placed: true });
+    for (const o of k.orders.slice(1)) await k.op("cancel_order", { order_id: o.id });
+    const had = linesOf(k, k.first.id);
+    await orderClock(k.ctx(), SUN_605PM);
+    expect(k.order(k.first.id).status).toBe("not_paid");
+    expect(linesOf(k, k.first.id)).toEqual(had);
+    expect(k.rows("orders")).toHaveLength(k.orders.length);
+    expect(k.rows("orders").filter((o) => o.status === "scheduled")).toEqual([]);
+    expect(k.wakes).toHaveLength(1);
+    expect(k.wakes[0].data).toEqual({ order_id: k.first.id, rolled_into: null,
+      message: "Saturday's order wasn't paid, and there is no later order to move its items to. Tell me if you still want them." });
+  });
+
+  it("a paid order, one closed already and one never placed are left alone; a note the order had is kept", async () => {
+    const k = await plannedWeek();
+    await k.op("record_order", { order_id: k.first.id, placed: true, paid: true });
+    await orderClock(k.ctx(), at(9, 0, 23));
+    expect(k.order(k.first.id).status).toBe("paid");
+    expect(k.wakes).toEqual([]);
+
+    const closed = await plannedWeek();
+    await closed.op("record_order", { order_id: closed.first.id, placed: true });
+    await closed.op("record_order", { order_id: closed.first.id, paid: false });
+    await orderClock(closed.ctx(), SUN_605PM);
+    expect(closed.wakes).toEqual([]);
+
+    const noted = await plannedWeek();
+    await noted.op("record_order", { order_id: noted.first.id, placed: true, note: "UPI link sent to Asha" });
+    await orderClock(noted.ctx(), SUN_605PM);
+    expect(noted.order(noted.first.id)).toMatchObject({ status: "not_paid", note: "UPI link sent to Asha" });
+  });
+
+  it("an order closed without its line reaching the agent fails the run, and the due orders are still handed over", async () => {
+    const k = await plannedWeek();
+    await k.op("record_order", { order_id: k.first.id, placed: true });
+    const busy = (data: any) => (data.message?.includes("wasn't paid") ? { ok: false, reason: "agent busy" } : { ok: true });
+    await expect(orderClock(k.ctx(null, busy), at(18, 0, 23))).rejects.toThrow(`1 unpaid orders closed without the family being told (${k.first.id}: the agent was not woken: agent busy)`);
+    expect(k.order(k.first.id).status).toBe("not_paid");
+    expect(k.wakes.map((w) => w.data.order_id)).toEqual([k.second.id]);
   });
 });
 

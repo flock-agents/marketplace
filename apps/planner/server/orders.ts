@@ -1,6 +1,7 @@
 // The orders: what is bought, grouped by when it is needed. A final plan gives each pair of days an order: fresh items go
-// in the order that covers their day, long-life ones once, in the week's first order. The first order is placed right away,
-// the others the evening before their first day. Orders not yet placed follow the plan: every change to a meal, a dish or
+// in the order that covers their day, long-life ones once, in the week's second order (its only order when it has one). The
+// first order is placed right away, the others the evening before their first day: the long-life items wait on the second,
+// so the family's low-or-out answer can still change them. A placed order nobody paid for in a day is closed as not paid. Orders not yet placed follow the plan: every change to a meal, a dish or
 // an everyday item builds their lines again, keeping what the family added and leaving out what they said they have.
 // Nothing about what is at home is stored beyond the order it was said about (skipped_items).
 import { and, asc, desc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
@@ -16,6 +17,8 @@ import { regularNeeds } from "./regulars";
 /** How long an order waits for a second try: one handed to the agent and never recorded is handed over again after this
  *  long, and one recorded as not placed is due again this long after. */
 export const REWAKE_AFTER_MIN = 60;
+/** How long a placed order waits for its payment before the order clock closes it as not paid. */
+export const UNPAID_AFTER_HOURS = 24;
 
 /** One thing needed on one day: an ingredient of a dish, or an everyday item. */
 export type Need = { date: string; item: string; amount: number | null; unit: string | null; keeps: "fresh" | "long";
@@ -148,15 +151,27 @@ export function weekHasOrders(db: Db, weekStart: string): boolean {
 
 // ── Building ──
 
+/** The order that carries a week's long-life items not yet bought: the soonest scheduled order after the week's first
+ *  (the first goes out at once, before the family is asked what is low or out). The first is the one for the week's
+ *  earliest days, cancelled or not: a first order that was cancelled does not make the second one the first. When no later
+ *  order can take them (a week of one order, or every later one placed), the soonest scheduled order has them. Null when
+ *  no order of the week can still be changed. */
+export function longCarrier(db: Db, weekStart: string): OrderRow | null {
+  const week = db.select().from(orders).where(eq(orders.week_start, weekStart)).orderBy(asc(orders.place_at), sql`rowid`).all();
+  const firstDay = week.map((o) => o.covers_from).sort()[0];
+  const open = week.filter((o) => o.status === "scheduled" && !o.wake_sent_at);
+  return open.find((o) => o.covers_from > firstDay) ?? open[0] ?? null;
+}
+
 /** A week's long-life side: the orders made for it, the long-life needs of the days they cover, and the scheduled order
- *  that carries what is not yet bought (the soonest one). A day before the week counts only when its own week has no
+ *  that carries what is not yet bought (longCarrier). A day before the week counts only when its own week has no
  *  orders: an order taken over from last week does not buy last week's rice again. */
 function weekLong(db: Db, weekStart: string) {
   const live = db.select().from(orders).where(ne(orders.status, "cancelled")).all().filter(planned);
   const mine = live.filter((o) => o.week_start === weekStart);
   const otherWeeks = new Set(live.map((o) => o.week_start));
   const days = [...new Set(mine.flatMap((o) => dates(o.covers_from, o.covers_to)))].sort().filter((d) => d >= weekStart || !otherWeeks.has(mondayOf(d)));
-  return { mine, lines: linesOf(db, mine.map((o) => o.id)), needs: collectNeeds(db, days).filter((n) => n.keeps === "long"), carrier: nextScheduled(db, weekStart) };
+  return { mine, lines: linesOf(db, mine.map((o) => o.id)), needs: collectNeeds(db, days).filter((n) => n.keeps === "long"), carrier: longCarrier(db, weekStart) };
 }
 
 /** How many packs of a product cover an amount, from the pack's size (or its text, when plain: "500 ml"); null when the
@@ -199,7 +214,7 @@ function syncLines(db: Db, o: OrderRow, wanted: Grouped[], had: LineRow[], chang
 }
 
 /** Give every scheduled order of a plan the lines its days need now. Fresh items go to the order covering their day;
- *  long-life ones to the week's soonest scheduled order, unless an order already placed has them, a line rolled over from
+ *  long-life ones to the week's second order (longCarrier), unless an order already placed has them, a line rolled over from
  *  an unpaid order has them, or the family said they have them. Lines the family added are not touched, and neither is an
  *  order the agent was woken to place: it is caught up by the next rebuild if it comes back not placed. */
 export function fillOrders(db: Db, changes: Change[]) {
@@ -296,7 +311,7 @@ export function lowOrOutQuestion(db: Db, weekStart: string): { order_id: string 
   return { order_id: w.carrier?.id ?? null, items: names, question: text ? `${text.charAt(0).toUpperCase()}${text.slice(1)}: any low or out?` : null };
 }
 
-/** The family's answer, applied to the week's next scheduled order. What was asked is every long-life item on a live order
+/** The family's answer, applied to the order that carries the week's long-life items (longCarrier). What was asked is every long-life item on a live order
  *  or said to be at home earlier. One the answer does not name is at home: its lines leave that order and it is skipped
  *  there. One it names is ordered: it comes back to that order when no live order has it; with no scheduled order left, a
  *  new order placed now takes it. Orders already placed are not touched. Answers with the order changed or made, or null. */

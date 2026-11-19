@@ -1,5 +1,5 @@
-// The messages the app writes for its agent to send, word for word: the order going out, the two daily check-ins and the
-// how-to-use intro; and what a recipe's link says about itself (where it is from, its thumbnail). Text in, text out: nothing
+// The messages the app writes for its agent to send, word for word: the order going out, the two daily check-ins, the
+// how-to-use intro and the line about an order nobody paid for; and what a recipe's link says about itself (where it is from, its thumbnail). Text in, text out: nothing
 // here reads the database, and nothing imported here is server-only, so the pages can use it too.
 import { APP_NAMES, type GroceryApp } from "./db/constants";
 import { clockText, dayLabel } from "./dates";
@@ -70,6 +70,14 @@ export function introText(orderDay: string, times: { dinner: string; tomorrow: s
     "• Saw a recipe on Instagram or YouTube? Share it here and say \"save this\"; I'll keep it and can plan it in.",
     "• Everyday items (milk, curd, eggs) are ordered automatically; tell me to change them.",
   ].join("\n");
+}
+
+/** The one line said when a placed order was not paid within a day and the app closed it. `orderDay` is the day it was
+ *  placed ("Monday"); `nextDay` the day of the order its items moved to, or null when there was no later order (none is
+ *  made, and the items stay where they were). */
+export function unpaidText(orderDay: string, nextDay: string | null): string {
+  if (!nextDay) return `${orderDay}'s order wasn't paid, and there is no later order to move its items to. Tell me if you still want them.`;
+  return `${orderDay}'s order wasn't paid, so I've moved its items to ${nextDay === orderDay ? "the next order" : `${nextDay}'s`}.`;
 }
 
 // ── Recipe links ──

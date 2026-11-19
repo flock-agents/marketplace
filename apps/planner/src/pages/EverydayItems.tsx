@@ -6,7 +6,7 @@ import { pausedNow, regularText, textList } from "./format";
 import type { RegularRow } from "./shared";
 
 const EVERY_LABELS: Record<string, string> = { day: "Every day", week: "Some times a week", weekdays: "On chosen days" };
-const KEEPS_LABELS: Record<string, string> = { fresh: "Fresh: bought for the days it is needed", long: "Keeps long: bought once, in the week's first order" };
+const KEEPS_LABELS: Record<string, string> = { fresh: "Fresh: bought for the days it is needed", long: "Keeps long: bought once, in the week's second order" };
 const FIELDS: FormProps["fields"] = [
   { type: "text", name: "item", label: "Item", required: true },
   { type: "number", name: "amount", label: "How much each time", required: true },

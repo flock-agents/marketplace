@@ -2,6 +2,7 @@
 // wiring that keeps the orders in step with the plan: a final plan builds its week's orders, and any later change to a
 // meal, a dish or an everyday item (by the agent, or by the family on a page) rebuilds the ones not yet placed.
 // An order goes scheduled → placed (waiting for the person's payment) → paid or not paid; or cancelled before it is placed.
+// One left waiting for its payment for a day is closed as not paid by the order clock (routines/order-clock.ts).
 import type { Hono } from "hono";
 import { and, asc, desc, eq, gte, isNull, sql } from "drizzle-orm";
 import type { KitEvent } from "@flock/app-kit";
@@ -86,7 +87,7 @@ export function mountOrderRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: Orde
   });
 
   // ask_low_or_out { week_start, low_or_out? }: without an answer, the week's long-life items and the question to ask about
-  // them. With one, the items it names are ordered and the rest are at home: a list of items names them whole, the
+  // them; they wait on the week's second order (orders.ts longCarrier), which is the order the answer changes. With one, the items it names are ordered and the rest are at home: a list of items names them whole, the
   // family's own words as one text name an item by any of its words.
   write("/api/orders/low-or-out", (b, by) => {
     const weekStart = dateOf(b.week_start, "week_start");
