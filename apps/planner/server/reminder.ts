@@ -10,7 +10,7 @@ import { item_events, items, order_lines, orders, regulars } from "./db/schema";
 import { APP_NAMES, CART_SYNC, ESTIMATE, type GroceryApp } from "./db/constants";
 import { addDays, mondayOf, todayStr } from "./dates";
 import { refuse, shoppingApps, writeRoutes, type Db, type Emit } from "./family";
-import { weekView, type MealView } from "./meals";
+import { dateOf, weekView, type MealView } from "./meals";
 import { regularNeeds } from "./regulars";
 import { itemFor, itemStates, recomputeItem } from "./items";
 import { isDue, pickAsks } from "./estimate";
@@ -51,8 +51,11 @@ function coveredMeals(tx: Db, which: Which, date: string): MealView[] {
 
 type Schedule = (key: string, run: null, ms: number) => void;
 
-function build(tx: Db, which: Which, now: Date, by: string, changes: Change[], schedule?: Schedule): Reminder {
-  const today = todayStr(now), tomorrow = addDays(today, 1);
+/** The day a reminder runs on, from its `date` (the meals' date): the afternoon's is that day, the evening's the day before. */
+const runDay = (which: Which, date: string): string => (which === "afternoon" ? date : addDays(date, -1));
+
+function build(tx: Db, which: Which, now: Date, by: string, changes: Change[], schedule?: Schedule, given?: string): Reminder {
+  const today = given ? runDay(which, given) : todayStr(now), tomorrow = addDays(today, 1);
   const date = which === "afternoon" ? today : tomorrow, key = `${date}:${which}`;
   const opts = { changes, at: now };
   const shop = shoppingApps(tx);
@@ -161,13 +164,15 @@ function build(tx: Db, which: Which, now: Date, by: string, changes: Change[], s
 }
 
 /** The reminder `which` at `now`. With `dryRun` nothing is kept (everything is rolled back) and the answer is the same; else
- *  the changes are told to `emit` once they are committed, and a cart it orders drops its app's waiting copy (`schedule`). */
-export function buildReminder(db: Db, which: Which, now: Date, opts: { dryRun: boolean; by?: string; emit?: Emit; schedule?: Schedule }): Reminder {
+ *  the changes are told to `emit` once they are committed, and a cart it orders drops its app's waiting copy (`schedule`).
+ *  `date`: the reminder's date (its meals' day) as the routine that woke the agent worked it out, so the agent's call builds
+ *  the reminder the routine checked even when it runs after midnight; without it, the reminder of `now`. */
+export function buildReminder(db: Db, which: Which, now: Date, opts: { dryRun: boolean; by?: string; emit?: Emit; schedule?: Schedule; date?: string }): Reminder {
   const changes: Change[] = [];
   let out = null as Reminder | null;
   try {
     db.transaction((tx) => {
-      out = build(tx as unknown as Db, which, now, opts.by ?? "app", changes, opts.dryRun ? undefined : opts.schedule);
+      out = build(tx as unknown as Db, which, now, opts.by ?? "app", changes, opts.dryRun ? undefined : opts.schedule, opts.date);
       if (opts.dryRun) throw new DryRun();
     });
   } catch (e) {
@@ -177,13 +182,21 @@ export function buildReminder(db: Db, which: Which, now: Date, opts: { dryRun: b
   return out!;
 }
 
-/** get_reminder { which } → POST /api/reminders/:which: the reminder, for real. */
+/** get_reminder { which, date? } → POST /api/reminders/:which: the reminder, for real. `date` is the one the routine's wake
+ *  carried; only a reminder of today's run or yesterday's (a wake held past midnight) is built, any other date is refused. */
 export function mountReminderRoutes(hono: Hono<any>, db: Db, emit: Emit,
   deps: { now?: () => Date; schedule?: (key: string, run: (() => void) | null, ms: number) => void } = {}) {
   const write = writeRoutes(hono);
-  write("/api/reminders/:which", (_b, by, c) => {
+  write("/api/reminders/:which", (b, by, c) => {
     const which = c.req.param("which") ?? "";
     if (!(WHICH as readonly string[]).includes(which)) refuse(`which must be one of: ${WHICH.join(", ")}`);
-    return { body: buildReminder(db, which as Which, (deps.now ?? (() => new Date()))(), { dryRun: false, by, emit, schedule: deps.schedule }) };
+    const now = (deps.now ?? (() => new Date()))();
+    let date: string | undefined;
+    if (b?.date != null) {
+      date = dateOf(b.date, "date");
+      const today = todayStr(now);
+      if (![today, addDays(today, -1)].includes(runDay(which as Which, date))) refuse(`date ${date} is not the date of today's ${which} reminder or yesterday's: send the date the wake gave`);
+    }
+    return { body: buildReminder(db, which as Which, now, { dryRun: false, by, emit, schedule: deps.schedule, date }) };
   });
 }

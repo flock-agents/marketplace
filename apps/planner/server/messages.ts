@@ -1,8 +1,8 @@
-// The messages the app writes for its agent to send, word for word: the order going out, the two daily check-ins, the
+// The messages the app writes for its agent to send, word for word: the order going out, the two daily reminders, the
 // how-to-use intro and the line about an order nobody paid for; and what a recipe's link says about itself (where it is from, its thumbnail). Text in, text out: nothing
 // here reads the database, and nothing imported here is server-only, so the pages can use it too.
 import { APP_NAMES, type GroceryApp } from "./db/constants";
-import { clockText, dayLabel } from "./dates";
+import { clockText } from "./dates";
 import { dishText } from "./dishText";
 import type { MealView } from "./meals";
 
@@ -16,7 +16,6 @@ const SHOWN_LINES = 8;
  *  library is the pages' own, not the server's, so the same format is written here. */
 const rupees = (n: number): string => `₹${new Intl.NumberFormat("en-IN").format(Math.round(n))}`;
 const ANYTHING = "Anything to change?";
-const notOnAnOrder = (missing: string[]): string[] => (missing.length ? [`Not on any order yet: ${missing.join(", ")}.`] : []);
 
 /** What the agent says just before an order is placed: "Ordering this now: Aashirvaad Atta 5 kg, Amul Taaza 500 ml ×4,
  *  ~₹405 on Zepto". The estimate adds up the lines that have a price, and is left out when none has. */
@@ -27,36 +26,6 @@ export function orderingNowText(o: { app: string; lines: OrderLineText[] }): str
   const priced = o.lines.filter((l) => l.price != null);
   const total = priced.length ? `, ~${rupees(priced.reduce((sum, l) => sum + qty(l) * l.price!, 0))}` : "";
   return `Ordering this now: ${names.join(", ")}${more > 0 ? ` and ${more} more` : ""}${total} on ${APP_NAMES[o.app as GroceryApp] ?? o.app}`;
-}
-
-/** The afternoon check-in about tonight's dinner: its dishes, the fresh items it needs that are on an order (`covered`) and
- *  the ones on none (`missing`). Null when there is nothing to check: no dinner, one ordered in, or one with no dishes. */
-export function dinnerCheckText(i: { meal: MealView | null; missing: string[]; covered: string[] }): string | null {
-  if (!i.meal || i.meal.ordered_in || !i.meal.dishes.length) return null;
-  return [
-    `Tonight's dinner: ${i.meal.dishes.map(dishText).join(", ")}.`,
-    ...(i.covered.length ? [`Fresh items on an order: ${i.covered.join(", ")}.`] : []),
-    ...notOnAnOrder(i.missing),
-    ANYTHING,
-  ].join("\n");
-}
-
-/** The evening check-in about tomorrow, which is also the cook's brief: each meal on its own line, then the videos of its
- *  dishes (for the cook when they come that day). Null when no meal is planned. */
-export function tomorrowCheckText(i: { date: string; meals: MealView[]; cook?: { name: string; arrival: string; today: boolean };
-  videos: { dish: string; url: string }[]; missing: string[] }): string | null {
-  const meals = i.meals.filter((m) => m.ordered_in || m.dishes.length);
-  if (!meals.length) return null;
-  const videos = i.videos.map((v) => `${v.dish} ${v.url}`).join(", ");
-  // "07:30" reads "7:30": the cook's arrival as it was given, without the leading zero.
-  const forWhom = i.cook?.today ? `For ${i.cook.name} (comes ${i.cook.arrival.replace(/^0/, "")})` : "Videos";
-  return [
-    `Tomorrow, ${dayLabel(i.date)}:`,
-    ...meals.map((m) => `${m.slot}: ${m.ordered_in ? "ordering in" : m.dishes.map(dishText).join(", ")}`),
-    ...(videos ? [`${forWhom}: ${videos}`] : []),
-    ...notOnAnOrder(i.missing),
-    ANYTHING,
-  ].join("\n");
 }
 
 // ── The reminder (reminder.ts builds it) ──

@@ -1,7 +1,7 @@
-// The messages the app writes for the agent to send, word for word: the order going out, the two daily check-ins, the
-// how-to-use intro; and what a recipe link says about itself.
+// The messages the app writes for the agent to send, word for word: the order going out, the reminder, the
+// how-to-use intro, the unpaid line; and what a recipe link says about itself.
 import { describe, it, expect } from "bun:test";
-import { andList, clockText, dinnerCheckText, dishText, introText, linkSource, orderingNowText, reminderText, tomorrowCheckText, unpaidText, weekLink, weekMessage, youtubeThumb,
+import { andList, clockText, dishText, introText, linkSource, orderingNowText, reminderText, unpaidText, weekLink, weekMessage, youtubeThumb,
   type ReminderText } from "./messages";
 import type { DishView, MealView } from "./meals";
 
@@ -11,16 +11,6 @@ const meal = (date: string, slot: string, dishes: DishView[], m: Partial<MealVie
   ({ id: `${date} ${slot}`, date, slot, ordered_in: false, note: null, dishes, ...m });
 
 const TUE = "2026-11-24";
-const dinner = meal("2026-11-23", "Dinner", [
-  dish("Matar paneer"),
-  dish("Rotis", { portion_note: "wife 2, me 3, Agastya 2" }),
-  dish("Parathas", { for_people: ["Dad"] }) ]);
-const breakfast = meal(TUE, "Breakfast", [dish("Poha", { video_url: "https://www.instagram.com/reel/abc" })]);
-const lunch = meal(TUE, "Lunch", [dish("Rice"), dish("Aloo gobi"), dish("Sambar"),
-  dish("Boiled eggs", { for_people: ["me", "wife"], portion_note: "4 for me, 1 for wife" })]);
-const tiffin = meal(TUE, "Agastya's tiffin", [dish("Idli")]);
-const lakshmi = { name: "Lakshmi", arrival: "07:30", today: true };
-const pohaVideo = { dish: "Poha", url: "https://www.instagram.com/reel/abc" };
 
 describe("dishText", () => {
   it("is the name, with the portions when noted, else who it is for", () => {
@@ -53,58 +43,6 @@ describe("orderingNowText", () => {
     expect(orderingNowText({ app: "zepto", lines }))
       .toBe("Ordering this now: item 1, item 2, item 3, item 4, item 5, item 6, item 7, item 8 and 3 more, ~₹110 on Zepto");
     expect(orderingNowText({ app: "zepto", lines: lines.slice(0, 8) })).not.toContain("more");
-  });
-});
-
-describe("dinnerCheckText", () => {
-  it("says tonight's dishes, the fresh items on an order and the ones on none", () => {
-    expect(dinnerCheckText({ meal: dinner, covered: ["paneer", "peas"], missing: ["coriander"] }))
-      .toBe("Tonight's dinner: Matar paneer, Rotis (wife 2, me 3, Agastya 2), Parathas (for Dad).\nFresh items on an order: paneer, peas.\nNot on any order yet: coriander.\nAnything to change?");
-  });
-
-  it("leaves out a line with nothing to say", () => {
-    expect(dinnerCheckText({ meal: dinner, covered: [], missing: [] }))
-      .toBe("Tonight's dinner: Matar paneer, Rotis (wife 2, me 3, Agastya 2), Parathas (for Dad).\nAnything to change?");
-    expect(dinnerCheckText({ meal: dinner, covered: [], missing: ["coriander"] }))
-      .toBe("Tonight's dinner: Matar paneer, Rotis (wife 2, me 3, Agastya 2), Parathas (for Dad).\nNot on any order yet: coriander.\nAnything to change?");
-  });
-
-  it("has nothing to send with no dinner, a dinner ordered in, or one with no dishes", () => {
-    expect(dinnerCheckText({ meal: null, covered: [], missing: [] })).toBeNull();
-    expect(dinnerCheckText({ meal: meal("2026-11-23", "Dinner", [], { ordered_in: true }), covered: [], missing: [] })).toBeNull();
-    expect(dinnerCheckText({ meal: meal("2026-11-23", "Dinner", []), covered: [], missing: ["coriander"] })).toBeNull();
-  });
-});
-
-describe("tomorrowCheckText", () => {
-  it("lists tomorrow's meals and the cook's videos", () => {
-    expect(tomorrowCheckText({ date: TUE, meals: [breakfast, lunch, tiffin], cook: lakshmi, videos: [pohaVideo], missing: [] }))
-      .toBe("Tomorrow, Tue 24 Nov:\nBreakfast: Poha\nLunch: Rice, Aloo gobi, Sambar, Boiled eggs (4 for me, 1 for wife)\nAgastya's tiffin: Idli\nFor Lakshmi (comes 7:30): Poha https://www.instagram.com/reel/abc\nAnything to change?");
-  });
-
-  it("a meal ordered in reads as ordering in", () => {
-    expect(tomorrowCheckText({ date: TUE, meals: [breakfast, meal(TUE, "Dinner", [], { ordered_in: true })], videos: [], missing: [] }))
-      .toBe("Tomorrow, Tue 24 Nov:\nBreakfast: Poha\nDinner: ordering in\nAnything to change?");
-  });
-
-  it("says what is on no order yet", () => {
-    expect(tomorrowCheckText({ date: TUE, meals: [breakfast], videos: [], missing: ["poha", "peanuts"] }))
-      .toBe("Tomorrow, Tue 24 Nov:\nBreakfast: Poha\nNot on any order yet: poha, peanuts.\nAnything to change?");
-  });
-
-  it("keeps the videos when the cook is not coming, and has no cook line without a video", () => {
-    const videos = [pohaVideo, { dish: "Sambar", url: "https://youtu.be/s4mb4r" }];
-    expect(tomorrowCheckText({ date: TUE, meals: [breakfast, lunch], cook: { ...lakshmi, today: false }, videos, missing: [] }))
-      .toBe("Tomorrow, Tue 24 Nov:\nBreakfast: Poha\nLunch: Rice, Aloo gobi, Sambar, Boiled eggs (4 for me, 1 for wife)\nVideos: Poha https://www.instagram.com/reel/abc, Sambar https://youtu.be/s4mb4r\nAnything to change?");
-    expect(tomorrowCheckText({ date: TUE, meals: [breakfast, lunch], cook: { ...lakshmi, arrival: "11:00" }, videos, missing: [] }))
-      .toContain("\nFor Lakshmi (comes 11:00): Poha https://www.instagram.com/reel/abc, Sambar https://youtu.be/s4mb4r\n");
-    expect(tomorrowCheckText({ date: TUE, meals: [breakfast], cook: lakshmi, videos: [], missing: [] }))
-      .toBe("Tomorrow, Tue 24 Nov:\nBreakfast: Poha\nAnything to change?");
-  });
-
-  it("has nothing to send when no meal is planned", () => {
-    expect(tomorrowCheckText({ date: TUE, meals: [], cook: lakshmi, videos: [], missing: [] })).toBeNull();
-    expect(tomorrowCheckText({ date: TUE, meals: [meal(TUE, "Lunch", [])], videos: [], missing: [] })).toBeNull();
   });
 });
 
@@ -185,9 +123,7 @@ describe("no em dashes", () => {
   it("none of the texts has one", () => {
     const texts = [weekMessage({ monday: [], link: "L" }), introText(TIMES, ["milk"]), unpaidText("Zepto", "Monday"),
       reminderText({ which: "afternoon", meals: [meal(TUE, "Dinner", [dish("Dal")])], ask_ingredients: ["methi"], added: [{ item: "curd" }], cart_items: ["curd"],
-        asks: [{ item: "atta", days_ago: 3 }, { item: "rice", days_ago: 1 }], delivery_gap: { app: "Zepto", rupees: 10 }, ordered: [], carts: [], empty: false }),
-      dinnerCheckText({ date: TUE, meals: [meal(TUE, "Dinner", [dish("Dal")])], videos: [], missing: [] }) ?? "",
-      tomorrowCheckText({ date: TUE, meals: [meal(TUE, "Lunch", [dish("Dal")])], videos: [], missing: [] }) ?? ""];
+        asks: [{ item: "atta", days_ago: 3 }, { item: "rice", days_ago: 1 }], delivery_gap: { app: "Zepto", rupees: 10 }, ordered: [], carts: [], empty: false })];
     for (const t of texts) expect(t).not.toContain("\u2014");
   });
 });

@@ -117,13 +117,46 @@
     {
       "id": "weekly-plan",
       "name": "Weekly meal plan",
-      "description": "Once a week, asks the agent to plan next week's meals and send the family the plan. On an install carried over from the old Meal Planner it first asks for the family's profile to be structured.",
+      "description": "Every Sunday at 11, asks the agent to plan next week's meals on the cooking days and send the family the plan. It plans only: nothing is bought. On an install carried over from the old Meal Planner it first asks for the family's profile to be structured.",
       "trigger": {
         "type": "schedule",
-        "cron": "0 18 * * 6"
+        "cron": "0 11 * * 0"
       },
       "executionMode": "app-relay",
       "handler": "weekly-plan"
+    },
+    {
+      "id": "afternoon-reminder",
+      "name": "Afternoon reminder",
+      "description": "Every day at 3 pm, when there is something to say: tonight's dinner, the ingredients to check, tomorrow's everyday items put on the cart and anything that may be running low. Nothing is ordered until you reply.",
+      "trigger": {
+        "type": "schedule",
+        "cron": "0 15 * * *"
+      },
+      "executionMode": "app-relay",
+      "handler": "afternoon-reminder"
+    },
+    {
+      "id": "evening-reminder",
+      "name": "Evening reminder",
+      "description": "Every day at 7 pm: reads new orders from your connected shopping apps, then tells you tomorrow's meals, puts tomorrow's everyday items on the cart and asks about anything that may be running low. Nothing is ordered until you reply.",
+      "trigger": {
+        "type": "schedule",
+        "cron": "0 19 * * *"
+      },
+      "executionMode": "app-relay",
+      "handler": "evening-reminder"
+    },
+    {
+      "id": "order-clock",
+      "name": "Order clock",
+      "description": "Every 15 minutes: an order not paid within 24 hours is closed and its items go back on your cart (you are told once); an order stuck being placed for an hour goes back to your cart.",
+      "trigger": {
+        "type": "schedule",
+        "cron": "*/15 * * * *"
+      },
+      "executionMode": "app-relay",
+      "handler": "order-clock"
     }
   ],
   "agentInterface": {
@@ -201,7 +234,7 @@
       },
       {
         "name": "get_reminder",
-        "description": "The reminder to send now, built from the plan, the carts and what may be running low. { which: afternoon | evening }. afternoon is tonight's dinner, evening is tomorrow's meals; both put tomorrow's everyday items on the cart and ask about at most 5 items that may be running low, each counted once per reminder however often you call it. Answers { which, date, meals, ask_ingredients, added, cart_items, asks: [{ item, days_ago }], delivery_gap, ordered: [{ order_id, app, message }], empty, text, app_text, block, carts: [{ order_id, app, status, lines, sync }] }. empty: send nothing. Send text on WhatsApp word for word, or app_text with block in the app chat. Copy each cart with sync: true to its app, then sync_cart. Check out every cart in ordered (Order without asking is on; a retry lists the same ones): say its message, check out, record_order."
+        "description": "The reminder to send now, built from the plan, the carts and what may be running low. { which: afternoon | evening, date?: the date the reminder's wake gave, YYYY-MM-DD (so a call after midnight builds that same reminder) }. afternoon is tonight's dinner, evening is tomorrow's meals; both put tomorrow's everyday items on the cart and ask about at most 5 items that may be running low, each counted once per reminder however often you call it. Answers { which, date, meals, ask_ingredients, added, cart_items, asks: [{ item, days_ago }], delivery_gap, ordered: [{ order_id, app, message }], empty, text, app_text, block, carts: [{ order_id, app, status, lines, sync }] }. empty: send nothing. Send text on WhatsApp word for word, or app_text with block in the app chat. Copy each cart with sync: true to its app, then sync_cart. Check out every cart in ordered (Order without asking is on; a retry lists the same ones): say its message, check out, record_order."
       },
       {
         "name": "get_cart",

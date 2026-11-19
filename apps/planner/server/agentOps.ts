@@ -29,7 +29,7 @@ export const ROUTES: Record<string, Route> = {
   set_subscription: (p) => ({ method: "POST", path: "/api/items/subscription", body: p }),
   answer_running_low: (p) => ({ method: "POST", path: "/api/items/answers", body: p }),
   get_reminder: (p) => typeof p.which === "string"
-    ? { method: "POST", path: `/api/reminders/${encodeURIComponent(p.which)}`, body: {} }
+    ? { method: "POST", path: `/api/reminders/${encodeURIComponent(p.which)}`, body: p.date === undefined ? {} : { date: p.date } }
     : { error: "which is required: afternoon or evening", code: "APP_REFUSED", status: 400 },
   get_cart: (p) => ({ method: "GET", path: p.app == null ? "/api/carts" : `/api/carts?app=${encodeURIComponent(String(p.app))}` }),
   set_cart_line: (p) => ({ method: "POST", path: "/api/carts/line", body: p }),
