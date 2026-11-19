@@ -391,7 +391,7 @@ describe("live pages", () => {
   it("are told of every row once the write is in: the writer's rows as the writer's, what follows from them as the app's", async () => {
     const { kit } = await boot();
     const hono = new Hono(); const told: string[] = [];
-    mountMealRoutes(hono, kit.db, (table, _id, op, by) => { told.push(`${table} ${op} ${by}`); }, { onFinal: () => undefined, onChanged: () => {} });
+    mountMealRoutes(hono, kit.db, (table, _id, op, by) => { told.push(`${table} ${op} ${by}`); }, { basePath: "/a/planner" });
     const post = async (path: string, body: unknown) => {
       told.length = 0;
       const r = await hono.request(path, { method: "POST", headers: { "Content-Type": "application/json", "x-flock-user": "meera" }, body: JSON.stringify(body) });

@@ -1,7 +1,7 @@
 // The words the pages show for a dish, a cart, an order, a pantry item, an everyday item and a recipe. No React and no
 // library import here, so the wording is tested on its own. The dates, the grocery apps' names and a dish's line are the
 // server's own. The app an item is bought on is never named on the Pantry or the item page.
-import { clockText, dayLabel, todayStr } from "../../server/dates";
+import { addDays, clockText, dayLabel, todayStr, WEEKDAYS, weekdayLong, type Weekday } from "../../server/dates";
 import { APP_NAMES, SYNC_ASK_COOLDOWN_MIN, type GroceryApp } from "../../server/db/constants";
 import { dishText } from "../../server/dishText";
 
@@ -207,4 +207,31 @@ export function patternFields(i: ItemLike): { label: string; value: string | num
 /** What the item was learned from, as the list shows it: each with its day. */
 export function eventRows(events: { what: string; when: string; tag: string | null }[]): { id: string; what: string; when: string; tag: string | null }[] {
   return events.map((e, n) => ({ id: String(n), what: e.what, when: dayLabel(e.when), tag: e.tag }));
+}
+
+/** "23 Nov" from a date. */
+const dayMonth = (date: string): string => dayLabel(date).split(" ").slice(1).join(" ");
+
+/** The Week page's title: the week's dates, Monday to Saturday. "23 – 28 Nov"; across months "30 Nov – 5 Dec". */
+export function weekTitle(weekStart: string): string {
+  const [from, to] = [dayMonth(weekStart), dayMonth(addDays(weekStart, 5))];
+  const [fromDay, fromMonth] = from.split(" "), toMonth = to.split(" ")[1];
+  return fromMonth === toMonth ? `${fromDay} – ${to}` : `${from} – ${to}`;
+}
+
+/** A weekday's full name, "Sunday". 2026-11-23 is a Monday. */
+export const longDay = (d: Weekday): string => weekdayLong(addDays("2026-11-23", WEEKDAYS.indexOf(d)));
+
+/** The cooking days in words: "Every day", a run of three or more as "Mon – Sat (Sunday off)", else "Mon, Wed, Fri". */
+export function cookingDaysText(days: readonly string[]): string {
+  const on = WEEKDAYS.filter((d) => days.includes(d));
+  if (!on.length) return "No days";
+  if (on.length === WEEKDAYS.length) return "Every day";
+  const first = WEEKDAYS.indexOf(on[0]), last = WEEKDAYS.indexOf(on[on.length - 1]);
+  if (on.length >= 3 && last - first + 1 === on.length) {
+    const off = WEEKDAYS.filter((d) => !on.includes(d));
+    const offText = off.length <= 2 ? ` (${off.map(longDay).join(" and ")} off)` : "";
+    return `${on[0]} – ${on[on.length - 1]}${offText}`;
+  }
+  return on.join(", ");
 }

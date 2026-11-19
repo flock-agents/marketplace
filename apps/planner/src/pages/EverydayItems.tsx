@@ -1,12 +1,11 @@
 import { useState } from "react";
-import { Button, Card, DateRange, Empty, Field, Form, Row, RowList, Stack, useTable, type FormProps } from "../flock/ui";
+import { Button, Card, DateRange, Empty, Field, Form, Row, RowList, Stack, useApp, useTable, type FormProps } from "../flock/ui";
 import { dayLabel, todayStr, WEEKDAYS } from "../../server/dates";
-import { EVERY, KEEPS } from "../../server/db/constants";
-import { pausedNow, regularText, textList } from "./format";
+import { EVERY } from "../../server/db/constants";
+import { agentName, pausedNow, regularText, textList } from "./format";
 import type { RegularRow } from "./shared";
 
 const EVERY_LABELS: Record<string, string> = { day: "Every day", week: "Some times a week", weekdays: "On chosen days" };
-const KEEPS_LABELS: Record<string, string> = { fresh: "Fresh: bought for the days it is needed", long: "Keeps long: bought once for the week" };
 const FIELDS: FormProps["fields"] = [
   { type: "text", name: "item", label: "Item", required: true },
   { type: "number", name: "amount", label: "How much each time", required: true },
@@ -15,7 +14,6 @@ const FIELDS: FormProps["fields"] = [
   { type: "number", name: "times_per_week", label: "Times a week (for some times a week)" },
   { type: "multi", name: "weekdays", label: "Days (for chosen days)", options: [...WEEKDAYS] },
   { type: "text", name: "for_whom", label: "For whom (leave empty for the house)" },
-  { type: "select", name: "keeps", label: "How long it keeps", options: [...KEEPS], optionLabels: KEEPS_LABELS },
 ];
 
 /** What the form holds, as the row to save. The same checks as the assistant's own route: a refusal is shown under the form. */
@@ -27,15 +25,16 @@ function rowOf(v: Record<string, unknown>): Partial<RegularRow> {
   return {
     item: String(v.item).trim(), amount, unit: String(v.unit).trim(), every: String(v.every),
     times_per_week: v.every === "week" ? times ?? 1 : null, weekdays: v.every === "weekdays" ? JSON.stringify(days) : null,
-    for_whom: v.for_whom ? String(v.for_whom).trim() || null : null, keeps: v.keeps ? String(v.keeps) : "fresh",
+    for_whom: v.for_whom ? String(v.for_whom).trim() || null : null,
   };
 }
 
-/** The everyday items: how much and how often, whether each is being ordered, a pause for a holiday, and an edit form. All
- *  of it opens under the item's own row. A change here rebuilds the orders not yet placed. */
+/** The everyday items, on the Family page: how much and how often, whether each goes in the cart, a pause for a holiday, and
+ *  an edit form. All of it opens under the item's own row. */
 export function EverydayItems() {
   const list = useTable<RegularRow>("regulars", { sort: "item", limit: 200 });
   const today = todayStr();
+  const agent = agentName(useApp().display);
   const [open, setOpen] = useState<{ id: string; what: "edit" | "pause" } | null>(null);
   const [until, setUntil] = useState<string | null>(null);
   const picked = open ? list.rows.find((r) => r.id === open.id) : undefined;
@@ -52,15 +51,15 @@ export function EverydayItems() {
     <RowList
       rows={list.rows} loading={list.loading} error={list.error} hasMore={list.hasMore} onLoadMore={list.loadMore}
       title={name}
-      meta={(r) => (r.active ? regularText(r, today) : `${regularText(r, today)} · not being ordered`)}
+      meta={(r) => (r.active ? regularText(r, today) : `${regularText(r, today)} · not added to the cart`)}
       trailing={(r) => (
         <>
-          <Field type="checkbox" name={`active-${r.id}`} label="Order it" value={!!r.active} onChange={(v) => void patch(r, { active: v === true ? 1 : 0 }, false)} />
+          <Field type="checkbox" name={`active-${r.id}`} label="Add to cart" value={!!r.active} onChange={(v) => void patch(r, { active: v === true ? 1 : 0 }, false)} />
           <Button size="sm" variant="ghost" icon="pause" onClick={() => toggle(r, "pause")}>{pausedNow(r, today) ? "Paused" : "Pause"}</Button>
           <Button size="sm" variant="ghost" icon="pencil" onClick={() => toggle(r, "edit")}>Edit</Button>
         </>
       )}
-      empty={<Empty title="No everyday items yet" hint="Tell the assistant what you buy again and again, like milk every day or bread twice a week." object="grocery-bag" />}
+      empty={<Empty title="No everyday items yet" hint={`Tell ${agent} what you buy again and again, like milk every day or bread twice a week.`} object="grocery-bag" />}
       expanded={picked && open ? {
         at: picked.id, label: `${open.what === "edit" ? "Edit" : "Pause"} ${picked.item}`, onClose: () => setOpen(null),
         content: open.what === "edit" ? (
@@ -69,13 +68,13 @@ export function EverydayItems() {
               onSubmit={async (v) => { await list.update(picked.id, rowOf(v)); setOpen(null); }} />
           </Card>
         ) : (
-          <Card title={`Pause ${name(picked)}`} meta="It is left off the orders from today up to and including the day you pick, for a holiday or a trip.">
+          <Card title={`Pause ${name(picked)}`} meta="It is left out of the cart from today up to and including the day you pick, for a holiday or a trip.">
             <Stack gap="md">
               {/* The pause always starts today: only the last day is picked. */}
               <DateRange from={today} to={until} presets={[]} onChange={(r) => setUntil(r.to && r.to >= today ? r.to : null)} />
               <Row>
                 <Button disabled={!until} onClick={() => void patch(picked, { paused_until: until })}>{until ? `Pause until ${dayLabel(until)}` : "Pick the last day"}</Button>
-                {pausedNow(picked, today) ? <Button variant="soft" onClick={() => void patch(picked, { paused_until: null })}>Order it again now</Button> : null}
+                {pausedNow(picked, today) ? <Button variant="soft" onClick={() => void patch(picked, { paused_until: null })}>Add it again now</Button> : null}
                 <Button variant="ghost" onClick={() => setOpen(null)}>Cancel</Button>
               </Row>
             </Stack>

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { APP_NAMES, TAG_TEXT } from "../../server/db/constants";
-import { agentName, cartNote, cartTitle, debouncePicks, dishNote, eventRows, forText, itemCallout, itemSubtitle, orderLabel, orderRow, outsideText, pantryTabs,
-  patternFields, pausedNow, pickerItems, profileWaiting, recipeSourceLabel, regularText, statusTone, TAG_TONES, textList } from "./format";
+import { agentName, cartNote, cookingDaysText, cartTitle, debouncePicks, dishNote, eventRows, forText, itemCallout, itemSubtitle, orderLabel, orderRow, outsideText, pantryTabs,
+  patternFields, pausedNow, pickerItems, profileWaiting, recipeSourceLabel, regularText, statusTone, TAG_TONES, textList, weekTitle } from "./format";
 
 describe("regularText", () => {
   it("says how much and how often", () => {
@@ -252,5 +252,29 @@ describe("the item page", () => {
       ...patternFields(item).map((f) => `${f.label} ${f.value}`), ...pantryTabs({ all: 1, in_stock: 1, low: 0, snoozed: 0 }).map((t) => t.label),
       ...eventRows([{ what: "Atta, 10 kg, bought outside the apps", when: "2026-11-01", tag: "your answer" }]).flatMap((r) => [r.what, r.when, r.tag])];
     for (const t of texts) for (const n of names) expect(String(t ?? "")).not.toContain(n);
+  });
+});
+
+describe("weekTitle", () => {
+  it("is the week's dates, Monday to Saturday", () => {
+    expect(weekTitle("2026-11-23")).toBe("23 – 28 Nov");
+  });
+  it("names both months when the week crosses one", () => {
+    expect(weekTitle("2026-11-30")).toBe("30 Nov – 5 Dec");
+  });
+});
+
+describe("cookingDaysText", () => {
+  it("reads a run of days as a range, with the days off", () => {
+    expect(cookingDaysText(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"])).toBe("Mon – Sat (Sunday off)");
+    expect(cookingDaysText(["Mon", "Tue", "Wed", "Thu", "Fri"])).toBe("Mon – Fri (Saturday and Sunday off)");
+  });
+  it("is every day when no day is off", () => {
+    expect(cookingDaysText(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"])).toBe("Every day");
+  });
+  it("lists days that are not a run, in week order", () => {
+    expect(cookingDaysText(["Fri", "Mon", "Wed"])).toBe("Mon, Wed, Fri");
+    expect(cookingDaysText(["Sat", "Sun"])).toBe("Sat, Sun");
+    expect(cookingDaysText([])).toBe("No days");
   });
 });

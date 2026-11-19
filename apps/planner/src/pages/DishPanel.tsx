@@ -1,10 +1,8 @@
 import { useState } from "react";
 import { Button, Confirm, Field, Heading, Row, Stack } from "../flock/ui";
-import { KEEPS } from "../../server/db/constants";
 import { joined, send, typedList, why, type DishView } from "./shared";
 
-type Line = { key: number; item: string; amount: number | null; unit: string; keeps: string };
-const KEEPS_LABELS: Record<string, string> = { fresh: "Fresh", long: "Keeps long" };
+type Line = { key: number; item: string; amount: number | null; unit: string };
 
 /** One dish, open under its row on the Week page: its name, who it is for, the portions, and what it needs bought. `dish`
  *  null is a new dish for the meal at `at`. Saved through the same route the agent's set_dish uses. */
@@ -12,12 +10,12 @@ export function DishPanel({ dish, at, onDone }: { dish: DishView | null; at: { d
   const [name, setName] = useState(dish?.name ?? "");
   const [who, setWho] = useState(joined(dish?.for_people));
   const [note, setNote] = useState(dish?.portion_note ?? "");
-  const [lines, setLines] = useState<Line[]>(() => (dish?.ingredients ?? []).map((i, key) => ({ key, item: i.item, amount: i.amount, unit: i.unit ?? "", keeps: i.keeps })));
+  const [lines, setLines] = useState<Line[]>(() => (dish?.ingredients ?? []).map((i, key) => ({ key, item: i.item, amount: i.amount, unit: i.unit ?? "" })));
   const [busy, setBusy] = useState(false);
   const [asking, setAsking] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
   const setLine = (key: number, patch: Partial<Line>) => setLines((all) => all.map((l) => (l.key === key ? { ...l, ...patch } : l)));
-  const addLine = () => setLines((all) => [...all, { key: Math.max(-1, ...all.map((l) => l.key)) + 1, item: "", amount: null, unit: "", keeps: "fresh" }]);
+  const addLine = () => setLines((all) => [...all, { key: Math.max(-1, ...all.map((l) => l.key)) + 1, item: "", amount: null, unit: "" }]);
 
   const run = async (body: object) => {
     setBusy(true); setProblem(null);
@@ -30,7 +28,7 @@ export function DishPanel({ dish, at, onDone }: { dish: DishView | null; at: { d
     if (bad) { setProblem(`The amount of ${bad.item.trim()} must be above 0, or left empty.`); return; }
     void run({
       name: name.trim(), for: typedList(who), portion_note: note.trim() || null,
-      ingredients: lines.filter((l) => l.item.trim()).map((l) => ({ item: l.item.trim(), amount: l.amount, unit: l.unit.trim() || null, keeps: l.keeps })),
+      ingredients: lines.filter((l) => l.item.trim()).map((l) => ({ item: l.item.trim(), amount: l.amount, unit: l.unit.trim() || null })),
     });
   };
 
@@ -48,7 +46,6 @@ export function DishPanel({ dish, at, onDone }: { dish: DishView | null; at: { d
               <Field type="text" name={`item-${l.key}`} label="Item" value={l.item} onChange={(v) => setLine(l.key, { item: String(v ?? "") })} />
               <Field type="number" name={`amount-${l.key}`} label="Amount" value={l.amount} onChange={(v) => setLine(l.key, { amount: typeof v === "number" ? v : null })} />
               <Field type="text" name={`unit-${l.key}`} label="Unit" placeholder="g, pc, l" value={l.unit} onChange={(v) => setLine(l.key, { unit: String(v ?? "") })} />
-              <Field type="select" name={`keeps-${l.key}`} label="Keeps" options={[...KEEPS]} optionLabels={KEEPS_LABELS} value={l.keeps} onChange={(v) => setLine(l.key, { keeps: v ? String(v) : "fresh" })} />
               <Button size="sm" variant="ghost" icon="x" onClick={() => setLines((all) => all.filter((x) => x.key !== l.key))}>Remove</Button>
             </div>
           ))}
@@ -64,7 +61,7 @@ export function DishPanel({ dish, at, onDone }: { dish: DishView | null; at: { d
         </Row>
       </Stack>
       {dish ? (
-        <Confirm open={asking} title={`Remove ${dish.name}?`} body="It is taken off this meal, and what it needs comes off the orders not yet placed."
+        <Confirm open={asking} title={`Remove ${dish.name}?`} body="It is taken off this meal."
           confirmLabel="Remove" tone="danger" onConfirm={() => { setAsking(false); void run({ remove: true }); }} onCancel={() => setAsking(false)} />
       ) : null}
     </form>
