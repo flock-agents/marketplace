@@ -146,4 +146,4 @@ on a dish, with the dish's ingredients in this family's amounts.
 On an upgraded install the weekly run first hands you a `profile`: what the family once said, as text. Structure it
 with `set_person` / `set_house_rules` / `set_cook` / `set_slots` / `set_regular`, in their words, and ask about anything
 unclear. Then clear it with `set_house_rules { structured: true }`, only after at least one person is saved. No week is
-planned until it is cleared; once it is, tell the family the app was rebuilt and plan the coming week.
+planned until it is cleared. Once it is, tell the family the app was rebuilt and plan the coming week as the weekly run does.
