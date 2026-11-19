@@ -15,12 +15,14 @@ every day. Needs Flock 0.24.0 (its betas included).
   and go into the orders without being asked for. The agent suggests them from your past orders; you confirm each one.
 - **Orders, placed for you.** Once a week (Saturday 6 pm unless you change it) the agent plans next week and groups what
   it needs into orders: fresh items close to the day they are cooked, long-life items in the first order. The first order
-  is placed right away; the later ones go out the evening before. The agent messages you just before each one and places
-  it without waiting for a yes; the payment step is yours. With the plan it asks once which long-life items are low or
-  out, and takes the ones you have off the next order.
+  is placed right away, with the week's long-life items; the later ones go out the evening before. The agent messages
+  you just before each one and places it without waiting for a yes; the payment step is yours. With the plan it asks
+  once which long-life items are low or out: your answer changes only the orders not yet placed.
 - **Where an order stands.** Scheduled, then placed and waiting for payment, then paid or not paid; a scheduled order can
   be cancelled. If you do not pay, or say cancel after it is placed, the order is closed as not paid and its items move to
-  the next order. A paid order is cancelled in the grocery app itself.
+  the next order; when no later order is waiting they are not moved, and the agent says so. A paid order is cancelled in
+  the grocery app itself. An order that could not be placed is tried again in an hour; one whose days have passed is
+  cancelled, not placed late.
 - **Real products.** Each line is a product on your grocery app with its pack and price, remembered for the next order.
   On the Shopping page you change the packs or remove a line while an order is scheduled; to add something, tell the
   agent, or press Add on the order, and pick from what it finds.
@@ -37,7 +39,8 @@ every day. Needs Flock 0.24.0 (its betas included).
   Family page.
 
 Existing installs: the old tables are kept unread; your household profile is carried over and the agent turns it into
-the new Family page on its next run. Until it has, no week is planned and no order goes out. Old meals, recipes and
+the new Family page on its next weekly run (Saturday 6 pm), then plans the week; the Family page says so until then, and
+you can tell the agent to do it now. Until it has, no week is planned and no order goes out. Old meals, recipes and
 shopping lists are not shown in the new pages.
 
 ## 2.0.7

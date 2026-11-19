@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { dishNote, forText, lineFor, orderHeading, orderMoney, pausedNow, recipeSourceLabel, regularText, textList } from "./format";
+import { dishNote, forText, lineFor, orderHeading, orderMoney, orderWhen, pausedNow, profileWaiting, recipeSourceLabel, regularText, textList } from "./format";
 
 describe("regularText", () => {
   it("says how much and how often", () => {
@@ -35,6 +35,30 @@ describe("orderHeading", () => {
   it("names no grocery app on an order that never went to one", () => {
     expect(orderHeading({ place_at: "2026-11-24T18:00", app: "zepto", status: "scheduled" } as any)).toBe("Tue 24 Nov, 6 pm · scheduled");
     expect(orderHeading({ place_at: "2026-11-24T18:00", app: "zepto", status: "cancelled" } as any)).toBe("Tue 24 Nov, 6 pm · cancelled");
+  });
+
+  it("a scheduled order the assistant was handed reads as being placed", () => {
+    expect(orderHeading({ place_at: "2026-11-21T18:00", app: "zepto", status: "scheduled", wake_sent_at: "2026-11-21T18:15" })).toBe("Sat 21 Nov, 6 pm · being placed");
+    expect(orderHeading({ place_at: "2026-11-21T18:00", app: "zepto", status: "scheduled", wake_sent_at: null })).toBe("Sat 21 Nov, 6 pm · scheduled");
+    // Once it is recorded, how it stands is what counts.
+    expect(orderHeading({ place_at: "2026-11-21T18:00", app: "zepto", status: "placed", wake_sent_at: "2026-11-21T18:15" })).toBe("Sat 21 Nov, 6 pm · Zepto · placed, waiting for payment");
+  });
+});
+
+describe("orderWhen", () => {
+  it("names an order by its day and time alone", () => {
+    expect(orderWhen({ place_at: "2026-11-24T18:00" })).toBe("Tue 24 Nov, 6 pm");
+    expect(orderWhen({ place_at: "2026-11-21T07:30" })).toBe("Sat 21 Nov, 7:30 am");
+    expect(orderWhen({ place_at: "2026-11-24" })).toBe("Tue 24 Nov");
+  });
+});
+
+describe("profileWaiting", () => {
+  it("is true while a profile from the old Meal Planner waits to be turned into the Family page", () => {
+    expect(profileWaiting({ profile_to_structure: "2 adults and Agastya (6). Veg on Tuesdays." })).toBe(true);
+    expect(profileWaiting({ profile_to_structure: null })).toBe(false);
+    expect(profileWaiting({ profile_to_structure: "  " })).toBe(false);
+    expect(profileWaiting({})).toBe(false);
   });
 });
 

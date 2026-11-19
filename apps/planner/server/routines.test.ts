@@ -1,6 +1,8 @@
 // The four routines, run by hand with a context that records each wake of the agent: the weekly plan, the two daily
 // check-ins and the order clock; and the family gate in front of them.
 import { describe, it, expect } from "bun:test";
+import { readFileSync } from "fs";
+import { join } from "path";
 import { boot } from "./testkit";
 import { migrateOldProfile } from "./gate";
 import { routines } from "./routines";
@@ -8,6 +10,7 @@ import { weeklyPlan, WEEKLY_PROMPT } from "./routines/weekly-plan";
 import { dailyTime, dinnerCheck, tomorrowCheck } from "./routines/check-ins";
 import { orderClock } from "./routines/order-clock";
 
+const guide = readFileSync(join(import.meta.dir, "agent-guide.md"), "utf8");
 const MON = "2026-11-23", TUE = "2026-11-24";
 const SAT_EVENING = new Date(2026, 10, 21, 18, 5);   // Sat 21 Nov, 18:05: the weekly run
 const SUN_7PM = new Date(2026, 10, 22, 19, 0);
@@ -159,7 +162,12 @@ describe("weekly plan", () => {
     expect(k.wakes[0].data).toEqual({ profile: "2 adults and Agastya (6). Veg on Tuesdays." });
     expect(k.wakes[0].message).toContain("set_person / set_house_rules / set_cook / set_slots / set_regular");
     expect(k.wakes[0].message).toContain("structured: true");
+    // Then the family hears of the new app and gets a plan in the same run, not a week later.
+    const m = k.wakes[0].message;
+    expect(m).toContain("tell the family the app was rebuilt, and plan the week of Mon 23 Nov (week_start 2026-11-23) as the weekly run does (call guide)");
+    expect(m.indexOf("structured: true")).toBeLessThan(m.indexOf("the app was rebuilt"));
     expect(k.wakes[0].data.week_start).toBeUndefined();
+    expect(guide.replace(/\s+/g, " ")).toContain("tell the family the app was rebuilt and plan the coming week as the weekly run does");
   });
 });
 

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Button, Card, Confirm, Icon, RowList, formatINR, useChat, useToast } from "../flock/ui";
 import { dayLabel } from "../../server/dates";
-import { lineFor, orderHeading, orderMoney } from "./format";
+import { beingPlaced, lineFor, orderHeading, orderMoney, orderWhen } from "./format";
 import { send, why, type LineRow, type OrderView } from "./shared";
 
 /** The days an order buys for: "Mon 23 Nov", or "Mon 23 Nov to Tue 24 Nov". An order made for an added item has none. */
@@ -19,13 +19,15 @@ const lineMeta = (l: LineRow): string => {
 };
 
 /** One order: when it is placed and how it stands, what it costs, and its lines. Only a scheduled order changes here: packs
- *  and removals in place, additions through the assistant. A placed order can be given up as not paying; the rest are read-only. */
+ *  and removals in place, additions through the assistant; not while the assistant is placing it, which is done from the
+ *  order as it was read. A placed order can be given up as not paying; the rest are read-only. */
 export function OrderCard({ order: o, movedTo, onChanged, onMoved }: { order: OrderView; movedTo?: string; onChanged: () => void; onMoved: (orderId: string, to: string) => void }) {
   const toast = useToast();
   const chat = useChat();
   const [asking, setAsking] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);   // the line being saved, or "order"
   const scheduled = o.status === "scheduled", placed = o.status === "placed";
+  const editable = scheduled && !beingPlaced(o);   // the family can still change it here
   const failed = (e: unknown) => toast.show({ message: `Couldn't save: ${why(e)}`, tone: "danger" });
 
   const setQty = async (l: LineRow, qty: number) => {
@@ -50,8 +52,8 @@ export function OrderCard({ order: o, movedTo, onChanged, onMoved }: { order: Or
       const out = await send<{ rolled_into?: OrderView | null }>(`orders/${o.id}/cancel`);
       onChanged();
       if (!placed) toast.show({ message: "Order cancelled", tone: "success" });
-      else if (out.rolled_into) { onMoved(o.id, orderHeading(out.rolled_into)); toast.show({ message: `Not paid. Its items moved to the order of ${orderHeading(out.rolled_into)}`, tone: "success" }); }
-      else toast.show({ message: "Marked as not paid. It had no items to move.", tone: "success" });
+      else if (out.rolled_into) { onMoved(o.id, orderWhen(out.rolled_into)); toast.show({ message: `Not paid. Its items moved to the order of ${orderWhen(out.rolled_into)}`, tone: "success" }); }
+      else toast.show({ message: "Not paid. There is no later order for its items.", tone: "success" });
     } catch (e) { failed(e); } finally { setBusy(null); }
   };
 
@@ -61,8 +63,9 @@ export function OrderCard({ order: o, movedTo, onChanged, onMoved }: { order: Or
       meta={[coversText(o), moneyText(o), o.note].filter(Boolean).join(" · ") || undefined}
       actions={scheduled ? (
         <>
-          {chat.available ? <Button size="sm" variant="soft" icon="plus" onClick={() => chat.openChat({ message: `Add to ${dayLabel(o.place_at.slice(0, 10))}'s order: `, send: false })}>Add</Button> : null}
-          <Button size="sm" variant="ghost" icon="x" loading={busy === "order"} onClick={() => setAsking(true)}>Cancel order</Button>
+          {chat.available ? <Button size="sm" variant="soft" icon="plus" onClick={() => chat.openChat({ message: `Add to ${dayLabel(o.place_at.slice(0, 10))}'s order: `, send: false })}>Add</Button>
+            : <span className="pl-quiet">To add something, tell the assistant.</span>}
+          {editable ? <Button size="sm" variant="ghost" icon="x" loading={busy === "order"} onClick={() => setAsking(true)}>Cancel order</Button> : null}
         </>
       ) : placed ? <Button size="sm" variant="ghost" loading={busy === "order"} onClick={() => setAsking(true)}>Not paying</Button> : undefined}
     >
@@ -74,7 +77,7 @@ export function OrderCard({ order: o, movedTo, onChanged, onMoved }: { order: Or
         trailing={(l) => (
           <>
             {l.price == null ? null : <span className="pl-price">{formatINR(l.price)}</span>}
-            {scheduled ? (
+            {editable ? (
               <>
                 <span className="pl-stepper">
                   <button type="button" aria-label={`One less of ${l.item}`} disabled={busy === l.id || (l.qty ?? 1) <= 1} onClick={() => void setQty(l, (l.qty ?? 1) - 1)}><Icon name="minus" size={14} /></button>
@@ -93,8 +96,8 @@ export function OrderCard({ order: o, movedTo, onChanged, onMoved }: { order: Or
       <Confirm
         open={asking}
         title={placed ? "Not paying for this order?" : "Cancel this order?"}
-        body={placed ? "This order will not be paid. Its items move to the next order." : "It will not be placed, and nothing on it is bought."}
-        confirmLabel={placed ? "Not paying" : "Cancel order"} tone="danger" onConfirm={() => void cancel()} onCancel={() => setAsking(false)}
+        body={placed ? "This order will not be paid. Its items move to the next order, when there is one." : "It will not be placed, and nothing on it is bought."}
+        confirmLabel={placed ? "Not paying" : "Yes, cancel the order"} tone="danger" onConfirm={() => void cancel()} onCancel={() => setAsking(false)}
       />
     </Card>
   );

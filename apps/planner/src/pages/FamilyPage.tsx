@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { Bullets, Button, Card, Confirm, Detail, Empty, ErrorCard, Field, Form, Heading, InlinePanel, Page, Section, Skeleton, Stack, label, useToast, type FormProps } from "../flock/ui";
+import { Bullets, Button, Callout, Card, Confirm, Detail, Empty, ErrorCard, Field, Form, Heading, InlinePanel, Page, Section, Skeleton, Stack, label, useToast, type FormProps } from "../flock/ui";
 import { clockText, WEEKDAYS } from "../../server/dates";
 import { APP_NAMES, GROCERY_APPS, GROUPS, RULE_KINDS, SLOTS } from "../../server/db/constants";
 import { RowsEditor } from "./RowsEditor";
+import { profileWaiting } from "./format";
 import { joined, send, typedList, useLive, why, type Family, type PersonRow } from "./shared";
 
 const GROUP_LABELS: Record<string, string> = { child: "Child", adult: "Adult", elder: "Elder" };
@@ -59,6 +60,9 @@ export function FamilyPage() {
 
   return (
     <Page title={label("title.family", "Family")} subtitle="What the assistant plans the meals and the orders from">
+      {profileWaiting(house) ? (
+        <Callout tone="info">Your profile from the old Meal Planner was kept. The assistant turns it into this page on its next weekly run; tell it to do it now.</Callout>
+      ) : null}
       <Section title="People" actions={<Button size="sm" variant="app" icon="plus" onClick={() => setEditing(editing === "add-person" ? null : "add-person")}>Add</Button>}>
         {editing === "add-person" ? (
           <InlinePanel label="Add a person" onClose={close} className="pl-panel">

@@ -89,7 +89,7 @@ arithmetic (g, ml, pc); `recipes.ts` saved recipes; `orders.ts` how needs become
 order operations and the rebuild after a change; `messages.ts` the texts the agent sends word for word; `dates.ts` local
 dates; `gate.ts` the family gate and the 2.0 profile; `routines/` the four routines; `testkit.ts` boots the app for tests.
 Pages (`src/pages/`): `WeekPage` + `DishPanel`; `ShoppingPage` with `OrderCard` (packs and remove in place, only while
-scheduled; "+ Add" opens the chat) and `EverydayItems`; `RecipesPage`; `FamilyPage`; `format.ts` their wording.
+scheduled and not being placed; "+ Add" opens the chat) and `EverydayItems`; `RecipesPage`; `FamilyPage`; `format.ts`.
 
 **Tables** (all public; lists are JSON text, dates `YYYY-MM-DD`, times `HH:MM`, local). `people` (child | adult | elder;
 portions, diet, allergies in their own words) · `house` (one row: rules, the cook, extra slots, meals ordered in, notes,
@@ -102,19 +102,19 @@ too), `set_cook`, `set_slots`; `plan_week` (draft | final; without meals it answ
 `set_dish`; `set_regular`, `import_order_history` (suggests only), `remember_product`, `save_recipe`; `ask_low_or_out`,
 `place_order`, `record_order`, `cancel_order`, and `add_to_order`, the one door to an order's lines (add, set, remove).
 
-**Routines and the gate.** `weekly-plan` (Sat 18:00) wakes the agent to plan next week, place its first order and send the
-plan with the low-or-out question. `dinner-check` (15:00) and `tomorrow-check` (19:00) wake it to send a message the app
-wrote, only when a final plan has a meal to check; each records the time it really runs at, which the intro names.
-`order-clock` (every 15 min) hands each due order to the agent, again after 60 min if it was never recorded. The
-gate (`gate.ts`): nothing runs until one person is saved. On an upgrade from 2.0, boot copies the `household.profile` text
-to `house.profile_to_structure`; until cleared, the weekly run only asks the agent to structure it. 2.0's 18 tables stay, unread.
+**Routines and the gate.** `weekly-plan` (Sat 18:00) wakes the agent to plan next week, place its first order and send the plan
+with the low-or-out question. `dinner-check` (15:00) and `tomorrow-check` (19:00) wake it to send a message the app wrote, only
+when a final plan has a meal to check; each records the time it runs at, which the intro names. `order-clock` (every 15 min)
+hands each due order to the agent, again after 60 min if never recorded or recorded not placed; a planned one whose days are over
+is cancelled. The gate (`gate.ts`): nothing runs until one person is saved. On an upgrade, boot copies `household.profile` to
+`house.profile_to_structure`; until cleared, the weekly run asks only to structure it, then plan. 2.0's 18 tables stay, unread.
 
-**An order's life.** A final plan gives each pair of days an order: fresh items in the order covering their day, long-life
-items once, in the week's first. The first is placed right away, each later one at 18:00 the evening before; one order a
-date. `scheduled` → `placed` (waiting for payment) → `paid` or `not_paid`; `cancelled` only from scheduled. Scheduled orders
-are rebuilt after every change to the plan or an everyday item, keeping added lines and `skipped_items` (what the family
-said they have). Not paid, or a placed order cancelled: its lines move to the next scheduled order; nothing is cancelled on
-the grocery app. A not-paid order still covers its days, a cancelled one does not. The first one placed answers `intro`.
+**An order's life.** A final plan gives each pair of days an order: fresh items in the order covering their day, long-life items
+once, in the week's first. The first is placed right away, later ones at 18:00 the evening before; one order a date. `scheduled`
+→ `placed` (waiting for payment) → `paid` or `not_paid`; `cancelled` only from scheduled. Scheduled orders are rebuilt after
+every change to the plan or an everyday item, keeping added lines and `skipped_items` (what the family has). Not paid, or a
+placed order cancelled: its lines move to the next scheduled order, or stay when none waits (none is made); nothing is cancelled
+on the grocery app. A not-paid order still covers its days; a cancelled one does not. The first one placed answers `intro`.
 
 **Deliberately not stored.** No inventory: a low-or-out answer or a removed line changes only the order it is about. No
 ingredient catalog, portion multipliers, stock ledger, price comparison or prep reminders; amounts come from the agent.

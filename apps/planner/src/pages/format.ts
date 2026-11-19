@@ -21,13 +21,23 @@ export const STATUS_TEXT: Record<string, string> = { scheduled: "scheduled", pla
 /** The orders that went to a grocery app: only those name it. */
 const WENT_OUT = ["placed", "paid", "not_paid"];
 
-/** "Sat 21 Nov, 6 pm · Zepto · placed, waiting for payment", or "Tue 24 Nov, 6 pm · scheduled". */
-export function orderHeading(o: { place_at: string; app: string; status: string }): string {
+/** An order by when it is placed: "Sat 21 Nov, 6 pm". */
+export function orderWhen(o: { place_at: string }): string {
   const [date, time] = o.place_at.split("T");
-  const when = time ? `${dayLabel(date)}, ${clockText(time)}` : dayLabel(date);
-  const app = WENT_OUT.includes(o.status) ? APP_NAMES[o.app as GroceryApp] ?? o.app : null;
-  return [when, app, STATUS_TEXT[o.status] ?? o.status].filter(Boolean).join(" · ");
+  return time ? `${dayLabel(date)}, ${clockText(time)}` : dayLabel(date);
 }
+
+/** Is the assistant placing this order now? It was handed the order, and has not recorded what happened yet. */
+export const beingPlaced = (o: { status: string; wake_sent_at?: string | null }): boolean => o.status === "scheduled" && !!o.wake_sent_at;
+
+/** "Sat 21 Nov, 6 pm · Zepto · placed, waiting for payment", "Tue 24 Nov, 6 pm · scheduled", or "… · being placed". */
+export function orderHeading(o: { place_at: string; app: string; status: string; wake_sent_at?: string | null }): string {
+  const app = WENT_OUT.includes(o.status) ? APP_NAMES[o.app as GroceryApp] ?? o.app : null;
+  return [orderWhen(o), app, beingPlaced(o) ? "being placed" : STATUS_TEXT[o.status] ?? o.status].filter(Boolean).join(" · ");
+}
+
+/** Is a profile carried over from the old Meal Planner still waiting to be turned into people, rules, the cook and slots? */
+export const profileWaiting = (house: { profile_to_structure?: string | null }): boolean => !!house.profile_to_structure?.trim();
 
 /** What an order costs: the amount recorded from the grocery app when there is one, else the estimate added up from its
  *  lines (`estimate`: shown as "about"). Null when neither is known. */
