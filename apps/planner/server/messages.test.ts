@@ -1,7 +1,7 @@
 // The messages the app writes for the agent to send, word for word: the order going out, the two daily check-ins, the
 // how-to-use intro; and what a recipe link says about itself.
 import { describe, it, expect } from "bun:test";
-import { clockText, dinnerCheckText, dishText, introText, linkSource, orderingNowText, tomorrowCheckText, unpaidText, youtubeThumb } from "./messages";
+import { clockText, dinnerCheckText, dishText, introText, linkSource, orderingNowText, tomorrowCheckText, unpaidText, weekLink, weekMessage, youtubeThumb } from "./messages";
 import type { DishView, MealView } from "./meals";
 
 const dish = (name: string, d: Partial<DishView> = {}): DishView =>
@@ -107,21 +107,46 @@ describe("tomorrowCheckText", () => {
   });
 });
 
-describe("introText", () => {
-  it("is the how-to-use message, with the order's day and the real check-in times", () => {
-    expect(introText("Saturday", { dinner: "15:00", tomorrow: "19:00" })).toBe([
-      "Your week is planned and Saturday's order is placed. How it works:",
-      "• Change any meal by telling me, or in the app (Week).",
-      "• I check in at 3 pm about dinner and 7 pm about tomorrow; reply to change anything. Times can be changed.",
-      "• Orders go out on their own; I message you just before. Tell me to add anything.",
-      "• Saw a recipe on Instagram or YouTube? Share it here and say \"save this\"; I'll keep it and can plan it in.",
-      "• Everyday items (milk, curd, eggs) are ordered automatically; tell me to change them."].join("\n"));
+const TIMES = { plan: "11:00", afternoon: "15:00", evening: "19:00" };
+describe("weekMessage", () => {
+  it("is Monday's meals and the Week link", () => {
+    expect(weekLink("/a/t")).toBe("/a/t/?flock_scope=app#/week");
+    const monday = [meal("2026-11-23", "Breakfast", [dish("poha")]), { ...meal("2026-11-23", "Lunch", [dish("rajma chawal"), dish("bhindi")]) },
+      meal("2026-11-23", "Dinner", [dish("palak paneer"), dish("rotis")])];
+    expect(weekMessage({ monday, link: weekLink("/a/t") })).toBe([
+      "Next week is planned.", "Monday: poha · rajma chawal, bhindi · palak paneer, rotis", "",
+      "The whole week: [Week page](/a/t/?flock_scope=app#/week)", "Tell me anything to change."].join("\n"));
   });
+  it("says nothing planned without meals, and ordering in for an ordered-in meal", () => {
+    expect(weekMessage({ monday: [], link: "L" }).split("\n")[1]).toBe("Monday: nothing planned");
+    expect(weekMessage({ monday: [{ ...meal("2026-11-23", "Dinner", []), ordered_in: true }], link: "L" }).split("\n")[1]).toBe("Monday: ordering in");
+  });
+});
 
-  it("follows check-in times the family changed", () => {
-    const text = introText("Sunday", { dinner: "16:30", tomorrow: "20:00" });
-    expect(text.split("\n")[0]).toBe("Your week is planned and Sunday's order is placed. How it works:");
-    expect(text.split("\n")[2]).toBe("• I check in at 4:30 pm about dinner and 8 pm about tomorrow; reply to change anything. Times can be changed.");
+describe("introText", () => {
+  it("is the how-to-use message with the real times", () => {
+    expect(introText(TIMES, [])).toBe([
+      "Your week is planned. How it works:",
+      "• Every Sunday morning I plan the week. Change any meal by telling me, or in the app (Week).",
+      "• Every day at 3 I check tonight's dinner, and at 7 I tell you tomorrow's meals, put your milk and curd in the cart, and mention anything that may be running low. Reply and I order it together. Nothing is ordered until you reply.",
+      "• Saw a recipe on Instagram or YouTube? Share it here and say \"save this\"; I'll keep it and can plan it in.",
+      "• Times can be changed, and you can tell me to order without asking."].join("\n"));
+  });
+  it("follows the times and names the first two everyday items", () => {
+    const text = introText({ plan: "18:00", afternoon: "15:30", evening: "19:30" }, ["eggs", "bread", "curd"]);
+    expect(text).toContain("Every Sunday evening");
+    expect(text).toContain("at 3:30 I check tonight's dinner, and at 7:30 I tell you");
+    expect(text).toContain("put your eggs and bread in the cart");
+    expect(introText(TIMES, ["milk"])).toContain("put your milk in the cart");
+  });
+});
+
+describe("no em dashes", () => {
+  it("none of the texts has one", () => {
+    const texts = [weekMessage({ monday: [], link: "L" }), introText(TIMES, ["milk"]), unpaidText("Zepto", "Monday"),
+      dinnerCheckText({ date: TUE, meals: [meal(TUE, "Dinner", [dish("Dal")])], videos: [], missing: [] }) ?? "",
+      tomorrowCheckText({ date: TUE, meals: [meal(TUE, "Lunch", [dish("Dal")])], videos: [], missing: [] }) ?? ""];
+    for (const t of texts) expect(t).not.toContain("\u2014");
   });
 });
 

@@ -22,7 +22,7 @@ describe("plan_week", () => {
     const m = r.week.days[0].meals[0];
     expect(m.dishes.map((d: any) => d.name)).toEqual(["Rice", "Aloo gobi", "Sambar", "Boiled eggs"]);
     expect(m.dishes[3]).toMatchObject({ for_people: ["me", "wife"], portion_note: "4 for me, 1 for wife" });
-    expect(r.week.status).toBe("draft"); expect(r.orders).toBeUndefined();
+    expect(r.week.status).toBe("draft"); expect(r.message).toBeUndefined();
   });
 
   it("the week view has all seven days, each dish's ingredients, and everyone as null", async () => {
@@ -96,6 +96,7 @@ describe("plan_week", () => {
 
   it("an ordered-in meal has no dishes: dishes sent with ordered_in are refused", async () => {
     const { op, rows } = await boot();
+    await op("set_cooking_days", { days: ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] });
     const pizza = { date: "2026-11-29", slot: "Dinner", ordered_in: true, note: "pizza night" };
     expect((await op("plan_week", { week_start: MON, mode: "draft", meals: [{ ...pizza, dishes: [{ name: "Pizza" }] }] })).code).toBe("APP_REFUSED");
     const r = await op("plan_week", { week_start: MON, mode: "draft", meals: [lunch, { ...pizza, dishes: [] }] });
@@ -117,6 +118,7 @@ describe("plan_week", () => {
 
   it("keep_rest plans a week in parts: each part replaces only its own meals, and the parts add up to the week", async () => {
     const { op, rows } = await boot();
+    await op("set_cooking_days", { days: ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] });
     const tue = "2026-11-24";
     const tueDinner = { date: tue, slot: "Dinner", dishes: [{ name: "Dal", ingredients: [{ item: "toor dal", amount: 200, unit: "g" }] }] };
     // An older draft of the week: the first part, without keep_rest, takes its place.
@@ -155,30 +157,49 @@ describe("plan_week", () => {
     expect(rows("plan_meals")[0]).toMatchObject({ status: "final", updated_by: "agent:meal-agent" });
   });
 
-  it("a final write runs the orders hook and answers with its orders; a draft write does not", async () => {
-    const finals: string[] = []; let changed = 0;
-    const { op } = await boot({ mealHooks: { onFinal: (w) => { finals.push(w); return [{ id: "o1", covers_from: w }]; }, onChanged: () => { changed++; } } });
-    expect((await op("plan_week", { week_start: MON, mode: "draft" })).orders).toBeUndefined();
-    expect((await op("plan_week", { week_start: MON, mode: "draft", meals: [lunch] })).orders).toBeUndefined();
-    expect(finals).toEqual([]); expect(changed).toBe(1);
-    expect((await op("plan_week", { week_start: MON, mode: "final" })).orders).toEqual([{ id: "o1", covers_from: MON }]);
-    expect((await op("plan_week", { week_start: MON, mode: "final", meals: [lunch] })).orders).toEqual([{ id: "o1", covers_from: MON }]);
-    expect(finals).toEqual([MON, MON]); expect(changed).toBe(1);
-    await op("plan_week", { week_start: MON, mode: "final" });                                       // already final: the context, no rebuild
-    await op("plan_week", { week_start: "2026-11-24", mode: "final", meals: [lunch] });              // refused
-    expect(finals).toEqual([MON, MON]);
+  it("a meal on a non-cooking day is refused by plan_week, taken by set_meal", async () => {
+    const { op, rows } = await boot();
+    const sunday = { date: "2026-11-29", slot: "Dinner", dishes: [{ name: "Dal" }] };
+    const r = await op("plan_week", { week_start: MON, mode: "draft", meals: [lunch, sunday] });
+    expect(r.code).toBe("NOT_COOKING_DAY"); expect(r.error).toContain("2026-11-29"); expect(r.error).toContain("Sun");
+    expect(rows("plan_meals")).toHaveLength(0);
+    expect((await op("set_cooking_days", { days: ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] })).house.cooking_days).toContain("Sun");
+    expect((await op("plan_week", { week_start: MON, mode: "draft", meals: [lunch, sunday] })).week.status).toBe("draft");
+    await op("set_cooking_days", { days: ["mon"] });
+    expect(dishNames((await op("set_meal", { date: "2026-11-24", slot: "Dinner", dishes: [{ name: "Dal" }] })).meal)).toEqual(["Dal"]);
   });
 
-  it("without the orders hook's answer there is no orders key", async () => {
-    const { op } = await boot();
-    const r = await op("plan_week", { week_start: MON, mode: "final", meals: [lunch] });
-    expect(r.week.status).toBe("final"); expect("orders" in r).toBe(false);
+  it("plan_week final answers the Monday message with the Week link, and the intro once", async () => {
+    const { op, rows } = await boot({ basePath: "/a/xyz" });
+    await op("set_regular", { item: "milk", amount: 1, unit: "L", every: "day" });
+    await op("set_regular", { item: "curd", amount: 1, unit: "pc", every: "day" });
+    await op("set_regular", { item: "bread", amount: 1, unit: "pc", every: "day" });
+    const first = await op("plan_week", { week_start: MON, mode: "final", meals: [
+      { date: MON, slot: "Breakfast", dishes: [{ name: "Poha" }] }, { date: MON, slot: "Dinner", ordered_in: true }] });
+    expect(first.message).toBe("Next week is planned.\nMonday: Poha · ordering in\n\nThe whole week: [Week page](/a/xyz/?flock_scope=app#/week)\nTell me anything to change.");
+    expect(first.intro).toStartWith("Your week is planned. How it works:");
+    expect(first.intro).toContain("Every Sunday morning");
+    expect(first.intro).toContain("put your milk and curd in the cart");
+    expect(rows("house")[0].intro_sent_at).toBeTruthy();
+    const second = await op("plan_week", { week_start: "2026-11-30", mode: "final", meals: [{ date: "2026-11-30", slot: "Lunch", dishes: [{ name: "Dal" }] }] });
+    expect(second.message).toContain("Monday: Dal"); expect(second.intro).toBeUndefined();
+    const drafts = await op("plan_week", { week_start: "2026-12-07", mode: "draft", meals: [{ date: "2026-12-08", slot: "Lunch", dishes: [{ name: "Dal" }] }] });
+    expect(drafts.message).toBeUndefined();
+    expect((await op("plan_week", { week_start: "2026-12-07", mode: "final" })).message).toContain("Monday: nothing planned");
+  });
+
+  it("a final week stays final with no reply: nothing waits on an answer", async () => {
+    const { op, rows } = await boot();
+    await op("plan_week", { week_start: MON, mode: "final", meals: [lunch] });
+    expect(rows("plan_meals").every((m) => m.status === "final")).toBe(true);
+    expect(rows("plan_meals")).toHaveLength(1);
   });
 });
 
 describe("the context", () => {
   it("the context carries last week's dishes for variety", async () => {
     const { op } = await boot();
+    await op("set_cooking_days", { days: ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] });
     await op("plan_week", { week_start: "2026-11-16", mode: "final", meals: [
       { ...lunch, date: "2026-11-17" }, { date: "2026-11-16", slot: "Dinner", dishes: [{ name: "Dal" }, { name: "Roti" }] }, { date: "2026-11-22", slot: "Dinner", ordered_in: true }] });
     await op("plan_week", { week_start: "2026-11-09", mode: "final", meals: [{ date: "2026-11-09", slot: "Dinner", dishes: [{ name: "Pulao" }] }] });
@@ -264,18 +285,6 @@ describe("set_meal", () => {
     const cooked = await op("set_meal", { date: MON, slot: "Dinner", ordered_in: false, dishes: [{ name: "Dal" }] });
     expect(cooked.meal).toMatchObject({ ordered_in: false }); expect(dishNames(cooked.meal)).toEqual(["Dal"]);
   });
-
-  it("tells the orders hook after a meal or a dish changes, not after a refusal", async () => {
-    let changed = 0; const finals: string[] = [];
-    const { op } = await boot({ mealHooks: { onFinal: (w) => { finals.push(w); }, onChanged: () => { changed++; } } });
-    await op("set_meal", { date: MON, slot: "Dinner", dishes: [{ name: "Dal" }] });
-    expect(changed).toBe(1);
-    await op("set_dish", { date: MON, slot: "Dinner", name: "Roti" });
-    expect(changed).toBe(2);
-    await op("set_meal", { date: MON, slot: "Supper" });
-    await op("set_dish", { dish_id: "nope", name: "x" });
-    expect(changed).toBe(2); expect(finals).toEqual([]);
-  });
 });
 
 describe("set_dish", () => {
@@ -349,6 +358,7 @@ describe("set_dish", () => {
 describe("GET /api/weeks/:week_start", () => {
   it("reads a week for the Week page: seven days, its meals with their dishes, and whether it is a draft", async () => {
     const { op, owner } = await boot();
+    await op("set_cooking_days", { days: ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] });
     const empty = await owner("GET", `/api/weeks/${MON}`);
     expect(empty.status).toBe(200);
     expect(empty.body).toMatchObject({ week_start: MON, status: null });

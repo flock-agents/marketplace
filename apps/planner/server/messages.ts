@@ -59,16 +59,36 @@ export function tomorrowCheckText(i: { date: string; meals: MealView[]; cook?: {
   ].join("\n");
 }
 
-/** The how-to-use message, sent once the first week is planned and its first order placed. `orderDay` is that order's day
- *  ("Saturday"); `times` are when the two check-ins really run, as "HH:MM". */
-export function introText(orderDay: string, times: { dinner: string; tomorrow: string }): string {
+/** The link to the Week page. `flock_scope=app` marks it for Flock, which signs the person in to this app only and drops the marker. */
+export function weekLink(basePath: string): string { return `${basePath}/?flock_scope=app#/week`; }
+
+/** The Sunday message once the week is planned: Monday's meals and the link to the rest. `monday` is Monday's meals, empty when it is
+ *  not a cooking day or has none. */
+export function weekMessage(i: { monday: MealView[]; link: string }): string {
+  const meals = i.monday.map((m) => (m.ordered_in ? "ordering in" : m.dishes.map(dishText).join(", "))).filter(Boolean);
   return [
-    `Your week is planned and ${orderDay}'s order is placed. How it works:`,
-    "• Change any meal by telling me, or in the app (Week).",
-    `• I check in at ${clockText(times.dinner)} about dinner and ${clockText(times.tomorrow)} about tomorrow; reply to change anything. Times can be changed.`,
-    "• Orders go out on their own; I message you just before. Tell me to add anything.",
+    "Next week is planned.",
+    `Monday: ${meals.length ? meals.join(" · ") : "nothing planned"}`,
+    "",
+    `The whole week: [Week page](${i.link})`,
+    "Tell me anything to change.",
+  ].join("\n");
+}
+
+/** A time of day as it reads inside a sentence: "3", "7:30" (no am or pm). */
+const bare = (time: string): string => clockText(time).replace(/ [ap]m$/, "");
+const partOfDay = (time: string): string => { const h = Number(time.split(":")[0]); return h < 12 ? "morning" : h < 17 ? "afternoon" : "evening"; };
+
+/** The how-to-use message, sent once with the first week. `times` are when the plan and the two reminders really run, as "HH:MM";
+ *  `everyday` are the family's everyday items (the first two are named; milk and curd when there are none). */
+export function introText(times: { plan: string; afternoon: string; evening: string }, everyday: string[]): string {
+  const named = everyday.slice(0, 2).join(" and ") || "milk and curd";
+  return [
+    "Your week is planned. How it works:",
+    `• Every Sunday ${partOfDay(times.plan)} I plan the week. Change any meal by telling me, or in the app (Week).`,
+    `• Every day at ${bare(times.afternoon)} I check tonight's dinner, and at ${bare(times.evening)} I tell you tomorrow's meals, put your ${named} in the cart, and mention anything that may be running low. Reply and I order it together. Nothing is ordered until you reply.`,
     "• Saw a recipe on Instagram or YouTube? Share it here and say \"save this\"; I'll keep it and can plan it in.",
-    "• Everyday items (milk, curd, eggs) are ordered automatically; tell me to change them.",
+    "• Times can be changed, and you can tell me to order without asking.",
   ].join("\n");
 }
 

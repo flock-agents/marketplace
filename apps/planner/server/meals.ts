@@ -3,9 +3,10 @@
 // or one dish with set_meal and set_dish. A meal that is ordered in has no dishes, so nothing is bought for it.
 import type { Hono } from "hono";
 import { and, asc, eq, gte, inArray, lte, sql } from "drizzle-orm";
-import { dish_items, dishes, people, plan_meals, regulars, saved_recipes } from "./db/schema";
+import { dish_items, dishes, house as house_t, people, plan_meals, regulars, saved_recipes } from "./db/schema";
 import { SLOTS, type GroceryApp } from "./db/constants";
 import { addDays, mondayOf, weekDates, weekdayOf } from "./dates";
+import { introText, weekLink, weekMessage } from "./messages";
 import { getHouse, groceryApp, houseView, isObject, list, name, names, refuse, words, writeRoutes,
   type Db, type Emit, type HouseView, type PersonRow } from "./family";
 
@@ -23,11 +24,6 @@ export type WeekView = { week_start: string; status: "draft" | "final" | null; d
 export type WeekContext = { week_start: string; people: PersonRow[]; house: HouseView; regulars: (typeof regulars.$inferSelect)[];
   last_week: { date: string; slot: string; dishes: string[] }[];
   recipes: { id: string; name: string; tags: string[]; for_people: string[] }[]; grocery_app: GroceryApp };
-
-/** What the orders do when the plan changes: `onFinal` builds a week's orders once its plan is final and answers with them;
- *  `onChanged` follows any other change to a meal or a dish; `weekHasOrders` says a week already has orders made from its
- *  plan (cancelled ones aside), so a new draft may not take that plan's place. */
-export type MealHooks = { onFinal(weekStart: string): unknown; onChanged(): void; weekHasOrders?(weekStart: string): boolean };
 
 type MealRow = typeof plan_meals.$inferSelect;
 type DishRow = typeof dishes.$inferSelect;
@@ -184,7 +180,7 @@ function orderDishes(tx: Db, mealId: string, changes: Change[], place?: { id: st
   });
 }
 
-export function mountMealRoutes(hono: Hono<any>, db: Db, emit: Emit, hooks: MealHooks) {
+export function mountMealRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: { basePath: string }) {
   const write = writeRoutes(hono);
   /** Run a write in one transaction; the pages hear of its changes only once it is committed. */
   const commit = <T>(run: (tx: Db, changes: Change[]) => T): T => {
@@ -225,14 +221,13 @@ export function mountMealRoutes(hono: Hono<any>, db: Db, emit: Emit, hooks: Meal
       });
     } else {
       if (!Array.isArray(b.meals) || !b.meals.length) refuse("meals must be a list of the week's meals: { date, slot, ordered_in?, note?, dishes? }; leave it out to read the context");
-      // The orders are built from final meals: a draft in their place would take every dish off the orders not yet placed.
-      if (mode === "draft" && hooks.weekHasOrders?.(weekStart))
-        refuse("this week is already planned and has orders: change a meal with set_meal or set_dish, or send plan_week with mode final and the new meals");
       const keepRest = b.keep_rest === undefined ? false : flag(b.keep_rest, "keep_rest");
       const slots = slotNames(db);
       const meals = (b.meals as unknown[]).map((m) => mealOf(db, m, slots));
       const seen = new Set<string>();
+      const cooking = houseView(getHouse(db)).cooking_days;
       for (const m of meals) {
+        if (!cooking.includes(weekdayOf(m.date))) refuse(`${m.date} ${m.slot}: ${weekdayOf(m.date)} is not a cooking day (cooking days: ${cooking.join(", ")}); add it with set_cooking_days, or set_meal for one meal`, "NOT_COOKING_DAY");
         if (mondayOf(m.date) !== weekStart) refuse(`${m.date} ${m.slot} is not in the week of ${weekStart}`);
         if (seen.has(`${m.date} ${m.slot}`)) refuse(`${m.date} ${m.slot} is in meals twice`);
         seen.add(`${m.date} ${m.slot}`);
@@ -258,9 +253,18 @@ export function mountMealRoutes(hono: Hono<any>, db: Db, emit: Emit, hooks: Meal
         }
       });
     }
-    // A final plan is what the orders are built from; a draft that took a week's place is one more change to follow.
-    const orders = mode === "final" ? await hooks.onFinal(weekStart) : void hooks.onChanged();
-    return { body: { week: weekView(db, weekStart), ...(orders === undefined ? {} : { orders }) } };
+    const week = weekView(db, weekStart);
+    if (mode !== "final") return { body: { week } };
+    // A final week is kept whether or not anyone replies. The answer carries the Sunday message, and the intro once.
+    const house = getHouse(db), view = houseView(house);
+    const monday = view.cooking_days.includes("Mon") ? week.days[0].meals : [];
+    const out: Record<string, unknown> = { week, message: weekMessage({ monday, link: weekLink(opts.basePath) }) };
+    if (!house.intro_sent_at) {
+      const everyday = db.select().from(regulars).where(and(eq(regulars.every, "day"), eq(regulars.active, 1))).orderBy(asc(regulars.created_at)).limit(2).all().map((r) => r.item);
+      out.intro = introText({ plan: view.plan_time ?? "11:00", afternoon: view.afternoon_time ?? "15:00", evening: view.evening_time ?? "19:00" }, everyday);
+      db.update(house_t).set({ intro_sent_at: now() }).where(eq(house_t.id, house.id)).run();
+    }
+    return { body: out };
   });
 
   // set_meal { date, slot | meal_id, ordered_in?, note?, dishes? }: one meal, found by its date and slot or by its id, made when
@@ -292,7 +296,6 @@ export function mountMealRoutes(hono: Hono<any>, db: Db, emit: Emit, hooks: Meal
       (sent ?? []).forEach((d, position) => addDish(tx, row.id, position, d, by, changes));
       return row.id;
     });
-    hooks.onChanged();
     return { body: { meal: mealView(id) } };
   });
 
@@ -322,7 +325,6 @@ export function mountMealRoutes(hono: Hono<any>, db: Db, emit: Emit, hooks: Meal
     if (b.remove === true) {
       if (!dish || !meal) return notFound(`${label} is not a dish of that meal`);
       commit((tx, changes) => { removeDish(tx, dish.id, changes); orderDishes(tx, meal.id, changes); });
-      hooks.onChanged();
       return { body: { meal: mealView(meal.id) } };
     }
     const sent = dishOf(db, b, label);
@@ -342,7 +344,6 @@ export function mountMealRoutes(hono: Hono<any>, db: Db, emit: Emit, hooks: Meal
       orderDishes(tx, mealRow.id, changes, position === undefined ? undefined : { id: row.id, at: position });
       return { meal: mealRow.id, dish: row.id };
     });
-    hooks.onChanged();
     const view = mealView(ids.meal);
     return { body: { dish: view.dishes.find((d) => d.id === ids.dish), meal: view } };
   });

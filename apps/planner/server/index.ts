@@ -24,7 +24,7 @@ if (kit.status.state === "ok") migrateOldProfile(kit.sqlite);
 
 mountFamilyRoutes(flock.hono, kit.db, kit.emitChange, { appToken: flock.env.token ?? process.env.FLOCK_APP_TOKEN ?? null });
 // Until carts and the reminder come (a later revision 2 step) a plan or an everyday item changes nothing beyond itself.
-mountMealRoutes(flock.hono, kit.db, kit.emitChange, { onFinal: () => undefined, onChanged: () => {} });
+mountMealRoutes(flock.hono, kit.db, kit.emitChange, { basePath: flock.env.basePath });
 mountRegularRoutes(flock.hono, kit.db, kit.emitChange, { onChanged: () => {} });
 mountProductRoutes(flock.hono, kit.db, kit.emitChange);
 mountRecipeRoutes(flock.hono, kit.db, kit.emitChange);
