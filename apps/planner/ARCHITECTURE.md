@@ -116,8 +116,9 @@ each kept as planned, and to close with a `plan_week { week_start, mode: "final"
 Sunday message and, once, the intro. `afternoon-reminder` (15:00) and `evening-reminder` (19:00) check as a dry run whether
 there is anything to say and wake the agent only then (the evening one also when an app is connected, for the day's read of
 its history); each records the time it really runs at, which the intro names. The woken agent reads the order history first,
-calls `get_reminder` (which puts everyday items on the carts and chooses what to ask), copies the carts with the
-connectors, then sends the message the app wrote. `order-clock` (every 15 min) closes a placed order nobody paid within
+calls `get_reminder` (which puts everyday items on the carts and chooses what to ask), copies the carts to the apps
+with the connectors (`sync_cart`), calls `get_reminder` again with the same date (nothing is counted twice), then sends the
+message the app wrote. `order-clock` (every 15 min) closes a placed order nobody paid within
 24 hours as not paid and wakes the agent with the one line to send (`unpaid_notice`, not repeated when the agent itself
 recorded the order unpaid or cancelled it), and reopens a cart left `ordering` for an hour with nothing recorded. The gate
 (`gate.ts`): nothing runs until one person is saved. On an upgrade, boot copies `household.profile` to

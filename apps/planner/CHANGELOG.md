@@ -29,7 +29,7 @@ betas included) and library 1.10.11.
 - **For the agent.** There are 25 operations. Kept from 2.0: `guide` and `record_order` (now about a cart). New: `set_person`,
   `set_house_rules`, `set_cook`, `set_slots`, `set_cooking_days`, `set_shopping_apps`, `plan_week`, `set_meal`, `set_dish`,
   `set_regular`, `import_order_history`, `record_bought_outside`, `set_item`, `set_subscription`, `answer_running_low`,
-  `get_reminder`, `get_cart`, `set_cart_line`, `order_cart`, `sync_cart`, `remember_product` and `save_recipe`. Gone:
+  `get_reminder`, `get_cart`, `set_cart_line`, `order_cart`, `sync_cart`, `cancel_order`, `remember_product` and `save_recipe`. Gone:
   `get_draft`, `edit_draft`, `move_window`, `add_quote`, `record_yes`, `skip_order`, `ack_message`, `list_jobs`,
   `answer_job`, `pantry`, `pantry_answer`, `have_item`, `search`, `save_meal`, `remove_meal`, `set_meal_recipes`,
   `write_recipe` and `set_shelf_life`. Past orders are read in calls of about 8 orders and 80 items. The Sunday run ends
