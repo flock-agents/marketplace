@@ -4,7 +4,7 @@
 import type { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { regulars } from "./db/schema";
-import { EVERY, KEEPS } from "./db/constants";
+import { EVERY } from "./db/constants";
 import { weekdayOf, WEEKDAYS, type Weekday } from "./dates";
 import { isObject, list, name, refuse, weekdays, words, writeRoutes, type Db, type Emit } from "./family";
 import { dateOf, flag } from "./meals";
@@ -71,7 +71,7 @@ const HISTORY_SHAPE = "orders must be a list of { date, items: [{ item, qty?, pa
 export function mountRegularRoutes(hono: Hono<any>, db: Db, emit: Emit, hooks: RegularHooks) {
   const write = writeRoutes(hono);
 
-  // set_regular { item, amount, unit, every: day | week | weekdays, times_per_week?, weekdays?, for_whom?, keeps?, active?,
+  // set_regular { item, amount, unit, every: day | week | weekdays, times_per_week?, weekdays?, for_whom?, active?,
   // paused_until?, remove? }: one everyday item, found by its name and whom it is for (the same item for the house and for one
   // person are two). Only the fields given change. `remove` deletes it; `active: false` keeps it without ordering it.
   write("/api/regulars", (b, by) => {
@@ -97,7 +97,6 @@ export function mountRegularRoutes(hono: Hono<any>, db: Db, emit: Emit, hooks: R
       : typeof b.times_per_week === "number" && Number.isInteger(b.times_per_week) && b.times_per_week >= 1 && b.times_per_week <= 7 ? b.times_per_week
       : refuse("times_per_week must be a whole number from 1 to 7");
     if (b.weekdays !== undefined) set.weekdays = b.weekdays === null ? null : JSON.stringify(weekdays(b.weekdays, "weekdays"));
-    if (b.keeps != null) set.keeps = (KEEPS as readonly unknown[]).includes(b.keeps) ? (b.keeps as string) : refuse(`keeps must be one of: ${KEEPS.join(", ")}`);
     if (b.active !== undefined) set.active = flag(b.active, "active") ? 1 : 0;
     if (b.paused_until !== undefined) set.paused_until = b.paused_until === null ? null : dateOf(b.paused_until, "paused_until");
     if ((set.every ?? existing?.every) === "weekdays" && !list(set.weekdays !== undefined ? set.weekdays : existing?.weekdays ?? null).length)

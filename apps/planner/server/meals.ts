@@ -4,16 +4,16 @@
 import type { Hono } from "hono";
 import { and, asc, eq, gte, inArray, lte, sql } from "drizzle-orm";
 import { dish_items, dishes, people, plan_meals, regulars, saved_recipes } from "./db/schema";
-import { KEEPS, SLOTS, type GroceryApp } from "./db/constants";
+import { SLOTS, type GroceryApp } from "./db/constants";
 import { addDays, mondayOf, weekDates, weekdayOf } from "./dates";
 import { getHouse, groceryApp, houseView, isObject, list, name, names, refuse, words, writeRoutes,
   type Db, type Emit, type HouseView, type PersonRow } from "./family";
 
 export type DishInput = { name: string; for?: string[] | null; portion_note?: string | null; recipe_id?: string | null; video_url?: string | null;
-  ingredients?: { item: string; amount?: number | null; unit?: string | null; keeps?: (typeof KEEPS)[number] }[] };
+  ingredients?: { item: string; amount?: number | null; unit?: string | null }[] };
 export type MealInput = { date: string; slot: string; ordered_in?: boolean; note?: string | null; dishes?: DishInput[] };
 
-export type IngredientView = { id: string; item: string; amount: number | null; unit: string | null; keeps: string };
+export type IngredientView = { id: string; item: string; amount: number | null; unit: string | null };
 export type DishView = { id: string; name: string; for_people: string[] | null; portion_note: string | null; recipe_id: string | null;
   video_url: string | null; ingredients: IngredientView[] };
 export type MealView = { id: string; date: string; slot: string; ordered_in: boolean; note: string | null; dishes: DishView[] };
@@ -31,7 +31,7 @@ export type MealHooks = { onFinal(weekStart: string): unknown; onChanged(): void
 
 type MealRow = typeof plan_meals.$inferSelect;
 type DishRow = typeof dishes.$inferSelect;
-type Item = { item: string; amount: number | null; unit: string | null; keeps: string };
+type Item = { item: string; amount: number | null; unit: string | null };
 /** A dish as it was sent: only the fields in `set` were given. */
 type Dish = { name: string; set: Partial<Pick<DishRow, "for_people" | "portion_note" | "recipe_id" | "video_url">>; items?: Item[] };
 type Meal = { date: string; slot: string; ordered_in?: boolean; note?: string | null; dishes?: Dish[] };
@@ -58,7 +58,7 @@ function mealViews(db: Db, meals: MealRow[]): MealView[] {
     id: m.id, date: m.date, slot: m.slot, ordered_in: !!m.ordered_in, note: m.note,
     dishes: dishRows.filter((d) => d.meal_id === m.id).map((d) => ({
       id: d.id, name: d.name, for_people: d.for_people ? list<string>(d.for_people) : null, portion_note: d.portion_note, recipe_id: d.recipe_id, video_url: d.video_url,
-      ingredients: itemRows.filter((i) => i.dish_id === d.id).map((i) => ({ id: i.id, item: i.item, amount: i.amount, unit: i.unit, keeps: i.keeps ?? "fresh" })),
+      ingredients: itemRows.filter((i) => i.dish_id === d.id).map((i) => ({ id: i.id, item: i.item, amount: i.amount, unit: i.unit })),
     })),
   }));
 }
@@ -99,14 +99,13 @@ const slotOf = (v: unknown, slots: string[]): string =>
 export const flag = (v: unknown, what: string): boolean => (typeof v === "boolean" ? v : refuse(`${what} must be true or false`));
 
 function itemsOf(v: unknown, dish: string): Item[] {
-  if (!Array.isArray(v)) return refuse(`${dish}: ingredients must be a list of { item, amount?, unit?, keeps? }`);
+  if (!Array.isArray(v)) return refuse(`${dish}: ingredients must be a list of { item, amount?, unit? }`);
   return v.map((i) => {
-    if (!isObject(i)) return refuse(`${dish}: ingredients must be a list of { item, amount?, unit?, keeps? }`);
+    if (!isObject(i)) return refuse(`${dish}: ingredients must be a list of { item, amount?, unit? }`);
     const item = name(i.item, `${dish}: an ingredient's item`);
     const amount = i.amount == null ? null : typeof i.amount === "number" && Number.isFinite(i.amount) && i.amount > 0 ? i.amount
       : refuse(`${dish}: the amount of ${item} must be a number above 0 (put the measure in unit)`);
-    const keeps = i.keeps == null ? "fresh" : (KEEPS as readonly unknown[]).includes(i.keeps) ? (i.keeps as string) : refuse(`${dish}: keeps must be one of: ${KEEPS.join(", ")}`);
-    return { item, amount, unit: i.unit === undefined ? null : words(i.unit, `${dish}: the unit of ${item}`), keeps };
+    return { item, amount, unit: i.unit === undefined ? null : words(i.unit, `${dish}: the unit of ${item}`) };
   });
 }
 

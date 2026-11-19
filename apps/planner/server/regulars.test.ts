@@ -80,7 +80,7 @@ describe("set_regular", () => {
   it("adds an everyday item and changes it by its name, whatever its capitals, keeping what was not sent", async () => {
     const { op, rows } = await boot();
     const r = await op("set_regular", { item: "Milk", amount: 1, unit: "l", every: "day" });
-    expect(r.regular).toMatchObject({ item: "Milk", amount: 1, unit: "l", every: "day", keeps: "fresh", active: 1, for_whom: null, paused_until: null, weekdays: [], updated_by: "agent:meal-agent" });
+    expect(r.regular).toMatchObject({ item: "Milk", amount: 1, unit: "l", every: "day", active: 1, for_whom: null, paused_until: null, weekdays: [], updated_by: "agent:meal-agent" });
     const again = await op("set_regular", { item: "  milk ", amount: 2 });
     expect(again.regular).toMatchObject({ id: r.regular.id, item: "Milk", amount: 2, unit: "l", every: "day" });
     expect(rows("regulars")).toHaveLength(1);
@@ -96,8 +96,8 @@ describe("set_regular", () => {
 
   it("keeps how often: times a week, or named weekdays however they are written", async () => {
     const { op, rows } = await boot();
-    expect((await op("set_regular", { item: "bread", amount: 1, unit: "pack", every: "week", times_per_week: 2, keeps: "long" })).regular)
-      .toMatchObject({ every: "week", times_per_week: 2, keeps: "long" });
+    expect((await op("set_regular", { item: "bread", amount: 1, unit: "pack", every: "week", times_per_week: 2 })).regular)
+      .toMatchObject({ every: "week", times_per_week: 2 });
     expect((await op("set_regular", { item: "fruit", amount: 1, unit: "kg", every: "weekdays", weekdays: ["tuesday", "SAT"] })).regular.weekdays).toEqual(["Tue", "Sat"]);
     expect(regularNeeds(rows("regulars").find((x) => x.item === "fruit"), wk).map((n) => n.date)).toEqual(["2026-11-24", "2026-11-28"]);
     expect(regularNeeds(rows("regulars").find((x) => x.item === "bread"), wk).map((n) => n.date)).toEqual(["2026-11-23", "2026-11-26"]);
@@ -137,7 +137,7 @@ describe("set_regular", () => {
     for (const bad of [{ ...milk, item: " " }, { ...milk, amount: undefined }, { ...milk, amount: "1" }, { ...milk, amount: 0 }, { ...milk, unit: undefined },
       { ...milk, every: undefined }, { ...milk, every: "daily" }, { ...milk, every: "week", times_per_week: 0 }, { ...milk, every: "week", times_per_week: 1.5 },
       { ...milk, every: "weekdays" }, { ...milk, every: "weekdays", weekdays: [] }, { ...milk, every: "weekdays", weekdays: ["Someday"] },
-      { ...milk, keeps: "forever" }, { ...milk, active: "no" }, { ...milk, paused_until: "next week" }, { ...milk, paused_until: "2026-02-30" }, { ...milk, for_whom: 7 }])
+      { ...milk, active: "no" }, { ...milk, paused_until: "next week" }, { ...milk, paused_until: "2026-02-30" }, { ...milk, for_whom: 7 }])
       expect([bad, (await op("set_regular", bad)).code]).toEqual([bad, "APP_REFUSED"]);
     expect(rows("regulars")).toEqual([]);
     // An item already there cannot be made a weekdays one without its weekdays.

@@ -10,7 +10,8 @@ const guide = readFileSync(join(import.meta.dir, "agent-guide.md"), "utf8");
 const instructions: string = manifest.agentInterface.instructions;
 const operations: { name: string; description: string }[] = manifest.agentInterface.operations;
 
-const FIXED = ["set_person", "set_house_rules", "set_cook", "set_regular", "set_slots", "plan_week", "set_meal", "set_dish", "save_recipe", "import_order_history", "place_order", "ask_low_or_out"];
+// The operations the onboarding plan calls by name, plus the ones this app has always had.
+const FIXED = ["set_person", "set_house_rules", "set_cook", "set_slots", "set_cooking_days", "set_shopping_apps", "set_regular", "import_order_history", "plan_week", "set_meal", "set_dish", "save_recipe", "remember_product"];
 
 describe("the agent's interface", () => {
   it("declares every fixed operation and every declared one has a handler", () => {
@@ -42,7 +43,7 @@ describe("the agent's interface", () => {
     for (const method of ["PATCH", "DELETE"]) expect(guide + instructions).not.toContain(method);
     expect(guide + instructions).not.toContain("_app/settings");
     expect(guide).toContain("remove: true");
-    expect(guide).toContain("set_house_rules { grocery_app");
+    expect(guide).toContain("set_shopping_apps { main, fallback, connected }");
   });
 
   it("the instructions fit in 1,200 characters and the guide in 150 lines", () => {
@@ -98,7 +99,6 @@ describe("the agent's interface", () => {
   it("the guide covers what the agent is asked to do", () => {
     expect(guide.startsWith("# Meal Planner")).toBe(true);
     for (const n of Object.keys(ROUTES)) expect(guide, n).toContain(n);
-    for (const said of ["needs_product", "needs_qty", "NEEDS_NAME", "structured: true", "ItemPicker", "search-products", "add-to-cart", "view-cart", "checkout", "view-order-history",
-      "never their websites"]) expect(guide, said).toContain(said);
+    for (const said of ["NEEDS_NAME", "structured: true"]) expect(guide, said).toContain(said);
   });
 });

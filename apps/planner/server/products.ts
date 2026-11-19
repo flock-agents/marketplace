@@ -4,7 +4,7 @@
 import type { Hono } from "hono";
 import { and, eq } from "drizzle-orm";
 import { products } from "./db/schema";
-import { GROCERY_APPS, type GroceryApp } from "./db/constants";
+import { SHOP_APPS, type GroceryApp } from "./db/constants";
 import { name, refuse, words, writeRoutes, type Db, type Emit } from "./family";
 
 export type ProductRow = typeof products.$inferSelect;
@@ -75,8 +75,10 @@ export function rememberProduct(db: Db, p: ProductInput, by = "app"): ProductRow
 
 // ── What was sent, checked ──
 
+// Amazon has no cart or order history the agent can read, so products and histories are taken from the other four (Tasks 4-5 revisit this).
+const HISTORY_APPS = SHOP_APPS.filter((a) => a !== "amazon");
 export const groceryAppOf = (v: unknown): GroceryApp =>
-  (GROCERY_APPS as readonly unknown[]).includes(v) ? (v as GroceryApp) : refuse(`app must be one of: ${GROCERY_APPS.join(", ")}`);
+  (HISTORY_APPS as readonly unknown[]).includes(v) ? (v as GroceryApp) : refuse(`app must be one of: ${HISTORY_APPS.join(", ")}`);
 /** A number above 0, or null to clear it. */
 export const positive = (v: unknown, what: string): number | null =>
   v === null ? null : typeof v === "number" && Number.isFinite(v) && v > 0 ? v : refuse(`${what} must be a number above 0`);

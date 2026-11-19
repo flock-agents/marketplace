@@ -8,7 +8,6 @@ import { mountMealRoutes } from "./meals";
 import { mountRegularRoutes } from "./regulars";
 import { mountProductRoutes } from "./products";
 import { mountRecipeRoutes } from "./recipes";
-import { mountOrderRoutes } from "./orderRoutes";
 import { migrateOldProfile } from "./gate";
 import { routines } from "./routines";
 
@@ -22,11 +21,9 @@ const kit = await mountKit(flock, { schema, settings: SETTINGS, keepTables: OLD_
 if (kit.status.state === "ok") migrateOldProfile(kit.sqlite);
 
 mountFamilyRoutes(flock.hono, kit.db, kit.emitChange, { appToken: flock.env.token ?? process.env.FLOCK_APP_TOKEN ?? null });
-// The orders follow the plan: a final week builds its orders, and a change to a meal, a dish or an everyday item, through
-// these routes or by the family on a page (the kit's change events), rebuilds the ones not yet placed.
-const orders = mountOrderRoutes(flock.hono, kit.db, kit.emitChange, { events: kit.ctx.events });
-mountMealRoutes(flock.hono, kit.db, kit.emitChange, orders.mealHooks);
-mountRegularRoutes(flock.hono, kit.db, kit.emitChange, orders.regularHooks);
+// Until carts and the reminder come (a later revision 2 step) a plan or an everyday item changes nothing beyond itself.
+mountMealRoutes(flock.hono, kit.db, kit.emitChange, { onFinal: () => undefined, onChanged: () => {} });
+mountRegularRoutes(flock.hono, kit.db, kit.emitChange, { onChanged: () => {} });
 mountProductRoutes(flock.hono, kit.db, kit.emitChange);
 mountRecipeRoutes(flock.hono, kit.db, kit.emitChange);
 

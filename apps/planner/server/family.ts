@@ -7,7 +7,7 @@ import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import { asc, eq } from "drizzle-orm";
 import { _settings } from "@flock/app-kit";
 import { house, people } from "./db/schema";
-import { GROCERY_APPS, GROUPS, RULE_KINDS, SETTINGS, SLOTS, type GroceryApp } from "./db/constants";
+import { appOf, COOKING_DAYS_DEFAULT, GROUPS, RULE_KINDS, SETTINGS, SHOP_APPS, SLOTS, type GroceryApp } from "./db/constants";
 import { WEEKDAYS, type Weekday } from "./dates";
 
 export type Db = BunSQLiteDatabase<any>;
@@ -20,8 +20,9 @@ export type HouseRule = { kind: (typeof RULE_KINDS)[number]; days: string[]; not
 export type ExtraSlot = { name: string; days?: Weekday[]; for?: string[] };
 export type OrderIn = { day: Weekday; slot: string; note?: string };
 /** The house row with its lists read: what the routes answer with. */
-export type HouseView = Omit<HouseRow, "rules" | "cook_days" | "extra_slots" | "order_in"> &
-  { rules: HouseRule[]; cook_days: Weekday[]; extra_slots: ExtraSlot[]; order_in: OrderIn[] };
+export type HouseView = Omit<HouseRow, "rules" | "cook_days" | "extra_slots" | "order_in" | "cooking_days" | "connected_apps" | "history_synced"> &
+  { rules: HouseRule[]; cook_days: Weekday[]; extra_slots: ExtraSlot[]; order_in: OrderIn[];
+    cooking_days: Weekday[]; connected_apps: GroceryApp[]; history_synced: Record<string, string> };
 
 /** The household's one row, made the first time anything asks for it. */
 export function getHouse(db: Db): HouseRow {
@@ -31,18 +32,37 @@ export function getHouse(db: Db): HouseRow {
 
 export const list = <T>(json: string | null): T[] => { try { const v = json ? JSON.parse(json) : []; return Array.isArray(v) ? v : []; } catch { return []; } };
 
+const object = (json: string | null): Record<string, string> => {
+  try { const v = json ? JSON.parse(json) : {}; return isObject(v) ? (v as Record<string, string>) : {}; } catch { return {}; }
+};
+
 export function houseView(row: HouseRow): HouseView {
-  return { ...row, rules: list(row.rules), cook_days: list(row.cook_days), extra_slots: list(row.extra_slots), order_in: list(row.order_in) };
+  const cooking = list<Weekday>(row.cooking_days);
+  return { ...row, rules: list(row.rules), cook_days: list(row.cook_days), extra_slots: list(row.extra_slots), order_in: list(row.order_in),
+    cooking_days: cooking.length ? cooking : [...COOKING_DAYS_DEFAULT], connected_apps: list<GroceryApp>(row.connected_apps), history_synced: object(row.history_synced) };
+}
+
+/** One of the app's settings as saved, else its default. */
+function setting(db: Db, key: string): unknown {
+  const def = SETTINGS.find((s) => s.key === key)!.default;
+  try {
+    const row = db.select({ value: _settings.value }).from(_settings).where(eq(_settings.key, key)).get();
+    return row?.value ? JSON.parse(row.value) : def;
+  } catch { return def; }
 }
 
 /** The grocery app orders go to: the owner's setting, else its default. */
 export function groceryApp(db: Db): GroceryApp {
-  const fallback = SETTINGS[0].default as GroceryApp;
-  try {
-    const row = db.select({ value: _settings.value }).from(_settings).where(eq(_settings.key, "grocery_app")).get();
-    const v = row?.value ? JSON.parse(row.value) : null;
-    return (GROCERY_APPS as readonly unknown[]).includes(v) ? (v as GroceryApp) : fallback;
-  } catch { return fallback; }
+  const v = setting(db, "grocery_app");
+  return (SHOP_APPS as readonly unknown[]).includes(v) ? (v as GroceryApp) : (SETTINGS[0].default as GroceryApp);
+}
+
+/** The family's shopping profile: the main app, the one tried when something is not on it, every app signed in to, and
+ *  whether an order may go without her say. */
+export function shoppingApps(db: Db): { main: GroceryApp; fallback: GroceryApp | null; connected: GroceryApp[]; order_without_asking: boolean } {
+  const fb = setting(db, "fallback_app");
+  return { main: groceryApp(db), fallback: (SHOP_APPS as readonly unknown[]).includes(fb) ? (fb as GroceryApp) : null,
+    connected: houseView(getHouse(db)).connected_apps, order_without_asking: setting(db, "order_without_asking") === true };
 }
 
 /** A write the app will not make: the route answers 400 with the reason, and with a code when the agent acts on the kind of
@@ -141,14 +161,14 @@ export const writeRoutes = (hono: Hono<any>) =>
  *  with it, so that settings change through Flock alone; the app holds it, and uses it for the one setting its agent sets. */
 export function mountFamilyRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: { appToken?: string | null } = {}) {
   const write = writeRoutes(hono);
-  /** The grocery app, written as the app's `grocery_app` setting through the kit's own settings route: its check, its
-   *  change log and the event the pages listen to, stamped with whoever asked. */
-  const setGroceryApp = async (app: GroceryApp, c: Context): Promise<void> => {
+  /** Settings written through the kit's own settings route: its check, its change log and the event the pages listen to,
+   *  stamped with whoever asked. */
+  const patchSettings = async (values: Record<string, unknown>, c: Context): Promise<void> => {
     const headers: Record<string, string> = { "Content-Type": "application/json" };
     if (opts.appToken) headers.Authorization = `Bearer ${opts.appToken}`;
     for (const h of ["x-flock-agent", "x-flock-user"]) { const v = c.req.header(h); if (v) headers[h] = v; }
-    const res = await hono.request("/api/_app/settings", { method: "PATCH", headers, body: JSON.stringify({ grocery_app: app }) });
-    if (!res.ok) refuse(`the grocery app was not saved: ${(await res.json().catch(() => null) as any)?.message ?? res.status}`);
+    const res = await hono.request("/api/_app/settings", { method: "PATCH", headers, body: JSON.stringify(values) });
+    if (!res.ok) refuse(`the shopping apps were not saved: ${(await res.json().catch(() => null) as any)?.message ?? res.status}`);
   };
   const saveHouse = (set: Partial<typeof house.$inferInsert>, by: string) => {
     const row = db.update(house).set({ ...set, updated_at: new Date().toISOString(), updated_by: by }).where(eq(house.id, getHouse(db).id)).returning().get();
@@ -159,7 +179,7 @@ export function mountFamilyRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: { a
   hono.get("/api/family", (c) => c.json({
     people: db.select().from(people).where(eq(people.active, 1)).orderBy(asc(people.created_at)).all(),
     house: houseView(getHouse(db)),
-    grocery_app: groceryApp(db),
+    shopping: shoppingApps(db),
   }));
 
   // set_person { name, relationship?, group, portions?, diet?, allergies?, dislikes?, targets?, note?, remove?: true }: one person by
@@ -180,21 +200,42 @@ export function mountFamilyRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: { a
     return { body: { person } };
   });
 
-  // set_house_rules { rules?, notes?, grocery_app?, structured?: true }: the rules given replace the ones there. `grocery_app`
-  // is the app the orders go to: the app's one setting, written here so the agent has an operation for it. `structured: true`
-  // says the profile carried over from Meal Planner 2.0 (gate.ts) is now in the app's own rows, and clears it.
-  write("/api/family/rules", async (b, by, c) => {
+  // set_house_rules { rules?, notes?, structured?: true }: the rules given replace the ones there. `structured: true` says the
+  // profile carried over from Meal Planner 2.0 (gate.ts) is now in the app's own rows, and clears it. The grocery app has its
+  // own operation, set_shopping_apps.
+  write("/api/family/rules", (b, by) => {
+    if (b.grocery_app !== undefined) refuse("grocery_app is set with set_shopping_apps { main, fallback, connected }");
     const set: Partial<typeof house.$inferInsert> = {};
     if (b.rules !== undefined) set.rules = JSON.stringify(rules(b.rules));
     if (b.notes !== undefined) set.notes = words(b.notes, "notes");
     if (b.structured === true) set.profile_to_structure = null;
-    // Checked before anything is saved: a call with an app the orders cannot go to changes nothing.
-    const app = b.grocery_app === undefined ? undefined
-      : (GROCERY_APPS as readonly unknown[]).includes(b.grocery_app) ? (b.grocery_app as GroceryApp) : refuse(`grocery_app must be one of: ${GROCERY_APPS.join(", ")}`);
-    if (!Object.keys(set).length && !app) refuse("give rules, notes, grocery_app or structured: true");
-    if (app) await setGroceryApp(app, c);
-    const saved = Object.keys(set).length ? saveHouse(set, by) : { body: { house: houseView(getHouse(db)) } };
-    return app ? { body: { ...saved.body, grocery_app: groceryApp(db) } } : saved;
+    if (!Object.keys(set).length) refuse("give rules, notes or structured: true");
+    return saveHouse(set, by);
+  });
+
+  // set_cooking_days { days }: the weekdays the family cooks at home; a plan has meals on these days only.
+  write("/api/family/cooking-days", (b, by) => {
+    const lower = WEEKDAYS.map((d) => d.toLowerCase()).join(", ");
+    if (!Array.isArray(b.days)) refuse(`days must be a list of weekdays (${lower})`);
+    const days = (b.days as unknown[]).map((d) => weekday(d) ?? refuse(`days: ${JSON.stringify(d)} is not a weekday (${lower})`));
+    if (!days.length) refuse("days must have at least one weekday");
+    return saveHouse({ cooking_days: JSON.stringify(WEEKDAYS.filter((d) => days.includes(d))) }, by);
+  });
+
+  // set_shopping_apps { main, fallback, connected }: the main app and the one tried when something is not on it are saved as
+  // the app's settings; the house keeps every app signed in to, which always includes those two. Apps by name or id.
+  write("/api/family/shopping-apps", async (b, by, c) => {
+    const known = `${SHOP_APPS.join(", ")}`;
+    const one = (v: unknown, what: string): GroceryApp => appOf(v) ?? refuse(`${what}: ${JSON.stringify(v)} is not a shopping app (${known})`);
+    const main = one(b.main, "main");
+    const fallback = b.fallback == null ? null : one(b.fallback, "fallback");
+    if (fallback === main) refuse("fallback must be a different app from main");
+    if (!Array.isArray(b.connected)) refuse(`connected must be a list of shopping apps (${known})`);
+    const connected = new Set<GroceryApp>([main, ...(fallback ? [fallback] : []), ...(b.connected as unknown[]).map((v) => one(v, "connected"))]);
+    // Checked before anything is saved: a call with an app we do not know changes nothing.
+    await patchSettings({ grocery_app: main, fallback_app: fallback ?? "none" }, c);
+    saveHouse({ connected_apps: JSON.stringify(SHOP_APPS.filter((a) => connected.has(a))) }, by);
+    return { body: { ...shoppingApps(db), house: houseView(getHouse(db)) } };
   });
 
   // set_cook { name, days, arrival, makes_well?, note? }

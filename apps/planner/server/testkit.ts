@@ -14,7 +14,6 @@ import { mountMealRoutes, type MealHooks } from "./meals";
 import { mountRegularRoutes, type RegularHooks } from "./regulars";
 import { mountProductRoutes } from "./products";
 import { mountRecipeRoutes } from "./recipes";
-import { mountOrderRoutes } from "./orderRoutes";
 
 /** A fresh temp directory for a test, removed when its test file is done: nothing piles up in the system's temp folder.
  *  The removal is registered here, per directory: this module loads once for the whole run, so a hook at its top level would
@@ -25,10 +24,12 @@ export function tempDir(prefix = "planner-test-"): string {
   return dir;
 }
 
-/** `now` gives the orders their clock and makes them follow the plan as in the app (index.ts); without it a plan or an
- *  everyday item changes nothing beyond itself, unless the test gives its own hooks. A rebuild the app would run 2 s after
- *  a change waits here until the test calls `settle()`. */
-export async function boot(opts: { dbFile?: string; dataDir?: string; mealHooks?: MealHooks; regularHooks?: RegularHooks; now?: () => Date; token?: string } = {}) {
+/** The app on a real kit. `basePath` is the app's own path (as Flock gives it, APP_BASE_PATH). `askAgent` stands in for the
+ *  platform's intent call: every call is recorded in `k.asked` as `{ intent, payload }`, and its answer is the function's.
+ *  `schedule` stands in for the app's per-key timer (a debounce): it holds the latest `run` for each key until the test calls
+ *  `k.settle(key?)`; the routes that need it (carts, the week) take `basePath`, `askAgent` and `schedule` from `k.deps`. */
+export async function boot(opts: { dbFile?: string; dataDir?: string; mealHooks?: MealHooks; regularHooks?: RegularHooks; token?: string;
+  basePath?: string; askAgent?: (intent: string, payload: object) => Promise<unknown> } = {}) {
   const hono = new Hono();
   const dataDir = opts.dataDir ?? tempDir();
   // The kit opens its database inside dataDir, so a file given by its full path is named from there.
@@ -36,10 +37,8 @@ export async function boot(opts: { dbFile?: string; dataDir?: string; mealHooks?
   const kit = await mountKit({ hono, env: { appId: "t", dataDir, apiUrl: null, token: opts.token ?? null, agent: null } },
     { schema, settings: SETTINGS, keepTables: OLD_TABLES, dbFile, appName: "T" });
   mountFamilyRoutes(hono, kit.db, kit.emitChange, { appToken: opts.token ?? null });
-  let rebuild: (() => void) | null = null;
-  const orders = mountOrderRoutes(hono, kit.db, kit.emitChange, { now: opts.now, events: kit.ctx.events, schedule: (run) => { rebuild = run; } });
-  mountMealRoutes(hono, kit.db, kit.emitChange, opts.mealHooks ?? (opts.now ? orders.mealHooks : { onFinal: () => undefined, onChanged: () => {} }));
-  mountRegularRoutes(hono, kit.db, kit.emitChange, opts.regularHooks ?? (opts.now ? orders.regularHooks : { onChanged: () => {} }));
+  mountMealRoutes(hono, kit.db, kit.emitChange, opts.mealHooks ?? { onFinal: () => undefined, onChanged: () => {} });
+  mountRegularRoutes(hono, kit.db, kit.emitChange, opts.regularHooks ?? { onChanged: () => {} });
   mountProductRoutes(hono, kit.db, kit.emitChange);
   mountRecipeRoutes(hono, kit.db, kit.emitChange);
   /** A request as the owner. */
@@ -52,9 +51,19 @@ export async function boot(opts: { dbFile?: string; dataDir?: string; mealHooks?
     Promise.resolve(agentOps(() => hono)[name](payload as Record<string, unknown>, { agentId: "meal-agent" } as any));
   /** Every row of a table, straight from the database. */
   const rows = (table: string): any[] => kit.sqlite.query(`SELECT * FROM "${table}"`).all() as any[];
-  /** Is a rebuild of the orders waiting? */
-  const pending = () => rebuild !== null;
-  /** Run the rebuild that is waiting, if any. */
-  const settle = () => { const run = rebuild; rebuild = null; run?.(); };
-  return { kit, hono, owner, op, rows, pending, settle };
+  /** The agent calls the app asked for, in order. */
+  const asked: { intent: string; payload: object }[] = [];
+  const askAgent = async (intent: string, payload: object): Promise<unknown> => { asked.push({ intent, payload }); return opts.askAgent?.(intent, payload); };
+  /** The timers waiting, by key: only the latest run for a key is kept. */
+  const timers = new Map<string, () => void>();
+  const schedule = (key: string, run: () => void, _ms: number): void => { timers.set(key, run); };
+  /** Is a run waiting for this key (or any key)? */
+  const pending = (key?: string): boolean => (key === undefined ? timers.size > 0 : timers.has(key));
+  /** Run what is waiting for this key, or for every key, once. */
+  const settle = (key?: string): void => {
+    const keys = key === undefined ? [...timers.keys()] : timers.has(key) ? [key] : [];
+    for (const k of keys) { const run = timers.get(k)!; timers.delete(k); run(); }
+  };
+  const deps = { basePath: opts.basePath ?? "/a/t", askAgent, schedule };
+  return { kit, hono, owner, op, rows, asked, pending, settle, deps };
 }

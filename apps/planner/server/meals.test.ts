@@ -6,7 +6,7 @@ import { mountMealRoutes } from "./meals";
 
 const MON = "2026-11-23";
 const lunch = { date: MON, slot: "Lunch", dishes: [
-  { name: "Rice", ingredients: [{ item: "rice", amount: 400, unit: "g", keeps: "long" }] },
+  { name: "Rice", ingredients: [{ item: "rice", amount: 400, unit: "g" }] },
   { name: "Aloo gobi", ingredients: [{ item: "cauliflower", amount: 1, unit: "pc" }, { item: "potato", amount: 500, unit: "g" }] },
   { name: "Sambar" },
   { name: "Boiled eggs", for: ["me", "wife"], portion_note: "4 for me, 1 for wife", ingredients: [{ item: "eggs", amount: 5, unit: "pc" }] } ] };
@@ -34,8 +34,8 @@ describe("plan_week", () => {
     const m = week.days[0].meals[0];
     expect(m).toMatchObject({ slot: "Lunch", ordered_in: false, note: null });
     expect(m.dishes[0]).toMatchObject({ for_people: null, portion_note: null, recipe_id: null, video_url: null });
-    expect(m.dishes[0].ingredients).toMatchObject([{ item: "rice", amount: 400, unit: "g", keeps: "long" }]);
-    expect(m.dishes[1].ingredients).toMatchObject([{ item: "cauliflower", amount: 1, unit: "pc", keeps: "fresh" }, { item: "potato", amount: 500, unit: "g", keeps: "fresh" }]);
+    expect(m.dishes[0].ingredients).toMatchObject([{ item: "rice", amount: 400, unit: "g" }]);
+    expect(m.dishes[1].ingredients).toMatchObject([{ item: "cauliflower", amount: 1, unit: "pc" }, { item: "potato", amount: 500, unit: "g" }]);
     expect(m.dishes[2].ingredients).toEqual([]);
   });
 
@@ -89,7 +89,6 @@ describe("plan_week", () => {
     await refused([lunch, { date: MON, slot: "Dinner", dishes: [{ name: "Dal", for: "me" }] }]);
     await refused([lunch, { date: MON, slot: "Dinner", dishes: [{ name: "Dal", ingredients: [{ amount: 200, unit: "g" }] }] }]);
     await refused([lunch, { date: MON, slot: "Dinner", dishes: [{ name: "Dal", ingredients: [{ item: "toor dal", amount: "a cup" }] }] }]);
-    await refused([lunch, { date: MON, slot: "Dinner", dishes: [{ name: "Dal", ingredients: [{ item: "toor dal", keeps: "forever" }] }] }]);
     await refused([lunch, { date: MON, slot: "Dinner", dishes: [{ name: "Dal", recipe_id: "no-such-recipe" }] }]);
     await refused([lunch, { date: MON, slot: "Dinner", ordered_in: "yes" }]);
     for (const t of ["plan_meals", "dishes", "dish_items"]) expect(rows(t)).toHaveLength(0);
@@ -108,7 +107,7 @@ describe("plan_week", () => {
     const { op, rows } = await boot();
     await op("plan_week", { week_start: "2026-11-16", mode: "final", meals: [{ date: "2026-11-18", slot: "Dinner", dishes: [{ name: "Khichdi", ingredients: [{ item: "moong dal", amount: 200, unit: "g" }] }] }] });
     await op("plan_week", { week_start: MON, mode: "draft", meals: [lunch, { date: "2026-11-24", slot: "Breakfast", dishes: [{ name: "Idli" }] }] });
-    const r = await op("plan_week", { week_start: MON, mode: "final", meals: [{ date: "2026-11-25", slot: "Dinner", dishes: [{ name: "Dal", ingredients: [{ item: "toor dal", amount: 200, unit: "g", keeps: "long" }] }, { name: "Roti" }] }] });
+    const r = await op("plan_week", { week_start: MON, mode: "final", meals: [{ date: "2026-11-25", slot: "Dinner", dishes: [{ name: "Dal", ingredients: [{ item: "toor dal", amount: 200, unit: "g" }] }, { name: "Roti" }] }] });
     expect(r.week.status).toBe("final");
     expect(r.week.days.flatMap((d: any) => d.meals).map((m: any) => `${m.slot}: ${dishNames(m)}`)).toEqual(["Dinner: Dal,Roti"]);
     expect(rows("plan_meals").map((m) => `${m.date} ${m.status}`).sort()).toEqual(["2026-11-18 final", "2026-11-25 final"]);
@@ -119,7 +118,7 @@ describe("plan_week", () => {
   it("keep_rest plans a week in parts: each part replaces only its own meals, and the parts add up to the week", async () => {
     const { op, rows } = await boot();
     const tue = "2026-11-24";
-    const tueDinner = { date: tue, slot: "Dinner", dishes: [{ name: "Dal", ingredients: [{ item: "toor dal", amount: 200, unit: "g", keeps: "long" }] }] };
+    const tueDinner = { date: tue, slot: "Dinner", dishes: [{ name: "Dal", ingredients: [{ item: "toor dal", amount: 200, unit: "g" }] }] };
     // An older draft of the week: the first part, without keep_rest, takes its place.
     await op("plan_week", { week_start: MON, mode: "draft", meals: [{ date: "2026-11-29", slot: "Dinner", dishes: [{ name: "Old plan" }] }] });
     await op("plan_week", { week_start: MON, mode: "draft", meals: [lunch] });
@@ -235,7 +234,7 @@ describe("set_meal", () => {
     const noted = await op("set_meal", { date: "2026-11-25", slot: "Dinner", note: "guests tonight" });
     expect(noted.meal.id).toBe(first.meal.id);
     expect(noted.meal).toMatchObject({ note: "guests tonight" }); expect(dishNames(noted.meal)).toEqual(["Dal", "Roti"]);
-    const swapped = await op("set_meal", { date: "2026-11-25", slot: "Dinner", dishes: [{ name: "Pulao", ingredients: [{ item: "rice", amount: 300, unit: "g", keeps: "long" }] }] });
+    const swapped = await op("set_meal", { date: "2026-11-25", slot: "Dinner", dishes: [{ name: "Pulao", ingredients: [{ item: "rice", amount: 300, unit: "g" }] }] });
     expect(dishNames(swapped.meal)).toEqual(["Pulao"]); expect(swapped.meal.note).toBe("guests tonight");
     expect(rows("plan_meals")).toHaveLength(1); expect(rows("dishes")).toHaveLength(1);
 
@@ -282,7 +281,7 @@ describe("set_meal", () => {
 describe("set_dish", () => {
   it("adds a dish to a meal by date and slot, making the meal when it is not there; position 0 is first", async () => {
     const { op, rows } = await boot();
-    const a = await op("set_dish", { date: MON, slot: "Dinner", name: "Dal", ingredients: [{ item: "toor dal", amount: 200, unit: "g", keeps: "long" }] });
+    const a = await op("set_dish", { date: MON, slot: "Dinner", name: "Dal", ingredients: [{ item: "toor dal", amount: 200, unit: "g" }] });
     expect(a.dish).toMatchObject({ name: "Dal", for_people: null });
     expect(a.meal).toMatchObject({ date: MON, slot: "Dinner" }); expect(dishNames(a.meal)).toEqual(["Dal"]);
     expect(rows("plan_meals")[0]).toMatchObject({ status: "draft" });

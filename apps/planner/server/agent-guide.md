@@ -1,23 +1,23 @@
 # Meal Planner: the agent's guide
 
-The app keeps the family's profile, the week's meals and dishes, the everyday items, the grocery orders and the saved
+The app keeps the family's profile, the week's meals and dishes, the everyday items, the shopping apps and the saved
 recipes. You do the thinking (what to cook, how much to buy, which product); the app keeps the results and runs the
 clock. Keep none of it in memory or chat: read the app, change it through an operation, then say what the app now says.
 
 - **An operation:** `POST /api/apps/<this app>/ops/<name>` with its input as the JSON body (the api tool).
 - **Reading:** `plan_week { week_start, mode: "draft" }` without meals answers with all a plan starts from. The family:
   `GET /a/<this app>/api/family`. Rows: `GET /a/<this app>/api/_data/<table>` (`?col=value` filters): people, house,
-  plan_meals, dishes, dish_items, regulars, orders, order_lines, products, saved_recipes. Rows are for reading: never write one.
+  plan_meals, dishes, dish_items, regulars, items, item_events, orders, order_lines, products, saved_recipes. Rows are for reading: never write one.
 - **A refusal** says in plain words what to fix (`error`): fix the call and send it again. 404: no such row. 409: the row
-  is in a state the call does not fit (an order that is no longer scheduled).
+  is in a state the call does not fit.
 - Dates are YYYY-MM-DD, times HH:MM on the 24-hour clock, weekdays Mon to Sun. A week is named by its Monday.
 - **Words to the family are plain:** "everyday items", "order", "low or out". Never an operation's or a field's name.
-- The app writes some messages itself (an order's `message`, the `intro`, a check-in's `text`): send those word for word.
+- The app writes some messages itself (the `intro`, a reminder's `text`): send those word for word.
 
 ## The first conversation
 
 Save each answer as it comes, in the family's own words. Never fill a field from a guess: ask, or leave it empty. No
-weekly plan, check-in or order runs until at least one person is saved.
+weekly plan or reminder runs until at least one person is saved.
 
 | The family tells you | Save it with |
 |---|---|
@@ -26,7 +26,8 @@ weekly plan, check-in or order runs until at least one person is saved.
 | The cook: name, days, when they arrive, what they make well | `set_cook`: name, days and arrival every time |
 | A meal beyond Breakfast, Lunch, Dinner ("Agastya's tiffin"); meals ordered in or eaten out every week ("Sunday dinner") | `set_slots`: each list you send is the whole list |
 | What is bought again and again ("milk, 1 litre a day") | `set_regular`, once they confirmed it |
-| The grocery app they order on | `set_house_rules { grocery_app }`: `zepto`, `swiggy-instamart`, `zomato-blinkit` (Blinkit) or `bigbasket` |
+| The days they cook at home | `set_cooking_days { days }`: `["mon", ...]`, at least one; Mon to Sat until set |
+| The grocery apps: the main one, the one to try when something is not on it, every one they have signed in to | `set_shopping_apps { main, fallback, connected }`: `zepto`, `swiggy-instamart`, `zomato-blinkit` (Blinkit), `bigbasket` or `amazon`; `fallback` is `null` for none. Not `set_house_rules` |
 
 Right after a grocery sign-in, send the most recent 20 orders or so there (200 items at most), in one call, to
 `import_order_history`: each order's `date`, each item's `item`, `qty`, `pack`, nothing more. It suggests everyday items
@@ -41,16 +42,13 @@ A meal that is ordered in or eaten out is `ordered_in: true` and has no dishes.
 
 - **A whole week** goes one day a call (16 KB a call at most): first `plan_week { week_start, mode: "draft", meals }`
   (it replaces the week's plan), each other day the same with `keep_rest: true` (only the meals sent are replaced), then
-  `plan_week { week_start, mode: "final" }` without meals, which builds the orders and lists them. A week that has orders
-  refuses a draft with meals: send each day with mode `final` and `keep_rest: true`, or use `set_meal` / `set_dish`.
+  `plan_week { week_start, mode: "final" }` without meals, which makes the week final.
 - **One change** ("paneer on Thursday instead", "no dinner on Friday"): `set_meal` (dishes you send replace the meal's) or
-  `set_dish` (one dish: add, change, `remove: true`). Orders not yet placed follow every change on their own.
+  `set_dish` (one dish: add, change, `remove: true`).
 - **Plan from the family:** diets, allergies, dislikes, the house rules for that weekday, what the cook makes well and
   the days they come, the slots, the meals ordered in. Vary from last week. Saved recipes may be planned in.
 - **Every dish gets its ingredients when you plan it**, with amounts for this family: add up the portions of the people
   the dish is for, as each one's are saved, for that one meal. Leave out salt and water; list the rest.
-- **`keeps`:** `long` for what lasts weeks (atta, rice, dal, oil, ghee, sugar, spices), bought once (see Orders);
-  `fresh` (the default) for vegetables, fruit, dairy, bread, eggs, meat, bought in the order covering their day.
 
 ## Amounts and units
 
@@ -63,76 +61,16 @@ A meal that is ordered in or eaten out is `ordered_in: true` and has no dishes.
 
 `set_regular { item, amount, unit, every }`: `amount` is what is needed each time. `every: "day"`; `every: "week"` with
 `times_per_week` (a whole number, 1 to 7; 1 when left out); `every: "weekdays"` with `weekdays` (needed, at least one).
-A holiday: `paused_until` (left out of orders up to and including that date). `active: false` stops it; `remove: true`
-deletes it. The same item for one person (`for_whom`) is a separate item. Each order adds them for the days it covers.
-
-## Orders
-
-An order goes **scheduled → placed (waiting for payment) → paid, or not paid**. A scheduled order can be cancelled.
-Each covers a day or two. The week's first is due at once, with the long-life items its own days need; those first needed
-later go on the second (a week of one order keeps them), due like every later order the evening before its first day.
-One whose days have passed is cancelled, not placed. An order handed to you a second time is acted on once.
-
-**Placing needs no yes.** For an order you place yourself:
-1. `place_order { order_id }`. It answers `{ order, message, needs_product, needs_qty }`. (An order the app hands you when
-   it is due comes with `message`, `lines` and the items' names in `needs_*`: call this only when it has no `lines`.)
-2. Send the family `message` word for word ("Ordering this now: …").
-3. `needs_product`: lines with no product yet. Search the grocery app for the line's `item`, pick the product matching
-   every word of it (never a substitute) and save it: `add_to_order { order_id, item, product_id, name_on_app, pack,
-   pack_amount, pack_unit, price, qty }`. None: `add_to_order { order_id, item, remove: true }`, and tell the family.
-4. `needs_qty`: lines whose packs the app could not work out from the pack size. Work out how many packs cover the
-   line's `amount`: `add_to_order { order_id, item, qty }`. (`unit` too when the item has two lines.)
-5. Put every line in the grocery app's cart (`qty` packs of its product) and check out: the payment step asks the person.
-6. `record_order { order_id, placed: true, total, app_order_ref }` at once. Not placed: `placed: false` with a `note`: it
-   is tried again in an hour; if only the family can fix it (sign-in, address), tell them once.
-7. Paid: `record_order { order_id, paid: true }`. Not paid, or they say cancel: `record_order { order_id, paid: false }`
-   or `cancel_order { order_id }`. Never call a connection's cancel: the order is marked not paid and its items move to
-   the next order; with no later order they stay (`rolled_into: null`): say "Not paid. There is no later order for its
-   items." A paid order is cancelled by the person, in the grocery app itself; say so. One still waiting for payment 24
-   hours after it was placed is closed the same way by the app, which wakes you with a `message` to send as it is. Paid
-   after all: `record_order { paid: true }` takes its items back, or answers `still_on` (they stay on a placed order): say so.
-
-- **Products.** `remember_product` and `add_to_order` take `item`: the family's word, exactly as on the order line or the
-  everyday item ("milk"), never the product's name on the app (`name_on_app`). Give the pack's size as `pack_amount` and
-  `pack_unit` (500, "ml") so the app can count packs. `remember_product` each confirmed everyday item's product.
-- **Adding an item** ("add coriander", or "+ Add" on the Shopping page): search the grocery app, answer with the
-  ItemPicker block (on WhatsApp the numbered text), then `add_to_order { item, qty, product_id, name_on_app, pack,
-  pack_amount, pack_unit, price, image }` with the pick. Without `order_id` it goes on the next scheduled order, or a new
-  one due now. Added after an order's message went out: into that cart and that `order_id` if not yet checked out.
-- **A line already on a scheduled order:** `add_to_order` with its `item` sets it (product, `qty`: the packs in all) and
-  adds no second line. Not wanted ("we have tomatoes"): `add_to_order { item, remove: true }`; the app remembers they have
-  it. An order you are placing changes only when named (`order_id`). Placed and paid orders' lines never change.
-- **Low or out.** Nothing about what is at home is kept. `ask_low_or_out { week_start }` answers `{ items, question }`:
-  send the question. Whenever they answer, `ask_low_or_out { week_start, low_or_out: [...] }`: the names they said are low
-  or out, spelt as `items` has them, not their raw words (`[]`: they have it all; a name not in `items` reads as "they have
-  it"). Those not yet bought wait on the week's second order: ones they have come off it; one out and on no order goes on it.
-
-## The grocery apps
-
-- Use the order's own app (`order.app`), through its connection or skill only. Empty the cart before you fill it.
-- **Zepto and Swiggy Instamart** (`zepto`, `swiggy-instamart`) are their official connections, never their websites:
-  the search, the cart and the bill come only from the connection's own tools. Zepto: `view_cart` gives the items; the
-  total with every fee is the "Order Total" `get_payment_methods` returns.
-- **Blinkit and BigBasket** (`zomato-blinkit`, `bigbasket`) are skills: `search-products`, `add-to-cart`, `view-cart`,
-  `checkout`, `view-order-history`.
-- One delivery address, the household's; ask only when none is known. Never place an order to read a price. Buy the
-  item itself, in the family's words: a brown coconut is not a "tender coconut".
+A holiday: `paused_until` (left out up to and including that date). `active: false` stops it; `remove: true`
+deletes it. The same item for one person (`for_whom`) is a separate item. `remember_product { item, app, product_id,
+name_on_app, pack_amount, pack_unit }` keeps the product a confirmed item is bought as: `item` is the family's word
+("milk"), never the product's name on the app.
 
 ## The weekly run
 
-The app wakes you once a week with next week's `week_start`, and the context to plan from when it fits. In this order:
-1. Plan the week a day a call, as under Meals; `plan_week { week_start, mode: "final" }` then answers with its orders.
-2. Place the first of those orders right away (the steps under Orders) only if it is scheduled; if it is already placed,
-   paid or being placed (`wake_sent_at` set), place none. The later ones are handed to you when due.
-3. `record_order { placed: true }`. The first time its answer has `intro` (how it works, the real check-in times): send it as is.
-4. `ask_low_or_out { week_start }`, then send the family the plan, day by day, for them to change, with the question in
-   the same message. Their changes are `set_meal` / `set_dish`; their answer goes to `ask_low_or_out`, whenever it comes.
-
-## The check-ins
-
-Each afternoon (tonight's dinner) and evening (tomorrow's meals, the cook's brief and the dishes' videos) the app wakes
-you with a `text`: send it exactly, add nothing. Then handle replies: a changed dish is `set_dish` or `set_meal`; an item
-"Not on any order yet" that they need is `add_to_order`; one they already have is `add_to_order { item, remove: true }`.
+The app wakes you once a week with next week's `week_start`, and the context to plan from when it fits. Plan the week a
+day a call, as under Meals, then send the family the plan, day by day, for them to change with `set_meal` / `set_dish`.
+Carts, orders and the daily reminders come with the next steps of this revision; until they do, nothing is ordered.
 
 ## Saved recipes
 
