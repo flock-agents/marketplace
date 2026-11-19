@@ -97,6 +97,7 @@ export const orders = sqliteTable("orders", {
   paid_at: text("paid_at"),
   app_order_ref: text("app_order_ref"),
   wake_sent_at: text("wake_sent_at"),                          // the agent was woken to place it
+  unpaid_notice: text("unpaid_notice"),                        // pending | sent: the order clock closed it as not paid; has the agent been given the line to say
   skipped_items: text("skipped_items"),                        // JSON string[]: items the family said they have
   note: text("note"),
 });
@@ -116,6 +117,7 @@ export const order_lines = sqliteTable("order_lines", {
   image: text("image"),
   source: text("source").notNull(),                            // dish | regular | added
   sources: text("sources"),                                    // JSON [{ kind, id, label }]
+  rolled_from: text("rolled_from"),                            // the unpaid order this line moved here from
 });
 
 /** The product the family buys for an item on a grocery app, remembered once the agent has picked it. */

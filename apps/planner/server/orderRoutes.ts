@@ -15,7 +15,7 @@ import { introText } from "./messages";
 import { normItem, productFor, productId, productOf, rememberProduct } from "./products";
 import type { RegularHooks } from "./regulars";
 import { applyLowOrOut, buildOrdersForWeek, commitOrders, extraOrder, fillOrders, lineRemoved, lineRestored, lowOrOutQuestion, nextScheduled, orderView, productPacks,
-  rebuildScheduledOrders, REWAKE_AFTER_MIN, rollUnpaid, startPlacing, weekHasOrders, type OrderRow } from "./orders";
+  rebuildScheduledOrders, REWAKE_AFTER_MIN, rollUnpaid, startPlacing, takeBackRolled, UNPAID_NOTE, weekHasOrders, type OrderRow } from "./orders";
 
 export type OrderOptions = {
   /** The time, for tests. */
@@ -87,7 +87,8 @@ export function mountOrderRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: Orde
   });
 
   // ask_low_or_out { week_start, low_or_out? }: without an answer, the week's long-life items and the question to ask about
-  // them; they wait on the week's second order (orders.ts longCarrier), which is the order the answer changes. With one, the items it names are ordered and the rest are at home: a list of items names them whole, the
+  // them; the ones not needed in the first order's days wait on the week's second order (orders.ts longHomes), which is the
+  // order the answer changes. With one, the items it names are ordered and the rest are at home: a list of items names them whole, the
   // family's own words as one text name an item by any of its words.
   write("/api/orders/low-or-out", (b, by) => {
     const weekStart = dateOf(b.week_start, "week_start");
@@ -181,6 +182,8 @@ export function mountOrderRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: Orde
   // paid: true → paid; paid: false → not paid, and its lines move to the next order (`rolled_into`); with no later order
   // they stay where they are, no order is made, and the answer says so (`rolled_into: null`, `note`).
   // The first order of a planned week recorded placed answers with `intro`, the how-to-use message, once.
+  // paid: true is also taken for an order the order clock closed as not paid after a day (a late payment): it is paid, and
+  // the lines that moved on come back to it (`taken_back`) unless their order is placed or being placed (`still_on`, `note`).
   write("/api/orders/:id/record", (b, by, c) => {
     const o = find(c.req.param("id"));
     if (!o) return notFound(c.req.param("id"));
@@ -194,13 +197,16 @@ export function mountOrderRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: Orde
     if (b.note !== undefined) set.note = words(b.note, "note");
     const is = STATUS_TEXT[o.status] ?? o.status;
     if (placed !== undefined && o.status !== "scheduled") return conflict(`this order is ${is}: only a scheduled order is recorded placed or not placed`);
-    if (paid !== undefined && !(o.status === "placed" || placed)) return conflict(`this order is ${is}: only a placed order is recorded paid or not paid`);
+    const late = paid === true && o.status === "not_paid" && !!o.unpaid_notice;
+    if (paid !== undefined && !(o.status === "placed" || placed || late)) return conflict(`this order is ${is}: only a placed order is recorded paid or not paid`);
     const at = localStamp(now());
     const out = commitOrders(db, emit, (tx, changes) => {
       if (placed) Object.assign(set, { status: "placed", placed_at: at });
       // Not placed: nobody is placing it now, and it is due again in an hour, not at the clock's next run.
       if (placed === false) Object.assign(set, { wake_sent_at: null, place_at: localStamp(new Date(now().getTime() + REWAKE_AFTER_MIN * 60_000)) });
       if (paid) Object.assign(set, { status: "paid", paid_at: at });
+      // Paid after all: no longer an order to tell the family about, and the clock's own note about it goes.
+      if (late) Object.assign(set, { unpaid_notice: null, ...(set.note === undefined && o.note === UNPAID_NOTE ? { note: null } : {}) });
       tx.update(orders).set({ ...set, updated_at: new Date().toISOString(), updated_by: by }).where(eq(orders.id, o.id)).run();
       changes.push(["orders", o.id, "update", by]);
       // Back among the orders that follow the plan: it catches up with what changed while it was being placed.
@@ -212,9 +218,12 @@ export function mountOrderRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: Orde
         tx.update(house).set({ intro_sent_at: new Date().toISOString() }).where(eq(house.id, home.id)).run();
         changes.push(["house", home.id, "update", "app"]);
       }
-      return { intro, ...(paid === false ? { rolled: rollUnpaid(tx, o, by, changes) } : {}) };
+      return { intro, ...(paid === false ? { rolled: rollUnpaid(tx, o, by, changes) } : {}), ...(late ? { back: takeBackRolled(tx, o, by, changes) } : {}) };
     });
-    return { body: { order: orderView(db, o.id), ...(out.intro ? { intro: out.intro } : {}), ...("rolled" in out ? rolledInto(out.rolled ?? null) : {}) } };
+    const still = out.back?.left_on ? orderView(db, out.back.left_on) : null;
+    return { body: { order: orderView(db, o.id), ...(out.intro ? { intro: out.intro } : {}), ...("rolled" in out ? rolledInto(out.rolled ?? null) : {}),
+      ...(out.back ? { taken_back: out.back.taken_back } : {}),
+      ...(still ? { still_on: still, note: `its items are also on ${weekdayLong(still.place_at.slice(0, 10))}'s order, which is ${still.status === "scheduled" ? "being placed" : STATUS_TEXT[still.status] ?? still.status}: they were left there and may be bought twice; tell the person` } : {}) } };
   });
 
   // cancel_order { order_id }: a scheduled order is cancelled, and no longer covers its days. A placed one is not paid for:

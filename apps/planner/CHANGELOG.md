@@ -14,16 +14,17 @@ every day. Needs Flock 0.24.0 (its betas included).
 - **Everyday items.** Milk, curd, bread and the like are a list of their own (how much, how often, paused over a holiday)
   and go into the orders without being asked for. The agent suggests them from your past orders; you confirm each one.
 - **Orders, placed for you.** Once a week (Saturday 6 pm unless you change it) the agent plans next week and groups what
-  it needs into orders: fresh items close to the day they are cooked, long-life items in the second order. The first order
-  is placed right away, with the first days' fresh items and the everyday items; the later ones go out the evening
-  before. The agent messages you just before each one and places it without waiting for a yes; the payment step is yours.
-  With the plan it asks once which long-life items are low or out: they wait on the second order, so your answer takes
-  off what you have and keeps what you need. A week with a single order keeps its long-life items in that order.
+  it needs into orders: fresh items close to the day they are cooked, long-life items once. The first order is placed
+  right away, with what its own days need (the long-life items too) and the everyday items; the later ones go out the
+  evening before. The agent messages you just before each one and places it without waiting for a yes; the payment step
+  is yours. With the plan it asks once which long-life items are low or out: the ones first needed later in the week
+  wait on the second order, so your answer takes off what you have and keeps what you need.
 - **Where an order stands.** Scheduled, then placed and waiting for payment, then paid or not paid; a scheduled order can
   be cancelled. If you do not pay, or say cancel after it is placed, the order is closed as not paid and its items move to
   the next order; when no later order is waiting they are not moved, and the agent says so. An order still waiting for
   payment 24 hours after it was placed is closed the same way on its own, and the agent tells you in one line ("Monday's
-  order wasn't paid, so I've moved its items to Wednesday's."). A paid order is cancelled in
+  order wasn't paid, so I've moved its items to Wednesday's."). If you pay it after all, tell the agent: the items come
+  back off the next order, unless that one has already gone out. A paid order is cancelled in
   the grocery app itself. An order that could not be placed is tried again in an hour; one whose days have passed is
   cancelled, not placed late.
 - **Real products.** Each line is a product on your grocery app with its pack and price, remembered for the next order.

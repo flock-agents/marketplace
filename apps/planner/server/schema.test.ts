@@ -50,6 +50,9 @@ describe("planner 3.0 data", () => {
     expect(ORDER_STATUSES).toEqual(["scheduled", "placed", "paid", "not_paid", "cancelled"]);
     expect(columns(s, "orders")).toContain("paid_at");
     expect(columns(s, "orders")).not.toContain("ask_pending");
+    // An order the clock closed as not paid, and the lines that moved on from an unpaid order.
+    expect(columns(s, "orders")).toContain("unpaid_notice");
+    expect(columns(s, "order_lines")).toContain("rolled_from");
     expect(columns(s, "house")).toEqual(expect.arrayContaining(["dinner_check_time", "tomorrow_check_time"]));
   });
 

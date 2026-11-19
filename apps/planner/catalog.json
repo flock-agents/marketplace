@@ -418,6 +418,12 @@
           "nullable": true,
           "note": "the agent was woken to place it"
         },
+        "unpaid_notice": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "pending | sent: the order clock closed it as not paid; has the agent been given the line to say"
+        },
         "skipped_items": {
           "type": "string",
           "required": false,
@@ -504,6 +510,12 @@
           "required": false,
           "nullable": true,
           "note": "JSON [{ kind, id, label }]"
+        },
+        "rolled_from": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "the unpaid order this line moved here from"
         }
       }
     },

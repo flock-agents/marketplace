@@ -106,11 +106,11 @@ too), `set_cook`, `set_slots`; `plan_week` (draft | final; without meals it answ
 with the low-or-out question. `dinner-check` (15:00) and `tomorrow-check` (19:00) wake it to send a message the app wrote, only
 when a final plan has a meal to check; each records the time it runs at, which the intro names. `order-clock` (every 15 min)
 hands each due order to the agent, again after 60 min if never recorded or recorded not placed; a planned one whose days are over
-is cancelled; a placed one unpaid for 24 h is closed as not paid (lines roll on) and the agent is woken with the line to send. The gate (`gate.ts`): nothing runs until one person is saved. On an upgrade, boot copies `household.profile` to
+is cancelled; a placed one unpaid for 24 h is closed as not paid (lines roll on, `rolled_from`) and the agent woken with the line to send (`unpaid_notice`; retried); paid later, it takes them back. The gate (`gate.ts`): nothing runs until one person is saved. On an upgrade, boot copies `household.profile` to
 `house.profile_to_structure`; until cleared, the weekly run asks only to structure it, then plan. 2.0's 18 tables stay, unread.
 
 **An order's life.** A final plan gives each pair of days an order: fresh items in the order covering their day, long-life items
-once, in the week's second (`longCarrier`; its only order when it has one), so the low-or-out answer still edits them. The first is placed right away, later ones at 18:00 the evening before; one order a date. `scheduled`
+once: with the week's first when its days need them, else in the second (`longHomes`), where the low-or-out answer still edits them. The first is placed right away, later ones at 18:00 the evening before; one order a date. `scheduled`
 → `placed` (waiting for payment) → `paid` or `not_paid`; `cancelled` only from scheduled. Scheduled orders are rebuilt after
 every change to the plan or an everyday item, keeping added lines and `skipped_items` (what the family has). Not paid, or a
 placed order cancelled: its lines move to the next scheduled order, or stay when none waits (none is made); nothing is cancelled

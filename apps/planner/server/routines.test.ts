@@ -152,14 +152,15 @@ describe("weekly plan", () => {
     expect(p).toContain("names from `items`");
     expect(p).toContain("Cancel nothing on the grocery app");
     expect(p).not.toContain("ask_pending");
-    // The long-life items are on the second order, where the answer can still change them; an order nobody pays for is closed by the app.
-    expect(p).toContain("the week's long-life items wait on the second order");
-    expect(p).toContain("The items they have come off the second order; the ones low or out stay on it.");
+    // Long-life items the first days need go out with the first order; the rest wait on the second, where the answer can
+    // still change them. An order nobody pays for is closed by the app.
+    expect(p).toContain("the long-life items first needed later wait on the second order");
+    expect(p).toContain("The items they have come off the second order; the ones low or out stay on it. What the first order already bought is not changed.");
+    expect(p).toContain("if the person pays it after all, record_order { order_id, paid: true } is still taken");
     expect(p).toContain("still waiting for its payment 24 hours after it was placed is closed as not paid by the app");
     const g = guide.replace(/\s+/g, " ");
-    for (const said of ["the long-life ones go on the second (a week of one order keeps them)", "bought once, in the week's second order", "The items wait on the week's second order",
-      "still waiting for payment 24 hours after it was placed is closed the same way by the app", "Monday's order wasn't paid, so I've moved its items to Wednesday's."]) expect(g, said).toContain(said);
-    expect(g).not.toContain("week's first order");
+    for (const said of ["with the long-life items its own days need", "first needed later go on the second", "wait on the week's second order", "Paid after all", "still_on",
+      "still waiting for payment 24 hours after it was placed is closed the same way by the app"]) expect(g, said).toContain(said);
   });
 
   it("with a migrated 2.0 profile, the weekly run only asks to structure it", async () => {
@@ -369,13 +370,13 @@ describe("order clock", () => {
     expect(Object.keys(data)).toEqual(["order_id", "app", "message", "lines", "needs_product", "needs_qty"]);
     expect(data.order_id).toBe(k.first.id);
     expect(data.app).toBe("zepto");
-    expect(data.lines.map((l: any) => l.item).sort()).toEqual(["cauliflower", "paneer", "potato", "spinach"]);
+    expect(data.lines.map((l: any) => l.item).sort()).toEqual(["atta", "cauliflower", "paneer", "potato", "rice", "spinach"]);
     // A line carries what placing needs, and nothing of the row's bookkeeping.
     expect(data.lines.find((l: any) => l.item === "potato")).toEqual({ item: "potato", unit: "g", amount: 500, qty: 1, qty_checked: 0, product_id: null, name_on_app: null, pack: null, price: null });
     expect(data.message).toStartWith("Ordering this now: ");
     expect(data.message).toEndWith(" on Zepto");
-    expect([...data.needs_product].sort()).toEqual(["cauliflower", "paneer", "potato", "spinach"]);
-    expect([...data.needs_qty].sort()).toEqual(["cauliflower", "paneer", "potato", "spinach"]);
+    expect([...data.needs_product].sort()).toEqual(["atta", "cauliflower", "paneer", "potato", "rice", "spinach"]);
+    expect([...data.needs_qty].sort()).toEqual(["atta", "cauliflower", "paneer", "potato", "rice", "spinach"]);
     expect(k.order(k.first.id).wake_sent_at).toBe("2026-11-21T18:15");
     for (const s of ["`message`", "needs_product", "needs_qty", "add_to_order { order_id, item", "Zepto", "placed: true", "paid: true", "paid: false", "Cancel nothing on Zepto"]) expect(message).toContain(s);
     expect(message.indexOf("placed: true")).toBeLessThan(message.indexOf("paid: true"));
@@ -409,10 +410,10 @@ describe("order clock", () => {
     expect(a.order(a.first.id).wake_sent_at).toBe(placed.order.wake_sent_at);
   });
 
-  /** A week whose first order (Sun and Mon) has `n` lines, none with a product: Monday's lunch and dinner, n fresh ingredients. */
+  /** A week whose first order (Sun and Mon) has `n` lines, none with a product: Monday's lunch and dinner, n ingredients. */
   const longOrder = async (n: number) => {
     const names = ["basmati rice", "toor dal", "cauliflower florets", "green chillies", "coriander leaves", "cold pressed mustard oil", "whole wheat atta", "kashmiri red chilli powder"];
-    const ingredients = Array.from({ length: n }, (_, i) => ({ item: `${names[i % names.length]} ${i + 1}`, amount: 250 + i, unit: i % 2 ? "g" : "ml", keeps: "fresh" }));
+    const ingredients = Array.from({ length: n }, (_, i) => ({ item: `${names[i % names.length]} ${i + 1}`, amount: 250 + i, unit: i % 2 ? "g" : "ml", keeps: i % 3 ? "fresh" : "long" }));
     const dishes = (from: number, to: number, slot: string) => Array.from({ length: Math.ceil((to - from) / 5) }, (_, d) => ({
       name: `${slot} dish number ${d + 1} with gravy`, ingredients: ingredients.slice(from + d * 5, Math.min(from + d * 5 + 5, to)) }));
     const half = Math.ceil(n / 2);
@@ -618,13 +619,84 @@ describe("an order nobody paid for", () => {
     expect(noted.order(noted.first.id)).toMatchObject({ status: "not_paid", note: "UPI link sent to Asha" });
   });
 
-  it("an order closed without its line reaching the agent fails the run, and the due orders are still handed over", async () => {
+  it("a line that did not reach the agent fails the run and is sent on the next one; the order is closed once, and the due orders still go", async () => {
     const k = await plannedWeek();
     await k.op("record_order", { order_id: k.first.id, placed: true });
     const busy = (data: any) => (data.message?.includes("wasn't paid") ? { ok: false, reason: "agent busy" } : { ok: true });
-    await expect(orderClock(k.ctx(null, busy), at(18, 0, 23))).rejects.toThrow(`1 unpaid orders closed without the family being told (${k.first.id}: the agent was not woken: agent busy)`);
-    expect(k.order(k.first.id).status).toBe("not_paid");
-    expect(k.wakes.map((w) => w.data.order_id)).toEqual([k.second.id]);
+    await expect(orderClock(k.ctx(null, busy), SUN_605PM)).rejects.toThrow(`1 unpaid orders with the family not yet told, tried again on the next run (${k.first.id}: the agent was not woken: agent busy)`);
+    expect(k.order(k.first.id)).toMatchObject({ status: "not_paid", unpaid_notice: "pending" });
+    expect(k.wakes).toEqual([]);
+    const rolled = JSON.stringify(k.rows("order_lines"));
+    // The next run says it, and rolls nothing a second time.
+    await orderClock(k.ctx(), at(18, 20, 22));
+    expect(k.wakes.map((w) => w.data)).toEqual([{ order_id: k.first.id, rolled_into: k.second.id, message: "Saturday's order wasn't paid, so I've moved its items to Monday's." }]);
+    expect(k.order(k.first.id).unpaid_notice).toBe("sent");
+    expect(JSON.stringify(k.rows("order_lines"))).toBe(rolled);
+    await orderClock(k.ctx(), at(18, 35, 22));
+    expect(k.wakes).toHaveLength(1);
+
+    // A failed line does not hold up the orders that are due.
+    const due = await plannedWeek();
+    await due.op("record_order", { order_id: due.first.id, placed: true });
+    await expect(orderClock(due.ctx(null, busy), at(18, 0, 23))).rejects.toThrow("family not yet told");
+    expect(due.wakes.map((w) => w.data.order_id)).toEqual([due.second.id]);
+  });
+
+  it("paid after all: the order is paid and takes its lines back off the next order, which is as the plan has it again", async () => {
+    const k = await plannedWeek();
+    await k.op("record_order", { order_id: k.first.id, placed: true });
+    const had = k.rows("order_lines").filter((l) => l.order_id === k.first.id);
+    await orderClock(k.ctx(), SUN_605PM);
+    expect(k.rows("order_lines").filter((l) => l.rolled_from === k.first.id)).toHaveLength(had.length);
+    k.clock.now = at(20, 0, 22);
+    const r = await k.op("record_order", { order_id: k.first.id, paid: true, total: 640 });
+    expect(r.order).toMatchObject({ status: "paid", paid_at: "2026-11-22T20:00", recorded_total: 640, note: null, unpaid_notice: null });
+    expect(r.taken_back).toBe(6);
+    expect(r.still_on).toBeUndefined(); expect(r.note).toBeUndefined();
+    // Each line is the line it was: the same row, a dish's line again, with no trace of the trip.
+    const back = k.rows("order_lines").filter((l) => l.order_id === k.first.id);
+    expect(back.map((l) => [l.id, l.item, l.source, l.sources, l.rolled_from]).sort()).toEqual(had.map((l) => [l.id, l.item, l.source, l.sources, null]).sort());
+    expect(linesOf(k, k.second.id)).toEqual(["onion"]);
+    // Paid once: a second payment is refused, and the clock has nothing more to say about it.
+    expect((await k.op("record_order", { order_id: k.first.id, paid: true })).status).toBe(409);
+    await orderClock(k.ctx(), at(20, 15, 22));
+    expect(k.wakes).toHaveLength(1);
+  });
+
+  it("paid after the next order was placed: the lines stay there, and the answer says so for the agent to tell the person", async () => {
+    const k = await plannedWeek();
+    await k.op("record_order", { order_id: k.first.id, placed: true });
+    await orderClock(k.ctx(), at(18, 0, 23));   // closed, rolled onto the second order, which is handed over in the same run
+    expect(k.order(k.second.id).wake_sent_at).toBe("2026-11-23T18:00");
+    await k.op("record_order", { order_id: k.second.id, placed: true });
+    const r = await k.op("record_order", { order_id: k.first.id, paid: true });
+    expect(r.order).toMatchObject({ status: "paid", lines: [] });
+    expect(r.taken_back).toBe(0);
+    expect(r.still_on.id).toBe(k.second.id);
+    expect(r.note).toBe("its items are also on Monday's order, which is placed, waiting for payment: they were left there and may be bought twice; tell the person");
+    expect(linesOf(k, k.second.id)).toEqual(["atta", "cauliflower", "onion", "paneer", "potato", "rice", "spinach"]);
+    // The same while the next order is only being placed: nothing changes under the agent placing it.
+    const b = await plannedWeek();
+    await b.op("record_order", { order_id: b.first.id, placed: true });
+    await orderClock(b.ctx(), at(18, 0, 23));
+    const being = await b.op("record_order", { order_id: b.first.id, paid: true });
+    expect(being.taken_back).toBe(0);
+    expect(being.note).toBe("its items are also on Monday's order, which is being placed: they were left there and may be bought twice; tell the person");
+  });
+
+  it("paid before the line was said: nothing is said; an order the family itself did not pay stays closed", async () => {
+    const k = await plannedWeek();
+    await k.op("record_order", { order_id: k.first.id, placed: true });
+    await expect(orderClock(k.ctx(null, () => ({ ok: false, reason: "agent busy" })), SUN_605PM)).rejects.toThrow("agent busy");
+    expect((await k.op("record_order", { order_id: k.first.id, paid: true })).order.status).toBe("paid");
+    await orderClock(k.ctx(), at(18, 20, 22));
+    expect(k.wakes).toEqual([]);
+
+    const said = await plannedWeek();
+    await said.op("record_order", { order_id: said.first.id, placed: true });
+    await said.op("record_order", { order_id: said.first.id, paid: false });
+    const r = await said.op("record_order", { order_id: said.first.id, paid: true });
+    expect(r.status).toBe(409); expect(r.error).toContain("only a placed order is recorded paid or not paid");
   });
 });
 

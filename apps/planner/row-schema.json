@@ -579,6 +579,12 @@
               "null"
             ]
           },
+          "unpaid_notice": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "skipped_items": {
             "type": [
               "string",
@@ -718,6 +724,12 @@
             "type": "string"
           },
           "sources": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "rolled_from": {
             "type": [
               "string",
               "null"

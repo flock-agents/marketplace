@@ -1,11 +1,12 @@
 // The order clock: every run, each scheduled order whose time has come is handed to the agent to place, once. The agent
 // places the first order of a week itself, right after planning it; the clock places every later one, and any the agent missed.
-// It also closes a placed order nobody paid for within a day: its items move to the next order, and the agent says so.
+// It also closes a placed order nobody paid for within a day: its items move to the next order, and the agent says so
+// (a wake that did not go is tried again on the next run).
 import { and, asc, eq, isNull, lt, lte, or, sql } from "drizzle-orm";
-import { orders } from "../db/schema";
+import { order_lines, orders } from "../db/schema";
 import { APP_NAMES, type GroceryApp } from "../db/constants";
 import { clockText, dayLabel, localStamp, todayStr, weekdayLong } from "../dates";
-import { commitOrders, REWAKE_AFTER_MIN, rollUnpaid, startPlacing, UNPAID_AFTER_HOURS, type PlacePayload } from "../orders";
+import { commitOrders, REWAKE_AFTER_MIN, rollUnpaid, startPlacing, UNPAID_AFTER_HOURS, UNPAID_NOTE, type PlacePayload } from "../orders";
 import { unpaidText } from "../messages";
 import { familyKnown } from "../gate";
 import { fitsWake, wake, type RoutineCtx } from "./ctx";
@@ -18,7 +19,7 @@ const PLACE_PROMPT = (app: string): string => [
   `4. The payment step asks the person. When they pay, record_order { order_id, paid: true }. If they do not pay, or say cancel, record_order { order_id, paid: false }. Cancel nothing on ${app}: the items move to the next order. An order still waiting for its payment ${UNPAID_AFTER_HOURS} hours after it was placed is closed as not paid by the app.`,
 ].join("\n");
 
-const UNPAID_PROMPT = `An order placed ${UNPAID_AFTER_HOURS} hours ago was never paid: the app has closed it as not paid, and \`rolled_into\` is the order its items moved to (null: there was no later order, and none was made). Send the family \`message\`, word for word, and nothing more. Cancel nothing on the grocery app, and do not call record_order or cancel_order for it.`;
+const UNPAID_PROMPT = `An order placed ${UNPAID_AFTER_HOURS} hours ago was never paid: the app has closed it as not paid, and \`rolled_into\` is the order its items moved to (null: there was no later order, and none was made). Send the family \`message\`, word for word, and nothing more. Cancel nothing on the grocery app, and do not call record_order or cancel_order for it; only if the person pays it after all, record_order { order_id, paid: true }.`;
 
 /** What the wake carries of an order to place: place_order's answer, cut down to what placing needs, so that it fits in a
  *  wake. An order still too long goes by its id and message alone, and the agent reads the rest with place_order. */
@@ -52,14 +53,25 @@ export async function orderClock(ctx: RoutineCtx, now: Date = new Date()): Promi
   const waitedOut = localStamp(new Date(now.getTime() - UNPAID_AFTER_HOURS * 3_600_000));
   for (const o of db.select().from(orders).where(and(eq(orders.status, "placed"), lte(orders.placed_at, waitedOut))).orderBy(asc(orders.placed_at), sql`rowid`).all()) {
     try {
-      const into = commitOrders(db, emit, (tx, changes) => {
-        // The Shopping page shows why it closed, unless the order already carries a note of its own.
-        if (!o.note) tx.update(orders).set({ note: `not paid within ${UNPAID_AFTER_HOURS} hours` }).where(eq(orders.id, o.id)).run();
-        return rollUnpaid(tx, o, "app", changes);
+      commitOrders(db, emit, (tx, changes) => {
+        // The family is still to be told; the Shopping page shows why it closed, unless the order carries a note of its own.
+        tx.update(orders).set({ unpaid_notice: "pending", ...(o.note ? {} : { note: UNPAID_NOTE }) }).where(eq(orders.id, o.id)).run();
+        rollUnpaid(tx, o, "app", changes);
       });
+    } catch (e: any) {
+      unpaid.push(`${o.id}: ${String(e?.message ?? e)}`);
+    }
+  }
+  // Then the line about each, said once: one whose wake did not go stays pending, and is tried again on the next run (the
+  // close itself is never done twice). One paid meanwhile is no longer not paid, and is not spoken of.
+  for (const o of db.select().from(orders).where(and(eq(orders.status, "not_paid"), eq(orders.unpaid_notice, "pending"))).orderBy(asc(orders.placed_at), sql`rowid`).all()) {
+    try {
+      const into = db.select({ id: order_lines.order_id }).from(order_lines).where(eq(order_lines.rolled_from, o.id)).limit(1).get()?.id ?? null;
       const next = into ? db.select().from(orders).where(eq(orders.id, into)).get() : undefined;
-      const message = unpaidText(weekdayLong(o.placed_at!.slice(0, 10)), next ? weekdayLong(next.place_at.slice(0, 10)) : null);
+      const message = unpaidText(weekdayLong((o.placed_at ?? o.place_at).slice(0, 10)), next ? weekdayLong(next.place_at.slice(0, 10)) : null);
       await wake(ctx, UNPAID_PROMPT, { order_id: o.id, rolled_into: into, message });
+      db.update(orders).set({ unpaid_notice: "sent", updated_at: new Date().toISOString() }).where(eq(orders.id, o.id)).run();
+      emit("orders", o.id, "update", "app");
     } catch (e: any) {
       unpaid.push(`${o.id}: ${String(e?.message ?? e)}`);
     }
@@ -97,7 +109,7 @@ export async function orderClock(ctx: RoutineCtx, now: Date = new Date()): Promi
   // A failed run in the routine's history, once every due order had its turn.
   const failed = [
     ...(failures.length ? [`${failures.length} of ${due.length} due orders not handed to the agent (${failures.join("; ")})`] : []),
-    ...(unpaid.length ? [`${unpaid.length} unpaid orders closed without the family being told (${unpaid.join("; ")})`] : []),
+    ...(unpaid.length ? [`${unpaid.length} unpaid orders with the family not yet told, tried again on the next run (${unpaid.join("; ")})`] : []),
   ];
   if (failed.length) throw new Error(failed.join("; "));
 }

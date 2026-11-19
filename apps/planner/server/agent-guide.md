@@ -49,8 +49,8 @@ A meal that is ordered in or eaten out is `ordered_in: true` and has no dishes.
   the days they come, the slots, the meals ordered in. Vary from last week. Saved recipes may be planned in.
 - **Every dish gets its ingredients when you plan it**, with amounts for this family: add up the portions of the people
   the dish is for, as each one's are saved, for that one meal. Leave out salt and water; list the rest.
-- **`keeps`:** `long` for what lasts weeks (atta, rice, dal, oil, ghee, sugar, spices), bought once, in the week's second
-  order; `fresh` (the default) for vegetables, fruit, dairy, bread, eggs, meat, bought in the order covering their day.
+- **`keeps`:** `long` for what lasts weeks (atta, rice, dal, oil, ghee, sugar, spices), bought once (see Orders);
+  `fresh` (the default) for vegetables, fruit, dairy, bread, eggs, meat, bought in the order covering their day.
 
 ## Amounts and units
 
@@ -69,9 +69,9 @@ deletes it. The same item for one person (`for_whom`) is a separate item. Each o
 ## Orders
 
 An order goes **scheduled → placed (waiting for payment) → paid, or not paid**. A scheduled order can be cancelled.
-Each covers a day or two. The week's first is due at once, with fresh and everyday items only; the long-life ones go on
-the second (a week of one order keeps them), due like every later order the evening before its first day. One whose days
-have passed is cancelled, not placed. An order handed to you a second time is acted on once.
+Each covers a day or two. The week's first is due at once, with the long-life items its own days need; those first needed
+later go on the second (a week of one order keeps them), due like every later order the evening before its first day.
+One whose days have passed is cancelled, not placed. An order handed to you a second time is acted on once.
 
 **Placing needs no yes.** For an order you place yourself:
 1. `place_order { order_id }`. It answers `{ order, message, needs_product, needs_qty }`. (An order the app hands you when
@@ -88,9 +88,9 @@ have passed is cancelled, not placed. An order handed to you a second time is ac
 7. Paid: `record_order { order_id, paid: true }`. Not paid, or they say cancel: `record_order { order_id, paid: false }`
    or `cancel_order { order_id }`. Never call a connection's cancel: the order is marked not paid and its items move to
    the next order; with no later order they stay (`rolled_into: null`): say "Not paid. There is no later order for its
-   items." A paid order is cancelled by the person, in the grocery app itself; say so. An order still waiting for
-   payment 24 hours after it was placed is closed the same way by the app, which wakes you with a `message` to send as
-   it is ("Monday's order wasn't paid, so I've moved its items to Wednesday's."): record and cancel nothing for it.
+   items." A paid order is cancelled by the person, in the grocery app itself; say so. One still waiting for payment 24
+   hours after it was placed is closed the same way by the app, which wakes you with a `message` to send as it is. Paid
+   after all: `record_order { paid: true }` takes its items back, or answers `still_on` (they stay on a placed order): say so.
 
 - **Products.** `remember_product` and `add_to_order` take `item`: the family's word, exactly as on the order line or the
   everyday item ("milk"), never the product's name on the app (`name_on_app`). Give the pack's size as `pack_amount` and
@@ -105,7 +105,7 @@ have passed is cancelled, not placed. An order handed to you a second time is ac
 - **Low or out.** Nothing about what is at home is kept. `ask_low_or_out { week_start }` answers `{ items, question }`:
   send the question. Whenever they answer, `ask_low_or_out { week_start, low_or_out: [...] }`: the names they said are low
   or out, spelt as `items` has them, not their raw words (`[]`: they have it all; a name not in `items` reads as "they have
-  it"). The items wait on the week's second order: those they have come off it; one out and on no order goes on it, or a new one.
+  it"). Those not yet bought wait on the week's second order: ones they have come off it; one out and on no order goes on it.
 
 ## The grocery apps
 
@@ -123,7 +123,7 @@ have passed is cancelled, not placed. An order handed to you a second time is ac
 The app wakes you once a week with next week's `week_start`, and the context to plan from when it fits. In this order:
 1. Plan the week a day a call, as under Meals; `plan_week { week_start, mode: "final" }` then answers with its orders.
 2. Place the first of those orders right away (the steps under Orders) only if it is scheduled; if it is already placed,
-   paid or being placed (`wake_sent_at` set), place none. The later ones, the long-life items' too, are handed to you when due.
+   paid or being placed (`wake_sent_at` set), place none. The later ones are handed to you when due.
 3. `record_order { placed: true }`. The first time its answer has `intro` (how it works, the real check-in times): send it as is.
 4. `ask_low_or_out { week_start }`, then send the family the plan, day by day, for them to change, with the question in
    the same message. Their changes are `set_meal` / `set_dish`; their answer goes to `ask_low_or_out`, whenever it comes.

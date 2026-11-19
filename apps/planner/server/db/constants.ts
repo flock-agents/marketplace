@@ -10,7 +10,8 @@ export const RULE_KINDS = ["veg", "egg", "fasting", "no_onion_garlic", "other"] 
 export const EVERY = ["day", "week", "weekdays"] as const;
 /** An order's life: scheduled → placed (waiting for the person's payment) → paid, or not paid; or cancelled before it is placed. */
 export const ORDER_STATUSES = ["scheduled", "placed", "paid", "not_paid", "cancelled"] as const;
-/** How long an item keeps: fresh items are bought for the days that use them, long-life ones once, in the week's second order. */
+/** How long an item keeps: fresh items are bought for the days that use them, long-life ones once: with the
+ *  week's first order when its days need them, else in the second. */
 export const KEEPS = ["fresh", "long"] as const;
 
 /** The grocery apps an order can go to, by their Flock connection id. */
