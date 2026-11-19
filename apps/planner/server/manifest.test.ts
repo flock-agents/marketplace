@@ -51,6 +51,12 @@ describe("the agent's interface", () => {
     for (const o of operations) expect(o.description, o.name).not.toContain("\u2014");
   });
 
+  it("set_cart_line says only a lower qty changes the cart being ordered", () => {
+    const d = operations.find((o) => o.name === "set_cart_line")!.description;
+    expect(d).toContain("lower");
+    expect(d).not.toContain("change or take off a line of the cart being ordered");
+  });
+
   it("the Pantry page has its label and the cook is never he or she", () => {
     expect(manifest.labels["nav.pantry"]).toBe("Pantry");
     expect(manifest.labels["title.pantry"]).toBe("Pantry");

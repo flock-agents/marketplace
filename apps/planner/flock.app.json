@@ -244,7 +244,7 @@
       },
       {
         "name": "set_cart_line",
-        "description": "Put an item on the cart, change its qty or take it off. { item, qty: packs, a whole number (0 takes it off), app?: the app (else the one the family buys it on, else the main app), source?: added (default) | low | everyday | meal, for_note?, product_id?, name_on_app?, pack?, price?, image? }. It goes on that app's open cart; while a cart is being ordered, a new item goes to a new open cart, and you may change or take off a line of the cart being ordered (\"remove the ghee\"). An item delivered outside the apps is refused (code SUBSCRIPTION). Copy the change to the app's own cart yourself in the same turn, then sync_cart. Answers { line, cart }."
+        "description": "Put an item on the cart, change its qty or take it off. { item, qty: packs, a whole number (0 takes it off), app?: the app (else the one the family buys it on, else the main app), source?: added (default) | low | everyday | meal, for_note?, product_id?, name_on_app?, pack?, price?, image? }. It goes on that app's open cart; while a cart is being ordered, a new item goes to a new open cart, and you may lower or take off a line of the cart being ordered (\"remove the ghee\"), and a higher qty or a new item goes to the open cart. An item delivered outside the apps is refused (code SUBSCRIPTION). Copy the change to the app's own cart yourself in the same turn, then sync_cart. Answers { line, cart }."
       },
       {
         "name": "order_cart",

@@ -44,8 +44,8 @@ plan or reminder runs until one person is saved. Do not ask what is at home: the
 
 ## Reading order history
 
-After a sign-in, and at the start of every reminder, read each connected app's orders of the last 3 months (the wake's
-`since` says how far each was read) and give them to `import_order_history`: the most recent first, about 8 orders and
+After a sign-in, and at the start of every reminder, read each connected app's orders placed since the wake's
+`since[app]` (3 months back only for an app not yet in `since`) and give them to `import_order_history`: the most recent first, about 8 orders and
 80 items a call, one app a call. Each order has its `date` and `order_ref`; each item its `item` (the family's word:
 "atta"), `group`, `product`, `product_id`, `pack` and `count`. The same order sent twice is recorded once. Which connectors can read orders:
 - **BigBasket and Blinkit:** `view-order-history`, then `track-order` for each order to get its items.
