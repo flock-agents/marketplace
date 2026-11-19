@@ -29,9 +29,9 @@ weekly plan or reminder runs until at least one person is saved.
 | The days they cook at home | `set_cooking_days { days }`: `["mon", ...]`, at least one; Mon to Sat until set |
 | The grocery apps: the main one, the one to try when something is not on it, every one they have signed in to | `set_shopping_apps { main, fallback, connected }`: `zepto`, `swiggy-instamart`, `zomato-blinkit` (Blinkit), `bigbasket` or `amazon`; `fallback` is `null` for none. Not `set_house_rules` |
 
-Right after a grocery sign-in, send that app's orders of the last 3 months to `import_order_history`, one app a call,
-the most recent 20 orders or so (200 items at most) a call: each order's `date` and `order_ref`, each item's `item` (the
-family's word), `group`, `product`, `product_id`, `pack` and `count`. Each item becomes a purchase, and the same order sent
+Right after a grocery sign-in, send that app's orders of the last 3 months to `import_order_history`, the most recent
+first, at most about 10 orders and 100 items a call, one app a call: each order's `date` and `order_ref`, each item's
+`item` (the family's word), `group`, `product`, `product_id`, `pack` and `count`. Each item becomes a purchase, and the same order sent
 twice is recorded once. Give each item in `needs_group` its group with `set_item`. It suggests everyday items and makes
 none: ask the family about each ("You buy milk most days: 1 litre a day?") and `set_regular` the ones they confirm.
 An item delivered outside the apps (a milkman): `set_subscription { item, source, active: true }`.

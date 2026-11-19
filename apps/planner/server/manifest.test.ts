@@ -71,19 +71,20 @@ describe("the agent's interface", () => {
     expect(guide).toContain("one day a call");
   });
 
-  it("import_order_history is taught slim: date, item, qty and pack, about 20 orders and at most 200 items a call", () => {
+  it("import_order_history is taught at most about 10 orders and 100 items a call, one app a call, and that fits", () => {
     const d = operations.find((o) => o.name === "import_order_history")!.description;
-    for (const text of [guide, d]) for (const said of ["20 orders", "200 items", "most recent"]) expect(text).toContain(said);
-    // 20 orders of 10 items (200 items, with names as long as the grocery apps') fit an operation's body in the slim shape;
-    // the same orders with each item's product do not, which is why products are remembered afterwards.
-    const history = (item: (i: number) => object) => ({ app: "swiggy-instamart", orders: Array.from({ length: 20 }, (_, k) => ({
-      date: `2026-11-${String(k + 1).padStart(2, "0")}`, items: Array.from({ length: 10 }, (_, i) => item(i)) })) });
-    const slim = (i: number) => ({ item: `Amul Taaza Toned Fresh Milk Pouch ${i}`, qty: 2, pack: "500 ml" });
-    const full = (i: number) => ({ ...slim(i), product_id: `prod_0123456789abcdef${i}`, name_on_app: `Amul Taaza Toned Fresh Milk Pouch ${i}`, pack_amount: 500, pack_unit: "ml",
-      price: 29, image: `https://cdn.grocery.example/images/products/0123456789abcdef${i}.jpg` });
+    for (const text of [guide, d]) for (const said of ["10 orders", "100 items", "one app a call", "most recent"]) expect(text).toContain(said);
+    // 10 orders of 10 items in the full shape the operation takes, at a typical length (a 32-character product name, a
+    // 9-character product id), fit Flock's 16,384 bytes for an operation's body; twice that does not. About 160 bytes an
+    // item is the most that fits, so the description's numbers leave little room.
+    const item = (i: number) => ({ item: `toor dal ${i}`, group: "monthly", product: `Tata Sampann Unpolished Toor ${i}`,
+      product_id: `58312904${i}`, pack: "1 kg", count: 2, price: 189 });
+    const history = (orders: number) => ({ app: "swiggy-instamart", orders: Array.from({ length: orders }, (_, k) => ({
+      date: `2026-11-${String(k + 1).padStart(2, "0")}`, order_ref: `ORD-2026-11-${String(k + 1).padStart(2, "0")}-000123456`,
+      items: Array.from({ length: 10 }, (_, i) => item(i)) })) });
     const bytes = (body: object) => Buffer.byteLength(JSON.stringify(body), "utf8");
-    expect(bytes(history(slim))).toBeLessThan(16_384);
-    expect(bytes(history(full))).toBeGreaterThan(16_384);
+    expect(bytes(history(10))).toBeLessThan(16_384);
+    expect(bytes(history(20))).toBeGreaterThan(16_384);
   });
 
   it("the instructions and the guide name only operations the app has", () => {

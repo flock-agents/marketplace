@@ -63,17 +63,23 @@ export function recomputeItem(db: Db, itemId: string, _today: string): ItemRow {
     .where(eq(items.id, itemId)).returning().get();
 }
 
-/** The one door for a purchase. The same purchase twice is told, not recorded: a purchase of the item that is not void with
- *  the same app and order_ref, or without an order_ref, the same app, date and product id (else product name). The amount
+/** The one door for a purchase. The same purchase twice is told, not recorded: a purchase of the item that is not void, on
+ *  the same app, with the same order_ref; or, when either has no order_ref, the same date and product (see below). The amount
  *  is put in its base unit; one that has none is kept with no amount. The caller recomputes the item. */
 export function recordPurchase(tx: Db, p: Purchase): { event_id: string } | { duplicate: true } {
   let it = itemFor(tx, p.item, { group: p.group, create: true })!;
   if (p.group && !it.group) it = tx.update(items).set({ group: p.group }).where(eq(items.id, it.id)).returning().get();
+  // The same purchase, whichever way it came first: two refs decide alone (different refs are two orders); when either side
+  // has none, the date and the product do (by product_id when both have one, else by the product's name).
+  const lower = (v: string | null | undefined) => (v ?? "").trim().toLowerCase();
   const same = tx.select().from(item_events).where(and(eq(item_events.item_id, it.id), eq(item_events.kind, "purchase"), eq(item_events.app, p.app))).all()
-    .filter((e) => !e.void)
-    .some((e) => p.order_ref ? e.order_ref === p.order_ref
-      : e.date === p.date && (p.product_id ? e.product_id === p.product_id : (e.product_id == null && (e.product ?? null) === (p.product ?? null))));
-  if (same) return { duplicate: true };
+    .find((e) => !e.void && (e.order_ref && p.order_ref ? e.order_ref === p.order_ref
+      : e.date === p.date && (e.product_id && p.product_id ? e.product_id === p.product_id : lower(e.product) === lower(p.product))));
+  if (same) {
+    // A copy with the ref teaches the one recorded without it, so later imports match by ref.
+    if (p.order_ref && !same.order_ref) tx.update(item_events).set({ order_ref: p.order_ref }).where(eq(item_events.id, same.id)).run();
+    return { duplicate: true };
+  }
   let base = p.amount == null ? null : toBase(p.amount, p.unit);
   if (base && !it.unit) it = tx.update(items).set({ unit: base.unit }).where(eq(items.id, it.id)).returning().get();
   // An amount that cannot be put in the item's unit (pieces of an item bought by weight) is kept as text, with no amount.

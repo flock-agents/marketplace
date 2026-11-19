@@ -4,7 +4,7 @@ import { describe, it, expect } from "bun:test";
 import { boot } from "./testkit";
 import { dish_items, dishes, order_lines, orders, plan_meals } from "./db/schema";
 import { pickAsks } from "./estimate";
-import { itemStates } from "./items";
+import { itemStates, recordPurchase } from "./items";
 
 const TODAY = "2026-11-21";
 const start = () => boot({ now: () => new Date(2026, 10, 21, 12) });
@@ -55,6 +55,31 @@ describe("import_order_history", () => {
     expect(events(k, "rice").map((e) => [e.amount, e.count])).toEqual([[7000, 3]]);
     expect(await k.op("import_order_history", two)).toMatchObject({ recorded: 0, duplicates: 1 });
     expect(k.rows("item_events")).toHaveLength(7);
+  });
+
+  // Review Focus 1: the same purchase arrives twice, in either order, with and without its ref.
+  it("a purchase recorded without its ref and then imported with it (or the other way round) is one purchase; the ref is learned", async () => {
+    const k = await start();
+    const db = k.kit.db;
+    const zepto = { item: "atta", date: "2026-11-10", app: "zepto" as const, product: "Aashirvaad Select", product_id: "p1", amount: 10, unit: "kg" };
+    // Ref-less first (an order recorded as placed), then the history with its ref.
+    expect("event_id" in recordPurchase(db, zepto)).toBe(true);
+    expect(await k.op("import_order_history", { app: "zepto", orders: [{ date: "2026-11-10", order_ref: "Z9", items: [{ item: "atta", product: "Aashirvaad Select", product_id: "p1", pack: "10 kg" }] }] }))
+      .toMatchObject({ recorded: 0, duplicates: 1 });
+    expect(events(k, "atta").map((e) => e.order_ref)).toEqual(["Z9"]);
+    // Learned: the same ref is caught by ref now, even on another date.
+    expect(recordPurchase(db, { ...zepto, date: "2026-11-11", order_ref: "Z9" })).toEqual({ duplicate: true });
+    // A different ref the same day is another order.
+    expect("event_id" in recordPurchase(db, { ...zepto, order_ref: "Z10" })).toBe(true);
+    // Ref first, then ref-less: the same date and product.
+    await k.op("import_order_history", { app: "zepto", orders: [{ date: "2026-11-12", order_ref: "Z11", items: [{ item: "dal", product: "Tata Sampann Toor Dal", product_id: "d1", pack: "1 kg" }] }] });
+    expect(recordPurchase(db, { item: "dal", date: "2026-11-12", app: "zepto", product_id: "d1", amount: 1, unit: "kg" })).toEqual({ duplicate: true });
+    // product_id against a name: an event with a product_id is matched by a line with the product's name only (any capitals).
+    expect(await k.op("import_order_history", { app: "zepto", orders: [{ date: "2026-11-12", items: [{ item: "dal", product: "tata sampann toor dal", pack: "1 kg" }] }] }))
+      .toMatchObject({ recorded: 0, duplicates: 1 });
+    // Two product ids that differ are two products, whatever the names.
+    expect("event_id" in recordPurchase(db, { item: "dal", date: "2026-11-12", app: "zepto", product: "Tata Sampann Toor Dal", product_id: "d2", amount: 1, unit: "kg" })).toBe(true);
+    expect(k.rows("item_events")).toHaveLength(4);
   });
 
   it("orders older than 3 months are skipped, and history_synced moves to the newest order", async () => {
