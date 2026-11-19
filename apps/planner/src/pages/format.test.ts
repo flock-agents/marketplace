@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { APP_NAMES, TAG_TEXT } from "../../server/db/constants";
 import { agentName, cartNote, cookingDaysText, cartTitle, debouncePicks, dishNote, eventRows, forText, itemCallout, itemSubtitle, orderLabel, orderRow, outsideText, pantryTabs,
-  patternFields, pausedNow, pickerItems, profileWaiting, recipeSourceLabel, regularText, statusTone, TAG_TONES, textList, weekTitle } from "./format";
+  patternFields, pausedNow, pickerItems, profileWaiting, recipeSourceLabel, regularText, statusTone, syncPicker, TAG_TONES, textList, weekTitle } from "./format";
 
 describe("regularText", () => {
   it("says how much and how often", () => {
@@ -177,6 +177,38 @@ describe("debouncePicks", () => {
     d.change("bigbasket", []);
     d.flushAll();
     expect(sent.slice(1)).toEqual([["zepto", [{ line_id: "a", qty: 1 }]], ["bigbasket", []]]);
+  });
+});
+
+// Final review I2: a qty changed elsewhere reaches the picker; her own taps and their echo never make it again.
+describe("syncPicker", () => {
+  it("the first read is what the page knows, and makes nothing again", () => {
+    expect(syncPicker([{ id: "curd", qty: 1 }, { id: "atta", qty: null }], {}, {})).toEqual({ rekey: false, known: { curd: 1, atta: 0 } });
+  });
+
+  it("a qty changed elsewhere (the agent made the curd 2) makes the picker again, once", () => {
+    const first = syncPicker([{ id: "curd", qty: 1 }, { id: "bread", qty: 1 }], {}, {});
+    const agent = syncPicker([{ id: "curd", qty: 2 }, { id: "bread", qty: 1 }], first.known, {});
+    expect(agent).toEqual({ rekey: true, known: { curd: 2, bread: 1 } });
+    // Read again (another render): nothing new.
+    expect(syncPicker([{ id: "curd", qty: 2 }, { id: "bread", qty: 1 }], agent.known, {}).rekey).toBe(false);
+  });
+
+  it("her taps waiting or being saved are left alone; the echo of her save matches what was saved", () => {
+    const known = { curd: 1, bread: 1 };
+    // She tapped curd to 3: while it waits, an older read of curd at 1 or a server qty of 2 changes nothing.
+    expect(syncPicker([{ id: "curd", qty: 1 }, { id: "bread", qty: 1 }], known, { curd: 3 })).toEqual({ rekey: false, known });
+    expect(syncPicker([{ id: "curd", qty: 2 }, { id: "bread", qty: 1 }], known, { curd: 3 }).rekey).toBe(false);
+    // Saved: the page knows 3, and the server's echo of 3 makes nothing again.
+    expect(syncPicker([{ id: "curd", qty: 3 }, { id: "bread", qty: 1 }], { ...known, curd: 3 }, {})).toEqual({ rekey: false, known: { curd: 3, bread: 1 } });
+    // Another line changed elsewhere while her tap waits still shows.
+    expect(syncPicker([{ id: "curd", qty: 1 }, { id: "bread", qty: 4 }], known, { curd: 3 })).toEqual({ rekey: true, known: { curd: 1, bread: 4 } });
+  });
+
+  it("a new line is learned without making the picker again (its line set does that), and known is not changed in place", () => {
+    const known = { curd: 1 };
+    expect(syncPicker([{ id: "curd", qty: 1 }, { id: "eggs", qty: 2 }], known, {})).toEqual({ rekey: false, known: { curd: 1, eggs: 2 } });
+    expect(known).toEqual({ curd: 1 });
   });
 });
 

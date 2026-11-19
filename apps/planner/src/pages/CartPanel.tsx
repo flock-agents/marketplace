@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Callout, Empty, ErrorCard, ItemPicker, Section, Skeleton, Stack, useApp, useChat, useToast } from "../flock/ui";
 import { addDays, todayStr } from "../../server/dates";
-import { agentName, cartNote, cartTitle, debouncePicks, orderLabel, outsideText, pickerItems, PICKS_DEBOUNCE_MS, type Pick } from "./format";
+import { agentName, cartNote, cartTitle, debouncePicks, orderLabel, outsideText, pickerItems, PICKS_DEBOUNCE_MS, syncPicker, type Pick } from "./format";
 import { send, statusOf, useLive, type CartView, type Shopping } from "./shared";
 
 type Live<T> = { data: T | null; error: string | null; refetch: () => Promise<void> };
@@ -9,9 +9,9 @@ type Live<T> = { data: T | null; error: string | null; refetch: () => Promise<vo
  *  to have zeroed). */
 type Sent = { picks: Pick[]; seen: string[] };
 
-/** The lines a picker was made from: a new picker when the server adds or takes off a line, not when a qty changes, so her
- *  own tap is never undone by its echo. */
-const lineSet = (c: CartView): string => `${c.order_id}:${c.lines.map((l) => l.id).sort().join(",")}`;
+/** The lines a picker was made from: a new picker when the server adds or takes off a line. A qty changed elsewhere makes
+ *  it again through `syncPicker` (the version after the colon); her own tap's echo never does. */
+const lineSet = (c: CartView, version: number): string => `${c.order_id}:${c.lines.map((l) => l.id).sort().join(",")}:${version}`;
 
 /** The Cart tab: one ItemPicker and one Order button per app. Her taps are saved once they stop (the server then copies the
  *  cart to the app); Order saves what is waiting, moves the cart to ordering and asks the agent in the chat to check out.
@@ -27,13 +27,21 @@ export function CartPanel({ carts }: { carts: Live<{ carts: CartView[] }> }) {
   const [busy, setBusy] = useState<string | null>(null);
   // Her qty per line since the page opened, so a picker made again (a line was added) starts from her taps, not an older read.
   const mine = useRef<Record<string, number>>({});
+  // Each line's qty as the page last saved or read it, and each cart's picker version: a qty changed elsewhere (the agent,
+  // a reminder) makes that cart's picker again, so it shows it and Order never sends the old one.
+  const known = useRef<Record<string, number>>({});
+  const versions = useRef<Record<string, number>>({});
   const latest = useRef({ carts, toast });
   latest.current = { carts, toast };
 
   const picks = useMemo(() => debouncePicks<Promise<void>, Sent>((shop, sent) =>
     send(`carts/${shop}/picks`, sent).then(() => {
       // Saved: the cart now says what she picked.
-      for (const id of sent.seen) if (mine.current[id] === (sent.picks.find((p) => p.line_id === id)?.qty ?? 0)) delete mine.current[id];
+      for (const id of sent.seen) {
+        const qty = sent.picks.find((p) => p.line_id === id)?.qty ?? 0;
+        known.current[id] = qty;
+        if (mine.current[id] === qty) delete mine.current[id];
+      }
     }, (e) => {
       if (statusOf(e) !== 409) latest.current.toast.show({ message: `Couldn't save your cart: ${e.message}`, tone: "danger" });
       void latest.current.carts.refetch();
@@ -76,11 +84,14 @@ export function CartPanel({ carts }: { carts: Live<{ carts: CartView[] }> }) {
         const open = c.status === "open";
         const note = cartNote(c, { already: open && already[c.app] && ordering(c.app), chat: chat.available, agent });
         const outside = outsideText(c.outside_lines);
+        const step = syncPicker(c.lines, known.current, mine.current);
+        known.current = step.known;
+        if (step.rekey) versions.current[c.order_id] = (versions.current[c.order_id] ?? 0) + 1;
         const items = pickerItems(open ? c.lines : c.lines.filter((l) => (l.qty ?? 0) > 0)).map((it) => ({ ...it, qty: mine.current[it.id] ?? it.qty }));
         return (
           <Section key={c.order_id} title={cartTitle(c, shopping)}>
             <Stack gap="sm">
-              <ItemPicker key={lineSet(c)} items={items} submitLabel={orderLabel(c)} disabled={!open || !chat.available || busy === c.app}
+              <ItemPicker key={lineSet(c, versions.current[c.order_id] ?? 0)} items={items} submitLabel={orderLabel(c)} disabled={!open || !chat.available || busy === c.app}
                 onChange={open ? (p) => changed(c, p) : undefined} onSubmit={(p) => void order(c, p)} />
               {outside ? <p className="pl-quiet">{outside}</p> : null}
               {note ? <Callout tone="muted" icon={note.endsWith("free delivery") ? "truck" : "info"}>{note}</Callout> : null}

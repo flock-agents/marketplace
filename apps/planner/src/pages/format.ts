@@ -139,6 +139,24 @@ export function debouncePicks<R, P = Pick[]>(send: (app: string, picks: P) => R,
   };
 }
 
+/** Keeping the picker in step with a cart changed elsewhere (the agent made the curd 2, a reminder added to a line). `known`
+ *  is each line's qty as the page last saved it, or last read it with none of her taps waiting; `pending` is her taps not
+ *  yet saved. A line whose qty on the server differs from `known`, with no tap of hers waiting, was changed elsewhere: the
+ *  picker is made again (`rekey`) so it shows it. Her own save's echo matches `known`, and a line with a tap waiting is
+ *  left alone, so neither ever makes it again. Answers what the page now knows; `known` itself is not changed. */
+export function syncPicker(lines: { id: string; qty: number | null }[], known: Record<string, number>, pending: Record<string, number>):
+  { rekey: boolean; known: Record<string, number> } {
+  const next = { ...known };
+  let rekey = false;
+  for (const l of lines) {
+    if (pending[l.id] != null) continue;
+    const qty = l.qty ?? 0;
+    if (next[l.id] != null && next[l.id] !== qty) rekey = true;
+    next[l.id] = qty;
+  }
+  return { rekey, known: next };
+}
+
 export const ORDER_STATUS_TEXT: Record<string, string> = { ordering: "Ordering", placed: "Waiting for payment", paid: "Paid", not_paid: "Not paid", cancelled: "Cancelled" };
 export const ORDER_TONES = { Ordering: "info", "Waiting for payment": "warning", Paid: "success", "Not paid": "danger", Cancelled: "muted" } as const;
 
