@@ -16,15 +16,19 @@ const SHOWN_LINES = 8;
  *  library is the pages' own, not the server's, so the same format is written here. */
 const rupees = (n: number): string => `₹${new Intl.NumberFormat("en-IN").format(Math.round(n))}`;
 const ANYTHING = "Anything to change?";
+/** The lines' total, or null when there are none or any has no price. */
+const totalOf = (lines: OrderLineText[]): number | null =>
+  lines.length && lines.every((l) => l.price != null) ? lines.reduce((sum, l) => sum + (l.qty ?? 1) * l.price!, 0) : null;
 
 /** What the agent says just before an order is placed: "Ordering this now: Aashirvaad Atta 5 kg, Amul Taaza 500 ml ×4,
- *  ~₹405 on Zepto". The estimate adds up the lines that have a price, and is left out when none has. */
+ *  ~₹405 on Zepto". The estimate adds up every line, and is left out when any line has no price (a part total would read
+ *  as the whole). */
 export function orderingNowText(o: { app: string; lines: OrderLineText[] }): string {
   const qty = (l: OrderLineText) => l.qty ?? 1;
   const names = o.lines.slice(0, SHOWN_LINES).map((l) => `${l.name_on_app ?? l.item}${qty(l) > 1 ? ` ×${qty(l)}` : ""}`);
   const more = o.lines.length - names.length;
-  const priced = o.lines.filter((l) => l.price != null);
-  const total = priced.length ? `, ~${rupees(priced.reduce((sum, l) => sum + qty(l) * l.price!, 0))}` : "";
+  const sum = totalOf(o.lines);
+  const total = sum == null ? "" : `, ~${rupees(sum)}`;
   return `Ordering this now: ${names.join(", ")}${more > 0 ? ` and ${more} more` : ""}${total} on ${APP_NAMES[o.app as GroceryApp] ?? o.app}`;
 }
 
@@ -57,8 +61,8 @@ export function reminderText(r: ReminderText, opts: { app?: boolean } = {}): str
   if (r.ordered.length) {
     for (const o of r.ordered) {
       const lines = (r.carts.find((c) => c.order_id === o.order_id)?.lines ?? []).filter((l) => (l.qty ?? 0) > 0);
-      const priced = lines.filter((l) => l.price != null);
-      const total = priced.length ? `, about ${rupees(priced.reduce((sum, l) => sum + (l.qty ?? 1) * l.price!, 0))}` : "";
+      const sum = totalOf(lines);
+      const total = sum == null ? "" : `, about ${rupees(sum)}`;
       rest.push(`I've ordered ${andList(lines.map((l) => l.item))} on ${APP_NAMES[o.app as GroceryApp] ?? o.app}${total}.`);
     }
   } else if (r.added.length) rest.push(`I've added ${andList([...new Set(r.added.map((a) => a.item))])} to your cart.`);

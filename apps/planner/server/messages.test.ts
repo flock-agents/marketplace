@@ -33,9 +33,11 @@ describe("orderingNowText", () => {
       .toBe("Ordering this now: coriander, eggs ×2 on Blinkit");
   });
 
-  it("adds up the priced lines only, with thousands grouped", () => {
+  it("adds up every line, with thousands grouped; leaves the estimate out when any line has no price", () => {
+    expect(orderingNowText({ app: "bigbasket", lines: [{ item: "ghee", name_on_app: "Amul Ghee 1 l", qty: 2, price: 625 }, { item: "salt", price: 28.4 }] }))
+      .toBe("Ordering this now: Amul Ghee 1 l ×2, salt, ~₹1,278 on BigBasket");
     expect(orderingNowText({ app: "bigbasket", lines: [{ item: "ghee", name_on_app: "Amul Ghee 1 l", qty: 2, price: 625 }, { item: "coriander", qty: 1 }, { item: "salt", price: 28.4 }] }))
-      .toBe("Ordering this now: Amul Ghee 1 l ×2, coriander, salt, ~₹1,278 on BigBasket");
+      .toBe("Ordering this now: Amul Ghee 1 l ×2, coriander, salt on BigBasket");
   });
 
   it("shows eight lines and counts the rest, the estimate still over all of them", () => {
@@ -105,6 +107,10 @@ describe("reminderText", () => {
     const lines = [{ item: "curd", qty: 1, price: 50 }, { item: "bread", qty: 1, price: 45 }, { item: "salt", qty: 0, price: 20 }];
     expect(reminderText({ ...base, meals: [], asks: [], delivery_gap: null, cart_items: [], ordered: [{ order_id: "o1", app: "zepto" }], carts: [{ order_id: "o1", lines }] }))
       .toBe("I've ordered curd and bread on Zepto, about ₹95.");
+    // A line ordered with no price: no total, since a part total would read as the whole.
+    const unpriced = [...lines, { item: "atta", qty: 1, price: null }];
+    expect(reminderText({ ...base, meals: [], asks: [], delivery_gap: null, cart_items: [], ordered: [{ order_id: "o1", app: "zepto" }], carts: [{ order_id: "o1", lines: unpriced }] }))
+      .toBe("I've ordered curd, bread and atta on Zepto.");
   });
 
   it("one item running low is one sentence", () => {
