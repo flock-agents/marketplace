@@ -91,8 +91,20 @@ export function stockBlock(asks: { item: string; days_ago: number }[], id: strin
     children: asks.map((a) => ({ type: "Choice", props: { tab: capital(a.item), question: `${capital(a.item)}, ${daysAgo(a.days_ago)}`, options: STOCK_OPTIONS } })) };
 }
 
-/** The link to the Week page. `flock_scope=app` marks it for Flock, which signs the person in to this app only and drops the marker. */
-export function weekLink(basePath: string): string { return `${basePath}/?flock_scope=app#/week`; }
+/** The link to the Week page, opening the week planned (`weekStart`, its Monday). `flock_scope=app` marks it for Flock, which signs
+ *  the person in to this app only and drops the marker. */
+export function weekLink(basePath: string, weekStart?: string): string { return `${basePath}/?flock_scope=app#/week${weekStart ? `?week=${weekStart}` : ""}`; }
+
+/** What the agent is told to do with a closing plan_week's answer: the message as it is (its link is the only one, signed in to
+ *  this app), the intro once when there is one, and nothing after. */
+export function weekSendText(intro: boolean): string {
+  return [
+    "Forward message to the family verbatim, word for word, as one message.",
+    "It already holds the only link they need (the Week page, signed in to this app): send no other link, no link of your own, and do not reword it.",
+    intro ? "Then send intro verbatim, once, exactly as given: never paraphrase it, and never send it again." : null,
+    `After sending ${intro ? "them" : "it"}, end your turn.`,
+  ].filter(Boolean).join(" ");
+}
 
 /** The Sunday message once the week is planned: Monday's meals and the link to the rest. `monday` is Monday's meals, empty when it is
  *  not a cooking day or has none. */
@@ -112,13 +124,17 @@ const bare = (time: string): string => clockText(time).replace(/ [ap]m$/, "");
 const partOfDay = (time: string): string => { const h = Number(time.split(":")[0]); return h < 12 ? "morning" : h < 17 ? "afternoon" : "evening"; };
 
 /** The how-to-use message, sent once with the first week. `times` are when the plan and the two reminders really run, as "HH:MM";
- *  `everyday` are the family's everyday items (the first two are named; milk and curd when there are none). */
+ *  `everyday` are the family's everyday items bought on the apps (subscriptions left out): the first two are named; with none
+ *  known yet, the cart fills with them once the family orders. */
 export function introText(times: { plan: string; afternoon: string; evening: string }, everyday: string[]): string {
-  const named = everyday.slice(0, 2).join(" and ") || "milk and curd";
+  const named = andList(everyday.slice(0, 2));
+  const each = named
+    ? `each time I put your ${named} in the cart and mention anything that may be running low.`
+    : "each time I mention anything that may be running low, and once you order, your cart fills with your everyday items.";
   return [
     "Your week is planned. How it works:",
     `• Every Sunday ${partOfDay(times.plan)} I plan the week. Change any meal by telling me, or in the app (Week).`,
-    `• Every day at ${bare(times.afternoon)} I check tonight's dinner, and at ${bare(times.evening)} I tell you tomorrow's meals, put your ${named} in the cart, and mention anything that may be running low. Reply and I order it together. Nothing is ordered until you reply.`,
+    `• Every day at ${bare(times.afternoon)} I check tonight's dinner and at ${bare(times.evening)} tomorrow's meals; ${each} Reply and I order it together. Nothing is ordered until you reply.`,
     "• Saw a recipe on Instagram or YouTube? Share it here and say \"save this\"; I'll keep it and can plan it in.",
     "• Times can be changed, and you can tell me to order without asking.",
   ].join("\n");

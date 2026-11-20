@@ -124,11 +124,15 @@ describe("weekly plan", () => {
   it("the prompt plans the cooking days a day a call as final, then one closing call whose message and intro are sent word for word", () => {
     const p = WEEKLY_PROMPT(MON);
     const steps = [`mode: "draft" } without meals`, "cooking_days", `mode: "final", keep_rest: true, meals`, "answer no message",
-      `plan_week { week_start: "${MON}", mode: "final" } without meals`, "`message` word for word", "`intro`", "Do not wait for a reply"].map((s) => p.indexOf(s));
+      `plan_week { week_start: "${MON}", mode: "final" } without meals`, "`instructions`", "`message` word for word", "only link", "`intro` word for word", "end your turn", "Do not wait for a reply"].map((s) => p.indexOf(s));
     expect(steps.every((i) => i >= 0)).toBe(true);
     expect(steps).toEqual([...steps].sort((a, b) => a - b));
     expect(p).toContain("one day a call");
     expect(p).toContain("Mon 23 Nov");
+    // What the plan is made from: the cook's limits, every slot (a child's tiffin), variety and every dish's ingredients.
+    for (const said of ["cook_wont_make", "cook_time_limit", "cook_new_recipes", "extra_slots", "tiffin", "no dish twice in the week unless the family asked", "Every dish gets its ingredients"])
+      expect(p).toContain(said);
+    expect(p).not.toMatch(/\b(he|she|his|her|him)\b/i);
     for (const gone of ["place_order", "record_order", "ask_low_or_out", "add_to_order", "order_cart", "set_cart_line"]) expect(p).not.toContain(gone);
     for (const banned of ["order", "saturday", "long-life", "long life", "\u2014"]) expect(p.toLowerCase()).not.toContain(banned);
     expect(p.length).toBeLessThanOrEqual(WAKE_MESSAGE_MAX_CHARS);

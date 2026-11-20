@@ -2,11 +2,12 @@
 // needs bought. The agent writes a whole week with plan_week (a draft the family can change, then final), and changes one meal
 // or one dish with set_meal and set_dish. A meal that is ordered in has no dishes, so nothing is bought for it.
 import type { Hono } from "hono";
-import { and, asc, eq, gte, inArray, lte, sql } from "drizzle-orm";
-import { dish_items, dishes, house as house_t, people, plan_meals, regulars, saved_recipes } from "./db/schema";
-import { SLOTS, type GroceryApp } from "./db/constants";
-import { addDays, mondayOf, weekDates, weekdayOf } from "./dates";
-import { introText, weekLink, weekMessage } from "./messages";
+import { and, asc, eq, gte, inArray, isNotNull, lte, sql } from "drizzle-orm";
+import { dish_items, dishes, house as house_t, items, people, plan_meals, regulars, saved_recipes } from "./db/schema";
+import { normItem } from "./products";
+import { SLOTS, STAPLE_DISHES, type GroceryApp } from "./db/constants";
+import { addDays, mondayOf, todayStr, weekDates, weekdayOf } from "./dates";
+import { introText, weekLink, weekMessage, weekSendText } from "./messages";
 import { getHouse, groceryApp, houseView, isObject, list, name, names, refuse, words, writeRoutes,
   type Db, type Emit, type HouseView, type PersonRow } from "./family";
 
@@ -18,8 +19,9 @@ export type IngredientView = { id: string; item: string; amount: number | null; 
 export type DishView = { id: string; name: string; for_people: string[] | null; portion_note: string | null; recipe_id: string | null;
   video_url: string | null; ingredients: IngredientView[] };
 export type MealView = { id: string; date: string; slot: string; ordered_in: boolean; note: string | null; dishes: DishView[] };
-/** A week as the pages and the agent read it. `status` is null while the week has no meals. */
-export type WeekView = { week_start: string; status: "draft" | "final" | null; days: { date: string; meals: MealView[] }[] };
+/** A week as the pages and the agent read it. `status` is null while the week has no meals; `planned_at` is when its plan was
+ *  written (the first of its meals made, an ISO moment), null with none. */
+export type WeekView = { week_start: string; status: "draft" | "final" | null; planned_at: string | null; days: { date: string; meals: MealView[] }[] };
 /** What the agent reads before it plans a week. */
 export type WeekContext = { week_start: string; people: PersonRow[]; house: HouseView; regulars: (typeof regulars.$inferSelect)[];
   last_week: { date: string; slot: string; dishes: string[] }[];
@@ -62,7 +64,8 @@ function mealViews(db: Db, meals: MealRow[]): MealView[] {
 export function weekView(db: Db, weekStart: string): WeekView {
   const rows = db.select().from(plan_meals).where(inWeek(weekStart)).all();
   const meals = mealViews(db, rows);
-  return { week_start: weekStart, status: weekStatus(rows),
+  const planned = rows.map((m) => m.created_at).filter(Boolean).sort()[0] ?? null;
+  return { week_start: weekStart, status: weekStatus(rows), planned_at: planned,
     days: weekDates(weekStart).map((date) => ({ date, meals: meals.filter((m) => m.date === date) })) };
 }
 
@@ -138,6 +141,52 @@ function mealOf(db: Db, v: unknown, slots: string[]): Meal {
   return meal;
 }
 
+// ── What a planned dish needs, and the checks on a final week ──
+
+const mealLabel = (m: { date: string; slot: string }) => `${weekdayOf(m.date)} ${m.date} ${m.slot}`;
+const INGREDIENTS_RULE = "Every planned dish needs its ingredients, with amounts for this family (add up the portions of the people it is for; leave out salt and water)";
+
+/** The agent plans: every dish it sends in a final plan carries its ingredients. Names each dish without them. */
+function needIngredients(meals: Meal[]): void {
+  const missing = meals.flatMap((m) => (m.dishes ?? []).filter((d) => !d.items?.length).map((d) => `${mealLabel(m)}: ${d.name}`));
+  if (missing.length) refuse(`${INGREDIENTS_RULE}. Without ingredients: ${missing.join("; ")}. Send each with ingredients: [{ item, amount, unit }].`,
+    "MISSING_INGREDIENTS", { missing_ingredients: missing });
+}
+
+const dishKey = (name: string) => name.trim().toLowerCase().replace(/\s+/g, " ");
+const STAPLES = new Set<string>(STAPLE_DISHES);
+
+/** The checks a week passes before its closing call answers the message: every dish has its ingredients, every extra slot
+ *  (a child's tiffin) has a meal on each of its days that is a cooking day from today on, and no dish (staples aside) is on
+ *  two days unless the family asked for it (`repeatsOk`). Refused with every problem named, so one fix round is enough. */
+function checkWeek(week: WeekView, house: HouseView, today: string, repeatsOk: boolean): void {
+  const meals = week.days.flatMap((d) => d.meals);
+  const missing = meals.flatMap((m) => m.dishes.filter((d) => !d.ingredients.length).map((d) => `${mealLabel(m)}: ${d.name}`));
+  const gaps: string[] = [];
+  for (const slot of house.extra_slots) {
+    for (const date of weekDates(week.week_start)) {
+      const day = weekdayOf(date);
+      if (date < today || !house.cooking_days.includes(day) || (slot.days?.length && !slot.days.includes(day))) continue;
+      if (!meals.some((m) => m.date === date && dishKey(m.slot) === dishKey(slot.name))) gaps.push(mealLabel({ date, slot: slot.name }));
+    }
+  }
+  const days = new Map<string, { name: string; days: Set<string> }>();
+  for (const m of meals) for (const d of m.dishes) {
+    const k = dishKey(d.name);
+    if (STAPLES.has(k)) continue;
+    const seen = days.get(k) ?? { name: d.name, days: new Set<string>() };
+    seen.days.add(m.date); days.set(k, seen);
+  }
+  const repeated = repeatsOk ? [] : [...days.values()].filter((d) => d.days.size > 1).map((d) => `${d.name} (${[...d.days].sort().map(weekdayOf).join(", ")})`);
+  if (!missing.length && !gaps.length && !repeated.length) return;
+  const said: string[] = [];
+  if (missing.length) said.push(`${INGREDIENTS_RULE}. Without ingredients: ${missing.join("; ")}: give each its ingredients with set_dish { dish_id, ingredients }.`);
+  if (gaps.length) said.push(`An extra slot has no meal on its day: ${gaps.join("; ")}. Plan it with set_meal { date, slot, dishes }; on a day it is not needed (no school), set_meal { date, slot, ordered_in: true, note }.`);
+  if (repeated.length) said.push(`Dishes repeat in the week: ${repeated.join("; ")}. Plan a different dish on the other days with set_dish, unless the family asked for it more than once: then call again with repeats_ok: true.`);
+  refuse(`The week is not ready to send. ${said.join(" ")}`, missing.length ? "MISSING_INGREDIENTS" : gaps.length ? "MISSING_SLOTS" : "REPEATED_DISHES",
+    { missing_ingredients: missing, missing_slots: gaps, repeated });
+}
+
 // ── Writes: each runs inside a transaction and lists what changed, told to the pages once it is committed ──
 
 function addItems(tx: Db, dishId: string, items: Item[], by: string, changes: Change[]) {
@@ -180,8 +229,9 @@ function orderDishes(tx: Db, mealId: string, changes: Change[], place?: { id: st
   });
 }
 
-export function mountMealRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: { basePath: string }) {
+export function mountMealRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: { basePath: string; now?: () => Date }) {
   const write = writeRoutes(hono);
+  const today = () => todayStr((opts.now ?? (() => new Date()))());
   /** Run a write in one transaction; the pages hear of its changes only once it is committed. */
   const commit = <T>(run: (tx: Db, changes: Change[]) => T): T => {
     const changes: Change[] = [];
@@ -215,6 +265,7 @@ export function mountMealRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: { bas
       // A week already final is closed again: the message is answered from it. A week with no meals answers the context.
       const planned = mode === "final" && !drafts.length && !!db.select().from(plan_meals).where(inWeek(weekStart)).limit(1).get();
       if (!drafts.length && !planned) return { body: { context: weekContext(db, weekStart) } };
+      if (mode === "final" && by.startsWith("agent:")) checkWeek(weekView(db, weekStart), houseView(getHouse(db)), today(), b.repeats_ok === true);
       commit((tx, changes) => {
         for (const m of drafts) {
           tx.update(plan_meals).set({ status: "final", updated_at: now(), updated_by: by }).where(eq(plan_meals.id, m.id)).run();
@@ -234,6 +285,7 @@ export function mountMealRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: { bas
         if (seen.has(`${m.date} ${m.slot}`)) refuse(`${m.date} ${m.slot} is in meals twice`);
         seen.add(`${m.date} ${m.slot}`);
       }
+      if (mode === "final" && by.startsWith("agent:")) needIngredients(meals);
       commit((tx, changes) => {
         for (const old of tx.select().from(plan_meals).where(inWeek(weekStart)).all()) {
           if (keepRest && !seen.has(`${old.date} ${old.slot}`)) {
@@ -261,12 +313,16 @@ export function mountMealRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: { bas
     if (mode !== "final" || b.meals !== undefined) return { body: { week } };
     const house = getHouse(db), view = houseView(house);
     const monday = view.cooking_days.includes("Mon") ? week.days[0].meals : [];
-    const out: Record<string, unknown> = { week, message: weekMessage({ monday, link: weekLink(opts.basePath) }) };
+    const out: Record<string, unknown> = { week, message: weekMessage({ monday, link: weekLink(opts.basePath, weekStart) }) };
     if (!house.intro_sent_at) {
-      const everyday = db.select().from(regulars).where(and(eq(regulars.every, "day"), eq(regulars.active, 1))).orderBy(asc(regulars.created_at)).limit(2).all().map((r) => r.item);
+      // The everyday items the cart is filled with: an item delivered on a subscription (a milkman) never goes in a cart.
+      const subscribed = new Set(db.select({ item: items.item }).from(items).where(isNotNull(items.subscription)).all().map((i) => i.item));
+      const everyday = db.select().from(regulars).where(and(eq(regulars.every, "day"), eq(regulars.active, 1))).orderBy(asc(regulars.created_at)).all()
+        .map((r) => r.item).filter((i) => !subscribed.has(normItem(i))).slice(0, 2);
       out.intro = introText({ plan: view.plan_time ?? "11:00", afternoon: view.afternoon_time ?? "15:00", evening: view.evening_time ?? "19:00" }, everyday);
       db.update(house_t).set({ intro_sent_at: now() }).where(eq(house_t.id, house.id)).run();
     }
+    out.instructions = weekSendText(!!out.intro);
     return { body: out };
   });
 
@@ -290,6 +346,7 @@ export function mountMealRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: { bas
     const sent = b.dishes === undefined ? undefined : dishesSent(db, b.dishes, label);
     const orderedIn = !!(set.ordered_in ?? meal?.ordered_in);
     if (orderedIn && sent?.length) refuse(`${label}: ${NO_DISHES_WITH_ORDER_IN}`);
+    if (sent && by.startsWith("agent:")) needIngredients([{ ...(meal ?? at!), dishes: sent }]);
     const id = commit((tx, changes) => {
       const row = meal
         ? tx.update(plan_meals).set({ ...set, updated_at: now(), updated_by: by }).where(eq(plan_meals.id, meal.id)).returning().get()
@@ -332,6 +389,10 @@ export function mountMealRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: { bas
     }
     const sent = dishOf(db, b, label);
     if (!dish && meal?.ordered_in) refuse(`${meal.date} ${meal.slot} is ordered in, so it has no dishes: set_meal it with ordered_in: false first`);
+    if (by.startsWith("agent:") && (sent.items ? !sent.items.length
+      : !dish || !db.select({ id: dish_items.id }).from(dish_items).where(eq(dish_items.dish_id, dish.id)).limit(1).get()))
+      // The agent plans: a dish it adds or changes ends with its ingredients.
+      needIngredients([{ ...(meal ?? at!), dishes: [{ ...sent, name: b.dish_id != null && typeof b.name === "string" ? b.name : label }] }]);
     const ids = commit((tx, changes) => {
       // A meal made for the dish is the app's own row; the dish is the writer's.
       const mealRow = meal ?? tx.insert(plan_meals).values({ ...at!, status: statusFor(at!.date), updated_by: "app" }).returning().get();

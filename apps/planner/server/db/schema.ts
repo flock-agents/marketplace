@@ -22,11 +22,14 @@ export const people = sqliteTable("people", {
 /** The household itself: one row. */
 export const house = sqliteTable("house", {
   ...kitColumns(),
-  rules: text("rules"),                                        // JSON [{ kind: veg | egg | fasting | no_onion_garlic | other, days: string[], note? }]
+  rules: text("rules"),                                        // JSON [{ kind: veg | egg | no_eggs | no_meat | fasting | no_onion_garlic | other, days: string[] (empty: every day), note? }]
   cook_name: text("cook_name"),
   cook_days: text("cook_days"),                                // JSON weekday[]
   cook_arrival: text("cook_arrival"),                          // "HH:MM"
   cook_makes_well: text("cook_makes_well"),
+  cook_wont_make: text("cook_wont_make"),                      // what the cook does not make well or will not make
+  cook_time_limit: text("cook_time_limit"),                    // the cook's time, in the family's words ("leaves early: a dish or two in the morning")
+  cook_new_recipes: text("cook_new_recipes"),                  // open (new recipes from reels and the internet) | set_menu (familiar dishes)
   cook_note: text("cook_note"),
   extra_slots: text("extra_slots"),                            // JSON [{ name, days?: string[], for?: string[] }]
   order_in: text("order_in"),                                  // JSON [{ day, slot, note? }]

@@ -88,7 +88,7 @@
           "type": "string",
           "required": false,
           "nullable": true,
-          "note": "JSON [{ kind: veg | egg | fasting | no_onion_garlic | other, days: string[], note? }]"
+          "note": "JSON [{ kind: veg | egg | no_eggs | no_meat | fasting | no_onion_garlic | other, days: string[] (empty: every day), note? }]"
         },
         "cook_name": {
           "type": "string",
@@ -111,6 +111,24 @@
           "type": "string",
           "required": false,
           "nullable": true
+        },
+        "cook_wont_make": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "what the cook does not make well or will not make"
+        },
+        "cook_time_limit": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "the cook's time, in the family's words (\"leaves early: a dish or two in the morning\")"
+        },
+        "cook_new_recipes": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "open (new recipes from reels and the internet) | set_menu (familiar dishes)"
         },
         "cook_note": {
           "type": "string",

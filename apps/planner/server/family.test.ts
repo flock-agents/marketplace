@@ -88,7 +88,8 @@ describe("the house", () => {
     expect(house.rules).toEqual([{ kind: "fasting", days: ["Ekadashi"], note: "Nani only" }, { kind: "no_onion_garlic", days: ["Sat"] }]);
     expect(house.notes).toBe("no beef at home");
     expect((await op("set_house_rules", { rules: [{ kind: "keto", days: ["Mon"] }] })).code).toBe("APP_REFUSED");
-    expect((await op("set_house_rules", { rules: [{ kind: "veg" }] })).code).toBe("APP_REFUSED");
+    expect((await op("set_house_rules", { rules: [{ kind: "veg", days: "Tue" }] })).code).toBe("APP_REFUSED");
+    expect((await op("set_house_rules", { rules: [{ kind: "other" }] })).code).toBe("APP_REFUSED");   // an other rule says what it is
     expect((await op("set_house_rules", { rules: "veg on Tuesdays" })).code).toBe("APP_REFUSED");
     expect((await op("set_house_rules", {})).code).toBe("APP_REFUSED");
   });
@@ -141,6 +142,49 @@ describe("the house", () => {
     expect((await k.op("set_shopping_apps", { main: "zepto", fallback: null })).code).toBe("APP_REFUSED");
     // A refused call changes nothing.
     expect((await k.owner("GET", "/api/_app")).body.settings.grocery_app).toBe("zepto");
+  });
+
+  it("set_house_rules takes a rule that holds every day (no days), one in the family's own words, no eggs, and notes as a list", async () => {
+    const { op } = await boot();
+    const { house } = await op("set_house_rules", {
+      rules: [{ kind: "veg", note: "mostly" }, { note: "mostly vegetarian" }, { kind: "no_eggs", days: ["tuesday"] }, { kind: "egg", days: ["Thu"] }],
+      notes: ["no beef at home", "light dinners"] });
+    expect(house.rules).toEqual([{ kind: "veg", days: [], note: "mostly" }, { kind: "other", days: [], note: "mostly vegetarian" },
+      { kind: "no_eggs", days: ["Tue"] }, { kind: "egg", days: ["Thu"] }]);
+    expect(house.notes).toBe("no beef at home\nlight dinners");
+    expect((await op("set_house_rules", { notes: "mostly vegetarian, fish on Sundays" })).house.notes).toBe("mostly vegetarian, fish on Sundays");
+  });
+
+  it("set_cook holds what the cook does not make, the cook's time and whether they try new recipes; only what is sent changes", async () => {
+    const { op } = await boot();
+    expect((await op("set_cook", { name: "Lakshmi", wont_make: "non-veg" })).code).toBe("APP_REFUSED");   // a first cook needs days and arrival
+    await op("set_cook", { name: "Lakshmi", days: ["Mon", "Tue"], arrival: "07:30", makes_well: "dosa" });
+    const { house } = await op("set_cook", { name: "Lakshmi", wont_make: "non-veg, baking", time_limit: "leaves at 9 for the next house: a dish or two in the morning", new_recipes: "set_menu" });
+    expect(house).toMatchObject({ cook_name: "Lakshmi", cook_days: ["Mon", "Tue"], cook_arrival: "07:30", cook_makes_well: "dosa", cook_wont_make: "non-veg, baking",
+      cook_time_limit: "leaves at 9 for the next house: a dish or two in the morning", cook_new_recipes: "set_menu" });
+    expect((await op("set_cook", { name: "Lakshmi", new_recipes: "maybe" })).error).toContain("open, set_menu");
+    expect((await op("set_cook", { name: "Lakshmi", new_recipes: null })).house.cook_new_recipes).toBeNull();
+  });
+
+  it("an operation names its fields when it is sent one it does not take, or misses one it needs", async () => {
+    const { op, rows } = await boot();
+    const r = await op("set_cook", { name: "Lakshmi", days: ["Mon"], arrival: "07:30", specialty: "dosa" });
+    expect(r.code).toBe("APP_REFUSED");
+    expect(r.error).toBe("set_cook does not take specialty. Its fields: name, days, arrival, makes_well, wont_make, time_limit, new_recipes, note. Send it again with those only.");
+    expect((await op("set_cook", { name: "Lakshmi", days: ["Mon"], arrival: "07:30", make_well: "dosa" })).error).toContain("(did you mean makes_well?)");
+    expect(rows("house").every((h) => h.cook_name === null)).toBe(true);
+    const dish = await op("set_dish", { date: "2026-11-23", slot: "Lunch", dish: "Dal" });
+    expect(dish.error).toContain("set_dish does not take dish"); expect(dish.error).toContain("Its fields: dish_id, meal_id, date, slot, name,");
+    expect((await op("set_person", { group: "adult" })).error).toContain("set_person needs name.");
+  });
+
+  it("an operation the app does not have is answered with the closest one and its fields", async () => {
+    const { unknownOperation } = await import("./agentOps");
+    expect(unknownOperation("save_meal").error).toBe(`save_meal is not an operation of this app. Did you mean set_meal? Its fields: date, slot, meal_id, ordered_in, note, dishes. The operations: ${Object.keys((await import("./agentOps")).FIELDS).join(", ")}.`);
+    expect(unknownOperation("add_dish").error).toContain("Did you mean set_dish?");
+    expect(unknownOperation("set_rules").error).toContain("Did you mean set_house_rules?");
+    expect(unknownOperation("plan").error).toContain("Did you mean plan_week?");
+    expect(unknownOperation("zzzz").error).not.toContain("Did you mean");
   });
 
   it("set_house_rules refuses grocery_app and points to set_shopping_apps; it changes nothing", async () => {

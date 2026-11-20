@@ -52,6 +52,7 @@ const TIMES = { plan: "11:00", afternoon: "15:00", evening: "19:00" };
 describe("weekMessage", () => {
   it("is Monday's meals and the Week link", () => {
     expect(weekLink("/a/t")).toBe("/a/t/?flock_scope=app#/week");
+    expect(weekLink("/a/t", "2026-11-23")).toBe("/a/t/?flock_scope=app#/week?week=2026-11-23");   // opens the week planned
     const monday = [meal("2026-11-23", "Breakfast", [dish("poha")]), { ...meal("2026-11-23", "Lunch", [dish("rajma chawal"), dish("bhindi")]) },
       meal("2026-11-23", "Dinner", [dish("palak paneer"), dish("rotis")])];
     expect(weekMessage({ monday, link: weekLink("/a/t") })).toBe([
@@ -65,20 +66,25 @@ describe("weekMessage", () => {
 });
 
 describe("introText", () => {
-  it("is the how-to-use message with the real times", () => {
-    expect(introText(TIMES, [])).toBe([
+  it("is the how-to-use message with the real times and the real everyday items", () => {
+    expect(introText(TIMES, ["milk", "curd"])).toBe([
       "Your week is planned. How it works:",
       "• Every Sunday morning I plan the week. Change any meal by telling me, or in the app (Week).",
-      "• Every day at 3 I check tonight's dinner, and at 7 I tell you tomorrow's meals, put your milk and curd in the cart, and mention anything that may be running low. Reply and I order it together. Nothing is ordered until you reply.",
+      "• Every day at 3 I check tonight's dinner and at 7 tomorrow's meals; each time I put your milk and curd in the cart and mention anything that may be running low. Reply and I order it together. Nothing is ordered until you reply.",
       "• Saw a recipe on Instagram or YouTube? Share it here and say \"save this\"; I'll keep it and can plan it in.",
       "• Times can be changed, and you can tell me to order without asking."].join("\n"));
   });
   it("follows the times and names the first two everyday items", () => {
     const text = introText({ plan: "18:00", afternoon: "15:30", evening: "19:30" }, ["eggs", "bread", "curd"]);
     expect(text).toContain("Every Sunday evening");
-    expect(text).toContain("at 3:30 I check tonight's dinner, and at 7:30 I tell you");
+    expect(text).toContain("at 3:30 I check tonight's dinner and at 7:30 tomorrow's meals;");
     expect(text).toContain("put your eggs and bread in the cart");
     expect(introText(TIMES, ["milk"])).toContain("put your milk in the cart");
+  });
+  it("with no everyday items known names none: the cart fills with them once they order", () => {
+    const text = introText(TIMES, []);
+    expect(text).not.toMatch(/milk|curd/);
+    expect(text).toContain("each time I mention anything that may be running low, and once you order, your cart fills with your everyday items.");
   });
 });
 

@@ -18,9 +18,12 @@ const STRUCTURE_PROFILE = (weekStart: string): string => "Structure the family p
 export const WEEKLY_PROMPT = (weekStart: string): string => [
   `Plan the family's meals for the week of ${dayLabel(weekStart)} (week_start ${weekStart}) and send them the plan.`,
   `1. The context to plan from is in the data below when it has \`context\` (people, house rules with the cooking days, the cook, everyday items, last week's dishes, the recipe book); else plan_week { week_start: "${weekStart}", mode: "draft" } without meals answers with it, in full.`,
-  `2. Plan only the house's cooking_days, one day a call (a call carries 16 KB at most): plan_week { week_start: "${weekStart}", mode: "final", keep_rest: true, meals } with that day's meals. These calls answer no message.`,
-  `3. Then make one closing call, plan_week { week_start: "${weekStart}", mode: "final" } without meals. Send the family its \`message\` word for word, then its \`intro\` word for word when it has one. They change any meal with set_meal / set_dish whenever they like.`,
-  "4. Do not wait for a reply. Plan meals only: buy nothing and put nothing on a cart.",
+  "2. Plan from it: each person's diet, allergies, dislikes and portions; the house rules for that weekday (a rule without days holds every day); the cook's days, what the cook makes well, never what the cook does not make (cook_wont_make), the cook's time (cook_time_limit: a cook who leaves early gets only a dish or two in the morning), and cook_new_recipes (set_menu: familiar dishes the cook knows; open: new dishes and saved recipes, with their video).",
+  "3. Every slot on its days: Breakfast, Lunch, Dinner and each of house.extra_slots on its days for its people (a child's school tiffin, on school days, is its own slot). Variety: no dish twice in the week unless the family asked for it (roti, rice and curd aside), and not last week's dishes again.",
+  "4. Every dish gets its ingredients: { item, amount, unit } with amounts for the people it is for (add up their portions for that one meal; leave out salt and water). A dish without them is refused.",
+  `5. Plan only the house's cooking_days, one day a call (a call carries 16 KB at most): plan_week { week_start: "${weekStart}", mode: "final", keep_rest: true, meals } with that day's meals. These calls answer no message.`,
+  `6. Then make one closing call, plan_week { week_start: "${weekStart}", mode: "final" } without meals. When it is refused, fix what it names (set_dish, set_meal) and call it again. Its answer has \`message\` and, the first time, \`intro\`: do what its \`instructions\` say. Send \`message\` word for word: it holds the only link to send. Then its \`intro\` word for word, once, when it has one. Then end your turn.`,
+  "7. Do not wait for a reply. Plan meals only: buy nothing and put nothing on a cart.",
 ].join("\n");
 
 /** A row without the kit's own columns: the agent plans from what the family said, not from the row's bookkeeping. */

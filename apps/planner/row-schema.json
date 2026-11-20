@@ -130,6 +130,24 @@
               "null"
             ]
           },
+          "cook_wont_make": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "cook_time_limit": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "cook_new_recipes": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "cook_note": {
             "type": [
               "string",

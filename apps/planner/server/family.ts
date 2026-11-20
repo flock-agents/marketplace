@@ -7,7 +7,7 @@ import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import { asc, eq } from "drizzle-orm";
 import { _settings } from "@flock/app-kit";
 import { house, people } from "./db/schema";
-import { appOf, COOKING_DAYS_DEFAULT, GROUPS, RULE_KINDS, SETTINGS, SHOP_APPS, SLOTS, type GroceryApp } from "./db/constants";
+import { appOf, COOK_NEW_RECIPES, COOKING_DAYS_DEFAULT, GROUPS, RULE_KINDS, SETTINGS, SHOP_APPS, SLOTS, type GroceryApp } from "./db/constants";
 import { WEEKDAYS, type Weekday } from "./dates";
 
 export type Db = BunSQLiteDatabase<any>;
@@ -16,6 +16,7 @@ export type Emit = (table: string, id: string, op: "insert" | "update" | "delete
 
 export type PersonRow = typeof people.$inferSelect;
 export type HouseRow = typeof house.$inferSelect;
+/** A house rule. `days` empty: it holds every day. */
 export type HouseRule = { kind: (typeof RULE_KINDS)[number]; days: string[]; note?: string };
 export type ExtraSlot = { name: string; days?: Weekday[]; for?: string[] };
 export type OrderIn = { day: Weekday; slot: string; note?: string };
@@ -68,9 +69,10 @@ export function shoppingApps(db: Db): { main: GroceryApp; fallback: GroceryApp |
 /** A write the app will not make: the route answers 400 with the reason, and with a code when the agent acts on the kind of
  *  refusal (NEEDS_NAME: ask the family for a name). */
 export class Refused extends Error {
-  constructor(reason: string, readonly code?: string) { super(reason); }
+  constructor(reason: string, readonly code?: string, readonly detail?: Record<string, unknown>) { super(reason); }
 }
-export const refuse = (reason: string, code?: string): never => { throw new Refused(reason, code); };
+/** `detail`: more for the agent to act on, answered beside the reason (a plan's check lists the dishes it names). */
+export const refuse = (reason: string, code?: string, detail?: Record<string, unknown>): never => { throw new Refused(reason, code, detail); };
 
 export const isObject = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
 const DAY_NAMES = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
@@ -96,15 +98,26 @@ const optionalNote = (v: unknown, what: string): { note?: string } => {
 
 const PERSON_WORDS = ["relationship", "portions", "diet", "allergies", "dislikes", "targets", "note"] as const;
 
+const RULE_SHAPE = "rules must be a list of { kind, days?, note? }";
 function rules(v: unknown): HouseRule[] {
-  if (!Array.isArray(v)) return refuse("rules must be a list of { kind, days, note? }");
+  if (!Array.isArray(v)) return refuse(RULE_SHAPE);
   return v.map((r) => {
-    if (!isObject(r) || !(RULE_KINDS as readonly unknown[]).includes(r.kind)) return refuse(`a rule's kind must be one of: ${RULE_KINDS.join(", ")}`);
-    if (!Array.isArray(r.days) || !r.days.length || !r.days.every((d) => typeof d === "string" && d.trim()))
-      return refuse(`the ${r.kind} rule needs its days: weekdays, or the family's own words for a day ("Ekadashi")`);
-    return { kind: r.kind as HouseRule["kind"], days: r.days.map((d: string) => weekday(d) ?? d.trim()), ...optionalNote(r.note, "a rule's note") };
+    if (!isObject(r)) return refuse(RULE_SHAPE);
+    const note = optionalNote(r.note, "a rule's note");
+    // A rule in the family's own words only ("mostly vegetarian") is an `other` rule.
+    const kind = r.kind == null && note.note ? "other" : r.kind;
+    if (!(RULE_KINDS as readonly unknown[]).includes(kind))
+      return refuse(`a rule's kind must be one of: ${RULE_KINDS.join(", ")} (no_eggs: "no eggs on Tuesday"; egg: eggs but no meat; other: the family's own words in note)`);
+    if (kind === "other" && !note.note) return refuse("an other rule says what it is in note");
+    if (r.days != null && (!Array.isArray(r.days) || !r.days.every((d) => typeof d === "string" && d.trim())))
+      return refuse(`the ${kind} rule's days are weekdays or the family's own words for a day ("Ekadashi"); leave days out for a rule that holds every day`);
+    return { kind: kind as HouseRule["kind"], days: ((r.days ?? []) as string[]).map((d) => weekday(d) ?? d.trim()), ...note };
   });
 }
+
+/** The house's notes: text, or a list of the family's lines. */
+const notesOf = (v: unknown): string | null =>
+  Array.isArray(v) && v.every((n) => typeof n === "string") ? v.map((n) => n.trim()).filter(Boolean).join("\n") || null : words(v, "notes");
 
 function extraSlots(v: unknown): ExtraSlot[] {
   if (!Array.isArray(v)) return refuse("extra_slots must be a list of { name, days?, for? }");
@@ -152,7 +165,7 @@ export const writeRoutes = (hono: Hono<any>) =>
         const res = await run(b, writer(c), c);
         return c.json(res.status ? { ok: false, ...res.body } : res.body, res.status ?? 200);
       } catch (e) {
-        if (e instanceof Refused) return c.json({ ok: false, reason: e.message, ...(e.code ? { code: e.code } : {}) }, 400);
+        if (e instanceof Refused) return c.json({ ok: false, reason: e.message, ...(e.code ? { code: e.code } : {}), ...(e.detail ?? {}) }, 400);
         throw e;
       }
     });
@@ -207,7 +220,7 @@ export function mountFamilyRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: { a
     if (b.grocery_app !== undefined) refuse("grocery_app is set with set_shopping_apps { main, fallback, connected }");
     const set: Partial<typeof house.$inferInsert> = {};
     if (b.rules !== undefined) set.rules = JSON.stringify(rules(b.rules));
-    if (b.notes !== undefined) set.notes = words(b.notes, "notes");
+    if (b.notes !== undefined) set.notes = notesOf(b.notes);
     if (b.structured === true) set.profile_to_structure = null;
     if (!Object.keys(set).length) refuse("give rules, notes or structured: true");
     return saveHouse(set, by);
@@ -238,15 +251,18 @@ export function mountFamilyRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: { a
     return { body: { ...shoppingApps(db), house: houseView(getHouse(db)) } };
   });
 
-  // set_cook { name, days, arrival, makes_well?, note? }
+  // set_cook { name, days?, arrival?, makes_well?, wont_make?, time_limit?, new_recipes?, note? }: the cook. A name is needed
+  // every time; the cook's days and arrival time the first time. Only the fields given change; null clears a word field.
   write("/api/family/cook", (b, by) => {
-    const set: Partial<typeof house.$inferInsert> = {
-      cook_name: name(b.name, "the cook's name"),
-      cook_days: JSON.stringify(weekdays(b.days, "days")),
-      cook_arrival: typeof b.arrival === "string" && /^([01]\d|2[0-3]):[0-5]\d$/.test(b.arrival) ? b.arrival : refuse('arrival must be a time as "HH:MM", like "07:30"'),
-    };
-    if (b.makes_well !== undefined) set.cook_makes_well = words(b.makes_well, "makes_well");
-    if (b.note !== undefined) set.cook_note = words(b.note, "note");
+    const had = getHouse(db);
+    const set: Partial<typeof house.$inferInsert> = { cook_name: name(b.name, "the cook's name") };
+    if (b.days !== undefined || !had.cook_days) set.cook_days = JSON.stringify(weekdays(b.days, "days"));
+    if (b.arrival !== undefined || !had.cook_arrival)
+      set.cook_arrival = typeof b.arrival === "string" && /^([01]\d|2[0-3]):[0-5]\d$/.test(b.arrival) ? b.arrival : refuse('arrival must be a time as "HH:MM", like "07:30"');
+    for (const [field, column] of [["makes_well", "cook_makes_well"], ["wont_make", "cook_wont_make"], ["time_limit", "cook_time_limit"], ["note", "cook_note"]] as const)
+      if (b[field] !== undefined) set[column] = words(b[field], field);
+    if (b.new_recipes !== undefined) set.cook_new_recipes = b.new_recipes === null ? null : (COOK_NEW_RECIPES as readonly unknown[]).includes(b.new_recipes)
+      ? (b.new_recipes as string) : refuse(`new_recipes must be one of: ${COOK_NEW_RECIPES.join(", ")} (open: tries new recipes from reels and the internet; set_menu: better with familiar dishes), or null`);
     return saveHouse(set, by);
   });
 

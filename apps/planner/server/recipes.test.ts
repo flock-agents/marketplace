@@ -20,12 +20,14 @@ describe("save_recipe", () => {
     expect(unnamed).toMatchObject({ code: "NEEDS_NAME", status: 400 });
     expect(rows("saved_recipes")).toHaveLength(1);
 
-    const { dish } = await op("set_dish", { date: MON, slot: "Dinner", name: "Dal makhani", recipe_id: first.recipe.id, video_url: REEL });
+    const { dish } = await op("set_dish", { date: MON, slot: "Dinner", name: "Dal makhani", recipe_id: first.recipe.id, video_url: REEL,
+      ingredients: [{ item: "urad dal", amount: 200, unit: "g" }] });
     expect(dish.recipe_id).toBe(first.recipe.id);
     const { context } = await op("plan_week", { week_start: MON, mode: "draft" });
     expect(context.recipes).toEqual([{ id: first.recipe.id, name: "Dal makhani", tags: ["Saturday fun dinner"], for_people: [] }]);
     const { week } = await op("plan_week", { week_start: MON, mode: "final" });
-    expect(week.days[0].meals[0].dishes[0]).toMatchObject({ name: "Dal makhani", recipe_id: first.recipe.id, video_url: REEL });
+    expect(week.days[0].meals[0].dishes[0]).toMatchObject({ name: "Dal makhani", recipe_id: first.recipe.id, video_url: REEL,
+      ingredients: [{ item: "urad dal", amount: 200, unit: "g" }] });
   });
 
   it("takes the source from the first link and the thumbnail from a YouTube one", async () => {

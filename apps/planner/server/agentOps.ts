@@ -49,11 +49,102 @@ export const ROUTES: Record<string, Route> = {
   save_recipe: (p) => ({ method: "POST", path: "/api/recipes/save", body: p }),
 };
 
+/** Each operation's fields, exactly as its route reads them (the guide and the manifest name the same: manifest.test.ts holds
+ *  them equal). A field outside the list is refused with the list, so a guessed field never passes unread. `need`: the fields
+ *  it cannot do without. */
+export const FIELDS: Record<string, { fields: string[]; need?: string[] }> = {
+  guide: { fields: [] },
+  set_person: { fields: ["name", "relationship", "group", "portions", "diet", "allergies", "dislikes", "targets", "note", "remove"], need: ["name"] },
+  set_house_rules: { fields: ["rules", "notes", "structured"] },
+  set_cook: { fields: ["name", "days", "arrival", "makes_well", "wont_make", "time_limit", "new_recipes", "note"], need: ["name"] },
+  set_slots: { fields: ["extra_slots", "order_in"] },
+  set_cooking_days: { fields: ["days"], need: ["days"] },
+  set_shopping_apps: { fields: ["main", "fallback", "connected"], need: ["main", "connected"] },
+  plan_week: { fields: ["week_start", "mode", "meals", "keep_rest", "repeats_ok"], need: ["week_start", "mode"] },
+  set_meal: { fields: ["date", "slot", "meal_id", "ordered_in", "note", "dishes"] },
+  set_dish: { fields: ["dish_id", "meal_id", "date", "slot", "name", "for", "portion_note", "recipe_id", "video_url", "ingredients", "position", "remove"] },
+  set_regular: { fields: ["item", "amount", "unit", "every", "times_per_week", "weekdays", "for_whom", "active", "paused_until", "remove"], need: ["item"] },
+  import_order_history: { fields: ["app", "orders"], need: ["app", "orders"] },
+  record_bought_outside: { fields: ["item", "date"], need: ["item"] },
+  set_item: { fields: ["item", "group", "follows_plan", "dont_ask", "snooze_days", "unit"], need: ["item"] },
+  set_subscription: { fields: ["item", "source", "active"], need: ["item", "active"] },
+  answer_running_low: { fields: ["answers"], need: ["answers"] },
+  get_reminder: { fields: ["which", "date"], need: ["which"] },
+  get_cart: { fields: ["app"] },
+  set_cart_line: { fields: ["item", "qty", "app", "source", "for_note", "for_date", "product_id", "name_on_app", "pack", "price", "image"], need: ["item", "qty"] },
+  sync_cart: { fields: ["order_id", "lines", "total", "delivery_gap", "outside_lines"], need: ["order_id", "lines"] },
+  order_cart: { fields: ["app"], need: ["app"] },   // picks and seen are the Order button's, sent by the page itself
+  record_order: { fields: ["order_id", "placed", "paid", "app_order_ref", "total"], need: ["order_id"] },
+  cancel_order: { fields: ["order_id"], need: ["order_id"] },
+  remember_product: { fields: ["item", "app", "product_id", "name_on_app", "pack", "pack_amount", "pack_unit", "price", "image"], need: ["item", "app", "product_id", "name_on_app"] },
+  save_recipe: { fields: ["recipe_id", "name", "links", "notes", "ingredients", "tags", "for", "thumbnail"] },
+};
+
+/** A field sent to the wrong operation that has a home elsewhere: the refusal names that operation. */
+const MOVED: Record<string, Record<string, string>> = {
+  set_house_rules: { grocery_app: "the grocery app is set with set_shopping_apps { main, fallback, connected }" },
+};
+
+/** How alike two names are: shared words count most, then the edit distance between them. Lower is closer. */
+function distance(a: string, b: string): number {
+  const wa = a.toLowerCase().split(/[_\s-]+/), wb = b.toLowerCase().split(/[_\s-]+/);
+  const shared = wa.filter((w) => wb.includes(w)).length;
+  const s = a.toLowerCase(), t = b.toLowerCase();
+  let prev = Array.from({ length: t.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= s.length; i++) {
+    const cur = [i];
+    for (let j = 1; j <= t.length; j++) cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (s[i - 1] === t[j - 1] ? 0 : 1));
+    prev = cur;
+  }
+  return prev[t.length] - shared * 3;
+}
+/** The closest of `names` to `given`, when it is close enough to be what was meant. */
+export function closest(given: string, names: string[]): string | null {
+  let best: string | null = null, score = Infinity;
+  for (const n of names) { const d = distance(given, n); if (d < score) { score = d; best = n; } }
+  return best !== null && score <= Math.max(3, Math.ceil(given.length / 2)) ? best : null;
+}
+/** Words an agent reaches for that name another operation: "save" and "add" a meal is set_meal. */
+const OP_WORDS: Record<string, string> = { save: "set", add: "set", update: "set", create: "set", change: "set", edit: "set", put: "set" };
+
+const fieldList = (op: string) => (FIELDS[op].fields.length ? FIELDS[op].fields.join(", ") : "none");
+
+/** The answer to an operation the app does not have: the closest one and its fields. (Flock answers an undeclared name itself
+ *  today; this is the text for when it asks the app.) */
+export function unknownOperation(name: string): { error: string; code: string; status: number } {
+  const swapped = name.split("_").map((w) => OP_WORDS[w.toLowerCase()] ?? w).join("_");
+  const known = Object.keys(FIELDS);
+  const near = known.includes(swapped) ? swapped : closest(swapped, known) ?? closest(name, known);
+  const hint = near ? ` Did you mean ${near}? Its fields: ${fieldList(near)}.` : "";
+  return { error: `${name} is not an operation of this app.${hint} The operations: ${known.join(", ")}.`, code: "UNKNOWN_OP", status: 404 };
+}
+
+/** The fields sent that the operation does not take, and the ones it needs that are missing: refused with its whole field list. */
+export function checkFields(op: string, p: Record<string, unknown>): { error: string; code: string; status: number } | null {
+  const spec = FIELDS[op];
+  if (!spec) return null;
+  const wrong = Object.keys(p).filter((k) => !spec.fields.includes(k));
+  const missing = (spec.need ?? []).filter((k) => p[k] === undefined || p[k] === null);
+  if (!wrong.length && !missing.length) return null;
+  const said: string[] = [];
+  for (const k of wrong) {
+    const moved = MOVED[op]?.[k];
+    const near = moved ? null : closest(k, spec.fields);
+    said.push(moved ? `${op} does not take ${k}: ${moved}.` : `${op} does not take ${k}${near ? ` (did you mean ${near}?)` : ""}.`);
+  }
+  if (missing.length) said.push(`${op} needs ${missing.join(", ")}.`);
+  return { error: `${said.join(" ")} Its fields: ${fieldList(op)}. Send it again with those only.`, code: "APP_REFUSED", status: 400 };
+}
+
 /** Operations that take more than one call, or none. */
 type Multi = (p: Record<string, unknown>, call: (c: Call) => Promise<{ status: number; body: any }>) => Promise<unknown>;
 
+/** The guide's last section: every operation with its fields as the code reads them (a field it can do without has "?"). */
+export const FIELDS_SECTION = ["## Operations and their fields (exactly these; no other name or field is taken)", "",
+  ...Object.entries(FIELDS).map(([op, f]) => `- ${op} { ${f.fields.map((k) => (f.need?.includes(k) ? k : `${k}?`)).join(", ")} }`)].join("\n");
+
 const MULTI: Record<string, Multi> = {
-  guide: async () => ({ guide }),
+  guide: async () => ({ guide: `${guide.trimEnd()}\n\n${FIELDS_SECTION}\n` }),
 };
 
 /** The operation names, for the manifest test: every declared operation has a handler. */
@@ -72,6 +163,8 @@ export function agentOps(hono: () => Hono<any>): Record<string, OpHandler> {
   const ops: Record<string, OpHandler> = {};
   for (const [name, route] of Object.entries(ROUTES)) {
     ops[name] = async (payload, ctx) => {
+      const bad = checkFields(name, payload ?? {});
+      if (bad) return bad;
       const c = route(payload ?? {});
       if ("error" in c) return c;
       const res = await caller(ctx.agentId)(c);

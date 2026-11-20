@@ -4,8 +4,14 @@ export const SLOTS = ["Breakfast", "Lunch", "Dinner"] as const;
 
 /** A person's age group: portions and the planning rules follow it. */
 export const GROUPS = ["child", "adult", "elder"] as const;
-/** A house rule: a vegetarian day, an egg day, a fasting day, a day without onion and garlic, or the family's own. */
-export const RULE_KINDS = ["veg", "egg", "fasting", "no_onion_garlic", "other"] as const;
+/** A house rule: vegetarian (no meat, no eggs), eggs but no meat, no eggs, no meat, fasting, no onion and garlic, or the family's
+ *  own (its note says it). A rule with no days holds every day ("mostly vegetarian"). */
+export const RULE_KINDS = ["veg", "egg", "no_eggs", "no_meat", "fasting", "no_onion_garlic", "other"] as const;
+/** How each rule reads on the Family page: what the rule allows or forbids, never the opposite. */
+export const RULE_LABELS: Record<(typeof RULE_KINDS)[number], string> = { veg: "Vegetarian", egg: "Eggs but no meat", no_eggs: "No eggs", no_meat: "No meat",
+  fasting: "Fasting", no_onion_garlic: "No onion or garlic", other: "Other" };
+/** Whether the cook tries new recipes (reels, the internet) or is better with a set menu of familiar dishes. */
+export const COOK_NEW_RECIPES = ["open", "set_menu"] as const;
 /** How often an everyday item is needed: every day, a number of times a week, or on named weekdays. */
 export const EVERY = ["day", "week", "weekdays"] as const;
 /** A cart's life: one `open` cart per app is the one being filled; `ordering` while the agent places it; then `placed` (waiting
@@ -40,6 +46,10 @@ const ALIASES: Record<string, GroceryApp> = {
 export const appOf = (v: unknown): GroceryApp | null => (typeof v === "string" ? ALIASES[v.trim().toLowerCase().replace(/\s+/g, " ")] ?? null : null);
 /** Can the agent copy a cart into the app? Amazon has no cart tool: its cart is built when the family orders. */
 export const CART_SYNC: Record<GroceryApp, boolean> = { zepto: true, "swiggy-instamart": true, "zomato-blinkit": true, bigbasket: true, amazon: false };
+
+/** Dishes served with most meals: a week may hold them on many days without counting as a repeat. */
+export const STAPLE_DISHES = ["roti", "rotis", "chapati", "chapatis", "phulka", "phulkas", "rice", "plain rice", "steamed rice", "curd", "dahi", "raita",
+  "salad", "papad", "pickle", "buttermilk", "chaas", "milk", "fruit", "fruits"] as const;
 
 export const COOKING_DAYS_DEFAULT = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
 /** How far back an order history is read, in days. */

@@ -3,7 +3,7 @@
 import { describe, it, expect } from "bun:test";
 import { readFileSync } from "fs";
 import { join } from "path";
-import { OPERATION_NAMES, ROUTES } from "./agentOps";
+import { agentOps, FIELDS, FIELDS_SECTION, OPERATION_NAMES, ROUTES } from "./agentOps";
 
 const manifest = JSON.parse(readFileSync(join(import.meta.dir, "..", "flock.app.json"), "utf8"));
 const guide = readFileSync(join(import.meta.dir, "agent-guide.md"), "utf8");
@@ -127,7 +127,7 @@ describe("the agent's interface", () => {
   it("the instructions and the guide name only operations the app has", () => {
     const known = new Set<string>(OPERATION_NAMES);
     // Written like an operation (a verb, then "_"), and not one: the app's tables, and a tool of Zepto's own connection.
-    const notOurs = new Set<string>([...manifest.tables, "get_payment_methods"]);
+    const notOurs = new Set<string>([...manifest.tables, "get_payment_methods", "set_menu"]);   // set_menu: a value of set_cook's new_recipes
     const verb = /^(set|plan|save|import|place|ask|add|record|cancel|remember|get|list|answer|edit|move|skip|ack|search|write|remove|have)_[a-z_]+$/;
     for (const text of [guide, instructions])
       for (const [word] of text.matchAll(/\b[a-z]+_[a-z_]+\b/g))
@@ -139,5 +139,35 @@ describe("the agent's interface", () => {
     for (const n of Object.keys(ROUTES)) expect(guide, n).toContain(n);
     for (const said of ["NEEDS_NAME", "structured: true", "get_reminder", "answer_running_low", "Order my", "sync_cart", "import_order_history", "Fine for a week", "record_order", "STOCK_OPTIONS", "taken_off"]) expect(guide, said).toContain(said);
     for (const n of ["guide", ...Object.keys(ROUTES)]) expect(operations.map((o) => o.name), n).toContain(n);
+  });
+
+  it("the operations' fields are the code's: each description, every call written in the guide and the guide's field list name exactly those", async () => {
+    expect(Object.keys(FIELDS).sort()).toEqual([...OPERATION_NAMES].sort());
+    /** The field names at the top level of the "{ ... }" that starts at `at`: nested lists and objects are not looked into. */
+    const keysAt = (text: string, at: number): string[] => {
+      let depth = 0, top = "";
+      for (let i = at; i < text.length; i++) {
+        const ch = text[i];
+        if (ch === "{" || ch === "[" || ch === "(") { depth++; if (depth === 1) continue; }
+        if (ch === "}" || ch === "]" || ch === ")") { depth--; if (depth === 0) break; }
+        if (depth === 1) top += ch; else if (depth > 1 && top.slice(-1) !== " ") top += " ";
+      }
+      const words = top.replace(/"[^"]*"/g, " ").split(/[,;]/).map((part) => /^\s*(?:or\s+)?([a-z_]+)\??\s*(?::|$)/.exec(part)?.[1]).filter((w): w is string => !!w && w !== "null");
+      return words.flatMap((w) => (w === "date" && /date and slot/.test(top) ? ["date", "slot"] : [w]));
+    };
+    for (const o of operations) {
+      const at = o.description.indexOf("{");
+      const keys = keysAt(o.description, at);
+      if (o.name === "set_dish") keys.push("date", "slot");   // "{ dish_id, or meal_id, or date and slot; ... }"
+      expect(new Set(keys), o.name).toEqual(new Set(FIELDS[o.name].fields));
+    }
+    for (const [, op, rest] of guide.matchAll(/`([a-z_]+) (\{[^`]*\})`/g)) {
+      if (!FIELDS[op]) continue;
+      for (const k of keysAt(rest, 0)) expect(FIELDS[op].fields, `${op} ${k} in the guide`).toContain(k);
+    }
+    const served = (await agentOps(() => null as any).guide({}, { agentId: null } as any)) as { guide: string };
+    expect(served.guide).toContain(FIELDS_SECTION);
+    expect(FIELDS_SECTION).toContain("- set_cook { name, days?, arrival?, makes_well?, wont_make?, time_limit?, new_recipes?, note? }");
+    expect(FIELDS_SECTION).toContain("- plan_week { week_start, mode, meals?, keep_rest?, repeats_ok? }");
   });
 });

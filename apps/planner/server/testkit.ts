@@ -42,7 +42,7 @@ export async function boot(opts: { dbFile?: string; dataDir?: string; regularHoo
   const kit = await mountKit({ hono, env: { appId: "t", dataDir, apiUrl: null, token: opts.token ?? null, agent: null } },
     { schema, settings: SETTINGS, keepTables: OLD_TABLES, dbFile, appName: "T" });
   mountFamilyRoutes(hono, kit.db, kit.emitChange, { appToken: opts.token ?? null });
-  mountMealRoutes(hono, kit.db, kit.emitChange, { basePath: opts.basePath ?? "/a/t" });
+  mountMealRoutes(hono, kit.db, kit.emitChange, { basePath: opts.basePath ?? "/a/t", now });
   mountRegularRoutes(hono, kit.db, kit.emitChange, opts.regularHooks ?? { onChanged: () => {} });
   mountProductRoutes(hono, kit.db, kit.emitChange);
   mountRecipeRoutes(hono, kit.db, kit.emitChange);
