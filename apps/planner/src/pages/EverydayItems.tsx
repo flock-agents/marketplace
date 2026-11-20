@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Button, Card, DateRange, Empty, Field, Form, Row, RowList, Stack, useApp, useTable, type FormProps } from "../flock/ui";
+import { Button, Card, DateRange, Empty, Field, Form, Row, RowList, Section, Stack, useApp, useTable, type FormProps } from "../flock/ui";
 import { dayLabel, todayStr, WEEKDAYS } from "../../server/dates";
 import { EVERY } from "../../server/db/constants";
 import { agentName, pausedNow, regularText, textList } from "./format";
@@ -46,7 +46,10 @@ export function EverydayItems() {
   const patch = async (r: RegularRow, values: Partial<RegularRow>, close = true) => { try { await list.update(r.id, values); if (close) setOpen(null); } catch { /* told already */ } };
   const name = (r: RegularRow) => (r.for_whom ? `${r.item} (for ${r.for_whom})` : r.item);
 
+  // Nothing confirmed yet (the first order history has not been read): the Family page has no empty block for it.
+  if (!list.loading && !list.error && list.rows.length === 0) return null;
   return (
+    <Section title="Everyday items">
     <div className="pl-lines">
     <RowList
       rows={list.rows} loading={list.loading} error={list.error} hasMore={list.hasMore} onLoadMore={list.loadMore}
@@ -83,5 +86,6 @@ export function EverydayItems() {
       } : null}
     />
     </div>
+    </Section>
   );
 }

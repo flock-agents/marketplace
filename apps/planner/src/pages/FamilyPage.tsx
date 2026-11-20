@@ -207,9 +207,7 @@ export function FamilyPage() {
         ))}
       </Section>
 
-      <Section title="Everyday items">
-        <EverydayItems />
-      </Section>
+      <EverydayItems />
 
       <Section title="House rules" actions={<>{edit("rules")}{edit("notes", "Notes")}</>}>
         {panel("rules", "House rules", (

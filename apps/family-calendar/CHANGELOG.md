@@ -1,8 +1,8 @@
 # Changelog
 
-## Unreleased
+## 2.1.0
 
-Not released: flock.app.json still says 2.0.3. To ship it, this becomes 2.1.0 (flock.app.json, flock.marketplace.json, the catalog), with minFlockVersion 0.19.0 for the routine.
+Needs Flock 0.19.0 or later.
 
 - **Events can repeat.** An event has a Repeat (once, every day, every week, every month). One that happens every week is kept once and shown on the Week page in every week, and once on the Events page at the next day it falls on. An existing calendar keeps its events as they are.
 - **A week in one go.** The agent adds a family's events in one step (`add_events`): each with who it is for, a date or the weekdays it happens on, its times, a note and a reminder. A person not in the family yet is added. A mistake refuses the whole step and says which event and which field. Until now it wrote one row at a time, and a child's classes ended up as reminders that the week did not show.

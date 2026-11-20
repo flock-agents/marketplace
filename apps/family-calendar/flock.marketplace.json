@@ -1,5 +1,5 @@
 {
   "name": "family-calendar",
-  "version": "2.0.3",
-  "minFlockVersion": "0.15.0"
+  "version": "2.1.0",
+  "minFlockVersion": "0.19.0"
 }
