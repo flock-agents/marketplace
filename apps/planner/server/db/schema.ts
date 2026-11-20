@@ -25,7 +25,7 @@ export const house = sqliteTable("house", {
   rules: text("rules"),                                        // JSON [{ kind: veg | egg | no_eggs | no_meat | fasting | no_onion_garlic | other, days: string[] (empty: every day), note? }]
   cook_name: text("cook_name"),
   cook_days: text("cook_days"),                                // JSON weekday[]
-  cook_arrival: text("cook_arrival"),                          // "HH:MM"
+  cook_arrival: text("cook_arrival"),                          // "HH:MM", or for a cook who comes more than once JSON [{ at: "HH:MM", meals?: string[] }]
   cook_makes_well: text("cook_makes_well"),
   cook_wont_make: text("cook_wont_make"),                      // what the cook does not make well or will not make
   cook_time_limit: text("cook_time_limit"),                    // the cook's time, in the family's words ("leaves early: a dish or two in the morning")
@@ -40,7 +40,7 @@ export const house = sqliteTable("house", {
   evening_time: text("evening_time"),                          // "HH:MM": the same for the evening reminder
   plan_time: text("plan_time"),                                // "HH:MM": the same for the weekly plan
   cooking_days: text("cooking_days"),                          // JSON weekday[]; Mon to Sat until set
-  connected_apps: text("connected_apps"),                      // JSON GroceryApp[]: every shopping app the family has signed in to
+  connected_apps: text("connected_apps"),                      // JSON GroceryApp[]: the shopping apps the family has signed in to (the main app only once it is)
   history_synced: text("history_synced"),                      // JSON { [app]: "YYYY-MM-DD" }: how far each app's order history was read
   asks_confirmed: integer("asks_confirmed").default(0),
   asks_still_have: integer("asks_still_have").default(0),

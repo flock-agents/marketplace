@@ -61,10 +61,15 @@ describe("plan_week", () => {
     const { op, rows } = await boot();
     expect((await op("plan_week", { week_start: "2026-11-24", mode: "draft", meals: [lunch] })).code).toBe("APP_REFUSED");
     expect((await op("plan_week", { week_start: MON, mode: "draft", meals: [{ ...lunch, slot: "Brunch" }] })).code).toBe("APP_REFUSED");
+    // A near miss is named, as a mistyped field is; a meal with no slot is told that.
+    expect((await op("plan_week", { week_start: MON, mode: "draft", meals: [{ ...lunch, slot: "Diner" }] })).error).toBe("slot must be one of: Breakfast, Lunch, Dinner (did you mean Dinner?)");
+    expect((await op("plan_week", { week_start: MON, mode: "draft", meals: [{ ...lunch, slot: "Supper" }] })).error).toBe("slot must be one of: Breakfast, Lunch, Dinner");
+    expect((await op("plan_week", { week_start: MON, mode: "draft", meals: [{ date: MON }] })).error).toBe("slot is required: one of Breakfast, Lunch, Dinner");
     const tiffin = { date: MON, slot: "Agastya's tiffin", dishes: [{ name: "Lemon rice" }] };
     expect((await op("plan_week", { week_start: MON, mode: "draft", meals: [tiffin] })).code).toBe("APP_REFUSED");
     expect(rows("plan_meals")).toHaveLength(0);
     await op("set_slots", { extra_slots: [{ name: "Agastya's tiffin", days: ["Mon", "Tue", "Wed", "Thu", "Fri"], for: ["Agastya"] }] });
+    expect((await op("plan_week", { week_start: MON, mode: "draft", meals: [{ ...tiffin, slot: "tiffin" }] })).error).toContain("(did you mean Agastya's tiffin?)");
     const r = await op("plan_week", { week_start: MON, mode: "draft", meals: [lunch, { ...tiffin, slot: "agastya's TIFFIN" }] });
     expect(r.week.days[0].meals.map((m: any) => m.slot)).toEqual(["Lunch", "Agastya's tiffin"]);
   });

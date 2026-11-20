@@ -11,7 +11,7 @@ const TODAY = "2026-11-21";
 const start = async (opts: { askAgent?: (intent: string, payload: object) => Promise<unknown> } = {}) => {
   let t = new Date(2026, 10, 21, 12).getTime();
   const k = await boot({ now: () => new Date(t), askAgent: opts.askAgent });
-  await k.op("set_shopping_apps", { main: "zepto", fallback: null, connected: ["blinkit"] });
+  await k.op("set_shopping_apps", { main: "zepto", fallback: null, connected: ["zepto", "blinkit"] });
   // The products she buys on Zepto, as the agent remembered them.
   await k.op("remember_product", { item: "curd", app: "zepto", product_id: "z-curd", name_on_app: "Mother Dairy curd", pack: "400 g", price: 50 });
   await k.op("remember_product", { item: "bread", app: "zepto", product_id: "z-bread", name_on_app: "Harvest Gold bread", pack: "400 g", price: 45 });
@@ -319,6 +319,22 @@ describe("the app's real cart, kept in step", () => {
     expect((await k.owner("POST", "/api/carts/refresh", {})).body.asked.sort()).toEqual(["zepto", "zomato-blinkit"]);
     expect(k.asked.map((a: any) => [a.payload.app, a.payload.reuseSessionId])).toEqual([["zepto", undefined], ["zepto", "s1"], ["zomato-blinkit", "s1"]]);
     expect(k.asked.some((a: any) => a.payload.app === "amazon")).toBe(false);
+  });
+
+  it("a cart of an app the family has not signed in to is kept, and never copied: no ask on an edit or when the page opens", async () => {
+    const k = await start({ askAgent: async () => ({ ok: true, data: { sessionId: "s1" } }) });
+    // The main app chosen, nothing signed in to yet.
+    await k.op("set_shopping_apps", { main: "zepto", fallback: null, connected: [] });
+    await fill(k);
+    expect(await cartOf(k, "zepto")).toMatchObject({ connected: false, status: "open" });
+    await k.owner("POST", "/api/carts/zepto/picks", { picks: [{ line_id: await lineId(k, "zepto", "curd"), qty: 2 }] });
+    k.settle();
+    expect((await k.owner("POST", "/api/carts/refresh", {})).body).toEqual({ asked: [] });
+    expect(k.asked).toEqual([]);
+    // Signed in: the next time the page opens the cart is copied.
+    await k.op("set_shopping_apps", { main: "zepto", fallback: null, connected: ["zepto"] });
+    expect((await cartOf(k, "zepto")).connected).toBe(true);
+    expect((await k.owner("POST", "/api/carts/refresh", {})).body).toEqual({ asked: ["zepto"] });
   });
 
   it("five page edits to one app's cart are one ask, after the last edit; two apps are two asks", async () => {

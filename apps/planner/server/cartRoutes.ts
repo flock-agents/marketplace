@@ -8,7 +8,7 @@ import { eq, inArray } from "drizzle-orm";
 import { house, order_lines, orders } from "./db/schema";
 import { APP_NAMES, appOf, CART_STALE_MIN, CART_SYNC, LINE_SOURCES, SHOP_APPS, SYNC_ASK_COOLDOWN_MIN, SYNC_DEBOUNCE_SEC,
   type GroceryApp, type LineSource } from "./db/constants";
-import { getHouse, isObject, name, refuse, words, writeRoutes, type Db, type Emit } from "./family";
+import { getHouse, isObject, name, refuse, shoppingApps, words, writeRoutes, type Db, type Emit } from "./family";
 import { itemFor } from "./items";
 import { productId } from "./products";
 import { dateOf } from "./meals";
@@ -76,7 +76,8 @@ export function mountCartRoutes(hono: Hono<any>, db: Db, emit: Emit, deps: CartD
    *  one started, so a follow-up carries little new context. */
   const fire = (app: GroceryApp): boolean => {
     const cart = cartOf(db, app, "open");
-    if (!cart || !CART_SYNC[app]) return false;
+    // An app the family has not signed in to has no cart of its own to copy to: nothing is asked until it is connected.
+    if (!cart || !CART_SYNC[app] || !shoppingApps(db).connected.includes(app)) return false;
     const lines = linesOf(db, cart.id);
     // Nothing to put on the app's cart, and nothing it may hold to take off.
     if (!lines.some((l) => (l.qty ?? 0) > 0) && !(lines.length && (cart.synced_at || cart.sync_asked_at))) return false;

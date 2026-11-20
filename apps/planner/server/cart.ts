@@ -277,9 +277,11 @@ export function markPaid(tx: Db, o: OrderRow, by: string, opts: CartOpts = {}): 
   return taken;
 }
 
-/** A cart or an order as the pages and the agent read it. `total` is the app's own total, from its last copy. */
+/** A cart or an order as the pages and the agent read it. `total` is the app's own total, from its last copy. `connected`:
+ *  the family has signed in to its app; a cart of an app they have not is kept here only, and copied nowhere. */
 export function cartView(db: Db, o: OrderRow) {
   return { order_id: o.id, app: o.app, app_name: APP_NAMES[o.app as GroceryApp] ?? o.app, status: o.status, lines: linesOf(db, o.id), reminder_key: o.reminder_key,
+    connected: shoppingApps(db).connected.includes(o.app as GroceryApp),
     total: o.total, delivery_gap: o.delivery_gap, sync_state: o.sync_state, synced_at: o.synced_at, sync_asked_at: o.sync_asked_at,
     outside_lines: list<{ name: string; qty?: number }>(o.outside_lines), building_at_order: !CART_SYNC[o.app as GroceryApp],
     ordering_at: o.ordering_at, placed_at: o.placed_at, paid_at: o.paid_at, app_order_ref: o.app_order_ref, note: o.note };

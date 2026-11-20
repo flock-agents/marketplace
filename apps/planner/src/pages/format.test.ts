@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { APP_NAMES, TAG_TEXT } from "../../server/db/constants";
 import { agentName, cartNote, cookingDaysText, cartTitle, debouncePicks, dishNote, eventRows, forText, itemCallout, itemSubtitle, orderLabel, orderRow, outsideText, pantryTabs,
   patternFields, pausedNow, pickerItems, profileWaiting, recipeSourceLabel, regularText, statusTone, syncPicker, TAG_TONES, textList, weekTitle,
-  cookDetails, linkWeek, plannedText, ruleChip, weekToOpen } from "./format";
+  cookDetails, cookVisitsText, linkWeek, plannedText, ruleChip, weekToOpen } from "./format";
 
 describe("regularText", () => {
   it("says how much and how often", () => {
@@ -120,6 +120,8 @@ describe("cartNote", () => {
     expect(cartNote(cart({ app: "amazon", app_name: "Amazon Fresh", building_at_order: true, sync_state: "building_at_order", delivery_gap: 35 }), { now: NOW }))
       .toBe("Putting this on Amazon Fresh takes a minute when you order");
     expect(cartNote(cart({ sync_state: "pending", ...asked, delivery_gap: 35 }), { now: NOW })).toBe("Updating your Zepto cart…");
+    // An app not signed in to has nothing copied to it: never "updating".
+    expect(cartNote(cart({ connected: false, sync_state: "pending", delivery_gap: 35 }), { now: NOW })).toBe("You haven't signed in to Zepto yet");
     expect(cartNote(cart({ ...asked, delivery_gap: 35 }), { now: NOW })).toBe("Checking your Zepto cart…");
   });
   it("stops saying it is checking once the ask is long lost", () => {
@@ -332,6 +334,14 @@ describe("cookDetails", () => {
       { label: "Makes well", value: "dosa" }, { label: "Doesn't make", value: "non-veg" }, { label: "Cook's time", value: "a dish or two in the morning" },
       { label: "New recipes", value: "Better with familiar dishes" }]);
     expect(cookDetails({ cook_makes_well: null, cook_wont_make: null, cook_time_limit: null, cook_new_recipes: "open" })).toEqual([{ label: "New recipes", value: "Open to new recipes" }]);
+  });
+});
+
+describe("cookVisitsText", () => {
+  it("says each visit, with its meals when they were said", () => {
+    expect(cookVisitsText([])).toBeNull();
+    expect(cookVisitsText([{ at: "07:30" }])).toBe("comes at 7:30 am");
+    expect(cookVisitsText([{ at: "06:00", meals: ["Breakfast", "Lunch"] }, { at: "16:30", meals: ["Dinner"] }])).toBe("comes at 6 am (Breakfast, Lunch) and 4:30 pm (Dinner)");
   });
 });
 

@@ -1,7 +1,7 @@
 // The family profile: who eats at home, the house rules, the cook, the extra slots and the meals ordered in. The agent writes
 // it during the interview through these routes (its set_person, set_house_rules, set_cook and set_slots operations) and the
 // Family page reads it. Everything a person said is kept in their own words; only what the app itself reads later (a group,
-// a weekday, the cook's arrival time) is checked.
+// a weekday, the cook's arrival times) is checked.
 import type { Context, Hono } from "hono";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import { asc, eq } from "drizzle-orm";
@@ -20,9 +20,11 @@ export type HouseRow = typeof house.$inferSelect;
 export type HouseRule = { kind: (typeof RULE_KINDS)[number]; days: string[]; note?: string };
 export type ExtraSlot = { name: string; days?: Weekday[]; for?: string[] };
 export type OrderIn = { day: Weekday; slot: string; note?: string };
+/** One visit of the cook: when they come, and the meals that visit makes when the family said. */
+export type CookVisit = { at: string; meals?: string[] };
 /** The house row with its lists read: what the routes answer with. */
 export type HouseView = Omit<HouseRow, "rules" | "cook_days" | "extra_slots" | "order_in" | "cooking_days" | "connected_apps" | "history_synced"> &
-  { rules: HouseRule[]; cook_days: Weekday[]; extra_slots: ExtraSlot[]; order_in: OrderIn[];
+  { rules: HouseRule[]; cook_days: Weekday[]; cook_visits: CookVisit[]; extra_slots: ExtraSlot[]; order_in: OrderIn[];
     cooking_days: Weekday[]; connected_apps: GroceryApp[]; history_synced: Record<string, string> };
 
 /** The household's one row, made the first time anything asks for it. */
@@ -37,9 +39,20 @@ const object = (json: string | null): Record<string, string> => {
   try { const v = json ? JSON.parse(json) : {}; return isObject(v) ? (v as Record<string, string>) : {}; } catch { return {}; }
 };
 
+const CLOCK = /^([01]\d|2[0-3]):[0-5]\d$/;
+/** The cook's visits from `cook_arrival`: one plain "HH:MM" (every row before a cook could come twice) is one visit; a cook who
+ *  comes more than once, or whose visit names its meals, is kept as a JSON list. Earliest first. */
+export function cookVisits(arrival: string | null): CookVisit[] {
+  if (!arrival) return [];
+  if (CLOCK.test(arrival)) return [{ at: arrival }];
+  return list<CookVisit>(arrival).filter((v) => isObject(v) && typeof v.at === "string" && CLOCK.test(v.at));
+}
+
 export function houseView(row: HouseRow): HouseView {
   const cooking = list<Weekday>(row.cooking_days);
-  return { ...row, rules: list(row.rules), cook_days: list(row.cook_days), extra_slots: list(row.extra_slots), order_in: list(row.order_in),
+  const visits = cookVisits(row.cook_arrival);
+  // cook_arrival stays one time for whoever reads it as before (the first visit); cook_visits is every visit.
+  return { ...row, cook_arrival: visits[0]?.at ?? null, cook_visits: visits, rules: list(row.rules), cook_days: list(row.cook_days), extra_slots: list(row.extra_slots), order_in: list(row.order_in),
     cooking_days: cooking.length ? cooking : [...COOKING_DAYS_DEFAULT], connected_apps: list<GroceryApp>(row.connected_apps), history_synced: object(row.history_synced) };
 }
 
@@ -58,8 +71,8 @@ export function groceryApp(db: Db): GroceryApp {
   return (SHOP_APPS as readonly unknown[]).includes(v) ? (v as GroceryApp) : (SETTINGS[0].default as GroceryApp);
 }
 
-/** The family's shopping profile: the main app, the one tried when something is not on it, every app signed in to, and
- *  whether an order may go without her say. */
+/** The family's shopping profile: the main app, the one tried when something is not on it, every app signed in to (the main
+ *  app and the fallback are among them only once the family has signed in to them), and whether an order may go without her say. */
 export function shoppingApps(db: Db): { main: GroceryApp; fallback: GroceryApp | null; connected: GroceryApp[]; order_without_asking: boolean } {
   const fb = setting(db, "fallback_app");
   return { main: groceryApp(db), fallback: (SHOP_APPS as readonly unknown[]).includes(fb) ? (fb as GroceryApp) : null,
@@ -145,6 +158,24 @@ function orderIn(v: unknown, slotNames: string[]): OrderIn[] {
       ?? refuse(`order_in: the slot must be one of: ${slotNames.join(", ")}`);
     return { day, slot, ...optionalNote(o.note, "an order-in note") };
   });
+}
+
+const ARRIVAL_SHAPE = 'arrival must be a time as "HH:MM", like "07:30", or for a cook who comes more than once a list of visits: ["06:00", "16:30"] or [{ at: "06:00", meals: ["Breakfast", "Lunch"] }, { at: "16:30", meals: ["Dinner"] }]';
+/** The cook's arrival as sent: one time, or a list of visits (each a time, or { at, meals? }). `slotNames`: the meals a visit
+ *  may make. Stored as the plain time when it is one visit with no meals, so rows read as they always did. */
+function arrival(v: unknown, slotNames: string[]): string {
+  const time = (t: unknown): string => (typeof t === "string" && CLOCK.test(t) ? t : refuse(ARRIVAL_SHAPE));
+  if (!Array.isArray(v)) return time(v);
+  if (!v.length) return refuse(ARRIVAL_SHAPE);
+  const visits = v.map((x): CookVisit => {
+    if (!isObject(x)) return { at: time(x) };
+    const visit: CookVisit = { at: time(x.at) };
+    if (x.meals != null) visit.meals = names(x.meals, `the ${visit.at} visit's meals`).map((m) =>
+      slotNames.find((s) => s.toLowerCase() === m.toLowerCase()) ?? refuse(`the ${visit.at} visit's meals must be from: ${slotNames.join(", ")}`));
+    return visit;
+  }).sort((a, b) => a.at.localeCompare(b.at));
+  if (new Set(visits.map((x) => x.at)).size !== visits.length) return refuse("arrival: two visits have the same time");
+  return visits.length === 1 && !visits[0].meals ? visits[0].at : JSON.stringify(visits);
 }
 
 /** Who is writing: the agent Flock relayed, the person on the page, or the app itself. */
@@ -236,7 +267,8 @@ export function mountFamilyRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: { a
   });
 
   // set_shopping_apps { main, fallback, connected }: the main app and the one tried when something is not on it are saved as
-  // the app's settings; the house keeps every app signed in to, which always includes those two. Apps by name or id.
+  // the app's settings; the house keeps the apps the family has signed in to, exactly as given. The main app or the fallback
+  // may be one they have not signed in to yet: choosing an app is not signing in to it. Apps by name or id.
   write("/api/family/shopping-apps", async (b, by, c) => {
     const known = `${SHOP_APPS.join(", ")}`;
     const one = (v: unknown, what: string): GroceryApp => appOf(v) ?? refuse(`${what}: ${JSON.stringify(v)} is not a shopping app (${known})`);
@@ -244,7 +276,7 @@ export function mountFamilyRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: { a
     const fallback = b.fallback == null ? null : one(b.fallback, "fallback");
     if (fallback === main) refuse("fallback must be a different app from main");
     if (!Array.isArray(b.connected)) refuse(`connected must be a list of shopping apps (${known})`);
-    const connected = new Set<GroceryApp>([main, ...(fallback ? [fallback] : []), ...(b.connected as unknown[]).map((v) => one(v, "connected"))]);
+    const connected = new Set<GroceryApp>((b.connected as unknown[]).map((v) => one(v, "connected")));
     // Checked before anything is saved: a call with an app we do not know changes nothing.
     await patchSettings({ grocery_app: main, fallback_app: fallback ?? "none" }, c);
     saveHouse({ connected_apps: JSON.stringify(SHOP_APPS.filter((a) => connected.has(a))) }, by);
@@ -253,12 +285,13 @@ export function mountFamilyRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: { a
 
   // set_cook { name, days?, arrival?, makes_well?, wont_make?, time_limit?, new_recipes?, note? }: the cook. A name is needed
   // every time; the cook's days and arrival time the first time. Only the fields given change; null clears a word field.
+  // A cook who comes twice a day has a list of visits as arrival, each with the meals it makes when the family said.
   write("/api/family/cook", (b, by) => {
     const had = getHouse(db);
     const set: Partial<typeof house.$inferInsert> = { cook_name: name(b.name, "the cook's name") };
     if (b.days !== undefined || !had.cook_days) set.cook_days = JSON.stringify(weekdays(b.days, "days"));
     if (b.arrival !== undefined || !had.cook_arrival)
-      set.cook_arrival = typeof b.arrival === "string" && /^([01]\d|2[0-3]):[0-5]\d$/.test(b.arrival) ? b.arrival : refuse('arrival must be a time as "HH:MM", like "07:30"');
+      set.cook_arrival = arrival(b.arrival, [...SLOTS, ...houseView(had).extra_slots.map((s) => s.name)]);
     for (const [field, column] of [["makes_well", "cook_makes_well"], ["wont_make", "cook_wont_make"], ["time_limit", "cook_time_limit"], ["note", "cook_note"]] as const)
       if (b[field] !== undefined) set[column] = words(b[field], field);
     if (b.new_recipes !== undefined) set.cook_new_recipes = b.new_recipes === null ? null : (COOK_NEW_RECIPES as readonly unknown[]).includes(b.new_recipes)

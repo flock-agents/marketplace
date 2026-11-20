@@ -1,10 +1,10 @@
 import { useState, type ReactNode } from "react";
 import { Button, Callout, Card, Confirm, Detail, Empty, ErrorCard, Field, Form, Heading, InlinePanel, Page, PropertyChips, Row, RowList, Section, Skeleton, Stack, label, useApp, useTable, useToast, type FormProps } from "../flock/ui";
-import { clockText, WEEKDAYS } from "../../server/dates";
+import { WEEKDAYS } from "../../server/dates";
 import { APP_NAMES, COOK_NEW_RECIPES, GROUPS, RULE_KINDS, RULE_LABELS, SHOP_APPS, SLOTS, type GroceryApp } from "../../server/db/constants";
 import { EverydayItems } from "./EverydayItems";
 import { RowsEditor } from "./RowsEditor";
-import { agentName, cookDetails, cookingDaysText, profileWaiting, ruleChip } from "./format";
+import { agentName, cookDetails, cookingDaysText, cookVisitsText, profileWaiting, ruleChip } from "./format";
 import { joined, send, typedList, useLive, why, type Family, type PersonRow } from "./shared";
 
 const GROUP_LABELS: Record<string, string> = { child: "Child", adult: "Adult", elder: "Elder" };
@@ -27,7 +27,7 @@ const NEW_PERSON: FormProps["fields"] = [{ type: "text", name: "name", label: "N
 const COOK_FIELDS: FormProps["fields"] = [
   { type: "text", name: "name", label: "Name", required: true },
   { type: "multi", name: "days", label: "Days the cook comes", options: [...WEEKDAYS] },
-  { type: "text", name: "arrival", label: "Arrives at (24-hour time)", required: true, placeholder: "07:30" },
+  { type: "text", name: "arrival", label: "Arrives at (24-hour time; a comma between two visits)", required: true, placeholder: "07:30, or 06:00, 16:30" },
   { type: "text", name: "makes_well", label: "Makes well" },
   { type: "text", name: "wont_make", label: "Doesn't make well, or won't make" },
   { type: "text", name: "time_limit", label: "The cook's time", placeholder: "leaves early: a dish or two in the morning" },
@@ -37,8 +37,10 @@ const COOK_FIELDS: FormProps["fields"] = [
 const APPS_FIELDS: FormProps["fields"] = [
   { type: "select", name: "main", label: "Main app", required: true, options: [...SHOP_APPS], optionLabels: APP_NAMES },
   { type: "select", name: "fallback", label: "When something isn't there", options: ["none", ...SHOP_APPS], optionLabels: FALLBACK_LABELS },
-  { type: "multi", name: "connected", label: "Also connected", options: [...SHOP_APPS], optionLabels: APP_NAMES },
+  // The tick list shows its options as they are, so the apps are listed by name and turned back into ids on save (APP_BY_NAME).
+  { type: "multi", name: "connected", label: "Signed in", options: SHOP_APPS.map((a) => APP_NAMES[a]) },
 ];
+const APP_BY_NAME: Record<string, GroceryApp> = Object.fromEntries(SHOP_APPS.map((a) => [APP_NAMES[a], a]));
 /** The fields of a form as the routes take them: an emptied field is sent as null, which clears it. */
 const cleared = (v: Record<string, unknown>, names: readonly string[]) => Object.fromEntries(names.map((n) => [n, v[n] ?? null]));
 const appNames = (apps: readonly GroceryApp[]) => apps.map((a) => APP_NAMES[a] ?? a).join(", ");
@@ -95,10 +97,14 @@ export function FamilyPage() {
     } finally { void items.refetch(); }
   };
   const slotNames = [...SLOTS, ...house.extra_slots.map((s) => s.name)];
-  const otherApps = shopping.connected.filter((a) => a !== shopping.main && a !== shopping.fallback);
   const cook = house.cook_name
-    ? [house.cook_name, house.cook_days.length ? cookingDaysText(house.cook_days) : null, house.cook_arrival ? `comes at ${clockText(house.cook_arrival)}` : null].filter(Boolean).join(", ")
+    ? [house.cook_name, house.cook_days.length ? cookingDaysText(house.cook_days) : null, cookVisitsText(house.cook_visits)].filter(Boolean).join(", ")
     : "No cook yet";
+  /** The arrival as typed ("6:00, 16:30") as set_cook takes it: one time, or the visits, each keeping the meals it had. */
+  const arrivalOf = (typed: unknown): string | { at: string; meals?: string[] }[] => {
+    const times = String(typed ?? "").split(",").map((t) => t.trim().replace(/^(\d):/, "0$1:")).filter(Boolean);
+    return times.length > 1 ? times.map((at) => house.cook_visits.find((v) => v.at === at) ?? { at }) : times[0] ?? "";
+  };
   const opened = editing?.startsWith("person:") ? people.find((p) => `person:${p.id}` === editing) : undefined;
 
   return (
@@ -142,9 +148,9 @@ export function FamilyPage() {
         ))}
         {panel("cook", "Cook", (
           <Form fields={COOK_FIELDS} onCancel={close}
-            initial={{ name: house.cook_name, days: house.cook_days, arrival: house.cook_arrival, makes_well: house.cook_makes_well, wont_make: house.cook_wont_make,
+            initial={{ name: house.cook_name, days: house.cook_days, arrival: house.cook_visits.map((v) => v.at).join(", "), makes_well: house.cook_makes_well, wont_make: house.cook_wont_make,
               time_limit: house.cook_time_limit, new_recipes: house.cook_new_recipes, note: house.cook_note }}
-            onSubmit={(v) => save("family/cook", { name: v.name, days: v.days ?? [], arrival: String(v.arrival ?? "").trim().replace(/^(\d):/, "0$1:"), ...cleared(v, [...COOK_WORDS, "new_recipes"]) })} />
+            onSubmit={(v) => save("family/cook", { name: v.name, days: v.days ?? [], arrival: arrivalOf(v.arrival), ...cleared(v, [...COOK_WORDS, "new_recipes"]) })} />
         ))}
         {panel("slots", "Extra meals, like a tiffin", (
           <RowsEditor addLabel="Add a meal" onCancel={close}
@@ -175,7 +181,7 @@ export function FamilyPage() {
         <Detail fields={[
           { label: "Main app", value: APP_NAMES[shopping.main] ?? shopping.main },
           { label: "When something isn't there", value: shopping.fallback ? APP_NAMES[shopping.fallback] : "None" },
-          { label: "Also connected", value: otherApps.length ? appNames(otherApps) : "None" },
+          { label: "Signed in", value: shopping.connected.length ? appNames(shopping.connected) : "None yet" },
           { label: "Subscriptions (left out)", value: subscriptions.length ? subscriptions.map((s) => `${s.name} from ${s.subscription}`).join(", ") : "None" },
         ]} />
         <Field type="checkbox" name="order_without_asking" label="Order without asking" value={shopping.order_without_asking} onChange={(v) => void setOrderWithoutAsking(v === true)} />
@@ -183,8 +189,9 @@ export function FamilyPage() {
         <Row>{edit("apps", "Shopping apps")}{edit("subscriptions", "Subscriptions", items.loading)}</Row>
         {panel("apps", "Shopping apps", (
           <Form fields={APPS_FIELDS} onCancel={close}
-            initial={{ main: shopping.main, fallback: shopping.fallback ?? "none", connected: shopping.connected }}
-            onSubmit={(v) => save("family/shopping-apps", { main: v.main, fallback: v.fallback && v.fallback !== "none" ? v.fallback : null, connected: (v.connected as string[] | null) ?? [] })} />
+            initial={{ main: shopping.main, fallback: shopping.fallback ?? "none", connected: shopping.connected.map((a) => APP_NAMES[a] ?? a) }}
+            onSubmit={(v) => save("family/shopping-apps", { main: v.main, fallback: v.fallback && v.fallback !== "none" ? v.fallback : null,
+              connected: ((v.connected as string[] | null) ?? []).map((n) => APP_BY_NAME[n] ?? n) })} />
         ))}
         {panel("subscriptions", "Subscriptions", (
           <Stack gap="sm">

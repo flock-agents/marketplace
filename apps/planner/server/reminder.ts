@@ -143,13 +143,14 @@ function build(tx: Db, which: Which, now: Date, by: string, changes: Change[], s
     }
   }
 
-  // The carts this reminder changed are copied to their apps by the agent.
+  // The carts this reminder changed are copied to their apps by the agent: the apps the family has signed in to.
   const touched = new Set(changes.filter((c) => c[0] === "orders").map((c) => c[1]));
   // Order without asking: each open cart is ordered as her yes would order it (cart.ts orderCart). An app with an order still
   // being placed keeps its open cart open, ordered at the next yes. `ordered` is every cart this reminder ordered, so a retry
   // answers the same.
   if (shop.order_without_asking) {
-    for (const c of cartsView(tx).carts) if (c.status === "open") orderCart(tx, c.app as GroceryApp, by, { ...opts, reminder_key: key, schedule });
+    // Only on an app the family has signed in to: the agent cannot check out on one it is not connected to.
+    for (const c of cartsView(tx).carts) if (c.status === "open" && shop.connected.includes(c.app as GroceryApp)) orderCart(tx, c.app as GroceryApp, by, { ...opts, reminder_key: key, schedule });
   }
   const ordered: Reminder["ordered"] = tx.select().from(orders).where(and(eq(orders.status, "ordering"), eq(orders.reminder_key, key))).all()
     .map((o) => { const a = orderAnswer(tx, o); return { order_id: o.id, app: o.app as GroceryApp, message: a.message }; });
@@ -159,7 +160,7 @@ function build(tx: Db, which: Which, now: Date, by: string, changes: Change[], s
   const cart_items = [...new Set(open.flatMap((c) => c.lines.filter((l) => (l.qty ?? 0) > 0).map((l) => l.item)))];
   const short = open.find((c) => (c.delivery_gap ?? 0) > 0);
   const carts = all.map((c) => ({ order_id: c.order_id, app: c.app as GroceryApp, status: c.status as "open" | "ordering", lines: c.lines,
-    sync: c.status === "open" && CART_SYNC[c.app as GroceryApp] && touched.has(c.order_id) }));
+    sync: c.status === "open" && CART_SYNC[c.app as GroceryApp] && shop.connected.includes(c.app as GroceryApp) && touched.has(c.order_id) }));
   const r: Reminder = { which, date, meals, ask_ingredients, added, cart_items, asks,
     delivery_gap: short ? { app: APP_NAMES[short.app as GroceryApp] ?? short.app, rupees: short.delivery_gap! } : null, ordered,
     empty: !meals.length && !cart_items.length && !asks.length && !ordered.length, text: "", app_text: "", block: null, carts };

@@ -6,8 +6,8 @@
 betas included) and library 1.10.11.
 
 - **Family.** The Family page holds who eats at home, the house rules, the cook, the days you cook (Monday to Saturday
-  until you change them), the shopping apps you use (a main one, one to try when something is not on it, and the others you
-  are signed in to) and the items delivered to you by someone else, such as milk from a milkman, which are left out of
+  until you change them), the shopping apps you use (a main one, one to try when something is not on it, and the ones you
+  are signed in to: choosing an app does not mark it signed in, and nothing is read from or copied to an app until it is) and the items delivered to you by someone else, such as milk from a milkman, which are left out of
   running low. Tell the agent or edit it yourself.
 - **The week, planned and kept.** The week is planned on Sunday at 11 am, on your cooking days only, and each day is kept
   as soon as it is planned: you do not need to reply. The Sunday message is Monday's meals plus a link to the Week page.
@@ -25,7 +25,8 @@ betas included) and library 1.10.11.
 - **A plan the cart can use.** Every planned dish carries its ingredients, in amounts for your family: the agent's plan is
   refused until it does, so the cart fills from it. A child's school tiffin is its own meal on school days, and a dish is
   not repeated in the week unless you asked for it. The plan follows what you told the agent about the cook: what the cook
-  does not make, how much time the cook has, and whether the cook tries new recipes or keeps to familiar ones.
+  does not make, how much time the cook has, and whether the cook tries new recipes or keeps to familiar ones. A cook
+  who comes twice a day has both visits, each with the meals it makes.
 - **House rules read right.** "No eggs on Tuesday" shows as "Tue · No eggs". A rule can hold every day ("mostly
   vegetarian"), and anything else about how the house eats is kept as notes.
 - **The Week page** says when the week was really planned, and the Sunday link opens the week it planned.

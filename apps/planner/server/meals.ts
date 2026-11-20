@@ -5,6 +5,7 @@ import type { Hono } from "hono";
 import { and, asc, eq, gte, inArray, isNotNull, lte, sql } from "drizzle-orm";
 import { dish_items, dishes, house as house_t, items, people, plan_meals, regulars, saved_recipes } from "./db/schema";
 import { normItem } from "./products";
+import { closest } from "./agentOps";
 import { SLOTS, STAPLE_DISHES, type GroceryApp } from "./db/constants";
 import { addDays, mondayOf, todayStr, weekDates, weekdayOf } from "./dates";
 import { introText, weekLink, weekMessage, weekSendText } from "./messages";
@@ -93,8 +94,19 @@ export function weekContext(db: Db, weekStart: string): WeekContext {
 /** A real calendar date as "YYYY-MM-DD". */
 export const dateOf = (v: unknown, what: string): string =>
   typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) && addDays(v, 0) === v ? v : refuse(`${what} must be a date as YYYY-MM-DD`);
-const slotOf = (v: unknown, slots: string[]): string =>
-  slots.find((s) => typeof v === "string" && s.toLowerCase() === v.trim().toLowerCase()) ?? refuse(`slot must be one of: ${slots.join(", ")}`);
+/** A slot by its name, whatever its capitals. One that is none of them is refused with the list, and with the name that was
+ *  probably meant when it is near one ("Diner"; "tiffin" for "Agastya's tiffin"), as a field is (agentOps.ts checkFields).
+ *  A meal sent with no slot is told so, not that its slot is wrong. */
+const slotOf = (v: unknown, slots: string[]): string => {
+  const given = typeof v === "string" ? v.trim() : "";
+  if (!given) return refuse(`slot is required: one of ${slots.join(", ")}`);
+  const hit = slots.find((s) => s.toLowerCase() === given.toLowerCase());
+  if (hit) return hit;
+  // Part of one slot's name only ("tiffin") is that slot; else the closest spelling.
+  const within = slots.filter((s) => s.toLowerCase().includes(given.toLowerCase()));
+  const near = within.length === 1 ? within[0] : closest(given, slots);
+  return refuse(`slot must be one of: ${slots.join(", ")}${near ? ` (did you mean ${near}?)` : ""}`);
+};
 export const flag = (v: unknown, what: string): boolean => (typeof v === "boolean" ? v : refuse(`${what} must be true or false`));
 
 function itemsOf(v: unknown, dish: string): Item[] {

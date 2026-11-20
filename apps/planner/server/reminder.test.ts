@@ -280,6 +280,17 @@ describe("the reminder", () => {
       "I've ordered curd, bread, atta and toor dal on Zepto."].join("\n"));
   });
 
+  it("an app the family has not signed in to: its cart is filled but not marked to copy, and never ordered without asking", async () => {
+    const k = await start();
+    await k.op("set_shopping_apps", { main: "zepto", fallback: null, connected: [] });
+    const r = await k.reminder("evening");
+    expect(r.carts).toEqual([expect.objectContaining({ app: "zepto", status: "open", sync: false })]);
+    await k.owner("PATCH", "/api/_app/settings", { order_without_asking: true });
+    const again = await k.reminder("evening");
+    expect(again.ordered).toEqual([]);
+    expect(k.rows("orders").map((o) => [o.app, o.status])).toEqual([["zepto", "open"]]);
+  });
+
   it("an everyday item put on the cart by the reminder is not also asked about", async () => {
     const k = await start();
     // Eggs: an everyday item with a confident history, last bought 20 days ago (due).

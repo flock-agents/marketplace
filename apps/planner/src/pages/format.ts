@@ -52,7 +52,7 @@ const appName = (c: { app: string; app_name?: string }): string => c.app_name ??
 type CartLine = { id: string; item: string; name_on_app: string | null; pack: string | null; for_note: string | null; image: string | null;
   price: number | null; qty: number | null; source: string | null };
 type CartLike = { app: string; app_name?: string; status: string; lines: CartLine[]; total: number | null; delivery_gap: number | null;
-  sync_state: string | null; synced_at: string | null; sync_asked_at: string | null; building_at_order: boolean };
+  sync_state: string | null; synced_at: string | null; sync_asked_at: string | null; building_at_order: boolean; connected?: boolean };
 /** One thing in the ItemPicker, as the library takes it. */
 export type PickItem = { id: string; name: string; meta?: string; image?: string; price?: number; qty: number };
 /** One line's qty as the cart's picks route takes it. */
@@ -85,13 +85,14 @@ export function orderLabel(c: CartLike): string {
 }
 
 /** The line under a cart, or null: being ordered, waiting for payment, still ordering her last cart, no chat to order from,
- *  built when she orders, her edits being copied to the app, the app's cart being read, or how far from free delivery. */
+ *  an app not signed in to yet (nothing is copied to it, so it is never "updating"), built when she orders, her edits being copied to the app, the app's cart being read, or how far from free delivery. */
 export function cartNote(c: CartLike, opts: { now?: Date; already?: boolean; chat?: boolean; agent?: string } = {}): string | null {
   const app = appName(c);
   if (c.status === "ordering") return "Ordering…";
   if (c.status === "placed") return "Waiting for payment";
   if (opts.already) return `${app} is still ordering your last cart`;
   if (opts.chat === false) return `Ask ${opts.agent ?? "Butler"} on WhatsApp to order`;
+  if (c.connected === false) return `You haven't signed in to ${app} yet`;
   if (c.building_at_order) return `Putting this on ${app} takes a minute when you order`;
   if (c.sync_state === "pending") return `Updating your ${app} cart…`;
   const now = (opts.now ?? new Date()).getTime();
@@ -261,6 +262,13 @@ export function cookingDaysText(days: readonly string[]): string {
 export function ruleChip(r: { kind: string; days: readonly string[]; note?: string | null }): { label: string; value: string } {
   const what = r.kind === "other" && r.note ? r.note : [RULE_LABELS[r.kind as keyof typeof RULE_LABELS] ?? r.kind, r.note].filter(Boolean).join(": ");
   return { label: r.days.length ? r.days.join(", ") : "In general", value: what };
+}
+
+/** When the cook comes, as the Family page says it: "comes at 7:30 am", or for a cook who comes twice "comes at 6 am
+ *  (Breakfast, Lunch) and 4:30 pm (Dinner)"; null when no time was said. */
+export function cookVisitsText(visits: readonly { at: string; meals?: string[] }[]): string | null {
+  if (!visits.length) return null;
+  return `comes at ${visits.map((v) => `${clockText(v.at)}${v.meals?.length ? ` (${v.meals.join(", ")})` : ""}`).join(" and ")}`;
 }
 
 /** What the Family page says about the cook beyond who and when: what they make well and will not make, their time, and

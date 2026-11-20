@@ -71,6 +71,25 @@ describe("the house", () => {
     expect(rows("house").every((h) => h.cook_name === null)).toBe(true);
   });
 
+  it("set_cook takes a cook who comes twice a day, each visit with the meals it makes; one visit stays a plain time", async () => {
+    const { op, rows, owner } = await boot();
+    await op("set_slots", { extra_slots: [{ name: "Agastya's tiffin", days: ["Mon"], for: ["Agastya"] }] });
+    const twice = await op("set_cook", { name: "Lakshmi", days: ["Mon"], arrival: [{ at: "16:30", meals: ["dinner"] }, { at: "06:00", meals: ["Breakfast", "Lunch", "agastya's tiffin"] }] });
+    // Earliest first, the meals by their own names; cook_arrival stays the first visit for whoever reads one time.
+    expect(twice.house).toMatchObject({ cook_arrival: "06:00", cook_visits: [{ at: "06:00", meals: ["Breakfast", "Lunch", "Agastya's tiffin"] }, { at: "16:30", meals: ["Dinner"] }] });
+    expect((await owner("GET", "/api/family")).body.house.cook_visits).toHaveLength(2);
+    // Times alone are visits too; another field leaves them as they are.
+    expect((await op("set_cook", { name: "Lakshmi", arrival: ["06:00", "16:30"] })).house.cook_visits).toEqual([{ at: "06:00" }, { at: "16:30" }]);
+    expect((await op("set_cook", { name: "Lakshmi", note: "off on festival days" })).house.cook_visits).toEqual([{ at: "06:00" }, { at: "16:30" }]);
+    // One visit without meals is kept as the plain time, the shape every earlier row has.
+    expect((await op("set_cook", { name: "Lakshmi", arrival: ["07:30"] })).house).toMatchObject({ cook_arrival: "07:30", cook_visits: [{ at: "07:30" }] });
+    expect(rows("house")[0].cook_arrival).toBe("07:30");
+    for (const arrival of [[], ["6:00", "16:30"], "06:00 and 16:30", ["06:00", "06:00"], [{ at: "06:00", meals: ["Brunch"] }], [{ at: "06:00", meals: "Breakfast" }], [{ meals: ["Dinner"] }]])
+      expect((await op("set_cook", { name: "Lakshmi", arrival })).code, JSON.stringify(arrival)).toBe("APP_REFUSED");
+    expect((await op("set_cook", { name: "Lakshmi", arrival: "6:00 and 16:30" })).error).toContain('[{ at: "06:00", meals: ["Breakfast", "Lunch"] }');
+    expect(rows("house")[0].cook_arrival).toBe("07:30");
+  });
+
   it("set_cook refuses a missing name and a day that is not a weekday; it reads weekdays however they are written", async () => {
     const { op } = await boot();
     expect((await op("set_cook", { days: ["Mon"], arrival: "07:30" })).code).toBe("APP_REFUSED");
@@ -123,17 +142,20 @@ describe("the house", () => {
     expect((await k.owner("GET", "/api/family")).body.house.cooking_days).toEqual(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]);
   });
 
-  it("set_shopping_apps saves main and fallback as settings and every connected app; names or ids", async () => {
+  it("set_shopping_apps saves main and fallback as settings and the connected apps exactly as given; names or ids", async () => {
     const k = await boot();
     const heard: string[] = [];
     k.kit.ctx.events.subscribe((e) => { if (e.table === "_settings") heard.push(`${e.id} by ${e.by}`); });
     const r = await k.op("set_shopping_apps", { main: "Zepto", fallback: "BigBasket", connected: ["Blinkit", "amazon fresh"] });
     expect(r).toMatchObject({ main: "zepto", fallback: "bigbasket", order_without_asking: false });
-    expect([...r.connected].sort()).toEqual(["amazon", "bigbasket", "zepto", "zomato-blinkit"]);   // main and fallback are connected too
+    expect(r.connected).toEqual(["zomato-blinkit", "amazon"]);   // only what the call says: choosing an app is not signing in to it
     expect((await k.owner("GET", "/api/_app")).body.settings).toMatchObject({ grocery_app: "zepto", fallback_app: "bigbasket", order_without_asking: false });
     // The pages hear of the settings as of any setting, stamped as the agent's.
     expect(heard.sort()).toEqual(["fallback_app by agent:meal-agent", "grocery_app by agent:meal-agent"]);
-    expect((await k.owner("GET", "/api/family")).body).toMatchObject({ shopping: { main: "zepto", fallback: "bigbasket" }, house: { connected_apps: ["zepto", "zomato-blinkit", "bigbasket", "amazon"] } });
+    expect((await k.owner("GET", "/api/family")).body).toMatchObject({ shopping: { main: "zepto", fallback: "bigbasket" }, house: { connected_apps: ["zomato-blinkit", "amazon"] } });
+    // The live case: a main app and a fallback, neither signed in to yet.
+    const none = await k.op("set_shopping_apps", { main: "zepto", fallback: "swiggy-instamart", connected: [] });
+    expect(none).toMatchObject({ main: "zepto", fallback: "swiggy-instamart", connected: [], house: { connected_apps: [] } });
     expect((await k.op("set_shopping_apps", { main: "zepto", fallback: null, connected: [] })).fallback).toBeNull();
     expect((await k.owner("GET", "/api/_app")).body.settings.fallback_app).toBe("none");
     expect((await k.op("set_shopping_apps", { main: "dmart", fallback: null, connected: [] })).error).toContain("zepto");

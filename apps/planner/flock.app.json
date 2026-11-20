@@ -185,7 +185,7 @@
       },
       {
         "name": "set_cook",
-        "description": "The cook: who, which days, when they arrive, what they make well, what they do not make well or will not make, their time, and whether they try new recipes. { name, days?: [\"Mon\", ...], arrival?: \"HH:MM\", makes_well?, wont_make?, time_limit?: in the family's words (\"off to the next house at 9: a dish or two in the morning\"), new_recipes?: open (tries recipes from reels and the internet) | set_menu (better with familiar dishes), note? }. name every time; days and arrival the first time. Only what you send changes; null clears a field. Plans never give the cook what is in wont_make, fit time_limit, and keep to familiar dishes with set_menu."
+        "description": "The cook: who, which days, when they arrive, what they make well, what they do not make well or will not make, their time, and whether they try new recipes. { name, days?: [\"Mon\", ...], arrival?: \"HH:MM\" (a cook who comes more than once a day: a list of visits, [\"06:00\", \"16:30\"] or [{ at: \"06:00\", meals: [\"Breakfast\", \"Lunch\"] }, { at: \"16:30\", meals: [\"Dinner\"] }]; meals are slot names), makes_well?, wont_make?, time_limit?: in the family's words (\"off to the next house at 9: a dish or two in the morning\"), new_recipes?: open (tries recipes from reels and the internet) | set_menu (better with familiar dishes), note? }. name every time; days and arrival the first time. Only what you send changes; null clears a field. Plans never give the cook what is in wont_make, fit time_limit, and keep to familiar dishes with set_menu."
       },
       {
         "name": "set_slots",
@@ -197,7 +197,7 @@
       },
       {
         "name": "set_shopping_apps",
-        "description": "The family's shopping apps. { main: zepto | swiggy-instamart | zomato-blinkit | bigbasket | amazon, fallback: the app to try when something is not on the main one, or null, connected: [every app the family has signed in to] }. Apps by id or name (\"Blinkit\"). main and fallback are connected too, so need not be repeated; fallback must differ from main. Answers { main, fallback, connected, order_without_asking, house }."
+        "description": "The family's shopping apps. { main: zepto | swiggy-instamart | zomato-blinkit | bigbasket | amazon, fallback: the app to try when something is not on the main one, or null, connected: [only the apps the family has signed in to in Flock; [] when none yet] }. Apps by id or name (\"Blinkit\"). main and fallback may be apps not signed in to yet, and are never added to connected: send the call again after each sign-in. Order history is read, and a cart copied, only for a connected app; fallback must differ from main. Answers { main, fallback, connected, order_without_asking, house }."
       },
       {
         "name": "plan_week",

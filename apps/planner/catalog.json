@@ -105,7 +105,7 @@
           "type": "string",
           "required": false,
           "nullable": true,
-          "note": "\"HH:MM\""
+          "note": "\"HH:MM\", or for a cook who comes more than once JSON [{ at: \"HH:MM\", meals?: string[] }]"
         },
         "cook_makes_well": {
           "type": "string",
@@ -191,7 +191,7 @@
           "type": "string",
           "required": false,
           "nullable": true,
-          "note": "JSON GroceryApp[]: every shopping app the family has signed in to"
+          "note": "JSON GroceryApp[]: the shopping apps the family has signed in to (the main app only once it is)"
         },
         "history_synced": {
           "type": "string",
