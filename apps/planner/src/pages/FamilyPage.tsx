@@ -1,14 +1,15 @@
 import { useState, type ReactNode } from "react";
 import { Button, Callout, Card, Confirm, Detail, Empty, ErrorCard, Field, Form, Heading, InlinePanel, Page, PropertyChips, Row, RowList, Section, Skeleton, Stack, label, useApp, useTable, useToast, type FormProps } from "../flock/ui";
 import { clockText, WEEKDAYS } from "../../server/dates";
-import { APP_NAMES, GROUPS, RULE_KINDS, SHOP_APPS, SLOTS, type GroceryApp } from "../../server/db/constants";
+import { APP_NAMES, COOK_NEW_RECIPES, GROUPS, RULE_KINDS, RULE_LABELS, SHOP_APPS, SLOTS, type GroceryApp } from "../../server/db/constants";
 import { EverydayItems } from "./EverydayItems";
 import { RowsEditor } from "./RowsEditor";
-import { agentName, cookingDaysText, profileWaiting } from "./format";
+import { agentName, cookDetails, cookingDaysText, profileWaiting, ruleChip } from "./format";
 import { joined, send, typedList, useLive, why, type Family, type PersonRow } from "./shared";
 
 const GROUP_LABELS: Record<string, string> = { child: "Child", adult: "Adult", elder: "Elder" };
-const RULE_LABELS: Record<string, string> = { veg: "Vegetarian", egg: "Eggs, no meat", fasting: "Fasting", no_onion_garlic: "No onion or garlic", other: "Other" };
+const NEW_RECIPE_LABELS: Record<string, string> = { open: "Open to new recipes", set_menu: "Better with familiar dishes" };
+const COOK_WORDS = ["makes_well", "wont_make", "time_limit", "note"] as const;
 const FALLBACK_LABELS: Record<string, string> = { none: "None", ...APP_NAMES };
 /** A person's own words, kept as they said them. The name is asked only for a new person: it is how a person is found. */
 const PERSON_WORDS: FormProps["fields"] = [
@@ -28,6 +29,9 @@ const COOK_FIELDS: FormProps["fields"] = [
   { type: "multi", name: "days", label: "Days the cook comes", options: [...WEEKDAYS] },
   { type: "text", name: "arrival", label: "Arrives at (24-hour time)", required: true, placeholder: "07:30" },
   { type: "text", name: "makes_well", label: "Makes well" },
+  { type: "text", name: "wont_make", label: "Doesn't make well, or won't make" },
+  { type: "text", name: "time_limit", label: "The cook's time", placeholder: "leaves early: a dish or two in the morning" },
+  { type: "select", name: "new_recipes", label: "New recipes", options: [...COOK_NEW_RECIPES], optionLabels: NEW_RECIPE_LABELS },
   { type: "longtext", name: "note", label: "Note" },
 ];
 const APPS_FIELDS: FormProps["fields"] = [
@@ -127,6 +131,7 @@ export function FamilyPage() {
         <Detail fields={[
           { label: "Cooking days", value: cookingDaysText(house.cooking_days) },
           { label: "Cook", value: cook },
+          ...(house.cook_name ? cookDetails(house) : []),
           { label: "Extra meals", value: house.extra_slots.length ? house.extra_slots.map((s) => [s.name, s.days?.length ? `on ${joined(s.days)}` : "every day", s.for?.length ? `for ${joined(s.for)}` : null].filter(Boolean).join(" ")).join("; ") : "None" },
           { label: "Ordered in every week", value: house.order_in.length ? house.order_in.map((o) => [`${o.day} ${o.slot}`, o.note].filter(Boolean).join(": ")).join("; ") : "None" },
         ]} />
@@ -137,8 +142,9 @@ export function FamilyPage() {
         ))}
         {panel("cook", "Cook", (
           <Form fields={COOK_FIELDS} onCancel={close}
-            initial={{ name: house.cook_name, days: house.cook_days, arrival: house.cook_arrival, makes_well: house.cook_makes_well, note: house.cook_note }}
-            onSubmit={(v) => save("family/cook", { name: v.name, days: v.days ?? [], arrival: String(v.arrival ?? "").trim().replace(/^(\d):/, "0$1:"), ...cleared(v, ["makes_well", "note"]) })} />
+            initial={{ name: house.cook_name, days: house.cook_days, arrival: house.cook_arrival, makes_well: house.cook_makes_well, wont_make: house.cook_wont_make,
+              time_limit: house.cook_time_limit, new_recipes: house.cook_new_recipes, note: house.cook_note }}
+            onSubmit={(v) => save("family/cook", { name: v.name, days: v.days ?? [], arrival: String(v.arrival ?? "").trim().replace(/^(\d):/, "0$1:"), ...cleared(v, [...COOK_WORDS, "new_recipes"]) })} />
         ))}
         {panel("slots", "Extra meals, like a tiffin", (
           <RowsEditor addLabel="Add a meal" onCancel={close}
@@ -203,18 +209,18 @@ export function FamilyPage() {
           <RowsEditor addLabel="Add a rule" onCancel={close}
             columns={[
               { name: "kind", label: "Rule", type: "select", options: [...RULE_KINDS], optionLabels: RULE_LABELS },
-              { name: "days", label: "Days (with commas)", type: "text", placeholder: "Tue, Thu or Ekadashi" },
+              { name: "days", label: "Days (with commas; empty for every day)", type: "text", placeholder: "Tue, Thu or Ekadashi" },
               { name: "note", label: "Note", type: "text" },
             ]}
             initial={house.rules.map((r) => ({ kind: r.kind, days: joined(r.days), note: r.note ?? "" }))}
-            onSave={(rows) => save("family/rules", { rules: rows.filter((r) => r.kind || r.days).map((r) => ({ kind: r.kind, days: typedList(r.days), note: r.note || null })) })} />
+            onSave={(rows) => save("family/rules", { rules: rows.filter((r) => r.kind || r.days || r.note).map((r) => ({ kind: r.kind || null, days: typedList(r.days), note: r.note || null })) })} />
         ))}
         {panel("notes", "Notes", (
           <Form fields={[{ type: "longtext", name: "notes", label: "Anything else about how the house eats" }]} initial={{ notes: house.notes }} onCancel={close}
             onSubmit={(v) => save("family/rules", { notes: v.notes ?? null })} />
         ))}
         {house.rules.length
-          ? <PropertyChips items={house.rules.map((r) => ({ label: joined(r.days), value: [RULE_LABELS[r.kind] ?? r.kind, r.note].filter(Boolean).join(": ") }))} />
+          ? <PropertyChips items={house.rules.map(ruleChip)} />
           : <p className="pl-quiet">No rules yet.</p>}
         {house.notes ? <p className="pl-notes">{house.notes}</p> : null}
       </Section>

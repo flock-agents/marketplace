@@ -22,6 +22,13 @@ betas included) and library 1.10.11.
 - **One cart per app.** What you need is gathered into one cart for each shopping app. Each cart has its own Order button,
   and the app's own cart is kept in step with it as you change it (Amazon's cart is built when you order). The agent
   orders it only on your yes. An order that was not paid within 24 hours goes back to the cart, and you are told once.
+- **A plan the cart can use.** Every planned dish carries its ingredients, in amounts for your family: the agent's plan is
+  refused until it does, so the cart fills from it. A child's school tiffin is its own meal on school days, and a dish is
+  not repeated in the week unless you asked for it. The plan follows what you told the agent about the cook: what the cook
+  does not make, how much time the cook has, and whether the cook tries new recipes or keeps to familiar ones.
+- **House rules read right.** "No eggs on Tuesday" shows as "Tue · No eggs". A rule can hold every day ("mostly
+  vegetarian"), and anything else about how the house eats is kept as notes.
+- **The Week page** says when the week was really planned, and the Sunday link opens the week it planned.
 - **Pantry page.** Each item with its status (in stock, low or snoozed), when it was last bought, how long it usually
   lasts, and what the app learned from each order and each answer of yours.
 - **Saved recipes with videos.** Share a reel, a short or any link and say "save this": it is kept on the Recipes page, now

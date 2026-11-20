@@ -1,7 +1,8 @@
 import { describe, expect, it } from "bun:test";
 import { APP_NAMES, TAG_TEXT } from "../../server/db/constants";
 import { agentName, cartNote, cookingDaysText, cartTitle, debouncePicks, dishNote, eventRows, forText, itemCallout, itemSubtitle, orderLabel, orderRow, outsideText, pantryTabs,
-  patternFields, pausedNow, pickerItems, profileWaiting, recipeSourceLabel, regularText, statusTone, syncPicker, TAG_TONES, textList, weekTitle } from "./format";
+  patternFields, pausedNow, pickerItems, profileWaiting, recipeSourceLabel, regularText, statusTone, syncPicker, TAG_TONES, textList, weekTitle,
+  cookDetails, linkWeek, plannedText, ruleChip, weekToOpen } from "./format";
 
 describe("regularText", () => {
   it("says how much and how often", () => {
@@ -313,5 +314,51 @@ describe("cookingDaysText", () => {
     expect(cookingDaysText(["Fri", "Mon", "Wed"])).toBe("Mon, Wed, Fri");
     expect(cookingDaysText(["Sat", "Sun"])).toBe("Sat, Sun");
     expect(cookingDaysText([])).toBe("No days");
+  });
+});
+
+describe("ruleChip", () => {
+  it("reads what the rule says, never its opposite; a rule with no days holds in general; an other rule is its note", () => {
+    expect(ruleChip({ kind: "no_eggs", days: ["Tue"] })).toEqual({ label: "Tue", value: "No eggs" });
+    expect(ruleChip({ kind: "egg", days: ["Thu"] })).toEqual({ label: "Thu", value: "Eggs but no meat" });
+    expect(ruleChip({ kind: "veg", days: ["Tue", "Thu"], note: "Nani only" })).toEqual({ label: "Tue, Thu", value: "Vegetarian: Nani only" });
+    expect(ruleChip({ kind: "other", days: [], note: "Mostly vegetarian" })).toEqual({ label: "In general", value: "Mostly vegetarian" });
+  });
+});
+
+describe("cookDetails", () => {
+  it("lists only what was said about the cook", () => {
+    expect(cookDetails({ cook_makes_well: "dosa", cook_wont_make: "non-veg", cook_time_limit: "a dish or two in the morning", cook_new_recipes: "set_menu" })).toEqual([
+      { label: "Makes well", value: "dosa" }, { label: "Doesn't make", value: "non-veg" }, { label: "Cook's time", value: "a dish or two in the morning" },
+      { label: "New recipes", value: "Better with familiar dishes" }]);
+    expect(cookDetails({ cook_makes_well: null, cook_wont_make: null, cook_time_limit: null, cook_new_recipes: "open" })).toEqual([{ label: "New recipes", value: "Open to new recipes" }]);
+  });
+});
+
+describe("the Week page's week", () => {
+  it("says when the week was really planned", () => {
+    const at = new Date(2026, 10, 19, 16, 5).toISOString();   // Thursday 19 Nov, 4:05 pm local
+    expect(plannedText(at)).toBe("Planned Thu 19 Nov, 4:05 pm");
+  });
+
+  it("reads the week a link names, a Monday only", () => {
+    expect(linkWeek("#/week?week=2026-11-23")).toBe("2026-11-23");
+    expect(linkWeek("#/week")).toBeNull();
+    expect(linkWeek("#/week?week=2026-11-24")).toBeNull();
+    expect(linkWeek("#/week?week=2026-02-30")).toBeNull();
+  });
+
+  it("opens this week, unless nothing is planned in it from today on and the planned week has meals", () => {
+    const wk = (dates: Record<string, number>) => ({ days: Object.entries(dates).map(([date, n]) => ({ date, meals: Array(n).fill({}) })) });
+    const base = { thisWeek: "2026-11-16", today: "2026-11-22", planned: "2026-11-23" };
+    // Sunday: this week's meals are behind, next week's plan is there.
+    expect(weekToOpen({ ...base, current: wk({ "2026-11-20": 2, "2026-11-22": 0 }), other: wk({ "2026-11-23": 3 }) })).toBe("2026-11-23");
+    // Something still to come this week: this week.
+    expect(weekToOpen({ ...base, current: wk({ "2026-11-22": 1 }), other: wk({ "2026-11-23": 3 }) })).toBe("2026-11-16");
+    // Nothing planned anywhere: this week. Still loading: wait.
+    expect(weekToOpen({ ...base, current: wk({}), other: wk({ "2026-11-23": 0 }) })).toBe("2026-11-16");
+    expect(weekToOpen({ ...base, current: null, other: null })).toBeNull();
+    expect(weekToOpen({ ...base, current: wk({}), other: null })).toBeNull();
+    expect(weekToOpen({ ...base, planned: "2026-11-16", current: null, other: null })).toBe("2026-11-16");
   });
 });

@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button, Callout, Card, Confirm, ErrorCard, Field, Icon, Page, Row, Schedule, Skeleton, Stack, Value, safeHref, scheduleAddKey, useApp, useChat, useTable, useToast } from "../flock/ui";
-import { addDays, clockText, dayLabel, mondayOf, todayStr, weekDates, weekdayLong, weekdayOf } from "../../server/dates";
+import { addDays, dayLabel, mondayOf, todayStr, weekDates, weekdayLong, weekdayOf } from "../../server/dates";
 import { DishPanel } from "./DishPanel";
-import { agentName, dishNote, textList, weekTitle } from "./format";
+import { agentName, dishNote, linkWeek, plannedText, textList, weekTitle, weekToOpen } from "./format";
 import { send, useLive, why, type DishView, type Family, type MealView, type RecipeRow, type WeekView } from "./shared";
 
 /** What is open in the schedule: a meal by its id (with one of its dishes, or a new one, being edited), or an add spot (a day,
@@ -18,8 +18,13 @@ const longLabel = (date: string) => dayLabel(date).replace(weekdayOf(date), week
  *  its dishes editable there. A day that is not a cooking day says so, with a way to plan it this once. */
 export function WeekPage() {
   const thisWeek = mondayOf(todayStr());
+  // The planned week: the one the link names ("#/week?week=…", the Sunday message), else next week. The page opens on it when
+  // nothing is planned in this week from today on (a Sunday, or a first week planned mid-week for the next).
+  const [planned] = useState(() => linkWeek(typeof location === "undefined" ? "" : location.hash) ?? addDays(thisWeek, 7));
   const [weekStart, setWeekStart] = useState(thisWeek);
+  const [chosen, setChosen] = useState(false);
   const week = useLive<WeekView>(`weeks/${weekStart}`, ["plan_meals", "dishes", "dish_items"]);
+  const other = useLive<WeekView>(`weeks/${planned}`, ["plan_meals"]);
   const family = useLive<Family>("family", ["house"]);
   const recipes = useTable<RecipeRow>("saved_recipes", { limit: 500 });
   const agent = agentName(useApp().display);
@@ -28,7 +33,15 @@ export function WeekPage() {
   const [open, setOpen] = useState<Open>(null);
   const [asking, setAsking] = useState<{ date: string; slot: string; dishes: number } | null>(null);
 
-  const go = (to: string) => { setOpen(null); setWeekStart(to); };
+  const go = (to: string) => { setOpen(null); setChosen(true); setWeekStart(to); };
+  // Decided once, before the family picks a week themselves.
+  useEffect(() => {
+    if (chosen || weekStart !== thisWeek) return;
+    const to = weekToOpen({ thisWeek, today: todayStr(), planned, current: week.data, other: other.data });
+    if (to === null) return;
+    setChosen(true);
+    if (to !== thisWeek) setWeekStart(to);
+  }, [chosen, weekStart, thisWeek, planned, week.data, other.data]);
   const done = () => { setOpen(null); void week.refetch(); };
   const orderIn = async (date: string, slot: string, on: boolean) => {
     try { await send("meals", { date, slot, ordered_in: on }); setOpen(null); void week.refetch(); }
@@ -53,7 +66,7 @@ export function WeekPage() {
   const offDays = house ? weekDates(weekStart).filter((d) => d >= today && !house.cooking_days.includes(weekdayOf(d)) && !meals.some((m) => m.date === d)) : [];
   const status = week.data?.status ?? null;
   const subtitle = status === null ? `Not planned yet · ask ${agent} to plan it`
-    : `Planned Sunday ${clockText(house?.plan_time ?? "11:00")} · tell ${agent} to change anything`;
+    : `${week.data?.planned_at ? plannedText(week.data.planned_at) : "Planned"} · tell ${agent} to change anything`;
   const opened = open && "meal" in open ? meals.find((m) => m.id === open.meal) : undefined;
 
   const mealPanel = (m: MealView, editing: string | undefined) => (

@@ -1,8 +1,8 @@
 // The words the pages show for a dish, a cart, an order, a pantry item, an everyday item and a recipe. No React and no
 // library import here, so the wording is tested on its own. The dates, the grocery apps' names and a dish's line are the
 // server's own. The app an item is bought on is never named on the Pantry or the item page.
-import { addDays, clockText, dayLabel, todayStr, WEEKDAYS, weekdayLong, type Weekday } from "../../server/dates";
-import { APP_NAMES, SYNC_ASK_COOLDOWN_MIN, type GroceryApp } from "../../server/db/constants";
+import { addDays, clockText, dayLabel, todayStr, WEEKDAYS, weekdayLong, weekdayOf, type Weekday } from "../../server/dates";
+import { APP_NAMES, RULE_LABELS, SYNC_ASK_COOLDOWN_MIN, type GroceryApp } from "../../server/db/constants";
 import { dishText } from "../../server/dishText";
 
 /** A dish in one line, "Parathas (for Dad)": the same words the messages use. */
@@ -253,4 +253,46 @@ export function cookingDaysText(days: readonly string[]): string {
     return `${on[0]} – ${on[on.length - 1]}${offText}`;
   }
   return on.join(", ");
+}
+
+// ── The family and the week ──
+
+/** A house rule as a chip: its days ("Tue", "In general" for every day) and what it says ("No eggs"; an other rule is its note). */
+export function ruleChip(r: { kind: string; days: readonly string[]; note?: string | null }): { label: string; value: string } {
+  const what = r.kind === "other" && r.note ? r.note : [RULE_LABELS[r.kind as keyof typeof RULE_LABELS] ?? r.kind, r.note].filter(Boolean).join(": ");
+  return { label: r.days.length ? r.days.join(", ") : "In general", value: what };
+}
+
+/** What the Family page says about the cook beyond who and when: what they make well and will not make, their time, and
+ *  whether they try new recipes. Only what was said. */
+export function cookDetails(h: { cook_makes_well: string | null; cook_wont_make: string | null; cook_time_limit: string | null; cook_new_recipes: string | null }):
+  { label: string; value: string }[] {
+  const recipes = h.cook_new_recipes === "open" ? "Open to new recipes" : h.cook_new_recipes === "set_menu" ? "Better with familiar dishes" : null;
+  return [["Makes well", h.cook_makes_well], ["Doesn't make", h.cook_wont_make], ["Cook's time", h.cook_time_limit], ["New recipes", recipes]]
+    .filter((f): f is [string, string] => !!f[1]).map(([label, value]) => ({ label, value }));
+}
+
+/** When the week was planned, as the Week page's header says it: "Planned Sat 21 Nov, 4:05 pm" (local time). */
+export function plannedText(iso: string): string {
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const date = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  return `Planned ${dayLabel(date)}, ${clockText(`${pad(d.getHours())}:${pad(d.getMinutes())}`)}`;
+}
+
+/** The week a link opens ("#/week?week=2026-11-23"): its Monday, or null. */
+export function linkWeek(hash: string): string | null {
+  const w = /[?&]week=(\d{4}-\d{2}-\d{2})(?:&|$)/.exec(hash)?.[1];
+  return w && addDays(w, 0) === w && weekdayOf(w) === "Mon" ? w : null;
+}
+
+/** The week the Week page opens on: this week, unless nothing is planned in it from today on and the planned week (the link's,
+ *  else next week) has meals. Null while either is still loading. */
+export function weekToOpen(o: { thisWeek: string; today: string; planned: string; current: { days: { date: string; meals: unknown[] }[] } | null;
+  other: { days: { date: string; meals: unknown[] }[] } | null }): string | null {
+  if (o.planned === o.thisWeek) return o.thisWeek;
+  if (!o.current) return null;
+  if (o.current.days.some((d) => d.date >= o.today && d.meals.length)) return o.thisWeek;
+  if (!o.other) return null;
+  return o.other.days.some((d) => d.meals.length) ? o.planned : o.thisWeek;
 }
