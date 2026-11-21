@@ -4,6 +4,7 @@ import { describe, it, expect } from "bun:test";
 import { readFileSync } from "fs";
 import { join } from "path";
 import { agentOps, FIELDS, FIELDS_SECTION, OPERATION_NAMES, ROUTES } from "./agentOps";
+import { APP_NAMES } from "./db/constants";
 
 const manifest = JSON.parse(readFileSync(join(import.meta.dir, "..", "flock.app.json"), "utf8"));
 const guide = readFileSync(join(import.meta.dir, "agent-guide.md"), "utf8");
@@ -72,6 +73,14 @@ describe("the agent's interface", () => {
     for (const s of settings) {
       expect(s.group, s.key).toBe("How we order");
       expect(s.label.trim().length > 0 && (s.help ?? "").trim().length > 0, s.key).toBe(true);
+    }
+  });
+
+  it("the grocery app settings show each app by its name, not its id", () => {
+    const named = { ...APP_NAMES, none: "None" } as Record<string, string>;
+    for (const key of ["grocery_app", "fallback_app"]) {
+      const s: { options: string[]; optionLabels: Record<string, string> } = manifest.settings.find((x: { key: string }) => x.key === key);
+      expect(s.optionLabels, key).toEqual(Object.fromEntries(s.options.map((o) => [o, named[o]])));
     }
   });
 

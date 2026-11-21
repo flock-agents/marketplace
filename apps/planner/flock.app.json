@@ -90,6 +90,13 @@
         "bigbasket",
         "amazon"
       ],
+      "optionLabels": {
+        "zepto": "Zepto",
+        "swiggy-instamart": "Swiggy Instamart",
+        "zomato-blinkit": "Blinkit",
+        "bigbasket": "BigBasket",
+        "amazon": "Amazon Fresh"
+      },
       "default": "zepto",
       "scope": "owner",
       "label": "Your main grocery app",
@@ -107,6 +114,14 @@
         "bigbasket",
         "amazon"
       ],
+      "optionLabels": {
+        "none": "None",
+        "zepto": "Zepto",
+        "swiggy-instamart": "Swiggy Instamart",
+        "zomato-blinkit": "Blinkit",
+        "bigbasket": "BigBasket",
+        "amazon": "Amazon Fresh"
+      },
       "default": "none",
       "scope": "owner",
       "label": "When something isn't on your main app",
