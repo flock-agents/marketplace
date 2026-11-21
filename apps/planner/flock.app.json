@@ -362,17 +362,6 @@
       "help": "save: set_person diet for each. Also call set_house_rules yourself, the whole list, for each rule said, as in: \"Lakshmi is diabetic: no white rice, millets instead, no sugar\": {\"kind\":\"swap\",\"who\":\"Lakshmi\",\"items\":[\"@white_rice\"],\"to\":\"millets\"} and {\"kind\":\"avoid\",\"who\":\"Lakshmi\",\"items\":[\"sugar\",\"jaggery\"]}; \"Shiva: high protein, protein at every lunch and dinner\": {\"kind\":\"require\",\"who\":\"Shiva\",\"slots\":[\"Lunch\",\"Dinner\"],\"items\":[\"@protein\"]}. \"No X, Y instead\" is swap; plain \"no X\" is avoid."
     },
     {
-      "id": "draft",
-      "action": "plan_week",
-      "args": {
-        "mode": "draft"
-      },
-      "after": [
-        "diet"
-      ],
-      "help": "A first draft of next week: plan_week draft with week_start next Monday, never final yet; it uses the orders if they are in by now, never wait for them. Then send the draft as a short message, not the whole week, ending with the link: {{appLink}}. Nothing is ordered now."
-    },
-    {
       "id": "elders",
       "when": "household.elders",
       "ask": "Does anyone older eat differently? Low salt, sugar-free, softer food, no onion or garlic?",
@@ -487,7 +476,7 @@
       "background": true,
       "result": true,
       "fixedSay": "Give me a few minutes, I'm putting your week together.",
-      "help": "An import still running: wait for its result first. Delegate, agentId self, sessionId new, task: \"Make next week's plan final in the Meal Planner: plan_week final, as its guide says, from what it holds and from this: (what the answers since the draft change, what you assumed). Message nobody. Reply with the message and the intro its closing call gives, word for word.\" End the turn. When its result comes back: send that message (Monday's meals, Week link) and intro exactly as given, once each; no other link. Nothing is ordered now. If you cannot delegate, make it here: plan_week final."
+      "help": "An import still running: wait for its result first. Delegate, agentId self, sessionId new, task: \"Make next week's plan final in the Meal Planner: plan_week final, as its guide says, from what it holds (every answer is saved in it) and from this: (what you assumed). Message nobody. Reply with the message and the intro its closing call gives, word for word.\" End the turn. When its result comes back: send that message (Monday's meals, Week link) and intro exactly as given, once each; no other link. Nothing is ordered now. If you cannot delegate, make it here: plan_week final."
     }
   ],
   "setupJoiner": [
