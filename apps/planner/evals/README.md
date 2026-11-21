@@ -64,3 +64,11 @@ bun apps/planner/evals/interview.ts --fixtures run11 --repeats 3
 ```
 
 Results: `results/interview-<time>/`.
+
+## Re-scoring saved weeks
+
+After changing a fixture's `expect` or the scorer, re-score the weeks a plan run saved (no model, no app):
+
+```sh
+bun apps/planner/evals/rescore.ts apps/planner/evals/results/plan-<time>
+```

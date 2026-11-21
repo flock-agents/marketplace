@@ -16,7 +16,7 @@ export const CATEGORIES: Record<string, string[]> = {
   sugar: ["sugar", "jaggery", "gud", "honey", "condensed milk", "sheera", "kesari", "halwa", "kheer", "payasam", "ladoo", "laddu", "jalebi", "gulab jamun"],
   protein: ["paneer", "dal", "daal", "dhal", "toor", "tuvar", "moong", "masoor", "urad", "chana", "chole", "chickpea", "rajma", "kidney bean", "soya", "soy", "tofu", "sprouts", "curd", "dahi", "yogurt", "yoghurt", "lobia", "chawli", "besan", "sambar", "kadhi", "raita", "pesarattu", "adai", "cheese", "egg", "omelette", "chicken", "fish", "mutton", "prawn", "lentil", "peanut", "kootu", "usal", "misal", "matki", "horse gram", "kulthi", "chilla", "cheela", "dhokla", "thayir", "mor kuzhambu", "pappu", "paruppu", "bele", "keema"],
   vegan_protein: ["dal", "daal", "dhal", "toor", "tuvar", "moong", "masoor", "urad", "chana", "chole", "chickpea", "rajma", "kidney bean", "soya", "tofu", "sprouts", "lobia", "chawli", "besan", "sambar", "lentil", "pesarattu", "adai", "chilla", "cheela", "usal", "misal", "matki", "horse gram", "kulthi", "pappu", "paruppu", "bele", "peanut", "tempeh", "edamame"],
-  dal: ["dal", "daal", "dhal", "toor", "tuvar", "arhar", "moong dal", "masoor", "urad dal", "chana dal", "sambar", "pappu", "paruppu", "bele", "lentil", "rasam", "saaru", "khichdi", "kootu", "dal makhani", "dal tadka", "dal fry"],
+  dal: ["dal", "daal", "dhal", "toor", "tuvar", "arhar", "moong dal", "masoor", "urad dal", "chana dal", "sambar", "pappu", "paruppu", "bele", "lentil", "rasam", "saaru", "dal khichdi", "moong khichdi", "kootu", "dal makhani", "dal tadka", "dal fry"],
   soy: ["soy", "soya", "soybean", "tofu", "soy sauce", "soy milk", "soya chunks", "nutrela", "edamame", "tempeh", "miso"],
   dairy: ["milk", "curd", "dahi", "yogurt", "yoghurt", "paneer", "ghee", "butter", "cream", "malai", "cheese", "khoa", "khoya", "mawa", "buttermilk", "chaas", "mor", "raita", "lassi", "kheer", "payasam", "condensed milk", "thayir", "kadhi", "shrikhand", "basundi", "rabri", "makhani", "butter masala"],
   gluten: ["wheat", "atta", "maida", "rava", "sooji", "suji", "semolina", "bread", "biscuit", "roti", "chapati", "chapathi", "phulka", "paratha", "parantha", "puri", "poori", "naan", "kulcha", "bhatura", "pav", "bun", "pasta", "noodle", "maggi", "vermicelli", "sevai", "semiya", "seviyan", "dalia", "daliya", "broken wheat", "barley", "jau", "thepla", "khakhra", "rusk", "toast", "sandwich", "cake", "cookie", "muffin", "pizza", "burger", "samosa", "kachori", "mathri", "seitan", "couscous", "lapsi", "bulgur"],
@@ -29,7 +29,7 @@ export const CATEGORIES: Record<string, string[]> = {
   south_indian_breakfast: ["idli", "idly", "dosa", "dosai", "dose", "uttapam", "uthappam", "pongal", "upma", "uppittu", "pesarattu", "appam", "adai", "paniyaram", "paddu", "puttu", "idiyappam", "neer dosa", "set dosa", "akki roti", "kozhukattai", "sevai", "semiya upma", "khara bath", "chow chow bath", "avalakki", "vada", "rava idli", "ragi dosa", "ragi idli", "kesari bath", "bisi bele"],
   slow_breakfast: ["puri", "poori", "paratha", "parantha", "chole", "bhature", "bhatura", "vada", "medu vada", "kachori", "misal", "pav bhaji", "idiyappam", "dhokla", "biryani", "pulao", "bisi bele", "halwa", "puttu"],
   slow_dish: ["biryani", "pulao", "bisi bele", "rajma", "chole", "chana masala", "dal makhani", "paratha", "parantha", "puri", "poori", "kofta", "butter masala", "makhani", "dum", "korma", "kurma", "sambar", "avial", "bhature", "halwa", "kheer", "payasam", "dhokla", "pav bhaji", "undhiyu", "kadhi", "kootu", "gatte", "malai", "full meals"],
-  wet: ["gravy", "curry", "sambar", "rasam", "saaru", "dal", "kadhi", "curd rice", "dahi", "raita", "soup", "stew", "kurma", "korma", "masala curry", "makhani", "khichdi", "pongal", "payasam", "kheer", "chole", "rajma", "kootu", "huli", "kuzhambu", "bisi bele"],
+  wet: ["gravy", "curry", "sambar", "rasam", "saaru", "dal", "kadhi", "curd rice", "dahi", "raita", "soup", "stew", "kurma", "korma", "masala curry", "makhani", "dal khichdi", "moong dal khichdi", "pongal", "payasam", "kheer", "chole", "rajma", "kootu", "huli", "kuzhambu", "bisi bele"],
   /** A dish that is a side when its name holds one of these. */
   side: ["chutney", "podi", "gunpowder", "pickle", "achar", "raita", "salad", "papad", "thokku", "kosambari"],
   /** A dish that is a side when its whole name is one of these. */
@@ -72,8 +72,11 @@ export function positiveName(name: string): string {
     .replace(/\b(without|no|minus|sans)\s+[a-z]+(\s+(or|and|&|,)\s*[a-z]+)*/gi, " ")
     .replace(/\b[a-z]+[- ]free\b/gi, " ");
 }
+/** Plant milks are not milk: "coconut milk" must not read as dairy. */
+const PLANT_MILK = /\b(coconut|almond|oat|soy|soya|rice|cashew)\s+(milk|cream|curd|yogurt|yoghurt|butter)\b/gi;
 /** The first of `terms` the text holds, or null. */
 export function firstHit(text: string, terms: string[]): string | null {
+  text = text.replace(PLANT_MILK, "$1 plant$2");
   for (const t of terms) if (hasPhrase(text, t)) return t;
   return null;
 }

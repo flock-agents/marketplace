@@ -55,6 +55,6 @@
     { "id": "priya_vegan", "says": "Nothing Priya eats has dairy, egg or honey", "check": { "type": "avoid", "who": "Priya", "terms": ["@dairy", "@egg", "honey"] } },
     { "id": "priya_protein", "says": "Priya has a vegan protein at lunch and dinner", "check": { "type": "require", "who": "Priya", "slots": ["Lunch", "Dinner"], "terms": ["@vegan_protein"] } },
     { "id": "sushila_no_onion_garlic_egg", "says": "Sushila gets no onion, garlic or egg", "check": { "type": "avoid", "who": "Sushila", "terms": ["onion", "garlic", "@egg"] } },
-    { "id": "everyone_fed_dinner", "says": "Each of the four has something at every dinner", "check": { "type": "present_each", "who": ["Rohan", "Priya", "Dev", "Sushila"], "slots": ["Dinner"] } }
+    { "id": "everyone_fed_dinner", "says": "Each of the four has something at every dinner", "check": { "type": "present_each", "who": ["Rohan", "Priya", "Dev", "Sushila"], "days": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"], "slots": ["Dinner"] } }
   ]
 }
