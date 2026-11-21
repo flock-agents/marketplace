@@ -1,6 +1,6 @@
 // Scores a saved week against a fixture's `expect` list. Independent of the app's own rule checker: who eats what, what a
 // dish "contains" and every word list are the eval's own (terms.ts).
-import { CATEGORIES, expand, firstHit, hasPhrase, positiveName, words } from "./terms";
+import { CATEGORIES, expand, firstHit, hasPhrase, positiveName, saysNoSugar, words } from "./terms";
 
 export type Ingredient = { item: string };
 export type Dish = { name: string; for_people: string[] | null; portion_note: string | null; ingredients: Ingredient[] };
@@ -26,7 +26,9 @@ const lc = (s: string) => s.trim().toLowerCase();
 const samePerson = (a: string, b: string) => lc(a) === lc(b);
 
 function contains(d: Dish, terms: string[], namesOnly = false): string | null {
-  const hit = firstHit(positiveName(d.name), terms);
+  // A name that says "no sugar" is not sweet by its name ("Banana sheera (no sugar)"): its ingredients still count.
+  const sweetCheck = terms.includes("sugar") && saysNoSugar(d.name);
+  const hit = sweetCheck ? null : firstHit(positiveName(d.name), terms);
   if (hit || namesOnly) return hit;
   for (const i of d.ingredients ?? []) { const h = firstHit(i.item, terms); if (h) return `${h} (in ${i.item})`; }
   return null;

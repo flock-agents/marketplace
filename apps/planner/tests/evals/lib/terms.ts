@@ -39,6 +39,7 @@ export const CATEGORIES: Record<string, string[]> = {
 // The contract's category names that the lists above spell differently.
 CATEGORIES.green_leafy = [...CATEGORIES.green_veg, ...CATEGORIES.green_garnish];
 CATEGORIES.mushroom = ["mushroom", "button mushroom", "shiitake"];
+CATEGORIES.sweet = CATEGORIES.sugar;
 
 const STOP = new Set<string>();
 /** Words of a text: lower case, letters and digits only, a trailing plural s/es dropped. */
@@ -65,13 +66,19 @@ export function expandLenient(terms: string[]): string[] {
 export function expand(terms: string[]): string[] {
   return terms.flatMap((t) => (t.startsWith("@") ? CATEGORIES[t.slice(1)] ?? (() => { throw new Error(`unknown category ${t}`); })() : [t]));
 }
-/** A dish name with what it says it leaves out removed: "(no peanuts)", "without onion", "no-garlic". */
+/** A dish name with what it says it leaves out removed: "(no peanuts)", "without onion", "no-garlic". The whole list goes:
+ *  "no onion garlic", "no onion, garlic", "no onion or garlic"; in brackets, from the negation to the bracket's end
+ *  ("Moong dal (Jain, no onion garlic)"). */
 export function positiveName(name: string): string {
   return name
     .replace(/\(\s*(no|without|minus|skip|less|zero|free of)\b[^)]*\)/gi, " ")
-    .replace(/\b(without|no|minus|sans)\s+[a-z]+(\s+(or|and|&|,)\s*[a-z]+)*/gi, " ")
+    .replace(/([(,;]\s*)(no|without|minus|sans)\s+[^)]*\)/gi, "$1)")
+    // A list running to the end of the name or a comma/bracket may be joined by spaces too ("no onion garlic"); else as before.
+    .replace(/\b(without|no|minus|sans)\s+(?:[a-z]+(?:(?:\s*,\s*|\s+(?:or|and|&)\s+|\s+)(?!(?:with|served|topped)\b)[a-z]+)*(?=\s*(?:[,;)\]]|$))|[a-z]+(?:\s+(?:or|and|&|,)\s*[a-z]+)*)/gi, " ")
     .replace(/\b[a-z]+[- ]free\b/gi, " ");
 }
+/** A name that says it has no sugar ("Banana sheera (no sugar)", "sugar-free halwa") is not sweet by its name. */
+export const saysNoSugar = (name: string): boolean => /\b(no|without|minus|zero)\s+(added\s+)?sugar\b|\bsugar[\s-]*free\b|\bunsweetened\b/i.test(name);
 /** Plant milks are not milk: "coconut milk" must not read as dairy. */
 const PLANT_MILK = /\b(coconut|almond|oat|soy|soya|rice|cashew)\s+(milk|cream|curd|yogurt|yoghurt|butter)\b/gi;
 /** The first of `terms` the text holds, or null. */

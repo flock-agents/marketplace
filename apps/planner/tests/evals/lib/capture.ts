@@ -1,8 +1,8 @@
 // Compares the rules an interview saved with the rules a correct interview would save (a fixture's `rules`). Tolerant:
-// synonyms and category-vs-listing in items are fine; who/days/slots must be right; `cap` needs its per_week, `swap` a `to`.
+// synonyms and category-vs-listing in items are fine; who/days/slots must be right; `cap` needs its per_week or per_meal, `swap` a `to`.
 import { CATEGORIES, expandLenient, hasPhrase, words } from "./terms";
 
-export type Rule = { kind?: string; who?: string; days?: string[]; slots?: string[]; items?: string[]; to?: string; per_week?: number; note?: string };
+export type Rule = { kind?: string; who?: string; days?: string[]; slots?: string[]; items?: string[]; to?: string; per_week?: number; per_meal?: number; note?: string };
 export type Verdict = { rule: string; result: "captured" | "wrong" | "note_only" | "missed"; why?: string; got?: Rule };
 
 const DAY: Record<string, string> = { mon: "Mon", monday: "Mon", tue: "Tue", tues: "Tue", tuesday: "Tue", wed: "Wed", wednesday: "Wed", thu: "Thu",
@@ -77,6 +77,7 @@ export function compareRules(expected: Rule[], gotRaw: Rule[], personText: strin
       if (slots(g.slots) !== slots(e.slots)) off.push(`slots ${slots(g.slots) || "all"} (want ${slots(e.slots) || "all"})`);
       if (e.kind === "only" && bestCov < 1) off.push(`items cover ${Math.round(bestCov * 100)}% of the allowed list`);
       if (e.kind === "cap" && g.per_week !== e.per_week) off.push(`per_week ${g.per_week} (want ${e.per_week})`);
+      if (e.kind === "cap" && g.per_meal !== e.per_meal) off.push(`per_meal ${g.per_meal} (want ${e.per_meal})`);
       if (e.kind === "swap" && !g.to) off.push("no `to`");
       return off.length ? { rule: label, result: "wrong", why: off.join("; "), got: gotRaw[best] } : { rule: label, result: "captured", got: gotRaw[best] };
     }

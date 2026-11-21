@@ -50,7 +50,7 @@ async function seed(k: any, fx: Fixture): Promise<{ notes: string[] }> {
     const legacy = fx.rules.map((x) => LEGACY_KINDS.includes(x.kind) && !x.who && !x.items
       ? { kind: x.kind, ...(x.days ? { days: x.days } : {}), ...(x.note ? { note: x.note } : {}) }
       : { kind: "other", ...(x.days ? { days: x.days } : {}), note: `${x.note ?? ""} [${[x.kind, x.who && `who ${x.who}`, x.slots && `slots ${x.slots.join("/")}`,
-          x.items && `items ${x.items.join(", ")}`, x.to && `to ${x.to}`, x.per_week && `max ${x.per_week} a week`].filter(Boolean).join("; ")}]`.trim() });
+          x.items && `items ${x.items.join(", ")}`, x.to && `to ${x.to}`, x.per_week && `max ${x.per_week} a week`, x.per_meal && `max ${x.per_meal} dishes a meal`].filter(Boolean).join("; ")}]`.trim() });
     await must("set_house_rules", { rules: legacy, notes: fx.rules.map((x) => x.note).filter(Boolean) });
     notes.push("sent as legacy kinds + other notes");
   } else {
