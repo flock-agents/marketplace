@@ -26,9 +26,10 @@ const FRAME = `
 ## This run (the eval harness)
 
 You are the meal agent on the weekly run. You have no tools here: the harness makes the app calls for you. Reply with ONE JSON
-object and nothing else: { "meals": [ ...every meal of the week... ] }, each meal as plan_week takes it ({ date, slot,
+object and nothing else: { "meals": [ ...every meal of the week... ], "repeats_ok"?: true }, each meal as plan_week takes it ({ date, slot,
 ordered_in?, note?, dishes?: [{ name, for?, portion_note?, ingredients: [{ item, amount, unit }] }] }). The harness sends it
-as plan_week { week_start, mode: "final", meals } and then the closing plan_week { week_start, mode: "final" }. If the app
+as plan_week { week_start, mode: "final", meals } and then the closing plan_week { week_start, mode: "final", repeats_ok }
+(repeats_ok only when you send it). If the app
 refuses either, you get its answer and send the whole week again, fixed.`;
 
 async function seed(k: any, fx: Fixture): Promise<{ notes: string[] }> {
@@ -91,9 +92,10 @@ async function once(fx: Fixture, guide: string, rep: number): Promise<RunRecord>
         refusals.push(said); transcript.push(`Your reply:\n${reply.text.slice(0, 2000)}`, said); continue;
       }
       const meals = Array.isArray(payload) ? payload : payload.meals;
-      transcript.push(`Your reply:\n${JSON.stringify({ meals })}`);
+      transcript.push(`Your reply:\n${JSON.stringify(Array.isArray(payload) ? { meals } : payload)}`);
       let r = await k.op("plan_week", { week_start: fx.week_start, mode: "final", meals });
-      if (!r?.error) r = await k.op("plan_week", { week_start: fx.week_start, mode: "final" });
+      const repeatsOk = !Array.isArray(payload) && payload.repeats_ok === true;
+      if (!r?.error) r = await k.op("plan_week", { week_start: fx.week_start, mode: "final", ...(repeatsOk ? { repeats_ok: true } : {}) });
       if (r?.error) {
         const said = `The app refused (${r.code}): ${r.error}${r.detail?.rule_breaks ? `\nrule_breaks: ${JSON.stringify(r.detail.rule_breaks)}` : ""}`;
         refusals.push(said);
