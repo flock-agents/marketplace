@@ -1,0 +1,71 @@
+{
+  "id": "nonveg-eggallergy",
+  "title": "Non-veg except Tue/Thu/Sat, egg-allergic child with a school tiffin, protein-hungry dad, lactose-intolerant grandfather",
+  "today": "2026-11-21",
+  "week_start": "2026-11-23",
+  "people": [
+    { "name": "Karthik", "relationship": "self", "group": "adult" },
+    { "name": "Divya", "relationship": "wife", "group": "adult" },
+    { "name": "Isha", "relationship": "daughter, 7", "group": "child", "allergies": "egg" },
+    { "name": "Venkat", "relationship": "father, 70", "group": "elder", "diet": "lactose intolerant; no fish or prawns" }
+  ],
+  "cook": { "name": "Lakshmamma", "days": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+    "arrival": [{ "at": "07:30", "meals": ["Breakfast", "Lunch"] }, { "at": "18:30", "meals": ["Dinner"] }] },
+  "cooking_days": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+  "slots": {
+    "extra_slots": [{ "name": "Isha's tiffin", "days": ["Mon", "Tue", "Wed", "Thu", "Fri"], "for": ["Isha"] }],
+    "order_in": []
+  },
+  "absent": [{ "who": "Isha", "days": ["Mon", "Tue", "Wed", "Thu", "Fri"], "slots": ["Lunch"], "why": "school" },
+             { "who": "Karthik", "days": ["Mon", "Tue", "Wed", "Thu", "Fri"], "slots": ["Lunch"], "why": "office canteen" },
+             { "who": "Divya", "days": ["Mon", "Tue", "Wed", "Thu", "Fri"], "slots": ["Lunch"], "why": "office" }],
+  "last_week": [
+    { "date": "2026-11-16", "slot": "Dinner", "dishes": ["Chicken curry", "Rice"] },
+    { "date": "2026-11-18", "slot": "Dinner", "dishes": ["Fish fry", "Rasam rice"] },
+    { "date": "2026-11-22", "slot": "Lunch", "dishes": ["Chicken biryani", "Raita"] }
+  ],
+  "told": {
+    "family": "Me Karthik, my wife Divya, our daughter Isha who is 7, and my father Venkat, 70.",
+    "cook": "Lakshmamma comes every day, 7:30 for breakfast and lunch, 6:30 for dinner.",
+    "cookLimits": "She's good with Andhra and Tamil food, chicken, fish.",
+    "cookTime": "No limits.",
+    "newRecipes": "Open to new things.",
+    "cookingDays": "Every day.",
+    "kidsBreakfast": "Isha is allergic to eggs — no egg in anything she eats, not even in cake or mayonnaise.",
+    "kidsLunch": "Isha has a school tiffin Monday to Friday: no nuts (school rule), no egg, and not the same thing twice in a week.",
+    "kidsDinner": "She eats what we eat, just no egg.",
+    "adultsBreakfast": "I go to the gym: I need protein at every meal, breakfast included — eggs are great for me.",
+    "adultsLunch": "Divya and I eat at office on weekdays.",
+    "adultsDinner": "Something with protein for me.",
+    "diet": "We eat non-veg, but Tuesday, Thursday and Saturday are vegetarian days: no meat, no fish, no egg on those days. Never beef or pork.",
+    "elders": "Appa can't digest milk: no milk, curd, paneer, ghee for him. And he doesn't eat fish or prawns, only chicken and mutton.",
+    "rules": "Sunday lunch is always chicken biryani.",
+    "orderIn": "No."
+  },
+  "rules": [
+    { "kind": "avoid", "days": ["Tue", "Thu", "Sat"], "items": ["@meat", "@fish", "@egg"], "note": "Tue, Thu, Sat are vegetarian days" },
+    { "kind": "avoid", "items": ["beef", "pork", "bacon", "ham"], "note": "never beef or pork" },
+    { "kind": "avoid", "who": "Isha", "items": ["@egg"], "note": "Isha is allergic to eggs" },
+    { "kind": "avoid", "slots": ["Isha's tiffin"], "items": ["@nuts", "@peanut", "@egg"], "note": "tiffin: no nuts (school), no egg" },
+    { "kind": "require", "who": "Karthik", "slots": ["Breakfast", "Lunch", "Dinner"], "items": ["@protein"], "note": "protein at every meal, breakfast too" },
+    { "kind": "avoid", "who": "Venkat", "items": ["@dairy"], "note": "lactose intolerant: no milk, curd, paneer, ghee" },
+    { "kind": "avoid", "who": "Venkat", "items": ["@fish"], "note": "no fish or prawns" },
+    { "kind": "require", "days": ["Sun"], "slots": ["Lunch"], "items": ["chicken biryani"], "note": "Sunday lunch is always chicken biryani" },
+    { "kind": "other", "slots": ["Isha's tiffin"], "note": "not the same tiffin twice in a week" }
+  ],
+  "expect": [
+    { "id": "all_meals_planned", "says": "Breakfast, lunch and dinner every day", "check": { "type": "present", "slots": ["Breakfast", "Lunch", "Dinner"] } },
+    { "id": "tiffin_every_school_day", "says": "Isha has a tiffin Mon-Fri", "check": { "type": "present", "days": ["Mon", "Tue", "Wed", "Thu", "Fri"], "slots": ["Isha's tiffin"] } },
+    { "id": "veg_days", "says": "No meat, fish or egg on Tue, Thu, Sat", "check": { "type": "avoid", "days": ["Tue", "Thu", "Sat"], "terms": ["@meat", "@fish", "@egg"] } },
+    { "id": "no_beef_pork", "says": "Never beef or pork", "check": { "type": "avoid", "terms": ["beef", "pork", "bacon", "ham"] } },
+    { "id": "isha_no_egg", "says": "Nothing Isha eats has egg (incl. cake, mayo)", "check": { "type": "avoid", "who": "Isha", "terms": ["@egg"] } },
+    { "id": "tiffin_no_nuts_no_egg", "says": "Tiffin: no nuts, no egg", "check": { "type": "avoid", "slots": ["Isha's tiffin"], "terms": ["@nuts", "@peanut", "@egg"] } },
+    { "id": "tiffin_never_twice", "says": "No tiffin dish repeats", "check": { "type": "distinct", "slots": ["Isha's tiffin"] } },
+    { "id": "isha_fed_each_meal", "says": "Isha has something at each breakfast and dinner", "check": { "type": "present", "who": "Isha", "slots": ["Breakfast", "Dinner"] } },
+    { "id": "karthik_protein_every_meal", "says": "Karthik has protein at every meal he eats at home, breakfast included", "check": { "type": "require", "who": "Karthik", "slots": ["Breakfast", "Lunch", "Dinner"], "terms": ["@protein"] } },
+    { "id": "venkat_no_dairy", "says": "Venkat gets no milk, curd, paneer, ghee", "check": { "type": "avoid", "who": "Venkat", "terms": ["@dairy"] } },
+    { "id": "venkat_no_fish", "says": "Venkat gets no fish or prawns", "check": { "type": "avoid", "who": "Venkat", "terms": ["@fish"] } },
+    { "id": "venkat_fed_each_meal", "says": "Venkat has something at every meal", "check": { "type": "present", "who": "Venkat", "slots": ["Breakfast", "Lunch", "Dinner"] } },
+    { "id": "sunday_chicken_biryani", "says": "Sunday lunch is chicken biryani", "check": { "type": "some_dish_named", "days": ["Sun"], "slots": ["Lunch"], "terms": ["chicken biryani"] } }
+  ]
+}
