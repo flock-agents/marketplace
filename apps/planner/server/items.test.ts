@@ -197,7 +197,7 @@ describe("import_order_history", () => {
       { app: "zepto", orders: [good, { date: "2026-10-02", items: [{ item: "Curd", count: "two" }] }] },
       { app: "zepto", orders: [good, { date: "2026-10-02", items: [{ item: "Curd", count: 0 }] }] },
       { app: "zepto", orders: [good, { date: "2026-10-02", items: [{ item: "Curd", product_id: "z-2", price: "40" }] }] },
-      { app: "zepto", orders: [good, { date: "2026-10-02", items: [{ item: "Curd", group: "weekly" }] }] },
+      { app: "zepto", orders: [good, { date: "2026-10-02", items: [{ item: "Curd", group: "sometimes" }] }] },
       { app: "zepto", orders: [good, { date: "2026-10-02", items: [{ item: "Curd", pack_amount: 400 }] }] }])
       expect([bad, (await k.op("import_order_history", bad)).code]).toEqual([bad, "APP_REFUSED"]);
     for (const t of ["items", "item_events", "products"]) expect(k.rows(t)).toEqual([]);
@@ -310,6 +310,14 @@ describe("subscriptions, answers, outside purchases", () => {
 });
 
 describe("set_item", () => {
+  it("a group in other words is taken as the nearest one; one it cannot place is refused with what each means", async () => {
+    const k = await start();
+    expect((await k.op("set_item", { item: "bhindi", group: "weekly" })).item).toMatchObject({ group: "few_days" });
+    expect((await k.op("set_item", { item: "milk", group: "Every Day" })).item).toMatchObject({ group: "daily" });
+    expect((await k.op("set_item", { item: "shower gel", group: "household" })).item).toMatchObject({ group: "monthly" });
+    expect((await k.op("set_item", { item: "atta", group: "sometimes" })).error).toContain("group must be one of: daily (bought every day or two: milk, curd), few_days");
+  });
+
   it("sets the group, snooze, don't-ask and unit; the Pantry's Snooze goes through it", async () => {
     const k = await start();
     await atta(k);
@@ -319,7 +327,7 @@ describe("set_item", () => {
     expect((await k.op("set_item", { item: "atta", snooze_days: null })).item.snoozed_until).toBe(null);
     // A new item is made; a unit is kept as its base unit.
     expect((await k.op("set_item", { item: "Oil", group: "monthly", unit: "l" })).item).toMatchObject({ name: "Oil", group: "monthly", unit: "ml" });
-    for (const bad of [{ item: "atta", group: "weekly" }, { item: "atta", unit: "pack" }, { item: "atta", snooze_days: -1 }, { item: "atta", dont_ask: "yes" }, { group: "daily" }])
+    for (const bad of [{ item: "atta", group: "sometimes" }, { item: "atta", unit: "pack" }, { item: "atta", snooze_days: -1 }, { item: "atta", dont_ask: "yes" }, { group: "daily" }])
       expect([bad, (await k.op("set_item", bad)).code]).toEqual([bad, "APP_REFUSED"]);
   });
 

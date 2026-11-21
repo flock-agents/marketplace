@@ -50,9 +50,9 @@ one). Each order has its `date` and `order_ref`; each item its `item` (the famil
 - **Zepto and Instamart:** the order tools of their own connection, when it has them; when it has none, skip the app.
 - **Amazon:** cannot. Skip it.
 
-Take the pack from the product name ("Aashirvaad Atta 5 kg") when the app gives none. Give each item in `needs_group`
-its group with `set_item`. The answer suggests everyday items and makes none: ask about each ("You buy milk most days:
-1 litre a day?") and `set_regular` the ones they confirm.
+Take the pack from the product name ("Aashirvaad Atta 5 kg") when the app gives none. Send every item's `group` too:
+`daily` (milk, curd), `few_days` (vegetables, eggs, bread), `monthly` (atta, oil, cleaning). The answer suggests
+everyday items and makes none: ask about each ("You buy milk most days: 1 litre a day?"), `set_regular` what they confirm.
 
 ## Meals, dishes, ingredients
 

@@ -183,8 +183,20 @@ export function itemView(db: Db, id: string, today: string) {
 
 // ── What was sent, checked ──
 
-const groupOf = (v: unknown, what = "group"): string =>
-  (ITEM_GROUPS as readonly unknown[]).includes(v) ? (v as string) : refuse(`${what} must be one of: ${ITEM_GROUPS.join(", ")}`);
+/** Other words an agent sends for a group (live 2026-11-21: eight set_item calls in a row were refused for one). */
+const GROUP_WORDS: Record<string, string> = {
+  day: "daily", everyday: "daily", every_day: "daily",
+  weekly: "few_days", week: "few_days", every_few_days: "few_days", few: "few_days", twice_a_week: "few_days", fresh: "few_days",
+  month: "monthly", fortnightly: "monthly", pantry: "monthly", staple: "monthly", staples: "monthly", rarely: "monthly",
+  occasional: "monthly", occasionally: "monthly", household: "monthly", other: "monthly", none: "monthly",
+};
+const GROUP_MEANS = "daily (bought every day or two: milk, curd), few_days (bought within the week: vegetables, fruit, eggs, bread, paneer), monthly (lasts weeks: atta, rice, oil, masalas, and anything for cleaning or personal care)";
+const groupOf = (v: unknown, what = "group"): string => {
+  const word = typeof v === "string" ? v.trim().toLowerCase().replace(/[\s-]+/g, "_") : v;
+  if ((ITEM_GROUPS as readonly unknown[]).includes(word)) return word as string;
+  const known = typeof word === "string" ? GROUP_WORDS[word] : undefined;
+  return known ?? refuse(`${what} must be one of: ${GROUP_MEANS}`);
+};
 const HISTORY_SHAPE = "orders must be a list of { date, order_ref?, items: [{ item, group?, product?, product_id?, pack?, pack_amount?, pack_unit?, count?, price?, image? }] }";
 
 type Line = { item: string; group?: string; product?: string; product_id?: string; amount: number | null; unit: string | null; count: number;
