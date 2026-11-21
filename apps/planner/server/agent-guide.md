@@ -31,7 +31,7 @@ plan or reminder runs until one person is saved. Do not ask what is at home: the
 | The family tells you | Save it with |
 |---|---|
 | Who eats at home; for each: relation, child / adult / elder, how much they eat ("2 rotis, small rice"), diet, allergies, dislikes, targets | `set_person`, one call a person. `group` is needed for a new person |
-| Food rules: veg, egg (eggs but no meat), no_eggs ("no eggs on Tuesday"), no_meat, fasting, no_onion_garlic days ("Ekadashi" is a day too); a rule for every day ("mostly vegetarian"); anything else | `set_house_rules { rules: [{ kind, days?, note? }], notes }`: no days = every day; `other` with its `note` for their own words; `notes` is free text. `rules` is the whole list each time |
+| Food rules: veg, egg (eggs but no meat), no_eggs ("no eggs on Tuesday"), no_meat, fasting, no_onion_garlic days ("Ekadashi" is a day too); a person's or the house's avoid, only, swap, require, cap (see Food rules); anything else | `set_house_rules { rules: [{ kind, who?, days?, slots?, items?, to?, per_week?, note? }], notes }`: no who = everyone, no days = every day; `other` with its `note` for what no kind fits; `notes` is free text. `rules` is the whole list each time: every rule saved plus the new |
 | The cook: name, days, arrival; what they make well; what they do not make well or will not make; their time ("off to the next house: a dish or two in the morning"); new recipes from reels, or a set menu of familiar dishes | `set_cook { name, days, arrival, makes_well, wont_make, time_limit, new_recipes: "open" or "set_menu", note }`: name every time, days and arrival the first time. A cook who comes twice a day: `arrival: [{ at: "06:00", meals: ["Breakfast", "Lunch"] }, { at: "16:30", meals: ["Dinner"] }]` |
 | A meal beyond Breakfast, Lunch, Dinner: a child's school tiffin is `set_slots { extra_slots: [{ name: "Agastya's tiffin", days: ["Mon", "Tue", "Wed", "Thu", "Fri"], for: ["Agastya"] }] }`; meals ordered in every week ("Sunday dinner") are `order_in` | `set_slots`: each list you send is the whole list |
 | The days they cook at home | `set_cooking_days { days }`: `["mon", ...]`, at least one; Mon to Sat until set |
@@ -55,7 +55,7 @@ Take the pack from the product name ("Aashirvaad Atta 5 kg") when the app gives 
 ## Meals, dishes, ingredients
 
 A meal is a date and a slot; it holds dishes in the order they are served. **A meal is planned once, not once per person:** a slot has one dish for everyone who eats it, and one person's variation is that dish's `portion_note` ("two eggs for Shiva", "no eggs on Tuesday", "4 for me, 1 for wife"), never the dish a second time.
-A second dish with `for` is only for someone who truly eats something else (a baby's milk, an elder's softer dish). A dish may carry a saved recipe (`recipe_id`); its video is its own, across weeks (below). A meal ordered in or eaten out is `ordered_in: true` and has no dishes. Meals go on the cooking days only.
+A second dish with `for` is only for someone who truly eats something else (a baby's milk, an elder's softer dish, a food rule's only or avoid). A dish may carry a saved recipe (`recipe_id`); its video is its own, across weeks (below). A meal ordered in or eaten out is `ordered_in: true` and has no dishes. Meals go on the cooking days only.
 
 - **The weekly run:** the wake carries `week_start` and, when it fits, the context to plan from. Plan each cooking day
   one day a call (16 KB a call at most): `plan_week { week_start, mode: "final", keep_rest: true, meals }` with that
@@ -69,6 +69,9 @@ A second dish with `for` is only for someone who truly eats something else (a ba
   never `wont_make`, `time_limit`, `new_recipes`: `set_menu` keeps to familiar dishes), every slot on its days (a tiffin),
   the meals ordered in. No dish twice in the week unless asked (roti, rice, curd aside); vary from last week. A dish in
   `known_dishes` rated `didnt_work`: plan it rarely, not never; heed every dish's note ("too oily").
+- **Food rules are checked.** A person eats a meal's dishes whose `for` names them; when none names them, every dish without `for`. A rule of
+  `only` or `avoid` for one person: give that person a dish of their own (`for: ["Meera"]`); the shared dishes stay for the rest. A `swap` ("millets instead of rice for Lakshmi") is the dish's `portion_note` naming the person and the swap. A `require` ("protein at every lunch for Shiva") is a dish that person eats with one of its items. `other` rules are not checked: heed their note.
+  A final `plan_week`, `set_meal` or `set_dish` that breaks one is refused with `RULE_BROKEN`, each break named (`rule_breaks`): fix each one and send again.
 - **Every dish gets its ingredients when you plan it** (`set_dish` and `set_meal` too, or they are refused), with amounts
   for this family: add up the portions of the people it is for, for that one meal. Leave out salt and water.
 

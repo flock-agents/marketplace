@@ -142,7 +142,7 @@
   "setupOptions": {
     "menuOrder": 10,
     "scope": "family",
-    "about": "Learn how this family eats and shops, saving each answer in the Meal Planner, and end with next week's plan. Past-week meals: ask for all the detail they can give. Never ask brands, pack sizes or what's at home, and never whether to add an item as a regular. Nothing is ordered now.",
+    "about": "Learn how this family eats and shops, saving each answer in the Meal Planner, and end with next week's plan. Past-week meals: ask for all the detail they can give. Never ask brands, pack sizes or what's at home, and never whether to add an item as a regular. Nothing is ordered now. Every food rule said is ALSO saved as a checked rule: set_house_rules { rules }, the WHOLE list each time (all saved so far plus the new). A rule: { kind, who?, days?, slots?, items?, to?, per_week?, note }. avoid: none of items; only: in slots just items; swap: items, to instead; require: one of items in each of slots; cap: items in at most per_week meals; other: note only. who: a person's name as saved, none = everyone. items: words or (@protein, @white_rice, @root_veg, @green_leafy, @peanut, @baked).",
     "uses": [
       "household.people",
       "household.children",
@@ -226,7 +226,7 @@
       "answer": {
         "operation": "set_cook"
       },
-      "help": "Matters more than what they make best.",
+      "help": "Matters more than what they make best. save: set_cook wont_make in their words. Also call set_house_rules yourself, the whole list, for each rule said, as in: \"won't touch mushrooms\": {\"kind\":\"avoid\",\"items\":[\"@mushroom\"],\"note\":\"the cook won't touch mushrooms\"}; \"no oven, can't bake\": {\"kind\":\"avoid\",\"items\":[\"@baked\"],\"note\":\"no oven\"}; \"phulkas at most twice a week\": {\"kind\":\"cap\",\"items\":[\"phulka\"],\"per_week\":2,\"note\":\"phulkas twice a week at most\"}.",
       "default": "assume",
       "assume": "I assumed the cook makes the usual dishes well."
     },
@@ -241,7 +241,8 @@
         "operation": "set_cook"
       },
       "default": "assume",
-      "assume": "I assumed the cook has time for the full meal."
+      "assume": "I assumed the cook has time for the full meal.",
+      "help": "save: set_cook time_limit in their words. Also call set_house_rules yourself, the whole list, for each rule said, as in: a dish count or a time is not checked, so other with the note: \"2 dishes in the morning, breakfast under 20 minutes\": {\"kind\":\"other\",\"note\":\"morning: at most 2 dishes; breakfast under 20 minutes\"}."
     },
     {
       "id": "newRecipes",
@@ -254,7 +255,8 @@
         "operation": "set_cook"
       },
       "default": "set_menu",
-      "assume": "I assumed a set menu of familiar dishes."
+      "assume": "I assumed a set menu of familiar dishes.",
+      "help": "save: set_cook new_recipes open or set_menu. Also call set_house_rules yourself, the whole list, for each rule said, as in: a limit on new dishes is other: \"one new dish a week, never a weekday dinner\": {\"kind\":\"other\",\"note\":\"one new dish a week, never at a weekday dinner\"}."
     },
     {
       "id": "cookingDays",
@@ -273,7 +275,8 @@
         "fri",
         "sat"
       ],
-      "assume": "I assumed food is cooked Monday to Saturday."
+      "assume": "I assumed food is cooked Monday to Saturday.",
+      "help": "save: set_cooking_days. A meal eaten out or ordered in (\"Sunday lunch out\"): set_slots order_in, the whole list. Also call set_house_rules yourself, the whole list, for each rule said, as in: \"Sunday breakfast South Indian, the parents cook it\": {\"kind\":\"other\",\"days\":[\"Sun\"],\"slots\":[\"Breakfast\"],\"note\":\"South Indian, cooked by the parents\"}; \"Sunday dinner under 15 minutes\": {\"kind\":\"other\",\"days\":[\"Sun\"],\"slots\":[\"Dinner\"],\"note\":\"under 15 minutes\"}."
     },
     {
       "id": "kidsBreakfast",
@@ -287,7 +290,7 @@
         "operation": "set_person"
       },
       "required": false,
-      "help": "set_person for each child, with what they eat in their note."
+      "help": "set_person for each child, with what they eat in their note. Also call set_house_rules yourself, the whole list, for each rule said, as in: \"Meera has only plain idli, plain dosa or banana sheera\": {\"kind\":\"only\",\"who\":\"Meera\",\"slots\":[\"Breakfast\"],\"items\":[\"plain idli\",\"plain dosa\",\"banana sheera\"],\"note\":\"nothing spicy\"}; \"Agastya won't eat anything green\": {\"kind\":\"avoid\",\"who\":\"Agastya\",\"items\":[\"@green_leafy\"],\"note\":\"nothing green visible\"}."
     },
     {
       "id": "kidsLunch",
@@ -301,7 +304,7 @@
         "operation": "set_slots"
       },
       "required": false,
-      "help": "A tiffin on school days: set_slots with it as an extra slot."
+      "help": "A tiffin on school days: set_slots with it as an extra slot. Also call set_house_rules yourself, the whole list, for each rule said, as in: \"tiffin dry, nut-free\": {\"kind\":\"avoid\",\"who\":\"Agastya\",\"slots\":[\"Agastya's tiffin\"],\"items\":[\"gravy\",\"curry\",\"sambar\",\"@nuts\",\"@peanut\"],\"note\":\"dry, no gravy, nut-free\"}; \"Meera eats only soft food at lunch\": {\"kind\":\"other\",\"who\":\"Meera\",\"slots\":[\"Lunch\"],\"note\":\"soft food only\"}; \"never the same twice\" needs no rule."
     },
     {
       "id": "kidsDinner",
@@ -310,7 +313,8 @@
       "multi": true,
       "fills": [
         "pastWeek.kidsDinner:text"
-      ]
+      ],
+      "help": "Also call set_house_rules yourself, the whole list, for each rule said, as in: \"keep Meera's portion aside before the chilli\": {\"kind\":\"swap\",\"who\":\"Meera\",\"items\":[\"chilli\"],\"to\":\"set aside before chilli\"}; a dish a child won't eat: {\"kind\":\"avoid\",\"who\":\"Agastya\",\"items\":[\"palak\",\"methi\"]}."
     },
     {
       "id": "adultsBreakfast",
@@ -323,7 +327,7 @@
         "operation": "set_person"
       },
       "required": false,
-      "help": "set_person for each adult, with what they eat in their note."
+      "help": "set_person for each adult, with what they eat in their note. Also call set_house_rules yourself, the whole list, for each rule said, as in: what one person never eats: {\"kind\":\"avoid\",\"who\":\"Shiva\",\"items\":[\"upma\"]}; what one person eats only: {\"kind\":\"only\",\"who\":\"Lakshmi\",\"slots\":[\"Breakfast\"],\"items\":[\"ragi dosa\",\"poha\"]}."
     },
     {
       "id": "adultsLunch",
@@ -331,7 +335,8 @@
       "multi": true,
       "fills": [
         "pastWeek.adultsLunch:text"
-      ]
+      ],
+      "help": "Also call set_house_rules yourself, the whole list, for each rule said, as in: \"Shiva has no rice at lunch\": {\"kind\":\"avoid\",\"who\":\"Shiva\",\"slots\":[\"Lunch\"],\"items\":[\"rice\"]}."
     },
     {
       "id": "adultsDinner",
@@ -339,7 +344,8 @@
       "multi": true,
       "fills": [
         "pastWeek.adultsDinner:text"
-      ]
+      ],
+      "help": "Also call set_house_rules yourself, the whole list, for each rule said, as in: \"no heavy food for anyone at dinner\" is not checked: {\"kind\":\"other\",\"slots\":[\"Dinner\"],\"note\":\"light dinner\"}."
     },
     {
       "id": "diet",
@@ -352,7 +358,8 @@
       },
       "required": false,
       "default": "assume",
-      "assume": "I assumed nobody is on a special diet."
+      "assume": "I assumed nobody is on a special diet.",
+      "help": "save: set_person diet for each. Also call set_house_rules yourself, the whole list, for each rule said, as in: \"Lakshmi is diabetic: no white rice, millets instead, no sugar\": {\"kind\":\"swap\",\"who\":\"Lakshmi\",\"items\":[\"@white_rice\"],\"to\":\"millets\"} and {\"kind\":\"avoid\",\"who\":\"Lakshmi\",\"items\":[\"sugar\",\"jaggery\"]}; \"Shiva: high protein, protein at every lunch and dinner\": {\"kind\":\"require\",\"who\":\"Shiva\",\"slots\":[\"Lunch\",\"Dinner\"],\"items\":[\"@protein\"]}. \"No X, Y instead\" is swap; plain \"no X\" is avoid."
     },
     {
       "id": "draft",
@@ -377,7 +384,8 @@
       },
       "required": false,
       "default": "assume",
-      "assume": "I assumed the elders eat what everyone eats."
+      "assume": "I assumed the elders eat what everyone eats.",
+      "help": "save: set_person for each. Also call set_house_rules yourself, the whole list, for each rule said, as in: \"Lakshmi fasts on Thursday, only sabudana khichdi or fruit\": {\"kind\":\"only\",\"who\":\"Lakshmi\",\"days\":[\"Thu\"],\"slots\":[\"Breakfast\",\"Lunch\",\"Dinner\"],\"items\":[\"sabudana khichdi\",\"fruit\"],\"note\":\"Thursday fast\"}; \"no onion or garlic for her\": {\"kind\":\"avoid\",\"who\":\"Lakshmi\",\"items\":[\"onion\",\"garlic\"]}; \"low salt\", \"softer food\": other with who."
     },
     {
       "id": "rules",
@@ -389,9 +397,26 @@
         "operation": "set_house_rules"
       },
       "required": false,
-      "help": "Confirm what the orders show.",
+      "help": "Confirm what the orders show. save: set_house_rules, the WHOLE list, every rule saved so far plus these. \"strictly veg, no eggs\": {\"kind\":\"veg\"} and {\"kind\":\"no_eggs\"}; \"Tuesday Jain for everyone\": {\"kind\":\"avoid\",\"days\":[\"Tue\"],\"items\":[\"@root_veg\"],\"note\":\"Jain on Tuesday\"}; \"Ankita is allergic to peanuts, none in the house\": {\"kind\":\"avoid\",\"items\":[\"@peanut\"],\"note\":\"Ankita's allergy\"}; \"nobody eats bitter gourd or brinjal\": {\"kind\":\"avoid\",\"items\":[\"bitter gourd\",\"karela\",\"brinjal\",\"baingan\"]}; a dish someone won't touch: avoid with who.",
       "default": "assume",
       "assume": "I assumed no special food rules."
+    },
+    {
+      "id": "rulesReadBack",
+      "after": [
+        "rules"
+      ],
+      "ask": "These are the food rules I saved: (every rule, in plain words, under Everyone and then each person's name). Did I get these right?",
+      "fills": [
+        "rulesReadBack:text"
+      ],
+      "answer": {
+        "operation": "set_house_rules"
+      },
+      "required": false,
+      "help": "One message: every rule saved with set_house_rules in this interview, the other ones too, in plain words (\"Lakshmi: millets instead of white rice\"), never a kind, field or @ name; then \"Did I get these right?\". A yes: save nothing. A correction or a rule they add: save the WHOLE list with it fixed, before the plan. No rule saved at all: skipped true, send nothing.",
+      "default": "assume",
+      "assume": "I kept the food rules as I read them back."
     },
     {
       "id": "orderIn",
@@ -403,7 +428,7 @@
         "operation": "set_slots"
       },
       "required": false,
-      "help": "Nothing is cooked then.",
+      "help": "Nothing is cooked then. save: set_slots order_in, the whole list, one { day, slot } a meal. A food rule said here: set_house_rules too, the whole list.",
       "default": "assume",
       "assume": "I assumed you don't order in on a fixed day."
     },
