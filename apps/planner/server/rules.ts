@@ -5,7 +5,7 @@ import { RULE_LABELS } from "./db/constants";
 import { WEEKDAYS, weekdayOf, type Weekday } from "./dates";
 
 /** A house rule as it is kept. `days` empty: every day; no `who`: everyone; no `slots`: every meal. */
-export type Rule = { kind: string; who?: string; days: string[]; slots?: string[]; items?: string[]; to?: string; per_week?: number; note?: string };
+export type Rule = { kind: string; who?: string; days: string[]; slots?: string[]; items?: string[]; to?: string; per_week?: number; per_meal?: number; note?: string };
 export type RuleDish = { name: string; for_people: string[] | null; portion_note: string | null; ingredients: (string | { item: string })[] };
 export type RuleMeal = { date: string; slot: string; ordered_in?: boolean; dishes: RuleDish[] };
 /** A week as the checks read it: a WeekView is one. */
@@ -13,11 +13,17 @@ export type RuleWeek = { days: { date: string; meals: RuleMeal[] }[] };
 /** One break: the meal ("Mon 2026-11-23 Breakfast"), the dish when it is one dish, whose rule, the rule in words, and the fix. */
 export type RuleBreak = { meal: string; dish?: string; who?: string; rule: string; fix: string };
 
-/** The kinds the app checks, and what each needs besides its kind. */
+/** The kinds the app checks, and what each needs besides its kind. A cap takes exactly one of per_week (then it needs items) or
+ *  per_meal (items optional: without them every dish to cook counts); the Family page's check says so. */
 export const CHECKED_KINDS = ["avoid", "only", "swap", "require", "cap"] as const;
 export const KIND_NEEDS: Record<(typeof CHECKED_KINDS)[number], string[]> = {
-  avoid: ["items"], only: ["who", "items"], swap: ["who", "items", "to"], require: ["slots", "items"], cap: ["items", "per_week"],
+  avoid: ["items"], only: ["who", "items"], swap: ["who", "items", "to"], require: ["slots", "items"], cap: [],
 };
+
+/** What a per_meal cap does not count as a dish to cook: a side. A dish is a side when its name has one of SIDE_WORDS, or its
+ *  whole name is one of SIDE_NAMES ("Curd", but not "Curd rice"). */
+export const SIDE_WORDS = ["chutney", "podi", "gunpowder", "pickle", "achaar", "achar", "papad", "raita", "salad"];
+export const SIDE_NAMES = ["curd", "plain curd", "dahi", "yogurt", "fruit", "fruits", "cut fruit", "seasonal fruit", "fruit bowl", "banana", "buttermilk", "chaas", "ghee"];
 
 /** The categories a rule's items may name as `@name`: each is the words that put a dish in it. */
 export const CATEGORIES: Record<string, string[]> = {
@@ -28,19 +34,35 @@ export const CATEGORIES: Record<string, string[]> = {
   nuts: ["nut", "almond", "badam", "cashew", "kaju", "walnut", "akhrot", "pistachio", "pista", "peanut", "groundnut", "moongphali", "hazelnut", "pecan", "macadamia"],
   peanut: ["peanut", "groundnut", "moongphali", "peanut butter", "groundnut oil"],
   root_veg: ["onion", "garlic", "potato", "carrot", "beetroot", "radish", "sweet potato", "ginger", "yam", "arbi", "turnip"],
-  green_leafy: ["palak", "spinach", "methi", "coriander", "dill", "curry leaves", "beans", "peas", "capsicum", "broccoli"],
+  green_leafy: ["palak", "spinach", "methi", "coriander", "dill", "curry leaves", "beans", "peas", "capsicum", "broccoli", "cucumber", "lettuce", "spring onion",
+    "zucchini", "okra", "bhindi"],
   white_rice: ["rice", "basmati", "sona masoori", "idli rice", "dosa rice", "ponni", "raw rice", "boiled rice", "poha", "rice flour", "idli", "dosa", "appam", "neer dosa"],
   protein: ["paneer", "dal", "daal", "toor", "moong", "masoor", "urad", "chana", "chole", "rajma", "soya", "soy", "tofu", "sprouts", "curd", "dahi", "yogurt", "lobia",
     "besan", "egg", "chicken", "fish", "mutton", "lentil", "chickpea", "kidney bean", "prawn"],
   mushroom: ["mushroom", "shiitake", "khumb", "guchhi", "morel"],
   baked: ["bake", "baked", "cake", "muffin", "pizza", "bread loaf", "garlic bread", "oven"],
+  chilli: ["chilli", "chili", "chillies", "chilies", "mirchi", "red chilli", "green chilli", "chilli powder", "kashmiri chilli", "sambar powder", "rasam powder",
+    "curry powder", "garam masala", "pickle", "achaar", "achar", "schezwan", "chilli flakes"],
+  sweet: ["sugar", "jaggery", "gur", "honey", "sheera", "halwa", "kheer", "payasam", "ladoo", "laddu", "jamun", "barfi", "mithai", "jalebi", "condensed milk"],
+  soy: ["soy", "soya", "soya chunks", "tofu", "soy sauce", "edamame"],
+  gluten: ["wheat", "atta", "maida", "rava", "sooji", "semolina", "bread", "roti", "chapati", "phulka", "paratha", "naan", "pasta", "noodle", "barley", "dalia", "seitan"],
+  dairy: ["milk", "curd", "dahi", "paneer", "ghee", "butter", "cream", "cheese", "khoa", "raita", "lassi", "buttermilk", "chaas", "malai"],
+  dal: ["dal", "toor", "arhar", "moong", "masoor", "urad", "chana dal"],
+  pickle: ["pickle", "achaar", "achar", "papad"],
+  vegan_protein: ["tofu", "soya", "chana", "chole", "rajma", "dal", "toor", "moong", "masoor", "urad", "sprouts", "lobia", "besan"],
 };
 /** How a category reads in a rule. */
 export const CATEGORY_LABELS: Record<string, string> = { meat: "meat", fish: "fish", egg: "eggs", nuts: "nuts", peanut: "peanuts", root_veg: "root vegetables",
-  green_leafy: "green leafy vegetables", white_rice: "white rice", protein: "protein", mushroom: "mushrooms", baked: "baked food" };
+  green_leafy: "green leafy vegetables", white_rice: "white rice", protein: "protein", mushroom: "mushrooms", baked: "baked food",
+  chilli: "chilli", sweet: "sweet things", soy: "soy", gluten: "gluten", dairy: "dairy", dal: "dal", pickle: "pickle", vegan_protein: "vegan protein" };
 /** A word before rice (or idli, dosa…) that says it is not white rice: millet, brown, red or ragi rice, a millet idli, a rava dosa. */
 const NOT_WHITE = new Set(["millet", "brown", "red", "black", "wild", "ragi", "jowar", "bajra", "oat", "wheat", "rava", "sooji", "suji", "semolina", "quinoa",
   "cauliflower", "foxtail", "kodo", "barnyard", "little", "samai", "saamai", "varagu", "thinai", "kambu", "moong", "dal"]);
+
+/** A word before milk, cream, butter or curd that says it is not dairy: coconut milk, peanut butter. */
+const NOT_DAIRY = new Set(["coconut", "almond", "oat", "soy", "soya", "rice", "cashew", "peanut", "cocoa"]);
+/** A dish name that says it has no sugar is not sweet by its name ("Banana sheera (no sugar)"); its ingredients still count. */
+const NO_SUGAR = /\b(?:no|without|minus)\s+(?:added\s+)?sugar\b|\bsugar[\s-]*free\b|\bunsweetened\b/i;
 
 // ── Matching ──
 
@@ -72,12 +94,14 @@ const termsOf = (item: string): string[] => {
 
 /** The word of `item` that `text` has, or null. `name`: the text is a dish's name, so its negations are dropped first. */
 export function hit(text: string, item: string, opts: { name?: boolean } = {}): string | null {
+  const cat = item.trim().toLowerCase();
+  if (opts.name && cat === "@sweet" && NO_SUGAR.test(text)) return null;
   const hay = wordsOf(opts.name ? stripNegations(text) : text);
-  const whiteRice = item.trim().toLowerCase() === "@white_rice";
   for (const term of termsOf(item)) {
     const needle = wordsOf(term);
     for (const i of at(hay, needle)) {
-      if (whiteRice && (NOT_WHITE.has(hay[i - 1]) || hay[i + needle.length] === "bran")) continue;
+      if (cat === "@white_rice" && (NOT_WHITE.has(hay[i - 1]) || hay[i + needle.length] === "bran")) continue;
+      if (cat === "@dairy" && NOT_DAIRY.has(hay[i - 1])) continue;
       return term;
     }
   }
@@ -91,6 +115,12 @@ export function dishHit(d: { name: string; ingredients?: (string | { item: strin
   return hit(d.name, item, { name: true }) ?? (d.ingredients ?? []).map((i) => hit(ingredientName(i), item)).find((h) => h !== null) ?? null;
 }
 export const dishHas = (d: { name: string; ingredients?: (string | { item: string })[] }, item: string): boolean => dishHit(d, item) !== null;
+
+/** Is a dish a side, which a per_meal cap does not count: "Coconut chutney", "Curd", "Fruit". */
+export const isSide = (name: string): boolean => {
+  const n = wordsOf(stripNegations(name)).join(" ");
+  return SIDE_WORDS.some((w) => at(n.split(" "), wordsOf(w)).length > 0) || SIDE_NAMES.some((s) => wordsOf(s).join(" ") === n);
+};
 
 // ── Who eats what ──
 
@@ -131,7 +161,10 @@ export function ruleText(r: Rule, opts: { days?: boolean } = {}): string {
     case "only": return `${r.who ?? "everyone"} eats only ${listText(r.items)}${scope}`;
     case "swap": return `${r.who ?? "everyone"} has ${r.to} in place of ${listText(r.items)}${scope}`;
     case "require": return `${r.who ?? "everyone"} has ${listText(r.items, " or ")}${scope}`;
-    case "cap": { const n = r.per_week ?? 0; return `${listText(r.items)} in at most ${n} meal${n === 1 ? "" : "s"} a week${r.who ? ` for ${r.who}` : ""}${scope}`; }
+    case "cap": {
+      if (r.per_meal != null) { const n = r.per_meal; return `at most ${n} dish${n === 1 ? "" : "es"}${r.items?.length ? ` with ${listText(r.items)}` : ""} a meal${r.who ? ` for ${r.who}` : ""}${scope}`; }
+      const n = r.per_week ?? 0; return `${listText(r.items)} in at most ${n} meal${n === 1 ? "" : "s"} a week${r.who ? ` for ${r.who}` : ""}${scope}`;
+    }
     default: return `${RULE_LABELS[r.kind as keyof typeof RULE_LABELS] ?? r.kind}${r.who ? ` for ${r.who}` : ""}${scope}`;
   }
 }
@@ -199,6 +232,17 @@ function breaksOf(shown: Rule, meals: RuleMeal[], people: { name: string }[], sl
         if (!eaten(m, who).some((d) => firstHit(d))) add(m, { who, fix: `add a dish with ${listText(items, " or ")} that ${who} eats` });
       break;
     case "cap": {
+      if (r.per_meal != null) {
+        const cap = r.per_meal;
+        for (const m of inScope) {
+          if (r.who && !eatsAt(m, r.who)) continue;
+          const cooked = [...new Map((r.who ? eaten(m, r.who) : m.dishes).filter((d) => !isSide(d.name) && (!items.length || firstHit(d)))
+            .map((d) => [wordsOf(d.name).join(" "), d.name])).values()];
+          if (cooked.length > cap)
+            add(m, { who: r.who, fix: `now ${cooked.length} dishes (${cooked.join(", ")}): serve one dish to more people, or a swap as a portion_note` });
+        }
+        break;
+      }
       const counted = inScope.map((m) => ({ m, d: (r.who ? eaten(m, r.who) : m.dishes).find((d) => firstHit(d)) })).filter((x) => x.d);
       const cap = r.per_week ?? 0;
       if (counted.length <= cap) break;

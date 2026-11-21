@@ -2,7 +2,7 @@
 // breaks of each kind of rule, and run 11's week, refused naming each break and passed once corrected.
 import { describe, it, expect } from "bun:test";
 import { boot } from "./testkit";
-import { breaksText, dishHas, matches, ruleBreaks, type RuleWeek } from "./rules";
+import { breaksText, dishHas, isSide, matches, ruleBreaks, ruleText, type RuleWeek } from "./rules";
 
 describe("matches", () => {
   it("drops a negation from a dish's name: in brackets, and 'without X' / 'no X'", () => {
@@ -61,6 +61,42 @@ describe("matches", () => {
       expect(matches(yes, "@white_rice")).toBe(true);
     for (const no of ["Millet rice", "Brown rice", "Red rice", "Ragi rice", "Millet idli", "Ragi dosa", "Foxtail millet pongal", "Rava idli", "Oats dosa"])
       expect(matches(no, "@white_rice")).toBe(false);
+  });
+
+  // Live eval 2026-11-22: rules the interview saves named categories the app did not have.
+  it("the categories from the 2026-11-22 eval: chilli, sweet, soy, gluten, dairy, dal, pickle, vegan protein, and visible green", () => {
+    const yes: [string, string][] = [["sambar powder", "@chilli"], ["rasam powder", "@chilli"], ["Green chillies", "@chilli"], ["Mirchi bajji", "@chilli"],
+      ["kashmiri chilli", "@chilli"], ["garam masala", "@chilli"], ["Mango achaar", "@chilli"], ["Schezwan noodles", "@chilli"],
+      ["Carrot halwa", "@sweet"], ["Gulab jamun", "@sweet"], ["jaggery", "@sweet"], ["Rava kesari with sugar", "@sweet"], ["Besan ladoo", "@sweet"],
+      ["Tofu stir fry", "@soy"], ["Soya chunks curry", "@soy"], ["soy sauce", "@soy"],
+      ["Aloo paratha", "@gluten"], ["Rava upma", "@gluten"], ["Phulkas", "@gluten"], ["maida", "@gluten"], ["Veg noodles", "@gluten"], ["Dalia", "@gluten"],
+      ["Paneer butter masala", "@dairy"], ["ghee", "@dairy"], ["Sweet lassi", "@dairy"], ["Cucumber raita", "@dairy"], ["Chaas", "@dairy"],
+      ["Toor dal", "@dal"], ["Moong dal khichdi", "@dal"], ["chana dal", "@dal"], ["Arhar dal fry", "@dal"],
+      ["Lemon pickle", "@pickle"], ["Papad", "@pickle"], ["Achaar", "@pickle"],
+      ["Tofu bhurji", "@vegan_protein"], ["Rajma", "@vegan_protein"], ["Besan chilla", "@vegan_protein"], ["Sprouts salad", "@vegan_protein"],
+      ["Cucumber raita", "@green_leafy"], ["Bhindi fry", "@green_leafy"], ["Lettuce", "@green_leafy"], ["spring onion", "@green_leafy"], ["Zucchini", "@green_leafy"], ["okra", "@green_leafy"]];
+    for (const [text, item] of yes) expect(matches(text, item), `${text} ${item}`).toBe(true);
+    const no: [string, string][] = [["Chana masala", "@dal"], ["Curd rice", "@soy"], ["Coconut milk", "@dairy"], ["peanut butter", "@dairy"], ["Ragi dosa", "@gluten"],
+      ["Peanut chikki", "@vegan_protein"], ["Paneer tikka", "@vegan_protein"], ["Plain idli", "@chilli"], ["Banana", "@sweet"], ["Onion", "@green_leafy"]];
+    for (const [text, item] of no) expect(matches(text, item), `${text} ${item}`).toBe(false);
+  });
+
+  it("a dish named 'no sugar' is not sweet by its name; its ingredients still count", () => {
+    for (const name of ["Banana sheera (no sugar)", "Banana sheera without sugar", "Sugar-free halwa", "Sugar free kheer", "Unsweetened payasam"]) {
+      expect(matches(name, "@sweet", { name: true }), name).toBe(false);
+      expect(dishHas({ name, ingredients: ["banana", "rava", "ghee"] }, "@sweet"), name).toBe(false);
+    }
+    expect(dishHas({ name: "Banana sheera (no sugar)", ingredients: ["banana", "rava", "jaggery"] }, "@sweet")).toBe(true);
+    expect(dishHas({ name: "Banana sheera", ingredients: ["banana", "rava"] }, "@sweet")).toBe(true);
+    // Only the sweet category reads the name this way: an ingredient as given, and other items, are unchanged.
+    expect(matches("Sugar-free halwa", "@sweet")).toBe(true);
+    expect(matches("Banana sheera (no sugar)", "sheera", { name: true })).toBe(true);
+  });
+
+  it("a side is a chutney, podi, pickle, raita, papad, salad, or a dish that is just curd or fruit", () => {
+    for (const side of ["Coconut chutney", "Gunpowder podi", "Lemon pickle", "Boondi raita", "Papad", "Curd", "Plain curd", "Fruit", "Cut fruits", "Banana"])
+      expect(isSide(side), side).toBe(true);
+    for (const main of ["Curd rice", "Idli", "Fruit custard", "Banana sheera", "Ragi idli"]) expect(isSide(main), main).toBe(false);
   });
 
   it("a dish has an item when its name (negations dropped) or one of its ingredients has it", () => {
@@ -167,6 +203,34 @@ describe("ruleBreaks", () => {
     const b = ruleBreaks(w, { rules }, people);
     expect(keys(b)).toEqual(["Tue 2026-11-24 Lunch|Chapati|"]);
     expect(b[0].fix).toContain("Mon Lunch, Mon Dinner, Tue Lunch");
+  });
+
+  // Live eval 2026-11-22: the cook's "max 2 dishes in the morning" broken by per-person variants (3 to cook).
+  it("cap per_meal: at most N dishes to cook in each meal of slots; sides and one dish sent per person do not count", () => {
+    const rules = [{ kind: "cap" as const, slots: ["Breakfast"], per_meal: 2, days: [] }];
+    expect(ruleText(rules[0])).toBe("at most 2 dishes a meal at Breakfast");
+    const w = week([
+      { date: "2026-11-23", slot: "Breakfast", dishes: [{ name: "Idli", for_people: ["Shiva", "Ankita", "Agastya"] }, { name: "Plain idli", for_people: ["Meera"] },
+        { name: "Ragi idli", for_people: ["Lakshmi"] }, { name: "Coconut chutney" }] },
+      { date: "2026-11-24", slot: "Breakfast", dishes: [{ name: "Upma" }, { name: "Plain dosa", for_people: ["Meera"] }, { name: "Coconut chutney" },
+        { name: "Curd" }, { name: "Fruit" }] },
+      // The same dish sent once per person is one dish to cook.
+      { date: "2026-11-25", slot: "Breakfast", dishes: [{ name: "Poha", for_people: ["Shiva"] }, { name: "poha", for_people: ["Ankita"] },
+        { name: "Plain idli", for_people: ["Meera"] }] },
+      // Not in slots.
+      { date: "2026-11-23", slot: "Lunch", dishes: [{ name: "Rice" }, { name: "Sambar" }, { name: "Beans poriyal" }, { name: "Rasam" }] }]);
+    const b = ruleBreaks(w, { rules }, people);
+    expect(keys(b)).toEqual(["Mon 2026-11-23 Breakfast||"]);
+    expect(b[0].fix).toBe("now 3 dishes (Idli, Plain idli, Ragi idli): serve one dish to more people, or a swap as a portion_note");
+    // A swap as a portion_note keeps it at two.
+    const fixed = week([{ date: "2026-11-23", slot: "Breakfast", dishes: [{ name: "Idli", portion_note: "ragi idli for Lakshmi" }, { name: "Plain idli", for_people: ["Meera"] }] }]);
+    expect(ruleBreaks(fixed, { rules }, people)).toEqual([]);
+    // With items, only those dishes count; with who, only what that person eats.
+    const fried = [{ kind: "cap" as const, items: ["fry", "pakoda"], per_meal: 1, days: [] }];
+    expect(keys(ruleBreaks(week([{ date: "2026-11-23", slot: "Dinner", dishes: [{ name: "Aloo fry" }, { name: "Onion pakoda" }, { name: "Dal" }, { name: "Roti" }] }]),
+      { rules: fried }, people))).toEqual(["Mon 2026-11-23 Dinner||"]);
+    const meera = [{ kind: "cap" as const, who: "Meera", per_meal: 1, days: [] }];
+    expect(ruleBreaks(w, { rules: meera }, people).map((x) => x.meal)).toEqual(["Mon 2026-11-23 Lunch", "Tue 2026-11-24 Breakfast"]);
   });
 
   it("the older kinds are checked as the spec maps them; fasting and other are not", () => {

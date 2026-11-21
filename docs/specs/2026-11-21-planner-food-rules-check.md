@@ -12,7 +12,7 @@ were stored as free text in people notes, which no code reads.
 ## The rule (one shape, on the house's `rules` list)
 
 ```
-{ kind, who?, days?, slots?, items?, to?, per_week?, note? }
+{ kind, who?, days?, slots?, items?, to?, per_week?, per_meal?, note? }
 ```
 - `who`: one person's name as on the Family page (people.name). Left out: everyone.
 - `days`: weekdays (Mon..Sun). Left out: every day. `slots`: meal slot names (Breakfast, Lunch, Dinner, an extra slot
@@ -28,10 +28,16 @@ Kinds that are CHECKED:
 | `swap` | a dish `who` eats that contains any of `items` carries a portion_note naming `who` and `to`, or `who` gets a dish of their own | who, items, to |
 | `require` | in each of `slots` (and `days`), `who` eats at least one dish containing one of `items` | slots, items |
 | `cap` | dishes matching `items` are in at most `per_week` meals of the week | items, per_week |
+| `cap` | at most `per_meal` dishes to cook in each meal of `slots` (and `days`); with `items`, only dishes matching them count; with `who`, only the dishes `who` eats | per_meal |
 
 Existing kinds keep working and are checked as:
 - `veg` → avoid `@meat`, `@fish`; `no_meat` → same; `no_eggs` → avoid `@egg`; `egg` → avoid `@meat`, `@fish`.
 - `no_onion_garlic` → avoid `onion`, `garlic` on its `days`.
+- A cap takes exactly one of `per_week` / `per_meal`. For `per_meal` (live eval 2026-11-22: the cook's "max 2 dishes in the
+  morning" broken by per-person variants, idli + plain idli for Meera + ragi idli for Lakshmi = 3 to cook): dishes are counted
+  once per name, and a side does not count, a dish whose name has chutney, podi, gunpowder, pickle, achaar/achar, papad, raita
+  or salad, or whose whole name is curd, dahi, yogurt, fruit, banana, buttermilk, chaas or ghee (`SIDE_WORDS`/`SIDE_NAMES` in
+  rules.ts). A meal over it is refused with the fix "serve one dish to more people, or a swap as a portion_note".
 - `fasting`, `other`: not checked (note only) unless given as one of the checked kinds.
 
 ## Who eats a dish
@@ -59,10 +65,20 @@ Before matching a dish NAME, negations are removed: anything in brackets that st
 Categories (built into the app, extendable): `@meat`, `@fish`, `@egg`, `@nuts`, `@peanut` (peanut, groundnut,
 moongphali, peanut butter, groundnut oil), `@root_veg` (onion, garlic, potato, carrot, beetroot, radish, sweet potato,
 ginger, yam, arbi, turnip), `@green_leafy` (palak, spinach, methi, coriander, dill, curry leaves, beans, peas, capsicum,
-broccoli), `@white_rice` (rice, basmati, sona masoori, idli rice, dosa rice, ponni, raw rice, boiled rice, poha, rice
+broccoli, cucumber, lettuce, spring onion, zucchini, okra, bhindi: it reads as "visible green"), `@white_rice` (rice, basmati, sona masoori, idli rice, dosa rice, ponni, raw rice, boiled rice, poha, rice
 flour, idli, dosa, appam, neer dosa), `@protein` (paneer, dal, toor, moong, masoor, urad, chana, chole, rajma, soya, tofu, sprouts,
 curd, dahi, lobia, besan, egg, chicken, fish, mutton), `@mushroom`, `@baked` (bake, baked, cake, muffin, pizza, bread
-loaf, garlic bread, oven).
+loaf, garlic bread, oven), and from the 2026-11-22 eval:
+- `@chilli` (chilli, chili, mirchi, red/green chilli, chilli powder, kashmiri chilli, sambar powder, rasam powder, curry powder,
+  garam masala, pickle, achaar, schezwan, chilli flakes)
+- `@sweet` (sugar, jaggery, gur, honey, sheera, halwa, kheer, payasam, ladoo, laddu, jamun, barfi, mithai, jalebi, condensed
+  milk). A dish whose NAME says "no sugar", "without sugar", "sugar-free" or "unsweetened" is not `@sweet` by its name
+  ("Banana sheera (no sugar)"); its ingredients still count.
+- `@soy` (soy, soya, soya chunks, tofu, soy sauce, edamame); `@gluten` (wheat, atta, maida, rava, sooji, semolina, bread, roti,
+  chapati, phulka, paratha, naan, pasta, noodles, barley, dalia, seitan); `@dairy` (milk, curd, dahi, paneer, ghee, butter,
+  cream, cheese, khoa, raita, lassi, buttermilk, chaas, malai; coconut/almond/oat/soy/rice/cashew milk, peanut butter are not);
+  `@dal` (dal, toor, arhar, moong, masoor, urad, chana dal); `@pickle` (pickle, achaar, papad); `@vegan_protein` (tofu, soya,
+  chana, chole, rajma, dal, toor, moong, masoor, urad, sprouts, lobia, besan; peanut only in `@peanut`/`@nuts`).
 
 ## Where it is checked
 - `plan_week` final by the agent (both the meals-given path and drafts made final), and `set_meal` / `set_dish` by the
@@ -75,6 +91,8 @@ loaf, garlic bread, oven).
 Every answer that states a rule is saved as a checked kind with `set_house_rules` (people's notes keep the story; the
 rule is the rule). After the rules question, the Butler reads every saved rule back in plain words, one message, and
 asks "Did I get these right?"; a correction is saved before the draft plan.
+The cook's dish count ("2 dishes in the morning") is saved as `cap` `per_meal` 2 on Breakfast; a time ("under 20 minutes")
+stays an `other` note.
 
 ## Evals (no WhatsApp)
 1. Planning: fixture households (run 11's + harsher ones) are seeded into a real planner app; the planning model writes

@@ -124,6 +124,8 @@ describe("the house", () => {
       { kind: "require", who: "Shiva", slots: ["Lunch", "Dinner"], items: ["@protein"] },
       { kind: "avoid", slots: ["agastya's tiffin"], items: ["@peanut"] },
       { kind: "cap", items: ["chapati", "phulka"], per_week: 2 },
+      { kind: "cap", slots: ["breakfast"], per_meal: 2, note: "2 dishes in the morning" },
+      { kind: "avoid", who: "Meera", items: ["@chilli", "@sweet", "@soy", "@gluten", "@dairy", "@dal", "@pickle", "@vegan_protein"] },
       { kind: "veg", days: ["Tue"] }] });
     expect(house.rules).toEqual([
       { kind: "only", who: "Meera", days: [], slots: ["Breakfast"], items: ["plain idli", "plain dosa"], note: "Meera's breakfasts" },
@@ -132,6 +134,8 @@ describe("the house", () => {
       { kind: "require", who: "Shiva", days: [], slots: ["Lunch", "Dinner"], items: ["@protein"] },
       { kind: "avoid", days: [], slots: ["Agastya's tiffin"], items: ["@peanut"] },
       { kind: "cap", days: [], items: ["chapati", "phulka"], per_week: 2 },
+      { kind: "cap", days: [], slots: ["Breakfast"], per_meal: 2, note: "2 dishes in the morning" },
+      { kind: "avoid", who: "Meera", days: [], items: ["@chilli", "@sweet", "@soy", "@gluten", "@dairy", "@dal", "@pickle", "@vegan_protein"] },
       { kind: "veg", days: ["Tue"] }]);
   });
 
@@ -154,6 +158,11 @@ describe("the house", () => {
     expect(await refused({ kind: "swap", who: "Lakshmi", items: ["@white_rice"] })).toContain("needs to");
     expect(await refused({ kind: "require", who: "Lakshmi", items: ["@protein"] })).toContain("needs slots");
     expect(await refused({ kind: "cap", items: ["chapati"] })).toContain("needs per_week");
+    expect(await refused({ kind: "cap", items: ["chapati"], per_week: 2, per_meal: 1 })).toContain("not both");
+    expect(await refused({ kind: "cap", slots: ["Breakfast"], per_meal: 0 })).toContain("per_meal");
+    expect(await refused({ kind: "cap", slots: ["Breakfast"], per_meal: "two" })).toContain("per_meal");
+    expect(await refused({ kind: "cap", per_week: 2 })).toContain("needs items");
+    expect(await refused({ kind: "avoid", items: ["egg"], per_meal: 2 })).toContain("takes no per_meal");
     expect(await refused({ kind: "cap", items: ["chapati"], per_week: 1.5 })).toContain("per_week");
     expect(await refused({ kind: "avoid", items: ["egg"], per_week: 2 })).toContain("takes no per_week");
     expect(await refused({ kind: "avoid", items: ["egg"], to: "tofu" })).toContain("takes no to");

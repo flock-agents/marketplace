@@ -7,7 +7,7 @@ export const GROUPS = ["child", "adult", "elder"] as const;
 /** A house rule: vegetarian (no meat, no eggs), eggs but no meat, no eggs, no meat, fasting, no onion and garlic, or the family's
  *  own (its note says it). A rule with no days holds every day ("mostly vegetarian"). The kinds the app checks a plan against
  *  (server/rules.ts): avoid (no dish with its items), only (who eats only its items), swap (who has `to` in place of its
- *  items), require (who eats one of its items at each of its slots) and cap (its items in at most per_week meals). */
+ *  items), require (who eats one of its items at each of its slots) and cap (its items in at most per_week meals, or at most per_meal dishes a meal). */
 export const RULE_KINDS = ["veg", "egg", "no_eggs", "no_meat", "fasting", "no_onion_garlic", "other", "avoid", "only", "swap", "require", "cap"] as const;
 /** How each rule reads on the Family page: what the rule allows or forbids, never the opposite. */
 export const RULE_LABELS: Record<(typeof RULE_KINDS)[number], string> = { veg: "Vegetarian", egg: "Eggs but no meat", no_eggs: "No eggs", no_meat: "No meat",

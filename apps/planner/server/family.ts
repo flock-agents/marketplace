@@ -132,9 +132,9 @@ const optionalNote = (v: unknown, what: string): { note?: string } => {
 
 const PERSON_WORDS = ["relationship", "portions", "diet", "allergies", "dislikes", "targets", "note"] as const;
 
-const RULE_SHAPE = "rules must be a list of { kind, who?, days?, slots?, items?, to?, per_week?, note? }";
+const RULE_SHAPE = "rules must be a list of { kind, who?, days?, slots?, items?, to?, per_week?, per_meal?, note? }";
 const KIND_HELP = `a rule's kind must be one of: ${RULE_KINDS.join(", ")} (avoid: no dish with items; only: who eats only items; swap: who has to in place of items; `
-  + `require: who eats one of items at each of slots; cap: items in at most per_week meals; no_eggs: "no eggs on Tuesday"; egg: eggs but no meat; other: the family's own words in note)`;
+  + `require: who eats one of items at each of slots; cap: items in at most per_week meals, or at most per_meal dishes in each meal of slots; no_eggs: "no eggs on Tuesday"; egg: eggs but no meat; other: the family's own words in note)`;
 const CATEGORY_LIST = Object.keys(CATEGORIES).map((c) => `@${c}`).join(", ");
 const isChecked = (kind: unknown): kind is (typeof CHECKED_KINDS)[number] => (CHECKED_KINDS as readonly unknown[]).includes(kind);
 
@@ -176,7 +176,7 @@ function rules(v: unknown, ctx: { people: string[]; slots: string[] }): HouseRul
       return refuse(`${label}: slots: ${JSON.stringify(s)} is not a meal (${ctx.slots.join(", ")})${near ? ` (did you mean ${near}?)` : ""}`);
     });
     // What only the checked kinds take: a fast the app checks is { kind: only, who, days, items }.
-    for (const k of ["items", "to", "per_week"]) if (given(k) && !isChecked(kind))
+    for (const k of ["items", "to", "per_week", "per_meal"]) if (given(k) && !isChecked(kind))
       return refuse(`${label} takes no ${k}: a rule about particular foods is ${CHECKED_KINDS.join(", ")} (a fast: { kind: only, who, days, items })`);
     if (given("items")) {
       if (!Array.isArray(r.items) || !r.items.length || !r.items.every((i) => typeof i === "string" && i.trim()))
@@ -198,6 +198,18 @@ function rules(v: unknown, ctx: { people: string[]; slots: string[] }): HouseRul
       if (kind !== "cap") return refuse(`${label} takes no per_week: per_week is a cap rule's most meals in a week`);
       out.per_week = typeof r.per_week === "number" && Number.isInteger(r.per_week) && r.per_week >= 0 ? r.per_week
         : refuse(`${label}: per_week must be a whole number of meals, 0 or more`);
+    }
+    if (given("per_meal")) {
+      if (kind !== "cap") return refuse(`${label} takes no per_meal: per_meal is a cap rule's most dishes in a meal`);
+      out.per_meal = typeof r.per_meal === "number" && Number.isInteger(r.per_meal) && r.per_meal >= 1 ? r.per_meal
+        : refuse(`${label}: per_meal must be a whole number of dishes, 1 or more`);
+    }
+    if (kind === "cap") {
+      if (out.per_week !== undefined && out.per_meal !== undefined)
+        return refuse(`${label} takes per_week or per_meal, not both: per_week is the most meals a week with items, per_meal the most dishes in a meal`);
+      if (out.per_week === undefined && out.per_meal === undefined)
+        return refuse(`${label} needs per_week (items in at most per_week meals a week) or per_meal (at most per_meal dishes in each meal of slots)`);
+      if (out.per_week !== undefined && !out.items) return refuse(`${label} needs items: the foods a per_week cap counts`);
     }
     if (isChecked(kind)) {
       const missing = KIND_NEEDS[kind].filter((k) => (out as Record<string, unknown>)[k] === undefined);
