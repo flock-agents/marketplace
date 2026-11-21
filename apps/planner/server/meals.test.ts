@@ -3,15 +3,22 @@ import { describe, it, expect } from "bun:test";
 import { readFileSync } from "fs";
 import { join } from "path";
 import { Hono } from "hono";
-import { boot } from "./testkit";
+import { boot as bootKit } from "./testkit";
 import { mergeDuplicateDishes, mergeSameDishes, mountMealRoutes } from "./meals";
 
 const MON = "2026-11-23";
 const lunch = { date: MON, slot: "Lunch", dishes: [
-  { name: "Rice", ingredients: [{ item: "rice", amount: 400, unit: "g" }] },
-  { name: "Aloo gobi", ingredients: [{ item: "cauliflower", amount: 1, unit: "pc" }, { item: "potato", amount: 500, unit: "g" }] },
-  { name: "Sambar", ingredients: [{ item: "toor dal", amount: 150, unit: "g" }] },
+  { name: "Rice", for: ["everyone"], ingredients: [{ item: "rice", amount: 400, unit: "g" }] },
+  { name: "Aloo gobi", for: ["everyone"], ingredients: [{ item: "cauliflower", amount: 1, unit: "pc" }, { item: "potato", amount: 500, unit: "g" }] },
+  { name: "Sambar", for: ["everyone"], ingredients: [{ item: "toor dal", amount: 150, unit: "g" }] },
   { name: "Boiled eggs", for: ["me", "wife"], portion_note: "4 for me, 1 for wife", ingredients: [{ item: "eggs", amount: 5, unit: "pc" }] } ] };
+
+/** The app with the two people `lunch` names on the Family page: a dish the agent plans names who eats it, from there. */
+const boot = async (...a: Parameters<typeof bootKit>) => {
+  const k = await bootKit(...a);
+  for (const name of ["me", "wife"]) await k.op("set_person", { name, group: "adult" });
+  return k;
+};
 
 /** The meal of a week view at a date and slot. */
 const mealOf = (week: any, date: string, slot: string) => week.days.find((d: any) => d.date === date).meals.find((m: any) => m.slot === slot);
@@ -27,7 +34,7 @@ describe("plan_week", () => {
     expect(r.week.status).toBe("draft"); expect(r.message).toBeUndefined();
   });
 
-  it("the week view has all seven days, each dish's ingredients, and everyone as null", async () => {
+  it("the week view has all seven days, each dish's ingredients and who eats it", async () => {
     const { op } = await boot();
     const { week } = await op("plan_week", { week_start: MON, mode: "draft", meals: [lunch] });
     expect(week.week_start).toBe(MON);
@@ -35,7 +42,7 @@ describe("plan_week", () => {
     expect(week.days[1].meals).toEqual([]);
     const m = week.days[0].meals[0];
     expect(m).toMatchObject({ slot: "Lunch", ordered_in: false, note: null });
-    expect(m.dishes[0]).toMatchObject({ for_people: null, portion_note: null, recipe_id: null, video_url: null });
+    expect(m.dishes[0]).toMatchObject({ for_people: ["everyone"], portion_note: null, recipe_id: null, video_url: null });
     expect(m.dishes[0].ingredients).toMatchObject([{ item: "rice", amount: 400, unit: "g" }]);
     expect(m.dishes[1].ingredients).toMatchObject([{ item: "cauliflower", amount: 1, unit: "pc" }, { item: "potato", amount: 500, unit: "g" }]);
     expect(m.dishes[2].ingredients).toMatchObject([{ item: "toor dal", amount: 150, unit: "g" }]);
@@ -67,7 +74,7 @@ describe("plan_week", () => {
     expect((await op("plan_week", { week_start: MON, mode: "draft", meals: [{ ...lunch, slot: "Diner" }] })).error).toBe("slot must be one of: Breakfast, Lunch, Dinner (did you mean Dinner?)");
     expect((await op("plan_week", { week_start: MON, mode: "draft", meals: [{ ...lunch, slot: "Supper" }] })).error).toBe("slot must be one of: Breakfast, Lunch, Dinner");
     expect((await op("plan_week", { week_start: MON, mode: "draft", meals: [{ date: MON }] })).error).toBe("slot is required: one of Breakfast, Lunch, Dinner");
-    const tiffin = { date: MON, slot: "Agastya's tiffin", dishes: [{ name: "Lemon rice" }] };
+    const tiffin = { date: MON, slot: "Agastya's tiffin", dishes: [{ name: "Lemon rice", for: ["everyone"] }] };
     expect((await op("plan_week", { week_start: MON, mode: "draft", meals: [tiffin] })).code).toBe("APP_REFUSED");
     expect(rows("plan_meals")).toHaveLength(0);
     await op("set_slots", { extra_slots: [{ name: "Agastya's tiffin", days: ["Mon", "Tue", "Wed", "Thu", "Fri"], for: ["Agastya"] }] });
@@ -94,8 +101,8 @@ describe("plan_week", () => {
     await refused([lunch, { date: MON, slot: "Dinner", dishes: [{ name: "  " }] }]);
     await refused([lunch, { date: MON, slot: "Dinner", dishes: "dal" }]);
     await refused([lunch, { date: MON, slot: "Dinner", dishes: [{ name: "Dal", for: "me" }] }]);
-    await refused([lunch, { date: MON, slot: "Dinner", dishes: [{ name: "Dal", ingredients: [{ amount: 200, unit: "g" }] }] }]);
-    await refused([lunch, { date: MON, slot: "Dinner", dishes: [{ name: "Dal", ingredients: [{ item: "toor dal", amount: "a cup" }] }] }]);
+    await refused([lunch, { date: MON, slot: "Dinner", dishes: [{ name: "Dal", for: ["everyone"], ingredients: [{ amount: 200, unit: "g" }] }] }]);
+    await refused([lunch, { date: MON, slot: "Dinner", dishes: [{ name: "Dal", for: ["everyone"], ingredients: [{ item: "toor dal", amount: "a cup" }] }] }]);
     await refused([lunch, { date: MON, slot: "Dinner", dishes: [{ name: "Dal", recipe_id: "no-such-recipe" }] }]);
     await refused([lunch, { date: MON, slot: "Dinner", ordered_in: "yes" }]);
     for (const t of ["plan_meals", "dishes", "dish_items"]) expect(rows(t)).toHaveLength(0);
@@ -113,9 +120,9 @@ describe("plan_week", () => {
 
   it("with meals it replaces the week: the old meals, dishes and ingredients go, another week's stay", async () => {
     const { op, rows } = await boot();
-    await op("plan_week", { week_start: "2026-11-16", mode: "final", meals: [{ date: "2026-11-18", slot: "Dinner", dishes: [{ name: "Khichdi", ingredients: [{ item: "moong dal", amount: 200, unit: "g" }] }] }] });
+    await op("plan_week", { week_start: "2026-11-16", mode: "final", meals: [{ date: "2026-11-18", slot: "Dinner", dishes: [{ name: "Khichdi", for: ["everyone"], ingredients: [{ item: "moong dal", amount: 200, unit: "g" }] }] }] });
     await op("plan_week", { week_start: MON, mode: "draft", meals: [lunch, { date: "2026-11-24", slot: "Breakfast", dishes: [{ name: "Idli" }] }] });
-    const r = await op("plan_week", { week_start: MON, mode: "final", meals: [{ date: "2026-11-25", slot: "Dinner", dishes: [{ name: "Dal", ingredients: [{ item: "toor dal", amount: 200, unit: "g" }] }, { name: "Roti", ingredients: [{ item: "atta", amount: 200, unit: "g" }] }] }] });
+    const r = await op("plan_week", { week_start: MON, mode: "final", meals: [{ date: "2026-11-25", slot: "Dinner", dishes: [{ name: "Dal", for: ["everyone"], ingredients: [{ item: "toor dal", amount: 200, unit: "g" }] }, { name: "Roti", for: ["everyone"], ingredients: [{ item: "atta", amount: 200, unit: "g" }] }] }] });
     expect(r.week.status).toBe("final");
     expect(r.week.days.flatMap((d: any) => d.meals).map((m: any) => `${m.slot}: ${dishNames(m)}`)).toEqual(["Dinner: Dal,Roti"]);
     expect(rows("plan_meals").map((m) => `${m.date} ${m.status}`).sort()).toEqual(["2026-11-18 final", "2026-11-25 final"]);
@@ -127,17 +134,17 @@ describe("plan_week", () => {
     const { op, rows } = await boot();
     await op("set_cooking_days", { days: ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] });
     const tue = "2026-11-24";
-    const tueDinner = { date: tue, slot: "Dinner", dishes: [{ name: "Dal", ingredients: [{ item: "toor dal", amount: 200, unit: "g" }] }] };
+    const tueDinner = { date: tue, slot: "Dinner", dishes: [{ name: "Dal", for: ["everyone"], ingredients: [{ item: "toor dal", amount: 200, unit: "g" }] }] };
     // An older draft of the week: the first part, without keep_rest, takes its place.
     await op("plan_week", { week_start: MON, mode: "draft", meals: [{ date: "2026-11-29", slot: "Dinner", dishes: [{ name: "Old plan" }] }] });
     await op("plan_week", { week_start: MON, mode: "draft", meals: [lunch] });
-    const two = await op("plan_week", { week_start: MON, mode: "draft", keep_rest: true, meals: [tueDinner, { date: tue, slot: "Breakfast", dishes: [{ name: "Idli", ingredients: [{ item: "idli batter", amount: 1, unit: "kg" }] }] }] });
+    const two = await op("plan_week", { week_start: MON, mode: "draft", keep_rest: true, meals: [tueDinner, { date: tue, slot: "Breakfast", dishes: [{ name: "Idli", for: ["everyone"], ingredients: [{ item: "idli batter", amount: 1, unit: "kg" }] }] }] });
     expect(two.week.status).toBe("draft");
     expect(two.week.days.flatMap((d: any) => d.meals).map((m: any) => `${m.date} ${m.slot}: ${dishNames(m)}`)).toEqual([
       `${MON} Lunch: Rice,Aloo gobi,Sambar,Boiled eggs`, `${tue} Breakfast: Idli`, `${tue} Dinner: Dal`]);
     // A part sent again replaces that meal only: its dishes and ingredients go, the other meals keep their rows.
     const lunchRow = rows("plan_meals").find((m) => m.slot === "Lunch").id;
-    const again = await op("plan_week", { week_start: MON, mode: "draft", keep_rest: true, meals: [{ date: tue, slot: "Dinner", dishes: [{ name: "Rajma", ingredients: [{ item: "rajma", amount: 250, unit: "g" }] }] }] });
+    const again = await op("plan_week", { week_start: MON, mode: "draft", keep_rest: true, meals: [{ date: tue, slot: "Dinner", dishes: [{ name: "Rajma", for: ["everyone"], ingredients: [{ item: "rajma", amount: 250, unit: "g" }] }] }] });
     expect(again.week.days.flatMap((d: any) => d.meals).map((m: any) => `${m.slot}: ${dishNames(m)}`)).toEqual(["Lunch: Rice,Aloo gobi,Sambar,Boiled eggs", "Breakfast: Idli", "Dinner: Rajma"]);
     expect(rows("plan_meals").find((m) => m.slot === "Lunch").id).toBe(lunchRow);
     expect(rows("dishes").map((d) => d.name).sort()).toEqual(["Aloo gobi", "Boiled eggs", "Idli", "Rajma", "Rice", "Sambar"]);
@@ -150,7 +157,7 @@ describe("plan_week", () => {
   it("keep_rest with mode final leaves the week final: the meals kept are final too", async () => {
     const { op, rows } = await boot();
     await op("plan_week", { week_start: MON, mode: "draft", meals: [lunch] });
-    const r = await op("plan_week", { week_start: MON, mode: "final", keep_rest: true, meals: [{ date: MON, slot: "Dinner", dishes: [{ name: "Rotis", ingredients: [{ item: "atta", amount: 200, unit: "g" }] }] }] });
+    const r = await op("plan_week", { week_start: MON, mode: "final", keep_rest: true, meals: [{ date: MON, slot: "Dinner", dishes: [{ name: "Rotis", for: ["everyone"], ingredients: [{ item: "atta", amount: 200, unit: "g" }] }] }] });
     expect(r.week.status).toBe("final");
     expect(rows("plan_meals").map((m) => `${m.slot} ${m.status}`).sort()).toEqual(["Dinner final", "Lunch final"]);
     expect((await op("plan_week", { week_start: MON, mode: "draft", keep_rest: "yes", meals: [lunch] })).code).toBe("APP_REFUSED");
@@ -166,14 +173,14 @@ describe("plan_week", () => {
 
   it("a meal on a non-cooking day is refused by plan_week, taken by set_meal", async () => {
     const { op, rows } = await boot();
-    const sunday = { date: "2026-11-29", slot: "Dinner", dishes: [{ name: "Dal" }] };
+    const sunday = { date: "2026-11-29", slot: "Dinner", dishes: [{ name: "Dal", for: ["everyone"] }] };
     const r = await op("plan_week", { week_start: MON, mode: "draft", meals: [lunch, sunday] });
     expect(r.code).toBe("NOT_COOKING_DAY"); expect(r.error).toContain("2026-11-29"); expect(r.error).toContain("Sun");
     expect(rows("plan_meals")).toHaveLength(0);
     expect((await op("set_cooking_days", { days: ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] })).house.cooking_days).toContain("Sun");
     expect((await op("plan_week", { week_start: MON, mode: "draft", meals: [lunch, sunday] })).week.status).toBe("draft");
     await op("set_cooking_days", { days: ["mon"] });
-    expect(dishNames((await op("set_meal", { date: "2026-11-24", slot: "Dinner", dishes: [{ name: "Dal", ingredients: [{ item: "toor dal", amount: 200, unit: "g" }] }] })).meal)).toEqual(["Dal"]);
+    expect(dishNames((await op("set_meal", { date: "2026-11-24", slot: "Dinner", dishes: [{ name: "Dal", for: ["everyone"], ingredients: [{ item: "toor dal", amount: 200, unit: "g" }] }] })).meal)).toEqual(["Dal"]);
   });
 
   it("only the closing final call without meals answers the Monday message, and the intro once", async () => {
@@ -181,9 +188,9 @@ describe("plan_week", () => {
     await op("set_regular", { item: "milk", amount: 1, unit: "L", every: "day" });
     await op("set_regular", { item: "curd", amount: 1, unit: "pc", every: "day" });
     await op("set_regular", { item: "bread", amount: 1, unit: "pc", every: "day" });
-    const part1 = await op("plan_week", { week_start: MON, mode: "final", meals: [{ date: "2026-11-24", slot: "Lunch", dishes: [{ name: "Dal", ingredients: [{ item: "toor dal", amount: 200, unit: "g" }] }] }] });
+    const part1 = await op("plan_week", { week_start: MON, mode: "final", meals: [{ date: "2026-11-24", slot: "Lunch", dishes: [{ name: "Dal", for: ["everyone"], ingredients: [{ item: "toor dal", amount: 200, unit: "g" }] }] }] });
     const part2 = await op("plan_week", { week_start: MON, mode: "final", keep_rest: true, meals: [
-      { date: MON, slot: "Breakfast", dishes: [{ name: "Poha", ingredients: [{ item: "poha", amount: 250, unit: "g" }] }] }, { date: MON, slot: "Dinner", ordered_in: true }] });
+      { date: MON, slot: "Breakfast", dishes: [{ name: "Poha", for: ["everyone"], ingredients: [{ item: "poha", amount: 250, unit: "g" }] }] }, { date: MON, slot: "Dinner", ordered_in: true }] });
     for (const r of [part1, part2]) { expect(r.week.status).toBe("final"); expect(r.message).toBeUndefined(); expect(r.intro).toBeUndefined(); }
     expect(rows("house")[0]?.intro_sent_at ?? null).toBeNull();
     const close = await op("plan_week", { week_start: MON, mode: "final" });
@@ -194,7 +201,7 @@ describe("plan_week", () => {
     expect(rows("house")[0].intro_sent_at).toBeTruthy();
     const again = await op("plan_week", { week_start: MON, mode: "final" });
     expect(again.message).toBe(close.message); expect(again.intro).toBeUndefined();
-    await op("plan_week", { week_start: "2026-12-07", mode: "draft", meals: [{ date: "2026-12-08", slot: "Lunch", dishes: [{ name: "Dal", ingredients: [{ item: "toor dal", amount: 200, unit: "g" }] }] }] });
+    await op("plan_week", { week_start: "2026-12-07", mode: "draft", meals: [{ date: "2026-12-08", slot: "Lunch", dishes: [{ name: "Dal", for: ["everyone"], ingredients: [{ item: "toor dal", amount: 200, unit: "g" }] }] }] });
     expect((await op("plan_week", { week_start: "2026-12-07", mode: "draft" })).message).toBeUndefined();
     expect((await op("plan_week", { week_start: "2026-12-07", mode: "final" })).message).toContain("Monday: nothing planned");
     expect((await op("plan_week", { week_start: "2027-01-04", mode: "final" })).context).toBeDefined();
@@ -210,20 +217,20 @@ describe("plan_week", () => {
 
 describe("a planned week is ready to send", () => {
   const SUNDAY = () => new Date(2026, 10, 22, 11);   // Sunday 22 Nov, the weekly run
-  const food = (name: string, item = name.toLowerCase()) => ({ name, ingredients: [{ item, amount: 200, unit: "g" }] });
+  const food = (name: string, item = name.toLowerCase()) => ({ name, for: ["everyone"], ingredients: [{ item, amount: 200, unit: "g" }] });
   const day = (date: string, slot: string, ...names: string[]) => ({ date, slot, dishes: names.map((n) => food(n)) });
 
   it("a final plan from the agent gives every dish its ingredients: the dishes without are named, nothing is written", async () => {
     const { op, rows } = await boot({ now: SUNDAY });
     const r = await op("plan_week", { week_start: MON, mode: "final", keep_rest: true, meals: [
-      { date: MON, slot: "Lunch", dishes: [food("Rajma"), { name: "Jeera rice" }] }, { date: MON, slot: "Dinner", dishes: [{ name: "Bhindi" }] }] });
+      { date: MON, slot: "Lunch", dishes: [food("Rajma"), { name: "Jeera rice", for: ["everyone"] }] }, { date: MON, slot: "Dinner", dishes: [{ name: "Bhindi", for: ["everyone"] }] }] });
     expect(r.code).toBe("MISSING_INGREDIENTS");
     expect(r.error).toContain("Mon 2026-11-23 Lunch: Jeera rice"); expect(r.error).toContain("Mon 2026-11-23 Dinner: Bhindi"); expect(r.error).not.toContain("Rajma");
     expect(r.detail.missing_ingredients).toEqual(["Mon 2026-11-23 Lunch: Jeera rice", "Mon 2026-11-23 Dinner: Bhindi"]);
     expect(rows("plan_meals")).toHaveLength(0);
     // set_meal and set_dish hold the agent to the same.
-    expect((await op("set_meal", { date: MON, slot: "Lunch", dishes: [{ name: "Khichdi" }] })).code).toBe("MISSING_INGREDIENTS");
-    expect((await op("set_dish", { date: MON, slot: "Lunch", name: "Khichdi" })).code).toBe("MISSING_INGREDIENTS");
+    expect((await op("set_meal", { date: MON, slot: "Lunch", dishes: [{ name: "Khichdi", for: ["everyone"] }] })).code).toBe("MISSING_INGREDIENTS");
+    expect((await op("set_dish", { date: MON, slot: "Lunch", name: "Khichdi", for: ["everyone"] })).code).toBe("MISSING_INGREDIENTS");
     expect(rows("dishes")).toHaveLength(0);
   });
 
@@ -305,7 +312,7 @@ describe("a meal is planned once, not once per person", () => {
   const milk = { name: "Milk", for: ["Meera"], ingredients: [{ item: "milk", amount: 200, unit: "ml" }] };
 
   it("the same dish sent once per person is kept as one dish for those people, its notes and ingredients put together", async () => {
-    const k = await boot();
+    const k = await bootKit();
     await family(k);
     const { week } = await k.op("plan_week", { week_start: MON, mode: "final", meals: [{ date: "2026-11-24", slot: "Breakfast",
       dishes: [paratha("Agastya"), paratha("Shiva", { name: "aloo  Paratha", portion_note: "two, with extra butter", ingredients: [{ item: "Potato", amount: 300, unit: "g" }, { item: "butter", amount: 20, unit: "g" }] }), milk] }] });
@@ -315,7 +322,7 @@ describe("a meal is planned once, not once per person", () => {
     expect(k.rows("dishes")).toHaveLength(2);
     // set_meal does the same; when the people of the two are everyone at home, the dish is for everyone.
     const { meal } = await k.op("set_meal", { date: "2026-11-24", slot: "Dinner", dishes: [paratha("Agastya"), paratha("Shiva"), paratha("Meera")] });
-    expect(meal.dishes.map((d: any) => [d.name, d.for_people])).toEqual([["Aloo paratha", null]]);
+    expect(meal.dishes.map((d: any) => [d.name, d.for_people])).toEqual([["Aloo paratha", ["everyone"]]]);
     expect(meal.dishes[0].ingredients.map((i: any) => i.amount)).toEqual([450, 300]);
   });
 
@@ -326,10 +333,10 @@ describe("a meal is planned once, not once per person", () => {
   });
 
   it("a week planned before, with a dish kept once per person, is made one dish at boot; a week without is left as it is", async () => {
-    const k = await boot();
+    const k = await bootKit();
     await family(k);
     await k.op("plan_week", { week_start: MON, mode: "final", meals: [
-      { date: MON, slot: "Breakfast", dishes: [{ name: "Idli", ingredients: [{ item: "idli batter", amount: 500, unit: "g" }] }, milk] },
+      { date: MON, slot: "Breakfast", dishes: [{ name: "Idli", for: ["everyone"], ingredients: [{ item: "idli batter", amount: 500, unit: "g" }] }, milk] },
       { date: "2026-11-24", slot: "Breakfast", dishes: [paratha("Agastya"), milk] }] });
     const tuesday = k.rows("plan_meals").find((m) => m.date === "2026-11-24").id;
     // As the old app kept it: the paratha a second time, for Shiva, after the milk.
@@ -354,6 +361,15 @@ describe("a meal is planned once, not once per person", () => {
     const guide = readFileSync(join(import.meta.dir, "agent-guide.md"), "utf8");
     for (const text of [plan, guide]) for (const said of ["planned once, not once per person", "one dish for everyone who eats it", "portion_note", "two eggs for Shiva", "truly eats something else"]) expect(text).toContain(said);
   });
+
+  it("the guide and the plan operations say every dish names who eats it: everyone, or the names", () => {
+    const manifest = JSON.parse(readFileSync(join(import.meta.dir, "..", "flock.app.json"), "utf8"));
+    const ops = ["plan_week", "set_meal", "set_dish"].map((n) => manifest.agentInterface.operations.find((o: any) => o.name === n).description as string);
+    const guide = readFileSync(join(import.meta.dir, "agent-guide.md"), "utf8");
+    for (const text of [guide, ...ops]) expect(text).toContain('["everyone"]');
+    for (const text of [guide, ops[0], ops[2]]) for (const said of ["MISSING_EATERS", "names only them", "the shared dish then names everyone else", "millet instead of rice for Lakshmi"])
+      expect(text).toContain(said);
+  });
 });
 
 describe("the context", () => {
@@ -361,8 +377,8 @@ describe("the context", () => {
     const { op } = await boot();
     await op("set_cooking_days", { days: ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] });
     await op("plan_week", { week_start: "2026-11-16", mode: "final", meals: [
-      { ...lunch, date: "2026-11-17" }, { date: "2026-11-16", slot: "Dinner", dishes: [{ name: "Dal", ingredients: [{ item: "toor dal", amount: 200, unit: "g" }] }, { name: "Roti", ingredients: [{ item: "atta", amount: 200, unit: "g" }] }] }, { date: "2026-11-22", slot: "Dinner", ordered_in: true }] });
-    await op("plan_week", { week_start: "2026-11-09", mode: "final", meals: [{ date: "2026-11-09", slot: "Dinner", dishes: [{ name: "Pulao", ingredients: [{ item: "rice", amount: 300, unit: "g" }] }] }] });
+      { ...lunch, date: "2026-11-17" }, { date: "2026-11-16", slot: "Dinner", dishes: [{ name: "Dal", for: ["everyone"], ingredients: [{ item: "toor dal", amount: 200, unit: "g" }] }, { name: "Roti", for: ["everyone"], ingredients: [{ item: "atta", amount: 200, unit: "g" }] }] }, { date: "2026-11-22", slot: "Dinner", ordered_in: true }] });
+    await op("plan_week", { week_start: "2026-11-09", mode: "final", meals: [{ date: "2026-11-09", slot: "Dinner", dishes: [{ name: "Pulao", for: ["everyone"], ingredients: [{ item: "rice", amount: 300, unit: "g" }] }] }] });
     const { context } = await op("plan_week", { week_start: MON, mode: "draft" });
     expect(context.last_week).toEqual([
       { date: "2026-11-16", slot: "Dinner", dishes: ["Dal", "Roti"] },
@@ -370,7 +386,7 @@ describe("the context", () => {
   });
 
   it("carries the family, the house, what the house buys often, the recipe book and the grocery app", async () => {
-    const { op, kit } = await boot();
+    const { op, kit } = await bootKit();
     await op("set_person", { name: "Agastya", group: "child", allergies: "peanuts" });
     await op("set_person", { name: "Nani", group: "elder" });
     await op("set_person", { name: "Nani", remove: true });
@@ -396,10 +412,73 @@ describe("the context", () => {
   });
 });
 
+// The owner, 22 Nov: every planned dish says exactly who eats it, so the food-rule check reads what is written.
+describe("who eats a dish", () => {
+  const family = async () => {
+    const k = await bootKit();
+    for (const name of ["Priya", "Dev", "Sushila", "Rohan"]) await k.op("set_person", { name, group: "adult" });
+    return k;
+  };
+  const ing = [{ item: "chana", amount: 300, unit: "g" }];
+
+  it("the agent's dish without for, with an unknown name, or with everyone and names is refused, each dish named, nothing written", async () => {
+    const { op, rows } = await family();
+    const r = await op("plan_week", { week_start: MON, mode: "draft", meals: [{ date: MON, slot: "Lunch", dishes: [
+      { name: "Chana masala", ingredients: ing }, { name: "Rice", for: ["Priyaa", "Dev"], ingredients: ing },
+      { name: "Sauteed veg", for: ["everyone", "Rohan"], ingredients: ing }, { name: "Curd", for: [], ingredients: ing }, { name: "Salad", for: ["Everyone"], ingredients: ing }] }] });
+    expect(r.code).toBe("MISSING_EATERS");
+    expect(r.detail.missing_eaters).toEqual([
+      "Mon 2026-11-23 Lunch: Chana masala (no for)",
+      "Mon 2026-11-23 Lunch: Rice (for: \"Priyaa\" is not on the Family page (did you mean Priya?))",
+      "Mon 2026-11-23 Lunch: Sauteed veg (for: \"everyone\" goes alone; otherwise name each person who eats it)",
+      "Mon 2026-11-23 Lunch: Curd (no for)"]);
+    expect(r.error).toBe("Every planned dish names who eats it in for: [\"everyone\"] (everyone who eats that meal) or the names of the people who eat it "
+      + "(Priya, Dev, Sushila, Rohan). A person's own dish names only them, and the shared dish then names everyone else. Not so: "
+      + r.detail.missing_eaters.join("; ") + ". Send each with its for.");
+    expect(rows("plan_meals")).toHaveLength(0);
+    // set_meal and set_dish the same; a final plan tells it with the dishes without ingredients, in one refusal.
+    expect((await op("set_meal", { date: MON, slot: "Lunch", dishes: [{ name: "Dal", ingredients: ing }] })).detail.missing_eaters).toEqual(["Mon 2026-11-23 Lunch: Dal (no for)"]);
+    expect((await op("set_dish", { date: MON, slot: "Lunch", name: "Dal", ingredients: ing })).code).toBe("MISSING_EATERS");
+    expect((await op("set_dish", { date: MON, slot: "Lunch", name: "Dal", for: ["Rohn"], ingredients: ing })).error).toContain("did you mean Rohan?");
+    const both = await op("plan_week", { week_start: MON, mode: "final", meals: [{ date: MON, slot: "Lunch", dishes: [{ name: "Dal" }] }] });
+    expect(both.code).toBe("MISSING_EATERS");
+    expect(both.detail).toMatchObject({ missing_eaters: ["Mon 2026-11-23 Lunch: Dal (no for)"], missing_ingredients: ["Mon 2026-11-23 Lunch: Dal"] });
+    expect(rows("dishes")).toHaveLength(0);
+  });
+
+  it("names are kept as the Family page writes them, and everyone as everyone", async () => {
+    const { op } = await family();
+    const { meal } = await op("set_meal", { date: MON, slot: "Lunch", dishes: [
+      { name: "Chana masala", for: ["EVERYONE"], ingredients: ing }, { name: "Rice", for: ["priya", "Dev", "sushila"], ingredients: ing }] });
+    expect(meal.dishes.map((d: any) => d.for_people)).toEqual([["everyone"], ["Priya", "Dev", "Sushila"]]);
+    // A dish there keeps its eaters when the agent changes something else.
+    expect((await op("set_dish", { dish_id: meal.dishes[1].id, portion_note: "less for Dev" })).dish.for_people).toEqual(["Priya", "Dev", "Sushila"]);
+  });
+
+  it("the family's own dishes need no for: they are for everyone, and the agent may still change them", async () => {
+    const { op, owner } = await family();
+    const r = await owner("POST", "/api/meals", { date: MON, slot: "Lunch", dishes: [{ name: "Khichdi" }] });
+    expect(r.status).toBe(200); expect(r.body.meal.dishes[0].for_people).toBeNull();
+    const added = await owner("POST", "/api/dishes", { date: MON, slot: "Lunch", name: "Papad", for: null });
+    expect(added.status).toBe(200); expect(added.body.dish.for_people).toBeNull();
+    expect((await op("set_dish", { dish_id: added.body.dish.id, ingredients: [{ item: "papad", amount: 4, unit: "pc" }] })).dish.for_people).toBeNull();
+  });
+
+  it("the same dish sent once per person is eaten by all of theirs", () => {
+    const part = (for_people: string[] | null) => ({ name: "Idli", for_people, portion_note: null, recipe_id: null, video_url: null, items: [] });
+    const merged = (...p: (string[] | null)[]) => mergeSameDishes(p.map(part), ["Shiva", "Agastya", "Meera"])[0].for_people;
+    expect(merged(["Shiva"], ["Agastya"])).toEqual(["Shiva", "Agastya"]);
+    expect(merged(["Meera"], ["everyone"])).toEqual(["everyone"]);
+    expect(merged(["everyone"], ["Meera"])).toEqual(["everyone"]);
+    expect(merged(["Shiva"], ["Agastya", "Meera"])).toEqual(["everyone"]);
+    expect(merged(["Shiva"], null)).toBeNull();
+  });
+});
+
 describe("set_meal", () => {
   it("set_meal ordered_in clears the dishes; set_dish edits one dish's ingredients", async () => {
     const { op, rows } = await boot();
-    const { week } = await op("plan_week", { week_start: MON, mode: "draft", meals: [lunch, { date: MON, slot: "Dinner", dishes: [{ name: "Dal", ingredients: [{ item: "toor dal", amount: 200, unit: "g" }] }, { name: "Roti" }] }] });
+    const { week } = await op("plan_week", { week_start: MON, mode: "draft", meals: [lunch, { date: MON, slot: "Dinner", dishes: [{ name: "Dal", for: ["everyone"], ingredients: [{ item: "toor dal", amount: 200, unit: "g" }] }, { name: "Roti", for: ["everyone"] }] }] });
     const aloo = mealOf(week, MON, "Lunch").dishes[1];
     const d = await op("set_dish", { dish_id: aloo.id, ingredients: [{ item: "cauliflower", amount: 2, unit: "pc" }, { item: "peas", amount: 100, unit: "g" }] });
     expect(d.dish).toMatchObject({ id: aloo.id, name: "Aloo gobi" });
@@ -415,24 +494,24 @@ describe("set_meal", () => {
 
   it("upserts by date and slot, with the week's status; given dishes it replaces them, a note alone leaves them", async () => {
     const { op, rows } = await boot();
-    const first = await op("set_meal", { date: "2026-11-25", slot: "dinner", dishes: [{ name: "Dal", ingredients: [{ item: "toor dal", amount: 200, unit: "g" }] }, { name: "Roti", ingredients: [{ item: "atta", amount: 200, unit: "g" }] }] });
+    const first = await op("set_meal", { date: "2026-11-25", slot: "dinner", dishes: [{ name: "Dal", for: ["everyone"], ingredients: [{ item: "toor dal", amount: 200, unit: "g" }] }, { name: "Roti", for: ["everyone"], ingredients: [{ item: "atta", amount: 200, unit: "g" }] }] });
     expect(first.meal).toMatchObject({ date: "2026-11-25", slot: "Dinner", ordered_in: false });
     expect(rows("plan_meals")[0]).toMatchObject({ status: "draft", updated_by: "agent:meal-agent" });
     const noted = await op("set_meal", { date: "2026-11-25", slot: "Dinner", note: "guests tonight" });
     expect(noted.meal.id).toBe(first.meal.id);
     expect(noted.meal).toMatchObject({ note: "guests tonight" }); expect(dishNames(noted.meal)).toEqual(["Dal", "Roti"]);
-    const swapped = await op("set_meal", { date: "2026-11-25", slot: "Dinner", dishes: [{ name: "Pulao", ingredients: [{ item: "rice", amount: 300, unit: "g" }] }] });
+    const swapped = await op("set_meal", { date: "2026-11-25", slot: "Dinner", dishes: [{ name: "Pulao", for: ["everyone"], ingredients: [{ item: "rice", amount: 300, unit: "g" }] }] });
     expect(dishNames(swapped.meal)).toEqual(["Pulao"]); expect(swapped.meal.note).toBe("guests tonight");
     expect(rows("plan_meals")).toHaveLength(1); expect(rows("dishes")).toHaveLength(1);
 
     await op("plan_week", { week_start: MON, mode: "final" });
-    await op("set_meal", { date: "2026-11-26", slot: "Breakfast", dishes: [{ name: "Poha", ingredients: [{ item: "poha", amount: 250, unit: "g" }] }] });
+    await op("set_meal", { date: "2026-11-26", slot: "Breakfast", dishes: [{ name: "Poha", for: ["everyone"], ingredients: [{ item: "poha", amount: 250, unit: "g" }] }] });
     expect(rows("plan_meals").find((m) => m.date === "2026-11-26").status).toBe("final");
   });
 
   it("finds a meal by meal_id; an unknown one is a 404", async () => {
     const { op } = await boot();
-    const { meal } = await op("set_meal", { date: MON, slot: "Lunch", dishes: [{ name: "Rice", ingredients: [{ item: "rice", amount: 300, unit: "g" }] }] });
+    const { meal } = await op("set_meal", { date: MON, slot: "Lunch", dishes: [{ name: "Rice", for: ["everyone"], ingredients: [{ item: "rice", amount: 300, unit: "g" }] }] });
     expect((await op("set_meal", { meal_id: meal.id, note: "early lunch" })).meal).toMatchObject({ id: meal.id, date: MON, slot: "Lunch", note: "early lunch" });
     expect((await op("set_meal", { meal_id: "nope", note: "x" })).status).toBe(404);
     expect((await op("set_meal", { meal_id: meal.id, date: "2026-11-24", slot: "Lunch" })).code).toBe("APP_REFUSED");
@@ -448,7 +527,7 @@ describe("set_meal", () => {
     expect(rows("plan_meals")).toHaveLength(0);
     await op("set_meal", { date: MON, slot: "Dinner", ordered_in: true });
     expect((await op("set_meal", { date: MON, slot: "Dinner", dishes: [{ name: "Dal" }] })).code).toBe("APP_REFUSED");
-    const cooked = await op("set_meal", { date: MON, slot: "Dinner", ordered_in: false, dishes: [{ name: "Dal", ingredients: [{ item: "toor dal", amount: 200, unit: "g" }] }] });
+    const cooked = await op("set_meal", { date: MON, slot: "Dinner", ordered_in: false, dishes: [{ name: "Dal", for: ["everyone"], ingredients: [{ item: "toor dal", amount: 200, unit: "g" }] }] });
     expect(cooked.meal).toMatchObject({ ordered_in: false }); expect(dishNames(cooked.meal)).toEqual(["Dal"]);
   });
 });
@@ -456,14 +535,14 @@ describe("set_meal", () => {
 describe("set_dish", () => {
   it("adds a dish to a meal by date and slot, making the meal when it is not there; position 0 is first", async () => {
     const { op, rows } = await boot();
-    const a = await op("set_dish", { date: MON, slot: "Dinner", name: "Dal", ingredients: [{ item: "toor dal", amount: 200, unit: "g" }] });
-    expect(a.dish).toMatchObject({ name: "Dal", for_people: null });
+    const a = await op("set_dish", { date: MON, slot: "Dinner", name: "Dal", for: ["Everyone"], ingredients: [{ item: "toor dal", amount: 200, unit: "g" }] });
+    expect(a.dish).toMatchObject({ name: "Dal", for_people: ["everyone"] });
     expect(a.meal).toMatchObject({ date: MON, slot: "Dinner" }); expect(dishNames(a.meal)).toEqual(["Dal"]);
     expect(rows("plan_meals")[0]).toMatchObject({ status: "draft" });
-    await op("set_dish", { meal_id: a.meal.id, name: "Roti", ingredients: [{ item: "atta", amount: 200, unit: "g" }] });
-    const c = await op("set_dish", { date: MON, slot: "dinner", name: "Salad", position: 0, for: ["Meera"], portion_note: "a big bowl", video_url: "https://youtu.be/x", ingredients: [{ item: "cucumber", amount: 2, unit: "pc" }] });
+    await op("set_dish", { meal_id: a.meal.id, name: "Roti", for: ["everyone"], ingredients: [{ item: "atta", amount: 200, unit: "g" }] });
+    const c = await op("set_dish", { date: MON, slot: "dinner", name: "Salad", position: 0, for: ["WIFE"], portion_note: "a big bowl", video_url: "https://youtu.be/x", ingredients: [{ item: "cucumber", amount: 2, unit: "pc" }] });
     expect(dishNames(c.meal)).toEqual(["Salad", "Dal", "Roti"]);
-    expect(c.dish).toMatchObject({ for_people: ["Meera"], portion_note: "a big bowl", video_url: "https://youtu.be/x" });
+    expect(c.dish).toMatchObject({ for_people: ["wife"], portion_note: "a big bowl", video_url: "https://youtu.be/x" });
     expect(rows("dishes").sort((x, y) => x.position - y.position).map((d) => `${d.position} ${d.name}`)).toEqual(["0 Salad", "1 Dal", "2 Roti"]);
     expect(rows("plan_meals")).toHaveLength(1);
   });
@@ -476,8 +555,9 @@ describe("set_dish", () => {
     expect(renamed.dish).toMatchObject({ id: eggs.id, name: "Egg curry", for_people: ["me", "wife"], portion_note: "4 for me, 1 for wife" });
     expect(renamed.dish.ingredients).toMatchObject([{ item: "eggs", amount: 5 }]);
     expect((await op("set_dish", { dish_id: eggs.id, ingredients: [] })).code).toBe("MISSING_INGREDIENTS");   // the agent's dish keeps its ingredients
-    const everyone = await op("set_dish", { dish_id: eggs.id, for: null, portion_note: null });
-    expect(everyone.dish).toMatchObject({ for_people: null, portion_note: null, ingredients: [{ item: "eggs", amount: 5 }] });
+    expect((await op("set_dish", { dish_id: eggs.id, for: null })).code).toBe("MISSING_EATERS");   // the agent says who eats it
+    const everyone = await op("set_dish", { dish_id: eggs.id, for: ["everyone"], portion_note: null });
+    expect(everyone.dish).toMatchObject({ for_people: ["everyone"], portion_note: null, ingredients: [{ item: "eggs", amount: 5 }] });
     const same = await op("set_dish", { date: MON, slot: "Lunch", name: "sambar", portion_note: "extra for Dad" });
     expect(same.dish).toMatchObject({ name: "Sambar", portion_note: "extra for Dad" });
     expect(rows("dishes")).toHaveLength(4);
@@ -501,7 +581,7 @@ describe("set_dish", () => {
     const { op, kit } = await boot();
     const now = new Date().toISOString();
     kit.sqlite.query(`INSERT INTO saved_recipes (id, created_at, updated_at, name) VALUES ('r1', ?, ?, 'Sambar')`).run(now, now);
-    expect((await op("set_dish", { date: MON, slot: "Lunch", name: "Sambar", recipe_id: "r1", ingredients: [{ item: "toor dal", amount: 150, unit: "g" }] })).dish.recipe_id).toBe("r1");
+    expect((await op("set_dish", { date: MON, slot: "Lunch", name: "Sambar", for: ["everyone"], recipe_id: "r1", ingredients: [{ item: "toor dal", amount: 150, unit: "g" }] })).dish.recipe_id).toBe("r1");
     expect((await op("set_dish", { date: MON, slot: "Lunch", name: "Sambar", recipe_id: "r9" })).code).toBe("APP_REFUSED");
     expect((await op("set_dish", { date: MON, slot: "Lunch", name: "Sambar", recipe_id: null })).dish.recipe_id).toBeNull();
   });
@@ -559,7 +639,7 @@ describe("live pages", () => {
       const r = await hono.request(path, { method: "POST", headers: { "Content-Type": "application/json", "x-flock-user": "meera" }, body: JSON.stringify(body) });
       return { status: r.status, body: (await r.json()) as any };
     };
-    const dinner = { date: MON, slot: "Dinner", dishes: [{ name: "Dal", ingredients: [{ item: "toor dal", amount: 200, unit: "g" }] }, { name: "Roti" }] };
+    const dinner = { date: MON, slot: "Dinner", dishes: [{ name: "Dal", for: ["everyone"], ingredients: [{ item: "toor dal", amount: 200, unit: "g" }] }, { name: "Roti" }] };
     await post(`/api/weeks/${MON}/plan`, { mode: "draft", meals: [dinner] });
     expect(told).toEqual(["plan_meals insert user:meera", "dishes insert user:meera", "dish_items insert user:meera", "dishes insert user:meera"]);
     await post(`/api/weeks/${MON}/plan`, { mode: "final" });

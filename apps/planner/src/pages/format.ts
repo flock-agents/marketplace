@@ -4,7 +4,7 @@
 import { addDays, clockText, dayLabel, todayStr, WEEKDAYS, weekdayLong, weekdayOf, type Weekday } from "../../server/dates";
 import { ruleText, type Rule } from "../../server/rules";
 import { APP_NAMES, SUBSCRIPTION_UNNAMED, SYNC_ASK_COOLDOWN_MIN, type GroceryApp } from "../../server/db/constants";
-import { dishText, lastTimeText, type LastTime } from "../../server/dishText";
+import { dishText, forAll, lastTimeText, type LastTime } from "../../server/dishText";
 
 /** A dish in one line, "Parathas (for Dad)": the same words the messages use. */
 export const forText = dishText;
@@ -34,7 +34,7 @@ export function mealLines(m: { ordered_in?: boolean; note?: string | null; dishe
   for (const d of m.dishes) {
     if (!names.some((n) => key(n) === key(d.name))) names.push(d.name);
     const note = d.portion_note?.trim(), who = d.for_people ?? [];
-    const all = everyone.length > 0 && everyone.every((p) => who.some((w) => key(w) === key(p)));
+    const all = forAll(who) || (everyone.length > 0 && everyone.every((p) => who.some((w) => key(w) === key(p))));
     const line = note ? `${d.name}: ${note}` : who.length && !all ? `${d.name} for ${who.join(", ")}` : null;
     if (line && !under.includes(line)) under.push(line);
     const last = lastTimeText(d.last_time), said = last ? `${d.name}, last time: ${last}` : null;

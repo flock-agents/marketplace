@@ -38,15 +38,16 @@ export function makeScorer(fx: Fixture, week: Week) {
   const isAbsent = (who: string, day: string, slot: string) =>
     fx.absent.some((a) => samePerson(a.who, who) && a.days.includes(day) && a.slots.some((s) => lc(s) === lc(slot)));
   const mealAt = (day: string, slot: string): Meal | undefined => meals.find((m) => weekdayOf(m.date) === day && lc(m.slot) === lc(slot));
-  /** The dishes `who` eats in a meal: the ones naming them, else every dish naming nobody. Nobody eats a meal they are away
-   *  for, or an extra slot that is someone else's. */
+  /** Is a dish for everyone who eats its meal: `["everyone"]`, or no one named (an older row). */
+  const forEveryone = (d: Dish) => !d.for_people?.length || d.for_people.some((p) => lc(p) === "everyone");
+  /** The dishes `who` eats in a meal, as written: the ones naming them, and the ones for everyone. Nobody eats a meal they
+   *  are away for, or an extra slot that is someone else's (that slot's everyone is its own people). */
   const eats = (who: string, m: Meal): Dish[] => {
     const day = weekdayOf(m.date);
     const extra = slotFor.get(lc(m.slot));
     if (extra?.for?.length && !extra.for.some((p) => samePerson(p, who))) return [];
     if (isAbsent(who, day, m.slot) || m.ordered_in) return [];
-    const named = m.dishes.filter((d) => d.for_people?.some((p) => samePerson(p, who)));
-    return named.length ? named : m.dishes.filter((d) => !d.for_people?.length);
+    return m.dishes.filter((d) => forEveryone(d) || d.for_people!.some((p) => samePerson(p, who)));
   };
   const inScope = (m: Meal, c: Check) =>
     (!c.days || c.days.includes(weekdayOf(m.date))) && (!c.slots || c.slots.some((s: string) => lc(s) === lc(m.slot)));

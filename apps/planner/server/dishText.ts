@@ -1,12 +1,15 @@
 // A dish in one line, as the messages and the pages write it. No imports: the pages read this file too.
 
 /** "Boiled eggs (4 for me, 1 for wife)": the portions when they are noted, else who it is for ("Parathas (for Dad)"), else
- *  the name alone (a dish for everyone). */
+ *  the name alone (a dish for everyone: no one named, or `["everyone"]`). */
 export function dishText(d: { name: string; for_people?: string[] | null; portion_note?: string | null }): string {
   const note = d.portion_note?.trim();
   if (note) return `${d.name} (${note})`;
-  return d.for_people?.length ? `${d.name} (for ${d.for_people.join(", ")})` : d.name;
+  return d.for_people?.length && !forAll(d.for_people) ? `${d.name} (for ${d.for_people.join(", ")})` : d.name;
 }
+
+/** Does a dish's `for` say "everyone" (everyone who eats that meal)? */
+export const forAll = (who: readonly string[] | null | undefined): boolean => !!who?.some((w) => w.trim().toLowerCase() === "everyone");
 
 /** A dish's name as it is matched across meals and weeks: lowercase, trimmed, single spaces. */
 export const dishKey = (name: string): string => name.trim().toLowerCase().replace(/\s+/g, " ");

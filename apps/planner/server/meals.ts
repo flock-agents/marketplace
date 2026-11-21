@@ -1,6 +1,7 @@
 // The plan: a week of meals, each a date and a slot, made of dishes in the order they are served, each dish with what it
-// needs bought. A meal is planned once, not once per person: a dish is for everyone who eats that meal, one person's variation
-// is a note on it, and the same dish sent twice in a meal (once per person) is kept as one (mergeSameDishes). The agent writes a whole week with plan_week (a draft the family can change, then final), and changes one meal
+// needs bought and who eats it (`for`: the names, or ["everyone"] for everyone who eats that meal; the agent names them on
+// every dish, the family may leave them out for everyone). A meal is planned once, not once per person: one person's variation
+// is a note on a dish, and the same dish sent twice in a meal (once per person) is kept as one (mergeSameDishes). The agent writes a whole week with plan_week (a draft the family can change, then final), and changes one meal
 // or one dish with set_meal and set_dish. A meal that is ordered in has no dishes, so nothing is bought for it.
 import type { Hono } from "hono";
 import { and, asc, eq, gte, inArray, isNotNull, lte, sql } from "drizzle-orm";
@@ -13,7 +14,7 @@ import { addDays, mondayOf, todayStr, weekDates, weekdayOf } from "./dates";
 import { introText, weekLink, weekMessage, weekSendText, youtubeThumb } from "./messages";
 import { dishKey, type LastTime } from "./dishText";
 import { bookOf, knownDishes, lastTime, setVideo, videoOf, type DishVideo } from "./dishBook";
-import { breaksText, ruleBreaks, ruleBreaksIn, type RuleBreak } from "./rules";
+import { breaksText, dinersOf, EVERYONE, forEveryone, ruleBreaks, ruleBreaksIn, type RuleBreak } from "./rules";
 import { getHouse, groceryApp, houseView, isObject, list, name, names, refuse, words, writeRoutes,
   type Db, type Emit, type HouseView, type PersonRow } from "./family";
 
@@ -41,8 +42,9 @@ export type WeekContext = { week_start: string; people: PersonRow[]; house: Hous
 type MealRow = typeof plan_meals.$inferSelect;
 type DishRow = typeof dishes.$inferSelect;
 type Item = { item: string; amount: number | null; unit: string | null };
-/** A dish as it was sent: only the fields in `set` were given. */
-type Dish = { name: string; set: Partial<Pick<DishRow, "for_people" | "portion_note" | "recipe_id" | "video_url">>; items?: Item[] };
+/** A dish as it was sent: only the fields in `set` were given. `eaters`: what is wrong with who eats it, as the agent sent it
+ *  ("no for"), when something is. */
+type Dish = { name: string; set: Partial<Pick<DishRow, "for_people" | "portion_note" | "recipe_id" | "video_url">>; items?: Item[]; eaters?: string };
 type Meal = { date: string; slot: string; ordered_in?: boolean; note?: string | null; dishes?: Dish[] };
 type Change = Parameters<Emit>;
 
@@ -139,10 +141,36 @@ function itemsOf(v: unknown, dish: string): Item[] {
   });
 }
 
-/** The fields of a dish that were sent. `for` empty or null means everyone. */
-function dishOf(db: Db, d: Record<string, unknown>, dishName: string): Dish {
+const NO_EATERS = "no for";
+
+/** Who eats a dish, as the agent sent it: `["everyone"]` alone, or names on the Family page (`people`), each written as there.
+ *  Answers the list, or what is wrong with it. */
+function eatersOf(who: string[], people: string[]): { who: string[] } | { problem: string } {
+  if (!who.length) return { problem: NO_EATERS };
+  if (who.some((w) => w.toLowerCase() === EVERYONE))
+    return who.length === 1 ? { who: [EVERYONE] } : { problem: `for: "everyone" goes alone; otherwise name each person who eats it` };
+  const unknown: string[] = [], out: string[] = [];
+  for (const w of who) {
+    const p = people.find((x) => x.toLowerCase() === w.toLowerCase());
+    if (p) { if (!out.includes(p)) out.push(p); continue; }
+    const near = closest(w, people);
+    unknown.push(`${JSON.stringify(w)} is not on the Family page${near ? ` (did you mean ${near}?)` : ""}`);
+  }
+  return unknown.length ? { problem: `for: ${unknown.join(", ")}` } : { who: out };
+}
+
+/** The fields of a dish that were sent. From the family, `for` empty or null means everyone. From the agent (`people`: the
+ *  names on the Family page), `for` is checked as eatersOf says, and what is wrong is kept in `eaters` to be told with the rest. */
+function dishOf(db: Db, d: Record<string, unknown>, dishName: string, people: string[] | null = null): Dish {
   const set: Dish["set"] = {};
-  if (d.for !== undefined) { const who = d.for === null ? [] : names(d.for, `${dishName}: for`); set.for_people = who.length ? JSON.stringify(who) : null; }
+  let eaters: string | undefined;
+  if (d.for !== undefined) {
+    const who = d.for === null ? [] : names(d.for, `${dishName}: for`);
+    if (people) {
+      const e = eatersOf(who, people);
+      if ("problem" in e) eaters = e.problem; else set.for_people = JSON.stringify(e.who);
+    } else set.for_people = who.length ? JSON.stringify(who) : null;
+  }
   if (d.portion_note !== undefined) set.portion_note = words(d.portion_note, `${dishName}: portion_note`);
   if (d.video_url !== undefined) set.video_url = words(d.video_url, `${dishName}: video_url`);
   if (d.recipe_id !== undefined) {
@@ -150,7 +178,7 @@ function dishOf(db: Db, d: Record<string, unknown>, dishName: string): Dish {
       : typeof d.recipe_id === "string" && db.select({ id: saved_recipes.id }).from(saved_recipes).where(eq(saved_recipes.id, d.recipe_id)).get() ? d.recipe_id
       : refuse(`${dishName}: no saved recipe has the id ${JSON.stringify(d.recipe_id)}`);
   }
-  return { name: dishName, set, ...(d.ingredients !== undefined ? { items: itemsOf(d.ingredients, dishName) } : {}) };
+  return { name: dishName, set, ...(d.ingredients !== undefined ? { items: itemsOf(d.ingredients, dishName) } : {}), ...(eaters ? { eaters } : {}) };
 }
 
 /** A dish as mergeSameDishes reads it, whether it was sent or is a row. */
@@ -159,8 +187,9 @@ export type DishPart = { name: string; for_people: string[] | null; portion_note
 const sameName = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
 
 /** One meal's dishes with each dish once. The same dish planned more than once (the same name, once per person) becomes one,
- *  where the first stood: for everyone when any of them was, or when together they name everyone at home (`everyone`), else
- *  for the people of all of them; each one's note is kept, with whose it was ("two eggs for Shiva"); the ingredients are
+ *  where the first stood, eaten by all of theirs together: with no eaters (the family's "everyone") when any of them had
+ *  none; `["everyone"]` when any of them was for everyone, or when together they name everyone who eats the meal (`everyone`);
+ *  else the people of all of them. Each one's note is kept, with whose it was ("two eggs for Shiva"); the ingredients are
  *  added up. `from` lists the dishes each one was made of, by their place in `parts`: one place for a dish left as it was. */
 export function mergeSameDishes(parts: DishPart[], everyone: string[]): (DishPart & { from: number[] })[] {
   const out: (DishPart & { from: number[] })[] = [];
@@ -169,14 +198,16 @@ export function mergeSameDishes(parts: DishPart[], everyone: string[]): (DishPar
     if (!had) { out.push({ ...p, for_people: p.for_people?.length ? [...p.for_people] : null, items: p.items.map((i) => ({ ...i })), from: [n] }); return; }
     const noteOf = (d: DishPart) => {
       const note = d.portion_note?.trim();
-      if (!note || !d.for_people?.length || d.for_people.some((who) => note.toLowerCase().includes(who.trim().toLowerCase()))) return note || null;
+      if (!note || !d.for_people || forEveryone(d.for_people) || d.for_people.some((who) => note.toLowerCase().includes(who.trim().toLowerCase()))) return note || null;
       return `${note} for ${d.for_people.join(" and ")}`;
     };
     // The first one's note names its people from the moment a second joins it.
     if (had.from.length === 1) had.portion_note = noteOf(had);
     const note = noteOf(p);
     if (note && !(had.portion_note ?? "").toLowerCase().includes(note.toLowerCase())) had.portion_note = [had.portion_note, note].filter(Boolean).join(", ");
-    had.for_people = had.for_people && p.for_people?.length ? [...had.for_people, ...p.for_people.filter((who) => !had.for_people!.some((x) => sameName(x, who)))] : null;
+    had.for_people = !had.for_people?.length || !p.for_people?.length ? null
+      : forEveryone(had.for_people) || forEveryone(p.for_people) ? [EVERYONE]
+      : [...had.for_people, ...p.for_people.filter((who) => !had.for_people!.some((x) => sameName(x, who)))];
     had.recipe_id ??= p.recipe_id; had.video_url ??= p.video_url;
     for (const i of p.items) {
       const same = had.items.find((x) => normItem(x.item) === normItem(i.item) && (x.unit ?? "").trim().toLowerCase() === (i.unit ?? "").trim().toLowerCase());
@@ -186,34 +217,48 @@ export function mergeSameDishes(parts: DishPart[], everyone: string[]): (DishPar
     had.from.push(n);
   });
   for (const o of out)
-    if (o.from.length > 1 && o.for_people && everyone.length && everyone.every((who) => o.for_people!.some((x) => sameName(x, who)))) o.for_people = null;
+    if (o.from.length > 1 && o.for_people && !forEveryone(o.for_people) && everyone.length && everyone.every((who) => o.for_people!.some((x) => sameName(x, who))))
+      o.for_people = [EVERYONE];
   return out;
 }
 
 /** The names of everyone who eats at home. */
 const everyoneAtHome = (db: Db): string[] => db.select({ name: people.name }).from(people).where(eq(people.active, 1)).all().map((p) => p.name);
+/** Who eats a meal in this slot: an extra slot's own people (a child's tiffin), else everyone at home (rules.ts dinersOf). */
+const dinersAt = (db: Db, slot: string): string[] =>
+  dinersOf(slot, everyoneAtHome(db).map((name) => ({ name })), houseView(getHouse(db)).extra_slots);
 
-function dishesSent(db: Db, v: unknown, meal: string): Dish[] {
-  if (!Array.isArray(v)) return refuse(`${meal}: dishes must be a list of { name, for?, portion_note?, recipe_id?, video_url?, ingredients? }`);
-  const sent = v.map((d) => (isObject(d) ? dishOf(db, d, name(d.name, `${meal}: a dish's name`)) : refuse(`${meal}: each dish is { name, ... }`)));
-  // A meal is planned once: the same dish sent once per person is one dish.
+/** A meal's dishes as sent. `agent`: the agent sent them, so each names who eats it (a dish without `for` is told so). */
+function dishesSent(db: Db, v: unknown, meal: string, slot: string, agent: boolean): Dish[] {
+  if (!Array.isArray(v)) return refuse(`${meal}: dishes must be a list of { name, for, portion_note?, recipe_id?, video_url?, ingredients? }`);
+  const family = agent ? everyoneAtHome(db) : null;
+  const sent = v.map((d) => {
+    if (!isObject(d)) return refuse(`${meal}: each dish is { name, ... }`);
+    const dish = dishOf(db, d, name(d.name, `${meal}: a dish's name`), family);
+    return agent && d.for === undefined ? { ...dish, eaters: NO_EATERS } : dish;
+  });
+  // A meal is planned once: the same dish sent once per person is one dish, eaten by all of theirs.
   const merged = mergeSameDishes(sent.map((d) => ({ name: d.name, for_people: d.set.for_people ? list<string>(d.set.for_people) : null, portion_note: d.set.portion_note ?? null,
-    recipe_id: d.set.recipe_id ?? null, video_url: d.set.video_url ?? null, items: d.items ?? [] })), everyoneAtHome(db));
-  return merged.map((m) => m.from.length === 1 ? sent[m.from[0]] : { name: m.name,
-    set: { for_people: m.for_people ? JSON.stringify(m.for_people) : null, portion_note: m.portion_note, recipe_id: m.recipe_id, video_url: m.video_url },
-    ...(m.from.some((n) => sent[n].items) ? { items: m.items } : {}) });
+    recipe_id: d.set.recipe_id ?? null, video_url: d.set.video_url ?? null, items: d.items ?? [] })), dinersAt(db, slot));
+  return merged.map((m) => {
+    if (m.from.length === 1) return sent[m.from[0]];
+    const eaters = m.from.map((n) => sent[n].eaters).find(Boolean);
+    return { name: m.name,
+      set: { for_people: m.for_people ? JSON.stringify(m.for_people) : null, portion_note: m.portion_note, recipe_id: m.recipe_id, video_url: m.video_url },
+      ...(m.from.some((n) => sent[n].items) ? { items: m.items } : {}), ...(eaters ? { eaters } : {}) };
+  });
 }
 
 const NO_DISHES_WITH_ORDER_IN = "a meal that is ordered in has no dishes: leave dishes out, or send ordered_in: false";
 
 /** One meal of a plan_week list. */
-function mealOf(db: Db, v: unknown, slots: string[]): Meal {
+function mealOf(db: Db, v: unknown, slots: string[], agent: boolean): Meal {
   if (!isObject(v)) return refuse("meals must be a list of { date, slot, ordered_in?, note?, dishes? }");
   const date = dateOf(v.date, "a meal's date"), slot = slotOf(v.slot, slots), label = `${date} ${slot}`;
   const meal: Meal = { date, slot };
   if (v.ordered_in !== undefined) meal.ordered_in = flag(v.ordered_in, `${label}: ordered_in`);
   if (v.note !== undefined) meal.note = words(v.note, `${label}: note`);
-  if (v.dishes !== undefined) meal.dishes = dishesSent(db, v.dishes, label);
+  if (v.dishes !== undefined) meal.dishes = dishesSent(db, v.dishes, label, slot, agent);
   if (meal.ordered_in && meal.dishes?.length) refuse(`${label}: ${NO_DISHES_WITH_ORDER_IN}`);
   return meal;
 }
@@ -228,18 +273,31 @@ function missingIngredients(meals: Meal[]): string[] {
   return meals.flatMap((m) => (m.dishes ?? []).filter((d) => !d.items?.length).map((d) => `${mealLabel(m)}: ${d.name}`));
 }
 
+/** The agent plans: every dish it sends names who eats it. Names each dish that does not, and what is wrong. */
+function missingEaters(meals: Meal[]): string[] {
+  return meals.flatMap((m) => (m.dishes ?? []).filter((d) => d.eaters).map((d) => `${mealLabel(m)}: ${d.name} (${d.eaters})`));
+}
+
+/** What the agent is told when a dish does not say who eats it. `family`: the names on the Family page. */
+const eatersSaid = (eaters: string[], family: string[]) =>
+  `Every planned dish names who eats it in for: ["everyone"] (everyone who eats that meal) or the names of the people who eat it`
+  + `${family.length ? ` (${family.join(", ")})` : ""}. A person's own dish names only them, and the shared dish then names everyone else.`
+  + ` Not so: ${eaters.join("; ")}. Send each with its for.`;
+
 /** The family's rules broken, in one sentence the agent acts on. */
 const rulesSaid = (breaks: RuleBreak[]) =>
   `The family's food rules are broken: ${breaksText(breaks)}. Change each of these meals so it keeps the rule, then send it again.`;
 
-/** A write by the agent refused, naming every dish without ingredients and every rule it breaks together, so one round fixes both. */
-function refuseWrite(missing: string[], breaks: RuleBreak[]): void {
-  if (!missing.length && !breaks.length) return;
+/** A write by the agent refused, naming every dish without who eats it, every dish without ingredients and every rule it
+ *  breaks together, so one round fixes them all. */
+function refuseWrite(tx: Db, missing: string[], breaks: RuleBreak[], eaters: string[] = []): void {
+  if (!missing.length && !breaks.length && !eaters.length) return;
   const said: string[] = [];
+  if (eaters.length) said.push(eatersSaid(eaters, everyoneAtHome(tx)));
   if (missing.length) said.push(`${INGREDIENTS_RULE}. Without ingredients: ${missing.join("; ")}. Send each with ingredients: [{ item, amount, unit }].`);
   if (breaks.length) said.push(rulesSaid(breaks));
-  refuse(said.join(" "), breaks.length ? "RULE_BROKEN" : "MISSING_INGREDIENTS",
-    { missing_ingredients: missing, ...(breaks.length ? { rule_breaks: breaks } : {}) });
+  refuse(said.join(" "), breaks.length ? "RULE_BROKEN" : eaters.length ? "MISSING_EATERS" : "MISSING_INGREDIENTS",
+    { missing_ingredients: missing, ...(eaters.length ? { missing_eaters: eaters } : {}), ...(breaks.length ? { rule_breaks: breaks } : {}) });
 }
 
 /** The people the rules are checked for: everyone who eats at home. */
@@ -250,10 +308,11 @@ function breaksIn(tx: Db, weekStart: string, meals: { date: string; slot: string
   return ruleBreaksIn(weekView(tx, weekStart), houseView(getHouse(tx)), peopleAtHome(tx), meals.map(mealLabel));
 }
 
-/** After the agent's write to one meal, inside its transaction: refused (and so undone) when a dish is left without ingredients,
- *  or when the meal is in a final week and breaks one of the family's rules. The family's own edits are never checked. */
-function guardMeal(tx: Db, meal: MealRow, missing: string[]): void {
-  refuseWrite(missing, meal.status === "final" ? breaksIn(tx, mondayOf(meal.date), [meal]) : []);
+/** After the agent's write to one meal, inside its transaction: refused (and so undone) when a dish does not say who eats it
+ *  or is left without ingredients, or when the meal is in a final week and breaks one of the family's rules. The family's
+ *  own edits are never checked. */
+function guardMeal(tx: Db, meal: MealRow, missing: string[], eaters: string[] = []): void {
+  refuseWrite(tx, missing, meal.status === "final" ? breaksIn(tx, mondayOf(meal.date), [meal]) : [], eaters);
 }
 
 const STAPLES = new Set<string>(STAPLE_DISHES);
@@ -347,7 +406,8 @@ export function mergeDuplicateDishes(db: Db): number {
   for (const d of all) byMeal.set(d.meal_id, [...(byMeal.get(d.meal_id) ?? []), d]);
   const twice = [...byMeal.entries()].filter(([, rows]) => new Set(rows.map((d) => dishKey(d.name))).size < rows.length);
   if (!twice.length) return 0;
-  const everyone = everyoneAtHome(db);
+  const slotOf = new Map(db.select({ id: plan_meals.id, slot: plan_meals.slot }).from(plan_meals).where(inArray(plan_meals.id, twice.map(([id]) => id))).all()
+    .map((m) => [m.id, m.slot]));
   let folded = 0;
   db.transaction((txRaw) => {
     const tx = txRaw as unknown as Db, changes: Change[] = [];
@@ -355,7 +415,7 @@ export function mergeDuplicateDishes(db: Db): number {
       const itemsOf = (id: string) => tx.select().from(dish_items).where(eq(dish_items.dish_id, id)).orderBy(asc(dish_items.created_at), sql`rowid`).all()
         .map((i) => ({ item: i.item, amount: i.amount, unit: i.unit }));
       const merged = mergeSameDishes(rows.map((d) => ({ name: d.name, for_people: d.for_people ? list<string>(d.for_people) : null, portion_note: d.portion_note,
-        recipe_id: d.recipe_id, video_url: d.video_url, items: itemsOf(d.id) })), everyone);
+        recipe_id: d.recipe_id, video_url: d.video_url, items: itemsOf(d.id) })), dinersAt(db, slotOf.get(mealId) ?? ""));
       for (const m of merged) {
         if (m.from.length === 1) continue;
         const [keep, ...rest] = m.from.map((n) => rows[n]);
@@ -421,8 +481,8 @@ export function mountMealRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: { bas
     } else {
       if (!Array.isArray(b.meals) || !b.meals.length) refuse("meals must be a list of the week's meals: { date, slot, ordered_in?, note?, dishes? }; leave it out to read the context");
       const keepRest = b.keep_rest === undefined ? false : flag(b.keep_rest, "keep_rest");
-      const slots = slotNames(db);
-      const meals = (b.meals as unknown[]).map((m) => mealOf(db, m, slots));
+      const slots = slotNames(db), agent = by.startsWith("agent:");
+      const meals = (b.meals as unknown[]).map((m) => mealOf(db, m, slots, agent));
       const seen = new Set<string>();
       const cooking = houseView(getHouse(db)).cooking_days;
       for (const m of meals) {
@@ -431,8 +491,8 @@ export function mountMealRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: { bas
         if (seen.has(`${m.date} ${m.slot}`)) refuse(`${m.date} ${m.slot} is in meals twice`);
         seen.add(`${m.date} ${m.slot}`);
       }
-      const checked = mode === "final" && by.startsWith("agent:");
-      const missing = checked ? missingIngredients(meals) : [];
+      const checked = mode === "final" && agent;
+      const missing = checked ? missingIngredients(meals) : [], eaters = agent ? missingEaters(meals) : [];
       commit((tx, changes) => {
         for (const old of tx.select().from(plan_meals).where(inWeek(weekStart)).all()) {
           if (keepRest && !seen.has(`${old.date} ${old.slot}`)) {
@@ -454,7 +514,7 @@ export function mountMealRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: { bas
         }
         // The agent's final plan keeps the family's rules: the meals it sent, and a cap over the week they count towards.
         // Checked on the week as written, so a refusal undoes the whole call.
-        if (checked) refuseWrite(missing, breaksIn(tx, weekStart, meals));
+        if (agent) refuseWrite(tx, missing, checked ? breaksIn(tx, weekStart, meals) : [], eaters);
       });
     }
     const week = weekView(db, weekStart);
@@ -492,11 +552,12 @@ export function mountMealRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: { bas
     const set: Partial<typeof plan_meals.$inferInsert> = {};
     if (b.ordered_in !== undefined) set.ordered_in = flag(b.ordered_in, "ordered_in") ? 1 : 0;
     if (b.note !== undefined) set.note = words(b.note, "note");
-    const sent = b.dishes === undefined ? undefined : dishesSent(db, b.dishes, label);
+    const agent = by.startsWith("agent:");
+    const sent = b.dishes === undefined ? undefined : dishesSent(db, b.dishes, label, meal?.slot ?? at!.slot, agent);
     const orderedIn = !!(set.ordered_in ?? meal?.ordered_in);
     if (orderedIn && sent?.length) refuse(`${label}: ${NO_DISHES_WITH_ORDER_IN}`);
-    const agent = by.startsWith("agent:");
     const missing = sent && agent ? missingIngredients([{ ...(meal ?? at!), dishes: sent }]) : [];
+    const eaters = sent && agent ? missingEaters([{ ...(meal ?? at!), dishes: sent }]) : [];
     const id = commit((tx, changes) => {
       const row = meal
         ? tx.update(plan_meals).set({ ...set, updated_at: now(), updated_by: by }).where(eq(plan_meals.id, meal.id)).returning().get()
@@ -504,7 +565,7 @@ export function mountMealRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: { bas
       changes.push(["plan_meals", row.id, meal ? "update" : "insert", by]);
       if (orderedIn || sent) removeDishes(tx, row.id, changes);
       (sent ?? []).forEach((d, position) => addDish(tx, row.id, position, d, by, changes));
-      if (agent) guardMeal(tx, row, missing);
+      if (agent) guardMeal(tx, row, missing, eaters);
       return row.id;
     });
     return { body: { meal: mealView(id) } };
@@ -541,13 +602,17 @@ export function mountMealRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: { bas
       });
       return { body: { meal: mealView(meal.id) } };
     }
-    const sent = dishOf(db, b, label);
-    if (!dish && meal?.ordered_in) refuse(`${meal.date} ${meal.slot} is ordered in, so it has no dishes: set_meal it with ordered_in: false first`);
     const agent = by.startsWith("agent:");
+    const sent = dishOf(db, b, label, agent ? everyoneAtHome(db) : null);
+    if (!dish && meal?.ordered_in) refuse(`${meal.date} ${meal.slot} is ordered in, so it has no dishes: set_meal it with ordered_in: false first`);
     const missing = agent && (sent.items ? !sent.items.length
       : !dish || !db.select({ id: dish_items.id }).from(dish_items).where(eq(dish_items.dish_id, dish.id)).limit(1).get())
       // The agent plans: a dish it adds or changes ends with its ingredients.
       ? missingIngredients([{ ...(meal ?? at!), dishes: [{ ...sent, name: b.dish_id != null && typeof b.name === "string" ? b.name : label }] }]) : [];
+    // The agent plans: a dish it adds says who eats it, and a `for` it sends names them as the Family page does. A dish there
+    // already keeps its eaters (a family's own dish without any stays for everyone).
+    const eaters = agent ? missingEaters([{ ...(meal ?? at!), dishes: [{ ...sent, name: b.dish_id != null && typeof b.name === "string" ? b.name : label,
+      eaters: sent.eaters ?? (b.for === undefined && !dish ? NO_EATERS : undefined) }] }]) : [];
     const ids = commit((tx, changes) => {
       // A meal made for the dish is the app's own row; the dish is the writer's.
       const mealRow = meal ?? tx.insert(plan_meals).values({ ...at!, status: statusFor(at!.date), updated_by: "app" }).returning().get();
@@ -562,7 +627,7 @@ export function mountMealRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: { bas
         if (sent.items) { removeItems(tx, row.id, changes); addItems(tx, row.id, sent.items, by, changes); }
       } else row = addDish(tx, mealRow.id, dishesOf(tx, mealRow.id).length, sent, by, changes);
       orderDishes(tx, mealRow.id, changes, position === undefined ? undefined : { id: row.id, at: position });
-      if (agent) guardMeal(tx, mealRow, missing);
+      if (agent) guardMeal(tx, mealRow, missing, eaters);
       return { meal: mealRow.id, dish: row.id };
     });
     const view = mealView(ids.meal);

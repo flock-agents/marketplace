@@ -35,8 +35,22 @@ Existing kinds keep working and are checked as:
 - `fasting`, `other`: not checked (note only) unless given as one of the checked kinds.
 
 ## Who eats a dish
-In a meal, a person eats the dishes whose `for_people` includes them; when no dish of that meal names them, they eat
-every dish with no `for_people`. So "Meera gets plain idli" is a dish `Plain idli` with `for_people: ["Meera"]`.
+Owner, 2026-11-22: every planned dish says exactly who eats it, so the check reads what is written, with no guessing.
+- Every dish the agent plans (`plan_week` with meals, `set_meal` dishes, `set_dish` adding a dish) carries `for`: a
+  non-empty list of names on the Family page, or `["everyone"]` alone. A missing or empty `for`, a name not on the Family
+  page (with "did you mean"), or "everyone" mixed with names is refused with code `MISSING_EATERS`, every such dish named
+  (`missing_eaters`), in the same refusal as missing ingredients and rule breaks (`RULE_BROKEN` wins the code when there are
+  breaks). `set_dish` changing a dish already there keeps its `for` unless one is sent.
+- "everyone" (stored as `["everyone"]`) is everyone who eats that meal: the people of an extra slot that has its own
+  `for` ("Agastya's tiffin": Agastya), else everyone on the Family page.
+- A person eats exactly the dishes whose `for` names them, and the dishes for everyone while they eat that meal. A dish
+  with no `for` (the family's own edits, which are never forced, and rows from before) is for everyone.
+- So "Meera gets plain idli" is `Plain idli` `for: ["Meera"]` and the shared dish names everyone else; a swap stays a
+  `portion_note` on a dish the person eats ("millet instead of rice for Lakshmi").
+- A rule for one person holds only in the meals they eat (an `only` rule for Meera says nothing about Agastya's tiffin);
+  a `require` with no `who` holds for everyone who eats that meal.
+- The same dish sent once per person in a meal is one dish eaten by all of theirs (`["everyone"]` when one of them is for
+  everyone, or when together they name everyone who eats the meal).
 
 ## Matching
 Lower case, words only; a trailing plural `s`/`es` is dropped on both sides; a phrase matches as consecutive words.

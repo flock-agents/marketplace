@@ -81,7 +81,7 @@ describe("weekly plan", () => {
       : i % 3 ? { item, amount: 500, unit: "g", every: "week", times_per_week: 2 } : { item, amount: 1, unit: "l", every: "day" });
     for (let i = 0; i < size.recipes; i++) await k.op("save_recipe", { name: `Grandmother's recipe number ${i + 1} with coconut`, links: [`https://www.instagram.com/reel/recipe${i}`], tags: ["breakfast", "tiffin", "quick"], for: ["Agastya", "Meera"] });
     const lastWeek = ["16", "17", "18", "19", "20", "21", "22"].flatMap((d) => ["Breakfast", "Lunch", "Agastya's tiffin", "Dinner"].map((slot) => ({ date: `2026-11-${d}`, slot,
-      dishes: [{ name: `${slot} main with gravy` }, { name: `${slot} side, dry` }, { name: `${slot} salad or raita` }] })));
+      dishes: [{ name: `${slot} main with gravy`, for: ["everyone"] }, { name: `${slot} side, dry`, for: ["everyone"] }, { name: `${slot} salad or raita`, for: ["everyone"] }] })));
     await k.op("set_cooking_days", { days: ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] });
     await k.op("plan_week", { week_start: "2026-11-16", mode: "draft", meals: lastWeek });
     return k;
@@ -261,7 +261,7 @@ describe("the reminders", () => {
     if (o.connected !== false) await k.op("set_shopping_apps", { main: "zepto", fallback: null, connected: ["zepto"] });
     if (o.curd) await k.op("set_item", { item: "curd", group: "daily", usual_amount: 400, unit: "g", every_days: 1 });
     if (o.dinner) await k.op("plan_week", { week_start: MON, mode: "final", keep_rest: true, meals: [
-      { date: MON, slot: "Dinner", dishes: [{ name: "methi thepla", ingredients: [{ item: "methi", amount: 1, unit: "pc" }] }] }] });
+      { date: MON, slot: "Dinner", dishes: [{ name: "methi thepla", for: ["everyone"], ingredients: [{ item: "methi", amount: 1, unit: "pc" }] }] }] });
     return Object.assign(k, { clock: (d: Date) => { t = d.getTime(); } });
   };
 

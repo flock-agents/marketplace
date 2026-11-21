@@ -27,7 +27,7 @@ const FRAME = `
 
 You are the meal agent on the weekly run. You have no tools here: the harness makes the app calls for you. Reply with ONE JSON
 object and nothing else: { "meals": [ ...every meal of the week... ], "repeats_ok"?: true }, each meal as plan_week takes it ({ date, slot,
-ordered_in?, note?, dishes?: [{ name, for?, portion_note?, ingredients: [{ item, amount, unit }] }] }). The harness sends it
+ordered_in?, note?, dishes?: [{ name, for: ["everyone"] or [names], portion_note?, ingredients: [{ item, amount, unit }] }] }). The harness sends it
 as plan_week { week_start, mode: "final", meals } and then the closing plan_week { week_start, mode: "final", repeats_ok }
 (repeats_ok only when you send it). If the app
 refuses either, you get its answer and send the whole week again, fixed.`;
@@ -83,7 +83,7 @@ async function once(fx: Fixture, guide: string, rep: number): Promise<RunRecord>
     while (rounds < maxRounds && !accepted) {
       rounds++;
       // --dry: no model, a one-meal stub, to check the seeding and the scoring end to end.
-      const reply = flags.dry ? { text: JSON.stringify({ meals: [{ date: fx.week_start, slot: "Breakfast", dishes: [{ name: "Plain idli", ingredients: [{ item: "idli batter", amount: 500, unit: "g" }] }] }] }), cost: 0, ms: 0 }
+      const reply = flags.dry ? { text: JSON.stringify({ meals: [{ date: fx.week_start, slot: "Breakfast", dishes: [{ name: "Plain idli", for: ["everyone"], ingredients: [{ item: "idli batter", amount: 500, unit: "g" }] }] }] }), cost: 0, ms: 0 }
         : await ask(mo, guide + FRAME, transcript.join("\n\n"));
       cost += reply.cost; ms += reply.ms;
       let payload: any;

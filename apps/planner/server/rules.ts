@@ -95,10 +95,22 @@ export const dishHas = (d: { name: string; ingredients?: (string | { item: strin
 // ── Who eats what ──
 
 const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
-/** The dishes of a meal a person eats: the ones naming them, else every dish for no one in particular. */
-export function eatenBy(meal: RuleMeal, person: string): RuleDish[] {
-  const named = meal.dishes.filter((d) => d.for_people?.some((p) => same(p, person)));
-  return named.length ? named : meal.dishes.filter((d) => !d.for_people?.length);
+/** The word a dish's eaters use for everyone who eats that meal. */
+export const EVERYONE = "everyone";
+/** Is a dish for everyone who eats its meal: `["everyone"]`, or no eaters at all (a family's own dish, a row from before
+ *  every dish named its eaters). */
+export const forEveryone = (who: string[] | null | undefined): boolean => !who?.length || who.some((w) => same(w, EVERYONE));
+/** An extra slot as the checks read it: a slot with `for` is eaten by those people only. */
+export type RuleSlot = { name: string; for?: string[] };
+/** Who eats a meal: an extra slot's own people (a child's tiffin), else everyone at home. */
+export function dinersOf(slot: string, people: { name: string }[], slots: RuleSlot[] = []): string[] {
+  const own = slots.find((s) => same(s.name, slot))?.for;
+  return own?.length ? own : people.map((p) => p.name);
+}
+/** The dishes of a meal a person eats, as written: the ones naming them, and the ones for everyone while they eat that meal. */
+export function eatenBy(meal: RuleMeal, person: string, diners: string[]): RuleDish[] {
+  const eats = diners.some((d) => same(d, person));
+  return meal.dishes.filter((d) => d.for_people?.some((p) => same(p, person)) || (eats && forEveryone(d.for_people)));
 }
 
 // ── A rule in words ──
@@ -143,7 +155,7 @@ const shortLabel = (m: { date: string; slot: string }) => `${weekdayOf(m.date)} 
 /** A break, with the meals it is about: for a cap, every meal that counts towards it. */
 type Found = RuleBreak & { about: string[] };
 
-function breaksOf(shown: Rule, meals: RuleMeal[], people: { name: string }[]): Found[] {
+function breaksOf(shown: Rule, meals: RuleMeal[], people: { name: string }[], slots: RuleSlot[]): Found[] {
   const r = checkedAs(shown);
   if (!r) return [];
   // A day in the family's own words ("Ekadashi") is not one the app can place: a rule with only such days is a note.
@@ -153,37 +165,41 @@ function breaksOf(shown: Rule, meals: RuleMeal[], people: { name: string }[]): F
     && (!days.length || days.includes(weekdayOf(m.date))) && (!r.slots?.length || r.slots.some((s) => same(s, m.slot))));
   const rule = ruleText(shown);
   const items = r.items ?? [];
+  const diners = (m: RuleMeal) => dinersOf(m.slot, people, slots);
+  /** Does a person eat this meal at all: one named on a dish, or one of its diners. */
+  const eatsAt = (m: RuleMeal, who: string) => diners(m).some((d) => same(d, who)) || m.dishes.some((d) => d.for_people?.some((p) => same(p, who)));
+  const eaten = (m: RuleMeal, who: string) => eatenBy(m, who, diners(m));
   const firstHit = (d: RuleDish) => items.map((i) => dishHit(d, i)).find((h) => h !== null) ?? null;
   const out: Found[] = [];
   const add = (m: RuleMeal, b: Omit<RuleBreak, "meal" | "rule">, about = [mealLabel(m)]) =>
     out.push({ meal: mealLabel(m), ...(b.dish ? { dish: b.dish } : {}), ...(b.who ? { who: b.who } : {}), rule, fix: b.fix, about });
   switch (r.kind) {
     case "avoid":
-      for (const m of inScope) for (const d of r.who ? eatenBy(m, r.who) : m.dishes) {
+      for (const m of inScope) for (const d of r.who ? eaten(m, r.who) : m.dishes) {
         const h = firstHit(d);
         if (h) add(m, { dish: d.name, who: r.who, fix: `it has ${h}: ${r.who ? `give ${r.who} a dish without it` : "plan a dish without it"}` });
       }
       break;
     case "only":
-      for (const m of inScope) {
-        const eaten = eatenBy(m, r.who!);
-        if (!eaten.length) add(m, { who: r.who, fix: `add a dish for ${r.who}: one of ${listText(items)}` });
-        for (const d of eaten) if (!items.some((i) => matches(d.name, i, { name: true }))) add(m, { dish: d.name, who: r.who, fix: `add a dish for ${r.who}` });
+      for (const m of inScope.filter((m) => eatsAt(m, r.who!))) {
+        const ate = eaten(m, r.who!);
+        if (!ate.length) add(m, { who: r.who, fix: `add a dish for ${r.who}: one of ${listText(items)}` });
+        for (const d of ate) if (!items.some((i) => matches(d.name, i, { name: true }))) add(m, { dish: d.name, who: r.who, fix: `add a dish for ${r.who}` });
       }
       break;
     case "swap":
-      for (const m of inScope) for (const d of eatenBy(m, r.who!)) {
+      for (const m of inScope) for (const d of eaten(m, r.who!)) {
         const h = firstHit(d), note = d.portion_note ?? "";
         if (h && !(matches(note, r.who!) && matches(note, r.to!)))
           add(m, { dish: d.name, who: r.who, fix: `it has ${h}: say "${r.to} for ${r.who}" in its portion_note, or give ${r.who} a dish of their own` });
       }
       break;
     case "require":
-      for (const m of inScope) for (const who of r.who ? [r.who] : people.map((p) => p.name))
-        if (!eatenBy(m, who).some((d) => firstHit(d))) add(m, { who, fix: `add a dish with ${listText(items, " or ")} that ${who} eats` });
+      for (const m of inScope) for (const who of r.who ? (eatsAt(m, r.who) ? [r.who] : []) : diners(m))
+        if (!eaten(m, who).some((d) => firstHit(d))) add(m, { who, fix: `add a dish with ${listText(items, " or ")} that ${who} eats` });
       break;
     case "cap": {
-      const counted = inScope.map((m) => ({ m, d: (r.who ? eatenBy(m, r.who) : m.dishes).find((d) => firstHit(d)) })).filter((x) => x.d);
+      const counted = inScope.map((m) => ({ m, d: (r.who ? eaten(m, r.who) : m.dishes).find((d) => firstHit(d)) })).filter((x) => x.d);
       const cap = r.per_week ?? 0;
       if (counted.length <= cap) break;
       const about = counted.map((x) => mealLabel(x.m));
@@ -195,9 +211,12 @@ function breaksOf(shown: Rule, meals: RuleMeal[], people: { name: string }[]): F
   return out;
 }
 
-function found(week: RuleWeek, house: { rules: Rule[] }, people: { name: string }[]): Found[] {
+/** The house as the checks read it: its rules, and its extra slots (who eats each). */
+export type RuleHouse = { rules: Rule[]; extra_slots?: RuleSlot[] };
+
+function found(week: RuleWeek, house: RuleHouse, people: { name: string }[]): Found[] {
   const meals = week.days.flatMap((d) => d.meals).sort((a, b) => a.date.localeCompare(b.date) || slotRank(a.slot) - slotRank(b.slot) || a.slot.localeCompare(b.slot));
-  const all = house.rules.flatMap((r) => breaksOf(r, meals, people));
+  const all = house.rules.flatMap((r) => breaksOf(r, meals, people, house.extra_slots ?? []));
   const order = new Map(meals.map((m, i) => [mealLabel(m), i]));
   // By meal, in the week's order; within a meal, in the order of the rules.
   return all.map((b, i) => ({ b, i })).sort((x, y) => (order.get(x.b.meal) ?? 0) - (order.get(y.b.meal) ?? 0) || x.i - y.i).map((x) => x.b);
@@ -206,13 +225,13 @@ function found(week: RuleWeek, house: { rules: Rule[] }, people: { name: string 
 const plain = ({ about: _about, ...b }: Found): RuleBreak => b;
 
 /** Every break of the house's rules in a week. */
-export function ruleBreaks(week: RuleWeek, house: { rules: Rule[] }, people: { name: string }[]): RuleBreak[] {
+export function ruleBreaks(week: RuleWeek, house: RuleHouse, people: { name: string }[]): RuleBreak[] {
   return found(week, house, people).map(plain);
 }
 
 /** The breaks a change to some meals of the week is answerable for: the breaks in those meals, and a cap over the week that
  *  one of them counts towards. `meals`: their labels, as mealLabel writes them. */
-export function ruleBreaksIn(week: RuleWeek, house: { rules: Rule[] }, people: { name: string }[], meals: string[]): RuleBreak[] {
+export function ruleBreaksIn(week: RuleWeek, house: RuleHouse, people: { name: string }[], meals: string[]): RuleBreak[] {
   const mine = new Set(meals);
   return found(week, house, people).filter((b) => b.about.some((m) => mine.has(m))).map(plain);
 }

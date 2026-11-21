@@ -19,6 +19,7 @@ describe("dishText", () => {
     expect(dishText({ name: "Khichdi", for_people: ["Dad", "Agastya"], portion_note: null })).toBe("Khichdi (for Dad, Agastya)");
     expect(dishText({ name: "Sambar" })).toBe("Sambar");
     expect(dishText({ name: "Sambar", for_people: [], portion_note: "  " })).toBe("Sambar");
+    expect(dishText({ name: "Sambar", for_people: ["everyone"] })).toBe("Sambar");
   });
 });
 

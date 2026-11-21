@@ -20,13 +20,13 @@ describe("save_recipe", () => {
     expect(unnamed).toMatchObject({ code: "NEEDS_NAME", status: 400 });
     expect(rows("saved_recipes")).toHaveLength(1);
 
-    const { dish } = await op("set_dish", { date: MON, slot: "Dinner", name: "Dal makhani", recipe_id: first.recipe.id, video_url: REEL,
+    const { dish } = await op("set_dish", { date: MON, slot: "Dinner", name: "Dal makhani", for: ["everyone"], recipe_id: first.recipe.id, video_url: REEL,
       ingredients: [{ item: "urad dal", amount: 200, unit: "g" }] });
     expect(dish.recipe_id).toBe(first.recipe.id);
     const { context } = await op("plan_week", { week_start: MON, mode: "draft" });
     expect(context.recipes).toEqual([{ id: first.recipe.id, name: "Dal makhani", tags: ["Saturday fun dinner"], for_people: [] }]);
     const { week } = await op("plan_week", { week_start: MON, mode: "final" });
-    expect(week.days[0].meals[0].dishes[0]).toMatchObject({ name: "Dal makhani", recipe_id: first.recipe.id, video_url: REEL,
+    expect(week.days[0].meals[0].dishes[0]).toMatchObject({ name: "Dal makhani", for_people: ["everyone"], recipe_id: first.recipe.id, video_url: REEL,
       ingredients: [{ item: "urad dal", amount: 200, unit: "g" }] });
   });
 
@@ -79,8 +79,8 @@ describe("save_recipe", () => {
     const { op, owner, rows } = await boot();
     expect(await op("save_recipe", { name: "X", links: "https://youtu.be/a" })).toMatchObject({ code: "APP_REFUSED", status: 400 });
     expect(await op("save_recipe", { name: "X", links: ["  "] })).toMatchObject({ code: "APP_REFUSED" });
-    expect(await op("save_recipe", { name: "X", ingredients: [{ amount: 2 }] })).toMatchObject({ code: "APP_REFUSED" });
-    expect(await op("save_recipe", { name: "X", ingredients: [{ item: "paneer", amount: "200 g" }] })).toMatchObject({ code: "APP_REFUSED" });
+    expect(await op("save_recipe", { name: "X", for: ["everyone"], ingredients: [{ amount: 2 }] })).toMatchObject({ code: "APP_REFUSED" });
+    expect(await op("save_recipe", { name: "X", for: ["everyone"], ingredients: [{ item: "paneer", amount: "200 g" }] })).toMatchObject({ code: "APP_REFUSED" });
     expect(await op("save_recipe", { name: "X", tags: "dinner" })).toMatchObject({ code: "APP_REFUSED" });
     expect(await op("save_recipe", { name: "  ", links: [REEL] })).toMatchObject({ code: "NEEDS_NAME" });
     expect(rows("saved_recipes")).toHaveLength(0);

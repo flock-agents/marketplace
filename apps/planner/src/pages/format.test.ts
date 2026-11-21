@@ -11,6 +11,7 @@ describe("mealLines", () => {
     expect(mealLines({ dishes: [{ name: "Idli", for_people: ["Agastya", "Shiva"], portion_note: "two eggs for Shiva" }, { name: "Milk", for_people: ["Meera"], portion_note: null }] }, everyone))
       .toEqual({ title: "Idli · Milk", secondary: "Idli: two eggs for Shiva · Milk for Meera" });
     expect(mealLines({ dishes: [{ name: "Dal", for_people: null, portion_note: null }, { name: "Rice" }] }, everyone)).toEqual({ title: "Dal · Rice", secondary: undefined });
+    expect(mealLines({ dishes: [{ name: "Dal", for_people: ["everyone"], portion_note: null }] }, everyone)).toEqual({ title: "Dal", secondary: undefined });
   });
   it("a dish for everyone at home by name is for everyone; a dish still kept twice is named once", () => {
     expect(mealLines({ dishes: [{ name: "Aloo paratha", for_people: ["shiva", "Agastya", "Meera"] }] }, everyone)).toEqual({ title: "Aloo paratha", secondary: undefined });

@@ -10,7 +10,7 @@ const MON = "2026-11-23", TUE = "2026-11-24", NEXT_MON = "2026-11-30";
 const RAJMA_VIDEO = "https://www.youtube.com/watch?v=abc123XYZ";
 const REEL = "https://www.instagram.com/reel/Cxyz123/";
 
-const dish = (name: string, item = name) => ({ name, ingredients: [{ item, amount: 200, unit: "g" }] });
+const dish = (name: string, item = name) => ({ name, for: ["everyone"], ingredients: [{ item, amount: 200, unit: "g" }] });
 const meal = (date: string, slot: string, ...names: string[]) => ({ date, slot, dishes: names.map((n) => dish(n)) });
 
 const start = async (hour = 19, day = 23) => {
