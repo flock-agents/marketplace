@@ -23,7 +23,8 @@ betas included) and library 1.10.11.
   items at a time. An item you have never bought with a size is estimated from the gaps alone.
 - **One cycle per item, for the whole house.** There is no separate list of everyday items: each item has its cycle, how
   much you buy and how often ("500 ml every day", "30 pc about once a week"), shown on the Pantry page. It is worked out
-  from the orders of everyone in the house, each on their own account of a shopping app, counted together and never twice.
+  from the orders of everyone in the house, each on their own account of a shopping app, counted together and never twice
+  (one agent holding two accounts of an app reads each one apart).
   What you buy every day or two goes on the cart by itself when it is due; the rest is asked about. With no orders to
   learn from, tell the agent ("milk every day, 1 litre") and that is kept until your orders show their own. Everyday
   items an installed copy already had become item cycles.

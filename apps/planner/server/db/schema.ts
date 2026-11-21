@@ -41,7 +41,7 @@ export const house = sqliteTable("house", {
   plan_time: text("plan_time"),                                // "HH:MM": the same for the weekly plan
   cooking_days: text("cooking_days"),                          // JSON weekday[]; Mon to Sat until set
   connected_apps: text("connected_apps"),                      // JSON GroceryApp[]: the shopping apps the family has signed in to (the main app only once it is)
-  history_synced: text("history_synced"),                      // JSON { [app]: { [reader]: "YYYY-MM-DD" } }: how far each reader (a person's agent) read each app's order history; a plain date is from before readers were kept apart
+  history_synced: text("history_synced"),                      // JSON { [app or "app:account"]: { [reader]: "YYYY-MM-DD" } }: how far each reader (a person's agent) read each app's order history, per shop account when named; a plain date is from before readers were kept apart
   regulars_moved_at: text("regulars_moved_at"),                // when the old everyday items (the retired regulars table's rows) became item cycles
   asks_confirmed: integer("asks_confirmed").default(0),
   asks_still_have: integer("asks_still_have").default(0),
@@ -136,6 +136,7 @@ export const item_events = sqliteTable("item_events", {
   cycle_days: real("cycle_days"),
   order_ref: text("order_ref"),
   order_id: text("order_id"),
+  account: text("account"),                                    // the shop account an imported purchase was bought on, when named
   note: text("note"),
   void: integer("void").default(0),
 });

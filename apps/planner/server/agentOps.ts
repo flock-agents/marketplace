@@ -64,7 +64,7 @@ export const FIELDS: Record<string, { fields: string[]; need?: string[] }> = {
   set_meal: { fields: ["date", "slot", "meal_id", "ordered_in", "note", "dishes"] },
   set_dish: { fields: ["dish_id", "meal_id", "date", "slot", "name", "for", "portion_note", "recipe_id", "video_url", "ingredients", "position", "remove"] },
   set_regular: { fields: ["item", "amount", "unit", "every", "times_per_week", "weekdays", "for_whom", "active", "paused_until", "remove"], need: ["item"] },
-  import_order_history: { fields: ["app", "orders"], need: ["app", "orders"] },
+  import_order_history: { fields: ["app", "account", "orders"], need: ["app", "orders"] },
   record_bought_outside: { fields: ["item", "date"], need: ["item"] },
   set_item: { fields: ["item", "group", "usual_amount", "unit", "every_days", "follows_plan", "dont_ask", "snooze_days"], need: ["item"] },
   set_subscription: { fields: ["item", "source", "active"], need: ["item", "active"] },

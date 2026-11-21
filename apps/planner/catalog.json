@@ -199,7 +199,7 @@
           "type": "string",
           "required": false,
           "nullable": true,
-          "note": "JSON { [app]: { [reader]: \"YYYY-MM-DD\" } }: how far each reader (a person's agent) read each app's order history; a plain date is from before readers were kept apart"
+          "note": "JSON { [app or \"app:account\"]: { [reader]: \"YYYY-MM-DD\" } }: how far each reader (a person's agent) read each app's order history, per shop account when named; a plain date is from before readers were kept apart"
         },
         "regulars_moved_at": {
           "type": "string",
@@ -620,6 +620,12 @@
           "type": "string",
           "required": false,
           "nullable": true
+        },
+        "account": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "the shop account an imported purchase was bought on, when named"
         },
         "note": {
           "type": "string",

@@ -214,6 +214,54 @@ describe("import_order_history", () => {
     expect((await k.owner("GET", "/api/family")).body.house.history_synced).toEqual({ zepto: { "*": "2026-11-10" } });
   });
 
+  // 21 Nov: one agent (the family group's) holds two accounts of one app, "Zepto (Shiva)" and "Zepto (Ankita)".
+  it("one agent reading two accounts of one app keeps each account's reading apart (an account not read yet starts 3 months back), and never merges two accounts' unreffed orders", async () => {
+    const k = await start();
+    const BUTLER = "agent:butler";
+    const synced = () => JSON.parse(house(k).history_synced);
+    const milk = (date: string, ref?: string) => ({ date, ...(ref ? { order_ref: ref } : {}), items: [{ item: "milk", group: "daily", product: "Amul Taaza", product_id: "m1", pack: "500 ml", count: 2 }] });
+    const read = (account: string | undefined, orders: unknown[]) => k.op("import_order_history", { app: "zepto", ...(account ? { account } : {}), orders }, "butler");
+    // Before accounts: the agent read Zepto (one account) up to the 12th, under the plain key.
+    expect(await read(undefined, [milk("2026-11-10", "S-10"), milk("2026-11-12", "S-12")])).toMatchObject({ recorded: 2, read_until: "2026-11-12" });
+    expect(synced()).toEqual({ zepto: { [BUTLER]: "2026-11-12" } });
+    // Shiva's account, now named: it has no reading of its own (the plain one never stands in), so its orders are read
+    // again from 3 months back; the ones already recorded are duplicates, not new purchases.
+    expect(await read("Zepto (Shiva)", [milk("2026-11-10", "S-10"), milk("2026-11-12", "S-12")])).toMatchObject({ recorded: 0, duplicates: 2, read_until: "2026-11-12" });
+    expect(synced()).toEqual({ zepto: { [BUTLER]: "2026-11-12" }, "zepto:Zepto (Shiva)": { [BUTLER]: "2026-11-12" } });
+    // An older read does not move it back.
+    expect(await read("Zepto (Shiva)", [milk("2026-11-10", "S-10")])).toMatchObject({ recorded: 0, duplicates: 1, read_until: "2026-11-12" });
+    expect(await read("Zepto (Shiva)", [milk("2026-11-12", "S-12"), milk("2026-11-18", "S-18")])).toMatchObject({ recorded: 1, duplicates: 1, read_until: "2026-11-18" });
+    // Ankita's account by the same agent: older dates than both Shiva's newest and the plain reading (the 12th), overlapping
+    // his days. All of hers are recorded, and reading it never moves Shiva's.
+    expect(await read("Zepto (Ankita)", [milk("2026-11-09", "A-09"), milk("2026-11-14", "A-14"), milk("2026-11-16", "A-16")])).toMatchObject({ recorded: 3, duplicates: 0, skipped_old: 0, read_until: "2026-11-16" });
+    expect(synced()).toEqual({ zepto: { [BUTLER]: "2026-11-12" }, "zepto:Zepto (Shiva)": { [BUTLER]: "2026-11-18" }, "zepto:Zepto (Ankita)": { [BUTLER]: "2026-11-16" } });
+    // Without an account the agent's plain reading is as it was.
+    expect(await read(undefined, [milk("2026-11-12", "S-12")])).toMatchObject({ duplicates: 1, read_until: "2026-11-12" });
+    // Re-sends of either account (and an order the other account gave, by its ref) are recorded once; read_until is per account.
+    expect(await read("Zepto (Shiva)", [milk("2026-11-18", "S-18"), milk("2026-11-16", "A-16")])).toMatchObject({ recorded: 0, duplicates: 2, read_until: "2026-11-18" });
+    expect(await read("  Zepto   (Ankita) ", [milk("2026-11-16", "A-16")])).toMatchObject({ recorded: 0, duplicates: 1, read_until: "2026-11-16" });
+    // No order_ref: the same date and product on two accounts are two purchases; the same account sending it again is one.
+    expect(await read("Zepto (Shiva)", [milk("2026-11-20")])).toMatchObject({ recorded: 1 });
+    expect(await read("Zepto (Ankita)", [milk("2026-11-20")])).toMatchObject({ recorded: 1, duplicates: 0, read_until: "2026-11-20" });
+    expect(await read("Zepto (Ankita)", [milk("2026-11-20")])).toMatchObject({ recorded: 0, duplicates: 1 });
+    expect(await read("Zepto (Shiva)", [milk("2026-11-20")])).toMatchObject({ recorded: 0, duplicates: 1 });
+    // ...and one with no account (from before accounts) still matches either.
+    expect(await read(undefined, [milk("2026-11-20")])).toMatchObject({ recorded: 0, duplicates: 1 });
+    expect(events(k, "milk").map((e) => [e.date, e.order_ref, e.account]).sort((x, y) => String(x).localeCompare(String(y)))).toEqual([
+      ["2026-11-09", "A-09", "Zepto (Ankita)"], ["2026-11-10", "S-10", null], ["2026-11-12", "S-12", null], ["2026-11-14", "A-14", "Zepto (Ankita)"], ["2026-11-16", "A-16", "Zepto (Ankita)"],
+      ["2026-11-18", "S-18", "Zepto (Shiva)"], ["2026-11-20", null, "Zepto (Ankita)"], ["2026-11-20", null, "Zepto (Shiva)"]]);
+    // All of it is one item and one estimate for the house.
+    expect(item(k, "milk")).toMatchObject({ last_bought: "2026-11-20" });
+    expect(k.rows("items")).toHaveLength(1);
+    // Another agent's reading of an account is its own.
+    expect(await k.op("import_order_history", { app: "zepto", account: "Zepto (Ankita)", orders: [milk("2026-11-14", "A-14")] }, "ankita-agent")).toMatchObject({ duplicates: 1, read_until: "2026-11-14" });
+    expect(synced()["zepto:Zepto (Ankita)"]).toEqual({ [BUTLER]: "2026-11-20", "agent:ankita-agent": "2026-11-14" });
+    // An account that is not a short name is refused, and nothing is recorded.
+    for (const account of ["", "   ", "x".repeat(81), { id: 1 }])
+      expect([account, (await k.op("import_order_history", { app: "zepto", account, orders: [milk("2026-11-21", "X")] }, "butler")).code]).toEqual([account, "APP_REFUSED"]);
+    expect(events(k, "milk")).toHaveLength(8);
+  });
+
   it("the newest order's product is the one remembered for an item, whatever the order the history came in", async () => {
     const k = await start();
     await k.op("import_order_history", { app: "zepto", orders: [

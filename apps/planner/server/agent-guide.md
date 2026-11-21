@@ -53,6 +53,7 @@ one). Each order has its `date` and `order_ref`; each item its `item` (the famil
 Take the pack from the product name ("Aashirvaad Atta 5 kg") when the app gives none. Send every item's `group` too:
 `daily` (milk, curd), `few_days` (vegetables, eggs, bread), `monthly` (atta, oil, cleaning). The app works out each item's cycle from the purchases by itself: ask the family to confirm nothing, and add nothing as an everyday item.
 **More than one person may order,** each on their own account of an app: each person's agent gives that person's orders, all count for the one house, and `since` and the answer's `read_until` are how far you yourself have read.
+**Holding more than one account of an app** ("Zepto (Shiva)", "Zepto (Ankita)"): read each account and send each with its `account` (its account id, else its label; always the same one). Read it from `since["zepto:<account>"]`, else 3 months back. Each account's `read_until` is its own.
 
 ## Meals, dishes, ingredients
 

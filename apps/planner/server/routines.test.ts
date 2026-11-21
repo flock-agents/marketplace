@@ -323,6 +323,12 @@ describe("the reminders", () => {
     k.kit.sqlite.run(`UPDATE house SET history_synced = '{"zepto":"2026-11-01"}'`);
     await reminder({ ...k.ctx(DAILY_7PM), agentId: "new-agent" }, "evening", MON_7PM);
     expect(k.wakes[4].data.since).toEqual({ zepto: "2026-11-01" });
+    // An agent holding two accounts of an app has a `since` per account it read, "<app>:<account>", beside the plain one.
+    await k.op("import_order_history", { app: "zepto", account: "Zepto (Ankita)", orders: [{ date: "2026-11-05", order_ref: "A1", items: [{ item: "atta", group: "monthly", pack: "5 kg" }] }] }, "new-agent");
+    await reminder({ ...k.ctx(DAILY_7PM), agentId: "new-agent" }, "evening", MON_7PM);
+    expect(k.wakes[5].data.since).toEqual({ zepto: "2026-11-01", "zepto:Zepto (Ankita)": "2026-11-05" });
+    expect(flockRefusal(k.wakes[5].message, k.wakes[5].data)).toBeNull();
+    for (const s of ["`account`", "since[\"app:account\"]"]) expect(message, s).toContain(s);
     for (const s of ["get_reminder", "`date`", "import_order_history", "about 8 orders a call", "one app a call", "3 months", "`since`", "`empty`", "`text`", "word for word",
       "`app_text`", "`block`", "sync: true", "sync_cart", "`ordered`", "record_order", "delivery_gap", "the app's cart as it is", "answer_running_low", "set_cart_line",
       "order_cart", "set_meal", "set_dish"]) expect(message, s).toContain(s);

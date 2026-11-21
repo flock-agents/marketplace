@@ -39,7 +39,7 @@ export function getHouse(db: Db): HouseRow {
 
 export const list = <T>(json: string | null): T[] => { try { const v = json ? JSON.parse(json) : []; return Array.isArray(v) ? v : []; } catch { return []; } };
 
-/** house.history_synced read: `{ app: { reader: date } }`; a plain date (an install from before) is under ANY_READER. */
+/** house.history_synced read: `{ app: { reader: date } }`, an app read per shop account under "<app>:<account>"; a plain date (an install from before) is under ANY_READER. */
 function historySynced(json: string | null): HistorySynced {
   let v: unknown = null;
   try { v = json ? JSON.parse(json) : null; } catch { /* unreadable: nothing read yet */ }

@@ -9,7 +9,7 @@ import { and, eq, inArray } from "drizzle-orm";
 import { dish_items, dishes, house, item_events, items, order_lines, orders, plan_meals } from "./db/schema";
 import { appOf, ESTIMATE, HISTORY_DAYS, ITEM_GROUPS, SHOP_APPS, TAG_TEXT, type GroceryApp } from "./db/constants";
 import { addDays, todayStr } from "./dates";
-import { getHouse, houseView, isObject, name, readUntil, refuse, words, writeRoutes, type Db, type Emit } from "./family";
+import { getHouse, houseView, isObject, name, readUntil, refuse, words, writeRoutes, type Db, type Emit, type HistorySynced } from "./family";
 import { dateOf, flag } from "./meals";
 import { normItem, parsePack, positive, productFor, productId, rememberProduct, toBase, type ProductInput } from "./products";
 import { cycleText, pantryStatus, pattern, quantityText, runOut, tagEvents, type DailyState, type Ev, type ItemState } from "./estimate";
@@ -18,7 +18,9 @@ import { cartOf, emitAll, lineApp, lineFor, setLine, type Change } from "./cart"
 export type ItemRow = typeof items.$inferSelect;
 export type EventRow = typeof item_events.$inferSelect;
 export type Purchase = { item: string; date: string; app: GroceryApp | "outside"; product?: string; product_id?: string;
-  amount: number | null; unit: string | null; count?: number; price?: number; order_ref?: string; order_id?: string; group?: string };
+  amount: number | null; unit: string | null; count?: number; price?: number; order_ref?: string; order_id?: string; group?: string;
+  /** The shop account it was bought on (import_order_history's `account`), when the agent named one. */
+  account?: string };
 
 const stamp = (by: string) => ({ updated_at: new Date().toISOString(), updated_by: by });
 const DAY_MS = 86_400_000;
@@ -71,7 +73,7 @@ export function recomputeItem(db: Db, itemId: string, _today: string): ItemRow {
 }
 
 /** The one door for a purchase. The same purchase twice is told, not recorded: a purchase of the item on the same app, with
- *  the same order_ref; or, when either has no order_ref, the same date and product (see below). A void purchase still counts
+ *  the same order_ref; or, when either has no order_ref, the same date and product on the same account (see below). A void purchase still counts
  *  as the one recorded (only a late payment brings it back). The amount is put in its base unit; one that has none is kept
  *  with no amount. The caller recomputes the item. */
 export function recordPurchase(tx: Db, p: Purchase): { event_id: string } | { duplicate: true } {
@@ -81,7 +83,9 @@ export function recordPurchase(tx: Db, p: Purchase): { event_id: string } | { du
   // orders placed through the app (different order_ids are two orders, even of one product on one day); when either side
   // has neither, the date and the product do (by product_id when both have one, else by the product's name). An order placed
   // through the app with no ref and the app's history copy of it (a ref, no order_id) are one purchase on the same date,
-  // whatever each calls the product. A void purchase matches too (a history copy of an unpaid order must not count again),
+  // whatever each calls the product. Two shop accounts named apart (two people's Zepto) are never the same purchase by the
+  // date and product: a ref still matches across accounts, and a side with no account (from before accounts) matches either.
+  // A void purchase matches too (a history copy of an unpaid order must not count again),
   // after the live ones, so a ref learned goes to the purchase that counts.
   const lower = (v: string | null | undefined) => (v ?? "").trim().toLowerCase();
   const appOrder = (x: { order_ref?: string | null; order_id?: string | null }) => !!x.order_id && !x.order_ref;
@@ -90,7 +94,7 @@ export function recordPurchase(tx: Db, p: Purchase): { event_id: string } | { du
     .sort((x, y) => (x.void ?? 0) - (y.void ?? 0))
     .find((e) => e.order_ref && p.order_ref ? e.order_ref === p.order_ref
       : e.order_id && p.order_id ? e.order_id === p.order_id
-      : e.date === p.date && ((appOrder(e) && historyCopy(p)) || (historyCopy(e) && appOrder(p))
+      : e.date === p.date && !(e.account && p.account && e.account !== p.account) && ((appOrder(e) && historyCopy(p)) || (historyCopy(e) && appOrder(p))
         || (e.product_id && p.product_id ? e.product_id === p.product_id : lower(e.product) === lower(p.product))));
   if (same) {
     // A copy with the ref teaches the one recorded without it, so later imports match by ref.
@@ -106,7 +110,7 @@ export function recordPurchase(tx: Db, p: Purchase): { event_id: string } | { du
   tx.update(items).set({ asks_unanswered: 0 }).where(eq(items.id, it.id)).run();
   const row = tx.insert(item_events).values({ item_id: it.id, date: p.date, kind: "purchase", app: p.app, product: p.product ?? null,
     product_id: p.product_id ?? null, amount: base?.amount ?? null, count: p.count ?? 1, price: p.price ?? null,
-    order_ref: p.order_ref ?? null, order_id: p.order_id ?? null, note, updated_by: "app" }).returning().get();
+    order_ref: p.order_ref ?? null, order_id: p.order_id ?? null, account: p.account ?? null, note, updated_by: "app" }).returning().get();
   return { event_id: row.id };
 }
 
@@ -204,6 +208,7 @@ const groupOf = (v: unknown, what = "group"): string => {
   const known = typeof word === "string" ? GROUP_WORDS[word] : undefined;
   return known ?? refuse(`${what} must be one of: ${GROUP_MEANS}`);
 };
+const ACCOUNT_MAX = 80;
 const HISTORY_SHAPE = "orders must be a list of { date, order_ref?, items: [{ item, group?, product?, product_id?, pack?, pack_amount?, pack_unit?, count?, price?, image? }] }";
 
 type Line = { item: string; group?: string; product?: string; product_id?: string; amount: number | null; unit: string | null; count: number;
@@ -261,15 +266,22 @@ export function mountItemRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: { now
   const itemIds = () => new Set(db.select({ id: items.id }).from(items).all().map((r) => r.id));
   const op = (had: Set<string>, id: string) => (had.has(id) ? "update" : "insert") as "update" | "insert";
 
-  // import_order_history { app, orders: [{ date, order_ref?, items: [...] }] }: each item of each order (3 months back, and not
+  // import_order_history { app, account?, orders: [{ date, order_ref?, items: [...] }] }: each item of each order (3 months back, and not
   // after today) becomes a purchase, never twice; an item with its product_id is remembered as that app's product. The agent
   // sends the oldest orders first, so history_synced (the newest order read, never past today) only moves over what was read.
   // More than one person may order for the house, each on their own account of the same app: every purchase counts towards
   // the one estimate of its item, and history_synced is kept per app and per reader (whoever called: a person's agent), so one
-  // person's reading never tells another's agent that its own orders were read.
+  // person's reading never tells another's agent that its own orders were read. With `account` (one agent holding several
+  // accounts of an app: "Zepto (Shiva)", "Zepto (Ankita)") the reading is kept per account too, under "<app>:<account>", so
+  // reading one account never moves another's. An account not read yet has no reading (the plain "<app>" one never stands
+  // in, so nothing of a second person's account is skipped): its orders are read again from 3 months back, recorded once.
   write("/api/order-history", (b, by) => {
     const app = appOf(b.app) ?? refuse(`app must be one of: ${SHOP_APPS.join(", ")}`);
     if (!Array.isArray(b.orders)) refuse(HISTORY_SHAPE);
+    const account = b.account == null ? undefined : typeof b.account === "number" ? String(b.account) : name(b.account, "account").replace(/\s+/g, " ");
+    if (account && account.length > ACCOUNT_MAX) refuse(`account must be a short name of the shop account, at most ${ACCOUNT_MAX} characters`);
+    const key = account ? `${app}:${account}` : app;
+    const readTo = (s: HistorySynced) => readUntil(s, key, by);
     const day = today(), since = addDays(day, -HISTORY_DAYS);
     const read = (b.orders as unknown[]).map((o) => {
       if (!isObject(o) || !Array.isArray(o.items)) return refuse(HISTORY_SHAPE);
@@ -286,7 +298,7 @@ export function mountItemRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: { now
       const tx = tdb(txRaw);
       for (const o of kept) for (const l of mergeLines(o.lines)) {
         const r = recordPurchase(tx, { item: l.item, date: o.date, app, product: l.product, product_id: l.product_id, amount: l.amount, unit: l.unit,
-          count: l.count, price: l.price, order_ref: o.ref, group: l.group });
+          count: l.count, price: l.price, order_ref: o.ref, group: l.group, account });
         if ("duplicate" in r) duplicates++; else { recorded++; changed.set(r.event_id, ["item_events", r.event_id, "insert", by]); }
         touched.add(itemFor(tx, l.item)!.id);
       }
@@ -301,8 +313,9 @@ export function mountItemRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: { now
       if (kept.length) {
         const synced = houseView(getHouse(tx)).history_synced;
         const newest = kept[kept.length - 1].date;
-        if (!synced[app]?.[by] || synced[app][by] < newest) {
-          const h = bumpHouse(tx, { history_synced: JSON.stringify({ ...synced, [app]: { ...synced[app], [by]: newest } }) }, by);
+        const was = readTo(synced);
+        if (!was || was < newest) {
+          const h = bumpHouse(tx, { history_synced: JSON.stringify({ ...synced, [key]: { ...synced[key], [by]: newest } }) }, by);
           changed.set(h.id, ["house", h.id, "update", by]);
         }
       }
@@ -312,7 +325,7 @@ export function mountItemRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: { now
     const probably = out.filter((r) => r.confident && r.run_out && r.run_out <= day && r.group && r.group !== "daily" && !r.subscription && !r.dont_ask && r.last_bought)
       .map((r) => ({ item: r.name, days_ago: daysBetween(r.last_bought!, day) })).sort((x, y) => y.days_ago - x.days_ago);
     return { body: { recorded, duplicates, skipped_old: read.length - kept.length - future, skipped_future: future, needs_group: out.filter((r) => !r.group).map((r) => r.name),
-      probably_out: probably, read_until: readUntil(houseView(getHouse(db)).history_synced, app, by) } };
+      probably_out: probably, read_until: readTo(houseView(getHouse(db)).history_synced) } };
   });
 
   // record_bought_outside { item, date? }: bought outside the apps ("from the kirana"): a purchase of the usual amount.
