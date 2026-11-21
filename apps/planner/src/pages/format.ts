@@ -111,17 +111,6 @@ export function cartTitle(c: { app: string; app_name?: string }, shopping: { mai
     ? `${appName(c)} · when ${APP_NAMES[shopping.main as GroceryApp] ?? shopping.main} doesn't have it` : appName(c);
 }
 
-/** How the house orders, in one line at the top of the Shopping page: "Zepto, then BigBasket when something isn't there ·
- *  Milk from the milkman · Asks before ordering". The subscriptions are named while there are two at most. */
-export function howWeOrderText(shopping: { main: string; fallback: string | null; order_without_asking: boolean },
-  subscriptions: readonly { name: string; subscription: string | null }[]): string {
-  const app = (a: string) => APP_NAMES[a as GroceryApp] ?? a;
-  const apps = shopping.fallback && shopping.fallback !== shopping.main ? `${app(shopping.main)}, then ${app(shopping.fallback)} when something isn't there` : app(shopping.main);
-  const subs = subscriptions.length === 0 ? null : subscriptions.length <= 2
-    ? subscriptions.map((s) => `${s.name} from ${s.subscription}`).join(", ") : `${subscriptions.length} items delivered by others`;
-  return [apps, subs, shopping.order_without_asking ? "Orders without asking" : "Asks before ordering"].filter(Boolean).join(" · ");
-}
-
 /** What she put in the app's own cart herself: "Already in your cart: Maggi ×2, Lays"; null when there is nothing. */
 export function outsideText(outside: { name: string; qty?: number }[]): string | null {
   return outside.length ? `Already in your cart: ${outside.map((o) => (o.qty && o.qty > 1 ? `${o.name} ×${o.qty}` : o.name)).join(", ")}` : null;

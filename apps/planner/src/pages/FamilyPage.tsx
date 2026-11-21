@@ -35,8 +35,8 @@ const COOK_FIELDS: FormProps["fields"] = [
 /** The fields of a form as the routes take them: an emptied field is sent as null, which clears it. */
 const cleared = (v: Record<string, unknown>, names: readonly string[]) => Object.fromEntries(names.map((n) => [n, v[n] ?? null]));
 /** The family, and only the family: who eats at home, the cooking days and the cook, the extra meals and the house rules.
- *  Every part is edited where it is shown, through the same routes (and the same checks) as the agent. The shopping apps,
- *  subscriptions and ordering are at the top of the Shopping page (HowWeOrder). */
+ *  Every part is edited where it is shown, through the same routes (and the same checks) as the agent. The main shopping app,
+ *  its fallback and Order without asking are on Flock's Settings tab, under "How we order". */
 export function FamilyPage() {
   const family = useLive<Family>("family", ["people", "house"]);
   const agent = agentName(useApp().display);

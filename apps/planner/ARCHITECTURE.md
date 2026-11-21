@@ -92,10 +92,10 @@ and their life; `cartRoutes.ts` the cart operations and keeping each app's own c
 says and does; `products.ts` remembered products and pack arithmetic (g, ml, pc); `recipes.ts` saved recipes;
 `dishBook.ts` each dish's video and how it went, by its name across weeks; `messages.ts` the texts the agent sends word for word; `dates.ts` local dates; `gate.ts` the family gate and the 2.0 profile;
 `routines/` the four routines; `testkit.ts` boots the app for tests. Pages (`src/pages/`): `WeekPage` + `DishPanel`;
-`ShoppingPage` with `HowWeOrder` (shopping apps, subscriptions, Order without asking: one line until Edit opens it, for
-everyone who orders, since Flock's own Settings tab is the owner's), `CartPanel` (one cart per app) and `OrdersList`;
-`PantryPage` and `ItemPage`; `RecipesPage`; `FamilyPage` (people, the cook, extra meals, house rules);
-lists are edited with `RowsEditor`; `Thumb.tsx` (a product's picture, a dish's play button); `shared.ts` and `format.ts`.
+`ShoppingPage` with `CartPanel` (one cart per app) and `OrdersList`; `PantryPage` and `ItemPage`; `RecipesPage`;
+`FamilyPage` (people, the cook, extra meals, house rules) with `RowsEditor`. The app has no Settings page of its own: the
+main app, the fallback and Order without asking are manifest settings (group "How we order"), shown on the Settings tab
+Flock's AppShell adds for the owner; `Thumb.tsx` (a product's picture, a dish's play button); `shared.ts` and `format.ts`.
 
 **Tables** (all public; lists are JSON text, dates `YYYY-MM-DD`, times `HH:MM`, local). `people` (child | adult | elder;
 portions, diet, allergies in their own words) · `house` (one row: rules, the cook, extra slots, meals ordered in, cooking

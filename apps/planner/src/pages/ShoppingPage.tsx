@@ -1,12 +1,10 @@
 import { useState } from "react";
 import { Page, Tabs, label } from "../flock/ui";
 import { CartPanel } from "./CartPanel";
-import { HowWeOrder } from "./HowWeOrder";
 import { OrdersList } from "./OrdersList";
 import { useLive, type CartView } from "./shared";
 
-/** Shopping: how the house orders (one line until opened), then the cart of each app, filled by the reminders and the chat,
- *  and the orders placed from them. */
+/** Shopping: the cart of each app, filled by the reminders and the chat, and the orders placed from them. */
 export function ShoppingPage() {
   const [tab, setTab] = useState("cart");
   const carts = useLive<{ carts: CartView[] }>("carts", ["orders", "order_lines"]);
@@ -14,7 +12,6 @@ export function ShoppingPage() {
   const tabs = [{ id: "cart", label: "Cart", count: picked || undefined }, { id: "orders", label: "Orders" }];
   return (
     <Page title={label("title.shopping", "Shopping")}>
-      <HowWeOrder />
       <Tabs tabs={tabs} value={tab} onChange={setTab} />
       {tab === "cart" ? <CartPanel carts={carts} /> : <OrdersList />}
     </Page>

@@ -7,11 +7,9 @@ betas included) and library 1.10.11.
 
 - **Family.** The Family page is only about the family: who eats at home, the cook, the days you cook (Monday to Saturday
   until you change them), the extra meals and the house rules. Tell the agent or edit it yourself.
-- **How we order.** The top of the Shopping page says in one line how the house orders, and Edit opens it, for everyone
-  who orders: the shopping apps you use (a main one, one to try when something is not on it, and the ones you are signed in
-  to: choosing an app does not mark it signed in, and nothing is read from or
-  copied to an app until it is), the items delivered to you by someone else, such as milk from a milkman, which are left
-  out of every cart, and "Order without asking".
+- **How we order.** The app's Settings tab (Flock's Settings & routines) has a "How we order" group: your main grocery
+  app, the one to try when something is not on it, and "Order without asking". Items delivered to you by someone else,
+  such as milk from a milkman, are left out of every cart; tell the agent which ones.
 - **The week, planned and kept.** The week is planned on Sunday at 11 am, on your cooking days only, and each day is kept
   as soon as it is planned: you do not need to reply. The Sunday message is Monday's meals plus a link to the Week page.
   Nothing is bought by the plan.

@@ -92,7 +92,9 @@
       ],
       "default": "zepto",
       "scope": "owner",
-      "label": "Your main grocery app"
+      "label": "Your main grocery app",
+      "group": "How we order",
+      "help": "Carts are filled and orders placed here."
     },
     {
       "key": "fallback_app",
@@ -107,14 +109,18 @@
       ],
       "default": "none",
       "scope": "owner",
-      "label": "When something isn't on your main app"
+      "label": "When something isn't on your main app",
+      "group": "How we order",
+      "help": "The app to try for what your main app doesn't have."
     },
     {
       "key": "order_without_asking",
       "type": "boolean",
       "default": false,
       "scope": "owner",
-      "label": "Order without asking"
+      "label": "Order without asking",
+      "group": "How we order",
+      "help": "Off: nothing is ordered until you reply or tap Order. On: the agent orders the items it is sure about by itself."
     }
   ],
   "routines": [

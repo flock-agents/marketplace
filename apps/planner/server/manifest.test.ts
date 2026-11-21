@@ -63,6 +63,18 @@ describe("the agent's interface", () => {
     for (const text of [guide, instructions, manifest.description, ...operations.map((o) => o.description)]) expect(text).not.toMatch(/\b(he|she|his|her|him)\b/i);
   });
 
+  it("has no Settings page of its own: how the house orders is a settings group on Flock's Settings tab", () => {
+    // Flock's AppShell adds the owner's Settings tab itself; a page of the app's own named settings made two.
+    expect(manifest.pages).toEqual(["week", "shopping", "pantry", "recipes", "family"]);
+    expect(Object.keys(manifest.labels).filter((k) => k.endsWith(".settings"))).toEqual([]);
+    const settings: { key: string; label: string; group?: string; help?: string }[] = manifest.settings;
+    expect(settings.map((s) => s.key)).toEqual(["grocery_app", "fallback_app", "order_without_asking"]);
+    for (const s of settings) {
+      expect(s.group, s.key).toBe("How we order");
+      expect(s.label.trim().length > 0 && (s.help ?? "").trim().length > 0, s.key).toBe(true);
+    }
+  });
+
   it("the app is changed only through its operations: no row write is taught", () => {
     for (const method of ["PATCH", "DELETE"]) expect(guide + instructions).not.toContain(method);
     expect(guide + instructions).not.toContain("_app/settings");
