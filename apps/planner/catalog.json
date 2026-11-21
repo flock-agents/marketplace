@@ -11,13 +11,11 @@
     "nav.pantry": "Pantry",
     "nav.recipes": "Recipes",
     "nav.family": "Family",
-    "nav.settings": "Settings",
     "title.week": "This week's meals",
     "title.shopping": "Shopping",
     "title.pantry": "Pantry",
     "title.recipes": "Recipes",
-    "title.family": "Family",
-    "title.settings": "Settings"
+    "title.family": "Family"
   },
   "tables": {
     "people": {

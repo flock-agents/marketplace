@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { APP_NAMES, TAG_TEXT } from "../../server/db/constants";
-import { agentName, cartNote, cookingDaysText, cartTitle, debouncePicks, dishNote, eventRows, forText, itemCallout, itemSubtitle, orderLabel, orderRow, outsideText, pantryTabs,
+import { agentName, cartNote, cookingDaysText, cartTitle, debouncePicks, dishNote, eventRows, forText, howWeOrderText,itemCallout, itemSubtitle, orderLabel, orderRow, outsideText, pantryTabs,
   mealLines, patternFields, patternSource, pickerItems, profileWaiting, recipeSourceLabel, statusTone, syncPicker, TAG_TONES, textList, weekTitle,
   cookDetails, cookVisitsText, linkWeek, plannedText, ruleChip, weekToOpen } from "./format";
 
@@ -145,6 +145,22 @@ describe("cartTitle and outsideText", () => {
   it("lists what she put in the app's cart herself", () => {
     expect(outsideText([{ name: "Maggi", qty: 2 }, { name: "Lays" }])).toBe("Already in your cart: Maggi ×2, Lays");
     expect(outsideText([])).toBeNull();
+  });
+});
+
+describe("howWeOrderText", () => {
+  it("says how the house orders in one line: the apps, what others deliver, and whether it asks first", () => {
+    expect(howWeOrderText({ main: "zepto", fallback: "bigbasket", order_without_asking: false }, [{ name: "Milk", subscription: "the milkman" }]))
+      .toBe("Zepto, then BigBasket when something isn't there · Milk from the milkman · Asks before ordering");
+    expect(howWeOrderText({ main: "zomato-blinkit", fallback: null, order_without_asking: true }, [])).toBe("Blinkit · Orders without asking");
+    // A fallback that is the main app says nothing more.
+    expect(howWeOrderText({ main: "zepto", fallback: "zepto", order_without_asking: false }, [])).toBe("Zepto · Asks before ordering");
+  });
+  it("names two subscriptions at most, and counts more", () => {
+    const subs = [{ name: "Milk", subscription: "Country Delight" }, { name: "Bread", subscription: "the baker" }, { name: "Paper", subscription: "the vendor" }];
+    expect(howWeOrderText({ main: "zepto", fallback: null, order_without_asking: false }, subs.slice(0, 2)))
+      .toBe("Zepto · Milk from Country Delight, Bread from the baker · Asks before ordering");
+    expect(howWeOrderText({ main: "zepto", fallback: null, order_without_asking: false }, subs)).toBe("Zepto · 3 items delivered by others · Asks before ordering");
   });
 });
 

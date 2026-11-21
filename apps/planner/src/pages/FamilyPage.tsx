@@ -36,7 +36,7 @@ const COOK_FIELDS: FormProps["fields"] = [
 const cleared = (v: Record<string, unknown>, names: readonly string[]) => Object.fromEntries(names.map((n) => [n, v[n] ?? null]));
 /** The family, and only the family: who eats at home, the cooking days and the cook, the extra meals and the house rules.
  *  Every part is edited where it is shown, through the same routes (and the same checks) as the agent. The shopping apps,
- *  subscriptions and ordering are on the Settings page. */
+ *  subscriptions and ordering are at the top of the Shopping page (HowWeOrder). */
 export function FamilyPage() {
   const family = useLive<Family>("family", ["people", "house"]);
   const agent = agentName(useApp().display);
