@@ -91,6 +91,34 @@ describe("the agent's interface", () => {
     expect(guide).toContain("set_shopping_apps { main, fallback, connected }");
   });
 
+  // Live run 11 (2026-11-21): rules the family said were kept as free text no code reads, and the plan broke them. Every
+  // question whose answer can state a food rule tells the Butler to save it with set_house_rules, the whole list, in the
+  // checked shape; the rules are read back right after the rules question. Flock refuses a help over 800 characters.
+  it("every setup question that can state a food rule saves it with set_house_rules, and the rules are read back", () => {
+    const setup: { id: string; help?: string; answer?: { operation?: string }; after?: string[] }[] = manifest.setup;
+    const RULE_QUESTIONS = ["cookLimits", "cookTime", "newRecipes", "cookingDays", "kidsBreakfast", "kidsLunch", "kidsDinner",
+      "adultsBreakfast", "adultsLunch", "adultsDinner", "diet", "elders", "rules", "orderIn", "rulesReadBack"];
+    for (const id of RULE_QUESTIONS) {
+      const q = setup.find((x) => x.id === id);
+      expect(q, id).toBeDefined();
+      expect(q!.help ?? "", id).toContain("set_house_rules");
+    }
+    for (const q of setup) expect((q.help ?? "").length, q.id).toBeLessThanOrEqual(800);
+    expect(manifest.setupOptions.about.length).toBeLessThanOrEqual(800);
+    for (const said of ["set_house_rules", "WHOLE list", "who?", "slots?", "items?", "per_week?", "@protein"]) expect(manifest.setupOptions.about, said).toContain(said);
+    // Each checked kind is taught by a worked example in the contract's JSON.
+    const helps = setup.map((q) => q.help ?? "").join("\n");
+    for (const kind of ["avoid", "only", "swap", "require", "cap", "other"]) expect(helps, kind).toContain(`"kind":"${kind}"`);
+    const ids = setup.map((q) => q.id);
+    const back = setup.find((q) => q.id === "rulesReadBack")!;
+    expect(ids.indexOf("rulesReadBack")).toBe(ids.indexOf("rules") + 1);
+    expect(back.answer?.operation).toBe("set_house_rules");
+    expect(back.after).toEqual(["rules"]);
+    expect(back.help).toContain("Did I get these right?");
+    expect(back.help).toContain("WHOLE list");
+    expect(guide).toContain("RULE_BROKEN");
+  });
+
   it("the instructions fit in 1,200 characters and the guide in 150 lines", () => {
     expect(instructions.length).toBeLessThanOrEqual(1200);
     expect(guide.trimEnd().split("\n").length).toBeLessThanOrEqual(150);
