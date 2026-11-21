@@ -117,6 +117,7 @@ export const items = sqliteTable("items", {
   anchor_amount: real("anchor_amount"),
   run_out: text("run_out"),
   confident: integer("confident").default(0),
+  image: text("image"),                                        // the product's picture from the shopping app (an order's item, else the first cart line that had one); never made up
 });
 
 /** What happened to an item: a purchase, an answer to a stock question, a question asked or one that went unanswered. */
@@ -190,6 +191,22 @@ export const products = sqliteTable("products", {
   pack_unit: text("pack_unit"),
   price: real("price"),
   image: text("image"),
+});
+
+/** What the family knows about a dish, kept by its name across weeks: its video (a link, never a file) and how it went
+ *  when they last ate it. A dish planned again shows both. */
+export const dish_book = sqliteTable("dish_book", {
+  ...kitColumns(),
+  key: text("key").notNull().unique(),                         // the dish's name, normalised (dishText.ts dishKey)
+  name: text("name").notNull(),
+  video_url: text("video_url"),                                // a YouTube video, an Instagram reel or any page: the link only
+  video_title: text("video_title"),
+  video_thumbnail: text("video_thumbnail"),
+  rating: text("rating"),                                      // the latest: constants.ts DISH_RATINGS
+  rating_note: text("rating_note"),                            // what went well or didn't, in the family's words ("too oily")
+  rated_on: text("rated_on"),                                  // the day it was eaten
+  rated_by: text("rated_by"),                                  // who said it, by name
+  ratings: text("ratings"),                                    // JSON [{ rating, note, date, by }], newest first, a short history
 });
 
 export const saved_recipes = sqliteTable("saved_recipes", {

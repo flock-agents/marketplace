@@ -14,6 +14,7 @@ import { mountMealRoutes } from "./meals";
 import { mountRegularRoutes } from "./regulars";
 import { mountProductRoutes } from "./products";
 import { mountRecipeRoutes } from "./recipes";
+import { mountDishBookRoutes } from "./dishBook";
 import { mountItemRoutes } from "./items";
 import { mountCartRoutes } from "./cartRoutes";
 import { mountReminderRoutes } from "./reminder";
@@ -46,6 +47,7 @@ export async function boot(opts: { dbFile?: string; dataDir?: string; token?: st
   mountRegularRoutes(hono, kit.db, kit.emitChange, { now });
   mountProductRoutes(hono, kit.db, kit.emitChange);
   mountRecipeRoutes(hono, kit.db, kit.emitChange);
+  mountDishBookRoutes(hono, kit.db, kit.emitChange, { now });
   /** A request as the owner. */
   const owner = async (method: string, path: string, body?: unknown) => {
     const r = await hono.request(path, { method, headers: { "Content-Type": "application/json", "X-Flock-User": "tester" }, body: body === undefined ? undefined : JSON.stringify(body) });

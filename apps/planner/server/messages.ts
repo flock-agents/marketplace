@@ -3,7 +3,7 @@
 // here reads the database, and nothing imported here is server-only, so the pages can use it too.
 import { APP_NAMES, type GroceryApp } from "./db/constants";
 import { clockText } from "./dates";
-import { dishText } from "./dishText";
+import { dishKey, dishText, lastTimeText } from "./dishText";
 import type { MealView } from "./meals";
 
 export { dishText } from "./dishText";
@@ -43,7 +43,29 @@ const STILL_IN_STOCK = "Still in stock? If yes, when should I remind you?";
 /** What a reminder's text is made of (reminder.ts Reminder). `carts` holds the lines of the carts it ordered. */
 export type ReminderText = { which: "afternoon" | "evening"; meals: MealView[]; ask_ingredients: string[]; added: { item: string }[];
   cart_items: string[]; asks: { item: string; days_ago: number }[]; delivery_gap: { app: string; rupees: number } | null;
-  ordered: { order_id: string; app: string }[]; carts: { order_id: string; lines: OrderLineText[] }[]; empty: boolean };
+  ordered: { order_id: string; app: string }[]; carts: { order_id: string; lines: OrderLineText[] }[]; empty: boolean;
+  /** The evening's one question about today's food eaten at home: its dishes, each once. */
+  rate_today?: { date: string; dishes: string[] } | null };
+
+type ExtraDish = { name: string; video?: { url: string } | null; last_time?: Parameters<typeof lastTimeText>[0] };
+/** What the cook should know about the meals' dishes, a line each, only for a dish with something to say: how it went last time
+ *  ("Bhindi, last time: too oily") and its video's link ("Rajma chawal video: https://…"). Each dish once. */
+export function dishExtras(meals: { ordered_in?: boolean; dishes: ExtraDish[] }[]): string[] {
+  const out: string[] = [], seen = new Set<string>();
+  for (const m of meals) for (const d of m.ordered_in ? [] : m.dishes) {
+    if (seen.has(dishKey(d.name))) continue;
+    seen.add(dishKey(d.name));
+    const note = lastTimeText(d.last_time), url = d.video?.url;
+    if (note && url) out.push(`${capital(d.name)}, last time: ${note}. Video: ${url}`);
+    else if (note) out.push(`${capital(d.name)}, last time: ${note}`);
+    else if (url) out.push(`${capital(d.name)} video: ${url}`);
+  }
+  return out;
+}
+
+/** The evening's question about today's food, asked once for all of it. */
+export const rateTodayText = (dishes: string[]): string =>
+  `How was today's food: ${andList(dishes)}? Good, okay or didn't work, and anything that went well or didn't?`;
 
 /** The reminder as the agent sends it: the meals it covers and the ingredients to check; then the cart (what was added, else
  *  what is on it, or what was ordered without asking); the items that may be running low, numbered, asked together; and how
@@ -55,6 +77,7 @@ export function reminderText(r: ReminderText, opts: { app?: boolean } = {}): str
   if (r.meals.length) {
     const meals = r.meals.map(meal).join(" · ");
     top.push(r.which === "afternoon" ? `Tonight: ${meals}. ${ANYTHING}` : `Tomorrow: ${meals}`);
+    top.push(...dishExtras(r.meals));
     if (r.ask_ingredients.length) top.push(`Do you have ${andList(r.ask_ingredients)}?`);
   }
   const rest: string[] = [];
@@ -76,7 +99,8 @@ export function reminderText(r: ReminderText, opts: { app?: boolean } = {}): str
     rest.push(STILL_IN_STOCK);
   }
   if (r.delivery_gap) rest.push(`${rupees(r.delivery_gap.rupees)} short of free delivery on ${r.delivery_gap.app}.`);
-  return [top.join("\n"), rest.join("\n")].filter(Boolean).join("\n\n");
+  const rate = r.rate_today?.dishes.length ? rateTodayText(r.rate_today.dishes) : "";
+  return [top.join("\n"), rest.join("\n"), rate].filter(Boolean).join("\n\n");
 }
 
 /** The stock check's answers, in the app chat. The guide maps them to answer_running_low: low; in_stock with days 3, 7 or 14;
@@ -100,7 +124,7 @@ export function weekLink(basePath: string, weekStart?: string): string { return 
 export function weekSendText(intro: boolean): string {
   return [
     "Forward message to the family verbatim, word for word, as one message.",
-    "It already holds the only link they need (the Week page, signed in to this app): send no other link, no link of your own, and do not reword it.",
+    "It already holds the only links they need (the Week page, signed in to this app, and a dish's video when it has one): send no other link, no link of your own, and do not reword it.",
     intro ? "Then send intro verbatim, once, exactly as given: never paraphrase it, and never send it again." : null,
     `After sending ${intro ? "them" : "it"}, end your turn.`,
   ].filter(Boolean).join(" ");
@@ -113,6 +137,7 @@ export function weekMessage(i: { monday: MealView[]; link: string }): string {
   return [
     "Next week is planned.",
     `Monday: ${meals.length ? meals.join(" · ") : "nothing planned"}`,
+    ...dishExtras(i.monday),
     "",
     `The whole week: [Week page](${i.link})`,
     "Tell me anything to change.",

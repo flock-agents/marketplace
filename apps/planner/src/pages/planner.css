@@ -17,6 +17,19 @@
 .pl-chip:hover { text-decoration: underline; }
 .pl-chip:focus-visible { outline: 2px solid var(--ua); outline-offset: 2px; }
 
+/* A product's picture: a small square, or the item's first letter when there is none. */
+.pl-thumb { display: inline-grid; place-items: center; flex: none; width: 36px; height: 36px; border-radius: 8px; overflow: hidden;
+  background: var(--surface-2); border: 1px solid var(--line); }
+.pl-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.pl-thumb-empty { color: var(--ink-3); font-size: 14px; font-weight: 600; }
+
+/* A dish's video at the end of its meal's row: its thumbnail with a play mark, or the play mark alone. */
+.pl-play { position: relative; display: inline-grid; place-items: center; flex: none; width: 32px; height: 32px; border-radius: 8px; overflow: hidden;
+  background: var(--ua-soft); color: var(--ua); text-decoration: none; }
+.pl-play img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.pl-play-icon { position: relative; display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; background: var(--surface); color: var(--ua); }
+.pl-play:focus-visible { outline: 2px solid var(--ua); outline-offset: 2px; }
+
 /* An editor opened in place in a list the page lays out itself: the look of a card, without being one. */
 .pl-panel { box-sizing: border-box; padding: var(--pad-box); border: 1px solid var(--line-2); border-radius: var(--radius); background: var(--surface); min-width: 0; }
 /* One row of an editor's list: its fields side by side, its Remove at the end; stacked on a phone. */

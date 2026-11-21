@@ -46,10 +46,19 @@ betas included) and library 1.10.11.
   lasts, and what the app learned from each order and each answer of yours.
 - **Saved recipes with videos.** Share a reel, a short or any link and say "save this": it is kept on the Recipes page, now
   a gallery, and can be planned into the week.
-- **For the agent.** There are 25 operations. Kept from 2.0: `guide` and `record_order` (now about a cart). New: `set_person`,
+- **A video for a dish.** Ask "find a video for rajma", or share a recipe reel for a dish: the dish keeps that one video
+  (a link, never a download), and every week it is planned it shows as a small play button on the Week page and its
+  link goes in the cook's message for that day.
+- **How the food went.** The 7 pm reminder asks once how today's home-cooked food went: good, okay or didn't work, and what
+  went well or didn't. A day with nothing eaten at home asks nothing. The next time a dish is planned, last time's note shows
+  under it ("Bhindi, last time: too oily") and is in the cook's message, and dishes that didn't work are planned less often.
+- **Product pictures.** The Pantry and the cart show each item's picture from the shopping app (from your orders, or the
+  first time it went into a cart), or its first letter when there is none. Pictures stay in the app, never in a message.
+- **For the agent.** There are 28 operations. Kept from 2.0: `guide` and `record_order` (now about a cart). New: `set_person`,
   `set_house_rules`, `set_cook`, `set_slots`, `set_cooking_days`, `set_shopping_apps`, `plan_week`, `set_meal`, `set_dish`,
   `set_regular` (now another way to state an item's cycle, as `set_item` does), `import_order_history`, `record_bought_outside`, `set_item`, `set_subscription`, `answer_running_low`,
-  `get_reminder`, `get_cart`, `set_cart_line`, `order_cart`, `sync_cart`, `cancel_order`, `remember_product` and `save_recipe`. Gone:
+  `get_reminder`, `get_cart`, `set_cart_line`, `order_cart`, `sync_cart`, `cancel_order`, `remember_product`, `save_recipe`,
+  `set_dish_video`, `rate_dishes` and `get_dish`. Gone:
   `get_draft`, `edit_draft`, `move_window`, `add_quote`, `record_yes`, `skip_order`, `ack_message`, `list_jobs`,
   `answer_job`, `pantry`, `pantry_answer`, `have_item`, `search`, `save_meal`, `remove_meal`, `set_meal_recipes`,
   `write_recipe` and `set_shelf_life`. Past orders are read in calls of about 8 orders and 80 items. The Sunday run ends

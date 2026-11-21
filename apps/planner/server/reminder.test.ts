@@ -16,7 +16,9 @@ A few things were bought a while ago:
 1. Atta, 31 days ago
 2. Toor dal, 26 days ago
 Still in stock? If yes, when should I remind you?
-₹35 short of free delivery on Zepto.`;
+₹35 short of free delivery on Zepto.
+
+How was today's food: dal and methi thepla? Good, okay or didn't work, and anything that went well or didn't?`;
 
 const AFTERNOON_SAMPLE = `Tonight: methi thepla, curd. Anything to change?
 Do you have methi?
@@ -277,7 +279,9 @@ describe("the reminder", () => {
       "Tomorrow: poha · rajma chawal, bhindi",
       "Do you have rajma and bhindi?",
       "",
-      "I've ordered curd, bread, atta and toor dal on Zepto."].join("\n"));
+      "I've ordered curd, bread, atta and toor dal on Zepto.",
+      "",
+      "How was today's food: dal and methi thepla? Good, okay or didn't work, and anything that went well or didn't?"].join("\n"));
   });
 
   it("an app the family has not signed in to: its cart is filled but not marked to copy, and never ordered without asking", async () => {

@@ -6,7 +6,7 @@ import { andList, clockText, dishText, introText, linkSource, orderingNowText, r
 import type { DishView, MealView } from "./meals";
 
 const dish = (name: string, d: Partial<DishView> = {}): DishView =>
-  ({ id: name, name, for_people: null, portion_note: null, recipe_id: null, video_url: null, ingredients: [], ...d });
+  ({ id: name, name, for_people: null, portion_note: null, recipe_id: null, video_url: null, video: null, last_time: null, ingredients: [], ...d });
 const meal = (date: string, slot: string, dishes: DishView[], m: Partial<MealView> = {}): MealView =>
   ({ id: `${date} ${slot}`, date, slot, ordered_in: false, note: null, dishes, ...m });
 

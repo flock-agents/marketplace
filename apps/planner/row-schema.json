@@ -762,6 +762,12 @@
                 "type": "null"
               }
             ]
+          },
+          "image": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "required": [
@@ -1357,6 +1363,79 @@
         },
         "required": [
           "$key",
+          "name"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "dish_book": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "$key": {
+            "type": "string",
+            "minLength": 1,
+            "description": "This row's name within the request, for $ref"
+          },
+          "key": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "video_url": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "video_title": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "video_thumbnail": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "rating": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "rating_note": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "rated_on": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "rated_by": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "ratings": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "$key",
+          "key",
           "name"
         ],
         "additionalProperties": false

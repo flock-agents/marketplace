@@ -9,7 +9,7 @@ import { item_events, order_lines, orders } from "./db/schema";
 import { APP_NAMES, CART_SYNC, SHOP_APPS, type GroceryApp, type LineSource } from "./db/constants";
 import { list, refuse, shoppingApps, type Db, type Emit } from "./family";
 import { itemFor, recomputeItem, recordPurchase, type ItemRow } from "./items";
-import { normItem, parsePack, productFor } from "./products";
+import { imageFor, normItem, parsePack, productFor, setItemImage } from "./products";
 import { todayStr } from "./dates";
 import { orderingNowText } from "./messages";
 
@@ -86,13 +86,16 @@ export function setLine(tx: Db, l: LineInput, by: string, opts: CartOpts = {}): 
     const set = { qty: l.qty, source: l.source, item_id: it?.id ?? had?.item_id ?? null,
       product_id: l.product_id ?? had?.product_id ?? p?.product_id ?? null, name_on_app: l.name_on_app ?? had?.name_on_app ?? p?.name_on_app ?? null,
       pack: l.pack !== undefined ? l.pack : had ? had.pack : p?.pack ?? null, price: l.price !== undefined ? l.price : had ? had.price : p?.price ?? null,
-      image: l.image !== undefined ? l.image : had ? had.image : p?.image ?? null,
+      image: l.image !== undefined ? l.image : had ? had.image : p?.image ?? it?.image ?? null,
       ...(l.for_note !== undefined ? { for_note: l.for_note } : {}), ...(l.for_date !== undefined ? { for_date: l.for_date } : {}),
       updated_at: new Date().toISOString(), updated_by: by };
     row = had
       ? tx.update(order_lines).set(set).where(eq(order_lines.id, had.id)).returning().get()
       : tx.insert(order_lines).values({ ...set, order_id: cart.id, item: it?.name ?? l.item.trim() }).returning().get();
     opts.changes?.push(["order_lines", row.id, had ? "update" : "insert", by]);
+    // An item never ordered keeps the picture of the first cart line that had one (its product on the app).
+    const pictured = it ? setItemImage(tx, it.name, l.image, false) : null;
+    if (pictured) opts.changes?.push(["items", pictured, "update", by]);
   }
   touchCart(tx, cart, by, opts);
   return row;
@@ -201,6 +204,7 @@ export function markPlaced(tx: Db, o: OrderRow, ref: string | null, by: string, 
       order_ref: ref ?? o.app_order_ref ?? undefined, order_id: o.id });
     if ("event_id" in r) opts.changes?.push(["item_events", r.event_id, "insert", by]);
     touched.add(itemFor(tx, l.item)!.id);
+    setItemImage(tx, l.item, l.image, false);
   }
   for (const id of touched) { recomputeItem(tx, id, day); opts.changes?.push(["items", id, "update", by]); }
 }
@@ -280,7 +284,9 @@ export function markPaid(tx: Db, o: OrderRow, by: string, opts: CartOpts = {}): 
 /** A cart or an order as the pages and the agent read it. `total` is the app's own total, from its last copy. `connected`:
  *  the family has signed in to its app; a cart of an app they have not is kept here only, and copied nowhere. */
 export function cartView(db: Db, o: OrderRow) {
-  return { order_id: o.id, app: o.app, app_name: APP_NAMES[o.app as GroceryApp] ?? o.app, status: o.status, lines: linesOf(db, o.id), reminder_key: o.reminder_key,
+  // A line with no picture of its own shows its product's, else its item's.
+  const lines = linesOf(db, o.id).map((l) => (l.image ? l : { ...l, image: imageFor(db, l.item, o.app) }));
+  return { order_id: o.id, app: o.app, app_name: APP_NAMES[o.app as GroceryApp] ?? o.app, status: o.status, lines, reminder_key: o.reminder_key,
     connected: shoppingApps(db).connected.includes(o.app as GroceryApp),
     total: o.total, delivery_gap: o.delivery_gap, sync_state: o.sync_state, synced_at: o.synced_at, sync_asked_at: o.sync_asked_at,
     outside_lines: list<{ name: string; qty?: number }>(o.outside_lines), building_at_order: !CART_SYNC[o.app as GroceryApp],

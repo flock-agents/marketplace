@@ -3,7 +3,7 @@
 // in one base unit each (grams, millilitres, pieces), so "1.2 kg" of an item sold in 500 g packs is 3 packs.
 import type { Hono } from "hono";
 import { and, eq } from "drizzle-orm";
-import { products } from "./db/schema";
+import { items, products } from "./db/schema";
 import { SHOP_APPS, type GroceryApp } from "./db/constants";
 import { name, refuse, words, writeRoutes, type Db, type Emit } from "./family";
 
@@ -48,6 +48,25 @@ export function parsePack(pack: string | null | undefined): { amount: number; un
   if (!m) return null;
   const amount = Number(m[1]), unit = m[2].toLowerCase();
   return amount > 0 && toBase(amount, unit) ? { amount, unit } : null;
+}
+
+/** A product's picture as a shopping app gave it: an http(s) link, else null (nothing else is kept as a picture). */
+export const imageUrl = (v: unknown): string | null => (typeof v === "string" && /^https?:\/\/\S+$/i.test(v.trim()) ? v.trim() : null);
+
+/** Give an item its picture, from the shopping app's product: `replace` for an order's item (the newest order's product is the
+ *  one shown), else only when it has none (the first cart line that had one). Answers the item's id when it changed. */
+export function setItemImage(db: Db, item: string, image: unknown, replace: boolean): string | null {
+  const url = imageUrl(image);
+  if (!url) return null;
+  const it = db.select({ id: items.id, image: items.image }).from(items).where(eq(items.item, normItem(item))).get();
+  if (!it || it.image === url || (it.image && !replace)) return null;
+  db.update(items).set({ image: url, updated_at: new Date().toISOString() }).where(eq(items.id, it.id)).run();
+  return it.id;
+}
+
+/** The picture an item is shown with on an app's cart: that app's product's, else the item's own. */
+export function imageFor(db: Db, item: string, app: string): string | null {
+  return imageUrl(productFor(db, item, app)?.image) ?? imageUrl(db.select({ image: items.image }).from(items).where(eq(items.item, normItem(item))).get()?.image);
 }
 
 const DETAILS = ["pack", "pack_amount", "pack_unit", "price", "image"] as const;

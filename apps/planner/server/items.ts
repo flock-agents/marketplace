@@ -6,12 +6,12 @@
 // item page read it all, and never name the app an item is bought on.
 import type { Hono } from "hono";
 import { and, eq, inArray } from "drizzle-orm";
-import { dish_items, dishes, house, item_events, items, order_lines, orders, plan_meals } from "./db/schema";
+import { dish_items, dishes, house, item_events, items, order_lines, orders, plan_meals, products } from "./db/schema";
 import { appOf, ESTIMATE, HISTORY_DAYS, ITEM_GROUPS, SHOP_APPS, TAG_TEXT, type GroceryApp } from "./db/constants";
 import { addDays, todayStr } from "./dates";
 import { getHouse, houseView, isObject, name, readUntil, refuse, words, writeRoutes, type Db, type Emit, type HistorySynced } from "./family";
 import { dateOf, flag } from "./meals";
-import { normItem, parsePack, positive, productFor, productId, rememberProduct, toBase, type ProductInput } from "./products";
+import { imageUrl, normItem, parsePack, positive, productFor, productId, rememberProduct, setItemImage, toBase, type ProductInput } from "./products";
 import { cycleText, pantryStatus, pattern, quantityText, runOut, tagEvents, type DailyState, type Ev, type ItemState } from "./estimate";
 import { cartOf, emitAll, lineApp, lineFor, setLine, type Change } from "./cart";
 
@@ -159,13 +159,17 @@ function lowOnCart(db: Db): Set<string> {
 
 export type PantryStatus = ReturnType<typeof pantryStatus>;
 /** `cycle`: what is bought and how often, in plain words ("500 ml every day", "30 pc about once a week"); null with no cycle yet. */
-export type PantryRow = { id: string; name: string; quantity: string | null; cycle: string | null; status: PantryStatus };
+/** `image`: the product's picture from the shopping app (the item's own, else a remembered product's), or null. */
+export type PantryRow = { id: string; name: string; quantity: string | null; cycle: string | null; status: PantryStatus; image: string | null };
 
 /** The Pantry: every item but the subscribed ones, by name, with its cycle (else the amount usually bought) and its status. */
 export function pantryView(db: Db, today: string): { counts: { all: number; in_stock: number; low: number; snoozed: number }; rows: PantryRow[] } {
   const cycles = cycleCounts(db), onCart = lowOnCart(db);
+  const pictures = new Map<string, string>();
+  for (const p of db.select({ item: products.item, image: products.image }).from(products).all()) { const url = imageUrl(p.image); if (url && !pictures.has(p.item)) pictures.set(p.item, url); }
   const rows = db.select().from(items).all().filter((i) => !i.subscription)
-    .map((i) => ({ id: i.id, name: i.name, quantity: quantityText(i.usual_amount, i.unit), cycle: cycleText(i, cycleStated(i)), status: pantryStatus(stateOf(i, cycles.get(i.id) ?? 0), today, onCart.has(i.id)) }))
+    .map((i) => ({ id: i.id, name: i.name, quantity: quantityText(i.usual_amount, i.unit), cycle: cycleText(i, cycleStated(i)), status: pantryStatus(stateOf(i, cycles.get(i.id) ?? 0), today, onCart.has(i.id)),
+      image: imageUrl(i.image) ?? pictures.get(i.item) ?? null }))
     .sort((a, b) => a.name.localeCompare(b.name));
   const n = (s: PantryStatus) => rows.filter((r) => r.status === s).length;
   return { counts: { all: rows.length, in_stock: n("In stock"), low: n("Low"), snoozed: n("Snoozed") }, rows };
@@ -212,7 +216,7 @@ const ACCOUNT_MAX = 80;
 const HISTORY_SHAPE = "orders must be a list of { date, order_ref?, items: [{ item, group?, product?, product_id?, pack?, pack_amount?, pack_unit?, count?, price?, image? }] }";
 
 type Line = { item: string; group?: string; product?: string; product_id?: string; amount: number | null; unit: string | null; count: number;
-  price?: number; pack?: string; remember?: ProductInput };
+  price?: number; pack?: string; image?: string; remember?: ProductInput };
 
 /** One item of an order, checked: its amount is pack × count in the base unit, or null when the pack has no size. */
 function lineOf(i: unknown, date: string, app: GroceryApp): Line {
@@ -232,6 +236,8 @@ function lineOf(i: unknown, date: string, app: GroceryApp): Line {
   const base = size ? toBase(size.amount * count, size.unit) : null;
   const line: Line = { item, count, amount: base?.amount ?? null, unit: base?.unit ?? null, pack, product, price };
   if (i.group != null) line.group = groupOf(i.group, `${at}group`);
+  // The product's picture from the app's order details: kept on the item (and on the product, with its id). Never a made-up one.
+  if (i.image != null) line.image = imageUrl(words(i.image, `${at}image`)) ?? undefined;
   if (i.product_id != null) {
     line.product_id = productId(i.product_id, `${at}product_id`);
     line.remember = { item, app, product_id: line.product_id, name_on_app: product ?? item };
@@ -252,7 +258,7 @@ function mergeLines(lines: Line[]): Line[] {
     if (had.amount == null) had.unit = null;
     had.count += l.count;
     had.price = had.price != null && l.price != null ? had.price + l.price : had.price ?? l.price;
-    had.group ??= l.group; had.product ??= l.product; had.product_id ??= l.product_id;
+    had.group ??= l.group; had.product ??= l.product; had.product_id ??= l.product_id; had.image ??= l.image;
   }
   return [...by.values()];
 }
@@ -301,6 +307,8 @@ export function mountItemRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: { now
           count: l.count, price: l.price, order_ref: o.ref, group: l.group, account });
         if ("duplicate" in r) duplicates++; else { recorded++; changed.set(r.event_id, ["item_events", r.event_id, "insert", by]); }
         touched.add(itemFor(tx, l.item)!.id);
+        // Oldest first, so the newest order's picture is the one shown.
+        if (l.image) setItemImage(tx, l.item, l.image, true);
       }
       // Oldest first, so the newest order's product is the one kept for an item.
       for (const o of kept) for (const l of o.lines) if (l.remember) {

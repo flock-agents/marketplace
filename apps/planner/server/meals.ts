@@ -10,7 +10,9 @@ import { normItem } from "./products";
 import { closest } from "./agentOps";
 import { SLOTS, STAPLE_DISHES, type GroceryApp } from "./db/constants";
 import { addDays, mondayOf, todayStr, weekDates, weekdayOf } from "./dates";
-import { introText, weekLink, weekMessage, weekSendText } from "./messages";
+import { introText, weekLink, weekMessage, weekSendText, youtubeThumb } from "./messages";
+import { dishKey, type LastTime } from "./dishText";
+import { bookOf, knownDishes, lastTime, setVideo, videoOf, type DishVideo } from "./dishBook";
 import { getHouse, groceryApp, houseView, isObject, list, name, names, refuse, words, writeRoutes,
   type Db, type Emit, type HouseView, type PersonRow } from "./family";
 
@@ -19,8 +21,10 @@ export type DishInput = { name: string; for?: string[] | null; portion_note?: st
 export type MealInput = { date: string; slot: string; ordered_in?: boolean; note?: string | null; dishes?: DishInput[] };
 
 export type IngredientView = { id: string; item: string; amount: number | null; unit: string | null };
+/** `video`: the dish's own video, kept by its name across weeks (dishBook.ts), else the one this planned dish was given;
+ *  `last_time`: how it went the last time it was eaten before this meal's day, when the family said. */
 export type DishView = { id: string; name: string; for_people: string[] | null; portion_note: string | null; recipe_id: string | null;
-  video_url: string | null; ingredients: IngredientView[] };
+  video_url: string | null; video: DishVideo | null; last_time: LastTime | null; ingredients: IngredientView[] };
 export type MealView = { id: string; date: string; slot: string; ordered_in: boolean; note: string | null; dishes: DishView[] };
 /** A week as the pages and the agent read it. `status` is null while the week has no meals; `planned_at` is when its plan was
  *  written (the first of its meals made, an ISO moment), null with none. */
@@ -29,6 +33,8 @@ export type WeekView = { week_start: string; status: "draft" | "final" | null; p
 /** `bought_often`: what the house buys within about ten days and how often ("milk: 1 l every day"), so a plan can lean on it. */
 export type WeekContext = { week_start: string; people: PersonRow[]; house: HouseView; bought_often: { item: string; cycle: string }[];
   last_week: { date: string; slot: string; dishes: string[] }[];
+  /** Every dish the family rated or gave a video, the ones that did not work first: plan those rarely, and heed each note. */
+  known_dishes: ReturnType<typeof knownDishes>;
   recipes: { id: string; name: string; tags: string[]; for_people: string[] }[]; grocery_app: GroceryApp };
 
 type MealRow = typeof plan_meals.$inferSelect;
@@ -54,12 +60,15 @@ function mealViews(db: Db, meals: MealRow[]): MealView[] {
   const dishRows = db.select().from(dishes).where(inArray(dishes.meal_id, meals.map((m) => m.id))).orderBy(asc(dishes.position), asc(dishes.created_at)).all();
   const itemRows = dishRows.length
     ? db.select().from(dish_items).where(inArray(dish_items.dish_id, dishRows.map((d) => d.id))).orderBy(asc(dish_items.created_at), sql`rowid`).all() : [];
+  const book = bookOf(db, dishRows.map((d) => d.name));
   const slots = slotNames(db);
   const rank = (m: MealRow) => { const i = slots.indexOf(m.slot); return i < 0 ? slots.length : i; };
   return [...meals].sort((a, b) => a.date.localeCompare(b.date) || rank(a) - rank(b) || a.slot.localeCompare(b.slot)).map((m) => ({
     id: m.id, date: m.date, slot: m.slot, ordered_in: !!m.ordered_in, note: m.note,
     dishes: dishRows.filter((d) => d.meal_id === m.id).map((d) => ({
       id: d.id, name: d.name, for_people: d.for_people ? list<string>(d.for_people) : null, portion_note: d.portion_note, recipe_id: d.recipe_id, video_url: d.video_url,
+      video: videoOf(book.get(dishKey(d.name))) ?? (d.video_url && /^https?:\/\//i.test(d.video_url) ? { url: d.video_url, title: null, thumbnail: youtubeThumb(d.video_url) } : null),
+      last_time: lastTime(book.get(dishKey(d.name)), m.date),
       ingredients: itemRows.filter((i) => i.dish_id === d.id).map((i) => ({ id: i.id, item: i.item, amount: i.amount, unit: i.unit })),
     })),
   }));
@@ -91,6 +100,7 @@ export function weekContext(db: Db, weekStart: string): WeekContext {
       .map((i) => ({ item: i.name, cycle: cycleText(i, i.stated_days != null && i.lasts_days === i.stated_days)! })).slice(0, OFTEN_MAX),
     last_week: mealViews(db, db.select().from(plan_meals).where(inWeek(addDays(weekStart, -7))).all())
       .filter((m) => m.dishes.length).map((m) => ({ date: m.date, slot: m.slot, dishes: m.dishes.map((d) => d.name) })),
+    known_dishes: knownDishes(db),
     recipes: db.select().from(saved_recipes).orderBy(asc(saved_recipes.name)).all()
       .map((r) => ({ id: r.id, name: r.name, tags: list<string>(r.tags), for_people: list<string>(r.for_people) })),
     grocery_app: groceryApp(db),
@@ -219,7 +229,6 @@ function needIngredients(meals: Meal[]): void {
     "MISSING_INGREDIENTS", { missing_ingredients: missing });
 }
 
-const dishKey = (name: string) => name.trim().toLowerCase().replace(/\s+/g, " ");
 const STAPLES = new Set<string>(STAPLE_DISHES);
 
 /** The checks a week passes before its closing call answers the message: every dish has its ingredients, every extra slot
@@ -267,7 +276,13 @@ function addDish(tx: Db, mealId: string, position: number, d: Dish, by: string, 
   const row = tx.insert(dishes).values({ ...d.set, name: d.name, meal_id: mealId, position, updated_by: by }).returning().get();
   changes.push(["dishes", row.id, "insert", by]);
   addItems(tx, row.id, d.items ?? [], by, changes);
+  keepVideo(tx, d.name, d.set.video_url, by, changes);
   return row;
+}
+
+/** A video sent with a planned dish is the dish's own from then on (dishBook.ts): the next week it is planned in shows it. */
+function keepVideo(tx: Db, dish: string, url: string | null | undefined, by: string, changes: Change[]) {
+  if (url && /^https?:\/\/\S+$/i.test(url)) setVideo(tx, dish, { url }, by, changes);
 }
 
 function removeDish(tx: Db, dishId: string, changes: Change[]) {
@@ -502,6 +517,7 @@ export function mountMealRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: { bas
         const rename = b.dish_id != null && b.name !== undefined ? { name: name(b.name, "name") } : {};
         tx.update(dishes).set({ ...sent.set, ...rename, updated_at: now(), updated_by: by }).where(eq(dishes.id, row.id)).run();
         changes.push(["dishes", row.id, "update", by]);
+        keepVideo(tx, rename.name ?? row.name, sent.set.video_url, by, changes);
         if (sent.items) { removeItems(tx, row.id, changes); addItems(tx, row.id, sent.items, by, changes); }
       } else row = addDish(tx, mealRow.id, dishesOf(tx, mealRow.id).length, sent, by, changes);
       orderDishes(tx, mealRow.id, changes, position === undefined ? undefined : { id: row.id, at: position });

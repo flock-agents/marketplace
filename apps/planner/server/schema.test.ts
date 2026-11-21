@@ -11,7 +11,7 @@ describe("planner data", () => {
   it("shows the new tables to agents and hides the old ones", async () => {
     const { owner } = await boot();
     const s = (await owner("GET", "/api/_data/_schema")).body;
-    expect(Object.keys(s.tables).sort()).toEqual(["dish_items", "dishes", "house", "item_events", "items", "order_lines", "orders", "people", "plan_meals", "products", "regulars", "saved_recipes"]);
+    expect(Object.keys(s.tables).sort()).toEqual(["dish_book", "dish_items", "dishes", "house", "item_events", "items", "order_lines", "orders", "people", "plan_meals", "products", "regulars", "saved_recipes"]);
   });
 
   it("upgrades a 2.0.x database without a block and keeps its old rows", async () => {

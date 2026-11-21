@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { Button, Callout, Card, Confirm, ErrorCard, Field, Icon, Page, Row, Schedule, Skeleton, Stack, Value, safeHref, scheduleAddKey, useApp, useChat, useTable, useToast } from "../flock/ui";
 import { addDays, dayLabel, mondayOf, todayStr, weekDates, weekdayLong, weekdayOf } from "../../server/dates";
 import { DishPanel } from "./DishPanel";
+import { PlayLink } from "./Thumb";
+import { lastTimeText } from "../../server/dishText";
 import { agentName, dishNote, linkWeek, mealLines, plannedText, textList, weekTitle, weekToOpen } from "./format";
 import { send, useLive, why, type DishView, type Family, type MealView, type RecipeRow, type WeekView } from "./shared";
 
@@ -24,7 +26,7 @@ export function WeekPage() {
   const [planned] = useState(() => linkWeek(typeof location === "undefined" ? "" : location.hash) ?? addDays(thisWeek, 7));
   const [weekStart, setWeekStart] = useState(thisWeek);
   const [chosen, setChosen] = useState(false);
-  const week = useLive<WeekView>(`weeks/${weekStart}`, ["plan_meals", "dishes", "dish_items"]);
+  const week = useLive<WeekView>(`weeks/${weekStart}`, ["plan_meals", "dishes", "dish_items", "dish_book"]);
   const other = useLive<WeekView>(`weeks/${planned}`, ["plan_meals"]);
   const family = useLive<Family>("family", ["house", "people"]);
   const recipes = useTable<RecipeRow>("saved_recipes", { limit: 500 });
@@ -48,13 +50,19 @@ export function WeekPage() {
     try { await send("meals", { date, slot, ordered_in: on }); setOpen(null); void week.refetch(); }
     catch (e) { toast.show({ message: `Couldn't save: ${why(e)}`, tone: "danger" }); }
   };
-  /** A dish's video: its own link, else the first link of the recipe it points at. Only a safe link is ever shown. */
-  const linkOf = (d: DishView): { href: string; text: string } | null => {
-    const own = safeHref(d.video_url);
-    if (own) return { href: own, text: "Video" };
+  /** A dish's video: the dish's own (kept by its name across weeks), else the first link of the recipe it points at. Only a
+   *  safe link is ever shown. */
+  const linkOf = (d: DishView): { href: string; text: string; thumbnail: string | null } | null => {
+    const own = safeHref(d.video?.url ?? d.video_url);
+    if (own) return { href: own, text: "Video", thumbnail: d.video?.thumbnail ?? null };
     const recipe = d.recipe_id ? recipes.rows.find((r) => r.id === d.recipe_id) : undefined;
     const href = recipe ? textList(recipe.links).map((l) => safeHref(l)).find((l) => l) : null;
-    return href ? { href, text: "Recipe video" } : null;
+    return href ? { href, text: "Recipe video", thumbnail: recipe?.thumbnail ?? null } : null;
+  };
+  /** A meal's videos as small play buttons at the end of its row: one a dish, two at most. */
+  const videos = (m: MealView) => {
+    const shown = m.ordered_in ? [] : m.dishes.map((d) => ({ d, link: linkOf(d) })).filter((x) => x.link).slice(0, 2);
+    return shown.length ? <Row>{shown.map(({ d, link }) => <PlayLink key={d.id} href={link!.href} thumbnail={link!.thumbnail} label={`Watch the ${d.name} video`} />)}</Row> : null;
   };
 
   const house = family.data?.house;
@@ -80,14 +88,17 @@ export function WeekPage() {
           <>
             {m.dishes.map((d) => {
               if (editing === d.id) return <DishPanel key={d.id} dish={d} at={{ date: m.date, slot: m.slot }} onDone={done} />;
-              const link = linkOf(d), note = dishNote(d);
+              const link = linkOf(d), note = dishNote(d), last = lastTimeText(d.last_time);
               return (
                 <div className="pl-dish" key={d.id}>
-                  <Row>
-                    <b>{d.name}</b>
-                    {note ? <span className="pl-quiet">{note}</span> : null}
-                    {link ? <a className="pl-chip" href={link.href} target="_blank" rel="noopener noreferrer"><Icon name="play" size={12} />{link.text}</a> : null}
-                  </Row>
+                  <Stack gap="xs">
+                    <Row>
+                      <b>{d.name}</b>
+                      {note ? <span className="pl-quiet">{note}</span> : null}
+                      {link ? <a className="pl-chip" href={link.href} target="_blank" rel="noopener noreferrer"><Icon name="play" size={12} />{link.text}</a> : null}
+                    </Row>
+                    {last ? <span className="pl-quiet">{`Last time: ${last}`}</span> : null}
+                  </Stack>
                   <Button size="sm" variant="ghost" icon="pencil" onClick={() => setOpen({ meal: m.id, dish: d.id })}>Edit</Button>
                 </div>
               );
@@ -141,6 +152,7 @@ export function WeekPage() {
               title={(m) => mealLines(m, everyone).title}
               secondary={(m) => mealLines(m, everyone).secondary}
               tone={(m) => (m.ordered_in ? "muted" : "neutral")}
+              trailing={videos}
               selectedId={opened?.id}
               onSelect={(m) => setOpen(opened?.id === m.id ? null : { meal: m.id })}
               onAdd={(date, slot) => setOpen({ date, tapped: slot, slot })}

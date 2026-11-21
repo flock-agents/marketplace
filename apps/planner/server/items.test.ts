@@ -449,7 +449,7 @@ describe("the Pantry and the item page", () => {
     expect(pantry.rows.map((r: any) => [r.name, r.quantity, r.status])).toEqual([
       ["atta", "10 kg", "In stock"], ["bhindi", "500 g", "Snoozed"], ["eggs", "12 pc", "Low"], ["toor dal", "1 kg", "Low"]]);
     expect(pantry.rows.map((r: any) => r.cycle)).toEqual(["10 kg about every 3 weeks", "500 g about every 4 days", "12 pc about every 4 days", "1 kg about once a month"]);
-    expect(pantry.rows[0]).toEqual({ id: item(k, "atta").id, name: "atta", quantity: "10 kg", cycle: "10 kg about every 3 weeks", status: "In stock" });
+    expect(pantry.rows[0]).toEqual({ id: item(k, "atta").id, name: "atta", quantity: "10 kg", cycle: "10 kg about every 3 weeks", status: "In stock", image: null });
     expect(pantry.counts).toEqual({ all: 4, in_stock: 1, low: 2, snoozed: 1 });
     expect(pantry.counts.in_stock + pantry.counts.low + pantry.counts.snoozed).toBe(pantry.counts.all);
     expect(JSON.stringify(pantry)).not.toMatch(/zepto|Zepto/);

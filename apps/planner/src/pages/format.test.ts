@@ -17,6 +17,12 @@ describe("mealLines", () => {
     expect(mealLines({ dishes: [{ name: "Aloo paratha", for_people: ["Agastya"] }, { name: "aloo paratha", for_people: ["Shiva"] }, { name: "Milk", for_people: ["Meera"] }] }, everyone))
       .toEqual({ title: "Aloo paratha · Milk", secondary: "Aloo paratha for Agastya · aloo paratha for Shiva · Milk for Meera" });
   });
+  it("says how a dish went last time in one line, only when there is something to say", () => {
+    const last = (rating: string, note: string | null) => ({ rating, note, date: "2026-11-16", by: "Ankita" });
+    expect(mealLines({ dishes: [{ name: "Bhindi", last_time: last("didnt_work", "too oily") }, { name: "Dal", last_time: last("good", null) },
+      { name: "Rajma", last_time: last("didnt_work", null) }] }, everyone))
+      .toEqual({ title: "Bhindi · Dal · Rajma", secondary: "Bhindi, last time: too oily · Rajma, last time: didn't work" });
+  });
   it("carries the meal's note, and an ordered-in meal says so", () => {
     expect(mealLines({ note: "cook comes late", dishes: [{ name: "Poha" }] }, everyone)).toEqual({ title: "Poha", secondary: "cook comes late" });
     expect(mealLines({ ordered_in: true, note: "pizza night", dishes: [] })).toEqual({ title: "Ordered in", secondary: "pizza night" });

@@ -8,6 +8,7 @@ import { mergeDuplicateDishes, mountMealRoutes } from "./meals";
 import { mountRegularRoutes, moveRegulars } from "./regulars";
 import { mountProductRoutes } from "./products";
 import { mountRecipeRoutes } from "./recipes";
+import { mountDishBookRoutes } from "./dishBook";
 import { mountItemRoutes } from "./items";
 import { mountCartRoutes } from "./cartRoutes";
 import { mountReminderRoutes } from "./reminder";
@@ -34,6 +35,8 @@ mountMealRoutes(flock.hono, kit.db, kit.emitChange, { basePath: flock.env.basePa
 mountRegularRoutes(flock.hono, kit.db, kit.emitChange);
 mountProductRoutes(flock.hono, kit.db, kit.emitChange);
 mountRecipeRoutes(flock.hono, kit.db, kit.emitChange);
+// Each dish's video and how it went, kept by its name across weeks (dishBook.ts).
+mountDishBookRoutes(flock.hono, kit.db, kit.emitChange);
 mountItemRoutes(flock.hono, kit.db, kit.emitChange);
 // The app's real carts are copied by the agent: an edit on the page asks it (the sync-cart intent) once the taps stop.
 const timers = new Map<string, ReturnType<typeof setTimeout>>();

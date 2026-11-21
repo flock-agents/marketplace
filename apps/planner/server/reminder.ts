@@ -4,11 +4,14 @@
 // running low asked together (at most ESTIMATE.maxAsks, each counted once per reminder; after two unanswered asks an item is
 // snoozed instead). With "Order without asking" on, the confident ones go on the cart and every open cart is ordered. A dry
 // run (the routine's "anything to say?") answers the same and changes nothing. Lines put on while an app's cart is being
-// ordered go to a new open cart of that app (cart.ts setLine).
+// ordered go to a new open cart of that app (cart.ts setLine). The evening one also asks once how today's food eaten at home
+// went (rate_today), and the meals' dishes carry last time's note and their video link (messages.ts dishExtras).
 import type { Hono } from "hono";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { item_events, items, order_lines, orders } from "./db/schema";
-import { APP_NAMES, CART_SYNC, ESTIMATE, type GroceryApp } from "./db/constants";
+import { APP_NAMES, CART_SYNC, ESTIMATE, STAPLE_DISHES, type GroceryApp } from "./db/constants";
+import { bookOf } from "./dishBook";
+import { dishKey } from "./dishText";
 import { addDays, mondayOf, todayStr } from "./dates";
 import { refuse, shoppingApps, writeRoutes, type Db, type Emit } from "./family";
 import { dateOf, weekView, type MealView } from "./meals";
@@ -24,6 +27,8 @@ export type Reminder = { which: Which; date: string /* the meals' date: today (a
   meals: MealView[]; ask_ingredients: string[]; added: { app: GroceryApp; item: string }[]; cart_items: string[];
   asks: { item: string; days_ago: number }[]; delivery_gap: { app: string; rupees: number } | null;
   ordered: { order_id: string; app: GroceryApp; message: string }[]; empty: boolean;
+  /** Evening only: today's food eaten at home, asked about once (how it went), each dish once; null on a day with none. */
+  rate_today: { date: string; dishes: string[] } | null;
   text: string /* WhatsApp: numbered */; app_text: string; block: object | null /* flock-ui JSON */;
   carts: { order_id: string; app: GroceryApp; status: "open" | "ordering"; lines: LineRow[]; sync: boolean }[] };
 
@@ -47,6 +52,21 @@ function coveredMeals(tx: Db, which: Which, date: string): MealView[] {
   const day = weekView(tx, mondayOf(date)).days.find((d) => d.date === date)?.meals ?? [];
   return which === "afternoon" ? day.filter((m) => m.slot === "Dinner" && !m.ordered_in && m.dishes.length)
     : day.filter((m) => m.ordered_in || m.dishes.length);
+}
+
+const STAPLES = new Set<string>(STAPLE_DISHES);
+
+/** The evening's question about today: every dish of today's meals eaten at home (planned, not ordered in), each once, staples
+ *  (roti, rice, curd) aside, and none the family already said how it went today. Null when there is none: a day nothing was
+ *  eaten at home asks nothing. */
+function rateToday(tx: Db, today: string): Reminder["rate_today"] {
+  const meals = weekView(tx, mondayOf(today)).days.find((d) => d.date === today)?.meals ?? [];
+  const names: string[] = [];
+  for (const m of meals) for (const d of m.ordered_in ? [] : m.dishes)
+    if (!STAPLES.has(dishKey(d.name)) && !names.some((n) => dishKey(n) === dishKey(d.name))) names.push(d.name.trim());
+  const book = bookOf(tx, names);
+  const dishes = names.filter((n) => book.get(dishKey(n))?.rated_on !== today);
+  return dishes.length ? { date: today, dishes } : null;
 }
 
 type Schedule = (key: string, run: null, ms: number) => void;
@@ -161,9 +181,10 @@ function build(tx: Db, which: Which, now: Date, by: string, changes: Change[], s
   const short = open.find((c) => (c.delivery_gap ?? 0) > 0);
   const carts = all.map((c) => ({ order_id: c.order_id, app: c.app as GroceryApp, status: c.status as "open" | "ordering", lines: c.lines,
     sync: c.status === "open" && CART_SYNC[c.app as GroceryApp] && shop.connected.includes(c.app as GroceryApp) && touched.has(c.order_id) }));
+  const rate_today = which === "evening" ? rateToday(tx, today) : null;
   const r: Reminder = { which, date, meals, ask_ingredients, added, cart_items, asks,
     delivery_gap: short ? { app: APP_NAMES[short.app as GroceryApp] ?? short.app, rupees: short.delivery_gap! } : null, ordered,
-    empty: !meals.length && !cart_items.length && !asks.length && !ordered.length, text: "", app_text: "", block: null, carts };
+    empty: !meals.length && !cart_items.length && !asks.length && !ordered.length && !rate_today, rate_today, text: "", app_text: "", block: null, carts };
   r.text = reminderText(r);
   r.app_text = reminderText(r, { app: true });
   r.block = stockBlock(asks, `stock-${date}-${which}`);

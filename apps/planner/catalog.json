@@ -299,7 +299,8 @@
         "video_url": {
           "type": "string",
           "required": false,
-          "nullable": true
+          "nullable": true,
+          "note": "a YouTube video, an Instagram reel or any page: the link only"
         }
       }
     },
@@ -526,6 +527,12 @@
           "required": false,
           "nullable": true,
           "default": 0
+        },
+        "image": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "the product's picture from the shopping app (an order's item, else the first cart line that had one); never made up"
         }
       }
     },
@@ -791,7 +798,8 @@
         "image": {
           "type": "string",
           "required": false,
-          "nullable": true
+          "nullable": true,
+          "note": "the product's picture from the shopping app (an order's item, else the first cart line that had one); never made up"
         },
         "source": {
           "type": "string",
@@ -873,7 +881,8 @@
         "image": {
           "type": "string",
           "required": false,
-          "nullable": true
+          "nullable": true,
+          "note": "the product's picture from the shopping app (an order's item, else the first cart line that had one); never made up"
         }
       }
     },
@@ -923,6 +932,67 @@
           "required": false,
           "nullable": true,
           "note": "JSON string[]"
+        }
+      }
+    },
+    "dish_book": {
+      "columns": {
+        "key": {
+          "type": "string",
+          "required": true,
+          "nullable": false,
+          "note": "the dish's name, normalised (dishText.ts dishKey)"
+        },
+        "name": {
+          "type": "string",
+          "required": true,
+          "nullable": false
+        },
+        "video_url": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "a YouTube video, an Instagram reel or any page: the link only"
+        },
+        "video_title": {
+          "type": "string",
+          "required": false,
+          "nullable": true
+        },
+        "video_thumbnail": {
+          "type": "string",
+          "required": false,
+          "nullable": true
+        },
+        "rating": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "the latest: constants.ts DISH_RATINGS"
+        },
+        "rating_note": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "what went well or didn't, in the family's words (\"too oily\")"
+        },
+        "rated_on": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "the day it was eaten"
+        },
+        "rated_by": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "who said it, by name"
+        },
+        "ratings": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "JSON [{ rating, note, date, by }], newest first, a short history"
         }
       }
     }

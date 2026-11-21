@@ -51,6 +51,12 @@ export const CART_SYNC: Record<GroceryApp, boolean> = { zepto: true, "swiggy-ins
 export const STAPLE_DISHES = ["roti", "rotis", "chapati", "chapatis", "phulka", "phulkas", "rice", "plain rice", "steamed rice", "curd", "dahi", "raita",
   "salad", "papad", "pickle", "buttermilk", "chaas", "milk", "fruit", "fruits"] as const;
 
+/** How a dish went, as the family says it: good, okay, or didn't work. */
+export const DISH_RATINGS = ["good", "okay", "didnt_work"] as const;
+export type DishRating = (typeof DISH_RATINGS)[number];
+/** How many of a dish's ratings are kept, newest first. */
+export const RATINGS_KEPT = 5;
+
 export const COOKING_DAYS_DEFAULT = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
 /** How far back an order history is read, in days. */
 export const HISTORY_DAYS = 92;

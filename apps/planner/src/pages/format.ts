@@ -3,7 +3,7 @@
 // server's own. The app an item is bought on is never named on the Pantry or the item page.
 import { addDays, clockText, dayLabel, todayStr, WEEKDAYS, weekdayLong, weekdayOf, type Weekday } from "../../server/dates";
 import { APP_NAMES, RULE_LABELS, SYNC_ASK_COOLDOWN_MIN, type GroceryApp } from "../../server/db/constants";
-import { dishText } from "../../server/dishText";
+import { dishText, lastTimeText, type LastTime } from "../../server/dishText";
 
 /** A dish in one line, "Parathas (for Dad)": the same words the messages use. */
 export const forText = dishText;
@@ -23,8 +23,9 @@ export const profileWaiting = (house: { profile_to_structure?: string | null }):
 
 /** A meal as the Week page lists it: its dishes' names, each once, and under them only what differs from "everyone eats
  *  it": the meal's note, a dish's portions note ("Idli: two eggs for Shiva"), or who a dish is for when that is not everyone
- *  at home ("Milk for Meera"). `everyone`: the names of the people at home. */
-export function mealLines(m: { ordered_in?: boolean; note?: string | null; dishes: { name: string; for_people?: string[] | null; portion_note?: string | null }[] },
+ *  at home ("Milk for Meera"); and how a dish went last time when the family said something about it ("Bhindi, last time:
+ *  too oily"). `everyone`: the names of the people at home. */
+export function mealLines(m: { ordered_in?: boolean; note?: string | null; dishes: { name: string; for_people?: string[] | null; portion_note?: string | null; last_time?: LastTime | null }[] },
   everyone: readonly string[] = []): { title: string; secondary: string | undefined } {
   if (m.ordered_in) return { title: "Ordered in", secondary: m.note?.trim() || undefined };
   const key = (v: string) => v.trim().toLowerCase();
@@ -35,6 +36,8 @@ export function mealLines(m: { ordered_in?: boolean; note?: string | null; dishe
     const all = everyone.length > 0 && everyone.every((p) => who.some((w) => key(w) === key(p)));
     const line = note ? `${d.name}: ${note}` : who.length && !all ? `${d.name} for ${who.join(", ")}` : null;
     if (line && !under.includes(line)) under.push(line);
+    const last = lastTimeText(d.last_time), said = last ? `${d.name}, last time: ${last}` : null;
+    if (said && !under.includes(said)) under.push(said);
   }
   return { title: names.join(" · "), secondary: under.join(" · ") || undefined };
 }

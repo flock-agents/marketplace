@@ -272,10 +272,10 @@ describe("a planned week is ready to send", () => {
     await op("plan_week", { week_start: MON, mode: "final", keep_rest: true, meals: [day(MON, "Lunch", "Rajma")] });
     const first = await op("plan_week", { week_start: MON, mode: "final" });
     expect(first.message).toContain("[Week page](/a/xyz/?flock_scope=app#/week?week=2026-11-23)");
-    expect(first.instructions).toBe("Forward message to the family verbatim, word for word, as one message. It already holds the only link they need (the Week page, signed in to this app): send no other link, no link of your own, and do not reword it. Then send intro verbatim, once, exactly as given: never paraphrase it, and never send it again. After sending them, end your turn.");
+    expect(first.instructions).toBe("Forward message to the family verbatim, word for word, as one message. It already holds the only links they need (the Week page, signed in to this app, and a dish's video when it has one): send no other link, no link of your own, and do not reword it. Then send intro verbatim, once, exactly as given: never paraphrase it, and never send it again. After sending them, end your turn.");
     const again = await op("plan_week", { week_start: MON, mode: "final" });
     expect(again.intro).toBeUndefined();
-    expect(again.instructions).toBe("Forward message to the family verbatim, word for word, as one message. It already holds the only link they need (the Week page, signed in to this app): send no other link, no link of your own, and do not reword it. After sending it, end your turn.");
+    expect(again.instructions).toBe("Forward message to the family verbatim, word for word, as one message. It already holds the only links they need (the Week page, signed in to this app, and a dish's video when it has one): send no other link, no link of your own, and do not reword it. After sending it, end your turn.");
   });
 
   it("the intro names what is bought every day on the apps: a subscription's is left out, and with none it names nothing", async () => {
