@@ -9,7 +9,7 @@ const HOME = process.env.HOME!;
 export const FLOCK = process.env.FLOCK ?? join(HOME, "Developer/flock-wa-onboarding/flock-app");
 export const NM_CACHE = process.env.NM_CACHE ?? join(HOME, ".flock-wa-onboarding-test/helpers/mp-apps/nm");
 /** The apps folder holding this planner (the worktree's own apps/). */
-export const SOURCES = process.env.SOURCES ?? resolve(import.meta.dir, "../../..");
+export const SOURCES = process.env.SOURCES ?? resolve(import.meta.dir, "../../../..");
 
 export async function runInAssembledApp(inner: string, args: string[]): Promise<number> {
   const flockHome = mkdtempSync(join(tmpdir(), "planner-evals-home-"));

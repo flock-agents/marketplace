@@ -1,5 +1,5 @@
 // Re-score a plan eval's saved weeks with the current fixtures and scorer (no model, no app):
-//   bun apps/planner/evals/rescore.ts <results/plan-... dir>
+//   bun apps/planner/tests/evals/rescore.ts <results/plan-... dir>
 import { readdirSync, readFileSync } from "fs";
 import { join } from "path";
 import { scoreWeek, type Fixture } from "./lib/score";

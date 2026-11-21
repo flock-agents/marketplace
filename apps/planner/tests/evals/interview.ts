@@ -1,4 +1,4 @@
-// Interview-capture eval: bun apps/planner/evals/interview.ts [--fixtures run11] [--repeats 1] [--model claude-sonnet-5]
+// Interview-capture eval: bun apps/planner/tests/evals/interview.ts [--fixtures run11] [--repeats 1] [--model claude-sonnet-5]
 //   [--config-dir <real claude config dir>]
 // The model gets the app's guide and the setup questions (ask + help + the operation each answer is saved with), then each of
 // the fixture's answers, as said, in order; it answers with the calls it would make. Its set_house_rules rules are compared
@@ -14,7 +14,7 @@ const { flags } = flagsOf(process.argv.slice(2));
 const repeats = Number(flags.repeats ?? 1);
 const only = flags.fixtures ? flags.fixtures.split(",") : null;
 const mo = modelOpts(flags);
-const appDir = resolve(import.meta.dir, "..");
+const appDir = resolve(import.meta.dir, "../..");
 const fixtures: Fixture[] = readdirSync(join(import.meta.dir, "fixtures")).filter((f) => f.endsWith(".json"))
   .map((f) => JSON.parse(readFileSync(join(import.meta.dir, "fixtures", f), "utf8"))).filter((fx: Fixture) => !only || only.includes(fx.id));
 const outDir = join(process.env.EVALS_OUT ?? join(import.meta.dir, "results"), `interview-${new Date().toISOString().replace(/[:.]/g, "-")}`);

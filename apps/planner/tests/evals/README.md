@@ -40,9 +40,9 @@ agent guide as the system prompt, sends `plan_week final` (meals, then the closi
 back, up to `--rounds` model calls, then scores the saved week.
 
 ```sh
-bun apps/planner/evals/plan.ts --fixtures run11,colliding-rules --repeats 2 2>&1 | grep -v "Pulling schema"
-bun apps/planner/evals/plan.ts                       # every fixture, 3 repeats, 3 rounds
-bun apps/planner/evals/plan.ts --dry --repeats 1     # no model: a one-meal stub, checks seeding + scoring
+bun apps/planner/tests/evals/plan.ts --fixtures run11,colliding-rules --repeats 2 2>&1 | grep -v "Pulling schema"
+bun apps/planner/tests/evals/plan.ts                       # every fixture, 3 repeats, 3 rounds
+bun apps/planner/tests/evals/plan.ts --dry --repeats 1     # no model: a one-meal stub, checks seeding + scoring
 ```
 
 Flags: `--fixtures a,b` `--repeats N` (3) `--rounds N` (3) `--model M` `--config-dir D` `--dry`.
@@ -59,8 +59,8 @@ are fine; kind, who, days, slots, `per_week`, `to` must match; a legacy kind cou
 code can check it) / missed; plus extra rules saved.
 
 ```sh
-bun apps/planner/evals/interview.ts                          # every fixture, once
-bun apps/planner/evals/interview.ts --fixtures run11 --repeats 3
+bun apps/planner/tests/evals/interview.ts                          # every fixture, once
+bun apps/planner/tests/evals/interview.ts --fixtures run11 --repeats 3
 ```
 
 Results: `results/interview-<time>/`.
@@ -70,5 +70,5 @@ Results: `results/interview-<time>/`.
 After changing a fixture's `expect` or the scorer, re-score the weeks a plan run saved (no model, no app):
 
 ```sh
-bun apps/planner/evals/rescore.ts apps/planner/evals/results/plan-<time>
+bun apps/planner/tests/evals/rescore.ts apps/planner/tests/evals/results/plan-<time>
 ```
