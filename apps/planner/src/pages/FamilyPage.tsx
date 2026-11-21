@@ -2,6 +2,7 @@ import { useState, type ReactNode } from "react";
 import { Button, Callout, Card, Confirm, Detail, Empty, ErrorCard, Form, Heading, InlinePanel, Page, PropertyChips, Row, RowList, Section, Skeleton, Stack, label, useApp, useToast, type FormProps } from "../flock/ui";
 import { WEEKDAYS } from "../../server/dates";
 import { COOK_NEW_RECIPES, GROUPS, RULE_KINDS, RULE_LABELS, SLOTS } from "../../server/db/constants";
+import type { HouseRule } from "../../server/family";
 import { RowsEditor } from "./RowsEditor";
 import { agentName, cookDetails, cookingDaysText, cookVisitsText, profileWaiting, ruleChip } from "./format";
 import { joined, send, typedList, useLive, why, type Family, type PersonRow } from "./shared";
@@ -152,8 +153,12 @@ export function FamilyPage() {
               { name: "days", label: "Days (with commas; empty for every day)", type: "text", placeholder: "Tue, Thu or Ekadashi" },
               { name: "note", label: "Note", type: "text" },
             ]}
-            initial={house.rules.map((r) => ({ kind: r.kind, days: joined(r.days), note: r.note ?? "" }))}
-            onSave={(rows) => save("family/rules", { rules: rows.filter((r) => r.kind || r.days || r.note).map((r) => ({ kind: r.kind || null, days: typedList(r.days), note: r.note || null })) })} />
+            initial={house.rules.map((r) => ({ kind: r.kind, days: joined(r.days), note: r.note ?? "", rule: r }))}
+            onSave={(rows) => save("family/rules", { rules: rows.filter((r) => r.kind || r.days || r.note).map((r) => {
+              // What the editor does not show (who, the meals, the foods) stays with the rule while its kind does.
+              const { kind: was, days: _d, note: _n, ...kept } = (r.rule ?? {}) as Partial<HouseRule>;
+              return { ...(was && was === r.kind ? kept : {}), kind: r.kind || null, days: typedList(r.days), note: r.note || null };
+            }) })} />
         ))}
         {panel("notes", "Notes", (
           <Form fields={[{ type: "longtext", name: "notes", label: "Anything else about how the house eats" }]} initial={{ notes: house.notes }} onCancel={close}

@@ -2,7 +2,8 @@
 // library import here, so the wording is tested on its own. The dates, the grocery apps' names and a dish's line are the
 // server's own. The app an item is bought on is never named on the Pantry or the item page.
 import { addDays, clockText, dayLabel, todayStr, WEEKDAYS, weekdayLong, weekdayOf, type Weekday } from "../../server/dates";
-import { APP_NAMES, RULE_LABELS, SUBSCRIPTION_UNNAMED, SYNC_ASK_COOLDOWN_MIN, type GroceryApp } from "../../server/db/constants";
+import { ruleText, type Rule } from "../../server/rules";
+import { APP_NAMES, SUBSCRIPTION_UNNAMED, SYNC_ASK_COOLDOWN_MIN, type GroceryApp } from "../../server/db/constants";
 import { dishText, lastTimeText, type LastTime } from "../../server/dishText";
 
 /** A dish in one line, "Parathas (for Dad)": the same words the messages use. */
@@ -273,9 +274,11 @@ export function cookingDaysText(days: readonly string[]): string {
 
 // ── The family and the week ──
 
-/** A house rule as a chip: its days ("Tue", "In general" for every day) and what it says ("No eggs"; an other rule is its note). */
-export function ruleChip(r: { kind: string; days: readonly string[]; note?: string | null }): { label: string; value: string } {
-  const what = r.kind === "other" && r.note ? r.note : [RULE_LABELS[r.kind as keyof typeof RULE_LABELS] ?? r.kind, r.note].filter(Boolean).join(": ");
+/** A house rule as a chip: its days ("Tue", "In general" for every day) and what it says ("No eggs", "Meera eats only plain
+ *  idli at Breakfast"; an other rule is its note), then the family's note. */
+export function ruleChip(r: Omit<Rule, "days" | "note"> & { days: readonly string[]; note?: string | null }): { label: string; value: string } {
+  const said = ruleText({ ...r, days: [...r.days], note: undefined }, { days: false });
+  const what = r.kind === "other" && r.note ? r.note : [said.charAt(0).toUpperCase() + said.slice(1), r.note].filter(Boolean).join(": ");
   return { label: r.days.length ? r.days.join(", ") : "In general", value: what };
 }
 

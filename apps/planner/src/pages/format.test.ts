@@ -337,6 +337,16 @@ describe("ruleChip", () => {
     expect(ruleChip({ kind: "veg", days: ["Tue", "Thu"], note: "Nani only" })).toEqual({ label: "Tue, Thu", value: "Vegetarian: Nani only" });
     expect(ruleChip({ kind: "other", days: [], note: "Mostly vegetarian" })).toEqual({ label: "In general", value: "Mostly vegetarian" });
   });
+
+  it("a checked rule reads as the rule: who, the meals, the foods (a category by its name), the swap, the cap", () => {
+    expect(ruleChip({ kind: "only", who: "Meera", days: [], slots: ["Breakfast"], items: ["plain idli", "banana sheera"], note: "her choice" }))
+      .toEqual({ label: "In general", value: "Meera eats only plain idli, banana sheera at Breakfast: her choice" });
+    expect(ruleChip({ kind: "avoid", days: ["Tue"], items: ["@root_veg"] })).toEqual({ label: "Tue", value: "No root vegetables" });
+    expect(ruleChip({ kind: "swap", who: "Lakshmi", days: [], items: ["@white_rice"], to: "millet" })).toEqual({ label: "In general", value: "Lakshmi has millet in place of white rice" });
+    expect(ruleChip({ kind: "require", who: "Shiva", days: [], slots: ["Lunch", "Dinner"], items: ["@protein"] })).toEqual({ label: "In general", value: "Shiva has protein at Lunch, Dinner" });
+    expect(ruleChip({ kind: "cap", days: [], items: ["chapati", "phulka"], per_week: 2 })).toEqual({ label: "In general", value: "Chapati, phulka in at most 2 meals a week" });
+    expect(ruleChip({ kind: "only", who: "Lakshmi", days: ["Thu"], items: ["sabudana khichdi", "fruit"] })).toEqual({ label: "Thu", value: "Lakshmi eats only sabudana khichdi, fruit" });
+  });
 });
 
 describe("cookDetails", () => {
