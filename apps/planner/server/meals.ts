@@ -13,6 +13,7 @@ import { addDays, mondayOf, todayStr, weekDates, weekdayOf } from "./dates";
 import { introText, weekLink, weekMessage, weekSendText, youtubeThumb } from "./messages";
 import { dishKey, type LastTime } from "./dishText";
 import { bookOf, knownDishes, lastTime, setVideo, videoOf, type DishVideo } from "./dishBook";
+import { breaksText, ruleBreaks, ruleBreaksIn, type RuleBreak } from "./rules";
 import { getHouse, groceryApp, houseView, isObject, list, name, names, refuse, words, writeRoutes,
   type Db, type Emit, type HouseView, type PersonRow } from "./family";
 
@@ -223,10 +224,36 @@ const mealLabel = (m: { date: string; slot: string }) => `${weekdayOf(m.date)} $
 const INGREDIENTS_RULE = "Every planned dish needs its ingredients, with amounts for this family (add up the portions of the people it is for; leave out salt and water)";
 
 /** The agent plans: every dish it sends in a final plan carries its ingredients. Names each dish without them. */
-function needIngredients(meals: Meal[]): void {
-  const missing = meals.flatMap((m) => (m.dishes ?? []).filter((d) => !d.items?.length).map((d) => `${mealLabel(m)}: ${d.name}`));
-  if (missing.length) refuse(`${INGREDIENTS_RULE}. Without ingredients: ${missing.join("; ")}. Send each with ingredients: [{ item, amount, unit }].`,
-    "MISSING_INGREDIENTS", { missing_ingredients: missing });
+function missingIngredients(meals: Meal[]): string[] {
+  return meals.flatMap((m) => (m.dishes ?? []).filter((d) => !d.items?.length).map((d) => `${mealLabel(m)}: ${d.name}`));
+}
+
+/** The family's rules broken, in one sentence the agent acts on. */
+const rulesSaid = (breaks: RuleBreak[]) =>
+  `The family's food rules are broken: ${breaksText(breaks)}. Change each of these meals so it keeps the rule, then send it again.`;
+
+/** A write by the agent refused, naming every dish without ingredients and every rule it breaks together, so one round fixes both. */
+function refuseWrite(missing: string[], breaks: RuleBreak[]): void {
+  if (!missing.length && !breaks.length) return;
+  const said: string[] = [];
+  if (missing.length) said.push(`${INGREDIENTS_RULE}. Without ingredients: ${missing.join("; ")}. Send each with ingredients: [{ item, amount, unit }].`);
+  if (breaks.length) said.push(rulesSaid(breaks));
+  refuse(said.join(" "), breaks.length ? "RULE_BROKEN" : "MISSING_INGREDIENTS",
+    { missing_ingredients: missing, ...(breaks.length ? { rule_breaks: breaks } : {}) });
+}
+
+/** The people the rules are checked for: everyone who eats at home. */
+const peopleAtHome = (db: Db) => db.select({ name: people.name }).from(people).where(eq(people.active, 1)).all();
+
+/** The rules a write to some meals of a final week breaks (rules.ts ruleBreaksIn): read inside the write, so a refusal undoes it. */
+function breaksIn(tx: Db, weekStart: string, meals: { date: string; slot: string }[]): RuleBreak[] {
+  return ruleBreaksIn(weekView(tx, weekStart), houseView(getHouse(tx)), peopleAtHome(tx), meals.map(mealLabel));
+}
+
+/** After the agent's write to one meal, inside its transaction: refused (and so undone) when a dish is left without ingredients,
+ *  or when the meal is in a final week and breaks one of the family's rules. The family's own edits are never checked. */
+function guardMeal(tx: Db, meal: MealRow, missing: string[]): void {
+  refuseWrite(missing, meal.status === "final" ? breaksIn(tx, mondayOf(meal.date), [meal]) : []);
 }
 
 const STAPLES = new Set<string>(STAPLE_DISHES);
@@ -234,7 +261,7 @@ const STAPLES = new Set<string>(STAPLE_DISHES);
 /** The checks a week passes before its closing call answers the message: every dish has its ingredients, every extra slot
  *  (a child's tiffin) has a meal on each of its days that is a cooking day from today on, and no dish (staples aside) is on
  *  two days unless the family asked for it (`repeatsOk`). Refused with every problem named, so one fix round is enough. */
-function checkWeek(week: WeekView, house: HouseView, today: string, repeatsOk: boolean): void {
+function checkWeek(week: WeekView, house: HouseView, today: string, repeatsOk: boolean, breaks: RuleBreak[]): void {
   const meals = week.days.flatMap((d) => d.meals);
   const missing = meals.flatMap((m) => m.dishes.filter((d) => !d.ingredients.length).map((d) => `${mealLabel(m)}: ${d.name}`));
   const gaps: string[] = [];
@@ -253,13 +280,14 @@ function checkWeek(week: WeekView, house: HouseView, today: string, repeatsOk: b
     seen.days.add(m.date); days.set(k, seen);
   }
   const repeated = repeatsOk ? [] : [...days.values()].filter((d) => d.days.size > 1).map((d) => `${d.name} (${[...d.days].sort().map(weekdayOf).join(", ")})`);
-  if (!missing.length && !gaps.length && !repeated.length) return;
-  const said: string[] = [];
+  if (!missing.length && !gaps.length && !repeated.length && !breaks.length) return;
+  const said: string[] = breaks.length ? [rulesSaid(breaks)] : [];
   if (missing.length) said.push(`${INGREDIENTS_RULE}. Without ingredients: ${missing.join("; ")}: give each its ingredients with set_dish { dish_id, ingredients }.`);
   if (gaps.length) said.push(`An extra slot has no meal on its day: ${gaps.join("; ")}. Plan it with set_meal { date, slot, dishes }; on a day it is not needed (no school), set_meal { date, slot, ordered_in: true, note }.`);
   if (repeated.length) said.push(`Dishes repeat in the week: ${repeated.join("; ")}. Plan a different dish on the other days with set_dish, unless the family asked for it more than once: then call again with repeats_ok: true.`);
-  refuse(`The week is not ready to send. ${said.join(" ")}`, missing.length ? "MISSING_INGREDIENTS" : gaps.length ? "MISSING_SLOTS" : "REPEATED_DISHES",
-    { missing_ingredients: missing, missing_slots: gaps, repeated });
+  refuse(`The week is not ready to send. ${said.join(" ")}`,
+    breaks.length ? "RULE_BROKEN" : missing.length ? "MISSING_INGREDIENTS" : gaps.length ? "MISSING_SLOTS" : "REPEATED_DISHES",
+    { missing_ingredients: missing, missing_slots: gaps, repeated, ...(breaks.length ? { rule_breaks: breaks } : {}) });
 }
 
 // ── Writes: each runs inside a transaction and lists what changed, told to the pages once it is committed ──
@@ -380,7 +408,10 @@ export function mountMealRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: { bas
       // A week already final is closed again: the message is answered from it. A week with no meals answers the context.
       const planned = mode === "final" && !drafts.length && !!db.select().from(plan_meals).where(inWeek(weekStart)).limit(1).get();
       if (!drafts.length && !planned) return { body: { context: weekContext(db, weekStart) } };
-      if (mode === "final" && by.startsWith("agent:")) checkWeek(weekView(db, weekStart), houseView(getHouse(db)), today(), b.repeats_ok === true);
+      if (mode === "final" && by.startsWith("agent:")) {
+        const view = weekView(db, weekStart), house = houseView(getHouse(db));
+        checkWeek(view, house, today(), b.repeats_ok === true, ruleBreaks(view, house, peopleAtHome(db)));
+      }
       commit((tx, changes) => {
         for (const m of drafts) {
           tx.update(plan_meals).set({ status: "final", updated_at: now(), updated_by: by }).where(eq(plan_meals.id, m.id)).run();
@@ -400,7 +431,8 @@ export function mountMealRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: { bas
         if (seen.has(`${m.date} ${m.slot}`)) refuse(`${m.date} ${m.slot} is in meals twice`);
         seen.add(`${m.date} ${m.slot}`);
       }
-      if (mode === "final" && by.startsWith("agent:")) needIngredients(meals);
+      const checked = mode === "final" && by.startsWith("agent:");
+      const missing = checked ? missingIngredients(meals) : [];
       commit((tx, changes) => {
         for (const old of tx.select().from(plan_meals).where(inWeek(weekStart)).all()) {
           if (keepRest && !seen.has(`${old.date} ${old.slot}`)) {
@@ -420,6 +452,9 @@ export function mountMealRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: { bas
           changes.push(["plan_meals", row.id, "insert", by]);
           (m.dishes ?? []).forEach((d, position) => addDish(tx, row.id, position, d, by, changes));
         }
+        // The agent's final plan keeps the family's rules: the meals it sent, and a cap over the week they count towards.
+        // Checked on the week as written, so a refusal undoes the whole call.
+        if (checked) refuseWrite(missing, breaksIn(tx, weekStart, meals));
       });
     }
     const week = weekView(db, weekStart);
@@ -460,7 +495,8 @@ export function mountMealRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: { bas
     const sent = b.dishes === undefined ? undefined : dishesSent(db, b.dishes, label);
     const orderedIn = !!(set.ordered_in ?? meal?.ordered_in);
     if (orderedIn && sent?.length) refuse(`${label}: ${NO_DISHES_WITH_ORDER_IN}`);
-    if (sent && by.startsWith("agent:")) needIngredients([{ ...(meal ?? at!), dishes: sent }]);
+    const agent = by.startsWith("agent:");
+    const missing = sent && agent ? missingIngredients([{ ...(meal ?? at!), dishes: sent }]) : [];
     const id = commit((tx, changes) => {
       const row = meal
         ? tx.update(plan_meals).set({ ...set, updated_at: now(), updated_by: by }).where(eq(plan_meals.id, meal.id)).returning().get()
@@ -468,6 +504,7 @@ export function mountMealRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: { bas
       changes.push(["plan_meals", row.id, meal ? "update" : "insert", by]);
       if (orderedIn || sent) removeDishes(tx, row.id, changes);
       (sent ?? []).forEach((d, position) => addDish(tx, row.id, position, d, by, changes));
+      if (agent) guardMeal(tx, row, missing);
       return row.id;
     });
     return { body: { meal: mealView(id) } };
@@ -498,15 +535,19 @@ export function mountMealRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: { bas
     const label = dish?.name ?? name(b.name, "name");
     if (b.remove === true) {
       if (!dish || !meal) return notFound(`${label} is not a dish of that meal`);
-      commit((tx, changes) => { removeDish(tx, dish.id, changes); orderDishes(tx, meal.id, changes); });
+      commit((tx, changes) => {
+        removeDish(tx, dish.id, changes); orderDishes(tx, meal.id, changes);
+        if (by.startsWith("agent:")) guardMeal(tx, meal, []);
+      });
       return { body: { meal: mealView(meal.id) } };
     }
     const sent = dishOf(db, b, label);
     if (!dish && meal?.ordered_in) refuse(`${meal.date} ${meal.slot} is ordered in, so it has no dishes: set_meal it with ordered_in: false first`);
-    if (by.startsWith("agent:") && (sent.items ? !sent.items.length
-      : !dish || !db.select({ id: dish_items.id }).from(dish_items).where(eq(dish_items.dish_id, dish.id)).limit(1).get()))
+    const agent = by.startsWith("agent:");
+    const missing = agent && (sent.items ? !sent.items.length
+      : !dish || !db.select({ id: dish_items.id }).from(dish_items).where(eq(dish_items.dish_id, dish.id)).limit(1).get())
       // The agent plans: a dish it adds or changes ends with its ingredients.
-      needIngredients([{ ...(meal ?? at!), dishes: [{ ...sent, name: b.dish_id != null && typeof b.name === "string" ? b.name : label }] }]);
+      ? missingIngredients([{ ...(meal ?? at!), dishes: [{ ...sent, name: b.dish_id != null && typeof b.name === "string" ? b.name : label }] }]) : [];
     const ids = commit((tx, changes) => {
       // A meal made for the dish is the app's own row; the dish is the writer's.
       const mealRow = meal ?? tx.insert(plan_meals).values({ ...at!, status: statusFor(at!.date), updated_by: "app" }).returning().get();
@@ -521,6 +562,7 @@ export function mountMealRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: { bas
         if (sent.items) { removeItems(tx, row.id, changes); addItems(tx, row.id, sent.items, by, changes); }
       } else row = addDish(tx, mealRow.id, dishesOf(tx, mealRow.id).length, sent, by, changes);
       orderDishes(tx, mealRow.id, changes, position === undefined ? undefined : { id: row.id, at: position });
+      if (agent) guardMeal(tx, mealRow, missing);
       return { meal: mealRow.id, dish: row.id };
     });
     const view = mealView(ids.meal);
