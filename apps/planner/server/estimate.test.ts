@@ -181,7 +181,8 @@ describe("estimate", () => {
     expect(tie.map((i) => i.id)).toEqual(["b", "a"]);
   });
 
-  it("pantryStatus: Snoozed while snoozed, Low when due or on a cart as low, else In stock", () => {
+  it("pantryStatus: Subscription for an item delivered outside the apps, Snoozed while snoozed, Low when due or on a cart as low, else In stock", () => {
+    expect(pantryStatus(item({ subscription: "the milkman", snoozed_until: "2026-11-30" }), "2026-11-24", true)).toBe("Subscription");
     expect(pantryStatus(item({ snoozed_until: "2026-11-30" }), "2026-11-24", true)).toBe("Snoozed");
     expect(pantryStatus(item({}), "2026-11-24", false)).toBe("Low");
     expect(pantryStatus(item({}), "2026-11-10", true)).toBe("Low");

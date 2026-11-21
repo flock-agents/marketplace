@@ -292,7 +292,7 @@ describe("import_order_history", () => {
 });
 
 describe("subscriptions, answers, outside purchases", () => {
-  it("set_subscription leaves the item out of the Pantry and off open carts; active false brings it back", async () => {
+  it("set_subscription keeps the item in the Pantry as a Subscription and takes it off open carts; active false brings it back", async () => {
     const k = await start();
     await buys(k, "milk", "daily", "500 ml", ["2026-11-19", "2026-11-20"]);
     const milk = item(k, "milk");
@@ -307,14 +307,17 @@ describe("subscriptions, answers, outside purchases", () => {
     expect(item(k, "milk").subscription).toBe("Country Delight");
     // Off the open cart; the cart already being ordered is left as it is, and so is the rest of the open cart.
     expect(k.rows("order_lines").map((l) => [l.order_id === open.id ? "open" : "ordering", l.item])).toEqual([["ordering", "milk"], ["open", "bread"]]);
-    expect((await k.owner("GET", "/api/pantry")).body).toMatchObject({ counts: { all: 0 }, rows: [] });
+    // A subscription is the pantry item's setting: still listed, as "Subscription" with who delivers it, never low.
+    expect((await k.owner("GET", "/api/pantry")).body).toMatchObject({ counts: { all: 1, in_stock: 0, low: 0, snoozed: 0, subscription: 1 },
+      rows: [{ name: "milk", status: "Subscription", subscription: "Country Delight" }] });
+    expect((await k.owner("GET", `/api/items/${milk.id}`)).body.item).toMatchObject({ status: "Subscription", subscription: "Country Delight" });
     // A new item is made, in the daily group.
     await k.op("set_subscription", { item: "Eggs", source: "the milkman", active: true });
     expect(item(k, "eggs")).toMatchObject({ name: "Eggs", group: "daily", subscription: "the milkman" });
 
     await k.op("set_subscription", { item: "milk", source: "Country Delight", active: false });
     expect(item(k, "milk").subscription).toBe(null);
-    expect((await k.owner("GET", "/api/pantry")).body.rows.map((r: any) => r.name)).toEqual(["milk"]);
+    expect((await k.owner("GET", "/api/pantry")).body.rows.map((r: any) => [r.name, r.status === "Subscription", r.subscription])).toEqual([["Eggs", true, "the milkman"], ["milk", false, null]]);
     // Refused: no source to start one, a yes/no that is not one; ending one that is not there is a 404.
     for (const bad of [{ item: "curd", active: true }, { item: "curd", source: "Amul", active: "yes" }, { source: "Amul", active: true }])
       expect([bad, (await k.op("set_subscription", bad)).code]).toEqual([bad, "APP_REFUSED"]);
@@ -439,7 +442,7 @@ describe("the Pantry and the item page", () => {
     await buys(k, "toor dal", "monthly", "1 kg", ["2026-09-01", "2026-10-01"]);              // ran out 31 Oct: low
     await buys(k, "bhindi", "few_days", "500 g", ["2026-11-14", "2026-11-18"]);              // snoozed below
     await buys(k, "eggs", "daily", "12 pc", ["2026-11-15", "2026-11-19"]);                   // on a cart as low
-    await buys(k, "milk", "daily", "1 l", ["2026-11-19", "2026-11-20"]);                     // subscribed: not listed
+    await buys(k, "milk", "daily", "1 l", ["2026-11-19", "2026-11-20"]);                     // subscribed: listed as such
     await k.op("set_item", { item: "bhindi", snooze_days: 2 });
     await k.op("set_subscription", { item: "milk", source: "Country Delight", active: true });
     const cart = k.kit.db.insert(orders).values({ app: "zepto", status: "open" }).returning().get();
@@ -447,11 +450,11 @@ describe("the Pantry and the item page", () => {
 
     const pantry = (await k.owner("GET", "/api/pantry")).body;
     expect(pantry.rows.map((r: any) => [r.name, r.quantity, r.status])).toEqual([
-      ["atta", "10 kg", "In stock"], ["bhindi", "500 g", "Snoozed"], ["eggs", "12 pc", "Low"], ["toor dal", "1 kg", "Low"]]);
-    expect(pantry.rows.map((r: any) => r.cycle)).toEqual(["10 kg about every 3 weeks", "500 g about every 4 days", "12 pc about every 4 days", "1 kg about once a month"]);
-    expect(pantry.rows[0]).toEqual({ id: item(k, "atta").id, name: "atta", quantity: "10 kg", cycle: "10 kg about every 3 weeks", status: "In stock", image: null });
-    expect(pantry.counts).toEqual({ all: 4, in_stock: 1, low: 2, snoozed: 1 });
-    expect(pantry.counts.in_stock + pantry.counts.low + pantry.counts.snoozed).toBe(pantry.counts.all);
+      ["atta", "10 kg", "In stock"], ["bhindi", "500 g", "Snoozed"], ["eggs", "12 pc", "Low"], ["milk", "1 l", "Subscription"], ["toor dal", "1 kg", "Low"]]);
+    expect(pantry.rows.filter((r: any) => r.name !== "milk").map((r: any) => r.cycle)).toEqual(["10 kg about every 3 weeks", "500 g about every 4 days", "12 pc about every 4 days", "1 kg about once a month"]);
+    expect(pantry.rows[0]).toEqual({ id: item(k, "atta").id, name: "atta", quantity: "10 kg", cycle: "10 kg about every 3 weeks", status: "In stock", subscription: null, image: null });
+    expect(pantry.counts).toEqual({ all: 5, in_stock: 1, low: 2, snoozed: 1, subscription: 1 });
+    expect(pantry.counts.in_stock + pantry.counts.low + pantry.counts.snoozed + pantry.counts.subscription).toBe(pantry.counts.all);
     expect(JSON.stringify(pantry)).not.toMatch(/zepto|Zepto/);
   });
 

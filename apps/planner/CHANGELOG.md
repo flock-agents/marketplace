@@ -8,8 +8,7 @@ betas included) and library 1.10.11.
 - **Family.** The Family page is only about the family: who eats at home, the cook, the days you cook (Monday to Saturday
   until you change them), the extra meals and the house rules. Tell the agent or edit it yourself.
 - **How we order.** The app's Settings tab (Flock's Settings & routines) has a "How we order" group: your main grocery
-  app, the one to try when something is not on it, and "Order without asking". Items delivered to you by someone else,
-  such as milk from a milkman, are left out of every cart; tell the agent which ones.
+  app, the one to try when something is not on it, and "Order without asking".
 - **The week, planned and kept.** The week is planned on Sunday at 11 am, on your cooking days only, and each day is kept
   as soon as it is planned: you do not need to reply. The Sunday message is Monday's meals plus a link to the Week page.
   Nothing is bought by the plan.
@@ -43,6 +42,10 @@ betas included) and library 1.10.11.
 - **The Week page** says when the week was really planned, and the Sunday link opens the week it planned.
 - **Pantry page.** Each item with its cycle and status (in stock, low or snoozed), when it was last bought, how long it usually
   lasts, and what the app learned from each order and each answer of yours.
+- **A subscription is a pantry item's setting.** On an item's page, "Comes on subscription", with who delivers it if you
+  like (the milkman, Country Delight): the item stays in the Pantry as "Subscription · the milkman" and is never put in a
+  cart or asked about, until you turn it off there ("Not on subscription"). There is no separate list of subscriptions;
+  telling the agent works too.
 - **Saved recipes with videos.** Share a reel, a short or any link and say "save this": it is kept on the Recipes page, now
   a gallery, and can be planned into the week.
 - **A video for a dish.** Ask "find a video for rajma", or share a recipe reel for a dish: the dish keeps that one video

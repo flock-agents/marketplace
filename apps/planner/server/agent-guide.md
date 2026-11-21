@@ -37,7 +37,7 @@ plan or reminder runs until one person is saved. Do not ask what is at home: the
 | The days they cook at home | `set_cooking_days { days }`: `["mon", ...]`, at least one; Mon to Sat until set |
 | The shopping apps: the main one, the one to try when something is not on it, the ones they have signed in to | `set_shopping_apps { main, fallback, connected }`: `zepto`, `swiggy-instamart`, `zomato-blinkit` (Blinkit), `bigbasket` or `amazon`; `fallback` is `null` for none. `connected` is only the apps signed in to in Flock, `[]` when none yet (main and fallback are not added to it): send it again after each sign-in. Not `set_house_rules` |
 | How often something is bought, only when they say it or there are no orders to learn it from ("milk every day, 1 litre") | `set_item { item, group, usual_amount, unit, every_days }` (see Items and their cycles) |
-| An item delivered outside the apps (a milkman, Country Delight) | `set_subscription { item, source, active: true }`: it is left out of every cart and every question |
+| An item delivered outside the apps (a milkman, Country Delight) | `set_subscription { item, source, active: true }`: a subscription is a pantry item's setting (the family can turn it on or off on the item's page too); it stays in the Pantry as a subscription and is left out of every cart and every question |
 
 ## Reading order history
 

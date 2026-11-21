@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
-import { APP_NAMES, TAG_TEXT } from "../../server/db/constants";
+import { APP_NAMES, SUBSCRIPTION_UNNAMED, TAG_TEXT } from "../../server/db/constants";
 import { agentName, cartNote, cookingDaysText, cartTitle, debouncePicks, dishNote, eventRows, forText, itemCallout, itemSubtitle, orderLabel, orderRow, outsideText, pantryTabs,
-  mealLines, patternFields, patternSource, pickerItems, profileWaiting, recipeSourceLabel, statusTone, syncPicker, TAG_TONES, textList, weekTitle,
+  mealLines, patternFields, patternSource, pickerItems, profileWaiting, recipeSourceLabel, statusTone, subscriptionTag, syncPicker, TAG_TONES, textList, weekTitle,
   cookDetails, cookVisitsText, linkWeek, plannedText, ruleChip, weekToOpen } from "./format";
 
 describe("mealLines", () => {
@@ -249,6 +249,7 @@ describe("pantryTabs and tones", () => {
     expect(statusTone("In stock")).toBe("success");
     expect(statusTone("Low")).toBe("warning");
     expect(statusTone("Snoozed")).toBe("info");
+    expect(statusTone("Subscription")).toBe("muted");
   });
   it("reads each event's tag, and tones it", () => {
     expect([TAG_TEXT.counted, TAG_TEXT.early_buy, TAG_TEXT.your_answer, TAG_TEXT.one_off]).toEqual(["counted", "early buy", "your answer", "one-off, not counted"]);
@@ -270,6 +271,12 @@ describe("the item page", () => {
     expect(itemCallout({ ...item, run_out: null })?.title).toBe("Low");
     expect(itemCallout({ ...item, status: "Snoozed", snoozed_until: "2026-11-27" })?.title).toBe("Snoozed until Fri 27 Nov");
     expect(itemCallout({ ...item, status: "In stock" })).toBeNull();
+  });
+  it("a subscribed item says who delivers it, and that it is never put in a cart or asked about", () => {
+    expect(subscriptionTag("the milkman")).toBe("Subscription · the milkman");
+    expect([subscriptionTag(SUBSCRIPTION_UNNAMED), subscriptionTag(null)]).toEqual(["Subscription", "Subscription"]);
+    expect(itemCallout({ ...item, status: "Subscription", subscription: "Country Delight" }))
+      .toEqual({ tone: "info", icon: "repeat", title: "Subscription · Country Delight", body: "Delivered outside the apps: never put in a cart or asked about." });
   });
   it("lays out her pattern", () => {
     expect(patternFields(item)).toEqual([

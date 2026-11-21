@@ -173,7 +173,9 @@ export function pickAsks(items: ItemState[], on: string): ItemState[] {
 
 /** What the Pantry shows. `onCart`: the item is on a cart as low. An item that is not confident is never due, so it reads
  *  In stock unless it is on a cart. */
-export function pantryStatus(i: ItemState, today: string, onCart: boolean): "In stock" | "Low" | "Snoozed" {
+export function pantryStatus(i: ItemState, today: string, onCart: boolean): "In stock" | "Low" | "Snoozed" | "Subscription" {
+  // Delivered outside the apps: never in a cart or asked about, so never low.
+  if (i.subscription) return "Subscription";
   if (i.snoozed_until && i.snoozed_until >= today) return "Snoozed";
   return isDue(i, today) || onCart ? "Low" : "In stock";
 }

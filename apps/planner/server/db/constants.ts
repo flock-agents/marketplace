@@ -92,3 +92,6 @@ export const SETTINGS = [
 
 /** Meal Planner 2.0's tables. The upgrade keeps them as they are (mountKit keepTables): never changed, dropped or shown. */
 export const OLD_TABLES = ["ingredients", "recipes", "recipe_ingredients", "meals", "meal_recipes", "diners", "diner_portions", "standing_consumption", "staples", "carts", "groceries", "prep_reminders", "shopping_prefs", "stock", "agent_jobs", "choice_log", "learned_prefs", "message_log"];
+/** Who delivers a subscribed item when the family named nobody (the Pantry item's "Comes on subscription" with "from" left
+ *  empty): set_subscription needs a source, and the pill then says just "Subscription". */
+export const SUBSCRIPTION_UNNAMED = "outside the apps";

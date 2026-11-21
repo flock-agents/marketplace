@@ -2,7 +2,7 @@
 // library import here, so the wording is tested on its own. The dates, the grocery apps' names and a dish's line are the
 // server's own. The app an item is bought on is never named on the Pantry or the item page.
 import { addDays, clockText, dayLabel, todayStr, WEEKDAYS, weekdayLong, weekdayOf, type Weekday } from "../../server/dates";
-import { APP_NAMES, RULE_LABELS, SYNC_ASK_COOLDOWN_MIN, type GroceryApp } from "../../server/db/constants";
+import { APP_NAMES, RULE_LABELS, SUBSCRIPTION_UNNAMED, SYNC_ASK_COOLDOWN_MIN, type GroceryApp } from "../../server/db/constants";
 import { dishText, lastTimeText, type LastTime } from "../../server/dishText";
 
 /** A dish in one line, "Parathas (for Dad)": the same words the messages use. */
@@ -184,7 +184,7 @@ export function agentName(display: Record<string, unknown> | null | undefined): 
 
 // ── Pantry and the item page ──
 
-export type PantryCounts = { all: number; in_stock: number; low: number; snoozed: number };
+export type PantryCounts = { all: number; in_stock: number; low: number; snoozed: number; subscription?: number };
 export const PANTRY_FILTER: Record<string, string | null> = { all: null, in_stock: "In stock", low: "Low", snoozed: "Snoozed" };
 
 /** The Pantry's one control: All · In stock · Low · Snoozed, with their counts. */
@@ -193,15 +193,15 @@ export function pantryTabs(counts: PantryCounts): { id: string; label: string; c
     { id: "low", label: "Low", count: counts.low }, { id: "snoozed", label: "Snoozed", count: counts.snoozed }];
 }
 
-const STATUS_TONES = { "In stock": "success", Low: "warning", Snoozed: "info" } as const;
+const STATUS_TONES = { "In stock": "success", Low: "warning", Snoozed: "info", Subscription: "muted" } as const;
 /** A status's pill tone. */
-export const statusTone = (status: string): "success" | "warning" | "info" | "neutral" => STATUS_TONES[status as keyof typeof STATUS_TONES] ?? "neutral";
+export const statusTone = (status: string): "success" | "warning" | "info" | "muted" | "neutral" => STATUS_TONES[status as keyof typeof STATUS_TONES] ?? "neutral";
 /** The pills of the Pantry's statuses and of an event's tag (the server sends the tag as words). */
 export const TAG_TONES: Record<string, "success" | "warning" | "info" | "neutral" | "muted" | "accent"> = {
   ...STATUS_TONES, counted: "neutral", "early buy": "accent", "your answer": "info", "one-off, not counted": "muted", "not counted": "muted" };
 
 const GROUP_TEXT: Record<string, string> = { daily: "Daily", few_days: "Every few days", monthly: "Monthly" };
-type ItemLike = { name: string; group: string | null; status: string; run_out: string | null; snoozed_until: string | null; product: string | null;
+type ItemLike = { name: string; group: string | null; status: string; run_out: string | null; snoozed_until: string | null; subscription?: string | null; product: string | null;
   usual: string | null; price: number | null; lasts_days: number | null; uses: string | null; follows_plan: boolean; cycle?: string | null; cycle_stated?: boolean };
 
 /** Under the item's name: its cycle, "Monthly · 10 kg about once a month"; with no cycle yet, the usual amount ("Monthly · 10 kg"). */
@@ -213,8 +213,13 @@ export function patternSource(i: ItemLike, counted: number): string {
   return counted ? `from the last ${counted} ${counted === 1 ? "purchase" : "purchases"}` : "nothing counted yet";
 }
 
-/** Why the item is low or snoozed, or null when it is in stock. */
+/** A subscribed item's pill: "Subscription · the milkman"; just "Subscription" when nobody was named. */
+export const subscriptionTag = (source: string | null | undefined): string =>
+  source && source !== SUBSCRIPTION_UNNAMED ? `Subscription · ${source}` : "Subscription";
+
+/** Why the item is on a subscription, low or snoozed, or null when it is in stock. */
 export function itemCallout(i: ItemLike): { tone: "warning" | "info"; icon: string; title: string; body: string } | null {
+  if (i.subscription) return { tone: "info", icon: "repeat", title: subscriptionTag(i.subscription), body: "Delivered outside the apps: never put in a cart or asked about." };
   if (i.status === "Low") return { tone: "warning", icon: "triangle-alert", title: i.run_out ? `Low · about to run out around ${dayLabel(i.run_out)}` : "Low",
     body: "Snooze it if you still have enough." };
   if (i.status === "Snoozed" && i.snoozed_until) return { tone: "info", icon: "bell-off", title: `Snoozed until ${dayLabel(i.snoozed_until)}`, body: "Not asked about until then." };

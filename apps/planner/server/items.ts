@@ -160,19 +160,21 @@ function lowOnCart(db: Db): Set<string> {
 export type PantryStatus = ReturnType<typeof pantryStatus>;
 /** `cycle`: what is bought and how often, in plain words ("500 ml every day", "30 pc about once a week"); null with no cycle yet. */
 /** `image`: the product's picture from the shopping app (the item's own, else a remembered product's), or null. */
-export type PantryRow = { id: string; name: string; quantity: string | null; cycle: string | null; status: PantryStatus; image: string | null };
+/** `subscription`: who delivers it outside the apps (a subscribed item's status is "Subscription"), else null. */
+export type PantryRow = { id: string; name: string; quantity: string | null; cycle: string | null; status: PantryStatus; subscription: string | null; image: string | null };
 
-/** The Pantry: every item but the subscribed ones, by name, with its cycle (else the amount usually bought) and its status. */
-export function pantryView(db: Db, today: string): { counts: { all: number; in_stock: number; low: number; snoozed: number }; rows: PantryRow[] } {
+/** The Pantry: every item, by name, with its cycle (else the amount usually bought) and its status. A subscription is a
+ *  pantry item's setting: the item stays listed, as "Subscription", and is never put in a cart or asked about. */
+export function pantryView(db: Db, today: string): { counts: { all: number; in_stock: number; low: number; snoozed: number; subscription: number }; rows: PantryRow[] } {
   const cycles = cycleCounts(db), onCart = lowOnCart(db);
   const pictures = new Map<string, string>();
   for (const p of db.select({ item: products.item, image: products.image }).from(products).all()) { const url = imageUrl(p.image); if (url && !pictures.has(p.item)) pictures.set(p.item, url); }
-  const rows = db.select().from(items).all().filter((i) => !i.subscription)
+  const rows = db.select().from(items).all()
     .map((i) => ({ id: i.id, name: i.name, quantity: quantityText(i.usual_amount, i.unit), cycle: cycleText(i, cycleStated(i)), status: pantryStatus(stateOf(i, cycles.get(i.id) ?? 0), today, onCart.has(i.id)),
-      image: imageUrl(i.image) ?? pictures.get(i.item) ?? null }))
+      subscription: i.subscription, image: imageUrl(i.image) ?? pictures.get(i.item) ?? null }))
     .sort((a, b) => a.name.localeCompare(b.name));
   const n = (s: PantryStatus) => rows.filter((r) => r.status === s).length;
-  return { counts: { all: rows.length, in_stock: n("In stock"), low: n("Low"), snoozed: n("Snoozed") }, rows };
+  return { counts: { all: rows.length, in_stock: n("In stock"), low: n("Low"), snoozed: n("Snoozed"), subscription: n("Subscription") }, rows };
 }
 
 /** One item's page: its pattern, and the purchases and answers it was learned from, newest first. */
@@ -187,7 +189,7 @@ export function itemView(db: Db, id: string, today: string) {
   const state = stateOf(i, cycleCounts(db).get(id) ?? 0);
   return {
     item: { id: i.id, name: i.name, group: i.group, status: pantryStatus(state, today, lowOnCart(db).has(id)), run_out: i.run_out, snoozed_until: i.snoozed_until,
-      product: i.product, usual: quantityText(i.usual_amount, i.unit), price: priced?.price ?? null, lasts_days: i.lasts_days,
+      subscription: i.subscription, product: i.product, usual: quantityText(i.usual_amount, i.unit), price: priced?.price ?? null, lasts_days: i.lasts_days,
       uses: usesText(i.usual_amount, i.lasts_days, i.unit), follows_plan: !!i.follows_plan, cycle: cycleText(i, cycleStated(i)), cycle_stated: cycleStated(i) },
     events: evs.map((e) => ({
       what: e.kind === "answer" ? (e.days != null ? `Fine for ${trim(e.days, 1)} more days` : "Still have it")
