@@ -3,7 +3,7 @@
   "usage": "template",
   "icon": "icon.svg",
   "description": "The family's meals for the week on the days they cook, a running-out guess for the things they buy from their order history, and a reminder each afternoon and evening with one cart per shopping app that is ordered only when they say yes; not for school runs, chores or appointments.",
-  "version": "3.1.0",
+  "version": "3.2.0",
   "minFlockVersion": "0.24.0-beta.1",
   "type": "fullstack",
   "access": "private",
@@ -136,6 +136,387 @@
       "label": "Order without asking",
       "group": "How we order",
       "help": "Off: nothing is ordered until you reply or tap Order. On: the agent orders the items it is sure about by itself."
+    }
+  ],
+  "setupMenu": "Planning the week's meals and groceries",
+  "setupOptions": {
+    "menuOrder": 10,
+    "scope": "family",
+    "about": "Learn how this family eats and shops, saving each answer in the Meal Planner, and end with next week's plan. Past-week meals: ask for all the detail they can give. Never ask brands, pack sizes or what's at home, and never whether to add an item as a regular. Nothing is ordered now.",
+    "uses": [
+      "household.people",
+      "household.children",
+      "household.elders",
+      "household.help",
+      "household.mealsBy",
+      "household.groceriesBy"
+    ],
+    "connectors": [
+      "zepto",
+      "swiggy-instamart",
+      "zomato-blinkit",
+      "bigbasket",
+      "amazon"
+    ]
+  },
+  "setup": [
+    {
+      "id": "pain",
+      "ask": "What's the hardest part of meals for you? Or something else.",
+      "choices": [
+        "Deciding what to make every day",
+        "Remembering to order what the meals need",
+        "Remembering what the cook said has run out"
+      ],
+      "help": "It decides what the Meal Planner does first, menus or shopping.",
+      "fills": [
+        "pain:text"
+      ],
+      "default": "assume",
+      "assume": "I assumed deciding what to make every day is the hardest part."
+    },
+    {
+      "id": "apps",
+      "ask": "Which apps do you order groceries on: Zepto, Blinkit, Instamart, BigBasket or Amazon? If you sign me in, I'll read your past orders to learn what your home buys and how often, so the plan and the shopping list fit you from the first week, and I can fill the cart for you. Nothing is ordered without your yes.",
+      "fills": [
+        "groceryApps:list"
+      ],
+      "then": [
+        {
+          "do": "connect",
+          "each": "groceryApps"
+        }
+      ],
+      "help": "One message, with the why. Each app not signed in: sign in now, one at a time, number then code. Once one is in, Flock reads its past orders into the Meal Planner itself, in the background (never start that yourself); its one line comes into this chat. Then the next question at once. Someone else orders: no codes. Never promise 3 months, never ask brands or pack sizes. groceryApps: the apps they named.",
+      "default": [],
+      "assume": "I left the grocery apps for now; you can connect them any time."
+    },
+    {
+      "id": "mainApp",
+      "when": "groceryApps",
+      "ask": "Which is your main app, and which do you use when something isn't there?",
+      "fills": [
+        "mainApp:text",
+        "fallbackApp"
+      ],
+      "answer": {
+        "operation": "set_shopping_apps"
+      },
+      "help": "One app signed in: it is the main; record it without asking. save: set_shopping_apps with main, fallback or null, and every app signed in as connected."
+    },
+    {
+      "id": "cook",
+      "when": "household.help has cook",
+      "ask": "Who cooks which meals, and when do they come?",
+      "fills": [
+        "cookMeals:text"
+      ],
+      "answer": {
+        "operation": "set_cook"
+      },
+      "help": "Skip hours you know; \"the cook\", never he or she."
+    },
+    {
+      "id": "cookLimits",
+      "when": "household.help has cook",
+      "ask": "Is there anything the cook doesn't make well, or won't make?",
+      "fills": [
+        "cookWontMake:text"
+      ],
+      "answer": {
+        "operation": "set_cook"
+      },
+      "help": "Matters more than what they make best.",
+      "default": "assume",
+      "assume": "I assumed the cook makes the usual dishes well."
+    },
+    {
+      "id": "cookTime",
+      "when": "household.help has cook",
+      "ask": "Is the cook short of time, say off to the next house, so only a dish or two in the morning?",
+      "fills": [
+        "cookTime:text"
+      ],
+      "answer": {
+        "operation": "set_cook"
+      },
+      "default": "assume",
+      "assume": "I assumed the cook has time for the full meal."
+    },
+    {
+      "id": "newRecipes",
+      "when": "household.help has cook",
+      "ask": "Will the cook try new recipes from reels or the internet, or is a set menu of familiar dishes better?",
+      "fills": [
+        "newRecipes:text"
+      ],
+      "answer": {
+        "operation": "set_cook"
+      },
+      "default": "set_menu",
+      "assume": "I assumed a set menu of familiar dishes."
+    },
+    {
+      "id": "cookingDays",
+      "ask": "Which days is food cooked at home? Monday to Saturday, or Sunday too?",
+      "fills": [
+        "cookingDays:list"
+      ],
+      "answer": {
+        "operation": "set_cooking_days"
+      },
+      "default": [
+        "mon",
+        "tue",
+        "wed",
+        "thu",
+        "fri",
+        "sat"
+      ],
+      "assume": "I assumed food is cooked Monday to Saturday."
+    },
+    {
+      "id": "kidsBreakfast",
+      "when": "household.children",
+      "ask": "What did the children have for breakfast over the past week? Tell me in as much detail as you can.",
+      "multi": true,
+      "fills": [
+        "pastWeek.kidsBreakfast:text"
+      ],
+      "answer": {
+        "operation": "set_person"
+      },
+      "required": false,
+      "help": "set_person for each child, with what they eat in their note."
+    },
+    {
+      "id": "kidsLunch",
+      "when": "household.children",
+      "ask": "The children's lunch over the past week, or their school tiffin?",
+      "multi": true,
+      "fills": [
+        "pastWeek.kidsLunch:text"
+      ],
+      "answer": {
+        "operation": "set_slots"
+      },
+      "required": false,
+      "help": "A tiffin on school days: set_slots with it as an extra slot."
+    },
+    {
+      "id": "kidsDinner",
+      "when": "household.children",
+      "ask": "The children's dinner over the past week?",
+      "multi": true,
+      "fills": [
+        "pastWeek.kidsDinner:text"
+      ]
+    },
+    {
+      "id": "adultsBreakfast",
+      "ask": "What did the adults have for breakfast over the past week? Tell me in as much detail as you can.",
+      "multi": true,
+      "fills": [
+        "pastWeek.adultsBreakfast:text"
+      ],
+      "answer": {
+        "operation": "set_person"
+      },
+      "required": false,
+      "help": "set_person for each adult, with what they eat in their note."
+    },
+    {
+      "id": "adultsLunch",
+      "ask": "The adults' lunch over the past week?",
+      "multi": true,
+      "fills": [
+        "pastWeek.adultsLunch:text"
+      ]
+    },
+    {
+      "id": "adultsDinner",
+      "ask": "The adults' dinner over the past week?",
+      "multi": true,
+      "fills": [
+        "pastWeek.adultsDinner:text"
+      ]
+    },
+    {
+      "id": "diet",
+      "ask": "Is anyone on a diet? High protein, low carb, diabetic, anything a doctor asked for.",
+      "fills": [
+        "diet:text"
+      ],
+      "answer": {
+        "operation": "set_person"
+      },
+      "required": false,
+      "default": "assume",
+      "assume": "I assumed nobody is on a special diet."
+    },
+    {
+      "id": "draft",
+      "action": "plan_week",
+      "args": {
+        "mode": "draft"
+      },
+      "after": [
+        "diet"
+      ],
+      "help": "A first draft of next week: plan_week draft with week_start next Monday, never final yet; it uses the orders if they are in by now, never wait for them. Then send the draft as a short message, not the whole week, ending with the link: {{appLink}}. Nothing is ordered now."
+    },
+    {
+      "id": "elders",
+      "when": "household.elders",
+      "ask": "Does anyone older eat differently? Low salt, sugar-free, softer food, no onion or garlic?",
+      "fills": [
+        "elders:text"
+      ],
+      "answer": {
+        "operation": "set_person"
+      },
+      "required": false,
+      "default": "assume",
+      "assume": "I assumed the elders eat what everyone eats."
+    },
+    {
+      "id": "rules",
+      "ask": "Any food rules for the house? Veg, egg or non-veg days, fasting days, allergies, a dish someone won't touch.",
+      "fills": [
+        "rules:text"
+      ],
+      "answer": {
+        "operation": "set_house_rules"
+      },
+      "required": false,
+      "help": "Confirm what the orders show.",
+      "default": "assume",
+      "assume": "I assumed no special food rules."
+    },
+    {
+      "id": "orderIn",
+      "ask": "How often do you order in, and on which days?",
+      "fills": [
+        "orderIn:text"
+      ],
+      "answer": {
+        "operation": "set_slots"
+      },
+      "required": false,
+      "help": "Nothing is cooked then.",
+      "default": "assume",
+      "assume": "I assumed you don't order in on a fixed day."
+    },
+    {
+      "id": "subscriptions",
+      "ask": "Does anything come on a subscription, like Country Delight or a milkman?",
+      "fills": [
+        "subscriptions:list"
+      ],
+      "answer": {
+        "operation": "set_subscription"
+      },
+      "required": false,
+      "help": "save: set_subscription for each; never in a cart.",
+      "default": [],
+      "assume": "I assumed nothing comes on a subscription."
+    },
+    {
+      "id": "connectLater",
+      "when": "!groceryApps and household.groceriesBy",
+      "ask": "Before I make the final plan: shall I sign in to (the grocery app they use) now? I'd read your past orders, so the plan and the shopping list fit what your home buys.",
+      "fills": [
+        "laterApps:list"
+      ],
+      "yes": [
+        {
+          "do": "connect",
+          "each": "laterApps"
+        }
+      ],
+      "answer": {
+        "operation": "set_shopping_apps"
+      },
+      "required": false,
+      "help": "Only if they order the groceries themselves and skipped signing in earlier; once, a no is final. A yes: sign in, number then code; Flock then reads its past orders into the Meal Planner itself, in the background (never start that yourself); then save set_shopping_apps."
+    },
+    {
+      "id": "orderFindings",
+      "when": "groceryApps",
+      "ask": "From your orders: (what the home buys and how often, a few items: \"milk most days, eggs about weekly, onions and tomatoes weekly\"). Is anything off?",
+      "fills": [
+        "orderFindings:text"
+      ],
+      "answer": {
+        "operation": "set_item"
+      },
+      "required": false,
+      "help": "Only once an import's result is back, and only if you have not told them yet; a correction: save set_item for it. An import still running: go on, and say it when it is back."
+    },
+    {
+      "id": "final",
+      "action": "plan_week",
+      "args": {
+        "mode": "final"
+      },
+      "background": true,
+      "result": true,
+      "fixedSay": "Give me a few minutes, I'm putting your week together.",
+      "help": "An import still running: wait for its result first. Delegate, agentId self, sessionId new, task: \"Make next week's plan final in the Meal Planner: plan_week final, as its guide says, from what it holds and from this: (what the answers since the draft change, what you assumed). Message nobody. Reply with the message and the intro its closing call gives, word for word.\" End the turn. When its result comes back: send that message (Monday's meals, Week link) and intro exactly as given, once each; no other link. Nothing is ordered now. If you cannot delegate, make it here: plan_week final."
+    }
+  ],
+  "setupJoiner": [
+    {
+      "id": "intro",
+      "when": "!ctx.group",
+      "ask": "Send ONE message about the Meal Planner: read what it holds with its own operations and say it in a line or two (the real contents), then its link, as it is: {{offerLink}}",
+      "help": "Then end your turn: Flock asks the next question itself."
+    },
+    {
+      "id": "connectOwn",
+      "when": "!ctx.group",
+      "fixed": true,
+      "ask": "If you connect your own grocery apps, I can track your house's pantry better, with your orders in it too. Shall we connect them?",
+      "yes": [
+        "moveChatToGroup",
+        "connect"
+      ],
+      "no": [
+        "ownInterview"
+      ],
+      "help": "yes false too for \"I don't order the groceries\"."
+    },
+    {
+      "id": "ownApps",
+      "when": "ctx.group and ctx.ordersGroceries",
+      "ask": "{{inviter}} says you order the groceries. Which apps do you order groceries on: Zepto, Blinkit, Instamart, BigBasket or Amazon? If you sign me in, I'll read your past orders to learn what your home buys and how often, so the family's plan and shopping list fit what your home buys, and I can fill the cart for you. Nothing is ordered without your yes.",
+      "fills": [
+        "person.groceryApps:list"
+      ],
+      "then": [
+        {
+          "do": "connect",
+          "each": "person.groceryApps"
+        }
+      ],
+      "help": "One message, with the why. Each app not signed in: sign in here in the group, one at a time, number then code; the connection is theirs. Once one is in, Flock reads its past orders into the Meal Planner itself, in the background (never start that yourself). A skip: go on, never ask again.",
+      "default": []
+    },
+    {
+      "id": "ownApps",
+      "when": "ctx.group and !ctx.ordersGroceries",
+      "ask": "Which apps do you order groceries on: Zepto, Blinkit, Instamart, BigBasket or Amazon? If you sign me in, I'll read your past orders to learn what your home buys and how often, so the family's plan and shopping list fit what your home buys, and I can fill the cart for you. Nothing is ordered without your yes.",
+      "fills": [
+        "person.groceryApps:list"
+      ],
+      "then": [
+        {
+          "do": "connect",
+          "each": "person.groceryApps"
+        }
+      ],
+      "help": "One message, with the why. Each app not signed in: sign in here in the group, one at a time, number then code; the connection is theirs. Once one is in, Flock reads its past orders into the Meal Planner itself, in the background (never start that yourself). A skip: go on, never ask again.",
+      "default": []
     }
   ],
   "routines": [

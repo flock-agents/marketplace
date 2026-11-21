@@ -1,5 +1,16 @@
 # Changelog
 
+## 3.2.0
+
+- **The setup interview lives in the app.** The questions the Butler asks when the Meal Planner is set up are now the
+  app's own `setup` (with `setupJoiner`, `setupMenu` and `setupOptions`), in the same words as before: the hardest part,
+  the grocery apps and why, the main app, the cook, the cooking days, last week's meals, any diet, the draft week, elders,
+  house rules, ordering in, subscriptions, what the orders show and the final plan ("Give me a few minutes, I'm putting
+  your week together."). Each answer is written into the app through its operation. Flock (with the interview engine)
+  asks them one at a time, skips what the family already said, and lets a person skip a question or the rest (each has
+  a default, said as an assumption). A second person the app is shared with is asked to connect their own grocery apps.
+  An older Flock ignores these fields.
+
 ## 3.1.0
 
 3.0.0 was a build that was never released; this is the release. It replaces the 2.0 Meal Planner. Needs Flock 0.24.0 (its

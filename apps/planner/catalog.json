@@ -1,6 +1,6 @@
 {
   "name": "planner",
-  "version": "3.1.0",
+  "version": "3.2.0",
   "description": "The family's meals for the week on the days they cook, a running-out guess for the things they buy from their order history, and a reminder each afternoon and evening with one cart per shopping app that is ordered only when they say yes; not for school runs, chores or appointments.",
   "objects": [
     "grocery-bag"
