@@ -113,6 +113,55 @@ describe("the house", () => {
     expect((await op("set_house_rules", {})).code).toBe("APP_REFUSED");
   });
 
+  it("set_house_rules takes the checked kinds: who on the Family page, days, slots, items and categories, to, per_week", async () => {
+    const { op } = await boot();
+    for (const name of ["Meera", "Lakshmi", "Shiva"]) await op("set_person", { name, group: "adult" });
+    await op("set_slots", { extra_slots: [{ name: "Agastya's tiffin", days: ["Mon"] }] });
+    const { house } = await op("set_house_rules", { rules: [
+      { kind: "only", who: "meera", slots: ["breakfast"], items: ["plain idli", " plain dosa "], note: "Meera's breakfasts" },
+      { kind: "swap", who: "Lakshmi", items: ["@White_Rice"], to: "millet" },
+      { kind: "only", who: "Lakshmi", days: ["thursday"], items: ["sabudana khichdi", "fruit"] },
+      { kind: "require", who: "Shiva", slots: ["Lunch", "Dinner"], items: ["@protein"] },
+      { kind: "avoid", slots: ["agastya's tiffin"], items: ["@peanut"] },
+      { kind: "cap", items: ["chapati", "phulka"], per_week: 2 },
+      { kind: "veg", days: ["Tue"] }] });
+    expect(house.rules).toEqual([
+      { kind: "only", who: "Meera", days: [], slots: ["Breakfast"], items: ["plain idli", "plain dosa"], note: "Meera's breakfasts" },
+      { kind: "swap", who: "Lakshmi", days: [], items: ["@white_rice"], to: "millet" },
+      { kind: "only", who: "Lakshmi", days: ["Thu"], items: ["sabudana khichdi", "fruit"] },
+      { kind: "require", who: "Shiva", days: [], slots: ["Lunch", "Dinner"], items: ["@protein"] },
+      { kind: "avoid", days: [], slots: ["Agastya's tiffin"], items: ["@peanut"] },
+      { kind: "cap", days: [], items: ["chapati", "phulka"], per_week: 2 },
+      { kind: "veg", days: ["Tue"] }]);
+  });
+
+  it("set_house_rules refuses a checked rule it cannot check, naming the field; nothing is saved", async () => {
+    const { op, rows } = await boot();
+    for (const name of ["Meera", "Lakshmi"]) await op("set_person", { name, group: "adult" });
+    const refused = async (rule: Record<string, unknown>) => {
+      const r = await op("set_house_rules", { rules: [rule] });
+      expect(r.code).toBe("APP_REFUSED");
+      return r.error as string;
+    };
+    expect(await refused({ kind: "avoid", who: "Meeraa", items: ["egg"] })).toContain("did you mean Meera?");
+    expect(await refused({ kind: "avoid", who: "Nani", items: ["egg"] })).toContain("set_person");
+    expect(await refused({ kind: "only", who: "Meera", slots: ["Brekfast"], items: ["plain idli"] })).toContain("did you mean Breakfast?");
+    expect(await refused({ kind: "avoid", items: ["@peanuts"] })).toContain("did you mean @peanut?");
+    expect(await refused({ kind: "avoid", items: [] })).toContain("items");
+    expect(await refused({ kind: "avoid", items: ["egg", " "] })).toContain("items");
+    expect(await refused({ kind: "avoid" })).toContain("needs items");
+    expect(await refused({ kind: "only", items: ["plain idli"] })).toContain("needs who");
+    expect(await refused({ kind: "swap", who: "Lakshmi", items: ["@white_rice"] })).toContain("needs to");
+    expect(await refused({ kind: "require", who: "Lakshmi", items: ["@protein"] })).toContain("needs slots");
+    expect(await refused({ kind: "cap", items: ["chapati"] })).toContain("needs per_week");
+    expect(await refused({ kind: "cap", items: ["chapati"], per_week: 1.5 })).toContain("per_week");
+    expect(await refused({ kind: "avoid", items: ["egg"], per_week: 2 })).toContain("takes no per_week");
+    expect(await refused({ kind: "avoid", items: ["egg"], to: "tofu" })).toContain("takes no to");
+    expect(await refused({ kind: "fasting", days: ["Thu"], items: ["sabudana khichdi"] })).toContain("kind: only");
+    expect(await refused({ kind: "avoid", days: ["Ekadashi"], items: ["rice"] })).toContain("not a weekday");
+    expect(rows("house").every((h) => h.rules === null || JSON.parse(h.rules).length === 0)).toBe(true);
+  });
+
   it("set_slots replaces only the field it is given", async () => {
     const { op } = await boot();
     await op("set_slots", { extra_slots: [{ name: "Agastya's tiffin", days: ["Mon"], for: ["Agastya"] }], order_in: [{ day: "Sun", slot: "Dinner" }] });

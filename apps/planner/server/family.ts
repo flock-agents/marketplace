@@ -9,6 +9,8 @@ import { _settings } from "@flock/app-kit";
 import { house, people } from "./db/schema";
 import { appOf, COOK_NEW_RECIPES, COOKING_DAYS_DEFAULT, GROUPS, RULE_KINDS, SETTINGS, SHOP_APPS, SLOTS, type GroceryApp } from "./db/constants";
 import { WEEKDAYS, type Weekday } from "./dates";
+import { closest } from "./agentOps";
+import { CATEGORIES, CHECKED_KINDS, KIND_NEEDS, type Rule } from "./rules";
 
 export type Db = BunSQLiteDatabase<any>;
 /** Tell live pages a row changed, and who changed it (the kit's emitChange). */
@@ -16,8 +18,8 @@ export type Emit = (table: string, id: string, op: "insert" | "update" | "delete
 
 export type PersonRow = typeof people.$inferSelect;
 export type HouseRow = typeof house.$inferSelect;
-/** A house rule. `days` empty: it holds every day. */
-export type HouseRule = { kind: (typeof RULE_KINDS)[number]; days: string[]; note?: string };
+/** A house rule (rules.ts, the spec's one shape). `days` empty: it holds every day; no `who`: everyone; no `slots`: every meal. */
+export type HouseRule = Rule & { kind: (typeof RULE_KINDS)[number] };
 export type ExtraSlot = { name: string; days?: Weekday[]; for?: string[] };
 export type OrderIn = { day: Weekday; slot: string; note?: string };
 /** One visit of the cook: when they come, and the meals that visit makes when the family said. */
@@ -130,20 +132,78 @@ const optionalNote = (v: unknown, what: string): { note?: string } => {
 
 const PERSON_WORDS = ["relationship", "portions", "diet", "allergies", "dislikes", "targets", "note"] as const;
 
-const RULE_SHAPE = "rules must be a list of { kind, days?, note? }";
-function rules(v: unknown): HouseRule[] {
+const RULE_SHAPE = "rules must be a list of { kind, who?, days?, slots?, items?, to?, per_week?, note? }";
+const KIND_HELP = `a rule's kind must be one of: ${RULE_KINDS.join(", ")} (avoid: no dish with items; only: who eats only items; swap: who has to in place of items; `
+  + `require: who eats one of items at each of slots; cap: items in at most per_week meals; no_eggs: "no eggs on Tuesday"; egg: eggs but no meat; other: the family's own words in note)`;
+const CATEGORY_LIST = Object.keys(CATEGORIES).map((c) => `@${c}`).join(", ");
+const isChecked = (kind: unknown): kind is (typeof CHECKED_KINDS)[number] => (CHECKED_KINDS as readonly unknown[]).includes(kind);
+
+/** The rules as sent, checked. `people`: the names on the Family page (a rule's who is one of them); `slots`: the meal slots. */
+function rules(v: unknown, ctx: { people: string[]; slots: string[] }): HouseRule[] {
   if (!Array.isArray(v)) return refuse(RULE_SHAPE);
   return v.map((r) => {
     if (!isObject(r)) return refuse(RULE_SHAPE);
     const note = optionalNote(r.note, "a rule's note");
     // A rule in the family's own words only ("mostly vegetarian") is an `other` rule.
     const kind = r.kind == null && note.note ? "other" : r.kind;
-    if (!(RULE_KINDS as readonly unknown[]).includes(kind))
-      return refuse(`a rule's kind must be one of: ${RULE_KINDS.join(", ")} (no_eggs: "no eggs on Tuesday"; egg: eggs but no meat; other: the family's own words in note)`);
+    if (!(RULE_KINDS as readonly unknown[]).includes(kind)) return refuse(KIND_HELP);
     if (kind === "other" && !note.note) return refuse("an other rule says what it is in note");
-    if (r.days != null && (!Array.isArray(r.days) || !r.days.every((d) => typeof d === "string" && d.trim())))
-      return refuse(`the ${kind} rule's days are weekdays or the family's own words for a day ("Ekadashi"); leave days out for a rule that holds every day`);
-    return { kind: kind as HouseRule["kind"], days: ((r.days ?? []) as string[]).map((d) => weekday(d) ?? d.trim()), ...note };
+    const out: HouseRule = { kind: kind as HouseRule["kind"], days: [] };
+    const given = (k: string) => r[k] !== undefined && r[k] !== null;
+    if (given("who")) {
+      const who = typeof r.who === "string" ? r.who.trim() : refuse(`the ${kind} rule: who is one person's name, as on the Family page`);
+      const person = ctx.people.find((p) => p.toLowerCase() === who.toLowerCase());
+      if (!person) {
+        const near = closest(who, ctx.people);
+        return refuse(ctx.people.length
+          ? `the ${kind} rule: who: ${JSON.stringify(who)} is not on the Family page (${ctx.people.join(", ")})${near ? ` (did you mean ${near}?)` : ""}; add a new person with set_person first`
+          : `the ${kind} rule: who: ${JSON.stringify(who)} is not on the Family page: add them with set_person first`);
+      }
+      out.who = person;
+    }
+    const label = `the ${kind} rule${out.who ? ` for ${out.who}` : ""}`;
+    if (r.days != null) {
+      if (isChecked(kind)) out.days = weekdays(r.days, `${label}: days`);
+      else if (!Array.isArray(r.days) || !r.days.every((d) => typeof d === "string" && d.trim()))
+        return refuse(`the ${kind} rule's days are weekdays or the family's own words for a day ("Ekadashi"); leave days out for a rule that holds every day`);
+      else out.days = (r.days as string[]).map((d) => weekday(d) ?? d.trim());
+    }
+    if (given("slots")) out.slots = names(r.slots, `${label}: slots`).map((s) => {
+      const hit = ctx.slots.find((x) => x.toLowerCase() === s.toLowerCase());
+      if (hit) return hit;
+      const within = ctx.slots.filter((x) => x.toLowerCase().includes(s.toLowerCase()));
+      const near = within.length === 1 ? within[0] : closest(s, ctx.slots);
+      return refuse(`${label}: slots: ${JSON.stringify(s)} is not a meal (${ctx.slots.join(", ")})${near ? ` (did you mean ${near}?)` : ""}`);
+    });
+    // What only the checked kinds take: a fast the app checks is { kind: only, who, days, items }.
+    for (const k of ["items", "to", "per_week"]) if (given(k) && !isChecked(kind))
+      return refuse(`${label} takes no ${k}: a rule about particular foods is ${CHECKED_KINDS.join(", ")} (a fast: { kind: only, who, days, items })`);
+    if (given("items")) {
+      if (!Array.isArray(r.items) || !r.items.length || !r.items.every((i) => typeof i === "string" && i.trim()))
+        return refuse(`${label}: items must be a list of foods or dishes ("plain idli") or categories (${CATEGORY_LIST})`);
+      out.items = (r.items as string[]).map((i) => {
+        const t = i.trim();
+        if (!t.startsWith("@")) return t;
+        const cat = t.slice(1).toLowerCase();
+        if (CATEGORIES[cat]) return `@${cat}`;
+        const near = closest(cat, Object.keys(CATEGORIES));
+        return refuse(`${label}: items: ${t} is not a category (${CATEGORY_LIST})${near ? ` (did you mean @${near}?)` : ""}`);
+      });
+    }
+    if (given("to")) {
+      if (kind !== "swap") return refuse(`${label} takes no to: to is what a swap rule gives in place of its items`);
+      out.to = name(r.to, `${label}: to`);
+    }
+    if (given("per_week")) {
+      if (kind !== "cap") return refuse(`${label} takes no per_week: per_week is a cap rule's most meals in a week`);
+      out.per_week = typeof r.per_week === "number" && Number.isInteger(r.per_week) && r.per_week >= 0 ? r.per_week
+        : refuse(`${label}: per_week must be a whole number of meals, 0 or more`);
+    }
+    if (isChecked(kind)) {
+      const missing = KIND_NEEDS[kind].filter((k) => (out as Record<string, unknown>)[k] === undefined);
+      if (missing.length) return refuse(`${label} needs ${missing.join(", ")}`);
+    }
+    return { ...out, ...note };
   });
 }
 
@@ -269,7 +329,9 @@ export function mountFamilyRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: { a
   write("/api/family/rules", (b, by) => {
     if (b.grocery_app !== undefined) refuse("grocery_app is set with set_shopping_apps { main, fallback, connected }");
     const set: Partial<typeof house.$inferInsert> = {};
-    if (b.rules !== undefined) set.rules = JSON.stringify(rules(b.rules));
+    if (b.rules !== undefined) set.rules = JSON.stringify(rules(b.rules, {
+      people: db.select({ name: people.name }).from(people).where(eq(people.active, 1)).all().map((p) => p.name),
+      slots: [...SLOTS, ...houseView(getHouse(db)).extra_slots.map((s) => s.name)] }));
     if (b.notes !== undefined) set.notes = notesOf(b.notes);
     if (b.structured === true) set.profile_to_structure = null;
     if (!Object.keys(set).length) refuse("give rules, notes or structured: true");
