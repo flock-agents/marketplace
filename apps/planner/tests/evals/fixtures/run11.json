@@ -73,7 +73,7 @@
     { "kind": "other", "note": "one new dish a week, never on a weekday dinner" },
     { "kind": "avoid", "days": ["Tue"], "items": ["onion", "garlic", "@root_veg"], "note": "Tuesday the whole family eats Jain" },
     { "kind": "only", "who": "Meera", "slots": ["Breakfast"], "items": ["plain idli", "plain dosa", "banana sheera"], "note": "Meera only eats plain idli, plain dosa or banana sheera for breakfast" },
-    { "kind": "swap", "who": "Meera", "items": ["chilli"], "to": "her portion set aside before the chilli goes in", "note": "Meera can't have anything spicy" },
+    { "kind": "swap", "who": "Meera", "items": ["@chilli"], "to": "her portion set aside before the chilli goes in", "note": "Meera can't have anything spicy" },
     { "kind": "other", "who": "Meera", "slots": ["Lunch"], "note": "Meera's lunch has to be soft" },
     { "kind": "avoid", "who": "Agastya", "items": ["@green_leafy"], "note": "Agastya won't eat anything with something green visible" },
     { "kind": "avoid", "slots": ["Agastya's tiffin"], "items": ["@nuts", "@peanut"], "note": "school tiffin nut-free" },

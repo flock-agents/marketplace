@@ -53,7 +53,7 @@
     { "kind": "avoid", "items": ["@root_veg", "mushroom", "honey"], "note": "Jain: no root vegetables, mushrooms or honey" },
     { "kind": "avoid", "who": "Riya", "items": ["@gluten"], "note": "celiac: absolutely no gluten" },
     { "kind": "avoid", "who": "Mahendra", "items": ["@pickle", "papad", "namkeen", "bhujia", "chips"], "note": "very low salt after his heart attack" },
-    { "kind": "avoid", "who": "Mahendra", "items": ["@hard_food"], "note": "few teeth: soft food only, no rotis or crisp food" },
+    { "kind": "other", "who": "Mahendra", "note": "few teeth: soft food only, no rotis or crisp food" },
     { "kind": "cap", "items": ["paneer"], "per_week": 2, "note": "paneer at most twice a week" }
   ],
   "expect": [

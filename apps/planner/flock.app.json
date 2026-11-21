@@ -314,7 +314,7 @@
       "fills": [
         "pastWeek.kidsDinner:text"
       ],
-      "help": "Also call set_house_rules yourself, the whole list, for each rule said, as in: \"keep Meera's portion aside before the chilli\": {\"kind\":\"swap\",\"who\":\"Meera\",\"items\":[\"chilli\"],\"to\":\"set aside before chilli\"}; a dish a child won't eat: {\"kind\":\"avoid\",\"who\":\"Agastya\",\"items\":[\"palak\",\"methi\"]}."
+      "help": "Also call set_house_rules yourself, the whole list, for each rule said, as in: \"keep Meera's portion aside before the chilli\": {\"kind\":\"swap\",\"who\":\"Meera\",\"items\":[\"@chilli\"],\"to\":\"set aside before chilli\"}; a dish a child won't eat: {\"kind\":\"avoid\",\"who\":\"Agastya\",\"items\":[\"palak\",\"methi\"]}."
     },
     {
       "id": "adultsBreakfast",
