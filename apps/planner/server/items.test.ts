@@ -7,6 +7,8 @@ import { pickAsks } from "./estimate";
 import { itemStates, recordPurchase } from "./items";
 
 const TODAY = "2026-11-21";
+/** The agent the tests call as (testkit op), as the app stamps it. */
+const ME = "agent:meal-agent";
 const start = () => boot({ now: () => new Date(2026, 10, 21, 12) });
 type K = Awaited<ReturnType<typeof start>>;
 
@@ -34,7 +36,7 @@ describe("import_order_history", () => {
     expect(k.rows("items")[0]).toMatchObject({ name: "atta", group: "monthly", unit: "g", product: "Aashirvaad Select", app: "zepto", run_out: "2026-11-25" });
     // An item with its product id is remembered as that app's product, under the family's word for it.
     expect(k.rows("products")).toEqual([expect.objectContaining({ item: "atta", app: "zepto", product_id: "p1", name_on_app: "Aashirvaad Select", pack: "5 kg", pack_amount: 5, pack_unit: "kg" })]);
-    expect(r).toMatchObject({ duplicates: 0, skipped_old: 0, skipped_future: 0, needs_group: [], suggestions: [], probably_out: [] });
+    expect(r).toMatchObject({ duplicates: 0, skipped_old: 0, skipped_future: 0, needs_group: [], probably_out: [], read_until: "2026-11-01" });
   });
 
   it("the same order imported twice is recorded once (order_ref; else date and product)", async () => {
@@ -91,14 +93,15 @@ describe("import_order_history", () => {
       { date: "2026-11-01", items: [{ item: "salt", pack: "1 kg" }] }] });
     expect(r).toMatchObject({ recorded: 2, skipped_old: 1 });
     expect(k.rows("item_events").map((e) => e.date)).toEqual(["2026-08-21", "2026-11-01"]);
-    expect(JSON.parse(house(k).history_synced)).toEqual({ zepto: "2026-11-01" });
+    expect(JSON.parse(house(k).history_synced)).toEqual({ zepto: { [ME]: "2026-11-01" } });
+    expect(r.read_until).toBe("2026-11-01");
     // An older history later does not move it back; another app has its own date.
     await k.op("import_order_history", { app: "zepto", orders: [{ date: "2026-10-01", items: [{ item: "salt", pack: "1 kg" }] }] });
     await k.op("import_order_history", { app: "Swiggy Instamart", orders: [{ date: "2026-11-19", items: [{ item: "salt", pack: "1 kg" }] }] });
-    expect((await k.owner("GET", "/api/family")).body.house.history_synced).toEqual({ zepto: "2026-11-01", "swiggy-instamart": "2026-11-19" });
+    expect((await k.owner("GET", "/api/family")).body.house.history_synced).toEqual({ zepto: { [ME]: "2026-11-01" }, "swiggy-instamart": { [ME]: "2026-11-19" } });
     // A history of only old orders records nothing and leaves the date as it was.
     expect(await k.op("import_order_history", { app: "zepto", orders: [{ date: "2026-05-01", items: [{ item: "salt", pack: "1 kg" }] }] })).toMatchObject({ recorded: 0, skipped_old: 1 });
-    expect(JSON.parse(house(k).history_synced).zepto).toBe("2026-11-01");
+    expect(JSON.parse(house(k).history_synced).zepto[ME]).toBe("2026-11-01");
   });
 
   // Final review I4: history goes oldest first, and the mark never passes today, so an import cut short reads on from where it stopped.
@@ -110,14 +113,14 @@ describe("import_order_history", () => {
       { date: "2026-08-01", items: [{ item: "salt", pack: "1 kg" }] }] });
     expect(r).toMatchObject({ recorded: 1, skipped_old: 1, skipped_future: 1 });
     expect(k.rows("item_events").map((e) => e.date)).toEqual(["2026-11-10"]);
-    expect(JSON.parse(house(k).history_synced)).toEqual({ zepto: "2026-11-10" });
+    expect(JSON.parse(house(k).history_synced)).toEqual({ zepto: { [ME]: "2026-11-10" } });
     // Only a future order: nothing recorded, the mark stays.
     expect(await k.op("import_order_history", { app: "zepto", orders: [{ date: "2027-01-05", items: [{ item: "salt", pack: "1 kg" }] }] }))
       .toMatchObject({ recorded: 0, skipped_old: 0, skipped_future: 1 });
-    expect(JSON.parse(house(k).history_synced)).toEqual({ zepto: "2026-11-10" });
+    expect(JSON.parse(house(k).history_synced)).toEqual({ zepto: { [ME]: "2026-11-10" } });
     // Today's order is read.
     expect(await k.op("import_order_history", { app: "zepto", orders: [{ date: TODAY, items: [{ item: "salt", pack: "1 kg" }] }] })).toMatchObject({ recorded: 1, skipped_future: 0 });
-    expect(JSON.parse(house(k).history_synced)).toEqual({ zepto: TODAY });
+    expect(JSON.parse(house(k).history_synced)).toEqual({ zepto: { [ME]: TODAY } });
   });
 
   it("an item new to the app without a group is saved and listed in needs_group; it is never asked about", async () => {
@@ -165,7 +168,7 @@ describe("import_order_history", () => {
     expect((await k.op("set_item", { item: "eggs", unit: "pcs" })).item.unit).toBe("pc");
   });
 
-  it("suggests everyday items from the daily items of the call only; probably_out names what has likely run out", async () => {
+  it("an import suggests no everyday items: the cycle is worked out, with nothing to confirm; probably_out names what has likely run out", async () => {
     const k = await start();
     const dates = ["2026-11-18", "2026-11-19", "2026-11-20", "2026-11-21"];
     const r = await k.op("import_order_history", { app: "zepto", orders: [
@@ -174,10 +177,41 @@ describe("import_order_history", () => {
       { date: "2026-08-25", items: [{ item: "ghee", group: "monthly", pack: "1 l" }] },
       { date: "2026-10-01", items: [{ item: "toor dal", group: "monthly", pack: "1 kg" }] },
       { date: "2026-10-31", items: [{ item: "toor dal", group: "monthly", pack: "1 kg" }] }] });
-    expect(r.suggestions).toEqual([{ item: "milk", amount: 2, unit: "500 ml", every: "day", orders_seen: 4 }]);
+    expect(r.suggestions).toBeUndefined();
+    expect(item(k, "milk")).toMatchObject({ group: "daily", usual_amount: 1000, lasts_days: 1, confident: 1 });
     // Ghee: bought 24 Sep, lasts 30 days, ran out 24 Oct. Toor dal runs out 30 Nov. Milk is daily, and chips run out tomorrow.
     expect(r.probably_out).toEqual([{ item: "ghee", days_ago: 58 }]);
-    expect(k.rows("regulars")).toEqual([]);
+  });
+
+  // The owner, 21 Nov: more than one person orders for the house, each on their own account of the same app.
+  it("two people's agents import their own accounts of one app: nothing is skipped or counted twice, and one cycle per item comes of both", async () => {
+    const k = await start();
+    const milk = (date: string, ref: string) => ({ date, order_ref: ref, items: [{ item: "milk", group: "daily", product: "Amul Taaza", product_id: "m1", pack: "500 ml", count: 2 }] });
+    // Shiva's Zepto: milk on the odd days, and the eggs of the 8th. His agent reads up to the 20th.
+    const shiva = await k.op("import_order_history", { app: "zepto", orders: [milk("2026-11-15", "S-15"), milk("2026-11-17", "S-17"), milk("2026-11-19", "S-19"),
+      { date: "2026-11-08", order_ref: "S-08", items: [{ item: "eggs", group: "few_days", pack: "30 pc" }] },
+      { date: "2026-11-20", order_ref: "S-20", items: [{ item: "bread", group: "few_days", pack: "400 g" }] }] }, "shiva-agent");
+    expect(shiva).toMatchObject({ recorded: 5, duplicates: 0, read_until: "2026-11-20" });
+    // By his orders alone the milk is bought every two days.
+    expect(item(k, "milk")).toMatchObject({ lasts_days: 2, last_bought: "2026-11-19" });
+    // Meera's Zepto, read later by her own agent: older orders than his newest, all of them hers. None is skipped for being
+    // before what his agent read, and an order on the same day as one of his (the 15th, another ref) is its own purchase.
+    const meera = await k.op("import_order_history", { app: "zepto", orders: [milk("2026-11-14", "M-14"), milk("2026-11-15", "M-15"), milk("2026-11-16", "M-16"), milk("2026-11-18", "M-18"),
+      { date: "2026-11-15", order_ref: "M-15", items: [{ item: "eggs", group: "few_days", pack: "30 pc" }] }] }, "meera-agent");
+    expect(meera).toMatchObject({ recorded: 5, duplicates: 0, skipped_old: 0, read_until: "2026-11-18" });
+    // One estimate for the house from both accounts: milk on the 14th to the 19th, so every day; eggs every 7 days.
+    expect(events(k, "milk").map((e) => e.date).sort()).toEqual(["2026-11-14", "2026-11-15", "2026-11-15", "2026-11-16", "2026-11-17", "2026-11-18", "2026-11-19"]);
+    expect(item(k, "milk")).toMatchObject({ lasts_days: 1, usual_amount: 1000, last_bought: "2026-11-19", run_out: "2026-11-20" });
+    expect(item(k, "eggs")).toMatchObject({ lasts_days: 7, last_bought: "2026-11-15", run_out: "2026-11-22" });
+    expect((await k.owner("GET", "/api/pantry")).body.rows.map((r: any) => [r.name, r.cycle])).toEqual([["bread", null], ["eggs", "30 pc about once a week"], ["milk", "1 l every day"]]);
+    // Each agent's reading is its own: hers did not move his, and his did not make hers look read.
+    expect(JSON.parse(house(k).history_synced)).toEqual({ zepto: { "agent:shiva-agent": "2026-11-20", "agent:meera-agent": "2026-11-18" } });
+    // Either sending an order again (its own, or one the other already gave) records nothing twice.
+    expect(await k.op("import_order_history", { app: "zepto", orders: [milk("2026-11-19", "S-19"), milk("2026-11-18", "M-18")] }, "meera-agent")).toMatchObject({ recorded: 0, duplicates: 2 });
+    expect(events(k, "milk")).toHaveLength(7);
+    // A date kept before readers were told apart reads as nobody's in particular.
+    k.kit.sqlite.run(`UPDATE house SET history_synced = '{"zepto":"2026-11-10"}'`);
+    expect((await k.owner("GET", "/api/family")).body.house.history_synced).toEqual({ zepto: { "*": "2026-11-10" } });
   });
 
   it("the newest order's product is the one remembered for an item, whatever the order the history came in", async () => {
@@ -201,7 +235,7 @@ describe("import_order_history", () => {
       { app: "zepto", orders: [good, { date: "2026-10-02", items: [{ item: "Curd", pack_amount: 400 }] }] }])
       expect([bad, (await k.op("import_order_history", bad)).code]).toEqual([bad, "APP_REFUSED"]);
     for (const t of ["items", "item_events", "products"]) expect(k.rows(t)).toEqual([]);
-    expect(await k.op("import_order_history", { app: "zepto", orders: [] })).toMatchObject({ recorded: 0, suggestions: [] });
+    expect(await k.op("import_order_history", { app: "zepto", orders: [] })).toMatchObject({ recorded: 0, probably_out: [], read_until: null });
     const r = await k.op("import_order_history", { app: "Amazon Fresh", orders: [{ date: "2026-11-01", order_ref: "A1", items: [{ item: "ghee", product: "Amul Ghee 1 L", product_id: "B0X", pack: "1 l" }] }] });
     expect(r.recorded).toBe(1);
     expect(k.rows("item_events")[0]).toMatchObject({ app: "amazon", amount: 1000 });
@@ -351,7 +385,7 @@ describe("set_item", () => {
 });
 
 describe("the Pantry and the item page", () => {
-  it("the Pantry lists each item with its usual quantity and status, never the app; its counts add up", async () => {
+  it("the Pantry lists each item with its cycle and status, never the app; its counts add up", async () => {
     const k = await start();
     await atta(k);                                                                            // runs out 25 Nov: in stock
     await buys(k, "toor dal", "monthly", "1 kg", ["2026-09-01", "2026-10-01"]);              // ran out 31 Oct: low
@@ -366,7 +400,8 @@ describe("the Pantry and the item page", () => {
     const pantry = (await k.owner("GET", "/api/pantry")).body;
     expect(pantry.rows.map((r: any) => [r.name, r.quantity, r.status])).toEqual([
       ["atta", "10 kg", "In stock"], ["bhindi", "500 g", "Snoozed"], ["eggs", "12 pc", "Low"], ["toor dal", "1 kg", "Low"]]);
-    expect(pantry.rows[0]).toEqual({ id: item(k, "atta").id, name: "atta", quantity: "10 kg", status: "In stock" });
+    expect(pantry.rows.map((r: any) => r.cycle)).toEqual(["10 kg about every 3 weeks", "500 g about every 4 days", "12 pc about every 4 days", "1 kg about once a month"]);
+    expect(pantry.rows[0]).toEqual({ id: item(k, "atta").id, name: "atta", quantity: "10 kg", cycle: "10 kg about every 3 weeks", status: "In stock" });
     expect(pantry.counts).toEqual({ all: 4, in_stock: 1, low: 2, snoozed: 1 });
     expect(pantry.counts.in_stock + pantry.counts.low + pantry.counts.snoozed).toBe(pantry.counts.all);
     expect(JSON.stringify(pantry)).not.toMatch(/zepto|Zepto/);

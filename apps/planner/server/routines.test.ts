@@ -94,11 +94,12 @@ describe("weekly plan", () => {
     const { data } = k.wakes[0];
     expect(dataChars(data)).toBeLessThanOrEqual(WAKE_DATA_MAX_CHARS);
     const c = data.context;
-    expect([c.people.length, c.regulars.length, c.recipes.length, c.last_week.length]).toEqual([4, 8, 12, 28]);
-    for (const row of [...c.people, ...c.regulars, c.house]) for (const col of ["id", "created_at", "updated_at", "updated_by"]) expect(col in row).toBe(false);
+    expect([c.people.length, c.bought_often.length, c.recipes.length, c.last_week.length]).toEqual([4, 8, 12, 28]);
+    for (const row of [...c.people, c.house]) for (const col of ["id", "created_at", "updated_at", "updated_by"]) expect(col in row).toBe(false);
     // What the plan is made from is all there.
     expect(c.people[0]).toMatchObject({ name: "Shivashankar", group: "adult", portions: "3 rotis at dinner, a small bowl of rice at lunch, 2 idlis at breakfast", allergies: "peanuts" });
-    expect(c.regulars[0]).toMatchObject({ item: "milk", amount: 1, unit: "l", every: "day" });
+    expect(c.bought_often).toContainEqual({ item: "milk", cycle: "1 l every day" });
+    expect(c.bought_often).toContainEqual({ item: "curd", cycle: "500 g twice a week" });
     expect(c.house).toMatchObject({ cook_name: "Lakshmi akka", rules: [{ kind: "veg" }, { kind: "fasting" }, { kind: "no_onion_garlic" }] });
     expect(c.recipes[0].id).toBeString();
   });
@@ -111,7 +112,7 @@ describe("weekly plan", () => {
     expect(WEEKLY_PROMPT("2026-11-23")).toContain("when it has `context`");
     // The whole context is the agent's to read: an operation's answer has no such limit.
     const { context } = await k.op("plan_week", { week_start: "2026-11-23", mode: "draft" });
-    expect([context.people.length, context.regulars.length, context.recipes.length]).toEqual([6, 15, 40]);
+    expect([context.people.length, context.bought_often.length, context.recipes.length]).toEqual([6, 15, 40]);
     expect(dataChars(context)).toBeGreaterThan(WAKE_DATA_MAX_CHARS);
   });
 
@@ -152,7 +153,7 @@ describe("weekly plan", () => {
     await weeklyPlan(k.ctx(), SUN_MORNING);
     expect(k.wakes).toHaveLength(1);
     expect(k.wakes[0].data).toEqual({ profile: "2 adults and Agastya (6). Veg on Tuesdays." });
-    expect(k.wakes[0].message).toContain("set_person / set_house_rules / set_cook / set_slots / set_regular");
+    expect(k.wakes[0].message).toContain("set_person / set_house_rules / set_cook / set_slots / set_item");
     expect(k.wakes[0].message).toContain("structured: true");
     // Then the family hears of the new app and gets a plan in the same run, not a week later.
     const m = k.wakes[0].message;
@@ -258,7 +259,7 @@ describe("the reminders", () => {
     const k = await app({ now: () => new Date(t) });
     // The main app is always among the connected ones: a family with none connected has not set its shopping apps.
     if (o.connected !== false) await k.op("set_shopping_apps", { main: "zepto", fallback: null, connected: ["zepto"] });
-    if (o.curd) await k.op("set_regular", { item: "curd", amount: 400, unit: "g", every: "day" });
+    if (o.curd) await k.op("set_item", { item: "curd", group: "daily", usual_amount: 400, unit: "g", every_days: 1 });
     if (o.dinner) await k.op("plan_week", { week_start: MON, mode: "final", keep_rest: true, meals: [
       { date: MON, slot: "Dinner", dishes: [{ name: "methi thepla", ingredients: [{ item: "methi", amount: 1, unit: "pc" }] }] }] });
     return Object.assign(k, { clock: (d: Date) => { t = d.getTime(); } });
@@ -308,6 +309,20 @@ describe("the reminders", () => {
     const { message, data } = k.wakes[0];
     expect(flockRefusal(message, data)).toBeNull();
     expect(data).toEqual({ which: "evening", date: TUE, connected: ["zepto"], since: { zepto: "2026-10-20" } });
+    // `since` is the woken agent's own reading. Another person's agent read its own account of the same app further: the
+    // wake of this agent does not move, so none of its own orders are skipped.
+    await k.op("import_order_history", { app: "zepto", orders: [{ date: "2026-11-22", order_ref: "M1", items: [{ item: "milk", group: "daily", pack: "500 ml" }] }] }, "meera-agent");
+    await reminder({ ...k.ctx(DAILY_7PM), agentId: "meal-agent" }, "evening", MON_7PM);
+    expect(k.wakes[1].data.since).toEqual({ zepto: "2026-10-20" });
+    await reminder({ ...k.ctx(DAILY_7PM), agentId: "meera-agent" }, "evening", MON_7PM);
+    expect(k.wakes[2].data.since).toEqual({ zepto: "2026-11-22" });
+    // An agent that has read nothing yet has no `since`: it reads the last 3 months. A date kept before readers were told
+    // apart is the woken agent's.
+    await reminder({ ...k.ctx(DAILY_7PM), agentId: "new-agent" }, "evening", MON_7PM);
+    expect(k.wakes[3].data.since).toEqual({});
+    k.kit.sqlite.run(`UPDATE house SET history_synced = '{"zepto":"2026-11-01"}'`);
+    await reminder({ ...k.ctx(DAILY_7PM), agentId: "new-agent" }, "evening", MON_7PM);
+    expect(k.wakes[4].data.since).toEqual({ zepto: "2026-11-01" });
     for (const s of ["get_reminder", "`date`", "import_order_history", "about 8 orders a call", "one app a call", "3 months", "`since`", "`empty`", "`text`", "word for word",
       "`app_text`", "`block`", "sync: true", "sync_cart", "`ordered`", "record_order", "delivery_gap", "the app's cart as it is", "answer_running_low", "set_cart_line",
       "order_cart", "set_meal", "set_dish"]) expect(message, s).toContain(s);

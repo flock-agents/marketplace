@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { isDue, median, pantryStatus, pattern, pickAsks, runOut, tagEvents, type Ev, type ItemState, type Pattern } from "./estimate";
+import { cycleText, dailyDue, isDue, median, pantryStatus, pattern, pickAsks, quantityText, runOut, tagEvents, type DailyState, type Ev, type ItemState, type Pattern } from "./estimate";
 
 let n = 0;
 const ev = (mmdd: string, e: Partial<Ev>): Ev => ({
@@ -187,5 +187,52 @@ describe("estimate", () => {
     expect(pantryStatus(item({}), "2026-11-10", true)).toBe("Low");
     expect(pantryStatus(item({}), "2026-11-10", false)).toBe("In stock");
     expect(pantryStatus(item({ confident: false }), "2026-11-24", false)).toBe("In stock");
+  });
+});
+
+describe("an item's cycle in words", () => {
+  const c = (usual_amount: number | null, unit: string | null, lasts_days: number | null, stated = false) => cycleText({ usual_amount, unit, lasts_days }, stated);
+  it("says how much and how often: every day as it is, anything longer as about", () => {
+    expect(c(500, "ml", 1)).toBe("500 ml every day");
+    expect(c(30, "pc", 7)).toBe("30 pc about once a week");
+    expect(c(10000, "g", 24)).toBe("10 kg about every 3 weeks");
+    expect(c(1000, "g", 30)).toBe("1 kg about once a month");
+    expect(c(400, "g", 2)).toBe("400 g about every 2 days");
+    expect(c(400, "g", 3.5)).toBe("400 g about twice a week");
+    expect(c(5000, "ml", 14)).toBe("5 l about every 2 weeks");
+    expect(c(1, "pc", 60)).toBe("1 pc about every 2 months");
+    expect(c(1, "pc", 10)).toBe("1 pc about every 10 days");
+  });
+  it("a cycle the family stated is said as they said it; with no amount it is how often alone; with no cycle there is none", () => {
+    expect(c(30, "pc", 7, true)).toBe("30 pc once a week");
+    expect(c(null, null, 7)).toBe("About once a week");
+    expect(c(null, "g", 1)).toBe("Every day");
+    expect(c(500, "g", null)).toBeNull();
+    expect(quantityText(1500, "ml")).toBe("1.5 l");
+  });
+});
+
+describe("a daily item on the cart by itself", () => {
+  const d = (o: Partial<DailyState>): DailyState => ({ group: "daily", lasts_days: 1, run_out: "2026-11-23", last_bought: "2026-11-22", subscription: null, dont_ask: false,
+    snoozed_until: null, stated: false, ...o });
+  const TODAY = "2026-11-23", TOMORROW = "2026-11-24";
+  it("goes on when it runs out by the day, and only a daily item with a cycle", () => {
+    expect(dailyDue(d({}), TOMORROW, TODAY)).toBe(true);
+    expect(dailyDue(d({ run_out: "2026-11-25" }), TOMORROW, TODAY)).toBe(false);
+    expect(dailyDue(d({ group: "few_days" }), TOMORROW, TODAY)).toBe(false);
+    expect(dailyDue(d({ lasts_days: null }), TOMORROW, TODAY)).toBe(false);
+  });
+  it("never a subscribed, left-alone or snoozed one; a snooze holds up to and including its day", () => {
+    expect(dailyDue(d({ subscription: "the milkman" }), TOMORROW, TODAY)).toBe(false);
+    expect(dailyDue(d({ dont_ask: true }), TOMORROW, TODAY)).toBe(false);
+    expect(dailyDue(d({ snoozed_until: TOMORROW }), TOMORROW, TODAY)).toBe(false);
+    expect(dailyDue(d({ snoozed_until: TODAY }), TOMORROW, TODAY)).toBe(true);
+  });
+  it("one never bought goes on only by a stated cycle; a learned cycle stops two weeks after the last purchase, a stated one does not", () => {
+    expect(dailyDue(d({ last_bought: null, run_out: null }), TOMORROW, TODAY)).toBe(false);
+    expect(dailyDue(d({ last_bought: null, run_out: null, stated: true }), TOMORROW, TODAY)).toBe(true);
+    expect(dailyDue(d({ last_bought: "2026-11-09", run_out: "2026-11-10" }), TOMORROW, TODAY)).toBe(true);
+    expect(dailyDue(d({ last_bought: "2026-11-08", run_out: "2026-11-09" }), TOMORROW, TODAY)).toBe(false);
+    expect(dailyDue(d({ last_bought: "2026-11-08", run_out: "2026-11-09", stated: true }), TOMORROW, TODAY)).toBe(true);
   });
 });

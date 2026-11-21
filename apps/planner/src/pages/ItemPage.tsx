@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Button, Callout, Card, Detail, ErrorCard, Page, Row, RowList, Section, Skeleton, Value, useChat, useToast } from "../flock/ui";
 import { ESTIMATE } from "../../server/db/constants";
-import { eventRows, itemCallout, itemSubtitle, patternFields, TAG_TONES } from "./format";
+import { eventRows, itemCallout, itemSubtitle, patternFields, patternSource, TAG_TONES } from "./format";
 import { send, useLive, why, type ItemView } from "./shared";
 
 /** One pantry item: whether it is low or snoozed, her pattern for it, and the purchases and answers it was learned from. It
@@ -27,7 +27,7 @@ export function ItemPage({ id, onBack }: { id: string; onBack: () => void }) {
     <Page title={i.name} subtitle={itemSubtitle(i) || undefined}
       actions={<>{back}<Button size="sm" variant="soft" icon="bell-off" loading={busy === "snooze"} onClick={() => void save("snooze", { snooze_days: 7 }, `${i.name} is snoozed for a week`)}>Snooze</Button></>}>
       {callout ? <Callout tone={callout.tone} icon={callout.icon} title={callout.title}>{callout.body}</Callout> : null}
-      <Card title="Her pattern" meta={counted ? `from the last ${counted} ${counted === 1 ? "purchase" : "purchases"}` : "nothing counted yet"}>
+      <Card title="Her pattern" meta={patternSource(i, counted)}>
         <Detail fields={patternFields(i)} />
       </Card>
       <Section title="What it learned from">

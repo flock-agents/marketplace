@@ -1,163 +1,109 @@
-// Everyday items: which days a regular is needed on, what an order history suggests, and set_regular.
+// Everyday items are no longer a list of their own: each is its item's cycle. set_regular, the older operation, still states
+// one; and an installed copy's rows in the retired `regulars` table become item cycles once, at boot. Today is Mon 23 Nov 2026.
 import { describe, it, expect } from "bun:test";
 import { boot } from "./testkit";
-import { addDays, weekDates } from "./dates";
-import { regularNeeds, spreadDays, suggestRegulars } from "./regulars";
+import { cycleDays, moveRegulars } from "./regulars";
 
-const wk = weekDates("2026-11-23");
+const NOW = new Date(2026, 10, 23, 12);
+const start = () => boot({ now: () => NOW });
+type K = Awaited<ReturnType<typeof start>>;
+const item = (k: K, name: string) => k.rows("items").find((i) => i.item === name);
 
-describe("regularNeeds", () => {
-  it("spreadDays spreads the times of a week evenly from Monday", () => {
-    expect(spreadDays(1)).toEqual([0]);
-    expect(spreadDays(2)).toEqual([0, 3]); expect(spreadDays(3)).toEqual([0, 2, 4]);
-    expect(spreadDays(7)).toEqual([0, 1, 2, 3, 4, 5, 6]);
+describe("set_regular, the older way to state an item's cycle", () => {
+  it("how often becomes a cycle in days", () => {
+    expect([cycleDays("day", null, []), cycleDays("week", null, []), cycleDays("week", 2, []), cycleDays("weekdays", null, ["Mon", "Wed", "Fri", "Sun"])]).toEqual([1, 7, 3.5, 1.75]);
   });
 
-  it("a daily item is needed every date; a weekly one on its spread days; a weekdays one on those days", () => {
-    expect(regularNeeds({ item: "milk", amount: 1, unit: "l", every: "day", active: 1 } as any, wk.slice(0, 2)))
-      .toEqual([{ date: "2026-11-23", amount: 1 }, { date: "2026-11-24", amount: 1 }]);
-    expect(regularNeeds({ item: "bread", amount: 1, unit: "pack", every: "week", times_per_week: 2, active: 1 } as any, wk).map((n) => n.date))
-      .toEqual(["2026-11-23", "2026-11-26"]);
-    expect(regularNeeds({ item: "bananas", amount: 6, unit: "pc", every: "week", active: 1 } as any, wk))
-      .toEqual([{ date: "2026-11-23", amount: 6 }]);
-    expect(regularNeeds({ item: "fruit", amount: 1, unit: "kg", every: "weekdays", weekdays: '["Tue","Sat"]', active: 1 } as any, wk).map((n) => n.date))
-      .toEqual(["2026-11-24", "2026-11-28"]);
-    // The spread follows the weekday, not the place in the list: an order covering Wed to Fri gets the Thursday bread.
-    expect(regularNeeds({ item: "bread", amount: 1, unit: "pack", every: "week", times_per_week: 2, active: 1 } as any, wk.slice(2, 5)).map((n) => n.date))
-      .toEqual(["2026-11-26"]);
+  it("states the item's cycle, the same as set_item: no separate list is kept", async () => {
+    const k = await start();
+    const r = await k.op("set_regular", { item: "Milk", amount: 1, unit: "l", every: "day" });
+    expect(r.item).toMatchObject({ item: "milk", name: "Milk", group: "daily", unit: "ml", stated_amount: 1000, stated_days: 1, usual_amount: 1000, lasts_days: 1 });
+    await k.op("set_regular", { item: "eggs", amount: 30, unit: "pc", every: "week", for_whom: "Agastya" });
+    await k.op("set_regular", { item: "bread", amount: 1, unit: "pack", every: "weekdays", weekdays: ["tue", "Friday"] });
+    expect(item(k, "eggs")).toMatchObject({ group: "few_days", stated_amount: 30, stated_days: 7 });
+    // "1 pack" cannot be added up: how often is kept, the amount is not.
+    expect(item(k, "bread")).toMatchObject({ group: "few_days", stated_amount: null, stated_days: 3.5, unit: null });
+    expect((await k.owner("GET", "/api/pantry")).body.rows.map((p: any) => [p.name, p.cycle])).toEqual([["bread", "Twice a week"], ["eggs", "30 pc once a week"], ["Milk", "1 l every day"]]);
+    // set_item says the same thing, and changes it.
+    expect((await k.op("set_item", { item: "milk", usual_amount: 500, unit: "ml", every_days: 2 })).item).toMatchObject({ stated_amount: 500, stated_days: 2, group: "daily" });
   });
 
-  // Review Focus 3
-  it("a paused regular is left out up to and including paused_until and needed again after; an inactive one is never needed", () => {
-    // paused through Tue → Mon/Tue left out, Wed on
-    expect(regularNeeds({ item: "curd", amount: 500, unit: "g", every: "day", active: 1, paused_until: "2026-11-24" } as any, wk.slice(0, 4)).map((n) => n.date))
-      .toEqual(["2026-11-25", "2026-11-26"]);
-    expect(regularNeeds({ item: "curd", amount: 500, unit: "g", every: "day", active: 0 } as any, wk)).toEqual([]);
-    // A pause that ended before the dates changes nothing; one past them leaves all out.
-    expect(regularNeeds({ item: "curd", amount: 500, unit: "g", every: "day", active: 1, paused_until: "2026-11-22" } as any, wk)).toHaveLength(7);
-    expect(regularNeeds({ item: "curd", amount: 500, unit: "g", every: "day", active: 1, paused_until: "2026-11-29" } as any, wk)).toEqual([]);
-    // A weekly item whose day falls in the pause is skipped that time, and back on its next day.
-    expect(regularNeeds({ item: "bread", amount: 1, unit: "pack", every: "week", times_per_week: 2, active: 1, paused_until: "2026-11-24" } as any, wk).map((n) => n.date))
-      .toEqual(["2026-11-26"]);
-  });
-});
-
-describe("suggestRegulars", () => {
-  const days = (n: number, step: number) => Array.from({ length: n }, (_, i) => addDays("2026-10-01", Math.round(i * step)));
-
-  it("suggests what is bought again and again, by how often, and drops what is rare", () => {
-    const hist = [...days(10, 1).map((d) => ({ date: d, items: [{ item: "Amul Taaza Milk", qty: 2, pack: "500 ml" }] })),
-                  ...days(4, 3.5).map((d) => ({ date: d, items: [{ item: "Bread", qty: 1, pack: "1 pack" }] })),
-                  ...days(3, 30).map((d) => ({ date: d, items: [{ item: "Atta", qty: 1, pack: "5 kg" }] }))];
-    const s = suggestRegulars(hist);
-    expect(s.find((x) => x.item === "amul taaza milk")).toMatchObject({ every: "day", amount: 2, unit: "500 ml", orders_seen: 10 });
-    expect(s.find((x) => x.item === "amul taaza milk")!.times_per_week).toBeUndefined();
-    expect(s.find((x) => x.item === "bread")).toMatchObject({ every: "week", times_per_week: 2, orders_seen: 4 });
-    expect(s.find((x) => x.item === "atta")).toBeUndefined();
+  it("a pause snoozes the item, and switching it off or removing it takes the stated cycle away", async () => {
+    const k = await start();
+    await k.op("set_regular", { item: "milk", amount: 1, unit: "l", every: "day" });
+    expect((await k.op("set_regular", { item: "milk", paused_until: "2026-11-29" })).item).toMatchObject({ snoozed_until: "2026-11-29", stated_days: 1 });
+    expect((await k.op("set_regular", { item: "milk", active: false })).item).toMatchObject({ stated_days: null, stated_amount: null, lasts_days: null, confident: 0 });
+    await k.op("set_regular", { item: "milk", amount: 1, unit: "l", every: "day" });
+    expect((await k.op("set_regular", { item: "milk", remove: true })).item.stated_days).toBeNull();
+    expect((await k.op("set_regular", { item: "ghee", remove: true })).status).toBe(404);
   });
 
-  it("needs three different dates, takes the usual quantity and pack, and reads one name however it is written", () => {
-    // Twice on one day and once on another is two dates: not enough.
-    expect(suggestRegulars([{ date: "2026-10-01", items: [{ item: "Eggs" }, { item: "eggs" }] }, { date: "2026-10-02", items: [{ item: "Eggs" }] }])).toEqual([]);
-    const s = suggestRegulars([
-      { date: "2026-10-01", items: [{ item: "Eggs", qty: 1, pack: "6 pc" }] },
-      { date: "2026-10-08", items: [{ item: "  EGGS ", qty: 2, pack: "12 pc" }] },
-      { date: "2026-10-15", items: [{ item: "eggs", qty: 2, pack: "6 pc" }] },
-      { date: "2026-10-22", items: [{ item: "Eggs", pack: "6 pc" }] },
-      { date: "2026-10-29", items: [{ item: "Eggs", qty: 5 }] }]);
-    expect(s).toEqual([{ item: "eggs", amount: 2, unit: "6 pc", every: "week", times_per_week: 1, orders_seen: 5 }]);
-    // No pack on any order: the unit is left for the family to say.
-    expect(suggestRegulars(days(3, 2).map((date) => ({ date, items: [{ item: "Curd" }] })))[0])
-      .toEqual({ item: "curd", amount: 1, unit: null, every: "week", times_per_week: 4, orders_seen: 3 });
-    // Once a fortnight is still an everyday item; never more than six times a week.
-    expect(suggestRegulars(days(3, 14).map((date) => ({ date, items: [{ item: "Ghee" }] })))[0]).toMatchObject({ every: "week", times_per_week: 1 });
-    expect(suggestRegulars(["2026-10-01", "2026-10-02", "2026-10-04", "2026-10-06"].map((date) => ({ date, items: [{ item: "Paneer" }] })))[0])
-      .toMatchObject({ every: "week", times_per_week: 4 });
-  });
-});
-
-describe("set_regular", () => {
-  it("adds an everyday item and changes it by its name, whatever its capitals, keeping what was not sent", async () => {
-    const { op, rows } = await boot();
-    const r = await op("set_regular", { item: "Milk", amount: 1, unit: "l", every: "day" });
-    expect(r.regular).toMatchObject({ item: "Milk", amount: 1, unit: "l", every: "day", active: 1, for_whom: null, paused_until: null, weekdays: [], updated_by: "agent:meal-agent" });
-    const again = await op("set_regular", { item: "  milk ", amount: 2 });
-    expect(again.regular).toMatchObject({ id: r.regular.id, item: "Milk", amount: 2, unit: "l", every: "day" });
-    expect(rows("regulars")).toHaveLength(1);
-  });
-
-  it("the same item for one person is its own everyday item", async () => {
-    const { op, rows } = await boot();
-    await op("set_regular", { item: "milk", amount: 1, unit: "l", every: "day" });
-    await op("set_regular", { item: "milk", amount: 2, unit: "glasses", every: "day", for_whom: "Agastya" });
-    await op("set_regular", { item: "Milk", amount: 3, for_whom: "agastya" });
-    expect(rows("regulars").map((x) => [x.for_whom, x.amount])).toEqual([[null, 1], ["Agastya", 3]]);
-  });
-
-  it("keeps how often: times a week, or named weekdays however they are written", async () => {
-    const { op, rows } = await boot();
-    expect((await op("set_regular", { item: "bread", amount: 1, unit: "pack", every: "week", times_per_week: 2 })).regular)
-      .toMatchObject({ every: "week", times_per_week: 2 });
-    expect((await op("set_regular", { item: "fruit", amount: 1, unit: "kg", every: "weekdays", weekdays: ["tuesday", "SAT"] })).regular.weekdays).toEqual(["Tue", "Sat"]);
-    expect(regularNeeds(rows("regulars").find((x) => x.item === "fruit"), wk).map((n) => n.date)).toEqual(["2026-11-24", "2026-11-28"]);
-    expect(regularNeeds(rows("regulars").find((x) => x.item === "bread"), wk).map((n) => n.date)).toEqual(["2026-11-23", "2026-11-26"]);
-  });
-
-  // Review Focus 3, through the operation: the stored row is what the orders read.
-  it("a pause leaves it out of exactly the paused days and it is needed again after; active: false stops it until it is set active", async () => {
-    const { op, rows } = await boot();
-    await op("set_regular", { item: "curd", amount: 500, unit: "g", every: "day" });
-    const curd = () => rows("regulars")[0];
-    expect((await op("set_regular", { item: "curd", paused_until: "2026-11-24" })).regular.paused_until).toBe("2026-11-24");
-    expect(regularNeeds(curd(), wk).map((n) => n.date)).toEqual(["2026-11-25", "2026-11-26", "2026-11-27", "2026-11-28", "2026-11-29"]);
-    await op("set_regular", { item: "curd", paused_until: null });
-    expect(regularNeeds(curd(), wk)).toHaveLength(7);
-    await op("set_regular", { item: "curd", active: false });
-    expect(regularNeeds(curd(), wk)).toEqual([]);
-    // Changing its amount does not bring a stopped item back.
-    await op("set_regular", { item: "curd", amount: 400 });
-    expect(regularNeeds(curd(), wk)).toEqual([]);
-    await op("set_regular", { item: "curd", active: true });
-    expect(regularNeeds(curd(), wk)).toHaveLength(7);
-    expect(regularNeeds(curd(), wk)[0]).toEqual({ date: "2026-11-23", amount: 400 });
-  });
-
-  it("remove deletes it, and answers 404 for an item that is not there", async () => {
-    const { op, rows } = await boot();
-    await op("set_regular", { item: "curd", amount: 500, unit: "g", every: "day" });
-    expect((await op("set_regular", { item: "paneer", remove: true })).status).toBe(404);
-    expect((await op("set_regular", { item: "curd", for_whom: "Agastya", remove: true })).status).toBe(404);
-    expect((await op("set_regular", { item: "Curd", remove: true })).removed.item).toBe("curd");
-    expect(rows("regulars")).toEqual([]);
-  });
-
-  it("refuses what it cannot read, and writes nothing", async () => {
-    const { op, rows } = await boot();
+  it("refuses what it cannot read, and a new item without how often", async () => {
+    const k = await start();
     const milk = { item: "milk", amount: 1, unit: "l", every: "day" };
-    for (const bad of [{ ...milk, item: " " }, { ...milk, amount: undefined }, { ...milk, amount: "1" }, { ...milk, amount: 0 }, { ...milk, unit: undefined },
-      { ...milk, every: undefined }, { ...milk, every: "daily" }, { ...milk, every: "week", times_per_week: 0 }, { ...milk, every: "week", times_per_week: 1.5 },
-      { ...milk, every: "weekdays" }, { ...milk, every: "weekdays", weekdays: [] }, { ...milk, every: "weekdays", weekdays: ["Someday"] },
-      { ...milk, active: "no" }, { ...milk, paused_until: "next week" }, { ...milk, paused_until: "2026-02-30" }, { ...milk, for_whom: 7 }])
-      expect([bad, (await op("set_regular", bad)).code]).toEqual([bad, "APP_REFUSED"]);
-    expect(rows("regulars")).toEqual([]);
-    // An item already there cannot be made a weekdays one without its weekdays.
-    await op("set_regular", milk);
-    expect((await op("set_regular", { item: "milk", every: "weekdays" })).code).toBe("APP_REFUSED");
-    expect(rows("regulars")[0].every).toBe("day");
+    for (const bad of [{ ...milk, item: " " }, { ...milk, amount: 0 }, { ...milk, every: "hourly" }, { ...milk, every: "week", times_per_week: 9 },
+      { ...milk, every: "weekdays" }, { ...milk, every: "weekdays", weekdays: ["someday"] }, { item: "milk", amount: 1, unit: "l" }, { ...milk, paused_until: "next week" }, { ...milk, colour: "white" }])
+      expect([bad, (await k.op("set_regular", bad)).code]).toEqual([bad, "APP_REFUSED"]);
+    expect(k.rows("items")).toEqual([]);
+  });
+});
+
+describe("set_item states a cycle", () => {
+  it("usual_amount with its unit and every_days are kept on the item; null clears; the unit of an item already bought stays", async () => {
+    const k = await start();
+    expect((await k.op("set_item", { item: "eggs", group: "few_days", usual_amount: 30, unit: "pc", every_days: 7 })).item).toMatchObject({ stated_amount: 30, stated_days: 7, unit: "pc" });
+    expect((await k.op("set_item", { item: "eggs", usual_amount: 12 })).item).toMatchObject({ stated_amount: 12, stated_days: 7 });
+    expect((await k.op("set_item", { item: "eggs", usual_amount: null, every_days: null })).item).toMatchObject({ stated_amount: null, stated_days: null, lasts_days: null, usual_amount: null });
+    for (const bad of [{ item: "ghee", usual_amount: 1 }, { item: "ghee", usual_amount: 1, unit: "jar" }, { item: "ghee", every_days: 0 }, { item: "ghee", usual_amount: -1, unit: "l" }])
+      expect([bad, (await k.op("set_item", bad)).code]).toEqual([bad, "APP_REFUSED"]);
+    await k.op("import_order_history", { app: "zepto", orders: [{ date: "2026-11-20", items: [{ item: "atta", group: "monthly", pack: "5 kg" }] }] });
+    expect((await k.op("set_item", { item: "atta", usual_amount: 10, unit: "pc" })).code).toBe("APP_REFUSED");
+    expect((await k.op("set_item", { item: "atta", usual_amount: 10, unit: "kg", every_days: 30 })).item).toMatchObject({ stated_amount: 10000, usual_amount: 10000, lasts_days: 30, run_out: "2026-12-05" });
+  });
+});
+
+describe("an installed copy's everyday items become item cycles", () => {
+  /** Rows of the retired table, as an installed copy has them. */
+  const oldRows = async (k: K, rows: [string, number | null, string | null, string, number | null, string | null, string | null, number, string | null][]) => {
+    for (const [item, amount, unit, every, times_per_week, weekdays, for_whom, active, paused_until] of rows)
+      expect((await k.owner("POST", "/api/_data/regulars", { item, amount, unit, every, times_per_week, weekdays, for_whom, active, paused_until })).status).toBe(201);
+  };
+
+  it("nothing to move on a fresh install", async () => {
+    const k = await start();
+    expect(moveRegulars(k.kit.sqlite, k.kit.db, NOW)).toBe("none");
+    expect(k.rows("items")).toEqual([]);
   });
 
-  it("every change tells the orders, a refusal does not; the owner's write is stamped as theirs", async () => {
-    let changed = 0;
-    const { op, owner, rows } = await boot({ regularHooks: { onChanged: () => { changed++; } } });
-    await op("set_regular", { item: "milk", amount: 1, unit: "l", every: "day" });
-    await op("set_regular", { item: "milk", paused_until: "2026-11-24" });
-    expect(changed).toBe(2);
-    await op("set_regular", { item: "milk", every: "hourly" });
-    await op("set_regular", { item: "ghee", remove: true });
-    expect(changed).toBe(2);
-    const r = await owner("POST", "/api/regulars", { item: "milk", amount: 2 });
-    expect(r.status).toBe(200); expect(rows("regulars")[0].updated_by).toBe("user:tester");
-    await owner("POST", "/api/regulars", { item: "milk", remove: true });
-    expect(changed).toBe(4);
+  it("each active one states its item's cycle, once; the old rows stay as they were", async () => {
+    const k = await start();
+    // Eggs already have purchases of their own (a 30 tray every 7 days), and curd already has a group.
+    await k.op("import_order_history", { app: "zepto", orders: ["2026-11-08", "2026-11-15"].map((date) => ({ date, items: [{ item: "eggs", group: "few_days", pack: "30 pc" }] })) });
+    await k.op("set_item", { item: "curd", group: "few_days" });
+    await oldRows(k, [
+      ["Milk", 500, "ml", "day", null, null, null, 1, null],
+      ["milk", 250, "ml", "weekdays", null, '["Mon","Wed"]', "Agastya", 1, "2026-11-25"],
+      ["eggs", 2, "pc", "weekdays", null, '["Mon","Tue","Wed","Thu","Fri"]', null, 1, null],
+      ["curd", 400, "g", "week", 2, null, null, 1, "2026-11-01"],
+      ["bread", 1, "pack", "week", null, null, null, 1, null],
+      ["butter", 100, "g", "day", null, null, null, 0, null]]);
+    expect(moveRegulars(k.kit.sqlite, k.kit.db, NOW)).toBe("moved");
+    // Milk: 500 ml a day for the house and 250 ml twice a week for Agastya add up over a day; his pause, still running, snoozes it.
+    expect(item(k, "milk")).toMatchObject({ name: "Milk", group: "daily", unit: "ml", stated_days: 1, stated_amount: 571.429, snoozed_until: "2026-11-25", lasts_days: 1 });
+    // Eggs keep the cycle their purchases show; what was stated is kept beside it.
+    expect(item(k, "eggs")).toMatchObject({ group: "few_days", stated_days: 1.4, stated_amount: 2, lasts_days: 7, usual_amount: 30 });
+    // Curd keeps its group, and a pause that is over is not carried. Bread's "1 pack" states how often only. Butter was off.
+    expect(item(k, "curd")).toMatchObject({ group: "few_days", stated_days: 3.5, stated_amount: 400, snoozed_until: null });
+    expect(item(k, "bread")).toMatchObject({ group: "few_days", stated_days: 7, stated_amount: null });
+    expect(item(k, "butter")).toBeUndefined();
+    expect((await k.owner("GET", "/api/pantry")).body.rows.map((p: any) => [p.name, p.cycle]))
+      .toEqual([["bread", "Once a week"], ["curd", "400 g twice a week"], ["eggs", "30 pc about once a week"], ["Milk", "571 ml every day"]]);
+    expect(k.rows("regulars")).toHaveLength(6);
+    // A second boot moves nothing again: a cycle the family has since cleared stays cleared.
+    await k.op("set_item", { item: "bread", every_days: null });
+    expect(moveRegulars(k.kit.sqlite, k.kit.db, NOW)).toBe("already");
+    expect(item(k, "bread").stated_days).toBeNull();
+    // The reminder now puts the daily one on the cart once its snooze is over, as the everyday item was.
+    expect((await k.op("get_reminder", { which: "evening" })).added).toEqual([]);
   });
 });

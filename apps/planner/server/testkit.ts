@@ -11,7 +11,7 @@ import { OLD_TABLES, SETTINGS } from "./db/constants";
 import { agentOps } from "./agentOps";
 import { mountFamilyRoutes } from "./family";
 import { mountMealRoutes } from "./meals";
-import { mountRegularRoutes, type RegularHooks } from "./regulars";
+import { mountRegularRoutes } from "./regulars";
 import { mountProductRoutes } from "./products";
 import { mountRecipeRoutes } from "./recipes";
 import { mountItemRoutes } from "./items";
@@ -32,7 +32,7 @@ export function tempDir(prefix = "planner-test-"): string {
  *  `schedule` stands in for the app's per-key timer (a debounce): it holds the latest `run` for each key until the test calls
  *  `k.settle(key?)`; the routes that need it (carts, the week) take `basePath`, `askAgent` and `schedule` from `k.deps`.
  *  `now` is the app's clock (the real one unless a test pins it): the routes that need today take it from `k.deps.now`. */
-export async function boot(opts: { dbFile?: string; dataDir?: string; regularHooks?: RegularHooks; token?: string;
+export async function boot(opts: { dbFile?: string; dataDir?: string; token?: string;
   basePath?: string; askAgent?: (intent: string, payload: object) => Promise<unknown>; now?: () => Date } = {}) {
   const now = opts.now ?? (() => new Date());
   const hono = new Hono();
@@ -43,7 +43,7 @@ export async function boot(opts: { dbFile?: string; dataDir?: string; regularHoo
     { schema, settings: SETTINGS, keepTables: OLD_TABLES, dbFile, appName: "T" });
   mountFamilyRoutes(hono, kit.db, kit.emitChange, { appToken: opts.token ?? null });
   mountMealRoutes(hono, kit.db, kit.emitChange, { basePath: opts.basePath ?? "/a/t", now });
-  mountRegularRoutes(hono, kit.db, kit.emitChange, opts.regularHooks ?? { onChanged: () => {} });
+  mountRegularRoutes(hono, kit.db, kit.emitChange, { now });
   mountProductRoutes(hono, kit.db, kit.emitChange);
   mountRecipeRoutes(hono, kit.db, kit.emitChange);
   /** A request as the owner. */
@@ -51,9 +51,10 @@ export async function boot(opts: { dbFile?: string; dataDir?: string; regularHoo
     const r = await hono.request(path, { method, headers: { "Content-Type": "application/json", "X-Flock-User": "tester" }, body: body === undefined ? undefined : JSON.stringify(body) });
     return { status: r.status, body: (await r.json()) as any };
   };
-  /** One of the agent's operations, called as Flock relays it. */
-  const op = (name: string, payload: object = {}): Promise<any> =>
-    Promise.resolve(agentOps(() => hono)[name](payload as Record<string, unknown>, { agentId: "meal-agent" } as any));
+  /** One of the agent's operations, called as Flock relays it. `agentId`: the agent calling (another person's, for a house
+   *  where more than one person's agent works the app). */
+  const op = (name: string, payload: object = {}, agentId = "meal-agent"): Promise<any> =>
+    Promise.resolve(agentOps(() => hono)[name](payload as Record<string, unknown>, { agentId } as any));
   /** Every row of a table, straight from the database. */
   const rows = (table: string): any[] => kit.sqlite.query(`SELECT * FROM "${table}"`).all() as any[];
   /** The agent calls the app asked for, in order. */

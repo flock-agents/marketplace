@@ -1,30 +1,25 @@
 import { describe, expect, it } from "bun:test";
 import { APP_NAMES, TAG_TEXT } from "../../server/db/constants";
 import { agentName, cartNote, cookingDaysText, cartTitle, debouncePicks, dishNote, eventRows, forText, itemCallout, itemSubtitle, orderLabel, orderRow, outsideText, pantryTabs,
-  patternFields, pausedNow, pickerItems, profileWaiting, recipeSourceLabel, regularText, statusTone, syncPicker, TAG_TONES, textList, weekTitle,
+  mealLines, patternFields, patternSource, pickerItems, profileWaiting, recipeSourceLabel, statusTone, syncPicker, TAG_TONES, textList, weekTitle,
   cookDetails, cookVisitsText, linkWeek, plannedText, ruleChip, weekToOpen } from "./format";
 
-describe("regularText", () => {
-  it("says how much and how often", () => {
-    expect(regularText({ amount: 1, unit: "l", every: "day" } as any)).toBe("1 l a day");
-    expect(regularText({ amount: 1, unit: "pack", every: "week", times_per_week: 2 } as any)).toBe("1 pack twice a week");
-    expect(regularText({ amount: 6, unit: null, every: "week", times_per_week: 1 } as any)).toBe("6 a week");
-    expect(regularText({ amount: 2, unit: "pc", every: "week", times_per_week: 3 } as any)).toBe("2 pc 3 times a week");
-    expect(regularText({ amount: 1, unit: "pack", every: "week" } as any)).toBe("1 pack a week");
+describe("mealLines", () => {
+  const everyone = ["Shiva", "Agastya", "Meera"];
+  it("names each dish once, and under them only what differs from everyone eating it", () => {
+    // The live week of 21 Nov, as it is now kept: one idli for the two who eat it, with Shiva's eggs as its note, and Meera's milk.
+    expect(mealLines({ dishes: [{ name: "Idli", for_people: ["Agastya", "Shiva"], portion_note: "two eggs for Shiva" }, { name: "Milk", for_people: ["Meera"], portion_note: null }] }, everyone))
+      .toEqual({ title: "Idli · Milk", secondary: "Idli: two eggs for Shiva · Milk for Meera" });
+    expect(mealLines({ dishes: [{ name: "Dal", for_people: null, portion_note: null }, { name: "Rice" }] }, everyone)).toEqual({ title: "Dal · Rice", secondary: undefined });
   });
-
-  it("names the weekdays, and the day a pause ends", () => {
-    expect(regularText({ amount: 500, unit: "g", every: "weekdays", weekdays: '["Mon","Wed","Fri"]', paused_until: "2026-11-29" } as any)).toBe("500 g on Mon, Wed, Fri · paused until Sun 29 Nov");
-    expect(regularText({ amount: 500, unit: "g", every: "weekdays", weekdays: ["Mon"] } as any)).toBe("500 g on Mon");
+  it("a dish for everyone at home by name is for everyone; a dish still kept twice is named once", () => {
+    expect(mealLines({ dishes: [{ name: "Aloo paratha", for_people: ["shiva", "Agastya", "Meera"] }] }, everyone)).toEqual({ title: "Aloo paratha", secondary: undefined });
+    expect(mealLines({ dishes: [{ name: "Aloo paratha", for_people: ["Agastya"] }, { name: "aloo paratha", for_people: ["Shiva"] }, { name: "Milk", for_people: ["Meera"] }] }, everyone))
+      .toEqual({ title: "Aloo paratha · Milk", secondary: "Aloo paratha for Agastya · aloo paratha for Shiva · Milk for Meera" });
   });
-
-  it("leaves out a pause that is over", () => {
-    const r = { amount: 1, unit: "l", every: "day", paused_until: "2026-11-29" } as any;
-    expect(regularText(r, "2026-11-29")).toBe("1 l a day · paused until Sun 29 Nov");
-    expect(regularText(r, "2026-11-30")).toBe("1 l a day");
-    expect(pausedNow(r, "2026-11-29")).toBe(true);
-    expect(pausedNow(r, "2026-11-30")).toBe(false);
-    expect(pausedNow({ paused_until: null }, "2026-11-30")).toBe(false);
+  it("carries the meal's note, and an ordered-in meal says so", () => {
+    expect(mealLines({ note: "cook comes late", dishes: [{ name: "Poha" }] }, everyone)).toEqual({ title: "Poha", secondary: "cook comes late" });
+    expect(mealLines({ ordered_in: true, note: "pizza night", dishes: [] })).toEqual({ title: "Ordered in", secondary: "pizza night" });
   });
 });
 
@@ -260,6 +255,9 @@ describe("the item page", () => {
     usual: "10 kg", price: 520, lasts_days: 24, uses: "0.4 kg a day", follows_plan: false } as any;
   it("says its group and usual amount, and why it is low or snoozed", () => {
     expect(itemSubtitle(item)).toBe("Monthly · 10 kg");
+    expect(itemSubtitle({ ...item, cycle: "10 kg about every 3 weeks" })).toBe("Monthly · 10 kg about every 3 weeks");
+    expect([patternSource(item, 2), patternSource(item, 1), patternSource(item, 0), patternSource({ ...item, cycle_stated: true }, 0)])
+      .toEqual(["from the last 2 purchases", "from the last 1 purchase", "nothing counted yet", "as you said"]);
     expect(itemSubtitle({ ...item, group: "few_days", usual: null })).toBe("Every few days");
     expect(itemSubtitle({ ...item, group: null, usual: null })).toBe("");
     expect(itemCallout(item)?.title).toBe("Low · about to run out around Tue 24 Nov");

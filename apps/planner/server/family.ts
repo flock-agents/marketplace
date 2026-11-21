@@ -25,7 +25,11 @@ export type CookVisit = { at: string; meals?: string[] };
 /** The house row with its lists read: what the routes answer with. */
 export type HouseView = Omit<HouseRow, "rules" | "cook_days" | "extra_slots" | "order_in" | "cooking_days" | "connected_apps" | "history_synced"> &
   { rules: HouseRule[]; cook_days: Weekday[]; cook_visits: CookVisit[]; extra_slots: ExtraSlot[]; order_in: OrderIn[];
-    cooking_days: Weekday[]; connected_apps: GroceryApp[]; history_synced: Record<string, string> };
+    cooking_days: Weekday[]; connected_apps: GroceryApp[]; history_synced: HistorySynced };
+/** How far each app's order history was read, by reader: whoever gave the orders (`agent:<id>`, a person's own agent reading
+ *  that person's account). `*` is a date kept before readers were told apart. */
+export type HistorySynced = Record<string, Record<string, string>>;
+export const ANY_READER = "*";
 
 /** The household's one row, made the first time anything asks for it. */
 export function getHouse(db: Db): HouseRow {
@@ -35,9 +39,24 @@ export function getHouse(db: Db): HouseRow {
 
 export const list = <T>(json: string | null): T[] => { try { const v = json ? JSON.parse(json) : []; return Array.isArray(v) ? v : []; } catch { return []; } };
 
-const object = (json: string | null): Record<string, string> => {
-  try { const v = json ? JSON.parse(json) : {}; return isObject(v) ? (v as Record<string, string>) : {}; } catch { return {}; }
-};
+/** house.history_synced read: `{ app: { reader: date } }`; a plain date (an install from before) is under ANY_READER. */
+function historySynced(json: string | null): HistorySynced {
+  let v: unknown = null;
+  try { v = json ? JSON.parse(json) : null; } catch { /* unreadable: nothing read yet */ }
+  const out: HistorySynced = {};
+  if (!isObject(v)) return out;
+  for (const [app, read] of Object.entries(v)) {
+    if (typeof read === "string") out[app] = { [ANY_READER]: read };
+    else if (isObject(read)) out[app] = Object.fromEntries(Object.entries(read).filter((e): e is [string, string] => typeof e[1] === "string"));
+  }
+  return out;
+}
+
+/** How far `reader` read `app`'s order history, or null. `legacy`: a date from before readers were told apart counts as this
+ *  reader's (true only for the app's own paired agent, which was the one reading then). */
+export function readUntil(synced: HistorySynced, app: string, reader: string, legacy = false): string | null {
+  return synced[app]?.[reader] ?? (legacy ? synced[app]?.[ANY_READER] : undefined) ?? null;
+}
 
 const CLOCK = /^([01]\d|2[0-3]):[0-5]\d$/;
 /** The cook's visits from `cook_arrival`: one plain "HH:MM" (every row before a cook could come twice) is one visit; a cook who
@@ -53,7 +72,7 @@ export function houseView(row: HouseRow): HouseView {
   const visits = cookVisits(row.cook_arrival);
   // cook_arrival stays one time for whoever reads it as before (the first visit); cook_visits is every visit.
   return { ...row, cook_arrival: visits[0]?.at ?? null, cook_visits: visits, rules: list(row.rules), cook_days: list(row.cook_days), extra_slots: list(row.extra_slots), order_in: list(row.order_in),
-    cooking_days: cooking.length ? cooking : [...COOKING_DAYS_DEFAULT], connected_apps: list<GroceryApp>(row.connected_apps), history_synced: object(row.history_synced) };
+    cooking_days: cooking.length ? cooking : [...COOKING_DAYS_DEFAULT], connected_apps: list<GroceryApp>(row.connected_apps), history_synced: historySynced(row.history_synced) };
 }
 
 /** One of the app's settings as saved, else its default. */

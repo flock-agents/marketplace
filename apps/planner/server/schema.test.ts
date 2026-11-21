@@ -67,7 +67,7 @@ describe("planner data", () => {
     expect(columns(s, "house")).toEqual(expect.arrayContaining(["afternoon_time", "evening_time", "plan_time", "cooking_days", "connected_apps", "history_synced", "asks_confirmed", "asks_still_have"]));
   });
 
-  it("fills the defaults an agent may leave out: an active person, an active everyday item", async () => {
+  it("fills the defaults an agent may leave out: an active person, an active row of the retired everyday items table", async () => {
     const { owner, rows } = await boot();
     expect((await owner("POST", "/api/_data/people", { name: "Agastya", group: "child" })).status).toBe(201);
     expect(rows("people")[0]).toMatchObject({ name: "Agastya", group: "child", active: 1 });

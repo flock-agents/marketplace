@@ -1,4 +1,4 @@
-// The words the pages show for a dish, a cart, an order, a pantry item, an everyday item and a recipe. No React and no
+// The words the pages show for a dish, a meal, a cart, an order, a pantry item and a recipe. No React and no
 // library import here, so the wording is tested on its own. The dates, the grocery apps' names and a dish's line are the
 // server's own. The app an item is bought on is never named on the Pantry or the item page.
 import { addDays, clockText, dayLabel, todayStr, WEEKDAYS, weekdayLong, weekdayOf, type Weekday } from "../../server/dates";
@@ -21,21 +21,22 @@ export function textList<T = string>(v: unknown): T[] {
 /** Is a profile carried over from the old Meal Planner still waiting to be turned into people, rules, the cook and slots? */
 export const profileWaiting = (house: { profile_to_structure?: string | null }): boolean => !!house.profile_to_structure?.trim();
 
-type Regular = { amount: number | null; unit: string | null; every: string; times_per_week?: number | null; weekdays?: unknown; paused_until?: string | null };
-
-/** Is the item paused on `today`? A pause runs up to and including its date. */
-export function pausedNow(r: { paused_until?: string | null }, today: string): boolean { return !!r.paused_until && r.paused_until >= today; }
-
-/** "1 l a day", "1 pack twice a week", "6 a week", "500 g on Mon, Wed, Fri", plus " · paused until Sun 29 Nov". With
- *  `today`, a pause that is over is left out. */
-export function regularText(r: Regular, today?: string): string {
-  const much = [r.amount ?? 1, r.unit?.trim()].filter(Boolean).join(" ");
-  const times = r.times_per_week ?? 1;
-  const often = r.every === "day" ? "a day"
-    : r.every === "weekdays" ? `on ${textList(r.weekdays).join(", ")}`
-    : times === 1 ? "a week" : times === 2 ? "twice a week" : `${times} times a week`;
-  const paused = r.paused_until && (!today || pausedNow(r, today)) ? ` · paused until ${dayLabel(r.paused_until)}` : "";
-  return `${much} ${often}${paused}`;
+/** A meal as the Week page lists it: its dishes' names, each once, and under them only what differs from "everyone eats
+ *  it": the meal's note, a dish's portions note ("Idli: two eggs for Shiva"), or who a dish is for when that is not everyone
+ *  at home ("Milk for Meera"). `everyone`: the names of the people at home. */
+export function mealLines(m: { ordered_in?: boolean; note?: string | null; dishes: { name: string; for_people?: string[] | null; portion_note?: string | null }[] },
+  everyone: readonly string[] = []): { title: string; secondary: string | undefined } {
+  if (m.ordered_in) return { title: "Ordered in", secondary: m.note?.trim() || undefined };
+  const key = (v: string) => v.trim().toLowerCase();
+  const names: string[] = [], under: string[] = m.note?.trim() ? [m.note.trim()] : [];
+  for (const d of m.dishes) {
+    if (!names.some((n) => key(n) === key(d.name))) names.push(d.name);
+    const note = d.portion_note?.trim(), who = d.for_people ?? [];
+    const all = everyone.length > 0 && everyone.every((p) => who.some((w) => key(w) === key(p)));
+    const line = note ? `${d.name}: ${note}` : who.length && !all ? `${d.name} for ${who.join(", ")}` : null;
+    if (line && !under.includes(line)) under.push(line);
+  }
+  return { title: names.join(" · "), secondary: under.join(" · ") || undefined };
 }
 
 /** Where a saved recipe is from: "Instagram", "YouTube" or "Link". */
@@ -198,10 +199,16 @@ export const TAG_TONES: Record<string, "success" | "warning" | "info" | "neutral
 
 const GROUP_TEXT: Record<string, string> = { daily: "Daily", few_days: "Every few days", monthly: "Monthly" };
 type ItemLike = { name: string; group: string | null; status: string; run_out: string | null; snoozed_until: string | null; product: string | null;
-  usual: string | null; price: number | null; lasts_days: number | null; uses: string | null; follows_plan: boolean };
+  usual: string | null; price: number | null; lasts_days: number | null; uses: string | null; follows_plan: boolean; cycle?: string | null; cycle_stated?: boolean };
 
-/** Under the item's name: "Monthly · 10 kg". */
-export const itemSubtitle = (i: ItemLike): string => [i.group ? GROUP_TEXT[i.group] ?? i.group : null, i.usual].filter(Boolean).join(" · ");
+/** Under the item's name: its cycle, "Monthly · 10 kg about once a month"; with no cycle yet, the usual amount ("Monthly · 10 kg"). */
+export const itemSubtitle = (i: ItemLike): string => [i.group ? GROUP_TEXT[i.group] ?? i.group : null, i.cycle ?? i.usual].filter(Boolean).join(" · ");
+
+/** Where the item's pattern is from: the purchases counted, the family's own words, or nothing yet. */
+export function patternSource(i: ItemLike, counted: number): string {
+  if (i.cycle_stated) return "as you said";
+  return counted ? `from the last ${counted} ${counted === 1 ? "purchase" : "purchases"}` : "nothing counted yet";
+}
 
 /** Why the item is low or snoozed, or null when it is in stock. */
 export function itemCallout(i: ItemLike): { tone: "warning" | "info"; icon: string; title: string; body: string } | null {

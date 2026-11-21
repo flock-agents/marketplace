@@ -220,6 +220,12 @@
               "null"
             ]
           },
+          "regulars_moved_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "asks_confirmed": {
             "anyOf": [
               {
@@ -650,6 +656,30 @@
             ]
           },
           "wait_factor": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": -140737488355328,
+                "maximum": 140737488355327
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "stated_amount": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": -140737488355328,
+                "maximum": 140737488355327
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "stated_days": {
             "anyOf": [
               {
                 "type": "number",

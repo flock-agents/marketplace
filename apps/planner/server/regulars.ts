@@ -1,109 +1,107 @@
-// Everyday items ("regulars"): what the house buys again and again whatever is cooked: milk every day, bread twice a week,
-// fruit on Mondays. Each says how much and how often; an order adds its amount for the days the order covers. The agent
-// writes them with set_regular once the family confirmed them; import_order_history (items.ts) only suggests them.
+// Everyday items were once a list of their own (the `regulars` table: "milk, 1 l a day"). They are now each item's own cycle
+// (items.stated_amount, items.stated_days; items.ts), so the house has one thing per item: what is bought and how often. The
+// table stays in the schema, retired: nothing reads it after the move below (dropping a table with rows would stop an
+// installed copy for the owner's approval, and Flock's catalogue generator still names it). What is left here: set_regular, the older operation, kept as another way to state an item's cycle (Flock's first conversation
+// still names it), and the one-time move of an installed copy's rows into item cycles.
 import type { Hono } from "hono";
+import type { Database } from "bun:sqlite";
 import { eq } from "drizzle-orm";
-import { regulars } from "./db/schema";
+import { house, items } from "./db/schema";
 import { EVERY } from "./db/constants";
-import { weekdayOf, WEEKDAYS, type Weekday } from "./dates";
-import { list, name, refuse, weekdays, words, writeRoutes, type Db, type Emit } from "./family";
+import { todayStr, WEEKDAYS } from "./dates";
+import { getHouse, list, name, refuse, weekdays, writeRoutes, type Db, type Emit } from "./family";
 import { dateOf, flag } from "./meals";
-import { normItem, positive } from "./products";
+import { positive, toBase } from "./products";
+import { itemFor, recomputeItem } from "./items";
 
-export type RegularRow = typeof regulars.$inferSelect;
-/** A regular as the routes answer with it: its weekdays read. */
-export type RegularView = Omit<RegularRow, "weekdays"> & { weekdays: Weekday[] };
-export type PastOrder = { date: string; items: { item: string; qty?: number; pack?: string }[] };
-export type Suggestion = { item: string; amount: number; unit: string | null; every: "day" | "week"; times_per_week?: number; orders_seen: number };
-/** What the orders do when an everyday item changes: the orders not yet placed are built again. */
-export type RegularHooks = { onChanged(): void };
-
-/** The days of a week (0 = Monday) an item needed `times` a week falls on, spread evenly: twice is Monday and Thursday. */
-export function spreadDays(times: number): number[] {
-  return Array.from({ length: times }, (_, i) => Math.floor((i * 7) / times));
+/** A cycle in days from "every day", "N times a week" or "on these weekdays". */
+export function cycleDays(every: string, timesPerWeek: number | null | undefined, days: readonly string[]): number {
+  return every === "day" ? 1 : every === "weekdays" ? 7 / Math.max(1, days.length) : 7 / Math.max(1, timesPerWeek ?? 1);
 }
+/** The group an item with no group takes from its cycle. */
+const groupFor = (days: number): string => (days <= 2 ? "daily" : days <= 10 ? "few_days" : "monthly");
 
-/** What of a regular is needed on each of `dates`. Nothing while it is not active, nor up to and including `paused_until`. */
-export function regularNeeds(r: RegularRow, dates: string[]): { date: string; amount: number }[] {
-  if (!r.active) return [];
-  const on: (date: string) => boolean =
-    r.every === "day" ? () => true
-    : r.every === "weekdays" ? ((days) => (date: string) => days.includes(weekdayOf(date)))(list<Weekday>(r.weekdays))
-    : r.every === "week" ? ((days) => (date: string) => days.includes(WEEKDAYS.indexOf(weekdayOf(date))))(spreadDays(r.times_per_week ?? 1))
-    : () => false;
-  return dates.filter((date) => !(r.paused_until && date <= r.paused_until) && on(date)).map((date) => ({ date, amount: r.amount ?? 1 }));
-}
-
-const dayNumber = (date: string): number => { const [y, m, d] = date.split("-").map(Number); return Date.UTC(y, m - 1, d) / 86_400_000; };
-
-/** The everyday items a history of orders points to: what was bought on three or more days, at least once a fortnight.
- *  The amount is the usual quantity of one order and the unit its usual pack, both as the grocery app had them. */
-export function suggestRegulars(orders: PastOrder[]): Suggestion[] {
-  const seen = new Map<string, { qty: Map<string, number>; packs: Map<string, number> }>();
-  for (const o of orders) for (const i of o.items) {
-    const key = normItem(i.item);
-    const s = seen.get(key) ?? { qty: new Map(), packs: new Map() };
-    seen.set(key, s);
-    s.qty.set(o.date, (s.qty.get(o.date) ?? 0) + (i.qty ?? 1));
-    if (i.pack?.trim()) s.packs.set(i.pack.trim(), (s.packs.get(i.pack.trim()) ?? 0) + 1);
-  }
-  const out: Suggestion[] = [];
-  for (const [item, s] of seen) {
-    const dates = [...s.qty.keys()].sort(), n = dates.length;
-    if (n < 3) continue;
-    const interval = (dayNumber(dates[n - 1]) - dayNumber(dates[0])) / (n - 1);
-    if (interval > 14) continue;
-    const qtys = [...s.qty.values()].sort((a, b) => a - b);
-    const unit = [...s.packs].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
-    out.push({ item, amount: qtys[Math.floor((n - 1) / 2)], unit,
-      ...(interval <= 1.5 ? { every: "day" as const } : { every: "week" as const, times_per_week: Math.min(6, Math.max(1, Math.round(7 / interval))) }),
-      orders_seen: n });
-  }
-  return out.sort((a, b) => b.orders_seen - a.orders_seen || a.item.localeCompare(b.item));
-}
-
-export function regularView(r: RegularRow): RegularView { return { ...r, weekdays: list<Weekday>(r.weekdays) }; }
-
-// ── What was sent, checked ──
-
-export function mountRegularRoutes(hono: Hono<any>, db: Db, emit: Emit, hooks: RegularHooks) {
+export function mountRegularRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: { now?: () => Date } = {}) {
   const write = writeRoutes(hono);
+  const today = () => todayStr((opts.now ?? (() => new Date()))());
 
-  // set_regular { item, amount, unit, every: day | week | weekdays, times_per_week?, weekdays?, for_whom?, active?,
-  // paused_until?, remove? }: one everyday item, found by its name and whom it is for (the same item for the house and for one
-  // person are two). Only the fields given change. `remove` deletes it; `active: false` keeps it without ordering it.
+  // set_regular { item, amount, unit, every: day | week | weekdays, times_per_week?, weekdays?, for_whom?, active?, paused_until?,
+  // remove? }: the item's cycle as the family stated it, the same as set_item { item, usual_amount, unit, every_days }.
+  // `paused_until` snoozes the item; `active: false` and `remove` take the stated cycle away. `for_whom` is not kept: an item
+  // has one cycle for the house.
   write("/api/regulars", (b, by) => {
     const given = name(b.item, "item");
-    const whom = b.for_whom == null ? null : words(b.for_whom, "for_whom");
-    const existing = db.select().from(regulars).all()
-      .find((r) => normItem(r.item) === normItem(given) && (r.for_whom ?? "").trim().toLowerCase() === (whom ?? "").toLowerCase());
-    if (b.remove === true) {
-      if (!existing) return { status: 404, body: { reason: `${given}${whom ? ` for ${whom}` : ""} is not an everyday item` } };
-      db.delete(regulars).where(eq(regulars.id, existing.id)).run();
-      emit("regulars", existing.id, "delete", by);
-      hooks.onChanged();
-      return { body: { removed: regularView(existing) } };
+    const was = itemFor(db, given);
+    const off = b.remove === true || (b.active !== undefined && !flag(b.active, "active"));
+    if (off && !was) return { status: 404, body: { reason: `${given} is not an item the app knows` } };
+    const set: Partial<typeof items.$inferInsert> = {};
+    if (off) Object.assign(set, { stated_amount: null, stated_days: null });
+    else {
+      if (b.every != null) {
+        if (!(EVERY as readonly unknown[]).includes(b.every)) refuse(`every must be one of: ${EVERY.join(", ")}`);
+        const times = b.times_per_week == null ? null
+          : typeof b.times_per_week === "number" && Number.isInteger(b.times_per_week) && b.times_per_week >= 1 && b.times_per_week <= 7 ? b.times_per_week
+          : refuse("times_per_week must be a whole number from 1 to 7");
+        const on = b.weekdays == null ? [] : weekdays(b.weekdays, "weekdays");
+        if (b.every === "weekdays" && !on.length) refuse(`weekdays is required when every is weekdays: a list from ${WEEKDAYS.join(", ")}`);
+        set.stated_days = cycleDays(b.every as string, times, on);
+      } else if (was?.stated_days == null && b.paused_until === undefined) refuse(`every is required: one of ${EVERY.join(", ")}`);
+      if (b.amount != null) {
+        // An amount in a measure the app cannot add up ("1 pack") states how often only.
+        const base = toBase(positive(b.amount, "amount")!, typeof b.unit === "string" ? b.unit : was?.unit);
+        if (base && (!was?.unit || was.unit === base.unit)) Object.assign(set, { stated_amount: base.amount, unit: base.unit });
+      }
+      if (b.paused_until !== undefined) set.snoozed_until = b.paused_until === null ? null : dateOf(b.paused_until, "paused_until");
     }
-    const set: Partial<typeof regulars.$inferInsert> = {};
-    if (b.amount != null) set.amount = positive(b.amount, "amount");
-    else if (!existing) refuse("amount is required: how much is needed each time, as a number (put the measure in unit)");
-    if (b.unit != null) set.unit = name(b.unit, "unit");
-    else if (!existing) refuse('unit is required: the measure of the amount, like "l", "g", "pc" or "pack"');
-    if (b.every != null) set.every = (EVERY as readonly unknown[]).includes(b.every) ? (b.every as string) : refuse(`every must be one of: ${EVERY.join(", ")}`);
-    else if (!existing) refuse(`every is required: one of ${EVERY.join(", ")}`);
-    if (b.times_per_week !== undefined) set.times_per_week = b.times_per_week === null ? null
-      : typeof b.times_per_week === "number" && Number.isInteger(b.times_per_week) && b.times_per_week >= 1 && b.times_per_week <= 7 ? b.times_per_week
-      : refuse("times_per_week must be a whole number from 1 to 7");
-    if (b.weekdays !== undefined) set.weekdays = b.weekdays === null ? null : JSON.stringify(weekdays(b.weekdays, "weekdays"));
-    if (b.active !== undefined) set.active = flag(b.active, "active") ? 1 : 0;
-    if (b.paused_until !== undefined) set.paused_until = b.paused_until === null ? null : dateOf(b.paused_until, "paused_until");
-    if ((set.every ?? existing?.every) === "weekdays" && !list(set.weekdays !== undefined ? set.weekdays : existing?.weekdays ?? null).length)
-      refuse(`weekdays is required when every is weekdays: a list from ${WEEKDAYS.join(", ")}`);
-    const row = existing
-      ? db.update(regulars).set({ ...set, updated_at: new Date().toISOString(), updated_by: by }).where(eq(regulars.id, existing.id)).returning().get()
-      : db.insert(regulars).values({ ...set, item: given, every: set.every!, for_whom: whom, updated_by: by }).returning().get();
-    emit("regulars", row.id, existing ? "update" : "insert", by);
-    hooks.onChanged();
-    return { body: { regular: regularView(row) } };
+    const row = db.transaction((tx) => {
+      const t = tx as unknown as Db;
+      const it = itemFor(t, given, { create: true })!;
+      if (!it.group && set.stated_days != null) set.group = groupFor(set.stated_days);
+      t.update(items).set({ ...set, updated_at: new Date().toISOString(), updated_by: by }).where(eq(items.id, it.id)).run();
+      return recomputeItem(t, it.id, today());
+    });
+    emit("items", row.id, was ? "update" : "insert", by);
+    return { body: { item: row } };
   });
+}
+
+type OldRegular = { item: string; amount: number | null; unit: string | null; every: string; times_per_week: number | null; weekdays: string | null;
+  active: number | null; paused_until: string | null };
+
+/** At boot, once: the everyday items of an installed copy (the rows of the retired `regulars` table, left as they are) become item cycles.
+ *  Each active one states its item's cycle: how much each time and how often; several of one item (the house's, one person's)
+ *  add up. A cycle the item already has stands, a pause still running snoozes the item, and an item with no group takes one
+ *  from its cycle. Rows that were switched off are left behind. "none": nothing in the table (or no table yet: a boot before the schema landed). */
+export function moveRegulars(sqlite: Database, db: Db, now: Date = new Date()): "moved" | "none" | "already" {
+  let rows: OldRegular[];
+  try { rows = sqlite.query(`SELECT item, amount, unit, every, times_per_week, weekdays, active, paused_until FROM regulars`).all() as OldRegular[]; }
+  catch { return "none"; }
+  const home = getHouse(db);
+  if (home.regulars_moved_at) return "already";
+  const today = todayStr(now);
+  db.transaction((txRaw) => {
+    const tx = txRaw as unknown as Db;
+    const byItem = new Map<string, OldRegular[]>();
+    for (const r of rows) {
+      const key = (r.item ?? "").trim().toLowerCase().replace(/\s+/g, " ");
+      if (key && r.active !== 0) byItem.set(key, [...(byItem.get(key) ?? []), r]);
+    }
+    for (const group of byItem.values()) {
+      const it = itemFor(tx, group[0].item, { create: true })!;
+      const each = group.map((r) => ({ days: cycleDays(r.every, r.times_per_week, list<string>(r.weekdays)), base: r.amount != null ? toBase(r.amount, r.unit ?? it.unit) : null }));
+      const days = Math.min(...each.map((e) => e.days));
+      const unit = it.unit ?? each.find((e) => e.base)?.base?.unit ?? null;
+      // What all of them need over the shortest cycle, when every one has an amount the app can add up in the item's unit.
+      const amount = unit && each.every((e) => e.base?.unit === unit) ? each.reduce((sum, e) => sum + e.base!.amount * (days / e.days), 0) : null;
+      const paused = group.map((r) => r.paused_until).filter((d): d is string => !!d && d >= today).sort().pop() ?? null;
+      const set: Partial<typeof items.$inferInsert> = {};
+      if (it.stated_days == null) Object.assign(set, { stated_days: days, ...(amount != null && it.stated_amount == null ? { stated_amount: Math.round(amount * 1000) / 1000, unit } : {}) });
+      if (!it.group) set.group = groupFor(days);
+      if (paused && (!it.snoozed_until || it.snoozed_until < paused)) set.snoozed_until = paused;
+      if (Object.keys(set).length) tx.update(items).set(set).where(eq(items.id, it.id)).run();
+      recomputeItem(tx, it.id, today);
+    }
+    tx.update(house).set({ regulars_moved_at: now.toISOString() }).where(eq(house.id, home.id)).run();
+  });
+  return rows.length ? "moved" : "none";
 }

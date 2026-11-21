@@ -1,8 +1,7 @@
 import { useState, type ReactNode } from "react";
-import { Button, Callout, Card, Confirm, Detail, Empty, ErrorCard, Field, Form, Heading, InlinePanel, Page, PropertyChips, Row, RowList, Section, Skeleton, Stack, label, useApp, useTable, useToast, type FormProps } from "../flock/ui";
+import { Button, Callout, Card, Confirm, Detail, Empty, ErrorCard, Form, Heading, InlinePanel, Page, PropertyChips, Row, RowList, Section, Skeleton, Stack, label, useApp, useToast, type FormProps } from "../flock/ui";
 import { WEEKDAYS } from "../../server/dates";
-import { APP_NAMES, COOK_NEW_RECIPES, GROUPS, RULE_KINDS, RULE_LABELS, SHOP_APPS, SLOTS, type GroceryApp } from "../../server/db/constants";
-import { EverydayItems } from "./EverydayItems";
+import { COOK_NEW_RECIPES, GROUPS, RULE_KINDS, RULE_LABELS, SLOTS } from "../../server/db/constants";
 import { RowsEditor } from "./RowsEditor";
 import { agentName, cookDetails, cookingDaysText, cookVisitsText, profileWaiting, ruleChip } from "./format";
 import { joined, send, typedList, useLive, why, type Family, type PersonRow } from "./shared";
@@ -10,7 +9,6 @@ import { joined, send, typedList, useLive, why, type Family, type PersonRow } fr
 const GROUP_LABELS: Record<string, string> = { child: "Child", adult: "Adult", elder: "Elder" };
 const NEW_RECIPE_LABELS: Record<string, string> = { open: "Open to new recipes", set_menu: "Better with familiar dishes" };
 const COOK_WORDS = ["makes_well", "wont_make", "time_limit", "note"] as const;
-const FALLBACK_LABELS: Record<string, string> = { none: "None", ...APP_NAMES };
 /** A person's own words, kept as they said them. The name is asked only for a new person: it is how a person is found. */
 const PERSON_WORDS: FormProps["fields"] = [
   { type: "text", name: "relationship", label: "Relationship", placeholder: "wife, son, father" },
@@ -34,34 +32,20 @@ const COOK_FIELDS: FormProps["fields"] = [
   { type: "select", name: "new_recipes", label: "New recipes", options: [...COOK_NEW_RECIPES], optionLabels: NEW_RECIPE_LABELS },
   { type: "longtext", name: "note", label: "Note" },
 ];
-const APPS_FIELDS: FormProps["fields"] = [
-  { type: "select", name: "main", label: "Main app", required: true, options: [...SHOP_APPS], optionLabels: APP_NAMES },
-  { type: "select", name: "fallback", label: "When something isn't there", options: ["none", ...SHOP_APPS], optionLabels: FALLBACK_LABELS },
-  // The tick list shows its options as they are, so the apps are listed by name and turned back into ids on save (APP_BY_NAME).
-  { type: "multi", name: "connected", label: "Signed in", options: SHOP_APPS.map((a) => APP_NAMES[a]) },
-];
-const APP_BY_NAME: Record<string, GroceryApp> = Object.fromEntries(SHOP_APPS.map((a) => [APP_NAMES[a], a]));
 /** The fields of a form as the routes take them: an emptied field is sent as null, which clears it. */
 const cleared = (v: Record<string, unknown>, names: readonly string[]) => Object.fromEntries(names.map((n) => [n, v[n] ?? null]));
-const appNames = (apps: readonly GroceryApp[]) => apps.map((a) => APP_NAMES[a] ?? a).join(", ");
-const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
-/** An item delivered outside the apps, as the kit's data route gives it. */
-type SubscriptionRow = { id: string; name: string; subscription: string | null };
-
-/** The family's profile: who eats at home, the cooking days and the cook, the shopping apps and what comes on a
- *  subscription, the everyday items and the house rules. Every part is edited where it is shown, through the same routes
- *  (and the same checks) as the agent. */
+/** The family, and only the family: who eats at home, the cooking days and the cook, the extra meals and the house rules.
+ *  Every part is edited where it is shown, through the same routes (and the same checks) as the agent. The shopping apps,
+ *  subscriptions and ordering are on the Settings page. */
 export function FamilyPage() {
-  const family = useLive<Family>("family", ["people", "house", "_settings"]);
-  const items = useTable<SubscriptionRow>("items", { sort: "name", limit: 500 });
+  const family = useLive<Family>("family", ["people", "house"]);
   const agent = agentName(useApp().display);
   const toast = useToast();
   const [editing, setEditing] = useState<string | null>(null);
   const [removing, setRemoving] = useState<PersonRow | null>(null);
   if (family.error && !family.data) return <Page title={label("title.family", "Family")}><ErrorCard title="Couldn't load the family" message={family.error} onRetry={() => void family.refetch()} /></Page>;
   if (!family.data) return <Page title={label("title.family", "Family")}><Skeleton variant="card" lines={6} /></Page>;
-  const { people, house, shopping } = family.data;
-  const subscriptions = items.rows.filter((i) => i.subscription);
+  const { people, house } = family.data;
 
   const close = () => setEditing(null);
   /** Save through one of the family routes, then show what the app now holds. A refusal is thrown to the form that asked. */
@@ -79,23 +63,6 @@ export function FamilyPage() {
     try { await send("family/people", { name: p.name, remove: true }); close(); void family.refetch(); toast.show({ message: `${p.name} is no longer in the family`, tone: "success" }); }
     catch (e) { toast.show({ message: `Couldn't save: ${why(e)}`, tone: "danger" }); }
   };
-  const setOrderWithoutAsking = async (on: boolean) => {
-    try {
-      await send("_app/settings", { order_without_asking: on }, "PATCH"); void family.refetch();
-      toast.show({ message: on ? `${agent} now orders without asking` : "Nothing is ordered until you reply or tap Order", tone: "success" });
-    } catch (e) { toast.show({ message: `Couldn't change it: ${why(e)}`, tone: "danger" }); }
-  };
-  /** The subscriptions as edited: each one listed is on; one taken off the list is an item like any other again. */
-  const saveSubscriptions = async (rows: Record<string, unknown>[]) => {
-    const kept = rows.map((r) => ({ item: String(r.item ?? "").trim(), source: String(r.source ?? "").trim() })).filter((r) => r.item || r.source);
-    const missing = kept.find((r) => !r.item || !r.source);
-    if (missing) throw new Error(missing.item ? `Say who delivers ${missing.item}.` : "Say which item comes from each one.");
-    try {
-      for (const s of subscriptions) if (!kept.some((k) => same(k.item, s.name))) await send("items/subscription", { item: s.name, active: false });
-      for (const k of kept) if (!subscriptions.some((s) => same(s.name, k.item) && s.subscription === k.source)) await send("items/subscription", { item: k.item, source: k.source, active: true });
-      close();
-    } finally { void items.refetch(); }
-  };
   const slotNames = [...SLOTS, ...house.extra_slots.map((s) => s.name)];
   const cook = house.cook_name
     ? [house.cook_name, house.cook_days.length ? cookingDaysText(house.cook_days) : null, cookVisitsText(house.cook_visits)].filter(Boolean).join(", ")
@@ -108,7 +75,7 @@ export function FamilyPage() {
   const opened = editing?.startsWith("person:") ? people.find((p) => `person:${p.id}` === editing) : undefined;
 
   return (
-    <Page title={label("title.family", "Family")} subtitle={`What ${agent} plans your meals and fills your carts from`}>
+    <Page title={label("title.family", "Family")} subtitle={`Who eats at home, the cook and the house rules: what ${agent} plans your meals from`}>
       {profileWaiting(house) ? (
         <Callout tone="info">{`Your profile from the old Meal Planner was kept. ${agent} turns it into this page on the next weekly plan; tell ${agent} to do it now.`}</Callout>
       ) : null}
@@ -176,38 +143,6 @@ export function FamilyPage() {
             onSave={(rows) => save("family/slots", { order_in: rows.filter((r) => r.day || r.slot).map((r) => ({ day: r.day, slot: r.slot, note: r.note || null })) })} />
         ))}
       </Section>
-
-      <Section title="Shopping">
-        <Detail fields={[
-          { label: "Main app", value: APP_NAMES[shopping.main] ?? shopping.main },
-          { label: "When something isn't there", value: shopping.fallback ? APP_NAMES[shopping.fallback] : "None" },
-          { label: "Signed in", value: shopping.connected.length ? appNames(shopping.connected) : "None yet" },
-          { label: "Subscriptions (left out)", value: subscriptions.length ? subscriptions.map((s) => `${s.name} from ${s.subscription}`).join(", ") : "None" },
-        ]} />
-        <Field type="checkbox" name="order_without_asking" label="Order without asking" value={shopping.order_without_asking} onChange={(v) => void setOrderWithoutAsking(v === true)} />
-        <p className="pl-quiet">{shopping.order_without_asking ? `${agent} orders what is in your carts without asking first.` : "Off: nothing is ordered until you reply or tap Order."}</p>
-        <Row>{edit("apps", "Shopping apps")}{edit("subscriptions", "Subscriptions", items.loading)}</Row>
-        {panel("apps", "Shopping apps", (
-          <Form fields={APPS_FIELDS} onCancel={close}
-            initial={{ main: shopping.main, fallback: shopping.fallback ?? "none", connected: shopping.connected.map((a) => APP_NAMES[a] ?? a) }}
-            onSubmit={(v) => save("family/shopping-apps", { main: v.main, fallback: v.fallback && v.fallback !== "none" ? v.fallback : null,
-              connected: ((v.connected as string[] | null) ?? []).map((n) => APP_BY_NAME[n] ?? n) })} />
-        ))}
-        {panel("subscriptions", "Subscriptions", (
-          <Stack gap="sm">
-            <p className="pl-quiet">Items delivered outside the apps, like milk from a milkman. They are never put in a cart or asked about.</p>
-            <RowsEditor addLabel="Add a subscription" onCancel={close}
-              columns={[
-                { name: "item", label: "Item", type: "text", placeholder: "Milk" },
-                { name: "source", label: "Who delivers it", type: "text", placeholder: "Country Delight, the milkman" },
-              ]}
-              initial={subscriptions.map((s) => ({ item: s.name, source: s.subscription ?? "" }))}
-              onSave={saveSubscriptions} />
-          </Stack>
-        ))}
-      </Section>
-
-      <EverydayItems />
 
       <Section title="House rules" actions={<>{edit("rules")}{edit("notes", "Notes")}</>}>
         {panel("rules", "House rules", (

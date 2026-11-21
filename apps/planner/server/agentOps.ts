@@ -66,7 +66,7 @@ export const FIELDS: Record<string, { fields: string[]; need?: string[] }> = {
   set_regular: { fields: ["item", "amount", "unit", "every", "times_per_week", "weekdays", "for_whom", "active", "paused_until", "remove"], need: ["item"] },
   import_order_history: { fields: ["app", "orders"], need: ["app", "orders"] },
   record_bought_outside: { fields: ["item", "date"], need: ["item"] },
-  set_item: { fields: ["item", "group", "follows_plan", "dont_ask", "snooze_days", "unit"], need: ["item"] },
+  set_item: { fields: ["item", "group", "usual_amount", "unit", "every_days", "follows_plan", "dont_ask", "snooze_days"], need: ["item"] },
   set_subscription: { fields: ["item", "source", "active"], need: ["item", "active"] },
   answer_running_low: { fields: ["answers"], need: ["answers"] },
   get_reminder: { fields: ["which", "date"], need: ["which"] },

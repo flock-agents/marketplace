@@ -70,7 +70,7 @@ describe("introText", () => {
     expect(introText(TIMES, ["milk", "curd"])).toBe([
       "Your week is planned. How it works:",
       "• Every Sunday morning I plan the week. Change any meal by telling me, or in the app (Week).",
-      "• Every day at 3 I check tonight's dinner and at 7 tomorrow's meals; each time I put your milk and curd in the cart and mention anything that may be running low. Reply and I order it together. Nothing is ordered until you reply.",
+      "• Every day at 3 I check tonight's dinner and at 7 tomorrow's meals; each time I put what is due in the cart, like your milk and curd, and mention anything that may be running low. Reply and I order it together. Nothing is ordered until you reply.",
       "• Saw a recipe on Instagram or YouTube? Share it here and say \"save this\"; I'll keep it and can plan it in.",
       "• Times can be changed, and you can tell me to order without asking."].join("\n"));
   });
@@ -78,13 +78,14 @@ describe("introText", () => {
     const text = introText({ plan: "18:00", afternoon: "15:30", evening: "19:30" }, ["eggs", "bread", "curd"]);
     expect(text).toContain("Every Sunday evening");
     expect(text).toContain("at 3:30 I check tonight's dinner and at 7:30 tomorrow's meals;");
-    expect(text).toContain("put your eggs and bread in the cart");
-    expect(introText(TIMES, ["milk"])).toContain("put your milk in the cart");
+    expect(text).toContain("put what is due in the cart, like your eggs and bread, and mention");
+    expect(introText(TIMES, ["milk"])).toContain("put what is due in the cart, like your milk, and mention");
   });
-  it("with no everyday items known names none: the cart fills with them once they order", () => {
+  it("with nothing bought every day known yet it names none", () => {
     const text = introText(TIMES, []);
     expect(text).not.toMatch(/milk|curd/);
-    expect(text).toContain("each time I mention anything that may be running low, and once you order, your cart fills with your everyday items.");
+    expect(text).toContain("each time I put what is due in the cart and mention anything that may be running low. Reply and I order it together.");
+    expect(text).not.toContain("everyday items");
   });
 });
 

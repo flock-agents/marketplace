@@ -1,18 +1,18 @@
 // Items: one row per thing the family buys, and what happened to it (item_events). Every purchase goes in through
 // recordPurchase, from an order history on any app, an order placed through the app, or one bought outside, and is never
 // recorded twice. The item's cached estimate (usual amount, lasts about, run-out) is re-derived from its events by
-// recomputeItem with estimate.ts. Her answers to "still in stock?" snooze an item and teach its pattern. The Pantry and the
+// recomputeItem with estimate.ts; where the purchases show no cycle yet, the cycle the family stated (set_item) stands in.
+// Purchases count for the whole house, whoever's account they came from. Her answers to "still in stock?" snooze an item and teach its pattern. The Pantry and the
 // item page read it all, and never name the app an item is bought on.
 import type { Hono } from "hono";
 import { and, eq, inArray } from "drizzle-orm";
 import { dish_items, dishes, house, item_events, items, order_lines, orders, plan_meals } from "./db/schema";
 import { appOf, ESTIMATE, HISTORY_DAYS, ITEM_GROUPS, SHOP_APPS, TAG_TEXT, type GroceryApp } from "./db/constants";
 import { addDays, todayStr } from "./dates";
-import { getHouse, houseView, isObject, name, refuse, words, writeRoutes, type Db, type Emit } from "./family";
+import { getHouse, houseView, isObject, name, readUntil, refuse, words, writeRoutes, type Db, type Emit } from "./family";
 import { dateOf, flag } from "./meals";
 import { normItem, parsePack, positive, productFor, productId, rememberProduct, toBase, type ProductInput } from "./products";
-import { suggestRegulars, type PastOrder } from "./regulars";
-import { pantryStatus, pattern, runOut, tagEvents, type Ev, type ItemState } from "./estimate";
+import { cycleText, pantryStatus, pattern, quantityText, runOut, tagEvents, type DailyState, type Ev, type ItemState } from "./estimate";
 import { cartOf, emitAll, lineApp, lineFor, setLine, type Change } from "./cart";
 
 export type ItemRow = typeof items.$inferSelect;
@@ -57,7 +57,13 @@ export function recomputeItem(db: Db, itemId: string, _today: string): ItemRow {
     const tag = t?.tag ?? null, cycle = t?.cycle_days ?? null;
     if (e.tag !== tag || e.cycle_days !== cycle) db.update(item_events).set({ tag, cycle_days: cycle }).where(eq(item_events.id, e.id)).run();
   }
-  const p = pattern(tagged);
+  const learned = pattern(tagged);
+  // Until the purchases show a cycle of their own, what the family stated stands in ("milk every day, 1 litre"): its days,
+  // with its amount (so a smaller pack than stated lasts less long); after that, the purchases' own amount and cycle.
+  const lasts = learned.lasts_days ?? it.stated_days ?? null;
+  const usual = (learned.lasts_days == null ? it.stated_amount : null) ?? learned.usual_amount ?? it.stated_amount ?? null;
+  const p = { ...learned, usual_amount: usual, lasts_days: lasts, anchor_amount: learned.anchor_amount ?? (learned.last_bought ? usual : null),
+    confident: learned.confident || lasts != null };
   const plan = it.follows_plan && p.last_bought ? planUse(db, it, p.last_bought) : undefined;
   return db.update(items).set({ usual_amount: p.usual_amount, lasts_days: p.lasts_days, product: p.product, app: p.app, last_bought: p.last_bought,
     anchor_amount: p.anchor_amount, run_out: runOut(p, it.wait_factor ?? 1, plan), confident: p.confident ? 1 : 0 })
@@ -115,6 +121,12 @@ function cycleCounts(db: Db): Map<string, number> {
 const stateOf = (i: ItemRow, cycles: number): ItemState => ({ id: i.id, name: i.name, group: i.group, subscription: i.subscription, dont_ask: !!i.dont_ask,
   snoozed_until: i.snoozed_until, wait_factor: i.wait_factor ?? 1, run_out: i.run_out, confident: !!i.confident, last_bought: i.last_bought, cycles });
 
+/** Is the item's cycle the one the family stated (the purchases show none of their own yet)? */
+export const cycleStated = (i: ItemRow): boolean => i.stated_days != null && i.lasts_days === i.stated_days;
+/** An item as the reminder reads it to put a daily one on the cart (estimate.ts dailyDue). */
+export const dailyState = (i: ItemRow): DailyState => ({ group: i.group, lasts_days: i.lasts_days, run_out: i.run_out, last_bought: i.last_bought,
+  subscription: i.subscription, dont_ask: !!i.dont_ask, snoozed_until: i.snoozed_until, stated: i.stated_days != null });
+
 /** Every item as the estimate reads it. The run-out is the cached one (recomputeItem keeps it current). */
 export function itemStates(db: Db, _today: string): ItemState[] {
   const cycles = cycleCounts(db);
@@ -124,13 +136,7 @@ export function itemStates(db: Db, _today: string): ItemState[] {
 // ── How amounts read ──
 
 const trim = (n: number, places: number) => String(Math.round(n * 10 ** places) / 10 ** places);
-/** "10 kg", "500 g", "1.5 l", "12 pc"; null when there is no amount or unit. */
-export function quantityText(amount: number | null, unit: string | null): string | null {
-  if (amount == null || !unit) return null;
-  if (unit === "g") return amount >= 1000 ? `${trim(amount / 1000, 2)} kg` : `${trim(amount, 0)} g`;
-  if (unit === "ml") return amount >= 1000 ? `${trim(amount / 1000, 2)} l` : `${trim(amount, 0)} ml`;
-  return `${trim(amount, 1)} ${unit}`;
-}
+export { quantityText };
 /** "0.4 kg a day": a day's use, at one decimal in the large unit from 100 g (100 ml) a day. */
 function usesText(amount: number | null, days: number | null, unit: string | null): string | null {
   if (amount == null || !days || !unit) return null;
@@ -148,13 +154,14 @@ function lowOnCart(db: Db): Set<string> {
 }
 
 export type PantryStatus = ReturnType<typeof pantryStatus>;
-export type PantryRow = { id: string; name: string; quantity: string | null; status: PantryStatus };
+/** `cycle`: what is bought and how often, in plain words ("500 ml every day", "30 pc about once a week"); null with no cycle yet. */
+export type PantryRow = { id: string; name: string; quantity: string | null; cycle: string | null; status: PantryStatus };
 
-/** The Pantry: every item but the subscribed ones, by name, with the amount usually bought and its status. */
+/** The Pantry: every item but the subscribed ones, by name, with its cycle (else the amount usually bought) and its status. */
 export function pantryView(db: Db, today: string): { counts: { all: number; in_stock: number; low: number; snoozed: number }; rows: PantryRow[] } {
   const cycles = cycleCounts(db), onCart = lowOnCart(db);
   const rows = db.select().from(items).all().filter((i) => !i.subscription)
-    .map((i) => ({ id: i.id, name: i.name, quantity: quantityText(i.usual_amount, i.unit), status: pantryStatus(stateOf(i, cycles.get(i.id) ?? 0), today, onCart.has(i.id)) }))
+    .map((i) => ({ id: i.id, name: i.name, quantity: quantityText(i.usual_amount, i.unit), cycle: cycleText(i, cycleStated(i)), status: pantryStatus(stateOf(i, cycles.get(i.id) ?? 0), today, onCart.has(i.id)) }))
     .sort((a, b) => a.name.localeCompare(b.name));
   const n = (s: PantryStatus) => rows.filter((r) => r.status === s).length;
   return { counts: { all: rows.length, in_stock: n("In stock"), low: n("Low"), snoozed: n("Snoozed") }, rows };
@@ -173,7 +180,7 @@ export function itemView(db: Db, id: string, today: string) {
   return {
     item: { id: i.id, name: i.name, group: i.group, status: pantryStatus(state, today, lowOnCart(db).has(id)), run_out: i.run_out, snoozed_until: i.snoozed_until,
       product: i.product, usual: quantityText(i.usual_amount, i.unit), price: priced?.price ?? null, lasts_days: i.lasts_days,
-      uses: usesText(i.usual_amount, i.lasts_days, i.unit), follows_plan: !!i.follows_plan },
+      uses: usesText(i.usual_amount, i.lasts_days, i.unit), follows_plan: !!i.follows_plan, cycle: cycleText(i, cycleStated(i)), cycle_stated: cycleStated(i) },
     events: evs.map((e) => ({
       what: e.kind === "answer" ? (e.days != null ? `Fine for ${trim(e.days, 1)} more days` : "Still have it")
         : [e.product ?? i.name, quantityText(e.amount, i.unit) ?? e.note, e.app === "outside" ? "bought outside the apps" : null].filter(Boolean).join(", "),
@@ -257,6 +264,9 @@ export function mountItemRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: { now
   // import_order_history { app, orders: [{ date, order_ref?, items: [...] }] }: each item of each order (3 months back, and not
   // after today) becomes a purchase, never twice; an item with its product_id is remembered as that app's product. The agent
   // sends the oldest orders first, so history_synced (the newest order read, never past today) only moves over what was read.
+  // More than one person may order for the house, each on their own account of the same app: every purchase counts towards
+  // the one estimate of its item, and history_synced is kept per app and per reader (whoever called: a person's agent), so one
+  // person's reading never tells another's agent that its own orders were read.
   write("/api/order-history", (b, by) => {
     const app = appOf(b.app) ?? refuse(`app must be one of: ${SHOP_APPS.join(", ")}`);
     if (!Array.isArray(b.orders)) refuse(HISTORY_SHAPE);
@@ -291,20 +301,18 @@ export function mountItemRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: { now
       if (kept.length) {
         const synced = houseView(getHouse(tx)).history_synced;
         const newest = kept[kept.length - 1].date;
-        if (!synced[app] || synced[app] < newest) {
-          const h = bumpHouse(tx, { history_synced: JSON.stringify({ ...synced, [app]: newest }) }, by);
+        if (!synced[app]?.[by] || synced[app][by] < newest) {
+          const h = bumpHouse(tx, { history_synced: JSON.stringify({ ...synced, [app]: { ...synced[app], [by]: newest } }) }, by);
           changed.set(h.id, ["house", h.id, "update", by]);
         }
       }
       return rows;
     });
     for (const c of changed.values()) emit(...c);
-    const daily = new Set(out.filter((r) => r.group === "daily").map((r) => r.item));
-    const past: PastOrder[] = kept.map((o) => ({ date: o.date, items: o.lines.filter((l) => daily.has(normItem(l.item))).map((l) => ({ item: l.item, qty: l.count, pack: l.pack })) }));
     const probably = out.filter((r) => r.confident && r.run_out && r.run_out <= day && r.group && r.group !== "daily" && !r.subscription && !r.dont_ask && r.last_bought)
       .map((r) => ({ item: r.name, days_ago: daysBetween(r.last_bought!, day) })).sort((x, y) => y.days_ago - x.days_ago);
     return { body: { recorded, duplicates, skipped_old: read.length - kept.length - future, skipped_future: future, needs_group: out.filter((r) => !r.group).map((r) => r.name),
-      suggestions: suggestRegulars(past), probably_out: probably } };
+      probably_out: probably, read_until: readUntil(houseView(getHouse(db)).history_synced, app, by) } };
   });
 
   // record_bought_outside { item, date? }: bought outside the apps ("from the kirana"): a purchase of the usual amount.
@@ -324,10 +332,13 @@ export function mountItemRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: { now
     return { body: { ...res.r, item: res.row } };
   });
 
-  // set_item { item, group?, follows_plan?, dont_ask?, snooze_days?, unit? }: one item, made when it is not there.
+  // set_item { item, group?, usual_amount?, every_days?, follows_plan?, dont_ask?, snooze_days?, unit? }: one item, made when it is
+  // not there. usual_amount (in unit) and every_days are the cycle the family stated ("milk every day, 1 litre"): kept on the
+  // item, and what its estimate goes by until its purchases show a cycle of their own.
   write("/api/items", (b, by) => {
     const given = name(b.item, "item");
     const set: Partial<typeof items.$inferInsert> = {};
+    if (b.every_days !== undefined) set.stated_days = positive(b.every_days, "every_days (how many days one purchase lasts: 1 for every day, 7 for once a week)");
     if (b.group !== undefined) set.group = b.group === null ? null : groupOf(b.group);
     if (b.follows_plan !== undefined) set.follows_plan = flag(b.follows_plan, "follows_plan") ? 1 : 0;
     if (b.dont_ask !== undefined) set.dont_ask = flag(b.dont_ask, "dont_ask") ? 1 : 0;
@@ -335,6 +346,15 @@ export function mountItemRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: { now
       : typeof b.snooze_days === "number" && Number.isInteger(b.snooze_days) && b.snooze_days > 0 ? addDays(today(), b.snooze_days) : refuse("snooze_days must be a whole number of days above 0, or null");
     if (b.unit !== undefined) set.unit = (typeof b.unit === "string" && toBase(1, b.unit)?.unit) || refuse("unit must be g, kg, ml, l or pc");
     const was = itemFor(db, given), had = itemIds();
+    if (b.usual_amount !== undefined) {
+      if (b.usual_amount === null) set.stated_amount = null;
+      else {
+        const base = toBase(positive(b.usual_amount, "usual_amount")!, typeof b.unit === "string" ? b.unit : was?.unit)
+          ?? refuse("usual_amount needs its unit: g, kg, ml, l or pc");
+        set.stated_amount = base.amount;
+        set.unit = base.unit;
+      }
+    }
     // Its purchases' amounts are in its unit: an item bought by weight cannot be counted in pieces from now on.
     if (was?.unit && set.unit && set.unit !== was.unit && db.select().from(item_events).where(eq(item_events.item_id, was.id)).all().some((e) => e.amount != null))
       refuse(`${was.name} is already bought in ${was.unit}: its unit stays`);

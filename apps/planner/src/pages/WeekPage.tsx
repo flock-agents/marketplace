@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Button, Callout, Card, Confirm, ErrorCard, Field, Icon, Page, Row, Schedule, Skeleton, Stack, Value, safeHref, scheduleAddKey, useApp, useChat, useTable, useToast } from "../flock/ui";
 import { addDays, dayLabel, mondayOf, todayStr, weekDates, weekdayLong, weekdayOf } from "../../server/dates";
 import { DishPanel } from "./DishPanel";
-import { agentName, dishNote, linkWeek, plannedText, textList, weekTitle, weekToOpen } from "./format";
+import { agentName, dishNote, linkWeek, mealLines, plannedText, textList, weekTitle, weekToOpen } from "./format";
 import { send, useLive, why, type DishView, type Family, type MealView, type RecipeRow, type WeekView } from "./shared";
 
 /** What is open in the schedule: a meal by its id (with one of its dishes, or a new one, being edited), or an add spot (a day,
@@ -14,7 +14,8 @@ const dayWords = (date: string) => `${weekdayLong(date)} ${Number(date.slice(8))
 /** "Sunday 29 Nov". */
 const longLabel = (date: string) => dayLabel(date).replace(weekdayOf(date), weekdayLong(date));
 
-/** The week as a schedule of its cooking days: each meal with its dishes, an ordered-in meal muted. A meal opens in place,
+/** The week as a schedule of its cooking days: each meal with its dishes named once and, under them, only what differs from
+ *  everyone eating it (a person's portions, a dish for one person); an ordered-in meal muted. A meal opens in place,
  *  its dishes editable there. A day that is not a cooking day says so, with a way to plan it this once. */
 export function WeekPage() {
   const thisWeek = mondayOf(todayStr());
@@ -25,7 +26,7 @@ export function WeekPage() {
   const [chosen, setChosen] = useState(false);
   const week = useLive<WeekView>(`weeks/${weekStart}`, ["plan_meals", "dishes", "dish_items"]);
   const other = useLive<WeekView>(`weeks/${planned}`, ["plan_meals"]);
-  const family = useLive<Family>("family", ["house"]);
+  const family = useLive<Family>("family", ["house", "people"]);
   const recipes = useTable<RecipeRow>("saved_recipes", { limit: 500 });
   const agent = agentName(useApp().display);
   const chat = useChat();
@@ -57,6 +58,7 @@ export function WeekPage() {
   };
 
   const house = family.data?.house;
+  const everyone = (family.data?.people ?? []).map((p) => p.name);
   const today = todayStr();
   const meals = (week.data?.days ?? []).flatMap((d) => d.meals).filter((m) => m.ordered_in || m.dishes.length);
   // Breakfast, Lunch, the family's own meals, then Dinner; any other slot a meal was planned in after them.
@@ -136,8 +138,8 @@ export function WeekPage() {
         : (
           <>
             <Schedule rows={meals} today={today} from={weekStart} days={7} date={(m) => m.date} slot={slotOf} slots={slots}
-              title={(m) => (m.ordered_in ? "Ordered in" : m.dishes.map((d) => d.name).join(" · "))}
-              secondary={(m) => [m.note, ...m.dishes.map((d) => { const n = dishNote(d); return n ? `${d.name} ${n}` : null; })].filter(Boolean).join(" · ") || undefined}
+              title={(m) => mealLines(m, everyone).title}
+              secondary={(m) => mealLines(m, everyone).secondary}
               tone={(m) => (m.ordered_in ? "muted" : "neutral")}
               selectedId={opened?.id}
               onSelect={(m) => setOpen(opened?.id === m.id ? null : { meal: m.id })}

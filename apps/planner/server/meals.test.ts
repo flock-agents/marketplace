@@ -1,8 +1,10 @@
 // The plan: a week of meals, each made of dishes with their ingredients, as the agent writes it (plan_week, set_meal, set_dish).
 import { describe, it, expect } from "bun:test";
+import { readFileSync } from "fs";
+import { join } from "path";
 import { Hono } from "hono";
 import { boot } from "./testkit";
-import { mountMealRoutes } from "./meals";
+import { mergeDuplicateDishes, mergeSameDishes, mountMealRoutes } from "./meals";
 
 const MON = "2026-11-23";
 const lunch = { date: MON, slot: "Lunch", dishes: [
@@ -188,7 +190,7 @@ describe("plan_week", () => {
     expect(close.message).toBe("Next week is planned.\nMonday: Poha · ordering in\n\nThe whole week: [Week page](/a/xyz/?flock_scope=app#/week?week=2026-11-23)\nTell me anything to change.");
     expect(close.intro).toStartWith("Your week is planned. How it works:");
     expect(close.intro).toContain("Every Sunday morning");
-    expect(close.intro).toContain("put your milk and curd in the cart");
+    expect(close.intro).toContain("put what is due in the cart, like your milk and curd, and mention");
     expect(rows("house")[0].intro_sent_at).toBeTruthy();
     const again = await op("plan_week", { week_start: MON, mode: "final" });
     expect(again.message).toBe(close.message); expect(again.intro).toBeUndefined();
@@ -276,14 +278,14 @@ describe("a planned week is ready to send", () => {
     expect(again.instructions).toBe("Forward message to the family verbatim, word for word, as one message. It already holds the only link they need (the Week page, signed in to this app): send no other link, no link of your own, and do not reword it. After sending it, end your turn.");
   });
 
-  it("the intro names the everyday items bought on the apps: a subscription's is left out, and with none it says the cart fills once they order", async () => {
+  it("the intro names what is bought every day on the apps: a subscription's is left out, and with none it names nothing", async () => {
     const { op } = await boot({ now: SUNDAY });
     await op("set_regular", { item: "milk", amount: 1, unit: "L", every: "day" });
     await op("set_subscription", { item: "milk", source: "Country Delight", active: true });
     await op("plan_week", { week_start: MON, mode: "final", keep_rest: true, meals: [day(MON, "Lunch", "Rajma")] });
     const r = await op("plan_week", { week_start: MON, mode: "final" });
     expect(r.intro).not.toContain("milk");
-    expect(r.intro).toContain("once you order, your cart fills with your everyday items");
+    expect(r.intro).toContain("each time I put what is due in the cart and mention anything that may be running low.");
   });
 
   it("the week says when it was planned", async () => {
@@ -293,6 +295,64 @@ describe("a planned week is ready to send", () => {
     await op("plan_week", { week_start: MON, mode: "final", keep_rest: true, meals: [day(MON, "Lunch", "Rajma")] });
     const { planned_at } = (await owner("GET", `/api/weeks/${MON}`)).body;
     expect(planned_at >= before).toBe(true);
+  });
+});
+
+// The owner, 21 Nov: "The items are getting added twice, once for each person. That's not how a meal is planned."
+describe("a meal is planned once, not once per person", () => {
+  const family = async (k: Awaited<ReturnType<typeof boot>>) => { for (const name of ["Shiva", "Agastya", "Meera"]) await k.op("set_person", { name, group: name === "Shiva" ? "adult" : "child" }); };
+  const paratha = (who: string, extra: object = {}) => ({ name: "Aloo paratha", for: [who], ingredients: [{ item: "potato", amount: 150, unit: "g" }, { item: "atta", amount: 100, unit: "g" }], ...extra });
+  const milk = { name: "Milk", for: ["Meera"], ingredients: [{ item: "milk", amount: 200, unit: "ml" }] };
+
+  it("the same dish sent once per person is kept as one dish for those people, its notes and ingredients put together", async () => {
+    const k = await boot();
+    await family(k);
+    const { week } = await k.op("plan_week", { week_start: MON, mode: "final", meals: [{ date: "2026-11-24", slot: "Breakfast",
+      dishes: [paratha("Agastya"), paratha("Shiva", { name: "aloo  Paratha", portion_note: "two, with extra butter", ingredients: [{ item: "Potato", amount: 300, unit: "g" }, { item: "butter", amount: 20, unit: "g" }] }), milk] }] });
+    const m = mealOf(week, "2026-11-24", "Breakfast");
+    expect(m.dishes.map((d: any) => [d.name, d.for_people, d.portion_note])).toEqual([["Aloo paratha", ["Agastya", "Shiva"], "two, with extra butter for Shiva"], ["Milk", ["Meera"], null]]);
+    expect(m.dishes[0].ingredients.map((i: any) => [i.item, i.amount, i.unit])).toEqual([["potato", 450, "g"], ["atta", 100, "g"], ["butter", 20, "g"]]);
+    expect(k.rows("dishes")).toHaveLength(2);
+    // set_meal does the same; when the people of the two are everyone at home, the dish is for everyone.
+    const { meal } = await k.op("set_meal", { date: "2026-11-24", slot: "Dinner", dishes: [paratha("Agastya"), paratha("Shiva"), paratha("Meera")] });
+    expect(meal.dishes.map((d: any) => [d.name, d.for_people])).toEqual([["Aloo paratha", null]]);
+    expect(meal.dishes[0].ingredients.map((i: any) => i.amount)).toEqual([450, 300]);
+  });
+
+  it("mergeSameDishes: one for everyone makes the dish for everyone; a note that names its person is kept as it is; other dishes stay", () => {
+    const part = (name: string, for_people: string[] | null, portion_note: string | null = null) => ({ name, for_people, portion_note, recipe_id: null, video_url: null, items: [] });
+    const out = mergeSameDishes([part("Idli", null), part("Milk", ["Meera"]), part("idli", ["Shiva"], "two eggs for Shiva"), part("Idli", ["Agastya"], "no chutney")], ["Shiva", "Agastya", "Meera"]);
+    expect(out.map((d) => [d.name, d.for_people, d.portion_note, d.from])).toEqual([["Idli", null, "two eggs for Shiva, no chutney for Agastya", [0, 2, 3]], ["Milk", ["Meera"], null, [1]]]);
+  });
+
+  it("a week planned before, with a dish kept once per person, is made one dish at boot; a week without is left as it is", async () => {
+    const k = await boot();
+    await family(k);
+    await k.op("plan_week", { week_start: MON, mode: "final", meals: [
+      { date: MON, slot: "Breakfast", dishes: [{ name: "Idli", ingredients: [{ item: "idli batter", amount: 500, unit: "g" }] }, milk] },
+      { date: "2026-11-24", slot: "Breakfast", dishes: [paratha("Agastya"), milk] }] });
+    const tuesday = k.rows("plan_meals").find((m) => m.date === "2026-11-24").id;
+    // As the old app kept it: the paratha a second time, for Shiva, after the milk.
+    k.kit.sqlite.run(`INSERT INTO dishes (id, created_at, updated_at, updated_by, meal_id, position, name, for_people, portion_note) VALUES ('d-old', '2026-11-21T10:00:00Z', '', 'agent:x', ?, 2, 'Aloo paratha', '["Shiva"]', 'two')`, [tuesday]);
+    k.kit.sqlite.run(`INSERT INTO dish_items (id, created_at, updated_at, updated_by, dish_id, item, amount, unit) VALUES ('i-old', '', '', 'agent:x', 'd-old', 'potato', 150, 'g')`);
+    const before = (await k.owner("GET", `/api/weeks/${MON}`)).body;
+    expect(dishNames(mealOf(before, "2026-11-24", "Breakfast"))).toEqual(["Aloo paratha", "Milk", "Aloo paratha"]);
+    expect(mergeDuplicateDishes(k.kit.db)).toBe(1);
+    const after = (await k.owner("GET", `/api/weeks/${MON}`)).body;
+    const m = mealOf(after, "2026-11-24", "Breakfast");
+    expect(m.dishes.map((d: any) => [d.name, d.for_people, d.portion_note])).toEqual([["Aloo paratha", ["Agastya", "Shiva"], "two for Shiva"], ["Milk", ["Meera"], null]]);
+    expect(m.dishes[0].ingredients.map((i: any) => [i.item, i.amount])).toEqual([["potato", 300], ["atta", 100]]);
+    expect(mealOf(after, MON, "Breakfast")).toEqual(mealOf(before, MON, "Breakfast"));
+    expect(k.rows("dishes").map((d) => d.id)).not.toContain("d-old");
+    expect(k.rows("dish_items").map((i) => i.id)).not.toContain("i-old");
+    expect(mergeDuplicateDishes(k.kit.db)).toBe(0);
+  });
+
+  it("the guide and plan_week say a slot has one dish for everyone, a person's variation is a note, a second dish only for a different meal", () => {
+    const manifest = JSON.parse(readFileSync(join(import.meta.dir, "..", "flock.app.json"), "utf8"));
+    const plan = manifest.agentInterface.operations.find((o: any) => o.name === "plan_week").description as string;
+    const guide = readFileSync(join(import.meta.dir, "agent-guide.md"), "utf8");
+    for (const text of [plan, guide]) for (const said of ["planned once, not once per person", "one dish for everyone who eats it", "portion_note", "two eggs for Shiva", "truly eats something else"]) expect(text).toContain(said);
   });
 });
 
@@ -309,7 +369,7 @@ describe("the context", () => {
       { date: "2026-11-17", slot: "Lunch", dishes: ["Rice", "Aloo gobi", "Sambar", "Boiled eggs"] }]);
   });
 
-  it("carries the family, the house, the everyday items, the recipe book and the grocery app", async () => {
+  it("carries the family, the house, what the house buys often, the recipe book and the grocery app", async () => {
     const { op, kit } = await boot();
     await op("set_person", { name: "Agastya", group: "child", allergies: "peanuts" });
     await op("set_person", { name: "Nani", group: "elder" });
@@ -318,12 +378,18 @@ describe("the context", () => {
     const now = new Date().toISOString();
     kit.sqlite.query(`INSERT INTO saved_recipes (id, created_at, updated_at, name, tags, for_people, notes) VALUES ('r1', ?, ?, 'Sambar', '["south indian"]', '["Agastya"]', 'long notes')`).run(now, now);
     kit.sqlite.query(`INSERT INTO saved_recipes (id, created_at, updated_at, name) VALUES ('r2', ?, ?, 'Aloo gobi')`).run(now, now);
-    kit.sqlite.query(`INSERT INTO regulars (id, created_at, updated_at, item, amount, unit, every, active) VALUES ('g1', ?, ?, 'milk', 1, 'l', 'day', 1), ('g2', ?, ?, 'bread', 1, 'pc', 'day', 0)`).run(now, now, now, now);
+    // Milk every day and eggs once a week are bought often; atta once a month is not, and a subscription's item never is.
+    await op("set_item", { item: "milk", group: "daily", usual_amount: 1, unit: "l", every_days: 1 });
+    await op("set_item", { item: "eggs", group: "few_days", usual_amount: 30, unit: "pc", every_days: 7 });
+    await op("set_item", { item: "atta", group: "monthly", usual_amount: 10, unit: "kg", every_days: 30 });
+    await op("set_item", { item: "curd", group: "daily", every_days: 1 });
+    await op("set_subscription", { item: "curd", source: "the dairy", active: true });
     const { context } = await op("plan_week", { week_start: MON, mode: "draft" });
     expect(context.people.map((p: any) => p.name)).toEqual(["Agastya"]);
     expect(context.people[0].allergies).toBe("peanuts");
     expect(context.house.rules).toEqual([{ kind: "veg", days: ["Tue"] }]);
-    expect(context.regulars.map((r: any) => r.item)).toEqual(["milk"]);
+    expect(context.bought_often).toEqual([{ item: "eggs", cycle: "30 pc once a week" }, { item: "milk", cycle: "1 l every day" }]);
+    expect(context.regulars).toBeUndefined();
     expect(context.recipes).toEqual([{ id: "r2", name: "Aloo gobi", tags: [], for_people: [] }, { id: "r1", name: "Sambar", tags: ["south indian"], for_people: ["Agastya"] }]);
     expect(context.grocery_app).toBe("zepto");
     expect(context.last_week).toEqual([]);

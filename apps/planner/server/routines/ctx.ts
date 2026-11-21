@@ -8,6 +8,8 @@ import type { Emit } from "../family";
 export type RoutineCtx = {
   kit: { db: BunSQLiteDatabase<any>; sqlite: Database; emitChange: Emit };
   routine?: { trigger?: unknown };
+  /** The agent this routine wakes (the SDK's RoutineContext.agentId). */
+  agentId?: string;
   /** The SDK's Result: `ok: false` with a reason when the agent was not woken. A wake held for later is `ok`. */
   wakeAgent(message: string, data?: unknown): Promise<{ ok: boolean; reason?: string }>;
 };

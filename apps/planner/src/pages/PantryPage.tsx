@@ -6,8 +6,8 @@ import { useLive, type PantryView } from "./shared";
 
 const TABLES = ["items", "item_events", "orders", "order_lines"];
 
-/** The Pantry: every item the family buys (not the subscribed ones), with the amount usually bought and whether it is in stock,
- *  low or snoozed. The only control is the status filter. An item opens its page in place. */
+/** The Pantry: every item the family buys (not the subscribed ones), with its cycle ("500 ml every day", "30 pc about once a
+ *  week"; the amount usually bought until a cycle is known) and whether it is in stock, low or snoozed. The only control is the status filter. An item opens its page in place. */
 export function PantryPage() {
   const [tab, setTab] = useState("all");
   const [openId, setOpenId] = useState<string | null>(null);
@@ -22,7 +22,7 @@ export function PantryPage() {
           <>
             <Tabs tabs={pantryTabs(pantry.data.counts)} value={tab} onChange={setTab} />
             <RowList rows={pantry.data.rows.filter((r) => !want || r.status === want)} rowKey={(r) => r.id}
-              title={(r) => r.name} meta={(r) => r.quantity} trailing={(r) => <Value kind="select" value={r.status} tones={TAG_TONES} />}
+              title={(r) => r.name} meta={(r) => r.cycle ?? r.quantity} trailing={(r) => <Value kind="select" value={r.status} tones={TAG_TONES} />}
               onRowClick={(r) => setOpenId(r.id)}
               empty={pantry.data.counts.all
                 ? <p className="pl-quiet">Nothing here right now.</p>

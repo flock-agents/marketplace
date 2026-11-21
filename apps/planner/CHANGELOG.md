@@ -5,20 +5,31 @@
 3.0.0 was a build that was never released; this is the release. It replaces the 2.0 Meal Planner. Needs Flock 0.24.0 (its
 betas included) and library 1.10.11.
 
-- **Family.** The Family page holds who eats at home, the house rules, the cook, the days you cook (Monday to Saturday
-  until you change them), the shopping apps you use (a main one, one to try when something is not on it, and the ones you
-  are signed in to: choosing an app does not mark it signed in, and nothing is read from or copied to an app until it is) and the items delivered to you by someone else, such as milk from a milkman, which are left out of
-  running low. Tell the agent or edit it yourself.
+- **Family.** The Family page is only about the family: who eats at home, the cook, the days you cook (Monday to Saturday
+  until you change them), the extra meals and the house rules. Tell the agent or edit it yourself.
+- **Settings.** A Settings page holds how the house shops: the shopping apps you use (a main one, one to try when something
+  is not on it, and the ones you are signed in to: choosing an app does not mark it signed in, and nothing is read from or
+  copied to an app until it is), the items delivered to you by someone else, such as milk from a milkman, which are left
+  out of every cart, and "Order without asking".
 - **The week, planned and kept.** The week is planned on Sunday at 11 am, on your cooking days only, and each day is kept
   as soon as it is planned: you do not need to reply. The Sunday message is Monday's meals plus a link to the Week page.
   Nothing is bought by the plan.
 - **Two reminders a day.** At 3 pm (tonight's dinner) and 7 pm (tomorrow's meals), each one complete in one message: the
-  meals, the everyday items put on your cart, and anything that may be running low. Nothing is ordered until you reply or
+  meals, what you buy every day put on your cart as it comes due, and anything that may be running low. Nothing is ordered until you reply or
   tap Order. A setting, "Order without asking" (off), lets the agent order the items it is sure about on its own.
 - **Running low, estimated per item.** The app reads the last 3 months of your orders on every connected shopping app and
   works out how long each item lasts for you, from the amounts and the gaps between buys. Early or one-off buys are not
   counted and your own answers are. When something may be running low, you are asked together in one message, at most 5
   items at a time. An item you have never bought with a size is estimated from the gaps alone.
+- **One cycle per item, for the whole house.** There is no separate list of everyday items: each item has its cycle, how
+  much you buy and how often ("500 ml every day", "30 pc about once a week"), shown on the Pantry page. It is worked out
+  from the orders of everyone in the house, each on their own account of a shopping app, counted together and never twice.
+  What you buy every day or two goes on the cart by itself when it is due; the rest is asked about. With no orders to
+  learn from, tell the agent ("milk every day, 1 litre") and that is kept until your orders show their own. Everyday
+  items an installed copy already had become item cycles.
+- **A meal is planned once.** A meal has one dish for everyone who eats it; one person's variation is a note on that dish
+  ("two eggs for Shiva"), and a second dish is only for someone who eats something else. The same dish sent once per
+  person is kept as one, and the Week page names each dish once.
 - **One cart per app.** What you need is gathered into one cart for each shopping app. Each cart has its own Order button,
   and the app's own cart is kept in step with it as you change it (Amazon's cart is built when you order). The agent
   orders it only on your yes. An order that was not paid within 24 hours goes back to the cart, and you are told once.
@@ -30,13 +41,13 @@ betas included) and library 1.10.11.
 - **House rules read right.** "No eggs on Tuesday" shows as "Tue · No eggs". A rule can hold every day ("mostly
   vegetarian"), and anything else about how the house eats is kept as notes.
 - **The Week page** says when the week was really planned, and the Sunday link opens the week it planned.
-- **Pantry page.** Each item with its status (in stock, low or snoozed), when it was last bought, how long it usually
+- **Pantry page.** Each item with its cycle and status (in stock, low or snoozed), when it was last bought, how long it usually
   lasts, and what the app learned from each order and each answer of yours.
 - **Saved recipes with videos.** Share a reel, a short or any link and say "save this": it is kept on the Recipes page, now
   a gallery, and can be planned into the week.
 - **For the agent.** There are 25 operations. Kept from 2.0: `guide` and `record_order` (now about a cart). New: `set_person`,
   `set_house_rules`, `set_cook`, `set_slots`, `set_cooking_days`, `set_shopping_apps`, `plan_week`, `set_meal`, `set_dish`,
-  `set_regular`, `import_order_history`, `record_bought_outside`, `set_item`, `set_subscription`, `answer_running_low`,
+  `set_regular` (now another way to state an item's cycle, as `set_item` does), `import_order_history`, `record_bought_outside`, `set_item`, `set_subscription`, `answer_running_low`,
   `get_reminder`, `get_cart`, `set_cart_line`, `order_cart`, `sync_cart`, `cancel_order`, `remember_product` and `save_recipe`. Gone:
   `get_draft`, `edit_draft`, `move_window`, `add_quote`, `record_yes`, `skip_order`, `ack_message`, `list_jobs`,
   `answer_job`, `pantry`, `pantry_answer`, `have_item`, `search`, `save_meal`, `remove_meal`, `set_meal_recipes`,

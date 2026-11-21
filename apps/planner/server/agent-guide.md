@@ -6,10 +6,10 @@ clock. Keep none of it in memory or chat: read the app, change it through an ope
 - **An operation:** `POST /api/apps/<this app>/ops/<name>` with its input as the JSON body (the api tool).
 - **Reading:** `plan_week { week_start, mode: "draft" }` without meals answers with all a plan starts from. The family:
   `GET /a/<this app>/api/family`. Rows: `GET /a/<this app>/api/_data/<table>` (`?col=value` filters): people, house,
-  plan_meals, dishes, dish_items, regulars, items, item_events, orders, order_lines, products, saved_recipes. Never write one.
+  plan_meals, dishes, dish_items, items, item_events, orders, order_lines, products, saved_recipes. Never write one.
 - **A refusal** says in plain words what to fix (`error`): fix the call and send it again. 404: no such row. 409: the
   row is in a state the call does not fit. Use only the operations and fields listed at the end of this guide. Dates YYYY-MM-DD, times HH:MM (24-hour), weekdays Mon to Sun; a week is its Monday.
-- **Words to the family are plain:** "everyday items", "your cart", "running low", never an operation's or a field's
+- **Words to the family are plain:** "what you buy every day", "your cart", "running low", never an operation's or a field's
   name. Say "you"; the cook is "the cook" or their name. The app writes some messages itself (a plan's `message` and
   `intro`, a reminder's `text`, an order's `message`): send those word for word.
 
@@ -36,7 +36,7 @@ plan or reminder runs until one person is saved. Do not ask what is at home: the
 | A meal beyond Breakfast, Lunch, Dinner: a child's school tiffin is `set_slots { extra_slots: [{ name: "Agastya's tiffin", days: ["Mon", "Tue", "Wed", "Thu", "Fri"], for: ["Agastya"] }] }`; meals ordered in every week ("Sunday dinner") are `order_in` | `set_slots`: each list you send is the whole list |
 | The days they cook at home | `set_cooking_days { days }`: `["mon", ...]`, at least one; Mon to Sat until set |
 | The shopping apps: the main one, the one to try when something is not on it, the ones they have signed in to | `set_shopping_apps { main, fallback, connected }`: `zepto`, `swiggy-instamart`, `zomato-blinkit` (Blinkit), `bigbasket` or `amazon`; `fallback` is `null` for none. `connected` is only the apps signed in to in Flock, `[]` when none yet (main and fallback are not added to it): send it again after each sign-in. Not `set_house_rules` |
-| What is bought again and again ("milk, 1 litre a day") | `set_regular`, once they confirmed it |
+| How often something is bought, only when they say it or there are no orders to learn it from ("milk every day, 1 litre") | `set_item { item, group, usual_amount, unit, every_days }` (see Items and their cycles) |
 | An item delivered outside the apps (a milkman, Country Delight) | `set_subscription { item, source, active: true }`: it is left out of every cart and every question |
 
 ## Reading order history
@@ -51,14 +51,13 @@ one). Each order has its `date` and `order_ref`; each item its `item` (the famil
 - **Amazon:** cannot. Skip it.
 
 Take the pack from the product name ("Aashirvaad Atta 5 kg") when the app gives none. Send every item's `group` too:
-`daily` (milk, curd), `few_days` (vegetables, eggs, bread), `monthly` (atta, oil, cleaning). The answer suggests
-everyday items and makes none: ask about each ("You buy milk most days: 1 litre a day?"), `set_regular` what they confirm.
+`daily` (milk, curd), `few_days` (vegetables, eggs, bread), `monthly` (atta, oil, cleaning). The app works out each item's cycle from the purchases by itself: ask the family to confirm nothing, and add nothing as an everyday item.
+**More than one person may order,** each on their own account of an app: each person's agent gives that person's orders, all count for the one house, and `since` and the answer's `read_until` are how far you yourself have read.
 
 ## Meals, dishes, ingredients
 
-A meal is a date and a slot; it holds dishes in the order they are served. A dish is for everyone unless `for` names
-people, and may carry a `portion_note` ("4 for me, 1 for wife"), a saved recipe (`recipe_id`) or a video (`video_url`).
-A meal that is ordered in or eaten out is `ordered_in: true` and has no dishes. Meals go on the cooking days only.
+A meal is a date and a slot; it holds dishes in the order they are served. **A meal is planned once, not once per person:** a slot has one dish for everyone who eats it, and one person's variation is that dish's `portion_note` ("two eggs for Shiva", "no eggs on Tuesday", "4 for me, 1 for wife"), never the dish a second time.
+A second dish with `for` is only for someone who truly eats something else (a baby's milk, an elder's softer dish). A dish may carry a saved recipe (`recipe_id`) or a video (`video_url`). A meal ordered in or eaten out is `ordered_in: true` and has no dishes. Meals go on the cooking days only.
 
 - **The weekly run:** the wake carries `week_start` and, when it fits, the context to plan from. Plan each cooking day
   one day a call (16 KB a call at most): `plan_week { week_start, mode: "final", keep_rest: true, meals }` with that
@@ -80,12 +79,10 @@ A meal that is ordered in or eaten out is `ordered_in: true` and has no dishes. 
 - Use `g` or `kg`, `ml` or `l`, `pc` (things counted: 2 onions, 6 eggs); the app adds these up and works out the packs. When none fits, use the pack's own word (`pack`, `bunch`, `loaf`): the app cannot count packs for it and asks you.
   One name and one unit for an item everywhere ("curd", always in `g`): a second makes a second line.
 
-## Everyday items
+## Items and their cycles
 
-`set_regular { item, amount, unit, every }`: `amount` is what is needed each time. `every: "day"`; `every: "week"` with
-`times_per_week` (a whole number, 1 to 7; 1 when left out); `every: "weekdays"` with `weekdays` (needed, at least one).
-A holiday: `paused_until` (left out up to and including that date). `active: false` stops it; `remove: true` deletes it.
-One person's own (`for_whom`) is a separate item. `remember_product { item, app, product_id, name_on_app, pack_amount,
+Every item has one cycle for the house: how much is bought and how often ("500 ml every day", "30 pc about once a week"), worked out from everyone's purchases and shown on the Pantry page. A `daily` item goes on the cart by itself when it is due; the others are asked about.
+Only when the family says it, or there are no orders: `set_item { item, group, usual_amount, unit, every_days }` ("milk every day, 1 litre": `usual_amount: 1, unit: "l", every_days: 1`; once a week is 7); `set_regular` is its older name. A holiday: `snooze_days`. Never by itself or asked: `dont_ask: true`. `remember_product { item, app, product_id, name_on_app, pack_amount,
 pack_unit }` keeps the product an item is bought as: `item` is the family's word ("milk"), never the name on the app.
 
 ## A reminder
@@ -145,6 +142,6 @@ on a dish, with the dish's ingredients in this family's amounts.
 ## A profile carried over from the old Meal Planner
 
 On an upgraded install the weekly run first hands you a `profile`: what the family once said, as text. Structure it
-with `set_person` / `set_house_rules` / `set_cook` / `set_slots` / `set_regular`, in their words, and ask about anything
+with `set_person` / `set_house_rules` / `set_cook` / `set_slots` / `set_item`, in their words, and ask about anything
 unclear. Then clear it with `set_house_rules { structured: true }`, only after at least one person is saved. No week is
 planned until it is cleared. Once it is, tell the family the app was rebuilt and plan the coming week as the weekly run does.

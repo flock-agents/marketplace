@@ -6,7 +6,7 @@
 import { eq } from "drizzle-orm";
 import { house } from "../db/schema";
 import { addDays, todayStr } from "../dates";
-import { getHouse, houseView, isObject, shoppingApps } from "../family";
+import { getHouse, houseView, isObject, readUntil, shoppingApps } from "../family";
 import { familyKnown } from "../gate";
 import { buildReminder, type Which } from "../reminder";
 import { wake, type RoutineCtx } from "./ctx";
@@ -38,7 +38,7 @@ export function recordTime(ctx: RoutineCtx, column: "afternoon_time" | "evening_
 /** What the agent does when a reminder wakes it, as the app's operations in the order they are called. The reminder's own
  *  lines are copied to the apps' carts before it is sent, so the delivery gap it quotes is the app's cart as it now is. */
 export const REMINDER_PROMPT = (which: Which): string => [
-  `The ${which === "afternoon" ? "15:00 reminder about tonight's dinner" : "19:00 reminder about tomorrow's meals"} is due. The data below has \`which\`, \`date\` (the reminder's day), \`connected\` (the shopping apps the family signed in to) and \`since\` (how far each app's order history was read).`,
+  `The ${which === "afternoon" ? "15:00 reminder about tonight's dinner" : "19:00 reminder about tomorrow's meals"} is due. The data below has \`which\`, \`date\` (the reminder's day), \`connected\` (the shopping apps the family signed in to) and \`since\` (how far you read each app's order history).`,
   "1. Order history first, so nothing bought already is asked about: for each app in `connected` whose connector can read past orders, read the orders placed since `since[app]` (the last 3 months for an app not in `since`) and give them to import_order_history oldest first, delivered or paid orders only, about 8 orders a call, one app a call. Skip an app whose connector cannot read orders. Nothing new: go on.",
   `2. get_reminder { which: "${which}", date } with the \`date\` from the data. If it answers \`empty\`: true, stop and send nothing.`,
   "3. For each cart in `carts` with sync: true, put the same lines in that app's cart with its connector, then sync_cart what the app's cart now holds (its delivery gap included).",
@@ -58,7 +58,13 @@ export async function reminder(ctx: RoutineCtx, which: Which, now: Date = new Da
   const { connected } = shoppingApps(db);
   const r = buildReminder(db, which, now, { dryRun: true, date });
   if (r.empty && !(which === "evening" && connected.length)) return;
-  await wake(ctx, REMINDER_PROMPT(which), { which, date, connected, since: houseView(getHouse(db)).history_synced });
+  // How far the agent woken read each app: its own reading only, so orders another person's agent gave from that person's
+  // account never make this one skip its own. A run that does not say which agent it wakes gets the earliest reading of each
+  // app: orders read twice are recorded once, orders skipped are lost.
+  const synced = houseView(getHouse(db)).history_synced;
+  const mine = (app: string) => (ctx.agentId ? readUntil(synced, app, `agent:${ctx.agentId}`, true) : Object.values(synced[app]).sort()[0] ?? null);
+  const since = Object.fromEntries(Object.keys(synced).map((app) => [app, mine(app)]).filter((e): e is [string, string] => !!e[1]));
+  await wake(ctx, REMINDER_PROMPT(which), { which, date, connected, since });
 }
 
 export const afternoonReminder = (ctx: RoutineCtx, now?: Date) => reminder(ctx, "afternoon", now);

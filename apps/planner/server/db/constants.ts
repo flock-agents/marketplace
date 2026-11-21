@@ -12,7 +12,7 @@ export const RULE_LABELS: Record<(typeof RULE_KINDS)[number], string> = { veg: "
   fasting: "Fasting", no_onion_garlic: "No onion or garlic", other: "Other" };
 /** Whether the cook tries new recipes (reels, the internet) or is better with a set menu of familiar dishes. */
 export const COOK_NEW_RECIPES = ["open", "set_menu"] as const;
-/** How often an everyday item is needed: every day, a number of times a week, or on named weekdays. */
+/** How often an item is bought, as set_regular (the older way to state an item's cycle) takes it. */
 export const EVERY = ["day", "week", "weekdays"] as const;
 /** A cart's life: one `open` cart per app is the one being filled; `ordering` while the agent places it; then `placed` (waiting
  *  for the person's payment), `paid` or `not_paid`; `cancelled` before it is placed. */
@@ -70,6 +70,8 @@ export const ESTIMATE = {
   cycles: 5, oneOffLow: 0.5, oneOffHigh: 2,
   snoozeDays: { daily: 1, few_days: 1, monthly: 5 }, askLeadDays: { daily: 0, few_days: 1, monthly: 3 },
   maxAsks: 5, unansweredLimit: 2, missesBeforeWait: 2, waitStep: 1.25, waitMax: 2,
+  // A daily item goes on the cart by itself when due; one whose cycle was learned from purchases stops once it was last bought this long ago.
+  dailyStaleDays: 14,
 } as const;
 
 /** The app's owner-facing settings: declared here with their checks, passed to mountKit, and repeated without the checks in

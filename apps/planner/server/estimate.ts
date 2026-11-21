@@ -1,6 +1,7 @@
 // The running-out estimate (spec 3.5), as pure functions: no DB. An item's events (purchases, answers, asks) are tagged in
 // date order, the tagged events make the item's pattern, and the pattern gives the run-out date, whether to ask, and the
-// status the Pantry shows.
+// status the Pantry shows. An item's cycle ("500 ml every day", "30 pc about once a week") is that pattern in words; where the
+// purchases show none yet, it is the cycle the family stated.
 
 import { ESTIMATE } from "./db/constants";
 import { addDays } from "./dates";
@@ -175,4 +176,54 @@ export function pickAsks(items: ItemState[], on: string): ItemState[] {
 export function pantryStatus(i: ItemState, today: string, onCart: boolean): "In stock" | "Low" | "Snoozed" {
   if (i.snoozed_until && i.snoozed_until >= today) return "Snoozed";
   return isDue(i, today) || onCart ? "Low" : "In stock";
+}
+
+// ── An item's cycle ──
+
+const round = (n: number, places: number) => String(Math.round(n * 10 ** places) / 10 ** places);
+/** "10 kg", "500 g", "1.5 l", "12 pc"; null when there is no amount or unit. */
+export function quantityText(amount: number | null, unit: string | null): string | null {
+  if (amount == null || !unit) return null;
+  if (unit === "g") return amount >= 1000 ? `${round(amount / 1000, 2)} kg` : `${round(amount, 0)} g`;
+  if (unit === "ml") return amount >= 1000 ? `${round(amount / 1000, 2)} l` : `${round(amount, 0)} ml`;
+  return `${round(amount, 1)} ${unit}`;
+}
+
+/** How often, from a cycle in days: "every day", "every 2 days", "twice a week", "once a week", "every 2 weeks", "once a month". */
+function oftenText(days: number): string {
+  const d = Math.round(days);
+  if (days < 1.5) return "every day";
+  if (days >= 3.2 && days <= 3.8) return "twice a week";
+  if (days < 5.5) return `every ${d} days`;
+  if (days <= 8.5) return "once a week";
+  if (days < 12.5) return `every ${d} days`;
+  if (days <= 17) return "every 2 weeks";
+  if (days <= 24) return "every 3 weeks";
+  if (days <= 38) return "once a month";
+  return `every ${Math.round(days / 30)} months`;
+}
+
+/** An item's cycle in plain words: "500 ml every day", "30 pc about once a week"; "About once a week" when no amount is known;
+ *  null with no cycle. A cycle worked out from purchases is "about" (every day aside); one the family stated is as they said it. */
+export function cycleText(i: { usual_amount: number | null; unit: string | null; lasts_days: number | null }, stated = false): string | null {
+  if (i.lasts_days == null || !(i.lasts_days > 0)) return null;
+  const often = stated || i.lasts_days < 1.5 ? oftenText(i.lasts_days) : `about ${oftenText(i.lasts_days)}`;
+  const much = quantityText(i.usual_amount, i.unit);
+  return much ? `${much} ${often}` : often.charAt(0).toUpperCase() + often.slice(1);
+}
+
+/** What the reminder reads of a daily item to decide whether it goes on the cart by itself. */
+export type DailyState = { group: string | null; lasts_days: number | null; run_out: string | null; last_bought: string | null;
+  subscription: string | null; dont_ask: boolean; snoozed_until: string | null; stated: boolean };
+
+/** Does a daily item (milk, curd) go on the cart by itself for `day`, on a reminder run on `today`? It needs a cycle; it is
+ *  due when it runs out by `day`, or was never bought (a cycle the family stated). Not a subscribed, left-alone or snoozed
+ *  item, and not one whose cycle was only learned from purchases that stopped ESTIMATE.dailyStaleDays ago (the family no
+ *  longer buys it on the apps: it comes back with the next purchase). */
+export function dailyDue(i: DailyState, day: string, today: string): boolean {
+  if (i.group !== "daily" || i.lasts_days == null || i.subscription || i.dont_ask) return false;
+  if (i.snoozed_until && i.snoozed_until >= day) return false;
+  if (!i.last_bought) return i.stated;
+  if (!i.stated && daysBetween(i.last_bought, today) > ESTIMATE.dailyStaleDays) return false;
+  return !i.run_out || i.run_out <= day;
 }

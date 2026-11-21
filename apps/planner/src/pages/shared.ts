@@ -6,9 +6,8 @@ import type { HouseView, PersonRow, shoppingApps } from "../../server/family";
 import type { DishView, MealView, WeekView } from "../../server/meals";
 import type { CartView, LineRow } from "../../server/cart";
 import type { itemView, PantryRow, pantryView } from "../../server/items";
-import type { RegularRow } from "../../server/regulars";
 
-export type { CartView, DishView, HouseView, LineRow, MealView, PantryRow, PersonRow, RegularRow, WeekView };
+export type { CartView, DishView, HouseView, LineRow, MealView, PantryRow, PersonRow, WeekView };
 /** The shopping apps: the main one, the fallback, the connected ones, and Order without asking. */
 export type Shopping = ReturnType<typeof shoppingApps>;
 /** The Pantry (GET /api/pantry) and one item's page (GET /api/items/:id). */

@@ -41,7 +41,8 @@ export const house = sqliteTable("house", {
   plan_time: text("plan_time"),                                // "HH:MM": the same for the weekly plan
   cooking_days: text("cooking_days"),                          // JSON weekday[]; Mon to Sat until set
   connected_apps: text("connected_apps"),                      // JSON GroceryApp[]: the shopping apps the family has signed in to (the main app only once it is)
-  history_synced: text("history_synced"),                      // JSON { [app]: "YYYY-MM-DD" }: how far each app's order history was read
+  history_synced: text("history_synced"),                      // JSON { [app]: { [reader]: "YYYY-MM-DD" } }: how far each reader (a person's agent) read each app's order history; a plain date is from before readers were kept apart
+  regulars_moved_at: text("regulars_moved_at"),                // when the old everyday items (the retired regulars table's rows) became item cycles
   asks_confirmed: integer("asks_confirmed").default(0),
   asks_still_have: integer("asks_still_have").default(0),
   sync_session_id: text("sync_session_id"),                    // the session the last sync-cart ask started: the next one reuses it
@@ -77,7 +78,7 @@ export const dish_items = sqliteTable("dish_items", {
   unit: text("unit"),
 });
 
-/** Everyday items no dish asks for (milk, bread, fruit). */
+/** Retired: everyday items are now each item's own cycle (items.stated_amount, items.stated_days). Rows here are moved to items once (regulars.ts) and never read again; write none. */
 export const regulars = sqliteTable("regulars", {
   ...kitColumns(),
   item: text("item").notNull(),
@@ -91,7 +92,7 @@ export const regulars = sqliteTable("regulars", {
   paused_until: text("paused_until"),                          // a date: not needed up to and including it
 });
 
-/** What the family buys, one row per item: its group, what a purchase usually is and when it runs out (the cached estimate). */
+/** What the family buys, one row per item: its group, the cycle the family stated (if any), what a purchase usually is and when it runs out (the cached estimate, from the whole house's purchases, else from the stated cycle). */
 export const items = sqliteTable("items", {
   ...kitColumns(),
   item: text("item").notNull().unique(),                       // normalised
@@ -106,6 +107,8 @@ export const items = sqliteTable("items", {
   last_ask_key: text("last_ask_key"),
   misses_in_row: integer("misses_in_row").default(0),
   wait_factor: real("wait_factor").default(1),
+  stated_amount: real("stated_amount"),                        // what the family said they buy each time, in `unit` ("1 litre": 1000)
+  stated_days: real("stated_days"),                            // and how often, in days ("every day": 1; "once a week": 7); used until the purchases show a cycle
   usual_amount: real("usual_amount"),                          // the cached derivation
   lasts_days: real("lasts_days"),
   product: text("product"),

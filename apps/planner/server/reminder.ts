@@ -1,19 +1,19 @@
 // The reminder: what the 15:00 (tonight's dinner) and 19:00 (tomorrow's meals) messages say and do. Each one is whole on its
-// own: the meals it covers and the ingredients to check, tomorrow's everyday items put on the cart, and the items that may be
+// own: the meals it covers and the ingredients to check, the daily items due tomorrow (milk, curd: by each item's own cycle)
+// put on the cart, and the other items that may be
 // running low asked together (at most ESTIMATE.maxAsks, each counted once per reminder; after two unanswered asks an item is
 // snoozed instead). With "Order without asking" on, the confident ones go on the cart and every open cart is ordered. A dry
 // run (the routine's "anything to say?") answers the same and changes nothing. Lines put on while an app's cart is being
 // ordered go to a new open cart of that app (cart.ts setLine).
 import type { Hono } from "hono";
-import { and, eq, inArray } from "drizzle-orm";
-import { item_events, items, order_lines, orders, regulars } from "./db/schema";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
+import { item_events, items, order_lines, orders } from "./db/schema";
 import { APP_NAMES, CART_SYNC, ESTIMATE, type GroceryApp } from "./db/constants";
 import { addDays, mondayOf, todayStr } from "./dates";
 import { refuse, shoppingApps, writeRoutes, type Db, type Emit } from "./family";
 import { dateOf, weekView, type MealView } from "./meals";
-import { regularNeeds } from "./regulars";
-import { itemFor, itemStates, recomputeItem } from "./items";
-import { isDue, pickAsks } from "./estimate";
+import { dailyState, itemFor, itemStates, recomputeItem } from "./items";
+import { dailyDue, isDue, pickAsks } from "./estimate";
 import { cartOf, cartsView, emitAll, lineApp, lineFor, orderAnswer, orderCart, setLine, type Change, type LineRow } from "./cart";
 import { normItem, packsFor, productFor } from "./products";
 import { reminderText, stockBlock } from "./messages";
@@ -66,11 +66,12 @@ function build(tx: Db, which: Which, now: Date, by: string, changes: Change[], s
     if (row.run_out !== it.run_out) changes.push(["items", it.id, "update", by]);
   }
   const onCart = onCarts(tx, ["open", "ordering"]);
-  const active = tx.select().from(regulars).where(eq(regulars.active, 1)).all();
+  // The daily items with a cycle (from the house's purchases, else as the family stated it): what goes on the cart by itself.
+  const daily = tx.select().from(items).where(eq(items.group, "daily")).orderBy(asc(items.created_at), sql`rowid`).all().filter((i) => i.lasts_days != null);
 
-  // The meals, and their ingredients to check: not an everyday item, not monthly, not subscribed, not on a cart already.
+  // The meals, and their ingredients to check: not a daily item with a cycle, not monthly, not subscribed, not on a cart already.
   const meals = coveredMeals(tx, which, date);
-  const everyday = new Set(active.map((r) => normItem(r.item)));
+  const everyday = new Set(daily.map((i) => i.item));
   const ask_ingredients: string[] = [], seen = new Set<string>();
   for (const m of meals) for (const d of m.dishes) for (const i of d.ingredients) {
     const k = normItem(i.item);
@@ -81,22 +82,21 @@ function build(tx: Db, which: Which, now: Date, by: string, changes: Change[], s
     ask_ingredients.push(i.item.trim());
   }
 
-  // Tomorrow's everyday items, unless a line of the item for tomorrow is already on a cart (her own qty there stands).
+  // The daily items due tomorrow by their cycle, at the usual amount, unless a line of the item for tomorrow is already on a
+  // cart (her own qty there stands).
   const added: Reminder["added"] = [];
   const forTomorrow = onCarts(tx, ["open", "ordering", "placed", "paid"], tomorrow);
-  for (const r of active) {
-    if (!regularNeeds(r, [tomorrow]).length || forTomorrow.has(normItem(r.item))) continue;
-    const it = itemFor(tx, r.item);
-    if (it?.subscription) continue;
-    const app = lineApp(tx, it), p = productFor(tx, r.item, app);
-    const packs = (p && r.amount != null ? packsFor(r.amount, r.unit, p.pack_amount, p.pack_unit) : null) ?? 1;
-    const open = cartOf(tx, app, "open"), had = open ? lineFor(tx, open.id, r.item) : null;
-    const row = setLine(tx, { item: r.item, qty: Math.max(packs, had?.qty ?? 0), app, source: "everyday", for_date: tomorrow }, by, opts)!;
-    forTomorrow.add(normItem(r.item));
+  for (const it of daily) {
+    if (!dailyDue(dailyState(it), tomorrow, today) || forTomorrow.has(it.item)) continue;
+    const app = lineApp(tx, it), p = productFor(tx, it.name, app);
+    const packs = (p && it.usual_amount != null ? packsFor(it.usual_amount, it.unit, p.pack_amount, p.pack_unit) : null) ?? 1;
+    const open = cartOf(tx, app, "open"), had = open ? lineFor(tx, open.id, it.name) : null;
+    const row = setLine(tx, { item: it.name, qty: Math.max(packs, had?.qty ?? 0), app, source: "everyday", for_date: tomorrow }, by, opts)!;
+    forTomorrow.add(it.item);
     added.push({ app, item: row.item });
   }
 
-  // Running low: the due items not on a cart, the everyday items just put on included.
+  // Running low: the due items not on a cart, the daily items just put on included.
   const onCartNow = onCarts(tx, ["open", "ordering"]);
   const states = itemStates(tx, today).filter((s) => !onCartNow.has(normItem(s.name)));
   const asks: Reminder["asks"] = [];

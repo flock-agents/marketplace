@@ -32,7 +32,8 @@
     "shopping",
     "pantry",
     "recipes",
-    "family"
+    "family",
+    "settings"
   ],
   "tables": [
     "people",
@@ -59,11 +60,13 @@
     "nav.pantry": "Pantry",
     "nav.recipes": "Recipes",
     "nav.family": "Family",
+    "nav.settings": "Settings",
     "title.week": "This week's meals",
     "title.shopping": "Shopping",
     "title.pantry": "Pantry",
     "title.recipes": "Recipes",
-    "title.family": "Family"
+    "title.family": "Family",
+    "title.settings": "Settings"
   },
   "useCases": {
     "for": [
@@ -131,7 +134,7 @@
     {
       "id": "afternoon-reminder",
       "name": "Afternoon reminder",
-      "description": "Every day at 3 pm, when there is something to say: tonight's dinner, the ingredients to check, tomorrow's everyday items put on the cart and anything that may be running low. Nothing is ordered until you reply.",
+      "description": "Every day at 3 pm, when there is something to say: tonight's dinner, the ingredients to check, what you buy every day put on the cart as it comes due, and anything that may be running low. Nothing is ordered until you reply.",
       "trigger": {
         "type": "schedule",
         "cron": "0 15 * * *"
@@ -142,7 +145,7 @@
     {
       "id": "evening-reminder",
       "name": "Evening reminder",
-      "description": "Every day at 7 pm: reads new orders from your connected shopping apps, then tells you tomorrow's meals, puts tomorrow's everyday items on the cart and asks about anything that may be running low. Nothing is ordered until you reply.",
+      "description": "Every day at 7 pm: reads new orders from your connected shopping apps, then tells you tomorrow's meals, puts what you buy every day on the cart as it comes due and asks about anything that may be running low. Nothing is ordered until you reply.",
       "trigger": {
         "type": "schedule",
         "cron": "0 19 * * *"
@@ -201,7 +204,7 @@
       },
       {
         "name": "plan_week",
-        "description": "Plan a week of meals. { week_start: the week's Monday as YYYY-MM-DD, mode: draft | final, keep_rest?: true, repeats_ok?: true, meals?: [{ date, slot, ordered_in?: true, note?, dishes?: [{ name, for?: [names], portion_note?, recipe_id?, video_url?, ingredients: [{ item, amount?, unit? }] }] }] }. Without meals it answers with the context to plan from (people, house, everyday items, last week's dishes, the recipe book), or, when mode is final and the week is a draft, makes that draft final. With meals they become the whole week's plan, in place of what was there; with keep_rest: true only the meals at the dates and slots you send are replaced and the rest of the week stays. A call carries 16 KB at most, so send a week one day a call: each day with mode final and keep_rest: true, then one closing call with mode final and no meals. Send meals with mode draft only when the family asks you to propose a week. A dish is for everyone unless you name who it is for; amount is a number above 0 with its measure in unit, for this family; an ordered-in meal has no dishes. A meal on a day that is not a cooking day is refused (NOT_COOKING_DAY). In a final call every dish needs its ingredients (refused with MISSING_INGREDIENTS, naming the dishes). Only the closing call, mode final without meals (it also works on a week already final), answers message, intro (the first time only) and instructions: forward message verbatim (its link is the only one to send), then intro once, then end your turn; final calls with meals answer none of them. The closing call is refused, naming what to fix, while a dish has no ingredients, an extra slot (a tiffin) has no meal on one of its days, or a dish is on two days (repeats_ok: true only when the family asked for that). Answers { week } or { context }, with message, intro and instructions on the closing call."
+        "description": "Plan a week of meals. { week_start: the week's Monday as YYYY-MM-DD, mode: draft | final, keep_rest?: true, repeats_ok?: true, meals?: [{ date, slot, ordered_in?: true, note?, dishes?: [{ name, for?: [names], portion_note?, recipe_id?, video_url?, ingredients: [{ item, amount?, unit? }] }] }] }. Without meals it answers with the context to plan from (people, house, bought_often: what the house buys often, last week's dishes, the recipe book), or, when mode is final and the week is a draft, makes that draft final. With meals they become the whole week's plan, in place of what was there; with keep_rest: true only the meals at the dates and slots you send are replaced and the rest of the week stays. A call carries 16 KB at most, so send a week one day a call: each day with mode final and keep_rest: true, then one closing call with mode final and no meals. Send meals with mode draft only when the family asks you to propose a week. A meal is planned once, not once per person: a slot has one dish for everyone who eats it, and one person's variation is that dish's portion_note (\"two eggs for Shiva\", \"no eggs on Tuesday\"), never a second dish. Plan a second dish only when someone truly eats something else (a baby's milk, an elder's softer dish), with for naming them; the same dish sent twice in a meal is kept as one. amount is a number above 0 with its measure in unit, for this family; an ordered-in meal has no dishes. A meal on a day that is not a cooking day is refused (NOT_COOKING_DAY). In a final call every dish needs its ingredients (refused with MISSING_INGREDIENTS, naming the dishes). Only the closing call, mode final without meals (it also works on a week already final), answers message, intro (the first time only) and instructions: forward message verbatim (its link is the only one to send), then intro once, then end your turn; final calls with meals answer none of them. The closing call is refused, naming what to fix, while a dish has no ingredients, an extra slot (a tiffin) has no meal on one of its days, or a dish is on two days (repeats_ok: true only when the family asked for that). Answers { week } or { context }, with message, intro and instructions on the closing call."
       },
       {
         "name": "set_meal",
@@ -213,11 +216,11 @@
       },
       {
         "name": "set_regular",
-        "description": "Add or change one everyday item: what the house buys again and again whatever is cooked (milk, curd, bread, eggs). { item, amount, unit, every: day | week | weekdays, times_per_week?, weekdays?: [\"Mon\", ...], for_whom?, active?, paused_until?: YYYY-MM-DD, remove?: true }. amount (a number above 0), unit and every are needed for a new item. amount is what is needed each time: 1 l every day; 1 pack with every: week and times_per_week: 2; 6 pc with every: weekdays and weekdays: [\"Mon\"]. times_per_week is a whole number from 1 to 7 (1 when left out); weekdays is needed, with at least one day, when every is weekdays. Found by item and for_whom; only the fields you send change. paused_until leaves it out of the carts up to and including that date (a holiday); active: false stops it until you send active: true; remove: true deletes it. Set one only after the family confirmed it."
+        "description": "The older way to state an item's cycle, kept so earlier instructions still work; set_item is the one to use. { item, amount, unit, every: day | week | weekdays, times_per_week?, weekdays?: [\"Mon\", ...], for_whom?, active?, paused_until?: YYYY-MM-DD, remove?: true }. The same as set_item { item, usual_amount, unit, every_days }: amount with unit is what is bought each time; every with times_per_week or weekdays is how often (1 l every day; every: week with times_per_week: 2 is twice a week). It is kept on the item as its cycle and shown on the Pantry page; there is no separate list. paused_until snoozes the item up to and including that date; active: false or remove: true takes the stated cycle away; for_whom is not kept (an item has one cycle for the house). Answers { item }."
       },
       {
         "name": "import_order_history",
-        "description": "Give the app the family's past orders on one shopping app, one app a call; read them with that app's connector first (Amazon's cannot be read). { app: zepto | swiggy-instamart | zomato-blinkit | bigbasket | amazon (by id or name), orders: [{ date: YYYY-MM-DD, order_ref?: the app's order id, items: [{ item, group: daily | few_days | monthly (as set_item names them; send it with every item, so none is left to set one by one), product?, product_id?, pack?: \"5 kg\", pack_amount?, pack_unit?, count?, price?, image? }] }] }. item is the family's word for it (atta), product the name on the app; count is how many packs (1 when left out). Send the oldest orders first, at most about 8 orders and 80 items a call, one app a call (a call carries 16 KB at most), and only the last 3 months: older orders are skipped, and so is an order dated after today. Send only delivered or paid orders, never a cancelled or failed one. Each item becomes a purchase; the same order sent again is recorded once, so a call may overlap the last. An item with its product_id is remembered as that app's product. Answers { recorded, duplicates, skipped_old, skipped_future, needs_group: [items to give a group with set_item], suggestions: [everyday items to ask the family about, then set_regular], probably_out: [{ item, days_ago }] }."
+        "description": "Give the app the family's past orders on one shopping app, one app a call; read them with that app's connector first (Amazon's cannot be read). { app: zepto | swiggy-instamart | zomato-blinkit | bigbasket | amazon (by id or name), orders: [{ date: YYYY-MM-DD, order_ref?: the app's order id, items: [{ item, group: daily | few_days | monthly (as set_item names them; send it with every item, so none is left to set one by one), product?, product_id?, pack?: \"5 kg\", pack_amount?, pack_unit?, count?, price?, image? }] }] }. item is the family's word for it (atta), product the name on the app; count is how many packs (1 when left out). Send the oldest orders first, at most about 8 orders and 80 items a call, one app a call (a call carries 16 KB at most), and only the last 3 months: older orders are skipped, and so is an order dated after today. Send only delivered or paid orders, never a cancelled or failed one. Each item becomes a purchase; the same order sent again is recorded once, so a call may overlap the last. An item with its product_id is remembered as that app's product. More than one person may order for the house, each on their own account of the same app: each person's agent gives the orders of that person's account, and all of them count towards one cycle per item for the house. The app works out each item's cycle (how much, how often) from the purchases by itself: ask the family to confirm nothing. Answers { recorded, duplicates, skipped_old, skipped_future, needs_group: [items to give a group with set_item], probably_out: [{ item, days_ago }], read_until: how far you have read this app (YYYY-MM-DD) }."
       },
       {
         "name": "record_bought_outside",
@@ -225,7 +228,7 @@
       },
       {
         "name": "set_item",
-        "description": "Change one item the family buys, made when it is not there. { item, group?: daily | few_days | monthly (how often it is bought: daily every day or two, like milk; few_days within the week, like vegetables, eggs, bread; monthly lasts weeks, like atta, oil, masalas, cleaning and personal care), follows_plan?: true when the week's meals use it up (paneer, rajma), dont_ask?: true to never ask about it, snooze_days?: days not to ask about it (null clears), unit?: g | kg | ml | l | pc }. Only what you send changes. Answers { item }."
+        "description": "Change one item the family buys, made when it is not there. { item, group?: daily | few_days | monthly (how often it is bought: daily every day or two, like milk; few_days within the week, like vegetables, eggs, bread; monthly lasts weeks, like atta, oil, masalas, cleaning and personal care), usual_amount?: what is bought each time, a number in unit, unit?: g | kg | ml | l | pc, every_days?: how many days one purchase lasts (1: every day; 7: once a week), follows_plan?: true when the week's meals use it up (paneer, rajma), dont_ask?: true to never ask about it or put it on the cart by itself, snooze_days?: days to leave it alone, for a holiday (null clears) }. usual_amount and every_days are the item's cycle as the family said it (\"milk every day, 1 litre\": { item: \"milk\", group: \"daily\", usual_amount: 1, unit: \"l\", every_days: 1 }; \"a tray of 30 eggs once a week\": usual_amount: 30, unit: \"pc\", every_days: 7): send them only when the family says so or there is no order history, since the app works the cycle out from the purchases and goes by those once they show one; null clears either. A daily item with a cycle goes on the cart by itself when it is due; the others are asked about. Only what you send changes. Answers { item }."
       },
       {
         "name": "set_subscription",
@@ -237,7 +240,7 @@
       },
       {
         "name": "get_reminder",
-        "description": "The reminder to send now, built from the plan, the carts and what may be running low. { which: afternoon | evening, date?: the date the reminder's wake gave, YYYY-MM-DD (so a call after midnight builds that same reminder) }. afternoon is tonight's dinner, evening is tomorrow's meals; both put tomorrow's everyday items on the cart and ask about at most 5 items that may be running low, each counted once per reminder however often you call it. Answers { which, date, meals, ask_ingredients, added, cart_items, asks: [{ item, days_ago }], delivery_gap, ordered: [{ order_id, app, message }], empty, text, app_text, block, carts: [{ order_id, app, status, lines, sync }] }. empty: send nothing. Send text on WhatsApp word for word, or app_text with block in the app chat. Read the connected apps' new orders into import_order_history before the first call. Copy each cart with sync: true to its app, then sync_cart, then call get_reminder again with the same which and date and send that answer. Check out every cart in ordered (Order without asking is on; a retry lists the same ones): say its message, check out, record_order."
+        "description": "The reminder to send now, built from the plan, the carts and what may be running low. { which: afternoon | evening, date?: the date the reminder's wake gave, YYYY-MM-DD (so a call after midnight builds that same reminder) }. afternoon is tonight's dinner, evening is tomorrow's meals; both put the daily items due tomorrow (by each item's cycle) on the cart and ask about at most 5 items that may be running low, each counted once per reminder however often you call it. Answers { which, date, meals, ask_ingredients, added, cart_items, asks: [{ item, days_ago }], delivery_gap, ordered: [{ order_id, app, message }], empty, text, app_text, block, carts: [{ order_id, app, status, lines, sync }] }. empty: send nothing. Send text on WhatsApp word for word, or app_text with block in the app chat. Read the connected apps' new orders into import_order_history before the first call. Copy each cart with sync: true to its app, then sync_cart, then call get_reminder again with the same which and date and send that answer. Check out every cart in ordered (Order without asking is on; a retry lists the same ones): say its message, check out, record_order."
       },
       {
         "name": "get_cart",
@@ -265,7 +268,7 @@
       },
       {
         "name": "remember_product",
-        "description": "Remember the product an item is bought as on a grocery app, so the next order reuses it without searching. { item, app: zepto | swiggy-instamart | zomato-blinkit | bigbasket, product_id, name_on_app, pack?, pack_amount?, pack_unit?, price?, image? }. item is the family's word for it, exactly as on the order line or the everyday item (milk), never the product's name on the app; pack_amount and pack_unit are the pack's size as a number and its measure (500, ml), which the app counts packs with (a plain pack text like \"500 ml\" is read too). One product per item and app: sending it again takes the place of the one remembered. Answers { product }."
+        "description": "Remember the product an item is bought as on a grocery app, so the next order reuses it without searching. { item, app: zepto | swiggy-instamart | zomato-blinkit | bigbasket, product_id, name_on_app, pack?, pack_amount?, pack_unit?, price?, image? }. item is the family's word for it, exactly as on the order line or the pantry item (milk), never the product's name on the app; pack_amount and pack_unit are the pack's size as a number and its measure (500, ml), which the app counts packs with (a plain pack text like \"500 ml\" is read too). One product per item and app: sending it again takes the place of the one remembered. Answers { product }."
       },
       {
         "name": "save_recipe",

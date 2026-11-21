@@ -1,9 +1,11 @@
 // The plan: a week of meals, each a date and a slot, made of dishes in the order they are served, each dish with what it
-// needs bought. The agent writes a whole week with plan_week (a draft the family can change, then final), and changes one meal
+// needs bought. A meal is planned once, not once per person: a dish is for everyone who eats that meal, one person's variation
+// is a note on it, and the same dish sent twice in a meal (once per person) is kept as one (mergeSameDishes). The agent writes a whole week with plan_week (a draft the family can change, then final), and changes one meal
 // or one dish with set_meal and set_dish. A meal that is ordered in has no dishes, so nothing is bought for it.
 import type { Hono } from "hono";
 import { and, asc, eq, gte, inArray, isNotNull, lte, sql } from "drizzle-orm";
-import { dish_items, dishes, house as house_t, items, people, plan_meals, regulars, saved_recipes } from "./db/schema";
+import { dish_items, dishes, house as house_t, items, people, plan_meals, saved_recipes } from "./db/schema";
+import { cycleText } from "./estimate";
 import { normItem } from "./products";
 import { closest } from "./agentOps";
 import { SLOTS, STAPLE_DISHES, type GroceryApp } from "./db/constants";
@@ -24,7 +26,8 @@ export type MealView = { id: string; date: string; slot: string; ordered_in: boo
  *  written (the first of its meals made, an ISO moment), null with none. */
 export type WeekView = { week_start: string; status: "draft" | "final" | null; planned_at: string | null; days: { date: string; meals: MealView[] }[] };
 /** What the agent reads before it plans a week. */
-export type WeekContext = { week_start: string; people: PersonRow[]; house: HouseView; regulars: (typeof regulars.$inferSelect)[];
+/** `bought_often`: what the house buys within about ten days and how often ("milk: 1 l every day"), so a plan can lean on it. */
+export type WeekContext = { week_start: string; people: PersonRow[]; house: HouseView; bought_often: { item: string; cycle: string }[];
   last_week: { date: string; slot: string; dishes: string[] }[];
   recipes: { id: string; name: string; tags: string[]; for_people: string[] }[]; grocery_app: GroceryApp };
 
@@ -75,12 +78,17 @@ function weekStatus(meals: MealRow[]): WeekView["status"] {
   return !meals.length ? null : meals.some((m) => m.status === "draft") ? "draft" : "final";
 }
 
+/** What counts as bought often for a plan's context: a cycle of ten days or less; at most this many items are listed. */
+const OFTEN_DAYS = 10, OFTEN_MAX = 30;
+
 export function weekContext(db: Db, weekStart: string): WeekContext {
   return {
     week_start: weekStart,
     people: db.select().from(people).where(eq(people.active, 1)).orderBy(asc(people.created_at)).all(),
     house: houseView(getHouse(db)),
-    regulars: db.select().from(regulars).where(eq(regulars.active, 1)).orderBy(asc(regulars.created_at)).all(),
+    bought_often: db.select().from(items).orderBy(asc(items.name)).all()
+      .filter((i) => i.lasts_days != null && i.lasts_days <= OFTEN_DAYS && !i.subscription)
+      .map((i) => ({ item: i.name, cycle: cycleText(i, i.stated_days != null && i.lasts_days === i.stated_days)! })).slice(0, OFTEN_MAX),
     last_week: mealViews(db, db.select().from(plan_meals).where(inWeek(addDays(weekStart, -7))).all())
       .filter((m) => m.dishes.length).map((m) => ({ date: m.date, slot: m.slot, dishes: m.dishes.map((d) => d.name) })),
     recipes: db.select().from(saved_recipes).orderBy(asc(saved_recipes.name)).all()
@@ -134,9 +142,55 @@ function dishOf(db: Db, d: Record<string, unknown>, dishName: string): Dish {
   return { name: dishName, set, ...(d.ingredients !== undefined ? { items: itemsOf(d.ingredients, dishName) } : {}) };
 }
 
+/** A dish as mergeSameDishes reads it, whether it was sent or is a row. */
+export type DishPart = { name: string; for_people: string[] | null; portion_note: string | null; recipe_id: string | null; video_url: string | null; items: Item[] };
+
+const sameName = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+
+/** One meal's dishes with each dish once. The same dish planned more than once (the same name, once per person) becomes one,
+ *  where the first stood: for everyone when any of them was, or when together they name everyone at home (`everyone`), else
+ *  for the people of all of them; each one's note is kept, with whose it was ("two eggs for Shiva"); the ingredients are
+ *  added up. `from` lists the dishes each one was made of, by their place in `parts`: one place for a dish left as it was. */
+export function mergeSameDishes(parts: DishPart[], everyone: string[]): (DishPart & { from: number[] })[] {
+  const out: (DishPart & { from: number[] })[] = [];
+  parts.forEach((p, n) => {
+    const had = out.find((o) => dishKey(o.name) === dishKey(p.name));
+    if (!had) { out.push({ ...p, for_people: p.for_people?.length ? [...p.for_people] : null, items: p.items.map((i) => ({ ...i })), from: [n] }); return; }
+    const noteOf = (d: DishPart) => {
+      const note = d.portion_note?.trim();
+      if (!note || !d.for_people?.length || d.for_people.some((who) => note.toLowerCase().includes(who.trim().toLowerCase()))) return note || null;
+      return `${note} for ${d.for_people.join(" and ")}`;
+    };
+    // The first one's note names its people from the moment a second joins it.
+    if (had.from.length === 1) had.portion_note = noteOf(had);
+    const note = noteOf(p);
+    if (note && !(had.portion_note ?? "").toLowerCase().includes(note.toLowerCase())) had.portion_note = [had.portion_note, note].filter(Boolean).join(", ");
+    had.for_people = had.for_people && p.for_people?.length ? [...had.for_people, ...p.for_people.filter((who) => !had.for_people!.some((x) => sameName(x, who)))] : null;
+    had.recipe_id ??= p.recipe_id; had.video_url ??= p.video_url;
+    for (const i of p.items) {
+      const same = had.items.find((x) => normItem(x.item) === normItem(i.item) && (x.unit ?? "").trim().toLowerCase() === (i.unit ?? "").trim().toLowerCase());
+      if (!same) had.items.push({ ...i });
+      else if (same.amount != null && i.amount != null) same.amount = Math.round((same.amount + i.amount) * 1e6) / 1e6;
+    }
+    had.from.push(n);
+  });
+  for (const o of out)
+    if (o.from.length > 1 && o.for_people && everyone.length && everyone.every((who) => o.for_people!.some((x) => sameName(x, who)))) o.for_people = null;
+  return out;
+}
+
+/** The names of everyone who eats at home. */
+const everyoneAtHome = (db: Db): string[] => db.select({ name: people.name }).from(people).where(eq(people.active, 1)).all().map((p) => p.name);
+
 function dishesSent(db: Db, v: unknown, meal: string): Dish[] {
   if (!Array.isArray(v)) return refuse(`${meal}: dishes must be a list of { name, for?, portion_note?, recipe_id?, video_url?, ingredients? }`);
-  return v.map((d) => (isObject(d) ? dishOf(db, d, name(d.name, `${meal}: a dish's name`)) : refuse(`${meal}: each dish is { name, ... }`)));
+  const sent = v.map((d) => (isObject(d) ? dishOf(db, d, name(d.name, `${meal}: a dish's name`)) : refuse(`${meal}: each dish is { name, ... }`)));
+  // A meal is planned once: the same dish sent once per person is one dish.
+  const merged = mergeSameDishes(sent.map((d) => ({ name: d.name, for_people: d.set.for_people ? list<string>(d.set.for_people) : null, portion_note: d.set.portion_note ?? null,
+    recipe_id: d.set.recipe_id ?? null, video_url: d.set.video_url ?? null, items: d.items ?? [] })), everyoneAtHome(db));
+  return merged.map((m) => m.from.length === 1 ? sent[m.from[0]] : { name: m.name,
+    set: { for_people: m.for_people ? JSON.stringify(m.for_people) : null, portion_note: m.portion_note, recipe_id: m.recipe_id, video_url: m.video_url },
+    ...(m.from.some((n) => sent[n].items) ? { items: m.items } : {}) });
 }
 
 const NO_DISHES_WITH_ORDER_IN = "a meal that is ordered in has no dishes: leave dishes out, or send ordered_in: false";
@@ -241,6 +295,40 @@ function orderDishes(tx: Db, mealId: string, changes: Change[], place?: { id: st
   });
 }
 
+/** At boot: a meal planned before dishes were merged may hold the same dish once per person ("Aloo paratha · Aloo paratha").
+ *  Each such meal's rows are made one dish (mergeSameDishes), so the Week page, the messages and an edit all see the one.
+ *  Answers how many dishes were folded away; a week with none is left untouched. */
+export function mergeDuplicateDishes(db: Db): number {
+  const all = db.select().from(dishes).orderBy(asc(dishes.position), asc(dishes.created_at)).all();
+  const byMeal = new Map<string, DishRow[]>();
+  for (const d of all) byMeal.set(d.meal_id, [...(byMeal.get(d.meal_id) ?? []), d]);
+  const twice = [...byMeal.entries()].filter(([, rows]) => new Set(rows.map((d) => dishKey(d.name))).size < rows.length);
+  if (!twice.length) return 0;
+  const everyone = everyoneAtHome(db);
+  let folded = 0;
+  db.transaction((txRaw) => {
+    const tx = txRaw as unknown as Db, changes: Change[] = [];
+    for (const [mealId, rows] of twice) {
+      const itemsOf = (id: string) => tx.select().from(dish_items).where(eq(dish_items.dish_id, id)).orderBy(asc(dish_items.created_at), sql`rowid`).all()
+        .map((i) => ({ item: i.item, amount: i.amount, unit: i.unit }));
+      const merged = mergeSameDishes(rows.map((d) => ({ name: d.name, for_people: d.for_people ? list<string>(d.for_people) : null, portion_note: d.portion_note,
+        recipe_id: d.recipe_id, video_url: d.video_url, items: itemsOf(d.id) })), everyone);
+      for (const m of merged) {
+        if (m.from.length === 1) continue;
+        const [keep, ...rest] = m.from.map((n) => rows[n]);
+        tx.update(dishes).set({ for_people: m.for_people ? JSON.stringify(m.for_people) : null, portion_note: m.portion_note, recipe_id: m.recipe_id, video_url: m.video_url,
+          updated_at: now() }).where(eq(dishes.id, keep.id)).run();
+        removeItems(tx, keep.id, changes);
+        addItems(tx, keep.id, m.items, keep.updated_by ?? "app", changes);
+        for (const d of rest) removeDish(tx, d.id, changes);
+        folded += rest.length;
+      }
+      orderDishes(tx, mealId, changes);
+    }
+  });
+  return folded;
+}
+
 export function mountMealRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: { basePath: string; now?: () => Date }) {
   const write = writeRoutes(hono);
   const today = () => todayStr((opts.now ?? (() => new Date()))());
@@ -327,10 +415,9 @@ export function mountMealRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: { bas
     const monday = view.cooking_days.includes("Mon") ? week.days[0].meals : [];
     const out: Record<string, unknown> = { week, message: weekMessage({ monday, link: weekLink(opts.basePath, weekStart) }) };
     if (!house.intro_sent_at) {
-      // The everyday items the cart is filled with: an item delivered on a subscription (a milkman) never goes in a cart.
-      const subscribed = new Set(db.select({ item: items.item }).from(items).where(isNotNull(items.subscription)).all().map((i) => i.item));
-      const everyday = db.select().from(regulars).where(and(eq(regulars.every, "day"), eq(regulars.active, 1))).orderBy(asc(regulars.created_at)).all()
-        .map((r) => r.item).filter((i) => !subscribed.has(normItem(i))).slice(0, 2);
+      // The daily items the cart is filled with as they come due: an item delivered on a subscription (a milkman) never goes in a cart.
+      const everyday = db.select().from(items).where(eq(items.group, "daily")).orderBy(asc(items.created_at), sql`rowid`).all()
+        .filter((i) => i.lasts_days != null && !i.subscription && !i.dont_ask).map((i) => i.name).slice(0, 2);
       out.intro = introText({ plan: view.plan_time ?? "11:00", afternoon: view.afternoon_time ?? "15:00", evening: view.evening_time ?? "19:00" }, everyday);
       db.update(house_t).set({ intro_sent_at: now() }).where(eq(house_t.id, house.id)).run();
     }

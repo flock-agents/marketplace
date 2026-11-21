@@ -11,11 +11,13 @@
     "nav.pantry": "Pantry",
     "nav.recipes": "Recipes",
     "nav.family": "Family",
+    "nav.settings": "Settings",
     "title.week": "This week's meals",
     "title.shopping": "Shopping",
     "title.pantry": "Pantry",
     "title.recipes": "Recipes",
-    "title.family": "Family"
+    "title.family": "Family",
+    "title.settings": "Settings"
   },
   "tables": {
     "people": {
@@ -197,7 +199,13 @@
           "type": "string",
           "required": false,
           "nullable": true,
-          "note": "JSON { [app]: \"YYYY-MM-DD\" }: how far each app's order history was read"
+          "note": "JSON { [app]: { [reader]: \"YYYY-MM-DD\" } }: how far each reader (a person's agent) read each app's order history; a plain date is from before readers were kept apart"
+        },
+        "regulars_moved_at": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "when the old everyday items (the retired regulars table's rows) became item cycles"
         },
         "asks_confirmed": {
           "type": "integer",
@@ -325,7 +333,7 @@
       }
     },
     "regulars": {
-      "note": "Everyday items no dish asks for (milk, bread, fruit).",
+      "note": "Retired: everyday items are now each item's own cycle (items.stated_amount, items.stated_days). Rows here are moved to items once (regulars.ts) and never read again; write none.",
       "columns": {
         "item": {
           "type": "string",
@@ -388,7 +396,7 @@
       }
     },
     "items": {
-      "note": "What the family buys, one row per item: its group, what a purchase usually is and when it runs out (the cached estimate).",
+      "note": "What the family buys, one row per item: its group, the cycle the family stated (if any), what a purchase usually is and when it runs out (the cached estimate, from the whole house's purchases, else from the stated cycle).",
       "columns": {
         "item": {
           "type": "string",
@@ -463,6 +471,18 @@
           "required": false,
           "nullable": true,
           "default": 1
+        },
+        "stated_amount": {
+          "type": "number",
+          "required": false,
+          "nullable": true,
+          "note": "what the family said they buy each time, in `unit` (\"1 litre\": 1000)"
+        },
+        "stated_days": {
+          "type": "number",
+          "required": false,
+          "nullable": true,
+          "note": "and how often, in days (\"every day\": 1; \"once a week\": 7); used until the purchases show a cycle"
         },
         "usual_amount": {
           "type": "number",

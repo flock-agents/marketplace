@@ -124,13 +124,11 @@ const bare = (time: string): string => clockText(time).replace(/ [ap]m$/, "");
 const partOfDay = (time: string): string => { const h = Number(time.split(":")[0]); return h < 12 ? "morning" : h < 17 ? "afternoon" : "evening"; };
 
 /** The how-to-use message, sent once with the first week. `times` are when the plan and the two reminders really run, as "HH:MM";
- *  `everyday` are the family's everyday items bought on the apps (subscriptions left out): the first two are named; with none
- *  known yet, the cart fills with them once the family orders. */
+ *  `everyday` are the things the family buys every day or two on the apps (subscriptions left out): the first two are named as
+ *  what goes in the cart when due; with none known yet, none is named. */
 export function introText(times: { plan: string; afternoon: string; evening: string }, everyday: string[]): string {
   const named = andList(everyday.slice(0, 2));
-  const each = named
-    ? `each time I put your ${named} in the cart and mention anything that may be running low.`
-    : "each time I mention anything that may be running low, and once you order, your cart fills with your everyday items.";
+  const each = `each time I put what is due in the cart${named ? `, like your ${named},` : ""} and mention anything that may be running low.`;
   return [
     "Your week is planned. How it works:",
     `• Every Sunday ${partOfDay(times.plan)} I plan the week. Change any meal by telling me, or in the app (Week).`,

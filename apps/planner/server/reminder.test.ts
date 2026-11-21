@@ -1,6 +1,6 @@
-// The reminder at 15:00 (tonight's dinner) and 19:00 (tomorrow's meals): the ingredients to check, the everyday items put on
+// The reminder at 15:00 (tonight's dinner) and 19:00 (tomorrow's meals): the ingredients to check, the daily items due put on
 // the cart, the items that may be running low asked together, and the texts the agent sends. Today is Monday 23 Nov 2026; the
-// family has a final week, curd every day, bread on Tuesdays and Fridays, and atta and toor dal bought a while ago.
+// family has a final week, curd and bread bought every day (their stated cycles), and atta and toor dal bought a while ago.
 import { describe, it, expect } from "bun:test";
 import { boot } from "./testkit";
 import { buildReminder } from "./reminder";
@@ -42,8 +42,8 @@ const start = async (o: { lunch?: Dish[]; regulars?: boolean; history?: boolean;
   await k.op("remember_product", { item: "curd", app: "zepto", product_id: "z-curd", name_on_app: "Mother Dairy curd", pack: "400 g", price: 50 });
   await k.op("remember_product", { item: "bread", app: "zepto", product_id: "z-bread", name_on_app: "Harvest Gold bread", pack: "400 g", price: 45 });
   if (o.regulars !== false) {
-    await k.op("set_regular", { item: "curd", amount: 400, unit: "g", every: "day" });
-    await k.op("set_regular", { item: "bread", amount: 1, unit: "pc", every: "weekdays", weekdays: ["Tue", "Fri"] });
+    await k.op("set_item", { item: "curd", group: "daily", usual_amount: 400, unit: "g", every_days: 1 });
+    await k.op("set_item", { item: "bread", group: "daily", usual_amount: 1, unit: "pc", every_days: 1 });
   }
   if (o.history !== false) {
     // Atta: 10 kg every 24 days, last 23 Oct (runs out 16 Nov). Toor dal: every 20 days, last 28 Oct (runs out 17 Nov).
@@ -253,7 +253,7 @@ describe("the reminder", () => {
     const r = await k.reminder("evening");
     expect(r.meals).toEqual([]);
     expect(r.text).toBe([
-      "I've added curd to your cart.",
+      "I've added curd and bread to your cart.",
       "A few things were bought a while ago:",
       "1. Atta, 36 days ago",
       "2. Toor dal, 31 days ago",
@@ -291,17 +291,49 @@ describe("the reminder", () => {
     expect(k.rows("orders").map((o) => [o.app, o.status])).toEqual([["zepto", "open"]]);
   });
 
-  it("an everyday item put on the cart by the reminder is not also asked about", async () => {
+  it("a daily item goes on the cart by its cycle from the purchases, with nothing confirmed, and is not also asked about", async () => {
     const k = await start();
-    // Eggs: an everyday item with a confident history, last bought 20 days ago (due).
-    await k.op("import_order_history", { app: "zepto", orders: ["2026-10-28", "2026-10-31", "2026-11-03"].map((date) => ({ date, items: [{ item: "eggs", group: "few_days", pack: "6 pc" }] })) });
-    expect(item(k, "eggs")).toMatchObject({ confident: 1, run_out: "2026-11-06" });
-    await k.op("set_regular", { item: "eggs", amount: 6, unit: "pc", every: "day" });
+    // Milk: two 500 ml packs every day, last bought on Sunday: it runs out today, so tomorrow's is put on. Nobody stated a cycle.
+    await k.op("remember_product", { item: "milk", app: "zepto", product_id: "z-milk", name_on_app: "Amul Taaza", pack: "500 ml" });
+    await k.op("import_order_history", { app: "zepto", orders: ["2026-11-19", "2026-11-20", "2026-11-21", "2026-11-22"].map((date) => ({ date, items: [{ item: "milk", group: "daily", pack: "500 ml", count: 2 }] })) });
+    expect(item(k, "milk")).toMatchObject({ confident: 1, lasts_days: 1, usual_amount: 1000, run_out: MON, stated_days: null });
     const r = await k.reminder("evening");
-    expect(r.added.map((a: any) => a.item)).toEqual(["curd", "bread", "eggs"]);
+    expect(r.added.map((a: any) => a.item)).toEqual(["curd", "bread", "milk"]);
+    expect(k.rows("order_lines").find((l) => l.item === "milk")).toMatchObject({ qty: 2, source: "everyday", for_date: TUE });
     expect(r.asks.map((a: any) => a.item)).toEqual(["atta", "toor dal"]);
-    expect(item(k, "eggs").asks_unanswered).toBe(0);
-    expect(events(k, "eggs", "ask")).toEqual([]);
+    expect(item(k, "milk").asks_unanswered).toBe(0);
+    expect(events(k, "milk", "ask")).toEqual([]);
+  });
+
+  it("a daily item bought today that lasts two days waits; one snoozed or left alone is not put on; one no longer bought stops", async () => {
+    const k = await start({ regulars: false, history: false, plan: false });
+    // Paneer every two days, bought today: it lasts till Wednesday.
+    await k.op("import_order_history", { app: "zepto", orders: ["2026-11-19", "2026-11-21", "2026-11-23"].map((date) => ({ date, items: [{ item: "paneer", group: "daily", pack: "200 g" }] })) });
+    // Lassi was bought every day in October and never since: its cycle was only learned, and the family stopped.
+    await k.op("import_order_history", { app: "zepto", orders: ["2026-10-01", "2026-10-02", "2026-10-03"].map((date) => ({ date, items: [{ item: "lassi", group: "daily", pack: "200 ml" }] })) });
+    await k.op("set_item", { item: "curd", group: "daily", usual_amount: 400, unit: "g", every_days: 1, snooze_days: 3 });
+    await k.op("set_item", { item: "bread", group: "daily", every_days: 1, dont_ask: true });
+    expect((await k.reminder("evening")).empty).toBe(true);
+    expect(k.rows("order_lines")).toEqual([]);
+    // Two days on the paneer is due; the curd's snooze ran to Thursday, so Friday's is put on that evening.
+    k.clock(24, 19);
+    expect((await k.reminder("evening")).added.map((a: any) => a.item)).toEqual(["paneer"]);
+    k.clock(26, 19);
+    expect((await k.reminder("evening")).added.map((a: any) => a.item)).toEqual(["paneer", "curd"]);
+  });
+
+  it("a cycle the family stated makes an item asked about once it was bought, until the purchases show their own", async () => {
+    const k = await start({ regulars: false, history: false, plan: false });
+    // "A tray of 30 eggs once a week", with one purchase, 8 days ago: no cycle to learn from yet.
+    await k.op("set_item", { item: "eggs", group: "few_days", usual_amount: 30, unit: "pc", every_days: 7 });
+    expect(item(k, "eggs")).toMatchObject({ lasts_days: 7, usual_amount: 30, run_out: null, confident: 1 });
+    await k.op("import_order_history", { app: "zepto", orders: [{ date: "2026-11-15", items: [{ item: "eggs", pack: "30 pc" }] }] });
+    expect(item(k, "eggs")).toMatchObject({ lasts_days: 7, run_out: "2026-11-22", confident: 1 });
+    const r = await k.reminder("evening");
+    expect(r.asks).toEqual([{ item: "eggs", days_ago: 8 }]);
+    // Two more purchases ten days apart: the estimate goes by them now, and the stated cycle stays on the item.
+    await k.op("import_order_history", { app: "zepto", orders: [{ date: "2026-11-05", items: [{ item: "eggs", pack: "30 pc" }] }] });
+    expect(item(k, "eggs")).toMatchObject({ lasts_days: 10, stated_days: 7, run_out: "2026-11-25" });
   });
 
   it("order without asking keeps one order at a time per app: a cart already being ordered leaves the open one open", async () => {
