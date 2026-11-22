@@ -194,3 +194,23 @@ reminder 7 days before. Drops: "evening before". Lines go to the Family group (w
 
 The portal, WhatsApp and Teams connectors (L5–L7); Project B (L2b); group to-dos (its own lane); the person's prep offer
 "add to the family calendar?" (L8).
+
+## Addendum 2026-11-22 (owner go): Your Schedule and planner parity
+
+**Schedule feed (L3 + Flock on feat/group-todos).**
+- Family Calendar declares a manifest widget `{ "id": "schedule", "kind": "schedule", "plansEvents": true }` and serves the
+  schedule widget data in the same wire format as Calendar Desk (`template: "schedule"`, `items` of `ScheduleItemWire`,
+  `kind: "event"`), for the requested date, repeating events expanded, cancelled ones left out.
+- `plansEvents: true` tells Flock the app plans its own events: the PA's morning sort shows them but never proposes
+  steps for them.
+- Items carry no chat link of their own. Flock gives every item from an app the chat of the app's paired agent: the
+  app's group chat for a group app (Family Butler → the family group), else that agent's chat with the person.
+- Flock shows the Family Calendar's items in "Your Schedule" for everyone who may open the app. The PA's brief/sort
+  bundle includes them only when the app is paired with that PA.
+
+**Planner parity (L3).** Family Calendar's plan-prep takes Calendar Desk's planning rules as they are (origin
+`feat/calendar-desk-copies`, apps/calendar-desk: the plan_events intent, plan-report.ts, planner.ts, tally.ts): tie an
+existing TODO that covers the work instead of a new step (the owner's TODOs: the group's for a group agent, the PA's
+person's for a PA, read with `GET /api/internal/todos`), habits from dismissals, the step-kinds table with refusals,
+long-lead and show-from rules, moved re-dating with the same keys, at most 3, never ask. Differences only: whose TODOs,
+and family kinds added (sign-and-return, buy-for-event, send-to-school). Calendar Desk itself is not changed.
