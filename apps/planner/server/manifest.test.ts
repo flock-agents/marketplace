@@ -168,6 +168,27 @@ describe("the agent's interface", () => {
     expect([final.id, final.action, final.args]).toEqual(["final", "plan_week", { mode: "final" }]);
   });
 
+  // Lane B (2026-11-23): an extra meal said while telling the past week (a tiffin, an evening snack) is saved as a slot
+  // before its dishes, added to the ones there; the meals part ends by reading every slot back from the app.
+  it("every past-week meal question can save an extra meal first, and the meals part ends with the slots read back", () => {
+    const MEALS = ["kidsBreakfast", "kidsLunch", "kidsDinner", "adultsBreakfast", "adultsLunch", "adultsDinner"];
+    for (const id of MEALS) {
+      const q = setup.find((x) => x.id === id)!;
+      expect(targets(q)[0], id).toBe("set_slots");
+      expect(targets(q), id).toContain("set_family_dishes");
+      expect(q.help, id).toContain("set_slots { add: true, extra_slots:");
+    }
+    const ids = setup.map((q) => q.id);
+    const confirm = setup.find((q) => q.id === "slotsConfirm")!;
+    expect(ids.indexOf("slotsConfirm")).toBe(ids.indexOf("adultsDinner") + 1);
+    expect(confirm.ask).toBe("{{slotsSaid}} Anything to add or change?");
+    expect(confirm.show).toEqual({ slotsSaid: { operation: "set_family_dishes", field: "slots_said" } });
+    expect(targets(confirm)).toEqual(["set_slots"]);
+    expect(confirm.help).toContain("add: true");
+    expect(ids.filter((id) => id.toLowerCase().includes("tiffin"))).toEqual([]);
+    for (const q of setup) if (targets(q).includes("set_slots") && q.id !== "slotsConfirm") expect(q.help ?? "", q.id).toContain("add: true");
+  });
+
   it("everyone at home is saved before any rule can name them, from the household answer", () => {
     const ids = setup.map((q) => q.id);
     const people = setup.find((q) => q.id === "people")!;

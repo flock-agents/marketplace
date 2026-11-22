@@ -11,7 +11,7 @@ import { DISH_RATINGS, RATINGS_KEPT, SLOTS, type DishRating } from "./db/constan
 import { todayStr } from "./dates";
 import { dishKey, type LastTime } from "./dishText";
 import { youtubeThumb } from "./messages";
-import { getHouse, houseView, isObject, list, name, names, refuse, words, writeRoutes, type Db, type Emit } from "./family";
+import { getHouse, houseView, isObject, list, name, names, refuse, slotsSaid, words, writeRoutes, type Db, type Emit } from "./family";
 import { closest } from "./agentOps";
 
 export type BookRow = typeof dish_book.$inferSelect;
@@ -181,7 +181,8 @@ export function mountDishBookRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: {
         ch.push(["dish_book", row.id, "update", by]);
       }
     });
-    return { body: { family_dishes: familyDishes(db) } };
+    // slots_said: the meals a week is planned with, which the setup reads back once the past week's meals are told.
+    return { body: { family_dishes: familyDishes(db), slots_said: slotsSaid(houseView(getHouse(db))) } };
   });
 
   // set_dish_video { dish | dish_id, url, title?, thumbnail?, remove? }: the dish's one video, a link only.

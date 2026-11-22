@@ -300,6 +300,32 @@ export const writeRoutes = (hono: Hono<any>) =>
       }
     });
 
+const LONG_DAY: Record<Weekday, string> = { Mon: "Monday", Tue: "Tuesday", Wed: "Wednesday", Thu: "Thursday", Fri: "Friday", Sat: "Saturday", Sun: "Sunday" };
+/** Weekdays as a person says them: "every day", "Mon–Fri" (three or more in a row), "Mon, Wed and Fri". */
+export function daysSaid(days: readonly string[] | undefined): string {
+  const set = WEEKDAYS.filter((d) => days?.includes(d));
+  if (!set.length || set.length === 7) return "every day";
+  const at = set.map((d) => WEEKDAYS.indexOf(d));
+  if (set.length >= 3 && at[at.length - 1] - at[0] === set.length - 1) return `${set[0]}–${set[set.length - 1]}`;
+  return set.length === 1 ? `on ${LONG_DAY[set[0]]}s` : `${set.slice(0, -1).join(", ")} and ${set[set.length - 1]}`;
+}
+const andWords = (xs: string[]) => (xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`);
+
+/** The meals a week is planned with, in the words the setup reads back: "Each day we'll plan Breakfast, Lunch and Dinner,
+ *  plus Agastya's tiffin Mon–Fri and Evening snack every day. Sunday dinner you order in." */
+export function slotsSaid(h: Pick<HouseView, "extra_slots" | "order_in">): string {
+  const extra = h.extra_slots.map((s) => {
+    const whose = (s.for ?? []).filter((p) => !s.name.toLowerCase().includes(p.toLowerCase()));
+    return `${s.name} ${daysSaid(s.days)}${whose.length ? ` for ${andWords(whose)}` : ""}`;
+  });
+  const out = [`Each day we'll plan Breakfast, Lunch and Dinner${extra.length ? `, plus ${andWords(extra)}` : ""}.`];
+  if (h.order_in.length) {
+    const meals = h.order_in.map((o) => `${LONG_DAY[o.day]} ${(SLOTS as readonly string[]).includes(o.slot) ? o.slot.toLowerCase() : o.slot}`);
+    out.push(`${andWords(meals)} you order in.`);
+  }
+  return out.join(" ");
+}
+
 /** `appToken`: the token Flock gave this app (null on an install that is not paired). The kit lets a setting change only
  *  with it, so that settings change through Flock alone; the app holds it, and uses it for the one setting its agent sets. */
 export function mountFamilyRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: { appToken?: string | null } = {}) {
@@ -374,7 +400,8 @@ export function mountFamilyRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: { a
     if (!Array.isArray(b.days)) refuse(`days must be a list of weekdays (${lower})`);
     const days = (b.days as unknown[]).map((d) => weekday(d) ?? refuse(`days: ${JSON.stringify(d)} is not a weekday (${lower})`));
     if (!days.length) refuse("days must have at least one weekday");
-    return saveHouse({ cooking_days: JSON.stringify(WEEKDAYS.filter((d) => days.includes(d))) }, by);
+    const saved = saveHouse({ cooking_days: JSON.stringify(WEEKDAYS.filter((d) => days.includes(d))) }, by);
+    return { body: { ...saved.body, slots_said: slotsSaid(saved.body.house) } };
   });
 
   // set_shopping_apps { main, fallback, connected }: the main app and the one tried when something is not on it are saved as
@@ -410,13 +437,27 @@ export function mountFamilyRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: { a
     return saveHouse(set, by);
   });
 
-  // set_slots { extra_slots?, order_in? }: each list given replaces the one there.
+  // set_slots { extra_slots?, order_in?, add?: true }: each list given replaces the one there (the Family page's edits). With
+  // add: true (the interview and the agent) the slots given are added to the ones there, a slot of the same name in place of
+  // that one, and an order_in meal of the same day and slot in place of that one: what was said earlier is never wiped.
+  // Answers the house and `said`, the meals a week is planned with in plain words (slotsSaid), which the setup reads back.
   write("/api/family/slots", (b, by) => {
+    if (b.add !== undefined && b.add !== true) refuse("add is true, or left out to replace the lists");
+    const had = houseView(getHouse(db));
     const set: Partial<typeof house.$inferInsert> = {};
-    const extra = b.extra_slots !== undefined ? extraSlots(b.extra_slots) : houseView(getHouse(db)).extra_slots;
-    if (b.extra_slots !== undefined) set.extra_slots = JSON.stringify(extra);
-    if (b.order_in !== undefined) set.order_in = JSON.stringify(orderIn(b.order_in, [...SLOTS, ...extra.map((s) => s.name)]));
+    let extra = had.extra_slots;
+    if (b.extra_slots !== undefined) {
+      const given = extraSlots(b.extra_slots);
+      extra = b.add === true ? [...had.extra_slots.filter((s) => !given.some((g) => g.name.toLowerCase() === s.name.toLowerCase())), ...given] : given;
+      set.extra_slots = JSON.stringify(extra);
+    }
+    if (b.order_in !== undefined) {
+      const given = orderIn(b.order_in, [...SLOTS, ...extra.map((s) => s.name)]);
+      const kept = b.add === true ? had.order_in.filter((o) => !given.some((g) => g.day === o.day && g.slot.toLowerCase() === o.slot.toLowerCase())) : [];
+      set.order_in = JSON.stringify([...kept, ...given]);
+    }
     if (!Object.keys(set).length) refuse("give extra_slots or order_in");
-    return saveHouse(set, by);
+    const saved = saveHouse(set, by);
+    return { body: { ...saved.body, said: slotsSaid(saved.body.house) } };
   });
 }

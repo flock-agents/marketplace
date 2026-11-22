@@ -324,3 +324,31 @@ describe("the house", () => {
     expect(rows("house")).toHaveLength(1);
   });
 });
+
+describe("set_slots add: true and the slots read back", () => {
+  it("add: true keeps a slot saved earlier, a slot of the same name takes that one's place, and without add the list is the whole list", async () => {
+    const { op } = await boot();
+    for (const name of ["Agastya", "Meera"]) await op("set_person", { name, group: "child" });
+    await op("set_slots", { add: true, extra_slots: [{ name: "Agastya's tiffin", days: ["Mon", "Tue", "Wed", "Thu", "Fri"], for: ["Agastya"] }] });
+    const r = await op("set_slots", { add: true, extra_slots: [{ name: "Evening snack" }], order_in: [{ day: "Sun", slot: "Dinner" }] });
+    expect(r.house.extra_slots.map((s: any) => s.name)).toEqual(["Agastya's tiffin", "Evening snack"]);
+    expect(r.said).toBe("Each day we'll plan Breakfast, Lunch and Dinner, plus Agastya's tiffin Mon–Fri and Evening snack every day. Sunday dinner you order in.");
+    const again = await op("set_slots", { add: true, extra_slots: [{ name: "agastya's tiffin", days: ["Mon", "Wed", "Fri"], for: ["Agastya"] }], order_in: [{ day: "Sat", slot: "Lunch" }] });
+    expect(again.house.extra_slots).toEqual([{ name: "Evening snack" }, { name: "agastya's tiffin", days: ["Mon", "Wed", "Fri"], for: ["Agastya"] }]);
+    expect(again.house.order_in).toEqual([{ day: "Sun", slot: "Dinner" }, { day: "Sat", slot: "Lunch" }]);
+    expect(again.said).toContain("agastya's tiffin Mon, Wed and Fri");
+    expect(again.said).toContain("Sunday dinner and Saturday lunch you order in.");
+    const whole = await op("set_slots", { extra_slots: [{ name: "Meera's tiffin", days: ["Tue"], for: ["Meera"] }] });
+    expect(whole.house.extra_slots.map((s: any) => s.name)).toEqual(["Meera's tiffin"]);
+    expect((await op("set_slots", { add: "yes", extra_slots: [] })).error).toContain("add is true");
+  });
+
+  it("set_family_dishes and set_cooking_days answer slots_said, which the setup's slot question shows", async () => {
+    const { op } = await boot();
+    await op("set_person", { name: "Agastya", group: "child" });
+    await op("set_slots", { add: true, extra_slots: [{ name: "Tiffin", days: ["Mon", "Tue", "Wed", "Thu", "Fri"], for: ["Agastya"] }] });
+    const r = await op("set_family_dishes", { dishes: [{ name: "Poha", slots: ["Breakfast", "Tiffin"] }] });
+    expect(r.slots_said).toBe("Each day we'll plan Breakfast, Lunch and Dinner, plus Tiffin Mon–Fri for Agastya.");
+    expect((await op("set_cooking_days", { days: ["mon"] })).slots_said).toContain("Tiffin Mon–Fri");
+  });
+});

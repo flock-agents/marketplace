@@ -69,7 +69,7 @@ export const FIELDS: Record<string, { fields: string[]; need?: string[] }> = {
   set_person: { fields: ["name", "relationship", "group", "portions", "diet", "allergies", "dislikes", "targets", "note", "remove"], need: ["name"] },
   set_house_rules: { fields: ["rules", "add", "notes", "structured"] },
   set_cook: { fields: ["name", "days", "arrival", "makes_well", "wont_make", "time_limit", "new_recipes", "note"], need: ["name"] },
-  set_slots: { fields: ["extra_slots", "order_in"] },
+  set_slots: { fields: ["extra_slots", "order_in", "add"] },
   set_cooking_days: { fields: ["days"], need: ["days"] },
   set_shopping_apps: { fields: ["main", "fallback", "connected"], need: ["main", "connected"] },
   plan_week: { fields: ["week_start", "mode", "meals", "keep_rest"], need: ["week_start", "mode"] },

@@ -481,6 +481,9 @@
       ],
       "answer": [
         {
+          "operation": "set_slots"
+        },
+        {
           "operation": "set_family_dishes"
         },
         {
@@ -488,7 +491,7 @@
         }
       ],
       "required": false,
-      "help": "save set_family_dishes { dishes }: every dish said, each once with every meal it is eaten at, {\"name\":\"Poha\",\"slots\":[\"Breakfast\"]}; for only when one person eats it ({\"name\":\"Plain idli\",\"slots\":[\"Breakfast\"],\"for\":[\"Meera\"]}). A dish said before for another meal (pastWeek facts) keeps those meals. set_house_rules { add: true, rules }: only the rules this reply states: \"Meera has only plain idli, plain dosa or banana sheera\": {\"kind\":\"only\",\"who\":\"Meera\",\"slots\":[\"Breakfast\"],\"items\":[\"plain idli\",\"plain dosa\",\"banana sheera\"],\"note\":\"nothing spicy\"}; \"Agastya won't eat anything green\": {\"kind\":\"avoid\",\"who\":\"Agastya\",\"items\":[\"@green_leafy\"],\"note\":\"nothing green visible\"}."
+      "help": "save An extra meal (a school tiffin, an evening snack): set_slots { add: true, extra_slots: [{\"name\":\"Agastya's tiffin\",\"days\":[\"Mon\",\"Tue\",\"Wed\",\"Thu\",\"Fri\"],\"for\":[\"Agastya\"]}] } first. set_family_dishes { dishes }: each dish said once, with every meal it is eaten at, {\"name\":\"Poha\",\"slots\":[\"Breakfast\"]}; for only when one person eats it ([\"Meera\"]). A dish said before for another meal (pastWeek facts) keeps those meals. set_house_rules { add: true, rules }: only the rules this reply states: \"Meera has only plain idli, plain dosa or banana sheera\": {\"kind\":\"only\",\"who\":\"Meera\",\"slots\":[\"Breakfast\"],\"items\":[\"plain idli\",\"plain dosa\",\"banana sheera\"]}; \"Agastya won't eat anything green\": {\"kind\":\"avoid\",\"who\":\"Agastya\",\"items\":[\"@green_leafy\"],\"note\":\"nothing green visible\"}."
     },
     {
       "id": "kidsLunch",
@@ -501,17 +504,17 @@
       ],
       "answer": [
         {
-          "operation": "set_family_dishes"
+          "operation": "set_slots"
         },
         {
-          "operation": "set_slots"
+          "operation": "set_family_dishes"
         },
         {
           "operation": "set_house_rules"
         }
       ],
       "required": false,
-      "help": "save set_family_dishes { dishes }: every dish said, each once with every meal it is eaten at, {\"name\":\"Poha\",\"slots\":[\"Lunch\"]}; for only when one person eats it ({\"name\":\"Plain idli\",\"slots\":[\"Breakfast\"],\"for\":[\"Meera\"]}). A dish said before for another meal (pastWeek facts) keeps those meals. A school tiffin: its dishes in its slot, and set_slots { extra_slots: [{ name: \"Agastya's tiffin\", days: [Mon..Fri], for: [\"Agastya\"] }] }, every child's tiffin. set_house_rules { add: true, rules }: only the rules this reply states: \"tiffin dry, nut-free\": {\"kind\":\"avoid\",\"who\":\"Agastya\",\"slots\":[\"Agastya's tiffin\"],\"items\":[\"gravy\",\"curry\",\"sambar\",\"@nuts\",\"@peanut\"],\"note\":\"dry, no gravy, nut-free\"}; \"never the same twice\" is no rule."
+      "help": "save An extra meal (a school tiffin, an evening snack): set_slots { add: true, extra_slots: [{\"name\":\"Agastya's tiffin\",\"days\":[\"Mon\",\"Tue\",\"Wed\",\"Thu\",\"Fri\"],\"for\":[\"Agastya\"]}] } first. set_family_dishes { dishes }: each dish said once, with every meal it is eaten at, {\"name\":\"Poha\",\"slots\":[\"Lunch\"]}; for only when one person eats it ([\"Meera\"]). A dish said before for another meal (pastWeek facts) keeps those meals. A school tiffin: its dishes in its own slot, one per child. set_house_rules { add: true, rules }: only the rules this reply states: \"tiffin dry, nut-free\": {\"kind\":\"avoid\",\"who\":\"Agastya\",\"slots\":[\"Agastya's tiffin\"],\"items\":[\"gravy\",\"curry\",\"sambar\",\"@nuts\",\"@peanut\"],\"note\":\"dry, no gravy, nut-free\"}; \"never the same twice\" is no rule."
     },
     {
       "id": "kidsDinner",
@@ -524,13 +527,16 @@
       ],
       "answer": [
         {
+          "operation": "set_slots"
+        },
+        {
           "operation": "set_family_dishes"
         },
         {
           "operation": "set_house_rules"
         }
       ],
-      "help": "save set_family_dishes { dishes }: every dish said, each once with every meal it is eaten at, {\"name\":\"Poha\",\"slots\":[\"Dinner\"]}; for only when one person eats it ({\"name\":\"Plain idli\",\"slots\":[\"Breakfast\"],\"for\":[\"Meera\"]}). A dish said before for another meal (pastWeek facts) keeps those meals. set_house_rules { add: true, rules }: only the rules this reply states: \"keep Meera's portion aside before the chilli\": {\"kind\":\"swap\",\"who\":\"Meera\",\"items\":[\"@chilli\"],\"to\":\"set aside before chilli\"}; a dish a child won't eat: {\"kind\":\"avoid\",\"who\":\"Agastya\",\"items\":[\"palak\",\"methi\"]}."
+      "help": "save An extra meal (a school tiffin, an evening snack): set_slots { add: true, extra_slots: [{\"name\":\"Agastya's tiffin\",\"days\":[\"Mon\",\"Tue\",\"Wed\",\"Thu\",\"Fri\"],\"for\":[\"Agastya\"]}] } first. set_family_dishes { dishes }: each dish said once, with every meal it is eaten at, {\"name\":\"Poha\",\"slots\":[\"Dinner\"]}; for only when one person eats it ([\"Meera\"]). A dish said before for another meal (pastWeek facts) keeps those meals. set_house_rules { add: true, rules }: only the rules this reply states: \"keep Meera's portion aside before the chilli\": {\"kind\":\"swap\",\"who\":\"Meera\",\"items\":[\"@chilli\"],\"to\":\"set aside before chilli\"}; a dish a child won't eat: {\"kind\":\"avoid\",\"who\":\"Agastya\",\"items\":[\"palak\",\"methi\"]}."
     },
     {
       "id": "adultsBreakfast",
@@ -542,6 +548,9 @@
       ],
       "answer": [
         {
+          "operation": "set_slots"
+        },
+        {
           "operation": "set_family_dishes"
         },
         {
@@ -549,7 +558,7 @@
         }
       ],
       "required": false,
-      "help": "save set_family_dishes { dishes }: every dish said, each once with every meal it is eaten at, {\"name\":\"Poha\",\"slots\":[\"Breakfast\"]}; for only when one person eats it ({\"name\":\"Plain idli\",\"slots\":[\"Breakfast\"],\"for\":[\"Meera\"]}). A dish said before for another meal (pastWeek facts) keeps those meals. set_house_rules { add: true, rules }: only the rules this reply states: what one person never eats: {\"kind\":\"avoid\",\"who\":\"Shiva\",\"items\":[\"upma\"]}; what one person eats only: {\"kind\":\"only\",\"who\":\"Lakshmi\",\"slots\":[\"Breakfast\"],\"items\":[\"ragi dosa\",\"poha\"]}."
+      "help": "save An extra meal (a school tiffin, an evening snack): set_slots { add: true, extra_slots: [{\"name\":\"Agastya's tiffin\",\"days\":[\"Mon\",\"Tue\",\"Wed\",\"Thu\",\"Fri\"],\"for\":[\"Agastya\"]}] } first. set_family_dishes { dishes }: each dish said once, with every meal it is eaten at, {\"name\":\"Poha\",\"slots\":[\"Breakfast\"]}; for only when one person eats it ([\"Meera\"]). A dish said before for another meal (pastWeek facts) keeps those meals. set_house_rules { add: true, rules }: only the rules this reply states: what one person never eats: {\"kind\":\"avoid\",\"who\":\"Shiva\",\"items\":[\"upma\"]}; what one person eats only: {\"kind\":\"only\",\"who\":\"Lakshmi\",\"slots\":[\"Breakfast\"],\"items\":[\"ragi dosa\",\"poha\"]}."
     },
     {
       "id": "adultsLunch",
@@ -561,13 +570,16 @@
       ],
       "answer": [
         {
+          "operation": "set_slots"
+        },
+        {
           "operation": "set_family_dishes"
         },
         {
           "operation": "set_house_rules"
         }
       ],
-      "help": "save set_family_dishes { dishes }: every dish said, each once with every meal it is eaten at, {\"name\":\"Poha\",\"slots\":[\"Lunch\"]}; for only when one person eats it ({\"name\":\"Plain idli\",\"slots\":[\"Breakfast\"],\"for\":[\"Meera\"]}). A dish said before for another meal (pastWeek facts) keeps those meals. set_house_rules { add: true, rules }: only the rules this reply states: \"Shiva has no rice at lunch\": {\"kind\":\"avoid\",\"who\":\"Shiva\",\"slots\":[\"Lunch\"],\"items\":[\"rice\"]}."
+      "help": "save An extra meal (a school tiffin, an evening snack): set_slots { add: true, extra_slots: [{\"name\":\"Agastya's tiffin\",\"days\":[\"Mon\",\"Tue\",\"Wed\",\"Thu\",\"Fri\"],\"for\":[\"Agastya\"]}] } first. set_family_dishes { dishes }: each dish said once, with every meal it is eaten at, {\"name\":\"Poha\",\"slots\":[\"Lunch\"]}; for only when one person eats it ([\"Meera\"]). A dish said before for another meal (pastWeek facts) keeps those meals. set_house_rules { add: true, rules }: only the rules this reply states: \"Shiva has no rice at lunch\": {\"kind\":\"avoid\",\"who\":\"Shiva\",\"slots\":[\"Lunch\"],\"items\":[\"rice\"]}."
     },
     {
       "id": "adultsDinner",
@@ -579,13 +591,47 @@
       ],
       "answer": [
         {
+          "operation": "set_slots"
+        },
+        {
           "operation": "set_family_dishes"
         },
         {
           "operation": "set_house_rules"
         }
       ],
-      "help": "save set_family_dishes { dishes }: every dish said, each once with every meal it is eaten at, {\"name\":\"Poha\",\"slots\":[\"Dinner\"]}; for only when one person eats it ({\"name\":\"Plain idli\",\"slots\":[\"Breakfast\"],\"for\":[\"Meera\"]}). A dish said before for another meal (pastWeek facts) keeps those meals. set_house_rules { add: true, rules }: only the rules this reply states: \"no heavy food for anyone at dinner\" is not checked: {\"kind\":\"other\",\"slots\":[\"Dinner\"],\"note\":\"light dinner\"}."
+      "help": "save An extra meal (a school tiffin, an evening snack): set_slots { add: true, extra_slots: [{\"name\":\"Agastya's tiffin\",\"days\":[\"Mon\",\"Tue\",\"Wed\",\"Thu\",\"Fri\"],\"for\":[\"Agastya\"]}] } first. set_family_dishes { dishes }: each dish said once, with every meal it is eaten at, {\"name\":\"Poha\",\"slots\":[\"Dinner\"]}; for only when one person eats it ([\"Meera\"]). A dish said before for another meal (pastWeek facts) keeps those meals. set_house_rules { add: true, rules }: only the rules this reply states: \"no heavy food for anyone at dinner\" is not checked: {\"kind\":\"other\",\"slots\":[\"Dinner\"],\"note\":\"light dinner\"}."
+    },
+    {
+      "id": "slotsConfirm",
+      "after": [
+        "kidsBreakfast",
+        "kidsLunch",
+        "kidsDinner",
+        "adultsBreakfast",
+        "adultsLunch",
+        "adultsDinner"
+      ],
+      "fixed": true,
+      "ask": "{{slotsSaid}} Anything to add or change?",
+      "show": {
+        "slotsSaid": {
+          "operation": "set_family_dishes",
+          "field": "slots_said"
+        }
+      },
+      "fills": [
+        "slotsConfirm:text"
+      ],
+      "answer": [
+        {
+          "operation": "set_slots"
+        }
+      ],
+      "required": false,
+      "help": "slotsSaid is every meal the app plans each week, as it said them back. A yes: no save. A meal they add: set_slots { add: true, extra_slots: [{ name, days?, for? }] } (\"Agastya's tiffin on school days\": {\"name\":\"Agastya's tiffin\",\"days\":[\"Mon\",\"Tue\",\"Wed\",\"Thu\",\"Fri\"],\"for\":[\"Agastya\"]}; \"a snack in the evening\": {\"name\":\"Evening snack\"}); a meal they order in every week: set_slots { add: true, order_in: [{ day, slot, note? }] } ({\"day\":\"Sun\",\"slot\":\"Dinner\"}); a change to one: add: true with that slot's name. Only a meal to take out: set_slots { extra_slots } with the WHOLE list without it, no add.",
+      "default": "assume",
+      "assume": "I kept the meals as I read them back."
     },
     {
       "id": "diet",
@@ -709,7 +755,7 @@
         }
       ],
       "required": false,
-      "help": "Nothing is cooked then. save set_slots { order_in }: the whole list, one { day, slot, note? } a meal (\"Sunday dinner\": {\"day\":\"Sun\",\"slot\":\"Dinner\"}), with any meal out said earlier in the interview; set_house_rules { add: true, rules }: only the rules this reply states.",
+      "help": "Nothing is cooked then. save set_slots { add: true, order_in }: one { day, slot, note? } a meal (\"Sunday dinner\": {\"day\":\"Sun\",\"slot\":\"Dinner\"}), with any meal out said earlier in the interview; set_house_rules { add: true, rules }: only the rules this reply states.",
       "default": "assume",
       "assume": "I assumed you don't order in on a fixed day."
     },
@@ -917,7 +963,7 @@
       },
       {
         "name": "set_slots",
-        "description": "Meals beyond Breakfast, Lunch and Dinner, and the meals the family orders in every week. { extra_slots?: [{ name, days?: [\"Mon\", ...], for?: [names] }], order_in?: [{ day: \"Sun\", slot: \"Dinner\", note? }] }. A child's school tiffin is an extra slot: { name: \"Agastya's tiffin\", days: [\"Mon\", \"Tue\", \"Wed\", \"Thu\", \"Fri\"], for: [\"Agastya\"] }; a plan gives it a meal on each of its days. Send at least one of the two; each list you send replaces the one there. An order_in slot is Breakfast, Lunch, Dinner or an extra slot's name."
+        "description": "Meals beyond Breakfast, Lunch and Dinner, and the meals the family orders in every week. { extra_slots?: [{ name, days?: [\"Mon\", ...], for?: [names] }], order_in?: [{ day: \"Sun\", slot: \"Dinner\", note? }], add?: true }. A child's school tiffin is an extra slot: { name: \"Agastya's tiffin\", days: [\"Mon\", \"Tue\", \"Wed\", \"Thu\", \"Fri\"], for: [\"Agastya\"] }, an evening snack { name: \"Evening snack\" }; a plan gives each a meal on each of its days. Send at least one of the two lists. With add: true (always, when the family tells you of a meal) they are added to the ones there: a slot of the same name, or an order_in of the same day and slot, takes that one's place, and nothing said before is lost. Without add each list sent replaces the one there (only to take a slot out: the whole list without it). An order_in slot is Breakfast, Lunch, Dinner or an extra slot's name. Answers { house, said: the meals each week is planned with, in plain words }."
       },
       {
         "name": "set_cooking_days",
