@@ -219,7 +219,8 @@
       ],
       "answer": [
         {
-          "operation": "set_person"
+          "operation": "set_person",
+          "required": true
         }
       ],
       "help": "The line names who lives with them (household.people). A \"no\", \"that's all\" or \"yes\": the people it names. Anyone they add, or take out, as they say. people: each { name, relationship?, group: child | adult | elder }, the cook and other help left out. save one set_person { name, relationship, group } per person: everyone a food rule may name is saved here first.",
@@ -234,7 +235,8 @@
       ],
       "answer": [
         {
-          "operation": "set_person"
+          "operation": "set_person",
+          "required": true
         }
       ],
       "help": "Read from household.people when it is known. people: each { name, relationship?, group: child | adult | elder }, the cook and other help left out. save one set_person { name, relationship, group } per person: everyone a food rule may name is saved here first.",
@@ -252,7 +254,8 @@
       ],
       "answer": [
         {
-          "operation": "set_cook"
+          "operation": "set_cook",
+          "required": true
         }
       ],
       "help": "Read from household.help's cook ({ role: cook, name?, days?, times?, meals? }) when it is there. cook.name: as said, \"Cook\" when no name was said. cook.days: Mon, Tue, Wed, Thu, Fri, Sat, Sun as said, in that order (\"Mon to Sat\" is six days). cook.visits: one { at: \"HH:MM\" (24-hour; an evening or dinner time is pm), meals: [Breakfast, Lunch, Dinner] } per visit, only when every visit's meals are said. \"Lakshmi comes at 7 for breakfast and lunch and 6 for dinner, Mon to Sat\": name Lakshmi, days Mon..Sat, visits [{\"at\":\"07:00\",\"meals\":[\"Breakfast\",\"Lunch\"]},{\"at\":\"18:00\",\"meals\":[\"Dinner\"]}]. save set_cook { name, days, arrival: the visits }."
@@ -269,7 +272,8 @@
       ],
       "answer": [
         {
-          "operation": "set_cook"
+          "operation": "set_cook",
+          "required": true
         }
       ],
       "help": "Read from household.help's cook ({ role: cook, name?, days?, times?, meals? }) when it is there. cook.name: as said, \"Cook\" when no name was said. cook.days: Mon, Tue, Wed, Thu, Fri, Sat, Sun as said, in that order (\"Mon to Sat\" is six days). cook.visits: one { at: \"HH:MM\" (24-hour; an evening or dinner time is pm), meals: [Breakfast, Lunch, Dinner] } per visit, only when every visit's meals are said. \"Lakshmi comes at 7 for breakfast and lunch and 6 for dinner, Mon to Sat\": name Lakshmi, days Mon..Sat, visits [{\"at\":\"07:00\",\"meals\":[\"Breakfast\",\"Lunch\"]},{\"at\":\"18:00\",\"meals\":[\"Dinner\"]}]. save set_cook { name, days, arrival: the visits }."
@@ -278,7 +282,7 @@
       "id": "cook",
       "fixed": true,
       "when": "household.help has cook",
-      "ask": "Who cooks which meals, and on which days and at what time do they come?",
+      "ask": "{{householdCook}} Is that right, and does the cook come for any other meals?",
       "fills": [
         "cook.name:text",
         "cook.days:list",
@@ -286,10 +290,11 @@
       ],
       "answer": [
         {
-          "operation": "set_cook"
+          "operation": "set_cook",
+          "required": true
         }
       ],
-      "help": "Read from household.help's cook ({ role: cook, name?, days?, times?, meals? }) when it is there. cook.name: as said, \"Cook\" when no name was said. cook.days: Mon, Tue, Wed, Thu, Fri, Sat, Sun as said, in that order (\"Mon to Sat\" is six days). cook.visits: one { at: \"HH:MM\" (24-hour; an evening or dinner time is pm), meals: [Breakfast, Lunch, Dinner] } per visit, only when every visit's meals are said. \"Lakshmi comes at 7 for breakfast and lunch and 6 for dinner, Mon to Sat\": name Lakshmi, days Mon..Sat, visits [{\"at\":\"07:00\",\"meals\":[\"Breakfast\",\"Lunch\"]},{\"at\":\"18:00\",\"meals\":[\"Dinner\"]}]. save set_cook { name, days, arrival: the visits }."
+      "help": "The line reads back the cook from the household part. A yes: those days and visits. Changes as they say. Read from household.help's cook ({ role: cook, name?, days?, times?, meals? }) when it is there. cook.name: as said, \"Cook\" when no name was said. cook.days: Mon, Tue, Wed, Thu, Fri, Sat, Sun as said, in that order (\"Mon to Sat\" is six days). cook.visits: one { at: \"HH:MM\" (24-hour; an evening or dinner time is pm), meals: [Breakfast, Lunch, Dinner] } per visit, only when every visit's meals are said. \"Lakshmi comes at 7 for breakfast and lunch and 6 for dinner, Mon to Sat\": name Lakshmi, days Mon..Sat, visits [{\"at\":\"07:00\",\"meals\":[\"Breakfast\",\"Lunch\"]},{\"at\":\"18:00\",\"meals\":[\"Dinner\"]}]. save set_cook { name, days, arrival: the visits }."
     },
     {
       "id": "cookTime",

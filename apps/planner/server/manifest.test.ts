@@ -136,7 +136,7 @@ describe("the agent's interface", () => {
   // 3.4.0: Flock's interview runner sends every setup line as written and a model reads each reply into the facts and each
   // target's payload, reading `help`. So an ask is the line a person reads, and a help speaks to that reader, not the Butler.
   it("every setup line is the exact line a person reads, and every help is how to read the reply", () => {
-    const FLOCK_VALUES = ["firstName", "inviter", "sharedApps", "appLink", "appId", "appName", "plannerId", "offerLink", "sharedAppLink", "shareQuestion", "said", "menu", "householdPeople"];
+    const FLOCK_VALUES = ["firstName", "inviter", "sharedApps", "appLink", "appId", "appName", "plannerId", "offerLink", "sharedAppLink", "shareQuestion", "said", "menu", "householdPeople", "householdCook"];
     for (const q of [...setup, ...joiner]) {
       if (q.action) continue;
       expect(q.fixed, q.id).toBe(true);
