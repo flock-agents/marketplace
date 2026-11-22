@@ -213,6 +213,21 @@
     {
       "id": "people",
       "fixed": true,
+      "ask": "{{householdPeople}} Anyone else who eats at home, or anyone who doesn't?",
+      "fills": [
+        "people:list"
+      ],
+      "answer": [
+        {
+          "operation": "set_person"
+        }
+      ],
+      "help": "The line names who lives with them (household.people). A \"no\", \"that's all\" or \"yes\": the people it names. Anyone they add, or take out, as they say. people: each { name, relationship?, group: child | adult | elder }, the cook and other help left out. save one set_person { name, relationship, group } per person: everyone a food rule may name is saved here first.",
+      "when": "household.people"
+    },
+    {
+      "id": "people",
+      "fixed": true,
       "ask": "Who eats at home? Tell me their names, and who is a child or an elder.",
       "fills": [
         "people:list"
@@ -222,7 +237,8 @@
           "operation": "set_person"
         }
       ],
-      "help": "Read from household.people when it is known. people: each { name, relationship?, group: child | adult | elder }, the cook and other help left out. save one set_person { name, relationship, group } per person: everyone a food rule may name is saved here first."
+      "help": "Read from household.people when it is known. people: each { name, relationship?, group: child | adult | elder }, the cook and other help left out. save one set_person { name, relationship, group } per person: everyone a food rule may name is saved here first.",
+      "when": "!household.people"
     },
     {
       "id": "cook",
@@ -328,6 +344,9 @@
           "operation": "set_cooking_days"
         },
         {
+          "operation": "set_slots"
+        },
+        {
           "operation": "set_house_rules"
         }
       ],
@@ -340,7 +359,7 @@
         "sat"
       ],
       "assume": "I assumed food is cooked Monday to Saturday.",
-      "help": "cookingDays: the days food is cooked at home, mon..sun. \"Sunday too?\": a yes is cook.days and Sun, a no is cook.days. A cook who comes every day: every day, unless they say otherwise. A meal eaten out or ordered in (\"Sunday lunch out\") does not take the day out: it answers orderIn too. save set_cooking_days { days }; set_house_rules { add: true, rules }: only the rules this reply states: \"Sunday breakfast South Indian, the parents cook it\": {\"kind\":\"other\",\"days\":[\"Sun\"],\"slots\":[\"Breakfast\"],\"note\":\"South Indian, cooked by the parents\"}; \"Sunday dinner under 15 minutes\": {\"kind\":\"other\",\"days\":[\"Sun\"],\"slots\":[\"Dinner\"],\"note\":\"under 15 minutes\"}."
+      "help": "cookingDays: the days food is cooked at home, mon..sun. \"Sunday too?\": a yes is cook.days and Sun, a no is cook.days. A cook who comes every day: every day, unless they say otherwise. A meal eaten out or ordered in (\"Sunday lunch out\") does not take the day out: save it now, set_slots { add: true, order_in: [{\"day\":\"Sun\",\"slot\":\"Lunch\",\"note\":\"eaten out\"}] }. save set_cooking_days { days }; set_house_rules { add: true, rules }: only the rules this reply states: \"Sunday breakfast South Indian, the parents cook it\": {\"kind\":\"other\",\"days\":[\"Sun\"],\"slots\":[\"Breakfast\"],\"note\":\"South Indian, cooked by the parents\"}; \"Sunday dinner under 15 minutes\": {\"kind\":\"other\",\"days\":[\"Sun\"],\"slots\":[\"Dinner\"],\"note\":\"under 15 minutes\"}."
     },
     {
       "id": "cookingDays",
@@ -355,6 +374,9 @@
           "operation": "set_cooking_days"
         },
         {
+          "operation": "set_slots"
+        },
+        {
           "operation": "set_house_rules"
         }
       ],
@@ -367,7 +389,7 @@
         "sat"
       ],
       "assume": "I assumed food is cooked Monday to Saturday.",
-      "help": "cookingDays: the days food is cooked at home, mon..sun. \"Sunday too?\": a yes is cook.days and Sun, a no is cook.days. A cook who comes every day: every day, unless they say otherwise. A meal eaten out or ordered in (\"Sunday lunch out\") does not take the day out: it answers orderIn too. save set_cooking_days { days }; set_house_rules { add: true, rules }: only the rules this reply states: \"Sunday breakfast South Indian, the parents cook it\": {\"kind\":\"other\",\"days\":[\"Sun\"],\"slots\":[\"Breakfast\"],\"note\":\"South Indian, cooked by the parents\"}; \"Sunday dinner under 15 minutes\": {\"kind\":\"other\",\"days\":[\"Sun\"],\"slots\":[\"Dinner\"],\"note\":\"under 15 minutes\"}."
+      "help": "cookingDays: the days food is cooked at home, mon..sun. \"Sunday too?\": a yes is cook.days and Sun, a no is cook.days. A cook who comes every day: every day, unless they say otherwise. A meal eaten out or ordered in (\"Sunday lunch out\") does not take the day out: save it now, set_slots { add: true, order_in: [{\"day\":\"Sun\",\"slot\":\"Lunch\",\"note\":\"eaten out\"}] }. save set_cooking_days { days }; set_house_rules { add: true, rules }: only the rules this reply states: \"Sunday breakfast South Indian, the parents cook it\": {\"kind\":\"other\",\"days\":[\"Sun\"],\"slots\":[\"Breakfast\"],\"note\":\"South Indian, cooked by the parents\"}; \"Sunday dinner under 15 minutes\": {\"kind\":\"other\",\"days\":[\"Sun\"],\"slots\":[\"Dinner\"],\"note\":\"under 15 minutes\"}."
     },
     {
       "id": "cookingDays",
@@ -382,6 +404,9 @@
           "operation": "set_cooking_days"
         },
         {
+          "operation": "set_slots"
+        },
+        {
           "operation": "set_house_rules"
         }
       ],
@@ -394,7 +419,7 @@
         "sat"
       ],
       "assume": "I assumed food is cooked Monday to Saturday.",
-      "help": "cookingDays: the days food is cooked at home, mon..sun. \"Sunday too?\": a yes is cook.days and Sun, a no is cook.days. A cook who comes every day: every day, unless they say otherwise. A meal eaten out or ordered in (\"Sunday lunch out\") does not take the day out: it answers orderIn too. save set_cooking_days { days }; set_house_rules { add: true, rules }: only the rules this reply states: \"Sunday breakfast South Indian, the parents cook it\": {\"kind\":\"other\",\"days\":[\"Sun\"],\"slots\":[\"Breakfast\"],\"note\":\"South Indian, cooked by the parents\"}; \"Sunday dinner under 15 minutes\": {\"kind\":\"other\",\"days\":[\"Sun\"],\"slots\":[\"Dinner\"],\"note\":\"under 15 minutes\"}."
+      "help": "cookingDays: the days food is cooked at home, mon..sun. \"Sunday too?\": a yes is cook.days and Sun, a no is cook.days. A cook who comes every day: every day, unless they say otherwise. A meal eaten out or ordered in (\"Sunday lunch out\") does not take the day out: save it now, set_slots { add: true, order_in: [{\"day\":\"Sun\",\"slot\":\"Lunch\",\"note\":\"eaten out\"}] }. save set_cooking_days { days }; set_house_rules { add: true, rules }: only the rules this reply states: \"Sunday breakfast South Indian, the parents cook it\": {\"kind\":\"other\",\"days\":[\"Sun\"],\"slots\":[\"Breakfast\"],\"note\":\"South Indian, cooked by the parents\"}; \"Sunday dinner under 15 minutes\": {\"kind\":\"other\",\"days\":[\"Sun\"],\"slots\":[\"Dinner\"],\"note\":\"under 15 minutes\"}."
     },
     {
       "id": "cookingDays",
@@ -409,6 +434,9 @@
           "operation": "set_cooking_days"
         },
         {
+          "operation": "set_slots"
+        },
+        {
           "operation": "set_house_rules"
         }
       ],
@@ -421,7 +449,7 @@
         "sat"
       ],
       "assume": "I assumed food is cooked Monday to Saturday.",
-      "help": "cookingDays: the days food is cooked at home, mon..sun. \"Sunday too?\": a yes is cook.days and Sun, a no is cook.days. A cook who comes every day: every day, unless they say otherwise. A meal eaten out or ordered in (\"Sunday lunch out\") does not take the day out: it answers orderIn too. save set_cooking_days { days }; set_house_rules { add: true, rules }: only the rules this reply states: \"Sunday breakfast South Indian, the parents cook it\": {\"kind\":\"other\",\"days\":[\"Sun\"],\"slots\":[\"Breakfast\"],\"note\":\"South Indian, cooked by the parents\"}; \"Sunday dinner under 15 minutes\": {\"kind\":\"other\",\"days\":[\"Sun\"],\"slots\":[\"Dinner\"],\"note\":\"under 15 minutes\"}."
+      "help": "cookingDays: the days food is cooked at home, mon..sun. \"Sunday too?\": a yes is cook.days and Sun, a no is cook.days. A cook who comes every day: every day, unless they say otherwise. A meal eaten out or ordered in (\"Sunday lunch out\") does not take the day out: save it now, set_slots { add: true, order_in: [{\"day\":\"Sun\",\"slot\":\"Lunch\",\"note\":\"eaten out\"}] }. save set_cooking_days { days }; set_house_rules { add: true, rules }: only the rules this reply states: \"Sunday breakfast South Indian, the parents cook it\": {\"kind\":\"other\",\"days\":[\"Sun\"],\"slots\":[\"Breakfast\"],\"note\":\"South Indian, cooked by the parents\"}; \"Sunday dinner under 15 minutes\": {\"kind\":\"other\",\"days\":[\"Sun\"],\"slots\":[\"Dinner\"],\"note\":\"under 15 minutes\"}."
     },
     {
       "id": "cookingDays",
@@ -436,6 +464,9 @@
           "operation": "set_cooking_days"
         },
         {
+          "operation": "set_slots"
+        },
+        {
           "operation": "set_house_rules"
         }
       ],
@@ -448,7 +479,7 @@
         "sat"
       ],
       "assume": "I assumed food is cooked Monday to Saturday.",
-      "help": "cookingDays: the days food is cooked at home, mon..sun. \"Sunday too?\": a yes is cook.days and Sun, a no is cook.days. A cook who comes every day: every day, unless they say otherwise. A meal eaten out or ordered in (\"Sunday lunch out\") does not take the day out: it answers orderIn too. save set_cooking_days { days }; set_house_rules { add: true, rules }: only the rules this reply states: \"Sunday breakfast South Indian, the parents cook it\": {\"kind\":\"other\",\"days\":[\"Sun\"],\"slots\":[\"Breakfast\"],\"note\":\"South Indian, cooked by the parents\"}; \"Sunday dinner under 15 minutes\": {\"kind\":\"other\",\"days\":[\"Sun\"],\"slots\":[\"Dinner\"],\"note\":\"under 15 minutes\"}."
+      "help": "cookingDays: the days food is cooked at home, mon..sun. \"Sunday too?\": a yes is cook.days and Sun, a no is cook.days. A cook who comes every day: every day, unless they say otherwise. A meal eaten out or ordered in (\"Sunday lunch out\") does not take the day out: save it now, set_slots { add: true, order_in: [{\"day\":\"Sun\",\"slot\":\"Lunch\",\"note\":\"eaten out\"}] }. save set_cooking_days { days }; set_house_rules { add: true, rules }: only the rules this reply states: \"Sunday breakfast South Indian, the parents cook it\": {\"kind\":\"other\",\"days\":[\"Sun\"],\"slots\":[\"Breakfast\"],\"note\":\"South Indian, cooked by the parents\"}; \"Sunday dinner under 15 minutes\": {\"kind\":\"other\",\"days\":[\"Sun\"],\"slots\":[\"Dinner\"],\"note\":\"under 15 minutes\"}."
     },
     {
       "id": "kidsBreakfast",
@@ -461,10 +492,10 @@
       ],
       "answer": [
         {
-          "operation": "set_slots"
+          "operation": "set_family_dishes"
         },
         {
-          "operation": "set_family_dishes"
+          "operation": "set_slots"
         },
         {
           "operation": "set_house_rules"
@@ -484,10 +515,10 @@
       ],
       "answer": [
         {
-          "operation": "set_slots"
+          "operation": "set_family_dishes"
         },
         {
-          "operation": "set_family_dishes"
+          "operation": "set_slots"
         },
         {
           "operation": "set_house_rules"
@@ -507,10 +538,10 @@
       ],
       "answer": [
         {
-          "operation": "set_slots"
+          "operation": "set_family_dishes"
         },
         {
-          "operation": "set_family_dishes"
+          "operation": "set_slots"
         },
         {
           "operation": "set_house_rules"
@@ -528,10 +559,10 @@
       ],
       "answer": [
         {
-          "operation": "set_slots"
+          "operation": "set_family_dishes"
         },
         {
-          "operation": "set_family_dishes"
+          "operation": "set_slots"
         },
         {
           "operation": "set_house_rules"
@@ -550,10 +581,10 @@
       ],
       "answer": [
         {
-          "operation": "set_slots"
+          "operation": "set_family_dishes"
         },
         {
-          "operation": "set_family_dishes"
+          "operation": "set_slots"
         },
         {
           "operation": "set_house_rules"
@@ -571,10 +602,10 @@
       ],
       "answer": [
         {
-          "operation": "set_slots"
+          "operation": "set_family_dishes"
         },
         {
-          "operation": "set_family_dishes"
+          "operation": "set_slots"
         },
         {
           "operation": "set_house_rules"

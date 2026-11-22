@@ -136,7 +136,7 @@ describe("the agent's interface", () => {
   // 3.4.0: Flock's interview runner sends every setup line as written and a model reads each reply into the facts and each
   // target's payload, reading `help`. So an ask is the line a person reads, and a help speaks to that reader, not the Butler.
   it("every setup line is the exact line a person reads, and every help is how to read the reply", () => {
-    const FLOCK_VALUES = ["firstName", "inviter", "sharedApps", "appLink", "appId", "appName", "plannerId", "offerLink", "sharedAppLink", "shareQuestion", "said", "menu"];
+    const FLOCK_VALUES = ["firstName", "inviter", "sharedApps", "appLink", "appId", "appName", "plannerId", "offerLink", "sharedAppLink", "shareQuestion", "said", "menu", "householdPeople"];
     for (const q of [...setup, ...joiner]) {
       if (q.action) continue;
       expect(q.fixed, q.id).toBe(true);
@@ -176,14 +176,16 @@ describe("the agent's interface", () => {
     for (const said of ['avoid { items: ["@baked"] }', '"phulkas twice a week" cap', "fasting { who, days, slots, note } is checked"]) expect(rules, said).toContain(said);
   });
 
-  // Lane B (2026-11-23): an extra meal said while telling the past week (a tiffin, an evening snack) is saved as a slot
-  // before its dishes, added to the ones there; the meals part ends by reading every slot back from the app.
+  // Lane B (2026-11-23): an extra meal said while telling the past week (a tiffin, an evening snack) is saved as a slot,
+  // added to the ones there (Flock writes set_slots before the dishes); the meals part ends by reading every slot back.
+  // The dishes are the main target: Flock refuses an answer without its first target, and most answers add no meal (sim
+  // run seed 16: set_slots first made every plain answer a refusal).
   it("every past-week meal question can save an extra meal first, and the meals part ends with the slots read back", () => {
     const MEALS = ["kidsBreakfast", "kidsLunch", "kidsDinner", "adultsBreakfast", "adultsLunch", "adultsDinner"];
     for (const id of MEALS) {
       const q = setup.find((x) => x.id === id)!;
-      expect(targets(q)[0], id).toBe("set_slots");
-      expect(targets(q), id).toContain("set_family_dishes");
+      expect(targets(q)[0], id).toBe("set_family_dishes");
+      expect(targets(q), id).toContain("set_slots");
       expect(q.help, id).toContain("set_slots { add: true, extra_slots:");
     }
     const ids = setup.map((q) => q.id);
@@ -224,7 +226,8 @@ describe("the agent's interface", () => {
     expect(ask("cook.days = mon,tue,wed,thu,fri,sat")).toBe("Is food cooked at home on Sunday too?");
     expect(ask("cook.days = mon,tue,wed,thu,fri")).toBe("Is food cooked at home on Saturday and Sunday too?");
     expect(ask("!cook.days")).toBe("Which days is food cooked at home? Monday to Saturday, or Sunday too?");
-    for (const q of days) expect(targets(q)).toEqual(["set_cooking_days", "set_house_rules"]);
+    // A meal eaten out said here ("Sunday lunch out") is saved now as an order-in meal (sim run seed 16 lost it).
+    for (const q of days) expect(targets(q)).toEqual(["set_cooking_days", "set_slots", "set_house_rules"]);
     // Variants of one question: each has a when, and the general one is the last.
     expect(days.every((q) => typeof q.when === "string")).toBe(true);
     expect(days[days.length - 1].when).toBe("!cook.days");

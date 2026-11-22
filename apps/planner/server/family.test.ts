@@ -224,6 +224,13 @@ describe("the house", () => {
     expect((await k.owner("GET", "/api/family")).body.house.cooking_days).toEqual(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]);
   });
 
+  it("set_cooking_days keeps the cook's days (sim run seed 16: 'Sunday too?' answered with Sunday alone planned Sunday alone)", async () => {
+    const k = await boot();
+    await k.op("set_cook", { name: "Lakshmi", days: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"], arrival: "07:30" });
+    const r = await k.op("set_cooking_days", { days: ["sun"] });
+    expect(r.house.cooking_days).toEqual(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]);
+  });
+
   it("set_shopping_apps saves main and fallback as settings and the connected apps exactly as given; names or ids", async () => {
     const k = await boot();
     const heard: string[] = [];

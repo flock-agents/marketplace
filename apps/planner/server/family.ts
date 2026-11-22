@@ -400,7 +400,11 @@ export function mountFamilyRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: { a
     if (!Array.isArray(b.days)) refuse(`days must be a list of weekdays (${lower})`);
     const days = (b.days as unknown[]).map((d) => weekday(d) ?? refuse(`days: ${JSON.stringify(d)} is not a weekday (${lower})`));
     if (!days.length) refuse("days must have at least one weekday");
-    const saved = saveHouse({ cooking_days: JSON.stringify(WEEKDAYS.filter((d) => days.includes(d))) }, by);
+    // The cook's days are always cooking days: the cook comes to cook. An answer to "Sunday too?" that names only Sunday
+    // adds it (sim run seed 16: "Ankita makes a quick breakfast and dinner on Sunday" saved Sunday alone, and only
+    // Sunday was planned).
+    const cookDays = houseView(getHouse(db)).cook_days;
+    const saved = saveHouse({ cooking_days: JSON.stringify(WEEKDAYS.filter((d) => days.includes(d) || cookDays.includes(d))) }, by);
     return { body: { ...saved.body, slots_said: slotsSaid(saved.body.house) } };
   });
 
