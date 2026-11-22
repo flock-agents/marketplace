@@ -46,7 +46,7 @@ export const CATEGORIES: Record<string, string[]> = {
   sweet: ["sugar", "jaggery", "gur", "honey", "sheera", "halwa", "kheer", "payasam", "ladoo", "laddu", "jamun", "barfi", "mithai", "jalebi", "condensed milk"],
   soy: ["soy", "soya", "soya chunks", "tofu", "soy sauce", "edamame"],
   gluten: ["wheat", "atta", "maida", "rava", "sooji", "semolina", "bread", "roti", "chapati", "phulka", "paratha", "naan", "pasta", "noodle", "barley", "dalia", "seitan"],
-  dairy: ["milk", "curd", "dahi", "paneer", "ghee", "butter", "cream", "cheese", "khoa", "raita", "lassi", "buttermilk", "chaas", "malai"],
+  dairy: ["milk", "curd", "dahi", "paneer", "ghee", "butter", "cream", "cheese", "khoa", "raita", "lassi", "buttermilk", "chaas", "malai", "makhani"],
   dal: ["dal", "toor", "arhar", "moong", "masoor", "urad", "chana dal"],
   pickle: ["pickle", "achaar", "achar", "papad"],
   vegan_protein: ["tofu", "soya", "chana", "chole", "rajma", "dal", "toor", "moong", "masoor", "urad", "sprouts", "lobia", "besan"],
@@ -121,6 +121,11 @@ export const isSide = (name: string): boolean => {
   const n = wordsOf(stripNegations(name)).join(" ");
   return SIDE_WORDS.some((w) => at(n.split(" "), wordsOf(w)).length > 0) || SIDE_NAMES.some((s) => wordsOf(s).join(" ") === n);
 };
+
+/** Is a dish one the family's own `only` rules name ("Tara eats only plain dosa, curd rice…")? Such a dish has to come back
+ *  in the week, so the repeat check lets it. */
+export const namedInOnlyRule = (name: string, rules: { kind: string; items?: string[] }[]): boolean =>
+  rules.some((r) => r.kind === "only" && (r.items ?? []).some((i) => matches(name, i, { name: true })));
 
 // ── Who eats what ──
 

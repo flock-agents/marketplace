@@ -18,6 +18,8 @@ describe("matches", () => {
     expect(matches("no peanuts", "peanut")).toBe(true);
     // "no" is a word: "Dal Makhani" is not a negation.
     expect(matches("Dal makhani", "dal", { name: true })).toBe(true);
+    // Makhani is butter and cream: dairy.
+    expect(matches("Dal makhani", "@dairy", { name: true })).toBe(true);
   });
 
   it("drops a trailing plural s / es on both sides", () => {

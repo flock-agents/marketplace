@@ -14,7 +14,7 @@ import { addDays, mondayOf, todayStr, weekDates, weekdayOf } from "./dates";
 import { introText, weekLink, weekMessage, weekSendText, youtubeThumb } from "./messages";
 import { dishKey, type LastTime } from "./dishText";
 import { bookOf, knownDishes, lastTime, setVideo, videoOf, type DishVideo } from "./dishBook";
-import { breaksText, dinersOf, EVERYONE, forEveryone, ruleBreaks, ruleBreaksIn, type RuleBreak } from "./rules";
+import { breaksText, dinersOf, EVERYONE, forEveryone, namedInOnlyRule, ruleBreaks, ruleBreaksIn, type RuleBreak } from "./rules";
 import { getHouse, groceryApp, houseView, isObject, list, name, names, refuse, words, writeRoutes,
   type Db, type Emit, type HouseView, type PersonRow } from "./family";
 
@@ -316,10 +316,17 @@ function guardMeal(tx: Db, meal: MealRow, missing: string[], eaters: string[] = 
 }
 
 const STAPLES = new Set<string>(STAPLE_DISHES);
+/** A grain before a staple keeps it a staple: "Jowar roti", "Ragi roti", "Brown rice" come back every day like roti and rice. */
+const STAPLE_GRAINS = new Set(["jowar", "bajra", "ragi", "nachni", "makki", "millet", "multigrain", "wheat", "brown", "red", "kambu"]);
+const isStaple = (key: string): boolean => {
+  if (STAPLES.has(key)) return true;
+  const w = key.split(" ");
+  return w.length === 2 && STAPLE_GRAINS.has(w[0]) && STAPLES.has(w[1]);
+};
 
 /** The checks a week passes before its closing call answers the message: every dish has its ingredients, every extra slot
- *  (a child's tiffin) has a meal on each of its days that is a cooking day from today on, and no dish (staples aside) is on
- *  two days unless the family asked for it (`repeatsOk`). Refused with every problem named, so one fix round is enough. */
+ *  (a child's tiffin) has a meal on each of its days that is a cooking day from today on, and no dish is on two days unless the
+ *  family asked for it (`repeatsOk`): staples (a grain's roti too) and the dishes an `only` rule names are let come back. Refused with every problem named, so one fix round is enough. */
 function checkWeek(week: WeekView, house: HouseView, today: string, repeatsOk: boolean, breaks: RuleBreak[]): void {
   const meals = week.days.flatMap((d) => d.meals);
   const missing = meals.flatMap((m) => m.dishes.filter((d) => !d.ingredients.length).map((d) => `${mealLabel(m)}: ${d.name}`));
@@ -334,7 +341,7 @@ function checkWeek(week: WeekView, house: HouseView, today: string, repeatsOk: b
   const days = new Map<string, { name: string; days: Set<string> }>();
   for (const m of meals) for (const d of m.dishes) {
     const k = dishKey(d.name);
-    if (STAPLES.has(k)) continue;
+    if (isStaple(k) || namedInOnlyRule(d.name, house.rules)) continue;
     const seen = days.get(k) ?? { name: d.name, days: new Set<string>() };
     seen.days.add(m.date); days.set(k, seen);
   }

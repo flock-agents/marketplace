@@ -86,6 +86,8 @@ loaf, garlic bread, oven), and from the 2026-11-22 eval:
   `Mon 2026-11-23 Breakfast: Rava idli — Meera eats only plain idli, plain dosa, banana sheera (add a dish for Meera)`.
   Also `rule_breaks: [{ meal, dish?, who?, rule, fix }]` in the body.
 - Never on the family's own edits in the app (they may break their own rules).
+- The repeat check (REPEATED_DISHES) lets come back what a rule forces: a dish an `only` rule names (Tara's five) and a
+  grain's staple ("Jowar roti" like "Roti"). Live eval on flock-fast 2026-11-22: these refusals kept Flash from finishing a week.
 
 ## The interview writes rules in this shape
 Every answer that states a rule is saved as a checked kind with `set_house_rules` (people's notes keep the story; the

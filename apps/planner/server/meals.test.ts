@@ -274,6 +274,21 @@ describe("a planned week is ready to send", () => {
     expect(ok.message).toContain("Next week is planned.");
   });
 
+  it("a grain's roti and the dishes a family's only rule names come back without counting as repeats", async () => {
+    const { op } = await boot({ now: SUNDAY });
+    await op("set_person", { name: "Tara", group: "child" });
+    await op("set_house_rules", { rules: [{ kind: "only", who: "Tara", slots: ["Breakfast"], items: ["plain dosa", "curd rice"], note: "Tara eats only these at breakfast" }] });
+    const days = [0, 1, 2].map((i) => `2026-11-${23 + i}`);
+    const planned = await op("plan_week", { week_start: MON, mode: "final", keep_rest: true, meals: [
+      ...days.map((d, i) => day(d, "Dinner", ["Rajma", "Chole", "Kadhi"][i], "Jowar roti")),
+      ...days.map((d) => day(d, "Breakfast", "Plain dosa", "Curd rice")),
+    ] });
+    expect(planned.error).toBeUndefined();
+    const r = await op("plan_week", { week_start: MON, mode: "final" });
+    expect(r.error).toBeUndefined();
+    expect(r.message).toContain("Next week is planned.");
+  });
+
   it("the closing answer tells the agent to forward the message as it is, with its one link, the intro once, then stop", async () => {
     const { op } = await boot({ now: SUNDAY, basePath: "/a/xyz" });
     await op("plan_week", { week_start: MON, mode: "final", keep_rest: true, meals: [day(MON, "Lunch", "Rajma")] });

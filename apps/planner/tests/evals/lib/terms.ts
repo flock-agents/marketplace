@@ -74,7 +74,7 @@ export function positiveName(name: string): string {
     .replace(/\(\s*(no|without|minus|skip|less|zero|free of)\b[^)]*\)/gi, " ")
     .replace(/([(,;]\s*)(no|without|minus|sans)\s+[^)]*\)/gi, "$1)")
     // A list running to the end of the name or a comma/bracket may be joined by spaces too ("no onion garlic"); else as before.
-    .replace(/\b(without|no|minus|sans)\s+(?:[a-z]+(?:(?:\s*,\s*|\s+(?:or|and|&)\s+|\s+)(?!(?:with|served|topped)\b)[a-z]+)*(?=\s*(?:[,;)\]]|$))|[a-z]+(?:\s+(?:or|and|&|,)\s*[a-z]+)*)/gi, " ")
+    .replace(/\b(without|no|minus|sans)[\s-]+(?:[a-z]+(?:(?:\s*,\s*|\s+(?:or|and|&)\s+|\s+)(?!(?:with|served|topped)\b)[a-z]+)*(?=\s*(?:[,;)\]]|$))|[a-z]+(?:\s+(?:or|and|&|,)\s*[a-z]+)*)/gi, " ")
     .replace(/\b[a-z]+[- ]free\b/gi, " ");
 }
 /** A name that says it has no sugar ("Banana sheera (no sugar)", "sugar-free halwa") is not sweet by its name. */
