@@ -14,7 +14,7 @@ import { addDays, mondayOf, todayStr, weekDates, weekdayOf } from "./dates";
 import { introText, weekLink, weekMessage, weekSendText, youtubeThumb } from "./messages";
 import { dishKey, type LastTime } from "./dishText";
 import { bookOf, knownDishes, lastTime, setVideo, videoOf, type DishVideo } from "./dishBook";
-import { breaksText, dinersOf, EVERYONE, forEveryone, namedInOnlyRule, ruleBreaks, ruleBreaksIn, type RuleBreak } from "./rules";
+import { breaksText, dinersOf, EVERYONE, forEveryone, isRepeatableSide, namedInOnlyRule, ruleBreaks, ruleBreaksIn, type RuleBreak } from "./rules";
 import { getHouse, groceryApp, houseView, isObject, list, name, names, refuse, words, writeRoutes,
   type Db, type Emit, type HouseView, type PersonRow } from "./family";
 
@@ -316,6 +316,7 @@ function guardMeal(tx: Db, meal: MealRow, missing: string[], eaters: string[] = 
 }
 
 const STAPLES = new Set<string>(STAPLE_DISHES);
+const keepRestOf = (b: Record<string, unknown>) => b.keep_rest === true || b.keep_rest === "true";
 /** A grain before a staple keeps it a staple: "Jowar roti", "Ragi roti", "Brown rice" come back every day like roti and rice. */
 const STAPLE_GRAINS = new Set(["jowar", "bajra", "ragi", "nachni", "makki", "millet", "multigrain", "wheat", "brown", "red", "kambu"]);
 const isStaple = (key: string): boolean => {
@@ -323,6 +324,19 @@ const isStaple = (key: string): boolean => {
   const w = key.split(" ");
   return w.length === 2 && STAPLE_GRAINS.has(w[0]) && STAPLES.has(w[1]);
 };
+
+/** The dishes on more than one day of a week: "Rajma (Mon, Thu)". Staples, sides (sambar, chutney, plain dal: owner
+ *  2026-11-22, "sides can be repeated on multiple days") and the dishes an `only` rule names come back freely. */
+function repeatsIn(week: WeekView, house: HouseView): string[] {
+  const days = new Map<string, { name: string; days: Set<string> }>();
+  for (const m of week.days.flatMap((d) => d.meals)) for (const d of m.dishes) {
+    const k = dishKey(d.name);
+    if (isStaple(k) || isRepeatableSide(d.name) || namedInOnlyRule(d.name, house.rules)) continue;
+    const seen = days.get(k) ?? { name: d.name, days: new Set<string>() };
+    seen.days.add(m.date); days.set(k, seen);
+  }
+  return [...days.values()].filter((d) => d.days.size > 1).map((d) => `${d.name} (${[...d.days].sort().map(weekdayOf).join(", ")})`);
+}
 
 /** The checks a week passes before its closing call answers the message: every dish has its ingredients, every extra slot
  *  (a child's tiffin) has a meal on each of its days that is a cooking day from today on, and no dish is on two days unless the
@@ -338,14 +352,7 @@ function checkWeek(week: WeekView, house: HouseView, today: string, repeatsOk: b
       if (!meals.some((m) => m.date === date && dishKey(m.slot) === dishKey(slot.name))) gaps.push(mealLabel({ date, slot: slot.name }));
     }
   }
-  const days = new Map<string, { name: string; days: Set<string> }>();
-  for (const m of meals) for (const d of m.dishes) {
-    const k = dishKey(d.name);
-    if (isStaple(k) || namedInOnlyRule(d.name, house.rules)) continue;
-    const seen = days.get(k) ?? { name: d.name, days: new Set<string>() };
-    seen.days.add(m.date); days.set(k, seen);
-  }
-  const repeated = repeatsOk ? [] : [...days.values()].filter((d) => d.days.size > 1).map((d) => `${d.name} (${[...d.days].sort().map(weekdayOf).join(", ")})`);
+  const repeated = repeatsOk ? [] : repeatsIn(week, house);
   if (!missing.length && !gaps.length && !repeated.length && !breaks.length) return;
   const said: string[] = breaks.length ? [rulesSaid(breaks)] : [];
   if (missing.length) said.push(`${INGREDIENTS_RULE}. Without ingredients: ${missing.join("; ")}: give each its ingredients with set_dish { dish_id, ingredients }.`);
@@ -527,7 +534,11 @@ export function mountMealRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: { bas
     const week = weekView(db, weekStart);
     // The message and the intro come only from the closing call (final, no meals), once the week is whole: a week planned in parts
     // by final calls with meals carries neither. A final week is kept whether or not anyone replies.
-    if (mode !== "final" || b.meals !== undefined) return { body: { week } };
+    if (mode !== "final" || b.meals !== undefined) {
+      // A part of the week by the agent: the dishes it now repeats are named at once, while that day is still being planned.
+      const repeats = b.meals !== undefined && keepRestOf(b) && by.startsWith("agent:") ? repeatsIn(week, houseView(getHouse(db))) : [];
+      return { body: repeats.length ? { week, repeats, note: `Dishes now on more than one day: ${repeats.join("; ")}. Change the day you just planned with set_dish or plan_week again, unless the family asked for it more than once; the closing plan_week refuses them.` } : { week } };
+    }
     const house = getHouse(db), view = houseView(house);
     const monday = view.cooking_days.includes("Mon") ? week.days[0].meals : [];
     const out: Record<string, unknown> = { week, message: weekMessage({ monday, link: weekLink(opts.basePath, weekStart) }) };

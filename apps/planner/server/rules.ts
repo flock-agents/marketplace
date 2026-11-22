@@ -46,7 +46,7 @@ export const CATEGORIES: Record<string, string[]> = {
   sweet: ["sugar", "jaggery", "gur", "honey", "sheera", "halwa", "kheer", "payasam", "ladoo", "laddu", "jamun", "barfi", "mithai", "jalebi", "condensed milk"],
   soy: ["soy", "soya", "soya chunks", "tofu", "soy sauce", "edamame"],
   gluten: ["wheat", "atta", "maida", "rava", "sooji", "semolina", "bread", "roti", "chapati", "phulka", "paratha", "naan", "pasta", "noodle", "barley", "dalia", "seitan"],
-  dairy: ["milk", "curd", "dahi", "paneer", "ghee", "butter", "cream", "cheese", "khoa", "raita", "lassi", "buttermilk", "chaas", "malai", "makhani"],
+  dairy: ["milk", "curd", "dahi", "paneer", "ghee", "butter", "cream", "cheese", "khoa", "raita", "lassi", "buttermilk", "chaas", "malai", "makhani", "kadhi"],
   dal: ["dal", "toor", "arhar", "moong", "masoor", "urad", "chana dal"],
   pickle: ["pickle", "achaar", "achar", "papad"],
   vegan_protein: ["tofu", "soya", "chana", "chole", "rajma", "dal", "toor", "moong", "masoor", "urad", "sprouts", "lobia", "besan"],
@@ -69,8 +69,23 @@ const NO_SUGAR = /\b(?:no|without|minus)\s+(?:added\s+)?sugar\b|\bsugar[\s-]*fre
 /** A word without its trailing plural: "potatoes" potato, "peanuts" peanut, "radishes" radish, "cheeses" cheese. */
 const singular = (w: string): string =>
   w.length <= 3 ? w : /(ss|x|z|ch|sh|o)es$/.test(w) ? w.slice(0, -2) : w.endsWith("s") && !w.endsWith("ss") ? w.slice(0, -1) : w;
-/** Lower case, words only, each without its plural. */
-const wordsOf = (text: string): string[] => text.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean).map(singular);
+/** Indian food words as the English one the rules and categories use, so a rule never needs each spelling: "Aloo matar" has
+ *  potato and peas, "Suji sheera" semolina. A word, not a dish: what a dish is made of stays in its ingredients. */
+export const SAME_AS: Record<string, string> = {
+  aloo: "potato", alu: "potato", batata: "potato", urulai: "potato", pyaz: "onion", pyaaz: "onion", kanda: "onion", vengayam: "onion",
+  lehsun: "garlic", lahsun: "garlic", lasun: "garlic", poondu: "garlic", adrak: "ginger", inji: "ginger", gajar: "carrot", mooli: "radish",
+  shakarkandi: "sweet potato", arbi: "colocasia", suran: "yam", jimikand: "yam", chukandar: "beetroot",
+  matar: "pea", mutter: "pea", palak: "spinach", keerai: "spinach", gobi: "cauliflower", phool: "cauliflower", bhindi: "okra", vendakkai: "okra",
+  baingan: "brinjal", vankaya: "brinjal", kathirikai: "brinjal", lauki: "bottle gourd", karela: "bitter gourd", kumbh: "mushroom", khumb: "mushroom",
+  suji: "semolina", sooji: "semolina", rava: "semolina", ravva: "semolina", maida: "refined wheat flour", gehun: "wheat", godhuma: "wheat",
+  dahi: "curd", thayir: "curd", mosaru: "curd", doodh: "milk", paal: "milk", makhan: "butter", malai: "cream",
+  anda: "egg", ande: "egg", muttai: "egg", murgh: "chicken", murg: "chicken", kozhi: "chicken", machli: "fish", machchi: "fish", meen: "fish",
+  gosht: "mutton", jhinga: "prawn", kaju: "cashew", badam: "almond", akhrot: "walnut", pista: "pistachio", moongphali: "peanut",
+  shengdana: "peanut", kadalai: "peanut", nilakadalai: "peanut", chawal: "rice", chaawal: "rice", akki: "rice", cheeni: "sugar", gud: "jaggery", shahad: "honey",
+};
+/** Lower case, words only, each without its plural, an Indian food word as its English one (SAME_AS). */
+const wordsOf = (text: string): string[] => text.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean).map(singular)
+  .flatMap((w) => (SAME_AS[w] ?? w).split(" "));
 
 /** A dish's name with what it says it is without taken out: "(no peanuts)", "[minus groundnut]", "without onion and garlic",
  *  "no onion" up to the next comma, bracket or "with". */
@@ -126,6 +141,16 @@ export const isSide = (name: string): boolean => {
  *  in the week, so the repeat check lets it. */
 export const namedInOnlyRule = (name: string, rules: { kind: string; items?: string[] }[]): boolean =>
   rules.some((r) => r.kind === "only" && (r.items ?? []).some((i) => matches(name, i, { name: true })));
+
+/** A side that comes back on many days of a week (owner 2026-11-22): any side a per_meal cap leaves out, and sambar, rasam,
+ *  a plain dal, boiled eggs. Only for the repeat check: a cap still counts sambar as a dish to cook. */
+const REPEAT_SIDE_WORDS = ["sambar", "rasam"];
+const REPEAT_SIDE_NAMES = ["dal", "plain dal", "dal tadka", "dal fry", "toor dal", "moong dal", "boiled egg", "boiled eggs"];
+export const isRepeatableSide = (name: string): boolean => {
+  if (isSide(name)) return true;
+  const n = wordsOf(stripNegations(name));
+  return REPEAT_SIDE_WORDS.some((w) => at(n, wordsOf(w)).length > 0) || REPEAT_SIDE_NAMES.some((s) => wordsOf(s).join(" ") === n.join(" "));
+};
 
 // ── Who eats what ──
 

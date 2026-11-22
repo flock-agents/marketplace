@@ -289,6 +289,17 @@ describe("a planned week is ready to send", () => {
     expect(r.message).toContain("Next week is planned.");
   });
 
+  it("sides come back on many days; a day planned in a part names the dishes it now repeats", async () => {
+    const { op } = await boot({ now: SUNDAY });
+    const first = await op("plan_week", { week_start: MON, mode: "final", keep_rest: true, meals: [day(MON, "Dinner", "Rajma", "Sambar", "Coconut chutney", "Plain dal")] });
+    expect(first.repeats).toBeUndefined();
+    const second = await op("plan_week", { week_start: MON, mode: "final", keep_rest: true, meals: [day("2026-11-24", "Dinner", "Rajma", "Drumstick sambar", "Coconut chutney", "Plain dal")] });
+    expect(second.repeats).toEqual(["Rajma (Mon, Tue)"]);
+    expect(second.note).toContain("Rajma (Mon, Tue)");
+    await op("plan_week", { week_start: MON, mode: "final", keep_rest: true, meals: [day("2026-11-24", "Dinner", "Chole", "Drumstick sambar", "Coconut chutney", "Plain dal")] });
+    expect((await op("plan_week", { week_start: MON, mode: "final" })).message).toContain("Next week is planned.");
+  });
+
   it("the closing answer tells the agent to forward the message as it is, with its one link, the intro once, then stop", async () => {
     const { op } = await boot({ now: SUNDAY, basePath: "/a/xyz" });
     await op("plan_week", { week_start: MON, mode: "final", keep_rest: true, meals: [day(MON, "Lunch", "Rajma")] });

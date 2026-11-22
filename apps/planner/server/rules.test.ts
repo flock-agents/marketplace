@@ -18,6 +18,14 @@ describe("matches", () => {
     expect(matches("no peanuts", "peanut")).toBe(true);
     // "no" is a word: "Dal Makhani" is not a negation.
     expect(matches("Dal makhani", "dal", { name: true })).toBe(true);
+    // An Indian food word reads as its English one: aloo is potato, suji is semolina (gluten), matar is peas, kadhi has curd.
+    expect(matches("Aloo matar", "@root_veg", { name: true })).toBe(true);
+    expect(matches("Aloo matar", "@green_leafy", { name: true })).toBe(true);
+    expect(matches("Suji sheera", "@gluten", { name: true })).toBe(true);
+    expect(matches("Kadhi chana", "@dairy", { name: true })).toBe(true);
+    expect(matches("Palak paneer", "spinach", { name: true })).toBe(true);
+    expect(matches("Rava idli", "@white_rice", { name: true })).toBe(false);
+    expect(matches("Akki roti", "@white_rice", { name: true })).toBe(true);
     // Makhani is butter and cream: dairy.
     expect(matches("Dal makhani", "@dairy", { name: true })).toBe(true);
   });
@@ -45,7 +53,7 @@ describe("matches", () => {
     expect(matches("groundnut oil", "@peanut")).toBe(true);
     expect(matches("Peanut chikki", "@nuts")).toBe(true);
     expect(matches("Coconut chutney", "@nuts")).toBe(false);
-    expect(matches("Aloo gobi", "@root_veg")).toBe(false);
+    expect(matches("Aloo gobi", "@root_veg")).toBe(true);   // aloo is potato (SAME_AS)
     expect(matches("potato", "@root_veg")).toBe(true);
     expect(matches("Sweet potato chaat", "@root_veg")).toBe(true);
     expect(matches("Palak paneer", "@green_leafy")).toBe(true);
@@ -373,10 +381,10 @@ describe("run 11: the plan for 23–29 Nov", () => {
     expect(r.error).toContain("Without ingredients");
     // The closing call too: a dish on two days and a rule broken in one refusal.
     await op("plan_week", { week_start: "2026-11-23", mode: "draft", meals: [...FIXED.slice(0, 2),
-      { date: "2026-11-25", slot: "Lunch", dishes: [dish("Dal tadka", ["toor dal"]), dish("Mushroom curry", ["mushroom"])] }] });
+      { date: "2026-11-25", slot: "Lunch", dishes: [dish("Rava idli", ["rava", "curd"]), dish("Mushroom curry", ["mushroom"])] }] });
     const closing = await op("plan_week", { week_start: "2026-11-23", mode: "final" });
     expect(closing.code).toBe("RULE_BROKEN");
-    expect(closing.detail.repeated).toEqual(["Dal tadka (Mon, Wed)"]);
+    expect(closing.detail.repeated).toEqual(["Rava idli (Mon, Wed)"]);   // a dal is a side: it may come back
     expect(keys(closing.detail.rule_breaks)).toEqual(["Wed 2026-11-25 Lunch|Mushroom curry|"]);
   });
 

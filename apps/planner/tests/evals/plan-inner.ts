@@ -117,7 +117,11 @@ async function byDay(k: any, fx: Fixture, guide: string, ctx: any, transcript: s
       const payload = await call(asked);
       if (!payload) { asked = `Send ${weekdayOf(date)} ${date} again as the JSON object only.`; continue; }
       const r = await k.op("plan_week", { week_start: fx.week_start, mode: "final", keep_rest: true, meals: payload.meals });
-      if (!r?.error) { transcript.push("The app took it."); break; }
+      if (!r?.error) {
+        // The app took the day but names the dishes it now repeats: the agent fixes that day while it is on it.
+        if (r?.note && n < dayRounds - 1) { asked = `The app took it, and says: ${r.note}\n\nSend ${weekdayOf(date)} ${date} again, fixed, as the same JSON object.`; continue; }
+        transcript.push(r?.note ? `The app took it, and says: ${r.note}` : "The app took it."); break;
+      }
       const said = refusalText(r);
       refusals.push(said);
       asked = `${said}\n\nSend ${weekdayOf(date)} ${date} again, fixed, as the same JSON object.`;

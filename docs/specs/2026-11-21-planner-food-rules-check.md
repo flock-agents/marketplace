@@ -88,6 +88,12 @@ loaf, garlic bread, oven), and from the 2026-11-22 eval:
 - Never on the family's own edits in the app (they may break their own rules).
 - The repeat check (REPEATED_DISHES) lets come back what a rule forces: a dish an `only` rule names (Tara's five) and a
   grain's staple ("Jowar roti" like "Roti"). Live eval on flock-fast 2026-11-22: these refusals kept Flash from finishing a week.
+- Sides come back freely (owner 2026-11-22: "sides can be repeated on multiple days"): any side a per_meal cap leaves out, and
+  sambar, rasam, a plain dal, boiled eggs (`isRepeatableSide`). A day the agent plans as a part (`keep_rest`) answers with
+  `repeats` and a `note` naming the dishes now on more than one day, so it is fixed while that day is being planned.
+- Indian food words are read as their English one before any matching (`SAME_AS` in rules.ts: aloo potato, suji semolina,
+  matar peas, dahi curd, palak spinach…), so a rule or category never needs each spelling. Kadhi is `@dairy`. Found by the
+  flock-fast eval: "Aloo matar" (no potato in its ingredients) for a Jain family, "Suji sheera" for a gluten-free child.
 
 ## The interview writes rules in this shape
 Every answer that states a rule is saved as a checked kind with `set_house_rules` (people's notes keep the story; the
