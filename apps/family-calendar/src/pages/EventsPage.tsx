@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { Button, Empty, InlinePanel, Page, Search, Table, useTable, useToast, useToday, label } from "../flock/ui";
 import { EventEditor } from "./EventEditor";
+import { EventTodos } from "./EventTodos";
 import { eventOrder, nextOccurrence, repeatText, repeats, type EventPatch } from "./dates";
-import { dayLabel, memberLabel, timeLabel, undo, type Event, type Member, type Selected } from "./shared";
+import { dayLabel, memberLabel, sourceLine, timeLabel, todoCount, undo, useExtras, type Event, type Member, type Selected } from "./shared";
 
 /** Every event from today on, soonest first, with Add under the header and the picked event opened in place. An event that
  *  repeats is listed once, at the next day it falls on. */
@@ -16,6 +17,7 @@ export function EventsPage({ selected, onSelect }: { selected: Selected; onSelec
   const family = useTable<Member>("members", { sort: "name", limit: 100 });
   const names = family.rows.map((m) => m.name);
   const rows = [...list.rows.filter((e) => !repeats(e)), ...repeating.rows.map((e) => ({ ...e, date: nextOccurrence(e, today) ?? e.date }))].sort(eventOrder);
+  const { extras, reload } = useExtras(rows.map((e) => `${e.id}:${e.updated_at}`).join(","));
   // The editor gets the event as it is kept (a repeating one with its first day), not the day it is listed on.
   const picked = selected?.table === "events" ? [...repeating.rows, ...list.rows].find((e) => e.id === selected.id) : undefined;
   const pick = (e: Event) => onSelect(selected?.id === e.id ? null : { table: "events", id: e.id, label: `${e.title} on ${dayLabel(e.date)}` });
@@ -39,19 +41,25 @@ export function EventsPage({ selected, onSelect }: { selected: Selected; onSelec
         selectedId={picked?.id} onRowClick={pick}
         empty={<Empty title="Nothing coming up" hint={q ? "Nothing matches. Clear the search." : "Add the first event, or ask the assistant to."} object="calendar" action={<Button onClick={() => setAdding(true)}>Add an event</Button>} />}
         columns={[
-          { key: "title", label: "What", width: "wide" },
+          { key: "title", label: "What", width: "wide", render: (e) => {
+            const line = sourceLine(e, extras);
+            // A cancelled event stays listed, struck through; the small line says where it came from or who added it.
+            return <span>{e.status === "cancelled" ? <><s>{e.title}</s> (cancelled)</> : e.title}{line ? <span className="fc-source">{line}</span> : null}</span>;
+          } },
           { key: "date", label: "When", kind: "date" },
-          { key: "start_time", label: "Time", render: (e) => (repeats(e) ? `${repeatText({ due: e.date, repeat: e.repeat })}, ${timeLabel(e)}` : timeLabel(e)) },
+          { key: "start_time", label: "Time", render: (e) => (repeats(e) ? `${repeatText(e.date, e.repeat)}, ${timeLabel(e)}` : timeLabel(e)) },
           { key: "who", label: "Who", render: (e) => memberLabel(e.who, family.rows) || "Everyone" },
           { key: "location", label: "Where", phone: "hide" },
+          { key: "id", label: "To-dos", render: (e) => todoCount(e.id, extras) },
         ]}
         // The picked event opens in place, under its row.
         expanded={picked ? {
           at: picked.id, label: `Edit ${picked.title}`, onClose: () => onSelect(null),
-          content: (
+          content: (<>
+            <EventTodos eventId={picked.id} todos={extras[picked.id]?.todos ?? []} onChanged={() => void reload()} />
             <EventEditor key={picked.id} title={`Edit ${picked.title}`} names={names} event={picked}
               onSave={async (row) => { await list.update(picked.id, row); onSelect(null); }} onCancel={() => onSelect(null)} onRemove={() => remove(picked)} />
-          ),
+          </>),
         } : null}
       />
     </Page>

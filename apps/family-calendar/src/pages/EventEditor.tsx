@@ -21,7 +21,8 @@ export function EventEditor({ title, names, event, date, onSave, onCancel, onRem
     const r = normaliseEvent(values);
     if (!r.ok) { setErrors(r.errors); return; }
     setErrors({});
-    await onSave(r.row);
+    // A new timed event is nudged half an hour before unless the form says otherwise, as one the agent adds is.
+    await onSave(!event && r.row.start_time && r.row.reminder_minutes === null ? { ...r.row, reminder_minutes: 30 } : r.row);
   };
   return (
     <Card title={title} actions={onRemove ? <Button size="sm" variant="ghost" icon="trash" onClick={() => setAsking(true)}>Delete</Button> : undefined}>

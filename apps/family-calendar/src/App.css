@@ -1,5 +1,5 @@
 /* The week toolbar's Prev / Today / Next stay 40px tall and wide enough to tap. */
 .fc-nav { display: flex; align-items: center; gap: 0; }
 .fc-nav .fl-btn { min-height: 40px; min-width: 40px; justify-content: center; }
-/* When a reminder next comes round, at the right of its row. */
-.fc-next { color: var(--ink-3); font-size: 13.5px; white-space: nowrap; }
+/* Under an event's title on the Events page: where it came from, or who added it. */
+.fc-source { display: block; color: var(--ink-3); font-size: 13px; margin-top: 2px; }

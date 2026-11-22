@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { Button, Empty, ErrorCard, Page, Schedule, Skeleton, scheduleAddKey, useTable, useToast, useToday, label } from "../flock/ui";
 import { EventEditor } from "./EventEditor";
+import { EventTodos } from "./EventTodos";
 import { FamilyList } from "./FamilyList";
 import { addDays, eventOrder, occurrences, repeats, shortDate, type EventPatch } from "./dates";
-import { dayLabel, memberLabel, timeLabel, toneOf, undo, type Event, type Member, type Selected } from "./shared";
+import { dayLabel, memberLabel, sourceLine, timeLabel, todoCount, toneOf, undo, useExtras, type Event, type Member, type Selected } from "./shared";
 
 /** What the editor is for, and `at`: where it opens in the week (under the event, or under the "+ Add" of a day). */
 type Target = { kind: "add"; date: string; at: string } | { kind: "edit"; event: Event; at: string };
@@ -24,6 +25,8 @@ export function WeekPage({ selected, onSelect }: { selected: Selected; onSelect:
   const family = useTable<Member>("members", { sort: "name", limit: 100 });
   const names = family.rows.map((m) => m.name);
   const rows = [...events.rows.filter((e) => !repeats(e)), ...repeating.rows.flatMap((e) => occurrences(e, from, end).map((date) => ({ ...e, date })))].sort(eventOrder);
+  // Where each event came from and its to-dos: read again when the events change.
+  const { extras, reload } = useExtras(rows.map((e) => `${e.id}:${e.updated_at}`).join(","));
   /** The event as it is kept: a repeating one is shown on its days of this week, and edited as the one row it is (its first day). */
   const kept = (e: Event): Event => repeating.rows.find((w) => w.id === e.id) ?? e;
   /** A row of the week: an event on one of its days. An event that happens every day is seven rows of one id, so the day is in the key. */
@@ -56,8 +59,10 @@ export function WeekPage({ selected, onSelect }: { selected: Selected; onSelect:
         : rows.length === 0 && !target ? <Empty title="Nothing on these days" hint="Add the first event, or ask the assistant to." object="calendar" action={<Button onClick={() => add(from)}>Add an event</Button>} />
         : <Schedule
           key={from} rows={rows} rowKey={keyOf} from={from} days={7} today={now} showEarlier={end < now}
-          date={(e) => e.date} title={(e) => e.title} time={timeLabel} start={(e) => e.start_time ?? "00:00"}
-          secondary={(e) => [memberLabel(e.who, family.rows), e.location].filter(Boolean).join(" · ")}
+          date={(e) => e.date} time={timeLabel} start={(e) => e.start_time ?? "00:00"}
+          // A cancelled event stays on its day, struck through.
+          title={(e) => (e.status === "cancelled" ? <><s>{e.title}</s><span style={SR}> (cancelled)</span></> : e.title)}
+          secondary={(e) => [memberLabel(e.who, family.rows), e.location, sourceLine(e, extras), todoCount(e.id, extras)].filter(Boolean).join(" · ")}
           tone={(e) => toneOf(e.who, family.rows)}
           selectedId={target?.kind === "edit" ? target.at : selected?.table === "events" ? selected.id : undefined}
           onSelect={open} onAdd={add}
@@ -65,14 +70,15 @@ export function WeekPage({ selected, onSelect }: { selected: Selected; onSelect:
           expanded={target ? {
             at: target.at, onClose: close,
             label: target.kind === "add" ? `Add an event on ${dayLabel(target.date)}` : `Edit ${target.event.title}`,
-            content: (
+            content: (<>
+              {target.kind === "edit" ? <EventTodos eventId={target.event.id} todos={extras[target.event.id]?.todos ?? []} onChanged={() => void reload()} /> : null}
               <EventEditor
                 key={target.kind === "edit" ? `edit:${target.event.id}` : `add:${target.date}`}
                 title={target.kind === "add" ? `Add an event on ${dayLabel(target.date)}` : `Edit ${target.event.title}`}
                 names={names} event={target.kind === "edit" ? target.event : undefined} date={target.kind === "add" ? target.date : undefined}
                 onSave={save} onCancel={close} onRemove={target.kind === "edit" ? remove : undefined}
               />
-            ),
+            </>),
           } : null}
         />}
       <FamilyList family={family} selected={selected} onSelect={onSelect} />
