@@ -9,10 +9,6 @@
       "reason": "Search, compare prices, and build grocery carts on Zomato Blinkit"
     },
     {
-      "slug": "google-calendar",
-      "reason": "Manage family calendar for daily briefings and event reminders"
-    },
-    {
       "slug": "google-sheets",
       "reason": "Track household expenses and grocery lists in spreadsheets"
     },
@@ -24,17 +20,21 @@
   "tasks": [
     {
       "name": "Morning Briefing",
-      "reason": "Daily summary with weather, calendar, and pending tasks at 8 AM"
+      "reason": "8 AM brief in the family group: today's events, changes, new dates and to-dos from the Family Calendar, with the weather"
     },
     {
       "name": "Evening Reminder",
-      "reason": "Daily evening check-in with tomorrow's preview at 9 PM"
+      "reason": "9 PM brief in the family group: tomorrow's events and the to-dos due tomorrow from the Family Calendar"
     }
   ],
   "apps": [
     {
       "slug": "planner",
       "reason": "Plan weekly meals and manage a grocery shopping list"
+    },
+    {
+      "slug": "family-calendar",
+      "reason": "The family's events and to-dos; the morning and evening briefs come from it"
     }
   ]
 }

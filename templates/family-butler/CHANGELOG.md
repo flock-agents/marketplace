@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.9.0
+
+- **The briefs come from the Family Calendar and go to the family group.** The template sets up the Family Calendar app (`family-calendar`, required) beside the Meal Planner, paired with Family Butler. Morning Briefing (8 AM) reads the calendar's `brief` operation with `{"kind":"morning"}`: today's events with their notes and who drops or picks up, anything cancelled or moved, new dates imported from email or school portals, the to-dos now showing, and the weather. Evening Reminder (9 PM) reads it with `{"kind":"evening"}`: tomorrow's events and the to-dos due tomorrow, and any change or new date since the morning (the call moves the calendar's mark, so nobody would hear of them otherwise). It replaces the calendar's per-event "evening before" reminder. Short, WhatsApp-style lines; when every list in the brief is empty the brief replies NOTHING_NEW and the family gets no message. Both post into the family group: Flock binds Family Butler's routines to the Family group (`deliverTo` stays null). Needs Family Calendar 3.0.0 (the `brief` operation).
+- **google-calendar is gone** from the template's skills, its suggestions and the README; the briefs no longer read it.
+- Task names, schedules and the pinned model (`claude-sonnet-4-6`, no thinking) are unchanged.
+- Installed Butlers keep their own tasks and apps until Flock applies the template to them again.
+
 ## 1.8.0
 
 - **Zepto and Swiggy Instamart through their official connections.** Their browser skills are gone from the template and its suggestions; the "Connect a grocery service" step counts the Zepto and Swiggy Instamart connections (`zepto-mcp`, `swiggy-instamart-mcp`) beside BigBasket and Blinkit.
