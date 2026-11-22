@@ -405,13 +405,16 @@ function overRepeated(week: WeekView, house: HouseView): string[] {
   const days = new Map<string, { name: string; days: Set<string> }>();
   for (const m of week.days.flatMap((d) => d.meals)) for (const d of m.dishes) {
     if (isStaple(d.name) || isRepeatableSide(d.name) || namedInOnlyRule(d.name, house.rules)) continue;
+    // A dish made for one person only (an elder's diabetic breakfast) may come back: the cap keeps the family's own
+    // dishes varied (owner, 2026-11-23: exempt his own dishes; sim plan-only 1 refused ragi dosa / oats 3x for Gowri Shankar).
+    if (d.for_people?.length === 1 && d.for_people[0] !== "everyone") continue;
     const k = dishKey(d.name), seen = days.get(k) ?? { name: d.name, days: new Set<string>() };
     seen.days.add(m.date); days.set(k, seen);
   }
   return [...days.values()].filter((d) => d.days.size > MAIN_DAYS_MAX).map((d) => `${d.name} (${[...d.days].sort().map(weekdayOf).join(", ")})`);
 }
 const repeatsSaid = (repeated: string[]) =>
-  `A main dish is on more than ${MAIN_DAYS_MAX} days: ${repeated.join("; ")}: plan something else on the other days (roti, rice, sides and a person's only dishes may come back).`;
+  `A main dish is on more than ${MAIN_DAYS_MAX} days: ${repeated.join("; ")}: plan something else on the other days (roti, rice, sides, a person's only dishes and a dish for one person alone may come back).`;
 
 /** The checks a week passes before its closing call answers the message: every dish has its ingredients, and every extra slot
  *  (a child's tiffin) has a meal on each of its days that is a cooking day from today on. Refused with every problem named, so

@@ -247,6 +247,16 @@ describe("a planned week is ready to send", () => {
     expect((await op("plan_week", { week_start: MON, mode: "final" })).message).toContain("Next week is planned.");
   });
 
+  it("a dish for one person alone may come back on more than 2 days (an elder's own breakfast)", async () => {
+    const { op } = await boot({ now: SUNDAY });
+    await op("set_person", { name: "Gowri Shankar", group: "elder" });
+    const days = ["2026-11-23", "2026-11-24", "2026-11-25", "2026-11-26"];
+    const meals = days.map((date) => ({ date, slot: "Breakfast", dishes: [{ name: "Ragi dosa", for: ["Gowri Shankar"], ingredients: [{ item: "ragi flour", amount: 100, unit: "g" }] }] }));
+    await op("plan_week", { week_start: MON, mode: "final", keep_rest: true, meals });
+    const r = await op("plan_week", { week_start: MON, mode: "final" });
+    expect(r.code).not.toBe("REPEATED_DISHES");
+  });
+
   it("the closing call refuses a week whose meals have no dish (sim run seed 15: \"Monday: nothing planned\" was sent)", async () => {
     const { op } = await boot({ now: SUNDAY });
     await op("plan_week", { week_start: MON, mode: "final", keep_rest: true, meals: [{ date: MON, slot: "Lunch" }] });
