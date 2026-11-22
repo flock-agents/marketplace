@@ -536,6 +536,7 @@
   "routines": [
     {
       "id": "weekly-plan",
+      "modelChoice": "balanced",
       "name": "Weekly meal plan",
       "description": "Every Sunday at 11, asks the agent to plan next week's meals on the cooking days and send the family the plan. It plans only: nothing is bought. On an install carried over from the old Meal Planner it first asks for the family's profile to be structured.",
       "trigger": {
