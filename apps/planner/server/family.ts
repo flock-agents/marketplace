@@ -190,8 +190,12 @@ function rules(v: unknown, ctx: { people: string[]; slots: string[] }): HouseRul
         if (!t.startsWith("@")) return t;
         const cat = t.slice(1).toLowerCase();
         if (CATEGORIES[cat]) return `@${cat}`;
-        const near = closest(cat, Object.keys(CATEGORIES));
-        return refuse(`${label}: items: ${t} is not a category (${CATEGORY_LIST})${near ? ` (did you mean @${near}?)` : ""}`);
+        // A category written a little off ("@mushrooms", "@spicy") is not worth refusing the whole list over (sim run
+        // seed 15: the family's every rule lost to one plural): its singular when that is a category, else the plain word,
+        // which matches dish names as any word item does.
+        const singular = cat.replace(/(?<=[a-z])(es|s)$/, "");
+        if (CATEGORIES[singular]) return `@${singular}`;
+        return cat.replace(/_/g, " ");
       });
     }
     if (given("to")) {

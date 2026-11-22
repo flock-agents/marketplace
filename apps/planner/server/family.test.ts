@@ -157,6 +157,13 @@ describe("the house", () => {
       { kind: "veg", days: ["Tue"] }]);
   });
 
+  it("set_house_rules takes a category a little off: its singular, else the plain word (sim run seed 15)", async () => {
+    const { op } = await boot();
+    const r = await op("set_house_rules", { rules: [{ kind: "avoid", items: ["@peanuts", "@spicy"] }] });
+    expect(r.code).toBeUndefined();
+    expect(r.house.rules[0].items).toEqual(["@peanut", "spicy"]);
+  });
+
   it("set_house_rules refuses a checked rule it cannot check, naming the field; nothing is saved", async () => {
     const { op, rows } = await boot();
     for (const name of ["Meera", "Lakshmi"]) await op("set_person", { name, group: "adult" });
@@ -168,7 +175,6 @@ describe("the house", () => {
     expect(await refused({ kind: "avoid", who: "Meeraa", items: ["egg"] })).toContain("did you mean Meera?");
     expect(await refused({ kind: "avoid", who: "Nani", items: ["egg"] })).toContain("set_person");
     expect(await refused({ kind: "only", who: "Meera", slots: ["Brekfast"], items: ["plain idli"] })).toContain("did you mean Breakfast?");
-    expect(await refused({ kind: "avoid", items: ["@peanuts"] })).toContain("did you mean @peanut?");
     expect(await refused({ kind: "avoid", items: [] })).toContain("items");
     expect(await refused({ kind: "avoid", items: ["egg", " "] })).toContain("items");
     expect(await refused({ kind: "avoid" })).toContain("needs items");
