@@ -17,7 +17,9 @@ are internal (they change no other lane's side) unless marked **for the owner** 
 - The brief's mark, the open plan and the change log live in two tables of the app's own (`fc_meta`, `fc_log`, kept by the kit).
 - To-dos are written locally first and sent to Flock after (`synced = 0` until Flock takes them), so an import or a report never
   fails because Flock is away; the hourly plan-prep run retries. A to-do ticked on Flock's Home is read back as done each hour.
-- Ticking on the page: the SDK has no "done" for an app's own task, so the app marks it done and **withdraws** it from Flock.
+- Ticking on the page: marked done on Flock's list with `tasks.complete(ref, { by })` (flock feat/group-todos, SDK 0.5.0); `by` is
+  "owner" when X-Flock-Role is owner, else the proxy's X-Flock-User ("user:<id>"). 409: done here too, Flock's words kept and
+  shown. 403: completed again without `by` (as the app's). 404 or an SDK without `complete`: withdrawn, as before.
 - Matching: "unsure" = more than one event fits rule 2 or rule 3, or both sides name a different `who`. Rules 2 and 3 look at
   cancelled events too (a second source's cancellation of the same thing cancels it). An import never un-cancels an event.
 - A field the item leaves out is never cleared by a re-send. A date or time change from the event's own source is `moved`.
@@ -45,6 +47,5 @@ are internal (they change no other lane's side) unless marked **for the owner** 
   unless the agent sends them to the group itself. (Read from the code, not run; the pairing path of an install straight
   into a group was not traced.) **For a lane (Flock):** bind a group app's routines to its group room at
   install, as app-move does. `agent.intent` likewise never uses the group room.
-- The SDK has no way for an app to mark its own task done (only publish, withdraw, snooze).
 - `due-reminders` has no manifest `prompt` (as in 2.1); Flock's contract check flags a waking routine without one. Its words
   are in the wake's message.

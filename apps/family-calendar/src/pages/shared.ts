@@ -5,7 +5,7 @@ export interface Event {
   created_at: string; updated_at: string; updated_by: string | null; _sample?: boolean;
 }
 /** An event's to-do, as the app keeps it (GET /api/events/extras). */
-export interface Todo { key: string; title: string; due: string; show_from: string; done: boolean }
+export interface Todo { key: string; title: string; due: string; show_from: string; done: boolean; /** Flock's words when someone else had done it ("Already done by Ravi.") */ note?: string }
 /** Per event id: where it came from (the sources' labels) and its to-dos. */
 export type Extras = Record<string, { sources: string[]; todos: Todo[] }>;
 /** What the chat is pointed at: the event or member the viewer last picked. */
@@ -55,9 +55,9 @@ export function useExtras(key: string) {
   return { extras, reload };
 }
 
-/** Tick (or untick) an event's to-do: settled in the app and taken off the family's list in Flock. */
+/** Tick (or untick) an event's to-do: settled in the app and marked done on the family's list in Flock, as the one who ticked it. */
 export const setTodoDone = (eventId: string, key: string, done: boolean) =>
-  kitFetch("todos/done", { method: "POST", body: JSON.stringify({ event_id: eventId, key, done }) });
+  kitFetch<{ ok: boolean; message?: string }>("todos/done", { method: "POST", body: JSON.stringify({ event_id: eventId, key, done }) });
 
 /** Bring back a deleted row through the kit's change log. */
 export const undo = (changeId: string, onFail: () => void) => { void kitFetch(`_data/_changes/${changeId}/undo`, { method: "POST" }).catch(onFail); };

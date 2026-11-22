@@ -57,5 +57,7 @@ export const todos = sqliteTable("todos", {
   // open | done | withdrawn (a line of its own: a trailing note would be read as the events' status note by the catalog)
   status: text("status").notNull().default("open"),
   closed_at: integer("closed_at"),                            // ms
+  done_by: text("done_by"),                                   // who ticked it in the app: "owner", or the person's Flock user
+  done_note: text("done_note"),                               // Flock's words when someone else had settled it ("Already done by Ravi.")
   synced: integer("synced").notNull().default(0),             // 1 once Flock has this version (published, or withdrawn)
 });

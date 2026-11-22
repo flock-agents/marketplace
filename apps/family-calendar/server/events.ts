@@ -4,7 +4,7 @@
 import type { Context, Hono } from "hono";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import { eq } from "drizzle-orm";
-import { events, members } from "./db/schema";
+import { events, members, todos } from "./db/schema";
 import { COLOURS, KINDS, REPEATS } from "./db/constants";
 import { addDays, isoDate, parseClock, parseDate, toMin } from "../src/pages/dates";
 import { extras, setTodoDone, syncTodos, type Cal, type TasksPlatform } from "./calendar";
@@ -130,11 +130,16 @@ export function mountEventRoutes(hono: Hono<any>, kit: { db: Db; sqlite: any; em
     const b = (await c.req.json().catch(() => null)) as Record<string, unknown> | null;
     if (!b || typeof b.event_id !== "string" || typeof b.key !== "string" || typeof b.done !== "boolean") return c.json({ ok: false, reason: "send { event_id, key, done }" }, 400);
     const by = writer(c);
-    const t = setTodoDone(cal, b.event_id, b.key, b.done, by);
+    // Who ticked it, as Flock knows them: "owner" for the owner, else the proxy's X-Flock-User ("user:<id>").
+    const user = c.req.header("x-flock-user")?.trim() || null;
+    const person = c.req.header("x-flock-role")?.trim() === "owner" ? "owner" : user;
+    const t = setTodoDone(cal, b.event_id, b.key, b.done, by, person);
     if (!t) return c.json({ ok: false, reason: "no such to-do" }, 404);
     kit.emitChange("events", b.event_id, "update", by);
     await syncTodos(cal);
-    return c.json({ ok: true, todo: { key: t.key, title: t.title, due: t.due, done: t.status === "done" } });
+    // Someone else had settled it on Flock's list first: say so ("Already done by Ravi.").
+    const now = cal.kit.db.select().from(todos).where(eq(todos.id, t.id)).get();
+    return c.json({ ok: true, todo: { key: t.key, title: t.title, due: t.due, done: t.status === "done" }, ...(now?.done_note ? { message: now.done_note } : {}) });
   });
 
   // add_events { events: [...], members?: [...] } → POST /api/events/add. All or nothing: a refusal (400) names each bad event

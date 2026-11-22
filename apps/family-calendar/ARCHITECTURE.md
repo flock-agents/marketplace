@@ -87,7 +87,7 @@ Four tables (server/db/schema.ts), each with the kit's `id`, `created_at`, `upda
 - `events`: one row per event. `title` and `date` (required), `repeat` (none, daily, weekly, monthly, yearly; a 29 February falls on the 28th in other years), `start_time` and `end_time` ("16:30"; both empty for all day), `who` (a member's `name`, or empty for everyone), `location`, `notes`, `reminder_minutes` (the nudge before the start; 30 for a new timed event unless it says), `kind` (event, or deadline: a day something is due by), `status` (active, or cancelled: kept, struck through), `added_by` (the member who typed it in; empty for an import), `imported` (1 for an event `import_events` made: only these are planned), `planned_at` and `plan_basis` (when its prep was planned, and the date and time it was planned for).
   Something that happens every week is one row with `repeat` weekly; the pages work out its days (`occurrences` in src/pages/dates.ts).
 - `event_sources`: where an imported event was seen, one row per source and item: `event_id`, `source` ("email:<personId>"), `ref` (the source's stable item ref), `label` (shown: "Shiva's email"), `match` (JSON identifiers: Message-ID, PNR, invoice number), `first_seen_at`, `last_seen_at`. Two people's copies of one mail are one event and two rows.
-- `todos`: an event's to-dos as the app published them to Flock's to-do list (`tasks.publish`, sourceRef `event:<event id>:<key>`, `due`, `showFrom`): `key`, `title`, `due`, `show_from`, `why`, `status` (open, done, withdrawn), `closed_at` and `synced` (0 until Flock has this version; a write never waits on Flock, and what Flock did not take goes on the next run).
+- `todos`: an event's to-dos as the app published them to Flock's to-do list (`tasks.publish`, sourceRef `event:<event id>:<key>`, `due`, `showFrom`): `key`, `title`, `due`, `show_from`, `why`, `status` (open, done, withdrawn), `closed_at`, `done_by` (who ticked it in the app), `done_note` (Flock's words when someone else had done it) and `synced` (0 until Flock has this version; a write never waits on Flock, and what Flock did not take goes on the next run).
 - The app's bookkeeping, outside the kit (`keepTables`): `fc_meta` (the open plan, the brief's mark, the update's marks) and `fc_log` (what imports added, moved or cancelled, for the brief).
 
 Updates keep everything: a 2.x `reminders` table is renamed `v2_reminders` before the kit starts (so its sync never asks to delete it) and its rows become deadline events with one to-do each, after which it is `v2_reminders_moved` (server/db/migrate-v2.ts). A 1.x install keeps `v1_*` tables (server/db/migrate-v1.ts). The pages and `/api/_data` never read the kept tables.
@@ -109,7 +109,7 @@ Declared in flock.app.json `agentInterface.operations` and served by server/agen
 
 - `week` (src/pages/WeekPage.tsx): the Schedule, seven days from today, each event with its time, who, where, a small line saying where it came from ("from Shiva's email") or who added it, and its open to-do count. A cancelled event stays on its day, struck through. A tap opens the event in place: its to-dos with ticks (src/pages/EventTodos.tsx) above the editor (src/pages/EventEditor.tsx). The family sits under the week (src/pages/FamilyList.tsx).
 - `events` (src/pages/EventsPage.tsx): every event from today on as a Table (what with its source line, when, time, who, where, to-dos), a repeating one once at its next day; Add under the header, a tap opens the event in place with its to-dos.
-- A tick settles the to-do in the app and takes it off Flock's list (`POST /api/todos/done`; the SDK has no "done" call, so it is withdrawn there).
+- A tick settles the to-do in the app and marks it done on Flock's list as the person who ticked it (`POST /api/todos/done`, then the SDK's `tasks.complete` with `by`: "owner", or the proxy's X-Flock-User). Already settled there (409): done here too, with Flock's words for who did it. A 404, or an SDK without `complete`: taken off the list instead (an older Flock).
 
 ### What to change first
 
@@ -124,6 +124,6 @@ Renaming a column or table needs the owner's approval, so do it before the app h
 - A repeating event is one row, so it has no exceptions: one week cannot be skipped or moved, and it has no last day.
 - The app decides what is due and wakes the agent with the words; with no agent paired, or on a Flock older than 0.19.0, nothing is sent.
 - A nudge is said within 15 minutes after it is due, in the time of the machine Flock runs on.
-- A to-do ticked on the page is withdrawn from Flock's list, not marked done there; one ticked on Flock's list is read back as done within the hour.
+- On a Flock older than `tasks.complete`, a to-do ticked on the page is taken off Flock's list, not marked done there. One ticked on Flock's list is read back as done within the hour.
 - The brief's `changed` lists a move of date; a move of time on the same day is not listed.
 - The week view lists up to 500 events for its seven days, and up to 500 repeating ones.

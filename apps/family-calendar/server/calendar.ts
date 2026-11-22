@@ -20,11 +20,13 @@ export type Emit = (table: string, id: string, op: "insert" | "update" | "delete
 export interface KitLike { db: Db; sqlite: Database; emitChange: Emit }
 
 /** The part of the SDK's PlatformContext the app uses: Flock's to-do list. */
-type Res<T = unknown> = { ok: true; data: T } | { ok: false; reason?: string };
+type Res<T = unknown> = { ok: true; data: T } | { ok: false; reason?: string; status?: number; skipped?: boolean };
 export interface TasksPlatform {
   tasks: {
     publish(task: Record<string, unknown>): Promise<Res>;
     withdraw(sourceRef: string, opts?: { reason?: string }): Promise<Res>;
+    /** Mark the app's own open task done, as `by` (SDK 0.5.0; an older SDK has none, an older Flock answers 404). */
+    complete?(sourceRef: string, opts?: { by?: string }): Promise<Res>;
     list(opts?: { prefix?: string }): Promise<Res<{ tasks: { sourceRef: string; status: "open" | "done" | "dismissed"; withdrawn?: true }[] }>>;
   };
 }
@@ -132,17 +134,35 @@ export async function syncTodos(cal: Cal): Promise<{ sent: number; left: number 
   if (!platform || !waiting.length) return { sent: 0, left: waiting.length };
   let sent = 0;
   for (const t of waiting) {
-    let r: Res;
+    const ref = todoRef(t.event_id, t.key);
+    let r: Res, note: string | null = null;
     try {
-      r = t.status === "open" ? await platform.tasks.publish(taskOf(t, byId.get(t.event_id)))
-        : await platform.tasks.withdraw(todoRef(t.event_id, t.key), { reason: t.status === "done" ? "Done in Family Calendar" : "Its event was cancelled" });
+      if (t.status === "open") r = await platform.tasks.publish(taskOf(t, byId.get(t.event_id)));
+      else if (t.status === "done") ({ r, note } = await completeTask(platform, ref, t.done_by));
+      else r = await platform.tasks.withdraw(ref, { reason: "Its event was cancelled" });
     } catch (err) { r = { ok: false, reason: (err as Error).message }; }
-    if (!r.ok) { console.warn(`[family-calendar] Flock did not take to-do ${todoRef(t.event_id, t.key)}: ${r.reason ?? "unknown"}`); continue; }
+    if (!r.ok) { console.warn(`[family-calendar] Flock did not take to-do ${ref}: ${r.reason ?? "unknown"}`); continue; }
     // Only the version sent is marked: a change made while Flock answered goes on the next run.
-    db.update(todos).set({ synced: 1 }).where(and(eq(todos.id, t.id), eq(todos.updated_at, t.updated_at), eq(todos.status, t.status))).run();
+    db.update(todos).set({ synced: 1, ...(note ? { done_note: note } : {}) }).where(and(eq(todos.id, t.id), eq(todos.updated_at, t.updated_at), eq(todos.status, t.status))).run();
     sent++;
   }
   return { sent, left: waiting.length - sent };
+}
+
+/**
+ * A to-do ticked in the app, on Flock's list: marked done as the person who ticked it (tasks.complete). Settled there already by
+ * someone else (409): it stays done, with Flock's words for who did it. `by` not someone the task is for (403): done as the app's.
+ * No open task by that ref, or a Flock or SDK older than the call (404, or no complete at all): taken back, as before.
+ */
+async function completeTask(platform: TasksPlatform, ref: string, by: string | null): Promise<{ r: Res; note: string | null }> {
+  const withdraw = async () => ({ r: await platform.tasks.withdraw(ref, { reason: "Done in Family Calendar" }), note: null });
+  if (typeof platform.tasks.complete !== "function") return withdraw();
+  let r = await platform.tasks.complete(ref, by ? { by } : undefined);
+  if (!r.ok && r.status === 403 && by) r = await platform.tasks.complete(ref);
+  if (r.ok) return { r, note: null };
+  if (r.status === 409) return { r: { ok: true, data: null }, note: (r.reason ?? "").replace(/^platform 409:\s*/, "").trim() || "Already done" };
+  if (r.status === 404) return withdraw();
+  return { r, note: null };
 }
 
 /** What the family did with the to-dos on Flock's list: one ticked or dismissed there is closed here too (never made again). */
@@ -163,14 +183,14 @@ export async function readBackTodos(cal: Cal): Promise<number> {
   return closed;
 }
 
-/** Tick (or untick) a to-do on the page: settled here and taken off Flock's list (the SDK has no "done" of its own). */
-export function setTodoDone(cal: Cal, eventId: string, key: string, done: boolean, by: string): TodoRow | null {
+/** Tick (or untick) a to-do on the page: settled here, then marked done on Flock's list as `person` (syncTodos). */
+export function setTodoDone(cal: Cal, eventId: string, key: string, done: boolean, by: string, person: string | null = null): TodoRow | null {
   const { db } = cal.kit;
   const t = db.select().from(todos).where(and(eq(todos.event_id, eventId), eq(todos.key, key))).get();
   if (!t || t.status === "withdrawn") return null;
   const status = done ? "done" : "open";
   if (t.status === status) return t;
-  return db.update(todos).set({ status, closed_at: done ? cal.now().getTime() : null, synced: 0, updated_at: stamp(), updated_by: by }).where(eq(todos.id, t.id)).returning().get();
+  return db.update(todos).set({ status, closed_at: done ? cal.now().getTime() : null, done_by: done ? person : null, done_note: null, synced: 0, updated_at: stamp(), updated_by: by }).where(eq(todos.id, t.id)).returning().get();
 }
 
 // ---- import_events ----------------------------------------------------------------------------------------------------------
@@ -549,8 +569,9 @@ export function brief(cal: Cal, p: Record<string, unknown>): Record<string, unkn
 // ---- The page's view of the extras ------------------------------------------------------------------------------------------
 
 /** Per event: its source labels and its to-dos (open and done), for the pages. */
-export function extras(db: Db): Record<string, { sources: string[]; todos: { key: string; title: string; due: string; show_from: string; done: boolean }[] }> {
-  const out: Record<string, { sources: string[]; todos: { key: string; title: string; due: string; show_from: string; done: boolean }[] }> = {};
+type TodoView = { key: string; title: string; due: string; show_from: string; done: boolean; note?: string };
+export function extras(db: Db): Record<string, { sources: string[]; todos: TodoView[] }> {
+  const out: Record<string, { sources: string[]; todos: TodoView[] }> = {};
   const at = (id: string) => (out[id] ??= { sources: [], todos: [] });
   for (const s of db.select().from(event_sources).all().sort((a, b) => a.first_seen_at - b.first_seen_at)) {
     const l = s.label ?? s.source;
@@ -558,7 +579,7 @@ export function extras(db: Db): Record<string, { sources: string[]; todos: { key
   }
   for (const t of db.select().from(todos).all().sort((a, b) => a.due.localeCompare(b.due))) {
     if (t.status === "withdrawn") continue;
-    at(t.event_id).todos.push({ key: t.key, title: t.title, due: t.due, show_from: t.show_from, done: t.status === "done" });
+    at(t.event_id).todos.push({ key: t.key, title: t.title, due: t.due, show_from: t.show_from, done: t.status === "done", ...(t.done_note ? { note: t.done_note } : {}) });
   }
   return out;
 }
