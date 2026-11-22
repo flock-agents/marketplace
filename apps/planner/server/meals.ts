@@ -393,7 +393,7 @@ export const MAIN_DAYS_MAX = 2;
 const STAPLES = new Set<string>(STAPLE_DISHES);
 /** A grain before a staple keeps it a staple: "Jowar roti", "Ragi roti", "Brown rice" come back like roti and rice. */
 const STAPLE_GRAINS = new Set(["jowar", "bajra", "ragi", "nachni", "makki", "millet", "multigrain", "wheat", "brown", "red", "kambu"]);
-const isStaple = (name: string): boolean => {
+export const isStaple = (name: string): boolean => {
   const key = dishKey(name), w = key.split(" ");
   return STAPLES.has(key) || (w.length === 2 && STAPLE_GRAINS.has(w[0]) && STAPLES.has(w[1]));
 };

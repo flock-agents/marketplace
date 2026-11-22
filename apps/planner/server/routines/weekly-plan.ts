@@ -1,5 +1,5 @@
 // The weekly run (Sunday 11:00): next week is planned in steps the app's code drives (makePlan.ts: the menu from one model
-// call, checked in code, then each day's ingredients), saved final, and the agent is woken only to send the family the
+// call per meal of the day, all at once, checked in code, then each day's ingredients), saved final, and the agent is woken only to send the family the
 // message the app wrote. It plans only: nothing is bought or put on a cart here, the daily reminders do that. On an install
 // carried over from Meal Planner 2.0 the agent is first asked to turn the family's old profile into people, rules, the cook
 // and the slots (a week is planned only from a family the app knows), then to tell the family and plan the week in that same

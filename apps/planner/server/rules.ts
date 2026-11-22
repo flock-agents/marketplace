@@ -225,7 +225,7 @@ export function rulesSaid(list: readonly Rule[]): string {
 /** An older kind as the checked rule it is (spec: veg, no_meat and egg avoid meat and fish; no_eggs avoids eggs;
  *  no_onion_garlic avoids onion and garlic). A fast with who, days and slots is checked (isCheckedFast); one without slots,
  *  and other, are a note only. */
-function checkedAs(r: Rule): Rule | null {
+export function checkedAs(r: Rule): Rule | null {
   if ((CHECKED_KINDS as readonly string[]).includes(r.kind) || isCheckedFast(r)) return r;
   const items = r.kind === "veg" || r.kind === "no_meat" || r.kind === "egg" ? ["@meat", "@fish"]
     : r.kind === "no_eggs" ? ["@egg"] : r.kind === "no_onion_garlic" ? ["onion", "garlic"] : null;
