@@ -8,6 +8,7 @@ import { events, members, todos } from "./db/schema";
 import { COLOURS, KINDS, REPEATS } from "./db/constants";
 import { addDays, isoDate, parseClock, parseDate, toMin } from "../src/pages/dates";
 import { extras, setTodoDone, syncTodos, type Cal, type TasksPlatform } from "./calendar";
+import { mountWidget } from "./widget";
 
 type Db = BunSQLiteDatabase<any>;
 /** Tell live pages a row changed, and who changed it (the kit's emitChange). */
@@ -121,6 +122,9 @@ export function mountEventRoutes(hono: Hono<any>, kit: { db: Db; sqlite: any; em
   const { db } = kit;
   const near = deps.near ?? (() => null);
   const cal: Cal = { kit, now: deps.now ?? (() => new Date()), platform: deps.platform ?? (() => null) };
+
+  // "Your Schedule" in Flock reads the family's days here (flock.app.json widgets).
+  mountWidget(hono, db, cal.now);
 
   // Each event's source labels and to-dos, for the pages (the two tables are the app's own: not on /api/_data).
   hono.get("/api/events/extras", (c) => c.json({ events: extras(db) }));
