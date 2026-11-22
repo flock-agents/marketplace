@@ -379,6 +379,15 @@ function slotGaps(week: WeekView, house: HouseView, today: string): string[] {
   return gaps;
 }
 
+/** A cooking day from today on with no meal at all, for the menu, which is the whole week (flock-fast eval 2026-11-22: a
+ *  week sent with Sunday empty). One meal, or one ordered in, is enough: a home may skip a meal. A day's meals kept from
+ *  the menu stay without ingredients until the day is planned, so the close refuses an unplanned day too. */
+function emptyDays(week: WeekView, house: HouseView, today: string): string[] {
+  const meals = week.days.flatMap((d) => d.meals);
+  return weekDates(week.week_start).filter((date) => date >= today && house.cooking_days.includes(weekdayOf(date)) && !meals.some((m) => m.date === date))
+    .map((date) => `${weekdayOf(date)} ${date}: no meal at all`);
+}
+
 /** A main dish comes back on at most this many days of the weekly plan (owner 2026-11-22). */
 export const MAIN_DAYS_MAX = 2;
 const STAPLES = new Set<string>(STAPLE_DISHES);
@@ -627,7 +636,7 @@ export function mountMealRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: { bas
       }
       const view = weekView(tx, weekStart), house = houseView(getHouse(tx));
       const breaks = ruleBreaks(view, house, peopleAtHome(tx));
-      const gaps = slotGaps(view, house, today());
+      const gaps = [...emptyDays(view, house, today()), ...slotGaps(view, house, today())];
       const repeated = overRepeated(view, house);
       if (!eaters.length && !breaks.length && !gaps.length && !repeated.length) return;
       const said: string[] = [];

@@ -262,6 +262,17 @@ describe("a planned week is ready to send", () => {
     expect((await op("plan_week", { week_start: MON, mode: "final" })).message).toContain("Next week is planned.");
   });
 
+  it("the menu names a cooking day with no meal at all; one meal, or one ordered in, is enough", async () => {
+    const { op } = await boot({ now: SUNDAY });
+    await op("set_cooking_days", { days: ["mon", "tue", "wed"] });
+    const name = (n: string) => ({ name: n, for: ["everyone"] });
+    const r = await op("plan_menu", { week_start: MON, meals: [{ date: MON, slot: "Dinner", dishes: [name("Rajma")] }, { date: "2026-11-24", slot: "Lunch", dishes: [name("Chole")] }] });
+    expect(r.code).toBe("MISSING_SLOTS");
+    expect(r.detail.missing_slots).toEqual(["Wed 2026-11-25: no meal at all"]);
+    expect((await op("plan_menu", { week_start: MON, meals: [{ date: MON, slot: "Dinner", dishes: [name("Rajma")] },
+      { date: "2026-11-24", slot: "Lunch", dishes: [name("Chole")] }, { date: "2026-11-25", slot: "Dinner", ordered_in: true, note: "out" }] })).error).toBeUndefined();
+  });
+
   it("the weekly plan: a main dish on two days is fine, on three refused; roti, rice and sides are not counted", async () => {
     const { op } = await boot({ now: SUNDAY });
     const loop = ["Rajma", "Chole", "Kadhi"];
