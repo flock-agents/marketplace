@@ -247,6 +247,14 @@ describe("a planned week is ready to send", () => {
     expect((await op("plan_week", { week_start: MON, mode: "final" })).message).toContain("Next week is planned.");
   });
 
+  it("the closing call refuses a week whose meals have no dish (sim run seed 15: \"Monday: nothing planned\" was sent)", async () => {
+    const { op } = await boot({ now: SUNDAY });
+    await op("plan_week", { week_start: MON, mode: "final", keep_rest: true, meals: [{ date: MON, slot: "Lunch" }] });
+    const r = await op("plan_week", { week_start: MON, mode: "final" });
+    expect(r.code).toBe("EMPTY_MEALS"); expect(r.message).toBeUndefined();
+    expect(r.detail.empty_meals[0]).toContain("Lunch");
+  });
+
   it("a child's tiffin is an extra slot planned on its days: a school day without one is named", async () => {
     const { op } = await boot({ now: SUNDAY });
     await op("set_person", { name: "Agastya", group: "child" });

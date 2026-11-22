@@ -420,16 +420,20 @@ const repeatsSaid = (repeated: string[]) =>
 function checkWeek(week: WeekView, house: HouseView, today: string, breaks: RuleBreak[]): void {
   const meals = week.days.flatMap((d) => d.meals);
   const missing = meals.flatMap((m) => m.dishes.filter((d) => !d.ingredients.length).map((d) => `${mealLabel(m)}: ${d.name}`));
+  // A meal from today on with no dish and not ordered in: the week is not planned (sim run seed 15: every meal sent
+  // with no dishes, the closing call answered "Monday: nothing planned").
+  const empty = meals.filter((m) => !m.ordered_in && !m.dishes.length && m.date >= today).map(mealLabel);
   const gaps = slotGaps(week, house, today);
   const repeated = overRepeated(week, house);
-  if (!missing.length && !gaps.length && !breaks.length && !repeated.length) return;
+  if (!missing.length && !empty.length && !gaps.length && !breaks.length && !repeated.length) return;
   const said: string[] = breaks.length ? [rulesSaid(breaks)] : [];
+  if (empty.length) said.push(`These meals have no dish: ${empty.join("; ")}. Send each with its dishes (plan_week final, keep_rest, that day's meals with dishes), or ordered_in: true with a note when they eat out.`);
   if (missing.length) said.push(`${INGREDIENTS_RULE}. Without ingredients: ${missing.join("; ")}: give each its ingredients with set_dish { dish_id, ingredients }.`);
   if (gaps.length) said.push(`An extra slot has no meal on its day: ${gaps.join("; ")}. Plan it with set_meal { date, slot, dishes }; on a day it is not needed (no school), set_meal { date, slot, ordered_in: true, note }.`);
   if (repeated.length) said.push(`${repeatsSaid(repeated)} Change them with set_dish.`);
   refuse(`The week is not ready to send. ${said.join(" ")}`,
-    breaks.length ? "RULE_BROKEN" : missing.length ? "MISSING_INGREDIENTS" : gaps.length ? "MISSING_SLOTS" : "REPEATED_DISHES",
-    { missing_ingredients: missing, missing_slots: gaps, repeated, ...(breaks.length ? { rule_breaks: breaks } : {}) });
+    breaks.length ? "RULE_BROKEN" : empty.length ? "EMPTY_MEALS" : missing.length ? "MISSING_INGREDIENTS" : gaps.length ? "MISSING_SLOTS" : "REPEATED_DISHES",
+    { missing_ingredients: missing, missing_slots: gaps, repeated, empty_meals: empty, ...(breaks.length ? { rule_breaks: breaks } : {}) });
 }
 
 // ── Writes: each runs inside a transaction and lists what changed, told to the pages once it is committed ──
