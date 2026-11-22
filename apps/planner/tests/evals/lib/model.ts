@@ -48,7 +48,7 @@ export async function ask(o: ModelOpts, system: string, prompt: string): Promise
   } finally { rmSync(cwd, { recursive: true, force: true }); }
 }
 
-/** One chat completion from an OpenAI-compatible endpoint. Cost is not known here (the gateway bills it): 0. */
+/** One chat completion from an OpenAI-compatible endpoint; cost from its usage when it says (Flock's gateway does). */
 async function askOpenAI(o: ModelOpts, system: string, prompt: string): Promise<Reply> {
   const t0 = Date.now();
   const res = await fetch(`${o.openai!.base}/chat/completions`, {
@@ -63,7 +63,7 @@ async function askOpenAI(o: ModelOpts, system: string, prompt: string): Promise<
   try { j = JSON.parse(body); } catch { throw new Error(`${o.model} gave no JSON: ${body.slice(0, 400)}`); }
   const text = j.choices?.[0]?.message?.content;
   if (typeof text !== "string") throw new Error(`${o.model} gave no message: ${body.slice(0, 400)}`);
-  return { text, cost: 0, ms: Date.now() - t0 };
+  return { text, cost: Number(j.usage?.cost ?? 0), ms: Date.now() - t0 };
 }
 
 /** The first JSON value in a reply (a ```json block, or the outermost {...} / [...]). */
