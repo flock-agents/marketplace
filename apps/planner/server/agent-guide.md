@@ -15,7 +15,7 @@ clock. Keep none of it in memory or chat: read the app, change it through an ope
 
 ## The two problems and the loop
 
-1. **What to eat.** Every Sunday at 11 the app wakes you to plan next week on the cooking days. The plan is kept whether or not anyone replies; the family changes a meal by replying or on the Week page.
+1. **What to eat.** Every Sunday at 11 the app plans next week on the cooking days and wakes you to send it. The plan is kept whether or not anyone replies; the family changes a meal by replying or on the Week page.
 2. **What to order.** The app guesses from order history what is running out, and keeps one open cart per shopping app.
    At 15:00 (tonight's dinner) and 19:00 (tomorrow's meals) every day a reminder wakes you: the meals, the carts and
    the few items that may be running low.
@@ -59,7 +59,8 @@ A meal is a date and a slot; it holds dishes in the order they are served. **A m
 **Every dish names who eats it** in `for`: `["everyone"]` (everyone who eats that meal; a tiffin's own people) or the names on the Family page; one without is refused (`MISSING_EATERS`). When one person has their own dish, the shared one is `for: ["everyone"], except: ["Meera"]`: never type out the others' names.
 A second dish is only for someone who truly eats something else (a baby's milk, an elder's softer dish, a food rule's only or avoid): it names only them, and the shared dish is for everyone except them (Plain idli `for: ["Meera"]`, Rava idli `for: ["everyone"], except: ["Meera"]`). A dish may carry a saved recipe (`recipe_id`); its video is its own, across weeks (below). A meal ordered in or eaten out is `ordered_in: true` and has no dishes. Meals go on the cooking days only.
 
-- **The weekly run:** the wake carries `week_start` and, when it fits, the context to plan from (last week's dishes, `known_dishes`, the family's rules).
+- **The weekly run:** the app plans the week itself on Sunday (the menu checked against every rule, then each day's ingredients) and wakes you only to send the family its `message` (and `intro` once) word for word: plan nothing then.
+  **A week planned, or planned again, on request** ("plan next week", "redo the week"): `make_plan { week_start }` does the same and answers `message` (and `intro`) to send word for word as its `instructions` say, or `say` when it could not plan (send that). Only on a Flock without the app's model call (`reason: "not_declared"`) do you plan a week yourself:
   1. The whole week's menu in one call, dish names and who eats each, no ingredients: `plan_menu { week_start, meals }`, built as the context's `how_to_plan` says: from `family_dishes`, the family's own food, chosen and rotated (a main on two days at most, never three: refused), never invented. What the family said wins (khichdi every night: plan it).
   It is refused, naming every rule a name breaks, a missing tiffin, a main on three days: change only those meals and send it again.
   2. Each cooking day's ingredients, one day a call (16 KB at most): `plan_week { week_start, mode: "final", keep_rest: true, meals }`, the menu's dishes.
@@ -146,4 +147,4 @@ attach it; a link only, never a file. `get_dish { dish }` reads a dish's video a
 ## A profile carried over from the old Meal Planner
 
 On an upgraded install the weekly run first hands you a `profile`: what the family once said, as text. Structure it with `set_person` / `set_house_rules` / `set_cook` / `set_slots` / `set_item`, in their words, and ask about anything unclear.
-Then clear it with `set_house_rules { structured: true }`, only after at least one person is saved. No week is planned until it is cleared. Once it is, tell the family the app was rebuilt and plan the coming week as the weekly run does.
+Then clear it with `set_house_rules { structured: true }`, only after at least one person is saved. No week is planned until it is cleared. Once it is, tell the family the app was rebuilt and plan the coming week with `make_plan { week_start }`.

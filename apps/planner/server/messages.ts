@@ -131,13 +131,14 @@ export function weekSendText(intro: boolean): string {
 }
 
 /** The Sunday message once the week is planned: Monday's meals and the link to the rest. `monday` is Monday's meals, empty when it is
- *  not a cooking day or has none. */
-export function weekMessage(i: { monday: MealView[]; link: string }): string {
+ *  not a cooking day or has none. `unmet`: what the plan could not keep (the stepped plan's last resort), said plainly. */
+export function weekMessage(i: { monday: MealView[]; link: string; unmet?: string[] }): string {
   const meals = i.monday.map((m) => (m.ordered_in ? "ordering in" : m.dishes.map(dishText).join(", "))).filter(Boolean);
   return [
     "Next week is planned.",
     `Monday: ${meals.length ? meals.join(" · ") : "nothing planned"}`,
     ...dishExtras(i.monday),
+    ...(i.unmet?.length ? ["", `I couldn't keep everything this week: ${i.unmet.join("; ")}. Tell me what to change.`] : []),
     "",
     `The whole week: [Week page](${i.link})`,
     "Tell me anything to change.",

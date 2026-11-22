@@ -23,6 +23,9 @@ export const ROUTES: Record<string, Route> = {
   plan_menu: (p) => typeof p.week_start === "string" || typeof p.week_start === "number"
     ? { method: "POST", path: `/api/weeks/${encodeURIComponent(String(p.week_start))}/menu`, body: p }
     : { error: "week_start is required: the week's Monday as YYYY-MM-DD", code: "APP_REFUSED", status: 400 },
+  make_plan: (p) => typeof p.week_start === "string" || typeof p.week_start === "number"
+    ? { method: "POST", path: `/api/weeks/${encodeURIComponent(String(p.week_start))}/make-plan`, body: p }
+    : { error: "week_start is required: the week's Monday as YYYY-MM-DD", code: "APP_REFUSED", status: 400 },
   set_meal: (p) => ({ method: "POST", path: "/api/meals", body: p }),
   set_dish: (p) => ({ method: "POST", path: "/api/dishes", body: p }),
   set_regular: (p) => ({ method: "POST", path: "/api/regulars", body: p }),
@@ -71,6 +74,7 @@ export const FIELDS: Record<string, { fields: string[]; need?: string[] }> = {
   set_shopping_apps: { fields: ["main", "fallback", "connected"], need: ["main", "connected"] },
   plan_week: { fields: ["week_start", "mode", "meals", "keep_rest"], need: ["week_start", "mode"] },
   plan_menu: { fields: ["week_start", "meals"], need: ["week_start", "meals"] },
+  make_plan: { fields: ["week_start"], need: ["week_start"] },
   set_meal: { fields: ["date", "slot", "meal_id", "ordered_in", "note", "dishes"] },
   set_dish: { fields: ["dish_id", "meal_id", "date", "slot", "name", "for", "except", "portion_note", "recipe_id", "video_url", "ingredients", "position", "remove"] },
   set_regular: { fields: ["item", "amount", "unit", "every", "times_per_week", "weekdays", "for_whom", "active", "paused_until", "remove"], need: ["item"] },

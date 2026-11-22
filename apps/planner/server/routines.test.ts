@@ -157,10 +157,10 @@ describe("weekly plan", () => {
     expect(k.wakes[0].message).toContain("structured: true");
     // Then the family hears of the new app and gets a plan in the same run, not a week later.
     const m = k.wakes[0].message;
-    expect(m).toContain("tell the family the app was rebuilt, and plan the week of Mon 23 Nov (week_start 2026-11-23) as the weekly run does (call guide)");
+    expect(m).toContain('tell the family the app was rebuilt, and plan the week of Mon 23 Nov (week_start 2026-11-23) with make_plan { week_start: "2026-11-23" }');
     expect(m.indexOf("structured: true")).toBeLessThan(m.indexOf("the app was rebuilt"));
     expect(k.wakes[0].data.week_start).toBeUndefined();
-    expect(guide.replace(/\s+/g, " ")).toContain("tell the family the app was rebuilt and plan the coming week as the weekly run does");
+    expect(guide.replace(/\s+/g, " ")).toContain("tell the family the app was rebuilt and plan the coming week with `make_plan { week_start }`");
   });
 });
 

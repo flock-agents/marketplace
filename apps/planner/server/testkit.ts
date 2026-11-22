@@ -18,6 +18,8 @@ import { mountDishBookRoutes } from "./dishBook";
 import { mountItemRoutes } from "./items";
 import { mountCartRoutes } from "./cartRoutes";
 import { mountReminderRoutes } from "./reminder";
+import { mountMakePlanRoute } from "./makePlan";
+import { NO_MODEL, type ModelCall } from "./model";
 
 /** A fresh temp directory for a test, removed when its test file is done: nothing piles up in the system's temp folder.
  *  The removal is registered here, per directory: this module loads once for the whole run, so a hook at its top level would
@@ -34,7 +36,7 @@ export function tempDir(prefix = "planner-test-"): string {
  *  `k.settle(key?)`; the routes that need it (carts, the week) take `basePath`, `askAgent` and `schedule` from `k.deps`.
  *  `now` is the app's clock (the real one unless a test pins it): the routes that need today take it from `k.deps.now`. */
 export async function boot(opts: { dbFile?: string; dataDir?: string; token?: string;
-  basePath?: string; askAgent?: (intent: string, payload: object) => Promise<unknown>; now?: () => Date } = {}) {
+  basePath?: string; askAgent?: (intent: string, payload: object) => Promise<unknown>; now?: () => Date; model?: ModelCall } = {}) {
   const now = opts.now ?? (() => new Date());
   const hono = new Hono();
   const dataDir = opts.dataDir ?? tempDir();
@@ -48,6 +50,7 @@ export async function boot(opts: { dbFile?: string; dataDir?: string; token?: st
   mountProductRoutes(hono, kit.db, kit.emitChange);
   mountRecipeRoutes(hono, kit.db, kit.emitChange);
   mountDishBookRoutes(hono, kit.db, kit.emitChange, { now });
+  mountMakePlanRoute(hono, kit.db, kit.emitChange, { basePath: opts.basePath ?? "/a/t", model: opts.model ?? NO_MODEL, now });
   /** A request as the owner. */
   const owner = async (method: string, path: string, body?: unknown) => {
     const r = await hono.request(path, { method, headers: { "Content-Type": "application/json", "X-Flock-User": "tester" }, body: body === undefined ? undefined : JSON.stringify(body) });

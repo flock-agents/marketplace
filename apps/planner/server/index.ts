@@ -14,6 +14,9 @@ import { mountCartRoutes } from "./cartRoutes";
 import { mountReminderRoutes } from "./reminder";
 import { migrateOldProfile } from "./gate";
 import { routines } from "./routines";
+import { routineEnv } from "./routines/ctx";
+import { mountMakePlanRoute } from "./makePlan";
+import { sdkModel } from "./model";
 
 // The app's operations for its agent (agentOps.ts): Flock relays the agent's calls to them.
 const flock = createFlockApp({ ops: agentOps(() => flock.hono) });
@@ -31,6 +34,9 @@ if (kit.status.state === "ok") {
 
 mountFamilyRoutes(flock.hono, kit.db, kit.emitChange, { appToken: flock.env.token ?? process.env.FLOCK_APP_TOKEN ?? null });
 mountMealRoutes(flock.hono, kit.db, kit.emitChange, { basePath: flock.env.basePath });
+// make_plan: the week planned in steps with the model call Flock gives the app (model.ts), the same as the Sunday run.
+mountMakePlanRoute(flock.hono, kit.db, kit.emitChange, { basePath: flock.env.basePath, model: (req) => sdkModel(flock.platform)(req) });
+routineEnv.basePath = flock.env.basePath;
 // set_regular, the older way to state an item's cycle (regulars.ts).
 mountRegularRoutes(flock.hono, kit.db, kit.emitChange);
 mountProductRoutes(flock.hono, kit.db, kit.emitChange);
