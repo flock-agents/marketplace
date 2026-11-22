@@ -79,6 +79,12 @@ export function positiveName(name: string): string {
 }
 /** A name that says it has no sugar ("Banana sheera (no sugar)", "sugar-free halwa") is not sweet by its name. */
 export const saysNoSugar = (name: string): boolean => /\b(no|without|minus|zero)\s+(added\s+)?sugar\b|\bsugar[\s-]*free\b|\bunsweetened\b/i.test(name);
+/** A rice dish made of another grain is not white rice by its name: "Rava idli", "Ragi dosa", "Oats dosa", "Millet pongal",
+ *  "Brown rice". The grain word goes with the dish word, so the name no longer reads as rice; its ingredients still count. */
+const OTHER_GRAIN = "rava|sooji|suji|semolina|ragi|nachni|jowar|bajra|millet|foxtail|kodo|little millet|barnyard|samai|thinai|varagu|oat|oats|wheat|godhuma|quinoa|moong|pesarattu|brown|red|black|wild|adai";
+const RICE_DISH = "rice|idli|idly|dosa|dosai|dose|uttapam|uthappam|appam|pongal|poha|puttu|idiyappam|paniyaram";
+export const otherGrainName = (name: string): string =>
+  name.replace(new RegExp(`\\b(${OTHER_GRAIN})(\\s+(${OTHER_GRAIN}))*\\s+(${RICE_DISH})\\b`, "gi"), " ");
 /** Plant milks are not milk: "coconut milk" must not read as dairy. */
 const PLANT_MILK = /\b(coconut|almond|oat|soy|soya|rice|cashew)\s+(milk|cream|curd|yogurt|yoghurt|butter)\b/gi;
 /** The first of `terms` the text holds, or null. */
