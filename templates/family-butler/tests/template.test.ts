@@ -13,7 +13,7 @@ const manifest = JSON.parse(read("flock.template.json"));
 const suggestions = JSON.parse(read("SUGGESTIONS.json"));
 const catalog = JSON.parse(readFileSync(join(dir, "../../catalog.json"), "utf8"));
 const samples = JSON.parse(read("tests/brief-samples.json")).samples as Array<{
-  name: string; kind: "morning" | "evening"; payload: any; expect: { nothing?: boolean; mentions?: unknown[]; absent?: string[] };
+  name: string; kind: "morning" | "evening"; payload: any; groupTodos?: any[]; expect: { nothing?: boolean; mentions?: unknown[]; absent?: string[] };
 }>;
 
 const task = (name: string) => manifest.tasks.find((t: any) => t.name === name);
@@ -99,9 +99,26 @@ describe("the briefs", () => {
 
   it("say nothing when every list is empty: NOTHING_NEW, which Flock never posts", () => {
     for (const t of [morning, evening]) {
-      expect(t.prompt).toContain("`events`, `changed`, `new` and `todos_due` are all empty, reply exactly NOTHING_NEW");
+      expect(t.prompt).toContain("`events`, `changed`, `new` and `todos_due` are all empty and you kept no group TODO, reply exactly NOTHING_NEW");
     }
     expect(morning.prompt).toContain("Weather alone is never a brief");
+  });
+
+  it("each also reads the group's own TODOs, from the brief's run in the group", () => {
+    for (const t of [morning, evening]) {
+      expect(t.prompt).toContain("`GET /api/internal/todos?upcoming=1`");
+      expect(t.prompt).toContain("`due` is epoch milliseconds");
+      expect(t.prompt).toContain("If this call fails, go on without them.");
+      expect(t.prompt).toContain("once each (a group TODO with the same title as a calendar to-do is one item)");
+    }
+  });
+
+  it("morning: group TODOs due today or overdue join To do, 5 in all; evening: those due tomorrow join Due tomorrow", () => {
+    expect(morning.prompt).toContain("Keep those due today or earlier");
+    expect(morning.prompt).toContain("\"To do:\" each of `todos_due` and each group TODO you kept");
+    expect(morning.prompt).toContain("At most 5 in all");
+    expect(evening.prompt).toContain("Keep those due on the brief's `day` (tomorrow)");
+    expect(evening.prompt).toContain("\"Due tomorrow:\" each of `todos_due` and each group TODO you kept");
   });
 
   it("weather stays in the morning one only", () => {
@@ -178,7 +195,13 @@ describe("sample brief answers (tests/brief-samples.json)", () => {
         expect(t.due).toMatch(ymd);
         if (s.kind === "evening") expect(t.due).toBe(p.day);
       }
-      const empty = ["events", "changed", "new", "todos_due"].every((k) => p[k].length === 0);
+      for (const g of s.groupTodos ?? []) {
+        expect(typeof g.id).toBe("string");
+        expect(typeof g.title).toBe("string");
+        expect(typeof g.due).toBe("number");
+        expect(typeof g.dueTimed).toBe("boolean");
+      }
+      const empty = ["events", "changed", "new", "todos_due"].every((k) => p[k].length === 0) && !(s.groupTodos ?? []).length;
       expect(!!s.expect.nothing).toBe(empty);
       if (!empty) expect(s.expect.mentions?.length).toBeGreaterThan(0);
     });
@@ -186,7 +209,7 @@ describe("sample brief answers (tests/brief-samples.json)", () => {
 
   it("cover an empty day, a busy day, a cancelled PTM and a new import", () => {
     const names = samples.map((s) => s.name).join(" | ");
-    for (const w of ["empty morning", "busy morning", "cancelled PTM", "new import"]) expect(names).toContain(w);
+    for (const w of ["empty morning", "busy morning", "cancelled PTM", "new import", "group TODO"]) expect(names).toContain(w);
   });
 });
 

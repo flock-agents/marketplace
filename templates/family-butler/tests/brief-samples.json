@@ -1,17 +1,35 @@
 {
-  "about": "Sample answers of the Family Calendar's brief op (contract docs/specs/2026-11-22-family-calendar-3-contract.md, 'brief op') and the message Family Butler's brief should make from each. Written from the contract and the owner's ask before the prompts were reread. `expect.nothing` = the reply is exactly NOTHING_NEW (Flock posts nothing). `mentions`: each entry must appear (case-insensitive); an array entry is alternatives, any one is enough. `once`: appears at most once. `absent`: must not appear. `maxLines`: non-empty lines at most. For a live run or an eval; the tests check only that each sample is a well-formed brief answer.",
+  "about": "Sample answers of the Family Calendar's brief op (contract docs/specs/2026-11-22-family-calendar-3-contract.md, 'brief op') and the message Family Butler's brief should make from each. Written from the contract and the owner's ask before the prompts were reread. `expect.nothing` = the reply is exactly NOTHING_NEW (Flock posts nothing). `mentions`: each entry must appear (case-insensitive); an array entry is alternatives, any one is enough. `once`: appears at most once. `absent`: must not appear. `maxLines`: non-empty lines at most. For a live run or an eval; the tests check only that each sample is a well-formed brief answer. `groupTodos`: the group's open TODOs as `GET /api/internal/todos?upcoming=1` answers them (`due` epoch ms), when the sample has any.",
   "samples": [
     {
       "name": "empty morning: nothing to say, weather alone is no brief",
       "kind": "morning",
-      "payload": { "day": "2026-11-23", "timezone": "Asia/Kolkata", "events": [], "changed": [], "new": [], "todos_due": [] },
-      "expect": { "nothing": true }
+      "payload": {
+        "day": "2026-11-23",
+        "timezone": "Asia/Kolkata",
+        "events": [],
+        "changed": [],
+        "new": [],
+        "todos_due": []
+      },
+      "expect": {
+        "nothing": true
+      }
     },
     {
       "name": "empty evening",
       "kind": "evening",
-      "payload": { "day": "2026-11-24", "timezone": "Asia/Kolkata", "events": [], "changed": [], "new": [], "todos_due": [] },
-      "expect": { "nothing": true }
+      "payload": {
+        "day": "2026-11-24",
+        "timezone": "Asia/Kolkata",
+        "events": [],
+        "changed": [],
+        "new": [],
+        "todos_due": []
+      },
+      "expect": {
+        "nothing": true
+      }
     },
     {
       "name": "busy morning: skating with a drop, an all-day test, a fee deadline, to-dos showing",
@@ -20,27 +38,114 @@
         "day": "2026-11-23",
         "timezone": "Asia/Kolkata",
         "events": [
-          { "id": "ev1", "title": "Unit test", "start_time": null, "end_time": null, "who": "Meera", "location": null,
-            "notes": null, "kind": "event", "status": "active", "sources": ["MyClassBoard"], "added_by": null,
-            "todos": { "open": 0, "titles": [] } },
-          { "id": "ev2", "title": "School fee due", "start_time": null, "end_time": null, "who": "Agastya", "location": null,
-            "notes": "Term 3, Rs 42,000", "kind": "deadline", "status": "active", "sources": ["Shiva's email"], "added_by": null,
-            "todos": { "open": 1, "titles": ["Pay the school fee"] } },
-          { "id": "ev3", "title": "Skating", "start_time": "16:00", "end_time": "17:30", "who": "Agastya", "location": null,
-            "notes": "Lakshmi drops", "kind": "event", "status": "active", "sources": [], "added_by": "Shiva",
-            "todos": { "open": 1, "titles": ["Carry skates"] } }
+          {
+            "id": "ev1",
+            "title": "Unit test",
+            "start_time": null,
+            "end_time": null,
+            "who": "Meera",
+            "location": null,
+            "notes": null,
+            "kind": "event",
+            "status": "active",
+            "sources": [
+              "MyClassBoard"
+            ],
+            "added_by": null,
+            "todos": {
+              "open": 0,
+              "titles": []
+            }
+          },
+          {
+            "id": "ev2",
+            "title": "School fee due",
+            "start_time": null,
+            "end_time": null,
+            "who": "Agastya",
+            "location": null,
+            "notes": "Term 3, Rs 42,000",
+            "kind": "deadline",
+            "status": "active",
+            "sources": [
+              "Shiva's email"
+            ],
+            "added_by": null,
+            "todos": {
+              "open": 1,
+              "titles": [
+                "Pay the school fee"
+              ]
+            }
+          },
+          {
+            "id": "ev3",
+            "title": "Skating",
+            "start_time": "16:00",
+            "end_time": "17:30",
+            "who": "Agastya",
+            "location": null,
+            "notes": "Lakshmi drops",
+            "kind": "event",
+            "status": "active",
+            "sources": [],
+            "added_by": "Shiva",
+            "todos": {
+              "open": 1,
+              "titles": [
+                "Carry skates"
+              ]
+            }
+          }
         ],
         "changed": [],
         "new": [],
         "todos_due": [
-          { "title": "Pay the school fee", "due": "2026-11-23", "event": "School fee due" },
-          { "title": "Sign the trip form", "due": "2026-11-26", "event": "School trip" }
+          {
+            "title": "Pay the school fee",
+            "due": "2026-11-23",
+            "event": "School fee due"
+          },
+          {
+            "title": "Sign the trip form",
+            "due": "2026-11-26",
+            "event": "School trip"
+          }
         ]
       },
       "expect": {
-        "mentions": ["Today", "skating", ["4", "16:00"], "Lakshmi", "Meera", "unit test", "school fee", "trip form", ["Thu", "26 Nov"], "skates", ["42,000", "42000", "42k"]],
-        "once": ["Pay the school fee"],
-        "absent": ["NOTHING_NEW", "**", "##", "|"],
+        "mentions": [
+          "Today",
+          "skating",
+          [
+            "4",
+            "16:00"
+          ],
+          "Lakshmi",
+          "Meera",
+          "unit test",
+          "school fee",
+          "trip form",
+          [
+            "Thu",
+            "26 Nov"
+          ],
+          "skates",
+          [
+            "42,000",
+            "42000",
+            "42k"
+          ]
+        ],
+        "once": [
+          "Pay the school fee"
+        ],
+        "absent": [
+          "NOTHING_NEW",
+          "**",
+          "##",
+          "|"
+        ],
         "maxLines": 6
       }
     },
@@ -51,13 +156,34 @@
         "day": "2026-11-23",
         "timezone": "Asia/Kolkata",
         "events": [],
-        "changed": [ { "id": "ev9", "title": "PTM", "date": "2026-12-05", "status": "cancelled" } ],
+        "changed": [
+          {
+            "id": "ev9",
+            "title": "PTM",
+            "date": "2026-12-05",
+            "status": "cancelled"
+          }
+        ],
         "new": [],
         "todos_due": []
       },
       "expect": {
-        "mentions": ["PTM", ["cancel", "off", "called off"], ["5 Dec", "Dec 5"]],
-        "absent": ["NOTHING_NEW", "Today:"],
+        "mentions": [
+          "PTM",
+          [
+            "cancel",
+            "off",
+            "called off"
+          ],
+          [
+            "5 Dec",
+            "Dec 5"
+          ]
+        ],
+        "absent": [
+          "NOTHING_NEW",
+          "Today:"
+        ],
         "maxLines": 3
       }
     },
@@ -68,18 +194,52 @@
         "day": "2026-11-23",
         "timezone": "Asia/Kolkata",
         "events": [
-          { "id": "ev4", "title": "Swimming", "start_time": "07:00", "end_time": "08:00", "who": "Meera", "location": "Club pool",
-            "notes": null, "kind": "event", "status": "cancelled", "sources": ["Shiva's email"], "added_by": null,
-            "todos": { "open": 0, "titles": [] } }
+          {
+            "id": "ev4",
+            "title": "Swimming",
+            "start_time": "07:00",
+            "end_time": "08:00",
+            "who": "Meera",
+            "location": "Club pool",
+            "notes": null,
+            "kind": "event",
+            "status": "cancelled",
+            "sources": [
+              "Shiva's email"
+            ],
+            "added_by": null,
+            "todos": {
+              "open": 0,
+              "titles": []
+            }
+          }
         ],
-        "changed": [ { "id": "ev4", "title": "Swimming", "date": "2026-11-23", "status": "cancelled" } ],
+        "changed": [
+          {
+            "id": "ev4",
+            "title": "Swimming",
+            "date": "2026-11-23",
+            "status": "cancelled"
+          }
+        ],
         "new": [],
         "todos_due": []
       },
       "expect": {
-        "mentions": ["Meera", "swimming", ["cancel", "off"]],
-        "once": ["swimming"],
-        "absent": ["NOTHING_NEW"],
+        "mentions": [
+          "Meera",
+          "swimming",
+          [
+            "cancel",
+            "off"
+          ]
+        ],
+        "once": [
+          "swimming"
+        ],
+        "absent": [
+          "NOTHING_NEW"
+        ],
         "maxLines": 3
       }
     },
@@ -90,13 +250,39 @@
         "day": "2026-11-23",
         "timezone": "Asia/Kolkata",
         "events": [],
-        "changed": [ { "id": "ev9", "title": "PTM", "date": "2026-12-06", "status": "moved", "was": "2026-12-05" } ],
+        "changed": [
+          {
+            "id": "ev9",
+            "title": "PTM",
+            "date": "2026-12-06",
+            "status": "moved",
+            "was": "2026-12-05"
+          }
+        ],
         "new": [],
         "todos_due": []
       },
       "expect": {
-        "mentions": ["PTM", ["moved", "now on", "shifted"], ["6 Dec", "Dec 6"], ["5 Dec", "Dec 5", "was Fri"]],
-        "absent": ["NOTHING_NEW"],
+        "mentions": [
+          "PTM",
+          [
+            "moved",
+            "now on",
+            "shifted"
+          ],
+          [
+            "6 Dec",
+            "Dec 6"
+          ],
+          [
+            "5 Dec",
+            "Dec 5",
+            "was Fri"
+          ]
+        ],
+        "absent": [
+          "NOTHING_NEW"
+        ],
         "maxLines": 3
       }
     },
@@ -108,12 +294,31 @@
         "timezone": "Asia/Kolkata",
         "events": [],
         "changed": [],
-        "new": [ { "id": "ev7", "title": "Annual Day", "date": "2026-12-12", "sources": ["MyClassBoard"] } ],
+        "new": [
+          {
+            "id": "ev7",
+            "title": "Annual Day",
+            "date": "2026-12-12",
+            "sources": [
+              "MyClassBoard"
+            ]
+          }
+        ],
         "todos_due": []
       },
       "expect": {
-        "mentions": ["Annual Day", ["12 Dec", "Dec 12"], "MyClassBoard"],
-        "absent": ["NOTHING_NEW", "Tomorrow:"],
+        "mentions": [
+          "Annual Day",
+          [
+            "12 Dec",
+            "Dec 12"
+          ],
+          "MyClassBoard"
+        ],
+        "absent": [
+          "NOTHING_NEW",
+          "Tomorrow:"
+        ],
         "maxLines": 2
       }
     },
@@ -124,21 +329,210 @@
         "day": "2026-11-24",
         "timezone": "Asia/Kolkata",
         "events": [
-          { "id": "ev5", "title": "PTM", "start_time": "10:00", "end_time": "11:00", "who": "Ankita", "location": "Greenwood High",
-            "notes": null, "kind": "event", "status": "active", "sources": ["MyClassBoard"], "added_by": null,
-            "todos": { "open": 0, "titles": [] } },
-          { "id": "ev6", "title": "Skating", "start_time": "16:00", "end_time": "17:30", "who": "Agastya", "location": null,
-            "notes": "Ravi picks up", "kind": "event", "status": "active", "sources": [], "added_by": "Shiva",
-            "todos": { "open": 0, "titles": [] } }
+          {
+            "id": "ev5",
+            "title": "PTM",
+            "start_time": "10:00",
+            "end_time": "11:00",
+            "who": "Ankita",
+            "location": "Greenwood High",
+            "notes": null,
+            "kind": "event",
+            "status": "active",
+            "sources": [
+              "MyClassBoard"
+            ],
+            "added_by": null,
+            "todos": {
+              "open": 0,
+              "titles": []
+            }
+          },
+          {
+            "id": "ev6",
+            "title": "Skating",
+            "start_time": "16:00",
+            "end_time": "17:30",
+            "who": "Agastya",
+            "location": null,
+            "notes": "Ravi picks up",
+            "kind": "event",
+            "status": "active",
+            "sources": [],
+            "added_by": "Shiva",
+            "todos": {
+              "open": 0,
+              "titles": []
+            }
+          }
         ],
         "changed": [],
         "new": [],
-        "todos_due": [ { "title": "Pay the school fee", "due": "2026-11-24", "event": "School fee due" } ]
+        "todos_due": [
+          {
+            "title": "Pay the school fee",
+            "due": "2026-11-24",
+            "event": "School fee due"
+          }
+        ]
       },
       "expect": {
-        "mentions": ["Tomorrow", "PTM", ["10 am", "10am", "10:00"], "Ankita", "skating", "Ravi", "school fee"],
-        "absent": ["NOTHING_NEW", "**", "##", "|", "weather"],
+        "mentions": [
+          "Tomorrow",
+          "PTM",
+          [
+            "10 am",
+            "10am",
+            "10:00"
+          ],
+          "Ankita",
+          "skating",
+          "Ravi",
+          "school fee"
+        ],
+        "absent": [
+          "NOTHING_NEW",
+          "**",
+          "##",
+          "|",
+          "weather"
+        ],
         "maxLines": 5
+      }
+    },
+    {
+      "name": "group TODO only: the brief is empty, the maid's pay is due today and a gas booking is overdue",
+      "kind": "morning",
+      "payload": {
+        "day": "2026-11-23",
+        "timezone": "Asia/Kolkata",
+        "events": [],
+        "changed": [],
+        "new": [],
+        "todos_due": []
+      },
+      "groupTodos": [
+        {
+          "id": "t1",
+          "title": "Renew the gas booking",
+          "due": 1795199400000,
+          "dueTimed": false,
+          "showFrom": null,
+          "recurrence": null,
+          "sourceKind": "agent",
+          "group": "Family"
+        },
+        {
+          "id": "t2",
+          "title": "Pay the maid",
+          "due": 1795404600000,
+          "dueTimed": true,
+          "showFrom": null,
+          "recurrence": null,
+          "sourceKind": "agent",
+          "group": "Family"
+        },
+        {
+          "id": "t3",
+          "title": "Book the car service",
+          "due": 1795804200000,
+          "dueTimed": false,
+          "showFrom": null,
+          "recurrence": null,
+          "sourceKind": "agent",
+          "group": "Family"
+        }
+      ],
+      "expect": {
+        "mentions": [
+          "To do",
+          "maid",
+          [
+            "9 am",
+            "9am"
+          ],
+          "gas booking",
+          [
+            "was due",
+            "overdue",
+            "Sat"
+          ]
+        ],
+        "absent": [
+          "NOTHING_NEW",
+          "car service",
+          "Today:"
+        ],
+        "maxLines": 3
+      }
+    },
+    {
+      "name": "group TODO in the evening: due tomorrow, one with the same title as the calendar's to-do",
+      "kind": "evening",
+      "payload": {
+        "day": "2026-11-24",
+        "timezone": "Asia/Kolkata",
+        "events": [],
+        "changed": [],
+        "new": [],
+        "todos_due": [
+          {
+            "title": "Pay the school fee",
+            "due": "2026-11-24",
+            "event": "School fee due"
+          }
+        ]
+      },
+      "groupTodos": [
+        {
+          "id": "t4",
+          "title": "Pay the school fee",
+          "due": 1795458600000,
+          "dueTimed": false,
+          "showFrom": null,
+          "recurrence": null,
+          "sourceKind": "agent",
+          "group": "Family"
+        },
+        {
+          "id": "t5",
+          "title": "Put the bins out",
+          "due": 1795483800000,
+          "dueTimed": true,
+          "showFrom": null,
+          "recurrence": null,
+          "sourceKind": "agent",
+          "group": "Family"
+        },
+        {
+          "id": "t6",
+          "title": "Pay the maid",
+          "due": 1795404600000,
+          "dueTimed": true,
+          "showFrom": null,
+          "recurrence": null,
+          "sourceKind": "agent",
+          "group": "Family"
+        }
+      ],
+      "expect": {
+        "mentions": [
+          "Due tomorrow",
+          "school fee",
+          "bins",
+          [
+            "7 am",
+            "7am"
+          ]
+        ],
+        "once": [
+          "school fee"
+        ],
+        "absent": [
+          "NOTHING_NEW",
+          "maid"
+        ],
+        "maxLines": 2
       }
     }
   ]
