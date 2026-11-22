@@ -3,7 +3,7 @@
   "usage": "app",
   "icon": "icon.svg",
   "description": "Family events, schedules, and reminders at a glance",
-  "version": "2.1.0",
+  "version": "3.0.0",
   "minFlockVersion": "0.19.0",
   "type": "fullstack",
   "access": "private",
@@ -29,13 +29,11 @@
   "assemble": true,
   "pages": [
     "week",
-    "events",
-    "reminders"
+    "events"
   ],
   "tables": [
     "members",
-    "events",
-    "reminders"
+    "events"
   ],
   "objects": [
     "calendar"
@@ -45,10 +43,8 @@
   "labels": {
     "nav.week": "Week",
     "nav.events": "Events",
-    "nav.reminders": "Reminders",
     "title.week": "This week",
-    "title.events": "Upcoming events",
-    "title.reminders": "Reminders"
+    "title.events": "Upcoming events"
   },
   "useCases": {
     "for": [
@@ -56,7 +52,7 @@
       "Remind everyone about the dentist on Friday",
       "When is grandma's birthday",
       "Add football practice every Tuesday 5pm",
-      "Who is picking up the kids on Thursday"
+      "What do we need to do before the school trip"
     ],
     "notFor": [
       "Booking slots for clients (use bookings)",
@@ -68,26 +64,50 @@
     {
       "id": "due-reminders",
       "name": "Reminders",
-      "description": "Every 15 minutes, when an event's reminder or a reminder of its own has come due: asks the agent to tell the person it is for. Nothing due, nothing sent.",
+      "description": "Every 15 minutes, when an event's nudge has come due (30 minutes before a timed event unless it says otherwise) or a due date is a week away: asks the agent to tell the person it is for. Nothing due, nothing sent.",
       "trigger": {
         "type": "schedule",
         "cron": "*/15 * * * *"
       },
       "executionMode": "app-relay",
       "handler": "due-reminders"
+    },
+    {
+      "id": "plan-prep",
+      "name": "Plan what to do before events",
+      "description": "Every hour, finds events that came in from a school portal, an email or a group and are new or moved, and asks the agent what the family must do before each (buy, pay, sign, send, book, collect). Usually nothing; what is needed lands on the family's to-do list. Nothing new, no wake.",
+      "trigger": {
+        "type": "schedule",
+        "cron": "20 * * * *"
+      },
+      "executionMode": "app-relay",
+      "handler": "plan-prep",
+      "prompt": "You are planning what this family must physically do before the events coming up. Family Calendar wakes you every hour with only the events that came in from a source (a school portal, an email, a group) and are new or have moved since they were last planned. Typed-in and repeating events never come here.\n\nThe data block holds `planId` (the plan you report on), `today`, `nowLocal` (HH:MM) and `timezone`: they are the clock for this run, never any other date you have. Each event in `events` has its `ref` (`e1`, `e2`...), `title`, `date`, `start_time` (null for all day), `who` (the family member it is for; null for everyone), `location`, `notes` (the source's own words), `kind` (`event`, or `deadline`: a day something is due by), `sources`, `change` (`new` or `moved`; a moved one also has `was`, the date and time it had when its steps were dated) and `steps` (the to-dos it already has; `closed: true` means done or taken back).\n\nFor each event decide: what must the family physically do before it? Only these count:\n- buy something (a costume, a gift, supplies the school asked for),\n- pay (a fee, a deposit, a contribution),\n- sign and return (a consent form, a slip),\n- send (an RSVP, a photo, a document the source asked for),\n- book (a cab, a table, a slot the source says to book),\n- collect (a ticket, a parcel, a kit to pick up).\n\nNothing is the usual answer. A class, a meeting (a parent-teacher meeting too), an appointment already booked, a holiday, a notice with nothing asked of the family, an event the source calls off: no steps. Never add a step to attend, to remember, to prepare in general, to check something, to carry something, or to set a reminder: the calendar already reminds the family of the event itself. Never re-do what the notes say is done (a flight booked and paid needs no booking or paying). Use only what the event and its notes say; never invent a requirement.\n\nRules for steps (Family Calendar refuses a step that breaks one):\n- At most 3 steps for an event, counting the open ones it has; usually 0 or 1.\n- `due` is the last day to do it: on or before the event's `date`, and not before `today`. When the notes give a date (\"return the form by 27 Nov\", \"pay by the 10th\"), that date is `due`. Otherwise give a sensible day before the event: a thing to buy a few days before, a deadline's payment on its date.\n- `show_from` is when it should appear on the family's list: on or before `due`. Leave it out for 3 days before `due`; give an earlier one for a thing that takes longer (buying a costume: about a week before).\n- `key`: a short name in lowercase letters, digits and hyphens (`buy-costume`, `sign-form`, `pay-fee`, `buy-gift`). A step the event already has keeps its key.\n- `title`: a short action the family reads on their list, naming whose it is when the event is for one person (\"Buy Agastya's farmer costume\", \"Sign and return the trip form\", \"Pay the term 3 fee\").\n- `why`: one line from the source's words (\"The school asked for a farmer costume\").\n- A `closed` step is never proposed again. An open step already there stands: leave it out unless the event moved.\n- A moved event: report each of its open steps again with the same key and a new `due` (and `show_from`) that fits the new date; add a new step only if the move itself asks for one.\n\nThen report, once, for every event in the data block, with `steps: []` for each that needs nothing:\n\nplan_done (POST /api/apps/<this app>/ops/plan_done):\n{ \"planId\": \"<the planId>\", \"events\": [\n  { \"event\": \"e1\", \"steps\": [{ \"key\": \"buy-costume\", \"title\": \"Buy Agastya's farmer costume\", \"due\": \"2026-12-08\", \"show_from\": \"2026-12-01\", \"why\": \"The school asked for a farmer costume.\" }] },\n  { \"event\": \"e2\", \"steps\": [] } ] }\n\nThe answer lists the steps `accepted` and those `refused`, each with why: fix a refused step and send the report again with the same `planId` (steps already accepted are kept as they are). Say nothing to the family about this run: the steps reach their to-do list on their own."
     }
   ],
   "agentInterface": {
     "operations": [
       {
         "name": "guide",
-        "description": "The full guide for working with this app: events and reminders, add_events with an example, and what the app sends on its own. Read it before you first add anything. {}"
+        "description": "The full guide for working with this app: events, due dates and to-dos, add_events with an example, and what the app sends on its own. Read it before you first add anything. {}"
       },
       {
         "name": "add_events",
-        "description": "Put events on the family's calendar, as many as you have, in one call. { events: [{ title, who?: one family member's name (added to the family when new; left out: everyone), date?: YYYY-MM-DD for an event on one day, weekdays?: [\"Tue\", \"Thu\"] for one that happens every week (from today, or from date), repeat?: none | daily | weekly | monthly (with a date: from that date on), start_time?: \"16:00\", end_time?: \"17:30\" (neither: all day), location?, notes?: who drops, picks up or what to bring, reminder?: \"evening before\" or whole minutes before the start }], members?: [{ name, emoji?, colour?: accent | info | success | warning | danger }] }. A class, a school run, a drop or a pick-up is an event, never a reminder; an event's own reminder is its reminder field, never a row in reminders. A weekly event is kept once per weekday and shown every week: never add a row per week. Every event is checked first and one bad event refuses the whole call, naming the event and the field: fix it and send the call again. The same event sent again changes the one there. The first call clears the sample family. A call carries 16 KB at most (about 60 events). Answers { added, updated, members_added, samples_cleared, events: [{ id, title, who, date, repeat, start_time, end_time, reminder_minutes }] }."
+        "description": "Put events on the family's calendar, as many as you have, in one call. { events: [{ title, who?: one family member's name (added to the family when new; left out: everyone), date?: YYYY-MM-DD for an event on one day, weekdays?: [\"Tue\", \"Thu\"] for one that happens every week (from today, or from date), repeat?: none | daily | weekly | monthly | yearly (with a date: from that date on; yearly for a birthday), start_time?: \"16:00\", end_time?: \"17:30\" (neither: all day), location?, notes?: who drops, picks up or what to bring, reminder?: whole minutes before the start (a timed event gets 30 unless you say; null for none), kind?: event | deadline (a day something is due by: a fee, a form), added_by?: the member who asked }], members?: [{ name, emoji?, colour?: accent | info | success | warning | danger }], added_by?: the member who asked, for every event }. A weekly event is kept once per weekday and shown every week: never add a row per week. Every event is checked first and one bad event refuses the whole call, naming the event and the field: fix it and send the call again. The same event sent again changes the one there. The first call clears the sample family. A call carries 16 KB at most (about 60 events). Answers { added, updated, members_added, samples_cleared, events: [{ id, title, who, date, repeat, start_time, end_time, reminder_minutes, kind, added_by }] }."
+      },
+      {
+        "name": "import_events",
+        "description": "Flock's own harvest sends a source's dated items here (an email, a school portal, a group); you never call it. { source, label?, items: [{ ref, match?, kind?, title, date, start_time?, end_time?, who?, location?, notes?, cancelled?, todos?: [{ title, due?, show_from? }] }] }, at most 50 items and 32 KB. Answers { results: [{ ref, id, result: added | merged | updated | moved | cancelled | unchanged | ignored | refused, reason? }], members_added }."
+      },
+      {
+        "name": "plan_done",
+        "description": "Report the steps you decided for a plan-prep wake: { planId, events: [{ event: \"e1\", steps: [{ key, title, due, show_from?, why? }] }] }. List every event of the wake; steps: [] when nothing is needed. Each step becomes a to-do on the family's list. Answers { accepted: [\"e1/key\"], refused: [{ step, reason }] }: fix a refused step and send the report again with the same planId."
+      },
+      {
+        "name": "brief",
+        "description": "The day for the family's morning or evening brief: { kind: morning | evening } (morning: today, evening: tomorrow). Answers { day, timezone, events: [{ id, title, start_time, end_time, who, location, notes, kind, status, sources, added_by, todos: { open, titles } }], changed: [{ id, title, date, status: cancelled | moved, was? }], new: [{ id, title, date, sources }], todos_due: [{ title, due, event }] }. new and changed are what came in since the last brief; each call moves that mark on. Empty lists: say nothing."
       }
     ],
-    "instructions": "Family Calendar owns this family's members, events and reminders. Read the app before you answer and tell the family what it now shows. Anything that happens at a time (a class, the school run, a pick-up, an appointment, a birthday) is an event: add events with add_events, all of them in one call, weekly ones with weekdays. Never write events, members or reminders one row at a time through the data route. A reminder before an event is that event's reminder field (\"evening before\", or minutes); the reminders table is only for a nudge with no event behind it. The app itself wakes you every 15 minutes with the reminders that are due and the words to send: set up no reminders or routines of your own for what is on the calendar. Call guide before you first add anything."
+    "instructions": "Family Calendar owns this family's members and events. Read the app before you answer and tell the family what it now shows. Anything with a day is an event: a class, a pick-up, an appointment, a birthday (repeat yearly); a day something is due by is an event of kind deadline. Add events with add_events, all of them in one call, weekly ones with weekdays. Never write events, members or to-dos one row at a time through the data route, and never make a reminder row: there is none. To-dos come from the plan-prep routine: when it wakes you, decide what the family must physically do before each event and report it with plan_done. The app itself wakes you every 15 minutes with the nudges that are due and the words to send: set up no reminders or routines of your own for what is on the calendar. For a brief, call brief. Call guide before you first add anything."
   }
 }

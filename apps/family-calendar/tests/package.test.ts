@@ -20,7 +20,7 @@ describe("family-calendar package", () => {
       buildCommand: "bun run app:build", buildDir: "dist", deployDir: ".flock-out",
       processConfig: { command: "bun", args: ["server/index.js"], healthCheckPath: "/api/health" },
       config: { requires: { agent: { required: true } } },
-      pages: ["week", "events", "reminders"], tables: ["members", "events", "reminders"], objects: ["calendar"], nav: "auto", chat: "side",
+      pages: ["week", "events"], tables: ["members", "events"], objects: ["calendar"], nav: "auto", chat: "side",
     });
     expect(manifest.icon).toBe("icon.svg");
     expect(existsSync(join(ROOT, "icon.svg"))).toBe(true);

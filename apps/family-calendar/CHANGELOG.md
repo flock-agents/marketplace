@@ -1,5 +1,17 @@
 # Changelog
 
+## 3.0.0
+
+Needs Flock 0.19.0 or later.
+
+- **The calendar holds events; to-dos come with them.** There is no Reminders page or reminders table any more. A due date (the school fee by the 10th, a form by Friday) is an event of kind *deadline* on that day. What someone must do before an event (pay the fee, buy the costume, sign the form) is a to-do tied to that event, on the family's to-do list in Flock, hidden until a few days before it is due. Each event shows its to-do count; a tap lists them and a tick settles one.
+- **Events from the family's email and other sources** (`import_events`, called by Flock's own harvest): each comes in with where it came from ("from Shiva's email"). The same thing seen in two people's mail, or from two sources, is one event with two sources; when the app is not sure two items are the same, it keeps both. A re-send changes nothing. A source that calls an event off marks it cancelled: it stays on its day, struck through, and its open to-dos are taken off the list.
+- **What to do before each imported event** (the *Plan what to do before events* routine, hourly): new or moved events from a source are handed to the family's agent, which decides what the family must physically do before each (buy, pay, sign and return, send, book, collect; usually nothing, at most 3 steps) and reports it with `plan_done`. Typed-in and repeating events are never planned. Nothing new: no wake, no model call.
+- **A brief for the morning and the evening** (`brief`): today's or tomorrow's events with their sources and to-dos, the to-dos to do, and what came in, moved or was cancelled since the last brief. Family Butler's 8 am and 9 pm briefs read it.
+- **Events can repeat every year** (a birthday, an anniversary; a 29 February falls on the 28th in other years). An event shows who added it.
+- **Nudges.** A timed event is nudged 30 minutes before unless it says otherwise; a deadline is spoken of a week before. There is no "evening before" reminder: the 9 pm brief covers tomorrow.
+- **Updating keeps everything.** On the first start after the update, each reminder becomes a deadline event on its due date (repeating as it did) with one to-do, due on its next day; a one-off already past comes across with no to-do, and the sample family's reminders are left behind. An event's reminder of exactly the old "evening before" value is cleared. The 2.x reminders stay in the app's database, untouched, as `v2_reminders_moved`. A 1.x install updated straight to 3.0 gets the same.
+
 ## 2.1.0
 
 Needs Flock 0.19.0 or later.
