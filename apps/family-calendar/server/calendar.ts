@@ -8,10 +8,12 @@
 import type { Database } from "bun:sqlite";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import { and, eq } from "drizzle-orm";
-import { events, event_sources, members, todos } from "./db/schema";
+import { events, event_sources, members, members as membersTable, todos } from "./db/schema";
 import { COLOURS, KINDS } from "./db/constants";
 import { addDays, clock12, isoDate, nextOccurrence, occurrences, pad, parseClock, parseDate, repeats, shortDate, toMin, weekday } from "../src/pages/dates";
 import { defaultShowFrom, slug } from "./db/reminder-events";
+import * as K from "./kinds";
+import { placeState, placeTally, tally, type TallyRow } from "./tally";
 
 type Db = BunSQLiteDatabase<any>;
 type EventRow = typeof events.$inferSelect;
@@ -27,11 +29,11 @@ export interface TasksPlatform {
     withdraw(sourceRef: string, opts?: { reason?: string }): Promise<Res>;
     /** Mark the app's own open task done, as `by` (SDK 0.5.0; an older SDK has none, an older Flock answers 404). */
     complete?(sourceRef: string, opts?: { by?: string }): Promise<Res>;
-    list(opts?: { prefix?: string }): Promise<Res<{ tasks: { sourceRef: string; status: "open" | "done" | "dismissed"; withdrawn?: true }[] }>>;
+    list(opts?: { prefix?: string }): Promise<Res<{ tasks: TallyRow[] }>>;
   };
 }
 /** What every piece here needs: the kit's database, the clock, and Flock (null when the app runs with no Flock, as in a check). */
-export interface Cal { kit: KitLike; now: () => Date; platform: () => TasksPlatform | null }
+export interface Cal { kit: KitLike; now: () => Date; platform: () => TasksPlatform | null; /** the app's own id (Flock's APP_ID): a TODO is tied to `<appId>:<event id>` */ appId?: string }
 export type OpError = { error: string; code: string; status: number };
 const refuse = (error: string, status = 400): OpError => ({ error, code: "APP_REFUSED", status });
 
@@ -86,22 +88,30 @@ function taskOf(t: TodoRow, e: EventRow | undefined): Record<string, unknown> {
   const day = e ? parseDate(e.date) : parseDate(t.due);
   const maxDue = e?.start_time ? day.getTime() + toMin(e.start_time) * 60_000 : new Date(day.getFullYear(), day.getMonth(), day.getDate(), 23, 59, 59, 999).getTime();
   const reason = e ? `${e.title}, ${weekday(e.date)} ${shortDate(e.date)}${e.start_time ? ` ${e.start_time}` : ""}` : t.title;
-  return { sourceRef: todoRef(t.event_id, t.key), title: t.title, due: dayStart(t.due), dueTimed: false, showFrom: t.show_from, status: "backlog",
-    maxDue: Math.max(maxDue, dayStart(t.due)), maxDueReason: reason.length > 120 ? `${reason.slice(0, 119)}…` : reason,
-    context: { app: "family-calendar", eventId: t.event_id, ...(t.why ? { why: t.why } : {}) } };
+  const due = dayStart(t.due) + (t.due_time ? toMin(t.due_time) * 60_000 : 0);
+  const spec = t.kind ? K.kindSpec(t.kind) : undefined;
+  return { sourceRef: todoRef(t.event_id, t.key), title: t.title, due, dueTimed: !!t.due_time, showFrom: t.show_from, status: "backlog",
+    maxDue: Math.max(maxDue, due), maxDueReason: reason.length > 120 ? `${reason.slice(0, 119)}…` : reason,
+    context: { app: "family-calendar", eventId: t.event_id, ...(t.kind ? { kind: t.kind } : {}), ...(t.why ? { why: t.why } : {}) },
+    // A step that follows from the event or the family's habits is offered to Flock as a cover (Calendar Desk's): when the family
+    // already has that TODO, Flock ties it to the event and makes nothing.
+    ...(e && spec && spec.tier !== "judgement" ? { cover: { kind: spec.kind, eventTitle: e.title, ...(e.location ? { eventLocation: e.location } : {}), eventDate: e.date } } : {}) };
 }
 
 /** Write a to-do of an event: a new key is made open; an open one takes the new title and dates; a closed one is never made
  *  again (false). Leaves it unsynced when anything changed. */
-export function putTodo(db: Db, eventId: string, t: { key: string; title: string; due: string; show_from: string; why?: string | null }, by: string): "added" | "changed" | "same" | "closed" {
+type TodoIn = { key: string; title: string; due: string; show_from: string; why?: string | null; due_time?: string | null; kind?: string | null; place?: string | null };
+export function putTodo(db: Db, eventId: string, t: TodoIn, by: string): "added" | "changed" | "same" | "closed" {
   const had = db.select().from(todos).where(and(eq(todos.event_id, eventId), eq(todos.key, t.key))).get();
   if (had && had.status !== "open") return "closed";
+  const extra = { ...(t.due_time !== undefined ? { due_time: t.due_time } : {}), ...(t.kind !== undefined ? { kind: t.kind } : {}), ...(t.place !== undefined ? { place: t.place } : {}) };
   if (had) {
-    if (had.title === t.title && had.due === t.due && had.show_from === t.show_from && (t.why === undefined || had.why === (t.why ?? null))) return "same";
-    db.update(todos).set({ title: t.title, due: t.due, show_from: t.show_from, ...(t.why !== undefined ? { why: t.why } : {}), synced: 0, updated_at: stamp(), updated_by: by }).where(eq(todos.id, had.id)).run();
+    if (had.title === t.title && had.due === t.due && had.show_from === t.show_from && (t.why === undefined || had.why === (t.why ?? null))
+      && Object.entries(extra).every(([k, v]) => (had as any)[k] === v)) return "same";
+    db.update(todos).set({ title: t.title, due: t.due, show_from: t.show_from, ...(t.why !== undefined ? { why: t.why } : {}), ...extra, synced: 0, updated_at: stamp(), updated_by: by }).where(eq(todos.id, had.id)).run();
     return "changed";
   }
-  db.insert(todos).values({ event_id: eventId, key: t.key, title: t.title, due: t.due, show_from: t.show_from, why: t.why ?? null, status: "open", synced: 0, updated_by: by }).run();
+  db.insert(todos).values({ event_id: eventId, key: t.key, title: t.title, due: t.due, show_from: t.show_from, why: t.why ?? null, ...extra, status: "open", synced: 0, updated_by: by }).run();
   return "added";
 }
 
@@ -116,12 +126,12 @@ export function withdrawTodos(db: Db, eventId: string, at: number, by: string): 
 function clampTodos(db: Db, e: EventRow, by: string) {
   for (const t of db.select().from(todos).where(and(eq(todos.event_id, e.id), eq(todos.status, "open"))).all()) {
     if (t.due <= e.date) continue;
-    db.update(todos).set({ due: e.date, show_from: t.show_from > e.date ? e.date : t.show_from, synced: 0, updated_at: stamp(), updated_by: by }).where(eq(todos.id, t.id)).run();
+    db.update(todos).set({ due: e.date, due_time: null, show_from: t.show_from > e.date ? e.date : t.show_from, synced: 0, updated_at: stamp(), updated_by: by }).where(eq(todos.id, t.id)).run();
   }
 }
 
 /** Tell Flock every to-do it does not have yet. Returns how many Flock took and how many are still to go. */
-export async function syncTodos(cal: Cal): Promise<{ sent: number; left: number }> {
+export async function syncTodos(cal: Cal): Promise<{ sent: number; left: number; covered: Set<string> }> {
   const platform = cal.platform();
   const { db } = cal.kit;
   const byId = new Map(db.select().from(events).all().map((e) => [e.id, e]));
@@ -131,7 +141,8 @@ export async function syncTodos(cal: Cal): Promise<{ sent: number; left: number 
     if (!e || e.status === "cancelled") db.update(todos).set({ status: "withdrawn", closed_at: cal.now().getTime(), synced: 0, updated_at: stamp(), updated_by: "app" }).where(eq(todos.id, t.id)).run();
   }
   const waiting = db.select().from(todos).where(eq(todos.synced, 0)).all();
-  if (!platform || !waiting.length) return { sent: 0, left: waiting.length };
+  const covered = new Set<string>();
+  if (!platform || !waiting.length) return { sent: 0, left: waiting.length, covered };
   let sent = 0;
   for (const t of waiting) {
     const ref = todoRef(t.event_id, t.key);
@@ -142,11 +153,15 @@ export async function syncTodos(cal: Cal): Promise<{ sent: number; left: number 
       else r = await platform.tasks.withdraw(ref, { reason: "Its event was cancelled" });
     } catch (err) { r = { ok: false, reason: (err as Error).message }; }
     if (!r.ok) { console.warn(`[family-calendar] Flock did not take to-do ${ref}: ${r.reason ?? "unknown"}`); continue; }
+    // Flock found a TODO of the family's that does this work and tied it to the event instead: never made here again.
+    const isCovered = t.status === "open" && !!(r.data as { covered?: unknown } | null)?.covered;
+    if (isCovered) covered.add(ref);
     // Only the version sent is marked: a change made while Flock answered goes on the next run.
-    db.update(todos).set({ synced: 1, ...(note ? { done_note: note } : {}) }).where(and(eq(todos.id, t.id), eq(todos.updated_at, t.updated_at), eq(todos.status, t.status))).run();
+    db.update(todos).set({ synced: 1, ...(note ? { done_note: note } : {}), ...(isCovered ? { status: "covered", closed_at: cal.now().getTime() } : {}) })
+      .where(and(eq(todos.id, t.id), eq(todos.updated_at, t.updated_at), eq(todos.status, t.status))).run();
     sent++;
   }
-  return { sent, left: waiting.length - sent };
+  return { sent, left: waiting.length - sent, covered };
 }
 
 /**
@@ -187,7 +202,7 @@ export async function readBackTodos(cal: Cal): Promise<number> {
 export function setTodoDone(cal: Cal, eventId: string, key: string, done: boolean, by: string, person: string | null = null): TodoRow | null {
   const { db } = cal.kit;
   const t = db.select().from(todos).where(and(eq(todos.event_id, eventId), eq(todos.key, key))).get();
-  if (!t || t.status === "withdrawn") return null;
+  if (!t || t.status === "withdrawn" || t.status === "covered") return null;
   const status = done ? "done" : "open";
   if (t.status === status) return t;
   return db.update(todos).set({ status, closed_at: done ? cal.now().getTime() : null, done_by: done ? person : null, done_note: null, synced: 0, updated_at: stamp(), updated_by: by }).where(eq(todos.id, t.id)).returning().get();
@@ -419,10 +434,30 @@ const labelsOf = (db: Db, eventId: string): string[] => {
   return out;
 };
 const stepsOf = (db: Db, eventId: string) => db.select().from(todos).where(eq(todos.event_id, eventId)).all()
-  .filter((t) => t.status !== "withdrawn").map((t) => ({ key: t.key, title: t.title, due: t.due, show_from: t.show_from, closed: t.status !== "open" }));
+  .filter((t) => t.status !== "withdrawn").map((t) => ({ key: t.key, ...(t.kind ? { kind: t.kind } : {}), title: t.title, due: t.due, ...(t.due_time ? { due_time: t.due_time } : {}),
+    show_from: t.show_from, closed: t.status !== "open" }));
 
 export const PLAN_MESSAGE = "These Family Calendar events are new or have moved. Decide for each what the family must physically do before it, then report with plan_done.";
 export type Wake = (message: string, data?: unknown) => Promise<{ ok: boolean; reason?: string }>;
+
+/** What the family did with past steps (Calendar Desk's habits): Flock's rows of the app's tasks, with each step's kind and place
+ *  from the app's own to-dos. Read once per run; nothing known when Flock does not answer. */
+async function habitsOf(cal: Cal): Promise<{ off: Set<string>; tallied: ReturnType<typeof tally>; places: ReturnType<typeof placeTally> }> {
+  const platform = cal.platform();
+  const listed = platform ? await platform.tasks.list({ prefix: "event:" }).catch(() => null) : null;
+  const rows: TallyRow[] = listed?.ok ? listed.data.tasks : [];
+  const kinds = new Map<string, string>(), places = new Map<string, { kind: string; place: string }>(), covered = new Set<string>();
+  for (const t of cal.kit.db.select().from(todos).all()) {
+    const ref = todoRef(t.event_id, t.key);
+    if (t.kind) kinds.set(ref, t.kind);
+    if (t.kind && t.place) places.set(ref, { kind: t.kind, place: t.place });
+    if (t.status === "covered") covered.add(ref);
+  }
+  const now = cal.now().getTime();
+  const tallied = tally(rows, kinds, now, covered);
+  return { tallied, places: placeTally(rows, places, now, covered), off: new Set([...tallied].filter(([, v]) => v.state === "off").map(([k]) => k)) };
+}
+const typesOf = (sqlite: Database) => getMeta<Record<string, string>>(sqlite, "types") ?? {};
 
 /** One plan-prep run. Nothing to plan, or a plan still waiting for its answer: no wake, no model call. */
 export async function planPrep(cal: Cal, wake: Wake): Promise<{ woke: boolean; planId?: string; skipped?: "nothing" | "waiting" }> {
@@ -434,13 +469,24 @@ export async function planPrep(cal: Cal, wake: Wake): Promise<{ woke: boolean; p
   const now = cal.now(), nowMs = now.getTime();
   const open = getMeta<PlanRecord>(sqlite, "plan");
   if (open && nowMs - open.createdAt < PLAN_WAIT_MS && open.events.some((r) => picks.some((p) => p.e.id === r.id && basisOf(p.e) === r.basis))) return { woke: false, skipped: "waiting" };
-  const planId = `p-${nowMs}`;
+  const planId = `p-${nowMs}`, appId = cal.appId ?? "family-calendar";
+  const { tallied, places } = await habitsOf(cal);
+  const habits: Record<string, { tier: K.Tier; tally: "on" | "off"; facts: string[] }> = {};
+  for (const k of [...K.KINDS].sort((a, b) => (a.kind < b.kind ? -1 : 1))) {
+    const st = tallied.get(k.kind)?.state;
+    if (k.tier !== "judgement" && (st === "on" || st === "off")) habits[k.kind] = { tier: k.tier, tally: st, facts: [] };
+  }
+  const types = typesOf(sqlite);
+  const members = db.select().from(membersTable).all().map((m) => m.name);
   const payloadOf = (list: typeof picks) => ({
-    planId, today: isoDate(now), nowLocal: hhmm(now), timezone: timezone(),
+    planId, appId, today: isoDate(now), nowLocal: hhmm(now), timezone: timezone(), members, habits,
     events: list.map(({ e, change }, i) => {
       const was = change === "moved" && e.plan_basis ? { date: e.plan_basis.slice(0, 10), start_time: e.plan_basis.length > 10 ? e.plan_basis.slice(11) : null } : undefined;
-      return { ref: `e${i + 1}`, id: e.id, title: e.title, date: e.date, start_time: e.start_time, who: e.who, location: e.location, notes: e.notes, kind: e.kind,
-        sources: labelsOf(db, e.id), change, ...(was ? { was } : {}), steps: stepsOf(db, e.id) };
+      const pattern: Record<string, "on" | "off"> = {};
+      for (const kind of K.PLACE_KINDS) { const st = placeState(places, kind, K.placeOf(kind, e)); if (st !== "none") pattern[kind] = st; }
+      return { ref: `e${i + 1}`, event: `${appId}:${e.id}`, id: e.id, title: e.title, date: e.date, start_time: e.start_time, who: e.who, location: e.location, notes: e.notes, kind: e.kind,
+        sources: labelsOf(db, e.id), change, ...(types[e.id] ? { type: types[e.id] } : {}), ...(Object.keys(pattern).length ? { pattern } : {}),
+        ...(was ? { was } : {}), steps: stepsOf(db, e.id) };
     }),
   });
   let payload = payloadOf(picks);
@@ -452,17 +498,21 @@ export async function planPrep(cal: Cal, wake: Wake): Promise<{ woke: boolean; p
 }
 
 export const PLAN_DONE_FIELDS = ["planId", "events"];
-export const STEP_FIELDS = ["key", "title", "due", "show_from", "why"];
+export const STEP_FIELDS = ["key", "kind", "title", "due", "due_time", "show_from", "why"];
+const HM = /^([01]\d|2[0-3]):[0-5]\d$/;
 
-/** The agent's report for a plan: each step checked and made a to-do, each listed event marked planned. */
+/** The agent's report for a plan (Calendar Desk's plan_events_done rules): each event's type, each step checked against the
+ *  kinds table, the family's habits and the dates, then made a to-do; each event reported with a good type marked planned. */
 export async function planDone(cal: Cal, p: Record<string, unknown>, by: string): Promise<{ accepted: string[]; refused: { step: string; reason: string }[] } | OpError> {
   const { sqlite, db } = cal.kit;
   const plan = getMeta<PlanRecord>(sqlite, "plan");
   if (typeof p.planId !== "string" || !plan || plan.planId !== p.planId) return refuse("planId is not the plan you were woken with (it was answered by a later plan, or never made): report the plan in your latest wake", 409);
-  if (!Array.isArray(p.events)) return refuse("events must be a list of { event: \"e1\", steps: [{ key, title, due, show_from?, why? }] }");
+  if (!Array.isArray(p.events)) return refuse("events must be a list of { event: \"e1\", type, steps: [{ key, kind, title, due, due_time?, show_from?, why? }] }");
   const now = cal.now(), today = isoDate(now), nowMs = now.getTime();
-  const accepted: string[] = [], refused: { step: string; reason: string }[] = [];
+  const accepted: { item: string; ref: string }[] = [], refused: { step: string; reason: string }[] = [];
   const seenEvents = new Set<string>();
+  const habits = await habitsOf(cal);
+  const types = typesOf(sqlite);
   for (const entry of p.events as unknown[]) {
     const evRef = isObject(entry) && typeof entry.event === "string" ? entry.event : "?";
     const pr = plan.events.find((x) => x.ref === evRef);
@@ -471,8 +521,11 @@ export async function planDone(cal: Cal, p: Record<string, unknown>, by: string)
     seenEvents.add(evRef);
     const e = db.select().from(events).where(eq(events.id, pr.id)).get();
     if (!e) { refused.push({ step: evRef, reason: "the event is no longer on the calendar" }); continue; }
+    const type = (entry as Record<string, unknown>).type as K.EventType;
+    if (!K.EVENT_TYPES.includes(type)) { refused.push({ step: evRef, reason: `type must be one of ${K.EVENT_TYPES.join(", ")}` }); continue; }
     const steps = (entry as Record<string, unknown>).steps;
     if (!Array.isArray(steps)) { refused.push({ step: evRef, reason: "steps must be a list (an empty one when nothing is needed)" }); continue; }
+    if (steps.length && !K.typeTakesSteps(type)) { refused.push({ step: evRef, reason: `a ${type} gets no steps` }); continue; }
     db.transaction((tx) => {
       const t = tx as unknown as Db;
       if (e.status === "cancelled") {
@@ -482,42 +535,67 @@ export async function planDone(cal: Cal, p: Record<string, unknown>, by: string)
         const mine = t.select().from(todos).where(eq(todos.event_id, e.id)).all();
         const closed = new Set(mine.filter((x) => x.status !== "open").map((x) => x.key));
         const open = new Set(mine.filter((x) => x.status === "open").map((x) => x.key));
+        const prepare = new Set(mine.filter((x) => x.status === "open" && x.kind === "prepare-ahead").map((x) => x.key));
         const seen = new Set<string>();
         for (const s of steps) {
           const key = isObject(s) && typeof s.key === "string" ? s.key : "?";
-          const why = stepRefusal(s, e, today, seen, closed, open);
+          const why = stepRefusal(s, e, type, now, seen, closed, open, prepare, habits);
           if (why) { refused.push({ step: `${evRef}/${key}`, reason: why }); continue; }
           const st = s as Record<string, string>;
           const due = st.due, show = st.show_from ? (st.show_from < today ? today : st.show_from) : defaultShowFrom(due, today);
-          putTodo(t, e.id, { key, title: st.title.trim(), due, show_from: show, why: text(st.why) }, by);
+          putTodo(t, e.id, { key, title: st.title.trim(), due, due_time: st.due_time ?? null, show_from: show, why: text(st.why), kind: st.kind, place: K.placeOf(st.kind, e) }, by);
           open.add(key);
-          accepted.push(`${evRef}/${key}`);
+          if (st.kind === "prepare-ahead") prepare.add(key);
+          accepted.push({ item: `${evRef}/${key}`, ref: todoRef(e.id, key) });
         }
         clampTodos(t, e, by);
       }
-      // Every event listed is planned, with no steps too, for the date and time it was offered on (a move since is offered again).
+      // Every event listed with a type is planned, with no steps too, for the date and time it was offered on (a move since is
+      // offered again); its type is kept and shown when it is offered again.
       t.update(events).set({ planned_at: nowMs, plan_basis: pr.basis }).where(eq(events.id, e.id)).run();
+      types[e.id] = type;
     });
   }
-  await syncTodos(cal);
-  return { accepted, refused };
+  setMeta(sqlite, "types", types);
+  const { covered } = await syncTodos(cal);
+  return { accepted: accepted.map((a) => (covered.has(a.ref) ? `${a.item} covered by a TODO` : a.item)), refused };
 }
 
-function stepRefusal(s: unknown, e: EventRow, today: string, seen: Set<string>, closed: Set<string>, open: Set<string>): string | null {
-  if (!isObject(s)) return "a step must be an object: { key, title, due, show_from?, why? }";
-  const bad = Object.keys(s).filter((k) => !STEP_FIELDS.includes(k));
+/** Why the step's kind is unusable for the event (Calendar Desk's kindRefusal), or null. */
+function kindRefusal(s: Record<string, unknown>, e: EventRow, type: K.EventType, prepare: Set<string>, h: Awaited<ReturnType<typeof habitsOf>>): string | null {
+  const spec = typeof s.kind === "string" ? K.kindSpec(s.kind) : undefined;
+  if (!spec) return `kind must be one of ${K.KINDS.map((x) => x.kind).join(", ")}`;
+  if (!spec.types.includes(type)) return `${spec.kind} does not fit ${/^[aeiou]/.test(type) ? "an" : "a"} ${type}`;
+  if (spec.kind === "cab-local" && !e.location?.trim()) return "cab-local needs the event's location";
+  if (spec.kind === "prepare-ahead" && [...prepare].some((k) => k !== s.key)) return "at most one prepare-ahead per meeting";
+  // The place before the kind: two skips here refuse it here; a done here lifts a switch-off earned elsewhere.
+  const here = placeState(h.places, spec.kind, K.placeOf(spec.kind, e));
+  if (here === "off") return `the family dismissed the last two ${spec.kind} steps for this place`;
+  if (here !== "on" && h.off.has(spec.kind)) return `the family dismissed the last two ${spec.kind} steps`;
+  return null;
+}
+
+function stepRefusal(s: unknown, e: EventRow, type: K.EventType, now: Date, seen: Set<string>, closed: Set<string>, open: Set<string>, prepare: Set<string>, h: Awaited<ReturnType<typeof habitsOf>>): string | null {
+  const today = isoDate(now);
+  if (!isObject(s)) return "a step must be an object: { key, kind, title, due, due_time?, show_from?, why? }";
+  const bad = Object.keys(s).filter((k) => !STEP_FIELDS.includes(k) && s[k] !== undefined);
   if (bad.length) return `${bad.join(", ")} is not a field of a step (${STEP_FIELDS.join(", ")})`;
   if (typeof s.key !== "string" || !KEY.test(s.key)) return "key must be lowercase letters, digits and hyphens, at most 40";
   if (seen.has(s.key)) return `key ${s.key} is used twice`;
   seen.add(s.key);
-  if (closed.has(s.key)) return `step ${s.key} was already done or taken back: it is never made again`;
+  if (closed.has(s.key)) return `step ${s.key} was already done, dismissed, covered or taken back: it is never made again`;
+  const kindWhy = kindRefusal(s, e, type, prepare, h);
+  if (kindWhy) return kindWhy;
   if (!text(s.title)) return "title is required";
   if (String(s.title).length > 200) return "title is longer than 200 characters";
   if (!realDate(s.due)) return "due must be a real date, YYYY-MM-DD";
-  if ((s.due as string) > e.date) return `due (${s.due}) is after the event (${e.date})`;
+  if (s.due_time != null && (typeof s.due_time !== "string" || !HM.test(s.due_time))) return "due_time must be HH:MM";
   if ((s.due as string) < today) return `due (${s.due}) is before today (${today})`;
   if (s.show_from != null && !realDate(s.show_from)) return "show_from must be a real date, YYYY-MM-DD";
   if (s.show_from != null && (s.show_from as string) > (s.due as string)) return "show_from is after its due date";
+  if (s.due_time && s.due === today && (s.due_time as string) <= hhmm(now)) return "it is already past";
+  if ((s.due as string) > e.date) return `due (${s.due}) is after the event (${e.date})`;
+  if (s.due_time && s.due === e.date && e.start_time && (s.due_time as string) > e.start_time) return "it is due after its event";
   if (s.why != null && typeof s.why !== "string") return "why must be text";
   if (!open.has(s.key) && open.size >= MAX_OPEN_STEPS) return `the event already has ${open.size} open steps (at most ${MAX_OPEN_STEPS})`;
   return null;

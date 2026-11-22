@@ -55,7 +55,7 @@ export function checkFields(op: string, p: Record<string, unknown>): { error: st
 export const FIELDS_SECTION = ["## Operations and their fields (exactly these; no other name or field is taken)", "",
   "- guide {}",
   `- add_events { events: [{ ${EVENT_FIELDS.map((k) => (k === "title" ? k : `${k}?`)).join(", ")} }], members?: [{ ${MEMBER_FIELDS.map((k) => (k === "name" ? k : `${k}?`)).join(", ")} }], added_by? }`,
-  `- plan_done { planId, events: [{ event, steps: [{ ${STEP_FIELDS.map((k) => (["key", "title", "due"].includes(k) ? k : `${k}?`)).join(", ")} }] }] }`,
+  `- plan_done { planId, events: [{ event, type, steps: [{ ${STEP_FIELDS.map((k) => (["key", "kind", "title", "due"].includes(k) ? k : `${k}?`)).join(", ")} }] }] }`,
   "- brief { kind: morning | evening }",
   `- import_events { source, label?, items: [{ ${ITEM_FIELDS.map((k) => (["ref", "title", "date"].includes(k) ? k : `${k}?`)).join(", ")} }] } (Flock's own harvest calls this one, not you)`].join("\n");
 

@@ -52,9 +52,12 @@ export const todos = sqliteTable("todos", {
   key: text("key").notNull(),                                 // a slug of the title, or the plan step's key
   title: text("title").notNull(),
   due: text("due").notNull(),                                 // ISO date, on or before its event's
+  due_time: text("due_time"),                                 // "HH:MM" when it is due at a time
+  kind: text("kind"),                                         // the plan step's kind (server/kinds.ts); empty for a source's own to-do
+  place: text("place"),                                       // where a person-dependent step was for (a venue, the person for a gift)
   show_from: text("show_from").notNull(),                     // ISO date it shows from, on or before due
   why: text("why"),                                           // the plan's reason, or the source's words
-  // open | done | withdrawn (a line of its own: a trailing note would be read as the events' status note by the catalog)
+  // open | done | withdrawn | covered (a line of its own: a trailing note would be read as the events' status note by the catalog)
   status: text("status").notNull().default("open"),
   closed_at: integer("closed_at"),                            // ms
   done_by: text("done_by"),                                   // who ticked it in the app: "owner", or the person's Flock user

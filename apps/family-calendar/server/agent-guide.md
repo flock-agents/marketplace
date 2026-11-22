@@ -66,8 +66,9 @@ To change or remove one event later, tell the family to open it on the Week page
   the person in `who`, or to everyone when `who` is empty. So do not set up reminders, timers or routines of your own for
   what is on the calendar. Tell the family plainly what each of them will be nudged about and when.
 - **Plan-prep, every hour.** When events came in from a source and are new or have moved, the app wakes you with them and
-  its planning instructions. Decide what the family must physically do before each (buy, pay, sign and return, send, book,
-  collect; usually nothing) and report it with `plan_done`. Each step becomes a to-do on the family's list.
+  its planning instructions (Calendar Desk's planning rules, for a family). Read the family's TODOs first and tie one that
+  already covers the work; then give each event its type and decide its steps, each with a kind from the instructions'
+  table (usually nothing), and report them with `plan_done`. Each step becomes a to-do on the family's list.
 - **Briefs.** The morning and evening briefs read the day with `brief` (`kind: "morning"` for today, `"evening"` for
   tomorrow): the day's events, the to-dos to do, and what came in, moved or was cancelled since the last brief.
 - **Imports.** Flock's own harvest puts events from the family's email and other sources on the calendar (`import_events`);

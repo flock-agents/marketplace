@@ -13,5 +13,6 @@ export const KINDS = ["event", "deadline"] as const;
 /** An event stays on the calendar when it is called off: `cancelled`, shown struck through on its day. */
 export const STATUSES = ["active", "cancelled"] as const;
 
-/** A to-do of an event: `open` until someone ticks it (`done`), or the app takes it back (`withdrawn`: its event was cancelled). */
-export const TODO_STATUSES = ["open", "done", "withdrawn"] as const;
+/** A to-do of an event: `open` until someone ticks it (`done`), the app takes it back (`withdrawn`: its event was cancelled), or
+ *  Flock finds the family already has a TODO for that work (`covered`: tied to the event there, never made again here). */
+export const TODO_STATUSES = ["open", "done", "withdrawn", "covered"] as const;

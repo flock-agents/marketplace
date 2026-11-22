@@ -37,6 +37,26 @@ are internal (they change no other lane's side) unless marked **for the owner** 
   family's reminders are left behind (they would otherwise become real to-dos on the owner's Home).
 - A brief's `changed` lists date moves; a time-only move is not listed (the contract's `was` is a date).
 
+## Round 3: planner parity (contract addendum 2026-11-22)
+
+- Calendar Desk's planning rules, kinds table, tally and plan_events_done checks are ported (server/kinds.ts, server/tally.ts,
+  server/calendar.ts planDone, server/plan-prep-prompt.md); apps/calendar-desk is unchanged.
+- Event types: all of Calendar Desk's are kept (none can be ruled out for imported family items; `block` is the least likely),
+  and `deadline` is added: a fee or form due date must take a payment or a form step, which Calendar Desk's `reminder` refuses.
+  Family kinds `sign-and-return`, `buy-for-event`, `send-to-school` are judgement kinds; `documents`, `payment` and `other`
+  also fit `deadline`. `gift` also covers a party one of the family is invited to, and a family member's birthday (the payload
+  gives `members`).
+- No memory facts: the payload's `habits[].facts` is always empty and events carry no `facts`; the event's `notes` (the
+  source's words) stand in. Habits come from Flock's `tasks.list` of the app's own steps, with each step's kind and place kept
+  in `todos`.
+- plan_done takes `type` per event and `kind` and `due_time` per step (Calendar Desk's `dueDate`/`showFrom`/`dueTime` keep this
+  app's `due`/`show_from`/`due_time` names). An event refused for its type is not marked planned (offered again).
+- The tie pointer is `<appId>:<event id>` (`appId` from Flock's APP_ID, in the payload). For Flock to accept a tie it must
+  resolve the pointer through a horizon feed; Family Calendar declares only the schedule widget (addendum), and Flock refuses
+  to tie a group's TODO to a calendar event ("a group's TODO can't be tied to a calendar event", internal-todos.ts). **For
+  Flock / the owner:** ties from Family Butler will be refused until Flock reads Family Calendar's events for pointers and
+  allows group ties; the planner then leaves that TODO alone and makes no duplicate step.
+
 ## Found while building (for the owner / Flock)
 
 - **Where a group app's routine wake lands** (read in flock `feat/personal-mail-rules`, which has PR #355): an app-relay routine

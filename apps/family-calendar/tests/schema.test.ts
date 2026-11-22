@@ -34,7 +34,7 @@ describe("family-calendar schema", () => {
     expect([...REPEATS]).toEqual(["none", "daily", "weekly", "monthly", "yearly"]);
     expect([...KINDS]).toEqual(["event", "deadline"]);
     expect([...STATUSES]).toEqual(["active", "cancelled"]);
-    expect([...TODO_STATUSES]).toEqual(["open", "done", "withdrawn"]);
+    expect([...TODO_STATUSES]).toEqual(["open", "done", "withdrawn", "covered"]);
     expect([...COLOURS]).toEqual(["accent", "info", "success", "warning", "danger"]);   // theme tones, never hex colours
   });
 

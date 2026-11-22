@@ -6,6 +6,7 @@ import { join } from "path";
 import { FIELDS, FIELDS_SECTION, OPERATION_NAMES, agentOps } from "./agentOps";
 import { EVENT_FIELDS, MEMBER_FIELDS } from "./events";
 import { ITEM_FIELDS, STEP_FIELDS } from "./calendar";
+import { EVENT_TYPES, kindTable } from "./kinds";
 import { routines } from "./routines";
 import { boot } from "./testkit";
 
@@ -27,11 +28,11 @@ describe("the agent's interface", () => {
   it("the manifest and the guide name every field the operations read", () => {
     for (const f of [...EVENT_FIELDS, ...MEMBER_FIELDS, "events", "members", "added_by"]) { expect(desc("add_events"), f).toContain(f); expect(guide, f).toContain(f); }
     for (const f of [...ITEM_FIELDS, "source", "label", "items"]) expect(desc("import_events"), f).toContain(f);
-    for (const f of [...STEP_FIELDS, "planId", "event"]) expect(desc("plan_done"), f).toContain(f);
+    for (const f of [...STEP_FIELDS, "planId", "event", "type"]) expect(desc("plan_done"), f).toContain(f);
     for (const f of ["kind", "morning", "evening", "todos_due", "changed", "new"]) expect(desc("brief"), f).toContain(f);
     expect(FIELDS.import_events.fields).toEqual(["source", "label", "items"]);
     expect(FIELDS_SECTION).toContain("- add_events { events: [{ title, who?, date?, weekdays?, repeat?, start_time?, end_time?, location?, notes?, reminder?, kind?, added_by? }], members?: [{ name, emoji?, colour? }], added_by? }");
-    expect(FIELDS_SECTION).toContain("- plan_done { planId, events: [{ event, steps: [{ key, title, due, show_from?, why? }] }] }");
+    expect(FIELDS_SECTION).toContain("- plan_done { planId, events: [{ event, type, steps: [{ key, kind, title, due, due_time?, show_from?, why? }] }] }");
     expect(FIELDS_SECTION).toContain("- brief { kind: morning | evening }");
   });
 
@@ -80,7 +81,11 @@ describe("the agent's interface", () => {
     for (const r of manifest.routines) expect(r.description).not.toContain("evening before");
   });
 
-  it("the planning prompt says what counts, that nothing is the usual answer, at most 3 steps, and how to report", () => {
-    for (const w of ["buy", "pay", "sign and return", "send", "book", "collect", "Nothing is the usual answer", "At most 3 steps", "plan_done", "planId", "show_from", "closed"]) expect(prompt, w).toContain(w);
+  it("the planning prompt is Calendar Desk's rules for a family: the kinds table as plan_done checks it, ties first, never ask", () => {
+    for (const w of ["buy", "pay", "sign and return", "send", "book", "collect", "Nothing is the usual answer", "At most 3 steps", "plan_done", "planId", "show_from", "closed",
+      "GET /api/internal/todos", "PATCH /api/internal/todos/<id>", "**Long lead.**", "You never ask", "SAME `key`", "covered by a TODO"]) expect(prompt, w).toContain(w);
+    expect(prompt).toContain(`<!-- kinds -->\n${kindTable()}\n<!-- /kinds -->`);
+    for (const t of EVENT_TYPES) expect(prompt, t).toContain(`\`${t}\``);
+    for (const k of ["sign-and-return", "buy-for-event", "send-to-school", "payment", "documents", "gift"]) expect(prompt, k).toContain(`\`${k}\``);
   });
 });

@@ -21,6 +21,8 @@ export function fakePlatform() {
   /** How Flock answers tasks.complete: "ok", "settled" (409, done by someone else), "gone" (404: no open task, or an older
    *  Flock), "forbidden" (403: `by` is not someone the task is for) or "absent" (an SDK with no complete at all). */
   let completeMode: "ok" | "settled" | "gone" | "forbidden" | "absent" = "ok";
+  /** sourceRefs Flock answers `covered` for (an existing TODO of the owner's does that work). */
+  const covers = new Set<string>();
   const rows = new Map<string, TaskRow>();
   let down = false;
   const ok = <T,>(data: T) => ({ ok: true as const, data });
@@ -31,6 +33,7 @@ export function fakePlatform() {
       publish: async (t: any) => {
         if (down) return fail();
         published.push(t);
+        if (covers.delete(t.sourceRef)) return ok({ covered: { todoId: "todo-existing" } });
         const had = rows.get(t.sourceRef);
         rows.set(t.sourceRef, { sourceRef: t.sourceRef, status: had && had.status !== "dismissed" ? had.status : "open", title: t.title, due: t.due ?? null, dueTimed: !!t.dueTimed, showFrom: dayMs(t.showFrom), updatedAt: Date.now() });
         return ok({});
@@ -61,6 +64,7 @@ export function fakePlatform() {
     get platform() { if (completeMode === "absent") { const { complete: _gone, ...older } = platform.tasks; return { tasks: older } as any; } return platform as any; },
     published, withdrawn, completed, rows,
     completeAs: (m: typeof completeMode) => { completeMode = m; },
+    coverNext: (ref: string) => { covers.add(ref); },
     /** The owner ticks or dismisses the to-do on their Home. */
     close: (ref: string, status: "done" | "dismissed") => { const r = rows.get(ref); if (r) r.status = status; },
     down: (v: boolean) => { down = v; },
@@ -79,7 +83,7 @@ export async function boot(opts: { seed?: boolean; now?: () => Date } = {}) {
   const tasks = fakePlatform();
   let clock = opts.now ?? (() => new Date());
   const now = () => clock();
-  const cal = { kit, now, platform: () => tasks.platform };
+  const cal = { kit, now, platform: () => tasks.platform, appId: "t" };
   mountEventRoutes(hono, kit, { now, near: closest, platform: () => tasks.platform });
   /** A request as the owner. */
   const owner = async (method: string, path: string, body?: unknown) => {
