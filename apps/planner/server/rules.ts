@@ -78,7 +78,7 @@ export const SAME_AS: Record<string, string> = {
   matar: "pea", mutter: "pea", palak: "spinach", keerai: "spinach", gobi: "cauliflower", phool: "cauliflower", bhindi: "okra", vendakkai: "okra",
   baingan: "brinjal", vankaya: "brinjal", kathirikai: "brinjal", lauki: "bottle gourd", karela: "bitter gourd", kumbh: "mushroom", khumb: "mushroom",
   suji: "semolina", sooji: "semolina", rava: "semolina", ravva: "semolina", maida: "refined wheat flour", gehun: "wheat", godhuma: "wheat",
-  dahi: "curd", thayir: "curd", mosaru: "curd", doodh: "milk", paal: "milk", makhan: "butter", malai: "cream",
+  dahi: "curd", thayir: "curd", mosaru: "curd", yogurt: "curd", yoghurt: "curd", doodh: "milk", paal: "milk", makhan: "butter", malai: "cream",
   anda: "egg", ande: "egg", muttai: "egg", murgh: "chicken", murg: "chicken", kozhi: "chicken", machli: "fish", machchi: "fish", meen: "fish",
   gosht: "mutton", jhinga: "prawn", kaju: "cashew", badam: "almond", akhrot: "walnut", pista: "pistachio", moongphali: "peanut",
   shengdana: "peanut", kadalai: "peanut", nilakadalai: "peanut", chawal: "rice", chaawal: "rice", akki: "rice", cheeni: "sugar", gud: "jaggery", shahad: "honey",

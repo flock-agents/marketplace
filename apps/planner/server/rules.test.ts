@@ -23,6 +23,7 @@ describe("matches", () => {
     expect(matches("Aloo matar", "@green_leafy", { name: true })).toBe(true);
     expect(matches("Suji sheera", "@gluten", { name: true })).toBe(true);
     expect(matches("Kadhi chana", "@dairy", { name: true })).toBe(true);
+    expect(matches("yogurt", "@dairy")).toBe(true);
     expect(matches("Palak paneer", "spinach", { name: true })).toBe(true);
     expect(matches("Rava idli", "@white_rice", { name: true })).toBe(false);
     expect(matches("Akki roti", "@white_rice", { name: true })).toBe(true);
