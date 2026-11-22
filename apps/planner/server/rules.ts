@@ -198,6 +198,22 @@ export function ruleText(r: Rule, opts: { days?: boolean } = {}): string {
   }
 }
 
+/** The rules in plain words, as read back to the family: one line for everyone, then one line per person, in the order they
+ *  first come ("Everyone: no root vegetables on Tue" / "Meera: eats only plain idli at Breakfast"). An other or fasting rule is
+ *  its note. "" when there are none. */
+export function rulesSaid(list: readonly Rule[]): string {
+  const groups = new Map<string, string[]>();
+  for (const r of list) {
+    const key = r.who ?? "";
+    let text = (r.kind === "other" || r.kind === "fasting") && r.note ? `${r.note}${scopeText(r)}` : ruleText(r);
+    if (r.who && text.startsWith(`${r.who} `)) text = text.slice(r.who.length + 1);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key)!.push(text);
+  }
+  const order = [...(groups.has("") ? [""] : []), ...[...groups.keys()].filter((k) => k)];
+  return order.map((k) => `${k || "Everyone"}: ${groups.get(k)!.join("; ")}`).join("\n");
+}
+
 /** An older kind as the checked rule it is (spec: veg, no_meat and egg avoid meat and fish; no_eggs avoids eggs;
  *  no_onion_garlic avoids onion and garlic). fasting and other are a note only. */
 function checkedAs(r: Rule): Rule | null {

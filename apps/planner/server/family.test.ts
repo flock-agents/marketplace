@@ -100,6 +100,24 @@ describe("the house", () => {
     expect(house).toMatchObject({ cook_name: "Lakshmi", cook_days: ["Mon", "Tue", "Wed"], cook_note: "off on festival days" });
   });
 
+  // The interview runner (3.4.0): each setup answer saves only the rules it said, and the rules are read back from `said`.
+  it("set_house_rules with add: true adds to the rules there, never twice, and answers every rule in plain words", async () => {
+    const { op } = await boot();
+    await op("set_person", { name: "Meera", group: "child" });
+    await op("set_house_rules", { rules: [{ kind: "avoid", days: ["Tue"], items: ["@root_veg"], note: "Jain on Tuesday" }] });
+    const r = await op("set_house_rules", { add: true, rules: [
+      { kind: "only", who: "meera", slots: ["Breakfast"], items: ["plain idli", "plain dosa"] },
+      { kind: "avoid", days: ["tuesday"], items: ["@root_veg"] },
+      { kind: "other", slots: ["Dinner"], note: "light dinner" }] });
+    expect(r.house.rules.map((x: { kind: string }) => x.kind)).toEqual(["avoid", "only", "other"]);
+    expect(r.said).toBe("Everyone: no root vegetables on Tue; light dinner at Dinner\nMeera: eats only plain idli, plain dosa at Breakfast");
+    // Without add the list sent is the list kept.
+    expect((await op("set_house_rules", { rules: [{ kind: "veg" }] })).house.rules).toHaveLength(1);
+    expect((await op("set_house_rules", { rules: [] })).said).toBe("");
+    expect((await op("set_house_rules", { add: true })).code).toBe("APP_REFUSED");
+    expect((await op("set_house_rules", { add: "yes", rules: [] })).code).toBe("APP_REFUSED");
+  });
+
   it("set_house_rules replaces the rules, keeps a fasting day in the family's words, and refuses an unknown kind", async () => {
     const { op } = await boot();
     await op("set_house_rules", { rules: [{ kind: "veg", days: ["Tue"] }], notes: "no beef at home" });

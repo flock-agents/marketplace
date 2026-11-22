@@ -24,6 +24,13 @@ export type Purchase = { item: string; date: string; app: GroceryApp | "outside"
 
 const stamp = (by: string) => ({ updated_at: new Date().toISOString(), updated_by: by });
 const DAY_MS = 86_400_000;
+/** What the house buys most often, from its purchases, in a line the setup reads back after an import: at most 8 items bought
+ *  within about ten days, most often first ("milk (1 l every day), eggs (30 pc once a week)"); "" when none is known yet. */
+export function boughtSaid(db: Db): string {
+  return db.select().from(items).all().filter((i) => i.lasts_days != null && i.lasts_days > 0 && i.lasts_days <= 10 && !i.subscription)
+    .sort((a, b) => a.lasts_days! - b.lasts_days! || a.name.localeCompare(b.name)).slice(0, 8)
+    .map((i) => `${i.name} (${cycleText(i, i.stated_days != null && i.lasts_days === i.stated_days)})`).join(", ");
+}
 const utc = (date: string) => { const [y, m, d] = date.split("-").map(Number); return Date.UTC(y, m - 1, d); };
 const daysBetween = (from: string, to: string) => Math.round((utc(to) - utc(from)) / DAY_MS);
 
@@ -335,7 +342,7 @@ export function mountItemRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: { now
     const probably = out.filter((r) => r.confident && r.run_out && r.run_out <= day && r.group && r.group !== "daily" && !r.subscription && !r.dont_ask && r.last_bought)
       .map((r) => ({ item: r.name, days_ago: daysBetween(r.last_bought!, day) })).sort((x, y) => y.days_ago - x.days_ago);
     return { body: { recorded, duplicates, skipped_old: read.length - kept.length - future, skipped_future: future, needs_group: out.filter((r) => !r.group).map((r) => r.name),
-      probably_out: probably, read_until: readTo(houseView(getHouse(db)).history_synced) } };
+      probably_out: probably, read_until: readTo(houseView(getHouse(db)).history_synced), said: boughtSaid(db) } };
   });
 
   // record_bought_outside { item, date? }: bought outside the apps ("from the kirana"): a purchase of the usual amount.

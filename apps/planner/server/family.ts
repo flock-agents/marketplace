@@ -10,7 +10,7 @@ import { house, people } from "./db/schema";
 import { appOf, COOK_NEW_RECIPES, COOKING_DAYS_DEFAULT, GROUPS, RULE_KINDS, SETTINGS, SHOP_APPS, SLOTS, type GroceryApp } from "./db/constants";
 import { WEEKDAYS, type Weekday } from "./dates";
 import { closest } from "./agentOps";
-import { CATEGORIES, CHECKED_KINDS, KIND_NEEDS, type Rule } from "./rules";
+import { CATEGORIES, CHECKED_KINDS, KIND_NEEDS, rulesSaid, type Rule } from "./rules";
 
 export type Db = BunSQLiteDatabase<any>;
 /** Tell live pages a row changed, and who changed it (the kit's emitChange). */
@@ -139,6 +139,10 @@ const CATEGORY_LIST = Object.keys(CATEGORIES).map((c) => `@${c}`).join(", ");
 const isChecked = (kind: unknown): kind is (typeof CHECKED_KINDS)[number] => (CHECKED_KINDS as readonly unknown[]).includes(kind);
 
 /** The rules as sent, checked. `people`: the names on the Family page (a rule's who is one of them); `slots`: the meal slots. */
+/** A rule as compared for add: true, its fields in one order, its note left out. */
+const ruleKey = (r: Rule): string => JSON.stringify([r.kind, r.who ?? null, r.days, r.slots ?? null, r.items ?? null, r.to ?? null, r.per_week ?? null, r.per_meal ?? null,
+  r.kind === "other" || r.kind === "fasting" ? (r.note ?? "").trim().toLowerCase() : null]);
+
 function rules(v: unknown, ctx: { people: string[]; slots: string[] }): HouseRule[] {
   if (!Array.isArray(v)) return refuse(RULE_SHAPE);
   return v.map((r) => {
@@ -335,19 +339,29 @@ export function mountFamilyRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: { a
     return { body: { person } };
   });
 
-  // set_house_rules { rules?, notes?, structured?: true }: the rules given replace the ones there. `structured: true` says the
-  // profile carried over from Meal Planner 2.0 (gate.ts) is now in the app's own rows, and clears it. The grocery app has its
-  // own operation, set_shopping_apps.
+  // set_house_rules { rules?, add?: true, notes?, structured?: true }: the rules given replace the ones there; with add: true
+  // they are added to them instead (a rule already there is not added twice), so each answer of the setup interview can save
+  // just the rules it said. `structured: true` says the profile carried over from Meal Planner 2.0 (gate.ts) is now in the
+  // app's own rows, and clears it. The grocery app has its own operation, set_shopping_apps. Answers the house and `said`,
+  // every rule in plain words (rules.ts rulesSaid), which the setup reads back to the family.
   write("/api/family/rules", (b, by) => {
     if (b.grocery_app !== undefined) refuse("grocery_app is set with set_shopping_apps { main, fallback, connected }");
+    if (b.add !== undefined && b.add !== true) refuse("add is true, or left out to replace the rules");
+    if (b.add === true && b.rules === undefined) refuse("add: true goes with rules, the rules to add");
     const set: Partial<typeof house.$inferInsert> = {};
-    if (b.rules !== undefined) set.rules = JSON.stringify(rules(b.rules, {
-      people: db.select({ name: people.name }).from(people).where(eq(people.active, 1)).all().map((p) => p.name),
-      slots: [...SLOTS, ...houseView(getHouse(db)).extra_slots.map((s) => s.name)] }));
+    if (b.rules !== undefined) {
+      const given = rules(b.rules, {
+        people: db.select({ name: people.name }).from(people).where(eq(people.active, 1)).all().map((p) => p.name),
+        slots: [...SLOTS, ...houseView(getHouse(db)).extra_slots.map((s) => s.name)] });
+      const kept = b.add === true ? houseView(getHouse(db)).rules : [];
+      const seen = new Set(kept.map(ruleKey));
+      set.rules = JSON.stringify([...kept, ...given.filter((r) => { const k = ruleKey(r); return seen.has(k) ? false : (seen.add(k), true); })]);
+    }
     if (b.notes !== undefined) set.notes = notesOf(b.notes);
     if (b.structured === true) set.profile_to_structure = null;
     if (!Object.keys(set).length) refuse("give rules, notes or structured: true");
-    return saveHouse(set, by);
+    const saved = saveHouse(set, by);
+    return { body: { ...saved.body, said: rulesSaid(saved.body.house.rules) } };
   });
 
   // set_cooking_days { days }: the weekdays the family cooks at home; a plan has meals on these days only.

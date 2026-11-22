@@ -64,7 +64,7 @@ export const ROUTES: Record<string, Route> = {
 export const FIELDS: Record<string, { fields: string[]; need?: string[] }> = {
   guide: { fields: [] },
   set_person: { fields: ["name", "relationship", "group", "portions", "diet", "allergies", "dislikes", "targets", "note", "remove"], need: ["name"] },
-  set_house_rules: { fields: ["rules", "notes", "structured"] },
+  set_house_rules: { fields: ["rules", "add", "notes", "structured"] },
   set_cook: { fields: ["name", "days", "arrival", "makes_well", "wont_make", "time_limit", "new_recipes", "note"], need: ["name"] },
   set_slots: { fields: ["extra_slots", "order_in"] },
   set_cooking_days: { fields: ["days"], need: ["days"] },

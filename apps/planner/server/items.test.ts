@@ -181,6 +181,8 @@ describe("import_order_history", () => {
     expect(item(k, "milk")).toMatchObject({ group: "daily", usual_amount: 1000, lasts_days: 1, confident: 1 });
     // Ghee: bought 24 Sep, lasts 30 days, ran out 24 Oct. Toor dal runs out 30 Nov. Milk is daily, and chips run out tomorrow.
     expect(r.probably_out).toEqual([{ item: "ghee", days_ago: 58 }]);
+    // What the house buys most often, in a line the setup reads back: only what is bought within about ten days.
+    expect(r.said).toBe("chips (50 g every day), Milk (1 l every day)");
   });
 
   // The owner, 21 Nov: more than one person orders for the house, each on their own account of the same app.
