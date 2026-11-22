@@ -35,10 +35,9 @@ const FRAME = `
 ## This run (the eval harness)
 
 You are the meal agent on the weekly run. You have no tools here: the harness makes the app calls for you. Reply with ONE JSON
-object and nothing else: { "meals": [ ...every meal of the week... ], "repeats_ok"?: true }, each meal as plan_week takes it ({ date, slot,
+object and nothing else: { "meals": [ ...every meal of the week... ] }, each meal as plan_week takes it ({ date, slot,
 ordered_in?, note?, dishes?: [{ name, for: ["everyone"] or [names], portion_note?, ingredients: [{ item, amount, unit }] }] }). The harness sends it
-as plan_week { week_start, mode: "final", meals } and then the closing plan_week { week_start, mode: "final", repeats_ok }
-(repeats_ok only when you send it). If the app
+as plan_week { week_start, mode: "final", meals } and then the closing plan_week { week_start, mode: "final" }. If the app
 refuses either, you get its answer and send the whole week again, fixed.`;
 
 const DAY_FRAME = `
@@ -47,15 +46,14 @@ const DAY_FRAME = `
 
 You are the meal agent on the weekly run, as the guide says. You have no tools here: the harness makes the app calls for you.
 When asked for the menu, reply with ONE JSON object and nothing else: { "meals": [ ...every meal of the week, dishes by name
-and for only, no ingredients... ], "repeats_ok"?: true }; the harness sends it as plan_menu { week_start, meals }. If the app
+and for only, no ingredients... ] }; the harness sends it as plan_menu { week_start, meals }. If the app
 refuses, you get its answer: send the whole menu again, fixed.
 Each time you are asked for a day, reply with ONE JSON object and nothing else:
 { "meals": [ ...that day's meals only... ] }, each meal as plan_week takes it ({ date, slot, ordered_in?, note?, dishes?: [{ name,
 for: ["everyone"] or [names], portion_note?, ingredients: [{ item, amount, unit }] }] }). The harness sends it as
 plan_week { week_start, mode: "final", keep_rest: true, meals }. If the app refuses, you get its answer: send that day again, fixed.
 After the last day the harness makes the closing plan_week { week_start, mode: "final" }. If it is refused, reply with
-{ "meals": [ ...only the meals you change, each meal whole... ], "repeats_ok"?: true } (repeats_ok only when the family asked
-for a dish more than once); the harness sends them with keep_rest and closes again.`;
+{ "meals": [ ...only the meals you change, each meal whole... ] }; the harness sends them with keep_rest and closes again.`;
 
 async function seed(k: any, fx: Fixture): Promise<{ notes: string[] }> {
   const notes: string[] = [];
@@ -119,7 +117,7 @@ async function byDay(k: any, fx: Fixture, guide: string, ctx: any, transcript: s
     for (let n = 0; n < menuRounds; n++) {
       const payload = await call(asked);
       if (!payload) { asked = "Send the menu again as the JSON object only."; continue; }
-      const r = await k.op("plan_menu", { week_start: fx.week_start, meals: payload.meals, ...(payload.repeats_ok === true ? { repeats_ok: true } : {}) });
+      const r = await k.op("plan_menu", { week_start: fx.week_start, meals: payload.meals });
       if (!r?.error) { transcript.push(`The app took the menu. ${r.next ?? ""}`); break; }
       const said = refusalText(r);
       refusals.push(said);
@@ -136,11 +134,7 @@ async function byDay(k: any, fx: Fixture, guide: string, ctx: any, transcript: s
       const payload = await call(asked);
       if (!payload) { asked = `Send ${weekdayOf(date)} ${date} again as the JSON object only.`; continue; }
       const r = await k.op("plan_week", { week_start: fx.week_start, mode: "final", keep_rest: true, meals: payload.meals });
-      if (!r?.error) {
-        // The app took the day but names the dishes it now repeats: the agent fixes that day while it is on it.
-        if (r?.note && n < dayRounds - 1) { asked = `The app took it, and says: ${r.note}\n\nSend ${weekdayOf(date)} ${date} again, fixed, as the same JSON object.`; continue; }
-        transcript.push(r?.note ? `The app took it, and says: ${r.note}` : "The app took it."); break;
-      }
+      if (!r?.error) { transcript.push("The app took it."); break; }
       const said = refusalText(r);
       refusals.push(said);
       asked = `${said}\n\nSend ${weekdayOf(date)} ${date} again, fixed, as the same JSON object.`;
@@ -150,13 +144,13 @@ async function byDay(k: any, fx: Fixture, guide: string, ctx: any, transcript: s
   for (let n = 0; r?.error && n < maxRounds; n++) {
     const said = refusalText(r);
     refusals.push(said);
-    const payload = await call(`The closing plan_week was refused. ${said}\n\nReply with only the meals you change, each meal whole, as { "meals": [...], "repeats_ok"?: true }.`);
+    const payload = await call(`The closing plan_week was refused. ${said}\n\nReply with only the meals you change, each meal whole, as { "meals": [...] }.`);
     if (!payload) continue;
     if (payload.meals?.length) {
       const w = await k.op("plan_week", { week_start: fx.week_start, mode: "final", keep_rest: true, meals: payload.meals });
       if (w?.error) { r = w; continue; }
     }
-    r = await k.op("plan_week", { week_start: fx.week_start, mode: "final", ...(payload.repeats_ok === true ? { repeats_ok: true } : {}) });
+    r = await k.op("plan_week", { week_start: fx.week_start, mode: "final" });
   }
   return { rounds, accepted: !r?.error, cost, ms };
 }
@@ -191,8 +185,7 @@ async function once(fx: Fixture, guide: string, rep: number): Promise<RunRecord>
       const meals = Array.isArray(payload) ? payload : payload.meals;
       transcript.push(`Your reply:\n${JSON.stringify(Array.isArray(payload) ? { meals } : payload)}`);
       let r = await k.op("plan_week", { week_start: fx.week_start, mode: "final", meals });
-      const repeatsOk = !Array.isArray(payload) && payload.repeats_ok === true;
-      if (!r?.error) r = await k.op("plan_week", { week_start: fx.week_start, mode: "final", ...(repeatsOk ? { repeats_ok: true } : {}) });
+      if (!r?.error) r = await k.op("plan_week", { week_start: fx.week_start, mode: "final" });
       if (r?.error) {
         const said = `The app refused (${r.code}): ${r.error}${r.detail?.rule_breaks ? `\nrule_breaks: ${JSON.stringify(r.detail.rule_breaks)}` : ""}`;
         refusals.push(said);

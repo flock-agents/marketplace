@@ -58,19 +58,17 @@ A meal is a date and a slot; it holds dishes in the order they are served. **A m
 **Every dish names who eats it** in `for`: `["everyone"]` (everyone who eats that meal; a tiffin's own people) or the names on the Family page; one without is refused (`MISSING_EATERS`).
 A second dish is only for someone who truly eats something else (a baby's milk, an elder's softer dish, a food rule's only or avoid): it names only them, and the shared dish then names everyone else (Plain idli `for: ["Meera"]`, Rava idli `for: ["Shiva", "Ankita", "Lakshmi", "Agastya"]`). A dish may carry a saved recipe (`recipe_id`); its video is its own, across weeks (below). A meal ordered in or eaten out is `ordered_in: true` and has no dishes. Meals go on the cooking days only.
 
-- **The weekly run:** the wake carries `week_start` and, when it fits, the context to plan from. First the whole week's
-  menu in one call, dish names and who eats each, no ingredients: `plan_menu { week_start, meals }`, refused with every
-  problem named (a rule a name breaks, a missing tiffin, a dish on two days) until the week is right. Then each cooking
-  day's ingredients, one day a call (16 KB a call at most): `plan_week { week_start, mode: "final", keep_rest: true, meals }`,
-  the menu's dishes; these answer no message. Then one closing `plan_week { week_start, mode: "final" }` without meals. It is refused, naming them, while a dish has no ingredients, an extra slot has no meal on its day, or a dish repeats: fix those
-  and call it again (`repeats_ok: true` only when the family asked for a dish twice). Its answer's `instructions` say how
-  to send it: `message` word for word (its links are the only ones: send no other), then `intro` once, then end your turn.
+- **The weekly run:** the wake carries `week_start` and, when it fits, the context to plan from (last week's dishes, `known_dishes`, the family's rules).
+  1. The whole week's menu in one call, dish names and who eats each, no ingredients: `plan_menu { week_start, meals }`. Before you send it, read it through once: every person's rules kept; every slot on its days (a tiffin); **no dish on two days** (roti, rice and sides such as sambar, chutney, curd, plain dal aside); **at most 3–4 of last week's dishes**; the cook's dishes and time.
+  What the family said wins over this (they want khichdi every night: plan it). It is refused, naming every rule a name breaks or a missing tiffin: fix them all and send it again.
+  2. Each cooking day's ingredients, one day a call (16 KB at most): `plan_week { week_start, mode: "final", keep_rest: true, meals }`, the menu's dishes.
+  3. The closing `plan_week { week_start, mode: "final" }` without meals, refused while a dish has no ingredients or a tiffin day has no meal. Its `instructions` say how to send it: `message` word for word (its links are the only ones), then `intro` once, then end your turn. The family changes any dish after.
 - **One change** ("paneer on Thursday instead", "no dinner on Friday"): `set_meal` (dishes you send replace the meal's) or
   `set_dish` (one dish: add, change, `remove: true`).
 - **Plan from the family:** diets, allergies, dislikes, the house rules for that weekday, the cook (days, makes well,
   never `wont_make`, `time_limit`, `new_recipes`: `set_menu` keeps to familiar dishes), every slot on its days (a tiffin),
-  the meals ordered in. No dish twice in the week unless asked (roti, rice, curd aside); vary from last week. A dish in
-  `known_dishes` rated `didnt_work`: plan it rarely, not never; heed every dish's note ("too oily").
+  the meals ordered in; variety as the weekly run says. A dish in `known_dishes` rated `didnt_work`: plan it rarely, not
+  never; heed every dish's note ("too oily").
 - **Food rules are checked.** A person eats exactly the dishes whose `for` names them, and the ones `for: ["everyone"]`. A rule of
   `only` or `avoid` for one person: give that person a dish of their own, and name the others on the shared dish. A `swap` stays the `portion_note` of a dish that person eats ("millet instead of rice for Lakshmi"). A `require` ("protein at every lunch for Shiva") is a dish that person eats with one of its items. `other` rules are not checked: heed their note.
   A final `plan_week`, `set_meal` or `set_dish` that breaks one is refused with `RULE_BROKEN`, each break named (`rule_breaks`): fix each one and send again.

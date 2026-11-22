@@ -383,12 +383,12 @@ describe("run 11: the plan for 23–29 Nov", () => {
     expect(r.error).toContain("Every planned dish names who eats it");
     expect(keys(r.detail.rule_breaks)).toEqual(["Mon 2026-11-23 Breakfast|Rava idli|Meera"]);
     expect(r.error).toContain("Without ingredients");
-    // The closing call too: a dish on two days and a rule broken in one refusal.
+    // The closing call too: a rule broken is refused; a dish on two days is not.
     await op("plan_week", { week_start: "2026-11-23", mode: "draft", meals: [...FIXED.slice(0, 2),
       { date: "2026-11-25", slot: "Lunch", dishes: [dish("Rava idli", ["rava", "curd"]), dish("Mushroom curry", ["mushroom"])] }] });
     const closing = await op("plan_week", { week_start: "2026-11-23", mode: "final" });
     expect(closing.code).toBe("RULE_BROKEN");
-    expect(closing.detail.repeated).toEqual(["Rava idli (Mon, Wed)"]);   // a dal is a side: it may come back
+    expect(closing.detail.repeated).toBeUndefined();   // a dish on two days is not refused
     expect(keys(closing.detail.rule_breaks)).toEqual(["Wed 2026-11-25 Lunch|Mushroom curry|"]);
   });
 

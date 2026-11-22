@@ -86,21 +86,19 @@ loaf, garlic bread, oven), and from the 2026-11-22 eval:
   `Mon 2026-11-23 Breakfast: Rava idli — Meera eats only plain idli, plain dosa, banana sheera (add a dish for Meera)`.
   Also `rule_breaks: [{ meal, dish?, who?, rule, fix }]` in the body.
 - Never on the family's own edits in the app (they may break their own rules).
-- The repeat check (REPEATED_DISHES) lets come back what a rule forces: a dish an `only` rule names (Tara's five) and a
-  grain's staple ("Jowar roti" like "Roti"). Live eval on flock-fast 2026-11-22: these refusals kept Flash from finishing a week.
-- Sides come back freely (owner 2026-11-22: "sides can be repeated on multiple days"): any side a per_meal cap leaves out, and
-  sambar, rasam, a plain dal, boiled eggs (`isRepeatableSide`). A day the agent plans as a part (`keep_rest`) answers with
-  `repeats` and a `note` naming the dishes now on more than one day, so it is fixed while that day is being planned.
+- A dish on two days is never refused (owner 2026-11-22: "focus on having it a prompt only guidance and still pushing the
+  plan. Let the user edit it after they receive the first draft. So user instruction overrides default preference"). The
+  guide's weekly run asks for it where the menu is written: no dish on two days (roti, rice and sides aside), at most 3–4 of
+  last week's dishes, what the family said wins. REPEATED_DISHES and repeats_ok are gone.
 - Indian food words are read as their English one before any matching (`SAME_AS` in rules.ts: aloo potato, suji semolina,
   matar peas, dahi curd, palak spinach…), so a rule or category never needs each spelling. Kadhi is `@dairy`. Found by the
   flock-fast eval: "Aloo matar" (no potato in its ingredients) for a Jain family, "Suji sheera" for a gluten-free child.
 
 ## The menu first (plan_menu), 2026-11-22
 Planned a day at a time, the agent never sees the week whole, and repeats pile up at the close (flock-fast eval). The weekly
-run now starts with `plan_menu { week_start, meals, repeats_ok? }`: every meal's dishes by name and who eats each, no
+run now starts with `plan_menu { week_start, meals }`: every meal's dishes by name and who eats each, no
 ingredients, in one call (well under 16 KB). The app checks the week as a whole: eaters (MISSING_EATERS), the rules a name
-shows (RULE_BROKEN), each extra slot's days (MISSING_SLOTS), no dish on two days (REPEATED_DISHES), every problem named in
-one refusal. Kept as the week's draft when it passes; the agent then gives each day its ingredients (plan_week final,
+shows (RULE_BROKEN), each extra slot's days (MISSING_SLOTS), every problem named in one refusal; variety is the guide's. Kept as the week's draft when it passes; the agent then gives each day its ingredients (plan_week final,
 keep_rest), where the rules on ingredients are checked, and closes as before.
 
 ## The interview writes rules in this shape

@@ -262,42 +262,14 @@ describe("a planned week is ready to send", () => {
     expect((await op("plan_week", { week_start: MON, mode: "final" })).message).toContain("Next week is planned.");
   });
 
-  it("no dish twice in a week unless the family asked for it (repeats_ok); staples like roti and rice repeat freely", async () => {
+  it("a dish on two days is never refused: variety is the guide's, and the family edits the week once it is sent", async () => {
     const { op } = await boot({ now: SUNDAY });
     const loop = ["Rajma", "Chole", "Kadhi"];
     await op("plan_week", { week_start: MON, mode: "final", keep_rest: true, meals: [0, 1, 2, 3, 4, 5].map((i) => day(`2026-11-${23 + i}`, "Dinner", loop[i % 3], "Roti", "Rice")) });
     const r = await op("plan_week", { week_start: MON, mode: "final" });
-    expect(r.code).toBe("REPEATED_DISHES");
-    expect(r.detail.repeated).toEqual(["Rajma (Mon, Thu)", "Chole (Tue, Fri)", "Kadhi (Wed, Sat)"]);
-    expect(r.error).not.toContain("Roti");
-    const ok = await op("plan_week", { week_start: MON, mode: "final", repeats_ok: true });
-    expect(ok.message).toContain("Next week is planned.");
-  });
-
-  it("a grain's roti and the dishes a family's only rule names come back without counting as repeats", async () => {
-    const { op } = await boot({ now: SUNDAY });
-    await op("set_person", { name: "Tara", group: "child" });
-    await op("set_house_rules", { rules: [{ kind: "only", who: "Tara", slots: ["Breakfast"], items: ["plain dosa", "curd rice"], note: "Tara eats only these at breakfast" }] });
-    const days = [0, 1, 2].map((i) => `2026-11-${23 + i}`);
-    const planned = await op("plan_week", { week_start: MON, mode: "final", keep_rest: true, meals: [
-      ...days.map((d, i) => day(d, "Dinner", ["Rajma", "Chole", "Kadhi"][i], "Jowar roti")),
-      ...days.map((d) => day(d, "Breakfast", "Plain dosa", "Curd rice")),
-    ] });
-    expect(planned.error).toBeUndefined();
-    const r = await op("plan_week", { week_start: MON, mode: "final" });
     expect(r.error).toBeUndefined();
     expect(r.message).toContain("Next week is planned.");
-  });
-
-  it("sides come back on many days; a day planned in a part names the dishes it now repeats", async () => {
-    const { op } = await boot({ now: SUNDAY });
-    const first = await op("plan_week", { week_start: MON, mode: "final", keep_rest: true, meals: [day(MON, "Dinner", "Rajma", "Sambar", "Coconut chutney", "Plain dal")] });
-    expect(first.repeats).toBeUndefined();
-    const second = await op("plan_week", { week_start: MON, mode: "final", keep_rest: true, meals: [day("2026-11-24", "Dinner", "Rajma", "Drumstick sambar", "Coconut chutney", "Plain dal")] });
-    expect(second.repeats).toEqual(["Rajma (Mon, Tue)"]);
-    expect(second.note).toContain("Rajma (Mon, Tue)");
-    await op("plan_week", { week_start: MON, mode: "final", keep_rest: true, meals: [day("2026-11-24", "Dinner", "Chole", "Drumstick sambar", "Coconut chutney", "Plain dal")] });
-    expect((await op("plan_week", { week_start: MON, mode: "final" })).message).toContain("Next week is planned.");
+    expect((await op("plan_week", { week_start: MON, mode: "final", repeats_ok: true })).error).toContain("repeats_ok");
   });
 
   it("plan_menu: the whole week by name first, every problem named at once; kept as a draft the days then fill", async () => {
@@ -318,7 +290,7 @@ describe("a planned week is ready to send", () => {
     expect(bad.error).toContain("Egg curry");
     expect(bad.detail.missing_eaters).toEqual(["Tue 2026-11-24 Dinner: Roti (no for)"]);
     expect(bad.detail.missing_slots).toEqual(["Tue 2026-11-24 Agastya's tiffin"]);
-    expect(bad.detail.repeated).toEqual(["Rajma (Mon, Tue)"]);
+    expect(bad.detail.repeated).toBeUndefined();   // Rajma on Mon and Tue is the guide's to avoid, not refused
     const ok = await op("plan_menu", { week_start: MON, meals: [
       { date: MON, slot: "Breakfast", dishes: [name("Upma", ["Agastya"]), name("Plain idli", ["Meera"])] },
       { date: MON, slot: "Dinner", dishes: [name("Rajma"), name("Roti")] },

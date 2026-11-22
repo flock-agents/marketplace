@@ -217,6 +217,6 @@ describe("the agent's interface", () => {
     const served = (await agentOps(() => null as any).guide({}, { agentId: null } as any)) as { guide: string };
     expect(served.guide).toContain(FIELDS_SECTION);
     expect(FIELDS_SECTION).toContain("- set_cook { name, days?, arrival?, makes_well?, wont_make?, time_limit?, new_recipes?, note? }");
-    expect(FIELDS_SECTION).toContain("- plan_week { week_start, mode, meals?, keep_rest?, repeats_ok? }");
+    expect(FIELDS_SECTION).toContain("- plan_week { week_start, mode, meals?, keep_rest? }");
   });
 });
