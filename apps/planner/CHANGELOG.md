@@ -1,5 +1,30 @@
 # Changelog
 
+## 3.5.0
+
+Needs a Flock that gives apps a model call (the manifest's new top-level `"model": true`); on one without it the Sunday
+run keeps the agent-planned week of 3.4.0.
+
+- **The week is planned in steps the app drives.** One long agent session failed in every simulated run (a week cut off
+  half sent, repeats not fixed, meals with no dish). Now the app works out every meal itself (who eats it, that meal's
+  family dishes, the rules that hold there, the cook), asks the model once for the week's menu, and checks it in code with
+  plan_menu's checks plus "every meal and extra slot has a dish"; only the meals that fail go back, with why, up to 5 times.
+  What is still wrong is fixed in code with a family dish that keeps every rule; when the rules cannot all be kept (two
+  breakfast dishes for six days) a dish repeats, and the message says so ("Idli repeats on 3 days (Mon, Wed, Fri): only 2 breakfast dishes
+  known"). Each day's ingredients come from one cheap call, tried once more on its own. The week is saved final and closed
+  as before (`message`, and `intro` the first time). Calls are metered by Flock; no credits, the day's limit or too many
+  calls stop the plan with a plain line for the family.
+- **`make_plan { week_start }`**, a new operation, does exactly that (Flock's first plan and "plan the week" in chat), inside
+  Flock's 6 minutes. The Sunday run does the same and wakes the agent only to send the message word for word.
+- **Extra meals are never wiped.** `set_slots { add: true }` adds a slot (the same name replaces it) and an order-in meal;
+  each past-week meal question can save one (a child's tiffin, an evening snack), and the meals part ends by reading every
+  slot back ("Each day we'll plan Breakfast, Lunch and Dinner, plus Agastya's tiffin Mon–Fri... Anything to add or change?").
+- **A fast is checked.** `{ kind: "fasting", who, days, slots }` ("fasts Thursday till evening": Breakfast, Lunch) refuses any
+  dish that person would eat then; without slots it stays a note.
+- **A cook's limit is a checked rule, whenever it is said.** The setup no longer asks it; a limit said in chat or while
+  fixing a plan is saved as avoid / cap rules (`@baked` for "no oven", now covering what needs an oven) plus the cook's
+  words. A vague one stays words.
+
 ## 3.4.0
 
 - **The setup interview, for Flock's interview runner.** Flock sends each setup question as written and reads each reply
