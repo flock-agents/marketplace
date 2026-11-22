@@ -6,6 +6,7 @@
 - **google-calendar is gone** from the template's skills, its suggestions and the README; the briefs no longer read it.
 - **The briefs run on Family Butler's own model.** Both tasks lose their `model` pin (was `claude-sonnet-4-6`), so Flock falls through to the agent's model (routine choice > agent pinned > agent tier); the agent's own `model` setting is unchanged. `thinkingLevel: "none"` stays.
 - Task names and schedules are unchanged.
+- **Reminders are group TODOs.** The `reminders` skill is gone; the `todos` skill is in its place. The SOUL's new Reminders section: "remind us about X" in the family group is a group TODO made from the group chat (`POST /api/internal/todos`), at the time asked; a day with no time is set for 9 am and the butler says so; no date at all, it asks once "When?". Never the Family Calendar for a reminder: the calendar is for events, and its to-dos come from its planning. README and SUGGESTIONS say the same. Needs Flock's group TODOs (feat/group-todos).
 - Installed Butlers keep their own tasks and apps until Flock applies the template to them again.
 
 ## 1.8.0

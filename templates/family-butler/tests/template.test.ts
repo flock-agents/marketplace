@@ -50,6 +50,29 @@ describe("google-calendar is gone", () => {
   });
 });
 
+describe("reminders are group TODOs", () => {
+  const soul = read("SOUL.md");
+  it("the reminders skill is gone and the todos skill is in", () => {
+    const ids = manifest.skills.map((s: any) => s.skillId);
+    expect(ids).not.toContain("reminders");
+    expect(ids).toContain("todos");
+    expect(suggestions.skills.map((s: any) => s.slug)).toContain("todos");
+    expect(read("README.md")).not.toMatch(/\| reminders \|/);
+  });
+
+  it("the SOUL makes 'remind us' a group TODO through the todos call, at the time asked", () => {
+    expect(soul).toContain('"remind us about X" is a group TODO');
+    expect(soul).toContain("`POST /api/internal/todos`");
+    expect(soul).toContain("A day with no time: 9 am, and say the time you set");
+    expect(soul).toContain('No date at all: ask once, "When?"');
+  });
+
+  it("the SOUL never puts a reminder on the Family Calendar", () => {
+    expect(soul).toContain("Never the Family Calendar for a reminder");
+    expect(soul).toContain("The calendar is for events (its add_events)");
+  });
+});
+
 describe("the briefs", () => {
   it("are the two tasks, at 8 am and 9 pm IST", () => {
     expect(manifest.tasks.map((t: any) => t.name)).toEqual(["Morning Briefing", "Evening Reminder"]);

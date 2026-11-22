@@ -1,6 +1,10 @@
 {
   "skills": [
     {
+      "slug": "todos",
+      "reason": "Group reminders: \"remind us\" in the family group becomes a group TODO that pings the group at its time"
+    },
+    {
       "slug": "bigbasket",
       "reason": "Search, compare prices, and build grocery carts on BigBasket"
     },

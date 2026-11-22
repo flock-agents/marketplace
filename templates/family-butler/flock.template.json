@@ -60,7 +60,11 @@
   },
 
   "skills": [
-    { "skillId": "reminders" },
+    {
+      "skillId": "todos",
+      "preSelected": true,
+      "description": "Group reminders: \"remind us\" in the family group becomes a group TODO that pings the group"
+    },
     {
       "skillId": "google-sheets",
       "preSelected": true,
