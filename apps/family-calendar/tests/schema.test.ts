@@ -54,6 +54,7 @@ describe("family-calendar schema", () => {
     expect(catalog.tables.events.columns.repeat).toMatchObject({ type: "string", required: false, default: REPEATS[0] });
     expect(catalog.tables.events.columns.kind).toMatchObject({ type: "string", required: false, default: KINDS[0] });
     expect(catalog.tables.events.columns.monthly_by).toMatchObject({ type: "string", required: false, nullable: true, note: expect.stringContaining("last_weekday") });
+    expect(catalog.tables.events.columns.end_date).toMatchObject({ type: "string", required: false, nullable: true, note: expect.stringContaining("last day") });
     expect(catalog.tables.events.columns.status).toMatchObject({ type: "string", required: false, default: STATUSES[0], note: expect.stringContaining("cancelled") });
     expect(catalog.settings).toEqual([]);
     expect(json("settings.json")).toEqual({});

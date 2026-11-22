@@ -60,6 +60,14 @@ describe("the schedule widget", () => {
     expect((await k.get("?from=2027-01-04")).body.items.filter((i: any) => i.title === "Society committee meeting")).toEqual([]);
   });
 
+  it("a trip over several days is an item on each of its days", async () => {
+    const k = await start();
+    await k.op("add_events", { events: [{ title: "Goa trip", date: "2026-12-20", end_date: "2026-12-23", location: "Goa" }] });
+    const id = k.rows("events").find((e) => e.title === "Goa trip").id;
+    const items = (await k.get("?from=2026-12-21")).body.items.filter((i: any) => i.title === "Goa trip");
+    expect(items).toEqual(["2026-12-21", "2026-12-22", "2026-12-23"].map((date) => ({ id: `${id}@${date}`, kind: "event", title: "Goa trip", date, startAt: null, endAt: null, allDay: true, location: "Goa" })));
+  });
+
   it("is declared in the manifest as a schedule widget that plans its own events", () => {
     const manifest = JSON.parse(readFileSync(join(import.meta.dir, "..", "flock.app.json"), "utf8"));
     expect(manifest.widgets).toEqual([{ id: "schedule", kind: "schedule", plansEvents: true, dataUrl: "/api/widget/schedule", title: "Family Calendar" }]);

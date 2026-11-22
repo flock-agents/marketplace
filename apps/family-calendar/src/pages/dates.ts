@@ -50,7 +50,7 @@ export const addYears = (s: string, n: number): string => addMonths(s, 12 * n);
 // A monthly event by weekday (`monthly_by`, server/db/constants.ts MONTHLY_BY): "weekday" is the same weekday of the month as its
 // date (6 Dec 2026 is the 1st Sunday: every 1st Sunday), "last_weekday" the last such weekday of the month. Empty, or "date", is
 // the date's day of the month, as every monthly event was before.
-type Repeating = { date: string; repeat?: string | null; monthly_by?: string | null };
+type Repeating = { date: string; repeat?: string | null; monthly_by?: string | null; end_date?: string | null };
 const daysIn = (y: number, m: number): number => new Date(y, m + 1, 0).getDate();
 /** Which of its weekday in the month a date is: 1 for a first Sunday, up to 5 for a fifth. */
 export const weekOfMonth = (s: string): number => Math.ceil(parseDate(s).getDate() / 7);
@@ -80,6 +80,19 @@ export function monthlyByProblem(date: string, by: string | null | undefined): s
  *  (`monthly_by`: the 1st Sunday, the last Friday; a 5th weekday only in the months that have one), or every year on its date
  *  (a 29 February on the 28th in other years), from its date on. */
 export function occurrences(e: Repeating, from: string, to: string): string[] {
+  // An event over several days (a trip) is on each of them: a one-off with an end_date after its date.
+  const last = lastDay(e);
+  if (last) { const out: string[] = []; for (let d = e.date >= from ? e.date : from; d <= to && d <= last; d = addDays(d, 1)) out.push(d); return out; }
+  return starts(e, from, to);
+}
+/** The last day of an event over several days, or null: read only on a one-off, and only after its date. */
+export const lastDay = (e: Repeating): string | null => (!repeats(e) && e.end_date && e.end_date > e.date ? e.end_date : null);
+/** "Dec 20 to Dec 23": an event's days, when it is over several. */
+export const spanLabel = (date: string, end_date: string): string => `${shortDate(date)} to ${shortDate(end_date)}`;
+
+/** The days an event begins on from `from` to `to`: its date, or each day a repeating one falls on (occurrences, without the
+ *  later days of an event over several days). Its reminders are for these. */
+export function starts(e: Repeating, from: string, to: string): string[] {
   const out: string[] = [];
   const start = e.date >= from ? e.date : from;
   switch (e.repeat) {
@@ -130,8 +143,9 @@ export const eveningBeforeMinutes = (start: string | null): number => toMin(star
  *  event it is for and when it is due. An event with no `reminder_minutes` has none. */
 export function eventRemindersDue(e: Repeating & { start_time: string | null; reminder_minutes: number | null }, from: string, to: string): { date: string; at: string }[] {
   if (e.reminder_minutes == null) return [];
-  // The event may be days after its reminder (a week's notice): look that far past the window.
-  const days = occurrences(e, from.slice(0, 10), addDays(to.slice(0, 10), Math.ceil(e.reminder_minutes / 1440) + 1));
+  // The event may be days after its reminder (a week's notice): look that far past the window. An event over several days is
+  // nudged before its first day only.
+  const days = starts(e, from.slice(0, 10), addDays(to.slice(0, 10), Math.ceil(e.reminder_minutes / 1440) + 1));
   return days.map((date) => ({ date, at: minutesBefore(date, e.start_time ?? "00:00", e.reminder_minutes!) })).filter((r) => r.at > from && r.at <= to);
 }
 
@@ -143,8 +157,8 @@ export const deadlineNoticeAt = (date: string): string => `${addDays(date, -DEAD
 export const eventOrder = (a: { date: string; start_time: string | null; title: string }, b: typeof a): number =>
   a.date.localeCompare(b.date) || (a.start_time ?? "").localeCompare(b.start_time ?? "") || a.title.localeCompare(b.title);
 
-type EventValues = { title?: unknown; date?: unknown; repeat?: unknown; monthly_by?: unknown; start_time?: unknown; end_time?: unknown; who?: unknown; location?: unknown; notes?: unknown; reminder_minutes?: unknown };
-export type EventPatch = { title: string; date: string; repeat: string; monthly_by: string | null; start_time: string | null; end_time: string | null; who: string | null; location: string | null; notes: string | null; reminder_minutes: number | null };
+type EventValues = { title?: unknown; date?: unknown; end_date?: unknown; repeat?: unknown; monthly_by?: unknown; start_time?: unknown; end_time?: unknown; who?: unknown; location?: unknown; notes?: unknown; reminder_minutes?: unknown };
+export type EventPatch = { title: string; date: string; end_date: string | null; repeat: string; monthly_by: string | null; start_time: string | null; end_time: string | null; who: string | null; location: string | null; notes: string | null; reminder_minutes: number | null };
 const str = (v: unknown): string | null => (typeof v === "string" && v.trim() ? v.trim() : null);
 
 /** What the event form submitted, as the row to write: times normalised to HH:MM, blanks as null; or the field errors to show. */
@@ -177,8 +191,15 @@ export function normaliseEvent(v: EventValues): { ok: true; row: EventPatch } | 
     else if (monthlyByProblem(date, by)) errors.monthly_by = `This is not the last ${name} of its month`;
     else monthly_by = by;
   }
+  // The last day of an event over several days (a trip): after the first, and only for one that does not repeat.
+  const end_date = str(v.end_date);
+  if (end_date) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(end_date)) errors.end_date = "A date, or leave it empty for one day";
+    else if (date && end_date <= date) errors.end_date = "Must be after the first day; leave it empty for one day";
+    else if (repeat !== "none") errors.end_date = "Only for an event that happens once; leave it empty when it repeats";
+  }
   if (Object.keys(errors).length) return { ok: false, errors };
-  return { ok: true, row: { title: title!, date: date!, repeat, monthly_by, ...times, who: str(v.who), location: str(v.location), notes: str(v.notes), reminder_minutes: typeof minutes === "number" ? minutes : null } };
+  return { ok: true, row: { title: title!, date: date!, end_date: end_date ?? null, repeat, monthly_by, ...times, who: str(v.who), location: str(v.location), notes: str(v.notes), reminder_minutes: typeof minutes === "number" ? minutes : null } };
 }
 
 /** "Daily", "Weekly on Mondays", "Monthly on the 1st", "Monthly on the 1st Sunday", "Monthly on the last Friday", "Yearly on

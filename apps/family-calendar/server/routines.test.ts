@@ -54,6 +54,13 @@ describe("due-reminders", () => {
     expect(k.wakes.map((w) => w.data.reminders)).toEqual([[{ who: "Shiva", text: "School fee due: due in a week, on Thu Dec 3" }]]);
   });
 
+  it("a trip over several days is nudged before its first day only, and says its last", async () => {
+    const k = await start();
+    await k.op("add_events", { events: [{ title: "Goa trip", date: "2026-12-20", end_date: "2026-12-23", start_time: "09:00" }] });
+    expect(dueBetween(k.kit.db, "2026-12-20T08:15", "2026-12-20T08:30")).toEqual([{ who: null, text: "Goa trip: today to Wed Dec 23, 9 am", at: "2026-12-20T08:30" }]);
+    for (const d of ["21", "22", "23"]) expect(dueBetween(k.kit.db, `2026-12-${d}T08:15`, `2026-12-${d}T08:30`)).toEqual([]);
+  });
+
   it("a cancelled event is never spoken of", async () => {
     const k = await start();
     k.kit.sqlite.run("UPDATE events SET status = 'cancelled' WHERE title = 'Keyboard class'");

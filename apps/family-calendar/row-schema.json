@@ -134,6 +134,12 @@
               "string",
               "null"
             ]
+          },
+          "end_date": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "required": [

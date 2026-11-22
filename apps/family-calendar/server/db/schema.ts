@@ -32,6 +32,7 @@ export const events = sqliteTable("events", {
   plan_basis: text("plan_basis"),                             // "YYYY-MM-DD" or "YYYY-MM-DDTHH:MM": the date and time it was planned for
   imported: integer("imported").notNull().default(0),         // 1: first made by import_events (only these are planned)
   monthly_by: text("monthly_by"),                             // a monthly event: empty or date (the 6th) | weekday (the 1st Sunday) | last_weekday
+  end_date: text("end_date"),                                 // ISO date: the last day of an event over several days (a trip); empty for one day
 });
 
 /** Where an imported event was seen: one row per source and item. Two people's copies of one mail are one event, two rows. */

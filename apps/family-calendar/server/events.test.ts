@@ -97,7 +97,7 @@ describe("add_events", () => {
     expect(r.status).toBe(400);
     expect(r.error).toStartWith("Nothing was added. ");
     for (const said of [
-      "events[1] (Art class): start is not a field of an event (did you mean start_time?); the fields: title, who, date, weekdays, repeat, monthly_by, start_time, end_time, location, notes, reminder, kind, added_by",
+      "events[1] (Art class): start is not a field of an event (did you mean start_time?); the fields: title, who, date, end_date, weekdays, repeat, monthly_by, start_time, end_time, location, notes, reminder, kind, added_by",
       'events[1] (Art class): weekdays: "Fryday" is not a weekday (Mon, Tue, Wed, Thu, Fri, Sat, Sun)',
       "events[2]: title is required", 'events[2]: date must be a real date as YYYY-MM-DD ("27/11/2026" is not)',
       'events[2]: start_time must be a time like "16:30" or "4:30 pm" ("half four" is not)',
@@ -196,3 +196,48 @@ describe("add_events: a monthly event on a weekday of the month", () => {
     expect(k.rows("events")).toHaveLength(1);
   });
 });
+
+describe("add_events: an event over several days", () => {
+  it("Goa from 20 to 23 December: date the first day, end_date the last; the answer says both", async () => {
+    const k = await boot({ now: NOW });
+    const r = await k.op("add_events", { events: [{ title: "Goa trip", date: "2026-12-20", end_date: "2026-12-23", notes: "Flight at 9" }, { title: "Dentist", date: "2026-11-27", start_time: "11:00" }] });
+    expect(r.error).toBeUndefined();
+    expect(r.events.map((e: any) => [e.title, e.date, e.end_date, e.repeat])).toEqual([["Goa trip", "2026-12-20", "2026-12-23", "none"], ["Dentist", "2026-11-27", null, "none"]]);
+    expect(k.rows("events").map((e) => [e.title, e.date, e.end_date])).toEqual([["Goa trip", "2026-12-20", "2026-12-23"], ["Dentist", "2026-11-27", null]]);
+  });
+
+  it("refuses an end_date on or before the date, with a repeat or weekdays, on a deadline, or not a date", async () => {
+    const k = await boot({ now: NOW });
+    const r = await k.op("add_events", { events: [
+      { title: "A", date: "2026-12-20", end_date: "2026-12-19" },
+      { title: "B", date: "2026-12-20", end_date: "2026-12-20" },
+      { title: "C", date: "2026-12-20", end_date: "2026-12-23", repeat: "weekly" },
+      { title: "D", weekdays: ["Mon"], end_date: "2026-12-23" },
+      { title: "E", date: "2026-12-20", end_date: "2026-12-23", kind: "deadline" },
+      { title: "F", date: "2026-12-20", end_date: "23 Dec" }] });
+    expect(r.code).toBe("APP_REFUSED");
+    for (const said of [
+      "events[0] (A): end_date (2026-12-19) must be after date (2026-12-20): it is the last day; leave it out for an event on one day",
+      "events[1] (B): end_date (2026-12-20) must be after date (2026-12-20)",
+      "events[2] (C): end_date is for an event on several days in a row, once: leave out repeat, or end_date",
+      "events[3] (D): end_date is for an event on several days in a row, once",
+      "events[4] (E): end_date is not for a deadline (a deadline is the one day something is due by)",
+      'events[5] (F): end_date must be a real date as YYYY-MM-DD ("23 Dec" is not)'])
+      expect(r.error).toContain(said);
+    expect(k.rows("events")).toEqual([]);
+  });
+
+  it("the trip first kept as one day, sent again with its end_date, is changed, not doubled", async () => {
+    const k = await boot({ now: NOW });
+    await k.op("add_events", { events: [{ title: "Goa", date: "2026-12-20", notes: "Goa from 20 to 23 December" }] });
+    const r = await k.op("add_events", { events: [{ title: "Goa", date: "2026-12-20", end_date: "2026-12-23", notes: null }] });
+    expect(r).toMatchObject({ added: 0, updated: 1 });
+    expect(k.rows("events").map((e) => [e.date, e.end_date, e.notes])).toEqual([["2026-12-20", "2026-12-23", null]]);
+    // Left out, the last day stays; null takes it away.
+    await k.op("add_events", { events: [{ title: "Goa", date: "2026-12-20", location: "Panjim" }] });
+    expect(k.rows("events")[0].end_date).toBe("2026-12-23");
+    await k.op("add_events", { events: [{ title: "Goa", date: "2026-12-20", end_date: null }] });
+    expect(k.rows("events")[0].end_date).toBeNull();
+  });
+});
+
