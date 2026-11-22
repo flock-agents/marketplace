@@ -5,16 +5,17 @@
 /** What the app asks. `tier`: "fast" for cheap, many-times work (a day's ingredients), "balanced" for the week's menu. */
 export type ModelRequest = { system: string; user: string; schema?: object; tier: "fast" | "balanced"; maxTokens?: number; purpose?: string };
 /** A stop that is the family's to fix (no credits, the day's budget spent, too many calls): never tried again in a run. */
-export const STOP_CODES = ["not_declared", "daily_budget", "out_of_credits", "rate_limited"] as const;
-export type ModelFailure = "not_declared" | "daily_budget" | "out_of_credits" | "rate_limited" | "invalid_output" | "timeout" | "unavailable";
+export const STOP_CODES = ["not_declared", "daily_budget", "out_of_credits", "rate_limited", "bad_request"] as const;
+/** bad_request: Flock refused the request's shape (a bug here, never tried again). Flock's daily cap comes as rate_limited. */
+export type ModelFailure = "not_declared" | "daily_budget" | "out_of_credits" | "rate_limited" | "bad_request" | "invalid_output" | "timeout" | "unavailable";
 export type ModelResult = { ok: true; json?: unknown; text?: string; model: string } | { ok: false; code: ModelFailure; message: string };
 export type ModelCall = (req: ModelRequest) => Promise<ModelResult>;
 
-/** A Flock without the model call (older than the manifest's `model: true`), or a run with no platform. */
-export const NO_MODEL: ModelCall = async () => ({ ok: false, code: "not_declared", message: "this Flock gives the app no model call" });
+/** A platform with no model call on it (an older Flock's SDK, a run with no platform): Flock's contract maps it to unavailable. */
+export const NO_MODEL: ModelCall = async () => ({ ok: false, code: "unavailable", message: "this Flock gives the app no model call" });
 
-/** The SDK's model call on a platform context (an operation's `ctx.platform`, a routine's `ctx.platform`, `flock.platform`).
- *  Wired here and nowhere else: the one line that names where the SDK keeps it. */
+/** The SDK's model call on a platform context (an operation's `ctx.platform`, a routine's `ctx.platform`, `flock.platform`):
+ *  `platform.model?.json(req)`, optional on the SDK's PlatformContext. Wired here and nowhere else. */
 export function sdkModel(platform: unknown): ModelCall {
   const model = (platform as { model?: { json?: (req: ModelRequest) => Promise<ModelResult> } } | null | undefined)?.model;
   if (typeof model?.json !== "function") return NO_MODEL;
@@ -22,6 +23,10 @@ export function sdkModel(platform: unknown): ModelCall {
     try { return await model.json!(req); } catch (e) { return { ok: false, code: "unavailable", message: e instanceof Error ? e.message : String(e) }; }
   };
 }
+
+/** Does this platform give the app a model call at all (an older Flock's SDK does not). */
+export const hasModel = (platform: unknown): boolean =>
+  typeof (platform as { model?: { json?: unknown } } | null | undefined)?.model?.json === "function";
 
 /** The line the family reads when a stop leaves the week unplanned. */
 export function stopSaid(code: ModelFailure): string {

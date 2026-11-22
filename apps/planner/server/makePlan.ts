@@ -312,12 +312,29 @@ function ingredientsFrom(json: unknown): { slot: string; name: string; ingredien
 
 // ── The plan, step by step ──
 
-export type MakePlanDeps = { db: Db; emit: Emit; model: ModelCall; weekStart: string; today: string; basePath: string };
+/** `budgetMs`: how long the whole plan may take (Flock waits 6 minutes for make_plan); `clock`: milliseconds now, for tests. */
+export type MakePlanDeps = { db: Db; emit: Emit; model: ModelCall; weekStart: string; today: string; basePath: string; budgetMs?: number; clock?: () => number };
+
+/** make_plan's time: inside Flock's 6 minutes for an operation, with room to save and answer. */
+export const OP_BUDGET_MS = 330_000;
+/** The Sunday run has no caller waiting, only Flock's own per-call deadlines. */
+export const ROUTINE_BUDGET_MS = 20 * 60_000;
+/** Kept back from the menu's rounds for the ingredients (asked for every day at once) and the save. */
+const INGREDIENTS_RESERVE_MS = 90_000, SAVE_RESERVE_MS = 5_000;
 
 /** Make and save the week's plan (steps a to d). Never messages anyone; answers the message and intro to send, or why not and
  *  the plain line to say instead. A stop the family must fix (credits, the day's budget, too many calls) ends the run at once. */
 export async function makePlan(deps: MakePlanDeps): Promise<MakePlanResult> {
-  const { db, model, weekStart, today } = deps;
+  const { db, weekStart, today } = deps;
+  const clock = deps.clock ?? Date.now, end = clock() + (deps.budgetMs ?? OP_BUDGET_MS);
+  /** A model call that gives up (timeout) when the run's time, less `reserve`, is spent. */
+  const model = async (req: Parameters<ModelCall>[0], reserve: number): Promise<ModelResult> => {
+    const left = end - reserve - clock();
+    if (left <= 0) return { ok: false, code: "timeout", message: "the plan's time is spent" };
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const late = new Promise<ModelResult>((resolve) => { timer = setTimeout(() => resolve({ ok: false, code: "timeout", message: "the plan's time is spent" }), left); });
+    try { return await Promise.race([deps.model(req), late]); } finally { clearTimeout(timer); }
+  };
   const c = weekContext(db, weekStart);
   if (!c.people.length) return { ok: false, reason: "no_family", say: "Tell me who eats at home first, then I'll plan the week." };
   const needs = slotNeeds(c, today);
@@ -332,6 +349,7 @@ export async function makePlan(deps: MakePlanDeps): Promise<MakePlanResult> {
     known_dishes: c.known_dishes.map((k) => Object.fromEntries(Object.entries({ dish: k.dish, rating: k.rating, note: k.note }).filter(([, v]) => v != null))),
     house_notes: c.house.notes ?? undefined };
   let problems = menuProblems(c, needs, menu, today);
+  let lastFailure: Extract<ModelResult, { ok: false }> | null = null, answered = false;
   for (let round = 1; round <= MENU_ROUNDS && toPlan.length && problems.size; round++) {
     const first = !menu.size;
     const failing = toPlan.filter((n) => problems.has(n.key));
@@ -342,16 +360,20 @@ export async function makePlan(deps: MakePlanDeps): Promise<MakePlanResult> {
         user: JSON.stringify({ week_start: weekStart,
           fix: failing.map((n) => ({ ...mealAsked(n), family_dishes: n.family_dishes.map((d) => d.dish), now: menu.get(n.key)?.dishes ?? [], wrong: problems.get(n.key)!.map((p) => p.text) })),
           rest_of_week: toPlan.filter((n) => !problems.has(n.key)).map((n) => ({ date: n.date, slot: n.slot, dishes: (menu.get(n.key)?.dishes ?? []).map((d) => d.name) })),
-          people: family }) });
+          people: family }) }, INGREDIENTS_RESERVE_MS);
     if (!r.ok) {
       if (isStop(r.code)) return stopped(r);
+      lastFailure = r;
       continue;   // a bad answer or a timeout uses up the round
     }
+    answered = true;
     const sent = mealsFrom(r.json, needs);
     // A fix round changes only the meals it was asked to fix.
     for (const m of sent) if (first || problems.has(keyOf(m.date, m.slot))) menu.set(keyOf(m.date, m.slot), m);
     problems = menuProblems(c, needs, menu, today);
   }
+  // The model never answered (down, or every answer unreadable): no week rather than one the model had no part in.
+  if (toPlan.length && !answered && lastFailure) return stopped(lastFailure);
   if (problems.size) {
     menu = fixInCode(c, needs, menu, today);
     problems = menuProblems(c, needs, menu, today);
@@ -365,7 +387,8 @@ export async function makePlan(deps: MakePlanDeps): Promise<MakePlanResult> {
   const people = c.people.map((p) => p.name);
   const got = new Map<string, Ingredient[]>();   // by meal key and dish
   const noIngredients: string[] = [];
-  for (const date of [...new Set(toPlan.map((n) => n.date))]) {
+  // Every day at once (Flock allows 60 calls a minute): the run's time is spent on the slowest day, not on all of them.
+  const days = await Promise.all([...new Set(toPlan.map((n) => n.date))].map(async (date): Promise<Extract<ModelResult, { ok: false }> | null> => {
     const day = toPlan.filter((n) => n.date === date);
     const dishes = day.flatMap((n) => menu.get(n.key)!.dishes.map((d) => {
       const e = eatersFor(d, n.who, people);
@@ -375,8 +398,8 @@ export async function makePlan(deps: MakePlanDeps): Promise<MakePlanResult> {
     const missing = () => dishes.filter((d) => !got.get(`${keyOf(date, d.slot)}|${dishKey(d.name)}`)?.length);
     for (let attempt = 0; attempt < 2 && missing().length; attempt++) {
       const r = await model({ tier: "fast", purpose: "meal plan: a day's ingredients", system: INGREDIENT_SYSTEM, schema: INGREDIENT_SCHEMA, maxTokens: 4000,
-        user: JSON.stringify({ date, day: weekdayOf(date), people: family.map((p) => ({ name: p.name, group: p.group, portions: p.portions })), dishes: attempt ? missing() : dishes }) });
-      if (!r.ok) { if (isStop(r.code)) return stopped(r); continue; }
+        user: JSON.stringify({ date, day: weekdayOf(date), people: family.map((p) => ({ name: p.name, group: p.group, portions: p.portions })), dishes: attempt ? missing() : dishes }) }, SAVE_RESERVE_MS);
+      if (!r.ok) { if (isStop(r.code)) return r; continue; }
       for (const d of ingredientsFrom(r.json)) {
         if (!d.ingredients.length) continue;
         const n = day.find((x) => same(x.slot, d.slot) && menu.get(x.key)!.dishes.some((y) => same(y.name, d.name)))
@@ -385,7 +408,11 @@ export async function makePlan(deps: MakePlanDeps): Promise<MakePlanResult> {
       }
     }
     if (missing().length) noIngredients.push(...missing().map((d) => `${weekdayOf(date)} ${d.slot}: ${d.name}`));
-  }
+    return null;
+  }));
+  const stop = days.find((x) => x);
+  if (stop) return stopped(stop);
+  noIngredients.sort((a, b) => toPlan.findIndex((n) => a.startsWith(short(n) + ":")) - toPlan.findIndex((n) => b.startsWith(short(n) + ":")));
 
   // d. Saved final, and closed as the closing plan_week call closes it.
   const meals = needs.map((n) => n.ordered_in
@@ -411,6 +438,6 @@ export function mountMakePlanRoute(hono: Hono<any>, db: Db, emit: Emit, opts: { 
     if (weekdayOf(weekStart) !== "Mon") refuse(`week_start must be a Monday: ${weekStart} is a ${weekdayOf(weekStart)}`);
     const today = todayStr((opts.now ?? (() => new Date()))());
     if (addDays(weekStart, 6) < today) refuse(`the week of ${weekStart} is over: plan this week or a later one`);
-    return { body: await makePlan({ db, emit, model: opts.model, weekStart, today, basePath: opts.basePath }) };
+    return { body: await makePlan({ db, emit, model: opts.model, weekStart, today, basePath: opts.basePath, budgetMs: OP_BUDGET_MS }) };
   });
 }

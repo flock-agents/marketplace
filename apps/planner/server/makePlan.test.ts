@@ -2,7 +2,7 @@
 // sent back, code's own swap when the model never fixes them, and each day's ingredients.
 import { describe, it, expect } from "bun:test";
 import { boot } from "./testkit";
-import { MENU_ROUNDS } from "./makePlan";
+import { makePlan, MENU_ROUNDS, OP_BUDGET_MS } from "./makePlan";
 import type { ModelRequest, ModelResult } from "./model";
 import { weeklyPlan, DELIVER_PROMPT } from "./routines/weekly-plan";
 
@@ -181,7 +181,7 @@ describe("make_plan: the week in steps", () => {
     const r = await k.op("make_plan", { week_start: MON });
     expect(r.ok).toBe(false);
     expect(r.reason).toBe("daily_budget");
-    expect(f.days()).toHaveLength(1);
+    expect(f.days()).toHaveLength(6);   // every day is asked at once; none is asked a second time
     expect((await k.week()).status).toBeNull();
   });
 
@@ -240,6 +240,36 @@ describe("make_plan: the week in steps", () => {
     expect(fix[0].wrong[0]).toContain('"Agasthya" is not on the Family page (did you mean Agastya?)');
     const mon = await k.meal(MON, "Breakfast");
     expect(mon.dishes.map((d: any) => [d.name, d.for_people])).toEqual([["Plain idli", ["Agastya"]], ["Poha", ["Asha", "Ravi"]]]);
+  });
+
+  it("the model never answering (down every round) plans no week: the last failure's plain line, nothing saved", async () => {
+    const f = fakeModel({ menu: () => ({ ok: false, code: "unavailable", message: "down" }) });
+    const k = await family(f.model);
+    const r = await k.op("make_plan", { week_start: MON });
+    expect(r).toMatchObject({ ok: false, reason: "unavailable" });
+    expect(f.menus()).toHaveLength(MENU_ROUNDS);
+    expect(f.days()).toHaveLength(0);
+    expect((await k.week()).status).toBeNull();
+  });
+
+  it("bad_request is a bug, never asked again", async () => {
+    const f = fakeModel({ menu: () => ({ ok: false, code: "bad_request", message: "schema" }) });
+    const k = await family(f.model);
+    expect(await k.op("make_plan", { week_start: MON })).toMatchObject({ ok: false, reason: "bad_request" });
+    expect(f.asked).toHaveLength(1);
+  });
+
+  it("inside Flock's 6 minutes: no menu round starts once the time left is the ingredients', code fixes the rest, and late days go without ingredients", async () => {
+    let t = 0;
+    const f = fakeModel({ menu: (u) => { t += 200_000; const r = rotate(u) as any; for (const m of r.meals) if (m.slot === "Breakfast") m.dishes = [{ name: "Poha", for: ["everyone"] }]; return r; } });
+    const k = await family(f.model);
+    const r = await makePlan({ db: k.kit.db, emit: k.kit.emitChange, model: f.model, weekStart: MON, today: "2026-11-22", basePath: "/a/t", budgetMs: OP_BUDGET_MS, clock: () => t });
+    expect(r.ok).toBe(true);
+    expect(f.menus()).toHaveLength(2);
+    expect(f.days()).toHaveLength(0);
+    const week = await k.week();
+    for (const d of ["Poha", "Upma", "Idli"]) expect(daysOn(week, d)).toBeLessThanOrEqual(2);
+    expect((r as any).no_ingredients).toHaveLength(18);
   });
 
   it("make_plan needs a Monday, and a family", async () => {

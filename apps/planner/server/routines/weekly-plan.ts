@@ -8,9 +8,9 @@ import { dayLabel, nextMonday, todayStr } from "../dates";
 import { getHouse } from "../family";
 import { profilePending } from "../gate";
 import { weekContext } from "../meals";
-import { makePlan } from "../makePlan";
+import { makePlan, ROUTINE_BUDGET_MS } from "../makePlan";
 import { weekSendText } from "../messages";
-import { sdkModel, type ModelCall } from "../model";
+import { hasModel, sdkModel, type ModelCall } from "../model";
 import { fitsWake, routineEnv, wake, type RoutineCtx } from "./ctx";
 import { recordTime, scheduleTime } from "./reminders";
 
@@ -40,6 +40,13 @@ export const WEEKLY_PROMPT = (weekStart: string): string => [
 const bare = <T extends object>(row: T): Partial<T> =>
   Object.fromEntries(Object.entries(row).filter(([k]) => !["id", "created_at", "updated_at", "updated_by"].includes(k))) as Partial<T>;
 
+/** The agent plans the week itself, from the context in the wake (WEEKLY_PROMPT): a Flock without the app's model call. */
+async function legacyPlan(ctx: RoutineCtx, weekStart: string): Promise<void> {
+  const c = weekContext(ctx.kit.db, weekStart);
+  const data = { week_start: weekStart, context: { ...c, people: c.people.map(bare), house: bare(c.house) } };
+  await wake(ctx, WEEKLY_PROMPT(weekStart), fitsWake(data) ? data : { week_start: weekStart });
+}
+
 /** `model`: the model call, for tests (else the platform's, model.ts sdkModel). */
 export async function weeklyPlan(ctx: RoutineCtx, now: Date = new Date(), model?: ModelCall): Promise<void> {
   // The time it really runs at, for the how-to-use intro ("every Sunday morning").
@@ -50,18 +57,15 @@ export async function weeklyPlan(ctx: RoutineCtx, now: Date = new Date(), model?
     await wake(ctx, STRUCTURE_PROFILE(weekStart), { profile: getHouse(db).profile_to_structure });
     return;
   }
-  const r = await makePlan({ db, emit: ctx.kit.emitChange, model: model ?? sdkModel(ctx.platform), weekStart, today: todayStr(now), basePath: routineEnv.basePath });
+  // A Flock whose SDK gives the app no model call: the agent plans as it did before.
+  if (!model && !hasModel(ctx.platform)) return legacyPlan(ctx, weekStart);
+  const r = await makePlan({ db, emit: ctx.kit.emitChange, model: model ?? sdkModel(ctx.platform), weekStart, today: todayStr(now), basePath: routineEnv.basePath,
+    budgetMs: ROUTINE_BUDGET_MS });
   if (r.ok) {
     await wake(ctx, DELIVER_PROMPT(!!r.intro), { week_start: weekStart, message: r.message, ...(r.intro ? { intro: r.intro } : {}) });
     return;
   }
-  if (r.reason === "not_declared") {
-    // A Flock with no model call for apps: the agent plans as it did before.
-    const c = weekContext(db, weekStart);
-    const data = { week_start: weekStart, context: { ...c, people: c.people.map(bare), house: bare(c.house) } };
-    await wake(ctx, WEEKLY_PROMPT(weekStart), fitsWake(data) ? data : { week_start: weekStart });
-    return;
-  }
+  if (r.reason === "not_declared") return legacyPlan(ctx, weekStart);
   // No week this time (no credits, the day's budget, nothing known to plan from): the family is told so, plainly.
   await wake(ctx, DELIVER_PROMPT(false), { week_start: weekStart, message: r.say });
 }
