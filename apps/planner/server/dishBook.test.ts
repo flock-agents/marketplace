@@ -123,6 +123,29 @@ describe("the context a plan starts from", () => {
   });
 });
 
+describe("the family's own dishes", () => {
+  it("the interview's past week is saved by meal and eater, and the week's context lists it with how to plan from it", async () => {
+    const k = await start();
+    await k.op("set_person", { name: "Meera", group: "child" });
+    await k.op("set_slots", { extra_slots: [{ name: "Meera's tiffin", days: ["Mon", "Tue"], for: ["Meera"] }] });
+    const r = await k.op("set_family_dishes", { dishes: [
+      { name: "Idli", slots: ["breakfast"] }, { name: "Plain dosa", slots: ["Breakfast"], for: ["meera"] },
+      { name: "Rajma", slots: ["Lunch", "Dinner"] }, { name: "Poha", slots: ["meera's tiffin", "Breakfast"] }] });
+    expect(r.error).toBeUndefined();
+    const { context } = await k.op("plan_week", { week_start: NEXT_MON, mode: "draft" });
+    expect(context.family_dishes).toEqual({
+      Breakfast: [{ dish: "Idli" }, { dish: "Plain dosa", for: ["Meera"] }, { dish: "Poha" }],
+      Lunch: [{ dish: "Rajma" }], Dinner: [{ dish: "Rajma" }], "Meera's tiffin": [{ dish: "Poha" }] });
+    expect(context.how_to_plan).toContain("Build the week from family_dishes");
+    expect(context.how_to_plan).toContain('except ["Meera"]');
+    // A meal or a person the family does not have is told, with the closest; remove takes a dish off the list.
+    expect((await k.op("set_family_dishes", { dishes: [{ name: "Upma", slots: ["Brekfast"] }] })).error).toContain("did you mean Breakfast?");
+    expect((await k.op("set_family_dishes", { dishes: [{ name: "Upma", slots: ["Breakfast"], for: ["Mira"] }] })).error).toContain("did you mean Meera?");
+    await k.op("set_family_dishes", { dishes: [{ name: "Rajma", remove: true }] });
+    expect((await k.op("plan_week", { week_start: NEXT_MON, mode: "draft" })).context.family_dishes.Lunch).toBeUndefined();
+  });
+});
+
 describe("the messages", () => {
   /** Monday: lunch at home (dal, bhindi, roti), dinner ordered in. Tuesday: lunch of rajma chawal and bhindi. */
   const planned = async (k: Awaited<ReturnType<typeof start>>, monday: object[] = [meal(MON, "Lunch", "Dal", "Bhindi", "Roti"), { date: MON, slot: "Dinner", ordered_in: true }]) => {

@@ -9,6 +9,8 @@ import { join } from "path";
 import { tmpdir } from "os";
 // @ts-ignore: resolved in the assembled app, where evals/ sits beside server/
 import { boot } from "../server/testkit";
+// @ts-ignore: resolved in the assembled app
+import { WEEKLY_PROMPT } from "../server/routines/weekly-plan";
 import { ask, flagsOf, jsonOf, modelOpts } from "./lib/model";
 import { scoreWeek, type Fixture, type Outcome } from "./lib/score";
 import { addDays, LEGACY_KINDS, mdTable, pct, type RunRecord } from "./lib/common";
@@ -88,6 +90,15 @@ async function seed(k: any, fx: Fixture): Promise<{ notes: string[] }> {
     const w = await k.owner("POST", `/api/weeks/${prev}/plan`, { mode: "final", meals });
     if (w.status >= 400) throw new Error(`${fx.id}: last week refused: ${JSON.stringify(w.body)}`);
   }
+  // The family's own dishes, as the interview saves what each person ate over the past week (set_family_dishes): the
+  // fixture's family_dishes (what its answers name), else its past week, each dish with every meal it was eaten at.
+  const slotsOf = new Map<string, Set<string>>();
+  for (const m of fx.last_week) for (const d of m.dishes ?? []) (slotsOf.get(d) ?? slotsOf.set(d, new Set()).get(d)!).add(m.slot);
+  const family = fx.family_dishes ?? [...slotsOf].map(([name, slots]) => ({ name, slots: [...slots] }));
+  if (family.length) {
+    const r = await k.op("set_family_dishes", { dishes: family });
+    notes.push(r?.error ? `set_family_dishes refused: ${r.error}` : `family dishes: ${family.length}`);
+  }
   return { notes };
 }
 
@@ -162,8 +173,11 @@ async function once(fx: Fixture, guide: string, rep: number): Promise<RunRecord>
     const { notes } = await seed(k, fx);
     const ctx = await k.op("plan_week", { week_start: fx.week_start, mode: "draft" });
     if (!ctx?.context) throw new Error(`${fx.id}: plan_week draft gave no context: ${JSON.stringify(ctx).slice(0, 300)}`);
-    const opening = `The weekly run woke you to plan next week. week_start: ${fx.week_start} (today is ${fx.today}).\n` +
-      `plan_week { week_start: "${fx.week_start}", mode: "draft" } answered:\n${JSON.stringify(ctx, null, 1)}\n\nWrite the whole week now.`;
+    // The Sunday wake as the live agent gets it (routines/weekly-plan.ts): its prompt and the week's context as its data.
+    const opening = whole
+      ? `The weekly run woke you to plan next week. week_start: ${fx.week_start} (today is ${fx.today}).\n` +
+        `plan_week { week_start: "${fx.week_start}", mode: "draft" } answered:\n${JSON.stringify(ctx, null, 1)}\n\nWrite the whole week now.`
+      : `${WEEKLY_PROMPT(fx.week_start)}\n\nData (today is ${fx.today}):\n${JSON.stringify({ week_start: fx.week_start, context: ctx.context }, null, 1)}`;
     const transcript: string[] = [opening];
     const refusals: string[] = [];
     let rounds = 0, accepted = false, cost = 0, ms = 0;

@@ -13,7 +13,7 @@ import { SLOTS, STAPLE_DISHES, type GroceryApp } from "./db/constants";
 import { addDays, mondayOf, todayStr, weekDates, weekdayOf } from "./dates";
 import { introText, weekLink, weekMessage, weekSendText, youtubeThumb } from "./messages";
 import { dishKey, type LastTime } from "./dishText";
-import { bookOf, knownDishes, lastTime, setVideo, videoOf, type DishVideo } from "./dishBook";
+import { bookOf, familyDishes, knownDishes, lastTime, setVideo, videoOf, type DishVideo } from "./dishBook";
 import { breaksText, dinersOf, EVERYONE, forEveryone, isRepeatableSide, namedInOnlyRule, ruleBreaks, ruleBreaksIn, type RuleBreak } from "./rules";
 import { getHouse, groceryApp, houseView, isObject, list, name, names, refuse, words, writeRoutes,
   type Db, type Emit, type HouseView, type PersonRow } from "./family";
@@ -37,7 +37,11 @@ export type WeekContext = { week_start: string; people: PersonRow[]; house: Hous
   last_week: { date: string; slot: string; dishes: string[] }[];
   /** Every dish the family rated or gave a video, the ones that did not work first: plan those rarely, and heed each note. */
   known_dishes: ReturnType<typeof knownDishes>;
-  recipes: { id: string; name: string; tags: string[]; for_people: string[] }[]; grocery_app: GroceryApp };
+  recipes: { id: string; name: string; tags: string[]; for_people: string[] }[]; grocery_app: GroceryApp;
+  /** The family's own dishes by meal (the interview: what each person ate over the past week): what the week is planned from. */
+  family_dishes: ReturnType<typeof familyDishes>;
+  /** How to build the week, step by step, with one day as an example (PLAN_METHOD). */
+  how_to_plan: string };
 
 type MealRow = typeof plan_meals.$inferSelect;
 type DishRow = typeof dishes.$inferSelect;
@@ -107,8 +111,28 @@ export function weekContext(db: Db, weekStart: string): WeekContext {
     recipes: db.select().from(saved_recipes).orderBy(asc(saved_recipes.name)).all()
       .map((r) => ({ id: r.id, name: r.name, tags: list<string>(r.tags), for_people: list<string>(r.for_people) })),
     grocery_app: groceryApp(db),
+    family_dishes: familyDishes(db),
+    how_to_plan: PLAN_METHOD,
   };
 }
+
+/** How the agent builds a week (owner 2026-11-22: "A good prompt can always fix failures that needs a higher model. The
+ *  interview gives us enough data to populate a good week"). Given with the context, where the week is planned. */
+export const PLAN_METHOD = `Build the week from family_dishes, the family's own food: choose and rotate, do not invent.
+1. Each person first: read their rules (house.rules) and notes. Who has an only, avoid or swap rule needs their own dish or a portion_note.
+2. Each meal of each cooking day: take that meal's dishes from family_dishes and spread them over the week, so each main dish
+   is on two days at most (roti, rice and sides such as chutney, curd, plain dal come back freely; sambar and rasam are mains).
+   Prefer dishes not on last_week; a dish rated didnt_work rarely. A dish listed with for is that person's: theirs only.
+   A tiffin from the child's own list. Where the list runs short, add a dish like theirs that every rule allows (a new one
+   only when the cook takes new recipes).
+3. A person who cannot eat the shared dish gets their own, and the shared one is for: ["everyone"], except: [them].
+4. Read the week through once: every person fed at every meal they eat at home, every rule kept, no main on three days.
+5. A refusal names what is wrong: change only those meals, and keep every other meal exactly as you sent it.
+One day, done right (Meera eats only plain idli or dosa at breakfast; Agastya has a tiffin; Lakshmi has millet for rice):
+  Breakfast: Plain idli for ["Meera"]; Rava idli for ["everyone"] except ["Meera"]; Coconut chutney for ["everyone"]
+  Agastya's tiffin: Vegetable poha for ["Agastya"]
+  Lunch: Rajma for ["everyone"]; Steamed rice for ["everyone"], portion_note "millet in place of rice for Lakshmi"; Curd for ["everyone"]
+  Dinner: Paneer butter masala for ["everyone"]; Phulka for ["everyone"]`;
 
 // ── What was sent, checked ──
 

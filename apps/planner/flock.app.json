@@ -290,7 +290,7 @@
         "operation": "set_person"
       },
       "required": false,
-      "help": "set_person for each child, with what they eat in their note. Also call set_house_rules yourself, the whole list, for each rule said, as in: \"Meera has only plain idli, plain dosa or banana sheera\": {\"kind\":\"only\",\"who\":\"Meera\",\"slots\":[\"Breakfast\"],\"items\":[\"plain idli\",\"plain dosa\",\"banana sheera\"],\"note\":\"nothing spicy\"}; \"Agastya won't eat anything green\": {\"kind\":\"avoid\",\"who\":\"Agastya\",\"items\":[\"@green_leafy\"],\"note\":\"nothing green visible\"}."
+      "help": "Save every dish said with set_family_dishes, one call: {\"dishes\":[{\"name\":\"Poha\",\"slots\":[\"Breakfast\"]}]}, each dish once with every meal it is eaten at; \"for\" only when one person eats it ({\"name\":\"Plain idli\",\"slots\":[\"Breakfast\"],\"for\":[\"Meera\"]}). The week is planned from these. set_person for each child, with what they eat in their note. Also call set_house_rules yourself, the whole list, for each rule said, as in: \"Meera has only plain idli, plain dosa or banana sheera\": {\"kind\":\"only\",\"who\":\"Meera\",\"slots\":[\"Breakfast\"],\"items\":[\"plain idli\",\"plain dosa\",\"banana sheera\"],\"note\":\"nothing spicy\"}; \"Agastya won't eat anything green\": {\"kind\":\"avoid\",\"who\":\"Agastya\",\"items\":[\"@green_leafy\"],\"note\":\"nothing green visible\"}."
     },
     {
       "id": "kidsLunch",
@@ -304,7 +304,7 @@
         "operation": "set_slots"
       },
       "required": false,
-      "help": "A tiffin on school days: set_slots with it as an extra slot. Also call set_house_rules yourself, the whole list, for each rule said, as in: \"tiffin dry, nut-free\": {\"kind\":\"avoid\",\"who\":\"Agastya\",\"slots\":[\"Agastya's tiffin\"],\"items\":[\"gravy\",\"curry\",\"sambar\",\"@nuts\",\"@peanut\"],\"note\":\"dry, no gravy, nut-free\"}; \"Meera eats only soft food at lunch\": {\"kind\":\"other\",\"who\":\"Meera\",\"slots\":[\"Lunch\"],\"note\":\"soft food only\"}; \"never the same twice\" needs no rule."
+      "help": "Save every dish said with set_family_dishes, one call: {\"dishes\":[{\"name\":\"Poha\",\"slots\":[\"Lunch\"]}]}, each dish once with every meal it is eaten at; \"for\" only when one person eats it ({\"name\":\"Plain idli\",\"slots\":[\"Breakfast\"],\"for\":[\"Meera\"]}); a tiffin dish goes in the tiffin slot. The week is planned from these. A tiffin on school days: set_slots with it as an extra slot. Also call set_house_rules yourself, the whole list, for each rule said, as in: \"tiffin dry, nut-free\": {\"kind\":\"avoid\",\"who\":\"Agastya\",\"slots\":[\"Agastya's tiffin\"],\"items\":[\"gravy\",\"curry\",\"sambar\",\"@nuts\",\"@peanut\"],\"note\":\"dry, no gravy, nut-free\"}; \"Meera eats only soft food at lunch\": {\"kind\":\"other\",\"who\":\"Meera\",\"slots\":[\"Lunch\"],\"note\":\"soft food only\"}; \"never the same twice\" needs no rule."
     },
     {
       "id": "kidsDinner",
@@ -314,7 +314,7 @@
       "fills": [
         "pastWeek.kidsDinner:text"
       ],
-      "help": "Also call set_house_rules yourself, the whole list, for each rule said, as in: \"keep Meera's portion aside before the chilli\": {\"kind\":\"swap\",\"who\":\"Meera\",\"items\":[\"@chilli\"],\"to\":\"set aside before chilli\"}; a dish a child won't eat: {\"kind\":\"avoid\",\"who\":\"Agastya\",\"items\":[\"palak\",\"methi\"]}."
+      "help": "Save every dish said with set_family_dishes, one call: {\"dishes\":[{\"name\":\"Poha\",\"slots\":[\"Dinner\"]}]}, each dish once with every meal it is eaten at; \"for\" only when one person eats it ({\"name\":\"Plain idli\",\"slots\":[\"Breakfast\"],\"for\":[\"Meera\"]}). The week is planned from these. Also call set_house_rules yourself, the whole list, for each rule said, as in: \"keep Meera's portion aside before the chilli\": {\"kind\":\"swap\",\"who\":\"Meera\",\"items\":[\"@chilli\"],\"to\":\"set aside before chilli\"}; a dish a child won't eat: {\"kind\":\"avoid\",\"who\":\"Agastya\",\"items\":[\"palak\",\"methi\"]}."
     },
     {
       "id": "adultsBreakfast",
@@ -327,7 +327,7 @@
         "operation": "set_person"
       },
       "required": false,
-      "help": "set_person for each adult, with what they eat in their note. Also call set_house_rules yourself, the whole list, for each rule said, as in: what one person never eats: {\"kind\":\"avoid\",\"who\":\"Shiva\",\"items\":[\"upma\"]}; what one person eats only: {\"kind\":\"only\",\"who\":\"Lakshmi\",\"slots\":[\"Breakfast\"],\"items\":[\"ragi dosa\",\"poha\"]}."
+      "help": "Save every dish said with set_family_dishes, one call: {\"dishes\":[{\"name\":\"Poha\",\"slots\":[\"Breakfast\"]}]}, each dish once with every meal it is eaten at; \"for\" only when one person eats it ({\"name\":\"Plain idli\",\"slots\":[\"Breakfast\"],\"for\":[\"Meera\"]}). The week is planned from these. set_person for each adult, with what they eat in their note. Also call set_house_rules yourself, the whole list, for each rule said, as in: what one person never eats: {\"kind\":\"avoid\",\"who\":\"Shiva\",\"items\":[\"upma\"]}; what one person eats only: {\"kind\":\"only\",\"who\":\"Lakshmi\",\"slots\":[\"Breakfast\"],\"items\":[\"ragi dosa\",\"poha\"]}."
     },
     {
       "id": "adultsLunch",
@@ -336,7 +336,7 @@
       "fills": [
         "pastWeek.adultsLunch:text"
       ],
-      "help": "Also call set_house_rules yourself, the whole list, for each rule said, as in: \"Shiva has no rice at lunch\": {\"kind\":\"avoid\",\"who\":\"Shiva\",\"slots\":[\"Lunch\"],\"items\":[\"rice\"]}."
+      "help": "Save every dish said with set_family_dishes, one call: {\"dishes\":[{\"name\":\"Poha\",\"slots\":[\"Lunch\"]}]}, each dish once with every meal it is eaten at; \"for\" only when one person eats it ({\"name\":\"Plain idli\",\"slots\":[\"Breakfast\"],\"for\":[\"Meera\"]}). The week is planned from these. Also call set_house_rules yourself, the whole list, for each rule said, as in: \"Shiva has no rice at lunch\": {\"kind\":\"avoid\",\"who\":\"Shiva\",\"slots\":[\"Lunch\"],\"items\":[\"rice\"]}."
     },
     {
       "id": "adultsDinner",
@@ -345,7 +345,7 @@
       "fills": [
         "pastWeek.adultsDinner:text"
       ],
-      "help": "Also call set_house_rules yourself, the whole list, for each rule said, as in: \"no heavy food for anyone at dinner\" is not checked: {\"kind\":\"other\",\"slots\":[\"Dinner\"],\"note\":\"light dinner\"}."
+      "help": "Save every dish said with set_family_dishes, one call: {\"dishes\":[{\"name\":\"Poha\",\"slots\":[\"Dinner\"]}]}, each dish once with every meal it is eaten at; \"for\" only when one person eats it ({\"name\":\"Plain idli\",\"slots\":[\"Breakfast\"],\"for\":[\"Meera\"]}). The week is planned from these. Also call set_house_rules yourself, the whole list, for each rule said, as in: \"no heavy food for anyone at dinner\" is not checked: {\"kind\":\"other\",\"slots\":[\"Dinner\"],\"note\":\"light dinner\"}."
     },
     {
       "id": "diet",
@@ -691,6 +691,10 @@
       {
         "name": "save_recipe",
         "description": "Save a recipe, or change one. { recipe_id?, name?, links?: [the reel, short or page], notes?, ingredients?: [{ item, amount?, unit? }], tags?: [\"breakfast\", \"tiffin\"], for?: [names], thumbnail? }. Without recipe_id, a recipe that already holds one of the links is the one changed (new links are added to it), so a link shared twice is saved once; otherwise a new recipe is made, and it needs a name: with none the answer is code NEEDS_NAME, so ask the family what to call it and save again. By recipe_id only what you send changes, and links you send replace its links. Answers { recipe }; put its id on a dish with set_dish recipe_id."
+      },
+      {
+        "name": "set_family_dishes",
+        "description": "The family's own dishes, from what each person ate over the past week: { dishes: [{ name, slots: [the meals it is eaten at: Breakfast, Lunch, Dinner or an extra slot such as a tiffin], for?: [names on the Family page, only when one person eats it], remove?: true }] }. Each dish once, with every meal it is eaten at; sent again, it takes the meals and eaters sent. The weekly plan is built from these (the context's family_dishes). Answers { family_dishes } by meal."
       },
       {
         "name": "set_dish_video",

@@ -207,6 +207,8 @@ export const dish_book = sqliteTable("dish_book", {
   rated_on: text("rated_on"),                                  // the day it was eaten
   rated_by: text("rated_by"),                                  // who said it, by name
   ratings: text("ratings"),                                    // JSON [{ rating, note, date, by }], newest first, a short history
+  slots: text("slots"),                                        // JSON string[]: the meals the family eats it at (their own dishes, from the interview); null = not one of theirs
+  eaten_by: text("eaten_by"),                                  // JSON string[]: who eats it (names on the Family page); null = everyone
 });
 
 export const saved_recipes = sqliteTable("saved_recipes", {

@@ -50,6 +50,7 @@ export const ROUTES: Record<string, Route> = {
     : { error: "order_id is required: the order_id order_cart answered", code: "APP_REFUSED", status: 400 },
   remember_product: (p) => ({ method: "POST", path: "/api/products", body: p }),
   save_recipe: (p) => ({ method: "POST", path: "/api/recipes/save", body: p }),
+  set_family_dishes: (p) => ({ method: "POST", path: "/api/dish-book/family", body: p }),
   set_dish_video: (p) => ({ method: "POST", path: "/api/dish-book/video", body: p }),
   rate_dishes: (p) => ({ method: "POST", path: "/api/dish-book/ratings", body: p }),
   get_dish: (p) => typeof p.dish === "string" && p.dish.trim()
@@ -87,6 +88,7 @@ export const FIELDS: Record<string, { fields: string[]; need?: string[] }> = {
   cancel_order: { fields: ["order_id"], need: ["order_id"] },
   remember_product: { fields: ["item", "app", "product_id", "name_on_app", "pack", "pack_amount", "pack_unit", "price", "image"], need: ["item", "app", "product_id", "name_on_app"] },
   save_recipe: { fields: ["recipe_id", "name", "links", "notes", "ingredients", "tags", "for", "thumbnail"] },
+  set_family_dishes: { fields: ["dishes"], need: ["dishes"] },
   set_dish_video: { fields: ["dish", "dish_id", "url", "title", "thumbnail", "remove"] },
   rate_dishes: { fields: ["date", "ratings"], need: ["ratings"] },
   get_dish: { fields: ["dish"], need: ["dish"] },

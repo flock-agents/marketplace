@@ -104,6 +104,15 @@ ingredients, in one call (well under 16 KB). The app checks the week as a whole:
 shows (RULE_BROKEN), each extra slot's days (MISSING_SLOTS), every problem named in one refusal; variety is the guide's. Kept as the week's draft when it passes; the agent then gives each day its ingredients (plan_week final,
 keep_rest), where the rules on ingredients are checked, and closes as before.
 
+## The family's own dishes (2026-11-22)
+Owner: "A good prompt can always fix failures that needs a higher model. The interview gives us enough data to populate a
+good week." The interview's past-week answers (what each person ate at breakfast, lunch, dinner, a tiffin) are saved with
+`set_family_dishes { dishes: [{ name, slots, for? }] }` in the dish book (its `slots` and `eaten_by`). The week's context
+gives them as `family_dishes` by meal, with `how_to_plan` (meals.ts PLAN_METHOD): choose and rotate the family's own food,
+each person's rules first, `except` for a shared dish, one day done right as the example, and on a refusal change only the
+meals named. The Sunday wake (routines/weekly-plan.ts WEEKLY_PROMPT) is the same steps: menu, days, close. The plan eval
+opens with that wake and seeds each fixture's `family_dishes` (its answers name them).
+
 ## The interview writes rules in this shape
 Every answer that states a rule is saved as a checked kind with `set_house_rules` (people's notes keep the story; the
 rule is the rule). After the rules question, the Butler reads every saved rule back in plain words, one message, and

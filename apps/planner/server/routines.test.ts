@@ -131,7 +131,7 @@ describe("weekly plan", () => {
     expect(p).toContain("one day a call");
     expect(p).toContain("Mon 23 Nov");
     // What the plan is made from: the cook's limits, every slot (a child's tiffin), variety and every dish's ingredients.
-    for (const said of ["cook_wont_make", "cook_time_limit", "cook_new_recipes", "extra_slots", "tiffin", "no dish twice in the week unless the family asked", "Every dish gets its ingredients"])
+    for (const said of ["cook_wont_make", "cook_time_limit", "cook_new_recipes", "extra_slots", "tiffin", "family_dishes", "how_to_plan", "plan_menu", "except", "a main dish on two days at most", "What the family said wins", "Every dish gets its ingredients"])
       expect(p).toContain(said);
     expect(p).not.toMatch(/\b(he|she|his|her|him)\b/i);
     for (const gone of ["place_order", "record_order", "ask_low_or_out", "add_to_order", "order_cart", "set_cart_line"]) expect(p).not.toContain(gone);

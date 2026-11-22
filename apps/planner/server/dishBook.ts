@@ -6,12 +6,13 @@
 // set_dish_video and rate_dishes, and reads one dish with get_dish.
 import type { Hono } from "hono";
 import { asc, desc, eq, inArray, sql } from "drizzle-orm";
-import { dish_book, dishes } from "./db/schema";
-import { DISH_RATINGS, RATINGS_KEPT, type DishRating } from "./db/constants";
+import { dish_book, dishes, people } from "./db/schema";
+import { DISH_RATINGS, RATINGS_KEPT, SLOTS, type DishRating } from "./db/constants";
 import { todayStr } from "./dates";
 import { dishKey, type LastTime } from "./dishText";
 import { youtubeThumb } from "./messages";
-import { isObject, list, name, refuse, words, writeRoutes, type Db, type Emit } from "./family";
+import { getHouse, houseView, isObject, list, name, names, refuse, words, writeRoutes, type Db, type Emit } from "./family";
+import { closest } from "./agentOps";
 
 export type BookRow = typeof dish_book.$inferSelect;
 export type DishVideo = { url: string; title: string | null; thumbnail: string | null };
@@ -110,6 +111,17 @@ export function knownDishes(db: Db, max = 60): { dish: string; rating: DishRatin
     .map((r) => ({ dish: r.name, rating: (r.rating as DishRating | null) ?? null, note: r.rating_note, rated_on: r.rated_on, video_url: r.video_url }));
 }
 
+/** The family's own dishes (from the interview: what each person ate over the past week), by meal: what a week is planned from.
+ *  `for` is left out when everyone eats it. */
+export function familyDishes(db: Db): Record<string, { dish: string; for?: string[]; rating?: DishRating }[]> {
+  const out: Record<string, { dish: string; for?: string[]; rating?: DishRating }[]> = {};
+  for (const r of db.select().from(dish_book).orderBy(asc(dish_book.name)).all()) {
+    const who = list<string>(r.eaten_by);
+    for (const slot of list<string>(r.slots)) (out[slot] ??= []).push({ dish: r.name, ...(who.length ? { for: who } : {}), ...(r.rating ? { rating: r.rating as DishRating } : {}) });
+  }
+  return out;
+}
+
 /** The dish an op names: `dish` (its name, as planned) or `dish_id` (a planned dish, whose name it takes). */
 function dishName(db: Db, b: Record<string, unknown>, what = ""): string {
   if (b.dish_id != null) {
@@ -135,6 +147,41 @@ export function mountDishBookRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: {
     const dish = (c.req.query("dish") ?? "").trim();
     if (!dish) return c.json({ ok: false, reason: "dish is required: the dish's name, as planned" }, 400);
     return c.json({ dish: bookView(bookFor(db, dish), dish) });
+  });
+
+  // set_family_dishes { dishes: [{ name, slots, for?, remove? }] }: the family's own dishes, from the interview's answers about
+  // the past week ("idli, dosa, pongal for breakfast"; "Agastya's tiffin: paratha, poha"), each with the meals it is eaten at
+  // and who eats it (left out: everyone). A week is planned from them. A dish sent again takes the meals and eaters sent.
+  write("/api/dish-book/family", (b, by) => {
+    const shape = "dishes must be a list of { name, slots: [the meals it is eaten at], for?: [names on the Family page], remove?: true }";
+    if (!Array.isArray(b.dishes) || !b.dishes.length) refuse(shape);
+    const h = houseView(getHouse(db));
+    const slotNames = [...SLOTS, ...h.extra_slots.map((x) => x.name)];
+    const family = db.select({ name: people.name }).from(people).where(eq(people.active, 1)).all().map((p) => p.name);
+    const sent = (b.dishes as unknown[]).map((d) => {
+      if (!isObject(d)) return refuse(shape);
+      const dish = name(d.name, "a dish's name");
+      if (d.remove === true) return { dish, remove: true as const };
+      const slots = names(d.slots, `${dish}: slots`).map((s) => slotNames.find((x) => x.toLowerCase() === s.toLowerCase())
+        ?? refuse(`${dish}: slots: ${JSON.stringify(s)} is not a meal (${slotNames.join(", ")})${closest(s, slotNames) ? `; did you mean ${closest(s, slotNames)}?` : ""}`));
+      if (!slots.length) refuse(`${dish}: slots must name at least one meal (${slotNames.join(", ")})`);
+      const who = d.for == null ? [] : names(d.for, `${dish}: for`).filter((w) => w.toLowerCase() !== "everyone").map((w) => family.find((p) => p.toLowerCase() === w.toLowerCase())
+        ?? refuse(`${dish}: for: ${JSON.stringify(w)} is not on the Family page${closest(w, family) ? ` (did you mean ${closest(w, family)}?)` : ""}`));
+      return { dish, slots: [...new Set(slots)], who };
+    });
+    commit((tx, ch) => {
+      for (const s of sent) {
+        if ("remove" in s) {
+          const had = bookFor(tx, s.dish);
+          if (had) { tx.update(dish_book).set({ slots: null, eaten_by: null, updated_at: now(), updated_by: by }).where(eq(dish_book.id, had.id)).run(); ch.push(["dish_book", had.id, "update", by]); }
+          continue;
+        }
+        const row = bookRow(tx, s.dish, by, ch);
+        tx.update(dish_book).set({ slots: JSON.stringify(s.slots), eaten_by: s.who.length ? JSON.stringify(s.who) : null, updated_at: now(), updated_by: by }).where(eq(dish_book.id, row.id)).run();
+        ch.push(["dish_book", row.id, "update", by]);
+      }
+    });
+    return { body: { family_dishes: familyDishes(db) } };
   });
 
   // set_dish_video { dish | dish_id, url, title?, thumbnail?, remove? }: the dish's one video, a link only.
