@@ -1,5 +1,23 @@
 # Changelog
 
+## 3.4.0
+
+- **The setup interview, for Flock's interview runner.** Flock sends each setup question as written and reads each reply
+  in one call, writing every answer into the app itself; the Butler no longer makes the calls. So each question's
+  `answer` names every operation it writes (a list: the cook's limits save `set_cook` and `set_house_rules`), every
+  `help` says how to read the reply into those payloads (the food-rule examples stay), and every question is the exact
+  line a person reads. Needs a Flock with the interview runner (a list `answer`, and `show` values; see below).
+- **No question repeats the household answer.** A new first step saves everyone at home with `set_person`, read from
+  the household answer, before any rule names them. The cook's name, days and visits (each with its meals) are read
+  from the household answer when it said them, so the cook question is asked only for what is missing; the
+  cooking-days question then asks only what the cook's days leave ("Is food cooked at home on Sunday too?"). The
+  elders question no longer asks what the diet question covered ("Besides that diet, ...", and no sugar-free).
+- **Rules are added, not replaced, one answer at a time.** `set_house_rules { add: true, rules }` adds the rules sent
+  to the ones there (a rule already there is not added twice); without `add` the list sent is the list kept, as
+  before. It answers `said`, every rule in plain words, which the read-back shows (`{{rulesSaid}}`, Flock's `show`).
+  `import_order_history` answers `said`, what the house buys most often, which the order findings show.
+- Past-week meals no longer write `set_person` notes; what each person eats is in the family's dishes (`for`).
+
 ## 3.2.0
 
 - **The setup interview lives in the app.** The questions the Butler asks when the Meal Planner is set up are now the

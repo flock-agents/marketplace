@@ -26,7 +26,8 @@ const guideMd = readFileSync(join(appDir, "server/agent-guide.md"), "utf8");
 const opsSrc = readFileSync(join(appDir, "server/agentOps.ts"), "utf8");
 const fieldsBlock = opsSrc.slice(opsSrc.indexOf("export const FIELDS"), opsSrc.indexOf("};", opsSrc.indexOf("export const FIELDS")) + 2);
 const manifest = JSON.parse(readFileSync(join(appDir, "flock.app.json"), "utf8"));
-const questions: any[] = manifest.setup;
+// One per id: a question with variants (each with a `when`) is shown as its last, the general one.
+const questions: any[] = [...new Map((manifest.setup as any[]).map((q) => [q.id, q])).values()];
 
 const SYSTEM = `${guideMd}
 
@@ -49,7 +50,8 @@ function interviewText(fx: Fixture): string {
     if (said === undefined) continue;
     lines.push(`Q (${q.id}): ${q.ask}`);
     if (q.help) lines.push(`   [help: ${q.help}]`);
-    if (q.answer?.operation) lines.push(`   [saved with: ${q.answer.operation}]`);
+    const saved = (Array.isArray(q.answer) ? q.answer : q.answer ? [q.answer] : []).map((t: any) => t.operation).filter(Boolean);
+    if (saved.length) lines.push(`   [saved with: ${saved.join(", ")}]`);
     lines.push(`A: ${said}`, "");
   }
   lines.push("Now reply with the calls.");
