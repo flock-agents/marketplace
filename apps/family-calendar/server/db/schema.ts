@@ -1,9 +1,9 @@
 import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core";
 import { kitColumns } from "@flock/app-kit";
 
-import { REPEATS, COLOURS, KINDS, STATUSES, TODO_STATUSES } from "./constants";
+import { REPEATS, MONTHLY_BY, COLOURS, KINDS, STATUSES, TODO_STATUSES } from "./constants";
 
-export { REPEATS, COLOURS, KINDS, STATUSES, TODO_STATUSES };
+export { REPEATS, MONTHLY_BY, COLOURS, KINDS, STATUSES, TODO_STATUSES };
 
 /** The people in the family. An event names one by `name` in its `who`. */
 export const members = sqliteTable("members", {
@@ -31,6 +31,7 @@ export const events = sqliteTable("events", {
   planned_at: integer("planned_at"),                          // ms: when its prep was last planned (imported events only)
   plan_basis: text("plan_basis"),                             // "YYYY-MM-DD" or "YYYY-MM-DDTHH:MM": the date and time it was planned for
   imported: integer("imported").notNull().default(0),         // 1: first made by import_events (only these are planned)
+  monthly_by: text("monthly_by"),                             // a monthly event: empty or date (the 6th) | weekday (the 1st Sunday) | last_weekday
 });
 
 /** Where an imported event was seen: one row per source and item. Two people's copies of one mail are one event, two rows. */

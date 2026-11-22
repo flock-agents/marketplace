@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { addMonths, clock12, deadlineNoticeAt, eveningBeforeMinutes, eventOrder, eventRemindersDue, minutesBefore, mondayOf, nextOccurrence, normaliseEvent, occurrences, ordinal, parseClock, repeatText } from "../src/pages/dates";
+import { addMonths, clock12, deadlineNoticeAt, eveningBeforeMinutes, eventOrder, eventRemindersDue, minutesBefore, monthlyByProblem, mondayOf, nextOccurrence, normaliseEvent, occurrences, ordinal, parseClock, repeatText } from "../src/pages/dates";
 
 describe("parseClock: what people type as a time", () => {
   it("reads 24-hour, 12-hour and loose forms", () => {
@@ -54,8 +54,8 @@ describe("how an event repeats, in words", () => {
 describe("the event form's values as a row", () => {
   it("normalises the times and blanks, keeps a whole number of minutes", () => {
     const r = normaliseEvent({ title: " Dentist ", date: "2026-10-16", start_time: "4:30 pm", end_time: "5pm", who: "", location: "Smile Dental", notes: undefined, reminder_minutes: 60 });
-    expect(r).toEqual({ ok: true, row: { title: "Dentist", date: "2026-10-16", repeat: "none", start_time: "16:30", end_time: "17:00", who: null, location: "Smile Dental", notes: null, reminder_minutes: 60 } });
-    expect(normaliseEvent({ title: "Birthday", date: "2026-10-17" })).toEqual({ ok: true, row: { title: "Birthday", date: "2026-10-17", repeat: "none", start_time: null, end_time: null, who: null, location: null, notes: null, reminder_minutes: null } });
+    expect(r).toEqual({ ok: true, row: { title: "Dentist", date: "2026-10-16", repeat: "none", monthly_by: null, start_time: "16:30", end_time: "17:00", who: null, location: "Smile Dental", notes: null, reminder_minutes: 60 } });
+    expect(normaliseEvent({ title: "Birthday", date: "2026-10-17" })).toEqual({ ok: true, row: { title: "Birthday", date: "2026-10-17", repeat: "none", monthly_by: null, start_time: null, end_time: null, who: null, location: null, notes: null, reminder_minutes: null } });
   });
   it("names each field that is wrong", () => {
     const r = normaliseEvent({ title: "", date: "16/10/2026", start_time: "half four", end_time: "17:00", reminder_minutes: -5 });
@@ -149,5 +149,65 @@ describe("an event's own reminder", () => {
     const dentist = { date: "2026-11-27", repeat: "none", start_time: "11:00", reminder_minutes: 60 };
     expect(eventRemindersDue(dentist, "2026-11-27T09:45", "2026-11-27T10:00")).toEqual([{ date: "2026-11-27", at: "2026-11-27T10:00" }]);
     expect(eventRemindersDue(dentist, "2026-12-04T09:45", "2026-12-04T10:00")).toEqual([]);
+  });
+});
+
+describe("a monthly event on a weekday of the month (monthly_by)", () => {
+  // The society committee meets on the first Sunday of every month: 6 Dec 2026 is the first Sunday of December.
+  const society = { date: "2026-12-06", repeat: "monthly", monthly_by: "weekday" };
+  it("the 1st Sunday: every month's first Sunday, across the new year", () => {
+    expect(occurrences(society, "2026-12-01", "2027-06-30")).toEqual(["2026-12-06", "2027-01-03", "2027-02-07", "2027-03-07", "2027-04-04", "2027-05-02", "2027-06-06"]);
+    expect(occurrences(society, "2027-01-04", "2027-01-31")).toEqual([]);   // not the 6th, as a monthly-by-date one would be
+    expect(occurrences(society, "2026-11-01", "2026-11-30")).toEqual([]);   // not before it began
+  });
+  it("the 2nd Tuesday", () => {
+    expect(occurrences({ date: "2026-11-10", repeat: "monthly", monthly_by: "weekday" }, "2026-11-01", "2027-02-28")).toEqual(["2026-11-10", "2026-12-08", "2027-01-12", "2027-02-09"]);
+  });
+  it("the last Friday, and the last Tuesday of a leap year's February (its 5th)", () => {
+    expect(occurrences({ date: "2026-11-27", repeat: "monthly", monthly_by: "last_weekday" }, "2026-11-01", "2027-02-28")).toEqual(["2026-11-27", "2026-12-25", "2027-01-29", "2027-02-26"]);
+    expect(occurrences({ date: "2028-01-25", repeat: "monthly", monthly_by: "last_weekday" }, "2028-02-01", "2028-03-31")).toEqual(["2028-02-29", "2028-03-28"]);
+    // The 1st Tuesday of February 2028 is the 1st, and of a non-leap February too.
+    expect(occurrences({ date: "2028-01-04", repeat: "monthly", monthly_by: "weekday" }, "2028-02-01", "2028-02-29")).toEqual(["2028-02-01"]);
+    expect(occurrences({ date: "2027-01-31", repeat: "monthly", monthly_by: "last_weekday" }, "2027-02-01", "2027-02-28")).toEqual(["2027-02-28"]);
+  });
+  it("a 5th weekday that came in through the page falls only in the months that have one", () => {
+    expect(occurrences({ date: "2026-12-29", repeat: "monthly", monthly_by: "weekday" }, "2027-01-01", "2027-03-31")).toEqual(["2027-03-30"]);
+  });
+  it("monthly_by is read only for a monthly event; an old row without it is by date, as before", () => {
+    expect(occurrences({ date: "2026-12-06", repeat: "monthly", monthly_by: null }, "2027-01-01", "2027-01-31")).toEqual(["2027-01-06"]);
+    expect(occurrences({ date: "2026-12-06", repeat: "monthly", monthly_by: "date" }, "2027-01-01", "2027-01-31")).toEqual(["2027-01-06"]);
+    expect(occurrences({ date: "2026-12-06", repeat: "weekly", monthly_by: "weekday" }, "2026-12-07", "2026-12-13")).toEqual(["2026-12-13"]);
+  });
+  it("is listed at its next day, and nudged before that day", () => {
+    expect(nextOccurrence(society, "2027-01-04")).toBe("2027-02-07");
+    expect(nextOccurrence({ date: "2026-12-29", repeat: "monthly", monthly_by: "weekday" }, "2026-12-30")).toBe("2027-03-30");
+    const e = { ...society, start_time: "11:00", reminder_minutes: 30 };
+    expect(eventRemindersDue(e, "2027-01-03T10:15", "2027-01-03T10:30")).toEqual([{ date: "2027-01-03", at: "2027-01-03T10:30" }]);
+    expect(eventRemindersDue(e, "2027-01-06T10:15", "2027-01-06T10:30")).toEqual([]);
+  });
+  it("in words", () => {
+    expect(repeatText("2026-12-06", "monthly", "weekday")).toBe("Monthly on the 1st Sunday");
+    expect(repeatText("2026-11-10", "monthly", "weekday")).toBe("Monthly on the 2nd Tuesday");
+    expect(repeatText("2026-11-27", "monthly", "last_weekday")).toBe("Monthly on the last Friday");
+    expect(repeatText("2026-12-06", "monthly", null)).toBe("Monthly on the 6th");
+    expect(repeatText("2026-12-06", "weekly", "weekday")).toBe("Weekly on Sundays");
+  });
+  it("says why a start date cannot be read that way", () => {
+    expect(monthlyByProblem("2026-12-06", "weekday")).toBeNull();
+    expect(monthlyByProblem("2026-11-27", "last_weekday")).toBeNull();
+    expect(monthlyByProblem("2026-12-29", "weekday")).toBe('2026-12-29 is the 5th Tuesday of its month, and most months have no 5th: for "the last Tuesday of every month" use monthly_by "last_weekday"');
+    expect(monthlyByProblem("2026-11-20", "last_weekday")).toBe("2026-11-20 is not the last Friday of its month (that is 2026-11-27): give the date of a last Friday");
+    expect(monthlyByProblem("2026-11-20", "date")).toBeNull();
+  });
+  it("the form takes it for a monthly event only, and names a start date that does not fit", () => {
+    expect(normaliseEvent({ title: "Society meeting", date: "2026-12-06", repeat: "monthly", monthly_by: "weekday" })).toMatchObject({ ok: true, row: { repeat: "monthly", monthly_by: "weekday" } });
+    expect(normaliseEvent({ title: "Society meeting", date: "2026-12-06", repeat: "monthly", monthly_by: "date" })).toMatchObject({ ok: true, row: { monthly_by: null } });
+    expect(normaliseEvent({ title: "Skating", date: "2026-12-06", repeat: "weekly", monthly_by: "weekday" })).toMatchObject({ ok: true, row: { monthly_by: null } });
+    const fifth = normaliseEvent({ title: "X", date: "2026-12-29", repeat: "monthly", monthly_by: "weekday" });
+    if (!fifth.ok) expect(Object.keys(fifth.errors)).toEqual(["monthly_by"]); else throw new Error("a 5th Tuesday was taken");
+    const notLast = normaliseEvent({ title: "X", date: "2026-11-20", repeat: "monthly", monthly_by: "last_weekday" });
+    if (!notLast.ok) expect(Object.keys(notLast.errors)).toEqual(["monthly_by"]); else throw new Error("a Friday that is not the last was taken");
+    const unknown = normaliseEvent({ title: "X", date: "2026-11-20", repeat: "monthly", monthly_by: "second" });
+    if (unknown.ok) throw new Error("an unknown monthly_by was taken");
   });
 });

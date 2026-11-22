@@ -45,6 +45,12 @@ add_events { events: [
 - **When:** `date` for an event on one day, or `weekdays` for one that happens every week (it starts on the first such day
   from today, or from `date` when you give one). From a date on: `date` with `repeat: "daily"`, `"weekly"`, `"monthly"` or
   `"yearly"`.
+- **Monthly on a weekday:** `repeat: "monthly"` alone comes round on the same date each month (the 6th). For a weekday of the
+  month add `monthly_by`. "The first Sunday of every month" is `date` = the first such Sunday from now, `repeat: "monthly"`,
+  `monthly_by: "weekday"` (`{ title: "Society committee meeting", date: "2026-12-06", repeat: "monthly", monthly_by: "weekday",
+  start_time: "11:00" }`); the second Tuesday is the same with a second Tuesday as `date`. "The last Friday of every month" is
+  `date` = a last Friday of a month, `repeat: "monthly"`, `monthly_by: "last_weekday"`. A 5th weekday is refused with
+  `"weekday"` (most months have none): say `"last_weekday"`.
 - `start_time` and `end_time`; neither for an all-day event (a birthday, a holiday). `location` and `notes` are free text.
 - `reminder`: whole minutes before the start (`60`). A timed event is nudged 30 minutes before unless you say; `null` for
   none. There is no "evening before": the 9 pm brief already tells the family about tomorrow.

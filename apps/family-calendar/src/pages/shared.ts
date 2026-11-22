@@ -1,6 +1,6 @@
 export interface Member { id: string; name: string; colour: string; emoji: string | null; created_at: string; updated_at: string; updated_by: string | null; _sample?: boolean }
 export interface Event {
-  id: string; title: string; date: string; repeat: string; start_time: string | null; end_time: string | null; who: string | null; location: string | null;
+  id: string; title: string; date: string; repeat: string; /** a monthly event: null or "date" (the 6th), "weekday" (the 1st Sunday), "last_weekday" */ monthly_by?: string | null; start_time: string | null; end_time: string | null; who: string | null; location: string | null;
   notes: string | null; reminder_minutes: number | null; kind: string; status: string; added_by: string | null; imported: number;
   created_at: string; updated_at: string; updated_by: string | null; _sample?: boolean;
 }
@@ -12,13 +12,15 @@ export type Extras = Record<string, { sources: string[]; todos: Todo[] }>;
 export type Selected = { table: string; id: string; label: string } | null;
 
 import { useCallback, useEffect, useState } from "react";
-import { REPEATS as REPEAT_LIST, COLOURS as COLOUR_LIST } from "../../server/db/constants";
+import { REPEATS as REPEAT_LIST, MONTHLY_BY as MONTHLY_BY_LIST, COLOURS as COLOUR_LIST } from "../../server/db/constants";
 import { clockLabel, kitFetch, type ToneT } from "../flock/ui";
 import { shortDate, weekday } from "./dates";
 
 export const REPEATS: string[] = [...REPEAT_LIST];
 export const COLOURS: string[] = [...COLOUR_LIST];
 export const REPEAT_LABELS: Record<string, string> = { none: "Once", daily: "Every day", weekly: "Every week", monthly: "Every month", yearly: "Every year" };
+export const MONTHLY_BY: string[] = [...MONTHLY_BY_LIST];
+export const MONTHLY_BY_LABELS: Record<string, string> = { date: "On the same date (the 6th)", weekday: "On the same weekday (the 1st Sunday)", last_weekday: "On the last weekday (the last Friday)" };
 export const COLOUR_LABELS: Record<string, string> = { accent: "App colour", info: "Blue", success: "Green", warning: "Amber", danger: "Red" };
 
 /** The member's tone, for the dot beside their events; neutral for everyone or a name not in the family. */
@@ -67,6 +69,7 @@ export const eventFields = (names: string[]) => [
   { type: "text", name: "title", label: "What", required: true, placeholder: "Dentist" },
   { type: "date", name: "date", label: "Date (the first day, when it repeats)", required: true },
   { type: "select", name: "repeat", label: "Repeat", options: REPEATS, optionLabels: REPEAT_LABELS },
+  { type: "select", name: "monthly_by", label: "Every month, by (when it repeats monthly)", options: MONTHLY_BY, optionLabels: MONTHLY_BY_LABELS },
   { type: "text", name: "start_time", label: "Starts", placeholder: "16:30, or leave empty for all day" },
   { type: "text", name: "end_time", label: "Ends", placeholder: "17:00" },
   { type: "text", name: "who", label: "Who", options: names, placeholder: "Everyone" },

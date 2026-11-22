@@ -12,6 +12,7 @@ import * as schema from "./schema";
 import { prepareV2Data, finishV2Data } from "./migrate-v2";
 import { ensureInternalTables, INTERNAL_TABLES, PRIVATE_TABLES, syncTodos } from "../calendar";
 import { fakePlatform } from "../testkit";
+import { occurrences } from "../../src/pages/dates";
 
 /** 2.1.0's tables, exactly as its schema.ts declared them. */
 const V21 = {
@@ -106,5 +107,25 @@ describe("from 2.1.0 to 3.0", () => {
   it("a fresh install has nothing to carry", async () => {
     const dataDir = mkdtempSync(join(tmpdir(), "family-calendar-new-")); dirs.push(dataDir);
     expect(prepareV2Data(dataDir)).toEqual({ moved: null, keep: [] });
+  });
+});
+
+/** 3.0's events table before monthly_by: as the first 3.0 installs (and the 2026-11-22 live run) keep it. */
+const V30_EVENTS = sqliteTable("events", { ...kitColumns(), title: text("title").notNull(), date: text("date").notNull(), repeat: text("repeat").notNull().default("none"),
+  start_time: text("start_time"), end_time: text("end_time"), who: text("who"), location: text("location"), notes: text("notes"), reminder_minutes: integer("reminder_minutes"),
+  kind: text("kind").notNull().default("event"), status: text("status").notNull().default("active"), added_by: text("added_by"), planned_at: integer("planned_at"),
+  plan_basis: text("plan_basis"), imported: integer("imported").notNull().default(0) });
+
+describe("a 3.0 calendar kept before monthly_by", () => {
+  it("takes the new field on its next start without asking, empty, and its monthly event still comes round on its date", async () => {
+    const dataDir = mkdtempSync(join(tmpdir(), "family-calendar-v30-")); dirs.push(dataDir);
+    const hono = new Hono();
+    const old = await mountKit({ hono, env: { appId: "t", dataDir, apiUrl: null, token: null, agent: null } }, { schema: { ...schema, events: V30_EVENTS }, appName: "T", privateTables: PRIVATE_TABLES });
+    expect((await call(hono, "POST", "/api/_data/events", { title: "Society committee meeting", date: "2026-12-06", repeat: "monthly", start_time: "11:00" })).status).toBe(201);
+    old.sqlite.close();
+    const { kit } = await start3(dataDir);
+    const [e] = kit.sqlite.query("SELECT * FROM events").all() as any[];
+    expect(e).toMatchObject({ title: "Society committee meeting", date: "2026-12-06", repeat: "monthly", monthly_by: null });
+    expect(occurrences(e, "2027-01-01", "2027-01-31")).toEqual(["2027-01-06"]);
   });
 });

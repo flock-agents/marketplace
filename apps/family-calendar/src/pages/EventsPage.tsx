@@ -17,6 +17,8 @@ export function EventsPage({ selected, onSelect }: { selected: Selected; onSelec
   const family = useTable<Member>("members", { sort: "name", limit: 100 });
   const names = family.rows.map((m) => m.name);
   const rows = [...list.rows.filter((e) => !repeats(e)), ...repeating.rows.map((e) => ({ ...e, date: nextOccurrence(e, today) ?? e.date }))].sort(eventOrder);
+  /** A repeating event's own first day (it is listed at its next one): "Monthly on the 31st" stays so in a 30-day month. */
+  const firstDay = (e: Event): string => repeating.rows.find((r) => r.id === e.id)?.date ?? e.date;
   const { extras, reload } = useExtras(rows.map((e) => `${e.id}:${e.updated_at}`).join(","));
   // The editor gets the event as it is kept (a repeating one with its first day), not the day it is listed on.
   const picked = selected?.table === "events" ? [...repeating.rows, ...list.rows].find((e) => e.id === selected.id) : undefined;
@@ -47,7 +49,7 @@ export function EventsPage({ selected, onSelect }: { selected: Selected; onSelec
             return <span>{e.status === "cancelled" ? <><s>{e.title}</s> (cancelled)</> : e.title}{line ? <span className="fc-source">{line}</span> : null}</span>;
           } },
           { key: "date", label: "When", kind: "date" },
-          { key: "start_time", label: "Time", render: (e) => (repeats(e) ? `${repeatText(e.date, e.repeat)}, ${timeLabel(e)}` : timeLabel(e)) },
+          { key: "start_time", label: "Time", render: (e) => (repeats(e) ? `${repeatText(firstDay(e), e.repeat, e.monthly_by)}, ${timeLabel(e)}` : timeLabel(e)) },
           { key: "who", label: "Who", render: (e) => memberLabel(e.who, family.rows) || "Everyone" },
           { key: "location", label: "Where", phone: "hide" },
           { key: "id", label: "To-dos", render: (e) => todoCount(e.id, extras) },

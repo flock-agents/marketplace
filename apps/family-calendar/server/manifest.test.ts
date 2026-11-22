@@ -31,7 +31,7 @@ describe("the agent's interface", () => {
     for (const f of [...STEP_FIELDS, "planId", "event", "type"]) expect(desc("plan_done"), f).toContain(f);
     for (const f of ["kind", "morning", "evening", "todos_due", "changed", "new"]) expect(desc("brief"), f).toContain(f);
     expect(FIELDS.import_events.fields).toEqual(["source", "label", "items"]);
-    expect(FIELDS_SECTION).toContain("- add_events { events: [{ title, who?, date?, weekdays?, repeat?, start_time?, end_time?, location?, notes?, reminder?, kind?, added_by? }], members?: [{ name, emoji?, colour? }], added_by? }");
+    expect(FIELDS_SECTION).toContain("- add_events { events: [{ title, who?, date?, weekdays?, repeat?, monthly_by?, start_time?, end_time?, location?, notes?, reminder?, kind?, added_by? }], members?: [{ name, emoji?, colour? }], added_by? }");
     expect(FIELDS_SECTION).toContain("- plan_done { planId, events: [{ event, type, steps: [{ key, kind, title, due, due_time?, show_from?, why? }] }] }");
     expect(FIELDS_SECTION).toContain("- brief { kind: morning | evening }");
   });

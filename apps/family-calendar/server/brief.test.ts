@@ -69,6 +69,15 @@ describe("brief", () => {
     expect(next.changed).toEqual([]);
   });
 
+  it("a monthly event on the 1st Sunday is in the brief on that Sunday, not on its date's day of the month", async () => {
+    const k = await start();
+    await k.op("add_events", { events: [{ title: "Society committee meeting", date: "2026-12-06", repeat: "monthly", monthly_by: "weekday", start_time: "11:00" }] });
+    k.setNow(new Date(2027, 0, 3, 8, 0));   // Sunday 3 Jan 2027
+    expect((await k.op("brief", { kind: "morning" })).events.map((e: any) => e.title)).toEqual(["Society committee meeting"]);
+    k.setNow(new Date(2027, 0, 5, 21, 0));   // the evening before Wednesday the 6th
+    expect((await k.op("brief", { kind: "evening" })).events).toEqual([]);
+  });
+
   it("refuses a kind it does not know", async () => {
     const k = await start();
     expect((await k.op("brief", { kind: "noon" })).error).toContain("morning");
