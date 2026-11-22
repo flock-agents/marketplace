@@ -14,7 +14,7 @@ const now = () => new Date();
 // The app's operations for its agent (agentOps.ts): Flock relays the agent's calls to them, each with its platform.
 const flock = createFlockApp({ ops: agentOps(() => flock.hono, () => {
   if (!kitRef) throw new Error("the app is still starting");
-  return { kit: kitRef, now };
+  return { kit: kitRef, now, appId: flock.env.appId };
 }) });
 const apply = schemaModeFromEnv() === "apply";
 // An install updated from 1.x: its tables move aside (kept) and their rows become the boot import mountKit applies.

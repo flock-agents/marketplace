@@ -29,6 +29,7 @@ export function fakePlatform() {
   const fail = () => ({ ok: false as const, reason: "Flock is not reachable" });
   const dayMs = (s?: string) => (s ? new Date(`${s}T00:00:00`).getTime() : null);
   const platform = {
+    appId: "t-copy",
     tasks: {
       publish: async (t: any) => {
         if (down) return fail();

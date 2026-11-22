@@ -97,6 +97,8 @@ describe("plan-prep: which events are offered", () => {
     await planPrepRoutine({ kit: k.kit, platform: k.tasks.platform, wakeAgent: async (_m: string, d: unknown) => { wakes.push(d); return { ok: true }; } } as any, NOW);
     expect(wakes).toHaveLength(1);
     expect((wakes[0] as any).events[0].steps).toEqual([{ key: "sign-the-form", title: "Sign the form", due: "2026-11-27", show_from: "2026-11-24", closed: true }]);
+    // The pointer is this copy's own id, as the SDK's platform says it.
+    expect(wakes[0]).toMatchObject({ appId: "t-copy", events: [{ event: `t-copy:${idOf(k, "School trip")}` }] });
     expect(k.rows("todos")[0].status).toBe("done");
   });
 

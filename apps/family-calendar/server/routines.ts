@@ -57,7 +57,9 @@ export async function dueReminders(ctx: RoutineCtx, now: Date = new Date()): Pro
 
 /** One plan-prep run (calendar.ts planPrep), with the run's Flock and wake. */
 export async function planPrepRoutine(ctx: Omit<RoutineCtx, "state"> & { state?: RoutineCtx["state"] }, now?: Date): Promise<void> {
-  const r = await planPrep({ kit: ctx.kit as KitLike, now: () => now ?? new Date(), platform: () => ctx.platform ?? null }, (m, d) => ctx.wakeAgent(m, d));
+  // The app's own id (a person's copy has a suffixed one) is the SDK platform's: the pointer a TODO is tied to starts with it.
+  const appId = (ctx.platform as { appId?: string } | undefined)?.appId;
+  const r = await planPrep({ kit: ctx.kit as KitLike, now: () => now ?? new Date(), platform: () => ctx.platform ?? null, ...(appId ? { appId } : {}) }, (m, d) => ctx.wakeAgent(m, d));
   if (r.woke) console.log(`[family-calendar] plan-prep: woke the agent with plan ${r.planId}`);
 }
 
