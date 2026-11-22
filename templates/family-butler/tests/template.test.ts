@@ -101,10 +101,12 @@ describe("the briefs", () => {
     }
   });
 
-  it("keep the model they were pinned to (an open owner question)", () => {
+  it("run on Family Butler's own model: no task-level model pin, the agent's model left as it is", () => {
+    // Flock: a routine with no model passes no modelChoice (model-tiers.ts routineModelOpts), so the turn falls
+    // through to the agent's pinned model (model-resolution.ts: routine choice > agent pinned > agent tier).
     expect(manifest.agent.model).toBe("claude-sonnet-4-6");
     for (const t of [morning, evening]) {
-      expect(t.model).toBe("claude-sonnet-4-6");
+      expect(t).not.toHaveProperty("model");
       expect(t.thinkingLevel).toBe("none");
     }
   });

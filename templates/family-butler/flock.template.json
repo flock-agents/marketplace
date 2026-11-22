@@ -111,7 +111,6 @@
       "deliverTo": null,
       "timezone": "Asia/Kolkata",
       "enabled": true,
-      "model": "claude-sonnet-4-6",
       "thinkingLevel": "none"
     },
     {
@@ -121,7 +120,6 @@
       "deliverTo": null,
       "timezone": "Asia/Kolkata",
       "enabled": true,
-      "model": "claude-sonnet-4-6",
       "thinkingLevel": "none"
     }
   ],
