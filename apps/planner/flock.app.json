@@ -162,6 +162,7 @@
   "setup": [
     {
       "id": "pain",
+      "fixed": true,
       "ask": "What's the hardest part of meals for you? Or something else.",
       "choices": [
         "Deciding what to make every day",
@@ -177,6 +178,7 @@
     },
     {
       "id": "apps",
+      "fixed": true,
       "ask": "Which apps do you order groceries on: Zepto, Blinkit, Instamart, BigBasket or Amazon? If you sign me in, I'll read your past orders to learn what your home buys and how often, so the plan and the shopping list fit you from the first week, and I can fill the cart for you. Nothing is ordered without your yes.",
       "fills": [
         "groceryApps:list"
@@ -193,6 +195,7 @@
     },
     {
       "id": "mainApp",
+      "fixed": true,
       "when": "groceryApps",
       "ask": "Which is your main app, and which do you use when something isn't there?",
       "fills": [
@@ -206,6 +209,7 @@
     },
     {
       "id": "cook",
+      "fixed": true,
       "when": "household.help has cook",
       "ask": "Who cooks which meals, and when do they come?",
       "fills": [
@@ -218,6 +222,7 @@
     },
     {
       "id": "cookLimits",
+      "fixed": true,
       "when": "household.help has cook",
       "ask": "Is there anything the cook doesn't make well, or won't make?",
       "fills": [
@@ -232,6 +237,7 @@
     },
     {
       "id": "cookTime",
+      "fixed": true,
       "when": "household.help has cook",
       "ask": "Is the cook short of time, say off to the next house, so only a dish or two in the morning?",
       "fills": [
@@ -246,6 +252,7 @@
     },
     {
       "id": "newRecipes",
+      "fixed": true,
       "when": "household.help has cook",
       "ask": "Will the cook try new recipes from reels or the internet, or is a set menu of familiar dishes better?",
       "fills": [
@@ -260,6 +267,7 @@
     },
     {
       "id": "cookingDays",
+      "fixed": true,
       "ask": "Which days is food cooked at home? Monday to Saturday, or Sunday too?",
       "fills": [
         "cookingDays:list"
@@ -280,6 +288,7 @@
     },
     {
       "id": "kidsBreakfast",
+      "fixed": true,
       "when": "household.children",
       "ask": "What did the children have for breakfast over the past week? Tell me in as much detail as you can.",
       "multi": true,
@@ -294,6 +303,7 @@
     },
     {
       "id": "kidsLunch",
+      "fixed": true,
       "when": "household.children",
       "ask": "The children's lunch over the past week, or their school tiffin?",
       "multi": true,
@@ -308,6 +318,7 @@
     },
     {
       "id": "kidsDinner",
+      "fixed": true,
       "when": "household.children",
       "ask": "The children's dinner over the past week?",
       "multi": true,
@@ -318,6 +329,7 @@
     },
     {
       "id": "adultsBreakfast",
+      "fixed": true,
       "ask": "What did the adults have for breakfast over the past week? Tell me in as much detail as you can.",
       "multi": true,
       "fills": [
@@ -331,6 +343,7 @@
     },
     {
       "id": "adultsLunch",
+      "fixed": true,
       "ask": "The adults' lunch over the past week?",
       "multi": true,
       "fills": [
@@ -340,6 +353,7 @@
     },
     {
       "id": "adultsDinner",
+      "fixed": true,
       "ask": "The adults' dinner over the past week?",
       "multi": true,
       "fills": [
@@ -349,6 +363,7 @@
     },
     {
       "id": "diet",
+      "fixed": true,
       "ask": "Is anyone on a diet? High protein, low carb, diabetic, anything a doctor asked for.",
       "fills": [
         "diet:text"
@@ -363,6 +378,7 @@
     },
     {
       "id": "elders",
+      "fixed": true,
       "when": "household.elders",
       "ask": "Does anyone older eat differently? Low salt, sugar-free, softer food, no onion or garlic?",
       "fills": [
@@ -378,6 +394,7 @@
     },
     {
       "id": "rules",
+      "fixed": true,
       "ask": "Any food rules for the house? Veg, egg or non-veg days, fasting days, allergies, a dish someone won't touch.",
       "fills": [
         "rules:text"
@@ -409,6 +426,7 @@
     },
     {
       "id": "orderIn",
+      "fixed": true,
       "ask": "How often do you order in, and on which days?",
       "fills": [
         "orderIn:text"
@@ -423,6 +441,7 @@
     },
     {
       "id": "subscriptions",
+      "fixed": true,
       "ask": "Does anything come on a subscription, like Country Delight or a milkman?",
       "fills": [
         "subscriptions:list"
