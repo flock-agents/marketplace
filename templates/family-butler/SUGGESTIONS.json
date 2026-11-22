@@ -15,10 +15,6 @@
     {
       "slug": "google-sheets",
       "reason": "Track household expenses and grocery lists in spreadsheets"
-    },
-    {
-      "slug": "weather",
-      "reason": "Include weather forecasts in morning briefings"
     }
   ],
   "tasks": [
