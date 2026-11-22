@@ -168,7 +168,7 @@ agent with the same keys; a cancelled event's open steps are withdrawn by the ap
 
 ## `due-reminders` (L3, changed)
 
-Keeps: the nudge before a timed event (its `reminder_minutes`, default 30 for new timed imports) and a `deadline` event's
+Keeps: the nudge before a timed event (its `reminder_minutes`; default 30 for every timed event, typed-in or imported, weekly ones included, unless it sets its own; clarified 2026-11-22 from the canvas's "Skating in 30 minutes") and a `deadline` event's
 reminder 7 days before. Drops: "evening before". Lines go to the Family group (who: everyone) as today's wake does.
 
 ## L2a: what Flock sends
