@@ -265,7 +265,7 @@ describe("a planned week is ready to send", () => {
   it("the weekly plan: a main dish on two days is fine, on three refused; roti, rice and sides are not counted", async () => {
     const { op } = await boot({ now: SUNDAY });
     const loop = ["Rajma", "Chole", "Kadhi"];
-    await op("plan_week", { week_start: MON, mode: "final", keep_rest: true, meals: [0, 1, 2, 3, 4, 5].map((i) => day(`2026-11-${23 + i}`, "Dinner", loop[i % 3], "Roti", "Rice", "Sambar")) });
+    await op("plan_week", { week_start: MON, mode: "final", keep_rest: true, meals: [0, 1, 2, 3, 4, 5].map((i) => day(`2026-11-${23 + i}`, "Dinner", loop[i % 3], "Roti", "Rice", "Coconut chutney")) });
     expect((await op("plan_week", { week_start: MON, mode: "final" })).message).toContain("Next week is planned.");
     // A third Rajma by the agent's weekly plan is refused at the close.
     await op("plan_week", { week_start: MON, mode: "final", keep_rest: true, meals: [day("2026-11-24", "Dinner", "Rajma", "Roti")] });
@@ -274,6 +274,10 @@ describe("a planned week is ready to send", () => {
     expect(r.detail.repeated).toEqual(["Rajma (Mon, Tue, Thu)"]);
     expect(r.error).toContain("more than 2 days");
     expect((await op("plan_week", { week_start: MON, mode: "final", repeats_ok: true })).error).toContain("repeats_ok");
+    // Sambar and rasam are mains (owner 2026-11-22), not sides: a third day is refused too.
+    await op("plan_week", { week_start: MON, mode: "final", keep_rest: true, meals: [day("2026-11-24", "Dinner", "Chole", "Roti"),
+      ...["2026-11-23", "2026-11-24", "2026-11-25"].map((d) => day(d, "Lunch", "Sambar", "Rice"))] });
+    expect((await op("plan_week", { week_start: MON, mode: "final" })).detail.repeated).toEqual(["Sambar (Mon, Tue, Wed)"]);
   });
 
   it("the family's changes in chat (set_meal, set_dish) never check repeats", async () => {
