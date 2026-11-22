@@ -104,7 +104,7 @@ describe("the agent's interface", () => {
   // runner writes, add: true, only the rules said), in the checked shape; the rules are read back right after the rules
   // question, and a fix there sends the whole list. Flock refuses a help over 800 characters.
   it("every setup question that can state a food rule saves it with set_house_rules, and the rules are read back", () => {
-    const RULE_QUESTIONS = ["cookLimits", "cookTime", "newRecipes", "cookingDays", "kidsBreakfast", "kidsLunch", "kidsDinner",
+    const RULE_QUESTIONS = ["cookTime", "newRecipes", "cookingDays", "kidsBreakfast", "kidsLunch", "kidsDinner",
       "adultsBreakfast", "adultsLunch", "adultsDinner", "diet", "elders", "rules", "orderIn", "rulesReadBack"];
     for (const id of RULE_QUESTIONS) {
       const variants = setup.filter((x) => x.id === id);
@@ -166,6 +166,14 @@ describe("the agent's interface", () => {
     for (const q of setup) expect(q.ask ?? "", q.id).not.toMatch(/\b(brand|pack size)/i);
     const final = setup[setup.length - 1];
     expect([final.id, final.action, final.args]).toEqual(["final", "plan_week", { mode: "final" }]);
+  });
+
+  // Lane B (2026-11-23): the cook's limits are not a setup question; a limit said any time is saved as a checked rule.
+  it("no cook-limits question; the guide and set_cook / set_house_rules teach a cook's limit said any time as a checked rule", () => {
+    expect(setup.some((q) => q.id === "cookLimits")).toBe(false);
+    const cook = operations.find((o) => o.name === "set_cook")!.description, rules = operations.find((o) => o.name === "set_house_rules")!.description;
+    for (const text of [guide, cook]) for (const said of ["@baked", "per_week", "wont_make", "which dishes?", "not only the swap", "add: true"]) expect(text, said).toContain(said);
+    for (const said of ['avoid { items: ["@baked"] }', '"phulkas twice a week" cap', "fasting { who, days, slots, note } is checked"]) expect(rules, said).toContain(said);
   });
 
   // Lane B (2026-11-23): an extra meal said while telling the past week (a tiffin, an evening snack) is saved as a slot

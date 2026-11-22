@@ -54,6 +54,8 @@ function interviewText(fx: Fixture): string {
     if (saved.length) lines.push(`   [saved with: ${saved.join(", ")}]`);
     lines.push(`A: ${said}`, "");
   }
+  // What the family says later, in chat, outside the setup's questions (a cook's limits: the setup no longer asks them).
+  if (fx.told.said_later) lines.push(`Later, in chat, the family says: ${fx.told.said_later}`, "");
   lines.push("Now reply with the calls.");
   return lines.join("\n");
 }

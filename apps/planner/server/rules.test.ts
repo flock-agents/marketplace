@@ -262,6 +262,18 @@ describe("ruleBreaks", () => {
     expect(ruleBreaks(w, { rules: [rule("veg", ["Ekadashi"])] }, people)).toEqual([]);
   });
 
+  // Lane B (2026-11-23): a cook's "no baking, no oven" is avoid @baked: what needs an oven, not what is bought baked.
+  it("@baked takes what needs an oven, not bread, pav, buns or tandoori food", () => {
+    for (const dish of ["Chocolate cake", "Veg puffs", "Garlic bread", "Pizza", "Baked vegetables", "Oats cookies", "Banana muffins", "Brownies", "Veg lasagna"])
+      expect(matches(dish, "@baked", { name: true }), dish).toBe(true);
+    for (const dish of ["Pav bhaji", "Bread upma", "Bun dosa", "Tandoori roti", "Paneer tikka", "Rava kesari", "Puri bhaji", "Masala dosa", "Bread pakora"])
+      expect(matches(dish, "@baked", { name: true }), dish).toBe(false);
+    const w = week([{ date: "2026-11-23", slot: "Dinner", dishes: [{ name: "Veg puffs" }, { name: "Dal" }] }]);
+    const cook = [{ kind: "avoid" as const, days: [], items: ["@baked"], note: "no oven" }];
+    expect(keys(ruleBreaks(w, { rules: cook }, people))).toEqual(["Mon 2026-11-23 Dinner|Veg puffs|"]);
+    expect(rulesSaid(cook)).toBe("Everyone: no baked food");
+  });
+
   // Lane B (2026-11-23): "fasts Thursday till evening" was a note nobody checked; with who, days and slots it is checked.
   it("a fast with who, days and slots is checked: a dish for that person, or for everyone without except of them, is a break", () => {
     const fast = [{ kind: "fasting" as const, who: "Lakshmi", days: ["Thu"], slots: ["Breakfast", "Lunch"], note: "fast till evening, light dinner" }];

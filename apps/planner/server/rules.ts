@@ -40,7 +40,10 @@ export const CATEGORIES: Record<string, string[]> = {
   protein: ["paneer", "dal", "daal", "toor", "moong", "masoor", "urad", "chana", "chole", "rajma", "soya", "soy", "tofu", "sprouts", "curd", "dahi", "yogurt", "lobia",
     "besan", "egg", "chicken", "fish", "mutton", "lentil", "chickpea", "kidney bean", "prawn"],
   mushroom: ["mushroom", "shiitake", "khumb", "guchhi", "morel"],
-  baked: ["bake", "baked", "cake", "muffin", "pizza", "bread loaf", "garlic bread", "oven"],
+  // What needs an oven to make at home: a cook's "no baking, no oven". Not bread, pav or buns, which are bought (a pav bhaji
+  // or a bread upma needs no oven), and not tandoori food (a tawa or a tandoor, not an oven at home).
+  baked: ["bake", "baked", "oven", "cake", "cupcake", "muffin", "pizza", "bread loaf", "garlic bread", "focaccia", "brownie", "cookie", "biscuit",
+    "puff", "pie", "tart", "quiche", "croissant", "lasagna", "lasagne", "casserole", "gratin", "souffle", "nankhatai", "khari"],
   chilli: ["chilli", "chili", "chillies", "chilies", "mirchi", "red chilli", "green chilli", "chilli powder", "kashmiri chilli", "sambar powder", "rasam powder",
     "curry powder", "garam masala", "pickle", "achaar", "achar", "schezwan", "chilli flakes"],
   sweet: ["sugar", "jaggery", "gur", "honey", "sheera", "halwa", "kheer", "payasam", "ladoo", "laddu", "jamun", "barfi", "mithai", "jalebi", "condensed milk"],
