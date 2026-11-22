@@ -1,5 +1,6 @@
 // add_events as the agent calls it: a family's week in one call, weekly events kept once per weekday, members made as they
-// are named, each event's own reminder, and a refusal that names every bad field and writes nothing.
+// are named, each event's own nudge (30 minutes before a timed one unless it says), a birthday every year, a due date as a
+// deadline, who added it, and a refusal that names every bad field and writes nothing.
 import { describe, it, expect } from "bun:test";
 import { boot } from "./testkit";
 import { occurrences } from "../src/pages/dates";
@@ -9,7 +10,7 @@ const NOW = () => new Date(2026, 10, 20, 17, 30);
 const drops = "Gowri Shankar drops and picks up";
 /** The child's classes of that run: four classes, seven weekly days. */
 const CLASSES = [
-  { title: "Skating class", who: "Agastya", weekdays: ["Tue", "Thu"], start_time: "16:00", end_time: "17:30", notes: drops, reminder: "evening before" },
+  { title: "Skating class", who: "Agastya", weekdays: ["Tue", "Thu"], start_time: "16:00", end_time: "17:30", notes: drops },
   { title: "Art class", who: "Agastya", weekdays: ["Fri"], start_time: "5 pm", notes: drops },
   { title: "Chess class", who: "Agastya", weekdays: ["Sat", "Sun"], start_time: "10:00", end_time: "11:00", notes: "Goes alone, in the society" },
   { title: "Keyboard class", who: "Agastya", weekdays: ["saturday", "SUN"], start_time: "16:00", end_time: "17:00", notes: "Shiva drops and picks up", reminder: 60 },
@@ -27,14 +28,13 @@ describe("add_events", () => {
       ["Art class", "2026-11-20", "weekly", "17:00", null],
       ["Chess class", "2026-11-21", "weekly", "10:00", "11:00"], ["Chess class", "2026-11-22", "weekly", "10:00", "11:00"],
       ["Keyboard class", "2026-11-21", "weekly", "16:00", "17:00"], ["Keyboard class", "2026-11-22", "weekly", "16:00", "17:00"]]);
-    // They are events, stamped as the agent's, and no reminder row was made: the reminder is the event's own.
+    // They are events, stamped as the agent's; the nudge is the event's own.
     const events = k.rows("events");
     expect(events).toHaveLength(7);
     expect(events.every((e) => e.who === "Agastya" && e.updated_by === "agent:butler")).toBe(true);
-    expect(events[0]).toMatchObject({ notes: drops, reminder_minutes: 21 * 60 });   // 7 pm the day before a 4 pm class
+    expect(events[0]).toMatchObject({ notes: drops, reminder_minutes: 30, kind: "event", status: "active", added_by: null, imported: 0 });   // half an hour before, unless it says
     expect(events[5].reminder_minutes).toBe(60);
-    expect(events[2].reminder_minutes).toBeNull();
-    expect(k.rows("reminders")).toEqual([]);
+    expect(events[2].reminder_minutes).toBe(30);
     expect(k.rows("members").map((m) => [m.name, m.colour])).toEqual([["Agastya", "accent"]]);
     // What the Week page reads for 20 to 26 Nov, and for a week next March: every class on its days.
     const weekly = (await k.owner("GET", "/api/_data/events?repeat[ne]=none&date[lte]=2026-11-26&limit=500")).body.rows;
@@ -50,17 +50,20 @@ describe("add_events", () => {
     const r = await k.op("add_events", {
       events: [
         { title: "Dentist", who: "ankita", date: "2026-11-27", start_time: "11:00", location: "Smile Dental", reminder: 60 },
-        { title: "Grandma's birthday", date: "2026-12-05", reminder: "evening before" },
+        { title: "Grandma's birthday", date: "1950-12-05", repeat: "yearly" },
         { title: "Swimming", who: "Agastya", weekdays: ["Mon"], date: "2027-01-04", start_time: "07:00" },
         { title: "School run", who: "Shiva", date: "2026-11-23", repeat: "weekly", start_time: "08:00" },
-        { title: "Society maintenance", date: "2026-12-05", repeat: "monthly" }],
-      members: [{ name: "Ankita", emoji: "👩", colour: "info" }, { name: "Gowri Shankar", emoji: "👴" }] });
+        { title: "Society maintenance", date: "2026-12-05", repeat: "monthly", kind: "deadline", added_by: "Ankita" }],
+      members: [{ name: "Ankita", emoji: "👩", colour: "info" }, { name: "Gowri Shankar", emoji: "👴" }], added_by: "Shiva" });
     expect(r.error).toBeUndefined();
     expect(r).toMatchObject({ added: 5, members_added: ["Ankita", "Gowri Shankar", "Agastya", "Shiva"] });
     // `who` is written as the member is named, whatever capitals the call used; a new member takes the next colour.
-    expect(k.rows("events").map((e) => [e.title, e.who, e.date, e.repeat, e.reminder_minutes])).toEqual([
-      ["Dentist", "Ankita", "2026-11-27", "none", 60], ["Grandma's birthday", null, "2026-12-05", "none", 300],
-      ["Swimming", "Agastya", "2027-01-04", "weekly", null], ["School run", "Shiva", "2026-11-23", "weekly", null], ["Society maintenance", null, "2026-12-05", "monthly", null]]);
+    expect(k.rows("events").map((e) => [e.title, e.who, e.date, e.repeat, e.reminder_minutes, e.kind, e.added_by])).toEqual([
+      ["Dentist", "Ankita", "2026-11-27", "none", 60, "event", "Shiva"], ["Grandma's birthday", null, "1950-12-05", "yearly", null, "event", "Shiva"],
+      ["Swimming", "Agastya", "2027-01-04", "weekly", 30, "event", "Shiva"], ["School run", "Shiva", "2026-11-23", "weekly", 30, "event", "Shiva"],
+      ["Society maintenance", null, "2026-12-05", "monthly", null, "deadline", "Ankita"]]);
+    // A yearly one sent again is the same event (its day of the year), whatever year the call names.
+    expect((await k.op("add_events", { events: [{ title: "Grandma's birthday", date: "2026-12-05", repeat: "yearly", notes: "Cake" }] })).updated).toBe(1);
     expect(k.rows("members").map((m) => [m.name, m.colour, m.emoji])).toEqual([["Ankita", "info", "👩"], ["Gowri Shankar", "info", "👴"], ["Agastya", "success", null], ["Shiva", "warning", null]]);
     // A member named again is changed, not doubled.
     await k.op("add_events", { events: [{ title: "Walk", who: "Gowri Shankar", weekdays: ["Mon"] }], members: [{ name: "gowri shankar", colour: "danger" }] });
@@ -88,18 +91,21 @@ describe("add_events", () => {
       { title: "Art class", who: "Agastya", weekdays: ["Fryday"], start: "17:00" },
       { who: "Agastya", date: "27/11/2026", start_time: "half four", end_time: "17:00" },
       { title: "Chess", weekdays: ["Sat"], start_time: "11:00", end_time: "10:00", reminder: "the night before" },
-      { title: "Picnic" }] });
+      { title: "Picnic" },
+      { title: "Swim", date: "2026-12-01", start_time: "07:00", reminder: "evening before", kind: "holiday" }] });
     expect(r.code).toBe("APP_REFUSED");
     expect(r.status).toBe(400);
     expect(r.error).toStartWith("Nothing was added. ");
     for (const said of [
-      "events[1] (Art class): start is not a field of an event (did you mean start_time?); the fields: title, who, date, weekdays, repeat, start_time, end_time, location, notes, reminder",
+      "events[1] (Art class): start is not a field of an event (did you mean start_time?); the fields: title, who, date, weekdays, repeat, start_time, end_time, location, notes, reminder, kind, added_by",
       'events[1] (Art class): weekdays: "Fryday" is not a weekday (Mon, Tue, Wed, Thu, Fri, Sat, Sun)',
       "events[2]: title is required", 'events[2]: date must be a real date as YYYY-MM-DD ("27/11/2026" is not)',
       'events[2]: start_time must be a time like "16:30" or "4:30 pm" ("half four" is not)',
       "events[3] (Chess): end_time (10:00) must be after start_time (11:00)",
-      'events[3] (Chess): reminder must be "evening before" or whole minutes before the start, like 60 ("the night before" is neither)',
-      "events[4] (Picnic): give a date (YYYY-MM-DD) for an event on one day, or weekdays for one that happens every week"])
+      'events[3] (Chess): reminder must be whole minutes before the start, like 60, or null for none ("the night before" is not)',
+      "events[4] (Picnic): give a date (YYYY-MM-DD) for an event on one day, or weekdays for one that happens every week",
+      'events[5] (Swim): reminder "evening before" is gone: the 9 pm brief already tells the family about tomorrow',
+      "events[5] (Swim): kind must be one of: event, deadline"])
       expect(r.error).toContain(said);
     expect(r.error).not.toContain("events[0]");
     expect(k.rows("events")).toEqual([]);
@@ -108,14 +114,15 @@ describe("add_events", () => {
 
   it("refuses a call that is not a list of events, a field it does not take, and a bad member", async () => {
     const k = await boot({ now: NOW });
-    expect((await k.op("add_events", {})).error).toBe("add_events needs events. Its fields: events, members. Send it again with those only.");
+    expect((await k.op("add_events", {})).error).toBe("add_events needs events. Its fields: events, members, added_by. Send it again with those only.");
     expect((await k.op("add_events", { events: [] })).code).toBe("APP_REFUSED");
     expect((await k.op("add_events", { events: CLASSES, event: CLASSES[0] })).error).toContain("add_events does not take event (did you mean events?)");
     expect((await k.op("add_events", { events: [CLASSES[0]], members: [{ name: "Agastya", colour: "#ff0000" }, { emoji: "🧒" }] })).error)
       .toContain("members[0]: colour must be one of: accent, info, success, warning, danger. members[1]: name is required");
     expect((await k.op("add_events", { events: [{ title: "X", weekdays: ["Mon"], repeat: "none" }] })).code).toBe("APP_REFUSED");
     expect((await k.op("add_events", { events: [{ title: "X", repeat: "monthly" }] })).error).toContain("a monthly event needs the date of its first day");
-    expect((await k.op("add_events", { events: [{ title: "X", date: "2026-12-01", repeat: "yearly" }] })).error).toContain("repeat must be one of: none, daily, weekly, monthly");
+    expect((await k.op("add_events", { events: [{ title: "X", date: "2026-12-01", repeat: "fortnightly" }] })).error).toContain("repeat must be one of: none, daily, weekly, monthly, yearly");
+    expect((await k.op("add_events", { events: [{ title: "X", repeat: "yearly" }] })).error).toContain("a yearly event needs the date of its first day (a birthday's date, any year)");
     expect((await k.op("add_events", { events: [{ title: "X", date: "2026-02-30" }] })).error).toContain("date must be a real date");
     expect(k.rows("events")).toEqual([]);
   });
@@ -127,10 +134,9 @@ describe("add_events", () => {
     expect((await k.op("add_events", { events: [{ title: "Picnic" }] })).code).toBe("APP_REFUSED");
     expect(k.rows("events")).toHaveLength(samples);
     const r = await k.op("add_events", { events: [CLASSES[1]] });
-    expect(r.samples_cleared).toBeGreaterThan(samples);   // the sample members and reminders too
+    expect(r.samples_cleared).toBeGreaterThan(samples);   // the sample members too
     expect(k.rows("events").map((e) => e.title)).toEqual(["Art class"]);
     expect(k.rows("members").map((m) => m.name)).toEqual(["Agastya"]);
-    expect(k.rows("reminders")).toEqual([]);
   });
 
   it("the page's own route takes the same call, stamped as the person's", async () => {

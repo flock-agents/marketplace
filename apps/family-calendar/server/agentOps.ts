@@ -6,12 +6,16 @@ import type { Hono } from "hono";
 import type { OpHandler } from "@flock/app-sdk";
 import guide from "./agent-guide.md" with { type: "text" };
 import { EVENT_FIELDS, MEMBER_FIELDS } from "./events";
+import { BRIEF_FIELDS, IMPORT_FIELDS, ITEM_FIELDS, PLAN_DONE_FIELDS, STEP_FIELDS, brief, importEvents, planDone, type Cal } from "./calendar";
 
 /** Each operation's fields, exactly as its route reads them. A field outside the list is refused with the list, so a guessed
  *  field never passes unread. `need`: the fields it cannot do without. */
 export const FIELDS: Record<string, { fields: string[]; need?: string[] }> = {
   guide: { fields: [] },
-  add_events: { fields: ["events", "members"], need: ["events"] },
+  add_events: { fields: ["events", "members", "added_by"], need: ["events"] },
+  import_events: { fields: IMPORT_FIELDS, need: ["source", "items"] },
+  plan_done: { fields: PLAN_DONE_FIELDS, need: ["planId", "events"] },
+  brief: { fields: BRIEF_FIELDS, need: ["kind"] },
 };
 
 /** How alike two names are: shared words count most, then the edit distance between them. Lower is closer. */
@@ -50,12 +54,18 @@ export function checkFields(op: string, p: Record<string, unknown>): { error: st
 /** The guide's last section: every operation with its fields as the code reads them (a field it can do without has "?"). */
 export const FIELDS_SECTION = ["## Operations and their fields (exactly these; no other name or field is taken)", "",
   "- guide {}",
-  `- add_events { events: [{ ${EVENT_FIELDS.map((k) => (k === "title" ? k : `${k}?`)).join(", ")} }], members?: [{ ${MEMBER_FIELDS.map((k) => (k === "name" ? k : `${k}?`)).join(", ")} }] }`].join("\n");
+  `- add_events { events: [{ ${EVENT_FIELDS.map((k) => (k === "title" ? k : `${k}?`)).join(", ")} }], members?: [{ ${MEMBER_FIELDS.map((k) => (k === "name" ? k : `${k}?`)).join(", ")} }], added_by? }`,
+  `- plan_done { planId, events: [{ event, steps: [{ ${STEP_FIELDS.map((k) => (["key", "title", "due"].includes(k) ? k : `${k}?`)).join(", ")} }] }] }`,
+  "- brief { kind: morning | evening }",
+  `- import_events { source, label?, items: [{ ${ITEM_FIELDS.map((k) => (["ref", "title", "date"].includes(k) ? k : `${k}?`)).join(", ")} }] } (Flock's own harvest calls this one, not you)`].join("\n");
 
 /** The operation names, for the manifest test: every declared operation has a handler. */
 export const OPERATION_NAMES = Object.keys(FIELDS);
 
-export function agentOps(hono: () => Hono<any>): Record<string, OpHandler> {
+/** `cal`: the app's database and clock; each operation is given Flock (the SDK's platform) by its caller. */
+export function agentOps(hono: () => Hono<any>, cal: () => Omit<Cal, "platform">): Record<string, OpHandler> {
+  const withFlock = (ctx: { platform?: unknown }): Cal => ({ ...cal(), platform: () => (ctx.platform ?? null) as any });
+  const by = (ctx: { agentId?: string | null }) => (ctx.agentId ? `agent:${ctx.agentId}` : "app");
   return {
     guide: async () => ({ guide: `${guide.trimEnd()}\n\n${FIELDS_SECTION}\n` }),
     add_events: async (payload, ctx) => {
@@ -68,5 +78,8 @@ export function agentOps(hono: () => Hono<any>): Record<string, OpHandler> {
       if (res.status >= 400) return { error: body?.reason ?? body?.error ?? "refused", code: "APP_REFUSED", status: res.status };
       return body;
     },
+    import_events: async (payload, ctx) => checkFields("import_events", payload ?? {}) ?? importEvents(withFlock(ctx), payload ?? {}),
+    plan_done: async (payload, ctx) => checkFields("plan_done", payload ?? {}) ?? planDone(withFlock(ctx), payload ?? {}, by(ctx)),
+    brief: async (payload, ctx) => checkFields("brief", payload ?? {}) ?? brief(withFlock(ctx), payload ?? {}),
   };
 }

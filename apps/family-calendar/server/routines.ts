@@ -1,14 +1,19 @@
-// The app's one routine, `due-reminders` (every 15 minutes): what has come due since its last run, an event's own reminder
-// (`reminder_minutes` before its start, every week for a weekly event) and the `reminders` rows, is handed to the agent to send.
-// The app decides what is due and what each line says; the agent only delivers it. Nothing due: no wake, so no model call.
+// The app's two routines.
+// - `due-reminders` (every 15 minutes): what has come due since its last run (an event's own nudge, `reminder_minutes` before its
+//   start, every week for a weekly event; a deadline's notice a week before) is handed to the agent to send. The app decides what
+//   is due and what each line says; the agent only delivers it. Nothing due: no wake, so no model call.
+// - `plan-prep` (hourly): imported events that are new or have moved are handed to the agent with the manifest's planning prompt;
+//   its answer comes back through plan_done (calendar.ts). Nothing to plan: no wake.
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
-import { events, reminders } from "./db/schema";
-import { addDays, clock12, eventRemindersDue, isoDate, minutesBefore, nextDue, pad, shortDate, weekday } from "../src/pages/dates";
+import { events } from "./db/schema";
+import { addDays, deadlineNoticeAt, DEADLINE_NOTICE_DAYS, eventRemindersDue, isoDate, occurrences, pad, shortDate, weekday } from "../src/pages/dates";
+import { eventLine, planPrep, type KitLike, type TasksPlatform } from "./calendar";
 
-/** What the routine uses of its run: the SDK's RoutineContext (the wake, its own small state) and the kit's database. */
+/** What the routine uses of its run: the SDK's RoutineContext (the wake, its own small state, Flock) and the kit's database. */
 export type RoutineCtx = {
-  kit: { db: BunSQLiteDatabase<any> };
+  kit: KitLike | { db: BunSQLiteDatabase<any> };
   state: { get<T = unknown>(): T | null; set(value: unknown): void };
+  platform?: TasksPlatform;
   wakeAgent(message: string, data?: unknown): Promise<{ ok: boolean; reason?: string }>;
 };
 export type Due = { who: string | null; text: string; at: string };
@@ -20,23 +25,18 @@ export const DUE_PROMPT = "These Family Calendar reminders are due now. Tell eac
 
 const local = (d: Date): string => `${isoDate(d)}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 
-/** "Skating class: tomorrow, 4 pm to 5:30 pm. Gowri Shankar drops and picks up" */
-function eventLine(e: typeof events.$inferSelect, date: string, today: string): string {
-  const day = date === today ? "today" : date === addDays(today, 1) ? "tomorrow" : `on ${weekday(date)} ${shortDate(date)}`;
-  const time = e.start_time ? `, ${clock12(e.start_time)}${e.end_time ? ` to ${clock12(e.end_time)}` : ""}` : "";
-  return [`${e.title}: ${day}${time}${e.location ? `, ${e.location}` : ""}`, e.notes].filter(Boolean).join(". ");
-}
-
-/** Everything due after `from` and up to `to` (local moments), soonest first. */
+/** Everything due after `from` and up to `to` (local moments), soonest first. A cancelled event says nothing. */
 export function dueBetween(db: BunSQLiteDatabase<any>, from: string, to: string): Due[] {
   const today = to.slice(0, 10), out: Due[] = [];
-  for (const e of db.select().from(events).all())
+  for (const e of db.select().from(events).all()) {
+    if (e.status === "cancelled") continue;
     for (const r of eventRemindersDue(e, from, to)) out.push({ who: e.who, text: eventLine(e, r.date, today), at: r.at });
-  // A reminder of its own is due at its next time at or after the minute following `from`.
-  const after = minutesBefore(from.slice(0, 10), from.slice(11, 16), -1);
-  for (const r of db.select().from(reminders).all()) {
-    const at = nextDue(r, after);
-    if (at && at <= to) out.push({ who: r.who, text: r.title, at });
+    // A deadline, a week before its day.
+    if (e.kind === "deadline")
+      for (const date of occurrences(e, addDays(from.slice(0, 10), DEADLINE_NOTICE_DAYS), addDays(to.slice(0, 10), DEADLINE_NOTICE_DAYS))) {
+        const at = deadlineNoticeAt(date);
+        if (at > from && at <= to) out.push({ who: e.who, text: eventLine({ ...e, start_time: null, end_time: null, notes: null }, date, today, `due in a week, on ${weekday(date)} ${shortDate(date)}`), at });
+      }
   }
   return out.sort((a, b) => a.at.localeCompare(b.at));
 }
@@ -55,4 +55,13 @@ export async function dueReminders(ctx: RoutineCtx, now: Date = new Date()): Pro
   ctx.state.set({ until: to });
 }
 
-export const routines: Record<string, (ctx: any) => Promise<void>> = { "due-reminders": (ctx) => dueReminders(ctx) };
+/** One plan-prep run (calendar.ts planPrep), with the run's Flock and wake. */
+export async function planPrepRoutine(ctx: Omit<RoutineCtx, "state"> & { state?: RoutineCtx["state"] }, now?: Date): Promise<void> {
+  const r = await planPrep({ kit: ctx.kit as KitLike, now: () => now ?? new Date(), platform: () => ctx.platform ?? null }, (m, d) => ctx.wakeAgent(m, d));
+  if (r.woke) console.log(`[family-calendar] plan-prep: woke the agent with plan ${r.planId}`);
+}
+
+export const routines: Record<string, (ctx: any) => Promise<void>> = {
+  "due-reminders": (ctx) => dueReminders(ctx),
+  "plan-prep": (ctx) => planPrepRoutine(ctx),
+};

@@ -1,7 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { addMonths, clock12, eveningBeforeMinutes, eventOrder, eventRemindersDue, minutesBefore, mondayOf, nextDue, nextOccurrence, normaliseEvent, normaliseReminder, occurrences, ordinal, parseClock, repeatText, splitDue } from "../src/pages/dates";
-
-const REPEATS = ["none", "daily", "weekly", "monthly"];
+import { addMonths, clock12, deadlineNoticeAt, eveningBeforeMinutes, eventOrder, eventRemindersDue, minutesBefore, mondayOf, nextOccurrence, normaliseEvent, occurrences, ordinal, parseClock, repeatText } from "../src/pages/dates";
 
 describe("parseClock: what people type as a time", () => {
   it("reads 24-hour, 12-hour and loose forms", () => {
@@ -43,34 +41,13 @@ describe("dates", () => {
   });
 });
 
-describe("nextDue: when a reminder next comes round", () => {
-  const now = "2026-10-16T08:05";
-  it("a one-off is due once, then done", () => {
-    expect(nextDue({ due: "2026-10-16T19:00", repeat: "none" }, now)).toBe("2026-10-16T19:00");
-    expect(nextDue({ due: "2026-10-15T19:00", repeat: "none" }, now)).toBeNull();
-  });
-  it("daily: today at that time if still ahead, else tomorrow", () => {
-    expect(nextDue({ due: "2026-10-05T18:00", repeat: "daily" }, now)).toBe("2026-10-16T18:00");
-    expect(nextDue({ due: "2026-10-05T07:30", repeat: "daily" }, now)).toBe("2026-10-17T07:30");
-    expect(nextDue({ due: "2026-10-20T07:30", repeat: "daily" }, now)).toBe("2026-10-20T07:30");   // not started yet
-  });
-  it("weekly: the next same weekday, counting from the first due date", () => {
-    expect(nextDue({ due: "2026-10-05T07:30", repeat: "weekly" }, now)).toBe("2026-10-19T07:30");   // a Monday; Friday now
-    expect(nextDue({ due: "2026-10-02T07:30", repeat: "weekly" }, now)).toBe("2026-10-23T07:30");   // 07:30 today is gone: next Friday
-    expect(nextDue({ due: "2026-10-02T09:00", repeat: "weekly" }, now)).toBe("2026-10-16T09:00");   // later today
-  });
-  it("monthly: the same day each month, a 31st on the last day of a short month and back to the 31st after", () => {
-    expect(nextDue({ due: "2026-10-01T09:00", repeat: "monthly" }, now)).toBe("2026-11-01T09:00");
-    expect(nextDue({ due: "2026-08-31T09:00", repeat: "monthly" }, now)).toBe("2026-10-31T09:00");
-    expect(nextDue({ due: "2026-08-31T09:00", repeat: "monthly" }, "2026-11-01T00:00")).toBe("2026-11-30T09:00");
-    expect(nextDue({ due: "2026-08-31T09:00", repeat: "monthly" }, "2026-12-01T00:00")).toBe("2026-12-31T09:00");
-  });
-  it("says how it repeats", () => {
-    expect(repeatText({ due: "2026-10-05T07:30", repeat: "weekly" })).toBe("Weekly on Mondays");
-    expect(repeatText({ due: "2026-10-01T09:00", repeat: "monthly" })).toBe("Monthly on the 1st");
-    expect(repeatText({ due: "2026-10-01T09:00", repeat: "daily" })).toBe("Daily");
-    expect(repeatText({ due: "2026-10-01T09:00", repeat: "none" })).toBe("Once");
-    expect(splitDue("2026-10-01T09:00")).toEqual({ date: "2026-10-01", time: "09:00" });
+describe("how an event repeats, in words", () => {
+  it("names the weekday, the day of the month or the day of the year", () => {
+    expect(repeatText("2026-10-05", "weekly")).toBe("Weekly on Mondays");
+    expect(repeatText("2026-10-01", "monthly")).toBe("Monthly on the 1st");
+    expect(repeatText("2026-10-01", "daily")).toBe("Daily");
+    expect(repeatText("2020-11-28", "yearly")).toBe("Yearly on Nov 28");
+    expect(repeatText("2026-10-01", "none")).toBe("Once");
   });
 });
 
@@ -117,15 +94,44 @@ describe("an event that repeats", () => {
     expect(nextOccurrence(skating, "2026-10-01")).toBe("2026-11-24");   // not begun yet
     expect(nextOccurrence({ date: "2026-11-24", repeat: "none" }, "2026-11-25")).toBeNull();
   });
-  it("the form keeps how it repeats, and names a repeat it does not know", () => {
+  it("the form keeps how it repeats, yearly too, and names a repeat it does not know", () => {
     expect(normaliseEvent({ title: "Skating", date: "2026-11-24", repeat: "weekly" })).toMatchObject({ ok: true, row: { repeat: "weekly" } });
-    const bad = normaliseEvent({ title: "Skating", date: "2026-11-24", repeat: "yearly" });
-    if (!bad.ok) expect(Object.keys(bad.errors)).toEqual(["repeat"]); else throw new Error("yearly was taken");
+    expect(normaliseEvent({ title: "Grandma's birthday", date: "1950-11-28", repeat: "yearly" })).toMatchObject({ ok: true, row: { repeat: "yearly" } });
+    const bad = normaliseEvent({ title: "Skating", date: "2026-11-24", repeat: "fortnightly" });
+    if (!bad.ok) expect(Object.keys(bad.errors)).toEqual(["repeat"]); else throw new Error("fortnightly was taken");
+  });
+});
+
+describe("an event that comes round every year", () => {
+  const birthday = { date: "1950-11-28", repeat: "yearly" };
+  it("falls on its day each year from its first", () => {
+    expect(occurrences(birthday, "2026-11-20", "2026-11-30")).toEqual(["2026-11-28"]);
+    expect(occurrences(birthday, "2026-11-29", "2027-11-27")).toEqual([]);
+    expect(occurrences(birthday, "2026-01-01", "2028-12-31")).toEqual(["2026-11-28", "2027-11-28", "2028-11-28"]);
+    expect(occurrences({ date: "2027-03-10", repeat: "yearly" }, "2026-01-01", "2027-12-31")).toEqual(["2027-03-10"]);   // not before it began
+  });
+  it("a 29 February falls on 28 February in the years without one, and on the 29th in a leap year", () => {
+    const leap = { date: "2024-02-29", repeat: "yearly" };
+    expect(occurrences(leap, "2025-01-01", "2028-12-31")).toEqual(["2025-02-28", "2026-02-28", "2027-02-28", "2028-02-29"]);
+    expect(occurrences(leap, "2026-02-28", "2026-02-28")).toEqual(["2026-02-28"]);
+    expect(occurrences(leap, "2026-03-01", "2026-03-01")).toEqual([]);
+  });
+  it("is listed at its next day, even when that is most of a year away", () => {
+    expect(nextOccurrence(birthday, "2026-11-28")).toBe("2026-11-28");
+    expect(nextOccurrence(birthday, "2026-11-29")).toBe("2027-11-28");
+    expect(nextOccurrence({ date: "2024-02-29", repeat: "yearly" }, "2026-03-01")).toBe("2027-02-28");
+  });
+  it("its reminder comes due each year", () => {
+    const e = { date: "1950-11-28", repeat: "yearly", start_time: null, reminder_minutes: 60 };
+    expect(eventRemindersDue(e, "2026-11-27T22:45", "2026-11-27T23:00")).toEqual([{ date: "2026-11-28", at: "2026-11-27T23:00" }]);
   });
 });
 
 describe("an event's own reminder", () => {
-  it("is due its minutes before the start; the evening before is 7 pm the day before", () => {
+  it("a due date is spoken of a week before, at 9 in the morning", () => {
+    expect(deadlineNoticeAt("2026-12-10")).toBe("2026-12-03T09:00");
+  });
+  it("is due its minutes before the start; the old evening before was 7 pm the day before", () => {
     expect(minutesBefore("2026-11-24", "16:00", 60)).toBe("2026-11-24T15:00");
     expect(minutesBefore("2026-11-24", "00:30", 60)).toBe("2026-11-23T23:30");
     expect(eveningBeforeMinutes("16:00")).toBe(21 * 60);
@@ -143,18 +149,5 @@ describe("an event's own reminder", () => {
     const dentist = { date: "2026-11-27", repeat: "none", start_time: "11:00", reminder_minutes: 60 };
     expect(eventRemindersDue(dentist, "2026-11-27T09:45", "2026-11-27T10:00")).toEqual([{ date: "2026-11-27", at: "2026-11-27T10:00" }]);
     expect(eventRemindersDue(dentist, "2026-12-04T09:45", "2026-12-04T10:00")).toEqual([]);
-  });
-});
-
-describe("the reminder form's values as a row", () => {
-  it("joins the date and time into due", () => {
-    expect(normaliseReminder({ title: "PE kit", date: "2026-10-12", time: "7:30 am", repeat: "weekly", who: "Aarav" }, REPEATS))
-      .toEqual({ ok: true, row: { title: "PE kit", due: "2026-10-12T07:30", repeat: "weekly", who: "Aarav" } });
-    expect(normaliseReminder({ title: "Fees", date: "2026-11-01", time: "09:00" }, REPEATS)).toEqual({ ok: true, row: { title: "Fees", due: "2026-11-01T09:00", repeat: "none", who: null } });
-  });
-  it("needs a title, a date and a time, and a known repeat", () => {
-    const r = normaliseReminder({ title: "", date: "", time: "sometime", repeat: "yearly" }, REPEATS);
-    expect(r.ok).toBe(false);
-    if (!r.ok) expect(Object.keys(r.errors).sort()).toEqual(["date", "repeat", "time", "title"]);
   });
 });

@@ -1,5 +1,5 @@
 // Plain functions, no imports: the pages use them and server/dates.test.ts tests them.
-// Dates are ISO "YYYY-MM-DD", times "HH:MM" (24-hour) and a reminder's `due` is the two joined with a T, all in the family's own time.
+// Dates are ISO "YYYY-MM-DD" and times "HH:MM" (24-hour), all in the family's own time; a local moment is the two joined with a T.
 
 export const pad = (n: number): string => String(n).padStart(2, "0");
 export const isoDate = (d: Date): string => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -43,8 +43,12 @@ export const toMin = (hhmm: string): number => { const [h, m] = hhmm.split(":").
 /** "4:30 pm", "4 pm" */
 export const clock12 = (hhmm: string): string => { const [h, m] = hhmm.split(":").map(Number); return `${h % 12 || 12}${m ? `:${pad(m)}` : ""} ${h < 12 ? "am" : "pm"}`; };
 
+/** The same day `n` years on; a 29 February lands on the 28th in a year without one. */
+export const addYears = (s: string, n: number): string => addMonths(s, 12 * n);
+
 /** The dates an event falls on from `from` to `to`, both included: its own date, or for a repeating event every day, every
- *  week on its date's weekday or every month on its date's day (the last day of a shorter month), from its date on. */
+ *  week on its date's weekday, every month on its date's day (the last day of a shorter month) or every year on its date
+ *  (a 29 February on the 28th in other years), from its date on. */
 export function occurrences(e: { date: string; repeat?: string | null }, from: string, to: string): string[] {
   const out: string[] = [];
   const start = e.date >= from ? e.date : from;
@@ -57,22 +61,28 @@ export function occurrences(e: { date: string; repeat?: string | null }, from: s
       for (let n = Math.max(0, (b.getFullYear() - a.getFullYear()) * 12 + b.getMonth() - a.getMonth()), d = addMonths(e.date, n); d <= to; d = addMonths(e.date, ++n)) if (d >= from) out.push(d);
       break;
     }
+    case "yearly": {
+      // Stepped from the first date too, so a 29 February comes back to the 29th in a leap year.
+      for (let n = Math.max(0, parseDate(start).getFullYear() - parseDate(e.date).getFullYear() - 1), d = addYears(e.date, n); d <= to; d = addYears(e.date, ++n)) if (d >= from) out.push(d);
+      break;
+    }
     default: if (e.date >= from && e.date <= to) out.push(e.date);
   }
   return out;
 }
 /** Does the event repeat? */
-export const repeats = (e: { repeat?: string | null }): boolean => e.repeat === "daily" || e.repeat === "weekly" || e.repeat === "monthly";
+export const repeats = (e: { repeat?: string | null }): boolean => e.repeat === "daily" || e.repeat === "weekly" || e.repeat === "monthly" || e.repeat === "yearly";
 /** The next date an event falls on, on or after `from`; null for a one-off already past. */
 export const nextOccurrence = (e: { date: string; repeat?: string | null }, from: string): string | null =>
-  repeats(e) ? occurrences(e, from, addMonths(from, 1))[0] ?? e.date : e.date >= from ? e.date : null;
+  repeats(e) ? occurrences(e, from, addMonths(from, e.repeat === "yearly" ? 13 : 1))[0] ?? e.date : e.date >= from ? e.date : null;
 
 /** The local moment `minutes` before a date and time, as "YYYY-MM-DDTHH:MM". */
 export const minutesBefore = (date: string, time: string, minutes: number): string => {
   const d = parseDate(date), t = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, toMin(time) - minutes);
   return `${isoDate(t)}T${pad(t.getHours())}:${pad(t.getMinutes())}`;
 };
-/** "The evening before" is 19:00 the day before, kept like any other lead: as minutes before the start (midnight for an all-day event). */
+/** 2.x's "the evening before" was 19:00 the day before, kept as minutes before the start (midnight for an all-day event). 3.0 has
+ *  no such reminder (the 9 pm brief covers tomorrow): the update to 3.0 clears a reminder of exactly this value. */
 export const EVENING_BEFORE = "19:00";
 export const eveningBeforeMinutes = (start: string | null): number => toMin(start ?? "00:00") + 24 * 60 - toMin(EVENING_BEFORE);
 
@@ -84,6 +94,10 @@ export function eventRemindersDue(e: { date: string; repeat?: string | null; sta
   const days = occurrences(e, from.slice(0, 10), addDays(to.slice(0, 10), Math.ceil(e.reminder_minutes / 1440) + 1));
   return days.map((date) => ({ date, at: minutesBefore(date, e.start_time ?? "00:00", e.reminder_minutes!) })).filter((r) => r.at > from && r.at <= to);
 }
+
+/** A deadline is spoken of a week before its day, at 9 in the morning (the family's own time). */
+export const DEADLINE_NOTICE_DAYS = 7;
+export const deadlineNoticeAt = (date: string): string => `${addDays(date, -DEADLINE_NOTICE_DAYS)}T09:00`;
 
 /** By date, then all-day events first, then by start time, then by title. */
 export const eventOrder = (a: { date: string; start_time: string | null; title: string }, b: typeof a): number =>
@@ -112,51 +126,12 @@ export function normaliseEvent(v: EventValues): { ok: true; row: EventPatch } | 
   if (minutes !== null && minutes !== undefined && minutes !== "" && !(typeof minutes === "number" && Number.isInteger(minutes) && minutes >= 0)) errors.reminder_minutes = "Whole minutes, 0 or more";
   // Once unless the form says how it repeats: an event made before events could repeat has no repeat to send.
   const repeat = str(v.repeat) ?? "none";
-  if (!["none", "daily", "weekly", "monthly"].includes(repeat)) errors.repeat = "Once, or every day, week or month";
+  if (!["none", "daily", "weekly", "monthly", "yearly"].includes(repeat)) errors.repeat = "Once, or every day, week, month or year";
   if (Object.keys(errors).length) return { ok: false, errors };
   return { ok: true, row: { title: title!, date: date!, repeat, ...times, who: str(v.who), location: str(v.location), notes: str(v.notes), reminder_minutes: typeof minutes === "number" ? minutes : null } };
 }
 
-type ReminderValues = { title?: unknown; date?: unknown; time?: unknown; repeat?: unknown; who?: unknown };
-export type ReminderPatch = { title: string; due: string; repeat: string; who: string | null };
-
-/** What the reminder form submitted (a date and a time) as the row to write (`due` joined), or the field errors. */
-export function normaliseReminder(v: ReminderValues, repeats: readonly string[]): { ok: true; row: ReminderPatch } | { ok: false; errors: Record<string, string> } {
-  const errors: Record<string, string> = {};
-  const title = str(v.title), date = str(v.date), time = parseClock(str(v.time));
-  if (!title) errors.title = "Required";
-  if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) errors.date = "Required";
-  if (!time) errors.time = str(v.time) ? "Use a time like 08:00 or 8 am" : "Required";
-  const repeat = str(v.repeat) ?? repeats[0];
-  if (!repeats.includes(repeat)) errors.repeat = `One of ${repeats.join(", ")}`;
-  if (Object.keys(errors).length) return { ok: false, errors };
-  return { ok: true, row: { title: title!, due: `${date}T${time}`, repeat, who: str(v.who) } };
-}
-
-/** A reminder's `due` as the form's date and time. */
-export const splitDue = (due: string): { date: string; time: string } => ({ date: due.slice(0, 10), time: due.slice(11, 16) });
-
-/** When a reminder next comes round, on or after `now` (a local "YYYY-MM-DDTHH:MM"); null for a one-off already past. */
-export function nextDue(r: { due: string; repeat: string }, now: string): string | null {
-  if (r.due >= now) return r.due;
-  const { date, time } = splitDue(r.due);
-  const nowDate = now.slice(0, 10);
-  const at = (d: string) => `${d}T${time}`;
-  // Always stepped from the first due date, so a monthly on the 31st never drifts to the 30th for good.
-  const bump = (d: string, step: (s: string, n: number) => string, n: number) => { const c = step(d, n); return at(c) >= now ? c : step(d, n + 1); };
-  switch (r.repeat) {
-    case "daily": return at(bump(date, addDays, Math.max(0, Math.round((parseDate(nowDate).getTime() - parseDate(date).getTime()) / 86400000))));
-    case "weekly": return at(bump(date, (s, n) => addDays(s, n * 7), Math.max(0, Math.floor(Math.round((parseDate(nowDate).getTime() - parseDate(date).getTime()) / 86400000) / 7))));
-    case "monthly": {
-      const a = parseDate(date), b = parseDate(nowDate);
-      return at(bump(date, addMonths, Math.max(0, (b.getFullYear() - a.getFullYear()) * 12 + b.getMonth() - a.getMonth())));
-    }
-    default: return null;
-  }
-}
-
-/** "Daily", "Weekly on Mondays", "Monthly on the 1st", or "Once" for a one-off. */
-export const repeatText = (r: { due: string; repeat: string }): string => {
-  const d = splitDue(r.due).date;
-  return r.repeat === "daily" ? "Daily" : r.repeat === "weekly" ? `Weekly on ${weekdays(d)}` : r.repeat === "monthly" ? `Monthly on the ${ordinal(parseDate(d).getDate())}` : "Once";
-};
+/** "Daily", "Weekly on Mondays", "Monthly on the 1st", "Yearly on Nov 28", or "Once" for a one-off. */
+export const repeatText = (date: string, repeat: string): string =>
+  repeat === "daily" ? "Daily" : repeat === "weekly" ? `Weekly on ${weekdays(date)}` : repeat === "monthly" ? `Monthly on the ${ordinal(parseDate(date).getDate())}`
+    : repeat === "yearly" ? `Yearly on ${shortDate(date)}` : "Once";

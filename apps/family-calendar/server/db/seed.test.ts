@@ -1,6 +1,7 @@
 import { describe, it, expect } from "bun:test";
-import { mondayOf, sampleEvents, sampleMembers, sampleReminders, staggered } from "./seed";
-import { COLOURS, REPEATS } from "./schema";
+import { mondayOf, sampleDates, sampleEvents, sampleMembers, staggered } from "./seed";
+import { COLOURS, KINDS, REPEATS } from "./schema";
+import { occurrences } from "../../src/pages/dates";
 
 const iso = (x: Date) => `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, "0")}-${String(x.getDate()).padStart(2, "0")}`;
 
@@ -18,12 +19,12 @@ describe("family-calendar sample rows", () => {
     for (const m of sampleMembers()) { expect(COLOURS as readonly string[]).toContain(m.colour); expect(m.emoji).toBeString(); }
     expect(new Set(sampleMembers().map((m) => m.colour)).size).toBe(4);
   });
-  it("fills two weeks from Monday with the school run, football, the dentist and grandma's birthday", () => {
+  it("fills two weeks from Monday with the school run, football and the dentist", () => {
     const dates = [...new Set(events.map((e) => e.date))].sort();
     expect(dates[0]).toBe("2026-10-05");
     expect(dates.at(-1)! <= "2026-10-18").toBe(true);
     expect(events.filter((e) => e.title === "School run").length).toBe(10);
-    for (const t of ["Football practice", "Dentist", "Grandma's birthday"]) expect(events.some((e) => e.title === t), t).toBe(true);
+    for (const t of ["Football practice", "Dentist"]) expect(events.some((e) => e.title === t), t).toBe(true);
     expect(events.filter((e) => e.title === "Dentist").length).toBe(1);   // a one-off
     expect(events.filter((e) => e.title === "Football practice").length).toBe(2);   // weekly
   });
@@ -43,15 +44,15 @@ describe("family-calendar sample rows", () => {
       if (e.who) expect(names).toContain(e.who);
       expect(e.title.toLowerCase()).not.toContain("lorem");
     }
-    expect(events.some((e) => e.start_time === null), "an all-day event").toBe(true);
+    expect([...events, ...sampleDates(from)].some((e) => e.start_time === null), "an all-day event").toBe(true);
     expect(events.some((e) => e.reminder_minutes), "an event with a reminder").toBe(true);
   });
-  it("has one reminder of each kind, due this week or the first of next month, for a member of the family", () => {
-    const r = sampleReminders(from);
-    expect(r.map((x) => x.repeat).sort()).toEqual([...REPEATS].sort());
-    for (const x of r) { expect(x.due).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/); expect(names).toContain(x.who); }
-    expect(r.find((x) => x.repeat === "monthly")!.due).toBe("2026-11-01T09:00");
-    expect(r.find((x) => x.repeat === "none")!.due).toBe("2026-10-08T19:00");   // the evening before the dentist
+  it("has grandma's birthday every year on this week's Saturday, and the school fees due on the 1st of each month", () => {
+    const [birthday, fees] = sampleDates(from);
+    expect(birthday).toMatchObject({ repeat: "yearly", kind: "event", start_time: null });
+    expect(occurrences(birthday, "2026-10-05", "2026-10-11")).toEqual(["2026-10-10"]);
+    expect(fees).toMatchObject({ repeat: "monthly", kind: "deadline", date: "2026-11-01", who: "Vikram" });
+    for (const x of sampleDates(from)) { expect(REPEATS as readonly string[]).toContain(x.repeat); expect(KINDS as readonly string[]).toContain(x.kind); }
   });
   it("have distinct created_at stamps, in order and in the past", () => {
     const now = new Date();
