@@ -759,7 +759,8 @@
       ],
       "answer": [
         {
-          "operation": "set_slots"
+          "operation": "set_slots",
+          "required": true
         },
         {
           "operation": "set_house_rules"
