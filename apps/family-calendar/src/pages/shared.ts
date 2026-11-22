@@ -1,6 +1,6 @@
 export interface Member { id: string; name: string; colour: string; emoji: string | null; created_at: string; updated_at: string; updated_by: string | null; _sample?: boolean }
 export interface Event {
-  id: string; title: string; date: string; repeat: string; start_time: string | null; end_time: string | null; who: string | null; location: string | null;
+  id: string; title: string; date: string; /** the last day of an event over several days (a trip) */ end_date?: string | null; repeat: string; /** a monthly event: null or "date" (the 6th), "weekday" (the 1st Sunday), "last_weekday" */ monthly_by?: string | null; start_time: string | null; end_time: string | null; who: string | null; location: string | null;
   notes: string | null; reminder_minutes: number | null; kind: string; status: string; added_by: string | null; imported: number;
   created_at: string; updated_at: string; updated_by: string | null; _sample?: boolean;
 }
@@ -12,13 +12,15 @@ export type Extras = Record<string, { sources: string[]; todos: Todo[] }>;
 export type Selected = { table: string; id: string; label: string } | null;
 
 import { useCallback, useEffect, useState } from "react";
-import { REPEATS as REPEAT_LIST, COLOURS as COLOUR_LIST } from "../../server/db/constants";
+import { REPEATS as REPEAT_LIST, MONTHLY_BY as MONTHLY_BY_LIST, COLOURS as COLOUR_LIST } from "../../server/db/constants";
 import { clockLabel, kitFetch, type ToneT } from "../flock/ui";
-import { shortDate, weekday } from "./dates";
+import { lastDay, shortDate, spanLabel, weekday } from "./dates";
 
 export const REPEATS: string[] = [...REPEAT_LIST];
 export const COLOURS: string[] = [...COLOUR_LIST];
 export const REPEAT_LABELS: Record<string, string> = { none: "Once", daily: "Every day", weekly: "Every week", monthly: "Every month", yearly: "Every year" };
+export const MONTHLY_BY: string[] = [...MONTHLY_BY_LIST];
+export const MONTHLY_BY_LABELS: Record<string, string> = { date: "On the same date (the 6th)", weekday: "On the same weekday (the 1st Sunday)", last_weekday: "On the last weekday (the last Friday)" };
 export const COLOUR_LABELS: Record<string, string> = { accent: "App colour", info: "Blue", success: "Green", warning: "Amber", danger: "Red" };
 
 /** The member's tone, for the dot beside their events; neutral for everyone or a name not in the family. */
@@ -32,6 +34,8 @@ export const memberLabel = (who: string | null, family: Member[]): string => {
 /** "4:30 pm to 5:00 pm", "4:30 pm", or "All day". */
 export const timeLabel = (e: Pick<Event, "start_time" | "end_time">): string =>
   e.start_time ? `${clockLabel(e.start_time)}${e.end_time ? ` to ${clockLabel(e.end_time)}` : ""}` : "All day";
+/** "Dec 20 to Dec 23" for an event over several days; empty for one day. */
+export const spanOf = (e: Pick<Event, "date" | "repeat" | "end_date">): string => { const last = lastDay(e); return last ? spanLabel(e.date, last) : ""; };
 /** "Thu Oct 16" */
 export const dayLabel = (date: string): string => `${weekday(date)} ${shortDate(date)}`;
 /** "from Shiva's email", "from MyClassBoard and Ankita's email", or "added by Shiva"; empty when neither is known. */
@@ -65,8 +69,10 @@ export const undo = (changeId: string, onFail: () => void) => { void kitFetch(`_
 /** The form fields for one event. `names` (the family) are suggestions for Who; any name is accepted. */
 export const eventFields = (names: string[]) => [
   { type: "text", name: "title", label: "What", required: true, placeholder: "Dentist" },
-  { type: "date", name: "date", label: "Date (the first day, when it repeats)", required: true },
+  { type: "date", name: "date", label: "Date (the first day, when it repeats or spans days)", required: true },
+  { type: "date", name: "end_date", label: "Until (last day), for a trip or anything over several days" },
   { type: "select", name: "repeat", label: "Repeat", options: REPEATS, optionLabels: REPEAT_LABELS },
+  { type: "select", name: "monthly_by", label: "Every month, by (when it repeats monthly)", options: MONTHLY_BY, optionLabels: MONTHLY_BY_LABELS },
   { type: "text", name: "start_time", label: "Starts", placeholder: "16:30, or leave empty for all day" },
   { type: "text", name: "end_time", label: "Ends", placeholder: "17:00" },
   { type: "text", name: "who", label: "Who", options: names, placeholder: "Everyone" },

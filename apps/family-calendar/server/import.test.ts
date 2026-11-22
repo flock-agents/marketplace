@@ -199,3 +199,38 @@ describe("import_events: what is refused", () => {
     expect(k.rows("events")).toEqual([]);
   });
 });
+
+describe("import_events: an item over several days (end_date)", () => {
+  const trip = { ref: "<m9@travel>#goa", match: ["PNR-X1"], title: "Goa trip", date: "2026-12-20", end_date: "2026-12-23" };
+  it("keeps its last day; a re-send changes nothing; the source that made it moves the last day", async () => {
+    const k = await boot({ now: NOW });
+    const r = await importOf(k, SHIVA, trip);
+    expect(r.results[0].result).toBe("added");
+    expect(k.rows("events")[0]).toMatchObject({ date: "2026-12-20", end_date: "2026-12-23", imported: 1 });
+    expect((await importOf(k, SHIVA, trip)).results[0].result).toBe("unchanged");
+    expect((await importOf(k, SHIVA, { ...trip, end_date: "2026-12-24" })).results[0].result).toBe("updated");
+    expect(k.rows("events")[0].end_date).toBe("2026-12-24");
+  });
+
+  it("another source fills an empty last day, never changes one; a move keeps the trip's length", async () => {
+    const k = await boot({ now: NOW });
+    await importOf(k, SHIVA, { ...trip, end_date: undefined });
+    expect(k.rows("events")[0].end_date).toBeNull();
+    expect((await importOf(k, ANKITA, { ...trip, ref: "<m10@travel>#goa" })).results[0].result).toBe("merged");
+    expect(k.rows("events")[0].end_date).toBe("2026-12-23");
+    await importOf(k, ANKITA, { ...trip, ref: "<m10@travel>#goa", end_date: "2026-12-27" });
+    expect(k.rows("events")[0].end_date).toBe("2026-12-23");
+    // Its own source moves it two days on without saying the last day: the trip keeps its four days.
+    expect((await importOf(k, SHIVA, { ref: trip.ref, title: "Goa trip", date: "2026-12-22" })).results[0].result).toBe("moved");
+    expect(k.rows("events")[0]).toMatchObject({ date: "2026-12-22", end_date: "2026-12-25" });
+  });
+
+  it("refuses alone an end_date on or before its date, or on a deadline", async () => {
+    const k = await boot({ now: NOW });
+    const r = await importOf(k, SHIVA, { ...trip, ref: "a", end_date: "2026-12-20" }, { ...trip, ref: "b", kind: "deadline" }, { ...trip, ref: "c" });
+    expect(r.results.map((x: any) => [x.ref, x.result])).toEqual([["a", "refused"], ["b", "refused"], ["c", "added"]]);
+    expect(r.results[0].reason).toContain("end_date (2026-12-20) must be after date (2026-12-20)");
+    expect(r.results[1].reason).toContain("end_date is not for a deadline");
+  });
+});
+

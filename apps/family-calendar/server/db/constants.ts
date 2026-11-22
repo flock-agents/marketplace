@@ -4,6 +4,11 @@
  *  weekday, every month on its date's day or every year on its date (a 29 February on the 28th in other years), from its `date` on. */
 export const REPEATS = ["none", "daily", "weekly", "monthly", "yearly"] as const;
 
+/** How a monthly event comes round (`monthly_by`; empty is `date`): on its date's day of the month (`date`: the 6th), on the same
+ *  weekday of the month as its date (`weekday`: 6 Dec 2026 is the 1st Sunday, so every 1st Sunday), or on the last such weekday
+ *  of the month (`last_weekday`: its date is a last Friday, so every last Friday). */
+export const MONTHLY_BY = ["date", "weekday", "last_weekday"] as const;
+
 /** A family member's colour: a theme tone, never a hex colour. Their events carry it in the week view. */
 export const COLOURS = ["accent", "info", "success", "warning", "danger"] as const;
 

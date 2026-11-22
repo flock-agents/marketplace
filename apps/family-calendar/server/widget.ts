@@ -5,7 +5,7 @@
 import type { Hono } from "hono";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import { events } from "./db/schema";
-import { addDays, isoDate, occurrences, parseDate, repeats, toMin } from "../src/pages/dates";
+import { addDays, isoDate, lastDay, occurrences, parseDate, repeats, toMin } from "../src/pages/dates";
 
 export const WIDGET_DAYS = 7;
 const localMs = (date: string, hhmm: string) => parseDate(date).getTime() + toMin(hhmm) * 60_000;
@@ -14,8 +14,9 @@ export function scheduleItems(db: BunSQLiteDatabase<any>, from: string) {
   const to = addDays(from, WIDGET_DAYS);
   const items = db.select().from(events).all().filter((e) => e.status !== "cancelled").flatMap((e) =>
     occurrences(e, from, to).map((date) => ({
-      // A repeating event is one row: each day it falls on is an item of its own.
-      id: repeats(e) ? `${e.id}@${date}` : e.id, kind: "event" as const, title: e.title, date,
+      // A repeating event is one row: each day it falls on is an item of its own; so is each day of an event over several days
+      // (its times, when it has them, are each day's).
+      id: repeats(e) || lastDay(e) ? `${e.id}@${date}` : e.id, kind: "event" as const, title: e.title, date,
       startAt: e.start_time ? localMs(date, e.start_time) : null, endAt: e.start_time && e.end_time ? localMs(date, e.end_time) : null, allDay: !e.start_time,
       ...(e.location ? { location: e.location } : {}),
       // Who it is for shows as the item's tag (Flock shows a `calendar` other than "primary").

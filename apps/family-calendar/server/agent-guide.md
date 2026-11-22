@@ -45,7 +45,18 @@ add_events { events: [
 - **When:** `date` for an event on one day, or `weekdays` for one that happens every week (it starts on the first such day
   from today, or from `date` when you give one). From a date on: `date` with `repeat: "daily"`, `"weekly"`, `"monthly"` or
   `"yearly"`.
-- `start_time` and `end_time`; neither for an all-day event (a birthday, a holiday). `location` and `notes` are free text.
+- **Monthly on a weekday:** `repeat: "monthly"` alone comes round on the same date each month (the 6th). For a weekday of the
+  month add `monthly_by`. "The first Sunday of every month" is `date` = the first such Sunday from now, `repeat: "monthly"`,
+  `monthly_by: "weekday"` (`{ title: "Society committee meeting", date: "2026-12-06", repeat: "monthly", monthly_by: "weekday",
+  start_time: "11:00" }`); the second Tuesday is the same with a second Tuesday as `date`. "The last Friday of every month" is
+  `date` = a last Friday of a month, `repeat: "monthly"`, `monthly_by: "last_weekday"`. A 5th weekday is refused with
+  `"weekday"` (most months have none): say `"last_weekday"`.
+- **Over several days:** a trip, a stay, a holiday, a camp, anything spanning days in a row has `date` (the first day) and
+  `end_date` (the last day): "Goa from 20 to 23 December" is `{ title: "Goa trip", date: "2026-12-20", end_date:
+  "2026-12-23" }`, never one day with the range in `notes`. It shows on each of its days and is nudged before the first. Once
+  only: never with `repeat` or `weekdays`, and never on a deadline. `end_date: null` makes it one day again.
+- `start_time` and `end_time`; neither for an all-day event (a birthday, a holiday, most trips). On an event over several
+  days they are each day's times. `location` and `notes` are free text.
 - `reminder`: whole minutes before the start (`60`). A timed event is nudged 30 minutes before unless you say; `null` for
   none. There is no "evening before": the 9 pm brief already tells the family about tomorrow.
 - `kind`: `"deadline"` for a day something is due by; leave it out for an event.

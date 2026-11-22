@@ -32,7 +32,7 @@ describe("brief", () => {
     const b = await k.op("brief", { kind: "morning" });
     expect(b.day).toBe("2026-11-22");
     expect(b.events.map((e: any) => [e.title, e.status])).toEqual([["Swimming gala", "active"], ["Skating", "active"], ["Puppet show", "cancelled"]]);
-    expect(b.events[1]).toEqual({ id: expect.any(String), title: "Skating", start_time: "16:00", end_time: "17:30", who: "Agastya", location: null, notes: "Lakshmi drops",
+    expect(b.events[1]).toEqual({ id: expect.any(String), title: "Skating", end_date: null, start_time: "16:00", end_time: "17:30", who: "Agastya", location: null, notes: "Lakshmi drops",
       kind: "event", status: "active", sources: [], added_by: "Shiva", todos: { open: 0, titles: [] } });
     expect(b.events[0]).toMatchObject({ sources: ["Shiva's email"], added_by: null, todos: { open: 1, titles: ["Pack the swim kit"] } });
     expect(b.todos_due).toEqual([{ title: "Pack the swim kit", due: "2026-11-22", event: "Swimming gala" }, { title: "Sign the trip form", due: "2026-11-24", event: "School trip" }]);
@@ -67,6 +67,28 @@ describe("brief", () => {
     const next = await k.op("brief", { kind: "morning" });
     expect(next.new).toEqual([]);
     expect(next.changed).toEqual([]);
+  });
+
+  it("a monthly event on the 1st Sunday is in the brief on that Sunday, not on its date's day of the month", async () => {
+    const k = await start();
+    await k.op("add_events", { events: [{ title: "Society committee meeting", date: "2026-12-06", repeat: "monthly", monthly_by: "weekday", start_time: "11:00" }] });
+    k.setNow(new Date(2027, 0, 3, 8, 0));   // Sunday 3 Jan 2027
+    expect((await k.op("brief", { kind: "morning" })).events.map((e: any) => e.title)).toEqual(["Society committee meeting"]);
+    k.setNow(new Date(2027, 0, 5, 21, 0));   // the evening before Wednesday the 6th
+    expect((await k.op("brief", { kind: "evening" })).events).toEqual([]);
+  });
+
+  it("a trip over several days is in the brief on each of its days, with its first and last day", async () => {
+    const k = await start();
+    await k.op("add_events", { events: [{ title: "Goa trip", date: "2026-12-20", end_date: "2026-12-23" }] });
+    k.setNow(new Date(2026, 11, 21, 8, 0));   // Monday 21 Dec, the trip's second day
+    const b = await k.op("brief", { kind: "morning" });
+    expect(b.events).toEqual([{ id: expect.any(String), title: "Goa trip", date: "2026-12-20", end_date: "2026-12-23", start_time: null, end_time: null, who: null, location: null,
+      notes: null, kind: "event", status: "active", sources: [], added_by: null, todos: { open: 0, titles: [] } }]);
+    k.setNow(new Date(2026, 11, 22, 21, 0));   // the evening before its last day
+    expect((await k.op("brief", { kind: "evening" })).events.map((e: any) => e.title)).toEqual(["Goa trip"]);
+    k.setNow(new Date(2026, 11, 23, 21, 0));
+    expect((await k.op("brief", { kind: "evening" })).events).toEqual([]);
   });
 
   it("refuses a kind it does not know", async () => {

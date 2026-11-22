@@ -3,7 +3,7 @@
 import { describe, it, expect } from "bun:test";
 import { readFileSync } from "fs";
 import { join } from "path";
-import { REPEATS, COLOURS, KINDS, STATUSES, TODO_STATUSES } from "../server/db/constants";
+import { REPEATS, MONTHLY_BY, COLOURS, KINDS, STATUSES, TODO_STATUSES } from "../server/db/constants";
 
 const ROOT = join(import.meta.dir, "..");
 const read = (f: string) => readFileSync(join(ROOT, f), "utf8");
@@ -32,6 +32,7 @@ describe("family-calendar schema", () => {
 
   it("the repeats, kinds, statuses and colours are closed lists", () => {
     expect([...REPEATS]).toEqual(["none", "daily", "weekly", "monthly", "yearly"]);
+    expect([...MONTHLY_BY]).toEqual(["date", "weekday", "last_weekday"]);   // a monthly event: by its date, or by its weekday of the month
     expect([...KINDS]).toEqual(["event", "deadline"]);
     expect([...STATUSES]).toEqual(["active", "cancelled"]);
     expect([...TODO_STATUSES]).toEqual(["open", "done", "withdrawn", "covered"]);
@@ -52,6 +53,8 @@ describe("family-calendar schema", () => {
     expect(catalog.tables.events.columns.reminder_minutes).toMatchObject({ type: "integer", required: false, nullable: true });
     expect(catalog.tables.events.columns.repeat).toMatchObject({ type: "string", required: false, default: REPEATS[0] });
     expect(catalog.tables.events.columns.kind).toMatchObject({ type: "string", required: false, default: KINDS[0] });
+    expect(catalog.tables.events.columns.monthly_by).toMatchObject({ type: "string", required: false, nullable: true, note: expect.stringContaining("last_weekday") });
+    expect(catalog.tables.events.columns.end_date).toMatchObject({ type: "string", required: false, nullable: true, note: expect.stringContaining("last day") });
     expect(catalog.tables.events.columns.status).toMatchObject({ type: "string", required: false, default: STATUSES[0], note: expect.stringContaining("cancelled") });
     expect(catalog.settings).toEqual([]);
     expect(json("settings.json")).toEqual({});

@@ -6,7 +6,7 @@
 //   its answer comes back through plan_done (calendar.ts). Nothing to plan: no wake.
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import { events } from "./db/schema";
-import { addDays, deadlineNoticeAt, DEADLINE_NOTICE_DAYS, eventRemindersDue, isoDate, occurrences, pad, shortDate, weekday } from "../src/pages/dates";
+import { addDays, deadlineNoticeAt, DEADLINE_NOTICE_DAYS, eventRemindersDue, isoDate, pad, shortDate, starts, weekday } from "../src/pages/dates";
 import { eventLine, planPrep, type KitLike, type TasksPlatform } from "./calendar";
 
 /** What the routine uses of its run: the SDK's RoutineContext (the wake, its own small state, Flock) and the kit's database. */
@@ -33,7 +33,7 @@ export function dueBetween(db: BunSQLiteDatabase<any>, from: string, to: string)
     for (const r of eventRemindersDue(e, from, to)) out.push({ who: e.who, text: eventLine(e, r.date, today), at: r.at });
     // A deadline, a week before its day.
     if (e.kind === "deadline")
-      for (const date of occurrences(e, addDays(from.slice(0, 10), DEADLINE_NOTICE_DAYS), addDays(to.slice(0, 10), DEADLINE_NOTICE_DAYS))) {
+      for (const date of starts(e, addDays(from.slice(0, 10), DEADLINE_NOTICE_DAYS), addDays(to.slice(0, 10), DEADLINE_NOTICE_DAYS))) {
         const at = deadlineNoticeAt(date);
         if (at > from && at <= to) out.push({ who: e.who, text: eventLine({ ...e, start_time: null, end_time: null, notes: null }, date, today, `due in a week, on ${weekday(date)} ${shortDate(date)}`), at });
       }

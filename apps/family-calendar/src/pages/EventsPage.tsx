@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { Button, Empty, InlinePanel, Page, Search, Table, useTable, useToast, useToday, label } from "../flock/ui";
+import { Button, Empty, InlinePanel, Page, Search, Table, Value, useTable, useToast, useToday, label } from "../flock/ui";
 import { EventEditor } from "./EventEditor";
 import { EventTodos } from "./EventTodos";
 import { eventOrder, nextOccurrence, repeatText, repeats, type EventPatch } from "./dates";
-import { dayLabel, memberLabel, sourceLine, timeLabel, todoCount, undo, useExtras, type Event, type Member, type Selected } from "./shared";
+import { dayLabel, memberLabel, sourceLine, spanOf, timeLabel, todoCount, undo, useExtras, type Event, type Member, type Selected } from "./shared";
 
 /** Every event from today on, soonest first, with Add under the header and the picked event opened in place. An event that
  *  repeats is listed once, at the next day it falls on. */
@@ -14,12 +14,16 @@ export function EventsPage({ selected, onSelect }: { selected: Selected; onSelec
   const toast = useToast();
   const list = useTable<Event>("events", { where: { "date[gte]": today }, sort: "date", limit: 100, q: q || undefined });
   const repeating = useTable<Event>("events", { where: { "repeat[ne]": "none" }, sort: "date", limit: 500, q: q || undefined });
+  // An event over several days that began before today is listed while it is still on (a trip under way).
+  const ongoing = useTable<Event>("events", { where: { "date[lt]": today, "end_date[gte]": today }, sort: "date", limit: 100, q: q || undefined });
   const family = useTable<Member>("members", { sort: "name", limit: 100 });
   const names = family.rows.map((m) => m.name);
-  const rows = [...list.rows.filter((e) => !repeats(e)), ...repeating.rows.map((e) => ({ ...e, date: nextOccurrence(e, today) ?? e.date }))].sort(eventOrder);
+  const rows = [...list.rows.filter((e) => !repeats(e)), ...ongoing.rows.filter((e) => !repeats(e)), ...repeating.rows.map((e) => ({ ...e, date: nextOccurrence(e, today) ?? e.date }))].sort(eventOrder);
+  /** A repeating event's own first day (it is listed at its next one): "Monthly on the 31st" stays so in a 30-day month. */
+  const firstDay = (e: Event): string => repeating.rows.find((r) => r.id === e.id)?.date ?? e.date;
   const { extras, reload } = useExtras(rows.map((e) => `${e.id}:${e.updated_at}`).join(","));
   // The editor gets the event as it is kept (a repeating one with its first day), not the day it is listed on.
-  const picked = selected?.table === "events" ? [...repeating.rows, ...list.rows].find((e) => e.id === selected.id) : undefined;
+  const picked = selected?.table === "events" ? [...repeating.rows, ...list.rows, ...ongoing.rows].find((e) => e.id === selected.id) : undefined;
   const pick = (e: Event) => onSelect(selected?.id === e.id ? null : { table: "events", id: e.id, label: `${e.title} on ${dayLabel(e.date)}` });
   const add = async (row: EventPatch) => { await list.create(row); setAdding(false); };
   const remove = async (e: Event) => {
@@ -37,7 +41,7 @@ export function EventsPage({ selected, onSelect }: { selected: Selected; onSelec
       ) : null}
       <Search value={q} onChange={setQ} placeholder="Search the events" />
       <Table
-        rows={rows} loading={list.loading || repeating.loading} error={list.error ?? repeating.error} hasMore={list.hasMore} onLoadMore={list.loadMore}
+        rows={rows} loading={list.loading || repeating.loading || ongoing.loading} error={list.error ?? repeating.error ?? ongoing.error} hasMore={list.hasMore} onLoadMore={list.loadMore}
         selectedId={picked?.id} onRowClick={pick}
         empty={<Empty title="Nothing coming up" hint={q ? "Nothing matches. Clear the search." : "Add the first event, or ask the assistant to."} object="calendar" action={<Button onClick={() => setAdding(true)}>Add an event</Button>} />}
         columns={[
@@ -46,8 +50,9 @@ export function EventsPage({ selected, onSelect }: { selected: Selected; onSelec
             // A cancelled event stays listed, struck through; the small line says where it came from or who added it.
             return <span>{e.status === "cancelled" ? <><s>{e.title}</s> (cancelled)</> : e.title}{line ? <span className="fc-source">{line}</span> : null}</span>;
           } },
-          { key: "date", label: "When", kind: "date" },
-          { key: "start_time", label: "Time", render: (e) => (repeats(e) ? `${repeatText(e.date, e.repeat)}, ${timeLabel(e)}` : timeLabel(e)) },
+          // An event over several days says its days ("Dec 20 to Dec 23"); any other its date.
+          { key: "date", label: "When", kind: "date", render: (e) => spanOf(e) || <Value kind="date" value={e.date} /> },
+          { key: "start_time", label: "Time", render: (e) => (repeats(e) ? `${repeatText(firstDay(e), e.repeat, e.monthly_by)}, ${timeLabel(e)}` : timeLabel(e)) },
           { key: "who", label: "Who", render: (e) => memberLabel(e.who, family.rows) || "Everyone" },
           { key: "location", label: "Where", phone: "hide" },
           { key: "id", label: "To-dos", render: (e) => todoCount(e.id, extras) },

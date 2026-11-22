@@ -10,7 +10,7 @@ import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import { and, eq } from "drizzle-orm";
 import { events, event_sources, members, members as membersTable, todos } from "./db/schema";
 import { COLOURS, KINDS } from "./db/constants";
-import { addDays, clock12, isoDate, nextOccurrence, occurrences, pad, parseClock, parseDate, repeats, shortDate, toMin, weekday } from "../src/pages/dates";
+import { addDays, clock12, isoDate, lastDay, nextOccurrence, occurrences, pad, parseClock, parseDate, repeats, shortDate, toMin, weekday } from "../src/pages/dates";
 import { defaultShowFrom, slug } from "./db/reminder-events";
 import * as K from "./kinds";
 import { placeState, placeTally, tally, type TallyRow } from "./tally";
@@ -212,7 +212,7 @@ export function setTodoDone(cal: Cal, eventId: string, key: string, done: boolea
 
 export const IMPORT_MAX_ITEMS = 50, IMPORT_MAX_BYTES = 32 * 1024;
 export const IMPORT_FIELDS = ["source", "label", "items"];
-export const ITEM_FIELDS = ["ref", "match", "kind", "title", "date", "start_time", "end_time", "who", "location", "notes", "cancelled", "todos"];
+export const ITEM_FIELDS = ["ref", "match", "kind", "title", "date", "end_date", "start_time", "end_time", "who", "location", "notes", "cancelled", "todos"];
 /** A new timed import is nudged this long before it starts. */
 export const IMPORT_REMINDER_MINUTES = 30;
 
@@ -232,7 +232,7 @@ const timesNear = (a: string | null, b: string | null) => !a || !b || Math.abs(t
 const idsOf = (m: string | null): string[] => { try { const v = JSON.parse(m ?? "[]"); return Array.isArray(v) ? v.filter((x) => typeof x === "string") : []; } catch { return []; } };
 const norm = (id: string) => id.trim().toLowerCase();
 
-type Item = { ref: string; match: string[]; kind: (typeof KINDS)[number]; title: string; date: string; start_time: string | null; end_time: string | null;
+type Item = { ref: string; match: string[]; kind: (typeof KINDS)[number]; title: string; date: string; end_date: string | null; start_time: string | null; end_time: string | null;
   who: string | null; location: string | null; notes: string | null; cancelled: boolean; todos: { key: string; title: string; due: string | null; show_from: string | null }[];
   given: Set<string> };
 
@@ -257,6 +257,11 @@ function checkItem(v: unknown): { ok: Item } | { why: string } {
   if (times.end_time && !times.start_time) times.end_time = null;   // an end with no start says nothing a page can show
   if (times.start_time && times.end_time && toMin(times.end_time) <= toMin(times.start_time)) times.end_time = null;
   for (const k of ["who", "location", "notes"] as const) if (v[k] != null && typeof v[k] !== "string") errors.push(`${k} must be text`);
+  // The last day of something over several days (a trip, a stay): after its date, never on a deadline.
+  const end_date = v.end_date == null ? null : realDate(v.end_date);
+  if (v.end_date != null && !end_date) errors.push(`end_date must be a real date as YYYY-MM-DD (${JSON.stringify(v.end_date)} is not)`);
+  else if (end_date && kind === "deadline") errors.push("end_date is not for a deadline (a deadline is the one day something is due by)");
+  else if (end_date && date && end_date <= date) errors.push(`end_date (${end_date}) must be after date (${date}): it is the last day; leave it out for one day`);
   if (v.match != null && (!Array.isArray(v.match) || v.match.some((m) => typeof m !== "string"))) errors.push("match must be a list of identifiers (text)");
   if (v.cancelled != null && typeof v.cancelled !== "boolean") errors.push("cancelled must be true or false");
   const list: Item["todos"] = [];
@@ -273,7 +278,7 @@ function checkItem(v: unknown): { ok: Item } | { why: string } {
     });
   }
   if (errors.length) return { why: errors.join("; ") };
-  return { ok: { ref: ref!, match: ((v.match as string[] | undefined) ?? []).map((m) => m.trim()).filter(Boolean), kind: kind!, title: title!, date: date!, ...times,
+  return { ok: { ref: ref!, match: ((v.match as string[] | undefined) ?? []).map((m) => m.trim()).filter(Boolean), kind: kind!, title: title!, date: date!, end_date, ...times,
     who: text(v.who), location: text(v.location), notes: text(v.notes), cancelled: v.cancelled === true, todos: list,
     given: new Set(Object.keys(v).filter((k) => v[k] != null)) } };
 }
@@ -338,7 +343,7 @@ function importOne(db: Db, sqlite: Database, source: string, label: string | nul
   const who = it.who ? memberNamed(db, it.who, by, added, changes) : null;
 
   if (!hit) {
-    const row = db.insert(events).values({ title: it.title, date: it.date, repeat: "none", start_time: it.start_time, end_time: it.end_time, who, location: it.location, notes: it.notes,
+    const row = db.insert(events).values({ title: it.title, date: it.date, end_date: it.end_date, repeat: "none", start_time: it.start_time, end_time: it.end_time, who, location: it.location, notes: it.notes,
       reminder_minutes: it.start_time ? IMPORT_REMINDER_MINUTES : null, kind: it.kind, status: "active", added_by: null, imported: 1, updated_by: by }).returning().get();
     db.insert(event_sources).values({ event_id: row.id, source, ref: it.ref, label, match: JSON.stringify(it.match), first_seen_at: nowMs, last_seen_at: nowMs, updated_by: by }).run();
     for (const t of it.todos) { const due = t.due ?? row.date; putTodo(db, row.id, { key: t.key, title: t.title, due, show_from: t.show_from ?? defaultShowFrom(due, today) }, by); }
@@ -370,8 +375,8 @@ function importOne(db: Db, sqlite: Database, source: string, label: string | nul
   // Fields: the event's own source changes what it sends; any other source only fills what is empty. A cancelled event is
   // never brought back by an import (a re-send of the first mail would undo the cancellation that came after it).
   const fromOrigin = originOf(db, hit) === source;
-  const want: Partial<EventRow> = { title: it.title, date: it.date, start_time: it.start_time, end_time: it.end_time, who, location: it.location, notes: it.notes, kind: it.kind };
-  const field: Record<string, string> = { who: "who", start_time: "start_time", end_time: "end_time", location: "location", notes: "notes", kind: "kind", title: "title", date: "date" };
+  const want: Partial<EventRow> = { title: it.title, date: it.date, end_date: it.end_date, start_time: it.start_time, end_time: it.end_time, who, location: it.location, notes: it.notes, kind: it.kind };
+  const field: Record<string, string> = { who: "who", start_time: "start_time", end_time: "end_time", location: "location", notes: "notes", kind: "kind", title: "title", date: "date", end_date: "end_date" };
   const set: Partial<EventRow> = {};
   for (const [k, v] of Object.entries(want) as [keyof EventRow, any][]) {
     if (!it.given.has(field[k as string]) && k !== "title" && k !== "date") continue;   // a field the item left out is never cleared
@@ -379,6 +384,12 @@ function importOne(db: Db, sqlite: Database, source: string, label: string | nul
     if (fromOrigin || (hit as any)[k] == null || (hit as any)[k] === "") (set as any)[k] = v;
   }
   if (hit.status === "cancelled") for (const k of Object.keys(set)) delete (set as any)[k];
+  // A trip moved by its own source without its last day keeps its length; a last day left on or before the new date is dropped.
+  if (set.date !== undefined && set.end_date === undefined && hit.end_date) {
+    const shifted = addDays(hit.end_date, Math.round((parseDate(set.date).getTime() - parseDate(hit.date).getTime()) / 86_400_000));
+    set.end_date = shifted > set.date ? shifted : null;
+  }
+  if ((set.end_date ?? hit.end_date) && (set.end_date ?? hit.end_date)! <= (set.date ?? hit.date)) set.end_date = null;
   const moved = set.date !== undefined || set.start_time !== undefined;
   let row = hit;
   if (Object.keys(set).length) {
@@ -484,7 +495,7 @@ export async function planPrep(cal: Cal, wake: Wake): Promise<{ woke: boolean; p
       const was = change === "moved" && e.plan_basis ? { date: e.plan_basis.slice(0, 10), start_time: e.plan_basis.length > 10 ? e.plan_basis.slice(11) : null } : undefined;
       const pattern: Record<string, "on" | "off"> = {};
       for (const kind of K.PLACE_KINDS) { const st = placeState(places, kind, K.placeOf(kind, e)); if (st !== "none") pattern[kind] = st; }
-      return { ref: `e${i + 1}`, event: `${appId}:${e.id}`, id: e.id, title: e.title, date: e.date, start_time: e.start_time, who: e.who, location: e.location, notes: e.notes, kind: e.kind,
+      return { ref: `e${i + 1}`, event: `${appId}:${e.id}`, id: e.id, title: e.title, date: e.date, ...(lastDay(e) ? { end_date: lastDay(e) } : {}), start_time: e.start_time, who: e.who, location: e.location, notes: e.notes, kind: e.kind,
         sources: labelsOf(db, e.id), change, ...(types[e.id] ? { type: types[e.id] } : {}), ...(Object.keys(pattern).length ? { pattern } : {}),
         ...(was ? { was } : {}), steps: stepsOf(db, e.id) };
     }),
@@ -619,7 +630,8 @@ export function brief(cal: Cal, p: Record<string, unknown>): Record<string, unkn
     .sort((a, b) => (a.start_time ?? "").localeCompare(b.start_time ?? "") || a.title.localeCompare(b.title))
     .map((e) => {
       const mine = openTodos.filter((t) => t.event_id === e.id).sort((a, b) => a.due.localeCompare(b.due));
-      return { id: e.id, title: e.title, start_time: e.start_time, end_time: e.end_time, who: e.who, location: e.location, notes: e.notes, kind: e.kind, status: e.status,
+      // An event over several days is on each of them: it says its first and last day.
+      return { id: e.id, title: e.title, ...(lastDay(e) ? { date: e.date } : {}), end_date: lastDay(e), start_time: e.start_time, end_time: e.end_time, who: e.who, location: e.location, notes: e.notes, kind: e.kind, status: e.status,
         sources: labelsOf(db, e.id), added_by: e.added_by, todos: { open: mine.length, titles: mine.map((t) => t.title) } };
     });
 
@@ -663,8 +675,10 @@ export function extras(db: Db): Record<string, { sources: string[]; todos: TodoV
 }
 
 /** "Skating class: tomorrow, 4 pm to 5:30 pm, Rink. Lakshmi drops": what a nudge says. */
-export function eventLine(e: { title: string; start_time: string | null; end_time: string | null; location: string | null; notes: string | null }, date: string, today: string, prefix?: string): string {
-  const day = prefix ?? (date === today ? "today" : date === addDays(today, 1) ? "tomorrow" : `on ${weekday(date)} ${shortDate(date)}`);
+export function eventLine(e: { title: string; start_time: string | null; end_time: string | null; location: string | null; notes: string | null; date?: string; repeat?: string | null; end_date?: string | null }, date: string, today: string, prefix?: string): string {
+  // An event over several days says its last: "Goa trip: today to Wed Dec 23".
+  const last = e.date && lastDay({ date: e.date, repeat: e.repeat, end_date: e.end_date });
+  const day = (prefix ?? (date === today ? "today" : date === addDays(today, 1) ? "tomorrow" : `on ${weekday(date)} ${shortDate(date)}`)) + (last && !prefix ? ` to ${weekday(last)} ${shortDate(last)}` : "");
   const time = e.start_time ? `, ${clock12(e.start_time)}${e.end_time ? ` to ${clock12(e.end_time)}` : ""}` : "";
   return [`${e.title}: ${day}${time}${e.location ? `, ${e.location}` : ""}`, e.notes].filter(Boolean).join(". ");
 }

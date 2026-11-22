@@ -128,6 +128,18 @@
           "nullable": false,
           "default": 0,
           "note": "1: first made by import_events (only these are planned)"
+        },
+        "monthly_by": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "a monthly event: empty or date (the 6th) | weekday (the 1st Sunday) | last_weekday"
+        },
+        "end_date": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "ISO date: the last day of an event over several days (a trip); empty for one day"
         }
       }
     }
