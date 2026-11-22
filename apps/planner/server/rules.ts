@@ -45,7 +45,7 @@ export const CATEGORIES: Record<string, string[]> = {
     "curry powder", "garam masala", "pickle", "achaar", "achar", "schezwan", "chilli flakes"],
   sweet: ["sugar", "jaggery", "gur", "honey", "sheera", "halwa", "kheer", "payasam", "ladoo", "laddu", "jamun", "barfi", "mithai", "jalebi", "condensed milk"],
   soy: ["soy", "soya", "soya chunks", "tofu", "soy sauce", "edamame"],
-  gluten: ["wheat", "atta", "maida", "rava", "sooji", "semolina", "bread", "roti", "chapati", "phulka", "paratha", "naan", "pasta", "noodle", "barley", "dalia", "seitan"],
+  gluten: ["wheat", "atta", "maida", "rava", "sooji", "semolina", "bread", "roti", "chapati", "phulka", "paratha", "naan", "pasta", "noodle", "barley", "dalia", "seitan", "vermicelli", "semiya", "sevai", "seviyan"],
   dairy: ["milk", "curd", "dahi", "paneer", "ghee", "butter", "cream", "cheese", "khoa", "raita", "lassi", "buttermilk", "chaas", "malai", "makhani", "kadhi"],
   dal: ["dal", "toor", "arhar", "moong", "masoor", "urad", "chana dal"],
   pickle: ["pickle", "achaar", "achar", "papad"],
@@ -307,7 +307,13 @@ export function ruleBreaks(week: RuleWeek, house: RuleHouse, people: { name: str
  *  one of them counts towards. `meals`: their labels, as mealLabel writes them. */
 export function ruleBreaksIn(week: RuleWeek, house: RuleHouse, people: { name: string }[], meals: string[]): RuleBreak[] {
   const mine = new Set(meals);
-  return found(week, house, people).filter((b) => b.about.some((m) => mine.has(m))).map(plain);
+  const short = (label: string) => label.replace(/ \d{4}-\d{2}-\d{2}/, "");
+  return found(week, house, people).filter((b) => b.about.some((m) => mine.has(m))).map((b) => {
+    // A cap over the week already used up by meals not being written now: those stay, this meal is the one to change.
+    const kept = b.about.filter((m) => !mine.has(m));
+    if (!b.fix.startsWith("now in ") || !kept.length || !mine.has(b.meal)) return plain(b);
+    return { ...plain(b), fix: `${kept.map(short).join(", ")} already ${kept.length === 1 ? "has" : "have"} it, as many as the rule allows: plan ${short(b.meal)} without it` };
+  });
 }
 
 /** Every break in one message: "Mon 2026-11-23 Breakfast: Rava idli — Meera eats only … (add a dish for Meera)". */

@@ -2,7 +2,7 @@
 // breaks of each kind of rule, and run 11's week, refused naming each break and passed once corrected.
 import { describe, it, expect } from "bun:test";
 import { boot } from "./testkit";
-import { breaksText, dishHas, isSide, matches, ruleBreaks, ruleText, type RuleWeek } from "./rules";
+import { breaksText, dishHas, isSide, matches, ruleBreaks, ruleBreaksIn, ruleText, type RuleWeek } from "./rules";
 
 describe("matches", () => {
   it("drops a negation from a dish's name: in brackets, and 'without X' / 'no X'", () => {
@@ -213,6 +213,9 @@ describe("ruleBreaks", () => {
     const b = ruleBreaks(w, { rules }, people);
     expect(keys(b)).toEqual(["Tue 2026-11-24 Lunch|Chapati|"]);
     expect(b[0].fix).toContain("Mon Lunch, Mon Dinner, Tue Lunch");
+    // Writing Tuesday alone (a day of the weekly run): Monday's two stay, Tuesday is the one to change, said so.
+    const tue = ruleBreaksIn(w, { rules }, people, ["Tue 2026-11-24 Lunch"]);
+    expect(tue[0].fix).toBe("Mon Lunch, Mon Dinner already have it, as many as the rule allows: plan Tue Lunch without it");
   });
 
   // Live eval 2026-11-22: the cook's "max 2 dishes in the morning" broken by per-person variants (3 to cook).

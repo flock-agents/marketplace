@@ -51,6 +51,17 @@ export async function ask(o: ModelOpts, system: string, prompt: string): Promise
 /** One chat completion from an OpenAI-compatible endpoint; cost from its usage when it says (Flock's gateway does). */
 async function askOpenAI(o: ModelOpts, system: string, prompt: string): Promise<Reply> {
   const t0 = Date.now();
+  // Rate limited (429) or the gateway busy (5xx): wait as it says, or 10 s, and try again, up to 8 times.
+  for (let attempt = 1; ; attempt++) {
+    try { return await askOpenAIOnce(o, system, prompt, t0); } catch (e) {
+      const m = /answered (429|5\d\d)(?:: .*"retryAfter":(\d+))?/.exec((e as Error).message);
+      if (!m || attempt >= 8) throw e;
+      await Bun.sleep(1000 * (Number(m[2] ?? 10) + 1));
+    }
+  }
+}
+
+async function askOpenAIOnce(o: ModelOpts, system: string, prompt: string, t0: number): Promise<Reply> {
   const res = await fetch(`${o.openai!.base}/chat/completions`, {
     method: "POST", signal: AbortSignal.timeout(TIMEOUT_MS),
     headers: { authorization: `Bearer ${o.openai!.key}`, "content-type": "application/json" },

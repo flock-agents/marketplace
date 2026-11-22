@@ -16,7 +16,7 @@ import { addDays, LEGACY_KINDS, mdTable, pct, type RunRecord } from "./lib/commo
 const { flags } = flagsOf(process.argv.slice(2));
 const repeats = Number(flags.repeats ?? 3);
 const maxRounds = Number(flags.rounds ?? 3);
-const dayRounds = Number(flags["day-rounds"] ?? 3);
+const dayRounds = Number(flags["day-rounds"] ?? 4);
 const whole = flags.whole === "true";
 const WEEKDAY = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const weekdayOf = (date: string) => WEEKDAY[new Date(`${date}T00:00:00Z`).getUTCDay()];
