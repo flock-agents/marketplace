@@ -10,7 +10,7 @@ For each event decide: what must the family physically do before it? Only these 
 - book (a cab, a table, a slot the source says to book),
 - collect (a ticket, a parcel, a kit to pick up).
 
-Nothing is the usual answer. A class, a meeting (a parent-teacher meeting too), an appointment already booked, a holiday, a notice with nothing asked of the family, an event the source calls off: no steps. Never add a step to attend, to remember, to prepare in general, to check something, to carry something, or to set a reminder: the calendar already reminds the family of the event itself. Never re-do what the notes say is done (a flight booked and paid needs no booking or paying). Use only what the event and its notes say; never invent a requirement.
+Nothing is the usual answer. A class, a meeting (a parent-teacher meeting too), an appointment already booked, a holiday, a notice with nothing asked of the family, an event the source calls off: no steps. Never add a step to attend, to remember, to prepare in general, to check something, to carry something, or to set a reminder: the calendar already reminds the family of the event itself. Never re-do what the notes say is done (a flight booked and paid needs no booking or paying). Use what the event and its notes say, and never invent a requirement, with one kind of exception: what the occasion itself plainly asks of a guest, said or not. A child's birthday party, a wedding or a housewarming the family is invited to needs a gift bought (and an RSVP sent when the invitation asks for one).
 
 Rules for steps (Family Calendar refuses a step that breaks one):
 - At most 3 steps for an event, counting the open ones it has; usually 0 or 1.
