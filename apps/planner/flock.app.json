@@ -605,7 +605,7 @@
       "required": false,
       "default": "assume",
       "assume": "I assumed nobody is on a special diet.",
-      "help": "dietElders: what it says about how an elder (household.elders) eats, \"\" when nothing. save one set_person { name, diet: in their words } per person named; set_house_rules { add: true, rules }: only the rules this reply states: \"Lakshmi is diabetic: no white rice, millets instead, no sugar\": {\"kind\":\"swap\",\"who\":\"Lakshmi\",\"items\":[\"@white_rice\"],\"to\":\"millets\"} and {\"kind\":\"avoid\",\"who\":\"Lakshmi\",\"items\":[\"sugar\",\"jaggery\"]}; \"Shiva: high protein, protein at every lunch and dinner\": {\"kind\":\"require\",\"who\":\"Shiva\",\"slots\":[\"Lunch\",\"Dinner\"],\"items\":[\"@protein\"]}. \"No X, Y instead\" is swap; plain \"no X\" is avoid."
+      "help": "dietElders: what it says about how an elder eats, \"\" when nothing. save one set_person { name, diet: in their words } per person named; set_house_rules { add: true, rules }: only the rules this reply states: \"diabetic, less rice, millets are good, no sugar\": {\"kind\":\"swap\",\"who\":\"Lakshmi\",\"items\":[\"@white_rice\"],\"to\":\"millets\"} and {\"kind\":\"avoid\",\"who\":\"Lakshmi\",\"items\":[\"sugar\",\"jaggery\"]}; \"Shiva: protein at every lunch and dinner\": {\"kind\":\"require\",\"who\":\"Shiva\",\"slots\":[\"Lunch\",\"Dinner\"],\"items\":[\"@protein\"]}. Kind: \"only\" just for \"only\"/\"must\"/\"nothing but\"; \"less X\", \"X is good for him\", \"X instead\": swap, never only; \"no X\": avoid."
     },
     {
       "id": "elders",
@@ -626,7 +626,7 @@
       "required": false,
       "default": "assume",
       "assume": "I assumed the elders eat what everyone eats.",
-      "help": "Only what the diet answer did not say. save one set_person { name, diet } per elder named, diet in their words with what the diet answer said for them (dietElders) kept in it; set_house_rules { add: true, rules }: only the rules this reply states: \"Lakshmi fasts on Thursday, only sabudana khichdi or fruit\": {\"kind\":\"only\",\"who\":\"Lakshmi\",\"days\":[\"Thu\"],\"slots\":[\"Breakfast\",\"Lunch\",\"Dinner\"],\"items\":[\"sabudana khichdi\",\"fruit\"],\"note\":\"Thursday fast\"}; \"no onion or garlic for her\": {\"kind\":\"avoid\",\"who\":\"Lakshmi\",\"items\":[\"onion\",\"garlic\"]}; \"low salt\", \"softer food\": other with who. \"No, the same as everyone\": no save."
+      "help": "Only what the diet answer did not say. save one set_person { name, diet } per elder named, diet in their words with dietElders kept in it; set_house_rules { add: true, rules }: only the rules this reply states: \"fasts Thursday, only sabudana khichdi or fruit\": {\"kind\":\"only\",\"who\":\"Lakshmi\",\"days\":[\"Thu\"],\"slots\":[\"Breakfast\",\"Lunch\",\"Dinner\"],\"items\":[\"sabudana khichdi\",\"fruit\"]}; \"fasts till evening on Thursday\": {\"kind\":\"fasting\",\"who\":\"Lakshmi\",\"days\":[\"Thu\"],\"note\":\"no breakfast or lunch, light dinner\"}; \"no onion or garlic\": {\"kind\":\"avoid\",\"who\":\"Lakshmi\",\"items\":[\"onion\",\"garlic\"]}; \"low salt\": other with who. \"Same as everyone\": no save. Kind: \"only\" just for \"only\"/\"must\"/\"nothing but\"; \"less X\", \"X is good for him\", \"X instead\": swap, never only; \"no X\": avoid."
     },
     {
       "id": "elders",
@@ -647,7 +647,7 @@
       "required": false,
       "default": "assume",
       "assume": "I assumed the elders eat what everyone eats.",
-      "help": "Only what the diet answer did not say. save one set_person { name, diet } per elder named, diet in their words with what the diet answer said for them (dietElders) kept in it; set_house_rules { add: true, rules }: only the rules this reply states: \"Lakshmi fasts on Thursday, only sabudana khichdi or fruit\": {\"kind\":\"only\",\"who\":\"Lakshmi\",\"days\":[\"Thu\"],\"slots\":[\"Breakfast\",\"Lunch\",\"Dinner\"],\"items\":[\"sabudana khichdi\",\"fruit\"],\"note\":\"Thursday fast\"}; \"no onion or garlic for her\": {\"kind\":\"avoid\",\"who\":\"Lakshmi\",\"items\":[\"onion\",\"garlic\"]}; \"low salt\", \"softer food\": other with who. \"No, the same as everyone\": no save."
+      "help": "Only what the diet answer did not say. save one set_person { name, diet } per elder named, diet in their words with dietElders kept in it; set_house_rules { add: true, rules }: only the rules this reply states: \"fasts Thursday, only sabudana khichdi or fruit\": {\"kind\":\"only\",\"who\":\"Lakshmi\",\"days\":[\"Thu\"],\"slots\":[\"Breakfast\",\"Lunch\",\"Dinner\"],\"items\":[\"sabudana khichdi\",\"fruit\"]}; \"fasts till evening on Thursday\": {\"kind\":\"fasting\",\"who\":\"Lakshmi\",\"days\":[\"Thu\"],\"note\":\"no breakfast or lunch, light dinner\"}; \"no onion or garlic\": {\"kind\":\"avoid\",\"who\":\"Lakshmi\",\"items\":[\"onion\",\"garlic\"]}; \"low salt\": other with who. \"Same as everyone\": no save. Kind: \"only\" just for \"only\"/\"must\"/\"nothing but\"; \"less X\", \"X is good for him\", \"X instead\": swap, never only; \"no X\": avoid."
     },
     {
       "id": "rules",
@@ -662,7 +662,7 @@
         }
       ],
       "required": false,
-      "help": "set_house_rules { add: true, rules }: only the rules this reply states, never the whole list: \"strictly veg, no eggs\": {\"kind\":\"veg\"} and {\"kind\":\"no_eggs\"}; \"Tuesday Jain for everyone\": {\"kind\":\"avoid\",\"days\":[\"Tue\"],\"items\":[\"@root_veg\"],\"note\":\"Jain on Tuesday\"}; \"Ankita is allergic to peanuts, none in the house\": {\"kind\":\"avoid\",\"items\":[\"@peanut\"],\"note\":\"Ankita's allergy\"}; \"nobody eats bitter gourd or brinjal\": {\"kind\":\"avoid\",\"items\":[\"bitter gourd\",\"karela\",\"brinjal\",\"baingan\"]}; a dish someone won't touch: avoid with who.",
+      "help": "set_house_rules { add: true, rules }: only the rules this reply states, never the whole list: \"strictly veg, no eggs\": {\"kind\":\"veg\"} and {\"kind\":\"no_eggs\"}; \"Tuesday Jain\": {\"kind\":\"avoid\",\"days\":[\"Tue\"],\"items\":[\"@root_veg\"],\"note\":\"Jain on Tuesday\"}; \"nut-free school\": {\"kind\":\"avoid\",\"who\":\"Agastya\",\"slots\":[\"Tiffin\"],\"items\":[\"@nuts\",\"@peanut\"]}; \"father fasts Thursday till evening\": {\"kind\":\"fasting\",\"who\":\"Gowri Shankar\",\"days\":[\"Thu\"],\"note\":\"no breakfast or lunch, light dinner\"}; a dish someone won't touch: avoid with who. Kind: \"only\" just for \"only\"/\"must\"/\"nothing but\"; \"less X\", \"X is good for him\", \"X instead\": swap, never only; \"no X\": avoid.",
       "default": "assume",
       "assume": "I assumed no special food rules."
     },
