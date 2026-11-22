@@ -272,6 +272,20 @@ describe("make_plan: the week in steps", () => {
     expect((r as any).no_ingredients).toHaveLength(18);
   });
 
+  it("a fasting person given breakfast on their fast day is refused, and the fix round says why", async () => {
+    const f = fakeModel();
+    const k = await family(f.model);
+    await k.op("set_house_rules", { add: true, rules: [{ kind: "fasting", who: "Ravi", days: ["Thu"], slots: ["Breakfast", "Lunch"], note: "fast till evening" }] });
+    await k.op("make_plan", { week_start: MON });
+    const fix = f.menus()[1].user.fix;
+    expect(fix.map((m: any) => `${m.day} ${m.slot}`)).toEqual(["Thu Breakfast", "Thu Lunch"]);
+    expect(fix[0].wrong[0]).toContain("Poha is for everyone, which includes Ravi, who fasts at Breakfast and Lunch on Thursday");
+    expect(fix[0].rules).toContain("Ravi fasts at Breakfast, Lunch on Thu");
+    // The fake model never fixes it; code takes Ravi off the shared dish.
+    const thu = await k.meal("2026-11-26", "Breakfast");
+    expect(thu.dishes.every((d: any) => !d.for_people.includes("Ravi") && !d.for_people.includes("everyone"))).toBe(true);
+  });
+
   it("make_plan needs a Monday, and a family", async () => {
     const f = fakeModel();
     const k = await boot({ model: f.model, now: () => SUN });

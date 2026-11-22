@@ -2,7 +2,7 @@
 // breaks of each kind of rule, and run 11's week, refused naming each break and passed once corrected.
 import { describe, it, expect } from "bun:test";
 import { boot } from "./testkit";
-import { breaksText, dishHas, isSide, matches, ruleBreaks, ruleBreaksIn, ruleText, type RuleWeek } from "./rules";
+import { breaksText, dishHas, isSide, matches, ruleBreaks, ruleBreaksIn, rulesSaid, ruleText, type RuleWeek } from "./rules";
 
 describe("matches", () => {
   it("drops a negation from a dish's name: in brackets, and 'without X' / 'no X'", () => {
@@ -260,6 +260,26 @@ describe("ruleBreaks", () => {
     expect(ruleBreaks(w, { rules: [rule("fasting", ["Tue"]), { kind: "other", days: [], note: "no fish" }] }, people)).toEqual([]);
     // A day in the family's own words ("Ekadashi") is not a weekday the app can check.
     expect(ruleBreaks(w, { rules: [rule("veg", ["Ekadashi"])] }, people)).toEqual([]);
+  });
+
+  // Lane B (2026-11-23): "fasts Thursday till evening" was a note nobody checked; with who, days and slots it is checked.
+  it("a fast with who, days and slots is checked: a dish for that person, or for everyone without except of them, is a break", () => {
+    const fast = [{ kind: "fasting" as const, who: "Lakshmi", days: ["Thu"], slots: ["Breakfast", "Lunch"], note: "fast till evening, light dinner" }];
+    const thu = "2026-11-26";
+    const w = week([
+      { date: thu, slot: "Breakfast", dishes: [{ name: "Upma", for_people: ["everyone"] }] },
+      { date: thu, slot: "Lunch", dishes: [{ name: "Rajma", for_people: ["Shiva", "Ankita", "Agastya", "Meera"] }, { name: "Curd rice", for_people: ["Lakshmi"] }] },
+      { date: thu, slot: "Dinner", dishes: [{ name: "Khichdi", for_people: ["everyone"] }] },
+      { date: "2026-11-27", slot: "Breakfast", dishes: [{ name: "Poha", for_people: ["everyone"] }] }]);
+    const b = ruleBreaks(w, { rules: fast }, people);
+    expect(keys(b)).toEqual(["Thu 2026-11-26 Breakfast|Upma|Lakshmi", "Thu 2026-11-26 Lunch|Curd rice|Lakshmi"]);
+    expect(b[0].rule).toBe("Lakshmi fasts at Breakfast, Lunch on Thu");
+    expect(b[0].fix).toBe('Upma is for everyone, which includes Lakshmi, who fasts at Breakfast and Lunch on Thursday: make it for everyone except Lakshmi (except: ["Lakshmi"])');
+    expect(b[1].fix).toContain("plan nothing for Lakshmi at this meal");
+    // Without slots it stays a note; so does a day in the family's words.
+    expect(ruleBreaks(w, { rules: [{ kind: "fasting", who: "Lakshmi", days: ["Thu"], note: "fasts" }] }, people)).toEqual([]);
+    expect(ruleBreaks(w, { rules: [{ kind: "fasting", who: "Lakshmi", days: ["Ekadashi"], slots: ["Breakfast"] }] }, people)).toEqual([]);
+    expect(rulesSaid(fast)).toBe("Lakshmi: fasts at Breakfast, Lunch on Thu (fast till evening, light dinner)");
   });
 
   it("names each break in one line: meal, dish, the rule, and the fix", () => {

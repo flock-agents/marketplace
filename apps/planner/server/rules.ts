@@ -194,6 +194,10 @@ export function ruleText(r: Rule, opts: { days?: boolean } = {}): string {
       if (r.per_meal != null) { const n = r.per_meal; return `at most ${n} dish${n === 1 ? "" : "es"}${r.items?.length ? ` with ${listText(r.items)}` : ""} a meal${r.who ? ` for ${r.who}` : ""}${scope}`; }
       const n = r.per_week ?? 0; return `${listText(r.items)} in at most ${n} meal${n === 1 ? "" : "s"} a week${r.who ? ` for ${r.who}` : ""}${scope}`;
     }
+    case "fasting":
+      // A fast the app checks (who, days, slots): no meal for that person then.
+      if (r.who && r.slots?.length) return `${r.who} fasts${scope}`;
+      return `${RULE_LABELS.fasting}${r.who ? ` for ${r.who}` : ""}${scope}`;
     default: return `${RULE_LABELS[r.kind as keyof typeof RULE_LABELS] ?? r.kind}${r.who ? ` for ${r.who}` : ""}${scope}`;
   }
 }
@@ -205,7 +209,8 @@ export function rulesSaid(list: readonly Rule[]): string {
   const groups = new Map<string, string[]>();
   for (const r of list) {
     const key = r.who ?? "";
-    let text = (r.kind === "other" || r.kind === "fasting") && r.note ? `${r.note}${scopeText(r)}` : ruleText(r);
+    let text = isCheckedFast(r) ? `${ruleText(r)}${r.note ? ` (${r.note})` : ""}`
+      : (r.kind === "other" || r.kind === "fasting") && r.note ? `${r.note}${scopeText(r)}` : ruleText(r);
     if (r.who && text.startsWith(`${r.who} `)) text = text.slice(r.who.length + 1);
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key)!.push(text);
@@ -215,13 +220,22 @@ export function rulesSaid(list: readonly Rule[]): string {
 }
 
 /** An older kind as the checked rule it is (spec: veg, no_meat and egg avoid meat and fish; no_eggs avoids eggs;
- *  no_onion_garlic avoids onion and garlic). fasting and other are a note only. */
+ *  no_onion_garlic avoids onion and garlic). A fast with who, days and slots is checked (isCheckedFast); one without slots,
+ *  and other, are a note only. */
 function checkedAs(r: Rule): Rule | null {
-  if ((CHECKED_KINDS as readonly string[]).includes(r.kind)) return r;
+  if ((CHECKED_KINDS as readonly string[]).includes(r.kind) || isCheckedFast(r)) return r;
   const items = r.kind === "veg" || r.kind === "no_meat" || r.kind === "egg" ? ["@meat", "@fish"]
     : r.kind === "no_eggs" ? ["@egg"] : r.kind === "no_onion_garlic" ? ["onion", "garlic"] : null;
   return items ? { ...r, kind: "avoid", items } : null;
 }
+
+/** A fast the app checks: a person (who), the weekdays (days) and the meals (slots) they eat nothing at. A fast without
+ *  slots ("fasts on Ekadashi") stays a note; a fast with foods allowed is an `only` rule. */
+export const isCheckedFast = (r: Rule): boolean =>
+  r.kind === "fasting" && !!r.who && !!r.slots?.length && r.days.length > 0 && r.days.every((d) => isWeekday(d));
+
+const LONG_DAYS: Record<string, string> = { Mon: "Monday", Tue: "Tuesday", Wed: "Wednesday", Thu: "Thursday", Fri: "Friday", Sat: "Saturday", Sun: "Sunday" };
+const andList = (xs: string[]) => (xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`);
 
 // ── The checks ──
 
@@ -276,6 +290,16 @@ function breaksOf(shown: Rule, meals: RuleMeal[], people: { name: string }[], sl
       for (const m of inScope) for (const who of r.who ? (eatsAt(m, r.who) ? [r.who] : []) : diners(m))
         if (!eaten(m, who).some((d) => firstHit(d))) add(m, { who, fix: `add a dish with ${listText(items, " or ")} that ${who} eats` });
       break;
+    case "fasting": {
+      // Every dish the person would eat at a meal they fast at: one naming them, or one for everyone not leaving them out.
+      const fasts = `${r.who}, who fasts at ${andList(r.slots!)} on ${andList(days.map((d) => LONG_DAYS[d]))}`;
+      for (const m of inScope) for (const d of eaten(m, r.who!)) {
+        const all = forEveryone(d.for_people);
+        add(m, { dish: d.name, who: r.who, fix: all ? `${d.name} is for everyone, which includes ${fasts}: make it for everyone except ${r.who} (except: ["${r.who}"])`
+          : `${d.name} is for ${fasts}: plan nothing for ${r.who} at this meal` });
+      }
+      break;
+    }
     case "cap": {
       if (r.per_meal != null) {
         const cap = r.per_meal;

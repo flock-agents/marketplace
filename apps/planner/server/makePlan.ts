@@ -28,7 +28,7 @@ export type MenuMeal = { date: string; slot: string; dishes: MenuDish[] };
 export type SlotNeed = { key: string; date: string; day: string; slot: string; who: string[]; rules: string[]; cook: string;
   family_dishes: { dish: string; for?: string[]; rating?: string }[]; ordered_in?: { note?: string } };
 /** What is wrong with one meal of the menu. A repeat weighs least: it is what the family can live with when nothing else fits. */
-type Problem = { kind: "rule" | "repeat" | "eaters" | "empty"; text: string; said: string; dish?: string };
+type Problem = { kind: "rule" | "repeat" | "eaters" | "empty"; text: string; said: string; dish?: string; who?: string };
 type Ingredient = { item: string; amount: number | null; unit: string | null };
 
 export type MakePlanResult =
@@ -134,7 +134,7 @@ export function menuProblems(c: WeekContext, needs: SlotNeed[], menu: Map<string
   const { breaks } = menuChecks(view, c.house, family.map((name) => ({ name })), today);
   for (const b of breaks) {
     const n = byLabel.get(b.meal);
-    if (n) add(n.key, { kind: "rule", dish: b.dish, text: `${b.dish ? `${b.dish}: ` : ""}${b.rule} (${b.fix})`, said: `${short(n)}${b.dish ? ` has ${b.dish}, against "${b.rule}"` : `: "${b.rule}" is not kept`}` });
+    if (n) add(n.key, { kind: "rule", dish: b.dish, ...(b.who ? { who: b.who } : {}), text: `${b.dish ? `${b.dish}: ` : ""}${b.rule} (${b.fix})`, said: `${short(n)}${b.dish ? ` has ${b.dish}, against "${b.rule}"` : `: "${b.rule}" is not kept`}` });
   }
   for (const r of repeatedDays(view, c.house)) {
     const kept = r.dates.slice(0, MAIN_DAYS_MAX).map(weekdayOf).join(" and ");
@@ -239,6 +239,17 @@ function candidates(n: SlotNeed, meal: MenuMeal | undefined, problems: Problem[]
     }
     // The dish dropped, when the meal has others.
     if (now.length > 1) out.push(now.filter((_, i) => i !== at));
+  }
+  // A person's rule broken by a dish they share (a fast, an avoid): the dish without them.
+  for (const p of problems) {
+    if (p.kind !== "rule" || !p.dish || !p.who) continue;
+    const at = now.findIndex((d) => dishKey(d.name) === dishKey(p.dish!));
+    if (at < 0) continue;
+    const d = now[at], who = p.who;
+    const named = d.for.filter((x) => !same(x, EVERYONE));
+    const without: MenuDish | null = !named.length ? { ...d, for: [EVERYONE], except: [...new Set([...(d.except ?? []), who])] }
+      : named.some((x) => same(x, who)) ? (named.length > 1 ? { ...d, for: named.filter((x) => !same(x, who)) } : null) : d;
+    out.unshift(without ? now.map((x, i) => (i === at ? without : x)) : now.filter((_, i) => i !== at));
   }
   const everyone = pool.filter((p) => !p.for?.length), own = pool.filter((p) => p.for?.length);
   for (const p of everyone) out.push([{ name: p.dish, for: [EVERYONE] }]);

@@ -72,7 +72,7 @@ A second dish is only for someone who truly eats something else (a baby's milk, 
   the meals ordered in; variety as the weekly run says. A dish in `known_dishes` rated `didnt_work`: plan it rarely, not
   never; heed every dish's note ("too oily").
 - **Food rules are checked.** A person eats exactly the dishes whose `for` names them, and the ones `for: ["everyone"]`. A rule of
-  `only` or `avoid` for one person: give that person a dish of their own, and name the others on the shared dish. A `swap` stays the `portion_note` of a dish that person eats ("millet instead of rice for Lakshmi"). A `require` ("protein at every lunch for Shiva") is a dish that person eats with one of its items. `other` rules are not checked: heed their note.
+  `only` or `avoid` for one person: give that person a dish of their own, and name the others on the shared dish. A `swap` stays the `portion_note` of a dish that person eats ("millet instead of rice for Lakshmi"). A `require` ("protein at every lunch for Shiva") is a dish that person eats with one of its items. A `fasting` rule with who, days and slots ("fasts Thursday till evening": slots Breakfast, Lunch) is checked: no dish for them then, the shared one `except` them; without slots it is a note. `other` rules are not checked: heed their note.
   A final `plan_week`, `set_meal` or `set_dish` that breaks one is refused with `RULE_BROKEN`, each break named (`rule_breaks`): fix each one and send again.
 - **Every dish gets its ingredients when you plan it** (`set_dish` and `set_meal` too, or they are refused), with amounts
   for this family: add up the portions of the people it is for, for that one meal. Leave out salt and water.

@@ -134,7 +134,7 @@ const PERSON_WORDS = ["relationship", "portions", "diet", "allergies", "dislikes
 
 const RULE_SHAPE = "rules must be a list of { kind, who?, days?, slots?, items?, to?, per_week?, per_meal?, note? }";
 const KIND_HELP = `a rule's kind must be one of: ${RULE_KINDS.join(", ")} (avoid: no dish with items; only: who eats only items; swap: who has to in place of items; `
-  + `require: who eats one of items at each of slots; cap: items in at most per_week meals, or at most per_meal dishes in each meal of slots; no_eggs: "no eggs on Tuesday"; egg: eggs but no meat; other: the family's own words in note)`;
+  + `require: who eats one of items at each of slots; cap: items in at most per_week meals, or at most per_meal dishes in each meal of slots; no_eggs: "no eggs on Tuesday"; egg: eggs but no meat; fasting: who eats nothing at slots on days (without slots a note); other: the family's own words in note)`;
 const CATEGORY_LIST = Object.keys(CATEGORIES).map((c) => `@${c}`).join(", ");
 const isChecked = (kind: unknown): kind is (typeof CHECKED_KINDS)[number] => (CHECKED_KINDS as readonly unknown[]).includes(kind);
 
