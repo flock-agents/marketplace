@@ -262,14 +262,54 @@ describe("a planned week is ready to send", () => {
     expect((await op("plan_week", { week_start: MON, mode: "final" })).message).toContain("Next week is planned.");
   });
 
-  it("a dish on two days is never refused: variety is the guide's, and the family edits the week once it is sent", async () => {
+  it("the weekly plan: a main dish on two days is fine, on three refused; roti, rice and sides are not counted", async () => {
     const { op } = await boot({ now: SUNDAY });
     const loop = ["Rajma", "Chole", "Kadhi"];
-    await op("plan_week", { week_start: MON, mode: "final", keep_rest: true, meals: [0, 1, 2, 3, 4, 5].map((i) => day(`2026-11-${23 + i}`, "Dinner", loop[i % 3], "Roti", "Rice")) });
+    await op("plan_week", { week_start: MON, mode: "final", keep_rest: true, meals: [0, 1, 2, 3, 4, 5].map((i) => day(`2026-11-${23 + i}`, "Dinner", loop[i % 3], "Roti", "Rice", "Sambar")) });
+    expect((await op("plan_week", { week_start: MON, mode: "final" })).message).toContain("Next week is planned.");
+    // A third Rajma by the agent's weekly plan is refused at the close.
+    await op("plan_week", { week_start: MON, mode: "final", keep_rest: true, meals: [day("2026-11-24", "Dinner", "Rajma", "Roti")] });
     const r = await op("plan_week", { week_start: MON, mode: "final" });
-    expect(r.error).toBeUndefined();
-    expect(r.message).toContain("Next week is planned.");
+    expect(r.code).toBe("REPEATED_DISHES");
+    expect(r.detail.repeated).toEqual(["Rajma (Mon, Tue, Thu)"]);
+    expect(r.error).toContain("more than 2 days");
     expect((await op("plan_week", { week_start: MON, mode: "final", repeats_ok: true })).error).toContain("repeats_ok");
+  });
+
+  it("the family's changes in chat (set_meal, set_dish) never check repeats", async () => {
+    const { op } = await boot({ now: SUNDAY });
+    for (const d of ["2026-11-23", "2026-11-24", "2026-11-25", "2026-11-26"]) {
+      const r = await op("set_meal", { date: d, slot: "Dinner", dishes: [food("Rajma")] });
+      expect(r.error).toBeUndefined();
+    }
+    expect((await op("set_dish", { date: "2026-11-27", slot: "Dinner", name: "Rajma", for: ["everyone"], ingredients: [{ item: "rajma", amount: 200, unit: "g" }] })).error).toBeUndefined();
+  });
+
+  it("a dish one person's only rule names comes back freely; a grain's roti is a staple", async () => {
+    const { op } = await boot({ now: SUNDAY });
+    await op("set_person", { name: "Tara", group: "child" });
+    await op("set_house_rules", { rules: [{ kind: "only", who: "Tara", slots: ["Breakfast"], items: ["plain dosa"] }] });
+    const days = [0, 1, 2, 3].map((i) => `2026-11-${23 + i}`);
+    await op("plan_week", { week_start: MON, mode: "final", keep_rest: true, meals: [
+      ...days.map((d) => day(d, "Breakfast", "Plain dosa")), ...days.map((d, i) => day(d, "Dinner", ["Rajma", "Chole", "Kadhi", "Dal makhani"][i], "Jowar roti"))] });
+    expect((await op("plan_week", { week_start: MON, mode: "final" })).error).toBeUndefined();
+  });
+
+  it("except: the shared dish is for everyone but the person with their own, kept as the names of the others", async () => {
+    const { op, owner } = await boot({ now: SUNDAY });
+    for (const n of ["Shiva", "Ankita", "Meera"]) await op("set_person", { name: n, group: n === "Meera" ? "child" : "adult" });
+    const r = await op("set_meal", { date: MON, slot: "Breakfast", dishes: [
+      { name: "Plain idli", for: ["Meera"], ingredients: [{ item: "idli batter", amount: 100, unit: "g" }] },
+      { name: "Rava idli", for: ["everyone"], except: ["meera"], ingredients: [{ item: "rava", amount: 200, unit: "g" }] }] });
+    expect(r.error).toBeUndefined();
+    const week = (await owner("GET", `/api/weeks/${MON}`)).body;
+    const [plain, rava] = mealOf(week, MON, "Breakfast").dishes;
+    expect(plain.for_people).toEqual(["Meera"]);
+    expect(rava.for_people).toContain("Shiva"); expect(rava.for_people).toContain("Ankita"); expect(rava.for_people).not.toContain("Meera");
+    // except alone means everyone but them; with names in for, or a name not eating the meal, it is told.
+    expect((await op("set_dish", { date: MON, slot: "Lunch", name: "Dal", except: ["Meera"], ingredients: [{ item: "dal", amount: 100, unit: "g" }] })).error).toBeUndefined();
+    expect((await op("set_dish", { date: MON, slot: "Dinner", name: "Dal", for: ["Shiva"], except: ["Meera"], ingredients: [{ item: "dal", amount: 100, unit: "g" }] })).error).toContain('except goes with for: ["everyone"]');
+    expect((await op("set_dish", { date: MON, slot: "Dinner", name: "Dal", for: ["everyone"], except: ["Mira"], ingredients: [{ item: "dal", amount: 100, unit: "g" }] })).error).toContain("did you mean Meera?");
   });
 
   it("plan_menu: the whole week by name first, every problem named at once; kept as a draft the days then fill", async () => {
@@ -290,7 +330,7 @@ describe("a planned week is ready to send", () => {
     expect(bad.error).toContain("Egg curry");
     expect(bad.detail.missing_eaters).toEqual(["Tue 2026-11-24 Dinner: Roti (no for)"]);
     expect(bad.detail.missing_slots).toEqual(["Tue 2026-11-24 Agastya's tiffin"]);
-    expect(bad.detail.repeated).toBeUndefined();   // Rajma on Mon and Tue is the guide's to avoid, not refused
+    expect(bad.detail.repeated).toEqual([]);   // Rajma on two days is allowed; a third would be named
     const ok = await op("plan_menu", { week_start: MON, meals: [
       { date: MON, slot: "Breakfast", dishes: [name("Upma", ["Agastya"]), name("Plain idli", ["Meera"])] },
       { date: MON, slot: "Dinner", dishes: [name("Rajma"), name("Roti")] },
@@ -397,7 +437,7 @@ describe("a meal is planned once, not once per person", () => {
     const ops = ["plan_week", "set_meal", "set_dish"].map((n) => manifest.agentInterface.operations.find((o: any) => o.name === n).description as string);
     const guide = readFileSync(join(import.meta.dir, "agent-guide.md"), "utf8");
     for (const text of [guide, ...ops]) expect(text).toContain('["everyone"]');
-    for (const text of [guide, ops[0], ops[2]]) for (const said of ["MISSING_EATERS", "names only them", "the shared dish then names everyone else", "millet instead of rice for Lakshmi"])
+    for (const text of [guide, ops[0], ops[2]]) for (const said of ["MISSING_EATERS", "names only them", "except", "millet instead of rice for Lakshmi"])
       expect(text).toContain(said);
   });
 });
@@ -463,7 +503,7 @@ describe("who eats a dish", () => {
       "Mon 2026-11-23 Lunch: Sauteed veg (for: \"everyone\" goes alone; otherwise name each person who eats it)",
       "Mon 2026-11-23 Lunch: Curd (no for)"]);
     expect(r.error).toBe("Every planned dish names who eats it in for: [\"everyone\"] (everyone who eats that meal) or the names of the people who eat it "
-      + "(Priya, Dev, Sushila, Rohan). A person's own dish names only them, and the shared dish then names everyone else. Not so: "
+      + "(Priya, Dev, Sushila, Rohan). A person's own dish names only them, and the shared dish is for everyone except them: for: [\"everyone\"], except: [their names]. Not so: "
       + r.detail.missing_eaters.join("; ") + ". Send each with its for.");
     expect(rows("plan_meals")).toHaveLength(0);
     // set_meal and set_dish the same; a final plan tells it with the dishes without ingredients, in one refusal.

@@ -86,10 +86,13 @@ loaf, garlic bread, oven), and from the 2026-11-22 eval:
   `Mon 2026-11-23 Breakfast: Rava idli — Meera eats only plain idli, plain dosa, banana sheera (add a dish for Meera)`.
   Also `rule_breaks: [{ meal, dish?, who?, rule, fix }]` in the body.
 - Never on the family's own edits in the app (they may break their own rules).
-- A dish on two days is never refused (owner 2026-11-22: "focus on having it a prompt only guidance and still pushing the
-  plan. Let the user edit it after they receive the first draft. So user instruction overrides default preference"). The
-  guide's weekly run asks for it where the menu is written: no dish on two days (roti, rice and sides aside), at most 3–4 of
-  last week's dishes, what the family said wins. REPEATED_DISHES and repeats_ok are gone.
+- Variety (owner 2026-11-22): the weekly plan (plan_menu, the closing plan_week) refuses a main dish on more than two days
+  (REPEATED_DISHES; `MAIN_DAYS_MAX`); roti, rice (a grain's too), sides (sambar, rasam, chutney, curd, plain dal, boiled
+  eggs) and the dishes an `only` rule names are not counted. set_meal / set_dish, the family's changes in chat, never check
+  it: the family edits the week after it is sent and what they say wins. Two days of a dish and last week's dishes (3–4 at
+  most) are the guide's to ask for, in the menu step. `repeats_ok` is gone.
+- `except` (2026-11-22): `for: ["everyone"], except: ["Meera"]` is everyone who eats that meal but Meera, kept as their
+  names. The flock-fast eval left a child with no breakfast when the shared dish's eaters were typed out by hand.
 - Indian food words are read as their English one before any matching (`SAME_AS` in rules.ts: aloo potato, suji semolina,
   matar peas, dahi curd, palak spinach…), so a rule or category never needs each spelling. Kadhi is `@dairy`. Found by the
   flock-fast eval: "Aloo matar" (no potato in its ingredients) for a Jain family, "Suji sheera" for a gluten-free child.

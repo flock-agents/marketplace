@@ -36,7 +36,7 @@ const FRAME = `
 
 You are the meal agent on the weekly run. You have no tools here: the harness makes the app calls for you. Reply with ONE JSON
 object and nothing else: { "meals": [ ...every meal of the week... ] }, each meal as plan_week takes it ({ date, slot,
-ordered_in?, note?, dishes?: [{ name, for: ["everyone"] or [names], portion_note?, ingredients: [{ item, amount, unit }] }] }). The harness sends it
+ordered_in?, note?, dishes?: [{ name, for: ["everyone"] or [names], except?: [names], portion_note?, ingredients: [{ item, amount, unit }] }] }). The harness sends it
 as plan_week { week_start, mode: "final", meals } and then the closing plan_week { week_start, mode: "final" }. If the app
 refuses either, you get its answer and send the whole week again, fixed.`;
 
@@ -50,7 +50,7 @@ and for only, no ingredients... ] }; the harness sends it as plan_menu { week_st
 refuses, you get its answer: send the whole menu again, fixed.
 Each time you are asked for a day, reply with ONE JSON object and nothing else:
 { "meals": [ ...that day's meals only... ] }, each meal as plan_week takes it ({ date, slot, ordered_in?, note?, dishes?: [{ name,
-for: ["everyone"] or [names], portion_note?, ingredients: [{ item, amount, unit }] }] }). The harness sends it as
+for: ["everyone"] or [names], except?: [names], portion_note?, ingredients: [{ item, amount, unit }] }] }). The harness sends it as
 plan_week { week_start, mode: "final", keep_rest: true, meals }. If the app refuses, you get its answer: send that day again, fixed.
 After the last day the harness makes the closing plan_week { week_start, mode: "final" }. If it is refused, reply with
 { "meals": [ ...only the meals you change, each meal whole... ] }; the harness sends them with keep_rest and closes again.`;

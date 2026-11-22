@@ -137,6 +137,21 @@ export const isSide = (name: string): boolean => {
   return SIDE_WORDS.some((w) => at(n.split(" "), wordsOf(w)).length > 0) || SIDE_NAMES.some((s) => wordsOf(s).join(" ") === n);
 };
 
+/** Is a dish one the family's own `only` rules name ("Meera eats only plain idli, plain dosa…")? Such a dish has to come
+ *  back in the week, so the weekly plan's repeat check lets it. */
+export const namedInOnlyRule = (name: string, rules: { kind: string; items?: string[] }[]): boolean =>
+  rules.some((r) => r.kind === "only" && (r.items ?? []).some((i) => matches(name, i, { name: true })));
+
+/** A side, which comes back on many days of a week (owner 2026-11-22): any side a per_meal cap leaves out, and sambar, rasam,
+ *  a plain dal, boiled eggs. Only for the repeat check: a cap still counts sambar as a dish to cook. */
+const REPEAT_SIDE_WORDS = ["sambar", "rasam"];
+const REPEAT_SIDE_NAMES = ["dal", "plain dal", "dal tadka", "dal fry", "toor dal", "moong dal", "boiled egg", "boiled eggs"];
+export const isRepeatableSide = (name: string): boolean => {
+  if (isSide(name)) return true;
+  const n = wordsOf(stripNegations(name));
+  return REPEAT_SIDE_WORDS.some((w) => at(n, wordsOf(w)).length > 0) || REPEAT_SIDE_NAMES.some((x) => wordsOf(x).join(" ") === n.join(" "));
+};
+
 // ── Who eats what ──
 
 const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();

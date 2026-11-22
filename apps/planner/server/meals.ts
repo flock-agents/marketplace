@@ -9,12 +9,12 @@ import { dish_items, dishes, house as house_t, items, people, plan_meals, saved_
 import { cycleText } from "./estimate";
 import { normItem } from "./products";
 import { closest } from "./agentOps";
-import { SLOTS, type GroceryApp } from "./db/constants";
+import { SLOTS, STAPLE_DISHES, type GroceryApp } from "./db/constants";
 import { addDays, mondayOf, todayStr, weekDates, weekdayOf } from "./dates";
 import { introText, weekLink, weekMessage, weekSendText, youtubeThumb } from "./messages";
 import { dishKey, type LastTime } from "./dishText";
 import { bookOf, knownDishes, lastTime, setVideo, videoOf, type DishVideo } from "./dishBook";
-import { breaksText, dinersOf, EVERYONE, forEveryone, ruleBreaks, ruleBreaksIn, type RuleBreak } from "./rules";
+import { breaksText, dinersOf, EVERYONE, forEveryone, isRepeatableSide, namedInOnlyRule, ruleBreaks, ruleBreaksIn, type RuleBreak } from "./rules";
 import { getHouse, groceryApp, houseView, isObject, list, name, names, refuse, words, writeRoutes,
   type Db, type Emit, type HouseView, type PersonRow } from "./family";
 
@@ -161,10 +161,22 @@ function eatersOf(who: string[], people: string[]): { who: string[] } | { proble
 
 /** The fields of a dish that were sent. From the family, `for` empty or null means everyone. From the agent (`people`: the
  *  names on the Family page), `for` is checked as eatersOf says, and what is wrong is kept in `eaters` to be told with the rest. */
-function dishOf(db: Db, d: Record<string, unknown>, dishName: string, people: string[] | null = null): Dish {
+function dishOf(db: Db, d: Record<string, unknown>, dishName: string, people: string[] | null = null, slot?: string): Dish {
   const set: Dish["set"] = {};
   let eaters: string | undefined;
-  if (d.for !== undefined) {
+  if (d.except != null) {
+    // "Everyone except Meera" (Meera has her own dish): kept as the names of everyone else who eats that meal, so no one is
+    // left out by a list typed by hand (flock-fast eval 2026-11-22: a child left with no breakfast).
+    const out = names(d.except, `${dishName}: except`);
+    const who = d.for == null ? [EVERYONE] : names(d.for, `${dishName}: for`);
+    const diners = slot ? dinersAt(db, slot) : everyoneAtHome(db);
+    const unknown = out.filter((o) => !diners.some((p) => p.toLowerCase() === o.toLowerCase()));
+    const rest = diners.filter((p) => !out.some((o) => o.toLowerCase() === p.toLowerCase()));
+    if (who.length !== 1 || who[0].toLowerCase() !== EVERYONE) eaters = `except goes with for: ["everyone"]`;
+    else if (unknown.length) eaters = `except: ${unknown.map((u) => { const near = closest(u, diners); return `${JSON.stringify(u)} does not eat this meal${near ? ` (did you mean ${near}?)` : ""}`; }).join(", ")}`;
+    else if (!rest.length) eaters = `everyone except ${out.join(", ")} leaves no one to eat it`;
+    else set.for_people = JSON.stringify(rest);
+  } else if (d.for !== undefined) {
     const who = d.for === null ? [] : names(d.for, `${dishName}: for`);
     if (people) {
       const e = eatersOf(who, people);
@@ -234,8 +246,8 @@ function dishesSent(db: Db, v: unknown, meal: string, slot: string, agent: boole
   const family = agent ? everyoneAtHome(db) : null;
   const sent = v.map((d) => {
     if (!isObject(d)) return refuse(`${meal}: each dish is { name, ... }`);
-    const dish = dishOf(db, d, name(d.name, `${meal}: a dish's name`), family);
-    return agent && d.for === undefined ? { ...dish, eaters: NO_EATERS } : dish;
+    const dish = dishOf(db, d, name(d.name, `${meal}: a dish's name`), family, slot);
+    return agent && d.for === undefined && d.except == null ? { ...dish, eaters: NO_EATERS } : dish;
   });
   // A meal is planned once: the same dish sent once per person is one dish, eaten by all of theirs.
   const merged = mergeSameDishes(sent.map((d) => ({ name: d.name, for_people: d.set.for_people ? list<string>(d.set.for_people) : null, portion_note: d.set.portion_note ?? null,
@@ -296,7 +308,7 @@ function missingEaters(meals: Meal[]): string[] {
 /** What the agent is told when a dish does not say who eats it. `family`: the names on the Family page. */
 const eatersSaid = (eaters: string[], family: string[]) =>
   `Every planned dish names who eats it in for: ["everyone"] (everyone who eats that meal) or the names of the people who eat it`
-  + `${family.length ? ` (${family.join(", ")})` : ""}. A person's own dish names only them, and the shared dish then names everyone else.`
+  + `${family.length ? ` (${family.join(", ")})` : ""}. A person's own dish names only them, and the shared dish is for everyone except them: for: ["everyone"], except: [their names].`
   + ` Not so: ${eaters.join("; ")}. Send each with its for.`;
 
 /** The family's rules broken, in one sentence the agent acts on. */
@@ -343,21 +355,48 @@ function slotGaps(week: WeekView, house: HouseView, today: string): string[] {
   return gaps;
 }
 
+/** A main dish comes back on at most this many days of the weekly plan (owner 2026-11-22). */
+export const MAIN_DAYS_MAX = 2;
+const STAPLES = new Set<string>(STAPLE_DISHES);
+/** A grain before a staple keeps it a staple: "Jowar roti", "Ragi roti", "Brown rice" come back like roti and rice. */
+const STAPLE_GRAINS = new Set(["jowar", "bajra", "ragi", "nachni", "makki", "millet", "multigrain", "wheat", "brown", "red", "kambu"]);
+const isStaple = (name: string): boolean => {
+  const key = dishKey(name), w = key.split(" ");
+  return STAPLES.has(key) || (w.length === 2 && STAPLE_GRAINS.has(w[0]) && STAPLES.has(w[1]));
+};
+
+/** The main dishes on more than MAIN_DAYS_MAX days of the week: "Paneer bhurji (Mon, Tue, Thu)". Staples, sides and the
+ *  dishes an `only` rule names come back freely. Checked on the weekly plan only (plan_menu, the closing plan_week): never on
+ *  set_meal / set_dish, so the family's changes in chat are never refused. */
+function overRepeated(week: WeekView, house: HouseView): string[] {
+  const days = new Map<string, { name: string; days: Set<string> }>();
+  for (const m of week.days.flatMap((d) => d.meals)) for (const d of m.dishes) {
+    if (isStaple(d.name) || isRepeatableSide(d.name) || namedInOnlyRule(d.name, house.rules)) continue;
+    const k = dishKey(d.name), seen = days.get(k) ?? { name: d.name, days: new Set<string>() };
+    seen.days.add(m.date); days.set(k, seen);
+  }
+  return [...days.values()].filter((d) => d.days.size > MAIN_DAYS_MAX).map((d) => `${d.name} (${[...d.days].sort().map(weekdayOf).join(", ")})`);
+}
+const repeatsSaid = (repeated: string[]) =>
+  `A main dish is on more than ${MAIN_DAYS_MAX} days: ${repeated.join("; ")}: plan something else on the other days (roti, rice, sides and a person's only dishes may come back).`;
+
 /** The checks a week passes before its closing call answers the message: every dish has its ingredients, and every extra slot
  *  (a child's tiffin) has a meal on each of its days that is a cooking day from today on. Refused with every problem named, so
- *  one fix round is enough. A dish on two days is never refused (owner 2026-11-22): variety is the guide's to ask for, and the
- *  family changes the week as they like once it is sent. */
+ *  one fix round is enough. A main dish on more than MAIN_DAYS_MAX days is refused too (overRepeated); the family's own changes
+ *  once the week is sent never are. */
 function checkWeek(week: WeekView, house: HouseView, today: string, breaks: RuleBreak[]): void {
   const meals = week.days.flatMap((d) => d.meals);
   const missing = meals.flatMap((m) => m.dishes.filter((d) => !d.ingredients.length).map((d) => `${mealLabel(m)}: ${d.name}`));
   const gaps = slotGaps(week, house, today);
-  if (!missing.length && !gaps.length && !breaks.length) return;
+  const repeated = overRepeated(week, house);
+  if (!missing.length && !gaps.length && !breaks.length && !repeated.length) return;
   const said: string[] = breaks.length ? [rulesSaid(breaks)] : [];
   if (missing.length) said.push(`${INGREDIENTS_RULE}. Without ingredients: ${missing.join("; ")}: give each its ingredients with set_dish { dish_id, ingredients }.`);
   if (gaps.length) said.push(`An extra slot has no meal on its day: ${gaps.join("; ")}. Plan it with set_meal { date, slot, dishes }; on a day it is not needed (no school), set_meal { date, slot, ordered_in: true, note }.`);
+  if (repeated.length) said.push(`${repeatsSaid(repeated)} Change them with set_dish.`);
   refuse(`The week is not ready to send. ${said.join(" ")}`,
-    breaks.length ? "RULE_BROKEN" : missing.length ? "MISSING_INGREDIENTS" : "MISSING_SLOTS",
-    { missing_ingredients: missing, missing_slots: gaps, ...(breaks.length ? { rule_breaks: breaks } : {}) });
+    breaks.length ? "RULE_BROKEN" : missing.length ? "MISSING_INGREDIENTS" : gaps.length ? "MISSING_SLOTS" : "REPEATED_DISHES",
+    { missing_ingredients: missing, missing_slots: gaps, repeated, ...(breaks.length ? { rule_breaks: breaks } : {}) });
 }
 
 // ── Writes: each runs inside a transaction and lists what changed, told to the pages once it is committed ──
@@ -540,7 +579,8 @@ export function mountMealRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: { bas
 
   // plan_menu { week_start, meals }: the whole week's dishes by name and who eats each, no ingredients, in one
   // call (small enough for one). Checked as a whole before anything is cooked up: who eats each dish, the rules a name shows
-  // (Meera's breakfast, a cap, egg on a veg day) and each extra slot's days. Refused with every problem named; kept as the
+  // (Meera's breakfast, a cap, egg on a veg day), each extra slot's days, and no main dish on more than MAIN_DAYS_MAX days.
+  // Refused with every problem named; kept as the
   // week's draft when it passes, which the agent then fills a day a call with ingredients (plan_week final, keep_rest). The
   // agent sees the week whole here, so it can vary it as the guide asks (flock-fast eval 2026-11-22).
   write("/api/weeks/:week_start/menu", async (b, by, c) => {
@@ -564,14 +604,16 @@ export function mountMealRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: { bas
       const view = weekView(tx, weekStart), house = houseView(getHouse(tx));
       const breaks = ruleBreaks(view, house, peopleAtHome(tx));
       const gaps = slotGaps(view, house, today());
-      if (!eaters.length && !breaks.length && !gaps.length) return;
+      const repeated = overRepeated(view, house);
+      if (!eaters.length && !breaks.length && !gaps.length && !repeated.length) return;
       const said: string[] = [];
       if (eaters.length) said.push(eatersSaid(eaters, everyoneAtHome(tx)));
       if (breaks.length) said.push(rulesSaid(breaks));
       if (gaps.length) said.push(`An extra slot has no meal on its day: ${gaps.join("; ")}: add it to the menu (ordered_in: true with a note on a day it is not needed).`);
+      if (repeated.length) said.push(repeatsSaid(repeated));
       refuse(`The menu is not ready. ${said.join(" ")} Send the whole menu again, fixed.`,
-        breaks.length ? "RULE_BROKEN" : eaters.length ? "MISSING_EATERS" : "MISSING_SLOTS",
-        { ...(breaks.length ? { rule_breaks: breaks } : {}), ...(eaters.length ? { missing_eaters: eaters } : {}), missing_slots: gaps });
+        breaks.length ? "RULE_BROKEN" : eaters.length ? "MISSING_EATERS" : gaps.length ? "MISSING_SLOTS" : "REPEATED_DISHES",
+        { ...(breaks.length ? { rule_breaks: breaks } : {}), ...(eaters.length ? { missing_eaters: eaters } : {}), missing_slots: gaps, repeated });
     });
     return { body: { week: weekView(db, weekStart), next: "The menu is kept as next week's draft. Now give each day its ingredients: plan_week { week_start, mode: \"final\", keep_rest: true, meals } one day a call, the menu's dishes with the same names and for, then the closing plan_week { week_start, mode: \"final\" }." } };
   });
@@ -644,7 +686,7 @@ export function mountMealRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: { bas
       return { body: { meal: mealView(meal.id) } };
     }
     const agent = by.startsWith("agent:");
-    const sent = dishOf(db, b, label, agent ? everyoneAtHome(db) : null);
+    const sent = dishOf(db, b, label, agent ? everyoneAtHome(db) : null, meal?.slot ?? at?.slot);
     if (!dish && meal?.ordered_in) refuse(`${meal.date} ${meal.slot} is ordered in, so it has no dishes: set_meal it with ordered_in: false first`);
     const missing = agent && (sent.items ? !sent.items.length
       : !dish || !db.select({ id: dish_items.id }).from(dish_items).where(eq(dish_items.dish_id, dish.id)).limit(1).get())
@@ -653,7 +695,7 @@ export function mountMealRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: { bas
     // The agent plans: a dish it adds says who eats it, and a `for` it sends names them as the Family page does. A dish there
     // already keeps its eaters (a family's own dish without any stays for everyone).
     const eaters = agent ? missingEaters([{ ...(meal ?? at!), dishes: [{ ...sent, name: b.dish_id != null && typeof b.name === "string" ? b.name : label,
-      eaters: sent.eaters ?? (b.for === undefined && !dish ? NO_EATERS : undefined) }] }]) : [];
+      eaters: sent.eaters ?? (b.for === undefined && b.except == null && !dish ? NO_EATERS : undefined) }] }]) : [];
     const ids = commit((tx, changes) => {
       // A meal made for the dish is the app's own row; the dish is the writer's.
       const mealRow = meal ?? tx.insert(plan_meals).values({ ...at!, status: statusFor(at!.date), updated_by: "app" }).returning().get();
