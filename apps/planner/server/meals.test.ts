@@ -300,6 +300,38 @@ describe("a planned week is ready to send", () => {
     expect((await op("plan_week", { week_start: MON, mode: "final" })).message).toContain("Next week is planned.");
   });
 
+  it("plan_menu: the whole week by name first, every problem named at once; kept as a draft the days then fill", async () => {
+    const { op } = await boot({ now: SUNDAY });
+    await op("set_person", { name: "Agastya", group: "child" });
+    await op("set_person", { name: "Meera", group: "child" });
+    await op("set_slots", { extra_slots: [{ name: "Agastya's tiffin", days: ["Mon", "Tue"], for: ["Agastya"] }] });
+    await op("set_cooking_days", { days: ["mon", "tue"] });
+    await op("set_house_rules", { rules: [{ kind: "veg" }, { kind: "no_eggs" }, { kind: "only", who: "Meera", slots: ["Breakfast"], items: ["plain idli", "plain dosa"] }] });
+    const name = (n: string, who = ["everyone"]) => ({ name: n, for: who });
+    const bad = await op("plan_menu", { week_start: MON, meals: [
+      { date: MON, slot: "Breakfast", dishes: [name("Upma")] },
+      { date: MON, slot: "Dinner", dishes: [name("Rajma"), name("Egg curry")] },
+      { date: "2026-11-24", slot: "Dinner", dishes: [name("Rajma"), { name: "Roti" }] },
+      { date: MON, slot: "Agastya's tiffin", dishes: [name("Poha")] }] });
+    expect(bad.code).toBe("RULE_BROKEN");
+    expect(bad.error).toContain("Meera eats only plain idli, plain dosa");
+    expect(bad.error).toContain("Egg curry");
+    expect(bad.detail.missing_eaters).toEqual(["Tue 2026-11-24 Dinner: Roti (no for)"]);
+    expect(bad.detail.missing_slots).toEqual(["Tue 2026-11-24 Agastya's tiffin"]);
+    expect(bad.detail.repeated).toEqual(["Rajma (Mon, Tue)"]);
+    const ok = await op("plan_menu", { week_start: MON, meals: [
+      { date: MON, slot: "Breakfast", dishes: [name("Upma", ["Agastya"]), name("Plain idli", ["Meera"])] },
+      { date: MON, slot: "Dinner", dishes: [name("Rajma"), name("Roti")] },
+      { date: "2026-11-24", slot: "Dinner", dishes: [name("Chole"), name("Roti")] },
+      { date: MON, slot: "Agastya's tiffin", dishes: [name("Poha")] },
+      { date: "2026-11-24", slot: "Agastya's tiffin", dishes: [name("Idli")] }] });
+    expect(ok.error).toBeUndefined();
+    expect(ok.next).toContain("one day a call");
+    expect(ok.week.status).toBe("draft");
+    // The closing call wants each day's ingredients first.
+    expect((await op("plan_week", { week_start: MON, mode: "final" })).code).toBe("MISSING_INGREDIENTS");
+  });
+
   it("the closing answer tells the agent to forward the message as it is, with its one link, the intro once, then stop", async () => {
     const { op } = await boot({ now: SUNDAY, basePath: "/a/xyz" });
     await op("plan_week", { week_start: MON, mode: "final", keep_rest: true, meals: [day(MON, "Lunch", "Rajma")] });

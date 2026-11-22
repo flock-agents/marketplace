@@ -263,6 +263,21 @@ function mealOf(db: Db, v: unknown, slots: string[], agent: boolean): Meal {
   return meal;
 }
 
+/** The meals sent for a week, each on a cooking day of that week and once only. */
+function weekMealsSent(db: Db, sent: unknown[], weekStart: string, agent: boolean): { meals: Meal[]; seen: Set<string> } {
+  const slots = slotNames(db);
+  const meals = sent.map((m) => mealOf(db, m, slots, agent));
+  const seen = new Set<string>();
+  const cooking = houseView(getHouse(db)).cooking_days;
+  for (const m of meals) {
+    if (!cooking.includes(weekdayOf(m.date))) refuse(`${m.date} ${m.slot}: ${weekdayOf(m.date)} is not a cooking day (cooking days: ${cooking.join(", ")}); add it with set_cooking_days, or set_meal for one meal`, "NOT_COOKING_DAY");
+    if (mondayOf(m.date) !== weekStart) refuse(`${m.date} ${m.slot} is not in the week of ${weekStart}`);
+    if (seen.has(`${m.date} ${m.slot}`)) refuse(`${m.date} ${m.slot} is in meals twice`);
+    seen.add(`${m.date} ${m.slot}`);
+  }
+  return { meals, seen };
+}
+
 // ── What a planned dish needs, and the checks on a final week ──
 
 const mealLabel = (m: { date: string; slot: string }) => `${weekdayOf(m.date)} ${m.date} ${m.slot}`;
@@ -325,6 +340,19 @@ const isStaple = (key: string): boolean => {
   return w.length === 2 && STAPLE_GRAINS.has(w[0]) && STAPLES.has(w[1]);
 };
 
+/** Each extra slot (a child's tiffin) without a meal on one of its days that is a cooking day from today on. */
+function slotGaps(week: WeekView, house: HouseView, today: string): string[] {
+  const meals = week.days.flatMap((d) => d.meals), gaps: string[] = [];
+  for (const slot of house.extra_slots) {
+    for (const date of weekDates(week.week_start)) {
+      const day = weekdayOf(date);
+      if (date < today || !house.cooking_days.includes(day) || (slot.days?.length && !slot.days.includes(day))) continue;
+      if (!meals.some((m) => m.date === date && dishKey(m.slot) === dishKey(slot.name))) gaps.push(mealLabel({ date, slot: slot.name }));
+    }
+  }
+  return gaps;
+}
+
 /** The dishes on more than one day of a week: "Rajma (Mon, Thu)". Staples, sides (sambar, chutney, plain dal: owner
  *  2026-11-22, "sides can be repeated on multiple days") and the dishes an `only` rule names come back freely. */
 function repeatsIn(week: WeekView, house: HouseView): string[] {
@@ -344,14 +372,7 @@ function repeatsIn(week: WeekView, house: HouseView): string[] {
 function checkWeek(week: WeekView, house: HouseView, today: string, repeatsOk: boolean, breaks: RuleBreak[]): void {
   const meals = week.days.flatMap((d) => d.meals);
   const missing = meals.flatMap((m) => m.dishes.filter((d) => !d.ingredients.length).map((d) => `${mealLabel(m)}: ${d.name}`));
-  const gaps: string[] = [];
-  for (const slot of house.extra_slots) {
-    for (const date of weekDates(week.week_start)) {
-      const day = weekdayOf(date);
-      if (date < today || !house.cooking_days.includes(day) || (slot.days?.length && !slot.days.includes(day))) continue;
-      if (!meals.some((m) => m.date === date && dishKey(m.slot) === dishKey(slot.name))) gaps.push(mealLabel({ date, slot: slot.name }));
-    }
-  }
+  const gaps = slotGaps(week, house, today);
   const repeated = repeatsOk ? [] : repeatsIn(week, house);
   if (!missing.length && !gaps.length && !repeated.length && !breaks.length) return;
   const said: string[] = breaks.length ? [rulesSaid(breaks)] : [];
@@ -495,16 +516,8 @@ export function mountMealRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: { bas
     } else {
       if (!Array.isArray(b.meals) || !b.meals.length) refuse("meals must be a list of the week's meals: { date, slot, ordered_in?, note?, dishes? }; leave it out to read the context");
       const keepRest = b.keep_rest === undefined ? false : flag(b.keep_rest, "keep_rest");
-      const slots = slotNames(db), agent = by.startsWith("agent:");
-      const meals = (b.meals as unknown[]).map((m) => mealOf(db, m, slots, agent));
-      const seen = new Set<string>();
-      const cooking = houseView(getHouse(db)).cooking_days;
-      for (const m of meals) {
-        if (!cooking.includes(weekdayOf(m.date))) refuse(`${m.date} ${m.slot}: ${weekdayOf(m.date)} is not a cooking day (cooking days: ${cooking.join(", ")}); add it with set_cooking_days, or set_meal for one meal`, "NOT_COOKING_DAY");
-        if (mondayOf(m.date) !== weekStart) refuse(`${m.date} ${m.slot} is not in the week of ${weekStart}`);
-        if (seen.has(`${m.date} ${m.slot}`)) refuse(`${m.date} ${m.slot} is in meals twice`);
-        seen.add(`${m.date} ${m.slot}`);
-      }
+      const agent = by.startsWith("agent:");
+      const { meals, seen } = weekMealsSent(db, b.meals as unknown[], weekStart, agent);
       const checked = mode === "final" && agent;
       const missing = checked ? missingIngredients(meals) : [], eaters = agent ? missingEaters(meals) : [];
       commit((tx, changes) => {
@@ -551,6 +564,46 @@ export function mountMealRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: { bas
     }
     out.instructions = weekSendText(!!out.intro);
     return { body: out };
+  });
+
+  // plan_menu { week_start, meals, repeats_ok? }: the whole week's dishes by name and who eats each, no ingredients, in one
+  // call (small enough for one). Checked as a whole before anything is cooked up: who eats each dish, the rules a name shows
+  // (Meera's breakfast, a cap, egg on a veg day), each extra slot's days, and no dish on two days. Refused with every problem
+  // named; kept as the week's draft when it passes, which the agent then fills a day a call with ingredients (plan_week final,
+  // keep_rest). Found by the flock-fast eval 2026-11-22: planned a day at a time, the week's repeats piled up at the close.
+  write("/api/weeks/:week_start/menu", async (b, by, c) => {
+    const weekStart = dateOf(c.req.param("week_start"), "week_start");
+    if (weekdayOf(weekStart) !== "Mon") refuse(`week_start must be a Monday: ${weekStart} is a ${weekdayOf(weekStart)}`);
+    if (!Array.isArray(b.meals) || !b.meals.length) refuse("meals must be the whole week's meals: [{ date, slot, ordered_in?, note?, dishes?: [{ name, for, portion_note? }] }]");
+    const agent = by.startsWith("agent:");
+    const { meals } = weekMealsSent(db, b.meals as unknown[], weekStart, agent);
+    const eaters = agent ? missingEaters(meals) : [];
+    commit((tx, changes) => {
+      for (const old of tx.select().from(plan_meals).where(inWeek(weekStart)).all()) {
+        removeDishes(tx, old.id, changes);
+        tx.delete(plan_meals).where(eq(plan_meals.id, old.id)).run();
+        changes.push(["plan_meals", old.id, "delete", "app"]);
+      }
+      for (const m of meals) {
+        const row = tx.insert(plan_meals).values({ date: m.date, slot: m.slot, ordered_in: m.ordered_in ? 1 : 0, note: m.note ?? null, status: "draft", updated_by: by }).returning().get();
+        changes.push(["plan_meals", row.id, "insert", by]);
+        (m.dishes ?? []).forEach((d, position) => addDish(tx, row.id, position, d, by, changes));
+      }
+      const view = weekView(tx, weekStart), house = houseView(getHouse(tx));
+      const breaks = ruleBreaks(view, house, peopleAtHome(tx));
+      const gaps = slotGaps(view, house, today());
+      const repeated = b.repeats_ok === true ? [] : repeatsIn(view, house);
+      if (!eaters.length && !breaks.length && !gaps.length && !repeated.length) return;
+      const said: string[] = [];
+      if (eaters.length) said.push(eatersSaid(eaters, everyoneAtHome(tx)));
+      if (breaks.length) said.push(rulesSaid(breaks));
+      if (gaps.length) said.push(`An extra slot has no meal on its day: ${gaps.join("; ")}: add it to the menu (ordered_in: true with a note on a day it is not needed).`);
+      if (repeated.length) said.push(`Dishes on more than one day: ${repeated.join("; ")}: plan a different dish on the other days, unless the family asked for it more than once (then send repeats_ok: true).`);
+      refuse(`The menu is not ready. ${said.join(" ")} Send the whole menu again, fixed.`,
+        breaks.length ? "RULE_BROKEN" : eaters.length ? "MISSING_EATERS" : gaps.length ? "MISSING_SLOTS" : "REPEATED_DISHES",
+        { ...(breaks.length ? { rule_breaks: breaks } : {}), ...(eaters.length ? { missing_eaters: eaters } : {}), missing_slots: gaps, repeated });
+    });
+    return { body: { week: weekView(db, weekStart), next: "The menu is kept as next week's draft. Now give each day its ingredients: plan_week { week_start, mode: \"final\", keep_rest: true, meals } one day a call, the menu's dishes with the same names and for, then the closing plan_week { week_start, mode: \"final\" }." } };
   });
 
   // set_meal { date, slot | meal_id, ordered_in?, note?, dishes? }: one meal, found by its date and slot or by its id, made when

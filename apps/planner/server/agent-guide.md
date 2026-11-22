@@ -58,10 +58,11 @@ A meal is a date and a slot; it holds dishes in the order they are served. **A m
 **Every dish names who eats it** in `for`: `["everyone"]` (everyone who eats that meal; a tiffin's own people) or the names on the Family page; one without is refused (`MISSING_EATERS`).
 A second dish is only for someone who truly eats something else (a baby's milk, an elder's softer dish, a food rule's only or avoid): it names only them, and the shared dish then names everyone else (Plain idli `for: ["Meera"]`, Rava idli `for: ["Shiva", "Ankita", "Lakshmi", "Agastya"]`). A dish may carry a saved recipe (`recipe_id`); its video is its own, across weeks (below). A meal ordered in or eaten out is `ordered_in: true` and has no dishes. Meals go on the cooking days only.
 
-- **The weekly run:** the wake carries `week_start` and, when it fits, the context to plan from. Plan each cooking day
-  one day a call (16 KB a call at most): `plan_week { week_start, mode: "final", keep_rest: true, meals }` with that
-  day's meals; these answer no message. Then one closing `plan_week { week_start, mode: "final" }` without meals. It is
-  refused, naming them, while a dish has no ingredients, an extra slot has no meal on its day, or a dish repeats: fix those
+- **The weekly run:** the wake carries `week_start` and, when it fits, the context to plan from. First the whole week's
+  menu in one call, dish names and who eats each, no ingredients: `plan_menu { week_start, meals }`, refused with every
+  problem named (a rule a name breaks, a missing tiffin, a dish on two days) until the week is right. Then each cooking
+  day's ingredients, one day a call (16 KB a call at most): `plan_week { week_start, mode: "final", keep_rest: true, meals }`,
+  the menu's dishes; these answer no message. Then one closing `plan_week { week_start, mode: "final" }` without meals. It is refused, naming them, while a dish has no ingredients, an extra slot has no meal on its day, or a dish repeats: fix those
   and call it again (`repeats_ok: true` only when the family asked for a dish twice). Its answer's `instructions` say how
   to send it: `message` word for word (its links are the only ones: send no other), then `intro` once, then end your turn.
 - **One change** ("paneer on Thursday instead", "no dinner on Friday"): `set_meal` (dishes you send replace the meal's) or

@@ -95,6 +95,14 @@ loaf, garlic bread, oven), and from the 2026-11-22 eval:
   matar peas, dahi curd, palak spinach…), so a rule or category never needs each spelling. Kadhi is `@dairy`. Found by the
   flock-fast eval: "Aloo matar" (no potato in its ingredients) for a Jain family, "Suji sheera" for a gluten-free child.
 
+## The menu first (plan_menu), 2026-11-22
+Planned a day at a time, the agent never sees the week whole, and repeats pile up at the close (flock-fast eval). The weekly
+run now starts with `plan_menu { week_start, meals, repeats_ok? }`: every meal's dishes by name and who eats each, no
+ingredients, in one call (well under 16 KB). The app checks the week as a whole: eaters (MISSING_EATERS), the rules a name
+shows (RULE_BROKEN), each extra slot's days (MISSING_SLOTS), no dish on two days (REPEATED_DISHES), every problem named in
+one refusal. Kept as the week's draft when it passes; the agent then gives each day its ingredients (plan_week final,
+keep_rest), where the rules on ingredients are checked, and closes as before.
+
 ## The interview writes rules in this shape
 Every answer that states a rule is saved as a checked kind with `set_house_rules` (people's notes keep the story; the
 rule is the rule). After the rules question, the Butler reads every saved rule back in plain words, one message, and

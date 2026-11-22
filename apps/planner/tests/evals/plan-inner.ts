@@ -18,6 +18,8 @@ const repeats = Number(flags.repeats ?? 3);
 const maxRounds = Number(flags.rounds ?? 3);
 const dayRounds = Number(flags["day-rounds"] ?? 4);
 const whole = flags.whole === "true";
+const menuFirst = flags["no-menu"] !== "true";
+const menuRounds = Number(flags["menu-rounds"] ?? 4);
 const WEEKDAY = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const weekdayOf = (date: string) => WEEKDAY[new Date(`${date}T00:00:00Z`).getUTCDay()];
 const only = flags.fixtures ? flags.fixtures.split(",") : null;
@@ -43,8 +45,11 @@ const DAY_FRAME = `
 
 ## This run (the eval harness)
 
-You are the meal agent on the weekly run, planning one cooking day a call as the guide says. You have no tools here: the
-harness makes the app calls for you. Each time you are asked for a day, reply with ONE JSON object and nothing else:
+You are the meal agent on the weekly run, as the guide says. You have no tools here: the harness makes the app calls for you.
+When asked for the menu, reply with ONE JSON object and nothing else: { "meals": [ ...every meal of the week, dishes by name
+and for only, no ingredients... ], "repeats_ok"?: true }; the harness sends it as plan_menu { week_start, meals }. If the app
+refuses, you get its answer: send the whole menu again, fixed.
+Each time you are asked for a day, reply with ONE JSON object and nothing else:
 { "meals": [ ...that day's meals only... ] }, each meal as plan_week takes it ({ date, slot, ordered_in?, note?, dishes?: [{ name,
 for: ["everyone"] or [names], portion_note?, ingredients: [{ item, amount, unit }] }] }). The harness sends it as
 plan_week { week_start, mode: "final", keep_rest: true, meals }. If the app refuses, you get its answer: send that day again, fixed.
@@ -109,10 +114,24 @@ async function byDay(k: any, fx: Fixture, guide: string, ctx: any, transcript: s
       return null;
     }
   };
+  if (menuFirst) {
+    let asked = `First the whole week's menu: every meal of every cooking day (the extra slots too), each dish by name with its for (and a portion_note where one person's portion differs), no ingredients, as { "meals": [...] }.`;
+    for (let n = 0; n < menuRounds; n++) {
+      const payload = await call(asked);
+      if (!payload) { asked = "Send the menu again as the JSON object only."; continue; }
+      const r = await k.op("plan_menu", { week_start: fx.week_start, meals: payload.meals, ...(payload.repeats_ok === true ? { repeats_ok: true } : {}) });
+      if (!r?.error) { transcript.push(`The app took the menu. ${r.next ?? ""}`); break; }
+      const said = refusalText(r);
+      refusals.push(said);
+      asked = `${said}\n\nSend the whole menu again, fixed, as the same JSON object.`;
+    }
+  }
   const days = Array.from({ length: 7 }, (_, i) => addDays(fx.week_start, i))
     .filter((d) => d >= fx.today && (ctx.context?.house?.cooking_days ?? fx.cooking_days).map((x: string) => x.slice(0, 3).toLowerCase()).includes(weekdayOf(d).toLowerCase()));
   for (const date of days) {
-    let asked = `Plan ${weekdayOf(date)} ${date}: every meal of that day (its extra slots too), as { "meals": [...] }.`;
+    let asked = menuFirst
+      ? `Give ${weekdayOf(date)} ${date} its ingredients: every meal of that day from the menu (the same dishes, names and for), each dish with its ingredients, as { "meals": [...] }.`
+      : `Plan ${weekdayOf(date)} ${date}: every meal of that day (its extra slots too), as { "meals": [...] }.`;
     for (let n = 0; n < dayRounds; n++) {
       const payload = await call(asked);
       if (!payload) { asked = `Send ${weekdayOf(date)} ${date} again as the JSON object only.`; continue; }
@@ -194,7 +213,7 @@ const guideOp = async () => {
 };
 const guide = await guideOp();
 const records: RunRecord[] = [];
-console.log(`plan eval: ${fixtures.map((f) => f.id).join(", ")} × ${repeats}, model ${mo.model}, ${whole ? `whole week, up to ${maxRounds} rounds` : `a day a call, up to ${dayRounds} calls a day + ${maxRounds} to close`}\n`);
+console.log(`plan eval: ${fixtures.map((f) => f.id).join(", ")} × ${repeats}, model ${mo.model}, ${whole ? `whole week, up to ${maxRounds} rounds` : `${menuFirst ? `menu first (up to ${menuRounds} calls), then ` : ""}a day a call, up to ${dayRounds} calls a day + ${maxRounds} to close`}\n`);
 for (const fx of fixtures) for (let rep = 1; rep <= repeats; rep++) {
   process.stdout.write(`${fx.id} #${rep} … `);
   try {
