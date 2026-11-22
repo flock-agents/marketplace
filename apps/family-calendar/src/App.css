@@ -3,3 +3,7 @@
 .fc-nav .fl-btn { min-height: 40px; min-width: 40px; justify-content: center; }
 /* Under an event's title on the Events page: where it came from, or who added it. */
 .fc-source { display: block; color: var(--ink-3); font-size: 13px; margin-top: 2px; }
+/* Today and tomorrow are drawn big by the kit's Schedule, which sets their times in capitals ("5:00 PM TO 7:00 PM"); every other
+   day reads "4:00 pm to 5:30 pm". The same lower case on every day: one class stronger than the kit's rule, so it wins whatever
+   order the stylesheets load in. */
+.fl-sch-day.fl-sch-big .fl-sch-time { text-transform: none; letter-spacing: normal; }
