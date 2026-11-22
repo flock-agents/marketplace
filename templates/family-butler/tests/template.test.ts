@@ -126,6 +126,14 @@ describe("the briefs", () => {
     expect(evening.prompt.toLowerCase()).not.toContain("weather");
   });
 
+  it("morning: the weather comes from WebSearch for the family's city, and is left out quietly without one", () => {
+    // Every regular Flock agent has the CLI's WebSearch (permissions.ts AGENT_BUILTIN_TOOLS); no weather skill exists.
+    expect(morning.prompt).toContain("Get it with your WebSearch tool");
+    expect(morning.prompt).toContain("never guess the city from the brief's `timezone`");
+    expect(morning.prompt).toContain("leave the line out and say nothing about it");
+    expect(suggestions.skills.map((s: any) => s.slug)).not.toContain("weather");
+  });
+
   it("the evening one also tells the changes and new dates (its call moves the mark past them)", () => {
     expect(evening.prompt).toContain("each of `changed`");
     expect(evening.prompt).toContain("each of `new`");
