@@ -1,0 +1,3810 @@
+{
+ "kind": "eval1",
+ "model": "deepseek/deepseek-v4-flash",
+ "persona": "deepseek/deepseek-v4-flash",
+ "repeat": 1,
+ "totals": {
+  "people": [
+   8,
+   8
+  ],
+  "cook_days": [
+   8,
+   8
+  ],
+  "cook_times": [
+   5,
+   6
+  ],
+  "home_cook": [
+   8,
+   9
+  ],
+  "slots_present": [
+   6,
+   6
+  ],
+  "slot_days": [
+   6,
+   6
+  ],
+  "slot_for": [
+   6,
+   6
+  ],
+  "no_extra_slots": [
+   8,
+   8
+  ],
+  "order_in": [
+   8,
+   8
+  ],
+  "hard_rules": [
+   26,
+   27
+  ],
+  "no_unsaid_rules": [
+   8,
+   8
+  ],
+  "soft_notes": [
+   8,
+   11
+  ],
+  "soft_kept_soft": [
+   11,
+   11
+  ],
+  "dish_no_wrong_restriction": [
+   6,
+   8
+  ],
+  "personal_dishes": [
+   9,
+   17
+  ],
+  "dish_coverage": [
+   142,
+   155
+  ],
+  "dish_slots": [
+   139,
+   142
+  ],
+  "dish_frequency": [
+   22,
+   35
+  ],
+  "meal_examples": [
+   20,
+   20
+  ],
+  "rule_frequency": [
+   1,
+   2
+  ]
+ },
+ "spend": {
+  "calls": 0,
+  "in": 0,
+  "out": 0,
+  "cost": 0
+ },
+ "results": [
+  {
+   "household": "h1-sharma",
+   "title": "North Indian, office parents, cook Mon–Sat, eggs OK, chicken on weekends",
+   "rep": 1,
+   "ok": true,
+   "setup_ms": 43368,
+   "calls": [
+    {
+     "purpose": "setup: the home",
+     "tier": "balanced",
+     "ms": 3640,
+     "ok": true,
+     "attempts": 1,
+     "out": 622,
+     "think": 0,
+     "cost": 0.00042012
+    },
+    {
+     "purpose": "setup: the dishes",
+     "tier": "balanced",
+     "ms": 3753,
+     "ok": true,
+     "attempts": 1,
+     "out": 374,
+     "think": 0,
+     "cost": 0.0003799
+    },
+    {
+     "purpose": "setup: the food rules",
+     "tier": "balanced",
+     "ms": 43303,
+     "ok": true,
+     "attempts": 1,
+     "out": 1632,
+     "think": 1521,
+     "cost": 0.00087626
+    }
+   ],
+   "rates": {
+    "people": [
+     1,
+     1
+    ],
+    "cook_days": [
+     1,
+     1
+    ],
+    "cook_times": [
+     1,
+     1
+    ],
+    "home_cook": [
+     1,
+     1
+    ],
+    "slots_present": [
+     1,
+     1
+    ],
+    "slot_days": [
+     1,
+     1
+    ],
+    "slot_for": [
+     1,
+     1
+    ],
+    "no_extra_slots": [
+     1,
+     1
+    ],
+    "order_in": [
+     1,
+     1
+    ],
+    "hard_rules": [
+     1,
+     1
+    ],
+    "no_unsaid_rules": [
+     1,
+     1
+    ],
+    "soft_notes": [
+     1,
+     1
+    ],
+    "soft_kept_soft": [
+     1,
+     1
+    ],
+    "dish_no_wrong_restriction": [
+     1,
+     1
+    ],
+    "personal_dishes": [
+     0,
+     1
+    ],
+    "dish_coverage": [
+     19,
+     19
+    ],
+    "dish_slots": [
+     19,
+     19
+    ],
+    "dish_frequency": [
+     2,
+     5
+    ],
+    "meal_examples": [
+     2,
+     2
+    ]
+   },
+   "notes": [
+    "personal_dishes: Cornflakes for Vihaan: saved for \"everyone\"",
+    "dish_frequency: Aloo paratha (Sat,Sun): saved {}",
+    "dish_frequency: Cornflakes (sometimes): saved {}",
+    "dish_frequency: Chicken curry (Sat,Sun): saved {\"days\":[\"Sat\"]}"
+   ],
+   "said": "At home: Rohit (adult, 38), Neha (adult, 36) and Vihaan (child, 7).\nSunita cooks Mon–Sat: breakfast and lunch at 08:00 and dinner at 19:30.\nOn Sunday Neha cooks.\nEach day we'll plan Breakfast, Lunch and Dinner, plus Vihaan's tiffin Mon–Fri. Sunday dinner you order in.\nFood rules:\nEveryone: no chicken on Mon, Tue, Wed, Thu, Fri\nVihaan: less spicy at Dinner\n26 of your dishes noted to plan from.",
+   "noted": [],
+   "dropped": [],
+   "setup": {
+    "people": [
+     {
+      "name": "Rohit",
+      "group": "adult",
+      "relationship": "self",
+      "note": "age 38"
+     },
+     {
+      "name": "Neha",
+      "group": "adult",
+      "relationship": "wife",
+      "note": "age 36"
+     },
+     {
+      "name": "Vihaan",
+      "group": "child",
+      "relationship": "son",
+      "note": "age 7"
+     }
+    ],
+    "cook": {
+     "name": "Sunita",
+     "days": [
+      "Mon",
+      "Tue",
+      "Wed",
+      "Thu",
+      "Fri",
+      "Sat"
+     ],
+     "visits": [
+      {
+       "at": "08:00",
+       "meals": [
+        "Breakfast",
+        "Lunch"
+       ]
+      },
+      {
+       "at": "19:30",
+       "meals": [
+        "Dinner"
+       ]
+      }
+     ],
+     "time_limit": "two hours in the morning",
+     "note": null
+    },
+    "extraSlots": [
+     {
+      "name": "Vihaan's tiffin",
+      "days": [
+       "Mon",
+       "Tue",
+       "Wed",
+       "Thu",
+       "Fri"
+      ],
+      "for": [
+       "Vihaan"
+      ]
+     }
+    ],
+    "orderIn": [
+     {
+      "day": "Sun",
+      "slot": "Dinner",
+      "note": "ordered from Zomato"
+     }
+    ],
+    "rules": [
+     {
+      "kind": "avoid",
+      "days": [
+       "Mon",
+       "Tue",
+       "Wed",
+       "Thu",
+       "Fri"
+      ],
+      "items": [
+       "chicken"
+      ],
+      "note": "Chicken only on weekends"
+     },
+     {
+      "kind": "other",
+      "days": [],
+      "who": "Vihaan",
+      "slots": [
+       "Dinner"
+      ],
+      "note": "less spicy"
+     },
+     {
+      "kind": "other",
+      "days": [
+       "Sun"
+      ],
+      "slots": [
+       "Breakfast",
+       "Lunch",
+       "Dinner"
+      ],
+      "note": "Neha cooks"
+     }
+    ],
+    "dishes": [
+     {
+      "name": "Poha",
+      "slots": [
+       "Breakfast",
+       "Vihaan's tiffin"
+      ]
+     },
+     {
+      "name": "Bread omelette",
+      "slots": [
+       "Breakfast"
+      ]
+     },
+     {
+      "name": "Aloo paratha",
+      "slots": [
+       "Breakfast"
+      ]
+     },
+     {
+      "name": "Cornflakes",
+      "slots": [
+       "Breakfast"
+      ]
+     },
+     {
+      "name": "Sandwich",
+      "slots": [
+       "Vihaan's tiffin"
+      ]
+     },
+     {
+      "name": "Paratha roll",
+      "slots": [
+       "Vihaan's tiffin"
+      ]
+     },
+     {
+      "name": "Maggi",
+      "slots": [
+       "Vihaan's tiffin"
+      ],
+      "days": [
+       "Fri"
+      ]
+     },
+     {
+      "name": "Dal",
+      "slots": [
+       "Dinner",
+       "Lunch"
+      ]
+     },
+     {
+      "name": "Roti",
+      "slots": [
+       "Dinner",
+       "Lunch"
+      ]
+     },
+     {
+      "name": "Sabzi",
+      "slots": [
+       "Dinner",
+       "Lunch"
+      ]
+     },
+     {
+      "name": "Chicken curry",
+      "slots": [
+       "Dinner"
+      ],
+      "days": [
+       "Sat"
+      ]
+     },
+     {
+      "name": "Besan chilla",
+      "slots": [
+       "Breakfast"
+      ]
+     },
+     {
+      "name": "Paratha",
+      "slots": [
+       "Breakfast"
+      ],
+      "days": [
+       "Sat",
+       "Sun"
+      ]
+     },
+     {
+      "name": "Chawal",
+      "slots": [
+       "Lunch"
+      ]
+     },
+     {
+      "name": "Raita",
+      "slots": [
+       "Lunch"
+      ]
+     },
+     {
+      "name": "Rajma chawal",
+      "slots": [
+       "Lunch"
+      ],
+      "per_week": 2
+     },
+     {
+      "name": "Aloo gobi",
+      "slots": [
+       "Lunch"
+      ]
+     },
+     {
+      "name": "Bhindi",
+      "slots": [
+       "Lunch"
+      ]
+     },
+     {
+      "name": "Lauki",
+      "slots": [
+       "Lunch"
+      ]
+     },
+     {
+      "name": "Paneer bhurji",
+      "slots": [
+       "Dinner"
+      ],
+      "often": "sometimes"
+     },
+     {
+      "name": "Matar paneer",
+      "slots": [
+       "Dinner"
+      ],
+      "often": "sometimes"
+     }
+    ],
+    "examples": [
+     {
+      "slot": "Breakfast",
+      "group": "children",
+      "words": "poha, bread omelette, aloo paratha, and cornflakes on busy days"
+     },
+     {
+      "slot": "Vihaan's tiffin",
+      "words": "sandwich, paratha roll, poha. Maggi on Fridays as a treat"
+     },
+     {
+      "slot": "Dinner",
+      "group": "children",
+      "words": "Vihaan eats what we eat at dinner, less spicy"
+     },
+     {
+      "slot": "Breakfast",
+      "group": "adults",
+      "words": "poha, besan chilla, bread omelette. Parathas on the weekend"
+     },
+     {
+      "slot": "Lunch",
+      "group": "adults",
+      "words": "dal, chawal, roti, ek sabzi aur raita. Rajma chawal twice a week"
+     },
+     {
+      "slot": "Dinner",
+      "group": "adults",
+      "words": "roti, dal and a sabzi. Paneer bhurji or matar paneer sometimes, chicken curry on Saturday and Sunday"
+     }
+    ]
+   },
+   "transcript": [
+    "Q: What's the hardest part of meals for you? Or something else.",
+    "A: The hardest part is deciding what to make every day. Sunita keeps asking me what to cook.",
+    "Q: Which apps do you order groceries on: Zepto, Blinkit, Instamart, BigBasket or Amazon? If you sign me in, I'll read your past orders to learn what your home buys and how often, so the plan and the shopping list fit you from the first week, and I can fill the cart for you. Nothing is ordered without your yes.",
+    "A: Blinkit mostly, BigBasket for the monthly stuff. Later for the sign in.",
+    "Q: Which is your main app, and which do you use when something isn't there?",
+    "A: Blinkit mainly, it's faster. BigBasket if Blinkit doesn't have something.",
+    "Q: I have Rohit (38), Neha (36) and Vihaan (7) eating at home. Anyone else who eats at home, or anyone who doesn't?",
+    "A: No, just the three of us. Nobody else eats at home.",
+    "Q: Sunita cooks Mon-Sat: Breakfast and Lunch at 8am, Dinner at 7pm. Is that right, and does the cook come for any other meals?",
+    "A: Yes, that's right. She only does those three meals, no other time.",
+    "Q: Is the cook short of time, say off to the next house, so only a dish or two in the morning?",
+    "A: No, she has about two hours in the morning. That's enough time.",
+    "A: oh and evening Sunita comes at 7:30 now, not 7",
+    "Q: On Sunday, when the cook doesn't come, who cooks? Or is a meal eaten out?",
+    "A: Neha cooks all three meals on Sunday. We order dinner from Zomato that night.",
+    "Q: What did the children have for breakfast over the past week? Tell me in as much detail as you can.",
+    "A: Vihaan had poha, bread omelette, aloo paratha, and cornflakes on busy days last week.",
+    "Q: The children's lunch over the past week, or their school tiffin?",
+    "A: Vihaan takes a tiffin Mon-Fri: sandwich, paratha roll, poha. Maggi on Fridays as a treat.",
+    "Q: The children's dinner over the past week?",
+    "A: Vihaan eats what we eat at dinner, less spicy. Last week that was dal, roti, sabzi, and chicken curry on Saturday.",
+    "Q: What did the adults have for breakfast over the past week? Tell me in as much detail as you can.",
+    "A: Adults had poha, besan chilla, bread omelette. Parathas on the weekend.",
+    "Q: The adults' lunch over the past week?",
+    "A: Lunch is usually dal, chawal, roti, ek sabzi aur raita. Rajma chawal twice a week.",
+    "A: Sabzi like aloo gobi, bhindi, lauki.",
+    "Q: The adults' dinner over the past week?",
+    "A: Dinner is roti, dal and a sabzi. Paneer bhurji or matar paneer sometimes, chicken curry on Saturday and Sunday.",
+    "Q: Is anyone on a diet? High protein, low carb, diabetic, anything a doctor asked for.",
+    "A: No, nobody's on any diet. We all eat normally.",
+    "Q: Any food rules for the house? Veg, egg or non-veg days, fasting days, allergies, a dish someone won't touch.",
+    "A: Eggs are fine any day. Chicken only on weekends, Saturday and Sunday.",
+    "A: No allergies, no fasting, no one refuses anything.",
+    "Q: How often do you order in, and on which days?",
+    "A: Order in once a week, Sunday dinner from Zomato.",
+    "Q: Does anything come on a subscription, like Country Delight or a milkman?",
+    "A: Yes, Mother Dairy milk from the milkman, 1 litre daily."
+   ]
+  },
+  {
+   "household": "h2-iyer",
+   "title": "South Indian veg, wife cooks every meal, no cook",
+   "rep": 1,
+   "ok": true,
+   "setup_ms": 3022,
+   "calls": [
+    {
+     "purpose": "setup: the food rules",
+     "tier": "balanced",
+     "ms": 1225,
+     "ok": true,
+     "attempts": 1,
+     "out": 101,
+     "think": 0,
+     "cost": 0.00027549
+    },
+    {
+     "purpose": "setup: the dishes",
+     "tier": "balanced",
+     "ms": 1697,
+     "ok": true,
+     "attempts": 1,
+     "out": 189,
+     "think": 0,
+     "cost": 0.00033213
+    },
+    {
+     "purpose": "setup: the home",
+     "tier": "balanced",
+     "ms": 2903,
+     "ok": true,
+     "attempts": 1,
+     "out": 554,
+     "think": 0,
+     "cost": 0.00048874
+    }
+   ],
+   "rates": {
+    "people": [
+     1,
+     1
+    ],
+    "cook_days": [
+     1,
+     1
+    ],
+    "home_cook": [
+     1,
+     1
+    ],
+    "no_extra_slots": [
+     1,
+     1
+    ],
+    "order_in": [
+     1,
+     1
+    ],
+    "hard_rules": [
+     3,
+     3
+    ],
+    "no_unsaid_rules": [
+     1,
+     1
+    ],
+    "soft_notes": [
+     0,
+     1
+    ],
+    "soft_kept_soft": [
+     1,
+     1
+    ],
+    "dish_no_wrong_restriction": [
+     1,
+     1
+    ],
+    "personal_dishes": [
+     0,
+     2
+    ],
+    "dish_coverage": [
+     13,
+     19
+    ],
+    "dish_slots": [
+     13,
+     13
+    ],
+    "dish_frequency": [
+     3,
+     6
+    ],
+    "meal_examples": [
+     3,
+     3
+    ]
+   },
+   "notes": [
+    "soft_notes: missing: Ananya: less spicy for Ananya",
+    "personal_dishes: Ragi porridge for Ananya: saved for \"everyone\"",
+    "personal_dishes: Curd rice for Ananya: not saved",
+    "dish_frequency: Kootu (sometimes): not saved",
+    "dish_frequency: Curd rice (rarely): not saved",
+    "dish_frequency: Rasam rice (sometimes): not saved"
+   ],
+   "said": "At home: Karthik (adult, 36), Meenakshi (adult, 33) and Ananya (child, 5).\nThe family cooks every day.\nEach day we'll plan Breakfast, Lunch and Dinner. Saturday dinner you order in.\nFood rules:\nEveryone: Vegetarian; No eggs\nKarthik: eats no brinjal\n13 of your dishes noted to plan from.",
+   "noted": [],
+   "dropped": [
+    "how often for Rice (usually): not in the family's words",
+    "how often for Sambar (usually): not in the family's words",
+    "how often for Curd (usually): not in the family's words",
+    "how often for Chapati (usually): not in the family's words",
+    "how often for Kurma (usually): not in the family's words"
+   ],
+   "setup": {
+    "people": [
+     {
+      "name": "Karthik",
+      "group": "adult",
+      "relationship": "self",
+      "note": "age 36"
+     },
+     {
+      "name": "Meenakshi",
+      "group": "adult",
+      "relationship": "wife",
+      "note": "age 33"
+     },
+     {
+      "name": "Ananya",
+      "group": "child",
+      "relationship": "daughter",
+      "note": "age 5"
+     }
+    ],
+    "cook": null,
+    "extraSlots": [],
+    "orderIn": [
+     {
+      "day": "Sat",
+      "slot": "Dinner",
+      "note": "ordered from Saravana Bhavan on Swiggy"
+     }
+    ],
+    "rules": [
+     {
+      "kind": "veg",
+      "days": [],
+      "note": "Just pure vegetarian, no eggs."
+     },
+     {
+      "kind": "no_eggs",
+      "days": [],
+      "note": "Just pure vegetarian, no eggs."
+     },
+     {
+      "kind": "avoid",
+      "days": [],
+      "who": "Karthik",
+      "items": [
+       "brinjal"
+      ],
+      "note": "I won't touch brinjal."
+     },
+     {
+      "kind": "other",
+      "days": [
+       "Mon"
+      ],
+      "slots": [
+       "Breakfast",
+       "Lunch",
+       "Dinner"
+      ],
+      "note": "Meenakshi cooks"
+     },
+     {
+      "kind": "other",
+      "days": [
+       "Tue"
+      ],
+      "slots": [
+       "Breakfast",
+       "Lunch",
+       "Dinner"
+      ],
+      "note": "Meenakshi cooks"
+     },
+     {
+      "kind": "other",
+      "days": [
+       "Wed"
+      ],
+      "slots": [
+       "Breakfast",
+       "Lunch",
+       "Dinner"
+      ],
+      "note": "Meenakshi cooks"
+     },
+     {
+      "kind": "other",
+      "days": [
+       "Thu"
+      ],
+      "slots": [
+       "Breakfast",
+       "Lunch",
+       "Dinner"
+      ],
+      "note": "Meenakshi cooks"
+     },
+     {
+      "kind": "other",
+      "days": [
+       "Fri"
+      ],
+      "slots": [
+       "Breakfast",
+       "Lunch",
+       "Dinner"
+      ],
+      "note": "Meenakshi cooks"
+     },
+     {
+      "kind": "other",
+      "days": [
+       "Sat"
+      ],
+      "slots": [
+       "Breakfast",
+       "Lunch",
+       "Dinner"
+      ],
+      "note": "Meenakshi cooks"
+     },
+     {
+      "kind": "other",
+      "days": [
+       "Sun"
+      ],
+      "slots": [
+       "Breakfast",
+       "Lunch",
+       "Dinner"
+      ],
+      "note": "Meenakshi cooks"
+     }
+    ],
+    "dishes": [
+     {
+      "name": "Idli",
+      "slots": [
+       "Breakfast"
+      ],
+      "often": "usually"
+     },
+     {
+      "name": "Dosa",
+      "slots": [
+       "Breakfast",
+       "Dinner"
+      ],
+      "often": "usually"
+     },
+     {
+      "name": "Ragi porridge",
+      "slots": [
+       "Breakfast"
+      ],
+      "often": "sometimes"
+     },
+     {
+      "name": "Rice",
+      "slots": [
+       "Lunch"
+      ]
+     },
+     {
+      "name": "Sambar",
+      "slots": [
+       "Lunch"
+      ]
+     },
+     {
+      "name": "Rasam",
+      "slots": [
+       "Lunch",
+       "Dinner"
+      ],
+      "often": "sometimes"
+     },
+     {
+      "name": "Curd",
+      "slots": [
+       "Lunch"
+      ]
+     },
+     {
+      "name": "Poriyal",
+      "slots": [
+       "Lunch"
+      ]
+     },
+     {
+      "name": "Chapati",
+      "slots": [
+       "Dinner"
+      ]
+     },
+     {
+      "name": "Kurma",
+      "slots": [
+       "Dinner"
+      ]
+     },
+     {
+      "name": "Uthappam",
+      "slots": [
+       "Dinner"
+      ],
+      "often": "sometimes"
+     },
+     {
+      "name": "Upma",
+      "slots": [
+       "Breakfast"
+      ]
+     },
+     {
+      "name": "Pongal",
+      "slots": [
+       "Breakfast"
+      ],
+      "days": [
+       "Sun"
+      ]
+     }
+    ],
+    "examples": [
+     {
+      "slot": "Breakfast",
+      "words": "idli, dosa, upma, pongal on Sundays. With coconut chutney and sambar."
+     },
+     {
+      "slot": "Lunch",
+      "words": "rice with sambar, rasam, a poriyal and curd. Same as what I take in my lunch box."
+     },
+     {
+      "slot": "Dinner",
+      "words": "dosa or chapati with kurma, sometimes uthappam, or rasam rice if it's late."
+     }
+    ]
+   },
+   "transcript": [
+    "Q: What's the hardest part of meals for you? Or something else.",
+    "A: Remembering to order what we need for the meals. That's the toughest bit.",
+    "Q: Which apps do you order groceries on: Zepto, Blinkit, Instamart, BigBasket or Amazon? If you sign me in, I'll read your past orders to learn what your home buys and how often, so the plan and the shopping list fit you from the first week, and I can fill the cart for you. Nothing is ordered without your yes.",
+    "A: Only Instamart, actually.",
+    "A: Let's do the sign-in later.",
+    "Q: Which is your main app, and which do you use when something isn't there?",
+    "A: Only Instamart, told you already.",
+    "A: Don't really use anything else even if something's not there, just skip it or swap.",
+    "Q: I have Karthik (36), Meenakshi (33) and Ananya (5) eating at home. Anyone else who eats at home, or anyone who doesn't?",
+    "A: Just the three of us. No one else.",
+    "Q: Who cooks at home, and on which days? Is any day's meal eaten out?",
+    "A: Meenakshi cooks every meal, all seven days.",
+    "A: We order in Friday dinner from Saravana Bhavan on Swiggy.",
+    "Q: What did the children have for breakfast over the past week? Tell me in as much detail as you can.",
+    "A: Ananya's breakfast is same as ours most days — idli, dosa, sometimes ragi porridge. She's 5, so nothing different.",
+    "Q: The children's lunch over the past week, or their school tiffin?",
+    "A: Ananya's lunch is at home after playschool, same as us — rice with sambar or rasam and curd. No tiffin.",
+    "Q: The children's dinner over the past week?",
+    "A: Ananya's dinner is same as ours, just less spicy — dosa or chapati with kurma, sometimes uthappam, or rasam rice if it's late.",
+    "Q: What did the adults have for breakfast over the past week? Tell me in as much detail as you can.",
+    "A: Same as Ananya — idli, dosa, upma, pongal on Sundays. With coconut chutney and sambar.",
+    "Q: The adults' lunch over the past week?",
+    "A: Rice with sambar, rasam, a poriyal and curd. Same as what I take in my lunch box.",
+    "Q: The adults' dinner over the past week?",
+    "A: Same as Ananya — dosa or chapati with kurma, sometimes uthappam, or rasam rice late.",
+    "Q: Is anyone on a diet? High protein, low carb, diabetic, anything a doctor asked for.",
+    "A: No diets here. Just pure vegetarian, no eggs.",
+    "A: And I won't touch brinjal. Meenakshi cooks everything fresh.",
+    "Q: Any food rules for the house? Veg, egg or non-veg days, fasting days, allergies, a dish someone won't touch.",
+    "A: Pure vegetarian, no eggs. I can't stand brinjal. No other rules really.",
+    "Q: How often do you order in, and on which days?",
+    "A: Once a week, Friday dinner. Usually from Saravana Bhavan on Swiggy.",
+    "A: sorry, saturday dinner we order, not friday",
+    "Q: Does anything come on a subscription, like Country Delight or a milkman?",
+    "A: Aavin milk packets from the milkman every morning."
+   ]
+  },
+  {
+   "household": "h3-shiva",
+   "title": "The owner's family: mixed South/North, elder diabetic + Thursday fast, cook Mon–Sat",
+   "rep": 1,
+   "ok": true,
+   "setup_ms": 64948,
+   "calls": [
+    {
+     "purpose": "setup: the dishes",
+     "tier": "balanced",
+     "ms": 3312,
+     "ok": true,
+     "attempts": 1,
+     "out": 441,
+     "think": 0,
+     "cost": 0.00040977
+    },
+    {
+     "purpose": "setup: the home",
+     "tier": "balanced",
+     "ms": 20919,
+     "ok": true,
+     "attempts": 1,
+     "out": 4505,
+     "think": 3745,
+     "cost": 0.00176232
+    },
+    {
+     "purpose": "setup: the food rules",
+     "tier": "balanced",
+     "ms": 64851,
+     "ok": true,
+     "attempts": 1,
+     "out": 2470,
+     "think": 2028,
+     "cost": 0.00113246
+    }
+   ],
+   "rates": {
+    "people": [
+     1,
+     1
+    ],
+    "cook_days": [
+     1,
+     1
+    ],
+    "cook_times": [
+     1,
+     1
+    ],
+    "home_cook": [
+     1,
+     1
+    ],
+    "slots_present": [
+     1,
+     1
+    ],
+    "slot_days": [
+     1,
+     1
+    ],
+    "slot_for": [
+     1,
+     1
+    ],
+    "no_extra_slots": [
+     1,
+     1
+    ],
+    "order_in": [
+     1,
+     1
+    ],
+    "hard_rules": [
+     7,
+     7
+    ],
+    "no_unsaid_rules": [
+     1,
+     1
+    ],
+    "soft_notes": [
+     3,
+     4
+    ],
+    "soft_kept_soft": [
+     4,
+     4
+    ],
+    "rule_frequency": [
+     0,
+     1
+    ],
+    "dish_no_wrong_restriction": [
+     1,
+     1
+    ],
+    "personal_dishes": [
+     3,
+     3
+    ],
+    "dish_coverage": [
+     25,
+     29
+    ],
+    "dish_slots": [
+     24,
+     25
+    ],
+    "dish_frequency": [
+     4,
+     6
+    ],
+    "meal_examples": [
+     3,
+     3
+    ]
+   },
+   "notes": [
+    "soft_notes: missing: Gowri Shankar: millets are good for him",
+    "rule_frequency: Gowri Shankar: \"millets are good for him\" saved without often=sometimes",
+    "dish_slots: Sandwich at Agastya's tiffin (want Breakfast)",
+    "dish_frequency: Aloo paratha (Sat,Sun): saved {}",
+    "dish_frequency: Lemon rice (Fri): saved {}"
+   ],
+   "said": "At home: Shiva (adult, 38), Ankita (adult, 35), Agastya (child, 6) and Gowri Shankar (elder, 63).\nLakshmi cooks Mon–Sat: breakfast and lunch at 07:30 and dinner at 18:00.\nOn Sunday Ankita cooks.\nEach day we'll plan Breakfast, Lunch and Dinner, plus Agastya's tiffin Mon–Fri. Sunday lunch you eat out. Saturday dinner you order in.\nFood rules:\nEveryone: Vegetarian; No eggs; no mushroom; no nuts at Agastya's tiffin\nGowri Shankar: eats no sweet things; eats no white rice at Dinner; less rice; less salt; fasts at Breakfast, Lunch on Thu (fasts Thursday till evening)\nAgastya: less spicy 4–5 times a week\n30 of your dishes noted to plan from.\nNoted, not checked by the planner:\n- millets are good for father",
+   "noted": [
+    "millets are good for father"
+   ],
+   "dropped": [
+    "how often for \"less rice\" (usually): not in the family's words, kept every time",
+    "how often for \"less salt\" (usually): not in the family's words, kept every time"
+   ],
+   "setup": {
+    "people": [
+     {
+      "name": "Shiva",
+      "group": "adult",
+      "relationship": "self",
+      "note": "age 38"
+     },
+     {
+      "name": "Ankita",
+      "group": "adult",
+      "relationship": "wife",
+      "note": "age 35"
+     },
+     {
+      "name": "Agastya",
+      "group": "child",
+      "relationship": "son",
+      "note": "age 6"
+     },
+     {
+      "name": "Gowri Shankar",
+      "group": "elder",
+      "relationship": "father",
+      "note": "age 63"
+     }
+    ],
+    "cook": {
+     "name": "Lakshmi",
+     "days": [
+      "Mon",
+      "Tue",
+      "Wed",
+      "Thu",
+      "Fri",
+      "Sat"
+     ],
+     "visits": [
+      {
+       "at": "07:30",
+       "meals": [
+        "Breakfast",
+        "Lunch"
+       ]
+      },
+      {
+       "at": "18:00",
+       "meals": [
+        "Dinner"
+       ]
+      }
+     ],
+     "time_limit": "about an hour",
+     "note": null
+    },
+    "extraSlots": [
+     {
+      "name": "Agastya's tiffin",
+      "days": [
+       "Mon",
+       "Tue",
+       "Wed",
+       "Thu",
+       "Fri"
+      ],
+      "for": [
+       "Agastya"
+      ]
+     }
+    ],
+    "orderIn": [
+     {
+      "day": "Sun",
+      "slot": "Lunch",
+      "note": "eaten out"
+     },
+     {
+      "day": "Sat",
+      "slot": "Dinner",
+      "note": "ordered from Swiggy"
+     }
+    ],
+    "rules": [
+     {
+      "kind": "veg",
+      "days": [],
+      "note": "Vegetarian"
+     },
+     {
+      "kind": "no_eggs",
+      "days": [],
+      "note": "no eggs at home"
+     },
+     {
+      "kind": "avoid",
+      "days": [],
+      "items": [
+       "mushroom"
+      ],
+      "note": "No mushrooms"
+     },
+     {
+      "kind": "avoid",
+      "days": [],
+      "slots": [
+       "Agastya's tiffin"
+      ],
+      "items": [
+       "@nuts"
+      ],
+      "note": "Agastya's school is nut-free"
+     },
+     {
+      "kind": "avoid",
+      "days": [],
+      "who": "Gowri Shankar",
+      "items": [
+       "@sweet"
+      ],
+      "note": "no sugar"
+     },
+     {
+      "kind": "avoid",
+      "days": [],
+      "who": "Gowri Shankar",
+      "slots": [
+       "Dinner"
+      ],
+      "items": [
+       "@white_rice"
+      ],
+      "note": "no rice at night"
+     },
+     {
+      "kind": "other",
+      "days": [],
+      "who": "Gowri Shankar",
+      "note": "less rice"
+     },
+     {
+      "kind": "other",
+      "days": [],
+      "who": "Gowri Shankar",
+      "note": "less salt"
+     },
+     {
+      "kind": "other",
+      "days": [],
+      "who": "Agastya",
+      "often": "usually",
+      "note": "less spicy"
+     },
+     {
+      "kind": "fasting",
+      "days": [
+       "Thu"
+      ],
+      "who": "Gowri Shankar",
+      "slots": [
+       "Breakfast",
+       "Lunch"
+      ],
+      "note": "fasts Thursday till evening"
+     },
+     {
+      "kind": "other",
+      "days": [
+       "Sun"
+      ],
+      "slots": [
+       "Breakfast",
+       "Dinner"
+      ],
+      "note": "Ankita cooks"
+     }
+    ],
+    "dishes": [
+     {
+      "name": "Idli",
+      "slots": [
+       "Breakfast"
+      ]
+     },
+     {
+      "name": "Dosa",
+      "slots": [
+       "Breakfast"
+      ]
+     },
+     {
+      "name": "Poha",
+      "slots": [
+       "Breakfast"
+      ]
+     },
+     {
+      "name": "Upma",
+      "slots": [
+       "Breakfast"
+      ]
+     },
+     {
+      "name": "Aloo paratha",
+      "slots": [
+       "Breakfast"
+      ]
+     },
+     {
+      "name": "Paratha rolls",
+      "slots": [
+       "Agastya's tiffin"
+      ]
+     },
+     {
+      "name": "Besan cheela",
+      "slots": [
+       "Agastya's tiffin"
+      ]
+     },
+     {
+      "name": "Mini idlis",
+      "slots": [
+       "Agastya's tiffin"
+      ]
+     },
+     {
+      "name": "Veg sandwich",
+      "slots": [
+       "Agastya's tiffin"
+      ]
+     },
+     {
+      "name": "Lemon rice",
+      "slots": [
+       "Agastya's tiffin"
+      ]
+     },
+     {
+      "name": "Chapati",
+      "slots": [
+       "Dinner"
+      ],
+      "often": "usually"
+     },
+     {
+      "name": "Dal",
+      "slots": [
+       "Dinner"
+      ]
+     },
+     {
+      "name": "Sabzi",
+      "slots": [
+       "Dinner"
+      ]
+     },
+     {
+      "name": "Curd rice",
+      "slots": [
+       "Dinner"
+      ],
+      "for": [
+       "Agastya"
+      ],
+      "often": "sometimes"
+     },
+     {
+      "name": "Ragi dosa",
+      "slots": [
+       "Breakfast"
+      ],
+      "for": [
+       "Gowri Shankar"
+      ]
+     },
+     {
+      "name": "Oats",
+      "slots": [
+       "Breakfast"
+      ],
+      "for": [
+       "Gowri Shankar"
+      ]
+     },
+     {
+      "name": "Sandwich",
+      "slots": [
+       "Breakfast"
+      ]
+     },
+     {
+      "name": "Parathas",
+      "slots": [
+       "Breakfast"
+      ],
+      "days": [
+       "Sat",
+       "Sun"
+      ]
+     },
+     {
+      "name": "Rice",
+      "slots": [
+       "Lunch"
+      ]
+     },
+     {
+      "name": "Sambar",
+      "slots": [
+       "Lunch"
+      ]
+     },
+     {
+      "name": "Sabji",
+      "slots": [
+       "Lunch"
+      ]
+     },
+     {
+      "name": "Rajma chawal",
+      "slots": [
+       "Lunch"
+      ],
+      "per_week": 2
+     },
+     {
+      "name": "Bisi bele bath",
+      "slots": [
+       "Lunch"
+      ],
+      "days": [
+       "Sat"
+      ]
+     },
+     {
+      "name": "Roti",
+      "slots": [
+       "Dinner"
+      ],
+      "often": "usually"
+     },
+     {
+      "name": "Gravy",
+      "slots": [
+       "Dinner"
+      ]
+     },
+     {
+      "name": "Dry sabji",
+      "slots": [
+       "Dinner"
+      ]
+     },
+     {
+      "name": "Palak dal",
+      "slots": [
+       "Dinner"
+      ]
+     },
+     {
+      "name": "Bhindi",
+      "slots": [
+       "Dinner"
+      ]
+     },
+     {
+      "name": "Aloo gobi",
+      "slots": [
+       "Dinner"
+      ]
+     },
+     {
+      "name": "Chole",
+      "slots": [
+       "Dinner"
+      ],
+      "per_week": 1
+     }
+    ],
+    "examples": [
+     {
+      "slot": "Breakfast",
+      "group": "children",
+      "words": "Agastya had idli with chutney twice, dosa, poha, upma, and aloo paratha on Saturday. Milk every morning."
+     },
+     {
+      "slot": "Breakfast",
+      "group": "adults",
+      "words": "Mixed breakfast — idli, dosa, poha, upma, sandwich. Father had ragi dosa and oats. Weekend parathas."
+     },
+     {
+      "slot": "Lunch",
+      "group": "adults",
+      "words": "South Indian — rice, sambar, sabji. Shiva and Ankita take lunch boxes. Rajma chawal twice a week. Bisi bele bath on Saturday. Father has same with less rice."
+     },
+     {
+      "slot": "Dinner",
+      "group": "children",
+      "words": "Agastya's dinner is same as us mostly — chapati with dal or a sabzi, less spicy. Curd rice when he's tired."
+     },
+     {
+      "slot": "Dinner",
+      "group": "adults",
+      "words": "Dinner is roti, gravy or dry sabji. Chapati most nights. Palak dal, bhindi, aloo gobi, chole once a week."
+     },
+     {
+      "slot": "Agastya's tiffin",
+      "words": "paratha rolls, besan cheela, mini idlis, veg sandwich, lemon rice on Friday."
+     }
+    ]
+   },
+   "transcript": [
+    "Q: What's the hardest part of meals for you? Or something else.",
+    "A: Honestly, just deciding what to make every day and then remembering to order what we need.",
+    "Q: Which apps do you order groceries on: Zepto, Blinkit, Instamart, BigBasket or Amazon? If you sign me in, I'll read your past orders to learn what your home buys and how often, so the plan and the shopping list fit you from the first week, and I can fill the cart for you. Nothing is ordered without your yes.",
+    "A: Zepto mostly. Instamart when something isn't on Zepto.",
+    "A: Maybe later on signing in.",
+    "Q: Which is your main app, and which do you use when something isn't there?",
+    "A: Zepto is my main one. Instamart for things Zepto doesn't have.",
+    "Q: I have Shiva (38), Ankita (35), Agastya (6) and Gowri Shankar (63) eating at home. Anyone else who eats at home, or anyone who doesn't?",
+    "A: That's right, just the four of us. No one else.",
+    "Q: Lakshmi cooks Mon-Sat: Breakfast and Lunch at 7am, Dinner at 6pm. Is that right, and does the cook come for any other meals?",
+    "A: That's right. She does breakfast and lunch in the morning, and dinner in the evening. No other meals.",
+    "Q: Is the cook short of time, say off to the next house, so only a dish or two in the morning?",
+    "A: Yeah, she has about an hour in the morning. So breakfast plus at most two dishes for lunch.",
+    "A: actually Lakshmi comes at 7:30",
+    "Q: On Sunday, when the cook doesn't come, who cooks? Or is a meal eaten out?",
+    "A: Ankita makes a quick breakfast and dinner. Sunday lunch we eat out.",
+    "Q: What did the children have for breakfast over the past week? Tell me in as much detail as you can.",
+    "A: Agastya had idli with chutney twice, dosa, poha, upma, and aloo paratha on Saturday. Milk every morning.",
+    "Q: The children's lunch over the past week, or their school tiffin?",
+    "A: Agastya takes a school tiffin Mon-Fri. Last week: paratha rolls, besan cheela, mini idlis, veg sandwich, lemon rice on Friday.",
+    "Q: The children's dinner over the past week?",
+    "A: Agastya's dinner is same as us mostly — chapati with dal or a sabzi, less spicy. Curd rice when he's tired.",
+    "Q: What did the adults have for breakfast over the past week? Tell me in as much detail as you can.",
+    "A: Mixed breakfast — idli, dosa, poha, upma, sandwich. Father had ragi dosa and oats. Weekend parathas.",
+    "Q: The adults' lunch over the past week?",
+    "A: South Indian — rice, sambar, sabji. Shiva and Ankita take lunch boxes. Rajma chawal twice a week. Bisi bele bath on Saturday. Father has same with less rice.",
+    "Q: The adults' dinner over the past week?",
+    "A: Dinner is roti, gravy or dry sabji. Chapati most nights. Palak dal, bhindi, aloo gobi, chole once a week.",
+    "A: Father has two phulkas, no rice at night.",
+    "Q: Is anyone on a diet? High protein, low carb, diabetic, anything a doctor asked for.",
+    "A: Father Gowri Shankar is diabetic — less rice, no sugar, millets are good. Nobody else is on any diet.",
+    "Q: Besides that diet, do the elders eat anything differently: less salt, softer food, no onion or garlic, a fasting day?",
+    "A: Father has less salt too. Onion and garlic are fine. He fasts Thursday till evening, then a light dinner.",
+    "Q: Any food rules for the house? Veg, egg or non-veg days, fasting days, allergies, a dish someone won't touch.",
+    "A: Vegetarian, no eggs at home. No mushrooms. Agastya's school is nut-free. Father fasts Thursdays.",
+    "Q: How often do you order in, and on which days?",
+    "A: Once a week, usually Saturday dinner from Swiggy.",
+    "Q: Does anything come on a subscription, like Country Delight or a milkman?",
+    "A: Yes, Country Delight milk, 1 litre every morning. Nothing else on subscription."
+   ]
+  },
+  {
+   "household": "h4-reddy",
+   "title": "Grandparents + cook: diabetic grandmother, Ekadashi, soft food, teen tiffin",
+   "rep": 1,
+   "ok": true,
+   "setup_ms": 35092,
+   "calls": [
+    {
+     "purpose": "setup: the food rules",
+     "tier": "balanced",
+     "ms": 29015,
+     "ok": true,
+     "attempts": 1,
+     "out": 5070,
+     "think": 4502,
+     "cost": 0.00187992
+    },
+    {
+     "purpose": "setup: the dishes",
+     "tier": "balanced",
+     "ms": 33409,
+     "ok": true,
+     "attempts": 1,
+     "out": 4544,
+     "think": 4000,
+     "cost": 0.0018915899999999999
+    },
+    {
+     "purpose": "setup: the home",
+     "tier": "balanced",
+     "ms": 34986,
+     "ok": true,
+     "attempts": 1,
+     "out": 3735,
+     "think": 3019,
+     "cost": 0.00078309
+    }
+   ],
+   "rates": {
+    "people": [
+     1,
+     1
+    ],
+    "cook_days": [
+     1,
+     1
+    ],
+    "cook_times": [
+     1,
+     1
+    ],
+    "home_cook": [
+     1,
+     1
+    ],
+    "slots_present": [
+     1,
+     1
+    ],
+    "slot_days": [
+     1,
+     1
+    ],
+    "slot_for": [
+     1,
+     1
+    ],
+    "no_extra_slots": [
+     1,
+     1
+    ],
+    "order_in": [
+     1,
+     1
+    ],
+    "hard_rules": [
+     4,
+     5
+    ],
+    "no_unsaid_rules": [
+     1,
+     1
+    ],
+    "soft_notes": [
+     3,
+     3
+    ],
+    "soft_kept_soft": [
+     3,
+     3
+    ],
+    "rule_frequency": [
+     1,
+     1
+    ],
+    "dish_no_wrong_restriction": [
+     0,
+     1
+    ],
+    "personal_dishes": [
+     2,
+     5
+    ],
+    "dish_coverage": [
+     23,
+     23
+    ],
+    "dish_slots": [
+     22,
+     23
+    ],
+    "dish_frequency": [
+     2,
+     2
+    ],
+    "meal_examples": [
+     3,
+     3
+    ]
+   },
+   "notes": [
+    "hard_rules: missing: Chicken only at Sunday lunch",
+    "dish_no_wrong_restriction: restricted though everyone's: Idli [Arjun+Srinivas+Padma], Pesarattu [Arjun], Upma [Arjun], Dosa [Srinivas], Allam chutney [Srinivas]",
+    "personal_dishes: Ragi dosa for Sarojini: saved for \"everyone\"",
+    "personal_dishes: Ragi java for Sarojini: saved for \"everyone\"",
+    "personal_dishes: Jowar roti for Sarojini: saved for \"everyone\"",
+    "dish_slots: Rasam at Dinner (want Lunch)"
+   ],
+   "said": "At home: Srinivas (adult, 45), Padma (adult, 42), Arjun (child, 15), Sarojini (elder, 70) and Venkat (elder, 74).\nKavitha cooks Mon–Sat: breakfast and lunch at 07:30 and dinner at 19:00.\nOn Sunday Padma cooks.\nEach day we'll plan Breakfast, Lunch and Dinner, plus Arjun's tiffin Mon–Fri.\nFood rules:\nSarojini: Vegetarian for Sarojini; No eggs for Sarojini; eats no sweet things; has ragi 2–3 times a week; fasts on Ekadashi twice a month, only fruits\nVenkat: Vegetarian for Venkat; No eggs for Venkat; less salt; soft food\nSrinivas: eats only meat at Lunch on Sun\nPadma: eats only meat at Lunch on Sun\nArjun: eats only meat at Lunch on Sun\n34 of your dishes noted to plan from.",
+   "noted": [],
+   "dropped": [
+    "how often for Tomato rasam (1): not in the family's words",
+    "how often for Bendakaya curry (1): not in the family's words"
+   ],
+   "setup": {
+    "people": [
+     {
+      "name": "Srinivas",
+      "group": "adult",
+      "relationship": "self",
+      "note": "age 45"
+     },
+     {
+      "name": "Padma",
+      "group": "adult",
+      "relationship": "wife",
+      "note": "age 42"
+     },
+     {
+      "name": "Arjun",
+      "group": "child",
+      "relationship": "son",
+      "note": "age 15"
+     },
+     {
+      "name": "Sarojini",
+      "group": "elder",
+      "relationship": "mother",
+      "note": "age 70"
+     },
+     {
+      "name": "Venkat",
+      "group": "elder",
+      "relationship": "father",
+      "note": "age 74"
+     }
+    ],
+    "cook": {
+     "name": "Kavitha",
+     "days": [
+      "Mon",
+      "Tue",
+      "Wed",
+      "Thu",
+      "Fri",
+      "Sat"
+     ],
+     "visits": [
+      {
+       "at": "07:30",
+       "meals": [
+        "Breakfast",
+        "Lunch"
+       ]
+      },
+      {
+       "at": "19:00",
+       "meals": [
+        "Dinner"
+       ]
+      }
+     ],
+     "time_limit": null,
+     "note": null
+    },
+    "extraSlots": [
+     {
+      "name": "Arjun's tiffin",
+      "days": [
+       "Mon",
+       "Tue",
+       "Wed",
+       "Thu",
+       "Fri"
+      ],
+      "for": [
+       "Arjun"
+      ]
+     }
+    ],
+    "orderIn": [],
+    "rules": [
+     {
+      "kind": "veg",
+      "days": [],
+      "who": "Sarojini",
+      "note": "pure vegetarian, no eggs or meat"
+     },
+     {
+      "kind": "veg",
+      "days": [],
+      "who": "Venkat",
+      "note": "pure vegetarian, no eggs or meat"
+     },
+     {
+      "kind": "no_eggs",
+      "days": [],
+      "who": "Sarojini",
+      "note": "pure vegetarian, no eggs or meat"
+     },
+     {
+      "kind": "no_eggs",
+      "days": [],
+      "who": "Venkat",
+      "note": "pure vegetarian, no eggs or meat"
+     },
+     {
+      "kind": "avoid",
+      "days": [],
+      "who": "Sarojini",
+      "items": [
+       "@sweet"
+      ],
+      "note": "no sugar at all"
+     },
+     {
+      "kind": "require",
+      "days": [],
+      "who": "Sarojini",
+      "often": "sometimes",
+      "items": [
+       "ragi"
+      ],
+      "note": "Ragi is good for her, a few times a week"
+     },
+     {
+      "kind": "other",
+      "days": [],
+      "who": "Venkat",
+      "note": "less salt"
+     },
+     {
+      "kind": "other",
+      "days": [],
+      "who": "Venkat",
+      "note": "soft food"
+     },
+     {
+      "kind": "other",
+      "days": [],
+      "who": "Sarojini",
+      "note": "fasts on Ekadashi twice a month, only fruits"
+     },
+     {
+      "kind": "only",
+      "days": [
+       "Sun"
+      ],
+      "who": "Srinivas",
+      "slots": [
+       "Lunch"
+      ],
+      "items": [
+       "@meat"
+      ],
+      "note": "The three of us eat chicken only on Sunday lunch"
+     },
+     {
+      "kind": "only",
+      "days": [
+       "Sun"
+      ],
+      "who": "Padma",
+      "slots": [
+       "Lunch"
+      ],
+      "items": [
+       "@meat"
+      ],
+      "note": "The three of us eat chicken only on Sunday lunch"
+     },
+     {
+      "kind": "only",
+      "days": [
+       "Sun"
+      ],
+      "who": "Arjun",
+      "slots": [
+       "Lunch"
+      ],
+      "items": [
+       "@meat"
+      ],
+      "note": "The three of us eat chicken only on Sunday lunch"
+     },
+     {
+      "kind": "other",
+      "days": [
+       "Sun"
+      ],
+      "slots": [
+       "Breakfast",
+       "Lunch",
+       "Dinner"
+      ],
+      "note": "Padma cooks"
+     }
+    ],
+    "dishes": [
+     {
+      "name": "Idli",
+      "slots": [
+       "Breakfast"
+      ],
+      "for": [
+       "Arjun",
+       "Srinivas",
+       "Padma"
+      ],
+      "often": "usually"
+     },
+     {
+      "name": "Pesarattu",
+      "slots": [
+       "Breakfast"
+      ],
+      "for": [
+       "Arjun"
+      ],
+      "per_week": 2
+     },
+     {
+      "name": "Upma",
+      "slots": [
+       "Breakfast"
+      ],
+      "for": [
+       "Arjun"
+      ],
+      "per_week": 1
+     },
+     {
+      "name": "Bread toast",
+      "slots": [
+       "Breakfast"
+      ],
+      "for": [
+       "Arjun"
+      ],
+      "per_week": 1
+     },
+     {
+      "name": "Chapati roll",
+      "slots": [
+       "Arjun's tiffin"
+      ]
+     },
+     {
+      "name": "Lemon rice",
+      "slots": [
+       "Arjun's tiffin"
+      ]
+     },
+     {
+      "name": "Veg pulao",
+      "slots": [
+       "Arjun's tiffin"
+      ]
+     },
+     {
+      "name": "Curd rice",
+      "slots": [
+       "Arjun's tiffin"
+      ]
+     },
+     {
+      "name": "Chapati",
+      "slots": [
+       "Dinner"
+      ]
+     },
+     {
+      "name": "Bendakaya curry",
+      "slots": [
+       "Dinner",
+       "Lunch"
+      ],
+      "per_week": 2
+     },
+     {
+      "name": "Rice",
+      "slots": [
+       "Dinner",
+       "Lunch"
+      ]
+     },
+     {
+      "name": "Pappu",
+      "slots": [
+       "Dinner",
+       "Lunch"
+      ]
+     },
+     {
+      "name": "Tomato rasam",
+      "slots": [
+       "Dinner"
+      ]
+     },
+     {
+      "name": "Ragi dosa",
+      "slots": [
+       "Breakfast"
+      ],
+      "per_week": 2
+     },
+     {
+      "name": "Ragi java",
+      "slots": [
+       "Breakfast"
+      ],
+      "per_week": 3
+     },
+     {
+      "name": "Dosa",
+      "slots": [
+       "Breakfast"
+      ],
+      "for": [
+       "Srinivas"
+      ]
+     },
+     {
+      "name": "Allam chutney",
+      "slots": [
+       "Breakfast"
+      ],
+      "for": [
+       "Srinivas"
+      ]
+     },
+     {
+      "name": "Curry",
+      "slots": [
+       "Lunch"
+      ]
+     },
+     {
+      "name": "Rasam",
+      "slots": [
+       "Lunch"
+      ]
+     },
+     {
+      "name": "Curd",
+      "slots": [
+       "Lunch"
+      ]
+     },
+     {
+      "name": "Pachadi",
+      "slots": [
+       "Lunch"
+      ]
+     },
+     {
+      "name": "Dondakaya curry",
+      "slots": [
+       "Lunch"
+      ],
+      "per_week": 2
+     },
+     {
+      "name": "Beans curry",
+      "slots": [
+       "Lunch"
+      ],
+      "per_week": 2
+     },
+     {
+      "name": "Chicken",
+      "slots": [
+       "Lunch"
+      ],
+      "for": [
+       "Srinivas",
+       "Padma",
+       "Arjun"
+      ],
+      "days": [
+       "Sun"
+      ]
+     },
+     {
+      "name": "Dondakaya pappu",
+      "slots": [
+       "Dinner"
+      ],
+      "per_week": 2
+     },
+     {
+      "name": "Jowar roti",
+      "slots": [
+       "Dinner"
+      ]
+     },
+     {
+      "name": "Dal",
+      "slots": [
+       "Dinner"
+      ]
+     }
+    ],
+    "examples": [
+     {
+      "slot": "Breakfast",
+      "group": "children",
+      "words": "idli on most days, pesarattu twice, upma once, and bread toast once when he was late."
+     },
+     {
+      "slot": "Arjun's tiffin",
+      "words": "chapati roll, lemon rice, veg pulao, curd rice. No fixed order."
+     },
+     {
+      "slot": "Dinner",
+      "group": "children",
+      "words": "chapati with bendakaya curry two nights, rice and pappu two nights, and one night we had rice with tomato rasam."
+     },
+     {
+      "slot": "Breakfast",
+      "group": "adults",
+      "words": "Amma had ragi dosa twice, ragi java thrice, and idli on the other days. I had idli or dosa with allam chutney most days. Padma had the same as me."
+     },
+     {
+      "slot": "Lunch",
+      "group": "adults",
+      "words": "Lunch is always rice, pappu, one curry, rasam, curd, and a pachadi."
+     },
+     {
+      "slot": "Dinner",
+      "group": "adults",
+      "words": "Dinner same pattern as usual. Chapati with curry or rice and pappu."
+     }
+    ]
+   },
+   "transcript": [
+    "Q: What's the hardest part of meals for you? Or something else.",
+    "A: Cooking separately for my parents' health every day, that's the real challenge.",
+    "Q: Which apps do you order groceries on: Zepto, Blinkit, Instamart, BigBasket or Amazon? If you sign me in, I'll read your past orders to learn what your home buys and how often, so the plan and the shopping list fit you from the first week, and I can fill the cart for you. Nothing is ordered without your yes.",
+    "A: BigBasket only, we don't use the others.",
+    "A: And later, not signing in now.",
+    "Q: Which is your main app, and which do you use when something isn't there?",
+    "A: BigBasket is our main app, we don't use anything else.",
+    "A: If something's not there, we just skip it or find a substitute on BigBasket only.",
+    "Q: I have Srinivas (45), Padma (42), Arjun (15), Sarojini (70) and Venkat (74) eating at home. Anyone else who eats at home, or anyone who doesn't?",
+    "A: That's all of us, no one else eats at home regularly.",
+    "A: And all five of us eat at home every day.",
+    "Q: Kavitha cooks Mon-Sat: Breakfast and Lunch at 7:30am, Dinner at 6:30pm. Is that right, and does the cook come for any other meals?",
+    "A: Yes, that's right, 7:30 for breakfast and lunch, 6:30 for dinner. No other meals.",
+    "Q: Is the cook short of time, say off to the next house, so only a dish or two in the morning?",
+    "A: No, she has time, no rush. She does everything for that meal before leaving.",
+    "Q: On Sunday, when the cook doesn't come, who cooks? Or is a meal eaten out?",
+    "A: Padma cooks on Sunday, all three meals.",
+    "A: We eat at home only, never go out for meals.",
+    "A: oh one thing, evening Kavitha comes at 7, not 6:30",
+    "Q: What did the children have for breakfast over the past week? Tell me in as much detail as you can.",
+    "A: Only one child, Arjun. He had idli on most days, pesarattu twice, upma once, and bread toast once when he was late.",
+    "Q: The children's lunch over the past week, or their school tiffin?",
+    "A: Only Arjun. School tiffin Mon-Fri: chapati roll, lemon rice, veg pulao, curd rice. No fixed order.",
+    "Q: The children's dinner over the past week?",
+    "A: Arjun eats the same as us for dinner. This week: chapati with bendakaya curry two nights, rice and pappu two nights, and one night we had rice with tomato rasam.",
+    "Q: What did the adults have for breakfast over the past week? Tell me in as much detail as you can.",
+    "A: Amma had ragi dosa twice, ragi java thrice, and idli on the other days. I had idli or dosa with allam chutney most days. Padma had the same as me.",
+    "Q: The adults' lunch over the past week?",
+    "A: Lunch is always rice, pappu, one curry, rasam, curd, and a pachadi.",
+    "A: Last week: dondakaya curry twice, beans curry twice, bendakaya once, and chicken on Sunday for me, Padma, and Arjun.",
+    "Q: The adults' dinner over the past week?",
+    "A: Dinner same pattern as usual. Chapati with curry or rice and pappu.",
+    "A: Last week: bendakaya curry with chapatis twice, rice with dondakaya pappu twice, and one night jowar roti for Amma with dal.",
+    "Q: Is anyone on a diet? High protein, low carb, diabetic, anything a doctor asked for.",
+    "A: Amma is diabetic, no sugar at all. Ragi is good for her, a few times a week.",
+    "A: Nanna needs less salt and soft food, he has trouble chewing.",
+    "Q: Besides that diet, do the elders eat anything differently: less salt, softer food, no onion or garlic, a fasting day?",
+    "A: Told you already, Nanna needs less salt and soft food. Amma fasts on Ekadashi twice a month, only fruits that day.",
+    "Q: Any food rules for the house? Veg, egg or non-veg days, fasting days, allergies, a dish someone won't touch.",
+    "A: My parents are pure vegetarian, no eggs or meat. The three of us eat chicken only on Sunday lunch.",
+    "A: Amma fasts on Ekadashi twice a month, only fruits. No allergies.",
+    "Q: How often do you order in, and on which days?",
+    "A: Hardly order in, maybe once a month. No fixed day.",
+    "Q: Does anything come on a subscription, like Country Delight or a milkman?",
+    "A: Milk from Heritage, delivered daily. That's the only subscription."
+   ]
+  },
+  {
+   "household": "h5-agarwal",
+   "title": "Marwari joint family, DIL cooks, no onion-garlic for one elder always / one on days",
+   "rep": 1,
+   "ok": true,
+   "setup_ms": 7494,
+   "calls": [
+    {
+     "purpose": "setup: the food rules",
+     "tier": "balanced",
+     "ms": 1288,
+     "ok": true,
+     "attempts": 1,
+     "out": 172,
+     "think": 0,
+     "cost": 0.00037088
+    },
+    {
+     "purpose": "setup: the dishes",
+     "tier": "balanced",
+     "ms": 1696,
+     "ok": true,
+     "attempts": 1,
+     "out": 248,
+     "think": 0,
+     "cost": 0.00034072
+    },
+    {
+     "purpose": "setup: the home",
+     "tier": "balanced",
+     "ms": 7229,
+     "ok": true,
+     "attempts": 1,
+     "out": 727,
+     "think": 0,
+     "cost": 0.00063855
+    }
+   ],
+   "rates": {
+    "people": [
+     1,
+     1
+    ],
+    "cook_days": [
+     1,
+     1
+    ],
+    "home_cook": [
+     1,
+     1
+    ],
+    "slots_present": [
+     1,
+     1
+    ],
+    "slot_days": [
+     1,
+     1
+    ],
+    "slot_for": [
+     1,
+     1
+    ],
+    "no_extra_slots": [
+     1,
+     1
+    ],
+    "order_in": [
+     1,
+     1
+    ],
+    "hard_rules": [
+     4,
+     4
+    ],
+    "no_unsaid_rules": [
+     1,
+     1
+    ],
+    "dish_no_wrong_restriction": [
+     1,
+     1
+    ],
+    "personal_dishes": [
+     0,
+     1
+    ],
+    "dish_coverage": [
+     15,
+     15
+    ],
+    "dish_slots": [
+     15,
+     15
+    ],
+    "dish_frequency": [
+     3,
+     3
+    ],
+    "meal_examples": [
+     2,
+     2
+    ]
+   },
+   "notes": [
+    "personal_dishes: Dalia for Ramesh: saved for \"everyone\""
+   ],
+   "said": "At home: Ankit (adult, 34), Pooja (adult, 32), Reyansh (child, 8), Ramesh (elder, 66) and Kamla (elder, 62).\nThe family cooks every day.\nEach day we'll plan Breakfast, Lunch and Dinner, plus Reyansh's tiffin Mon–Fri.\nFood rules:\nEveryone: Vegetarian; No eggs\nRamesh: eats no onion, garlic\nKamla: eats no onion, garlic on Tue, Sat\n16 of your dishes noted to plan from.",
+   "noted": [],
+   "dropped": [],
+   "setup": {
+    "people": [
+     {
+      "name": "Ankit",
+      "group": "adult",
+      "relationship": "self",
+      "note": "age 34"
+     },
+     {
+      "name": "Pooja",
+      "group": "adult",
+      "relationship": "wife",
+      "note": "age 32"
+     },
+     {
+      "name": "Reyansh",
+      "group": "child",
+      "relationship": "son",
+      "note": "age 8"
+     },
+     {
+      "name": "Ramesh",
+      "group": "elder",
+      "relationship": "father",
+      "note": "age 66"
+     },
+     {
+      "name": "Kamla",
+      "group": "elder",
+      "relationship": "mother",
+      "note": "age 62"
+     }
+    ],
+    "cook": null,
+    "extraSlots": [
+     {
+      "name": "Reyansh's tiffin",
+      "days": [
+       "Mon",
+       "Tue",
+       "Wed",
+       "Thu",
+       "Fri"
+      ],
+      "for": [
+       "Reyansh"
+      ]
+     }
+    ],
+    "orderIn": [],
+    "rules": [
+     {
+      "kind": "veg",
+      "days": [],
+      "note": "Pure vegetarian, no eggs in the house."
+     },
+     {
+      "kind": "no_eggs",
+      "days": [],
+      "note": "Pure vegetarian, no eggs in the house."
+     },
+     {
+      "kind": "avoid",
+      "days": [],
+      "who": "Ramesh",
+      "items": [
+       "onion",
+       "garlic"
+      ],
+      "note": "Papa never eats onion or garlic."
+     },
+     {
+      "kind": "avoid",
+      "days": [
+       "Tue",
+       "Sat"
+      ],
+      "who": "Kamla",
+      "items": [
+       "onion",
+       "garlic"
+      ],
+      "note": "Mummy's no onion garlic days are Tuesday and Saturday"
+     },
+     {
+      "kind": "other",
+      "days": [
+       "Mon"
+      ],
+      "slots": [
+       "Breakfast",
+       "Lunch",
+       "Dinner"
+      ],
+      "note": "Pooja cooks"
+     },
+     {
+      "kind": "other",
+      "days": [
+       "Tue"
+      ],
+      "slots": [
+       "Breakfast",
+       "Lunch",
+       "Dinner"
+      ],
+      "note": "Pooja cooks"
+     },
+     {
+      "kind": "other",
+      "days": [
+       "Wed"
+      ],
+      "slots": [
+       "Breakfast",
+       "Lunch",
+       "Dinner"
+      ],
+      "note": "Pooja cooks"
+     },
+     {
+      "kind": "other",
+      "days": [
+       "Thu"
+      ],
+      "slots": [
+       "Breakfast",
+       "Lunch",
+       "Dinner"
+      ],
+      "note": "Pooja cooks"
+     },
+     {
+      "kind": "other",
+      "days": [
+       "Fri"
+      ],
+      "slots": [
+       "Breakfast",
+       "Lunch",
+       "Dinner"
+      ],
+      "note": "Pooja cooks"
+     },
+     {
+      "kind": "other",
+      "days": [
+       "Sat"
+      ],
+      "slots": [
+       "Breakfast",
+       "Lunch",
+       "Dinner"
+      ],
+      "note": "Pooja cooks"
+     },
+     {
+      "kind": "other",
+      "days": [
+       "Sun"
+      ],
+      "slots": [
+       "Breakfast",
+       "Lunch",
+       "Dinner"
+      ],
+      "note": "Pooja cooks"
+     }
+    ],
+    "dishes": [
+     {
+      "name": "Poha",
+      "slots": [
+       "Breakfast"
+      ]
+     },
+     {
+      "name": "Paratha",
+      "slots": [
+       "Breakfast",
+       "Reyansh's tiffin"
+      ]
+     },
+     {
+      "name": "Besan chilla",
+      "slots": [
+       "Breakfast"
+      ]
+     },
+     {
+      "name": "Dalia",
+      "slots": [
+       "Breakfast"
+      ]
+     },
+     {
+      "name": "Sabzi",
+      "slots": [
+       "Reyansh's tiffin",
+       "Lunch",
+       "Dinner"
+      ]
+     },
+     {
+      "name": "Aloo sandwich",
+      "slots": [
+       "Reyansh's tiffin"
+      ]
+     },
+     {
+      "name": "Roti",
+      "slots": [
+       "Lunch",
+       "Dinner"
+      ]
+     },
+     {
+      "name": "Dal",
+      "slots": [
+       "Lunch"
+      ]
+     },
+     {
+      "name": "Chawal",
+      "slots": [
+       "Lunch"
+      ]
+     },
+     {
+      "name": "Kadhi chawal",
+      "slots": [
+       "Lunch"
+      ],
+      "often": "sometimes"
+     },
+     {
+      "name": "Dal baati",
+      "slots": [
+       "Lunch"
+      ],
+      "days": [
+       "Sun"
+      ]
+     },
+     {
+      "name": "Gatte ki sabzi",
+      "slots": [
+       "Dinner"
+      ]
+     },
+     {
+      "name": "Aloo matar",
+      "slots": [
+       "Dinner"
+      ]
+     },
+     {
+      "name": "Bhindi",
+      "slots": [
+       "Dinner"
+      ]
+     },
+     {
+      "name": "Khichdi",
+      "slots": [
+       "Dinner"
+      ],
+      "days": [
+       "Sat"
+      ]
+     }
+    ],
+    "examples": [
+     {
+      "slot": "Breakfast",
+      "words": "Reyansh had poha, paratha, besan chilla, or dalia. He doesn't have eggs."
+     },
+     {
+      "slot": "Breakfast",
+      "group": "adults",
+      "words": "Same as Reyansh mostly: poha, paratha, besan chilla, dalia for Papa."
+     },
+     {
+      "slot": "Reyansh's tiffin",
+      "words": "paratha with sabzi, poha, aloo sandwich."
+     },
+     {
+      "slot": "Lunch",
+      "group": "adults",
+      "words": "Dal, chawal, roti, ek sabzi. Kadhi chawal sometimes, dal baati on Sundays."
+     },
+     {
+      "slot": "Dinner",
+      "group": "adults",
+      "words": "Roti and a sabzi, like gatte ki sabzi or aloo matar or bhindi."
+     },
+     {
+      "slot": "Dinner",
+      "words": "Reyansh eats the same dinner as all of us: roti and sabzi."
+     }
+    ]
+   },
+   "transcript": [
+    "Q: What's the hardest part of meals for you? Or something else.",
+    "A: The hardest part is deciding what to make, with everyone having different rules.",
+    "Q: Which apps do you order groceries on: Zepto, Blinkit, Instamart, BigBasket or Amazon? If you sign me in, I'll read your past orders to learn what your home buys and how often, so the plan and the shopping list fit you from the first week, and I can fill the cart for you. Nothing is ordered without your yes.",
+    "A: We don't use any apps, the kirana delivers. Later for sign in.",
+    "Q: I have Ankit (34), Pooja (32), Reyansh (8), Ramesh (66) and Kamla (62) eating at home. Anyone else who eats at home, or anyone who doesn't?",
+    "A: That's everyone who lives here, no one else.",
+    "Q: Who cooks at home, and on which days? Is any day's meal eaten out?",
+    "A: Pooja cooks every meal, every day. We never eat out.",
+    "Q: What did the children have for breakfast over the past week? Tell me in as much detail as you can.",
+    "A: Reyansh had poha, paratha, besan chilla, or dalia. He doesn't have eggs.",
+    "Q: The children's lunch over the past week, or their school tiffin?",
+    "A: Reyansh takes tiffin to school Mon-Fri: paratha with sabzi, poha, aloo sandwich.",
+    "Q: The children's dinner over the past week?",
+    "A: Reyansh eats the same dinner as all of us: roti and sabzi.",
+    "Q: What did the adults have for breakfast over the past week? Tell me in as much detail as you can.",
+    "A: Same as Reyansh mostly: poha, paratha, besan chilla, dalia for Papa.",
+    "Q: The adults' lunch over the past week?",
+    "A: Dal, chawal, roti, ek sabzi. Kadhi chawal sometimes, dal baati on Sundays.",
+    "Q: The adults' dinner over the past week?",
+    "A: Roti and a sabzi, like gatte ki sabzi or aloo matar or bhindi.",
+    "A: Khichdi on Saturday night.",
+    "Q: Is anyone on a diet? High protein, low carb, diabetic, anything a doctor asked for.",
+    "A: No, nobody is on any diet.",
+    "Q: Do the elders eat anything differently from the rest: less salt, softer food, no onion or garlic, a fasting day?",
+    "A: Papa never eats onion or garlic. Mummy skips them on Tuesdays and Thursdays. Rest of us eat everything.",
+    "Q: Any food rules for the house? Veg, egg or non-veg days, fasting days, allergies, a dish someone won't touch.",
+    "A: Pure vegetarian, no eggs in the house. No fasting days or allergies.",
+    "A: sorry I meant Mummy's no onion garlic days are Tuesday and Saturday, not Thursday",
+    "Q: How often do you order in, and on which days?",
+    "A: We don't order in at all.",
+    "A: Pooja cooks every meal.",
+    "Q: Does anything come on a subscription, like Country Delight or a milkman?",
+    "A: No subscriptions. Milk comes from the local dairy, 2 litres daily."
+   ]
+  },
+  {
+   "household": "h6-kulkarni",
+   "title": "Maharashtrian, non-veg weekends, two snack boxes, peanut allergy, cook Mon–Fri",
+   "rep": 1,
+   "ok": true,
+   "setup_ms": 19024,
+   "calls": [
+    {
+     "purpose": "setup: the food rules",
+     "tier": "balanced",
+     "ms": 1322,
+     "ok": true,
+     "attempts": 1,
+     "out": 120,
+     "think": 0,
+     "cost": 0.00029169
+    },
+    {
+     "purpose": "setup: the dishes",
+     "tier": "balanced",
+     "ms": 2368,
+     "ok": true,
+     "attempts": 1,
+     "out": 328,
+     "think": 0,
+     "cost": 0.00044523
+    },
+    {
+     "purpose": "setup: the home",
+     "tier": "balanced",
+     "ms": 18962,
+     "ok": true,
+     "attempts": 1,
+     "out": 3221,
+     "think": 2579,
+     "cost": 0.001359115
+    }
+   ],
+   "rates": {
+    "people": [
+     1,
+     1
+    ],
+    "cook_days": [
+     1,
+     1
+    ],
+    "cook_times": [
+     1,
+     1
+    ],
+    "home_cook": [
+     2,
+     2
+    ],
+    "slots_present": [
+     1,
+     1
+    ],
+    "slot_days": [
+     1,
+     1
+    ],
+    "slot_for": [
+     1,
+     1
+    ],
+    "no_extra_slots": [
+     1,
+     1
+    ],
+    "order_in": [
+     1,
+     1
+    ],
+    "hard_rules": [
+     2,
+     2
+    ],
+    "no_unsaid_rules": [
+     1,
+     1
+    ],
+    "dish_no_wrong_restriction": [
+     1,
+     1
+    ],
+    "personal_dishes": [
+     1,
+     1
+    ],
+    "dish_coverage": [
+     19,
+     19
+    ],
+    "dish_slots": [
+     18,
+     19
+    ],
+    "dish_frequency": [
+     3,
+     5
+    ],
+    "meal_examples": [
+     2,
+     2
+    ]
+   },
+   "notes": [
+    "dish_frequency: Thalipeeth (Sat,Sun): saved {}",
+    "dish_frequency: Noodles (sometimes, Fri): saved {\"days\":[\"Fri\"]}",
+    "dish_slots: Chicken rassa at Dinner (want Lunch)"
+   ],
+   "said": "At home: Amit (adult, 40), Snehal (adult, 38), Aditi (child, 10) and Ishaan (child, 6).\nMangala cooks Mon–Fri: breakfast and lunch at 06:45 and dinner at 18:00.\nOn Saturday Amit cooks. On Sunday Snehal cooks.\nEach day we'll plan Breakfast, Lunch and Dinner, plus School tiffin Mon–Fri for Aditi and Ishaan.\nFood rules:\nEveryone: no meat, fish on Mon, Tue, Wed, Thu, Fri\nIshaan: eats no peanuts\n20 of your dishes noted to plan from.",
+   "noted": [],
+   "dropped": [
+    "how often for Bhakri (usually): not in the family's words",
+    "how often for Poli (usually): not in the family's words",
+    "how often for Usal (usually): not in the family's words",
+    "how often for Pithla (usually): not in the family's words"
+   ],
+   "setup": {
+    "people": [
+     {
+      "name": "Amit",
+      "group": "adult",
+      "relationship": "self",
+      "note": "age 40"
+     },
+     {
+      "name": "Snehal",
+      "group": "adult",
+      "relationship": "wife",
+      "note": "age 38"
+     },
+     {
+      "name": "Aditi",
+      "group": "child",
+      "relationship": "daughter",
+      "note": "age 10"
+     },
+     {
+      "name": "Ishaan",
+      "group": "child",
+      "relationship": "son",
+      "note": "age 6"
+     }
+    ],
+    "cook": {
+     "name": "Mangala",
+     "days": [
+      "Mon",
+      "Tue",
+      "Wed",
+      "Thu",
+      "Fri"
+     ],
+     "visits": [
+      {
+       "at": "06:45",
+       "meals": [
+        "Breakfast",
+        "Lunch"
+       ]
+      },
+      {
+       "at": "18:00",
+       "meals": [
+        "Dinner"
+       ]
+      }
+     ],
+     "time_limit": null,
+     "note": null
+    },
+    "extraSlots": [
+     {
+      "name": "School tiffin",
+      "days": [
+       "Mon",
+       "Tue",
+       "Wed",
+       "Thu",
+       "Fri"
+      ],
+      "for": [
+       "Aditi",
+       "Ishaan"
+      ]
+     }
+    ],
+    "orderIn": [],
+    "rules": [
+     {
+      "kind": "avoid",
+      "days": [
+       "Mon",
+       "Tue",
+       "Wed",
+       "Thu",
+       "Fri"
+      ],
+      "items": [
+       "@meat",
+       "@fish"
+      ],
+      "note": "Non-veg only on weekends, Saturday and Sunday."
+     },
+     {
+      "kind": "avoid",
+      "days": [],
+      "who": "Ishaan",
+      "items": [
+       "@peanut"
+      ],
+      "note": "Ishaan is allergic to peanuts — nothing with peanuts, not even groundnut oil."
+     },
+     {
+      "kind": "other",
+      "days": [
+       "Sat"
+      ],
+      "slots": [
+       "Breakfast",
+       "Lunch",
+       "Dinner"
+      ],
+      "note": "Amit cooks"
+     },
+     {
+      "kind": "other",
+      "days": [
+       "Sun"
+      ],
+      "slots": [
+       "Breakfast",
+       "Lunch",
+       "Dinner"
+      ],
+      "note": "Snehal cooks"
+     }
+    ],
+    "dishes": [
+     {
+      "name": "Poha",
+      "slots": [
+       "Breakfast"
+      ]
+     },
+     {
+      "name": "Upma",
+      "slots": [
+       "Breakfast"
+      ]
+     },
+     {
+      "name": "Sheera",
+      "slots": [
+       "Breakfast"
+      ]
+     },
+     {
+      "name": "Thalipeeth",
+      "slots": [
+       "Breakfast"
+      ]
+     },
+     {
+      "name": "Sandwich",
+      "slots": [
+       "School tiffin"
+      ]
+     },
+     {
+      "name": "Fruits",
+      "slots": [
+       "School tiffin"
+      ]
+     },
+     {
+      "name": "Chivda",
+      "slots": [
+       "School tiffin"
+      ]
+     },
+     {
+      "name": "Idli",
+      "slots": [
+       "School tiffin"
+      ]
+     },
+     {
+      "name": "Noodles",
+      "slots": [
+       "School tiffin"
+      ],
+      "for": [
+       "Ishaan"
+      ],
+      "days": [
+       "Fri"
+      ]
+     },
+     {
+      "name": "Bhakri",
+      "slots": [
+       "Dinner"
+      ]
+     },
+     {
+      "name": "Poli",
+      "slots": [
+       "Dinner",
+       "Lunch"
+      ]
+     },
+     {
+      "name": "Usal",
+      "slots": [
+       "Dinner"
+      ]
+     },
+     {
+      "name": "Pithla",
+      "slots": [
+       "Dinner"
+      ]
+     },
+     {
+      "name": "Fish fry",
+      "slots": [
+       "Dinner"
+      ],
+      "days": [
+       "Sat"
+      ]
+     },
+     {
+      "name": "Chicken rassa",
+      "slots": [
+       "Dinner"
+      ],
+      "days": [
+       "Sun"
+      ]
+     },
+     {
+      "name": "Bhaji",
+      "slots": [
+       "Lunch"
+      ]
+     },
+     {
+      "name": "Varan bhaat",
+      "slots": [
+       "Lunch"
+      ]
+     },
+     {
+      "name": "Koshimbir",
+      "slots": [
+       "Lunch"
+      ]
+     },
+     {
+      "name": "Amti",
+      "slots": [
+       "Lunch"
+      ],
+      "often": "sometimes"
+     }
+    ],
+    "examples": [
+     {
+      "slot": "Breakfast",
+      "group": "children",
+      "words": "Poha on Monday, upma Tuesday, sheera Wednesday, thalipeeth Thursday, poha Friday. Weekend we had the same variety."
+     },
+     {
+      "slot": "Breakfast",
+      "group": "adults",
+      "words": "Same as kids mostly. Poha, upma, sheera, thalipeeth. I had the same."
+     },
+     {
+      "slot": "Lunch",
+      "words": "Poli, bhaji, varan bhaat, koshimbir. Sometimes amti instead of varan."
+     },
+     {
+      "slot": "Dinner",
+      "words": "Dinner was bhakri or poli with usal or pithla, same as usual. Weekend had fish fry Saturday and chicken rassa Sunday."
+     },
+     {
+      "slot": "School tiffin",
+      "words": "sandwich, fruits, chivda, idli; noodles sometimes on Friday for Ishaan."
+     }
+    ]
+   },
+   "transcript": [
+    "Q: What's the hardest part of meals for you? Or something else.",
+    "A: Hardest part is deciding what to make every day. The cooking itself is fine.",
+    "Q: Which apps do you order groceries on: Zepto, Blinkit, Instamart, BigBasket or Amazon? If you sign me in, I'll read your past orders to learn what your home buys and how often, so the plan and the shopping list fit you from the first week, and I can fill the cart for you. Nothing is ordered without your yes.",
+    "A: Zepto mostly. Later for the sign in thing.",
+    "Q: Which is your main app, and which do you use when something isn't there?",
+    "A: Zepto is the main one. If something's not there, I just try Blinkit or Instamart.",
+    "Q: I have Amit (40), Snehal (38), Aditi (10) and Ishaan (6) eating at home. Anyone else who eats at home, or anyone who doesn't?",
+    "A: That's all of us. Mangala cooks for us but doesn't eat with us.",
+    "Q: Mangala cooks Mon-Fri: Breakfast and Lunch at 7am, Dinner at 6pm. Is that right, and does the cook come for any other meals?",
+    "A: That's right, breakfast and lunch at 7am, dinner at 6pm. No other meals from her.",
+    "Q: Is the cook short of time, say off to the next house, so only a dish or two in the morning?",
+    "A: No, she's fine on time, makes full meals both times.",
+    "Q: On Saturday and Sunday, when the cook doesn't come, who cooks? Or is a meal eaten out?",
+    "A: I cook on Saturday, Snehal does Sunday. We don't eat out.",
+    "A: actually Mangala comes at 6:45 in the morning now",
+    "Q: What did the children have for breakfast over the past week? Tell me in as much detail as you can.",
+    "A: Poha on Monday, upma Tuesday, sheera Wednesday, thalipeeth Thursday, poha Friday. Weekend we had the same variety.",
+    "Q: The children's lunch over the past week, or their school tiffin?",
+    "A: School tiffin Monday to Friday: sandwich, fruits, chivda, idli; noodles sometimes on Friday for Ishaan.",
+    "A: Lunch at home after school, same as ours.",
+    "Q: The children's dinner over the past week?",
+    "A: Dinner was bhakri or poli with usal or pithla, same as usual. Weekend had fish fry Saturday and chicken rassa Sunday.",
+    "Q: What did the adults have for breakfast over the past week? Tell me in as much detail as you can.",
+    "A: Same as kids mostly. Poha, upma, sheera, thalipeeth. I had the same.",
+    "Q: The adults' lunch over the past week?",
+    "A: Poli, bhaji, varan bhaat, koshimbir. Sometimes amti instead of varan.",
+    "Q: The adults' dinner over the past week?",
+    "A: Same as what I told you for the kids' dinner — bhakri or poli with usal or pithla. Weekend fish fry Saturday, chicken rassa Sunday.",
+    "Q: Is anyone on a diet? High protein, low carb, diabetic, anything a doctor asked for.",
+    "A: No diets, nothing like that.",
+    "Q: Any food rules for the house? Veg, egg or non-veg days, fasting days, allergies, a dish someone won't touch.",
+    "A: Non-veg only on weekends, Saturday and Sunday. Ishaan is allergic to peanuts — nothing with peanuts, not even groundnut oil. Eggs are fine.",
+    "Q: How often do you order in, and on which days?",
+    "A: We rarely order in. Maybe once or twice a month, not fixed days. Zepto mostly for groceries.",
+    "Q: Does anything come on a subscription, like Country Delight or a milkman?",
+    "A: Chitale milk every morning. That's about it."
+   ]
+  },
+  {
+   "household": "h7-menon",
+   "title": "Young couple, weekday cook one visit (lunch+dinner), weekends out, high protein",
+   "rep": 1,
+   "ok": true,
+   "setup_ms": 22843,
+   "calls": [
+    {
+     "purpose": "setup: the food rules",
+     "tier": "balanced",
+     "ms": 1868,
+     "ok": true,
+     "attempts": 1,
+     "out": 117,
+     "think": 0,
+     "cost": 0.000334194
+    },
+    {
+     "purpose": "setup: the dishes",
+     "tier": "balanced",
+     "ms": 2025,
+     "ok": true,
+     "attempts": 1,
+     "out": 140,
+     "think": 0,
+     "cost": 0.00019672
+    },
+    {
+     "purpose": "setup: the home",
+     "tier": "balanced",
+     "ms": 22805,
+     "ok": true,
+     "attempts": 1,
+     "out": 2173,
+     "think": 1762,
+     "cost": 0.00053193
+    }
+   ],
+   "rates": {
+    "people": [
+     1,
+     1
+    ],
+    "cook_days": [
+     1,
+     1
+    ],
+    "cook_times": [
+     0,
+     1
+    ],
+    "home_cook": [
+     1,
+     2
+    ],
+    "no_extra_slots": [
+     1,
+     1
+    ],
+    "order_in": [
+     1,
+     1
+    ],
+    "hard_rules": [
+     1,
+     1
+    ],
+    "no_unsaid_rules": [
+     1,
+     1
+    ],
+    "soft_notes": [
+     0,
+     1
+    ],
+    "soft_kept_soft": [
+     1,
+     1
+    ],
+    "dish_no_wrong_restriction": [
+     0,
+     1
+    ],
+    "personal_dishes": [
+     3,
+     3
+    ],
+    "dish_coverage": [
+     12,
+     13
+    ],
+    "dish_slots": [
+     12,
+     12
+    ],
+    "dish_frequency": [
+     1,
+     3
+    ],
+    "meal_examples": [
+     2,
+     2
+    ]
+   },
+   "notes": [
+    "cook_times: [{\"at\":\"11:00\",\"meals\":[\"Lunch\"]}] (want [{\"at\":\"11:00\",\"meals\":[\"Lunch\",\"Dinner\"]}])",
+    "home_cook: Nikhil on Sat,Sun: [\"Sun Tanya cooks\"]",
+    "soft_notes: missing: Nikhil: high protein",
+    "dish_no_wrong_restriction: restricted though everyone's: Toast with peanut butter [Tanya]",
+    "dish_frequency: Toast (sometimes): saved {}",
+    "dish_frequency: Biryani (rarely): not saved"
+   ],
+   "said": "At home: Nikhil (adult, 30) and Tanya (adult, 29).\nRekha cooks Mon–Fri: lunch at 11:00.\nOn Saturday the family cooks. On Sunday Tanya cooks.\nEach day we'll plan Breakfast, Lunch and Dinner. Saturday lunch you eat out. Saturday dinner and Sunday lunch you order in.\nFood rules:\nTanya: eats no meat\nNikhil: has eggs at Breakfast 4–5 times a week\n13 of your dishes noted to plan from.",
+   "noted": [],
+   "dropped": [],
+   "setup": {
+    "people": [
+     {
+      "name": "Nikhil",
+      "group": "adult",
+      "relationship": "self",
+      "note": "age 30"
+     },
+     {
+      "name": "Tanya",
+      "group": "adult",
+      "relationship": "wife",
+      "note": "age 29"
+     }
+    ],
+    "cook": {
+     "name": "Rekha",
+     "days": [
+      "Mon",
+      "Tue",
+      "Wed",
+      "Thu",
+      "Fri"
+     ],
+     "visits": [
+      {
+       "at": "11:00",
+       "meals": [
+        "Lunch"
+       ]
+      }
+     ],
+     "time_limit": "an hour and a half",
+     "note": null
+    },
+    "extraSlots": [],
+    "orderIn": [
+     {
+      "day": "Sat",
+      "slot": "Lunch",
+      "note": "eaten out"
+     },
+     {
+      "day": "Sat",
+      "slot": "Dinner",
+      "note": "ordered in"
+     },
+     {
+      "day": "Sun",
+      "slot": "Lunch",
+      "note": "ordered in"
+     }
+    ],
+    "rules": [
+     {
+      "kind": "avoid",
+      "days": [],
+      "who": "Tanya",
+      "items": [
+       "@meat"
+      ],
+      "note": "Tanya doesn't eat red meat or mutton."
+     },
+     {
+      "kind": "require",
+      "days": [],
+      "who": "Nikhil",
+      "slots": [
+       "Breakfast"
+      ],
+      "often": "usually",
+      "items": [
+       "@egg"
+      ],
+      "note": "I make eggs every morning for myself"
+     },
+     {
+      "kind": "other",
+      "days": [
+       "Sun"
+      ],
+      "slots": [
+       "Dinner"
+      ],
+      "note": "Tanya cooks"
+     }
+    ],
+    "dishes": [
+     {
+      "name": "Eggs",
+      "slots": [
+       "Breakfast"
+      ],
+      "for": [
+       "Nikhil"
+      ],
+      "often": "usually"
+     },
+     {
+      "name": "Oats",
+      "slots": [
+       "Breakfast"
+      ],
+      "for": [
+       "Tanya"
+      ]
+     },
+     {
+      "name": "Smoothie",
+      "slots": [
+       "Breakfast"
+      ],
+      "for": [
+       "Tanya"
+      ]
+     },
+     {
+      "name": "Toast with peanut butter",
+      "slots": [
+       "Breakfast"
+      ],
+      "for": [
+       "Tanya"
+      ]
+     },
+     {
+      "name": "Chicken curry",
+      "slots": [
+       "Lunch"
+      ]
+     },
+     {
+      "name": "Dal",
+      "slots": [
+       "Lunch",
+       "Dinner"
+      ]
+     },
+     {
+      "name": "Rice",
+      "slots": [
+       "Lunch"
+      ]
+     },
+     {
+      "name": "Sabzi",
+      "slots": [
+       "Lunch",
+       "Dinner"
+      ]
+     },
+     {
+      "name": "Salad",
+      "slots": [
+       "Lunch"
+      ]
+     },
+     {
+      "name": "Paneer",
+      "slots": [
+       "Lunch",
+       "Dinner"
+      ]
+     },
+     {
+      "name": "Roti",
+      "slots": [
+       "Dinner"
+      ]
+     },
+     {
+      "name": "Chicken",
+      "slots": [
+       "Dinner"
+      ]
+     }
+    ],
+    "examples": [
+     {
+      "slot": "Breakfast",
+      "words": "I make eggs every morning for myself, usually a couple of fried or scrambled. Tanya has oats or a smoothie, sometimes toast with peanut butter."
+     },
+     {
+      "slot": "Lunch",
+      "words": "chicken curry or dal, rice, sabzi, salad. Paneer when not chicken."
+     },
+     {
+      "slot": "Dinner",
+      "words": "roti with chicken or paneer and a sabzi. Dal sometimes."
+     }
+    ]
+   },
+   "transcript": [
+    "Q: What's the hardest part of meals for you? Or something else.",
+    "A: Honestly, the hardest part is we never know what to tell Rekha, and groceries always run out.",
+    "Q: Which apps do you order groceries on: Zepto, Blinkit, Instamart, BigBasket or Amazon? If you sign me in, I'll read your past orders to learn what your home buys and how often, so the plan and the shopping list fit you from the first week, and I can fill the cart for you. Nothing is ordered without your yes.",
+    "A: Zepto mainly, Blinkit if Zepto doesn't have it. And later on the sign-in, let's just get the plan sorted first.",
+    "Q: Which is your main app, and which do you use when something isn't there?",
+    "A: Zepto mainly, Blinkit if Zepto doesn't have it.",
+    "Q: I have Nikhil (30) and Tanya (29) eating at home. Anyone else who eats at home, or anyone who doesn't?",
+    "A: Just us two, no one else.",
+    "A: No one skips meals either, if that's what you mean.",
+    "Q: Rekha cooks Mon-Fri: Lunch and Dinner at 10am. Is that right, and does the cook come for any other meals?",
+    "A: Yeah that's right, just lunch and dinner on weekdays. She's done in an hour and a half.",
+    "Q: Is the cook short of time, say off to the next house, so only a dish or two in the morning?",
+    "A: No, she has an hour and a half, that's enough for lunch and dinner both. She makes everything in one go.",
+    "Q: On Saturday and Sunday, when the cook doesn't come, who cooks? Or is a meal eaten out?",
+    "A: Saturday lunch we eat out, Saturday dinner and Sunday lunch we order in. Sunday dinner Tanya cooks something simple.",
+    "Q: What did the adults have for breakfast over the past week? Tell me in as much detail as you can.",
+    "A: I make eggs every morning for myself, usually a couple of fried or scrambled. Tanya has oats or a smoothie, sometimes toast with peanut butter.",
+    "Q: The adults' lunch over the past week?",
+    "A: Weekdays: chicken curry or dal, rice, sabzi, salad. Paneer when not chicken.",
+    "A: Weekends: Saturday we eat out, Sunday we order in.",
+    "A: btw Rekha's timing changed, she comes at 11 now not 10",
+    "Q: The adults' dinner over the past week?",
+    "A: Weekdays: roti with chicken or paneer and a sabzi. Dal sometimes.",
+    "A: Weekends: Saturday dinner we order in, Sunday dinner Tanya cooks something simple.",
+    "Q: Is anyone on a diet? High protein, low carb, diabetic, anything a doctor asked for.",
+    "A: Yeah, I'm on high protein for the gym. Tanya's not on anything specific.",
+    "Q: Any food rules for the house? Veg, egg or non-veg days, fasting days, allergies, a dish someone won't touch.",
+    "A: Tanya doesn't eat red meat or mutton. Chicken, fish, eggs are fine for both of us.",
+    "A: No fasting or allergy issues.",
+    "Q: How often do you order in, and on which days?",
+    "A: Weekends — Saturday dinner and Sunday lunch, every week.",
+    "A: Rest of the time Rekha cooks weekdays.",
+    "Q: Does anything come on a subscription, like Country Delight or a milkman?",
+    "A: No subscriptions. We just order Zepto or Blinkit as needed."
+   ]
+  },
+  {
+   "household": "h8-banerjee",
+   "title": "Bengali, grandparents, cook every day, fish most days, veg no-onion-garlic grandmother",
+   "rep": 1,
+   "ok": true,
+   "setup_ms": 11196,
+   "calls": [
+    {
+     "purpose": "setup: the dishes",
+     "tier": "balanced",
+     "ms": 2186,
+     "ok": true,
+     "attempts": 1,
+     "out": 299,
+     "think": 0,
+     "cost": 0.00025507
+    },
+    {
+     "purpose": "setup: the home",
+     "tier": "balanced",
+     "ms": 3496,
+     "ok": true,
+     "attempts": 1,
+     "out": 560,
+     "think": 0,
+     "cost": 0.00041706
+    },
+    {
+     "purpose": "setup: the food rules",
+     "tier": "balanced",
+     "ms": 11110,
+     "ok": true,
+     "attempts": 1,
+     "out": 1824,
+     "think": 1602,
+     "cost": 0.00094262
+    }
+   ],
+   "rates": {
+    "people": [
+     1,
+     1
+    ],
+    "cook_days": [
+     1,
+     1
+    ],
+    "cook_times": [
+     1,
+     1
+    ],
+    "slots_present": [
+     1,
+     1
+    ],
+    "slot_days": [
+     1,
+     1
+    ],
+    "slot_for": [
+     1,
+     1
+    ],
+    "no_extra_slots": [
+     1,
+     1
+    ],
+    "order_in": [
+     1,
+     1
+    ],
+    "hard_rules": [
+     4,
+     4
+    ],
+    "no_unsaid_rules": [
+     1,
+     1
+    ],
+    "soft_notes": [
+     1,
+     1
+    ],
+    "soft_kept_soft": [
+     1,
+     1
+    ],
+    "dish_no_wrong_restriction": [
+     1,
+     1
+    ],
+    "personal_dishes": [
+     0,
+     1
+    ],
+    "dish_coverage": [
+     16,
+     18
+    ],
+    "dish_slots": [
+     16,
+     16
+    ],
+    "dish_frequency": [
+     4,
+     5
+    ],
+    "meal_examples": [
+     3,
+     3
+    ]
+   },
+   "notes": [
+    "personal_dishes: Veg torkari for Gita: not saved",
+    "dish_frequency: Kosha mangsho (Sun): not saved"
+   ],
+   "said": "At home: Sourav (adult, 42), Rituparna (adult, 40), Riya (child, 12), Pradip (elder, 72) and Gita (elder, 68).\nMala cooks every day: breakfast and lunch at 08:30 and dinner at 18:00.\nEach day we'll plan Breakfast, Lunch and Dinner, plus Riya's tiffin Mon–Fri.\nFood rules:\nEveryone: no beef, pork\nPradip: eats no sweet things; less oil\nGita: eats no fish, meat, eggs; eats no onion, garlic\n21 of your dishes noted to plan from.",
+   "noted": [],
+   "dropped": [
+    "how often for \"less oil\" (usually): not in the family's words, kept every time",
+    "how often for Roti (usually): not in the family's words"
+   ],
+   "setup": {
+    "people": [
+     {
+      "name": "Sourav",
+      "group": "adult",
+      "relationship": "self",
+      "note": "age 42"
+     },
+     {
+      "name": "Rituparna",
+      "group": "adult",
+      "relationship": "wife",
+      "note": "age 40"
+     },
+     {
+      "name": "Riya",
+      "group": "child",
+      "relationship": "daughter",
+      "note": "age 12"
+     },
+     {
+      "name": "Pradip",
+      "group": "elder",
+      "relationship": "father",
+      "note": "age 72"
+     },
+     {
+      "name": "Gita",
+      "group": "elder",
+      "relationship": "mother",
+      "note": "age 68"
+     }
+    ],
+    "cook": {
+     "name": "Mala",
+     "days": [
+      "Mon",
+      "Tue",
+      "Wed",
+      "Thu",
+      "Fri",
+      "Sat",
+      "Sun"
+     ],
+     "visits": [
+      {
+       "at": "08:30",
+       "meals": [
+        "Breakfast",
+        "Lunch"
+       ]
+      },
+      {
+       "at": "18:00",
+       "meals": [
+        "Dinner"
+       ]
+      }
+     ],
+     "time_limit": null,
+     "note": null
+    },
+    "extraSlots": [
+     {
+      "name": "Riya's tiffin",
+      "days": [
+       "Mon",
+       "Tue",
+       "Wed",
+       "Thu",
+       "Fri"
+      ],
+      "for": [
+       "Riya"
+      ]
+     }
+    ],
+    "orderIn": [],
+    "rules": [
+     {
+      "kind": "avoid",
+      "days": [],
+      "who": "Pradip",
+      "items": [
+       "@sweet"
+      ],
+      "note": "no sweets at all"
+     },
+     {
+      "kind": "avoid",
+      "days": [],
+      "who": "Gita",
+      "items": [
+       "@fish",
+       "@meat",
+       "@egg"
+      ],
+      "note": "no fish, meat, eggs"
+     },
+     {
+      "kind": "avoid",
+      "days": [],
+      "who": "Gita",
+      "items": [
+       "onion",
+       "garlic"
+      ],
+      "note": "no onion or garlic"
+     },
+     {
+      "kind": "other",
+      "days": [],
+      "who": "Pradip",
+      "note": "less oil"
+     },
+     {
+      "kind": "avoid",
+      "days": [],
+      "items": [
+       "beef",
+       "pork"
+      ],
+      "note": "no beef or pork in the house"
+     }
+    ],
+    "dishes": [
+     {
+      "name": "Toast",
+      "slots": [
+       "Breakfast"
+      ],
+      "often": "usually"
+     },
+     {
+      "name": "Egg",
+      "slots": [
+       "Breakfast"
+      ],
+      "often": "usually"
+     },
+     {
+      "name": "Muri",
+      "slots": [
+       "Breakfast"
+      ]
+     },
+     {
+      "name": "Luchi",
+      "slots": [
+       "Breakfast"
+      ],
+      "days": [
+       "Sun"
+      ]
+     },
+     {
+      "name": "Egg roll",
+      "slots": [
+       "Riya's tiffin"
+      ]
+     },
+     {
+      "name": "Chowmein",
+      "slots": [
+       "Riya's tiffin"
+      ]
+     },
+     {
+      "name": "Sandwich",
+      "slots": [
+       "Riya's tiffin"
+      ]
+     },
+     {
+      "name": "Roti",
+      "slots": [
+       "Dinner"
+      ]
+     },
+     {
+      "name": "Torkari",
+      "slots": [
+       "Dinner",
+       "Lunch"
+      ],
+      "often": "usually"
+     },
+     {
+      "name": "Dal",
+      "slots": [
+       "Dinner",
+       "Lunch"
+      ],
+      "often": "usually"
+     },
+     {
+      "name": "Fish",
+      "slots": [
+       "Dinner"
+      ],
+      "often": "sometimes"
+     },
+     {
+      "name": "Chire bhaja",
+      "slots": [
+       "Breakfast"
+      ]
+     },
+     {
+      "name": "Alur dom",
+      "slots": [
+       "Breakfast"
+      ],
+      "days": [
+       "Sun"
+      ]
+     },
+     {
+      "name": "Bhaat",
+      "slots": [
+       "Lunch"
+      ],
+      "often": "usually"
+     },
+     {
+      "name": "Bhaja",
+      "slots": [
+       "Lunch"
+      ],
+      "often": "usually"
+     },
+     {
+      "name": "Maacher jhol",
+      "slots": [
+       "Lunch"
+      ],
+      "often": "usually"
+     },
+     {
+      "name": "Rui",
+      "slots": [
+       "Lunch"
+      ]
+     },
+     {
+      "name": "Katla fish curry",
+      "slots": [
+       "Lunch"
+      ]
+     }
+    ],
+    "examples": [
+     {
+      "slot": "Breakfast",
+      "group": "children",
+      "words": "Riya has toast and egg most days, or muri. On Sunday she gets luchi."
+     },
+     {
+      "slot": "Breakfast",
+      "group": "adults",
+      "words": "Toast and egg, muri, chire bhaja. Sunday luchi with alur dom."
+     },
+     {
+      "slot": "Lunch",
+      "group": "adults",
+      "words": "Lunch is bhaat, dal, ekta bhaja, ekta torkari ar maacher jhol most days. Rui or katla fish curry."
+     },
+     {
+      "slot": "Dinner",
+      "words": "Dinner is roti with a torkari and dal, sometimes fish. Ma has her own veg torkari."
+     },
+     {
+      "slot": "Riya's tiffin",
+      "words": "egg roll, chowmein, sandwich"
+     }
+    ]
+   },
+   "transcript": [
+    "Q: What's the hardest part of meals for you? Or something else.",
+    "A: Deciding the menu every day. Mala asks every morning, and I have no clue.",
+    "Q: Which apps do you order groceries on: Zepto, Blinkit, Instamart, BigBasket or Amazon? If you sign me in, I'll read your past orders to learn what your home buys and how often, so the plan and the shopping list fit you from the first week, and I can fill the cart for you. Nothing is ordered without your yes.",
+    "A: Blinkit mostly. And fish from the bazaar.",
+    "A: Later on the sign in, let's just set up the plan first.",
+    "Q: Which is your main app, and which do you use when something isn't there?",
+    "A: Blinkit is the main one. If they don't have something, I try Zepto or Instamart.",
+    "Q: I have Sourav (42), Rituparna (40), Riya (12), Pradip (72) and Gita (68) eating at home. Anyone else who eats at home, or anyone who doesn't?",
+    "A: That's everyone. No one else.",
+    "Q: Mala cooks every day: Breakfast and Lunch at 8am, Dinner at 6pm. Is that right, and does the cook come for any other meals?",
+    "A: That's right, 8 for breakfast and lunch, 6 for dinner. No other meals.",
+    "Q: Is the cook short of time, say off to the next house, so only a dish or two in the morning?",
+    "A: No, she has time. She does everything for breakfast and lunch.",
+    "A: sorry, Mala comes at 8:30 in the morning, not 8",
+    "Q: The cook comes every day: is food cooked at home all seven days?",
+    "A: Yes, all seven days at home.",
+    "Q: What did the children have for breakfast over the past week? Tell me in as much detail as you can.",
+    "A: Riya has toast and egg most days, or muri. On Sunday she gets luchi.",
+    "Q: The children's lunch over the past week, or their school tiffin?",
+    "A: Riya takes a tiffin Monday to Friday: egg roll, chowmein, sandwich. Lunch at home after school, same as ours.",
+    "Q: The children's dinner over the past week?",
+    "A: Dinner is same for everyone—roti with a torkari and dal, sometimes fish. Riya eats that too.",
+    "Q: What did the adults have for breakfast over the past week? Tell me in as much detail as you can.",
+    "A: Toast and egg, muri, chire bhaja. Sunday luchi with alur dom.",
+    "Q: The adults' lunch over the past week?",
+    "A: Lunch is bhaat, dal, ekta bhaja, ekta torkari ar maacher jhol most days. Rui or katla fish curry.",
+    "Q: The adults' dinner over the past week?",
+    "A: Dinner is roti with a torkari and dal, sometimes fish. Ma has her own veg torkari.",
+    "Q: Is anyone on a diet? High protein, low carb, diabetic, anything a doctor asked for.",
+    "A: Baba is diabetic, no sweets at all. Ma is vegetarian—no fish, meat, eggs, no onion or garlic. Baba eats everything but less oil.",
+    "Q: Do the elders eat anything differently from the rest: less salt, softer food, no onion or garlic, a fasting day?",
+    "A: Yes, Ma is vegetarian—no fish, meat, eggs, no onion or garlic. Baba is diabetic, no sweets, less oil. No fasting days.",
+    "Q: Any food rules for the house? Veg, egg or non-veg days, fasting days, allergies, a dish someone won't touch.",
+    "A: Told you already—no beef or pork in the house. That's it. No fixed veg or non-veg days, no fasting days, no allergies.",
+    "Q: How often do you order in, and on which days?",
+    "A: Rarely, maybe Saturday dinner sometimes. No fixed day.",
+    "Q: Does anything come on a subscription, like Country Delight or a milkman?",
+    "A: Milk packets every morning, from the local dairy. No other subscriptions."
+   ]
+  }
+ ]
+}

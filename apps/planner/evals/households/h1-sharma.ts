@@ -42,7 +42,7 @@ export const h1: Household = {
     homeCook: [{ days: ["Sun"], by: "Neha" }],
     extraSlots: [{ name: "Vihaan's tiffin", match: /tiffin|lunch ?box|school/i, days: SCHOOL, for: ["Vihaan"] }],
     orderIn: [{ day: "Sun", slot: "Dinner", note: "ordered from Zomato" }],
-    hardRules: [avoid("nonveg_weekends", "Non-veg only on Saturday and Sunday", ["@meat", "@fish"], { days: SCHOOL })],
+    hardRules: [avoid("nonveg_weekends", "Chicken (non-veg) only on Saturday and Sunday", ["@meat"], { days: SCHOOL })],
     softNotes: [{ id: "less_spicy_kid", who: "Vihaan", text: "less spicy for Vihaan", re: /spic|mild/i }],
     dishes: [
       { name: "Poha", slots: ["Breakfast", "Vihaan's tiffin"] }, { name: "Bread omelette", slots: ["Breakfast"] }, { name: "Aloo paratha", slots: ["Breakfast"], days: ["Sat", "Sun"] },

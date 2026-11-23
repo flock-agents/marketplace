@@ -55,7 +55,9 @@ function explained(h: Household, r: Saved): boolean {
     if (c.kind === "fasting" && r.kind === "fasting") return true;
     if (c.kind !== "fasting" && (asChecked(r).items ?? []).some((s) => c.items.some((t) => itemCovers(s, t)))) return true;
   }
-  return h.truth.softNotes.some((n) => (!n.who || (r.who && sameName(n.who, r.who))) && n.re.test(text));
+  if (h.truth.softNotes.some((n) => (!n.who || (r.who && sameName(n.who, r.who))) && n.re.test(text))) return true;
+  // A person's own dish said as their rule ("eggs every morning for me" as require eggs at Breakfast).
+  return !!r.who && h.truth.dishes.some((d) => d.for?.some((p) => sameName(p, r.who!)) && (r.items ?? []).some((i) => itemCovers(i, d.name) || itemCovers(d.name.toLowerCase(), i)));
 }
 const softFound = (n: SoftNote, rules: Saved[]) => rules.some((r) => (!n.who || (r.who && sameName(n.who, r.who))) && n.re.test(JSON.stringify([r.note ?? "", r.items ?? [], r.to ?? ""])));
 const isHomeCookNote = (r: Saved) => r.kind === "other" && /\bcooks?\b/i.test(r.note ?? "");
