@@ -30,10 +30,13 @@ interface Fake {
   /** What Gmail holds per draft id (getDraft answers this). */
   gmail: Map<string, string>;
   failNext: Partial<Record<string, { reason: string; code?: string }>>;
+  /** The next getDraft answers, in order, before the map: "blank" is a body of null (its compose did not open in time,
+   *  or the draft is gone: getDraft.ts cannot tell which), an object a failed read. */
+  getDraftQueue: Array<"blank" | { reason: string; code?: string }>;
 }
 
 function fake(pairedAgent: { id: string; name: string } | null = { id: "inbox-assistant-7", name: "Inbox Assistant" }): Fake {
-  const f: Fake = { platform: null, calls: [], published: [], withdrawn: [], gmail: new Map(), failNext: {} };
+  const f: Fake = { platform: null, calls: [], published: [], withdrawn: [], gmail: new Map(), failNext: {}, getDraftQueue: [] };
   let n = 0;
   f.platform = {
     appId: "email-desk", pairedAgent, dataDir: "test", configured: true,
@@ -53,6 +56,9 @@ function fake(pairedAgent: { id: string; name: string } | null = { id: "inbox-as
           return { ok: true, data: { ok: true, draftId: p.draftId, bodyAsSaved: String(p.body) } };
         }
         if (req.functionName === "getDraft") {
+          const next = f.getDraftQueue.shift();
+          if (next === "blank") return { ok: true, data: { draftId: p.draftId, body: null, threadId: THREAD } };
+          if (next) return { ok: false, reason: next.reason, ...(next.code ? { code: next.code } : {}) };
           const body = f.gmail.get(String(p.draftId));
           return { ok: true, data: { draftId: p.draftId, body: body ?? null, threadId: THREAD } };
         }
@@ -145,12 +151,75 @@ describe("create_draft", () => {
     expect(row(first.id)).toBeNull();
   });
 
-  test("Gmail could not be asked about the open draft: DRAFT_EXISTS, nothing cleared", async () => {
+  // Ruling R31: a slow or failed read of the open draft is GMAIL_FAILED and never "gone"; only an explicit not-found, or
+  // two blank reads in a row of a draft the person never edited, is gone. A person-edited draft is never replaced.
+  const untouched = (first: { id: string }, before: { published: number }) => {
+    expect(row(first.id)).toMatchObject({ draft_id: "gm-1", body_written: "Hi Asha, Tuesday works.", sent_at: null });
+    expect(f.withdrawn).toHaveLength(0);
+    expect(f.published).toHaveLength(before.published);
+    expect(f.gmail.get("gm-1")).toBe("Hi Asha, Tuesday works.");
+    expect(f.calls.filter((c) => c.functionName === "createReplyDraft")).toHaveLength(1);
+    expect(f.calls.some((c) => c.functionName === "discardDraft" || c.functionName === "updateDraft")).toBe(false);
+  };
+
+  test("a read timeout on the open draft: GMAIL_FAILED, the draft, row and card untouched", async () => {
+    for (const failure of [{ reason: "timeout" }, { reason: "browser busy" }, { reason: "The gmail operation took too long", code: "skill_timeout" }]) {
+      db.run("DELETE FROM draft_records"); f.calls.length = 0; f.published.length = 0; f.withdrawn.length = 0; f.gmail.clear();
+      const first = await create({ threadId: THREAD, body: "Hi Asha, Tuesday works." });
+      f.gmail.set("gm-1", "Hi Asha, Tuesday works.");
+      db.run("UPDATE draft_records SET draft_id = 'gm-1' WHERE id = ?", [first.id]);
+      const before = { published: f.published.length };
+      f.getDraftQueue.push(failure);
+      const again = await create({ threadId: THREAD, body: "Hi Asha, see you then." });
+      expect(again.code).toBe("GMAIL_FAILED");
+      expect(again.error).not.toMatch(/[–—]/);
+      untouched(first, before);
+    }
+  });
+
+  test("one blank read (a compose that did not open) is not gone: DRAFT_EXISTS, nothing cleared", async () => {
     const first = await create({ threadId: THREAD, body: "Hi Asha, Tuesday works." });
-    f.failNext.getDraft = { reason: "browser busy" };
+    const before = { published: f.published.length };
+    f.getDraftQueue.push("blank");
     const again = await create({ threadId: THREAD, body: "Hi Asha, see you then." });
     expect(again.code).toBe("DRAFT_EXISTS");
-    expect(row(first.id)).not.toBeNull();
+    expect(f.calls.filter((c) => c.functionName === "getDraft")).toHaveLength(2);
+    untouched(first, before);
+  });
+
+  test("a blank read, then a failed one: GMAIL_FAILED, nothing cleared", async () => {
+    const first = await create({ threadId: THREAD, body: "Hi Asha, Tuesday works." });
+    const before = { published: f.published.length };
+    f.getDraftQueue.push("blank", { reason: "timeout" });
+    const again = await create({ threadId: THREAD, body: "Hi Asha, see you then." });
+    expect(again.code).toBe("GMAIL_FAILED");
+    untouched(first, before);
+  });
+
+  test("not found (two blank reads): the open draft is replaced by one new Gmail draft", async () => {
+    const first = await create({ threadId: THREAD, body: "Hi Asha, Tuesday works." });
+    f.gmail.delete("gm-1");
+    f.calls.length = 0;
+    const again = await create({ threadId: THREAD, body: "Hi Asha, see you then." });
+    expect(again.id).toBeTruthy();
+    expect(f.calls.map((c) => c.functionName)).toEqual(["getDraft", "getDraft", "createReplyDraft"]);
+    expect(row(first.id)).toBeNull();
+    expect(f.withdrawn).toEqual([`draft:${first.id}`]);
+  });
+
+  test("a person-edited open draft is never replaced, even when Gmail no longer holds it", async () => {
+    const first = await create({ threadId: THREAD, body: "Hi Asha, Tuesday works." });
+    expect(await update({ id: first.id, body: "Hi Asha, Tuesday works. Bring the deck.", by: "person" }, pressCtx())).toEqual({ ok: true });
+    f.gmail.delete("gm-1");
+    const published = f.published.length;
+    f.calls.length = 0;
+    const again = await create({ threadId: THREAD, body: "Hi Asha, see you then." });
+    expect(again.code).toBe("DRAFT_EXISTS");
+    expect(again.error).toContain(first.id);
+    expect(f.calls).toHaveLength(0);
+    expect(row(first.id)).toMatchObject({ person_edited: 1, body_written: "Hi Asha, Tuesday works. Bring the deck.", sent_at: null });
+    expect(f.withdrawn).toHaveLength(0);
+    expect(f.published).toHaveLength(published);
   });
 
   test("two drafts for one thread at once: one is written, the other names it", async () => {
@@ -306,6 +375,35 @@ describe("update_draft", () => {
     expect(out.code).toBe("NOT_FOUND");
     expect(row(id)).toBeNull();
     expect(f.withdrawn).toEqual([`draft:${id}`]);
+  });
+
+  test("a read timeout on the agent's update: GMAIL_FAILED, row and card untouched", async () => {
+    const { id } = await create({ threadId: THREAD, body: "Hi Asha, Tuesday works." });
+    const published = f.published.length;
+    f.getDraftQueue.push({ reason: "timeout" });
+    const out = await update({ id, body: "Hi Asha, Wednesday instead." });
+    expect(out.code).toBe("GMAIL_FAILED");
+    expect(row(id)).toMatchObject({ body_written: "Hi Asha, Tuesday works.", person_edited: 0 });
+    expect(f.gmail.get("gm-1")).toBe("Hi Asha, Tuesday works.");
+    expect(f.withdrawn).toHaveLength(0);
+    expect(f.published).toHaveLength(published);
+    expect(f.calls.some((c) => c.functionName === "updateDraft")).toBe(false);
+  });
+
+  test("one blank read on the agent's update is not gone: the second read decides, and the update goes through", async () => {
+    const { id } = await create({ threadId: THREAD, body: "Hi Asha, Tuesday works." });
+    f.getDraftQueue.push("blank");
+    expect(await update({ id, body: "Hi Asha, Wednesday instead." })).toEqual({ ok: true });
+    expect(row(id).body_written).toBe("Hi Asha, Wednesday instead.");
+    expect(f.withdrawn).toHaveLength(0);
+  });
+
+  test("a blank read, then a failed one, on the agent's update: GMAIL_FAILED, nothing dropped", async () => {
+    const { id } = await create({ threadId: THREAD, body: "Hi Asha, Tuesday works." });
+    f.getDraftQueue.push("blank", { reason: "timeout" });
+    expect((await update({ id, body: "Hi Asha, Wednesday instead." })).code).toBe("GMAIL_FAILED");
+    expect(row(id)).not.toBeNull();
+    expect(f.withdrawn).toHaveLength(0);
   });
 
   test("Gmail answering DRAFT_NOT_FOUND to the agent's update is the draft gone too", async () => {

@@ -33,7 +33,7 @@ interface Fake {
   published: any[];
   withdrawn: string[];
   gmail: Map<string, string>;
-  failNext: Partial<Record<string, { reason: string; code?: string }>>;
+  failNext: Partial<Record<string, { reason: string; code?: string; status?: number; unknown?: boolean; throws?: boolean }>>;
   /** sendDraft waits on this when set (two presses at once). */
   sendGate: Promise<void> | null;
 }
@@ -47,7 +47,11 @@ function fake(): Fake {
       exec: async (req: any) => {
         f.calls.push({ functionName: req.functionName, params: req.params ?? {}, accountHint: req.accountHint, pressToken: req.pressToken, sideEffect: req.sideEffect });
         const fail = f.failNext[req.functionName];
-        if (fail) { delete f.failNext[req.functionName]; return { ok: false, reason: fail.reason, ...(fail.code ? { code: fail.code } : {}) }; }
+        if (fail) {
+          delete f.failNext[req.functionName];
+          if (fail.throws) throw new Error(fail.reason);
+          return { ok: false, reason: fail.reason, ...(fail.code ? { code: fail.code } : {}), ...(fail.status !== undefined ? { status: fail.status } : {}) };
+        }
         const p = req.params ?? {};
         if (req.functionName === "createReplyDraft") {
           const draftId = `gm-${++n}`;
@@ -117,6 +121,13 @@ afterEach(() => {
   _setOpsLogForTesting(null);
   db.close();
 });
+
+/** sendDraft's own failure before Send was pressed, as the platform hands it to the app (in-band, HTTP 400, the
+ *  executor's exec_error code, the script's code and message in the text: skill-executor.ts, sdk transport.ts). */
+const NOTHING_SENT = {
+  reason: "platform 400: BROWSER_ERROR: Failed to send draft, nothing was sent: Send button not found in this draft's compose",
+  code: "exec_error", status: 400,
+};
 
 describe("send_draft", () => {
   test("no press token: refused, Gmail not called", async () => {
@@ -224,13 +235,13 @@ describe("send_draft", () => {
     expect(sends()).toHaveLength(2);
   });
 
-  test("Gmail failure leaves the draft pending with the reason", async () => {
+  test("a failure before Send was pressed leaves the draft pending with the reason", async () => {
     const id = await create();
-    f.failNext.sendDraft = { reason: "Gmail showed an error banner" };
+    f.failNext.sendDraft = { ...NOTHING_SENT };
     const out = await send({ id });
-    expect(out).toEqual({ error: "Could not send: Gmail showed an error banner", code: "SEND_FAILED", status: 502 });
+    expect(out).toEqual({ error: `Could not send: ${NOTHING_SENT.reason}`, code: "SEND_FAILED", status: 502 });
     expect(row(id).sent_at).toBeNull();
-    expect(ledger(id)).toMatchObject({ state: "failed", result: "Gmail showed an error banner" });
+    expect(ledger(id)).toMatchObject({ state: "failed", result: NOTHING_SENT.reason });
     expect(f.withdrawn).toHaveLength(0);
     // The next press tries again and sends.
     const again = await send({ id }, pressCtx("press-token-2"));
@@ -283,7 +294,7 @@ describe("send_draft", () => {
 
   test("sendDraft failed, then Gmail shows no draft: SEND_FAILED asking to check Gmail, never sent again", async () => {
     const id = await create();
-    f.failNext.sendDraft = { reason: "timed out" };
+    f.failNext.sendDraft = { ...NOTHING_SENT };
     expect((await send({ id })).code).toBe("SEND_FAILED");
     f.gmail.delete("gm-1");
     const out = await send({ id }, pressCtx("press-token-2"));
@@ -295,7 +306,7 @@ describe("send_draft", () => {
 
   test("an edit pressed after a failed send whose draft is gone is not saved or sent", async () => {
     const id = await create();
-    f.failNext.sendDraft = { reason: "timed out" };
+    f.failNext.sendDraft = { ...NOTHING_SENT };
     await send({ id });
     f.gmail.delete("gm-1");
     f.calls.length = 0;
@@ -334,6 +345,85 @@ describe("send_draft", () => {
     expect(await send({ id }, pressCtx("press-token-2"))).toEqual(UNCONFIRMED);
     expect(await send({ id }, pressCtx("press-token-3"))).toEqual(UNCONFIRMED);
     expect(sends()).toHaveLength(1);
+  });
+
+  // Ruling R31: only a failure known to come before Send was pressed is definite; every other sendDraft failure may have
+  // gone out, so its row stays in_flight and no later press sends again.
+  const pressAgainSendsNothing = async (failure: Fake["failNext"][string]) => {
+    const id = await create();
+    f.failNext.sendDraft = failure;
+    expect(await send({ id })).toEqual(UNCONFIRMED);
+    expect(ledger(id).state).toBe("in_flight");
+    expect(await send({ id }, pressCtx("press-token-2"))).toEqual(UNCONFIRMED);
+    expect(sends()).toHaveLength(1);
+    expect(row(id).sent_at).toBeNull();
+    expect(ledger(id).state).toBe("in_flight");
+  };
+  const clear = () => { db.run("DELETE FROM draft_records"); db.run("DELETE FROM send_ledger"); f.calls.length = 0; };
+
+  test("(a) a transport timeout, then a press with a new token: one sendDraft in all", async () => {
+    await pressAgainSendsNothing({ reason: "timeout" });
+  });
+
+  test("(a) the platform unreachable, a 5xx, or the call throwing: one sendDraft in all", async () => {
+    await pressAgainSendsNothing({ reason: "unreachable" });
+    clear();
+    await pressAgainSendsNothing({ reason: "platform 502: bad gateway", status: 502 });
+    clear();
+    await pressAgainSendsNothing({ reason: "socket closed", throws: true });
+  });
+
+  test("(b) in-band 400 'Send was pressed but Gmail did not confirm': the next press sends nothing", async () => {
+    await pressAgainSendsNothing({
+      reason: "platform 400: BROWSER_ERROR: Send was pressed but Gmail did not confirm it was sent. Check the thread in Gmail before trying again (notice=none, editorPresent=true, composes=1).",
+      code: "exec_error", status: 400,
+    });
+  });
+
+  test("(c) skill_timeout: the next press sends nothing", async () => {
+    await pressAgainSendsNothing({ reason: "platform 400: The gmail operation took too long (>120s) and was stopped.", code: "skill_timeout", status: 400 });
+  });
+
+  test("an exec_error with no word on Send, or a session that never reported back, is not definite either", async () => {
+    await pressAgainSendsNothing({ reason: "platform 400: Script execution failed (exit=1 after 30ms, no output at all)", code: "exec_error", status: 400 });
+    clear();
+    // The browser ran the open-and-press actions in the same request that came back without a session id.
+    await pressAgainSendsNothing({ reason: "platform 400: SESSION_ERROR: Failed to create persistent session for draft", code: "exec_error", status: 400 });
+  });
+
+  test("(d) a confirmed failure before the press: the next press may send (one more sendDraft)", async () => {
+    const id = await create();
+    f.failNext.sendDraft = { ...NOTHING_SENT };
+    expect((await send({ id })).code).toBe("SEND_FAILED");
+    expect(ledger(id).state).toBe("failed");
+    expect((await send({ id }, pressCtx("press-token-2"))).ok).toBe(true);
+    expect(sends()).toHaveLength(2);
+    expect(ledger(id).state).toBe("sent");
+  });
+
+  test("the platform or the script refusing before the press is definite", async () => {
+    const definite: Array<Fake["failNext"][string]> = [
+      { reason: "platform 400: BROWSER_ERROR: The draft did not open; nothing was sent. (reason=timeout, composes=0, heading=none, hash=none)", code: "exec_error", status: 400 },
+      { reason: "platform 400: MISSING_PARAM: draftId is required", code: "exec_error", status: 400 },
+      { reason: "guard busy", code: "guard_busy" },
+      { reason: "no account", code: "resolution_account_hint_unmatched" },
+      { reason: "not allowed", code: "send_not_authorized" },
+      { reason: "not allowed", code: "sideeffect_not_authorized" },
+      { reason: "not allowed", code: "forbidden" },
+      { reason: "not connected", code: "not_connected" },
+      { reason: "bad params", code: "invalid_params" },
+      { reason: "platform 403: Side-effectful skill requires a valid approval token", status: 403 },
+      { reason: "platform 403: Connector 'gmail' is not connected: the paired agent does not have it", status: 403 },
+    ];
+    for (const failure of definite) {
+      clear();
+      const id = await create();
+      f.failNext.sendDraft = failure;
+      expect((await send({ id })).code).toBe("SEND_FAILED");
+      expect(ledger(id).state).toBe("failed");
+      expect((await send({ id }, pressCtx("press-token-2"))).ok).toBe(true);
+      expect(sends()).toHaveLength(2);
+    }
   });
 
   test("a failed row (a definite Gmail error) with the draft still there sends once on the next press", async () => {

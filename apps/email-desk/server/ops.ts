@@ -41,8 +41,23 @@ export function _setOpsLogForTesting(fn: ((line: string) => void) | null): void 
 const str = (v: unknown): string => (typeof v === "string" ? v.trim() : "");
 
 /** A failure: `status` is the platform's HTTP status when it gave one; `unknown` says the call's outcome is not known (no
- *  answer in time, the platform unreachable, or the call threw): it may have run. */
-export type Gmail<T> = { ok: true; data: T } | { ok: false; reason: string; code?: string; status?: number; unknown?: boolean };
+ *  answer in time, the platform unreachable, or the call threw): it may have run. `notRun` says the call surely stopped
+ *  before the skill acted: the platform refused it before running it, or the script refused its params. */
+export type Gmail<T> =
+  | { ok: true; data: T }
+  | { ok: false; reason: string; code?: string; status?: number; unknown?: boolean; notRun?: boolean };
+
+/** The platform's own refusals before a skill runs (app-skill-access.ts, skill-executor.ts: the account guard, account
+ *  resolution, the grant and approval gates, params it would not take). */
+const NOT_RUN_CODE = /^(forbidden|sideeffect_not_authorized|send_not_authorized|not_connected|guard_.+|resolution_.+|invalid_.+)$/;
+
+/** Did this failure surely stop before the skill acted? A skill's own failure reaches the app in-band as HTTP 400 with an
+ *  executor code (exec_error, skill_timeout, ...) and the script's code and message in its text (app-agent.ts); the
+ *  platform's refusals before the run come with a code above, or as a status other than 400 with none. */
+function failedBeforeRun(r: { reason: string; code?: string; status?: number }): boolean {
+  if (r.code) return NOT_RUN_CODE.test(r.code) || /\bMISSING_PARAM:/.test(r.reason);
+  return r.status !== undefined && r.status > 400 && r.status < 500;
+}
 
 /** One Gmail skill call as the copy's paired agent, on `accountId`. Only a send passes `approval` (the person's press
  *  token, sideEffect): no draft write ever does. Never throws. */
@@ -56,12 +71,14 @@ export async function gmail<T>(
       ...(approval ? { pressToken: approval.pressToken, sideEffect: true } : {}),
     });
     if (r.ok) return { ok: true, data: r.data };
-    if (r.skipped) return { ok: false, reason: "Email Desk is not set up with an agent" };
+    if (r.skipped) return { ok: false, reason: "Email Desk is not set up with an agent", notRun: true };
     const status = typeof r.status === "number" ? r.status : undefined;
+    const reason = r.message ?? r.reason;
     const unknown = r.reason === "timeout" || r.reason === "unreachable" || (status !== undefined && status >= 500);
+    const notRun = !unknown && failedBeforeRun({ reason, ...(r.code ? { code: r.code } : {}), ...(status !== undefined ? { status } : {}) });
     return {
-      ok: false, reason: r.message ?? r.reason, ...(r.code ? { code: r.code } : {}),
-      ...(status !== undefined ? { status } : {}), ...(unknown ? { unknown: true } : {}),
+      ok: false, reason, ...(r.code ? { code: r.code } : {}),
+      ...(status !== undefined ? { status } : {}), ...(unknown ? { unknown: true } : {}), ...(notRun ? { notRun: true } : {}),
     };
   } catch (e: any) {
     return { ok: false, reason: String(e?.message ?? e), unknown: true };
@@ -121,22 +138,41 @@ export async function createDraft(p: Record<string, unknown>, ctx: OpCtx): Promi
   return withThreadTurn(accountId, threadId, () => writeNewDraft(accountId, threadId, body, str(p.why) || null, ctx));
 }
 
-/** Gmail's text for a draft: the body, null when Gmail no longer holds it (DRAFT_NOT_FOUND, or no body shown), or the
- *  failure when Gmail could not be asked. */
-async function gmailDraftBody(platform: PlatformContext, draft: DraftRecord): Promise<{ ok: true; body: string | null } | { ok: false; reason: string }> {
+type DraftRead = { ok: true; body: string | null; gone: boolean } | { ok: false; reason: string };
+
+/** One getDraft. `gone` only on Gmail's explicit DRAFT_NOT_FOUND; a body of null without it is a blank read. */
+async function readDraftOnce(platform: PlatformContext, draft: DraftRecord): Promise<DraftRead> {
   const now = await gmail<{ body?: unknown }>(platform, "getDraft", { draftId: draft.draftId }, draft.accountId);
-  if (!now.ok) return now.code === "DRAFT_NOT_FOUND" ? { ok: true, body: null } : { ok: false, reason: now.reason };
-  return { ok: true, body: typeof now.data?.body === "string" ? now.data.body : null };
+  if (!now.ok) return now.code === "DRAFT_NOT_FOUND" ? { ok: true, body: null, gone: true } : { ok: false, reason: now.reason };
+  return { ok: true, body: typeof now.data?.body === "string" ? now.data.body : null, gone: false };
+}
+
+/**
+ * Gmail's text for a draft the person never edited (ruling R31): the body; null only when Gmail no longer holds it; or the
+ * failure when Gmail could not be asked (a timeout, a read error), which is never "gone". getDraft.ts answers a body of
+ * null both for a draft that no longer exists and for a compose that did not open in time, so one blank read is not
+ * enough: the draft is gone on Gmail's explicit DRAFT_NOT_FOUND, or on two blank reads in a row. Callers never ask this
+ * of a person-edited draft: such a draft is never replaced or dropped on a read.
+ */
+async function gmailDraftBody(platform: PlatformContext, draft: DraftRecord): Promise<{ ok: true; body: string | null } | { ok: false; reason: string }> {
+  let read = await readDraftOnce(platform, draft);
+  if (read.ok && read.body === null && !read.gone) read = await readDraftOnce(platform, draft);
+  if (!read.ok) return read;
+  return { ok: true, body: read.body };
 }
 
 async function writeNewDraft(accountId: string, threadId: string, body: string, why: string | null, ctx: OpCtx): Promise<{ id: string } | DraftRefusal> {
   const db = getStore();
   const open = openDraftForThread(db, accountId, threadId);
   if (open) {
-    // The open row may be stale: the person sent or deleted the draft in Gmail itself. Gmail is asked; a draft it no longer
-    // holds is cleared (row and card) and the new one is written. Gmail not answering keeps the row (DRAFT_EXISTS).
+    // The person's edit is never replaced, whatever Gmail shows (ruling R31): nothing is read or changed.
+    if (open.personEdited) return draftExistsRefusal(open.id);
+    // The open row may be stale: the person sent or deleted the draft in Gmail itself. Gmail is asked; a draft it surely
+    // no longer holds is cleared (row and card) and the new one is written. Gmail not answering is GMAIL_FAILED and
+    // changes nothing.
     const held = await gmailDraftBody(ctx.platform, open);
-    if (!held.ok || held.body !== null) return draftExistsRefusal(open.id);
+    if (!held.ok) return gmailRefusal("check the draft already on this thread", held.reason);
+    if (held.body !== null) return draftExistsRefusal(open.id);
     deleteDraft(db, open.id);
     await withdrawDraftCard(ctx.platform, open.id);
   }

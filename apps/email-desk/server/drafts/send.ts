@@ -19,10 +19,12 @@
 // The ledger is claimed (in_flight) just before Gmail's sendDraft runs, with nothing awaited in between: anything that
 // fails before it (the edit, the text sync) writes no ledger row, so a ledger row that is not `sent` always means sendDraft
 // was asked and may have reached Gmail (ruling R30, as Flock's own send):
-//   - `in_flight`: the outcome is unknown (no answer in time, the platform unreachable, or the app died mid-send). A later
-//     press answers from the ledger and NEVER sends, whatever Gmail shows: UNCONFIRMED, telling the person to check Sent.
-//   - `failed`: sendDraft answered with a definite error. The next press reads Gmail first: the draft still there did not go
-//     out, so the press sends it; Gmail showing no draft is never read as sent, and never sent again either (Review Focus 1).
+//   - `in_flight`: the outcome is unknown (no answer in time, the platform unreachable, a skill_timeout or exec_error,
+//     "Send was pressed but Gmail did not confirm", or the app died mid-send). A later press answers from the ledger and
+//     NEVER sends, whatever Gmail shows: UNCONFIRMED, telling the person to check Sent.
+//   - `failed`: sendDraft failed before Send was pressed, for sure (ruling R31, stoppedBeforePress). The next press reads
+//     Gmail first: the draft still there did not go out, so the press sends it; Gmail showing no draft is never read as
+//     sent, and never sent again either (Review Focus 1).
 import type { CardClosedEvent, PlatformContext } from "@flock/app-sdk";
 import { getStore } from "../store";
 import { changeDraft, gmail, withThreadTurn, type OpCtx } from "../ops";
@@ -123,10 +125,23 @@ async function sendInTurn(id: string, editedBody: string | undefined, ctx: OpCtx
     [key, draft.accountId, draft.threadId, draft.draftId, now, now],
   );
   const sent = await gmail(ctx.platform, "sendDraft", { draftId: draft.draftId }, draft.accountId, { pressToken });
-  // No answer in time, or the call never came back: it may have gone out. The row stays in_flight (R30).
-  if (!sent.ok && sent.unknown) return unconfirmed();
-  if (!sent.ok) return fail(key, sent.reason || "Gmail did not send it");
-  return recordSent(draft, key);
+  if (sent.ok) return recordSent(draft, key);
+  // Only a failure known to come before Send was pressed is definite (R31). Anything else may have gone out: no answer in
+  // time, a skill_timeout, "Send was pressed but Gmail did not confirm", a crash. The row stays in_flight (R30).
+  if (!stoppedBeforePress(sent)) return unconfirmed();
+  return fail(key, sent.reason || "Gmail did not send it");
+}
+
+/**
+ * Did this sendDraft failure surely stop before Send was pressed (ruling R31)? The platform refused it before the skill
+ * ran (ops.ts gmail `notRun`), or the script said so in its own words: "Failed to send draft, nothing was sent" and "The
+ * draft did not open; nothing was sent." (skills/gmail/scripts/sendDraft.ts, _openDraft.ts). Its SESSION_ERROR is not:
+ * the browser runs the open-and-press steps in the same request that came back without a session.
+ */
+function stoppedBeforePress(f: { reason: string; unknown?: boolean; notRun?: boolean }): boolean {
+  if (f.unknown) return false;
+  if (/send was pressed/i.test(f.reason)) return false;
+  return f.notRun === true || /nothing was sent/i.test(f.reason);
 }
 
 /** A retake after sendDraft was asked, with Gmail showing no draft: it may have been sent, so it is not sent again. */
