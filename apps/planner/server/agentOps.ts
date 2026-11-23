@@ -101,6 +101,8 @@ export const FIELDS: Record<string, { fields: string[]; need?: string[] }> = {
 /** A field sent to the wrong operation that has a home elsewhere: the refusal names that operation. */
 const MOVED: Record<string, Record<string, string>> = {
   set_house_rules: { grocery_app: "the grocery app is set with set_shopping_apps { main, fallback, connected }" },
+  // Sim run 9: a cook correction sent its times as visits (the interview's fact name), and the 7:30 was lost.
+  set_cook: { visits: "the times go in arrival: [{ at: \"07:30\", meals: [\"Breakfast\", \"Lunch\"] }]", times: "the times go in arrival: [{ at, meals }]" },
 };
 
 /** How alike two names are: shared words count most, then the edit distance between them. Lower is closer. */

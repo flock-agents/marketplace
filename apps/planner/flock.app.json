@@ -223,7 +223,7 @@
           "required": true
         }
       ],
-      "help": "The line names who lives with them (household.people). A \"no\", \"that's all\" or \"yes\": the people it names. Anyone they add, or take out, as they say. people: each { name, relationship?, group: child | adult | elder }, the cook and other help left out; \"me\", \"I\" or \"myself\" is the person named in you.areTalkingTo, saved by that name, never as \"Me\". save one set_person { name, relationship, group } per person: everyone a food rule may name is saved here first.",
+      "help": "The line names who lives with them (household.people). ALWAYS save, even for a plain confirmation: \"that's it\", \"just us four\", \"no one else\", \"yes\" all mean save one set_person { name, relationship, group } for EVERY person the line names, as a list, plus anyone they add (or remove: true for anyone they take out). group: child | adult | elder; the cook and other help left out; \"me\", \"I\" or \"myself\" is the person named in you.areTalkingTo, saved by that name. Everyone a food rule may name is saved here first.",
       "when": "household.people"
     },
     {
