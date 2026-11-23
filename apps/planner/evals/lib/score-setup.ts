@@ -69,7 +69,7 @@ export function ruleSaved(c: Ctx, t: TruthRule, rules: SavedRule[]): SavedRule[]
     const se = effective(s);
     return (kinds.has(se.what) || kinds.has(s.what)) && whoOk(c, t, s) && sameDays(te.days, se.days) && slotsOk(c, t, s);
   });
-  if (!scoped.length) return [];
+  if (!scoped.length) return t.who ? [] : perPerson(c, t, rules);
   if (t.what === "fasting") return scoped.filter((s) => !!s.fasting_food?.length === !!t.fasting_food?.length);
   if (t.what === "note") return [];
   if (!te.items.length) return scoped;
@@ -77,6 +77,27 @@ export function ruleSaved(c: Ctx, t: TruthRule, rules: SavedRule[]): SavedRule[]
   if (!te.items.every((ti) => items.some((si) => itemCovers(si, ti)))) return [];
   if (t.what === "swap" && t.to) return scoped.filter((s) => !s.to || s.what !== "swap" || itemCovers(canonTag(s.to), canonTag(t.to!)) || lc(s.to).includes(lc(t.to!)) || effective({ what: "x", items: [s.to] }).items.some((x) => itemCovers(x, canonTag(t.to!))));
   return scoped;
+}
+
+/** A whole-house avoid kept as one rule per person: met when, for every person at home, the saved rules that hold for them
+ *  on the truth's days (theirs or the house's, every day or on those days) cover its items. "The three of us eat chicken only
+ *  on Sunday" saved per person, with the vegetarian grandparents' own veg rules, keeps "no meat Mon–Sat" for the house. */
+function perPerson(c: Ctx, t: TruthRule, rules: SavedRule[]): SavedRule[] {
+  const te = effective(t);
+  if (te.what !== "avoid" || !te.items.length || t.slots?.length) return [];
+  const used = new Set<SavedRule>();
+  for (const p of c.h.truth.people) {
+    const hold = rules.filter((s) => {
+      const se = effective(s);
+      if (se.what !== "avoid" || (s.who && !sameName(s.who, p.name)) || s.slots?.length) return false;
+      return !se.days || (!!te.days && te.days.every((d) => se.days!.includes(d)));
+    });
+    const items = hold.flatMap((s) => effective(s).items);
+    if (!te.items.every((ti) => items.some((si) => itemCovers(si, ti)))) return [];
+    hold.forEach((s) => used.add(s));
+  }
+  // Only per-person rules make this a different shape from the plain match: at least one must name a person.
+  return [...used].some((s) => s.who) ? [...used] : [];
 }
 
 /** A soft rule (or a note) found: a saved rule of that person whose quote says it, or whose items cover it. */
@@ -155,7 +176,9 @@ export function scoreSetup(h: Household, s: SetupOut, o: { transcript?: string[]
   const said = t.library.filter((d) => !d.unsaid);
   // Saved rows are recognised among every truth dish (an unsaid "Curd" is not "Curd rice"); only said ones are required.
   const names = [...new Set(t.library.map((d) => d.name))];
-  const rowsOf = (name: string) => s.library.filter((x) => dishNameOf(x.name, names) === name);
+  const aka = new Map(t.library.flatMap((d) => (d.aka ?? []).map((a) => [a, d.name] as const)));
+  const nameOf = (x: string) => { const n = dishNameOf(x, [...names, ...aka.keys()]); return n ? aka.get(n) ?? n : null; };
+  const rowsOf = (name: string) => s.library.filter((x) => nameOf(x.name) === name);
   const slotsOfTruth = (name: string) => t.library.filter((d) => d.name === name).flatMap((d) => [d.slot, ...(d.alsoSlots ?? [])]).map(lc);
   const kindOf = (slot: string) => t.slots.find((x) => lc(x.name) === lc(slot))?.kind ?? "main";
   for (const name of new Set(said.map((d) => d.name))) add("dish_coverage", rowsOf(name).length > 0, undefined, info);
@@ -170,14 +193,16 @@ export function scoreSetup(h: Household, s: SetupOut, o: { transcript?: string[]
       add("personal_placement", at.length > 0 && !shared.length, `${d.name} (${d.slot}'s) saved at ${rows.map((x) => x.slot).join(",")}`);
     }
     if (d.frequency || d.days) {
-      const row = at[0] ?? rows[0];
-      add("dish_frequency", sameFrequency(row.frequency, d.frequency) && (!d.days || sameDays(d.days, row.days)) && (!!d.days || !row.days?.length),
-        `${d.name}: saved ${JSON.stringify({ frequency: row.frequency, days: row.days })} (want ${JSON.stringify({ frequency: d.frequency ?? null, days: d.days ?? null })})`);
+      // Several saved rows may be this one dish ("Aloo paratha" and "Paratha", "Maacher jhol" and "Rui fish curry"): one of them
+      // on its slot carrying the frequency and days is enough.
+      const ok = (row: (typeof rows)[number]) => sameFrequency(row.frequency, d.frequency) && (!d.days || sameDays(d.days, row.days)) && (!!d.days || !row.days?.length);
+      const row = (at.length ? at : rows).find(ok) ?? at[0] ?? rows[0];
+      add("dish_frequency", ok(row), `${d.name}: saved ${JSON.stringify({ frequency: row.frequency, days: row.days })} (want ${JSON.stringify({ frequency: d.frequency ?? null, days: d.days ?? null })})`);
     }
   }
   // Every saved row of a family dish on one of its own slots; a shared dish never saved as a person's own.
   for (const x of s.library) {
-    const name = dishNameOf(x.name, names);
+    const name = nameOf(x.name);
     if (!name) continue;
     const slot = lc(truthSlotName(c, x.slot));
     add("rows_on_right_slot", slotsOfTruth(name).includes(slot), `${x.name} saved at ${x.slot} (want ${slotsOfTruth(name).join(",")})`);
@@ -223,7 +248,7 @@ export function scoreSetup(h: Household, s: SetupOut, o: { transcript?: string[]
   }
   for (const row of s.seed) {
     const slot = truthSlotName(c, row.slot);
-    const own = row.dishes.filter((d) => { const n = dishNameOf(d, t.library.map((x) => x.name)); return !!n && slotsOfTruth(n).includes(lc(slot)); });
+    const own = row.dishes.filter((d) => { const n = nameOf(d); return !!n && slotsOfTruth(n).includes(lc(slot)); });
     add("seed_on_slot", own.length * 2 >= row.dishes.length, `${row.slot} seed ${JSON.stringify(row.dishes)}: mostly not ${row.slot} dishes`);
   }
   return { rates, info, notes };

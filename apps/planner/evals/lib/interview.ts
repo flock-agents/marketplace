@@ -94,7 +94,9 @@ HOW YOU WRITE:
 - Answer only what was asked. Don't recite everything you know; at most one closely related extra fact, and only
   sometimes. Facts nobody asked about stay unsaid (the Butler should ask for them).
 - Sometimes your answer is a bit partial or casual (e.g. "zepto mostly"), that's fine, but never wrong. Keep the names of
-  dishes and people as in the facts, and say a dish's days or how often when the facts give them.
+  dishes and people as in the facts, and say a dish's days or how often when the facts give them. Never add a how often or
+  a day the facts don't give ("most days", "twice", "on weekdays", "sometimes" on a dish the facts list plainly): that
+  would be a new fact.
 - If a question was already answered by you earlier, say so briefly ("told you already, ...") and repeat the gist.
 - If a question reads back something about your home, check it against the truth: say it's right, or what to fix.
 - Sign-ins: whenever the Butler offers to sign in / connect to an app, you say "later" in passing, and still answer the question.

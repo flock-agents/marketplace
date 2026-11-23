@@ -41,10 +41,12 @@ export type Away = { person: string; slots: string[]; days: Weekday[] };
 /** A library row (spec `library`, one per dish and slot). `contains`: the true tags when the name does not say them
  *  (vocab.ts reads the rest from the name); `notContains`: tags the name suggests but this family's dish lacks.
  *  `alsoSlots`: another slot Eval 1 accepts for it (an ambiguous sentence). `unsaid`: in TRUTH for Eval 2, but the
- *  persona never names it (Eval 1 does not count it). */
+ *  persona never names it (Eval 1 does not count it). `aka`: other names for it, Eval 1 only. */
 export type TruthDish = {
   name: string; slot: string; frequency?: Frequency; days?: Weekday[];
   contains?: string[]; notContains?: string[]; alsoSlots?: string[]; unsaid?: boolean;
+  /** Other names the family uses for this dish ("fish curry" for maacher jhol): Eval 1 recognises a saved row by them. */
+  aka?: string[];
 };
 
 /** A rule (spec `rules`). `quote`: what the saved quote must contain (a fragment of the family's words). `also`: other
@@ -140,10 +142,12 @@ export const sameDays = (a?: readonly string[] | null, b?: readonly string[] | n
 
 /** The name among `names` a dish name is: the same name, else the longest one that holds it or is held by it. */
 export function dishNameOf(name: string, names: readonly string[]): string | null {
-  const n = plain(name);
-  const exact = names.find((d) => plain(d) === n);
+  // "Veg sandwich" and "Vegetable sandwich" are one dish: the persona shortens names the facts spell out.
+  const dish = (s: string) => plain(s).replace(/\bvegetable\b/g, "veg");
+  const n = dish(name);
+  const exact = names.find((d) => dish(d) === n);
   if (exact) return exact;
-  const near = names.filter((d) => { const t = plain(d); return !!t && (` ${n} `.includes(` ${t} `) || ` ${t} `.includes(` ${n} `)); });
+  const near = names.filter((d) => { const t = dish(d); return !!t && (` ${n} `.includes(` ${t} `) || ` ${t} `.includes(` ${n} `)); });
   return [...near].sort((a, b) => b.length - a.length)[0] ?? null;
 }
 

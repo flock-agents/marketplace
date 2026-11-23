@@ -59,7 +59,7 @@ export const h8: Household = {
       ...dish("Luchi", ["Breakfast"], { days: ["Sun"] }), ...dish("Alur dom", ["Breakfast"], { days: ["Sun"] }),
       ...dish("Egg roll", ["Riya's tiffin"]), ...dish("Chowmein", ["Riya's tiffin"]), ...dish("Sandwich", ["Riya's tiffin"]),
       ...dish("Bhaat", ["Lunch"]), ...dish("Dal", ["Lunch", "Dinner"]), ...dish("Bhaja", ["Lunch"]), ...dish("Torkari", ["Lunch", "Dinner"]),
-      ...dish("Maacher jhol", ["Lunch"], { frequency: "usually" }), ...dish("Kosha mangsho", ["Lunch"], { days: ["Sun"] }),
+      ...dish("Maacher jhol", ["Lunch"], { frequency: "usually", aka: ["Fish curry"] }), ...dish("Kosha mangsho", ["Lunch"], { days: ["Sun"] }),
       ...dish("Roti", ["Dinner"]), ...dish("Fish", ["Dinner"], { frequency: "sometimes" }),
       ...dish("Veg torkari", ["Gita's dinner"], { alsoSlots: ["Gita's lunch"] }),
     ],
