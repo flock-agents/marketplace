@@ -663,6 +663,12 @@ describe("apply_setup: eval 1's weak fields", () => {
     expect(said).toContainEqual(["avoid", "Mohan", "@sweet"]);
     expect(said).toContainEqual(["other", "Kabir", "less spicy"]);
     expect(said).toContainEqual(["other", null, "less salt"]);
+    // A rule quoted from the same sentence is not that note: "no sweets, less oil" on the no-sweets avoid.
+    const quoted = await run(read({ rules: [{ kind: "avoid", who: "Mohan", items: ["@sweet"], quote: "Father is diabetic — less oil, no sweets at all." }] }), lines);
+    expect(quoted.rules.filter((x) => x.who === "Mohan").map((x) => x.kind === "avoid" ? x.items.join() : x.note).sort()).toEqual(["@sweet", "less oil"]);
+    // "My father … less rice": the father's, not the speaker's.
+    const mine = await run(read({ rules: [] }), ["Q: Is anyone on a diet?", "A: My father is diabetic, so he eats less rice."]);
+    expect(mine.rules.map((x) => [x.who, x.note])).toContainEqual(["Mohan", "less rice"]);
     // Said once only: a reader's own rule is not doubled.
     const again = await run(read({ rules: [{ kind: "other", who: "Mohan", note: "less oil", quote: "less oil" }] }), lines);
     expect(again.rules.filter((x) => x.who === "Mohan" && /oil/.test(x.note ?? ""))).toHaveLength(1);

@@ -644,13 +644,18 @@ export async function applySetup(deps: { db: Db; model: ModelCall; post: Post; h
   /** Who a sentence of the family's is about: the one person it names, else (for "less rice, no sugar" after "Father is
    *  diabetic") the person named last before it in the reply or its question; "we"/"everyone" is the house (""). */
   const aboutWhom = (clause: string, reply: string): string | null => {
-    const named = family.filter((f) => refsOf(f.name).some((r) => has(clause, r)));
+    let named = family.filter((f) => refsOf(f.name).some((r) => has(clause, r)));
+    // "My father … he eats less rice": the "my" is not the speaker's own rule.
+    if (named.length > 1 && speaker) named = named.filter((f) => !same(f.name, speaker));
     if (named.length === 1) return named[0].name;
     if (named.length > 1) return null;
     if (/(^| )(we|us|everyone|everybody|all of us|the house|at home)( |$)/.test(clause)) return "";
     return lastNamed(reply.slice(0, Math.max(0, reply.indexOf(clause)))) ;
   };
-  const ruleFor = (who: string, re: RegExp) => p.rules.some((r) => (who ? !!r.who && personOf(r.who) === who : !r.who) && re.test(plainWords(`${r.note ?? ""} ${r.quote} ${(r.items ?? []).join(" ")} ${r.to ?? ""}`)));
+  // What a rule is about: its own note, items and swap, not the rest of the sentence it was quoted from ("no sweets, less
+  // oil" quoted on the no-sweets avoid is no "less oil" rule).
+  const ruleFor = (who: string, re: RegExp) => p.rules.some((r) => (who ? !!r.who && personOf(r.who) === who : !r.who)
+    && re.test(plainWords(`${r.kind === "other" || r.kind === "fasting" ? r.note ?? r.quote : ""} ${(r.items ?? []).join(" ")} ${r.to ?? ""}`)));
   // A wish the rules reader left unplaced ("millets are good for father"): a soft rule for its person, some meals a week.
   for (const u of [...p.unplaced]) {
     const t = plainWords(u.text);
@@ -667,7 +672,7 @@ export async function applySetup(deps: { db: Db; model: ModelCall; post: Post; h
   // What the family said and no reader wrote down (eval 23 Nov: "I'm on high protein", "less spicy" for a child, dropped;
   // "no sugar" once kept only as a plain note): a note for its person, and "no sugar" an avoid.
   const SOFT_SAID: [RegExp, RegExp][] = [[/\bhigh protein\b/, /protein/], [/\blow carbs?\b/, /carb/], [/\b(less|low) salt\b/, /salt/], [/\bless oil\b/, /oil/],
-    [/\b(less|not too|mildly) spicy\b|\bless spice\b/, /spic|chilli|mild/], [/\bsoft food\b/, /soft|chew/], [/\bless ghee\b/, /ghee/]];
+    [/\b(less|not too|mildly) spicy\b|\bless spice\b/, /spic|chilli|mild/], [/\bsoft food\b/, /soft|chew/], [/\bless ghee\b/, /ghee/], [/\bless rice\b/, /less rice|portion/]];
   for (const { reply, clauses: cs } of askedClauses) for (const clause of cs) {
     for (const [re, key] of SOFT_SAID) {
       const m = re.exec(clause);
