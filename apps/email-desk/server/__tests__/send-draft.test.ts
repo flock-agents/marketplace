@@ -621,7 +621,8 @@ describe("redraft over an unconfirmed send (R33)", () => {
     untouched(id);
     expect(f.turns.map((t) => t.consumer)).toEqual(["email-desk:send-check"]);
     expect(f.turns.every((t) => t.released)).toBe(true);
-    expect(f.calls.find((c) => c.functionName === "getThread")?.params).toEqual({ threadId: THREAD });
+    // Fresh, never the cached pre-send thread, which would hide the sent reply.
+    expect(f.calls.find((c) => c.functionName === "getThread")?.params).toEqual({ threadId: THREAD, bypassCache: true });
   });
 
   test("(1) ambiguous: the person's reply with the text but a date that does not read: refused", async () => {
@@ -770,6 +771,33 @@ describe("redraft over an unconfirmed send (R33)", () => {
     expect(ledger(id).state).toBe("sent");
     // The thread is free again: the next create_draft drafts (a later reply on the thread).
     expect(typeof (await createAgain()).id).toBe("string");
+  });
+
+  test("no reply seen, but Gmail's compose holds other text (a new draft the person started): unknown, the row stays in_flight", async () => {
+    const id = await unknownSend();
+    f.thread = [ASHA];
+    f.gmail.set("gm-1", "Hi Asha, one more thing about Tuesday.");
+    expect(await createAgain()).toEqual(SEND_UNCONFIRMED);
+    expect(ledger(id).state).toBe("in_flight");
+    expect(writes()).toHaveLength(0);
+    expect(await updateAgain(id)).toEqual(SEND_UNCONFIRMED);
+    expect(ledger(id).state).toBe("in_flight");
+    expect(writes()).toHaveLength(0);
+    // And the press still never sends.
+    expect((await send({ id }, pressCtx("press-token-2"))).code).toBe("SEND_FAILED");
+    expect(sends()).toHaveLength(0);
+  });
+
+  test("a claim with no stored text (an imported row) can never be proven unsent", async () => {
+    const id = await unknownSend();
+    db.run("UPDATE send_ledger SET result = NULL WHERE idempotency_key = ?", [`draft:${id}`]);
+    await ops.discard_draft({ id }, pressCtx("press-token-9") as any); // the row's text is gone too
+    f.gmail.set("gm-1", BODY); // even with Gmail showing the very text
+    f.thread = [ASHA];
+    f.calls.length = 0;
+    expect(await createAgain()).toEqual(SEND_UNCONFIRMED);
+    expect(ledger(id).state).toBe("in_flight");
+    expect(writes()).toHaveLength(0);
   });
 });
 

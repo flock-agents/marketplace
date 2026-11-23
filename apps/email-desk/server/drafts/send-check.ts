@@ -10,8 +10,9 @@
 //     text is the one sent (kept in the ledger row at the claim, else the draft row; whitespace and quote styles aside;
 //     Gmail's quoted history after it allowed). The ledger says sent, the row (while there) gets its sent stamp, the card
 //     is withdrawn, and the caller refuses as already sent.
-//   - UNSENT: the read worked, no such message is there, AND Gmail still holds the draft (getDraft gives its body). The
-//     in_flight row is cleared, and drafting goes on as for any open draft.
+//   - UNSENT: the read worked, no such message is there, AND Gmail's draft still holds the very text that was being sent
+//     (getDraft's body, compared as above; other text may be a new draft the person began after a real send). The
+//     in_flight row is cleared, and drafting goes on as for any open draft. A row with no known text is never unsent.
 //   - anything else (no read turn, the mailbox busy, a failed read, the person's own address unknown, a matching message
 //     whose date does not read, the draft not shown): unknown, SEND_UNCONFIRMED, nothing changed.
 // One attempt per call, under the mailbox's read turn ("email-desk:send-check"), as reply_context reads. send_draft itself
@@ -125,7 +126,8 @@ async function reread(platform: PlatformContext, draft: PendingSend): Promise<Se
       if (!r.ok) return null;
       return typeof r.data === "string" ? safeParse(r.data) : r.data;
     };
-    const thread = await read("getThread", { threadId: draft.threadId });
+    // bypassCache: a cached read from before the send would hide the reply it sent (routines/follow-up.ts reads the same way).
+    const thread = await read("getThread", { threadId: draft.threadId, bypassCache: true });
     if (!thread || !Array.isArray(thread.messages)) return UNKNOWN;
     // Gmail's dates name the minute, in the mailbox's local time: a reply sent in the minute the send was claimed counts.
     const from = Math.floor(since / 60_000) * 60_000;
@@ -138,8 +140,10 @@ async function reread(platform: PlatformContext, draft: PendingSend): Promise<Se
       if (at >= from) return { kind: "sent", at };
     }
     if (undated) return UNKNOWN;
+    // getDraft shows whatever compose is open on the thread, so a new draft the person began after a real send would read
+    // as "still there". Unsent only when Gmail still holds the very text that was being sent.
     const held = await read("getDraft", { draftId: draft.gmailDraftId });
-    return held && typeof held.body === "string" && held.body.trim() ? { kind: "unsent" } : UNKNOWN;
+    return held && typeof held.body === "string" && sameSentText(sentText, held.body) ? { kind: "unsent" } : UNKNOWN;
   } catch {
     return UNKNOWN;
   } finally {
