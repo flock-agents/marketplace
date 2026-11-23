@@ -24,7 +24,7 @@ at milestones, on fresh chats). Each holds Flock's `household.*` facts (with str
 
 - `slots`: main / custom / addon, `usual_people` (empty = everyone), `days`, `skip_days`; `optional` slots are accepted, not required
 - `away`: weekly absences by slot and weekday (a person who carries the home lunch is *not* away); `lunchUnclear`
-- `library`: one row per dish and slot, `frequency` (`daily` | `usually` | `sometimes` | `rarely` | `n/week`), `days`, `contains` overrides, `alsoSlots`, `unsaid`
+- `library`: one row per dish and slot, `frequency` (`daily` | `usually` | `sometimes` | `rarely` | `n/week`), `days`, `contains` overrides, `alsoSlots`, `unsaid`, `aka` (other names the family uses, Eval 1 only)
 - `rules`: hard/soft, `what`, who/slots/days/items/to/frequency/per_meal/fasting_food, a `quote` pattern of the family's words; `noted` for what no weekday rule holds (Ekadashi)
 - `seed`: past meals per slot; `week`: stays, trips and guests for Eval 2; `familyCooks`, `cook`
 
@@ -87,3 +87,7 @@ merged how-often planner, the scorecards to compare against.
 `results/base-reuse-setup`: cf9a391's setup re-read twice on cf9a391's chats (its own variance); `results/fixes-*`: the
 setup fixes of feat/planner-setup-fixes on the same chats (`fixes-reuse-setup`), on new chats (`fixes-fresh-setup`) and
 on those new chats after the last fix (`fixes-fresh-rescored-setup`). `results.json` now keeps each run's model `profile`.
+`results/setup-2026-11-231555`: setup v2 before tuning (the baseline); `results/setup-tuned-fresh` and
+`results/setup-heldout-tuned`: after the how-often read and the scorer/persona fixes of 23 Nov (a whole-house avoid kept per
+person counts; any row of a dish on its slot may carry its frequency; "veg" = "vegetable" and `aka` in dish names; the persona
+never adds a how often the facts don't give).
