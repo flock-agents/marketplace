@@ -11,6 +11,7 @@
 
 import { composeFrom } from "../../_shared/_gmail-sender";
 import { htmlToText } from "./_draftBody";
+import { MARK_FNS, clickEachMarked } from "./_gmailPress";
 
 // --- Pure types ------------------------------------------------------------
 
@@ -237,25 +238,47 @@ export function assessThreadCompleteness(
 
 // --- In-page scrape scripts (executed via an `evaluate` pageAction) --------
 
+/** At most this many messages are expanded, or details panels opened, one real click each. */
+export const THREAD_CLICK_LIMIT = 30;
+const EXPAND_TARGET = "thread-expand-";
+const DETAILS_TARGET = "thread-details-";
+
 /** Expand every message before scraping — a collapsed message renders neither its `to` nor `cc`.
- *  Stashes the pre-expansion container count on `window` for the completeness comparison. */
+ *  Stashes the pre-expansion container count on `window` for the completeness comparison. Only
+ *  MARKS what to click ("Expand all", else each on-screen collapsed message); THREAD_EXPAND_ACTIONS
+ *  clicks the marks with real input (_gmailPress.ts). */
 export const THREAD_EXPAND_SCRIPT = `(() => {
+    ${MARK_FNS}
     const beforeEls = Array.from(document.querySelectorAll('.adn, div[role="listitem"]'));
     const before = beforeEls.filter((el) => !beforeEls.some((other) => other !== el && other.contains(el))).length;
     window.__flockThreadExpectedCount = before;
     const expandAllBtn = document.querySelector('[aria-label="Expand all"]');
-    if (expandAllBtn) { expandAllBtn.click(); return 'expand-all'; }
+    if (expandAllBtn) { markAll([expandAllBtn], '${EXPAND_TARGET}', 1); return 'expand-all'; }
     const collapsed = document.querySelectorAll('.kQ, tr.kv');
-    collapsed.forEach((el) => el.click());
+    markAll(collapsed, '${EXPAND_TARGET}', ${THREAD_CLICK_LIMIT});
     return 'clicked-' + collapsed.length;
   })()`;
 
-/** Open every message's "Show details" panel — Gmail renders the labelled to:/cc: rows only then. */
+/** THREAD_EXPAND_SCRIPT, then a real click on each message it marked. */
+export const THREAD_EXPAND_ACTIONS = [
+  { action: "evaluate", script: THREAD_EXPAND_SCRIPT },
+  ...clickEachMarked(EXPAND_TARGET, THREAD_CLICK_LIMIT),
+];
+
+/** Open every message's "Show details" panel — Gmail renders the labelled to:/cc: rows only then.
+ *  Only MARKS each on-screen caret; THREAD_DETAILS_ACTIONS clicks them with real input. */
 export const THREAD_DETAILS_SCRIPT = `(() => {
+    ${MARK_FNS}
     const carets = document.querySelectorAll('[aria-label="Show details"]');
-    carets.forEach((c) => c.click());
+    markAll(carets, '${DETAILS_TARGET}', ${THREAD_CLICK_LIMIT});
     return 'details-' + carets.length;
   })()`;
+
+/** THREAD_DETAILS_SCRIPT, then a real click on each caret it marked. */
+export const THREAD_DETAILS_ACTIONS = [
+  { action: "evaluate", script: THREAD_DETAILS_SCRIPT },
+  ...clickEachMarked(DETAILS_TARGET, THREAD_CLICK_LIMIT),
+];
 
 /** Scrape the expanded thread into { subject, rows, expectedCount, hasDraft }. Recipients come from
  *  Gmail's OWN labelled header rows (verified live 2026-09-09), never guessed from region classes. */

@@ -5,7 +5,7 @@ const env = process.env;
 /** "/a/<app id>", from the platform's own launch environment. */
 export const basePath = (): string => (env.APP_BASE_PATH ?? (env.APP_ID ? `/a/${env.APP_ID}` : "")).replace(/\/+$/, "");
 
-/** The app's own API path, as the coach's curl calls use it after $FLOCK_API_URL: "/a/<app id>/api". */
+/** The app's own API path, as the coach's api tool calls use it: "/a/<app id>/api". */
 export const apiPath = (): string => `${basePath()}/api`;
 
 /** The app's address with a trailing slash, from the request's forwarded host: links shared in chat open the exact page. */

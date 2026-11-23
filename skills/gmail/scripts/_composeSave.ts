@@ -34,7 +34,7 @@
 // RULE: never reach for a "close" control by guessing. A save affordance is
 // named as one; anything unnamed may be the trash.
 
-import { pressGmailButton } from "./_gmailPress";
+import { markThenClick } from "./_gmailPress";
 
 /**
  * Gmail's Discard draft control. Exported ONLY so callers and tests can name
@@ -49,31 +49,35 @@ export const DISCARD_DRAFT_SELECTOR = ".og.T-I-J3";
  */
 export const SAVE_AND_CLOSE_SELECTORS = ['.Ha img.Ha-Jj', '[aria-label="Save & close"]'];
 
+/** The mark SAVE_AND_CLOSE_SCRIPT puts on the element the finishing click hits. */
+const SAVE_CLOSE_TARGET = "save-close";
+
 /**
  * Finish a compose WITHOUT ever risking the draft.
  *
- * Clicks a real save-and-close control when one exists (popup composer);
- * otherwise blurs the editor and leaves the compose alone, because Gmail has
- * already autosaved it. Blurring is what the owner does by hand — "typing
- * something and then clicking outside saves the draft" — and, unlike the old
- * fallback, it cannot delete anything.
+ * Marks a real save-and-close control when one is on screen (popup composer);
+ * otherwise marks the thread's subject heading, so the click lands away from
+ * the editor and leaves the compose alone, because Gmail has already autosaved
+ * it. Clicking away is what the owner does by hand -- "typing something and
+ * then clicking outside saves the draft" -- and, unlike the old fallback, it
+ * cannot delete anything. Neither on screen: nothing is marked or clicked.
  *
  * Returns JSON: { ok: true, how: "save-and-close" | "autosaved-inline" }.
  *
- * Task 28: the control is pressed with mousedown/mouseup/click (pressGmailButton,
- * _gmailPress.ts), not `.click()`, which Gmail's div[role=button] controls
- * ignore. An off-screen control is not pressed; the blur path runs instead.
+ * The click is a real click page action (SAVE_AND_CLOSE_ACTIONS, _gmailPress.ts),
+ * never an in-page `.click()` or dispatched mouse events: Gmail's div[role=button]
+ * controls ignore the first (task 28) and Google can tell the second from real input.
  */
 export const SAVE_AND_CLOSE_SCRIPT = `(() => {
-  const press = ${pressGmailButton.toString()};
   const saveClose = document.querySelector('.Ha img.Ha-Jj') ||
                     document.querySelector('[aria-label="Save & close"]');
-  if (saveClose && press(saveClose)) return JSON.stringify({ok:true, how:"save-and-close"});
-  const editor = document.querySelector('div[aria-label*="Message"][contenteditable=true]');
-  if (editor && editor.blur) editor.blur();
-  if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+  if (saveClose && mark(saveClose, "${SAVE_CLOSE_TARGET}")) return JSON.stringify({ok:true, how:"save-and-close"});
+  mark(document.querySelector('h2.hP'), "${SAVE_CLOSE_TARGET}");
   return JSON.stringify({ok:true, how:"autosaved-inline"});
 })()`;
+
+/** SAVE_AND_CLOSE_SCRIPT, the real click on what it marked, and its result as the step's last. */
+export const SAVE_AND_CLOSE_ACTIONS = markThenClick(SAVE_CLOSE_TARGET, SAVE_AND_CLOSE_SCRIPT);
 
 /**
  * Wait for Gmail's OWN "Draft saved" confirmation rather than sleeping a fixed

@@ -1,5 +1,5 @@
 import type { ComponentType } from "react";
-import { AppShell, AgentChat, useApp, useHashRoute, type AppShellProps, type ShellPage } from "./flock/ui";
+import { AppShell, AgentChat, label, useApp, useHashRoute, type AppShellProps, type ShellPage } from "./flock/ui";
 import { DayPage } from "./pages/DayPage";
 import { HistoryPage } from "./pages/HistoryPage";
 import { ExercisesPage } from "./pages/ExercisesPage";
@@ -29,9 +29,11 @@ export default function App() {
   // Idle until the app knows who it is for: one page saying so, whose button opens the coach's chat with the setup ask.
   const idle = !app.loading && !isSetUp((key) => app.settings[key]);
   const View = idle ? IdlePage : VIEWS[page] ?? VIEWS.today;
+  // The title is the display's title.overview label (the app's own name unless renamed: titleFromName), else the app's name.
+  const title = app.display.labels?.["title.overview"] ? label("title.overview", "Fitness") : app.name ?? document.title;
   return (
     <AppShell
-      name={app.name ?? document.title} object={app.display.object ?? "globe"} accent={app.display.accent as AppShellProps["accent"]}
+      name={title} object={app.display.object ?? "globe"} accent={app.display.accent as AppShellProps["accent"]}
       nav="top" pages={idle ? IDLE_PAGES : PAGES} current={page} onNavigate={go}
       chat={{
         placement: "side",

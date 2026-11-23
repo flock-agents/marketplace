@@ -1,5 +1,5 @@
 // The app's operations for its agent (flock.app.json agentInterface.operations; Flock puts them in the paired agent's
-// context and relays `flock-api POST /api/apps/<app>/ops/<name>` here). The app owns how its agent works: each operation
+// context and relays the api tool's `POST /api/apps/<app>/ops/<name>` here). The app owns how its agent works: each operation
 // is a thin door onto the app's own route, so validation, change hooks and recomputes stay in one place, and every write
 // is stamped as the agent's (x-flock-agent) exactly as a direct call would be. The full guide is the `guide` operation.
 import type { Hono } from "hono";

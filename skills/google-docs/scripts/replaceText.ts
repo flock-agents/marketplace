@@ -1,6 +1,6 @@
 import { errorJson, requireBrowserSession } from "../../_shared/_google_helpers";
 import { resolveDriveFile } from "../../_shared/_driveFiles";
-import { DOCS_KEYS, editDoc, readBackUntil } from "../../_shared/_docsEdit";
+import { DOCS_KEYS, editDoc, readBackUntil, replaceAllActions } from "../../_shared/_docsEdit";
 
 const params = JSON.parse(process.env.SKILL_PARAMS || "{}");
 const find: string = params.find || "";
@@ -8,22 +8,6 @@ const replace: string = params.replace || "";
 if (!find) errorJson("MISSING_PARAM", "find is required (and documentId or name)");
 
 requireBrowserSession();
-
-const CLICK_REPLACE_ALL = `(function(){
-  var dlg = document.querySelector(".docs-findandreplace-content") ||
-            document.querySelector("[role=\\"dialog\\"]");
-  if (!dlg) return {ok:false, message:"Find and Replace dialog not found"};
-  var btns = dlg.querySelectorAll("button");
-  for (var i = 0; i < btns.length; i++) {
-    if (/replace.all/i.test(btns[i].textContent)) {
-      btns[i].click();
-      return {ok:true, message:"Replace all executed via browser"};
-    }
-  }
-  var ariaBtn = dlg.querySelector("[aria-label*=\\"Replace all\\"], [aria-label*=\\"replace all\\"]");
-  if (ariaBtn) { ariaBtn.click(); return {ok:true, message:"Replace all executed via browser"}; }
-  return {ok:false, message:"Replace All button not found in dialog"};
-})()`;
 
 const loose = (t: string) => t.replace(/\s+/g, " ").trim().toLowerCase();
 
@@ -40,7 +24,7 @@ const loose = (t: string) => t.replace(/\s+/g, " ").trim().toLowerCase();
     { action: "press", key: DOCS_KEYS.selectAll },
     { action: "type", text: replace },
     { action: "wait", delay: 300 },
-    { action: "evaluate", script: CLICK_REPLACE_ALL },
+    ...replaceAllActions(),
     { action: "wait", delay: 1000 },
     { action: "press", key: "Escape" },
   ]);

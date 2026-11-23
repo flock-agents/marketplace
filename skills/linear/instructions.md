@@ -24,25 +24,16 @@ Create, update, and search issues in Linear. Track assigned work, manage cycles,
 
 ## Authentication
 
-This skill requires a Linear API key (personal or workspace). Invoke via skill-exec:
+This skill requires a Linear API key (personal or workspace). Invoke it with the run_skill tool: skill `linear`, function the command, params `{"_args": [...args]}` (the command's arguments, in order).
 
-```bash
-curl -s -X POST http://localhost:35625/api/internal/skill-exec \
-  -H "Content-Type: application/json" \
-  -d '{
-    "skillId": "linear",
-    "scriptName": "linear.sh",
-    "args": ["<command>", ...args],
-    "agentId": "'"$FLOCK_AGENT_ID"'"
-  }'
-```
+For example, `my-issues todo` is skill `linear`, function `my-issues`, params `{"_args": ["todo"]}`.
 
 ## Commands
 
 ### my-issues
 List issues assigned to the authenticated user.
 
-    linear.sh my-issues [status]
+    my-issues [status]
 
 Status filter: backlog, todo, in_progress, done, canceled (optional).
 Returns: `{issues: [{id, identifier, title, status, priority, project, dueDate}], count: N}`
@@ -50,12 +41,12 @@ Returns: `{issues: [{id, identifier, title, status, priority, project, dueDate}]
 ### search
 Search issues by text.
 
-    linear.sh search "<query>"
+    search "<query>"
 
 ### create
 Create a new issue.
 
-    linear.sh create <teamId> <title> [description] [priority] [assigneeId]
+    create <teamId> <title> [description] [priority] [assigneeId]
 
 Priority: 0=none, 1=urgent, 2=high, 3=medium, 4=low.
 Returns: `{id, identifier, title, url}`
@@ -63,24 +54,24 @@ Returns: `{id, identifier, title, url}`
 ### update
 Update an issue field.
 
-    linear.sh update <issueId> <field> <value>
+    update <issueId> <field> <value>
 
 Fields: title, description, status, priority, assignee, dueDate.
 
 ### view
 Get full details of an issue.
 
-    linear.sh view <issueId>
+    view <issueId>
 
 ### teams
 List all teams in the workspace.
 
-    linear.sh teams
+    teams
 
 ### cycles
 List current and upcoming cycles for a team.
 
-    linear.sh cycles <teamId>
+    cycles <teamId>
 
 ## Safety Rules
 

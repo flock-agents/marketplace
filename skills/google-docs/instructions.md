@@ -42,8 +42,9 @@ the document.
 
 ## In the browser: create a document
 
-There is no create function here. Do it yourself in the Google browser session (authenticated-crawl,
-on the sessionName under **Available Browser Sessions**). Tested 2026-10-25:
+There is no create function here. Do it yourself with your `browser` tool on the Google sign-in (`list` shows it: the one
+whose `skills` list google-docs, for the account you want): `open` with that `session` and the url,
+then `act` on its `persistentSessionId`. Tested 2026-10-25:
 
 1. Open `https://docs.google.com/document/create?usp=drive_web&folder=<folderId>` in the same
    tab (the folder's id is in its Drive address; leave `&folder=…` out for My Drive). Do not use
@@ -62,23 +63,17 @@ If the skill is not connected or the session has expired, guide the user to set 
 
 ## Usage
 
-To execute a function, run the skill execution wrapper. It lives under
-`$FLOCK_SKILLS_DIR`, which your shell already exports; your working directory
-does NOT contain it, so always use this exact form:
-```bash
-bash "$FLOCK_SKILLS_DIR/google-docs/scripts/docs-exec.sh" <functionName> '<paramsJson>'
-```
+To execute a function, call the run_skill tool with skill `google-docs`, the
+function's name, and its params as an object.
 
-The wrapper is the only way to call a function: it picks the account (pass
+The run_skill tool is the only way to call a function: it picks the account (pass
 `"accountHint"` in the params for a non-default one) and hands the function its
 Google sign-in. Never run the per-function scripts in `scripts/` yourself —
-outside the wrapper they have no sign-in and always answer `NO_AUTH` ("No
-browser session available"), whatever is connected. If `$FLOCK_SKILLS_DIR` is
-unset or the wrapper is missing, tell the owner (the install is broken); do not
-search the filesystem for another copy.
+outside the run_skill tool they have no sign-in and always answer `NO_AUTH` ("No
+browser session available"), whatever is connected. If the run_skill tool cannot
+find the google-docs skill, tell the owner (the install is broken); do not search the
+filesystem for the skill's scripts.
 
-Example:
-```bash
-bash "$FLOCK_SKILLS_DIR/google-docs/scripts/docs-exec.sh" appendText '{"documentId":"abc","text":"\n## 2026-05-13\nKickoff."}'
-bash "$FLOCK_SKILLS_DIR/google-docs/scripts/docs-exec.sh" replaceText '{"documentId":"abc","find":"TBD","replace":"Confirmed"}'
-```
+Example (the run_skill tool, skill `google-docs`):
+- function `appendText`, params `{"documentId":"abc","text":"\n## 2026-05-13\nKickoff."}`
+- function `replaceText`, params `{"documentId":"abc","find":"TBD","replace":"Confirmed"}`

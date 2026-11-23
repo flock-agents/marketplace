@@ -21,9 +21,10 @@
 import { draftRowForThread, DRAFT_ROWS_EXPR, type DraftListRow } from "./_draftRows";
 import { gmailViewUrl, pollInPageScript, parsePollResult, searchViewReadyExpr, DRAFTS_VIEW_READY_EXPR, NAV_TO_DRAFTS_SCRIPT } from "./_gmailNav";
 import { extractDraftBody, COMPOSE_BODY_SCRAPE } from "./_draftBody";
-import { hasTable, bodyToComposeHtml, writeComposeHtmlScript } from "./_bodyHtml";
+import { hasTable, pasteComposeBodyActions } from "./_bodyHtml";
 import { findReplyAll, findReplyAllMenuItem } from "./_replyAll";
-import { SAVE_AND_CLOSE_SCRIPT, waitForDraftSavedScript } from "./_composeSave";
+import { SAVE_AND_CLOSE_ACTIONS, waitForDraftSavedScript } from "./_composeSave";
+import { markThenClick } from "./_gmailPress";
 import {
   errorJson,
   requireBrowserSession,
@@ -35,7 +36,7 @@ import {
   persistentClose,
 } from "../../_shared/_google_helpers";
 import { invalidateCachedThread, rememberDraftThread } from "./_threadCache";
-import { unreadProbeQuery, unreadIdsExpr, wasUnread, probeSummary, MARK_UNREAD_SCRIPT, parseMarkResult, type MarkResult, type UnreadDiag } from "./_unreadState";
+import { unreadProbeQuery, unreadIdsExpr, wasUnread, probeSummary, MARK_UNREAD_ACTIONS, parseMarkResult, type MarkResult, type UnreadDiag } from "./_unreadState";
 
 // Fix round 1 (Critical + Important #3): the probe and restore ride on TOP of the 90s
 // SLOW_SKILL_TIMEOUT_MS ceiling (server/src/skill-executor.ts) — a draft write that is already
@@ -49,7 +50,7 @@ import { unreadProbeQuery, unreadIdsExpr, wasUnread, probeSummary, MARK_UNREAD_S
 // returns ready:false instead of throwing; an unsettled probe counts as "not unread" (fail-closed).
 // 20s is the skill's usual cold-load ceiling.
 //
-// Async confirmation (2026-09-24 round 3): MARK_UNREAD_SCRIPT itself now polls up to 5000ms for a
+// Async confirmation (2026-09-24 round 3): MARK_UNREAD_ACTIONS' confirmation step now polls up to 5000ms for a
 // confirmation signal plus a fixed 1500ms flush wait (~6.5s worst case) before it returns. Started
 // at the RESTORE_BUDGET_MS ceiling (60s), that puts the restore call's own return at ~66.5s —
 // still well inside the 90s SLOW_SKILL_TIMEOUT_MS. The evaluate action's own per-call timeout
@@ -66,6 +67,13 @@ const RESTORE_BUDGET_MS = 60_000;
 // same rule as the write it recovers. Re-exported here because this module was
 // their original home and gmail-draft-id.test.ts imports them from it.
 export { draftIdFromRows, type DraftListRow } from "./_draftRows";
+
+/** A step's JSON object result, or {} when it is not one. Never throws. */
+function parseJsonObject(content: unknown): Record<string, any> {
+  try {
+    return JSON.parse(typeof content === "string" ? content : "{}") || {};
+  } catch { return {}; }
+}
 
 // --- Script entrypoint (browser-driven compose) ---
 if (process.env.SKILL_PARAMS !== undefined) {
@@ -223,42 +231,51 @@ function runScript(): void {
       // reply-all (requireReplyAll), plain Reply is never the fallback: the script
       // stops before typing anything, so no draft is written without the Cc.
       const requireReplyAll = params.requireReplyAll === true || params.requireReplyAll === "true";
+      //
+      // REAL INPUT ONLY: each script below only FINDS and MARKS the control; the click is a
+      // real click page action on the mark (markThenClick, _gmailPress.ts), and closing a menu
+      // that held no reply-all item is a real Escape key press.
       const findReplyAllScript = `(() => {
           const visible = (el) => !!el && el.offsetParent !== null;
           const lastOf = (sel) => { const all = [...document.querySelectorAll(sel)].filter(visible); return all[all.length - 1] || null; };
           const direct = (${findReplyAll.toString()})(document);
-          if (direct) { direct.click(); window.__flockReplyMode = "reply-all"; return JSON.stringify({ step: "direct" }); }
+          if (direct) { mark(direct, "reply-open"); window.__flockReplyMode = "reply-all"; return JSON.stringify({ step: "direct" }); }
           const more = lastOf('[aria-label="More message options"]') || lastOf('[aria-label="More"]') || lastOf('[data-tooltip="More"]');
-          if (more) { more.click(); window.__flockReplyMode = "menu"; return JSON.stringify({ step: "menu-opened" }); }
+          if (more) { mark(more, "reply-open"); window.__flockReplyMode = "menu"; return JSON.stringify({ step: "menu-opened" }); }
           window.__flockReplyMode = "none";
           return JSON.stringify({ step: "none" });
+        })()`;
+      // A menu without a reply-all item is left as "menu-miss": the caller closes it with Escape.
+      const pickMenuItemScript = `(() => {
+          if (window.__flockReplyMode !== "menu") return JSON.stringify({ mode: window.__flockReplyMode || "none" });
+          const item = (${findReplyAllMenuItem.toString()})(document);
+          window.__flockReplyMode = item ? "reply-all" : "menu-miss";
+          if (item) mark(item, "reply-menu-item");
+          return JSON.stringify({ mode: window.__flockReplyMode });
         })()`;
       const settleReplyModeScript = `(() => {
           const visible = (el) => !!el && el.offsetParent !== null;
           let mode = window.__flockReplyMode || "none";
-          if (mode === "menu") {
-            const item = (${findReplyAllMenuItem.toString()})(document);
-            if (item) { item.click(); mode = "reply-all"; }
-            else { document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); mode = "none"; }
-          }
+          if (mode === "menu-miss") mode = "none";
           if (mode === "reply-all") return JSON.stringify({ ok: true, mode });
           if (${requireReplyAll ? "true" : "false"}) return JSON.stringify({ ok: false, mode: "none" });
           const all = [...document.querySelectorAll('[aria-label="Reply"]')].filter(visible);
           const one = all[all.length - 1] || document.querySelector('.T-I-JW[data-tooltip="Reply"]');
-          if (one) { one.click(); return JSON.stringify({ ok: true, mode: "reply" }); }
+          if (one) { mark(one, "reply-plain"); return JSON.stringify({ ok: true, mode: "reply" }); }
           return JSON.stringify({ ok: false, message: "no reply control found" });
         })()`;
-      const openResult = await persistentInteract(persistentId, [
+      const picked = await persistentInteract(persistentId, [
         { action: "waitForSelector", selector: `[aria-label="Reply"],[aria-label="Reply all"],.T-I-JW[data-tooltip="Reply"]`, delay: 20000 },
-        { action: "evaluate", script: findReplyAllScript },
+        ...markThenClick("reply-open", findReplyAllScript),
         { action: "wait", delay: 800 },
-        { action: "evaluate", script: settleReplyModeScript },
+        ...markThenClick("reply-menu-item", pickMenuItemScript),
       ]);
-      const opened = (() => {
-        try {
-          return JSON.parse(typeof openResult?.content === "string" ? openResult.content : "{}") || {};
-        } catch { return {}; }
-      })();
+      const menuMissed = parseJsonObject(picked?.content).mode === "menu-miss";
+      const openResult = await persistentInteract(persistentId, [
+        ...(menuMissed ? [{ action: "press", key: "Escape" }] : []),
+        ...markThenClick("reply-plain", settleReplyModeScript),
+      ]);
+      const opened = parseJsonObject(openResult?.content);
 
       // R13(b): the thread was already opened above (marking it read) by the time we get here,
       // whichever way this turns out. Shared by every exit that leaves the thread open-and-read —
@@ -277,7 +294,7 @@ function runScript(): void {
         try {
           const { httpCode, body } = await persistentInteractRaw(persistentId, [
             { action: "waitForSelector", selector: "h2.hP", delay: RESTORE_WAIT_MS },
-            { action: "evaluate", script: MARK_UNREAD_SCRIPT },
+            ...MARK_UNREAD_ACTIONS,
           ], false, undefined, gmailViewUrl(`#all/${threadId}`));
           if (httpCode >= 400) {
             markResult = `http-${httpCode}`;
@@ -326,22 +343,24 @@ function runScript(): void {
       // step built on these helpers actually kills the whole draft.
 
       // Body
-      // A body with a Markdown table is written as HTML so the table is real
+      // A body with a Markdown table is pasted as rich text so the table is real
       // (_bodyHtml.ts); every other body is typed, exactly as before.
       const bodyActions = [
         { action: "click", selector: `div[aria-label*="Message"][contenteditable=true]` },
-        hasTable(bodyText)
-          ? { action: "evaluate", script: writeComposeHtmlScript(bodyToComposeHtml(bodyText)) }
-          : { action: "insertText", text: bodyText },
-        // Belt-and-braces, NOT the fix. insertText delivers the text and fires
-        // `input` but not keydown/keyup, and this pair was once believed to be
-        // why Drafts stayed empty -- Gmail supposedly never being told the
-        // compose was dirty. That was wrong: the body always saved, and the
-        // close step then clicked Gmail's trash (see _composeSave.ts). Proven
-        // live to be harmless and it costs nothing, so the real keystrokes
-        // stay; a space followed by a backspace leaves the text identical.
-        { action: "press", key: "Space" },
-        { action: "press", key: "Backspace" },
+        ...(hasTable(bodyText)
+          ? pasteComposeBodyActions(bodyText)
+          : [
+            { action: "insertText", text: bodyText },
+            // Belt-and-braces, NOT the fix. insertText delivers the text and fires
+            // `input` but not keydown/keyup, and this pair was once believed to be
+            // why Drafts stayed empty -- Gmail supposedly never being told the
+            // compose was dirty. That was wrong: the body always saved, and the
+            // close step then clicked Gmail's trash (see _composeSave.ts). Proven
+            // live to be harmless and it costs nothing, so the real keystrokes
+            // stay; a space followed by a backspace leaves the text identical.
+            { action: "press", key: "Space" },
+            { action: "press", key: "Backspace" },
+          ]),
       ];
       await persistentInteract(persistentId, bodyActions);
 
@@ -389,8 +408,8 @@ function runScript(): void {
       // (we waited for it to say so above), exactly as it does for a person who
       // types and then clicks away.
       await persistentInteract(persistentId, [
-        { action: "evaluate", script: SAVE_AND_CLOSE_SCRIPT },
-        // Room for Gmail to act on the blur it was just given. NOT a substitute
+        ...SAVE_AND_CLOSE_ACTIONS,
+        // Room for Gmail to act on the click-away it was just given. NOT a substitute
         // for the confirmation below -- the previous version tore the context
         // down in this very call, which is what lost brand-new drafts.
         { action: "wait", delay: 2000 },

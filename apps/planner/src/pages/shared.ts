@@ -38,7 +38,7 @@ export const AISLES: string[] = [...AISLE_LIST];
 export const CATEGORIES: string[] = [...CATEGORY_LIST];
 export const CART_STATUSES: string[] = [...CART_STATUS_LIST];
 
-/** The grocery-service skill ids, as the family knows the services by name. */
+/** The grocery service ids, as the family knows the services by name. */
 export const SERVICE_NAMES: Record<string, string> = { zepto: "Zepto", "zomato-blinkit": "Blinkit", bigbasket: "BigBasket", "swiggy-instamart": "Instamart" };
 export const serviceLabel = (id: string | null): string => (id ? SERVICE_NAMES[id] ?? id : "Not chosen yet");
 

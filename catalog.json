@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "updatedAt": "2026-11-03T00:00:00Z",
+  "updatedAt": "2026-11-23T00:00:00Z",
   "items": [
     {
       "slug": "linear",
@@ -17,11 +17,11 @@
       "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "skills/linear",
-      "latestVersion": "1.0.2",
-      "latestTag": "linear-v1.0.2",
-      "minFlockVersion": "0.7.0",
+      "latestVersion": "1.0.3",
+      "latestTag": "linear-v1.0.3",
+      "minFlockVersion": "0.24.0-beta.1",
       "publishedAt": "2026-08-11T17:00:00Z",
-      "updatedAt": "2026-09-07T00:00:00Z"
+      "updatedAt": "2026-11-10T00:00:00Z"
     },
     {
       "slug": "zepp",
@@ -119,14 +119,14 @@
       "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "templates/family-butler",
-      "latestVersion": "1.3.3",
-      "latestTag": "family-butler-v1.3.3",
-      "minFlockVersion": "0.15.0",
+      "latestVersion": "1.8.0",
+      "latestTag": "family-butler-v1.8.0",
+      "minFlockVersion": "0.24.0-beta.1",
       "onboardingCard": {
         "id": "household",
         "label": "Run the household",
         "description": "Groceries, meals, family routines",
-        "emoji": "\ud83c\udfe0",
+        "emoji": "🏠",
         "order": 40,
         "agentName": "Family Butler",
         "services": [
@@ -138,7 +138,7 @@
         ]
       },
       "publishedAt": "2026-08-11T17:00:00Z",
-      "updatedAt": "2026-11-05T00:00:00Z"
+      "updatedAt": "2026-11-17T00:00:00Z"
     },
     {
       "slug": "gmail",
@@ -156,11 +156,11 @@
       "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "skills/gmail",
-      "latestVersion": "1.6.3",
-      "latestTag": "gmail-v1.6.3",
-      "minFlockVersion": "0.13.0",
+      "latestVersion": "1.6.6",
+      "latestTag": "gmail-v1.6.6",
+      "minFlockVersion": "0.24.0",
       "publishedAt": "2026-08-14T10:00:00Z",
-      "updatedAt": "2026-10-24T12:00:00Z"
+      "updatedAt": "2026-11-23T00:00:00Z"
     },
     {
       "slug": "google-calendar",
@@ -177,11 +177,11 @@
       "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "skills/google-calendar",
-      "latestVersion": "1.0.2",
-      "latestTag": "google-calendar-v1.0.2",
-      "minFlockVersion": "0.12.0",
+      "latestVersion": "1.0.4",
+      "latestTag": "google-calendar-v1.0.4",
+      "minFlockVersion": "0.24.0",
       "publishedAt": "2026-10-06T00:00:00Z",
-      "updatedAt": "2026-10-19T00:00:00Z"
+      "updatedAt": "2026-11-23T00:00:00Z"
     },
     {
       "slug": "google-drive",
@@ -199,11 +199,11 @@
       "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "skills/google-drive",
-      "latestVersion": "1.0.0",
-      "latestTag": "google-drive-v1.0.0",
-      "minFlockVersion": "0.18.1",
+      "latestVersion": "1.0.1",
+      "latestTag": "google-drive-v1.0.1",
+      "minFlockVersion": "0.24.0-beta.1",
       "publishedAt": "2026-10-25T00:00:00Z",
-      "updatedAt": "2026-10-25T00:00:00Z"
+      "updatedAt": "2026-11-10T00:00:00Z"
     },
     {
       "slug": "google-docs",
@@ -221,11 +221,11 @@
       "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "skills/google-docs",
-      "latestVersion": "1.0.0",
-      "latestTag": "google-docs-v1.0.0",
-      "minFlockVersion": "0.18.1",
+      "latestVersion": "1.0.2",
+      "latestTag": "google-docs-v1.0.2",
+      "minFlockVersion": "0.24.0",
       "publishedAt": "2026-10-25T00:00:00Z",
-      "updatedAt": "2026-10-25T00:00:00Z"
+      "updatedAt": "2026-11-23T00:00:00Z"
     },
     {
       "slug": "google-sheets",
@@ -243,33 +243,11 @@
       "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "skills/google-sheets",
-      "latestVersion": "1.0.0",
-      "latestTag": "google-sheets-v1.0.0",
-      "minFlockVersion": "0.18.1",
+      "latestVersion": "1.0.1",
+      "latestTag": "google-sheets-v1.0.1",
+      "minFlockVersion": "0.24.0-beta.1",
       "publishedAt": "2026-10-25T00:00:00Z",
-      "updatedAt": "2026-10-25T00:00:00Z"
-    },
-    {
-      "slug": "zepto",
-      "type": "connector",
-      "name": "Zepto",
-      "description": "Search products, manage cart, and place grocery orders on Zepto",
-      "author": "flock",
-      "category": "integration",
-      "tags": [
-        "grocery",
-        "delivery",
-        "shopping",
-        "zepto"
-      ],
-      "icon": "icon.svg",
-      "repo": "flock-agents/marketplace",
-      "path": "skills/zepto",
-      "latestVersion": "1.3.1",
-      "latestTag": "zepto-v1.3.1",
-      "minFlockVersion": "0.18.1",
-      "publishedAt": "2026-08-14T10:00:00Z",
-      "updatedAt": "2026-10-24T12:00:00Z"
+      "updatedAt": "2026-11-10T00:00:00Z"
     },
     {
       "slug": "zomato-blinkit",
@@ -288,11 +266,11 @@
       "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "skills/zomato-blinkit",
-      "latestVersion": "1.3.1",
-      "latestTag": "zomato-blinkit-v1.3.1",
-      "minFlockVersion": "0.18.1",
+      "latestVersion": "1.4.3",
+      "latestTag": "zomato-blinkit-v1.4.3",
+      "minFlockVersion": "0.24.0",
       "publishedAt": "2026-08-14T10:00:00Z",
-      "updatedAt": "2026-10-24T12:00:00Z"
+      "updatedAt": "2026-11-23T00:00:00Z"
     },
     {
       "slug": "bigbasket",
@@ -310,11 +288,11 @@
       "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "skills/bigbasket",
-      "latestVersion": "1.3.1",
-      "latestTag": "bigbasket-v1.3.1",
-      "minFlockVersion": "0.18.1",
+      "latestVersion": "1.4.3",
+      "latestTag": "bigbasket-v1.4.3",
+      "minFlockVersion": "0.24.0",
       "publishedAt": "2026-08-14T10:00:00Z",
-      "updatedAt": "2026-10-24T12:00:00Z"
+      "updatedAt": "2026-11-23T00:00:00Z"
     },
     {
       "slug": "amazon",
@@ -332,11 +310,11 @@
       "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "skills/amazon",
-      "latestVersion": "1.1.13",
-      "latestTag": "amazon-v1.1.13",
-      "minFlockVersion": "0.20.0",
+      "latestVersion": "1.1.14",
+      "latestTag": "amazon-v1.1.14",
+      "minFlockVersion": "0.24.0-beta.1",
       "publishedAt": "2026-08-14T10:00:00Z",
-      "updatedAt": "2026-10-27T00:00:00Z"
+      "updatedAt": "2026-11-10T00:00:00Z"
     },
     {
       "slug": "linkedin",
@@ -353,17 +331,17 @@
       "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "skills/linkedin",
-      "latestVersion": "1.2.2",
-      "latestTag": "linkedin-v1.2.2",
-      "minFlockVersion": "0.10.3",
+      "latestVersion": "1.2.4",
+      "latestTag": "linkedin-v1.2.4",
+      "minFlockVersion": "0.24.0",
       "publishedAt": "2026-08-19T05:23:00Z",
-      "updatedAt": "2026-10-27T00:00:00Z"
+      "updatedAt": "2026-11-23T00:00:00Z"
     },
     {
       "slug": "slack",
       "type": "connector",
       "name": "Slack",
-      "description": "Full Slack workspace integration \u2014 read channels, search messages, manage saved items, post messages, add reactions, and manage user groups. Equivalent to the korotovsky/slack-mcp-server feature set, via browser session auth.",
+      "description": "Full Slack workspace integration — read channels, search messages, manage saved items, post messages, add reactions, and manage user groups. Equivalent to the korotovsky/slack-mcp-server feature set, via browser session auth.",
       "author": "flock",
       "category": "integration",
       "tags": [
@@ -386,7 +364,7 @@
       "type": "app",
       "usage": "app",
       "name": "Slack Desk",
-      "description": "Builds memory from your Slack conversations and surfaces tasks you missed \u2014 reads only, never posts",
+      "description": "Builds memory from your Slack conversations and surfaces tasks you missed — reads only, never posts",
       "author": "flock",
       "category": "productivity",
       "tags": [
@@ -420,9 +398,9 @@
       "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "apps/calendar-desk",
-      "latestVersion": "2.0.3",
-      "latestTag": "calendar-desk-v2.0.3",
-      "minFlockVersion": "0.12.0",
+      "latestVersion": "2.0.4",
+      "latestTag": "calendar-desk-v2.0.4",
+      "minFlockVersion": "0.24.0-beta.1",
       "personalAssistant": {
         "always": true,
         "useCase": "calendar",
@@ -434,7 +412,7 @@
         "id": "calendar",
         "label": "Manage my calendar",
         "description": "What's coming up, reminders, prep before meetings",
-        "emoji": "\ud83d\udcc5",
+        "emoji": "📅",
         "order": 30
       },
       "publishedAt": "2026-10-03T00:00:00Z",
@@ -463,7 +441,7 @@
         "id": "slack",
         "label": "Catch up on Slack",
         "description": "What you missed, what's asked of you",
-        "emoji": "\ud83d\udcac",
+        "emoji": "💬",
         "order": 20,
         "agentName": "Slack Assistant",
         "services": [
@@ -497,7 +475,7 @@
         "id": "email",
         "label": "Stay on top of email",
         "description": "Finds what needs you, drafts replies",
-        "emoji": "\ud83d\udce5",
+        "emoji": "📥",
         "order": 10,
         "agentName": "Inbox Assistant",
         "services": [
@@ -706,11 +684,11 @@
       "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "apps/planner",
-      "latestVersion": "2.0.3",
-      "latestTag": "planner-v2.0.3",
-      "minFlockVersion": "0.22.0",
+      "latestVersion": "2.0.7",
+      "latestTag": "planner-v2.0.7",
+      "minFlockVersion": "0.24.0-beta.1",
       "publishedAt": "2026-10-11T00:00:00Z",
-      "updatedAt": "2026-11-03T19:05:48Z"
+      "updatedAt": "2026-11-17T00:00:00Z"
     },
     {
       "slug": "tracker",
@@ -754,11 +732,11 @@
       "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "apps/fitness",
-      "latestVersion": "1.1.0",
-      "latestTag": "fitness-v1.1.0",
-      "minFlockVersion": "0.23.1",
+      "latestVersion": "1.1.1",
+      "latestTag": "fitness-v1.1.1",
+      "minFlockVersion": "0.24.0-beta.1",
       "publishedAt": "2026-10-26T00:00:00Z",
-      "updatedAt": "2026-11-05T00:00:00Z"
+      "updatedAt": "2026-11-10T00:00:00Z"
     },
     {
       "slug": "fitness-coach",

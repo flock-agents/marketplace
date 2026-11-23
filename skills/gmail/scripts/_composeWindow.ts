@@ -30,6 +30,8 @@
 //      the next call opens Gmail with a REAL page load (see gmailViewUrl), so
 //      leftovers cannot pile up even if a cleanup step itself fails.
 
+import { markThenClick } from "./_gmailPress";
+
 /** The attribute a call stamps on the compose window it opened. */
 export const COMPOSE_TAG_ATTR = "data-flock-compose";
 /** The attribute stamped on every compose that was already open before ours. */
@@ -43,6 +45,12 @@ export const TO_FIELD_CANDIDATES = [
   'input[aria-label^="To"]',
   'textarea[aria-label^="To"]',
 ];
+
+/** The marks the compose scripts put on what the next real click hits (_gmailPress.ts). */
+const RECIPIENTS_TARGET = "compose-recipients";
+const ROW_TOGGLE_TARGET = "compose-row-toggle";
+const SAVE_CLOSE_TARGET = "compose-save-close";
+const DISCARD_TARGET = "compose-discard";
 
 /** A fresh, collision-free nonce for one compose. */
 export function newComposeNonce(now: number = Date.now(), rand: number = Math.random()): string {
@@ -130,7 +138,8 @@ export const MARK_PREEXISTING_COMPOSES_SCRIPT = `(() => {
  * Wait for the compose that Compose just opened, tag it with `nonce`, and make
  * sure its recipient row is expanded (Gmail collapses it to a "Recipients"
  * placeholder whenever focus leaves it; clicking the placeholder only expands
- * the row). Returns JSON { ok, waitedMs, expanded }.
+ * the row): the placeholder is marked for the real click tagNewComposeActions
+ * makes. Returns JSON { ok, waitedMs, expanded }.
  */
 export function tagNewComposeScript(nonce: string, timeoutMs = 15000): string {
   composeScope(nonce);
@@ -157,14 +166,20 @@ export function tagNewComposeScript(nonce: string, timeoutMs = 15000): string {
   if (!hasVisibleTo()) {
     const placeholder = Array.from(root.querySelectorAll('div,span'))
       .find((el) => el.children.length === 0 && (el.textContent || '').trim() === 'Recipients' && isVisible(el));
-    if (placeholder) { placeholder.click(); expanded = true; }
+    if (placeholder) { mark(placeholder, "${RECIPIENTS_TARGET}"); expanded = true; }
   }
   return JSON.stringify({ ok: true, waitedMs: Date.now() - started, expanded });
 })()`;
 }
 
+/** tagNewComposeScript, then the real click on the placeholder it marked (if any); its result last. */
+export function tagNewComposeActions(nonce: string, timeoutMs?: number) {
+  return markThenClick(RECIPIENTS_TARGET, tagNewComposeScript(nonce, timeoutMs));
+}
+
 /**
- * Reveal the Cc or Bcc row of OUR compose (Gmail hides both by default).
+ * Reveal the Cc or Bcc row of OUR compose (Gmail hides both by default): the
+ * toggle is marked for the real click expandRecipientRowActions makes.
  * Returns "visible" | "expanded" | "not-found" | "no-compose".
  */
 export function expandRecipientRowScript(nonce: string, field: "cc" | "bcc"): string {
@@ -176,32 +191,42 @@ export function expandRecipientRowScript(nonce: string, field: "cc" | "bcc"): st
   if (c.querySelector("textarea[name=${field}],input[name=${field}]")) return "visible";
   const labels = ${toggles};
   for (const el of c.querySelectorAll("span,a,[role=link],[role=button]")) {
-    if (labels.includes((el.textContent || "").trim())) { el.click(); return "expanded"; }
+    if (labels.includes((el.textContent || "").trim())) { mark(el, "${ROW_TOGGLE_TARGET}"); return "expanded"; }
   }
   return "not-found";
 })()`;
 }
 
+/** expandRecipientRowScript, then the real click on the toggle it marked (if any). */
+export function expandRecipientRowActions(nonce: string, field: "cc" | "bcc") {
+  return markThenClick(ROW_TOGGLE_TARGET, expandRecipientRowScript(nonce, field));
+}
+
 /**
  * Save-and-close OUR compose. Same rule as SAVE_AND_CLOSE_SCRIPT (_composeSave.ts):
- * only a control NAMED as save-and-close is ever clicked. If ours cannot be
- * found it blurs instead — Gmail has already autosaved — and never guesses.
+ * only a control NAMED as save-and-close is ever marked for the real click. If
+ * ours cannot be found nothing is clicked -- Gmail has already autosaved -- and
+ * nothing is guessed.
  */
 export function saveAndCloseComposeScript(nonce: string): string {
   const scope = composeScope(nonce);
   return `(() => {
   const c = document.querySelector(${JSON.stringify(scope)});
   const saveClose = c && (c.querySelector('.Ha img.Ha-Jj') || c.querySelector('[aria-label="Save & close"]'));
-  if (saveClose) { saveClose.click(); return JSON.stringify({ok:true, how:"save-and-close"}); }
-  if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+  if (saveClose) { mark(saveClose, "${SAVE_CLOSE_TARGET}"); return JSON.stringify({ok:true, how:"save-and-close"}); }
   return JSON.stringify({ok:true, how:"autosaved", composeFound: !!c});
 })()`;
+}
+
+/** saveAndCloseComposeScript, then the real click on the control it marked (if any); its result last. */
+export function saveAndCloseComposeActions(nonce: string) {
+  return markThenClick(SAVE_CLOSE_TARGET, saveAndCloseComposeScript(nonce));
 }
 
 /**
  * Discard OUR compose after a failure, so a retry does not inherit it. Only an
  * element whose own label/tooltip starts with "Discard" and never mentions
- * "Send" is clicked; anything else is reported, not clicked. It never falls
+ * "Send" is marked for the real click; anything else is reported, not clicked. It never falls
  * back to a positional or generic toolbar click (see discardDraft.ts).
  * Returns JSON { ok, reason? }.
  */
@@ -214,9 +239,14 @@ export function discardComposeScript(nonce: string): string {
   if (!btn) return JSON.stringify({ ok: false, reason: "discard-control-not-found" });
   const label = ((btn.getAttribute('aria-label') || '') + ' ' + (btn.getAttribute('data-tooltip') || '')).trim();
   if (!/^discard/i.test(label) || /send/i.test(label)) return JSON.stringify({ ok: false, reason: "label-mismatch", label });
-  btn.click();
+  mark(btn, "${DISCARD_TARGET}");
   return JSON.stringify({ ok: true });
 })()`;
+}
+
+/** discardComposeScript, then the real click on the control it marked (if any); its result last. */
+export function discardComposeActions(nonce: string) {
+  return markThenClick(DISCARD_TARGET, discardComposeScript(nonce));
 }
 
 /** Parse a compose script's JSON reply without ever throwing. */

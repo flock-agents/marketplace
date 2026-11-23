@@ -3,6 +3,7 @@ import {
   requireBrowserSession,
   browserInteract,
 } from "../../_shared/_google_helpers";
+import { saveEventActions } from "./save-button";
 
 const params = JSON.parse(process.env.SKILL_PARAMS || "{}");
 const eventId: string = params.eventId || "";
@@ -24,7 +25,6 @@ const eidRaw = `${eventId} ${calendarId}`;
 const eidB64 = Buffer.from(eidRaw).toString("base64");
 const editUrl = `https://calendar.google.com/calendar/event?action=EDIT&eid=${eidB64}`;
 
-const CLICK_SAVE = `(function(){var btns=document.querySelectorAll("button");for(var i=0;i<btns.length;i++){var t=btns[i].textContent.trim();if(t==="Save"||t==="save"){btns[i].click();return{ok:true,message:"Event updated via browser"}}}var alt=document.querySelector("[aria-label=Save]");if(alt){alt.click();return{ok:true,message:"Event updated via browser"}}return{ok:false,message:"Save button not found"}})()`;
 const TITLE_SELECTOR = '[data-key="title"] input, input[aria-label="Title"]';
 
 const pageActions: any[] = [
@@ -59,7 +59,7 @@ if (description) {
 
 pageActions.push(
   { action: "wait", delay: 1000 },
-  { action: "evaluate", script: CLICK_SAVE },
+  ...saveEventActions("Event updated via browser"),
   { action: "wait", delay: 2000 },
 );
 
