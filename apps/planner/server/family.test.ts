@@ -71,6 +71,15 @@ describe("the house", () => {
     expect(JSON.parse(rows("house")[0].rules)[0].who).toBeUndefined();
   });
 
+  it("a rule's slot named by a word only one meal has is that meal (sim run 10: \"Tiffin\" lost the whole rules answer)", async () => {
+    const { op, rows } = await boot();
+    await op("set_person", { name: "Agastya", group: "child" });
+    await op("set_slots", { add: true, extra_slots: [{ name: "Agastya's tiffin", days: ["Mon"], for: ["Agastya"] }] });
+    const r = await op("set_house_rules", { add: true, rules: [{ kind: "veg" }, { kind: "avoid", who: "Agastya", slots: ["Tiffin"], items: ["@nuts"] }] });
+    expect(r.code).toBeUndefined();
+    expect(JSON.parse(rows("house")[0].rules)[1].slots).toEqual(["Agastya's tiffin"]);
+  });
+
   it("set_cook refuses an arrival that is not HH:MM", async () => {
     const { op, rows } = await boot();
     for (const arrival of ["7.30am", "7:30", "24:00", "07:60", 730, undefined])

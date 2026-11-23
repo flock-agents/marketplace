@@ -162,7 +162,8 @@ export function mountDishBookRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: {
       if (!isObject(d)) return refuse(shape);
       const dish = name(d.name, "a dish's name");
       if (d.remove === true) return { dish, remove: true as const };
-      const slots = names(d.slots, `${dish}: slots`).map((s) => slotNames.find((x) => x.toLowerCase() === s.toLowerCase())
+      const only = (s: string) => { const w = slotNames.filter((x) => x.toLowerCase().includes(s.toLowerCase())); return w.length === 1 && s.trim().length >= 4 ? w[0] : undefined; };
+      const slots = names(d.slots, `${dish}: slots`).map((s) => slotNames.find((x) => x.toLowerCase() === s.toLowerCase()) ?? only(s)
         ?? refuse(`${dish}: slots: ${JSON.stringify(s)} is not a meal (${slotNames.join(", ")})${closest(s, slotNames) ? `; did you mean ${closest(s, slotNames)}?` : ""}`));
       if (!slots.length) refuse(`${dish}: slots must name at least one meal (${slotNames.join(", ")})`);
       const who = d.for == null ? [] : names(d.for, `${dish}: for`).filter((w) => w.toLowerCase() !== "everyone").map((w) => family.find((p) => p.toLowerCase() === w.toLowerCase())

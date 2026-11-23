@@ -177,6 +177,9 @@ function rules(v: unknown, ctx: { people: string[]; slots: string[] }): HouseRul
       const hit = ctx.slots.find((x) => x.toLowerCase() === s.toLowerCase());
       if (hit) return hit;
       const within = ctx.slots.filter((x) => x.toLowerCase().includes(s.toLowerCase()));
+      // One meal only has that word in its name ("Tiffin" → "Agastya's tiffin"): that meal. Refusing it once cost a whole
+      // rules answer (veg, no eggs, the fast) to the house notes (sim run 10).
+      if (within.length === 1 && s.trim().length >= 4) return within[0];
       const near = within.length === 1 ? within[0] : closest(s, ctx.slots);
       return refuse(`${label}: slots: ${JSON.stringify(s)} is not a meal (${ctx.slots.join(", ")})${near ? ` (did you mean ${near}?)` : ""}`);
     });
