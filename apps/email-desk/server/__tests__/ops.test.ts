@@ -315,12 +315,22 @@ describe("platform ops", () => {
     expect((await call("bundle_rows", { sinceIso: new Date(at(5)).toISOString(), accountIds: [] })).json).toEqual({ rows: [] });
     expect((await call("bundle_rows", { sinceIso: "never", accountIds: [A1] })).status).toBe(400);
   });
+
+  test("engaged_domains: the domains the named mailboxes wrote to, seeded ones too, each once; no other mailbox's", async () => {
+    const put = (acct: string, domain: string, seeded = 0) => db.run(
+      "INSERT INTO engaged_domains (account_id, domain, count, last_sent_at, seeded, updated_at) VALUES (?,?,0,0,?,1)", [acct, domain, seeded]);
+    put(A1, "acme.com", 1); put(A1, "vendor.io"); put(A2, "vendor.io"); put(A2, "club.org"); put("acct-9", "other.net");
+    expect((await call("engaged_domains", { accountIds: [A1, A2] })).json).toEqual({ domains: ["acme.com", "club.org", "vendor.io"] });
+    expect((await call("engaged_domains", { accountIds: [A2] })).json).toEqual({ domains: ["club.org", "vendor.io"] });
+    expect((await call("engaged_domains", { accountIds: [] })).json).toEqual({ domains: [] });
+    expect((await call("engaged_domains", {})).status).toBe(400);
+  });
 });
 
 describe("the router", () => {
   test("ops router serves the platform ops and send_draft though the manifest does not declare them", async () => {
     const declared = (await Bun.file(join(import.meta.dir, "../../flock.app.json")).json()).agentInterface.operations.map((o: any) => o.name);
-    const served = ["newest_thread_message", "thread_body", "store_thread_body", "last_harvest", "follow_up_kind", "draft_send_recorded", "mailboxes", "bundle_rows", "republish_legacy_card", "import_voice", "send_draft"];
+    const served = ["newest_thread_message", "thread_body", "store_thread_body", "last_harvest", "follow_up_kind", "draft_send_recorded", "mailboxes", "bundle_rows", "engaged_domains", "republish_legacy_card", "import_voice", "send_draft"];
     for (const name of served) {
       expect(declared).not.toContain(name);
       expect(Object.keys(allOps)).toContain(name);

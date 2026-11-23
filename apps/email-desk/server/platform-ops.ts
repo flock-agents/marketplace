@@ -9,6 +9,7 @@
 //   draft_send_recorded    <- send-email.draftSendRecorded
 //   mailboxes              <- mailbox.resolveMailbox (routes/app-memory.ts)
 //   bundle_rows            <- the sent-replies query pa-brief/bundle.ts ran on the built-in store
+//   engaged_domains        <- the built-in store's engaged_domains (Flock's TODO-salience prior and its event-wake gate)
 // And two that only the owner's upgrade calls (Flock's migrations/email-desk-marketplace.ts, once the built-in desk's
 // email-desk.db is this copy's store):
 //   republish_legacy_card  <- a built-in "Approve & Send" card, published again as this copy's draft card
@@ -172,6 +173,18 @@ function bundleRows(p: Record<string, unknown>) {
   return { rows };
 }
 
+/** The domains the named mailboxes have written to (the engaged_domains rows, seeded ones included), each once. Only the
+ *  named accounts: Flock names the accounts of this copy's person. */
+function engagedDomains(p: Record<string, unknown>) {
+  if (!Array.isArray(p.accountIds)) return fail("accountIds is required", "INVALID");
+  const accounts = p.accountIds.filter((a): a is string => typeof a === "string" && !!a);
+  if (accounts.length === 0) return { domains: [] };
+  const rows = getStore().query(
+    `SELECT DISTINCT domain FROM engaged_domains WHERE account_id IN (${accounts.map(() => "?").join(",")}) ORDER BY domain`,
+  ).all(...accounts) as { domain: string }[];
+  return { domains: rows.map((r) => r.domain) };
+}
+
 /**
  * A card the built-in desk published (`<account>|<thread>`, Approve & Send) becomes this copy's draft card: the thread's
  * draft row moved with the store, so its card is published from the row (its text is what Gmail holds; the payload's body
@@ -233,6 +246,7 @@ export const platformOps: Record<string, OpHandler> = {
     return { accounts: (r.data?.accounts ?? []).map((a) => ({ accountId: a.accountId, email: a.email ?? "" })) };
   },
   bundle_rows: async (p) => bundleRows(p),
+  engaged_domains: async (p) => engagedDomains(p),
   republish_legacy_card: async (p, ctx) => republishLegacyCard(p, ctx.platform),
   import_voice: async (p) => importVoice(p),
 };
