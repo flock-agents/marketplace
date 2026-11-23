@@ -196,6 +196,31 @@ describe("planImport: items, their to-dos, ref and match", () => {
     expect(planned).toHaveLength(1);
     expect(planned[0]!.item).toMatchObject({ ref: earlier, date: "2026-12-12", factIds: ["w-1"], todos: [{ title: "Buy the costume", due: "2026-12-05" }] });
   });
+  test("a correction's earlier ref is never minted again by a to-do's own deadline in the same mail", () => {
+    // Repro (review round 2): the event moved from 12-15 to 12-12; a to-do due 12-15 makes its own deadline on 12-15.
+    const { planned } = planImport([{
+      threadKey: "t", messageId: null, facts: [fact()], factIds: [["w-1"]], prevRef: "gmail-thread:t#2026-12-15",
+      tasks: [held(task("Return the form", "2026-12-15"), "t")],
+    }], CTX);
+    const refs = planned.map((p) => p.item.ref);
+    expect(new Set(refs).size).toBe(refs.length);
+    expect(planned.find((p) => p.item.date === "2026-12-12")!.item.ref).toBe("gmail-thread:t#2026-12-15");
+    expect(planned.find((p) => p.item.date === "2026-12-15")!.item.ref).toBe("gmail-thread:t#2026-12-15~2");
+  });
+  test("refs are unique across the run: a later mail's own ref yields to an earlier mail's correction", () => {
+    const { planned } = planImport([
+      { threadKey: "a", messageId: MID, facts: [fact()], factIds: [["w-a"]], prevRef: "gmail-thread:b#2026-12-14", tasks: [] },
+      { threadKey: "b", messageId: null, facts: [fact({ when: { date: "2026-12-14", time: null } })], factIds: [["w-b"]], tasks: [] },
+    ], CTX);
+    expect(planned.map((p) => p.item.ref)).toEqual(["gmail-thread:b#2026-12-14", "gmail-thread:b#2026-12-14~2"]);
+  });
+  test("two corrections claiming one ref: the first keeps it, the second keeps its own", () => {
+    const { planned } = planImport([
+      { threadKey: "a", messageId: null, facts: [fact()], factIds: [["w-a"]], prevRef: "old#1", tasks: [] },
+      { threadKey: "b", messageId: null, facts: [fact({ when: { date: "2026-12-14", time: null } })], factIds: [["w-b"]], prevRef: "old#1", tasks: [] },
+    ], CTX);
+    expect(planned.map((p) => p.item.ref)).toEqual(["old#1", "gmail-thread:b#2026-12-14"]);
+  });
   test("no correction: the item keeps its own ref", () => {
     const { planned } = planImport([{ threadKey: "t", messageId: MID, facts: [fact()], factIds: [["w-1"]], prevRef: null, tasks: [] }], CTX);
     expect(planned[0]!.item.ref).toBe(`${MID}#2026-12-12`);

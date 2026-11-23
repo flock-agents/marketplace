@@ -198,11 +198,14 @@ function fold(p: PlannedItem, next: Omit<ImportItem, "ref" | "match">, named: bo
  * One item per mail per date (live 2026-11-22: a circular's "Annual Day on Friday" and "report by 8 am" were two rows, a fee
  * and its late-fee rule two deadlines): the facts a mail gives for one day are one thing on the family's calendar. Its ref is
  * the mail's anchor and that date, so it is stable however the item comes to be named. A correction (`prevRef`) is sent under
- * the ref the earlier import used: the block's first item made from its facts takes it, unless another item already has it.
+ * the ref the earlier import used: the block's first item made from its facts takes it (the first correction to claim a ref
+ * keeps it). Every ref in the run's payload is unique: an item whose own ref is a claimed correction ref, or another item's,
+ * is sent under that ref with "~2", "~3" appended (the earlier item on the calendar is the corrected one's).
  * Each item carries the wiki ids of the facts it came from (`factIds`, at most MAX_FACT_IDS).
  */
 export function planImport(blocks: readonly FamilyBlock[], ctx: ItemContext): { planned: PlannedItem[]; leftover: HeldTask[] } {
   const planned: PlannedItem[] = [];
+  const corrections: Array<{ carrier: PlannedItem; ref: string }> = [];
   const leftover: HeldTask[] = [];
   for (const b of blocks) {
     const anchor = refAnchor(b.messageId, b.threadKey);
@@ -237,8 +240,9 @@ export function planImport(blocks: readonly FamilyBlock[], ctx: ItemContext): { 
       place(item, [fact.content], named, clip(fact.content, MAX_NOTES), b.factIds?.[i] ?? []);
     });
     // A correction goes under the ref its earlier fact went under: the calendar moves that item rather than adding another.
+    // Its carrier is the block's first item made from facts (placed above, before any to-do's own deadline).
     const prev = b.prevRef?.trim();
-    if (prev && mine.length > 0 && !mine.some((p) => p.item.ref === prev) && !planned.some((p) => p.item.ref === prev)) mine[0]!.item.ref = prev;
+    if (prev && mine.length > 0) corrections.push({ carrier: mine[0]!, ref: prev });
     const events = [...mine];
     for (const h of b.tasks) {
       const due = todoDue(h.task, ctx.tz);
@@ -260,6 +264,24 @@ export function planImport(blocks: readonly FamilyBlock[], ctx: ItemContext): { 
       addTodo(p, { title, due: due.date }, h);
     }
     planned.push(...mine);
+  }
+  // The run's refs, once every block is placed: corrections first claim their earlier refs, then every other item keeps its
+  // own unless it is taken, and is suffixed then.
+  const taken = new Set<string>();
+  const carriers = new Set<PlannedItem>();
+  for (const c of corrections) {
+    if (taken.has(c.ref) || carriers.has(c.carrier)) continue;
+    c.carrier.item.ref = c.ref;
+    taken.add(c.ref);
+    carriers.add(c.carrier);
+  }
+  for (const p of planned) {
+    if (carriers.has(p)) continue;
+    const own = p.item.ref;
+    let ref = own;
+    for (let n = 2; taken.has(ref); n++) ref = `${own}~${n}`;
+    p.item.ref = ref;
+    taken.add(ref);
   }
   return { planned, leftover };
 }
