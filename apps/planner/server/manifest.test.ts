@@ -138,7 +138,7 @@ describe("the agent's interface", () => {
     expect(about).toContain("apply_setup");
     expect(about).not.toContain("set_house_rules");
     // The checked kinds are taught where the rules are read now: the setup's own prompt.
-    for (const kind of ["avoid {", "only {", "swap {", "require {", "cap {", "fasting {", "other {"]) expect(SETUP_SYSTEM, kind).toContain(kind);
+    for (const kind of ["avoid {", "only {", "swap {", "require {", "cap {", "fasting {", "note {"]) expect(SETUP_SYSTEM, kind).toContain(kind);
   });
 
   // 3.4.0: Flock's interview runner sends every setup line as written and a model reads each reply into the facts and each

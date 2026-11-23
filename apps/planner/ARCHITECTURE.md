@@ -87,8 +87,8 @@ the routes; `agentOps.ts` maps each operation to one of those routes, so the age
 the estimate's tuning and the 2.0 table names; `family.ts` people, the house row, the cook and shopping apps;
 `slotStore.ts` the slot model's typed rows, reads and writes (slots, slot-days with dishes and ingredients, library, rules)
 and its derived values (staples, looks like, recent); `meals.ts` the week as the pages read it and a planned week's close;
-`legacy.ts` the old house and dish shapes `setup.ts` and `makePlan.ts` still compile against until lanes B and C rewrite
-them (every read of them throws); `dishText.ts` a dish in one line; `regulars.ts` `set_regular` as a way to state an item's cycle, and the move of old everyday items into item cycles;
+`legacy.ts` the old house and dish shapes `makePlan.ts` still compiles against until lane C rewrites it (every read of them
+throws); `setup.ts` `apply_setup` (spec §4: three balanced reads and a fast contains read, structural checks, the writes, the read-back, a correction as a diff); `dishText.ts` a dish in one line; `regulars.ts` `set_regular` as a way to state an item's cycle, and the move of old everyday items into item cycles;
 `items.ts` items, their events, order history and the answers; `estimate.ts` the estimate and an item's cycle as pure functions; `cart.ts` carts
 and their life; `cartRoutes.ts` the cart operations and keeping each app's own cart in step; `reminder.ts` what a reminder
 says and does; `products.ts` remembered products and pack arithmetic (g, ml, pc); `recipes.ts` saved recipes;
@@ -104,7 +104,7 @@ Flock's AppShell adds for the owner; `Thumb.tsx` (a product's picture, a dish's 
 **Tables** (all public; lists are JSON text, dates `YYYY-MM-DD`, times `HH:MM`, local; the slot model,
 `docs/slot-model-spec.md` §2). `people` (child | adult | elder; portions, diet, allergies in their own words) · `house` (one
 row: the cook, connected apps, `history_synced` per app and reader, `sync_session_id`, `profile_to_structure`,
-`intro_sent_at`, the check-in times, notes) · `slots` (unique name; main | custom | addon with `addon_of`; usual people,
+`intro_sent_at`, the check-in times, notes, `setup_state`: what apply_setup read beside the rows, for a correction's diff) · `slots` (unique name; main | custom | addon with `addon_of`; usual people,
 days, weekly `skip_days`, planning `order`) · `slot_days` (one per date and slot, unique; who it is for, guests, occasion,
 `skip` eaten_out | ordered_in, `status` planned | confirmed, `edited`; a setup seed example has no date and is confirmed) ·
 `slot_dishes` (in order; `new`, `feedback_asked`, a note) · `dish_ingredients` (item, amount, unit, per slot dish; the SQL
@@ -124,7 +124,7 @@ setting `new_dishes_per_week` (0, 2, 4 or 7; 2 until set) caps a week's new dish
 `cooking_days`) are gone, with no migration.
 
 **Operations** (24). `guide`; the family: `set_person`, `set_cook`, `set_shopping_apps`, `apply_setup` (the whole setup
-at once; lane B rewrites it on the slot model); the plan: `make_plan` (lane C rewrites it; the change operations of spec §6
+at once: slots, rules, library, seed slot-days, the cook; called again with more replies it applies only what they changed); the plan: `make_plan` (lane C rewrites it; the change operations of spec §6
 come with lane D); items: `set_regular` (the older way to state a cycle), `import_order_history` (about 8 orders and 80
 items a call, one app a call), `record_bought_outside`, `set_item`, `set_subscription`, `answer_running_low`,
 `remember_product`; the reminder and carts: `get_reminder` (afternoon | evening, with an optional date), `get_cart`,
