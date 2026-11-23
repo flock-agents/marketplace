@@ -19,8 +19,9 @@ import { SLOTS } from "./db/constants";
 import { addDays, todayStr, weekDates, weekdayOf } from "./dates";
 import { dishKey } from "./dishText";
 import { closest } from "./agentOps";
-import { closeWeek, dateOf, isStaple, MAIN_DAYS_MAX, menuChecks, PLAN_METHOD, repeatedDays, saveWeek, weekContext, type WeekContext, type WeekView } from "./meals";
-import { checkedAs, dinersOf, EVERYONE, hit, isCheckedFast, isSide, mealLabel, ruleText, type Rule } from "./rules";
+import { closeWeek, dateOf, dishLimit, isStaple, PLAN_METHOD, repeatedDays, saveWeek, weekContext, type WeekContext, type WeekView } from "./meals";
+import { alternatives, checkedAs, dinersOf, EVERYONE, hit, isCheckedFast, isSide, isSoft, mealLabel, matches, ruleBreaks, ruleText, timesOf, type Rule } from "./rules";
+import { dishOftenMap } from "./dishBook";
 import { refuse, writeRoutes, type Db, type Emit } from "./family";
 import { STOP_CODES, stopSaid, type ModelCall, type ModelFailure, type ModelResult } from "./model";
 
@@ -34,8 +35,11 @@ export type MenuMeal = { date: string; slot: string; dishes: MenuDish[] };
 export type SlotNeed = { key: string; date: string; day: string; slot: string; who: string[]; rules: string[]; cook: string;
   family_dishes: { dish: string; for?: string[]; rating?: string }[]; ordered_in?: { note?: string }; fasts?: string[] };
 /** What is wrong with one meal of the menu. A repeat weighs least: it is what the family can live with when nothing else fits.
- *  `uncovered`: people who eat the meal and have no main dish there (`people`). */
-type Problem = { kind: "rule" | "repeat" | "eaters" | "empty" | "uncovered"; text: string; said: string; dish?: string; who?: string; people?: string[] };
+ *  `uncovered`: people who eat the meal and have no main dish there (`people`). `often`: a soft rule kept more times this week
+ *  than the family said ("millets are good for him" at every meal); `few`: kept fewer times, the softest (`to`: a swap's). */
+type Problem = { kind: "rule" | "repeat" | "eaters" | "empty" | "uncovered" | "often" | "few"; text: string; said: string; dish?: string; who?: string; people?: string[]; to?: string };
+/** The problems the family can live with when nothing else fits: a dish come back, a soft rule's count off. */
+const SOFT_PROBLEMS: Problem["kind"][] = ["repeat", "often", "few"];
 type Ingredient = { item: string; amount: number | null; unit: string | null };
 
 export type MakePlanResult =
@@ -164,22 +168,28 @@ export function menuProblems(c: WeekContext, needs: SlotNeed[], menu: Map<string
       text: `${andList(hungry)} ${hungry.length === 1 ? "has" : "have"} no main dish at ${short(n)}: give them one (a shared dish for everyone, except who has their own)`,
       said: `${short(n)}: no main dish for ${andList(hungry)}` });
   }
-  const { breaks } = menuChecks(view, c.house, family.map((name) => ({ name })), today);
-  for (const b of breaks) {
+  // plan_menu's rule checks, and a soft rule kept too few times (a softer problem the fix round can address).
+  for (const b of ruleBreaks(view, c.house, family.map((name) => ({ name })), { under: true })) {
     const n = byLabel.get(b.meal);
-    if (n) add(n.key, { kind: "rule", dish: b.dish, ...(b.who ? { who: b.who } : {}), text: `${b.dish ? `${b.dish}: ` : ""}${b.rule} (${b.fix})`, said: `${short(n)}${b.dish ? ` has ${b.dish}, against "${b.rule}"` : `: "${b.rule}" is not kept`}` });
+    if (!n) continue;
+    const kind: Problem["kind"] = b.soft === "over" ? "often" : b.soft === "under" ? "few" : "rule";
+    add(n.key, { kind, dish: b.dish, ...(b.who ? { who: b.who } : {}), ...(b.to ? { to: b.to } : {}), text: `${b.dish ? `${b.dish}: ` : ""}${b.rule} (${b.fix})`,
+      said: kind === "rule" ? `${short(n)}${b.dish ? ` has ${b.dish}, against "${b.rule}"` : `: "${b.rule}" is not kept`}` : `"${b.rule}" is not kept as often as said` });
   }
-  for (const r of repeatedDays(view, c.house)) {
-    const kept = r.dates.slice(0, MAIN_DAYS_MAX).map(weekdayOf).join(" and ");
-    for (const date of r.dates.slice(MAIN_DAYS_MAX))
+  const often = dishOftenMap(c.family_dishes);
+  for (const r of repeatedDays(view, c.house, often)) {
+    const kept = r.dates.filter((d) => !r.over.includes(d)).map(weekdayOf);
+    const theirs = often.has(dishKey(r.name));
+    for (const date of r.over)
       for (const n of needs.filter((x) => x.date === date && (menu.get(x.key)?.dishes ?? []).some((d) => dishKey(d.name) === dishKey(r.name))))
-        add(n.key, { kind: "repeat", dish: r.name, text: `${r.name} is already on ${kept}: a main dish is on ${MAIN_DAYS_MAX} days at most, plan something else here`,
-          said: `${r.name} repeats on ${r.dates.length} days (${r.dates.map(weekdayOf).join(", ")}): only ${n.family_dishes.length} ${n.slot.toLowerCase()} dish${n.family_dishes.length === 1 ? "" : "es"} known` });
+        add(n.key, { kind: "repeat", dish: r.name, text: `${r.name} is ${kept.length ? `already on ${kept.join(" and ")}` : `not had on ${weekdayOf(date)}`}: ${r.why}, plan something else here`,
+          said: theirs ? `${r.name} is on ${r.dates.length} days (${r.dates.map(weekdayOf).join(", ")}): ${r.why}`
+            : `${r.name} repeats on ${r.dates.length} days (${r.dates.map(weekdayOf).join(", ")}): only ${n.family_dishes.length} ${n.slot.toLowerCase()} dish${n.family_dishes.length === 1 ? "" : "es"} known` });
   }
   return out;
 }
 
-const weight = (ps: Problem[] | undefined) => (ps ?? []).reduce((s, p) => s + (p.kind === "repeat" ? 1 : 100), 0);
+const weight = (ps: Problem[] | undefined) => (ps ?? []).reduce((s, p) => s + (p.kind === "repeat" || p.kind === "few" ? 1 : p.kind === "often" ? 10 : 100), 0);
 const total = (m: Map<string, Problem[]>) => [...m.values()].reduce((s, ps) => s + weight(ps), 0);
 
 const MENU_SCHEMA = { type: "object", required: ["meals"], properties: { meals: { type: "array", items: { type: "object", required: ["date", "slot", "dishes"],
@@ -191,7 +201,8 @@ export const MENU_SYSTEM = [
   "Dish names only, no ingredients. Every meal you are given gets at least one dish; use its date and slot exactly as given. A person listed in a meal's `fasts` eats nothing there.",
   "for: [\"everyone\"] (everyone who eats that meal) or the names of the people who eat it. A dish is for [\"everyone\"] unless one person has their own: their dish for [them], and the shared dish for [\"everyone\"] with except: [them].",
   "Everyone who eats a meal has a main dish there, not only rice, roti or sides like chutney and curd. Never put the family's main dish for one person.",
-  "Every rule listed on a meal must hold there. A main dish is on two days of the week at most (roti, rice, plain dal and sides like chutney, curd come back freely; sambar and rasam are mains).",
+  "Every rule listed on a meal must hold there; a rule with a number of times a week (\"2–3 times a week\") is kept at that many meals of the week, not at every one.",
+  "how_often: how many times this week a dish or such a rule comes, from the family's own words: keep to it. A dish of family_dishes with often comes back no more than that (usually: 5 days, sometimes: 2, rarely: 1), with per_week on that many days, with days only on those days. Any other main dish is on two days of the week at most, a person's own dish too (roti, rice, plain dal and sides like chutney, curd come back freely; sambar and rasam are mains).",
   "typical_meal, when given: what this meal looks like in this home, in the family's own words (for the children and the adults, when they differ). Plan each meal shaped like it: the same kind and number of parts, from the family's own dishes.",
   "How to plan:",
   PLAN_METHOD,
@@ -200,7 +211,7 @@ export const MENU_SYSTEM = [
 const FIX_SYSTEM = [
   "You fix some meals of an Indian family's week plan. Answer with JSON only, as the schema says: { meals: [{ date, slot, dishes: [{ name, for, except?, portion_note? }] }] }.",
   "Send back ONLY the meals listed in `fix`, each one whole (all its dishes), changed so that every reason given for it is gone. Do not send any other meal: the rest of the week stays as it is (`rest_of_week`, to keep the variety).",
-  "for: [\"everyone\"] or the names; a person's own dish is for [them] and the shared one is for [\"everyone\"] with except: [them]. Everyone who eats a meal has a main dish there; never put the family's main dish for one person. A person in a meal's `fasts` eats nothing there. A main dish is on two days of the week at most.",
+  "for: [\"everyone\"] or the names; a person's own dish is for [them] and the shared one is for [\"everyone\"] with except: [them]. Everyone who eats a meal has a main dish there; never put the family's main dish for one person. A person in a meal's `fasts` eats nothing there. A main dish is on two days of the week at most, or as `how_often` says; a rule with a number of times a week is kept at that many meals, not more.",
   "typical_meal, when given: what this meal looks like in this home, in the family's words. Keep each meal shaped like it.",
 ].join("\n");
 
@@ -214,6 +225,30 @@ function cookOf(c: WeekContext) {
   return h.cook_name ? Object.fromEntries(Object.entries({ name: h.cook_name, days: h.cook_days, makes_well: h.cook_makes_well, wont_make: h.cook_wont_make,
     time_limit: h.cook_time_limit, new_recipes: h.cook_new_recipes, note: h.cook_note }).filter(([, v]) => v != null && v !== "")) : null;
 }
+/** How often this week, for one meal of the day's call (owner, 23 Nov): each of its family dishes the family said how often
+ *  of ("Khichdi, for Tara: at most twice this week"; "Lemon rice: on Fri only"), and each soft rule that holds at it, with
+ *  this meal's share of the week's count (the other meals of the day are planned at the same time). */
+export function howOften(c: WeekContext, needs: SlotNeed[], slot: string): string[] {
+  const out: string[] = [];
+  const fam = Object.entries(c.family_dishes).find(([s]) => same(s, slot))?.[1] ?? [];
+  for (const d of fam) {
+    if (!d.often && d.per_week == null && !d.days?.length) continue;
+    const lim = dishLimit(d);
+    const count = d.per_week != null ? `${lim.max === 1 ? "once" : lim.max === 2 ? "twice" : `on ${lim.max} days`} this week` : lim.days ? "" : `at most ${lim.max === 1 ? "once" : `${lim.max} days`} this week`;
+    out.push(`${d.dish}${d.for?.length ? `, for ${andList(d.for)}` : ""}: ${[count, lim.days ? `on ${lim.days.join(", ")} only` : ""].filter(Boolean).join(", ")}`);
+  }
+  const planned = needs.filter((n) => !n.ordered_in);
+  for (const r of c.house.rules.filter(isSoft)) {
+    const holds = (n: SlotNeed) => ruleHolds(r, n.day, n.slot, eatingAt(n));
+    const slots = [...new Set(planned.filter(holds).map((n) => n.slot))];
+    if (!slots.some((s) => same(s, slot))) continue;
+    const [lo, hi] = timesOf(r), k = slots.length;
+    const share = k <= 1 ? "" : ` (all meals together; at ${slot}: ${Math.floor(lo / k) === Math.ceil(hi / k) ? Math.ceil(hi / k) : `${Math.floor(lo / k)}–${Math.ceil(hi / k)}`})`;
+    out.push(`${ruleWords(r)}${share}`);
+  }
+  return out;
+}
+
 const mealAsked = (n: SlotNeed) => ({ date: n.date, day: n.day, slot: n.slot, who: n.who, ...(n.fasts?.length ? { fasts: n.fasts } : {}), rules: n.rules, cook: n.cook });
 
 /** The model's meals, read leniently: each one that is a meal of `needs` (its slot whatever its capitals), with its dishes. */
@@ -287,6 +322,25 @@ function candidates(n: SlotNeed, meal: MenuMeal | undefined, problems: Problem[]
       : named.some((x) => same(x, who)) ? (named.length > 1 ? { ...d, for: named.filter((x) => !same(x, who)) } : null) : d;
     out.unshift(without ? now.map((x, i) => (i === at ? without : x)) : now.filter((_, i) => i !== at));
   }
+  // A soft swap kept too often: the dish as it is for them (the swap's portion_note taken out), or their own dish of it
+  // dropped (they eat the shared dish); too few: the swap said in the portion_note of the dish that has its items.
+  for (const p of problems) {
+    if ((p.kind !== "often" && p.kind !== "few") || !p.to || !p.who || !p.dish) continue;
+    const at = now.findIndex((d) => dishKey(d.name) === dishKey(p.dish!));
+    if (at < 0) continue;
+    const d = now[at], who = p.who, tos = alternatives(p.to);
+    const swapSaid = (seg: string) => matches(seg, who) && tos.some((t) => matches(seg, t));
+    if (p.kind === "few") { out.unshift(now.map((x, i) => (i === at ? { ...x, portion_note: [x.portion_note, `${p.to} for ${who}`].filter(Boolean).join("; ") } : x))); continue; }
+    const segs = (d.portion_note ?? "").split(/\s*;\s*/).filter(Boolean);
+    if (segs.some(swapSaid)) {
+      const left = segs.filter((x) => !swapSaid(x)).join("; ");
+      out.unshift(now.map((x, i) => (i === at ? { name: x.name, for: x.for, ...(x.except ? { except: x.except } : {}), ...(left ? { portion_note: left } : {}) } : x)));
+    } else if (d.for.some((x) => same(x, who)) && !d.for.some((x) => same(x, EVERYONE))) {
+      const rest = now.filter((_, i) => i !== at).map((x) => (x.except?.some((e) => same(e, who)) ? (() => { const e = x.except!.filter((y) => !same(y, who)); return { ...x, ...(e.length ? { except: e } : { except: undefined }) }; })() : x))
+        .map(({ except, ...x }) => (except?.length ? { ...x, except } : x));
+      if (rest.length) out.unshift(rest);
+    }
+  }
   // People with no main dish: a main of one person's made the shared one (everyone but who has a main of their own), first;
   // else a family dish of the meal added for them.
   for (const p of problems) {
@@ -324,7 +378,7 @@ function fixInCode(c: WeekContext, needs: SlotNeed[], menu: Map<string, MenuMeal
       const empty = !fixed.get(n.key)?.dishes.length;
       // A meal whose only fault is a dish come back a third day keeps to its own dishes: a repeat before a dish from elsewhere.
       const tiers = poolTiers(c, n, fixed);
-      for (const tier of mine.every((p) => p.kind === "repeat") ? tiers.slice(0, 1) : tiers) {
+      for (const tier of mine.every((p) => SOFT_PROBLEMS.includes(p.kind)) ? tiers.slice(0, 1) : tiers) {
         for (const dishes of candidates(n, fixed.get(n.key), mine, tier)) {
           const meal = { date: n.date, slot: n.slot, dishes };
           const trial = new Map(fixed).set(n.key, meal);
@@ -334,7 +388,7 @@ function fixInCode(c: WeekContext, needs: SlotNeed[], menu: Map<string, MenuMeal
           if (score === 0) break;
         }
         // This tier keeps every rule of the meal (at worst a dish comes back): no need to look further.
-        if (best && !(menuProblems(c, needs, new Map(fixed).set(n.key, best.meal), today).get(n.key) ?? []).some((p) => p.kind !== "repeat")) break;
+        if (best && !(menuProblems(c, needs, new Map(fixed).set(n.key, best.meal), today).get(n.key) ?? []).some((p) => !SOFT_PROBLEMS.includes(p.kind))) break;
       }
       if (best) { fixed.set(n.key, best.meal); changed = true; }
     }
@@ -499,13 +553,14 @@ async function planWeek(deps: MakePlanDeps & { log: (line: string) => void }, in
     const xs = c.house.meal_examples.filter((x) => same(x.slot, slot)).map((x) => (x.group ? { for: x.group, words: x.words } : { words: x.words }));
     return xs.length ? xs : undefined;
   };
+  const often = (slot: string) => { const xs = howOften(c, needs, slot); return xs.length ? xs : undefined; };
   const firstAsk = (slot: string, mine: SlotNeed[]) => ({ tier: "balanced" as const, purpose: `meal plan: the week's ${slot}`, system: MENU_SYSTEM, schema: MENU_SCHEMA,
     maxTokens: menuTokens(mine.length),
-    user: JSON.stringify({ week_start: weekStart, slot, typical_meal: typical(slot), meals: mine.map(mealAsked), people: family, cook, family_dishes: famOf(slot),
+    user: JSON.stringify({ week_start: weekStart, slot, typical_meal: typical(slot), how_often: often(slot), meals: mine.map(mealAsked), people: family, cook, family_dishes: famOf(slot),
       last_week: c.last_week.filter((m) => same(m.slot, slot)), known_dishes: known, house_notes: c.house.notes ?? undefined }) });
   const fixAsk = (slot: string, bad: SlotNeed[]) => ({ tier: "balanced" as const, purpose: `meal plan: fix the ${slot}`, system: FIX_SYSTEM, schema: MENU_SCHEMA,
     maxTokens: fixTokens(bad.length),
-    user: JSON.stringify({ week_start: weekStart, slot, typical_meal: typical(slot),
+    user: JSON.stringify({ week_start: weekStart, slot, typical_meal: typical(slot), how_often: often(slot),
       fix: bad.map((n) => ({ ...mealAsked(n), family_dishes: n.family_dishes.map((d) => d.dish), now: menu.get(n.key)?.dishes ?? [], wrong: problems.get(n.key)!.map((p) => p.text) })),
       rest_of_week: toPlan.filter((n) => !problems.has(n.key)).map((n) => ({ date: n.date, slot: n.slot, dishes: (menu.get(n.key)?.dishes ?? []).map((d) => d.name) })),
       people: family }) });
@@ -549,7 +604,8 @@ async function planWeek(deps: MakePlanDeps & { log: (line: string) => void }, in
   const empty = toPlan.filter((n) => !(menu.get(n.key)?.dishes.length));
   if (empty.length) return done({ ok: false, reason: "no_dishes",
     say: `I couldn't plan the week: I don't know any dishes for ${[...new Set(empty.map((n) => n.slot.toLowerCase()))].join(", ")} yet. Tell me a few you usually have.` });
-  const unmet = [...new Set(toPlan.flatMap((n) => (problems.get(n.key) ?? []).map((p) => p.said)))];
+  // A soft rule kept a little less often than said is not worth a line to the family.
+  const unmet = [...new Set(toPlan.flatMap((n) => (problems.get(n.key) ?? []).filter((p) => p.kind !== "few").map((p) => p.said)))];
 
   // c. Each day's ingredients, one call a day, once more on its own when it fails.
   const people = c.people.map((p) => p.name);

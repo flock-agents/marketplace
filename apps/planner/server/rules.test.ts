@@ -471,3 +471,51 @@ describe("run 11: the plan for 23–29 Nov", () => {
     expect((await owner("POST", "/api/dishes", { date: "2026-11-24", slot: "Lunch", name: "Chapati" })).status).toBe(200);
   });
 });
+
+// Owner, 23 Nov: a soft wish ("millets are good for him") is kept some meals of the week, not at every one: too many is a
+// break, too few a softer one (only when asked for, as the stepped plan does).
+describe("a soft rule, kept some times a week", () => {
+  const DAYS = ["2026-11-23", "2026-11-24", "2026-11-25", "2026-11-26", "2026-11-27"];
+  const swap = { kind: "swap", who: "Meera", items: ["@white_rice"], to: "millets", often: "sometimes" as const, days: [] };
+  /** Five lunches of rice for everyone; the first `n` say "millets for Meera". */
+  const lunches = (n: number) => week(DAYS.map((date, i) => ({ date, slot: "Lunch", dishes: [{ name: "Rice", for_people: ["everyone"], portion_note: i < n ? "millets in place of rice for Meera" : null },
+    { name: "Sambar", for_people: ["everyone"] }] })));
+
+  it("2–3 meals keep it: no break; a hard swap would want every meal", () => {
+    for (const n of [2, 3]) expect(ruleBreaks(lunches(n), { rules: [swap] }, people, { under: true })).toEqual([]);
+    const { often: _o, ...hard } = swap;
+    expect(keys(ruleBreaks(lunches(2), { rules: [hard] }, people))).toEqual(["Wed 2026-11-25 Lunch|Rice|Meera", "Thu 2026-11-26 Lunch|Rice|Meera", "Fri 2026-11-27 Lunch|Rice|Meera"]);
+  });
+
+  it("every meal (the live run): the meals past 3 are breaks, 'over'", () => {
+    const b = ruleBreaks(lunches(5), { rules: [swap] }, people);
+    expect(keys(b)).toEqual(["Thu 2026-11-26 Lunch|Rice|Meera", "Fri 2026-11-27 Lunch|Rice|Meera"]);
+    expect(b.every((x) => x.soft === "over" && x.to === "millets")).toBe(true);
+    expect(b[0].rule).toBe("Meera has millets in place of white rice 2–3 times a week");
+    expect(b[0].fix).toContain("now in 5 meals");
+  });
+
+  it("too few: a softer break on the meals that could keep it, only when asked (plan_menu never refuses for it)", () => {
+    expect(ruleBreaks(lunches(0), { rules: [swap] }, people)).toEqual([]);
+    const b = ruleBreaks(lunches(0), { rules: [swap] }, people, { under: true });
+    expect(keys(b)).toEqual(["Mon 2026-11-23 Lunch|Rice|Meera", "Tue 2026-11-24 Lunch|Rice|Meera"]);
+    expect(b.every((x) => x.soft === "under")).toBe(true);
+  });
+
+  it("a dish of the person's own that is the swap counts; per_week is exact", () => {
+    const own = week(DAYS.map((date, i) => ({ date, slot: "Lunch", dishes: i < 4 ? [{ name: "Foxtail millet pongal", for_people: ["Meera"] }, { name: "Rice", for_people: ["everyone"] }]
+      : [{ name: "Rice", for_people: ["everyone"] }] })));
+    expect(keys(ruleBreaks(own, { rules: [{ ...swap, often: undefined, per_week: 2 }] }, people))).toEqual(["Wed 2026-11-25 Lunch|Foxtail millet pongal|Meera", "Thu 2026-11-26 Lunch|Foxtail millet pongal|Meera"]);
+    expect(ruleText({ ...swap, often: undefined, per_week: 2 })).toBe("Meera has millets in place of white rice twice a week");
+  });
+
+  it("a soft require: fruit three times a week, counted over the week", () => {
+    const fruit = { kind: "require", who: "Agastya", items: ["fruit"], per_week: 3, days: [] };
+    const snacks = (n: number) => week(DAYS.map((date, i) => ({ date, slot: "Dinner", dishes: [{ name: i < n ? "Fruit bowl" : "Dhokla", for_people: ["everyone"] }] })));
+    expect(ruleBreaks(snacks(3), { rules: [fruit] }, people, { under: true })).toEqual([]);
+    expect(keys(ruleBreaks(snacks(5), { rules: [fruit] }, people))).toEqual(["Thu 2026-11-26 Dinner|Fruit bowl|Agastya", "Fri 2026-11-27 Dinner|Fruit bowl|Agastya"]);
+    expect(keys(ruleBreaks(snacks(1), { rules: [fruit] }, people, { under: true }))).toEqual(["Tue 2026-11-24 Dinner||Agastya", "Wed 2026-11-25 Dinner||Agastya"]);
+    expect(rulesSaid([fruit, { kind: "other", who: "Agastya", note: "something light at night", often: "sometimes", days: [] }]))
+      .toBe("Agastya: has fruit 3 times a week; something light at night 2–3 times a week");
+  });
+});

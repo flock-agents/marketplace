@@ -7,10 +7,10 @@ import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import { asc, eq } from "drizzle-orm";
 import { _settings } from "@flock/app-kit";
 import { house, people } from "./db/schema";
-import { appOf, COOK_NEW_RECIPES, GROUPS, RULE_KINDS, SETTINGS, SHOP_APPS, SLOTS, type GroceryApp } from "./db/constants";
+import { appOf, COOK_NEW_RECIPES, GROUPS, OFTEN, RULE_KINDS, SETTINGS, SHOP_APPS, SLOTS, type GroceryApp, type Often } from "./db/constants";
 import { WEEKDAYS, type Weekday } from "./dates";
 import { closest } from "./agentOps";
-import { CATEGORIES, CHECKED_KINDS, KIND_NEEDS, rulesSaid, type Rule } from "./rules";
+import { CATEGORIES, CHECKED_KINDS, KIND_NEEDS, rulesSaid, SOFT_KINDS, type Rule } from "./rules";
 
 export type Db = BunSQLiteDatabase<any>;
 /** Tell live pages a row changed, and who changed it (the kit's emitChange). */
@@ -137,7 +137,7 @@ const optionalNote = (v: unknown, what: string): { note?: string } => {
 
 const PERSON_WORDS = ["relationship", "portions", "diet", "allergies", "dislikes", "targets", "note"] as const;
 
-const RULE_SHAPE = "rules must be a list of { kind, who?, days?, slots?, items?, to?, per_week?, per_meal?, note? }";
+const RULE_SHAPE = "rules must be a list of { kind, who?, days?, slots?, items?, to?, per_week?, per_meal?, often?, note? }";
 const KIND_HELP = `a rule's kind must be one of: ${RULE_KINDS.join(", ")} (avoid: no dish with items; only: who eats only items; swap: who has to in place of items; `
   + `require: who eats one of items at each of slots; cap: items in at most per_week meals, or at most per_meal dishes in each meal of slots; no_eggs: "no eggs on Tuesday"; egg: eggs but no meat; fasting: who eats nothing at slots on days (without slots a note); other: the family's own words in note)`;
 const CATEGORY_LIST = Object.keys(CATEGORIES).map((c) => `@${c}`).join(", ");
@@ -145,7 +145,7 @@ const isChecked = (kind: unknown): kind is (typeof CHECKED_KINDS)[number] => (CH
 
 /** The rules as sent, checked. `people`: the names on the Family page (a rule's who is one of them); `slots`: the meal slots. */
 /** A rule as compared for add: true, its fields in one order, its note left out. */
-const ruleKey = (r: Rule): string => JSON.stringify([r.kind, r.who ?? null, r.days, r.slots ?? null, r.items ?? null, r.to ?? null, r.per_week ?? null, r.per_meal ?? null,
+const ruleKey = (r: Rule): string => JSON.stringify([r.kind, r.who ?? null, r.days, r.slots ?? null, r.items ?? null, r.to ?? null, r.per_week ?? null, r.per_meal ?? null, r.often ?? null,
   r.kind === "other" || r.kind === "fasting" ? (r.note ?? "").trim().toLowerCase() : null]);
 
 function rules(v: unknown, ctx: { people: string[]; slots: string[] }): HouseRule[] {
@@ -188,8 +188,21 @@ function rules(v: unknown, ctx: { people: string[]; slots: string[] }): HouseRul
       const near = within.length === 1 ? within[0] : closest(s, ctx.slots);
       return refuse(`${label}: slots: ${JSON.stringify(s)} is not a meal (${ctx.slots.join(", ")})${near ? ` (did you mean ${near}?)` : ""}`);
     });
+    // How often a soft rule is kept (owner, 23 Nov): a swap, require or other the family said loosely ("millets are good for
+    // him") is kept `often` (usually, sometimes, rarely) or per_week times a week, not every time. Every other rule is hard.
+    const soft = (SOFT_KINDS as readonly string[]).includes(kind as string);
+    if (given("often")) {
+      if (!soft) return refuse(`${label} takes no often: a ${kind} rule holds every time; often goes on a ${SOFT_KINDS.join(", ")} rule the family keeps only some days`);
+      const w = typeof r.often === "string" ? r.often.trim().toLowerCase() : "";
+      out.often = (OFTEN as readonly string[]).includes(w) ? w as Often : refuse(`${label}: often must be one of ${OFTEN.join(", ")}`);
+    }
+    if (given("per_week") && soft && kind !== "cap") {
+      out.per_week = typeof r.per_week === "number" && Number.isInteger(r.per_week) && r.per_week >= 1 && r.per_week <= 21 ? r.per_week
+        : refuse(`${label}: per_week must be a whole number of times a week, 1 to 21`);
+      if (out.often) delete out.often;
+    }
     // What only the checked kinds take: a fast the app checks is { kind: only, who, days, items }.
-    for (const k of ["items", "to", "per_week", "per_meal"]) if (given(k) && !isChecked(kind))
+    for (const k of ["items", "to", "per_week", "per_meal"]) if (given(k) && !isChecked(kind) && !(k === "per_week" && soft))
       return refuse(`${label} takes no ${k}: a rule about particular foods is ${CHECKED_KINDS.join(", ")} (a fast: { kind: only, who, days, items })`);
     if (given("items")) {
       if (!Array.isArray(r.items) || !r.items.length || !r.items.every((i) => typeof i === "string" && i.trim()))
@@ -211,8 +224,8 @@ function rules(v: unknown, ctx: { people: string[]; slots: string[] }): HouseRul
       if (kind !== "swap") return refuse(`${label} takes no to: to is what a swap rule gives in place of its items`);
       out.to = name(r.to, `${label}: to`);
     }
-    if (given("per_week")) {
-      if (kind !== "cap") return refuse(`${label} takes no per_week: per_week is a cap rule's most meals in a week`);
+    if (given("per_week") && !soft) {
+      if (kind !== "cap") return refuse(`${label} takes no per_week: per_week is a cap rule's most meals in a week, or how many times a week a ${SOFT_KINDS.join(", ")} rule is kept`);
       out.per_week = typeof r.per_week === "number" && Number.isInteger(r.per_week) && r.per_week >= 0 ? r.per_week
         : refuse(`${label}: per_week must be a whole number of meals, 0 or more`);
     }
@@ -229,7 +242,8 @@ function rules(v: unknown, ctx: { people: string[]; slots: string[] }): HouseRul
       if (out.per_week !== undefined && !out.items) return refuse(`${label} needs items: the foods a per_week cap counts`);
     }
     if (isChecked(kind)) {
-      const missing = KIND_NEEDS[kind].filter((k) => (out as Record<string, unknown>)[k] === undefined);
+      // A soft require is counted over the week ("fruit three times a week"): it needs no slots.
+      const missing = KIND_NEEDS[kind].filter((k) => (out as Record<string, unknown>)[k] === undefined && !(k === "slots" && (out.often || out.per_week != null)));
       if (missing.length) return refuse(`${label} needs ${missing.join(", ")}`);
     }
     return { ...out, ...note };

@@ -50,6 +50,22 @@ describe("set_person", () => {
 });
 
 describe("the house", () => {
+  // Owner, 23 Nov: a soft wish is kept some times a week; a hard rule (allergy, veg, avoid, a fast, "no sugar") every time.
+  it("set_house_rules: often and per_week on a swap, require or other; never on a hard rule", async () => {
+    const { op } = await boot();
+    await op("set_person", { name: "Nani", group: "elder" });
+    const r = await op("set_house_rules", { add: true, rules: [{ kind: "swap", who: "Nani", items: ["@white_rice"], to: "millets", often: "Sometimes" },
+      { kind: "require", who: "Nani", items: ["fruit"], per_week: 3 }, { kind: "other", note: "something light at night", often: "sometimes" }] });
+    expect(r.error).toBeUndefined();
+    expect(r.house.rules).toEqual([{ kind: "swap", who: "Nani", items: ["@white_rice"], to: "millets", often: "sometimes", days: [] },
+      { kind: "require", who: "Nani", items: ["fruit"], per_week: 3, days: [] }, { kind: "other", note: "something light at night", often: "sometimes", days: [] }]);
+    expect(r.said).toBe("Everyone: something light at night 2–3 times a week\nNani: has millets in place of white rice 2–3 times a week; has fruit 3 times a week");
+    expect((await op("set_house_rules", { add: true, rules: [{ kind: "avoid", items: ["@sweet"], often: "sometimes" }] })).error).toContain("takes no often");
+    expect((await op("set_house_rules", { add: true, rules: [{ kind: "swap", who: "Nani", items: ["rice"], to: "millets", often: "daily" }] })).error).toContain("often must be one of usually, sometimes, rarely");
+    // A require kept every time still needs its meals.
+    expect((await op("set_house_rules", { add: true, rules: [{ kind: "require", who: "Nani", items: ["fruit"] }] })).error).toContain("needs slots");
+  });
+
   it("set_cook, set_house_rules and set_slots fill the one house row", async () => {
     const { op, rows } = await boot();
     await op("set_cook", { name: "Lakshmi", days: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"], arrival: "07:30", makes_well: "dosa, sambar" });

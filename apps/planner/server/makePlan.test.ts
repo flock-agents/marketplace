@@ -592,3 +592,62 @@ describe("make_plan: one call per meal of the day, everyone fed, one run at a ti
     expect(upma.portion_note).toBeNull();
   });
 });
+
+// Owner, 23 Nov: the week keeps the family's frequency words. A dish of one person's is counted like any other; a dish said
+// "sometimes" comes on 2 days at most, "on Friday" on Friday only; a soft swap ("millets are good for him") 2–3 meals, not all.
+describe("make_plan: how often", () => {
+  const dinnerWith = (extra: (m: any, i: number) => any[]) => (u: any, n: number) => {
+    const r = rotate(u) as any;
+    if (u.slot === "Dinner" && n === 1) r.meals.forEach((m: any, i: number) => m.dishes.push(...extra(m, i)));
+    return r;
+  };
+
+  it("a dish of one person's said 'sometimes', planned every night: the menu call is told how often, the nights past 2 are sent back", async () => {
+    const f = fakeModel({ menu: dinnerWith(() => [{ name: "Curd rice", for: ["Agastya"] }]) });
+    const k = await family(f.model);
+    await k.op("set_family_dishes", { dishes: [{ name: "Curd rice", slots: ["Dinner"], for: ["Agastya"], often: "sometimes" }, { name: "Lemon rice", slots: ["Lunch"], days: ["Fri"] }] });
+    const r = await k.op("make_plan", { week_start: MON });
+    expect(r.ok).toBe(true);
+    const first = f.firsts().find((a) => a.user.slot === "Dinner")!;
+    expect(first.user.how_often).toEqual(["Curd rice, for Agastya: at most 2 days this week"]);
+    expect(f.firsts().find((a) => a.user.slot === "Lunch")!.user.how_often).toEqual(["Lemon rice: on Fri only"]);
+    expect(f.firsts().find((a) => a.user.slot === "Breakfast")!.user.how_often).toBeUndefined();
+    const fix = f.fixes().find((a) => a.user.slot === "Dinner")!;
+    expect(fix.user.fix.map((m: any) => m.day)).toEqual(["Wed", "Thu", "Fri", "Sat"]);
+    expect(fix.user.fix[0].wrong).toEqual(["Curd rice is already on Mon and Tue: the family has it sometimes: 2 days a week at most, plan something else here"]);
+    expect(daysOn(await k.week(), "Curd rice")).toBe(2);
+  });
+
+  it("a dish on its own days: on another day it is sent back; code moves it when the model never does", async () => {
+    const f = fakeModel({ menu: (u: any) => {
+      const r = rotate(u) as any;
+      if (u.slot === "Lunch") r.meals.forEach((m: any) => { if (m.date === MON) m.dishes = [{ name: "Lemon rice", for: ["everyone"] }]; });
+      return r;
+    } });
+    const k = await family(f.model, { dishes: { ...DISHES, Lunch: ["Rajma", "Chole", "Kadhi", "Lemon rice"] } });
+    await k.op("set_family_dishes", { dishes: [{ name: "Lemon rice", slots: ["Lunch"], days: ["Fri"] }] });
+    const r = await k.op("make_plan", { week_start: MON });
+    expect(r.ok).toBe(true);
+    const week = await k.week();
+    const lemon = week.days.filter((d: any) => d.meals.some((m: any) => m.dishes.some((x: any) => x.name === "Lemon rice"))).map((d: any) => d.date);
+    expect(lemon.every((d: string) => d === "2026-11-27")).toBe(true);
+  });
+
+  it("a soft swap at every lunch, never fixed by the model: code takes the swap off the meals past 3, and the menu is told the count", async () => {
+    const swapEveryLunch = (u: any) => ({ meals: (u.meals ?? u.fix).map((m: any, i: number) => ({ date: m.date, slot: m.slot,
+      dishes: m.slot !== "Lunch" ? [{ name: (DISHES[m.slot] ?? EXTRA)[i % 3], for: ["everyone"] }]
+        : [{ name: ["Rajma", "Chole", "Kadhi"][i % 3], for: ["everyone"] }, { name: "Rice", for: ["everyone"], portion_note: "millets in place of rice for Asha" }] })) });
+    const f = fakeModel({ menu: swapEveryLunch });
+    const k = await family(f.model, { dishes: { Breakfast: ["Upma", "Paratha", "Dalia"], Lunch: ["Rajma", "Chole", "Kadhi", "Rice"], Dinner: DISHES.Dinner } });
+    await k.op("set_house_rules", { add: true, rules: [{ kind: "swap", who: "Asha", items: ["@white_rice"], to: "millets", often: "sometimes" }] });
+    const r = await k.op("make_plan", { week_start: MON });
+    expect(r.ok).toBe(true);
+    expect(f.firsts().find((a) => a.user.slot === "Lunch")!.user.how_often[0]).toMatch(/^Asha has millets in place of white rice 2–3 times a week \(all meals together; at Lunch: /);
+    expect(f.firsts().find((a) => a.user.slot === "Lunch")!.user.meals[0].rules).toContain("Asha has millets in place of white rice 2–3 times a week");
+    const week = await k.week();
+    const swapped = allMeals(week).filter((m: any) => m.dishes.some((d: any) => /millets/.test(d.portion_note ?? ""))).length;
+    expect(swapped).toBeGreaterThanOrEqual(2);
+    expect(swapped).toBeLessThanOrEqual(3);
+    expect(r.unmet).toBeUndefined();
+  });
+});
