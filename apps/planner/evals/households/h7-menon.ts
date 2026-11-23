@@ -38,7 +38,7 @@ export const h7: Household = {
     extraSlots: [],
     orderIn: [{ day: "Sat", slot: "Lunch", note: "eaten out" }, { day: "Sat", slot: "Dinner", note: "ordered in" }, { day: "Sun", slot: "Lunch", note: "ordered in" }],
     hardRules: [avoid("no_red_meat_tanya", "Tanya: no red meat", ["mutton", "lamb", "beef", "pork", "goat"], { who: "Tanya" })],
-    softNotes: [{ id: "high_protein", who: "Nikhil", text: "high protein", re: /protein/i, often: "usually" }],
+    softNotes: [{ id: "high_protein", who: "Nikhil", text: "high protein", re: /protein/i }],
     dishes: [
       { name: "Eggs", slots: ["Breakfast"], for: ["Nikhil"], often: "usually" }, { name: "Oats", slots: ["Breakfast"], for: ["Tanya"] }, { name: "Smoothie", slots: ["Breakfast"], for: ["Tanya"] },
       { name: "Toast", slots: ["Breakfast"], often: "sometimes" },

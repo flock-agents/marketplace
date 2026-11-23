@@ -28,7 +28,7 @@ export function setupOfTruth(h: Household): Setup {
     orderIn: t.orderIn,
     rules: [
       ...t.hardRules.map((r) => r.rule),
-      ...t.softNotes.map((n): PlannerRule & { often?: string } => ({ kind: "other", ...(n.who ? { who: n.who } : {}), note: n.text, ...(n.often ? { often: n.often } : {}) })),
+      ...t.softNotes.map((n): PlannerRule & { often?: string } => n.rule ?? ({ kind: "other", ...(n.who ? { who: n.who } : {}), note: n.text, ...(n.often ? { often: n.often } : {}) })),
       ...t.homeCook.flatMap((c) => c.days.filter((d) => !t.cook?.days.includes(d)).map((d) => ({ kind: "other", days: [d], ...(c.slots ? { slots: c.slots } : {}), note: `${c.by} cooks` }))),
     ],
     dishes: t.dishes.map((d) => ({ name: d.name, slots: d.slots, ...(d.for ? { for: d.for } : {}), ...(d.often ? { often: d.often } : {}), ...(d.per_week ? { per_week: d.per_week } : {}), ...(d.days ? { days: d.days } : {}) })),

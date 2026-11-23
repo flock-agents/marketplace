@@ -39,7 +39,9 @@ export type HardRule = {
 /** A soft note (less salt, high protein, "ragi is good for her"): found as any saved rule of that person whose words match.
  *  `often`/`per_week`: how often it should show in a week (a soft preference, not every meal). `items`: what it is about,
  *  for the weekly count in Eval 2. */
-export type SoftNote = { id: string; who?: string; text: string; re: RegExp; often?: Often; per_week?: [number, number]; items?: string[] };
+export type SoftNote = { id: string; who?: string; text: string; re: RegExp; often?: Often; per_week?: [number, number]; items?: string[];
+  /** The rule TRUTH loads for it in Eval 2 (default: an `other` note with its text and `often`). */
+  rule?: PlannerRule & { often?: Often } };
 
 /** A dish of the family's. `for`: only when the family says it is someone's. `often`, `per_week`, `days`: how often or when
  *  it is eaten, when the family said ("sometimes", "twice a week", "on Sunday"). */
@@ -124,5 +126,5 @@ export function truthDishOf(name: string, dishes: TruthDish[]): TruthDish | null
 export const slotFor = (t: TruthSlot, saved: { name: string }[]): string | null =>
   saved.find((s) => lower(s.name) === lower(t.name))?.name ?? saved.find((s) => t.match.test(s.name))?.name ?? null;
 
-/** How many days a week an `often` allows at most. */
-export const oftenMax = (o: Often | undefined): number | null => (o === "rarely" ? 1 : o === "sometimes" ? 2 : null);
+/** How many days a week a dish's `often` allows at most (the planner's reading: usually 5, sometimes 2, rarely 1). */
+export const oftenMax = (o: Often | undefined): number | null => (o === "rarely" ? 1 : o === "sometimes" ? 2 : o === "usually" ? 5 : null);

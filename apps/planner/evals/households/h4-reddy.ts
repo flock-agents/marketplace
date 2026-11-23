@@ -53,7 +53,7 @@ export const h4: Household = {
       { id: "ekadashi", title: "Sarojini fasts on Ekadashi (fruits only)", rule: { kind: "fasting", who: "Sarojini", days: ["Ekadashi"], note: "fasts on Ekadashi, only fruits" }, check: null, words: /ekadashi/i },
     ],
     softNotes: [
-      { id: "ragi_good", who: "Sarojini", text: "ragi is good for her, a few times a week", re: /ragi|millet/i, often: "sometimes", per_week: [2, 5], items: ["ragi"] },
+      { id: "ragi_good", who: "Sarojini", text: "ragi is good for her, a few times a week", re: /ragi|millet/i, often: "sometimes", per_week: [2, 3], items: ["ragi"] },
       { id: "less_salt", who: "Venkat", text: "less salt", re: /salt/i },
       { id: "soft_food", who: "Venkat", text: "soft food", re: /soft|chew/i },
     ],

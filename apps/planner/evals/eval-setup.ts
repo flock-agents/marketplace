@@ -2,7 +2,7 @@
 // answering the manifest's questions, one correction), then apply_setup on a fresh planner database with Flock's household
 // facts and that transcript, then the saved rows scored field by field against TRUTH in code (lib/score-setup.ts).
 //
-//   bun evals/eval-setup.ts [--only h1,h3] [--repeat 1] [--out <dir>] [--reuse-transcripts <dir>] [--concurrency 4]
+//   bun evals/eval-setup.ts [--only h1,h3] [--repeat 1] [--out <dir>] [--reuse-transcripts <dir>] [--rescore <results.json>] [--concurrency 4]
 //                           [--model deepseek/deepseek-v4-flash] [--persona-model <id>] [--no-think] [--self-test]
 //
 // --reuse-transcripts <dir>: read <dir>/transcripts/<household>-rep<n>.json instead of making new chats (re-score a setup
@@ -42,6 +42,8 @@ if (flag("self-test")) {
   process.exit(bad ? 1 : 0);
 }
 
+// --rescore <results.json>: score the setups a past run saved again (a scorer change), no model.
+const RESCORE = arg("rescore");
 mkdirSync(join(OUT, "transcripts"), { recursive: true });
 
 async function runOne(h: Household, rep: number) {
@@ -70,7 +72,14 @@ async function runOne(h: Household, rep: number) {
 const jobs = HH.flatMap((h) => Array.from({ length: REPEAT }, (_, i) => ({ h, rep: i + 1 })));
 const t0 = Date.now();
 log0(`Eval 1 (setup): ${HH.length} households x ${REPEAT}, model ${MODEL}${flag("no-think") ? " (no think)" : ""}, persona ${REUSE ? `reused from ${REUSE}` : PERSONA}, out ${OUT}`);
+const past = RESCORE ? JSON.parse(readFileSync(RESCORE, "utf8")).results as any[] : null;
 const results = await pool(jobs, CONC, async ({ h, rep }) => {
+  if (past) {
+    const r = past.find((x) => x.household === h.id && x.rep === rep);
+    if (!r?.setup) return { household: h.id, title: h.title, rep, ok: false, error: "not in the rescored run", rates: {} as Rates, notes: [] as string[] } as any;
+    const sc = r.ok ? scoreSetup(h, r.setup) : { rates: {} as Rates, notes: [`apply_setup failed`] };
+    return { ...r, rates: sc.rates, notes: sc.notes };
+  }
   try {
     const r = await runOne(h, rep);
     const fails = Object.entries(r.rates).filter(([, [p, n]]) => p < n).map(([k, x]) => `${k} ${x[0]}/${x[1]}`);
@@ -86,7 +95,7 @@ const results = await pool(jobs, CONC, async ({ h, rep }) => {
 const tot = totals(results.map((r) => r.rates));
 const fields = Object.keys(tot);
 const lines: string[] = [];
-lines.push(`# Eval 1 (setup) — ${new Date().toISOString().slice(0, 16)}`, "", `model ${MODEL}${flag("no-think") ? " (no think)" : ""}; persona ${REUSE ? `transcripts from ${REUSE}` : PERSONA}; repeat ${REPEAT}; ${((Date.now() - t0) / 60000).toFixed(1)} min; spend $${spend.cost.toFixed(3)} (${spend.calls} calls)`, "");
+lines.push(`# Eval 1 (setup) — ${new Date().toISOString().slice(0, 16)}`, "", `model ${MODEL}${flag("no-think") ? " (no think)" : ""}; persona ${REUSE ? `transcripts from ${REUSE}` : PERSONA}${RESCORE ? `; rescored from ${RESCORE} (time and spend are the rescore's)` : ""}; repeat ${REPEAT}; ${((Date.now() - t0) / 60000).toFixed(1)} min; spend $${spend.cost.toFixed(3)} (${spend.calls} calls)`, "");
 lines.push(`| household | ${fields.join(" | ")} |`, `|---|${fields.map(() => "---").join("|")}|`);
 for (const r of results) lines.push(`| ${r.household}${REPEAT > 1 ? ` #${r.rep}` : ""}${r.ok ? "" : " (FAILED)"} | ${fields.map((f) => (r.rates[f] ? `${r.rates[f][0]}/${r.rates[f][1]}` : "–")).join(" | ")} |`);
 lines.push(`| **total** | ${fields.map((f) => pct(tot[f])).join(" | ")} |`, "");

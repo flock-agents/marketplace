@@ -30,8 +30,8 @@ parts and staple).
 | h7-menon | young couple, one weekday visit makes lunch+dinner | no breakfast by the cook, three weekend meals out/in, high protein, no red meat for one; eggs every morning, biryani rarely |
 | h8-banerjee | Bengali, grandparents, cook every day | rice-dal-bhaja-torkari-fish shape, fish most days, luchi Sunday, veg no-onion-garlic grandmother, diabetic grandfather |
 
-Frequency words are encoded in TRUTH (dish `often` usually/sometimes/rarely, `per_week`, `days`; soft note `often` /
-`per_week` range). The current planner has no such fields, so those fields score ~0 today: that is the "before".
+Frequency words are encoded in TRUTH (dish `often` usually ≤5 / sometimes ≤2 / rarely ≤1 days a week, `per_week`, `days`; a soft note's `often` and
+its weekly range, sometimes 2–3, usually 4–5). The planner before 8dc4b89 had no such fields: its runs are the "before".
 
 ## Eval 1 — user input → constraints
 
@@ -41,6 +41,7 @@ bun evals/eval-setup.ts                                  # all 8, repeat 1, new 
 bun evals/eval-setup.ts --reuse-transcripts evals/results/<run>   # re-score a setup change on the same chats
 bun evals/eval-setup.ts --only h3,h5 --repeat 3 --concurrency 4
 bun evals/eval-setup.ts --self-test                      # TRUTH scored against itself: every field must pass (no model)
+bun evals/eval-setup.ts --rescore evals/results/<run>/results.json --out evals/results/<run>   # a scorer change, no model
 ```
 
 Flags: `--model` (apply_setup's balanced/fast upstream, default `deepseek/deepseek-v4-flash` as the live gateway),
@@ -68,6 +69,7 @@ Scorecard fields (each a pass rate over what it counts; `–` = not applicable t
 | hard_rules | each hard rule saved as a rule the planner checks (who, days, slots, items covered) |
 | no_unsaid_rules | every saved rule traces to something the family said (a hard rule or a soft note) |
 | soft_notes | each soft note (less salt, less spicy, high protein…) saved for its person |
+| soft_kept_soft | a soft note is not turned into a rule enforced at every meal ("less oil" saved as avoid oil) |
 | rule_frequency | a soft note with a frequency saved with it (`often`) |
 | dish_no_wrong_restriction | no dish saved as someone's own when the family eats it together |
 | personal_dishes | each one-person dish saved for exactly that person |
@@ -85,6 +87,7 @@ bun evals/eval-plan.ts --from-eval1 evals/results/<eval1 run>/results.json   # p
 bun evals/eval-plan.ts --perturb                         # robustness: h3, h1, h2 x 5 defects, one at a time
 bun evals/eval-plan.ts --perturb lunch_restricted,no_examples --only h3,h6
 bun evals/eval-plan.ts --compare evals/results/<a>/results.json evals/results/<b>/results.json   # pairwise judge
+bun evals/eval-plan.ts --rescore evals/results/<run>/results.json   # a scorer change on the saved weeks, judge kept, no model
 ```
 
 Flags: `--week` (default 2026-11-30), `--model`, `--no-think`, `--no-judge`, `--judge-model` (default
@@ -106,6 +109,7 @@ Code scores:
 | hard_rules | each hard rule held all week, person by person (avoid by name and ingredients, fasts, swaps) |
 | everyone_fed | at each main meal every diner (not fasting) has a main dish, not only rice/roti/sides |
 | personal_dish_freq | a one-person dish on at most its count (`rarely` 1, `sometimes` 2, `per_week` n, else 3 days) |
+| personal_dish_eaters | a one-person dish is given to its person only (Tanya's oats are not Nikhil's breakfast) |
 | dish_frequency | a dish with `often`/`per_week` within its count, `usually` on 3+ days, a day-bound dish only on its days |
 | soft_frequency | a soft preference with a range (millets good for him) in that many of the person's meals |
 | meal_shape | each meal of a slot with a typical meal: shared parts = their parts ±1, and their staple when their words name one (a one-pot dish like bisi bele bath counts as a miss here) |
@@ -135,5 +139,6 @@ instead of silently filling.
 
 ## Results
 
-`results/` holds the runs (`results.json` with every setup, transcript and week, and `summary.md`). Baselines on the code at
-the commit that added these evals: `results/baseline-2026-11-23-*`.
+`results/` holds the runs (`results.json` with every setup, transcript and week, and `summary.md`). `results/before-257ef20-*`: the
+planner before the how-often change (h3 fixture v1, without the rajma/chole/chapati counts); `results/cf9a391-*`: the
+merged how-often planner, the scorecards to compare against.

@@ -38,6 +38,26 @@ export async function readWeek(k: Kit, h: Household, week: string): Promise<{ me
   return { meals: out, slotNames };
 }
 
+/** A week back from its text (weekText), for re-scoring a past run that kept only the text. */
+export function weekOf(text: string, week: string): Week {
+  const out: Week = [];
+  for (const line of text.split("\n")) {
+    const day = line.slice(0, 3) as Weekday, i = WEEK.indexOf(day);
+    for (const part of line.slice(5).split(" | ")) {
+      const at = part.indexOf(": ");
+      const slot = part.slice(0, at), rest = part.slice(at + 2);
+      const ordered = rest.startsWith("(ordered in");
+      const dishes: PDish[] = [];
+      if (!ordered) for (const m of rest.matchAll(/\s*([^[]+?)\s*\[([^\]]*)\](?:,|$)/g)) {
+        const n = /^(.*?)(?: \((.*)\))?$/.exec(m[1].trim())!;
+        dishes.push({ name: n[1], portion_note: n[2] ?? null, eaters: m[2].split(", ").filter(Boolean), items: [] });
+      }
+      out.push({ day, date: dateOf(week, i), slot, ordered_in: ordered, dishes });
+    }
+  }
+  return out;
+}
+
 /** The week as text, for the judge and the report. */
 export const weekText = (w: Week) => WEEK.map((day) => `${day}: ${w.filter((m) => m.day === day).map((m) => `${m.slot}: ${m.ordered_in ? "(ordered in / eaten out)"
   : m.dishes.map((d) => `${d.name}${d.portion_note ? ` (${d.portion_note})` : ""} [${d.eaters.join(", ")}]`).join(", ") || "(nothing)"}`).join(" | ")}`).join("\n");
@@ -109,15 +129,23 @@ export function scorePlan(h: Household, w: Week, slotNames: Map<string, string>,
     const days = dishDays(td), max = td.per_week ?? oftenMax(td.often) ?? 3;
     add("personal_dish_freq", days.length <= max, `${td.name} [${td.for!.join("+")}] on ${days.length} days (${days.join(",")}), at most ${max}`);
   }
+  // A one-person dish goes to its person: no one else is given it (Tanya's oats are not Nikhil's breakfast).
+  for (const m of w.filter((x) => !x.ordered_in)) for (const d of m.dishes) {
+    const td = truthDishOf(d.name, book);
+    if (!td?.for || !td.slots.some((s) => real(s) === m.slot)) continue;
+    const others = d.eaters.filter((e) => !td.for!.some((p) => sameName(p, e)));
+    add("personal_dish_eaters", !others.length, `${m.day} ${m.slot}: ${d.name} (${td.for.join("+")}'s) given to ${others.join(", ")}`);
+  }
   for (const td of book.filter((d) => d !== o.extraPersonal && (d.often || d.per_week || d.days))) {
     const days = dishDays(td);
     const max = td.per_week ?? oftenMax(td.often);
-    const okCount = max === null ? (td.often === "usually" ? days.length >= 3 : true) : days.length <= max;
+    const okCount = (max === null || days.length <= max) && (td.often !== "usually" || days.length >= 3);
     const okDays = !td.days || days.every((d) => td.days!.includes(d));
     add("dish_frequency", okCount && okDays, `${td.name} (${[td.often, td.per_week && `${td.per_week}/wk`, td.days?.join(",")].filter(Boolean).join(", ")}) planned on ${days.join(",") || "no day"}`);
   }
   for (const n of t.softNotes.filter((x) => x.per_week && x.items)) {
-    const meals = w.filter((m) => !m.ordered_in && m.dishes.some((d) => eats(d, n.who!) && n.items!.some((i) => dishHas({ name: d.name, ingredients: d.items }, i) || new RegExp(`\\b${i}`, "i").test(d.name))));
+    const says = (d: PDish) => n.items!.some((i) => new RegExp(`\\b${i}`, "i").test(`${d.name} ${d.portion_note ?? ""}`) || dishHas({ name: d.name, ingredients: d.items }, i));
+    const meals = w.filter((m) => !m.ordered_in && m.dishes.some((d) => eats(d, n.who!) && says(d)));
     add("soft_frequency", meals.length >= n.per_week![0] && meals.length <= n.per_week![1], `${n.who}: "${n.text}" in ${meals.length} meals (want ${n.per_week!.join("–")})`);
   }
 

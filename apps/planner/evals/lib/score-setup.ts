@@ -102,8 +102,14 @@ export function scoreSetup(h: Household, s: Setup): SetupScore {
   const unsaid = s.rules.filter((r) => !isHomeCookNote(r) && !explained(h, r));
   add("no_unsaid_rules", !unsaid.length, `not said: ${JSON.stringify(unsaid)}`);
   for (const n of t.softNotes) add("soft_notes", softFound(n, s.rules), `missing: ${n.who ?? "house"}: ${n.text}`);
-  for (const n of t.softNotes.filter((x) => x.often || x.per_week))
-    add("rule_frequency", s.rules.some((r) => (!n.who || (r.who && sameName(n.who, r.who))) && n.re.test(JSON.stringify([r.note ?? "", r.items ?? [], r.to ?? ""])) && r.often === n.often),
+  // A soft note kept soft: not turned into a rule the planner enforces at every meal ("less oil" as never oil).
+  for (const n of t.softNotes) {
+    const hard = s.rules.filter((r) => ["avoid", "only", "cap"].includes(r.kind) && (!n.who || (r.who && sameName(n.who, r.who))) && n.re.test(JSON.stringify([r.note ?? "", r.items ?? [], r.to ?? ""])));
+    add("soft_kept_soft", !hard.length, `${n.who ?? "house"}: "${n.text}" saved as ${hard.map((r) => `${r.kind} ${JSON.stringify(r.items ?? [])}`).join(", ")}`);
+  }
+  for (const n of t.softNotes.filter((x) => x.often))
+    add("rule_frequency", s.rules.some((r) => (!n.who || (r.who && sameName(n.who, r.who))) && n.re.test(JSON.stringify([r.note ?? "", r.items ?? [], r.to ?? ""]))
+      && (r.often === n.often || (!!n.per_week && r.per_week != null && r.per_week >= n.per_week[0] && r.per_week <= n.per_week[1]))),
       `${n.who}: "${n.text}" saved without often=${n.often}`);
   // Dishes
   const wrong: string[] = [];

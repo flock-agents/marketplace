@@ -7,6 +7,7 @@
 //   bun evals/eval-plan.ts --from-eval1 <eval1 results.json>      plan from what Eval 1's apply_setup saved (still scored vs TRUTH)
 //   bun evals/eval-plan.ts --perturb [kind,kind] [--only h3,h1,h2] robustness: TRUTH with one defect at a time (setup.ts PERTURBATIONS)
 //   bun evals/eval-plan.ts --compare a/results.json b/results.json pairwise judge of two runs' weeks, per household
+//   bun evals/eval-plan.ts --rescore <results.json>                 score a past run's saved weeks again (a scorer change), judge kept
 import { mkdirSync, writeFileSync, readFileSync, mkdtempSync, rmSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
@@ -14,7 +15,7 @@ import { boot } from "../server/testkit";
 import { appModel, arg, flag, pool, spend, DEFAULT_UPSTREAM, type CallRow } from "./lib/model";
 import { HOUSEHOLDS, pick } from "./households";
 import { loadSetup, perturb, personalDishOwner, PERTURBATIONS, setupOfTruth, type Perturbation, type Setup } from "./lib/setup";
-import { readWeek, scorePlan, weekText } from "./lib/score-plan";
+import { readWeek, scorePlan, weekOf, weekText } from "./lib/score-plan";
 import { AXES, DEFAULT_JUDGE, judgePair, judgeWeek, type JudgeScore } from "./lib/judge";
 import { pct, totals, type Rates } from "./lib/score-setup";
 import type { Household } from "./lib/truth";
@@ -44,6 +45,25 @@ if (flag("compare")) {
   process.exit(0);
 }
 
+// ── Re-score a past run's weeks (a scorer change), keeping its judge scores: no model ──
+const RESCORE = arg("rescore");
+const past = RESCORE ? JSON.parse(readFileSync(RESCORE, "utf8")) : null;
+if (past) {
+  for (const r of past.results) {
+    const h = HOUSEHOLDS.find((x) => x.id === r.household);
+    if (!h || !r.week) continue;
+    const meals = r.meals ?? weekOf(r.week, past.week);
+    const extraPersonal = r.perturb === "personal_dish" ? { name: "Curd rice", slots: ["Dinner"], for: [personalDishOwner(h)] } : undefined;
+    const sc = scorePlan(h, meals, new Map(Object.entries(r.slot_names ?? {})), { unmet: r.unmet, message: r.message }, { extraPersonal });
+    // A run saved before `meals` was kept has only the week's text: no ingredients, so the checks that read ingredients
+    // (hard rules, soft frequency) keep the run's own scores and notes.
+    const kept = r.meals ? [] : ["hard_rules", "soft_frequency"];
+    for (const f of kept) { if (r.rates?.[f]) sc.rates[f] = r.rates[f]; else delete sc.rates[f]; }
+    const notes = [...sc.notes.filter((n) => !kept.some((f) => n.startsWith(`${f}:`))), ...(r.notes ?? []).filter((n: string) => n.startsWith("judge failed") || kept.some((f) => n.startsWith(`${f}:`)))];
+    Object.assign(r, { rates: sc.rates, notes, facts: sc.facts });
+  }
+}
+
 // ── The runs ──
 type Job = { h: Household; setup: Setup; perturb?: Perturbation; source: string };
 const jobs: Job[] = [];
@@ -60,8 +80,8 @@ if (FROM) {
   for (const h of pick(arg("only") ?? "h3,h1,h2")) for (const kind of kinds) jobs.push({ h, setup: perturb(h, setupOfTruth(h), kind), perturb: kind, source: `truth + ${kind}` });
 } else for (const h of pick(arg("only"))) jobs.push({ h, setup: setupOfTruth(h), source: "truth" });
 
-const mode = FROM ? "from-eval1" : flag("perturb") ? "perturb" : "truth";
-const OUT = arg("out") ?? join(import.meta.dir, "results", `plan-${mode}-${stamp}`);
+const mode: string = past ? past.mode : FROM ? "from-eval1" : flag("perturb") ? "perturb" : "truth";
+const OUT = past ? join(RESCORE!, "..") : arg("out") ?? join(import.meta.dir, "results", `plan-${mode}-${stamp}`);
 mkdirSync(OUT, { recursive: true });
 
 async function runOne(j: Job) {
@@ -80,14 +100,14 @@ async function runOne(j: Job) {
     let judge: JudgeScore | null = null;
     if (!flag("no-judge") && !j.perturb && meals.length) { try { judge = await judgeWeek(j.h, week, JUDGE); } catch (e) { score.notes.push(`judge failed: ${e}`); } }
     return { household: j.h.id, title: j.h.title, perturb: j.perturb, source: j.source, ok: plan.ok === true, plan_ms: ms, refused,
-      rates: score.rates, notes: score.notes, facts: score.facts, judge, unmet: plan.unmet ?? [], message: plan.message ?? plan.say, week,
+      rates: score.rates, notes: score.notes, facts: score.facts, judge, unmet: plan.unmet ?? [], message: plan.message ?? plan.say, week, meals, slot_names: Object.fromEntries(slotNames),
       calls: calls.length, cost: calls.reduce((a, c) => a + c.cost, 0) };
   } finally { rmSync(dataDir, { recursive: true, force: true }); }
 }
 
 const t0 = Date.now();
-log0(`Eval 2 (plan, ${mode}): ${jobs.length} runs, week ${WEEK}, model ${MODEL}${flag("no-think") ? " (no think)" : ""}, judge ${flag("no-judge") ? "off" : JUDGE}, out ${OUT}`);
-const results = await pool(jobs, CONC, async (j) => {
+if (!past) log0(`Eval 2 (plan, ${mode}): ${jobs.length} runs, week ${WEEK}, model ${MODEL}${flag("no-think") ? " (no think)" : ""}, judge ${flag("no-judge") ? "off" : JUDGE}, out ${OUT}`);
+const results: any[] = past ? past.results : await pool(jobs, CONC, async (j) => {
   const label = `${j.h.id}${j.perturb ? ` / ${j.perturb}` : ""}`;
   try {
     const r = await runOne(j);
@@ -103,7 +123,7 @@ const results = await pool(jobs, CONC, async (j) => {
 // ── The scorecard ──
 const lines: string[] = [];
 const minutes = ((Date.now() - t0) / 60000).toFixed(1);
-lines.push(`# Eval 2 (plan, ${mode}) — ${new Date().toISOString().slice(0, 16)}`, "", `week ${WEEK}; model ${MODEL}${flag("no-think") ? " (no think)" : ""}; judge ${flag("no-judge") ? "off" : JUDGE}; ${minutes} min; spend $${spend.cost.toFixed(3)} (${spend.calls} calls)`, "");
+lines.push(`# Eval 2 (plan, ${mode}) — ${new Date().toISOString().slice(0, 16)}`, "", `week ${WEEK}; model ${MODEL}${flag("no-think") ? " (no think)" : ""}; judge ${flag("no-judge") ? "off" : JUDGE}; ${past ? `re-scored from the saved weeks (the run: ${past.minutes ?? "?"} min, $${(past.spend?.cost ?? 0).toFixed(3)})` : `${minutes} min; spend $${spend.cost.toFixed(3)} (${spend.calls} calls)`}`, "");
 const groups = mode === "perturb" ? Object.keys(PERTURBATIONS).filter((p) => results.some((r) => r.perturb === p)) : [""];
 for (const g of groups) {
   const rs = results.filter((r) => (r.perturb ?? "") === g);
@@ -125,7 +145,7 @@ for (const r of results) {
 const kinds = new Map<string, number>();
 for (const r of results) for (const n of r.notes ?? []) { const k = n.split(":")[0]; kinds.set(k, (kinds.get(k) ?? 0) + 1); }
 lines.push("## Top failure kinds", "", ...[...kinds].sort((a, b) => b[1] - a[1]).map(([k, n]) => `- ${k}: ${n}`), "");
-writeFileSync(join(OUT, "results.json"), JSON.stringify({ kind: "eval2", mode, week: WEEK, model: MODEL, judge: JUDGE, spend, results }, null, 1));
+writeFileSync(join(OUT, "results.json"), JSON.stringify(past ? past : { kind: "eval2", mode, week: WEEK, model: MODEL, judge: JUDGE, minutes: Number(minutes), spend, results }, null, 1));
 writeFileSync(join(OUT, "summary.md"), lines.join("\n"));
 log0(`\n${lines.join("\n")}\nsaved ${OUT}/results.json and summary.md`);
 process.exit(0);
