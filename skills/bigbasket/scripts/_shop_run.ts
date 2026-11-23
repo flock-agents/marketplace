@@ -10,11 +10,13 @@ import {
   persistentCreate,
   persistentInteract,
   persistentClose,
+  runPressLoop,
+  type PageAction,
 } from "../../_shared/_grocery_helpers";
 import {
-  addressListScript,
   cartReadScript,
-  emptyCartScript,
+  emptyCartLoop,
+  listSavedAddresses,
   noSavedAddresses,
   notTheCart,
   parseJson,
@@ -36,11 +38,21 @@ function failOn(read: any, what: string): void {
 
 const shown = (a: SavedAddress) => ({ label: a.label, address: a.text, selected: a.selected });
 
+/** A persistent session on `url` after `actions`, and its PageStep; exits with SESSION_ERROR when none opened. */
+async function openSession(site: ShopSite, url: string, actions: PageAction[]): Promise<{ sessionId: string; step: PageStep }> {
+  const opened = await persistentCreate(site.config, url, actions);
+  const sessionId: string = opened?.persistentSessionId || "";
+  if (!sessionId) errorJson("SESSION_ERROR", "Failed to create persistent session");
+  const step: PageStep = async (stepActions) => parseJson((await persistentInteract(site.config, sessionId, stepActions))?.content);
+  return { sessionId, step };
+}
+
 /** list-addresses: opens the header's picker, reads every saved address, closes it without picking. */
 export async function listAddresses(site: ShopSite): Promise<void> {
   requireBrowserSession();
-  const result = await browserInteract(site.config, site.homeUrl, [SETTLE], undefined, addressListScript(site, true));
-  const read = parseJson(result?.content);
+  const { sessionId, step } = await openSession(site, site.homeUrl, [SETTLE]);
+  const read = await listSavedAddresses(site, step);
+  await persistentClose(site.config, sessionId).catch(() => {});
   const missing = noSavedAddresses(site, read);
   if (missing) errorJson(missing.code, missing.message);
   console.log(JSON.stringify({ platform: site.config.name, addresses: read.saved.map(shown), currentLocation: read.location || null }));
@@ -56,13 +68,7 @@ export async function setDeliveryLocation(site: ShopSite): Promise<void> {
   const wanted = String(PARAMS.address || "").trim();
   if (!wanted) errorJson("MISSING_PARAM", "address is required: the delivery address agreed with the family (its flat or house number and building)");
 
-  const opened = await persistentCreate(site.config, site.homeUrl, [SETTLE]);
-  const sessionId: string = opened?.persistentSessionId || "";
-  if (!sessionId) errorJson("SESSION_ERROR", "Failed to create persistent session");
-  const step: PageStep = async (script, waitMs) => {
-    const actions = waitMs ? [{ action: "wait", delay: waitMs }] : [];
-    return parseJson((await persistentInteract(site.config, sessionId, actions, false, script))?.content);
-  };
+  const { sessionId, step } = await openSession(site, site.homeUrl, [SETTLE]);
 
   const result = await selectAddress(site, wanted, step);
   await persistentClose(site.config, sessionId).catch(() => {});
@@ -122,8 +128,9 @@ export async function viewCart(site: ShopSite): Promise<void> {
 /** empty-cart: removes every line, then proves the cart (not some other page) is empty. */
 export async function emptyCart(site: ShopSite): Promise<void> {
   requireBrowserSession();
-  const result = await browserInteract(site.config, site.cartUrl, site.openCart, undefined, emptyCartScript(site));
-  const read = parseJson(result?.content);
+  const { sessionId } = await openSession(site, site.cartUrl, site.openCart);
+  const read = parseJson(await runPressLoop(site.config, sessionId, emptyCartLoop(site)));
+  await persistentClose(site.config, sessionId).catch(() => {});
   failOn(read, "the cart");
   const problem = notTheCart(site, { ...read, items: new Array(read.remaining || 0), bill: [], emptyShown: read.emptyShown || read.removed?.length > 0 });
   if (problem) errorJson("NOT_CART_PAGE", `${problem} Nothing was removed.`);

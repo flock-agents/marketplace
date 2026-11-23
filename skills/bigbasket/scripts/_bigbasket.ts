@@ -3,6 +3,7 @@
  * The cart is the /basket page. The bill selectors are NOT confirmed live: they are the generic
  * ones in _shop.ts.
  */
+import { PRESS_KIT_JS, pressLoop, type PageAction } from "../../_shared/_grocery_helpers";
 import type { AddressPicker, ShopSite } from "./_shop";
 
 /**
@@ -41,19 +42,26 @@ export const SEARCH_CARD = '[class*="SKUDeck___StyledDiv"], [qa="product"], [cla
 
 /**
  * search-products' page script. It waits up to `waitMs` for product cards; a search with none (BigBasket sells
- * nothing that matches, say) answers `{ products: [], noCards: true }` instead of timing out. Then it scrolls twice
- * for lazily drawn cards and reads them. Markup checked live 2026-11-10: a card's h3 holds brand, name and pack on
+ * nothing that matches, say) answers `{ products: [], noCards: true }` instead of timing out. Before the read, the
+ * page is scrolled twice as a person looks down the results (searchActions), for lazily drawn cards. Markup checked live 2026-11-10: a card's h3 holds brand, name and pack on
  * separate lines, with the rating ("4.2", "5122 Ratings") between them; the link is /pd/<id>/<slug>/; prices are
  * the ₹ amounts (selling first, then MRP); an in-stock card has an "Add" button.
  */
-export function searchScript(maxResults: number, waitMs = 10000): string {
+export function searchActions(waitMs = 10000): PageAction[] {
+  const waitForCards = String.raw`(async () => {
+  const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  for (const end = Date.now() + ${waitMs}; document.querySelectorAll('${SEARCH_CARD}').length === 0 && Date.now() < end; ) await sleep(250);
+})()`;
+  const lookDown = [{ action: "scroll", deltaY: 600 }, { action: "wait", delay: 1000 }];
+  return [{ action: "evaluate", script: waitForCards }, ...lookDown, ...lookDown];
+}
+
+/** The search results read: the cards the page holds (see searchActions). */
+export function searchScript(maxResults: number): string {
   return String.raw`(async () => {
   const maxResults = ${maxResults};
-  const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
   const cardsNow = () => Array.from(document.querySelectorAll('${SEARCH_CARD}'));
-  for (const end = Date.now() + ${waitMs}; cardsNow().length === 0 && Date.now() < end; ) await sleep(250);
   if (cardsNow().length === 0) return JSON.stringify({ products: [], totalResults: 0, noCards: true });
-  for (let i = 0; i < 2; i++) { window.scrollBy(0, 600); await sleep(1000); }
   const rupees = (t) => (t.match(/₹\s*[\d,]+(?:\.\d+)?/g) || []).map((s) => parseFloat(s.replace(/[₹,\s]/g, "")));
   const cards = cardsNow();
   const products = [];
@@ -83,43 +91,60 @@ export function searchScript(maxResults: number, waitMs = 10000): string {
 })()`;
 }
 
+/** The mark add-to-cart's presses on the search results go to, and its page state. */
+const SEARCH_ADD = "bb-search-add";
+
 /**
- * add-to-cart's page script on the search results: finds the card whose link is the product's
- * (/pd/<id>/), presses its "Add" button (found by its text), then the stepper's "+" for each more
- * unit. It never opens the product page. A card with no Add button is out of stock or changed.
+ * add-to-cart's page actions on the search results: finds the card whose link is the product's
+ * (/pd/<id>/) and marks its "Add" button (found by its text) for Flock's real click, then the
+ * stepper's "+" for each more unit. It never opens the product page. A card with no Add button is
+ * out of stock or changed. The last action's answer:
  * → { success, productId, name, quantityAdded, quantityAsked } or { error, code, message }.
  */
-export function addFromSearchScript(productId: string, quantity: number, waitMs = 10000): string {
-  return String.raw`(async () => {
+export function addFromSearchActions(productId: string, quantity: number, waitMs = 10000): PageAction[] {
+  const start = String.raw`(async () => {
+  ${PRESS_KIT_JS}
   const ID = ${JSON.stringify(productId)};
-  const QUANTITY = ${quantity};
+  const MARK = ${JSON.stringify(SEARCH_ADD)};
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
   const visible = (el) => !!el && el.getClientRects().length > 0;
   const text = (el) => ((el && (el.innerText || el.textContent)) || "").replace(/\s+/g, " ").trim();
   const cardOf = () => Array.from(document.querySelectorAll('${SEARCH_CARD}')).find((el) => Array.from(el.querySelectorAll('a[href*="/pd/"]')).some((a) => (a.getAttribute("href") || "").match(/\/pd\/(\d+)/)?.[1] === ID));
+  const s = flockState(MARK, true);
+  flockClear(MARK);
   let card = null;
   for (const end = Date.now() + ${waitMs}; !(card = cardOf()) && Date.now() < end; ) await sleep(250);
-  if (!card) return JSON.stringify({ error: true, code: "NOT_IN_RESULTS", message: "That product is not in these search results. Search again with its name, then add it with the same query." });
-  card.scrollIntoView({ block: "center" });
-  const name = text(card.querySelector("h3")).substring(0, 200);
+  if (!card) { s.done = true; s.answer = { error: true, code: "NOT_IN_RESULTS", message: "That product is not in these search results. Search again with its name, then add it with the same query." }; return; }
+  s.name = text(card.querySelector("h3")).substring(0, 200);
   const buttons = () => Array.from(card.querySelectorAll('button, [role="button"]')).filter(visible);
   const add = buttons().find((b) => /^add( to basket)?$/i.test(text(b)));
   if (!add) {
     const out = /out of stock|notify me|sold out|currently unavailable/i.test(text(card));
-    return JSON.stringify({ error: true, code: out ? "OUT_OF_STOCK" : "PAGE_CHANGED", message: out ? name + " is out of stock." : "The product card has no Add button: the page may have changed." });
+    s.done = true;
+    s.answer = { error: true, code: out ? "OUT_OF_STOCK" : "PAGE_CHANGED", message: out ? s.name + " is out of stock." : "The product card has no Add button: the page may have changed." };
+    return;
   }
-  add.click();
-  await sleep(1500);
-  let added = 1;
   const plus = () => buttons().find((b) => text(b) === "+" || /increase|increment|add one|plus/i.test(b.getAttribute("aria-label") || ""))
     || (() => { const icons = buttons().filter((b) => !text(b)); return icons.length >= 2 ? icons[icons.length - 1] : null; })();
-  while (added < QUANTITY) {
+  s.step = async () => {
+    flockMark(MARK, null);
+    await flockSettle(s);
     const more = plus();
-    if (!more) break;
-    more.click();
-    await sleep(900);
-    added++;
-  }
-  return JSON.stringify({ success: true, productId: ID, name, quantityAdded: added, quantityAsked: QUANTITY });
+    if (!more) { s.done = true; return; }
+    flockMark(MARK, more);
+    s.added++;
+    s.settleMs = 900;
+  };
+  flockMark(MARK, add);
+  s.added = 1;
+  s.settleMs = 1500;
 })()`;
+  const finish = String.raw`(async () => {
+  ${PRESS_KIT_JS}
+  const s = flockState(${JSON.stringify(SEARCH_ADD)});
+  flockClear(${JSON.stringify(SEARCH_ADD)});
+  await flockSettle(s);
+  return JSON.stringify(s.answer || { success: true, productId: ${JSON.stringify(productId)}, name: s.name, quantityAdded: s.added, quantityAsked: ${quantity} });
+})()`;
+  return pressLoop({ key: SEARCH_ADD, mark: SEARCH_ADD, start, finish, presses: quantity });
 }
