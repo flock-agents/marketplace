@@ -1,337 +1,329 @@
 {
   "name": "planner",
-  "version": "2.0.3",
-  "description": "The family's meals for the week, day by day (Breakfast, Lunch and Dinner), with a shared grocery list and the family's recipe book; not for school runs, chores or appointments.",
+  "version": "3.2.0",
+  "description": "The family's meals for the week on the days they cook, a running-out guess for the things they buy from their order history, and a reminder each afternoon and evening with one cart per shopping app that is ordered only when they say yes; not for school runs, chores or appointments.",
   "objects": [
     "grocery-bag"
   ],
   "labels": {
     "nav.week": "Week",
-    "nav.groceries": "Shopping",
+    "nav.shopping": "Shopping",
     "nav.pantry": "Pantry",
     "nav.recipes": "Recipes",
+    "nav.family": "Family",
     "title.week": "This week's meals",
-    "title.groceries": "Shopping",
+    "title.shopping": "Shopping",
     "title.pantry": "Pantry",
     "title.recipes": "Recipes",
-    "nav.ingredients": "Ingredients"
+    "title.family": "Family"
   },
   "tables": {
-    "meals": {
-      "note": "One row per dish; the rows on one date and slot are that meal (Monday lunch: Rice, Sambar, Bhindi fry as three rows)",
-      "columns": {
-        "date": {
-          "type": "string",
-          "required": true,
-          "nullable": false,
-          "note": "ISO date"
-        },
-        "slot": {
-          "type": "string",
-          "required": true,
-          "nullable": false,
-          "enum": [
-            "Breakfast",
-            "Lunch",
-            "Dinner"
-          ],
-          "note": "reminder | heads_up | price"
-        },
-        "time": {
-          "type": "string",
-          "required": false,
-          "nullable": true,
-          "note": "\"HH:MM\"; null → the slot's default (cook.morning / cook.lunch / cook.evening)"
-        },
-        "dish": {
-          "type": "string",
-          "required": true,
-          "nullable": false,
-          "note": "one dish, never a list: \"Sambar\", not \"Rice, sambar\""
-        },
-        "recipe_id": {
-          "type": "string",
-          "required": false,
-          "nullable": true,
-          "references": "recipes"
-        },
-        "recipe_dish": {
-          "type": "string",
-          "required": false,
-          "nullable": true,
-          "note": "the dish text recipe_id was linked/confirmed for: a later dish edit re-links (recipeStubs.ts)"
-        },
-        "note": {
-          "type": "string",
-          "required": false,
-          "nullable": true
-        },
-        "review": {
-          "type": "string",
-          "required": false,
-          "nullable": true
-        },
-        "review_for": {
-          "type": "string",
-          "required": false,
-          "nullable": true
-        },
-        "status": {
-          "type": "string",
-          "required": false,
-          "nullable": false,
-          "default": "planned",
-          "note": "open | answered | expired | fallback"
-        },
-        "confirmed_by": {
-          "type": "string",
-          "required": false,
-          "nullable": true
-        },
-        "confirmed_at": {
-          "type": "string",
-          "required": false,
-          "nullable": true
-        },
-        "portions": {
-          "type": "string",
-          "required": false,
-          "nullable": true,
-          "note": "JSON: { \"<diner>\": \"2 roti, 100g paneer\", … }"
-        },
-        "coach_check": {
-          "type": "string",
-          "required": false,
-          "nullable": false,
-          "default": "pending",
-          "note": "pending | ok | flagged"
-        },
-        "coach_notes": {
-          "type": "string",
-          "required": false,
-          "nullable": true
-        },
-        "outcome": {
-          "type": "string",
-          "required": false,
-          "nullable": true,
-          "note": "cooked | skipped"
-        },
-        "outcome_source": {
-          "type": "string",
-          "required": false,
-          "nullable": true,
-          "note": "owner | inferred"
-        },
-        "outcome_at": {
-          "type": "string",
-          "required": false,
-          "nullable": true,
-          "note": "ISO: when it was cooked/skipped (or inferred to be)"
-        }
-      }
-    },
-    "recipes": {
+    "people": {
+      "note": "Who eats at home.",
       "columns": {
         "name": {
           "type": "string",
           "required": true,
           "nullable": false
         },
-        "ingredients": {
+        "relationship": {
           "type": "string",
           "required": false,
-          "nullable": true,
-          "note": "one per line: \"Rajma, 1 cup\""
+          "nullable": true
         },
-        "method": {
+        "group": {
           "type": "string",
           "required": false,
           "nullable": true,
-          "note": "how the family makes it"
+          "enum": [
+            "child",
+            "adult",
+            "elder"
+          ],
+          "note": "constants.ts ITEM_GROUPS"
+        },
+        "portions": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "in the family's words"
+        },
+        "diet": {
+          "type": "string",
+          "required": false,
+          "nullable": true
+        },
+        "allergies": {
+          "type": "string",
+          "required": false,
+          "nullable": true
+        },
+        "dislikes": {
+          "type": "string",
+          "required": false,
+          "nullable": true
+        },
+        "targets": {
+          "type": "string",
+          "required": false,
+          "nullable": true
+        },
+        "note": {
+          "type": "string",
+          "required": false,
+          "nullable": true
+        },
+        "active": {
+          "type": "integer",
+          "required": false,
+          "nullable": true,
+          "default": 1
+        }
+      }
+    },
+    "house": {
+      "note": "The household itself: one row.",
+      "columns": {
+        "rules": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "JSON [{ kind: veg | egg | no_eggs | no_meat | fasting | no_onion_garlic | other, days: string[] (empty: every day), note? }]"
+        },
+        "cook_name": {
+          "type": "string",
+          "required": false,
+          "nullable": true
+        },
+        "cook_days": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "JSON weekday[]"
+        },
+        "cook_arrival": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "\"HH:MM\", or for a cook who comes more than once JSON [{ at: \"HH:MM\", meals?: string[] }]"
+        },
+        "cook_makes_well": {
+          "type": "string",
+          "required": false,
+          "nullable": true
+        },
+        "cook_wont_make": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "what the cook does not make well or will not make"
+        },
+        "cook_time_limit": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "the cook's time, in the family's words (\"leaves early: a dish or two in the morning\")"
+        },
+        "cook_new_recipes": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "open (new recipes from reels and the internet) | set_menu (familiar dishes)"
+        },
+        "cook_note": {
+          "type": "string",
+          "required": false,
+          "nullable": true
+        },
+        "extra_slots": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "JSON [{ name, days?: string[], for?: string[] }]"
+        },
+        "order_in": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "JSON [{ day, slot, note? }]"
         },
         "notes": {
           "type": "string",
           "required": false,
-          "nullable": true,
-          "note": "free-text preferences the agent reads"
+          "nullable": true
         },
-        "prep_steps": {
+        "profile_to_structure": {
           "type": "string",
           "required": false,
           "nullable": true,
-          "note": "JSON [{step, hours_before_cook}], ordered; null = nothing to prep ahead"
+          "note": "the 2.0 household.profile, waiting to be turned into rows"
         },
-        "prep_lead_hours": {
-          "type": "number",
+        "intro_sent_at": {
+          "type": "string",
+          "required": false,
+          "nullable": true
+        },
+        "afternoon_time": {
+          "type": "string",
           "required": false,
           "nullable": true,
-          "note": "the largest hours_before_cook, for display"
+          "note": "\"HH:MM\": when the afternoon reminder really runs, written by that routine"
         },
-        "servings": {
+        "evening_time": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "\"HH:MM\": the same for the evening reminder"
+        },
+        "plan_time": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "\"HH:MM\": the same for the weekly plan"
+        },
+        "cooking_days": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "JSON weekday[]; Mon to Sat until set"
+        },
+        "connected_apps": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "JSON GroceryApp[]: the shopping apps the family has signed in to (the main app only once it is)"
+        },
+        "history_synced": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "JSON { [app or \"app:account\"]: { [reader]: \"YYYY-MM-DD\" } }: how far each reader (a person's agent) read each app's order history, per shop account when named; a plain date is from before readers were kept apart"
+        },
+        "regulars_moved_at": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "when the old everyday items (the retired regulars table's rows) became item cycles"
+        },
+        "asks_confirmed": {
           "type": "integer",
           "required": false,
           "nullable": true,
-          "note": "× the family's usual portion of this recipe"
+          "default": 0
         },
-        "prep_min": {
+        "asks_still_have": {
+          "type": "integer",
+          "required": false,
+          "nullable": true,
+          "default": 0
+        },
+        "sync_session_id": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "the session the last sync-cart ask started: the next one reuses it"
+        }
+      }
+    },
+    "plan_meals": {
+      "note": "One meal of the plan: a date and a slot, made of dishes.",
+      "columns": {
+        "date": {
+          "type": "string",
+          "required": true,
+          "nullable": false
+        },
+        "slot": {
+          "type": "string",
+          "required": true,
+          "nullable": false,
+          "note": "Breakfast | Lunch | Dinner, or one of house.extra_slots"
+        },
+        "ordered_in": {
+          "type": "integer",
+          "required": false,
+          "nullable": true,
+          "default": 0,
+          "note": "1: food is ordered in, so no dishes and no ingredients"
+        },
+        "note": {
+          "type": "string",
+          "required": false,
+          "nullable": true
+        },
+        "status": {
+          "type": "string",
+          "required": true,
+          "nullable": false,
+          "note": "constants.ts ORDER_STATUSES"
+        }
+      }
+    },
+    "dishes": {
+      "columns": {
+        "meal_id": {
+          "type": "string",
+          "required": true,
+          "nullable": false,
+          "references": "plan_meals"
+        },
+        "position": {
           "type": "integer",
           "required": false,
           "nullable": true
         },
-        "cook_min": {
-          "type": "integer",
-          "required": false,
-          "nullable": true
+        "name": {
+          "type": "string",
+          "required": true,
+          "nullable": false
         },
-        "tags": {
+        "for_people": {
           "type": "string",
           "required": false,
           "nullable": true,
           "note": "JSON string[]"
         },
-        "cuisine": {
+        "portion_note": {
           "type": "string",
           "required": false,
           "nullable": true
         },
-        "source_url": {
+        "recipe_id": {
           "type": "string",
           "required": false,
-          "nullable": true
+          "nullable": true,
+          "references": "saved_recipes"
+        },
+        "video_url": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "a YouTube video, an Instagram reel or any page: the link only"
         }
       }
     },
-    "groceries": {
+    "dish_items": {
+      "note": "What a dish needs bought, in the amount for this family.",
       "columns": {
+        "dish_id": {
+          "type": "string",
+          "required": true,
+          "nullable": false,
+          "references": "dishes"
+        },
         "item": {
           "type": "string",
           "required": true,
-          "nullable": false
+          "nullable": false,
+          "note": "normalised"
         },
-        "aisle": {
-          "type": "string",
-          "required": false,
-          "nullable": true,
-          "default": "Other",
-          "enum": [
-            "Vegetables",
-            "Dairy",
-            "Staples",
-            "Spices",
-            "Other"
-          ],
-          "note": "Vegetables | Dairy | Staples | Spices | Other"
-        },
-        "done": {
-          "type": "boolean",
-          "required": false,
-          "nullable": true,
-          "default": false,
-          "note": "bought"
-        },
-        "for_dish": {
-          "type": "string",
-          "required": false,
-          "nullable": true
-        },
-        "category": {
-          "type": "string",
-          "required": false,
-          "nullable": true,
-          "note": "dairy | vegetables | pantry | spices"
-        },
-        "needed_by": {
-          "type": "string",
-          "required": false,
-          "nullable": true,
-          "note": "ISO date: the earliest meal that uses it, or when a staple runs out"
-        },
-        "buy_at": {
-          "type": "string",
-          "required": false,
-          "nullable": true,
-          "note": "ISO datetime: when the timeline orders it (→ a carts row)"
-        },
-        "qty": {
-          "type": "string",
-          "required": false,
-          "nullable": true,
-          "note": "remaining, in unit"
-        },
-        "suggested_qty": {
-          "type": "string",
-          "required": false,
-          "nullable": true,
-          "note": "the computed draft (recipe_ingredients × diner_portions, scaled) — a hint, never"
-        },
-        "ingredient_id": {
-          "type": "string",
-          "required": false,
-          "nullable": true,
-          "references": "ingredients"
-        },
-        "source": {
-          "type": "string",
-          "required": false,
-          "nullable": true,
-          "default": "manual",
-          "note": "owner | inferred | auto (an applied pattern)"
-        },
-        "added_by": {
-          "type": "string",
-          "required": false,
-          "nullable": true,
-          "note": "who added it by hand"
-        },
-        "status": {
-          "type": "string",
-          "required": false,
-          "nullable": true,
-          "default": "pending",
-          "note": "open | answered | expired | fallback"
-        },
-        "service": {
-          "type": "string",
-          "required": false,
-          "nullable": true,
-          "note": "the service it was (or usually is) ordered from"
-        },
-        "price": {
-          "type": "number",
-          "required": false,
-          "nullable": true
-        },
-        "cart_id": {
-          "type": "string",
-          "required": false,
-          "nullable": true,
-          "references": "carts"
-        },
-        "in_stock_until": {
-          "type": "string",
-          "required": false,
-          "nullable": true,
-          "note": "ISO date: already have it: skip the timeline until this date passes"
-        },
-        "meal_id": {
-          "type": "string",
-          "required": false,
-          "nullable": true,
-          "references": "meals"
-        },
-        "qty_min": {
+        "amount": {
           "type": "number",
           "required": false,
           "nullable": true,
-          "note": "the engine's rough range (server/quantity.ts), in qty_unit"
+          "note": "base unit"
         },
-        "qty_max": {
-          "type": "number",
-          "required": false,
-          "nullable": true
-        },
-        "qty_unit": {
+        "unit": {
           "type": "string",
           "required": false,
           "nullable": true,
@@ -339,115 +331,20 @@
         }
       }
     },
-    "ingredients": {
+    "regulars": {
+      "note": "Retired: everyday items are now each item's own cycle (items.stated_amount, items.stated_days). Rows here are moved to items once (regulars.ts) and never read again; write none.",
       "columns": {
-        "name": {
-          "type": "string",
-          "required": true,
-          "nullable": false
-        },
-        "default_unit": {
-          "type": "string",
-          "required": false,
-          "nullable": true
-        },
-        "category": {
-          "type": "string",
-          "required": false,
-          "nullable": true,
-          "note": "dairy | vegetables | pantry | spices"
-        },
-        "last_ordered_at": {
-          "type": "string",
-          "required": false,
-          "nullable": true,
-          "note": "ISO datetime"
-        },
-        "last_ordered_qty": {
-          "type": "number",
-          "required": false,
-          "nullable": true
-        },
-        "aliases": {
-          "type": "string",
-          "required": false,
-          "nullable": true,
-          "note": "JSON string[]: English/Hindi/regional names (\"palak\", \"spinach\")"
-        },
-        "unit_conversions": {
-          "type": "string",
-          "required": false,
-          "nullable": true,
-          "note": "JSON { \"pc\": 150, \"bunch\": 250 }: grams (or ml) per unit"
-        },
-        "shelf_life_days": {
-          "type": "integer",
-          "required": false,
-          "nullable": true,
-          "note": "in THIS home (weather, season, storage): the agent's informed guess, never asked"
-        },
-        "shelf_life_source": {
-          "type": "string",
-          "required": false,
-          "nullable": true,
-          "note": "default (the seed table) | agent"
-        },
-        "shelf_life_note": {
-          "type": "string",
-          "required": false,
-          "nullable": true,
-          "note": "the agent's one-line reason (\"Bengaluru, humid Oct, kept in fridge\")"
-        },
-        "prefs": {
-          "type": "string",
-          "required": false,
-          "nullable": true,
-          "note": "JSON ShoppingPrefs (server/quantity.ts); falls back to prefs.category_defaults"
-        },
-        "notes": {
-          "type": "string",
-          "required": false,
-          "nullable": true,
-          "note": "free-text preferences the agent reads"
-        },
-        "level": {
-          "type": "string",
-          "required": false,
-          "nullable": true,
-          "note": "pantry rough level: plenty | low | out (null = not checked)"
-        },
-        "last_checked_at": {
-          "type": "string",
-          "required": false,
-          "nullable": true,
-          "note": "ISO datetime; the pantry's own cadence"
-        }
-      }
-    },
-    "recipe_ingredients": {
-      "columns": {
-        "recipe_id": {
-          "type": "string",
-          "required": true,
-          "nullable": false,
-          "references": "recipes"
-        },
-        "ingredient_id": {
-          "type": "string",
-          "required": false,
-          "nullable": true,
-          "references": "ingredients"
-        },
         "item": {
           "type": "string",
           "required": true,
-          "nullable": false
+          "nullable": false,
+          "note": "normalised"
         },
-        "qty": {
+        "amount": {
           "type": "number",
           "required": false,
           "nullable": true,
-          "note": "remaining, in unit"
+          "note": "base unit"
         },
         "unit": {
           "type": "string",
@@ -455,95 +352,506 @@
           "nullable": true,
           "note": "g | ml | pc"
         },
-        "category": {
+        "every": {
           "type": "string",
-          "required": false,
-          "nullable": true,
-          "note": "dairy | vegetables | pantry | spices"
+          "required": true,
+          "nullable": false,
+          "enum": [
+            "day",
+            "week",
+            "weekdays"
+          ],
+          "note": "day | week | weekdays (constants.ts EVERY)"
         },
-        "qty_per_adult": {
-          "type": "number",
-          "required": false,
-          "nullable": true,
-          "note": "v2 name for qty (one regular adult portion); the engine reads qty_per_adult ?? qty"
-        },
-        "optional": {
+        "times_per_week": {
           "type": "integer",
           "required": false,
           "nullable": true,
-          "note": "0/1: an optional line never generates a grocery need"
+          "note": "for every = week"
         },
-        "substitutes": {
+        "weekdays": {
           "type": "string",
           "required": false,
           "nullable": true,
-          "note": "JSON string[] of ingredient ids"
+          "note": "JSON weekday[], for every = weekdays"
+        },
+        "for_whom": {
+          "type": "string",
+          "required": false,
+          "nullable": true
+        },
+        "active": {
+          "type": "integer",
+          "required": false,
+          "nullable": true,
+          "default": 1
+        },
+        "paused_until": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "a date: not needed up to and including it"
         }
       }
     },
-    "diners": {
-      "note": "The standing diet targets a coach set for each diner; read by the rolling-plan routine when it fills and checks meals.",
+    "items": {
+      "note": "What the family buys, one row per item: its group, the cycle the family stated (if any), what a purchase usually is and when it runs out (the cached estimate, from the whole house's purchases, else from the stated cycle).",
       "columns": {
+        "item": {
+          "type": "string",
+          "required": true,
+          "nullable": false,
+          "note": "normalised"
+        },
         "name": {
           "type": "string",
           "required": true,
           "nullable": false
         },
-        "goal": {
+        "group": {
           "type": "string",
           "required": false,
           "nullable": true,
-          "note": "\"fat loss, high protein\" | \"weight gain, high fat and protein\""
+          "enum": [
+            "daily",
+            "few_days",
+            "monthly"
+          ],
+          "note": "constants.ts ITEM_GROUPS"
         },
-        "kcal_target": {
-          "type": "number",
+        "unit": {
+          "type": "string",
           "required": false,
-          "nullable": true
+          "nullable": true,
+          "note": "g | ml | pc"
         },
-        "protein_g_target": {
-          "type": "number",
+        "follows_plan": {
+          "type": "integer",
           "required": false,
-          "nullable": true
+          "nullable": true,
+          "default": 0
         },
-        "fat_note": {
+        "subscription": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "the family's words, or null"
+        },
+        "dont_ask": {
+          "type": "integer",
+          "required": false,
+          "nullable": true,
+          "default": 0
+        },
+        "snoozed_until": {
           "type": "string",
           "required": false,
           "nullable": true
+        },
+        "asks_unanswered": {
+          "type": "integer",
+          "required": false,
+          "nullable": true,
+          "default": 0
+        },
+        "last_ask_key": {
+          "type": "string",
+          "required": false,
+          "nullable": true
+        },
+        "misses_in_row": {
+          "type": "integer",
+          "required": false,
+          "nullable": true,
+          "default": 0
+        },
+        "wait_factor": {
+          "type": "number",
+          "required": false,
+          "nullable": true,
+          "default": 1
+        },
+        "stated_amount": {
+          "type": "number",
+          "required": false,
+          "nullable": true,
+          "note": "what the family said they buy each time, in `unit` (\"1 litre\": 1000)"
+        },
+        "stated_days": {
+          "type": "number",
+          "required": false,
+          "nullable": true,
+          "note": "and how often, in days (\"every day\": 1; \"once a week\": 7); used until the purchases show a cycle"
+        },
+        "usual_amount": {
+          "type": "number",
+          "required": false,
+          "nullable": true,
+          "note": "the cached derivation"
+        },
+        "lasts_days": {
+          "type": "number",
+          "required": false,
+          "nullable": true
+        },
+        "product": {
+          "type": "string",
+          "required": false,
+          "nullable": true
+        },
+        "app": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "constants.ts SHOP_APPS"
+        },
+        "last_bought": {
+          "type": "string",
+          "required": false,
+          "nullable": true
+        },
+        "anchor_amount": {
+          "type": "number",
+          "required": false,
+          "nullable": true
+        },
+        "run_out": {
+          "type": "string",
+          "required": false,
+          "nullable": true
+        },
+        "confident": {
+          "type": "integer",
+          "required": false,
+          "nullable": true,
+          "default": 0
+        },
+        "image": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "the product's picture from the shopping app (an order's item, else the first cart line that had one); never made up"
+        }
+      }
+    },
+    "item_events": {
+      "note": "What happened to an item: a purchase, an answer to a stock question, a question asked or one that went unanswered.",
+      "columns": {
+        "item_id": {
+          "type": "string",
+          "required": true,
+          "nullable": false,
+          "references": "items"
+        },
+        "date": {
+          "type": "string",
+          "required": true,
+          "nullable": false
+        },
+        "kind": {
+          "type": "string",
+          "required": true,
+          "nullable": false,
+          "enum": [
+            "purchase",
+            "answer",
+            "ask",
+            "unanswered"
+          ],
+          "note": "constants.ts EVENT_KINDS"
+        },
+        "tag": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "enum": [
+            "counted",
+            "early_buy",
+            "your_answer",
+            "one_off",
+            "not_counted"
+          ],
+          "note": "constants.ts EVENT_TAGS"
+        },
+        "app": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "constants.ts SHOP_APPS"
+        },
+        "product": {
+          "type": "string",
+          "required": false,
+          "nullable": true
+        },
+        "product_id": {
+          "type": "string",
+          "required": false,
+          "nullable": true
+        },
+        "amount": {
+          "type": "number",
+          "required": false,
+          "nullable": true,
+          "note": "base unit"
+        },
+        "count": {
+          "type": "integer",
+          "required": false,
+          "nullable": true
+        },
+        "price": {
+          "type": "number",
+          "required": false,
+          "nullable": true
+        },
+        "days": {
+          "type": "number",
+          "required": false,
+          "nullable": true,
+          "note": "an answer's \"enough for N days\""
+        },
+        "cycle_days": {
+          "type": "number",
+          "required": false,
+          "nullable": true
+        },
+        "order_ref": {
+          "type": "string",
+          "required": false,
+          "nullable": true
+        },
+        "order_id": {
+          "type": "string",
+          "required": false,
+          "nullable": true
+        },
+        "account": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "the shop account an imported purchase was bought on, when named"
+        },
+        "note": {
+          "type": "string",
+          "required": false,
+          "nullable": true
+        },
+        "void": {
+          "type": "integer",
+          "required": false,
+          "nullable": true,
+          "default": 0
+        }
+      }
+    },
+    "orders": {
+      "note": "One cart on a shopping app: the open one is being filled; the rest follow the order through ordering, placed and paid.",
+      "columns": {
+        "app": {
+          "type": "string",
+          "required": true,
+          "nullable": false,
+          "enum": [
+            "zepto",
+            "swiggy-instamart",
+            "zomato-blinkit",
+            "bigbasket",
+            "amazon"
+          ],
+          "note": "constants.ts SHOP_APPS"
+        },
+        "status": {
+          "type": "string",
+          "required": true,
+          "nullable": false,
+          "enum": [
+            "open",
+            "ordering",
+            "placed",
+            "paid",
+            "not_paid",
+            "cancelled"
+          ],
+          "note": "constants.ts ORDER_STATUSES"
+        },
+        "total": {
+          "type": "number",
+          "required": false,
+          "nullable": true
+        },
+        "delivery_gap": {
+          "type": "number",
+          "required": false,
+          "nullable": true,
+          "note": "rupees short of free delivery"
+        },
+        "synced_at": {
+          "type": "string",
+          "required": false,
+          "nullable": true
+        },
+        "sync_state": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "in_step | pending | building_at_order"
+        },
+        "sync_asked_at": {
+          "type": "string",
+          "required": false,
+          "nullable": true
+        },
+        "outside_lines": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "JSON [{ name, qty }]: already in the cart on the app"
+        },
+        "ordering_at": {
+          "type": "string",
+          "required": false,
+          "nullable": true
+        },
+        "reminder_key": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "\"<date>:<which>\": the reminder that ordered it without asking"
+        },
+        "placed_at": {
+          "type": "string",
+          "required": false,
+          "nullable": true
+        },
+        "paid_at": {
+          "type": "string",
+          "required": false,
+          "nullable": true
+        },
+        "app_order_ref": {
+          "type": "string",
+          "required": false,
+          "nullable": true
+        },
+        "unpaid_notice": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "pending | sent"
+        },
+        "note": {
+          "type": "string",
+          "required": false,
+          "nullable": true
+        }
+      }
+    },
+    "order_lines": {
+      "columns": {
+        "order_id": {
+          "type": "string",
+          "required": true,
+          "nullable": false,
+          "references": "orders"
+        },
+        "item_id": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "references": "items"
+        },
+        "item": {
+          "type": "string",
+          "required": true,
+          "nullable": false,
+          "note": "normalised"
+        },
+        "qty": {
+          "type": "integer",
+          "required": false,
+          "nullable": true,
+          "note": "packs; 0 = shown, not ordered"
+        },
+        "product_id": {
+          "type": "string",
+          "required": false,
+          "nullable": true
+        },
+        "name_on_app": {
+          "type": "string",
+          "required": false,
+          "nullable": true
+        },
+        "pack": {
+          "type": "string",
+          "required": false,
+          "nullable": true
+        },
+        "price": {
+          "type": "number",
+          "required": false,
+          "nullable": true
+        },
+        "image": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "the product's picture from the shopping app (an order's item, else the first cart line that had one); never made up"
         },
         "source": {
           "type": "string",
+          "required": true,
+          "nullable": false,
+          "enum": [
+            "everyday",
+            "meal",
+            "low",
+            "added",
+            "returned"
+          ],
+          "note": "constants.ts LINE_SOURCES"
+        },
+        "for_note": {
+          "type": "string",
           "required": false,
           "nullable": true,
-          "note": "owner | inferred | auto (an applied pattern)"
-        }
-      }
-    },
-    "diner_portions": {
-      "columns": {
-        "diner_id": {
-          "type": "string",
-          "required": true,
-          "nullable": false,
-          "references": "diners"
+          "note": "the line under the name: \"Tue lunch, you said it's missing\""
         },
-        "slot": {
+        "for_date": {
           "type": "string",
-          "required": true,
-          "nullable": false,
-          "note": "reminder | heads_up | price"
-        },
-        "multiplier": {
-          "type": "number",
           "required": false,
-          "nullable": false,
-          "default": 1
+          "nullable": true
+        },
+        "rolled_from": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "the unpaid order this line moved here from"
         }
       }
     },
-    "staples": {
-      "note": "Recurring items with a known cadence (milk) or a standing check (the pantry), bought without waiting on a meal.",
+    "products": {
+      "note": "The product the family buys for an item on a grocery app, remembered once the agent has picked it.",
       "columns": {
         "item": {
+          "type": "string",
+          "required": true,
+          "nullable": false,
+          "note": "normalised"
+        },
+        "app": {
+          "type": "string",
+          "required": true,
+          "nullable": false,
+          "note": "constants.ts SHOP_APPS"
+        },
+        "product_id": {
+          "type": "string",
+          "required": true,
+          "nullable": false
+        },
+        "name_on_app": {
           "type": "string",
           "required": true,
           "nullable": false
@@ -553,562 +861,163 @@
           "required": false,
           "nullable": true
         },
-        "category": {
-          "type": "string",
-          "required": false,
-          "nullable": false,
-          "default": "pantry",
-          "note": "dairy | vegetables | pantry | spices"
-        },
-        "every_min_days": {
+        "pack_amount": {
           "type": "number",
           "required": false,
           "nullable": true
         },
-        "every_max_days": {
-          "type": "number",
-          "required": false,
-          "nullable": true
-        },
-        "max_days_ahead": {
-          "type": "number",
-          "required": false,
-          "nullable": true,
-          "note": "how many days' worth one order may bundle"
-        },
-        "usual_qty": {
+        "pack_unit": {
           "type": "string",
           "required": false,
           "nullable": true
         },
-        "usual_price": {
+        "price": {
           "type": "number",
           "required": false,
           "nullable": true
         },
-        "last_ordered_at": {
+        "image": {
           "type": "string",
           "required": false,
           "nullable": true,
-          "note": "ISO datetime"
-        },
-        "last_checked_at": {
-          "type": "string",
-          "required": false,
-          "nullable": true,
-          "note": "ISO datetime; the pantry's own cadence"
-        },
-        "active": {
-          "type": "boolean",
-          "required": false,
-          "nullable": false,
-          "default": true
-        },
-        "level": {
-          "type": "string",
-          "required": false,
-          "nullable": true,
-          "note": "pantry rough level: plenty | low | out (null = not checked)"
+          "note": "the product's picture from the shopping app (an order's item, else the first cart line that had one); never made up"
         }
       }
     },
-    "carts": {
-      "note": "One order on the shopping timeline: a group of grocery rows bought together, one yes, one set of fees.",
+    "saved_recipes": {
       "columns": {
-        "buy_at": {
+        "name": {
+          "type": "string",
+          "required": true,
+          "nullable": false
+        },
+        "links": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "JSON string[]"
+        },
+        "source": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "constants.ts LINE_SOURCES"
+        },
+        "thumbnail": {
+          "type": "string",
+          "required": false,
+          "nullable": true
+        },
+        "notes": {
+          "type": "string",
+          "required": false,
+          "nullable": true
+        },
+        "ingredients": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "JSON [{ item, amount, unit }]"
+        },
+        "tags": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "JSON string[]"
+        },
+        "for_people": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "JSON string[]"
+        }
+      }
+    },
+    "dish_book": {
+      "columns": {
+        "key": {
           "type": "string",
           "required": true,
           "nullable": false,
-          "note": "ISO datetime: when the timeline orders it (→ a carts row)"
+          "note": "the dish's name, normalised (dishText.ts dishKey)"
         },
-        "categories": {
+        "name": {
+          "type": "string",
+          "required": true,
+          "nullable": false
+        },
+        "video_url": {
           "type": "string",
           "required": false,
           "nullable": true,
-          "note": "JSON list: [\"dairy\",\"vegetables\"]"
+          "note": "a YouTube video, an Instagram reel or any page: the link only"
         },
-        "status": {
-          "type": "string",
-          "required": false,
-          "nullable": false,
-          "default": "draft",
-          "note": "open | answered | expired | fallback"
-        },
-        "checkin_sent_at": {
+        "video_title": {
           "type": "string",
           "required": false,
           "nullable": true
         },
-        "owner_notes": {
-          "type": "string",
-          "required": false,
-          "nullable": true,
-          "note": "what the owner said at the check-in (add/drop, a service preference)"
-        },
-        "estimate": {
-          "type": "number",
-          "required": false,
-          "nullable": true,
-          "note": "from usual prices, before a cart is built"
-        },
-        "chosen_service": {
+        "video_thumbnail": {
           "type": "string",
           "required": false,
           "nullable": true
         },
-        "items_total": {
-          "type": "number",
-          "required": false,
-          "nullable": true
-        },
-        "fees": {
+        "rating": {
           "type": "string",
           "required": false,
           "nullable": true,
-          "note": "JSON: {delivery, handling, platform, small_cart, surge, …}"
+          "note": "the latest: constants.ts DISH_RATINGS"
         },
-        "grand_total": {
-          "type": "number",
-          "required": false,
-          "nullable": true
-        },
-        "quotes": {
+        "rating_note": {
           "type": "string",
           "required": false,
           "nullable": true,
-          "note": "JSON Quote[] (server/quotes.ts): {service, total, fees?, lines?, screenshot_url?, at, lines_key}, one per service"
+          "note": "what went well or didn't, in the family's words (\"too oily\")"
         },
-        "delivery_eta": {
+        "rated_on": {
           "type": "string",
           "required": false,
           "nullable": true,
-          "note": "set only for an actual scheduled slot (e.g. \"7 AM Thu\"); null for an ordinary quick-commerce ETA"
+          "note": "the day it was eaten"
         },
-        "confirmed_by": {
-          "type": "string",
-          "required": false,
-          "nullable": true
-        },
-        "order_ref": {
-          "type": "string",
-          "required": false,
-          "nullable": true
-        },
-        "ordered_at": {
-          "type": "string",
-          "required": false,
-          "nullable": true
-        },
-        "order_at": {
+        "rated_by": {
           "type": "string",
           "required": false,
           "nullable": true,
-          "note": "local \"YYYY-MM-DDTHH:MM\": the order window start this cart is planned for"
+          "note": "who said it, by name"
         },
-        "prepare_at": {
+        "ratings": {
           "type": "string",
           "required": false,
           "nullable": true,
-          "note": "v2 only (unused since v3); kept for existing rows"
-        },
-        "snapshot": {
-          "type": "string",
-          "required": false,
-          "nullable": true,
-          "note": "JSON CartSnapshot {service, lines[], fees, total, screenshot_url?} (server/shopping.ts)"
-        },
-        "build_requested_at": {
-          "type": "string",
-          "required": false,
-          "nullable": true,
-          "note": "ISO: when the agent was last woken to build this cart (one wake per build)"
-        },
-        "yes_at": {
-          "type": "string",
-          "required": false,
-          "nullable": true,
-          "note": "ISO: a family member's explicit yes (confirmed_by says who); the draft is frozen from then"
-        },
-        "moved_at": {
-          "type": "string",
-          "required": false,
-          "nullable": true,
-          "note": "ISO: the owner moved this window (order_at); the timeline no longer re-plans it"
-        },
-        "let_go_at": {
-          "type": "string",
-          "required": false,
-          "nullable": true,
-          "note": "ISO: when the draft was let go (no yes in time, or the owner's \"Let it go\")"
+          "note": "JSON [{ rating, note, date, by }], newest first, a short history"
         }
       }
     }
   },
   "settings": [
     {
-      "key": "household.profile",
-      "type": "json",
-      "default": null,
-      "label": "Your household, in your words (who eats, food habits, meals to plan, where you shop): nothing is planned until it's set",
+      "key": "grocery_app",
+      "type": "choice",
+      "default": "zepto",
+      "label": "Your main grocery app",
       "scope": "owner",
-      "constraint": "household.profile must be an object of the family's answers"
+      "constraint": "grocery_app must be one of: zepto, swiggy-instamart, zomato-blinkit, bigbasket, amazon"
     },
     {
-      "key": "cook.morning",
-      "type": "string",
-      "default": "07:30",
-      "label": "When breakfast and lunch are cooked",
+      "key": "fallback_app",
+      "type": "choice",
+      "default": "none",
+      "label": "When something isn't on your main app",
       "scope": "owner",
-      "constraint": "cook.morning must be a 24-hour time, HH:MM"
+      "constraint": "fallback_app must be one of: none, zepto, swiggy-instamart, zomato-blinkit, bigbasket, amazon"
     },
     {
-      "key": "cook.lunch",
-      "type": "string",
-      "default": "13:00",
-      "label": "When lunch is eaten (meal time default)",
-      "scope": "owner",
-      "constraint": "cook.lunch must be a 24-hour time, HH:MM"
-    },
-    {
-      "key": "cook.evening",
-      "type": "string",
-      "default": "19:00",
-      "label": "When dinner is cooked",
-      "scope": "owner",
-      "constraint": "cook.evening must be a 24-hour time, HH:MM"
-    },
-    {
-      "key": "quiet.start",
-      "type": "string",
-      "default": "22:30",
-      "label": "Quiet hours start: no reminders after this",
-      "scope": "owner",
-      "constraint": "quiet.start must be a 24-hour time, HH:MM"
-    },
-    {
-      "key": "quiet.end",
-      "type": "string",
-      "default": "06:30",
-      "label": "Quiet hours end",
-      "scope": "owner",
-      "constraint": "quiet.end must be a 24-hour time, HH:MM"
-    },
-    {
-      "key": "reminder.buffer_min",
-      "type": "integer",
-      "default": 30,
-      "label": "Extra minutes before a prep step must start",
-      "scope": "owner",
-      "constraint": "reminder.buffer_min must be a whole number from 0 to 240"
-    },
-    {
-      "key": "spend.weekly_limit",
-      "type": "number",
-      "default": 2000,
-      "label": "₹ a week (Mon-Sun) a cart is flagged for crossing",
-      "scope": "owner",
-      "constraint": "spend.weekly_limit must be a number from 0 to 1000000"
-    },
-    {
-      "key": "price.jump_pct",
-      "type": "number",
-      "default": 20,
-      "label": "% above usual price an item is flagged, not added",
-      "scope": "owner",
-      "constraint": "price.jump_pct must be a number from 0 to 500"
-    },
-    {
-      "key": "services",
-      "type": "json",
-      "default": [
-        "zepto",
-        "zomato-blinkit",
-        "bigbasket"
-      ],
-      "label": "Grocery services compared at order time",
-      "scope": "owner",
-      "constraint": "services must be a non-empty list of service ids"
-    },
-    {
-      "key": "buy.delivery_lead_min",
-      "type": "integer",
-      "default": 60,
-      "label": "Minutes an item must arrive before the cooking slot that uses it",
-      "scope": "owner",
-      "constraint": "buy.delivery_lead_min must be a whole number from 0 to 480"
-    },
-    {
-      "key": "buy.fresh_window_days",
-      "type": "json",
-      "default": {
-        "dairy": 1,
-        "vegetables": 2,
-        "pantry": 7,
-        "spices": 14
-      },
-      "label": "Days one order may cover, per category",
-      "scope": "owner",
-      "constraint": "buy.fresh_window_days must give a positive number of days for dairy, vegetables, pantry and spices"
-    },
-    {
-      "key": "buy.earliest_order",
-      "type": "string",
-      "default": "06:30",
-      "label": "No order is placed earlier than this",
-      "scope": "owner",
-      "constraint": "buy.earliest_order must be a 24-hour time, HH:MM"
-    },
-    {
-      "key": "buy.preferred_order_time",
-      "type": "string",
-      "default": "18:00",
-      "label": "The evening before an item is needed, order it at this time instead of waiting for the morning (Zepto's evening deals, and the family's own habit) — falls back to the morning cutoff once this slot has already passed",
-      "scope": "owner",
-      "constraint": "buy.preferred_order_time must be a 24-hour time, HH:MM"
-    },
-    {
-      "key": "meal.latest.breakfast",
-      "type": "string",
-      "default": "11:00",
-      "label": "Breakfast can be cooked as late as",
-      "scope": "owner",
-      "constraint": "meal.latest.breakfast must be a 24-hour time, HH:MM"
-    },
-    {
-      "key": "meal.latest.lunch",
-      "type": "string",
-      "default": "15:00",
-      "label": "Lunch can be cooked as late as",
-      "scope": "owner",
-      "constraint": "meal.latest.lunch must be a 24-hour time, HH:MM"
-    },
-    {
-      "key": "meal.latest.dinner",
-      "type": "string",
-      "default": "23:00",
-      "label": "Dinner can be cooked as late as",
-      "scope": "owner",
-      "constraint": "meal.latest.dinner must be a 24-hour time, HH:MM"
-    },
-    {
-      "key": "shop.reminder_time",
-      "type": "string",
-      "default": "20:00",
-      "label": "The evening before a shopping window, the reminder goes out at",
-      "scope": "owner",
-      "constraint": "shop.reminder_time must be a 24-hour time, HH:MM"
-    },
-    {
-      "key": "shop.heads_up_min",
-      "type": "integer",
-      "default": 15,
-      "label": "Minutes before a shopping window the draft is shared",
-      "scope": "owner",
-      "constraint": "shop.heads_up_min must be a whole number from 5 to 240"
-    },
-    {
-      "key": "shop.yes_wait_h",
-      "type": "number",
-      "default": 3,
-      "label": "Hours to wait for a yes before the draft is let go quietly",
-      "scope": "owner",
-      "constraint": "shop.yes_wait_h must be a number from 0.5 to 24"
-    },
-    {
-      "key": "plan.horizon_days",
-      "type": "integer",
-      "default": 7,
-      "label": "Rolling plan length, in days",
-      "scope": "owner",
-      "constraint": "plan.horizon_days must be a whole number from 1 to 30"
-    },
-    {
-      "key": "plan.confirm_ahead_days",
-      "type": "integer",
-      "default": 2,
-      "label": "Days within which an unconfirmed day is raised with the family",
-      "scope": "owner",
-      "constraint": "plan.confirm_ahead_days must be a whole number from 0 to 14"
-    },
-    {
-      "key": "prefs.category_defaults",
-      "type": "json",
-      "default": {
-        "vegetables": {
-          "pack_min": 250,
-          "pack_max": 1000,
-          "pack_unit": "g",
-          "stock_days": 2,
-          "price": "balanced",
-          "brands_preferred": [],
-          "brands_avoid": [],
-          "substitutions": "ask",
-          "service": "any",
-          "never_auto_add": false
-        },
-        "leafy_greens": {
-          "pack_min": 1,
-          "pack_max": 2,
-          "pack_unit": "pc",
-          "stock_days": 1,
-          "price": "balanced",
-          "brands_preferred": [],
-          "brands_avoid": [],
-          "substitutions": "ask",
-          "service": "any",
-          "never_auto_add": false
-        },
-        "fruits": {
-          "pack_min": 500,
-          "pack_max": 2000,
-          "pack_unit": "g",
-          "stock_days": 3,
-          "price": "balanced",
-          "brands_preferred": [],
-          "brands_avoid": [],
-          "substitutions": "ask",
-          "service": "any",
-          "never_auto_add": false
-        },
-        "dairy": {
-          "pack_min": 500,
-          "pack_max": 2000,
-          "pack_unit": "ml",
-          "stock_days": 1,
-          "price": "balanced",
-          "brands_preferred": [
-            "Amul",
-            "Mother Dairy"
-          ],
-          "brands_avoid": [],
-          "substitutions": "ask",
-          "service": "any",
-          "never_auto_add": false
-        },
-        "bakery": {
-          "pack_min": 1,
-          "pack_max": 2,
-          "pack_unit": "pc",
-          "stock_days": 2,
-          "price": "balanced",
-          "brands_preferred": [],
-          "brands_avoid": [],
-          "substitutions": "allowed",
-          "service": "any",
-          "never_auto_add": false
-        },
-        "grains": {
-          "pack_min": 1000,
-          "pack_max": 5000,
-          "pack_unit": "g",
-          "stock_days": 30,
-          "price": "balanced",
-          "brands_preferred": [
-            "Aashirvaad",
-            "India Gate"
-          ],
-          "brands_avoid": [],
-          "substitutions": "ask",
-          "service": "any",
-          "never_auto_add": false
-        },
-        "pulses": {
-          "pack_min": 500,
-          "pack_max": 2000,
-          "pack_unit": "g",
-          "stock_days": 30,
-          "price": "balanced",
-          "brands_preferred": [
-            "Tata Sampann"
-          ],
-          "brands_avoid": [],
-          "substitutions": "ask",
-          "service": "any",
-          "never_auto_add": false
-        },
-        "pantry": {
-          "pack_min": 500,
-          "pack_max": 2000,
-          "pack_unit": "g",
-          "stock_days": 30,
-          "price": "cheapest",
-          "brands_preferred": [],
-          "brands_avoid": [],
-          "substitutions": "allowed",
-          "service": "any",
-          "never_auto_add": false
-        },
-        "oils": {
-          "pack_min": 1000,
-          "pack_max": 5000,
-          "pack_unit": "ml",
-          "stock_days": 45,
-          "price": "balanced",
-          "brands_preferred": [
-            "Fortune"
-          ],
-          "brands_avoid": [],
-          "substitutions": "ask",
-          "service": "any",
-          "never_auto_add": false
-        },
-        "spices": {
-          "pack_min": 50,
-          "pack_max": 200,
-          "pack_unit": "g",
-          "stock_days": 60,
-          "price": "balanced",
-          "brands_preferred": [
-            "MDH",
-            "Everest"
-          ],
-          "brands_avoid": [],
-          "substitutions": "ask",
-          "service": "any",
-          "never_auto_add": false
-        },
-        "meat": {
-          "pack_min": 250,
-          "pack_max": 1000,
-          "pack_unit": "g",
-          "stock_days": 1,
-          "price": "premium",
-          "brands_preferred": [
-            "Licious"
-          ],
-          "brands_avoid": [],
-          "substitutions": "never",
-          "service": "any",
-          "never_auto_add": true
-        },
-        "snacks": {
-          "pack_min": 1,
-          "pack_max": 3,
-          "pack_unit": "pc",
-          "stock_days": 7,
-          "price": "balanced",
-          "brands_preferred": [],
-          "brands_avoid": [],
-          "substitutions": "allowed",
-          "service": "any",
-          "never_auto_add": true
-        },
-        "household": {
-          "pack_min": 1,
-          "pack_max": 2,
-          "pack_unit": "pc",
-          "stock_days": 30,
-          "price": "cheapest",
-          "brands_preferred": [],
-          "brands_avoid": [],
-          "substitutions": "allowed",
-          "service": "any",
-          "never_auto_add": true
-        }
-      },
-      "label": "Default shopping prefs per category (an ingredient's own prefs override these)",
-      "scope": "owner",
-      "constraint": "prefs.category_defaults must be an object keyed by category"
+      "key": "order_without_asking",
+      "type": "boolean",
+      "default": false,
+      "label": "Order without asking",
+      "scope": "owner"
     }
   ]
 }

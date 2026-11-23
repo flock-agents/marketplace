@@ -3,7 +3,7 @@
 import { describe, it, expect } from "bun:test";
 import { readFileSync } from "fs";
 import { join } from "path";
-import { REPEATS, COLOURS } from "../server/db/constants";
+import { REPEATS, MONTHLY_BY, COLOURS, KINDS, STATUSES, TODO_STATUSES } from "../server/db/constants";
 
 const ROOT = join(import.meta.dir, "..");
 const read = (f: string) => readFileSync(join(ROOT, f), "utf8");
@@ -12,23 +12,30 @@ const manifest = json("flock.app.json");
 const schema = read("server/db/schema.ts");
 
 describe("family-calendar schema", () => {
-  it("declares exactly the tables schema.ts exports, each spreading kitColumns()", () => {
+  it("declares the public tables schema.ts exports, each table spreading kitColumns(); the sources and to-dos are private", () => {
     const tables = [...schema.matchAll(/export const \w+ = sqliteTable\("(\w+)"/g)].map((m) => m[1]);
-    expect(tables).toEqual(manifest.tables);
-    expect(manifest.tables).toEqual(["members", "events", "reminders"]);
+    expect(tables).toEqual(["members", "events", "event_sources", "todos"]);
+    expect(manifest.tables).toEqual(["members", "events"]);   // the app's own two are hidden from /api/_data (server/calendar.ts PRIVATE_TABLES)
     expect((schema.match(/\.\.\.kitColumns\(\)/g) ?? []).length).toBe(tables.length);
   });
 
-  it("an event needs a title and a date; a reminder a title and when it is due, and repeats `none` unless told", () => {
+  it("an event needs a title and a date, repeats `none`, is an `event` and `active` unless told", () => {
     expect(schema).toContain('text("title").notNull()');
     expect(schema).toContain('text("date").notNull()');
-    expect(schema).toContain('text("due").notNull()');
     expect(schema).toContain(`text("repeat").notNull().default("${REPEATS[0]}")`);
+    expect(schema).toContain(`text("kind").notNull().default("${KINDS[0]}")`);
+    expect(schema).toContain(`text("status").notNull().default("${STATUSES[0]}")`);
+    expect(schema).toContain(`text("status").notNull().default("${TODO_STATUSES[0]}")`);
     expect(schema).toContain(`text("colour").notNull().default("${COLOURS[0]}")`);
+    expect(schema).not.toContain('sqliteTable("reminders"');
   });
 
-  it("the repeats and colours are closed lists", () => {
-    expect([...REPEATS]).toEqual(["none", "daily", "weekly", "monthly"]);
+  it("the repeats, kinds, statuses and colours are closed lists", () => {
+    expect([...REPEATS]).toEqual(["none", "daily", "weekly", "monthly", "yearly"]);
+    expect([...MONTHLY_BY]).toEqual(["date", "weekday", "last_weekday"]);   // a monthly event: by its date, or by its weekday of the month
+    expect([...KINDS]).toEqual(["event", "deadline"]);
+    expect([...STATUSES]).toEqual(["active", "cancelled"]);
+    expect([...TODO_STATUSES]).toEqual(["open", "done", "withdrawn", "covered"]);
     expect([...COLOURS]).toEqual(["accent", "info", "success", "warning", "danger"]);   // theme tones, never hex colours
   });
 
@@ -36,7 +43,6 @@ describe("family-calendar schema", () => {
     const rows = json("row-schema.json");
     expect(Object.keys(rows.properties)).toEqual(manifest.tables);
     expect(rows.properties.events.items.required).toEqual(["$key", "title", "date"]);
-    expect(rows.properties.reminders.items.required).toEqual(["$key", "title", "due"]);
     expect(rows.properties.members.items.required).toEqual(["$key", "name"]);
     for (const t of manifest.tables) expect(rows.properties[t].items.additionalProperties).toBe(false);
     const catalog = json("catalog.json");
@@ -45,19 +51,24 @@ describe("family-calendar schema", () => {
     expect(catalog.tables.events.columns.title).toMatchObject({ type: "string", required: true, nullable: false });
     expect(catalog.tables.events.columns.start_time).toMatchObject({ type: "string", required: false, nullable: true });
     expect(catalog.tables.events.columns.reminder_minutes).toMatchObject({ type: "integer", required: false, nullable: true });
-    expect(catalog.tables.reminders.columns.repeat).toMatchObject({ type: "string", required: false, default: REPEATS[0] });
+    expect(catalog.tables.events.columns.repeat).toMatchObject({ type: "string", required: false, default: REPEATS[0] });
+    expect(catalog.tables.events.columns.kind).toMatchObject({ type: "string", required: false, default: KINDS[0] });
+    expect(catalog.tables.events.columns.monthly_by).toMatchObject({ type: "string", required: false, nullable: true, note: expect.stringContaining("last_weekday") });
+    expect(catalog.tables.events.columns.end_date).toMatchObject({ type: "string", required: false, nullable: true, note: expect.stringContaining("last day") });
+    expect(catalog.tables.events.columns.status).toMatchObject({ type: "string", required: false, default: STATUSES[0], note: expect.stringContaining("cancelled") });
     expect(catalog.settings).toEqual([]);
     expect(json("settings.json")).toEqual({});
   });
 
-  it("the seed and the e2e fixture only use the declared repeats and colours", () => {
+  it("the seed and the e2e fixture only use the declared repeats, kinds and colours", () => {
     const seed = read("server/db/seed.ts");
     const repeats = [...seed.matchAll(/repeat:\s*"([^"]+)"/g)].map((m) => m[1]);
-    expect(new Set(repeats)).toEqual(new Set(REPEATS));   // one sample of each kind
+    for (const r of repeats) expect(REPEATS as readonly string[], `seed repeat ${r}`).toContain(r);
+    for (const k of [...seed.matchAll(/kind:\s*"([^"]+)"/g)].map((m) => m[1])) expect(KINDS as readonly string[], `seed kind ${k}`).toContain(k);
     for (const c of [...seed.matchAll(/colour:\s*"([^"]+)"/g)].map((m) => m[1])) expect(COLOURS, `seed colour ${c}`).toContain(c);
     const fixture = json("e2e-rows.json");
     expect(Object.keys(fixture)).toEqual(manifest.tables);
-    for (const r of fixture.reminders) expect(REPEATS, `fixture repeat ${r.repeat}`).toContain(r.repeat);
+    for (const e of fixture.events) { if (e.repeat) expect(REPEATS, `fixture repeat ${e.repeat}`).toContain(e.repeat); if (e.kind) expect(KINDS, `fixture kind ${e.kind}`).toContain(e.kind); }
     for (const m of fixture.members) expect(COLOURS, `fixture colour ${m.colour}`).toContain(m.colour);
   });
 

@@ -1,12 +1,8 @@
 {
   "skills": [
     {
-      "slug": "swiggy-instamart",
-      "reason": "Search, compare prices, and build grocery carts on Swiggy Instamart"
-    },
-    {
-      "slug": "zepto",
-      "reason": "Search, compare prices, and build grocery carts on Zepto"
+      "slug": "todos",
+      "reason": "Group reminders: \"remind us\" in the family group becomes a group TODO that pings the group at its time"
     },
     {
       "slug": "bigbasket",
@@ -17,40 +13,28 @@
       "reason": "Search, compare prices, and build grocery carts on Zomato Blinkit"
     },
     {
-      "slug": "google-calendar",
-      "reason": "Manage family calendar for daily briefings and event reminders"
-    },
-    {
       "slug": "google-sheets",
       "reason": "Track household expenses and grocery lists in spreadsheets"
-    },
-    {
-      "slug": "weather",
-      "reason": "Include weather forecasts in morning briefings"
     }
   ],
   "tasks": [
     {
       "name": "Morning Briefing",
-      "reason": "Daily summary with weather, calendar, and pending tasks at 8 AM"
-    },
-    {
-      "name": "Grocery Stock Check",
-      "reason": "Weekly Saturday grocery review and shopping list suggestions"
-    },
-    {
-      "name": "Weekly Summary",
-      "reason": "Sunday evening digest with spending, activity recap, and memory curation"
+      "reason": "8 AM brief in the family group: today's events, changes, new dates and to-dos from the Family Calendar, with the weather"
     },
     {
       "name": "Evening Reminder",
-      "reason": "Daily evening check-in with tomorrow's preview at 9 PM"
+      "reason": "9 PM brief in the family group: tomorrow's events and the to-dos due tomorrow from the Family Calendar"
     }
   ],
   "apps": [
     {
-      "slug": "meal-planner",
+      "slug": "planner",
       "reason": "Plan weekly meals and manage a grocery shopping list"
+    },
+    {
+      "slug": "family-calendar",
+      "reason": "The family's events and to-dos; the morning and evening briefs come from it"
     }
   ]
 }

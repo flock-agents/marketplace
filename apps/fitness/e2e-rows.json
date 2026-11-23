@@ -1,0 +1,10 @@
+{ "metrics": [
+  { "$key": "s1", "label": "Steps", "value": 8420, "unit": "steps" },
+  { "$key": "p1", "label": "PAI", "value": 74, "unit": null },
+  { "$key": "w1", "label": "Weight", "value": 71.5, "unit": "kg" }
+], "events": [
+  { "$key": "e1", "title": "Poha with peanuts", "at": "2026-10-09T08:30", "kind": "Meal", "kcal": 320, "protein_g": 9, "fiber_g": 4 },
+  { "$key": "e2", "title": "Morning walk around the lake", "at": "2026-10-09T07:10", "kind": "Note" }
+], "exercises": [
+  { "$key": "x1", "slug": "goblet-squat", "name": "Goblet squat", "notes": "Hold the weight at the chest, sit between the heels." }
+] }

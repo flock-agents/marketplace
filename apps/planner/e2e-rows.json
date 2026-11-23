@@ -1,12 +1,13 @@
-{ "recipes": [
-  { "$key": "sambar", "name": "Drumstick sambar", "ingredients": "Toor dal\nDrumsticks\nTamarind\nSambar powder", "method": "Pressure-cook the dal, simmer with the vegetables and tamarind, temper with mustard and curry leaves." },
-  { "$key": "upma", "name": "Rava upma", "ingredients": "Rava\nOnion\nGreen chillies\nCurry leaves" }
-], "meals": [
-  { "$key": "m1", "date": "2026-10-12", "slot": "Lunch", "dish": "Drumstick sambar" },
-  { "$key": "m1r", "date": "2026-10-12", "slot": "Lunch", "dish": "Rice" },
-  { "$key": "m2", "date": "2026-10-13", "slot": "Breakfast", "dish": "Rava upma" }
-], "groceries": [
-  { "$key": "g1", "item": "Toor dal, 1 kg", "aisle": "Staples", "for_dish": "Drumstick sambar" },
-  { "$key": "g2", "item": "Drumsticks, 4", "aisle": "Vegetables", "for_dish": "Drumstick sambar" },
-  { "$key": "g3", "item": "Curd, 500 g", "aisle": "Dairy" }
+{ "people": [
+  { "$key": "meera", "name": "Meera", "relationship": "mother", "group": "adult", "portions": "2 rotis, 1 cup rice", "diet": "vegetarian" },
+  { "$key": "agastya", "name": "Agastya", "relationship": "son", "group": "child", "portions": "2 rotis", "dislikes": "bitter gourd" }
+], "plan_meals": [
+  { "$key": "mon-lunch", "date": "2026-11-23", "slot": "Lunch", "status": "final" },
+  { "$key": "mon-dinner", "date": "2026-11-23", "slot": "Dinner", "status": "final" }
+], "items": [
+  { "$key": "atta", "item": "atta", "name": "Atta", "group": "monthly" }
+], "dishes": [
+  { "$key": "rice", "meal_id": { "$ref": "plan_meals/mon-lunch" }, "position": 0, "name": "Rice" },
+  { "$key": "sambar", "meal_id": { "$ref": "plan_meals/mon-lunch" }, "position": 1, "name": "Drumstick sambar" },
+  { "$key": "rotis", "meal_id": { "$ref": "plan_meals/mon-dinner" }, "position": 0, "name": "Rotis", "for_people": "[\"Agastya\"]", "portion_note": "2 for Agastya" }
 ] }

@@ -1,18 +1,19 @@
 {
   "version": 1,
-  "generatedAt": "2026-10-27T00:00:00.000Z",
-  "sourceVersion": "1.1.13",
-  "sourceTag": "amazon-v1.1.13",
+  "generatedAt": "2026-11-10T19:02:54.120Z",
+  "sourceVersion": "1.1.14",
+  "sourceTag": "amazon-v1.1.14",
   "files": {
-    "flock.skill.json": "cbb608fbb57565402cf04e5c8c879e08178560a81b96f1ab03c9c7581bbbb154",
+    "CHANGELOG.md": "260fbeedb5b191ce608d48f2783e964ec511f1b9def1ff81942e6e0d9df3c97f",
     "icon.svg": "5d7735254f99d2fb9a467608bc2a73d2543f571ca3b1221ef503c405e1dc7b5f",
-    "instructions.md": "54e51dbb572bc5bf67b47229de07021f064284460c003a18a9cf890337b2a8fd",
-    "scripts/_amazon.ts": "e42d789c6848aae3e117de2eba784468383e35fe9a0f35ad3e9d00d7dd67fea1",
-    "scripts/_cards.ts": "218a843f47efbcd7817d4d285e8065a4557ba2f6d8c86501e53d9b98db1aaa45",
+    "scripts/read-products.ts": "d44f7c7474f4287094bee9a5ad03379e7dc975e46f6cea625605adf890e2da43",
+    "scripts/read-variants.ts": "1b971793588e27ca07994abf7709af23f8db0bcbc4b3aaf810a5ec06939a81da",
     "scripts/_product-read.ts": "48b3caa875b0265741350e73a5a05c57d284e15d8ab8c2442414ed7ca0a21cf8",
     "scripts/_store.ts": "7a3ce9412f7df4aff01fe9c64d91ff333d87d6d06852f9b918dd0cde9e0a1a34",
+    "scripts/_cards.ts": "218a843f47efbcd7817d4d285e8065a4557ba2f6d8c86501e53d9b98db1aaa45",
     "scripts/_variants.ts": "8278c13b427b650c179700c52751b6b80ca46d10e8bf35fab8e982e876e69933",
-    "scripts/read-products.ts": "d44f7c7474f4287094bee9a5ad03379e7dc975e46f6cea625605adf890e2da43",
-    "scripts/read-variants.ts": "1b971793588e27ca07994abf7709af23f8db0bcbc4b3aaf810a5ec06939a81da"
+    "scripts/_amazon.ts": "af8583edddd1e7db84acbad86e966d5cd986e13df1eb393dab41b2909339438b",
+    "flock.skill.json": "42009ded2799fc3d78a8e400a97085b2e2afca31a1c993f74b706597d6e83ddc",
+    "instructions.md": "edca011eefd258a83823945e56b36ce522d10b2e63841be19360798421e38aed"
   }
 }

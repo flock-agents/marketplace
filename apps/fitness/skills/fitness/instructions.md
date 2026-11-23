@@ -1,7 +1,8 @@
 ## The Fitness App
 
-The Fitness app paired with you holds only this person's data. Below, `<app>` is `$FLOCK_API_URL/a/<its app id>` (find it
-under your apps), and every call carries `-H "Authorization: Bearer $FLOCK_AUTH_TOKEN"`. Read its schema before your first write.
+The Fitness app paired with you holds only this person's data. Call it with the api tool: below, `<app>` is `/a/<its app id>`
+(find it under your apps), so a call is a method and a path like `GET <app>/api/today`, with a JSON object as the body.
+Read its schema (`GET <app>/api/_data/_schema`) before your first write.
 
 - **Readings** go in the `metrics` table, one per measure per day, with plain labels: `Weight` (kg), `Waist` (cm),
   `Calorie target` (kcal), `Protein target` (g), `Fiber target` (g), `Water target` (L, 3 until changed), and targets

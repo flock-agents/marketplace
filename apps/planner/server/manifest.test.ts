@@ -1,0 +1,222 @@
+// What the agent reads to use the app: the manifest's operations and instructions, and the guide. Every operation declared
+// has a handler, nothing of Meal Planner 2.0 is left in the text, and both stay short enough to be read whole.
+import { describe, it, expect } from "bun:test";
+import { readFileSync } from "fs";
+import { join } from "path";
+import { agentOps, FIELDS, FIELDS_SECTION, OPERATION_NAMES, ROUTES } from "./agentOps";
+import { APP_NAMES } from "./db/constants";
+
+const manifest = JSON.parse(readFileSync(join(import.meta.dir, "..", "flock.app.json"), "utf8"));
+const guide = readFileSync(join(import.meta.dir, "agent-guide.md"), "utf8");
+const instructions: string = manifest.agentInterface.instructions;
+const operations: { name: string; description: string }[] = manifest.agentInterface.operations;
+
+// The operations the onboarding plan calls by name, plus the ones this app has always had.
+const FIXED = ["set_person", "set_house_rules", "set_cook", "set_slots", "set_cooking_days", "set_shopping_apps", "set_subscription", "set_regular", "import_order_history", "plan_week"];
+
+describe("the agent's interface", () => {
+  it("declares every fixed operation and every declared one has a handler", () => {
+    const declared = operations.map((o) => o.name);
+    for (const n of FIXED) expect(declared).toContain(n);
+    expect([...declared].sort()).toEqual([...OPERATION_NAMES].sort());
+  });
+
+  it("every operation says what it does and what it takes", () => {
+    for (const o of operations) {
+      expect(typeof o.description === "string" && o.description.trim().length > 0, o.name).toBe(true);
+      expect(o.description, o.name).toContain("{");
+    }
+  });
+
+  it("names no 2.0 operation or table anywhere in the guide or instructions", () => {
+    for (const old of ["save_meal", "set_meal_recipes", "write_recipe", "household.profile", "diners", "get_draft"])
+      expect(guide + instructions).not.toContain(old);
+  });
+
+  it("says nothing of the 2.0 ordering rules: no yes before placing, and a placed order can be let go", () => {
+    for (const old of ["explicit yes", "record_yes", "can't be cancelled here"]) {
+      expect(guide + instructions).not.toContain(old);
+      for (const o of operations) expect(o.description, o.name).not.toContain(old);
+    }
+  });
+
+  it("names no 3.0 ordering rule anywhere: nothing is bought from the plan, nothing is placed without a yes", () => {
+    const all = [guide, instructions, manifest.description, ...operations.map((o) => o.description), ...manifest.useCases.for, ...manifest.useCases.notFor].join("\n");
+    for (const old of ["ask_low_or_out", "place_order", "add_to_order", "without waiting for a yes", "Saturday", "long-life"]) expect(all, old).not.toContain(old);
+  });
+
+  it("no em dash in the guide, the instructions, the description or any operation description", () => {
+    expect(guide).not.toContain("\u2014");
+    expect(instructions).not.toContain("\u2014");
+    expect(manifest.description).not.toContain("\u2014");
+    for (const o of operations) expect(o.description, o.name).not.toContain("\u2014");
+  });
+
+  it("set_cart_line says only a lower qty changes the cart being ordered", () => {
+    const d = operations.find((o) => o.name === "set_cart_line")!.description;
+    expect(d).toContain("lower");
+    expect(d).not.toContain("change or take off a line of the cart being ordered");
+  });
+
+  it("the Pantry page has its label and the cook is never he or she", () => {
+    expect(manifest.labels["nav.pantry"]).toBe("Pantry");
+    expect(manifest.labels["title.pantry"]).toBe("Pantry");
+    for (const text of [guide, instructions, manifest.description, ...operations.map((o) => o.description)]) expect(text).not.toMatch(/\b(he|she|his|her|him)\b/i);
+  });
+
+  it("has no Settings page of its own: how the house orders is a settings group on Flock's Settings tab", () => {
+    // Flock's AppShell adds the owner's Settings tab itself; a page of the app's own named settings made two.
+    expect(manifest.pages).toEqual(["week", "shopping", "pantry", "recipes", "family"]);
+    expect(Object.keys(manifest.labels).filter((k) => k.endsWith(".settings"))).toEqual([]);
+    const settings: { key: string; label: string; group?: string; help?: string }[] = manifest.settings;
+    expect(settings.map((s) => s.key)).toEqual(["grocery_app", "fallback_app", "order_without_asking"]);
+    for (const s of settings) {
+      expect(s.group, s.key).toBe("How we order");
+      expect(s.label.trim().length > 0 && (s.help ?? "").trim().length > 0, s.key).toBe(true);
+    }
+  });
+
+  it("the grocery app settings show each app by its name, not its id", () => {
+    const named = { ...APP_NAMES, none: "None" } as Record<string, string>;
+    for (const key of ["grocery_app", "fallback_app"]) {
+      const s: { options: string[]; optionLabels: Record<string, string> } = manifest.settings.find((x: { key: string }) => x.key === key);
+      expect(s.optionLabels, key).toEqual(Object.fromEntries(s.options.map((o) => [o, named[o]])));
+    }
+  });
+
+  it("the app is changed only through its operations: no row write is taught", () => {
+    for (const method of ["PATCH", "DELETE"]) expect(guide + instructions).not.toContain(method);
+    expect(guide + instructions).not.toContain("_app/settings");
+    expect(guide).toContain("remove: true");
+    expect(guide).toContain("set_shopping_apps { main, fallback, connected }");
+  });
+
+  // Live run 11 (2026-11-21): rules the family said were kept as free text no code reads, and the plan broke them. Every
+  // question whose answer can state a food rule tells the Butler to save it with set_house_rules, the whole list, in the
+  // checked shape; the rules are read back right after the rules question. Flock refuses a help over 800 characters.
+  it("every setup question that can state a food rule saves it with set_house_rules, and the rules are read back", () => {
+    const setup: { id: string; help?: string; answer?: { operation?: string }; after?: string[] }[] = manifest.setup;
+    const RULE_QUESTIONS = ["cookLimits", "cookTime", "newRecipes", "cookingDays", "kidsBreakfast", "kidsLunch", "kidsDinner",
+      "adultsBreakfast", "adultsLunch", "adultsDinner", "diet", "elders", "rules", "orderIn", "rulesReadBack"];
+    for (const id of RULE_QUESTIONS) {
+      const q = setup.find((x) => x.id === id);
+      expect(q, id).toBeDefined();
+      expect(q!.help ?? "", id).toContain("set_house_rules");
+    }
+    for (const q of setup) expect((q.help ?? "").length, q.id).toBeLessThanOrEqual(800);
+    expect(manifest.setupOptions.about.length).toBeLessThanOrEqual(800);
+    for (const said of ["set_house_rules", "WHOLE list", "who?", "slots?", "items?", "per_week?", "@protein"]) expect(manifest.setupOptions.about, said).toContain(said);
+    // Each checked kind is taught by a worked example in the contract's JSON.
+    const helps = setup.map((q) => q.help ?? "").join("\n");
+    for (const kind of ["avoid", "only", "swap", "require", "cap", "other"]) expect(helps, kind).toContain(`"kind":"${kind}"`);
+    const ids = setup.map((q) => q.id);
+    const back = setup.find((q) => q.id === "rulesReadBack")!;
+    expect(ids.indexOf("rulesReadBack")).toBe(ids.indexOf("rules") + 1);
+    expect(back.answer?.operation).toBe("set_house_rules");
+    expect(back.after).toEqual(["rules"]);
+    expect(back.help).toContain("Did I get these right?");
+    expect(back.help).toContain("WHOLE list");
+    expect(guide).toContain("RULE_BROKEN");
+  });
+
+  it("the instructions fit in 1,200 characters and the guide in 150 lines", () => {
+    expect(instructions.length).toBeLessThanOrEqual(1200);
+    expect(guide.trimEnd().split("\n").length).toBeLessThanOrEqual(150);
+  });
+
+  // Flock refuses an operation whose body is over 16 KB (flock-app/server/src/routes/app-ops.ts MAX_BODY_BYTES, counted in
+  // UTF-8 bytes of the JSON as sent), so a week is planned a day a call (plan_week keep_rest).
+  it("one day of a week, as plan_week takes it, fits in Flock's 16,384 bytes for an operation's body; the whole week does not", () => {
+    const ingredients = ["basmati rice", "toor dal", "cauliflower florets", "green chillies", "coriander leaves", "mustard oil"]
+      .map((item, i) => ({ item, amount: 250 + i * 50, unit: i % 2 ? "g" : "ml", keeps: i < 2 ? "long" : "fresh" }));
+    const dish = (name: string) => ({ name, for: ["Shivashankar", "Ananya", "Agastya"], portion_note: "4 for me, 2 for Ananya, 1 small one for Agastya",
+      video_url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ&list=PL1234567890", ingredients });
+    const day = (date: string) => ["Breakfast", "Lunch", "Agastya's tiffin", "Dinner"].map((slot) => ({ date, slot, note: "the cook comes late today",
+      dishes: [`${slot} main with gravy`, `${slot} side, dry`, `${slot} salad or raita`].map(dish) }));
+    const bytes = (body: object) => Buffer.byteLength(JSON.stringify(body), "utf8");
+    const oneDay = bytes({ week_start: "2026-11-23", mode: "draft", keep_rest: true, meals: day("2026-11-23") });
+    expect(oneDay).toBeLessThan(16_384);
+    // With room to spare: a day twice as heavy still goes.
+    expect(oneDay).toBeLessThan(16_384 / 2);
+    const week = bytes({ week_start: "2026-11-23", mode: "final", meals: [23, 24, 25, 26, 27, 28, 29].flatMap((d) => day(`2026-11-${d}`)) });
+    expect(week).toBeGreaterThan(16_384);
+    for (const text of [guide, operations.find((o) => o.name === "plan_week")!.description]) expect(text).toContain("keep_rest: true");
+    expect(guide).toContain("one day a call");
+    // Ruling T6-R1: each day a final call with keep_rest, then a closing final call without meals; draft only to propose a week.
+    const plan = operations.find((o) => o.name === "plan_week")!.description;
+    expect(plan).toContain("each day with mode final and keep_rest: true, then one closing call with mode final and no meals");
+    expect(plan).not.toContain("the first day with mode draft");
+  });
+
+  it("a line the app does not have today moves to the fallback app (guide and the sync-cart ask)", () => {
+    const sync = manifest.agentInterface.intents.find((i: { name: string }) => i.name === "sync-cart").instructions as string;
+    for (const text of [guide, sync]) {
+      expect(text).toContain("in_stock");
+      expect(text).toContain("set_cart_line { item, qty, app: <fallback> }");
+      expect(text).toContain("leave it marked");
+    }
+  });
+
+  it("import_order_history is taught at most about 8 orders and 80 items a call, one app a call, and that fits", () => {
+    const d = operations.find((o) => o.name === "import_order_history")!.description;
+    for (const text of [guide, d]) for (const said of ["8 orders", "80 items", "one app a call", "oldest", "delivered or paid"]) expect(text).toContain(said);
+    for (const text of [guide, d]) expect(text).not.toContain("most recent");
+    // 8 orders of 10 items in the full shape at its longest (45-character product names, 20-character product ids, group and
+    // price given) fit Flock's 16,384 bytes for an operation's body.
+    const item = (i: number) => ({ item: `toned milk ${i}`, group: "few_days", product: `Amul Taaza Toned Fresh Milk Pouch Homogenis ${i}`,
+      product_id: `prod_0123456789abcd${i}`, pack: "500 ml", count: 2, price: 29 });
+    expect(item(0).product).toHaveLength(45);
+    expect(item(0).product_id).toHaveLength(20);
+    const history = { app: "swiggy-instamart", orders: Array.from({ length: 8 }, (_, k) => ({
+      date: `2026-11-${String(k + 1).padStart(2, "0")}`, order_ref: `ORD-2026-11-${String(k + 1).padStart(2, "0")}-000123456`,
+      items: Array.from({ length: 10 }, (_, i) => item(i)) })) };
+    expect(Buffer.byteLength(JSON.stringify(history), "utf8")).toBeLessThan(16_384);
+  });
+
+  it("the instructions and the guide name only operations the app has", () => {
+    const known = new Set<string>(OPERATION_NAMES);
+    // Written like an operation (a verb, then "_"), and not one: the app's tables, and a tool of Zepto's own connection.
+    const notOurs = new Set<string>([...manifest.tables, "get_payment_methods", "set_menu"]);   // set_menu: a value of set_cook's new_recipes
+    const verb = /^(set|plan|save|import|place|ask|add|record|cancel|remember|get|list|answer|edit|move|skip|ack|search|write|remove|have)_[a-z_]+$/;
+    for (const text of [guide, instructions])
+      for (const [word] of text.matchAll(/\b[a-z]+_[a-z_]+\b/g))
+        if (verb.test(word) && !notOurs.has(word)) expect(known.has(word), word).toBe(true);
+  });
+
+  it("the guide covers what the agent is asked to do", () => {
+    expect(guide.startsWith("# Meal Planner")).toBe(true);
+    for (const n of Object.keys(ROUTES)) expect(guide, n).toContain(n);
+    for (const said of ["NEEDS_NAME", "structured: true", "get_reminder", "answer_running_low", "Order my", "sync_cart", "import_order_history", "Fine for a week", "record_order", "STOCK_OPTIONS", "taken_off"]) expect(guide, said).toContain(said);
+    for (const n of ["guide", ...Object.keys(ROUTES)]) expect(operations.map((o) => o.name), n).toContain(n);
+  });
+
+  it("the operations' fields are the code's: each description, every call written in the guide and the guide's field list name exactly those", async () => {
+    expect(Object.keys(FIELDS).sort()).toEqual([...OPERATION_NAMES].sort());
+    /** The field names at the top level of the "{ ... }" that starts at `at`: nested lists and objects are not looked into. */
+    const keysAt = (text: string, at: number): string[] => {
+      let depth = 0, top = "";
+      for (let i = at; i < text.length; i++) {
+        const ch = text[i];
+        if (ch === "{" || ch === "[" || ch === "(") { depth++; if (depth === 1) continue; }
+        if (ch === "}" || ch === "]" || ch === ")") { depth--; if (depth === 0) break; }
+        if (depth === 1) top += ch; else if (depth > 1 && top.slice(-1) !== " ") top += " ";
+      }
+      const words = top.replace(/"[^"]*"/g, " ").split(/[,;]/).map((part) => /^\s*(?:or\s+)?([a-z_]+)\??\s*(?::|$)/.exec(part)?.[1]).filter((w): w is string => !!w && w !== "null");
+      return words.flatMap((w) => (w === "date" && /date and slot/.test(top) ? ["date", "slot"] : [w]));
+    };
+    for (const o of operations) {
+      const at = o.description.indexOf("{");
+      const keys = keysAt(o.description, at);
+      if (o.name === "set_dish") keys.push("date", "slot");   // "{ dish_id, or meal_id, or date and slot; ... }"
+      expect(new Set(keys), o.name).toEqual(new Set(FIELDS[o.name].fields));
+    }
+    for (const [, op, rest] of guide.matchAll(/`([a-z_]+) (\{[^`]*\})`/g)) {
+      if (!FIELDS[op]) continue;
+      for (const k of keysAt(rest, 0)) expect(FIELDS[op].fields, `${op} ${k} in the guide`).toContain(k);
+    }
+    const served = (await agentOps(() => null as any).guide({}, { agentId: null } as any)) as { guide: string };
+    expect(served.guide).toContain(FIELDS_SECTION);
+    expect(FIELDS_SECTION).toContain("- set_cook { name, days?, arrival?, makes_well?, wont_make?, time_limit?, new_recipes?, note? }");
+    expect(FIELDS_SECTION).toContain("- plan_week { week_start, mode, meals?, keep_rest?, repeats_ok? }");
+  });
+});

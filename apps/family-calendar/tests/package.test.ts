@@ -20,7 +20,7 @@ describe("family-calendar package", () => {
       buildCommand: "bun run app:build", buildDir: "dist", deployDir: ".flock-out",
       processConfig: { command: "bun", args: ["server/index.js"], healthCheckPath: "/api/health" },
       config: { requires: { agent: { required: true } } },
-      pages: ["week", "events", "reminders"], tables: ["members", "events", "reminders"], objects: ["calendar"], nav: "auto", chat: "side",
+      pages: ["week", "events"], tables: ["members", "events"], objects: ["calendar"], nav: "auto", chat: "side",
     });
     expect(manifest.icon).toBe("icon.svg");
     expect(existsSync(join(ROOT, "icon.svg"))).toBe(true);
@@ -57,5 +57,12 @@ describe("family-calendar package", () => {
     expect(arch.startsWith("# Family Calendar: architecture\n")).toBe(true);
     expect(arch).toContain("## What a kit app is");
     expect(arch).toContain("## This app: Family Calendar");
+  });
+
+  it("the Week page's times read in lower case on today and tomorrow too (the kit's big days set them in capitals)", () => {
+    // The kit's Schedule draws today and tomorrow big (.fl-sch-big) and sets their times uppercase: "5:00 PM TO 7:00 PM" beside
+    // "4:00 pm to 5:30 pm" on the other days. The app's own rule, one class stronger so it wins whatever order the CSS loads in.
+    const css = read("src/App.css").replace(/\s+/g, " ");
+    expect(css).toMatch(/\.fl-sch-day\.fl-sch-big \.fl-sch-time \{[^}]*text-transform: none;/);
   });
 });

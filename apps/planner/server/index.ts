@@ -1,147 +1,52 @@
-import { eq, gte } from "drizzle-orm";
 import { createFlockApp } from "@flock/app-sdk";
-import { agentOps } from "./agentOps";
-import { clearSamplesAs, gateRoutines, householdKnown, PROFILE_KEY, settleExistingInstall } from "./setupGate";
-import { setAppEmit } from "./appEmit";
 import { mountKit } from "@flock/app-kit";
+import { agentOps } from "./agentOps";
 import * as schema from "./db/schema";
-import { meal_recipes, meals } from "./db/schema";   // named, for this file's own routes and hooks below
-import { seed } from "./db/seed";
-import { SETTINGS } from "./db/constants";
-import { todayStr } from "./timeline";
-import { mountShoppingRoutes } from "./routes";
-import { readRoutineId } from "./routineRegistry";
-import { ensureRecipeForMeal, relinkLegacyMeals } from "./recipeStubs";
-import { syncMealRecipes } from "./mealRecipes";
-import { mountMealRoutes } from "./mealRoutes";
-import { queueMealReview } from "./mealReview";
-import { mountJobRoutes } from "./jobRoutes";
-import agentJobs, { createJobsWaker } from "./routines/agent-jobs";
-import { queueRecipeFillsForMeal, queueUpcomingRecipeFills } from "./recipeFill";
-import { mountPantryRoutes } from "./pantryRoutes";
-import { seedIngredientKnowledge } from "./db/ingredientSeed";
-import { migrateCartStatuses, refreshShopping } from "./shopping";
-import { refreshOrderPatterns } from "./orderPatterns";
-import { backfillRecipeIngredientCatalog } from "./ingredients";
-import rollingPlan from "./routines/rolling-plan";
-import prepReminders from "./routines/prep-reminders";
-import shoppingTimeline from "./routines/shopping-timeline";
+import { OLD_TABLES, SETTINGS } from "./db/constants";
+import { mountFamilyRoutes } from "./family";
+import { mergeDuplicateDishes, mountMealRoutes } from "./meals";
+import { mountRegularRoutes, moveRegulars } from "./regulars";
+import { mountProductRoutes } from "./products";
+import { mountRecipeRoutes } from "./recipes";
+import { mountDishBookRoutes } from "./dishBook";
+import { mountItemRoutes } from "./items";
+import { mountCartRoutes } from "./cartRoutes";
+import { mountReminderRoutes } from "./reminder";
+import { migrateOldProfile } from "./gate";
+import { routines } from "./routines";
 
 // The app's operations for its agent (agentOps.ts): Flock relays the agent's calls to them.
 const flock = createFlockApp({ ops: agentOps(() => flock.hono) });
-const kit = await mountKit(flock, {
-  schema, seed, settings: SETTINGS,
-  privateTables: {
-    prep_reminders: "server-only dedupe for the prep-reminders routine; nothing for an agent to read or write here",
-    message_log: "server-only per-window message budget; the agent acks a message through its ack_message operation",
-    agent_jobs: "background jobs for the agent: its list_jobs and answer_job operations",
-    choice_log: "the raw record of choices and inferences; the agent reads it in its find_patterns job",
-    learned_prefs: "patterns the agent found, written by its find_patterns answers",
-    stock: "what is in the kitchen: GET /api/pantry, POST /api/pantry/have and /api/pantry/answer (the pantry, have_item, pantry_answer operations)",
-    shopping_prefs: "order windows and household shopping prefs: GET /api/shopping/patterns, PUT /api/shopping/patterns/pinned",
-    standing_consumption: "consumption no meal plans for (milk daily); background data for the stock estimate",
-    meal_recipes: "a meal's recipes: POST /api/meals/:id/recipes (the set_meal_recipes operation)",
-  },
-  // Silent until the household is known (setupGate.ts): a fresh install plans, shops and asks nothing about samples.
-  routines: gateRoutines({ "rolling-plan": rollingPlan as any, "prep-reminders": prepReminders as any, "shopping-timeline": shoppingTimeline as any, "agent-jobs": agentJobs as any }),
-});
+// Meal Planner 2.0's tables are kept as they are beside the new ones, so an upgrade is never a destructive change.
+const kit = await mountKit(flock, { schema, settings: SETTINGS, keepTables: OLD_TABLES, routines });
 
-// Background jobs (meal reviews, recipe fills, pattern runs) wake the agent shortly after they're queued, not only on
-// the agent-jobs routine's 15-minute tick.
-const jobsWaker = createJobsWaker({ db: kit.db, dataDir: flock.platform.dataDir,
-  wake: (routineId, message, data) => flock.platform.routines.wake(routineId, message, data) });
-
-// Every meal written (the agent's own API calls, a routine, or the manual editor) is linked to a recipe of exactly
-// its name, or left for the agent to link/create (a review_meal job) and fill (a fill_recipe job); the app never
-// creates a recipe itself. Once a recipe has its structured ingredients, the plan's grocery rows follow at once.
-// The app's own writes tell live pages without claiming the row: kit.emitChange would unmark a sample row on any update, so
-// the app's bookkeeping (a meal's recipe link, its recipe set, an inferred outcome) would turn the template's samples into
-// the owner's rows at first start.
-const emitApp = (table: string, id: string, op: "insert" | "update" | "delete") =>
-  kit.ctx.events.emit({ table, op, id, by: "app", at: new Date().toISOString() });
-setAppEmit(emitApp);
-
-function upcomingMealIds(): string[] {
-  return (kit.db.select({ id: meals.id }).from(meals).where(gte(meals.date, todayStr())).all() as { id: string }[]).map((m) => m.id);
-}
-
-/** The agent's background work on the plan: a review for every upcoming meal whose note/dish needs one, recipe fills, then
- *  one wake. At boot once the household is known, and again the moment it becomes known (setupGate.ts). */
-function startAgentWork(): void {
-  for (const id of upcomingMealIds()) queueMealReview(kit.db, id);
-  queueUpcomingRecipeFills(kit.db);
-  jobsWaker.poke();
-}
-
-// Any recipe_ingredients row still written as plain text (no ingredient_id) gets linked to the catalog — matching
-// an existing entry over creating a near-duplicate. Idempotent; cheap once there's nothing left to backfill.
-// Only once the schema sync actually landed — a schema-"check" boot (a dry-run smoke test, say) never applies the
-// new columns this reads, and querying them anyway would crash the boot outright.
+// An install upgraded from 2.0 has its family as profile text only: it is carried over for the agent to structure (gate.ts).
+// Only once the schema landed: a boot that is still waiting on it has no house table to write.
 if (kit.status.state === "ok") {
-  settleExistingInstall(kit.sqlite, (kit.ctx.allTables ?? kit.ctx.tables).keys(), flock.platform.dataDir);
-  migrateCartStatuses(kit.db);   // upcoming/discussed/building/awaiting_yes → draft; skipped/missed → let_go (idempotent)
-  backfillRecipeIngredientCatalog(kit.db, emitApp as any);
-  seedIngredientKnowledge(kit.db, emitApp as any);   // aliases / unit conversions / shelf life: fills nulls only
-  relinkLegacyMeals(kit.db, todayStr(), emitApp as any);         // a dish edited before links were stamped gets its own recipe
-  // Every upcoming meal's recipe set (from recipe_id on first boot).
-  for (const m of upcomingMealIds()) syncMealRecipes(kit.db, m, emitApp);
-  refreshOrderPatterns(kit.db);                      // learned order windows from history
+  migrateOldProfile(kit.sqlite);
+  // An installed copy's everyday items become item cycles, once; a meal that holds one dish once per person holds it once.
+  try { moveRegulars(kit.sqlite, kit.db); } catch (e) { console.warn("[planner] the everyday items were not moved to item cycles", e); }
+  try { mergeDuplicateDishes(kit.db); } catch (e) { console.warn("[planner] dishes planned twice in a meal were not merged", e); }
 }
-let known = householdKnown(kit.sqlite);
-if (known) startAgentWork();
 
-/** The plan's shopping follows the meals only once the household is known: before that the meals are samples. */
-const refreshPlan = () => { if (known) refreshShopping(kit.db, kit.settings, new Date(), emitApp as any); };
-
-const mealChanged = (mealId: string) => {
-  ensureRecipeForMeal(kit.db, mealId, emitApp);
-  syncMealRecipes(kit.db, mealId, emitApp);
-  if (!known) return;
-  queueMealReview(kit.db, mealId);
-  queueRecipeFillsForMeal(kit.db, mealId);
-  jobsWaker.poke();
-  refreshPlan();
+mountFamilyRoutes(flock.hono, kit.db, kit.emitChange, { appToken: flock.env.token ?? process.env.FLOCK_APP_TOKEN ?? null });
+mountMealRoutes(flock.hono, kit.db, kit.emitChange, { basePath: flock.env.basePath });
+// set_regular, the older way to state an item's cycle (regulars.ts).
+mountRegularRoutes(flock.hono, kit.db, kit.emitChange);
+mountProductRoutes(flock.hono, kit.db, kit.emitChange);
+mountRecipeRoutes(flock.hono, kit.db, kit.emitChange);
+// Each dish's video and how it went, kept by its name across weeks (dishBook.ts).
+mountDishBookRoutes(flock.hono, kit.db, kit.emitChange);
+mountItemRoutes(flock.hono, kit.db, kit.emitChange);
+// The app's real carts are copied by the agent: an edit on the page asks it (the sync-cart intent) once the taps stop.
+const timers = new Map<string, ReturnType<typeof setTimeout>>();
+const schedule = (key: string, run: (() => void) | null, ms: number) => {
+  clearTimeout(timers.get(key));
+  timers.delete(key);
+  if (run) timers.set(key, setTimeout(() => { timers.delete(key); run(); }, ms));
 };
-
-kit.ctx.events.subscribe((e) => {
-  // The household profile just arrived (the agent saving what the family told it, Flock's install of a
-  // planned app): the samples go, then the work held back so far starts on the family's own rows.
-  if (!known && e.table === "_settings" && e.id === PROFILE_KEY && householdKnown(kit.sqlite)) {
-    known = true;
-    void clearSamplesAs(flock.hono, e.by).then(() => { refreshPlan(); startAgentWork(); });
-  }
-  if (e.table === "meals" && (e.op === "insert" || e.op === "update") && (e as { by?: string }).by !== "app") mealChanged(e.id);
-  if (e.table === "meal_recipes" && (e as { by?: string }).by !== "app") {
-    const row = kit.db.select({ meal_id: meal_recipes.meal_id }).from(meal_recipes).where(eq(meal_recipes.id, e.id)).get() as { meal_id: string } | undefined;
-    if (row) mealChanged(row.meal_id);
-    else refreshPlan();
-  }
-  // A moved or deleted meal moves/removes its own open grocery rows on the very next recompute.
-  if (e.table === "meals" && e.op === "delete") refreshPlan();
-  if (e.table === "stock" && (e as { by?: string }).by !== "app") refreshPlan();
-  if (e.table === "recipe_ingredients" || (e.table === "ingredients" && e.op === "update" && (e as { by?: string }).by !== "app")) {
-    refreshPlan();
-  }
-});
-
-// The frontend calls this after a meal or grocery edit so the Groceries timeline reflects it immediately; the
-// three routines above also recompute it on their own schedule, so this is a convenience, never the only path.
-flock.hono.post("/api/timeline/recalc", (c) => {
-  refreshPlan();
-  return c.json({ ok: true });
-});
-
-// The page's "Order with <service>" (a family member's yes) wakes the shopping-timeline routine's agent to place it.
-const shoppingWake = async (message: string, data: unknown) => {
-  const routineId = readRoutineId(flock.platform.dataDir);
-  if (!routineId) return { ok: false, reason: "not_ready" };
-  const res = await flock.platform.routines.wake(routineId, message, data) as { ok: boolean; skipped?: boolean; reason?: string };
-  return res.ok ? { ok: true } : { ok: false, reason: res.skipped ? "not_configured" : res.reason };
-};
-
-mountShoppingRoutes(flock.hono, kit.db, kit.settings, emitApp as any, undefined, shoppingWake);
-mountPantryRoutes(flock.hono, kit.db, kit.settings, emitApp);
-mountMealRoutes(flock.hono, kit.db, emitApp, mealChanged);
-mountJobRoutes(flock.hono, kit.db, emitApp, refreshPlan);
+mountCartRoutes(flock.hono, kit.db, kit.emitChange, { askAgent: (name, p) => flock.platform.agent.intent(name, p), schedule });
+// The reminder the agent sends at 15:00 and 19:00 (get_reminder); a cart it orders drops the copy to its app still waiting.
+mountReminderRoutes(flock.hono, kit.db, kit.emitChange, { schedule });
 
 flock.listen();

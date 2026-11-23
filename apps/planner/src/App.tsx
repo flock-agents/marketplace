@@ -1,59 +1,32 @@
-import { useEffect, useState } from "react";
+import "./pages/planner.css";
 import { AppShell, AgentChat, useApp, useHashRoute, label, type AppShellProps } from "./flock/ui";
 import { WeekPage } from "./pages/WeekPage";
-import { GroceriesPage } from "./pages/GroceriesPage";
+import { ShoppingPage } from "./pages/ShoppingPage";
 import { PantryPage } from "./pages/PantryPage";
 import { RecipesPage } from "./pages/RecipesPage";
-import { RecipePage } from "./pages/RecipePage";
-import { IngredientsPage } from "./pages/IngredientsPage";
-import { IngredientPage } from "./pages/IngredientPage";
-import { GlobalSearch } from "./pages/GlobalSearch";
-import { IdleNotice } from "./pages/IdleNotice";
+import { FamilyPage } from "./pages/FamilyPage";
 
 // The name, object, accent, starters and labels come from the app's display (GET /api/_app); these are the fallbacks.
-const STARTERS = ["Plan next week without repeats", "Plan next week from our recipes", "Make the grocery list"];
-const PAGE_IDS = ["week", "groceries", "pantry", "recipes", "ingredients"];
+const STARTERS = ["Plan next week", "Add paneer to my cart", "Save a recipe video"];
+const PAGE_IDS = ["week", "shopping", "pantry", "recipes", "family"];
 
 export default function App() {
   const app = useApp();
-  const [page, go] = useHashRoute("week");
-  const recipeId = page.startsWith("recipe/") ? page.slice(7) : null;
-  const ingredientId = page.startsWith("ingredient/") ? page.slice(11) : null;
-  const groceryFocus = page.startsWith("groceries/") ? page.slice(10).split(",").filter(Boolean) : [];
-  const current = recipeId ? "recipes" : ingredientId ? "ingredients" : groceryFocus.length ? "groceries" : PAGE_IDS.includes(page) ? page : "week";
-  const [selected, setSelected] = useState<{ table: string; id: string; label: string } | null>(null);
-  useEffect(() => { if (!recipeId && selected?.table === "recipes") setSelected(null); }, [recipeId]); // eslint-disable-line react-hooks/exhaustive-deps
+  const [page, go] = useHashRoute("week", PAGE_IDS);
   const pages = [
     { id: "week", label: label("nav.week", "Week"), icon: "calendar-days" },
-    { id: "groceries", label: label("nav.groceries", "Shopping"), icon: "shopping-basket" },
-    { id: "pantry", label: label("nav.pantry", "Pantry"), icon: "package" },
+    { id: "shopping", label: label("nav.shopping", "Shopping"), icon: "shopping-basket" },
+    { id: "pantry", label: label("nav.pantry", "Pantry"), icon: "archive" },
     { id: "recipes", label: label("nav.recipes", "Recipes"), icon: "book-open" },
-    { id: "ingredients", label: label("nav.ingredients", "Ingredients"), icon: "carrot" },
+    { id: "family", label: label("nav.family", "Family"), icon: "users" },
   ];
   return (
     <AppShell
       name={app.name ?? document.title} object={app.display.object ?? "grocery-bag"} accent={app.display.accent as AppShellProps["accent"]}
-      nav="top" pages={pages} current={current} onNavigate={(id) => { setSelected(null); go(id); }}
-      chat={{
-        placement: "side",
-        render: () => (
-          <AgentChat
-            placement="side"
-            context={selected}
-            starters={app.display.starters ?? STARTERS}
-          />
-        ),
-      }}
+      nav="top" pages={pages} current={page} onNavigate={go}
+      chat={{ placement: "side", render: () => <AgentChat placement="side" starters={app.display.starters ?? STARTERS} /> }}
     >
-      <GlobalSearch onOpen={(route) => { setSelected(null); go(route); }} />
-      <IdleNotice settings={app.settings} loading={app.loading} />
-      {ingredientId ? <IngredientPage id={ingredientId} onBack={() => go("ingredients")} onOpenRecipe={(id) => go(`recipe/${id}`)} />
-        : recipeId ? <RecipePage id={recipeId} onBack={() => go("recipes")} onSelect={setSelected} />
-        : current === "groceries" ? <GroceriesPage focus={groceryFocus} />
-        : current === "pantry" ? <PantryPage />
-        : current === "ingredients" ? <IngredientsPage onOpen={(i) => go(`ingredient/${i.id}`)} />
-        : current === "recipes" ? <RecipesPage onOpen={(r) => go(`recipe/${r.id}`)} />
-        : <WeekPage onSelect={setSelected} onOpenGroceries={(ids) => { setSelected(null); go(`groceries/${ids.join(",")}`); }} />}
+      {page === "shopping" ? <ShoppingPage /> : page === "pantry" ? <PantryPage /> : page === "recipes" ? <RecipesPage /> : page === "family" ? <FamilyPage /> : <WeekPage />}
     </AppShell>
   );
 }

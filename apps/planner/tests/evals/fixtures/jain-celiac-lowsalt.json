@@ -1,0 +1,75 @@
+{
+  "id": "jain-celiac-lowsalt",
+  "title": "Jain every day, a celiac child, a low-salt soft-food grandfather",
+  "today": "2026-11-21",
+  "week_start": "2026-11-23",
+  "people": [
+    { "name": "Nikhil", "relationship": "self", "group": "adult" },
+    { "name": "Pooja", "relationship": "wife", "group": "adult" },
+    { "name": "Riya", "relationship": "daughter, 6", "group": "child", "allergies": "celiac: no gluten" },
+    { "name": "Arjun", "relationship": "son, 13", "group": "child" },
+    { "name": "Mahendra", "relationship": "father, 78", "group": "elder", "diet": "low salt (heart), soft food" }
+  ],
+  "cook": { "name": "Sunita", "days": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
+    "arrival": [{ "at": "11:00", "meals": ["Lunch"] }, { "at": "17:00", "meals": ["Dinner"] }],
+    "time_limit": "an hour each visit" },
+  "cooking_days": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+  "slots": {
+    "extra_slots": [{ "name": "Riya's tiffin", "days": ["Mon", "Tue", "Wed", "Thu", "Fri"], "for": ["Riya"] }],
+    "order_in": []
+  },
+  "absent": [{ "who": "Riya", "days": ["Mon", "Tue", "Wed", "Thu", "Fri"], "slots": ["Lunch"], "why": "school" },
+             { "who": "Arjun", "days": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"], "slots": ["Lunch"], "why": "school canteen" }],
+  "last_week": [
+    { "date": "2026-11-16", "slot": "Lunch", "dishes": ["Moong dal", "Rice", "Lauki sabzi", "Phulka"] },
+    { "date": "2026-11-16", "slot": "Dinner", "dishes": ["Paneer bhurji", "Phulka"] },
+    { "date": "2026-11-17", "slot": "Lunch", "dishes": ["Gatte ki sabzi", "Rice"] },
+    { "date": "2026-11-17", "slot": "Dinner", "dishes": ["Moong dal khichdi", "Kadhi"] },
+    { "date": "2026-11-18", "slot": "Lunch", "dishes": ["Toor dal", "Rice", "Cabbage sabzi"] },
+    { "date": "2026-11-18", "slot": "Dinner", "dishes": ["Paneer tikka masala", "Jowar roti"] }
+  ],
+  "told": {
+    "family": "Me Nikhil, my wife Pooja, our daughter Riya is 6, our son Arjun is 13, and my father Mahendra, he's 78.",
+    "cook": "Sunita comes Monday to Saturday, 11 for lunch and 5 for dinner, about an hour each time. Breakfast and Sunday we do ourselves.",
+    "cookLimits": "She makes good dal, sabzi, rotis. No fancy stuff.",
+    "cookTime": "Breakfast we make ourselves in 15 minutes before school.",
+    "newRecipes": "Stick to what she knows.",
+    "cookingDays": "We cook all seven days; Sunday we cook ourselves.",
+    "kidsBreakfast": "Riya has celiac disease: absolutely no gluten — no wheat, atta, maida, rava/sooji, bread, biscuits, nothing. Arjun eats anything.",
+    "kidsLunch": "Riya takes a tiffin Monday to Friday, it must be gluten free like everything she eats. Arjun eats in the school canteen on weekdays and Saturday.",
+    "kidsDinner": "Same food for everyone at dinner, but Riya's must be gluten free.",
+    "adultsBreakfast": "Poha, upma, chilla, that kind of thing.",
+    "adultsLunch": "Dal, sabzi, rice, roti.",
+    "adultsDinner": "Light.",
+    "diet": "We are Jain, every day: no onion, no garlic, no potatoes, carrots, beetroot, radish, ginger, no root vegetables at all, no mushrooms, no honey, no eggs, no meat.",
+    "elders": "Papa had a heart attack last year: very low salt — no pickles, no papad, no namkeen. And he has few teeth left, so everything for him must be soft: no rotis, no hard or crisp food.",
+    "rules": "Paneer not more than twice a week, it's heavy for papa.",
+    "orderIn": "We never order in."
+  },
+  "rules": [
+    { "kind": "veg", "note": "Jain: no meat" },
+    { "kind": "no_eggs", "note": "no eggs" },
+    { "kind": "no_onion_garlic", "note": "Jain every day" },
+    { "kind": "avoid", "items": ["@root_veg", "mushroom", "honey"], "note": "Jain: no root vegetables, mushrooms or honey" },
+    { "kind": "avoid", "who": "Riya", "items": ["@gluten"], "note": "celiac: absolutely no gluten" },
+    { "kind": "avoid", "who": "Mahendra", "items": ["@pickle", "papad", "namkeen", "bhujia", "chips"], "note": "very low salt after his heart attack" },
+    { "kind": "other", "who": "Mahendra", "note": "few teeth: soft food only, no rotis or crisp food" },
+    { "kind": "cap", "items": ["paneer"], "per_week": 2, "note": "paneer at most twice a week" }
+  ],
+  "expect": [
+    { "id": "all_meals_planned", "says": "Breakfast, lunch and dinner every day", "check": { "type": "present", "slots": ["Breakfast", "Lunch", "Dinner"] } },
+    { "id": "tiffin_every_school_day", "says": "Riya has a tiffin Mon-Fri", "check": { "type": "present", "days": ["Mon", "Tue", "Wed", "Thu", "Fri"], "slots": ["Riya's tiffin"] } },
+    { "id": "jain_no_root_veg", "says": "No onion, garlic, potato or any root veg, any day, anyone", "check": { "type": "avoid", "terms": ["@root_veg"] } },
+    { "id": "jain_no_mushroom_honey", "says": "No mushroom or honey", "check": { "type": "avoid", "terms": ["mushroom", "honey"] } },
+    { "id": "veg_no_eggs", "says": "No meat, fish or eggs", "check": { "type": "avoid", "terms": ["@meat", "@fish", "@egg"] } },
+    { "id": "riya_gluten_free", "says": "Nothing Riya eats has wheat, atta, maida, rava, bread or other gluten", "check": { "type": "avoid", "who": "Riya", "terms": ["@gluten"] } },
+    { "id": "riya_tiffin_gluten_free", "says": "Riya's tiffin is gluten free", "check": { "type": "avoid", "slots": ["Riya's tiffin"], "terms": ["@gluten"] } },
+    { "id": "riya_fed_each_meal", "says": "Riya has something she can eat at every meal she is home for", "check": { "type": "present", "who": "Riya", "slots": ["Breakfast", "Dinner"] } },
+    { "id": "mahendra_low_salt", "says": "No pickle, papad or namkeen for Mahendra", "check": { "type": "avoid", "who": "Mahendra", "terms": ["@pickle", "papad", "namkeen", "bhujia", "chips", "sev"] } },
+    { "id": "mahendra_soft", "says": "Mahendra gets no roti or hard/crisp food", "check": { "type": "avoid", "who": "Mahendra", "terms": ["@hard_food"], "names_only": true } },
+    { "id": "mahendra_fed_each_meal", "says": "Mahendra has something soft at every meal", "check": { "type": "present", "who": "Mahendra", "slots": ["Breakfast", "Lunch", "Dinner"] } },
+    { "id": "paneer_max_2", "says": "Paneer in at most 2 meals of the week", "check": { "type": "cap", "terms": ["paneer"], "per_week": 2 } },
+    { "id": "breakfast_quick", "says": "Breakfast is a 15-minute dish (no paratha, puri, vada...)", "heuristic": true, "check": { "type": "avoid", "slots": ["Breakfast"], "terms": ["@slow_breakfast"], "names_only": true } },
+    { "id": "tiffin_never_twice", "says": "Riya's tiffin dish does not repeat", "soft": true, "check": { "type": "distinct", "slots": ["Riya's tiffin"] } }
+  ]
+}

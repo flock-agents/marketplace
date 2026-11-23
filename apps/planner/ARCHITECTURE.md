@@ -77,65 +77,111 @@ An installed copy that nobody edited follows its package and the component libra
 
 ## This app: Meal Planner
 
-For a household's meals over the week (Breakfast, Lunch and Dinner), the shopping that follows from them, what is in the
-kitchen and the family's recipe book. The app does the deterministic work (lists, quantities, timing, stock); its paired
-agent brings the judgement (reviewing a meal's note, matching and filling recipes, finding patterns, building carts on
-grocery services) through the app's operations. The agent is replaceable: everything it needs ships with the app.
+A household's week of meals, what the family needs to buy gathered into one cart per shopping app, a guess at what is running
+out for each item, and saved recipes. The agent reasons (plans, answers the questions, copies carts to the apps, checks out);
+the app stores, estimates, builds the carts and runs the clock.
 
-Nothing runs until the household is known (server/setupGate.ts): the `household.profile` setting holds what the family
-told the agent in their first conversation. Until then the routines are silent no-ops, no job is queued for the agent,
-the shopping list is not rebuilt and every page says the app is waiting (src/pages/IdleNotice.tsx). When the profile
-arrives the samples are cleared and the held-back work starts. Don't fill the profile from guesses or from the app's rows.
+**Files, one job each.** `server/index.ts` mounts the kit (`settings`, `routines`, `keepTables: OLD_TABLES`; no seed) and
+the routes; `agentOps.ts` maps each operation to one of those routes, so the agent and the pages pass the same checks;
+`agent-guide.md` is the `guide` text; `db/schema.ts` the thirteen tables; `db/constants.ts` the closed lists, the settings,
+the estimate's tuning and the 2.0 table names; `family.ts` people, the house row, the cooking days and shopping apps;
+`meals.ts` the week, `plan_week`, `set_meal`, `set_dish`, and one dish per meal (`mergeSameDishes`); `dishText.ts` a dish in
+one line; `regulars.ts` `set_regular` as a way to state an item's cycle, and the move of old everyday items into item cycles;
+`items.ts` items, their events, order history and the answers; `estimate.ts` the estimate and an item's cycle as pure functions; `cart.ts` carts
+and their life; `cartRoutes.ts` the cart operations and keeping each app's own cart in step; `reminder.ts` what a reminder
+says and does; `products.ts` remembered products and pack arithmetic (g, ml, pc); `recipes.ts` saved recipes;
+`dishBook.ts` each dish's video and how it went, by its name across weeks; `messages.ts` the texts the agent sends word for word; `dates.ts` local dates; `gate.ts` the family gate and the 2.0 profile;
+`routines/` the four routines; `testkit.ts` boots the app for tests. Pages (`src/pages/`): `WeekPage` + `DishPanel`;
+`ShoppingPage` with `CartPanel` (one cart per app) and `OrdersList`; `PantryPage` and `ItemPage` (Snooze, "Don't ask about
+this" and "Comes on subscription" with an optional who-delivers-it: a subscription is a pantry item's setting, shown as
+"Subscription · the milkman" and never in a cart or asked about; no separate list); `RecipesPage`;
+`FamilyPage` (people, the cook, extra meals, house rules) with `RowsEditor`. The app has no Settings page of its own: the
+main app, the fallback and Order without asking are manifest settings (group "How we order"), shown on the Settings tab
+Flock's AppShell adds for the owner; `Thumb.tsx` (a product's picture, a dish's play button); `shared.ts` and `format.ts`.
 
-### Data
+**Tables** (all public; lists are JSON text, dates `YYYY-MM-DD`, times `HH:MM`, local). `people` (child | adult | elder;
+portions, diet, allergies in their own words) · `house` (one row: rules, the cook, extra slots, meals ordered in, cooking
+days, connected apps, `history_synced` per app and reader, `sync_session_id`, `profile_to_structure`, `intro_sent_at`, the check-in
+times) · `plan_meals` (date, slot, draft | final, `ordered_in`) · `dishes` (in order, for everyone or named people, optional
+recipe or video) · `dish_items` (item, amount, unit) · `regulars` (retired: its rows became item cycles, nothing reads it) · `items` (one per thing
+bought: group daily | few_days | monthly, unit, `subscription`, `dont_ask`, `snoozed_until`, the cycle the family stated
+(`stated_amount`, `stated_days`), the cached estimate: usual
+amount, lasts days, product, app, last bought, run-out, confident; and `image`, the shopping app's picture of it) · `item_events` (a purchase, an answer, an ask or an
+unanswered ask, each tagged counted | early_buy | your_answer | one_off | not_counted) · `orders` (a cart; `reminder_key`)
+and `order_lines` (source everyday | meal | low | added | returned) · `products` (one per item and app) · `saved_recipes` · `dish_book` (one per dish name: its video link, title and
+thumbnail; its latest rating good | okay | didnt_work with the note, day and who said it, and the last 5 as `ratings`).
 
-Public tables (server/db/schema.ts), each with the kit's `id`, `created_at`, `updated_at`, `updated_by`:
-- `meals`: one row per dish (`date`, `slot`, `dish`, `time`, `note`, `outcome` cooked|skipped with `outcome_source`). Its
-  recipes are the private `meal_recipes` set (`recipe_id` mirrors the first). A meal surely over (its slot's latest time,
-  settings `meal.latest.*`) counts as cooked.
-- `recipes` and `recipe_ingredients` (one regular adult portion per line, each linked to the one `ingredients` entry it
-  means). Only the agent creates recipes (after searching for the same dish under another spelling); a planned recipe with
-  no lines gets a `fill_recipe` job.
-- `ingredients`: the catalog (aliases, unit conversions, pack prefs, home shelf life guessed by the agent).
-- `groceries`: the shopping list. Meal rows are recomputed from the plan every time (server/quantity.ts, mealGroceries.ts):
-  recipes × diners' portions, minus stock still good on the meal's day (server/stock.ts), plus the agent's review of the note.
-- `carts`: one shopping window each: `draft` → `ordered` | `let_go`, with its span, quotes and the yes.
-- `diners`, `diner_portions` (each diner's portion by slot), `staples` (cadence items like milk).
+**Operations** (28). `guide`; the family: `set_person`, `set_house_rules`, `set_cook`, `set_slots`, `set_cooking_days`,
+`set_shopping_apps`; the plan: `plan_week` (draft | final; without meals it answers the context to plan from), `set_meal`,
+`set_dish`; items: `set_regular` (the older way to state a cycle), `import_order_history` (about 8 orders and 80 items a call, one app a call),
+`record_bought_outside`, `set_item`, `set_subscription`, `answer_running_low`, `remember_product`; the reminder and carts:
+`get_reminder` (afternoon | evening, with an optional date), `get_cart`, `set_cart_line`, `order_cart`, `sync_cart`,
+`record_order`, `cancel_order`; `save_recipe`; dishes: `set_dish_video`, `rate_dishes`, `get_dish`. The `sync-cart` intent asks the agent to make an app's own cart match a cart.
 
-Private tables (server-only, reached through routes/operations): `stock` (what is at home), `agent_jobs`, `choice_log`,
-`learned_prefs`, `message_log`, `shopping_prefs`, `standing_consumption`, `meal_recipes`, `prep_reminders`.
+**Routines and the gate.** `weekly-plan` (Sunday 11:00) wakes the agent to plan next week on the cooking days one day a call,
+each kept as planned, and to close with a `plan_week { week_start, mode: "final" }` call without meals, which carries the
+Sunday message and, once, the intro. `afternoon-reminder` (15:00) and `evening-reminder` (19:00) check as a dry run whether
+there is anything to say and wake the agent only then (the evening one also when an app is connected, for the day's read of
+its history); each records the time it really runs at, which the intro names. The woken agent reads the order history first,
+calls `get_reminder` (which puts the daily items due on the carts and chooses what to ask), copies the carts to the apps
+with the connectors (`sync_cart`), calls `get_reminder` again with the same date (nothing is counted twice), then sends the
+message the app wrote. `order-clock` (every 15 min) closes a placed order nobody paid within
+24 hours as not paid and wakes the agent with the one line to send (`unpaid_notice`, not repeated when the agent itself
+recorded the order unpaid or cancelled it), and reopens a cart left `ordering` for an hour with nothing recorded. The gate
+(`gate.ts`): nothing runs until one person is saved. On an upgrade, boot copies `household.profile` to
+`house.profile_to_structure`; until cleared, the weekly run asks only to structure it, then plan. 2.0's 18 tables stay, unread.
 
-### The agent's interface
+**A cart's life.** One `open` cart per app collects lines: daily items as they come due (source `everyday`), a meal's items, an item that may be running low, what
+the family added and what came back from a closed order. The family's yes (a reply, or the Order button, which sends "Order my
+<App> cart"; with "Order without asking" on, the reminder's yes for the items it is sure about) moves it to `ordering`; the
+agent checks out and records it `placed` (its lines are then purchases and restart their items' cycles), then `paid` or
+`not_paid`. A cart not paid for 24 hours, or recorded unpaid, is `not_paid`: its purchases stop counting and its lines go
+back on the app's open cart as `returned`; a late payment undoes both. `cancelled` is a cart being ordered that went back, or
+a placed one let go. Lines added while a cart is `ordering` go to a new open cart of that app. The page sends the lines it
+showed (`seen`) with its picks and its order, so a line added after it loaded is neither zeroed nor lost. After the family
+edits a cart the app asks the agent, through the `sync-cart` intent, to copy it to the app (once per burst of edits,
+SYNC_DEBOUNCE_SEC after the last, one at a time, never for Amazon, whose cart is built when the family orders).
 
-`agentInterface` in flock.app.json: 20 operations (server/agentOps.ts, each a door onto the app's own route, so a write
-runs the app's checks and hooks) and short instructions; the full guide is the `guide` operation (server/agent-guide.md).
-Routines: `rolling-plan` (nightly plan check), `prep-reminders`, `shopping-timeline` (per window: reminder → heads-up
-Checklist → price step; ≤ 3 messages; a draft with no yes is let go), `agent-jobs` (wakes the agent for background jobs:
-review_meal, fill_recipe, find_patterns — never messages the family).
+**An item's estimate.** Events are tagged in date order. A purchase is `counted`, or `early_buy` when it came before the
+usual cycle with no ask in between (both enter the pattern). It is `one_off` when its amount is under half or over twice the
+usual, or its gap from the last restock under half or over twice the usual cycle; a one-off under half the usual amount is a
+top-up and does not restart the item; two one-offs in a row in the same direction both count. An answer with days closes the
+cycle it is in (`your_answer`); an answer before any purchase, and an ask that went unanswered, are `not_counted`. An item
+never bought with a size is estimated from gaps alone. The pattern is the median of the last 5 sized amounts and cycles; the
+run-out is the last restock plus the cycle (scaled when the last amount was not the usual) times the item's wait factor, or
+the day the plan's amounts use up what was bought, when sooner. An item is asked about when confident (one cycle seen), not
+daily, not a subscription or `dont_ask`, not snoozed, and its run-out less a lead (0, 1 or 3 days by group) has come; at most 5
+asks a reminder, soonest run-out first. Two unanswered asks snooze the item; repeated misses stretch its wait factor.
 
-### Pages
+**One cycle per item, for the house.** An item's cycle is how much is bought and how often (`cycleText`: "500 ml every day",
+"30 pc about once a week"), the Pantry's line for it. It comes from the purchases of the whole house: more than one person's
+agent may give `import_order_history` the orders of that person's own account of an app; purchases dedupe by `order_ref`
+and all count for the one item, and `history_synced` is kept per app and per reader (`agent:<id>`), so a reminder's `since`
+is the woken agent's own reading. Until the purchases show a cycle, the one the family stated stands in (`set_item
+{ usual_amount, unit, every_days }`, or the older `set_regular`). A `daily` item with a cycle goes on the cart by itself for
+the day it is due (`dailyDue`: never a subscribed, `dont_ask` or snoozed one, nor one whose learned cycle stopped
+`dailyStaleDays` ago); `few_days` and `monthly` items are asked about. There is no list of everyday items: at boot
+`moveRegulars` turns an installed copy's `regulars` rows into item cycles, once.
 
-- `week` (WeekPage.tsx): the Schedule; a meal's chip appears only when there is something to tell ("Need Coriander…",
-  "On Sun 6:00 PM list") and opens those items on Shopping. The editor (MealEditor.tsx) has the dish, time and note.
-- `groceries` ("Shopping", GroceriesPage.tsx): orders as groups with their span; the next draft's best quote, "Order with
-  <service>" and "Skip this order" (asks first); one line per ingredient with Mark bought / Already have it / Skip.
-- `pantry` (PantryPage.tsx): what is at home, by kind, with how sure ("bought Tue", "assumed"); tap an item to correct it.
-- `recipes`, `#/recipe/<id>`, `ingredients`, `#/ingredient/<id>`: the book and the catalog.
+**A meal is planned once.** A slot has one dish for everyone who eats it; one person's variation is the dish's
+`portion_note`, and a second dish (`for`) is only for someone who eats something else. The same dish sent twice in a meal is
+merged into one by `plan_week` and `set_meal` (people combined, notes kept with whose they are, ingredients added up), and
+at boot `mergeDuplicateDishes` does the same for meals planned before. The Week page names each dish once (`mealLines`).
 
-### What to change first
+**A dish is known by its name.** `dish_book` keeps a dish's one video (a link the agent found with its own search, or a
+reel the family saved: never a file; a `video_url` sent with a planned dish becomes the dish's too) and how it went. Every
+planned dish reads both by its name (`DishView.video`, `last_time`: a rating from before the meal's day), so a video
+attached last week shows this week with no call. The 19:00 reminder asks once how today's food eaten at home went (every
+dish of today's meals not ordered in, staples and dishes already rated today aside; nothing on a day with none), answered
+with one `rate_dishes`. Last time's note is under the dish on the Week page and in the cook's message (the reminder's text,
+the Sunday message), beside the dish's video link; `plan_week`'s context lists `known_dishes`, the ones that did not work
+first, for a plan to make them rarely.
 
-1. Slots, aisles and categories: server/db/constants.ts; the meal latest times and shopping-window settings there too.
-2. The seed rows in server/db/seed.ts (a sample family's recipes with their lines, two weeks of meals, a diner, a staple).
-3. The grocery services compared at order time (setting `services`) and `prefs.category_defaults`.
-4. The starter prompts in src/App.tsx, page titles and nav names (`label(...)`), the accent and the object.
+**Product pictures.** An item's `image` is the shopping app's picture: from an order's item in `import_order_history` (the
+newest order's), else the first cart line that had one; only an http(s) link is kept. The Pantry shows it (else a
+remembered product's, else the item's first letter), and a cart line without one shows its product's or item's. Never in
+a message.
 
-### Other weekly plans (school runs, chores, appointments): only on the owner's ask
-
-This app is for meals: a school-run rota, chores or appointments are a `checklist` (who and by when) or a `tracker`, not a planner.
-Adapt the planner only when the owner asks for this week view for something else. That is a hand change (a build, or a change after the app is live), never the install: the install keeps `meals`, its Breakfast, Lunch and Dinner slots and a required `dish`.
-The week is generic underneath: each row is a date, a slot and a title, and the rows sharing a date and slot show on one line. To adapt it, before the app has real rows:
-1. `SLOTS` in server/db/constants.ts become the rows of the day: `["Morning drop", "Afternoon pickup"]` for school runs, `["Morning", "Evening"]` for chores, `["Morning", "Afternoon", "Evening"]` for appointments.
-2. Rename in server/db/schema.ts and the pages: `meals` → `plans`, `dish` → `title`, and drop `recipe_id`. Add a column only when the job needs it: for appointments an optional `time` (text, "16:30") and `place`, shown with the title ("16:30 Dentist, Meera").
-3. In src/pages/WeekPage.tsx and src/pages/MealEditor.tsx, swap the words "meal", "dish" and "breakfast" in titles and buttons (all plain strings), and take the recipe suggestions out of the editor.
-4. Drop the pages that do not fit: remove `groceries` and `recipes` from `PAGES` in src/App.tsx (and their files and tables) unless a shopping list helps, and set `nav="none"` on AppShell when one page is left.
-5. Rewrite the seed rows in server/db/seed.ts with the owner's real week.
+**Deliberately not stored or done.** No stock count: a status is a guess from the item's events. The app never calls a
+connector itself: it asks the agent (a wake, or the `sync-cart` intent). The Pantry and the item page never show which app an
+item is bought on.

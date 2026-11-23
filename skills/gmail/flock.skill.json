@@ -314,7 +314,7 @@
   },
   "name": "Gmail",
   "slug": "gmail",
-  "version": "1.6.3",
+  "version": "1.6.5",
   "minFlockVersion": "0.13.0",
   "author": "flock"
 }

@@ -1,56 +1,59 @@
-import { useMemo, useState } from "react";
-import { Button, Empty, Form, InlinePanel, Page, RowList, Search, useTable, useToday, label } from "../flock/ui";
-import { RECIPE_FIELDS, addDays, saidText, type Meal, type Recipe } from "./shared";
-import { suggestRecipes, type RecipeV2 } from "./recipes";
-import { splitList } from "./ingredients";
+import { useState } from "react";
+import { Bullets, Button, Card, Empty, Gallery, Heading, Icon, Page, Stack, label, safeHref, safeSrc, useApp, useTable } from "../flock/ui";
+import { agentName, recipeSourceLabel, textList } from "./format";
+import { joined, type RecipeRow } from "./shared";
 
-/** Empty text fields come back from the form as null; the recipe keeps only what was written. */
-export const recipeValues = (v: Record<string, any>): Partial<RecipeV2> => {
-  const out: Record<string, unknown> = { name: String(v.name ?? "").trim(), ingredients: v.ingredients ?? null, method: v.method ?? null, notes: v.notes ?? null };
-  for (const k of ["servings", "prep_min", "cook_min", "prep_lead_hours", "cuisine", "source_url"] as const) if (k in v) out[k] = v[k] ?? null;
-  if ("tags" in v) out.tags = JSON.stringify(splitList(v.tags));
-  return out as Partial<RecipeV2>;
-};
+type Ingredient = { item?: unknown; amount?: unknown; unit?: unknown };
+const ingredientText = (i: Ingredient): string => [i.amount, i.unit, i.item].filter((x) => x != null && x !== "").join(" ");
+/** A link without its scheme, short enough to read: what the family taps. */
+const linkWords = (href: string): string => { const t = href.replace(/^https?:\/\//i, "").replace(/\/$/, ""); return t.length > 60 ? `${t.slice(0, 57)}…` : t; };
 
-export function RecipesPage({ onOpen }: { onOpen: (r: Recipe) => void }) {
-  const [q, setQ] = useState("");
-  const [adding, setAdding] = useState(false);
-  const now = useToday();
-  const list = useTable<Recipe>("recipes", { sort: "name", limit: 500 });
-  const recent = useTable<Meal>("meals", { where: { "date[gte]": addDays(now, -56) }, sort: "-date", limit: 500 });
-  // The structured lines the shopping list is built from (not the free-text `ingredients` note), counted per recipe.
-  const lines = useTable<{ id: string; recipe_id: string }>("recipe_ingredients", { limit: 5000 });
-  const lineCount = useMemo(() => {
-    const m = new Map<string, number>();
-    for (const l of lines.rows) m.set(l.recipe_id, (m.get(l.recipe_id) ?? 0) + 1);
-    return m;
-  }, [lines.rows]);
-  const last = useMemo(() => new Map(suggestRecipes(list.rows, recent.rows, "", now, now, list.rows.length).map((s) => [s.recipe.id, s.said])), [list.rows, recent.rows, now]);
-  // Search reads the name and the ingredients ("paneer" finds Palak paneer), so it filters here.
-  const needle = q.trim().toLowerCase();
-  const shown = list.rows.filter((r) => !needle || r.name.toLowerCase().includes(needle) || (r.ingredients ?? "").toLowerCase().includes(needle));
-  const add = async (v: Record<string, any>) => { const row = await list.create(recipeValues(v)); setAdding(false); onOpen(row); };
+/** The family's saved recipes, with their videos. A recipe opens in place, under its card. A link or a picture saved with a
+ *  recipe is any text someone sent: only a safe link is linked, and only a safe picture is loaded. */
+export function RecipesPage() {
+  const list = useTable<RecipeRow>("saved_recipes", { sort: "name", limit: 100 });
+  const [openId, setOpenId] = useState<string | null>(null);
+  const picked = openId ? list.rows.find((r) => r.id === openId) : undefined;
+  const agent = agentName(useApp().display);
   return (
-    <Page title={label("title.recipes", "Recipes")} subtitle={list.rows.length === 1 ? "1 recipe in the family's book" : `${list.rows.length} recipes in the family's book`}
-      actions={<Button variant="app" icon="plus" onClick={() => setAdding(true)}>Add</Button>}>
-      {adding ? (
-        <InlinePanel label="New recipe" onClose={() => setAdding(false)}>
-          <Form fields={[...RECIPE_FIELDS]} submitLabel="Add" onSubmit={add} onCancel={() => setAdding(false)} />
-        </InlinePanel>
-      ) : null}
-      <Search value={q} onChange={setQ} placeholder="Search recipes or ingredients" />
-      <RowList
-        rows={shown} loading={list.loading} error={list.error}
+    <Page title={label("title.recipes", "Recipes")} subtitle={`Share a reel to ${agent} on WhatsApp and say "save this"`}>
+      <Gallery
+        rows={list.rows} loading={list.loading} error={list.error} hasMore={list.hasMore} onLoadMore={list.loadMore}
+        image={(r) => safeSrc(r.thumbnail)} object={() => "grocery-bag"} columns={2}
         title={(r) => r.name}
-        meta={(r) => {
-          const n = lineCount.get(r.id) ?? 0, said = last.get(r.id) ?? null;
-          const count = lines.loading ? null : n ? `${n} ingredient${n === 1 ? "" : "s"}` : "No ingredients yet";
-          return [count, said ? saidText(said, now) : null].filter(Boolean).join(" · ");
-        }}
-        onRowClick={onOpen}
-        empty={<Empty title={q ? "No matches" : "No recipes yet"} hint={q ? "Nothing matches that search." : "Add the dishes the family makes, with how you like them made."} object="grocery-bag"
-          action={q ? undefined : <Button onClick={() => setAdding(true)}>Add a recipe</Button>} />}
+        meta={(r) => [recipeSourceLabel(r), ...textList(r.tags)].join(" · ")}
+        onClick={(r) => setOpenId(openId === r.id ? null : r.id)}
+        empty={<Empty title="No recipes saved yet" hint={`Saved recipes show here, and ${agent} can plan them into a week.`} object="grocery-bag" />}
+        expanded={picked ? { at: picked.id, label: picked.name, onClose: () => setOpenId(null), content: <RecipeDetail recipe={picked} agent={agent} onClose={() => setOpenId(null)} /> } : null}
       />
     </Page>
+  );
+}
+
+function RecipeDetail({ recipe: r, agent, onClose }: { recipe: RecipeRow; agent: string; onClose: () => void }) {
+  const links = textList<unknown>(r.links).filter((l): l is string => typeof l === "string" && !!l.trim());
+  const ingredients = textList<Ingredient>(r.ingredients).map(ingredientText).filter(Boolean);
+  const who = joined(textList(r.for_people));
+  return (
+    <Card title={r.name} meta={[recipeSourceLabel(r), who ? `for ${who}` : null, ...textList(r.tags)].filter(Boolean).join(" · ")}
+      actions={<Button size="sm" variant="ghost" icon="x" onClick={onClose}>Close</Button>}>
+      <Stack gap="md">
+        {links.length ? (
+          <Stack gap="xs">
+            {links.map((l, i) => {
+              const href = safeHref(l);
+              return href
+                ? <a key={i} className="pl-chip" href={href} target="_blank" rel="noopener noreferrer"><Icon name="play" size={12} />{linkWords(href)}</a>
+                : <span key={i} className="pl-quiet">{l}</span>;
+            })}
+          </Stack>
+        ) : <p className="pl-quiet">No link saved with this recipe.</p>}
+        <Stack gap="xs">
+          <Heading level={3}>Ingredients</Heading>
+          {ingredients.length ? <Bullets items={ingredients} /> : <p className="pl-quiet">{`None saved yet. Ask ${agent} to add them.`}</p>}
+        </Stack>
+        {r.notes ? <Stack gap="xs"><Heading level={3}>Notes</Heading><p className="pl-notes">{r.notes}</p></Stack> : null}
+      </Stack>
+    </Card>
   );
 }
