@@ -518,3 +518,81 @@ describe("memory-extraction: when it runs (R25, the built-in desk's cadence)", (
     expect(f.extracts).toHaveLength(1);
   });
 });
+
+describe("memory-extraction: the day is closed only by a run that worked the whole mailbox", () => {
+  const IST = "Asia/Kolkata";
+  const at = (hhmm: string) => Date.parse(`2026-11-24T${hhmm}:00+05:30`);
+  const stamp = () => (db.query("SELECT value FROM app_meta WHERE key = ?").get(`last_harvest:${ACCOUNT}`) as { value: string } | null)?.value ?? null;
+  beforeEach(() => { noteTickCadence({ tz: IST, window: { days: [0, 1, 2, 3, 4, 5, 6], start: 9, end: 19 }, everyHours: 1, morningHour: 5 }); });
+  const event = (over: Parameters<typeof fake>[0] = {}) => fake({ kept: [kept(1)], trigger: "event", now: () => at("06:10"), ...over });
+
+  test("a full read stamps; mail left for good (deferred, not stopped, not over the cap) still counts as worked", async () => {
+    const f = event({ gather: { deferred: 3 } });
+    await f.run();
+    expect(Number(stamp())).toBe(at("06:10"));
+  });
+
+  test("a mailbox not read through (a sign-in wall, a paused account) leaves the day owed", async () => {
+    let now = at("06:10");
+    const f = event({ gather: { stopped: "quarantined", note: "mailbox not read (quarantined)", kept: [], deferred: 2 }, now: () => now });
+    await f.run();
+    expect(stamp()).toBeNull();
+    // The next run in the same hour is still owed: it reads the mailbox again.
+    now = at("06:40");
+    await f.run();
+    expect(logs.filter((l) => l.includes("day left owed: mailbox not read (quarantined)"))).toHaveLength(2);
+    expect(stamp()).toBeNull();
+  });
+
+  test("threads left over the run's cap leave the day owed", async () => {
+    const f = event({ gather: { overCap: 4, deferred: 4 } });
+    await f.run();
+    expect(stamp()).toBeNull();
+    expect(f.extracts).toHaveLength(1);
+  });
+
+  test("a chunk Flock deferred on its write limit leaves the day owed", async () => {
+    const f = event({ extract: () => ({ ok: true, data: { ok: true, processedItems: 0, failedItems: 0, deferredItems: 1 } }) });
+    await f.run();
+    expect(stamp()).toBeNull();
+  });
+
+  test("a busy mailbox never stamps", async () => {
+    const f = event({ gather: { busy: true, note: "mailbox busy", kept: [] } });
+    await f.run();
+    expect(stamp()).toBeNull();
+  });
+
+  test("an owed day is read again on the next new mail in the same hour", async () => {
+    let now = at("06:10");
+    const f = event({ now: () => now, extract: () => ({ ok: true, data: { ok: true, processedItems: 0, failedItems: 0, deferredItems: 1 } }) });
+    await f.run();
+    now = at("06:40");
+    await f.run();
+    expect(f.extracts).toHaveLength(2);
+  });
+});
+
+describe("memory-extraction: the first read leaves the morning run owed (R27)", () => {
+  const IST = "Asia/Kolkata";
+  const at = (hhmm: string) => Date.parse(`2026-11-24T${hhmm}:00+05:30`);
+  beforeEach(() => { noteTickCadence({ tz: IST, window: { days: [0, 1, 2, 3, 4, 5, 6], start: 9, end: 19 }, everyHours: 1, morningHour: 5 }); });
+
+  test("the first read stamps nothing", async () => {
+    const f = fake({ kept: [kept(1)] });
+    expect(await runFirstRead(f.ctx, ACCOUNT, "me@acme.com", {
+      gather: async () => ({ kept: [kept(1)], skipped: 0, cursor: "1", deferred: 0 } as GatherResult), handOver: () => {},
+    })).toBe("read");
+    expect(db.query("SELECT 1 FROM app_meta WHERE key = ?").get(`last_harvest:${ACCOUNT}`)).toBeNull();
+  });
+
+  test("first read at 05:30, then a new-mail run still reads for the 05:00 boundary", async () => {
+    const first = fake({ kept: [kept(1)] });
+    await runFirstRead(first.ctx, ACCOUNT, "me@acme.com", {
+      gather: async () => ({ kept: [kept(1)], skipped: 0, cursor: "1", deferred: 0 } as GatherResult), handOver: () => {},
+    });
+    const f = fake({ kept: [kept(2)], trigger: "event", now: () => at("05:40") });
+    await f.run();
+    expect(f.extracts).toHaveLength(1);
+  });
+});

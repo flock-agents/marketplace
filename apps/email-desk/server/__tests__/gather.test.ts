@@ -38,6 +38,8 @@ function fake(opts: {
   inbox: Mail[];
   turn?: ReadTurnResult;
   throwOn?: string;
+  /** A Gmail function that answers this refusal instead. */
+  refuseOn?: { fn: string; result: Record<string, unknown> };
   /** Threads the person started: listed by in:sent, read like any thread. */
   sent?: Mail[];
   label?: string | null;
@@ -55,6 +57,7 @@ function fake(opts: {
     f.calls.push({ fn, params, opts: o });
     if (skillId !== "gmail") return { ok: false as const, reason: "unknown skill" };
     if (opts.throwOn === fn) throw new Error(`${fn} blew up`);
+    if (opts.refuseOn?.fn === fn) return { ok: false as const, ...opts.refuseOn.result } as { ok: false; reason: string };
     if (fn === "listInbox") return { ok: true as const, data: opts.inbox.map(rowOf) };
     if (fn === "getThreads") {
       const ids = (params.threadIds as string[]) ?? [];
@@ -154,6 +157,36 @@ describe("gatherNewMail", () => {
     expect(f.calls).toHaveLength(0);
     expect(getCursor(db, GMAIL_SOURCE, ACCOUNT)).toBe("1234");
     expect((db.query("SELECT COUNT(*) AS n FROM ingest_events").get() as { n: number }).n).toBe(0);
+  });
+
+  test("a refused turn other than busy is a run that did not read the mailbox (stopped)", async () => {
+    const f = fake({ mailbox: "me@acme.com", inbox: [ASHA], turn: { ok: false, reason: "quarantined", code: "quarantined" } });
+    const r = await gatherNewMail(f.ctx, ACCOUNT);
+    expect(r.busy).toBeFalsy();
+    expect(r.stopped).toBe("quarantined");
+  });
+
+  test("a sign-in wall on the read stops the run: stopped, the mail left pending", async () => {
+    const f = fake({ mailbox: "me@acme.com", inbox: [ASHA], refuseOn: { fn: "getThreads", result: { reason: "paused", code: "guard_quarantined" } } });
+    const r = await gatherNewMail(f.ctx, ACCOUNT);
+    expect(r.stopped).toBe("quarantined");
+    expect(r.kept).toEqual([]);
+    expect(r.deferred).toBeGreaterThan(0);
+  });
+
+  test("threads over the run's cap are left pending and counted (overCap)", async () => {
+    const BEN: Mail = { ...ASHA, threadId: "t-ben", from: "Ben Ito <ben@acme.com>", subject: "Wednesday call", body: "Can we talk on Wednesday?", minutesAgo: 20 };
+    const f = fake({ mailbox: "me@acme.com", inbox: [ASHA, BEN] });
+    const r = await gatherNewMail(f.ctx, ACCOUNT, { maxThreads: 1 });
+    expect(r.kept).toHaveLength(1);
+    expect(r.overCap).toBe(1);
+    expect(r.stopped).toBeUndefined();
+  });
+
+  test("a full read sets neither stopped nor overCap", async () => {
+    const r = await gatherNewMail(fake({ mailbox: "me@acme.com", inbox: [ASHA] }).ctx, ACCOUNT);
+    expect(r.stopped).toBeUndefined();
+    expect(r.overCap).toBeUndefined();
   });
 
   test("bulk mail skipped by body link", async () => {

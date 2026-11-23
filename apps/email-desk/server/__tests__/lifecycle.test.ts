@@ -297,7 +297,7 @@ describe("the first read reuses the routine's run", () => {
   beforeEach(() => _setLogForTesting(() => {}));
   afterEach(() => _setLogForTesting(null));
 
-  test("mail goes into memory and is handed over, the harvest is stamped, nothing wakes the agent", async () => {
+  test("mail goes into memory and is handed over, the day is not stamped (R27), nothing wakes the agent", async () => {
     const { c, woke, extracted } = ctx();
     const handed: string[][] = [];
     const out = await runFirstRead(c, A1, EMAILS[A1], { gather: gather([mail(1)]), handOver: (ids) => { handed.push([...ids]); } });
@@ -305,7 +305,9 @@ describe("the first read reuses the routine's run", () => {
     expect(extracted.length).toBe(1);
     expect(handed).toEqual([["m-1"]]);
     expect(woke).toEqual([]);
-    expect(historyOf(db, A1)).toBe("last_harvest");
+    // R27: the first read never closes the day (the morning run stays owed). "Already set up" rests on the sequence row
+    // initialize writes, else on the extracted ledger rows and the cursor a real read leaves (historyOf).
+    expect(db.query("SELECT 1 FROM app_meta WHERE key = ?").get(`last_harvest:${A1}`)).toBeNull();
     // The reply offer waits for the routine's run, which wakes for it.
     expect(db.query("SELECT COUNT(*) AS n FROM app_meta WHERE key LIKE 'draft-offer:%'").get()).toEqual({ n: 1 });
   });
@@ -320,6 +322,13 @@ describe("the first read reuses the routine's run", () => {
     expect(handed).toEqual([]);
     expect(historyOf(db, A1)).toBeNull();
     expect(await runFirstRead(a.c, A1, null, { gather: async () => { throw new Error("list failed"); } })).toBe("failed");
+  });
+
+  test("a first read that handed mail over still reads as set up without a stamp (extracted rows, cursor)", () => {
+    seedExtracted(A1);
+    seedCursor(A1);
+    expect(historyOf(db, A1)).toBe("extracted");
+    expect(isInitialized(db, A1, clock)).toBe(true);
   });
 
   test("the window is the built-in desk's landing window", () => {

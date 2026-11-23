@@ -238,7 +238,8 @@ async function runAccount(
   voice: Voice,
   failures: string[],
   wake: boolean,
-  /** When the run asked whether the day was owed: the stamp a finished run records (the first read records its finish). */
+  /** When the run asked whether the day was owed: the stamp a run that worked the whole mailbox records. Absent (the first
+   *  read, which never asks: ruling R27), nothing is stamped and the next boundary stays owed. */
   stampAt?: number,
 ): Promise<"read" | "busy"> {
   const g = await gather(ctx, accountId);
@@ -250,6 +251,7 @@ async function runAccount(
 
   const extracted: KeptMail[] = [];
   let failed = 0;
+  let deferredChunks = 0;
   if (g.kept.length > 0) {
     const personal = g.kept.some((k) => k.mailboxKind === "personal");
     const openTasks = await openTasksFor(ctx, g.kept);
@@ -287,6 +289,7 @@ async function runAccount(
       }
       if ((answer.deferredItems ?? 0) > 0) {
         say(accountId, `deferred ${chunk.length} mail(s): Flock's write limit; left for the next run`);
+        deferredChunks++;
         continue;
       }
       extracted.push(...chunk);
@@ -318,7 +321,12 @@ async function runAccount(
   const woke = wake ? await wakeForOffers(ctx, accountId, voice, failures) : 0;
   // A run that read the mailbox and put every kept mail into memory is a finished harvest (last_harvest op). A failed chunk
   // leaves the day open.
-  if (failed === 0) recordHarvestRun(accountId, stampAt);
+  // STAMP ONLY A RUN THAT WORKED THE WHOLE MAILBOX (the source relay's rule): read through (no refused turn, no sign-in wall
+  // or paused account), nothing left over the thread cap, every chunk taken by Flock. Mail left for good (past the age
+  // cutoff, cold outreach) counts as worked. Anything else leaves the day owed, so the next boundary's run picks it up.
+  const worked = failed === 0 && !g.stopped && !(g.overCap ?? 0) && deferredChunks === 0;
+  if (stampAt !== undefined && worked) recordHarvestRun(accountId, stampAt);
+  else if (stampAt !== undefined) say(accountId, `day left owed: ${g.stopped ? `mailbox not read (${g.stopped})` : g.overCap ? `${g.overCap} mail(s) over the run's cap` : deferredChunks ? "Flock's write limit" : "a chunk failed"}`);
   say(accountId, `kept=${g.kept.length} extracted=${extracted.length} failed=${failed} woke=${woke}`);
   return "read";
 }

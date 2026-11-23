@@ -100,6 +100,11 @@ export interface GatherResult {
   note?: string;
   /** From a refused turn, when Flock said when to try again. */
   retryAfterMs?: number;
+  /** The mailbox was not read through: a refused turn, or a read that stopped (a sign-in wall, a paused account). Whatever
+   *  was not read stays pending. A run with this set never closes the day (memory-extraction's stamp). */
+  stopped?: string;
+  /** Messages over this run's thread cap, left pending for the next run (counted in `deferred` too). */
+  overCap?: number;
 }
 
 export interface GatherOptions {
@@ -371,7 +376,7 @@ export async function gatherNewMail(ctx: RoutineCtx, accountId: string, opts: Ga
       : code === "not_yours" ? "not this person's mailbox"
       : `could not take the mailbox (${turn.reason})`;
     const retryAfterMs = "retryAfterMs" in turn && typeof turn.retryAfterMs === "number" ? turn.retryAfterMs : undefined;
-    return { kept: [], skipped: 0, deferred: 0, cursor, note, ...(code === "busy" ? { busy: true } : {}), ...(retryAfterMs !== undefined ? { retryAfterMs } : {}) };
+    return { kept: [], skipped: 0, deferred: 0, cursor, note, stopped: turn.skipped ? "not_configured" : code ?? turn.reason, ...(code === "busy" ? { busy: true } : {}), ...(retryAfterMs !== undefined ? { retryAfterMs } : {}) };
   }
 
   const { turnId } = turn.data;
@@ -400,7 +405,7 @@ async function gatherUnderTurn(
   const listed = await gmail("listInbox", { ...LIST_PARAMS }, LIST_TIMEOUT_MS);
   if (!listed.ok) {
     const stop = stopReason(listed);
-    if (stop) return { ...out, note: `mailbox not read (${stop})` };
+    if (stop) return { ...out, note: `mailbox not read (${stop})`, stopped: stop };
     throw new Error(`could not list the inbox: ${errorText(listed)}`);
   }
   const page = parsed(listed.data);
@@ -446,7 +451,7 @@ async function gatherUnderTurn(
   // a refusal of the mailbox stops the run as any read's does.
   const sent = await gmail("searchEmails", { query: sentQuery(opts.openDays ?? OPEN_DAYS), maxResults: SENT_LIST_MAX }, LIST_TIMEOUT_MS);
   const sentStop = stopReason(sent);
-  if (sentStop) return { ...out, note: `mailbox not read (${sentStop})` };
+  if (sentStop) return { ...out, note: `mailbox not read (${sentStop})`, stopped: sentStop };
   if (sent.ok) {
     const rows = parsed(sent.data);
     const sentEvents = (Array.isArray(rows) ? rows : [])
@@ -504,7 +509,7 @@ async function gatherUnderTurn(
   blocks.sort((a, b) => (b.rows[b.rows.length - 1]?.ts ?? 0) - (a.rows[a.rows.length - 1]?.ts ?? 0));
   const maxThreads = opts.maxThreads ?? MAX_THREADS_PER_RUN;
   const work = blocks.slice(0, maxThreads);
-  for (const b of blocks.slice(maxThreads)) out.deferred += b.rows.length;
+  for (const b of blocks.slice(maxThreads)) { out.deferred += b.rows.length; out.overCap = (out.overCap ?? 0) + b.rows.length; }
   if (work.length === 0) return out;
 
   const freshAfter = work.flatMap((b) => b.rows).reduce((m, r) => Math.max(m, r.createdAt ?? 0), 0) || undefined;
@@ -515,7 +520,7 @@ async function gatherUnderTurn(
   const batchStop = stopReason(batch);
   if (batchStop) {
     for (const b of work) out.deferred += b.rows.length;
-    return { ...out, note: `mailbox not read (${batchStop})` };
+    return { ...out, note: `mailbox not read (${batchStop})`, stopped: batchStop };
   }
   if (batch.ok) {
     const list = parsed(batch.data)?.threads;
@@ -533,7 +538,7 @@ async function gatherUnderTurn(
       const stop = stopReason(one);
       if (stop) {
         for (const b of work.slice(index)) out.deferred += b.rows.length;
-        return { ...out, note: `mailbox not read (${stop})` };
+        return { ...out, note: `mailbox not read (${stop})`, stopped: stop };
       }
       if (!one.ok) {
         for (const row of block.rows) markComprehension(db, MEMORY_CONSUMER, keyOf(row), "failed", errorText(one));
