@@ -125,6 +125,12 @@ export function lockDraft(db: Database, id: string, now = Date.now()): void {
   db.run("UPDATE draft_records SET person_edited = 1, updated_at = ? WHERE id = ?", [now, id]);
 }
 
+/** The person answered the thread in Gmail itself: the draft is closed, not sent from its card. Its row stays, stamped
+ *  with the reply's time and `sent_by` "replied-in-gmail", so the thread has no open draft (replied-in-gmail.ts). */
+export function markDraftRepliedInGmail(db: Database, id: string, at: number): void {
+  db.run("UPDATE draft_records SET sent_at = ?, sent_by = 'replied-in-gmail', updated_at = ? WHERE id = ? AND sent_at IS NULL", [at, Date.now(), id]);
+}
+
 /** The draft is gone (discarded, or deleted in Gmail): the thread has no draft. */
 export function deleteDraft(db: Database, id: string): void {
   db.run("DELETE FROM draft_records WHERE id = ?", [id]);
