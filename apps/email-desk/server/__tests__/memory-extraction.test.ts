@@ -40,6 +40,9 @@ interface Fake {
   imports: ImportPayload[];
   published: any[];
   models: any[];
+  targetsCalls: number;
+  /** Change between runs: the next run's kept mail, and whether the agent can be woken. */
+  next: { kept: KeptMail[]; wakeFails: boolean };
 }
 
 function fake(opts: {
@@ -54,7 +57,8 @@ function fake(opts: {
   openTasks?: any[];
   wakeFails?: boolean;
 } = {}): Fake & { run: () => Promise<void> } {
-  const f: Fake = { ctx: null, extracts: [], wakes: [], handed: [], imports: [], published: [], models: [] };
+  const f: Fake = { ctx: null, extracts: [], wakes: [], handed: [], imports: [], published: [], models: [], targetsCalls: 0,
+    next: { kept: opts.kept ?? [], wakeFails: opts.wakeFails ?? false } };
   let call = 0;
   const platform: any = {
     appId: "email-desk-p1", pairedAgent: opts.pairedAgent === undefined ? { id: "pa-1", name: "Butler" } : opts.pairedAgent,
@@ -84,7 +88,7 @@ function fake(opts: {
   };
   if (opts.family !== null && opts.family !== undefined) {
     platform.family = {
-      targets: async () => ({ ok: true, data: { appIds: opts.family!.targets ?? ["family-calendar"] } }),
+      targets: async () => { f.targetsCalls++; return { ok: true, data: { appIds: opts.family!.targets ?? ["family-calendar"] } }; },
       importEvents: async (p: ImportPayload) => {
         f.imports.push(p);
         return { ok: true, data: { answer: opts.family!.importAnswer ? opts.family!.importAnswer(p) : { results: p.items.map((i) => ({ ref: i.ref, id: "e", result: "added" })) } } };
@@ -103,14 +107,13 @@ function fake(opts: {
     connectors: { exec: async () => ({ ok: false, reason: "unused" }) },
     wakeAgent: async (message: string, data: any) => {
       f.wakes.push({ message, data });
-      return opts.wakeFails ? { ok: false, reason: "agent busy" } : { ok: true, data: { sessionId: "s1" } };
+      return f.next.wakeFails ? { ok: false, reason: "agent busy" } : { ok: true, data: { sessionId: "s1" } };
     },
     notify: async () => ({ ok: true, data: { delivered: 0 } }),
     state: { get: () => null, set: () => {} },
   };
-  const gatherResult: GatherResult = { kept: opts.kept ?? [], skipped: 0, cursor: "1", deferred: 0, ...opts.gather };
   const run = () => runMemoryExtraction(f.ctx, {
-    gather: async () => gatherResult,
+    gather: async () => ({ kept: f.next.kept, skipped: 0, cursor: "1", deferred: 0, ...opts.gather } as GatherResult),
     handOver: (ids) => { f.handed.push([...ids]); },
   });
   return Object.assign(f, { run });
@@ -154,6 +157,23 @@ describe("memory-extraction: into memory", () => {
     await personal.run();
     expect(personal.extracts[0]!.items[0].context.mailboxKind).toBe("personal");
     expect(personal.extracts[0]!.source.familyCandidates).toBe(true);
+  });
+
+  test("a thread only the person wrote carries selfAuthored; every item carries its sender kind", async () => {
+    const own = kept(1, { body: [`From: Me <me@acme.com>\nCan you send the deck, Raj?`, `From: me@acme.com\nPinging again.`].join(THREAD_BODY_SEPARATOR) });
+    const bot = kept(2, { body: `From: Acme Billing <no-reply@acme.com>\nYour invoice is ready.` });
+    const f = fake({ kept: [own, bot, kept(3)] });
+    await f.run();
+    const [a, b] = f.extracts[0]!.items;
+    expect(a.context.selfAuthored).toBe(true);
+    expect(a.context.senderKind).toBe("human");
+    expect(b.context.selfAuthored).toBeUndefined();
+    expect(b.context.senderKind).toBe("automated");
+    const c = f.extracts[1]!.items[0];
+    expect(c.context.selfAuthored).toBeUndefined();
+    expect(c.context.senderKind).toBe("human");
+    // KeptMail has no to/cc, so no addressing verdict is claimed.
+    expect(a.context.addressing).toBeUndefined();
   });
 
   test(`mail goes in chunks of EXTRACT_SERVABLE_ITEMS (${EXTRACT_SERVABLE_ITEMS})`, async () => {
@@ -267,10 +287,43 @@ describe("memory-extraction: the wake", () => {
     expect(f.handed.flat()).toEqual(["m-1"]);
   });
 
-  test("a failed wake: the woken mail is offered again next run, the run reports it", async () => {
+  test("a failed wake: the mail is handed over all the same, and the next run offers it again with no second extract", async () => {
     const f = fake({ kept: [kept(1, { draftEligible: true }), kept(2)], wakeFails: true });
     await expect(f.run()).rejects.toThrow(/could not wake the agent/);
-    expect(f.handed.flat()).toEqual(["m-2"]);
+    // Into memory once: handed over, never extracted again.
+    expect(f.handed.flat()).toEqual(["m-1", "m-2"]);
+    expect(f.extracts).toHaveLength(1);
+
+    // Next run: no new mail, the agent can be woken. The pending offer goes; nothing is extracted.
+    f.next = { kept: [], wakeFails: false };
+    await f.run();
+    expect(f.extracts).toHaveLength(1);
+    expect(f.wakes).toHaveLength(2);
+    expect(f.wakes[1]!.message).toBe("1 new mails may want a reply.");
+    expect(f.wakes[1]!.data.mails.map((m: any) => m.threadId)).toEqual(["t-1"]);
+
+    // Woken once: the offer is cleared.
+    await f.run();
+    expect(f.wakes).toHaveLength(2);
+  });
+
+  test("a pending offer whose thread got a draft meanwhile is dropped, not woken", async () => {
+    const f = fake({ kept: [kept(1, { draftEligible: true })], wakeFails: true });
+    await expect(f.run()).rejects.toThrow();
+    db.run("INSERT INTO draft_records (account_id, thread_id, draft_id, body_written, updated_at) VALUES (?,?,?,?,?)", [ACCOUNT, "t-1", "d1", "x", 1]);
+    f.next = { kept: [], wakeFails: false };
+    await f.run();
+    expect(f.wakes).toHaveLength(1);
+    await f.run();
+    expect(f.wakes).toHaveLength(1);
+  });
+
+  test("a pending offer met again in new mail is offered once", async () => {
+    const f = fake({ kept: [kept(1, { draftEligible: true })], wakeFails: true });
+    await expect(f.run()).rejects.toThrow();
+    f.next = { kept: [kept(1, { draftEligible: true, messageId: "m-1b" })], wakeFails: false };
+    await f.run();
+    expect(f.wakes[1]!.data.mails.map((m: any) => m.threadId)).toEqual(["t-1"]);
   });
 
   test("the routine's entry point is the handler", () => {
@@ -310,12 +363,35 @@ describe("memory-extraction: the family calendar", () => {
     expect(f.models[0]).toMatchObject({ tier: "fast" });
     // Pushed: nothing on Home.
     expect(f.published).toEqual([]);
+    // Flock asked once per run where the family's items may go (R14).
+    expect(f.targetsCalls).toBe(1);
   });
 
-  test("nowhere to push: the held to-dos go on Home, nothing imported", async () => {
-    const f = fake({ kept: [kept(1, { mailboxKind: "personal" })], family: { targets: [] }, extract: () => ({ ok: true, data: { family: { blocks: [annual("t-1")] } } }) });
+  test("nowhere to push (R14): no family candidates asked for, nothing imported, no app TODOs", async () => {
+    const f = fake({ kept: [kept(1, { mailboxKind: "personal" })], family: { targets: [] } });
     await f.run();
+    expect(f.targetsCalls).toBe(1);
+    expect(f.extracts[0]!.source.familyCandidates).toBeFalsy();
+    // Still read as a personal mailbox.
+    expect(f.extracts[0]!.items[0].context.mailboxKind).toBe("personal");
     expect(f.imports).toEqual([]);
+    expect(f.published).toEqual([]);
+    expect(f.models).toEqual([]);
+  });
+
+  test("a Flock with no family import asks for no candidates", async () => {
+    const f = fake({ kept: [kept(1, { mailboxKind: "personal" })] });
+    await f.run();
+    expect(f.extracts[0]!.source.familyCandidates).toBeFalsy();
+  });
+
+  test("a refused item's held to-dos go on Home", async () => {
+    const f = fake({
+      kept: [kept(1, { mailboxKind: "personal" })],
+      family: { importAnswer: (p) => ({ results: p.items.map((i) => ({ ref: i.ref, id: "x", result: "refused", reason: "bad date" })) }) },
+      extract: () => ({ ok: true, data: { family: { blocks: [annual("t-1")] } } }),
+    });
+    await f.run();
     expect(f.published).toHaveLength(1);
     expect(f.published[0]).toMatchObject({ title: "Buy Agastya's farmer costume", sourceRef: "todo:t-1#buy-agastyas-farmer-costume" });
   });

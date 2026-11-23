@@ -12,13 +12,15 @@
 //      limit). Facts go to the paired agent's memory (the person's) and TODOs to their Home, as today: Flock writes both. A
 //      chunk that fails (refused, timed out, or answered with a failed item) does not stop the next; its mail stays pending
 //      and is offered again next run. A deferred chunk (Flock's hourly write limit) is left pending without a failure.
-//   3. family: a personal mailbox asks for its family items back (`source.familyCandidates`). They are planned into Family
-//      Calendar items and sent in ONE import per run through Flock's gate (family/push.ts). With nowhere to send them, or a
-//      failed send, the to-dos Flock held go on Home.
-//   4. wake: the draft-eligible mail that went into memory and has no open draft is offered to the routine's agent, whoever
-//      it is: one line of counts, the mail itself only in `data`.
-//   5. hand over (seen.ts markHandedOver) what went into memory, so it is never offered twice. Mail whose wake failed is
-//      not handed over, so it is offered (and woken for) again next run.
+//   3. family: a personal mailbox whose person has a Family Calendar (`family.targets()`, asked once per run: ruling R14)
+//      asks for its family items back (`source.familyCandidates`). They are planned into Family Calendar items and sent in
+//      ONE import per run through Flock's gate (family/push.ts). A failed send, or an item refused or over the op's limits,
+//      puts the to-dos Flock held on Home. With no Family Calendar, extraction answers as today (TODOs are Flock's rows).
+//   4. hand over (seen.ts markHandedOver) everything that went into memory, so it is never extracted twice. Its
+//      draft-eligible mail becomes a pending draft offer in the app's store.
+//   5. wake: the pending offers whose thread has no open draft go to the routine's agent, whoever it is: one line of
+//      counts, the mail itself only in `data`. A wake that reached the agent clears them; a failed one keeps them for the
+//      next run, which offers them again without extracting again.
 // A run with a failure throws once everything else is done, so the owner's routine history shows it.
 //
 // CLOSURE (ruling R12). The extraction closes a TODO once the thread shows it done, but only a TODO the item carries
@@ -35,6 +37,7 @@ import { gatherNewMail, EARLIER_MESSAGE_MARK, type GatherResult, type KeptMail }
 import { markHandedOver } from "./seen";
 import { FamilyPushBatch, NAMING_SCHEMA, emailLabel, slugOf, type HeldTask, type ImportCallResult } from "../family/push";
 import { householdNames, personFirstName } from "../family/context";
+import { blockTaskGate, senderKindOf } from "../lib/task-gates";
 
 /**
  * How many items one memory.extract call can serve. NOT EXPORTED BY THE SDK, so mirrored here from its formula
@@ -108,8 +111,16 @@ export function openTaskRefs(tasks: readonly OpenTaskWire[]): Array<Record<strin
 export function keptToItem(k: KeptMail, owner: { email: string | null }, openTasks: readonly OpenTaskWire[] = []): Record<string, unknown> {
   const messages = messagesOf(k.body);
   const participants = [...new Set(messages.map((m) => m.from).filter(Boolean))];
+  const owners = owner.email ? [owner.email] : [];
   const context: Record<string, unknown> = {};
-  if (owner.email) context.ownerAddresses = [owner.email];
+  // WHO WROTE IT (harvest toContentBlock, memory-relay blockToItem T1/T3/T11): a thread only the person wrote is labelled so
+  // the extraction mints only their own commitments, never their asks of others (sent mail is kept now, R11); the other
+  // end's kind caps a role or no-reply mailbox to one item. `addressing` is NOT sent: it needs each message's To/Cc, which
+  // KeptMail does not carry, and Flock prints nothing for its absence.
+  const gate = blockTaskGate(messages, owners);
+  if (gate.tasks && gate.selfAuthored) context.selfAuthored = true;
+  context.senderKind = senderKindOf(messages, owners);
+  if (owners.length) context.ownerAddresses = owners;
   if (k.mailboxKind === "personal") context.mailboxKind = "personal";
   const refs = openTaskRefs(openTasks);
   if (refs.length > 0) context.openTasks = refs;
@@ -186,95 +197,125 @@ async function runAccount(
     return;
   }
   if (g.note) say(accountId, g.note);
-  if (g.kept.length === 0) return;
 
-  const personal = g.kept.some((k) => k.mailboxKind === "personal");
-  const openTasks = await openTasksFor(ctx, g.kept);
-
-  // 2. EXTRACT, chunk by chunk.
   const extracted: KeptMail[] = [];
-  const family = personal ? await openFamilyBatch(ctx) : null;
   let failed = 0;
-  const reasons = new Set<string>();
-  for (let i = 0; i < g.kept.length; i += EXTRACT_SERVABLE_ITEMS) {
-    const chunk = g.kept.slice(i, i + EXTRACT_SERVABLE_ITEMS);
-    const items = chunk.map((k) => keptToItem(k, { email }, openTasks.get(k.threadId)));
-    const source: Record<string, unknown> = { type: "email", connectorSkill: GMAIL, account: accountId };
-    if (personal) source.familyCandidates = true;
-    let r: Awaited<ReturnType<RoutineCtx["platform"]["memory"]["extract"]>>;
-    try {
-      r = await ctx.platform.memory.extract<ExtractAnswer>(items, source);
-    } catch (e: any) {
-      r = { ok: false, reason: e?.message ?? String(e) };
-    }
-    if (!r.ok) {
-      failed += chunk.length;
-      reasons.add(r.skipped ? "not paired" : r.reason);
-      continue;
-    }
-    const answer = (r.data ?? {}) as ExtractAnswer;
-    // The family items Flock wrote and held come back whatever else happened: they are placed either way.
-    if (family && Array.isArray(answer.family?.blocks)) family.batch.addBlocks(answer.family!.blocks);
-    // One call answers for the whole chunk, so a failed item fails the chunk: it is offered again, never marked done.
-    if ((answer.failedItems ?? 0) > 0) {
-      failed += chunk.length;
-      reasons.add("an item failed");
-      continue;
-    }
-    if ((answer.deferredItems ?? 0) > 0) {
-      say(accountId, `deferred ${chunk.length} mail(s): Flock's write limit; left for the next run`);
-      continue;
-    }
-    extracted.push(...chunk);
-  }
-  if (failed > 0) {
-    const why = [...reasons].join(", ");
-    say(accountId, `extract failed for ${failed} mail(s): ${why}`);
-    failures.push(`${failed} of ${g.kept.length} mails could not be read into memory (${why})`);
-  }
+  if (g.kept.length > 0) {
+    const personal = g.kept.some((k) => k.mailboxKind === "personal");
+    const openTasks = await openTasksFor(ctx, g.kept);
+    // RULING R14: family candidates only when this person has a Family Calendar to import into, asked once per run.
+    // Otherwise the extraction answers as today and every TODO stays Flock's own row.
+    const target = personal ? await familyTarget(ctx, accountId) : null;
+    const family = target ? await openFamilyBatch(ctx, target) : null;
 
-  // 3. FAMILY: the run's one import.
-  if (family && !family.batch.isEmpty) await flushFamily(ctx, accountId, email, family);
+    // 2. EXTRACT, chunk by chunk.
+    const reasons = new Set<string>();
+    for (let i = 0; i < g.kept.length; i += EXTRACT_SERVABLE_ITEMS) {
+      const chunk = g.kept.slice(i, i + EXTRACT_SERVABLE_ITEMS);
+      const items = chunk.map((k) => keptToItem(k, { email }, openTasks.get(k.threadId)));
+      const source: Record<string, unknown> = { type: "email", connectorSkill: GMAIL, account: accountId };
+      if (family) source.familyCandidates = true;
+      let r: Awaited<ReturnType<RoutineCtx["platform"]["memory"]["extract"]>>;
+      try {
+        r = await ctx.platform.memory.extract<ExtractAnswer>(items, source);
+      } catch (e: any) {
+        r = { ok: false, reason: e?.message ?? String(e) };
+      }
+      if (!r.ok) {
+        failed += chunk.length;
+        reasons.add(r.skipped ? "not paired" : r.reason);
+        continue;
+      }
+      const answer = (r.data ?? {}) as ExtractAnswer;
+      // The family items Flock wrote and held come back whatever else happened: they are placed either way.
+      if (family && Array.isArray(answer.family?.blocks)) family.batch.addBlocks(answer.family!.blocks);
+      // One call answers for the whole chunk, so a failed item fails the chunk: it is offered again, never marked done.
+      if ((answer.failedItems ?? 0) > 0) {
+        failed += chunk.length;
+        reasons.add("an item failed");
+        continue;
+      }
+      if ((answer.deferredItems ?? 0) > 0) {
+        say(accountId, `deferred ${chunk.length} mail(s): Flock's write limit; left for the next run`);
+        continue;
+      }
+      extracted.push(...chunk);
+    }
+    if (failed > 0) {
+      const why = [...reasons].join(", ");
+      say(accountId, `extract failed for ${failed} mail(s): ${why}`);
+      failures.push(`${failed} of ${g.kept.length} mails could not be read into memory (${why})`);
+    }
 
-  // 4. WAKE for what may want a reply.
-  const toWake = draftCandidates(extracted);
-  const notWoken = new Set<string>();
-  if (toWake.length > 0) {
-    const mails = toWake.map((k) => ({ threadId: k.threadId, accountId: k.accountId, from: k.from, subject: k.subject, snippet: snippetOf(k.body) }));
-    let woke: Awaited<ReturnType<RoutineCtx["wakeAgent"]>>;
-    try {
-      woke = await ctx.wakeAgent(wakeLine(toWake.length), { mails });
-    } catch (e: any) {
-      woke = { ok: false, reason: e?.message ?? String(e) };
-    }
-    if (!woke.ok) {
-      for (const k of toWake) notWoken.add(k.messageId);
-      const why = woke.skipped ? "not paired" : woke.reason;
-      say(accountId, `could not wake the agent: ${why}`);
-      failures.push(`could not wake the agent (${why})`);
-    }
+    // 3. FAMILY: the run's one import.
+    if (family && !family.batch.isEmpty) await flushFamily(ctx, accountId, email, family);
+
+    // 4. HAND OVER everything that went into memory: it is never extracted again, whatever happens to the wake.
+    if (extracted.length > 0) handOver(extracted.map((k) => k.messageId));
+    // What may want a reply joins the pending draft offers (kept until a wake reaches the agent).
+    addDraftOffers(extracted);
   }
 
-  // 5. HAND OVER what went into memory (and, for mail that wanted a reply, reached the agent).
-  const ids = extracted.map((k) => k.messageId).filter((id) => !notWoken.has(id));
-  if (ids.length > 0) handOver(ids);
-  say(accountId, `kept=${g.kept.length} extracted=${extracted.length} failed=${failed} woke=${notWoken.size ? 0 : toWake.length}`);
+  // 5. WAKE for the pending draft offers: this run's and any an earlier failed wake left.
+  const woke = await wakeForOffers(ctx, accountId, failures);
+  say(accountId, `kept=${g.kept.length} extracted=${extracted.length} failed=${failed} woke=${woke}`);
 }
 
-/** Draft-eligible mail with no open draft on its thread, one per thread. */
-function draftCandidates(mail: readonly KeptMail[]): KeptMail[] {
+// ---- pending draft offers ------------------------------------------------------------------------------------------------
+// A mail that may want a reply is offered to the agent until a wake reaches it, or a draft exists for its thread. Kept in
+// the app's own store (app_meta `draft-offer:<account>:<thread>`), so a failed wake costs a re-offer next run, never a
+// second extraction (which would re-mint TODOs the person ticked, and pay the model again).
+
+const OFFER_PREFIX = "draft-offer:";
+const offerKey = (accountId: string, threadId: string) => `${OFFER_PREFIX}${accountId}:${threadId}`;
+interface DraftOffer { threadId: string; accountId: string; from: string; subject: string; snippet: string }
+
+/** Draft-eligible mail, one offer per thread; the newest mail of a thread replaces its older offer. */
+function addDraftOffers(mail: readonly KeptMail[]): void {
   const db = getStore();
-  const open = db.query("SELECT 1 FROM draft_records WHERE account_id = ? AND thread_id = ? AND sent_at IS NULL LIMIT 1");
-  const seen = new Set<string>();
-  const out: KeptMail[] = [];
+  const put = db.query(
+    "INSERT INTO app_meta (key, value, updated_at) VALUES (?,?,?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at",
+  );
+  const now = Date.now();
   for (const k of mail) {
-    const key = `${k.accountId}\u0000${k.threadId}`;
-    if (!k.draftEligible || seen.has(key)) continue;
-    seen.add(key);
-    if (open.get(k.accountId, k.threadId)) continue;
-    out.push(k);
+    if (!k.draftEligible) continue;
+    const offer: DraftOffer = { threadId: k.threadId, accountId: k.accountId, from: k.from, subject: k.subject, snippet: snippetOf(k.body) };
+    put.run(offerKey(k.accountId, k.threadId), JSON.stringify(offer), now);
   }
-  return out;
+}
+
+/** Wakes the routine's agent for this account's pending offers whose thread has no open draft. Returns how many it woke for. */
+async function wakeForOffers(ctx: RoutineCtx, accountId: string, failures: string[]): Promise<number> {
+  const db = getStore();
+  const prefix = offerKey(accountId, "");
+  const rows = db.query("SELECT key, value FROM app_meta WHERE substr(key, 1, ?) = ? ORDER BY updated_at, key")
+    .all(prefix.length, prefix) as { key: string; value: string }[];
+  const open = db.query("SELECT 1 FROM draft_records WHERE account_id = ? AND thread_id = ? AND sent_at IS NULL LIMIT 1");
+  const drop = db.query("DELETE FROM app_meta WHERE key = ?");
+  const offers: Array<{ key: string; offer: DraftOffer }> = [];
+  for (const row of rows) {
+    let offer: DraftOffer | null = null;
+    try { offer = JSON.parse(row.value) as DraftOffer; } catch { offer = null; }
+    // A broken row, or a thread drafted meanwhile: nothing left to offer.
+    if (!offer?.threadId || open.get(accountId, offer.threadId)) { drop.run(row.key); continue; }
+    offers.push({ key: row.key, offer });
+  }
+  if (offers.length === 0) return 0;
+  const mails = offers.map(({ offer: o }) => ({ threadId: o.threadId, accountId: o.accountId, from: o.from, subject: o.subject, snippet: o.snippet }));
+  let woke: Awaited<ReturnType<RoutineCtx["wakeAgent"]>>;
+  try {
+    woke = await ctx.wakeAgent(wakeLine(mails.length), { mails });
+  } catch (e: any) {
+    woke = { ok: false, reason: e?.message ?? String(e) };
+  }
+  if (!woke.ok) {
+    const why = woke.skipped ? "not paired" : woke.reason;
+    say(accountId, `could not wake the agent: ${why}; ${mails.length} offer(s) kept for the next run`);
+    failures.push(`could not wake the agent (${why})`);
+    return 0;
+  }
+  db.transaction(() => { for (const { key } of offers) drop.run(key); })();
+  return mails.length;
 }
 
 /** The kept threads' open TODOs, when Flock serves them (seam `board.openTasks`); none otherwise. Never throws. */
@@ -295,33 +336,40 @@ async function openTasksFor(ctx: RoutineCtx, mail: readonly KeptMail[]): Promise
 
 // ---- the family push -----------------------------------------------------------------------------------------------------
 
-interface FamilyRun { batch: FamilyPushBatch; tz: string }
+interface FamilyRun { batch: FamilyPushBatch; tz: string; target: string }
 
-async function openFamilyBatch(ctx: RoutineCtx): Promise<FamilyRun> {
+/** The Family Calendar this person's mail may go to (the oldest group's), or null: none, a Flock without the import, or an
+ *  unreadable answer. Asked once per run (ruling R14). Never throws. */
+async function familyTarget(ctx: RoutineCtx, accountId: string): Promise<string | null> {
+  const fam = ctx.platform.family;
+  if (!fam?.targets || !fam.importEvents) return null;
+  try {
+    const t = await fam.targets();
+    const ids = t.ok ? t.data?.appIds ?? [] : [];
+    if (ids.length > 1) say(accountId, `family_push_target ${ids[0]} (the oldest group's); not used: ${ids.slice(1).join(", ")}`);
+    return ids[0] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+async function openFamilyBatch(ctx: RoutineCtx, target: string): Promise<FamilyRun> {
   const tz = processTimezone();
   const [names, first] = await Promise.all([householdNames(ctx), personFirstName(ctx)]);
-  return { tz, batch: new FamilyPushBatch({ sourceId: ctx.platform.appId, label: emailLabel(first), today: todayIn(tz), tz, familyNames: names }) };
+  return { tz, target, batch: new FamilyPushBatch({ sourceId: ctx.platform.appId, label: emailLabel(first), today: todayIn(tz), tz, familyNames: names }) };
 }
 
 async function flushFamily(ctx: RoutineCtx, accountId: string, email: string | null, run: FamilyRun): Promise<void> {
   const fam = ctx.platform.family;
-  let target: string | null = null;
-  try {
-    const t = fam?.targets && fam.importEvents ? await fam.targets() : null;
-    const ids = t && t.ok ? t.data?.appIds ?? [] : [];
-    target = ids[0] ?? null;
-    if (ids.length > 1) say(accountId, `family_push_target ${ids[0]} (the oldest group's); not used: ${ids.slice(1).join(", ")}`);
-  } catch { target = null; }
-
+  // Flock's gate picks the calendar (the same oldest group's this run was told of); the target only says there is one.
   const send = async (payload: ImportPayload): Promise<ImportCallResult> => {
-    if (!target || !fam?.importEvents) return { ok: false, error: "no Family Calendar to import into" };
+    if (!fam?.importEvents) return { ok: false, error: "no Family Calendar to import into" };
     const r = await fam.importEvents(payload);
     return r.ok ? { ok: true, answer: r.data?.answer } : { ok: false, error: r.skipped ? "not paired" : (r.message ?? r.reason) };
   };
   const out = await run.batch.flush({
     send,
-    // Named only when there is somewhere to send it: the call costs a model call.
-    name: target && ctx.platform.model?.json
+    name: ctx.platform.model?.json
       ? async (prompt) => {
         const r = await ctx.platform.model!.json({ ...prompt, schema: NAMING_SCHEMA, tier: "fast", maxTokens: 2000, purpose: "family-calendar-names" });
         if (!r.ok) throw new Error(`${r.code}: ${r.message}`);
@@ -331,9 +379,7 @@ async function flushFamily(ctx: RoutineCtx, accountId: string, email: string | n
     publishTasks: (held) => publishHome(ctx, email, held, run.tz),
     log: (outcome, detail) => say(accountId, `${outcome} ${detail}`),
   });
-  if (out.ok !== null || out.tasksPublished > 0) {
-    say(accountId, `family push ok=${out.ok} sent=${out.sent} fellBack=${out.fellBack} home=${out.tasksPublished}`);
-  }
+  say(accountId, `family push to ${run.target} ok=${out.ok} sent=${out.sent} fellBack=${out.fellBack} home=${out.tasksPublished}`);
 }
 
 /** Home, for the family to-dos the push could not take: one of this app's TODOs each, keyed on its thread and title. */
