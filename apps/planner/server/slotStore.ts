@@ -8,7 +8,7 @@
 import { and, asc, eq, gte, inArray, isNull, lte, sql } from "drizzle-orm";
 import { _settings } from "@flock/app-kit";
 import { ingredients, library, rules, slot_days, slot_dishes, slots } from "./db/schema";
-import { LOOKS_LIKE_MAX, SETTINGS, SLOT_ORDER, STAPLE_SHARE, STAPLE_WINDOW,
+import { LOOKS_LIKE_MAX, SETTINGS, SLOT_ORDER, STAPLE_MIN_ROWS, STAPLE_SHARE, STAPLE_WINDOW,
   type Frequency, type LibraryOrigin, type RuleWhat, type Skip, type SlotDayStatus, type SlotKind } from "./db/constants";
 import { addDays, type Weekday } from "./dates";
 import { dishKey } from "./dishText";
@@ -339,9 +339,9 @@ const newestFirst = (rows: HistoryRow[]): HistoryRow[] => {
 /** A slot's staples: the dishes in at least `share` (60%) of its last `window` (14) history rows with dishes, the seed
  *  examples counting. A dish counts once a row. Named as most recently written, most frequent first. Staples are exempt from
  *  the repeat window. `rows`: one slot's history (slotHistory), any status. */
-export function staples(rows: HistoryRow[], opts: { share?: number; window?: number } = {}): string[] {
+export function staples(rows: HistoryRow[], opts: { share?: number; window?: number; minRows?: number } = {}): string[] {
   const last = newestFirst(rows).filter(hasDishes).slice(0, opts.window ?? STAPLE_WINDOW);
-  if (!last.length) return [];
+  if (!last.length || last.length < (opts.minRows ?? STAPLE_MIN_ROWS)) return [];
   const seen = new Map<string, { name: string; n: number }>();
   for (const r of last) for (const k of new Set(r.dishes.map((d) => dishKey(d.dish)))) {
     const had = seen.get(k);

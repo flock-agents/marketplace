@@ -4,7 +4,7 @@
 // eat; a slot the family eats out or orders in that weekday is skipped. A slot-day the family changed (`edited`) is kept as
 // it is. Nothing here reads the meaning of a word: a calendar event whose effect on meals code cannot see from its fields
 // goes to one small model call (eventsRead), and what that call is unsure of is asked of the family.
-import { CALENDAR_APP, MAIN_SLOT_TIME, SLOT_ORDER, type Skip } from "./db/constants";
+import { CALENDAR_APP, MAIN_SLOT_HOURS, SLOT_ORDER, type Skip } from "./db/constants";
 import { addDays, weekDates, weekdayOf, type Weekday } from "./dates";
 import { isObject } from "./family";
 import type { ModelCall, ModelResult } from "./model";
@@ -178,14 +178,15 @@ export function ruleHolds(r: Pick<Rule, "days" | "slots">, date: string, slot: S
 
 /** Is a person away from this main slot on this weekday by their weekday pattern. `lunch`: the family's word for weekday lunch
  *  (away: not eating the home lunch; carries: the home lunch is cooked for them and packed, so they count; home: at home);
- *  else the pattern's hours strictly around the slot's usual time (leaving at 8 still eats an 8 o'clock breakfast); else home. */
+ *  else the pattern's hours covering the slot's whole span (MAIN_SLOT_HOURS: school at 7:30 still eats breakfast, back at
+ *  9 still eats dinner); else home. */
 function awayBy(w: Weekly, day: Weekday, slot: Slot): boolean {
   if (!w.weekdays.includes(day) || w.where === "home") return false;
   const base = slot.kind === "main" ? slot : null;
   const order = base?.order;
   if (order === SLOT_ORDER.Lunch && w.lunch) return w.lunch === "away";
-  const at = order != null ? MAIN_SLOT_TIME[order] : undefined;
-  return !!(at && w.from && w.to && w.from < at && at < w.to);
+  const span = order != null ? MAIN_SLOT_HOURS[order] : undefined;
+  return !!(span && w.from && w.to && w.from <= span[0] && span[1] <= w.to);
 }
 
 /** The key of a slot-day in a set of them: its date and its slot's name, any capitals. */
@@ -239,7 +240,8 @@ export function buildDays(o: { weekStart: string; from: string; slots: Slot[]; p
         if (r.fasting_food?.length) for (const p of who) fasting.push(`${p} fasts: only ${r.fasting_food.join(", ")} (${r.quote})`);
         else { people = people.filter((p) => !who.includes(p)); for (const p of who) why.push(`${p} fasts (${r.quote})`); }
       }
-      const skip = s.skip_days.find((x) => x.day === day)?.skip ?? null;
+      // An add-on is cooked beside its main slot: a main slot eaten out or ordered in that weekday takes its add-ons with it.
+      const skip = s.skip_days.find((x) => x.day === day)?.skip ?? (s.kind === "addon" && main && main !== s ? main.skip_days.find((x) => x.day === day)?.skip : null) ?? null;
       if (!people.length && !skip) continue;
       out.push({ date, slot: s.name, people, guests: [], occasion: null, new_dishes_allowed: null, skip, edited: false, fixed: false, why, fasting, dishes: [], note: null });
     }

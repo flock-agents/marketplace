@@ -29,6 +29,11 @@ describe("staples", () => {
     expect(staples([row(null, "confirmed", ["Chapati", "chapati"]), row("2026-11-01", "planned", ["Dal"])])).toEqual([]);
   });
 
+  it("count only once a slot has STAPLE_MIN_ROWS (3) rows with dishes: two rows of jowar roti are no staple yet", () => {
+    expect(staples([row(null, "confirmed", ["Jowar roti"]), row(null, "confirmed", ["Jowar roti"])])).toEqual([]);
+    expect(staples([row(null, "confirmed", ["Jowar roti"]), row(null, "confirmed", ["Jowar roti"]), row(null, "confirmed", ["Jowar roti", "Dal"])])).toEqual(["Jowar roti"]);
+  });
+
   it("no history: none", () => {
     expect(staples([])).toEqual([]);
     expect(staples([row("2026-11-01", "planned", [], "eaten_out")])).toEqual([]);

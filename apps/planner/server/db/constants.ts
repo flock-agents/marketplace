@@ -33,6 +33,9 @@ export type Frequency = (typeof FREQUENCY_WORDS)[number] | `${number}/week`;
 /** Staples of a slot: dishes in at least this share of the slot's last STAPLE_WINDOW history rows with dishes (owner, 23 Nov). */
 export const STAPLE_SHARE = 0.6;
 export const STAPLE_WINDOW = 14;
+/** History counts for staples only once a slot has at least this many history rows with dishes (seed + confirmed; owner,
+ *  23 Nov): below it, a slot's staples are only its `daily` dishes. */
+export const STAPLE_MIN_ROWS = 3;
 /** At most this many "looks like" examples a slot (seed and confirmed slot-days only). */
 export const LOOKS_LIKE_MAX = 6;
 /** An untried dish placed this many times with no "made it" answer is dropped. */
@@ -64,9 +67,10 @@ export const SLOT_CALLS_AT_ONCE = 3;
 export const CONTAINS_BATCH = 40;
 /** A tag that is a kind of another: a chicken dish has meat, a peanut dish has nuts. */
 export const TAG_PARENT: Record<string, string> = { chicken: "meat", red_meat: "meat", mutton: "red_meat", beef: "red_meat", pork: "red_meat", prawn: "fish", peanut: "nuts" };
-/** The main slots' usual time of day, by their planning order: a weekly pattern with times (at the office 9 to 6) is away for
- *  the main slots whose time falls inside it. */
-export const MAIN_SLOT_TIME: Record<number, string> = { 10: "08:00", 30: "13:00", 50: "20:00" };
+/** The main slots' span of the day, by their planning order: a weekly pattern with times (at the office 9 to 6) is away for a
+ *  main slot only when it covers the whole span. A family eats breakfast before leaving (school at 7:30 still eats it) and
+ *  dinner after coming home (back at 9 still eats it); weekday lunch goes by the family's word for it first. */
+export const MAIN_SLOT_HOURS: Record<number, [string, string]> = { 10: ["06:00", "10:00"], 30: ["12:00", "14:30"], 50: ["19:00", "22:30"] };
 /** The Family Calendar's app id, read for the week's stays and trips (get_events). */
 export const CALENDAR_APP = "family-calendar";
 
