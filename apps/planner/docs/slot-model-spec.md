@@ -1,10 +1,15 @@
 # Meal Planner: slot model — build spec
 
-Status: owner decisions folded in, 23 Nov 2026 (see §10). Source of truth for the design: the design page
+Status: owner decisions folded in, 23 Nov 2026 (see §10), incl. "plans are suggestions" (§5.7). Source of truth for the design: the design page
 (https://claude.ai/artifact/G6kUr6SWuXe75wQoCLNmHD). This file turns it into what to build.
 
 Principle throughout: **the model reads words and fills slots; code stores, counts and checks rules.**
 No model writes app payloads mid-chat; no code matches phrases ("Amma", "weekend") to decide meaning.
+
+**A plan is a suggestion, not a record of what was eaten** (owner, 23 Nov). The family can ignore it, cook
+something else and never say so. So a planned slot-day is never treated as eaten: only what the family tells
+us (a correction, or the next-day answer about a dish they hadn't had before, §5.7) confirms anything. There are no general
+"did you cook it / was the week as planned" check-ins.
 
 ---
 
@@ -22,6 +27,7 @@ Non-goals (for this build)
 - **No code check on the number of dishes in a slot.** Shape is a tracked score in Eval 2 only.
 - No festival table, list or setup input. The weekly plan routine's prompt asks when a festival is near (§5.6).
 - Prep reminders ("soak rajma tonight") come after this lands, in the day-before 7pm reminder.
+- No general check-ins on whether the plan was followed. The only feedback ask is the next-day question about an untried dish (§5.7).
 - Shopping, carts, regulars and reminders keep working on the new tables but are not redesigned here.
 - Per-app scoping of household facts (all facts are sent) stays as decided; revisit when third-party apps publish.
 
@@ -59,7 +65,7 @@ Add-on slots exist so per-person needs (grandfather's 2 phulkas and no rice at n
 | occasion | text, null | "dinner party", in their words |
 | new_dishes_allowed | int, null | override of the setting for this slot-day |
 | skip | text, null | `eaten_out` \| `ordered_in` \| null |
-| status | text | `planned` \| `confirmed` (history) |
+| status | text | `planned` (a suggestion the family was shown; never read as eaten) \| `confirmed` (the family said what was made: a correction, `record_made`, or a "made it" answer, §5.7) |
 | edited | int | 1 when the family changed it (never overwritten by a re-plan) |
 | note | text, null | "Millet rice for Gowri Shankar only" |
 
@@ -73,6 +79,7 @@ Unique (date, slot).
 | position | int | |
 | dish | text | dish name (library key) |
 | new | int | 1 when this was a new suggestion |
+| feedback_asked | int | 1 once the next-day untried-dish question (§5.7) was sent for this placement; never asked twice for it |
 | note | text, null | only when this dish needs a specific change for someone |
 
 **ingredients** — `dish_items` renamed; `slot_dish_id` instead of `dish_id`. Same item/amount/unit.
@@ -90,6 +97,9 @@ Unique (date, slot).
 | contains_read | json string[] | which tags have been read for this dish (a rule tag not in here = unknown) |
 | origin | text | `setup_named` \| `family_added` \| `planner_suggested` |
 | suggested | int | 1 = a planner suggestion not yet kept; offered only as a new dish, not as a library dish |
+| untried | int | 1 = the family hasn't eaten it yet: every `planner_suggested` dish, and `family_added` dishes saved from a reel or recipe link the family sent (Instagram/YouTube; link in `video_url`). 0 for dishes named in the interview (`setup_named`) or that the family says they already eat. Cleared by a "made it, liked it, again" answer (§5.7) |
+| offers | int | times this untried dish was put on a plan; an untried dish with `offers ≥ 2` and no "made it" answer is dropped (never planned again) |
+| disliked | int | 1 = the family made it and didn't like it; never suggested or planned again (kept so the planner doesn't re-invent it) |
 | prep | text, null | later: "soak overnight", "ferment batter 8h" |
 | video_url, rating, ratings… | as today | |
 
@@ -117,9 +127,10 @@ Unique (key, slot).
 
 ### 2.2 Derived, not stored
 
-- **History** = past `slot_days` (+ the seed examples, `status = confirmed`, date null, from setup).
+- **History** = past `slot_days` (+ the seed examples, `status = confirmed`, date null, from setup). Past `planned` slot-days are what the family was **shown**, not what they ate.
 - **Staples** of a slot = dishes appearing in ≥ 60% of that slot's last 14 history rows with dishes (seed counts; decided default, tunable). Staples are exempt from the repeat window. Computed at plan time.
-- **Looks like** examples for a slot = up to 6 recent rows: confirmed first, then seed, then planned.
+- **Looks like** examples for a slot = up to 6 rows from the seed and **confirmed** slot-days only (recent confirmed first, then seed). Planned-only slot-days are never used as shape examples.
+- **Recent** (repeat avoidance, §5.4 check 4) = past slot-days of any status, planned included: it avoids repeating what the family was shown.
 
 ### 2.3 Flock household additions (Flock owns; sent to apps)
 
@@ -222,11 +233,11 @@ Request (JSON user message):
     { "date": "2026-12-03", "for": ["Ankita","Agastya"], "why": "Gowri Shankar fasts till evening" },
     { "date": "2026-12-06", "skip": "eaten_out" }
   ],
-  "looks_like": ["Rice, Sambar, Beans poriyal, Curd", "Rajma chawal, Curd"],
+  "looks_like": ["Rice, Sambar, Beans poriyal, Curd", "Rajma chawal, Curd"],   // seed + confirmed only
   "staples": ["Rice", "Curd"],
   "library": [{ "dish": "Rajma chawal", "left": 2 }, { "dish": "Bisi bele bath", "days": ["Sat"] }, …],
   "already_this_week": { "Breakfast": {"2026-11-30": ["Idli","Chutney"]}, "Agastya's tiffin": {…} },
-  "recent": { "2026-11-29": ["Bisi bele bath","Curd"] },
+  "recent": { "2026-11-29": ["Bisi bele bath","Curd"] },   // planned or confirmed: what they were shown
   "rules": ["Gowri Shankar: no sugar", "Gowri Shankar: millets in place of white rice, 1 more this week in this slot", "everyone: vegetarian, no eggs, no mushrooms"],
   "notes_for_people": ["less spicy for Agastya"],
   "new_dishes_allowed": 1,
@@ -243,7 +254,7 @@ Add-on calls also get their main slot's dishes per day.
 
 ### 5.4 Code checks (after each slot call)
 
-1. Every dish is in that slot's library, a staple, or listed in `new` within `new_dishes_allowed` (week budget across slots).
+1. Every dish is in that slot's library, a staple, or listed in `new` within `new_dishes_allowed` (week budget across slots). A `disliked` dish is never allowed; a dropped untried dish (`untried = 1`, `offers ≥ 2`) is not planned again.
 2. Hard rules for every person on that slot-day: rule `items` vs dish `contains`. **Fail closed**: a dish whose needed tag isn't in `contains_read` can't go to that person; new dishes get a contains read before the check.
 3. `days` and `frequency` per dish, counted across all slots for the week.
 4. Repeat window: non-staple dish not within 3 days of itself in this slot; for mains it applies across main slots (no same main twice in a day across slots). Staples are exempt.
@@ -252,7 +263,7 @@ Problems → one fix call for that slot with the exact list; still failing → t
 
 ### 5.5 Ingredients and save
 
-Fast call per day (as today); remove items a person on that slot-day must avoid; save `slot_days` (status planned), `slot_dishes`, `ingredients` in one transaction; new dishes are saved with origin `planner_suggested` and `suggested = 1`; at the end of the week a new dish the family kept and didn't complain about joins the library (`suggested = 0`), otherwise it stays suggested.
+Fast call per day (as today); remove items a person on that slot-day must avoid; save `slot_days` (status planned), `slot_dishes`, `ingredients` in one transaction; new dishes are saved with origin `planner_suggested`, `suggested = 1`, `untried = 1`; each placement of an untried dish (new or from a reel) adds 1 to `offers`. Nothing is promoted at the end of the week: an untried dish becomes a regular library dish only through the next-day answer (§5.7).
 
 ### 5.6 Message
 
@@ -262,16 +273,44 @@ Festivals are handled by the weekly plan routine's prompt, not by a table or lis
 
 ---
 
+### 5.7 Next-day question about an untried dish (the only feedback ask)
+
+The plan is a suggestion (§1), so the planner never asks whether the plan was followed. It asks about one thing only:
+**dishes the family hasn't eaten before** (`untried = 1`): the planner's own new suggestions (`planner_suggested`) and
+dishes the family sent as an Instagram/YouTube reel or recipe link (`family_added` from a saved link). Dishes named in
+the interview are never asked about. In the next day's message (the existing day reminder), for each untried dish on
+**yesterday's** plan whose placement has `feedback_asked = 0`, it adds one line:
+
+> planner suggestion: "Yesterday's plan had <dish>, which was new. Did you make it, did you like it, and should I suggest it again?"
+>
+> from a reel/link: "Yesterday's plan had <dish> from the reel you sent. Did you make it, did you like it, and should I keep suggesting it?"
+
+Several untried dishes from yesterday → one line each in the same message. `feedback_asked = 1` once sent. The Butler
+reads the reply and calls `record_feedback` (§6). Outcomes (code applies them, same for both kinds):
+
+| answer | effect |
+|---|---|
+| made + liked + suggest again | regular library dish (`untried = 0`, `suggested = 0`); that slot-day `confirmed` |
+| made + didn't like | `disliked = 1`; never suggested or planned again; that slot-day `confirmed` |
+| made + liked, but not again | dropped (`offers` set to 2), so not planned again unless the family asks for it; that slot-day `confirmed` |
+| not made | stays untried; may be planned once more later (`offers < 2`), then dropped |
+| no reply | stays untried; nothing assumed; slot-day stays `planned`; not asked again for that placement |
+
+Corrections the family volunteers in chat ("we made khichdi instead") still mark that slot-day confirmed (`record_made`).
+
+---
+
 ## 6. Later changes (Butler → planner ops)
 
 | op | payload | effect |
 |---|---|---|
 | `set_slot` | { name, kind?, addon_of?, usual_people?, days?, skip_days?, remove? } | add/change a slot; re-plan this week's affected slot-days |
 | `set_slot_day` | { date, slot, people?, add_people?, remove_people?, guests?, occasion?, new_dishes_allowed?, skip?, dishes? } | one-off change; marks `edited`; re-plans only that slot-day unless `dishes` given |
-| `add_dish` | { name, slot, frequency?, days?, quote? } | library add (origin family_added) + contains read |
+| `add_dish` | { name, slot, frequency?, days?, quote?, link? } | library add (origin family_added) + contains read; with `link` (a reel/recipe the family sent) the dish is saved `untried = 1`, link in `video_url` |
 | `set_rule` | { …rule fields, remove? } | add/change/remove; re-checks this week; re-plans failing slot-days only |
 | `set_setting` | { new_dishes_per_week } | |
-| `record_made` | { date, slot, dishes } | "we made khichdi instead" → slot-day dishes replaced, status confirmed |
+| `record_made` | { date, slot, dishes } | volunteered correction ("we made khichdi instead") → slot-day dishes replaced, status confirmed |
+| `record_feedback` | { date, slot, dish, made, liked?, again? } | answer to the next-day untried-dish question (§5.7), planner suggestions and reel dishes alike: regular library dish / `disliked` / stays untried, per the §5.7 table |
 
 Re-plans never overwrite `edited` slot-days. A change typically re-plans only the next day or only the touched slot-days. There is no re-plan cap; the app's existing daily model budget is the only guard against runaway loops. Old ops (`set_meal`, `set_family_dishes`, `set_slots`, `set_house_rules`, `plan_week`, `plan_menu`) are removed now (§3).
 
@@ -303,8 +342,8 @@ Re-plans never overwrite `edited` slot-days. A change typically re-plans only th
 |---|---|---|---|---|---|
 | A. Schema | planner | tables §2, old tables and ops removed §3 | — | 0.5–0.75 d | fresh install creates the new tables; old ops gone; suite green |
 | B. Setup v2 | planner | reads, checks, write order, read-back, diff-apply §4 | A | 1.5 d | Eval 1 ≥ current on h1–h8; personal placement and day/frequency ≥ 85% |
-| C. Plan v2 | planner | §5 incl. feasibility, ordered calls, checks, message (festival question in the routine prompt) | A | 2 d | Eval 2: hard rules 100%, filled 100%, frequency ≥ 95%, judge overall ≥ 3.0 on balanced |
-| D. Later-change ops | planner | §6 | A, C | 0.5–1 d | unit tests; re-plan keeps edited slot-days and touches only the changed slot-days |
+| C. Plan v2 | planner | §5 incl. feasibility, ordered calls, checks, message (festival question in the routine prompt) | A | 2 d | Eval 2: hard rules 100%, filled 100%, frequency ≥ 95%, judge overall ≥ 3.0 on balanced; unit test: `looks_like` holds only seed + confirmed rows, `recent` includes planned; disliked/dropped dishes never planned |
+| D. Later-change ops + untried-dish question | planner | §6, §5.7 (line in the next-day reminder) | A, C | 0.75–1 d | unit tests; re-plan keeps edited slot-days and touches only the changed slot-days; next-day message asks only about yesterday's untried dishes (planner suggestions and reel/link dishes, never interview-named ones), once per placement, with the reel wording for reel dishes; each §5.7 outcome applied; no other "did you cook it" prompt anywhere |
 | E. Flock household | flock | weekly patterns, nicknames, dated fallback, calendar op path §7 | — | 1 d | runner/household tests; facts visible to apps |
 | F. Calendar read | family-calendar | `get_events` §2.4 | — | 0.25 d | op test |
 | G. Evals | planner | §8, households h9–h12, guards | A (shapes) | 1 d | both evals run on new shapes; held-out set committed |
@@ -316,11 +355,12 @@ Parallel: A, E, F, G start together; B and C after A; D after C. Then the WhatsA
 1. Staple = a dish in ≥ 60% of a slot's last 14 meals.
 2. Add-on slots named by the person's name, or the family's own word for them ("Papa's dinner").
 3. Repeat window applies across main slots for mains (no same main twice in a day across slots); staples exempt.
-4. New dishes default 2 a week; a new dish joins the library only if the family kept it and didn't complain, else it stays suggested.
+4. New dishes default 2 a week. A plan is a suggestion: a dish the family hasn't eaten (a planner suggestion, or a dish from a reel/recipe link they sent) becomes a regular library dish only when the family answers the next-day question "made it, liked it, again"; made and disliked → never again; not made → planned once more later, then dropped; no reply → stays untried, nothing assumed (§5.7). Interview-named dishes are never asked about.
 5. Calendar events with unclear meal effect → a small model call; ask the family only if it's unsure.
 6. Cook limits are rules attached to the cook's days; no separate cook entity for now.
 7. Festivals: no table or list; the weekly plan routine's prompt asks (§5.6).
 8. No migration; old tables and ops removed now (§3).
 9. No re-plan cap; the daily model budget is the guard (§6).
+10. Planned slot-days are suggestions: shape examples (`looks_like`) use only the seed and confirmed slot-days; repeat avoidance may use planned ones. No general check-ins; volunteered corrections confirm a slot-day (§1, §2.2).
 
 Open questions: none.
