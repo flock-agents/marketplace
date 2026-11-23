@@ -94,6 +94,12 @@ describe("republish_legacy_card", () => {
     expect((db.query("SELECT COUNT(*) AS n FROM draft_records").get() as { n: number }).n).toBe(1);
   });
 
+  test("the republished card is marked so Flock does not notify about it as a new draft", async () => {
+    builtInRow(A1, T1, "gm-1", "Hi Asha.");
+    await call("republish_legacy_card", { accountId: A1, threadId: T1, draftId: "gm-1", body: "Hi Asha." });
+    expect(published[0].republished).toBe(true);
+  });
+
   test("the row's text is the card's, not the payload's (Gmail holds the row's)", async () => {
     builtInRow(A1, T1, "gm-1", "Text in Gmail.");
     await call("republish_legacy_card", { accountId: A1, threadId: T1, draftId: "gm-1", body: "An older card preview." });

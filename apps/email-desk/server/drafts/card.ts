@@ -114,7 +114,7 @@ export function answeredMessage(db: Database, accountId: string, threadId: strin
 
 /** Publishes (or re-publishes) the draft's card as it stands now. Never throws: the draft is already in Gmail, and a card
  *  that failed is logged, not a failed draft. */
-export async function publishDraftCard(platform: PlatformContext, draft: DraftRecord): Promise<boolean> {
+export async function publishDraftCard(platform: PlatformContext, draft: DraftRecord, opts: { republished?: boolean } = {}): Promise<boolean> {
   try {
     const m = answeredMessage(getStore(), draft.accountId, draft.threadId);
     const blocks: Record<string, unknown>[] = [];
@@ -135,6 +135,8 @@ export async function publishDraftCard(platform: PlatformContext, draft: DraftRe
     const published = await platform.tasks.publish({
       title: followUp ? (fu?.recipientName ? `Follow up with ${fu.recipientName}` : "Follow up on an email you sent") : `Reply to ${m?.name || "this email"}`,
       sourceRef: draftSourceRef(draft.id),
+      // An upgrade moving the person's existing card under this copy: not a new draft, so Flock does not notify about it.
+      ...(opts.republished ? { republished: true } : {}),
       context: {
         why: draft.why || (followUp ? FOLLOW_UP_WHY : DEFAULT_WHY),
         ...(followUp ? { followUp: true } : {}),

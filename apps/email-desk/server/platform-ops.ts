@@ -208,7 +208,7 @@ async function republishLegacyCard(p: Record<string, unknown>, platform: Platfor
   if (draft.sentAt !== null || sentByLedger(sendLedgerKey(draft.id)) || sentByLedger(`${accountId}|${threadId}|${draft.draftId}`)) {
     return { id: draft.id, published: false, sent: true };
   }
-  if (!(await publishDraftCard(platform, draft))) return fail("the card could not be published", "PUBLISH_FAILED", 502);
+  if (!(await publishDraftCard(platform, draft, { republished: true }))) return fail("the card could not be published", "PUBLISH_FAILED", 502);
   return { id: draft.id, published: true };
 }
 
