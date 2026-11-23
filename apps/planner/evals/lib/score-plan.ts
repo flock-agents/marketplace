@@ -67,6 +67,8 @@ export function scorePlan(h: Household, plan: PlanOut, loaded: SetupOut): PlanSc
   for (const e of exp) {
     const sd = at(e.date, e.slot);
     if (e.skip) { add("skips_kept", !sd || (!!sd.skip && !sd.dishes.length), `${e.day} ${e.slot}: has dishes though ${e.skip}`); continue; }
+    // An add-on is filled only as often as its dishes allow (owner 23 Nov, spec §5.2): an empty add-on day is right.
+    if (t.slots.find((x) => x.name === e.slot)?.kind === "addon" && (!sd || (!sd.skip && !sd.dishes.length))) continue;
     add("filled", !!sd && !sd.skip && sd.dishes.length > 0, `${e.day} ${e.slot}: ${!sd ? "no slot-day" : sd.skip ? `marked ${sd.skip}` : "no dish"}`);
     if (!sd || sd.skip) continue;
     // Weekday lunch nobody said of (TRUTH's lunchUnclear): planned with or without that person, both are right.
@@ -176,7 +178,8 @@ export function scorePlan(h: Household, plan: PlanOut, loaded: SetupOut): PlanSc
     const n = exp.filter((e) => e.slot === slot && !e.skip).length;
     const rows = history.filter((r) => r.slot === slot && r.dishes.length).map((r) => r.dishes.filter((d) => !isStaple(slot, d)).length).sort((a, b) => a - b);
     const m = rows.length ? Math.max(1, rows[Math.floor((rows.length - 1) / 2)]) : 1;
-    if (!k || k * 2 >= n * m || !plan.unmet.some((u) => lc(u).includes(lc(slot)))) return null;
+    // The planner says so in unmet (before 23 Nov) or asks about the slot (owner 23 Nov: "I only know N dishes for <slot>").
+    if (!k || k * 2 >= n * m || ![...plan.unmet, ...(plan.asked ?? [])].some((u) => lc(u).includes(lc(slot)))) return null;
     return { cap: Math.ceil((n * m) / k), gap: Math.max(1, Math.floor(k / m)) };
   };
   /** The default cap of a dish (2 days), more only when every slot it is a non-staple at is thin. */
@@ -267,7 +270,7 @@ export function scorePlan(h: Household, plan: PlanOut, loaded: SetupOut): PlanSc
   facts.dishes = cooked.reduce((a, x) => a + x.dishes.length, 0);
   facts.family_dish_share = facts.dishes ? Math.round((100 * cooked.flatMap((x) => x.dishes).filter((d) => dishNameOf(d.name, truthNames)).length) / (facts.dishes as number)) : 0;
   facts.unmet = plan.unmet.length;
-  facts.flagged = plan.unmet.length || /only \d+ .* known|don't know|tell me (a few|more)/i.test(plan.message ?? "") ? 1 : 0;
+  facts.flagged = plan.unmet.length || /only \d+ .* known|only know \d+|don't know|tell me (a few|more)/i.test(plan.message ?? "") ? 1 : 0;
   return { rates, tracked, notes, facts };
 }
 

@@ -226,3 +226,14 @@ describe("scorePlan: a slot too thin for the default rules", () => {
     expect(failing(said)).toContain("repeat_window");
   });
 });
+
+describe("add-on days may be empty (owner 23 Nov)", () => {
+  test("an add-on day with no slot-day, or one with no dishes, is not counted unfilled; a main slot's still is", () => {
+    const p = goodWeek();
+    p.slotDays = p.slotDays.filter((x) => !(x.slot === "Dadu's dinner" && x.date === dateOf(MON, "Mon")));
+    at(p, "Wed", "Dadu's dinner").dishes = [];
+    expect(fails(p)).not.toContain("filled");
+    at(p, "Wed", "Lunch").dishes = [];
+    expect(fails(p)).toContain("filled");
+  });
+});
