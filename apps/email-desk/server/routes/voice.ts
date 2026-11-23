@@ -1,6 +1,6 @@
-// The settings page and its voice editor (Task 2.9, ruling R6): `GET /settings` (and `/`) serve public/settings.html, one
-// static page with no build step; `GET /api/voice` reads the person's voice for each of their mailboxes, `PUT /api/voice`
-// edits, forgets or restores one row (written as 'owner-edit', which no re-learn overwrites), or learns a mailbox again.
+// The person's voice editor (Task 2.9, ruling R6): `GET /api/voice` reads the person's voice for each of their mailboxes,
+// `PUT /api/voice` edits, forgets or restores one row (written as 'owner-edit', which no re-learn overwrites), or learns a
+// mailbox again. The page that uses them is the app's own page (src/App.tsx, served by routes/page.ts).
 // Ported from Flock's Voice tab (wiki/voice-page.ts, routes/wiki.ts) and its re-crawl route (email-desk/routes/voice-crawl.ts).
 //
 // WHO REACHES IT. Flock's proxy is the only way in (the app listens on loopback): its gate (app-gate.ts) opens an app paired
@@ -10,13 +10,9 @@
 // role at all) is refused. The proxy strips any incoming x-flock-* header, so none of these can be forged through it.
 // Agents read the voice through reply_context, never here.
 import { Hono, type Context } from "hono";
-import { readFileSync } from "fs";
-import { join } from "path";
 import type { PlatformContext } from "@flock/app-sdk";
 import { EDITABLE_DIMENSIONS, editVoiceRow, forgetVoiceRow, restoreVoiceRow, voiceAccounts, voicePageFor, type VoicePageAccount } from "../voice/store";
 import { beginVoiceCrawl, voiceLearningUntil, voiceStateFor, type VoiceState } from "../voice/crawl";
-
-export const SETTINGS_PAGE = join(import.meta.dir, "../../public/settings.html");
 
 export interface VoiceAccountView extends VoicePageAccount {
   accountId: string;
@@ -65,16 +61,6 @@ export function voiceView(accountId: string, email: string | null): VoiceAccount
 
 export function voiceRoutes(platform: PlatformContext): Hono {
   const app = new Hono();
-
-  const page = (c: Context) => {
-    try {
-      return c.html(readFileSync(SETTINGS_PAGE, "utf-8"));
-    } catch {
-      return c.text("Settings page missing", 500);
-    }
-  };
-  app.get("/", page);
-  app.get("/settings", page);
 
   app.get("/api/voice", async (c) => {
     if (!person(c)) return c.json({ error: NOT_YOURS }, 403);

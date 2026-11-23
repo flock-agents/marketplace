@@ -1,0 +1,8 @@
+.fl-toasts { position: fixed; left: 50%; bottom: calc(22px + var(--toast-lift, 0px) + env(safe-area-inset-bottom, 0px));   /* --toast-lift: AppShell's phone chat launcher */ transform: translateX(-50%); z-index: 50; display: flex; flex-direction: column; gap: 8px; align-items: center; pointer-events: none; }
+.fl-toast { pointer-events: auto; display: inline-flex; align-items: center; gap: 12px; background: var(--ink); color: var(--on-ink); border-radius: 999px; padding: 9px 10px 9px 16px; font-size: 14px; box-shadow: var(--panel-shadow); }
+.fl-toast button { position: relative; background: var(--on-ink-soft); border: 0; color: var(--on-ink); border-radius: 999px; padding: 5px 11px; font: 500 13px var(--body); cursor: pointer; }
+/* A 40px+ tap target around the small pill button (Undo on a phone), without making the toast taller. */
+.fl-toast button::before { content: ""; position: absolute; inset: -8px -6px; }
+.fl-toast i { width: 7px; height: 7px; border-radius: 50%; background: var(--ink-4); display: block; flex: none; }
+.fl-toast-success i { background: var(--ok); } .fl-toast-warning i { background: var(--risk); }
+.fl-toast-danger i { background: var(--block); } .fl-toast-info i { background: var(--info); } .fl-toast-accent i { background: var(--accent-strong); }

@@ -1,0 +1,7 @@
+.fl-cols { display: grid; gap: var(--gap-page); align-items: start; min-width: 0; }
+.fl-cols > * { min-width: 0; }
+.fl-cols-1-1 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.fl-cols-2-1 { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); }
+.fl-cols-1-2 { grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); }
+.fl-cols-1-1-1 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+@media (max-width: 720px) { .fl-cols { grid-template-columns: 1fr; } }

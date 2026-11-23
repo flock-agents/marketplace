@@ -1,0 +1,16 @@
+.fl-card { position: relative; background: var(--surface); border: 1px solid var(--line-2); border-radius: var(--radius); padding: var(--pad-box); display: flex; flex-direction: column; gap: var(--gap-box); min-width: 0; text-align: left; }
+.fl-card-subtle { background: var(--surface-2); border-color: var(--line); }
+.fl-card-click { cursor: pointer; transition: transform .15s, background .15s; }
+.fl-card-click:hover { background: var(--hover); transform: translateY(-1px); }
+.fl-card-click:focus-within { outline: 2px solid var(--ua); outline-offset: 2px; }
+.fl-card-hit { all: unset; cursor: pointer; }
+.fl-card-hit::after { content: ""; position: absolute; inset: 0; border-radius: var(--radius); }
+.fl-card-hit:focus-visible { outline: none; }
+.fl-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.fl-card-text { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.fl-card-title { font-size: 15px; font-weight: 550; letter-spacing: -.015em; color: var(--ink); }
+.fl-card-meta { font-size: 12.5px; color: var(--ink-3); }
+.fl-card-actions { position: relative; z-index: 1; flex: none; display: inline-flex; align-items: center; gap: 6px; }
+.fl-card-body { font-size: 14px; color: var(--ink-2); min-width: 0; }
+/* Blocks stacked in a card's body are spaced by the box gap; text and inline elements flow as they are. */
+.fl-card-body > :is(div, p, ul, ol, dl, table, form, section, figure, pre, h3, h4) + :is(div, p, ul, ol, dl, table, form, section, figure, pre, h3, h4) { margin-top: var(--gap-box); }

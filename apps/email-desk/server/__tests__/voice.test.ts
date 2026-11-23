@@ -618,12 +618,7 @@ describe("the settings routes", () => {
     open();
   });
 
-  test("the settings page is served", async () => {
-    const res = await app().request("/settings");
-    expect(res.status).toBe(200);
-    const html = await res.text();
-    expect(html).toContain("Your voice");
-    expect(html).toContain('"api/voice"');
-    expect(html).not.toMatch(/[—–]/);
+  test("the old settings page is gone: the app's own page is its settings (routes/page.ts)", async () => {
+    expect((await app().request("/settings")).status).toBe(404);
   });
 });

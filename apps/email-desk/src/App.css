@@ -1,0 +1,3 @@
+/* Layout only: a muted note line and a voice value that keeps its line breaks. Colours and type come from the theme. */
+.ed-note { margin: 0; color: var(--ink-3); font-size: 14px; }
+.ed-value { white-space: pre-wrap; overflow-wrap: anywhere; }

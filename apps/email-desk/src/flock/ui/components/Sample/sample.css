@@ -1,0 +1,8 @@
+/* Sample rows (the kit marks seeded rows `_sample: true`): the row's content is lighter, the chip stays full strength. */
+.fl-sample-fade { opacity: var(--sample); }
+/* Content a template supplies (a render cell, a trailing slot, a Board card) may hold controls. Fade it only when it neither
+   is nor holds one: opacity on a parent cannot be undone on a child, and a faded control reads as disabled. */
+.fl-sample-soft:not(button, a[href], input, select, textarea, [role=button], [role=checkbox], [role=menuitem], [tabindex]):not(:has(button, a[href], input, select, textarea, [role=button], [role=checkbox], [role=menuitem], [tabindex])) { opacity: var(--sample); }
+.fl-sample-soft-kids > *:not(button, a[href], input, select, textarea, [role=button], [role=checkbox], [role=menuitem], [tabindex]):not(:has(button, a[href], input, select, textarea, [role=button], [role=checkbox], [role=menuitem], [tabindex])) { opacity: var(--sample); }
+.fl-sample-chip { display: inline-flex; align-items: center; flex: none; align-self: center; font: 500 11.5px/1 var(--body); letter-spacing: .01em; color: var(--ink-2); background: var(--surface); border: 1px dashed var(--ink-4); border-radius: var(--radius-pill); padding: 4px 8px; white-space: nowrap; vertical-align: middle; }
+.fl-sample-sr { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }

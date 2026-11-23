@@ -1,0 +1,14 @@
+.fl-rows { display: flex; flex-direction: column; }
+.fl-row { display: flex; align-items: center; gap: 12px; padding: 12px 2px; border-bottom: 1px solid var(--line); }
+.fl-row:last-of-type, .fl-row:has(+ .fl-rows-inline) { border-bottom: 0; }
+.fl-row-click { cursor: pointer; } .fl-row-click:hover { background: var(--hover); }
+.fl-row-click:focus-visible { outline: 2px solid var(--ua); outline-offset: -2px; }
+.fl-row-main { flex: 1; min-width: 0; }
+.fl-row-title { font-size: 14.5px; font-weight: 550; letter-spacing: -.015em; color: var(--ink); }
+.fl-row-meta { display: block; font-size: 12.5px; color: var(--ink-3); }
+.fl-row-lead, .fl-row-trail { flex: none; display: inline-flex; align-items: center; gap: 8px; }
+.fl-rows-foot { display: flex; justify-content: center; padding-top: 10px; }
+.fl-rows-note { margin: 0; padding: 8px 4px; font-size: 13px; color: var(--block); }
+/* A form or detail opened in place under its row. */
+.fl-rows-inline { padding: 4px 0 14px; border-bottom: 1px solid var(--line); min-width: 0; }
+.fl-rows-inline:last-child { border-bottom: 0; }

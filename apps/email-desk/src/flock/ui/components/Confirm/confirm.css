@@ -1,0 +1,5 @@
+.fl-confirm-scrim { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: 16px; background: var(--scrim); backdrop-filter: blur(2px); }
+.fl-confirm { border: 1px solid var(--line-2); border-radius: 18px; background: var(--surface); padding: 20px; box-shadow: var(--panel-shadow); width: 100%; max-width: 400px; display: flex; flex-direction: column; gap: 10px; }
+.fl-confirm h4 { margin: 0; font-size: 17px; letter-spacing: -.025em; color: var(--ink); }
+.fl-confirm p { margin: 0; color: var(--ink-2); font-size: 14px; }
+.fl-confirm-acts { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }

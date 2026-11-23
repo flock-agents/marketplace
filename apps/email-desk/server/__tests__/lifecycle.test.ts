@@ -475,8 +475,8 @@ describe("delete my mail data", () => {
     expect(SEQUENCE_STALL_MS).toBe(STALL_MS);
   });
 
-  test("the settings page says only new mail is read after a delete", async () => {
-    const html = await Bun.file(join(import.meta.dir, "..", "..", "public", "settings.html")).text();
+  test("the app's page says only new mail is read after a delete", async () => {
+    const html = await Bun.file(join(import.meta.dir, "..", "..", "src", "App.tsx")).text();
     expect(html).toContain("Only new mail from now on is read.");
     expect(html).not.toContain("New mail is read again after this.");
   });

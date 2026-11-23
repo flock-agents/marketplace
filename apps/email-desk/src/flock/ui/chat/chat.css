@@ -1,0 +1,76 @@
+/* Blocks in a chat are compact (owner round 1, 2026-10-20: "one message should fit in one fold").
+   Scoped to .fl-chatblock (ChatBlock's root) so BigCard, HeroStat and the frames keep their size in apps. */
+.fl-chatblock .fl-mini { padding: 12px 14px; gap: 8px; }
+.fl-chatblock .fl-mini-foot { padding-top: 8px; }
+.fl-chatblock .fl-mini-foot .fl-btn { padding: 8px 14px; font-size: 13.5px; }
+.fl-chatblock .fl-choice { gap: 8px; }
+/* Ruling 48 (replaces Ruling 37): option cards stay in ONE row at every frame width. Cards that fit at their
+   150px minimum share the row (3 fill a ~600px frame); more than fit scroll sideways instead of shrinking,
+   wrapping or stacking, and the last visible card peeks (~2.3 cards at a 375px phone frame). A card is never
+   wider than 220px while the row scrolls (each track is at its minimum then). The 3px padding keeps a focus ring
+   and the hover lift inside the scroller's clip; the negative margin keeps the row where it was. */
+.fl-chatblock .fl-ocards {
+  display: grid; grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: minmax(150px, 1fr); gap: 8px;
+  overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; scroll-snap-type: x proximity; scroll-behavior: smooth;
+  scroll-padding-inline: 3px; padding: 3px; margin: -3px; min-width: 0; scrollbar-width: none;
+}
+.fl-chatblock .fl-ocards::-webkit-scrollbar { display: none; }
+.fl-chatblock .fl-ocards > * { scroll-snap-align: start; min-width: 0; max-width: 100%; }
+/* The edge with more cards past it fades (Choice toggles the classes on scroll and resize, only when the row
+   overflows). A mask, not an overlay: it works on any bubble colour and never sits over a card's click target. */
+.fl-chatblock .fl-ocards.fl-ocards-more-r { -webkit-mask-image: linear-gradient(to right, var(--ink) calc(100% - 32px), transparent); mask-image: linear-gradient(to right, var(--ink) calc(100% - 32px), transparent); }
+.fl-chatblock .fl-ocards.fl-ocards-more-l { -webkit-mask-image: linear-gradient(to left, var(--ink) calc(100% - 32px), transparent); mask-image: linear-gradient(to left, var(--ink) calc(100% - 32px), transparent); }
+.fl-chatblock .fl-ocards.fl-ocards-more-l.fl-ocards-more-r { -webkit-mask-image: linear-gradient(to right, transparent, var(--ink) 32px, var(--ink) calc(100% - 32px), transparent); mask-image: linear-gradient(to right, transparent, var(--ink) 32px, var(--ink) calc(100% - 32px), transparent); }
+@media (prefers-reduced-motion: reduce) { .fl-chatblock .fl-ocards { scroll-behavior: auto; } }
+.fl-chatblock .fl-ocard, .fl-chatblock .fl-info { padding: 12px 14px; border-radius: 14px; gap: 2px; container-type: inline-size; }
+.fl-chatblock .fl-ocard-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fl-chatblock .fl-ocard-title { font-size: 15px; font-weight: 600; line-height: 1.3; margin-top: 0; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
+/* the unit stays on the value's line: the figure shrinks in a narrow card instead of wrapping */
+.fl-chatblock .fl-ocard-value { font-size: max(15px, min(28px, calc((100cqi - 46px) / 3.9))); margin-top: 4px; white-space: nowrap; }
+.fl-chatblock .fl-ocard-value small { font-size: 12px; margin-left: 3px; }
+.fl-chatblock .fl-ocard-caption { font-size: 13px; line-height: 1.4; margin-top: 3px; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
+/* Facts in chat: the value is never squeezed into a sliver. A card under 220px (every card while the row scrolls)
+   puts the label above its value; long values wrap between words only. The facts sit at the card's foot, so rows
+   line up across cards whose titles or captions differ in length. */
+.fl-chatblock .fl-ocard > :has(+ .fl-ocard-facts) { margin-bottom: 8px; }
+.fl-chatblock .fl-ocard-facts { margin-top: auto; }
+.fl-chatblock .fl-ocard-fact-v { overflow-wrap: break-word; word-break: normal; }
+@container (max-width: 219px) {
+  .fl-chatblock .fl-ocard-fact { flex-direction: column; align-items: stretch; gap: 1px; padding: 5px 0; }
+  .fl-chatblock .fl-ocard-fact-l { font-size: 11.5px; line-height: 1.3; }
+  .fl-chatblock .fl-ocard-fact-v { text-align: left; }
+}
+/* chips: one row, the ones that do not fit are cut rather than adding a line */
+.fl-chatblock .fl-ocard .fl-props, .fl-chatblock .fl-info .fl-props { margin-top: 8px; gap: 6px; flex-wrap: nowrap; overflow: hidden; }
+.fl-chatblock .fl-ocard .fl-prop, .fl-chatblock .fl-info .fl-prop { padding: 3px 9px; font-size: 12px; flex: none; white-space: nowrap; }
+.fl-chatblock .fl-mini-head { gap: 10px; }
+.fl-chatblock .fl-mini-write .fl-inp { padding: 7px 12px; font-size: 14px; }
+.fl-chatblock .fl-mini-write .fl-btn { padding: 8px 14px; font-size: 13.5px; }
+.fl-chatblock .fl-ocard-badge { top: 10px; right: 10px; }
+/* The library's phone rules (40px tap targets at ≤720px) read the frame's width here: a desktop mouse in a
+   461–720px chat column keeps the compact controls; a phone (≤460px or a coarse pointer) keeps 40px. */
+@media (min-width: 461px) and (max-width: 720px) and (pointer: fine) {
+  .fl-chatblock .fl-tab, .fl-chatblock .fl-inp, .fl-chatblock .fl-mini-app { min-height: 0; }
+  /* a kit Button has no vertical padding (its height IS its min-height): back to the desktop size, never 0 */
+  .fl-chatblock .fl-btn:not(.fl-btn-sm), .fl-chatblock .fl-choice-opt { min-height: 34px; }
+  .fl-chatblock .fl-btn-sm { min-height: 30px; }
+}
+@media (max-width: 599px) {
+  .fl-chatblock .fl-mini { padding: 12px; }
+}
+
+
+/* A block that could not be drawn, read as text. */
+.fl-chat-fallback { display: flex; flex-direction: column; gap: 4px; font-family: var(--body); }
+.fl-chat-fallback-note { font: 500 11.5px var(--body); color: var(--ink-3); padding: 2px 0; }
+.fl-chat-fallback-text { font-size: 14px; line-height: 1.5; color: var(--ink); white-space: pre-wrap; overflow-wrap: anywhere; }
+/* A long list's "Show all N" sits under it, as Checklist's does. */
+.fl-chatblock .fl-chat-long { display: flex; flex-direction: column; }
+/* An ObjectIcon whose name is not a picture: a quiet blank tile, not nothing. */
+.fl-chatblock .fl-obj-missing { display: inline-block; border-radius: 12px; border: 1.5px dashed var(--line-2); background: var(--line); filter: none; }
+/* A Progress with no limit: the label and the amount, no bar. */
+.fl-chatblock .fl-chat-amount { display: flex; justify-content: space-between; gap: 12px; font-size: 14px; }
+.fl-chatblock .fl-chat-amount-l { color: var(--ink-2); }
+/* a RowList row's photo (its `image`) */
+.fl-chatblock .fl-chat-thumb { display: block; width: 56px; flex: none; }
+.fl-chatblock .fl-chat-thumb .fl-img { border-radius: 10px; }

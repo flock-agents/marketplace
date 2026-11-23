@@ -1,0 +1,20 @@
+/* Light: ink outline + hard offset shadow. Dark: dark ink outline, lit gloss, cream die-cut border, soft lift. */
+.fl-obj { --fl-die-w: 1.6px; --fl-lift: 0 5px 7px; display: inline-block; color: var(--obj-ink); filter: drop-shadow(2px 2px 0 var(--obj-shadow)); line-height: 0; flex: none; }
+.fl-obj[data-size="24"], .fl-obj[data-size="32"] { --fl-die-w: 1px; --fl-lift: 0 2px 3px; filter: drop-shadow(1px 1px 0 var(--obj-shadow)); }
+.fl-obj svg { width: 100%; height: 100%; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .fl-obj {
+    filter: url(#fl-obj-gloss)
+      drop-shadow(var(--fl-die-w) 0 0 var(--obj-die)) drop-shadow(calc(-1 * var(--fl-die-w)) 0 0 var(--obj-die))
+      drop-shadow(0 var(--fl-die-w) 0 var(--obj-die)) drop-shadow(0 calc(-1 * var(--fl-die-w)) 0 var(--obj-die))
+      drop-shadow(var(--fl-lift) var(--obj-lift));
+  }
+  :root:not([data-theme="light"]) .fl-obj svg { overflow: visible; }
+}
+:root[data-theme="dark"] .fl-obj {
+  filter: url(#fl-obj-gloss)
+    drop-shadow(var(--fl-die-w) 0 0 var(--obj-die)) drop-shadow(calc(-1 * var(--fl-die-w)) 0 0 var(--obj-die))
+    drop-shadow(0 var(--fl-die-w) 0 var(--obj-die)) drop-shadow(0 calc(-1 * var(--fl-die-w)) 0 var(--obj-die))
+    drop-shadow(var(--fl-lift) var(--obj-lift));
+}
+:root[data-theme="dark"] .fl-obj svg { overflow: visible; }
