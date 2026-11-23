@@ -270,10 +270,17 @@ async function runOne(dir: string, rep: number) {
   const parts = [...new Set(sc.map((x) => x.purpose))].map((purpose) => { const xs = sc.filter((x) => x.purpose === purpose);
     return { part: purpose.replace(/^setup: (the )?/, ""), ms: xs.reduce((a, x) => a + x.ms, 0), attempts: xs.reduce((a, x) => a + x.attempts, 0), out: xs.reduce((a, x) => a + x.out, 0), think: xs.reduce((a, x) => a + x.think, 0), ok: xs.at(-1)!.ok }; });
   const setupCall = parts.length ? { ms: Math.max(...parts.map((x) => x.ms)), attempts: parts.reduce((a, x) => a + x.attempts, 0) } : undefined;
+  // The week's lunches and dinners with who eats each dish, and the dish book they were planned from, to read by eye.
+  const forOf = (d: any) => { const f = d.for_people ? JSON.parse(d.for_people) : null; return !f || f.includes("everyone") ? "all" : f.join("+"); };
+  const week = WEEK_DAYS.map((day, i) => ["Lunch", "Dinner"].map((slot) => {
+    const m = meals.find((x) => x.date === dateOf(i) && x.slot === slot);
+    return `${day} ${slot}: ${!m ? "-" : m.ordered_in ? "ordered in" : dishesOf(m).map((d) => `${d.name} [${forOf(d)}]`).join(", ")}`;
+  })).flat();
+  const book = k.rows("dish_book").filter((b) => b.slots).map((b) => `${b.name} @${JSON.parse(b.slots).join(",")}${b.eaten_by ? ` [${JSON.parse(b.eaten_by).join("+")}]` : ""}`);
   rmSync(dataDir, { recursive: true, force: true });
   const row = { run: name, rep, setup_ms: setupCall?.ms ?? setupMs, setup_wall_ms: setupMs, setup_attempts: setupCall?.attempts ?? 0, parts, plan_ms: planMs, checks: c, snack: `${snackWho} ${snackDays}`.trim(),
     expected_snack: ex.snack, notes, said: setup.said ?? setup.say ?? setup.error, noted: setup.noted ?? [], dropped: setup.dropped ?? [], rules: (setup.rules ?? []).map((r: any) => `${r.saved_as}${r.who ? ` ${r.who}` : ""}${r.items ? ` [${r.items.join(",")}]` : ""}${r.slots ? ` @${r.slots.join(",")}` : ""}${r.days ? ` ${r.days.join(",")}` : ""}${r.per_meal ? ` per_meal=${r.per_meal}` : ""} "${r.quote}"`),
-    plan_message: plan.message?.split("\n").slice(0, 3).join(" / "), unmet: plan.unmet ?? [] };
+    plan_message: plan.message?.split("\n").slice(0, 3).join(" / "), unmet: plan.unmet ?? [], week, book, examples: (h.meal_examples ?? []).map((x: any) => `${x.slot}${x.group ? ` (${x.group})` : ""}: ${x.words}`) };
   writeFileSync(join(OUT, `${name}-rep${rep}.json`), JSON.stringify({ ...row, transcript: lines, profile: setup.profile }, null, 1));
   return row;
 }
@@ -291,6 +298,9 @@ for (let rep = 1; rep <= REPEAT; rep++) {
     for (const d of r.dropped) console.log(`  dropped: ${d}`);
     console.log(`  rules: ${r.rules.join(" | ")}`);
     console.log(`  read-back:\n    ${String(r.said).split("\n").join("\n    ")}`);
+    console.log(`  dish book: ${r.book.join(" | ")}`);
+    console.log(`  meal examples: ${r.examples.join(" || ")}`);
+    console.log(`  lunches and dinners:\n    ${r.week.join("\n    ")}`);
   }
 }
 writeFileSync(join(OUT, "results.json"), JSON.stringify(results, null, 1));
