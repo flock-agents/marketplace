@@ -82,11 +82,11 @@ async function runOne(j: Job) {
   let plan: PlanOut, refused: string[] = [], ms = 0;
   if (mode === "baseline") plan = baselineWeek(j.h, WEEK0);
   else {
-    const { bootPlanner, loadSetup, runPlan } = await import("./lib/adapter");
+    const { bootPlanner, loadSetup, loadPeople, runPlan } = await import("./lib/adapter");
     const dataDir = mkdtempSync(join(tmpdir(), "planner-eval2-"));
     try {
       const k = await bootPlanner({ dataDir, model: appModel({ upstream: { balanced: MODEL, fast: MODEL }, noThink: flag("no-think"), sink: calls }) });
-      refused = loadSetup(k, j.setup);
+      refused = [...loadPeople(k, j.h), ...loadSetup(k, j.setup)];
       const t0 = Date.now();
       const r = await runPlan(k, j.h, WEEK0, j.h.truth.week ?? []);
       ms = Date.now() - t0;

@@ -96,6 +96,20 @@ export async function readContains(k: Kit, dishes: string[]): Promise<Record<str
 
 // ── Eval 2 ──
 
+/** The household's people as rows (in a live run apply_setup writes them from household.people; Eval 2 skips setup). */
+export function loadPeople(k: Kit, h: Household): string[] {
+  const refused: string[] = [];
+  const people = (h.household as any)["household.people"];
+  if (!Array.isArray(people)) return ["people: household.people is not a list"];
+  const now = new Date().toISOString();
+  for (const p of people) {
+    try { k.kit.sqlite.query(`INSERT INTO "people" (id, created_at, updated_at, updated_by, name, "group", relationship, active) VALUES (?, ?, ?, 'eval', ?, ?, ?, 1)`)
+      .run(crypto.randomUUID(), now, now, p.name, p.group ?? null, p.relationship ?? null); }
+    catch (e) { refused.push(`people: ${String(e).slice(0, 160)}`); }
+  }
+  return refused;
+}
+
 /** Load a setup into a fresh planner as rows (no model, no route): slots, library, rules, seed history, cook, setting.
  *  Returns what could not be written (a missing table or column), so a run says what it planned from. */
 export function loadSetup(k: Kit, s: SetupOut): string[] {

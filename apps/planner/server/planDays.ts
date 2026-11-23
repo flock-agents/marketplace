@@ -177,14 +177,15 @@ export function ruleHolds(r: Pick<Rule, "days" | "slots">, date: string, slot: S
 }
 
 /** Is a person away from this main slot on this weekday by their weekday pattern. `lunch`: the family's word for weekday lunch
- *  (away, carries: not at home; home: at home); else the pattern's hours over the slot's usual time; else not known (home). */
+ *  (away: not eating the home lunch; carries: the home lunch is cooked for them and packed, so they count; home: at home);
+ *  else the pattern's hours strictly around the slot's usual time (leaving at 8 still eats an 8 o'clock breakfast); else home. */
 function awayBy(w: Weekly, day: Weekday, slot: Slot): boolean {
   if (!w.weekdays.includes(day) || w.where === "home") return false;
   const base = slot.kind === "main" ? slot : null;
   const order = base?.order;
-  if (order === SLOT_ORDER.Lunch && w.lunch) return w.lunch === "away" || w.lunch === "carries";
+  if (order === SLOT_ORDER.Lunch && w.lunch) return w.lunch === "away";
   const at = order != null ? MAIN_SLOT_TIME[order] : undefined;
-  return !!(at && w.from && w.to && w.from <= at && at < w.to);
+  return !!(at && w.from && w.to && w.from < at && at < w.to);
 }
 
 /** The key of a slot-day in a set of them: its date and its slot's name, any capitals. */
