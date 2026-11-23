@@ -24,6 +24,13 @@ describe("findPlaceholder", () => {
 // See draft-body-check.ts: the owner's voice has no dashes, and a model asked
 // for a draft in chat never saw that rule. The check is the backstop.
 describe("findDash", () => {
+  // Ported from Flock tests/gmail-body-html.test.ts (Task 3.4): a Markdown table's divider row is not a dash in the prose.
+  test("|---| is not a dash; an empty header row is fine; a real em dash in a cell still is", () => {
+    expect(findDash("Hi,\n\n| Field | Details |\n|---|---|\n| Designation | Co-Founder |\n\nThanks")).toBeNull();
+    expect(findDash("| | |\n|---|---|\n| a | b |")).toBeNull();
+    expect(findDash("| a | b |\n|:---|---:|\n| x | y |")).toBeNull();
+    expect(findDash("| a |\n|---|\n| yes — confirmed |")).toBe("yes — confirmed");
+  });
   test("catches an em dash, an en dash and a double hyphen, with the words around it", () => {
     expect(findDash("Yes — Friday works.")).toBe("Yes — Friday");
     expect(findDash("We ship 10–12 units.")).toBe("10–12");
