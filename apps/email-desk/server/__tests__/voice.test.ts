@@ -305,6 +305,11 @@ describe("the crawl", () => {
     expect(f.reads).toEqual([]);
     expect(f.models).toEqual([]);
     expect(voiceStateFor(A1)).toBe("none");
+    // Not stamped as an attempt: the routine's catch-up asks again on its next run, not a week later.
+    f.turnRefusal = null;
+    const again = await ensureVoiceCrawl(f.platform, A1);
+    expect(again.started).toBe(true);
+    if (again.started) await again.done;
   });
 
   test("a learned mailbox is not crawled again unless forced; a running one never twice", async () => {
