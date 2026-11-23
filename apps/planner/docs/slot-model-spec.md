@@ -218,7 +218,7 @@ Calendar: `get_events` for the week via Flock; events → people changes (code f
 
 ### 5.2 Feasibility pre-check (code, per slot)
 
-Non-staple library dishes allowed this week (rules, days, frequency) vs non-staple places to fill (slot-days × typical non-staple count from history). If short: allow extra new dishes for that slot up to the setting, then widen the repeat window from 3 to 2 days, then note "only N lunch dishes known" in `unmet`. Order of relaxing is fixed and logged.
+Non-staple library dishes allowed this week (rules, days, frequency) vs non-staple places to fill (slot-days × typical non-staple count, taken from the interview seed and confirmed slot-days only, never planned-only ones, owner 23 Nov). If short: allow extra new dishes for that slot up to the setting, then widen the repeat window from 3 to 2 days, then note "only N lunch dishes known" in `unmet`. Order of relaxing is fixed and logged.
 
 ### 5.3 Ordered slot calls (model, balanced)
 
