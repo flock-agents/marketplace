@@ -336,12 +336,14 @@ describe("send_draft", () => {
     expect(row(id).sent_at).toBeNull();
   });
 
+  const ASHA_MSG = { from: "Asha Rao <asha@acme.com>", date: "Nov 23, 2026, 9:00", body: "Are you free on Tuesday?" };
   const UNCONFIRMED = { error: "Couldn't confirm the send. Check Sent before sending again.", code: "SEND_FAILED", status: 502 };
 
   test("a send a crash cut short, gone from Gmail: answered from the ledger, nothing sent (R30)", async () => {
     const id = await create();
     db.run("INSERT INTO send_ledger (idempotency_key, account_id, thread_id, draft_id, state, created_at, updated_at) VALUES (?, ?, ?, 'gm-1', 'in_flight', 1, 1)", [`draft:${id}`, ACCOUNT, THREAD]);
     f.gmail.delete("gm-1");
+    f.thread = [ASHA_MSG]; // no reply seen and no draft shown: ambiguous (R34)
     expect(await send({ id })).toEqual(UNCONFIRMED);
     expect(sends()).toHaveLength(0);
     expect(row(id).sent_at).toBeNull();
@@ -352,8 +354,9 @@ describe("send_draft", () => {
     const id = await create();
     db.run("INSERT INTO send_ledger (idempotency_key, account_id, thread_id, draft_id, state, created_at, updated_at) VALUES (?, ?, ?, 'gm-1', 'in_flight', 1, 1)", [`draft:${id}`, ACCOUNT, THREAD]);
     f.calls.length = 0;
+    f.thread = null; // the re-read fails: no send (R34)
     expect(await send({ id }, pressCtx("press-token-2"))).toEqual(UNCONFIRMED);
-    expect(f.calls).toHaveLength(0);
+    expect(sends()).toHaveLength(0);
     expect(ledger(id).state).toBe("in_flight");
   });
 
@@ -362,6 +365,7 @@ describe("send_draft", () => {
     f.failNext.sendDraft = { reason: "timeout" };
     expect(await send({ id })).toEqual(UNCONFIRMED);
     expect(ledger(id).state).toBe("in_flight");
+    f.thread = null; // the re-read fails (R34)
     expect(await send({ id }, pressCtx("press-token-2"))).toEqual(UNCONFIRMED);
     expect(await send({ id }, pressCtx("press-token-3"))).toEqual(UNCONFIRMED);
     expect(sends()).toHaveLength(1);
@@ -374,6 +378,7 @@ describe("send_draft", () => {
     f.failNext.sendDraft = failure;
     expect(await send({ id })).toEqual(UNCONFIRMED);
     expect(ledger(id).state).toBe("in_flight");
+    f.thread = null; // the re-read fails: the press sends nothing (R34)
     expect(await send({ id }, pressCtx("press-token-2"))).toEqual(UNCONFIRMED);
     expect(sends()).toHaveLength(1);
     expect(row(id).sent_at).toBeNull();
@@ -573,6 +578,7 @@ describe("redraft over an unconfirmed send (R33)", () => {
     return `${MONTHS[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}, ${d.getHours()}:${String(d.getMinutes()).padStart(2, "0")}`;
   };
   const ASHA = { from: "Asha Rao <asha@acme.com>", date: "Nov 23, 2026, 9:00", body: "Are you free on Tuesday?" };
+  const threadHeld = () => !!db.query("SELECT 1 FROM send_ledger WHERE state = 'in_flight' LIMIT 1").get();
   const writes = () => f.calls.filter((c) => ["createReplyDraft", "updateDraft", "discardDraft", "sendDraft"].includes(c.functionName));
 
   /** A draft whose send timed out: the ledger row stays in_flight and Gmail still holds the draft. */
@@ -736,41 +742,43 @@ describe("redraft over an unconfirmed send (R33)", () => {
     expect(f.turns).toHaveLength(0); // no re-read: a discard changes nothing
   });
 
-  test("the person's discard goes through, and the thread stays held: create_draft SEND_UNCONFIRMED, no Gmail write", async () => {
+  test("the person's discard releases the hold: the in_flight row goes and create_draft drafts (R34)", async () => {
     const id = await unknownSend();
     expect(await ops.discard_draft({ id }, pressCtx("press-token-9") as any)).toEqual({ ok: true });
     expect(row(id)).toBeNull();
-    expect(ledger(id).state).toBe("in_flight");
+    expect(ledger(id)).toBeNull();
     f.calls.length = 0;
-    f.thread = [ASHA]; // no reply seen, and Gmail holds no draft: ambiguous
-    expect(await createAgain()).toEqual(SEND_UNCONFIRMED);
-    expect(writes()).toHaveLength(0);
-    expect(ledger(id).state).toBe("in_flight");
-    expect(db.query("SELECT COUNT(*) AS n FROM draft_records").get()).toEqual({ n: 0 });
+    f.turn = "busy"; // no re-read is needed: nothing holds the thread
+    expect(typeof (await createAgain()).id).toBe("string");
+    expect(f.calls.some((c) => c.functionName === "createReplyDraft")).toBe(true);
   });
 
-  test("the person's ✕ on the card (declined) leaves the thread held too", async () => {
+  test("the person's discard releases every in_flight row of the thread, not other threads' (R34)", async () => {
+    const id = await unknownSend();
+    db.run("INSERT INTO send_ledger (idempotency_key, account_id, thread_id, draft_id, state, created_at, updated_at) VALUES ('acct-1|thread-1|gm-old', ?, ?, 'gm-old', 'in_flight', 1, 1)", [ACCOUNT, THREAD]);
+    db.run("INSERT INTO send_ledger (idempotency_key, account_id, thread_id, draft_id, state, created_at, updated_at) VALUES ('acct-1|thread-2|gm-z', ?, 'thread-2', 'gm-z', 'in_flight', 1, 1)", [ACCOUNT]);
+    await ops.discard_draft({ id }, pressCtx("press-token-9") as any);
+    expect(db.query("SELECT idempotency_key FROM send_ledger").all()).toEqual([{ idempotency_key: "acct-1|thread-2|gm-z" }]);
+  });
+
+  test("the person's ✕ on the card (declined) releases the hold too (R34)", async () => {
     const id = await unknownSend();
     await handleCardClosed({ sourceRef: `draft:${id}`, outcome: "declined" } as any, { platform: f.platform });
     expect(row(id)).toBeNull();
-    expect(ledger(id).state).toBe("in_flight");
+    expect(ledger(id)).toBeNull();
     f.calls.length = 0;
     f.turn = "busy";
-    expect(await createAgain()).toEqual(SEND_UNCONFIRMED);
-    expect(writes()).toHaveLength(0);
+    expect(typeof (await createAgain()).id).toBe("string");
   });
 
-  test("after the person's discard, a re-read that proves it went: create_draft refused SENT, ledger sent", async () => {
+  test("the agent's discard stays refused (R33), and the person's edit keeps the hold (R34)", async () => {
     const id = await unknownSend();
-    await ops.discard_draft({ id }, pressCtx("press-token-9") as any);
-    f.calls.length = 0;
-    itWentOut();
-    const out = await createAgain();
-    expect(out.code).toBe("SENT");
-    expect(writes()).toHaveLength(0);
-    expect(ledger(id).state).toBe("sent");
-    // The thread is free again: the next create_draft drafts (a later reply on the thread).
-    expect(typeof (await createAgain()).id).toBe("string");
+    expect(await ops.discard_draft({ id }, agentCtx() as any)).toEqual(SEND_UNCONFIRMED);
+    expect(ledger(id).state).toBe("in_flight");
+    f.thread = null;
+    expect(await ops.update_draft({ id, body: "Hi Asha, Tuesday is good.", by: "person" }, pressCtx("press-token-9") as any)).toEqual(SEND_UNCONFIRMED);
+    expect(ledger(id).state).toBe("in_flight");
+    expect(row(id).body_written).toBe(BODY);
   });
 
   test("no reply seen, but Gmail's compose holds other text (a new draft the person started): unknown, the row stays in_flight", async () => {
@@ -788,16 +796,88 @@ describe("redraft over an unconfirmed send (R33)", () => {
     expect(sends()).toHaveLength(0);
   });
 
-  test("a claim with no stored text (an imported row) can never be proven unsent", async () => {
+  test("a claim with no stored text can never be proven unsent: the press sends nothing (R34)", async () => {
     const id = await unknownSend();
-    db.run("UPDATE send_ledger SET result = NULL WHERE idempotency_key = ?", [`draft:${id}`]);
-    await ops.discard_draft({ id }, pressCtx("press-token-9") as any); // the row's text is gone too
-    f.gmail.set("gm-1", BODY); // even with Gmail showing the very text
+    db.run("UPDATE send_ledger SET result = NULL, draft_id = '' WHERE idempotency_key = ?", [`draft:${id}`]);
     f.thread = [ASHA];
-    f.calls.length = 0;
     expect(await createAgain()).toEqual(SEND_UNCONFIRMED);
     expect(ledger(id).state).toBe("in_flight");
     expect(writes()).toHaveLength(0);
   });
-});
 
+  // R34: the person's press of Send on a thread with a send in doubt re-reads the thread first.
+  describe("a press on a thread whose send is in doubt (R34, R35)", () => {
+    const PRESS_REFUSED = { error: "Couldn't confirm the send. Check Sent before sending again.", code: "SEND_FAILED", status: 502 };
+
+    test("the earlier reply is found: nothing is sent, ledger sent, row stamped, card closed, answered as sent", async () => {
+      const id = await unknownSend();
+      itWentOut();
+      const out = await send({ id }, pressCtx("press-token-2"));
+      expect(out.ok).toBe(true);
+      expect(typeof out.sentAt).toBe("string");
+      expect(sends()).toHaveLength(0);
+      expect(ledger(id).state).toBe("sent");
+      expect(row(id).sent_at).not.toBeNull();
+      expect(f.withdrawn).toEqual([`draft:${id}`]);
+      expect(f.calls.find((c) => c.functionName === "getThread")?.params).toEqual({ threadId: THREAD, bypassCache: true });
+      expect(f.turns.map((t) => t.consumer)).toEqual(["email-desk:send-check"]);
+    });
+
+    test("the read worked and shows no reply: the hold is cleared and exactly one sendDraft goes", async () => {
+      const id = await unknownSend();
+      f.thread = [ASHA];
+      const out = await send({ id }, pressCtx("press-token-2"));
+      expect(out.ok).toBe(true);
+      expect(sends()).toHaveLength(1);
+      expect(sends()[0]!.pressToken).toBe("press-token-2");
+      expect(ledger(id).state).toBe("sent");
+      expect(threadHeld()).toBe(false);
+    });
+
+    test("the read fails, the mailbox is busy, or there are no read turns: UNCONFIRMED, no sendDraft, hold kept", async () => {
+      const id = await unknownSend();
+      for (const setup of [() => { f.turn = "ok"; f.thread = null; }, () => { f.turn = "busy"; }, () => { f.turn = "none"; }]) {
+        setup();
+        expect(await send({ id }, pressCtx("press-token-2"))).toEqual(PRESS_REFUSED);
+      }
+      expect(sends()).toHaveLength(0);
+      expect(ledger(id).state).toBe("in_flight");
+      expect(row(id).sent_at).toBeNull();
+    });
+
+    test("no reply but Gmail shows no draft either: ambiguous, no sendDraft", async () => {
+      const id = await unknownSend();
+      f.gmail.delete("gm-1");
+      f.thread = [ASHA];
+      expect(await send({ id }, pressCtx("press-token-2"))).toEqual(PRESS_REFUSED);
+      expect(sends()).toHaveLength(0);
+      expect(ledger(id).state).toBe("in_flight");
+    });
+
+    test("an imported in_flight row beside an open draft: the press goes through the re-read, never a blind send", async () => {
+      const id = await create(BODY);
+      db.run("INSERT INTO send_ledger (idempotency_key, account_id, thread_id, draft_id, state, result, created_at, updated_at) VALUES ('acct-1|thread-1|gm-1', ?, ?, 'gm-1', 'in_flight', ?, 1, 1)", [ACCOUNT, THREAD, JSON.stringify({ body: BODY })]);
+      f.calls.length = 0;
+      f.thread = null;
+      expect(await send({ id })).toEqual(PRESS_REFUSED);
+      expect(sends()).toHaveLength(0);
+      expect(f.calls.some((c) => c.functionName === "getThread")).toBe(true);
+      // The read shows the reply: the imported send is proven, so this press sends nothing and says so.
+      f.thread = [ASHA, { from: "Me <me@acme.com>", date: gmailDate(Date.now() + 60_000), body: BODY }];
+      f.gmail.delete("gm-1");
+      const out = await send({ id }, pressCtx("press-token-2"));
+      expect(out).toEqual({ error: "Already sent.", code: "SEND_FAILED", status: 502 });
+      expect(sends()).toHaveLength(0);
+      expect(db.query("SELECT state FROM send_ledger WHERE idempotency_key = 'acct-1|thread-1|gm-1'").get()).toEqual({ state: "sent" });
+    });
+
+    test("an imported in_flight row, the read shows no reply and Gmail still holds the text: cleared, one sendDraft", async () => {
+      const id = await create(BODY);
+      db.run("INSERT INTO send_ledger (idempotency_key, account_id, thread_id, draft_id, state, result, created_at, updated_at) VALUES ('acct-1|thread-1|gm-1', ?, ?, 'gm-1', 'in_flight', ?, 1, 1)", [ACCOUNT, THREAD, JSON.stringify({ body: BODY })]);
+      f.thread = [ASHA];
+      expect((await send({ id })).ok).toBe(true);
+      expect(sends()).toHaveLength(1);
+      expect(db.query("SELECT COUNT(*) AS n FROM send_ledger WHERE state = 'in_flight'").get()).toEqual({ n: 0 });
+    });
+  });
+});

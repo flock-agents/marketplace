@@ -20,8 +20,9 @@
 // fails before it (the edit, the text sync) writes no ledger row, so a ledger row that is not `sent` always means sendDraft
 // was asked and may have reached Gmail (ruling R30, as Flock's own send):
 //   - `in_flight`: the outcome is unknown (no answer in time, the platform unreachable, a skill_timeout or exec_error,
-//     "Send was pressed but Gmail did not confirm", or the app died mid-send). A later press answers from the ledger and
-//     NEVER sends, whatever Gmail shows: UNCONFIRMED, telling the person to check Sent.
+//     "Send was pressed but Gmail did not confirm", or the app died mid-send). A later press re-reads the thread first
+//     (ruling R34, send-check.ts): the reply found means it went (nothing is sent); only a read that worked and shows no
+//     reply clears the hold and sends; a failed or unclear read is UNCONFIRMED, telling the person to check Sent.
 //   - `failed`: sendDraft failed before Send was pressed, for sure (ruling R31, stoppedBeforePress). The next press reads
 //     Gmail first: the draft still there did not go out, so the press sends it; Gmail showing no draft is never read as
 //     sent, and never sent again either (Review Focus 1).
@@ -30,6 +31,7 @@ import { getStore } from "../store";
 import { changeDraft, gmail, withThreadTurn, type OpCtx } from "../ops";
 import { deleteDraft, getDraft, type DraftRecord } from "./records";
 import { DRAFT_SOURCE_PREFIX, withdrawDraftCard } from "./card";
+import { releaseThreadHold, settleForPress, threadSendInDoubt } from "./send-check";
 
 export type SendRefusal =
   | { error: string; code: "NO_APPROVAL"; status: number }
@@ -85,13 +87,22 @@ async function sendInTurn(id: string, editedBody: string | undefined, ctx: OpCtx
   if (!draft) return notFound();
   if (draft.sentAt !== null) return { ok: true, sentAt: new Date(draft.sentAt).toISOString() };
 
-  // sendDraft was asked before. Its outcome unknown (in_flight): never again (R30). Its own definite failure: send again
-  // only while Gmail still holds the draft.
-  if (before?.state === "in_flight") return unconfirmed();
-  if (before) {
-    const held = await readGmailDraft(ctx.platform, draft);
-    if (!held.ok) return sendFailed(`could not check the draft in Gmail (${held.reason})`);
-    if (held.body === null) return sendFailed(MAY_HAVE_GONE_OUT);
+  // A send of this thread is in doubt (in_flight: this draft's own, or any other row on the thread, an imported one too;
+  // R34, R35). The person's press reads the thread first: their reply there proves it went (nothing is sent); the read
+  // working and showing none clears the hold and the press sends; a failed, busy or unclear read sends nothing.
+  let held = before;
+  if (threadSendInDoubt(draft.accountId, draft.threadId)) {
+    const seen = await settleForPress(ctx.platform, draft.accountId, draft.threadId, key);
+    if (seen.kind === "own") return { ok: true, sentAt: new Date(seen.at).toISOString() };
+    if (seen.kind === "other") return { error: "Already sent.", code: "SEND_FAILED", status: 502 };
+    if (seen.kind === "unknown") return unconfirmed();
+    held = readLedger(key);
+  }
+  // Its own earlier definite failure: send again only while Gmail still holds the draft.
+  if (held) {
+    const shown = await readGmailDraft(ctx.platform, draft);
+    if (!shown.ok) return sendFailed(`could not check the draft in Gmail (${shown.reason})`);
+    if (shown.body === null) return sendFailed(MAY_HAVE_GONE_OUT);
   }
 
   // The person's edit on the card is saved as theirs first (their press token makes it theirs, ruling R5), then sent.
@@ -251,6 +262,8 @@ export async function handleCardClosed(event: CardClosedEvent, ctx: { platform: 
       db.transaction(() => {
         putPendingDiscard(id, { accountId: draft.accountId, threadId: draft.threadId, draftId: draft.draftId });
         deleteDraft(db, id);
+        // The person's no says it did not go: the thread's hold is released (R34).
+        releaseThreadHold(draft.accountId, draft.threadId);
       })();
     });
     await withdrawDraftCard(ctx.platform, id);

@@ -20,7 +20,7 @@ import {
 import { deleteDraft, draftStatus, getDraft, lockDraft, openDraftForThread, recordDraft, setDraftBody, type DraftRecord } from "./drafts/records";
 import { answeredMessage, publishDraftCard, withdrawDraftCard } from "./drafts/card";
 import { sendDraft } from "./drafts/send";
-import { settleUnconfirmedSend, threadSendInDoubt } from "./drafts/send-check";
+import { releaseThreadHold, settleUnconfirmedSend, threadSendInDoubt } from "./drafts/send-check";
 import { tryAfterText, voiceStateFor, voiceLearningUntil } from "./voice/crawl";
 import { processTimezone } from "./lib/local-day";
 
@@ -289,6 +289,8 @@ export async function removeDraft(
       log(`[email-desk] Gmail could not discard draft ${draft.id} (${gone.reason}); its record and card are gone anyway`);
     }
     deleteDraft(db, draft.id);
+    // The person's own discard says it did not go: the thread's hold is released (R34).
+    if (opts.byPerson) releaseThreadHold(draft.accountId, draft.threadId);
     return null;
   });
 }

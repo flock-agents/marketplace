@@ -5,7 +5,7 @@
 // create_draft / update_draft would read the draft as gone, drop the row and the Check Sent card, and write a new draft
 // whose press would send a second reply. So while the thread has an in_flight ledger row (whatever draft it was, the row
 // gone or not), create_draft and update_draft write nothing and answer SEND_UNCONFIRMED, unless one Gmail re-read settles
-// it; an agent's discard_draft is refused the same way (no re-read), and the person's own discard leaves the row held:
+// it; an agent's discard_draft is refused the same way (no re-read); the person's own discard releases the hold (R34):
 //   - SENT: the thread holds a message from the person's own address, dated at or after the ledger row was claimed, whose
 //     text is the one sent (kept in the ledger row at the claim, else the draft row; whitespace and quote styles aside;
 //     Gmail's quoted history after it allowed). The ledger says sent, the row (while there) gets its sent stamp, the card
@@ -16,7 +16,7 @@
 //   - anything else (no read turn, the mailbox busy, a failed read, the person's own address unknown, a matching message
 //     whose date does not read, the draft not shown): unknown, SEND_UNCONFIRMED, nothing changed.
 // One attempt per call, under the mailbox's read turn ("email-desk:send-check"), as reply_context reads. send_draft itself
-// keeps R31: a press on an in_flight row never sends, and never runs this re-read.
+// runs the same re-read on the person's press (settleForPress, R34): it sends only when the read shows nothing went out.
 import type { PlatformContext } from "@flock/app-sdk";
 import { getStore } from "../store";
 import { extractEmailAddress } from "../lib/draft-eligibility";
@@ -73,24 +73,52 @@ export function threadSendInDoubt(accountId: string, threadId: string): boolean 
  * key, not the open draft: a draft the person discarded after its send leaves its row in_flight, and that still holds.
  */
 export async function settleUnconfirmedSend(platform: PlatformContext, accountId: string, threadId: string): Promise<DraftRefusal | null> {
-  const pending = pendingSends(accountId, threadId);
-  if (pending.length === 0) return null;
-  let sent = false;
-  let unknown = false;
-  for (const p of pending) {
+  const r = await settlePending(platform, accountId, threadId);
+  if (r.sent) return sentRefusal();
+  return r.unknown ? sendUnconfirmedRefusal() : null;
+}
+
+/** What one re-read of the thread's in_flight sends found: any proven sent (and when the pressed draft's own was), any
+ *  unknown. Proven-unsent rows are cleared, proven-sent ones recorded and their cards withdrawn. */
+async function settlePending(
+  platform: PlatformContext, accountId: string, threadId: string, ownKey = "",
+): Promise<{ sent: boolean; ownSentAt: number | null; unknown: boolean }> {
+  const out = { sent: false, ownSentAt: null as number | null, unknown: false };
+  for (const p of pendingSends(accountId, threadId)) {
     const seen = await reread(platform, p);
     if (seen.kind === "sent") {
       markSent(p, seen.at);
       if (p.id) await withdrawDraftCard(platform, p.id);
-      sent = true;
+      out.sent = true;
+      if (p.key === ownKey) out.ownSentAt = seen.at;
     } else if (seen.kind === "unsent") {
       getStore().run("DELETE FROM send_ledger WHERE idempotency_key = ? AND state = 'in_flight'", [p.key]);
     } else {
-      unknown = true;
+      out.unknown = true;
     }
   }
-  if (sent) return sentRefusal();
-  return unknown ? sendUnconfirmedRefusal() : null;
+  return out;
+}
+
+/**
+ * The person's press of Send on a thread with a send in doubt (ruling R34, R35): one re-read of the thread first, whatever
+ * row holds it (the draft's own key or an imported one). `own`: this draft's own send is proven sent (recorded, card
+ * withdrawn). `other`: another send of the thread is. `clear`: the read worked and no send went out (the holds are
+ * cleared), so the press may send. `unknown`: anything else, the press sends nothing.
+ */
+export async function settleForPress(
+  platform: PlatformContext, accountId: string, threadId: string, ownKey: string,
+): Promise<{ kind: "own"; at: number } | { kind: "other" } | { kind: "clear" } | { kind: "unknown" }> {
+  const r = await settlePending(platform, accountId, threadId, ownKey);
+  if (r.ownSentAt !== null) return { kind: "own", at: r.ownSentAt };
+  if (r.sent) return { kind: "other" };
+  return r.unknown ? { kind: "unknown" } : { kind: "clear" };
+}
+
+/** The person's own discard of the draft releases the thread's hold (ruling R34): its in_flight rows are deleted, so a
+ *  later create_draft is allowed. The agent's discard never reaches this. */
+export function releaseThreadHold(accountId: string, threadId: string): void {
+  getStore().run("DELETE FROM send_ledger WHERE account_id = ? AND thread_id = ? AND state = 'in_flight'", [accountId, threadId]);
 }
 
 /** The ledger says sent (when Gmail shows it went), and the draft row, while it is still there, has its sent stamp. */
