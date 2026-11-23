@@ -10,7 +10,7 @@ import { createEmailDeskHooks } from "../lifecycle";
 const ROOT = join(import.meta.dir, "../..");
 const manifest = JSON.parse(readFileSync(join(ROOT, "flock.app.json"), "utf-8"));
 
-const AGENT_OPS = ["reply_context", "create_draft", "update_draft", "discard_draft"];
+const AGENT_OPS = ["reply_context", "create_draft", "update_draft", "discard_draft", "voice_summary"];
 const SERVED_ONLY = [
   "send_draft",
   "newest_thread_message", "thread_body", "store_thread_body", "last_harvest", "follow_up_kind", "draft_send_recorded",
@@ -25,7 +25,7 @@ const skillText = (id: string) => readFileSync(join(ROOT, "skills", id, "instruc
 const routine = (id: string) => manifest.routines.find((r: { id: string }) => r.id === id);
 
 describe("ops: the manifest and the server agree", () => {
-  test("the declared ops are exactly the four agent ops", () => {
+  test("the declared ops are exactly the five agent ops", () => {
     expect(sorted(declaredOps())).toEqual(sorted(AGENT_OPS));
   });
 
