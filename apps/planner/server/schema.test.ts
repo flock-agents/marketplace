@@ -11,8 +11,43 @@ describe("planner data", () => {
   it("shows the new tables to agents and hides the old ones", async () => {
     const { owner } = await boot();
     const s = (await owner("GET", "/api/_data/_schema")).body;
-    expect(Object.keys(s.tables).sort()).toEqual(["dish_book", "dish_ingredients", "dish_items", "dishes", "house", "item_events", "items", "library", "order_lines", "orders", "people",
-      "plan_meals", "products", "regulars", "rules", "saved_recipes", "slot_days", "slot_dishes", "slots"]);
+    expect(Object.keys(s.tables).sort()).toEqual(["dish_ingredients", "house", "item_events", "items", "library", "order_lines", "orders", "people", "products", "regulars",
+      "rules", "saved_recipes", "slot_days", "slot_dishes", "slots"]);
+  });
+
+  // The slot model (docs/slot-model-spec.md §2.1, §3): its tables on a fresh install, the old ones and the house's old lists gone.
+  it("a fresh install has the slot model's tables and columns, and none of the old plan's", async () => {
+    const { kit } = await boot();
+    const tables = (kit.sqlite.query(`SELECT name FROM sqlite_master WHERE type = 'table'`).all() as { name: string }[]).map((t) => t.name);
+    for (const t of ["slots", "slot_days", "slot_dishes", "dish_ingredients", "library", "rules"]) expect(tables, t).toContain(t);
+    for (const t of ["plan_meals", "dishes", "dish_items", "dish_book"]) expect(tables, t).not.toContain(t);
+    const cols = (t: string) => (kit.sqlite.query(`PRAGMA table_info(${t})`).all() as { name: string }[]).map((c) => c.name);
+    expect(cols("slots")).toEqual(expect.arrayContaining(["name", "kind", "addon_of", "usual_people", "days", "skip_days", "order", "active"]));
+    expect(cols("slot_days")).toEqual(expect.arrayContaining(["date", "slot", "people", "guests", "occasion", "new_dishes_allowed", "skip", "status", "edited", "note"]));
+    expect(cols("slot_dishes")).toEqual(expect.arrayContaining(["slot_day_id", "position", "dish", "new", "feedback_asked", "note"]));
+    expect(cols("dish_ingredients")).toEqual(expect.arrayContaining(["slot_dish_id", "item", "amount", "unit"]));
+    expect(cols("library")).toEqual(expect.arrayContaining(["key", "slot", "name", "frequency", "days", "contains", "contains_read", "origin", "suggested", "untried",
+      "offers", "disliked", "prep", "video_url", "video_title", "video_thumbnail", "rating", "rating_note", "rated_on", "rated_by", "ratings"]));
+    expect(cols("rules")).toEqual(expect.arrayContaining(["hard", "what", "who", "slots", "days", "items", "to", "frequency", "per_meal", "fasting_food", "quote"]));
+    for (const gone of ["rules", "extra_slots", "order_in", "meal_examples", "cooking_days", "meal_parts"]) expect(cols("house"), gone).not.toContain(gone);
+    expect(cols("house")).toEqual(expect.arrayContaining(["cook_name", "cook_days", "cook_arrival", "connected_apps", "notes", "intro_sent_at", "plan_time"]));
+    // Unique: a slot's name, a slot-day's date and slot, a library dish's key and slot.
+    const indexes = (t: string) => (kit.sqlite.query(`PRAGMA index_list(${t})`).all() as { name: string; unique: number }[]).filter((i) => i.unique).map((i) => i.name);
+    expect(indexes("slot_days")).toContain("slot_days_date_slot");
+    expect(indexes("library")).toContain("library_key_slot");
+    expect(indexes("slots").length).toBeGreaterThan(0);
+  });
+
+  it("an upgraded 2.0 install keeps its own ingredients table untouched beside the new dish_ingredients", async () => {
+    const dir = tempDir("planner-up-"); const file = join(dir, "app.db");
+    const old = new Database(file);
+    old.run(`CREATE TABLE ingredients (id text primary key, name text, aisle text)`);
+    old.run(`INSERT INTO ingredients VALUES ('i1', 'Toor dal', 'pulses')`);
+    old.close();
+    const { kit } = await boot({ dbFile: file, dataDir: dir });
+    expect(kit.status.state).toBe("ok");
+    expect(kit.sqlite.query("SELECT name, aisle FROM ingredients").get()).toEqual({ name: "Toor dal", aisle: "pulses" });
+    expect(kit.sqlite.query("SELECT count(*) n FROM dish_ingredients").get()).toEqual({ n: 0 });
   });
 
   it("upgrades a 2.0.x database without a block and keeps its old rows", async () => {
@@ -42,7 +77,7 @@ describe("planner data", () => {
     const { rows, kit } = await boot();
     for (const t of ["items", "item_events", "orders", "order_lines"]) expect(rows(t), t).toEqual([]);
     const cols = (t: string) => (kit.sqlite.query(`PRAGMA table_info(${t})`).all() as { name: string }[]).map((c) => c.name);
-    expect(cols("dish_items")).not.toContain("keeps");
+    expect(cols("dish_ingredients")).not.toContain("keeps");
     expect(cols("regulars")).not.toContain("keeps");
     expect(cols("orders")).not.toContain("place_at");
   });
@@ -67,7 +102,7 @@ describe("planner data", () => {
     expect(columns(s, "order_lines")).toEqual(expect.arrayContaining(["order_id", "item_id", "item", "qty", "product_id", "name_on_app", "pack", "price", "image", "source", "for_note", "for_date", "rolled_from"]));
     expect(columns(s, "items")).toEqual(expect.arrayContaining(["item", "name", "group", "unit", "follows_plan", "subscription", "dont_ask", "snoozed_until", "usual_amount", "lasts_days", "run_out", "confident", "wait_factor"]));
     expect(columns(s, "item_events")).toEqual(expect.arrayContaining(["item_id", "date", "kind", "tag", "app", "amount", "count", "price", "days", "cycle_days", "order_ref", "order_id", "void"]));
-    expect(columns(s, "house")).toEqual(expect.arrayContaining(["afternoon_time", "evening_time", "plan_time", "cooking_days", "connected_apps", "history_synced", "asks_confirmed", "asks_still_have"]));
+    expect(columns(s, "house")).toEqual(expect.arrayContaining(["afternoon_time", "evening_time", "plan_time", "connected_apps", "history_synced", "asks_confirmed", "asks_still_have"]));
   });
 
   it("fills the defaults an agent may leave out: an active person, an active row of the retired everyday items table", async () => {

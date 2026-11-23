@@ -2,7 +2,7 @@
 // "still in stock?", purchases outside the apps, and the Pantry and item page reads. Today is pinned: Saturday 21 Nov 2026.
 import { describe, it, expect } from "bun:test";
 import { boot } from "./testkit";
-import { dish_items, dishes, order_lines, orders, plan_meals } from "./db/schema";
+import { ingredients, order_lines, orders, slot_days, slot_dishes } from "./db/schema";
 import { pickAsks } from "./estimate";
 import { itemStates, recordPurchase } from "./items";
 
@@ -418,18 +418,18 @@ describe("set_item", () => {
       expect([bad, (await k.op("set_item", bad)).code]).toEqual([bad, "APP_REFUSED"]);
   });
 
-  it("an item that follows the plan runs out when the final plan's amounts use up what was bought", async () => {
+  it("an item that follows the plan runs out when the plan's amounts use up what was bought (a slot-day eaten out counts nothing)", async () => {
     const k = await start();
     await buys(k, "paneer", "few_days", "500 g", ["2026-11-18"]);
     expect(item(k, "paneer").run_out).toBe(null);
-    const dish = (date: string, status: string, amount: number, unit: string) => {
-      const meal = k.kit.db.insert(plan_meals).values({ date, slot: "Dinner", status }).returning().get();
-      const d = k.kit.db.insert(dishes).values({ meal_id: meal.id, name: "palak paneer" }).returning().get();
-      k.kit.db.insert(dish_items).values({ dish_id: d.id, item: "Paneer", amount, unit }).run();
+    const dish = (date: string, skip: "eaten_out" | null, amount: number, unit: string) => {
+      const day = k.kit.db.insert(slot_days).values({ date, slot: "Dinner", status: "planned", skip }).returning().get();
+      const d = k.kit.db.insert(slot_dishes).values({ slot_day_id: day.id, dish: "palak paneer" }).returning().get();
+      k.kit.db.insert(ingredients).values({ slot_dish_id: d.id, item: "Paneer", amount, unit }).run();
     };
-    dish("2026-11-22", "final", 300, "g");
-    dish("2026-11-23", "draft", 300, "g");
-    dish("2026-11-24", "final", 0.3, "kg");
+    dish("2026-11-22", null, 300, "g");
+    dish("2026-11-23", "eaten_out", 300, "g");
+    dish("2026-11-24", null, 0.3, "kg");
     await k.op("set_item", { item: "paneer", follows_plan: true });
     expect(item(k, "paneer")).toMatchObject({ follows_plan: 1, run_out: "2026-11-24" });
     await k.op("set_item", { item: "paneer", follows_plan: false });

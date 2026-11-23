@@ -57,14 +57,13 @@ const start = async (o: { lunch?: Dish[]; regulars?: boolean; history?: boolean;
   }
   for (const it of ["poha", "rice", "oil", "atta"]) await k.op("set_item", { item: it, group: "monthly" });
   if (o.plan !== false) {
-    const r = await k.op("plan_week", { week_start: MON, mode: "final", meals: [
+    k.plan([
       { date: MON, slot: "Lunch", dishes: [{ name: "dal", for: ["everyone"], ingredients: [{ item: "toor dal", amount: 150, unit: "g" }] }] },
       { date: MON, slot: "Dinner", dishes: [
         { name: "methi thepla", for: ["everyone"], ingredients: [{ item: "methi", amount: 1, unit: "pc" }, { item: "atta", amount: 300, unit: "g" }] },
         { name: "curd", for: ["everyone"], ingredients: [{ item: "curd", amount: 400, unit: "g" }] }] },
       { date: TUE, slot: "Breakfast", dishes: [{ name: "poha", for: ["everyone"], ingredients: [{ item: "poha", amount: 200, unit: "g" }] }] },
-      { date: TUE, slot: "Lunch", dishes: o.lunch ?? tuesdayLunch }] });
-    expect(r.error).toBeUndefined();
+      { date: TUE, slot: "Lunch", dishes: o.lunch ?? tuesdayLunch }]);
   }
   /** Set the clock to a day of November 2026 and an hour. */
   const clock = (day: number, hour: number) => { t = at(day, hour); };
@@ -120,7 +119,7 @@ describe("the reminder", () => {
     // The everyday items are tomorrow's, whichever reminder puts them on.
     expect(k.rows("order_lines").filter((l) => l.source === "everyday").map((l) => l.for_date)).toEqual([TUE, TUE]);
     // A dinner ordered in has no meal lines; the 19:00 reminder that follows says the cart is already filled.
-    await k.op("set_meal", { date: MON, slot: "Dinner", ordered_in: true });
+    k.plan([{ date: MON, slot: "Dinner", ordered_in: true }]);
     const again = await k.reminder("afternoon");
     expect(again.meals).toEqual([]);
     expect(again.text.split("\n")[0]).toBe("Your cart: curd and bread.");
@@ -418,8 +417,7 @@ describe("the reminder", () => {
     await k.op("set_item", { item: "paneer", follows_plan: true });
     expect(item(k, "paneer").run_out).toBe("2026-11-30");
     // Wednesday's dinner uses all of it: it runs out on 25 Nov, so it is due tomorrow.
-    expect((await k.op("plan_week", { week_start: MON, mode: "final", keep_rest: true, meals: [
-      { date: "2026-11-25", slot: "Dinner", dishes: [{ name: "palak paneer", for: ["everyone"], ingredients: [{ item: "paneer", amount: 500, unit: "g" }] }] }] })).error).toBeUndefined();
+    k.plan([{ date: "2026-11-25", slot: "Dinner", dishes: [{ name: "palak paneer", for: ["everyone"], ingredients: [{ item: "paneer", amount: 500, unit: "g" }] }] }]);
     const snap = () => JSON.stringify(["orders", "order_lines", "items", "item_events"].map((t) => k.rows(t)));
     const before = snap();
     const dry = buildReminder(k.kit.db as any, "evening", new Date(at(23, 19)), { dryRun: true });

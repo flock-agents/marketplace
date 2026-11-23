@@ -1,12 +1,15 @@
 import { useState, type ReactNode } from "react";
 import { Button, Callout, Card, Confirm, Detail, Empty, ErrorCard, Form, Heading, InlinePanel, Page, PropertyChips, Row, RowList, Section, Skeleton, Stack, label, useApp, useToast, type FormProps } from "../flock/ui";
 import { WEEKDAYS } from "../../server/dates";
-import { COOK_NEW_RECIPES, GROUPS, RULE_KINDS, RULE_LABELS, SLOTS } from "../../server/db/constants";
-import type { HouseRule } from "../../server/family";
-import { RowsEditor } from "./RowsEditor";
-import { agentName, cookDetails, cookingDaysText, cookVisitsText, profileWaiting, ruleChip } from "./format";
-import { joined, send, typedList, useLive, why, type Family, type PersonRow } from "./shared";
+import { COOK_NEW_RECIPES, GROUPS } from "../../server/db/constants";
+import { agentName, cookDetails, cookingDaysText, cookVisitsText, profileWaiting } from "./format";
+import { joined, send, useLive, why, type Family, type PersonRow } from "./shared";
 
+/** The meals eaten out or ordered in every week, from each slot's skip days: "Sun Dinner: ordered in". */
+const skipsText = (slots: Family["slots"]): string => {
+  const said = slots.flatMap((s) => s.skip_days.map((d) => `${d.day} ${s.name}: ${d.skip === "eaten_out" ? "eaten out" : "ordered in"}`));
+  return said.length ? said.join("; ") : "None";
+};
 const GROUP_LABELS: Record<string, string> = { child: "Child", adult: "Adult", elder: "Elder" };
 const NEW_RECIPE_LABELS: Record<string, string> = { open: "Open to new recipes", set_menu: "Better with familiar dishes" };
 const COOK_WORDS = ["makes_well", "wont_make", "time_limit", "note"] as const;
@@ -35,18 +38,19 @@ const COOK_FIELDS: FormProps["fields"] = [
 ];
 /** The fields of a form as the routes take them: an emptied field is sent as null, which clears it. */
 const cleared = (v: Record<string, unknown>, names: readonly string[]) => Object.fromEntries(names.map((n) => [n, v[n] ?? null]));
-/** The family, and only the family: who eats at home, the cook (every day is planned: the cook's days off the family cooks), the extra meals and the house rules.
- *  Every part is edited where it is shown, through the same routes (and the same checks) as the agent. The main shopping app,
+/** The family, and only the family: who eats at home, the cook (every day is planned: the cook's days off the family cooks), the meals
+ *  planned (the slots) and the food rules. People and the cook are edited where they are shown, through the same routes (and the
+ *  same checks) as the agent; the slots and the rules are shown as the setup saved them (they change through the agent). The main shopping app,
  *  its fallback and Order without asking are on Flock's Settings tab, under "How we order". */
 export function FamilyPage() {
-  const family = useLive<Family>("family", ["people", "house"]);
+  const family = useLive<Family>("family", ["people", "house", "slots", "rules"]);
   const agent = agentName(useApp().display);
   const toast = useToast();
   const [editing, setEditing] = useState<string | null>(null);
   const [removing, setRemoving] = useState<PersonRow | null>(null);
   if (family.error && !family.data) return <Page title={label("title.family", "Family")}><ErrorCard title="Couldn't load the family" message={family.error} onRetry={() => void family.refetch()} /></Page>;
   if (!family.data) return <Page title={label("title.family", "Family")}><Skeleton variant="card" lines={6} /></Page>;
-  const { people, house } = family.data;
+  const { people, house, slots, rules } = family.data;
 
   const close = () => setEditing(null);
   /** Save through one of the family routes, then show what the app now holds. A refusal is thrown to the form that asked. */
@@ -64,7 +68,6 @@ export function FamilyPage() {
     try { await send("family/people", { name: p.name, remove: true }); close(); void family.refetch(); toast.show({ message: `${p.name} is no longer in the family`, tone: "success" }); }
     catch (e) { toast.show({ message: `Couldn't save: ${why(e)}`, tone: "danger" }); }
   };
-  const slotNames = [...SLOTS, ...house.extra_slots.map((s) => s.name)];
   const cook = house.cook_name
     ? [house.cook_name, house.cook_days.length ? cookingDaysText(house.cook_days) : null, cookVisitsText(house.cook_visits)].filter(Boolean).join(", ")
     : "No cook yet";
@@ -105,62 +108,21 @@ export function FamilyPage() {
         <Detail fields={[
           { label: "Cook", value: cook },
           ...(house.cook_name ? cookDetails(house) : []),
-          { label: "Extra meals", value: house.extra_slots.length ? house.extra_slots.map((s) => [s.name, s.days?.length ? `on ${joined(s.days)}` : "every day", s.for?.length ? `for ${joined(s.for)}` : null].filter(Boolean).join(" ")).join("; ") : "None" },
-          { label: "Eaten out or ordered in every week", value: house.order_in.length ? house.order_in.map((o) => [`${o.day} ${o.slot}`, o.note].filter(Boolean).join(": ")).join("; ") : "None" },
+          { label: "Meals planned", value: slots.length ? slots.map((s) => [s.name, s.days.length ? `on ${joined(s.days)}` : null, s.usual_people.length ? `for ${joined(s.usual_people)}` : null].filter(Boolean).join(" ")).join("; ") : "Breakfast, Lunch and Dinner" },
+          { label: "Eaten out or ordered in every week", value: skipsText(slots) },
         ]} />
-        <Row>{edit("cook", "Cook")}{edit("slots", "Extra meals")}{edit("order-in", "Ordered in")}</Row>
+        <Row>{edit("cook", "Cook")}</Row>
         {panel("cook", "Cook", (
           <Form fields={COOK_FIELDS} onCancel={close}
             initial={{ name: house.cook_name, days: house.cook_days, arrival: house.cook_visits.map((v) => v.at).join(", "), makes_well: house.cook_makes_well, wont_make: house.cook_wont_make,
               time_limit: house.cook_time_limit, new_recipes: house.cook_new_recipes, note: house.cook_note }}
             onSubmit={(v) => save("family/cook", { name: v.name, days: v.days ?? [], arrival: arrivalOf(v.arrival), ...cleared(v, [...COOK_WORDS, "new_recipes"]) })} />
         ))}
-        {panel("slots", "Extra meals, like a tiffin", (
-          <RowsEditor addLabel="Add a meal" onCancel={close}
-            columns={[
-              { name: "name", label: "Meal", type: "text", placeholder: "Kabir's tiffin" },
-              { name: "days", label: "Days (none means every day)", type: "multi", options: [...WEEKDAYS] },
-              { name: "for", label: "For (names with commas)", type: "text" },
-            ]}
-            initial={house.extra_slots.map((s) => ({ name: s.name, days: s.days ?? [], for: joined(s.for) }))}
-            onSave={(rows) => save("family/slots", { extra_slots: rows.filter((r) => r.name || r.for).map((r) => {
-              const days = (r.days as string[] | null) ?? [], who = typedList(r.for);
-              return { name: r.name, ...(days.length ? { days } : {}), ...(who.length ? { for: who } : {}) };
-            }) })} />
-        ))}
-        {panel("order-in", "Meals ordered in every week", (
-          <RowsEditor addLabel="Add a meal" onCancel={close}
-            columns={[
-              { name: "day", label: "Day", type: "select", options: [...WEEKDAYS] },
-              { name: "slot", label: "Meal", type: "select", options: slotNames },
-              { name: "note", label: "Note", type: "text" },
-            ]}
-            initial={house.order_in.map((o) => ({ day: o.day, slot: o.slot, note: o.note ?? "" }))}
-            onSave={(rows) => save("family/slots", { order_in: rows.filter((r) => r.day || r.slot).map((r) => ({ day: r.day, slot: r.slot, note: r.note || null })) })} />
-        ))}
       </Section>
 
-      <Section title="House rules" actions={<>{edit("rules")}{edit("notes", "Notes")}</>}>
-        {panel("rules", "House rules", (
-          <RowsEditor addLabel="Add a rule" onCancel={close}
-            columns={[
-              { name: "kind", label: "Rule", type: "select", options: [...RULE_KINDS], optionLabels: RULE_LABELS },
-              { name: "days", label: "Days (with commas; empty for every day)", type: "text", placeholder: "Tue, Thu or Ekadashi" },
-              { name: "note", label: "Note", type: "text" },
-            ]}
-            initial={house.rules.map((r) => ({ kind: r.kind, days: joined(r.days), note: r.note ?? "", rule: r }))}
-            onSave={(rows) => save("family/rules", { rules: rows.filter((r) => r.kind || r.days || r.note).map((r) => {
-              // What the editor does not show (who, the meals, the foods) stays with the rule while its kind does.
-              const { kind: was, days: _d, note: _n, ...kept } = (r.rule ?? {}) as Partial<HouseRule>;
-              return { ...(was && was === r.kind ? kept : {}), kind: r.kind || null, days: typedList(r.days), note: r.note || null };
-            }) })} />
-        ))}
-        {panel("notes", "Notes", (
-          <Form fields={[{ type: "longtext", name: "notes", label: "Anything else about how the house eats" }]} initial={{ notes: house.notes }} onCancel={close}
-            onSubmit={(v) => save("family/rules", { notes: v.notes ?? null })} />
-        ))}
-        {house.rules.length
-          ? <PropertyChips items={house.rules.map(ruleChip)} />
+      <Section title="Food rules">
+        {rules.length
+          ? <PropertyChips items={rules.map((r) => ({ label: [r.who ?? "Everyone", r.days?.length ? r.days.join(", ") : null].filter(Boolean).join(", "), value: r.hard ? r.quote : `${r.quote} (${r.frequency ?? "sometimes"})` }))} />
           : <p className="pl-quiet">No rules yet.</p>}
         {house.notes ? <p className="pl-notes">{house.notes}</p> : null}
       </Section>

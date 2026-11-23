@@ -19,7 +19,8 @@ import { appOf, GROUPS, OFTEN, RULE_KINDS, SLOTS, STAPLE_DISHES, type Often } fr
 import { WEEKDAYS, type Weekday } from "./dates";
 import { closest } from "./agentOps";
 import { CATEGORIES, CHECKED_KINDS, rulesSaid, SOFT_KINDS } from "./rules";
-import { daysSaid, getHouse, LONG_DAY, houseView, isObject, refuse, slotsSaid, writeRoutes, type Db, type Emit } from "./family";
+import { daysSaid, getHouse, LONG_DAY, houseView, isObject, refuse, writeRoutes, type Db, type Emit } from "./family";
+import { LANE_B, legacyHouse, slotsSaid } from "./legacy";
 import type { ModelCall, ModelResult } from "./model";
 
 // ── The model's answer: three readers at once ──
@@ -390,6 +391,9 @@ export function personByKin(word: string, family: { name: string; group: string;
 /** Read the setup and write it. `post` writes through the app's own routes (validation, change events and the writer's stamp
  *  stay theirs). Never refuses the whole: what does not fit is in `noted` and what was not said is in `dropped`. */
 export async function applySetup(deps: { db: Db; model: ModelCall; post: Post; household: unknown; transcript: string[]; log?: (l: string) => void; budgetMs?: number }): Promise<SetupResult> {
+  // The old setup wrote the removed tables (house rules, extra slots, the dish book): nothing is read or saved until lane B
+  // rewrites it on the slot model.
+  legacyHouse(deps.db, LANE_B);
   const log = deps.log ?? ((l: string) => console.log(`[planner] apply_setup: ${l}`));
   // The family's replies numbered (A1:, A2:, ...): the model quotes them, not the questions.
   let n = 0;
@@ -584,7 +588,7 @@ export async function applySetup(deps: { db: Db; model: ModelCall; post: Post; h
     const res = await deps.post("/api/family/slots", { add: true, extra_slots: [{ name: s.name, ...(s.days.length && s.days.length < 7 ? { days: s.days } : {}), ...(who.names.length && !who.unknown.length ? { for: who.names } : {}) }] });
     if (!res.ok) noted.push(`${s.name}: not saved (${res.reason})`);
   }
-  const slotNames = (): string[] => [...SLOTS, ...houseView(getHouse(deps.db)).extra_slots.map((s) => s.name)];
+  const slotNames = (): string[] => [...SLOTS, ...legacyHouse(deps.db, LANE_B).extra_slots.map((s) => s.name)];
   /** A meal's name as the app has it: exact, the one meal a word is in ("Tiffin"), or close enough. */
   const slotOf = (w: string): string | null => {
     const all = slotNames(), t = w.trim();
@@ -1228,7 +1232,7 @@ const andWords = (xs: string[]) => (xs.length <= 1 ? xs.join("") : `${xs.slice(0
 
 /** What was saved, in plain words, from the rows themselves. */
 export function readBack(db: Db, p: Profile): string {
-  const h = houseView(getHouse(db));
+  const h = legacyHouse(db, LANE_B);
   const fam = db.select().from(peopleTable).where(eq(peopleTable.active, 1)).all();
   const lines: string[] = [];
   lines.push(`At home: ${andWords(fam.map((x) => `${x.name} (${x.group}${x.note?.startsWith("age ") ? `, ${x.note.slice(4)}` : ""})`))}.`);

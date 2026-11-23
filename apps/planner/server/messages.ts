@@ -119,7 +119,7 @@ export function stockBlock(asks: { item: string; days_ago: number }[], id: strin
  *  the person in to this app only and drops the marker. */
 export function weekLink(basePath: string, weekStart?: string): string { return `${basePath}/?flock_scope=app#/week${weekStart ? `?week=${weekStart}` : ""}`; }
 
-/** What the agent is told to do with a closing plan_week's answer: the message as it is (its link is the only one, signed in to
+/** What the agent is told to do with a planned week's message (closeWeek, make_plan): the message as it is (its link is the only one, signed in to
  *  this app), the intro once when there is one, and nothing after. */
 export function weekSendText(intro: boolean): string {
   return [

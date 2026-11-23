@@ -22,9 +22,9 @@ export function WeekPage() {
   const [planned] = useState(() => linkWeek(typeof location === "undefined" ? "" : location.hash) ?? addDays(thisWeek, 7));
   const [weekStart, setWeekStart] = useState(thisWeek);
   const [chosen, setChosen] = useState(false);
-  const week = useLive<WeekView>(`weeks/${weekStart}`, ["plan_meals", "dishes", "dish_items", "dish_book"]);
-  const other = useLive<WeekView>(`weeks/${planned}`, ["plan_meals"]);
-  const family = useLive<Family>("family", ["house", "people"]);
+  const week = useLive<WeekView>(`weeks/${weekStart}`, ["slot_days", "slot_dishes", "dish_ingredients", "library"]);
+  const other = useLive<WeekView>(`weeks/${planned}`, ["slot_days"]);
+  const family = useLive<Family>("family", ["house", "people", "slots"]);
   const recipes = useTable<RecipeRow>("saved_recipes", { limit: 500 });
   const agent = agentName(useApp().display);
   const chat = useChat();
@@ -61,12 +61,12 @@ export function WeekPage() {
     return shown.length ? <Row>{shown.map(({ d, link }) => <PlayLink key={d.id} href={link!.href} thumbnail={link!.thumbnail} label={`Watch the ${d.name} video`} />)}</Row> : null;
   };
 
-  const house = family.data?.house;
   const everyone = (family.data?.people ?? []).map((p) => p.name);
   const today = todayStr();
   const meals = (week.data?.days ?? []).flatMap((d) => d.meals).filter((m) => m.ordered_in || m.dishes.length);
-  // Breakfast, Lunch, the family's own meals, then Dinner; any other slot a meal was planned in after them.
-  const slots = ["Breakfast", "Lunch", ...(house?.extra_slots ?? []).map((s) => s.name), "Dinner"];
+  // The house's slots in planning order (Breakfast, Lunch and Dinner until any is saved); any other slot a meal was planned in after them.
+  const saved = (family.data?.slots ?? []).map((s) => s.name);
+  const slots = saved.length ? saved : ["Breakfast", "Lunch", "Dinner"];
   for (const m of meals) if (!slots.some((s) => sameSlot(s, m.slot))) slots.push(m.slot);
   const slotOf = (m: MealView) => slots.find((s) => sameSlot(s, m.slot)) ?? m.slot;
   const status = week.data?.status ?? null;

@@ -1,6 +1,6 @@
 // Saved recipes: a name, one or more video links (an Instagram reel, a YouTube short, any link), where the first is from, a
 // thumbnail when a link gives one, notes, ingredients, tags and who it is for. The agent saves one with save_recipe when the
-// family shares a link and says "save this"; a dish of the plan can then point at it (set_dish recipe_id).
+// family shares a link and says "save this".
 import type { Hono } from "hono";
 import { asc, eq } from "drizzle-orm";
 import { saved_recipes } from "./db/schema";

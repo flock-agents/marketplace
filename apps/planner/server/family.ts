@@ -1,16 +1,15 @@
-// The family profile: who eats at home, the house rules, the cook, the extra slots and the meals ordered in. The agent writes
-// it during the interview through these routes (its set_person, set_house_rules, set_cook and set_slots operations) and the
-// Family page reads it. Everything a person said is kept in their own words; only what the app itself reads later (a group,
+// The family profile: who eats at home, the cook and the shopping apps (the slots, the rules and the dishes are their own
+// tables: slotStore.ts). The agent writes it through these routes (its set_person, set_cook and set_shopping_apps operations)
+// and the Family page reads it. Everything a person said is kept in their own words; only what the app itself reads later (a group,
 // a weekday, the cook's arrival times) is checked.
 import type { Context, Hono } from "hono";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import { asc, eq } from "drizzle-orm";
 import { _settings } from "@flock/app-kit";
 import { house, people } from "./db/schema";
-import { appOf, COOK_NEW_RECIPES, GROUPS, OFTEN, RULE_KINDS, SETTINGS, SHOP_APPS, SLOTS, type GroceryApp, type Often } from "./db/constants";
+import { appOf, COOK_NEW_RECIPES, GROUPS, SETTINGS, SHOP_APPS, SLOTS, type GroceryApp } from "./db/constants";
 import { WEEKDAYS, type Weekday } from "./dates";
-import { closest } from "./agentOps";
-import { CATEGORIES, CHECKED_KINDS, KIND_NEEDS, rulesSaid, SOFT_KINDS, type Rule } from "./rules";
+import { listRules, listSlots } from "./slotStore";
 
 export type Db = BunSQLiteDatabase<any>;
 /** Tell live pages a row changed, and who changed it (the kit's emitChange). */
@@ -18,22 +17,14 @@ export type Emit = (table: string, id: string, op: "insert" | "update" | "delete
 
 export type PersonRow = typeof people.$inferSelect;
 export type HouseRow = typeof house.$inferSelect;
-/** A house rule (rules.ts, the spec's one shape). `days` empty: it holds every day; no `who`: everyone; no `slots`: every meal. */
-export type HouseRule = Rule & { kind: (typeof RULE_KINDS)[number] };
-export type ExtraSlot = { name: string; days?: Weekday[]; for?: string[] };
-export type OrderIn = { day: Weekday; slot: string; note?: string };
-/** What one meal looks like in this home, in the family's own words from the setup ("Rice, dal, a dry sabzi, curd"), for one
- *  group when the family told the children's and the adults' apart. The week's menu is shaped like it. */
-export type MealExample = { slot: string; group?: "children" | "adults"; words: string };
+/** The old house shapes, for the code lanes B and C rewrite (legacy.ts). */
+export type { ExtraSlot, HouseRule, MealExample, OrderIn } from "./legacy";
 /** One visit of the cook: when they come, and the meals that visit makes when the family said. */
 export type CookVisit = { at: string; meals?: string[] };
-/** The house row with its lists read: what the routes answer with. */
-/** No cooking days: every day is planned (owner, 23 Nov: many families cook every day themselves, and Sunday needs a plan too).
- *  A day the cook does not come is cooked by the family; a meal not cooked at home is one in `order_in`, said by the family.
- *  The old `cooking_days` column is no longer read. */
-export type HouseView = Omit<HouseRow, "rules" | "cook_days" | "extra_slots" | "order_in" | "meal_examples" | "cooking_days" | "connected_apps" | "history_synced"> &
-  { rules: HouseRule[]; cook_days: Weekday[]; cook_visits: CookVisit[]; extra_slots: ExtraSlot[]; order_in: OrderIn[]; meal_examples: MealExample[];
-    connected_apps: GroceryApp[]; history_synced: HistorySynced };
+/** The house row with its lists read: what the routes answer with. Every day is planned; a meal not cooked at home is a slot's
+ *  skip_days (slotStore.ts). */
+export type HouseView = Omit<HouseRow, "cook_days" | "connected_apps" | "history_synced"> &
+  { cook_days: Weekday[]; cook_visits: CookVisit[]; connected_apps: GroceryApp[]; history_synced: HistorySynced };
 /** How far each app's order history was read, by reader: whoever gave the orders (`agent:<id>`, a person's own agent reading
  *  that person's account). `*` is a date kept before readers were told apart. */
 export type HistorySynced = Record<string, Record<string, string>>;
@@ -75,11 +66,17 @@ export function cookVisits(arrival: string | null): CookVisit[] {
   return list<CookVisit>(arrival).filter((v) => isObject(v) && typeof v.at === "string" && CLOCK.test(v.at));
 }
 
-export function houseView({ cooking_days: _old, ...row }: HouseRow): HouseView {
+export function houseView(row: HouseRow): HouseView {
   const visits = cookVisits(row.cook_arrival);
   // cook_arrival stays one time for whoever reads it as before (the first visit); cook_visits is every visit.
-  return { ...row, cook_arrival: visits[0]?.at ?? null, cook_visits: visits, rules: list(row.rules), cook_days: list(row.cook_days), extra_slots: list(row.extra_slots), order_in: list(row.order_in),
-    meal_examples: list<MealExample>(row.meal_examples), connected_apps: list<GroceryApp>(row.connected_apps), history_synced: historySynced(row.history_synced) };
+  return { ...row, cook_arrival: visits[0]?.at ?? null, cook_visits: visits, cook_days: list(row.cook_days),
+    connected_apps: list<GroceryApp>(row.connected_apps), history_synced: historySynced(row.history_synced) };
+}
+
+/** The names of the meals a cook's visit may make: the active slots, else the main ones before any slot is saved. */
+export function slotNames(db: Db): string[] {
+  const names = listSlots(db).map((s) => s.name);
+  return names.length ? names : [...SLOTS];
 }
 
 /** One of the app's settings as saved, else its default. */
@@ -130,157 +127,7 @@ export const words = (v: unknown, what: string): string | null =>
   v === null ? null : typeof v === "string" ? v.trim() || null : refuse(`${what} must be text`);
 export const names = (v: unknown, what: string): string[] =>
   Array.isArray(v) && v.every((n) => typeof n === "string" && n.trim()) ? v.map((n: string) => n.trim()) : refuse(`${what} must be a list of names`);
-const optionalNote = (v: unknown, what: string): { note?: string } => {
-  const note = v === undefined ? null : words(v, what);
-  return note ? { note } : {};
-};
-
 const PERSON_WORDS = ["relationship", "portions", "diet", "allergies", "dislikes", "targets", "note"] as const;
-
-const RULE_SHAPE = "rules must be a list of { kind, who?, days?, slots?, items?, to?, per_week?, per_meal?, often?, note? }";
-const KIND_HELP = `a rule's kind must be one of: ${RULE_KINDS.join(", ")} (avoid: no dish with items; only: who eats only items; swap: who has to in place of items; `
-  + `require: who eats one of items at each of slots; cap: items in at most per_week meals, or at most per_meal dishes in each meal of slots; no_eggs: "no eggs on Tuesday"; egg: eggs but no meat; fasting: who eats nothing at slots on days (without slots a note); other: the family's own words in note)`;
-const CATEGORY_LIST = Object.keys(CATEGORIES).map((c) => `@${c}`).join(", ");
-const isChecked = (kind: unknown): kind is (typeof CHECKED_KINDS)[number] => (CHECKED_KINDS as readonly unknown[]).includes(kind);
-
-/** The rules as sent, checked. `people`: the names on the Family page (a rule's who is one of them); `slots`: the meal slots. */
-/** A rule as compared for add: true, its fields in one order, its note left out. */
-const ruleKey = (r: Rule): string => JSON.stringify([r.kind, r.who ?? null, r.days, r.slots ?? null, r.items ?? null, r.to ?? null, r.per_week ?? null, r.per_meal ?? null, r.often ?? null,
-  r.kind === "other" || r.kind === "fasting" ? (r.note ?? "").trim().toLowerCase() : null]);
-
-function rules(v: unknown, ctx: { people: string[]; slots: string[] }): HouseRule[] {
-  if (!Array.isArray(v)) return refuse(RULE_SHAPE);
-  return v.map((r) => {
-    if (!isObject(r)) return refuse(RULE_SHAPE);
-    const note = optionalNote(r.note, "a rule's note");
-    // A rule in the family's own words only ("mostly vegetarian") is an `other` rule.
-    const kind = r.kind == null && note.note ? "other" : r.kind;
-    if (!(RULE_KINDS as readonly unknown[]).includes(kind)) return refuse(KIND_HELP);
-    if (kind === "other" && !note.note) return refuse("an other rule says what it is in note");
-    const out: HouseRule = { kind: kind as HouseRule["kind"], days: [] };
-    const given = (k: string) => r[k] !== undefined && r[k] !== null;
-    // "Everyone" (as the rules read-back heads the house's rules) is the whole house: no who.
-    if (given("who") && !(typeof r.who === "string" && /^\s*(everyone|everybody|all|the house|the family|whole family)\s*$/i.test(r.who))) {
-      const who = typeof r.who === "string" ? r.who.trim() : refuse(`the ${kind} rule: who is one person's name, as on the Family page`);
-      const person = ctx.people.find((p) => p.toLowerCase() === who.toLowerCase());
-      if (!person) {
-        const near = closest(who, ctx.people);
-        return refuse(ctx.people.length
-          ? `the ${kind} rule: who: ${JSON.stringify(who)} is not on the Family page (${ctx.people.join(", ")})${near ? ` (did you mean ${near}?)` : ""}; add a new person with set_person first`
-          : `the ${kind} rule: who: ${JSON.stringify(who)} is not on the Family page: add them with set_person first`);
-      }
-      out.who = person;
-    }
-    const label = `the ${kind} rule${out.who ? ` for ${out.who}` : ""}`;
-    if (r.days != null) {
-      if (isChecked(kind)) out.days = weekdays(r.days, `${label}: days`);
-      else if (!Array.isArray(r.days) || !r.days.every((d) => typeof d === "string" && d.trim()))
-        return refuse(`the ${kind} rule's days are weekdays or the family's own words for a day ("Ekadashi"); leave days out for a rule that holds every day`);
-      else out.days = (r.days as string[]).map((d) => weekday(d) ?? d.trim());
-    }
-    if (given("slots")) out.slots = names(r.slots, `${label}: slots`).map((s) => {
-      const hit = ctx.slots.find((x) => x.toLowerCase() === s.toLowerCase());
-      if (hit) return hit;
-      const within = ctx.slots.filter((x) => x.toLowerCase().includes(s.toLowerCase()));
-      // One meal only has that word in its name ("Tiffin" → "Agastya's tiffin"): that meal. Refusing it once cost a whole
-      // rules answer (veg, no eggs, the fast) to the house notes (sim run 10).
-      if (within.length === 1 && s.trim().length >= 4) return within[0];
-      const near = within.length === 1 ? within[0] : closest(s, ctx.slots);
-      return refuse(`${label}: slots: ${JSON.stringify(s)} is not a meal (${ctx.slots.join(", ")})${near ? ` (did you mean ${near}?)` : ""}`);
-    });
-    // How often a soft rule is kept (owner, 23 Nov): a swap, require or other the family said loosely ("millets are good for
-    // him") is kept `often` (usually, sometimes, rarely) or per_week times a week, not every time. Every other rule is hard.
-    const soft = (SOFT_KINDS as readonly string[]).includes(kind as string);
-    if (given("often")) {
-      if (!soft) return refuse(`${label} takes no often: a ${kind} rule holds every time; often goes on a ${SOFT_KINDS.join(", ")} rule the family keeps only some days`);
-      const w = typeof r.often === "string" ? r.often.trim().toLowerCase() : "";
-      out.often = (OFTEN as readonly string[]).includes(w) ? w as Often : refuse(`${label}: often must be one of ${OFTEN.join(", ")}`);
-    }
-    if (given("per_week") && soft && kind !== "cap") {
-      out.per_week = typeof r.per_week === "number" && Number.isInteger(r.per_week) && r.per_week >= 1 && r.per_week <= 21 ? r.per_week
-        : refuse(`${label}: per_week must be a whole number of times a week, 1 to 21`);
-      if (out.often) delete out.often;
-    }
-    // What only the checked kinds take: a fast the app checks is { kind: only, who, days, items }.
-    for (const k of ["items", "to", "per_week", "per_meal"]) if (given(k) && !isChecked(kind) && !(k === "per_week" && soft))
-      return refuse(`${label} takes no ${k}: a rule about particular foods is ${CHECKED_KINDS.join(", ")} (a fast: { kind: only, who, days, items })`);
-    if (given("items")) {
-      if (!Array.isArray(r.items) || !r.items.length || !r.items.every((i) => typeof i === "string" && i.trim()))
-        return refuse(`${label}: items must be a list of foods or dishes ("plain idli") or categories (${CATEGORY_LIST})`);
-      out.items = (r.items as string[]).map((i) => {
-        const t = i.trim();
-        if (!t.startsWith("@")) return t;
-        const cat = t.slice(1).toLowerCase();
-        if (CATEGORIES[cat]) return `@${cat}`;
-        // A category written a little off ("@mushrooms", "@spicy") is not worth refusing the whole list over (sim run
-        // seed 15: the family's every rule lost to one plural): its singular when that is a category, else the plain word,
-        // which matches dish names as any word item does.
-        const singular = cat.replace(/(?<=[a-z])(es|s)$/, "");
-        if (CATEGORIES[singular]) return `@${singular}`;
-        return cat.replace(/_/g, " ");
-      });
-    }
-    if (given("to")) {
-      if (kind !== "swap") return refuse(`${label} takes no to: to is what a swap rule gives in place of its items`);
-      out.to = name(r.to, `${label}: to`);
-    }
-    if (given("per_week") && !soft) {
-      if (kind !== "cap") return refuse(`${label} takes no per_week: per_week is a cap rule's most meals in a week, or how many times a week a ${SOFT_KINDS.join(", ")} rule is kept`);
-      out.per_week = typeof r.per_week === "number" && Number.isInteger(r.per_week) && r.per_week >= 0 ? r.per_week
-        : refuse(`${label}: per_week must be a whole number of meals, 0 or more`);
-    }
-    if (given("per_meal")) {
-      if (kind !== "cap") return refuse(`${label} takes no per_meal: per_meal is a cap rule's most dishes in a meal`);
-      out.per_meal = typeof r.per_meal === "number" && Number.isInteger(r.per_meal) && r.per_meal >= 1 ? r.per_meal
-        : refuse(`${label}: per_meal must be a whole number of dishes, 1 or more`);
-    }
-    if (kind === "cap") {
-      if (out.per_week !== undefined && out.per_meal !== undefined)
-        return refuse(`${label} takes per_week or per_meal, not both: per_week is the most meals a week with items, per_meal the most dishes in a meal`);
-      if (out.per_week === undefined && out.per_meal === undefined)
-        return refuse(`${label} needs per_week (items in at most per_week meals a week) or per_meal (at most per_meal dishes in each meal of slots)`);
-      if (out.per_week !== undefined && !out.items) return refuse(`${label} needs items: the foods a per_week cap counts`);
-    }
-    if (isChecked(kind)) {
-      // A soft require is counted over the week ("fruit three times a week"): it needs no slots.
-      const missing = KIND_NEEDS[kind].filter((k) => (out as Record<string, unknown>)[k] === undefined && !(k === "slots" && (out.often || out.per_week != null)));
-      if (missing.length) return refuse(`${label} needs ${missing.join(", ")}`);
-    }
-    return { ...out, ...note };
-  });
-}
-
-/** The house's notes: text, or a list of the family's lines. */
-const notesOf = (v: unknown): string | null =>
-  Array.isArray(v) && v.every((n) => typeof n === "string") ? v.map((n) => n.trim()).filter(Boolean).join("\n") || null : words(v, "notes");
-
-function extraSlots(v: unknown): ExtraSlot[] {
-  if (!Array.isArray(v)) return refuse("extra_slots must be a list of { name, days?, for? }");
-  const slots = v.map((s) => {
-    if (!isObject(s)) return refuse("extra_slots must be a list of { name, days?, for? }");
-    const slot: ExtraSlot = { name: name(s.name, "an extra slot's name") };
-    if (s.days != null) slot.days = weekdays(s.days, `${slot.name}: days`);
-    if (s.for != null) slot.for = names(s.for, `${slot.name}: for`);
-    return slot;
-  });
-  const taken = new Set(SLOTS.map((s) => s.toLowerCase()));
-  for (const s of slots) {
-    if (taken.has(s.name.toLowerCase())) return refuse(`there is already a slot named ${s.name}`);
-    taken.add(s.name.toLowerCase());
-  }
-  return slots;
-}
-
-function orderIn(v: unknown, slotNames: string[]): OrderIn[] {
-  if (!Array.isArray(v)) return refuse("order_in must be a list of { day, slot, note? }");
-  return v.map((o) => {
-    if (!isObject(o)) return refuse("order_in must be a list of { day, slot, note? }");
-    const day = weekday(o.day) ?? refuse(`order_in: ${JSON.stringify(o.day)} is not a weekday (${WEEKDAYS.join(", ")})`);
-    const slot = slotNames.find((s) => typeof o.slot === "string" && s.toLowerCase() === o.slot.trim().toLowerCase())
-      ?? refuse(`order_in: the slot must be one of: ${slotNames.join(", ")}`);
-    return { day, slot, ...optionalNote(o.note, "an order-in note") };
-  });
-}
 
 const ARRIVAL_SHAPE = 'arrival must be a time as "HH:MM", like "07:30", or for a cook who comes more than once a list of visits: ["06:00", "16:30"] or [{ at: "06:00", meals: ["Breakfast", "Lunch"] }, { at: "16:30", meals: ["Dinner"] }]';
 /** The cook's arrival as sent: one time, or a list of visits (each a time, or { at, meals? }). `slotNames`: the meals a visit
@@ -332,32 +179,6 @@ export function daysSaid(days: readonly string[] | undefined): string {
   if (set.length >= 3 && at[at.length - 1] - at[0] === set.length - 1) return `${set[0]}–${set[set.length - 1]}`;
   return set.length === 1 ? `on ${LONG_DAY[set[0]]}s` : `${set.slice(0, -1).join(", ")} and ${set[set.length - 1]}`;
 }
-const andWords = (xs: string[]) => (xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`);
-
-/** What a meal left out by set_cooking_days is noted as. */
-export const NOT_COOKED = "not cooked at home";
-/** A meal not cooked at home because the family eats out (not one ordered in). */
-const EATEN_OUT = /eat(en|ing)? out|outside|restaurant|in-laws|parents|relatives|friends/i;
-
-/** The meals a week is planned with, in the words the setup reads back: "Each day we'll plan Breakfast, Lunch and Dinner,
- *  plus Kabir's tiffin Mon–Fri and Evening snack every day for everyone. Sunday lunch you eat out. Sunday dinner you
- *  order in." */
-export function slotsSaid(h: Pick<HouseView, "extra_slots" | "order_in">): string {
-  const extra = h.extra_slots.map((s) => {
-    const whose = (s.for ?? []).filter((p) => !s.name.toLowerCase().includes(p.toLowerCase()));
-    // "for everyone" said aloud, so a slot saved for the whole house when it is two people's is caught at the read-back
-    // (sim run 8: the adults' evening snack saved for everyone, and the read-back gave no way to see it).
-    return `${s.name} ${daysSaid(s.days)}${whose.length ? ` for ${andWords(whose)}` : (s.for ?? []).length ? "" : " for everyone"}`;
-  });
-  const out = [`Each day we'll plan Breakfast, Lunch and Dinner${extra.length ? `, plus ${andWords(extra)}` : ""}.`];
-  const meal = (o: OrderIn) => `${LONG_DAY[o.day]} ${(SLOTS as readonly string[]).includes(o.slot) ? o.slot.toLowerCase() : o.slot}`;
-  const notCooked = h.order_in.filter((o) => o.note === NOT_COOKED), rest = h.order_in.filter((o) => o.note !== NOT_COOKED);
-  const out_ = rest.filter((o) => EATEN_OUT.test(o.note ?? "")), ordered = rest.filter((o) => !EATEN_OUT.test(o.note ?? ""));
-  if (out_.length) out.push(`${andWords(out_.map(meal))} you eat out.`);
-  if (ordered.length) out.push(`${andWords(ordered.map(meal))} you order in.`);
-  if (notCooked.length) out.push(`${andWords(notCooked.map(meal))} ${notCooked.length === 1 ? "isn't" : "aren't"} cooked at home.`);
-  return out.join(" ");
-}
 
 /** `appToken`: the token Flock gave this app (null on an install that is not paired). The kit lets a setting change only
  *  with it, so that settings change through Flock alone; the app holds it, and uses it for the one setting its agent sets. */
@@ -381,6 +202,9 @@ export function mountFamilyRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: { a
   hono.get("/api/family", (c) => c.json({
     people: db.select().from(people).where(eq(people.active, 1)).orderBy(asc(people.created_at)).all(),
     house: houseView(getHouse(db)),
+    // The slots a week is planned with (planning order) and the food rules: the slot model's own tables (slotStore.ts).
+    slots: listSlots(db),
+    rules: listRules(db),
     shopping: shoppingApps(db),
   }));
 
@@ -400,51 +224,6 @@ export function mountFamilyRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: { a
       : db.insert(people).values({ ...set, name: given, updated_by: by }).returning().get();
     emit("people", person.id, existing ? "update" : "insert", by);
     return { body: { person } };
-  });
-
-  // set_house_rules { rules?, add?: true, notes?, structured?: true }: the rules given replace the ones there; with add: true
-  // they are added to them instead (a rule already there is not added twice), so each answer of the setup interview can save
-  // just the rules it said. `structured: true` says the profile carried over from Meal Planner 2.0 (gate.ts) is now in the
-  // app's own rows, and clears it. The grocery app has its own operation, set_shopping_apps. Answers the house and `said`,
-  // every rule in plain words (rules.ts rulesSaid), which the setup reads back to the family.
-  write("/api/family/rules", (b, by) => {
-    if (b.grocery_app !== undefined) refuse("grocery_app is set with set_shopping_apps { main, fallback, connected }");
-    if (b.add !== undefined && b.add !== true) refuse("add is true, or left out to replace the rules");
-    if (b.add === true && b.rules === undefined) refuse("add: true goes with rules, the rules to add");
-    const set: Partial<typeof house.$inferInsert> = {};
-    if (b.rules !== undefined) {
-      const given = rules(b.rules, {
-        people: db.select({ name: people.name }).from(people).where(eq(people.active, 1)).all().map((p) => p.name),
-        slots: [...SLOTS, ...houseView(getHouse(db)).extra_slots.map((s) => s.name)] });
-      const kept = b.add === true ? houseView(getHouse(db)).rules : [];
-      const seen = new Set(kept.map(ruleKey));
-      set.rules = JSON.stringify([...kept, ...given.filter((r) => { const k = ruleKey(r); return seen.has(k) ? false : (seen.add(k), true); })]);
-    }
-    if (b.notes !== undefined) set.notes = notesOf(b.notes);
-    if (b.structured === true) set.profile_to_structure = null;
-    if (!Object.keys(set).length) refuse("give rules, notes or structured: true");
-    const saved = saveHouse(set, by);
-    return { body: { ...saved.body, said: rulesSaid(saved.body.house.rules) } };
-  });
-
-  // set_cooking_days { days }: the weekdays food is cooked at home. Every day is planned (owner, 23 Nov), so a day left out is
-  // a day nothing is cooked at home: its Breakfast, Lunch and Dinner are saved as meals not cooked at home (`order_in`), which
-  // the plan and the Family page show; a day named again is cooked again. The cook's days are always cooked: the cook comes
-  // to cook (sim run seed 16: "Sunday too?" answered with Sunday alone). A day the cook does not come is still cooked by
-  // the family unless it is left out here.
-  write("/api/family/cooking-days", (b, by) => {
-    const lower = WEEKDAYS.map((d) => d.toLowerCase()).join(", ");
-    if (!Array.isArray(b.days)) refuse(`days must be a list of weekdays (${lower})`);
-    const days = (b.days as unknown[]).map((d) => weekday(d) ?? refuse(`days: ${JSON.stringify(d)} is not a weekday (${lower})`));
-    if (!days.length) refuse("days must have at least one weekday");
-    const had = houseView(getHouse(db));
-    const cooked = WEEKDAYS.filter((d) => days.includes(d) || had.cook_days.includes(d));
-    const kept = had.order_in.filter((o) => !(cooked.includes(o.day) && o.note === NOT_COOKED));
-    const slots = [...SLOTS, ...had.extra_slots.map((s) => s.name)];
-    const added = WEEKDAYS.filter((d) => !cooked.includes(d)).flatMap((day) => slots.filter((slot) => (SLOTS as readonly string[]).includes(slot) || !had.extra_slots.find((s) => s.name === slot)?.days?.length || had.extra_slots.find((s) => s.name === slot)!.days!.includes(day)).filter((slot) => !kept.some((o) => o.day === day && o.slot.toLowerCase() === slot.toLowerCase()))
-      .map((slot): OrderIn => ({ day, slot, note: NOT_COOKED })));
-    const saved = saveHouse({ order_in: JSON.stringify([...kept, ...added]) }, by);
-    return { body: { ...saved.body, slots_said: slotsSaid(saved.body.house) } };
   });
 
   // set_shopping_apps { main, fallback, connected }: the main app and the one tried when something is not on it are saved as
@@ -475,56 +254,11 @@ export function mountFamilyRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: { a
     const set: Partial<typeof house.$inferInsert> = { cook_name: name(b.name, "the cook's name") };
     if (b.days !== undefined || !had.cook_days) set.cook_days = JSON.stringify(weekdays(b.days, "days"));
     if (b.arrival !== undefined || !had.cook_arrival)
-      set.cook_arrival = arrival(b.arrival, [...SLOTS, ...houseView(had).extra_slots.map((s) => s.name)]);
+      set.cook_arrival = arrival(b.arrival, slotNames(db));
     for (const [field, column] of [["makes_well", "cook_makes_well"], ["wont_make", "cook_wont_make"], ["time_limit", "cook_time_limit"], ["note", "cook_note"]] as const)
       if (b[field] !== undefined) set[column] = words(b[field], field);
     if (b.new_recipes !== undefined) set.cook_new_recipes = b.new_recipes === null ? null : (COOK_NEW_RECIPES as readonly unknown[]).includes(b.new_recipes)
       ? (b.new_recipes as string) : refuse(`new_recipes must be one of: ${COOK_NEW_RECIPES.join(", ")} (open: tries new recipes from reels and the internet; set_menu: better with familiar dishes), or null`);
     return saveHouse(set, by);
-  });
-
-  // set_slots { extra_slots?, order_in?, add?: true }: each list given replaces the one there (the Family page's edits). With
-  // add: true (the interview and the agent) the slots given are added to the ones there, a slot of the same name in place of
-  // that one, and an order_in meal of the same day and slot in place of that one: what was said earlier is never wiped.
-  // Answers the house and `said`, the meals a week is planned with in plain words (slotsSaid), which the setup reads back.
-  write("/api/family/slots", (b, by) => {
-    if (b.add !== undefined && b.add !== true) refuse("add is true, or left out to replace the lists");
-    const had = houseView(getHouse(db));
-    const set: Partial<typeof house.$inferInsert> = {};
-    let extra = had.extra_slots;
-    if (b.extra_slots !== undefined) {
-      const given = extraSlots(b.extra_slots);
-      extra = b.add === true ? [...had.extra_slots.filter((s) => !given.some((g) => g.name.toLowerCase() === s.name.toLowerCase())), ...given] : given;
-      set.extra_slots = JSON.stringify(extra);
-    }
-    if (b.order_in !== undefined) {
-      const given = orderIn(b.order_in, [...SLOTS, ...extra.map((s) => s.name)]);
-      const kept = b.add === true ? had.order_in.filter((o) => !given.some((g) => g.day === o.day && g.slot.toLowerCase() === o.slot.toLowerCase())) : [];
-      set.order_in = JSON.stringify([...kept, ...given]);
-    }
-    if (!Object.keys(set).length) refuse("give extra_slots or order_in");
-    const saved = saveHouse(set, by);
-    return { body: { ...saved.body, said: slotsSaid(saved.body.house) } };
-  });
-
-  // The setup's meal examples { examples: [{ slot, group?, words }] }: what each meal looks like in this home, in the family's
-  // words; an example of the same slot and group in place of the one there. The week's menu is planned in their shape.
-  write("/api/family/meal-examples", (b, by) => {
-    const shape = "examples must be a list of { slot, group?: children | adults, words }";
-    if (!Array.isArray(b.examples) || !b.examples.length) refuse(shape);
-    const had = houseView(getHouse(db));
-    const slots = [...SLOTS, ...had.extra_slots.map((s) => s.name)];
-    const given = (b.examples as unknown[]).map((e): MealExample => {
-      if (!isObject(e)) return refuse(shape);
-      const slot = slots.find((s) => typeof e.slot === "string" && s.toLowerCase() === e.slot.trim().toLowerCase())
-        ?? refuse(`slot ${JSON.stringify(e.slot)} is not a meal (${slots.join(", ")})`);
-      const group = e.group == null || e.group === "" ? undefined : e.group === "children" || e.group === "adults" ? e.group : refuse("group is children, adults or left out");
-      const text = typeof e.words === "string" ? e.words.trim() : "";
-      if (!text) refuse(`${slot}: words are the family's own words for the meal`);
-      return { slot, ...(group ? { group } : {}), words: text.slice(0, 500) };
-    });
-    const key = (x: MealExample) => `${x.slot.toLowerCase()}|${x.group ?? ""}`;
-    const kept = had.meal_examples.filter((x) => !given.some((g) => key(g) === key(x)));
-    return saveHouse({ meal_examples: JSON.stringify([...kept, ...given]) }, by);
   });
 }

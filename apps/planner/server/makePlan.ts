@@ -21,7 +21,7 @@ import { dishKey } from "./dishText";
 import { closest } from "./agentOps";
 import { closeWeek, dateOf, dishLimit, isStaple, PLAN_METHOD, repeatedDays, saveWeek, weekContext, type WeekContext, type WeekView } from "./meals";
 import { alternatives, checkedAs, dinersOf, EVERYONE, hit, isCheckedFast, isSide, isSoft, mealLabel, matches, ruleBreaks, ruleText, timesOf, type Rule } from "./rules";
-import { dishOftenMap } from "./dishBook";
+import { dishOftenMap } from "./legacy";
 import { refuse, writeRoutes, type Db, type Emit } from "./family";
 import { STOP_CODES, stopSaid, type ModelCall, type ModelFailure, type ModelResult } from "./model";
 
@@ -136,8 +136,8 @@ function viewOf(weekStart: string, needs: SlotNeed[], menu: Map<string, MenuMeal
     dishes: n.ordered_in ? [] : (menu.get(n.key)?.dishes ?? []).map((d) => {
       const e = eatersFor(d, n.who, family);
       return { id: "", name: d.name, for_people: "for" in e ? e.for : null, portion_note: d.portion_note ?? null, recipe_id: null, video_url: null, video: null,
-        last_time: null, ingredients: [] };
-    }) }));
+        last_time: null, ingredients: [], new: false };
+    }), skip: null, people: [], status: "planned" as const }));
   return { week_start: weekStart, status: "draft", planned_at: null, days: weekDates(weekStart).map((date) => ({ date, meals: meals.filter((m) => m.date === date) })) };
 }
 

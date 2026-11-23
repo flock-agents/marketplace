@@ -5,8 +5,8 @@
 // Purchases count for the whole house, whoever's account they came from. Her answers to "still in stock?" snooze an item and teach its pattern. The Pantry and the
 // item page read it all, and never name the app an item is bought on.
 import type { Hono } from "hono";
-import { and, eq, inArray } from "drizzle-orm";
-import { dish_items, dishes, house, item_events, items, order_lines, orders, plan_meals, products } from "./db/schema";
+import { and, eq, inArray, isNotNull, isNull } from "drizzle-orm";
+import { house, ingredients, item_events, items, order_lines, orders, products, slot_days, slot_dishes } from "./db/schema";
 import { appOf, ESTIMATE, HISTORY_DAYS, ITEM_GROUPS, SHOP_APPS, TAG_TEXT, type GroceryApp } from "./db/constants";
 import { addDays, todayStr } from "./dates";
 import { getHouse, houseView, isObject, name, readUntil, refuse, words, writeRoutes, type Db, type Emit, type HistorySynced } from "./family";
@@ -41,13 +41,14 @@ export function itemFor(db: Db, given: string, opts: { group?: string; create?: 
   return db.insert(items).values({ item: normItem(given), name: given.trim(), group: opts.group ?? null, updated_by: "app" }).returning().get();
 }
 
-/** What the final plan uses of a follows-plan item from `from` on, by date, in the item's unit. */
+/** What the plan uses of a follows-plan item from `from` on, by date, in the item's unit: every dated slot-day cooked at home
+ *  (planned or confirmed; one eaten out or ordered in has no dishes to buy for). */
 function planUse(db: Db, it: ItemRow, from: string): { date: string; amount: number }[] {
-  const rows = db.select({ date: plan_meals.date, item: dish_items.item, amount: dish_items.amount, unit: dish_items.unit })
-    .from(dish_items).innerJoin(dishes, eq(dish_items.dish_id, dishes.id)).innerJoin(plan_meals, eq(dishes.meal_id, plan_meals.id))
-    .where(eq(plan_meals.status, "final")).all();
+  const rows = db.select({ date: slot_days.date, item: ingredients.item, amount: ingredients.amount, unit: ingredients.unit })
+    .from(ingredients).innerJoin(slot_dishes, eq(ingredients.slot_dish_id, slot_dishes.id)).innerJoin(slot_days, eq(slot_dishes.slot_day_id, slot_days.id))
+    .where(and(isNotNull(slot_days.date), isNull(slot_days.skip))).all();
   return rows.flatMap((r) => {
-    if (normItem(r.item) !== it.item || r.date < from || r.amount == null) return [];
+    if (normItem(r.item) !== it.item || r.date == null || r.date < from || r.amount == null) return [];
     const b = toBase(r.amount, r.unit);
     return b && b.unit === it.unit ? [{ date: r.date, amount: b.amount }] : [];
   });

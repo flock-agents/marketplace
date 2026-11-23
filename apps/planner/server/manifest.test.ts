@@ -24,13 +24,22 @@ const targetsOf = (t: Target | Target[] | undefined): Target[] => (t === undefin
 const targets = (q: SetupQ): string[] => targetsOf(q.answer).map((t) => t.operation ?? t.setting ?? t.preference ?? "");
 
 // The operations the onboarding plan calls by name, plus the ones this app has always had.
-const FIXED = ["set_person", "set_house_rules", "set_cook", "set_slots", "set_cooking_days", "set_shopping_apps", "set_subscription", "set_regular", "import_order_history", "plan_week"];
+const FIXED = ["set_person", "set_cook", "set_shopping_apps", "set_subscription", "set_regular", "import_order_history", "make_plan"];
+// The old plan operations, gone with the slot model (docs/slot-model-spec.md §3, §6): no adapters.
+const GONE = ["set_meal", "set_dish", "set_family_dishes", "set_slots", "set_house_rules", "set_cooking_days", "plan_week", "plan_menu"];
 
 describe("the agent's interface", () => {
   it("declares every fixed operation and every declared one has a handler", () => {
     const declared = operations.map((o) => o.name);
     for (const n of FIXED) expect(declared).toContain(n);
     expect([...declared].sort()).toEqual([...OPERATION_NAMES].sort());
+    for (const n of GONE) expect(declared, n).not.toContain(n);
+    for (const n of GONE) expect(OPERATION_NAMES as readonly string[], n).not.toContain(n);
+  });
+
+  it("the old plan operations and tables are named nowhere the agent reads, and no setup question answers to them", () => {
+    const all = JSON.stringify(manifest) + guide;
+    for (const n of [...GONE, "plan_meals", "dish_items", "dish_book"]) expect(all, n).not.toMatch(new RegExp(`\\b${n}\\b`));
   });
 
   it("every operation says what it does and what it takes", () => {
@@ -130,7 +139,6 @@ describe("the agent's interface", () => {
     expect(about).not.toContain("set_house_rules");
     // The checked kinds are taught where the rules are read now: the setup's own prompt.
     for (const kind of ["avoid {", "only {", "swap {", "require {", "cap {", "fasting {", "other {"]) expect(SETUP_SYSTEM, kind).toContain(kind);
-    expect(guide).toContain("RULE_BROKEN");
   });
 
   // 3.4.0: Flock's interview runner sends every setup line as written and a model reads each reply into the facts and each
@@ -165,15 +173,15 @@ describe("the agent's interface", () => {
     for (const id of ["kidsBreakfast", "kidsLunch", "kidsDinner", "adultsBreakfast", "adultsLunch", "adultsDinner"]) expect(setup.find((q) => q.id === id)!.multi, id).toBe(true);
     for (const q of setup) expect(q.ask ?? "", q.id).not.toMatch(/\b(brand|pack size)/i);
     const final = setup[setup.length - 1];
-    expect([final.id, final.action, final.args]).toEqual(["final", "plan_week", { mode: "final" }]);
+    expect([final.id, final.action, final.args]).toEqual(["final", "make_plan", {}]);
   });
 
-  // Lane B (2026-11-23): the cook's limits are not a setup question; a limit said any time is saved as a checked rule.
-  it("no cook-limits question; the guide and set_cook / set_house_rules teach a cook's limit said any time as a checked rule", () => {
+  // Lane B (2026-11-23): the cook's limits are not a setup question; a limit said any time is kept in the cook's words (the
+  // slot model turns limits into cap / note rules on the cook's days).
+  it("no cook-limits question; the guide and set_cook keep a cook's limit said any time in the cook's words", () => {
     expect(setup.some((q) => q.id === "cookLimits")).toBe(false);
-    const cook = operations.find((o) => o.name === "set_cook")!.description, rules = operations.find((o) => o.name === "set_house_rules")!.description;
-    for (const text of [guide, cook]) for (const said of ["@baked", "per_week", "wont_make", "which dishes?", "not only the swap", "add: true"]) expect(text, said).toContain(said);
-    for (const said of ['avoid { items: ["@baked"] }', '"phulkas twice a week" cap', "fasting { who, days, slots, note } is checked"]) expect(rules, said).toContain(said);
+    const cook = operations.find((o) => o.name === "set_cook")!.description;
+    for (const text of [guide, cook]) for (const said of ["wont_make", "time_limit", "which dishes?", "not only the swap"]) expect(text, said).toContain(said);
   });
   // The past week's meals: each answer is read into its fact in the family's words, an extra meal said there (a tiffin, an
   // evening snack) with it, for apply_setup to save. The answer targets stay for a Flock without setupApply.
@@ -182,7 +190,7 @@ describe("the agent's interface", () => {
     for (const id of MEALS) {
       const q = setup.find((x) => x.id === id)!;
       expect(q.fills, id).toEqual([`pastWeek.${id}:text`]);
-      expect(targets(q)[0], id).toBe("set_family_dishes");
+      expect(targets(q), id).toEqual([]);
       expect(q.help, id).toContain("extra meal");
       expect(q.help, id).toContain("in their words");
     }
@@ -196,7 +204,7 @@ describe("the agent's interface", () => {
     const people = setup.find((q) => q.id === "people")!;
     expect(targets(people)).toEqual(["set_person"]);
     expect(people.help).toContain("household.people");
-    const firstRule = setup.findIndex((q) => targets(q).includes("set_house_rules"));
+    const firstRule = setup.findIndex((q) => q.id === "diet");
     expect(ids.indexOf("people")).toBeLessThan(firstRule);
   });
 
@@ -238,30 +246,6 @@ describe("the agent's interface", () => {
     expect(guide.trimEnd().split("\n").length).toBeLessThanOrEqual(150);
   });
 
-  // Flock refuses an operation whose body is over 16 KB (flock-app/server/src/routes/app-ops.ts MAX_BODY_BYTES, counted in
-  // UTF-8 bytes of the JSON as sent), so a week is planned a day a call (plan_week keep_rest).
-  it("one day of a week, as plan_week takes it, fits in Flock's 16,384 bytes for an operation's body; the whole week does not", () => {
-    const ingredients = ["basmati rice", "toor dal", "cauliflower florets", "green chillies", "coriander leaves", "mustard oil"]
-      .map((item, i) => ({ item, amount: 250 + i * 50, unit: i % 2 ? "g" : "ml", keeps: i < 2 ? "long" : "fresh" }));
-    const dish = (name: string) => ({ name, for: ["Shivashankar", "Ananya", "Agastya"], portion_note: "4 for me, 2 for Ananya, 1 small one for Agastya",
-      video_url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ&list=PL1234567890", ingredients });
-    const day = (date: string) => ["Breakfast", "Lunch", "Agastya's tiffin", "Dinner"].map((slot) => ({ date, slot, note: "the cook comes late today",
-      dishes: [`${slot} main with gravy`, `${slot} side, dry`, `${slot} salad or raita`].map(dish) }));
-    const bytes = (body: object) => Buffer.byteLength(JSON.stringify(body), "utf8");
-    const oneDay = bytes({ week_start: "2026-11-23", mode: "draft", keep_rest: true, meals: day("2026-11-23") });
-    expect(oneDay).toBeLessThan(16_384);
-    // With room to spare: a day twice as heavy still goes.
-    expect(oneDay).toBeLessThan(16_384 / 2);
-    const week = bytes({ week_start: "2026-11-23", mode: "final", meals: [23, 24, 25, 26, 27, 28, 29].flatMap((d) => day(`2026-11-${d}`)) });
-    expect(week).toBeGreaterThan(16_384);
-    for (const text of [guide, operations.find((o) => o.name === "plan_week")!.description]) expect(text).toContain("keep_rest: true");
-    expect(guide).toContain("one day a call");
-    // Ruling T6-R1: each day a final call with keep_rest, then a closing final call without meals; draft only to propose a week.
-    const plan = operations.find((o) => o.name === "plan_week")!.description;
-    expect(plan).toContain("each day with mode final and keep_rest: true, then one closing call with mode final and no meals");
-    expect(plan).not.toContain("the first day with mode draft");
-  });
-
   it("a line the app does not have today moves to the fallback app (guide and the sync-cart ask)", () => {
     const sync = manifest.agentInterface.intents.find((i: { name: string }) => i.name === "sync-cart").instructions as string;
     for (const text of [guide, sync]) {
@@ -300,7 +284,7 @@ describe("the agent's interface", () => {
   it("the guide covers what the agent is asked to do", () => {
     expect(guide.startsWith("# Meal Planner")).toBe(true);
     for (const n of Object.keys(ROUTES)) expect(guide, n).toContain(n);
-    for (const said of ["NEEDS_NAME", "structured: true", "get_reminder", "answer_running_low", "Order my", "sync_cart", "import_order_history", "Fine for a week", "record_order", "STOCK_OPTIONS", "taken_off"]) expect(guide, said).toContain(said);
+    for (const said of ["NEEDS_NAME", "get_reminder", "answer_running_low", "Order my", "sync_cart", "import_order_history", "Fine for a week", "record_order", "STOCK_OPTIONS", "taken_off"]) expect(guide, said).toContain(said);
     for (const n of ["guide", ...Object.keys(ROUTES)]) expect(operations.map((o) => o.name), n).toContain(n);
   });
 
@@ -321,7 +305,6 @@ describe("the agent's interface", () => {
     for (const o of operations) {
       const at = o.description.indexOf("{");
       const keys = keysAt(o.description, at);
-      if (o.name === "set_dish") keys.push("date", "slot");   // "{ dish_id, or meal_id, or date and slot; ... }"
       expect(new Set(keys), o.name).toEqual(new Set(FIELDS[o.name].fields));
     }
     for (const [, op, rest] of guide.matchAll(/`([a-z_]+) (\{[^`]*\})`/g)) {
@@ -331,7 +314,7 @@ describe("the agent's interface", () => {
     const served = (await agentOps(() => null as any).guide({}, { agentId: null } as any)) as { guide: string };
     expect(served.guide).toContain(FIELDS_SECTION);
     expect(FIELDS_SECTION).toContain("- set_cook { name, days?, arrival?, makes_well?, wont_make?, time_limit?, new_recipes?, note? }");
-    expect(FIELDS_SECTION).toContain("- plan_week { week_start, mode, meals?, keep_rest? }");
+    expect(FIELDS_SECTION).toContain("- make_plan { week_start }");
   });
 
   // Owner, 23 Nov: the test family's names and lines (the simulated runs' family) are in no text a model reads, so a model

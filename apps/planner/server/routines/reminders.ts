@@ -44,7 +44,7 @@ export const REMINDER_PROMPT = (which: Which): string => [
   "3. For each cart in `carts` with sync: true, put the same lines in that app's cart with its connector, then sync_cart what the app's cart now holds (its delivery gap included).",
   `4. Call get_reminder { which: "${which}", date } again with the same date: the same reminder, nothing is asked or added twice, and its delivery_gap is now the app's cart as it is. Send that answer's \`text\` on WhatsApp word for word, or its \`app_text\` with its \`block\` in the app chat.`,
   "5. For each cart in `ordered` (Order without asking is on; a retry lists the same ones): send its `message` word for word, check out on its app as the guide says, then record_order { order_id, placed: true, app_order_ref }.",
-  "6. The family's replies: running low or still in stock (\"1 low, 2 fine for 2 weeks\") is answer_running_low; \"add dal\" is set_cart_line; a yes to a cart is order_cart { app }; a change to a meal is set_meal / set_dish; how today's food went (the evening text asks once, in its last lines) is one rate_dishes { ratings: [{ dish, rating: good | okay | didnt_work, note, said_by }] } call for the whole reply.",
+  "6. The family's replies: running low or still in stock (\"1 low, 2 fine for 2 weeks\") is answer_running_low; \"add dal\" is set_cart_line; a yes to a cart is order_cart { app }; how today's food went (the evening text asks once, in its last lines) is one rate_dishes { ratings: [{ dish, rating: good | okay | didnt_work, note, said_by }] } call for the whole reply.",
 ].join("\n");
 
 /** One reminder's run: record its time; for a family the app knows, wake the agent when the reminder has something to say

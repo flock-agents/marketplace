@@ -21,6 +21,11 @@ import { mountReminderRoutes } from "./reminder";
 import { mountMakePlanRoute } from "./makePlan";
 import { NO_MODEL, type ModelCall } from "./model";
 import { mountSetupRoute } from "./setup";
+import { commit, saveSlotDay, type SlotDay } from "./slotStore";
+
+/** A slot-day as a test writes it: `ordered_in` is skip "ordered_in"; a dish's `portion_note` is its note. */
+export type TestMeal = { date: string; slot: string; ordered_in?: boolean; note?: string; status?: "planned" | "confirmed";
+  dishes?: { name: string; for?: string[]; portion_note?: string; new?: boolean; ingredients?: { item: string; amount?: number; unit?: string }[] }[] };
 
 /** A fresh temp directory for a test, removed when its test file is done: nothing piles up in the system's temp folder.
  *  The removal is registered here, per directory: this module loads once for the whole run, so a hook at its top level would
@@ -78,8 +83,13 @@ export async function boot(opts: { dbFile?: string; dataDir?: string; token?: st
     for (const k of keys) { const run = timers.get(k)!; timers.delete(k); run(); }
   };
   const deps = { basePath: opts.basePath ?? "/a/t", askAgent, schedule, now };
+  /** Write slot-days straight to the store (what make_plan saves), each in place of the one at its date and slot. */
+  const plan = (meals: TestMeal[], by = "app"): SlotDay[] => commit(kit.db, kit.emitChange, (tx, ch) => meals.map((m) => saveSlotDay(tx, {
+    date: m.date, slot: m.slot, skip: m.ordered_in ? "ordered_in" : null, note: m.note ?? null, ...(m.status ? { status: m.status } : {}),
+    dishes: (m.dishes ?? []).map((d) => ({ dish: d.name, note: d.portion_note ?? null, new: d.new,
+      ingredients: (d.ingredients ?? []).map((i) => ({ item: i.item, amount: i.amount ?? null, unit: i.unit ?? null })) })) }, by, ch)));
   mountItemRoutes(hono, kit.db, kit.emitChange, { now });
   mountCartRoutes(hono, kit.db, kit.emitChange, deps);
   mountReminderRoutes(hono, kit.db, kit.emitChange, deps);
-  return { kit, hono, owner, op, rows, asked, pending, settle, deps };
+  return { kit, hono, owner, op, rows, asked, pending, settle, deps, plan };
 }

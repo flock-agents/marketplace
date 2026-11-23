@@ -14,16 +14,17 @@ import { hasModel, sdkModel, type ModelCall } from "../model";
 import { fitsWake, routineEnv, wake, type RoutineCtx } from "./ctx";
 import { recordTime, scheduleTime } from "./reminders";
 
-const STRUCTURE_PROFILE = (weekStart: string): string => "Structure the family profile below with set_person / set_house_rules / set_cook / set_slots / set_item, "
-  + "then clear it with set_house_rules { structured: true }. Keep the family's own words, and ask them about anything the profile leaves unclear. "
-  + `No week is planned until it is cleared. Once it is, tell the family the app was rebuilt, and plan the week of ${dayLabel(weekStart)} (week_start ${weekStart}) with make_plan { week_start: "${weekStart}" }: send its message and intro word for word.`;
+const STRUCTURE_PROFILE = (weekStart: string): string => "Structure the family profile below with set_person / set_cook / set_item, everyone at home first. "
+  + "Keep the family's own words, and ask them about anything the profile leaves unclear. "
+  + `No week is planned until someone at home is saved. Once they are, tell the family the app was rebuilt, and plan the week of ${dayLabel(weekStart)} (week_start ${weekStart}) with make_plan { week_start: "${weekStart}" }: send its message and intro word for word.`;
 
 /** The wake once the week is planned: deliver what the app wrote, nothing else. */
 export const DELIVER_PROMPT = (intro: boolean): string =>
   `Send this message to the family word for word: \`message\` in the data below. ${weekSendText(intro)} Plan nothing and change nothing: the week is already saved.`;
 
 /** What the agent did on the weekly run before the stepped plan, kept for a Flock that gives the app no model call
- *  (not_declared): the agent plans the week itself, as its operations allow. */
+ *  (not_declared): the agent plans the week itself, as its operations allow. Lane C: the operations it names are gone with
+ *  the slot model, and legacyPlan's context throws before it is ever sent. */
 export const WEEKLY_PROMPT = (weekStart: string): string => [
   `Plan the family's meals for the week of ${dayLabel(weekStart)} (week_start ${weekStart}) and send them the plan.`,
   `1. The context to plan from is in the data below when it has \`context\` (people, house rules, the meals not cooked at home, the cook, family_dishes: the family's own dishes by meal, last week's dishes, known_dishes, the recipe book, how_to_plan); else plan_week { week_start: "${weekStart}", mode: "draft" } without meals answers with it, in full.`,

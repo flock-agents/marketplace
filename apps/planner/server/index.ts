@@ -4,7 +4,7 @@ import { agentOps } from "./agentOps";
 import * as schema from "./db/schema";
 import { OLD_TABLES, SETTINGS } from "./db/constants";
 import { mountFamilyRoutes } from "./family";
-import { mergeDuplicateDishes, mountMealRoutes } from "./meals";
+import { mountMealRoutes } from "./meals";
 import { mountRegularRoutes, moveRegulars } from "./regulars";
 import { mountProductRoutes } from "./products";
 import { mountRecipeRoutes } from "./recipes";
@@ -28,9 +28,8 @@ const kit = await mountKit(flock, { schema, settings: SETTINGS, keepTables: OLD_
 // Only once the schema landed: a boot that is still waiting on it has no house table to write.
 if (kit.status.state === "ok") {
   migrateOldProfile(kit.sqlite);
-  // An installed copy's everyday items become item cycles, once; a meal that holds one dish once per person holds it once.
+  // An installed copy's everyday items become item cycles, once.
   try { moveRegulars(kit.sqlite, kit.db); } catch (e) { console.warn("[planner] the everyday items were not moved to item cycles", e); }
-  try { mergeDuplicateDishes(kit.db); } catch (e) { console.warn("[planner] dishes planned twice in a meal were not merged", e); }
 }
 
 mountFamilyRoutes(flock.hono, kit.db, kit.emitChange, { appToken: flock.env.token ?? process.env.FLOCK_APP_TOKEN ?? null });

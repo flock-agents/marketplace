@@ -12,23 +12,12 @@ type Route = (p: Record<string, unknown>) => Call | { error: string; code: strin
 /** Each operation: where it goes in the app's own API. */
 export const ROUTES: Record<string, Route> = {
   set_person: (p) => ({ method: "POST", path: "/api/family/people", body: p }),
-  set_house_rules: (p) => ({ method: "POST", path: "/api/family/rules", body: p }),
   set_cook: (p) => ({ method: "POST", path: "/api/family/cook", body: p }),
-  set_slots: (p) => ({ method: "POST", path: "/api/family/slots", body: p }),
-  set_cooking_days: (p) => ({ method: "POST", path: "/api/family/cooking-days", body: p }),
   set_shopping_apps: (p) => ({ method: "POST", path: "/api/family/shopping-apps", body: p }),
   apply_setup: (p) => ({ method: "POST", path: "/api/family/setup", body: p }),
-  plan_week: (p) => typeof p.week_start === "string" || typeof p.week_start === "number"
-    ? { method: "POST", path: `/api/weeks/${encodeURIComponent(String(p.week_start))}/plan`, body: p }
-    : { error: "week_start is required: the week's Monday as YYYY-MM-DD", code: "APP_REFUSED", status: 400 },
-  plan_menu: (p) => typeof p.week_start === "string" || typeof p.week_start === "number"
-    ? { method: "POST", path: `/api/weeks/${encodeURIComponent(String(p.week_start))}/menu`, body: p }
-    : { error: "week_start is required: the week's Monday as YYYY-MM-DD", code: "APP_REFUSED", status: 400 },
   make_plan: (p) => typeof p.week_start === "string" || typeof p.week_start === "number"
     ? { method: "POST", path: `/api/weeks/${encodeURIComponent(String(p.week_start))}/make-plan`, body: p }
     : { error: "week_start is required: the week's Monday as YYYY-MM-DD", code: "APP_REFUSED", status: 400 },
-  set_meal: (p) => ({ method: "POST", path: "/api/meals", body: p }),
-  set_dish: (p) => ({ method: "POST", path: "/api/dishes", body: p }),
   set_regular: (p) => ({ method: "POST", path: "/api/regulars", body: p }),
   import_order_history: (p) => ({ method: "POST", path: "/api/order-history", body: p }),
   record_bought_outside: (p) => ({ method: "POST", path: "/api/items/outside", body: p }),
@@ -54,7 +43,6 @@ export const ROUTES: Record<string, Route> = {
     : { error: "order_id is required: the order_id order_cart answered", code: "APP_REFUSED", status: 400 },
   remember_product: (p) => ({ method: "POST", path: "/api/products", body: p }),
   save_recipe: (p) => ({ method: "POST", path: "/api/recipes/save", body: p }),
-  set_family_dishes: (p) => ({ method: "POST", path: "/api/dish-book/family", body: p }),
   set_dish_video: (p) => ({ method: "POST", path: "/api/dish-book/video", body: p }),
   rate_dishes: (p) => ({ method: "POST", path: "/api/dish-book/ratings", body: p }),
   get_dish: (p) => typeof p.dish === "string" && p.dish.trim()
@@ -68,17 +56,10 @@ export const ROUTES: Record<string, Route> = {
 export const FIELDS: Record<string, { fields: string[]; need?: string[] }> = {
   guide: { fields: [] },
   set_person: { fields: ["name", "relationship", "group", "portions", "diet", "allergies", "dislikes", "targets", "note", "remove"], need: ["name"] },
-  set_house_rules: { fields: ["rules", "add", "notes", "structured"] },
   set_cook: { fields: ["name", "days", "arrival", "makes_well", "wont_make", "time_limit", "new_recipes", "note"], need: ["name"] },
-  set_slots: { fields: ["extra_slots", "order_in", "add"] },
-  set_cooking_days: { fields: ["days"], need: ["days"] },
   set_shopping_apps: { fields: ["main", "fallback", "connected"], need: ["main", "connected"] },
   apply_setup: { fields: ["household", "transcript"], need: ["transcript"] },
-  plan_week: { fields: ["week_start", "mode", "meals", "keep_rest"], need: ["week_start", "mode"] },
-  plan_menu: { fields: ["week_start", "meals"], need: ["week_start", "meals"] },
   make_plan: { fields: ["week_start"], need: ["week_start"] },
-  set_meal: { fields: ["date", "slot", "meal_id", "ordered_in", "note", "dishes"] },
-  set_dish: { fields: ["dish_id", "meal_id", "date", "slot", "name", "for", "except", "portion_note", "recipe_id", "video_url", "ingredients", "position", "remove"] },
   set_regular: { fields: ["item", "amount", "unit", "every", "times_per_week", "weekdays", "for_whom", "active", "paused_until", "remove"], need: ["item"] },
   import_order_history: { fields: ["app", "account", "orders"], need: ["app", "orders"] },
   record_bought_outside: { fields: ["item", "date"], need: ["item"] },
@@ -94,7 +75,6 @@ export const FIELDS: Record<string, { fields: string[]; need?: string[] }> = {
   cancel_order: { fields: ["order_id"], need: ["order_id"] },
   remember_product: { fields: ["item", "app", "product_id", "name_on_app", "pack", "pack_amount", "pack_unit", "price", "image"], need: ["item", "app", "product_id", "name_on_app"] },
   save_recipe: { fields: ["recipe_id", "name", "links", "notes", "ingredients", "tags", "for", "thumbnail"] },
-  set_family_dishes: { fields: ["dishes"], need: ["dishes"] },
   set_dish_video: { fields: ["dish", "dish_id", "url", "title", "thumbnail", "remove"] },
   rate_dishes: { fields: ["date", "ratings"], need: ["ratings"] },
   get_dish: { fields: ["dish"], need: ["dish"] },
@@ -102,7 +82,6 @@ export const FIELDS: Record<string, { fields: string[]; need?: string[] }> = {
 
 /** A field sent to the wrong operation that has a home elsewhere: the refusal names that operation. */
 const MOVED: Record<string, Record<string, string>> = {
-  set_house_rules: { grocery_app: "the grocery app is set with set_shopping_apps { main, fallback, connected }" },
   // Sim run 9: a cook correction sent its times as visits (the interview's fact name), and the 7:30 was lost.
   set_cook: { times: "the times go in arrival: [{ at, meals }]" },
 };
@@ -126,7 +105,7 @@ export function closest(given: string, names: string[]): string | null {
   for (const n of names) { const d = distance(given, n); if (d < score) { score = d; best = n; } }
   return best !== null && score <= Math.max(3, Math.ceil(given.length / 2)) ? best : null;
 }
-/** Words an agent reaches for that name another operation: "save" and "add" a meal is set_meal. */
+/** Words an agent reaches for that name another operation: "save" and "add" a person is set_person. */
 const OP_WORDS: Record<string, string> = { save: "set", add: "set", update: "set", create: "set", change: "set", edit: "set", put: "set" };
 
 const fieldList = (op: string) => (FIELDS[op].fields.length ? FIELDS[op].fields.join(", ") : "none");
