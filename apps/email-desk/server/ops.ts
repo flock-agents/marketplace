@@ -29,6 +29,9 @@ export interface OpCtx {
   platform: PlatformContext;
   agentId: string | null;
   pressToken: string | null;
+  /** Set only when Flock proved the calling agent runs in the run session of one of this app's own routines (Ruling
+   *  P3-R15, header x-flock-routine-id); absent for a chat or an older Flock. */
+  routineId?: string | null;
 }
 
 /** A Gmail draft write drives a browser (manifest timeout 90 s, plus queueing for the mailbox). */
@@ -205,6 +208,9 @@ async function writeNewDraft(accountId: string, threadId: string, body: string, 
   const draft = recordDraft(db, {
     accountId, threadId, draftId: ids.draftId, draftMessageId: ids.draftMessageId,
     bodyWritten: saved || body, answeredMessageRef: answered?.eventId ?? "", why, replyAll,
+    // R-F5 (Ruling P3-R14): a draft made in one of this copy's routine runs, on Flock's proof only (P3-R15). A standing
+    // mail rule sends only such a draft; one the person asked for in chat is theirs to send.
+    automated: typeof ctx.routineId === "string" && ctx.routineId.length > 0,
   });
   await publishDraftCard(ctx.platform, draft);
   return { id: draft.id };

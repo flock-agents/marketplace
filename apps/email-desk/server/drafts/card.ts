@@ -140,6 +140,9 @@ export async function publishDraftCard(platform: PlatformContext, draft: DraftRe
         // Who the reply reaches, derived in code (drafts/addressing.ts): a standing mail rule in Flock sends the card only
         // when these name exactly its people. Left out when unknown, so no rule sends it.
         ...(draft.replyAll ? { to: draft.replyAll.to, cc: draft.replyAll.cc, replyAllRecipients: draft.replyAll.recipients } : {}),
+        // Made in one of this copy's routine runs (Ruling P3-R14/R15): only then may a standing rule send it. Never set
+        // for a draft the person asked for in chat.
+        ...(draft.automated ? { automated: true } : {}),
         card: { blocks, draftSaveOp: "update_draft" },
       },
       actions: [{

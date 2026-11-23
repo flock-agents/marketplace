@@ -30,6 +30,8 @@ export interface DraftRecord {
   why: string | null;
   /** Who the reply reaches, derived in code when the draft was written (drafts/addressing.ts); null when unknown. */
   replyAll: ReplyAddressing | null;
+  /** Made in one of the copy's routine runs, on Flock's proof (Ruling P3-R15): a standing mail rule may send it. */
+  automated: boolean;
 }
 
 export type DraftStatus = "untouched" | "person-edited" | "missing";
@@ -49,6 +51,7 @@ function toRecord(r: any): DraftRecord {
     personEdited: r.person_edited === 1,
     why: typeof r.why === "string" && r.why ? r.why : null,
     replyAll: replyAllOf(r.reply_all),
+    automated: r.automated === 1,
   };
 }
 
@@ -88,6 +91,7 @@ export interface NewDraft {
   draftMessageId?: string;
   why?: string | null;
   replyAll?: ReplyAddressing | null;
+  automated?: boolean;
 }
 
 /** Records the thread's one draft under a new id. A row already there (a sent draft: create_draft refuses an open one) is
@@ -96,14 +100,14 @@ export function recordDraft(db: Database, d: NewDraft, now = Date.now()): DraftR
   const id = crypto.randomUUID();
   db.run(
     `INSERT INTO draft_records (account_id, thread_id, draft_id, body_written, answered_message_ref, draft_message_id,
-       updated_at, sent_at, sent_by, id, person_edited, why, reply_all)
-     VALUES (?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, 0, ?, ?)
+       updated_at, sent_at, sent_by, id, person_edited, why, reply_all, automated)
+     VALUES (?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, 0, ?, ?, ?)
      ON CONFLICT(account_id, thread_id) DO UPDATE SET draft_id = excluded.draft_id, body_written = excluded.body_written,
        answered_message_ref = excluded.answered_message_ref, draft_message_id = excluded.draft_message_id,
        updated_at = excluded.updated_at, sent_at = NULL, sent_by = NULL, id = excluded.id, person_edited = 0, why = excluded.why,
-       reply_all = excluded.reply_all`,
+       reply_all = excluded.reply_all, automated = excluded.automated`,
     [d.accountId, d.threadId, d.draftId, d.bodyWritten, d.answeredMessageRef ?? "", d.draftMessageId ?? "", now, id, d.why ?? null,
-      d.replyAll ? JSON.stringify(d.replyAll) : null],
+      d.replyAll ? JSON.stringify(d.replyAll) : null, d.automated ? 1 : 0],
   );
   return getDraft(db, id)!;
 }

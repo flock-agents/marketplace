@@ -59,9 +59,9 @@ function platform(): any {
   };
 }
 
-async function call(name: string, payload: Record<string, unknown>): Promise<any> {
+async function call(name: string, payload: Record<string, unknown>, headers: Record<string, string> = {}): Promise<any> {
   const res = await createOpsRouter({ handlers: allOps, token: TOKEN, platform: platform() }).request(`/ops/${name}`, {
-    method: "POST", headers: { authorization: `Bearer ${TOKEN}`, "content-type": "application/json" }, body: JSON.stringify(payload),
+    method: "POST", headers: { authorization: `Bearer ${TOKEN}`, "content-type": "application/json", ...headers }, body: JSON.stringify(payload),
   });
   return res.json();
 }
@@ -213,3 +213,27 @@ describe("the draft's card carries who the reply reaches", () => {
     unstamped();
   });
 });
+
+// R-F5 (Ruling P3-R14/R15): the card says `automated: true` only for a draft made in one of the copy's routine runs, which
+// the app knows only from Flock's x-flock-routine-id on the call (Flock sends it only on proof of the run session).
+describe("a routine's draft is marked automated; a chat's never", () => {
+  const ROUTINE = { "x-flock-routine-id": "routine-memory-extraction" };
+  test("create_draft in a routine run: the card carries automated: true, and an update keeps it", async () => {
+    const made = await call("create_draft", { threadId: T1, body: "Hi all, Tuesday works." }, ROUTINE);
+    expect(cardContext().automated).toBe(true);
+    expect((db.query("SELECT automated FROM draft_records WHERE id = ?").get(made.id) as any).automated).toBe(1);
+    published = [];
+    // An update asked for later in chat (no routine) re-publishes the same draft: still the routine's draft.
+    expect(await call("update_draft", { id: made.id, body: "Hi all, Tuesday at 4 works." })).toEqual({ ok: true });
+    expect(cardContext().automated).toBe(true);
+  });
+
+  test("create_draft from a chat (no routine header, or an empty one): no automated flag", async () => {
+    await call("create_draft", { threadId: T1, body: "Hi Asha, Tuesday works." });
+    expect(cardContext().automated).toBeUndefined();
+    db.run("DELETE FROM draft_records");
+    await call("create_draft", { threadId: T1, body: "Hi Asha, Tuesday works.", automated: true, routineId: "r" }, { "x-flock-routine-id": "" });
+    expect(cardContext().automated).toBeUndefined();
+  });
+});
+

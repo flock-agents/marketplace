@@ -268,6 +268,8 @@ function createSchema(db: Database): void {
   addColumns(db, "follow_up_state", [["session_id", "TEXT"], ["offered_at", "INTEGER"], ["recipient_name", "TEXT"]]);
   // Who the draft's reply reaches (drafts/addressing.ts, Ruling P3-R5): JSON { to, cc, recipients }, or NULL when unknown.
   addColumns(db, "draft_records", [["reply_all", "TEXT"]]);
+  // A draft made in one of the copy's routine runs (Ruling P3-R14/R15): only these may be sent by a standing mail rule.
+  addColumns(db, "draft_records", [["automated", "INTEGER NOT NULL DEFAULT 0"]]);
 }
 
 // The copy's one open store, opened on first use in $APP_DATA_DIR (or the dir a caller names, e.g. the platform
