@@ -1,0 +1,337 @@
+// The memory-extraction routine: kept mail into memory (memory.extract, in chunks), a personal mailbox's family items to the
+// Family Calendar (one import per run, through Flock's gate), and the routine's agent woken for the mail that may want a
+// reply. Expectations written from the brief and the source (memory-relay.ts blockToItem, harvest-runner extract half):
+//   - each kept mail is one extract item, its thread as text, the mailbox's kind on it; a personal mailbox asks for family
+//     candidates back;
+//   - only mail whose extraction succeeded is handed over; a failed chunk does not stop the next, and the run reports it;
+//   - the wake is one line of counts; mail text rides only in data; mail with an open draft is not offered again;
+//   - the wake goes to the routine's own agent, whatever it is.
+import { describe, test, expect, beforeEach, afterEach } from "bun:test";
+import type { Database } from "bun:sqlite";
+import { mkdtempSync } from "fs";
+import { tmpdir } from "os";
+import { join } from "path";
+import { openStore, _setStoreForTesting } from "../store";
+import { THREAD_BODY_SEPARATOR } from "../lib/thread-format";
+import {
+  memoryExtraction, runMemoryExtraction, wakeLine, EXTRACT_SERVABLE_ITEMS, _setLogForTesting,
+} from "../routines/memory-extraction";
+import type { GatherResult, KeptMail } from "../routines/gather";
+import type { ExtractAnswer, FamilyBlockWire, ImportPayload } from "../platform-ext";
+
+const ACCOUNT = "acct-1";
+
+function kept(n: number, over: Partial<KeptMail> = {}): KeptMail {
+  return {
+    accountId: ACCOUNT, threadId: `t-${n}`, messageId: `m-${n}`,
+    from: `Asha Rao <asha${n}@acme.com>`, to: "me@acme.com", date: new Date(Date.UTC(2026, 10, 23, 9, n)).toISOString(),
+    subject: `Subject ${n}`,
+    body: [`From: Asha Rao <asha${n}@acme.com>\nFirst message ${n}.`, `From: Asha Rao <asha${n}@acme.com>\nAre you free on Tuesday? (mail ${n})`].join(THREAD_BODY_SEPARATOR),
+    mailboxKind: "work", draftEligible: false,
+    ...over,
+  };
+}
+
+interface Fake {
+  ctx: any;
+  extracts: { items: any[]; source: any }[];
+  wakes: { message: string; data: any }[];
+  handed: string[][];
+  imports: ImportPayload[];
+  published: any[];
+  models: any[];
+}
+
+function fake(opts: {
+  kept?: KeptMail[];
+  gather?: Partial<GatherResult>;
+  extract?: (items: any[], call: number) => { ok: true; data: ExtractAnswer } | { ok: false; reason: string };
+  agentId?: string;
+  pairedAgent?: { id: string; name: string } | null;
+  accounts?: Record<string, string>;
+  family?: { targets?: string[]; importAnswer?: (p: ImportPayload) => any } | null;
+  household?: string[];
+  openTasks?: any[];
+  wakeFails?: boolean;
+} = {}): Fake & { run: () => Promise<void> } {
+  const f: Fake = { ctx: null, extracts: [], wakes: [], handed: [], imports: [], published: [], models: [] };
+  let call = 0;
+  const platform: any = {
+    appId: "email-desk-p1", pairedAgent: opts.pairedAgent === undefined ? { id: "pa-1", name: "Butler" } : opts.pairedAgent,
+    dataDir: "test", configured: true,
+    connectors: {
+      accounts: async () => ({ ok: true, data: { accounts: [{ accountId: ACCOUNT, email: "me@acme.com", label: "Shiva" }] } }),
+      readTurn: async () => ({ ok: false, reason: "unused", code: "busy" }),
+      exec: async () => ({ ok: false, reason: "unused" }),
+      list: async () => [],
+    },
+    memory: {
+      extract: async (items: any[], source: any) => {
+        f.extracts.push({ items, source });
+        const n = call++;
+        return opts.extract ? opts.extract(items, n) : { ok: true, data: { ok: true, processedItems: items.length, failedItems: 0, deferredItems: 0 } };
+      },
+    },
+    tasks: {
+      publish: async (t: any) => { f.published.push(t); return { ok: true, data: {} }; },
+      list: async () => ({ ok: true, data: { tasks: [] } }),
+      withdraw: async () => ({ ok: true, data: undefined }),
+    },
+    model: {
+      json: async (req: any) => { f.models.push(req); return { ok: true, json: [], model: "fast" }; },
+    },
+    identity: { names: async () => ({ ok: true, data: { names: ["Shiva Shankar"] } }) },
+  };
+  if (opts.family !== null && opts.family !== undefined) {
+    platform.family = {
+      targets: async () => ({ ok: true, data: { appIds: opts.family!.targets ?? ["family-calendar"] } }),
+      importEvents: async (p: ImportPayload) => {
+        f.imports.push(p);
+        return { ok: true, data: { answer: opts.family!.importAnswer ? opts.family!.importAnswer(p) : { results: p.items.map((i) => ({ ref: i.ref, id: "e", result: "added" })) } } };
+      },
+      household: async () => ({ ok: true, data: { names: opts.household ?? ["Agastya Shankar", "Shiva"] } }),
+    };
+  }
+  if (opts.openTasks) {
+    platform.board = { openTasks: async () => ({ ok: true, data: { tasks: opts.openTasks } }) };
+  }
+  f.ctx = {
+    routine: { id: "r1", appRoutineId: "memory-extraction", handler: "memory-extraction", agentId: opts.agentId ?? "pa-1", name: "Build memory",
+      accounts: opts.accounts ?? { gmail: ACCOUNT }, trigger: {}, values: {} },
+    trigger: "event",
+    platform,
+    connectors: { exec: async () => ({ ok: false, reason: "unused" }) },
+    wakeAgent: async (message: string, data: any) => {
+      f.wakes.push({ message, data });
+      return opts.wakeFails ? { ok: false, reason: "agent busy" } : { ok: true, data: { sessionId: "s1" } };
+    },
+    notify: async () => ({ ok: true, data: { delivered: 0 } }),
+    state: { get: () => null, set: () => {} },
+  };
+  const gatherResult: GatherResult = { kept: opts.kept ?? [], skipped: 0, cursor: "1", deferred: 0, ...opts.gather };
+  const run = () => runMemoryExtraction(f.ctx, {
+    gather: async () => gatherResult,
+    handOver: (ids) => { f.handed.push([...ids]); },
+  });
+  return Object.assign(f, { run });
+}
+
+let db: Database;
+const logs: string[] = [];
+beforeEach(() => {
+  db = openStore(mkdtempSync(join(tmpdir(), "email-desk-extract-")));
+  _setStoreForTesting(db);
+  logs.length = 0;
+  _setLogForTesting((line) => { logs.push(line); });
+});
+afterEach(() => {
+  _setLogForTesting(null);
+  _setStoreForTesting(null);
+  db.close();
+});
+
+describe("memory-extraction: into memory", () => {
+  test("kept mail goes to memory.extract with mailboxKind", async () => {
+    const work = fake({ kept: [kept(1)] });
+    await work.run();
+    expect(work.extracts).toHaveLength(1);
+    const { items, source } = work.extracts[0]!;
+    expect(source).toMatchObject({ type: "email", connectorSkill: "gmail", account: ACCOUNT });
+    expect(source.familyCandidates).toBeFalsy();
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({ id: "t-1", text: kept(1).body, timestamp: kept(1).date });
+    expect(items[0].context.mailboxKind).toBeUndefined();
+    expect(items[0].context.ownerAddresses).toEqual(["me@acme.com"]);
+    // The thread kept apart, message by message, for Flock's item gate and closure judge.
+    expect(items[0].messages).toEqual([
+      { index: 0, from: "Asha Rao <asha1@acme.com>", text: "First message 1." },
+      { index: 1, from: "Asha Rao <asha1@acme.com>", text: "Are you free on Tuesday? (mail 1)" },
+    ]);
+    expect(items[0].reference).toBe("https://mail.google.com/mail/?authuser=me%40acme.com#all/t-1");
+    expect(work.handed).toEqual([["m-1"]]);
+
+    const personal = fake({ kept: [kept(2, { mailboxKind: "personal" })], family: {} });
+    await personal.run();
+    expect(personal.extracts[0]!.items[0].context.mailboxKind).toBe("personal");
+    expect(personal.extracts[0]!.source.familyCandidates).toBe(true);
+  });
+
+  test(`mail goes in chunks of EXTRACT_SERVABLE_ITEMS (${EXTRACT_SERVABLE_ITEMS})`, async () => {
+    expect(EXTRACT_SERVABLE_ITEMS).toBe(2);
+    const f = fake({ kept: [1, 2, 3, 4, 5].map((n) => kept(n)) });
+    await f.run();
+    expect(f.extracts.map((e) => e.items.map((i) => i.id))).toEqual([["t-1", "t-2"], ["t-3", "t-4"], ["t-5"]]);
+    expect(f.handed.flat()).toEqual(["m-1", "m-2", "m-3", "m-4", "m-5"]);
+  });
+
+  test("extract failure on one chunk: later chunks still run, run reports the failure", async () => {
+    const f = fake({
+      kept: [1, 2, 3, 4].map((n) => kept(n)),
+      extract: (_items, n) => (n === 0 ? { ok: false, reason: "timeout" } : { ok: true, data: { failedItems: 0, deferredItems: 0 } }),
+    });
+    await expect(f.run()).rejects.toThrow(/2 of 4 mails could not be read into memory/);
+    expect(f.extracts).toHaveLength(2);
+    // Only the chunk that went in is handed over; the failed one is offered again next run.
+    expect(f.handed.flat()).toEqual(["m-3", "m-4"]);
+  });
+
+  test("a chunk Flock answered with a failed item is not handed over; a deferred one is left for later without a failure", async () => {
+    const failed = fake({ kept: [kept(1), kept(2)], extract: () => ({ ok: true, data: { failedItems: 1, deferredItems: 0 } }) });
+    await expect(failed.run()).rejects.toThrow(/could not be read into memory/);
+    expect(failed.handed.flat()).toEqual([]);
+
+    const deferred = fake({ kept: [kept(1), kept(2)], extract: () => ({ ok: true, data: { failedItems: 0, deferredItems: 1 } }) });
+    await deferred.run();
+    expect(deferred.handed.flat()).toEqual([]);
+  });
+
+  test("busy mailbox: the run ends ok with the note, nothing extracted", async () => {
+    const f = fake({ gather: { busy: true, note: "mailbox busy", kept: [] } });
+    await f.run();
+    expect(f.extracts).toEqual([]);
+    expect(f.wakes).toEqual([]);
+    expect(logs.join("\n")).toContain("mailbox busy");
+  });
+
+  test("the thread's open TODOs ride along when Flock serves them (closure)", async () => {
+    const f = fake({
+      kept: [kept(1), kept(2)],
+      openTasks: [
+        { id: "task-9", threadKey: "t-1", title: "Send Asha the deck", why: "Can you send the deck?", anchor: 0, createdAt: 2 },
+        { id: "task-8", threadKey: "t-1", title: "Book the room", createdAt: 1 },
+      ],
+    });
+    await f.run();
+    const [first, second] = f.extracts[0]!.items;
+    expect(first.context.openTasks).toEqual([
+      { ref: "T1", id: "task-8", title: "Book the room", anchor: null, createdAt: 1 },
+      { ref: "T2", id: "task-9", title: "Send Asha the deck", why: "Can you send the deck?", anchor: 0, createdAt: 2 },
+    ]);
+    expect(second.context.openTasks).toBeUndefined();
+  });
+
+  test("with no account on the routine, every Gmail account of the agent is read", async () => {
+    const f = fake({ kept: [kept(1)], accounts: {} });
+    await f.run();
+    expect(f.extracts).toHaveLength(1);
+  });
+});
+
+describe("memory-extraction: the wake", () => {
+  test("no draft-eligible mail: no wake", async () => {
+    const f = fake({ kept: [kept(1), kept(2, { draftEligible: false })] });
+    await f.run();
+    expect(f.wakes).toEqual([]);
+  });
+
+  test("wake message is counts only, mail text only in data", async () => {
+    const f = fake({ kept: [kept(1, { draftEligible: true, subject: "Lunch on Tuesday?" }), kept(2, { draftEligible: true }), kept(3)] });
+    await f.run();
+    expect(f.wakes).toHaveLength(1);
+    const { message, data } = f.wakes[0]!;
+    expect(message).toBe("2 new mails may want a reply.");
+    expect(message).toBe(wakeLine(2));
+    expect(message).not.toContain("Lunch");
+    expect(message).not.toContain("Asha");
+    expect(data).toEqual({
+      mails: [
+        { threadId: "t-1", accountId: ACCOUNT, from: "Asha Rao <asha1@acme.com>", subject: "Lunch on Tuesday?", snippet: "Are you free on Tuesday? (mail 1)" },
+        { threadId: "t-2", accountId: ACCOUNT, from: "Asha Rao <asha2@acme.com>", subject: "Subject 2", snippet: "Are you free on Tuesday? (mail 2)" },
+      ],
+    });
+  });
+
+  test("a thread with an open draft is not offered again; one whose draft was sent is", async () => {
+    db.run("INSERT INTO draft_records (account_id, thread_id, draft_id, body_written, updated_at) VALUES (?,?,?,?,?)", [ACCOUNT, "t-1", "d1", "x", 1]);
+    db.run("INSERT INTO draft_records (account_id, thread_id, draft_id, body_written, updated_at, sent_at) VALUES (?,?,?,?,?,?)", [ACCOUNT, "t-2", "d2", "x", 1, 2]);
+    const f = fake({ kept: [kept(1, { draftEligible: true }), kept(2, { draftEligible: true })] });
+    await f.run();
+    expect(f.wakes[0]!.message).toBe("1 new mails may want a reply.");
+    expect(f.wakes[0]!.data.mails.map((m: any) => m.threadId)).toEqual(["t-2"]);
+  });
+
+  test("only mail that went into memory is offered to draft", async () => {
+    const f = fake({
+      kept: [kept(1, { draftEligible: true }), kept(2, { draftEligible: true }), kept(3, { draftEligible: true })],
+      extract: (_items, n) => (n === 0 ? { ok: false, reason: "timeout" } : { ok: true, data: {} }),
+    });
+    await expect(f.run()).rejects.toThrow();
+    expect(f.wakes[0]!.data.mails.map((m: any) => m.threadId)).toEqual(["t-3"]);
+  });
+
+  test("wake is addressed to the paired agent whatever it is", async () => {
+    const f = fake({ kept: [kept(1, { draftEligible: true })], agentId: "inbox-assistant-7", pairedAgent: null });
+    await f.run();
+    expect(f.wakes).toHaveLength(1);
+    expect(f.wakes[0]!.message).toBe("1 new mails may want a reply.");
+    expect(f.handed.flat()).toEqual(["m-1"]);
+  });
+
+  test("a failed wake: the woken mail is offered again next run, the run reports it", async () => {
+    const f = fake({ kept: [kept(1, { draftEligible: true }), kept(2)], wakeFails: true });
+    await expect(f.run()).rejects.toThrow(/could not wake the agent/);
+    expect(f.handed.flat()).toEqual(["m-2"]);
+  });
+
+  test("the routine's entry point is the handler", () => {
+    expect(typeof memoryExtraction).toBe("function");
+  });
+});
+
+describe("memory-extraction: the family calendar", () => {
+  const today = new Date().toLocaleDateString("en-CA");
+  const inDays = (n: number) => { const d = new Date(`${today}T12:00:00Z`); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+  const EVENT_DAY = inDays(18), DUE = inDays(11);
+  const annual = (threadKey: string): FamilyBlockWire => ({
+    blockId: threadKey,
+    facts: [{ content: `Agastya's Annual Day is on ${EVENT_DAY} at 10:00 at Greenwood High.`, kind: "event", salience: 0.8, dateRole: "occasion", audience: "family",
+      entities: [{ name: "Agastya", type: "person" }, { name: "Annual Day", type: "event" }], when: { date: EVENT_DAY, time: "10:00" } }],
+    heldTasks: [{ title: "Buy Agastya's farmer costume", detail: null, due: DUE, audience: "family" }],
+    ctx: { threadKey, messageId: null, mailDate: new Date().toISOString(), sender: "info@greenwoodhigh.edu.in" },
+  });
+
+  test("family items imported once per ref", async () => {
+    const mails = [kept(1, { mailboxKind: "personal" }), kept(2, { mailboxKind: "personal" }), kept(3, { mailboxKind: "personal" })];
+    const f = fake({
+      kept: mails,
+      family: {},
+      // Both chunks hand back the same mail's family items (a mail met twice in one run).
+      extract: () => ({ ok: true, data: { family: { blocks: [annual("t-1")] } } }),
+    });
+    await f.run();
+    expect(f.extracts).toHaveLength(2);
+    expect(f.imports).toHaveLength(1);
+    expect(f.imports[0]!.items).toHaveLength(1);
+    expect(f.imports[0]!.items[0]).toMatchObject({ ref: `gmail-thread:t-1#${EVENT_DAY}`, title: "Annual Day", who: "Agastya", start_time: "10:00",
+      todos: [{ title: "Buy Agastya's farmer costume", due: DUE }] });
+    expect(f.imports[0]).toMatchObject({ source: "email:email-desk-p1", label: "Shiva's email" });
+    // The run's one naming call, on the Fast tier.
+    expect(f.models).toHaveLength(1);
+    expect(f.models[0]).toMatchObject({ tier: "fast" });
+    // Pushed: nothing on Home.
+    expect(f.published).toEqual([]);
+  });
+
+  test("nowhere to push: the held to-dos go on Home, nothing imported", async () => {
+    const f = fake({ kept: [kept(1, { mailboxKind: "personal" })], family: { targets: [] }, extract: () => ({ ok: true, data: { family: { blocks: [annual("t-1")] } } }) });
+    await f.run();
+    expect(f.imports).toEqual([]);
+    expect(f.published).toHaveLength(1);
+    expect(f.published[0]).toMatchObject({ title: "Buy Agastya's farmer costume", sourceRef: "todo:t-1#buy-agastyas-farmer-costume" });
+  });
+
+  test("a failed import puts the held to-dos on Home; the run still ends ok", async () => {
+    const f = fake({ kept: [kept(1, { mailboxKind: "personal" })], family: { importAnswer: () => ({ nope: true }) }, extract: () => ({ ok: true, data: { family: { blocks: [annual("t-1")] } } }) });
+    await f.run();
+    expect(f.imports).toHaveLength(1);
+    expect(f.published.map((t) => t.title)).toEqual(["Buy Agastya's farmer costume"]);
+    expect(f.handed.flat()).toEqual(["m-1"]);
+  });
+
+  test("a work mailbox never asks for family candidates nor imports", async () => {
+    const f = fake({ kept: [kept(1)], family: {} });
+    await f.run();
+    expect(f.extracts[0]!.source.familyCandidates).toBeFalsy();
+    expect(f.imports).toEqual([]);
+  });
+});
