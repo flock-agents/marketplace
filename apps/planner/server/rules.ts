@@ -325,7 +325,9 @@ function breaksOf(shown: Rule, meals: RuleMeal[], people: { name: string }[], sl
         const kept: { m: RuleMeal; d: RuleDish }[] = [], open: { m: RuleMeal; d: RuleDish }[] = [];
         for (const m of inScope) {
           const ate = eaten(m, who);
-          const k = ate.find((d) => (firstHit(d) && said(d)) || own(d));
+          // Any dish of theirs whose portion_note says the swap keeps it at this meal, rice in its name or not (eval 23 Nov:
+          // "millet in place of rice" on sambar and bisi bele bath went uncounted, and the swap stayed at every lunch).
+          const k = ate.find((d) => said(d) || own(d));
           if (k) kept.push({ m, d: k });
           else { const d = ate.find((x) => firstHit(x)); if (d) open.push({ m, d }); }
         }

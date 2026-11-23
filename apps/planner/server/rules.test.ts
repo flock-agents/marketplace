@@ -493,6 +493,9 @@ describe("a soft rule, kept some times a week", () => {
     expect(b.every((x) => x.soft === "over" && x.to === "millets")).toBe(true);
     expect(b[0].rule).toBe("Meera has millets in place of white rice 2–3 times a week");
     expect(b[0].fix).toContain("now in 5 meals");
+    // The swap said on a dish with no rice in its name (sambar, bisi bele bath) is the swap kept at that meal too (eval 23 Nov).
+    const onSambar = week(DAYS.map((date) => ({ date, slot: "Lunch", dishes: [{ name: "Sambar", for_people: ["everyone"], portion_note: "millet in place of rice for Meera" }] })));
+    expect(keys(ruleBreaks(onSambar, { rules: [swap] }, people))).toEqual(["Thu 2026-11-26 Lunch|Sambar|Meera", "Fri 2026-11-27 Lunch|Sambar|Meera"]);
   });
 
   it("too few: a softer break on the meals that could keep it, only when asked (plan_menu never refuses for it)", () => {
