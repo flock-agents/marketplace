@@ -39,4 +39,4 @@ When `create_draft` refuses, its `error` says what to do:
 
 When the person asks for a change to a draft, or newer mail on the thread changes what it should say, call `update_draft` with the draft's `id` and the whole new `body`. If it answers `PERSON_EDITED`, the person changed the draft themselves: leave their text alone. If it answers `SENT`, the reply already went out. If it answers `SEND_UNCONFIRMED`, a send of it may have gone already: stop, never redraft, and tell the person to check Sent in Gmail. If it answers `NOT_FOUND`, the draft is gone: write the reply again with `create_draft`.
 
-If a draft should not go at all, `discard_draft` with its `id` withdraws it.
+If a draft should not go at all, `discard_draft` with its `id` withdraws it. If it answers `SEND_UNCONFIRMED`, a reply on the thread may have gone already: stop, and tell the person to check Sent in Gmail.

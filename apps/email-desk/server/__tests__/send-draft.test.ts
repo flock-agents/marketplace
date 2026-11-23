@@ -724,5 +724,52 @@ describe("redraft over an unconfirmed send (R33)", () => {
     expect((await createAgain()).code).toBe("DRAFT_EXISTS");
     expect(ledger(id)).toBeNull();
   });
+
+  // The thread holds, not only its open draft (lead, wave 3): a discard cannot open the way for a second reply.
+  test("an agent's discard of a draft whose send is in doubt: SEND_UNCONFIRMED, nothing changed", async () => {
+    const id = await unknownSend();
+    const out = await ops.discard_draft({ id }, agentCtx() as any);
+    expect(out).toEqual(SEND_UNCONFIRMED);
+    untouched(id);
+    expect(f.gmail.has("gm-1")).toBe(true);
+    expect(f.turns).toHaveLength(0); // no re-read: a discard changes nothing
+  });
+
+  test("the person's discard goes through, and the thread stays held: create_draft SEND_UNCONFIRMED, no Gmail write", async () => {
+    const id = await unknownSend();
+    expect(await ops.discard_draft({ id }, pressCtx("press-token-9") as any)).toEqual({ ok: true });
+    expect(row(id)).toBeNull();
+    expect(ledger(id).state).toBe("in_flight");
+    f.calls.length = 0;
+    f.thread = [ASHA]; // no reply seen, and Gmail holds no draft: ambiguous
+    expect(await createAgain()).toEqual(SEND_UNCONFIRMED);
+    expect(writes()).toHaveLength(0);
+    expect(ledger(id).state).toBe("in_flight");
+    expect(db.query("SELECT COUNT(*) AS n FROM draft_records").get()).toEqual({ n: 0 });
+  });
+
+  test("the person's ✕ on the card (declined) leaves the thread held too", async () => {
+    const id = await unknownSend();
+    await handleCardClosed({ sourceRef: `draft:${id}`, outcome: "declined" } as any, { platform: f.platform });
+    expect(row(id)).toBeNull();
+    expect(ledger(id).state).toBe("in_flight");
+    f.calls.length = 0;
+    f.turn = "busy";
+    expect(await createAgain()).toEqual(SEND_UNCONFIRMED);
+    expect(writes()).toHaveLength(0);
+  });
+
+  test("after the person's discard, a re-read that proves it went: create_draft refused SENT, ledger sent", async () => {
+    const id = await unknownSend();
+    await ops.discard_draft({ id }, pressCtx("press-token-9") as any);
+    f.calls.length = 0;
+    itWentOut();
+    const out = await createAgain();
+    expect(out.code).toBe("SENT");
+    expect(writes()).toHaveLength(0);
+    expect(ledger(id).state).toBe("sent");
+    // The thread is free again: the next create_draft drafts (a later reply on the thread).
+    expect(typeof (await createAgain()).id).toBe("string");
+  });
 });
 

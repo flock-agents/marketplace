@@ -3,11 +3,13 @@
 // send_draft claims the ledger (in_flight) before Gmail's sendDraft and keeps it in_flight whenever the outcome is not
 // known (drafts/send.ts, rulings R30-R32). If that send really went out, Gmail no longer holds the draft, and an agent's
 // create_draft / update_draft would read the draft as gone, drop the row and the Check Sent card, and write a new draft
-// whose press would send a second reply. So while the thread's open draft has an in_flight ledger row, create_draft and
-// update_draft write nothing and answer SEND_UNCONFIRMED, unless one Gmail re-read settles it:
+// whose press would send a second reply. So while the thread has an in_flight ledger row (whatever draft it was, the row
+// gone or not), create_draft and update_draft write nothing and answer SEND_UNCONFIRMED, unless one Gmail re-read settles
+// it; an agent's discard_draft is refused the same way (no re-read), and the person's own discard leaves the row held:
 //   - SENT: the thread holds a message from the person's own address, dated at or after the ledger row was claimed, whose
-//     text is the draft's (whitespace and quote styles aside; Gmail's quoted history after it allowed). The ledger says
-//     sent, the row gets its sent stamp, the card is withdrawn, and the caller refuses as already sent.
+//     text is the one sent (kept in the ledger row at the claim, else the draft row; whitespace and quote styles aside;
+//     Gmail's quoted history after it allowed). The ledger says sent, the row (while there) gets its sent stamp, the card
+//     is withdrawn, and the caller refuses as already sent.
 //   - UNSENT: the read worked, no such message is there, AND Gmail still holds the draft (getDraft gives its body). The
 //     in_flight row is cleared, and drafting goes on as for any open draft.
 //   - anything else (no read turn, the mailbox busy, a failed read, the person's own address unknown, a matching message
@@ -20,9 +22,9 @@ import { extractEmailAddress } from "../lib/draft-eligibility";
 import { parseGmailDateTime } from "../lib/gmail-date";
 import type { ReadTurnResult } from "../platform-ext";
 import { sendUnconfirmedRefusal, sentRefusal, type DraftRefusal } from "./rules";
-import type { DraftRecord } from "./records";
-import { withdrawDraftCard } from "./card";
-import { recordSent, sendLedgerKey } from "./send";
+import { getDraft } from "./records";
+import { DRAFT_SOURCE_PREFIX, withdrawDraftCard } from "./card";
+import { recordSent } from "./send";
 
 export const SEND_CHECK_CONSUMER = "email-desk:send-check";
 /** One read's timeout (reply-context READ_TIMEOUT_MS). */
@@ -30,38 +32,83 @@ const READ_TIMEOUT_MS = 90_000;
 
 const str = (v: unknown): string => (typeof v === "string" ? v : "");
 
-/** When the draft's send was claimed, while its outcome is unknown; null when there is no in_flight row. */
-function inFlightSince(draft: DraftRecord): number | null {
-  const row = getStore().query("SELECT created_at FROM send_ledger WHERE idempotency_key = ? AND state = 'in_flight'")
-    .get(sendLedgerKey(draft.id)) as { created_at: number } | null;
-  return row ? row.created_at : null;
+/** A send of this thread whose outcome is unknown: its ledger row, and the text it sent when known (the claim keeps it in
+ *  the row's result; else the draft row, while it is still there). */
+interface PendingSend {
+  key: string;
+  /** The app's draft id (`draft:<id>` keys), "" for an imported key. */
+  id: string;
+  accountId: string;
+  threadId: string;
+  gmailDraftId: string;
+  body: string | null;
+  since: number;
+}
+
+function pendingSends(accountId: string, threadId: string): PendingSend[] {
+  const db = getStore();
+  const rows = db.query(
+    "SELECT idempotency_key, draft_id, result, created_at FROM send_ledger WHERE account_id = ? AND thread_id = ? AND state = 'in_flight'",
+  ).all(accountId, threadId) as Array<{ idempotency_key: string; draft_id: string | null; result: string | null; created_at: number }>;
+  return rows.map((r) => {
+    const id = r.idempotency_key.startsWith(DRAFT_SOURCE_PREFIX) ? r.idempotency_key.slice(DRAFT_SOURCE_PREFIX.length) : "";
+    let body: string | null = null;
+    try { const b = JSON.parse(r.result ?? "")?.body; if (typeof b === "string" && b.trim()) body = b; } catch { /* below */ }
+    if (body === null && id) body = getDraft(db, id)?.bodyWritten ?? null;
+    return { key: r.idempotency_key, id, accountId, threadId, gmailDraftId: r.draft_id ?? "", body, since: r.created_at };
+  });
+}
+
+/** Is a send of this thread in doubt (an in_flight ledger row, whatever draft it was)? No Gmail read. */
+export function threadSendInDoubt(accountId: string, threadId: string): boolean {
+  return !!getStore().query("SELECT 1 FROM send_ledger WHERE account_id = ? AND thread_id = ? AND state = 'in_flight' LIMIT 1")
+    .get(accountId, threadId);
 }
 
 /**
- * Before create_draft or update_draft touches a thread's open draft (inside the thread's turn): null when no send of it is
- * in doubt, or when the re-read proved it did not go out (the in_flight row is cleared). Otherwise the refusal to answer:
- * SENT when the re-read proved it went (recorded and the card withdrawn first), else SEND_UNCONFIRMED.
+ * Before create_draft or update_draft writes on a thread (inside the thread's turn): null when no send on the thread is
+ * in doubt, or when the re-read proved each did not go out (their in_flight rows are cleared). Otherwise the refusal to
+ * answer: SENT when the re-read proved one went (recorded, its card withdrawn), else SEND_UNCONFIRMED. The thread is the
+ * key, not the open draft: a draft the person discarded after its send leaves its row in_flight, and that still holds.
  */
-export async function settleUnconfirmedSend(platform: PlatformContext, draft: DraftRecord): Promise<DraftRefusal | null> {
-  const since = inFlightSince(draft);
-  if (since === null) return null;
-  const seen = await reread(platform, draft, since);
-  if (seen.kind === "sent") {
-    recordSent(draft, sendLedgerKey(draft.id), seen.at);
-    await withdrawDraftCard(platform, draft.id);
-    return sentRefusal();
+export async function settleUnconfirmedSend(platform: PlatformContext, accountId: string, threadId: string): Promise<DraftRefusal | null> {
+  const pending = pendingSends(accountId, threadId);
+  if (pending.length === 0) return null;
+  let sent = false;
+  let unknown = false;
+  for (const p of pending) {
+    const seen = await reread(platform, p);
+    if (seen.kind === "sent") {
+      markSent(p, seen.at);
+      if (p.id) await withdrawDraftCard(platform, p.id);
+      sent = true;
+    } else if (seen.kind === "unsent") {
+      getStore().run("DELETE FROM send_ledger WHERE idempotency_key = ? AND state = 'in_flight'", [p.key]);
+    } else {
+      unknown = true;
+    }
   }
-  if (seen.kind === "unsent") {
-    getStore().run("DELETE FROM send_ledger WHERE idempotency_key = ? AND state = 'in_flight'", [sendLedgerKey(draft.id)]);
-    return null;
-  }
-  return sendUnconfirmedRefusal();
+  if (sent) return sentRefusal();
+  return unknown ? sendUnconfirmedRefusal() : null;
+}
+
+/** The ledger says sent (when Gmail shows it went), and the draft row, while it is still there, has its sent stamp. */
+function markSent(p: PendingSend, at: number): void {
+  const db = getStore();
+  const draft = p.id ? getDraft(db, p.id) : null;
+  if (draft) { recordSent(draft, p.key, at); return; }
+  db.run("UPDATE send_ledger SET state = 'sent', result = ?, updated_at = ? WHERE idempotency_key = ?",
+    [JSON.stringify({ sentAt: new Date(at).toISOString() }), Date.now(), p.key]);
 }
 
 type Seen = { kind: "sent"; at: number } | { kind: "unsent" } | { kind: "unknown" };
 const UNKNOWN: Seen = { kind: "unknown" };
 
-async function reread(platform: PlatformContext, draft: DraftRecord, since: number): Promise<Seen> {
+async function reread(platform: PlatformContext, draft: PendingSend): Promise<Seen> {
+  // Without the text that was sent, no message can be told to be it, nor shown not to be there.
+  if (draft.body === null || !draft.gmailDraftId) return UNKNOWN;
+  const sentText = draft.body;
+  const since = draft.since;
   if (!platform.connectors.readTurn) return UNKNOWN;
   const own = await ownAddress(platform, draft.accountId);
   if (!own) return UNKNOWN;
@@ -85,13 +132,13 @@ async function reread(platform: PlatformContext, draft: DraftRecord, since: numb
     let undated = false;
     for (const m of thread.messages) {
       if (extractEmailAddress(str(m?.from)) !== own) continue;
-      if (!sameSentText(draft.bodyWritten, str(m?.bodyMain) || str(m?.body))) continue;
+      if (!sameSentText(sentText, str(m?.bodyMain) || str(m?.body))) continue;
       const at = parseGmailDateTime(str(m?.date));
       if (at === null) { undated = true; continue; }
       if (at >= from) return { kind: "sent", at };
     }
     if (undated) return UNKNOWN;
-    const held = await read("getDraft", { draftId: draft.draftId });
+    const held = await read("getDraft", { draftId: draft.gmailDraftId });
     return held && typeof held.body === "string" && held.body.trim() ? { kind: "unsent" } : UNKNOWN;
   } catch {
     return UNKNOWN;

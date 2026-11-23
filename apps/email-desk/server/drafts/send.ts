@@ -119,10 +119,12 @@ async function sendInTurn(id: string, editedBody: string | undefined, ctx: OpCtx
   const now = Date.now();
   db.run(
     `INSERT INTO send_ledger (idempotency_key, account_id, thread_id, draft_id, state, result, created_at, updated_at)
-     VALUES (?, ?, ?, ?, 'in_flight', NULL, ?, ?)
-     ON CONFLICT(idempotency_key) DO UPDATE SET state = 'in_flight', result = NULL, draft_id = excluded.draft_id,
+     VALUES (?, ?, ?, ?, 'in_flight', ?, ?, ?)
+     ON CONFLICT(idempotency_key) DO UPDATE SET state = 'in_flight', result = excluded.result, draft_id = excluded.draft_id,
        updated_at = excluded.updated_at WHERE send_ledger.state != 'sent'`,
-    [key, draft.accountId, draft.threadId, draft.draftId, now, now],
+    // The text being sent stays with the claim: Gmail's re-read (send-check.ts) tells the sent reply by it, even after the
+    // person discards the draft row.
+    [key, draft.accountId, draft.threadId, draft.draftId, JSON.stringify({ body: draft.bodyWritten }), now, now],
   );
   const sent = await gmail(ctx.platform, "sendDraft", { draftId: draft.draftId }, draft.accountId, { pressToken });
   if (sent.ok) return recordSent(draft, key);

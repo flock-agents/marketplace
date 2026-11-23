@@ -15,12 +15,12 @@ import type { OpHandler, PlatformContext } from "@flock/app-sdk";
 import { getStore } from "./store";
 import {
   bodyRefusal, draftExistsRefusal, gmailRefusal, notDeskThreadRefusal, notFoundRefusal, personEditedRefusal, updateRefusal,
-  voiceLearningRefusal, type DraftAuthor, type DraftRefusal,
+  sendUnconfirmedRefusal, voiceLearningRefusal, type DraftAuthor, type DraftRefusal,
 } from "./drafts/rules";
 import { deleteDraft, draftStatus, getDraft, lockDraft, openDraftForThread, recordDraft, setDraftBody, type DraftRecord } from "./drafts/records";
 import { answeredMessage, publishDraftCard, withdrawDraftCard } from "./drafts/card";
 import { sendDraft } from "./drafts/send";
-import { settleUnconfirmedSend } from "./drafts/send-check";
+import { settleUnconfirmedSend, threadSendInDoubt } from "./drafts/send-check";
 import { tryAfterText, voiceStateFor, voiceLearningUntil } from "./voice/crawl";
 import { processTimezone } from "./lib/local-day";
 
@@ -164,12 +164,13 @@ async function gmailDraftBody(platform: PlatformContext, draft: DraftRecord): Pr
 
 async function writeNewDraft(accountId: string, threadId: string, body: string, why: string | null, ctx: OpCtx): Promise<{ id: string } | DraftRefusal> {
   const db = getStore();
+  // A send on this thread whose outcome is unknown holds it (ruling R33), before anything reads a draft as gone and with
+  // or without its draft row: one Gmail re-read may prove it went (SENT) or did not (drafting goes on); short of that
+  // SEND_UNCONFIRMED, nothing written.
+  const inDoubt = await settleUnconfirmedSend(ctx.platform, accountId, threadId);
+  if (inDoubt) return inDoubt;
   const open = openDraftForThread(db, accountId, threadId);
   if (open) {
-    // A send of this draft whose outcome is unknown holds the thread (ruling R33), before anything reads it as gone: one
-    // Gmail re-read may prove it went (SENT) or did not (drafting goes on); short of that SEND_UNCONFIRMED, nothing written.
-    const inDoubt = await settleUnconfirmedSend(ctx.platform, open);
-    if (inDoubt) return inDoubt;
     // The person's edit is never replaced, whatever Gmail shows (ruling R31): nothing is read or changed.
     if (open.personEdited) return draftExistsRefusal(open.id);
     // The open row may be stale: the person sent or deleted the draft in Gmail itself. Gmail is asked; a draft it surely
@@ -217,8 +218,8 @@ export async function changeDraft(id: string, p: Record<string, unknown>, ctx: O
   // Read again inside the thread's turn: a discard or a person's edit may have landed while this waited.
   const draft = getDraft(db, id);
   if (!draft) return notFoundRefusal();
-  // A send of this draft whose outcome is unknown: nothing is written, whoever asks, until a re-read settles it (R33).
-  const inDoubt = await settleUnconfirmedSend(ctx.platform, draft);
+  // A send on this thread whose outcome is unknown: nothing is written, whoever asks, until a re-read settles it (R33).
+  const inDoubt = await settleUnconfirmedSend(ctx.platform, draft.accountId, draft.threadId);
   if (inDoubt) return inDoubt;
   const locked = updateRefusal(draft, by);
   if (locked) return locked;
@@ -252,8 +253,9 @@ export async function changeDraft(id: string, p: Record<string, unknown>, ctx: O
 }
 
 /** discard_draft: Gmail discards it, the row goes, the card is withdrawn. Idempotent, and `{ ok: true }` even when Gmail
- *  fails (ruling R15: logged; the thread has no draft). The one refusal (ruling R18): the agent (no press token) may not
- *  discard a draft the person edited, which would let it draft over their edit; nothing changes then. */
+ *  fails (ruling R15: logged; the thread has no draft). The refusals, for the agent (no press token) only: a draft the
+ *  person edited (ruling R18), which would let it draft over their edit; and a draft whose thread has a send in doubt
+ *  (SEND_UNCONFIRMED, ruling R33). Nothing changes then. */
 export async function discardDraft(p: Record<string, unknown>, ctx: OpCtx): Promise<{ ok: true } | DraftRefusal> {
   const id = str(p.id);
   const refused = await removeDraft(ctx.platform, id, { byPerson: !!ctx.pressToken });
@@ -278,6 +280,9 @@ export async function removeDraft(
     const draft = getDraft(db, id);
     if (!draft || draft.sentAt !== null) return null;
     if (draft.personEdited && !opts.byPerson) return personEditedRefusal();
+    // The agent may not discard a draft while a send on its thread is in doubt (R33): nothing changes. The person's own
+    // discard goes through and leaves the ledger row in_flight, so the thread stays held for create_draft.
+    if (!opts.byPerson && threadSendInDoubt(draft.accountId, draft.threadId)) return sendUnconfirmedRefusal();
     const gone = await gmail(platform, "discardDraft", { draftId: draft.draftId }, draft.accountId);
     // Already gone from Gmail is the end we want; any other failure leaves a stray Gmail draft.
     if (!gone.ok && gone.code !== "DRAFT_NOT_FOUND") {
