@@ -458,7 +458,7 @@
       "path": "apps/email-desk",
       "latestVersion": "3.0.0",
       "latestTag": "email-desk-v3.0.0",
-      "minFlockVersion": "0.24.0",
+      "minFlockVersion": "0.24.0-beta.2",
       "personalAssistant": {
         "always": true,
         "useCase": "email",

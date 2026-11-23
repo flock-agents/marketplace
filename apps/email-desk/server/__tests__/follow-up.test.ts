@@ -18,8 +18,9 @@ import { followUpKindForTo } from "../lib/reply-context";
 import { sentQuery } from "../journal";
 import {
   followUpConfig, isFollowUpDue, runFollowUpForAccount, settleRepliedFollowUps, followUp, _resetFollowUpPassMemoryForTesting,
-  FOLLOW_UP_CONSUMER, type FollowUpDeps,
+  FOLLOW_UP_CONSUMER, FOLLOW_UP_TURN_TTL_MS, type FollowUpDeps,
 } from "../routines/follow-up";
+import { stopReason } from "../routines/gather";
 import { getFollowUp, putFollowUp, lastFollowUpRunAt, listFollowUpsOfferedSince, recordFollowUpRun } from "../routines/follow-up-store";
 
 const OWNER = "shiva@bimacred.com";
@@ -424,6 +425,38 @@ describe("runFollowUpForAccount", () => {
     const t = await run(w);
     expect(t.completed).toBe(false);
     expect(getFollowUp(ACCT, THREAD)).toBeNull();
+  });
+
+  test("TODOs that keep failing to publish close the day after two failed passes (source M12), not every tick", async () => {
+    const w = world({ publishOk: false });
+    expect((await run(w)).completed).toBe(false);
+    const second = await run(w);
+    expect(second.completed).toBe(true);
+    expect(w.logs.join("\n")).toContain("day closed");
+    expect(getFollowUp(ACCT, THREAD)).toBeNull();
+    // The next local day starts afresh: one failure leaves it due again.
+    const next = world({ publishOk: false, now: () => NOW + 24 * 3600_000 });
+    expect((await run(next)).completed).toBe(false);
+  });
+
+  test("the read turn lasts the pass's worst case (40 min), and a turn that ended mid-pass stops it with the day due", async () => {
+    expect(FOLLOW_UP_TURN_TTL_MS).toBe(40 * 60_000);
+    const w = world();
+    await run(w);
+    expect(w.turns[0]!.opts).toMatchObject({ ttlMs: 40 * 60_000 });
+    const mismatch = { ok: false, reason: "platform 403: That read turn is not this app's on this account, or it has ended", status: 403 };
+    expect(stopReason(mismatch as any)).toBe("turn_mismatch");
+    expect(stopReason({ ok: false, reason: "x", code: "turn_mismatch" } as any)).toBe("turn_mismatch");
+    // A fresh day's state, so the ended pass reads the thread again.
+    _resetFollowUpPassMemoryForTesting();
+    db.run("DELETE FROM follow_up_state");
+    const ended = world();
+    const real = ended.ctx.connectors.exec;
+    ended.ctx.connectors.exec = async (sk: string, fn: string, p: any, o: any) => fn === "getThread" ? mismatch : real(sk, fn, p, o);
+    const t = await run(ended);
+    expect(t.completed).toBe(false);
+    expect(ended.published).toHaveLength(0);
+    expect(ended.logs.join("\n")).toContain("turn_mismatch");
   });
 
   test("no mailbox address leaves the day due", async () => {

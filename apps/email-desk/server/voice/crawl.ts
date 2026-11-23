@@ -20,7 +20,8 @@
 //
 // WHO STARTS IT. `runVoiceCrawl` / `beginVoiceCrawl` are what lifecycle initialize (Task 2.10) calls per mailbox.
 // `ensureVoiceCrawl` is the memory-extraction routine's catch-up for a mailbox that has no voice and no crawl in flight
-// (an existing mailbox from before this app, or one whose crawl failed): at most once per RECRAWL_AFTER_MS.
+// (an existing mailbox from before this app, or one whose crawl failed): RECRAWL_AFTER_MS after a clean end, sooner
+// (VOICE_RETRY_AFTER_MS) after a failed or capped one.
 import type { PlatformContext } from "@flock/app-sdk";
 import { getStore } from "../store";
 import { NO_READ_TURNS, type ReadTurnResult } from "../platform-ext";
@@ -40,8 +41,12 @@ export const CRAWL_WALL_CLOCK_MS = 40 * 60_000;
 /** How long a mailbox reads as learning: the crawl's bound plus the model call after it. The VOICE_LEARNING refusal's
  *  "try after" time is the crawl's start plus this, so one retry then always drafts (with the voice, or past the cap). */
 export const VOICE_PENDING_CAP_MS = CRAWL_WALL_CLOCK_MS + 5 * 60_000;
-/** The catch-up crawl (ensureVoiceCrawl) tries a mailbox that learned nothing again after this long, not every run. */
+/** The catch-up crawl (ensureVoiceCrawl) tries a mailbox whose crawl ended cleanly with nothing learned (`empty`) again after
+ *  this long, not every run. */
 export const RECRAWL_AFTER_MS = 7 * 24 * 60 * 60_000;
+/** A crawl that failed, hit its wall clock (`capped`), or ended with no outcome recorded is tried again after 6 hours: what
+ *  stopped it (a sign-in, a busy mailbox, the model) usually passes within the day, and a week without a voice is too long. */
+export const VOICE_RETRY_AFTER_MS = 6 * 60 * 60_000;
 
 /** Human-shaped gap between page reads in the background (source READ_PAUSE_*: CPU duty cycle when many mailboxes crawl). */
 export const READ_PAUSE_MIN_MS = 45_000;
@@ -285,10 +290,10 @@ function recordFinish(accountId: string, at: number, outcome: string): void {
   ).run(at, outcome, at, at, accountId);
 }
 
-function lastAttempt(accountId: string): { startedAt: number | null; finishedAt: number | null } | null {
-  const row = getStore().query("SELECT started_at, finished_at FROM lifecycle_state WHERE account_id = ? AND stage = 'voice'")
-    .get(accountId) as { started_at: number | null; finished_at: number | null } | null;
-  return row ? { startedAt: row.started_at, finishedAt: row.finished_at } : null;
+function lastAttempt(accountId: string): { startedAt: number | null; finishedAt: number | null; outcome: string | null } | null {
+  const row = getStore().query("SELECT started_at, finished_at, outcome FROM lifecycle_state WHERE account_id = ? AND stage = 'voice'")
+    .get(accountId) as { started_at: number | null; finished_at: number | null; outcome: string | null } | null;
+  return row ? { startedAt: row.started_at, finishedAt: row.finished_at, outcome: row.outcome } : null;
 }
 
 // ---- starting a crawl ----------------------------------------------------------------------------------------------------
@@ -447,15 +452,18 @@ export async function runVoiceCrawl(
 }
 
 /**
- * The catch-up: a mailbox with no voice, no crawl in flight, and no attempt that finished within RECRAWL_AFTER_MS gets one,
- * in the background. An attempt that never finished (the app stopped mid-crawl) does not count. Never throws.
+ * The catch-up: a mailbox with no voice and no crawl in flight gets one, in the background, unless its last attempt finished
+ * recently: within RECRAWL_AFTER_MS when it ended `done` or `empty`, within VOICE_RETRY_AFTER_MS otherwise (failed, capped,
+ * no outcome). An attempt that never finished (the app stopped mid-crawl, or the crawl never started) does not count.
+ * Never throws.
  */
 export async function ensureVoiceCrawl(platform: PlatformContext, accountId: string): Promise<BeginVoiceCrawl> {
   try {
     if (hasVoice(accountId)) return { started: false, reason: "learned" };
     if (voiceLearningUntil(accountId) !== null) return { started: false, reason: "running" };
     const last = lastAttempt(accountId);
-    if (last?.finishedAt && nowImpl() - last.finishedAt < RECRAWL_AFTER_MS) return { started: false, reason: "recent" };
+    const wait = last?.outcome === "done" || last?.outcome === "empty" ? RECRAWL_AFTER_MS : VOICE_RETRY_AFTER_MS;
+    if (last?.finishedAt && nowImpl() - last.finishedAt < wait) return { started: false, reason: "recent" };
     return await beginVoiceCrawl(platform, accountId);
   } catch (e: any) {
     return { started: false, reason: e?.message ?? String(e) };

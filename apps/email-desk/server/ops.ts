@@ -17,7 +17,7 @@ import {
   bodyRefusal, draftExistsRefusal, gmailRefusal, notDeskThreadRefusal, notFoundRefusal, personEditedRefusal, updateRefusal,
   voiceLearningRefusal, type DraftAuthor, type DraftRefusal,
 } from "./drafts/rules";
-import { deleteDraft, draftStatus, getDraft, lockDraft, openDraftForThread, recordDraft, setDraftBody } from "./drafts/records";
+import { deleteDraft, draftStatus, getDraft, lockDraft, openDraftForThread, recordDraft, setDraftBody, type DraftRecord } from "./drafts/records";
 import { answeredMessage, publishDraftCard, withdrawDraftCard } from "./drafts/card";
 import { sendDraft } from "./drafts/send";
 import { tryAfterText, voiceStateFor, voiceLearningUntil } from "./voice/crawl";
@@ -40,7 +40,9 @@ export function _setOpsLogForTesting(fn: ((line: string) => void) | null): void 
 
 const str = (v: unknown): string => (typeof v === "string" ? v.trim() : "");
 
-export type Gmail<T> = { ok: true; data: T } | { ok: false; reason: string; code?: string };
+/** A failure: `status` is the platform's HTTP status when it gave one; `unknown` says the call's outcome is not known (no
+ *  answer in time, the platform unreachable, or the call threw): it may have run. */
+export type Gmail<T> = { ok: true; data: T } | { ok: false; reason: string; code?: string; status?: number; unknown?: boolean };
 
 /** One Gmail skill call as the copy's paired agent, on `accountId`. Only a send passes `approval` (the person's press
  *  token, sideEffect): no draft write ever does. Never throws. */
@@ -55,9 +57,14 @@ export async function gmail<T>(
     });
     if (r.ok) return { ok: true, data: r.data };
     if (r.skipped) return { ok: false, reason: "Email Desk is not set up with an agent" };
-    return { ok: false, reason: r.message ?? r.reason, ...(r.code ? { code: r.code } : {}) };
+    const status = typeof r.status === "number" ? r.status : undefined;
+    const unknown = r.reason === "timeout" || r.reason === "unreachable" || (status !== undefined && status >= 500);
+    return {
+      ok: false, reason: r.message ?? r.reason, ...(r.code ? { code: r.code } : {}),
+      ...(status !== undefined ? { status } : {}), ...(unknown ? { unknown: true } : {}),
+    };
   } catch (e: any) {
-    return { ok: false, reason: String(e?.message ?? e) };
+    return { ok: false, reason: String(e?.message ?? e), unknown: true };
   }
 }
 
@@ -114,10 +121,25 @@ export async function createDraft(p: Record<string, unknown>, ctx: OpCtx): Promi
   return withThreadTurn(accountId, threadId, () => writeNewDraft(accountId, threadId, body, str(p.why) || null, ctx));
 }
 
+/** Gmail's text for a draft: the body, null when Gmail no longer holds it (DRAFT_NOT_FOUND, or no body shown), or the
+ *  failure when Gmail could not be asked. */
+async function gmailDraftBody(platform: PlatformContext, draft: DraftRecord): Promise<{ ok: true; body: string | null } | { ok: false; reason: string }> {
+  const now = await gmail<{ body?: unknown }>(platform, "getDraft", { draftId: draft.draftId }, draft.accountId);
+  if (!now.ok) return now.code === "DRAFT_NOT_FOUND" ? { ok: true, body: null } : { ok: false, reason: now.reason };
+  return { ok: true, body: typeof now.data?.body === "string" ? now.data.body : null };
+}
+
 async function writeNewDraft(accountId: string, threadId: string, body: string, why: string | null, ctx: OpCtx): Promise<{ id: string } | DraftRefusal> {
   const db = getStore();
   const open = openDraftForThread(db, accountId, threadId);
-  if (open) return draftExistsRefusal(open.id);
+  if (open) {
+    // The open row may be stale: the person sent or deleted the draft in Gmail itself. Gmail is asked; a draft it no longer
+    // holds is cleared (row and card) and the new one is written. Gmail not answering keeps the row (DRAFT_EXISTS).
+    const held = await gmailDraftBody(ctx.platform, open);
+    if (!held.ok || held.body !== null) return draftExistsRefusal(open.id);
+    deleteDraft(db, open.id);
+    await withdrawDraftCard(ctx.platform, open.id);
+  }
 
   const answered = answeredMessage(db, accountId, threadId);
   // Gmail's own Reply all sets who the reply reaches; the skill still asks for a `to` and a subject.
@@ -162,9 +184,9 @@ export async function changeDraft(id: string, p: Record<string, unknown>, ctx: O
 
   if (by === "agent") {
     // The person may have changed the draft in Gmail itself: the three-way compare (source owner-edit guard). Fails closed.
-    const now = await gmail<{ body?: unknown }>(ctx.platform, "getDraft", { draftId: draft.draftId }, draft.accountId);
+    const now = await gmailDraftBody(ctx.platform, draft);
     if (!now.ok) return gmailRefusal("read the draft to check it", now.reason);
-    const status = draftStatus(draft, typeof now.data?.body === "string" ? now.data.body : null);
+    const status = draftStatus(draft, now.body);
     if (status === "missing") {
       deleteDraft(db, draft.id);
       await withdrawDraftCard(ctx.platform, draft.id);
@@ -190,7 +212,7 @@ export async function changeDraft(id: string, p: Record<string, unknown>, ctx: O
  *  discard a draft the person edited, which would let it draft over their edit; nothing changes then. */
 export async function discardDraft(p: Record<string, unknown>, ctx: OpCtx): Promise<{ ok: true } | DraftRefusal> {
   const id = str(p.id);
-  const refused = await removeDraft(ctx.platform, id, { byPerson: !!ctx.pressToken, onGmailFailure: "log" });
+  const refused = await removeDraft(ctx.platform, id, { byPerson: !!ctx.pressToken });
   if (refused) return refused;
   if (id) await withdrawDraftCard(ctx.platform, id);
   return { ok: true };
@@ -199,11 +221,11 @@ export async function discardDraft(p: Record<string, unknown>, ctx: OpCtx): Prom
 /**
  * The discard itself, in the thread's turn: Gmail discardDraft, then the row deleted (ruling R19). A sent draft, or no
  * row, is left alone (null). The agent may not discard the person's edit (R18); the person may (`byPerson`: their press,
- * or their own ✕ on the card). A Gmail failure other than "already gone" is logged and the row deleted anyway (`log`,
- * the op's R15), or thrown with the row kept (`throw`, the card's close: Flock asks again later, card-closed.ts).
+ * or their own ✕ on the card). A Gmail failure other than "already gone" is logged and the row deleted anyway (R15). The
+ * card's own close is drafts/send.ts handleCardClosed.
  */
 export async function removeDraft(
-  platform: PlatformContext, id: string, opts: { byPerson: boolean; onGmailFailure: "log" | "throw" },
+  platform: PlatformContext, id: string, opts: { byPerson: boolean },
 ): Promise<DraftRefusal | null> {
   const found = getDraft(getStore(), id);
   if (!found) return null;
@@ -215,7 +237,6 @@ export async function removeDraft(
     const gone = await gmail(platform, "discardDraft", { draftId: draft.draftId }, draft.accountId);
     // Already gone from Gmail is the end we want; any other failure leaves a stray Gmail draft.
     if (!gone.ok && gone.code !== "DRAFT_NOT_FOUND") {
-      if (opts.onGmailFailure === "throw") throw new Error(`Gmail could not discard draft ${draft.id}: ${gone.reason}`);
       log(`[email-desk] Gmail could not discard draft ${draft.id} (${gone.reason}); its record and card are gone anyway`);
     }
     deleteDraft(db, draft.id);

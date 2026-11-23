@@ -305,22 +305,42 @@ describe("send_draft", () => {
     expect(row(id).sent_at).toBeNull();
   });
 
-  test("a send a crash cut short, gone from Gmail: SEND_FAILED asking to check Gmail, nothing sent", async () => {
+  const UNCONFIRMED = { error: "Couldn't confirm the send. Check Sent before sending again.", code: "SEND_FAILED", status: 502 };
+
+  test("a send a crash cut short, gone from Gmail: answered from the ledger, nothing sent (R30)", async () => {
     const id = await create();
     db.run("INSERT INTO send_ledger (idempotency_key, account_id, thread_id, draft_id, state, created_at, updated_at) VALUES (?, ?, ?, 'gm-1', 'in_flight', 1, 1)", [`draft:${id}`, ACCOUNT, THREAD]);
     f.gmail.delete("gm-1");
-    const out = await send({ id });
-    expect(out.code).toBe("SEND_FAILED");
-    expect(out.error).toContain("Check Sent in Gmail");
+    expect(await send({ id })).toEqual(UNCONFIRMED);
     expect(sends()).toHaveLength(0);
     expect(row(id).sent_at).toBeNull();
     expect(ledger(id).state).toBe("in_flight");
   });
 
-  test("a send a crash cut short, still in Gmail: the press sends it", async () => {
+  test("a send a crash cut short, still in Gmail: a new press never sends it (R30)", async () => {
     const id = await create();
     db.run("INSERT INTO send_ledger (idempotency_key, account_id, thread_id, draft_id, state, created_at, updated_at) VALUES (?, ?, ?, 'gm-1', 'in_flight', 1, 1)", [`draft:${id}`, ACCOUNT, THREAD]);
+    f.calls.length = 0;
+    expect(await send({ id }, pressCtx("press-token-2"))).toEqual(UNCONFIRMED);
+    expect(f.calls).toHaveLength(0);
+    expect(ledger(id).state).toBe("in_flight");
+  });
+
+  test("a send that timed out stays in flight: two more presses never send again (R30)", async () => {
+    const id = await create();
+    f.failNext.sendDraft = { reason: "timeout" };
+    expect(await send({ id })).toEqual(UNCONFIRMED);
+    expect(ledger(id).state).toBe("in_flight");
+    expect(await send({ id }, pressCtx("press-token-2"))).toEqual(UNCONFIRMED);
+    expect(await send({ id }, pressCtx("press-token-3"))).toEqual(UNCONFIRMED);
+    expect(sends()).toHaveLength(1);
+  });
+
+  test("a failed row (a definite Gmail error) with the draft still there sends once on the next press", async () => {
+    const id = await create();
+    db.run("INSERT INTO send_ledger (idempotency_key, account_id, thread_id, draft_id, state, result, created_at, updated_at) VALUES (?, ?, ?, 'gm-1', 'failed', 'banner', 1, 1)", [`draft:${id}`, ACCOUNT, THREAD]);
     expect((await send({ id })).ok).toBe(true);
+    expect((await send({ id }, pressCtx("press-token-2"))).ok).toBe(true);
     expect(sends()).toHaveLength(1);
     expect(ledger(id).state).toBe("sent");
   });
@@ -361,13 +381,36 @@ describe("card closed", () => {
     expect(row(id)).toBeNull();
   });
 
-  test("declined with Gmail failing throws and keeps the draft, so Flock asks again", async () => {
+  test("declined with Gmail failing closes the draft at once; only Gmail's discard is tried again", async () => {
+    const id = await create();
+    f.withdrawn.length = 0;
+    f.failNext.discardDraft = { reason: "browser busy" };
+    await expect(closed(id, "declined")).rejects.toThrow("browser busy");
+    // The thread is not muted: the row is gone and the card withdrawn on the first attempt.
+    expect(row(id)).toBeNull();
+    expect(f.withdrawn).toEqual([`draft:${id}`]);
+    expect(f.gmail.has("gm-1")).toBe(true);
+    // Flock asks again: Gmail's discard is retried on its own.
+    await closed(id, "declined");
+    expect(f.gmail.has("gm-1")).toBe(false);
+    // And then there is nothing left to do.
+    f.calls.length = 0;
+    await closed(id, "declined");
+    expect(f.calls).toHaveLength(0);
+  });
+
+  test("a retried Gmail discard never touches a newer draft on the same thread", async () => {
     const id = await create();
     f.failNext.discardDraft = { reason: "browser busy" };
     await expect(closed(id, "declined")).rejects.toThrow("browser busy");
-    expect(row(id)).not.toBeNull();
+    // Gmail's reply draft for the thread is reused by the new draft (same Gmail id).
+    f.gmail.delete("gm-1");
+    db.run("INSERT INTO draft_records (account_id, thread_id, draft_id, body_written, updated_at, id) VALUES (?,?,?,?,?,?)", [ACCOUNT, THREAD, "gm-1", "new", 2, "new-id"]);
+    f.gmail.set("gm-1", "new");
+    f.calls.length = 0;
     await closed(id, "declined");
-    expect(row(id)).toBeNull();
+    expect(f.calls).toHaveLength(0);
+    expect(f.gmail.get("gm-1")).toBe("new");
   });
 
   test("declined on a sent draft changes nothing", async () => {
@@ -379,13 +422,28 @@ describe("card closed", () => {
     expect(row(id).sent_at).not.toBeNull();
   });
 
-  test("done and expired change nothing; other refs are ignored", async () => {
+  test("done changes nothing; other refs are ignored", async () => {
     const id = await create();
     f.calls.length = 0;
     await closed(id, "done");
-    await closed(id, "expired");
     await handleCardClosed({ sourceRef: "followup:x", outcome: "declined", closedAt: Date.now() }, { platform: f.platform });
     expect(f.calls).toHaveLength(0);
     expect(row(id).sent_at).toBeNull();
+  });
+
+  test("expired leaves the draft in Gmail (as the source did) but never a cardless open row", async () => {
+    const id = await create();
+    f.calls.length = 0;
+    await closed(id, "expired");
+    expect(f.calls).toHaveLength(0);
+    expect(f.gmail.has("gm-1")).toBe(true);
+    expect(row(id)).toBeNull();
+  });
+
+  test("expired on a sent draft keeps its sent row", async () => {
+    const id = await create();
+    await send({ id });
+    await closed(id, "expired");
+    expect(row(id).sent_at).not.toBeNull();
   });
 });

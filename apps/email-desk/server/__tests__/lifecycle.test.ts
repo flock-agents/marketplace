@@ -111,6 +111,23 @@ describe("initialize", () => {
     expect((mid.read as any[])[0]).toMatchObject({ message: "Read 2 emails so far", state: "running" });
   });
 
+  test("a voice crawl that did not start leaves the voice row unfinished, so the catch-up tries again soon", async () => {
+    const { h, p } = hooks({ voice: async () => ({ started: false, reason: "no_model" }) }, platform([A1]));
+    await h.initialize!({ reason: "onboarding", platform: p });
+    expect(db.query("SELECT finished_at, outcome FROM lifecycle_state WHERE account_id = ? AND stage = 'voice'").get(A1)).toEqual({ finished_at: null, outcome: null });
+  });
+
+  test("a crawl's own outcome on the voice row is kept, never overwritten with done", async () => {
+    const { h, p } = hooks({
+      voice: async (_p, a) => {
+        db.run("UPDATE lifecycle_state SET finished_at = ?, outcome = 'failed' WHERE account_id = ? AND stage = 'voice'", [clock, a]);
+        return { started: true };
+      },
+    }, platform([A1]));
+    await h.initialize!({ reason: "onboarding", platform: p });
+    expect(db.query("SELECT outcome FROM lifecycle_state WHERE account_id = ? AND stage = 'voice'").get(A1)).toEqual({ outcome: "failed" });
+  });
+
   test("initialize for named accounts reads only those", async () => {
     const { h, p } = hooks();
     await h.initialize!({ reason: "account-added", accountIds: [A2], platform: p });
@@ -209,9 +226,16 @@ describe("a mailbox waiting behind a long sequence", () => {
 });
 
 describe("status", () => {
-  test("held while a sequence is live, released when it ends or stalls, open for a mailbox with no row", () => {
+  test("a mailbox with no row and no history is not initialized: no routine reads it before its first read", () => {
     const { h } = hooks();
-    expect(h.status!(A1)).toBe(true);
+    expect(h.status!(A1)).toBe(false);
+    // History alone (a moved owner db) is initialized.
+    seedCursor(A2);
+    expect(h.status!(A2)).toBe(true);
+  });
+
+  test("held while a sequence is live, released when it ends or stalls", () => {
+    const { h } = hooks();
     db.run("INSERT INTO lifecycle_state (account_id, stage, started_at, last_progress_at, updated_at) VALUES (?, 'sequence', ?, ?, ?)", [A1, clock, clock, clock]);
     expect(h.status!(A1)).toBe(false);
     clock += STALL_MS;
@@ -322,6 +346,11 @@ describe("the first read reuses the routine's run", () => {
     expect(handed).toEqual([]);
     expect(historyOf(db, A1)).toBeNull();
     expect(await runFirstRead(a.c, A1, null, { gather: async () => { throw new Error("list failed"); } })).toBe("failed");
+  });
+
+  test("a first read whose mailbox was not read through (stopped) is failed, so the tick reads again", async () => {
+    const { c } = ctx();
+    expect(await runFirstRead(c, A1, null, { gather: gather([], { stopped: "session_not_ready", note: "mailbox not read (session_not_ready)" }) })).toBe("failed");
   });
 
   test("a first read that handed mail over still reads as set up without a stamp (extracted rows, cursor)", () => {

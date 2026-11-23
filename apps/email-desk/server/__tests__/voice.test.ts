@@ -23,7 +23,7 @@ import { _setLogForTesting as _setCardLogForTesting } from "../drafts/card";
 import { allOps } from "../registry";
 import {
   runVoiceCrawl, beginVoiceCrawl, ensureVoiceCrawl, voiceStateFor, voiceCrawlProgress, VOICE_PENDING_CAP_MS, VOICE_CONSUMER,
-  RECRAWL_AFTER_MS, _setVoiceCrawlSeamsForTesting, _resetVoiceCrawlsForTesting,
+  RECRAWL_AFTER_MS, VOICE_RETRY_AFTER_MS, _setVoiceCrawlSeamsForTesting, _resetVoiceCrawlsForTesting,
 } from "../voice/crawl";
 import { editVoiceRow, forgetVoiceRow, restoreVoiceRow, voiceRows, OWNER_SOURCE, CRAWL_SOURCE } from "../voice/store";
 import { buildVoiceBlock, VOICE_HEADING } from "../voice/block";
@@ -503,6 +503,29 @@ describe("the routine's wake", () => {
     await runVoiceCrawl(f.platform, A1);
     expect(await ensureVoiceCrawl(f.platform, A1)).toEqual({ started: false, reason: "recent" });
     clock += RECRAWL_AFTER_MS;
+    const again = await ensureVoiceCrawl(f.platform, A1);
+    expect(again.started).toBe(true);
+    if (again.started) await again.done;
+  });
+
+  test(`a crawl that failed or hit its cap is tried again after VOICE_RETRY_AFTER_MS (${VOICE_RETRY_AFTER_MS / 3_600_000} h), not a week`, async () => {
+    expect(VOICE_RETRY_AFTER_MS).toBe(6 * 60 * 60_000);
+    for (const outcome of ["failed", "capped"]) {
+      db.run("DELETE FROM lifecycle_state");
+      db.run("INSERT INTO lifecycle_state (account_id, stage, started_at, finished_at, outcome, updated_at) VALUES (?, 'voice', ?, ?, ?, ?)", [A1, clock - 1000, clock, outcome, clock]);
+      expect(await ensureVoiceCrawl(f.platform, A1)).toEqual({ started: false, reason: "recent" });
+      clock += VOICE_RETRY_AFTER_MS;
+      const again = await ensureVoiceCrawl(f.platform, A1);
+      expect(again.started).toBe(true);
+      if (again.started) await again.done;
+      _resetVoiceCrawlsForTesting();
+      db.run("DELETE FROM voice_profile");
+    }
+  });
+
+  test("a voice row stamped finished with no outcome (a crawl that never started) does not wait a week", async () => {
+    db.run("INSERT INTO lifecycle_state (account_id, stage, started_at, finished_at, outcome, updated_at) VALUES (?, 'voice', ?, ?, NULL, ?)", [A1, clock, clock, clock]);
+    clock += VOICE_RETRY_AFTER_MS;
     const again = await ensureVoiceCrawl(f.platform, A1);
     expect(again.started).toBe(true);
     if (again.started) await again.done;

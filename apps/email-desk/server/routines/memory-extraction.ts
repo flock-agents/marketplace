@@ -8,8 +8,7 @@
 // One run, per account of the routine:
 //   1. gather (gather.ts): read new mail under the mailbox lease and keep what the rules keep. A held mailbox ends the run
 //      ok with the note; the next run reads it.
-//   2. extract: `platform.memory.extract` in chunks of EXTRACT_SERVABLE_ITEMS (what one call can serve before Flock's socket
-//      limit). Facts go to the paired agent's memory (the person's) and TODOs to their Home, as today: Flock writes both. A
+//   2. extract: `platform.memory.extract`, one item per call (EXTRACT_SERVABLE_ITEMS). Facts go to the paired agent's memory (the person's) and TODOs to their Home, as today: Flock writes both. A
 //      chunk that fails (refused, timed out, or answered with a failed item) does not stop the next; its mail stays pending
 //      and is offered again next run. A deferred chunk (Flock's hourly write limit) is left pending without a failure.
 //   3. family: a personal mailbox whose person has a Family Calendar (`family.targets()`, asked once per run: ruling R14)
@@ -53,13 +52,11 @@ import { voiceBlockOrNull } from "../voice/block";
 import { ensureVoiceCrawl, voiceStateFor, whenVoiceSettles, type VoiceState } from "../voice/crawl";
 
 /**
- * How many items one memory.extract call can serve. NOT EXPORTED BY THE SDK, so mirrored here from its formula
- * (@flock/app-sdk context.ts EXTRACT_SERVABLE_ITEMS): the platform spends about EXTRACT_PER_ITEM_TIMEOUT_MS (120 s) per item
- * and the SDK waits at most EXTRACT_MAX_TIMEOUT_MS (240 s), under the platform's 255 s socket limit. Change it with them.
+ * Items per memory.extract call: ONE. The answer carries one status for the whole call (failedItems / deferredItems are
+ * counts, not per item), so with two items a failure of one would leave both pending and the next run would extract the
+ * sibling Flock already wrote a second time (its TODOs minted again). One item per call gives each mail its own status.
  */
-const EXTRACT_PER_ITEM_TIMEOUT_MS = 120_000;
-const EXTRACT_MAX_TIMEOUT_MS = 240_000;
-export const EXTRACT_SERVABLE_ITEMS = Math.max(1, Math.floor(EXTRACT_MAX_TIMEOUT_MS / EXTRACT_PER_ITEM_TIMEOUT_MS));
+export const EXTRACT_SERVABLE_ITEMS = 1;
 
 /** memory-relay MAX_RELAY_MESSAGES: how many messages of one thread ride the wire. */
 const MAX_ITEM_MESSAGES = 200;
@@ -70,7 +67,7 @@ const GMAIL = "gmail";
 
 /** The wake's one line: counts only. */
 export function wakeLine(n: number): string {
-  return `${n} new mails may want a reply.`;
+  return n === 1 ? "1 new mail may want a reply." : `${n} new mails may want a reply.`;
 }
 
 let log: (line: string) => void = (line) => console.log(line);
@@ -241,7 +238,7 @@ async function runAccount(
   /** When the run asked whether the day was owed: the stamp a run that worked the whole mailbox records. Absent (the first
    *  read, which never asks: ruling R27), nothing is stamped and the next boundary stays owed. */
   stampAt?: number,
-): Promise<"read" | "busy"> {
+): Promise<"read" | "busy" | "stopped"> {
   const g = await gather(ctx, accountId);
   if (g.busy) {
     say(accountId, `ended: ${g.note ?? "mailbox busy"}`);
@@ -328,7 +325,7 @@ async function runAccount(
   if (stampAt !== undefined && worked) recordHarvestRun(accountId, stampAt);
   else if (stampAt !== undefined) say(accountId, `day left owed: ${g.stopped ? `mailbox not read (${g.stopped})` : g.overCap ? `${g.overCap} mail(s) over the run's cap` : deferredChunks ? "Flock's write limit" : "a chunk failed"}`);
   say(accountId, `kept=${g.kept.length} extracted=${extracted.length} failed=${failed} woke=${woke}`);
-  return "read";
+  return g.stopped ? "stopped" : "read";
 }
 
 /** The first read's window, as the built-in desk's landing read it (initialize.ts ONBOARDING_*): the recent weeks, the ten
@@ -338,8 +335,8 @@ export const FIRST_READ_WINDOW = { openDays: 14, horizonDays: 30, maxThreads: 10
 /**
  * One mailbox's FIRST read (lifecycle initialize): the same per-account run as the routine's (gather, extract, hand over,
  * family, draft offers, the voice crawl's start), over the first read's window and without the wake. "read": the mailbox was
- * read and every kept mail went into memory. "busy": another reader held the mailbox, nothing was read. "failed": the read
- * threw or a chunk could not be put into memory (what stayed pending is offered again by the daily run). Never throws.
+ * read through and every kept mail went into memory. "busy": another reader held the mailbox, nothing was read. "failed": the
+ * read threw, stopped before the mailbox was read through (a refused turn, a sign-in wall), or a mail could not be put into memory (what stayed pending is offered again by the daily run). Never throws.
  */
 export async function runFirstRead(
   ctx: RoutineCtx, accountId: string, email: string | null, deps: MemoryExtractionDeps = {},
@@ -355,7 +352,7 @@ export async function runFirstRead(
   const failures: string[] = [];
   try {
     const outcome = await runAccount(ctx, accountId, email, gather, handOver, voice, failures, false);
-    return outcome === "busy" ? "busy" : failures.length > 0 ? "failed" : "read";
+    return outcome === "busy" ? "busy" : outcome === "stopped" || failures.length > 0 ? "failed" : "read";
   } catch (e: any) {
     say(accountId, `first read failed: ${e?.message ?? String(e)}`);
     return "failed";
@@ -369,7 +366,8 @@ export async function runFirstRead(
 
 const OFFER_PREFIX = "draft-offer:";
 const offerKey = (accountId: string, threadId: string) => `${OFFER_PREFIX}${accountId}:${threadId}`;
-interface DraftOffer { threadId: string; accountId: string; from: string; subject: string; snippet: string }
+/** `at`: the offered mail's time (epoch ms), to tell it from an open draft written before it. */
+interface DraftOffer { threadId: string; accountId: string; from: string; subject: string; snippet: string; at?: number }
 
 /** Draft-eligible mail, one offer per thread; the newest mail of a thread replaces its older offer. */
 function addDraftOffers(mail: readonly KeptMail[]): void {
@@ -380,7 +378,11 @@ function addDraftOffers(mail: readonly KeptMail[]): void {
   const now = Date.now();
   for (const k of mail) {
     if (!k.draftEligible) continue;
-    const offer: DraftOffer = { threadId: k.threadId, accountId: k.accountId, from: k.from, subject: k.subject, snippet: snippetOf(k.body) };
+    const at = Date.parse(k.date);
+    const offer: DraftOffer = {
+      threadId: k.threadId, accountId: k.accountId, from: k.from, subject: k.subject, snippet: snippetOf(k.body),
+      ...(Number.isFinite(at) ? { at } : {}),
+    };
     put.run(offerKey(k.accountId, k.threadId), JSON.stringify(offer), now);
   }
 }
@@ -417,14 +419,18 @@ async function wakeNow(ctx: RoutineCtx, accountId: string, voice: Voice, failure
   const prefix = offerKey(accountId, "");
   const rows = db.query("SELECT key, value FROM app_meta WHERE substr(key, 1, ?) = ? ORDER BY updated_at, key")
     .all(prefix.length, prefix) as { key: string; value: string }[];
-  const open = db.query("SELECT 1 FROM draft_records WHERE account_id = ? AND thread_id = ? AND sent_at IS NULL LIMIT 1");
+  const open = db.query("SELECT updated_at FROM draft_records WHERE account_id = ? AND thread_id = ? AND sent_at IS NULL LIMIT 1");
   const drop = db.query("DELETE FROM app_meta WHERE key = ?");
   const offers: Array<{ key: string; offer: DraftOffer }> = [];
   for (const row of rows) {
     let offer: DraftOffer | null = null;
     try { offer = JSON.parse(row.value) as DraftOffer; } catch { offer = null; }
-    // A broken row, or a thread drafted meanwhile: nothing left to offer.
-    if (!offer?.threadId || open.get(accountId, offer.threadId)) { drop.run(row.key); continue; }
+    // A broken row, or a thread drafted after this mail came: nothing left to offer. An open draft OLDER than the mail
+    // never mutes the thread (it may be gone from Gmail, or its card expired): the mail is offered, and the agent updates
+    // that draft (reply_context shows it), or writes a new one once create_draft finds the old one gone.
+    if (!offer?.threadId) { drop.run(row.key); continue; }
+    const draft = open.get(accountId, offer.threadId) as { updated_at: number } | null;
+    if (draft && !(typeof offer.at === "number" && offer.at > draft.updated_at)) { drop.run(row.key); continue; }
     offers.push({ key: row.key, offer });
   }
   if (offers.length === 0) return 0;

@@ -87,6 +87,9 @@ describe("published skills", () => {
       expect(t).toContain(must);
     }
     expect(t).not.toContain("send_draft");
+    // A refused agent that cannot come back is not stuck: the offer comes again. A gone draft is written again.
+    expect(t).toContain("If you cannot come back later, leave it; Email Desk offers it again.");
+    expect(t).toContain("If it answers `NOT_FOUND`, the draft is gone: write the reply again with `create_draft`.");
   });
 
   test("judge-mail reads the thread with reply_context and hands over to write-reply", () => {
@@ -94,6 +97,8 @@ describe("published skills", () => {
     expect(t).toContain("reply_context");
     expect(t).toContain("write-reply");
     expect(t).not.toContain("send_draft");
+    // Never both "no draft is open" and "when existingDraft is not null" (R: a stale draft never mutes a thread).
+    expect(t).not.toContain("no draft is open for the thread");
   });
 });
 

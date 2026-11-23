@@ -126,6 +126,7 @@ type Gmail = <T = unknown>(fn: string, params: Record<string, unknown>, timeoutM
 const SESSION_UNAVAILABLE = /\bsession_(not_ready|outdated)\b/i;
 const GUARD = /\b(busy|too_soon|budget_exhausted|quarantined|queue_full)\b/;
 const PAUSED = /Flock paused using this \S+ account/;
+const TURN_MISMATCH = /\bturn_mismatch\b|read turn is not this app's on this account/i;
 
 /** A refusal that says "stop reading this mailbox for now" (the account guard, or a sign-in that needs redoing), or null. */
 export function stopReason(r: Result<unknown>): string | null {
@@ -133,6 +134,8 @@ export function stopReason(r: Result<unknown>): string | null {
   if (r.skipped) return "not_configured";
   if (typeof r.code === "string" && r.code.startsWith("guard_")) return r.code.slice("guard_".length) || "refused";
   const text = `${r.code ?? ""} ${r.reason ?? ""} ${r.message ?? ""}`;
+  // The read turn ended (its TTL passed) or is not this app's on this account: Flock refuses every further read under it.
+  if (TURN_MISMATCH.test(text)) return "turn_mismatch";
   if (SESSION_UNAVAILABLE.test(text)) return "session_not_ready";
   if (PAUSED.test(text)) return "quarantined";
   return text.match(GUARD)?.[1] ?? null;

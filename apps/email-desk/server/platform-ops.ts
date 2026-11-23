@@ -90,7 +90,8 @@ function storeThreadBody(p: Record<string, unknown>) {
   const threadId = str(p.threadId);
   const sourceId = str(p.sourceId);
   const rendered = p.rendered;
-  if (!accountId || !threadId || typeof rendered !== "string") return fail("accountId, threadId and rendered are required", "INVALID");
+  // A blank body would overwrite the parked thread text with nothing: refused like a missing one.
+  if (!accountId || !threadId || typeof rendered !== "string" || !rendered.trim()) return fail("accountId, threadId and rendered are required", "INVALID");
   if (sourceId !== GMAIL_SOURCE) return fail("donation is only accepted from the gmail connector", "FORBIDDEN", 403);
   if (Buffer.byteLength(rendered, "utf8") > MAX_DONATION_BYTES) return fail("donation body exceeds the size cap", "TOO_LARGE", 413);
   const db = getStore();

@@ -176,24 +176,30 @@ describe("memory-extraction: into memory", () => {
     const bot = kept(2, { body: `From: Acme Billing <no-reply@acme.com>\nYour invoice is ready.` });
     const f = fake({ kept: [own, bot, kept(3)] });
     await f.run();
-    const [a, b] = f.extracts[0]!.items;
+    const [a, b] = [f.extracts[0]!.items[0], f.extracts[1]!.items[0]];
     expect(a.context.selfAuthored).toBe(true);
     expect(a.context.senderKind).toBe("human");
     expect(b.context.selfAuthored).toBeUndefined();
     expect(b.context.senderKind).toBe("automated");
-    const c = f.extracts[1]!.items[0];
+    const c = f.extracts[2]!.items[0];
     expect(c.context.selfAuthored).toBeUndefined();
     expect(c.context.senderKind).toBe("human");
     // KeptMail has no to/cc, so no addressing verdict is claimed.
     expect(a.context.addressing).toBeUndefined();
   });
 
-  test(`mail goes in chunks of EXTRACT_SERVABLE_ITEMS (${EXTRACT_SERVABLE_ITEMS})`, async () => {
-    expect(EXTRACT_SERVABLE_ITEMS).toBe(2);
-    const f = fake({ kept: [1, 2, 3, 4, 5].map((n) => kept(n)) });
+  test(`mail goes one item per call (EXTRACT_SERVABLE_ITEMS = ${EXTRACT_SERVABLE_ITEMS}): each item has its own answer`, async () => {
+    expect(EXTRACT_SERVABLE_ITEMS).toBe(1);
+    const f = fake({ kept: [1, 2, 3].map((n) => kept(n)) });
     await f.run();
-    expect(f.extracts.map((e) => e.items.map((i) => i.id))).toEqual([["t-1", "t-2"], ["t-3", "t-4"], ["t-5"]]);
-    expect(f.handed.flat()).toEqual(["m-1", "m-2", "m-3", "m-4", "m-5"]);
+    expect(f.extracts.map((e) => e.items.map((i) => i.id))).toEqual([["t-1"], ["t-2"], ["t-3"]]);
+    expect(f.handed.flat()).toEqual(["m-1", "m-2", "m-3"]);
+  });
+
+  test("one item failing never re-extracts a sibling that was written", async () => {
+    const f = fake({ kept: [kept(1), kept(2)], extract: (items) => ({ ok: true, data: { failedItems: items[0].id === "t-1" ? 1 : 0, deferredItems: 0 } }) });
+    await expect(f.run()).rejects.toThrow(/1 of 2 mails could not be read into memory/);
+    expect(f.handed.flat()).toEqual(["m-2"]);
   });
 
   test("extract failure on one chunk: later chunks still run, run reports the failure", async () => {
@@ -201,10 +207,10 @@ describe("memory-extraction: into memory", () => {
       kept: [1, 2, 3, 4].map((n) => kept(n)),
       extract: (_items, n) => (n === 0 ? { ok: false, reason: "timeout" } : { ok: true, data: { failedItems: 0, deferredItems: 0 } }),
     });
-    await expect(f.run()).rejects.toThrow(/2 of 4 mails could not be read into memory/);
-    expect(f.extracts).toHaveLength(2);
-    // Only the chunk that went in is handed over; the failed one is offered again next run.
-    expect(f.handed.flat()).toEqual(["m-3", "m-4"]);
+    await expect(f.run()).rejects.toThrow(/1 of 4 mails could not be read into memory/);
+    expect(f.extracts).toHaveLength(4);
+    // Only the items that went in are handed over; the failed one is offered again next run.
+    expect(f.handed.flat()).toEqual(["m-2", "m-3", "m-4"]);
   });
 
   test("a chunk Flock answered with a failed item is not handed over; a deferred one is left for later without a failure", async () => {
@@ -234,7 +240,7 @@ describe("memory-extraction: into memory", () => {
       ],
     });
     await f.run();
-    const [first, second] = f.extracts[0]!.items;
+    const [first, second] = [f.extracts[0]!.items[0], f.extracts[1]!.items[0]];
     expect(first.context.openTasks).toEqual([
       { ref: "T1", id: "task-8", title: "Book the room", anchor: null, createdAt: 1 },
       { ref: "T2", id: "task-9", title: "Send Asha the deck", why: "Can you send the deck?", anchor: 0, createdAt: 2 },
@@ -262,6 +268,7 @@ describe("memory-extraction: the wake", () => {
     expect(f.wakes).toHaveLength(1);
     const { message, data } = f.wakes[0]!;
     expect(message).toBe("2 new mails may want a reply.");
+    expect(wakeLine(1)).toBe("1 new mail may want a reply.");
     expect(message).toBe(wakeLine(2));
     expect(message).not.toContain("Lunch");
     expect(message).not.toContain("Asha");
@@ -276,13 +283,23 @@ describe("memory-extraction: the wake", () => {
     });
   });
 
-  test("a thread with an open draft is not offered again; one whose draft was sent is", async () => {
-    db.run("INSERT INTO draft_records (account_id, thread_id, draft_id, body_written, updated_at) VALUES (?,?,?,?,?)", [ACCOUNT, "t-1", "d1", "x", 1]);
+  test("a thread with an open draft written after its mail is not offered again; one whose draft was sent is", async () => {
+    const after = Date.UTC(2026, 10, 24);
+    db.run("INSERT INTO draft_records (account_id, thread_id, draft_id, body_written, updated_at) VALUES (?,?,?,?,?)", [ACCOUNT, "t-1", "d1", "x", after]);
     db.run("INSERT INTO draft_records (account_id, thread_id, draft_id, body_written, updated_at, sent_at) VALUES (?,?,?,?,?,?)", [ACCOUNT, "t-2", "d2", "x", 1, 2]);
     const f = fake({ kept: [kept(1, { draftEligible: true }), kept(2, { draftEligible: true })] });
     await f.run();
-    expect(f.wakes[0]!.message).toBe("1 new mails may want a reply.");
+    expect(f.wakes[0]!.message).toBe("1 new mail may want a reply.");
     expect(f.wakes[0]!.data.mails.map((m: any) => m.threadId)).toEqual(["t-2"]);
+  });
+
+  test("an open draft older than the thread's newest mail never mutes it: the mail is offered (to update that draft)", async () => {
+    // A draft sent or deleted in Gmail itself, or an expired card, can leave a row: new mail on its thread still wakes.
+    db.run("INSERT INTO draft_records (account_id, thread_id, draft_id, body_written, updated_at) VALUES (?,?,?,?,?)", [ACCOUNT, "t-1", "d1", "x", 1]);
+    const f = fake({ kept: [kept(1, { draftEligible: true })] });
+    await f.run();
+    expect(f.wakes).toHaveLength(1);
+    expect(f.wakes[0]!.data.mails.map((m: any) => m.threadId)).toEqual(["t-1"]);
   });
 
   test("only mail that went into memory is offered to draft", async () => {
@@ -291,30 +308,30 @@ describe("memory-extraction: the wake", () => {
       extract: (_items, n) => (n === 0 ? { ok: false, reason: "timeout" } : { ok: true, data: {} }),
     });
     await expect(f.run()).rejects.toThrow();
-    expect(f.wakes[0]!.data.mails.map((m: any) => m.threadId)).toEqual(["t-3"]);
+    expect(f.wakes[0]!.data.mails.map((m: any) => m.threadId)).toEqual(["t-2", "t-3"]);
   });
 
   test("wake is addressed to the paired agent whatever it is", async () => {
     const f = fake({ kept: [kept(1, { draftEligible: true })], agentId: "inbox-assistant-7", pairedAgent: null });
     await f.run();
     expect(f.wakes).toHaveLength(1);
-    expect(f.wakes[0]!.message).toBe("1 new mails may want a reply.");
+    expect(f.wakes[0]!.message).toBe("1 new mail may want a reply.");
     expect(f.handed.flat()).toEqual(["m-1"]);
   });
 
   test("a failed wake: the mail is handed over all the same, and the next run offers it again with no second extract", async () => {
     const f = fake({ kept: [kept(1, { draftEligible: true }), kept(2)], wakeFails: true });
     await expect(f.run()).rejects.toThrow(/could not wake the agent/);
-    // Into memory once: handed over, never extracted again.
+    // Into memory once (one call per mail): handed over, never extracted again.
     expect(f.handed.flat()).toEqual(["m-1", "m-2"]);
-    expect(f.extracts).toHaveLength(1);
+    expect(f.extracts).toHaveLength(2);
 
     // Next run: no new mail, the agent can be woken. The pending offer goes; nothing is extracted.
     f.next = { kept: [], wakeFails: false };
     await f.run();
-    expect(f.extracts).toHaveLength(1);
+    expect(f.extracts).toHaveLength(2);
     expect(f.wakes).toHaveLength(2);
-    expect(f.wakes[1]!.message).toBe("1 new mails may want a reply.");
+    expect(f.wakes[1]!.message).toBe("1 new mail may want a reply.");
     expect(f.wakes[1]!.data.mails.map((m: any) => m.threadId)).toEqual(["t-1"]);
 
     // Woken once: the offer is cleared.
@@ -325,7 +342,7 @@ describe("memory-extraction: the wake", () => {
   test("a pending offer whose thread got a draft meanwhile is dropped, not woken", async () => {
     const f = fake({ kept: [kept(1, { draftEligible: true })], wakeFails: true });
     await expect(f.run()).rejects.toThrow();
-    db.run("INSERT INTO draft_records (account_id, thread_id, draft_id, body_written, updated_at) VALUES (?,?,?,?,?)", [ACCOUNT, "t-1", "d1", "x", 1]);
+    db.run("INSERT INTO draft_records (account_id, thread_id, draft_id, body_written, updated_at) VALUES (?,?,?,?,?)", [ACCOUNT, "t-1", "d1", "x", Date.UTC(2026, 10, 24)]);
     f.next = { kept: [], wakeFails: false };
     await f.run();
     expect(f.wakes).toHaveLength(1);
@@ -365,11 +382,11 @@ describe("memory-extraction: the family calendar", () => {
     const f = fake({
       kept: mails,
       family: {},
-      // Both chunks hand back the same mail's family items (a mail met twice in one run).
+      // Every call hands back the same mail's family items (a mail met more than once in one run).
       extract: () => ({ ok: true, data: { family: { blocks: [annual("t-1")] } } }),
     });
     await f.run();
-    expect(f.extracts).toHaveLength(2);
+    expect(f.extracts).toHaveLength(3);
     expect(f.imports).toHaveLength(1);
     expect(f.imports[0]!.items).toHaveLength(1);
     expect(f.imports[0]!.items[0]).toMatchObject({ ref: `gmail-thread:t-1#${EVENT_DAY}`, title: "Annual Day", who: "Agastya", start_time: "10:00",

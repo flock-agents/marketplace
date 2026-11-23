@@ -126,6 +126,33 @@ describe("create_draft", () => {
     expect(f.calls.filter((c) => c.functionName === "createReplyDraft")).toHaveLength(1);
   });
 
+  test("an open draft gone from Gmail (sent or deleted there) does not block a new one: its row is cleared", async () => {
+    const first = await create({ threadId: THREAD, body: "Hi Asha, Tuesday works." });
+    f.gmail.delete("gm-1");
+    const again = await create({ threadId: THREAD, body: "Hi Asha, see you then." });
+    expect(again.id).toBeTruthy();
+    expect(again.id).not.toBe(first.id);
+    expect(row(first.id)).toBeNull();
+    expect(f.withdrawn).toEqual([`draft:${first.id}`]);
+    expect(f.calls.filter((c) => c.functionName === "createReplyDraft")).toHaveLength(2);
+  });
+
+  test("Gmail answering DRAFT_NOT_FOUND for the open draft also clears it", async () => {
+    const first = await create({ threadId: THREAD, body: "Hi Asha, Tuesday works." });
+    f.failNext.getDraft = { reason: "Draft not found", code: "DRAFT_NOT_FOUND" };
+    const again = await create({ threadId: THREAD, body: "Hi Asha, see you then." });
+    expect(again.id).toBeTruthy();
+    expect(row(first.id)).toBeNull();
+  });
+
+  test("Gmail could not be asked about the open draft: DRAFT_EXISTS, nothing cleared", async () => {
+    const first = await create({ threadId: THREAD, body: "Hi Asha, Tuesday works." });
+    f.failNext.getDraft = { reason: "browser busy" };
+    const again = await create({ threadId: THREAD, body: "Hi Asha, see you then." });
+    expect(again.code).toBe("DRAFT_EXISTS");
+    expect(row(first.id)).not.toBeNull();
+  });
+
   test("two drafts for one thread at once: one is written, the other names it", async () => {
     const [a, b] = await Promise.all([
       create({ threadId: THREAD, body: "Hi Asha, Tuesday works." }),
@@ -275,6 +302,15 @@ describe("update_draft", () => {
   test("a draft deleted in Gmail is gone: NOT_FOUND, row dropped, card withdrawn", async () => {
     const { id } = await create({ threadId: THREAD, body: "Hi Asha, Tuesday works." });
     f.gmail.delete("gm-1");
+    const out = await update({ id, body: "Hi Asha, Wednesday instead." });
+    expect(out.code).toBe("NOT_FOUND");
+    expect(row(id)).toBeNull();
+    expect(f.withdrawn).toEqual([`draft:${id}`]);
+  });
+
+  test("Gmail answering DRAFT_NOT_FOUND to the agent's update is the draft gone too", async () => {
+    const { id } = await create({ threadId: THREAD, body: "Hi Asha, Tuesday works." });
+    f.failNext.getDraft = { reason: "Draft not found", code: "DRAFT_NOT_FOUND" };
     const out = await update({ id, body: "Hi Asha, Wednesday instead." });
     expect(out.code).toBe("NOT_FOUND");
     expect(row(id)).toBeNull();

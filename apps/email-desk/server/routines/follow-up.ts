@@ -39,8 +39,10 @@ import { getFollowUp, listFollowUps, listFollowUpsOfferedSince, lastFollowUpRunA
 
 /** The read turn's consumer name: Flock's lease and its logs say who holds the mailbox. */
 export const FOLLOW_UP_CONSUMER = "email-desk:follow-up";
-/** One pass's worst case: a paced list and up to MAX_READS_PER_PASS thread reads. */
-export const FOLLOW_UP_TURN_TTL_MS = 20 * 60_000;
+/** One pass's worst case: the sent list (up to 2 min), then up to MAX_READS_PER_PASS paced thread reads of up to 90 s each
+ *  (about 25 min in all), with room to spare. A turn that still ends mid-pass answers `turn_mismatch`, which stops the
+ *  pass with the day left due (gather.ts stopReason). */
+export const FOLLOW_UP_TURN_TTL_MS = 40 * 60_000;
 const GMAIL = "gmail";
 const LIST_TIMEOUT_MS = 2 * 60_000;
 const THREAD_TIMEOUT_MS = 90_000;
@@ -86,7 +88,8 @@ const realDeps = (): FollowUpDeps => ({
 export interface FollowUpTally {
   /** True when the day's work is done and the caller should stamp it: the sent list was worked through or the daily limit was
    *  reached. False (the day stays due; the next tick continues) when there is no mailbox address, the mailbox was held, the
-   *  sent list failed, the account guard stopped the pass, the read cap stopped it with rows left, or a TODO did not publish. */
+   *  sent list failed, the account guard stopped the pass, the read cap stopped it with rows left, or a TODO did not publish
+   *  (the first such pass of the day; the second closes the day, ruling M12). */
   completed: boolean;
   listed: number; read: number; offered: number; settled: number;
 }
@@ -114,12 +117,14 @@ function fallbackName(to: string[]): string {
 }
 
 /** What this local day has already done per account, in memory (a restart only costs re-reads): threads read today that need
- *  no second read today, so the next tick of a heavy day continues past them. */
-const passMemory = new Map<string, { day: string; read: Set<string> }>();
-function dayMemory(accountId: string, day: string): { day: string; read: Set<string> } {
+ *  no second read today, so the next tick of a heavy day continues past them; and passes whose TODOs failed to publish
+ *  (the source's ruling M12: a second such pass in one local day closes the day instead of re-reading every tick). */
+interface DayMemory { day: string; read: Set<string>; publishFailures: number }
+const passMemory = new Map<string, DayMemory>();
+function dayMemory(accountId: string, day: string): DayMemory {
   const m = passMemory.get(accountId);
   if (m && m.day === day) return m;
-  const fresh = { day, read: new Set<string>() };
+  const fresh = { day, read: new Set<string>(), publishFailures: 0 };
   passMemory.set(accountId, fresh);
   return fresh;
 }
@@ -284,7 +289,16 @@ export async function runFollowUpForAccount(
   }
   if (tally.offered > 0) deps.log(`[email-desk] follow-up ${accountId}: raised ${tally.offered} follow-up TODO(s)`);
 
-  if (stopped || publishFailed) return tally;
+  if (stopped) return tally;
+  if (publishFailed) {
+    // Ruling M12 (source): a second pass today whose TODOs would not publish closes the day; the first leaves it due.
+    mem.publishFailures++;
+    if (mem.publishFailures >= 2) {
+      deps.log(`[email-desk] follow-up ${accountId}: TODOs failed to publish twice today; day closed`);
+      tally.completed = true;
+    }
+    return tally;
+  }
   // Stamp the day only when the list was worked through or the daily limit reached.
   if (cappedWithRowsLeft && !limitReached) {
     deps.log(`[email-desk] follow-up ${accountId}: read cap of ${cfg.maxReads} reached with rows left; day left due, the next tick continues`);

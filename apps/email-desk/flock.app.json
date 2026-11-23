@@ -10,6 +10,7 @@
   "deletable": true,
   "model": true,
   "apiPrefix": "/api",
+  "minFlockVersion": "0.24.0-beta.2",
   "_comment": "Runs OUT OF PROCESS on @flock/app-sdk, one copy per person. Owns that person's raw mail store (account_id kept). The agent drafts through the four declared ops; the send and the platform read ops are served but never declared, so only Flock reaches them.",
   "processConfig": {
     "command": "bun run server/index.ts",

@@ -16,17 +16,18 @@
 // last text written (the agent's latest update, which the card shows). Gmail's draft is made to hold that text before the
 // send, whatever Gmail holds (the source's approved-draft rule); short of that, nothing sends.
 //
-// The ledger is claimed (in_flight) only just before Gmail's sendDraft runs: anything that fails before it (the edit, the
-// text sync) writes no ledger row, so a ledger row that is not `sent` always means sendDraft was asked and may have
-// reached Gmail: in_flight left by a crash, or failed by sendDraft's own answer. The source's rule for such a row: check
-// Gmail, then the next press sends again. Gmail's draft still there: it did not go out, so the press sends it. Gmail shows
-// no draft: that is never read as sent (getDraft also reads nothing when the compose did not open in time), and never
-// sent again either: the answer is SEND_FAILED telling the person to look in Gmail's Sent (Review Focus 1).
+// The ledger is claimed (in_flight) just before Gmail's sendDraft runs, with nothing awaited in between: anything that
+// fails before it (the edit, the text sync) writes no ledger row, so a ledger row that is not `sent` always means sendDraft
+// was asked and may have reached Gmail (ruling R30, as Flock's own send):
+//   - `in_flight`: the outcome is unknown (no answer in time, the platform unreachable, or the app died mid-send). A later
+//     press answers from the ledger and NEVER sends, whatever Gmail shows: UNCONFIRMED, telling the person to check Sent.
+//   - `failed`: sendDraft answered with a definite error. The next press reads Gmail first: the draft still there did not go
+//     out, so the press sends it; Gmail showing no draft is never read as sent, and never sent again either (Review Focus 1).
 import type { CardClosedEvent, PlatformContext } from "@flock/app-sdk";
 import { getStore } from "../store";
-import { changeDraft, gmail, removeDraft, withThreadTurn, type OpCtx } from "../ops";
-import { getDraft, type DraftRecord } from "./records";
-import { DRAFT_SOURCE_PREFIX } from "./card";
+import { changeDraft, gmail, withThreadTurn, type OpCtx } from "../ops";
+import { deleteDraft, getDraft, type DraftRecord } from "./records";
+import { DRAFT_SOURCE_PREFIX, withdrawDraftCard } from "./card";
 
 export type SendRefusal =
   | { error: string; code: "NO_APPROVAL"; status: number }
@@ -41,6 +42,8 @@ const noApproval = (): SendRefusal => ({ error: "Only your press of Send can sen
 const notFound = (): SendRefusal => ({ error: "There is no draft with that id any more.", code: "NOT_FOUND", status: 404 });
 /** Gmail (or the press's approval) failed: 502, the card stays open with the reason. */
 const sendFailed = (reason: string, status = 502): SendRefusal => ({ error: `Could not send: ${reason}`, code: "SEND_FAILED", status });
+/** A send whose outcome is unknown (an in_flight ledger row): Flock's own wording (ruling R30). */
+const unconfirmed = (): SendRefusal => ({ error: "Couldn't confirm the send. Check Sent before sending again.", code: "SEND_FAILED", status: 502 });
 
 interface LedgerRow { state: "in_flight" | "sent" | "failed"; result: string | null; updated_at: number }
 
@@ -80,7 +83,9 @@ async function sendInTurn(id: string, editedBody: string | undefined, ctx: OpCtx
   if (!draft) return notFound();
   if (draft.sentAt !== null) return { ok: true, sentAt: new Date(draft.sentAt).toISOString() };
 
-  // sendDraft was asked before (a crash's in_flight, or its own failure): send again only while Gmail still holds the draft.
+  // sendDraft was asked before. Its outcome unknown (in_flight): never again (R30). Its own definite failure: send again
+  // only while Gmail still holds the draft.
+  if (before?.state === "in_flight") return unconfirmed();
   if (before) {
     const held = await readGmailDraft(ctx.platform, draft);
     if (!held.ok) return sendFailed(`could not check the draft in Gmail (${held.reason})`);
@@ -107,7 +112,8 @@ async function sendInTurn(id: string, editedBody: string | undefined, ctx: OpCtx
   const synced = await syncDraftText(ctx.platform, draft);
   if (synced !== "ok") return sendFailed(synced.reason);
 
-  // Claim the send (in_flight) just before Gmail is asked to send; a failed row is taken back here.
+  // Claim the send (in_flight) just before Gmail is asked to send; a failed row is taken back here. Nothing is awaited
+  // between this write and sendDraft.
   const now = Date.now();
   db.run(
     `INSERT INTO send_ledger (idempotency_key, account_id, thread_id, draft_id, state, result, created_at, updated_at)
@@ -117,6 +123,8 @@ async function sendInTurn(id: string, editedBody: string | undefined, ctx: OpCtx
     [key, draft.accountId, draft.threadId, draft.draftId, now, now],
   );
   const sent = await gmail(ctx.platform, "sendDraft", { draftId: draft.draftId }, draft.accountId, { pressToken });
+  // No answer in time, or the call never came back: it may have gone out. The row stays in_flight (R30).
+  if (!sent.ok && sent.unknown) return unconfirmed();
   if (!sent.ok) return fail(key, sent.reason || "Gmail did not send it");
   return recordSent(draft, key);
 }
@@ -202,14 +210,73 @@ async function syncDraftText(platform: PlatformContext, draft: DraftRecord): Pro
 // ---- The card closed (card-closed.ts; the Twitter desk's handleCardClosed) ------------------------------------------
 
 /**
- * What became of a draft card. `declined` (the person's ✕, Not important, Not now): the draft is discarded as the person,
- * so their own edit does not stop it (it is their no): Gmail's draft discarded, the row deleted. A Gmail failure other than
- * "already gone" throws and keeps the row, so Flock asks again later (the source's rule). `done` is the Send, which
- * send_draft already recorded; `expired` changes nothing (the source's rule: the draft stays in Gmail and on the thread).
+ * What became of a draft card. No outcome leaves an open row without a card: such a row would mute its thread (the wake
+ * and create_draft read an open row as "a draft exists").
+ *   - `declined` (the person's ✕, Not important, Not now): the draft is discarded as the person, so their own edit does not
+ *     stop it (it is their no). The row is deleted and the card withdrawn on the FIRST attempt. Gmail's discard is tried
+ *     then; a failure other than "already gone" is kept as a pending discard (app_meta `gmail-discard:<id>`) and thrown, so
+ *     Flock asks again later and only Gmail's discard is retried. It never discards a newer draft on the same thread.
+ *   - `expired`: as the source did, the draft stays in Gmail, but the row goes (the card is gone).
+ *   - `done` is the Send, which send_draft already recorded.
  */
 export async function handleCardClosed(event: CardClosedEvent, ctx: { platform: PlatformContext }): Promise<void> {
-  if (event.outcome !== "declined" || !event.sourceRef.startsWith(DRAFT_SOURCE_PREFIX)) return;
+  if (!event.sourceRef.startsWith(DRAFT_SOURCE_PREFIX)) return;
   const id = event.sourceRef.slice(DRAFT_SOURCE_PREFIX.length);
   if (!id) return;
-  await removeDraft(ctx.platform, id, { byPerson: true, onGmailFailure: "throw" });
+  if (event.outcome === "expired") return closeExpired(id);
+  if (event.outcome !== "declined") return;
+  const found = getDraft(getStore(), id);
+  if (found && found.sentAt === null) {
+    await withThreadTurn(found.accountId, found.threadId, async () => {
+      const db = getStore();
+      const draft = getDraft(db, id);
+      if (!draft || draft.sentAt !== null) return;
+      db.transaction(() => {
+        putPendingDiscard(id, { accountId: draft.accountId, threadId: draft.threadId, draftId: draft.draftId });
+        deleteDraft(db, id);
+      })();
+    });
+    await withdrawDraftCard(ctx.platform, id);
+  }
+  await retryPendingDiscard(ctx.platform, id);
+}
+
+/** An expired card's draft: left in Gmail (the source's rule), its row deleted so the thread is not muted. */
+async function closeExpired(id: string): Promise<void> {
+  const found = getDraft(getStore(), id);
+  if (!found || found.sentAt !== null) return;
+  await withThreadTurn(found.accountId, found.threadId, async () => {
+    const draft = getDraft(getStore(), id);
+    if (draft && draft.sentAt === null) deleteDraft(getStore(), id);
+  });
+}
+
+interface PendingDiscard { accountId: string; threadId: string; draftId: string }
+const pendingKey = (id: string): string => `gmail-discard:${id}`;
+
+function putPendingDiscard(id: string, p: PendingDiscard): void {
+  getStore().run(
+    "INSERT INTO app_meta (key, value, updated_at) VALUES (?,?,?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at",
+    [pendingKey(id), JSON.stringify(p), Date.now()],
+  );
+}
+
+/** Gmail's discard of a declined draft whose row is already gone. Done, already gone, or replaced by a newer draft of ours
+ *  on the thread (Gmail's reply draft id is reused): the pending discard is dropped. Any other failure throws. */
+async function retryPendingDiscard(platform: PlatformContext, id: string): Promise<void> {
+  const db = getStore();
+  const row = db.query("SELECT value FROM app_meta WHERE key = ?").get(pendingKey(id)) as { value: string } | null;
+  if (!row) return;
+  let p: PendingDiscard | null = null;
+  try { p = JSON.parse(row.value) as PendingDiscard; } catch { p = null; }
+  const drop = () => db.run("DELETE FROM app_meta WHERE key = ?", [pendingKey(id)]);
+  if (!p?.draftId || !p.accountId) { drop(); return; }
+  await withThreadTurn(p.accountId, p.threadId, async () => {
+    const newer = db.query("SELECT 1 FROM draft_records WHERE account_id = ? AND thread_id = ? AND draft_id = ? AND sent_at IS NULL")
+      .get(p!.accountId, p!.threadId, p!.draftId);
+    if (newer) { drop(); return; }
+    const gone = await gmail(platform, "discardDraft", { draftId: p!.draftId }, p!.accountId);
+    if (!gone.ok && gone.code !== "DRAFT_NOT_FOUND") throw new Error(`Gmail could not discard draft ${id}: ${gone.reason}`);
+    drop();
+  });
 }

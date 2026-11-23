@@ -176,8 +176,9 @@ export function createEmailDeskHooks(deps: LifecycleDeps = {}): AppLifecycleHook
 
       await report(platform, accountId, { status: "in_progress", phase: "voice", activeLabel: VOICE_LABEL });
       writeStage(db, accountId, "voice", { started_at: now(), last_progress_at: now() }, now());
+      // The crawl records its own end on the voice row (voice/crawl.ts recordFinish: done, empty, capped, failed). Nothing is
+      // stamped here: a crawl that did not start leaves the row unfinished, so the routine's catch-up tries it again soon.
       await voiceStage(platform, accountId);
-      writeStage(db, accountId, "voice", { finished_at: now(), outcome: "done", last_progress_at: now() }, now());
 
       // Persist before reporting: the gate asks `status`, which answers from these rows.
       writeStage(db, accountId, "sequence", { finished_at: now(), outcome: read === "read" ? "done" : "failed", last_progress_at: now() }, now());
@@ -230,12 +231,16 @@ export function createEmailDeskHooks(deps: LifecycleDeps = {}): AppLifecycleHook
       await Promise.all(owed.map((m) => enqueue(ctx.platform, m)));
     },
 
-    // Initialized when its sequence ended, or when nothing is working it. FAILS OPEN: a mailbox the app has no row for, or
-    // whose sequence has shown no sign of life for STALL_MS (its process died), is released.
+    // Initialized when its sequence ended, or when nothing is working it. A mailbox with NO row is initialized only when the
+    // db holds its history (historyOf): otherwise a routine let through before initialize claims it would stamp last_harvest
+    // and the first read would be skipped (the tick enqueues such a mailbox). FAILS OPEN for a sequence that has shown no
+    // sign of life for STALL_MS (its process died), and on an error.
     status(accountId: string) {
       try {
-        const seq = row(getStore(), accountId, "sequence");
-        if (!seq || seq.finished_at !== null) return true;
+        const db = getStore();
+        const seq = row(db, accountId, "sequence");
+        if (!seq) return historyOf(db, accountId) !== null;
+        if (seq.finished_at !== null) return true;
         if (busy(accountId)) return false; // waiting its turn or working: alive, however long the mailbox ahead takes
         const last = seq.last_progress_at ?? seq.started_at;
         if (last === null) return true;

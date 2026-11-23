@@ -246,6 +246,12 @@ describe("platform ops", () => {
     const big = await call("store_thread_body", { accountId: A1, sourceId: "gmail", threadId: T1, rendered: "x".repeat(500 * 1024 + 1) });
     expect(big.status).toBe(413);
     expect((await call("store_thread_body", { accountId: A1, sourceId: "gmail", threadId: T1 })).status).toBe(400);
+    // An empty or blank body would wipe the parked thread: refused INVALID, nothing written.
+    for (const rendered of ["", "  \n\t "]) {
+      const blank = await call("store_thread_body", { accountId: A1, sourceId: "gmail", threadId: T1, rendered });
+      expect(blank.status).toBe(400);
+      expect(blank.json.code).toBe("INVALID");
+    }
     expect((await call("thread_body", { accountId: A1, threadId: T1 })).json.body).toContain("Are you free");
   });
 
