@@ -5,6 +5,7 @@ import { tmpdir } from "os";
 import { join } from "path";
 import { openStore, _setStoreForTesting } from "../store";
 import { gatherNewMail, HARVEST_CONSUMER, EARLIER_MESSAGE_MARK } from "../routines/gather";
+import { runMemoryExtraction } from "../routines/memory-extraction";
 import { THREAD_BODY_SEPARATOR } from "../lib/thread-format";
 import { markHandedOver, wasHandedOver } from "../routines/seen";
 import { getCursor, setCursor, GMAIL_SOURCE } from "../journal";
@@ -45,6 +46,8 @@ function fake(opts: {
   sent?: Mail[];
   label?: string | null;
   platformExtra?: Record<string, unknown>;
+  /** What the in:sent lookup (checkEngagedDomains) finds engaged; "fails": the lookup could not run. Default: none. */
+  engaged?: string[] | "fails";
 }): Fake {
   const f: Fake = { ctx: null as unknown as RoutineCtx, calls: [], released: 0, turns: [] };
   const rowOf = (m: Mail) => ({
@@ -68,7 +71,11 @@ function fake(opts: {
       const m = all().find((x) => x.threadId === params.threadId);
       return m ? { ok: true as const, data: threadOf(m) } : { ok: false as const, reason: "not found" };
     }
-    if (fn === "checkEngagedDomains") return { ok: true as const, data: [] };
+    if (fn === "checkEngagedDomains") {
+      if (opts.engaged === "fails") return { ok: false as const, reason: "search did not finish" };
+      const asked = (params.domains as string[]) ?? [];
+      return { ok: true as const, data: asked.filter((d) => (opts.engaged ?? []).includes(d)) };
+    }
     if (fn === "searchEmails") return { ok: true as const, data: (opts.sent ?? []).map((m) => ({ ...rowOf(m), from: "me" })) };
     return { ok: false as const, reason: `unexpected ${fn}` };
   };
@@ -339,5 +346,37 @@ describe("gatherNewMail", () => {
     markHandedOver(r.kept.map((k) => k.messageId));
     const again = await gatherNewMail(fake({ mailbox: "me@acme.com", inbox: [ASHA], sent: [proposal] }).ctx, ACCOUNT);
     expect(again.kept).toEqual([]);
+  });
+});
+
+// The drafting wake, end to end (live 2026-11-23: every Build memory run logged woke=0). The kept mail there was all
+// automated senders, which draw no draft; this pins that a plainly reply-worthy mail from a sender the person writes to
+// does wake the routine's agent.
+describe("the drafting wake", () => {
+  const RAVI: Mail = { threadId: "t-ravi", from: "Ravi K <ravi@partner.io>", subject: "Signed contract", body: "Can you send the signed contract by Friday?", minutesAgo: 30 };
+
+  test("a plainly reply-worthy mail from an engaged sender is draft-eligible, and the routine wakes for it", async () => {
+    const woken: any[] = [];
+    const f = fake({
+      mailbox: "me@acme.com", inbox: [RAVI], engaged: ["partner.io"],
+      platformExtra: { memory: { extract: async () => ({ ok: true, data: { failedItems: 0, deferredItems: 0 } }) } },
+    });
+    (f.ctx as any).trigger = "manual";
+    (f.ctx as any).wakeAgent = async (message: string, data: any) => { woken.push({ message, data }); return { ok: true, data: {} }; };
+    await runMemoryExtraction(f.ctx, { ensureVoice: async () => undefined, voiceFor: () => ({ voice: "VOICE", voiceState: "ready" }) });
+    expect(woken).toHaveLength(1);
+    expect(woken[0].data.mails).toEqual([expect.objectContaining({ threadId: "t-ravi", accountId: ACCOUNT, subject: "Signed contract" })]);
+  });
+
+  test("the live run's senders (no-reply, notification, role and support addresses) draw no draft", async () => {
+    const senders = [
+      "Meta <noreply@email.meta.com>", "Facebook <notification@facebookmail.com>", "Fathom <no-reply@fathom.video>",
+      "WorldClaw <hello@worldclaw.ai>", "OpenRouter <support@openrouter.ai>", "OpenRouter <notifications@openrouter.ai>",
+      "Meta for Business <advertise-noreply@global.metamail.com>", "Google <no-reply@accounts.google.com>",
+    ];
+    const inbox: Mail[] = senders.map((from, i) => ({ threadId: `t-${i}`, from, subject: `Notice ${i}`, body: "Your account was updated.", minutesAgo: 30 + i }));
+    const r = await gatherNewMail(fake({ mailbox: "me@acme.com", inbox }).ctx, ACCOUNT);
+    expect(r.kept).toHaveLength(senders.length);
+    expect(r.kept.filter((k) => k.draftEligible)).toEqual([]);
   });
 });
