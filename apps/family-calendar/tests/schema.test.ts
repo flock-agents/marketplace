@@ -46,6 +46,7 @@ describe("family-calendar schema", () => {
     expect(catalog.tables.events.columns.start_time).toMatchObject({ type: "string", required: false, nullable: true });
     expect(catalog.tables.events.columns.reminder_minutes).toMatchObject({ type: "integer", required: false, nullable: true });
     expect(catalog.tables.reminders.columns.repeat).toMatchObject({ type: "string", required: false, default: REPEATS[0] });
+    expect(catalog.tables.events.columns.repeat).toMatchObject({ type: "string", required: false, default: REPEATS[0] });   // an event repeats as a reminder does
     expect(catalog.settings).toEqual([]);
     expect(json("settings.json")).toEqual({});
   });

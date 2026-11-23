@@ -113,7 +113,7 @@ export function intentMessage(payload: unknown): string {
   ].join("\n");
 }
 
-/** What `flock-api GET /api/internal/todos` answers for the case. */
+/** What `GET /api/internal/todos` answers for the case. */
 export function todosReply(c: PlanCase, pl: Planned): string {
   const ptr = (ref: string) => pl.pointerOf[ref];
   const todos = (c.todos ?? []).map((t) => ({
@@ -124,9 +124,9 @@ export function todosReply(c: PlanCase, pl: Planned): string {
 }
 
 /** Appended to the system prompt: the model has no tools in an eval, so it writes the calls it would make. */
-export const HARNESS = `\n\n## Evaluation harness\nYou have no tools in this evaluation. Where your instructions tell you to run \`flock-api\`, do not run anything: the reply to the GET is given to you below the data block, and every other call you would make (each PATCH tie, and the plan_events_done report) you write instead as an entry of ONE JSON array inside one fenced block opened with \`\`\`calls, each entry {"method":"PATCH"|"POST","path":"/api/...","body":{...}} with the body as the object you would send. Write the report once, then stop.`;
+export const HARNESS = `\n\n## Evaluation harness\nYou have no tools in this evaluation. Where your instructions tell you to call the api tool, do not call anything: the reply to the GET is given to you below the data block, and every other call you would make (each PATCH tie, and the plan_events_done report) you write instead as an entry of ONE JSON array inside one fenced block opened with \`\`\`calls, each entry {"method":"PATCH"|"POST","path":"/api/...","body":{...}} with the body as the object you would send. Write the report once, then stop.`;
 
-export const userMessage = (c: PlanCase, pl: Planned) => `${intentMessage(pl.payload)}\n\nReply to \`flock-api GET /api/internal/todos\`:\n\`\`\`json\n${todosReply(c, pl)}\n\`\`\``;
+export const userMessage = (c: PlanCase, pl: Planned) => `${intentMessage(pl.payload)}\n\nReply to \`GET /api/internal/todos\`:\n\`\`\`json\n${todosReply(c, pl)}\n\`\`\``;
 
 /** The calls in the model's reply: every ```calls block, parsed and joined in order (a live agent makes its calls one after
  *  another, so a tie written in its own block before the report is still made); null when there is none or one is not a JSON array. */

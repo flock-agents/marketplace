@@ -13,11 +13,12 @@ export const members = sqliteTable("members", {
   emoji: text("emoji"),                                       // one emoji shown before the name
 });
 
-/** One row per event. A recurring event (football every Tuesday) is one row per date. */
+/** One row per event. One that happens every week (football every Tuesday) is one row with repeat weekly. */
 export const events = sqliteTable("events", {
   ...kitColumns(),
   title: text("title").notNull(),
-  date: text("date").notNull(),                               // ISO date
+  date: text("date").notNull(),                               // ISO date; for a repeating event, the first day it happens
+  repeat: text("repeat").notNull().default("none"),           // none | daily | weekly | monthly
   start_time: text("start_time"),                             // "16:30", 24-hour; empty for an all-day event
   end_time: text("end_time"),                                 // "17:30", 24-hour
   who: text("who"),                                           // a member's name, or empty for everyone

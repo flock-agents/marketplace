@@ -2,9 +2,9 @@
   "name": "Meal Planner",
   "usage": "template",
   "icon": "icon.svg",
-  "description": "The family's meals for the week, day by day (Breakfast, Lunch and Dinner), with a shared grocery list and the family's recipe book; not for school runs, chores or appointments.",
-  "version": "2.0.3",
-  "minFlockVersion": "0.22.0",
+  "description": "The family's meals for every day of the week, a running-out guess for the things they buy from their order history, and a reminder each afternoon and evening with one cart per shopping app that is ordered only when they say yes; not for school runs, chores or appointments.",
+  "version": "4.0.0",
+  "minFlockVersion": "0.24.0-beta.1",
   "type": "fullstack",
   "access": "private",
   "spa": true,
@@ -27,23 +27,30 @@
     }
   },
   "assemble": true,
+  "model": true,
   "pages": [
     "week",
-    "groceries",
+    "shopping",
     "pantry",
     "recipes",
-    "ingredients"
+    "family"
   ],
   "tables": [
-    "meals",
-    "recipes",
-    "groceries",
-    "ingredients",
-    "recipe_ingredients",
-    "diners",
-    "diner_portions",
-    "staples",
-    "carts"
+    "people",
+    "house",
+    "slots",
+    "slot_days",
+    "slot_dishes",
+    "dish_ingredients",
+    "library",
+    "rules",
+    "regulars",
+    "items",
+    "item_events",
+    "orders",
+    "order_lines",
+    "products",
+    "saved_recipes"
   ],
   "objects": [
     "grocery-bag"
@@ -52,516 +59,825 @@
   "chat": "side",
   "labels": {
     "nav.week": "Week",
-    "nav.groceries": "Shopping",
+    "nav.shopping": "Shopping",
     "nav.pantry": "Pantry",
     "nav.recipes": "Recipes",
+    "nav.family": "Family",
     "title.week": "This week's meals",
-    "title.groceries": "Shopping",
+    "title.shopping": "Shopping",
     "title.pantry": "Pantry",
     "title.recipes": "Recipes",
-    "nav.ingredients": "Ingredients"
+    "title.family": "Family"
   },
   "useCases": {
     "for": [
-      "The family's meals for the week: Breakfast, Lunch and Dinner, day by day",
-      "A shared grocery list grouped by aisle",
-      "The family's own recipe book, with a recipe's ingredients added to the list",
-      "Planning the week's dishes from the recipe book"
+      "The family's meals for the week, planned every Sunday for every day of the week, each with its dishes",
+      "A guess of what is running out (atta, dal, oil) from the family's own order history on their shopping apps",
+      "A reminder at 3 pm and 7 pm with tonight's or tomorrow's meals, the items that may be running low and one cart per shopping app, ordered only when the family says yes",
+      "The family's saved recipes and each dish's video, planned into the week, and how each dish went last time"
     ],
     "notFor": [
       "School runs, chores or appointments (use checklist or tracker)",
-      "Ordering groceries from a store: a connector does that",
+      "Keeping a list of what is in the kitchen: it only guesses what is running out",
       "A restaurant's menu or a business kitchen"
     ]
   },
   "settings": [
     {
-      "key": "household.profile",
-      "type": "json",
-      "default": null,
-      "scope": "owner",
-      "label": "Your household, in your words (who eats, food habits, meals to plan, where you shop): nothing is planned until it's set"
-    },
-    {
-      "key": "cook.morning",
-      "type": "string",
-      "default": "07:30",
-      "scope": "owner",
-      "label": "When breakfast and lunch are cooked"
-    },
-    {
-      "key": "cook.lunch",
-      "type": "string",
-      "default": "13:00",
-      "scope": "owner",
-      "label": "When lunch is eaten (meal time default)"
-    },
-    {
-      "key": "cook.evening",
-      "type": "string",
-      "default": "19:00",
-      "scope": "owner",
-      "label": "When dinner is cooked"
-    },
-    {
-      "key": "quiet.start",
-      "type": "string",
-      "default": "22:30",
-      "scope": "owner",
-      "label": "Quiet hours start: no reminders after this"
-    },
-    {
-      "key": "quiet.end",
-      "type": "string",
-      "default": "06:30",
-      "scope": "owner",
-      "label": "Quiet hours end"
-    },
-    {
-      "key": "reminder.buffer_min",
-      "type": "integer",
-      "default": 30,
-      "scope": "owner",
-      "label": "Extra minutes before a prep step must start"
-    },
-    {
-      "key": "spend.weekly_limit",
-      "type": "number",
-      "default": 2000,
-      "scope": "owner",
-      "label": "₹ a week (Mon-Sun) a cart is flagged for crossing"
-    },
-    {
-      "key": "price.jump_pct",
-      "type": "number",
-      "default": 20,
-      "scope": "owner",
-      "label": "% above usual price an item is flagged, not added"
-    },
-    {
-      "key": "services",
-      "type": "json",
-      "default": [
+      "key": "grocery_app",
+      "type": "choice",
+      "options": [
         "zepto",
+        "swiggy-instamart",
         "zomato-blinkit",
-        "bigbasket"
+        "bigbasket",
+        "amazon"
       ],
-      "scope": "owner",
-      "label": "Grocery services compared at order time"
-    },
-    {
-      "key": "buy.delivery_lead_min",
-      "type": "integer",
-      "default": 60,
-      "scope": "owner",
-      "label": "Minutes an item must arrive before the cooking slot that uses it"
-    },
-    {
-      "key": "buy.fresh_window_days",
-      "type": "json",
-      "default": {
-        "dairy": 1,
-        "vegetables": 2,
-        "pantry": 7,
-        "spices": 14
+      "optionLabels": {
+        "zepto": "Zepto",
+        "swiggy-instamart": "Swiggy Instamart",
+        "zomato-blinkit": "Blinkit",
+        "bigbasket": "BigBasket",
+        "amazon": "Amazon Fresh"
       },
+      "default": "zepto",
       "scope": "owner",
-      "label": "Days one order may cover, per category"
+      "label": "Your main grocery app",
+      "group": "How we order",
+      "help": "Carts are filled and orders placed here."
     },
     {
-      "key": "buy.earliest_order",
-      "type": "string",
-      "default": "06:30",
+      "key": "fallback_app",
+      "type": "choice",
+      "options": [
+        "none",
+        "zepto",
+        "swiggy-instamart",
+        "zomato-blinkit",
+        "bigbasket",
+        "amazon"
+      ],
+      "optionLabels": {
+        "none": "None",
+        "zepto": "Zepto",
+        "swiggy-instamart": "Swiggy Instamart",
+        "zomato-blinkit": "Blinkit",
+        "bigbasket": "BigBasket",
+        "amazon": "Amazon Fresh"
+      },
+      "default": "none",
       "scope": "owner",
-      "label": "No order is placed earlier than this"
+      "label": "When something isn't on your main app",
+      "group": "How we order",
+      "help": "The app to try for what your main app doesn't have."
     },
     {
-      "key": "buy.preferred_order_time",
-      "type": "string",
-      "default": "18:00",
+      "key": "order_without_asking",
+      "type": "boolean",
+      "default": false,
       "scope": "owner",
-      "label": "The evening before an item is needed, order it at this time instead of waiting for the morning (Zepto's evening deals, and the family's own habit) — falls back to the morning cutoff once this slot has already passed"
+      "label": "Order without asking",
+      "group": "How we order",
+      "help": "Off: nothing is ordered until you reply or tap Order. On: the agent orders the items it is sure about by itself."
     },
     {
-      "key": "meal.latest.breakfast",
-      "type": "string",
-      "scope": "owner",
-      "label": "Breakfast can be cooked as late as",
-      "default": "11:00"
-    },
-    {
-      "key": "meal.latest.lunch",
-      "type": "string",
-      "scope": "owner",
-      "label": "Lunch can be cooked as late as",
-      "default": "15:00"
-    },
-    {
-      "key": "meal.latest.dinner",
-      "type": "string",
-      "scope": "owner",
-      "label": "Dinner can be cooked as late as",
-      "default": "23:00"
-    },
-    {
-      "key": "shop.reminder_time",
-      "type": "string",
-      "scope": "owner",
-      "label": "The evening before a shopping window, the reminder goes out at",
-      "default": "20:00"
-    },
-    {
-      "key": "shop.heads_up_min",
-      "type": "integer",
-      "scope": "owner",
-      "label": "Minutes before a shopping window the draft is shared",
-      "default": 15
-    },
-    {
-      "key": "shop.yes_wait_h",
-      "type": "number",
-      "scope": "owner",
-      "label": "Hours to wait for a yes before the draft is let go quietly",
-      "default": 3
-    },
-    {
-      "key": "plan.horizon_days",
-      "type": "integer",
-      "default": 7,
-      "scope": "owner",
-      "label": "Rolling plan length, in days"
-    },
-    {
-      "key": "plan.confirm_ahead_days",
+      "key": "new_dishes_per_week",
       "type": "integer",
       "default": 2,
       "scope": "owner",
-      "label": "Days within which an unconfirmed day is raised with the family"
+      "label": "New dishes a week",
+      "group": "How we plan",
+      "help": "How many dishes the family hasn't had before a week's plan may suggest: 0 (none), 2 (1 or 2), 4 (3 or 4) or 7 (surprise me)."
+    }
+  ],
+  "setupMenu": "Planning the week's meals and groceries",
+  "setupOptions": {
+    "menuOrder": 10,
+    "scope": "family",
+    "about": "Learn how this family eats and shops. Never brands, pack sizes or what's at home, or whether to add a regular. Nothing is ordered now. Each reply is read only into its facts; at the end the Meal Planner saves the whole setup itself from the household facts and the replies word for word (apply_setup), and its read-back is checked with the family.",
+    "uses": [
+      "household.people",
+      "household.children",
+      "household.elders",
+      "household.help",
+      "household.mealsBy",
+      "household.groceriesBy"
+    ],
+    "connectors": [
+      "zepto",
+      "swiggy-instamart",
+      "zomato-blinkit",
+      "bigbasket",
+      "amazon"
+    ]
+  },
+  "setupApply": "apply_setup",
+  "setup": [
+    {
+      "id": "pain",
+      "fixed": true,
+      "ask": "What's the hardest part of meals for you? Or something else.",
+      "choices": [
+        "Deciding what to make every day",
+        "Remembering to order what the meals need",
+        "Remembering what the cook said has run out"
+      ],
+      "help": "pain: the option they picked, or their own words. It decides what the Meal Planner does first, menus or shopping.",
+      "fills": [
+        "pain:text"
+      ],
+      "default": "assume",
+      "assume": "I assumed deciding what to make every day is the hardest part."
     },
     {
-      "key": "prefs.category_defaults",
-      "type": "json",
-      "scope": "owner",
-      "label": "Default shopping prefs per category (an ingredient's own prefs override these)",
-      "default": {
-        "vegetables": {
-          "pack_min": 250,
-          "pack_max": 1000,
-          "pack_unit": "g",
-          "stock_days": 2,
-          "price": "balanced",
-          "brands_preferred": [],
-          "brands_avoid": [],
-          "substitutions": "ask",
-          "service": "any",
-          "never_auto_add": false
-        },
-        "leafy_greens": {
-          "pack_min": 1,
-          "pack_max": 2,
-          "pack_unit": "pc",
-          "stock_days": 1,
-          "price": "balanced",
-          "brands_preferred": [],
-          "brands_avoid": [],
-          "substitutions": "ask",
-          "service": "any",
-          "never_auto_add": false
-        },
-        "fruits": {
-          "pack_min": 500,
-          "pack_max": 2000,
-          "pack_unit": "g",
-          "stock_days": 3,
-          "price": "balanced",
-          "brands_preferred": [],
-          "brands_avoid": [],
-          "substitutions": "ask",
-          "service": "any",
-          "never_auto_add": false
-        },
-        "dairy": {
-          "pack_min": 500,
-          "pack_max": 2000,
-          "pack_unit": "ml",
-          "stock_days": 1,
-          "price": "balanced",
-          "brands_preferred": [
-            "Amul",
-            "Mother Dairy"
-          ],
-          "brands_avoid": [],
-          "substitutions": "ask",
-          "service": "any",
-          "never_auto_add": false
-        },
-        "bakery": {
-          "pack_min": 1,
-          "pack_max": 2,
-          "pack_unit": "pc",
-          "stock_days": 2,
-          "price": "balanced",
-          "brands_preferred": [],
-          "brands_avoid": [],
-          "substitutions": "allowed",
-          "service": "any",
-          "never_auto_add": false
-        },
-        "grains": {
-          "pack_min": 1000,
-          "pack_max": 5000,
-          "pack_unit": "g",
-          "stock_days": 30,
-          "price": "balanced",
-          "brands_preferred": [
-            "Aashirvaad",
-            "India Gate"
-          ],
-          "brands_avoid": [],
-          "substitutions": "ask",
-          "service": "any",
-          "never_auto_add": false
-        },
-        "pulses": {
-          "pack_min": 500,
-          "pack_max": 2000,
-          "pack_unit": "g",
-          "stock_days": 30,
-          "price": "balanced",
-          "brands_preferred": [
-            "Tata Sampann"
-          ],
-          "brands_avoid": [],
-          "substitutions": "ask",
-          "service": "any",
-          "never_auto_add": false
-        },
-        "pantry": {
-          "pack_min": 500,
-          "pack_max": 2000,
-          "pack_unit": "g",
-          "stock_days": 30,
-          "price": "cheapest",
-          "brands_preferred": [],
-          "brands_avoid": [],
-          "substitutions": "allowed",
-          "service": "any",
-          "never_auto_add": false
-        },
-        "oils": {
-          "pack_min": 1000,
-          "pack_max": 5000,
-          "pack_unit": "ml",
-          "stock_days": 45,
-          "price": "balanced",
-          "brands_preferred": [
-            "Fortune"
-          ],
-          "brands_avoid": [],
-          "substitutions": "ask",
-          "service": "any",
-          "never_auto_add": false
-        },
-        "spices": {
-          "pack_min": 50,
-          "pack_max": 200,
-          "pack_unit": "g",
-          "stock_days": 60,
-          "price": "balanced",
-          "brands_preferred": [
-            "MDH",
-            "Everest"
-          ],
-          "brands_avoid": [],
-          "substitutions": "ask",
-          "service": "any",
-          "never_auto_add": false
-        },
-        "meat": {
-          "pack_min": 250,
-          "pack_max": 1000,
-          "pack_unit": "g",
-          "stock_days": 1,
-          "price": "premium",
-          "brands_preferred": [
-            "Licious"
-          ],
-          "brands_avoid": [],
-          "substitutions": "never",
-          "service": "any",
-          "never_auto_add": true
-        },
-        "snacks": {
-          "pack_min": 1,
-          "pack_max": 3,
-          "pack_unit": "pc",
-          "stock_days": 7,
-          "price": "balanced",
-          "brands_preferred": [],
-          "brands_avoid": [],
-          "substitutions": "allowed",
-          "service": "any",
-          "never_auto_add": true
-        },
-        "household": {
-          "pack_min": 1,
-          "pack_max": 2,
-          "pack_unit": "pc",
-          "stock_days": 30,
-          "price": "cheapest",
-          "brands_preferred": [],
-          "brands_avoid": [],
-          "substitutions": "allowed",
-          "service": "any",
-          "never_auto_add": true
+      "id": "apps",
+      "fixed": true,
+      "ask": "Which apps do you order groceries on: Zepto, Blinkit, Instamart, BigBasket or Amazon? If you sign me in, I'll read your past orders to learn what your home buys and how often, so the plan and the shopping list fit you from the first week, and I can fill the cart for you. Nothing is ordered without your yes.",
+      "fills": [
+        "groceryApps:list"
+      ],
+      "then": [
+        {
+          "do": "connect",
+          "each": "groceryApps"
         }
-      }
+      ],
+      "help": "groceryApps: each app they order groceries on, by name (Zepto, Blinkit, Instamart, BigBasket, Amazon); [] when someone else orders or they use none. A reply naming one app only also answers mainApp: that app is the main, fallback null.",
+      "default": [],
+      "assume": "I left the grocery apps for now; you can connect them any time."
+    },
+    {
+      "id": "mainApp",
+      "fixed": true,
+      "when": "groceryApps",
+      "ask": "Which is your main app, and which do you use when something isn't there?",
+      "fills": [
+        "mainApp:text",
+        "fallbackApp"
+      ],
+      "answer": [
+        {
+          "operation": "set_shopping_apps"
+        }
+      ],
+      "help": "mainApp: the app they use most; fallbackApp: the one tried when something is not on it, null for none."
+    },
+    {
+      "id": "people",
+      "fixed": true,
+      "ask": "{{householdPeople}} Anyone else who eats at home, or anyone who doesn't?",
+      "fills": [
+        "people:list"
+      ],
+      "answer": [
+        {
+          "operation": "set_person",
+          "required": true
+        }
+      ],
+      "help": "The line names who lives with them (household.people). people: each { name, relationship?, group: child | adult | elder } after this reply: everyone the line names (a plain \"that's it\" or \"yes\" keeps them all), plus anyone they add, without anyone they take out. The cook and other help are left out; \"me\", \"I\" or \"myself\" is the person named in you.areTalkingTo, by that name.",
+      "when": "household.people"
+    },
+    {
+      "id": "people",
+      "fixed": true,
+      "ask": "Who eats at home? Tell me their names, and who is a child or an elder.",
+      "fills": [
+        "people:list"
+      ],
+      "answer": [
+        {
+          "operation": "set_person",
+          "required": true
+        }
+      ],
+      "help": "Read from household.people when it is known. people: each { name, relationship?, group: child | adult | elder }, the cook and other help left out; \"me\", \"I\" or \"myself\" is the person named in you.areTalkingTo, by that name, never \"Me\".",
+      "when": "!household.people"
+    },
+    {
+      "id": "cook",
+      "fixed": true,
+      "when": "household.help has cook and cook.days",
+      "ask": "Which meals does the cook make, and at what time does the cook come for them?",
+      "fills": [
+        "cook.name:text",
+        "cook.days:list",
+        "cook.visits:list"
+      ],
+      "answer": [
+        {
+          "operation": "set_cook",
+          "required": true
+        }
+      ],
+      "help": "Read from household.help's cook ({ role: cook, name?, days?, times?, meals? }) when it is there. cook.name: as said, \"Cook\" when no name was said. cook.days: Mon, Tue, Wed, Thu, Fri, Sat, Sun as said, in that order (\"Mon to Sat\" is six days). cook.visits: one { at: \"HH:MM\" (24-hour; an evening or dinner time is pm), meals: [Breakfast, Lunch, Dinner] } per visit, only when every visit's meals are said. \"Rani comes at 7 for breakfast and lunch and 6 for dinner, Mon to Sat\": name Rani, days Mon..Sat, visits [{\"at\":\"07:00\",\"meals\":[\"Breakfast\",\"Lunch\"]},{\"at\":\"18:00\",\"meals\":[\"Dinner\"]}]."
+    },
+    {
+      "id": "cook",
+      "fixed": true,
+      "when": "household.help has cook and cook.visits",
+      "ask": "Which days of the week does the cook come?",
+      "fills": [
+        "cook.name:text",
+        "cook.days:list",
+        "cook.visits:list"
+      ],
+      "answer": [
+        {
+          "operation": "set_cook",
+          "required": true
+        }
+      ],
+      "help": "Read from household.help's cook ({ role: cook, name?, days?, times?, meals? }) when it is there. cook.name: as said, \"Cook\" when no name was said. cook.days: Mon, Tue, Wed, Thu, Fri, Sat, Sun as said, in that order (\"Mon to Sat\" is six days). cook.visits: one { at: \"HH:MM\" (24-hour; an evening or dinner time is pm), meals: [Breakfast, Lunch, Dinner] } per visit, only when every visit's meals are said. \"Rani comes at 7 for breakfast and lunch and 6 for dinner, Mon to Sat\": name Rani, days Mon..Sat, visits [{\"at\":\"07:00\",\"meals\":[\"Breakfast\",\"Lunch\"]},{\"at\":\"18:00\",\"meals\":[\"Dinner\"]}]."
+    },
+    {
+      "id": "cook",
+      "fixed": true,
+      "when": "household.help has cook",
+      "ask": "{{householdCook}} Is that right, and does the cook come for any other meals?",
+      "fills": [
+        "cook.name:text",
+        "cook.days:list",
+        "cook.visits:list"
+      ],
+      "answer": [
+        {
+          "operation": "set_cook",
+          "required": true
+        }
+      ],
+      "help": "The line reads back the cook from the household part. A yes: those days and visits; changes as they say. Read from household.help's cook ({ role: cook, name?, days?, times?, meals? }) when it is there. cook.name: as said, \"Cook\" when no name was said. cook.days: Mon, Tue, Wed, Thu, Fri, Sat, Sun as said, in that order (\"Mon to Sat\" is six days). cook.visits: one { at: \"HH:MM\" (24-hour; an evening or dinner time is pm), meals: [Breakfast, Lunch, Dinner] } per visit, only when every visit's meals are said. \"Rani comes at 7 for breakfast and lunch and 6 for dinner, Mon to Sat\": name Rani, days Mon..Sat, visits [{\"at\":\"07:00\",\"meals\":[\"Breakfast\",\"Lunch\"]},{\"at\":\"18:00\",\"meals\":[\"Dinner\"]}]."
+    },
+    {
+      "id": "cookTime",
+      "fixed": true,
+      "when": "household.help has cook",
+      "ask": "Is the cook short of time, say off to the next house, so only a dish or two in the morning?",
+      "fills": [
+        "cookTime:text"
+      ],
+      "answer": [
+        {
+          "operation": "set_cook"
+        }
+      ],
+      "default": "assume",
+      "assume": "I assumed the cook has time for the full meal.",
+      "help": "cookTime: the cook's time in their words (\"about an hour in the morning, two dishes for lunch\"), \"\" when they have time for the full meal."
+    },
+    {
+      "id": "cookingDays",
+      "fixed": true,
+      "when": "cook.days = mon,tue,wed,thu,fri,sat,sun",
+      "ask": "The cook comes every day: is food cooked at home all seven days?",
+      "fills": [
+        "cookingDays:list"
+      ],
+      "default": [
+        "mon",
+        "tue",
+        "wed",
+        "thu",
+        "fri",
+        "sat",
+        "sun"
+      ],
+      "assume": "I assumed food is cooked at home every day.",
+      "help": "cookingDays: the days food is cooked at home, mon..sun. Every day is planned: a day the cook does not come, the family cooks, so it stays. Leave out only a day they say nothing at all is cooked at home (all its meals eaten out or ordered in); one meal out (\"Sunday lunch out\") keeps the day."
+    },
+    {
+      "id": "cookingDays",
+      "fixed": true,
+      "when": "cook.days = mon,tue,wed,thu,fri,sat",
+      "ask": "On Sunday, when the cook doesn't come, who cooks? Or is a meal eaten out?",
+      "fills": [
+        "cookingDays:list"
+      ],
+      "default": [
+        "mon",
+        "tue",
+        "wed",
+        "thu",
+        "fri",
+        "sat",
+        "sun"
+      ],
+      "assume": "I assumed food is cooked at home every day.",
+      "help": "cookingDays: the days food is cooked at home, mon..sun. Every day is planned: a day the cook does not come, the family cooks, so it stays. Leave out only a day they say nothing at all is cooked at home (all its meals eaten out or ordered in); one meal out (\"Sunday lunch out\") keeps the day."
+    },
+    {
+      "id": "cookingDays",
+      "fixed": true,
+      "when": "cook.days = mon,tue,wed,thu,fri",
+      "ask": "On Saturday and Sunday, when the cook doesn't come, who cooks? Or is a meal eaten out?",
+      "fills": [
+        "cookingDays:list"
+      ],
+      "default": [
+        "mon",
+        "tue",
+        "wed",
+        "thu",
+        "fri",
+        "sat",
+        "sun"
+      ],
+      "assume": "I assumed food is cooked at home every day.",
+      "help": "cookingDays: the days food is cooked at home, mon..sun. Every day is planned: a day the cook does not come, the family cooks, so it stays. Leave out only a day they say nothing at all is cooked at home (all its meals eaten out or ordered in); one meal out (\"Sunday lunch out\") keeps the day."
+    },
+    {
+      "id": "cookingDays",
+      "fixed": true,
+      "when": "cook.days",
+      "ask": "On the days the cook doesn't come, who cooks? Or is a meal eaten out?",
+      "fills": [
+        "cookingDays:list"
+      ],
+      "default": [
+        "mon",
+        "tue",
+        "wed",
+        "thu",
+        "fri",
+        "sat",
+        "sun"
+      ],
+      "assume": "I assumed food is cooked at home every day.",
+      "help": "cookingDays: the days food is cooked at home, mon..sun. Every day is planned: a day the cook does not come, the family cooks, so it stays. Leave out only a day they say nothing at all is cooked at home (all its meals eaten out or ordered in); one meal out (\"Sunday lunch out\") keeps the day."
+    },
+    {
+      "id": "cookingDays",
+      "fixed": true,
+      "when": "!cook.days",
+      "ask": "Who cooks at home, and on which days? Is any day's meal eaten out?",
+      "fills": [
+        "cookingDays:list"
+      ],
+      "default": [
+        "mon",
+        "tue",
+        "wed",
+        "thu",
+        "fri",
+        "sat",
+        "sun"
+      ],
+      "assume": "I assumed food is cooked at home every day.",
+      "help": "cookingDays: the days food is cooked at home, mon..sun. Every day is planned: a day the cook does not come, the family cooks, so it stays. Leave out only a day they say nothing at all is cooked at home (all its meals eaten out or ordered in); one meal out (\"Sunday lunch out\") keeps the day."
+    },
+    {
+      "id": "kidsBreakfast",
+      "fixed": true,
+      "when": "household.children",
+      "ask": "What did the children have for breakfast over the past week? Tell me in as much detail as you can.",
+      "multi": true,
+      "fills": [
+        "pastWeek.kidsBreakfast:text"
+      ],
+      "required": false,
+      "help": "pastWeek.kidsBreakfast: what they said the children had, in their words: each dish, who had it when not everyone, and any extra meal (a school tiffin, an evening snack) with whose it is when they say."
+    },
+    {
+      "id": "kidsLunch",
+      "fixed": true,
+      "when": "household.children",
+      "ask": "The children's lunch over the past week, or their school tiffin?",
+      "multi": true,
+      "fills": [
+        "pastWeek.kidsLunch:text"
+      ],
+      "required": false,
+      "help": "pastWeek.kidsLunch: what they said the children had, in their words: each dish, who had it when not everyone, and any extra meal (a school tiffin, an evening snack) with whose it is when they say. Food at home after school is their lunch."
+    },
+    {
+      "id": "kidsDinner",
+      "fixed": true,
+      "when": "household.children",
+      "ask": "The children's dinner over the past week?",
+      "multi": true,
+      "fills": [
+        "pastWeek.kidsDinner:text"
+      ],
+      "help": "pastWeek.kidsDinner: what they said the children had, in their words: each dish, who had it when not everyone, and any extra meal (a school tiffin, an evening snack) with whose it is when they say."
+    },
+    {
+      "id": "adultsBreakfast",
+      "fixed": true,
+      "ask": "What did the adults have for breakfast over the past week? Tell me in as much detail as you can.",
+      "multi": true,
+      "fills": [
+        "pastWeek.adultsBreakfast:text"
+      ],
+      "required": false,
+      "help": "pastWeek.adultsBreakfast: what they said the adults had, in their words: each dish, who had it when not everyone, and any extra meal (a school tiffin, an evening snack) with whose it is when they say."
+    },
+    {
+      "id": "adultsLunch",
+      "fixed": true,
+      "ask": "The adults' lunch over the past week?",
+      "multi": true,
+      "fills": [
+        "pastWeek.adultsLunch:text"
+      ],
+      "help": "pastWeek.adultsLunch: what they said the adults had, in their words: each dish, who had it when not everyone, and any extra meal (a school tiffin, an evening snack) with whose it is when they say."
+    },
+    {
+      "id": "adultsDinner",
+      "fixed": true,
+      "ask": "The adults' dinner over the past week?",
+      "multi": true,
+      "fills": [
+        "pastWeek.adultsDinner:text"
+      ],
+      "help": "pastWeek.adultsDinner: what they said the adults had, in their words: each dish, who had it when not everyone, and any extra meal (a school tiffin, an evening snack) with whose it is when they say."
+    },
+    {
+      "id": "diet",
+      "fixed": true,
+      "ask": "Is anyone on a diet? High protein, low carb, diabetic, anything a doctor asked for.",
+      "fills": [
+        "diet:text",
+        "dietElders:text"
+      ],
+      "answer": [
+        {
+          "operation": "set_person"
+        }
+      ],
+      "required": false,
+      "default": "assume",
+      "assume": "I assumed nobody is on a special diet.",
+      "help": "diet: what they said, in their words, with who it is for; \"\" when nobody is on a diet. dietElders: what it says about how an elder eats, \"\" when nothing."
+    },
+    {
+      "id": "elders",
+      "fixed": true,
+      "when": "household.elders and dietElders",
+      "ask": "Besides that diet, do the elders eat anything differently: less salt, softer food, no onion or garlic, a fasting day?",
+      "fills": [
+        "elders:text"
+      ],
+      "answer": [
+        {
+          "operation": "set_person"
+        }
+      ],
+      "required": false,
+      "default": "assume",
+      "assume": "I assumed the elders eat what everyone eats.",
+      "help": "elders: what they said about how the elders eat (less salt, softer food, a fast and when), in their words, with who; \"\" for the same as everyone."
+    },
+    {
+      "id": "elders",
+      "fixed": true,
+      "when": "household.elders",
+      "ask": "Do the elders eat anything differently from the rest: less salt, softer food, no onion or garlic, a fasting day?",
+      "fills": [
+        "elders:text"
+      ],
+      "answer": [
+        {
+          "operation": "set_person"
+        }
+      ],
+      "required": false,
+      "default": "assume",
+      "assume": "I assumed the elders eat what everyone eats.",
+      "help": "elders: what they said about how the elders eat (less salt, softer food, a fast and when), in their words, with who; \"\" for the same as everyone."
+    },
+    {
+      "id": "rules",
+      "fixed": true,
+      "ask": "Any food rules for the house? Veg, egg or non-veg days, fasting days, allergies, a dish someone won't touch.",
+      "fills": [
+        "rules:text"
+      ],
+      "required": false,
+      "help": "rules: every food rule they said, in their words, with who and when it holds; \"\" for none.",
+      "default": "assume",
+      "assume": "I assumed no special food rules."
+    },
+    {
+      "id": "orderIn",
+      "fixed": true,
+      "ask": "How often do you order in, and on which days?",
+      "fills": [
+        "orderIn:text"
+      ],
+      "required": false,
+      "help": "orderIn: each meal they order in or eat out and on which day, in their words (\"Sunday dinner from Swiggy\"); \"\" when not on a fixed day.",
+      "default": "assume",
+      "assume": "I assumed you don't order in on a fixed day."
+    },
+    {
+      "id": "subscriptions",
+      "fixed": true,
+      "ask": "Does anything come on a subscription, like Country Delight or a milkman?",
+      "fills": [
+        "subscriptions:list"
+      ],
+      "answer": [
+        {
+          "operation": "set_subscription"
+        }
+      ],
+      "required": false,
+      "help": "subscriptions: each item that comes on a subscription, with who delivers it (\"milk from Country Delight\"); [] for none.",
+      "default": [],
+      "assume": "I assumed nothing comes on a subscription."
+    },
+    {
+      "id": "connectLater",
+      "when": "!groceryApps and household.groceriesBy",
+      "fixed": true,
+      "ask": "Before I make the final plan, shall I sign in to your grocery app (Zepto, Blinkit, Instamart, BigBasket or Amazon) and read your past orders, so the plan and the shopping list fit what your home buys?",
+      "fills": [
+        "laterApps:list"
+      ],
+      "yes": [
+        {
+          "do": "connect",
+          "each": "laterApps"
+        }
+      ],
+      "answer": [
+        {
+          "operation": "set_shopping_apps"
+        }
+      ],
+      "required": false,
+      "help": "Asked once; a no is final. laterApps: the apps named, by name; [] for a no."
+    },
+    {
+      "id": "orderFindings",
+      "when": "groceryApps",
+      "fixed": true,
+      "ask": "From your orders, your home buys {{boughtSaid}}. Is anything off?",
+      "show": {
+        "boughtSaid": {
+          "operation": "import_order_history",
+          "field": "said"
+        }
+      },
+      "fills": [
+        "orderFindings:text"
+      ],
+      "answer": [
+        {
+          "operation": "set_item"
+        }
+      ],
+      "required": false,
+      "help": "boughtSaid is what the app worked out from the orders. orderFindings: what they say is off, in their words (\"milk is 2 litres a day\"); \"\" when it looks right."
+    },
+    {
+      "id": "final",
+      "action": "make_plan",
+      "args": {},
+      "background": true,
+      "result": true,
+      "fixedSay": "Give me a few minutes, I'm putting your week together.",
+      "help": "Once any order import is back. The planning session: make_plan for the coming week (week_start: its Monday), from what the app holds (apply_setup saved the setup) and the assumptions made in setup; it messages nobody and answers with the message and the intro its closing call gives, word for word. Nothing is ordered now."
+    }
+  ],
+  "setupJoiner": [
+    {
+      "id": "intro",
+      "when": "!ctx.group",
+      "fixed": true,
+      "ask": "This is the family's Meal Planner: the week's meals, the shopping list and the food rules, in one place. Here it is: {{offerLink}}",
+      "help": "Not a question: nothing to read from a reply."
+    },
+    {
+      "id": "connectOwn",
+      "when": "!ctx.group",
+      "fixed": true,
+      "ask": "If you connect your own grocery apps, I can track your house's pantry better, with your orders in it too. Shall we connect them?",
+      "yes": [
+        "moveChatToGroup",
+        "connect"
+      ],
+      "no": [
+        "ownInterview"
+      ],
+      "help": "yes false too for \"I don't order the groceries\"."
+    },
+    {
+      "id": "ownApps",
+      "when": "ctx.group and ctx.ordersGroceries",
+      "ask": "{{inviter}} says you order the groceries. Which apps do you order groceries on: Zepto, Blinkit, Instamart, BigBasket or Amazon? If you sign me in, I'll read your past orders to learn what your home buys and how often, so the family's plan and shopping list fit what your home buys, and I can fill the cart for you. Nothing is ordered without your yes.",
+      "fills": [
+        "person.groceryApps:list"
+      ],
+      "then": [
+        {
+          "do": "connect",
+          "each": "person.groceryApps"
+        }
+      ],
+      "help": "person.groceryApps: each app they order groceries on, by name (Zepto, Blinkit, Instamart, BigBasket, Amazon); [] for a skip or none. The sign-ins are theirs, here in the group; Flock reads each app's past orders itself.",
+      "default": [],
+      "fixed": true
+    },
+    {
+      "id": "ownApps",
+      "when": "ctx.group and !ctx.ordersGroceries",
+      "ask": "Which apps do you order groceries on: Zepto, Blinkit, Instamart, BigBasket or Amazon? If you sign me in, I'll read your past orders to learn what your home buys and how often, so the family's plan and shopping list fit what your home buys, and I can fill the cart for you. Nothing is ordered without your yes.",
+      "fills": [
+        "person.groceryApps:list"
+      ],
+      "then": [
+        {
+          "do": "connect",
+          "each": "person.groceryApps"
+        }
+      ],
+      "help": "person.groceryApps: each app they order groceries on, by name (Zepto, Blinkit, Instamart, BigBasket, Amazon); [] for a skip or none. The sign-ins are theirs, here in the group; Flock reads each app's past orders itself.",
+      "default": [],
+      "fixed": true
     }
   ],
   "routines": [
     {
-      "id": "rolling-plan",
-      "name": "Daily meal-plan check",
-      "description": "Fills the next few days of meals, checks them against each diner's targets, tells the family the near days' menus (straight from the app), loops in both coaches on Sunday, and gives the owner the first look at the shopping any of that creates. Each item is handed to the agent once; nothing new, no model call.",
+      "id": "weekly-plan",
+      "modelChoice": "balanced",
+      "name": "Weekly meal plan",
+      "description": "Every Sunday at 11, plans next week's meals, every day of it, in steps (the menu checked against every food rule, then each day's ingredients), saves the week, and asks the agent only to send the family the plan. It plans only: nothing is bought. On an install carried over from the old Meal Planner it first asks for the family's profile to be structured.",
       "trigger": {
         "type": "schedule",
-        "cron": "0 20 * * *"
+        "cron": "0 11 * * 0"
       },
       "executionMode": "app-relay",
-      "handler": "rolling-plan",
-      "prompt": "The nightly meal-plan check is in server/routines/rolling-plan.ts: read its wake message and the data it sends (missing slots, meals pending a coach check, whether it's Sunday, catalog links, quantities, likely duplicates, shelf lives, and the diners' targets), then do exactly what it asks through this app's operations (save_meal, set_meal_recipes, write_recipe, set_shelf_life; read rows at its _data routes) — and only then tell the owner what shopping it created. The app has already sent the family the near days' menus. Each item comes once: what you leave stands and is not asked again."
+      "handler": "weekly-plan"
     },
     {
-      "id": "prep-reminders",
-      "name": "Prep reminders",
-      "description": "Every 30 minutes, rings any advance-prep step (soak the batter, set it to ferment) whose moment has arrived for a meal in the next 48 hours. No model call unless something is actually due.",
+      "id": "afternoon-reminder",
+      "name": "Afternoon reminder",
+      "description": "Every day at 3 pm, when there is something to say: tonight's dinner, the ingredients to check, what you buy every day put on the cart as it comes due, and anything that may be running low. Nothing is ordered until you reply.",
       "trigger": {
         "type": "schedule",
-        "cron": "*/30 * * * *"
+        "cron": "0 15 * * *"
       },
       "executionMode": "app-relay",
-      "handler": "prep-reminders"
+      "handler": "afternoon-reminder"
     },
     {
-      "id": "shopping-timeline",
-      "name": "Shopping timeline",
-      "description": "A 15-minute heartbeat that keeps the shopping drafts current and sends at most three messages per shopping window: the reminder the evening before and the heads-up shortly before go out straight from the app (no model call); only the price step at the window (quotes, best service, one ask for a yes) wakes the agent. A draft with no yes in time is let go silently and its items roll into the next one.",
+      "id": "evening-reminder",
+      "name": "Evening reminder",
+      "description": "Every day at 7 pm: reads new orders from your connected shopping apps, then tells you tomorrow's meals, puts what you buy every day on the cart as it comes due and asks about anything that may be running low. Nothing is ordered until you reply.",
+      "trigger": {
+        "type": "schedule",
+        "cron": "0 19 * * *"
+      },
+      "executionMode": "app-relay",
+      "handler": "evening-reminder"
+    },
+    {
+      "id": "order-clock",
+      "name": "Order clock",
+      "description": "Every 15 minutes: an order not paid within 24 hours is closed and its items go back on your cart (you are told once); an order stuck being placed for an hour goes back to your cart.",
       "trigger": {
         "type": "schedule",
         "cron": "*/15 * * * *"
       },
       "executionMode": "app-relay",
-      "handler": "shopping-timeline",
-      "prompt": "The shopping-timeline routine woke you for the price step of a shopping window (its message names the slot and a message id) — or with the owner's yes from the app. Send exactly what it asks and nothing else; when sent, POST /api/messages/<id>/sent. Every list you share is the app's (the wake's data, or GET /api/shopping/draft), never from memory; every change the family asks for goes through POST /api/shopping/draft/items or POST /api/shopping/windows/move, and you reply with the app's updated draft. At most one question card per message; silence means carry on — never follow up, never answer your own question. Price step: fill a cart on each connected service, POST /api/carts/<id>/quotes for each, share the best service, rough total and screenshot, ask once for a yes. Never place or pay anything without a family member's explicit yes; on a yes in chat, POST /api/carts/<id>/yes first. The instant an order is placed, POST /api/carts/<id>/ordered with service, total, order_ref and delivery_eta before telling anyone it's done."
-    },
-    {
-      "id": "agent-jobs",
-      "name": "Background jobs",
-      "description": "Every 15 minutes, wakes the agent only when the app has background jobs it has never asked about (a meal to review, a recipe to fill, patterns to find), all in one wake; the app also wakes it right after queueing one. Each job is asked once; one left unanswered falls back to the app's plain rule. Never messages the family.",
-      "trigger": {
-        "type": "schedule",
-        "cron": "*/15 * * * *"
-      },
-      "executionMode": "app-relay",
-      "handler": "agent-jobs",
-      "prompt": "The meal planner's background jobs (server/routines/agent-jobs.ts): its message lists each open job in data.jobs with its facts and how to answer that kind. Answer every one with POST /api/jobs/<id>/answer, then any more_jobs the reply lists (GET /api/jobs/<id>). This is background work: never message the family and never ask anyone anything to answer a job — make an informed guess from the facts and what you know of this family. A 400 says what to fix; a 409 means the job went stale, skip it. Reply with one line on what you answered."
+      "handler": "order-clock"
     }
   ],
   "agentInterface": {
-    "intents": [],
+    "intents": [
+      {
+        "name": "sync-cart",
+        "description": "The family changed or opened their cart in Meal Planner: make the app's own cart match it.",
+        "instructions": "The payload has order_id, app and lines [{ item, product_id, name_on_app, qty }]. With that app's connector, make its cart hold exactly these lines (qty 0: take it off); touch only lines Meal Planner put there, and list any other line already in the cart as outside_lines. Read the cart back and call sync_cart { order_id, lines, total, delivery_gap, outside_lines }. A line the app does not have today (in_stock false): when the family has a fallback app (shopping.fallback in GET /api/family), take it off with set_cart_line { item, qty: 0, app } and move it with set_cart_line { item, qty, app: <fallback> }, then copy that cart to the fallback app and sync_cart it too; with no fallback, leave it marked. Send no message."
+      }
+    ],
     "operations": [
       {
         "name": "guide",
-        "description": "The full guide for working with this app: read it before shopping, answering a job or changing meals. {}"
+        "description": "The full guide for working with this app: read it before the first conversation, or when you are not sure which operation fits. {}"
       },
       {
-        "name": "get_draft",
-        "description": "The next shopping draft: span ('Thu breakfast → Sat dinner'), lines with qty ranges, quotes, best service, next message. {}"
+        "name": "set_person",
+        "description": "Add or change one person who eats at home, found by name. { name, relationship?, group?: child | adult | elder, portions?, diet?, allergies?, dislikes?, targets?, note?, remove?: true }. group is needed for a new person. Keep portions, diet and the rest in the family's own words. Only the fields you send change; null clears one; remove: true takes the person out of the family."
       },
       {
-        "name": "edit_draft",
-        "description": "Add / drop / restore draft items from a chat reply: {add:[{item|ingredient_id, qty?}], remove:[ref], restore:[ref], cart_id?}"
+        "name": "set_cook",
+        "description": "The cook: who, which days, when they arrive, what they make well, what they do not make well or will not make, their time, and whether they try new recipes. { name, days?: [\"Mon\", ...], arrival?: \"HH:MM\" (a cook who comes more than once a day: a list of visits, [\"06:00\", \"16:30\"] or [{ at: \"06:00\", meals: [\"Breakfast\", \"Lunch\"] }, { at: \"16:30\", meals: [\"Dinner\"] }]; meals are slot names), makes_well?, wont_make?, time_limit?: in the family's words (\"off to the next house at 9: a dish or two in the morning\"), new_recipes?: open (tries recipes from reels and the internet) | set_menu (better with familiar dishes), note? }. name every time; days and arrival the first time. Only what you send changes; null clears a field. Plans never give the cook what is in wont_make, fit time_limit, and keep to familiar dishes with set_menu. A cook's limit said any time (in chat, or fixing a plan: \"swap the chole, the cook can't make it\") goes in wont_make or time_limit at once, in their words; a plan correction keeps the limit, not only the swap. A vague limit (\"no fancy stuff\") stays words only; ask \"which dishes?\" once when it matters."
       },
       {
-        "name": "move_window",
-        "description": "Move a shopping window: {order_at:'YYYY-MM-DDTHH:MM', cart_id?}; lists meals it can't reach in time."
+        "name": "set_shopping_apps",
+        "description": "The family's shopping apps. { main: zepto | swiggy-instamart | zomato-blinkit | bigbasket | amazon, fallback: the app to try when something is not on the main one, or null, connected: [only the apps the family has signed in to in Flock; [] when none yet] }. Apps by id or name (\"Blinkit\"). main and fallback may be apps not signed in to yet, and are never added to connected: send the call again after each sign-in. Order history is read, and a cart copied, only for a connected app; fallback must differ from main. Answers { main, fallback, connected, order_without_asking, house }."
       },
       {
-        "name": "add_quote",
-        "description": "A service's filled cart: {cart_id, service, total, fees?, lines?, screenshot_url?}; returns all quotes and the best."
+        "name": "apply_setup",
+        "description": "Save the family's whole meal setup at the end of the interview, in one call. { household: every household fact you hold (people, help at home, routines), transcript: the planner's questions and the family's replies, word for word and in order, as lines \"Q: ...\" and \"A: ...\" (corrections, later and off-topic replies included, as they happened) }. The app reads them itself and saves the people, the meals (slots: a child's tiffin, one person's own plate, meals eaten out or ordered in), the cook, the food rules (only what the family said), the family's dishes and example meals, the shopping apps and subscriptions. Answers { ok, said: what was saved in plain words, ending with one question, to read back to the family (send it word for word; a correction is the same call again with the reply added to the transcript, and its said is only what changed), noted: what was kept but is not checked, dropped, asks } or { ok: false, say }."
       },
       {
-        "name": "record_yes",
-        "description": "A family member said yes in chat: {cart_id, service, by}. Then place the order and record_order."
+        "name": "make_plan",
+        "description": "Plan a whole week and save it, in one call: { week_start: the week's Monday as YYYY-MM-DD, household?: the household facts (Flock sends them; the app also reads them fresh) }. The app plans it in steps itself (who eats each meal from the slots, the weekday patterns and the calendar; each meal slot from the family's own dishes and plates, checked against every food rule per person, how often each dish comes and no dish too soon again; then each day's ingredients), the same way the Sunday run does, and messages nobody. Answers { ok: true, week_start, message, intro?, instructions, unmet? } (send message word for word, then intro once, as instructions say; unmet: what could not be kept, already said in message) or { ok: false, reason, say } (nothing planned: send say word for word). Use it when the family asks for a week planned or planned again;"
+      },
+      {
+        "name": "set_slot",
+        "description": "Add, change or take away a meal slot for good (a child's tiffin, one person's own dinner, \"Sunday lunch we eat out\"). { name: the slot's name, kind?: main | custom | addon (needed for a new slot), addon_of?: the main slot an addon adds to, usual_people?: [names] ([] is everyone at home), days?: [\"Mon\", ...] ([] is every day), skip_days?: [{ day, skip: eaten_out | ordered_in }], order?: planning order (Breakfast 10, tiffin 20, Lunch 30, snacks 40, Dinner 50, add-ons 60), remove?: true }. The planned weeks' slot-days of that slot from today on are planned again (never one the family changed). Answers { ok, slot, replanned, message? } (send message word for word) or { ok, slot, planned: false, say }."
+      },
+      {
+        "name": "set_slot_day",
+        "description": "A one-off change to one meal on one day: guests, someone away or joining, an occasion, eating out, or the dishes the family wants. { date, slot, people?: [names] (all of them), add_people?: [names] (a visitor too), remove_people?: [names], guests?: [{ count, rules?: [their food rules in words] }], occasion?: in their words (\"dinner party\"), new_dishes_allowed?: how many new dishes that meal may have, skip?: eaten_out | ordered_in | null (cooked at home again), dishes?: [dish names] }. The meal is marked as the family's change and never planned over; its dishes are planned again for the change unless dishes are given or it is eaten out or ordered in. Answers { ok, slot_day, replanned, message? } (send message word for word) or { ok, slot_day, planned: false, say }."
+      },
+      {
+        "name": "add_dish",
+        "description": "Add a dish the family has to a slot's dishes, or one from a reel or recipe link they sent. { name, slot, frequency?: daily | usually | sometimes | rarely | \"<n>/week\", days?: [\"Fri\"] (only those days), quote?: their words, link?: the reel's or recipe's link }. What it contains is read before it answers. With link the dish is new to them: the link is its video, and the day after it is first planned the reminder asks whether they made and liked it. Answers { ok, dish }."
+      },
+      {
+        "name": "set_rule",
+        "description": "Add, change or take away a food rule (an allergy, no onion and garlic, millets twice a week for one person). { id?: the rule's id (to change or take away one; read the rules table), hard?: true for one always kept, what?: veg | egg | no_eggs | avoid | only | swap | require | fasting | cap | note, who?: a person (none: everyone), slots?: [slot names], days?: [\"Mon\", ...], items?: [tags, like \"onion_garlic\", \"peanut\", \"white_rice\"], to?: what a swap puts in place, frequency?: soft only, sometimes | usually | rarely | \"<n>/week\", per_meal?: dishes a meal (cap), fasting_food?: [what they eat when fasting], quote?: the family's own words (needed for a new rule), remove?: true }. The planned meals from today on are checked again and only those that now fail are planned again. Answers { ok, rule, replanned, message? } (send message word for word) or { ok, rule, planned: false, say }."
+      },
+      {
+        "name": "set_setting",
+        "description": "How many new dishes a week the plan may suggest. { new_dishes_per_week: 0 (none), 2 (1 to 2), 4 (3 to 4) or 7 (surprise me) }. Answers { ok, new_dishes_per_week }."
+      },
+      {
+        "name": "record_made",
+        "description": "What the family says they made at a meal, when it was not the plan (\"we made khichdi instead\"). { date, slot, dishes: [dish names] }. The meal's dishes are replaced and kept as made. Only for today or before; a meal still to come is set_slot_day. Answers { ok, slot_day }."
+      },
+      {
+        "name": "record_feedback",
+        "description": "The answer to the reminder's question about a dish on yesterday's plan the family had not had before (\"Did you make it, did you like it, and should I suggest it again?\"). { date: the day it was planned, slot, dish: as the reminder named it, made: true or false, liked?: needed when made, again?: needed when made and liked }. Made, liked and again: it becomes one of their dishes. Made and not liked: never planned again. Liked but not again: not planned again unless they ask. Not made: it may be planned once more. One call for each dish asked about; no reply, no call. Answers { ok, dish, outcome }."
+      },
+      {
+        "name": "set_regular",
+        "description": "The older way to state an item's cycle, kept so earlier instructions still work; set_item is the one to use. { item, amount, unit, every: day | week | weekdays, times_per_week?, weekdays?: [\"Mon\", ...], for_whom?, active?, paused_until?: YYYY-MM-DD, remove?: true }. The same as set_item { item, usual_amount, unit, every_days }: amount with unit is what is bought each time; every with times_per_week or weekdays is how often (1 l every day; every: week with times_per_week: 2 is twice a week). It is kept on the item as its cycle and shown on the Pantry page; there is no separate list. paused_until snoozes the item up to and including that date; active: false or remove: true takes the stated cycle away; for_whom is not kept (an item has one cycle for the house). Answers { item }."
+      },
+      {
+        "name": "import_order_history",
+        "description": "Give the app the family's past orders on one shopping app, one app a call; read them with that app's connector first (Amazon's cannot be read). { app: zepto | swiggy-instamart | zomato-blinkit | bigbasket | amazon (by id or name), account?: which of your accounts of this app, when you hold more than one (its account id, else its label; always the same one), orders: [{ date: YYYY-MM-DD, order_ref?: the app's order id, items: [{ item, group: daily | few_days | monthly (as set_item names them; send it with every item, so none is left to set one by one), product?, product_id?, pack?: \"5 kg\", pack_amount?, pack_unit?, count?, price?, image?: the product's picture link from the order's details }] }] }. item is the family's word for it (atta), product the name on the app, image the product's picture as the app's order details give it (Zepto's order detail, Instamart's order items), never one you made or searched for; count is how many packs (1 when left out). Send the oldest orders first, at most about 8 orders and 80 items a call, one app a call (a call carries 16 KB at most), and only the last 3 months: older orders are skipped, and so is an order dated after today. Send only delivered or paid orders, never a cancelled or failed one. Each item becomes a purchase; the same order sent again is recorded once, so a call may overlap the last. An item with its product_id is remembered as that app's product. More than one person may order for the house, each on their own account of the same app: each person's agent gives the orders of that person's account, and all of them count towards one cycle per item for the house. Holding more than one account of an app (Zepto (Arjun), Zepto (Meera)), read each and send each with its account: each has its own read_until, and an order with no order_ref is never taken for one of another account. The app works out each item's cycle (how much, how often) from the purchases by itself: ask the family to confirm nothing. Answers { recorded, duplicates, skipped_old, skipped_future, needs_group: [items to give a group with set_item], probably_out: [{ item, days_ago }], read_until: how far you have read this app, or this account of it (YYYY-MM-DD), said: what the house buys most often and how often, in a line (\"milk (1 l every day), eggs (30 pc once a week)\"), \"\" when nothing yet }."
+      },
+      {
+        "name": "record_bought_outside",
+        "description": "The family bought an item outside the apps (\"got atta from the kirana\"). { item, date?: YYYY-MM-DD, today when left out }. It counts as a purchase of the usual amount and restarts the item's estimate. Answers { event_id } or { duplicate: true }, and { item }."
+      },
+      {
+        "name": "set_item",
+        "description": "Change one item the family buys, made when it is not there. { item, group?: daily | few_days | monthly (how often it is bought: daily every day or two, like milk; few_days within the week, like vegetables, eggs, bread; monthly lasts weeks, like atta, oil, masalas, cleaning and personal care), usual_amount?: what is bought each time, a number in unit, unit?: g | kg | ml | l | pc, every_days?: how many days one purchase lasts (1: every day; 7: once a week), follows_plan?: true when the week's meals use it up (paneer, rajma), dont_ask?: true to never ask about it or put it on the cart by itself, snooze_days?: days to leave it alone, for a holiday (null clears) }. usual_amount and every_days are the item's cycle as the family said it (\"milk every day, 1 litre\": { item: \"milk\", group: \"daily\", usual_amount: 1, unit: \"l\", every_days: 1 }; \"a tray of 30 eggs once a week\": usual_amount: 30, unit: \"pc\", every_days: 7): send them only when the family says so or there is no order history, since the app works the cycle out from the purchases and goes by those once they show one; null clears either. A daily item with a cycle goes on the cart by itself when it is due; the others are asked about. Only what you send changes. Answers { item }."
+      },
+      {
+        "name": "set_subscription",
+        "description": "An item delivered outside the apps (Country Delight, a milkman). { item, source: who delivers it, active: true | false }. active: true keeps it out of every cart and every question about running low, and takes it off the carts not yet ordered; active: false makes it an item like any other again. Answers { item }."
+      },
+      {
+        "name": "answer_running_low",
+        "description": "The family's answers to \"still in stock?\". { answers: [{ item, answer: low | in_stock, days?: how many more days it will last }] }. low: it goes on the cart (answers { to_cart }). in_stock with days (\"fine for a week\": 7) is not asked again until then; in_stock without days (\"still have it\") waits a few days. Answers { to_cart: [items to add to the cart], items }."
+      },
+      {
+        "name": "get_reminder",
+        "description": "The reminder to send now, built from the plan, the carts and what may be running low. { which: afternoon | evening, date?: the date the reminder's wake gave, YYYY-MM-DD (so a call after midnight builds that same reminder) }. afternoon is tonight's dinner, evening is tomorrow's meals; both put the daily items due tomorrow (by each item's cycle) on the cart and ask about at most 5 items that may be running low, each counted once per reminder however often you call it. Answers { which, date, meals, ask_ingredients, added, cart_items, asks: [{ item, days_ago }], delivery_gap, ordered: [{ order_id, app, message }], empty, text, app_text, block, carts: [{ order_id, app, status, lines, sync }] }. empty: send nothing. Send text on WhatsApp word for word, or app_text with block in the app chat. Read the connected apps' new orders into import_order_history before the first call. Copy each cart with sync: true to its app, then sync_cart, then call get_reminder again with the same which and date and send that answer. Check out every cart in ordered (Order without asking is on; a retry lists the same ones): say its message, check out, record_order."
+      },
+      {
+        "name": "get_cart",
+        "description": "The carts: one open cart per shopping app, and any being ordered. { app?: one app by id or name }. Answers { carts: [{ order_id, app, app_name, status: open | ordering, lines: [{ id, item, qty, product_id, name_on_app, pack, price, source, for_note }], total, delivery_gap, sync_state, synced_at, outside_lines, building_at_order }] }. A line at qty 0 is shown, not ordered."
+      },
+      {
+        "name": "set_cart_line",
+        "description": "Put an item on the cart, change its qty or take it off. { item, qty: packs, a whole number (0 takes it off), app?: the app (else the one the family buys it on, else the main app), source?: added (default) | low | everyday | meal, for_note?, for_date?: YYYY-MM-DD, product_id?, name_on_app?, pack?, price?, image?: the product's picture link as the app gives it }. It goes on that app's open cart; while a cart is being ordered, a new item goes to a new open cart, and you may lower or take off a line of the cart being ordered (\"remove the ghee\"), and a higher qty or a new item goes to the open cart. An item delivered outside the apps is refused (code SUBSCRIPTION). Copy the change to the app's own cart yourself in the same turn, then sync_cart. Answers { line, cart }."
+      },
+      {
+        "name": "order_cart",
+        "description": "The family said yes to ordering one app's cart (a reply, or the message \"Order my <App> cart\" from the Order button). { app }. The cart is being ordered from now on, and anything added later goes to a new cart. Send its message word for word, check out on the app, then record_order. Asked again while that order is being placed, it answers the same order. Answers { order_id, app, lines, message }; an empty cart is refused (409)."
+      },
+      {
+        "name": "sync_cart",
+        "description": "What the app's own cart holds after you copied a cart to it, or read it back. { order_id, lines: [{ product_id, qty, price?, in_stock?: false when the app does not have it today }], total?: the app's cart total, delivery_gap?: rupees short of free delivery, outside_lines?: [{ name, qty? }] (lines in the app's cart Meal Planner did not put there) }. Answers { cart }."
       },
       {
         "name": "record_order",
-        "description": "The order was placed: {cart_id, service, total, order_ref?, delivery_eta?}. Do it right after placing."
+        "description": "What happened to an order being placed. { order_id, placed?: true, paid?: true | false, app_order_ref?: the app's order id, total? }. placed: its lines become purchases and the items' estimates restart. paid: false (not paid): the purchases stop counting and the lines go back on the open cart; paid: true later brings both back. When you record paid: false, tell the family yourself: the clock will not. Send app_order_ref whenever you have it, also later. Answers { order }, and taken_off: [{ order_id, items }] when a late payment took returned items off a cart being ordered: take them off that checkout on the app too."
       },
       {
-        "name": "skip_order",
-        "description": "Skip this window's order (the family asked): {cart_id}; still-useful items move to the next order."
+        "name": "cancel_order",
+        "description": "Stop an order. { order_id }. One being ordered goes back to the open cart (nothing was placed); a placed one counts as not paid, its lines back on the cart, and you tell the family so yourself: the clock will not. Answers { order }."
       },
       {
-        "name": "ack_message",
-        "description": "Mark the message a shopping wake asked for as sent: {message_id}."
+        "name": "remember_product",
+        "description": "Remember the product an item is bought as on a grocery app, so the next order reuses it without searching. { item, app: zepto | swiggy-instamart | zomato-blinkit | bigbasket, product_id, name_on_app, pack?, pack_amount?, pack_unit?, price?, image? }. item is the family's word for it, exactly as on the order line or the pantry item (milk), never the product's name on the app; pack_amount and pack_unit are the pack's size as a number and its measure (500, ml), which the app counts packs with (a plain pack text like \"500 ml\" is read too). One product per item and app: sending it again takes the place of the one remembered. Answers { product }."
       },
       {
-        "name": "list_jobs",
-        "description": "Open background jobs the app wants your judgement on (review_meal, fill_recipe, find_patterns). {}"
+        "name": "save_recipe",
+        "description": "Save a recipe, or change one. { recipe_id?, name?, links?: [the reel, short or page], notes?, ingredients?: [{ item, amount?, unit? }], tags?: [\"breakfast\", \"tiffin\"], for?: [names], thumbnail? }. Without recipe_id, a recipe that already holds one of the links is the one changed (new links are added to it), so a link shared twice is saved once; otherwise a new recipe is made, and it needs a name: with none the answer is code NEEDS_NAME, so ask the family what to call it and save again. By recipe_id only what you send changes, and links you send replace its links. Answers { recipe }."
       },
       {
-        "name": "answer_job",
-        "description": "Answer a background job: {job_id, answer:{…}} (shapes in the guide). Never message the family about one."
+        "name": "set_dish_video",
+        "description": "Give a dish its one video, or take it away. { dish: its name as planned, or dish_id, url: the link (a YouTube video, an Instagram reel, any page; never a file), title?, thumbnail?: the video's picture link, remove?: true }. The video is the dish's, kept by its name: every week the dish is planned it shows on the Week page and in the cook's message, with no call again. Find one with your own search when the family asks (\"find a video for rajma\"); a recipe or reel the family shares for a dish is its video too. A YouTube link's thumbnail is filled in when you send none. A second video takes the place of the first. Answers { dish: { name, video, rating, note, rated_on, said_by, history } }."
       },
       {
-        "name": "pantry",
-        "description": "What is in the kitchen, how sure, and the items due for a check. {}"
+        "name": "rate_dishes",
+        "description": "How dishes went when the family ate them. { date?: the day they were eaten, today when left out, ratings: [{ dish: its name as planned, or dish_id, rating: good | okay | didnt_work, note?: what went well or didn't, in their words (\"too oily\"), said_by?: who said it }] }. One call for all of a reply. The latest rating and its note show the next time the dish is planned (\"last time: too oily\") on the Week page and in the cook's message; a short history is kept. A dish rated didnt_work is planned rarely, not never. Answers { dishes: [{ name, video, rating, note, rated_on, said_by, history }] }."
       },
       {
-        "name": "pantry_answer",
-        "description": "The family's answer about stock: {items:[{ingredient_id, have:'yes'|'low'|'out'}]}; low/out go on the list."
-      },
-      {
-        "name": "have_item",
-        "description": "'We already have X': {ingredient_id, item, use_by?}; covers its meals until use_by."
-      },
-      {
-        "name": "search",
-        "description": "Find dishes, recipes, ingredients (Hindi aliases, typos), pantry, orders: {q}."
-      },
-      {
-        "name": "save_meal",
-        "description": "Create or change a meal: {meal_id?, date, slot, dish, note?, time?, outcome?, outcome_source?, coach_check?}."
-      },
-      {
-        "name": "remove_meal",
-        "description": "Remove a meal from the plan: {meal_id}."
-      },
-      {
-        "name": "set_meal_recipes",
-        "description": "A meal's recipes, as a set in order: {meal_id, recipes:[{recipe_id, servings?}]}."
-      },
-      {
-        "name": "write_recipe",
-        "description": "A new recipe with its lines (search first), or lines for one: {name|recipe_id, lines:[{ingredient_id, item, qty_per_adult, unit, category}]}."
-      },
-      {
-        "name": "set_shelf_life",
-        "description": "How long an ingredient keeps in this home (your informed guess): {ingredient_id, shelf_life_days, note}."
+        "name": "get_dish",
+        "description": "What the app knows of one dish. { dish: its name as planned }. Answers { dish: { name, video: { url, title, thumbnail } or null, rating, note, rated_on, said_by, history: [{ rating, note, date, by }] } }, empty for a dish it knows nothing of."
       }
     ],
-    "instructions": "Meal Planner owns this family's meals, recipes, shopping list, drafts, orders, pantry stock and shopping preferences. Never keep any of it in memory or chat: read the app before you answer, change it only through its operations, then tell the family what the app now says. Read the guide operation before shopping, answering a job or changing meals. A meal is a set of recipes plus a note: when plans change, change the recipes and note (set_meal_recipes, save_meal), not just the dish text. Only you add recipes, and only after searching for the same dish under another spelling. Nothing in the app runs until it knows the household: when the family tells you who eats, their food habits, which meals to plan and where they shop, save it in their words as the household.profile setting (PATCH /a/<this app>/api/_app/settings); never fill it from guesses or the app's own rows. Background jobs (review_meal, fill_recipe, find_patterns) and background facts (shelf life, recipe lines) are your informed guesses: never ask the family about them and never message anyone for them. The app sends the reminders and menus itself; message the family only when a Shopping timeline wake asks (the price step), then ack_message; or when they talk to you. Silence means carry on. Never order without a family member's explicit yes; record it (record_yes), place the order, then record_order at once."
-  },
-  "privateTables": [
-    "prep_reminders",
-    "message_log",
-    "agent_jobs",
-    "choice_log",
-    "learned_prefs",
-    "stock",
-    "shopping_prefs",
-    "standing_consumption",
-    "meal_recipes"
-  ]
+    "instructions": "Meal Planner owns this family's people, meals, the items they buy, their carts and recipes. Read the app before you answer and change it only through its operations, then tell the family what the app now says. A routine wake (the Sunday plan, the 15:00 and 19:00 reminders) names its own steps. What the app writes for the family (a plan's message and intro, a reminder's text, an order's message) is sent word for word. Nothing is ordered until the family replies or taps Order: \"Order my <App> cart\" is that yes. Call guide before a first conversation or when unsure which operation fits. Save the family's own words; never fill anything from guesses. A shared reel plus \"save this\" is a save_recipe call; for a dish it is also its video (set_dish_video). How a meal went is rate_dishes."
+  }
 }
