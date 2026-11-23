@@ -129,7 +129,7 @@ Unique (key, slot).
 ### 2.2 Derived, not stored
 
 - **History** = past `slot_days` (+ the seed examples, `status = confirmed`, date null, from setup). Past `planned` slot-days are what the family was **shown**, not what they ate.
-- **Staples** of a slot = dishes appearing in ≥ 60% of that slot's last 14 **seed + confirmed** rows with dishes (planned rows never count; owner 23 Nov), plus any dish the family explicitly says to have every day ("add salad every day", "4 eggs every day": library `frequency = daily`, which must appear on every slot-day of its slot). Staples are exempt from the repeat window. Computed at plan time.
+- **Staples** of a slot = dishes appearing in ≥ 60% of that slot's last 14 **seed + confirmed** rows with dishes (planned rows never count; only once the slot has at least 3 such rows, else no history staples; owner 23 Nov), plus any dish the family explicitly says to have every day ("add salad every day", "4 eggs every day": library `frequency = daily`, which must appear on every slot-day of its slot). Staples are exempt from the repeat window. Computed at plan time.
 - **Looks like** examples for a slot = up to 6 rows from the seed and **confirmed** slot-days only (recent confirmed first, then seed). Planned-only slot-days are never used as shape examples.
 - **Recent** (repeat avoidance, §5.4 check 4) = past slot-days of any status, planned included: it avoids repeating what the family was shown.
 
