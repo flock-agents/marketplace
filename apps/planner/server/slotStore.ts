@@ -32,7 +32,7 @@ export type Slot = { id: string; name: string; kind: SlotKind; addon_of: string 
   skip_days: SkipDay[]; order: number; active: boolean };
 export type Guest = { count: number; rules?: string[] };
 export type Ingredient = { item: string; amount: number | null; unit: string | null };
-export type SlotDish = { id: string; position: number; dish: string; new: boolean; feedback_asked: boolean; note: string | null;
+export type SlotDish = { id: string; position: number; dish: string; new: boolean; feedback_asked: boolean; note: string | null; not_for: string[];
   ingredients: (Ingredient & { id: string })[] };
 /** A slot on a date (`date` null: a setup seed example), with its dishes in order. */
 export type SlotDay = { id: string; date: string | null; slot: string; people: string[]; guests: Guest[]; occasion: string | null;
@@ -50,7 +50,7 @@ export type Rule = { id: string; hard: boolean; what: RuleWhat; who: string | nu
 
 export type SlotInput = { name: string; kind?: SlotKind; addon_of?: string | null; usual_people?: string[]; days?: Weekday[];
   skip_days?: SkipDay[]; order?: number; active?: boolean };
-export type SlotDishInput = { dish: string; new?: boolean; feedback_asked?: boolean; note?: string | null; ingredients?: Ingredient[] };
+export type SlotDishInput = { dish: string; new?: boolean; feedback_asked?: boolean; note?: string | null; not_for?: string[]; ingredients?: Ingredient[] };
 /** `dishes` given: they replace the slot-day's dishes (and their ingredients). `date` null: a seed example, always a new row. */
 export type SlotDayInput = { date: string | null; slot: string; people?: string[]; guests?: Guest[]; occasion?: string | null;
   new_dishes_allowed?: number | null; skip?: Skip | null; status?: SlotDayStatus; edited?: boolean; note?: string | null; dishes?: SlotDishInput[] };
@@ -134,7 +134,7 @@ function slotDaysOf(db: Db, rows: SlotDayRow[]): SlotDay[] {
     id: r.id, date: r.date, slot: r.slot, people: arr(r.people), guests: arr(r.guests), occasion: r.occasion, new_dishes_allowed: r.new_dishes_allowed,
     skip: (r.skip as Skip | null) ?? null, status: r.status as SlotDayStatus, edited: !!r.edited, note: r.note, created_at: r.created_at,
     dishes: dishRows.filter((d) => d.slot_day_id === r.id).map((d, i) => ({ id: d.id, position: d.position ?? i, dish: d.dish, new: !!d.new,
-      feedback_asked: !!d.feedback_asked, note: d.note,
+      feedback_asked: !!d.feedback_asked, note: d.note, not_for: arr(d.not_for),
       ingredients: itemRows.filter((x) => x.slot_dish_id === d.id).map((x) => ({ id: x.id, item: x.item, amount: x.amount, unit: x.unit })) })),
   }));
 }
@@ -179,7 +179,7 @@ function replaceDishes(tx: Db, slotDayId: string, dishes: SlotDishInput[], by: s
   }
   dishes.forEach((d, position) => {
     const row = tx.insert(slot_dishes).values({ slot_day_id: slotDayId, position, dish: d.dish.trim(), new: bit(d.new) ?? 0, feedback_asked: bit(d.feedback_asked) ?? 0,
-      note: d.note ?? null, updated_by: by }).returning().get();
+      note: d.note ?? null, not_for: d.not_for?.length ? js(d.not_for) : null, updated_by: by }).returning().get();
     changes.push(["slot_dishes", row.id, "insert", by]);
     setIngredients(tx, row.id, d.ingredients ?? [], by, changes);
   });

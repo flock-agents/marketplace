@@ -775,7 +775,7 @@
       },
       {
         "name": "make_plan",
-        "description": "Plan a whole week and save it final, in one call: { week_start: the week's Monday as YYYY-MM-DD }. The app plans it in steps itself (the menu from the family's own dishes, checked against every food rule, every meal and extra slot, and no main dish on more than two days; then each day's ingredients), the same way the Sunday run does, and messages nobody. Answers { ok: true, week_start, message, intro?, instructions, unmet? } (send message word for word, then intro once, as instructions say; unmet: what could not be kept, already said in message) or { ok: false, reason, say } (nothing planned: send say word for word). Use it when the family asks for a week planned or planned again;"
+        "description": "Plan a whole week and save it, in one call: { week_start: the week's Monday as YYYY-MM-DD, household?: the household facts (Flock sends them; the app also reads them fresh) }. The app plans it in steps itself (who eats each meal from the slots, the weekday patterns and the calendar; each meal slot from the family's own dishes and plates, checked against every food rule per person, how often each dish comes and no dish too soon again; then each day's ingredients), the same way the Sunday run does, and messages nobody. Answers { ok: true, week_start, message, intro?, instructions, unmet? } (send message word for word, then intro once, as instructions say; unmet: what could not be kept, already said in message) or { ok: false, reason, say } (nothing planned: send say word for word). Use it when the family asks for a week planned or planned again;"
       },
       {
         "name": "set_regular",

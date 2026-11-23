@@ -6,9 +6,9 @@ import { join } from "path";
 import { agentOps, FIELDS, FIELDS_SECTION, OPERATION_NAMES, ROUTES } from "./agentOps";
 import { APP_NAMES } from "./db/constants";
 import { SETUP_SYSTEM } from "./setup";
-import { PLAN_METHOD } from "./meals";
-import { MENU_SYSTEM } from "./makePlan";
-import { WEEKLY_PROMPT } from "./routines/weekly-plan";
+import { CONTAINS_SYSTEM, FIX_SYSTEM, INGREDIENT_SYSTEM, SLOT_SYSTEM } from "./makePlan";
+import { EVENTS_SYSTEM } from "./planDays";
+import { DELIVER_PROMPT, FESTIVAL_PROMPT } from "./routines/weekly-plan";
 
 const manifest = JSON.parse(readFileSync(join(import.meta.dir, "..", "flock.app.json"), "utf8"));
 const guide = readFileSync(join(import.meta.dir, "agent-guide.md"), "utf8");
@@ -314,13 +314,13 @@ describe("the agent's interface", () => {
     const served = (await agentOps(() => null as any).guide({}, { agentId: null } as any)) as { guide: string };
     expect(served.guide).toContain(FIELDS_SECTION);
     expect(FIELDS_SECTION).toContain("- set_cook { name, days?, arrival?, makes_well?, wont_make?, time_limit?, new_recipes?, note? }");
-    expect(FIELDS_SECTION).toContain("- make_plan { week_start }");
+    expect(FIELDS_SECTION).toContain("- make_plan { week_start, household? }");
   });
 
   // Owner, 23 Nov: the test family's names and lines (the simulated runs' family) are in no text a model reads, so a model
   // copying an example cannot pass as having read the family. Tests may keep them; every model-facing string may not.
   it("no model-facing text names the test family or its lines", () => {
-    const texts = [JSON.stringify(manifest), guide, SETUP_SYSTEM, PLAN_METHOD, MENU_SYSTEM, WEEKLY_PROMPT("2026-11-30")];
+    const texts = [JSON.stringify(manifest), guide, SETUP_SYSTEM, SLOT_SYSTEM, FIX_SYSTEM, CONTAINS_SYSTEM, INGREDIENT_SYSTEM, EVENTS_SYSTEM, DELIVER_PROMPT(true), FESTIVAL_PROMPT("2026-11-30")];
     for (const t of texts) for (const word of [/shiva/i, /ankita/i, /agastya/i, /gowri/i, /lakshmi/i, /nut-free/i, /fasts thursday/i])
       expect(t, String(word)).not.toMatch(word);
   });

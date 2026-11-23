@@ -56,7 +56,7 @@ export async function boot(opts: { dbFile?: string; dataDir?: string; token?: st
   mountProductRoutes(hono, kit.db, kit.emitChange);
   mountRecipeRoutes(hono, kit.db, kit.emitChange);
   mountDishBookRoutes(hono, kit.db, kit.emitChange, { now });
-  mountMakePlanRoute(hono, kit.db, kit.emitChange, { basePath: opts.basePath ?? "/a/t", model: opts.model ?? NO_MODEL, now });
+  mountMakePlanRoute(hono, kit.db, kit.emitChange, { basePath: opts.basePath ?? "/a/t", model: opts.model ?? NO_MODEL, now, sqlite: kit.sqlite });
   mountSetupRoute(hono, kit.db, kit.emitChange, { model: opts.model ?? NO_MODEL, budgetMs: opts.setupBudgetMs });
   /** A request as the owner. */
   const owner = async (method: string, path: string, body?: unknown) => {

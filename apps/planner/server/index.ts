@@ -34,8 +34,9 @@ if (kit.status.state === "ok") {
 
 mountFamilyRoutes(flock.hono, kit.db, kit.emitChange, { appToken: flock.env.token ?? process.env.FLOCK_APP_TOKEN ?? null });
 mountMealRoutes(flock.hono, kit.db, kit.emitChange, { basePath: flock.env.basePath });
-// make_plan: the week planned in steps with the model call Flock gives the app (model.ts), the same as the Sunday run.
-mountMakePlanRoute(flock.hono, kit.db, kit.emitChange, { basePath: flock.env.basePath, model: (req) => sdkModel(flock.platform)(req) });
+// make_plan: the week planned in steps with the model call Flock gives the app (model.ts), the same as the Sunday run; the
+// platform gives it the household fresh and the Family Calendar's events, when this Flock has them (planDays.ts platformPeers).
+mountMakePlanRoute(flock.hono, kit.db, kit.emitChange, { basePath: flock.env.basePath, model: (req) => sdkModel(flock.platform)(req), platform: () => flock.platform, sqlite: kit.sqlite });
 // apply_setup: the whole interview read once by the model and saved by the app's code (setup.ts).
 mountSetupRoute(flock.hono, kit.db, kit.emitChange, { model: (req) => sdkModel(flock.platform)(req) });
 routineEnv.basePath = flock.env.basePath;

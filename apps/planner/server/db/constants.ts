@@ -25,8 +25,10 @@ export type LibraryOrigin = (typeof LIBRARY_ORIGINS)[number];
  *  frequency; note is words only, not checked. */
 export const RULE_WHATS = ["veg", "egg", "no_eggs", "avoid", "only", "swap", "require", "fasting", "cap", "note"] as const;
 export type RuleWhat = (typeof RULE_WHATS)[number];
-/** How often a library dish or a soft rule comes: usually (4–5 a week), sometimes (2–3), rarely (at most 1), or "<n>/week". */
-export const FREQUENCY_WORDS = ["usually", "sometimes", "rarely"] as const;
+/** How often a library dish or a soft rule comes: usually (4–5 a week), sometimes (2–3), rarely (at most 1), or "<n>/week".
+ *  daily (a dish only): the family said to have it every day ("salad every day"): a staple by their word, on every slot-day of
+ *  its slot, exempt from the repeat window (owner, 23 Nov). */
+export const FREQUENCY_WORDS = ["usually", "sometimes", "rarely", "daily"] as const;
 export type Frequency = (typeof FREQUENCY_WORDS)[number] | `${number}/week`;
 /** Staples of a slot: dishes in at least this share of the slot's last STAPLE_WINDOW history rows with dishes (owner, 23 Nov). */
 export const STAPLE_SHARE = 0.6;
@@ -35,6 +37,33 @@ export const STAPLE_WINDOW = 14;
 export const LOOKS_LIKE_MAX = 6;
 /** An untried dish placed this many times with no "made it" answer is dropped. */
 export const UNTRIED_MAX_OFFERS = 2;
+/** Staples are counted from confirmed slot-days only (the setup seed is stored confirmed, so it counts); a planned slot-day
+ *  never feeds a staple (owner, 23 Nov: the plan's own output must not feed back into it). Flip to let planned ones count. */
+export const STAPLES_FROM_PLANNED = false;
+
+// ── The weekly plan (make_plan, spec §5; decided defaults, tunable) ──
+
+/** The days (inclusive range [min, max]) a week a dish or a soft rule comes, by how often. A dish with nothing said comes on
+ *  DEFAULT_DISH_DAYS days at most; a daily dish on every slot-day of its slot. */
+export const FREQUENCY_DAYS: Record<"usually" | "sometimes" | "rarely" | "daily", [number, number]> = { usually: [4, 5], sometimes: [2, 3], rarely: [0, 1], daily: [7, 7] };
+export const DEFAULT_DISH_DAYS = 2;
+/** A non-staple dish is not on a slot within this many days of itself; the feasibility check may widen it to the relaxed one. */
+export const REPEAT_WINDOW_DAYS = 3;
+export const REPEAT_WINDOW_RELAXED = 2;
+/** At most this many slot calls run at once. */
+export const SLOT_CALLS_AT_ONCE = 3;
+/** At most this many dishes a contains read asks about in one call. */
+export const CONTAINS_BATCH = 40;
+/** The tags every new dish is read for, beside the ones the family's rules name. */
+export const BASE_TAGS = ["egg", "meat", "fish", "onion_garlic"] as const;
+/** A tag that is a kind of another: a chicken dish has meat, a peanut dish has nuts. */
+export const TAG_PARENT: Record<string, string> = { chicken: "meat", red_meat: "meat", mutton: "red_meat", beef: "red_meat", pork: "red_meat", prawn: "fish", peanut: "nuts" };
+/** The main slots' usual time of day, by their planning order: a weekly pattern with times (at the office 9 to 6) is away for
+ *  the main slots whose time falls inside it. */
+export const MAIN_SLOT_TIME: Record<number, string> = { 10: "08:00", 30: "13:00", 50: "20:00" };
+/** The Family Calendar's app id, read for the week's stays and trips (get_events). */
+export const CALENDAR_APP = "family-calendar";
+
 /** The new-dishes-a-week choices: none, 1–2, 3–4, surprise me. */
 export const NEW_DISHES_CHOICES = [0, 2, 4, 7] as const;
 
