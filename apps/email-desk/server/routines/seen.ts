@@ -5,14 +5,35 @@
 //
 // Ids are journal event ids (KeptMail.messageId). Handing over a thread through one message covers the messages before it
 // in that thread too: they were in the same thread text.
+//
+// WHICH MESSAGES WERE READ (ruling R13, harvest earlierReadOf). When the gather keeps a thread it notes the fingerprints of
+// the messages in the text it handed out (app_meta `handover:<messageId>`); the hand-over records them in
+// extracted_messages, as the built-in desk's mark did on `extracted`. A later reply on the thread then reads those
+// messages as earlier (EARLIER_MESSAGE_MARK) and only the new one as new.
 import { getStore } from "../store";
 import { GMAIL_SOURCE, MEMORY_CONSUMER } from "../journal";
 
 export const HANDED_OVER_REASON = "handed_over";
 
 /** Mark these messages, and the earlier still-claimable messages of their threads, as handed over. Idempotent. */
+const HANDOVER_KEY = (id: string) => `handover:${id}`;
+
+/** The gather's note of what a kept mail's text held: read back by markHandedOver. Replaced on every gather. */
+export function noteHandoverFingerprints(id: string, accountId: string, threadKey: string, fingerprints: readonly string[]): void {
+  getStore().run(
+    "INSERT INTO app_meta (key, value, updated_at) VALUES (?,?,?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at",
+    [HANDOVER_KEY(id), JSON.stringify({ accountId, threadKey, fingerprints }), Date.now()],
+  );
+}
+
 export function markHandedOver(ids: readonly string[]): void {
   const db = getStore();
+  const note = db.query("SELECT value FROM app_meta WHERE key = ?");
+  const dropNote = db.query("DELETE FROM app_meta WHERE key = ?");
+  const record = db.query(
+    `INSERT OR IGNORE INTO extracted_messages (source_id, account_id, consumer, thread_key, fingerprint, created_at)
+     VALUES (?,?,?,?,?,?)`,
+  );
   const rowOf = db.query(
     "SELECT account_id, thread_key, ts FROM ingest_events WHERE source_id = ? AND event_id = ?",
   );
@@ -37,6 +58,14 @@ export function markHandedOver(ids: readonly string[]): void {
           : [id];
         if (!events.includes(id)) events.push(id);
         for (const e of events) mark.run(GMAIL_SOURCE, r.account_id, e, MEMORY_CONSUMER, HANDED_OVER_REASON, now);
+      }
+      const noted = note.get(HANDOVER_KEY(id)) as { value: string } | null;
+      if (noted) {
+        try {
+          const n = JSON.parse(noted.value) as { accountId: string; threadKey: string; fingerprints: string[] };
+          for (const f of n.fingerprints ?? []) if (f) record.run(GMAIL_SOURCE, n.accountId, MEMORY_CONSUMER, n.threadKey, f, now);
+        } catch { /* a broken note costs the earlier mark, never the hand-over */ }
+        dropNote.run(HANDOVER_KEY(id));
       }
     }
   })();

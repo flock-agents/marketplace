@@ -20,8 +20,8 @@ import type { RoutineCtx } from "../platform-ext";
 import { getStore } from "../store";
 import {
   GMAIL_SOURCE, MEMORY_CONSUMER, RESOLVE,
-  appendEvents, applyResolve, claimPending, getCursor, isValidEvent, knownEventIds, markComprehension, needsResolve,
-  normalizeInboxRow, setCursor, setEventBody,
+  SENT_LIST_MAX, appendEvents, applyResolve, claimPending, getCursor, isValidEvent, knownEventIds, markComprehension,
+  needsResolve, normalizeInboxRow, normalizeSentRow, sentQuery, setCursor, setEventBody,
   type ClaimedJournalEntry, type EventKey,
 } from "../journal";
 import { engagedFromSearch, listEngagedDomains, resolveEngagement, seedOwnerDomains } from "../engaged-domains";
@@ -31,7 +31,9 @@ import { decideDraftEligibility, extractEmailAddress } from "../lib/draft-eligib
 import { isAutomatedSender } from "../lib/automated-sender";
 import { isSentRow } from "../lib/sent-row";
 import { THREAD_BODY_SEPARATOR as SEPARATOR, MAX_BODY_CHARS } from "../lib/thread-format";
-import { wasHandedOver } from "./seen";
+import { parseGmailDateTime } from "../lib/gmail-date";
+import { messageFingerprint } from "../lib/message-fingerprint";
+import { noteHandoverFingerprints, wasHandedOver } from "./seen";
 
 /** The read turn's consumer name: Flock's lease and its logs say who holds the mailbox. */
 export const HARVEST_CONSUMER = "email-desk:harvest";
@@ -40,6 +42,10 @@ export const HARVEST_TURN_TTL_MS = 20 * 60_000;
 
 /** The gmail manifest's poll: the inbox's newest 25 threads, no watermark (Gmail's list view has none); dedupe by event id. */
 export const LIST_PARAMS = { maxResults: 25 } as const;
+/** Heads a message an earlier hand-over of its thread already carried. Byte-for-byte Flock's wiki-extraction-prompts
+ *  EARLIER_MESSAGE_MARK: the email extraction preamble tells the model to read such a message as context only. */
+export const EARLIER_MESSAGE_MARK = "[EARLIER — already read]";
+
 /** Flock's POLL_CALL_TIMEOUT_MS for the listing. */
 export const LIST_TIMEOUT_MS = 2 * 60_000;
 /** A resolve read's worst case (manifest ingest.resolve.maxCallMs). */
@@ -76,7 +82,7 @@ export interface KeptMail {
   body: string;
   mailboxKind: "personal" | "work";
   /** Today's draft gate, in code, on the thread as read now: the newest message is to the person (To, not cc), not their
-   *  own, not bulk, not from an automated sender, and no draft is open. create_draft checks again before it writes. */
+   *  own, not bulk, not from an automated sender, and no draft is open. Sent mail never is. create_draft checks again. */
   draftEligible: boolean;
 }
 
@@ -97,8 +103,8 @@ export interface GatherResult {
 }
 
 export interface GatherOptions {
-  /** Who the family is, for a personal mailbox's rules. Until Flock gives the app this (a later seam field), the family is
-   *  the mailbox itself; the rules that need names then fail open (keep). */
+  /** Who the family is, for a personal mailbox's rules. Else Flock's `family.context()` when it has one, else the mailbox
+   *  alone with no names, so the rules that need names fail open (keep). */
   family?: FamilyContext;
   now?: number;
 }
@@ -132,7 +138,15 @@ function parsed(data: unknown): any {
 
 // ---- threads -------------------------------------------------------------------------------------------------------------
 
-interface Segment { from: string; text: string; to?: string[] }
+interface Segment {
+  from: string;
+  text: string;
+  to?: string[];
+  /** The message's own time, when the read gave a full Gmail datetime. */
+  ts?: number;
+  /** message-fingerprint.ts, from a live read only (a parked body has none). */
+  fingerprint?: string;
+}
 
 interface Block {
   key: string;
@@ -158,23 +172,49 @@ function segmentsFromRow(row: ClaimedJournalEntry): Segment[] {
   });
 }
 
-/** Whole messages, oldest first, under MAX_BODY_CHARS; identical texts once (harvest renderSegments). */
-export function renderSegments(segments: Segment[]): string {
+/**
+ * Whole messages, oldest first, under MAX_BODY_CHARS; identical texts once (harvest renderBlock). A message an earlier
+ * hand-over of the thread carried (`isEarlier`) is headed with EARLIER_MESSAGE_MARK. `fingerprints` are those of the
+ * messages that made it into the text, recorded once the text is handed over.
+ */
+export function renderBlock(segments: Segment[], isEarlier: (seg: Segment) => boolean): { text: string; fingerprints: string[] } {
   const seen = new Set<string>();
   const parts: string[] = [];
+  const fingerprints: string[] = [];
   let length = 0;
   for (const seg of segments) {
     const text = (seg.text ?? "").trim();
     if (!text || seen.has(text)) continue;
     seen.add(text);
-    const piece = seg.from && !/^from:/i.test(text) ? `From: ${seg.from}\n${text}` : text;
-    if (parts.length === 0 && piece.length > MAX_BODY_CHARS) return piece.slice(0, MAX_BODY_CHARS);
+    const named = seg.from && !/^from:/i.test(text) ? `From: ${seg.from}\n${text}` : text;
+    const piece = isEarlier(seg) ? `${EARLIER_MESSAGE_MARK}\n${named}` : named;
+    if (parts.length === 0 && piece.length > MAX_BODY_CHARS) {
+      return { text: piece.slice(0, MAX_BODY_CHARS), fingerprints: seg.fingerprint ? [seg.fingerprint] : [] };
+    }
     const sep = parts.length === 0 ? 0 : SEPARATOR.length;
     if (length + sep + piece.length > MAX_BODY_CHARS) break;
     parts.push(piece);
+    if (seg.fingerprint) fingerprints.push(seg.fingerprint);
     length += sep + piece.length;
   }
-  return parts.join(SEPARATOR);
+  return { text: parts.join(SEPARATOR), fingerprints };
+}
+
+/** The thread's text with nothing marked: what is parked on the journal rows. */
+export function renderSegments(segments: Segment[]): string {
+  return renderBlock(segments, () => false).text;
+}
+
+/** Which messages an earlier hand-over of the thread carried (harvest earlierReadOf): exactly the recorded fingerprints
+ *  once the thread has any; for a thread extracted before fingerprints were recorded, a message at or before the newest
+ *  extracted time. */
+function earlierReadOf(rows: readonly ClaimedJournalEntry[]): (seg: Segment) => boolean {
+  const read = new Set(rows.flatMap((r) => r.threadFingerprints ?? []));
+  if (read.size > 0) return (seg) => seg.fingerprint !== undefined && read.has(seg.fingerprint);
+  const times = rows.map((r) => r.threadExtractedThrough).filter((t): t is number => typeof t === "number");
+  if (times.length === 0) return () => false;
+  const through = Math.max(...times);
+  return (seg) => seg.ts !== undefined && seg.ts <= through;
 }
 
 /** Rows grouped by thread, oldest first within and across threads. The thread is the unit: read whole or skipped whole. */
@@ -194,7 +234,13 @@ const addressList = (v: unknown): string[] | undefined =>
 
 function segmentsFromThread(thread: any): Segment[] {
   const messages = thread && Array.isArray(thread.messages) ? thread.messages : [];
-  return messages.map((m: any) => ({ from: typeof m?.from === "string" ? m.from : "", text: typeof m?.body === "string" ? m.body : "", to: addressList(m?.to) }));
+  return messages.map((m: any) => ({
+    from: typeof m?.from === "string" ? m.from : "",
+    text: typeof m?.body === "string" ? m.body : "",
+    to: addressList(m?.to),
+    ts: (typeof m?.date === "string" ? parseGmailDateTime(m.date) : null) ?? undefined,
+    fingerprint: messageFingerprint(m ?? {}),
+  }));
 }
 
 // The bulk-mail signal (harvest findUnsubscribeLink / bulkSignalStrength). The browser read has no List-Unsubscribe header,
@@ -240,14 +286,38 @@ function personalEligibility(row: ClaimedJournalEntry, family: FamilyContext, te
   return v.keep ? { eligible: true } : { eligible: false, reason: v.reason };
 }
 
-function nameWords(full: string): string[] {
-  return full.split(/\s+/).map((w) => w.replace(/[^\p{L}\p{M}'-]/gu, "")).filter((w) => w.length > 1);
-}
-
-/** The mailbox address's local part as a name ("asha.rao@" names "asha rao"); under three letters names nobody. */
+/** The mailbox address's local part as a name ("asha.rao@" names "asha rao"); under three letters names nobody. Used only
+ *  for the work bulk test's owner names (harvest resolveOwnerIdentity), never as family names. */
 function namesFromAddress(address: string | null): string[] {
   const local = (address ?? "").split("@")[0]?.replace(/[._-]+/g, " ").trim() ?? "";
   return local.length > 2 ? [local] : [];
+}
+
+/** The family for the personal rules: the caller's, else Flock's (optional seam), else the mailbox with no names (R9:
+ *  fail open; the address is never read as a name). The mailbox's own address is always a family address. */
+async function familyFor(ctx: RoutineCtx, ownerAddresses: string[], given?: FamilyContext): Promise<FamilyContext> {
+  const lower = (a: readonly string[]) => a.map((x) => x.trim().toLowerCase()).filter(Boolean);
+  const withMailbox = (f: FamilyContext): FamilyContext => ({ ...f, addresses: [...new Set([...lower(ownerAddresses), ...lower(f.addresses ?? [])])] });
+  if (given) return withMailbox(given);
+  try {
+    const r = await ctx.platform.family?.context?.();
+    if (r?.ok) return withMailbox({ names: r.data.names ?? [], addresses: r.data.addresses ?? [], schoolDomains: r.data.schoolDomains ?? [] });
+  } catch { /* fail open below */ }
+  return { names: [], addresses: lower(ownerAddresses), schoolDomains: [] };
+}
+
+/** The person's names for the work bulk test (R10): Flock's (optional seam), else the Gmail account's label and the
+ *  address's local part. Empty is safe: the bulk test then keeps the mail. */
+async function ownerNamesFor(ctx: RoutineCtx, mailbox: { email: string | null; label: string | null }): Promise<string[]> {
+  try {
+    const r = await ctx.platform.identity?.names?.();
+    if (r?.ok) {
+      const names = (r.data.names ?? []).filter((n) => typeof n === "string" && n.trim().length > 1).map((n) => n.trim());
+      if (names.length > 0) return [...names, ...namesFromAddress(mailbox.email)];
+    }
+  } catch { /* fall back below */ }
+  const label = (mailbox.label ?? "").trim();
+  return [...(label.length > 1 && !label.includes("@") ? [label] : []), ...namesFromAddress(mailbox.email)];
 }
 
 const keyOf = (row: ClaimedJournalEntry): EventKey => ({ sourceId: row.sourceId, accountId: row.accountId, eventId: row.eventId });
@@ -264,13 +334,14 @@ function advancedCursor(prev: string | null, newestTs: number): string | null {
   return String(newestTs);
 }
 
-async function mailboxAddress(ctx: RoutineCtx, accountId: string): Promise<string | null> {
+async function mailboxOf(ctx: RoutineCtx, accountId: string): Promise<{ email: string | null; label: string | null }> {
   try {
     const r = await ctx.platform.connectors.accounts("gmail");
-    if (!r.ok) return null;
-    return r.data.accounts.find((a) => a.accountId === accountId)?.email?.trim() || null;
+    if (!r.ok) return { email: null, label: null };
+    const a = r.data.accounts.find((x) => x.accountId === accountId);
+    return { email: a?.email?.trim() || null, label: a?.label?.trim() || null };
   } catch {
-    return null;
+    return { email: null, label: null };
   }
 }
 
@@ -353,16 +424,32 @@ async function gatherUnderTurn(
   out.cursor = cursor;
 
   // 4. WHO THE MAILBOX IS. Fails open: no address → work rules, and the cold check keeps everything.
-  const mailbox = await mailboxAddress(ctx, accountId);
+  const account = await mailboxOf(ctx, accountId);
+  const mailbox = account.email;
   const ownerAddresses = mailbox ? [mailbox] : [];
   if (mailbox) seedOwnerDomains(db, accountId, ownerAddresses);
   const personal = isPersonalMailbox(mailbox);
   const mailboxKind: KeptMail["mailboxKind"] = personal ? "personal" : "work";
-  const family: FamilyContext | null = personal
-    ? (opts.family ?? { names: nameWords(namesFromAddress(mailbox).join(" ")), addresses: ownerAddresses, schoolDomains: [] })
-    : null;
-  const ownerNames = namesFromAddress(mailbox);
+  const family: FamilyContext | null = personal ? await familyFor(ctx, ownerAddresses, opts.family) : null;
+  const ownerNames = personal ? [] : await ownerNamesFor(ctx, account);
   const identity = { engagedDomains: listEngagedDomains(db, accountId), ownerAddresses };
+
+  // 4b. SENT MAIL (harvest's sent pre-step, sent-source.ts readSentIntoJournal): `in:sent` over the open window, journaled
+  // like the inbox so a thread the person started reaches memory. Best effort: a failed read is logged and the run goes on;
+  // a refusal of the mailbox stops the run as any read's does.
+  const sent = await gmail("searchEmails", { query: sentQuery(OPEN_DAYS), maxResults: SENT_LIST_MAX }, LIST_TIMEOUT_MS);
+  const sentStop = stopReason(sent);
+  if (sentStop) return { ...out, note: `mailbox not read (${sentStop})` };
+  if (sent.ok) {
+    const rows = parsed(sent.data);
+    const sentEvents = (Array.isArray(rows) ? rows : [])
+      .filter((i: unknown): i is Record<string, unknown> => !!i && typeof i === "object")
+      .map((i) => normalizeSentRow(i, accountId, mailbox))
+      .filter((e): e is NonNullable<typeof e> => !!e && isValidEvent(e));
+    appendEvents(db, accountId, sentEvents);
+  } else {
+    console.warn(`[gather] ${accountId}: sent mail not read (${errorText(sent)}); the inbox is still read`);
+  }
 
   // 5. CLAIM in pages → threads → horizon → cold outreach (harvest runHarvestOnceInner).
   const retentionCutoff = now - HORIZON_DAYS * DAY_MS;
@@ -468,7 +555,8 @@ async function gatherUnderTurn(
     const newestRow = eligible[eligible.length - 1];
     if (!newestRow) continue;
 
-    const body = renderSegments(segments);
+    const { text: body, fingerprints } = renderBlock(segments, earlierReadOf(block.rows));
+    noteHandoverFingerprints(newestRow.eventId, accountId, block.key, fingerprints);
     const newestSeg = segments[segments.length - 1];
     const from = newestSeg?.from || String((newestRow.actor as { name?: unknown })?.name ?? "") || actorEmail(newestRow);
     out.kept.push({
@@ -481,7 +569,8 @@ async function gatherUnderTurn(
       subject: subjectOf(newestRow),
       body,
       mailboxKind,
-      draftEligible: draftEligible(thread, mailbox, Boolean(unsubscribeLink), !!ownDraft.get(accountId, block.key)),
+      draftEligible: !isSentRow(newestRow)
+        && draftEligible(thread, mailbox, Boolean(unsubscribeLink), !!ownDraft.get(accountId, block.key)),
     });
   }
   return out;

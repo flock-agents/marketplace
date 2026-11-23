@@ -4,22 +4,27 @@ import { mkdtempSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { openStore, _setStoreForTesting } from "../store";
-import { gatherNewMail, HARVEST_CONSUMER } from "../routines/gather";
+import { gatherNewMail, HARVEST_CONSUMER, EARLIER_MESSAGE_MARK } from "../routines/gather";
+import { THREAD_BODY_SEPARATOR } from "../lib/thread-format";
 import { markHandedOver, wasHandedOver } from "../routines/seen";
 import { getCursor, setCursor, GMAIL_SOURCE } from "../journal";
 import type { RoutineCtx, ReadTurnResult } from "../platform-ext";
 
 const ACCOUNT = "acct-1";
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-/** Gmail's row title ("23 Nov 2026, 09:14") for a time `minutesAgo` before now. */
+/** One "now" for the file, so a message read in two runs carries the same date (and fingerprint). */
+const BASE = Date.now();
+/** Gmail's row title ("23 Nov 2026, 09:14") for a time `minutesAgo` before BASE. */
 function dateFull(minutesAgo: number): string {
-  const d = new Date(Date.now() - minutesAgo * 60_000);
+  const d = new Date(BASE - minutesAgo * 60_000);
   const hh = String(d.getHours()).padStart(2, "0");
   const mm = String(d.getMinutes()).padStart(2, "0");
   return `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}, ${hh}:${mm}`;
 }
 
-interface Mail { threadId: string; from: string; subject: string; body: string; minutesAgo: number; to?: string[] }
+interface Msg { from: string; body: string; minutesAgo: number; to?: string[] }
+/** A thread as the inbox lists it (its newest message) and as a thread read returns it (`earlier` messages first). */
+interface Mail { threadId: string; from: string; subject: string; body: string; minutesAgo: number; to?: string[]; earlier?: Msg[] }
 
 interface Fake {
   ctx: RoutineCtx;
@@ -33,16 +38,19 @@ function fake(opts: {
   inbox: Mail[];
   turn?: ReadTurnResult;
   throwOn?: string;
+  /** Threads the person started: listed by in:sent, read like any thread. */
+  sent?: Mail[];
+  label?: string | null;
+  platformExtra?: Record<string, unknown>;
 }): Fake {
   const f: Fake = { ctx: null as unknown as RoutineCtx, calls: [], released: 0, turns: [] };
   const rowOf = (m: Mail) => ({
     id: m.threadId, from: m.from, subject: m.subject, snippet: m.body.slice(0, 40),
     date: "", dateFull: dateFull(m.minutesAgo), isUnread: true,
   });
-  const threadOf = (m: Mail) => ({
-    threadId: m.threadId, subject: m.subject,
-    messages: [{ from: m.from, to: m.to ?? [opts.mailbox], cc: [], date: dateFull(m.minutesAgo), body: m.body, recipientsVerified: true }],
-  });
+  const msgOf = (m: Msg) => ({ from: m.from, to: m.to ?? [opts.mailbox], cc: [], date: dateFull(m.minutesAgo), body: m.body, recipientsVerified: true });
+  const threadOf = (m: Mail) => ({ threadId: m.threadId, subject: m.subject, messages: [...(m.earlier ?? []).map(msgOf), msgOf(m)] });
+  const all = () => [...opts.inbox, ...(opts.sent ?? [])];
   const exec = async (skillId: string, fn: string, params: Record<string, unknown> = {}, o: Record<string, unknown> = {}) => {
     f.calls.push({ fn, params, opts: o });
     if (skillId !== "gmail") return { ok: false as const, reason: "unknown skill" };
@@ -50,13 +58,14 @@ function fake(opts: {
     if (fn === "listInbox") return { ok: true as const, data: opts.inbox.map(rowOf) };
     if (fn === "getThreads") {
       const ids = (params.threadIds as string[]) ?? [];
-      return { ok: true as const, data: { threads: opts.inbox.filter((m) => ids.includes(m.threadId)).map(threadOf) } };
+      return { ok: true as const, data: { threads: all().filter((m) => ids.includes(m.threadId)).map(threadOf) } };
     }
     if (fn === "getThread") {
-      const m = opts.inbox.find((x) => x.threadId === params.threadId);
+      const m = all().find((x) => x.threadId === params.threadId);
       return m ? { ok: true as const, data: threadOf(m) } : { ok: false as const, reason: "not found" };
     }
     if (fn === "checkEngagedDomains") return { ok: true as const, data: [] };
+    if (fn === "searchEmails") return { ok: true as const, data: (opts.sent ?? []).map((m) => ({ ...rowOf(m), from: "me" })) };
     return { ok: false as const, reason: `unexpected ${fn}` };
   };
   const platform = {
@@ -66,10 +75,11 @@ function fake(opts: {
         f.turns.push({ accountHint, consumer, opts: o });
         return opts.turn ?? { ok: true, data: { turnId: "turn-1", accountId: ACCOUNT, release: async () => { f.released++; } } };
       },
-      accounts: async () => ({ ok: true as const, data: { accounts: [{ accountId: ACCOUNT, email: opts.mailbox, label: null }] } }),
+      accounts: async () => ({ ok: true as const, data: { accounts: [{ accountId: ACCOUNT, email: opts.mailbox, label: opts.label ?? null }] } }),
       exec: async () => ({ ok: false as const, reason: "use ctx.connectors.exec" }),
       list: async () => [],
     },
+    ...(opts.platformExtra ?? {}),
   };
   f.ctx = {
     routine: { id: "r1", appRoutineId: "memory-extraction", handler: "memory-extraction", agentId: "pa-1", name: "Build memory", accounts: { gmail: ACCOUNT }, trigger: {}, values: {} },
@@ -92,6 +102,14 @@ afterEach(() => {
   _setStoreForTesting(null);
   db.close();
 });
+
+/** A new empty store for a second scenario in one test. */
+function freshDb(): void {
+  _setStoreForTesting(null);
+  db.close();
+  db = openStore(mkdtempSync(join(tmpdir(), "email-desk-gather-")));
+  _setStoreForTesting(db);
+}
 
 const stateOf = (eventLike: string) =>
   (db.query("SELECT c.state, c.reason FROM ingest_comprehension c JOIN ingest_events e USING (source_id, account_id, event_id) WHERE e.thread_key = ?")
@@ -186,5 +204,75 @@ describe("gatherNewMail", () => {
     await expect(gatherNewMail(f.ctx, ACCOUNT)).rejects.toThrow("listInbox blew up");
     expect(f.released).toBe(1);
     expect(getCursor(db, GMAIL_SOURCE, ACCOUNT)).toBe("77");
+  });
+
+  test("personal mailbox with no family given: bulk mail naming no one is kept (fail open)", async () => {
+    const society: Mail = { threadId: "t-society", from: "Lakeview Society <lakeviewsociety@gmail.com>", subject: "Diwali meet-up",
+      body: "Join us on the lawn at 7.\n\nUnsubscribe: https://lists.example.org/unsubscribe?u=9", minutesAgo: 25 };
+    const r = await gatherNewMail(fake({ mailbox: "family.home@gmail.com", inbox: [society] }).ctx, ACCOUNT);
+    expect(r.kept.map((k) => k.threadId)).toEqual(["t-society"]);
+
+    // With Flock's family (optional seam) the names are known, and bulk mail naming none of them drops (rule 7).
+    freshDb();
+    const family = { context: async () => ({ ok: true as const, data: { names: ["Agastya", "Priya"], addresses: [], schoolDomains: [] } }) };
+    const withFamily = await gatherNewMail(fake({ mailbox: "family.home@gmail.com", inbox: [society], platformExtra: { family } }).ctx, ACCOUNT);
+    expect(withFamily.kept).toEqual([]);
+    expect(stateOf("t-society")).toEqual({ state: "filtered", reason: "bulk_impersonal" });
+  });
+
+  test("a new reply on a thread handed over before: earlier messages under the mark, only the new one above it", async () => {
+    const first = await gatherNewMail(fake({ mailbox: "me@acme.com", inbox: [ASHA] }).ctx, ACCOUNT);
+    expect(first.kept[0]!.body).not.toContain(EARLIER_MESSAGE_MARK);
+    markHandedOver(first.kept.map((k) => k.messageId));
+    expect((db.query("SELECT COUNT(*) AS n FROM extracted_messages WHERE thread_key = 't-asha'").get() as { n: number }).n).toBe(1);
+
+    const reply: Mail = {
+      threadId: "t-asha", from: ASHA.from, subject: ASHA.subject, body: "Also, could you bring the deck?", minutesAgo: 5,
+      earlier: [{ from: ASHA.from, body: ASHA.body, minutesAgo: ASHA.minutesAgo }],
+    };
+    const second = await gatherNewMail(fake({ mailbox: "me@acme.com", inbox: [reply] }).ctx, ACCOUNT);
+    expect(second.kept).toHaveLength(1);
+    expect(second.kept[0]!.body).toBe(
+      `${EARLIER_MESSAGE_MARK}\nFrom: ${ASHA.from}\n${ASHA.body}` + THREAD_BODY_SEPARATOR + `From: ${ASHA.from}\nAlso, could you bring the deck?`,
+    );
+  });
+
+  test("owner names come from the Gmail account label when Flock gives none", async () => {
+    const receipt: Mail = { threadId: "t-receipt", from: "Acme Billing <no-reply@billing.acme.com>", subject: "Your invoice",
+      body: "Hi Shiva, your invoice for November is ready.\n\nUnsubscribe: https://billing.acme.com/unsubscribe", minutesAgo: 12 };
+    const blast: Mail = { threadId: "t-blast", from: "Acme Offers <no-reply@offers.acme.com>", subject: "Big sale",
+      body: "Big sale this week only.\n\nUnsubscribe: https://offers.acme.com/unsubscribe", minutesAgo: 11 };
+
+    const named = await gatherNewMail(fake({ mailbox: "ss@acme.com", label: "Shiva", inbox: [receipt, blast] }).ctx, ACCOUNT);
+    expect(named.kept.map((k) => k.threadId)).toEqual(["t-receipt"]);
+    expect(stateOf("t-blast")).toEqual({ state: "filtered", reason: "bulk_impersonal" });
+
+    // No label and a two-letter address: no names, so the bulk test cannot judge and keeps both.
+    freshDb();
+    const unnamed = await gatherNewMail(fake({ mailbox: "ss@acme.com", inbox: [receipt, blast] }).ctx, ACCOUNT);
+    expect(unnamed.kept.map((k) => k.threadId).sort()).toEqual(["t-blast", "t-receipt"]);
+  });
+
+  test("sent mail is journaled under the turn, never draft-eligible, and handed over once", async () => {
+    const proposal: Mail = { threadId: "t-sent", from: "me <me@acme.com>", subject: "Proposal", body: "Here is the proposal we discussed.",
+      minutesAgo: 40, to: ["client@globex.com"] };
+    const f = fake({ mailbox: "me@acme.com", inbox: [ASHA], sent: [proposal] });
+    const r = await gatherNewMail(f.ctx, ACCOUNT);
+
+    const search = f.calls.find((c) => c.fn === "searchEmails")!;
+    expect(search.params).toEqual({ query: "in:sent newer_than:2d", maxResults: 50 });
+    expect(search.opts).toMatchObject({ turnId: "turn-1", account: ACCOUNT });
+    const row = db.query("SELECT event_id, raw, actor FROM ingest_events WHERE thread_key = 't-sent'").get() as { event_id: string; raw: string; actor: string };
+    expect(row.event_id.endsWith(":sent")).toBe(true);
+    expect(JSON.parse(row.raw).folder).toBe("sent");
+    expect(JSON.parse(row.actor).email).toBe("me@acme.com");
+
+    const sentMail = r.kept.find((k) => k.threadId === "t-sent")!;
+    expect(sentMail).toMatchObject({ draftEligible: false, mailboxKind: "work" });
+    expect(sentMail.body).toContain("Here is the proposal we discussed.");
+
+    markHandedOver(r.kept.map((k) => k.messageId));
+    const again = await gatherNewMail(fake({ mailbox: "me@acme.com", inbox: [ASHA], sent: [proposal] }).ctx, ACCOUNT);
+    expect(again.kept).toEqual([]);
   });
 });

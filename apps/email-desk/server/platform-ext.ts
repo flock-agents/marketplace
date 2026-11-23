@@ -4,6 +4,7 @@
 // is the only one to change. Later tasks add their fields to the interfaces below (memory.extract's family fields,
 // family.importEvents / family.targets, model.json); nothing else in the app declares platform shapes of its own.
 import type { PlatformContext, Result, RoutineContext, SkillExecRequest } from "@flock/app-sdk";
+import type { FamilyContext } from "./lib/personal-mail-rules";
 
 // ---- connectors.readTurn (plan Task 1.4): the mailbox lease, the subprocess form of Flock's account-turn ---------------
 
@@ -46,8 +47,24 @@ export interface ConnectorsExt {
   exec<T = unknown>(req: SkillExecRequest & { timeoutMs?: number; turnId?: string }): Promise<Result<T>>;
 }
 
+// ---- optional reads (rulings R9, R10): who the family is, and the person's own names ----------------------------------
+// Optional on purpose: a Flock without them answers nothing, and the app falls back (fail open). Their shapes are this app's
+// proposal; Part 3 aligns them with whatever Flock ships.
+
+export interface FamilyExt {
+  /** The family the personal-mail rules need: everyone's names and addresses, and the school's domains. */
+  context?(): Promise<Result<FamilyContext>>;
+}
+
+export interface IdentityExt {
+  /** The person's names (full name, the name they are called): what makes bulk mail personal when it names them. */
+  names?(): Promise<Result<{ names: string[] }>>;
+}
+
 export type PlatformExt = Omit<PlatformContext, "connectors"> & {
   connectors: Omit<PlatformContext["connectors"], "exec"> & ConnectorsExt;
+  family?: FamilyExt;
+  identity?: IdentityExt;
 };
 
 /** A routine's context with the extended platform, and `turnId` on its exec. */

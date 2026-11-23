@@ -9,6 +9,7 @@
 import type { Database } from "bun:sqlite";
 import type { JournalEntry, StoredJournalEntry } from "./lib/journal-entry";
 import { parseGmailDate, parseGmailDateTime } from "./lib/gmail-date";
+import { SENT_FOLDER } from "./lib/sent-row";
 
 /** The journal's source id for Gmail. Every built-in desk row and cursor carries it. */
 export const GMAIL_SOURCE = "gmail";
@@ -30,6 +31,10 @@ export interface ClaimedJournalEntry extends StoredJournalEntry {
   body: string | null;
   bodyStoredAt: number | null;
   attempts: number;
+  /** The newest message time of this thread the consumer already extracted (null: none). */
+  threadExtractedThrough: number | null;
+  /** Fingerprints of this thread's messages the consumer already extracted. */
+  threadFingerprints: string[];
 }
 
 // ---- listInbox row → journal entry (gmail manifest ingest.map, Flock ingest-manifest-loader TRANSFORMS) -----------------
@@ -125,6 +130,36 @@ export function applyResolve(items: Record<string, unknown>[], reply: unknown): 
   return out;
 }
 
+// ---- sent mail (Flock email-desk/sent-source.ts, the read part) -------------------------------------------------------------
+// The inbox listing never sees a thread the person started that nobody answered, so the gather also lists `in:sent` over
+// its open window. A sent row goes through the same normalize and journal path, marked raw.folder = "sent", with its
+// event id suffixed ":sent" (ruling R14 there: an inbox row and a sent row of one message share the fingerprint, and the
+// sent one must never take the inbox one's dedupe slot). Its thread key is the bare thread id, so it joins its thread.
+
+export const SENT_LIST_MAX = 50;
+
+export function sentQuery(days: number): string {
+  return `in:sent newer_than:${Math.max(1, Math.ceil(days))}d`;
+}
+
+/** Every sent message was written by the mailbox: its own address, else the address on the row's "me" chip, else "me". */
+export function sentRowSender(item: Record<string, unknown>, ownAddress: string | null | undefined): string {
+  const own = (ownAddress ?? "").trim();
+  if (ADDRESS.test(own)) return `me <${own}>`;
+  const chips = Array.isArray(item.chips) ? (item.chips as Array<Record<string, unknown>>) : [];
+  const me = chips.find((c) => {
+    const label = String((c?.name as string) || (c?.text as string) || "").trim().toLowerCase();
+    return label === "me" && ADDRESS.test(String(c?.email ?? "").trim());
+  });
+  return me ? `me <${String(me.email).trim()}>` : "me";
+}
+
+export function normalizeSentRow(item: Record<string, unknown>, accountId: string, ownAddress: string | null, now = new Date()): JournalEntry | null {
+  const e = normalizeInboxRow({ ...item, from: sentRowSender(item, ownAddress), folder: SENT_FOLDER }, accountId, now);
+  if (!e.eventId || !e.threadKey) return null;
+  return { ...e, eventId: `${e.eventId}:sent` };
+}
+
 // ---- storage (routes/journal.ts, routes/comprehension.ts) -----------------------------------------------------------------
 
 function genEventRowId(): string {
@@ -148,6 +183,8 @@ function rowToClaimed(r: any): ClaimedJournalEntry {
     body: r.body ?? null,
     bodyStoredAt: r.body_stored_at ?? null,
     attempts: r.comp_attempts ?? 0,
+    threadExtractedThrough: r.thread_extracted_ts ?? null,
+    threadFingerprints: r.thread_fingerprints ? String(r.thread_fingerprints).split(",") : [],
   };
 }
 
@@ -242,7 +279,17 @@ export function claimPending(db: Database, consumer: string, sourceId: string, a
             COALESCE(ic.raw, e.raw)                       AS raw,
             COALESCE(ic.body, e.body)                     AS body,
             COALESCE(ic.body_stored_at, e.body_stored_at) AS body_stored_at,
-            comp.attempts AS comp_attempts
+            comp.attempts AS comp_attempts,
+            (SELECT MAX(x.ts) FROM ingest_events x
+               JOIN ingest_comprehension xc
+                 ON xc.source_id = x.source_id AND xc.account_id = x.account_id AND xc.event_id = x.event_id
+              WHERE xc.consumer = comp.consumer AND xc.state = 'extracted'
+                AND x.source_id = e.source_id AND x.account_id = e.account_id AND x.thread_key = e.thread_key
+            ) AS thread_extracted_ts,
+            (SELECT GROUP_CONCAT(f.fingerprint) FROM extracted_messages f
+              WHERE f.consumer = comp.consumer AND f.source_id = e.source_id
+                AND f.account_id = e.account_id AND f.thread_key = e.thread_key
+            ) AS thread_fingerprints
        FROM ingest_comprehension comp
        JOIN ingest_events e
          ON e.source_id = comp.source_id AND e.account_id = comp.account_id AND e.event_id = comp.event_id
