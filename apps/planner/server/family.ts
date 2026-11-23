@@ -154,7 +154,8 @@ function rules(v: unknown, ctx: { people: string[]; slots: string[] }): HouseRul
     if (kind === "other" && !note.note) return refuse("an other rule says what it is in note");
     const out: HouseRule = { kind: kind as HouseRule["kind"], days: [] };
     const given = (k: string) => r[k] !== undefined && r[k] !== null;
-    if (given("who")) {
+    // "Everyone" (as the rules read-back heads the house's rules) is the whole house: no who.
+    if (given("who") && !(typeof r.who === "string" && /^\s*(everyone|everybody|all|the house|the family|whole family)\s*$/i.test(r.who))) {
       const who = typeof r.who === "string" ? r.who.trim() : refuse(`the ${kind} rule: who is one person's name, as on the Family page`);
       const person = ctx.people.find((p) => p.toLowerCase() === who.toLowerCase());
       if (!person) {

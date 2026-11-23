@@ -64,6 +64,13 @@ describe("the house", () => {
     expect(JSON.parse(h[0].order_in)).toEqual([{ day: "Sun", slot: "Dinner" }]);
   });
 
+  it("a rule for \"Everyone\" is the whole house's, not a person's (sim run 5: the read-back's heading sent back as who)", async () => {
+    const { op, rows } = await boot();
+    const r = await op("set_house_rules", { rules: [{ kind: "veg", who: "Everyone", days: [] }] });
+    expect(r.code).toBeUndefined();
+    expect(JSON.parse(rows("house")[0].rules)[0].who).toBeUndefined();
+  });
+
   it("set_cook refuses an arrival that is not HH:MM", async () => {
     const { op, rows } = await boot();
     for (const arrival of ["7.30am", "7:30", "24:00", "07:60", 730, undefined])
