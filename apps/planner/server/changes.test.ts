@@ -338,6 +338,29 @@ describe("the next-day question (§5.7)", () => {
     expect(next.feedback).toEqual([{ date: TUE, slot: "Dinner", dish: "Cabbage poriyal", from: "suggestion" }]);
   });
 
+  it("more than 3 untried dishes from one day: the 3 most recent are asked in one block, the rest wait for the next day's reminder (owner 24 Nov)", async () => {
+    const news = ["Ragi idli", "Methi thepla", "Turai sabzi", "Moong dal", "Gawar sabzi"];
+    const k = await home({ now: new Date(2026, 11, 1, 15, 0), library: news.map((name, i) => ({ name, slot: i < 2 ? "Breakfast" : i < 3 ? "Lunch" : "Dinner",
+      origin: "planner_suggested" as const, suggested: true, untried: true, offers: 1 })) });
+    k.plan([
+      { date: MON, slot: "Breakfast", dishes: [{ name: "Ragi idli", new: true }, { name: "Methi thepla", new: true }] },
+      { date: MON, slot: "Lunch", dishes: [{ name: "Sambar" }, { name: "Turai sabzi", new: true }] },
+      { date: MON, slot: "Dinner", dishes: [{ name: "Moong dal", new: true }, { name: "Gawar sabzi", new: true }] },
+    ]);
+    const r = await k.op("get_reminder", { which: "afternoon" });
+    expect(r.feedback.map((x: any) => x.dish)).toEqual(["Turai sabzi", "Moong dal", "Gawar sabzi"]);
+    expect(r.text.split("\n\n").at(-1).split("\n")).toHaveLength(3);
+    const asked = () => k.rows("slot_dishes").filter((x) => x.feedback_asked === 1).map((x) => x.dish).sort();
+    expect(asked()).toEqual(["Gawar sabzi", "Moong dal", "Turai sabzi"]);
+    // The same reminder again says the same.
+    expect((await k.op("get_reminder", { which: "afternoon" })).feedback.map((x: any) => x.dish)).toEqual(["Turai sabzi", "Moong dal", "Gawar sabzi"]);
+    // Wednesday's reminder (Tuesday had nothing new) asks the two left, by their day.
+    const next = buildReminder(k.kit.db, "afternoon", new Date(2026, 11, 2, 15, 0), { dryRun: false });
+    expect(next.feedback).toEqual([{ date: MON, slot: "Breakfast", dish: "Ragi idli", from: "suggestion", day: "Monday" }, { date: MON, slot: "Breakfast", dish: "Methi thepla", from: "suggestion", day: "Monday" }]);
+    expect(next.text).toContain("Monday's plan had Ragi idli, which was new.");
+    expect(asked()).toHaveLength(5);
+  });
+
   it("an answered placement is not asked again, even by the same reminder built again", async () => {
     const k = await yesterday();
     await k.op("get_reminder", { which: "afternoon" });

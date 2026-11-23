@@ -65,9 +65,9 @@ export function dishExtras(meals: { ordered_in?: boolean; dishes: ExtraDish[] }[
 
 /** The next-day question about one dish the family had not eaten before (spec §5.7, word for word): a planner suggestion, or
  *  a dish from a reel or recipe link they sent. The only question the app asks about what was cooked. */
-export const feedbackLine = (f: { dish: string; from: "suggestion" | "reel" }): string => f.from === "reel"
-  ? `Yesterday's plan had ${f.dish} from the reel you sent. Did you make it, did you like it, and should I keep suggesting it?`
-  : `Yesterday's plan had ${f.dish}, which was new. Did you make it, did you like it, and should I suggest it again?`;
+export const feedbackLine = (f: { dish: string; from: "suggestion" | "reel"; day?: string }): string => f.from === "reel"
+  ? `${f.day ?? "Yesterday"}'s plan had ${f.dish} from the reel you sent. Did you make it, did you like it, and should I keep suggesting it?`
+  : `${f.day ?? "Yesterday"}'s plan had ${f.dish}, which was new. Did you make it, did you like it, and should I suggest it again?`;
 
 /** The reminder as the agent sends it: the meals it covers and the ingredients to check; then the cart (what was added, else
  *  what is on it, or what was ordered without asking); the items that may be running low, numbered, asked together; and how

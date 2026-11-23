@@ -14,7 +14,7 @@ import { item_events, items, order_lines, orders, slot_dishes } from "./db/schem
 import { APP_NAMES, CART_SYNC, ESTIMATE, type GroceryApp } from "./db/constants";
 import { listLibrary, listSlotDays, listSlots, updateSlotDish } from "./slotStore";
 import { dishKey } from "./dishText";
-import { addDays, mondayOf, todayStr } from "./dates";
+import { addDays, mondayOf, todayStr, weekdayLong } from "./dates";
 import { refuse, shoppingApps, writeRoutes, type Db, type Emit } from "./family";
 import { dateOf, weekView, type MealView } from "./meals";
 import { dailyState, itemFor, itemStates, recomputeItem } from "./items";
@@ -29,9 +29,10 @@ export type Reminder = { which: Which; date: string /* the meals' date: today (a
   meals: MealView[]; ask_ingredients: string[]; added: { app: GroceryApp; item: string }[]; cart_items: string[];
   asks: { item: string; days_ago: number }[]; delivery_gap: { app: string; rupees: number } | null;
   ordered: { order_id: string; app: GroceryApp; message: string }[]; empty: boolean;
-  /** Afternoon only: yesterday's untried dishes asked about (spec §5.7), each placement once; the answer is record_feedback
+  /** Afternoon only: yesterday's untried dishes asked about (spec §5.7), each placement once, at most FEEDBACK_MAX (an older
+   *  one carried over says its `day`); the answer is record_feedback
    *  { date, slot, dish, made, liked?, again? }. `from`: a planner suggestion, or a dish from a reel or link the family sent. */
-  feedback: { date: string; slot: string; dish: string; from: "suggestion" | "reel" }[];
+  feedback: { date: string; slot: string; dish: string; from: "suggestion" | "reel"; /** a day before yesterday: its weekday */ day?: string }[];
   text: string /* WhatsApp: numbered */; app_text: string; block: object | null /* flock-ui JSON */;
   carts: { order_id: string; app: GroceryApp; status: "open" | "ordering"; lines: LineRow[]; sync: boolean }[] };
 
@@ -74,26 +75,60 @@ function coveredMeals(tx: Db, which: Which, date: string): MealView[] {
     : day.filter((m) => m.ordered_in || m.dishes.length);
 }
 
+/** At most this many next-day questions in one reminder (owner 24 Nov): the most recent placements; the rest wait for a
+ *  later day's reminder, up to FEEDBACK_CARRY_DAYS days back. */
+export const FEEDBACK_MAX = 3;
+export const FEEDBACK_CARRY_DAYS = 2;
+
 /** The next-day question (spec §5.7): each dish on yesterday's plan (`yesterday`) the family had not eaten before (`untried`:
  *  a planner suggestion, or a dish saved from a reel or link they sent; never one named in the interview, never one they
- *  disliked), each placement once. A placement is marked asked (feedback_asked 1) as the reminder is built; only this
- *  reminder asks about yesterday, so a placement asked and not answered (still 1; record_feedback sets 2) is this same
- *  reminder built again (the agent's second get_reminder) and answers the same. */
+ *  disliked), each placement once, one dish once. At most FEEDBACK_MAX a reminder, the most recent placements first (owner
+ *  24 Nov: a short slot's new dishes can make many); the others stay unasked (feedback_asked 0) and are asked by a later
+ *  day's reminder, while they are at most FEEDBACK_CARRY_DAYS days older than its yesterday ("Monday's plan had ...").
+ *  Which reminder asks which placement is worked out the same way every time, day by day from the oldest, so the same
+ *  reminder built again (the agent's second get_reminder) answers the same; a placement is marked asked (feedback_asked 1)
+ *  as its reminder is built, and record_feedback sets 2. */
 export function feedbackAsks(tx: Db, yesterday: string, by: string, changes: Change[]): Reminder["feedback"] {
-  const out: Reminder["feedback"] = [];
-  for (const d of listSlotDays(tx, { from: yesterday, to: yesterday })) {
+  type Placed = { id: string; date: string; slot: string; dish: string; from: "suggestion" | "reel" };
+  // Two weeks back: enough days before the carry window for each day's share to come out as it did on that day.
+  const from = addDays(yesterday, -14);
+  // Every placement that was or is a question: an untried dish not disliked nor named in the interview, or one asked already.
+  const placed: Placed[] = [];
+  for (const d of listSlotDays(tx, { from, to: yesterday })) {
     if (d.skip) continue;
     for (const x of d.dishes) {
       const asked = tx.select({ v: slot_dishes.feedback_asked }).from(slot_dishes).where(eq(slot_dishes.id, x.id)).get()?.v ?? 0;
-      if (asked > 1 || out.some((y) => dishKey(y.dish) === dishKey(x.dish))) continue;
       const rows = listLibrary(tx, { names: [x.dish] });
       const row = rows.find((r) => r.slot.trim().toLowerCase() === d.slot.trim().toLowerCase()) ?? rows[0];
-      if (!row || !row.untried || row.disliked || row.origin === "setup_named") continue;
-      out.push({ date: yesterday, slot: d.slot, dish: x.dish, from: row.origin === "family_added" ? "reel" : "suggestion" });
-      if (!asked) updateSlotDish(tx, x.id, { feedback_asked: true }, by, changes);
+      if (!row || row.origin === "setup_named") continue;
+      if (!asked && (!row.untried || row.disliked)) continue;
+      placed.push({ id: x.id, date: d.date!, slot: d.slot, dish: x.dish, from: row.origin === "family_added" ? "reel" : "suggestion" });
     }
   }
-  return out;
+  const answered = (x: Placed) => (tx.select({ v: slot_dishes.feedback_asked }).from(slot_dishes).where(eq(slot_dishes.id, x.id)).get()?.v ?? 0) > 1;
+  // Each day's reminder from the oldest: the most recent placements of its window not taken by an earlier day, one per dish.
+  const taken = new Set<string>();
+  let mine: Placed[] = [];
+  for (let day = from; day <= yesterday; day = addDays(day, 1)) {
+    const pool = placed.filter((x) => x.date <= day && x.date >= addDays(day, -FEEDBACK_CARRY_DAYS) && !taken.has(x.id)).reverse();
+    const pick: Placed[] = [];
+    for (const x of pool) if (pick.length < FEEDBACK_MAX && !pick.some((y) => dishKey(y.dish) === dishKey(x.dish))) pick.push(x);
+    for (const x of pick) taken.add(x.id);
+    mine = pick;
+  }
+  const out: Reminder["feedback"] = [];
+  for (const x of mine) {
+    if (answered(x)) continue;
+    // Only now askable: still untried and not disliked (an answer to another placement of the dish may have settled it).
+    const rows = listLibrary(tx, { names: [x.dish] });
+    const row = rows.find((r) => r.slot.trim().toLowerCase() === x.slot.trim().toLowerCase()) ?? rows[0];
+    if (!row?.untried || row.disliked) continue;
+    out.push({ date: x.date, slot: x.slot, dish: x.dish, from: x.from, ...(x.date !== yesterday ? { day: weekdayLong(x.date) } : {}) });
+    const asked = tx.select({ v: slot_dishes.feedback_asked }).from(slot_dishes).where(eq(slot_dishes.id, x.id)).get()?.v ?? 0;
+    if (!asked) updateSlotDish(tx, x.id, { feedback_asked: true }, by, changes);
+  }
+  // Most recent last in the message reads oddly: in plan order (oldest first).
+  return out.reverse();
 }
 
 type Schedule = (key: string, run: null, ms: number) => void;
