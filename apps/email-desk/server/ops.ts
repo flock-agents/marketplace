@@ -26,6 +26,12 @@ export interface OpCtx {
 /** A Gmail draft write drives a browser (manifest timeout 90 s, plus queueing for the mailbox). */
 const GMAIL_WRITE_TIMEOUT_MS = 150_000;
 
+let log: (line: string) => void = (line) => console.warn(line);
+/** Tests: silence (or capture) the ops' warnings; null restores console.warn. */
+export function _setOpsLogForTesting(fn: ((line: string) => void) | null): void {
+  log = fn ?? ((line) => console.warn(line));
+}
+
 const str = (v: unknown): string => (typeof v === "string" ? v.trim() : "");
 
 type Gmail<T> = { ok: true; data: T } | { ok: false; reason: string; code?: string };
@@ -43,9 +49,10 @@ async function gmail<T>(platform: PlatformContext, functionName: string, params:
 
 // One change at a time per thread: two create_draft calls racing past the open-draft check would write two Gmail drafts,
 // and an update racing a discard could write into a draft being thrown away. The second waits, then sees the first's
-// result (DRAFT_EXISTS naming it, or NOT_FOUND).
+// result (DRAFT_EXISTS naming it, or NOT_FOUND). Not re-entrant: inside a turn, call the lock-free `changeDraft`, never
+// `updateDraft` (send_draft runs its edit and its send in one turn that way).
 const threadTurns = new Map<string, Promise<unknown>>();
-async function oneAtATime<T>(accountId: string, threadId: string, fn: () => Promise<T>): Promise<T> {
+export async function withThreadTurn<T>(accountId: string, threadId: string, fn: () => Promise<T>): Promise<T> {
   const key = `${accountId}|${threadId}`;
   const run = (threadTurns.get(key) ?? Promise.resolve()).then(fn, fn);
   const tail = run.catch(() => undefined);
@@ -84,7 +91,7 @@ export async function createDraft(p: Record<string, unknown>, ctx: OpCtx): Promi
   const body = typeof p.body === "string" ? p.body : "";
   const bad = bodyRefusal(body, "agent");
   if (bad) return bad;
-  return oneAtATime(accountId, threadId, () => writeNewDraft(accountId, threadId, body, str(p.why) || null, ctx));
+  return withThreadTurn(accountId, threadId, () => writeNewDraft(accountId, threadId, body, str(p.why) || null, ctx));
 }
 
 async function writeNewDraft(accountId: string, threadId: string, body: string, why: string | null, ctx: OpCtx): Promise<{ id: string } | DraftRefusal> {
@@ -117,10 +124,11 @@ async function writeNewDraft(accountId: string, threadId: string, body: string, 
 export async function updateDraft(p: Record<string, unknown>, ctx: OpCtx): Promise<{ ok: true } | DraftRefusal> {
   const found = getDraft(getStore(), str(p.id));
   if (!found) return notFoundRefusal();
-  return oneAtATime(found.accountId, found.threadId, () => changeDraft(found.id, p, ctx));
+  return withThreadTurn(found.accountId, found.threadId, () => changeDraft(found.id, p, ctx));
 }
 
-async function changeDraft(id: string, p: Record<string, unknown>, ctx: OpCtx): Promise<{ ok: true } | DraftRefusal> {
+/** update_draft's work, for a caller already inside the thread's turn (withThreadTurn): send_draft's edit-then-send. */
+export async function changeDraft(id: string, p: Record<string, unknown>, ctx: OpCtx): Promise<{ ok: true } | DraftRefusal> {
   const by: DraftAuthor = p.by === "person" && !!ctx.pressToken ? "person" : "agent";
   const db = getStore();
   // Read again inside the thread's turn: a discard or a person's edit may have landed while this waited.
@@ -151,24 +159,29 @@ async function changeDraft(id: string, p: Record<string, unknown>, ctx: OpCtx): 
   const written = await gmail<{ bodyAsSaved?: unknown }>(ctx.platform, "updateDraft", { draftId: draft.draftId, body }, draft.accountId);
   if (!written.ok) return gmailRefusal("save the draft", written.reason);
   setDraftBody(db, draft.id, str(written.data?.bodyAsSaved) ? String(written.data.bodyAsSaved) : body, { personEdited: by === "person" });
-  // The agent's change goes back on the card (same sourceRef), so Flock re-posts its line. The person's own save came from
-  // the card, which already shows it.
-  if (by === "agent") await publishDraftCard(ctx.platform, getDraft(db, draft.id)!);
+  // The change goes back on the card (same sourceRef, why kept): the agent's so Flock re-posts its line, the person's so
+  // the card shows what they saved (ruling R16).
+  await publishDraftCard(ctx.platform, getDraft(db, draft.id)!);
   return { ok: true };
 }
 
-/** discard_draft: Gmail discards it, the row goes, the card is withdrawn. Idempotent. */
+/** discard_draft: Gmail discards it, the row goes, the card is withdrawn. Idempotent, and `{ ok: true }` even when Gmail
+ *  fails (ruling R15: logged; the thread has no draft). The one refusal (ruling R18): the agent (no press token) may not
+ *  discard a draft the person edited, which would let it draft over their edit; nothing changes then. */
 export async function discardDraft(p: Record<string, unknown>, ctx: OpCtx): Promise<{ ok: true } | DraftRefusal> {
   const id = str(p.id);
   const found = getDraft(getStore(), id);
   if (found) {
-    const refused = await oneAtATime(found.accountId, found.threadId, async () => {
+    const refused = await withThreadTurn(found.accountId, found.threadId, async (): Promise<DraftRefusal | null> => {
       const db = getStore();
       const draft = getDraft(db, id);
       if (!draft || draft.sentAt !== null) return null;
+      if (draft.personEdited && !ctx.pressToken) return personEditedRefusal();
       const gone = await gmail(ctx.platform, "discardDraft", { draftId: draft.draftId }, draft.accountId);
-      // Already gone from Gmail is the end we want.
-      if (!gone.ok && gone.code !== "DRAFT_NOT_FOUND") return gmailRefusal("discard the draft", gone.reason);
+      // Already gone from Gmail is the end we want; any other failure leaves a stray Gmail draft, logged.
+      if (!gone.ok && gone.code !== "DRAFT_NOT_FOUND") {
+        log(`[email-desk] Gmail could not discard draft ${draft.id} (${gone.reason}); its record and card are gone anyway`);
+      }
       deleteDraft(db, draft.id);
       return null;
     });

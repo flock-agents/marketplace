@@ -14,7 +14,7 @@ import { join } from "path";
 import { openStore, _setStoreForTesting } from "../store";
 import { appendEvents, normalizeInboxRow, setEventBody, GMAIL_SOURCE } from "../journal";
 import { THREAD_BODY_SEPARATOR } from "../lib/thread-format";
-import { ops } from "../ops";
+import { ops, withThreadTurn, changeDraft, _setOpsLogForTesting } from "../ops";
 import { _setLogForTesting } from "../drafts/card";
 
 const ACCOUNT = "acct-1";
@@ -94,12 +94,14 @@ beforeEach(() => {
   db = openStore(mkdtempSync(join(tmpdir(), "email-desk-drafts-")));
   _setStoreForTesting(db);
   _setLogForTesting(() => {});
+  _setOpsLogForTesting(() => {});
   f = fake();
   seedThread();
 });
 afterEach(() => {
   _setStoreForTesting(null);
   _setLogForTesting(null);
+  _setOpsLogForTesting(null);
   db.close();
 });
 
@@ -227,6 +229,11 @@ describe("update_draft", () => {
     expect(row(id)).toMatchObject({ body_written: "Asha, Tuesday is good [after lunch].", person_edited: 1 });
     // The person's text is theirs: no placeholder rule. And no Gmail press token for a draft.
     expect(f.calls.find((c) => c.functionName === "updateDraft")?.pressToken).toBeUndefined();
+    // Ruling R16: the card shows the person's text (same card, why kept).
+    expect(f.published).toHaveLength(2);
+    expect(f.published[1].sourceRef).toBe(`draft:${id}`);
+    expect(f.published[1].context.why).toBe(f.published[0].context.why);
+    expect(f.published[1].context.card.blocks[1].body).toBe("Asha, Tuesday is good [after lunch].");
   });
 
   test("agent update after a person's edit is refused", async () => {
@@ -315,13 +322,44 @@ describe("discard_draft", () => {
     expect(row(id)).toBeNull();
   });
 
-  test("a Gmail failure keeps the draft and its card", async () => {
+  test("a Gmail failure is still a discard: row gone, card withdrawn (ruling R15)", async () => {
     const { id } = await create({ threadId: THREAD, body: "Hi Asha, Tuesday works." });
     f.failNext.discardDraft = { reason: "browser busy" };
+    expect(await discard({ id })).toEqual({ ok: true });
+    expect(row(id)).toBeNull();
+    expect(f.withdrawn).toEqual([`draft:${id}`]);
+  });
+
+  test("an agent cannot discard a draft the person edited (ruling R18)", async () => {
+    const { id } = await create({ threadId: THREAD, body: "Hi Asha, Tuesday works." });
+    await update({ id, body: "Asha, Tuesday is good.", by: "person" }, pressCtx());
     const out = await discard({ id });
-    expect(out.code).toBe("GMAIL_FAILED");
-    expect(row(id)).not.toBeNull();
+    expect(out.code).toBe("PERSON_EDITED");
+    expect(out.error).not.toMatch(/[–—]/);
+    expect(f.calls.some((c) => c.functionName === "discardDraft")).toBe(false);
     expect(f.withdrawn).toEqual([]);
+    // ...so it cannot overwrite the edit by drafting again either.
+    expect((await create({ threadId: THREAD, body: "Hi Asha, Wednesday instead." })).code).toBe("DRAFT_EXISTS");
+    expect(f.calls.filter((c) => c.functionName === "createReplyDraft")).toHaveLength(1);
+    expect(row(id)).toMatchObject({ body_written: "Asha, Tuesday is good.", person_edited: 1 });
+    expect(f.gmail.get("gm-1")).toBe("Asha, Tuesday is good.");
+  });
+
+  test("with a press token, the person's own discard of their edited draft goes through", async () => {
+    const { id } = await create({ threadId: THREAD, body: "Hi Asha, Tuesday works." });
+    await update({ id, body: "Asha, Tuesday is good.", by: "person" }, pressCtx());
+    expect(await discard({ id }, pressCtx())).toEqual({ ok: true });
+    expect(row(id)).toBeNull();
+  });
+});
+
+describe("withThreadTurn", () => {
+  test("send_draft can edit inside the thread's turn without waiting on itself", async () => {
+    const { id } = await create({ threadId: THREAD, body: "Hi Asha, Tuesday works." });
+    const out = await withThreadTurn(ACCOUNT, THREAD, () =>
+      changeDraft(id, { body: "Asha, Tuesday is good.", by: "person" }, pressCtx()));
+    expect(out).toEqual({ ok: true });
+    expect(row(id).person_edited).toBe(1);
   });
 });
 
