@@ -15,6 +15,8 @@ const SERVED_ONLY = [
   "send_draft",
   "newest_thread_message", "thread_body", "store_thread_body", "last_harvest", "follow_up_kind", "draft_send_recorded",
   "mailboxes", "bundle_rows",
+  // The owner's upgrade only (Flock migrations/email-desk-marketplace.ts).
+  "republish_legacy_card", "import_voice",
 ];
 
 const sorted = (a: Iterable<string>) => [...a].sort();

@@ -63,7 +63,7 @@ describe("Email Desk manifest", () => {
   test("declares exactly the four agent ops, never send_draft or a platform op", () => {
     const names = manifest.agentInterface.operations.map((o: any) => o.name);
     expect(names).toEqual(["reply_context", "create_draft", "update_draft", "discard_draft"]);
-    for (const banned of ["send_draft", "newest_thread_message", "thread_body", "store_thread_body", "last_harvest", "follow_up_kind", "draft_send_recorded", "mailboxes", "bundle_rows"]) {
+    for (const banned of ["send_draft", "newest_thread_message", "thread_body", "store_thread_body", "last_harvest", "follow_up_kind", "draft_send_recorded", "mailboxes", "bundle_rows", "republish_legacy_card", "import_voice"]) {
       expect(names).not.toContain(banned);
     }
     expect(JSON.stringify(manifest)).not.toContain("send_draft");

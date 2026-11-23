@@ -9,12 +9,19 @@
 //   draft_send_recorded    <- send-email.draftSendRecorded
 //   mailboxes              <- mailbox.resolveMailbox (routes/app-memory.ts)
 //   bundle_rows            <- the sent-replies query pa-brief/bundle.ts ran on the built-in store
-import type { OpHandler } from "@flock/app-sdk";
+// And two that only the owner's upgrade calls (Flock's migrations/email-desk-marketplace.ts, once the built-in desk's
+// email-desk.db is this copy's store):
+//   republish_legacy_card  <- a built-in "Approve & Send" card, published again as this copy's draft card
+//   import_voice           <- the owner's wiki_voice_profile rows, into this copy's voice_profile
+import type { OpHandler, PlatformContext } from "@flock/app-sdk";
 import { getStore } from "./store";
 import { THREAD_BODY_SEPARATOR } from "./lib/thread-format";
 import { followUpKindForTo } from "./lib/reply-context";
 import { GMAIL_SOURCE } from "./journal";
 import { sendLedgerKey } from "./drafts/send";
+import { getDraftForThread, recordDraft } from "./drafts/records";
+import { publishDraftCard } from "./drafts/card";
+import { importVoiceRows, type ImportedVoiceRow } from "./voice/store";
 
 const str = (v: unknown): string => (typeof v === "string" ? v.trim() : "");
 const fail = (error: string, code: string, status = 400) => ({ error, code, status });
@@ -165,6 +172,52 @@ function bundleRows(p: Record<string, unknown>) {
   return { rows };
 }
 
+/**
+ * A card the built-in desk published (`<account>|<thread>`, Approve & Send) becomes this copy's draft card: the thread's
+ * draft row moved with the store, so its card is published from the row (its text is what Gmail holds; the payload's body
+ * is only for a thread whose row is missing). A row already sent is never republished: Flock closes that card instead.
+ * Publishing upserts `draft:<id>`, so a second call is the same card.
+ */
+async function republishLegacyCard(p: Record<string, unknown>, platform: PlatformContext) {
+  const accountId = str(p.accountId);
+  const threadId = str(p.threadId);
+  if (!accountId || !threadId) return fail("accountId and threadId are required", "INVALID");
+  const db = getStore();
+  let draft = getDraftForThread(db, accountId, threadId);
+  if (!draft) {
+    const draftId = str(p.draftId);
+    const body = typeof p.body === "string" ? p.body : "";
+    if (!draftId || !body.trim()) return fail("no draft is recorded for this thread", "NOT_FOUND", 404);
+    draft = recordDraft(db, { accountId, threadId, draftId, bodyWritten: body });
+  }
+  const sentByLedger = (key: string) =>
+    (db.query("SELECT state FROM send_ledger WHERE idempotency_key = ?").get(key) as { state: string } | null)?.state === "sent";
+  if (draft.sentAt !== null || sentByLedger(sendLedgerKey(draft.id)) || sentByLedger(`${accountId}|${threadId}|${draft.draftId}`)) {
+    return { id: draft.id, published: false, sent: true };
+  }
+  if (!(await publishDraftCard(platform, draft))) return fail("the card could not be published", "PUBLISH_FAILED", 502);
+  return { id: draft.id, published: true };
+}
+
+/** The owner's voice rows from Flock's wiki (each already given its account by Flock). All or nothing: a bad row refuses the
+ *  whole import. */
+function importVoice(p: Record<string, unknown>) {
+  if (!Array.isArray(p.rows)) return fail("rows is required", "INVALID");
+  const rows: ImportedVoiceRow[] = [];
+  for (const r of p.rows as Record<string, unknown>[]) {
+    const accountId = str(r?.accountId);
+    const dimension = str(r?.dimension);
+    if (!accountId || !dimension || typeof r.value !== "string") return fail("each row needs accountId, dimension and value", "INVALID");
+    rows.push({
+      accountId, dimension, value: r.value,
+      examples: Array.isArray(r.examples) ? r.examples.filter((e): e is string => typeof e === "string") : [],
+      observationCount: typeof r.observationCount === "number" && Number.isFinite(r.observationCount) ? r.observationCount : 1,
+      source: str(r.source),
+    });
+  }
+  return importVoiceRows(rows);
+}
+
 export const platformOps: Record<string, OpHandler> = {
   newest_thread_message: async (p) => newestThreadMessage(p),
   thread_body: async (p) => threadBody(p),
@@ -180,4 +233,6 @@ export const platformOps: Record<string, OpHandler> = {
     return { accounts: (r.data?.accounts ?? []).map((a) => ({ accountId: a.accountId, email: a.email ?? "" })) };
   },
   bundle_rows: async (p) => bundleRows(p),
+  republish_legacy_card: async (p, ctx) => republishLegacyCard(p, ctx.platform),
+  import_voice: async (p) => importVoice(p),
 };

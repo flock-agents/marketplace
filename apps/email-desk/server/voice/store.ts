@@ -87,6 +87,30 @@ export function storeLearnedVoice(accountId: string, entries: VoiceEntryWrite[],
   return stored;
 }
 
+/** One of the owner's rows from Flock's wiki_voice_profile, given its account by Flock (the owner's upgrade). */
+export interface ImportedVoiceRow { accountId: string; dimension: string; value: string; examples: string[]; observationCount: number; source: string }
+
+/**
+ * The owner's upgrade: their wiki voice rows become this copy's. A row they wrote ('owner-edit') stays theirs; any other is a
+ * learned row. Nothing the copy already holds is written over, except a learned row by the person's own: so a second import
+ * (or one after the copy has learned or been edited) changes nothing. One transaction.
+ */
+export function importVoiceRows(rows: ImportedVoiceRow[], db: Database = getStore()): { imported: number; kept: number } {
+  let imported = 0;
+  let kept = 0;
+  db.transaction(() => {
+    for (const r of rows) {
+      const source = r.source === OWNER_SOURCE ? OWNER_SOURCE : CRAWL_SOURCE;
+      const existing = db.query("SELECT source FROM voice_profile WHERE account_id = ? AND dimension = ?")
+        .get(r.accountId, r.dimension) as { source: string } | null;
+      if (existing && (existing.source === OWNER_SOURCE || source !== OWNER_SOURCE)) { kept++; continue; }
+      upsertVoiceRow({ accountId: r.accountId, dimension: r.dimension, value: r.value, examples: r.examples, source, observationCount: r.observationCount }, db);
+      imported++;
+    }
+  })();
+  return { imported, kept };
+}
+
 /** Whether this mailbox has a voice the drafter can use: a learned or person-written row that says something. */
 export function hasVoice(accountId: string, db: Database = getStore()): boolean {
   if (!accountId) return false;

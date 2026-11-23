@@ -320,7 +320,7 @@ describe("platform ops", () => {
 describe("the router", () => {
   test("ops router serves the platform ops and send_draft though the manifest does not declare them", async () => {
     const declared = (await Bun.file(join(import.meta.dir, "../../flock.app.json")).json()).agentInterface.operations.map((o: any) => o.name);
-    const served = ["newest_thread_message", "thread_body", "store_thread_body", "last_harvest", "follow_up_kind", "draft_send_recorded", "mailboxes", "bundle_rows", "send_draft"];
+    const served = ["newest_thread_message", "thread_body", "store_thread_body", "last_harvest", "follow_up_kind", "draft_send_recorded", "mailboxes", "bundle_rows", "republish_legacy_card", "import_voice", "send_draft"];
     for (const name of served) {
       expect(declared).not.toContain(name);
       expect(Object.keys(allOps)).toContain(name);
