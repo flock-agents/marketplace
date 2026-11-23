@@ -44,8 +44,8 @@ const STILL_IN_STOCK = "Still in stock? If yes, when should I remind you?";
 export type ReminderText = { which: "afternoon" | "evening"; meals: MealView[]; ask_ingredients: string[]; added: { item: string }[];
   cart_items: string[]; asks: { item: string; days_ago: number }[]; delivery_gap: { app: string; rupees: number } | null;
   ordered: { order_id: string; app: string }[]; carts: { order_id: string; lines: OrderLineText[] }[]; empty: boolean;
-  /** The evening's one question about today's food eaten at home: its dishes, each once. */
-  rate_today?: { date: string; dishes: string[] } | null };
+  /** The next-day question (spec §5.7): yesterday's dishes the family had not eaten before, one line each. */
+  feedback?: { dish: string; from: "suggestion" | "reel" }[] };
 
 type ExtraDish = { name: string; video?: { url: string } | null; last_time?: Parameters<typeof lastTimeText>[0] };
 /** What the cook should know about the meals' dishes, a line each, only for a dish with something to say: how it went last time
@@ -63,9 +63,11 @@ export function dishExtras(meals: { ordered_in?: boolean; dishes: ExtraDish[] }[
   return out;
 }
 
-/** The evening's question about today's food, asked once for all of it. */
-export const rateTodayText = (dishes: string[]): string =>
-  `How was today's food: ${andList(dishes)}? Good, okay or didn't work, and anything that went well or didn't?`;
+/** The next-day question about one dish the family had not eaten before (spec §5.7, word for word): a planner suggestion, or
+ *  a dish from a reel or recipe link they sent. The only question the app asks about what was cooked. */
+export const feedbackLine = (f: { dish: string; from: "suggestion" | "reel" }): string => f.from === "reel"
+  ? `Yesterday's plan had ${f.dish} from the reel you sent. Did you make it, did you like it, and should I keep suggesting it?`
+  : `Yesterday's plan had ${f.dish}, which was new. Did you make it, did you like it, and should I suggest it again?`;
 
 /** The reminder as the agent sends it: the meals it covers and the ingredients to check; then the cart (what was added, else
  *  what is on it, or what was ordered without asking); the items that may be running low, numbered, asked together; and how
@@ -99,8 +101,8 @@ export function reminderText(r: ReminderText, opts: { app?: boolean } = {}): str
     rest.push(STILL_IN_STOCK);
   }
   if (r.delivery_gap) rest.push(`${rupees(r.delivery_gap.rupees)} short of free delivery on ${r.delivery_gap.app}.`);
-  const rate = r.rate_today?.dishes.length ? rateTodayText(r.rate_today.dishes) : "";
-  return [top.join("\n"), rest.join("\n"), rate].filter(Boolean).join("\n\n");
+  const asked = (r.feedback ?? []).map(feedbackLine).join("\n");
+  return [top.join("\n"), rest.join("\n"), asked].filter(Boolean).join("\n\n");
 }
 
 /** The stock check's answers, in the app chat. The guide maps them to answer_running_low: low; in_stock with days 3, 7 or 14;
@@ -152,6 +154,19 @@ export type PlanText = {
   days: { label: string; meals: { slot: string; skip: string | null; note: string | null; dishes: { name: string; note: string | null; not_for?: string[] }[] }[] }[];
   standing: string[]; unmet: string[]; new_dishes: { name: string; why: string }[]; asked: string[]; link: string;
 };
+/** What a later change re-planned (spec §6), as the agent sends it: each slot-day planned again with its dishes, the new ones,
+ *  what could not be kept, and the Week page. */
+export function changeMessage(t: { meals: { label: string; skip: string | null; dishes: { name: string; note: string | null; not_for?: string[] }[] }[];
+  unmet: string[]; new_dishes: { name: string; why: string }[]; link: string }): string {
+  const lines = ["Updated the plan:"];
+  for (const m of t.meals) lines.push(`${m.label}: ${m.skip ? (m.skip === "eaten_out" ? "eating out" : "ordering in")
+    : m.dishes.map((x) => dishText({ name: x.name, portion_note: x.note, not_for: x.not_for })).join(", ") || "nothing planned"}`);
+  if (t.new_dishes.length) lines.push("", `New: ${t.new_dishes.map((n) => (n.why ? `${n.name} (${n.why})` : n.name)).join("; ")}`);
+  if (t.unmet.length) lines.push("", `I couldn't keep everything: ${t.unmet.join("; ")}. Tell me what to change.`);
+  lines.push("", `The whole week: [Week page](${t.link})`);
+  return lines.join("\n");
+}
+
 /** A note on this many days or more is said once, under "All week", not on each day. */
 const ALL_WEEK_DAYS = 3;
 

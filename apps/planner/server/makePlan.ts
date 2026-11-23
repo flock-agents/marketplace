@@ -18,12 +18,12 @@ import { CONTAINS_BATCH, DEFAULT_DISH_DAYS, SLOT_CALLS_AT_ONCE } from "./db/cons
 import { addDays, todayStr, weekDates, weekdayLong, weekdayOf } from "./dates";
 import { dishKey } from "./dishText";
 import { closeWeek, dateOf } from "./meals";
-import { planMessage, weekLink } from "./messages";
+import { changeMessage, planMessage, weekLink } from "./messages";
 import { isObject, refuse, writeRoutes, type Db, type Emit } from "./family";
 import { STOP_CODES, stopSaid, type ModelCall, type ModelFailure, type ModelRequest, type ModelResult } from "./model";
 import { commit, deleteSlotDays, listLibrary, listRules, listSlotDays, listSlots, newDishesPerWeek, recent, saveSlotDay, slotHistory, upsertLibrary,
   type Rule, type Slot } from "./slotStore";
-import { buildDays, lunchSaid, platformPeers, readEvents, readHousehold, ruleHolds, withLunchSaid, type PlanDay, type Peers } from "./planDays";
+import { buildDays, slotDayKey, lunchSaid, platformPeers, readEvents, readHousehold, ruleHolds, withLunchSaid, type PlanDay, type Peers } from "./planDays";
 import { addDaily, canonTag, checkSlot, factsOf, feasibility, forbidden, frequencyRange, hardOnly, isStapleAt, notFor, plannable, rotate, ruleBreaks, ruleTags,
   slotFacts, swapNotes, type Problem, type Proposal, type Week } from "./planChecks";
 
@@ -87,7 +87,7 @@ export const CONTAINS_SYSTEM = [
 
 // ── The ingredients (§5.5) ──
 
-const INGREDIENT_SCHEMA = { type: "object", required: ["dishes"], properties: { dishes: { type: "array", items: { type: "object", required: ["slot", "name", "ingredients"],
+export const INGREDIENT_SCHEMA = { type: "object", required: ["dishes"], properties: { dishes: { type: "array", items: { type: "object", required: ["slot", "name", "ingredients"],
   properties: { slot: { type: "string" }, name: { type: "string" }, ingredients: { type: "array", items: { type: "object", required: ["item", "amount", "unit"],
     properties: { item: { type: "string" }, amount: { type: "number" }, unit: { type: "string" }, tags: { type: "array", items: { type: "string" } } } } } } } } } };
 export const INGREDIENT_SYSTEM = [
@@ -96,7 +96,7 @@ export const INGREDIENT_SYSTEM = [
   "tags: which of the dish's `tags` the ingredient is (sugar is \"sugar\", onion is \"onion_garlic\"); [] when none or when the dish has no tags.",
 ].join("\n");
 
-function ingredientsFrom(json: unknown): { slot: string; name: string; ingredients: (Ingredient & { tags: string[] })[] }[] {
+export function ingredientsFrom(json: unknown): { slot: string; name: string; ingredients: (Ingredient & { tags: string[] })[] }[] {
   const raw = isObject(json) ? json.dishes : undefined;
   if (!Array.isArray(raw)) return [];
   return raw.flatMap((d) => {
@@ -118,6 +118,9 @@ function ingredientsFrom(json: unknown): { slot: string; name: string; ingredien
  *  `household`: the household facts Flock sent; `peers`: the fresh household and the calendar (platformPeers), preferred. */
 export type MakePlanDeps = { db: Db; emit: Emit; model: ModelCall; weekStart: string; today: string; basePath: string; budgetMs?: number; clock?: () => number;
   log?: (line: string) => void; household?: unknown; peers?: Peers;
+  /** A later change (spec §6): plan only these slot-days of the week, every other one kept as saved and read for the checks;
+   *  the answer's message names only them, and no intro is sent. None: the whole week. */
+  only?: { date: string; slot: string }[];
   /** The raw database, for what setup kept beside the rows (house.setup_state: weekday lunch); none: not read. */
   sqlite?: { query: (q: string) => { get: () => unknown } } };
 
@@ -129,7 +132,7 @@ export const ROUTINE_BUDGET_MS = 20 * 60_000;
 const INGREDIENTS_RESERVE_MS = 90_000, SAVE_RESERVE_MS = 5_000;
 const slotTokens = (days: number) => Math.min(6000, 1500 + 350 * days);
 
-type Flight = { run?: Promise<MakePlanResult>; inflight: Set<Promise<unknown>> };
+type Flight = { run?: Promise<MakePlanResult>; changes?: Promise<void>; inflight: Set<Promise<unknown>> };
 const flights = new WeakMap<object, Map<string, Flight>>();
 function flightOf(db: Db, weekStart: string): Flight {
   let byWeek = flights.get(db as object);
@@ -142,8 +145,15 @@ function flightOf(db: Db, weekStart: string): Flight {
 /** Make and save the week's plan. Never messages anyone; answers the message and intro to send, or why not and the plain line
  *  to say instead. A stop the family must fix (credits, the day's budget, too many calls) ends the run at once. */
 export function makePlan(deps: MakePlanDeps): Promise<MakePlanResult> {
-  const log = deps.log ?? ((line: string) => console.log(`[planner] make_plan ${deps.weekStart}: ${line}`));
+  const log = deps.log ?? ((line: string) => console.log(`[planner] make_plan ${deps.weekStart}${deps.only ? " (a change)" : ""}: ${line}`));
   const f = flightOf(deps.db, deps.weekStart);
+  if (deps.only) {
+    // A change to some slot-days waits for the week's run (and any change before it), then plans on what that saved.
+    const before = f.changes ?? Promise.resolve();
+    const run = before.then(() => f.run).then(() => planWeek({ ...deps, log }, f.inflight), () => planWeek({ ...deps, log }, f.inflight));
+    f.changes = run.then(() => undefined, () => undefined);
+    return run;
+  }
   if (f.run) { log("joined the run already going for this week"); return f.run; }
   const run: Promise<MakePlanResult> = planWeek({ ...deps, log }, f.inflight).finally(() => { if (f.run === run) f.run = undefined; });
   f.run = run;
@@ -193,14 +203,18 @@ async function planWeek(deps: MakePlanDeps & { log: (line: string) => void }, in
   const read = await readEvents({ events, dated: household.dated, from, to: weekEnd, people, slots: slots.map((s) => s.name), model: (req) => model(req, INGREDIENTS_RESERVE_MS), log });
   if (read.stop) return stopped(read.stop);
   const rules = listRules(db);
-  const days = buildDays({ weekStart, from, slots, people, rules, household, changes: read.changes, saved: listSlotDays(db, { from: weekStart, to: weekEnd }) });
+  const only = deps.only ? new Set(deps.only.map((x) => slotDayKey(x.date, x.slot))) : undefined;
+  const saved = listSlotDays(db, { from: weekStart, to: weekEnd });
+  const days = buildDays({ weekStart, from, slots, people, rules, household, changes: read.changes, saved, only });
   const toPlan = days.filter((d) => !d.fixed && !d.skip);
-  if (!days.some((d) => !d.fixed)) return done({ ok: false, reason: "no_meals", say: "There are no days left to plan in that week." });
+  if (!days.some((d) => !d.fixed)) return done({ ok: false, reason: "no_meals", say: only ? "There is no meal left to plan there." : "There are no days left to plan in that week." });
 
   // 2. Each slot's facts, and the feasibility check.
   const library = listLibrary(db);
   const order = slots.filter((s) => days.some((d) => same(d.slot, s.name) && !d.fixed)).map((s) => s.name);
-  const w: Week = { days, slots: new Map(), rules, library, facts: new Map(), done: new Set(), newBudget: newDishesPerWeek(db), newDishes: new Map() };
+  // A change plans inside the week's budget of new dishes: those already on the week's other slot-days count.
+  const newKept = only ? new Set(days.filter((d) => d.fixed).flatMap((d) => saved.find((x) => x.date === d.date && same(x.slot, d.slot))?.dishes.filter((x) => x.new).map((x) => dishKey(x.dish)) ?? [])).size : 0;
+  const w: Week = { days, slots: new Map(), rules, library, facts: new Map(), done: new Set(), newBudget: Math.max(0, newDishesPerWeek(db) - newKept), newDishes: new Map() };
   for (const s of slots) {
     const history = slotHistory(db, s.name, weekStart);
     w.slots.set(s.name.toLowerCase(), slotFacts(s, library, history, recent(history, weekStart, 3)));
@@ -393,11 +407,14 @@ async function planWeek(deps: MakePlanDeps & { log: (line: string) => void }, in
   commit(db, deps.emit, (tx, ch) => {
     const by = "app";
     const back = new Map<string, number>();   // slot|key → placements taken back
+    const replaced = (d: { date: string | null; slot: string }) => days.some((y) => y.date === d.date && same(y.slot, d.slot) && !y.fixed);
     for (const d of listSlotDays(tx, { from, to: weekEnd })) for (const x of d.dishes) {
       const k = `${d.slot.toLowerCase()}|${dishKey(x.dish)}`;
-      if (!d.edited || days.some((y) => y.date === d.date && same(y.slot, d.slot) && !y.fixed)) back.set(k, (back.get(k) ?? 0) + 1);
+      if (only ? replaced(d) : !d.edited || replaced(d)) back.set(k, (back.get(k) ?? 0) + 1);
     }
-    deleteSlotDays(tx, { from, to: weekEnd, keepEdited: true }, by, ch);
+    // The whole week: its slot-days from `from` on go (edited ones kept) and are saved again. A change: only its slot-days
+    // are saved over (saveSlotDay replaces their dishes).
+    if (!only) deleteSlotDays(tx, { from, to: weekEnd, keepEdited: true }, by, ch);
     for (const [k, v] of w.newDishes) {
       const placedAt = toPlan.find((d) => d.dishes.some((x) => dishKey(x) === k))!.slot;
       const f = factsOf(w, placedAt, v.name);
@@ -420,8 +437,16 @@ async function planWeek(deps: MakePlanDeps & { log: (line: string) => void }, in
   });
 
   // 6. The message.
-  const closed = closeWeek(db, weekStart, deps.basePath, unmet);
   const asked = read.asked;
+  if (only) {
+    const message = changeMessage({
+      meals: days.filter((d) => !d.fixed).map((d) => ({ label: `${weekdayLong(d.date)} ${d.slot}`, skip: d.skip,
+        dishes: d.dishes.map((name) => ({ name, not_for: notFor(w, d, name), note: (dishNotes.get(`${d.date}|${d.slot}|${dishKey(name)}`) ?? []).join("; ") || null })) })),
+      unmet: uniq(unmet), new_dishes: [...w.newDishes.values()].map((v) => ({ name: v.name, why: v.why })), link: weekLink(deps.basePath, weekStart) });
+    return done({ ok: true, week_start: weekStart, message, instructions: "Send message to the family word for word, as one message, then end your turn.",
+      ...(unmet.length ? { unmet: uniq(unmet) } : {}), ...(asked.length ? { asked } : {}), ...(noIngredients.length ? { no_ingredients: noIngredients } : {}) });
+  }
+  const closed = closeWeek(db, weekStart, deps.basePath, unmet);
   const standing = rules.filter((r) => r.what === "note" && !r.hard).map(noteLine);
   const message = planMessage({
     days: weekDates(weekStart).filter((d) => d >= from).map((date) => ({ label: weekdayLong(date), meals: days.filter((d) => d.date === date && !d.fixed).map((d) => ({

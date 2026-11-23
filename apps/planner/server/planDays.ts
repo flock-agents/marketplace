@@ -187,10 +187,16 @@ function awayBy(w: Weekly, day: Weekday, slot: Slot): boolean {
   return !!(at && w.from && w.to && w.from <= at && at < w.to);
 }
 
+/** The key of a slot-day in a set of them: its date and its slot's name, any capitals. */
+export const slotDayKey = (date: string, slot: string): string => `${date}|${slot.trim().toLowerCase()}`;
+
 /** The week's slot-days (§5.1), every active slot on its days, dates `from` on (a week planned part way through keeps the
- *  days before). `saved`: the week's slot-days as saved, an edited one is kept; one before `from` is fixed. */
+ *  days before). `saved`: the week's slot-days as saved, an edited one is kept; one before `from` is fixed. `only` (a later
+ *  change, spec §6): only these slot-days are planned; every other one is kept as saved (fixed, read for counts) and one not
+ *  saved is left out. A slot-day in `only` that the family edited is planned with the people, guests and occasion they set,
+ *  its dishes planned again (set_slot_day asks for exactly that). */
 export function buildDays(o: { weekStart: string; from: string; slots: Slot[]; people: string[]; rules: Rule[]; household: Household;
-  changes: Attendance[]; saved: SlotDay[] }): PlanDay[] {
+  changes: Attendance[]; saved: SlotDay[]; only?: Set<string> }): PlanDay[] {
   const out: PlanDay[] = [];
   const bySlot = new Map(o.slots.map((s) => [s.name.toLowerCase(), s]));
   for (const date of weekDates(o.weekStart)) {
@@ -198,7 +204,9 @@ export function buildDays(o: { weekStart: string; from: string; slots: Slot[]; p
     for (const s of o.slots) {
       if (s.days.length && !s.days.includes(day)) continue;
       const had = o.saved.find((d) => d.date === date && same(d.slot, s.name));
-      if (date < o.from || (had?.edited && had.dishes.length) || (had?.edited && had.skip)) {
+      const asked = o.only?.has(slotDayKey(date, s.name));
+      if (o.only && !asked && !had) continue;
+      if (date < o.from || (o.only && !asked) || (!asked && had?.edited && had.dishes.length) || (had?.edited && had.skip) || had?.status === "confirmed") {
         if (had) out.push({ date, slot: s.name, people: had.people, guests: had.guests, occasion: had.occasion, new_dishes_allowed: had.new_dishes_allowed, skip: had.skip,
           edited: had.edited, fixed: true, why: [], fasting: [], dishes: had.dishes.map((x) => x.dish), note: had.note });
         continue;

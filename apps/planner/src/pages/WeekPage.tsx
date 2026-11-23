@@ -43,7 +43,8 @@ export function WeekPage() {
   }, [chosen, weekStart, thisWeek, planned, week.data, other.data]);
   const done = () => { setOpen(null); void week.refetch(); };
   const orderIn = async (date: string, slot: string, on: boolean) => {
-    try { await send("meals", { date, slot, ordered_in: on }); setOpen(null); void week.refetch(); }
+    // The same change as the agent's set_slot_day: ordered in takes its dishes off; cooked at home again plans its dishes.
+    try { await send("slot-days", { date, slot, skip: on ? "ordered_in" : null }); setOpen(null); void week.refetch(); }
     catch (e) { toast.show({ message: `Couldn't save: ${why(e)}`, tone: "danger" }); }
   };
   /** A dish's video: the dish's own (kept by its name across weeks), else the first link of the recipe it points at. Only a
@@ -82,7 +83,7 @@ export function WeekPage() {
         {m.ordered_in ? <p className="pl-quiet">Ordered in: nothing is cooked or bought for it.</p> : (
           <>
             {m.dishes.map((d) => {
-              if (editing === d.id) return <DishPanel key={d.id} dish={d} at={{ date: m.date, slot: m.slot }} onDone={done} />;
+              if (editing === d.id) return <DishPanel key={d.id} dish={d} dishes={m.dishes} at={{ date: m.date, slot: m.slot }} onDone={done} />;
               const link = linkOf(d), note = dishNote(d), last = lastTimeText(d.last_time);
               return (
                 <div className="pl-dish" key={d.id}>
@@ -98,7 +99,7 @@ export function WeekPage() {
                 </div>
               );
             })}
-            {editing === "new" ? <DishPanel key={`${m.id}-new`} dish={null} at={{ date: m.date, slot: m.slot }} onDone={done} />
+            {editing === "new" ? <DishPanel key={`${m.id}-new`} dish={null} dishes={m.dishes} at={{ date: m.date, slot: m.slot }} onDone={done} />
               : <Row><Button size="sm" variant="ghost" icon="plus" onClick={() => setOpen({ meal: m.id, dish: "new" })}>Add a dish</Button></Row>}
           </>
         )}
@@ -115,7 +116,7 @@ export function WeekPage() {
       )}
       {o.slot ? (
         <>
-          <DishPanel key={`${o.date}-${o.slot}`} dish={null} at={{ date: o.date, slot: o.slot }} onDone={done} />
+          <DishPanel key={`${o.date}-${o.slot}`} dish={null} dishes={meals.find((m) => m.date === o.date && sameSlot(m.slot, o.slot!))?.dishes ?? []} at={{ date: o.date, slot: o.slot }} onDone={done} />
           <Row><Button size="sm" variant="ghost" onClick={() => void orderIn(o.date, o.slot!, true)}>{`${o.slot} is ordered in`}</Button></Row>
         </>
       ) : <Row><Button size="sm" variant="ghost" onClick={() => setOpen(null)}>Cancel</Button></Row>}

@@ -488,7 +488,7 @@ async function lintReread(model: ModelCall, dishes: ReadDish[], replies: string[
 
 /** The contains read (fast, ≤CONTAINS_BATCH dishes a call, the calls at once): for each dish, the tags asked that it has and
  *  has not. A dish or tag the answer leaves out stays unread (unknown: the plan fails closed on it). */
-async function containsRead(model: ModelCall, ask: Map<string, { name: string; tags: Set<string> }>, until: number, log: (l: string) => void): Promise<Map<string, Record<string, boolean>>> {
+export async function containsRead(model: ModelCall, ask: Map<string, { name: string; tags: Set<string> }>, until: number, log: (l: string) => void): Promise<Map<string, Record<string, boolean>>> {
   const out = new Map<string, Record<string, boolean>>();
   const items = [...ask.values()];
   const batches: (typeof items)[] = [];

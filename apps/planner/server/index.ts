@@ -18,6 +18,7 @@ import { routineEnv } from "./routines/ctx";
 import { mountMakePlanRoute } from "./makePlan";
 import { sdkModel } from "./model";
 import { mountSetupRoute } from "./setup";
+import { mountChangeRoutes } from "./changes";
 
 // The app's operations for its agent (agentOps.ts): Flock relays the agent's calls to them.
 const flock = createFlockApp({ ops: agentOps(() => flock.hono) });
@@ -39,6 +40,10 @@ mountMealRoutes(flock.hono, kit.db, kit.emitChange, { basePath: flock.env.basePa
 mountMakePlanRoute(flock.hono, kit.db, kit.emitChange, { basePath: flock.env.basePath, model: (req) => sdkModel(flock.platform)(req), platform: () => flock.platform, sqlite: kit.sqlite });
 // apply_setup: the whole interview read once by the model and saved by the app's code (setup.ts).
 mountSetupRoute(flock.hono, kit.db, kit.emitChange, { model: (req) => sdkModel(flock.platform)(req) });
+// The later changes (set_slot, set_slot_day, add_dish, set_rule, set_setting, record_made, record_feedback): changes.ts; a
+// change re-plans only the slot-days it touches, with the plan's own steps.
+mountChangeRoutes(flock.hono, { db: kit.db, emit: kit.emitChange, basePath: flock.env.basePath, model: (req) => sdkModel(flock.platform)(req),
+  platform: () => flock.platform, sqlite: kit.sqlite, appToken: flock.env.token ?? process.env.FLOCK_APP_TOKEN ?? null });
 routineEnv.basePath = flock.env.basePath;
 // set_regular, the older way to state an item's cycle (regulars.ts).
 mountRegularRoutes(flock.hono, kit.db, kit.emitChange);
