@@ -186,8 +186,28 @@ describe("memory-extraction: into memory", () => {
     const c = f.extracts[2]!.items[0];
     expect(c.context.selfAuthored).toBeUndefined();
     expect(c.context.senderKind).toBe("human");
-    // KeptMail has no to/cc, so no addressing verdict is claimed.
+    // A kept mail whose read gave no To/Cc claims no addressing verdict.
     expect(a.context.addressing).toBeUndefined();
+  });
+
+  // Ruling P3-R13: Flock's item gate rejects a cc-only ask from each message's To/Cc and the owner's addresses; the item carries
+  // both, in the shape /api/memory/extract reads (messages[].to / .cc, context.addressing), so the gate works on the copy path.
+  test("each message carries its To/Cc and the item its addressing verdict; a cc-only thread reads cc", async () => {
+    const ccOnly = kept(1, { recipients: [{ to: ["priya@acme.com", "me@acme.com"], cc: [] }, { to: ["raj@acme.com"], cc: ["me@acme.com"] }] });
+    const ccOnlyAll = kept(2, { recipients: [{ to: ["raj@acme.com"], cc: ["me@acme.com"] }, { to: ["raj@acme.com"], cc: ["me@acme.com"] }] });
+    const unread = kept(3, { recipients: [{}, { to: ["raj@acme.com"], cc: [] }] });
+    const f = fake({ kept: [ccOnly, ccOnlyAll, unread] });
+    await f.run();
+    const [a, b, c] = f.extracts.map((e) => e.items[0]);
+    expect(a.messages).toEqual([
+      { index: 0, from: "Asha Rao <asha1@acme.com>", to: ["priya@acme.com", "me@acme.com"], cc: [], text: "First message 1." },
+      { index: 1, from: "Asha Rao <asha1@acme.com>", to: ["raj@acme.com"], cc: ["me@acme.com"], text: "Are you free on Tuesday? (mail 1)" },
+    ]);
+    expect(a.context.addressing).toBe("to");
+    expect(b.context.addressing).toBe("cc");
+    // A message the read could not address is unknown, never a confident negative.
+    expect(c.messages[0]).toEqual({ index: 0, from: "Asha Rao <asha3@acme.com>", text: "First message 3." });
+    expect(c.context.addressing).toBe("unknown");
   });
 
   test(`mail goes one item per call (EXTRACT_SERVABLE_ITEMS = ${EXTRACT_SERVABLE_ITEMS}): each item has its own answer`, async () => {

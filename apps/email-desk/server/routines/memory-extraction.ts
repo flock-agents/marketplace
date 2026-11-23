@@ -40,6 +40,7 @@ import type { ImportPayload, MemoryExtractAnswer } from "@flock/app-sdk";
 import { routineCtx, type OpenTaskWire, type RoutineCtx } from "../platform-ext";
 import { getStore } from "../store";
 import { THREAD_BODY_SEPARATOR } from "../lib/thread-format";
+import { blockAddressing } from "../lib/addressing";
 import { localDayStart, processTimezone, todayIn } from "../lib/local-day";
 import { gatherNewMail, EARLIER_MESSAGE_MARK, type GatherResult, type KeptMail } from "./gather";
 import { markHandedOver } from "./seen";
@@ -80,7 +81,7 @@ const say = (accountId: string, what: string) => log(`[email-desk] memory-extrac
 // ---- the wire item -------------------------------------------------------------------------------------------------------
 
 /** One message of a kept thread, as the extract item carries it (memory-relay messagesForWire). */
-export interface ItemMessage { index: number; from: string; text: string }
+export interface ItemMessage { index: number; from: string; to?: string[]; cc?: string[]; text: string }
 
 /** The thread kept apart, message by message, oldest first: KeptMail.body split back on its separator. */
 export function messagesOf(body: string): ItemMessage[] {
@@ -119,18 +120,23 @@ export function openTaskRefs(tasks: readonly OpenTaskWire[]): Array<Record<strin
 
 /** A kept mail as a /api/memory/extract item (memory-relay blockToItem). Enumerated, never spread; optional fields omitted. */
 export function keptToItem(k: KeptMail, owner: { email: string | null }, openTasks: readonly OpenTaskWire[] = []): Record<string, unknown> {
-  const messages = messagesOf(k.body);
+  // Each message's To/Cc (Ruling P3-R13), aligned with the body's messages; a message the read did not address has none.
+  const messages = messagesOf(k.body).map((m) => {
+    const r = k.recipients?.[m.index];
+    return { index: m.index, from: m.from, ...(r?.to ? { to: r.to } : {}), ...(r?.cc ? { cc: r.cc } : {}), text: m.text };
+  });
   const participants = [...new Set(messages.map((m) => m.from).filter(Boolean))];
   const owners = owner.email ? [owner.email] : [];
   const context: Record<string, unknown> = {};
   // WHO WROTE IT (harvest toContentBlock, memory-relay blockToItem T1/T3/T11): a thread only the person wrote is labelled so
   // the extraction mints only their own commitments, never their asks of others (sent mail is kept now, R11); the other
-  // end's kind caps a role or no-reply mailbox to one item. `addressing` is NOT sent: it needs each message's To/Cc, which
-  // KeptMail does not carry, and Flock prints nothing for its absence.
+  // end's kind caps a role or no-reply mailbox to one item. `addressing` is the thread's verdict from each message's To/Cc
+  // (lib/addressing.ts blockAddressing), sent only when the read gave recipients and the person's address is known.
   const gate = blockTaskGate(messages, owners);
   if (gate.tasks && gate.selfAuthored) context.selfAuthored = true;
   context.senderKind = senderKindOf(messages, owners);
   if (owners.length) context.ownerAddresses = owners;
+  if (owners.length && k.recipients?.length) context.addressing = blockAddressing(messages, owners);
   if (k.mailboxKind === "personal") context.mailboxKind = "personal";
   const refs = openTaskRefs(openTasks);
   if (refs.length > 0) context.openTasks = refs;

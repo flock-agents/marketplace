@@ -23,9 +23,9 @@ function dateFull(minutesAgo: number): string {
   return `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}, ${hh}:${mm}`;
 }
 
-interface Msg { from: string; body: string; minutesAgo: number; to?: string[] }
+interface Msg { from: string; body: string; minutesAgo: number; to?: string[]; cc?: string[] }
 /** A thread as the inbox lists it (its newest message) and as a thread read returns it (`earlier` messages first). */
-interface Mail { threadId: string; from: string; subject: string; body: string; minutesAgo: number; to?: string[]; earlier?: Msg[] }
+interface Mail { threadId: string; from: string; subject: string; body: string; minutesAgo: number; to?: string[]; cc?: string[]; earlier?: Msg[] }
 
 interface Fake {
   ctx: RoutineCtx;
@@ -51,7 +51,7 @@ function fake(opts: {
     id: m.threadId, from: m.from, subject: m.subject, snippet: m.body.slice(0, 40),
     date: "", dateFull: dateFull(m.minutesAgo), isUnread: true,
   });
-  const msgOf = (m: Msg) => ({ from: m.from, to: m.to ?? [opts.mailbox], cc: [], date: dateFull(m.minutesAgo), body: m.body, recipientsVerified: true });
+  const msgOf = (m: Msg) => ({ from: m.from, to: m.to ?? [opts.mailbox], cc: m.cc ?? [], date: dateFull(m.minutesAgo), body: m.body, recipientsVerified: true });
   const threadOf = (m: Mail) => ({ threadId: m.threadId, subject: m.subject, messages: [...(m.earlier ?? []).map(msgOf), msgOf(m)] });
   const all = () => [...opts.inbox, ...(opts.sent ?? [])];
   const exec = async (skillId: string, fn: string, params: Record<string, unknown> = {}, o: Record<string, unknown> = {}) => {
@@ -148,6 +148,20 @@ describe("gatherNewMail", () => {
     // A second read of the same inbox journals nothing new; the cursor never rewinds.
     const again = await gatherNewMail(fake({ mailbox: "me@acme.com", inbox: [{ ...ASHA, minutesAgo: 600 }] }).ctx, ACCOUNT);
     expect(again.cursor).toBe(r.cursor);
+  });
+
+  // Ruling P3-R13: the kept mail carries each message's To/Cc as the read gave them, in the order of the body's messages, so
+  // Flock's item gate can tell a cc-only ask from one to the person.
+  test("each kept message's To and Cc ride along, aligned with the body's messages", async () => {
+    const cc: Mail = { threadId: "t-cc", from: "Priya <priya@acme.com>", subject: "MSA", body: "Raj, please send the signed MSA today.", minutesAgo: 20,
+      to: ["raj@acme.com"], cc: ["me@acme.com"], earlier: [{ from: "Raj <raj@acme.com>", body: "Which MSA?", minutesAgo: 60, to: ["priya@acme.com", "me@acme.com"] }] };
+    const r = await gatherNewMail(fake({ mailbox: "me@acme.com", inbox: [cc] }).ctx, ACCOUNT);
+    const k = r.kept[0]!;
+    expect(k.body.split(THREAD_BODY_SEPARATOR)).toHaveLength(2);
+    expect(k.recipients).toEqual([
+      { to: ["priya@acme.com", "me@acme.com"], cc: [] },
+      { to: ["raj@acme.com"], cc: ["me@acme.com"] },
+    ]);
   });
 
   test('busy read-turn: no read, cursor unchanged, run ends ok with "mailbox busy"', async () => {

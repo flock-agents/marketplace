@@ -81,6 +81,9 @@ export interface KeptMail {
   subject: string;
   /** The whole thread, oldest first: each message opened with `From: <who>`, messages separated by a `---` line. */
   body: string;
+  /** Each message of `body`, in the same order: its To and Cc as the read gave them (absent: the read did not say, e.g. a
+   *  parked body). Flock's item gate reads them to tell a cc-only ask from one to the person (Ruling P3-R13). */
+  recipients?: MessageRecipients[];
   mailboxKind: "personal" | "work";
   /** Today's draft gate, in code, on the thread as read now: the newest message is to the person (To, not cc), not their
    *  own, not bulk, not from an automated sender, and no draft is open. Sent mail never is. create_draft checks again. */
@@ -152,10 +155,14 @@ function parsed(data: unknown): any {
 
 // ---- threads -------------------------------------------------------------------------------------------------------------
 
+/** One message's addressing, as the read gave it. Absent: unknown; [] known-and-empty. */
+export interface MessageRecipients { to?: string[]; cc?: string[] }
+
 interface Segment {
   from: string;
   text: string;
   to?: string[];
+  cc?: string[];
   /** The message's own time, when the read gave a full Gmail datetime. */
   ts?: number;
   /** message-fingerprint.ts, from a live read only (a parked body has none). */
@@ -191,10 +198,13 @@ function segmentsFromRow(row: ClaimedJournalEntry): Segment[] {
  * hand-over of the thread carried (`isEarlier`) is headed with EARLIER_MESSAGE_MARK. `fingerprints` are those of the
  * messages that made it into the text, recorded once the text is handed over.
  */
-export function renderBlock(segments: Segment[], isEarlier: (seg: Segment) => boolean): { text: string; fingerprints: string[] } {
+export function renderBlock(segments: Segment[], isEarlier: (seg: Segment) => boolean): { text: string; fingerprints: string[]; recipients: MessageRecipients[] } {
   const seen = new Set<string>();
   const parts: string[] = [];
   const fingerprints: string[] = [];
+  // One per rendered message, so index i is the i-th message of `text`.
+  const recipients: MessageRecipients[] = [];
+  const addressed = (seg: Segment): MessageRecipients => ({ ...(seg.to ? { to: seg.to } : {}), ...(seg.cc ? { cc: seg.cc } : {}) });
   let length = 0;
   for (const seg of segments) {
     const text = (seg.text ?? "").trim();
@@ -203,15 +213,16 @@ export function renderBlock(segments: Segment[], isEarlier: (seg: Segment) => bo
     const named = seg.from && !/^from:/i.test(text) ? `From: ${seg.from}\n${text}` : text;
     const piece = isEarlier(seg) ? `${EARLIER_MESSAGE_MARK}\n${named}` : named;
     if (parts.length === 0 && piece.length > MAX_BODY_CHARS) {
-      return { text: piece.slice(0, MAX_BODY_CHARS), fingerprints: seg.fingerprint ? [seg.fingerprint] : [] };
+      return { text: piece.slice(0, MAX_BODY_CHARS), fingerprints: seg.fingerprint ? [seg.fingerprint] : [], recipients: [addressed(seg)] };
     }
     const sep = parts.length === 0 ? 0 : SEPARATOR.length;
     if (length + sep + piece.length > MAX_BODY_CHARS) break;
     parts.push(piece);
+    recipients.push(addressed(seg));
     if (seg.fingerprint) fingerprints.push(seg.fingerprint);
     length += sep + piece.length;
   }
-  return { text: parts.join(SEPARATOR), fingerprints };
+  return { text: parts.join(SEPARATOR), fingerprints, recipients };
 }
 
 /** The thread's text with nothing marked: what is parked on the journal rows. */
@@ -252,6 +263,7 @@ function segmentsFromThread(thread: any): Segment[] {
     from: typeof m?.from === "string" ? m.from : "",
     text: typeof m?.body === "string" ? m.body : "",
     to: addressList(m?.to),
+    cc: addressList(m?.cc),
     ts: (typeof m?.date === "string" ? parseGmailDateTime(m.date) : null) ?? undefined,
     fingerprint: messageFingerprint(m ?? {}),
   }));
@@ -579,7 +591,7 @@ async function gatherUnderTurn(
     if (!newestRow) continue;
 
     const earlier = earlierReadOf(block.rows);
-    const { text: body, fingerprints } = renderBlock(segments, (seg) =>
+    const { text: body, fingerprints, recipients } = renderBlock(segments, (seg) =>
       earlier(seg) || (deletedAt !== null && seg.ts !== undefined && seg.ts <= deletedAt));
     noteHandoverFingerprints(newestRow.eventId, accountId, block.key, fingerprints);
     const newestSeg = segments[segments.length - 1];
@@ -593,6 +605,7 @@ async function gatherUnderTurn(
       date: new Date(newestRow.ts).toISOString(),
       subject: subjectOf(newestRow),
       body,
+      ...(recipients.some((r) => r.to || r.cc) ? { recipients } : {}),
       mailboxKind,
       draftEligible: !isSentRow(newestRow)
         && draftEligible(thread, mailbox, Boolean(unsubscribeLink), !!ownDraft.get(accountId, block.key)),
