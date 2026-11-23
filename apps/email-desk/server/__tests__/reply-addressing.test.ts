@@ -23,7 +23,7 @@ import { THREAD_BODY_SEPARATOR } from "../lib/thread-format";
 import { _setOpsLogForTesting } from "../ops";
 import { _setLogForTesting } from "../drafts/card";
 import { allOps } from "../registry";
-import { replyAddressingOf, followUpAddressingOf, _resetAddressingForTesting, ADDRESSING_FRESH_MS } from "../drafts/addressing";
+import { replyAddressingOf, followUpAddressingOf, confirmedByWrite, newestMessageKey, _resetAddressingForTesting, ADDRESSING_FRESH_MS } from "../drafts/addressing";
 import { getFollowUp, putFollowUp } from "../routines/follow-up-store";
 
 const ME = "me@acme.com";
@@ -38,6 +38,8 @@ let replyMode: string | undefined;
 let published: any[];
 let now: number;
 let threadReads: number;
+/** What createReplyDraft read from its own open compose (gmail 1.6.8+): `reply` and `newestMessage`. Undefined: an older skill. */
+let writeFacts: Record<string, unknown> | undefined;
 
 function platform(): any {
   return {
@@ -48,7 +50,7 @@ function platform(): any {
       exec: async (req: any) => {
         if (req.functionName === "getThread") { threadReads++; return gmailFails ? { ok: false, reason: "mailbox busy" } : { ok: true, data: gmailThread }; }
         if (req.functionName === "createReplyDraft") {
-          return { ok: true, data: { draftId: "gm-1", draftMessageId: "m-1", bodyAsSaved: String(req.params.body), ...(replyMode ? { replyMode } : {}) } };
+          return { ok: true, data: { draftId: "gm-1", draftMessageId: "m-1", bodyAsSaved: String(req.params.body), ...(replyMode ? { replyMode } : {}), ...(writeFacts ?? {}) } };
         }
         if (req.functionName === "getDraft") return { ok: true, data: { draftId: req.params.draftId, body: "Hi all, Tuesday works.", threadId: T1 } };
         if (req.functionName === "updateDraft") return { ok: true, data: { ok: true, draftId: req.params.draftId, bodyAsSaved: String(req.params.body) } };
@@ -84,7 +86,7 @@ beforeEach(() => {
   _setOpsLogForTesting(() => {});
   now = Date.UTC(2026, 10, 23, 9, 30);
   _resetAddressingForTesting(() => now);
-  published = []; gmailFails = false; replyMode = "reply-all"; threadReads = 0;
+  published = []; gmailFails = false; replyMode = "reply-all"; threadReads = 0; writeFacts = undefined;
   gmailThread = threadWith();
   const r = normalizeInboxRow({ id: T1, from: "Asha Rao <asha@acme.com>", subject: "Tuesday?", snippet: "Are you free on Tuesday?", dateFull: "Mon, Nov 23, 2026, 9:00 AM" }, A1, new Date(Date.UTC(2026, 10, 23, 9, 0)));
   appendEvents(db, A1, [r]);
@@ -304,5 +306,60 @@ describe("a follow-up draft the routine woke the agent for", () => {
     const u = followUpThread();
     u.messages[1] = { ...u.messages[1]!, replyToKnown: false } as any;
     expect(followUpAddressingOf(u, ME)).toBeNull();
+  });
+});
+
+// 2026-11-24 (speed, owner-approved): createReplyDraft reads, from the compose it just wrote, who Gmail's Reply all put on
+// it (`reply`: bare To/Cc/Bcc) and the thread's newest message (`newestMessage`: sender and time). Expectations, written
+// before the code: the set holds without a second thread read only when that newest message is the read's newest (same
+// sender, same time) AND the compose reaches exactly the set; anything else (a half missing, another sender or time, one
+// person more or less, a Bcc) is no proof either way, and the read after the write decides exactly as before.
+describe("the write's own facts confirm the set without a second read", () => {
+  const facts = (over: { reply?: unknown; newestMessage?: unknown } = {}) => ({
+    reply: { to: ["asha@acme.com"], cc: ["sam@acme.com", "ravi@acme.com"], bcc: [] },
+    newestMessage: { id: "m-9", from: "Asha Rao <asha@acme.com>", date: "Mon, 23 Nov 2026, 09:00" },
+    ...over,
+  });
+
+  test("matching facts: the card is stamped and the thread is read once (reply_context's read only)", async () => {
+    writeFacts = facts();
+    await call("reply_context", { threadId: T1 });
+    expect(await call("create_draft", { threadId: T1, body: "Hi all, Tuesday works." })).toHaveProperty("id");
+    expect(threadReads).toBe(1);
+    expect(cardContext()).toMatchObject({ to: "Asha Rao <asha@acme.com>", cc: "sam@acme.com, ravi@acme.com", replyAllRecipients: STAMP });
+  });
+
+  for (const [why, over] of [
+    ["one person fewer on the compose", { reply: { to: ["asha@acme.com"], cc: ["sam@acme.com"], bcc: [] } }],
+    ["a Bcc on the compose", { reply: { to: ["asha@acme.com"], cc: ["sam@acme.com", "ravi@acme.com"], bcc: ["x@acme.com"] } }],
+    ["another newest message (time)", { newestMessage: { id: "", from: "Asha Rao <asha@acme.com>", date: "Mon, 23 Nov 2026, 09:05" } }],
+    ["another newest message (sender)", { newestMessage: { id: "", from: "Sam <sam@acme.com>", date: "Mon, 23 Nov 2026, 09:00" } }],
+    ["no recipients read", { reply: undefined }],
+    ["no newest message read", { newestMessage: undefined }],
+  ] as const) {
+    test(`${why}: not proof; the read after the write decides, as before`, async () => {
+      writeFacts = facts(over as any);
+      await call("reply_context", { threadId: T1 });
+      await call("create_draft", { threadId: T1, body: "Hi all, Tuesday works." });
+      expect(threadReads).toBe(2);
+      expect(cardContext()).toMatchObject({ replyAllRecipients: STAMP });
+    });
+  }
+
+  test("facts that do not confirm never stamp on their own: the failed read after the write leaves no set", async () => {
+    writeFacts = facts({ reply: { to: ["asha@acme.com"], cc: [], bcc: [] } });
+    await call("reply_context", { threadId: T1 });
+    gmailFails = true;
+    await call("create_draft", { threadId: T1, body: "Hi all, Tuesday works." });
+    expect(cardContext().replyAllRecipients).toBeUndefined();
+  });
+
+  test("confirmedByWrite: order and case of addresses do not matter; spacing in the time does not either", () => {
+    const candidate = { addressing: replyAddressingOf(threadWith(), ME)!, newestKey: newestMessageKey(threadWith())! };
+    expect(confirmedByWrite(candidate, facts({ reply: { to: ["ASHA@acme.com"], cc: ["ravi@acme.com", "sam@acme.com"], bcc: [] } }))).toEqual(candidate.addressing);
+    expect(confirmedByWrite(candidate, facts({ newestMessage: { from: "asha@acme.com", date: "Mon,\u202f23 Nov 2026,  09:00" } }))).toEqual(candidate.addressing);
+    expect(confirmedByWrite(candidate, null)).toBeNull();
+    expect(confirmedByWrite(candidate, facts({ reply: { to: "asha@acme.com", cc: [], bcc: [] } }))).toBeNull();
+    expect(confirmedByWrite(candidate, facts({ reply: { to: [], cc: ["asha@acme.com", "sam@acme.com", "ravi@acme.com"], bcc: [] } }))).toBeNull();
   });
 });

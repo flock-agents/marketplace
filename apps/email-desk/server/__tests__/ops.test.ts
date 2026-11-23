@@ -42,6 +42,8 @@ let getThreadTurnIds: Array<string | undefined>;
 /** Set: Gmail answers getThread per mailbox and thread (`account|thread`); a pair it lacks reads as no such thread. */
 let gmailByThread: Map<string, any> | null;
 let turnsAsked: string[];
+/** What createReplyDraft read from its own compose (gmail 1.6.8+); undefined: an older skill that returns none. */
+let writeFacts: Record<string, unknown> | undefined;
 
 function platform(): any {
   return {
@@ -62,7 +64,7 @@ function platform(): any {
           }
           return { ok: true, data: gmailThread };
         }
-        if (req.functionName === "createReplyDraft") return { ok: true, data: { draftId: "gm-1", draftMessageId: "m-1", bodyAsSaved: String(req.params.body), replyMode: "reply" } };
+        if (req.functionName === "createReplyDraft") return { ok: true, data: { draftId: "gm-1", draftMessageId: "m-1", bodyAsSaved: String(req.params.body), replyMode: "reply", ...(writeFacts ?? {}) } };
         // Gmail still holds the draft it wrote.
         if (req.functionName === "getDraft") return { ok: true, data: { draftId: req.params.draftId, body: "held" } };
         return { ok: false, reason: `unexpected ${req.functionName}` };
@@ -97,7 +99,7 @@ beforeEach(() => {
   _setLogForTesting(() => {});
   _setOpsLogForTesting(() => {});
   calls = []; memoryQueries = []; published = [];
-  gmailFails = false; turnAnswer = null; released = []; getThreadTurnIds = []; gmailByThread = null; turnsAsked = [];
+  gmailFails = false; turnAnswer = null; released = []; getThreadTurnIds = []; gmailByThread = null; turnsAsked = []; writeFacts = undefined;
   gmailThread = {
     threadId: T1, subject: "Re: Tuesday?",
     messages: [
@@ -287,18 +289,37 @@ describe("an older thread the journal does not hold (the person's own ask)", () 
   // Live 2026-11-24 (create_draft 70 s on an older thread, fetched on demand by reply_context): 63 s of it was the skill's
   // own createReplyDraft, the rest one getThread after the write. Every Gmail call the pair makes, pinned: reply_context
   // reads the thread once; create_draft does not read it again before writing (the journal now holds it, nothing is in
-  // doubt, no open draft to check), writes once, and reads it once after the write, the read Ruling P3-R5 needs before
-  // the card may say who the reply reaches. No getDraft, no findDraftForThread.
-  test("reply_context then create_draft: getThread, createReplyDraft, then one getThread confirming who it reaches", async () => {
+  // doubt, no open draft to check) and writes once. Who the reply reaches (Ruling P3-R5) is then proved by the write's own
+  // read of the reply it composed (gmail 1.6.8+), so no getThread follows; an older skill that returns no such read gets
+  // the one getThread after the write, as before. No getDraft, no findDraftForThread.
+  const verifiedOld = () => ({ ...oldThread, messages: oldThread.messages.map((m) => ({ ...m, replyTo: [], replyToKnown: true })) });
+
+  test("reply_context then create_draft: getThread, then createReplyDraft alone (its own read says who the reply reaches)", async () => {
     _resetAddressingForTesting();
-    const verified = { ...oldThread, messages: oldThread.messages.map((m) => ({ ...m, replyTo: [], replyToKnown: true })) };
-    gmailByThread = new Map([[`${A1}|${OLD}`, verified]]);
+    gmailByThread = new Map([[`${A1}|${OLD}`, verifiedOld()]]);
+    writeFacts = {
+      reply: { to: ["contact.gshivashankar@gmail.com"], cc: [], bcc: [] },
+      newestMessage: { id: "m-1", from: "Ravi K <contact.gshivashankar@gmail.com>", date: "Sat, Oct 31, 2026, 10:15 AM" },
+    };
     expect((await call("reply_context", { threadId: OLD })).status).toBe(200);
     expect(calls.map((c) => c.functionName)).toEqual(["getThread"]);
     calls.length = 0;
     const made = await call("create_draft", { threadId: OLD, body: "Hi Ravi, the invoice is attached here today." });
     expect(made.json.id).toBeTruthy();
+    expect(calls.map((c) => c.functionName)).toEqual(["createReplyDraft"]);
+    expect(published[published.length - 1]?.context?.replyAllRecipients).toEqual(["contact.gshivashankar@gmail.com"]);
+    _resetAddressingForTesting();
+  });
+
+  test("an older skill (no read of its own): getThread, createReplyDraft, then one getThread confirming who it reaches", async () => {
+    _resetAddressingForTesting();
+    gmailByThread = new Map([[`${A1}|${OLD}`, verifiedOld()]]);
+    expect((await call("reply_context", { threadId: OLD })).status).toBe(200);
+    calls.length = 0;
+    const made = await call("create_draft", { threadId: OLD, body: "Hi Ravi, the invoice is attached here today." });
+    expect(made.json.id).toBeTruthy();
     expect(calls.map((c) => c.functionName)).toEqual(["createReplyDraft", "getThread"]);
+    expect(published[published.length - 1]?.context?.replyAllRecipients).toEqual(["contact.gshivashankar@gmail.com"]);
     _resetAddressingForTesting();
   });
 

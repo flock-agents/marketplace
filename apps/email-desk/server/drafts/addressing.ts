@@ -135,6 +135,37 @@ export function confirmedAddressing(candidate: DraftAddressing, reread: unknown,
   return candidate.addressing;
 }
 
+const oneSpace = (s: string) => s.replace(/\s+/g, " ").trim();
+
+/**
+ * The set, confirmed by what createReplyDraft read from the reply it had just composed (gmail 1.6.8+, 2026-11-24): the
+ * compose's own recipients (`reply`, what Gmail's Reply all put on it) and the thread's newest message (`newestMessage`,
+ * the one Reply all answered). Holds only when that message is the read's newest (same sender, same time) and the compose
+ * reaches exactly the set, no one more, no one less, no Bcc. Null is not "no set": it means the write cannot prove it, and
+ * the caller reads the thread again as before (confirmedAddressing).
+ */
+export function confirmedByWrite(candidate: DraftAddressing, written: unknown): ReplyAddressing | null {
+  const w = (written ?? {}) as { reply?: { to?: unknown; cc?: unknown; bcc?: unknown }; newestMessage?: { from?: unknown; date?: unknown } };
+  const newest = w.newestMessage;
+  const reply = w.reply;
+  if (!newest || typeof newest !== "object" || !reply || typeof reply !== "object") return null;
+  const from = address(newest.from);
+  const date = typeof newest.date === "string" ? oneSpace(newest.date) : "";
+  const [keyFrom, keyDate] = candidate.newestKey.split("|");
+  if (!from || !date || from !== keyFrom || date !== oneSpace(keyDate ?? "")) return null;
+  const lists = [reply.to, reply.cc, reply.bcc ?? []];
+  if (!lists.every(Array.isArray) || (reply.to as unknown[]).length === 0) return null;
+  const reached: string[] = [];
+  for (const raw of (lists as unknown[][]).flat()) {
+    const a = address(raw);
+    if (!a) return null;
+    if (!reached.includes(a)) reached.push(a);
+  }
+  const want = candidate.addressing.recipients;
+  if (reached.length !== want.length || !want.every((a) => reached.includes(a))) return null;
+  return candidate.addressing;
+}
+
 /** Tests: forget every read, and set the clock (null: the real one). */
 export function _resetAddressingForTesting(now: (() => number) | null = null): void {
   reads.clear();
