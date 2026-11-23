@@ -14,7 +14,9 @@ import { parseGmailDateTime } from "./gmail-date";
 export interface NudgeThreadMessage { from: string; to: string[]; cc: string[]; date: string; body: string; unsubscribeLink?: boolean }
 export interface NudgeThread { messages: NudgeThreadMessage[]; incomplete?: boolean; subject?: string }
 
-export type FollowUpStatus = "waiting" | "offered" | "replied";
+/** `drafting`: an "always follow up" rule covers it and the agent was woken to write it (no TODO); `drafted`: it did, and
+ *  the rule sends that draft. */
+export type FollowUpStatus = "waiting" | "offered" | "drafting" | "drafted" | "replied";
 export type FollowUpAction = "skip" | "judge" | "settle_replied";
 
 /** The key of the person's message a follow-up answers: one message is never raised twice. */
@@ -42,7 +44,7 @@ export function decideNudgeEligibility(
   return { ok: true };
 }
 
-const OPEN = new Set<FollowUpStatus>(["waiting", "offered"]);
+const OPEN = new Set<FollowUpStatus>(["waiting", "offered", "drafting"]);
 
 /** What to do with a sent thread once read. `judge` = run the gate and, if it passes, raise the TODO. */
 export function nextFollowUpAction(
@@ -52,7 +54,8 @@ export function nextFollowUpAction(
   if (!current.lastIsOwner) return prev && OPEN.has(prev.status) ? "settle_replied" : "skip";
   if (!prev || prev.ownerMsgKey !== current.ownerMsgKey) return "judge";
   if (prev.status === "waiting") return "judge";
-  // offered: the TODO is already up (idempotent across runs); replied: answered, and nothing new from the person.
+  // offered: the TODO is already up (idempotent across runs); drafting/drafted: the rule's draft is awaited or made;
+  // replied: answered, and nothing new from the person.
   return "skip";
 }
 

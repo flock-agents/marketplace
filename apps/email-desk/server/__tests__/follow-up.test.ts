@@ -22,7 +22,7 @@ import {
 } from "../routines/follow-up";
 import { stopReason } from "../routines/gather";
 import { recordMailDeleted } from "../mail-data";
-import { getFollowUp, putFollowUp, lastFollowUpRunAt, listFollowUpsOfferedSince, recordFollowUpRun } from "../routines/follow-up-store";
+import { getFollowUp, putFollowUp, lastFollowUpRunAt, listFollowUpsOfferedSince, recordFollowUpRun, markFollowUpDrafted } from "../routines/follow-up-store";
 
 const OWNER = "shiva@bimacred.com";
 const ACCT = "acct-1";
@@ -202,7 +202,7 @@ describe("the store", () => {
   test("upsert replaces the row for (account, thread); the offer fields are kept when a write omits them", () => {
     putFollowUp({ accountId: ACCT, threadId: "t1", ownerMsgKey: "owner:a", status: "offered", checkedAt: 1, offeredAt: 500, recipientName: "Priya" });
     putFollowUp({ accountId: ACCT, threadId: "t1", ownerMsgKey: "owner:a", status: "replied", checkedAt: 2 });
-    expect(getFollowUp(ACCT, "t1")).toEqual({ accountId: ACCT, threadId: "t1", ownerMsgKey: "owner:a", status: "replied", checkedAt: 2, offeredAt: 500, recipientName: "Priya" });
+    expect(getFollowUp(ACCT, "t1")).toEqual({ accountId: ACCT, threadId: "t1", ownerMsgKey: "owner:a", status: "replied", checkedAt: 2, offeredAt: 500, recipientName: "Priya", draftId: null });
   });
   test("run stamp per account", () => {
     expect(lastFollowUpRunAt(ACCT)).toBeNull();
@@ -670,5 +670,147 @@ describe("the person's follow-up rules", () => {
     w.deps.rules = async () => { throw new Error("Flock down"); };
     await run(w);
     expect(w.published).toHaveLength(1);
+  });
+});
+
+// Owner decision 2026-11-23: an "always follow up with X" rule AUTO-SENDS the follow-up, as the built-in desk did. The
+// routine wakes the copy's paired agent in its own run with the thread as data; the agent writes it with create_draft (a
+// routine-made draft, so the rule may send it); no TODO is raised for that thread. A wake that fails, or a draft that never
+// comes, falls back to the TODO. Recipients that differ from the rule's people: the TODO, no wake.
+describe("an always rule drafts the follow-up for the rule to send", () => {
+  const PEOPLE = ["priya@acme.com", "ravi@acme.com"];
+  const always = (o: WorldOpts = {}, wake?: (msg: string, data: any) => Promise<any>) => {
+    const w = world(o);
+    w.deps.rules = async () => ({ always: [PEOPLE], never: [] });
+    const wakes: Array<{ msg: string; data: any }> = [];
+    w.ctx.wakeAgent = async (msg: string, data: any) => {
+      wakes.push({ msg, data });
+      return wake ? wake(msg, data) : { ok: true, data: { sessionId: "s-1" } };
+    };
+    return { w, wakes };
+  };
+
+  test("the agent is woken once with the thread as data, and no TODO is raised", async () => {
+    const { w, wakes } = always();
+    const t = await run(w);
+    expect(wakes).toHaveLength(1);
+    expect(wakes[0]!.msg).not.toMatch(/[—–]/);
+    expect(wakes[0]!.data.followUps).toEqual([
+      expect.objectContaining({ threadId: THREAD, accountId: ACCT, subject: "MSA", to: ["Priya Shah <priya@acme.com>"], cc: ["Ravi <ravi@acme.com>"] }),
+    ]);
+    expect(w.published).toEqual([]);
+    expect(getFollowUp(ACCT, THREAD)).toMatchObject({ status: "drafting" });
+    expect(t).toMatchObject({ completed: true, offered: 0, woke: 1 });
+  });
+
+  test("a rerun the same day does nothing: no second wake, no TODO", async () => {
+    const { w, wakes } = always();
+    await followUp(w.ctx, w.deps);
+    _resetFollowUpPassMemoryForTesting();
+    w.ctx.trigger = "manual";
+    await followUp(w.ctx, w.deps);
+    expect(wakes).toHaveLength(1);
+    expect(w.published).toEqual([]);
+  });
+
+  test("a wake that fails raises the TODO instead", async () => {
+    const { w, wakes } = always({}, async () => ({ ok: false, reason: "agent busy" }));
+    await run(w);
+    expect(wakes).toHaveLength(1);
+    expect(w.published.map((p) => p.sourceRef)).toEqual([`follow-up:${THREAD}`]);
+    expect(getFollowUp(ACCT, THREAD)).toMatchObject({ status: "offered" });
+  });
+
+  test("a wake that throws raises the TODO instead", async () => {
+    const { w } = always({}, async () => { throw new Error("Flock down"); });
+    await run(w);
+    expect(w.published.map((p) => p.sourceRef)).toEqual([`follow-up:${THREAD}`]);
+  });
+
+  test("an unpaired copy (wake skipped) raises the TODO path as today", async () => {
+    const { w } = always({}, async () => ({ ok: false, skipped: true, reason: "not paired" }));
+    await run(w);
+    expect(w.published.map((p) => p.sourceRef)).toEqual([`follow-up:${THREAD}`]);
+  });
+
+  test("recipients that differ from the rule's people: the TODO, no wake", async () => {
+    const { w, wakes } = always();
+    w.deps.rules = async () => ({ always: [["priya@acme.com"]], never: [] });
+    await run(w);
+    expect(wakes).toEqual([]);
+    expect(w.published.map((p) => p.sourceRef)).toEqual([`follow-up:${THREAD}`]);
+  });
+
+  test("a thread with no always rule never wakes the agent", async () => {
+    const { w, wakes } = always();
+    w.deps.rules = async () => ({ always: [], never: [] });
+    await run(w);
+    expect(wakes).toEqual([]);
+    expect(w.published).toHaveLength(1);
+  });
+
+  test("woken but no draft came by the next run: the TODO is raised then, once", async () => {
+    let now = NOW;
+    const { w } = always({ now: () => now });
+    await followUp(w.ctx, w.deps);
+    expect(w.published).toEqual([]);
+    now += 20 * 60_000; // still inside the agent's time
+    await followUp(w.ctx, w.deps);
+    expect(w.published).toEqual([]);
+    now += 60 * 60_000;
+    await followUp(w.ctx, w.deps);
+    expect(w.published.map((p) => p.sourceRef)).toEqual([`follow-up:${THREAD}`]);
+    expect(w.published[0]!.title).toBe("Follow up with Priya");
+    expect(getFollowUp(ACCT, THREAD)).toMatchObject({ status: "offered" });
+    now += 60 * 60_000;
+    await followUp(w.ctx, w.deps);
+    expect(w.published).toHaveLength(1);
+  });
+
+  test("woken and the draft was made: no TODO later", async () => {
+    let now = NOW;
+    const { w } = always({ now: () => now });
+    await followUp(w.ctx, w.deps);
+    markFollowUpDrafted(ACCT, THREAD, "d-1");
+    now += 3 * 3600_000;
+    await followUp(w.ctx, w.deps);
+    expect(w.published).toEqual([]);
+    expect(getFollowUp(ACCT, THREAD)).toMatchObject({ status: "drafted", draftId: "d-1" });
+  });
+
+  test("a wake held over the usage limit waits for its hold before the TODO", async () => {
+    let now = NOW;
+    const heldUntil = new Date(NOW + 5 * 3600_000).toISOString();
+    const { w } = always({ now: () => now }, async () => ({ ok: true, data: { heldUntil } }));
+    await followUp(w.ctx, w.deps);
+    now += 3 * 3600_000;
+    await followUp(w.ctx, w.deps);
+    expect(w.published).toEqual([]);
+    now += 4 * 3600_000;
+    await followUp(w.ctx, w.deps);
+    expect(w.published).toHaveLength(1);
+  });
+
+  test("a send on the thread in doubt: no wake and no TODO; the thread waits", async () => {
+    const { w, wakes } = always();
+    db.run(
+      "INSERT INTO send_ledger (idempotency_key, account_id, thread_id, draft_id, state, result, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?)",
+      ["draft:x", ACCT, THREAD, "x", "in_flight", null, NOW - 1000, NOW - 1000],
+    );
+    await run(w);
+    expect(wakes).toEqual([]);
+    expect(w.published).toEqual([]);
+    expect(getFollowUp(ACCT, THREAD)).toBeNull();
+  });
+
+  test("a reply while the draft is awaited closes the row; nothing to withdraw", async () => {
+    const { w } = always();
+    await run(w);
+    const LATER = "Wed, 30 Sept 2026, 13:00";
+    _resetFollowUpPassMemoryForTesting();
+    const w2 = world({ threads: { [THREAD]: th(me(OLD), priya(LATER)) }, rows: [{ id: THREAD, dateFull: LATER }], now: () => NOW + 2 * 3600_000 });
+    await run(w2);
+    expect(getFollowUp(ACCT, THREAD)).toMatchObject({ status: "replied" });
+    expect(w2.withdrawn).toEqual([]);
   });
 });

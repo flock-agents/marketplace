@@ -56,6 +56,15 @@ describe("Email Desk manifest", () => {
     expect(keys(byId["follow-up"])).toContain("followUpHour");
   });
 
+  test("the follow-up routine tells its woken agent to write the rule's follow-ups with create_draft, in plain words", () => {
+    const r = manifest.routines.find((x: any) => x.id === "follow-up");
+    expect(r.prompt).toContain("followUps");
+    expect(r.prompt).toContain("create_draft");
+    expect(r.prompt).toContain("write-reply");
+    for (const text of [r.prompt, r.description]) expect(text).not.toMatch(/[—–]/);
+    expect(r.description).not.toContain("Nothing sends");
+  });
+
   test("publishes the two reading skills", () => {
     expect(manifest.publishedSkills.map((s: any) => s.id)).toEqual(["judge-mail", "write-reply"]);
   });

@@ -25,6 +25,7 @@ import { releaseThreadHold, settleUnconfirmedSend, threadSendInDoubt } from "./d
 import { tryAfterText, voiceStateFor, voiceLearningUntil } from "./voice/crawl";
 import { processTimezone } from "./lib/local-day";
 import { resolveDeskThread } from "./desk-thread";
+import { followUpAwaitingDraft, markFollowUpDrafted } from "./routines/follow-up-store";
 
 export interface OpCtx {
   platform: PlatformContext;
@@ -198,25 +199,32 @@ async function writeNewDraft(accountId: string, threadId: string, body: string, 
   // Who the reply reaches: the thread's fresh live read, when Gmail opened the reply that reaches them, and only when Gmail's
   // read taken now, after the draft was written, shows the same newest message: a message that came in since the read
   // would have been the one Reply all answered (Ruling P3-R5, drafts/addressing.ts).
-  const candidate = written.ok ? addressingForDraft(accountId, threadId, written.data?.replyMode) : null;
-  const replyAll = candidate ? await confirmAfterWrite(ctx.platform, accountId, threadId, candidate) : null;
+  // An "always follow up" rule's draft (owner decision 2026-11-23): made in a routine run on a thread the follow-up routine
+  // woke the agent for. It answers the person's own message, so it reaches that message's To and Cc.
+  const automated = typeof ctx.routineId === "string" && ctx.routineId.length > 0;
+  const followUp = automated && followUpAwaitingDraft(accountId, threadId);
+  const candidate = written.ok ? addressingForDraft(accountId, threadId, written.data?.replyMode, followUp) : null;
+  const replyAll = candidate ? await confirmAfterWrite(ctx.platform, accountId, threadId, candidate, followUp) : null;
   const draft = recordDraft(db, {
     accountId, threadId, draftId: ids.draftId, draftMessageId: ids.draftMessageId,
     bodyWritten: saved || body, answeredMessageRef: answered?.eventId ?? "", why, replyAll,
     // R-F5 (Ruling P3-R14): a draft made in one of this copy's routine runs, on Flock's proof only (P3-R15). A standing
     // mail rule sends only such a draft; one the person asked for in chat is theirs to send.
-    automated: typeof ctx.routineId === "string" && ctx.routineId.length > 0,
+    automated,
   });
+  if (followUp) markFollowUpDrafted(accountId, threadId, draft.id);
   await publishDraftCard(ctx.platform, draft);
   return { id: draft.id };
 }
 
 /** The draft's set, confirmed by a read of the thread after the draft was written; null on any doubt (never fails the draft). */
-async function confirmAfterWrite(platform: PlatformContext, accountId: string, threadId: string, candidate: DraftAddressing): Promise<ReplyAddressing | null> {
+async function confirmAfterWrite(
+  platform: PlatformContext, accountId: string, threadId: string, candidate: DraftAddressing, followUp = false,
+): Promise<ReplyAddressing | null> {
   try {
     const { liveThreadRead, mailboxAddress } = await import("./reply-context");
     const reread = await liveThreadRead(platform, accountId, threadId);
-    return confirmedAddressing(candidate, reread, await mailboxAddress(platform, accountId));
+    return confirmedAddressing(candidate, reread, await mailboxAddress(platform, accountId), followUp);
   } catch { return null; }
 }
 

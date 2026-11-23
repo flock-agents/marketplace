@@ -12,6 +12,7 @@ import { isSentRow } from "../lib/sent-row";
 import { THREAD_BODY_SEPARATOR } from "../lib/thread-format";
 import { getStore } from "../store";
 import type { DraftRecord } from "./records";
+import { getFollowUp } from "../routines/follow-up-store";
 
 export const DRAFT_SOURCE_PREFIX = "draft:";
 export const draftSourceRef = (id: string): string => `${DRAFT_SOURCE_PREFIX}${id}`;
@@ -19,6 +20,7 @@ export const draftSourceRef = (id: string): string => `${DRAFT_SOURCE_PREFIX}${i
 /** What a card shows of one text at most (the built-in card's CARD_BODY_MAX). */
 const CARD_TEXT_MAX = 8000;
 const DEFAULT_WHY = "A reply is drafted for you. Nothing sends until you press Send.";
+const FOLLOW_UP_WHY = "No reply yet, so a follow-up is drafted for you.";
 
 let log: (line: string) => void = (line) => console.warn(line);
 /** Tests: silence (or capture) the card's warnings; null restores console.warn. */
@@ -126,11 +128,16 @@ export async function publishDraftCard(platform: PlatformContext, draft: DraftRe
     }
     blocks.push({ type: "draft", from: "You", to: m?.from ?? "", body: clip(draft.bodyWritten) });
 
+    // An "always follow up" rule's draft (follow-up-store.ts): Flock scopes its card as a follow-up to these people, the
+    // scope of that rule, so the rule sends it.
+    const fu = getFollowUp(draft.accountId, draft.threadId);
+    const followUp = fu?.draftId === draft.id;
     const published = await platform.tasks.publish({
-      title: `Reply to ${m?.name || "this email"}`,
+      title: followUp ? (fu?.recipientName ? `Follow up with ${fu.recipientName}` : "Follow up on an email you sent") : `Reply to ${m?.name || "this email"}`,
       sourceRef: draftSourceRef(draft.id),
       context: {
-        why: draft.why || DEFAULT_WHY,
+        why: draft.why || (followUp ? FOLLOW_UP_WHY : DEFAULT_WHY),
+        ...(followUp ? { followUp: true } : {}),
         // The copy's own agent, whoever it is (an Inbox Assistant, the Butler, any agent the person paired): never the
         // caller's, never an assumed PA.
         agentId: platform.pairedAgent?.id,
