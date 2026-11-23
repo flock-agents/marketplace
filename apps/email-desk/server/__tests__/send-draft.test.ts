@@ -865,10 +865,38 @@ describe("redraft over an unconfirmed send (R33)", () => {
       // The read shows the reply: the imported send is proven, so this press sends nothing and says so.
       f.thread = [ASHA, { from: "Me <me@acme.com>", date: gmailDate(Date.now() + 60_000), body: BODY }];
       f.gmail.delete("gm-1");
-      const out = await send({ id }, pressCtx("press-token-2"));
-      expect(out).toEqual({ error: "Already sent.", code: "SEND_FAILED", status: 502 });
+      expect((await send({ id }, pressCtx("press-token-2"))).ok).toBe(true);
       expect(sends()).toHaveLength(0);
       expect(db.query("SELECT state FROM send_ledger WHERE idempotency_key = 'acct-1|thread-1|gm-1'").get()).toEqual({ state: "sent" });
+      expect(row(id).sent_at).not.toBeNull();
+    });
+
+    test("an imported in_flight row for a different Gmail draft, proven sent: Already sent., no sendDraft", async () => {
+      const id = await create(BODY);
+      db.run("INSERT INTO send_ledger (idempotency_key, account_id, thread_id, draft_id, state, result, created_at, updated_at) VALUES ('acct-1|thread-1|gm-old', ?, ?, 'gm-old', 'in_flight', ?, 1, 1)", [ACCOUNT, THREAD, JSON.stringify({ body: BODY })]);
+      f.thread = [ASHA, { from: "Me <me@acme.com>", date: gmailDate(Date.now() + 60_000), body: BODY }];
+      f.gmail.set("gm-old", BODY);
+      f.calls.length = 0;
+      expect(await send({ id })).toEqual({ error: "Already sent.", code: "SEND_FAILED", status: 502 });
+      expect(sends()).toHaveLength(0);
+    });
+
+    test("an imported in_flight row proven sent for this Gmail draft: this draft is stamped, card closed, a later press sends nothing", async () => {
+      const id = await create(BODY);
+      db.run("INSERT INTO send_ledger (idempotency_key, account_id, thread_id, draft_id, state, result, created_at, updated_at) VALUES ('acct-1|thread-1|gm-1', ?, ?, 'gm-1', 'in_flight', ?, 1, 1)", [ACCOUNT, THREAD, JSON.stringify({ body: BODY })]);
+      f.gmail.delete("gm-1");
+      f.thread = [ASHA, { from: "Me <me@acme.com>", date: gmailDate(Date.now() + 60_000), body: BODY }];
+      f.calls.length = 0;
+      const out = await send({ id });
+      expect(out.ok).toBe(true);
+      expect(row(id).sent_at).not.toBeNull();
+      expect(ledger(id).state).toBe("sent");
+      expect(f.withdrawn).toContain(`draft:${id}`);
+      // The person began a new compose on the thread: a second press must not overwrite it or send.
+      f.gmail.set("gm-1", "Something new I am typing.");
+      expect((await send({ id }, pressCtx("press-token-2"))).ok).toBe(true);
+      expect(sends()).toHaveLength(0);
+      expect(f.gmail.get("gm-1")).toBe("Something new I am typing.");
     });
 
     test("an imported in_flight row, the read shows no reply and Gmail still holds the text: cleared, one sendDraft", async () => {

@@ -281,7 +281,7 @@ export async function removeDraft(
     if (!draft || draft.sentAt !== null) return null;
     if (draft.personEdited && !opts.byPerson) return personEditedRefusal();
     // The agent may not discard a draft while a send on its thread is in doubt (R33): nothing changes. The person's own
-    // discard goes through and leaves the ledger row in_flight, so the thread stays held for create_draft.
+    // discard goes through and releases the hold (R34), below.
     if (!opts.byPerson && threadSendInDoubt(draft.accountId, draft.threadId)) return sendUnconfirmedRefusal();
     const gone = await gmail(platform, "discardDraft", { draftId: draft.draftId }, draft.accountId);
     // Already gone from Gmail is the end we want; any other failure leaves a stray Gmail draft.

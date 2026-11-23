@@ -92,8 +92,14 @@ async function sendInTurn(id: string, editedBody: string | undefined, ctx: OpCtx
   // working and showing none clears the hold and the press sends; a failed, busy or unclear read sends nothing.
   let held = before;
   if (threadSendInDoubt(draft.accountId, draft.threadId)) {
-    const seen = await settleForPress(ctx.platform, draft.accountId, draft.threadId, key);
-    if (seen.kind === "own") return { ok: true, sentAt: new Date(seen.at).toISOString() };
+    const seen = await settleForPress(ctx.platform, draft.accountId, draft.threadId, key, draft.draftId);
+    if (seen.kind === "own") {
+      // Also when the proven row was an imported one for this Gmail draft: this draft gets its sent stamp and ledger row.
+      if (readLedger(key)?.state === "sent") return { ok: true, sentAt: new Date(seen.at).toISOString() };
+      const out = recordSent(draft, key, seen.at);
+      await withdrawDraftCard(ctx.platform, draft.id);
+      return out;
+    }
     if (seen.kind === "other") return { error: "Already sent.", code: "SEND_FAILED", status: 502 };
     if (seen.kind === "unknown") return unconfirmed();
     held = readLedger(key);

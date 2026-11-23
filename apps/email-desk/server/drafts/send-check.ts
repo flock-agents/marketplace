@@ -70,7 +70,7 @@ export function threadSendInDoubt(accountId: string, threadId: string): boolean 
  * Before create_draft or update_draft writes on a thread (inside the thread's turn): null when no send on the thread is
  * in doubt, or when the re-read proved each did not go out (their in_flight rows are cleared). Otherwise the refusal to
  * answer: SENT when the re-read proved one went (recorded, its card withdrawn), else SEND_UNCONFIRMED. The thread is the
- * key, not the open draft: a draft the person discarded after its send leaves its row in_flight, and that still holds.
+ * key, not the open draft: an in_flight row holds even when its draft row is gone (until the person's own discard releases it, R34).
  */
 export async function settleUnconfirmedSend(platform: PlatformContext, accountId: string, threadId: string): Promise<DraftRefusal | null> {
   const r = await settlePending(platform, accountId, threadId);
@@ -81,7 +81,7 @@ export async function settleUnconfirmedSend(platform: PlatformContext, accountId
 /** What one re-read of the thread's in_flight sends found: any proven sent (and when the pressed draft's own was), any
  *  unknown. Proven-unsent rows are cleared, proven-sent ones recorded and their cards withdrawn. */
 async function settlePending(
-  platform: PlatformContext, accountId: string, threadId: string, ownKey = "",
+  platform: PlatformContext, accountId: string, threadId: string, ownKey = "", ownGmailDraftId = "",
 ): Promise<{ sent: boolean; ownSentAt: number | null; unknown: boolean }> {
   const out = { sent: false, ownSentAt: null as number | null, unknown: false };
   for (const p of pendingSends(accountId, threadId)) {
@@ -90,7 +90,7 @@ async function settlePending(
       markSent(p, seen.at);
       if (p.id) await withdrawDraftCard(platform, p.id);
       out.sent = true;
-      if (p.key === ownKey) out.ownSentAt = seen.at;
+      if (p.key === ownKey || (!!ownGmailDraftId && p.gmailDraftId === ownGmailDraftId)) out.ownSentAt = seen.at;
     } else if (seen.kind === "unsent") {
       getStore().run("DELETE FROM send_ledger WHERE idempotency_key = ? AND state = 'in_flight'", [p.key]);
     } else {
@@ -107,9 +107,9 @@ async function settlePending(
  * cleared), so the press may send. `unknown`: anything else, the press sends nothing.
  */
 export async function settleForPress(
-  platform: PlatformContext, accountId: string, threadId: string, ownKey: string,
+  platform: PlatformContext, accountId: string, threadId: string, ownKey: string, ownGmailDraftId = "",
 ): Promise<{ kind: "own"; at: number } | { kind: "other" } | { kind: "clear" } | { kind: "unknown" }> {
-  const r = await settlePending(platform, accountId, threadId, ownKey);
+  const r = await settlePending(platform, accountId, threadId, ownKey, ownGmailDraftId);
   if (r.ownSentAt !== null) return { kind: "own", at: r.ownSentAt };
   if (r.sent) return { kind: "other" };
   return r.unknown ? { kind: "unknown" } : { kind: "clear" };
