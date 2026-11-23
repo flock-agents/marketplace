@@ -193,7 +193,7 @@ export async function runMemoryExtraction(ctx: RoutineCtx, deps: MemoryExtractio
   const failures: string[] = [];
   for (const { accountId, email } of accounts) {
     try {
-      await runAccount(ctx, accountId, email, gather, handOver, voice, failures);
+      await runAccount(ctx, accountId, email, gather, handOver, voice, failures, true);
     } catch (e: any) {
       failures.push(`${accountId}: ${e?.message ?? String(e)}`);
     }
@@ -227,11 +227,12 @@ async function runAccount(
   handOver: NonNullable<MemoryExtractionDeps["handOver"]>,
   voice: Voice,
   failures: string[],
-): Promise<void> {
+  wake: boolean,
+): Promise<"read" | "busy"> {
   const g = await gather(ctx, accountId);
   if (g.busy) {
     say(accountId, `ended: ${g.note ?? "mailbox busy"}`);
-    return;
+    return "busy";
   }
   if (g.note) say(accountId, g.note);
 
@@ -300,12 +301,46 @@ async function runAccount(
     say(accountId, `voice crawl not started: ${e?.message ?? String(e)}`);
   }
 
-  // 6. WAKE for the pending draft offers: this run's and any an earlier failed wake left.
-  const woke = await wakeForOffers(ctx, accountId, voice, failures);
+  // 6. WAKE for the pending draft offers: this run's and any an earlier failed wake left. The first read (lifecycle
+  // initialize) does not wake: replies are drafted for mail as it arrives, never over what was already there, and the offers
+  // it leaves wait for the routine's first run.
+  const woke = wake ? await wakeForOffers(ctx, accountId, voice, failures) : 0;
   // A run that read the mailbox and put every kept mail into memory is a finished harvest (last_harvest op). A failed chunk
   // leaves the day open.
   if (failed === 0) recordHarvestRun(accountId);
   say(accountId, `kept=${g.kept.length} extracted=${extracted.length} failed=${failed} woke=${woke}`);
+  return "read";
+}
+
+/** The first read's window, as the built-in desk's landing read it (initialize.ts ONBOARDING_*): the recent weeks, the ten
+ *  newest conversations. What it does not read is not carried forward: the daily window follows new mail only. */
+export const FIRST_READ_WINDOW = { openDays: 14, horizonDays: 30, maxThreads: 10 } as const;
+
+/**
+ * One mailbox's FIRST read (lifecycle initialize): the same per-account run as the routine's (gather, extract, hand over,
+ * family, draft offers, the voice crawl's start), over the first read's window and without the wake. "read": the mailbox was
+ * read and every kept mail went into memory. "busy": another reader held the mailbox, nothing was read. "failed": the read
+ * threw or a chunk could not be put into memory (what stayed pending is offered again by the daily run). Never throws.
+ */
+export async function runFirstRead(
+  ctx: RoutineCtx, accountId: string, email: string | null, deps: MemoryExtractionDeps = {},
+): Promise<"read" | "busy" | "failed"> {
+  const gather = deps.gather ?? ((c, a) => gatherNewMail(c, a, FIRST_READ_WINDOW));
+  const handOver = deps.handOver ?? markHandedOver;
+  const voice: Voice = {
+    // The first read starts no crawl of its own: initialize runs the voice stage next, and waits for it.
+    ensure: deps.ensureVoice ?? (async () => undefined),
+    of: deps.voiceFor ?? wakeVoice,
+    settles: deps.voiceSettles ?? whenVoiceSettles,
+  };
+  const failures: string[] = [];
+  try {
+    const outcome = await runAccount(ctx, accountId, email, gather, handOver, voice, failures, false);
+    return outcome === "busy" ? "busy" : failures.length > 0 ? "failed" : "read";
+  } catch (e: any) {
+    say(accountId, `first read failed: ${e?.message ?? String(e)}`);
+    return "failed";
+  }
 }
 
 // ---- pending draft offers ------------------------------------------------------------------------------------------------

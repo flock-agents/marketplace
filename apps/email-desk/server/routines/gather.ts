@@ -107,6 +107,11 @@ export interface GatherOptions {
    *  alone with no names, so the rules that need names fail open (keep). */
   family?: FamilyContext;
   now?: number;
+  /** The first read's wider window (lifecycle initialize): threads that moved within `openDays` are opened, those older than
+   *  `horizonDays` dropped, and `maxThreads` are read. Default: the daily window (OPEN_DAYS, HORIZON_DAYS, MAX_THREADS_PER_RUN). */
+  openDays?: number;
+  horizonDays?: number;
+  maxThreads?: number;
 }
 
 type Gmail = <T = unknown>(fn: string, params: Record<string, unknown>, timeoutMs: number) => Promise<Result<T>>;
@@ -437,7 +442,7 @@ async function gatherUnderTurn(
   // 4b. SENT MAIL (harvest's sent pre-step, sent-source.ts readSentIntoJournal): `in:sent` over the open window, journaled
   // like the inbox so a thread the person started reaches memory. Best effort: a failed read is logged and the run goes on;
   // a refusal of the mailbox stops the run as any read's does.
-  const sent = await gmail("searchEmails", { query: sentQuery(OPEN_DAYS), maxResults: SENT_LIST_MAX }, LIST_TIMEOUT_MS);
+  const sent = await gmail("searchEmails", { query: sentQuery(opts.openDays ?? OPEN_DAYS), maxResults: SENT_LIST_MAX }, LIST_TIMEOUT_MS);
   const sentStop = stopReason(sent);
   if (sentStop) return { ...out, note: `mailbox not read (${sentStop})` };
   if (sent.ok) {
@@ -452,8 +457,8 @@ async function gatherUnderTurn(
   }
 
   // 5. CLAIM in pages → threads → horizon → cold outreach (harvest runHarvestOnceInner).
-  const retentionCutoff = now - HORIZON_DAYS * DAY_MS;
-  const openCutoff = now - OPEN_DAYS * DAY_MS;
+  const retentionCutoff = now - (opts.horizonDays ?? HORIZON_DAYS) * DAY_MS;
+  const openCutoff = now - (opts.openDays ?? OPEN_DAYS) * DAY_MS;
   const blocks: Block[] = [];
   let offset = 0;
   for (let pages = 0; pages < MAX_CLAIM_PAGES; pages++) {
@@ -495,8 +500,9 @@ async function gatherUnderTurn(
   // 6. READ the threads, newest conversations first, in one held session (getThreads); a thread the batch did not bring
   // back is read alone. Every worked thread is read, parked text or not: the draft gate needs the thread as it is now.
   blocks.sort((a, b) => (b.rows[b.rows.length - 1]?.ts ?? 0) - (a.rows[a.rows.length - 1]?.ts ?? 0));
-  const work = blocks.slice(0, MAX_THREADS_PER_RUN);
-  for (const b of blocks.slice(MAX_THREADS_PER_RUN)) out.deferred += b.rows.length;
+  const maxThreads = opts.maxThreads ?? MAX_THREADS_PER_RUN;
+  const work = blocks.slice(0, maxThreads);
+  for (const b of blocks.slice(maxThreads)) out.deferred += b.rows.length;
   if (work.length === 0) return out;
 
   const freshAfter = work.flatMap((b) => b.rows).reduce((m, r) => Math.max(m, r.createdAt ?? 0), 0) || undefined;

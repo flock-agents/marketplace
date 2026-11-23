@@ -45,6 +45,13 @@
   <p class="muted">How your replies are written, learned from mail you sent. Change anything that is wrong. Your changes stay, even when your voice is learned again.</p>
   <div id="voice"><p class="muted">Loading…</p></div>
   <p id="error" class="error" hidden></p>
+
+  <h2>Delete my mail data</h2>
+  <p class="muted">Deletes the mail this copy of Email Desk holds, and its drafts and your voice. Your assistant's memory and your TODOs stay. New mail is read again after this.</p>
+  <div id="delete" class="actions">
+    <button id="delete-ask">Delete my mail data</button>
+  </div>
+  <p id="delete-message" class="muted" hidden></p>
 </main>
 <script>
 (function () {
@@ -169,6 +176,33 @@
       })
       .catch(function () { showError("Your voice could not be loaded."); });
   }
+
+  var deleteBox = document.getElementById("delete");
+  var deleteMessage = document.getElementById("delete-message");
+
+  function deleteStep(confirming) {
+    deleteBox.textContent = "";
+    if (!confirming) {
+      deleteBox.appendChild(el("button", { id: "delete-ask", text: "Delete my mail data", onclick: function () { deleteStep(true); } }));
+      return;
+    }
+    deleteBox.appendChild(el("span", { class: "muted", text: "Delete it for good?" }));
+    deleteBox.appendChild(el("button", { id: "delete-confirm", class: "primary", text: "Yes, delete", onclick: function () {
+      showError("");
+      fetch("api/mail-data/delete", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ confirm: true }), credentials: "same-origin" })
+        .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, body: j }; }); })
+        .then(function (res) {
+          if (!res.ok) { showError(res.body && res.body.error ? res.body.error : "That did not work. Try again."); deleteStep(false); return; }
+          deleteMessage.textContent = "Your mail data is deleted.";
+          deleteMessage.hidden = false;
+          deleteStep(false);
+          load();
+        })
+        .catch(function () { showError("That did not work. Try again."); deleteStep(false); });
+    } }));
+    deleteBox.appendChild(el("button", { id: "delete-cancel", text: "Cancel", onclick: function () { deleteStep(false); } }));
+  }
+  document.getElementById("delete-ask").addEventListener("click", function () { deleteStep(true); });
 
   load();
 })();
