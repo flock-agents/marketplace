@@ -81,6 +81,7 @@ Unique (date, slot).
 | new | int | 1 when this was a new suggestion |
 | feedback_asked | int | 1 once the next-day untried-dish question (§5.7) was sent for this placement; never asked twice for it |
 | note | text, null | only when this dish needs a specific change for someone |
+| not_for | json string[], null | people at the slot-day this dish is not for (derived in code from hard rules; null = everyone) |
 
 **ingredients** — `dish_items` renamed; `slot_dish_id` instead of `dish_id`. Same item/amount/unit.
 
@@ -91,7 +92,7 @@ Unique (date, slot).
 | key | text | normalised dish name (dishKey) |
 | slot | text | the slot it is eaten at; one row per (dish, slot) |
 | name | text | display name |
-| frequency | text, null | `usually` \| `sometimes` \| `rarely` \| `"<n>/week"`; null = default (≤2 days) |
+| frequency | text, null | `daily` (family said every day; a staple) \| `usually` \| `sometimes` \| `rarely` \| `"<n>/week"`; null = default (≤2 days) |
 | days | json weekday[], null | only these days ("lemon rice on Friday") |
 | contains | json string[] | open tag list: every item any rule names (`egg`, `meat`, `fish`, `onion_garlic`, `nuts`, `peanut`, `sugar`, `white_rice`, `dairy`, `root_veg`, `millet`, `mushroom`, `chicken`…) |
 | contains_read | json string[] | which tags have been read for this dish (a rule tag not in here = unknown) |
@@ -128,7 +129,7 @@ Unique (key, slot).
 ### 2.2 Derived, not stored
 
 - **History** = past `slot_days` (+ the seed examples, `status = confirmed`, date null, from setup). Past `planned` slot-days are what the family was **shown**, not what they ate.
-- **Staples** of a slot = dishes appearing in ≥ 60% of that slot's last 14 history rows with dishes (seed counts; decided default, tunable). Staples are exempt from the repeat window. Computed at plan time.
+- **Staples** of a slot = dishes appearing in ≥ 60% of that slot's last 14 **seed + confirmed** rows with dishes (planned rows never count; only once the slot has at least 3 such rows, else no history staples; owner 23 Nov), plus any dish the family explicitly says to have every day ("add salad every day", "4 eggs every day": library `frequency = daily`, which must appear on every slot-day of its slot). Staples are exempt from the repeat window. Computed at plan time.
 - **Looks like** examples for a slot = up to 6 rows from the seed and **confirmed** slot-days only (recent confirmed first, then seed). Planned-only slot-days are never used as shape examples.
 - **Recent** (repeat avoidance, §5.4 check 4) = past slot-days of any status, planned included: it avoids repeating what the family was shown.
 
@@ -262,7 +263,7 @@ Add-on calls also get their main slot's dishes per day.
 ### 5.4 Code checks (after each slot call)
 
 1. Every dish is in that slot's library, a staple, or listed in `new` within `new_dishes_allowed` (week budget across slots). A `disliked` dish is never allowed; a dropped untried dish (`untried = 1`, `offers ≥ 2`) is not planned again.
-2. Hard rules for every person on that slot-day: rule `items` vs dish `contains`. **Fail closed**: a dish whose needed tag isn't in `contains_read` can't go to that person; new dishes get a contains read before the check.
+2. Hard rules per **person** on that slot-day (owner 23 Nov): a dish that breaks a present person's rule (rule `items` vs dish `contains`) is simply **not for** that person; code derives it and stores it on `slot_dishes.not_for` (shown as "Fish curry (not for Gita)"). **Fail closed**: a dish whose needed tag isn't in `contains_read` is not for that person; new dishes get a contains read before the check. The problem is a person left with no non-staple dish they can eat at that slot-day → fix call ("add a dish she can eat"), then rotation fill.
 3. `days` and `frequency` per dish, counted across all slots for the week.
 4. Repeat window: non-staple dish not within 3 days of itself in this slot; for mains it applies across main slots (no same main twice in a day across slots). Staples are exempt.
 5. Soft rule counts within their range across the week (too many = problem; too few = soft problem).
