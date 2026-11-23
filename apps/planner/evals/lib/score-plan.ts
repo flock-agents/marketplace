@@ -1,177 +1,235 @@
-// Eval 2's scorecard: a planned week against TRUTH, in code. Read straight from the planner's tables (plan_meals, dishes,
-// dish_items), with who eats each dish; checked independently of the planner's own checks (only its food vocabulary,
-// rules.ts dishHas / isSide and meals.ts isStaple, is reused, so "paneer" is dairy here as it is there).
-import { dishHas, isSide } from "../../server/rules";
-import { isStaple } from "../../server/meals";
-import type { boot } from "../../server/testkit";
-import { oftenMax, plain, sameName, slotFor, truthDishOf, WEEK, type Household, type TruthDish, type Weekday } from "./truth";
+// Eval 2's scorecard (spec §8): one planned week (result.ts PlanOut) against TRUTH, in code. Gating fields are pass rates;
+// `tracked` fields (shape: dish count vs history) are reported, never gating (spec §1 non-goals). Hard rules are checked
+// per person on each slot-day against what each dish contains, failing closed: a tag nobody read counts as a break.
+import type { PlanOut, PlanSlotDay, SavedDish, SetupOut } from "./result";
+import { meanDishes, staplesOf, type HistoryRow } from "./history";
+import { truthTags, weeklyPeople } from "./truth-setup";
+import { canonTag, hasItem, PARENT, tagsOfName } from "./vocab";
 import type { Rates } from "./score-setup";
+import {
+  WEEK, dateOf, dayOf, dishNameOf, frequencyRange, plain, sameName, sameNames, weekdayOfDate,
+  type Household, type Skip, type TruthRule, type TruthSlot, type Weekday,
+} from "./truth";
 
-type Kit = Awaited<ReturnType<typeof boot>>;
-export type PDish = { name: string; eaters: string[]; portion_note: string | null; items: string[] };
-export type PMeal = { day: Weekday; date: string; slot: string; ordered_in: boolean; dishes: PDish[] };
-export type Week = PMeal[];
+export type ExpectedSlotDay = { day: Weekday; date: string; slot: string; people: string[]; guests: number; guestItems: string[]; skip: Skip | null; fastingWithFood: string[] };
 
-const MAINS = ["Breakfast", "Lunch", "Dinner"];
-const dateOf = (week: string, i: number) => { const d = new Date(`${week}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + i); return d.toISOString().slice(0, 10); };
+const lc = (s: string) => s.trim().toLowerCase();
 
-/** The week as planned, each dish with the people who eat it (everyone: the meal's diners). */
-export async function readWeek(k: Kit, h: Household, week: string): Promise<{ meals: Week; slotNames: Map<string, string> }> {
-  const house = (await k.owner("GET", "/api/family")).body.house;
-  const slotNames = new Map<string, string>();
-  for (const t of h.truth.extraSlots) { const s = slotFor(t, house.extra_slots ?? []); if (s) slotNames.set(t.name, s); }
-  const extra = (house.extra_slots ?? []) as { name: string; for?: string[] }[];
-  const all = h.truth.people.map((p) => p.name);
-  const meals = k.rows("plan_meals").filter((m) => m.date >= week && m.date <= dateOf(week, 6));
-  const dishes = k.rows("dishes"), items = k.rows("dish_items");
-  const out: Week = meals.map((m) => {
-    const i = WEEK.findIndex((_, n) => dateOf(week, n) === m.date);
-    const diners = extra.find((s) => s.name === m.slot)?.for?.length ? extra.find((s) => s.name === m.slot)!.for! : all;
-    return { day: WEEK[i], date: m.date, slot: m.slot, ordered_in: !!m.ordered_in,
-      dishes: dishes.filter((d) => d.meal_id === m.id).sort((a, b) => (a.position ?? 0) - (b.position ?? 0)).map((d) => {
-        const f: string[] | null = d.for_people ? JSON.parse(d.for_people) : null;
-        const eaters = !f?.length || f.some((x) => /^everyone$/i.test(x)) ? diners : f;
-        return { name: d.name, eaters, portion_note: d.portion_note, items: items.filter((x) => x.dish_id === d.id).map((x) => x.item) };
-      }) };
-  });
-  out.sort((a, b) => a.date.localeCompare(b.date) || MAINS.indexOf(a.slot) - MAINS.indexOf(b.slot));
-  return { meals: out, slotNames };
-}
-
-/** A week back from its text (weekText), for re-scoring a past run that kept only the text. */
-export function weekOf(text: string, week: string): Week {
-  const out: Week = [];
-  for (const line of text.split("\n")) {
-    const day = line.slice(0, 3) as Weekday, i = WEEK.indexOf(day);
-    for (const part of line.slice(5).split(" | ")) {
-      const at = part.indexOf(": ");
-      const slot = part.slice(0, at), rest = part.slice(at + 2);
-      const ordered = rest.startsWith("(ordered in");
-      const dishes: PDish[] = [];
-      if (!ordered) for (const m of rest.matchAll(/\s*([^[]+?)\s*\[([^\]]*)\](?:,|$)/g)) {
-        const n = /^(.*?)(?: \((.*)\))?$/.exec(m[1].trim())!;
-        dishes.push({ name: n[1], portion_note: n[2] ?? null, eaters: m[2].split(", ").filter(Boolean), items: [] });
+/** The slot-days TRUTH expects for the week (spec §5.1): each slot on its days, its usual people minus weekly absences,
+ *  ± the week's stays and trips, minus anyone fasting without fasting food, its recurring skip (an add-on follows its
+ *  main slot), and the week's guests. A slot-day with nobody on it is not expected. */
+export function expectedSlotDays(h: Household, monday: string): ExpectedSlotDay[] {
+  const t = h.truth, out: ExpectedSlotDay[] = [];
+  const mainOf = (s: TruthSlot) => (s.kind === "addon" ? t.slots.find((x) => x.name === s.addon_of) ?? s : s);
+  for (const s of t.slots.filter((x) => !x.optional)) {
+    const base = mainOf(s);
+    for (const day of s.days?.length ? s.days : WEEK) {
+      let people = weeklyPeople(h, s, day);
+      for (const e of t.week ?? []) {
+        if (e.kind === "guests" || !e.days.includes(day)) continue;
+        const hits = e.slots?.length ? e.slots.includes(s.name) || e.slots.includes(base.name) : s.kind !== "custom" || e.kind === "away";
+        if (!hits) continue;
+        // A stay adds the person to the shared slots only (an add-on is someone's own meal).
+        if (e.kind === "stay" && s.kind === "main" && !people.some((p) => sameName(p, e.person))) people = [...people, e.person];
+        if (e.kind === "away") people = people.filter((p) => !sameName(p, e.person));
       }
-      out.push({ day, date: dateOf(week, i), slot, ordered_in: ordered, dishes });
+      const fasting = t.rules.filter((r) => r.hard && r.what === "fasting" && r.who && r.days?.includes(day) && (!r.slots?.length || r.slots.includes(s.name) || r.slots.includes(base.name)));
+      const withFood = fasting.filter((r) => r.fasting_food?.length).map((r) => r.who!);
+      people = people.filter((p) => !fasting.some((r) => !r.fasting_food?.length && sameName(r.who!, p)));
+      const skip = (base.skip_days ?? []).find((x) => x.day === day)?.skip ?? null;
+      const g = (t.week ?? []).filter((e): e is Extract<typeof e, { kind: "guests" }> => e.kind === "guests" && e.day === day && e.slot === s.name);
+      const guests = g.reduce((a, e) => a + e.count, 0);
+      if (!people.length && !guests && !skip) continue;
+      out.push({ day, date: dateOf(monday, day), slot: s.name, people, guests, guestItems: g.flatMap((e) => e.items ?? []), skip, fastingWithFood: withFood.filter((p) => people.some((x) => sameName(x, p))) });
     }
   }
   return out;
 }
 
-/** The week as text, for the judge and the report. */
-export const weekText = (w: Week) => WEEK.map((day) => `${day}: ${w.filter((m) => m.day === day).map((m) => `${m.slot}: ${m.ordered_in ? "(ordered in / eaten out)"
-  : m.dishes.map((d) => `${d.name}${d.portion_note ? ` (${d.portion_note})` : ""} [${d.eaters.join(", ")}]`).join(", ") || "(nothing)"}`).join(" | ")}`).join("\n");
+export type PlanScore = { rates: Rates; tracked: Rates; notes: string[]; facts: Record<string, number | string> };
 
-const notMain = (name: string) => isSide(name) || isStaple(name);
+/** Score one week. `loaded`: the setup the planner was given (TRUTH, or TRUTH with a defect): its library's
+ *  `contains_read` decides which tags were known (fail-closed), its seed the staples. Scoring is always against TRUTH. */
+export function scorePlan(h: Household, plan: PlanOut, loaded: SetupOut): PlanScore {
+  const t = h.truth, rates: Rates = {}, tracked: Rates = {}, notes: string[] = [], facts: PlanScore["facts"] = {};
+  const add = (field: string, ok: boolean, why?: string, into = rates) => { const r = (into[field] ??= [0, 0]); r[1]++; if (ok) r[0]++; else if (why) notes.push(`${field}: ${why}`); };
+  const exp = expectedSlotDays(h, plan.week_start);
+  const at = (date: string, slot: string) => plan.slotDays.find((x) => x.date === date && lc(x.slot) === lc(slot));
+  const truthNames = [...new Set(t.library.map((d) => d.name))];
+  const history: HistoryRow[] = loaded.seed.map((r) => ({ slot: r.slot, dishes: r.dishes, date: null }));
+  const staples = new Map(t.slots.map((s) => [s.name, staplesOf(history, s.name)]));
+  const isStaple = (slot: string, dish: string) => !!staples.get(slot)?.has(plain(dish));
+  const dayOfSd = (sd: PlanSlotDay) => weekdayOfDate(sd.date);
+  const cooked = plan.slotDays.filter((x) => !x.skip && x.dishes.length);
 
-export type PlanScore = { rates: Rates; notes: string[]; facts: Record<string, number | string> };
-
-/** `extraPersonal`: a personal dish added by a defect (--perturb personal_dish), checked like the family's own. */
-export function scorePlan(h: Household, w: Week, slotNames: Map<string, string>, plan: any, o: { extraPersonal?: TruthDish } = {}): PlanScore {
-  const t = h.truth, rates: Rates = {}, notes: string[] = [], facts: Record<string, number | string> = {};
-  const add = (field: string, ok: boolean, why?: string) => { const r = (rates[field] ??= [0, 0]); r[1]++; if (ok) r[0]++; else if (why) notes.push(`${field}: ${why}`); };
-  const all = t.people.map((p) => p.name);
-  const real = (slot: string) => slotNames.get(slot) ?? slot;
-  const dinersOf = (slot: string) => t.extraSlots.find((s) => real(s.name) === slot)?.for ?? all;
-  const fasting = (who: string, day: Weekday, slot: string) => t.hardRules.some((r) => r.check?.kind === "fasting" && sameName(r.check.who, who) && r.check.days.includes(day) && r.check.slots.includes(slot));
-  const at = (day: Weekday, slot: string) => w.find((m) => m.day === day && m.slot === slot);
-  const eats = (d: PDish, p: string) => d.eaters.some((e) => sameName(e, p));
-
-  // 1. Every meal the family eats at home is planned; nothing at a meal eaten out or ordered in; no meal the family lacks.
-  const expected = new Set<string>();
-  for (const day of WEEK) {
-    for (const slot of [...MAINS, ...t.extraSlots.filter((s) => !s.days || s.days.includes(day)).map((s) => real(s.name))]) {
-      const diners = dinersOf(slot);
-      if (diners.every((p) => fasting(p, day, slot))) continue;
-      expected.add(`${day} ${slot}`);
-      const ordered = t.orderIn.some((o) => o.day === day && o.slot === slot);
-      const m = at(day, slot);
-      if (ordered) add("order_in_kept", !m || m.ordered_in || !m.dishes.length, `${day} ${slot} has dishes though it is ${t.orderIn.find((o) => o.day === day && o.slot === slot)!.note}`);
-      else add("meals_planned", !!m && !m.ordered_in && m.dishes.length > 0, `${day} ${slot}: ${!m ? "no meal" : m.ordered_in ? "marked ordered in" : "no dish"}`);
-    }
+  // ── 1. Slot-days: filled, skips kept, nothing stray, the right people ──
+  for (const e of exp) {
+    const sd = at(e.date, e.slot);
+    if (e.skip) { add("skips_kept", !sd || (!!sd.skip && !sd.dishes.length), `${e.day} ${e.slot}: has dishes though ${e.skip}`); continue; }
+    add("filled", !!sd && !sd.skip && sd.dishes.length > 0, `${e.day} ${e.slot}: ${!sd ? "no slot-day" : sd.skip ? `marked ${sd.skip}` : "no dish"}`);
+    if (!sd || sd.skip) continue;
+    add("attendance", sameNames(e.people, sd.people), `${e.day} ${e.slot}: for ${JSON.stringify(sd.people)} (want ${JSON.stringify(e.people)})`);
+    if (e.guests || sd.guests.length) add("guests", sd.guests.reduce((a, g) => a + g.count, 0) === e.guests, `${e.day} ${e.slot}: guests ${JSON.stringify(sd.guests)} (want ${e.guests})`);
   }
-  const stray = w.filter((m) => m.dishes.length && !expected.has(`${m.day} ${m.slot}`));
-  add("no_stray_meals", !stray.length, stray.map((m) => `${m.day} ${m.slot}`).join(", "));
+  const stray = cooked.filter((x) => !exp.some((e) => e.date === x.date && lc(e.slot) === lc(x.slot) && !e.skip));
+  add("no_stray", !stray.length, stray.map((x) => `${dayOfSd(x)} ${x.slot}`).join(", "));
 
-  // 2. Hard rules, person by person, meal by meal.
-  for (const hr of t.hardRules) {
-    const c = hr.check;
-    if (!c) continue;
-    const breaks: string[] = [];
-    for (const m of w) {
-      if (m.ordered_in) continue;
-      if ("days" in c && c.days?.length && !c.days.includes(m.day)) continue;
-      if (c.kind !== "swap" && c.slots?.length && !c.slots.some((s) => real(s) === m.slot)) continue;
-      const who = "who" in c && c.who ? [c.who] : dinersOf(m.slot);
-      for (const p of who) for (const d of m.dishes.filter((x) => eats(x, p))) {
-        const dish = { name: d.name, ingredients: d.items };
-        if (c.kind === "fasting") breaks.push(`${m.day} ${m.slot}: ${p} has ${d.name}`);
-        else if (c.kind === "avoid") { const i = c.items.find((x) => dishHas(dish, x)); if (i) breaks.push(`${m.day} ${m.slot}: ${d.name} for ${p} (${i})`); }
-        else if (c.kind === "swap" && c.items.some((x) => dishHas(dish, x)) && !c.ok.test(`${d.name} ${d.portion_note ?? ""}`)) breaks.push(`${m.day} ${m.slot}: ${d.name} for ${p}`);
+  // ── 2. Hard rules, person by person (fail-closed) ──
+  const libRow = (lib: SavedDish[], name: string, slot?: string) =>
+    lib.find((d) => plain(d.name) === plain(name) && (!slot || lc(d.slot) === lc(slot))) ?? lib.find((d) => plain(d.name) === plain(name));
+  /** What a planned dish has, and which tags are known. TRUTH's own dishes: TRUTH's tags, known as far as the loaded
+   *  library read them. Other dishes: the planner's read. The eval's vocabulary of the planned name always counts. */
+  const dishFacts = (name: string, slot: string): { tags: Set<string>; known: Set<string> } => {
+    const tags = tagsOfName(name);
+    const tn = dishNameOf(name, truthNames);
+    const tdish = tn ? t.library.find((d) => d.name === tn && lc(d.slot) === lc(slot)) ?? t.library.find((d) => d.name === tn) : undefined;
+    const exact = tdish && plain(tdish.name) === plain(name);
+    if (tdish && exact) truthTags(tdish).forEach((x) => tags.add(x));
+    const row = libRow(loaded.library, name, slot) ?? libRow(plan.library, name, slot);
+    if (row) row.contains.map(canonTag).forEach((x) => tags.add(x));
+    return { tags, known: new Set((row?.contains_read ?? []).map(canonTag)) };
+  };
+  const knows = (known: Set<string>, item: string) => { for (let x: string | undefined = canonTag(item); x; x = PARENT[x]) if (known.has(x)) return true; return false; };
+  const binds = (r: TruthRule, sd: PlanSlotDay, e?: ExpectedSlotDay) => {
+    const day = dayOfSd(sd);
+    if (r.days?.length && !r.days.includes(day)) return [];
+    const slot = t.slots.find((s) => lc(s.name) === lc(sd.slot));
+    const base = slot?.kind === "addon" ? slot.addon_of : undefined;
+    if (r.slots?.length && !r.slots.some((x) => lc(x) === lc(sd.slot) || (!!base && lc(x) === lc(base)))) return [];
+    const there = [...new Set([...sd.people, ...(e?.people ?? [])])];
+    return r.who ? there.filter((p) => sameName(p, r.who!)) : there;
+  };
+  let breaks = 0;
+  for (const r of t.rules.filter((x) => x.hard && x.what !== "note" && x.what !== "cap")) {
+    const bad: string[] = [];
+    for (const sd of cooked) {
+      const e = exp.find((x) => x.date === sd.date && lc(x.slot) === lc(sd.slot));
+      const who = binds(r, sd, e);
+      if (!who.length) continue;
+      if (r.what === "fasting") {
+        if (!r.fasting_food?.length) for (const p of who) bad.push(`${dayOfSd(sd)} ${sd.slot}: ${p} is fasting but planned for`);
+        continue;
+      }
+      const items = r.what === "veg" ? ["meat", "fish", ...(r.items ?? [])] : r.what === "no_eggs" ? ["egg"] : r.items ?? [];
+      if (!["avoid", "veg", "no_eggs", "egg", "swap"].includes(r.what)) continue;
+      for (const d of sd.dishes) {
+        const eaters = who.filter((p) => !(d.not_for ?? []).some((x) => sameName(x, p)));
+        if (!eaters.length) continue;
+        const f = dishFacts(d.name, sd.slot);
+        for (const it of items) {
+          if (hasItem(f.tags, it)) bad.push(`${dayOfSd(sd)} ${sd.slot}: ${d.name} has ${it} (${eaters.join(", ")})`);
+          else if (!knows(f.known, it)) bad.push(`${dayOfSd(sd)} ${sd.slot}: ${d.name}: ${it} unread (fail-closed)`);
+        }
       }
     }
-    const uniq = [...new Set(breaks)];
-    add("hard_rules", !uniq.length, `${hr.title}: ${uniq.slice(0, 4).join("; ")}${uniq.length > 4 ? ` (+${uniq.length - 4})` : ""}`);
+    const uniq = [...new Set(bad)];
+    breaks += uniq.length;
+    add("hard_rules", !uniq.length, `${r.title}: ${uniq.slice(0, 4).join("; ")}${uniq.length > 4 ? ` (+${uniq.length - 4})` : ""}`);
+  }
+  // Guests' own rules (a vegan guest), on their slot-day only.
+  for (const e of exp.filter((x) => x.guestItems.length)) {
+    const sd = at(e.date, e.slot);
+    if (!sd || sd.skip) continue;
+    const bad = sd.dishes.filter((d) => e.guestItems.some((it) => hasItem(dishFacts(d.name, sd.slot).tags, it)));
+    // A guest needs at least one dish they can eat; dishes they can't are fine beside it.
+    add("guest_rules", bad.length < sd.dishes.length, `${e.day} ${e.slot}: nothing for the guests (${e.guestItems.join(", ")})`);
+  }
+  facts.hard_breaks = breaks;
+
+  // ── 3. Dishes from the slot's library, a staple, or an allowed new dish ──
+  const newNames = new Set<string>();
+  for (const sd of cooked) for (const d of sd.dishes) {
+    const inLib = loaded.library.some((x) => lc(x.slot) === lc(sd.slot) && plain(x.name) === plain(d.name));
+    const isNew = !!d.new || plan.library.some((x) => plain(x.name) === plain(d.name) && x.origin === "planner_suggested");
+    if (isNew && !inLib) newNames.add(plain(d.name));
+    add("from_library", inLib || isStaple(sd.slot, d.name) || isNew, `${dayOfSd(sd)} ${sd.slot}: ${d.name} is not in ${sd.slot}'s library`);
+  }
+  const budget = loaded.settings?.new_dishes_per_week ?? 2;
+  add("new_budget", newNames.size <= budget, `${newNames.size} new dishes (${[...newNames].join(", ")}), setting ${budget}`);
+  facts.new_dishes = newNames.size;
+
+  // ── 4. Frequency and days per dish, counted across all slots ──
+  const placements = (name: string) => cooked.flatMap((sd) => sd.dishes.filter((d) => dishNameOf(d.name, truthNames) === name).map(() => sd));
+  for (const name of truthNames) {
+    const rows = t.library.filter((d) => d.name === name);
+    const freq = rows.find((d) => d.frequency)?.frequency, days = rows.find((d) => d.days)?.days;
+    const ps = placements(name);
+    const counted = ps.filter((sd) => !isStaple(sd.slot, name));
+    if (freq || days) {
+      // Room: the slot-days this dish could go to this week (its slots, its days, not skipped).
+      const room = exp.filter((e) => !e.skip && rows.some((d) => lc(d.slot) === lc(e.slot)) && (!days || days.includes(e.day))).length;
+      const [min, max] = frequencyRange(freq);
+      // Counted in days (spec §2.1: "≤2 days", "2–3/wk"): dal at lunch and dinner on Monday is one day.
+      const n = new Set(ps.map((sd) => sd.date)).size;
+      const okCount = !freq || (n <= max && n >= Math.min(min, room));
+      const okDays = !days || ps.every((sd) => days.includes(dayOfSd(sd)));
+      add("dish_frequency", okCount && okDays, `${name} (${[freq, days?.join(",")].filter(Boolean).join(", ")}) on ${ps.map((sd) => `${dayOfSd(sd)} ${sd.slot}`).join(", ") || "no day"}`);
+    } else if (new Set(counted.map((sd) => sd.date)).size > 2) add("default_cap", false, `${name} (no frequency, not a staple) on ${new Set(counted.map((sd) => sd.date)).size} days: ${counted.map((sd) => `${dayOfSd(sd)} ${sd.slot}`).join(", ")}`);
+    else if (ps.length) add("default_cap", true);
   }
 
-  // 3. Everyone who eats a main meal has a main dish there.
-  for (const m of w.filter((x) => MAINS.includes(x.slot) && !x.ordered_in && x.dishes.length)) {
-    const hungry = dinersOf(m.slot).filter((p) => !fasting(p, m.day, m.slot) && !m.dishes.some((d) => !notMain(d.name) && eats(d, p)));
-    add("everyone_fed", !hungry.length, `${m.day} ${m.slot}: no main for ${hungry.join(", ")}`);
+  // ── 5. Repeat window per slot (staples exempt), and no same main twice a day across main slots ──
+  for (const s of t.slots.filter((x) => !x.optional)) {
+    const w = plan.relaxed?.[s.name] ?? 3;
+    const sds = cooked.filter((x) => lc(x.slot) === lc(s.name)).sort((a, b) => a.date.localeCompare(b.date));
+    const last = new Map<string, string>();
+    const bad: string[] = [];
+    for (const sd of sds) for (const d of sd.dishes) {
+      if (isStaple(s.name, d.name)) continue;
+      const k = plain(d.name), prev = last.get(k);
+      if (prev && (Date.parse(sd.date) - Date.parse(prev)) / 86400000 < w) bad.push(`${d.name} ${weekdayOfDate(prev)} and ${dayOfSd(sd)}`);
+      last.set(k, sd.date);
+    }
+    if (sds.length) add("repeat_window", !bad.length, `${s.name} (window ${w}): ${bad.join("; ")}`);
+  }
+  const mainNames = t.slots.filter((x) => x.kind === "main").map((x) => lc(x.name));
+  for (const date of [...new Set(cooked.map((x) => x.date))]) {
+    const seen = new Map<string, string>(), bad: string[] = [];
+    for (const sd of cooked.filter((x) => x.date === date && mainNames.includes(lc(x.slot)))) for (const d of sd.dishes) {
+      if (isStaple(sd.slot, d.name)) continue;
+      const k = plain(d.name);
+      if (seen.has(k) && seen.get(k) !== sd.slot) bad.push(`${d.name} at ${seen.get(k)} and ${sd.slot}`);
+      seen.set(k, sd.slot);
+    }
+    add("same_day_repeat", !bad.length, `${weekdayOfDate(date)}: ${bad.join("; ")}`);
   }
 
-  // 4. Frequency: a personal or occasional dish not every day; a day-bound dish only on its days; "usually" most days.
-  // Each planned dish is the family's dish it is most like, among all of them ("Rice" is Rice, not Curd rice).
-  const book = [...t.dishes.filter((d) => !o.extraPersonal || plain(d.name) !== plain(o.extraPersonal.name)), ...(o.extraPersonal ? [o.extraPersonal] : [])];
-  const dishDays = (td: TruthDish) => [...new Set(w.filter((m) => m.dishes.some((d) => truthDishOf(d.name, book) === td)).map((m) => m.day))];
-  const personal = book.filter((d) => d.for);
-  for (const td of personal) {
-    const days = dishDays(td), max = td.per_week ?? oftenMax(td.often) ?? 3;
-    add("personal_dish_freq", days.length <= max, `${td.name} [${td.for!.join("+")}] on ${days.length} days (${days.join(",")}), at most ${max}`);
+  // ── 6. Soft rules with a frequency, counted across slots; cook limits (cap) ──
+  for (const r of t.rules.filter((x) => !x.hard && x.frequency && (x.what === "swap" || x.what === "require"))) {
+    const want = r.what === "swap" ? [r.to ?? ""] : r.items ?? [];
+    const hits = cooked.filter((sd) => (!r.who || sd.people.some((p) => sameName(p, r.who!))) && (!r.slots?.length || r.slots.includes(sd.slot))
+      && sd.dishes.some((d) => want.some((it) => hasItem(dishFacts(d.name, sd.slot).tags, it) || new RegExp(`\\b${it}`, "i").test(`${d.name} ${d.note ?? ""}`) || new RegExp(`\\b${it}`, "i").test(sd.note ?? ""))));
+    const [min, max] = frequencyRange(r.frequency);
+    add("soft_frequency", hits.length >= min && hits.length <= max, `${r.title}: ${hits.length} times (want ${min}–${max})`);
   }
-  // A one-person dish goes to its person: no one else is given it (Tanya's oats are not Nikhil's breakfast).
-  for (const m of w.filter((x) => !x.ordered_in)) for (const d of m.dishes) {
-    const td = truthDishOf(d.name, book);
-    if (!td?.for || !td.slots.some((s) => real(s) === m.slot)) continue;
-    const others = d.eaters.filter((e) => !td.for!.some((p) => sameName(p, e)));
-    add("personal_dish_eaters", !others.length, `${m.day} ${m.slot}: ${d.name} (${td.for.join("+")}'s) given to ${others.join(", ")}`);
-  }
-  for (const td of book.filter((d) => d !== o.extraPersonal && (d.often || d.per_week || d.days))) {
-    const days = dishDays(td);
-    const max = td.per_week ?? oftenMax(td.often);
-    const okCount = (max === null || days.length <= max) && (td.often !== "usually" || days.length >= 3);
-    const okDays = !td.days || days.every((d) => td.days!.includes(d));
-    add("dish_frequency", okCount && okDays, `${td.name} (${[td.often, td.per_week && `${td.per_week}/wk`, td.days?.join(",")].filter(Boolean).join(", ")}) planned on ${days.join(",") || "no day"}`);
-  }
-  for (const n of t.softNotes.filter((x) => x.per_week && x.items)) {
-    const says = (d: PDish) => n.items!.some((i) => new RegExp(`\\b${i}`, "i").test(`${d.name} ${d.portion_note ?? ""}`) || dishHas({ name: d.name, ingredients: d.items }, i));
-    const meals = w.filter((m) => !m.ordered_in && m.dishes.some((d) => eats(d, n.who!) && says(d)));
-    add("soft_frequency", meals.length >= n.per_week![0] && meals.length <= n.per_week![1], `${n.who}: "${n.text}" in ${meals.length} meals (want ${n.per_week!.join("–")})`);
-  }
-
-  // 5. Meal shape against the family's own words: parts ±1, their staple when they name one.
-  for (const ex of t.examples) {
-    const slot = real(ex.slot);
-    for (const m of w.filter((x) => x.slot === slot && !x.ordered_in && x.dishes.length)) {
-      const diners = dinersOf(slot);
-      const shared = m.dishes.filter((d) => d.eaters.length > 1 || diners.length === 1);
-      const okParts = Math.abs(shared.length - ex.parts) <= 1;
-      const okStaple = !ex.staple || m.dishes.some((d) => ex.staple!.test(d.name));
-      add("meal_shape", okParts && okStaple, `${m.day} ${slot}: ${shared.length} shared parts (want ${ex.parts}±1)${okStaple ? "" : `, no ${ex.staple}`}: ${m.dishes.map((d) => d.name).join(", ")}`);
+  for (const r of t.rules.filter((x) => x.what === "cap" && x.per_meal)) {
+    for (const sd of cooked.filter((x) => (!r.slots?.length || r.slots.includes(x.slot)) && (!r.days?.length || r.days.includes(dayOfSd(x))))) {
+      const n = sd.dishes.filter((d) => !isStaple(sd.slot, d.name)).length;
+      add("cap_rules", n <= r.per_meal!, `${dayOfSd(sd)} ${sd.slot}: ${n} dishes besides staples (${r.title}: at most ${r.per_meal})`);
     }
   }
 
-  // 6. Each meal from its own dishes: no breakfast or tiffin dish at lunch or dinner unless the family eats it there.
-  for (const m of w.filter((x) => (x.slot === "Lunch" || x.slot === "Dinner") && !x.ordered_in)) {
-    const off = m.dishes.filter((d) => { const td = truthDishOf(d.name, t.dishes); return td && !td.slots.includes(m.slot) && !td.slots.some((s) => s === "Lunch" || s === "Dinner"); });
-    add("own_slot_dishes", !off.length, `${m.day} ${m.slot}: ${off.map((d) => d.name).join(", ")}`);
+  // ── Tracked, not gating: shape against the slot's own history ──
+  for (const s of t.slots.filter((x) => !x.optional)) {
+    const want = meanDishes(history, s.name);
+    const sds = cooked.filter((x) => lc(x.slot) === lc(s.name));
+    if (want === null || !sds.length) continue;
+    const got = sds.reduce((a, x) => a + x.dishes.length, 0) / sds.length;
+    facts[`shape_${s.name}`] = `${got.toFixed(1)} vs ${want.toFixed(1)}`;
+    for (const sd of sds) add("shape", Math.abs(sd.dishes.length - want) <= 1, undefined, tracked);
   }
-
-  // Facts, not pass/fail: how much of the week is the family's own food, and what the planner said it could not do.
-  const planned = w.flatMap((m) => m.dishes);
-  facts.family_dish_share = planned.length ? Math.round((100 * planned.filter((d) => truthDishOf(d.name, t.dishes)).length) / planned.length) : 0;
-  facts.dishes = planned.length;
-  facts.unmet = (plan?.unmet ?? []).length;
-  facts.flagged = (plan?.unmet ?? []).length || /don't know|only \d+ .* known|tell me a few/i.test(`${plan?.message ?? ""} ${plan?.say ?? ""}`) ? 1 : 0;
-  return { rates, notes, facts };
+  facts.dishes = cooked.reduce((a, x) => a + x.dishes.length, 0);
+  facts.family_dish_share = facts.dishes ? Math.round((100 * cooked.flatMap((x) => x.dishes).filter((d) => dishNameOf(d.name, truthNames)).length) / (facts.dishes as number)) : 0;
+  facts.unmet = plan.unmet.length;
+  facts.flagged = plan.unmet.length || /only \d+ .* known|don't know|tell me (a few|more)/i.test(plan.message ?? "") ? 1 : 0;
+  return { rates, tracked, notes, facts };
 }
+
+/** The week as text, for the judge and the report: each day, each slot-day with its people and dishes. */
+export function weekText(plan: PlanOut): string {
+  return WEEK.map((day) => {
+    const sds = plan.slotDays.filter((x) => weekdayOfDate(x.date) === day);
+    return `${day}: ${sds.map((x) => `${x.slot} [${[...x.people, ...x.guests.map((g) => `${g.count} guest${g.count > 1 ? "s" : ""}`)].join(", ")}]: ${x.skip ? `(${x.skip.replace("_", " ")})` : x.dishes.map((d) => `${d.name}${d.note ? ` (${d.note})` : ""}`).join(", ") || "(nothing)"}${x.note ? ` — ${x.note}` : ""}`).join(" | ")}`;
+  }).join("\n");
+}
+export { dayOf };

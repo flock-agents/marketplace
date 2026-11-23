@@ -1,6 +1,6 @@
 // 2. South Indian (Tamil), one child, the wife cooks every meal, no cook; vegetarian, no eggs; the husband carries lunch to
 // office. Frequency words: curd rice when Ananya's not well, pongal on Sundays. Correction: the order-in night.
-import { avoid, noEggs, veg, WEEK, type Household } from "../lib/truth";
+import { avoid, dish, mains, noEggs, note, SCHOOL, veg, WEEK, type Household } from "../lib/truth";
 
 export const h2: Household = {
   id: "h2-iyer", title: "South Indian veg, wife cooks every meal, no cook",
@@ -12,6 +12,9 @@ export const h2: Household = {
     "household.help": [{ role: "maid", name: "Selvi", days: "Mon-Sat", times: "7am" }],
     "household.weekday": "Karthik is at office 9 to 6 and takes his lunch box. Meenakshi works from home. Ananya has playschool 9 to 12, lunch at home.",
     "household.mealsBy": "Meenakshi", "household.groceriesBy": "Karthik",
+    "household.weekly": [{ person: "Karthik", where: "office", weekdays: SCHOOL, from: "09:00", to: "18:00", lunch: "carries" },
+      { person: "Meenakshi", where: "home", weekdays: SCHOOL, lunch: "home" },
+      { person: "Ananya", where: "school", weekdays: SCHOOL, from: "09:00", to: "12:00", lunch: "home" }],
   },
   groceryApps: ["Instamart"],
   facts: [
@@ -35,24 +38,35 @@ export const h2: Household = {
   truth: {
     people: [{ name: "Karthik", group: "adult" }, { name: "Meenakshi", group: "adult" }, { name: "Ananya", group: "child", age: 5 }],
     cook: null,
-    homeCook: [{ days: WEEK, by: "Meenakshi" }],
-    extraSlots: [],
-    orderIn: [{ day: "Sat", slot: "Dinner", note: "ordered from Swiggy" }],
-    hardRules: [veg(), noEggs(), avoid("no_brinjal_karthik", "Karthik eats no brinjal", ["brinjal"], { who: "Karthik" })],
-    softNotes: [{ id: "less_spicy_kid", who: "Ananya", text: "less spicy for Ananya", re: /spic|mild/i }],
-    dishes: [
-      { name: "Idli", slots: ["Breakfast"] }, { name: "Dosa", slots: ["Breakfast", "Dinner"] }, { name: "Ragi porridge", slots: ["Breakfast"], for: ["Ananya"], often: "sometimes" },
-      { name: "Upma", slots: ["Breakfast"] }, { name: "Pongal", slots: ["Breakfast"], days: ["Sun"] }, { name: "Coconut chutney", slots: ["Breakfast"] }, { name: "Sambar", slots: ["Breakfast", "Lunch"] },
-      { name: "Rice", slots: ["Lunch"] }, { name: "Rasam", slots: ["Lunch", "Dinner"] }, { name: "Poriyal", slots: ["Lunch"] }, { name: "Curd", slots: ["Lunch"] },
-      { name: "Beans poriyal", slots: ["Lunch"] }, { name: "Cabbage poriyal", slots: ["Lunch"] }, { name: "Kootu", slots: ["Lunch"], often: "sometimes" },
-      { name: "Curd rice", slots: ["Lunch"], for: ["Ananya"], often: "rarely" },
-      { name: "Chapati", slots: ["Dinner"] }, { name: "Kurma", slots: ["Dinner"] }, { name: "Uthappam", slots: ["Dinner"], often: "sometimes" }, { name: "Rasam rice", slots: ["Dinner"], often: "sometimes" },
+    familyCooks: [{ person: "Meenakshi", days: WEEK }],
+    slots: [
+      ...mains({ Dinner: [{ day: "Sat", skip: "ordered_in" }] }),
+      // Her breakfast is the family's "mostly": an add-on for the porridge is fine, not needed.
+      { name: "Ananya's breakfast", kind: "addon", addon_of: "Breakfast", usual_people: ["Ananya"], match: /ananya/i, optional: true },
     ],
-    examples: [
-      { slot: "Breakfast", words: "idli, dosa, upma, pongal on Sundays; with coconut chutney and sambar", parts: 3, staple: /idli|dosa|upma|pongal|uthappam/i },
-      { slot: "Lunch", words: "rice, sambar, rasam, a poriyal and curd", parts: 5, staple: /rice/i },
-      { slot: "Dinner", words: "dosa or chapati with kurma, sometimes uthappam", parts: 2, staple: /dosa|chapati|uthappam|roti/i },
+    away: [],
+    library: [
+      ...dish("Idli", ["Breakfast"]), ...dish("Dosa", ["Breakfast", "Dinner"]), ...dish("Upma", ["Breakfast"]), ...dish("Pongal", ["Breakfast"], { days: ["Sun"] }),
+      ...dish("Ragi porridge", ["Breakfast"], { frequency: "sometimes", alsoSlots: ["Ananya's breakfast"] }),
+      ...dish("Coconut chutney", ["Breakfast"]), ...dish("Sambar", ["Breakfast", "Lunch"]),
+      ...dish("Rice", ["Lunch"]), ...dish("Rasam", ["Lunch"]), ...dish("Curd", ["Lunch"]),
+      ...dish("Beans poriyal", ["Lunch"]), ...dish("Cabbage poriyal", ["Lunch"]), ...dish("Carrot poriyal", ["Lunch"]), ...dish("Kootu", ["Lunch"], { frequency: "sometimes" }),
+      ...dish("Curd rice", ["Lunch"], { frequency: "rarely" }),
+      ...dish("Chapati", ["Dinner"]), ...dish("Kurma", ["Dinner"]), ...dish("Uthappam", ["Dinner"], { frequency: "sometimes" }), ...dish("Rasam rice", ["Dinner"], { frequency: "sometimes" }),
     ],
-    judgeNotes: ["Pure vegetarian, no eggs; Karthik eats no brinjal.", "Saturday dinner ordered in.", "Meenakshi cooks every meal herself."],
+    rules: [
+      veg(/vegetarian|veg/i), noEggs(/egg/i),
+      avoid("no_brinjal_karthik", "Karthik eats no brinjal", ["brinjal"], /brinjal/i, { who: "Karthik" }),
+      note("less_spicy_kid", "less spicy for Ananya", "Ananya", /spic/i),
+    ],
+    seed: [
+      { slot: "Breakfast", dishes: ["Idli", "Coconut chutney", "Sambar"] }, { slot: "Breakfast", dishes: ["Dosa", "Coconut chutney", "Sambar"] },
+      { slot: "Breakfast", dishes: ["Upma", "Coconut chutney"] }, { slot: "Breakfast", dishes: ["Pongal", "Coconut chutney", "Sambar"] },
+      { slot: "Lunch", dishes: ["Rice", "Sambar", "Rasam", "Beans poriyal", "Curd"] }, { slot: "Lunch", dishes: ["Rice", "Sambar", "Rasam", "Cabbage poriyal", "Curd"] },
+      { slot: "Lunch", dishes: ["Rice", "Rasam", "Kootu", "Curd"] },
+      { slot: "Dinner", dishes: ["Dosa", "Kurma"] }, { slot: "Dinner", dishes: ["Chapati", "Kurma"] }, { slot: "Dinner", dishes: ["Uthappam", "Kurma"] }, { slot: "Dinner", dishes: ["Rasam rice"] },
+    ],
+    week: [{ kind: "guests", day: "Sun", slot: "Lunch", count: 2, occasion: "relatives for lunch" }],
+    judgeNotes: ["Pure vegetarian, no eggs; Karthik eats no brinjal.", "Saturday dinner ordered in.", "Meenakshi cooks every meal herself.", "Two guests at Sunday lunch this week."],
   },
 };

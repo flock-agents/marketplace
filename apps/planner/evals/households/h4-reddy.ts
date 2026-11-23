@@ -1,21 +1,24 @@
 // 4. Telugu family with grandparents and a paid cook: diabetic grandmother (no sugar; ragi is good for her: soft, a few
 // times a week; Ekadashi fast twice a month: not a weekday), grandfather less salt and soft food, two working adults, a teen
 // with a school tiffin. Non-veg (chicken) Sunday lunch for the three younger ones; the grandparents are pure veg.
-import { avoid, SCHOOL, WEEK, type Household } from "../lib/truth";
+import { avoid, dish, mains, MON_SAT, note, SCHOOL, veg, type Household } from "../lib/truth";
 
-const MON_SAT = WEEK.slice(0, 6);
 export const h4: Household = {
   id: "h4-reddy", title: "Grandparents + cook: diabetic grandmother, Ekadashi, soft food, teen tiffin",
   owner: "Srinivas", intro: "You are Srinivas Reddy, 45, a bank manager in Hyderabad",
   household: {
     "household.people": [{ name: "Srinivas", relation: "self", age: 45, group: "adult" }, { name: "Padma", relation: "wife", age: 42, group: "adult" },
-      { name: "Arjun", relation: "son", age: 15, group: "child" }, { name: "Sarojini", relation: "mother", age: 70, group: "elder" },
-      { name: "Venkat", relation: "father", age: 74, group: "elder" }],
+      { name: "Arjun", relation: "son", age: 15, group: "child" }, { name: "Sarojini", relation: "mother", age: 70, group: "elder", nicknames: [{ name: "Amma", by: "Srinivas" }] },
+      { name: "Venkat", relation: "father", age: 74, group: "elder", nicknames: [{ name: "Nanna", by: "Srinivas" }] }],
     "household.children": ["Arjun"], "household.elders": ["Sarojini", "Venkat"], "household.schoolAge": true,
     "household.help": [{ role: "cook", name: "Kavitha", days: "Mon-Sat", times: "7:30am", meals: ["Breakfast", "Lunch"] },
       { role: "cook", name: "Kavitha", days: "Mon-Sat", times: "6:30pm", meals: ["Dinner"] }],
     "household.weekday": "Srinivas and Padma both at work 9 to 6. Arjun's school 7:45 to 3:30. Amma and Nanna are home.",
     "household.mealsBy": "Padma", "household.groceriesBy": "Srinivas",
+    "household.weekly": [{ person: "Srinivas", where: "office", weekdays: SCHOOL, from: "09:00", to: "18:00", lunch: null },
+      { person: "Padma", where: "office", weekdays: SCHOOL, from: "09:00", to: "18:00", lunch: null },
+      { person: "Arjun", where: "school", weekdays: SCHOOL, from: "07:45", to: "15:30", lunch: "away" },
+      { person: "Sarojini", where: "home", weekdays: SCHOOL, lunch: "home" }, { person: "Venkat", where: "home", weekdays: SCHOOL, lunch: "home" }],
   },
   groceryApps: ["BigBasket"],
   facts: [
@@ -42,37 +45,51 @@ export const h4: Household = {
   truth: {
     people: [{ name: "Srinivas", group: "adult" }, { name: "Padma", group: "adult" }, { name: "Arjun", group: "child", age: 15 }, { name: "Sarojini", group: "elder", age: 70 }, { name: "Venkat", group: "elder", age: 74 }],
     cook: { name: "Kavitha", days: MON_SAT, visits: [{ at: "07:30", meals: ["Breakfast", "Lunch"] }, { at: "19:00", meals: ["Dinner"] }] },
-    homeCook: [{ days: ["Sun"], by: "Padma" }],
-    extraSlots: [{ name: "Arjun's tiffin", match: /tiffin|lunch ?box|school/i, days: SCHOOL, for: ["Arjun"] }],
-    orderIn: [],
-    hardRules: [
-      avoid("veg_sarojini", "Sarojini: pure veg, no eggs", ["@meat", "@fish", "@egg"], { who: "Sarojini" }),
-      avoid("veg_venkat", "Venkat: pure veg, no eggs", ["@meat", "@fish", "@egg"], { who: "Venkat" }),
-      avoid("nonveg_sunday_lunch", "Chicken only at Sunday lunch", ["@meat", "@fish"], { days: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] }),
-      avoid("no_sugar", "Sarojini: no sugar", ["@sweet"], { who: "Sarojini" }),
-      { id: "ekadashi", title: "Sarojini fasts on Ekadashi (fruits only)", rule: { kind: "fasting", who: "Sarojini", days: ["Ekadashi"], note: "fasts on Ekadashi, only fruits" }, check: null, words: /ekadashi/i },
+    familyCooks: [{ person: "Padma", days: ["Sun"] }],
+    slots: [
+      ...mains(),
+      { name: "Arjun's tiffin", kind: "custom", usual_people: ["Arjun"], days: SCHOOL, match: /tiffin|lunch ?box|school/i },
+      { name: "Sarojini's breakfast", kind: "addon", addon_of: "Breakfast", usual_people: ["Sarojini"], match: /sarojini|amma|mother|grand/i },
+      { name: "Sarojini's dinner", kind: "addon", addon_of: "Dinner", usual_people: ["Sarojini"], match: /sarojini|amma|mother|grand/i },
+      // Sunday chicken for the three of them: an add-on is one way to hold it; a rule alone is another.
+      { name: "Sunday chicken", kind: "addon", addon_of: "Lunch", usual_people: ["Srinivas", "Padma", "Arjun"], days: ["Sun"], match: /chicken|non.?veg|sunday/i, optional: true },
     ],
-    softNotes: [
-      { id: "ragi_good", who: "Sarojini", text: "ragi is good for her, a few times a week", re: /ragi|millet/i, often: "sometimes", per_week: [2, 3], items: ["ragi"] },
-      { id: "less_salt", who: "Venkat", text: "less salt", re: /salt/i },
-      { id: "soft_food", who: "Venkat", text: "soft food", re: /soft|chew/i },
+    // Nobody said whether the two of them take lunch to work: weekday lunch is unclear for them (asked once in the read-back).
+    away: [{ person: "Arjun", slots: ["Lunch"], days: SCHOOL }],
+    lunchUnclear: ["Srinivas", "Padma"],
+    library: [
+      ...dish("Idli", ["Breakfast"]), ...dish("Pesarattu", ["Breakfast"]), ...dish("Upma", ["Breakfast"]), ...dish("Dosa", ["Breakfast"]),
+      ...dish("Allam chutney", ["Breakfast"]), ...dish("Bread toast", ["Breakfast"], { frequency: "sometimes" }),
+      ...dish("Ragi dosa", ["Sarojini's breakfast"]), ...dish("Ragi java", ["Sarojini's breakfast"]),
+      ...dish("Chapati roll", ["Arjun's tiffin"]), ...dish("Lemon rice", ["Arjun's tiffin"]), ...dish("Veg pulao", ["Arjun's tiffin"]), ...dish("Curd rice", ["Arjun's tiffin"]),
+      ...dish("Rice", ["Lunch", "Dinner"]), ...dish("Pappu", ["Lunch", "Dinner"]), ...dish("Rasam", ["Lunch"]), ...dish("Curd", ["Lunch"]), ...dish("Pachadi", ["Lunch"]),
+      ...dish("Dondakaya curry", ["Lunch"]), ...dish("Beans curry", ["Lunch"]), ...dish("Bendakaya curry", ["Lunch"]),
+      ...dish("Dondakaya curry", ["Dinner"], { unsaid: true }), ...dish("Beans curry", ["Dinner"], { unsaid: true }), ...dish("Bendakaya curry", ["Dinner"], { unsaid: true }),
+      ...dish("Chicken curry", ["Lunch"], { days: ["Sun"], alsoSlots: ["Sunday chicken"] }),
+      ...dish("Chapati", ["Dinner"]), ...dish("Jowar roti", ["Sarojini's dinner"]),
     ],
-    dishes: [
-      { name: "Idli", slots: ["Breakfast"] }, { name: "Pesarattu", slots: ["Breakfast"] }, { name: "Upma", slots: ["Breakfast"] }, { name: "Dosa", slots: ["Breakfast"] },
-      { name: "Allam chutney", slots: ["Breakfast"] }, { name: "Bread toast", slots: ["Breakfast"], for: ["Arjun"], often: "sometimes" },
-      { name: "Ragi dosa", slots: ["Breakfast"], for: ["Sarojini"] }, { name: "Ragi java", slots: ["Breakfast"], for: ["Sarojini"] },
-      { name: "Chapati roll", slots: ["Arjun's tiffin"] }, { name: "Lemon rice", slots: ["Arjun's tiffin"] }, { name: "Veg pulao", slots: ["Arjun's tiffin"] }, { name: "Curd rice", slots: ["Arjun's tiffin"] },
-      { name: "Rice", slots: ["Lunch", "Dinner"] }, { name: "Pappu", slots: ["Lunch", "Dinner"] }, { name: "Rasam", slots: ["Lunch"] }, { name: "Curd", slots: ["Lunch"] }, { name: "Pachadi", slots: ["Lunch"] },
-      { name: "Dondakaya curry", slots: ["Lunch"] }, { name: "Beans curry", slots: ["Lunch"] }, { name: "Bendakaya curry", slots: ["Lunch"] },
-      { name: "Chicken curry", slots: ["Lunch"], for: ["Srinivas", "Padma", "Arjun"], days: ["Sun"] },
-      { name: "Chapati", slots: ["Dinner"] }, { name: "Jowar roti", slots: ["Dinner"], for: ["Sarojini"] },
+    rules: [
+      avoid("veg_sarojini", "Sarojini: pure veg, no eggs", ["meat", "fish", "egg"], /vegetarian|veg/i, { who: "Sarojini", also: ["veg", "no_eggs"] }),
+      avoid("veg_venkat", "Venkat: pure veg, no eggs", ["meat", "fish", "egg"], /vegetarian|veg/i, { who: "Venkat", also: ["veg", "no_eggs"] }),
+      avoid("nonveg_sunday", "Chicken only on Sunday (lunch)", ["meat"], /sunday/i, { days: MON_SAT, also: ["only"] }),
+      avoid("no_sugar", "Sarojini: no sugar", ["sugar"], /sugar/i, { who: "Sarojini" }),
+      { id: "ragi_good", title: "ragi is good for Sarojini, a few times a week", hard: false, what: "require", who: "Sarojini", items: ["millet"], frequency: "sometimes", quote: /ragi/i, also: ["swap"] },
+      note("less_salt", "less salt for Venkat", "Venkat", /salt/i),
+      note("soft_food", "soft food for Venkat", "Venkat", /soft|chew/i),
     ],
-    examples: [
-      { slot: "Breakfast", words: "idli, pesarattu, upma, dosa with allam chutney", parts: 2, staple: /idli|pesarattu|upma|dosa/i },
-      { slot: "Lunch", words: "rice, pappu, one curry, rasam, curd, and a pachadi", parts: 6, staple: /rice/i },
-      { slot: "Dinner", words: "chapati with a curry, or rice and pappu", parts: 2, staple: /chapati|roti|rice/i },
+    noted: [{ id: "ekadashi", who: "Sarojini", re: /ekadashi/i }],
+    seed: [
+      { slot: "Breakfast", dishes: ["Idli", "Allam chutney"] }, { slot: "Breakfast", dishes: ["Pesarattu", "Allam chutney"] }, { slot: "Breakfast", dishes: ["Upma", "Allam chutney"] },
+      { slot: "Breakfast", dishes: ["Dosa", "Allam chutney"] },
+      { slot: "Sarojini's breakfast", dishes: ["Ragi dosa"] }, { slot: "Sarojini's breakfast", dishes: ["Ragi java"] },
+      { slot: "Arjun's tiffin", dishes: ["Chapati roll"] }, { slot: "Arjun's tiffin", dishes: ["Lemon rice"] }, { slot: "Arjun's tiffin", dishes: ["Veg pulao"] }, { slot: "Arjun's tiffin", dishes: ["Curd rice"] },
+      { slot: "Lunch", dishes: ["Rice", "Pappu", "Dondakaya curry", "Rasam", "Curd", "Pachadi"] }, { slot: "Lunch", dishes: ["Rice", "Pappu", "Beans curry", "Rasam", "Curd", "Pachadi"] },
+      { slot: "Lunch", dishes: ["Rice", "Pappu", "Bendakaya curry", "Rasam", "Curd"] },
+      { slot: "Dinner", dishes: ["Chapati", "Beans curry"] }, { slot: "Dinner", dishes: ["Rice", "Pappu"] }, { slot: "Dinner", dishes: ["Chapati", "Dondakaya curry"] },
+      { slot: "Sarojini's dinner", dishes: ["Jowar roti"] }, { slot: "Sarojini's dinner", dishes: ["Jowar roti"] },
     ],
-    judgeNotes: ["Grandparents pure veg, no eggs; chicken only Sunday lunch for Srinivas, Padma, Arjun.", "Sarojini: no sugar; ragi a few times a week; Ekadashi fast (fruit) twice a month.",
-      "Venkat: less salt and soft food.", "Arjun's tiffin Monday to Friday."],
+    week: [{ kind: "away", person: "Srinivas", days: ["Wed", "Thu"], dated: { person: "Srinivas", what: "work trip to Mumbai", from: "2026-12-02", to: "2026-12-03" } }],
+    judgeNotes: ["Grandparents pure veg, no eggs; chicken only Sunday lunch for Srinivas, Padma, Arjun.", "Sarojini: no sugar; her own ragi breakfast and jowar roti at night; ragi a few times a week; Ekadashi fast (fruit) twice a month.",
+      "Venkat: less salt and soft food.", "Arjun's tiffin Monday to Friday.", "Srinivas is away Wednesday and Thursday this week."],
   },
 };

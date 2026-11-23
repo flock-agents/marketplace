@@ -2,21 +2,24 @@
 // Agastya (6), Gowri Shankar (63, diabetic, fasts Thursday till evening); cook Lakshmi Mon–Sat; Sunday lunch out, Saturday
 // dinner ordered in; vegetarian, no eggs, no mushrooms, nut-free tiffin. Meal shape in the owner's own words (23 Nov).
 // Frequency words: weekend parathas, curd rice when he's tired, millets are good for him (soft), no sugar (hard).
-import { avoid, fast, noEggs, SCHOOL, veg, WEEK, type Household } from "../lib/truth";
+import { avoid, dish, mains, MON_SAT, noEggs, note, SCHOOL, veg, type Household } from "../lib/truth";
 
-const MON_SAT = WEEK.slice(0, 6);
 const GS = "Gowri Shankar";
 export const h3: Household = {
   id: "h3-shiva", title: "The owner's family: mixed South/North, elder diabetic + Thursday fast, cook Mon–Sat",
   owner: "Shiva", intro: "You are Shiva, 38, a busy software manager in Bangalore",
   household: {
     "household.people": [{ name: "Shiva", relation: "self", age: 38, group: "adult" }, { name: "Ankita", relation: "wife", age: 35, group: "adult" },
-      { name: "Agastya", relation: "son", age: 6, group: "child" }, { name: GS, relation: "father", age: 63, group: "elder" }],
+      { name: "Agastya", relation: "son", age: 6, group: "child" }, { name: GS, relation: "father", age: 63, group: "elder", nicknames: [{ name: "Appa", by: "Shiva" }] }],
     "household.children": ["Agastya"], "household.elders": [GS], "household.schoolAge": true,
     "household.help": [{ role: "cook", name: "Lakshmi", days: "Mon-Sat", times: "7am", meals: ["Breakfast", "Lunch"] },
       { role: "cook", name: "Lakshmi", days: "Mon-Sat", times: "6pm", meals: ["Dinner"] }, { role: "maid", days: "daily", times: "9am" }],
     "household.weekday": "Shiva and Ankita work from office 9:30 to 6; father is home all day. Agastya has school 8:30 to 2:30.",
     "household.mealsBy": "Ankita", "household.groceriesBy": "Ankita",
+    "household.weekly": [{ person: "Shiva", where: "office", weekdays: SCHOOL, from: "09:30", to: "18:00", lunch: "carries" },
+      { person: "Ankita", where: "office", weekdays: SCHOOL, from: "09:30", to: "18:00", lunch: "carries" },
+      { person: "Agastya", where: "school", weekdays: SCHOOL, from: "08:30", to: "14:30", lunch: "home" },
+      { person: GS, where: "home", weekdays: SCHOOL, lunch: "home" }],
   },
   groceryApps: ["Zepto", "Instamart"],
   facts: [
@@ -43,41 +46,52 @@ export const h3: Household = {
   truth: {
     people: [{ name: "Shiva", group: "adult" }, { name: "Ankita", group: "adult" }, { name: "Agastya", group: "child", age: 6 }, { name: GS, group: "elder", age: 63 }],
     cook: { name: "Lakshmi", days: MON_SAT, visits: [{ at: "07:30", meals: ["Breakfast", "Lunch"] }, { at: "18:00", meals: ["Dinner"] }] },
-    homeCook: [{ days: ["Sun"], slots: ["Breakfast", "Dinner"], by: "Ankita" }],
-    extraSlots: [{ name: "Agastya's tiffin", match: /tiffin|lunch ?box|school/i, days: SCHOOL, for: ["Agastya"] }],
-    orderIn: [{ day: "Sun", slot: "Lunch", note: "eaten out" }, { day: "Sat", slot: "Dinner", note: "ordered from Swiggy" }],
-    hardRules: [
-      veg(), noEggs(),
-      avoid("no_mushrooms", "No mushrooms", ["mushroom"]),
-      avoid("nut_free_tiffin", "Agastya's tiffin nut-free", ["@nuts"], { slots: ["Agastya's tiffin"], alsoKinds: [] }),
-      fast("thu_fast", "Gowri Shankar fasts Thursday till evening", GS, ["Thu"], ["Breakfast", "Lunch"]),
-      avoid("no_sugar", "Gowri Shankar: no sugar", ["@sweet"], { who: GS }),
-      avoid("no_rice_night", "Gowri Shankar: no rice at night", ["@white_rice"], { who: GS, slots: ["Dinner"], alsoKinds: ["swap", "cap"] }),
+    familyCooks: [{ person: "Ankita", days: ["Sun"] }],
+    slots: [
+      ...mains({ Lunch: [{ day: "Sun", skip: "eaten_out" }], Dinner: [{ day: "Sat", skip: "ordered_in" }] }),
+      { name: "Agastya's tiffin", kind: "custom", usual_people: ["Agastya"], days: SCHOOL, match: /tiffin|lunch ?box|school/i },
+      // "Father has two phulkas, no rice at night": his dinner is always different, so it gets an add-on with the phulkas.
+      { name: "Gowri Shankar's dinner", kind: "addon", addon_of: "Dinner", usual_people: [GS], match: /gowri|father|appa|grand|phulka/i },
+      { name: "Gowri Shankar's breakfast", kind: "addon", addon_of: "Breakfast", usual_people: [GS], match: /gowri|father|appa|grand/i, optional: true },
     ],
-    softNotes: [
-      { id: "less_rice", who: GS, text: "less rice", re: /less rice|small(er)? portion|less of rice/i },
-      { id: "millets_good", who: GS, text: "millets are good for him", re: /millet|ragi|jowar/i, often: "sometimes", per_week: [2, 3], items: ["millet", "ragi", "jowar", "bajra", "foxtail"],
-        rule: { kind: "swap", who: GS, items: ["@white_rice"], to: "millets", often: "sometimes", note: "millets are good for him" } },
-      { id: "less_salt", who: GS, text: "less salt", re: /salt/i },
-      { id: "less_spicy_kid", who: "Agastya", text: "less spicy for Agastya", re: /spic|mild/i },
+    away: [],
+    library: [
+      ...dish("Idli", ["Breakfast"]), ...dish("Dosa", ["Breakfast"]), ...dish("Poha", ["Breakfast"]), ...dish("Upma", ["Breakfast"]),
+      ...dish("Sandwich", ["Breakfast"]), ...dish("Chutney", ["Breakfast"]), ...dish("Aloo paratha", ["Breakfast"], { days: ["Sat", "Sun"] }),
+      ...dish("Ragi dosa", ["Breakfast"], { alsoSlots: ["Gowri Shankar's breakfast"] }), ...dish("Oats", ["Breakfast"], { alsoSlots: ["Gowri Shankar's breakfast"] }),
+      ...dish("Paratha roll", ["Agastya's tiffin"]), ...dish("Besan cheela", ["Agastya's tiffin"]), ...dish("Mini idli", ["Agastya's tiffin"]),
+      ...dish("Vegetable sandwich", ["Agastya's tiffin"]), ...dish("Lemon rice", ["Agastya's tiffin"], { days: ["Fri"], notContains: ["nuts", "peanut"] }),
+      ...dish("Rice", ["Lunch"]), ...dish("Sambar", ["Lunch"]), ...dish("Dal", ["Lunch", "Dinner"]),
+      ...dish("Rajma chawal", ["Lunch"], { frequency: "2/week" }), ...dish("Bisi bele bath", ["Lunch"], { days: ["Sat"] }), ...dish("Curd", ["Lunch"], { unsaid: true }),
+      ...dish("Bhindi", ["Lunch"], { unsaid: true }), ...dish("Aloo gobi", ["Lunch"], { unsaid: true }),
+      ...dish("Chapati", ["Dinner"], { frequency: "usually" }), ...dish("Palak dal", ["Dinner"]), ...dish("Bhindi", ["Dinner"]),
+      ...dish("Aloo gobi", ["Dinner"]), ...dish("Chole", ["Dinner"], { frequency: "1/week" }), ...dish("Curd rice", ["Dinner"], { frequency: "sometimes" }),
+      ...dish("Phulka", ["Gowri Shankar's dinner"]),
     ],
-    dishes: [
-      { name: "Idli", slots: ["Breakfast"] }, { name: "Dosa", slots: ["Breakfast"] }, { name: "Poha", slots: ["Breakfast"] }, { name: "Upma", slots: ["Breakfast"] },
-      { name: "Sandwich", slots: ["Breakfast"] }, { name: "Chutney", slots: ["Breakfast"] }, { name: "Aloo paratha", slots: ["Breakfast"], days: ["Sat", "Sun"] },
-      { name: "Ragi dosa", slots: ["Breakfast"], for: [GS] }, { name: "Oats", slots: ["Breakfast"], for: [GS] },
-      { name: "Paratha roll", slots: ["Agastya's tiffin"] }, { name: "Besan cheela", slots: ["Agastya's tiffin"] }, { name: "Mini idli", slots: ["Agastya's tiffin"] },
-      { name: "Vegetable sandwich", slots: ["Agastya's tiffin"] }, { name: "Lemon rice", slots: ["Agastya's tiffin"], days: ["Fri"] },
-      { name: "Rice", slots: ["Lunch"] }, { name: "Sambar", slots: ["Lunch"] }, { name: "Sabji", slots: ["Lunch", "Dinner"] }, { name: "Dal", slots: ["Lunch", "Dinner"] },
-      { name: "Rajma chawal", slots: ["Lunch"], per_week: 2 }, { name: "Bisi bele bath", slots: ["Lunch"] }, { name: "Curd", slots: ["Lunch"] },
-      { name: "Roti", slots: ["Dinner"] }, { name: "Phulka", slots: ["Dinner"] }, { name: "Chapati", slots: ["Dinner"], often: "usually" }, { name: "Palak dal", slots: ["Dinner"] }, { name: "Bhindi", slots: ["Dinner"] },
-      { name: "Aloo gobi", slots: ["Dinner"] }, { name: "Chole", slots: ["Dinner"], per_week: 1 }, { name: "Curd rice", slots: ["Dinner"], for: ["Agastya"], often: "sometimes" },
+    rules: [
+      veg(/vegetarian/i), noEggs(/egg/i),
+      avoid("no_mushrooms", "No mushrooms", ["mushroom"], /mushroom/i),
+      avoid("nut_free_tiffin", "Agastya's tiffin nut-free", ["nuts"], /nut/i, { slots: ["Agastya's tiffin"] }),
+      { id: "thu_fast", title: "Gowri Shankar fasts Thursday till evening", hard: true, what: "fasting", who: GS, days: ["Thu"], slots: ["Breakfast", "Lunch"], fasting_food: [], quote: /fast/i },
+      avoid("no_sugar", "Gowri Shankar: no sugar", ["sugar"], /sugar/i, { who: GS }),
+      avoid("no_rice_night", "Gowri Shankar: no rice at night", ["white_rice"], /no rice at night|rice at night/i, { who: GS, slots: ["Dinner"] }),
+      note("less_rice", "less rice for Gowri Shankar", GS, /less rice/i),
+      { id: "millets_good", title: "millets are good for Gowri Shankar", hard: false, what: "swap", who: GS, items: ["white_rice"], to: "millet", frequency: "sometimes", quote: /millet/i, also: ["require"] },
+      note("less_salt", "less salt for Gowri Shankar", GS, /salt/i),
+      note("less_spicy_kid", "less spicy for Agastya", "Agastya", /spic/i),
+      { id: "cook_limit", title: "Lakshmi: breakfast plus at most two dishes for lunch", hard: false, hardAny: true, what: "cap", per_meal: 2, slots: ["Lunch"], days: MON_SAT, quote: /two dishes|an hour/i },
     ],
-    examples: [
-      { slot: "Breakfast", words: "a mixed breakfast - idli, dosa, poha, upma, sandwich", parts: 2, staple: /idli|dosa|poha|upma|sandwich|paratha|uttapam|pesarattu/i },
-      { slot: "Lunch", words: "south indian - rice, sambar, sabji, etc.", parts: 4, staple: /rice|bath/i },
-      { slot: "Dinner", words: "roti, gravy or dry sabji", parts: 3, staple: /roti|phulka|chapati|paratha/i },
+    seed: [
+      { slot: "Breakfast", dishes: ["Idli", "Chutney"] }, { slot: "Breakfast", dishes: ["Dosa", "Chutney"] }, { slot: "Breakfast", dishes: ["Poha"] },
+      { slot: "Breakfast", dishes: ["Upma", "Chutney"] }, { slot: "Breakfast", dishes: ["Idli", "Chutney"] }, { slot: "Breakfast", dishes: ["Aloo paratha"] },
+      { slot: "Agastya's tiffin", dishes: ["Paratha roll"] }, { slot: "Agastya's tiffin", dishes: ["Besan cheela"] }, { slot: "Agastya's tiffin", dishes: ["Mini idli"] },
+      { slot: "Agastya's tiffin", dishes: ["Vegetable sandwich"] }, { slot: "Agastya's tiffin", dishes: ["Lemon rice"] },
+      { slot: "Lunch", dishes: ["Rice", "Sambar", "Bhindi", "Curd"] }, { slot: "Lunch", dishes: ["Rajma chawal", "Curd"] }, { slot: "Lunch", dishes: ["Rice", "Dal", "Aloo gobi", "Curd"] },
+      { slot: "Lunch", dishes: ["Bisi bele bath", "Curd"] }, { slot: "Lunch", dishes: ["Rice", "Sambar", "Aloo gobi", "Curd"] },
+      { slot: "Dinner", dishes: ["Chapati", "Palak dal", "Bhindi"] }, { slot: "Dinner", dishes: ["Chapati", "Chole"] }, { slot: "Dinner", dishes: ["Chapati", "Dal", "Aloo gobi"] },
+      { slot: "Gowri Shankar's dinner", dishes: ["Phulka"] }, { slot: "Gowri Shankar's dinner", dishes: ["Phulka"] },
     ],
-    judgeNotes: ["Gowri Shankar fasts Thursday till evening: nothing for him at Thursday breakfast and lunch.", "Gowri Shankar: no sugar, less rice and no rice at night; millets good for him two or three times a week.",
+    judgeNotes: ["Gowri Shankar fasts Thursday till evening: he is not at Thursday breakfast and lunch.", "Gowri Shankar: no sugar, less rice and no rice at night (his own phulkas at dinner); millets good for him two or three times a week.",
       "Agastya's tiffin Monday to Friday, nut-free.", "Sunday lunch eaten out, Saturday dinner ordered in; Ankita cooks quick Sunday breakfast and dinner.", "Cook has an hour in the morning: breakfast plus at most two lunch dishes."],
   },
 };
