@@ -45,6 +45,7 @@ import { localDayStart, processTimezone, todayIn } from "../lib/local-day";
 import { gatherNewMail, EARLIER_MESSAGE_MARK, type GatherResult, type KeptMail } from "./gather";
 import { markHandedOver } from "./seen";
 import { recordHarvestRun } from "../platform-ops";
+import { harvestHourOf, isMemoryRunDue, routineSettings } from "./harvest-schedule";
 import { FamilyPushBatch, NAMING_SCHEMA, emailLabel, slugOf, type HeldTask, type ImportCallResult } from "../family/push";
 import { householdNames, personFirstName } from "../family/context";
 import { blockTaskGate, senderKindOf } from "../lib/task-gates";
@@ -168,6 +169,8 @@ export interface MemoryExtractionDeps {
   voiceFor?: (accountId: string) => { voice: string | null; voiceState: VoiceState };
   /** When a learning mailbox's voice settles (default voice/crawl.ts whenVoiceSettles); null when it is not learning. */
   voiceSettles?: (accountId: string) => Promise<void> | null;
+  /** The clock the cadence is asked on (default Date.now). */
+  now?: () => number;
 }
 
 /** The wake's voice: the block when there is one, else whether it is being learned. */
@@ -192,9 +195,15 @@ export async function runMemoryExtraction(ctx: RoutineCtx, deps: MemoryExtractio
   };
   const accounts = await routineAccounts(ctx);
   const failures: string[] = [];
+  // RULING R25: the built-in desk's cadence (harvest-schedule.ts). A run on new mail reads a mailbox only when a harvest is
+  // owed; "Run now" always reads. The run stamps the day at the moment it asked.
+  const now = (deps.now ?? Date.now)();
+  const hour = harvestHourOf(routineSettings(ctx.routine));
+  const manual = ctx.trigger === "manual";
   for (const { accountId, email } of accounts) {
+    if (!manual && !isMemoryRunDue(accountId, now, hour)) continue;
     try {
-      await runAccount(ctx, accountId, email, gather, handOver, voice, failures, true);
+      await runAccount(ctx, accountId, email, gather, handOver, voice, failures, true, now);
     } catch (e: any) {
       failures.push(`${accountId}: ${e?.message ?? String(e)}`);
     }
@@ -229,6 +238,8 @@ async function runAccount(
   voice: Voice,
   failures: string[],
   wake: boolean,
+  /** When the run asked whether the day was owed: the stamp a finished run records (the first read records its finish). */
+  stampAt?: number,
 ): Promise<"read" | "busy"> {
   const g = await gather(ctx, accountId);
   if (g.busy) {
@@ -307,7 +318,7 @@ async function runAccount(
   const woke = wake ? await wakeForOffers(ctx, accountId, voice, failures) : 0;
   // A run that read the mailbox and put every kept mail into memory is a finished harvest (last_harvest op). A failed chunk
   // leaves the day open.
-  if (failed === 0) recordHarvestRun(accountId);
+  if (failed === 0) recordHarvestRun(accountId, stampAt);
   say(accountId, `kept=${g.kept.length} extracted=${extracted.length} failed=${failed} woke=${woke}`);
   return "read";
 }

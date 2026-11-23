@@ -20,6 +20,7 @@ import {
 import { runFirstRead, FIRST_READ_WINDOW, _setLogForTesting } from "../routines/memory-extraction";
 import { removalRoutes } from "../removal";
 import { recordHarvestRun } from "../platform-ops";
+import { memoryCadence, _resetTickCadenceForTesting } from "../routines/harvest-schedule";
 import { putFollowUp } from "../routines/follow-up-store";
 import { THREAD_BODY_SEPARATOR } from "../lib/thread-format";
 import type { KeptMail } from "../routines/gather";
@@ -371,5 +372,22 @@ describe("delete my mail data", () => {
   test("the delete route reaches no platform call: memory and TODOs are not its to touch", () => {
     // removalRoutes takes no platform context, and its module imports neither the SDK's memory nor tasks.
     expect(removalRoutes.length).toBe(0);
+  });
+});
+
+describe("tick: the platform's harvest cadence (R25)", () => {
+  afterEach(() => { _resetTickCadenceForTesting(); });
+  test("a tick's cadence is what Build memory's runs are owed on; the routine's hour stays its own", async () => {
+    const { h, p } = hooks();
+    const harvest = { tz: "Europe/London", window: { days: [1, 2, 3, 4, 5], start: 8, end: 18 }, everyHours: 2, morningHour: 5, extraHours: [7] };
+    await h.tick!({ readRoutines: [], platform: p, harvest });
+    expect(memoryCadence(6)).toEqual({ ...harvest, morningHour: 6 });
+  });
+  test("a tick from an older Flock (no cadence) keeps the last one", async () => {
+    const { h, p } = hooks();
+    const harvest = { tz: "Asia/Kolkata", window: { days: [0, 1, 2, 3, 4, 5, 6], start: 9, end: 19 }, everyHours: 1, morningHour: 5 };
+    await h.tick!({ readRoutines: [], platform: p, harvest });
+    await h.tick!({ readRoutines: [], platform: p });
+    expect(memoryCadence(5).tz).toBe("Asia/Kolkata");
   });
 });

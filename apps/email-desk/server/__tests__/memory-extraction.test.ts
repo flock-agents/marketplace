@@ -14,8 +14,10 @@ import { join } from "path";
 import { openStore, _setStoreForTesting } from "../store";
 import { THREAD_BODY_SEPARATOR } from "../lib/thread-format";
 import {
-  memoryExtraction, runMemoryExtraction, wakeLine, EXTRACT_SERVABLE_ITEMS, _setLogForTesting,
+  memoryExtraction, runMemoryExtraction, runFirstRead, wakeLine, EXTRACT_SERVABLE_ITEMS, _setLogForTesting,
 } from "../routines/memory-extraction";
+import { noteTickCadence, _resetTickCadenceForTesting } from "../routines/harvest-schedule";
+import { recordHarvestRun } from "../platform-ops";
 import type { GatherResult, KeptMail } from "../routines/gather";
 import type { FamilyBlockWire, ImportPayload, MemoryExtractAnswer } from "@flock/app-sdk";
 
@@ -58,6 +60,10 @@ function fake(opts: {
   household?: string[];
   openTasks?: any[];
   wakeFails?: boolean;
+  /** The run's trigger: "manual" (Run now, never gated) unless a test asks for the cadence with "event". */
+  trigger?: "event" | "manual" | "scheduled";
+  values?: Record<string, unknown>;
+  now?: () => number;
 } = {}): Fake & { run: () => Promise<void> } {
   const f: Fake = { ctx: null, extracts: [], wakes: [], handed: [], imports: [], published: [], models: [], targetsCalls: 0,
     next: { kept: opts.kept ?? [], wakeFails: opts.wakeFails ?? false } };
@@ -103,8 +109,8 @@ function fake(opts: {
   }
   f.ctx = {
     routine: { id: "r1", appRoutineId: "memory-extraction", handler: "memory-extraction", agentId: opts.agentId ?? "pa-1", name: "Build memory",
-      accounts: opts.accounts ?? { gmail: ACCOUNT }, trigger: {}, values: {} },
-    trigger: "event",
+      accounts: opts.accounts ?? { gmail: ACCOUNT }, trigger: {}, values: opts.values ?? {} },
+    trigger: opts.trigger ?? "manual",
     platform,
     connectors: { exec: async () => ({ ok: false, reason: "unused" }) },
     wakeAgent: async (message: string, data: any) => {
@@ -119,6 +125,7 @@ function fake(opts: {
     handOver: (ids) => { f.handed.push([...ids]); },
     // The voice catch-up crawl is voice.test.ts's: here the mailbox has no voice and starts none.
     ensureVoice: async () => {},
+    ...(opts.now ? { now: opts.now } : {}),
   });
   return Object.assign(f, { run });
 }
@@ -132,6 +139,7 @@ beforeEach(() => {
   _setLogForTesting((line) => { logs.push(line); });
 });
 afterEach(() => {
+  _resetTickCadenceForTesting();
   _setLogForTesting(null);
   _setStoreForTesting(null);
   db.close();
@@ -367,6 +375,8 @@ describe("memory-extraction: the family calendar", () => {
     expect(f.imports[0]!.items[0]).toMatchObject({ ref: `gmail-thread:t-1#${EVENT_DAY}`, title: "Annual Day", who: "Agastya", start_time: "10:00",
       todos: [{ title: "Buy Agastya's farmer costume", due: DUE }] });
     expect(f.imports[0]).toMatchObject({ source: "email:email-desk-p1", label: "Shiva's email" });
+    // The facts it came from, so Flock marks them imported (R24).
+    expect(f.imports[0]!.items[0]!.factIds).toEqual(["t-1-f0"]);
     // The run's one naming call, on the Fast tier.
     expect(f.models).toHaveLength(1);
     expect(f.models[0]).toMatchObject({ tier: "fast" });
@@ -436,5 +446,75 @@ describe("memory-extraction: last_harvest", () => {
     const before = Date.now();
     await fake({ kept: [kept(1)] }).run();
     expect(Number(stamp())).toBeGreaterThanOrEqual(before);
+  });
+});
+
+describe("memory-extraction: when it runs (R25, the built-in desk's cadence)", () => {
+  // The platform's cadence as a tick hands it: every day 09:00-19:00 hourly, no shoulder runs, in India time.
+  const IST = "Asia/Kolkata";
+  const at = (hhmm: string) => Date.parse(`2026-11-24T${hhmm}:00+05:30`);
+  beforeEach(() => { noteTickCadence({ tz: IST, window: { days: [0, 1, 2, 3, 4, 5, 6], start: 9, end: 19 }, everyHours: 1, morningHour: 5 }); });
+
+  test("a new-mail run before the harvest hour reads nothing", async () => {
+    const f = fake({ kept: [kept(1)], trigger: "event", values: { harvestHour: 6 }, now: () => at("05:30") });
+    await f.run();
+    expect(f.extracts).toEqual([]);
+    expect(f.wakes).toEqual([]);
+  });
+
+  test("at the harvest hour it runs, once; the next hour of the window owes another", async () => {
+    let now = at("06:10");
+    const f = fake({ kept: [kept(1)], trigger: "event", values: { harvestHour: 6 }, now: () => now });
+    await f.run();
+    expect(f.extracts).toHaveLength(1);
+    now = at("06:40");
+    f.next.kept = [kept(2)];
+    await f.run();
+    expect(f.extracts).toHaveLength(1);
+    now = at("09:05");
+    await f.run();
+    expect(f.extracts).toHaveLength(2);
+  });
+
+  test("the routine's own harvest hour moves the morning run", async () => {
+    const early = fake({ kept: [kept(1)], trigger: "event", values: { harvestHour: 3 }, now: () => at("03:30") });
+    await early.run();
+    expect(early.extracts).toHaveLength(1);
+  });
+
+  test("with no hour set, 05:00", async () => {
+    const before = fake({ kept: [kept(1)], trigger: "event", now: () => at("04:50") });
+    await before.run();
+    expect(before.extracts).toEqual([]);
+    const after = fake({ kept: [kept(1)], trigger: "event", now: () => at("05:01") });
+    await after.run();
+    expect(after.extracts).toHaveLength(1);
+  });
+
+  test("Run now (manual) always runs", async () => {
+    const f = fake({ kept: [kept(1)], trigger: "manual", values: { harvestHour: 6 }, now: () => at("05:30") });
+    await f.run();
+    expect(f.extracts).toHaveLength(1);
+  });
+
+  test("a run that finished stamps the moment it asked", async () => {
+    const f = fake({ kept: [kept(1)], trigger: "event", values: { harvestHour: 6 }, now: () => at("06:10") });
+    await f.run();
+    const v = (db.query("SELECT value FROM app_meta WHERE key = ?").get(`last_harvest:${ACCOUNT}`) as { value: string }).value;
+    expect(Number(v)).toBe(at("06:10"));
+  });
+
+  test("the first read (lifecycle initialize) is never gated", async () => {
+    recordHarvestRun(ACCOUNT, Date.now());
+    const gated = fake({ kept: [kept(1)], trigger: "event" });
+    await gated.run();
+    expect(gated.extracts).toEqual([]);
+    const f = fake({ kept: [kept(1)] });
+    const outcome = await runFirstRead(f.ctx, ACCOUNT, "me@acme.com", {
+      gather: async () => ({ kept: [kept(1)], skipped: 0, cursor: "1", deferred: 0 } as GatherResult),
+      handOver: () => {},
+    });
+    expect(outcome).toBe("read");
+    expect(f.extracts).toHaveLength(1);
   });
 });

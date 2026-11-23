@@ -8,7 +8,8 @@ import { replyContext } from "./reply-context";
 import { platformOps } from "./platform-ops";
 import { voiceBlockOrNull } from "./voice/block";
 import { memoryExtraction } from "./routines/memory-extraction";
-import { followUp } from "./routines/follow-up";
+import { followUp, followUpConfig } from "./routines/follow-up";
+import { harvestHourOf } from "./routines/harvest-schedule";
 
 export const allOps: Record<string, OpHandler> = {
   ...draftOps,
@@ -20,4 +21,11 @@ export const allOps: Record<string, OpHandler> = {
 export const routineHandlers: Record<string, RoutineHandler> = {
   "memory-extraction": memoryExtraction,
   "follow-up": (ctx) => followUp(ctx),
+};
+
+/** The hour each routine's handler runs its day at, read from its settings: what the manifest's `workSchedule.hourKey`
+ *  offers the person (contract.test.ts holds the two together). */
+export const routineHours: Record<string, (settings: Record<string, unknown>) => number> = {
+  "memory-extraction": harvestHourOf,
+  "follow-up": (settings) => followUpConfig(settings).hour,
 };

@@ -4,7 +4,7 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync, readdirSync, readFileSync } from "fs";
 import { join } from "path";
-import { allOps, routineHandlers } from "../registry";
+import { allOps, routineHandlers, routineHours } from "../registry";
 import { createEmailDeskHooks } from "../lifecycle";
 
 const ROOT = join(import.meta.dir, "../..");
@@ -42,6 +42,20 @@ describe("routines: the manifest and the server agree", () => {
     const named = manifest.routines.map((r: { handler: string }) => r.handler);
     expect(sorted(named)).toEqual(sorted(Object.keys(routineHandlers)));
     for (const h of named) expect(typeof routineHandlers[h]).toBe("function");
+  });
+
+  test("a routine's workSchedule.hourKey is the setting its handler runs its day at", () => {
+    const scheduled = manifest.routines.filter((r: { workSchedule?: { hourKey?: string } }) => r.workSchedule?.hourKey);
+    expect(scheduled.length).toBeGreaterThan(0);
+    for (const r of scheduled) {
+      const key: string = r.workSchedule.hourKey;
+      expect(r.configSchema.map((c: { key: string }) => c.key)).toContain(key);
+      const hourOf = routineHours[r.handler];
+      expect(typeof hourOf).toBe("function");
+      for (const h of [0, 7, 13, 23]) expect({ routine: r.id, hour: hourOf!({ [key]: h }) }).toEqual({ routine: r.id, hour: h });
+      const fallback = r.configSchema.find((c: { key: string }) => c.key === key).default;
+      expect({ routine: r.id, hour: hourOf!({}) }).toEqual({ routine: r.id, hour: fallback });
+    }
   });
 
   test("memory-extraction wakes the agent with a prompt that names both skills", () => {
@@ -113,7 +127,8 @@ describe("owner-facing copy", () => {
   });
 
   test("the routine descriptions say when they run", () => {
-    expect(routine("memory-extraction").description).not.toMatch(/once a day/i);
+    expect(routine("memory-extraction").description).toMatch(/hour you pick/i);
+    expect(routine("memory-extraction").description).toMatch(/every hour/i);
     expect(routine("memory-extraction").description).toMatch(/new mail/i);
     expect(routine("follow-up").description).toMatch(/new mail/i);
     expect(routine("follow-up").description).toMatch(/once a day/i);

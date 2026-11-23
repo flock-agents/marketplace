@@ -32,6 +32,13 @@ export function recordHarvestRun(accountId: string, at = Date.now()): void {
   );
 }
 
+/** Epoch ms of this mailbox's last finished memory run, or null (routines/harvest-schedule.ts reads it). */
+export function lastHarvestRunAt(accountId: string): number | null {
+  const row = getStore().query("SELECT value FROM app_meta WHERE key = ?").get(lastHarvestKey(accountId)) as { value: string } | null;
+  const at = row ? Number(row.value) : NaN;
+  return Number.isFinite(at) && at > 0 ? at : null;
+}
+
 const parseJson = (v: unknown): Record<string, unknown> => {
   if (typeof v !== "string" || !v) return {};
   try { const o = JSON.parse(v); return o && typeof o === "object" && !Array.isArray(o) ? o : {}; } catch { return {}; }

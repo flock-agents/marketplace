@@ -27,6 +27,7 @@ import { lastHarvestKey } from "./platform-ops";
 import { runFirstRead } from "./routines/memory-extraction";
 import { runVoiceCrawl, whenVoiceSettles } from "./voice/crawl";
 import { routineCtxFor } from "./routine-ctx";
+import { noteTickCadence } from "./routines/harvest-schedule";
 import { settleRepliedFollowUps } from "./routines/follow-up";
 import { listFollowUps } from "./routines/follow-up-store";
 import { describeMailboxProgress, type MailboxInitStatus } from "./lib/mailbox-progress";
@@ -284,6 +285,8 @@ export function createEmailDeskHooks(deps: LifecycleDeps = {}): AppLifecycleHook
     // Not here, because they need Flock's board rows: closing reply cards whose draft was sent or discarded outside Flock
     // (owed-mail-checks), and the daily harvest and follow-up passes, which Flock hands to the routines when due.
     async tick(ctx: TickContext) {
+      // The platform's harvest cadence (window, interval, shoulder runs): Build memory's runs are owed on it (R25).
+      noteTickCadence(ctx.harvest);
       const db = getStore();
       const platform = ctx.platform;
       const mailboxes = await mailboxesOf(platform);

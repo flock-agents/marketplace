@@ -44,7 +44,7 @@
     {
       "id": "memory-extraction",
       "name": "Build memory",
-      "description": "Runs on new mail: reads it into your assistant's memory and finds the mail that may want a reply from you. Nothing sends.",
+      "description": "Each day at the hour you pick, then every hour through your day: reads your new mail into your assistant's memory and finds the mail that may want a reply from you. Nothing sends.",
       "trigger": {
         "connectorId": "gmail",
         "eventId": "new-mail"
