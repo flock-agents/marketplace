@@ -393,6 +393,27 @@ describe("make_plan: every day is planned", () => {
     // The menu is told the family cooks that day.
     const sunBreakfast = f.firsts().find((a) => a.user.slot === "Breakfast")!.user.meals.find((m: any) => m.day === "Sun");
     expect(sunBreakfast.cook).toContain("the family cooks");
+    // A meal is made simpler only by a rule the family said (live run 2026-11-23: "quick and simple" on every meal of a family
+    // that cooks every day gave one light dish a lunch).
+    expect(JSON.stringify(f.firsts().map((a) => a.user))).not.toMatch(/quick|simple/i);
+  });
+
+  it("the family's own words for what a meal looks like go with that meal's menu call and its fixes, and no other", async () => {
+    const f = fakeModel({ menu: (u, n) => {
+      if (u.slot !== "Lunch" || n > 1) return rotate(u);
+      const r = rotate(u) as any;
+      r.meals[0].dishes = [];
+      return r;
+    } });
+    const k = await family(f.model);
+    await k.owner("POST", "/api/family/meal-examples", { examples: [{ slot: "lunch", group: "adults", words: "Rajma with rice and a salad" }, { slot: "Lunch", group: "children", words: "Kadhi chawal" }] });
+    const r = await k.plan();
+    expect(r.ok).toBe(true);
+    const lunch = f.firsts().find((a) => a.user.slot === "Lunch")!.user;
+    expect(lunch.typical_meal).toEqual([{ for: "adults", words: "Rajma with rice and a salad" }, { for: "children", words: "Kadhi chawal" }]);
+    expect(f.fixes().find((a) => a.user.slot === "Lunch")!.user.typical_meal).toEqual(lunch.typical_meal);
+    expect(f.firsts().find((a) => a.user.slot === "Dinner")!.user.typical_meal).toBeUndefined();
+    expect(f.menus()[0].req.system).toContain("typical_meal, when given");
   });
 });
 

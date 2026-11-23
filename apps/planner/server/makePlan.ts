@@ -86,7 +86,7 @@ export function slotNeeds(c: WeekContext, today: string): SlotNeed[] {
       const fam = Object.entries(c.family_dishes).find(([s]) => same(s, slot))?.[1] ?? [];
       const order = h.order_in.find((o) => o.day === day && same(o.slot, slot));
       const visit = h.cook_visits.find((v) => v.meals?.some((m) => same(m, slot)));
-      const cook = !h.cook_name ? "the family cooks" : !h.cook_days.includes(day as never) ? `${h.cook_name} does not come: the family cooks, so dishes quick and simple to make`
+      const cook = !h.cook_name ? "the family cooks" : !h.cook_days.includes(day as never) ? `${h.cook_name} does not come: the family cooks`
         : visit ? `${h.cook_name} cooks it (comes at ${visit.at})` : `${h.cook_name} comes${h.cook_visits.length ? ` at ${h.cook_visits.map((v) => v.at).join(" and ")}` : ""}`;
       out.push({ key: keyOf(date, slot), date, day, slot, who, cook,
         rules: h.rules.filter((r) => ruleHolds(r, day, slot, who)).map(ruleWords),
@@ -192,6 +192,7 @@ export const MENU_SYSTEM = [
   "for: [\"everyone\"] (everyone who eats that meal) or the names of the people who eat it. A dish is for [\"everyone\"] unless one person has their own: their dish for [them], and the shared dish for [\"everyone\"] with except: [them].",
   "Everyone who eats a meal has a main dish there, not only rice, roti or sides like chutney and curd. Never put the family's main dish for one person.",
   "Every rule listed on a meal must hold there. A main dish is on two days of the week at most (roti, rice, plain dal and sides like chutney, curd come back freely; sambar and rasam are mains).",
+  "typical_meal, when given: what this meal looks like in this home, in the family's own words (for the children and the adults, when they differ). Plan each meal shaped like it: the same kind and number of parts, from the family's own dishes.",
   "How to plan:",
   PLAN_METHOD,
 ].join("\n");
@@ -200,6 +201,7 @@ const FIX_SYSTEM = [
   "You fix some meals of an Indian family's week plan. Answer with JSON only, as the schema says: { meals: [{ date, slot, dishes: [{ name, for, except?, portion_note? }] }] }.",
   "Send back ONLY the meals listed in `fix`, each one whole (all its dishes), changed so that every reason given for it is gone. Do not send any other meal: the rest of the week stays as it is (`rest_of_week`, to keep the variety).",
   "for: [\"everyone\"] or the names; a person's own dish is for [them] and the shared one is for [\"everyone\"] with except: [them]. Everyone who eats a meal has a main dish there; never put the family's main dish for one person. A person in a meal's `fasts` eats nothing there. A main dish is on two days of the week at most.",
+  "typical_meal, when given: what this meal looks like in this home, in the family's words. Keep each meal shaped like it.",
 ].join("\n");
 
 /** The family as the model needs it: who, and what each person said about how they eat. */
@@ -492,13 +494,18 @@ async function planWeek(deps: MakePlanDeps & { log: (line: string) => void }, in
   const known = c.known_dishes.map((k) => Object.fromEntries(Object.entries({ dish: k.dish, rating: k.rating, note: k.note }).filter(([, v]) => v != null)));
   const slots = [...new Set(toPlan.map((n) => n.slot))];
   const famOf = (slot: string) => Object.entries(c.family_dishes).find(([s]) => same(s, slot))?.[1] ?? [];
+  /** The family's own words for what this meal looks like (the setup's), for the menu to shape it by. */
+  const typical = (slot: string) => {
+    const xs = c.house.meal_examples.filter((x) => same(x.slot, slot)).map((x) => (x.group ? { for: x.group, words: x.words } : { words: x.words }));
+    return xs.length ? xs : undefined;
+  };
   const firstAsk = (slot: string, mine: SlotNeed[]) => ({ tier: "balanced" as const, purpose: `meal plan: the week's ${slot}`, system: MENU_SYSTEM, schema: MENU_SCHEMA,
     maxTokens: menuTokens(mine.length),
-    user: JSON.stringify({ week_start: weekStart, slot, meals: mine.map(mealAsked), people: family, cook, family_dishes: famOf(slot),
+    user: JSON.stringify({ week_start: weekStart, slot, typical_meal: typical(slot), meals: mine.map(mealAsked), people: family, cook, family_dishes: famOf(slot),
       last_week: c.last_week.filter((m) => same(m.slot, slot)), known_dishes: known, house_notes: c.house.notes ?? undefined }) });
   const fixAsk = (slot: string, bad: SlotNeed[]) => ({ tier: "balanced" as const, purpose: `meal plan: fix the ${slot}`, system: FIX_SYSTEM, schema: MENU_SCHEMA,
     maxTokens: fixTokens(bad.length),
-    user: JSON.stringify({ week_start: weekStart, slot,
+    user: JSON.stringify({ week_start: weekStart, slot, typical_meal: typical(slot),
       fix: bad.map((n) => ({ ...mealAsked(n), family_dishes: n.family_dishes.map((d) => d.dish), now: menu.get(n.key)?.dishes ?? [], wrong: problems.get(n.key)!.map((p) => p.text) })),
       rest_of_week: toPlan.filter((n) => !problems.has(n.key)).map((n) => ({ date: n.date, slot: n.slot, dishes: (menu.get(n.key)?.dishes ?? []).map((d) => d.name) })),
       people: family }) });
