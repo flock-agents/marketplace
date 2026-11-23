@@ -45,6 +45,7 @@ const HOME_SCHEMA = {
     orderIn: { type: "array", items: { type: "object", required: ["day", "slot"], properties: { day: STR, slot: STR, note: OPT_STR } } },
     groceryApps: { type: "object", properties: { main: OPT_STR, fallback: OPT_STR } },
     subscriptions: { type: "array", items: { type: "object", required: ["item"], properties: { item: STR, source: STR, note: OPT_STR } } },
+    meals: { type: "array", items: { type: "object", required: ["slot", "words"], properties: { slot: STR, group: { type: ["string", "null"], enum: ["children", "adults", null] }, words: STR } } },
   },
 };
 const RULES_SCHEMA = {
@@ -90,8 +91,9 @@ const HOME_PART = `Write this part: who eats at home, the cook, who cooks when t
 - orderIn: every regular meal not cooked at home because it is ordered in or eaten out: { day, slot, note: "eaten out" or "ordered from Swiggy" }. "Sunday lunch we eat out" is orderIn { Sun, Lunch, "eaten out" } only: Sunday's other meals are still cooked. "We don't cook on Sunday, we go to my parents'" is all three Sunday meals.
 - groceryApps: main and fallback, each one of zepto, swiggy-instamart, zomato-blinkit, bigbasket, amazon, or null.
 - subscriptions: what comes on a subscription: { item, source, note } ("milk", "Country Delight", "1 litre every morning").
+- meals: what each meal looks like in this home, in the family's own words, from their answers about what they eat: { slot, group, words }. slot: Breakfast, Lunch, Dinner, a child's tiffin as "<child>'s tiffin", "Evening snack". group: "children" or "adults" when the family described that meal for the two apart (one entry each), else left out. words: copied character for character from ONE A line, the part of it about that meal only, all of that part (what the meal is made of, what comes back on which days). Never your own words; a meal the family did not describe has no entry.
 Food rules and dishes are not this part: other readers write them.`;
-const HOME_EXAMPLE = `gives people [{ Arjun, adult }, { Divya, adult, wife }, { Tara, child, 8 }, { Lalitha, elder, 72, mother-in-law }], cook { name "Sunita", days Mon..Fri, visits [{ at "08:30", meals [Breakfast, Lunch] }, { at "17:00", meals [Dinner] }] }, homeCook [{ day Sat, slots [Breakfast, Lunch, Dinner], by "Divya" }], orderIn [{ Sun, Lunch, "eaten out" }, { Sun, Dinner, "ordered from Zomato" }] (Sunday breakfast is still cooked at home: nobody said otherwise), slots [{ "Tara's tiffin", Mon..Fri, ["Tara"], quote "Tara's tiffin" }, { "Evening snack", quote "a snack at 5" (no names: everyone, for left out) }], groceryApps { main zomato-blinkit }, subscriptions [{ milk, Country Delight, every morning }].`;
+const HOME_EXAMPLE = `gives people [{ Arjun, adult }, { Divya, adult, wife }, { Tara, child, 8 }, { Lalitha, elder, 72, mother-in-law }], cook { name "Sunita", days Mon..Fri, visits [{ at "08:30", meals [Breakfast, Lunch] }, { at "17:00", meals [Dinner] }] }, homeCook [{ day Sat, slots [Breakfast, Lunch, Dinner], by "Divya" }], orderIn [{ Sun, Lunch, "eaten out" }, { Sun, Dinner, "ordered from Zomato" }] (Sunday breakfast is still cooked at home: nobody said otherwise), slots [{ "Tara's tiffin", Mon..Fri, ["Tara"], quote "Tara's tiffin" }, { "Evening snack", quote "a snack at 5" (no names: everyone, for left out) }], groceryApps { main zomato-blinkit }, subscriptions [{ milk, Country Delight, every morning }], meals [{ "Tara's tiffin", words "sandwiches or poha" }].`;
 
 const RULES_PART = `Write this part: the family's food rules.
 - rules: the family's food rules, one per thing they said: what must or must not be eaten. What someone usually eats ("milk every morning", "curd rice when he's tired") is no rule: it is a dish, or nothing. kind is one of:
@@ -132,6 +134,7 @@ const RETRY_FLOOR_MS = 30_000;
 
 type Visit = { at: string; meals?: string[] };
 export type Profile = {
+  meals: { slot: string; group?: "children" | "adults"; words: string }[];
   people: { name: string; group: string; age?: number; relationship?: string }[];
   cook: { name: string; days: Weekday[]; visits: Visit[]; timeLimit?: string; newRecipes?: "open" | "set_menu"; note?: string } | null;
   homeCook: { day: Weekday; slots: string[]; by: string; note?: string }[];
@@ -223,6 +226,10 @@ export function profileOf(json: unknown): Profile {
     groceryApps: { main: isObject(j.groceryApps) ? str(j.groceryApps.main) || null : null, fallback: isObject(j.groceryApps) ? str(j.groceryApps.fallback) || null : null },
     subscriptions: arr(j.subscriptions).filter(isObject).filter((s) => str(s.item)).map((s) => ({ item: str(s.item), source: str(s.source), ...opt("note", s.note) })),
     unplaced: arr(j.unplaced).filter(isObject).filter((u) => str(u.text)).map((u) => ({ text: str(u.text), ...opt("quote", u.quote) })),
+    meals: arr(j.meals).filter(isObject).filter((m) => str(m.slot) && str(m.words)).map((m) => {
+      const g = str(m.group).toLowerCase();
+      return { slot: str(m.slot), ...(g === "children" || g === "adults" ? { group: g as "children" | "adults" } : {}), words: str(m.words) };
+    }),
   };
 }
 
@@ -231,8 +238,8 @@ export function profileOf(json: unknown): Profile {
 /** Lower case, letters and digits only, one space between words. */
 export const plainWords = (s: string): string => s.toLowerCase().replace(/[’']/g, "").replace(/[^\p{L}\p{N}]+/gu, " ").trim();
 
-/** Every line the family said: the transcript's replies (A:) and every text value of the household facts. */
-export function familyLines(transcript: string[], household: unknown): string[] {
+/** Every line the family said, as written: the transcript's replies (A:) and every text value of the household facts. */
+function familyText(transcript: string[], household: unknown): string[] {
   const out = transcript.filter((l) => /^A\d*:/i.test(l)).map((l) => l.replace(/^A\d*:\s*/i, ""));
   const walk = (v: unknown): void => {
     if (typeof v === "string") out.push(v);
@@ -240,7 +247,16 @@ export function familyLines(transcript: string[], household: unknown): string[] 
     else if (isObject(v)) Object.values(v).forEach(walk);
   };
   walk(household);
-  return out.map(plainWords).filter(Boolean);
+  return out;
+}
+/** Every line the family said, in plain words. */
+export function familyLines(transcript: string[], household: unknown): string[] {
+  return familyText(transcript, household).map(plainWords).filter(Boolean);
+}
+/** Every sentence or clause the family said, in plain words: "Same as Ravi most days - idli, dosa" is two, so a dish is not
+ *  taken as the person named in the clause before it. */
+export function familyClauses(transcript: string[], household: unknown): string[] {
+  return familyText(transcript, household).flatMap((l) => l.split(/[.;:!?\n—–]+|\s-\s/)).map(plainWords).filter(Boolean);
 }
 
 const FILLER = new Set(["a", "an", "the", "has", "have", "had", "is", "are", "was", "be", "at", "to", "for", "of", "in", "on", "and", "or", "too", "also",
@@ -369,6 +385,19 @@ export async function applySetup(deps: { db: Db; model: ModelCall; post: Post; h
     return names.find((n) => same(n, t)) ?? names.find((n) => same(n.split(/\s+/)[0], t) || same(t.split(/\s+/)[0], n))
       ?? family.find((x) => x.relationship && same(x.relationship, t))?.name ?? closest(t, names);
   };
+  /** Does one of `lines` (plain words) name this person: their name, first name, relationship or group word, "I"/"me" for the
+   *  speaker, and with `pronouns` a "he"/"she" ("curd rice when he's tired"). */
+  const namedIn = (lines: string[], w: string, pronouns = false): boolean => {
+    const t = plainWords(w);
+    const has = (l: string, r: string) => ` ${l} `.includes(` ${r} `);
+    if (GROUP_WORDS[t]) return lines.some((l) => has(l, t));
+    const n = personOf(w);
+    const fam = family.find((x) => x.name === n);
+    const refs = [...new Set([t, ...(fam ? [plainWords(fam.name), plainWords(fam.name).split(" ")[0], ...(fam.relationship ? [plainWords(fam.relationship)] : [])] : []),
+      ...(fam && speaker && same(fam.name, speaker) ? ["i", "me", "my", "myself"] : []),
+      ...(pronouns ? ["he", "hes", "him", "his", "she", "shes", "her"] : [])])].filter(Boolean);
+    return lines.some((l) => refs.some((r) => has(l, r)));
+  };
   /** Who a list names, as Family page names: a group word is its people; "everyone" is no one in particular (all). */
   const whoOf = (ws: string[]): { names: string[]; unknown: string[] } => {
     const out = new Set<string>(), unknown: string[] = [];
@@ -414,15 +443,7 @@ export async function applySetup(deps: { db: Db; model: ModelCall; post: Post; h
     // school child's.
     const q = plainWords(s.quote ?? "");
     const lines = q.length >= 3 && said.some((l) => l.includes(q)) ? said.filter((l) => l.includes(q)) : said.filter(hasKind);
-    const named = /tiffin|lunch ?box/i.test(s.name) ? s.for : s.for.filter((w) => {
-      const t = plainWords(w);
-      if (GROUP_WORDS[t]) return lines.some((l) => ` ${l} `.includes(` ${t} `));
-      const n = personOf(w);
-      const fam = family.find((x) => x.name === n);
-      const refs = [...new Set([t, ...(fam ? [plainWords(fam.name), plainWords(fam.name).split(" ")[0], ...(fam.relationship ? [plainWords(fam.relationship)] : [])] : []),
-        ...(fam && speaker && same(fam.name, speaker) ? ["i", "me", "my", "myself"] : [])])].filter(Boolean);
-      return lines.some((l) => refs.some((r) => ` ${l} `.includes(` ${r} `)));
-    });
+    const named = /tiffin|lunch ?box/i.test(s.name) ? s.for : s.for.filter((w) => namedIn(lines, w));
     if (named.length < s.for.length) noted.push(`${s.name}: no names said with it, so it is for everyone`);
     const who = whoOf(named.length === s.for.length ? s.for : []);
     if (who.unknown.length) noted.push(`${s.name}: ${who.unknown.join(", ")} is not on the Family page, so it is for everyone`);
@@ -530,10 +551,19 @@ export async function applySetup(deps: { db: Db; model: ModelCall; post: Post; h
     }
   }
 
-  // 5. The family's dishes: one row a dish (a dish sent again takes the meals and eaters sent), then each alone.
+  // 5. The family's dishes: one row a dish (a dish sent again takes the meals and eaters sent), then each alone. A dish of
+  // Breakfast, Lunch or Dinner is someone's only when the family's sentence that names it names them (owner, 23 Nov: the
+  // question's group only splits the asking; live run: the dishes of the answer about the adults saved as two people's).
+  // A dish named in no sentence as read (renamed) keeps who the reader gave.
+  const clauses = familyClauses(deps.transcript, deps.household);
   const rows: DishRow[] = [];
   for (const d of p.dishes) {
     if (DRINKS.test(d.name)) continue;
+    const key = plainWords(d.name), withDish = clauses.filter((l) => ` ${l} `.includes(` ${key} `) || ` ${l} `.includes(` ${key}s `));
+    if (d.for.length && withDish.length && d.slots.every((s) => SLOTS.some((x) => same(x, s)))) {
+      const kept = d.for.filter((w) => EVERYONE.test(w.trim()) || namedIn(withDish, w, true));
+      if (kept.length < d.for.length) d.for = kept;
+    }
     const found: (string | null)[] = [];
     for (const s of d.slots) found.push(await tiffinOf(s, d.for[0]));
     const slots = [...new Set(found.filter((s): s is string => !!s))];
@@ -544,6 +574,21 @@ export async function applySetup(deps: { db: Db; model: ModelCall; post: Post; h
   for (const d of mergeDishes(rows, names)) {
     const res = await deps.post("/api/dish-book/family", { dishes: [{ name: d.name, slots: d.slots, ...(d.who ? { for: d.who } : {}) }] });
     if (!res.ok) noted.push(`${d.name}: not saved (${res.reason})`);
+  }
+
+  // 5b. What each meal looks like here, in the family's own words (owner, 23 Nov: the week is planned in the family's own
+  // shape of a meal; live run: every lunch one light dish where the family said "rice, sambar or dal, one dry sabzi, curd").
+  // Only words the family said are kept.
+  const examples: { slot: string; group?: string; words: string }[] = [];
+  for (const m of p.meals) {
+    if (!saidByFamily(m.words, said)) { dropped.push(`what ${m.slot} looks like ("${m.words}"): not the family's words`); continue; }
+    const slot = await tiffinOf(m.slot);
+    if (!slot) continue;
+    examples.push({ slot, ...(m.group ? { group: m.group } : {}), words: m.words });
+  }
+  if (examples.length) {
+    const res = await deps.post("/api/family/meal-examples", { examples });
+    if (!res.ok) noted.push(`what your meals look like: not saved (${res.reason})`);
   }
 
   // 6. Shopping apps and subscriptions.

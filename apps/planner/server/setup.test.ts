@@ -176,6 +176,52 @@ describe("apply_setup: the model reads, code writes", () => {
   // Live run 2026-11-23: the dishes named in the adults' answer were saved as the adults' (rice, sambar, curd for two people),
   // and a dish read in two answers kept only the last one's eaters ("Chapati" the child's only). A question's group only
   // splits the asking; the same dish read twice is one dish.
+  it("a dish is someone's only when the family's sentence that names it names them: the question's group is not who eats it", async () => {
+    const transcript = [...TRANSCRIPT,
+      "Q: What did the children have for breakfast over the past week?",
+      "A: Upma twice, dosa, and Padma had ragi dosa.",
+      "Q: The adults' dinner over the past week?",
+      "A: Same as Ishaan most days - phulka with dal. Curd rice when he's tired.",
+    ];
+    const f = fake(PROFILE, { dishes: { dishes: [["Upma", "Breakfast", "Ishaan"], ["Dosa", "Breakfast", "Ishaan"], ["Ragi dosa", "Breakfast", "Padma"],
+      ["Phulka", "Dinner", "Kiran, Nisha"], ["Dal", "Dinner", "Ishaan"], ["Curd rice", "Dinner", "Ishaan"], ["Sandwich", "Tiffin", "Ishaan"]] } });
+    const k = await boot({ model: f.model });
+    const r = await k.op("apply_setup", { household: HOUSEHOLD, transcript });
+    expect(r.ok).toBe(true);
+    const book = k.rows("dish_book").filter((d) => d.slots).map((d) => [d.name, d.eaten_by ? JSON.parse(d.eaten_by) : null]);
+    expect(book).toContainEqual(["Upma", null]);
+    expect(book).toContainEqual(["Dosa", null]);
+    expect(book).toContainEqual(["Ragi dosa", ["Padma"]]);
+    expect(book).toContainEqual(["Phulka", null]);
+    expect(book).toContainEqual(["Dal", null]);   // "Same as Ishaan" is its own sentence
+    expect(book).toContainEqual(["Curd rice", ["Ishaan"]]);   // "when he's tired"
+    expect(book).toContainEqual(["Sandwich", ["Ishaan"]]);   // a tiffin dish keeps its child
+  });
+
+  // Owner, 23 Nov: the week is planned in the family's own shape of a meal. The home reader copies each meal's description
+  // from the family's replies; code keeps only the family's words and saves them on the house.
+  it("what each meal looks like is saved in the family's words, per group when told apart; words they never said are dropped", async () => {
+    const transcript = [...TRANSCRIPT,
+      "Q: The adults' lunch over the past week?",
+      "A: Roti, a dal, one vegetable, salad. Pulao on Sunday.",
+      "Q: The children's lunch over the past week?",
+      "A: Khichdi most days.",
+    ];
+    const f = fake({ ...PROFILE, meals: [{ slot: "Lunch", group: "adults", words: "Roti, a dal, one vegetable, salad. Pulao on Sunday." },
+      { slot: "lunch", group: "children", words: "Khichdi most days." }, { slot: "Dinner", words: "a hearty three-course dinner with dessert" },
+      { slot: "Tiffin", group: null, words: "nut-free" }] });
+    const k = await boot({ model: f.model });
+    const r = await k.op("apply_setup", { household: HOUSEHOLD, transcript });
+    expect(r.ok).toBe(true);
+    expect(f.sys("home")).toContain("meals: what each meal looks like in this home");
+    const h = (await k.owner("GET", "/api/family")).body.house;
+    expect(h.meal_examples).toEqual([{ slot: "Lunch", group: "adults", words: "Roti, a dal, one vegetable, salad. Pulao on Sunday." },
+      { slot: "Lunch", group: "children", words: "Khichdi most days." }, { slot: "Ishaan's tiffin", words: "nut-free" }]);
+    expect(r.dropped.join("\n")).toContain("a hearty three-course dinner");
+    // Nothing of it in the read-back.
+    expect(r.said).not.toContain("Khichdi");
+  });
+
   it("the same dish read in several rows is one dish: its meals and eaters joined, everyone's when any row is", async () => {
     const f = fake(PROFILE, { dishes: { dishes: [["Rice", "Lunch", "Kiran, Nisha"], ["Rice", "Lunch", "Ishaan"], ["Chapati", "Dinner", "Ishaan"], ["chapati", "Dinner", ""],
       ["Dal", "Lunch", "Kiran"], ["Dal", "Dinner", "Padma"], ["Curd", "Lunch", "Kiran, Nisha, Ishaan, Padma"], ["Sandwich", "Tiffin", "Ishaan"]] } });

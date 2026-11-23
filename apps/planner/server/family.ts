@@ -22,14 +22,17 @@ export type HouseRow = typeof house.$inferSelect;
 export type HouseRule = Rule & { kind: (typeof RULE_KINDS)[number] };
 export type ExtraSlot = { name: string; days?: Weekday[]; for?: string[] };
 export type OrderIn = { day: Weekday; slot: string; note?: string };
+/** What one meal looks like in this home, in the family's own words from the setup ("Rice, dal, a dry sabzi, curd"), for one
+ *  group when the family told the children's and the adults' apart. The week's menu is shaped like it. */
+export type MealExample = { slot: string; group?: "children" | "adults"; words: string };
 /** One visit of the cook: when they come, and the meals that visit makes when the family said. */
 export type CookVisit = { at: string; meals?: string[] };
 /** The house row with its lists read: what the routes answer with. */
 /** No cooking days: every day is planned (owner, 23 Nov: many families cook every day themselves, and Sunday needs a plan too).
  *  A day the cook does not come is cooked by the family; a meal not cooked at home is one in `order_in`, said by the family.
  *  The old `cooking_days` column is no longer read. */
-export type HouseView = Omit<HouseRow, "rules" | "cook_days" | "extra_slots" | "order_in" | "cooking_days" | "connected_apps" | "history_synced"> &
-  { rules: HouseRule[]; cook_days: Weekday[]; cook_visits: CookVisit[]; extra_slots: ExtraSlot[]; order_in: OrderIn[];
+export type HouseView = Omit<HouseRow, "rules" | "cook_days" | "extra_slots" | "order_in" | "meal_examples" | "cooking_days" | "connected_apps" | "history_synced"> &
+  { rules: HouseRule[]; cook_days: Weekday[]; cook_visits: CookVisit[]; extra_slots: ExtraSlot[]; order_in: OrderIn[]; meal_examples: MealExample[];
     connected_apps: GroceryApp[]; history_synced: HistorySynced };
 /** How far each app's order history was read, by reader: whoever gave the orders (`agent:<id>`, a person's own agent reading
  *  that person's account). `*` is a date kept before readers were told apart. */
@@ -76,7 +79,7 @@ export function houseView({ cooking_days: _old, ...row }: HouseRow): HouseView {
   const visits = cookVisits(row.cook_arrival);
   // cook_arrival stays one time for whoever reads it as before (the first visit); cook_visits is every visit.
   return { ...row, cook_arrival: visits[0]?.at ?? null, cook_visits: visits, rules: list(row.rules), cook_days: list(row.cook_days), extra_slots: list(row.extra_slots), order_in: list(row.order_in),
-    connected_apps: list<GroceryApp>(row.connected_apps), history_synced: historySynced(row.history_synced) };
+    meal_examples: list<MealExample>(row.meal_examples), connected_apps: list<GroceryApp>(row.connected_apps), history_synced: historySynced(row.history_synced) };
 }
 
 /** One of the app's settings as saved, else its default. */
@@ -488,5 +491,26 @@ export function mountFamilyRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: { a
     if (!Object.keys(set).length) refuse("give extra_slots or order_in");
     const saved = saveHouse(set, by);
     return { body: { ...saved.body, said: slotsSaid(saved.body.house) } };
+  });
+
+  // The setup's meal examples { examples: [{ slot, group?, words }] }: what each meal looks like in this home, in the family's
+  // words; an example of the same slot and group in place of the one there. The week's menu is planned in their shape.
+  write("/api/family/meal-examples", (b, by) => {
+    const shape = "examples must be a list of { slot, group?: children | adults, words }";
+    if (!Array.isArray(b.examples) || !b.examples.length) refuse(shape);
+    const had = houseView(getHouse(db));
+    const slots = [...SLOTS, ...had.extra_slots.map((s) => s.name)];
+    const given = (b.examples as unknown[]).map((e): MealExample => {
+      if (!isObject(e)) return refuse(shape);
+      const slot = slots.find((s) => typeof e.slot === "string" && s.toLowerCase() === e.slot.trim().toLowerCase())
+        ?? refuse(`slot ${JSON.stringify(e.slot)} is not a meal (${slots.join(", ")})`);
+      const group = e.group == null || e.group === "" ? undefined : e.group === "children" || e.group === "adults" ? e.group : refuse("group is children, adults or left out");
+      const text = typeof e.words === "string" ? e.words.trim() : "";
+      if (!text) refuse(`${slot}: words are the family's own words for the meal`);
+      return { slot, ...(group ? { group } : {}), words: text.slice(0, 500) };
+    });
+    const key = (x: MealExample) => `${x.slot.toLowerCase()}|${x.group ?? ""}`;
+    const kept = had.meal_examples.filter((x) => !given.some((g) => key(g) === key(x)));
+    return saveHouse({ meal_examples: JSON.stringify([...kept, ...given]) }, by);
   });
 }

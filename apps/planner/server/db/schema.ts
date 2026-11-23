@@ -33,6 +33,7 @@ export const house = sqliteTable("house", {
   cook_note: text("cook_note"),
   extra_slots: text("extra_slots"),                            // JSON [{ name, days?: string[], for?: string[] }]
   order_in: text("order_in"),                                  // JSON [{ day, slot, note? }]
+  meal_examples: text("meal_examples"),                        // JSON [{ slot, group?: children | adults, words }]: what a meal looks like here, in the family's words
   notes: text("notes"),
   profile_to_structure: text("profile_to_structure"),          // the 2.0 household.profile, waiting to be turned into rows
   intro_sent_at: text("intro_sent_at"),
