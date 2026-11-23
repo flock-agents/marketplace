@@ -245,12 +245,14 @@ export function rulesSaid(list: readonly Rule[]): string {
   return order.map((k) => `${k || "Everyone"}: ${groups.get(k)!.join("; ")}`).join("\n");
 }
 
-/** An older kind as the checked rule it is (spec: veg, no_meat and egg avoid meat and fish; no_eggs avoids eggs;
- *  no_onion_garlic avoids onion and garlic). A fast with who, days and slots is checked (isCheckedFast); one without slots,
- *  and other, are a note only. */
+/** An older kind as the checked rule it is (spec: veg avoids meat, fish and eggs, as constants.ts says of it: "vegetarian (no
+ *  meat, no eggs)", eval 23 Nov: a grandparent's "pure vegetarian" let eggs through; no_meat and egg ("eggs but no meat")
+ *  avoid meat and fish; no_eggs avoids eggs; no_onion_garlic avoids onion and garlic). A family that says eggs are fine is
+ *  `egg`, not veg (setup.ts). A fast with who, days and slots is checked (isCheckedFast); one without slots, and other, are a
+ *  note only. */
 export function checkedAs(r: Rule): Rule | null {
   if ((CHECKED_KINDS as readonly string[]).includes(r.kind) || isCheckedFast(r)) return r;
-  const items = r.kind === "veg" || r.kind === "no_meat" || r.kind === "egg" ? ["@meat", "@fish"]
+  const items = r.kind === "veg" ? ["@meat", "@fish", "@egg"] : r.kind === "no_meat" || r.kind === "egg" ? ["@meat", "@fish"]
     : r.kind === "no_eggs" ? ["@egg"] : r.kind === "no_onion_garlic" ? ["onion", "garlic"] : null;
   return items ? { ...r, kind: "avoid", items } : null;
 }

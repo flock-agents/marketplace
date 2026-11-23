@@ -253,7 +253,9 @@ describe("ruleBreaks", () => {
       { date: "2026-11-25", slot: "Lunch", dishes: [{ name: "Fish fry" }] }]);
     const rule = (kind: string, days: string[] = []) => ({ kind: kind as any, days });
     expect(keys(ruleBreaks(w, { rules: [rule("no_eggs", ["Tue"])] }, people))).toEqual(["Tue 2026-11-24 Lunch|Egg curry|"]);
-    expect(keys(ruleBreaks(w, { rules: [rule("veg")] }, people))).toEqual(["Tue 2026-11-24 Lunch|Chicken 65|", "Wed 2026-11-25 Lunch|Fish fry|"]);
+    // Vegetarian is no meat, fish or eggs (constants.ts; eval 23 Nov: a grandparent's "pure vegetarian" let eggs through).
+    expect(keys(ruleBreaks(w, { rules: [rule("veg")] }, people))).toEqual(["Tue 2026-11-24 Lunch|Egg curry|", "Tue 2026-11-24 Lunch|Chicken 65|", "Wed 2026-11-25 Lunch|Fish fry|"]);
+    expect(keys(ruleBreaks(w, { rules: [rule("egg")] }, people))).toEqual(["Tue 2026-11-24 Lunch|Chicken 65|", "Wed 2026-11-25 Lunch|Fish fry|"]);
     expect(keys(ruleBreaks(w, { rules: [rule("egg", ["Wed"])] }, people))).toEqual(["Wed 2026-11-25 Lunch|Fish fry|"]);
     expect(keys(ruleBreaks(w, { rules: [rule("no_meat", ["Tue"])] }, people))).toEqual(["Tue 2026-11-24 Lunch|Chicken 65|"]);
     expect(keys(ruleBreaks(w, { rules: [rule("no_onion_garlic", ["Tue"])] }, people))).toEqual(["Tue 2026-11-24 Lunch|Egg curry|"]);
@@ -350,6 +352,7 @@ const RUN11_BREAKS = [
   "Sat 2026-11-28 Breakfast|Banana walnut cake|",
   "Sat 2026-11-28 Breakfast|Banana walnut cake|Meera",
   "Sat 2026-11-28 Lunch|Egg curry|",
+  "Sat 2026-11-28 Lunch|Egg curry|",   // vegetarian and no eggs, each
   "Sat 2026-11-28 Lunch|Jeera rice|Lakshmi",
 ].sort();
 
