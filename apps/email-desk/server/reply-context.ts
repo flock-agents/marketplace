@@ -11,7 +11,8 @@ import { THREAD_BODY_SEPARATOR } from "./lib/thread-format";
 import { MEMORY_FACTS, senderOf, threadFromRead, topicTerms, type ContextThread } from "./lib/reply-context";
 import { notDeskThreadRefusal, type DraftRefusal } from "./drafts/rules";
 import { getDraftForThread } from "./drafts/records";
-import { gmail, deskThreadAccount, type OpCtx } from "./ops";
+import { deskThreadAccount, type OpCtx } from "./ops";
+import { ext } from "./platform-ext";
 
 export type VoiceState = "ready" | "learning" | "none";
 
@@ -53,14 +54,34 @@ function storedThread(accountId: string, threadId: string): ContextThread | null
   return threadFromRead({ subject: str(raw.subject), messages });
 }
 
-async function readThread(ctx: OpCtx, accountId: string, threadId: string): Promise<ContextThread | null> {
-  const live = await gmail<unknown>(ctx.platform, "getThread", { threadId }, accountId);
-  if (live.ok) {
-    const data: any = typeof live.data === "string" ? safeParse(live.data) : live.data;
-    const thread = threadFromRead(data);
-    if (thread) return thread;
+/** One thread read's timeout (gather's THREAD_TIMEOUT_MS): a read, not the write budget of a draft. */
+const READ_TIMEOUT_MS = 90_000;
+export const REPLY_CONTEXT_CONSUMER = "email-desk:reply-context";
+
+/** Gmail's read of the thread, under the mailbox's read turn. A turn that is refused (busy, paused, not this person's) or a
+ *  failed read answers null, and the caller uses the stored text: the agent's call never waits behind the mailbox. */
+async function liveThread(platform: PlatformContext, accountId: string, threadId: string): Promise<ContextThread | null> {
+  const x = ext(platform);
+  let turn: Awaited<ReturnType<typeof x.connectors.readTurn>>;
+  try {
+    turn = await x.connectors.readTurn(accountId, REPLY_CONTEXT_CONSUMER, { skillId: "gmail" });
+  } catch { return null; }
+  if (!turn.ok) return null;
+  try {
+    const r = await x.connectors.exec<unknown>({
+      skillId: "gmail", functionName: "getThread", params: { threadId }, accountHint: accountId,
+      timeoutMs: READ_TIMEOUT_MS, turnId: turn.data.turnId,
+    });
+    if (!r.ok) return null;
+    const data: any = typeof r.data === "string" ? safeParse(r.data) : r.data;
+    return threadFromRead(data);
+  } catch { return null; } finally {
+    try { await turn.data.release(); } catch { /* released by its ttl otherwise */ }
   }
-  return storedThread(accountId, threadId);
+}
+
+async function readThread(ctx: OpCtx, accountId: string, threadId: string): Promise<ContextThread | null> {
+  return (await liveThread(ctx.platform, accountId, threadId)) ?? storedThread(accountId, threadId);
 }
 
 const safeParse = (s: string): unknown => { try { return JSON.parse(s); } catch { return null; } };

@@ -35,15 +35,22 @@ let gmailThread: any;
 let gmailFails: boolean;
 let accountsAnswer: any;
 let published: any[];
+let turnAnswer: (() => any) | null;
+let released: string[];
+let getThreadTurnIds: Array<string | undefined>;
 
 function platform(): any {
   return {
     appId: "email-desk", pairedAgent: { id: "ia-1", name: "Inbox Assistant" }, dataDir: "test", configured: true,
     connectors: {
       accounts: async () => accountsAnswer,
+      readTurn: async (account: string) => turnAnswer
+        ? turnAnswer()
+        : { ok: true, data: { turnId: `turn-${account}`, accountId: account, release: async () => { released.push(`turn-${account}`); } } },
       exec: async (req: any) => {
         calls.push({ functionName: req.functionName, accountHint: req.accountHint });
         if (req.functionName === "getThread") {
+          getThreadTurnIds.push(req.turnId);
           if (gmailFails) return { ok: false, reason: "mailbox busy" };
           return { ok: true, data: gmailThread };
         }
@@ -80,7 +87,7 @@ beforeEach(() => {
   _setLogForTesting(() => {});
   _setOpsLogForTesting(() => {});
   calls = []; memoryQueries = []; published = [];
-  gmailFails = false;
+  gmailFails = false; turnAnswer = null; released = []; getThreadTurnIds = [];
   gmailThread = {
     threadId: T1, subject: "Re: Tuesday?",
     messages: [
@@ -140,6 +147,7 @@ describe("reply_context", () => {
     expect(json.voiceState).toBe("none");
     expect(json.existingDraft).toBeNull();
     expect(calls).toEqual([{ functionName: "getThread", accountHint: A1 }]);
+    expect(getThreadTurnIds).toEqual([`turn-${A1}`]);
   });
 
   test("an open draft shows as existingDraft; a sent one does not", async () => {
@@ -168,6 +176,27 @@ describe("reply_context", () => {
     const wrong = await call("reply_context", { threadId: T2, accountId: A1 });
     expect(wrong.status).toBe(400);
     expect(wrong.json.code).toBe("NOT_DESK_THREAD");
+  });
+
+  test("the read runs under the mailbox's turn and releases it, also when Gmail fails", async () => {
+    await call("reply_context", { threadId: T1 });
+    expect(getThreadTurnIds).toEqual([`turn-${A1}`]);
+    expect(released).toEqual([`turn-${A1}`]);
+    gmailFails = true;
+    await call("reply_context", { threadId: T1 });
+    expect(released).toEqual([`turn-${A1}`, `turn-${A1}`]);
+  });
+
+  test("a refused turn (busy, quarantined, not_yours): the stored text answers and Gmail is not read", async () => {
+    for (const code of ["busy", "quarantined", "not_yours"]) {
+      turnAnswer = () => ({ ok: false, reason: code, code });
+      calls.length = 0;
+      const { status, json } = await call("reply_context", { threadId: T1 });
+      expect(status).toBe(200);
+      expect(json.thread.messages.map((m: any) => m.body)).toEqual(["How about next week?", "Are you free on Tuesday?"]);
+      expect(calls).toEqual([]);
+    }
+    expect(released).toEqual([]);
   });
 
   test("a thread the journal does not hold is NOT_DESK_THREAD and Gmail is not asked", async () => {
