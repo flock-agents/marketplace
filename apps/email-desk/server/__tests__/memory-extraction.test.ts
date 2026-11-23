@@ -115,6 +115,8 @@ function fake(opts: {
   const run = () => runMemoryExtraction(f.ctx, {
     gather: async () => ({ kept: f.next.kept, skipped: 0, cursor: "1", deferred: 0, ...opts.gather } as GatherResult),
     handOver: (ids) => { f.handed.push([...ids]); },
+    // The voice catch-up crawl is voice.test.ts's: here the mailbox has no voice and starts none.
+    ensureVoice: async () => {},
   });
   return Object.assign(f, { run });
 }
@@ -258,6 +260,9 @@ describe("memory-extraction: the wake", () => {
         { threadId: "t-1", accountId: ACCOUNT, from: "Asha Rao <asha1@acme.com>", subject: "Lunch on Tuesday?", snippet: "Are you free on Tuesday? (mail 1)" },
         { threadId: "t-2", accountId: ACCOUNT, from: "Asha Rao <asha2@acme.com>", subject: "Subject 2", snippet: "Are you free on Tuesday? (mail 2)" },
       ],
+      // The mailbox's voice rides with its mail (Task 2.9): none learned here.
+      voice: null,
+      voiceState: "none",
     });
   });
 

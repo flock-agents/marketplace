@@ -6,6 +6,7 @@ import { memoryExtraction } from "./routines/memory-extraction";
 import { followUp } from "./routines/follow-up";
 import { allOps } from "./registry";
 import { handleCardClosed } from "./drafts/send";
+import { voiceRoutes } from "./routes/voice";
 
 const flock = createFlockApp({
   lifecycle: {},
@@ -16,4 +17,7 @@ const flock = createFlockApp({
   // A draft card the person dismissed discards its draft (drafts/send.ts); a sent or expired one changes nothing.
   onCardClosed: (event, ctx) => handleCardClosed(event, ctx),
 });
+// The settings page and the person's voice editor (Task 2.9): GET /settings, GET/PUT /api/voice (routes/voice.ts).
+// The linked SDK resolves its own hono copy; the types differ nominally, the runtime is one Hono (as calendar-desk).
+flock.hono.route("/", voiceRoutes(flock.platform) as never);
 flock.listen();

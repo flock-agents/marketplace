@@ -1,6 +1,9 @@
 // The app's ops (Op contract). Registered in index.ts; the SDK's ops router hands each `(payload, { platform, agentId,
 // pressToken })`. Who may call the declared ones is Flock's rule (routes/app-ops.ts), not this file's.
 //
+// A create_draft while the mailbox's voice is being learned answers VOICE_LEARNING with the time to try after (Task 2.9,
+// voice/crawl.ts).
+//
 // Drafts (Task 2.5): create_draft, update_draft, discard_draft; send_draft (Task 2.6, drafts/send.ts) on the person's press. The rules are drafts/rules.ts; the record drafts/records.ts;
 // the card drafts/card.ts. Gmail is reached only through connectors.exec as the copy's paired agent; a draft write needs no
 // press token (only a send does), so only send_draft ever passes one.
@@ -12,11 +15,13 @@ import type { OpHandler, PlatformContext } from "@flock/app-sdk";
 import { getStore } from "./store";
 import {
   bodyRefusal, draftExistsRefusal, gmailRefusal, notDeskThreadRefusal, notFoundRefusal, personEditedRefusal, updateRefusal,
-  type DraftAuthor, type DraftRefusal,
+  voiceLearningRefusal, type DraftAuthor, type DraftRefusal,
 } from "./drafts/rules";
 import { deleteDraft, draftStatus, getDraft, lockDraft, openDraftForThread, recordDraft, setDraftBody } from "./drafts/records";
 import { answeredMessage, publishDraftCard, withdrawDraftCard } from "./drafts/card";
 import { sendDraft } from "./drafts/send";
+import { tryAfterText, voiceStateFor, voiceLearningUntil } from "./voice/crawl";
+import { processTimezone } from "./lib/local-day";
 
 export interface OpCtx {
   platform: PlatformContext;
@@ -100,6 +105,12 @@ export async function createDraft(p: Record<string, unknown>, ctx: OpCtx): Promi
   const body = typeof p.body === "string" ? p.body : "";
   const bad = bodyRefusal(body, "agent");
   if (bad) return bad;
+  // The mailbox's voice is being learned right now (Task 2.9): a draft written now would miss it. Past the crawl's cap the
+  // mailbox is no longer learning, so this never holds a draft for longer than that (Review Focus 5).
+  if (voiceStateFor(accountId) === "learning") {
+    const until = voiceLearningUntil(accountId);
+    if (until !== null) return voiceLearningRefusal(until, tryAfterText(until, processTimezone()));
+  }
   return withThreadTurn(accountId, threadId, () => writeNewDraft(accountId, threadId, body, str(p.why) || null, ctx));
 }
 

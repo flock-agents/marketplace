@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Email Desk settings</title>
+<style>
+  :root {
+    --bg: #f7f7f5; --card: #ffffff; --text: #1d1d1b; --muted: #6b6b66; --line: #e4e4df;
+    --accent: #c2541a; --accent-text: #ffffff; --tag: #f1ebe4;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #161615; --card: #20201e; --text: #ececea; --muted: #9a9a94; --line: #34342f; --accent: #e07a3f; --accent-text: #161615; --tag: #2e2a25; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 680px; margin: 0 auto; padding: 24px 16px 48px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  h2 { font-size: 17px; margin: 28px 0 4px; }
+  h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 18px 0 6px; }
+  p { margin: 4px 0; }
+  .muted { color: var(--muted); }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; margin-top: 14px; }
+  .head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  .row { border-top: 1px solid var(--line); padding: 10px 0; }
+  .row:first-of-type { border-top: 0; }
+  .label { font-weight: 600; }
+  .value { white-space: pre-wrap; overflow-wrap: anywhere; }
+  .examples { margin: 4px 0 0; padding-left: 18px; color: var(--muted); }
+  .tag { display: inline-block; font-size: 12px; background: var(--tag); border-radius: 6px; padding: 0 6px; margin-left: 6px; }
+  .actions { margin-top: 6px; display: flex; gap: 8px; flex-wrap: wrap; }
+  button { font: inherit; font-size: 14px; border-radius: 8px; border: 1px solid var(--line); background: transparent; color: var(--text); padding: 4px 12px; cursor: pointer; }
+  button.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+  button:disabled { opacity: .5; cursor: default; }
+  textarea { width: 100%; font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px; min-height: 64px; }
+  .error { color: #c0392b; margin-top: 8px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Email Desk settings</h1>
+  <p class="muted">Only you can see this page.</p>
+
+  <h2>Your voice</h2>
+  <p class="muted">How your replies are written, learned from mail you sent. Change anything that is wrong. Your changes stay, even when your voice is learned again.</p>
+  <div id="voice"><p class="muted">Loading…</p></div>
+  <p id="error" class="error" hidden></p>
+</main>
+<script>
+(function () {
+  "use strict";
+  var API = "api/voice";
+  var root = document.getElementById("voice");
+  var errorBox = document.getElementById("error");
+
+  function el(tag, attrs, children) {
+    var node = document.createElement(tag);
+    if (attrs) for (var k in attrs) {
+      if (k === "text") node.textContent = attrs[k];
+      else if (k === "class") node.className = attrs[k];
+      else if (k === "onclick") node.addEventListener("click", attrs[k]);
+      else node.setAttribute(k, attrs[k]);
+    }
+    (children || []).forEach(function (c) { if (c) node.appendChild(c); });
+    return node;
+  }
+
+  function showError(message) {
+    errorBox.textContent = message || "";
+    errorBox.hidden = !message;
+  }
+
+  function clock(iso) {
+    try { return new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }); } catch (e) { return iso; }
+  }
+
+  function send(change) {
+    showError("");
+    return fetch(API, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(change), credentials: "same-origin" })
+      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, body: j }; }); })
+      .then(function (res) {
+        if (!res.ok) { showError(res.body && res.body.error ? res.body.error : "That did not work. Try again."); return; }
+        load();
+      })
+      .catch(function () { showError("That did not work. Try again."); });
+  }
+
+  function editor(account, row, holder) {
+    holder.textContent = "";
+    var box = el("textarea", { "aria-label": row.label });
+    box.value = row.part === "phrases" ? row.examples.join("\n") : row.value;
+    var save = el("button", { class: "primary", text: "Save", onclick: function () {
+      save.disabled = true;
+      send({ accountId: account.accountId, dimension: row.dimension, part: row.part, action: "edit", value: box.value });
+    } });
+    var cancel = el("button", { text: "Cancel", onclick: function () { load(); } });
+    holder.appendChild(box);
+    if (row.part === "phrases") holder.appendChild(el("p", { class: "muted", text: "One phrase per line." }));
+    holder.appendChild(el("div", { class: "actions" }, [save, cancel]));
+    box.focus();
+  }
+
+  function rowView(account, row) {
+    var label = el("div", { class: "label", text: row.label }, []);
+    if (row.editedByYou) label.appendChild(el("span", { class: "tag", text: "Changed by you" }));
+    var body = el("div", {}, []);
+    if (row.value) body.appendChild(el("div", { class: "value", text: row.value }));
+    if (row.examples && row.examples.length) {
+      body.appendChild(el("ul", { class: "examples" }, row.examples.map(function (e) { return el("li", { text: e }); })));
+    }
+    if (row.basis) body.appendChild(el("p", { class: "muted", text: row.basis }));
+    var actions = el("div", { class: "actions" }, [
+      el("button", { text: "Edit", onclick: function () { editor(account, row, body); actions.hidden = true; } }),
+      row.part === "abbreviations" ? null : el("button", { text: "Forget", onclick: function () {
+        send({ accountId: account.accountId, dimension: row.dimension, action: "forget" });
+      } }),
+      row.editedByYou ? el("button", { text: "Undo my change", onclick: function () {
+        send({ accountId: account.accountId, dimension: row.dimension, action: "restore" });
+      } }) : null,
+    ]);
+    return el("div", { class: "row" }, [label, body, actions]);
+  }
+
+  function accountView(account) {
+    var title = account.email || account.accountId;
+    var learnLabel = account.state === "ready" ? "Learn again" : "Learn my voice";
+    var learn = el("button", { text: learnLabel, onclick: function () {
+      learn.disabled = true;
+      send({ accountId: account.accountId, action: "relearn" });
+    } });
+    if (account.state === "learning") learn.disabled = true;
+    var card = el("div", { class: "card" }, [el("div", { class: "head" }, [el("strong", { text: title }), learn])]);
+
+    if (account.state === "learning") {
+      card.appendChild(el("p", { class: "muted", text: "Learning your voice from your sent mail. Done by " + clock(account.learningUntil) + "." }));
+    } else if (!account.groups.length && !account.forgotten.length) {
+      card.appendChild(el("p", { class: "muted", text: "Not learned yet. Replies are written without your voice until it is." }));
+    }
+    account.groups.forEach(function (g) {
+      card.appendChild(el("h3", { text: g.title }));
+      g.rows.forEach(function (r) { card.appendChild(rowView(account, r)); });
+    });
+    if (account.forgotten.length) {
+      card.appendChild(el("h3", { text: "Forgotten" }));
+      account.forgotten.forEach(function (f) {
+        card.appendChild(el("div", { class: "row" }, [
+          el("div", { class: "label", text: f.label }),
+          el("div", { class: "actions" }, [el("button", { text: "Bring back", onclick: function () {
+            send({ accountId: account.accountId, dimension: f.dimension, action: "restore" });
+          } })]),
+        ]));
+      });
+    }
+    if (account.state === "ready" && account.notLearned.length) {
+      card.appendChild(el("p", { class: "muted", text: "Not learned: " + account.notLearned.join(", ") + "." }));
+    }
+    return card;
+  }
+
+  function load() {
+    fetch(API, { credentials: "same-origin" })
+      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, body: j }; }); })
+      .then(function (res) {
+        root.textContent = "";
+        if (!res.ok) { showError(res.body && res.body.error ? res.body.error : "Your voice could not be loaded."); return; }
+        var accounts = res.body.accounts || [];
+        if (!accounts.length) { root.appendChild(el("p", { class: "muted", text: "No Gmail connected yet." })); return; }
+        accounts.forEach(function (a) { root.appendChild(accountView(a)); });
+      })
+      .catch(function () { showError("Your voice could not be loaded."); });
+  }
+
+  load();
+})();
+</script>
+</body>
+</html>

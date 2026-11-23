@@ -1,8 +1,8 @@
 // reply_context and the platform ops, through the real ops router. Expectations from the Op contract table and the sources
 // (reply-context.ts topicTerms/gather, store.ts newestStoredThreadMessage, follow-up-rules.ts followUpKindForTo,
 // send-email.ts draftSendRecorded, the journal's donate door, pa-brief/bundle.ts), written before the code:
-//   - reply_context answers thread, sender facts (memory by topic, else sender), voice (null, "none" until 2.9) and the
-//     thread's open draft; a thread of another mailbox of the same person works with no accountId;
+//   - reply_context answers thread, sender facts (memory by topic, else sender), voice (null and "none" while the mailbox
+//     has learned none) and the thread's open draft; a thread of another mailbox of the same person works with no accountId;
 //   - each platform op answers its contract shape, and none is reachable by a bad token;
 //   - the manifest declares none of them (manifest.test.ts) yet the router serves them and send_draft.
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";

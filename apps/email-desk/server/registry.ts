@@ -5,9 +5,10 @@ import type { OpHandler } from "@flock/app-sdk";
 import { ops as draftOps } from "./ops";
 import { replyContext } from "./reply-context";
 import { platformOps } from "./platform-ops";
+import { voiceBlockOrNull } from "./voice/block";
 
 export const allOps: Record<string, OpHandler> = {
   ...draftOps,
-  reply_context: (p, ctx) => replyContext(p, ctx),
+  reply_context: (p, ctx) => replyContext(p, ctx, voiceBlockOrNull),
   ...platformOps,
 };

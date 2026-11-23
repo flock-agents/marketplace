@@ -9,6 +9,7 @@ import { BUILTIN_DESK_DDL } from "./fixtures/builtin-desk-schema";
 const TABLES = [
   "app_meta", "draft_records", "engaged_domains", "extracted_messages", "follow_up_runs", "follow_up_state",
   "ingest_comprehension", "ingest_content", "ingest_cursors", "ingest_events", "lifecycle_state", "reply_messages", "send_ledger",
+  "voice_profile",
 ];
 
 const tmp = () => mkdtempSync(join(tmpdir(), "email-desk-store-"));
@@ -16,7 +17,7 @@ const tables = (db: Database) =>
   (db.query("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name").all() as { name: string }[]).map((r) => r.name);
 
 describe("store", () => {
-  test("creates all 13 tables on an empty dir", () => {
+  test("creates all 14 tables on an empty dir", () => {
     const dir = join(tmp(), "fresh");
     const db = openStore(dir);
     expect(tables(db)).toEqual(TABLES);

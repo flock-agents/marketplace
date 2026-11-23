@@ -3,8 +3,9 @@
 // its topic or sender, the person's voice, and the thread's open draft.
 //
 // Ported from Flock's email-desk/reply-context.ts gatherReplyContext. Not carried over: the related-mail searches (browser
-// sessions of 10-25 s each; the contract has no field for them). The voice block arrives with Task 2.9 through
-// `voiceBlockFor`, null until then.
+// sessions of 10-25 s each; the contract has no field for them). The voice (Task 2.9) comes from the copy's own store
+// through the injected `voiceBlockFor` (registry.ts passes voice/block.ts) and its state from the crawl (voice/crawl.ts):
+// "ready" with a block, else "learning" while a crawl is in flight, else "none".
 import type { PlatformContext } from "@flock/app-sdk";
 import { getStore } from "./store";
 import { THREAD_BODY_SEPARATOR } from "./lib/thread-format";
@@ -13,8 +14,9 @@ import { notDeskThreadRefusal, type DraftRefusal } from "./drafts/rules";
 import { getDraftForThread } from "./drafts/records";
 import { deskThreadAccount, type OpCtx } from "./ops";
 import { ext } from "./platform-ext";
+import { voiceStateFor as crawlVoiceState, type VoiceState } from "./voice/crawl";
 
-export type VoiceState = "ready" | "learning" | "none";
+export type { VoiceState };
 
 export interface ReplyContextAnswer {
   thread: ContextThread;
@@ -24,9 +26,11 @@ export interface ReplyContextAnswer {
   existingDraft: { id: string; body: string } | null;
 }
 
-/** The person's voice for one mailbox, as the block a draft is written from; null while there is none. Task 2.9 replaces it. */
+/** The person's voice for one mailbox, as the block a draft is written from; null while there is none. */
 export type VoiceBlockFor = (accountId: string) => string | null;
 export const noVoiceYet: VoiceBlockFor = () => null;
+/** Whether a mailbox without a block is learning its voice or has none. */
+export type VoiceStateFor = (accountId: string) => VoiceState;
 
 const str = (v: unknown): string => (typeof v === "string" ? v.trim() : "");
 
@@ -108,6 +112,7 @@ async function senderFacts(platform: PlatformContext, subject: string, sender: s
 
 export async function replyContext(
   p: Record<string, unknown>, ctx: OpCtx, voiceBlockFor: VoiceBlockFor = noVoiceYet,
+  voiceStateFor: VoiceStateFor = crawlVoiceState,
 ): Promise<ReplyContextAnswer | DraftRefusal> {
   const threadId = str(p.threadId);
   // A thread of any of this person's mailboxes works: with no accountId, the mailbox the journal holds it in.
@@ -124,7 +129,8 @@ export async function replyContext(
     thread,
     sender: { facts },
     voice,
-    voiceState: voice ? "ready" : "none",
+    // A block is a voice to write with; without one, "learning" only while a crawl is in flight (never "ready").
+    voiceState: voice ? "ready" : voiceStateFor(accountId) === "learning" ? "learning" : "none",
     existingDraft: draft && draft.sentAt === null ? { id: draft.id, body: draft.bodyWritten } : null,
   };
 }

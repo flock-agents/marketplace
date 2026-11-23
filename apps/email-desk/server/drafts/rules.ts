@@ -11,6 +11,8 @@ export type DraftRefusalCode =
 export interface DraftRefusal {
   error: string;
   code: DraftRefusalCode;
+  /** VOICE_LEARNING only: when to try again (ISO), the same time the error names. */
+  tryAfter?: string;
 }
 
 /** Who wrote the text: the person's own (a press of their card) is theirs, the agent's is held to the writing rules. */
@@ -48,6 +50,13 @@ export function bodyRefusal(body: unknown, by: DraftAuthor): DraftRefusal | null
 export function draftExistsRefusal(existingId: string): DraftRefusal {
   return refuse("DRAFT_EXISTS",
     `A draft for this thread exists: ${existingId}. Nothing new was written. To change it, call update_draft with that id.`);
+}
+
+/** The mailbox's voice is still being learned (spec §5.2): nothing was written; try again at `until` (the crawl's cap, so
+ *  that retry always drafts, with the voice or past the cap without it). `when` is the time in words (crawl.ts
+ *  tryAfterText). */
+export function voiceLearningRefusal(until: number, when: string): DraftRefusal {
+  return { error: `Voice still learning, try after ${when}. Nothing was written.`, code: "VOICE_LEARNING", tryAfter: new Date(until).toISOString() };
 }
 
 export function notDeskThreadRefusal(): DraftRefusal {

@@ -240,6 +240,21 @@ function createSchema(db: Database): void {
       updated_at INTEGER NOT NULL,
       PRIMARY KEY (account_id, thread_id)
     );
+
+    -- The person's voice, per mailbox (Task 2.9, spec §2.6): one row per (account, dimension), learned from their sent
+    -- mail (source 'voice-crawl') or written by them on the settings page (source 'owner-edit', which no re-learn
+    -- overwrites). Flock's wiki_voice_profile kept rows per address; here the key is the account, like every table above.
+    -- An owner-edit row with an empty value is a Forget: the drafter skips it and the crawl cannot learn it back.
+    CREATE TABLE IF NOT EXISTS voice_profile (
+      account_id        TEXT NOT NULL,
+      dimension         TEXT NOT NULL,
+      value             TEXT NOT NULL,
+      examples          TEXT NOT NULL DEFAULT '[]',
+      observation_count INTEGER NOT NULL DEFAULT 1,
+      source            TEXT NOT NULL,
+      updated_at        INTEGER NOT NULL,
+      PRIMARY KEY (account_id, dimension)
+    );
   `);
   // A store made before these columns existed: CREATE TABLE IF NOT EXISTS will not add them.
   addColumns(db, "draft_records", [["sent_at", "INTEGER"], ["sent_by", "TEXT"]]);

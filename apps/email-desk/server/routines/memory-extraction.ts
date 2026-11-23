@@ -18,9 +18,13 @@
 //      puts the to-dos Flock held on Home. With no Family Calendar, extraction answers as today (TODOs are Flock's rows).
 //   4. hand over (seen.ts markHandedOver) everything that went into memory, so it is never extracted twice. Its
 //      draft-eligible mail becomes a pending draft offer in the app's store.
-//   5. wake: the pending offers whose thread has no open draft go to the routine's agent, whoever it is: one line of
-//      counts, the mail itself only in `data`. A wake that reached the agent clears them; a failed one keeps them for the
-//      next run, which offers them again without extracting again.
+//   5. voice: a mailbox with no voice and no crawl in flight starts one (voice/crawl.ts ensureVoiceCrawl), after the read
+//      above released the mailbox; an existing mailbox from before this app is learned this way.
+//   6. wake: the pending offers whose thread has no open draft go to the routine's agent, whoever it is: one line of
+//      counts, the mail itself only in `data`, with the mailbox's voice: `{ mails, voice, voiceState }` (voice the block a
+//      reply is written from, or null; voiceState "ready" | "learning" | "none", as reply_context answers them). One wake
+//      is one mailbox, so one voice. A wake that reached the agent clears them; a failed one keeps them for the next run,
+//      which offers them again without extracting again.
 // A run with a failure throws once everything else is done, so the owner's routine history shows it.
 //
 // CLOSURE (ruling R12). The extraction closes a TODO once the thread shows it done, but only a TODO the item carries
@@ -39,6 +43,8 @@ import { recordHarvestRun } from "../platform-ops";
 import { FamilyPushBatch, NAMING_SCHEMA, emailLabel, slugOf, type HeldTask, type ImportCallResult } from "../family/push";
 import { householdNames, personFirstName } from "../family/context";
 import { blockTaskGate, senderKindOf } from "../lib/task-gates";
+import { voiceBlockOrNull } from "../voice/block";
+import { ensureVoiceCrawl, voiceStateFor, type VoiceState } from "../voice/crawl";
 
 /**
  * How many items one memory.extract call can serve. NOT EXPORTED BY THE SDK, so mirrored here from its formula
@@ -150,6 +156,18 @@ function snippetOf(body: string): string {
 export interface MemoryExtractionDeps {
   gather?: (ctx: RoutineCtx, accountId: string) => Promise<GatherResult>;
   handOver?: (ids: readonly string[]) => void;
+  /** Start the mailbox's voice crawl when it has none (default voice/crawl.ts ensureVoiceCrawl). Awaited only until the
+   *  crawl has the mailbox's turn; the crawl itself runs on in the background. */
+  ensureVoice?: (ctx: RoutineCtx, accountId: string) => Promise<unknown>;
+  /** The mailbox's voice for the wake (default voice/block.ts and voice/crawl.ts). */
+  voiceFor?: (accountId: string) => { voice: string | null; voiceState: VoiceState };
+}
+
+/** The wake's voice: the block when there is one, else whether it is being learned. */
+export function wakeVoice(accountId: string): { voice: string | null; voiceState: VoiceState } {
+  const voice = voiceBlockOrNull(accountId);
+  if (voice) return { voice, voiceState: "ready" };
+  return { voice: null, voiceState: voiceStateFor(accountId) === "learning" ? "learning" : "none" };
 }
 
 /** The routine handler (flock.app.json routines[].handler "memory-extraction"). */
@@ -160,11 +178,15 @@ export async function memoryExtraction(ctx: RoutineContext): Promise<void> {
 export async function runMemoryExtraction(ctx: RoutineCtx, deps: MemoryExtractionDeps = {}): Promise<void> {
   const gather = deps.gather ?? ((c, a) => gatherNewMail(c, a));
   const handOver = deps.handOver ?? markHandedOver;
+  const voice: Voice = {
+    ensure: deps.ensureVoice ?? ((c, a) => ensureVoiceCrawl(c.platform as never, a)),
+    of: deps.voiceFor ?? wakeVoice,
+  };
   const accounts = await routineAccounts(ctx);
   const failures: string[] = [];
   for (const { accountId, email } of accounts) {
     try {
-      await runAccount(ctx, accountId, email, gather, handOver, failures);
+      await runAccount(ctx, accountId, email, gather, handOver, voice, failures);
     } catch (e: any) {
       failures.push(`${accountId}: ${e?.message ?? String(e)}`);
     }
@@ -184,12 +206,18 @@ async function routineAccounts(ctx: RoutineCtx): Promise<Array<{ accountId: stri
   return known;
 }
 
+interface Voice {
+  ensure: NonNullable<MemoryExtractionDeps["ensureVoice"]>;
+  of: NonNullable<MemoryExtractionDeps["voiceFor"]>;
+}
+
 async function runAccount(
   ctx: RoutineCtx,
   accountId: string,
   email: string | null,
   gather: NonNullable<MemoryExtractionDeps["gather"]>,
   handOver: NonNullable<MemoryExtractionDeps["handOver"]>,
+  voice: Voice,
   failures: string[],
 ): Promise<void> {
   const g = await gather(ctx, accountId);
@@ -257,8 +285,15 @@ async function runAccount(
     addDraftOffers(extracted);
   }
 
-  // 5. WAKE for the pending draft offers: this run's and any an earlier failed wake left.
-  const woke = await wakeForOffers(ctx, accountId, failures);
+  // 5. VOICE: learn it if the mailbox has none (the read above has released the mailbox). Never fails the run.
+  try {
+    await voice.ensure(ctx, accountId);
+  } catch (e: any) {
+    say(accountId, `voice crawl not started: ${e?.message ?? String(e)}`);
+  }
+
+  // 6. WAKE for the pending draft offers: this run's and any an earlier failed wake left.
+  const woke = await wakeForOffers(ctx, accountId, voice.of(accountId), failures);
   // A run that read the mailbox and put every kept mail into memory is a finished harvest (last_harvest op). A failed chunk
   // leaves the day open.
   if (failed === 0) recordHarvestRun(accountId);
@@ -289,7 +324,9 @@ function addDraftOffers(mail: readonly KeptMail[]): void {
 }
 
 /** Wakes the routine's agent for this account's pending offers whose thread has no open draft. Returns how many it woke for. */
-async function wakeForOffers(ctx: RoutineCtx, accountId: string, failures: string[]): Promise<number> {
+async function wakeForOffers(
+  ctx: RoutineCtx, accountId: string, voice: { voice: string | null; voiceState: VoiceState }, failures: string[],
+): Promise<number> {
   const db = getStore();
   const prefix = offerKey(accountId, "");
   const rows = db.query("SELECT key, value FROM app_meta WHERE substr(key, 1, ?) = ? ORDER BY updated_at, key")
@@ -308,7 +345,7 @@ async function wakeForOffers(ctx: RoutineCtx, accountId: string, failures: strin
   const mails = offers.map(({ offer: o }) => ({ threadId: o.threadId, accountId: o.accountId, from: o.from, subject: o.subject, snippet: o.snippet }));
   let woke: Awaited<ReturnType<RoutineCtx["wakeAgent"]>>;
   try {
-    woke = await ctx.wakeAgent(wakeLine(mails.length), { mails });
+    woke = await ctx.wakeAgent(wakeLine(mails.length), { mails, voice: voice.voice, voiceState: voice.voiceState });
   } catch (e: any) {
     woke = { ok: false, reason: e?.message ?? String(e) };
   }
