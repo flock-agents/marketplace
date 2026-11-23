@@ -40,12 +40,57 @@ export function parseClock(s: unknown): string | null {
 }
 export const toMin = (hhmm: string): number => { const [h, m] = hhmm.split(":").map(Number); return h * 60 + m; };
 
+/** "4:30 pm", "4 pm" */
+export const clock12 = (hhmm: string): string => { const [h, m] = hhmm.split(":").map(Number); return `${h % 12 || 12}${m ? `:${pad(m)}` : ""} ${h < 12 ? "am" : "pm"}`; };
+
+/** The dates an event falls on from `from` to `to`, both included: its own date, or for a repeating event every day, every
+ *  week on its date's weekday or every month on its date's day (the last day of a shorter month), from its date on. */
+export function occurrences(e: { date: string; repeat?: string | null }, from: string, to: string): string[] {
+  const out: string[] = [];
+  const start = e.date >= from ? e.date : from;
+  switch (e.repeat) {
+    case "daily": for (let d = start; d <= to; d = addDays(d, 1)) out.push(d); break;
+    case "weekly": for (let d = addDays(start, (parseDate(e.date).getDay() - parseDate(start).getDay() + 7) % 7); d <= to; d = addDays(d, 7)) out.push(d); break;
+    case "monthly": {
+      // Always stepped from the first date, as a monthly reminder is, so the 31st never drifts to the 30th for good.
+      const a = parseDate(e.date), b = parseDate(start);
+      for (let n = Math.max(0, (b.getFullYear() - a.getFullYear()) * 12 + b.getMonth() - a.getMonth()), d = addMonths(e.date, n); d <= to; d = addMonths(e.date, ++n)) if (d >= from) out.push(d);
+      break;
+    }
+    default: if (e.date >= from && e.date <= to) out.push(e.date);
+  }
+  return out;
+}
+/** Does the event repeat? */
+export const repeats = (e: { repeat?: string | null }): boolean => e.repeat === "daily" || e.repeat === "weekly" || e.repeat === "monthly";
+/** The next date an event falls on, on or after `from`; null for a one-off already past. */
+export const nextOccurrence = (e: { date: string; repeat?: string | null }, from: string): string | null =>
+  repeats(e) ? occurrences(e, from, addMonths(from, 1))[0] ?? e.date : e.date >= from ? e.date : null;
+
+/** The local moment `minutes` before a date and time, as "YYYY-MM-DDTHH:MM". */
+export const minutesBefore = (date: string, time: string, minutes: number): string => {
+  const d = parseDate(date), t = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, toMin(time) - minutes);
+  return `${isoDate(t)}T${pad(t.getHours())}:${pad(t.getMinutes())}`;
+};
+/** "The evening before" is 19:00 the day before, kept like any other lead: as minutes before the start (midnight for an all-day event). */
+export const EVENING_BEFORE = "19:00";
+export const eveningBeforeMinutes = (start: string | null): number => toMin(start ?? "00:00") + 24 * 60 - toMin(EVENING_BEFORE);
+
+/** An event's reminders that come due after `from` and up to `to` (local moments "YYYY-MM-DDTHH:MM"): for each, the day of the
+ *  event it is for and when it is due. An event with no `reminder_minutes` has none. */
+export function eventRemindersDue(e: { date: string; repeat?: string | null; start_time: string | null; reminder_minutes: number | null }, from: string, to: string): { date: string; at: string }[] {
+  if (e.reminder_minutes == null) return [];
+  // The event may be days after its reminder (a week's notice): look that far past the window.
+  const days = occurrences(e, from.slice(0, 10), addDays(to.slice(0, 10), Math.ceil(e.reminder_minutes / 1440) + 1));
+  return days.map((date) => ({ date, at: minutesBefore(date, e.start_time ?? "00:00", e.reminder_minutes!) })).filter((r) => r.at > from && r.at <= to);
+}
+
 /** By date, then all-day events first, then by start time, then by title. */
 export const eventOrder = (a: { date: string; start_time: string | null; title: string }, b: typeof a): number =>
   a.date.localeCompare(b.date) || (a.start_time ?? "").localeCompare(b.start_time ?? "") || a.title.localeCompare(b.title);
 
-type EventValues = { title?: unknown; date?: unknown; start_time?: unknown; end_time?: unknown; who?: unknown; location?: unknown; notes?: unknown; reminder_minutes?: unknown };
-export type EventPatch = { title: string; date: string; start_time: string | null; end_time: string | null; who: string | null; location: string | null; notes: string | null; reminder_minutes: number | null };
+type EventValues = { title?: unknown; date?: unknown; repeat?: unknown; start_time?: unknown; end_time?: unknown; who?: unknown; location?: unknown; notes?: unknown; reminder_minutes?: unknown };
+export type EventPatch = { title: string; date: string; repeat: string; start_time: string | null; end_time: string | null; who: string | null; location: string | null; notes: string | null; reminder_minutes: number | null };
 const str = (v: unknown): string | null => (typeof v === "string" && v.trim() ? v.trim() : null);
 
 /** What the event form submitted, as the row to write: times normalised to HH:MM, blanks as null; or the field errors to show. */
@@ -65,8 +110,11 @@ export function normaliseEvent(v: EventValues): { ok: true; row: EventPatch } | 
   if (times.start_time && times.end_time && toMin(times.end_time) <= toMin(times.start_time)) errors.end_time = "Must be after the start";
   const minutes = v.reminder_minutes;
   if (minutes !== null && minutes !== undefined && minutes !== "" && !(typeof minutes === "number" && Number.isInteger(minutes) && minutes >= 0)) errors.reminder_minutes = "Whole minutes, 0 or more";
+  // Once unless the form says how it repeats: an event made before events could repeat has no repeat to send.
+  const repeat = str(v.repeat) ?? "none";
+  if (!["none", "daily", "weekly", "monthly"].includes(repeat)) errors.repeat = "Once, or every day, week or month";
   if (Object.keys(errors).length) return { ok: false, errors };
-  return { ok: true, row: { title: title!, date: date!, ...times, who: str(v.who), location: str(v.location), notes: str(v.notes), reminder_minutes: typeof minutes === "number" ? minutes : null } };
+  return { ok: true, row: { title: title!, date: date!, repeat, ...times, who: str(v.who), location: str(v.location), notes: str(v.notes), reminder_minutes: typeof minutes === "number" ? minutes : null } };
 }
 
 type ReminderValues = { title?: unknown; date?: unknown; time?: unknown; repeat?: unknown; who?: unknown };
