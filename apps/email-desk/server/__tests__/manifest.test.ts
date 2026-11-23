@@ -69,6 +69,12 @@ describe("Email Desk manifest", () => {
     expect(JSON.stringify(manifest)).not.toContain("send_draft");
   });
 
+  test("update_draft takes an optional by: person", () => {
+    const op = manifest.agentInterface.operations.find((o: any) => o.name === "update_draft");
+    expect(op.payloadSchema.required).toEqual(["id", "body"]);
+    expect(op.payloadSchema.properties.by).toEqual({ type: "string", enum: ["person"] });
+  });
+
   test("instructions are verbatim", () => {
     expect(manifest.agentInterface.instructions).toBe(INSTRUCTIONS);
   });

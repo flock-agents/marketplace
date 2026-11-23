@@ -166,7 +166,13 @@
           ],
           "properties": {
             "id": "string",
-            "body": "string"
+            "body": "string",
+            "by": {
+              "type": "string",
+              "enum": [
+                "person"
+              ]
+            }
           }
         }
       },

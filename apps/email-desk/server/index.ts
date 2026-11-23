@@ -3,11 +3,13 @@
 // boots, answers /health, runs the routines it has, and prints the ready line.
 import { createFlockApp } from "@flock/app-sdk";
 import { memoryExtraction } from "./routines/memory-extraction";
+import { ops } from "./ops";
 
 const flock = createFlockApp({
   lifecycle: {},
   // One run per account of the paired agent's Gmail (flock.app.json routines, event trigger per account).
   routines: { "memory-extraction": memoryExtraction },
-  ops: {},
+  // The draft ops (ops.ts); reply_context, send_draft and the platform read ops join them in later tasks.
+  ops,
 });
 flock.listen();

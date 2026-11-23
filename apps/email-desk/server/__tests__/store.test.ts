@@ -55,7 +55,15 @@ describe("store", () => {
     }
     expect((db.query("SELECT body FROM ingest_events WHERE id='e1'").get() as { body: string }).body).toBe("hello");
     expect((db.query("PRAGMA user_version").get() as { user_version: number }).user_version).toBe(1);
+    // The built-in desk's draft row becomes addressable by the ops: an id, unlocked; reopening keeps that id.
+    const draft = db.query("SELECT id, person_edited, why FROM draft_records WHERE thread_id='t1'").get() as { id: string; person_edited: number; why: string | null };
+    expect(draft.id).toMatch(/^[0-9a-f]{32}$/);
+    expect(draft.person_edited).toBe(0);
+    expect(draft.why).toBeNull();
     db.close();
+    const again = openStore(dir);
+    expect((again.query("SELECT id FROM draft_records WHERE thread_id='t1'").get() as { id: string }).id).toBe(draft.id);
+    again.close();
   });
 
   test("a db from a newer app version is left alone (user_version never lowered)", () => {

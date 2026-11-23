@@ -243,6 +243,11 @@ function createSchema(db: Database): void {
   `);
   // A store made before these columns existed: CREATE TABLE IF NOT EXISTS will not add them.
   addColumns(db, "draft_records", [["sent_at", "INTEGER"], ["sent_by", "TEXT"]]);
+  // The app's draft record (Task 2.5): its own id (the card's `draft:<id>`), the person-edit lock and the card's why.
+  // A row the built-in desk wrote gets an id here, once, so every draft is addressable by the ops.
+  addColumns(db, "draft_records", [["id", "TEXT"], ["person_edited", "INTEGER NOT NULL DEFAULT 0"], ["why", "TEXT"]]);
+  db.run("UPDATE draft_records SET id = lower(hex(randomblob(16))) WHERE id IS NULL OR id = ''");
+  db.run("CREATE UNIQUE INDEX IF NOT EXISTS idx_draft_records_id ON draft_records(id)");
   addColumns(db, "lifecycle_state", [["pending_sweeps", "TEXT"]]);
   addColumns(db, "reply_messages", [["quoted", "TEXT"]]);
   addColumns(db, "follow_up_state", [["session_id", "TEXT"], ["offered_at", "INTEGER"], ["recipient_name", "TEXT"]]);
