@@ -13,7 +13,7 @@ import { MEMORY_FACTS, senderOf, threadFromRead, topicTerms, type ContextThread 
 import { notDeskThreadRefusal, type DraftRefusal } from "./drafts/rules";
 import { getDraftForThread } from "./drafts/records";
 import { deskThreadAccount, type OpCtx } from "./ops";
-import { ext } from "./platform-ext";
+import type { ReadTurnResult } from "./platform-ext";
 import { voiceStateFor as crawlVoiceState, type VoiceState } from "./voice/crawl";
 
 export type { VoiceState };
@@ -65,14 +65,14 @@ export const REPLY_CONTEXT_CONSUMER = "email-desk:reply-context";
 /** Gmail's read of the thread, under the mailbox's read turn. A turn that is refused (busy, paused, not this person's) or a
  *  failed read answers null, and the caller uses the stored text: the agent's call never waits behind the mailbox. */
 async function liveThread(platform: PlatformContext, accountId: string, threadId: string): Promise<ContextThread | null> {
-  const x = ext(platform);
-  let turn: Awaited<ReturnType<typeof x.connectors.readTurn>>;
+  if (!platform.connectors.readTurn) return null;
+  let turn: ReadTurnResult;
   try {
-    turn = await x.connectors.readTurn(accountId, REPLY_CONTEXT_CONSUMER, { skillId: "gmail" });
+    turn = await platform.connectors.readTurn(accountId, REPLY_CONTEXT_CONSUMER, { skillId: "gmail" });
   } catch { return null; }
   if (!turn.ok) return null;
   try {
-    const r = await x.connectors.exec<unknown>({
+    const r = await platform.connectors.exec<unknown>({
       skillId: "gmail", functionName: "getThread", params: { threadId }, accountHint: accountId,
       timeoutMs: READ_TIMEOUT_MS, turnId: turn.data.turnId,
     });

@@ -15,7 +15,7 @@ export function routineCtxFor(platform: PlatformContext, accountId: string, skil
     platform,
     connectors: {
       exec: (skill: string, functionName: string, params?: Record<string, unknown>, opts?: { account?: string; timeoutMs?: number; turnId?: string }) =>
-        (platform.connectors as any).exec({
+        platform.connectors.exec({
           skillId: skill, functionName, params, accountHint: opts?.account ?? accountId, timeoutMs: opts?.timeoutMs, turnId: opts?.turnId,
         }),
     },

@@ -17,7 +17,9 @@ import {
   memoryExtraction, runMemoryExtraction, wakeLine, EXTRACT_SERVABLE_ITEMS, _setLogForTesting,
 } from "../routines/memory-extraction";
 import type { GatherResult, KeptMail } from "../routines/gather";
-import type { ExtractAnswer, FamilyBlockWire, ImportPayload } from "../platform-ext";
+import type { FamilyBlockWire, ImportPayload, MemoryExtractAnswer } from "@flock/app-sdk";
+
+type ExtractAnswer = Partial<MemoryExtractAnswer>;
 
 const ACCOUNT = "acct-1";
 
@@ -343,7 +345,9 @@ describe("memory-extraction: the family calendar", () => {
   const annual = (threadKey: string): FamilyBlockWire => ({
     blockId: threadKey,
     facts: [{ content: `Agastya's Annual Day is on ${EVENT_DAY} at 10:00 at Greenwood High.`, kind: "event", salience: 0.8, dateRole: "occasion", audience: "family",
+      category: "event", domain: "family", relationships: [], scope: "wiki", validFrom: null, validUntil: null,
       entities: [{ name: "Agastya", type: "person" }, { name: "Annual Day", type: "event" }], when: { date: EVENT_DAY, time: "10:00" } }],
+    factIds: [`${threadKey}-f0`], prevRef: null,
     heldTasks: [{ title: "Buy Agastya's farmer costume", detail: null, due: DUE, audience: "family" }],
     ctx: { threadKey, messageId: null, mailDate: new Date().toISOString(), sender: "info@greenwoodhigh.edu.in" },
   });

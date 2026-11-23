@@ -26,9 +26,9 @@
 // same item from the same mailbox, not shared with another person's copy.
 import { qualifiesAsEvent } from "../lib/event-gate";
 import { localDateAndTime } from "../lib/local-day";
-import type { ExtractedFactWire, ExtractedTaskWire, FamilyBlockWire, ImportItem, ImportPayload, ImportTodo } from "../platform-ext";
+import type { ExtractedFactWire, ExtractedTaskWire, FamilyBlockWire, ImportItem, ImportPayload, ImportTodo } from "@flock/app-sdk";
 
-export type { ImportItem, ImportPayload, ImportTodo } from "../platform-ext";
+export type { ImportItem, ImportPayload, ImportTodo } from "@flock/app-sdk";
 
 export const IMPORT_EVENTS_OP = "import_events";
 /** The op's own limits (contract): at most 50 items and 32 KB per call. Flock refuses past them; the batch never sends them. */

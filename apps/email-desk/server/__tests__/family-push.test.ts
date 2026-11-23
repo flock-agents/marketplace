@@ -14,7 +14,7 @@ import {
   slugOf, referenceNumbersIn, refAnchor, factItem, planImport, emailLabel, FamilyPushBatch, titleFromContent, namingPrompt, parseNamings,
   MAX_IMPORT_ITEMS, type HeldTask, type FlushDeps, type ImportPayload,
 } from "../family/push";
-import type { FamilyBlockWire } from "../platform-ext";
+import type { FamilyBlockWire } from "@flock/app-sdk";
 
 const CTX = { today: "2026-11-24", tz: "Asia/Kolkata", familyNames: ["Shiva", "Shankar", "Ankita", "Agastya", "Meera", "Lakshmi"] };
 const MID = "<CAF8x2=school-annual-day@mail.gmail.com>";
@@ -40,7 +40,7 @@ const task = (title: string, due: string | null, over: Record<string, unknown> =
 const held = (t: any, key = "t-annual"): HeldTask => ({ task: t, threadKey: key });
 /** memory.extract's family block for one mail. */
 const wire = (key: string, facts: any[], heldTasks: any[] = [], messageId: string | null = key === "t-annual" ? MID : null): FamilyBlockWire =>
-  ({ blockId: key, facts, heldTasks, ctx: { threadKey: key, messageId, mailDate: "2026-11-24T04:00:00Z", sender: "info@greenwoodhigh.edu.in" } });
+  ({ blockId: key, facts, factIds: facts.map((_, i) => `${key}-f${i}`), prevRef: null, heldTasks, ctx: { threadKey: key, messageId, mailDate: "2026-11-24T04:00:00Z", sender: "info@greenwoodhigh.edu.in" } });
 
 describe("slugOf / referenceNumbersIn / refAnchor", () => {
   test("a slug is the title's words, lower case, joined by hyphens", () => {

@@ -8,6 +8,7 @@
 process.env.TZ = "Asia/Kolkata";
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import type { Database } from "bun:sqlite";
+import { createRoutineContext } from "@flock/app-sdk";
 import { mkdtempSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -72,10 +73,22 @@ function world(o: WorldOpts = {}) {
   const withdrawn: string[] = [];
   const logs: string[] = [];
   let released = 0;
+  const exec = async (skillId: string, fn: string, params: any, opts: any) => {
+    calls.push({ skillId, fn, params, opts });
+    if (fn === "searchEmails") return o.list ? o.list() : { ok: true, data: rows };
+    if (fn === "getThread") {
+      const t = threads[params.threadId];
+      return t ? { ok: true, data: t } : { ok: false, reason: "no such thread" };
+    }
+    return { ok: false, reason: `unexpected ${fn}` };
+  };
   const platform: any = {
     appId: "email-desk-p1", pairedAgent: o.pairedAgent === undefined ? { id: "pa-1", name: "Butler" } : o.pairedAgent, dataDir: "test", configured: true,
     connectors: {
       accounts: async () => ({ ok: true, data: { accounts: [{ accountId: ACCT, email: OWNER, label: "Shiva" }] } }),
+      // The routine handler's reads reach the platform's exec (routineCtx carries the read turn there); `opts` is kept in the
+      // routine ctx's shape so both paths read the same in the tests.
+      exec: (req: any) => exec(req.skillId, req.functionName, req.params, { account: req.accountHint, turnId: req.turnId, timeoutMs: req.timeoutMs, routineId: req.routineId }),
       readTurn: async (accountHint: any, consumer: string, opts: any) => {
         turns.push({ accountHint, consumer, opts });
         return o.turn ?? { ok: true, data: { turnId: "turn-1", accountId: ACCT, release: async () => { released++; } } };
@@ -90,17 +103,7 @@ function world(o: WorldOpts = {}) {
     routine: { id: "r1", appRoutineId: "follow-up", handler: "follow-up", agentId: "pa-1", name: "Follow up", accounts: { gmail: ACCT }, trigger: {}, values: o.values ?? {} },
     trigger: o.trigger ?? "event",
     platform,
-    connectors: {
-      exec: async (skillId: string, fn: string, params: any, opts: any) => {
-        calls.push({ skillId, fn, params, opts });
-        if (fn === "searchEmails") return o.list ? o.list() : { ok: true, data: rows };
-        if (fn === "getThread") {
-          const t = threads[params.threadId];
-          return t ? { ok: true, data: t } : { ok: false, reason: "no such thread" };
-        }
-        return { ok: false, reason: `unexpected ${fn}` };
-      },
-    },
+    connectors: { exec },
     wakeAgent: async () => { throw new Error("the follow-up routine never wakes an agent"); },
     notify: async () => ({ ok: true, data: { delivered: 0 } }),
     state: { get: () => null, set: () => {} },
@@ -553,6 +556,16 @@ describe("the follow-up routine handler", () => {
     // Five business days: the OLD message is not yet due, so waiting and no TODO.
     expect(w.published).toHaveLength(0);
     expect(getFollowUp(ACCT, THREAD)).toMatchObject({ status: "waiting" });
+  });
+
+  test("on the SDK's own routine context, every Gmail read reaches the platform under the read turn", async () => {
+    const w = world();
+    // The SDK's routine ctx exec takes no turnId and drops it: the handler must not rely on it.
+    const sdkCtx = createRoutineContext({ runId: "run-1", trigger: "event", routine: w.ctx.routine }, w.ctx.platform);
+    await followUp(sdkCtx, w.deps);
+    expect(w.calls.length).toBeGreaterThan(0);
+    for (const c of w.calls) expect(c.opts).toMatchObject({ account: ACCT, turnId: "turn-1", routineId: "r1" });
+    expect(w.published).toHaveLength(1);
   });
 
   test("the routine never wakes an agent", async () => {

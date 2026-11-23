@@ -23,7 +23,7 @@
 // (an existing mailbox from before this app, or one whose crawl failed): at most once per RECRAWL_AFTER_MS.
 import type { PlatformContext } from "@flock/app-sdk";
 import { getStore } from "../store";
-import { ext } from "../platform-ext";
+import { NO_READ_TURNS, type ReadTurnResult } from "../platform-ext";
 import {
   prefilterSentRows, ownMessageText, isUsableSample, capSample, stripSharedTrailer, isSkippableSentSubject, MAX_SAMPLES, MAX_READS,
 } from "./sampling";
@@ -325,11 +325,10 @@ export async function beginVoiceCrawl(
   // Learning from here: the placeholder is what a create_draft racing the turn sees.
   const progress: VoiceCrawlProgress = { accountId, address: "", startedAt: nowImpl(), listed: 0, read: 0, sampled: 0, stored: 0, done: false };
   active.set(accountId, progress);
-  const x = ext(platform);
-  let turn: Awaited<ReturnType<typeof x.connectors.readTurn>>;
+  let turn: ReadTurnResult;
   try {
-    turn = x.connectors.readTurn
-      ? await x.connectors.readTurn(accountId, VOICE_CONSUMER, { skillId: "gmail", ttlMs: READ_TURN_TTL_MS })
+    turn = platform.connectors.readTurn
+      ? await platform.connectors.readTurn(accountId, VOICE_CONSUMER, { skillId: "gmail", ttlMs: READ_TURN_TTL_MS })
       : { ok: false, reason: "this Flock has no read turns", code: "busy" };
   } catch (e: any) {
     turn = { ok: false, reason: e?.message ?? String(e), code: "busy" };
@@ -355,7 +354,6 @@ async function learn(
   platform: PlatformContext, model: VoiceModel, progress: VoiceCrawlProgress, first: HeldTurn, interactive?: boolean,
 ): Promise<VoiceCrawlProgress> {
   const { accountId } = progress;
-  const x = ext(platform);
   // The turn the crawl holds right now, if any: taken for a read, released before every pause.
   let held: HeldTurn | null = first;
   const releaseHeld = async (): Promise<void> => {
@@ -371,9 +369,11 @@ async function learn(
    *  refusal (the account paused or not this person's), or busy past the retries, skips the read. */
   const take = async (): Promise<HeldTurn | null> => {
     for (let attempt = 0; attempt <= MAX_BUSY_RETRIES; attempt++) {
-      let r: Awaited<ReturnType<typeof x.connectors.readTurn>>;
+      let r: ReadTurnResult;
       try {
-        r = await x.connectors.readTurn(accountId, VOICE_CONSUMER, { skillId: "gmail", ttlMs: READ_TURN_TTL_MS });
+        r = platform.connectors.readTurn
+          ? await platform.connectors.readTurn(accountId, VOICE_CONSUMER, { skillId: "gmail", ttlMs: READ_TURN_TTL_MS })
+          : NO_READ_TURNS;
       } catch (e: any) {
         r = { ok: false, reason: e?.message ?? String(e), code: "busy" };
       }
@@ -388,7 +388,7 @@ async function learn(
     if (!held) held = await take();
     if (!held) return null;
     try {
-      const r = await x.connectors.exec<unknown>({
+      const r = await platform.connectors.exec<unknown>({
         skillId: "gmail", functionName, params, accountHint: accountId, timeoutMs: READ_TIMEOUT_MS, turnId: held.turnId,
       });
       if (!r.ok) return null;

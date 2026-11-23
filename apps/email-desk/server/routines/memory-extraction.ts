@@ -37,7 +37,8 @@
 // list of the thread's open TODOs: they are Flock's board rows (source "gmail"), which `tasks.list` cannot see. The seam's
 // optional `board.openTasks` is the proposed read; until Flock serves it, items carry none and nothing is closed here.
 import type { RoutineContext } from "@flock/app-sdk";
-import { routineCtx, type ExtractAnswer, type ImportPayload, type OpenTaskWire, type RoutineCtx } from "../platform-ext";
+import type { ImportPayload, MemoryExtractAnswer } from "@flock/app-sdk";
+import { routineCtx, type OpenTaskWire, type RoutineCtx } from "../platform-ext";
 import { getStore } from "../store";
 import { THREAD_BODY_SEPARATOR } from "../lib/thread-format";
 import { localDayStart, processTimezone, todayIn } from "../lib/local-day";
@@ -205,8 +206,8 @@ export async function runMemoryExtraction(ctx: RoutineCtx, deps: MemoryExtractio
 async function routineAccounts(ctx: RoutineCtx): Promise<Array<{ accountId: string; email: string | null }>> {
   let known: Array<{ accountId: string; email: string | null }> = [];
   try {
-    const r = await ctx.platform.connectors.accounts(GMAIL);
-    if (r.ok) known = (r.data?.accounts ?? []).map((a) => ({ accountId: a.accountId, email: a.email ?? null }));
+    const r = await ctx.platform.connectors.accounts?.(GMAIL);
+    if (r?.ok) known = (r.data?.accounts ?? []).map((a) => ({ accountId: a.accountId, email: a.email ?? null }));
   } catch { /* the address is a nice-to-have: the routine's own account still runs */ }
   const own = ctx.routine.accounts?.[GMAIL];
   if (own) return [{ accountId: own, email: known.find((a) => a.accountId === own)?.email ?? null }];
@@ -255,7 +256,7 @@ async function runAccount(
       if (family) source.familyCandidates = true;
       let r: Awaited<ReturnType<RoutineCtx["platform"]["memory"]["extract"]>>;
       try {
-        r = await ctx.platform.memory.extract<ExtractAnswer>(items, source);
+        r = await ctx.platform.memory.extract<MemoryExtractAnswer>(items, source);
       } catch (e: any) {
         r = { ok: false, reason: e?.message ?? String(e) };
       }
@@ -264,7 +265,7 @@ async function runAccount(
         reasons.add(r.skipped ? "not paired" : r.reason);
         continue;
       }
-      const answer = (r.data ?? {}) as ExtractAnswer;
+      const answer = (r.data ?? {}) as Partial<MemoryExtractAnswer>;
       // The family items Flock wrote and held come back whatever else happened: they are placed either way.
       if (family && Array.isArray(answer.family?.blocks)) family.batch.addBlocks(answer.family!.blocks);
       // One call answers for the whole chunk, so a failed item fails the chunk: it is offered again, never marked done.

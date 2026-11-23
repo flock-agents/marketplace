@@ -23,7 +23,7 @@
 // message on a TODO's thread newer than the TODO that is neither sent mail nor the person's own: that is a reply, with no
 // Gmail read. The daily pass catches the rest when it reads the thread again.
 import type { RoutineContext } from "@flock/app-sdk";
-import { routineCtx, type RoutineCtx } from "../platform-ext";
+import { NO_READ_TURNS, routineCtx, type ReadTurnResult, type RoutineCtx } from "../platform-ext";
 import { getStore } from "../store";
 import { SENT_LIST_MAX, sentQuery } from "../journal";
 import { extractEmailAddress } from "../lib/draft-eligibility";
@@ -182,7 +182,9 @@ export async function runFollowUpForAccount(
     return tally;
   }
 
-  const turn = await ctx.platform.connectors.readTurn(accountId, FOLLOW_UP_CONSUMER, { skillId: GMAIL, ttlMs: FOLLOW_UP_TURN_TTL_MS });
+  const turn: ReadTurnResult = ctx.platform.connectors.readTurn
+    ? await ctx.platform.connectors.readTurn(accountId, FOLLOW_UP_CONSUMER, { skillId: GMAIL, ttlMs: FOLLOW_UP_TURN_TTL_MS })
+    : NO_READ_TURNS;
   if (!turn.ok) {
     const code = "code" in turn ? turn.code : undefined;
     deps.log(`[email-desk] follow-up ${accountId}: ${turn.skipped ? "not connected to Flock" : code === "busy" ? "mailbox busy" : `could not take the mailbox (${turn.reason})`}; day left due`);
@@ -361,8 +363,8 @@ export async function settleRepliedFollowUps(ctx: RoutineCtx, accountId: string,
 async function routineAccounts(ctx: RoutineCtx): Promise<Array<{ accountId: string; email: string }>> {
   let known: Array<{ accountId: string; email: string }> = [];
   try {
-    const r = await ctx.platform.connectors.accounts(GMAIL);
-    if (r.ok) known = (r.data?.accounts ?? []).map((a) => ({ accountId: a.accountId, email: a.email ?? "" }));
+    const r = await ctx.platform.connectors.accounts?.(GMAIL);
+    if (r?.ok) known = (r.data?.accounts ?? []).map((a) => ({ accountId: a.accountId, email: a.email ?? "" }));
   } catch { /* with no address the daily pass skips and the settle does nothing */ }
   const own = ctx.routine.accounts?.[GMAIL];
   if (own) return [{ accountId: own, email: known.find((a) => a.accountId === own)?.email ?? "" }];

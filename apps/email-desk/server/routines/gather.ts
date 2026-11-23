@@ -16,7 +16,7 @@
 // gathering and handing over offers the same mail again, and a mail handed over is never offered twice.
 import type { Database } from "bun:sqlite";
 import type { Result } from "@flock/app-sdk";
-import type { RoutineCtx } from "../platform-ext";
+import { NO_READ_TURNS, type ReadTurnResult, type RoutineCtx } from "../platform-ext";
 import { getStore } from "../store";
 import {
   GMAIL_SOURCE, MEMORY_CONSUMER, RESOLVE,
@@ -341,8 +341,8 @@ function advancedCursor(prev: string | null, newestTs: number): string | null {
 
 async function mailboxOf(ctx: RoutineCtx, accountId: string): Promise<{ email: string | null; label: string | null }> {
   try {
-    const r = await ctx.platform.connectors.accounts("gmail");
-    if (!r.ok) return { email: null, label: null };
+    const r = await ctx.platform.connectors.accounts?.("gmail");
+    if (!r?.ok) return { email: null, label: null };
     const a = r.data.accounts.find((x) => x.accountId === accountId);
     return { email: a?.email?.trim() || null, label: a?.label?.trim() || null };
   } catch {
@@ -360,7 +360,9 @@ export async function gatherNewMail(ctx: RoutineCtx, accountId: string, opts: Ga
   const db = getStore(ctx.platform.dataDir);
   const cursor = getCursor(db, GMAIL_SOURCE, accountId);
 
-  const turn = await ctx.platform.connectors.readTurn(accountId, HARVEST_CONSUMER, { skillId: "gmail", ttlMs: HARVEST_TURN_TTL_MS });
+  const turn: ReadTurnResult = ctx.platform.connectors.readTurn
+    ? await ctx.platform.connectors.readTurn(accountId, HARVEST_CONSUMER, { skillId: "gmail", ttlMs: HARVEST_TURN_TTL_MS })
+    : NO_READ_TURNS;
   if (!turn.ok) {
     const code = "code" in turn ? turn.code : undefined;
     const note = turn.skipped ? "not connected to Flock"

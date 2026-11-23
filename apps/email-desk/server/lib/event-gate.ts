@@ -3,7 +3,7 @@
 // way Calendar Desk gates an event, and reads the owner-local date and time the gate gives. Flock gates the facts it hands
 // back too (memory.extract `family.blocks`); the app gates again because it needs the gate's date and time, not only its yes.
 // Unrated facts (salience null) never qualify.
-import type { DateRole, FactWhenWire } from "../platform-ext";
+import type { ExtractedFactWire } from "@flock/app-sdk";
 
 export const EVENT_SALIENCE_FLOOR = 0.6; // owner-approved 2026-10-05 (eval 34/37 both runs; junk <= 0.5)
 export const EVENT_HORIZON_DAYS = 90;
@@ -63,7 +63,7 @@ function convertWall(date: string, time: string, fromTz: string, toTz: string): 
  *  to it, and the converted date drives the past/horizon checks. An invalid `when.tz` is treated
  *  as the owner tz (the time is taken as owner-local rather than dropping the fact). */
 export function qualifiesAsEvent(
-  f: { when: FactWhenWire | null | undefined; dateRole: DateRole | null | undefined; salience: number | null | undefined; kind?: string | null; familyPush?: string | null },
+  f: { when: ExtractedFactWire["when"] | undefined; dateRole: string | null | undefined; salience: number | null | undefined; kind?: string | null; familyPush?: string | null },
   today: string,
   ownerTz: string,
 ): { ok: true; date: string; time: string | null } | { ok: false; reason: GateReason } {
