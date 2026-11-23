@@ -47,8 +47,10 @@ const parseJson = (v: unknown): Record<string, unknown> => {
 const CONTENT_JOIN = `LEFT JOIN ingest_content ic
   ON ic.source_id = e.source_id AND ic.account_id = e.account_id AND ic.event_id = e.event_id`;
 
-/** The newest message of a thread as the journal stored it, with the account it is stored under. Null when no row of the
- *  thread holds a body. The body column is the whole thread rendered oldest first; its last segment is the newest message. */
+/** The newest message of a thread as the journal stored it, with the account it is stored under, its subject (F-R11) and
+ *  its own body (F-R14). Null when no row of the thread holds a body. The store keeps no per-message body: the body column
+ *  is the whole thread rendered oldest first (the donation parks it on every row), so the newest message's body is that
+ *  text's last segment, without its `From:` line. */
 function newestThreadMessage(p: Record<string, unknown>) {
   const threadId = str(p.threadId);
   if (!threadId) return { message: null };
@@ -61,12 +63,16 @@ function newestThreadMessage(p: Record<string, unknown>) {
   ).get(threadId) as { event_id: string; account_id: string; actor: string | null; raw: string | null; body: string } | null;
   if (!row) return { message: null };
   const segments = row.body.split(THREAD_BODY_SEPARATOR).map((s) => s.trim()).filter(Boolean);
-  const named = (segments[segments.length - 1] ?? "").match(/^From: ([^\n]*)\n/);
+  const last = segments[segments.length - 1] ?? "";
+  const named = last.match(/^From: ([^\n]*)\n([\s\S]*)$/);
   const actor = parseJson(row.actor);
   const raw = parseJson(row.raw);
   const actorFrom = str(actor.name) && str(actor.email) ? `${str(actor.name)} <${str(actor.email)}>` : str(actor.email) || str(actor.name);
   return {
-    message: { id: row.event_id, from: named ? named[1]!.trim() : actorFrom, date: str(raw.dateFull) || str(raw.date), accountId: row.account_id },
+    message: {
+      id: row.event_id, from: named ? named[1]!.trim() : actorFrom, date: str(raw.dateFull) || str(raw.date), accountId: row.account_id,
+      subject: str(raw.subject), body: (named ? named[2]! : last).trim(),
+    },
   };
 }
 

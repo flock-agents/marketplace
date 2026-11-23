@@ -99,7 +99,9 @@ function fake(opts: {
       targets: async () => { f.targetsCalls++; return { ok: true, data: { appIds: opts.family!.targets ?? ["family-calendar"] } }; },
       importEvents: async (p: ImportPayload) => {
         f.imports.push(p);
-        return { ok: true, data: { answer: opts.family!.importAnswer ? opts.family!.importAnswer(p) : { results: p.items.map((i) => ({ ref: i.ref, id: "e", result: "added" })) } } };
+        // F's route answers { answer, marked } (family/import-route.ts; the SDK passes both through).
+        const answer = opts.family!.importAnswer ? opts.family!.importAnswer(p) : { results: p.items.map((i) => ({ ref: i.ref, id: "e", result: "added" })) };
+        return { ok: true, data: { answer, marked: p.items.reduce((n, i) => n + (i.factIds?.length ?? 0), 0) } };
       },
       household: async () => ({ ok: true, data: { names: opts.household ?? ["Agastya Shankar", "Shiva"] } }),
     };

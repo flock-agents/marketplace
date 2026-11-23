@@ -279,6 +279,9 @@ describe("create_draft", () => {
     expect(card.sourceRef).toBe(`draft:${out.id}`);
     expect(card.context.why).toBe("Asha asked if you are free.");
     expect(card.context.card.draftSaveOp).toBe("update_draft");
+    // F-R16: Flock's thread-keyed checks (dedup, Sent view, Discuss seed) read the draft's Gmail thread and account here.
+    expect(card.context.threadId).toBe(THREAD);
+    expect(card.context.accountId).toBe(ACCOUNT);
     const blocks = card.context.card.blocks;
     expect(blocks.map((b: any) => b.type)).toEqual(["message", "draft"]);
     expect(blocks[0]).toMatchObject({ type: "message", from: "Asha Rao <asha@acme.com>", subject: "Tuesday?", body: "Are you free on Tuesday?" });

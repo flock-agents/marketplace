@@ -223,11 +223,20 @@ describe("reply_context", () => {
 });
 
 describe("platform ops", () => {
-  test("newest_thread_message: id, from, date, accountId of the newest stored message", async () => {
+  test("newest_thread_message: id, from, date, accountId, subject and the newest message's own body (F-R11, F-R14)", async () => {
     const { json } = await call("newest_thread_message", { threadId: T1 });
     expect(Object.keys(json)).toEqual(["message"]);
-    expect(json.message).toEqual({ id: expect.any(String), from: "Asha Rao <asha@acme.com>", date: "Mon, Nov 23, 2026, 9:00 AM", accountId: A1 });
+    expect(json.message).toEqual({
+      id: expect.any(String), from: "Asha Rao <asha@acme.com>", date: "Mon, Nov 23, 2026, 9:00 AM", accountId: A1,
+      subject: "Tuesday?", body: "Are you free on Tuesday?",
+    });
     expect((await call("newest_thread_message", { threadId: "nope" })).json).toEqual({ message: null });
+  });
+
+  test("newest_thread_message: a one-message thread's body is that message, without its From line", async () => {
+    seed(A2, "t-one", "Dev <dev@club.org>", "Club night", ["From: Dev <dev@club.org>\nSaturday works for the club?\nDev"]);
+    const { json } = await call("newest_thread_message", { threadId: "t-one" });
+    expect(json.message).toMatchObject({ from: "Dev <dev@club.org>", subject: "Club night", body: "Saturday works for the club?\nDev", accountId: A2 });
   });
 
   test("thread_body and store_thread_body", async () => {

@@ -134,6 +134,9 @@ export async function publishDraftCard(platform: PlatformContext, draft: DraftRe
         // The copy's own agent, whoever it is (an Inbox Assistant, the Butler, any agent the person paired): never the
         // caller's, never an assumed PA.
         agentId: platform.pairedAgent?.id,
+        // The draft's Gmail thread and mailbox (F-R16): Flock's thread-keyed checks (dedup, Sent view, Discuss seed) read them.
+        threadId: draft.threadId,
+        accountId: draft.accountId,
         card: { blocks, draftSaveOp: "update_draft" },
       },
       actions: [{
