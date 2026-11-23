@@ -20,6 +20,7 @@ import { mountCartRoutes } from "./cartRoutes";
 import { mountReminderRoutes } from "./reminder";
 import { mountMakePlanRoute } from "./makePlan";
 import { NO_MODEL, type ModelCall } from "./model";
+import { mountSetupRoute } from "./setup";
 
 /** A fresh temp directory for a test, removed when its test file is done: nothing piles up in the system's temp folder.
  *  The removal is registered here, per directory: this module loads once for the whole run, so a hook at its top level would
@@ -51,6 +52,7 @@ export async function boot(opts: { dbFile?: string; dataDir?: string; token?: st
   mountRecipeRoutes(hono, kit.db, kit.emitChange);
   mountDishBookRoutes(hono, kit.db, kit.emitChange, { now });
   mountMakePlanRoute(hono, kit.db, kit.emitChange, { basePath: opts.basePath ?? "/a/t", model: opts.model ?? NO_MODEL, now });
+  mountSetupRoute(hono, kit.db, kit.emitChange, { model: opts.model ?? NO_MODEL });
   /** A request as the owner. */
   const owner = async (method: string, path: string, body?: unknown) => {
     const r = await hono.request(path, { method, headers: { "Content-Type": "application/json", "X-Flock-User": "tester" }, body: body === undefined ? undefined : JSON.stringify(body) });

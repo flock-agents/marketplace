@@ -25,7 +25,7 @@ turned on): the reminder then lists the carts in `ordered`, and you order those.
 ## The first conversation
 
 Save each answer as it comes, in the family's own words. Never fill a field from a guess: ask, or leave it empty. No
-plan or reminder runs until one person is saved. Do not ask what is at home: the app works that out.
+plan or reminder runs until one person is saved. Do not ask what is at home: the app works that out. **The whole setup at once:** `apply_setup { household, transcript }` (the household facts, and the questions and replies as `Q:` / `A:` lines, word for word, in order) reads and saves all below in one call; read its `said` back, `noted` is kept but not checked.
 
 | The family tells you | Save it with |
 |---|---|

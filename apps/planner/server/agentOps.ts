@@ -17,6 +17,7 @@ export const ROUTES: Record<string, Route> = {
   set_slots: (p) => ({ method: "POST", path: "/api/family/slots", body: p }),
   set_cooking_days: (p) => ({ method: "POST", path: "/api/family/cooking-days", body: p }),
   set_shopping_apps: (p) => ({ method: "POST", path: "/api/family/shopping-apps", body: p }),
+  apply_setup: (p) => ({ method: "POST", path: "/api/family/setup", body: p }),
   plan_week: (p) => typeof p.week_start === "string" || typeof p.week_start === "number"
     ? { method: "POST", path: `/api/weeks/${encodeURIComponent(String(p.week_start))}/plan`, body: p }
     : { error: "week_start is required: the week's Monday as YYYY-MM-DD", code: "APP_REFUSED", status: 400 },
@@ -72,6 +73,7 @@ export const FIELDS: Record<string, { fields: string[]; need?: string[] }> = {
   set_slots: { fields: ["extra_slots", "order_in", "add"] },
   set_cooking_days: { fields: ["days"], need: ["days"] },
   set_shopping_apps: { fields: ["main", "fallback", "connected"], need: ["main", "connected"] },
+  apply_setup: { fields: ["household", "transcript"], need: ["transcript"] },
   plan_week: { fields: ["week_start", "mode", "meals", "keep_rest"], need: ["week_start", "mode"] },
   plan_menu: { fields: ["week_start", "meals"], need: ["week_start", "meals"] },
   make_plan: { fields: ["week_start"], need: ["week_start"] },
