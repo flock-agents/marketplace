@@ -339,10 +339,19 @@ async function planWeek(deps: MakePlanDeps & { log: (line: string) => void }, in
     let thinUnmet = thin();
     let problems = checkSlot(w, s.name, p);
     const hard = () => dates.filter((d) => hardOnly(problems.get(d)).length);
-    const bad = hard();
+    // A dish back too soon, too often or twice a day is code's to swap in its place (owner 23 Nov: never a thinner plate),
+    // before anything is sent back; where no swap fits it stays (noted at the end), and is not sent back either.
+    const comesBack = (x: Problem) => !!x.dish && (x.kind === "repeat" || x.kind === "often" || x.kind === "same_day");
+    const early = hard().filter((d) => hardOnly(problems.get(d)).some(comesBack));
+    if (early.length) {
+      const r = rotate(w, s.name, p, early, { swapsOnly: true });
+      log(`${s.name}: code swapped first: ${r.changed.join("; ")}`);
+      problems = checkSlot(w, s.name, p);
+    }
+    const bad = dates.filter((d) => hardOnly(problems.get(d)).some((x) => !comesBack(x)));
     if (bad.length) {
       const fix = { ...first, now: Object.fromEntries(dates.map((d) => [d, p.days.get(d) ?? []])),
-        fix: bad.map((d) => ({ date: d, wrong: (problems.get(d) ?? []).map((x) => x.text) })), week: (problems.get("") ?? []).map((x) => x.text) };
+        fix: bad.map((d) => ({ date: d, wrong: (problems.get(d) ?? []).filter((x) => !comesBack(x)).map((x) => x.text) })), week: (problems.get("") ?? []).map((x) => x.text) };
       log(`${s.name}: ${bad.length} day${bad.length === 1 ? "" : "s"} sent back (${kindsOf(problems)})`);
       await ask({ tier: "balanced", purpose: `meal plan: fix the ${s.name}`, system: FIX_SYSTEM, schema: SLOT_SCHEMA, maxTokens: slotTokens(bad.length), user: JSON.stringify(fix) }, bad);
       if (!stop) await contains();
@@ -491,6 +500,19 @@ async function planWeek(deps: MakePlanDeps & { log: (line: string) => void }, in
       if (n || was) upsertLibrary(tx, { name: row.name, slot: row.slot, offers: Math.max(0, row.offers - was) + n }, by, ch);
     }
   });
+
+  // A dish kept back early on several days is said once: "Pappu at Dinner comes back sooner than usual (Tue, Wed, Thu)".
+  const BACK = " comes back sooner than usual";
+  const backs = new Map<string, { slot: string; dish: string; days: string[] }>();
+  for (const u of uniq(unmet)) {
+    if (!u.endsWith(BACK) || !u.includes(": ")) continue;
+    const head = u.slice(0, u.indexOf(": ")), dish = u.slice(u.indexOf(": ") + 2, -BACK.length);
+    const day = head.slice(0, head.indexOf(" ")), slot = head.slice(head.indexOf(" ") + 1);
+    const k = `${slot}|${dishKey(dish)}`;
+    backs.set(k, { slot, dish, days: [...(backs.get(k)?.days ?? []), day] });
+  }
+  if (backs.size) unmet.splice(0, unmet.length, ...uniq(unmet).filter((u) => !u.endsWith(BACK)),
+    ...[...backs.values()].map((x) => (x.days.length === 1 ? `${x.days[0]} ${x.slot}: ${x.dish}${BACK}` : `${x.dish} at ${x.slot}${BACK} (${x.days.join(", ")})`)));
 
   // 6. The message. A slot too thin for its week is asked about, the thinnest first (owner 23 Nov), not a line in unmet.
   const asked = [...read.asked, ...(only ? [] : shortQuestions(feas.short, slots, toPlan, w))];

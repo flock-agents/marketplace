@@ -146,11 +146,12 @@ describe("make_plan v2: history (spec §2.2)", () => {
     expect(u.recent).toEqual({ "2026-11-27": ["Rice", "Khichdi"], "2026-11-28": ["Roti", "Paneer"], "2026-11-29": ["Roti", "Chole"] });
     // Roti is in 2 of 5 history rows, but planned rows never feed staples: Rice (3 of 3 seed and confirmed rows) does.
     expect(u.staples).toEqual(["Rice"]);
-    // Chole was shown on Sunday: on Monday it is within 3 days of itself, so a plan with it there is sent back.
+    // Chole was shown on Sunday: on Monday it is within 3 days of itself, so code swaps it in its place (not sent back).
     const g = fakeModel({ slot: (x) => x.slot === "Lunch" ? { days: Object.fromEntries(x.days.map((d: any, i: number) => [d.date, ["Rice", ["Chole", "Rajma", "Kadhi", "Sambar"][i % 4]]])) } : rotateDays(x) });
     await k.plan(g.model);
-    expect(g.fixes().map((c) => c.user.slot)).toEqual(["Lunch"]);
-    expect(g.fixes()[0].user.fix[0].wrong.join(" ")).toContain("Chole is on Sun and Mon");
+    expect(g.fixes()).toHaveLength(0);
+    expect(k.dishesAt(MON, "Lunch")).toHaveLength(2);
+    expect(k.dishesAt(MON, "Lunch")).not.toContain("Chole");
   });
 
   it("a dish the family has daily is a staple by their word: given as one, and put on every slot-day of its slot when the model leaves it out", async () => {
@@ -232,7 +233,9 @@ describe("make_plan v2: hard rules per person, fail closed", () => {
     const k = await home({ library: [{ name: "Fish fry", slot: "Dinner", contains: ["fish"], contains_read: READ }] });
     const SAT = WEEK[5];
     commit(k.kit.db, k.kit.emitChange, (tx, ch) => saveSlotDay(tx, { date: SAT, slot: "Dinner", people: ["Asha", "Ravi", "Kabir"], guests: [{ count: 4, rules: ["Vegetarian"] }], edited: true, dishes: [] }, "app", ch));
-    const f = fakeModel({ slot: (u) => u.slot === "Dinner" ? { days: { ...(rotateDays(u) as any).days, [SAT]: ["Fish fry"] } } : rotateDays(u),
+    // The week's other days without the fish fry, so only Saturday is wrong (and for the guests only).
+    const others = (u: any) => ({ ...u, library: u.library.filter((d: any) => d.dish !== "Fish fry") });
+    const f = fakeModel({ slot: (u) => u.slot === "Dinner" ? { days: { ...(rotateDays(others(u)) as any).days, [SAT]: ["Fish fry"] } } : rotateDays(u),
       fix: (u) => ({ days: Object.fromEntries(u.fix.map((x: any) => [x.date, ["Fish fry"]])) }),
       day: (u) => (u.rules ? { rules: [{ rule: "vegetarian", never: ["meat", "fish", "unknown_tag"] }] } : ingredients(u)) });
     await k.plan(f.model);
@@ -319,12 +322,16 @@ describe("make_plan v2: ordered slot calls", () => {
     expect(reqOf(f, "Kabir's tiffin").days.map((d: any) => d.date)).toEqual(WEEK.slice(0, 5));
   });
 
-  it("no same main twice a day across main slots: a lunch that repeats breakfast's main is sent back", async () => {
+  it("no same main twice a day across main slots: a lunch that repeats breakfast's main is swapped in its place by code", async () => {
     const k = await home({ lib: { Breakfast: ["Poha", "Upma", "Idli", "Dosa"], Lunch: ["Poha", "Rajma", "Kadhi", "Chole", "Sambar"], Dinner: LIB.Dinner } });
     const f = fakeModel({ slot: (u) => u.slot === "Lunch" ? { days: { ...(rotateDays(u) as any).days, [MON]: ["Dosa"] }, new: [{ dish: "Dosa" }] } : rotateDays(u),
       wait: (u) => (u.slot === "Lunch" ? 10 : 0) });
-    await k.plan(f.model);
-    expect(f.fixes()[0].user.fix[0].wrong).toContain("Dosa is already at Breakfast that day");
+    const lines: string[] = [];
+    await k.plan(f.model, { log: (l) => lines.push(l) });
+    expect(k.dishesAt(MON, "Breakfast")).toContain("Dosa");
+    expect(k.dishesAt(MON, "Lunch")).toHaveLength(1);
+    expect(k.dishesAt(MON, "Lunch")).not.toContain("Dosa");
+    expect(lines.some((l) => l.startsWith("Lunch: code swapped first: Mon Lunch"))).toBe(true);
   });
 });
 

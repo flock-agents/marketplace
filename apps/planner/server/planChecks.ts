@@ -536,8 +536,9 @@ export function thinAddon(w: Week, slotName: string, p: Proposal): { unmet: stri
  *  and is short of takes the place of one of its stand-ins. No swap fits: the original stays and the repeat is noted (a
  *  dish never allowed there takes the least bad stand-in instead); an add-on's dish over its count is taken off, the day
  *  left empty where its people are fed at the main slot. A day with no dish at all (not an add-on) gets one of the
- *  family's own plates. Answers the lines for `unmet` and the log. */
-export function rotate(w: Week, slotName: string, p: Proposal, failing: string[]): { unmet: string[]; changed: string[] } {
+ *  family's own plates. `swapsOnly`: only the dishes back too soon, too often or twice a day are swapped (before the fix
+ *  call). Answers the lines for `unmet` and the log. */
+export function rotate(w: Week, slotName: string, p: Proposal, failing: string[], opts: { swapsOnly?: boolean } = {}): { unmet: string[]; changed: string[] } {
   const sf = w.slots.get(slotKey(slotName))!;
   const addon = sf.slot.kind === "addon";
   const unmet: string[] = [], changed: string[] = [];
@@ -557,7 +558,7 @@ export function rotate(w: Week, slotName: string, p: Proposal, failing: string[]
     let plate = [...was];
     const noted: string[] = [];
     // A day with nothing (the call left it out): one of the family's own plates at this slot that fits, else a dish.
-    if (!plate.length && !addon) {
+    if (!plate.length && !addon && !opts.swapsOnly) {
       const staples = sf.staples.filter((s) => notFor(w, d, s).length < d.people.length);
       const lib = sf.library.filter((x) => plannable(x) && !isStapleAt(w, slotName, x.name) && (!x.days?.length || x.days.includes(weekdayOf(date))));
       const units = sf.looks_like.map((r) => r.split(",").map((x) => x.trim()).filter((x) => x && !isStapleAt(w, slotName, x)))
@@ -569,7 +570,7 @@ export function rotate(w: Week, slotName: string, p: Proposal, failing: string[]
     // Each dish a hard problem names: swapped in its place.
     for (let i = 0; i < plate.length; i++) {
       const x = plate[i];
-      const mine = own(plate, x);
+      const mine = own(plate, x).filter((y) => !opts.swapsOnly || comesBack(y));
       if (!mine.length) continue;
       const cands = standIns(w, slotName, p, date, x, plate);
       const clean = cands.find((c) => better(plate, withAt(plate, i, c), c, false));
@@ -585,14 +586,17 @@ export function rotate(w: Week, slotName: string, p: Proposal, failing: string[]
       if (mine.every(comesBack)) noted.push(x);
     }
     // A person with nothing of their own there: a dish they can eat, beside the others.
-    for (const r of hardAt(plate).filter((x) => x.kind === "rule" && !x.dish)) {
+    for (const r of opts.swapsOnly ? [] : hardAt(plate).filter((x) => x.kind === "rule" && !x.dish)) {
       if (!hardAt(plate).some((x) => x.text === r.text)) continue;
       const cands = standIns(w, slotName, p, date, null, plate);
-      const add = cands.find((c) => better(plate, [...plate, c], c, false)) ?? cands.find((c) => better(plate, [...plate, c], c, true));
+      // Feeds them: the person's problem gone, and the dish's own faults at most a repeat (the least bad), none elsewhere.
+      const feeds = (c: string, least: boolean) => { const next = [...plate, c]; return !hardAt(next).some((x) => x.text === r.text) && others(next) <= others(plate)
+        && (least ? own(next, c).every(comesBack) : !own(next, c).length); };
+      const add = cands.find((c) => feeds(c, false)) ?? cands.find((c) => feeds(c, true));
       if (add) { plate = [...plate, add]; if (own(plate, add).length) noted.push(add); }
     }
     // A dish the family has often that this day should have: in the place of a stand-in of it, when that leaves fewer problems.
-    for (const f of hardAt(plate).filter((x) => x.kind === "few" && x.dish)) {
+    for (const f of opts.swapsOnly ? [] : hardAt(plate).filter((x) => x.kind === "few" && x.dish)) {
       if (plate.some((x) => dishKey(x) === dishKey(f.dish!))) continue;
       const roles = rolesOf(w, slotName);
       const at = plate.map((x, i) => ({ x, i })).filter(({ x }) => !isStapleAt(w, slotName, x)).sort((a, b) => peerScore(roles, f.dish!, b.x) - peerScore(roles, f.dish!, a.x));
