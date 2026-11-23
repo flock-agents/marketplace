@@ -69,7 +69,10 @@ export function scorePlan(h: Household, plan: PlanOut, loaded: SetupOut): PlanSc
     if (e.skip) { add("skips_kept", !sd || (!!sd.skip && !sd.dishes.length), `${e.day} ${e.slot}: has dishes though ${e.skip}`); continue; }
     add("filled", !!sd && !sd.skip && sd.dishes.length > 0, `${e.day} ${e.slot}: ${!sd ? "no slot-day" : sd.skip ? `marked ${sd.skip}` : "no dish"}`);
     if (!sd || sd.skip) continue;
-    add("attendance", sameNames(e.people, sd.people), `${e.day} ${e.slot}: for ${JSON.stringify(sd.people)} (want ${JSON.stringify(e.people)})`);
+    // Weekday lunch nobody said of (TRUTH's lunchUnclear): planned with or without that person, both are right.
+    const unclear = lc(e.slot) === "lunch" && !["Sat", "Sun"].includes(e.day) ? (t.lunchUnclear ?? []) : [];
+    const drop = (xs: string[]) => xs.filter((x) => !unclear.some((u) => sameName(u, x)));
+    add("attendance", sameNames(drop(e.people), drop(sd.people)), `${e.day} ${e.slot}: for ${JSON.stringify(sd.people)} (want ${JSON.stringify(e.people)})`);
     if (e.guests || sd.guests.length) add("guests", sd.guests.reduce((a, g) => a + g.count, 0) === e.guests, `${e.day} ${e.slot}: guests ${JSON.stringify(sd.guests)} (want ${e.guests})`);
   }
   const stray = cooked.filter((x) => !exp.some((e) => e.date === x.date && lc(e.slot) === lc(x.slot) && !e.skip));
@@ -123,6 +126,20 @@ export function scorePlan(h: Household, plan: PlanOut, loaded: SetupOut): PlanSc
         }
       }
     }
+    // A dish the app marks not for a person (code's not_for) spares their rule on it, as long as they still have a dish of
+    // their own there beside the staples (owner, 23 Nov: a fish lunch with dal for the vegetarian grandmother passes).
+    if (["avoid", "veg", "no_eggs", "egg"].includes(r.what)) for (const sd of cooked) {
+      const e = exp.find((x) => x.date === sd.date && lc(x.slot) === lc(sd.slot));
+      const mains = sd.dishes.filter((d) => !isStaple(sd.slot, d.name));
+      for (const p of binds(r, sd, e)) {
+        // Their own add-on beside this slot that day (her own dinner beside the family's) feeds them there.
+        const own = cooked.find((x) => x.date === sd.date && x.people.some((y) => sameName(y, p))
+          && t.slots.some((s) => s.kind === "addon" && lc(s.name) === lc(x.slot) && lc(s.addon_of ?? "") === lc(sd.slot)));
+        if (own?.dishes.some((d) => !(d.not_for ?? []).some((x) => sameName(x, p)))) continue;
+        const theirs = sd.dishes.filter((d) => !(d.not_for ?? []).some((x) => sameName(x, p)));
+        if (!theirs.length || (mains.length && !theirs.some((d) => mains.includes(d)))) bad.push(`${dayOfSd(sd)} ${sd.slot}: nothing for ${p}${theirs.length ? " but staples" : ""}`);
+      }
+    }
     const uniq = [...new Set(bad)];
     breaks += uniq.length;
     add("hard_rules", !uniq.length, `${r.title}: ${uniq.slice(0, 4).join("; ")}${uniq.length > 4 ? ` (+${uniq.length - 4})` : ""}`);
@@ -150,6 +167,28 @@ export function scorePlan(h: Household, plan: PlanOut, loaded: SetupOut): PlanSc
   facts.new_dishes = newNames.size;
 
   // ── 4. Frequency and days per dish, counted across all slots ──
+  /** A slot TRUTH's own dishes cannot fill within the default rules, when the planner says so in unmet (spec §5.2: the
+   *  library is too thin): its non-staple dishes with no frequency or days (k), 2 days each, are fewer than its places (n
+   *  cooked slot-days × m, its usual non-staple count). Such a slot may bring a dish back on an even share of its days,
+   *  ceil(n·m / k), and within floor(k / m) days of itself, and no sooner. null: the slot can be filled. */
+  const thin = (slot: string): { cap: number; gap: number } | null => {
+    const k = t.library.filter((d) => d.slot === slot && !d.frequency && !d.days && !isStaple(slot, d.name)).length;
+    const n = exp.filter((e) => e.slot === slot && !e.skip).length;
+    const rows = history.filter((r) => r.slot === slot && r.dishes.length).map((r) => r.dishes.filter((d) => !isStaple(slot, d)).length).sort((a, b) => a - b);
+    const m = rows.length ? Math.max(1, rows[Math.floor((rows.length - 1) / 2)]) : 1;
+    if (!k || k * 2 >= n * m || !plan.unmet.some((u) => lc(u).includes(lc(slot)))) return null;
+    return { cap: Math.ceil((n * m) / k), gap: Math.max(1, Math.floor(k / m)) };
+  };
+  /** The default cap of a dish (2 days), more only when every slot it is a non-staple at is thin. */
+  const capOf = (slots: string[]): number => {
+    let cap = 2;
+    for (const slot of slots) {
+      const th = thin(slot);
+      if (!th) return 2;
+      cap = Math.max(cap, th.cap);
+    }
+    return cap;
+  };
   const placements = (name: string) => cooked.flatMap((sd) => sd.dishes.filter((d) => dishNameOf(d.name, truthNames) === name).map(() => sd));
   for (const name of truthNames) {
     const rows = t.library.filter((d) => d.name === name);
@@ -171,13 +210,13 @@ export function scorePlan(h: Household, plan: PlanOut, loaded: SetupOut): PlanSc
       const okCount = !freq || (n <= max && n >= Math.min(min, room));
       const okDays = !days || ps.every((sd) => days.includes(dayOfSd(sd)));
       add("dish_frequency", okCount && okDays, `${name} (${[freq, days?.join(",")].filter(Boolean).join(", ")}) on ${ps.map((sd) => `${dayOfSd(sd)} ${sd.slot}`).join(", ") || "no day"}`);
-    } else if (new Set(counted.map((sd) => sd.date)).size > 2) add("default_cap", false, `${name} (no frequency, not a staple) on ${new Set(counted.map((sd) => sd.date)).size} days: ${counted.map((sd) => `${dayOfSd(sd)} ${sd.slot}`).join(", ")}`);
+    } else if (new Set(counted.map((sd) => sd.date)).size > capOf(rows.map((d) => d.slot).filter((x) => !isStaple(x, name)))) add("default_cap", false, `${name} (no frequency, not a staple) on ${new Set(counted.map((sd) => sd.date)).size} days: ${counted.map((sd) => `${dayOfSd(sd)} ${sd.slot}`).join(", ")}`);
     else if (ps.length) add("default_cap", true);
   }
 
   // ── 5. Repeat window per slot (staples exempt), and no same main twice a day across main slots ──
   for (const s of t.slots.filter((x) => !x.optional)) {
-    const w = plan.relaxed?.[s.name] ?? 3;
+    const w = Math.min(plan.relaxed?.[s.name] ?? 3, thin(s.name)?.gap ?? 3);
     const sds = cooked.filter((x) => lc(x.slot) === lc(s.name)).sort((a, b) => a.date.localeCompare(b.date));
     const last = new Map<string, string>();
     const bad: string[] = [];
@@ -236,7 +275,7 @@ export function scorePlan(h: Household, plan: PlanOut, loaded: SetupOut): PlanSc
 export function weekText(plan: PlanOut): string {
   return WEEK.map((day) => {
     const sds = plan.slotDays.filter((x) => weekdayOfDate(x.date) === day);
-    return `${day}: ${sds.map((x) => `${x.slot} [${[...x.people, ...x.guests.map((g) => `${g.count} guest${g.count > 1 ? "s" : ""}`)].join(", ")}]: ${x.skip ? `(${x.skip.replace("_", " ")})` : x.dishes.map((d) => `${d.name}${d.note ? ` (${d.note})` : ""}`).join(", ") || "(nothing)"}${x.note ? ` — ${x.note}` : ""}`).join(" | ")}`;
+    return `${day}: ${sds.map((x) => `${x.slot} [${[...x.people, ...x.guests.map((g) => `${g.count} guest${g.count > 1 ? "s" : ""}`)].join(", ")}]: ${x.skip ? `(${x.skip.replace("_", " ")})` : x.dishes.map((d) => `${d.name}${d.not_for?.length ? ` (not for ${d.not_for.join(", ")})` : ""}${d.note ? ` (${d.note})` : ""}`).join(", ") || "(nothing)"}${x.note ? ` — ${x.note}` : ""}`).join(" | ")}`;
   }).join("\n");
 }
 export { dayOf };

@@ -6,9 +6,12 @@ import { plain } from "./truth";
 export type HistoryRow = { slot: string; dishes: string[]; date?: string | null };
 
 /** spec §10.1 (owner, 23 Nov): a staple of a slot is a dish in ≥ 60% of that slot's last 14 history rows with dishes, from the
- *  seed and CONFIRMED rows only (a planned row is never history here: pass only those), plus every `daily` dish of the slot. */
+ *  seed and CONFIRMED rows only (a planned row is never history here: pass only those), once the slot has STAPLE_MIN_ROWS
+ *  such rows, plus every `daily` dish of the slot. */
 export const STAPLE_SHARE = 0.6;
 export const STAPLE_WINDOW = 14;
+/** Owner, 23 Nov: history makes staples only once the slot has at least this many rows with dishes; below it, only `daily`. */
+export const STAPLE_MIN_ROWS = 3;
 
 /** The staples of `slot`, as plain names. Rows are taken newest first by date; the seed (no date) after dated rows. */
 export function staplesOf(rows: HistoryRow[], slot: string, daily: string[] = []): Set<string> {
@@ -16,7 +19,7 @@ export function staplesOf(rows: HistoryRow[], slot: string, daily: string[] = []
     .sort((a, b) => (b.date ?? "").localeCompare(a.date ?? ""))
     .slice(0, STAPLE_WINDOW);
   const out = new Set<string>(daily.map(plain));
-  if (!mine.length) return out;
+  if (mine.length < STAPLE_MIN_ROWS) return out;
   const counts = new Map<string, number>();
   for (const r of mine) for (const d of new Set(r.dishes.map(plain))) counts.set(d, (counts.get(d) ?? 0) + 1);
   for (const [d, n] of counts) if (n / mine.length >= STAPLE_SHARE) out.add(d);

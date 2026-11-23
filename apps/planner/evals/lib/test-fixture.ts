@@ -43,9 +43,9 @@ export const FIX: Household = {
     noted: [{ id: "ekadashi", who: "Dadu Ram", re: /ekadashi/i }],
     seed: [
       { slot: "Breakfast", dishes: ["Poha"] }, { slot: "Breakfast", dishes: ["Upma"] },
-      { slot: "Chotu's tiffin", dishes: ["Sandwich"] },
-      { slot: "Lunch", dishes: ["Rice", "Dal", "Bhindi"] }, { slot: "Lunch", dishes: ["Rice", "Dal", "Aloo gobi"] },
-      { slot: "Dinner", dishes: ["Roti", "Dal", "Lauki"] }, { slot: "Dinner", dishes: ["Roti", "Rajma"] },
+      { slot: "Chotu's tiffin", dishes: ["Sandwich"] }, { slot: "Chotu's tiffin", dishes: ["Sandwich"] }, { slot: "Chotu's tiffin", dishes: ["Sandwich"] },
+      { slot: "Lunch", dishes: ["Rice", "Dal", "Bhindi"] }, { slot: "Lunch", dishes: ["Rice", "Dal", "Aloo gobi"] }, { slot: "Lunch", dishes: ["Rice", "Dal"] },
+      { slot: "Dinner", dishes: ["Roti", "Dal", "Lauki"] }, { slot: "Dinner", dishes: ["Roti", "Rajma"] }, { slot: "Dinner", dishes: ["Roti"] },
       { slot: "Dadu's dinner", dishes: ["Phulka"] },
     ],
     week: [
