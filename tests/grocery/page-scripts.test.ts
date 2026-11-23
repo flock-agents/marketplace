@@ -16,7 +16,13 @@ const TEMPLATE = /(String\.raw)?`((?:[^`\\]|\\[\s\S])*)`/g;
 /** A page script is an arrow function the page calls at once: `(() => {…})()` or `(async () => {…})()`. */
 const PAGE_SCRIPT = /^\s*\((async\s*)?\(\)\s*=>/;
 
-interface PageScript { where: string; raw: boolean; body: string }
+interface PageScript { where: string; raw: boolean; body: string; /** The function the script is written in, or "". */ fn?: string }
+
+/** The name of the last function declared before `at` in `src`: the one a template there belongs to. */
+function functionAt(src: string, at: number): string {
+  const names = [...src.slice(0, at).matchAll(/function\s+(\w+)\s*\(/g)];
+  return names.length ? names[names.length - 1][1] : "";
+}
 
 function pageScripts(skill: string): PageScript[] {
   const dir = join(skills, skill, "scripts");
@@ -24,7 +30,7 @@ function pageScripts(skill: string): PageScript[] {
     const src = readFileSync(join(dir, file), "utf8");
     return [...src.matchAll(TEMPLATE)]
       .filter(([, , body]) => PAGE_SCRIPT.test(body))
-      .map(([, raw, body]) => ({ where: `${skill}/scripts/${file}`, raw: !!raw, body }));
+      .map((m) => ({ where: `${skill}/scripts/${file}`, raw: !!m[1], body: m[2], fn: functionAt(src, m.index ?? 0) }));
   });
 }
 
@@ -64,7 +70,8 @@ describe("the in-page scripts", () => {
   });
 
   it("BigBasket's search reads the product id with its regex intact", () => {
-    const search = scripts.find((s) => s.where === "bigbasket/scripts/_bigbasket.ts")!;
+    const search = scripts.find((s) => s.where === "bigbasket/scripts/_bigbasket.ts" && s.fn === "searchScript")!;
+    expect(search).toBeDefined();
     expect(asThePageGetsIt(search).sent).toContain(String.raw`href.match(/\/pd\/(\d+)/)`);
   });
 
