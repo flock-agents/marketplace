@@ -266,6 +266,8 @@ function createSchema(db: Database): void {
   addColumns(db, "lifecycle_state", [["pending_sweeps", "TEXT"]]);
   addColumns(db, "reply_messages", [["quoted", "TEXT"]]);
   addColumns(db, "follow_up_state", [["session_id", "TEXT"], ["offered_at", "INTEGER"], ["recipient_name", "TEXT"]]);
+  // Who the draft's reply reaches (drafts/addressing.ts, Ruling P3-R5): JSON { to, cc, recipients }, or NULL when unknown.
+  addColumns(db, "draft_records", [["reply_all", "TEXT"]]);
 }
 
 // The copy's one open store, opened on first use in $APP_DATA_DIR (or the dir a caller names, e.g. the platform

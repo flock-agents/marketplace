@@ -9,6 +9,7 @@
 // `bodyWritten` is what Gmail held after our last write (the writer's own read-back, bodyAsSaved), the base of the
 // three-way compare that tells a person's edit in Gmail from our own text (draftStatus).
 import type { Database } from "bun:sqlite";
+import type { ReplyAddressing } from "./addressing";
 
 export interface DraftRecord {
   id: string;
@@ -27,6 +28,8 @@ export interface DraftRecord {
   /** The person changed this draft (on its card, or in Gmail): the agent may not change it again. */
   personEdited: boolean;
   why: string | null;
+  /** Who the reply reaches, derived in code when the draft was written (drafts/addressing.ts); null when unknown. */
+  replyAll: ReplyAddressing | null;
 }
 
 export type DraftStatus = "untouched" | "person-edited" | "missing";
@@ -45,7 +48,17 @@ function toRecord(r: any): DraftRecord {
     sentBy: r.sent_by ?? null,
     personEdited: r.person_edited === 1,
     why: typeof r.why === "string" && r.why ? r.why : null,
+    replyAll: replyAllOf(r.reply_all),
   };
+}
+
+function replyAllOf(raw: unknown): ReplyAddressing | null {
+  if (typeof raw !== "string" || !raw) return null;
+  try {
+    const v = JSON.parse(raw);
+    return v && typeof v.to === "string" && typeof v.cc === "string" && Array.isArray(v.recipients)
+      && v.recipients.length > 0 && v.recipients.every((e: unknown) => typeof e === "string") ? v : null;
+  } catch { return null; }
 }
 
 export function getDraft(db: Database, id: string): DraftRecord | null {
@@ -74,6 +87,7 @@ export interface NewDraft {
   answeredMessageRef?: string;
   draftMessageId?: string;
   why?: string | null;
+  replyAll?: ReplyAddressing | null;
 }
 
 /** Records the thread's one draft under a new id. A row already there (a sent draft: create_draft refuses an open one) is
@@ -82,12 +96,14 @@ export function recordDraft(db: Database, d: NewDraft, now = Date.now()): DraftR
   const id = crypto.randomUUID();
   db.run(
     `INSERT INTO draft_records (account_id, thread_id, draft_id, body_written, answered_message_ref, draft_message_id,
-       updated_at, sent_at, sent_by, id, person_edited, why)
-     VALUES (?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, 0, ?)
+       updated_at, sent_at, sent_by, id, person_edited, why, reply_all)
+     VALUES (?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, 0, ?, ?)
      ON CONFLICT(account_id, thread_id) DO UPDATE SET draft_id = excluded.draft_id, body_written = excluded.body_written,
        answered_message_ref = excluded.answered_message_ref, draft_message_id = excluded.draft_message_id,
-       updated_at = excluded.updated_at, sent_at = NULL, sent_by = NULL, id = excluded.id, person_edited = 0, why = excluded.why`,
-    [d.accountId, d.threadId, d.draftId, d.bodyWritten, d.answeredMessageRef ?? "", d.draftMessageId ?? "", now, id, d.why ?? null],
+       updated_at = excluded.updated_at, sent_at = NULL, sent_by = NULL, id = excluded.id, person_edited = 0, why = excluded.why,
+       reply_all = excluded.reply_all`,
+    [d.accountId, d.threadId, d.draftId, d.bodyWritten, d.answeredMessageRef ?? "", d.draftMessageId ?? "", now, id, d.why ?? null,
+      d.replyAll ? JSON.stringify(d.replyAll) : null],
   );
   return getDraft(db, id)!;
 }

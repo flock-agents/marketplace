@@ -137,6 +137,9 @@ export async function publishDraftCard(platform: PlatformContext, draft: DraftRe
         // The draft's Gmail thread and mailbox (F-R16): Flock's thread-keyed checks (dedup, Sent view, Discuss seed) read them.
         threadId: draft.threadId,
         accountId: draft.accountId,
+        // Who the reply reaches, derived in code (drafts/addressing.ts): a standing mail rule in Flock sends the card only
+        // when these name exactly its people. Left out when unknown, so no rule sends it.
+        ...(draft.replyAll ? { to: draft.replyAll.to, cc: draft.replyAll.cc, replyAllRecipients: draft.replyAll.recipients } : {}),
         card: { blocks, draftSaveOp: "update_draft" },
       },
       actions: [{

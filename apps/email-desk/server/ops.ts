@@ -20,6 +20,7 @@ import {
 import { deleteDraft, draftStatus, getDraft, lockDraft, openDraftForThread, recordDraft, setDraftBody, type DraftRecord } from "./drafts/records";
 import { answeredMessage, publishDraftCard, withdrawDraftCard } from "./drafts/card";
 import { sendDraft } from "./drafts/send";
+import { addressingForDraft } from "./drafts/addressing";
 import { releaseThreadHold, settleUnconfirmedSend, threadSendInDoubt } from "./drafts/send-check";
 import { tryAfterText, voiceStateFor, voiceLearningUntil } from "./voice/crawl";
 import { processTimezone } from "./lib/local-day";
@@ -187,7 +188,7 @@ async function writeNewDraft(accountId: string, threadId: string, body: string, 
   // Gmail's own Reply all sets who the reply reaches; the skill still asks for a `to` and a subject.
   const params: Record<string, unknown> = { threadId, to: answered?.address || answered?.from || "", body };
   if (answered?.subject) params.subject = answered.subject;
-  const written = await gmail<{ draftId?: unknown; draftMessageId?: unknown; bodyAsSaved?: unknown; reason?: unknown }>(
+  const written = await gmail<{ draftId?: unknown; draftMessageId?: unknown; bodyAsSaved?: unknown; reason?: unknown; replyMode?: unknown }>(
     ctx.platform, "createReplyDraft", params, accountId);
   let ids: { draftId: string; draftMessageId: string } | null = null;
   if (written.ok && str(written.data?.draftId)) ids = { draftId: str(written.data.draftId), draftMessageId: str(written.data.draftMessageId) };
@@ -196,9 +197,11 @@ async function writeNewDraft(accountId: string, threadId: string, body: string, 
   if (!ids) return gmailRefusal("save the draft", written.ok ? str(written.data?.reason) || "the draft did not show up in Gmail" : written.reason);
 
   const saved = written.ok ? str(written.data?.bodyAsSaved) : "";
+  // Who the reply reaches: the thread's fresh live read, when Gmail opened the reply that reaches them (Ruling P3-R5).
+  const replyAll = written.ok ? addressingForDraft(accountId, threadId, written.data?.replyMode) : null;
   const draft = recordDraft(db, {
     accountId, threadId, draftId: ids.draftId, draftMessageId: ids.draftMessageId,
-    bodyWritten: saved || body, answeredMessageRef: answered?.eventId ?? "", why,
+    bodyWritten: saved || body, answeredMessageRef: answered?.eventId ?? "", why, replyAll,
   });
   await publishDraftCard(ctx.platform, draft);
   return { id: draft.id };
