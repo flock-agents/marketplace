@@ -462,6 +462,8 @@ describe("apply_setup: how often, in the family's words", () => {
     expect(dishOftenSaid("usually", ["idli dosa poha"])).toEqual({ dropped: "usually" });
     expect(ruleOftenSaid({ often: "sometimes", quote: "millets are good for him" }, [])).toEqual({ often: "sometimes" });
     expect(ruleOftenSaid({ often: "sometimes", quote: "no sugar" }, ["father is diabetic no sugar"])).toEqual({ dropped: "sometimes" });
+    // A wish read as "usually" is still a wish (eval 23 Nov).
+    expect(ruleOftenSaid({ often: "usually", quote: "millets are good for him" }, [])).toEqual({ often: "sometimes" });
     expect(ruleOftenSaid({ per_week: 2, quote: "sweets twice a week" }, [])).toEqual({ per_week: 2 });
   });
 });

@@ -320,7 +320,9 @@ function breaksOf(shown: Rule, meals: RuleMeal[], people: { name: string }[], sl
         // Kept some times a week: a meal keeps it with a portion_note that says so, or a dish of the person's own that is what
         // the swap gives ("Millet roti" for them). Too many is a break; too few a softer one, on meals that could keep it.
         const who = r.who!, tos = alternatives(r.to!);
-        const said = (d: RuleDish) => matches(d.portion_note ?? "", who) && tos.some((t) => matches(d.portion_note ?? "", t));
+        const alone = (d: RuleDish) => d.for_people?.length === 1 && same(d.for_people[0], who);
+        // The note names them, or the dish is theirs alone ("Rice" for them, "millet in place of white rice").
+        const said = (d: RuleDish) => (alone(d) || matches(d.portion_note ?? "", who)) && tos.some((t) => matches(d.portion_note ?? "", t));
         const own = (d: RuleDish) => !forEveryone(d.for_people) && !!d.for_people?.some((p) => same(p, who)) && tos.some((t) => matches(d.name, t, { name: true }));
         const kept: { m: RuleMeal; d: RuleDish }[] = [], open: { m: RuleMeal; d: RuleDish }[] = [];
         for (const m of inScope) {

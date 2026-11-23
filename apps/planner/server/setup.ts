@@ -688,10 +688,13 @@ export function ruleOftenSaid(rule: Pick<SetupRule, "often" | "per_week" | "quot
     if (!rule.often) return { dropped: `${n} a week` };
   }
   const often = (OFTEN as readonly string[]).includes(rule.often ?? "") ? rule.often as Often : undefined;
-  if (!often) return { dropped: String(rule.often) };
   // The quote first: its own words; then the line it is in.
-  const says = (l: string) => OFTEN_WORDS[often].test(l) || (often === "sometimes" && WISH_WORDS.test(l));
-  return says(q) || lines.some(says) ? { often } : { dropped: often };
+  const says = (o: Often) => (l: string) => OFTEN_WORDS[o].test(l) || (o === "sometimes" && WISH_WORDS.test(l));
+  if (often && (says(often)(q) || lines.some(says(often)))) return { often };
+  // A wish said loosely ("millets are good for him") read as another often is still a wish: sometimes (eval 23 Nov: read
+  // as "usually", dropped, and kept at every meal).
+  if (says("sometimes")(q)) return { often: "sometimes" };
+  return { dropped: String(rule.often ?? "") };
 }
 /** The dishes read, one row a dish (live run 2026-11-23: "Curd" read once in the adults' answer and once in the child's,
  *  the last row saved won and the dish became one person's): rows of the same dish (its name lower case, single spaces) are
