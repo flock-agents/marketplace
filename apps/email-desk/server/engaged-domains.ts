@@ -4,7 +4,8 @@
 //
 // READ-THROUGH, PER DOMAIN, ON DEMAND (owner, 2026-09-08): a hit answers with no I/O; a miss runs ONE `in:sent to:@domain`
 // search (gmail checkEngagedDomains) and records a yes. A no is never recorded (cheap to re-ask, and wrong the day the
-// person first writes there). A failed search is UNRESOLVED, which every caller treats as fail-open.
+// person first writes there). A failed search is UNRESOLVED: the cold-outreach check keeps the mail on it (fail open), and
+// the drafting wake wakes nobody for it (fail closed, routines/gather.ts gateDraftingWake).
 import type { Database } from "bun:sqlite";
 
 function domainFromAddress(address: string): string | null {
@@ -55,8 +56,16 @@ function cachedEngaged(db: Database, accountId: string, domain: string): boolean
   }
 }
 
-/** Distinct missed domains one pass searches for: bounded by checkEngagedDomains' own 90s timeout (6 x ~10s). */
+/** Distinct missed domains one pass searches for, one call each (a call is one Gmail search, ~10-20 s, inside its own 90 s
+ *  timeout). Six keeps a pass inside a few minutes of the read turn even when every search is slow. */
 export const MAX_LOOKUPS_PER_PASS = 6;
+
+export interface ResolveOptions {
+  /** Waited between two searches (never before the first): a person's pace, not a crawler's. Default none. */
+  pause?: () => Promise<void>;
+  /** Asked before each search: true stops the pass, the rest stay unresolved (the mailbox was refused, say). */
+  stop?: () => boolean;
+}
 
 export interface EngagementResolution {
   /** Confirmed engaged: cache hits plus this pass's confirmed lookups. */
@@ -66,14 +75,20 @@ export interface EngagementResolution {
 }
 
 /**
- * Resolve engagement for the domains a batch contains. `search` returns the engaged subset of the domains it was given, or
- * null when it could not run (null = unresolved for all of them, never "none engaged").
+ * Resolve engagement for the domains a batch contains. `search` is called with ONE domain at a time and returns the engaged
+ * subset of what it was given, or null when it could not run (null = that domain unresolved, never "not engaged").
+ *
+ * ONE DOMAIN PER CALL (live 2026-11-23): the gmail skill's checkEngagedDomains is all-or-nothing over the domains of a call,
+ * by design (a partial list would read the unsearched rest as negatives). Handed six domains, one search that did not settle
+ * failed the call after 61 s and threw away the answers already found. Asked one at a time, a slow search costs only its
+ * own domain, and each confirmed positive is recorded as it comes.
  */
 export async function resolveEngagement(
   db: Database,
   accountId: string,
   domains: string[],
   search: (misses: string[]) => Promise<string[] | null>,
+  opts: ResolveOptions = {},
 ): Promise<EngagementResolution> {
   const wanted = [...new Set(domains.map((d) => (d || "").trim().toLowerCase()).filter(Boolean))];
   const engaged: string[] = [];
@@ -86,19 +101,17 @@ export async function resolveEngagement(
   if (misses.length === 0) return { engaged, resolved };
 
   const toSearch = misses.slice(0, MAX_LOOKUPS_PER_PASS);
-  let found: string[] | null = null;
-  try { found = await search(toSearch); } catch { found = null; }
-  if (found === null) return { engaged, resolved };
-
-  const foundSet = new Set(found.map((d) => (d || "").trim().toLowerCase()).filter(Boolean));
-  const confirmed: string[] = [];
-  for (const domain of toSearch) {
+  for (const [i, domain] of toSearch.entries()) {
+    if (opts.stop?.()) break;
+    if (i > 0 && opts.pause) await opts.pause();
+    let found: string[] | null = null;
+    try { found = await search([domain]); } catch { found = null; }
+    if (found === null) continue; // unresolved: asked again next pass
     resolved.push(domain);
-    if (foundSet.has(domain)) { engaged.push(domain); confirmed.push(domain); }
-  }
-  if (confirmed.length > 0) {
-    try { recordEngagedDomains(db, accountId, confirmed); }
-    catch (err: any) { console.warn(`[engaged] could not cache engaged domains for ${accountId} (${err?.message})`); }
+    if (!found.some((d) => (d || "").trim().toLowerCase() === domain)) continue;
+    engaged.push(domain);
+    try { recordEngagedDomains(db, accountId, [domain]); }
+    catch (err: any) { console.warn(`[engaged] could not cache an engaged domain for ${accountId} (${err?.message})`); }
   }
   return { engaged, resolved };
 }

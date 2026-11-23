@@ -26,7 +26,7 @@ function dateFull(minutesAgo: number): string {
 
 interface Msg { from: string; body: string; minutesAgo: number; to?: string[]; cc?: string[] }
 /** A thread as the inbox lists it (its newest message) and as a thread read returns it (`earlier` messages first). */
-interface Mail { threadId: string; from: string; subject: string; body: string; minutesAgo: number; to?: string[]; cc?: string[]; earlier?: Msg[] }
+interface Mail { threadId: string; from: string; subject: string; body: string; minutesAgo: number; to?: string[]; cc?: string[]; earlier?: Msg[]; participants?: string[] }
 
 interface Fake {
   ctx: RoutineCtx;
@@ -48,11 +48,13 @@ function fake(opts: {
   platformExtra?: Record<string, unknown>;
   /** What the in:sent lookup (checkEngagedDomains) finds engaged; "fails": the lookup could not run. Default: none. */
   engaged?: string[] | "fails";
+  /** Domains whose lookup fails (the call that asks about one of them answers an error). */
+  engagedFailsFor?: string[];
 }): Fake {
   const f: Fake = { ctx: null as unknown as RoutineCtx, calls: [], released: 0, turns: [] };
   const rowOf = (m: Mail) => ({
     id: m.threadId, from: m.from, subject: m.subject, snippet: m.body.slice(0, 40),
-    date: "", dateFull: dateFull(m.minutesAgo), isUnread: true,
+    date: "", dateFull: dateFull(m.minutesAgo), isUnread: true, ...(m.participants ? { participants: m.participants } : {}),
   });
   const msgOf = (m: Msg) => ({ from: m.from, to: m.to ?? [opts.mailbox], cc: m.cc ?? [], date: dateFull(m.minutesAgo), body: m.body, recipientsVerified: true });
   const threadOf = (m: Mail) => ({ threadId: m.threadId, subject: m.subject, messages: [...(m.earlier ?? []).map(msgOf), msgOf(m)] });
@@ -74,6 +76,7 @@ function fake(opts: {
     if (fn === "checkEngagedDomains") {
       if (opts.engaged === "fails") return { ok: false as const, reason: "search did not finish" };
       const asked = (params.domains as string[]) ?? [];
+      if (asked.some((d) => (opts.engagedFailsFor ?? []).includes(d))) return { ok: false as const, reason: "BROWSER_ERROR: did not finish rendering" };
       return { ok: true as const, data: asked.filter((d) => (opts.engaged ?? []).includes(d)) };
     }
     if (fn === "searchEmails") return { ok: true as const, data: (opts.sent ?? []).map((m) => ({ ...rowOf(m), from: "me" })) };
@@ -378,5 +381,105 @@ describe("the drafting wake", () => {
     const r = await gatherNewMail(fake({ mailbox: "me@acme.com", inbox }).ctx, ACCOUNT);
     expect(r.kept).toHaveLength(senders.length);
     expect(r.kept.filter((k) => k.draftEligible)).toEqual([]);
+  });
+});
+
+// The built-in desk's drafting gate (shouldTrigger's §4 gate, ported unchanged into lib/significance-gate.ts): new mail wakes
+// the drafting agent only from a domain the person has written to. Here the lookup FAILS CLOSED for drafting (an unresolved
+// domain wakes nobody), while the mail still goes to memory. A thread the person takes part in is never cold, so these mails
+// are kept whatever the lookup says: only the drafting wake depends on it.
+describe("the engaged-domain drafting gate", () => {
+  const NEW: Mail = {
+    threadId: "t-new", from: "Ravi K <ravi@partner.io>", subject: "Signed contract", body: "Can you send the signed contract by Friday?",
+    minutesAgo: 30, participants: ["me@acme.com", "ravi@partner.io"],
+  };
+  const extracted: unknown[] = [];
+  const memory = { memory: { extract: async (req: unknown) => { extracted.push(req); return { ok: true, data: { failedItems: 0, deferredItems: 0 } }; } } };
+  beforeEach(() => { extracted.length = 0; });
+
+  async function runWith(engaged: string[] | "fails"): Promise<{ woken: any[]; f: Fake }> {
+    const woken: any[] = [];
+    const f = fake({ mailbox: "me@acme.com", inbox: [NEW], engaged, platformExtra: memory });
+    (f.ctx as any).trigger = "manual";
+    (f.ctx as any).wakeAgent = async (message: string, data: any) => { woken.push({ message, data }); return { ok: true, data: {} }; };
+    await runMemoryExtraction(f.ctx, { ensureVoice: async () => undefined, voiceFor: () => ({ voice: "VOICE", voiceState: "ready" }) });
+    return { woken, f };
+  }
+
+  test("a domain the person has never written to draws no draft: kept for memory, no wake", async () => {
+    const r = await gatherNewMail(fake({ mailbox: "me@acme.com", inbox: [NEW], engaged: [] }).ctx, ACCOUNT);
+    expect(r.kept.map((k) => k.threadId)).toEqual(["t-new"]);
+    expect(r.kept[0]!.draftEligible).toBe(false);
+
+    freshDb();
+    const { woken } = await runWith([]);
+    expect(woken).toEqual([]);
+    expect(extracted).toHaveLength(1);
+  });
+
+  test("an engaged domain wakes the drafting agent", async () => {
+    const r = await gatherNewMail(fake({ mailbox: "me@acme.com", inbox: [NEW], engaged: ["partner.io"] }).ctx, ACCOUNT);
+    expect(r.kept[0]!.draftEligible).toBe(true);
+
+    freshDb();
+    const { woken } = await runWith(["partner.io"]);
+    expect(woken).toHaveLength(1);
+    expect(woken[0].data.mails).toEqual([expect.objectContaining({ threadId: "t-new" })]);
+  });
+
+  test("a lookup that fails wakes nobody (fail closed), and the mail still goes to memory", async () => {
+    const f = fake({ mailbox: "me@acme.com", inbox: [NEW], engaged: "fails" });
+    const r = await gatherNewMail(f.ctx, ACCOUNT);
+    expect(f.calls.some((c) => c.fn === "checkEngagedDomains")).toBe(true);
+    expect(r.kept.map((k) => k.threadId)).toEqual(["t-new"]);
+    expect(r.kept[0]!.draftEligible).toBe(false);
+
+    freshDb();
+    const { woken } = await runWith("fails");
+    expect(woken).toEqual([]);
+    expect(extracted).toHaveLength(1);
+  });
+
+  test("a sender whose domain was learned engaged before is gated on the cache, with no lookup", async () => {
+    db.query("INSERT INTO engaged_domains (account_id, domain, count, last_sent_at, seeded, updated_at) VALUES (?,?,0,0,0,?)").run(ACCOUNT, "partner.io", Date.now());
+    const f = fake({ mailbox: "me@acme.com", inbox: [NEW], engaged: "fails" });
+    const r = await gatherNewMail(f.ctx, ACCOUNT);
+    expect(r.kept[0]!.draftEligible).toBe(true);
+    expect(f.calls.some((c) => c.fn === "checkEngagedDomains")).toBe(false);
+  });
+
+  test("a calendar auto-response from an engaged sender draws no draft (the gate's order, unchanged)", async () => {
+    const accepted: Mail = { ...NEW, threadId: "t-acc", subject: "Accepted: Contract review" };
+    const r = await gatherNewMail(fake({ mailbox: "me@acme.com", inbox: [accepted], engaged: ["partner.io"] }).ctx, ACCOUNT);
+    expect(r.kept.find((k) => k.threadId === "t-acc")?.draftEligible ?? false).toBe(false);
+  });
+});
+
+// Live 2026-11-23 (email-desk-0932fc3e): one checkEngagedDomains call carried the batch's domains, its second in-session
+// Gmail search did not settle, and the script's all-or-nothing exit (400 after 61 s) threw away the first domain's answer
+// too. Each domain is now its own call, so one slow search costs only its own domain, and the failure's reason is logged.
+describe("the engaged-domain lookup, one domain per call", () => {
+  const A: Mail = { threadId: "t-a", from: "Ravi K <ravi@partner.io>", subject: "Contract", body: "Can you send the signed contract by Friday?", minutesAgo: 30, participants: ["me@acme.com"] };
+  const B: Mail = { threadId: "t-b", from: "Lee <lee@slow.io>", subject: "Invoice", body: "Could you confirm the invoice total?", minutesAgo: 40, participants: ["me@acme.com"] };
+
+  test("each domain is asked alone; a domain whose search fails leaves the others' answers standing", async () => {
+    const warned: string[] = [];
+    const warn = console.warn;
+    console.warn = (...a: unknown[]) => { warned.push(a.join(" ")); };
+    try {
+      const f = fake({ mailbox: "me@acme.com", inbox: [B, A], engaged: ["partner.io"], engagedFailsFor: ["slow.io"] });
+      const r = await gatherNewMail(f.ctx, ACCOUNT, { lookupPauseMs: 0 });
+      const asked = f.calls.filter((c) => c.fn === "checkEngagedDomains").map((c) => c.params.domains);
+      expect(asked.length).toBe(2);
+      for (const d of asked) expect(d).toHaveLength(1);
+      expect(r.kept.find((k) => k.threadId === "t-a")?.draftEligible).toBe(true);
+      expect(r.kept.find((k) => k.threadId === "t-b")?.draftEligible).toBe(false);
+      // The confirmed positive is kept for the next run; the failed domain is not cached either way.
+      const cached = (db.query("SELECT domain FROM engaged_domains WHERE account_id = ? AND seeded = 0").all(ACCOUNT) as { domain: string }[]).map((x) => x.domain);
+      expect(cached).toEqual(["partner.io"]);
+      expect(warned.some((w) => w.includes("did not finish rendering"))).toBe(true);
+    } finally {
+      console.warn = warn;
+    }
   });
 });

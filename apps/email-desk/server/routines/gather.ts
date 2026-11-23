@@ -29,6 +29,7 @@ import { isColdOutreachThread, isMemoryEligible } from "../lib/memory-eligibilit
 import { isPersonalMailbox, personalVerdict, type FamilyContext } from "../lib/personal-mail-rules";
 import { decideDraftEligibility, extractEmailAddress } from "../lib/draft-eligibility";
 import { isAutomatedSender } from "../lib/automated-sender";
+import { decide as decideSignificance } from "../lib/significance-gate";
 import { isSentRow } from "../lib/sent-row";
 import { THREAD_BODY_SEPARATOR as SEPARATOR, MAX_BODY_CHARS } from "../lib/thread-format";
 import { parseGmailDateTime } from "../lib/gmail-date";
@@ -53,6 +54,9 @@ export const LIST_TIMEOUT_MS = 2 * 60_000;
 const RESOLVE_TIMEOUT_MS = 105_000;
 /** checkEngagedDomains' own declared timeout. */
 const ENGAGED_TIMEOUT_MS = 90_000;
+/** The pause between two engaged-domain searches (the skill's own pacing, nextPauseMs: 3-7 s, randomised). */
+const LOOKUP_PAUSE_MIN_MS = 3_000;
+const LOOKUP_PAUSE_SPREAD_MS = 4_000;
 
 /** Two windows (owner, 2026-09-15): a thread whose newest message is older than OPEN is left pending (not read this run);
  *  one older than HORIZON is dropped for good as `too_old`. */
@@ -86,7 +90,8 @@ export interface KeptMail {
   recipients?: MessageRecipients[];
   mailboxKind: "personal" | "work";
   /** Today's draft gate, in code, on the thread as read now: the newest message is to the person (To, not cc), not their
-   *  own, not bulk, not from an automated sender, and no draft is open. Sent mail never is. create_draft checks again. */
+   *  own, not bulk, not from an automated sender, and no draft is open; and its sender's domain is one the person has written
+   *  to (gateDraftingWake: a lookup that did not answer means no). Sent mail never is. create_draft checks again. */
   draftEligible: boolean;
 }
 
@@ -121,6 +126,8 @@ export interface GatherOptions {
   openDays?: number;
   horizonDays?: number;
   maxThreads?: number;
+  /** The pause between two engaged-domain searches. Default 3-7 s, randomised; tests pass 0. */
+  lookupPauseMs?: number;
 }
 
 type Gmail = <T = unknown>(fn: string, params: Record<string, unknown>, timeoutMs: number) => Promise<Result<T>>;
@@ -402,12 +409,81 @@ export async function gatherNewMail(ctx: RoutineCtx, accountId: string, opts: Ga
 
   const { turnId } = turn.data;
   const gmail: Gmail = (fn, params, timeoutMs) => ctx.connectors.exec("gmail", fn, params, { account: accountId, turnId, timeoutMs });
+  const engagement = runEngagement(db, accountId, gmail, opts.lookupPauseMs);
+  const run: RunInfo = { mailbox: null };
   try {
-    return await gatherUnderTurn(db, ctx, gmail, accountId, cursor, opts);
+    const out = await gatherUnderTurn(db, ctx, gmail, accountId, cursor, opts, engagement, run);
+    // Still under the turn: the drafting gate may look a domain up.
+    await gateDraftingWake(out, run.mailbox, engagement);
+    return out;
   } finally {
     try { await turn.data.release(); }
     catch (err: any) { console.warn(`[gather] ${accountId}: releasing the read turn failed: ${err?.message}`); }
   }
+}
+
+/** What the gather learned that the drafting gate needs after it: the mailbox's address. */
+interface RunInfo { mailbox: string | null }
+
+/** Engagement for one run: each domain is asked at most once a run (a "no" is never cached across runs, and a failed lookup
+ *  is not retried until the next run), cache hits cost nothing. Answers, for the domains given, which are engaged and which
+ *  were classified at all. */
+type RunEngagement = (domains: string[]) => Promise<{ engaged: string[]; resolved: string[] }>;
+
+function runEngagement(db: Database, accountId: string, gmail: Gmail, pauseMs: number | undefined): RunEngagement {
+  const asked = new Set<string>();
+  const engaged = new Set<string>();
+  const resolved = new Set<string>();
+  // A refusal of the mailbox (the account guard, a sign-in wall) ends the run's lookups: every later search would be refused.
+  let refused = false;
+  const search = async (misses: string[]): Promise<string[] | null> => {
+    const r = await gmail("checkEngagedDomains", { domains: misses }, ENGAGED_TIMEOUT_MS);
+    if (!r.ok) {
+      if (stopReason(r)) refused = true;
+      console.warn(`[gather] ${accountId}: an engaged-domain lookup did not answer (${errorText(r).slice(0, 300)}); that domain stays unresolved`);
+    }
+    return engagedFromSearch(r);
+  };
+  const pause = () => new Promise<void>((done) => setTimeout(done, pauseMs ?? LOOKUP_PAUSE_MIN_MS + Math.random() * LOOKUP_PAUSE_SPREAD_MS));
+  return async (domains) => {
+    const wanted = [...new Set(domains.map((d) => (d || "").trim().toLowerCase()).filter(Boolean))];
+    const ask = wanted.filter((d) => !asked.has(d));
+    if (ask.length > 0) {
+      for (const d of ask) asked.add(d);
+      const res = await resolveEngagement(db, accountId, ask, search, { pause, stop: () => refused });
+      for (const d of res.engaged) engaged.add(d);
+      for (const d of res.resolved) resolved.add(d);
+    }
+    return { engaged: wanted.filter((d) => engaged.has(d)), resolved: wanted.filter((d) => resolved.has(d)) };
+  };
+}
+
+/**
+ * THE DRAFTING WAKE'S ENGAGEMENT GATE (the built-in desk's new-mail drafting trigger, lib/significance-gate.ts unchanged): of
+ * the mail that passed the thread's draft rules, only a sender from a domain the person has written to wakes the drafting
+ * agent. Run with the trigger's own settings (`ignoreAutomated` on, the mailbox's address as the owner's, velocity off).
+ *
+ * FAILS CLOSED, unlike the source: a domain whose lookup did not answer (failed, or past the per-pass cap), a sender with no
+ * readable address, or a run that stopped reading draws no wake. Only the wake: the mail stays kept and goes to memory.
+ */
+async function gateDraftingWake(out: GatherResult, mailbox: string | null, engagement: RunEngagement): Promise<void> {
+  const candidates = out.kept.filter((k) => k.draftEligible);
+  if (candidates.length === 0) return;
+  if (out.stopped || !mailbox) { for (const k of candidates) k.draftEligible = false; return; }
+  const senderOf = (k: KeptMail) => extractEmailAddress(k.from);
+  const domainOf = (email: string) => { const at = email.lastIndexOf("@"); return at > 0 ? email.slice(at + 1) : ""; };
+  let known: { engaged: string[]; resolved: string[] } = { engaged: [], resolved: [] };
+  try { known = await engagement(candidates.map((k) => domainOf(senderOf(k))).filter(Boolean)); }
+  catch (err: any) { console.warn(`[gather] engaged-domain lookup threw (${err?.message}); no drafting wake this run`); }
+  const engaged = new Set(known.engaged);
+  const decisions = decideSignificance(
+    candidates.map((k, i) => ({ eventId: String(i), actor: { email: senderOf(k) }, preview: k.subject })),
+    { ignoreAutomated: true, ownerAddresses: [mailbox], engagedDomains: known.engaged, resolvedDomains: known.resolved },
+  );
+  candidates.forEach((k, i) => {
+    const domain = domainOf(senderOf(k));
+    k.draftEligible = decisions[i]?.wake === true && !!domain && engaged.has(domain);
+  });
 }
 
 async function gatherUnderTurn(
@@ -417,6 +493,8 @@ async function gatherUnderTurn(
   accountId: string,
   cursorBefore: string | null,
   opts: GatherOptions,
+  engagement: RunEngagement,
+  run: RunInfo,
 ): Promise<GatherResult> {
   const now = opts.now ?? Date.now();
   const out: GatherResult = { kept: [], skipped: 0, deferred: 0, cursor: cursorBefore };
@@ -464,6 +542,7 @@ async function gatherUnderTurn(
   // 4. WHO THE MAILBOX IS. Fails open: no address → work rules, and the cold check keeps everything.
   const account = await mailboxOf(ctx, accountId);
   const mailbox = account.email;
+  run.mailbox = mailbox;
   const ownerAddresses = mailbox ? [mailbox] : [];
   if (mailbox) seedOwnerDomains(db, accountId, ownerAddresses);
   const personal = isPersonalMailbox(mailbox);
@@ -519,8 +598,7 @@ async function gatherUnderTurn(
         const at = email.lastIndexOf("@");
         if (at > 0 && at < email.length - 1) domains.add(email.slice(at + 1));
       }
-      const res = await resolveEngagement(db, accountId, [...domains], async (misses) =>
-        engagedFromSearch(await gmail("checkEngagedDomains", { domains: misses }, ENGAGED_TIMEOUT_MS)));
+      const res = await engagement([...domains]);
       const settled = { ...identity, engagedDomains: [...identity.engagedDomains, ...res.engaged], resolvedDomains: res.resolved };
       for (const b of coldCandidates) {
         if (isColdOutreachThread(b.rows, settled).cold) { out.deferred += b.rows.length; stillPending += b.rows.length; }

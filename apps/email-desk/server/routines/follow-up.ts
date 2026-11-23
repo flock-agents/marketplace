@@ -11,8 +11,9 @@
 // that session a grant to draft a follow-up on exactly those threads, judged the session's turn (`considered`, `nudged`,
 // `not_needed`) and discarded its untouched draft when a reply landed. None of that is here: the routine writes no draft and
 // wakes no agent. The TODO is the offer, and the person (with their agent, when they ask) decides. So the grant window, the
-// wake outcome handling, the settle's draft proofs and the kind drop (Flock applies it to the TODO) are gone; the statuses
-// are `waiting`, `offered` (the TODO is up) and `replied` (answered, or closed because the person wrote again).
+// wake outcome handling and the settle's draft proofs are gone; the statuses are `waiting`, `offered` (the TODO is up) and
+// `replied` (answered, or closed because the person wrote again). The person's follow-up rules stay: a dropped kind raises
+// nothing, a "send follow-ups to" rule for the same people stands over the drop (read from Flock, readFollowUpRules).
 //
 // EVERY GMAIL READ runs inside ONE read turn (`connectors.readTurn(account, "email-desk:follow-up")`), released on every path
 // out. A held or paused mailbox, or a refusal from the account guard, leaves the day due. A heavy day spans ticks: a pass
@@ -22,7 +23,7 @@
 // THE REPLY CHECK IS CHEAP. Every run (hourly, before the daily gate) looks in the journal, which the gather keeps, for a
 // message on a TODO's thread newer than the TODO that is neither sent mail nor the person's own: that is a reply, with no
 // Gmail read. The daily pass catches the rest when it reads the thread again.
-import type { RoutineContext } from "@flock/app-sdk";
+import { createTransport, readAppEnv, type RoutineContext } from "@flock/app-sdk";
 import { NO_READ_TURNS, routineCtx, type ReadTurnResult, type RoutineCtx } from "../platform-ext";
 import { getStore } from "../store";
 import { SENT_LIST_MAX, sentQuery } from "../journal";
@@ -73,11 +74,34 @@ export function followUpConfig(filter: Record<string, unknown> = {}): FollowUpCo
   };
 }
 
+/** The person's follow-up rules, as Flock answers them for the addresses asked about (GET /api/apps/:appId/follow-up-rules):
+ *  `always`, the people sets of their "send follow-ups to" rules; `never`, the asked addresses whose follow-up kind they
+ *  dropped. Null when they could not be read. */
+export interface FollowUpRules { always: string[][]; never: string[] }
+
 export interface FollowUpDeps {
   now: () => number;
   tz: () => string;
   sleep: (ms: number) => Promise<void>;
   log: (line: string) => void;
+  /** The person's follow-up rules for these addresses. Default: Flock's route, with the app's own token. */
+  rules?: (who: string[]) => Promise<FollowUpRules | null>;
+}
+
+const strings = (v: unknown): string[] =>
+  Array.isArray(v) ? v.filter((x): x is string => typeof x === "string").map((x) => x.trim().toLowerCase()).filter(Boolean) : [];
+
+/** Flock's answer for this copy's own person (the route answers only an Email Desk copy, with its own token). Null on any
+ *  failure, an unpaired app or an older Flock without the route: the routine then drops nothing. */
+export async function readFollowUpRules(who: string[]): Promise<FollowUpRules | null> {
+  const env = readAppEnv();
+  if (!env.configured) return null;
+  const q = new URLSearchParams();
+  for (const w of who) q.append("who", w);
+  const r = await createTransport(env).request<{ always?: unknown; never?: unknown }>("GET", `/api/apps/${encodeURIComponent(env.appId)}/follow-up-rules?${q}`);
+  if (!r.ok || !r.data || typeof r.data !== "object") return null;
+  const always = Array.isArray(r.data.always) ? r.data.always.map(strings).filter((p) => p.length > 0) : [];
+  return { always, never: strings(r.data.never) };
 }
 const realDeps = (): FollowUpDeps => ({
   now: () => Date.now(),
@@ -202,6 +226,7 @@ export async function runFollowUpForAccount(
 
   // After "Delete my mail data" (R29): sent mail from before the delete raises nothing again.
   const deletedAt = mailDeletedAt();
+  const readRules = deps.rules ?? readFollowUpRules;
   const candidates: Candidate[] = [];
   let limitReached = false;
   let cappedWithRowsLeft = false;
@@ -273,6 +298,20 @@ export async function runFollowUpForAccount(
         }
         mem.read.add(row.id);
         continue;
+      }
+      // THE PERSON'S RULES (the built-in desk's runner, P24): a follow-up whose kind (its first To) they dropped is never
+      // raised, remembered for today only, since a drop can end. A "send follow-ups to" rule for exactly the people this
+      // follow-up reaches (To and Cc, the person left out: asks/scope.ts mailSendScope) stands for them, over a drop.
+      const kind = followUpKindForTo(to);
+      if (kind) {
+        let rules: FollowUpRules | null = null;
+        try { rules = await readRules([kind]); }
+        catch (e: any) { deps.log(`[email-desk] follow-up ${accountId}: rules unreadable (${e?.message ?? e}); nothing dropped`); }
+        if (rules?.never.includes(kind)) {
+          const people = [...new Set([...(lastMsg.to ?? []), ...(lastMsg.cc ?? [])].map((a) => extractEmailAddress(a)).filter((a) => a && a !== me))].sort();
+          const always = rules.always.some((set) => [...new Set(set)].sort().join(",") === people.join(","));
+          if (!always) { mem.read.add(row.id); continue; }
+        }
       }
       candidates.push({
         threadId: row.id, ownerMsgKey: key!, subject: typeof thread!.subject === "string" ? thread!.subject : "",

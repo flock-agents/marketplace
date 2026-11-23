@@ -617,3 +617,58 @@ describe("the follow-up routine handler", () => {
     expect(w.published).toHaveLength(1);
   });
 });
+
+// The person's follow-up rules (Flock GET /api/apps/:appId/follow-up-rules), honoured as the built-in desk's runner did:
+// a follow-up whose kind (its first To) the person dropped is never raised; a "send follow-ups to" rule for exactly the
+// people it reaches stands for them, over a drop. A rules read that fails drops nothing.
+describe("the person's follow-up rules", () => {
+  const PEOPLE = ["priya@acme.com", "ravi@acme.com"]; // THREAD's last message: To Priya, Cc Ravi
+  const withRules = (answer: { always: string[][]; never: string[] } | null) => {
+    const w = world();
+    const asked: string[][] = [];
+    w.deps.rules = async (who) => { asked.push(who); return answer; };
+    return { w, asked };
+  };
+
+  test("never follow up with X: no TODO, asked about X, and the thread is not read again today", async () => {
+    const { w, asked } = withRules({ always: [], never: ["priya@acme.com"] });
+    const t = await run(w);
+    expect(w.published).toEqual([]);
+    expect(asked).toEqual([["priya@acme.com"]]);
+    expect(t).toMatchObject({ completed: true, offered: 0 });
+    expect(getFollowUp(ACCT, THREAD)).toBeNull();
+    await run(w);
+    expect(w.of("getThread").filter((c) => c.params.threadId === THREAD)).toHaveLength(1);
+  });
+
+  test("always follow up with X: the rule for exactly the people the follow-up reaches raises it, even over a drop", async () => {
+    const { w } = withRules({ always: [PEOPLE], never: ["priya@acme.com"] });
+    await run(w);
+    expect(w.published.map((p) => p.sourceRef)).toEqual([`follow-up:${THREAD}`]);
+  });
+
+  test("a rule for other people does not stand for these", async () => {
+    const { w } = withRules({ always: [["priya@acme.com"]], never: ["priya@acme.com"] });
+    await run(w);
+    expect(w.published).toEqual([]);
+  });
+
+  test("no rule for X: the TODO is raised", async () => {
+    const { w } = withRules({ always: [], never: [] });
+    await run(w);
+    expect(w.published).toHaveLength(1);
+  });
+
+  test("a rules read that fails drops nothing", async () => {
+    const { w } = withRules(null);
+    await run(w);
+    expect(w.published).toHaveLength(1);
+  });
+
+  test("a rules read that throws drops nothing", async () => {
+    const w = world();
+    w.deps.rules = async () => { throw new Error("Flock down"); };
+    await run(w);
+    expect(w.published).toHaveLength(1);
+  });
+});
