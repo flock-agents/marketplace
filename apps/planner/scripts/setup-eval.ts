@@ -8,9 +8,10 @@
 //   bun scripts/setup-eval.ts --runs <dir,dir,...> [--repeat 3] [--week 2026-11-30] [--out <dir>] [--balanced <id>] [--fast <id>] [--no-think]
 import { readFileSync, mkdirSync, writeFileSync, mkdtempSync, rmSync } from "fs";
 import { join } from "path";
-import { homedir, tmpdir } from "os";
+import { tmpdir } from "os";
 import { boot } from "../server/testkit";
 import type { ModelRequest, ModelResult } from "../server/model";
+import { appModel, type CallRow } from "../evals/lib/model";
 
 const arg = (n: string) => { const i = process.argv.indexOf(`--${n}`); return i > 0 ? process.argv[i + 1] : undefined; };
 const RUNS = (arg("runs") ?? "").split(",").filter(Boolean);
@@ -21,97 +22,12 @@ const NO_THINK = process.argv.includes("--no-think");
 const UPSTREAM = { balanced: arg("balanced") ?? "google/gemini-3.5-flash-lite", fast: arg("fast") ?? "google/gemini-3.1-flash-lite" };
 mkdirSync(OUT, { recursive: true });
 
-// ── The model: Flock's app-model contract over OpenRouter ──
+// ── The model: Flock's app-model contract over OpenRouter (evals/lib/model.ts) ──
 
-const KEY = (() => {
-  const env = readFileSync(join(homedir(), "Developer/flock/flock-web-services/.env"), "utf8");
-  const m = /^OPENROUTER_API_KEY=(.*)$/m.exec(env);
-  if (!m) throw new Error("no OPENROUTER_API_KEY");
-  return m[1].trim().replace(/^["']|["']$/g, "");
-})();
-
-/** flock-app/server/src/app-model.ts jsonIn. */
-function jsonIn(text: string): unknown {
-  const t = text.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
-  const fence = /```(?:json)?[ \t]*\n?([\s\S]*?)```/i.exec(t);
-  for (const x of [t, ...(fence ? [fence[1].trim()] : [])]) {
-    try { return JSON.parse(x); } catch { /* look inside */ }
-  }
-  for (const body of fence ? [fence[1], t] : [t]) {
-    for (const [open, close] of [["{", "}"], ["[", "]"]] as const) {
-      const b = body.lastIndexOf(close);
-      for (let a = body.indexOf(open), n = 0; a >= 0 && a < b && n < 20; a = body.indexOf(open, a + 1), n++) {
-        try { return JSON.parse(body.slice(a, b + 1)); } catch { /* the next opening */ }
-      }
-    }
-  }
-  throw new Error(`no JSON in the output (len=${text.length} end=${JSON.stringify(text.slice(-80))})`);
-}
-const isObj = (v: unknown): v is Record<string, any> => !!v && typeof v === "object" && !Array.isArray(v);
-const typeOf = (v: unknown) => (v === null ? "null" : Array.isArray(v) ? "array" : typeof v === "number" ? (Number.isInteger(v) ? "integer" : "number") : typeof v);
-/** flock-app/server/src/app-model.ts schemaProblems, the subset the planner's schemas use. */
-function schemaProblems(s: any, v: unknown, path = "$", out: string[] = []): string[] {
-  if (out.length >= 8 || !isObj(s)) return out;
-  const at = (m: string) => out.push(`${path}: ${m}`);
-  if (Array.isArray(s.anyOf) && !s.anyOf.some((x: any) => schemaProblems(x, v, path).length === 0)) at("matches none of the allowed shapes");
-  if (s.type !== undefined) {
-    const types = Array.isArray(s.type) ? s.type : [s.type];
-    if (!types.some((t: string) => t === typeOf(v) || (t === "number" && typeOf(v) === "integer"))) { at(`must be ${types.join(" or ")}, got ${typeOf(v)}`); return out; }
-  }
-  if (Array.isArray(s.enum) && !s.enum.some((e: unknown) => JSON.stringify(e) === JSON.stringify(v))) at(`must be one of ${JSON.stringify(s.enum)}`);
-  if (Array.isArray(v) && isObj(s.items)) v.forEach((x, n) => schemaProblems(s.items, x, `${path}[${n}]`, out));
-  if (isObj(v)) {
-    for (const k of s.required ?? []) if (!(k in v)) at(`"${k}" is required`);
-    for (const [k, x] of Object.entries(v)) if (isObj(s.properties) && k in s.properties) schemaProblems(s.properties[k], x, `${path}.${k}`, out);
-  }
-  return out;
-}
-
-const calls: { purpose: string; tier: string; ms: number; ok: boolean; attempts: number; out: number; think: number }[] = [];
-async function chat(model: string, system: string, user: string, maxTokens: number, usage: { out: number; think: number }): Promise<string> {
-  let last = "";
-  for (let i = 0; i < 4; i++) {
-    try {
-      const r = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-        method: "POST", headers: { authorization: `Bearer ${KEY}`, "content-type": "application/json" },
-        body: JSON.stringify({ model, max_tokens: maxTokens, temperature: 0.4, messages: [{ role: "system", content: system }, { role: "user", content: user }],
-          usage: { include: true }, ...(NO_THINK ? { reasoning: { enabled: false } } : {}) }),
-        signal: AbortSignal.timeout(390_000),
-      });
-      const j: any = await r.json();
-      const content = j?.choices?.[0]?.message?.content;
-      usage.out += j?.usage?.completion_tokens ?? 0; usage.think += j?.usage?.completion_tokens_details?.reasoning_tokens ?? 0;
-      if (r.ok && typeof content === "string" && content.trim()) return content;
-      last = JSON.stringify(j?.error ?? j).slice(0, 300);
-    } catch (e) { last = String(e); }
-    await Bun.sleep(2000 * (i + 1));
-  }
-  throw new Error(last);
-}
-async function model(req: ModelRequest, sink?: typeof calls): Promise<ModelResult> {
-  const t0 = Date.now(), upstream = UPSTREAM[req.tier];
-  const system = req.schema ? `${req.system}\n\nOutput ONLY one JSON value matching this JSON Schema: no prose, no code fence.\n${JSON.stringify(req.schema)}` : req.system;
-  let problem = "", attempts = 0;
-  const usage = { out: 0, think: 0 };
-  const done = (r: ModelResult) => {
-    const row = { purpose: req.purpose ?? "", tier: req.tier, ms: Date.now() - t0, ok: r.ok, attempts, ...usage };
-    calls.push(row); sink?.push(row);
-    if (!r.ok && req.purpose?.startsWith("setup")) console.log(`[eval] setup call failed: ${r.code} ${r.message.slice(0, 400)}`);
-    return r;
-  };
-  for (let attempt = 0; attempt < (req.schema ? 2 : 1); attempt++) {
-    attempts++;
-    let text: string;
-    try { text = await chat(upstream, system, attempt === 0 ? req.user : `${req.user}\n\nYour last output could not be used (${problem}). Output only the JSON.`, Math.min(req.maxTokens ?? 4000, 16000), usage); }
-    catch (e) { return done({ ok: false, code: "unavailable", message: String(e) }); }
-    if (!req.schema) return done({ ok: true, text, model: upstream });
-    let json: unknown;
-    try { json = jsonIn(text); } catch (e) { problem = String(e); continue; }
-    const ps = schemaProblems(req.schema, json);
-    if (!ps.length) return done({ ok: true, json, model: upstream });
-    problem = `it does not match the schema: ${ps.join("; ")}`;
-  }
-  return done({ ok: false, code: "invalid_output", message: problem });
+const calls: CallRow[] = [];
+function model(req: ModelRequest, sink?: CallRow[]): Promise<ModelResult> {
+  return appModel({ upstream: UPSTREAM, noThink: NO_THINK, sink: { push: (row: CallRow) => { calls.push(row); sink?.push(row); } },
+    onFail: (r, x) => { if (r.purpose?.startsWith("setup")) console.log(`[eval] setup call failed: ${x.code} ${x.message.slice(0, 400)}`); } })(req);
 }
 
 // ── A past run: its household facts and its meals transcript ──

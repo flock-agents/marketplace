@@ -1,0 +1,70 @@
+// 8. Bengali family with grandparents and a cook every day: rice + dal + bhaja + a torkari + fish curry most days, luchi on
+// Sunday morning, mutton on Sunday. The grandmother is vegetarian with no onion or garlic (and no fish, no eggs); the
+// grandfather diabetic, no sweets. Frequency words: fish curry most days, luchi on Sunday, kosha mangsho on Sunday.
+import { avoid, SCHOOL, WEEK, type Household } from "../lib/truth";
+
+export const h8: Household = {
+  id: "h8-banerjee", title: "Bengali, grandparents, cook every day, fish most days, veg no-onion-garlic grandmother",
+  owner: "Sourav", intro: "You are Sourav Banerjee, 42, a professor in Kolkata",
+  household: {
+    "household.people": [{ name: "Sourav", relation: "self", age: 42, group: "adult" }, { name: "Rituparna", relation: "wife", age: 40, group: "adult" },
+      { name: "Riya", relation: "daughter", age: 12, group: "child" }, { name: "Pradip", relation: "father", age: 72, group: "elder" },
+      { name: "Gita", relation: "mother", age: 68, group: "elder" }],
+    "household.children": ["Riya"], "household.elders": ["Pradip", "Gita"], "household.schoolAge": true,
+    "household.help": [{ role: "cook", name: "Mala", days: "every day", times: "8am", meals: ["Breakfast", "Lunch"] },
+      { role: "cook", name: "Mala", days: "every day", times: "6pm", meals: ["Dinner"] }],
+    "household.weekday": "Sourav at the university 10 to 5, Rituparna at the bank 10 to 6. Riya's school 7 to 1. Baba and Ma at home.",
+    "household.mealsBy": "Rituparna", "household.groceriesBy": "Sourav",
+  },
+  groceryApps: ["Blinkit"],
+  facts: [
+    { id: "pain", text: "Hardest part: deciding the menu every day, Mala asks every morning." },
+    { id: "apps", text: "Blinkit, and the fish from the bazaar." },
+    { id: "people", text: "Wife Rituparna (40), daughter Riya (12), Baba Pradip (72) and Ma Gita (68)." },
+    { id: "cook", text: "Cook Mala comes every day, 8 in the morning for breakfast and lunch, 6 in the evening for dinner." },
+    { id: "cookTime", text: "She has time." },
+    { id: "cookingDays", text: "Yes, all seven days at home." },
+    { id: "kidsBreakfast", text: "Riya has toast and egg, or muri; luchi on Sunday." },
+    { id: "kidsLunch", text: "Riya takes a tiffin Monday to Friday: egg roll, chowmein, sandwich. Lunch at home after school, same as ours." },
+    { id: "kidsDinner", text: "Same as ours." },
+    { id: "adultsBreakfast", text: "Breakfast: toast and egg, muri, chire bhaja; luchi with alur dom on Sunday." },
+    { id: "adultsLunch", text: "Lunch is bhaat, dal, ekta bhaja, ekta torkari ar maacher jhol. Fish curry most days, rui or katla. Kosha mangsho on Sunday." },
+    { id: "adultsDinner", text: "Dinner: roti with a torkari and dal, sometimes fish. Ma has her own veg torkari." },
+    { id: "diet", text: "Baba is diabetic, no sweets at all." },
+    { id: "elders", text: "Ma is vegetarian: no fish, no meat, no eggs, and no onion or garlic. Baba eats everything but less oil." },
+    { id: "rules", text: "No beef or pork in the house. That's it." },
+    { id: "orderIn", text: "Rarely, maybe Saturday dinner sometimes. No fixed day." },
+    { id: "subscriptions", text: "Milk packets every morning." },
+  ],
+  correction: { after: "cookTime", line: "sorry, Mala comes at 8:30 in the morning, not 8", fact: "cook",
+    corrected: "Cook Mala comes every day, 8:30 in the morning for breakfast and lunch, 6 in the evening for dinner." },
+  truth: {
+    people: [{ name: "Sourav", group: "adult" }, { name: "Rituparna", group: "adult" }, { name: "Riya", group: "child", age: 12 }, { name: "Pradip", group: "elder", age: 72 }, { name: "Gita", group: "elder", age: 68 }],
+    cook: { name: "Mala", days: WEEK, visits: [{ at: "08:30", meals: ["Breakfast", "Lunch"] }, { at: "18:00", meals: ["Dinner"] }] },
+    homeCook: [],
+    extraSlots: [{ name: "Riya's tiffin", match: /tiffin|lunch ?box|school/i, days: SCHOOL, for: ["Riya"] }],
+    orderIn: [],
+    hardRules: [
+      avoid("veg_gita", "Gita: vegetarian, no fish, meat or eggs", ["@meat", "@fish", "@egg"], { who: "Gita" }),
+      { ...avoid("no_og_gita", "Gita: no onion or garlic", ["onion", "garlic"], { who: "Gita", alsoKinds: ["no_onion_garlic"] }), rule: { kind: "no_onion_garlic", who: "Gita" } },
+      avoid("no_sweets_pradip", "Pradip: no sweets", ["@sweet"], { who: "Pradip" }),
+      avoid("no_beef_pork", "No beef or pork", ["beef", "pork"]),
+    ],
+    softNotes: [{ id: "less_oil", who: "Pradip", text: "less oil", re: /oil/i }],
+    dishes: [
+      { name: "Toast", slots: ["Breakfast"] }, { name: "Egg", slots: ["Breakfast"] }, { name: "Muri", slots: ["Breakfast"] }, { name: "Chire bhaja", slots: ["Breakfast"] },
+      { name: "Luchi", slots: ["Breakfast"], days: ["Sun"] }, { name: "Alur dom", slots: ["Breakfast"], days: ["Sun"] },
+      { name: "Egg roll", slots: ["Riya's tiffin"] }, { name: "Chowmein", slots: ["Riya's tiffin"] }, { name: "Sandwich", slots: ["Riya's tiffin"] },
+      { name: "Bhaat", slots: ["Lunch"] }, { name: "Dal", slots: ["Lunch", "Dinner"] }, { name: "Bhaja", slots: ["Lunch"] }, { name: "Torkari", slots: ["Lunch", "Dinner"] },
+      { name: "Maacher jhol", slots: ["Lunch"], often: "usually" }, { name: "Kosha mangsho", slots: ["Lunch"], days: ["Sun"] },
+      { name: "Roti", slots: ["Dinner"] }, { name: "Fish", slots: ["Dinner"], often: "sometimes" }, { name: "Veg torkari", slots: ["Lunch", "Dinner"], for: ["Gita"] },
+    ],
+    examples: [
+      { slot: "Breakfast", words: "toast and egg, muri, chire bhaja; luchi with alur dom on Sunday", parts: 2, staple: /toast|muri|chire|luchi|bread/i },
+      { slot: "Lunch", words: "bhaat, dal, ekta bhaja, ekta torkari ar maacher jhol", parts: 5, staple: /bhaat|rice/i },
+      { slot: "Dinner", words: "roti with a torkari and dal, sometimes fish", parts: 3, staple: /roti|chapati|ruti/i },
+    ],
+    judgeNotes: ["A Bengali home: lunch is bhaat + dal + a bhaja + a torkari + fish curry most days; luchi-alur dom Sunday morning; mutton Sunday.",
+      "Gita: vegetarian (no fish, meat, eggs) and no onion or garlic: she needs her own dishes wherever the rest have fish.", "Pradip: diabetic, no sweets, less oil.", "No beef or pork."],
+  },
+};
