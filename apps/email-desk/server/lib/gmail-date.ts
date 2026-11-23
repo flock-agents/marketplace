@@ -65,3 +65,39 @@ export function parseGmailDateTime(value: string): number | null {
   if (d.getMonth() !== month || d.getDate() !== day) return null;
   return d.getTime();
 }
+
+/**
+ * Parse the date string a Gmail inbox row shows, anchored to `now` (copied unchanged from Flock's
+ * ingest-manifest-loader parseGmailDate). Today's mail is a bare time ("9:14 AM"), this year's a month
+ * and day with NO year ("Aug 27"), older mail carries a year. A year-less date is this year, or last
+ * year when this year's would be in the future. Junk is null, never a guess.
+ */
+export function parseGmailDate(value: string, now: Date): number | null {
+  const s = typeof value === "string" ? value.trim() : "";
+  if (!s) return null;
+
+  const t = s.match(/^(\d{1,2}):(\d{2})\s*([AaPp][Mm])?$/);
+  if (t) {
+    const clock = clockTo24h(t[1], t[2], t[3]);
+    if (!clock) return null;
+    return new Date(now.getFullYear(), now.getMonth(), now.getDate(), clock.h, clock.mi).getTime();
+  }
+
+  const md = s.match(/^([A-Za-z]{3,5})\.?\s+(\d{1,2})$/) || s.match(/^(\d{1,2})\s+([A-Za-z]{3,5})\.?$/);
+  if (md) {
+    const [a, b] = md[1].match(/^\d/) ? [md[2], md[1]] : [md[1], md[2]];
+    const month = monthIndex(a);
+    const day = Number(b);
+    if (month === undefined || day < 1 || day > 31) return null;
+    let year = now.getFullYear();
+    let d = new Date(year, month, day);
+    if (d.getTime() > now.getTime() + 86_400_000) d = new Date(--year, month, day);
+    return d.getTime();
+  }
+
+  if (/\d{4}/.test(s)) {
+    const parsed = Date.parse(s);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}

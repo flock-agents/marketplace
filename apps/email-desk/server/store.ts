@@ -247,3 +247,20 @@ function createSchema(db: Database): void {
   addColumns(db, "reply_messages", [["quoted", "TEXT"]]);
   addColumns(db, "follow_up_state", [["session_id", "TEXT"], ["offered_at", "INTEGER"], ["recipient_name", "TEXT"]]);
 }
+
+// The copy's one open store, opened on first use in $APP_DATA_DIR (or the dir a caller names, e.g. the platform
+// context's dataDir). Modules that keep the brief's id-only signatures (seen.ts) read it here.
+let current: { dir: string; db: Database } | null = null;
+
+export function getStore(dir?: string): Database {
+  const want = dir ?? process.env.APP_DATA_DIR;
+  if (current && (!want || want === current.dir)) return current.db;
+  if (!want) throw new Error("email-desk store: no APP_DATA_DIR");
+  current = { dir: want, db: openStore(want) };
+  return current.db;
+}
+
+/** Tests: use this open db as the store (null forgets it; the caller closes its own db). */
+export function _setStoreForTesting(db: Database | null, dir = "test"): void {
+  current = db ? { dir, db } : null;
+}
