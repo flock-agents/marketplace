@@ -150,4 +150,14 @@ describe("a person with nothing of their own (rotate)", () => {
     expect(p.days.get(WEEK[1])).toEqual(["Poha", "Upma"]);
     expect(r.unmet).toEqual(["Tue Breakfast: Upma comes back sooner than usual"]);
   });
+  it("a repeat is never swapped for a dish that leaves someone with nothing of their own: it stays, said", () => {
+    const allergy: Rule = { id: "a", hard: true, what: "avoid", who: "Ravi", slots: null, days: null, items: ["peanut"], to: null, frequency: null, per_meal: null, fasting_food: null, quote: "no peanuts for Ravi" };
+    const lib = [dish("Poha", "Breakfast", { contains: ["peanut"], contains_read: [...READ, "peanut"] }), dish("Upma", "Breakfast", { contains_read: [...READ, "peanut"] })];
+    const w = week({ slots: [slot("Breakfast", { order: 10 })], library: lib, rules: [allergy] });
+    for (const d of w.days.filter((x) => ![WEEK[0], WEEK[1]].includes(x.date))) d.skip = "eaten_out";
+    const p: Proposal = { days: new Map([[WEEK[0], ["Upma"]], [WEEK[1], ["Upma"]]]), newNames: new Map() };
+    const r = rotate(w, "Breakfast", p, [WEEK[1]], { swapsOnly: true });
+    expect(p.days.get(WEEK[1])).toEqual(["Upma"]);
+    expect(r.unmet).toEqual(["Tue Breakfast: Upma comes back sooner than usual"]);
+  });
 });

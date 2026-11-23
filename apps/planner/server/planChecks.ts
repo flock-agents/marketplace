@@ -555,8 +555,12 @@ export function rotate(w: Week, slotName: string, p: Proposal, failing: string[]
     const othersBut = (ds: string[], skip: (x: Problem) => boolean) => [...all(ds).entries()].filter(([x]) => x !== date && x !== "").reduce((n, [, ps]) => n + hardOnly(ps).filter((x) => !skip(x)).length, 0);
     const own = (ds: string[], dish: string) => hardAt(ds).filter((x) => x.dish && dishKey(x.dish) === dishKey(dish));
     /** Is `next` better than `plate` here, no worse elsewhere, and the new dish clean (or, `least`, only back early). */
-    const better = (plate: string[], next: string[], dish: string, least: boolean) =>
-      hardAt(next).length < hardAt(plate).length && others(next) <= others(plate) && (least ? own(next, dish).every(comesBack) : !own(next, dish).length);
+    const better = (plate: string[], next: string[], dish: string, least: boolean) => {
+      const was = new Set(hardAt(plate).filter((x) => !x.dish).map((x) => x.text));
+      // Never a swap that leaves someone without a dish of their own (or breaks a rule) to cure a repeat.
+      if (hardAt(next).some((x) => !x.dish && !was.has(x.text))) return false;
+      return hardAt(next).length < hardAt(plate).length && others(next) <= others(plate) && (least ? own(next, dish).every(comesBack) : !own(next, dish).length);
+    };
     let plate = [...was];
     const noted: string[] = [];
     // A day with nothing (the call left it out): one of the family's own plates at this slot that fits, else a dish.
@@ -579,7 +583,8 @@ export function rotate(w: Week, slotName: string, p: Proposal, failing: string[]
       if (clean) { plate = withAt(plate, i, clean); continue; }
       if (addon && mine.some((y) => y.kind === "often" || never(y))) { plate = plate.filter((_, j) => j !== i); i--; continue; }
       if (mine.some(never)) {
-        const least = cands.find((c) => own(withAt(plate, i, c), c).every(comesBack) && !hardAt(withAt(plate, i, c)).some((y) => y.dish && dishKey(y.dish) === dishKey(x)));
+        const fed = new Set(hardAt(plate).filter((y) => !y.dish).map((y) => y.text));
+        const least = cands.find((c) => own(withAt(plate, i, c), c).every(comesBack) && !hardAt(withAt(plate, i, c)).some((y) => (y.dish && dishKey(y.dish) === dishKey(x)) || (!y.dish && !fed.has(y.text))));
         if (least) { plate = withAt(plate, i, least); noted.push(least); }
         else { plate = plate.filter((_, j) => j !== i); i--; }
         continue;
