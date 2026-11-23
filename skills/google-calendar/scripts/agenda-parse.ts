@@ -1,8 +1,8 @@
 // Aria-label parser for Google Calendar agenda rows. The in-page script cannot
 // import, so the parser lives here as ES5 source (AGENDA_PARSE_JS) that is
-// spliced into the page script in listEvents.ts / listEvents.sh, and the exported
-// function is built from that same source. No backslashes, single quotes or
-// template syntax in it, so it embeds verbatim in both twins.
+// spliced into the page script in listEvents.ts, and the exported function is
+// built from that same source. No backslashes, single quotes or template syntax
+// in it, so it embeds verbatim.
 export const AGENDA_PARSE_JS = `function parseAgendaAriaLabel(label, textContent) {
   // A timed event spanning days names both ends up front, with their dates (live 2026-10-19):
   // "October 19, 2026 at 5pm to October 23, 2026 at 5:30pm, Gym (Day 1 of 5), Yogesh Personal, No location, ".

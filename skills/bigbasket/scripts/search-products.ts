@@ -11,7 +11,7 @@ import {
   urlencode,
   browserInteract,
 } from "../../_shared/_grocery_helpers";
-import { BIGBASKET, searchScript } from "./_bigbasket";
+import { BIGBASKET, searchActions, searchScript } from "./_bigbasket";
 
 const NO_CARDS_NOTE = "BigBasket showed no products for this search: it may not sell this, or nothing matched. Try other words, or another service.";
 
@@ -26,8 +26,8 @@ if (maxResults > 25) maxResults = 25;
 
 const searchUrl = `${BIGBASKET.config.baseUrl}/ps/?q=${urlencode(query)}`;
 
-// The page script waits for the cards itself, so a search with none ends with a note, not a timeout.
-const result = await browserInteract(BIGBASKET.config, searchUrl, [], undefined, searchScript(maxResults));
+// The first script waits for the cards itself, so a search with none ends with a note, not a timeout.
+const result = await browserInteract(BIGBASKET.config, searchUrl, searchActions(), undefined, searchScript(maxResults));
 const content = (result as any)?.content || "{}";
 
 let parsed: any;

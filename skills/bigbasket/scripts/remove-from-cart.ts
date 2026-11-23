@@ -9,7 +9,9 @@ import {
   validateParam,
   validateId,
   requireBrowserSession,
-  browserWrite,
+  browserInteract,
+  pressLoop,
+  PRESS_KIT_JS,
   type GroceryServiceConfig,
 } from "../../_shared/_grocery_helpers";
 
@@ -27,15 +29,18 @@ validateId(productId, "productId");
 
 const cartUrl = `${config.baseUrl}/basket`;
 
-const removeEvalScript = `(() => {
+/** The mark Flock's real click on the line's remove control goes to, and its page state. */
+const REMOVE_MARK = "bb-remove";
+
+const markRemoveScript = `(() => {
+  ${PRESS_KIT_JS}
   const targetId = '${productId}';
+  const s = flockState("${REMOVE_MARK}", true);
+  flockClear("${REMOVE_MARK}");
   const cartItems = document.querySelectorAll('[class*="cart-item"], [class*="CartItem"], [class*="BasketItem"], [data-testid="cart-item"], [class*="itemlist"] > div, [class*="ItemList"] > div');
 
-  let found = false;
-  let removedName = '';
-
   cartItems.forEach(el => {
-    if (found) return;
+    if (s.found) return;
     const link = el.querySelector('a')?.href || '';
     const idMatch = link.match(/\\/pd\\/[\\w-]+\\/(\\d+)/) || link.match(/\\/(\\d{5,})/);
     const itemId = idMatch ? idMatch[1] : '';
@@ -46,14 +51,21 @@ const removeEvalScript = `(() => {
     if (itemId === targetId) {
       const removeBtn = el.querySelector('[class*="remove"], [class*="Remove"], [class*="delete"], [class*="Delete"], [aria-label*="remove"], [aria-label*="delete"], button[class*="close"]');
       if (removeBtn) {
-        removeBtn.click();
-        found = true;
-        removedName = name;
+        flockMark("${REMOVE_MARK}", removeBtn);
+        s.found = true;
+        s.removedName = name;
       }
     }
   });
+})()`;
 
-  if (!found) {
+const readCartScript = `(() => {
+  ${PRESS_KIT_JS}
+  const targetId = '${productId}';
+  const s = flockState("${REMOVE_MARK}");
+  flockClear("${REMOVE_MARK}");
+
+  if (!s.found) {
     return JSON.stringify({ error: true, code: 'PRODUCT_NOT_FOUND', message: 'Product ' + targetId + ' not found in cart' });
   }
 
@@ -69,7 +81,7 @@ const removeEvalScript = `(() => {
       resolve(JSON.stringify({
         success: true,
         productId: targetId,
-        removed: removedName,
+        removed: s.removedName,
         cartItemCount: cartCount,
         cartTotal: cartTotal
       }));
@@ -77,7 +89,7 @@ const removeEvalScript = `(() => {
   });
 })()`;
 
-const result = await browserWrite(config, cartUrl, removeEvalScript, undefined);
+const result = await browserInteract(config, cartUrl, pressLoop({ key: REMOVE_MARK, mark: REMOVE_MARK, start: markRemoveScript, finish: readCartScript, presses: 1 }));
 const content = (result as any)?.content || "{}";
 
 let parsed: any;

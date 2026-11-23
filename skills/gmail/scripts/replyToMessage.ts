@@ -6,6 +6,7 @@ import {
   persistentInteract,
 } from "../../_shared/_google_helpers";
 import { invalidateCachedThreadForMessage } from "./_threadCache";
+import { markThenClick } from "./_gmailPress";
 
 const params = JSON.parse(process.env.SKILL_PARAMS || "{}");
 const messageId: string = params.messageId || "";
@@ -31,7 +32,7 @@ validateId(messageId, "messageId");
   // Open reply editor
   const replyOpenActions = [
     { action: "waitForSelector", selector: `[aria-label="Reply"],.T-I-JW[data-tooltip="Reply"]`, delay: 5000 },
-    { action: "evaluate", script: `(() => { const replyBtns = document.querySelectorAll("[aria-label=\\"Reply\\"]"); const btn = replyBtns[replyBtns.length - 1]; if (btn) { btn.click(); return {ok:true}; } const altBtn = document.querySelector(".T-I-JW[data-tooltip=\\"Reply\\"]"); if (altBtn) { altBtn.click(); return {ok:true}; } return {ok:false,message:"Reply button not found"}; })()` },
+    ...markThenClick("reply", `(() => { const replyBtns = document.querySelectorAll("[aria-label=\\"Reply\\"]"); const btn = replyBtns[replyBtns.length - 1]; if (btn) { mark(btn, "reply"); return {ok:true}; } const altBtn = document.querySelector(".T-I-JW[data-tooltip=\\"Reply\\"]"); if (altBtn) { mark(altBtn, "reply"); return {ok:true}; } return {ok:false,message:"Reply button not found"}; })()`),
     { action: "waitForSelector", selector: `div[aria-label*="Message"][contenteditable=true]`, delay: 5000 },
   ];
   await persistentInteract(persistentId, replyOpenActions);

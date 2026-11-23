@@ -1,7 +1,6 @@
 // Pure Gmail-query builder for the getThreads intent tool. No browser, no side effects — turns
 // a caller's DECLARATIVE filters into a single Gmail search string, so the connector (not the
-// caller) owns how intent maps to Gmail. The same string drives either backend: the browser
-// search (searchEmails.ts) or IMAP (gmail-imap.py cmd_search).
+// caller) owns how intent maps to Gmail. The string drives the browser search (searchEmails.ts).
 //
 // WHY THE CONNECTOR OWNS THIS. The caller says WHAT it wants ("15 recent sent threads, not from
 // these senders, not spam/promotions"); the connector decides HOW. Exclusions matter most here:

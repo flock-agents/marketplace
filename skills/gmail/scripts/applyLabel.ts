@@ -5,6 +5,7 @@ import {
   browserInteract,
 } from "../../_shared/_google_helpers";
 import { invalidateCachedThreadForMessage } from "./_threadCache";
+import { markThenClick, markThenType } from "./_gmailPress";
 
 const params = JSON.parse(process.env.SKILL_PARAMS || "{}");
 const messageId: string = params.messageId || "";
@@ -21,13 +22,13 @@ const labelNameJson = JSON.stringify(labelName);
 
 const actions = [
   { action: "wait", delay: 3000 },
-  { action: "evaluate", script: `(() => { const btn = document.querySelector("[aria-label=\\"Labels\\"]") || document.querySelector("[data-tooltip=\\"Labels\\"]"); if (btn) { btn.click(); return {ok:true}; } return {ok:false,message:"Labels button not found"}; })()` },
+  ...markThenClick("labels", `(() => { const btn = document.querySelector("[aria-label=\\"Labels\\"]") || document.querySelector("[data-tooltip=\\"Labels\\"]"); if (btn) { mark(btn, "labels"); return {ok:true}; } return {ok:false,message:"Labels button not found"}; })()`),
   { action: "wait", delay: 1500 },
-  { action: "evaluate", script: `(() => { const searchInput = document.querySelector(".bqf input") || document.querySelector("[aria-label=\\"Label search\\"] input"); if (searchInput) { searchInput.value = ${labelNameJson}; searchInput.dispatchEvent(new Event("input",{bubbles:true})); } return {ok:true}; })()` },
+  ...markThenType("label-search", `(() => { const searchInput = document.querySelector(".bqf input") || document.querySelector("[aria-label=\\"Label search\\"] input"); if (searchInput) { mark(searchInput, "label-search"); } return {ok:true}; })()`, labelName),
   { action: "wait", delay: 1000 },
-  { action: "evaluate", script: `(() => { const target = ${labelNameJson}; const labels = document.querySelectorAll(".J-N-Jz, .brC-brG-btb"); for (const l of labels) { if (l.textContent?.trim() === target) { l.click(); return {ok:true,message:"Label selected"}; } } const checkboxes = document.querySelectorAll(".J-Kh-Jt input[type=checkbox]"); for (const cb of checkboxes) { const label = cb.closest(".J-N")?.querySelector(".J-N-Jz"); if (label && label.textContent?.trim() === target) { cb.click(); return {ok:true,message:"Label checkbox toggled"}; } } return {ok:false,message:"Label not found in dropdown"}; })()` },
+  ...markThenClick("label-option", `(() => { const target = ${labelNameJson}; const labels = document.querySelectorAll(".J-N-Jz, .brC-brG-btb"); for (const l of labels) { if (l.textContent?.trim() === target) { mark(l, "label-option"); return {ok:true,message:"Label selected"}; } } const checkboxes = document.querySelectorAll(".J-Kh-Jt input[type=checkbox]"); for (const cb of checkboxes) { const label = cb.closest(".J-N")?.querySelector(".J-N-Jz"); if (label && label.textContent?.trim() === target) { mark(cb, "label-option"); return {ok:true,message:"Label checkbox toggled"}; } } return {ok:false,message:"Label not found in dropdown"}; })()`),
   { action: "wait", delay: 500 },
-  { action: "evaluate", script: `(() => { const applyBtn = document.querySelector(".brC-aMv-auR[role=button]") || Array.from(document.querySelectorAll("button")).find(b => b.textContent?.trim() === "Apply"); if (applyBtn) { applyBtn.click(); return {ok:true}; } return {ok:true,message:"No apply button — label may have auto-applied"}; })()` },
+  ...markThenClick("label-apply", `(() => { const applyBtn = document.querySelector(".brC-aMv-auR[role=button]") || Array.from(document.querySelectorAll("button")).find(b => b.textContent?.trim() === "Apply"); if (applyBtn) { mark(applyBtn, "label-apply"); return {ok:true}; } return {ok:true,message:"No apply button — label may have auto-applied"}; })()`),
   { action: "wait", delay: 1500 },
 ];
 

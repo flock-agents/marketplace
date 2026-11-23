@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "updatedAt": "2026-11-14T00:00:00Z",
+  "updatedAt": "2026-11-23T00:00:00Z",
   "items": [
     {
       "slug": "linear",
@@ -156,11 +156,11 @@
       "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "skills/gmail",
-      "latestVersion": "1.6.5",
-      "latestTag": "gmail-v1.6.5",
+      "latestVersion": "1.6.6",
+      "latestTag": "gmail-v1.6.6",
       "minFlockVersion": "0.24.0-beta.1",
       "publishedAt": "2026-08-14T10:00:00Z",
-      "updatedAt": "2026-11-10T00:00:00Z"
+      "updatedAt": "2026-11-23T00:00:00Z"
     },
     {
       "slug": "google-calendar",
@@ -177,11 +177,11 @@
       "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "skills/google-calendar",
-      "latestVersion": "1.0.3",
-      "latestTag": "google-calendar-v1.0.3",
+      "latestVersion": "1.0.4",
+      "latestTag": "google-calendar-v1.0.4",
       "minFlockVersion": "0.24.0-beta.1",
       "publishedAt": "2026-10-06T00:00:00Z",
-      "updatedAt": "2026-11-10T00:00:00Z"
+      "updatedAt": "2026-11-23T00:00:00Z"
     },
     {
       "slug": "google-drive",
@@ -221,11 +221,11 @@
       "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "skills/google-docs",
-      "latestVersion": "1.0.1",
-      "latestTag": "google-docs-v1.0.1",
+      "latestVersion": "1.0.2",
+      "latestTag": "google-docs-v1.0.2",
       "minFlockVersion": "0.24.0-beta.1",
       "publishedAt": "2026-10-25T00:00:00Z",
-      "updatedAt": "2026-11-10T00:00:00Z"
+      "updatedAt": "2026-11-23T00:00:00Z"
     },
     {
       "slug": "google-sheets",
@@ -266,11 +266,11 @@
       "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "skills/zomato-blinkit",
-      "latestVersion": "1.4.2",
-      "latestTag": "zomato-blinkit-v1.4.2",
+      "latestVersion": "1.4.3",
+      "latestTag": "zomato-blinkit-v1.4.3",
       "minFlockVersion": "0.24.0-beta.1",
       "publishedAt": "2026-08-14T10:00:00Z",
-      "updatedAt": "2026-11-10T00:00:00Z"
+      "updatedAt": "2026-11-23T00:00:00Z"
     },
     {
       "slug": "bigbasket",
@@ -288,11 +288,11 @@
       "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "skills/bigbasket",
-      "latestVersion": "1.4.2",
-      "latestTag": "bigbasket-v1.4.2",
+      "latestVersion": "1.4.3",
+      "latestTag": "bigbasket-v1.4.3",
       "minFlockVersion": "0.24.0-beta.1",
       "publishedAt": "2026-08-14T10:00:00Z",
-      "updatedAt": "2026-11-10T00:00:00Z"
+      "updatedAt": "2026-11-23T00:00:00Z"
     },
     {
       "slug": "amazon",
@@ -331,11 +331,11 @@
       "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "skills/linkedin",
-      "latestVersion": "1.2.3",
-      "latestTag": "linkedin-v1.2.3",
+      "latestVersion": "1.2.4",
+      "latestTag": "linkedin-v1.2.4",
       "minFlockVersion": "0.24.0-beta.1",
       "publishedAt": "2026-08-19T05:23:00Z",
-      "updatedAt": "2026-11-10T00:00:00Z"
+      "updatedAt": "2026-11-23T00:00:00Z"
     },
     {
       "slug": "slack",

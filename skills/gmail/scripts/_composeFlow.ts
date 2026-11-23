@@ -15,18 +15,18 @@ import {
   persistentClose,
 } from "../../_shared/_google_helpers";
 import { gmailViewUrl } from "./_gmailNav";
-import { hasTable, bodyToComposeHtml, writeComposeHtmlScript } from "./_bodyHtml";
+import { hasTable, pasteComposeBodyActions } from "./_bodyHtml";
 import {
   MARK_PREEXISTING_COMPOSES_SCRIPT,
-  tagNewComposeScript,
+  tagNewComposeActions,
   toFieldSelector,
   ccFieldSelector,
   bccFieldSelector,
   subjectFieldSelector,
   bodyFieldSelector,
   fileInputSelector,
-  expandRecipientRowScript,
-  discardComposeScript,
+  expandRecipientRowActions,
+  discardComposeActions,
   newComposeNonce,
   parseComposeReply,
 } from "./_composeWindow";
@@ -115,7 +115,7 @@ export function fillComposeSteps(nonce: string, fields: ComposeFields, fileExist
     { action: "wait", delay: 1000 },
   ]];
   const extraRow = (field: "cc" | "bcc", value: string, selector: string) => steps.push([
-    { action: "evaluate", script: expandRecipientRowScript(nonce, field) },
+    ...expandRecipientRowActions(nonce, field),
     { action: "wait", delay: 500 },
     { action: "click", selector, delay: FIELD_WAIT_MS },
     { action: "insertText", text: value },
@@ -129,9 +129,9 @@ export function fillComposeSteps(nonce: string, fields: ComposeFields, fileExist
     { action: "insertText", text: fields.subject },
     { action: "click", selector: bodyFieldSelector(nonce), delay: FIELD_WAIT_MS },
     // A Markdown table is written as HTML so it is a real table (_bodyHtml.ts).
-    hasTable(fields.body)
-      ? { action: "evaluate", script: writeComposeHtmlScript(bodyToComposeHtml(fields.body)) }
-      : { action: "insertText", text: fields.body },
+    ...(hasTable(fields.body)
+      ? pasteComposeBodyActions(fields.body)
+      : [{ action: "insertText", text: fields.body }]),
     { action: "wait", delay: 1000 },
   ]);
   for (const raw of fields.attachments ?? []) {
@@ -171,7 +171,8 @@ export async function withNewCompose<T>(
       { action: "waitForSelector", selector: COMPOSE_BUTTON_SELECTOR, delay: COMPOSE_BUTTON_WAIT_MS },
       { action: "evaluate", script: MARK_PREEXISTING_COMPOSES_SCRIPT },
       { action: "click", selector: COMPOSE_BUTTON_SELECTOR },
-    ], tagNewComposeScript(nonce)));
+      ...tagNewComposeActions(nonce),
+    ]));
     // Clicked Compose: from here a window may exist even if it was never tagged.
     composeOpen = true;
     if (tagged.ok !== true) throw new Error(`Gmail's compose window did not open (${tagged.reason || "unknown"})`);
@@ -183,7 +184,7 @@ export async function withNewCompose<T>(
     return await finish({ psId, nonce });
   } catch (err) {
     if (composeOpen && !finishing) {
-      await io.step(psId, [], discardComposeScript(nonce)).catch(() => {});
+      await io.step(psId, discardComposeActions(nonce)).catch(() => {});
     }
     throw err;
   } finally {
