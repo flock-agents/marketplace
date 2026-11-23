@@ -1,6 +1,6 @@
 # Meal Planner: slot model — build spec
 
-Status: for owner review, 23 Nov 2026. Source of truth for the design: the design page
+Status: owner decisions folded in, 23 Nov 2026 (see §10). Source of truth for the design: the design page
 (https://claude.ai/artifact/G6kUr6SWuXe75wQoCLNmHD). This file turns it into what to build.
 
 Principle throughout: **the model reads words and fills slots; code stores, counts and checks rules.**
@@ -20,7 +20,7 @@ Goals
 Non-goals (for this build)
 - Weekly plans stay on the **balanced** tier. The Sol / "best" run was an experiment to see the model's ceiling.
 - **No code check on the number of dishes in a slot.** Shape is a tracked score in Eval 2 only.
-- No festival input at setup. The weekly plan message asks when a festival is near.
+- No festival table, list or setup input. The weekly plan routine's prompt asks when a festival is near (§5.6).
 - Prep reminders ("soak rajma tonight") come after this lands, in the day-before 7pm reminder.
 - Shopping, carts, regulars and reminders keep working on the new tables but are not redesigned here.
 - Per-app scoping of household facts (all facts are sent) stays as decided; revisit when third-party apps publish.
@@ -45,6 +45,8 @@ All tables keep the kit columns (`id`, `created_at`, `updated_at`, `updated_by`)
 | skip_days | json [{ day, skip }] | recurring "Sunday lunch eaten out", "Saturday dinner ordered in" |
 | order | int | planning order: Breakfast 10, custom-from-breakfast (tiffin) 20, Lunch 30, snacks 40, Dinner 50, add-ons 60+ |
 | active | int | 1/0 |
+
+Add-on slots exist so per-person needs (grandfather's 2 phulkas and no rice at night; a child's different dinner) are planned with their own constraints. Setup creates them from what the family said. Named by the person's name, or the family's own word for them ("Papa's dinner").
 
 **slot_days** — replaces `plan_meals`. One row per slot per date in a planned week.
 
@@ -75,7 +77,7 @@ Unique (date, slot).
 
 **ingredients** — `dish_items` renamed; `slot_dish_id` instead of `dish_id`. Same item/amount/unit.
 
-**library** — replaces `dish_book` (rows move; ratings/videos keep their columns).
+**library** — replaces `dish_book` (ratings/videos keep their columns).
 
 | field | type | meaning |
 |---|---|---|
@@ -87,6 +89,7 @@ Unique (date, slot).
 | contains | json string[] | open tag list: every item any rule names (`egg`, `meat`, `fish`, `onion_garlic`, `nuts`, `peanut`, `sugar`, `white_rice`, `dairy`, `root_veg`, `millet`, `mushroom`, `chicken`…) |
 | contains_read | json string[] | which tags have been read for this dish (a rule tag not in here = unknown) |
 | origin | text | `setup_named` \| `family_added` \| `planner_suggested` |
+| suggested | int | 1 = a planner suggestion not yet kept; offered only as a new dish, not as a library dish |
 | prep | text, null | later: "soak overnight", "ferment batter 8h" |
 | video_url, rating, ratings… | as today | |
 
@@ -108,14 +111,14 @@ Unique (key, slot).
 | fasting_food | json string[], null | fasting: what they may eat ("fruit", "sabudana") — empty = nothing |
 | quote | text | the family's own words (required) |
 
-**settings** (kit settings): `new_dishes_per_week` int, default 2 (choices 0, 2, 4, 7 shown as "none / 1–2 / 3–4 / surprise me").
+**settings** (kit settings): `new_dishes_per_week` int, default 2 (decided default, tunable) (choices 0, 2, 4, 7 shown as "none / 1–2 / 3–4 / surprise me").
 
-**house** keeps: cook fields (name, days, visits as reminder data, limits as `cap`/`note` rules), shopping apps, reminder times, notes, intro flags. Drops: `rules`, `extra_slots`, `order_in`, `meal_examples`, `cooking_days`, `meal_parts`.
+**house** keeps: cook fields (name, days, visits as reminder data; limits are `cap`/`note` rules attached to the cook's days, no separate cook entity for now), shopping apps, reminder times, notes, intro flags. Drops: `rules`, `extra_slots`, `order_in`, `meal_examples`, `cooking_days`, `meal_parts`.
 
 ### 2.2 Derived, not stored
 
 - **History** = past `slot_days` (+ the seed examples, `status = confirmed`, date null, from setup).
-- **Staples** of a slot = dishes appearing in ≥ 60% of that slot's last 14 history rows with dishes (seed counts). Staples are exempt from the repeat window. Computed at plan time.
+- **Staples** of a slot = dishes appearing in ≥ 60% of that slot's last 14 history rows with dishes (seed counts; decided default, tunable). Staples are exempt from the repeat window. Computed at plan time.
 - **Looks like** examples for a slot = up to 6 recent rows: confirmed first, then seed, then planned.
 
 ### 2.3 Flock household additions (Flock owns; sent to apps)
@@ -134,28 +137,13 @@ The Family Calendar app today has `add_events` only. Add one read op:
 
 `get_events { from: "YYYY-MM-DD", to: "YYYY-MM-DD" }` → `{ events: [{ title, date, end_date?, repeat, start_time?, end_time?, who?, notes? }] }` with repeats expanded inside the range.
 
-The planner reads it through Flock (the Butler's app-to-app op call) at plan time. A model call turns events into attendance changes only when an event's effect on meals isn't obvious ("Ankita work trip" → away all meals those days; "Nani visiting" → add to all slots). The result is shown in the plan message.
+The planner reads it through Flock (the Butler's app-to-app op call) at plan time. A small model call turns events into attendance changes only when an event's effect on meals isn't obvious ("Ankita work trip" → away all meals those days; "Nani visiting" → add to all slots). The family is asked only when that call is unsure. The result is shown in the plan message.
 
 ---
 
-## 3. Migration (existing installs and data)
+## 3. Replacing the old tables
 
-Run once per install on upgrade (planner minor version bump), in a transaction; keep old tables renamed `_old_*` for one release.
-
-| from | to |
-|---|---|
-| Breakfast/Lunch/Dinner (implicit) | `slots` rows kind `main`, usual_people = all active people |
-| `house.extra_slots` | `slots` kind `custom`, `usual_people` = `for`, `days` |
-| `house.order_in` | `slots.skip_days` on the matching slot: [{ day, skip: ordered_in \| eaten_out }] |
-| `plan_meals` | `slot_days` (people = everyone eating then, status `confirmed` for past dates, `planned` for future) |
-| `dishes` | `slot_dishes`; `for_people` restricted dishes: if the restriction is one person consistently on that slot → create an `addon` slot "<Name>'s <slot>" and move it there; otherwise drop the restriction (it was usually a bug) and keep the dish shared |
-| `dish_items` | `ingredients` |
-| `dish_book` | `library`: one row per (dish, each slot in `slots`); `eaten_by` single person on a main slot → library row on that person's add-on slot; `often`→`frequency`, `per_week`→`frequency "<n>/week"`, `days` kept; `contains` read by the batch tagger on first plan |
-| `house.rules` | `rules` rows (hard = kind is a checked kind and no `often`; quote = `note` or "(from before)") |
-| `house.meal_examples` | seed history rows (status confirmed, date null) per slot |
-| `people` (planner) | stays as the planner's name list; on next setup/plan the Flock household is the source |
-
-Existing installs with no setup transcript keep working: migration + the batch tagger + the first plan.
+No migration: the new interview format is unreleased and no family has it. The new tables replace the old ones (`plan_meals`, `dishes`, `dish_items`, `dish_book`, `house.rules`, `house.extra_slots`, `house.order_in`, `house.meal_examples`) outright; dev and test data can be reset. The old operations are removed now, with no adapters and no one-release transition.
 
 ---
 
@@ -166,7 +154,7 @@ Op unchanged in name and input: `apply_setup { household, transcript }` (Flock s
 ### 4.1 Reads (model, balanced unless stated; in parallel, 150 s budget)
 
 1. **home** → `{ slots: [{ name, kind, addon_of?, usual_people, days, skip_days }], cook: { name, days, visits, limits_words? } | null, family_cooks: [{ person, days }], apps, subscriptions, lunch_unclear?: [person] }`
-   - Add-on slot only when one person's meal at a slot is always different ("father has two phulkas, no rice at night"); it holds only the difference.
+   - Add-on slot when one person's meal at a slot is always different ("father has two phulkas, no rice at night", a child's different dinner), so it is planned with its own constraints; it holds only the difference and is named by the person's name or the family's word for them.
    - Weekday lunch attendance from `household.weekly` + replies; `lunch_unclear` lists people whose weekday lunch can't be told.
 2. **rules** → `{ rules: [{ hard, what, who?, slots?, days?, items?, to?, frequency?, per_meal?, fasting_food?, quote }], unplaced: [{ text, quote }] }`
 3. **dishes** → `{ library: [{ name, slot, frequency?, days?, quote }], seed: [{ slot, dishes: string[], quote }] }`
@@ -215,7 +203,7 @@ Op unchanged: `make_plan { week_start }` → `{ ok, message, intro?, unmet?, ask
 For each active slot × each date of the week (skipping `slots.days`):
 `people = usual_people (or all) − weekly absences (household.weekly: away at that slot that weekday) ± calendar/dated events − fasting (rules what=fasting with no fasting_food) ; skip = slots.skip_days for that weekday`.
 A person fasting **with** `fasting_food` stays and gets a fasting note. One-off changes already saved on a slot-day (`edited`) are kept as is.
-Calendar: `get_events` for the week via Flock; events → people changes (code for "<name> visiting/staying/away" when `who` and dates are clear; a small fast call otherwise). Unclear → `asked` in the result, planned with usual people.
+Calendar: `get_events` for the week via Flock; events → people changes (code for "<name> visiting/staying/away" when `who` and dates are clear; a small fast call otherwise). Still unsure after that call → `asked` in the result, planned with usual people.
 
 ### 5.2 Feasibility pre-check (code, per slot)
 
@@ -258,17 +246,19 @@ Add-on calls also get their main slot's dishes per day.
 1. Every dish is in that slot's library, a staple, or listed in `new` within `new_dishes_allowed` (week budget across slots).
 2. Hard rules for every person on that slot-day: rule `items` vs dish `contains`. **Fail closed**: a dish whose needed tag isn't in `contains_read` can't go to that person; new dishes get a contains read before the check.
 3. `days` and `frequency` per dish, counted across all slots for the week.
-4. Repeat window: non-staple dish not within 3 days of itself in this slot (or anywhere, for mains in main slots).
+4. Repeat window: non-staple dish not within 3 days of itself in this slot; for mains it applies across main slots (no same main twice in a day across slots). Staples are exempt.
 5. Soft rule counts within their range across the week (too many = problem; too few = soft problem).
 Problems → one fix call for that slot with the exact list; still failing → that slot-day filled by rotation from allowed library dishes (code), noted. A failed call never retries in a loop; out-of-credits/daily budget stops the plan with the existing message.
 
 ### 5.5 Ingredients and save
 
-Fast call per day (as today); remove items a person on that slot-day must avoid; save `slot_days` (status planned), `slot_dishes`, `ingredients` in one transaction; new dishes join the library with origin `planner_suggested` only when the family keeps them (end of week, not removed).
+Fast call per day (as today); remove items a person on that slot-day must avoid; save `slot_days` (status planned), `slot_dishes`, `ingredients` in one transaction; new dishes are saved with origin `planner_suggested` and `suggested = 1`; at the end of the week a new dish the family kept and didn't complain about joins the library (`suggested = 0`), otherwise it stays suggested.
 
 ### 5.6 Message
 
-Week by day; "All week:" standing notes said once (soft notes per person); `unmet`; "New this week: …"; festival question when a known festival falls in the week ("Navratri starts Thursday. Should I change anything for it?") — the festival list is a dated table in the planner (no setup input); calendar `asked` items.
+Week by day; "All week:" standing notes said once (soft notes per person); `unmet`; "New this week: …"; calendar `asked` items; a festival question when one is near.
+
+Festivals are handled by the weekly plan routine's prompt, not by a table or list. The routine knows the date and the household (people's names and anything the family said about fasts or observances; inferring tradition from names is fine). If a festival or observance this family likely keeps falls in the coming week, the message asks whether to change anything ("Navratri starts around Thursday. Want any changes?"). It checks the date with a calendar or search tool when the routine has one, and always phrases it as a question, because lunar dates can be off. The family's answer comes back as ordinary later changes (§6).
 
 ---
 
@@ -283,7 +273,7 @@ Week by day; "All week:" standing notes said once (soft notes per person); `unme
 | `set_setting` | { new_dishes_per_week } | |
 | `record_made` | { date, slot, dishes } | "we made khichdi instead" → slot-day dishes replaced, status confirmed |
 
-Re-plans never overwrite `edited` slot-days. Old ops (`set_meal`, `set_family_dishes`, `set_slots`, `set_house_rules`, `plan_week`, `plan_menu`) are kept as thin adapters for one release, then removed.
+Re-plans never overwrite `edited` slot-days. A change typically re-plans only the next day or only the touched slot-days. There is no re-plan cap; the app's existing daily model budget is the only guard against runaway loops. Old ops (`set_meal`, `set_family_dishes`, `set_slots`, `set_house_rules`, `plan_week`, `plan_menu`) are removed now (§3).
 
 ---
 
@@ -311,25 +301,26 @@ Re-plans never overwrite `edited` slot-days. Old ops (`set_meal`, `set_family_di
 
 | lane | repo | content | depends on | effort | acceptance |
 |---|---|---|---|---|---|
-| A. Schema + migration | planner | tables §2, migration §3, adapters for old ops | — | 1–1.5 d | migration test on a copy of a sim DB; suite green |
+| A. Schema | planner | tables §2, old tables and ops removed §3 | — | 0.5–0.75 d | fresh install creates the new tables; old ops gone; suite green |
 | B. Setup v2 | planner | reads, checks, write order, read-back, diff-apply §4 | A | 1.5 d | Eval 1 ≥ current on h1–h8; personal placement and day/frequency ≥ 85% |
-| C. Plan v2 | planner | §5 incl. feasibility, ordered calls, checks, message | A | 2 d | Eval 2: hard rules 100%, filled 100%, frequency ≥ 95%, judge overall ≥ 3.0 on balanced |
-| D. Later-change ops | planner | §6 | A, C | 0.5–1 d | unit tests; re-plan keeps edited slot-days |
+| C. Plan v2 | planner | §5 incl. feasibility, ordered calls, checks, message (festival question in the routine prompt) | A | 2 d | Eval 2: hard rules 100%, filled 100%, frequency ≥ 95%, judge overall ≥ 3.0 on balanced |
+| D. Later-change ops | planner | §6 | A, C | 0.5–1 d | unit tests; re-plan keeps edited slot-days and touches only the changed slot-days |
 | E. Flock household | flock | weekly patterns, nicknames, dated fallback, calendar op path §7 | — | 1 d | runner/household tests; facts visible to apps |
 | F. Calendar read | family-calendar | `get_events` §2.4 | — | 0.25 d | op test |
 | G. Evals | planner | §8, households h9–h12, guards | A (shapes) | 1 d | both evals run on new shapes; held-out set committed |
 
 Parallel: A, E, F, G start together; B and C after A; D after C. Then the WhatsApp sim batch (5 mixed runs, two stacks) for acceptance.
 
-## 10. Risks and open questions for the owner
+## 10. Decided defaults (owner, 23 Nov; tunable)
 
-1. Staple threshold (60% of the last 14 rows) — fine as a start?
-2. Add-on slot naming shown to the family ("Grandfather's dinner") — or "Gowri Shankar's dinner"?
-3. Repeat window scope: per slot, or across all main slots for mains (dosa at breakfast and dinner same day)?
-4. `new_dishes_per_week` default 2, and whether new dishes join the library automatically when not removed by Sunday.
-5. Festival list: a dated table in the planner for the family's region/tradition — which traditions to start with?
-6. Calendar → attendance: allow a small model call for unclear events, or always ask?
-7. Migration of per-dish eaters: auto-create add-on slots, or drop restrictions and let the next setup re-read decide?
-8. Old ops kept as adapters for one release — OK to remove after?
-9. Budget: ordered calls ≈ 5–6 balanced + 7 fast + fixes per week; within the 300/day app budget, but re-plans on every chat change add up — cap re-plans per day?
-10. Cook limits (≤2 dishes, an hour) as `cap`/`note` rules: enough, or a cook entity with checked limits?
+1. Staple = a dish in ≥ 60% of a slot's last 14 meals.
+2. Add-on slots named by the person's name, or the family's own word for them ("Papa's dinner").
+3. Repeat window applies across main slots for mains (no same main twice in a day across slots); staples exempt.
+4. New dishes default 2 a week; a new dish joins the library only if the family kept it and didn't complain, else it stays suggested.
+5. Calendar events with unclear meal effect → a small model call; ask the family only if it's unsure.
+6. Cook limits are rules attached to the cook's days; no separate cook entity for now.
+7. Festivals: no table or list; the weekly plan routine's prompt asks (§5.6).
+8. No migration; old tables and ops removed now (§3).
+9. No re-plan cap; the daily model budget is the guard (§6).
+
+Open questions: none.
