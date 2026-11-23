@@ -1,114 +1,187 @@
-// Plain constants, no imports: both the server schema and the browser pages read these.
+// The app's fixed vocabulary and its one setting. No Drizzle or Bun import here: the pages read these too.
+
+/** The main slots a household starts from (the setup writes them as `slots` rows). The slots table is the list a week is
+ *  planned with; this one is only the default. */
 export const SLOTS = ["Breakfast", "Lunch", "Dinner"] as const;
-export const AISLES = ["Vegetables", "Dairy", "Staples", "Spices", "Other"] as const;
 
-export const MEAL_STATUSES = ["planned", "confirmed"] as const;
-export const MEAL_OUTCOMES = ["cooked", "skipped"] as const;
+// ── The slot model (docs/slot-model-spec.md §2) ──
 
-/** v3 background jobs (docs/V3-FLOW-SPEC.md "Asking the agent for help"). */
-export const AGENT_JOB_KINDS = ["review_meal", "fill_recipe", "suggest_swaps", "parse_reply", "use_by", "pick_service", "find_patterns", "meal_ideas"] as const;
-/** What a learned_prefs row is about (find_patterns answers). engagement_time: rule {time:"HH:MM"}, when the family
- *  usually engages with the meal plan; meal_latest / order_window: rule {time:"HH:MM", …}. */
-export const LEARNED_PREF_KINDS = ["drop_item", "add_item", "service", "swap", "meal_latest", "order_window", "taste", "engagement_time"] as const;
-export const CHOICE_KINDS = ["item_dropped", "item_added", "item_restored", "swap_accepted", "swap_declined", "service_picked",
-  "meal_cooked", "meal_skipped", "draft_let_go", "undo_auto"] as const;
-export const MESSAGE_SLOTS = ["reminder", "heads_up", "price"] as const;
-export const COACH_CHECKS = ["pending", "ok", "flagged"] as const;
+/** A slot: one of the main meals, a custom one (a child's tiffin, an evening snack), or an add-on to a main one for one
+ *  person's different plate ("Papa's dinner"). */
+export const SLOT_KINDS = ["main", "custom", "addon"] as const;
+export type SlotKind = (typeof SLOT_KINDS)[number];
+/** Planning order: Breakfast 10, a custom slot from breakfast (a tiffin) 20, Lunch 30, snacks 40, Dinner 50, add-ons 60 on. */
+export const SLOT_ORDER = { Breakfast: 10, tiffin: 20, Lunch: 30, snack: 40, Dinner: 50, addon: 60 } as const;
+/** A slot-day not cooked at home. */
+export const SKIPS = ["eaten_out", "ordered_in"] as const;
+export type Skip = (typeof SKIPS)[number];
+/** planned: a suggestion the family was shown, never read as eaten; confirmed: the family said what was made (or a setup seed). */
+export const SLOT_DAY_STATUSES = ["planned", "confirmed"] as const;
+export type SlotDayStatus = (typeof SLOT_DAY_STATUSES)[number];
+/** Where a library dish came from. */
+export const LIBRARY_ORIGINS = ["setup_named", "family_added", "planner_suggested"] as const;
+export type LibraryOrigin = (typeof LIBRARY_ORIGINS)[number];
+/** What a rule is. Hard: always kept (veg, egg, no_eggs, avoid, only, swap, require, fasting, cap); a soft one has a
+ *  frequency; note is words only, not checked. */
+export const RULE_WHATS = ["veg", "egg", "no_eggs", "avoid", "only", "swap", "require", "fasting", "cap", "note"] as const;
+export type RuleWhat = (typeof RULE_WHATS)[number];
+/** How often a library dish or a soft rule comes: usually (4–5 a week), sometimes (2–3), rarely (at most 1), or "<n>/week".
+ *  daily (a dish only): the family said to have it every day ("salad every day"): a staple by their word, on every slot-day of
+ *  its slot, exempt from the repeat window (owner, 23 Nov). */
+export const FREQUENCY_WORDS = ["usually", "sometimes", "rarely", "daily"] as const;
+export type Frequency = (typeof FREQUENCY_WORDS)[number] | `${number}/week`;
+/** Staples of a slot: dishes in at least this share of the slot's last STAPLE_WINDOW history rows with dishes (owner, 23 Nov). */
+export const STAPLE_SHARE = 0.6;
+export const STAPLE_WINDOW = 14;
+/** History counts for staples only once a slot has at least this many history rows with dishes (seed + confirmed; owner,
+ *  23 Nov): below it, a slot's staples are only its `daily` dishes. */
+export const STAPLE_MIN_ROWS = 3;
+/** At most this many "looks like" examples a slot (seed and confirmed slot-days only). */
+export const LOOKS_LIKE_MAX = 6;
+/** An untried dish placed this many times with no "made it" answer is dropped. */
+export const UNTRIED_MAX_OFFERS = 2;
+/** The tags every library dish's contains is read for at setup, besides every tag a rule names (spec §4.1). */
+export const BASE_TAGS = ["egg", "meat", "fish", "onion_garlic", "nuts", "peanut", "sugar", "white_rice", "dairy"] as const;
+/** The setup's day/count lint (spec §4.2): a dish's quote with one of these words (or a digit) and no frequency or days
+ *  saved gets one re-read. Words only to spot a quote worth a second look; the model reads what they mean. */
+export const LINT_DAY_WORDS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday", "mondays", "tuesdays", "wednesdays",
+  "thursdays", "fridays", "saturdays", "sundays", "mon", "tue", "tues", "wed", "thu", "thur", "thurs", "fri", "sat", "sun", "weekend", "weekends",
+  "weekday", "weekdays", "daily", "everyday", "day", "days", "night", "nights", "morning", "mornings", "evening", "evenings"] as const;
+export const LINT_COUNT_WORDS = ["once", "twice", "thrice", "one", "two", "three", "four", "five", "six", "seven"] as const;
+/** Staples are counted from confirmed slot-days only (the setup seed is stored confirmed, so it counts); a planned slot-day
+ *  never feeds a staple (owner, 23 Nov: the plan's own output must not feed back into it). Flip to let planned ones count. */
+export const STAPLES_FROM_PLANNED = false;
 
-/** How the shopping timeline buys a thing: dairy ~daily, vegetables every couple of days, pantry and spices rarely. */
-export const BUY_CATEGORIES = ["dairy", "vegetables", "pantry", "spices"] as const;
-export const GROCERY_SOURCES = ["meal", "staple", "manual"] as const;
-export const GROCERY_STATUSES = ["pending", "confirmed", "ordered", "skipped", "have_stock"] as const;
+// ── The weekly plan (make_plan, spec §5; decided defaults, tunable) ──
 
-/** Long-shelf-life categories the family is assumed to already have: never auto-added to the shopping list just
- *  because a staple's cadence comes due (timeline.ts's ensureStapleGroceries) or a recipe uses one
- *  (mealGroceries.ts's AUTO_CATEGORIES). The only door either has into the timeline is the family's own pantry
- *  check-in (server/pantryCheck.ts) selecting it. */
-/** Pantry rough stock levels (staples.level / ingredients.level). */
-export const PANTRY_LEVELS = ["plenty", "low", "out"] as const;
+/** The days (inclusive range [min, max]) a week a dish or a soft rule comes, by how often. A dish with nothing said comes on
+ *  DEFAULT_DISH_DAYS days at most; a daily dish on every slot-day of its slot. */
+export const FREQUENCY_DAYS: Record<"usually" | "sometimes" | "rarely" | "daily", [number, number]> = { usually: [4, 5], sometimes: [2, 3], rarely: [0, 1], daily: [7, 7] };
+export const DEFAULT_DISH_DAYS = 2;
+/** A non-staple dish is not on a slot within this many days of itself; the feasibility check may widen it to the relaxed one. */
+export const REPEAT_WINDOW_DAYS = 3;
+export const REPEAT_WINDOW_RELAXED = 2;
+/** At most this many slot calls run at once. */
+export const SLOT_CALLS_AT_ONCE = 3;
+/** At most this many dishes a contains read asks about in one call. */
+export const CONTAINS_BATCH = 40;
+/** A tag that is a kind of another: a chicken dish has meat, a peanut dish has nuts. */
+export const TAG_PARENT: Record<string, string> = { chicken: "meat", red_meat: "meat", mutton: "red_meat", beef: "red_meat", pork: "red_meat", prawn: "fish", peanut: "nuts" };
+/** The main slots' span of the day, by their planning order: a weekly pattern with times (at the office 9 to 6) is away for a
+ *  main slot only when it covers the whole span. A family eats breakfast before leaving (school at 7:30 still eats it) and
+ *  dinner after coming home (back at 9 still eats it); weekday lunch goes by the family's word for it first. */
+export const MAIN_SLOT_HOURS: Record<number, [string, string]> = { 10: ["06:00", "10:00"], 30: ["12:00", "14:30"], 50: ["19:00", "22:30"] };
+/** The Family Calendar's app id, read for the week's stays and trips (get_events). */
+export const CALENDAR_APP = "family-calendar";
 
-export const HELD_BACK_CATEGORIES = ["pantry", "spices"] as const;
+/** The new-dishes-a-week choices: none, 1–2, 3–4, surprise me. */
+export const NEW_DISHES_CHOICES = [0, 2, 4, 7] as const;
 
-/** Home shelf life (days) per category when an ingredient has no shelf_life_days of its own yet (server/stock.ts). */
-export const DEFAULT_SHELF_LIFE_DAYS: Record<string, number> = {
-  leafy_greens: 2, dairy: 2, meat: 1, bakery: 3, fruits: 4, vegetables: 5,
-  snacks: 60, grains: 180, pantry: 180, oils: 180, pulses: 365, spices: 365, household: 365,
+/** A person's age group: portions and the planning rules follow it. */
+export const GROUPS = ["child", "adult", "elder"] as const;
+/** A house rule: vegetarian (no meat, no eggs), eggs but no meat, no eggs, no meat, fasting, no onion and garlic, or the family's
+ *  own (its note says it). A rule with no days holds every day ("mostly vegetarian"). The kinds the app checks a plan against
+ *  (server/rules.ts): avoid (no dish with its items), only (who eats only its items), swap (who has `to` in place of its
+ *  items), require (who eats one of its items at each of its slots) and cap (its items in at most per_week meals, or at most per_meal dishes a meal). */
+export const RULE_KINDS = ["veg", "egg", "no_eggs", "no_meat", "fasting", "no_onion_garlic", "other", "avoid", "only", "swap", "require", "cap"] as const;
+/** How each rule reads on the Family page: what the rule allows or forbids, never the opposite. */
+export const RULE_LABELS: Record<(typeof RULE_KINDS)[number], string> = { veg: "Vegetarian", egg: "Eggs but no meat", no_eggs: "No eggs", no_meat: "No meat",
+  fasting: "Fasting", no_onion_garlic: "No onion or garlic", other: "Other",
+  avoid: "Never these", only: "Only these", swap: "Swap for", require: "Always one of these", cap: "At most a few times a week" };
+/** Whether the cook tries new recipes (reels, the internet) or is better with a set menu of familiar dishes. */
+export const COOK_NEW_RECIPES = ["open", "set_menu"] as const;
+/** How often an item is bought, as set_regular (the older way to state an item's cycle) takes it. */
+export const EVERY = ["day", "week", "weekdays"] as const;
+/** A cart's life: one `open` cart per app is the one being filled; `ordering` while the agent places it; then `placed` (waiting
+ *  for the person's payment), `paid` or `not_paid`; `cancelled` before it is placed. */
+export const ORDER_STATUSES = ["open", "ordering", "placed", "paid", "not_paid", "cancelled"] as const;
+/** Why a line is in a cart: an everyday item, a meal's ingredient, an item running low, one the family added, or one returned
+ *  from an order nobody paid for. */
+export const LINE_SOURCES = ["everyday", "meal", "low", "added", "returned"] as const;
+export type LineSource = (typeof LINE_SOURCES)[number];
+/** How often an item is bought: every day, every few days, or about monthly. */
+export const ITEM_GROUPS = ["daily", "few_days", "monthly"] as const;
+
+/** What an item event is: a purchase, the family's answer to a stock question, a question asked, or one that went unanswered. */
+export const EVENT_KINDS = ["purchase", "answer", "ask", "unanswered"] as const;
+/** How an event counts towards the estimate. */
+export const EVENT_TAGS = ["counted", "early_buy", "your_answer", "one_off", "not_counted"] as const;
+/** How an event's tag reads on the item page. */
+export const TAG_TEXT: Record<(typeof EVENT_TAGS)[number], string> = { counted: "counted", early_buy: "early buy", your_answer: "your answer", one_off: "one-off, not counted", not_counted: "not counted" };
+
+/** The shopping apps, by their Flock connection id. */
+export const SHOP_APPS = ["zepto", "swiggy-instamart", "zomato-blinkit", "bigbasket", "amazon"] as const;
+export type GroceryApp = (typeof SHOP_APPS)[number];
+export const APP_NAMES: Record<GroceryApp, string> = { zepto: "Zepto", "swiggy-instamart": "Swiggy Instamart", "zomato-blinkit": "Blinkit", bigbasket: "BigBasket", amazon: "Amazon Fresh" };
+const ALIASES: Record<string, GroceryApp> = {
+  zepto: "zepto", "zepto-mcp": "zepto",
+  swiggy: "swiggy-instamart", instamart: "swiggy-instamart", "swiggy instamart": "swiggy-instamart", "swiggy-instamart": "swiggy-instamart", "swiggy-instamart-mcp": "swiggy-instamart",
+  blinkit: "zomato-blinkit", "zomato blinkit": "zomato-blinkit", "zomato-blinkit": "zomato-blinkit",
+  bigbasket: "bigbasket", "big basket": "bigbasket",
+  amazon: "amazon", "amazon fresh": "amazon", "amazon-fresh": "amazon",
 };
-export const UNKNOWN_SHELF_LIFE_DAYS = 3;   // an uncategorised item: assume it spoils fast, never that it lasts
+/** An app however it is written ("Zepto", "swiggy instamart", "Blinkit"), as its id; null when it is none of ours. */
+export const appOf = (v: unknown): GroceryApp | null => (typeof v === "string" ? ALIASES[v.trim().toLowerCase().replace(/\s+/g, " ")] ?? null : null);
+/** Can the agent copy a cart into the app? Amazon has no cart tool: its cart is built when the family orders. */
+export const CART_SYNC: Record<GroceryApp, boolean> = { zepto: true, "swiggy-instamart": true, "zomato-blinkit": true, bigbasket: true, amazon: false };
 
-// v3 (docs/V3-FLOW-SPEC.md): a draft stays live until a family member's yes, then becomes an order; a draft with no
-// yes by order_at + shop.yes_wait_h (or one the owner lets go) is let go, its open items rolling into the next draft.
-export const CART_STATUSES = ["draft", "ordered", "let_go"] as const;
+/** Dishes served with most meals: a week may hold them on many days without counting as a repeat. */
+export const STAPLE_DISHES = ["roti", "rotis", "chapati", "chapatis", "phulka", "phulkas", "rice", "plain rice", "steamed rice", "curd", "dahi", "raita",
+  "salad", "papad", "pickle", "buttermilk", "chaas", "milk", "fruit", "fruits"] as const;
 
-/** The grocery services compared at order time; the owner named these three (Instamart can be added later). Zepto and
- *  Instamart are their official connections, BigBasket and Blinkit their skills. */
-export const DEFAULT_SERVICES = ["zepto", "zomato-blinkit", "bigbasket"];
+/** How often the family has a dish, or keeps a soft rule, in their words (owner, 23 Nov): usually (most days, most nights,
+ *  daily), sometimes (sometimes, "when he's tired", now and then), rarely (once in a while, occasionally). */
+export const OFTEN = ["usually", "sometimes", "rarely"] as const;
+export type Often = (typeof OFTEN)[number];
+/** The days a week a dish of the family's comes back at most, by how often they have it (owner, 23 Nov); a dish with nothing
+ *  said comes back on MAIN_DAYS_MAX days (meals.ts). */
+export const DISH_DAYS_MAX: Record<Often, number> = { usually: 5, sometimes: 2, rarely: 1 };
+/** The meals a week a soft rule is kept at, by how often ("millets are good for him": 2 to 3 meals, not every meal). */
+export const RULE_TIMES: Record<Often, [number, number]> = { usually: [4, 5], sometimes: [2, 3], rarely: [0, 1] };
 
-/** Per-category ShoppingPrefs defaults (server/quantity.ts); mirrors flock.app.json's prefs.category_defaults. */
-export const DEFAULT_CATEGORY_PREFS: Record<string, Record<string, unknown>> = {"vegetables": {"pack_min": 250, "pack_max": 1000, "pack_unit": "g", "stock_days": 2, "price": "balanced", "brands_preferred": [], "brands_avoid": [], "substitutions": "ask", "service": "any", "never_auto_add": false}, "leafy_greens": {"pack_min": 1, "pack_max": 2, "pack_unit": "pc", "stock_days": 1, "price": "balanced", "brands_preferred": [], "brands_avoid": [], "substitutions": "ask", "service": "any", "never_auto_add": false}, "fruits": {"pack_min": 500, "pack_max": 2000, "pack_unit": "g", "stock_days": 3, "price": "balanced", "brands_preferred": [], "brands_avoid": [], "substitutions": "ask", "service": "any", "never_auto_add": false}, "dairy": {"pack_min": 500, "pack_max": 2000, "pack_unit": "ml", "stock_days": 1, "price": "balanced", "brands_preferred": ["Amul", "Mother Dairy"], "brands_avoid": [], "substitutions": "ask", "service": "any", "never_auto_add": false}, "bakery": {"pack_min": 1, "pack_max": 2, "pack_unit": "pc", "stock_days": 2, "price": "balanced", "brands_preferred": [], "brands_avoid": [], "substitutions": "allowed", "service": "any", "never_auto_add": false}, "grains": {"pack_min": 1000, "pack_max": 5000, "pack_unit": "g", "stock_days": 30, "price": "balanced", "brands_preferred": ["Aashirvaad", "India Gate"], "brands_avoid": [], "substitutions": "ask", "service": "any", "never_auto_add": false}, "pulses": {"pack_min": 500, "pack_max": 2000, "pack_unit": "g", "stock_days": 30, "price": "balanced", "brands_preferred": ["Tata Sampann"], "brands_avoid": [], "substitutions": "ask", "service": "any", "never_auto_add": false}, "pantry": {"pack_min": 500, "pack_max": 2000, "pack_unit": "g", "stock_days": 30, "price": "cheapest", "brands_preferred": [], "brands_avoid": [], "substitutions": "allowed", "service": "any", "never_auto_add": false}, "oils": {"pack_min": 1000, "pack_max": 5000, "pack_unit": "ml", "stock_days": 45, "price": "balanced", "brands_preferred": ["Fortune"], "brands_avoid": [], "substitutions": "ask", "service": "any", "never_auto_add": false}, "spices": {"pack_min": 50, "pack_max": 200, "pack_unit": "g", "stock_days": 60, "price": "balanced", "brands_preferred": ["MDH", "Everest"], "brands_avoid": [], "substitutions": "ask", "service": "any", "never_auto_add": false}, "meat": {"pack_min": 250, "pack_max": 1000, "pack_unit": "g", "stock_days": 1, "price": "premium", "brands_preferred": ["Licious"], "brands_avoid": [], "substitutions": "never", "service": "any", "never_auto_add": true}, "snacks": {"pack_min": 1, "pack_max": 3, "pack_unit": "pc", "stock_days": 7, "price": "balanced", "brands_preferred": [], "brands_avoid": [], "substitutions": "allowed", "service": "any", "never_auto_add": true}, "household": {"pack_min": 1, "pack_max": 2, "pack_unit": "pc", "stock_days": 30, "price": "cheapest", "brands_preferred": [], "brands_avoid": [], "substitutions": "allowed", "service": "any", "never_auto_add": true}};
+/** How a dish went, as the family says it: good, okay, or didn't work. */
+export const DISH_RATINGS = ["good", "okay", "didnt_work"] as const;
+export type DishRating = (typeof DISH_RATINGS)[number];
+/** How many of a dish's ratings are kept, newest first. */
+export const RATINGS_KEPT = 5;
 
-const TIME_RE = /^([01]\d|2[0-3]):([0-5]\d)$/;
-const isTime = (v: unknown): v is string => typeof v === "string" && TIME_RE.test(v);
-const timeProblem = (key: string) => (v: unknown): string | null => (isTime(v) ? null : `${key} must be a 24-hour time, HH:MM`);
-const intProblem = (key: string, min: number, max: number) => (v: unknown): string | null =>
-  typeof v === "number" && Number.isInteger(v) && v >= min && v <= max ? null : `${key} must be a whole number from ${min} to ${max}`;
-const numProblem = (key: string, min: number, max: number) => (v: unknown): string | null =>
-  typeof v === "number" && Number.isFinite(v) && v >= min && v <= max ? null : `${key} must be a number from ${min} to ${max}`;
+/** How far back an order history is read, in days. */
+export const HISTORY_DAYS = 92;
+/** A placed order still unpaid this long after is closed as not paid. */
+export const UNPAID_AFTER_HOURS = 24;
+/** An order left `ordering` this long is open again. */
+export const ORDERING_STALE_MIN = 60;
+/** A cart copied to its app this long ago is stale. */
+export const CART_STALE_MIN = 30;
+/** The app asks the agent to copy a cart this long after the last edit to it. */
+export const SYNC_DEBOUNCE_SEC = 20;
+/** An ask still unanswered after this long counts as lost. */
+export const SYNC_ASK_COOLDOWN_MIN = 10;
 
-/** The app's owner-facing settings (ARCHITECTURE.md "A setting"): declared here with their checks, passed to mountKit, and
- *  repeated without the checks in flock.app.json "settings" for the planner's catalogue. */
+/** The running-out estimate's tuning (spec section 6). */
+export const ESTIMATE = {
+  cycles: 5, oneOffLow: 0.5, oneOffHigh: 2,
+  snoozeDays: { daily: 1, few_days: 1, monthly: 5 }, askLeadDays: { daily: 0, few_days: 1, monthly: 3 },
+  maxAsks: 5, unansweredLimit: 2, missesBeforeWait: 2, waitStep: 1.25, waitMax: 2,
+  // A daily item goes on the cart by itself when due; one whose cycle was learned from purchases stops once it was last bought this long ago.
+  dailyStaleDays: 14,
+} as const;
+
+/** The app's owner-facing settings: declared here with their checks, passed to mountKit, and repeated without the checks in
+ *  flock.app.json "settings". */
 export const SETTINGS = [
-  { key: "household.profile", type: "json" as const, default: null, scope: "owner" as const,
-    label: "Your household, in your words (who eats, food habits, meals to plan, where you shop): nothing is planned until it's set",
-    check: (v: unknown) => v === null || (typeof v === "object" && !Array.isArray(v)) ? null : "household.profile must be an object of the family's answers" },
-  { key: "cook.morning", type: "string" as const, default: "07:30", scope: "owner" as const,
-    label: "When breakfast and lunch are cooked", check: timeProblem("cook.morning") },
-  { key: "cook.lunch", type: "string" as const, default: "13:00", scope: "owner" as const,
-    label: "When lunch is eaten (meal time default)", check: timeProblem("cook.lunch") },
-  { key: "cook.evening", type: "string" as const, default: "19:00", scope: "owner" as const,
-    label: "When dinner is cooked", check: timeProblem("cook.evening") },
-  { key: "quiet.start", type: "string" as const, default: "22:30", scope: "owner" as const,
-    label: "Quiet hours start: no reminders after this", check: timeProblem("quiet.start") },
-  { key: "quiet.end", type: "string" as const, default: "06:30", scope: "owner" as const,
-    label: "Quiet hours end", check: timeProblem("quiet.end") },
-  { key: "reminder.buffer_min", type: "integer" as const, default: 30, scope: "owner" as const,
-    label: "Extra minutes before a prep step must start", check: intProblem("reminder.buffer_min", 0, 240) },
-  { key: "spend.weekly_limit", type: "number" as const, default: 2000, scope: "owner" as const,
-    label: "₹ a week (Mon-Sun) a cart is flagged for crossing", check: numProblem("spend.weekly_limit", 0, 1_000_000) },
-  { key: "price.jump_pct", type: "number" as const, default: 20, scope: "owner" as const,
-    label: "% above usual price an item is flagged, not added", check: numProblem("price.jump_pct", 0, 500) },
-  { key: "services", type: "json" as const, default: DEFAULT_SERVICES, scope: "owner" as const,
-    label: "Grocery services compared at order time",
-    check: (v: unknown) => Array.isArray(v) && v.length > 0 && v.every((s) => typeof s === "string" && s.trim()) ? null : "services must be a non-empty list of service ids" },
-  { key: "buy.delivery_lead_min", type: "integer" as const, default: 60, scope: "owner" as const,
-    label: "Minutes an item must arrive before the cooking slot that uses it", check: intProblem("buy.delivery_lead_min", 0, 480) },
-  { key: "buy.fresh_window_days", type: "json" as const, default: { dairy: 1, vegetables: 2, pantry: 7, spices: 14 }, scope: "owner" as const,
-    label: "Days one order may cover, per category",
-    check: (v: unknown) => v && typeof v === "object" && !Array.isArray(v) && BUY_CATEGORIES.every((k) => typeof (v as Record<string, unknown>)[k] === "number" && (v as Record<string, number>)[k] > 0)
-      ? null : "buy.fresh_window_days must give a positive number of days for dairy, vegetables, pantry and spices" },
-  { key: "buy.earliest_order", type: "string" as const, default: "06:30", scope: "owner" as const,
-    label: "No order is placed earlier than this", check: timeProblem("buy.earliest_order") },
-  { key: "buy.preferred_order_time", type: "string" as const, default: "18:00", scope: "owner" as const,
-    label: "The evening before an item is needed, order it at this time instead of waiting for the morning (Zepto's evening deals, and the family's own habit) — falls back to the morning cutoff once this slot has already passed",
-    check: timeProblem("buy.preferred_order_time") },
-  // v3: a meal's needs leave the draft only once it is surely over — its latest time (docs/V3-FLOW-SPEC.md).
-  { key: "meal.latest.breakfast", type: "string" as const, default: "11:00", scope: "owner" as const,
-    label: "Breakfast can be cooked as late as", check: timeProblem("meal.latest.breakfast") },
-  { key: "meal.latest.lunch", type: "string" as const, default: "15:00", scope: "owner" as const,
-    label: "Lunch can be cooked as late as", check: timeProblem("meal.latest.lunch") },
-  { key: "meal.latest.dinner", type: "string" as const, default: "23:00", scope: "owner" as const,
-    label: "Dinner can be cooked as late as", check: timeProblem("meal.latest.dinner") },
-  { key: "shop.reminder_time", type: "string" as const, default: "20:00", scope: "owner" as const,
-    label: "The evening before a shopping window, the reminder goes out at", check: timeProblem("shop.reminder_time") },
-  { key: "shop.heads_up_min", type: "integer" as const, default: 15, scope: "owner" as const,
-    label: "Minutes before a shopping window the draft is shared", check: intProblem("shop.heads_up_min", 5, 240) },
-  { key: "shop.yes_wait_h", type: "number" as const, default: 3, scope: "owner" as const,
-    label: "Hours to wait for a yes before the draft is let go quietly", check: numProblem("shop.yes_wait_h", 0.5, 24) },
-  { key: "plan.horizon_days", type: "integer" as const, default: 7, scope: "owner" as const,
-    label: "Rolling plan length, in days", check: intProblem("plan.horizon_days", 1, 30) },
-  { key: "plan.confirm_ahead_days", type: "integer" as const, default: 2, scope: "owner" as const,
-    label: "Days within which an unconfirmed day is raised with the family", check: intProblem("plan.confirm_ahead_days", 0, 14) },
-  { key: "prefs.category_defaults", type: "json" as const, default: DEFAULT_CATEGORY_PREFS, scope: "owner" as const,
-    label: "Default shopping prefs per category (an ingredient's own prefs override these)",
-    check: (v: unknown) => v && typeof v === "object" && !Array.isArray(v) ? null : "prefs.category_defaults must be an object keyed by category" },
+  { key: "grocery_app", type: "choice" as const, options: [...SHOP_APPS], default: "zepto", scope: "owner" as const, label: "Your main grocery app",
+    check: (v: unknown) => (SHOP_APPS as readonly unknown[]).includes(v) ? null : `grocery_app must be one of: ${SHOP_APPS.join(", ")}` },
+  { key: "fallback_app", type: "choice" as const, options: ["none", ...SHOP_APPS], default: "none", scope: "owner" as const, label: "When something isn't on your main app",
+    check: (v: unknown) => v === "none" || (SHOP_APPS as readonly unknown[]).includes(v) ? null : `fallback_app must be one of: none, ${SHOP_APPS.join(", ")}` },
+  { key: "order_without_asking", type: "boolean" as const, default: false, scope: "owner" as const, label: "Order without asking" },
+  { key: "new_dishes_per_week", type: "integer" as const, default: 2, scope: "owner" as const, label: "New dishes a week",
+    check: (v: unknown) => (NEW_DISHES_CHOICES as readonly unknown[]).includes(v) ? null : `new_dishes_per_week must be one of: ${NEW_DISHES_CHOICES.join(", ")}` },
 ];
+
+/** Meal Planner 2.0's tables. The upgrade keeps them as they are (mountKit keepTables): never changed, dropped or shown. So no
+ *  table of the app's may take one of these names (the slot model's ingredients table is `dish_ingredients`). */
+export const OLD_TABLES = ["ingredients", "recipes", "recipe_ingredients", "meals", "meal_recipes", "diners", "diner_portions", "standing_consumption", "staples", "carts", "groceries", "prep_reminders", "shopping_prefs", "stock", "agent_jobs", "choice_log", "learned_prefs", "message_log"];
+/** Who delivers a subscribed item when the family named nobody (the Pantry item's "Comes on subscription" with "from" left
+ *  empty): set_subscription needs a source, and the pill then says just "Subscription". */
+export const SUBSCRIPTION_UNNAMED = "outside the apps";

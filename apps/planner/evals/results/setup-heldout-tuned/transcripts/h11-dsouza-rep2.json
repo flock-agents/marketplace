@@ -1,0 +1,33 @@
+{
+ "household": "h11-dsouza",
+ "lines": [
+  "Q: What's the hardest part of meals for you? Or something else.",
+  "A: We both cook and keep making the same three dishes. That's the hardest part.",
+  "Q: Which apps do you order groceries on: Zepto, Blinkit, Instamart, BigBasket or Amazon? If you sign me in, I'll read your past orders to learn what your home buys and how often, so the plan and the shopping list fit you from the first week, and I can fill the cart for you. Nothing is ordered without your yes.",
+  "A: Zepto only. And later for the sign-in thing.",
+  "Q: Which is your main app, and which do you use when something isn't there?",
+  "A: Zepto is the main one. If something's not there I just skip it or swap.",
+  "Q: I have Vikram (31) and Ishita (30) eating at home. Anyone else who eats at home, or anyone who doesn't?",
+  "A: No, just the two of us.",
+  "Q: Who cooks at home, and on which days? Is any day's meal eaten out?",
+  "A: I cook dinner on weekdays, Ishita does breakfast and her lunch. Weekends we cook together. Friday dinner we order in.",
+  "Q: What did the adults have for breakfast over the past week? Tell me in as much detail as you can.",
+  "A: Poha, upma, ragi dosa, besan chilla. Ishita had overnight oats on two busy days.",
+  "Q: The adults' lunch over the past week?",
+  "A: Dal, rice, sabzi and salad mostly. Rajma or chole once.",
+  "A: actually make the millets three times a week for me",
+  "Q: The adults' dinner over the past week?",
+  "A: Roti, dal and a sabzi on weekdays. Weekend we had chicken curry and fish fry on Sunday.",
+  "Q: Is anyone on a diet? High protein, low carb, diabetic, anything a doctor asked for.",
+  "A: Not really a diet, but Ishita is lactose intolerant — no milk, curd, paneer or ghee for her. And I'm trying to eat millets three times a week.",
+  "Q: Any food rules for the house? Veg, egg or non-veg days, fasting days, allergies, a dish someone won't touch.",
+  "A: Weekdays fully veg. Non-veg and eggs only on weekends. No other rules.",
+  "Q: How often do you order in, and on which days?",
+  "A: Told you already — Friday dinner we order in, every week.",
+  "Q: Does anything come on a subscription, like Country Delight or a milkman?",
+  "A: No subscriptions. We just use Zepto for everything."
+ ],
+ "questions": 12,
+ "model": "deepseek/deepseek-v4-flash",
+ "at": "2026-11-23T16:50:05.942Z"
+}

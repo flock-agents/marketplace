@@ -26,7 +26,7 @@ describe("family-calendar data, as agents see it", () => {
     const { call } = await boot();
     const s = (await call("GET", "/api/_data/_schema")).body;
     expect(Object.keys(s.tables).sort()).toEqual(["events", "members", "reminders"]);
-    expect(columns(s, "events")).toEqual(expect.arrayContaining(["title", "date", "start_time", "end_time", "who", "location", "notes", "reminder_minutes"]));
+    expect(columns(s, "events")).toEqual(expect.arrayContaining(["title", "date", "repeat", "start_time", "end_time", "who", "location", "notes", "reminder_minutes"]));
     expect(columns(s, "reminders")).toEqual(expect.arrayContaining(["title", "due", "repeat", "who"]));
     expect(columns(s, "members")).toEqual(expect.arrayContaining(["name", "colour", "emoji"]));
     expect(required(s, "events")).toEqual(["title", "date"]);
