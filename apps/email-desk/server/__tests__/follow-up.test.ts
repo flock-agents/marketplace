@@ -329,18 +329,31 @@ describe("runFollowUpForAccount", () => {
     expect(w.published.map((p) => p.sourceRef)).not.toContain("follow-up:t-replied");
   });
 
-  test("mail to an automated address, bulk mail and a note to self draw no TODO", async () => {
+  test("bulk mail (the declared unsubscribe flag) and a note to self draw no TODO", async () => {
     const w = world({
-      threads: {
-        a1: th(me(OLD, { to: ["noreply@vendor.com"], cc: [] })),
-        a2: th(me(OLD, { unsubscribeLink: true })),
-        a3: th(me(OLD, { body: "Our newsletter.\n\nUnsubscribe: https://news.acme.com/unsubscribe?u=1" })),
-        a4: th(me(OLD, { to: [OWNER], cc: [] })),
-      },
-      rows: ["a1", "a2", "a3", "a4"].map((id) => ({ id, dateFull: OLD })),
+      threads: { a2: th(me(OLD, { unsubscribeLink: true })), a4: th(me(OLD, { to: [OWNER], cc: [] })) },
+      rows: ["a2", "a4"].map((id) => ({ id, dateFull: OLD })),
     });
     await run(w);
     expect(w.published).toHaveLength(0);
+  });
+
+  test("a sent thread to support@ or billing@ with no reply raises a TODO", async () => {
+    const w = world({
+      threads: { s1: th(me(OLD, { to: ["support@vendor.com"], cc: [] })), s2: th(me(OLD, { to: ["Billing <billing@vendor.com>"], cc: [] })) },
+      rows: ["s1", "s2"].map((id) => ({ id, dateFull: OLD })),
+    });
+    await run(w);
+    expect(w.published.map((p) => p.sourceRef).sort()).toEqual(["follow-up:s1", "follow-up:s2"]);
+  });
+
+  test("a quoted unsubscribe footer in the person's message does not stop it", async () => {
+    const w = world({
+      threads: { q1: th(me(OLD, { body: "Any update?\n\n> Unsubscribe: https://news.acme.com/unsubscribe?u=1\n> manage your preferences" })) },
+      rows: [{ id: "q1", dateFull: OLD }],
+    });
+    await run(w);
+    expect(w.published.map((p) => p.sourceRef)).toEqual(["follow-up:q1"]);
   });
 
   test("the recipient's name is the first To's display name, else its local part", async () => {

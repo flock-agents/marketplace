@@ -29,12 +29,11 @@ import { SENT_LIST_MAX, sentQuery } from "../journal";
 import { extractEmailAddress } from "../lib/draft-eligibility";
 import { decideNudgeEligibility, nextFollowUpAction, ownerMsgKey, businessDaysSetting, type NudgeThread, type FollowUpStatus } from "../lib/follow-up-rules";
 import { followUpKindForTo } from "../lib/reply-context";
-import { isAutomatedSender } from "../lib/automated-sender";
 import { isSentRow } from "../lib/sent-row";
 import { addBusinessDays } from "../lib/business-days";
 import { parseGmailDate, parseGmailDateTime } from "../lib/gmail-date";
 import { processTimezone } from "../lib/local-day";
-import { findUnsubscribeLink, stopReason } from "./gather";
+import { stopReason } from "./gather";
 import { threadLink } from "./memory-extraction";
 import { getFollowUp, listFollowUps, listFollowUpsOfferedSince, lastFollowUpRunAt, putFollowUp, recordFollowUpRun, type FollowUpRow } from "./follow-up-store";
 
@@ -248,13 +247,10 @@ export async function runFollowUpForAccount(
       }
       if (action !== "judge") { mem.read.add(row.id); continue; }
 
-      // The bulk signal the thread read does not carry as a flag: a link in the message's own words.
-      const lastMsg = { ...last!, unsubscribeLink: last!.unsubscribeLink === true || !!findUnsubscribeLink(null, typeof last!.body === "string" ? last!.body : "") };
-      const gate = decideNudgeEligibility(me, { ...thread!, messages: [...thread!.messages.slice(0, -1), lastMsg] }, now, cfg.businessDays, tz);
+      const gate = decideNudgeEligibility(me, thread!, now, cfg.businessDays, tz);
+      const lastMsg = last!;
       const to = (lastMsg.to ?? []).filter((a) => extractEmailAddress(a) !== me);
-      // Mail only to a role or a no-reply address has nobody to follow up with (the built-in desk's agent judged this).
-      const nobody = gate.ok && to.length > 0 && [...to, ...(lastMsg.cc ?? [])].map(extractEmailAddress).filter((a) => a && a !== me).every(isAutomatedSender);
-      if (!gate.ok || nobody) {
+      if (!gate.ok) {
         // The person wrote again since their TODO went up: it is out of date, so it comes down.
         if (prev?.status === "offered") {
           if (!(await withdrawTodo(ctx, prev, deps))) continue;
