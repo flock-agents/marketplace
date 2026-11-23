@@ -22,9 +22,13 @@
 //      above released the mailbox; an existing mailbox from before this app is learned this way.
 //   6. wake: the pending offers whose thread has no open draft go to the routine's agent, whoever it is: one line of
 //      counts, the mail itself only in `data`, with the mailbox's voice: `{ mails, voice, voiceState }` (voice the block a
-//      reply is written from, or null; voiceState "ready" | "learning" | "none", as reply_context answers them). One wake
-//      is one mailbox, so one voice. A wake that reached the agent clears them; a failed one keeps them for the next run,
-//      which offers them again without extracting again.
+//      reply is written from, or null; voiceState "ready" | "none", as reply_context answers them). One wake is one
+//      mailbox, so one voice. A wake that reached the agent clears them; a failed one keeps them for the next run, which
+//      offers them again without extracting again.
+//      RULING R22: while the mailbox's voice is "learning", no wake: its offers stay pending, and the wake is sent once the
+//      voice settles (learned, or its crawl ended without one, or the 45-minute cap passed; voice/crawl.ts whenVoiceSettles),
+//      through the routine's own wake, or by the next run, whichever comes first. A woken agent's create_draft would only be
+//      refused, and nothing makes it retry.
 // A run with a failure throws once everything else is done, so the owner's routine history shows it.
 //
 // CLOSURE (ruling R12). The extraction closes a TODO once the thread shows it done, but only a TODO the item carries
@@ -44,7 +48,7 @@ import { FamilyPushBatch, NAMING_SCHEMA, emailLabel, slugOf, type HeldTask, type
 import { householdNames, personFirstName } from "../family/context";
 import { blockTaskGate, senderKindOf } from "../lib/task-gates";
 import { voiceBlockOrNull } from "../voice/block";
-import { ensureVoiceCrawl, voiceStateFor, type VoiceState } from "../voice/crawl";
+import { ensureVoiceCrawl, voiceStateFor, whenVoiceSettles, type VoiceState } from "../voice/crawl";
 
 /**
  * How many items one memory.extract call can serve. NOT EXPORTED BY THE SDK, so mirrored here from its formula
@@ -161,6 +165,8 @@ export interface MemoryExtractionDeps {
   ensureVoice?: (ctx: RoutineCtx, accountId: string) => Promise<unknown>;
   /** The mailbox's voice for the wake (default voice/block.ts and voice/crawl.ts). */
   voiceFor?: (accountId: string) => { voice: string | null; voiceState: VoiceState };
+  /** When a learning mailbox's voice settles (default voice/crawl.ts whenVoiceSettles); null when it is not learning. */
+  voiceSettles?: (accountId: string) => Promise<void> | null;
 }
 
 /** The wake's voice: the block when there is one, else whether it is being learned. */
@@ -181,6 +187,7 @@ export async function runMemoryExtraction(ctx: RoutineCtx, deps: MemoryExtractio
   const voice: Voice = {
     ensure: deps.ensureVoice ?? ((c, a) => ensureVoiceCrawl(c.platform as never, a)),
     of: deps.voiceFor ?? wakeVoice,
+    settles: deps.voiceSettles ?? whenVoiceSettles,
   };
   const accounts = await routineAccounts(ctx);
   const failures: string[] = [];
@@ -209,6 +216,7 @@ async function routineAccounts(ctx: RoutineCtx): Promise<Array<{ accountId: stri
 interface Voice {
   ensure: NonNullable<MemoryExtractionDeps["ensureVoice"]>;
   of: NonNullable<MemoryExtractionDeps["voiceFor"]>;
+  settles: NonNullable<MemoryExtractionDeps["voiceSettles"]>;
 }
 
 async function runAccount(
@@ -293,7 +301,7 @@ async function runAccount(
   }
 
   // 6. WAKE for the pending draft offers: this run's and any an earlier failed wake left.
-  const woke = await wakeForOffers(ctx, accountId, voice.of(accountId), failures);
+  const woke = await wakeForOffers(ctx, accountId, voice, failures);
   // A run that read the mailbox and put every kept mail into memory is a finished harvest (last_harvest op). A failed chunk
   // leaves the day open.
   if (failed === 0) recordHarvestRun(accountId);
@@ -323,10 +331,34 @@ function addDraftOffers(mail: readonly KeptMail[]): void {
   }
 }
 
-/** Wakes the routine's agent for this account's pending offers whose thread has no open draft. Returns how many it woke for. */
-async function wakeForOffers(
-  ctx: RoutineCtx, accountId: string, voice: { voice: string | null; voiceState: VoiceState }, failures: string[],
-): Promise<number> {
+// One wake at a time per mailbox: the run's wake and a held wake sent when the voice settles must not both send the same
+// offers.
+const wakeTurns = new Map<string, Promise<unknown>>();
+function inWakeTurn<T>(accountId: string, fn: () => Promise<T>): Promise<T> {
+  const run = (wakeTurns.get(accountId) ?? Promise.resolve()).then(fn, fn);
+  const tail = run.catch(() => undefined);
+  wakeTurns.set(accountId, tail);
+  void tail.then(() => { if (wakeTurns.get(accountId) === tail) wakeTurns.delete(accountId); });
+  return run;
+}
+/** Mailboxes with a held wake already waiting on their voice. */
+const heldWakes = new Set<string>();
+/** Tests: forget held wakes and wake turns. */
+export function _resetWakesForTesting(): void {
+  heldWakes.clear();
+  wakeTurns.clear();
+}
+
+/** Wakes the routine's agent for this account's pending offers whose thread has no open draft. Returns how many it woke for.
+ *  While the mailbox's voice is learning it wakes nobody and keeps the offers (ruling R22), and sends the wake once the voice
+ *  settles. */
+function wakeForOffers(ctx: RoutineCtx, accountId: string, voice: Voice, failures: string[], hold = true): Promise<number> {
+  return inWakeTurn(accountId, () => wakeNow(ctx, accountId, voice, failures, hold));
+}
+
+/** `hold`: on a learning voice, also arrange the wake for when it settles. The settled wake itself never re-arranges one
+ *  (a clock that disagrees with the cap's timer must not loop); the next run picks the offers up then. */
+async function wakeNow(ctx: RoutineCtx, accountId: string, voice: Voice, failures: string[], hold: boolean): Promise<number> {
   const db = getStore();
   const prefix = offerKey(accountId, "");
   const rows = db.query("SELECT key, value FROM app_meta WHERE substr(key, 1, ?) = ? ORDER BY updated_at, key")
@@ -342,10 +374,16 @@ async function wakeForOffers(
     offers.push({ key: row.key, offer });
   }
   if (offers.length === 0) return 0;
+  const v = voice.of(accountId);
+  if (v.voiceState === "learning") {
+    say(accountId, `holding ${offers.length} offer(s): the voice is still being learned`);
+    if (hold) holdUntilVoiceSettles(ctx, accountId, voice);
+    return 0;
+  }
   const mails = offers.map(({ offer: o }) => ({ threadId: o.threadId, accountId: o.accountId, from: o.from, subject: o.subject, snippet: o.snippet }));
   let woke: Awaited<ReturnType<RoutineCtx["wakeAgent"]>>;
   try {
-    woke = await ctx.wakeAgent(wakeLine(mails.length), { mails, voice: voice.voice, voiceState: voice.voiceState });
+    woke = await ctx.wakeAgent(wakeLine(mails.length), { mails, voice: v.voice, voiceState: v.voiceState });
   } catch (e: any) {
     woke = { ok: false, reason: e?.message ?? String(e) };
   }
@@ -357,6 +395,22 @@ async function wakeForOffers(
   }
   db.transaction(() => { for (const { key } of offers) drop.run(key); })();
   return mails.length;
+}
+
+/** Sends the held wake once the voice settles (once per mailbox at a time). The routine's wake is by routine id, so it works
+ *  after this run has ended. A wake that fails then keeps the offers for the next run, as any failed wake does. Never throws. */
+function holdUntilVoiceSettles(ctx: RoutineCtx, accountId: string, voice: Voice): void {
+  if (heldWakes.has(accountId)) return;
+  const settles = voice.settles(accountId);
+  if (!settles) return; // not learning any more: the next run wakes
+  heldWakes.add(accountId);
+  void settles
+    .then(() => {
+      heldWakes.delete(accountId);
+      return wakeForOffers(ctx, accountId, voice, [], false);
+    })
+    .then((n) => { if (n > 0) say(accountId, `woke for ${n} held offer(s) once the voice settled`); })
+    .catch((e: any) => { heldWakes.delete(accountId); say(accountId, `held wake failed: ${e?.message ?? String(e)}`); });
 }
 
 /** The kept threads' open TODOs, when Flock serves them (seam `board.openTasks`); none otherwise. Never throws. */

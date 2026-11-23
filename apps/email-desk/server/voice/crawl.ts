@@ -1,11 +1,14 @@
 // The voice crawl (Task 2.9): read enough of the person's own sent mail, for one mailbox, to learn how they write; then one
 // model call (extract.ts) and the rows (store.ts). Ported from Flock's email-desk/voice-crawl.ts.
 //
-// THE MAILBOX'S TURN. Every Gmail read here runs under `connectors.readTurn(accountId, "email-desk:voice")`, the lease every
-// reader of the mailbox takes its turn on, with each exec carrying the turn's id. A refused turn starts no crawl ("better to
-// skip a crawl than to read the mailbox out of turn", as the source said); the next trigger asks again. Holding the turn is
-// what replaces the source's own yielding (its mid-turn waits and busy-lock retries): nobody else reads the mailbox while
-// the crawl holds it. The turn is released as soon as the reads end, before the model call, which reads no mail.
+// THE MAILBOX'S TURN, ONE READ AT A TIME. Every Gmail read here runs under `connectors.readTurn(accountId,
+// "email-desk:voice")`, the lease every reader of the mailbox takes its turn on, with the exec carrying the turn's id. The
+// lease is a try-lock, so the crawl holds it only around its reads and RELEASES IT BEFORE EVERY PAUSE (the 45-90 s gaps, the
+// session retries, the busy backoff): between reads the hourly gather and reply_context can take the mailbox. This is the
+// source's yielding (yieldToAgentTurn, callWithBusyRetry) on the platform's lease: a turn refused as busy between reads is
+// "come back later", retried after a backoff up to MAX_BUSY_RETRIES times, then that read is skipped like any failed read.
+// The first turn decides whether the crawl starts at all: refused, no crawl ("better to skip a crawl than to read the
+// mailbox out of turn", as the source said), and the next trigger asks again. The model call reads no mail and holds none.
 //
 // LEARNING, AND ITS CAP (spec §5.2, Review Focus 5). While a crawl or its model call is in flight, the mailbox's voice is
 // "learning", and create_draft answers VOICE_LEARNING with a time to try after: the crawl's cap, VOICE_PENDING_CAP_MS from
@@ -51,6 +54,12 @@ const SEARCH_ATTEMPTS = 3;
 const SESSION_RETRY_MS = 30_000;
 /** One page of Gmail reads (gather's THREAD_TIMEOUT_MS order): a browser read, not a write. */
 const READ_TIMEOUT_MS = 180_000;
+/** A turn lasts one read (released after it, or at the latest by this ttl): the read plus a margin. */
+const READ_TURN_TTL_MS = READ_TIMEOUT_MS + 60_000;
+/** A mailbox busy between reads: come back after this (source BUSY_BACKOFF_*), at most MAX_BUSY_RETRIES times per read. */
+const BUSY_BACKOFF_MIN_MS = 30_000;
+const BUSY_BACKOFF_MAX_MS = 60_000;
+const MAX_BUSY_RETRIES = 3;
 
 /** Voice's read: ONE newest-first page of sent mail, up to the read budget (source VOICE_THREAD_FILTERS). */
 const VOICE_THREAD_FILTERS = { in: "sent" } as const;
@@ -101,8 +110,11 @@ export function _setVoiceCrawlSeamsForTesting(
 
 const active = new Map<string, VoiceCrawlProgress>(); // accountId -> progress
 
+const settling = new Map<string, Promise<void>>(); // accountId -> the crawl's end
+
 export function _resetVoiceCrawlsForTesting(): void {
   active.clear();
+  settling.clear();
 }
 
 export function voiceCrawlProgress(accountId: string): VoiceCrawlProgress | null {
@@ -132,9 +144,21 @@ export function voiceStateFor(accountId: string, now: number = nowImpl()): Voice
   return voiceLearningUntil(accountId, now) !== null ? "learning" : "none";
 }
 
+/** Resolves when this mailbox stops learning: its crawl (and model call) ended, or its cap passed, whichever is first.
+ *  Null when it is not learning now. Never rejects. (Ruling R22: memory-extraction holds a learning mailbox's wake to this.) */
+export function whenVoiceSettles(accountId: string): Promise<void> | null {
+  const until = voiceLearningUntil(accountId);
+  if (until === null) return null;
+  const ended = settling.get(accountId);
+  const cap = sleepImpl(Math.max(0, until - nowImpl()));
+  return ended ? Promise.race([ended, cap]) : cap;
+}
+
 // ---- the reads -----------------------------------------------------------------------------------------------------------
 
 type Read = (functionName: string, params: Record<string, unknown>) => Promise<unknown | null>;
+/** A gap between reads: the mailbox's turn is released first, so others may read meanwhile. */
+type Pause = (ms: number) => Promise<void>;
 
 function jitter(min: number, max: number): number {
   return Math.floor(min + Math.random() * (max - min));
@@ -149,7 +173,7 @@ type BatchStop = "samples" | "read_cap" | "wall_clock" | "exhausted" | "unavaila
  * "unavailable" when the first page could not be read at all, so the caller falls back to search + per-thread reads.
  */
 async function readSentViaGetThreads(c: {
-  read: Read; address: string; progress: VoiceCrawlProgress; samples: string[]; interactive?: boolean;
+  read: Read; pause: Pause; address: string; progress: VoiceCrawlProgress; samples: string[]; interactive?: boolean;
 }): Promise<BatchStop> {
   const { read, address, progress, samples } = c;
   let offset = 0;
@@ -190,7 +214,7 @@ async function readSentViaGetThreads(c: {
     const next = out.truncated && Number.isFinite(Number(out.nextOffset)) ? Number(out.nextOffset) : offset + threads.length;
     if (next <= offset) break;
     offset = next;
-    await sleepImpl(jitter(pauseMin(c.interactive), pauseMax(c.interactive)));
+    await c.pause(jitter(pauseMin(c.interactive), pauseMax(c.interactive)));
   }
   if (samples.length >= MAX_SAMPLES) return "samples";
   if (progress.read >= MAX_READS) return "read_cap";
@@ -199,7 +223,7 @@ async function readSentViaGetThreads(c: {
 
 /** The crawl's reads: the batch path, else one search and a read per candidate. Never throws; the samples are cleaned of a
  *  signature every sample shares. */
-async function crawlSentMail(read: Read, progress: VoiceCrawlProgress, interactive?: boolean): Promise<{ stop: string; samples: string[]; error?: string }> {
+async function crawlSentMail(read: Read, pause: Pause, progress: VoiceCrawlProgress, interactive?: boolean): Promise<{ stop: string; samples: string[]; error?: string }> {
   const samples: string[] = [];
   const address = progress.address;
   const done = (stop: string, error?: string) => {
@@ -208,7 +232,7 @@ async function crawlSentMail(read: Read, progress: VoiceCrawlProgress, interacti
     return { stop, samples: stripped, ...(error ? { error } : {}) };
   };
   try {
-    const batch = await readSentViaGetThreads({ read, address, progress, samples, interactive });
+    const batch = await readSentViaGetThreads({ read, pause, address, progress, samples, interactive });
     if (batch !== "unavailable") return done(batch);
 
     // A session that is not ready yet looks exactly like a search that failed: three attempts over a minute.
@@ -216,7 +240,7 @@ async function crawlSentMail(read: Read, progress: VoiceCrawlProgress, interacti
     for (let attempt = 0; attempt < SEARCH_ATTEMPTS; attempt++) {
       rows = await read("searchEmails", { query: "in:sent", maxResults: 50 });
       if (rows !== null) break;
-      if (attempt < SEARCH_ATTEMPTS - 1) await sleepImpl(SESSION_RETRY_MS);
+      if (attempt < SEARCH_ATTEMPTS - 1) await pause(SESSION_RETRY_MS);
     }
     if (rows === null) return done("session_not_ready", "search failed");
     const candidates = prefilterSentRows((Array.isArray(rows) ? rows : []) as never, new Date(nowImpl()));
@@ -236,7 +260,7 @@ async function crawlSentMail(read: Read, progress: VoiceCrawlProgress, interacti
         }
       }
       // Paced the same way, success or failure: a burst of fast failures is least like a person reading mail.
-      await sleepImpl(jitter(pauseMin(interactive), pauseMax(interactive)));
+      await pause(jitter(pauseMin(interactive), pauseMax(interactive)));
     }
     return done("exhausted");
   } catch (e: any) {
@@ -305,7 +329,7 @@ export async function beginVoiceCrawl(
   let turn: Awaited<ReturnType<typeof x.connectors.readTurn>>;
   try {
     turn = x.connectors.readTurn
-      ? await x.connectors.readTurn(accountId, VOICE_CONSUMER, { skillId: "gmail", ttlMs: VOICE_PENDING_CAP_MS })
+      ? await x.connectors.readTurn(accountId, VOICE_CONSUMER, { skillId: "gmail", ttlMs: READ_TURN_TTL_MS })
       : { ok: false, reason: "this Flock has no read turns", code: "busy" };
   } catch (e: any) {
     turn = { ok: false, reason: e?.message ?? String(e), code: "busy" };
@@ -316,23 +340,56 @@ export async function beginVoiceCrawl(
     log(`[email-desk] voice crawl account=${accountId} not started: mailbox ${code}${turn.reason ? ` (${turn.reason})` : ""}`);
     return { started: false, reason: code };
   }
-  const held = turn.data;
-  recordStart(accountId, progress.startedAt);
-  const done = learn(platform, model as unknown as VoiceModel, progress, held, opts.interactive);
+  // From here `learn` owns the turn: it releases it in every path, and never throws.
+  const done = learn(platform, model as unknown as VoiceModel, progress, turn.data, opts.interactive);
+  const ended = done.then(() => undefined);
+  settling.set(accountId, ended);
+  void ended.then(() => { if (settling.get(accountId) === ended) settling.delete(accountId); });
   return { started: true, progress, done };
 }
 
 /** The crawl under the held turn, then the model call and the rows. Never throws; always marks the crawl done. */
+type HeldTurn = { turnId: string; release(): Promise<void> };
+
 async function learn(
-  platform: PlatformContext, model: VoiceModel, progress: VoiceCrawlProgress,
-  turn: { turnId: string; release(): Promise<void> }, interactive?: boolean,
+  platform: PlatformContext, model: VoiceModel, progress: VoiceCrawlProgress, first: HeldTurn, interactive?: boolean,
 ): Promise<VoiceCrawlProgress> {
   const { accountId } = progress;
   const x = ext(platform);
+  // The turn the crawl holds right now, if any: taken for a read, released before every pause.
+  let held: HeldTurn | null = first;
+  const releaseHeld = async (): Promise<void> => {
+    const t = held;
+    held = null;
+    if (t) { try { await t.release(); } catch { /* released by its ttl otherwise */ } }
+  };
+  const pause: Pause = async (ms) => {
+    await releaseHeld();
+    await sleepImpl(ms);
+  };
+  /** The mailbox's turn for the next read. Busy is "come back later": a backoff holding nothing, then ask again. Any other
+   *  refusal (the account paused or not this person's), or busy past the retries, skips the read. */
+  const take = async (): Promise<HeldTurn | null> => {
+    for (let attempt = 0; attempt <= MAX_BUSY_RETRIES; attempt++) {
+      let r: Awaited<ReturnType<typeof x.connectors.readTurn>>;
+      try {
+        r = await x.connectors.readTurn(accountId, VOICE_CONSUMER, { skillId: "gmail", ttlMs: READ_TURN_TTL_MS });
+      } catch (e: any) {
+        r = { ok: false, reason: e?.message ?? String(e), code: "busy" };
+      }
+      if (r.ok) return r.data;
+      const code = "code" in r ? String(r.code ?? "") : "";
+      if (code !== "busy" || attempt === MAX_BUSY_RETRIES) return null;
+      await sleepImpl(jitter(BUSY_BACKOFF_MIN_MS, BUSY_BACKOFF_MAX_MS));
+    }
+    return null;
+  };
   const read: Read = async (functionName, params) => {
+    if (!held) held = await take();
+    if (!held) return null;
     try {
       const r = await x.connectors.exec<unknown>({
-        skillId: "gmail", functionName, params, accountHint: accountId, timeoutMs: READ_TIMEOUT_MS, turnId: turn.turnId,
+        skillId: "gmail", functionName, params, accountHint: accountId, timeoutMs: READ_TIMEOUT_MS, turnId: held.turnId,
       });
       if (!r.ok) return null;
       return typeof r.data === "string" ? safeParse(r.data) : r.data ?? null;
@@ -342,13 +399,14 @@ async function learn(
   };
   let outcome = "empty";
   try {
+    recordStart(accountId, progress.startedAt);
     let crawl: Awaited<ReturnType<typeof crawlSentMail>>;
     try {
       progress.address = await addressOf(platform, accountId);
-      crawl = progress.address ? await crawlSentMail(read, progress, interactive) : { stop: "no_address", samples: [] };
+      crawl = progress.address ? await crawlSentMail(read, pause, progress, interactive) : { stop: "no_address", samples: [] };
     } finally {
       // The reads are over: the mailbox is free for the next reader. The model call below reads no mail.
-      try { await turn.release(); } catch { /* released by its ttl otherwise */ }
+      await releaseHeld();
     }
     progress.stopReason = crawl.stop;
     if (crawl.error) progress.error = crawl.error;
@@ -367,6 +425,7 @@ async function learn(
     progress.error = e?.message ?? String(e);
     outcome = "failed";
   } finally {
+    await releaseHeld(); // a throw before the reads (recordStart) still lets the mailbox go
     progress.storing = false;
     progress.done = true;
     progress.finishedAt = nowImpl();

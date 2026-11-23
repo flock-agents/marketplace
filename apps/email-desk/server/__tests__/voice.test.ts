@@ -27,7 +27,7 @@ import {
 } from "../voice/crawl";
 import { editVoiceRow, forgetVoiceRow, restoreVoiceRow, voiceRows, OWNER_SOURCE, CRAWL_SOURCE } from "../voice/store";
 import { buildVoiceBlock, VOICE_HEADING } from "../voice/block";
-import { runMemoryExtraction, _setLogForTesting as _setRoutineLogForTesting } from "../routines/memory-extraction";
+import { runMemoryExtraction, _resetWakesForTesting, _setLogForTesting as _setRoutineLogForTesting } from "../routines/memory-extraction";
 import { voiceRoutes } from "../routes/voice";
 import type { GatherResult, KeptMail } from "../routines/gather";
 
@@ -64,10 +64,15 @@ interface Fake {
   hold: Promise<void> | null;
   turnRefusal: { reason: string; code: string } | null;
   profile: unknown;
+  /** The mailbox lease, as Flock's try-lock: who holds each account now. */
+  lease: Map<string, string>;
+  /** getThreads answers in two pages (4 threads, then 2), so the crawl pauses between them. */
+  twoPages: boolean;
 }
 
 function fake(): Fake {
-  const f: Fake = { platform: null, turns: [], released: 0, reads: [], writes: [], models: [], published: [], hold: null, turnRefusal: null, profile: PROFILE };
+  const f: Fake = { platform: null, turns: [], released: 0, reads: [], writes: [], models: [], published: [], hold: null, turnRefusal: null, profile: PROFILE,
+    lease: new Map(), twoPages: false };
   let n = 0;
   f.platform = {
     appId: "email-desk", pairedAgent: { id: "butler-1", name: "Butler" }, dataDir: "test", configured: true,
@@ -76,7 +81,17 @@ function fake(): Fake {
       readTurn: async (account: string | undefined, consumer: string, opts: any) => {
         f.turns.push({ account, consumer, opts });
         if (f.turnRefusal) return { ok: false, ...f.turnRefusal };
-        return { ok: true, data: { turnId: `turn-${f.turns.length}`, accountId: account, release: async () => { f.released++; } } };
+        const key = account ?? "";
+        const holder = f.lease.get(key);
+        if (holder) return { ok: false, reason: `held by ${holder}`, code: "busy", retryAfterMs: 1000 };
+        f.lease.set(key, consumer);
+        let done = false;
+        return { ok: true, data: { turnId: `turn-${f.turns.length}`, accountId: account, release: async () => {
+          if (done) return;
+          done = true;
+          f.released++;
+          if (f.lease.get(key) === consumer) f.lease.delete(key);
+        } } };
       },
       exec: async (req: any) => {
         const p = req.params ?? {};
@@ -85,14 +100,20 @@ function fake(): Fake {
           if (req.functionName === "getThreads") {
             if (f.hold) await f.hold; // only the crawl's read waits: reply_context's own getThread never does
             const me = ME[req.accountHint] ?? "";
-            const threads = Array.from({ length: 4 }, (_, i) => ({
-              threadId: `s-${i}`, subject: "Re: numbers",
-              messages: [
-                { from: "Sam <sam@acme.com>", body: "Any update on the numbers?" },
-                { from: `Me <${me}>`, body: sentBody(i) },
-              ],
-            }));
-            return { ok: true, data: { listed: threads.length, threads, truncated: false } };
+            const second = f.twoPages && Number(p.offset) > 0;
+            const count = f.twoPages ? (second ? 2 : 4) : 4;
+            const threads = Array.from({ length: count }, (_, j) => {
+              const i = second ? j + 4 : j;
+              return {
+                threadId: `s-${i}`, subject: "Re: numbers",
+                messages: [
+                  { from: "Sam <sam@acme.com>", body: "Any update on the numbers?" },
+                  { from: `Me <${me}>`, body: sentBody(i) },
+                ],
+              };
+            });
+            const truncated = f.twoPages && !second;
+            return { ok: true, data: { listed: f.twoPages ? 6 : 4, threads, truncated, ...(truncated ? { nextOffset: 4 } : {}) } };
           }
           return { ok: false, reason: "not used" };
         }
@@ -120,6 +141,8 @@ function fake(): Fake {
 let db: Database;
 let f: Fake;
 let clock: number;
+/** What a test does while the crawl pauses (the crawl's sleep seam), given the pause's length. */
+let onSleep: (ms: number) => Promise<void>;
 
 function seedThread(threadId = THREAD, account = A1): void {
   const at = new Date(Date.UTC(2026, 10, 23, 9, 0));
@@ -156,7 +179,8 @@ beforeEach(() => {
   _setCardLogForTesting(() => {});
   _setRoutineLogForTesting(() => {});
   clock = Date.UTC(2026, 10, 23, 10, 0);
-  _setVoiceCrawlSeamsForTesting({ sleep: async () => {}, now: () => clock, log: () => {} });
+  onSleep = async () => {};
+  _setVoiceCrawlSeamsForTesting({ sleep: (ms) => onSleep(ms), now: () => clock, log: () => {} });
   _resetVoiceCrawlsForTesting();
   f = fake();
   seedThread();
@@ -169,6 +193,7 @@ afterEach(async () => {
   _setRoutineLogForTesting(null);
   _setVoiceCrawlSeamsForTesting(null);
   _resetVoiceCrawlsForTesting();
+  _resetWakesForTesting();
   db.close();
 });
 
@@ -182,11 +207,14 @@ describe("the crawl", () => {
     expect(out.progress.sampled).toBe(4);
     expect(out.progress.stored).toBeGreaterThan(0);
 
-    // Read under the mailbox's turn, every read carrying it, then released.
-    expect(f.turns).toEqual([{ account: A1, consumer: VOICE_CONSUMER, opts: { skillId: "gmail", ttlMs: VOICE_PENDING_CAP_MS } }]);
+    // Read under the mailbox's turn, every read carrying it, then released. A turn lasts a read, not the crawl's cap.
+    expect(f.turns).toHaveLength(1);
+    expect(f.turns[0]).toMatchObject({ account: A1, consumer: VOICE_CONSUMER, opts: { skillId: "gmail" } });
+    expect(f.turns[0]!.opts.ttlMs).toBeLessThan(VOICE_PENDING_CAP_MS);
     expect(f.reads.length).toBeGreaterThan(0);
     for (const r of f.reads) expect(r).toMatchObject({ turnId: "turn-1", account: A1 });
     expect(f.released).toBe(1);
+    expect(f.lease.size).toBe(0);
 
     // One Balanced model call with a schema; the person's own prose is in it.
     expect(f.models).toHaveLength(1);
@@ -211,6 +239,63 @@ describe("the crawl", () => {
     await runVoiceCrawl(f.platform, A2);
     expect(dims(A2).sign_off!.value).toContain("Thanks, Shiva");
     expect(Object.keys(dims(A1)).sort()).toEqual(Object.keys(dims(A2)).sort());
+  });
+
+  test("the mailbox is free while the crawl pauses: gather or reply_context can take the turn", async () => {
+    f.twoPages = true;
+    const between: any[] = [];
+    onSleep = async () => {
+      // Another reader asks for the mailbox while the crawl waits between its pages.
+      const t = await f.platform.connectors.readTurn(A1, "email-desk:harvest", { skillId: "gmail" });
+      between.push(t.ok);
+      if (t.ok) await t.data.release();
+    };
+    const out = await runVoiceCrawl(f.platform, A1);
+    expect(between.length).toBeGreaterThan(0);
+    expect(between.every(Boolean)).toBe(true);
+    expect(out.started && out.progress.sampled).toBe(6);
+    // Two reads, each under its own turn, each released.
+    const crawlTurns = f.turns.filter((t) => t.consumer === VOICE_CONSUMER);
+    expect(crawlTurns).toHaveLength(2);
+    expect(f.reads.map((r) => r.turnId)).toEqual(["turn-1", "turn-3"]);
+    expect(f.lease.size).toBe(0);
+  });
+
+  test("a mailbox busy between reads is come back to later, not given up on", async () => {
+    f.twoPages = true;
+    let sleeps = 0;
+    const backoffs: number[] = [];
+    let other: { release(): Promise<void> } | null = null;
+    onSleep = async (ms) => {
+      sleeps++;
+      if (sleeps === 1) {
+        // The gather takes the mailbox during the page pause, and holds it through the crawl's first try.
+        const t = await f.platform.connectors.readTurn(A1, "email-desk:harvest", { skillId: "gmail" });
+        if (t.ok) other = t.data;
+      } else {
+        backoffs.push(ms);
+        await other?.release();
+        other = null;
+      }
+    };
+    const out = await runVoiceCrawl(f.platform, A1);
+    expect(backoffs).toHaveLength(1);
+    expect(backoffs[0]).toBeGreaterThanOrEqual(30_000);
+    expect(out.started && out.progress.sampled).toBe(6);
+    expect(f.lease.size).toBe(0);
+  });
+
+  test("a mailbox busy past the retries skips that read and keeps what was read", async () => {
+    f.twoPages = true;
+    let sleeps = 0;
+    onSleep = async () => {
+      sleeps++;
+      if (sleeps === 1) await f.platform.connectors.readTurn(A1, "email-desk:harvest", { skillId: "gmail" }); // never released
+    };
+    const out = await runVoiceCrawl(f.platform, A1);
+    expect(out.started && out.progress.sampled).toBe(4);
+    expect(dims(A1).sign_off).toBeTruthy();
+    f.lease.clear();
   });
 
   test("a refused turn starts no crawl and reads nothing", async () => {
@@ -367,13 +452,50 @@ describe("the routine's wake", () => {
     expect(f.turns).toEqual([]); // a learned mailbox is not crawled again
   });
 
-  test("a mailbox with no voice starts its crawl from the routine, and the wake says it is learning", async () => {
+  const offers = () => (db.query("SELECT key FROM app_meta WHERE key LIKE 'draft-offer:%'").all() as { key: string }[]).map((r) => r.key);
+  /** The cap's timer, held by the test (the crawl's other pauses pass at once). */
+  let fireCap: (() => void) | null = null;
+  const holdCapTimer = () => {
+    onSleep = (ms) => ms >= 10 * 60_000 ? new Promise<void>((r) => { fireCap = r; }) : Promise.resolve();
+  };
+  const until = async (cond: () => boolean) => { for (let i = 0; i < 200 && !cond(); i++) await Bun.sleep(1); };
+
+  test("a mailbox with no voice starts its crawl from the routine; no wake while it learns, offers kept (ruling R22)", async () => {
+    holdCapTimer();
     const open = holdReads();
     const wakes: Array<{ message: string; data: any }> = [];
     await runMemoryExtraction(routine(wakes), { gather, handOver: () => {} });
     expect(f.turns.map((t) => t.consumer)).toEqual([VOICE_CONSUMER]);
-    expect(wakes[0]!.data).toMatchObject({ voice: null, voiceState: "learning" });
+    expect(wakes).toEqual([]);
+    expect(offers()).toEqual([`draft-offer:${A1}:${THREAD}`]);
+
+    // A second run while still learning: still no wake, nothing lost, and no second crawl.
+    await runMemoryExtraction(routine(wakes), { gather, handOver: () => {} });
+    expect(wakes).toEqual([]);
+    expect(offers()).toHaveLength(1);
+
+    // The voice is learned: the held wake goes out, with the voice block.
     open();
+    await until(() => wakes.length > 0);
+    expect(wakes).toHaveLength(1);
+    expect(wakes[0]!.data.mails.map((m: any) => m.threadId)).toEqual([THREAD]);
+    expect(wakes[0]!.data.voiceState).toBe("ready");
+    expect(wakes[0]!.data.voice).toBe(buildVoiceBlock(A1, db));
+    expect(offers()).toEqual([]);
+  });
+
+  test("a crawl wedged past its cap: the held wake goes out without voice", async () => {
+    holdCapTimer();
+    holdReads(); // never finishes on its own
+    const wakes: Array<{ message: string; data: any }> = [];
+    await runMemoryExtraction(routine(wakes), { gather, handOver: () => {} });
+    expect(wakes).toEqual([]);
+    clock += VOICE_PENDING_CAP_MS;
+    fireCap!();
+    await until(() => wakes.length > 0);
+    expect(wakes).toHaveLength(1);
+    expect(wakes[0]!.data).toMatchObject({ voice: null, voiceState: "none" });
+    expect(offers()).toEqual([]);
   });
 
   test("the catch-up waits a week after a crawl that learned nothing", async () => {
@@ -393,12 +515,19 @@ describe("the settings routes", () => {
     hono.route("/", voiceRoutes(f.platform) as never);
     return hono;
   };
-  const person = { "x-flock-user": "shiva" };
+  const person = { "x-flock-user": "shiva", "x-flock-role": "owner" };
   const put = (body: unknown, headers: Record<string, string> = person) =>
     app().request("/api/voice", { method: "PUT", headers: { "content-type": "application/json", ...headers }, body: JSON.stringify(body) });
 
-  test("only the person: an agent or nobody is refused", async () => {
+  test("only the person: an agent, a shared viewer, or nobody is refused", async () => {
     expect((await app().request("/api/voice")).status).toBe(403);
+    // Someone the copy was shared with (Flock's proxy says role app_viewer), and a name with no role at all.
+    const viewer = { "x-flock-user": "user:fws-42", "x-flock-role": "app_viewer" };
+    expect((await app().request("/api/voice", { headers: viewer })).status).toBe(403);
+    expect((await put({ accountId: A1, dimension: "sign_off", action: "edit", value: "x" }, viewer)).status).toBe(403);
+    expect((await app().request("/api/voice", { headers: { "x-flock-user": "shiva" } })).status).toBe(403);
+    // A member's own copy: the proxy says member.
+    expect((await app().request("/api/voice", { headers: { "x-flock-user": "user:fws-7", "x-flock-role": "member" } })).status).toBe(200);
     expect((await app().request("/api/voice", { headers: { ...person, "x-flock-agent": "butler-1" } })).status).toBe(403);
     expect((await put({ accountId: A1, dimension: "sign_off", value: "x" }, { "x-flock-agent": "butler-1" })).status).toBe(403);
     expect(voiceRows(A1, db)).toEqual([]);

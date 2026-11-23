@@ -6,8 +6,9 @@
 // WHO REACHES IT. Flock's proxy is the only way in (the app listens on loopback): its gate (app-gate.ts) opens an app paired
 // with a person's assistant to that person alone, and admits agents too. The voice is the person's own word on how they
 // write and is trusted text in every draft, so these routes take the PERSON only: a request the proxy marks as an agent's
-// (X-Flock-Agent) or as nobody's (no X-Flock-User) is refused. The proxy strips any incoming x-flock-* header, so neither
-// can be forged through it. Agents read the voice through reply_context, never here.
+// (X-Flock-Agent), as nobody's (no X-Flock-User), or as a viewer the copy was shared with (X-Flock-Role "app_viewer", or no
+// role at all) is refused. The proxy strips any incoming x-flock-* header, so none of these can be forged through it.
+// Agents read the voice through reply_context, never here.
 import { Hono, type Context } from "hono";
 import { readFileSync } from "fs";
 import { join } from "path";
@@ -27,9 +28,16 @@ export interface VoiceAccountView extends VoicePageAccount {
 
 const NOT_YOURS = "Only you can see or change your voice here.";
 
-/** The person, as Flock's proxy vouched for them; null for an agent or nobody. */
-function person(c: Context): string | null {
+/** The roles Flock's proxy gives a signed-in person of this Flock (apps.ts sanitizeRequestHeaders: X-Flock-Role). The gate
+ *  (app-gate.ts) lets such a person into an app paired with someone's assistant only when it is their own. "app_viewer" is
+ *  someone the copy was SHARED with: they are let in by the share, never the copy's person. */
+const PERSON_ROLES: ReadonlySet<string> = new Set(["owner", "admin", "member"]);
+
+/** The person, as Flock's proxy vouched for them; null for an agent, a shared viewer, or nobody. */
+export function person(c: Context): string | null {
   if (c.req.header("x-flock-agent")) return null;
+  const role = (c.req.header("x-flock-role") ?? "").trim();
+  if (!PERSON_ROLES.has(role)) return null;
   const user = c.req.header("x-flock-user");
   return user && user.trim() ? user.trim() : null;
 }
