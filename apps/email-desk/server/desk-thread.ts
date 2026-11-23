@@ -12,6 +12,7 @@ import { extractEmailAddress } from "./lib/draft-eligibility";
 import { threadText } from "./routines/gather";
 import { gmailRefusal, notInMailboxRefusal, type DraftRefusal } from "./drafts/rules";
 import type { ReadTurnResult } from "./platform-ext";
+import { closeIfRepliedInGmail } from "./replied-in-gmail";
 
 /** One thread read's timeout (gather's THREAD_TIMEOUT_MS): a read, not the write budget of a draft. */
 const READ_TIMEOUT_MS = 90_000;
@@ -57,7 +58,10 @@ export async function readThreadInTurn(platform: PlatformContext, accountId: str
       return { status: "failed", reason: (r as { message?: string }).message ?? r.reason };
     }
     const read: any = typeof r.data === "string" ? safeParse(r.data) : r.data;
-    return hasMessages(read) ? { status: "found", read } : { status: "missing" };
+    if (!hasMessages(read)) return { status: "missing" };
+    // The person may have answered it in Gmail itself: the thread's open items close (replied-in-gmail.ts). Never throws.
+    await closeIfRepliedInGmail(platform, accountId, threadId, read);
+    return { status: "found", read };
   } catch (e: any) {
     return { status: "failed", reason: String(e?.message ?? e) };
   } finally {

@@ -37,7 +37,9 @@ import { processTimezone } from "../lib/local-day";
 import { stopReason } from "./gather";
 import { threadLink } from "./memory-extraction";
 import { mailDeletedAt } from "../mail-data";
-import { getFollowUp, listFollowUps, listFollowUpsOfferedSince, lastFollowUpRunAt, putFollowUp, recordFollowUpRun, type FollowUpRow } from "./follow-up-store";
+import { closeIfRepliedInGmail } from "../replied-in-gmail";
+import { followUpRef, getFollowUp, listFollowUps, listFollowUpsOfferedSince, lastFollowUpRunAt, putFollowUp, recordFollowUpRun, type FollowUpRow } from "./follow-up-store";
+export { followUpRef };
 
 /** The read turn's consumer name: Flock's lease and its logs say who holds the mailbox. */
 export const FOLLOW_UP_CONSUMER = "email-desk:follow-up";
@@ -155,8 +157,6 @@ function dayMemory(accountId: string, day: string): DayMemory {
 }
 export function _resetFollowUpPassMemoryForTesting(): void { passMemory.clear(); }
 
-export const followUpRef = (threadId: string): string => `follow-up:${threadId}`;
-
 /** States that are a final answer for their message until new mail lands on the thread. */
 const DECIDED = new Set<FollowUpStatus>(["offered", "replied"]);
 
@@ -251,7 +251,7 @@ export async function runFollowUpForAccount(
       // A row we cannot date is read (fail toward looking, not skipping).
       const rowAt = parseGmailDateTime(row.dateFull ?? "") ?? parseGmailDate(row.date ?? "", new Date(now));
       if (deletedAt !== null && rowAt !== null && rowAt <= deletedAt) { mem.read.add(row.id); continue; }
-      const prev = getFollowUp(accountId, row.id);
+      let prev = getFollowUp(accountId, row.id);
       // A thread we hold a row for is read whatever its age: the person may have written again, or they may have replied
       // (a newer sent-list date), and the TODO has to come down.
       if (!prev && rowAt !== null && addBusinessDays(rowAt, cfg.businessDays, tz) > now + 24 * 3600_000) continue;
@@ -273,6 +273,12 @@ export async function runFollowUpForAccount(
         continue; // not remembered: the next tick reads it again
       }
       const thread = parsed(res.data) as NudgeThread | null;
+      // The person may have answered it in Gmail itself: the thread's open items close (replied-in-gmail.ts), and the row
+      // is read again so the pass works from what is open now.
+      if (thread) {
+        await closeIfRepliedInGmail(ctx.platform, accountId, row.id, thread);
+        prev = getFollowUp(accountId, row.id);
+      }
       const last = thread?.messages?.[thread.messages.length - 1];
       const lastIsOwner = !!last && extractEmailAddress(last.from) === me;
       const key = lastIsOwner ? ownerMsgKey(last!) : null;

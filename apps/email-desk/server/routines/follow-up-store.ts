@@ -13,6 +13,9 @@ export interface FollowUpRow {
 /** A write. The offer fields are optional; omitted or null, the stored values are kept. */
 export type FollowUpInput = Omit<FollowUpRow, "offeredAt" | "recipientName"> & Partial<Pick<FollowUpRow, "offeredAt" | "recipientName">>;
 
+/** A thread's follow-up TODO on Flock's board: one per thread, so a repeat is the same TODO. */
+export const followUpRef = (threadId: string): string => `follow-up:${threadId}`;
+
 const toRow = (r: any): FollowUpRow => ({
   accountId: r.account_id, threadId: r.thread_id, ownerMsgKey: r.owner_msg_key, status: r.status, checkedAt: r.checked_at,
   offeredAt: r.offered_at ?? null, recipientName: r.recipient_name ?? null,

@@ -161,10 +161,11 @@ export async function publishDraftCard(platform: PlatformContext, draft: DraftRe
   }
 }
 
-/** Takes the draft's card off Home. Idempotent; never throws. */
-export async function withdrawDraftCard(platform: PlatformContext, id: string): Promise<void> {
+/** Takes the draft's card off Home. Idempotent; never throws. `reason` tells Flock why (e.g. "replied": the person answered
+ *  the thread in Gmail itself, so nothing was sent from the card). */
+export async function withdrawDraftCard(platform: Pick<PlatformContext, "tasks">, id: string, reason?: string): Promise<void> {
   try {
-    const r = await platform.tasks.withdraw(draftSourceRef(id));
+    const r = await platform.tasks.withdraw(draftSourceRef(id), ...(reason ? [{ reason }] as const : []));
     if (!r.ok && !r.skipped) log(`[email-desk] card withdraw failed for draft ${id}: ${r.message ?? r.reason}`);
   } catch (e: any) {
     log(`[email-desk] card withdraw threw for draft ${id}: ${e?.message ?? e}`);

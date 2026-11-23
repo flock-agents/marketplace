@@ -36,6 +36,7 @@ import { parseGmailDateTime } from "../lib/gmail-date";
 import { messageFingerprint } from "../lib/message-fingerprint";
 import { noteHandoverFingerprints, wasHandedOver } from "./seen";
 import { mailDeletedAt } from "../mail-data";
+import { closeIfRepliedInGmail } from "../replied-in-gmail";
 
 /** The read turn's consumer name: Flock's lease and its logs say who holds the mailbox. */
 export const HARVEST_CONSUMER = "email-desk:harvest";
@@ -651,6 +652,9 @@ async function gatherUnderTurn(
       }
       thread = parsed(one.data);
     }
+
+    // The person may have answered it in Gmail itself: the thread's open items close (replied-in-gmail.ts). Never throws.
+    await closeIfRepliedInGmail(ctx.platform, accountId, block.key, thread);
 
     // Prefer the read, but a read that found headers and no text must not wipe a parked body.
     const fetched = segmentsFromThread(thread);
