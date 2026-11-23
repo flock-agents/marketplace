@@ -63,24 +63,7 @@ export const ALLOWLIST = ["server/quoteLint.ts", "server/db/constants.ts"];
 /** The 2.x word lists still in server/setup.ts and server/makePlan.ts when this guard was written (23 Nov 2026), by file and
  *  regex text. Lanes B and C replace these files (spec §3, no adapters): delete each entry as its regex goes. Nothing is
  *  ever added here: a new word list belongs in an allowlisted constants file, or (better) in the model's reading. */
-export const GRANDFATHERED: string[] = [
-  "server/setup.ts|^weekdays?$",
-  "server/setup.ts|^weekends?$",
-  "server/setup.ts|^(?:more )?(.+?) (?:is|are) (?:good|better|healthy|healthier)\\b",
-  "server/setup.ts|\\b(less|low) salt\\b",
-  "server/setup.ts|\\bless oil\\b",
-  "server/setup.ts|\\b(less|not too|mildly) spicy\\b|\\bless spice\\b",
-  "server/setup.ts|\\bless ghee\\b",
-  "server/setup.ts|\\bless rice\\b",
-  "server/setup.ts|less rice|portion",
-  "server/setup.ts|\\b(less|low|lower|reduce|reduced|lighter|light|not too|mild|little|cut down)\\b",
-  "server/setup.ts|\\b(good|better|healthy|healthier|try to|should|prefer|more|less often)\\b",
-  "server/setup.ts| weekends? ",
-  "server/setup.ts| weekdays? ",
-  "server/setup.ts|\\b(mon(?:day)?|tues?(?:day)?|wed(?:nesday)?|thu(?:rs?)?(?:day)?|fri(?:day)?|sat(?:urday)?|sun(?:day)?)\\s*[-–]\\s*(mon(?:day)?|tues?(?:day)?|wed(?:nesday)?|thu(?:rs?)?(?:day)?|fri(?:day)?|sat(?:urday)?|sun(?:day)?)\\b",
-  "server/setup.ts|\\\\b(?:less|low|lower|reduce|reduced|lighter|not too|mild|little)(?: [a-z]+)? (?:${words || \"-\"})\\\\b",
-  "server/makePlan.ts|^(Mon|Tue|Wed|Thu|Fri|Sat|Sun)$",
-];
+export const GRANDFATHERED: string[] = [];
 
 describe("eval guards (spec §8)", () => {
   test("the scanner finds regex literals, strings and templates, and skips comments and division", () => {

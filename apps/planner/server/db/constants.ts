@@ -43,7 +43,7 @@ export const BASE_TAGS = ["egg", "meat", "fish", "onion_garlic", "nuts", "peanut
  *  saved gets one re-read. Words only to spot a quote worth a second look; the model reads what they mean. */
 export const LINT_DAY_WORDS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday", "mondays", "tuesdays", "wednesdays",
   "thursdays", "fridays", "saturdays", "sundays", "mon", "tue", "tues", "wed", "thu", "thur", "thurs", "fri", "sat", "sun", "weekend", "weekends",
-  "weekday", "weekdays", "daily", "everyday", "day", "days", "night", "nights"] as const;
+  "weekday", "weekdays", "daily", "everyday", "day", "days", "night", "nights", "morning", "mornings", "evening", "evenings"] as const;
 export const LINT_COUNT_WORDS = ["once", "twice", "thrice", "one", "two", "three", "four", "five", "six", "seven"] as const;
 /** Staples are counted from confirmed slot-days only (the setup seed is stored confirmed, so it counts); a planned slot-day
  *  never feeds a staple (owner, 23 Nov: the plan's own output must not feed back into it). Flip to let planned ones count. */

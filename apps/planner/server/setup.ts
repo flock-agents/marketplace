@@ -1,8 +1,9 @@
 // apply_setup { household, transcript } v2, on the slot model (docs/slot-model-spec.md §4). The model reads words, code stores
 // and checks. Flock sends every household fact it holds (household.people with nicknames, household.weekly, household.dated,
-// household.speaker) and the planner part of the interview as Q:/A: lines. Three balanced reads run at once (the home: slots,
+// household.speaker) and the planner part of the interview as Q:/A: lines. Four balanced reads run at once (the home: slots,
 // the cook, who of the family cooks, shopping; the food rules; the dishes: a library per slot and seed slot-days from the past
-// week's answers), then a fast "contains" read of every dish for every tag a rule names and the base tags.
+// week's answers; how often: the words that say how often or on which days the family has a dish, for the few dishes that have
+// them), then a fast "contains" read of every dish for every tag a rule names and the base tags.
 //
 // Code checks structure only (§4.2), never what a word means: a quote must be in the family's replies or facts; a hard rule
 // never carries a frequency; names must be people at home (unknown: the read-back asks); slot names must resolve to a slot; a
@@ -41,11 +42,11 @@ const EXAMPLE = `Example (another family, not this one). household: speaker "Rah
 Q: Savita cooks Breakfast and Lunch at 8am. Is that right? A1: yes, and she comes back at 5 for dinner
 Q: Is food cooked at home on weekends? A2: Saturday Divu cooks everything. Sunday we go to my in-laws for lunch, dinner we order from Zomato. We all have a snack at 5
 A3: oh and Savita comes at 8:30 actually
-Q: Any food rules? A4: we're eggetarian, eggs fine but no meat. Amma doesn't eat onion or garlic, and she fasts on Saturdays till sunset, only fruit. Brown rice is better for her, and less oil.
-Q: Does anyone eat differently at dinner? A5: Paati has just two phulkas at night, no rice
+Q: Any food rules? A4: we're eggetarian, eggs fine but no meat. Amma is pure veg, no eggs, and she doesn't eat onion or garlic; she fasts on Saturdays till sunset, only fruit. Brown rice is better for her, and less oil.
+Q: Does anyone eat differently at dinner? A5: Paati has just two phulkas at night, no rice. Tara has the same as us, just less spicy
 Q: Tara's tiffin? A6: Mon-Fri, sandwiches or poha, school says no peanuts.
-Q: What did you have for lunch last week? A7: rice, rasam or dal, a poriyal, curd most days. Pulao twice, puri on Sundays. Lemon rice every Friday. Salad every day.
-Q: And breakfast? A8: idli or dosa, upma once. Divu has ragi dosa.
+Q: What did you have for lunch last week? A7: Most days rice, rasam or dal, a poriyal, curd. Pulao twice, puri on Sundays. Lemon rice every Friday. Salad every day.
+Q: And breakfast? A8: usually idli or dosa, upma once, bread toast on busy days. Divu has ragi dosa too. Paati has her own ragi porridge.
 Q: Which grocery app? A9: Blinkit. Milk comes from Country Delight every morning`;
 const NOT_THE_EXAMPLE = "That family is only an example: write what THIS family said, nothing from the example.";
 
@@ -67,8 +68,8 @@ const HOME_SCHEMA = {
 };
 const HOME_PART = `Write this part: the meals (slots), the cook, who of the family cooks, shopping.
 - slots: every meal planned at home. Always Breakfast, Lunch and Dinner (kind "main"), each with skip_days when the family said that meal is eaten out or ordered in on a weekday every week ({ day, skip: eaten_out | ordered_in }; "Sunday lunch we eat out" is Lunch skip_days [{ Sun, eaten_out }] only: Sunday's other meals are still cooked) and a quote for that.
-  kind "custom": a meal the family names besides those: a child's school tiffin ("<child>'s tiffin", usual_people [that child], days the school days), an evening snack ("Evening snack"). after: the main meal it comes after (a tiffin: Breakfast; an evening snack: Lunch). usual_people: the people the family names for it; a meal said without names is everyone's: usual_people empty. days: the weekdays it is eaten, empty for every day.
-  kind "addon": one person's own plate at a main meal, when that person's meal there is always different ("father has two phulkas, no rice at night", a child's different dinner): name "<person>'s <meal>" ("Lalitha's dinner"), addon_of the main meal, usual_people [that person]. It holds only the difference; the person still eats the main meal's shared dishes.
+  kind "custom": a meal the family names besides those: a child's school tiffin, lunch box or snack box ("<child>'s tiffin", or the family's word for a box two children share; usual_people [those children], days the school days), an evening snack ("Evening snack"). after: the main meal it comes after (a tiffin: Breakfast; an evening snack: Lunch). usual_people: the people the family names for it; a meal said without names is everyone's: usual_people empty. days: the weekdays it is eaten, empty for every day.
+  kind "addon": one person's own plate at a main meal: the family names a dish made for that person at that meal, in place of or beside the shared dishes ("father has two phulkas, no rice at night", "bajra roti for her at night", "her own ragi porridge", "his own soup", a child's different dinner): name "<person>'s <meal>" ("Lalitha's dinner"), addon_of the main meal, usual_people [that person]. It holds only the difference; the person still eats the main meal's shared dishes. Someone who has a dish the others have too ("Divu has ragi dosa too", "same as us, less spicy") has no add-on.
   quote: the family's words that name a custom or add-on meal (one the family never named is no slot).
 - cook: the paid cook, or null. days. visits: each time they come, "HH:MM" 24-hour, with the meals that visit makes. limits_words: the cook's time or skill limits in the family's words. quote: the family's latest words about the cook's days or times.
 - family_cooks: on days the cook does not come, who of the family cooks ({ person, days, quote }), only when said.
@@ -77,7 +78,7 @@ const HOME_PART = `Write this part: the meals (slots), the cook, who of the fami
 - weekday_lunch: for someone away on weekdays (household.weekly), where they have lunch when the replies say it: away (eats out or at work), carries (takes lunch from home), home. Only from the family's words.
 - lunch_unclear: the people away on weekdays whose weekday lunch neither household.weekly nor the replies tell.
 Food rules and dishes are not this part: other readers write them.`;
-const HOME_EXAMPLE = `gives slots [{ Breakfast, main }, { Lunch, main, skip_days [{ Sun, eaten_out }], quote "Sunday we go to my in-laws for lunch" }, { Dinner, main, skip_days [{ Sun, ordered_in }], quote "dinner we order from Zomato" }, { "Tara's tiffin", custom, after Breakfast, usual_people [Tara], days Mon..Fri, quote "Mon-Fri, sandwiches or poha" }, { "Evening snack", custom, after Lunch, quote "We all have a snack at 5" (said for everyone: no usual_people) }, { "Lalitha's dinner", addon, addon_of Dinner, usual_people [Lalitha], quote "Paati has just two phulkas at night" }], cook { name "Savita", days Mon..Fri, visits [{ at "08:30", meals [Breakfast, Lunch] }, { at "17:00", meals [Dinner] }], quote "Savita comes at 8:30 actually" }, family_cooks [{ person "Divya", days [Sat], quote "Saturday Divu cooks everything" }] (who cooks on Sunday was not said: left out), apps { main "Blinkit" }, subscriptions [{ milk, Country Delight, every morning }], lunch_unclear ["Rahul"] (at the office on weekdays, his lunch never said; Tara carries hers).`;
+const HOME_EXAMPLE = `gives slots [{ Breakfast, main }, { Lunch, main, skip_days [{ Sun, eaten_out }], quote "Sunday we go to my in-laws for lunch" }, { Dinner, main, skip_days [{ Sun, ordered_in }], quote "dinner we order from Zomato" }, { "Tara's tiffin", custom, after Breakfast, usual_people [Tara], days Mon..Fri, quote "Mon-Fri, sandwiches or poha" }, { "Evening snack", custom, after Lunch, quote "We all have a snack at 5" (said for everyone: no usual_people) }, { "Lalitha's dinner", addon, addon_of Dinner, usual_people [Lalitha], quote "Paati has just two phulkas at night" }, { "Lalitha's breakfast", addon, addon_of Breakfast, usual_people [Lalitha], quote "Paati has her own ragi porridge" }] (no add-on for Divya: her ragi dosa is shared; none for Tara: same dinner), cook { name "Savita", days Mon..Fri, visits [{ at "08:30", meals [Breakfast, Lunch] }, { at "17:00", meals [Dinner] }], quote "Savita comes at 8:30 actually" }, family_cooks [{ person "Divya", days [Sat], quote "Saturday Divu cooks everything" }] (who cooks on Sunday was not said: left out), apps { main "Blinkit" }, subscriptions [{ milk, Country Delight, every morning }], lunch_unclear ["Rahul"] (at the office on weekdays, his lunch never said; Tara carries hers).`;
 
 const RULES_SCHEMA = {
   type: "object", required: ["rules"],
@@ -89,33 +90,42 @@ const RULES_SCHEMA = {
   },
 };
 const RULES_PART = `Write this part: the family's food rules, one per thing they said: what must or must not be eaten. What someone usually eats is no rule (another reader writes dishes).
-- what is one of: veg { who? } (vegetarian: no meat, fish or eggs) | egg { who? } (eats eggs, no meat or fish) | no_eggs { who? } | avoid { items, who?, days?, slots? } (no dish with these) | only { who, items, slots? } | swap { who, items, to } (who has "to" in place of items) | require { items, slots, who? } (one of items at those meals) | fasting { who, days, slots, fasting_food } (who eats nothing at those meals on those days but fasting_food; "till sunset" is slots [Breakfast, Lunch]) | cap { per_meal, slots? } (at most per_meal dishes to cook in a meal: a cook's time limit) | note { who? } (anything else, kept in the family's words: "less oil", "less spicy for the child", "high protein").
-- hard: true for what holds at every meal: allergies, vegetarian, eggs, no eggs, avoid, only, fasts, caps, "no sugar", "never". false for a wish said loosely ("X is good for her", "better", "more fruit", "try to", "sometimes"): give it frequency: usually (most days) | sometimes (a few times a week; any "good for" / "better" / "try to") | rarely | "<n>/week" when they gave a number. A hard rule never has a frequency. "No sugar" / "no sweets" is always hard avoid ["sugar"]. "Less X" is a note, never avoid.
-- items: tags, lower case with underscores: a plain food ("mushroom", "chicken", "paneer") or one of egg, meat, fish, onion_garlic, nuts, peanut, sugar, white_rice, dairy, root_veg, millet. "No rice at night" is avoid ["white_rice"] at slots ["Dinner"]. Meat on some days only ("chicken only on weekends") is avoid ["meat", "fish"] on the other days.
+Rules are said in any reply, the meals' answers too ("same dinner, just less spicy for her").
+- what is one of: veg { who? } (vegetarian: no meat or fish; eggs are their own rule) | egg { who? } (eats eggs, no meat or fish) | no_eggs { who? } (no eggs: "pure veg, no eggs" is two rules, veg and no_eggs) | avoid { items, who?, days?, slots? } (no dish with these) | only { who, items, slots? } | swap { who, items, to } (who has "to" in place of items) | require { items, slots, who? } (one of items at those meals) | fasting { who, days, slots, fasting_food } (who eats nothing at those meals on those days but fasting_food; "till sunset" is slots [Breakfast, Lunch]) | cap { per_meal, slots? } (at most per_meal dishes to cook in a meal: a cook's time limit) | note { who? } (anything else, kept in the family's words: "less oil", "less spicy for the child", "high protein").
+- hard: true for what holds at every meal: allergies, vegetarian, eggs, no eggs, avoid, only, fasts, caps, "no sugar", "never". A note is never hard. false for a wish said loosely ("X is good for her", "better", "more fruit", "try to", "sometimes"): give it frequency: usually (most days) | sometimes (a few times a week; any "good for" / "better" / "try to") | rarely | "<n>/week" when they gave a number. A hard rule never has a frequency. "No sugar" / "no sweets" is always hard avoid ["sugar"]. "Less X" is a note, never avoid.
+- items: tags, lower case with underscores: a plain food ("mushroom", "chicken", "paneer") or one of egg, meat, fish, onion_garlic, nuts, peanut, sugar, white_rice, dairy, root_veg, millet. "No nuts" is nuts (peanuts too); peanut only when peanuts alone are named. "No rice at night" is avoid ["white_rice"] at slots ["Dinner"]. Meat on some days only ("chicken only on weekends") is avoid ["meat", "fish"] on the other days, one rule for each person it is said of (left out when said of the whole house).
 - who: one person's name (household.people), left out for the whole house. days left out for every day; slots are meal names (Breakfast, Lunch, Dinner, "<child>'s tiffin", "Evening snack", "<person>'s <meal>"), left out for every meal.
 - unplaced: a food wish that is no rule and no dish, cook or shopping matter: { text, quote }. Usually none.`;
-const RULES_EXAMPLE = `gives rules [{ hard, egg, quote "eggs fine but no meat" }, { hard, avoid, who "Lalitha", items ["onion_garlic"], quote "Amma doesn't eat onion or garlic" }, { hard, fasting, who "Lalitha", days [Sat], slots [Breakfast, Lunch], fasting_food ["fruit"], quote "fasts on Saturdays till sunset, only fruit" }, { soft, swap, who "Lalitha", items ["white_rice"], to "brown rice", frequency "sometimes", quote "Brown rice is better for her" }, { soft, note, who "Lalitha", quote "less oil" }, { hard, avoid, who "Lalitha", items ["white_rice"], slots ["Dinner"], quote "no rice" }, { hard, avoid, items ["peanut"], slots ["Tara's tiffin"], quote "no peanuts" }].`;
+const RULES_EXAMPLE = `gives rules [{ hard, egg, quote "eggs fine but no meat" }, { hard, veg, who "Lalitha", quote "Amma is pure veg" }, { hard, no_eggs, who "Lalitha", quote "Amma is pure veg, no eggs" }, { hard, avoid, who "Lalitha", items ["onion_garlic"], quote "she doesn't eat onion or garlic" }, { hard, fasting, who "Lalitha", days [Sat], slots [Breakfast, Lunch], fasting_food ["fruit"], quote "fasts on Saturdays till sunset, only fruit" }, { soft, swap, who "Lalitha", items ["white_rice"], to "brown rice", frequency "sometimes", quote "Brown rice is better for her" }, { soft, note, who "Lalitha", quote "less oil" }, { hard, avoid, who "Lalitha", items ["white_rice"], slots ["Dinner"], quote "no rice" }, { hard, avoid, items ["peanut"], slots ["Tara's tiffin"], quote "no peanuts" }, { soft, note, who "Tara", quote "just less spicy" }].`;
 
 /** Short rows, the fewest tokens per item: the dishes are the longest answer. */
 const DISHES_SCHEMA = { type: "object", required: ["library"], properties: {
   library: { type: "array", items: { type: "array", items: STR } }, seed: { type: "array", items: { type: "array", items: STR } } } };
-const DISHES_PART = `Write this part: the family's own dishes, from their answers (the past week's meals, a child's tiffin, what someone has for a meal). No drinks (tea, coffee, milk, juice).
-- library: each dish the family eats, one row per dish and meal: [name, slot, frequency, days, quote].
+const DISHES_PART = `Write this part: the family's own dishes, from their answers (the past week's meals, a child's tiffin, what someone has for a meal). No drinks (tea, coffee, milk, juice). How often they have each is not this part: another reader writes it.
+- library: each dish the family eats, one row per dish and meal: [name, slot, quote].
   name: plain ("Idli", "Rajma chawal"); keep a quantity in the name when said with it ("4 eggs"). A meal told as its parts ("rice, dal, a dry sabzi, curd") is each part a dish; "sambar or dal" is two dishes.
-  slot: the meal it is eaten at: Breakfast, Lunch, Dinner, a child's tiffin as "<child>'s tiffin", "Evening snack", or one person's own plate as "<person>'s <meal>" ONLY when the family's sentence names that person and says their meal there is different. A dish someone has at a meal the others share stays on the shared meal.
-  frequency: from the family's words about that dish, else "": daily (said to be had every day: "salad every day"), usually (most days, most nights), sometimes (sometimes, "when she's unwell", now and then), rarely (once in a while), "<n>/week" for a count ("twice": "2/week", "once": "1/week").
-  days: the weekdays the family ties the dish to every week ("lemon rice every Friday": "Fri"; "weekend parathas": "Sat, Sun"), else "". A list of what was eaten on which day last week is no days.
-  quote: the family's words naming the dish, with its frequency or days words when said.
-- seed: each "past week" answer as example meals: [slot, "dish, dish, dish", quote], one row per kind of plate they described ("rice, rasam or dal, a poriyal, curd" is ["Lunch", "Rice, Rasam, Poriyal, Curd", quote] and ["Lunch", "Rice, Dal, Poriyal, Curd", quote]). Every seed dish is also in library.`;
-const DISHES_EXAMPLE = `gives library [["Sandwich", "Tara's tiffin", "", "", "sandwiches or poha"], ["Poha", "Tara's tiffin", "", "", "sandwiches or poha"], ["Phulka", "Lalitha's dinner", "", "", "Paati has just two phulkas at night"], ["Rice", "Lunch", "usually", "", "rice, rasam or dal, a poriyal, curd most days"], ["Rasam", "Lunch", "", "", "rasam or dal"], ["Dal", "Lunch", "", "", "rasam or dal"], ["Poriyal", "Lunch", "", "", "a poriyal"], ["Curd", "Lunch", "usually", "", "curd most days"], ["Pulao", "Lunch", "2/week", "", "Pulao twice"], ["Puri", "Lunch", "", "Sun", "puri on Sundays"], ["Lemon rice", "Lunch", "", "Fri", "Lemon rice every Friday"], ["Salad", "Lunch", "daily", "", "Salad every day"], ["Idli", "Breakfast", "", "", "idli or dosa"], ["Dosa", "Breakfast", "", "", "idli or dosa"], ["Upma", "Breakfast", "1/week", "", "upma once"], ["Ragi dosa", "Breakfast", "", "", "Divu has ragi dosa"]] (Divya's ragi dosa stays on Breakfast: nobody said her breakfast is different), seed [["Lunch", "Rice, Rasam, Poriyal, Curd", "rice, rasam or dal, a poriyal, curd most days"], ["Lunch", "Rice, Dal, Poriyal, Curd", "rice, rasam or dal, a poriyal, curd most days"], ["Breakfast", "Idli", "idli or dosa"], ["Breakfast", "Dosa", "idli or dosa"]].`;
+  slot: the meal it is eaten at. A reply is about the meal its question asks for: a breakfast answer is Breakfast, also when said of a child. A child's tiffin ("<child>'s tiffin", or the family's word for the box) holds only what the family says goes in the tiffin or box. One person's own plate "<person>'s <meal>" ONLY when the family's sentence names that person and a dish made for them at that meal (their own dish, "for Amma", "instead of"). A dish someone has that the others have too stays on the shared meal.
+  quote: the family's words naming the dish.
+- seed: each "past week" answer as example meals: [slot, "dish, dish, dish", quote], one row per kind of plate they described, for every meal they described: a child's tiffin and one person's own plate too ("rice, rasam or dal, a poriyal, curd" is ["Lunch", "Rice, Rasam, Poriyal, Curd", quote] and ["Lunch", "Rice, Dal, Poriyal, Curd", quote]). Every seed dish is also in library.`;
+const DISHES_EXAMPLE = `gives library [["Sandwich", "Tara's tiffin", "sandwiches or poha"], ["Poha", "Tara's tiffin", "sandwiches or poha"], ["Phulka", "Lalitha's dinner", "Paati has just two phulkas at night"], ["Rice", "Lunch", "Most days rice"], ["Rasam", "Lunch", "rasam or dal"], ["Dal", "Lunch", "rasam or dal"], ["Poriyal", "Lunch", "a poriyal"], ["Curd", "Lunch", "curd"], ["Pulao", "Lunch", "Pulao twice"], ["Puri", "Lunch", "puri on Sundays"], ["Lemon rice", "Lunch", "Lemon rice every Friday"], ["Salad", "Lunch", "Salad every day"], ["Idli", "Breakfast", "usually idli or dosa"], ["Dosa", "Breakfast", "usually idli or dosa"], ["Upma", "Breakfast", "upma once"], ["Bread toast", "Breakfast", "bread toast on busy days"], ["Ragi dosa", "Breakfast", "Divu has ragi dosa too"] (the others have it too: shared), ["Ragi porridge", "Lalitha's breakfast", "Paati has her own ragi porridge"]], seed [["Lunch", "Rice, Rasam, Poriyal, Curd", "Most days rice, rasam or dal, a poriyal, curd"], ["Lunch", "Rice, Dal, Poriyal, Curd", "Most days rice, rasam or dal, a poriyal, curd"], ["Breakfast", "Idli", "usually idli or dosa"], ["Breakfast", "Dosa", "usually idli or dosa"], ["Tara's tiffin", "Sandwich", "sandwiches or poha"], ["Tara's tiffin", "Poha", "sandwiches or poha"], ["Lalitha's dinner", "Phulka", "Paati has just two phulkas at night"], ["Lalitha's breakfast", "Ragi porridge", "Paati has her own ragi porridge"]].`;
+
+const OFTEN_SCHEMA = { type: "object", required: ["often"], properties: { often: { type: "array", items: { type: "array", items: STR } } } };
+const OFTEN_PART = `Write this part: how often the family has a dish, or the weekdays they have it, for every dish whose own words say so. Another reader lists the dishes: leave out a dish with no such words.
+- often: one row per such dish and meal: [name, slot, quote, often, frequency, days].
+  name, slot: the dish ("Lemon rice") and the meal it is eaten at (Breakfast, Lunch, Dinner, "<child>'s tiffin", "<person>'s <meal>"). quote: the family's words naming the dish.
+  often: the family's exact words, copied from the same sentence, that say how often or on which weekdays they have THIS one dish ("twice", "on Sundays", "every Friday", "most nights", "every day"; "sometimes appam", "bread toast on busy days", "pasta if it's late", "khichdi when someone is unwell" are about that one dish: sometimes). Words said over a whole list or a whole meal are about none of its dishes alone, so give no row for them: "usually idli or dosa", "most days rice, dal and a sabzi", "that's our usual", "mostly", "on weekdays it's poha or upma". The meal's own days (a tiffin's school days, the days the cook comes) are no dish's days. A count of the dish itself ("two phulkas") is not how often.
+  frequency: from often: daily (every day), usually (most days, most nights), sometimes (sometimes, "when she's unwell", "on busy days", now and then), rarely (once in a while), "<n>/week" for a count ("twice": "2/week", "once": "1/week"), else "".
+  days: from often: the weekdays the dish is tied to every week ("every Friday": "Fri"; "weekend parathas": "Sat, Sun"), else "". A list of what was eaten on which day last week is no days.`;
+const OFTEN_EXAMPLE = `gives often [["Pulao", "Lunch", "Pulao twice", "twice", "2/week", ""], ["Puri", "Lunch", "puri on Sundays", "on Sundays", "", "Sun"], ["Lemon rice", "Lunch", "Lemon rice every Friday", "every Friday", "", "Fri"], ["Salad", "Lunch", "Salad every day", "every day", "daily", ""], ["Upma", "Breakfast", "upma once", "once", "1/week", ""], ["Bread toast", "Breakfast", "bread toast on busy days", "on busy days", "sometimes", ""]]. No row for rice, rasam, dal, poriyal or curd ("Most days" is said of the whole plate), none for idli or dosa ("usually" is said of the list), none for the tiffin's dishes (Mon-Fri are the tiffin's days), none for the phulkas ("two" is how many).`;
 
 const systemOf = (part: string, example: string) => `${COMMON}\n\n${part}\n\n${EXAMPLE}\n${example}\n${NOT_THE_EXAMPLE}`;
 
-/** The three readers. `need`: the setup fails without this part; the dishes may come back empty (said, not saved). */
+/** The four readers. `need`: the setup fails without this part; the dishes and how often may come back empty (said, not saved). */
 export const SETUP_PARTS = [
   { id: "home", purpose: "setup: the home", system: systemOf(HOME_PART, HOME_EXAMPLE), schema: HOME_SCHEMA, maxTokens: 6000, need: true },
   { id: "rules", purpose: "setup: the food rules", system: systemOf(RULES_PART, RULES_EXAMPLE), schema: RULES_SCHEMA, maxTokens: 6000, need: true },
   { id: "dishes", purpose: "setup: the dishes", system: systemOf(DISHES_PART, DISHES_EXAMPLE), schema: DISHES_SCHEMA, maxTokens: 8000, need: false },
+  { id: "often", purpose: "setup: how often each dish", system: systemOf(OFTEN_PART, OFTEN_EXAMPLE), schema: OFTEN_SCHEMA, maxTokens: 6000, need: false },
 ] as const;
 
 export const CONTAINS_SYSTEM = `For each dish, say for each tag whether the dish as usually cooked in an Indian home has it: true or false, for every tag asked, for every dish. Answer as { "<dish name as given>": { "<tag>": true | false } }.
@@ -123,10 +133,11 @@ Tags: egg (egg in any form) · meat (chicken, mutton or any meat) · fish (fish 
 Example: dishes ["Masala dosa", "Fruit salad"], tags ["onion_garlic", "white_rice", "sugar"] gives { "Masala dosa": { "onion_garlic": true, "white_rice": true, "sugar": false }, "Fruit salad": { "onion_garlic": false, "white_rice": false, "sugar": false } }.`;
 const CONTAINS_SCHEMA = { type: "object", additionalProperties: { type: "object", additionalProperties: { type: "boolean" } } };
 
-export const LINT_SYSTEM = `Each dish below comes with the family's own words about it. Read from those words only how often the family has it, or the weekdays they have it every week. Answer { "dishes": [{ "name", "frequency", "days" }] }, one entry per dish:
-frequency: daily (every day) | usually (most days) | sometimes | rarely | "<n>/week" for a count ("twice": "2/week"), else "". days: weekdays (Mon..Sun) the dish is tied to every week ("on Fridays"), else []. A count of something else ("two phulkas") or a list of last week's days is neither: "" and [].`;
+export const LINT_SYSTEM = `Each dish below comes with the family's words naming it (quote) and their whole reply (line). Read from the line only how often the family has THIS one dish, or the weekdays they have it every week. Answer { "dishes": [{ "name", "often", "frequency", "days" }] }, one entry per dish:
+often: the exact words of the line that say it, about this dish alone, else "". Words about another dish of the line, or said over a whole list or meal ("usually idli or dosa", "that's our usual", a tiffin's "Mon-Fri"), are not this dish's: "". A count of something else ("two phulkas") or a list of last week's days is neither.
+frequency (from often only): daily (every day) | usually (most days) | sometimes | rarely | "<n>/week" for a count ("twice": "2/week"), else "". days (from often only): weekdays (Mon..Sun) the dish is tied to every week ("on Fridays"), else [].`;
 const LINT_SCHEMA = { type: "object", required: ["dishes"], properties: { dishes: { type: "array", items: { type: "object", required: ["name"],
-  properties: { name: STR, frequency: STR, days: DAYS } } } } };
+  properties: { name: STR, often: STR, frequency: STR, days: DAYS } } } } };
 
 /** Every prompt the setup sends, for the checks on model-facing text. */
 export const SETUP_SYSTEM = [...SETUP_PARTS.map((p) => p.system), CONTAINS_SYSTEM, LINT_SYSTEM].join("\n\n");
@@ -187,17 +198,21 @@ export type Visit = { at: string; meals?: string[] };
 export type Cook = { name: string; days: Weekday[]; visits: Visit[]; limits_words: string | null; quote: string };
 export type FamilyCook = { person: string; days: Weekday[]; quote: string };
 export type WeekdayLunch = { person: string; lunch: "away" | "carries" | "home"; quote: string };
-export type ReadDish = { name: string; slot: string; frequency: Frequency | null; days: Weekday[] | null; quote: string };
+/** `often`: the family's words saying how often or on which days they have this dish (none: ""); frequency and days stand only
+ *  on them. */
+export type ReadDish = { name: string; slot: string; frequency: Frequency | null; days: Weekday[] | null; quote: string; often: string;
+  /** Set by the checks: the family sentence (index) that backs `often`; `shared`: its words were dropped as a whole list's. */
+  oftenAt?: number; shared?: boolean };
 export type ReadSeed = { slot: string; dishes: string[]; quote: string };
 export type ReadRule = RuleInput;
-/** What the three reads give, merged; after the checks, every name and slot is known. */
+/** What the four reads give, merged; after the checks, every name and slot is known. */
 export type SetupRead = { slots: ReadSlot[]; cook: Cook | null; family_cooks: FamilyCook[]; apps: { main: string | null; fallback: string | null };
   subscriptions: { item: string; source: string; note?: string }[]; weekday_lunch: WeekdayLunch[]; lunch_unclear: string[];
   rules: ReadRule[]; unplaced: { text: string; quote: string }[]; library: ReadDish[]; seed: ReadSeed[] };
 
 /** The three answers as one read: every list a list, every field its type, nothing thrown away for being a little off. */
-export function readOf(home: unknown, rules: unknown, dishes: unknown): SetupRead {
-  const h = isObject(home) ? home : {}, r = isObject(rules) ? rules : {}, d = isObject(dishes) ? dishes : {};
+export function readOf(home: unknown, rules: unknown, dishes: unknown, often: unknown = null): SetupRead {
+  const h = isObject(home) ? home : {}, r = isObject(rules) ? rules : {}, d = isObject(dishes) ? dishes : {}, o = isObject(often) ? often : {};
   const cook = isObject(h.cook) && str(h.cook.name) ? h.cook : null;
   const kind = (v: unknown): SlotKind => (v === "addon" || v === "custom" || v === "main" ? v : "custom");
   return {
@@ -229,18 +244,36 @@ export function readOf(home: unknown, rules: unknown, dishes: unknown): SetupRea
         frequency: frequencyOf(x.frequency), per_meal: n && n > 0 ? n : null, fasting_food: Array.isArray(x.fasting_food) ? strs(x.fasting_food) : null };
     }),
     unplaced: arr(r.unplaced).filter(isObject).filter((u) => str(u.text)).map((u) => ({ text: str(u.text), quote: str(u.quote) || str(u.text) })),
-    library: arr(d.library).flatMap((row): ReadDish[] => {
-      const [name, slot, frequency, days, quote] = Array.isArray(row) ? row : isObject(row) ? [row.name, row.slot, row.frequency, row.days, row.quote] : [];
-      if (!str(name) || !str(slot)) return [];
+    library: withOften(arr(d.library).flatMap((row): ReadDish[] => {
+      const [name, slot, quote] = Array.isArray(row) ? row : isObject(row) ? [row.name, row.slot, row.quote] : [];
+      return str(name) && str(slot) ? [{ name: str(name), slot: str(slot), frequency: null, days: null, quote: str(quote), often: "" }] : [];
+    }), arr(o.often).flatMap((row): ReadDish[] => {
+      const [name, slot, quote, words, frequency, days] = Array.isArray(row) ? row : isObject(row) ? [row.name, row.slot, row.quote, row.often, row.frequency, row.days] : [];
       const ds = daysOf(days);
-      return [{ name: str(name), slot: str(slot), frequency: frequencyOf(frequency), days: ds.length ? ds : null, quote: str(quote) }];
-    }),
+      return str(name) && str(slot) ? [{ name: str(name), slot: str(slot), frequency: frequencyOf(frequency), days: ds.length ? ds : null, quote: str(quote), often: str(words) }] : [];
+    })),
     seed: arr(d.seed).flatMap((row): ReadSeed[] => {
       const [slot, dishes, quote] = Array.isArray(row) ? row : isObject(row) ? [row.slot, row.dishes, row.quote] : [];
       const list = Array.isArray(dishes) ? strs(dishes) : str(dishes).split(/\s*,\s*/).filter(Boolean);
       return str(slot) && list.length ? [{ slot: str(slot), dishes: list, quote: str(quote) }] : [];
     }),
   };
+}
+
+/** The how-often read laid on the dishes read: a row of the same dish and meal takes its words, else the one row of that dish;
+ *  a dish the dishes read does not list is left out (its name may be another's). By name and meal as written. */
+function withOften(library: ReadDish[], often: ReadDish[]): ReadDish[] {
+  const out = library.map((d) => ({ ...d }));
+  // The same name, else a name one holds as whole words ("Cornflakes" in "Cornflakes with milk"; "Parathas" for "Paratha").
+  const words = (n: string) => ` ${plainWords(n).replace(/\b(\w{4,})s\b/g, "$1")} `;
+  const holds = (a: string, b: string) => words(a).includes(words(b)) || words(b).includes(words(a));
+  const pick = (xs: ReadDish[], f: ReadDish) => { const at = xs.filter((x) => same(x.slot, f.slot)); return at.length === 1 ? at[0] : xs.length === 1 ? xs[0] : null; };
+  for (const f of often) {
+    const exact = out.filter((d) => dishKey(d.name) === dishKey(f.name));
+    const d = exact.length ? pick(exact, f) : pick(out.filter((x) => holds(x.name, f.name)), f);
+    if (d) Object.assign(d, { frequency: f.frequency, days: f.days, often: f.often });
+  }
+  return out;
 }
 
 // ── What the family said: the quote check ──
@@ -252,6 +285,12 @@ export const plainWords = (s: string): string => s.toLowerCase().replace(/[’']
 export const repliesOf = (transcript: string[]): string[] => transcript.filter((l) => /^A\d*:/i.test(l)).map((l) => l.replace(/^A\d*:\s*/i, ""));
 /** Every line the family said, in plain words: the replies and every text value of the household facts. */
 export function familyLines(transcript: string[], household: unknown): string[] {
+  return rawFamilyLines(transcript, household).map(plainWords).filter(Boolean);
+}
+/** The family's lines cut at sentence ends (. ! ? ;), in plain words: where a dish's how-often words must sit with it. */
+export const familySentences = (transcript: string[], household: unknown): string[] =>
+  rawFamilyLines(transcript, household).flatMap((l) => l.split(/[.!?;]+/)).map(plainWords).filter(Boolean);
+function rawFamilyLines(transcript: string[], household: unknown): string[] {
   const out = repliesOf(transcript);
   const walk = (v: unknown): void => {
     if (typeof v === "string") out.push(v);
@@ -259,7 +298,7 @@ export function familyLines(transcript: string[], household: unknown): string[] 
     else if (isObject(v)) Object.values(v).forEach(walk);
   };
   walk(household);
-  return out.map(plainWords).filter(Boolean);
+  return out;
 }
 /** Is a quote the family's own words: inside one of their lines (normalised substring). */
 export function saidByFamily(quote: string, lines: string[]): boolean {
@@ -335,6 +374,40 @@ const hasCount = (q: string) => /\d/.test(q) || plainWords(q).split(" ").some((w
 /** The day/count lint: a quote with a day word or a number. */
 export const quoteHasDayOrCount = (q: string): boolean => hasDayWord(q) || hasCount(q);
 
+/** Words inside a line, whole words (both in plain words). */
+const wordsIn = (line: string, words: string): boolean => { const w = plainWords(words); return !!w && ` ${line} `.includes(` ${w} `); };
+/** A dish's how-often words checked (§4.2): they are said in one sentence of the family's together with the dish (its quote or its name);
+ *  days need a day word in them, a count a number, "daily" a day word; days that are the dish's meal's own days say nothing of
+ *  the dish. What is not backed is dropped (logged in `dropped`). Structure only: which words mean what is the model's read. */
+export function backHowOften(d: ReadDish, said: string[], slotDays: Weekday[], dropped: string[]): void {
+  if (!d.frequency && !d.days) return;
+  const what = () => JSON.stringify({ frequency: d.frequency, days: d.days });
+  const at = d.often ? said.findIndex((l) => wordsIn(l, d.often) && (wordsIn(l, d.quote) || namedIn(d.name, [l]))) : -1;
+  d.oftenAt = at >= 0 ? at : undefined;
+  if (at < 0) { dropped.push(`how often for ${d.name} ${what()}: ${d.often ? `"${d.often}" is not said with it` : "no words of the family say it"}`); d.frequency = null; d.days = null; return; }
+  if (d.days && !hasDayWord(d.often)) { dropped.push(`days for ${d.name} (${d.days.join(", ")}): no day in "${d.often}"`); d.days = null; }
+  if (d.days && slotDays.length && d.days.length === slotDays.length && d.days.every((x) => slotDays.includes(x))) { dropped.push(`days for ${d.name}: the meal's own days`); d.days = null; }
+  if (d.frequency === "daily" && !hasDayWord(d.often)) { dropped.push(`daily for ${d.name}: "${d.often}" says no day`); d.frequency = null; }
+  if (d.frequency?.endsWith("/week") && !hasCount(d.often)) { dropped.push(`${d.frequency} for ${d.name}: no count in "${d.often}"`); d.frequency = null; }
+}
+
+/** How many dishes may share one how-often phrase of one sentence before it is the whole list's, not each dish's: "rice, dal,
+ *  a sabzi and curd most days" says what the meal is, not that each dish comes most days (the seed keeps that shape). */
+export const SHARED_OFTEN_MIN = 3;
+/** Drop how often from the dishes that share one sentence's how-often words with SHARED_OFTEN_MIN or more others (structure:
+ *  the same words at the same place, given to many dishes). */
+export function dropShared(library: ReadDish[], dropped: string[]): void {
+  const groups = new Map<string, ReadDish[]>();
+  for (const d of library) if ((d.frequency || d.days) && d.oftenAt !== undefined) {
+    const k = `${d.oftenAt}|${plainWords(d.often)}`;
+    groups.set(k, [...(groups.get(k) ?? []), d]);
+  }
+  for (const g of groups.values()) if (g.length >= SHARED_OFTEN_MIN) {
+    dropped.push(`how often for ${g.map((d) => d.name).join(", ")}: "${g[0].often}" is said of the whole list`);
+    for (const d of g) Object.assign(d, { frequency: null, days: null, shared: true });
+  }
+}
+
 /** The whats a rule is always hard in; swap, require and note may be soft (with a frequency). */
 const HARD_ONLY: RuleWhat[] = ["veg", "egg", "no_eggs", "avoid", "only", "fasting", "cap"];
 /** What a checked rule needs besides its what; without it, it is kept as a note (not checked). */
@@ -345,10 +418,10 @@ const NEEDS: Partial<Record<RuleWhat, (r: ReadRule) => boolean>> = {
 export const ruleKey = (r: Pick<ReadRule, "what" | "who" | "items" | "slots" | "days" | "to">): string =>
   JSON.stringify([r.what, r.who?.toLowerCase() ?? null, [...(r.items ?? [])].sort(), [...(r.slots ?? [])].map((s) => s.toLowerCase()).sort(), [...(r.days ?? [])].sort(), r.to?.toLowerCase() ?? null]);
 
-export type Checked = { read: SetupRead; dropped: string[]; asks: string[]; noted: string[]; lint: ReadDish[] };
+export type Checked = { read: SetupRead; dropped: string[]; asks: string[]; noted: string[]; lint: ReadDish[]; slotDays: Map<string, Weekday[]> };
 
 /** The read made safe to store: what the family did not say is dropped, unknown names are asked, slots resolved. */
-export function checkRead(read: SetupRead, ctx: { household: Household; said: string[] }): Checked {
+export function checkRead(read: SetupRead, ctx: { household: Household; said: string[]; sentences?: string[] }): Checked {
   const dropped: string[] = [], asks: string[] = [], noted: string[] = [], lint: ReadDish[] = [];
   const people = ctx.household.people, said = ctx.said;
   const ask = (name: string) => { const a = `Who is ${name}? I don't have them among the people at home.`; if (!asks.includes(a)) asks.push(a); };
@@ -371,6 +444,7 @@ export function checkRead(read: SetupRead, ctx: { household: Household; said: st
   for (const m of SLOTS) if (!slots.some((s) => s.name === m))
     slots.push({ name: m, kind: "main", addon_of: null, after: null, usual_people: [], days: [], skip_days: [], quote: "" });
   const slotNames = slots.map((s) => s.name);
+  const slotDays = new Map(slots.map((s) => [s.name, s.days]));
   const slotOf = (w: string) => resolveSlot(w, slotNames);
 
   // Rules.
@@ -391,8 +465,12 @@ export function checkRead(read: SetupRead, ctx: { household: Household; said: st
         continue;
       }
       r.slots = uniq(found as string[]);
+      // Days that are just its meals' own days (a tiffin's school days) say nothing more: every day of those meals.
+      const own = uniq(r.slots.flatMap((n) => slots.find((x) => x.name === n)?.days ?? []));
+      if (r.days && own.length && r.slots.every((n) => slots.find((x) => x.name === n)?.days.length) && r.days.length === own.length && r.days.every((d) => own.includes(d))) r.days = null;
     }
     if (HARD_ONLY.includes(r.what)) r.hard = true;
+    if (r.what === "note") r.hard = false;
     if (r.hard && r.frequency) { dropped.push(`how often for ${what}: a hard rule holds every time`); r.frequency = null; }
     if (r.what !== "fasting") r.fasting_food = null;
     if (r.what !== "cap") r.per_meal = null;
@@ -410,10 +488,7 @@ export function checkRead(read: SetupRead, ctx: { household: Household; said: st
     const d: ReadDish = { ...d0, slot };
     const quoted = saidByFamily(d.quote, said);
     if (!quoted && !namedIn(d.name, said)) { dropped.push(`${d.name} ("${d.quote}"): not something the family said`); continue; }
-    if (!quoted && (d.frequency || d.days)) { dropped.push(`how often for ${d.name}: its quote is not the family's words`); d.frequency = null; d.days = null; }
-    if (d.days && !hasDayWord(d.quote)) { dropped.push(`days for ${d.name} (${d.days.join(", ")}): no day in "${d.quote}"`); d.days = null; }
-    if (d.frequency === "daily" && !hasDayWord(d.quote)) { dropped.push(`daily for ${d.name}: "${d.quote}" says no day`); d.frequency = null; }
-    if (d.frequency?.endsWith("/week") && !hasCount(d.quote)) { dropped.push(`${d.frequency} for ${d.name}: no count in "${d.quote}"`); d.frequency = null; }
+    backHowOften(d, ctx.sentences ?? said, slotDays.get(slot) ?? [], dropped);
     const had = library.find((x) => dishKey(x.name) === dishKey(d.name) && x.slot === d.slot);
     if (had) {
       had.frequency ??= d.frequency;
@@ -422,7 +497,8 @@ export function checkRead(read: SetupRead, ctx: { household: Household; said: st
     }
     library.push(d);
   }
-  for (const d of library) if (!d.frequency && !d.days && quoteHasDayOrCount(d.quote) && saidByFamily(d.quote, said)) lint.push(d);
+  dropShared(library, dropped);
+  for (const d of library) if (!d.frequency && !d.days && !d.shared && quoteHasDayOrCount(d.quote) && saidByFamily(d.quote, said)) lint.push(d);
 
   // The seed: the past week's plates, in the family's words; each of its dishes is in the library too.
   const seed: ReadSeed[] = [];
@@ -433,7 +509,7 @@ export function checkRead(read: SetupRead, ctx: { household: Household; said: st
     if (seed.some((x) => x.slot === slot && x.dishes.join("|").toLowerCase() === s.dishes.join("|").toLowerCase())) continue;
     seed.push({ ...s, slot });
     for (const name of s.dishes) if (!library.some((x) => dishKey(x.name) === dishKey(name) && x.slot === slot))
-      library.push({ name, slot, frequency: null, days: null, quote: s.quote });
+      library.push({ name, slot, frequency: null, days: null, quote: s.quote, often: "" });
   }
 
   // The cook, who of the family cooks, lunch.
@@ -446,7 +522,7 @@ export function checkRead(read: SetupRead, ctx: { household: Household; said: st
   const unplaced = read.unplaced.filter((u) => saidByFamily(u.quote, said));
   for (const u of read.unplaced) if (!unplaced.includes(u)) dropped.push(`"${u.text}": not something the family said`);
 
-  return { read: { ...read, slots, rules, library, seed, cook, family_cooks, weekday_lunch, lunch_unclear, unplaced }, dropped, asks, noted, lint };
+  return { read: { ...read, slots, rules, library, seed, cook, family_cooks, weekday_lunch, lunch_unclear, unplaced }, dropped, asks, noted, lint, slotDays };
 }
 
 // ── Model calls ──
@@ -470,7 +546,8 @@ async function askOnce(model: ModelCall, req: Parameters<ModelCall>[0], until: n
 }
 
 /** The lint's one re-read of the dishes whose quote has a day word or a number and nothing saved. */
-async function lintReread(model: ModelCall, dishes: ReadDish[], replies: string[], until: number, log: (l: string) => void): Promise<void> {
+async function lintReread(model: ModelCall, dishes: ReadDish[], replies: string[], until: number, log: (l: string) => void,
+  check: { said: string[]; slotDays: Map<string, Weekday[]>; dropped: string[]; library: ReadDish[] }): Promise<void> {
   if (!dishes.length) return;
   const words = dishes.map((d) => ({ name: d.name, slot: d.slot, quote: d.quote,
     line: replies.find((l) => plainWords(l).includes(plainWords(d.quote))) ?? d.quote }));
@@ -480,10 +557,12 @@ async function lintReread(model: ModelCall, dishes: ReadDish[], replies: string[
     const d = dishes.find((y) => same(y.name, str(x.name)));
     if (!d) continue;
     const f = frequencyOf(x.frequency), days = daysOf(x.days);
-    if (f) d.frequency = f;
-    if (days.length && hasDayWord(d.quote)) d.days = days;
-    if (f || days.length) log(`lint: ${d.name} re-read as ${f ?? ""} ${days.join(",")}`.trim());
+    if (!f && !days.length) continue;
+    Object.assign(d, { frequency: f, days: days.length ? days : null, often: str(x.often) });
+    backHowOften(d, check.said, check.slotDays.get(d.slot) ?? [], check.dropped);
+    if (d.frequency || d.days) log(`lint: ${d.name} re-read as ${d.frequency ?? ""} ${(d.days ?? []).join(",")} ("${d.often}")`.trim());
   }
+  dropShared(check.library, check.dropped);
 }
 
 /** The contains read (fast, ≤CONTAINS_BATCH dishes a call, the calls at once): for each dish, the tags asked that it has and
@@ -809,7 +888,7 @@ export async function applySetup(deps: { db: Db; emit: Emit; model: ModelCall; p
   const user = JSON.stringify({ household: deps.household ?? {}, transcript: numbered.join("\n") });
   const t0 = Date.now(), until = t0 + (deps.budgetMs ?? SETUP_BUDGET_MS);
 
-  // 1. The three reads at once.
+  // 1. The four reads at once.
   const results = await Promise.all(SETUP_PARTS.map(async (part): Promise<ModelResult> => {
     const r = await askOnce(deps.model, { tier: "balanced", purpose: part.purpose, system: part.system, user, schema: part.schema, maxTokens: part.maxTokens }, until, log,
       (x) => (x.ok && part.id === "dishes" && !arr(isObject(x.json) ? x.json.library : null).length ? { ok: false, code: "invalid_output", message: "no dishes in the answer" } : x));
@@ -823,16 +902,18 @@ export async function applySetup(deps: { db: Db; emit: Emit; model: ModelCall; p
   }
   const json = (i: number) => (results[i].ok ? (results[i] as Extract<ModelResult, { ok: true }>).json : null);
   const model = (results[0] as Extract<ModelResult, { ok: true }>).model;
-  const read = readOf(json(0), json(1), json(2));
+  const read = readOf(json(0), json(1), json(2), json(3));
   const noted: string[] = [];
   if (!results[2].ok) noted.push("your dishes could not be read just now: tell me a few you like and I'll add them");
 
   // 2. The checks, and the lint's one re-read.
   const replies = repliesOf(deps.transcript);
   const said = familyLines(deps.transcript, deps.household);
-  const checked = checkRead(read, { household, said });
+  const sentences = familySentences(deps.transcript, deps.household);
+  const checked = checkRead(read, { household, said, sentences });
   noted.push(...checked.noted);
-  await lintReread(deps.model, checked.lint, replies, until, log);
+  for (const d of checked.dropped) log(`dropped: ${d}`);
+  await lintReread(deps.model, checked.lint, replies, until, log, { said: sentences, slotDays: checked.slotDays, dropped: checked.dropped, library: checked.read.library });
 
   // 3. The diff: a first setup takes all of it; a correction only what its new replies said.
   const saved = savedOf(deps.db);

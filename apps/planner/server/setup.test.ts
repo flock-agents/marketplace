@@ -3,7 +3,7 @@
 // reads back from the rows, and applies a correction as a diff.
 import { describe, it, expect } from "bun:test";
 import { boot } from "./testkit";
-import { checkRead, diffSetup, familyLines, frequencyOf, householdOf, lunchLine, personOf, plainWords, quoteHasDayOrCount, readOf, resolveSlot,
+import { checkRead, diffSetup, familyLines, familySentences, frequencyOf, householdOf, lunchLine, personOf, plainWords, quoteHasDayOrCount, readOf, resolveSlot,
   ruleSaid, saidByFamily, SETUP_PARTS, SETUP_SYSTEM, CONTAINS_BATCH, daysOf, clockOf, type Saved, type SetupRead } from "./setup";
 import { HOUSEHOLDS } from "../evals/households";
 import type { ModelRequest, ModelResult } from "./model";
@@ -60,17 +60,23 @@ const RULES = {
   unplaced: [],
 };
 const DISHES = {
-  library: [["Rice", "Lunch", "", "", "rice, sambar, beans poriyal, curd"], ["Sambar", "Lunch", "", "", "rice, sambar"], ["Beans poriyal", "Lunch", "", "", "beans poriyal"],
-    ["Curd", "Lunch", "", "", "curd"], ["Rajma", "Lunch", "", "", "Rajma twice"], ["Lemon rice", "Lunch", "", "Fri", "Lemon rice on Fridays"],
-    ["Salad", "Lunch", "daily", "", "Salad every day"], ["Phulka", "Padma's dinner", "", "", "Amma has two phulkas at night"],
-    ["Curd", "Breakfast", "", "Wed", "curd"]],                                                                                 // days with no day word: dropped
+  library: [["Rice", "Lunch", "rice, sambar, beans poriyal, curd"], ["Sambar", "Lunch", "rice, sambar"], ["Beans poriyal", "Lunch", "beans poriyal"],
+    ["Curd", "Lunch", "curd"], ["Rajma", "Lunch", "Rajma twice"], ["Lemon rice", "Lunch", "Lemon rice on Fridays"],
+    ["Salad", "Lunch", "Salad every day"], ["Phulka", "Padma's dinner", "Amma has two phulkas at night"], ["Curd", "Breakfast", "curd"],
+    ["Sambar", "Breakfast", "rice, sambar"], ["Poriyal", "Ishaan's tiffin", "beans poriyal"]],
   seed: [["Lunch", "Rice, Sambar, Beans poriyal, Curd", "rice, sambar, beans poriyal, curd"]],
 };
+const OFTEN = {
+  often: [["Lemon rice", "Lunch", "Lemon rice on Fridays", "on Fridays", "", "Fri"], ["Salad", "Lunch", "Salad every day", "every day", "daily", ""],
+    ["Curd", "Breakfast", "curd", "", "", "Wed"],                                                                               // days with no words saying them: dropped
+    ["Sambar", "Breakfast", "rice, sambar", "every day", "daily", ""],                                                         // how-often words not said with it: dropped
+    ["Poriyal", "Ishaan's tiffin", "beans poriyal", "", "", "Mon-Fri"]],                                                       // the tiffin's own days: dropped
+};
 
-type Part = "home" | "rules" | "dishes" | "contains" | "lint";
+type Part = "home" | "rules" | "dishes" | "often" | "contains" | "lint";
 const partOf = (req: ModelRequest): Part => {
   const p = req.purpose ?? "";
-  return /contains/.test(p) ? "contains" : /lint/.test(p) ? "lint" : /rules/.test(p) ? "rules" : /dishes/.test(p) ? "dishes" : "home";
+  return /contains/.test(p) ? "contains" : /lint/.test(p) ? "lint" : /often/.test(p) ? "often" : /rules/.test(p) ? "rules" : /dishes/.test(p) ? "dishes" : "home";
 };
 const isResult = (v: unknown): v is ModelResult => !!v && typeof v === "object" && "ok" in (v as object);
 /** Every dish's contains: true for the tags in `has`, false for the rest asked. */
@@ -80,8 +86,8 @@ const containsOf = (has: Record<string, string[]> = {}) => (req: ModelRequest) =
 };
 /** A model per part: a JSON answer, a result, or a function of (request, try number). */
 function fake(over: Partial<Record<Part, unknown>> = {}) {
-  const answers: Record<Part, unknown> = { home: HOME, rules: RULES, dishes: DISHES, contains: containsOf({ Rice: ["white_rice"], "Lemon rice": ["white_rice"], Curd: ["dairy"] }),
-    lint: { dishes: [{ name: "Rajma", frequency: "2/week" }] }, ...over };
+  const answers: Record<Part, unknown> = { home: HOME, rules: RULES, dishes: DISHES, often: OFTEN, contains: containsOf({ Rice: ["white_rice"], "Lemon rice": ["white_rice"], Curd: ["dairy"] }),
+    lint: { dishes: [{ name: "Rajma", often: "twice", frequency: "2/week" }] }, ...over };
   const asked: ModelRequest[] = [];
   const model = async (req: ModelRequest): Promise<ModelResult> => {
     asked.push(req);
@@ -102,8 +108,8 @@ describe("apply_setup v2: the model reads, code checks and writes", () => {
     const k = await boot({ model: f.model });
     const r = await k.op("apply_setup", { household: HOUSEHOLD, transcript: TRANSCRIPT });
     expect(r.ok).toBe(true);
-    expect(f.of("home").length + f.of("rules").length + f.of("dishes").length).toBe(3);
-    for (const p of ["home", "rules", "dishes"] as Part[]) {
+    expect(f.of("home").length + f.of("rules").length + f.of("dishes").length + f.of("often").length).toBe(4);
+    for (const p of ["home", "rules", "dishes", "often"] as Part[]) {
       const a = f.of(p)[0];
       expect(a.tier).toBe("balanced");
       expect(JSON.parse(a.user).household).toEqual(HOUSEHOLD);
@@ -135,6 +141,8 @@ describe("apply_setup v2: the model reads, code checks and writes", () => {
     const book = lib(k);
     expect(book["Lemon rice@Lunch"]).toMatchObject({ days: ["Fri"], contains: ["white_rice"], origin: "setup_named" });
     expect(book["Curd@Breakfast"].days).toBeNull();
+    expect(book["Sambar@Breakfast"].frequency).toBeNull();
+    expect(book["Poriyal@Ishaan's tiffin"].days).toBeNull();
     expect(book["Rajma@Lunch"].frequency).toBe("2/week");
     expect(f.of("lint")).toHaveLength(1);
     expect(JSON.parse(f.of("lint")[0].user).dishes.map((d: any) => d.name)).toEqual(["Rajma", "Phulka"]);   // "two phulkas at night": re-read, nothing saved
@@ -172,7 +180,8 @@ describe("apply_setup v2: the model reads, code checks and writes", () => {
         weekday_lunch: [{ person: "Kiran", lunch: "carries", quote: "Kiran takes lunch from home" }], lunch_unclear: [],
         cook: { ...HOME.cook, days: ["Mon", "Tue", "Wed"] } } : HOME),                              // read differently, not said again: discarded
       rules: (req: ModelRequest) => (corrected(req) ? { ...RULES, rules: RULES.rules.filter((x) => x.what !== "swap") } : RULES),   // missed: not removed
-      dishes: (req: ModelRequest) => (corrected(req) ? { ...DISHES, library: [...DISHES.library.filter((d) => d[0] !== "Rajma"), ["Rajma", "Lunch", "", "Sun", "Rajma only on Sundays"]] } : DISHES),
+      dishes: (req: ModelRequest) => (corrected(req) ? { ...DISHES, library: [...DISHES.library.filter((d) => d[0] !== "Rajma"), ["Rajma", "Lunch", "Rajma only on Sundays"]] } : DISHES),
+      often: (req: ModelRequest) => (corrected(req) ? { often: [...OFTEN.often, ["Rajma", "Lunch", "Rajma only on Sundays", "only on Sundays", "", "Sun"]] } : OFTEN),
     });
     const k = await boot({ model: f.model });
     await k.op("apply_setup", { household: HOUSEHOLD, transcript: TRANSCRIPT });
@@ -234,7 +243,7 @@ describe("apply_setup v2: the model reads, code checks and writes", () => {
   });
 
   it("contains: at most 40 dishes a call; a dish the answer leaves out stays unread (unknown)", async () => {
-    const many = Array.from({ length: 45 }, (_, i) => [`Dish ${i + 1}`, "Lunch", "", "", "rice, sambar"]);
+    const many = Array.from({ length: 45 }, (_, i) => [`Dish ${i + 1}`, "Lunch", "rice, sambar"]);
     const f = fake({ dishes: { library: many }, contains: (req: ModelRequest) => {
       const all = containsOf()(req) as Record<string, unknown>;
       delete all["Dish 45"];
@@ -286,6 +295,18 @@ describe("apply_setup v2: the checks, pure", () => {
     const c = checkRead(base({ rules: [{ hard: false, what: "avoid", items: ["sugar"], frequency: "sometimes", quote: "Amma has no sugar" }] }), { household: hh, said });
     expect(c.read.rules[0]).toMatchObject({ hard: true, frequency: null });
   });
+  it("a note is never hard; how often stands only on words said with the dish, and not on a whole list's words", () => {
+    const n = checkRead(base({ rules: [{ hard: true, what: "note", who: "Padma", quote: "Amma has no sugar" }] }), { household: hh, said });
+    expect(n.read.rules[0]).toMatchObject({ what: "note", hard: false });
+    const line = ["A: rice, sambar, beans poriyal, curd most days. Rajma twice."];
+    const sentences = familySentences(line, {});
+    const dish = (name: string, quote: string, often: string, frequency: string) => ({ name, slot: "Lunch", quote, often, frequency: frequency as any, days: null });
+    const c = checkRead(base({ library: [dish("Rice", "rice", "most days", "usually"), dish("Sambar", "sambar", "most days", "usually"),
+      dish("Curd", "curd", "most days", "usually"), dish("Rajma", "Rajma twice", "twice", "2/week"), dish("Beans poriyal", "beans poriyal", "", "usually")] }),
+      { household: hh, said: familyLines(line, {}), sentences });
+    expect(Object.fromEntries(c.read.library.map((d) => [d.name, d.frequency]))).toEqual({ Rice: null, Sambar: null, Curd: null, Rajma: "2/week", "Beans poriyal": null });
+    expect(c.dropped.join("\n")).toContain("is said of the whole list");
+  });
   it("the day/count lint: a quote with a day word or a number", () => {
     expect(quoteHasDayOrCount("Rajma twice")).toBe(true);
     expect(quoteHasDayOrCount("Lemon rice on Fridays")).toBe(true);
@@ -336,8 +357,9 @@ describe("apply_setup v2: the checks, pure", () => {
 describe("apply_setup v2: the prompts", () => {
   it("teach every rule shape and frequency, with the example family", () => {
     for (const shape of ["avoid {", "only {", "swap {", "require {", "cap {", "fasting {", "note {"]) expect(SETUP_SYSTEM, shape).toContain(shape);
-    expect(SETUP_PARTS.find((p) => p.id === "dishes")!.system).toContain("[name, slot, frequency, days, quote]");
-    expect(SETUP_PARTS.find((p) => p.id === "dishes")!.system).toContain("daily");
+    expect(SETUP_PARTS.find((p) => p.id === "dishes")!.system).toContain("[name, slot, quote]");
+    expect(SETUP_PARTS.find((p) => p.id === "often")!.system).toContain("[name, slot, quote, often, frequency, days]");
+    expect(SETUP_PARTS.find((p) => p.id === "often")!.system).toContain("daily");
     expect(SETUP_SYSTEM).toContain("never a nickname");
   });
   it("never name an eval household's people, cook or surname", () => {
