@@ -218,7 +218,9 @@ Calendar: `get_events` for the week via Flock; events → people changes (code f
 
 ### 5.2 Feasibility pre-check (code, per slot)
 
-Non-staple library dishes allowed this week (rules, days, frequency) vs non-staple places to fill (slot-days × typical non-staple count, taken from the interview seed and confirmed slot-days only, never planned-only ones, owner 23 Nov). If short: allow extra new dishes for that slot up to the setting, then widen the repeat window from 3 to 2 days, then note "only N lunch dishes known" in `unmet`. Order of relaxing is fixed and logged.
+Non-staple library dishes allowed this week (rules, days, frequency) vs non-staple places to fill (slot-days × typical non-staple count, taken from the interview seed and confirmed slot-days only, never planned-only ones, owner 23 Nov). If short: allow extra new dishes for that slot up to the setting, then widen the repeat window from 3 to 2 days, then ask the family (§5.6). Order of relaxing is fixed and logged.
+
+**Add-on slots may be empty on a day (owner 23 Nov).** An add-on slot is filled only as often as its dishes' frequency (else the default cap) and `days` allow: a fish add-on whose only dish is "2/week" gets 2 slot-days with that dish, spread apart; the other days have no add-on and its people eat the main slot. An add-on is therefore never short, and its empty days are not unmet. An add-on dish is never repeated past its count to fill a day. An empty add-on day has **no `slot_days` row** (nothing saved, said, shown on the Week page or bought for it); a later change that asks for that slot-day plans it as usual. Exception: a day where a person of the add-on would have nothing of their own at the main slot keeps the dish, noted. Main and custom slots (tiffin etc.) are still filled every planned day.
 
 ### 5.3 Ordered slot calls (model, balanced)
 
@@ -259,7 +261,9 @@ Add-on calls also get their main slot's dishes per day.
 3. `days` and `frequency` per dish, counted across all slots for the week.
 4. Repeat window: non-staple dish not within 3 days of itself in this slot; for mains it applies across main slots (no same main twice in a day across slots). Staples are exempt.
 5. Soft rule counts within their range across the week (too many = problem; too few = soft problem).
-Problems → one fix call for that slot with the exact list; still failing → that slot-day filled by rotation from allowed library dishes (code), noted. A failed call never retries in a loop; out-of-credits/daily budget stops the plan with the existing message.
+Problems → one fix call for that slot with the exact list; still failing → code mends that slot-day from allowed library dishes, noted. A failed call never retries in a loop; out-of-credits/daily budget stops the plan with the existing message.
+
+**Never a thinner plate from code (owner 23 Nov).** Code never deletes a dish from the model's plate: every dish a check rejects (repeat window, frequency/days, default cap, not allowed) is **swapped in the same position** for another allowed library dish, preferring the dish at the same position in the family's `looks_like` plates (its non-staple parts: Kadhi for Dal, one dry vegetable for another), then the least used; the backtracking re-choose of the whole slot-week also swaps in place and never picks a plate with fewer dishes. If no allowed swap exists, the original dish stays and the repeat is noted in `unmet`. Hard-rule conflicts stay as they are: the dish stays for the others and is `not_for` that person; a person with nothing of their own gets a dish added. The model's own plate size is never checked (no count check on what the model returns); the fix call is told to change a wrong dish for one of the same kind, never to leave it out. The only removal is an add-on's dish past its count (above), which may leave that add-on day empty.
 
 ### 5.5 Ingredients and save
 
@@ -268,6 +272,8 @@ Fast call per day (as today); remove items a person on that slot-day must avoid;
 ### 5.6 Message
 
 Week by day; "All week:" standing notes said once (soft notes per person); `unmet`; "New this week: …"; calendar `asked` items; a festival question when one is near.
+
+**A targeted question when a slot is short (owner 23 Nov), instead of a silent unmet line.** When §5.2 finds a slot with too few known dishes, the message asks one plain question per short slot, built from the slot's own name and people (no word lists): "I only know 2 dishes for <slot>, so <the dish on the most days> comes up a lot. What else does <its person> have for <slot>? Or should I suggest a few?" (a main slot for everyone: "What else do you have for dinner?"). At most 2 such questions per message, the shortest slots first (supply ÷ places); they are also returned in `asked`. The generic "only N … known" lines no longer appear in `unmet`. The Butler maps the answer (agent guide): dishes named → `add_dish` for that slot; "suggest" → `set_slot_day`'s `new_dishes_allowed` on that slot's next days, or `set_setting new_dishes_per_week` for more variety everywhere. A later change (§6) asks no such question.
 
 Festivals are handled by the weekly plan routine's prompt, not by a table or list. The routine knows the date and the household (people's names and anything the family said about fasts or observances; inferring tradition from names is fine). If a festival or observance this family likely keeps falls in the coming week, the message asks whether to change anything ("Navratri starts around Thursday. Want any changes?"). It checks the date with a calendar or search tool when the routine has one, and always phrases it as a question, because lunar dates can be off. The family's answer comes back as ordinary later changes (§6).
 

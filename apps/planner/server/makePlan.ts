@@ -25,7 +25,7 @@ import { commit, deleteSlotDays, listLibrary, listRules, listSlotDays, listSlots
   type Rule, type Slot } from "./slotStore";
 import { buildDays, slotDayKey, lunchSaid, platformPeers, readEvents, readHousehold, ruleHolds, withLunchSaid, type PlanDay, type Peers } from "./planDays";
 import { addDaily, canonTag, checkSlot, factsOf, feasibility, ownAddon, forbidden, frequencyRange, hardOnly, isStapleAt, notFor, plannable, resolveSlot, rotate, ruleBreaks, ruleTags, softSwapNotes,
-  slotFacts, swapNotes, type Problem, type Proposal, type Week } from "./planChecks";
+  slotFacts, swapNotes, thinAddon, type Problem, type Proposal, type ShortSlot, type Week } from "./planChecks";
 
 export type MakePlanResult =
   | { ok: true; week_start: string; message: string; intro?: string; instructions: string; unmet?: string[]; asked?: string[]; no_ingredients?: string[];
@@ -54,24 +54,25 @@ export const SLOT_SYSTEM = [
   "A dish's `not_for` people do not eat it: that is fine, as long as each of them has a dish of their own that day beside the staples. `guests` eat that meal too: keep their `rules` for them the same way. People in a day's `own_slot` get their own dish at their own slot that day.",
   "A dish that is not in `library` or `staples` is new: list it in `new` with why it suits this family (like which dish of theirs), at most `new_dishes_allowed` new dishes in all; none when it is 0.",
   "Every rule in `rules` holds for its person (everyone when it says so): a dish against their rule is simply not theirs, so on every day they are in `for` they need at least one dish they can eat beside the staples, as their past plates show. A rule with a count a week is kept that many times in the week, not every day. `notes_for_people` are preferences to keep in mind. A person in `fasting` eats only what it says.",
-  "Do not repeat what `already_this_week` has at another meal the same day, and avoid what `recent` had. An add-on slot (`main_slot` given) holds only what its people have in place of, or beside, the main slot's dishes that day.",
+  "Do not repeat what `already_this_week` has at another meal the same day, and avoid what `recent` had. An add-on slot (`main_slot` given) holds only what its people have in place of, or beside, the main slot's dishes that day, and only as often as its dishes' `left` and `days` allow: a day past that gets [] (they eat the main slot's dishes), never a dish again past its `left`.",
   "notes: only for a day that needs a word for someone at the table (\"millet rice for one person only\"); never about your choices or changes; leave other days out.",
 ].join("\n");
 
 export const FIX_SYSTEM = [
   "You fix some days of one meal slot of an Indian family's week. Answer with JSON only, in the same shape: { days: { \"YYYY-MM-DD\": [dish names] }, new: [{ dish, why }], notes: { ... } }.",
   "Send back ONLY the dates in `fix`, each day whole (all its dishes), changed so every reason given for it is gone. The other days stay as `now` has them. `week` lists what is off across the week: keep it in mind.",
+  "A dish that is wrong is changed for another dish of the same kind in its place (a dal for a dal, a dry vegetable for a dry vegetable, as `looks_like` shows), never just left out. Only an add-on slot (`main_slot` given) may get [] for a day, when its dishes' `left` is used up.",
   "Everything of the first request still holds: the library, staples, `left`, `days`, the rules (each person and the guests need a dish they can eat) and the new-dish limit.",
   "notes: only a word for someone at the table that day; never what you changed or why.",
 ].join("\n");
 
 /** The model's slot answer, read leniently: only the dates asked, dish names as strings, each once. */
-function proposalOf(json: unknown, dates: string[]): { days: Map<string, string[]>; newNames: Map<string, { name: string; why: string }>; notes: Map<string, string> } {
+function proposalOf(json: unknown, dates: string[], emptyOk = false): { days: Map<string, string[]>; newNames: Map<string, { name: string; why: string }>; notes: Map<string, string> } {
   const out = { days: new Map<string, string[]>(), newNames: new Map<string, { name: string; why: string }>(), notes: new Map<string, string>() };
   if (!isObject(json)) return out;
   if (isObject(json.days)) for (const [date, ds] of Object.entries(json.days)) if (dates.includes(date)) {
     const list = strs(ds).filter((x, i, xs) => xs.findIndex((y) => dishKey(y) === dishKey(x)) === i);
-    if (list.length) out.days.set(date, list);
+    if (list.length || (emptyOk && Array.isArray(ds))) out.days.set(date, list);
   }
   if (Array.isArray(json.new)) for (const n of json.new) if (isObject(n) && typeof n.dish === "string" && n.dish.trim())
     out.newNames.set(dishKey(n.dish), { name: n.dish.trim(), why: typeof n.why === "string" ? n.why.trim() : "" });
@@ -234,7 +235,7 @@ async function planWeek(deps: MakePlanDeps & { log: (line: string) => void }, in
   }
   const feas = feasibility(w, order);
   for (const l of feas.log) log(l);
-  const unmet: string[] = [...feas.unmet];
+  const unmet: string[] = [];
   const tags = ruleTags(rules);
   // The guests' food rules, in their words, read once into the tags they forbid (code then checks them like a person's).
   const guestWords = uniq(days.filter((d) => !d.fixed).flatMap((d) => d.guests.flatMap((g) => g.rules ?? [])).map((x) => x.trim().toLowerCase()).filter(Boolean));
@@ -322,7 +323,7 @@ async function planWeek(deps: MakePlanDeps & { log: (line: string) => void }, in
       log(`${req.purpose}: ${r.ok ? "ok" : r.code} in ${clock() - t0} ms`);
       if (!r.ok) { if (isStop(r.code)) stop = r; else lastFailure = r; return; }
       answered = true;
-      const got = proposalOf(r.json, only);
+      const got = proposalOf(r.json, only, s.kind === "addon");
       for (const [d, ds] of got.days) p.days.set(d, ds);
       for (const [k, v] of got.newNames) p.newNames.set(k, v);
       for (const d of only) p.notes.delete(d);
@@ -333,6 +334,9 @@ async function planWeek(deps: MakePlanDeps & { log: (line: string) => void }, in
     if (!stop) await contains();
     if (stop) return;
     addDaily(w, s.name, p);
+    // An add-on's days thinned to what its dishes allow, before anything is sent back (owner 23 Nov).
+    const thin = () => { const t = thinAddon(w, s.name, p); if (t.changed.length) log(`${s.name}: add-on thinned: ${t.changed.join("; ")}`); return t.unmet; };
+    let thinUnmet = thin();
     let problems = checkSlot(w, s.name, p);
     const hard = () => dates.filter((d) => hardOnly(problems.get(d)).length);
     const bad = hard();
@@ -344,21 +348,24 @@ async function planWeek(deps: MakePlanDeps & { log: (line: string) => void }, in
       if (!stop) await contains();
       if (stop) return;
       addDaily(w, s.name, p);
+      thinUnmet = thin();
     }
+    unmet.push(...thinUnmet);
     // From here to the slot's acceptance nothing waits: the week it is checked against is the week it joins.
     problems = checkSlot(w, s.name, p);
     const still = hard();
     if (still.length) {
       const r = rotate(w, s.name, p, still);
-      log(`${s.name}: code filled ${r.changed.join("; ")}`);
+      log(`${s.name}: code swapped ${r.changed.join("; ")}`);
       problems = checkSlot(w, s.name, p);
-      // Still back too soon or too often: the slot's week chosen again in code, its plates as they are first.
+      // Still back too soon or too often: the slot's week chosen again in code by swaps in place, plates kept whole.
       const again = hard().length ? resolveSlot(w, s.name, p) : null;
       if (again) {
         for (const [d, ds] of again) p.days.set(d, ds);
         log(`${s.name}: code chose the week again: ${[...again].map(([d, ds]) => `${weekdayOf(d)} ${ds.join(", ")}`).join("; ")}`);
         problems = checkSlot(w, s.name, p);
-        unmet.push(...hard().flatMap((d) => hardOnly(problems.get(d)).filter((x) => x.kind === "rule" && !x.dish).map((x) => `${weekdayOf(d)} ${s.name}: ${x.text.split(":")[0]}`)));
+        unmet.push(...hard().flatMap((d) => hardOnly(problems.get(d)).flatMap((x) => x.kind === "rule" && !x.dish ? [`${weekdayOf(d)} ${s.name}: ${x.text.split(":")[0]}`]
+          : x.dish && (x.kind === "repeat" || x.kind === "often" || x.kind === "same_day") ? [`${weekdayOf(d)} ${s.name}: ${x.dish} comes back sooner than usual`] : [])));
       } else unmet.push(...r.unmet);
     }
     for (const d of mine) {
@@ -393,7 +400,9 @@ async function planWeek(deps: MakePlanDeps & { log: (line: string) => void }, in
   await Promise.allSettled(running.values());
   if (stop) return stopped(stop);
   if (toPlan.length && !answered && lastFailure) return stopped(lastFailure);
-  const empty = toPlan.filter((d) => !d.dishes.length);
+  // An add-on day left empty (its dishes' count used up) is no slot-day: nothing saved, said or bought for it (owner 23 Nov).
+  const emptyAddon = (d: PlanDay) => !d.fixed && !d.skip && !d.dishes.length && slots.find((s) => same(s.name, d.slot))?.kind === "addon";
+  const empty = toPlan.filter((d) => !d.dishes.length && !emptyAddon(d));
   if (toPlan.length && empty.length === toPlan.length)
     return done({ ok: false, reason: "no_dishes", say: `I couldn't plan the week: I don't know any dishes for ${andList(uniq(empty.map((d) => d.slot.toLowerCase())))} yet. Tell me a few you usually have.` });
 
@@ -469,7 +478,7 @@ async function planWeek(deps: MakePlanDeps & { log: (line: string) => void }, in
       upsertLibrary(tx, { name: v.name, slot: placedAt, origin: "planner_suggested", suggested: true, untried: !eaten,
         ...(w.facts.has(k) ? { contains: [...f.tags], contains_read: [...f.read] } : {}) }, by, ch);
     }
-    for (const d of days.filter((x) => !x.fixed)) {
+    for (const d of days.filter((x) => !x.fixed && !emptyAddon(x))) {
       const note = [notesBy.get(`${d.date}|${d.slot}`), ...d.fasting].filter(Boolean).join("; ") || null;
       saveSlotDay(tx, { date: d.date, slot: d.slot, people: d.people, guests: d.guests, occasion: d.occasion, new_dishes_allowed: d.new_dishes_allowed,
         skip: d.skip, status: "planned", edited: d.edited, note, dishes: d.skip ? [] : d.dishes.map((name) => ({ dish: name, new: w.newDishes.has(dishKey(name)), not_for: notFor(w, d, name),
@@ -483,13 +492,13 @@ async function planWeek(deps: MakePlanDeps & { log: (line: string) => void }, in
     }
   });
 
-  // 6. The message.
-  const asked = read.asked;
+  // 6. The message. A slot too thin for its week is asked about, the thinnest first (owner 23 Nov), not a line in unmet.
+  const asked = [...read.asked, ...(only ? [] : shortQuestions(feas.short, slots, toPlan, w))];
   const relaxed = Object.fromEntries([...w.slots.values()].filter((x) => x.window !== REPEAT_WINDOW_DAYS && order.includes(x.slot.name)).map((x) => [x.slot.name, x.window]));
   const relaxedOut = Object.keys(relaxed).length ? { relaxed } : {};
   if (only) {
     const message = changeMessage({
-      meals: days.filter((d) => !d.fixed).map((d) => ({ label: `${weekdayLong(d.date)} ${d.slot}`, skip: d.skip,
+      meals: days.filter((d) => !d.fixed && !emptyAddon(d)).map((d) => ({ label: `${weekdayLong(d.date)} ${d.slot}`, skip: d.skip,
         dishes: d.dishes.map((name) => ({ name, not_for: notFor(w, d, name), note: (dishNotes.get(`${d.date}|${d.slot}|${dishKey(name)}`) ?? []).join("; ") || null })) })),
       unmet: uniq(unmet), new_dishes: [...w.newDishes.values()].map((v) => ({ name: v.name, why: v.why })), link: weekLink(deps.basePath, weekStart) });
     return done({ ok: true, week_start: weekStart, message, instructions: "Send message to the family word for word, as one message, then end your turn.",
@@ -498,13 +507,37 @@ async function planWeek(deps: MakePlanDeps & { log: (line: string) => void }, in
   const closed = closeWeek(db, weekStart, deps.basePath, unmet);
   const standing = rules.filter((r) => r.what === "note" && !r.hard).map(noteLine);
   const message = planMessage({
-    days: weekDates(weekStart).filter((d) => d >= from).map((date) => ({ label: weekdayLong(date), meals: days.filter((d) => d.date === date && !d.fixed).map((d) => ({
+    days: weekDates(weekStart).filter((d) => d >= from).map((date) => ({ label: weekdayLong(date), meals: days.filter((d) => d.date === date && !d.fixed && !emptyAddon(d)).map((d) => ({
       slot: d.slot, skip: d.skip, note: [notesBy.get(`${d.date}|${d.slot}`), ...d.fasting].filter(Boolean).join("; ") || null,
       dishes: d.dishes.map((name) => ({ name, not_for: notFor(w, d, name), note: (dishNotes.get(`${d.date}|${d.slot}|${dishKey(name)}`) ?? []).join("; ") || null })) })) })),
     standing, unmet: uniq(unmet), new_dishes: [...w.newDishes.values()].map((v) => ({ name: v.name, why: v.why })), asked, link: weekLink(deps.basePath, weekStart),
   });
   return done({ ok: true, week_start: weekStart, message, ...(closed.intro ? { intro: closed.intro } : {}), instructions: closed.instructions,
     ...(unmet.length ? { unmet: uniq(unmet) } : {}), ...(asked.length ? { asked } : {}), ...(noIngredients.length ? { no_ingredients: noIngredients } : {}), ...relaxedOut });
+}
+
+/** At most this many questions about a slot short of dishes in one plan's message. */
+export const SHORT_QUESTIONS_MAX = 2;
+
+/** One plain question per slot too thin for its week (the feasibility check's `short`), the thinnest first, at most
+ *  SHORT_QUESTIONS_MAX: how many of its dishes are known, the one that came up most, and what else its people have there,
+ *  or whether to suggest a few. Built from the slot's own name and people: "I only know 2 dishes for <slot>, so <dish>
+ *  comes up a lot. What else does <person> have for <slot>? Or should I suggest a few?". */
+export function shortQuestions(short: ShortSlot[], slots: Slot[], planned: PlanDay[], w: Week): string[] {
+  const ratio = (x: ShortSlot) => (x.places ? x.supply / x.places : 1);
+  return [...short].sort((a, b) => ratio(a) - ratio(b) || a.known - b.known).slice(0, SHORT_QUESTIONS_MAX).map((x) => {
+    const slot = slots.find((s) => same(s.name, x.slot));
+    const label = slot?.kind === "main" ? x.slot.toLowerCase() : x.slot;
+    const n = new Map<string, { name: string; days: number }>();
+    for (const d of planned.filter((y) => same(y.slot, x.slot))) for (const dish of uniq(d.dishes.filter((y) => !isStapleAt(w, x.slot, y)))) {
+      const k = dishKey(dish);
+      n.set(k, { name: n.get(k)?.name ?? dish, days: (n.get(k)?.days ?? 0) + 1 });
+    }
+    const top = [...n.values()].sort((a, b) => b.days - a.days)[0];
+    const who = slot?.usual_people ?? [];
+    const ask = who.length ? `What else ${who.length === 1 ? "does" : "do"} ${andList(who)} have for ${label}?` : `What else do you have for ${label}?`;
+    return `I only know ${x.known} dish${x.known === 1 ? "" : "es"} for ${label}${top && top.days > 1 ? `, so ${top.name} comes up a lot` : ""}. ${ask} Or should I suggest a few?`;
+  });
 }
 
 /** A note rule as said: "Asha: less spicy", the name only when the family's words do not have it. */

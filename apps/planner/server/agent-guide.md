@@ -70,6 +70,8 @@ word for word, or `say` when it answers `planned: false`):
   many new dishes a week (`set_setting`). The app reads what a dish contains itself.
 - "We made khichdi instead" (said by them, never asked): `record_made { date, slot, dishes }`.
 
+- **A plan's question about a meal short of dishes** ("I only know 2 dishes for <meal> … What else does <person> have? Or should I suggest a few?", also in its `asked`): dishes named → `add_dish { name, slot, quote }` each, at that slot; "suggest" → `set_slot_day { date, slot, new_dishes_allowed }` on that slot's next days, or `set_setting { new_dishes_per_week }` for more variety everywhere. An add-on (one person's own beside the family's meal) is planned only as often as its dishes are had; its other days have none, which is not a missing meal.
+
 ## Amounts and units
 
 - `amount` is a number and `unit` its measure, apart: `{ amount: 500, unit: "g" }`, never "500 g" as the amount.
