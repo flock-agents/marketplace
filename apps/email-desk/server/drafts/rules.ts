@@ -6,7 +6,7 @@ import { findDash, findPlaceholder } from "../lib/draft-body-check";
 
 export type DraftRefusalCode =
   | "DRAFT_EXISTS" | "PLACEHOLDER" | "QUALITY" | "VOICE_LEARNING" | "NOT_DESK_THREAD"
-  | "PERSON_EDITED" | "SENT" | "NOT_FOUND" | "GMAIL_FAILED";
+  | "PERSON_EDITED" | "SENT" | "NOT_FOUND" | "GMAIL_FAILED" | "SEND_UNCONFIRMED";
 
 export interface DraftRefusal {
   error: string;
@@ -76,6 +76,17 @@ export function updateRefusal(draft: { sentAt: number | null; personEdited: bool
   if (draft.sentAt !== null) return refuse("SENT", "This draft was already sent, so it can't be changed.");
   if (by === "agent" && draft.personEdited) return personEditedRefusal();
   return null;
+}
+
+/** The thread's reply was already sent (a send Gmail's re-read proved went out, ruling R33): nothing new is written. */
+export function sentRefusal(): DraftRefusal {
+  return refuse("SENT", "The reply on this thread was already sent, so nothing was written.");
+}
+
+/** A send on this thread may have gone out and could not be confirmed (an in_flight send ledger row, ruling R33): no draft
+ *  is written or changed until the person has checked Sent. */
+export function sendUnconfirmedRefusal(): DraftRefusal {
+  return refuse("SEND_UNCONFIRMED", "A reply to this may have gone already. Check Sent first.");
 }
 
 export function personEditedRefusal(): DraftRefusal {

@@ -20,6 +20,7 @@ import {
 import { deleteDraft, draftStatus, getDraft, lockDraft, openDraftForThread, recordDraft, setDraftBody, type DraftRecord } from "./drafts/records";
 import { answeredMessage, publishDraftCard, withdrawDraftCard } from "./drafts/card";
 import { sendDraft } from "./drafts/send";
+import { settleUnconfirmedSend } from "./drafts/send-check";
 import { tryAfterText, voiceStateFor, voiceLearningUntil } from "./voice/crawl";
 import { processTimezone } from "./lib/local-day";
 
@@ -165,6 +166,10 @@ async function writeNewDraft(accountId: string, threadId: string, body: string, 
   const db = getStore();
   const open = openDraftForThread(db, accountId, threadId);
   if (open) {
+    // A send of this draft whose outcome is unknown holds the thread (ruling R33), before anything reads it as gone: one
+    // Gmail re-read may prove it went (SENT) or did not (drafting goes on); short of that SEND_UNCONFIRMED, nothing written.
+    const inDoubt = await settleUnconfirmedSend(ctx.platform, open);
+    if (inDoubt) return inDoubt;
     // The person's edit is never replaced, whatever Gmail shows (ruling R31): nothing is read or changed.
     if (open.personEdited) return draftExistsRefusal(open.id);
     // The open row may be stale: the person sent or deleted the draft in Gmail itself. Gmail is asked; a draft it surely
@@ -212,6 +217,9 @@ export async function changeDraft(id: string, p: Record<string, unknown>, ctx: O
   // Read again inside the thread's turn: a discard or a person's edit may have landed while this waited.
   const draft = getDraft(db, id);
   if (!draft) return notFoundRefusal();
+  // A send of this draft whose outcome is unknown: nothing is written, whoever asks, until a re-read settles it (R33).
+  const inDoubt = await settleUnconfirmedSend(ctx.platform, draft);
+  if (inDoubt) return inDoubt;
   const locked = updateRefusal(draft, by);
   if (locked) return locked;
   const body = typeof p.body === "string" ? p.body : "";

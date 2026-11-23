@@ -36,14 +36,30 @@ interface Fake {
   failNext: Partial<Record<string, { reason: string; code?: string; status?: number; unknown?: boolean; throws?: boolean }>>;
   /** sendDraft waits on this when set (two presses at once). */
   sendGate: Promise<void> | null;
+  /** The thread as getThread reads it (ruling R33's re-read); null fails the read. */
+  thread: Array<{ from: string; date: string; body: string }> | null;
+  /** The read turn: "ok", "busy" (refused), or "none" (a Flock without read turns). */
+  turn: "ok" | "busy" | "none";
+  turns: Array<{ consumer: string; released: boolean }>;
 }
 
 function fake(): Fake {
-  const f: Fake = { platform: null, calls: [], published: [], withdrawn: [], gmail: new Map(), failNext: {}, sendGate: null };
+  const f: Fake = {
+    platform: null, calls: [], published: [], withdrawn: [], gmail: new Map(), failNext: {}, sendGate: null,
+    thread: [], turn: "ok", turns: [],
+  };
   let n = 0;
   f.platform = {
     appId: "email-desk", pairedAgent: { id: "inbox-assistant-7", name: "Inbox Assistant" }, dataDir: "test", configured: true,
     connectors: {
+      accounts: async () => ({ ok: true, data: { accounts: [{ accountId: ACCOUNT, email: "me@acme.com", label: null }] } }),
+      readTurn: async (_account: string, consumer: string) => {
+        if (f.turn === "none") throw new Error("no read turns");
+        if (f.turn === "busy") return { ok: false, reason: "busy", code: "busy" };
+        const t = { consumer, released: false };
+        f.turns.push(t);
+        return { ok: true, data: { turnId: `turn-${f.turns.length}`, accountId: ACCOUNT, release: async () => { t.released = true; } } };
+      },
       exec: async (req: any) => {
         f.calls.push({ functionName: req.functionName, params: req.params ?? {}, accountHint: req.accountHint, pressToken: req.pressToken, sideEffect: req.sideEffect });
         const fail = f.failNext[req.functionName];
@@ -70,6 +86,10 @@ function fake(): Fake {
           if (!f.gmail.has(String(p.draftId))) return { ok: false, reason: "Draft not found", code: "DRAFT_NOT_FOUND" };
           f.gmail.delete(String(p.draftId));
           return { ok: true, data: { draftId: p.draftId, discarded: true } };
+        }
+        if (req.functionName === "getThread") {
+          if (!f.thread) return { ok: false, reason: "Gmail did not load the thread" };
+          return { ok: true, data: { subject: "Tuesday?", messages: f.thread } };
         }
         if (req.functionName === "sendDraft") {
           if (f.sendGate) await f.sendGate;
@@ -537,3 +557,172 @@ describe("card closed", () => {
     expect(row(id).sent_at).not.toBeNull();
   });
 });
+
+// Ruling R33: a send whose outcome is unknown (an in_flight ledger row for the thread's open draft) blocks any redraft.
+// create_draft / update_draft re-read Gmail once under a read turn ("email-desk:send-check"): the person's own message on
+// the thread with the draft's text, dated at or after the send was asked, proves it went (SENT, card closed); no such
+// message with the Gmail draft still there proves it did not (drafting goes on as normal); anything else is unknown:
+// SEND_UNCONFIRMED, nothing written, nothing dropped, the card left up.
+describe("redraft over an unconfirmed send (R33)", () => {
+  const SEND_UNCONFIRMED = { error: "A reply to this may have gone already. Check Sent first.", code: "SEND_UNCONFIRMED" };
+  const BODY = "Hi Asha, Tuesday works.";
+  const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  /** Gmail's full date for a time, in local time ("Nov 23, 2026, 14:05"), as getThread gives it. */
+  const gmailDate = (ms: number) => {
+    const d = new Date(ms);
+    return `${MONTHS[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}, ${d.getHours()}:${String(d.getMinutes()).padStart(2, "0")}`;
+  };
+  const ASHA = { from: "Asha Rao <asha@acme.com>", date: "Nov 23, 2026, 9:00", body: "Are you free on Tuesday?" };
+  const writes = () => f.calls.filter((c) => ["createReplyDraft", "updateDraft", "discardDraft", "sendDraft"].includes(c.functionName));
+
+  /** A draft whose send timed out: the ledger row stays in_flight and Gmail still holds the draft. */
+  const unknownSend = async (): Promise<string> => {
+    const id = await create(BODY);
+    f.failNext.sendDraft = { reason: "timeout" };
+    expect((await send({ id })).code).toBe("SEND_FAILED");
+    expect(ledger(id).state).toBe("in_flight");
+    f.calls.length = 0;
+    f.published.length = 0;
+    f.withdrawn.length = 0;
+    return id;
+  };
+  /** The send really went out: Gmail's draft is gone and the thread holds the person's reply. */
+  const itWentOut = (text = BODY, from = "Me <me@acme.com>", at = Date.now() + 60_000) => {
+    f.gmail.delete("gm-1");
+    f.thread = [ASHA, { from, date: gmailDate(at), body: `${text}\n\nOn Nov 23, 2026, Asha Rao <asha@acme.com> wrote:\n> Are you free on Tuesday?` }];
+  };
+  const createAgain = () => ops.create_draft({ threadId: THREAD, body: "Hi Asha, Tuesday is good." }, agentCtx() as any) as Promise<any>;
+  const updateAgain = (id: string, ctx: any = agentCtx()) => ops.update_draft({ id, body: "Hi Asha, Tuesday is good." }, ctx) as Promise<any>;
+  const untouched = (id: string) => {
+    expect(writes()).toHaveLength(0);
+    expect(row(id)).not.toBeNull();
+    expect(row(id).sent_at).toBeNull();
+    expect(row(id).body_written).toBe(BODY);
+    expect(ledger(id).state).toBe("in_flight");
+    expect(f.withdrawn).toHaveLength(0);
+    expect(f.published).toHaveLength(0);
+  };
+
+  test("(1) the re-read cannot run (turn busy, no read turns, the thread read failing): create_draft refused, nothing touched", async () => {
+    const id = await unknownSend();
+    f.gmail.delete("gm-1"); // Gmail shows no draft: the old code read this as gone and wrote a second reply.
+    for (const setup of [() => { f.turn = "busy"; }, () => { f.turn = "none"; }, () => { f.turn = "ok"; f.thread = null; }]) {
+      setup();
+      expect(await createAgain()).toEqual(SEND_UNCONFIRMED);
+      untouched(id);
+    }
+  });
+
+  test("(1) ambiguous: no reply on the thread but Gmail shows no draft either: create_draft refused, nothing touched", async () => {
+    const id = await unknownSend();
+    f.gmail.delete("gm-1");
+    f.thread = [ASHA];
+    expect(await createAgain()).toEqual(SEND_UNCONFIRMED);
+    untouched(id);
+    expect(f.turns.map((t) => t.consumer)).toEqual(["email-desk:send-check"]);
+    expect(f.turns.every((t) => t.released)).toBe(true);
+    expect(f.calls.find((c) => c.functionName === "getThread")?.params).toEqual({ threadId: THREAD });
+  });
+
+  test("(1) ambiguous: the person's reply with the text but a date that does not read: refused", async () => {
+    const id = await unknownSend();
+    itWentOut();
+    f.thread![1]!.date = "yesterday-ish";
+    expect(await createAgain()).toEqual(SEND_UNCONFIRMED);
+    untouched(id);
+  });
+
+  test("(1) someone else's message with the text, or the person's other text, is not the send", async () => {
+    const id = await unknownSend();
+    itWentOut(BODY, "Asha Rao <asha@acme.com>");
+    expect(await createAgain()).toEqual(SEND_UNCONFIRMED);
+    untouched(id);
+    itWentOut("Hi Asha, I am away on Tuesday.");
+    expect(await createAgain()).toEqual(SEND_UNCONFIRMED);
+    untouched(id);
+  });
+
+  test("(1) update_draft over an unknown send: refused, nothing touched (the agent's, and the person's own save)", async () => {
+    const id = await unknownSend();
+    f.gmail.delete("gm-1");
+    f.thread = [ASHA];
+    expect(await updateAgain(id)).toEqual(SEND_UNCONFIRMED);
+    untouched(id);
+    expect(await ops.update_draft({ id, body: "Hi Asha, Tuesday is good.", by: "person" }, pressCtx("press-token-9") as any)).toEqual(SEND_UNCONFIRMED);
+    untouched(id);
+    f.turn = "busy";
+    expect(await updateAgain(id)).toEqual(SEND_UNCONFIRMED);
+    untouched(id);
+  });
+
+  test("(2) the re-read proves it went: ledger sent, row stamped, card closed, create_draft refused SENT", async () => {
+    const id = await unknownSend();
+    itWentOut();
+    const out = await createAgain();
+    expect(out.code).toBe("SENT");
+    expect(out.error).not.toMatch(/[–—]/);
+    expect(writes()).toHaveLength(0);
+    expect(ledger(id).state).toBe("sent");
+    expect(row(id).sent_at).not.toBeNull();
+    expect(f.withdrawn).toEqual([`draft:${id}`]);
+    // A press now answers from the ledger, and nothing is sent again.
+    expect((await send({ id }, pressCtx("press-token-2"))).ok).toBe(true);
+    expect(sends()).toHaveLength(0);
+  });
+
+  test("(2) Gmail's curly quotes and spacing still read as the same text", async () => {
+    const id = await create("Hi Asha, \"Tuesday\" works.\nSee you then.");
+    f.failNext.sendDraft = { reason: "timeout" };
+    await send({ id });
+    f.calls.length = 0;
+    itWentOut("Hi Asha,  \u201cTuesday\u201d works.\r\nSee you then.  ");
+    expect((await updateAgain(id)).code).toBe("SENT");
+    expect(ledger(id).state).toBe("sent");
+    expect(writes()).toHaveLength(0);
+  });
+
+  test("(2) update_draft finding the send went: SENT, card closed", async () => {
+    const id = await unknownSend();
+    itWentOut();
+    expect((await updateAgain(id)).code).toBe("SENT");
+    expect(writes()).toHaveLength(0);
+    expect(row(id).sent_at).not.toBeNull();
+    expect(f.withdrawn).toEqual([`draft:${id}`]);
+  });
+
+  test("(3) the re-read proves it did not go: the unknown is cleared and drafting goes on as normal", async () => {
+    const id = await unknownSend();
+    f.thread = [ASHA]; // no reply from the person; Gmail still holds the draft
+    // create_draft is no longer held by the send: the thread's open draft answers as any open draft does.
+    const out = await createAgain();
+    expect(out.code).toBe("DRAFT_EXISTS");
+    expect(ledger(id)).toBeNull();
+    // update_draft writes the draft.
+    expect(await updateAgain(id)).toEqual({ ok: true });
+    expect(f.gmail.get("gm-1")).toBe("Hi Asha, Tuesday is good.");
+    expect(row(id).body_written).toBe("Hi Asha, Tuesday is good.");
+    // And the person's press sends it.
+    expect((await send({ id }, pressCtx("press-token-2"))).ok).toBe(true);
+    expect(sends()).toHaveLength(1);
+  });
+
+  test("(3) proved unsent with the draft gone afterwards: create_draft writes the new draft", async () => {
+    const id = await unknownSend();
+    f.thread = [ASHA];
+    expect((await updateAgain(id)).ok).toBe(true); // proves unsent, clears the unknown
+    expect(ledger(id)).toBeNull();
+    f.gmail.delete("gm-1"); // the person then deletes the draft in Gmail
+    f.calls.length = 0;
+    const out = await createAgain();
+    expect(typeof out.id).toBe("string");
+    expect(f.calls.filter((c) => c.functionName === "createReplyDraft")).toHaveLength(1);
+  });
+
+  test("(3) the person's own earlier reply with the same text, dated before the send, is not this send", async () => {
+    const id = await unknownSend();
+    f.thread = [{ from: "Me <me@acme.com>", date: gmailDate(Date.now() - 3 * 86_400_000), body: BODY }, ASHA];
+    expect((await createAgain()).code).toBe("DRAFT_EXISTS");
+    expect(ledger(id)).toBeNull();
+  });
+});
+

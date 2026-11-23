@@ -154,10 +154,10 @@ function fail(key: string, reason: string): SendRefusal {
 }
 
 /** The ledger says sent and the row has its sent stamp (the source's "Sent by Flock" record; 2.4 reads the draft as no
- *  longer open). The platform closes the card on the answer. */
-function recordSent(draft: DraftRecord, key: string): { ok: true; sentAt: string } {
+ *  longer open). The platform closes the card on the answer. `at` is when it went (now, or the time Gmail's re-read
+ *  shows for it: drafts/send-check.ts). */
+export function recordSent(draft: DraftRecord, key: string, at = Date.now()): { ok: true; sentAt: string } {
   const db = getStore();
-  const at = Date.now();
   const sentAt = new Date(at).toISOString();
   db.run(
     `INSERT INTO send_ledger (idempotency_key, account_id, thread_id, draft_id, state, result, created_at, updated_at)
