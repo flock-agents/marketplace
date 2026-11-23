@@ -57,7 +57,8 @@ export function scorePlan(h: Household, plan: PlanOut, loaded: SetupOut): PlanSc
   const at = (date: string, slot: string) => plan.slotDays.find((x) => x.date === date && lc(x.slot) === lc(slot));
   const truthNames = [...new Set(t.library.map((d) => d.name))];
   const history: HistoryRow[] = loaded.seed.map((r) => ({ slot: r.slot, dishes: r.dishes, date: null }));
-  const staples = new Map(t.slots.map((s) => [s.name, staplesOf(history, s.name)]));
+  // The seed is the only history a fresh eval week has (planned rows never count); `daily` dishes are staples too.
+  const staples = new Map(t.slots.map((s) => [s.name, staplesOf(history, s.name, t.library.filter((d) => d.slot === s.name && d.frequency === "daily").map((d) => d.name))]));
   const isStaple = (slot: string, dish: string) => !!staples.get(slot)?.has(plain(dish));
   const dayOfSd = (sd: PlanSlotDay) => weekdayOfDate(sd.date);
   const cooked = plan.slotDays.filter((x) => !x.skip && x.dishes.length);
@@ -153,6 +154,12 @@ export function scorePlan(h: Household, plan: PlanOut, loaded: SetupOut): PlanSc
   for (const name of truthNames) {
     const rows = t.library.filter((d) => d.name === name);
     const freq = rows.find((d) => d.frequency)?.frequency, days = rows.find((d) => d.days)?.days;
+    if (freq === "daily") {
+      // Owner, 23 Nov: a dish said for every day is on every slot-day of its slot (a hard check).
+      for (const r of rows) for (const sd of cooked.filter((x) => lc(x.slot) === lc(r.slot)))
+        add("daily_dishes", sd.dishes.some((d) => dishNameOf(d.name, truthNames) === name), `${dayOfSd(sd)} ${sd.slot}: no ${name} (every day)`);
+      continue;
+    }
     const ps = placements(name);
     const counted = ps.filter((sd) => !isStaple(sd.slot, name));
     if (freq || days) {

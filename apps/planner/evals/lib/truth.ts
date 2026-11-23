@@ -16,7 +16,9 @@ export type Group = "child" | "adult" | "elder";
 export type SlotKind = "main" | "custom" | "addon";
 export type Skip = "eaten_out" | "ordered_in";
 /** spec §2.1 library.frequency / rules.frequency. */
-export type Frequency = "usually" | "sometimes" | "rarely" | `${number}/week`;
+/** `daily`: the family said to have it every day ("salad every day", "eggs every morning"): on every slot-day of its slot,
+ *  and a staple (owner, 23 Nov). */
+export type Frequency = "daily" | "usually" | "sometimes" | "rarely" | `${number}/week`;
 export type RuleWhat = "veg" | "egg" | "no_eggs" | "avoid" | "only" | "swap" | "require" | "fasting" | "cap" | "note";
 export const MAIN_SLOTS = ["Breakfast", "Lunch", "Dinner"] as const;
 
@@ -149,6 +151,7 @@ export function dishNameOf(name: string, names: readonly string[]): string | nul
  *  n (n−1 accepted as the floor); no frequency: at most 2, staples exempt). The floor is asked only when the week has room. */
 export function frequencyRange(f: string | null | undefined): [number, number] {
   if (!f) return [0, 2];
+  if (f === "daily") return [7, 7];
   if (f === "rarely") return [0, 1];
   if (f === "sometimes") return [2, 3];
   if (f === "usually") return [4, 7];

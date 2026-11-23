@@ -12,7 +12,7 @@ export const FIX: Household = {
   groceryApps: [],
   facts: [
     { id: "rules", text: "No eggs at home. Dadu Ram fasts on Monday till evening. Dadu Ram: no sugar. Millets are good for Dadu Ram, a few times a week." },
-    { id: "adultsDinner", text: "Dinner is roti, dal and a sabzi; Dadu Ram has two phulkas at night. Rajma twice a week. Khichdi on Saturday." },
+    { id: "adultsDinner", text: "Dinner is roti, dal and a sabzi; Dadu Ram has two phulkas every night. Rajma twice a week. Khichdi on Saturday." },
     { id: "diet", text: "Less salt for Dadu Ram. On Ekadashi he eats only fruit." },
   ],
   correction: { after: "rules", line: "ok", fact: "rules", corrected: "No eggs at home. Dadu Ram fasts on Monday till evening. Dadu Ram: no sugar. Millets are good for Dadu Ram, a few times a week." },
@@ -31,7 +31,7 @@ export const FIX: Household = {
       ...dish("Sandwich", ["Chotu's tiffin"]),
       ...dish("Rice", ["Lunch"]), ...dish("Dal", ["Lunch", "Dinner"]), ...dish("Bhindi", ["Lunch"]), ...dish("Aloo gobi", ["Lunch"]),
       ...dish("Roti", ["Dinner"]), ...dish("Lauki", ["Dinner"]), ...dish("Rajma", ["Dinner"], { frequency: "2/week" }), ...dish("Khichdi", ["Dinner"], { days: ["Sat"] }),
-      ...dish("Phulka", ["Dadu's dinner"]),
+      ...dish("Phulka", ["Dadu's dinner"], { frequency: "daily" }),
     ],
     rules: [
       { id: "no_eggs", title: "No eggs", hard: true, what: "no_eggs", items: ["egg"], quote: /egg/i, also: ["avoid"] },

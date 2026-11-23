@@ -53,7 +53,7 @@ if (flag("contains")) {
     const k = await bootPlanner({ dataDir, model: model(calls) });
     const got = await readContains(k, CONTAINS_LABELS.map((l) => l.dish));
     if (!got) { log0("the planner has no add_dish op yet: contains accuracy not run"); process.exit(2); }
-    const s = scoreContains(got);
+    const s = scoreContains(got!);
     mkdirSync(OUT, { recursive: true });
     const lines = [`# Eval 1 contains accuracy — ${stamp}`, "", `model ${MODEL}; ${CONTAINS_LABELS.length} labelled dishes; spend $${spend.cost.toFixed(3)} (${spend.calls} calls)`, "",
       ...Object.entries(s.rates).map(([k, r]) => `- ${k}: ${pct(r)}`), "", "| tag | tp | fp | fn | tn | unread |", "|---|---|---|---|---|---|",

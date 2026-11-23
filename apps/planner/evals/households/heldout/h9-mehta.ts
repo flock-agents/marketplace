@@ -31,7 +31,7 @@ export const h9: Household = {
     { id: "adultsLunch", text: "Lunch: rotli, dal, bhaat and one shaak, tindora, bhindi or cabbage; kadhi sometimes instead of dal. Dal dhokli on Sundays." },
     { id: "adultsDinner", text: "Dinner: khichdi and kadhi twice a week; other nights bhakri or thepla with a shaak." },
     { id: "diet", text: "I have high cholesterol, so less oil for me. Nobody else." },
-    { id: "elders", text: "Ba eats before sunset, so her dinner is at 5:30, on her own: khichdi or thepla, with doodh. She doesn't sit for our dinner." },
+    { id: "elders", text: "Ba eats before sunset, so her dinner is at 5:30, on her own: khichdi or thepla, and doodh every day. She doesn't sit for our dinner." },
     { id: "rules", text: "We are Jain: no onion, no garlic, no potato or any root vegetables, no eggs, no meat. On ashtami and chaudas Ba doesn't eat green vegetables." },
     { id: "orderIn", text: "We never order in. Saturday dinner we go out to a Jain restaurant." },
     { id: "subscriptions", text: "Amul milk, 2 litres every morning." },
@@ -57,7 +57,7 @@ export const h9: Household = {
       ...dish("Tindora shaak", ["Dinner"], { unsaid: true }), ...dish("Bhindi shaak", ["Dinner"], { unsaid: true }), ...dish("Cabbage shaak", ["Dinner"], { unsaid: true }),
       ...dish("Kadhi", ["Lunch"], { frequency: "sometimes" }), ...dish("Dal dhokli", ["Lunch"], { days: ["Sun"] }),
       ...dish("Khichdi", ["Dinner"], { frequency: "2/week" }), ...dish("Kadhi", ["Dinner"], { frequency: "2/week" }), ...dish("Bhakri", ["Dinner"]),
-      ...dish("Khichdi", ["Ba's dinner"]), ...dish("Doodh", ["Ba's dinner"], { contains: ["dairy"] }),
+      ...dish("Khichdi", ["Ba's dinner"]), ...dish("Doodh", ["Ba's dinner"], { frequency: "daily", contains: ["dairy"] }),
     ],
     rules: [
       avoid("jain", "Jain: no onion, garlic, root vegetables, eggs or meat", ["meat", "fish", "egg", "onion_garlic", "root_veg"], /jain|onion|garlic|root|potato/i, { also: ["veg", "no_eggs"] }),

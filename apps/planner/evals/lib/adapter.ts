@@ -102,9 +102,9 @@ export function loadSetup(k: Kit, s: SetupOut): string[] {
   const db = k.kit.sqlite;
   const now = new Date().toISOString();
   const insert = (table: string, row: Record<string, unknown>) => {
-    const r = { id: crypto.randomUUID(), created_at: now, updated_at: now, updated_by: "eval", ...row };
+    const r: Record<string, unknown> = { id: crypto.randomUUID(), created_at: now, updated_at: now, updated_by: "eval", ...row };
     const cols = Object.keys(r), vals = cols.map((c) => { const v = r[c]; return v === undefined ? null : typeof v === "boolean" ? (v ? 1 : 0) : Array.isArray(v) || (v && typeof v === "object") ? JSON.stringify(v) : v; });
-    try { db.query(`INSERT INTO "${table}" (${cols.map((c) => `"${c}"`).join(", ")}) VALUES (${cols.map(() => "?").join(", ")})`).run(...(vals as any[])); return r.id; }
+    try { db.query(`INSERT INTO "${table}" (${cols.map((c) => `"${c}"`).join(", ")}) VALUES (${cols.map(() => "?").join(", ")})`).run(...(vals as any[])); return r.id as string; }
     catch (e) { refused.push(`${table}: ${String(e).slice(0, 160)}`); return null; }
   };
   const order = (sl: SetupOut["slots"][number]) => sl.kind === "addon" ? 60 : sl.name === "Breakfast" ? 10 : sl.name === "Lunch" ? 30 : sl.name === "Dinner" ? 50 : /breakfast/i.test(sl.addon_of ?? "") ? 20 : 20;

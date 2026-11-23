@@ -157,6 +157,14 @@ describe("scorePlan", () => {
     expect(fails(q)).toContain("same_day_repeat");
   });
 
+  test("a daily dish on every slot-day of its slot (hard), exempt from the repeat window and the cap", () => {
+    const p = goodWeek();
+    expect(scorePlan(FIX, p, loaded()).rates.daily_dishes).toEqual([6, 6]);
+    at(p, "Wed", "Dadu's dinner").dishes = [{ name: "Lauki" }];
+    expect(fails(p)).toContain("daily_dishes");
+    expect(staplesOf([], "Dadu's dinner", ["Phulka"]).has("phulka")).toBe(true);
+  });
+
   test("soft rule counts across slots (millets 2–3 times a week for him)", () => {
     const p = goodWeek();
     at(p, "Fri", "Dadu's dinner").dishes = [{ name: "Phulka" }];
