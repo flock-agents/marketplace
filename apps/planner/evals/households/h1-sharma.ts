@@ -1,8 +1,7 @@
 // 1. North Indian, both parents in office, one child with a school tiffin, a paid cook Mon–Sat twice a day; Sunday the mother
 // cooks. Eggs fine, chicken only on weekends. Frequency words: parathas on weekends, rajma twice a week, Maggi on Fridays.
-import { avoid, SCHOOL, WEEK, type Household } from "../lib/truth";
+import { avoid, dish, mains, MON_SAT, note, SCHOOL, veg, type Household } from "../lib/truth";
 
-const MON_SAT = WEEK.slice(0, 6);
 export const h1: Household = {
   id: "h1-sharma", title: "North Indian, office parents, cook Mon–Sat, eggs OK, chicken on weekends",
   owner: "Rohit", intro: "You are Rohit Sharma, 38, a sales manager in Gurgaon",
@@ -12,8 +11,11 @@ export const h1: Household = {
     "household.children": ["Vihaan"], "household.elders": [], "household.schoolAge": true,
     "household.help": [{ role: "cook", name: "Sunita", days: "Mon-Sat", times: "8am", meals: ["Breakfast", "Lunch"] },
       { role: "cook", name: "Sunita", days: "Mon-Sat", times: "7pm", meals: ["Dinner"] }, { role: "maid", name: "Kamla", days: "daily", times: "10am" }],
-    "household.weekday": "Rohit and Neha are at office 9:30 to 7. Vihaan has school 8 to 2, then a day care till 6.",
+    "household.weekday": "Rohit and Neha are at office 9:30 to 7 and carry lunch from home. Vihaan has school 8 to 2, then a day care till 6.",
     "household.mealsBy": "Neha", "household.groceriesBy": "Neha",
+    "household.weekly": [{ person: "Rohit", where: "office", weekdays: SCHOOL, from: "09:30", to: "19:00", lunch: "carries" },
+      { person: "Neha", where: "office", weekdays: SCHOOL, from: "09:30", to: "19:00", lunch: "carries" },
+      { person: "Vihaan", where: "school", weekdays: SCHOOL, from: "08:00", to: "18:00", lunch: "away" }],
   },
   groceryApps: ["Blinkit", "BigBasket"],
   facts: [
@@ -39,23 +41,33 @@ export const h1: Household = {
   truth: {
     people: [{ name: "Rohit", group: "adult" }, { name: "Neha", group: "adult" }, { name: "Vihaan", group: "child", age: 7 }],
     cook: { name: "Sunita", days: MON_SAT, visits: [{ at: "08:00", meals: ["Breakfast", "Lunch"] }, { at: "19:30", meals: ["Dinner"] }] },
-    homeCook: [{ days: ["Sun"], by: "Neha" }],
-    extraSlots: [{ name: "Vihaan's tiffin", match: /tiffin|lunch ?box|school/i, days: SCHOOL, for: ["Vihaan"] }],
-    orderIn: [{ day: "Sun", slot: "Dinner", note: "ordered from Zomato" }],
-    hardRules: [avoid("nonveg_weekends", "Chicken (non-veg) only on Saturday and Sunday", ["@meat"], { days: SCHOOL })],
-    softNotes: [{ id: "less_spicy_kid", who: "Vihaan", text: "less spicy for Vihaan", re: /spic|mild/i }],
-    dishes: [
-      { name: "Poha", slots: ["Breakfast", "Vihaan's tiffin"] }, { name: "Bread omelette", slots: ["Breakfast"] }, { name: "Aloo paratha", slots: ["Breakfast"], days: ["Sat", "Sun"] },
-      { name: "Cornflakes", slots: ["Breakfast"], for: ["Vihaan"], often: "sometimes" }, { name: "Besan chilla", slots: ["Breakfast"] },
-      { name: "Sandwich", slots: ["Vihaan's tiffin"] }, { name: "Paratha roll", slots: ["Vihaan's tiffin"] }, { name: "Maggi", slots: ["Vihaan's tiffin"], days: ["Fri"] },
-      { name: "Dal", slots: ["Lunch", "Dinner"] }, { name: "Chawal", slots: ["Lunch"] }, { name: "Roti", slots: ["Lunch", "Dinner"] }, { name: "Raita", slots: ["Lunch"] },
-      { name: "Rajma chawal", slots: ["Lunch"], per_week: 2 }, { name: "Aloo gobi", slots: ["Lunch"] }, { name: "Bhindi", slots: ["Lunch"] }, { name: "Lauki", slots: ["Lunch"] },
-      { name: "Paneer bhurji", slots: ["Dinner"] }, { name: "Matar paneer", slots: ["Dinner"] }, { name: "Chicken curry", slots: ["Dinner"], days: ["Sat", "Sun"] },
+    familyCooks: [{ person: "Neha", days: ["Sun"] }],
+    slots: [
+      ...mains({ Dinner: [{ day: "Sun", skip: "ordered_in" }] }),
+      { name: "Vihaan's tiffin", kind: "custom", usual_people: ["Vihaan"], days: SCHOOL, match: /tiffin|lunch ?box|school/i },
     ],
-    examples: [
-      { slot: "Lunch", words: "dal, chawal, roti, ek sabzi aur raita", parts: 5, staple: /chawal|rice|roti|chapati|phulka/i },
-      { slot: "Dinner", words: "roti, dal and a sabzi", parts: 3, staple: /roti|chapati|phulka|paratha/i },
+    // Vihaan's weekday lunch is his school tiffin (day care till 6); his parents carry the home lunch.
+    away: [{ person: "Vihaan", slots: ["Lunch"], days: SCHOOL }],
+    library: [
+      ...dish("Poha", ["Breakfast", "Vihaan's tiffin"]), ...dish("Bread omelette", ["Breakfast"]), ...dish("Aloo paratha", ["Breakfast"], { days: ["Sat", "Sun"] }),
+      ...dish("Cornflakes", ["Breakfast"], { frequency: "sometimes", contains: ["dairy"] }), ...dish("Besan chilla", ["Breakfast"]),
+      ...dish("Sandwich", ["Vihaan's tiffin"]), ...dish("Paratha roll", ["Vihaan's tiffin"]), ...dish("Maggi", ["Vihaan's tiffin"], { days: ["Fri"] }),
+      ...dish("Dal", ["Lunch", "Dinner"]), ...dish("Chawal", ["Lunch"]), ...dish("Roti", ["Lunch", "Dinner"]), ...dish("Raita", ["Lunch"]),
+      ...dish("Rajma chawal", ["Lunch"], { frequency: "2/week" }), ...dish("Aloo gobi", ["Lunch"]), ...dish("Bhindi", ["Lunch"]), ...dish("Lauki", ["Lunch"]),
+      ...dish("Aloo gobi", ["Dinner"], { unsaid: true }), ...dish("Bhindi", ["Dinner"], { unsaid: true }), ...dish("Lauki", ["Dinner"], { unsaid: true }),
+      ...dish("Paneer bhurji", ["Dinner"]), ...dish("Matar paneer", ["Dinner"]), ...dish("Chicken curry", ["Dinner"], { days: ["Sat", "Sun"] }),
     ],
-    judgeNotes: ["Chicken only on Saturday and Sunday; eggs any day.", "Vihaan's tiffin Monday to Friday only.", "Sunday dinner is ordered in."],
+    rules: [
+      avoid("nonveg_weekends", "Chicken (non-veg) only on Saturday and Sunday", ["meat"], /weekend|weekday|saturday and sunday/i, { days: SCHOOL, also: ["only"] }),
+      note("less_spicy_kid", "less spicy for Vihaan", "Vihaan", /spic/i),
+    ],
+    seed: [
+      { slot: "Breakfast", dishes: ["Poha"] }, { slot: "Breakfast", dishes: ["Bread omelette"] }, { slot: "Breakfast", dishes: ["Aloo paratha"] },
+      { slot: "Breakfast", dishes: ["Besan chilla"] }, { slot: "Breakfast", dishes: ["Cornflakes"] },
+      { slot: "Vihaan's tiffin", dishes: ["Sandwich"] }, { slot: "Vihaan's tiffin", dishes: ["Paratha roll"] }, { slot: "Vihaan's tiffin", dishes: ["Poha"] }, { slot: "Vihaan's tiffin", dishes: ["Maggi"] },
+      { slot: "Lunch", dishes: ["Dal", "Chawal", "Roti", "Aloo gobi", "Raita"] }, { slot: "Lunch", dishes: ["Rajma chawal", "Raita"] }, { slot: "Lunch", dishes: ["Dal", "Chawal", "Roti", "Bhindi", "Raita"] },
+      { slot: "Dinner", dishes: ["Roti", "Dal", "Lauki"] }, { slot: "Dinner", dishes: ["Roti", "Matar paneer"] }, { slot: "Dinner", dishes: ["Roti", "Dal", "Paneer bhurji"] },
+    ],
+    judgeNotes: ["Chicken only on Saturday and Sunday; eggs any day.", "Vihaan's tiffin Monday to Friday only; he is not home for weekday lunch.", "Sunday dinner is ordered in."],
   },
 };

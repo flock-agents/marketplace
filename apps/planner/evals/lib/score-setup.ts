@@ -1,146 +1,232 @@
-// Eval 1's scorecard: a setup (as the planner's rows hold it) against TRUTH, field by field, in code. Every field is a pass
-// rate over the things it counts (a household's two hard rules are two of "hard_rules"); a field that does not apply to a
-// household counts nothing there.
-import type { Setup } from "./setup";
-import { itemCovers, oftenMax, sameName, truthDishOf, WEEK, type HardRule, type Household, type SoftNote } from "./truth";
+// Eval 1's scorecard (spec §8): apply_setup's rows (result.ts SetupOut) against TRUTH, field by field, in code. Every field
+// is a pass rate over the things it counts; a field that does not apply to a household counts nothing there. `info` fields
+// are reported but not gating (the persona may not name every dish).
+import type { SavedRule, SavedSlot, SetupOut } from "./result";
+import { canonTag, itemCovers } from "./vocab";
+import { weeklyPeople } from "./truth-setup";
+import {
+  MAIN_SLOTS, WEEK, dayOf, dishNameOf, sameDays, sameFrequency, sameName, sameNames, sameSet,
+  type Household, type TruthRule, type TruthSlot, type Weekday,
+} from "./truth";
 
 export type Rates = Record<string, [number, number]>;
-export type SetupScore = { rates: Rates; notes: string[] };
+export type SetupScore = { rates: Rates; info: Rates; notes: string[] };
 
-const setEq = (a: readonly string[] = [], b: readonly string[] = []) => a.length === b.length && a.every((x) => b.some((y) => y.toLowerCase() === x.toLowerCase()));
-const daysEq = (a?: readonly string[], b?: readonly string[]) => setEq(a?.length ? a : WEEK, b?.length ? b : WEEK);
-const namesEq = (a: readonly string[] = [], b: readonly string[] = []) => a.length === b.length && a.every((x) => b.some((y) => sameName(x, y)));
-type Saved = Setup["rules"][number];
+const lc = (s: string) => s.trim().toLowerCase();
 
-/** A saved rule as the planner checks it: the older kinds as avoid with their items (rules.ts checkedAs). */
-function asChecked(r: Saved): Saved {
-  const items = r.kind === "veg" ? ["@meat", "@fish", "@egg"] : r.kind === "no_meat" || r.kind === "egg" ? ["@meat", "@fish"] : r.kind === "no_eggs" ? ["@egg"] : r.kind === "no_onion_garlic" ? ["onion", "garlic"] : null;
-  return items ? { ...r, kind: "avoid", items } : r;
-}
-const whoOk = (truthWho: string | undefined, saved: string | undefined) => (truthWho ? !!saved && sameName(truthWho, saved) : !saved);
-
-/** The saved slot name a truth slot word is (an extra slot by its pattern). */
-function slotOk(h: Household, truthSlot: string, saved: string): boolean {
-  if (truthSlot.toLowerCase() === saved.toLowerCase()) return true;
-  const t = h.truth.extraSlots.find((s) => s.name === truthSlot);
-  return !!t && t.match.test(saved);
-}
-
-/** Is this hard rule saved, as a rule the planner checks. */
-export function hardRuleSaved(h: Household, hr: HardRule, rules: Saved[]): boolean {
-  if (hr.words) return rules.some((r) => whoOk(hr.rule.who, r.who) && hr.words!.test(JSON.stringify(r)));
-  const c = hr.check;
-  if (!c) return false;
-  if (c.kind === "fasting")
-    return rules.some((r) => r.kind === "fasting" && whoOk(c.who, r.who) && daysEq(c.days, r.days) && setEq(c.slots, r.slots ?? []));
-  const kinds = ["avoid", ...(hr.alsoKinds ?? []), ...(c.kind === "swap" ? ["swap", "avoid", "cap"] : [])];
-  // A rule of a person's own meal (a child's tiffin) may name that person.
-  const slotOwner = (who?: string) => !c.who && c.kind === "avoid" && !!c.slots?.length && !!who
-    && c.slots.every((x) => h.truth.extraSlots.find((t) => t.name === x)?.for?.some((p) => sameName(p, who)));
-  const scoped = rules.map(asChecked).filter((r) => kinds.includes(r.kind) && (whoOk(c.who, r.who) || slotOwner(r.who))
-    && (c.kind === "swap" || (daysEq(c.days, r.days) && (c.slots?.length ? !!r.slots?.length && c.slots.every((t) => r.slots!.some((s) => slotOk(h, t, s))) : !r.slots?.length))));
-  const items = scoped.flatMap((r) => r.items ?? []);
-  return c.items.every((t) => items.some((s) => itemCovers(s, t)));
-}
-
-/** Is a saved rule one of the family's: it loosely matches a hard rule or a soft note (same person, an item or the words). */
-function explained(h: Household, r: Saved): boolean {
-  const text = JSON.stringify([r.note ?? "", r.items ?? [], r.to ?? "", r.days ?? []]);
-  for (const hr of h.truth.hardRules) {
-    const who = hr.rule.who;
-    if (who && !(r.who && sameName(who, r.who))) continue;
-    if (hr.words?.test(text)) return true;
-    const c = hr.check;
-    if (!c) continue;
-    if (c.kind === "fasting" && r.kind === "fasting") return true;
-    if (c.kind !== "fasting" && (asChecked(r).items ?? []).some((s) => c.items.some((t) => itemCovers(s, t)))) return true;
+/** truth slot name → saved slot name. A main slot by its name; a custom or add-on slot by its name or its pattern, one
+ *  saved slot per truth slot, same-kind first. */
+export function slotMap(truth: TruthSlot[], saved: SavedSlot[]): Map<string, string> {
+  const out = new Map<string, string>(), used = new Set<string>();
+  const take = (t: TruthSlot, s?: SavedSlot) => { if (s) { out.set(t.name, s.name); used.add(s.name); } };
+  for (const t of truth) take(t, saved.find((s) => !used.has(s.name) && lc(s.name) === lc(t.name)));
+  for (const t of truth.filter((x) => !out.has(x.name) && x.kind !== "main" && x.match)) {
+    const cands = saved.filter((s) => !used.has(s.name) && s.kind !== "main" && t.match!.test(s.name));
+    take(t, cands.find((s) => s.kind === t.kind && (!t.addon_of || lc(s.addon_of ?? "") === lc(t.addon_of))) ?? cands.find((s) => s.kind === t.kind) ?? cands[0]);
   }
-  if (h.truth.softNotes.some((n) => (!n.who || (r.who && sameName(n.who, r.who))) && n.re.test(text))) return true;
-  // A person's own dish said as their rule ("eggs every morning for me" as require eggs at Breakfast).
-  return !!r.who && h.truth.dishes.some((d) => d.for?.some((p) => sameName(p, r.who!)) && (r.items ?? []).some((i) => itemCovers(i, d.name) || itemCovers(d.name.toLowerCase(), i)));
+  return out;
 }
-const softFound = (n: SoftNote, rules: Saved[]) => rules.some((r) => (!n.who || (r.who && sameName(n.who, r.who))) && n.re.test(JSON.stringify([r.note ?? "", r.items ?? [], r.to ?? ""])));
-const isHomeCookNote = (r: Saved) => r.kind === "other" && /\bcooks?\b/i.test(r.note ?? "");
 
-export function scoreSetup(h: Household, s: Setup): SetupScore {
-  const t = h.truth, rates: Rates = {}, notes: string[] = [];
-  const add = (field: string, ok: boolean, why?: string) => {
-    const r = (rates[field] ??= [0, 0]); r[1]++; if (ok) r[0]++; else if (why) notes.push(`${field}: ${why}`);
+/** A rule in one form: veg / no_eggs / egg as avoid with their items, `only` on some days as avoid on the other days. */
+export function effective(r: { what: string; items?: string[] | null; days?: string[] | null }): { what: string; items: string[]; days: Weekday[] | null } {
+  const days = r.days?.length ? r.days.map(dayOf) : null;
+  const items = (r.items ?? []).map(canonTag);
+  switch (r.what) {
+    case "veg": return { what: "avoid", items: [...new Set(["meat", "fish", ...items])], days };
+    case "egg": return { what: "avoid", items: [...new Set(["meat", "fish", ...items])], days };
+    case "no_eggs": return { what: "avoid", items: [...new Set(["egg", ...items])], days };
+    case "only": return days ? { what: "avoid", items, days: WEEK.filter((d) => !days.includes(d)) } : { what: "only", items, days };
+    default: return { what: r.what, items, days };
+  }
+}
+
+/** The family's own words: every reply, and Flock's household facts. Normalised for substring checks. */
+export const normWords = (s: string) => ` ${s.toLowerCase().replace(/[’']/g, "").replace(/[^\p{L}\p{N}]+/gu, " ").trim()} `;
+export function familyWords(h: Household, transcript: string[] = []): string {
+  return normWords([...transcript.filter((l) => l.startsWith("A:")).map((l) => l.slice(2)), JSON.stringify(h.household)].join(" \n "));
+}
+
+type Ctx = { h: Household; map: Map<string, string>; back: Map<string, string> };
+const truthSlotName = (c: Ctx, saved: string) => c.back.get(saved) ?? saved;
+const whoOk = (c: Ctx, t: TruthRule, s: SavedRule) => {
+  if (t.who) return !!s.who && sameName(t.who, s.who);
+  if (!s.who) return true;
+  // A rule of a person's own slot (a child's tiffin) may name that person.
+  return !!t.slots?.length && t.slots.every((x) => c.h.truth.slots.find((y) => y.name === x)?.usual_people?.some((p) => sameName(p, s.who!)));
+};
+const slotsOk = (c: Ctx, t: TruthRule, s: SavedRule) => {
+  const saved = (s.slots ?? []).map((x) => truthSlotName(c, x));
+  if (!t.slots?.length) return !saved.length || sameSet(saved.map(lc), c.h.truth.slots.filter((x) => !x.optional).map((x) => lc(x.name)));
+  return sameSet(t.slots.map(lc), saved.map(lc));
+};
+const kindsOf = (t: TruthRule) => new Set([effective(t).what, t.what, ...(t.also ?? [])]);
+
+/** Is truth rule `t` saved: the saved rules of its kind, person, days and slots together cover its items (a vegetarian
+ *  grandmother saved as veg + no_eggs covers meat, fish, egg). Fasting: same person, days, slots, and food-or-none. */
+export function ruleSaved(c: Ctx, t: TruthRule, rules: SavedRule[]): SavedRule[] {
+  const te = effective(t), kinds = kindsOf(t);
+  const scoped = rules.filter((s) => {
+    const se = effective(s);
+    return (kinds.has(se.what) || kinds.has(s.what)) && whoOk(c, t, s) && sameDays(te.days, se.days) && slotsOk(c, t, s);
+  });
+  if (!scoped.length) return [];
+  if (t.what === "fasting") return scoped.filter((s) => !!s.fasting_food?.length === !!t.fasting_food?.length);
+  if (t.what === "note") return [];
+  if (!te.items.length) return scoped;
+  const items = scoped.flatMap((s) => effective(s).items);
+  if (!te.items.every((ti) => items.some((si) => itemCovers(si, ti)))) return [];
+  if (t.what === "swap" && t.to) return scoped.filter((s) => !s.to || s.what !== "swap" || itemCovers(canonTag(s.to), canonTag(t.to!)) || lc(s.to).includes(lc(t.to!)) || effective({ what: "x", items: [s.to] }).items.some((x) => itemCovers(x, canonTag(t.to!))));
+  return scoped;
+}
+
+/** A soft rule (or a note) found: a saved rule of that person whose quote says it, or whose items cover it. */
+export function softSaved(c: Ctx, t: TruthRule, rules: SavedRule[]): SavedRule[] {
+  const structural = t.what === "note" ? [] : ruleSaved(c, t, rules);
+  if (structural.length) return structural;
+  return rules.filter((s) => whoOk(c, t, s) && (t.quote.test(s.quote) || t.quote.test(JSON.stringify(s.items ?? [])) || (!!t.items?.length && (s.items ?? []).some((i) => t.items!.some((ti) => itemCovers(i, ti) || itemCovers(ti, i))))));
+}
+
+/** A saved rule the family said: it loosely matches a truth rule or a noted item (same person, the words or an item). */
+function explained(c: Ctx, s: SavedRule): boolean {
+  for (const t of c.h.truth.rules) {
+    if (t.who && !(s.who && sameName(t.who, s.who))) continue;
+    if (t.quote.test(s.quote)) return true;
+    if (t.what === "fasting" && s.what === "fasting") return true;
+    const ti = effective(t).items, si = effective(s).items;
+    if (si.some((a) => ti.some((b) => itemCovers(a, b) || itemCovers(b, a)))) return true;
+  }
+  return (c.h.truth.noted ?? []).some((n) => (!n.who || (s.who && sameName(n.who, s.who))) && n.re.test(s.quote));
+}
+
+export function scoreSetup(h: Household, s: SetupOut, o: { transcript?: string[] } = {}): SetupScore {
+  const t = h.truth, rates: Rates = {}, info: Rates = {}, notes: string[] = [];
+  const add = (field: string, ok: boolean, why?: string, into = rates) => {
+    const r = (into[field] ??= [0, 0]); r[1]++; if (ok) r[0]++; else if (why) notes.push(`${field}: ${why}`);
   };
-  // People
-  add("people", t.people.length === s.people.length && t.people.every((p) => s.people.some((x) => sameName(x.name, p.name) && x.group === p.group)),
-    JSON.stringify(s.people.map((p) => `${p.name}/${p.group}`)));
-  // The cook
-  if (t.cook) {
-    add("cook_days", !!s.cook && sameName(s.cook.name, t.cook.name) && daysEq(t.cook.days, s.cook.days), JSON.stringify(s.cook && { name: s.cook.name, days: s.cook.days }));
-    add("cook_times", !!s.cook && s.cook.visits.length === t.cook.visits.length && t.cook.visits.every((v) => s.cook!.visits.some((x) => x.at === v.at && setEq(v.meals, x.meals ?? []))),
-      `${JSON.stringify(s.cook?.visits)} (want ${JSON.stringify(t.cook.visits)})`);
-  } else add("cook_days", !s.cook || t.people.some((p) => sameName(p.name, s.cook!.name)), `a paid cook saved: ${s.cook?.name}`);
-  // Who cooks on the cook's days off (or every day, with no cook)
-  for (const c of t.homeCook) {
-    const off = c.days.filter((d) => !t.cook?.days.includes(d));
-    if (!off.length) continue;
-    const ok = t.cook
-      ? off.every((d) => s.rules.some((r) => isHomeCookNote(r) && (r.days ?? []).includes(d) && new RegExp(`\\b${c.by}\\b`, "i").test(r.note ?? "")))
-      : (!!s.cook && sameName(s.cook.name, c.by)) || s.rules.some((r) => new RegExp(`\\b${c.by}\\b`, "i").test(r.note ?? "") && /cook/i.test(r.note ?? ""));
-    add("home_cook", ok, `${c.by} on ${off.join(",")}: ${JSON.stringify(s.rules.filter(isHomeCookNote).map((r) => `${r.days?.join(",")} ${r.note}`))}`);
-  }
-  // Extra slots
-  const matched = new Set<string>();
-  for (const ts of t.extraSlots) {
-    const got = s.extraSlots.find((x) => x.name.toLowerCase() === ts.name.toLowerCase()) ?? s.extraSlots.find((x) => ts.match.test(x.name));
-    add("slots_present", !!got, `${ts.name} missing`);
+  const required = t.slots.filter((x) => !x.optional);
+  const map = slotMap(t.slots, s.slots);
+  const back = new Map([...map].map(([a, b]) => [b, a]));
+  const c: Ctx = { h, map, back };
+  const everyone = t.people.map((p) => p.name);
+
+  // ── Slots ──
+  for (const ts of required) {
+    const name = map.get(ts.name), got = s.slots.find((x) => x.name === name);
+    add("slots_present", !!got, `${ts.name} missing (saved: ${s.slots.map((x) => x.name).join(", ")})`);
     if (!got) continue;
-    matched.add(got.name);
-    add("slot_days", daysEq(ts.days, got.days), `${got.name} days ${JSON.stringify(got.days ?? "every day")}`);
-    add("slot_for", ts.for ? namesEq(ts.for, got.for ?? []) : !got.for?.length, `${got.name} for ${JSON.stringify(got.for ?? "everyone")}`);
+    add("slot_kind", got.kind === ts.kind && (ts.kind !== "addon" || (!!got.addon_of && lc(got.addon_of) === lc(map.get(ts.addon_of!) ?? ts.addon_of!))),
+      `${got.name}: ${got.kind}${got.addon_of ? ` of ${got.addon_of}` : ""} (want ${ts.kind}${ts.addon_of ? ` of ${ts.addon_of}` : ""})`);
+    const want = ts.usual_people ?? [];
+    const peopleOk = want.length ? sameNames(want, got.usual_people) : !got.usual_people.length || sameNames(everyone, got.usual_people);
+    add("slot_people", peopleOk, `${got.name} for ${JSON.stringify(got.usual_people)} (want ${want.length ? JSON.stringify(want) : "everyone"})`);
+    add("slot_days", sameDays(ts.days, got.days), `${got.name} on ${JSON.stringify(got.days)} (want ${JSON.stringify(ts.days ?? "every day")})`);
+    const sk = (xs: { day: string; skip: string }[] = []) => xs.map((x) => `${dayOf(x.day)} ${x.skip}`);
+    add("skip_days", sameSet(sk(ts.skip_days), sk(got.skip_days)), `${got.name} skips ${JSON.stringify(sk(got.skip_days))} (want ${JSON.stringify(sk(ts.skip_days))})`);
   }
-  add("no_extra_slots", s.extraSlots.every((x) => matched.has(x.name)), `unexpected ${JSON.stringify(s.extraSlots.filter((x) => !matched.has(x.name)).map((x) => x.name))}`);
-  // Meals ordered in or eaten out
-  const oi = (xs: { day: string; slot: string }[]) => xs.map((o) => `${o.day} ${o.slot}`.toLowerCase()).sort().join("|");
-  add("order_in", oi(t.orderIn) === oi(s.orderIn), `${JSON.stringify(s.orderIn.map((o) => `${o.day} ${o.slot}`))} (want ${JSON.stringify(t.orderIn.map((o) => `${o.day} ${o.slot}`))})`);
-  // Rules
-  for (const hr of t.hardRules) add("hard_rules", hardRuleSaved(h, hr, s.rules), `missing: ${hr.title}`);
-  const unsaid = s.rules.filter((r) => !isHomeCookNote(r) && !explained(h, r));
-  add("no_unsaid_rules", !unsaid.length, `not said: ${JSON.stringify(unsaid)}`);
-  for (const n of t.softNotes) add("soft_notes", softFound(n, s.rules), `missing: ${n.who ?? "house"}: ${n.text}`);
-  // A soft note kept soft: not turned into a rule the planner enforces at every meal ("less oil" as never oil).
-  for (const n of t.softNotes) {
-    const hard = s.rules.filter((r) => ["avoid", "only", "cap"].includes(r.kind) && (!n.who || (r.who && sameName(n.who, r.who))) && n.re.test(JSON.stringify([r.note ?? "", r.items ?? [], r.to ?? ""])));
-    add("soft_kept_soft", !hard.length, `${n.who ?? "house"}: "${n.text}" saved as ${hard.map((r) => `${r.kind} ${JSON.stringify(r.items ?? [])}`).join(", ")}`);
-  }
-  for (const n of t.softNotes.filter((x) => x.often))
-    add("rule_frequency", s.rules.some((r) => (!n.who || (r.who && sameName(n.who, r.who))) && n.re.test(JSON.stringify([r.note ?? "", r.items ?? [], r.to ?? ""]))
-      && (r.often === n.often || (!!n.per_week && r.per_week != null && r.per_week >= n.per_week[0] && r.per_week <= n.per_week[1]))),
-      `${n.who}: "${n.text}" saved without often=${n.often}`);
-  // Dishes
-  const wrong: string[] = [];
-  for (const d of s.dishes) {
-    if (!d.for?.length) continue;
-    const td = truthDishOf(d.name, t.dishes);
-    if (!td?.for) wrong.push(`${d.name} [${d.for.join("+")}]`);
-  }
-  add("dish_no_wrong_restriction", !wrong.length, `restricted though everyone's: ${wrong.join(", ")}`);
-  for (const td of t.dishes.filter((x) => x.for)) {
-    const got = s.dishes.find((d) => truthDishOf(d.name, t.dishes) === td);
-    add("personal_dishes", !!got && namesEq(td.for, got.for ?? []), `${td.name} for ${td.for!.join("+")}: ${got ? `saved for ${JSON.stringify(got.for ?? "everyone")}` : "not saved"}`);
-  }
-  for (const td of t.dishes) {
-    const got = s.dishes.find((d) => truthDishOf(d.name, t.dishes) === td);
-    add("dish_coverage", !!got);
-    if (got) add("dish_slots", td.slots.some((ts) => got.slots.some((x) => slotOk(h, ts, x))), `${td.name} at ${got.slots.join(",")} (want ${td.slots.join(",")})`);
-    if (td.often || td.per_week || td.days) {
-      const ok = !!got && (!td.often || got.often === td.often || (oftenMax(td.often) !== null && got.per_week !== undefined && got.per_week <= oftenMax(td.often)!))
-        && (!td.per_week || got.per_week === td.per_week) && (!td.days || setEq(td.days, got.days ?? []));
-      add("dish_frequency", ok, `${td.name} (${[td.often, td.per_week && `${td.per_week}/wk`, td.days?.join(",")].filter(Boolean).join(", ")}): ${got ? `saved ${JSON.stringify({ often: got.often, per_week: got.per_week, days: got.days })}` : "not saved"}`);
+  const optionalNames = new Set(t.slots.filter((x) => x.optional).map((x) => map.get(x.name)).filter(Boolean));
+  const extra = s.slots.filter((x) => !back.has(x.name) && !optionalNames.has(x.name));
+  add("no_extra_slots", !extra.length, `not said: ${extra.map((x) => x.name).join(", ")}`);
+
+  // ── Weekday attendance (when the adapter can read it) ──
+  if (s.attendance) {
+    for (const ts of required.filter((x) => x.kind === "main" && (x.name === "Lunch" || t.away.some((a) => a.slots.includes(x.name))))) {
+      const got = s.attendance[map.get(ts.name) ?? ts.name];
+      for (const day of WEEK) {
+        const want = weeklyPeople(h, ts, day), have = got?.[day];
+        add("attendance", !!have && sameNames(want, have), `${ts.name} ${day}: ${JSON.stringify(have)} (want ${JSON.stringify(want)})`);
+      }
     }
   }
-  // Meal examples: one for each main meal the family described
-  for (const slot of ["Breakfast", "Lunch", "Dinner"]) {
-    if (!t.examples.some((e) => e.slot === slot)) continue;
-    add("meal_examples", s.examples.some((e) => e.slot.toLowerCase() === slot.toLowerCase()), `no ${slot} example`);
+  add("lunch_unclear", sameNames(t.lunchUnclear ?? [], s.lunch_unclear), `asked about ${JSON.stringify(s.lunch_unclear)} (want ${JSON.stringify(t.lunchUnclear ?? [])})`);
+
+  // ── Cook and family cooks ──
+  if (t.cook) {
+    add("cook_days", !!s.cook && sameName(s.cook.name, t.cook.name) && sameDays(t.cook.days, s.cook.days), JSON.stringify(s.cook && { name: s.cook.name, days: s.cook.days }));
+    const visitsOk = !!s.cook && s.cook.visits.length === t.cook.visits.length && t.cook.visits.every((v) => s.cook!.visits.some((x) => x.at === v.at && sameSet(v.meals.map(lc), (x.meals ?? []).map(lc))));
+    add("cook_times", visitsOk, `${JSON.stringify(s.cook?.visits)} (want ${JSON.stringify(t.cook.visits)})`);
+  } else add("cook_days", !s.cook || t.people.some((p) => sameName(p.name, s.cook!.name)), `a paid cook saved: ${s.cook?.name}`);
+  for (const fc of t.familyCooks) {
+    const days = fc.days.filter((d) => !t.cook?.days.includes(d));
+    const ok = days.every((d) => s.family_cooks.some((x) => sameName(x.person, fc.person) && x.days.map(dayOf).includes(d)));
+    add("family_cooks", ok, `${fc.person} on ${days.join(",")}: ${JSON.stringify(s.family_cooks)}`);
   }
-  return { rates, notes };
+
+  // ── Library ──
+  const said = t.library.filter((d) => !d.unsaid);
+  // Saved rows are recognised among every truth dish (an unsaid "Curd" is not "Curd rice"); only said ones are required.
+  const names = [...new Set(t.library.map((d) => d.name))];
+  const rowsOf = (name: string) => s.library.filter((x) => dishNameOf(x.name, names) === name);
+  const slotsOfTruth = (name: string) => t.library.filter((d) => d.name === name).flatMap((d) => [d.slot, ...(d.alsoSlots ?? [])]).map(lc);
+  const kindOf = (slot: string) => t.slots.find((x) => lc(x.name) === lc(slot))?.kind ?? "main";
+  for (const name of new Set(said.map((d) => d.name))) add("dish_coverage", rowsOf(name).length > 0, undefined, info);
+  for (const d of said) {
+    const rows = rowsOf(d.name);
+    if (!rows.length) continue;
+    const at = rows.filter((x) => [d.slot, ...(d.alsoSlots ?? [])].some((y) => lc(truthSlotName(c, x.slot)) === lc(y)));
+    add("placement", at.length > 0, `${d.name} at ${rows.map((x) => x.slot).join(",")} (want ${d.slot})`);
+    // A person's own dish (a custom or add-on slot's) is saved there and not on the shared slot.
+    if (kindOf(d.slot) !== "main") {
+      const shared = rows.filter((x) => kindOf(truthSlotName(c, x.slot)) === "main" && !slotsOfTruth(d.name).includes(lc(truthSlotName(c, x.slot))));
+      add("personal_placement", at.length > 0 && !shared.length, `${d.name} (${d.slot}'s) saved at ${rows.map((x) => x.slot).join(",")}`);
+    }
+    if (d.frequency || d.days) {
+      const row = at[0] ?? rows[0];
+      add("dish_frequency", sameFrequency(row.frequency, d.frequency) && (!d.days || sameDays(d.days, row.days)) && (!!d.days || !row.days?.length),
+        `${d.name}: saved ${JSON.stringify({ frequency: row.frequency, days: row.days })} (want ${JSON.stringify({ frequency: d.frequency ?? null, days: d.days ?? null })})`);
+    }
+  }
+  // Every saved row of a family dish on one of its own slots; a shared dish never saved as a person's own.
+  for (const x of s.library) {
+    const name = dishNameOf(x.name, names);
+    if (!name) continue;
+    const slot = lc(truthSlotName(c, x.slot));
+    add("rows_on_right_slot", slotsOfTruth(name).includes(slot), `${x.name} saved at ${x.slot} (want ${slotsOfTruth(name).join(",")})`);
+    if (kindOf(slot) !== "main" && !slotsOfTruth(name).includes(slot)) add("no_wrong_personal", false, `${x.name} saved as ${x.slot}'s`);
+    const td = t.library.find((d) => d.name === name && lc(d.slot) === slot);
+    if (td && !td.frequency && !td.days) add("no_unsaid_frequency", !x.frequency && !x.days?.length, `${x.name} at ${x.slot} saved with ${JSON.stringify({ frequency: x.frequency, days: x.days })}`);
+  }
+  if (!rates.no_wrong_personal) add("no_wrong_personal", true);
+
+  // ── Rules ──
+  for (const r of t.rules) {
+    if (r.hardAny) {
+      const got = ruleSaved(c, r, s.rules).filter((x) => r.per_meal == null || x.per_meal === r.per_meal);
+      add("soft_rules", got.length > 0 || softSaved(c, r, s.rules).some((x) => r.per_meal == null || x.per_meal === r.per_meal), `missing: ${r.title}`);
+    } else if (r.hard) {
+      const got = ruleSaved(c, r, s.rules);
+      add("hard_rules", got.length > 0, `missing: ${r.title}`);
+      if (got.length) add("hard_soft", got.every((x) => x.hard), `${r.title} saved as soft`);
+    } else {
+      const got = softSaved(c, r, s.rules);
+      add("soft_rules", got.length > 0, `missing: ${r.who ?? "house"}: ${r.title}`);
+      if (got.length) add("hard_soft", got.some((x) => !x.hard), `${r.title} saved as hard: ${JSON.stringify(got.map((x) => `${x.what} ${JSON.stringify(x.items)}`))}`);
+      if (got.length && r.frequency) add("rule_frequency", got.some((x) => sameFrequency(x.frequency, r.frequency)), `${r.title}: frequency ${JSON.stringify(got.map((x) => x.frequency))} (want ${r.frequency})`);
+    }
+  }
+  const unsaid = s.rules.filter((x) => !explained(c, x));
+  add("no_unsaid_rules", !unsaid.length, `not said: ${JSON.stringify(unsaid.map((x) => ({ what: x.what, who: x.who, items: x.items, quote: x.quote })))}`);
+  for (const x of s.rules.filter((y) => y.hard)) add("hard_no_frequency", !x.frequency, `hard ${x.what} ${JSON.stringify(x.items)} saved with frequency ${x.frequency}`);
+  if (o.transcript) {
+    const words = familyWords(h, o.transcript);
+    for (const x of s.rules) add("rule_quotes", !!x.quote.trim() && words.includes(normWords(x.quote)), `quote not in their words: "${x.quote}"`);
+  }
+  for (const n of t.noted ?? []) {
+    const kept = s.unplaced.some((u) => n.re.test(`${u.text} ${u.quote ?? ""}`)) || s.rules.some((x) => n.re.test(x.quote) && !x.days?.length && (!n.who || (!!x.who && sameName(n.who, x.who))));
+    const invented = s.rules.some((x) => x.what === "fasting" && n.re.test(x.quote) && !!x.days?.length && x.days.every((d) => WEEK.includes(dayOf(d))));
+    add("noted", kept && !invented, invented ? `${n.id} saved as a weekday fast` : `${n.id} not kept`);
+  }
+
+  // ── Seed history ──
+  for (const slot of [...new Set(t.seed.map((x) => x.slot))]) {
+    const saved = map.get(slot) ?? slot;
+    add("seed_present", s.seed.some((x) => lc(x.slot) === lc(saved) && x.dishes.length > 0), `no seed for ${slot}`);
+  }
+  for (const row of s.seed) {
+    const slot = truthSlotName(c, row.slot);
+    const own = row.dishes.filter((d) => { const n = dishNameOf(d, t.library.map((x) => x.name)); return !!n && slotsOfTruth(n).includes(lc(slot)); });
+    add("seed_on_slot", own.length * 2 >= row.dishes.length, `${row.slot} seed ${JSON.stringify(row.dishes)}: mostly not ${row.slot} dishes`);
+  }
+  return { rates, info, notes };
 }
 
 /** Field rates summed over households. */
@@ -150,3 +236,4 @@ export function totals(scores: Rates[]): Rates {
   return out;
 }
 export const pct = ([p, n]: [number, number]) => (n ? `${Math.round((100 * p) / n)}% (${p}/${n})` : "n/a");
+export { MAIN_SLOTS };

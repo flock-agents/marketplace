@@ -1,7 +1,7 @@
 // 7. Young working couple, long hours: a cook on weekdays only, one visit that makes lunch and dinner (no breakfast);
 // weekends mostly out or ordered in (Saturday lunch out, Saturday dinner and Sunday lunch ordered in); high protein for one;
 // she eats no red meat. Frequency words: eggs every morning for Nikhil, biryani once a month.
-import { avoid, SCHOOL, WEEK, type Household } from "../lib/truth";
+import { avoid, dish, mains, note, SCHOOL, WEEK, type Household } from "../lib/truth";
 
 export const h7: Household = {
   id: "h7-menon", title: "Young couple, weekday cook one visit (lunch+dinner), weekends out, high protein",
@@ -12,6 +12,8 @@ export const h7: Household = {
     "household.help": [{ role: "cook", name: "Rekha", days: "Mon-Fri", times: "10am", meals: ["Lunch", "Dinner"] }],
     "household.weekday": "Both of us out 9 to 9 most days. Lunch box from home, dinner reheated.",
     "household.mealsBy": "Tanya", "household.groceriesBy": "Nikhil",
+    "household.weekly": [{ person: "Nikhil", where: "office", weekdays: SCHOOL, from: "09:00", to: "21:00", lunch: "carries" },
+      { person: "Tanya", where: "office", weekdays: SCHOOL, from: "09:00", to: "21:00", lunch: "carries" }],
   },
   groceryApps: ["Zepto", "Blinkit"],
   facts: [
@@ -34,22 +36,30 @@ export const h7: Household = {
   truth: {
     people: [{ name: "Nikhil", group: "adult" }, { name: "Tanya", group: "adult" }],
     cook: { name: "Rekha", days: SCHOOL, visits: [{ at: "11:00", meals: ["Lunch", "Dinner"] }] },
-    homeCook: [{ days: ["Sat", "Sun"], slots: ["Breakfast"], by: "Nikhil" }, { days: ["Sun"], slots: ["Dinner"], by: "Tanya" }],
-    extraSlots: [],
-    orderIn: [{ day: "Sat", slot: "Lunch", note: "eaten out" }, { day: "Sat", slot: "Dinner", note: "ordered in" }, { day: "Sun", slot: "Lunch", note: "ordered in" }],
-    hardRules: [avoid("no_red_meat_tanya", "Tanya: no red meat", ["mutton", "lamb", "beef", "pork", "goat"], { who: "Tanya" })],
-    softNotes: [{ id: "high_protein", who: "Nikhil", text: "high protein", re: /protein/i }],
-    dishes: [
-      { name: "Eggs", slots: ["Breakfast"], for: ["Nikhil"], often: "usually" }, { name: "Oats", slots: ["Breakfast"], for: ["Tanya"] }, { name: "Smoothie", slots: ["Breakfast"], for: ["Tanya"] },
-      { name: "Toast", slots: ["Breakfast"], often: "sometimes" },
-      { name: "Chicken curry", slots: ["Lunch"] }, { name: "Dal", slots: ["Lunch", "Dinner"] }, { name: "Rice", slots: ["Lunch"] }, { name: "Sabzi", slots: ["Lunch", "Dinner"] }, { name: "Salad", slots: ["Lunch"] },
-      { name: "Paneer", slots: ["Lunch", "Dinner"] }, { name: "Roti", slots: ["Dinner"] }, { name: "Chicken", slots: ["Dinner"] }, { name: "Biryani", slots: ["Dinner"], often: "rarely" },
+    familyCooks: [{ person: "Nikhil", days: WEEK }, { person: "Tanya", days: ["Sun"] }],
+    slots: [
+      ...mains({ Lunch: [{ day: "Sat", skip: "eaten_out" }, { day: "Sun", skip: "ordered_in" }], Dinner: [{ day: "Sat", skip: "ordered_in" }] }),
+      { name: "Nikhil's breakfast", kind: "addon", addon_of: "Breakfast", usual_people: ["Nikhil"], match: /nikhil/i, optional: true },
+      { name: "Tanya's breakfast", kind: "addon", addon_of: "Breakfast", usual_people: ["Tanya"], match: /tanya/i, optional: true },
     ],
-    examples: [
-      { slot: "Lunch", words: "chicken curry or dal, rice, a sabzi, salad", parts: 4, staple: /rice/i },
-      { slot: "Dinner", words: "roti with chicken or paneer and a sabzi", parts: 3, staple: /roti|chapati|phulka/i },
+    away: [],
+    library: [
+      ...dish("Eggs", ["Breakfast"], { frequency: "daily", alsoSlots: ["Nikhil's breakfast"] }), ...dish("Oats", ["Breakfast"], { alsoSlots: ["Tanya's breakfast"] }),
+      ...dish("Smoothie", ["Breakfast"], { alsoSlots: ["Tanya's breakfast"] }), ...dish("Toast", ["Breakfast"], { frequency: "sometimes" }),
+      ...dish("Chicken curry", ["Lunch"]), ...dish("Dal", ["Lunch"]), ...dish("Rice", ["Lunch"]), ...dish("Sabzi", ["Lunch", "Dinner"]), ...dish("Salad", ["Lunch"]),
+      ...dish("Paneer", ["Lunch", "Dinner"]), ...dish("Roti", ["Dinner"]), ...dish("Chicken", ["Dinner"]), ...dish("Dal", ["Dinner"], { frequency: "sometimes" }),
+      ...dish("Biryani", ["Dinner"], { frequency: "rarely", contains: ["chicken"] }),
+    ],
+    rules: [
+      avoid("no_red_meat_tanya", "Tanya: no red meat", ["red_meat"], /red meat|mutton/i, { who: "Tanya" }),
+      note("high_protein", "high protein for Nikhil", "Nikhil", /protein/i),
+    ],
+    seed: [
+      { slot: "Breakfast", dishes: ["Eggs", "Oats"] }, { slot: "Breakfast", dishes: ["Eggs", "Smoothie"] }, { slot: "Breakfast", dishes: ["Eggs", "Toast"] },
+      { slot: "Lunch", dishes: ["Chicken curry", "Rice", "Sabzi", "Salad"] }, { slot: "Lunch", dishes: ["Dal", "Rice", "Sabzi", "Salad"] }, { slot: "Lunch", dishes: ["Paneer", "Rice", "Sabzi", "Salad"] },
+      { slot: "Dinner", dishes: ["Roti", "Chicken", "Sabzi"] }, { slot: "Dinner", dishes: ["Roti", "Paneer", "Sabzi"] }, { slot: "Dinner", dishes: ["Roti", "Dal", "Sabzi"] },
     ],
     judgeNotes: ["Rekha cooks lunch and dinner at one 11am visit on weekdays; they make breakfast.", "Saturday lunch out; Saturday dinner and Sunday lunch ordered in; Tanya cooks a simple Sunday dinner.",
-      "Nikhil high protein; Tanya no red meat."],
+      "Nikhil high protein, eggs every morning; Tanya no red meat."],
   },
 };
