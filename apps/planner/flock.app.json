@@ -680,16 +680,16 @@
       ],
       "answer": [
         {
-          "operation": "set_person"
+          "operation": "set_house_rules"
         },
         {
-          "operation": "set_house_rules"
+          "operation": "set_person"
         }
       ],
       "required": false,
       "default": "assume",
       "assume": "I assumed the elders eat what everyone eats.",
-      "help": "Only what the diet answer did not say. save one set_person { name, diet } per elder named, diet in their words with dietElders kept in it; set_house_rules { add: true, rules }: only the rules this reply states: \"fasts Thursday, only sabudana khichdi or fruit\": {\"kind\":\"only\",\"who\":\"Lakshmi\",\"days\":[\"Thu\"],\"slots\":[\"Breakfast\",\"Lunch\",\"Dinner\"],\"items\":[\"sabudana khichdi\",\"fruit\"]}; \"fasts Thursday till evening\": {\"kind\":\"fasting\",\"who\":\"Lakshmi\",\"days\":[\"Thu\"],\"slots\":[\"Breakfast\",\"Lunch\"],\"note\":\"light dinner after\"}; \"no onion or garlic\": {\"kind\":\"avoid\",\"who\":\"Lakshmi\",\"items\":[\"onion\",\"garlic\"]}; \"low salt\": other with who. \"Same as everyone\": no save. Kind: \"only\" just for \"only\"/\"must\"/\"nothing but\"; \"less X\", \"X is good for him\", \"X instead\": swap, never only; \"no X\": avoid."
+      "help": "Only what the diet answer did not say. save BOTH: set_house_rules { add: true, rules } with every fast, limit, avoid or swap said (the plan checks only rules, never the diet text), and set_person { name, diet } per elder named (diet in their words, dietElders kept). Rules: \"fasts Thursday till evening\": {\"kind\":\"fasting\",\"who\":\"Nani\",\"days\":[\"Thu\"],\"slots\":[\"Breakfast\",\"Lunch\"],\"note\":\"light dinner after\"}; \"fasts Thursday, only fruit\": {\"kind\":\"only\",\"who\":\"Nani\",\"days\":[\"Thu\"],\"slots\":[\"Breakfast\",\"Lunch\",\"Dinner\"],\"items\":[\"fruit\"]}; \"no onion or garlic\": {\"kind\":\"avoid\",\"who\":\"Nani\",\"items\":[\"onion\",\"garlic\"]}; \"less salt\": {\"kind\":\"other\",\"who\":\"Nani\",\"note\":\"less salt\"}. \"Same as everyone\": no save. \"only\" just for \"only\"/\"must\"/\"nothing but\"; \"less X\", \"X instead\": swap."
     },
     {
       "id": "elders",
@@ -701,16 +701,16 @@
       ],
       "answer": [
         {
-          "operation": "set_person"
+          "operation": "set_house_rules"
         },
         {
-          "operation": "set_house_rules"
+          "operation": "set_person"
         }
       ],
       "required": false,
       "default": "assume",
       "assume": "I assumed the elders eat what everyone eats.",
-      "help": "Only what the diet answer did not say. save one set_person { name, diet } per elder named, diet in their words with dietElders kept in it; set_house_rules { add: true, rules }: only the rules this reply states: \"fasts Thursday, only sabudana khichdi or fruit\": {\"kind\":\"only\",\"who\":\"Lakshmi\",\"days\":[\"Thu\"],\"slots\":[\"Breakfast\",\"Lunch\",\"Dinner\"],\"items\":[\"sabudana khichdi\",\"fruit\"]}; \"fasts Thursday till evening\": {\"kind\":\"fasting\",\"who\":\"Lakshmi\",\"days\":[\"Thu\"],\"slots\":[\"Breakfast\",\"Lunch\"],\"note\":\"light dinner after\"}; \"no onion or garlic\": {\"kind\":\"avoid\",\"who\":\"Lakshmi\",\"items\":[\"onion\",\"garlic\"]}; \"low salt\": other with who. \"Same as everyone\": no save. Kind: \"only\" just for \"only\"/\"must\"/\"nothing but\"; \"less X\", \"X is good for him\", \"X instead\": swap, never only; \"no X\": avoid."
+      "help": "Only what the diet answer did not say. save BOTH: set_house_rules { add: true, rules } with every fast, limit, avoid or swap said (the plan checks only rules, never the diet text), and set_person { name, diet } per elder named (diet in their words, dietElders kept). Rules: \"fasts Thursday till evening\": {\"kind\":\"fasting\",\"who\":\"Nani\",\"days\":[\"Thu\"],\"slots\":[\"Breakfast\",\"Lunch\"],\"note\":\"light dinner after\"}; \"fasts Thursday, only fruit\": {\"kind\":\"only\",\"who\":\"Nani\",\"days\":[\"Thu\"],\"slots\":[\"Breakfast\",\"Lunch\",\"Dinner\"],\"items\":[\"fruit\"]}; \"no onion or garlic\": {\"kind\":\"avoid\",\"who\":\"Nani\",\"items\":[\"onion\",\"garlic\"]}; \"less salt\": {\"kind\":\"other\",\"who\":\"Nani\",\"note\":\"less salt\"}. \"Same as everyone\": no save. \"only\" just for \"only\"/\"must\"/\"nothing but\"; \"less X\", \"X instead\": swap."
     },
     {
       "id": "rules",
