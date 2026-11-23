@@ -257,6 +257,11 @@ function groupIntoBlocks(rows: ClaimedJournalEntry[]): Block[] {
 const addressList = (v: unknown): string[] | undefined =>
   Array.isArray(v) ? v.filter((a): a is string => typeof a === "string" && a.trim().length > 0).map((a) => a.trim()) : undefined;
 
+/** A Gmail thread read as the text a gathered thread parks on its journal rows (an op's on-demand read keeps it so). */
+export function threadText(thread: unknown): string {
+  return renderSegments(segmentsFromThread(thread));
+}
+
 function segmentsFromThread(thread: any): Segment[] {
   const messages = thread && Array.isArray(thread.messages) ? thread.messages : [];
   return messages.map((m: any) => ({

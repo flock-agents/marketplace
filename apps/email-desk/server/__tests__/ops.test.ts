@@ -38,23 +38,32 @@ let published: any[];
 let turnAnswer: (() => any) | null;
 let released: string[];
 let getThreadTurnIds: Array<string | undefined>;
+/** Set: Gmail answers getThread per mailbox and thread (`account|thread`); a pair it lacks reads as no such thread. */
+let gmailByThread: Map<string, any> | null;
+let turnsAsked: string[];
 
 function platform(): any {
   return {
     appId: "email-desk", pairedAgent: { id: "ia-1", name: "Inbox Assistant" }, dataDir: "test", configured: true,
     connectors: {
       accounts: async () => accountsAnswer,
-      readTurn: async (account: string) => turnAnswer
+      readTurn: async (account: string) => { turnsAsked.push(account); return turnAnswer
         ? turnAnswer()
-        : { ok: true, data: { turnId: `turn-${account}`, accountId: account, release: async () => { released.push(`turn-${account}`); } } },
+        : { ok: true, data: { turnId: `turn-${account}`, accountId: account, release: async () => { released.push(`turn-${account}`); } } }; },
       exec: async (req: any) => {
         calls.push({ functionName: req.functionName, accountHint: req.accountHint });
         if (req.functionName === "getThread") {
           getThreadTurnIds.push(req.turnId);
           if (gmailFails) return { ok: false, reason: "mailbox busy" };
+          if (gmailByThread) {
+            const tid = String(req.params?.threadId ?? "");
+            return { ok: true, data: gmailByThread.get(`${req.accountHint}|${tid}`) ?? { threadId: tid, subject: "", messages: [], incomplete: true, reason: "print view returned no messages" } };
+          }
           return { ok: true, data: gmailThread };
         }
         if (req.functionName === "createReplyDraft") return { ok: true, data: { draftId: "gm-1", draftMessageId: "m-1", bodyAsSaved: String(req.params.body) } };
+        // Gmail still holds the draft it wrote.
+        if (req.functionName === "getDraft") return { ok: true, data: { draftId: req.params.draftId, body: "held" } };
         return { ok: false, reason: `unexpected ${req.functionName}` };
       },
     },
@@ -87,7 +96,7 @@ beforeEach(() => {
   _setLogForTesting(() => {});
   _setOpsLogForTesting(() => {});
   calls = []; memoryQueries = []; published = [];
-  gmailFails = false; turnAnswer = null; released = []; getThreadTurnIds = [];
+  gmailFails = false; turnAnswer = null; released = []; getThreadTurnIds = []; gmailByThread = null; turnsAsked = [];
   gmailThread = {
     threadId: T1, subject: "Re: Tuesday?",
     messages: [
@@ -173,6 +182,8 @@ describe("reply_context", () => {
     expect(calls[0]).toEqual({ functionName: "getThread", accountHint: A2 });
     // Named explicitly, the same mailbox answers; named wrongly, it is not that mailbox's thread.
     expect((await call("reply_context", { threadId: T2, accountId: A2 })).status).toBe(200);
+    // Named wrongly: A1's journal does not hold it, and A1's Gmail has no such thread.
+    gmailByThread = new Map([[`${A2}|${T2}`, gmailThread]]);
     const wrong = await call("reply_context", { threadId: T2, accountId: A1 });
     expect(wrong.status).toBe(400);
     expect(wrong.json.code).toBe("NOT_DESK_THREAD");
@@ -199,10 +210,16 @@ describe("reply_context", () => {
     expect(released).toEqual([]);
   });
 
-  test("a thread the journal does not hold is NOT_DESK_THREAD and Gmail is not asked", async () => {
+  test("a thread none of this person's mailboxes holds is NOT_DESK_THREAD, in plain words", async () => {
+    gmailByThread = new Map();
     const out = await call("reply_context", { threadId: "nope" });
+    expect(out.status).toBe(400);
     expect(out.json.code).toBe("NOT_DESK_THREAD");
-    expect(calls).toHaveLength(0);
+    expect(out.json.error).toBe("There is no such email thread in this person's Gmail, so nothing was written.");
+    // Each of the copy's own mailboxes was asked once, under its read turn; nothing was journaled.
+    expect(calls).toEqual([{ functionName: "getThread", accountHint: A1 }, { functionName: "getThread", accountHint: A2 }]);
+    expect(released).toEqual([`turn-${A1}`, `turn-${A2}`]);
+    expect(db.query("SELECT COUNT(*) AS n FROM ingest_events WHERE thread_key = 'nope'").get()).toEqual({ n: 0 });
   });
 
   test("Gmail cannot be read: the stored thread answers", async () => {
@@ -219,6 +236,101 @@ describe("reply_context", () => {
     gmailThread = { threadId: T1, subject: "Quick question", messages: [{ from: "Asha Rao <asha@acme.com>", to: [ME], date: "d", body: "hi" }] };
     await call("reply_context", { threadId: T1 });
     expect(memoryQueries).toEqual(["asha@acme.com"]);
+  });
+});
+
+describe("an older thread the journal does not hold (the person's own ask)", () => {
+  // Expectations (live 2026-11-23: "reply to contact.gshivashankar@gmail.com about the STK credit invoice", a thread
+  // from 31 Oct, refused NOT_DESK_THREAD): the person's ask works for ANY thread of their own mailbox. Not in the
+  // journal, the op reads it from Gmail once (under the mailbox's read turn, as the copy's own account), keeps it like a
+  // gathered thread, then the usual draft rules apply. Only a thread Gmail does not have, or one named under an account
+  // this copy does not hold, is refused; never a Gmail call with another account.
+  const OLD = "thread-old";
+  const oldThread = {
+    threadId: OLD, subject: "STK credit invoice",
+    messages: [
+      { from: "Ravi K <contact.gshivashankar@gmail.com>", to: [ME], cc: [], date: "Sat, Oct 31, 2026, 10:15 AM", body: "Please send the STK credit invoice for October." },
+    ],
+  };
+
+  test("create_draft: fetched once, kept in the journal, the draft written", async () => {
+    gmailByThread = new Map([[`${A1}|${OLD}`, oldThread]]);
+    const made = await call("create_draft", { threadId: OLD, body: "Hi Ravi, the invoice is attached here today." });
+    expect(made.status).toBe(200);
+    expect(made.json.id).toBeTruthy();
+    const before = calls.slice(0, calls.findIndex((c) => c.functionName === "createReplyDraft"));
+    expect(before).toEqual([{ functionName: "getThread", accountHint: A1 }]);
+    expect(getThreadTurnIds[0]).toBe(`turn-${A1}`);
+    expect(released).toContain(`turn-${A1}`);
+    const draft = calls.find((c) => c.functionName === "createReplyDraft")!;
+    expect(draft.accountHint).toBe(A1);
+    // Kept like a gathered thread: a journal row of A1 with the thread's text and its sender.
+    const row = db.query("SELECT e.actor, e.raw, COALESCE(c.body, e.body) AS body FROM ingest_events e LEFT JOIN ingest_content c USING (source_id, account_id, event_id) WHERE e.account_id = ? AND e.thread_key = ?").get(A1, OLD) as any;
+    expect(JSON.parse(row.actor).email).toBe("contact.gshivashankar@gmail.com");
+    expect(JSON.parse(row.raw).subject).toBe("STK credit invoice");
+    expect(row.body).toContain("Please send the STK credit invoice for October.");
+    expect(db.query("SELECT account_id, thread_id FROM draft_records").all()).toEqual([{ account_id: A1, thread_id: OLD }]);
+  });
+
+  test("then the usual rules: one draft per thread, and no second fetch", async () => {
+    gmailByThread = new Map([[`${A1}|${OLD}`, oldThread]]);
+    const first = await call("create_draft", { threadId: OLD, body: "Hi Ravi, the invoice is attached here today." });
+    calls.length = 0;
+    const second = await call("create_draft", { threadId: OLD, body: "Hi Ravi, sending it now." });
+    expect(second.json.code).toBe("DRAFT_EXISTS");
+    expect(second.json.error).toContain(first.json.id);
+    expect(calls.filter((c) => c.functionName === "createReplyDraft")).toHaveLength(0);
+    expect(calls.filter((c) => c.functionName === "getThread")).toHaveLength(0);
+  });
+
+  test("a placeholder is still refused, and Gmail is not read for it", async () => {
+    gmailByThread = new Map([[`${A1}|${OLD}`, oldThread]]);
+    const out = await call("create_draft", { threadId: OLD, body: "Hi Ravi, the invoice is [AMOUNT]." });
+    expect(out.json.code).toBe("PLACEHOLDER");
+    expect(calls).toHaveLength(0);
+  });
+
+  test("reply_context: fetched once and answered from that read", async () => {
+    gmailByThread = new Map([[`${A1}|${OLD}`, oldThread]]);
+    const { status, json } = await call("reply_context", { threadId: OLD });
+    expect(status).toBe(200);
+    expect(json.thread.subject).toBe("STK credit invoice");
+    expect(json.thread.messages.map((m: any) => m.body)).toEqual(["Please send the STK credit invoice for October."]);
+    expect(calls).toEqual([{ functionName: "getThread", accountHint: A1 }]);
+  });
+
+  test("the thread of the person's other mailbox is found there", async () => {
+    gmailByThread = new Map([[`${A2}|${OLD}`, oldThread]]);
+    const made = await call("create_draft", { threadId: OLD, body: "Hi Ravi, the invoice is attached here today." });
+    expect(made.json.id).toBeTruthy();
+    expect(calls.find((c) => c.functionName === "createReplyDraft")!.accountHint).toBe(A2);
+    expect(db.query("SELECT account_id FROM draft_records").all()).toEqual([{ account_id: A2 }]);
+  });
+
+  test("a thread Gmail does not have is refused, nothing written", async () => {
+    gmailByThread = new Map();
+    const out = await call("create_draft", { threadId: "no-such-thread", body: "Hi Ravi, the invoice is attached here today." });
+    expect(out.status).toBe(400);
+    expect(out.json.code).toBe("NOT_DESK_THREAD");
+    expect(calls.filter((c) => c.functionName === "createReplyDraft")).toHaveLength(0);
+    expect(db.query("SELECT COUNT(*) AS n FROM draft_records").get()).toEqual({ n: 0 });
+  });
+
+  test("a thread named under an account this copy does not hold: refused, no Gmail call, no turn on it", async () => {
+    gmailByThread = new Map([[`acct-someone-else|${OLD}`, oldThread]]);
+    for (const op of ["create_draft", "reply_context"]) {
+      const out = await call(op, { threadId: OLD, accountId: "acct-someone-else", body: "Hi Ravi, the invoice is attached here today." });
+      expect(out.json.code).toBe("NOT_DESK_THREAD");
+    }
+    expect(calls).toHaveLength(0);
+    expect(turnsAsked).toEqual([]);
+  });
+
+  test("Gmail could not be read: GMAIL_FAILED, try again; nothing journaled", async () => {
+    gmailFails = true;
+    const out = await call("create_draft", { threadId: OLD, body: "Hi Ravi, the invoice is attached here today." });
+    expect(out.json.code).toBe("GMAIL_FAILED");
+    expect(db.query("SELECT COUNT(*) AS n FROM ingest_events WHERE thread_key = ?").get(OLD)).toEqual({ n: 0 });
   });
 });
 

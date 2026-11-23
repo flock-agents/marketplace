@@ -10,10 +10,10 @@ import type { PlatformContext } from "@flock/app-sdk";
 import { getStore } from "./store";
 import { THREAD_BODY_SEPARATOR } from "./lib/thread-format";
 import { MEMORY_FACTS, senderOf, threadFromRead, topicTerms, type ContextThread } from "./lib/reply-context";
-import { notDeskThreadRefusal, type DraftRefusal } from "./drafts/rules";
+import type { DraftRefusal } from "./drafts/rules";
 import { getDraftForThread } from "./drafts/records";
-import { deskThreadAccount, type OpCtx } from "./ops";
-import type { ReadTurnResult } from "./platform-ext";
+import type { OpCtx } from "./ops";
+import { readThreadInTurn, resolveDeskThread } from "./desk-thread";
 import { voiceStateFor as crawlVoiceState, type VoiceState } from "./voice/crawl";
 import { newestMessageKey, noteThreadRead, replyAddressingOf } from "./drafts/addressing";
 
@@ -59,46 +59,33 @@ function storedThread(accountId: string, threadId: string): ContextThread | null
   return threadFromRead({ subject: str(raw.subject), messages });
 }
 
-/** One thread read's timeout (gather's THREAD_TIMEOUT_MS): a read, not the write budget of a draft. */
-const READ_TIMEOUT_MS = 90_000;
-export const REPLY_CONTEXT_CONSUMER = "email-desk:reply-context";
+export { REPLY_CONTEXT_CONSUMER } from "./desk-thread";
 
-/** Gmail's read of the thread, under the mailbox's read turn. A turn that is refused (busy, paused, not this person's) or a
- *  failed read answers null, and the caller uses the stored text: the agent's call never waits behind the mailbox. */
-/** Gmail's own read of a thread (getThread under the mailbox's read turn), as it answered; null when it could not be read. */
+/** Gmail's own read of a thread (getThread under the mailbox's read turn), as it answered; null when it could not be read.
+ *  A turn that is refused (busy, paused, not this person's) or a failed read answers null, and the caller uses the stored
+ *  text: the agent's call never waits behind the mailbox. */
 export async function liveThreadRead(platform: PlatformContext, accountId: string, threadId: string): Promise<unknown | null> {
   const live = await liveThread(platform, accountId, threadId);
   return live ? live.read : null;
 }
 
 async function liveThread(platform: PlatformContext, accountId: string, threadId: string): Promise<{ thread: ContextThread; read: unknown } | null> {
-  if (!platform.connectors.readTurn) return null;
-  let turn: ReadTurnResult;
-  try {
-    turn = await platform.connectors.readTurn(accountId, REPLY_CONTEXT_CONSUMER, { skillId: "gmail" });
-  } catch { return null; }
-  if (!turn.ok) return null;
-  try {
-    const r = await platform.connectors.exec<unknown>({
-      skillId: "gmail", functionName: "getThread", params: { threadId }, accountHint: accountId,
-      timeoutMs: READ_TIMEOUT_MS, turnId: turn.data.turnId,
-    });
-    if (!r.ok) return null;
-    const data: any = typeof r.data === "string" ? safeParse(r.data) : r.data;
-    const thread = threadFromRead(data);
-    return thread ? { thread, read: data } : null;
-  } catch { return null; } finally {
-    try { await turn.data.release(); } catch { /* released by its ttl otherwise */ }
-  }
+  const got = await readThreadInTurn(platform, accountId, threadId);
+  return got.status === "found" ? fromRead(got.read) : null;
+}
+
+function fromRead(read: unknown): { thread: ContextThread; read: unknown } | null {
+  const thread = threadFromRead(read);
+  return thread ? { thread, read } : null;
 }
 
 /** The thread (Gmail's live read, else the journal's), and Gmail's read itself when there was one. */
-async function readThread(ctx: OpCtx, accountId: string, threadId: string): Promise<{ thread: ContextThread | null; read: unknown }> {
-  const live = await liveThread(ctx.platform, accountId, threadId);
+async function readThread(ctx: OpCtx, accountId: string, threadId: string, fetched?: unknown): Promise<{ thread: ContextThread | null; read: unknown }> {
+  // A thread just read on demand (desk-thread.ts) is not read again.
+  const live = (fetched !== undefined ? fromRead(fetched) : null) ?? await liveThread(ctx.platform, accountId, threadId);
   return live ?? { thread: storedThread(accountId, threadId), read: null };
 }
 
-const safeParse = (s: string): unknown => { try { return JSON.parse(s); } catch { return null; } };
 
 /** The copy's own address for a mailbox, to tell the person's messages from the sender's. */
 export async function mailboxAddress(platform: PlatformContext, accountId: string): Promise<string> {
@@ -125,11 +112,14 @@ export async function replyContext(
   voiceStateFor: VoiceStateFor = crawlVoiceState,
 ): Promise<ReplyContextAnswer | DraftRefusal> {
   const threadId = str(p.threadId);
-  // A thread of any of this person's mailboxes works: with no accountId, the mailbox the journal holds it in.
-  const accountId = deskThreadAccount(threadId, str(p.accountId));
-  if (!accountId) return notDeskThreadRefusal();
+  // A thread of any of this person's mailboxes works: with no accountId, the mailbox the journal holds it in, else the one
+  // Gmail has it in.
+  // One the journal does not hold is read from Gmail now and kept (desk-thread.ts).
+  const where = await resolveDeskThread(ctx.platform, threadId, str(p.accountId));
+  if ("code" in where) return where;
+  const accountId = where.accountId;
 
-  const got = await readThread(ctx, accountId, threadId);
+  const got = await readThread(ctx, accountId, threadId, where.read);
   const thread = got.thread ?? { subject: "", messages: [] };
   const mailbox = await mailboxAddress(ctx.platform, accountId);
   const sender = senderOf(thread.messages, mailbox);
