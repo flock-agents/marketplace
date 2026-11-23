@@ -1,0 +1,188 @@
+{
+  "name": "Email Desk",
+  "usage": "app",
+  "slug": "email-desk",
+  "type": "managed",
+  "visibility": "headless",
+  "icon": "icon.svg",
+  "description": "Reads your Gmail into your assistant's memory and drafts replies in your voice for you to send. Nothing sends without you.",
+  "bundled": false,
+  "deletable": true,
+  "model": true,
+  "apiPrefix": "/api",
+  "_comment": "Runs OUT OF PROCESS on @flock/app-sdk, one copy per person. Owns that person's raw mail store (account_id kept). The agent drafts through the four declared ops; the send and the platform read ops are served but never declared, so only Flock reaches them.",
+  "processConfig": {
+    "command": "bun run server/index.ts",
+    "healthCheckPath": "/health",
+    "readyPattern": "email-desk listening on",
+    "readyTimeoutMs": 15000,
+    "maxRestarts": 3
+  },
+  "config": {
+    "requires": {
+      "skills": [
+        "gmail"
+      ],
+      "agent": {
+        "required": true,
+        "label": "Agent that drafts your replies",
+        "default": {
+          "pairDefaultAgent": true
+        }
+      }
+    }
+  },
+  "lifecycle": {
+    "initialize": true,
+    "tick": true,
+    "progress": true
+  },
+  "dataStore": {
+    "accountPartitioned": true
+  },
+  "routines": [
+    {
+      "id": "memory-extraction",
+      "name": "Build memory",
+      "description": "Once a day, reads your new mail and extracts durable facts into your assistant's memory. No AI cost beyond the daily extraction; nothing sends.",
+      "trigger": {
+        "connectorId": "gmail",
+        "eventId": "new-mail"
+      },
+      "eventKinds": [
+        "email"
+      ],
+      "executionMode": "app-relay",
+      "handler": "memory-extraction",
+      "configSchema": [
+        {
+          "key": "harvestHour",
+          "type": "number",
+          "label": "Build memory each day at (hour of the day, 0-23)",
+          "default": 5
+        }
+      ],
+      "workSchedule": {
+        "every": "day",
+        "hourKey": "harvestHour"
+      }
+    },
+    {
+      "id": "follow-up",
+      "name": "Follow up on sent mail",
+      "description": "Once a day, finds emails you sent that got no reply in 3 business days and asks your Inbox Assistant to draft a follow-up where one is needed. Nothing sends until you confirm.",
+      "trigger": {
+        "connectorId": "gmail",
+        "eventId": "new-mail"
+      },
+      "eventKinds": [
+        "email"
+      ],
+      "executionMode": "app-relay",
+      "handler": "follow-up",
+      "configSchema": [
+        {
+          "key": "followUpHour",
+          "type": "number",
+          "label": "Check for follow-ups each day at (hour, 0-23)",
+          "default": 8
+        },
+        {
+          "key": "businessDays",
+          "type": "number",
+          "label": "Follow up after this many business days with no reply (0 = the same day)",
+          "default": 3
+        },
+        {
+          "key": "lookbackDays",
+          "type": "number",
+          "label": "Look back this many days of sent mail",
+          "default": 14
+        },
+        {
+          "key": "dailyLimit",
+          "type": "number",
+          "label": "Follow up on at most this many threads a day",
+          "default": 25
+        }
+      ],
+      "workSchedule": {
+        "every": "day",
+        "hourKey": "followUpHour"
+      }
+    }
+  ],
+  "publishedSkills": [
+    {
+      "id": "judge-mail",
+      "name": "Judge mail",
+      "description": "Decides which of your mail needs a reply."
+    },
+    {
+      "id": "write-reply",
+      "name": "Write reply",
+      "description": "Writes a reply in your voice and leaves it as a draft for you to send."
+    }
+  ],
+  "agentInterface": {
+    "instructions": "Use reply_context before writing a reply and create_draft to record it. You never send mail: the person sends it with Send on the card, or by replying send to its line. When they ask for a change, use update_draft.",
+    "operations": [
+      {
+        "name": "reply_context",
+        "description": "Read one thread, what is known about its sender, the person's voice and any existing draft.",
+        "payloadSchema": {
+          "required": [
+            "threadId"
+          ],
+          "properties": {
+            "threadId": "string",
+            "accountId": "string"
+          }
+        }
+      },
+      {
+        "name": "create_draft",
+        "description": "Record a reply to a thread as a draft card. Never sends.",
+        "payloadSchema": {
+          "required": [
+            "threadId",
+            "body"
+          ],
+          "properties": {
+            "threadId": "string",
+            "accountId": "string",
+            "body": "string",
+            "why": "string"
+          }
+        }
+      },
+      {
+        "name": "update_draft",
+        "description": "Change the body of a draft you made, when the person asks.",
+        "payloadSchema": {
+          "required": [
+            "id",
+            "body"
+          ],
+          "properties": {
+            "id": "string",
+            "body": "string"
+          }
+        }
+      },
+      {
+        "name": "discard_draft",
+        "description": "Withdraw a draft's card.",
+        "payloadSchema": {
+          "required": [
+            "id"
+          ],
+          "properties": {
+            "id": "string"
+          }
+        }
+      }
+    ]
+  },
+  "buildCommand": "bun install"
+}
