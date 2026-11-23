@@ -123,6 +123,10 @@ export function createEmailDeskHooks(deps: LifecycleDeps = {}): AppLifecycleHook
 
   /** Mailboxes this process is working now: a sequence row without one of these died with an earlier process. */
   const running = new Set<string>();
+  /** Mailboxes claimed and waiting their turn behind another mailbox's sequence (or running). They are alive: neither the gate
+   *  nor the tick may take them for dead, and neither initialize nor the tick may queue them twice. */
+  const queued = new Set<string>();
+  const busy = (accountId: string) => running.has(accountId) || queued.has(accountId);
   /** One sequence at a time, across calls. */
   let queue: Promise<void> = Promise.resolve();
 
@@ -186,11 +190,13 @@ export function createEmailDeskHooks(deps: LifecycleDeps = {}): AppLifecycleHook
     } finally {
       if (beat) clearInterval(beat);
       running.delete(accountId);
+      queued.delete(accountId);
     }
   }
 
   /** Queue a mailbox's sequence behind any running; resolves when it has run. */
   function enqueue(platform: PlatformContext, mailbox: Mailbox): Promise<void> {
+    queued.add(mailbox.accountId);
     const run = queue.then(() => sequence(platform, mailbox));
     queue = run.catch(() => undefined);
     return run;
@@ -205,7 +211,7 @@ export function createEmailDeskHooks(deps: LifecycleDeps = {}): AppLifecycleHook
         : all;
       const owed: Mailbox[] = [];
       for (const m of wanted) {
-        if (running.has(m.accountId)) continue;
+        if (busy(m.accountId)) continue;
         if (isInitialized(db, m.accountId, now())) {
           // Already read (a moved db, or a finished sequence): not read again from scratch. The row says done.
           await report(ctx.platform, m.accountId, { status: "done", phase: "drafting", doneLabel: SETUP_DONE_LABEL });
@@ -215,6 +221,7 @@ export function createEmailDeskHooks(deps: LifecycleDeps = {}): AppLifecycleHook
       }
       // Claim every owed mailbox up front, so the gate and the panel see all of them while one is worked.
       for (const m of owed) {
+        queued.add(m.accountId);
         const t = now();
         writeStage(db, m.accountId, "sequence", { started_at: t, finished_at: null, outcome: null, last_progress_at: t }, t);
         await report(ctx.platform, m.accountId, { status: "in_progress", phase: "reading", activeLabel: READING_LABEL });
@@ -228,6 +235,7 @@ export function createEmailDeskHooks(deps: LifecycleDeps = {}): AppLifecycleHook
       try {
         const seq = row(getStore(), accountId, "sequence");
         if (!seq || seq.finished_at !== null) return true;
+        if (busy(accountId)) return false; // waiting its turn or working: alive, however long the mailbox ahead takes
         const last = seq.last_progress_at ?? seq.started_at;
         if (last === null) return true;
         return now() - last >= STALL_MS;
@@ -280,7 +288,7 @@ export function createEmailDeskHooks(deps: LifecycleDeps = {}): AppLifecycleHook
       const platform = ctx.platform;
       const mailboxes = await mailboxesOf(platform);
       for (const m of mailboxes) {
-        if (running.has(m.accountId)) continue;
+        if (busy(m.accountId)) continue;
         try {
           const seq = row(db, m.accountId, "sequence");
           const t = now();

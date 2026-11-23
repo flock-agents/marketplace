@@ -182,6 +182,31 @@ describe("initialize", () => {
   });
 });
 
+describe("a mailbox waiting behind a long sequence", () => {
+  test("is not taken for dead: read once, held by the gate until read, never queued twice", async () => {
+    let release!: () => void;
+    const held = new Promise<void>((r) => { release = r; });
+    const { h, p } = hooks({
+      firstRead: async (_p, a) => { events.push(`read ${a}`); if (a === A1) { await held; } return "read"; },
+    });
+    const first = h.initialize!({ reason: "onboarding", platform: p });
+    await new Promise((r) => setTimeout(r, 10));
+    expect(events).toEqual([`read ${A1}`]);
+    clock += STALL_MS + 60_000; // the first sequence outlives the stall bound
+    expect(h.status!(A2)).toBe(false);
+    await h.tick!({ readRoutines: [], platform: p });
+    await h.tick!({ readRoutines: [], platform: p });
+    await h.initialize!({ reason: "onboarding", platform: p });
+    expect(events).toEqual([`read ${A1}`]);
+    expect(h.status!(A2)).toBe(false);
+    release();
+    await first;
+    expect(events.filter((e) => e === `read ${A2}`).length).toBe(1);
+    expect(events.filter((e) => e === `voice ${A2}`).length).toBe(1);
+    expect(h.status!(A2)).toBe(true);
+  });
+});
+
 describe("status", () => {
   test("held while a sequence is live, released when it ends or stalls, open for a mailbox with no row", () => {
     const { h } = hooks();

@@ -302,8 +302,7 @@ async function runAccount(
   }
 
   // 6. WAKE for the pending draft offers: this run's and any an earlier failed wake left. The first read (lifecycle
-  // initialize) does not wake: replies are drafted for mail as it arrives, never over what was already there, and the offers
-  // it leaves wait for the routine's first run.
+  // initialize) does not wake: the draft offers its mail makes are kept, and the routine's next run wakes the agent for them.
   const woke = wake ? await wakeForOffers(ctx, accountId, voice, failures) : 0;
   // A run that read the mailbox and put every kept mail into memory is a finished harvest (last_harvest op). A failed chunk
   // leaves the day open.
