@@ -1,0 +1,8 @@
+.fl-statstrip { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 0; border: 1px solid var(--line); border-radius: 999px; padding: 8px 10px; background: var(--surface); width: fit-content; max-width: 100%; }
+.fl-stat { display: flex; align-items: baseline; gap: 7px; padding: 4px 16px; border-left: 1px solid var(--line); white-space: nowrap; }
+.fl-stat:first-child { border-left: 0; }
+.fl-stat b { font: 600 20px var(--body); letter-spacing: -.035em; font-variant-numeric: tabular-nums; }
+.fl-stat > span { font-size: 13.5px; color: var(--ink-2); }
+.fl-stat em { font: 500 11.5px var(--mono); font-style: normal; color: var(--ok); }
+.fl-stat em.fl-down { color: var(--block); }
+@media (max-width: 640px) { .fl-statstrip { border-radius: 16px; } .fl-stat { border-left: 0; padding: 4px 10px; } }

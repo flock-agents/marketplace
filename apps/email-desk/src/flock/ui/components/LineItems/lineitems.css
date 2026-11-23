@@ -1,0 +1,53 @@
+/* The card switch follows LineItems' own width (container query), not the viewport: with a side nav and a side chat the
+   main column can be narrow on a wide screen. Fixed tracks + gaps are ~524px editable, so cards below 680px keep
+   Description at its 160px floor or more. */
+.fl-li { display: flex; flex-direction: column; gap: 10px; min-width: 0; container-name: fl-li; container-type: inline-size; }
+.fl-li-head, .fl-li-row { display: grid; grid-template-columns: minmax(160px, 1fr) 76px 112px 84px 116px; gap: 10px; align-items: center; }
+.fl-li-edit { grid-template-columns: minmax(160px, 1fr) 76px 112px 84px 116px 36px; }
+.fl-li-head { padding: 0 2px 6px; border-bottom: 1px solid var(--line-2); font-size: 12.5px; font-weight: 550; color: var(--ink-3); letter-spacing: .02em; }
+.fl-li-head:has(span:nth-child(6)) { grid-template-columns: minmax(160px, 1fr) 76px 112px 84px 116px 36px; }
+/* noTax: no GST track. :where keeps these at one class, so the card layout below still wins in a narrow container. */
+:where(.fl-li-notax) .fl-li-head, :where(.fl-li-notax) .fl-li-row { grid-template-columns: minmax(160px, 1fr) 76px 112px 116px; }
+:where(.fl-li-notax) .fl-li-edit, :where(.fl-li-notax) .fl-li-head:has(span:nth-child(5)) { grid-template-columns: minmax(160px, 1fr) 76px 112px 116px 36px; }
+.fl-li-end { text-align: right; }
+.fl-li-rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.fl-li-row { padding: 9px 2px; border-bottom: 1px solid var(--line); font-size: 14.5px; }
+.fl-li-cell { display: flex; flex-direction: column; gap: 4px; min-width: 0; margin: 0; }
+.fl-li-lbl { display: none; font-size: 12px; color: var(--ink-3); }
+.fl-li-text { overflow-wrap: anywhere; color: var(--ink); }
+.fl-li-amt { text-align: right; align-items: flex-end; font-variant-numeric: tabular-nums; }
+.fl-li-amt b { font-weight: 600; }
+.fl-li-rate .fl-inp[aria-invalid="true"] { border-color: var(--block); }
+.fl-li-rm { width: 36px; height: 36px; display: grid; place-items: center; border: 0; border-radius: 10px; background: none; color: var(--ink-3); cursor: pointer; }
+.fl-li-rm:hover { background: var(--tint); color: var(--ink); }
+.fl-li-rm:focus-visible, .fl-li-add:focus-visible { outline: 2px solid var(--ua); outline-offset: 2px; }
+.fl-li-add { align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; border: 0; background: none; font: inherit; font-size: 14px; font-weight: 550; color: var(--ua); cursor: pointer; padding: 6px 2px; min-height: 44px; }
+.fl-li-totals { margin: 6px 0 0; align-self: flex-end; width: min(100%, 320px); display: flex; flex-direction: column; }
+.fl-li-trow { display: flex; justify-content: space-between; gap: 16px; padding: 5px 2px; font-size: 14px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.fl-li-trow dt, .fl-li-trow dd { margin: 0; }
+.fl-li-grand { margin-top: 4px; padding-top: 10px; border-top: 1px solid var(--line-2); font-size: 17px; font-weight: 650; color: var(--ink); }
+@container fl-li (max-width: 680px) {
+  .fl-li-head { display: none; }
+  .fl-li-row, .fl-li-edit { grid-template-columns: 1fr 1.4fr 1fr; gap: 10px 10px; padding: 12px; margin-bottom: 8px; border: 1px solid var(--line-2); border-radius: var(--radius); background: var(--surface); }
+  .fl-li-desc { grid-column: 1 / -1; }
+  .fl-li-lbl { display: block; }
+  .fl-li-amt { grid-column: 1 / 3; align-items: flex-start; text-align: left; }
+  .fl-li-rm { grid-column: 3 / 4; justify-self: end; align-self: end; width: 40px; height: 40px; }
+  .fl-li-row:not(.fl-li-edit) .fl-li-amt { grid-column: 1 / -1; flex-direction: row; justify-content: space-between; align-items: baseline; }
+  .fl-li-totals { width: 100%; }
+}
+/* Fallback for browsers without container queries. */
+@supports not (container-type: inline-size) {
+  @media (max-width: 720px) {
+    .fl-li-head { display: none; }
+    .fl-li-row, .fl-li-edit { grid-template-columns: 1fr 1.4fr 1fr; gap: 10px 10px; padding: 12px; margin-bottom: 8px; border: 1px solid var(--line-2); border-radius: var(--radius); background: var(--surface); }
+    .fl-li-desc { grid-column: 1 / -1; }
+    .fl-li-lbl { display: block; }
+    .fl-li-amt { grid-column: 1 / 3; align-items: flex-start; text-align: left; }
+    .fl-li-rm { grid-column: 3 / 4; justify-self: end; align-self: end; width: 40px; height: 40px; }
+    .fl-li-row:not(.fl-li-edit) .fl-li-amt { grid-column: 1 / -1; flex-direction: row; justify-content: space-between; align-items: baseline; }
+    .fl-li-totals { width: 100%; }
+  }
+}
+/* Print: always the table. A4 minus margins is narrower than the card switch, and a printed invoice reads as a table. */
+@media print { .fl-li { container-type: normal; } }

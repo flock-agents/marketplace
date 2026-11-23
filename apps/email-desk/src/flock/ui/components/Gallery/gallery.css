@@ -1,0 +1,29 @@
+.fl-gal { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; }
+.fl-gal.fl-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.fl-gal.fl-cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.fl-gal.fl-cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+@media (max-width: 640px) { .fl-gal.fl-cols-3, .fl-gal.fl-cols-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.fl-gc { border: 1px solid var(--line); border-radius: 14px; overflow: hidden; background: var(--surface); transition: transform .15s, box-shadow .15s; min-width: 0; }
+.fl-gc.fl-clickable { cursor: pointer; }
+.fl-gc:hover { transform: translateY(-1px); box-shadow: var(--panel-shadow); }
+.fl-gc:focus-visible { outline: none; border-color: var(--ua); box-shadow: 0 0 0 3px var(--ua-soft); }
+.fl-cover { aspect-ratio: 16 / 10; max-width: 100%; display: grid; place-items: center; overflow: hidden; background: var(--tint-2); }
+.fl-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.fl-cover.fl-img-empty { background: linear-gradient(135deg, var(--ua-soft), var(--tint-2)); }
+.fl-cover.fl-img-empty > span:not(.fl-obj) { width: 44px; height: 44px; border-radius: 12px; border: 2px dashed var(--ink-4); opacity: .7; }
+.fl-gb { padding: 11px 13px 13px; display: flex; flex-direction: column; gap: 6px; }
+.fl-gb b { font-weight: 550; font-size: 14.5px; letter-spacing: -.015em; }
+.fl-gm { font-size: 12.5px; color: var(--ink-3); }
+.fl-cover.fl-img-empty.fl-tint-0 { background: var(--t-coral); }
+.fl-cover.fl-img-empty.fl-tint-1 { background: var(--t-blue); }
+.fl-cover.fl-img-empty.fl-tint-2 { background: var(--t-green); }
+.fl-cover.fl-img-empty.fl-tint-3 { background: var(--t-violet); }
+.fl-cover.fl-img-empty.fl-tint-4 { background: var(--tint); }
+.fl-gal-foot { display: flex; justify-content: center; padding-top: 12px; }
+.fl-gal-note { margin: 8px 0 0; font-size: 13px; color: var(--block); }
+.fl-gc { position: relative; }
+.fl-gc > .fl-sample-chip { position: absolute; top: 10px; left: 10px; }
+/* A form or detail opened in place: a full-width band in the row after the card clicked. Dense packing lets the cards after it
+   in the list fill the rest of the clicked card's row, so nothing above the band moves. */
+.fl-gal.fl-gal-open { grid-auto-flow: row dense; }
+.fl-gal-inline { grid-column: 1 / -1; min-width: 0; }

@@ -1,0 +1,25 @@
+.fl-board { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(210px, 1fr); gap: 12px; overflow-x: auto; padding-bottom: 2px; }
+.fl-col { background: var(--bg-warm); border-radius: 14px; padding: 10px; display: flex; flex-direction: column; gap: 8px; border: 1px dashed transparent; transition: border-color .15s, background .15s; min-width: 0; }
+.fl-col.fl-over { border-color: var(--ua); background: var(--ua-soft); }
+.fl-col h5 { margin: 2px 4px 2px; display: flex; align-items: center; gap: 8px; font: 550 13.5px var(--body); letter-spacing: -.01em; }
+.fl-col h5 .fl-n { margin-left: auto; font: 500 12px var(--mono); color: var(--ink-3); }
+.fl-sd { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--ink-4); display: inline-block; }
+.fl-sd.fl-tone-accent { background: var(--ua); } .fl-sd.fl-tone-success { background: var(--ok); } .fl-sd.fl-tone-warning { background: var(--risk); }
+.fl-sd.fl-tone-danger { background: var(--block); } .fl-sd.fl-tone-info { background: var(--info); } .fl-sd.fl-tone-neutral { background: var(--ink-2); } .fl-sd.fl-tone-muted { background: var(--ink-4); }
+.fl-col-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; min-height: 8px; }
+.fl-bcard { position: relative; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 11px 12px; display: flex; flex-direction: column; gap: 8px; cursor: grab; transition: transform .15s, box-shadow .15s, border-color .15s; font-size: 14px; }
+.fl-bcard:hover { transform: translateY(-1px); box-shadow: var(--panel-shadow); }
+.fl-bcard:focus-visible { outline: none; border-color: var(--ua); box-shadow: 0 0 0 3px var(--ua-soft); }
+.fl-bcard.fl-dragging { opacity: .4; }
+.fl-bmenu { position: absolute; top: 100%; left: 8px; z-index: 5; margin-top: 4px; min-width: 160px; background: var(--surface); border: 1px solid var(--line-2); border-radius: 12px; padding: 4px; box-shadow: var(--panel-shadow); display: flex; flex-direction: column; cursor: default; }
+.fl-bmenu-h { font: 500 11.5px var(--mono); color: var(--ink-3); padding: 6px 10px 4px; }
+.fl-bmenu button { display: flex; align-items: center; gap: 8px; border: 0; background: none; font: 500 13.5px var(--body); color: var(--ink); text-align: left; padding: 7px 10px; border-radius: 8px; cursor: pointer; }
+.fl-bmenu button:hover, .fl-bmenu button:focus-visible { background: var(--tint); outline: none; }
+@media (max-width: 640px) { .fl-board { grid-auto-columns: minmax(78vw, 1fr); scroll-snap-type: x proximity; } .fl-col { scroll-snap-align: start; } }
+.fl-move { align-self: flex-start; border: 1px solid var(--line-2); background: var(--surface); color: var(--ink-2); font: 500 12px var(--body); border-radius: 999px; padding: 3px 10px; cursor: pointer; }
+.fl-move:hover { background: var(--tint); }
+.fl-bcard > .fl-sample-chip { align-self: flex-start; }
+/* Phones and touch: the Move button and each menu item are 40px tap targets. */
+@media (max-width: 640px), (pointer: coarse) { .fl-move { min-height: 40px; padding: 0 14px; } .fl-bmenu button { min-height: 40px; } }
+/* A form or detail opened in place in the card's column, right under the card. */
+.fl-bcard-inline { min-width: 0; cursor: default; }

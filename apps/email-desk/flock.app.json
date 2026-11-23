@@ -3,7 +3,8 @@
   "usage": "app",
   "slug": "email-desk",
   "type": "managed",
-  "visibility": "headless",
+  "spa": true,
+  "design": "1.10.10",
   "icon": "icon.svg",
   "description": "Reads your Gmail into your assistant's memory and drafts replies in your voice for you to send. Nothing sends without you.",
   "bundled": false,
@@ -202,5 +203,5 @@
       }
     ]
   },
-  "buildCommand": "bun install"
+  "buildCommand": "bun run app:build"
 }

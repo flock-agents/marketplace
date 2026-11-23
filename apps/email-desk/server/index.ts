@@ -5,6 +5,7 @@ import { createFlockApp, type PlatformContext } from "@flock/app-sdk";
 import { allOps, routineHandlers } from "./registry";
 import { handleCardClosed } from "./drafts/send";
 import { voiceRoutes } from "./routes/voice";
+import { pageRoutes } from "./routes/page";
 import { removalRoutes } from "./removal";
 import { createEmailDeskHooks } from "./lifecycle";
 
@@ -20,8 +21,10 @@ const flock = createFlockApp({
   // A draft card the person dismissed discards its draft (drafts/send.ts); a sent or expired one changes nothing.
   onCardClosed: (event, ctx) => handleCardClosed(event, ctx),
 });
-// The settings page and the person's voice editor (Task 2.9): GET /settings, GET/PUT /api/voice (routes/voice.ts).
+// The app's own page is its settings (src/App.tsx, built into dist/): GET / and its /assets/* (routes/page.ts).
 // The linked SDK resolves its own hono copy; the types differ nominally, the runtime is one Hono (as calendar-desk).
+flock.hono.route("/", pageRoutes() as never);
+// The person's voice editor (Task 2.9): GET/PUT /api/voice (routes/voice.ts).
 flock.hono.route("/", voiceRoutes(flock.platform) as never);
 // "Delete my mail data" (Task 2.10, R29): POST /api/mail-data/delete {confirm: true}, the person only (routes/voice.ts
 // person()). The platform takes the deleted mail's cards off Home.

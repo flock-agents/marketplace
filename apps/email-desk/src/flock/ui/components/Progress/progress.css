@@ -1,0 +1,18 @@
+.fl-prog { display: grid; grid-template-columns: minmax(0, auto) minmax(0, 1fr) auto; gap: 12px; align-items: center; font-size: 14px; }
+.fl-prog-label { color: var(--ink); }
+.fl-prog-bare { grid-template-columns: minmax(0, 1fr) auto; }
+.fl-prog-track { height: 8px; border-radius: 5px; background: var(--tint-2); overflow: hidden; }
+.fl-prog-fill { display: block; height: 100%; background: var(--ua); border-radius: 5px; transition: width .3s; }
+.fl-prog-text { font: 500 12.5px var(--mono); color: var(--ink-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.fl-over .fl-prog-fill { background: var(--block); }
+.fl-over .fl-prog-text { color: var(--block); }
+.fl-prog-solo { grid-template-columns: minmax(0, 1fr); }
+.fl-proglist { display: grid; grid-template-columns: max-content minmax(0, 1fr) max-content; column-gap: 12px; row-gap: 12px; }
+.fl-proglist > .fl-prog { grid-column: 1 / -1; grid-template-columns: subgrid; }
+@media (max-width: 640px) {
+  .fl-proglist { grid-template-columns: minmax(0, 1fr) max-content; row-gap: 14px; }
+  .fl-proglist > .fl-prog { grid-template-columns: subgrid; row-gap: 5px; }
+  .fl-proglist > .fl-prog .fl-prog-label { grid-column: 1; grid-row: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .fl-proglist > .fl-prog .fl-prog-text { grid-column: 2; grid-row: 1; }
+  .fl-proglist > .fl-prog .fl-prog-track { grid-column: 1 / -1; grid-row: 2; }
+}

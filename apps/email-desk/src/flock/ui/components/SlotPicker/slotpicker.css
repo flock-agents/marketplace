@@ -1,0 +1,9 @@
+.fl-slots { display: flex; flex-direction: column; gap: 10px; }
+.fl-slots-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 8px; }
+.fl-slot { position: relative; min-height: 44px; padding: 8px 6px; border: 1px solid var(--line-2); border-radius: var(--radius); background: var(--surface); color: var(--ink); font: 500 14px var(--body); font-variant-numeric: tabular-nums; cursor: pointer; transition: background .15s, border-color .15s; }
+.fl-slot:hover:not(:disabled) { border-color: var(--ua); background: var(--ua-soft); }
+.fl-slot:focus-visible { outline: 2px solid var(--ua); outline-offset: 2px; }
+.fl-slot-on, .fl-slot-on:hover:not(:disabled) { background: var(--ua); border-color: var(--ua); color: var(--on-ua); }
+.fl-slot-taken { background: var(--tint); color: var(--ink-4); text-decoration: line-through; cursor: not-allowed; }
+.fl-slots-count, .fl-slots-none { margin: 0; font-size: 13px; color: var(--ink-3); }
+.fl-slots-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }

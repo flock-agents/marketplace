@@ -1,0 +1,28 @@
+.fl-checklist { display: flex; flex-direction: column; gap: 12px; }
+.fl-check-prog { display: flex; flex-direction: column; gap: 8px; }
+.fl-check-prog > b { font-size: 14px; font-weight: 550; color: var(--ink); }
+.fl-check-list { display: flex; flex-direction: column; }
+.fl-check { display: flex; align-items: flex-start; gap: 12px; padding: 11px 4px; border: 0; border-bottom: 1px solid var(--line); cursor: pointer; width: 100%; background: none; text-align: left; font: inherit; color: var(--ink); }
+.fl-check:focus-visible { outline: 2px solid var(--ua); outline-offset: -2px; }
+.fl-cbx { width: 20px; height: 20px; border-radius: 6px; border: 1.6px solid var(--cbx); flex: none; display: grid; place-items: center; color: var(--on-ua); margin-top: 1px; transition: background .15s, border-color .15s; }
+.fl-cbx svg { opacity: 0; stroke-width: 2.6; }
+.fl-check-done .fl-cbx { background: var(--ua); border-color: var(--ua); }
+.fl-check-done .fl-cbx svg { opacity: 1; }
+.fl-check-t { flex: 1; font-size: 14.5px; min-width: 0; }
+.fl-check-t small { display: block; font-size: 12.5px; color: var(--ink-3); margin-top: 1px; }
+.fl-check-done .fl-check-t > span { text-decoration: line-through; color: var(--ink-3); }
+.fl-check-round .fl-cbx { border-radius: 50%; }
+.fl-check-grp { display: flex; flex-direction: column; }
+.fl-check-grp-h { display: flex; justify-content: space-between; align-items: center; padding: 14px 4px 4px; }
+.fl-check-grp:first-child .fl-check-grp-h { padding-top: 0; }
+.fl-check-grp-h h4 { margin: 0; font-size: 13px; font-weight: 600; letter-spacing: .02em; color: var(--ink-2); }
+.fl-check-grp-h span { font: 500 12px var(--mono); color: var(--ink-3); }
+.fl-check-add { display: flex; align-items: center; gap: 12px; padding: 10px 4px; color: var(--ink-3); }
+.fl-check-add input { flex: 1; min-width: 0; border: 0; background: none; font: inherit; font-size: 14.5px; color: var(--ink); padding: 2px 0; }
+.fl-check-add input:focus { outline: none; }
+.fl-check-add:focus-within { color: var(--ink); }
+.fl-check-more { align-self: flex-start; margin-top: 6px; padding: 6px 4px; border: 0; background: none; font: 500 13px var(--fl-body, inherit); color: var(--ink-2); cursor: pointer; }
+.fl-check-more:hover { color: var(--ink); text-decoration: underline; }
+.fl-check-add:focus-within input { box-shadow: 0 1px 0 var(--ink-3); }
+/* Phones: the Add item row is a 40px tap target. */
+@media (max-width: 720px), (pointer: coarse) { .fl-check-add input { min-height: 40px; } }

@@ -1,0 +1,5 @@
+.fl-hero { border-radius: 18px; padding: 18px 20px; display: flex; flex-direction: column; gap: 4px; background: radial-gradient(120% 140% at 100% 0%, var(--glow-a) 0%, transparent 55%), radial-gradient(90% 120% at 0% 100%, var(--glow-b) 0%, transparent 60%), var(--surface); border: 1px solid var(--line); }
+.fl-hero-label { font: 600 11px var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+.fl-hero-value { font: 560 44px/1 var(--body); letter-spacing: -.05em; margin-top: 10px; font-variant-numeric: tabular-nums; }
+.fl-hero-delta { font: 500 13px var(--mono); }
+.fl-hero-caption { color: var(--ink-2); font-size: 13.5px; }

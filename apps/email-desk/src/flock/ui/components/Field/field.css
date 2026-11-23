@@ -1,0 +1,18 @@
+.fl-fld { display: grid; gap: 6px; min-width: 0; border: 0; padding: 0; margin: 0; }
+.fl-lbl { font: 500 13px var(--body); color: var(--ink-2); padding: 0; }
+.fl-req { color: var(--block); }
+.fl-err { font-size: 12.5px; color: var(--block); display: flex; gap: 5px; align-items: center; }
+.fl-inp { background: var(--surface); color: var(--ink); border: 1px solid var(--line-2); border-radius: 10px; padding: 9px 12px; font: inherit; font-size: 14.5px; width: 100%; min-width: 0; box-sizing: border-box; transition: border-color .15s, box-shadow .15s; }
+.fl-inp:focus { outline: none; border-color: var(--ink-3); box-shadow: 0 0 0 4px color-mix(in srgb, var(--ink) 7%, transparent); }
+.fl-inp::placeholder { color: var(--ink-4); }
+.fl-inp-err { border-color: color-mix(in srgb, var(--block) 45%, transparent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--block) 7%, transparent); }
+.fl-inp-area { resize: vertical; min-height: 84px; }
+.fl-inp-select { appearance: none; padding-right: 32px; }
+.fl-inp-wrap { position: relative; display: block; }
+.fl-inp-prefix { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--ink-3); font-size: 14.5px; pointer-events: none; }
+.fl-inp-money .fl-inp { padding-left: 28px; }
+.fl-multi { display: flex; flex-wrap: wrap; gap: 6px 14px; }
+.fl-opt { display: inline-flex; align-items: center; gap: 8px; font-size: 14.5px; color: var(--ink); cursor: pointer; }
+.fl-opt input { width: 17px; height: 17px; accent-color: var(--ua); margin: 0; }
+/* Phones: text inputs (the search box among them) are 40px tap targets. */
+@media (max-width: 720px), (pointer: coarse) { .fl-inp { min-height: 40px; } }

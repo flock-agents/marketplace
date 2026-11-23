@@ -1,0 +1,146 @@
+.fl-shell { --fl-chat-beside-app: 480px; --fl-full-top: 93px; display: flex; flex-direction: column; min-height: 100vh; background: var(--bg); color: var(--ink); font-family: var(--body); min-width: 0; max-width: 100%; box-sizing: border-box; }
+@supports (color: color-mix(in srgb, red, blue)) { .fl-shell { --ua-soft: color-mix(in srgb, var(--ua) 12%, transparent); } }
+.fl-shell-head { display: flex; align-items: center; gap: 12px; padding: 14px 22px 6px; flex-wrap: wrap; }
+.fl-shell-ic { width: 42px; height: 42px; border-radius: 12px; background: var(--ua-soft); display: grid; place-items: center; flex: none; }
+.fl-shell-ic-own { overflow: hidden; }
+.fl-shell-ic-own img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.fl-shell-ic-own span { font-size: 24px; line-height: 1; }
+.fl-shell-title { min-width: 0; }
+.fl-shell-name { font: 600 20px var(--body); letter-spacing: -.03em; margin: 0; }
+.fl-shell-title small { display: block; font-size: 13px; color: var(--ink-3); }
+.fl-shell-end { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+.fl-shell-theme { border: 1px solid var(--line-2); background: var(--surface); color: var(--ink-2); border-radius: 9px; width: 32px; height: 32px; display: grid; place-items: center; cursor: pointer; }
+.fl-shell-theme:hover { background: var(--tint); color: var(--ink); }
+.fl-shell-tabs { padding: 8px 22px 0; min-width: 0; }
+/* Framed by Flock (it names the app above): no title row; the tabs come first, people and the theme switch at their end. */
+.fl-shell-tabs-row { display: flex; align-items: center; gap: 10px; padding-top: 14px; }
+.fl-shell-tabs-row .fl-tabs { flex: 1; min-width: 0; }
+.fl-shell-bar { display: flex; justify-content: flex-end; padding: 10px 22px 6px; }
+.fl-shell-bar .fl-shell-end { margin-left: 0; }
+.fl-shell-col { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.fl-shell-grid { flex: 1; display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0; }
+.fl-shell-nav-side .fl-shell-grid { grid-template-columns: 210px minmax(0, 1fr); }
+/* Side chat: a column on the right of the whole app (browser-sidebar style; DOM order keeps it first for screen readers), pinned to the viewport. Its thread scrolls inside, so the composer is
+   always on screen however long the page or the transcript grows. */
+.fl-shell-chat { flex-direction: row-reverse; }
+.fl-shell-main { min-width: 0; }
+/* The owner's Settings & routines page (Flock's /embed/app-settings): the page scrolls inside its frame, which fills the view below the tabs. */
+.fl-settings-frame { display: block; width: 100%; height: calc(100dvh - 120px); min-height: 480px; border: 0; background: transparent; }
+.fl-shell-rail { border-right: 1px solid var(--line); background: var(--surface-2); padding: 12px 10px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.fl-shell-rail button { display: flex; align-items: center; gap: 9px; font: 14px var(--body); color: var(--ink-2); background: none; border: 0; text-align: left; padding: 7px 10px; border-radius: 9px; cursor: pointer; }
+.fl-shell-rail button:hover { background: var(--tint); color: var(--ink); }
+.fl-shell-rail button[aria-current="page"] { background: var(--surface); color: var(--ink); box-shadow: 0 0 0 1px var(--line); font-weight: 500; }
+.fl-shell-agent { flex: none; width: var(--fl-chat-beside-app); position: sticky; top: 0; align-self: flex-start; height: 100vh; height: 100dvh; box-sizing: border-box; border-left: 1px solid var(--line); background: var(--surface-2); display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; }
+/* The phone chat launcher's size and offset, as tokens: the toast stack (outside the shell) is lifted by the same amount. */
+:root:has(.fl-shell-has-launcher) { --launcher-h: 44px; --launcher-gap: 16px; --toast-lift: calc(var(--launcher-h) + var(--launcher-gap)); }
+.fl-shell-launch { position: fixed; right: var(--launcher-gap, 16px); bottom: var(--launcher-gap, 16px); height: var(--launcher-h, 44px); box-sizing: border-box; display: inline-flex; align-items: center; gap: 8px; font: 500 14px var(--body); color: var(--on-ua); background: var(--ua); border: 0; border-radius: 999px; padding: 10px 16px; box-shadow: var(--panel-shadow); cursor: pointer; z-index: 20; }
+.fl-shell-launch[hidden] { display: none; }
+/* The agent's own avatar, in a white disc at the button's start (an emoji or an image). A Flock picture is drawn whole in
+   the disc with its finish (.fl-obj), not cropped to the circle. */
+.fl-shell-launch:has(.fl-shell-launch-av) { padding-left: 6px; }
+.fl-shell-launch-av { width: 30px; height: 30px; border-radius: 999px; background: var(--obj-white); display: grid; place-items: center; flex: none; overflow: hidden; font-size: 16px; line-height: 1; }
+.fl-shell-launch-av img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.fl-shell-launch-pic { overflow: visible; }
+.fl-shell-launch-pic img { width: 22px; height: 22px; object-fit: contain; }
+/* The phone sheet (canvas "7 (new)"): a light card floating 8px from the edges, about half the screen, over a very faint
+   scrim, so the app stays in view. It slides up when opened. Closed, the layer stays laid out but invisible, at rest inside
+   the viewport, so the chat preloaded in it settles at its real size and opening only moves it. Never parked below the
+   viewport: WebKit runs a frame wholly outside it at one animation frame per 10s (outside-viewport throttling), so the
+   preloaded chat would not settle there. The card slides by animation only while it moves. */
+.fl-shell-sheet-wrap { position: fixed; inset: 0; z-index: 30; display: flex; flex-direction: column; justify-content: flex-end; padding: 8px 8px max(8px, env(safe-area-inset-bottom)); box-sizing: border-box; }
+.fl-shell-scrim { position: absolute; inset: 0; background: var(--scrim); }
+.fl-shell-sheet-wrap .fl-shell-scrim { background: var(--sheet-scrim); transition: opacity 200ms ease-out; }
+.fl-shell-sheet { position: relative; height: min(430px, 52vh); height: min(430px, 52dvh); max-height: 100%; background: var(--sheet-card); border: 1px solid var(--sheet-line); border-radius: 22px; box-shadow: var(--sheet-shadow); display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+.fl-shell-sheet-wrap[hidden] { display: flex; visibility: hidden; pointer-events: none; transition: visibility 0s linear 200ms; }
+/* Opened from closed (data-slide, before the preload too): up from below; the full page shrinking back to the sheet does not
+   slide. Closed: down and off the screen by 200ms, when the layer turns invisible, held there 40ms more (so it never paints at
+   rest for a frame), then back at rest, invisible. */
+.fl-shell-sheet-wrap[data-slide]:not([hidden]) .fl-shell-sheet { animation: fl-sheet-up 200ms ease-out; }
+.fl-shell-sheet-wrap[hidden] .fl-shell-sheet { animation: fl-sheet-down 240ms linear; }
+@keyframes fl-sheet-up { from { transform: translateY(calc(100% + 8px)); } }
+@keyframes fl-sheet-down { from { animation-timing-function: ease-out; } 83.33%, to { transform: translateY(calc(100% + 8px)); } }
+/* The placeholder lights up only in the open card (AppShell gates it too): closed, it is never shown nor tapped. */
+.fl-shell-sheet-wrap[hidden] .fl-shell-sheet-ph { visibility: hidden; pointer-events: none; }
+.fl-shell-sheet-wrap[hidden] .fl-shell-scrim { opacity: 0; }
+.fl-shell-sheet .fl-chat, .fl-shell-sheet .fl-chat-frame { background: var(--sheet-card); }
+/* The placeholder: the same card in outline (slim header with an avatar circle and a name bar, an empty body, the pill
+   composer), over the chat until it is ready, then faded out in place. */
+.fl-shell-sheet-ph { position: absolute; inset: 10px 0 0; z-index: 2; display: flex; flex-direction: column; background: var(--sheet-card); opacity: 0; visibility: hidden; pointer-events: none; transition: opacity 200ms ease-out, visibility 0s linear 200ms; }
+.fl-shell-sheet-ph[data-on] { opacity: 1; visibility: visible; pointer-events: auto; transition: none; }
+.fl-shell-ph-head { flex: none; height: 40px; display: flex; align-items: center; gap: 8px; padding: 0 4px 0 14px; }
+.fl-shell-ph-close { margin-left: auto; width: 40px; height: 40px; border: 0; border-radius: 999px; background: none; color: var(--ink-3); display: grid; place-items: center; cursor: pointer; }
+.fl-shell-ph-close:hover { background: var(--tint); color: var(--ink); }
+.fl-shell-ph-av { width: 20px; height: 20px; border-radius: 999px; background: var(--tint); }
+.fl-shell-ph-name { width: 112px; height: 10px; border-radius: 999px; background: var(--tint); }
+.fl-shell-ph-body { flex: 1; }
+.fl-shell-ph-composer { flex: none; height: 48px; margin: 0 10px 10px; box-sizing: border-box; border: 1px solid var(--line-2); border-radius: 999px; }
+.fl-shell-close { position: absolute; top: 8px; right: 8px; z-index: 1; border: 0; background: var(--tint); color: var(--ink-2); border-radius: 8px; width: 28px; height: 28px; display: grid; place-items: center; cursor: pointer; }
+.fl-shell-sheet .fl-chat-head { padding-right: 48px; }   /* clear the close button, so the history button stays tappable */
+/* Flock's own chat brings its Expand and Close: the shell's close would sit on top of them. */
+.fl-shell-sheet:has(.fl-chat-flock) .fl-shell-close { display: none; }
+.fl-shell-grab { flex: none; width: 32px; height: 4px; border-radius: 999px; background: var(--line-2); margin: 6px auto 0; }
+.fl-shell-sheet-chat { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.fl-shell-sheet-chat[hidden] { display: none; }
+/* The hidden panel stays laid out at its size, out of the flow and invisible, so the chat preloaded in it settles there. */
+.fl-shell-agent[hidden] { display: flex; position: fixed; top: 0; right: 0; width: min(var(--fl-chat-beside-app), 100vw); visibility: hidden; pointer-events: none; }
+/* The phone's full page: the same layer as the sheet, filling the viewport, with Chat | App tabs on top (as Flock's own
+   chat-and-canvas tabs). On the App tab the layer is only the tab bar, and the app's page shows below it. */
+.fl-shell-full-wrap { position: fixed; inset: 0; z-index: 30; display: flex; flex-direction: column; background: var(--surface); }
+.fl-shell-full-app { bottom: auto; }
+.fl-shell-full { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.fl-shell-fulltabs { flex: none; display: flex; align-items: center; border-bottom: 1px solid var(--line); background: var(--surface); }
+.fl-shell-fulltabs button { flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; margin-bottom: -1px; border: 0; border-bottom: 2px solid transparent; background: none; font: 500 14px var(--body); color: var(--ink-3); cursor: pointer; }
+.fl-shell-fulltabs button:hover { color: var(--ink-2); }
+.fl-shell-fulltabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+.fl-shell-dot { width: 8px; height: 8px; border-radius: 999px; background: var(--accent); }
+.fl-shell-under-tabs { padding-top: 45px; }
+/* Flock's chat draws the full page's top itself: its header, then Chat | <app> in Flock's look (FULL_TOP_PX, the embed's 48px
+   header and 45px tab row). The kit's tabs give way; on the App tab the layer is cut to that top, the chat in it stays shown
+   (the embed hides its own transcript), and the page is padded by the same amount. The kit's tabs stay for its own chat. */
+.fl-shell-full:has(.fl-chat-flock) .fl-shell-fulltabs { display: none; }
+.fl-shell-full-app:has(.fl-chat-flock) { height: var(--fl-full-top); overflow: hidden; }
+.fl-shell-full-app:has(.fl-chat-flock) .fl-shell-sheet-chat[hidden] { display: flex; }
+.fl-shell-under-tabs:has(.fl-chat-flock) { padding-top: var(--fl-full-top); }
+/* Flock's app viewer's add-to-home offer, in its look (canvas 13b): one centred row at the top of the page, under the full
+   page's top, on the App tab only. 44px tap targets. */
+.fl-shell-home { flex: none; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 0 12px; font: 12px var(--body); background: var(--surface-2); border-bottom: 1px solid var(--line); }
+.fl-shell-home span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-3); }
+.fl-shell-home-add { flex: none; min-height: 44px; padding: 0 10px; border: 1px solid var(--line-2); border-radius: 6px; background: var(--surface); color: var(--ink-2); font: 500 12px var(--body); cursor: pointer; }
+.fl-shell-home-add:hover, .fl-shell-home-x:hover { color: var(--ink); }
+.fl-shell-home-x { flex: none; min-width: 44px; min-height: 44px; display: grid; place-items: center; border: 0; background: none; color: var(--ink-3); cursor: pointer; }
+/* 721-900: the chat sits under the page, at a fixed height so a long transcript scrolls inside it. */
+@media (min-width: 721px) and (max-width: 900px) {
+  .fl-shell-chat { flex-direction: column; }
+  .fl-shell-agent { order: 1; position: static; width: auto; align-self: stretch; height: min(560px, 100vh); height: min(560px, 100dvh); min-height: 360px; }
+}
+@media (max-width: 900px) {
+  .fl-shell-nav-side .fl-shell-grid { grid-template-columns: minmax(0, 1fr); }
+  .fl-shell-agent { border-left: 0; border-top: 1px solid var(--line); }
+  .fl-shell-rail { flex-direction: row; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--line); padding: 8px 16px; }
+  .fl-shell-rail button { flex: none; white-space: nowrap; }
+}
+@media (max-width: 720px) {
+  .fl-shell-head { padding: 12px 16px 4px; }
+  .fl-shell-tabs { padding: 8px 16px 0; overflow-x: auto; }
+  .fl-shell-tabs-row { padding-top: 12px; }
+  .fl-shell-bar { padding: 8px 16px 4px; }
+  .fl-shell-tabs .fl-tabs { flex-wrap: nowrap; }
+  .fl-shell-tabs .fl-tab { flex: none; }
+  .fl-shell-has-launcher .fl-shell-main { padding-bottom: 72px; }
+}
+/* Sample rows banner: one line under the header, until the samples are cleared. Its button is a 40px tap target. */
+.fl-shell-samples { display: flex; align-items: center; gap: 10px; margin: 10px 22px 4px; padding: 4px 4px 4px 14px; min-height: 50px; box-sizing: border-box; border: 1px dashed var(--ink-4); border-radius: 14px; background: var(--callout); color: var(--ink-2); font-size: 14px; }
+.fl-shell-samples p { margin: 0; flex: 1; min-width: 0; }
+.fl-shell-samples-ic { flex: none; display: grid; place-items: center; color: var(--ink-3); }
+.fl-shell-samples .fl-btn { flex: none; min-height: 40px; }
+.fl-shell-removed { border-style: solid; flex-wrap: wrap; }
+@media (max-width: 720px) {
+  .fl-shell-samples { margin: 10px 16px 4px; font-size: 13.5px; line-height: 1.35; padding: 4px 4px 4px 12px; }
+}
+/* Phones: the theme switch, the side-nav page buttons (the rail turns into a row at 900px) and the sheet's close button are 40px tap targets. */
+@media (max-width: 720px), (pointer: coarse) { .fl-shell-theme { width: 40px; height: 40px; } .fl-shell-close { width: 40px; height: 40px; top: 4px; right: 4px; } }
+@media (max-width: 900px), (pointer: coarse) { .fl-shell-rail button { min-height: 40px; } }
+@media (prefers-reduced-motion: reduce) {
+  .fl-shell-sheet, .fl-shell-sheet-wrap, .fl-shell-sheet-wrap[hidden], .fl-shell-sheet-wrap .fl-shell-scrim, .fl-shell-sheet-ph { transition: none; }
+  .fl-shell-sheet-wrap .fl-shell-sheet, .fl-shell-sheet-wrap[hidden] .fl-shell-sheet, .fl-shell-sheet-wrap[data-slide]:not([hidden]) .fl-shell-sheet { animation: none; }
+}

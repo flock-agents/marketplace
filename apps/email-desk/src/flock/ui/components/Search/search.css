@@ -1,0 +1,3 @@
+.fl-search { position: relative; min-width: 0; }
+.fl-search > svg { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--ink-3); pointer-events: none; }
+.fl-search .fl-inp { padding-left: 36px; border-radius: var(--radius-pill); }

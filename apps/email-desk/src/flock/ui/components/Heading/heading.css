@@ -1,0 +1,6 @@
+.fl-heading { display: flex; flex-direction: column; gap: 4px; }
+.fl-heading h1, .fl-heading h2, .fl-heading h3 { font-family: var(--body); font-weight: 560; margin: 0; text-wrap: balance; color: var(--ink); }
+.fl-h1 { font-size: 34px; letter-spacing: -.045em; line-height: 1.05; }
+.fl-h2 { font-size: 24px; letter-spacing: -.035em; line-height: 1.1; }
+.fl-h3 { font-size: 20px; letter-spacing: -.03em; line-height: 1.15; }
+.fl-heading-sub { margin: 0; font-size: 14px; color: var(--ink-3); }

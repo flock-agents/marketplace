@@ -1,0 +1,10 @@
+.fl-img { width: 100%; border-radius: 14px; overflow: hidden; background: var(--tint); display: grid; place-items: center; }
+.fl-ratio-1-1 { aspect-ratio: 1 / 1; } .fl-ratio-4-3 { aspect-ratio: 4 / 3; } .fl-ratio-16-9 { aspect-ratio: 16 / 9; }
+.fl-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.fl-img.fl-img-empty { color: var(--ink-3); background: linear-gradient(135deg, var(--ua-soft), var(--tint-2)); }
+.fl-img.fl-img-empty > span:not(.fl-obj) { width: 44px; height: 44px; border-radius: 12px; border: 2px dashed var(--ink-4); opacity: .7; }
+/* still being fetched (the chat frame): a soft shimmer of the picture's size, so nothing jumps when it arrives */
+.fl-img.fl-img-pending { background: linear-gradient(100deg, var(--tint) 30%, var(--tint-2) 50%, var(--tint) 70%); background-size: 300% 100%; animation: fl-img-shimmer 1.4s ease-in-out infinite; }
+@keyframes fl-img-shimmer { from { background-position: 100% 0; } to { background-position: 0 0; } }
+@media (prefers-reduced-motion: reduce) { .fl-img.fl-img-pending { animation: none; } }
+span.fl-img { display: grid; }

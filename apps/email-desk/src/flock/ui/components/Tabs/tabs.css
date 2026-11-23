@@ -1,0 +1,13 @@
+.fl-tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+.fl-tab { display: inline-flex; align-items: center; gap: 7px; font: 500 13.5px var(--body); color: var(--ink-2); background: var(--surface); border: 1px solid var(--line-2); border-radius: 999px; padding: 5px 13px; cursor: pointer; }
+/* The open tab: Flock's pale accent selection (owner 2026-10-21), so it never reads as a second primary button. */
+.fl-tab[aria-selected="true"] { background: var(--ua-soft); color: var(--ink); border-color: color-mix(in srgb, var(--ua) 45%, transparent); }
+.fl-tab svg { flex: none; }
+@media (max-width: 720px) {
+  .fl-tabs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+  .fl-tabs::-webkit-scrollbar { display: none; }
+  .fl-tab { flex: none; white-space: nowrap; }
+}
+.fl-tab-count { font: 500 11.5px var(--mono); opacity: .7; }
+/* Phones: each tab (the shell's page nav among them) is a 40px tap target. */
+@media (max-width: 720px), (pointer: coarse) { .fl-tab { min-height: 40px; } }

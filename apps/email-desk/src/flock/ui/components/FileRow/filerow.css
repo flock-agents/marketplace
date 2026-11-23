@@ -1,0 +1,6 @@
+.fl-file { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.fl-file-ico { width: 36px; height: 40px; border-radius: 7px; display: grid; place-items: center; font: 600 9px var(--mono); letter-spacing: .04em; background: var(--t-blue); color: var(--t-blue-ink); flex: none; }
+.fl-file-main { min-width: 0; }
+.fl-file b { font-weight: 550; font-size: 14px; display: block; overflow-wrap: anywhere; }
+.fl-file a { color: var(--ink); text-decoration: none; } .fl-file a:hover b { color: var(--accent); }
+.fl-file small { color: var(--ink-3); font-size: 12px; }
