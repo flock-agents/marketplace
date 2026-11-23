@@ -99,6 +99,13 @@ export type Week = { days: PlanDay[]; slots: Map<string, SlotFacts>; rules: Rule
 const slotKey = (s: string) => s.toLowerCase();
 export const isStapleAt = (w: Week, slot: string, dish: string): boolean => !!w.slots.get(slotKey(slot))?.staples.some((x) => dishKey(x) === dishKey(dish));
 const libAt = (w: Week, slot: string, dish: string): LibraryDish | undefined => w.library.find((d) => same(d.slot, slot) && d.key === dishKey(dish));
+/** A dish at an add-on slot with no how-often or days said: that person's standing difference (his phulkas every dinner).
+ *  Like a staple there, it has no weekly cap and no repeat window; only a said frequency or days thins it (owner, 24 Nov). */
+const standing = (w: Week, slot: string, dish: string): boolean => {
+  if (w.slots.get(slotKey(slot))?.slot.kind !== "addon") return false;
+  const row = libAt(w, slot, dish);
+  return !!row && !row.frequency && !row.days?.length;
+};
 
 /** What a dish contains and was read for, at a slot: its library row there, else any row of it, else a read made this run. */
 export function factsOf(w: Week, slot: string, dish: string): DishFacts {
@@ -270,7 +277,7 @@ export function checkSlot(w: Week, slotName: string, p: Proposal): Map<string, P
   for (const k of placed) {
     const row = libAt(w, slotName, k) ?? w.library.find((x) => x.key === k);
     const name = mine.flatMap((d) => p.days.get(d.date) ?? []).find((x) => dishKey(x) === k)!;
-    const staple = isStapleAt(w, slotName, name);
+    const staple = isStapleAt(w, slotName, name) || standing(w, slotName, name);
     const mineDates = mine.filter((d) => (p.days.get(d.date) ?? []).some((x) => dishKey(x) === k)).map((d) => d.date).sort();
     if (row?.days?.length && same(row.slot, slotName)) for (const date of mineDates.filter((x) => !row.days!.includes(weekdayOf(x))))
       add(date, { kind: "days", dish: name, text: `${name} is had on ${row.days.join(", ")} only, not ${weekdayOf(date)}`, soft: false });
@@ -321,7 +328,7 @@ export function checkSlot(w: Week, slotName: string, p: Proposal): Map<string, P
   seen.sort((a, b) => a.date.localeCompare(b.date));
   for (let i = 0; i < seen.length; i++) {
     const x = seen[i];
-    if (isStapleAt(w, slotName, x.dish)) continue;
+    if (isStapleAt(w, slotName, x.dish) || standing(w, slotName, x.dish)) continue;
     const prev = seen.slice(0, i).reverse().find((y) => y.key === x.key && y.date !== x.date);
     if (!prev || dayDiff(prev.date, x.date) >= sf.window) continue;
     const blame = x.mine ? x : prev.mine ? prev : null;
@@ -475,7 +482,7 @@ function maxDays(w: Week, slotName: string, dish: string): number | null {
   const row = libAt(w, slotName, dish) ?? w.library.find((x) => x.key === dishKey(dish));
   if (row?.frequency === "daily") return null;
   const r = frequencyRange(row?.frequency ?? null);
-  return r ? r[1] : isStapleAt(w, slotName, dish) ? null : DEFAULT_DISH_DAYS;
+  return r ? r[1] : isStapleAt(w, slotName, dish) || standing(w, slotName, dish) ? null : DEFAULT_DISH_DAYS;
 }
 const withAt = (xs: string[], i: number, x: string) => xs.map((y, j) => (j === i ? x : y));
 
@@ -491,7 +498,11 @@ export function thinAddon(w: Week, slotName: string, p: Proposal): { unmet: stri
   const before = new Map(mine.map((d) => [d.date, [...(p.days.get(d.date) ?? [])]]));
   const elsewhere = (name: string) => new Set(w.days.filter((d) => !same(d.slot, slotName) && counts(w, d) && d.dishes.some((x) => dishKey(x) === dishKey(name))).map((d) => d.date));
   const datesHere = (name: string) => mine.filter((d) => (p.days.get(d.date) ?? []).some((x) => dishKey(x) === dishKey(name))).map((d) => d.date);
-  const room = (name: string) => { const m = maxDays(w, slotName, name); return m === null ? Infinity : m - elsewhere(name).size - datesHere(name).filter((x) => !elsewhere(name).has(x)).length; };
+  // An add-on dish the family gave no how-often for is that person's standing difference (his phulkas at dinner): every day
+  // the add-on has. Only a said frequency or days thins it (owner, 24 Nov).
+  const said = (name: string) => { const r = libAt(w, slotName, name); return !!(r?.frequency || r?.days?.length); };
+  const capOf = (name: string) => (said(name) ? maxDays(w, slotName, name) : null);
+  const room = (name: string) => { const m = capOf(name); return m === null ? Infinity : m - elsewhere(name).size - datesHere(name).filter((x) => !elsewhere(name).has(x)).length; };
   const far = (name: string, date: string) => datesHere(name).every((x) => x === date || Math.abs(dayDiff(x, date)) >= sf.window);
   const names = uniq(mine.flatMap((d) => (p.days.get(d.date) ?? []).map(dishKey))).map((k) => mine.flatMap((d) => p.days.get(d.date) ?? []).find((x) => dishKey(x) === k)!);
   const over: { date: string; dish: string }[] = [];
@@ -500,7 +511,7 @@ export function thinAddon(w: Week, slotName: string, p: Proposal): { unmet: stri
     const dates = datesHere(name);
     const wrongDay = dates.filter((x) => row?.days?.length && !row.days.includes(weekdayOf(x)));
     const ok = dates.filter((x) => !wrongDay.includes(x) && !elsewhere(name).has(x));
-    const m = maxDays(w, slotName, name);
+    const m = capOf(name);
     const cap = m === null ? Infinity : Math.max(0, m - elsewhere(name).size);
     // Keep the days furthest apart: each one at least the repeat window after the last kept, then the earliest left.
     const keep: string[] = [];

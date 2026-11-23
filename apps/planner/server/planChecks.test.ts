@@ -137,6 +137,16 @@ describe("add-on days (owner, 23 Nov)", () => {
     expect(r.unmet).toEqual([]);
     expect(hardCount(w, "Fish", p)).toBe(0);
   });
+  it("an add-on dish with no how-often said is the person's standing difference: kept every day", () => {
+    const lib = [dish("Roti", "Dinner"), dish("Dal", "Dinner"), dish("Phulka", "Papa's dinner")];
+    const w = week({ slots: [slot("Dinner", { order: 50 }), slot("Papa's dinner", { kind: "addon", addon_of: "Dinner", order: 60, usual_people: ["Ravi"] })], library: lib });
+    for (const d of w.days.filter((x) => x.slot === "Dinner")) d.dishes = ["Roti", "Dal"];
+    for (const d of w.days.filter((x) => x.slot === "Papa's dinner")) d.people = ["Ravi"];
+    w.done.add("dinner");
+    const p: Proposal = { days: new Map(WEEK.map((d) => [d, ["Phulka"]])), newNames: new Map() };
+    thinAddon(w, "Papa's dinner", p);
+    expect(WEEK.filter((d) => p.days.get(d)!.length)).toHaveLength(7);
+  });
 });
 
 describe("a person with nothing of their own (rotate)", () => {
