@@ -104,7 +104,7 @@ describe("the agent's interface", () => {
   // runner writes, add: true, only the rules said), in the checked shape; the rules are read back right after the rules
   // question, and a fix there sends the whole list. Flock refuses a help over 800 characters.
   it("every setup question that can state a food rule saves it with set_house_rules, and the rules are read back", () => {
-    const RULE_QUESTIONS = ["cookTime", "newRecipes", "cookingDays", "kidsBreakfast", "kidsLunch", "kidsDinner",
+    const RULE_QUESTIONS = ["cookTime", "cookingDays", "kidsBreakfast", "kidsLunch", "kidsDinner",
       "adultsBreakfast", "adultsLunch", "adultsDinner", "diet", "elders", "rules", "orderIn", "rulesReadBack"];
     for (const id of RULE_QUESTIONS) {
       const variants = setup.filter((x) => x.id === id);

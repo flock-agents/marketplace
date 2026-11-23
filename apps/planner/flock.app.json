@@ -317,26 +317,6 @@
       "help": "save set_cook { name: cook.name, time_limit: in their words }; set_house_rules { add: true, rules }: only the rules this reply states. A dish count is a cap with per_meal (sides like chutney, podi, curd, fruit do not count; a person's own variant does); a time is not checked, so other with the note: \"2 dishes in the morning, breakfast under 20 minutes\": {\"kind\":\"cap\",\"slots\":[\"Breakfast\"],\"per_meal\":2,\"note\":\"at most 2 dishes in the morning\"} and {\"kind\":\"other\",\"slots\":[\"Breakfast\"],\"note\":\"breakfast under 20 minutes\"}. \"Plenty of time\": no rule."
     },
     {
-      "id": "newRecipes",
-      "fixed": true,
-      "when": "household.help has cook",
-      "ask": "Will the cook try new recipes from reels or the internet, or is a set menu of familiar dishes better?",
-      "fills": [
-        "newRecipes:text"
-      ],
-      "answer": [
-        {
-          "operation": "set_cook"
-        },
-        {
-          "operation": "set_house_rules"
-        }
-      ],
-      "default": "set_menu",
-      "assume": "I assumed a set menu of familiar dishes.",
-      "help": "newRecipes: open (tries recipes from reels and the internet) or set_menu (familiar dishes). save set_cook { name: cook.name, new_recipes }; set_house_rules { add: true, rules }: only the rules this reply states: a limit on new dishes is other: \"one new dish a week, never a weekday dinner\": {\"kind\":\"other\",\"note\":\"one new dish a week, never at a weekday dinner\"}."
-    },
-    {
       "id": "cookingDays",
       "fixed": true,
       "when": "cook.days = mon,tue,wed,thu,fri,sat,sun",
