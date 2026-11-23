@@ -158,14 +158,34 @@ export function scorePlan(h: Household, plan: PlanOut, loaded: SetupOut): PlanSc
 
   // ── 3. Dishes from the slot's library, a staple, or an allowed new dish ──
   const newNames = new Set<string>();
+  const newSlot = new Map<string, string>();   // new dish → the first slot it is placed at
   for (const sd of cooked) for (const d of sd.dishes) {
     const inLib = loaded.library.some((x) => lc(x.slot) === lc(sd.slot) && plain(x.name) === plain(d.name));
     const isNew = !!d.new || plan.library.some((x) => plain(x.name) === plain(d.name) && x.origin === "planner_suggested");
-    if (isNew && !inLib) newNames.add(plain(d.name));
+    if (isNew && !inLib) { newNames.add(plain(d.name)); if (!newSlot.has(plain(d.name))) newSlot.set(plain(d.name), sd.slot); }
     add("from_library", inLib || isStaple(sd.slot, d.name) || isNew, `${dayOfSd(sd)} ${sd.slot}: ${d.name} is not in ${sd.slot}'s library`);
   }
+  // Owner 24 Nov (spec §5.2): a slot short of known dishes, which the planner asks the family about, gets its own new dishes
+  // for its shortfall, beside the setting: its places (cooked slot-days × its usual non-staple count) less what its known
+  // non-staple dishes can still fill this week (each up to its frequency's most days, else 2, less its days at other
+  // slots), in dishes of up to 2 days each. Only the new dishes past that count against the setting.
+  const asked = (slot: string) => (plan.asked ?? []).some((u) => lc(u).includes(lc(slot)));
+  const shortAllowance = (slot: string): number => {
+    if (!asked(slot) || t.slots.find((s) => s.name === slot)?.kind === "addon") return 0;
+    const n = cooked.filter((sd) => lc(sd.slot) === lc(slot)).length;
+    const rows = history.filter((r) => r.slot === slot && r.dishes.length).map((r) => r.dishes.filter((d) => !isStaple(slot, d)).length).sort((a, b) => a - b);
+    const m = rows.length ? Math.max(1, rows[Math.floor((rows.length - 1) / 2)]) : 1;
+    const elsewhere = (name: string) => new Set(cooked.filter((sd) => lc(sd.slot) !== lc(slot) && sd.dishes.some((d) => dishNameOf(d.name, truthNames) === name)).map((sd) => sd.date)).size;
+    const supply = t.library.filter((d) => d.slot === slot && d.frequency !== "daily" && !isStaple(slot, d.name))
+      .reduce((a, d) => a + Math.max(0, Math.min(n, frequencyRange(d.frequency)[1] - elsewhere(d.name))), 0);
+    return Math.ceil(Math.max(0, n * m - supply) / Math.max(1, Math.min(2, Math.ceil(n / 2))));
+  };
   const budget = loaded.settings?.new_dishes_per_week ?? 2;
-  add("new_budget", newNames.size <= budget, `${newNames.size} new dishes (${[...newNames].join(", ")}), setting ${budget}`);
+  const bySlot = new Map<string, number>();
+  for (const s of newSlot.values()) bySlot.set(s, (bySlot.get(s) ?? 0) + 1);
+  const allowances = [...bySlot.keys()].map((s) => [s, shortAllowance(s)] as const).filter(([, a]) => a > 0);
+  const counted = [...bySlot].reduce((a, [s, c]) => a + Math.max(0, c - shortAllowance(s)), 0);
+  add("new_budget", counted <= budget, `${newNames.size} new dishes (${[...newNames].join(", ")}), setting ${budget}${allowances.length ? `, short slots' own: ${allowances.map(([s, a]) => `${s} ${a}`).join(", ")}` : ""}`);
   facts.new_dishes = newNames.size;
 
   // ── 4. Frequency and days per dish, counted across all slots ──

@@ -142,6 +142,20 @@ describe("scorePlan", () => {
     expect(fails(q)).toEqual(["new_budget"]);
   });
 
+  test("a short slot the planner asks about has its own new dishes for its shortfall beside the setting (owner 24 Nov)", () => {
+    // Breakfast: 7 days of one dish, Poha, Upma and Idli 2 days each: short by 1, so 1 new dish of its own.
+    const p = goodWeek();
+    at(p, "Wed", "Breakfast").dishes = [{ name: "Pesarattu", new: true }];
+    p.library.push(newRow("Pesarattu", "Breakfast", []));
+    expect(fails(p)).toEqual(["new_budget"]);   // 3 new dishes, setting 2, and no slot said to be short
+    p.asked = ["I only know 3 dishes for breakfast, so I've added a new one, Pesarattu. What else do you have for breakfast?"];
+    expect(fails(p)).toEqual([]);
+    // Its allowance is the shortfall, no more: a second new breakfast dish is past it.
+    at(p, "Thu", "Breakfast").dishes = [{ name: "Rava dosa", new: true }];
+    p.library.push(newRow("Rava dosa", "Breakfast", []));
+    expect(fails(p)).toEqual(["new_budget"]);
+  });
+
   test("frequency and days per dish, counted in days across slots; the default cap; staples exempt", () => {
     const p = goodWeek();
     at(p, "Mon", "Dinner").dishes = [{ name: "Roti" }, { name: "Rajma" }];
