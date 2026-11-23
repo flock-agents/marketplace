@@ -2,9 +2,7 @@
 // FLOCK_API_URL / FLOCK_APP_TOKEN / FLOCK_WEBHOOK_SECRET. Lifecycle hooks and ops are filled in by later tasks; this
 // boots, answers /health, runs the routines it has, and prints the ready line.
 import { createFlockApp, type PlatformContext } from "@flock/app-sdk";
-import { memoryExtraction } from "./routines/memory-extraction";
-import { followUp } from "./routines/follow-up";
-import { allOps } from "./registry";
+import { allOps, routineHandlers } from "./registry";
 import { handleCardClosed } from "./drafts/send";
 import { voiceRoutes } from "./routes/voice";
 import { removalRoutes } from "./removal";
@@ -16,7 +14,7 @@ const flock = createFlockApp({
   // First read, progress and owed work (lifecycle.ts).
   lifecycle: createEmailDeskHooks({ platform: () => platformRef as PlatformContext }),
   // One run per account of the paired agent's Gmail (flock.app.json routines, event trigger per account).
-  routines: { "memory-extraction": memoryExtraction, "follow-up": followUp },
+  routines: routineHandlers,
   // reply_context, the draft ops, send_draft and the platform read ops (registry.ts).
   ops: allOps,
   // A draft card the person dismissed discards its draft (drafts/send.ts); a sent or expired one changes nothing.
