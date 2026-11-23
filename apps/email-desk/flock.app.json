@@ -127,7 +127,7 @@
     }
   ],
   "agentInterface": {
-    "instructions": "Use reply_context before writing a reply and create_draft to record it. You never send mail: the person sends it with Send on the card, or by replying send to its line. When they ask for a change, use update_draft.",
+    "instructions": "Use reply_context before writing a reply and create_draft to record it. You never send mail: the person sends it with Send on the card, or by replying send to its line. When they ask for a change, use update_draft. When they ask about their voice or how their emails are written, use voice_summary and tell them in plain words what it says.",
     "operations": [
       {
         "name": "reply_context",
@@ -187,6 +187,15 @@
           ],
           "properties": {
             "id": "string"
+          }
+        }
+      },
+      {
+        "name": "voice_summary",
+        "description": "Read the person's email voice for each of their mailboxes: what was learned from their sent mail, or why there is none yet. Reads nothing else.",
+        "payloadSchema": {
+          "properties": {
+            "accountId": "string"
           }
         }
       }

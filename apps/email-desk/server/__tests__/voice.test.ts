@@ -415,6 +415,27 @@ describe("reply_context", () => {
   });
 });
 
+describe("voice_summary", () => {
+  test("names each of the person's mailboxes with the voice reply_context gives, or says plainly there is none yet", async () => {
+    await runVoiceCrawl(f.platform, A1);
+    const out: any = await allOps.voice_summary!({}, agentCtx() as any);
+    expect(out.mailboxes.map((m: any) => [m.accountId, m.email, m.voiceState])).toEqual([[A1, ME[A1], "ready"], [A2, ME[A2], "none"]]);
+    expect(out.mailboxes[0].voice).toBe(buildVoiceBlock(A1, db));
+    expect(out.mailboxes[1].voice).toBeNull();
+    expect(out.mailboxes[1].note).toMatch(/not learned/i);
+    for (const m of out.mailboxes) expect(/[\u2014\u2013]|--/.test(m.note ?? "")).toBe(false);
+  });
+
+  test("an accountId narrows it to that mailbox; a learning mailbox says so", async () => {
+    holdReads();
+    await beginVoiceCrawl(f.platform, A2);
+    const out: any = await allOps.voice_summary!({ accountId: A2 }, agentCtx() as any);
+    expect(out.mailboxes).toHaveLength(1);
+    expect(out.mailboxes[0]).toMatchObject({ accountId: A2, voiceState: "learning", voice: null });
+    expect(out.mailboxes[0].note).toMatch(/learning/i);
+  });
+});
+
 describe("the routine's wake", () => {
   const kept = (over: Partial<KeptMail> = {}): KeptMail => ({
     messageId: "m-1", threadId: THREAD, accountId: A1, from: "Asha Rao <asha@acme.com>", subject: "Tuesday?",

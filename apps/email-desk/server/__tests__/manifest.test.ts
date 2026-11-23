@@ -8,7 +8,7 @@ const marketplace = JSON.parse(readFileSync(join(root, "flock.marketplace.json")
 const catalog = JSON.parse(readFileSync(join(root, "../../catalog.json"), "utf-8"));
 
 const INSTRUCTIONS =
-  "Use reply_context before writing a reply and create_draft to record it. You never send mail: the person sends it with Send on the card, or by replying send to its line. When they ask for a change, use update_draft.";
+  "Use reply_context before writing a reply and create_draft to record it. You never send mail: the person sends it with Send on the card, or by replying send to its line. When they ask for a change, use update_draft. When they ask about their voice or how their emails are written, use voice_summary and tell them in plain words what it says.";
 
 describe("Email Desk manifest", () => {
   test("a per-person, deletable, model-using app", () => {
@@ -60,9 +60,9 @@ describe("Email Desk manifest", () => {
     expect(manifest.publishedSkills.map((s: any) => s.id)).toEqual(["judge-mail", "write-reply"]);
   });
 
-  test("declares exactly the four agent ops, never send_draft or a platform op", () => {
+  test("declares exactly the five agent ops, never send_draft or a platform op", () => {
     const names = manifest.agentInterface.operations.map((o: any) => o.name);
-    expect(names).toEqual(["reply_context", "create_draft", "update_draft", "discard_draft"]);
+    expect(names).toEqual(["reply_context", "create_draft", "update_draft", "discard_draft", "voice_summary"]);
     for (const banned of ["send_draft", "newest_thread_message", "thread_body", "store_thread_body", "last_harvest", "follow_up_kind", "draft_send_recorded", "mailboxes", "bundle_rows", "republish_legacy_card", "import_voice"]) {
       expect(names).not.toContain(banned);
     }
