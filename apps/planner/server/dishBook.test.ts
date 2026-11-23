@@ -144,6 +144,22 @@ describe("the family's own dishes", () => {
     await k.op("set_family_dishes", { dishes: [{ name: "Rajma", remove: true }] });
     expect((await k.op("plan_week", { week_start: NEXT_MON, mode: "draft" })).context.family_dishes.Lunch).toBeUndefined();
   });
+
+  it("how often, when the family said it: often, per_week, days; sent again without them, they stay", async () => {
+    const k = await start();
+    await k.op("set_person", { name: "Meera", group: "child" });
+    expect((await k.op("set_family_dishes", { dishes: [{ name: "Khichdi", slots: ["Dinner"], for: ["Meera"], often: "Sometimes" },
+      { name: "Pulao", slots: ["Lunch"], per_week: 2 }, { name: "Puri", slots: ["Breakfast"], days: ["sat", "Sunday"] }] })).error).toBeUndefined();
+    const fam = async () => (await k.op("plan_week", { week_start: NEXT_MON, mode: "draft" })).context.family_dishes;
+    expect(await fam()).toEqual({ Dinner: [{ dish: "Khichdi", for: ["Meera"], often: "sometimes" }], Lunch: [{ dish: "Pulao", per_week: 2 }],
+      Breakfast: [{ dish: "Puri", days: ["Sat", "Sun"] }] });
+    // Sent again (a meal added), how often stays; null clears it.
+    await k.op("set_family_dishes", { dishes: [{ name: "Pulao", slots: ["Lunch", "Dinner"] }, { name: "Puri", slots: ["Breakfast"], days: null }] });
+    expect((await fam()).Dinner).toContainEqual({ dish: "Pulao", per_week: 2 });
+    expect((await fam()).Breakfast).toEqual([{ dish: "Puri" }]);
+    expect((await k.op("set_family_dishes", { dishes: [{ name: "Upma", slots: ["Breakfast"], often: "daily" }] })).error).toContain("often must be one of usually, sometimes, rarely");
+    expect((await k.op("set_family_dishes", { dishes: [{ name: "Upma", slots: ["Breakfast"], per_week: 9 }] })).error).toContain("per_week must be a whole number of days a week, 1 to 7");
+  });
 });
 
 describe("the messages", () => {

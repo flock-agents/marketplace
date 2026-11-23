@@ -1005,7 +1005,7 @@
       },
       {
         "name": "set_family_dishes",
-        "description": "The family's own dishes, from what each person ate over the past week: { dishes: [{ name, slots: [the meals it is eaten at: Breakfast, Lunch, Dinner or an extra slot such as a tiffin], for?: [names on the Family page, only when one person eats it], remove?: true }] }. Each dish once, with every meal it is eaten at; sent again, it takes the meals and eaters sent. The weekly plan is built from these (the context's family_dishes). Answers { family_dishes } by meal."
+        "description": "The family's own dishes, from what each person ate over the past week: { dishes: [{ name, slots: [the meals it is eaten at: Breakfast, Lunch, Dinner or an extra slot such as a tiffin], for?: [names on the Family page, only when one person eats it], often?: usually | sometimes | rarely, per_week?: days a week, days?: [weekdays], remove?: true }] }. How often only when the family said it. Each dish once, with every meal it is eaten at; sent again, it takes the meals and eaters sent. The weekly plan is built from these (the context's family_dishes). Answers { family_dishes } by meal."
       },
       {
         "name": "set_dish_video",

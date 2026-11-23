@@ -7,11 +7,12 @@
 import type { Hono } from "hono";
 import { asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { dish_book, dishes, people } from "./db/schema";
-import { DISH_RATINGS, RATINGS_KEPT, SLOTS, type DishRating } from "./db/constants";
+import { DISH_RATINGS, OFTEN, RATINGS_KEPT, SLOTS, type DishRating, type Often } from "./db/constants";
 import { todayStr } from "./dates";
 import { dishKey, type LastTime } from "./dishText";
 import { youtubeThumb } from "./messages";
-import { getHouse, houseView, isObject, list, name, names, refuse, slotsSaid, words, writeRoutes, type Db, type Emit } from "./family";
+import { getHouse, houseView, isObject, list, name, names, refuse, slotsSaid, weekdays, words, writeRoutes, type Db, type Emit } from "./family";
+import type { Weekday } from "./dates";
 import { closest } from "./agentOps";
 
 export type BookRow = typeof dish_book.$inferSelect;
@@ -111,14 +112,51 @@ export function knownDishes(db: Db, max = 60): { dish: string; rating: DishRatin
     .map((r) => ({ dish: r.name, rating: (r.rating as DishRating | null) ?? null, note: r.rating_note, rated_on: r.rated_on, video_url: r.video_url }));
 }
 
+/** How often the family has a dish, as they said it (owner, 23 Nov): `often` (usually, sometimes, rarely), `per_week` (the days a
+ *  week: "twice" is 2), `days` (the weekdays: "weekend parathas" is Sat, Sun). Nothing said: the dish comes back on two days a
+ *  week at most (meals.ts MAIN_DAYS_MAX). */
+export type DishOften = { often?: Often; per_week?: number; days?: Weekday[] };
+export const oftenOfRow = (r: Pick<BookRow, "often" | "per_week" | "days">): DishOften => {
+  const days = list<Weekday>(r.days);
+  return { ...((OFTEN as readonly string[]).includes(r.often ?? "") ? { often: r.often as Often } : {}), ...(r.per_week != null ? { per_week: r.per_week } : {}),
+    ...(days.length ? { days } : {}) };
+};
+export type FamilyDish = { dish: string; for?: string[]; rating?: DishRating } & DishOften;
+
 /** The family's own dishes (from the interview: what each person ate over the past week), by meal: what a week is planned from.
- *  `for` is left out when everyone eats it. */
-export function familyDishes(db: Db): Record<string, { dish: string; for?: string[]; rating?: DishRating }[]> {
-  const out: Record<string, { dish: string; for?: string[]; rating?: DishRating }[]> = {};
+ *  `for` is left out when everyone eats it; how often, when the family said. */
+export function familyDishes(db: Db): Record<string, FamilyDish[]> {
+  const out: Record<string, FamilyDish[]> = {};
   for (const r of db.select().from(dish_book).orderBy(asc(dish_book.name)).all()) {
     const who = list<string>(r.eaten_by);
-    for (const slot of list<string>(r.slots)) (out[slot] ??= []).push({ dish: r.name, ...(who.length ? { for: who } : {}), ...(r.rating ? { rating: r.rating as DishRating } : {}) });
+    for (const slot of list<string>(r.slots)) (out[slot] ??= []).push({ dish: r.name, ...(who.length ? { for: who } : {}), ...(r.rating ? { rating: r.rating as DishRating } : {}), ...oftenOfRow(r) });
   }
+  return out;
+}
+
+/** How often each of the family's dishes may come in a week, by its key (dishText.ts dishKey): only the dishes the family said
+ *  something about. */
+export type OftenMap = Map<string, DishOften & { name: string; for?: string[] }>;
+export function dishOftenMap(dishes: Record<string, FamilyDish[]>): OftenMap {
+  const out: OftenMap = new Map();
+  for (const d of Object.values(dishes).flat())
+    if (d.often || d.per_week != null || d.days?.length) out.set(dishKey(d.dish), { name: d.dish, ...(d.for ? { for: d.for } : {}), ...(d.often ? { often: d.often } : {}),
+      ...(d.per_week != null ? { per_week: d.per_week } : {}), ...(d.days?.length ? { days: d.days } : {}) });
+  return out;
+}
+
+/** How often as sent to set_family_dishes: often one of OFTEN, per_week a whole number of days 1 to 7, days weekdays. Only
+ *  the fields sent are answered (null clears one). */
+function oftenSent(d: Record<string, unknown>, dish: string): { often?: Often | null; per_week?: number | null; days?: Weekday[] | null } {
+  const out: { often?: Often | null; per_week?: number | null; days?: Weekday[] | null } = {};
+  if (d.often !== undefined) {
+    const w = typeof d.often === "string" ? d.often.trim().toLowerCase() : "";
+    out.often = d.often === null ? null : (OFTEN as readonly string[]).includes(w) ? w as Often
+      : refuse(`${dish}: often must be one of ${OFTEN.join(", ")} (usually: most days; sometimes: now and then; rarely: once in a while)`);
+  }
+  if (d.per_week !== undefined) out.per_week = d.per_week === null ? null : typeof d.per_week === "number" && Number.isInteger(d.per_week) && d.per_week >= 1 && d.per_week <= 7
+    ? d.per_week : refuse(`${dish}: per_week must be a whole number of days a week, 1 to 7 ("twice": 2)`);
+  if (d.days !== undefined) out.days = d.days === null ? null : weekdays(d.days, `${dish}: days`);
   return out;
 }
 
@@ -149,11 +187,13 @@ export function mountDishBookRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: {
     return c.json({ dish: bookView(bookFor(db, dish), dish) });
   });
 
-  // set_family_dishes { dishes: [{ name, slots, for?, remove? }] }: the family's own dishes, from the interview's answers about
-  // the past week ("idli, dosa, pongal for breakfast"; "Agastya's tiffin: paratha, poha"), each with the meals it is eaten at
-  // and who eats it (left out: everyone). A week is planned from them. A dish sent again takes the meals and eaters sent.
+  // set_family_dishes { dishes: [{ name, slots, for?, often?, per_week?, days?, remove? }] }: the family's own dishes, from the
+  // interview's answers about the past week ("idli, dosa, pongal for breakfast"; "Agastya's tiffin: paratha, poha"), each with
+  // the meals it is eaten at, who eats it (left out: everyone) and how often, when the family said ("khichdi when she's
+  // unwell": sometimes; "rajma twice": per_week 2; "weekend parathas": days Sat, Sun). A week is planned from them. A dish
+  // sent again takes the meals and eaters sent, and how often only when sent.
   write("/api/dish-book/family", (b, by) => {
-    const shape = "dishes must be a list of { name, slots: [the meals it is eaten at], for?: [names on the Family page], remove?: true }";
+    const shape = "dishes must be a list of { name, slots: [the meals it is eaten at], for?: [names on the Family page], often?: usually | sometimes | rarely, per_week?, days?, remove?: true }";
     if (!Array.isArray(b.dishes) || !b.dishes.length) refuse(shape);
     const h = houseView(getHouse(db));
     const slotNames = [...SLOTS, ...h.extra_slots.map((x) => x.name)];
@@ -168,7 +208,7 @@ export function mountDishBookRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: {
       if (!slots.length) refuse(`${dish}: slots must name at least one meal (${slotNames.join(", ")})`);
       const who = d.for == null ? [] : names(d.for, `${dish}: for`).filter((w) => w.toLowerCase() !== "everyone").map((w) => family.find((p) => p.toLowerCase() === w.toLowerCase())
         ?? refuse(`${dish}: for: ${JSON.stringify(w)} is not on the Family page${closest(w, family) ? ` (did you mean ${closest(w, family)}?)` : ""}`));
-      return { dish, slots: [...new Set(slots)], who };
+      return { dish, slots: [...new Set(slots)], who, often: oftenSent(d, dish) };
     });
     commit((tx, ch) => {
       for (const s of sent) {
@@ -178,7 +218,10 @@ export function mountDishBookRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: {
           continue;
         }
         const row = bookRow(tx, s.dish, by, ch);
-        tx.update(dish_book).set({ slots: JSON.stringify(s.slots), eaten_by: s.who.length ? JSON.stringify(s.who) : null, updated_at: now(), updated_by: by }).where(eq(dish_book.id, row.id)).run();
+        const o = s.often;
+        tx.update(dish_book).set({ slots: JSON.stringify(s.slots), eaten_by: s.who.length ? JSON.stringify(s.who) : null,
+          ...(o.often !== undefined ? { often: o.often } : {}), ...(o.per_week !== undefined ? { per_week: o.per_week } : {}),
+          ...(o.days !== undefined ? { days: o.days?.length ? JSON.stringify(o.days) : null } : {}), updated_at: now(), updated_by: by }).where(eq(dish_book.id, row.id)).run();
         ch.push(["dish_book", row.id, "update", by]);
       }
     });

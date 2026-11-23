@@ -210,6 +210,9 @@ export const dish_book = sqliteTable("dish_book", {
   ratings: text("ratings"),                                    // JSON [{ rating, note, date, by }], newest first, a short history
   slots: text("slots"),                                        // JSON string[]: the meals the family eats it at (their own dishes, from the interview); null = not one of theirs
   eaten_by: text("eaten_by"),                                  // JSON string[]: who eats it (names on the Family page); null = everyone
+  often: text("often"),                                        // how often the family has it: constants.ts OFTEN; null = not said
+  per_week: integer("per_week"),                               // the days a week the family said ("twice": 2); null = not said
+  days: text("days"),                                          // JSON weekdays the family has it on ("weekend parathas": Sat, Sun); null = any day
 });
 
 export const saved_recipes = sqliteTable("saved_recipes", {

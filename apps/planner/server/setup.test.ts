@@ -2,7 +2,7 @@
 // in a fixed order; a rule the family never said is dropped; one the app cannot take is kept as a note; nothing sinks the rest.
 import { describe, it, expect } from "bun:test";
 import { boot } from "./testkit";
-import { clockOf, cookVisits, cookTimesOf, daysOf, mergeDishes, saidByFamily, familyLines, plainWords, SETUP_PARTS } from "./setup";
+import { clockOf, cookVisits, cookTimesOf, daysOf, dishOftenSaid, mergeDishes, ruleOftenSaid, saidByFamily, familyLines, plainWords, SETUP_PARTS } from "./setup";
 import type { ModelRequest, ModelResult } from "./model";
 
 const HOUSEHOLD = {
@@ -366,5 +366,104 @@ describe("apply_setup's readers", () => {
     expect(saidByFamily("no onion garlic on Tuesdays", lines)).toBe(false);
     expect(saidByFamily("no", lines)).toBe(false);
     expect(plainWords("Nut-free!")).toBe("nut free");
+  });
+});
+
+// Owner, 23 Nov: the family's frequency words are kept ("when he's tired", "twice", "weekend parathas", "X is good for him"),
+// each only when a line the family said carries them; otherwise the default holds (a dish: two days a week; a rule: always).
+describe("apply_setup: how often, in the family's words", () => {
+  const LINES = [
+    "Q: What does Ishaan eat for dinner?",
+    "A: same as us, chapati with dal most nights. Khichdi when he's unwell.",
+    "Q: And lunch?",
+    "A: rice, sambar, a dry sabzi. Pulao twice last week, puri on Sunday. Weekend parathas for breakfast.",
+    "Q: Any food rules?",
+    "A: Padma is diabetic: no sugar, less rice, brown rice is good for her. Ishaan has fruit three times a week. Pure veg at home.",
+  ];
+  const READ = { people: [{ name: "Kiran", group: "adult" }, { name: "Nisha", group: "adult" }, { name: "Ishaan", group: "child", age: 7 }, { name: "Padma", group: "elder" }],
+    rules: [
+      { kind: "veg", quote: "Pure veg at home", often: "sometimes" },                                         // hard: no often
+      { kind: "avoid", who: "Padma", items: ["@sweet"], quote: "no sugar", often: "usually" },                 // hard: no often
+      { kind: "other", who: "Padma", note: "less rice", quote: "less rice" },
+      { kind: "swap", who: "Padma", items: ["@white_rice"], to: "brown rice", often: "sometimes", quote: "brown rice is good for her" },
+      { kind: "require", who: "Ishaan", items: ["fruit"], per_week: 3, quote: "Ishaan has fruit three times a week" },
+    ],
+    dishes: [["Chapati", "Dinner", "", "usually"], ["Dal", "Dinner", "", "usually"], ["Khichdi", "Dinner", "Ishaan", "sometimes"],
+      ["Rice", "Lunch", "", ""], ["Sambar", "Lunch", "", "rarely"], ["Pulao", "Lunch", "", "2"], ["Puri", "Lunch", "", "Sun"],
+      ["Paratha", "Breakfast", "", "Sat, Sun"], ["Dry sabzi", "Lunch", "", "3, Fri"]] };
+
+  it("a dish keeps often, per_week and days only when its line says them; the rest is dropped and said", async () => {
+    const k = await boot({ model: fake(READ).model });
+    const r = await k.op("apply_setup", { household: {}, transcript: LINES });
+    expect(r.ok).toBe(true);
+    const book = Object.fromEntries(k.rows("dish_book").filter((d) => d.slots).map((d) => [d.name, [d.often, d.per_week, d.days ? JSON.parse(d.days) : null]]));
+    expect(book["Chapati"]).toEqual(["usually", null, null]);                     // "most nights"
+    expect(book["Khichdi"]).toEqual(["sometimes", null, null]);                   // "when he's unwell"
+    expect(book["Pulao"]).toEqual([null, 2, null]);                               // "twice"
+    expect(book["Puri"]).toEqual([null, null, ["Sun"]]);                          // "on Sunday"
+    expect(book["Paratha"]).toEqual([null, null, ["Sat", "Sun"]]);                // "weekend parathas"
+    expect(book["Rice"]).toEqual([null, null, null]);                             // nothing said
+    // "rarely" is nowhere in the line that names sambar; "3" and "Fri" not in the dry sabzi's line: dropped, said.
+    expect(book["Sambar"]).toEqual([null, null, null]);
+    expect(book["Dry sabzi"]).toEqual([null, null, null]);
+    expect(r.dropped.filter((d: string) => d.startsWith("how often")).sort()).toEqual(["how often for Dry sabzi (3; Fri): not in the family's words",
+      "how often for Sambar (rarely): not in the family's words"]);
+    // The week's context gives the menu how often.
+    const ctx = (await k.op("plan_week", { week_start: "2026-11-30", mode: "draft" })).context;
+    expect(ctx.family_dishes.Dinner.find((d: any) => d.dish === "Khichdi")).toEqual({ dish: "Khichdi", for: ["Ishaan"], often: "sometimes" });
+  });
+
+  it("a soft wish is kept some times a week (often, per_week); a hard rule never; 'less rice' is a note, not a swap", async () => {
+    const k = await boot({ model: fake(READ).model });
+    const r = await k.op("apply_setup", { household: {}, transcript: LINES });
+    const rules = (await k.owner("GET", "/api/family")).body.house.rules;
+    expect(rules.find((x: any) => x.kind === "veg").often).toBeUndefined();
+    expect(rules.find((x: any) => x.kind === "avoid").often).toBeUndefined();
+    expect(rules.find((x: any) => x.kind === "swap")).toMatchObject({ who: "Padma", items: ["@white_rice"], to: "brown rice", often: "sometimes" });
+    expect(rules.find((x: any) => x.kind === "require")).toMatchObject({ who: "Ishaan", items: ["fruit"], per_week: 3 });
+    expect(rules.find((x: any) => x.kind === "other")).toMatchObject({ who: "Padma", note: "less rice" });
+    // The read-back says how often.
+    expect(r.said).toContain("has brown rice in place of white rice 2–3 times a week");
+    expect(r.said).toContain("has fruit 3 times a week");
+  });
+
+  it("a frequency the family's words do not carry is dropped: the rule holds every time", async () => {
+    const read = { ...READ, rules: [{ kind: "swap", who: "Kiran", items: ["@white_rice"], to: "jowar roti", often: "sometimes", quote: "Kiran has jowar roti in place of rice" },
+      { kind: "require", who: "Ishaan", items: ["fruit"], per_week: 5, quote: "Ishaan has fruit three times a week" }] };
+    const k = await boot({ model: fake(read).model });
+    const r = await k.op("apply_setup", { household: {}, transcript: [...LINES, "A: Kiran has jowar roti in place of rice."] });
+    const rules = (await k.owner("GET", "/api/family")).body.house.rules;
+    expect(rules.find((x: any) => x.kind === "swap").often).toBeUndefined();
+    // A require with no count and no meals cannot be checked: kept as the family's words, a note.
+    expect(rules.find((x: any) => x.kind === "require")).toBeUndefined();
+    expect(rules.find((x: any) => x.kind === "other" && x.who === "Ishaan").note).toBe("Ishaan has fruit three times a week");
+    expect(r.dropped.filter((d: string) => d.startsWith(`how often for "`))).toEqual([
+      `how often for "Kiran has jowar roti in place of rice" (sometimes): not in the family's words, kept every time`,
+      `how often for "Ishaan has fruit three times a week" (5 a week): not in the family's words, kept every time`]);
+  });
+
+  it("the readers are taught how often with the example family, never the test family", () => {
+    const rules = SETUP_PARTS.find((p) => p.id === "rules")!, dishes = SETUP_PARTS.find((p) => p.id === "dishes")!;
+    expect(rules.system).toContain("often");
+    expect(rules.system).toContain(`"Less rice" is other`);
+    expect((rules.schema as any).properties.rules.items.properties.often.enum).toEqual(["usually", "sometimes", "rarely", null]);
+    expect(dishes.system).toContain("[name, meals, who, how_often]");
+    expect(dishes.system).toContain(`["Khichdi", "Dinner", "Tara", "sometimes"]`);
+  });
+
+  it("frequency words read in code", () => {
+    expect(dishOftenSaid("sometimes", ["curd rice when hes tired"])).toEqual({ often: "sometimes" });
+    expect(dishOftenSaid("usually", ["chapati with a sabzi and dal most nights"])).toEqual({ often: "usually" });
+    expect(dishOftenSaid("rarely", ["pasta once in a while"])).toEqual({ often: "rarely" });
+    expect(dishOftenSaid("2", ["rajma twice last week"])).toEqual({ per_week: 2 });
+    expect(dishOftenSaid("1", ["palak dal bhindi chole once"])).toEqual({ per_week: 1 });
+    expect(dishOftenSaid("Fri", ["lemon rice on friday"])).toEqual({ days: ["Fri"] });
+    expect(dishOftenSaid("Sat, Sun", ["weekend parathas"])).toEqual({ days: ["Sat", "Sun"] });
+    expect(dishOftenSaid("usually", ["idli dosa poha"])).toEqual({ dropped: "usually" });
+    expect(ruleOftenSaid({ often: "sometimes", quote: "millets are good for him" }, [])).toEqual({ often: "sometimes" });
+    expect(ruleOftenSaid({ often: "sometimes", quote: "no sugar" }, ["father is diabetic no sugar"])).toEqual({ dropped: "sometimes" });
+    // A wish read as "usually" is still a wish (eval 23 Nov).
+    expect(ruleOftenSaid({ often: "usually", quote: "millets are good for him" }, [])).toEqual({ often: "sometimes" });
+    expect(ruleOftenSaid({ per_week: 2, quote: "sweets twice a week" }, [])).toEqual({ per_week: 2 });
   });
 });

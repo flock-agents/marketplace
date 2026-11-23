@@ -54,6 +54,16 @@ export const CART_SYNC: Record<GroceryApp, boolean> = { zepto: true, "swiggy-ins
 export const STAPLE_DISHES = ["roti", "rotis", "chapati", "chapatis", "phulka", "phulkas", "rice", "plain rice", "steamed rice", "curd", "dahi", "raita",
   "salad", "papad", "pickle", "buttermilk", "chaas", "milk", "fruit", "fruits"] as const;
 
+/** How often the family has a dish, or keeps a soft rule, in their words (owner, 23 Nov): usually (most days, most nights,
+ *  daily), sometimes (sometimes, "when he's tired", now and then), rarely (once in a while, occasionally). */
+export const OFTEN = ["usually", "sometimes", "rarely"] as const;
+export type Often = (typeof OFTEN)[number];
+/** The days a week a dish of the family's comes back at most, by how often they have it (owner, 23 Nov); a dish with nothing
+ *  said comes back on MAIN_DAYS_MAX days (meals.ts). */
+export const DISH_DAYS_MAX: Record<Often, number> = { usually: 5, sometimes: 2, rarely: 1 };
+/** The meals a week a soft rule is kept at, by how often ("millets are good for him": 2 to 3 meals, not every meal). */
+export const RULE_TIMES: Record<Often, [number, number]> = { usually: [4, 5], sometimes: [2, 3], rarely: [0, 1] };
+
 /** How a dish went, as the family says it: good, okay, or didn't work. */
 export const DISH_RATINGS = ["good", "okay", "didnt_work"] as const;
 export type DishRating = (typeof DISH_RATINGS)[number];

@@ -9,11 +9,11 @@ import { dish_items, dishes, house as house_t, items, people, plan_meals, saved_
 import { cycleText } from "./estimate";
 import { normItem } from "./products";
 import { closest } from "./agentOps";
-import { SLOTS, STAPLE_DISHES, type GroceryApp } from "./db/constants";
+import { DISH_DAYS_MAX, SLOTS, STAPLE_DISHES, type GroceryApp, type Often } from "./db/constants";
 import { addDays, mondayOf, todayStr, weekDates, weekdayOf } from "./dates";
 import { introText, weekLink, weekMessage, weekSendText, youtubeThumb } from "./messages";
 import { dishKey, type LastTime } from "./dishText";
-import { bookOf, familyDishes, knownDishes, lastTime, setVideo, videoOf, type DishVideo } from "./dishBook";
+import { bookOf, dishOftenMap, familyDishes, knownDishes, lastTime, setVideo, videoOf, type DishVideo, type OftenMap } from "./dishBook";
 import { breaksText, dinersOf, EVERYONE, forEveryone, isRepeatableSide, namedInOnlyRule, ruleBreaks, ruleBreaksIn, type RuleBreak } from "./rules";
 import { getHouse, groceryApp, houseView, isObject, list, name, names, refuse, words, writeRoutes,
   type Db, type Emit, type HouseView, type PersonRow } from "./family";
@@ -121,12 +121,15 @@ export function weekContext(db: Db, weekStart: string): WeekContext {
 export const PLAN_METHOD = `Build the week from family_dishes, the family's own food: choose and rotate, do not invent.
 1. Each person first: read their rules (house.rules) and notes. Who has an only, avoid or swap rule needs their own dish or a portion_note.
 2. Each meal of each day: take that meal's dishes from family_dishes and spread them over the week, so each main dish
-   is on two days at most (roti, rice and sides such as chutney, curd, plain dal come back freely; sambar and rasam are mains).
+   is on two days at most, a person's own dish too (roti, rice and sides such as chutney, curd, plain dal come back freely;
+   sambar and rasam are mains). A dish listed with often comes as often as the family has it (usually: up to 5 days;
+   sometimes: 2; rarely: 1), with per_week on that many days, with days only on those days.
+   A rule with a number of times a week ("2–3 times a week") is kept at that many meals, not at every meal.
    Prefer dishes not on last_week; a dish rated didnt_work rarely. A dish listed with for is that person's: theirs only.
    A tiffin from the child's own list. Where the list runs short, add a dish like theirs that every rule allows (a new one
    only when the cook takes new recipes).
 3. A person who cannot eat the shared dish gets their own, and the shared one is for: ["everyone"], except: [them].
-4. Read the week through once: every person fed at every meal they eat at home, every rule kept, no main on three days.
+4. Read the week through once: every person fed at every meal they eat at home, every rule kept, no dish more often than allowed.
 5. A refusal names what is wrong: change only those meals, and keep every other meal exactly as you sent it.
 One day, done right (Kabir eats only plain idli or dosa at breakfast and has a tiffin; Nani has millet for rice):
   Breakfast: Plain idli for ["Kabir"]; Rava idli for ["everyone"] except ["Kabir"]; Coconut chutney for ["everyone"]
@@ -400,39 +403,66 @@ export const isStaple = (name: string): boolean => {
   return STAPLES.has(key) || (w.length === 2 && STAPLE_GRAINS.has(w[0]) && STAPLES.has(w[1]));
 };
 
-/** The main dishes on more than MAIN_DAYS_MAX days of the week: "Paneer bhurji (Mon, Tue, Thu)". Staples, sides and the
- *  dishes an `only` rule names come back freely. Checked on the weekly plan only (plan_menu, the closing plan_week): never on
- *  set_meal / set_dish, so the family's changes in chat are never refused. */
-export function repeatedDays(week: WeekView, house: HouseView): { name: string; dates: string[] }[] {
+/** How many days of the week a dish may be on, and on which: the family's own words for it (`often`: usually 5, sometimes 2,
+ *  rarely 1; `per_week`; `days`), else MAIN_DAYS_MAX. `why` says it as the family did. */
+export function dishLimit(f: { often?: Often; per_week?: number; days?: string[] } | undefined): { max: number; days?: string[]; why: string } {
+  const days = f?.days?.length ? f.days : undefined;
+  const max = Math.min(f?.per_week ?? (days ? days.length : f?.often ? DISH_DAYS_MAX[f.often] : MAIN_DAYS_MAX), days?.length ?? 7);
+  const n = max === 1 ? "once" : max === 2 ? "twice" : `${max} days`;
+  const why = f?.per_week != null ? `the family has it ${n} a week${days ? ` (${days.join(", ")})` : ""}`
+    : days ? `the family has it on ${days.join(", ")} only`
+    : f?.often ? `the family has it ${f.often}: ${max === 1 ? "once a week" : `${max} days a week`} at most`
+    : `a main dish is on ${MAIN_DAYS_MAX} days at most`;
+  return { max, ...(days ? { days } : {}), why };
+}
+
+/** One dish on more days than it may be (dishLimit), or on a day the family does not have it: every day it is on (`dates`),
+ *  and the ones too many (`over`: a day not its own first, then the last days past its most). */
+export type Repeat = { name: string; dates: string[]; over: string[]; max: number; why: string };
+
+/** The dishes the week has more often than the family does (owner, 23 Nov: "curd rice when he's tired" is not every night;
+ *  "lemon rice on Friday" is Friday): each dish by its `often` (the dish book's, by name), else MAIN_DAYS_MAX days. Staples,
+ *  sides and the dishes an `only` rule names come back freely, unless the family gave them a count or days ("weekend
+ *  parathas"). A dish of one person's is counted like any other (owner, 23 Nov: no longer exempt). Checked on the weekly
+ *  plan only (plan_menu, the closing plan_week): never on set_meal / set_dish, so the family's changes in chat are never
+ *  refused. */
+export function repeatedDays(week: WeekView, house: HouseView, often: OftenMap = new Map()): Repeat[] {
   const days = new Map<string, { name: string; days: Set<string> }>();
   for (const m of week.days.flatMap((d) => d.meals)) for (const d of m.dishes) {
-    if (isStaple(d.name) || isRepeatableSide(d.name) || namedInOnlyRule(d.name, house.rules)) continue;
-    // A dish made for one person only (an elder's diabetic breakfast) may come back: the cap keeps the family's own
-    // dishes varied (owner, 2026-11-23: exempt his own dishes; sim plan-only 1 refused ragi dosa / oats 3x for Gowri Shankar).
-    if (d.for_people?.length === 1 && d.for_people[0] !== "everyone") continue;
-    const k = dishKey(d.name), seen = days.get(k) ?? { name: d.name, days: new Set<string>() };
+    const k = dishKey(d.name), f = often.get(k);
+    const counted = f?.per_week != null || !!f?.days?.length;
+    if (!counted && (isStaple(d.name) || isRepeatableSide(d.name) || namedInOnlyRule(d.name, house.rules))) continue;
+    const seen = days.get(k) ?? { name: d.name, days: new Set<string>() };
     seen.days.add(m.date); days.set(k, seen);
   }
-  return [...days.values()].filter((d) => d.days.size > MAIN_DAYS_MAX).map((d) => ({ name: d.name, dates: [...d.days].sort() }));
+  const out: Repeat[] = [];
+  for (const [k, d] of days) {
+    const lim = dishLimit(often.get(k)), dates = [...d.days].sort();
+    const off = lim.days ? dates.filter((x) => !lim.days!.includes(weekdayOf(x))) : [];
+    const on = dates.filter((x) => !off.includes(x));
+    const over = [...off, ...on.slice(lim.max)].sort();
+    if (over.length) out.push({ name: d.name, dates, over, max: lim.max, why: lim.why });
+  }
+  return out;
 }
-function overRepeated(week: WeekView, house: HouseView): string[] {
-  return repeatedDays(week, house).map((d) => `${d.name} (${d.dates.map(weekdayOf).join(", ")})`);
+function overRepeated(week: WeekView, house: HouseView, often?: OftenMap): string[] {
+  return repeatedDays(week, house, often).map((d) => `${d.name} (${d.dates.map(weekdayOf).join(", ")}: ${d.why})`);
 }
 export const repeatsSaid = (repeated: string[]) =>
-  `A main dish is on more than ${MAIN_DAYS_MAX} days: ${repeated.join("; ")}: plan something else on the other days (roti, rice, sides, a person's only dishes and a dish for one person alone may come back).`;
+  `A dish is on more days than the family has it: ${repeated.join("; ")}: plan something else on the other days (a main dish the family said nothing about is on ${MAIN_DAYS_MAX} days at most; roti, rice, sides and a person's only dishes may come back).`;
 
 /** The checks a week passes before its closing call answers the message: every dish has its ingredients, and every extra slot
  *  (a child's tiffin) has a meal on each of its days from today on. Refused with every problem named, so
  *  one fix round is enough. A main dish on more than MAIN_DAYS_MAX days is refused too (overRepeated); the family's own changes
  *  once the week is sent never are. */
-function checkWeek(week: WeekView, house: HouseView, today: string, breaks: RuleBreak[]): void {
+function checkWeek(week: WeekView, house: HouseView, today: string, breaks: RuleBreak[], often?: OftenMap): void {
   const meals = week.days.flatMap((d) => d.meals);
   const missing = meals.flatMap((m) => m.dishes.filter((d) => !d.ingredients.length).map((d) => `${mealLabel(m)}: ${d.name}`));
   // A meal from today on with no dish and not ordered in: the week is not planned (sim run seed 15: every meal sent
   // with no dishes, the closing call answered "Monday: nothing planned").
   const empty = meals.filter((m) => !m.ordered_in && !m.dishes.length && m.date >= today).map(mealLabel);
   const gaps = slotGaps(week, house, today);
-  const repeated = overRepeated(week, house);
+  const repeated = overRepeated(week, house, often);
   if (!missing.length && !empty.length && !gaps.length && !breaks.length && !repeated.length) return;
   const said: string[] = breaks.length ? [rulesSaid(breaks)] : [];
   if (empty.length) said.push(`These meals have no dish: ${empty.join("; ")}. Send each with its dishes (plan_week final, keep_rest, that day's meals with dishes), or ordered_in: true with a note when they eat out.`);
@@ -446,8 +476,8 @@ function checkWeek(week: WeekView, house: HouseView, today: string, breaks: Rule
 
 /** The checks plan_menu makes on a whole week's menu (the stepped plan, makePlan.ts, makes the same): the rules a name
  *  breaks, a day with no meal and an extra slot without its meal (`gaps`), and a main dish on too many days. */
-export function menuChecks(view: WeekView, house: HouseView, people: { name: string }[], today: string): { breaks: RuleBreak[]; gaps: string[]; repeated: string[] } {
-  return { breaks: ruleBreaks(view, house, people), gaps: [...emptyDays(view, house, today), ...slotGaps(view, house, today)], repeated: overRepeated(view, house) };
+export function menuChecks(view: WeekView, house: HouseView, people: { name: string }[], today: string, often?: OftenMap): { breaks: RuleBreak[]; gaps: string[]; repeated: string[] } {
+  return { breaks: ruleBreaks(view, house, people), gaps: [...emptyDays(view, house, today), ...slotGaps(view, house, today)], repeated: overRepeated(view, house, often) };
 }
 
 /** Run a write in one transaction; the pages hear of its changes only once it is committed. */
@@ -612,7 +642,7 @@ export function mountMealRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: { bas
       if (!drafts.length && !planned) return { body: { context: weekContext(db, weekStart) } };
       if (mode === "final" && by.startsWith("agent:")) {
         const view = weekView(db, weekStart), house = houseView(getHouse(db));
-        checkWeek(view, house, today(), ruleBreaks(view, house, peopleAtHome(db)));
+        checkWeek(view, house, today(), ruleBreaks(view, house, peopleAtHome(db)), dishOftenMap(familyDishes(db)));
       }
       commit((tx, changes) => {
         for (const m of drafts) {
@@ -682,7 +712,7 @@ export function mountMealRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: { bas
         (m.dishes ?? []).forEach((d, position) => addDish(tx, row.id, position, d, by, changes));
       }
       const view = weekView(tx, weekStart), house = houseView(getHouse(tx));
-      const { breaks, gaps, repeated } = menuChecks(view, house, peopleAtHome(tx), today());
+      const { breaks, gaps, repeated } = menuChecks(view, house, peopleAtHome(tx), today(), dishOftenMap(familyDishes(tx)));
       if (!eaters.length && !breaks.length && !gaps.length && !repeated.length) return;
       const said: string[] = [];
       if (eaters.length) said.push(eatersSaid(eaters, everyoneAtHome(tx)));
