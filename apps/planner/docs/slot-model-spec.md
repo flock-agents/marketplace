@@ -91,7 +91,7 @@ Unique (date, slot).
 | key | text | normalised dish name (dishKey) |
 | slot | text | the slot it is eaten at; one row per (dish, slot) |
 | name | text | display name |
-| frequency | text, null | `usually` \| `sometimes` \| `rarely` \| `"<n>/week"`; null = default (≤2 days) |
+| frequency | text, null | `daily` (family said every day; a staple) \| `usually` \| `sometimes` \| `rarely` \| `"<n>/week"`; null = default (≤2 days) |
 | days | json weekday[], null | only these days ("lemon rice on Friday") |
 | contains | json string[] | open tag list: every item any rule names (`egg`, `meat`, `fish`, `onion_garlic`, `nuts`, `peanut`, `sugar`, `white_rice`, `dairy`, `root_veg`, `millet`, `mushroom`, `chicken`…) |
 | contains_read | json string[] | which tags have been read for this dish (a rule tag not in here = unknown) |
@@ -128,7 +128,7 @@ Unique (key, slot).
 ### 2.2 Derived, not stored
 
 - **History** = past `slot_days` (+ the seed examples, `status = confirmed`, date null, from setup). Past `planned` slot-days are what the family was **shown**, not what they ate.
-- **Staples** of a slot = dishes appearing in ≥ 60% of that slot's last 14 history rows with dishes (seed counts; decided default, tunable). Staples are exempt from the repeat window. Computed at plan time.
+- **Staples** of a slot = dishes appearing in ≥ 60% of that slot's last 14 **seed + confirmed** rows with dishes (planned rows never count; owner 23 Nov), plus any dish the family explicitly says to have every day ("add salad every day", "4 eggs every day": library `frequency = daily`, which must appear on every slot-day of its slot). Staples are exempt from the repeat window. Computed at plan time.
 - **Looks like** examples for a slot = up to 6 rows from the seed and **confirmed** slot-days only (recent confirmed first, then seed). Planned-only slot-days are never used as shape examples.
 - **Recent** (repeat avoidance, §5.4 check 4) = past slot-days of any status, planned included: it avoids repeating what the family was shown.
 
