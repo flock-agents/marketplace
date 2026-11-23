@@ -117,7 +117,7 @@ describe("a short slot's own new dishes (owner, 24 Nov)", () => {
     expect(budgetProblems(dinner(plates))).toEqual([]);
     // 5 of its own + the setting's 1 = 6; a 7th new dish is past it.
     const more = ["Sev tamatar", "Tinda masala"];
-    for (const n of more) newNames.set(dishKey(n), { name: n, why: "" });
+    for (const n of more) newNames.set(dishKey(n), { name: n, why: "", like: "" });
     expect(budgetProblems(dinner(plates.map((p, i) => (i === 5 ? ["Roti", more[0], "Lauki"] : p))))).toEqual([]);
     expect(budgetProblems(dinner(plates.map((p, i) => (i === 5 ? ["Roti", more[0], "Lauki"] : i === 6 ? ["Roti", more[1], "Toor dal"] : p)))).length).toBeGreaterThan(0);
     // Lunch is not short: two new dishes there with a setting of 1 is one too many.

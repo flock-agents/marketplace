@@ -87,8 +87,7 @@ the routes; `agentOps.ts` maps each operation to one of those routes, so the age
 the estimate's tuning and the 2.0 table names; `family.ts` people, the house row, the cook and shopping apps;
 `slotStore.ts` the slot model's typed rows, reads and writes (slots, slot-days with dishes and ingredients, library, rules)
 and its derived values (staples, looks like, recent); `meals.ts` the week as the pages read it and a planned week's close;
-`legacy.ts` the old shapes `setup.ts` still imports (to delete);
-`setup.ts` `apply_setup` (spec §4: three balanced reads and a fast contains read, structural checks, the writes, the read-back, a correction as a diff); `makePlan.ts` the week's plan (`make_plan`, spec §5): the slot calls in planning order, the fix call, the contains read of
+`setup.ts` `apply_setup` (spec §4: four balanced reads (home, rules, dishes, how often) and a fast contains read, structural checks, the writes, the read-back, a correction as a diff); `makePlan.ts` the week's plan (`make_plan`, spec §5): the slot calls in planning order, the fix call, the contains read of
 new dishes, the ingredients, the one-transaction save and the message, or (`only`, a later change) the same steps for some
 slot-days of the week with the rest kept and read for the checks; `changes.ts` the later changes of spec §6 (`set_slot`,
 `set_slot_day`, `add_dish`, `set_rule`, `set_setting`, `record_made`) and the answer to the next-day question

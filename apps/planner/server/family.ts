@@ -17,8 +17,6 @@ export type Emit = (table: string, id: string, op: "insert" | "update" | "delete
 
 export type PersonRow = typeof people.$inferSelect;
 export type HouseRow = typeof house.$inferSelect;
-/** The old house shapes, for the code lanes B and C rewrite (legacy.ts). */
-export type { ExtraSlot, HouseRule, MealExample, OrderIn } from "./legacy";
 /** One visit of the cook: when they come, and the meals that visit makes when the family said. */
 export type CookVisit = { at: string; meals?: string[] };
 /** The house row with its lists read: what the routes answer with. Every day is planned; a meal not cooked at home is a slot's

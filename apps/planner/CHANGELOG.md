@@ -1,5 +1,38 @@
 # Changelog
 
+## 4.0.0
+
+The slot model (`docs/slot-model-spec.md`). The old plan tables and operations are replaced outright, with no migration: no
+family has the new setup interview yet. Calendar stays and the fresh household need a Flock with `ctx.apps.op` and
+`ctx.household.get`; on an older Flock the plan uses the household facts it was sent.
+
+- **A week is slots filled day by day.** Breakfast, Lunch, Dinner, the family's own slots (a child's tiffin, an evening
+  snack) and a person's add-on (his phulkas at dinner, her fish twice a week) are each planned for the people eating that
+  day: the usual people, less who is at the office or school that weekday, plus or minus the Family Calendar's stays and
+  trips (or the household's dated facts), less a fast. Guests and an occasion can be set on one meal.
+- **Setup reads, code checks.** `apply_setup` reads the household facts and the family's replies in four parallel model
+  reads (home, rules, dishes, how often) and one fast read of each dish's tags; code keeps only what the family's own words
+  back (a frequency needs their sentence), saves slots, rules with quotes, the dish library per slot and last week's meals
+  as examples, and reads it back in plain words. A correction applies only what the new reply names.
+- **The plan keeps their shape and their rules.** One model call per slot in order (breakfast first, add-ons last, at most
+  3 at once), shown the family's own plates as the template. Code checks every person's hard rules (a dish someone cannot eat
+  is "not for" them, as long as they have something of their own), days and how often across slots, a 3-day repeat window
+  (staples, from at least 3 confirmed meals or dishes they said to have every day, are exempt), and swaps a rejected dish
+  for another of theirs, never leaving a plate thinner. A short slot is asked about ("I only know 2 dinners for Ba…") and
+  gets new dishes like theirs.
+- **Changes later, without setup again.** `set_slot`, `set_slot_day` (people, guests, occasion, eaten out, dishes),
+  `add_dish` (with a reel or recipe link), `set_rule`, `set_setting`, `record_made`, `record_feedback`. A change re-plans
+  only the meals it touches and never overwrites one the family changed.
+- **New dishes are asked about once, the next day.** The 15:00 reminder asks about yesterday's new dishes (made it? liked
+  it? again?), at most 3 a day; a kept dish joins the library, a disliked one never comes back. The evening "how was today's
+  food" check-in is gone.
+- **Shopping follows the slot model.** Ingredients come from the planned meals (eaten out and ordered in bring none); the
+  15:00 reminder covers tonight's dinner and anyone's own dinner; an everyday item ordered for tomorrow is not put on again
+  while that order still covers it (curd every 2 days was being bought every day).
+- **Removed:** `set_meal`, `set_family_dishes`, `set_slots`, `set_house_rules`, `plan_week`, `plan_menu`, `set_dish`,
+  `set_cooking_days`, `rate_today`, and the tables `plan_meals`, `dishes`, `dish_items`, `dish_book`.
+- **Evals:** `evals/` scores setup (Eval 1) and the plan (Eval 2) separately on 8 households, with 4 held out.
+
 ## 3.5.0
 
 Needs a Flock that gives apps a model call (the manifest's new top-level `"model": true`); on one without it the Sunday

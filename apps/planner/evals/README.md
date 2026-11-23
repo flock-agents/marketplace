@@ -79,14 +79,10 @@ per slot-day within ±1 of the slot's history). Facts: hard_breaks, new_dishes, 
 `server/db/constants.ts`; today's 2.x regexes are listed in `GRANDFATHERED` for lanes B/C to delete as they rewrite.
 `server/quoteLint.ts`: spec §4.2's day/count lint (`needsReread`, `lintLibrary`), tested in `quoteLint.test.ts`.
 
-## Results (2.x runs, before the slot model)
+## Results (slot model)
 
-`results/` holds the runs (`results.json` with every setup, transcript and week, and `summary.md`). `results/before-257ef20-*`: the
-planner before the how-often change (h3 fixture v1, without the rajma/chole/chapati counts); `results/cf9a391-*`: the
-merged how-often planner, the scorecards to compare against.
-`results/base-reuse-setup`: cf9a391's setup re-read twice on cf9a391's chats (its own variance); `results/fixes-*`: the
-setup fixes of feat/planner-setup-fixes on the same chats (`fixes-reuse-setup`), on new chats (`fixes-fresh-setup`) and
-on those new chats after the last fix (`fixes-fresh-rescored-setup`). `results.json` now keeps each run's model `profile`.
+`results/` holds the runs (`results.json` with every setup, transcript and week, and `summary.md`). The 2.x runs from before
+the slot model were removed (they scored tables that no longer exist).
 `results/setup-2026-11-231555`: setup v2 before tuning (the baseline); `results/setup-tuned-fresh` and
 `results/setup-heldout-tuned`: after the how-often read and the scorer/persona fixes of 23 Nov (a whole-house avoid kept per
 person counts; any row of a dish on its slot may carry its frequency; "veg" = "vegetable" and `aka` in dish names; the persona

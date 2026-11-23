@@ -50,7 +50,7 @@ export const house = sqliteTable("house", {
  *  one for one person's different plate ("Papa's dinner": two phulkas, no rice). Spec slot-model §2.1. */
 export const slots = sqliteTable("slots", {
   ...kitColumns(),
-  name: text("name").notNull().unique(),                       // "Breakfast", "Agastya's tiffin", "Papa's dinner"
+  name: text("name").notNull().unique(),                       // "Breakfast", "School tiffin", "Papa's dinner"
   kind: text("kind").notNull(),                                // main | custom | addon (constants.ts SLOT_KINDS)
   addon_of: text("addon_of"),                                  // an addon's main slot ("Dinner")
   usual_people: text("usual_people"),                          // JSON string[]: names; empty = everyone at home
