@@ -87,8 +87,14 @@ the routes; `agentOps.ts` maps each operation to one of those routes, so the age
 the estimate's tuning and the 2.0 table names; `family.ts` people, the house row, the cook and shopping apps;
 `slotStore.ts` the slot model's typed rows, reads and writes (slots, slot-days with dishes and ingredients, library, rules)
 and its derived values (staples, looks like, recent); `meals.ts` the week as the pages read it and a planned week's close;
-`legacy.ts` the old house and dish shapes `makePlan.ts` still compiles against until lane C rewrites it (every read of them
-throws); `setup.ts` `apply_setup` (spec §4: three balanced reads and a fast contains read, structural checks, the writes, the read-back, a correction as a diff); `dishText.ts` a dish in one line; `regulars.ts` `set_regular` as a way to state an item's cycle, and the move of old everyday items into item cycles;
+`legacy.ts` the old shapes `setup.ts` still imports (to delete);
+`setup.ts` `apply_setup` (spec §4: three balanced reads and a fast contains read, structural checks, the writes, the read-back, a correction as a diff); `makePlan.ts` the week's plan (`make_plan`, spec §5): the slot calls in planning order, the fix call, the contains read of
+new dishes, the ingredients, the one-transaction save and the message; `planDays.ts` its slot-days in code (who eats each
+slot each day: usual people, `household.weekly` with setup's weekday lunch winning, the Family Calendar's `get_events` or
+`household.dated` read by one fast call, fasts, skip days, edited slot-days kept) and the SDK feature-detection
+(`ctx.household.get`, `ctx.apps.op`); `planChecks.ts` its code checks (library, staples incl. `daily` dishes, new-dish
+budget, hard rules per person with `not_for` and fail-closed contains, days and frequency across slots, the repeat window,
+no main twice a day, soft counts), the feasibility pre-check and rotation; `dishText.ts` a dish in one line; `regulars.ts` `set_regular` as a way to state an item's cycle, and the move of old everyday items into item cycles;
 `items.ts` items, their events, order history and the answers; `estimate.ts` the estimate and an item's cycle as pure functions; `cart.ts` carts
 and their life; `cartRoutes.ts` the cart operations and keeping each app's own cart in step; `reminder.ts` what a reminder
 says and does; `products.ts` remembered products and pack arithmetic (g, ml, pc); `recipes.ts` saved recipes;
@@ -124,8 +130,8 @@ setting `new_dishes_per_week` (0, 2, 4 or 7; 2 until set) caps a week's new dish
 `cooking_days`) are gone, with no migration.
 
 **Operations** (24). `guide`; the family: `set_person`, `set_cook`, `set_shopping_apps`, `apply_setup` (the whole setup
-at once: slots, rules, library, seed slot-days, the cook; called again with more replies it applies only what they changed); the plan: `make_plan` (lane C rewrites it; the change operations of spec §6
-come with lane D); items: `set_regular` (the older way to state a cycle), `import_order_history` (about 8 orders and 80
+at once: slots, rules, library, seed slot-days, the cook; called again with more replies it applies only what they changed); the plan: `make_plan { week_start, household? }` (the slot model, spec §5; the change operations of
+spec §6 come with lane D); items: `set_regular` (the older way to state a cycle), `import_order_history` (about 8 orders and 80
 items a call, one app a call), `record_bought_outside`, `set_item`, `set_subscription`, `answer_running_low`,
 `remember_product`; the reminder and carts: `get_reminder` (afternoon | evening, with an optional date), `get_cart`,
 `set_cart_line`, `order_cart`, `sync_cart`, `record_order`, `cancel_order`; `save_recipe`; dishes: `set_dish_video`,
@@ -134,7 +140,8 @@ items a call, one app a call), `record_bought_outside`, `set_item`, `set_subscri
 app's own cart match a cart.
 
 **Routines and the gate.** `weekly-plan` (Sunday 11:00) plans next week with `make_plan` and wakes the agent only to send
-its message and, once, the intro (lane C rewrites the plan on the slot model). `afternoon-reminder` (15:00) and `evening-reminder` (19:00) check as a dry run whether
+its message and, once, the intro, with one question when a festival the family likely keeps is near (the agent judges it
+from the people's names and their fasts; always asked, never assumed). A Flock with no model call is told to update. `afternoon-reminder` (15:00) and `evening-reminder` (19:00) check as a dry run whether
 there is anything to say and wake the agent only then (the evening one also when an app is connected, for the day's read of
 its history); each records the time it really runs at, which the intro names. The woken agent reads the order history first,
 calls `get_reminder` (which puts the daily items due on the carts and chooses what to ask), copies the carts to the apps

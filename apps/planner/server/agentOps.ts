@@ -59,7 +59,7 @@ export const FIELDS: Record<string, { fields: string[]; need?: string[] }> = {
   set_cook: { fields: ["name", "days", "arrival", "makes_well", "wont_make", "time_limit", "new_recipes", "note"], need: ["name"] },
   set_shopping_apps: { fields: ["main", "fallback", "connected"], need: ["main", "connected"] },
   apply_setup: { fields: ["household", "transcript"], need: ["transcript"] },
-  make_plan: { fields: ["week_start"], need: ["week_start"] },
+  make_plan: { fields: ["week_start", "household"], need: ["week_start"] },
   set_regular: { fields: ["item", "amount", "unit", "every", "times_per_week", "weekdays", "for_whom", "active", "paused_until", "remove"], need: ["item"] },
   import_order_history: { fields: ["app", "account", "orders"], need: ["app", "orders"] },
   record_bought_outside: { fields: ["item", "date"], need: ["item"] },

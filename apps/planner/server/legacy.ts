@@ -1,16 +1,14 @@
-// What apply_setup (lane B) and make_plan (lane C) still compile against from before the slot model: the old house shape
-// (rules, extra slots, meals ordered in, meal examples as JSON on the house row) and the old family-dish shape. The tables
-// behind them are gone (docs/slot-model-spec.md §3), so every read of them throws LANE_B / LANE_C; the pure helpers stay so
-// the old code still type-checks until its lane rewrites it. Delete this file once both lanes have landed.
+// What apply_setup (lane B) still compiles against from before the slot model: the old house shape (rules, extra slots, meals
+// ordered in, meal examples as JSON on the house row). The tables behind it are gone (docs/slot-model-spec.md §3), so every
+// read of them throws LANE_B; the pure helpers stay so the old code still type-checks until lane B rewrites it. make_plan
+// (lane C) no longer uses any of it. Delete this file once lane B has landed.
 import type { Weekday } from "./dates";
-import { RULE_KINDS, SLOTS, type Often } from "./db/constants";
-import { dishKey } from "./dishText";
+import { RULE_KINDS, SLOTS } from "./db/constants";
 import { daysSaid, LONG_DAY, type Db, type HouseView } from "./family";
 import type { Rule } from "./rules";
 
 /** The error a read of a removed table throws until its lane rewrites the code that makes it. */
 export const LANE_B = "slot model: rewritten in lane B";
-export const LANE_C = "slot model: rewritten in lane C";
 
 /** An old house rule (rules.ts's shape): now a `rules` row (slotStore.ts Rule). */
 export type HouseRule = Rule & { kind: (typeof RULE_KINDS)[number] };
@@ -24,7 +22,7 @@ export type MealExample = { slot: string; group?: "children" | "adults"; words: 
 export type LegacyHouse = HouseView & { rules: HouseRule[]; extra_slots: ExtraSlot[]; order_in: OrderIn[]; meal_examples: MealExample[] };
 
 /** The old house shape: its columns are gone, so this throws (`lane`: who rewrites the caller). */
-export function legacyHouse(_db: Db, lane: typeof LANE_B | typeof LANE_C): LegacyHouse {
+export function legacyHouse(_db: Db, lane: typeof LANE_B): LegacyHouse {
   throw new Error(lane);
 }
 
@@ -49,19 +47,4 @@ export function slotsSaid(h: Pick<LegacyHouse, "extra_slots" | "order_in">): str
   if (ordered.length) out.push(`${andWords(ordered.map(meal))} you order in.`);
   if (notCooked.length) out.push(`${andWords(notCooked.map(meal))} ${notCooked.length === 1 ? "isn't" : "aren't"} cooked at home.`);
   return out.join(" ");
-}
-
-/** How often the family has a dish, as the old dish book kept it: now a library row's `frequency` and `days`. */
-export type DishOften = { often?: Often; per_week?: number; days?: Weekday[] };
-export type FamilyDish = { dish: string; for?: string[]; rating?: string } & DishOften;
-/** A dish the family rated or gave a video, as the old plan context listed it. */
-export type KnownDish = { dish: string; rating: string | null; note: string | null; rated_on: string | null; video_url: string | null };
-export type OftenMap = Map<string, DishOften & { name: string; for?: string[] }>;
-/** How often each of the family's dishes may come in a week, by its key: only the dishes the family said something about. */
-export function dishOftenMap(dishes: Record<string, FamilyDish[]>): OftenMap {
-  const out: OftenMap = new Map();
-  for (const d of Object.values(dishes).flat())
-    if (d.often || d.per_week != null || d.days?.length) out.set(dishKey(d.dish), { name: d.dish, ...(d.for ? { for: d.for } : {}), ...(d.often ? { often: d.often } : {}),
-      ...(d.per_week != null ? { per_week: d.per_week } : {}), ...(d.days?.length ? { days: d.days } : {}) });
-  return out;
 }

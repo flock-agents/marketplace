@@ -145,6 +145,43 @@ export function weekMessage(i: { monday: MealView[]; link: string; unmet?: strin
   ].join("\n");
 }
 
+/** What make_plan's message is made of: each day planned (`label`: "Monday"), its slot-days with their dishes (who a dish is
+ *  not for, its note); the family's standing notes (said once); what could not be kept; the new dishes; what to ask (a calendar
+ *  entry the plan could not read for meals). */
+export type PlanText = {
+  days: { label: string; meals: { slot: string; skip: string | null; note: string | null; dishes: { name: string; note: string | null; not_for?: string[] }[] }[] }[];
+  standing: string[]; unmet: string[]; new_dishes: { name: string; why: string }[]; asked: string[]; link: string;
+};
+/** A note on this many days or more is said once, under "All week", not on each day. */
+const ALL_WEEK_DAYS = 3;
+
+/** The plan's message (spec §5.6): the week by day, the standing notes once ("All week"), the new dishes, what could not be
+ *  kept and the questions; then the Week page. */
+export function planMessage(t: PlanText): string {
+  const daysWith = new Map<string, Set<string>>();
+  const seen = (note: string | null, day: string) => { if (note) daysWith.set(note, (daysWith.get(note) ?? new Set()).add(day)); };
+  for (const d of t.days) for (const m of d.meals) { seen(m.note, d.label); for (const x of m.dishes) seen(x.note, d.label); }
+  const allWeek = [...daysWith].filter(([, ds]) => ds.size >= ALL_WEEK_DAYS).map(([n]) => n);
+  const shown = (note: string | null) => (note && !allWeek.includes(note) ? note : null);
+  const lines = ["Your week is planned."];
+  for (const d of t.days) {
+    if (!d.meals.length) continue;
+    lines.push("", `*${d.label}*`);
+    for (const m of d.meals) {
+      const what = m.skip ? (m.skip === "eaten_out" ? "eating out" : "ordering in")
+        : m.dishes.map((x) => dishText({ name: x.name, portion_note: shown(x.note), not_for: x.not_for })).join(", ") || "nothing planned";
+      lines.push(`${m.slot}: ${what}${shown(m.note) ? `. ${m.note}` : ""}`);
+    }
+  }
+  const standing = [...new Set([...t.standing, ...allWeek])];
+  if (standing.length) lines.push("", `All week: ${standing.join("; ")}`);
+  if (t.new_dishes.length) lines.push("", `New this week: ${t.new_dishes.map((n) => (n.why ? `${n.name} (${n.why})` : n.name)).join("; ")}`);
+  if (t.unmet.length) lines.push("", `I couldn't keep everything this week: ${t.unmet.join("; ")}. Tell me what to change.`);
+  if (t.asked.length) lines.push("", ...t.asked);
+  lines.push("", `The whole week: [Week page](${t.link})`, "Tell me anything to change.");
+  return lines.join("\n");
+}
+
 /** A time of day as it reads inside a sentence: "3", "7:30" (no am or pm). */
 const bare = (time: string): string => clockText(time).replace(/ [ap]m$/, "");
 const partOfDay = (time: string): string => { const h = Number(time.split(":")[0]); return h < 12 ? "morning" : h < 17 ? "afternoon" : "evening"; };

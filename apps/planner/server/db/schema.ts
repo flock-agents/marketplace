@@ -85,6 +85,7 @@ export const slot_dishes = sqliteTable("slot_dishes", {
   new: integer("new").default(0),                              // 1: a new suggestion of the planner's
   feedback_asked: integer("feedback_asked").default(0),        // 1: the next-day untried-dish question was sent for this placement
   note: text("note"),                                          // only when this dish needs a change for someone
+  not_for: text("not_for"),                                    // JSON string[]: people at the slot-day a hard rule keeps it from (code's, never the model's); null/[] = everyone
 });
 
 /** What a planned dish needs bought, in the amount for this family. The SQL table is dish_ingredients: "ingredients" is a

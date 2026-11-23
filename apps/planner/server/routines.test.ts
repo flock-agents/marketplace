@@ -4,10 +4,11 @@ import { describe, it, expect } from "bun:test";
 import { readFileSync } from "fs";
 import { join } from "path";
 import { boot } from "./testkit";
-import { LANE_C } from "./legacy";
+import { addRule, commit, upsertLibrary, upsertSlot } from "./slotStore";
+import type { ModelRequest, ModelResult } from "./model";
 import { migrateOldProfile } from "./gate";
 import { routines } from "./routines";
-import { weeklyPlan, WEEKLY_PROMPT } from "./routines/weekly-plan";
+import { DELIVER_PROMPT, FESTIVAL_PROMPT, weeklyPlan } from "./routines/weekly-plan";
 import { dailyTime, reminder, REMINDER_PROMPT, scheduleTime } from "./routines/reminders";
 import { orderClock } from "./routines/order-clock";
 
@@ -52,104 +53,82 @@ function carryOldProfile(k: Awaited<ReturnType<typeof app>>, text: string) {
   expect(migrateOldProfile(k.kit.sqlite)).toBe("migrated");
 }
 
+/** A family the plan can plan for: Breakfast, Lunch and Dinner, four dishes each. */
+function kitchen(k: Awaited<ReturnType<typeof app>>) {
+  const lib: Record<string, string[]> = { Breakfast: ["Poha", "Upma", "Idli", "Dosa"], Lunch: ["Sambar", "Rajma", "Kadhi", "Chole"], Dinner: ["Palak paneer", "Aloo gobi", "Bhindi", "Dal makhani"] };
+  commit(k.kit.db, k.kit.emitChange, (tx, ch) => {
+    for (const [name, order] of [["Breakfast", 10], ["Lunch", 30], ["Dinner", 50]] as const) upsertSlot(tx, { name, kind: "main", order }, "app", ch);
+    for (const [slot, names] of Object.entries(lib)) for (const name of names) upsertLibrary(tx, { name, slot, contains_read: ["egg", "meat", "fish", "onion_garlic"] }, "app", ch);
+    addRule(tx, { hard: true, what: "fasting", who: "Asha", days: ["Thu"], fasting_food: ["fruit"], quote: "Thursday fast" }, "app", ch);
+  });
+}
+/** The model: each slot from its library in turn; every dish one ingredient. */
+const fake = async (req: ModelRequest): Promise<ModelResult> => {
+  const u = JSON.parse(req.user);
+  if ((req.purpose ?? "").startsWith("meal plan: the week's") || (req.purpose ?? "").startsWith("meal plan: fix the")) {
+    const all = u.days.filter((d: any) => !d.skip).map((d: any) => d.date);
+    return { ok: true, model: "f", json: { days: Object.fromEntries(all.map((d: string, i: number) => [d, [u.library[i % u.library.length].dish]])) } };
+  }
+  if (Array.isArray(u.dishes) && u.date) return { ok: true, model: "f", json: { dishes: u.dishes.map((d: any) => ({ slot: d.slot, name: d.name, ingredients: [{ item: "x", amount: 1, unit: "pc" }] })) } };
+  return { ok: true, model: "f", json: {} };
+};
+
 describe("weekly plan", () => {
-  // lane C: the weekly run plans with make_plan on the slot model; the old context (weekContext) is gone.
-  it.skip("Sunday 11:00 plans next week (Monday tomorrow), one wake, under Flock's limits, and the prompt never mentions an order or Saturday", async () => {
+  it("Sunday 11:00 plans next week (Monday tomorrow) in code and wakes the agent once, under Flock's limits, to send the message and intro word for word", async () => {
     const k = await app();
-    await weeklyPlan(k.ctx(WEEKLY), SUN_MORNING);
+    kitchen(k);
+    await weeklyPlan(k.ctx(WEEKLY), SUN_MORNING, fake);
     expect(k.wakes).toHaveLength(1);
     expect(flockRefusal(k.wakes[0].message, k.wakes[0].data)).toBeNull();
     expect(k.house().plan_time).toBe("11:00");
-    for (const banned of ["order", "saturday", "long-life", "long life"]) expect(k.wakes[0].message.toLowerCase()).not.toContain(banned);
-    expect(k.wakes[0].data.week_start).toBe("2026-11-23");
-    expect(k.wakes[0].data.context.week_start).toBe("2026-11-23");
-    expect(k.wakes[0].data.context.people.map((p: any) => p.name)).toEqual(["Asha"]);
-    expect(k.wakes[0].message).toBe(WEEKLY_PROMPT("2026-11-23"));
+    const { message, data } = k.wakes[0];
+    expect(message).toBe(`${DELIVER_PROMPT(true)} ${FESTIVAL_PROMPT(MON)}`);
+    for (const banned of ["saturday", "long-life", "long life", "place_order"]) expect(message.toLowerCase()).not.toContain(banned);
+    expect(data.week_start).toBe(MON);
+    expect(data.message).toContain("Your week is planned.");
+    expect(data.intro).toContain("How it works");
+    // What the festival question is judged from: the family's names and their own words about fasts.
+    expect(data.family).toEqual(["Asha"]);
+    expect(data.observances).toEqual(["Asha: Thursday fast"]);
+    expect(k.rows("slot_days").length).toBe(21);
   });
 
-  /** A family with long answers, everyday items, saved recipes and last week planned in full. */
-  const family = async (size: { people: number; items: number; recipes: number }) => {
-    const k = await app({ family: false });
-    const everyone = [["Shivashankar", "me", "adult"], ["Ananya", "wife", "adult"], ["Agastya", "son", "child"], ["Meera", "daughter", "child"], ["Lakshmi", "mother", "elder"], ["Raman", "father", "elder"]];
-    for (const [name, relationship, group] of everyone.slice(0, size.people))
-      await k.op("set_person", { name, relationship, group, portions: "3 rotis at dinner, a small bowl of rice at lunch, 2 idlis at breakfast", diet: "vegetarian, eggs on weekends",
-        allergies: "peanuts", dislikes: "bitter gourd, brinjal, anything too spicy", targets: "more protein, around 1800 kcal", note: "eats lunch at the office on weekdays" });
-    await k.op("set_house_rules", { rules: [{ kind: "veg", days: ["Tue", "Thu"], note: "no eggs either" }, { kind: "fasting", days: ["Ekadashi"] }, { kind: "no_onion_garlic", days: ["Mon"] }],
-      notes: "Dinner by 8 pm. Sunday lunch is the big meal of the week." });
-    await k.op("set_cook", { name: "Lakshmi akka", days: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"], arrival: "07:30", makes_well: "sambar, rasam, poriyal, chapati, lemon rice", note: "leaves by 11" });
-    await k.op("set_slots", { extra_slots: [{ name: "Agastya's tiffin", days: ["Mon", "Tue", "Wed", "Thu", "Fri"], for: ["Agastya"] }], order_in: [{ day: "Sun", slot: "Dinner", note: "pizza night" }] });
-    const items = ["milk", "curd", "bread", "eggs", "bananas", "coffee powder", "tender coconut", "paneer", "butter", "idli batter", "tomatoes", "onions", "green chillies", "coriander", "apples"];
-    for (const [i, item] of items.slice(0, size.items).entries()) await k.op("set_regular", i % 3 === 2 ? { item, amount: 6, unit: "pc", every: "weekdays", weekdays: ["Mon", "Wed", "Fri"], for_whom: "Agastya" }
-      : i % 3 ? { item, amount: 500, unit: "g", every: "week", times_per_week: 2 } : { item, amount: 1, unit: "l", every: "day" });
-    for (let i = 0; i < size.recipes; i++) await k.op("save_recipe", { name: `Grandmother's recipe number ${i + 1} with coconut`, links: [`https://www.instagram.com/reel/recipe${i}`], tags: ["breakfast", "tiffin", "quick"], for: ["Agastya", "Meera"] });
-    const lastWeek = ["16", "17", "18", "19", "20", "21", "22"].flatMap((d) => ["Breakfast", "Lunch", "Agastya's tiffin", "Dinner"].map((slot) => ({ date: `2026-11-${d}`, slot,
-      dishes: [{ name: `${slot} main with gravy`, for: ["everyone"] }, { name: `${slot} side, dry`, for: ["everyone"] }, { name: `${slot} salad or raita`, for: ["everyone"] }] })));
-    await k.op("set_cooking_days", { days: ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] });
-    await k.op("plan_week", { week_start: "2026-11-16", mode: "draft", meals: lastWeek });
-    return k;
-  };
-
-  // lane C: the weekly run plans with make_plan on the slot model; the old context (weekContext) is gone.
-  it.skip("the context goes without the rows' bookkeeping, inside Flock's 20,000 characters of wake data", async () => {
-    const k = await family({ people: 4, items: 8, recipes: 12 });
-    await weeklyPlan(k.ctx(), SUN_MORNING);
-    expect(k.wakes).toHaveLength(1);
-    const { data } = k.wakes[0];
-    expect(dataChars(data)).toBeLessThanOrEqual(WAKE_DATA_MAX_CHARS);
-    const c = data.context;
-    expect([c.people.length, c.bought_often.length, c.recipes.length, c.last_week.length]).toEqual([4, 8, 12, 28]);
-    for (const row of [...c.people, c.house]) for (const col of ["id", "created_at", "updated_at", "updated_by"]) expect(col in row).toBe(false);
-    // What the plan is made from is all there.
-    expect(c.people[0]).toMatchObject({ name: "Shivashankar", group: "adult", portions: "3 rotis at dinner, a small bowl of rice at lunch, 2 idlis at breakfast", allergies: "peanuts" });
-    expect(c.bought_often).toContainEqual({ item: "milk", cycle: "1 l every day" });
-    expect(c.bought_often).toContainEqual({ item: "curd", cycle: "500 g twice a week" });
-    expect(c.house).toMatchObject({ cook_name: "Lakshmi akka", rules: [{ kind: "veg" }, { kind: "fasting" }, { kind: "no_onion_garlic" }] });
-    expect(c.recipes[0].id).toBeString();
+  it("the festival question is the agent's own judgement, always a question, never a change it makes, the date checked when it can", () => {
+    const p = FESTIVAL_PROMPT(MON);
+    for (const said of ["Mon 23 Nov to Sun 29 Nov", "people's names in `family`", "`observances`", "calendar or search tool", "Want any changes?", "Always as a question", "Never change the plan", "No such day: send nothing more"])
+      expect(p).toContain(said);
+    expect(p).not.toContain("\u2014");
+    expect((DELIVER_PROMPT(true) + FESTIVAL_PROMPT(MON)).length).toBeLessThanOrEqual(WAKE_MESSAGE_MAX_CHARS);
   });
 
-  // lane C: the weekly run plans with make_plan on the slot model; the old context (weekContext) is gone.
-  it.skip("a family of 6 with 15 everyday items and 40 recipes is still woken: its context is too long for a wake, so the wake names the week and the prompt says where to read it", async () => {
-    const k = await family({ people: 6, items: 15, recipes: 40 });
-    await weeklyPlan(k.ctx(), SUN_MORNING);
-    expect(k.wakes).toEqual([{ message: WEEKLY_PROMPT("2026-11-23"), data: { week_start: "2026-11-23" } }]);
-    expect(dataChars(k.wakes[0].data)).toBeLessThanOrEqual(WAKE_DATA_MAX_CHARS);
-    expect(WEEKLY_PROMPT("2026-11-23")).toContain("when it has `context`");
-    // The whole context is the agent's to read: an operation's answer has no such limit.
-    const { context } = await k.op("plan_week", { week_start: "2026-11-23", mode: "draft" });
-    expect([context.people.length, context.bought_often.length, context.recipes.length]).toEqual([6, 15, 40]);
-    expect(dataChars(context)).toBeGreaterThan(WAKE_DATA_MAX_CHARS);
-  });
-
-  // lane C: the weekly run plans with make_plan on the slot model; the old context (weekContext) is gone.
-  it.skip("a run on a Monday plans the week after", async () => {
+  it("a run on a Monday plans the week after", async () => {
     const k = await app();
-    await weeklyPlan(k.ctx(), new Date(2026, 10, 23, 18, 0));
+    kitchen(k);
+    await weeklyPlan(k.ctx(), new Date(2026, 10, 23, 18, 0), fake);
     expect(k.wakes[0].data.week_start).toBe("2026-11-30");
   });
 
-  it("the prompt plans every day, a day a call as final, then one closing call whose message and intro are sent word for word", () => {
-    const p = WEEKLY_PROMPT(MON);
-    const steps = [`mode: "draft" } without meals`, "Every day of the week is planned", "every day of the week, one day a call", `mode: "final", keep_rest: true, meals`, "answer no message",
-      `plan_week { week_start: "${MON}", mode: "final" } without meals`, "`instructions`", "`message` word for word", "only link", "`intro` word for word", "end your turn", "Do not wait for a reply"].map((s) => p.indexOf(s));
-    expect(steps.every((i) => i >= 0)).toBe(true);
-    expect(steps).toEqual([...steps].sort((a, b) => a - b));
-    expect(p).toContain("one day a call");
-    expect(p).toContain("Mon 23 Nov");
-    // What the plan is made from: the cook's limits, every slot (a child's tiffin), variety and every dish's ingredients.
-    for (const said of ["cook_wont_make", "cook_time_limit", "cook_new_recipes", "extra_slots", "tiffin", "family_dishes", "how_to_plan", "plan_menu", "except", "a main dish on two days at most", "What the family said wins", "Every dish gets its ingredients"])
-      expect(p).toContain(said);
-    expect(p).not.toMatch(/\b(he|she|his|her|him)\b/i);
-    for (const gone of ["place_order", "record_order", "ask_low_or_out", "add_to_order", "order_cart", "set_cart_line"]) expect(p).not.toContain(gone);
-    for (const banned of ["order", "saturday", "long-life", "long life", "\u2014"]) expect(p.toLowerCase()).not.toContain(banned);
-    expect(p.length).toBeLessThanOrEqual(WAKE_MESSAGE_MAX_CHARS);
+  it("no week (nothing known to plan from, or a Flock with no model call): the agent is woken only to say so, plainly", async () => {
+    const k = await app();
+    await weeklyPlan(k.ctx(), SUN_MORNING, fake);
+    expect(k.wakes[0]).toEqual({ message: DELIVER_PROMPT(false), data: { week_start: MON, message: expect.stringContaining("which meals you have at home") } });
+    await weeklyPlan(k.ctx(), SUN_MORNING);
+    expect(k.wakes[1].data.message).toContain("this version of Flock can't plan them yet");
   });
 
-  // lane C: the weekly run plans with make_plan on the slot model; the old context (weekContext) is gone.
-  it.skip("a weekly cron of 30 10 * * 0 stores 10:30; one that is not one time a week stores nothing", async () => {
+  it("the platform's model call is used when none is handed in (ctx.platform.model.json)", async () => {
     const k = await app();
-    await weeklyPlan(k.ctx({ type: "schedule", cron: "30 10 * * 0" }), SUN_MORNING);
+    kitchen(k);
+    const ctx = { ...k.ctx(), platform: { model: { json: fake } } };
+    await weeklyPlan(ctx as any, SUN_MORNING);
+    expect(k.wakes[0].data.message).toContain("Your week is planned.");
+  });
+
+  it("a weekly cron of 30 10 * * 0 stores 10:30; one that is not one time a week stores nothing", async () => {
+    const k = await app();
+    await weeklyPlan(k.ctx({ type: "schedule", cron: "30 10 * * 0" }), SUN_MORNING, fake);
     expect(k.house().plan_time).toBe("10:30");
-    await weeklyPlan(k.ctx({ type: "schedule", cron: "0 11 * * 0,3" }), SUN_MORNING);
+    await weeklyPlan(k.ctx({ type: "schedule", cron: "0 11 * * 0,3" }), SUN_MORNING, fake);
     expect(k.house().plan_time).toBeNull();
   });
 
@@ -174,10 +153,10 @@ describe("weekly plan", () => {
 describe("a wake that does not go", () => {
   const busy = () => ({ ok: false, reason: "agent busy" });
 
-  // lane C: the weekly run plans with make_plan on the slot model; the old context (weekContext) is gone.
-  it.skip("fails the weekly run, so the run is not recorded as done", async () => {
+  it("fails the weekly run, so the run is not recorded as done", async () => {
     const k = await app();
-    await expect(weeklyPlan(k.ctx(null, busy), SUN_MORNING)).rejects.toThrow("the agent was not woken: agent busy");
+    kitchen(k);
+    await expect(weeklyPlan(k.ctx(null, busy), SUN_MORNING, fake)).rejects.toThrow("the agent was not woken: agent busy");
     expect(k.wakes).toEqual([]);
 
     const old = await app({ family: false });
@@ -206,9 +185,10 @@ describe("the family gate", () => {
     await routines["weekly-plan"](k.ctx(), SUN_MORNING);
     expect(k.wakes).toEqual([]);
 
-    // The same app once a person is known: its body runs (and plans: lane C rewrites what it plans with).
+    // The same app once a person is known: its body runs (no model call on this platform: it says so).
     await k.op("set_person", { name: "Asha", group: "adult" });
-    await expect(routines["weekly-plan"](k.ctx(), SUN_MORNING)).rejects.toThrow(LANE_C);
+    await routines["weekly-plan"](k.ctx(), SUN_MORNING);
+    expect(k.wakes.map((w) => w.data.week_start)).toEqual([MON]);
   });
 
   it("a carried-over profile and nobody yet: the weekly run wakes only to structure it", async () => {
@@ -218,10 +198,11 @@ describe("the family gate", () => {
     expect(k.wakes.map((w) => Object.keys(w.data))).toEqual([["profile"]]);
     expect(k.wakes[0].data.profile).toBe("2 adults, veg");
 
-    // Once the profile is structured into a person, it is no longer pending and the routine plans (lane C rewrites the plan).
+    // Once the profile is structured into a person, it is no longer pending and the routine runs its plan.
     await k.op("set_person", { name: "Asha", group: "adult" });
-    await expect(routines["weekly-plan"](k.ctx(), SUN_MORNING)).rejects.toThrow(LANE_C);
-    expect(k.wakes).toHaveLength(1);
+    await routines["weekly-plan"](k.ctx(), SUN_MORNING);
+    expect(k.wakes).toHaveLength(2);
+    expect(k.wakes[1].data.week_start).toBe(MON);
   });
 });
 
