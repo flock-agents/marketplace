@@ -34,6 +34,7 @@ import { THREAD_BODY_SEPARATOR as SEPARATOR, MAX_BODY_CHARS } from "../lib/threa
 import { parseGmailDateTime } from "../lib/gmail-date";
 import { messageFingerprint } from "../lib/message-fingerprint";
 import { noteHandoverFingerprints, wasHandedOver } from "./seen";
+import { mailDeletedAt } from "../mail-data";
 
 /** The read turn's consumer name: Flock's lease and its logs say who holds the mailbox. */
 export const HARVEST_CONSUMER = "email-desk:harvest";
@@ -414,13 +415,18 @@ async function gatherUnderTurn(
   const page = parsed(listed.data);
   let items: Record<string, unknown>[] = Array.isArray(page) ? page.filter((i) => i && typeof i === "object") : [];
 
+  // AFTER "DELETE MY MAIL DATA" (mail-data.ts, R29) only mail newer than the delete is journaled, so nothing older is read
+  // into memory again; an older message of a thread that moved since rides as context under the earlier mark.
+  const deletedAt = mailDeletedAt(db);
+  const afterDelete = (e: { ts: number }) => deletedAt === null || e.ts > deletedAt;
+
   // 2. RESOLVE (F-SELF): a row listInbox could not name a sender for is read from its thread first, at most 5 a run and
   // only rows not journaled yet. A row left unresolved is not journaled this run (never stored with a guessed sender).
   const flagged = items.filter(needsResolve);
   if (flagged.length > 0) {
     const idOf = (i: Record<string, unknown>) => normalizeInboxRow(i, accountId).eventId;
     const known = knownEventIds(db, GMAIL_SOURCE, accountId, flagged.map(idOf));
-    const batch = flagged.filter((i) => !known.has(idOf(i))).slice(0, RESOLVE.maxPerPass);
+    const batch = flagged.filter((i) => !known.has(idOf(i)) && afterDelete(normalizeInboxRow(i, accountId))).slice(0, RESOLVE.maxPerPass);
     let resolved: Record<string, unknown>[] = [];
     if (batch.length > 0) {
       const r = await gmail(RESOLVE.functionName, {
@@ -432,7 +438,7 @@ async function gatherUnderTurn(
   }
 
   // 3. JOURNAL, then move the watermark.
-  const events = items.map((i) => normalizeInboxRow(i, accountId)).filter(isValidEvent);
+  const events = items.map((i) => normalizeInboxRow(i, accountId)).filter(isValidEvent).filter(afterDelete);
   appendEvents(db, accountId, events);
   const cursor = advancedCursor(cursorBefore, events.reduce((m, e) => Math.max(m, e.ts), -Infinity));
   if (cursor !== cursorBefore) setCursor(db, GMAIL_SOURCE, accountId, cursor);
@@ -460,7 +466,8 @@ async function gatherUnderTurn(
     const sentEvents = (Array.isArray(rows) ? rows : [])
       .filter((i: unknown): i is Record<string, unknown> => !!i && typeof i === "object")
       .map((i) => normalizeSentRow(i, accountId, mailbox))
-      .filter((e): e is NonNullable<typeof e> => !!e && isValidEvent(e));
+      .filter((e): e is NonNullable<typeof e> => !!e && isValidEvent(e))
+      .filter(afterDelete);
     appendEvents(db, accountId, sentEvents);
   } else {
     console.warn(`[gather] ${accountId}: sent mail not read (${errorText(sent)}); the inbox is still read`);
@@ -571,7 +578,9 @@ async function gatherUnderTurn(
     const newestRow = eligible[eligible.length - 1];
     if (!newestRow) continue;
 
-    const { text: body, fingerprints } = renderBlock(segments, earlierReadOf(block.rows));
+    const earlier = earlierReadOf(block.rows);
+    const { text: body, fingerprints } = renderBlock(segments, (seg) =>
+      earlier(seg) || (deletedAt !== null && seg.ts !== undefined && seg.ts <= deletedAt));
     noteHandoverFingerprints(newestRow.eventId, accountId, block.key, fingerprints);
     const newestSeg = segments[segments.length - 1];
     const from = newestSeg?.from || String((newestRow.actor as { name?: unknown })?.name ?? "") || actorEmail(newestRow);

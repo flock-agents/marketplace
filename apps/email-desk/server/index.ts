@@ -23,7 +23,8 @@ const flock = createFlockApp({
 // The settings page and the person's voice editor (Task 2.9): GET /settings, GET/PUT /api/voice (routes/voice.ts).
 // The linked SDK resolves its own hono copy; the types differ nominally, the runtime is one Hono (as calendar-desk).
 flock.hono.route("/", voiceRoutes(flock.platform) as never);
-// "Delete my mail data" (Task 2.10): POST /api/mail-data/delete {confirm: true}, the person only (routes/voice.ts person()).
-flock.hono.route("/", removalRoutes() as never);
+// "Delete my mail data" (Task 2.10, R29): POST /api/mail-data/delete {confirm: true}, the person only (routes/voice.ts
+// person()). The platform takes the deleted mail's cards off Home.
+flock.hono.route("/", removalRoutes(() => platformRef) as never);
 platformRef = flock.platform;
 flock.listen();

@@ -35,6 +35,7 @@ import { parseGmailDate, parseGmailDateTime } from "../lib/gmail-date";
 import { processTimezone } from "../lib/local-day";
 import { stopReason } from "./gather";
 import { threadLink } from "./memory-extraction";
+import { mailDeletedAt } from "../mail-data";
 import { getFollowUp, listFollowUps, listFollowUpsOfferedSince, lastFollowUpRunAt, putFollowUp, recordFollowUpRun, type FollowUpRow } from "./follow-up-store";
 
 /** The read turn's consumer name: Flock's lease and its logs say who holds the mailbox. */
@@ -199,6 +200,8 @@ export async function runFollowUpForAccount(
   const gmail = <T = unknown>(fn: string, params: Record<string, unknown>, timeoutMs: number) =>
     ctx.connectors.exec<T>(GMAIL, fn, params, { account: accountId, turnId, timeoutMs });
 
+  // After "Delete my mail data" (R29): sent mail from before the delete raises nothing again.
+  const deletedAt = mailDeletedAt();
   const candidates: Candidate[] = [];
   let limitReached = false;
   let cappedWithRowsLeft = false;
@@ -222,6 +225,7 @@ export async function runFollowUpForAccount(
       // Coarse age filter off the row date (day-precise for older mail): never read a thread that cannot possibly be due.
       // A row we cannot date is read (fail toward looking, not skipping).
       const rowAt = parseGmailDateTime(row.dateFull ?? "") ?? parseGmailDate(row.date ?? "", new Date(now));
+      if (deletedAt !== null && rowAt !== null && rowAt <= deletedAt) { mem.read.add(row.id); continue; }
       const prev = getFollowUp(accountId, row.id);
       // A thread we hold a row for is read whatever its age: the person may have written again, or they may have replied
       // (a newer sent-list date), and the TODO has to come down.
@@ -254,8 +258,10 @@ export async function runFollowUpForAccount(
       }
       if (action !== "judge") { mem.read.add(row.id); continue; }
 
-      const gate = decideNudgeEligibility(me, thread!, now, cfg.businessDays, tz);
       const lastMsg = last!;
+      const lastAt = parseGmailDateTime(lastMsg.date);
+      if (deletedAt !== null && lastAt !== null && lastAt <= deletedAt) { mem.read.add(row.id); continue; }
+      const gate = decideNudgeEligibility(me, thread!, now, cfg.businessDays, tz);
       const to = (lastMsg.to ?? []).filter((a) => extractEmailAddress(a) !== me);
       if (!gate.ok) {
         // The person wrote again since their TODO went up: it is out of date, so it comes down.

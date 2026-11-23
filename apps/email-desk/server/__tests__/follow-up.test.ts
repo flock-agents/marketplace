@@ -21,6 +21,7 @@ import {
   FOLLOW_UP_CONSUMER, FOLLOW_UP_TURN_TTL_MS, type FollowUpDeps,
 } from "../routines/follow-up";
 import { stopReason } from "../routines/gather";
+import { recordMailDeleted } from "../mail-data";
 import { getFollowUp, putFollowUp, lastFollowUpRunAt, listFollowUpsOfferedSince, recordFollowUpRun } from "../routines/follow-up-store";
 
 const OWNER = "shiva@bimacred.com";
@@ -457,6 +458,15 @@ describe("runFollowUpForAccount", () => {
     expect(t.completed).toBe(false);
     expect(ended.published).toHaveLength(0);
     expect(ended.logs.join("\n")).toContain("turn_mismatch");
+  });
+
+  test("after Delete my mail data, sent mail from before the delete raises no follow-up again", async () => {
+    recordMailDeleted(Date.parse("2026-09-29T00:00:00+05:30"));
+    const w = world();
+    const t = await run(w);
+    expect(w.published).toHaveLength(0);
+    expect(w.of("getThread")).toHaveLength(0);
+    expect(t.completed).toBe(true);
   });
 
   test("no mailbox address leaves the day due", async () => {

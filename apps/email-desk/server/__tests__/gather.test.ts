@@ -8,6 +8,7 @@ import { gatherNewMail, HARVEST_CONSUMER, EARLIER_MESSAGE_MARK } from "../routin
 import { THREAD_BODY_SEPARATOR } from "../lib/thread-format";
 import { markHandedOver, wasHandedOver } from "../routines/seen";
 import { getCursor, setCursor, GMAIL_SOURCE } from "../journal";
+import { recordMailDeleted } from "../mail-data";
 import type { RoutineCtx, ReadTurnResult } from "../platform-ext";
 
 const ACCOUNT = "acct-1";
@@ -266,6 +267,23 @@ describe("gatherNewMail", () => {
     const second = await gatherNewMail(fake({ mailbox: "me@acme.com", inbox: [reply] }).ctx, ACCOUNT);
     expect(second.kept).toHaveLength(1);
     expect(second.kept[0]!.body).toBe(
+      `${EARLIER_MESSAGE_MARK}\nFrom: ${ASHA.from}\n${ASHA.body}` + THREAD_BODY_SEPARATOR + `From: ${ASHA.from}\nAlso, could you bring the deck?`,
+    );
+  });
+
+  test("after Delete my mail data, only mail newer than the delete is read; older messages of a thread are context", async () => {
+    recordMailDeleted(BASE - 60 * 60_000);
+    const old: Mail = { threadId: "t-old", from: "Ravi <ravi@acme.com>", subject: "Old news", body: "This came before the delete.", minutesAgo: 120 };
+    const reply: Mail = {
+      threadId: "t-asha", from: ASHA.from, subject: ASHA.subject, body: "Also, could you bring the deck?", minutesAgo: 5,
+      earlier: [{ from: ASHA.from, body: ASHA.body, minutesAgo: 90 }],
+    };
+    const r = await gatherNewMail(fake({ mailbox: "me@acme.com", inbox: [old, reply] }).ctx, ACCOUNT);
+    expect(r.kept.map((k) => k.threadId)).toEqual(["t-asha"]);
+    // The older mail is not even journaled: nothing will read it later.
+    expect(db.query("SELECT 1 FROM ingest_events WHERE thread_key = 't-old'").get()).toBeNull();
+    // The message from before the delete rides as context only, under the earlier mark.
+    expect(r.kept[0]!.body).toBe(
       `${EARLIER_MESSAGE_MARK}\nFrom: ${ASHA.from}\n${ASHA.body}` + THREAD_BODY_SEPARATOR + `From: ${ASHA.from}\nAlso, could you bring the deck?`,
     );
   });

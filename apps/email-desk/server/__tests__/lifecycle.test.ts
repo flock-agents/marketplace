@@ -18,7 +18,9 @@ import {
   READING_LABEL, VOICE_LABEL, STILL_LABEL, SETUP_DONE_LABEL,
 } from "../lifecycle";
 import { runFirstRead, FIRST_READ_WINDOW, _setLogForTesting } from "../routines/memory-extraction";
-import { removalRoutes } from "../removal";
+import { removalRoutes, BUSY_REFUSAL } from "../removal";
+import { MAIL_DELETED_AT_KEY, SEQUENCE_STALL_MS, mailDeletedAt } from "../mail-data";
+import { beginWork, workInProgress, trackedRoutine, _resetWorkForTesting } from "../activity";
 import { recordHarvestRun } from "../platform-ops";
 import { memoryCadence, _resetTickCadenceForTesting } from "../routines/harvest-schedule";
 import { putFollowUp } from "../routines/follow-up-store";
@@ -367,10 +369,21 @@ describe("the first read reuses the routine's run", () => {
 
 describe("delete my mail data", () => {
   const PERSON = { "x-flock-user": "u1", "x-flock-role": "member", "content-type": "application/json" };
-  const app = () => new Hono().route("/", removalRoutes() as never);
+  let withdrawn: string[];
+  let memoryCalls: number;
+  function removalPlatform(): any {
+    return {
+      ...platform([A1]),
+      tasks: { withdraw: async (ref: string) => { withdrawn.push(ref); return { ok: true, data: undefined }; }, publish: async () => ({ ok: true, data: {} }) },
+      memory: { extract: async () => { memoryCalls++; return { ok: true, data: {} }; } },
+    };
+  }
+  const app = () => new Hono().route("/", removalRoutes(() => removalPlatform()) as never);
   const post = (headers: Record<string, string>, body?: unknown) =>
     app().request("/api/mail-data/delete", { method: "POST", headers, body: body === undefined ? undefined : JSON.stringify(body) });
   const count = (t: string) => (db.query(`SELECT COUNT(*) AS n FROM ${t}`).get() as { n: number }).n;
+
+  beforeEach(() => { withdrawn = []; memoryCalls = 0; _resetWorkForTesting(); });
 
   function seedMail() {
     seedExtracted(A1);
@@ -378,7 +391,7 @@ describe("delete my mail data", () => {
     db.run("INSERT INTO ingest_events (source_id, account_id, event_id, kind, ts, created_at) VALUES ('gmail', ?, 'm1', 'email', 1, 1)", [A1]);
     db.run("INSERT INTO reply_messages (account_id, thread_id, kind, from_addr, body, updated_at) VALUES (?, 't1', 'reply', 'a@b.c', 'hello', 1)", [A1]);
     db.run("INSERT INTO voice_profile (account_id, dimension, value, source, updated_at) VALUES (?, 'greeting', 'Hi', 'voice-crawl', 1)", [A1]);
-    db.run("INSERT INTO lifecycle_state (account_id, stage, updated_at) VALUES (?, 'sequence', 1)", [A1]);
+    db.run("INSERT INTO lifecycle_state (account_id, stage, started_at, finished_at, outcome, last_progress_at, updated_at) VALUES (?, 'sequence', 1, 2, 'done', 2, 2)", [A1]);
     recordHarvestRun(A1);
   }
 
@@ -398,18 +411,82 @@ describe("delete my mail data", () => {
     const res = await post(PERSON, { confirm: true });
     expect(res.status).toBe(200);
     expect(((await res.json()) as any).ok).toBe(true);
-    for (const t of ["ingest_events", "ingest_comprehension", "ingest_cursors", "reply_messages", "voice_profile", "lifecycle_state", "app_meta"]) expect(count(t)).toBe(0);
-    // The store stays healthy: the schema is there, and the copy goes on from nothing.
-    expect(historyOf(db, A1)).toBeNull();
-    db.run("INSERT INTO app_meta (key, value, updated_at) VALUES ('k', 'v', 1)");
-    expect(count("app_meta")).toBe(1);
+    for (const t of ["ingest_events", "ingest_comprehension", "ingest_cursors", "reply_messages", "voice_profile"]) expect(count(t)).toBe(0);
+    // What stays: the sequence row (done) and the delete's watermark, nothing else of app_meta.
+    expect(db.query("SELECT account_id, stage, outcome FROM lifecycle_state").all()).toEqual([{ account_id: A1, stage: "sequence", outcome: "done" }]);
+    expect((db.query("SELECT key FROM app_meta").all() as any[]).map((r) => r.key)).toEqual([MAIL_DELETED_AT_KEY]);
+    expect(mailDeletedAt()).toBeGreaterThan(0);
+    // Deleted for good: SQLite's secure delete was on, and the file was vacuumed (no free pages keep old rows).
+    expect((db.query("PRAGMA freelist_count").get() as any).freelist_count).toBe(0);
     // Idempotent.
     expect((await post(PERSON, { confirm: true })).status).toBe(200);
   });
 
-  test("the delete route reaches no platform call: memory and TODOs are not its to touch", () => {
-    // removalRoutes takes no platform context, and its module imports neither the SDK's memory nor tasks.
-    expect(removalRoutes.length).toBe(0);
+  test("delete then tick: no first read again, and the gate stays open", async () => {
+    seedMail();
+    expect((await post(PERSON, { confirm: true })).status).toBe(200);
+    const { h, p } = hooks({}, platform([A1]));
+    await h.tick!({ readRoutines: [], platform: p });
+    expect(events).toEqual([]);
+    expect(h.status!(A1)).toBe(true);
+    expect(isInitialized(db, A1, clock)).toBe(true);
+  });
+
+  test("a mailbox Flock knows with no sequence row also gets one, so it is not read from scratch", async () => {
+    expect((await post(PERSON, { confirm: true })).status).toBe(200);
+    expect(db.query("SELECT outcome FROM lifecycle_state WHERE account_id = ? AND stage = 'sequence'").get(A1)).toEqual({ outcome: "done" });
+  });
+
+  test("open draft cards and offered follow-up TODOs are withdrawn; memory is never called", async () => {
+    seedMail();
+    db.run("INSERT INTO draft_records (account_id, thread_id, draft_id, body_written, updated_at, id) VALUES (?, 't-open', 'gm-1', 'x', 1, 'd-open')", [A1]);
+    db.run("INSERT INTO draft_records (account_id, thread_id, draft_id, body_written, updated_at, sent_at, id) VALUES (?, 't-sent', 'gm-2', 'x', 1, 2, 'd-sent')", [A1]);
+    putFollowUp({ accountId: A1, threadId: "t-off", ownerMsgKey: "k", status: "offered", checkedAt: 1, offeredAt: 1 });
+    putFollowUp({ accountId: A1, threadId: "t-wait", ownerMsgKey: "k", status: "waiting", checkedAt: 1 });
+    expect((await post(PERSON, { confirm: true })).status).toBe(200);
+    expect(withdrawn.sort()).toEqual(["draft:d-open", "follow-up:t-off"]);
+    expect(memoryCalls).toBe(0);
+    expect(count("draft_records")).toBe(0);
+    expect(count("follow_up_state")).toBe(0);
+  });
+
+  test("refused while a first read runs or a routine runs, and nothing is deleted", async () => {
+    seedMail();
+    db.run("INSERT INTO lifecycle_state (account_id, stage, started_at, last_progress_at, updated_at) VALUES (?, 'sequence', ?, ?, ?)", [A2, Date.now(), Date.now(), Date.now()]);
+    const live = await post(PERSON, { confirm: true });
+    expect(live.status).toBe(409);
+    expect(((await live.json()) as any).error).toBe(BUSY_REFUSAL);
+    expect(count("ingest_events")).toBe(1);
+    db.run("DELETE FROM lifecycle_state WHERE account_id = ?", [A2]);
+
+    const end = beginWork("memory-extraction");
+    expect((await post(PERSON, { confirm: true })).status).toBe(409);
+    expect(count("ingest_events")).toBe(1);
+    end();
+    expect((await post(PERSON, { confirm: true })).status).toBe(200);
+  });
+
+  test("a sequence row left by a dead process does not block the delete", async () => {
+    db.run("INSERT INTO lifecycle_state (account_id, stage, started_at, last_progress_at, updated_at) VALUES (?, 'sequence', 1, 1, 1)", [A2]);
+    expect((await post(PERSON, { confirm: true })).status).toBe(200);
+  });
+
+  test("the delete's stall bound is the lifecycle's", () => {
+    expect(SEQUENCE_STALL_MS).toBe(STALL_MS);
+  });
+
+  test("the settings page says only new mail is read after a delete", async () => {
+    const html = await Bun.file(join(import.meta.dir, "..", "..", "public", "settings.html")).text();
+    expect(html).toContain("Only new mail from now on is read.");
+    expect(html).not.toContain("New mail is read again after this.");
+  });
+
+  test("the routines are counted as work while they run", async () => {
+    let seen: string[] = [];
+    const wrapped = trackedRoutine("memory-extraction", async () => { seen = workInProgress(); });
+    await wrapped({} as any);
+    expect(seen).toEqual(["memory-extraction"]);
+    expect(workInProgress()).toEqual([]);
   });
 });
 

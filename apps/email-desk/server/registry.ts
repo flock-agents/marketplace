@@ -10,6 +10,7 @@ import { voiceBlockOrNull } from "./voice/block";
 import { memoryExtraction } from "./routines/memory-extraction";
 import { followUp, followUpConfig } from "./routines/follow-up";
 import { harvestHourOf } from "./routines/harvest-schedule";
+import { trackedRoutine } from "./activity";
 
 export const allOps: Record<string, OpHandler> = {
   ...draftOps,
@@ -17,10 +18,11 @@ export const allOps: Record<string, OpHandler> = {
   ...platformOps,
 };
 
-/** One handler per flock.app.json routine (`handler`): one run per account of the paired agent's Gmail. */
+/** One handler per flock.app.json routine (`handler`): one run per account of the paired agent's Gmail. Each run counts as
+ *  work in progress while it runs ("Delete my mail data" waits for it: activity.ts). */
 export const routineHandlers: Record<string, RoutineHandler> = {
-  "memory-extraction": memoryExtraction,
-  "follow-up": (ctx) => followUp(ctx),
+  "memory-extraction": trackedRoutine("memory-extraction", memoryExtraction),
+  "follow-up": trackedRoutine("follow-up", (ctx) => followUp(ctx)),
 };
 
 /** The hour each routine's handler runs its day at, read from its settings: what the manifest's `workSchedule.hourKey`
