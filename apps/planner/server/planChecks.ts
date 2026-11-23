@@ -640,7 +640,8 @@ export function resolveSlot(w: Week, slotName: string, p: Proposal, nodes = 4000
   // Not counted: soft ones, a dish short of its count (a later day may add it), and a person with nothing of their own that
   // the plate as it is already had (the library has nothing for them there).
   const tolerated = (x: Problem, date: string) => x.soft || x.kind === "few" || (x.kind === "rule" && !!now.get(date)?.some((y) => y.text === x.text));
-  const countAt = (ps: Map<string, Problem[]>, date: string) => (ps.get(date) ?? []).filter((x) => !tolerated(x, date)).length;
+  // A person left with nothing (a problem with no dish) weighs more than any number of repeats: never traded for them.
+  const countAt = (ps: Map<string, Problem[]>, date: string) => (ps.get(date) ?? []).filter((x) => !tolerated(x, date)).reduce((n, x) => n + (x.dish ? 1 : 1000), 0);
   const total = (ps: Map<string, Problem[]>) => [...ps.keys()].reduce((n, d) => n + countAt(ps, d), 0);
   const before = total(now);
   if (!before) return null;

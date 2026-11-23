@@ -161,3 +161,14 @@ describe("a person with nothing of their own (rotate)", () => {
     expect(r.unmet).toEqual(["Tue Breakfast: Upma comes back sooner than usual"]);
   });
 });
+
+describe("resolveSlot never trades a fed person for fewer repeats", () => {
+  it("keeps the dish a person can eat though it repeats", () => {
+    const allergy: Rule = { id: "a", hard: true, what: "avoid", who: "Ravi", slots: null, days: null, items: ["peanut"], to: null, frequency: null, per_meal: null, fasting_food: null, quote: "no peanuts for Ravi" };
+    const lib = [dish("Poha", "Breakfast", { contains: ["peanut"], contains_read: [...READ, "peanut"] }), dish("Upma", "Breakfast", { contains_read: [...READ, "peanut"] })];
+    const w = week({ slots: [slot("Breakfast", { order: 10 })], library: lib, rules: [allergy] });
+    const p: Proposal = { days: new Map(WEEK.map((d) => [d, ["Upma"]])), newNames: new Map() };
+    const again = resolveSlot(w, "Breakfast", p);
+    for (const ds of (again ?? p.days).values()) expect(ds).toEqual(["Upma"]);
+  });
+});
