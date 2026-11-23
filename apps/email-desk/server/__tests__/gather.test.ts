@@ -454,3 +454,32 @@ describe("the engaged-domain drafting gate", () => {
     expect(r.kept.find((k) => k.threadId === "t-acc")?.draftEligible ?? false).toBe(false);
   });
 });
+
+// Live 2026-11-23 (email-desk-0932fc3e): one checkEngagedDomains call carried the batch's domains, its second in-session
+// Gmail search did not settle, and the script's all-or-nothing exit (400 after 61 s) threw away the first domain's answer
+// too. Each domain is now its own call, so one slow search costs only its own domain, and the failure's reason is logged.
+describe("the engaged-domain lookup, one domain per call", () => {
+  const A: Mail = { threadId: "t-a", from: "Ravi K <ravi@partner.io>", subject: "Contract", body: "Can you send the signed contract by Friday?", minutesAgo: 30, participants: ["me@acme.com"] };
+  const B: Mail = { threadId: "t-b", from: "Lee <lee@slow.io>", subject: "Invoice", body: "Could you confirm the invoice total?", minutesAgo: 40, participants: ["me@acme.com"] };
+
+  test("each domain is asked alone; a domain whose search fails leaves the others' answers standing", async () => {
+    const warned: string[] = [];
+    const warn = console.warn;
+    console.warn = (...a: unknown[]) => { warned.push(a.join(" ")); };
+    try {
+      const f = fake({ mailbox: "me@acme.com", inbox: [B, A], engaged: ["partner.io"], engagedFailsFor: ["slow.io"] });
+      const r = await gatherNewMail(f.ctx, ACCOUNT, { lookupPauseMs: 0 });
+      const asked = f.calls.filter((c) => c.fn === "checkEngagedDomains").map((c) => c.params.domains);
+      expect(asked.length).toBe(2);
+      for (const d of asked) expect(d).toHaveLength(1);
+      expect(r.kept.find((k) => k.threadId === "t-a")?.draftEligible).toBe(true);
+      expect(r.kept.find((k) => k.threadId === "t-b")?.draftEligible).toBe(false);
+      // The confirmed positive is kept for the next run; the failed domain is not cached either way.
+      const cached = (db.query("SELECT domain FROM engaged_domains WHERE account_id = ? AND seeded = 0").all(ACCOUNT) as { domain: string }[]).map((x) => x.domain);
+      expect(cached).toEqual(["partner.io"]);
+      expect(warned.some((w) => w.includes("did not finish rendering"))).toBe(true);
+    } finally {
+      console.warn = warn;
+    }
+  });
+});

@@ -54,6 +54,9 @@ export const LIST_TIMEOUT_MS = 2 * 60_000;
 const RESOLVE_TIMEOUT_MS = 105_000;
 /** checkEngagedDomains' own declared timeout. */
 const ENGAGED_TIMEOUT_MS = 90_000;
+/** The pause between two engaged-domain searches (the skill's own pacing, nextPauseMs: 3-7 s, randomised). */
+const LOOKUP_PAUSE_MIN_MS = 3_000;
+const LOOKUP_PAUSE_SPREAD_MS = 4_000;
 
 /** Two windows (owner, 2026-09-15): a thread whose newest message is older than OPEN is left pending (not read this run);
  *  one older than HORIZON is dropped for good as `too_old`. */
@@ -123,6 +126,8 @@ export interface GatherOptions {
   openDays?: number;
   horizonDays?: number;
   maxThreads?: number;
+  /** The pause between two engaged-domain searches. Default 3-7 s, randomised; tests pass 0. */
+  lookupPauseMs?: number;
 }
 
 type Gmail = <T = unknown>(fn: string, params: Record<string, unknown>, timeoutMs: number) => Promise<Result<T>>;
@@ -404,7 +409,7 @@ export async function gatherNewMail(ctx: RoutineCtx, accountId: string, opts: Ga
 
   const { turnId } = turn.data;
   const gmail: Gmail = (fn, params, timeoutMs) => ctx.connectors.exec("gmail", fn, params, { account: accountId, turnId, timeoutMs });
-  const engagement = runEngagement(db, accountId, gmail);
+  const engagement = runEngagement(db, accountId, gmail, opts.lookupPauseMs);
   const run: RunInfo = { mailbox: null };
   try {
     const out = await gatherUnderTurn(db, ctx, gmail, accountId, cursor, opts, engagement, run);
@@ -425,17 +430,27 @@ interface RunInfo { mailbox: string | null }
  *  were classified at all. */
 type RunEngagement = (domains: string[]) => Promise<{ engaged: string[]; resolved: string[] }>;
 
-function runEngagement(db: Database, accountId: string, gmail: Gmail): RunEngagement {
+function runEngagement(db: Database, accountId: string, gmail: Gmail, pauseMs: number | undefined): RunEngagement {
   const asked = new Set<string>();
   const engaged = new Set<string>();
   const resolved = new Set<string>();
+  // A refusal of the mailbox (the account guard, a sign-in wall) ends the run's lookups: every later search would be refused.
+  let refused = false;
+  const search = async (misses: string[]): Promise<string[] | null> => {
+    const r = await gmail("checkEngagedDomains", { domains: misses }, ENGAGED_TIMEOUT_MS);
+    if (!r.ok) {
+      if (stopReason(r)) refused = true;
+      console.warn(`[gather] ${accountId}: an engaged-domain lookup did not answer (${errorText(r).slice(0, 300)}); that domain stays unresolved`);
+    }
+    return engagedFromSearch(r);
+  };
+  const pause = () => new Promise<void>((done) => setTimeout(done, pauseMs ?? LOOKUP_PAUSE_MIN_MS + Math.random() * LOOKUP_PAUSE_SPREAD_MS));
   return async (domains) => {
     const wanted = [...new Set(domains.map((d) => (d || "").trim().toLowerCase()).filter(Boolean))];
     const ask = wanted.filter((d) => !asked.has(d));
     if (ask.length > 0) {
       for (const d of ask) asked.add(d);
-      const res = await resolveEngagement(db, accountId, ask, async (misses) =>
-        engagedFromSearch(await gmail("checkEngagedDomains", { domains: misses }, ENGAGED_TIMEOUT_MS)));
+      const res = await resolveEngagement(db, accountId, ask, search, { pause, stop: () => refused });
       for (const d of res.engaged) engaged.add(d);
       for (const d of res.resolved) resolved.add(d);
     }
