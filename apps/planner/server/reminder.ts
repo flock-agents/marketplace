@@ -50,6 +50,20 @@ function onCarts(tx: Db, statuses: string[], forDate?: string): Set<string> {
   return new Set(rows.filter((l) => (forDate ? l.for_date === forDate : (l.qty ?? 0) > 0)).map((l) => normItem(l.item)));
 }
 
+/** The daily items an order she said yes to (ordering, placed, paid) brings for `day` already: a line of the item for an
+ *  earlier date that, by the item's cycle, lasts through `day` (curd every 2 days, ordered for Tuesday, is Wednesday's too).
+ *  Needed because an order placed for tomorrow is bought on the day it is placed (cart.ts markPlaced), a day before it is
+ *  used: its run-out alone would put the item on again a day early, every cycle. */
+function lastingThrough(tx: Db, daily: { item: string; lasts_days: number | null }[], day: string): Set<string> {
+  const lasts = new Map(daily.map((i) => [i.item, i.lasts_days]));
+  const rows = tx.select({ item: order_lines.item, qty: order_lines.qty, for_date: order_lines.for_date }).from(order_lines)
+    .innerJoin(orders, eq(order_lines.order_id, orders.id)).where(inArray(orders.status, ["ordering", "placed", "paid"])).all();
+  return new Set(rows.filter((l) => {
+    const n = lasts.get(normItem(l.item));
+    return n != null && (l.qty ?? 0) > 0 && !!l.for_date && l.for_date < day && addDays(l.for_date, Math.max(1, Math.round(n))) > day;
+  }).map((l) => normItem(l.item)));
+}
+
 /** The meals a reminder covers: tonight's dinner when it is cooked (afternoon); every meal of tomorrow (evening). */
 function coveredMeals(tx: Db, which: Which, date: string): MealView[] {
   const day = weekView(tx, mondayOf(date)).days.find((d) => d.date === date)?.meals ?? [];
@@ -113,11 +127,12 @@ function build(tx: Db, which: Which, now: Date, by: string, changes: Change[], s
   }
 
   // The daily items due tomorrow by their cycle, at the usual amount, unless a line of the item for tomorrow is already on a
-  // cart (her own qty there stands).
+  // cart (her own qty there stands), or one she said yes to for an earlier day still lasts through tomorrow.
   const added: Reminder["added"] = [];
   const forTomorrow = onCarts(tx, ["open", "ordering", "placed", "paid"], tomorrow);
+  const lasting = lastingThrough(tx, daily, tomorrow);
   for (const it of daily) {
-    if (!dailyDue(dailyState(it), tomorrow, today) || forTomorrow.has(it.item)) continue;
+    if (!dailyDue(dailyState(it), tomorrow, today) || forTomorrow.has(it.item) || lasting.has(it.item)) continue;
     const app = lineApp(tx, it), p = productFor(tx, it.name, app);
     const packs = (p && it.usual_amount != null ? packsFor(it.usual_amount, it.unit, p.pack_amount, p.pack_unit) : null) ?? 1;
     const open = cartOf(tx, app, "open"), had = open ? lineFor(tx, open.id, it.name) : null;
