@@ -60,7 +60,6 @@ export type DishRating = (typeof DISH_RATINGS)[number];
 /** How many of a dish's ratings are kept, newest first. */
 export const RATINGS_KEPT = 5;
 
-export const COOKING_DAYS_DEFAULT = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
 /** How far back an order history is read, in days. */
 export const HISTORY_DAYS = 92;
 /** A placed order still unpaid this long after is closed as not paid. */

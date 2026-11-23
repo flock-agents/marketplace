@@ -7,7 +7,7 @@ import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import { asc, eq } from "drizzle-orm";
 import { _settings } from "@flock/app-kit";
 import { house, people } from "./db/schema";
-import { appOf, COOK_NEW_RECIPES, COOKING_DAYS_DEFAULT, GROUPS, RULE_KINDS, SETTINGS, SHOP_APPS, SLOTS, type GroceryApp } from "./db/constants";
+import { appOf, COOK_NEW_RECIPES, GROUPS, RULE_KINDS, SETTINGS, SHOP_APPS, SLOTS, type GroceryApp } from "./db/constants";
 import { WEEKDAYS, type Weekday } from "./dates";
 import { closest } from "./agentOps";
 import { CATEGORIES, CHECKED_KINDS, KIND_NEEDS, rulesSaid, type Rule } from "./rules";
@@ -25,9 +25,12 @@ export type OrderIn = { day: Weekday; slot: string; note?: string };
 /** One visit of the cook: when they come, and the meals that visit makes when the family said. */
 export type CookVisit = { at: string; meals?: string[] };
 /** The house row with its lists read: what the routes answer with. */
+/** No cooking days: every day is planned (owner, 23 Nov: many families cook every day themselves, and Sunday needs a plan too).
+ *  A day the cook does not come is cooked by the family; a meal not cooked at home is one in `order_in`, said by the family.
+ *  The old `cooking_days` column is no longer read. */
 export type HouseView = Omit<HouseRow, "rules" | "cook_days" | "extra_slots" | "order_in" | "cooking_days" | "connected_apps" | "history_synced"> &
   { rules: HouseRule[]; cook_days: Weekday[]; cook_visits: CookVisit[]; extra_slots: ExtraSlot[]; order_in: OrderIn[];
-    cooking_days: Weekday[]; connected_apps: GroceryApp[]; history_synced: HistorySynced };
+    connected_apps: GroceryApp[]; history_synced: HistorySynced };
 /** How far each app's order history was read, by reader: whoever gave the orders (`agent:<id>`, a person's own agent reading
  *  that person's account). `*` is a date kept before readers were told apart. */
 export type HistorySynced = Record<string, Record<string, string>>;
@@ -69,12 +72,11 @@ export function cookVisits(arrival: string | null): CookVisit[] {
   return list<CookVisit>(arrival).filter((v) => isObject(v) && typeof v.at === "string" && CLOCK.test(v.at));
 }
 
-export function houseView(row: HouseRow): HouseView {
-  const cooking = list<Weekday>(row.cooking_days);
+export function houseView({ cooking_days: _old, ...row }: HouseRow): HouseView {
   const visits = cookVisits(row.cook_arrival);
   // cook_arrival stays one time for whoever reads it as before (the first visit); cook_visits is every visit.
   return { ...row, cook_arrival: visits[0]?.at ?? null, cook_visits: visits, rules: list(row.rules), cook_days: list(row.cook_days), extra_slots: list(row.extra_slots), order_in: list(row.order_in),
-    cooking_days: cooking.length ? cooking : [...COOKING_DAYS_DEFAULT], connected_apps: list<GroceryApp>(row.connected_apps), history_synced: historySynced(row.history_synced) };
+    connected_apps: list<GroceryApp>(row.connected_apps), history_synced: historySynced(row.history_synced) };
 }
 
 /** One of the app's settings as saved, else its default. */
@@ -304,7 +306,7 @@ export const writeRoutes = (hono: Hono<any>) =>
       }
     });
 
-const LONG_DAY: Record<Weekday, string> = { Mon: "Monday", Tue: "Tuesday", Wed: "Wednesday", Thu: "Thursday", Fri: "Friday", Sat: "Saturday", Sun: "Sunday" };
+export const LONG_DAY: Record<Weekday, string> = { Mon: "Monday", Tue: "Tuesday", Wed: "Wednesday", Thu: "Thursday", Fri: "Friday", Sat: "Saturday", Sun: "Sunday" };
 /** Weekdays as a person says them: "every day", "Mon–Fri" (three or more in a row), "Mon, Wed and Fri". */
 export function daysSaid(days: readonly string[] | undefined): string {
   const set = WEEKDAYS.filter((d) => days?.includes(d));
@@ -315,8 +317,14 @@ export function daysSaid(days: readonly string[] | undefined): string {
 }
 const andWords = (xs: string[]) => (xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`);
 
+/** What a meal left out by set_cooking_days is noted as. */
+export const NOT_COOKED = "not cooked at home";
+/** A meal not cooked at home because the family eats out (not one ordered in). */
+const EATEN_OUT = /eat(en|ing)? out|outside|restaurant|in-laws|parents|relatives|friends/i;
+
 /** The meals a week is planned with, in the words the setup reads back: "Each day we'll plan Breakfast, Lunch and Dinner,
- *  plus Agastya's tiffin Mon–Fri and Evening snack every day for everyone. Sunday dinner you order in." */
+ *  plus Kabir's tiffin Mon–Fri and Evening snack every day for everyone. Sunday lunch you eat out. Sunday dinner you
+ *  order in." */
 export function slotsSaid(h: Pick<HouseView, "extra_slots" | "order_in">): string {
   const extra = h.extra_slots.map((s) => {
     const whose = (s.for ?? []).filter((p) => !s.name.toLowerCase().includes(p.toLowerCase()));
@@ -325,10 +333,12 @@ export function slotsSaid(h: Pick<HouseView, "extra_slots" | "order_in">): strin
     return `${s.name} ${daysSaid(s.days)}${whose.length ? ` for ${andWords(whose)}` : (s.for ?? []).length ? "" : " for everyone"}`;
   });
   const out = [`Each day we'll plan Breakfast, Lunch and Dinner${extra.length ? `, plus ${andWords(extra)}` : ""}.`];
-  if (h.order_in.length) {
-    const meals = h.order_in.map((o) => `${LONG_DAY[o.day]} ${(SLOTS as readonly string[]).includes(o.slot) ? o.slot.toLowerCase() : o.slot}`);
-    out.push(`${andWords(meals)} you order in.`);
-  }
+  const meal = (o: OrderIn) => `${LONG_DAY[o.day]} ${(SLOTS as readonly string[]).includes(o.slot) ? o.slot.toLowerCase() : o.slot}`;
+  const notCooked = h.order_in.filter((o) => o.note === NOT_COOKED), rest = h.order_in.filter((o) => o.note !== NOT_COOKED);
+  const out_ = rest.filter((o) => EATEN_OUT.test(o.note ?? "")), ordered = rest.filter((o) => !EATEN_OUT.test(o.note ?? ""));
+  if (out_.length) out.push(`${andWords(out_.map(meal))} you eat out.`);
+  if (ordered.length) out.push(`${andWords(ordered.map(meal))} you order in.`);
+  if (notCooked.length) out.push(`${andWords(notCooked.map(meal))} ${notCooked.length === 1 ? "isn't" : "aren't"} cooked at home.`);
   return out.join(" ");
 }
 
@@ -400,17 +410,23 @@ export function mountFamilyRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: { a
     return { body: { ...saved.body, said: rulesSaid(saved.body.house.rules) } };
   });
 
-  // set_cooking_days { days }: the weekdays the family cooks at home; a plan has meals on these days only.
+  // set_cooking_days { days }: the weekdays food is cooked at home. Every day is planned (owner, 23 Nov), so a day left out is
+  // a day nothing is cooked at home: its Breakfast, Lunch and Dinner are saved as meals not cooked at home (`order_in`), which
+  // the plan and the Family page show; a day named again is cooked again. The cook's days are always cooked: the cook comes
+  // to cook (sim run seed 16: "Sunday too?" answered with Sunday alone). A day the cook does not come is still cooked by
+  // the family unless it is left out here.
   write("/api/family/cooking-days", (b, by) => {
     const lower = WEEKDAYS.map((d) => d.toLowerCase()).join(", ");
     if (!Array.isArray(b.days)) refuse(`days must be a list of weekdays (${lower})`);
     const days = (b.days as unknown[]).map((d) => weekday(d) ?? refuse(`days: ${JSON.stringify(d)} is not a weekday (${lower})`));
     if (!days.length) refuse("days must have at least one weekday");
-    // The cook's days are always cooking days: the cook comes to cook. An answer to "Sunday too?" that names only Sunday
-    // adds it (sim run seed 16: "Ankita makes a quick breakfast and dinner on Sunday" saved Sunday alone, and only
-    // Sunday was planned).
-    const cookDays = houseView(getHouse(db)).cook_days;
-    const saved = saveHouse({ cooking_days: JSON.stringify(WEEKDAYS.filter((d) => days.includes(d) || cookDays.includes(d))) }, by);
+    const had = houseView(getHouse(db));
+    const cooked = WEEKDAYS.filter((d) => days.includes(d) || had.cook_days.includes(d));
+    const kept = had.order_in.filter((o) => !(cooked.includes(o.day) && o.note === NOT_COOKED));
+    const slots = [...SLOTS, ...had.extra_slots.map((s) => s.name)];
+    const added = WEEKDAYS.filter((d) => !cooked.includes(d)).flatMap((day) => slots.filter((slot) => (SLOTS as readonly string[]).includes(slot) || !had.extra_slots.find((s) => s.name === slot)?.days?.length || had.extra_slots.find((s) => s.name === slot)!.days!.includes(day)).filter((slot) => !kept.some((o) => o.day === day && o.slot.toLowerCase() === slot.toLowerCase()))
+      .map((slot): OrderIn => ({ day, slot, note: NOT_COOKED })));
+    const saved = saveHouse({ order_in: JSON.stringify([...kept, ...added]) }, by);
     return { body: { ...saved.body, slots_said: slotsSaid(saved.body.house) } };
   });
 

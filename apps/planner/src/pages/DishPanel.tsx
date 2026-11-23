@@ -37,7 +37,7 @@ export function DishPanel({ dish, at, onDone }: { dish: DishView | null; at: { d
       <Stack gap="md">
         <Heading level={3}>{dish ? `Edit ${dish.name}` : `Add a dish to ${at.slot}`}</Heading>
         <Field type="text" name="name" label="Dish" required value={name} onChange={(v) => setName(String(v ?? ""))} />
-        <Field type="text" name="for" label="For (names with commas; leave empty for everyone)" placeholder="Dad, Agastya" value={who} onChange={(v) => setWho(String(v ?? ""))} />
+        <Field type="text" name="for" label="For (names with commas; leave empty for everyone)" placeholder="Dad, Kabir" value={who} onChange={(v) => setWho(String(v ?? ""))} />
         <Field type="text" name="portion_note" label="Portions" placeholder="4 for me, 1 for wife" value={note} onChange={(v) => setNote(String(v ?? ""))} />
         <Stack gap="sm">
           <Heading level={3}>What it needs bought</Heading>

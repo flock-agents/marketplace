@@ -237,22 +237,30 @@ describe("the house", () => {
     expect((await op("set_slots", {})).code).toBe("APP_REFUSED");
   });
 
-  it("set_cooking_days takes lowercase days and stores weekdays; Mon–Sat until set", async () => {
+  // Owner, 23 Nov: every day is planned. There are no cooking days: a day left out is a day nothing is cooked at home, saved
+  // as its meals not cooked at home, which a day named again takes back. Meals the family said they eat out stay.
+  it("every day is planned until said otherwise; set_cooking_days saves a day left out as its meals not cooked at home", async () => {
     const k = await boot();
-    expect((await k.owner("GET", "/api/family")).body.house.cooking_days).toEqual(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]);
-    const r = await k.op("set_cooking_days", { days: ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] });
-    expect(r.house.cooking_days).toEqual(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]);
+    const house = async () => (await k.owner("GET", "/api/family")).body.house;
+    expect((await house()).cooking_days).toBeUndefined();
+    expect((await house()).order_in).toEqual([]);
+    await k.op("set_slots", { add: true, extra_slots: [{ name: "Evening snack" }, { name: "Tiffin", days: ["Mon", "Tue", "Wed", "Thu", "Fri"] }], order_in: [{ day: "Sat", slot: "Lunch", note: "eaten out" }] });
+    const r = await k.op("set_cooking_days", { days: ["mon", "tue", "wed", "thu", "fri", "sat"] });
+    expect(r.house.order_in).toEqual([{ day: "Sat", slot: "Lunch", note: "eaten out" }, ...["Breakfast", "Lunch", "Dinner", "Evening snack"].map((slot) => ({ day: "Sun", slot, note: "not cooked at home" }))]);
+    expect(r.slots_said).toContain("Saturday lunch you eat out. Sunday breakfast, Sunday lunch, Sunday dinner and Sunday Evening snack aren't cooked at home.");
+    const all = await k.op("set_cooking_days", { days: ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] });
+    expect(all.house.order_in).toEqual([{ day: "Sat", slot: "Lunch", note: "eaten out" }]);
     expect((await k.op("set_cooking_days", { days: [] })).code).toBe("APP_REFUSED");
     expect((await k.op("set_cooking_days", { days: ["funday"] })).error).toContain("mon, tue");
     // Nothing of the refused calls was saved.
-    expect((await k.owner("GET", "/api/family")).body.house.cooking_days).toEqual(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]);
+    expect((await house()).order_in).toEqual([{ day: "Sat", slot: "Lunch", note: "eaten out" }]);
   });
 
-  it("set_cooking_days keeps the cook's days (sim run seed 16: 'Sunday too?' answered with Sunday alone planned Sunday alone)", async () => {
+  it("set_cooking_days never takes the cook's days out (sim run seed 16: 'Sunday too?' answered with Sunday alone)", async () => {
     const k = await boot();
-    await k.op("set_cook", { name: "Lakshmi", days: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"], arrival: "07:30" });
+    await k.op("set_cook", { name: "Rani", days: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"], arrival: "07:30" });
     const r = await k.op("set_cooking_days", { days: ["sun"] });
-    expect(r.house.cooking_days).toEqual(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]);
+    expect(r.house.order_in).toEqual([]);
   });
 
   it("set_shopping_apps saves main and fallback as settings and the connected apps exactly as given; names or ids", async () => {
@@ -364,6 +372,9 @@ describe("set_slots add: true and the slots read back", () => {
     const r = await op("set_slots", { add: true, extra_slots: [{ name: "Evening snack" }], order_in: [{ day: "Sun", slot: "Dinner" }] });
     expect(r.house.extra_slots.map((s: any) => s.name)).toEqual(["Agastya's tiffin", "Evening snack"]);
     expect(r.said).toBe("Each day we'll plan Breakfast, Lunch and Dinner, plus Agastya's tiffin Mon–Fri and Evening snack every day for everyone. Sunday dinner you order in.");
+    const out = await op("set_slots", { add: true, order_in: [{ day: "Sun", slot: "Lunch", note: "eaten out at the in-laws" }] });
+    expect(out.said).toContain("Sunday lunch you eat out. Sunday dinner you order in.");
+    await op("set_slots", { order_in: [{ day: "Sun", slot: "Dinner" }] });
     const again = await op("set_slots", { add: true, extra_slots: [{ name: "agastya's tiffin", days: ["Mon", "Wed", "Fri"], for: ["Agastya"] }], order_in: [{ day: "Sat", slot: "Lunch" }] });
     expect(again.house.extra_slots).toEqual([{ name: "Evening snack" }, { name: "agastya's tiffin", days: ["Mon", "Wed", "Fri"], for: ["Agastya"] }]);
     expect(again.house.order_in).toEqual([{ day: "Sun", slot: "Dinner" }, { day: "Sat", slot: "Lunch" }]);

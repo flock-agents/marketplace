@@ -128,12 +128,13 @@ function transcriptOf(msgs: Msg[]): { lines: string[]; replies: string[] } {
   return { lines, replies };
 }
 
-type Expect = { diet: boolean; tiffin: boolean; snack: "none" | "any" | "Shiva+Ankita"; fast: boolean; sugar: boolean; mushroom: boolean; eggs: boolean; nut: boolean; rice: boolean; corr730: boolean; satOrder: boolean; sunOut: boolean };
+type Expect = { diet: boolean; tiffin: boolean; snack: "none" | "everyone" | "Shiva+Ankita"; fast: boolean; sugar: boolean; mushroom: boolean; eggs: boolean; nut: boolean; rice: boolean; corr730: boolean; satOrder: boolean; sunOut: boolean };
 function expectOf(replies: string[]): Expect {
   const said = replies.join("\n");
   const has = (re: RegExp) => re.test(said);
   return { diet: has(/vegetarian/i), tiffin: has(/tiffin/i),
-    snack: !has(/snack/i) ? "none" : has(/snack for Shiva and Ankita|Shiva and Ankita have an evening snack/i) ? "Shiva+Ankita" : "any",
+    // Unnamed is everyone (owner, 23 Nov): a snack said without names is everyone's.
+    snack: !has(/snack/i) ? "none" : has(/snack for Shiva and Ankita|Shiva and Ankita have an evening snack/i) ? "Shiva+Ankita" : "everyone",
     fast: has(/fasts? thursday/i), sugar: has(/no sugar/i), mushroom: has(/no mushroom/i), eggs: has(/no eggs/i), nut: has(/nut[- ]free/i),
     rice: has(/no rice at night|less rice/i), corr730: has(/7:30/), satOrder: has(/saturday dinner/i), sunOut: has(/sunday lunch|lunch out/i) };
 }
@@ -176,7 +177,6 @@ async function runOne(dir: string, rep: number) {
   const evening = h.cook_visits.find((v: any) => v.meals?.includes("Dinner"));
   c.cook_times = (ex.corr730 ? morning?.at === "07:30" : morning?.at === "07:00") && !h.cook_visits.some((v: any) => v.at === (ex.corr730 ? "07:00" : "07:30")) && evening?.at === "18:00";
   if (!c.cook_days || !c.cook_times) notes.push(`cook: ${h.cook_name} ${JSON.stringify(h.cook_days)} ${JSON.stringify(h.cook_visits)}`);
-  c.sunday_cooked = h.cooking_days.includes("Sun");
   // Slots
   const tiffin = h.extra_slots.filter((s: any) => /tiffin/i.test(s.name));
   // Mon–Fri only where the family said the tiffin's days.
@@ -188,7 +188,7 @@ async function runOne(dir: string, rep: number) {
   // Mon–Sat is right too where the old interview read the snack back as Mon–Sat and the family said it was right.
   const readBackSat = lines.some((l) => /^Q:.*snack Mon–Sat/i.test(l));
   c.snack = ex.snack === "none" ? snack.length === 0 : snack.length === 1 && (!snack[0].days?.length || snack[0].days.length === 7 || (readBackSat && snack[0].days.length === 6 && !snack[0].days.includes("Sun")))
-    && (ex.snack === "any" || snackWho === "Shiva+Ankita");
+    && snackWho === ex.snack;
   c.no_extra_slots = h.extra_slots.length === tiffin.length + snack.length;
   if (!c.no_extra_slots || !c.tiffin || !c.snack) notes.push(`slots: ${JSON.stringify(h.extra_slots)}`);
   const ord = h.order_in.map((o: any) => `${o.day} ${o.slot}`);
@@ -226,7 +226,6 @@ async function runOne(dir: string, rep: number) {
     for (let i = 0; i < 7; i++) {
       const day = WEEK_DAYS[i], date = dateOf(i);
       const want = ["Breakfast", "Lunch", "Dinner", ...h.extra_slots.filter((s: any) => !s.days?.length || s.days.includes(day)).map((s: any) => s.name)];
-      if (!h.cooking_days.includes(day)) continue;
       for (const slot of want) {
         const m = meals.find((x) => x.date === date && x.slot === slot);
         const ordered = h.order_in.some((o: any) => o.day === day && o.slot === slot);
@@ -237,6 +236,9 @@ async function runOne(dir: string, rep: number) {
     }
   }
   c.plan_complete = plan.ok ? missing.length === 0 : false;
+  // Every day is planned (owner, 23 Nov): Sunday, the cook's day off, has its breakfast and dinner cooked at home.
+  const sun = meals.filter((m) => m.date === dateOf(6));
+  c.sunday_cooked = plan.ok ? ["Breakfast", "Dinner"].every((s) => sun.some((m) => m.slot === s && !m.ordered_in && dishesOf(m).length)) : false;
   if (missing.length) notes.push(`meals without dishes: ${missing.join(", ")}`);
   const thu = meals.filter((m) => m.date === dateOf(3) && ["Breakfast", "Lunch"].includes(m.slot));
   const gsEats = thu.flatMap(dishesOf).filter((d) => { const f = d.for_people ? JSON.parse(d.for_people) : null; return !f || f.includes("everyone") || f.includes(GS); });
@@ -244,7 +246,8 @@ async function runOne(dir: string, rep: number) {
   if (ex.fast && gsEats.length) notes.push(`Thu fast broken: ${gsEats.map((d) => `${d.name} ${d.for_people}`).join("; ")}`);
   const bad = dishes.filter((d) => meals.some((m) => m.id === d.meal_id)).filter((d) => /\b(egg|omelette|omelet|anda|mushroom)/i.test(d.name)
     || dItems.some((i) => i.dish_id === d.id && /\b(egg|mushroom)/i.test(i.item)));
-  c.plan_no_egg_mushroom = plan.ok ? bad.length === 0 : false;
+  // Only a family that said no eggs or no mushrooms is checked for them (seed 13 said nothing: an omelette is fine there).
+  c.plan_no_egg_mushroom = !ex.eggs && !ex.mushroom ? null : plan.ok ? bad.length === 0 : false;
   if (bad.length) notes.push(`egg/mushroom dishes: ${bad.map((d) => d.name).join(", ")}`);
   const sc = mine.filter((x) => x.purpose.startsWith("setup"));
   const setupCall = sc.length ? { ms: sc.reduce((a, x) => a + x.ms, 0), attempts: sc.reduce((a, x) => a + x.attempts, 0) } : undefined;

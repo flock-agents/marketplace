@@ -24,7 +24,6 @@ const TRANSCRIPT = [
 const PROFILE = {
   people: [{ name: "Kiran", group: "adult" }, { name: "Nisha", group: "adult", relationship: "wife" }, { name: "Ishaan", group: "child", age: 7 }],
   cook: { name: "Rani", days: ["Mon-Fri"], visits: [{ at: "8:15", meals: ["breakfast", "lunch"] }, { at: "5pm", meals: ["Dinner"] }], timeLimit: null, newRecipes: null, note: null },
-  cookingDays: ["Mon", "Tue", "Wed", "Thu", "Fri"],
   homeCook: [{ day: "Saturday", slots: ["Breakfast", "Lunch", "Dinner"], by: "Nisha" }],
   slots: [{ name: "Ishaan's tiffin", days: ["Mon-Fri"], for: ["Ishaan"] }, { name: "Evening snack", days: [], for: ["adults"] }],
   orderIn: [{ day: "Sun", slot: "lunch", note: "eaten out" }],
@@ -67,8 +66,8 @@ describe("apply_setup: the model reads, code writes", () => {
     expect(h.cook_name).toBe("Rani");
     expect(h.cook_days).toEqual(["Mon", "Tue", "Wed", "Thu", "Fri"]);
     expect(h.cook_visits).toEqual([{ at: "08:15", meals: ["Breakfast", "Lunch"] }, { at: "17:00", meals: ["Dinner"] }]);
-    // Saturday is a cooking day because Nisha cooks it.
-    expect(h.cooking_days).toEqual(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]);
+    // Every day is planned: Saturday Nisha cooks; Sunday, which nobody said who cooks, is still cooked but for the lunch out.
+    expect(h.cooking_days).toBeUndefined();
     expect(h.extra_slots).toEqual([{ name: "Ishaan's tiffin", days: ["Mon", "Tue", "Wed", "Thu", "Fri"], for: ["Ishaan"] }, { name: "Evening snack", for: ["Kiran", "Nisha"] }]);
     expect(h.order_in).toEqual([{ day: "Sun", slot: "Lunch", note: "eaten out" }]);
     const kinds = h.rules.map((x: any) => `${x.kind}${x.who ? ` ${x.who}` : ""}${x.slots ? ` @${x.slots.join(",")}` : ""}`);
@@ -84,7 +83,35 @@ describe("apply_setup: the model reads, code writes", () => {
     expect(r.said).toContain("Rani cooks Mon–Fri");
     expect(r.said).toContain("at 08:15");
     expect(r.said).toContain("Padma: eats no sweet things");
-    expect(r.said).toContain("Nisha cooks at Breakfast, Lunch, Dinner on Sat");
+    expect(r.said).toContain("On Saturday Nisha cooks. On Sunday the family cooks.");
+    expect(r.said).toContain("Sunday lunch you eat out.");
+    expect(r.said).not.toContain("Nisha cooks at");   // who cooks is said once, not again as a food rule
+  });
+
+  // Owner, 23 Nov: unnamed is everyone. A meal said without names is everyone's, whatever answer it came in.
+  it("an extra meal said without names is everyone's, even when the model gave it to the adults, and said so", async () => {
+    const transcript = TRANSCRIPT.map((l) => l.replace("The adults have chai and a snack at 5 every day.", "We have chai and a snack at 5 every day."));
+    const f = fake({ ...PROFILE, slots: [PROFILE.slots[0], { name: "Evening snack", days: [], for: ["adults"], quote: "a snack at 5" }] });
+    const k = await boot({ model: f.model });
+    const r = await k.op("apply_setup", { household: HOUSEHOLD, transcript });
+    const h = (await k.owner("GET", "/api/family")).body.house;
+    expect(h.extra_slots[1]).toEqual({ name: "Evening snack" });
+    expect(r.said).toContain("Evening snack every day for everyone");
+    expect(r.noted.join()).toContain("no names said with it, so it is for everyone");
+    expect(f.asked[0].system).toContain("a meal said without names is everyone's");
+  });
+
+  // Owner, 23 Nov: every day is planned. A day the cook does not come is cooked by the family, every meal of it; only a meal
+  // the family says is eaten out or ordered in is not.
+  it("a day the family cooks only some meals of is still cooked whole: only the meal said to be eaten out is not", async () => {
+    const f = fake({ ...PROFILE, homeCook: [{ day: "Sun", slots: ["Breakfast", "Dinner"], by: "Nisha", note: "quick" }], orderIn: [] });
+    const k = await boot({ model: f.model });
+    const r = await k.op("apply_setup", { household: HOUSEHOLD, transcript: TRANSCRIPT });
+    const h = (await k.owner("GET", "/api/family")).body.house;
+    expect(h.order_in).toEqual([]);
+    expect(r.said).toContain("On Saturday the family cooks. On Sunday Nisha cooks.");
+    expect(f.asked[0].system).toContain("Every day of the week is planned");
+    expect(f.asked[0].system).not.toContain("cookingDays");
   });
 
   it("a rule the app cannot take is kept as a note and said; the rules after it are still saved", async () => {

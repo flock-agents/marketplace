@@ -35,7 +35,7 @@ const COOK_FIELDS: FormProps["fields"] = [
 ];
 /** The fields of a form as the routes take them: an emptied field is sent as null, which clears it. */
 const cleared = (v: Record<string, unknown>, names: readonly string[]) => Object.fromEntries(names.map((n) => [n, v[n] ?? null]));
-/** The family, and only the family: who eats at home, the cooking days and the cook, the extra meals and the house rules.
+/** The family, and only the family: who eats at home, the cook (every day is planned: the cook's days off the family cooks), the extra meals and the house rules.
  *  Every part is edited where it is shown, through the same routes (and the same checks) as the agent. The main shopping app,
  *  its fallback and Order without asking are on Flock's Settings tab, under "How we order". */
 export function FamilyPage() {
@@ -103,17 +103,12 @@ export function FamilyPage() {
 
       <Section title="Cooking">
         <Detail fields={[
-          { label: "Cooking days", value: cookingDaysText(house.cooking_days) },
           { label: "Cook", value: cook },
           ...(house.cook_name ? cookDetails(house) : []),
           { label: "Extra meals", value: house.extra_slots.length ? house.extra_slots.map((s) => [s.name, s.days?.length ? `on ${joined(s.days)}` : "every day", s.for?.length ? `for ${joined(s.for)}` : null].filter(Boolean).join(" ")).join("; ") : "None" },
-          { label: "Ordered in every week", value: house.order_in.length ? house.order_in.map((o) => [`${o.day} ${o.slot}`, o.note].filter(Boolean).join(": ")).join("; ") : "None" },
+          { label: "Eaten out or ordered in every week", value: house.order_in.length ? house.order_in.map((o) => [`${o.day} ${o.slot}`, o.note].filter(Boolean).join(": ")).join("; ") : "None" },
         ]} />
-        <Row>{edit("days", "Cooking days")}{edit("cook", "Cook")}{edit("slots", "Extra meals")}{edit("order-in", "Ordered in")}</Row>
-        {panel("days", "Cooking days", (
-          <Form fields={[{ type: "multi", name: "days", label: "The days you cook at home", options: [...WEEKDAYS] }]} initial={{ days: house.cooking_days }} onCancel={close}
-            onSubmit={(v) => save("family/cooking-days", { days: v.days ?? [] })} />
-        ))}
+        <Row>{edit("cook", "Cook")}{edit("slots", "Extra meals")}{edit("order-in", "Ordered in")}</Row>
         {panel("cook", "Cook", (
           <Form fields={COOK_FIELDS} onCancel={close}
             initial={{ name: house.cook_name, days: house.cook_days, arrival: house.cook_visits.map((v) => v.at).join(", "), makes_well: house.cook_makes_well, wont_make: house.cook_wont_make,
@@ -123,7 +118,7 @@ export function FamilyPage() {
         {panel("slots", "Extra meals, like a tiffin", (
           <RowsEditor addLabel="Add a meal" onCancel={close}
             columns={[
-              { name: "name", label: "Meal", type: "text", placeholder: "Agastya's tiffin" },
+              { name: "name", label: "Meal", type: "text", placeholder: "Kabir's tiffin" },
               { name: "days", label: "Days (none means every day)", type: "multi", options: [...WEEKDAYS] },
               { name: "for", label: "For (names with commas)", type: "text" },
             ]}

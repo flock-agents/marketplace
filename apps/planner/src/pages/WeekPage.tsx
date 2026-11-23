@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { Button, Callout, Card, Confirm, ErrorCard, Field, Icon, Page, Row, Schedule, Skeleton, Stack, Value, safeHref, scheduleAddKey, useApp, useChat, useTable, useToast } from "../flock/ui";
-import { addDays, dayLabel, mondayOf, todayStr, weekDates, weekdayLong, weekdayOf } from "../../server/dates";
+import { Button, Card, Confirm, ErrorCard, Field, Icon, Page, Row, Schedule, Skeleton, Stack, Value, safeHref, scheduleAddKey, useApp, useChat, useTable, useToast } from "../flock/ui";
+import { addDays, dayLabel, mondayOf, todayStr } from "../../server/dates";
 import { DishPanel } from "./DishPanel";
 import { PlayLink } from "./Thumb";
 import { lastTimeText } from "../../server/dishText";
@@ -11,14 +11,10 @@ import { send, useLive, why, type DishView, type Family, type MealView, type Rec
  *  and the slot tapped if any) with the slot the new dish goes in. */
 type Open = { meal: string; dish?: string } | { date: string; tapped?: string; slot?: string } | null;
 const sameSlot = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
-/** "Sunday 29": a day as the not-a-cooking-day note names it. */
-const dayWords = (date: string) => `${weekdayLong(date)} ${Number(date.slice(8))}`;
-/** "Sunday 29 Nov". */
-const longLabel = (date: string) => dayLabel(date).replace(weekdayOf(date), weekdayLong(date));
 
-/** The week as a schedule of its cooking days: each meal with its dishes named once and, under them, only what differs from
+/** The week as a schedule of every day (every day is planned): each meal with its dishes named once and, under them, only what differs from
  *  everyone eating it (a person's portions, a dish for one person); an ordered-in meal muted. A meal opens in place,
- *  its dishes editable there. A day that is not a cooking day says so, with a way to plan it this once. */
+ *  its dishes editable there. */
 export function WeekPage() {
   const thisWeek = mondayOf(todayStr());
   // The planned week: the one the link names ("#/week?week=…", the Sunday message), else next week. The page opens on it when
@@ -73,7 +69,6 @@ export function WeekPage() {
   const slots = ["Breakfast", "Lunch", ...(house?.extra_slots ?? []).map((s) => s.name), "Dinner"];
   for (const m of meals) if (!slots.some((s) => sameSlot(s, m.slot))) slots.push(m.slot);
   const slotOf = (m: MealView) => slots.find((s) => sameSlot(s, m.slot)) ?? m.slot;
-  const offDays = house ? weekDates(weekStart).filter((d) => d >= today && !house.cooking_days.includes(weekdayOf(d)) && !meals.some((m) => m.date === d)) : [];
   const status = week.data?.status ?? null;
   const subtitle = status === null ? `Not planned yet · ask ${agent} to plan it`
     : `${week.data?.planned_at ? plannedText(week.data.planned_at) : "Planned"} · tell ${agent} to change anything`;
@@ -134,7 +129,7 @@ export function WeekPage() {
 
   return (
     <Page
-      title={weekTitle(weekStart, !!house?.cooking_days.includes("Sun"))} subtitle={subtitle}
+      title={weekTitle(weekStart)} subtitle={subtitle}
       actions={
         <Row>
           {status === "draft" ? <Value kind="select" value="Draft" tones={{ Draft: "warning" }} /> : null}
@@ -157,16 +152,6 @@ export function WeekPage() {
               onSelect={(m) => setOpen(opened?.id === m.id ? null : { meal: m.id })}
               onAdd={(date, slot) => setOpen({ date, tapped: slot, slot })}
               expanded={expanded} />
-            {offDays.map((d) => (
-              <Callout key={d} tone="muted" icon="sun" title={`${dayWords(d)} isn't a cooking day`}>
-                <Stack gap="sm">
-                  <span>{chat.available ? `Change this on the Family page, or plan just this ${weekdayLong(d)}.` : `Change this on the Family page, or ask ${agent} to plan just this ${weekdayLong(d)}.`}</span>
-                  {chat.available ? (
-                    <Row><Button variant="soft" size="sm" onClick={() => chat.openChat({ message: `Plan ${longLabel(d)} too`, send: true })}>{`Plan ${weekdayLong(d)} too`}</Button></Row>
-                  ) : null}
-                </Stack>
-              </Callout>
-            ))}
           </>
         )}
       <Confirm

@@ -171,13 +171,9 @@ describe("plan_week", () => {
     expect(rows("plan_meals")[0]).toMatchObject({ status: "final", updated_by: "agent:meal-agent" });
   });
 
-  it("a meal on a non-cooking day is refused by plan_week, taken by set_meal", async () => {
-    const { op, rows } = await boot();
+  it("every day is planned: a Sunday meal is taken by plan_week, and a meal on a day not cooked at home by set_meal", async () => {
+    const { op } = await boot();
     const sunday = { date: "2026-11-29", slot: "Dinner", dishes: [{ name: "Dal", for: ["everyone"] }] };
-    const r = await op("plan_week", { week_start: MON, mode: "draft", meals: [lunch, sunday] });
-    expect(r.code).toBe("NOT_COOKING_DAY"); expect(r.error).toContain("2026-11-29"); expect(r.error).toContain("Sun");
-    expect(rows("plan_meals")).toHaveLength(0);
-    expect((await op("set_cooking_days", { days: ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] })).house.cooking_days).toContain("Sun");
     expect((await op("plan_week", { week_start: MON, mode: "draft", meals: [lunch, sunday] })).week.status).toBe("draft");
     await op("set_cooking_days", { days: ["mon"] });
     expect(dishNames((await op("set_meal", { date: "2026-11-24", slot: "Dinner", dishes: [{ name: "Dal", for: ["everyone"], ingredients: [{ item: "toor dal", amount: 200, unit: "g" }] }] })).meal)).toEqual(["Dal"]);
@@ -280,7 +276,7 @@ describe("a planned week is ready to send", () => {
     expect((await op("plan_week", { week_start: MON, mode: "final" })).message).toContain("Next week is planned.");
   });
 
-  it("the menu names a cooking day with no meal at all; one meal, or one ordered in, is enough", async () => {
+  it("the menu names a day with no meal at all; one meal, or one ordered in, is enough; a day not cooked at home is none", async () => {
     const { op } = await boot({ now: SUNDAY });
     await op("set_cooking_days", { days: ["mon", "tue", "wed"] });
     const name = (n: string) => ({ name: n, for: ["everyone"] });
@@ -462,7 +458,7 @@ describe("a meal is planned once, not once per person", () => {
     const manifest = JSON.parse(readFileSync(join(import.meta.dir, "..", "flock.app.json"), "utf8"));
     const plan = manifest.agentInterface.operations.find((o: any) => o.name === "plan_week").description as string;
     const guide = readFileSync(join(import.meta.dir, "agent-guide.md"), "utf8");
-    for (const text of [plan, guide]) for (const said of ["planned once, not once per person", "one dish for everyone who eats it", "portion_note", "two eggs for Shiva", "truly eats something else"]) expect(text).toContain(said);
+    for (const text of [plan, guide]) for (const said of ["planned once, not once per person", "one dish for everyone who eats it", "portion_note", "two eggs for Arjun", "truly eats something else"]) expect(text).toContain(said);
   });
 
   it("the guide and the plan operations say every dish names who eats it: everyone, or the names", () => {
@@ -470,7 +466,7 @@ describe("a meal is planned once, not once per person", () => {
     const ops = ["plan_week", "set_meal", "set_dish"].map((n) => manifest.agentInterface.operations.find((o: any) => o.name === n).description as string);
     const guide = readFileSync(join(import.meta.dir, "agent-guide.md"), "utf8");
     for (const text of [guide, ...ops]) expect(text).toContain('["everyone"]');
-    for (const text of [guide, ops[0], ops[2]]) for (const said of ["MISSING_EATERS", "names only them", "except", "millet instead of rice for Lakshmi"])
+    for (const text of [guide, ops[0], ops[2]]) for (const said of ["MISSING_EATERS", "names only them", "except", "millet instead of rice for Nani"])
       expect(text).toContain(said);
   });
 });

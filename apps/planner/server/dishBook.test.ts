@@ -137,7 +137,7 @@ describe("the family's own dishes", () => {
       Breakfast: [{ dish: "Idli" }, { dish: "Plain dosa", for: ["Meera"] }, { dish: "Poha" }],
       Lunch: [{ dish: "Rajma" }], Dinner: [{ dish: "Rajma" }], "Meera's tiffin": [{ dish: "Poha" }] });
     expect(context.how_to_plan).toContain("Build the week from family_dishes");
-    expect(context.how_to_plan).toContain('except ["Meera"]');
+    expect(context.how_to_plan).toContain('except ["Kabir"]');
     // A meal or a person the family does not have is told, with the closest; remove takes a dish off the list.
     expect((await k.op("set_family_dishes", { dishes: [{ name: "Upma", slots: ["Brekfast"] }] })).error).toContain("did you mean Breakfast?");
     expect((await k.op("set_family_dishes", { dishes: [{ name: "Upma", slots: ["Breakfast"], for: ["Mira"] }] })).error).toContain("did you mean Meera?");

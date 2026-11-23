@@ -303,16 +303,11 @@ describe("the item page", () => {
 });
 
 describe("weekTitle", () => {
-  it("is the week's dates, Monday to Saturday", () => {
-    expect(weekTitle("2026-11-23")).toBe("23 – 28 Nov");
+  it("is the week's dates, Monday to Sunday: every day is planned", () => {
+    expect(weekTitle("2026-11-23")).toBe("23 – 29 Nov");
   });
   it("names both months when the week crosses one", () => {
-    expect(weekTitle("2026-11-30")).toBe("30 Nov – 5 Dec");
-  });
-  it("ends on Sunday when Sunday is a cooking day", () => {
-    expect(weekTitle("2026-11-23", true)).toBe("23 – 29 Nov");
-    expect(weekTitle("2026-11-30", true)).toBe("30 Nov – 6 Dec");
-    expect(weekTitle("2026-11-23", false)).toBe("23 – 28 Nov");
+    expect(weekTitle("2026-11-30")).toBe("30 Nov – 6 Dec");
   });
 });
 

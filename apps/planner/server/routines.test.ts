@@ -122,9 +122,9 @@ describe("weekly plan", () => {
     expect(k.wakes[0].data.week_start).toBe("2026-11-30");
   });
 
-  it("the prompt plans the cooking days a day a call as final, then one closing call whose message and intro are sent word for word", () => {
+  it("the prompt plans every day, a day a call as final, then one closing call whose message and intro are sent word for word", () => {
     const p = WEEKLY_PROMPT(MON);
-    const steps = [`mode: "draft" } without meals`, "cooking_days", `mode: "final", keep_rest: true, meals`, "answer no message",
+    const steps = [`mode: "draft" } without meals`, "Every day of the week is planned", "every day of the week, one day a call", `mode: "final", keep_rest: true, meals`, "answer no message",
       `plan_week { week_start: "${MON}", mode: "final" } without meals`, "`instructions`", "`message` word for word", "only link", "`intro` word for word", "end your turn", "Do not wait for a reply"].map((s) => p.indexOf(s));
     expect(steps.every((i) => i >= 0)).toBe(true);
     expect(steps).toEqual([...steps].sort((a, b) => a - b));

@@ -5,13 +5,16 @@ import { readFileSync } from "fs";
 import { join } from "path";
 import { agentOps, FIELDS, FIELDS_SECTION, OPERATION_NAMES, ROUTES } from "./agentOps";
 import { APP_NAMES } from "./db/constants";
+import { SETUP_SYSTEM } from "./setup";
+import { PLAN_METHOD } from "./meals";
+import { WEEKLY_PROMPT } from "./routines/weekly-plan";
 
 const manifest = JSON.parse(readFileSync(join(import.meta.dir, "..", "flock.app.json"), "utf8"));
 const guide = readFileSync(join(import.meta.dir, "agent-guide.md"), "utf8");
 const instructions: string = manifest.agentInterface.instructions;
 const operations: { name: string; description: string }[] = manifest.agentInterface.operations;
 type Target = { operation?: string; setting?: string; preference?: string };
-type SetupQ = { id: string; ask?: string; help?: string; when?: string; fixed?: boolean; multi?: boolean; fills?: string[]; after?: string[];
+type SetupQ = { id: string; ask?: string; help?: string; when?: string; fixed?: boolean; multi?: boolean; fills?: string[]; after?: string[]; default?: unknown;
   action?: string; args?: unknown; answer?: Target | Target[]; show?: Record<string, { operation: string; field: string }> };
 const setup: SetupQ[] = manifest.setup;
 const joiner: SetupQ[] = manifest.setupJoiner;
@@ -99,37 +102,33 @@ describe("the agent's interface", () => {
     expect(guide).toContain("set_shopping_apps { main, fallback, connected }");
   });
 
-  // Live run 11 (2026-11-21): rules the family said were kept as free text no code reads, and the plan broke them. Every
-  // question whose answer can state a food rule saves it with set_house_rules (3.4.0: an `answer` target Flock's interview
-  // runner writes, add: true, only the rules said), in the checked shape; the rules are read back right after the rules
-  // question, and a fix there sends the whole list. Flock refuses a help over 800 characters.
-  it("every setup question that can state a food rule saves it with set_house_rules, and the rules are read back", () => {
-    const RULE_QUESTIONS = ["cookTime", "cookingDays", "kidsBreakfast", "kidsLunch", "kidsDinner",
-      "adultsBreakfast", "adultsLunch", "adultsDinner", "diet", "elders", "rules", "orderIn", "rulesReadBack"];
-    for (const id of RULE_QUESTIONS) {
-      const variants = setup.filter((x) => x.id === id);
-      expect(variants.length, id).toBeGreaterThan(0);
-      for (const q of variants) {
-        expect(targets(q), id).toContain("set_house_rules");
-        if (id !== "rulesReadBack") expect(q.help ?? "", id).toContain("add: true");
-      }
-    }
-    for (const q of [...setup, ...joiner]) expect((q.help ?? "").length, q.id).toBeLessThanOrEqual(800);
-    expect(manifest.setupOptions.about.length).toBeLessThanOrEqual(800);
-    for (const said of ["set_house_rules", "add: true", "WHOLE list", "who?", "slots?", "items?", "per_week?", "@protein"]) expect(manifest.setupOptions.about, said).toContain(said);
-    // Each checked kind is taught by a worked example in the contract's JSON.
-    const helps = setup.map((q) => q.help ?? "").join("\n");
-    for (const kind of ["avoid", "only", "swap", "require", "cap", "other"]) expect(helps, kind).toContain(`"kind":"${kind}"`);
+  // 23 Nov (owner-approved, "model reads, code writes; the app owns its setup"): Flock no longer writes each reply's answer
+  // targets. Each reply is read only into its facts (fills: the interview's when conditions and Flock's own read-backs), and
+  // at the end Flock calls the app's setupApply operation once with the household facts and the transcript; the app reads it
+  // and saves it in code, and its `said` read-back replaces the mid-chat ones (slots, rules). Flock refuses a help over 800
+  // characters; a help now teaches only the facts a reply fills.
+  it("the app saves the whole setup at the end (setupApply: apply_setup); no read-back mid-chat, and each help is only the reply's facts", () => {
+    expect(manifest.setupApply).toBe("apply_setup");
+    const apply = operations.find((o) => o.name === "apply_setup")!;
+    for (const said of ["household", "transcript", '"Q: ..."', '"A: ..."', "said", "noted", "dropped", "{ ok: false, say }"]) expect(apply.description, said).toContain(said);
     const ids = setup.map((q) => q.id);
-    const back = setup.find((q) => q.id === "rulesReadBack")!;
-    expect(ids.indexOf("rulesReadBack")).toBe(ids.indexOf("rules") + 1);
-    expect(targets(back)).toEqual(["set_house_rules"]);
-    expect(back.after).toEqual(["rules"]);
-    expect(back.ask).toContain("{{rulesSaid}}");
-    expect(back.ask).toContain("Did I get these right?");
-    expect(back.show).toEqual({ rulesSaid: { operation: "set_house_rules", field: "said" } });
-    expect(back.help).toContain("WHOLE list");
-    expect(back.help).not.toContain("add: true");
+    for (const gone of ["slotsConfirm", "rulesReadBack"]) expect(ids).not.toContain(gone);
+    // The one line that still shows the app's words is what it read from the orders.
+    expect(setup.filter((q) => q.show).map((q) => q.id)).toEqual(["orderFindings"]);
+    for (const q of [...setup, ...joiner]) {
+      const help = q.help ?? "";
+      expect(help.length, q.id).toBeLessThanOrEqual(800);
+      // No write instruction is left: no operation call, no payload in the rules' JSON.
+      for (const write of ["save ", "set_house_rules", "set_slots", "set_family_dishes", "set_person", "set_cook", "add: true", '"kind":', "WHOLE list"]) expect(help, `${q.id}: ${write}`).not.toContain(write);
+    }
+    // Every fact a question fills is named in its help, so the reader knows what to write.
+    for (const q of setup) for (const f of q.fills ?? []) if (!f.startsWith("people") && !f.startsWith("cook.")) expect(q.help ?? "", `${q.id} ${f}`).toContain(f.split(":")[0].split(".").pop()!);
+    const about: string = manifest.setupOptions.about;
+    expect(about.length).toBeLessThanOrEqual(800);
+    expect(about).toContain("apply_setup");
+    expect(about).not.toContain("set_house_rules");
+    // The checked kinds are taught where the rules are read now: the setup's own prompt.
+    for (const kind of ["avoid {", "only {", "swap {", "require {", "cap {", "fasting {", "other {"]) expect(SETUP_SYSTEM, kind).toContain(kind);
     expect(guide).toContain("RULE_BROKEN");
   });
 
@@ -175,28 +174,20 @@ describe("the agent's interface", () => {
     for (const text of [guide, cook]) for (const said of ["@baked", "per_week", "wont_make", "which dishes?", "not only the swap", "add: true"]) expect(text, said).toContain(said);
     for (const said of ['avoid { items: ["@baked"] }', '"phulkas twice a week" cap', "fasting { who, days, slots, note } is checked"]) expect(rules, said).toContain(said);
   });
-
-  // Lane B (2026-11-23): an extra meal said while telling the past week (a tiffin, an evening snack) is saved as a slot,
-  // added to the ones there (Flock writes set_slots before the dishes); the meals part ends by reading every slot back.
-  // The dishes are the main target: Flock refuses an answer without its first target, and most answers add no meal (sim
-  // run seed 16: set_slots first made every plain answer a refusal).
-  it("every past-week meal question can save an extra meal first, and the meals part ends with the slots read back", () => {
+  // The past week's meals: each answer is read into its fact in the family's words, an extra meal said there (a tiffin, an
+  // evening snack) with it, for apply_setup to save. The answer targets stay for a Flock without setupApply.
+  it("every past-week meal question reads the dishes and any extra meal said, and the meals part ends with no read-back", () => {
     const MEALS = ["kidsBreakfast", "kidsLunch", "kidsDinner", "adultsBreakfast", "adultsLunch", "adultsDinner"];
     for (const id of MEALS) {
       const q = setup.find((x) => x.id === id)!;
+      expect(q.fills, id).toEqual([`pastWeek.${id}:text`]);
       expect(targets(q)[0], id).toBe("set_family_dishes");
-      expect(targets(q), id).toContain("set_slots");
-      expect(q.help, id).toContain("set_slots { add: true, extra_slots:");
+      expect(q.help, id).toContain("extra meal");
+      expect(q.help, id).toContain("in their words");
     }
     const ids = setup.map((q) => q.id);
-    const confirm = setup.find((q) => q.id === "slotsConfirm")!;
-    expect(ids.indexOf("slotsConfirm")).toBe(ids.indexOf("adultsDinner") + 1);
-    expect(confirm.ask).toBe("{{slotsSaid}} Anything to add or change?");
-    expect(confirm.show).toEqual({ slotsSaid: { operation: "set_family_dishes", field: "slots_said" } });
-    expect(targets(confirm)).toEqual(["set_slots"]);
-    expect(confirm.help).toContain("add: true");
+    expect(ids[ids.indexOf("adultsDinner") + 1]).toBe("diet");
     expect(ids.filter((id) => id.toLowerCase().includes("tiffin"))).toEqual([]);
-    for (const q of setup) if (targets(q).includes("set_slots") && q.id !== "slotsConfirm") expect(q.help ?? "", q.id).toContain("add: true");
   });
 
   it("everyone at home is saved before any rule can name them, from the household answer", () => {
@@ -216,18 +207,21 @@ describe("the agent's interface", () => {
       expect(q.fills).toEqual(["cook.name:text", "cook.days:list", "cook.visits:list"]);
       expect(targets(q)).toEqual(["set_cook"]);
       expect(q.help).toContain("household.help");
-      expect(q.help).toContain("Lakshmi comes at 7 for breakfast and lunch and 6 for dinner");
-      expect(q.help).toContain("arrival");
+      expect(q.help).toContain("Rani comes at 7 for breakfast and lunch and 6 for dinner");
       expect(q.when).toStartWith("household.help has cook");
     }
     expect(cook[cook.length - 1].when).toBe("household.help has cook");
     const days = setup.filter((q) => q.id === "cookingDays");
     const ask = (when: string) => days.find((q) => q.when === when)?.ask;
-    expect(ask("cook.days = mon,tue,wed,thu,fri,sat")).toBe("Is food cooked at home on Sunday too?");
-    expect(ask("cook.days = mon,tue,wed,thu,fri")).toBe("Is food cooked at home on Saturday and Sunday too?");
-    expect(ask("!cook.days")).toBe("Which days is food cooked at home? Monday to Saturday, or Sunday too?");
-    // A meal eaten out said here ("Sunday lunch out") is saved now as an order-in meal (sim run seed 16 lost it).
-    for (const q of days) expect(targets(q)).toEqual(["set_cooking_days", "set_slots", "set_house_rules"]);
+    // Every day is planned (owner, 23 Nov): the cook's days off ask who cooks, never whether the day is skipped.
+    expect(ask("cook.days = mon,tue,wed,thu,fri,sat")).toBe("On Sunday, when the cook doesn't come, who cooks? Or is a meal eaten out?");
+    expect(ask("cook.days = mon,tue,wed,thu,fri")).toBe("On Saturday and Sunday, when the cook doesn't come, who cooks? Or is a meal eaten out?");
+    expect(ask("!cook.days")).toBe("Who cooks at home, and on which days? Is any day's meal eaten out?");
+    for (const q of days) {
+      expect(q.fills).toEqual(["cookingDays:list"]);
+      expect(q.default).toEqual(["mon", "tue", "wed", "thu", "fri", "sat", "sun"]);
+      expect(q.help).toContain("Every day is planned");
+    }
     // Variants of one question: each has a when, and the general one is the last.
     expect(days.every((q) => typeof q.when === "string")).toBe(true);
     expect(days[days.length - 1].when).toBe("!cook.days");
@@ -337,5 +331,13 @@ describe("the agent's interface", () => {
     expect(served.guide).toContain(FIELDS_SECTION);
     expect(FIELDS_SECTION).toContain("- set_cook { name, days?, arrival?, makes_well?, wont_make?, time_limit?, new_recipes?, note? }");
     expect(FIELDS_SECTION).toContain("- plan_week { week_start, mode, meals?, keep_rest? }");
+  });
+
+  // Owner, 23 Nov: the test family's names and lines (the simulated runs' family) are in no text a model reads, so a model
+  // copying an example cannot pass as having read the family. Tests may keep them; every model-facing string may not.
+  it("no model-facing text names the test family or its lines", () => {
+    const texts = [JSON.stringify(manifest), guide, SETUP_SYSTEM, PLAN_METHOD, WEEKLY_PROMPT("2026-11-30")];
+    for (const t of texts) for (const word of [/shiva/i, /ankita/i, /agastya/i, /gowri/i, /lakshmi/i, /nut-free/i, /fasts thursday/i])
+      expect(t, String(word)).not.toMatch(word);
   });
 });

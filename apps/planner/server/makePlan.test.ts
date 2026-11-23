@@ -55,11 +55,14 @@ function rotate(u: any): unknown {
 /** Every dish of the day gets one ingredient. */
 const ingredients = (u: any) => ({ dishes: u.dishes.map((d: any) => ({ slot: d.slot, name: d.name, ingredients: [{ item: d.name.toLowerCase(), amount: 200, unit: "g" }] })) });
 
-async function family(model: (req: ModelRequest) => Promise<ModelResult>, opts: { dishes?: Record<string, string[]>; people?: [string, string][] } = {}) {
+async function family(model: (req: ModelRequest) => Promise<ModelResult>, opts: { dishes?: Record<string, string[]>; people?: [string, string][]; sunday?: boolean } = {}) {
   const k = await boot({ model, now: () => SUN });
   for (const [name, group] of opts.people ?? [["Asha", "adult"], ["Ravi", "adult"], ["Agastya", "child"]]) await k.op("set_person", { name, group });
   const dishes = opts.dishes ?? DISHES;
   await k.op("set_family_dishes", { dishes: Object.entries(dishes).flatMap(([slot, names]) => names.map((name) => ({ name, slots: [slot] }))) });
+  // Every day is planned; this family says nothing is cooked at home on Sunday, so the week's arithmetic is Mon to Sat (three
+  // dishes a meal, each on two days at most). `sunday: true`: Sunday is cooked too.
+  if (!opts.sunday) await k.op("set_cooking_days", { days: ["mon", "tue", "wed", "thu", "fri", "sat"] });
   const week = async () => (await k.owner("GET", `/api/weeks/${MON}`)).body;
   const meal = async (date: string, slot: string) => (await week()).days.find((d: any) => d.date === date).meals.find((m: any) => m.slot === slot);
   /** makePlan called straight, with its log kept. */
@@ -68,7 +71,8 @@ async function family(model: (req: ModelRequest) => Promise<ModelResult>, opts: 
   return { ...k, week, meal, plan };
 }
 const daysOn = (week: any, dish: string) => week.days.filter((d: any) => d.meals.some((m: any) => m.dishes.some((x: any) => x.name === dish))).length;
-const allMeals = (week: any) => week.days.flatMap((d: any) => d.meals);
+/** The meals cooked at home (Sunday, not cooked at home in `family`, is ordered in). */
+const allMeals = (week: any) => week.days.flatMap((d: any) => d.meals).filter((m: any) => !m.ordered_in);
 const names = (m: any) => m.dishes.map((d: any) => [d.name, d.for_people]);
 
 describe("make_plan: the week in steps", () => {
@@ -371,6 +375,27 @@ describe("the Sunday run", () => {
   });
 });
 
+describe("make_plan: every day is planned", () => {
+  // Owner, 23 Nov: "There are a lot of households where family member only cooks daily. Our app is for both. Needs to have a
+  // plan for Sunday."
+  it("a day the cook does not come is cooked by the family, every meal of it; only a meal the family eats out is not", async () => {
+    const f = fakeModel();
+    const k = await family(f.model, { sunday: true, dishes: { Breakfast: ["Poha", "Upma", "Idli", "Dosa"], Lunch: ["Rajma", "Chole", "Kadhi", "Sambar"], Dinner: ["Aloo gobi", "Bhindi", "Palak paneer", "Dal fry"] } });
+    await k.op("set_cook", { name: "Rani", days: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] });
+    await k.op("set_slots", { add: true, order_in: [{ day: "Sun", slot: "Lunch", note: "eaten out" }] });
+    const r = await k.op("make_plan", { week_start: MON });
+    expect(r.ok).toBe(true);
+    const daysAsked = (slot: string) => f.firsts().find((a) => a.user.slot === slot)!.user.meals.map((m: any) => m.day);
+    expect(daysAsked("Breakfast")).toEqual(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]);
+    expect(daysAsked("Lunch")).toEqual(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]);
+    const sun = (await k.week()).days.find((d: any) => d.date === "2026-11-29").meals;
+    expect(sun.map((m: any) => [m.slot, m.ordered_in, m.dishes.length > 0])).toEqual([["Breakfast", false, true], ["Lunch", true, false], ["Dinner", false, true]]);
+    // The menu is told the family cooks that day.
+    const sunBreakfast = f.firsts().find((a) => a.user.slot === "Breakfast")!.user.meals.find((m: any) => m.day === "Sun");
+    expect(sunBreakfast.cook).toContain("the family cooks");
+  });
+});
+
 describe("make_plan: one call per meal of the day, everyone fed, one run at a time", () => {
   it("the first menus are asked all at once, one per meal of the day (extra slots too), each with only its own meals; the log has a line a round", async () => {
     const f = fakeModel({ wait: () => 20 });
@@ -384,7 +409,8 @@ describe("make_plan: one call per meal of the day, everyone fed, one run at a ti
     expect(f.most()).toBe(5);   // all five running together
     for (const a of first) expect(a.user.meals.every((m: any) => m.slot === a.user.slot)).toBe(true);
     expect(first[3].user.meals.every((m: any) => m.who.join() === "Agastya")).toBe(true);
-    expect(lines[0]).toMatch(/^round 1: 5 calls \(Breakfast 6: ok, Lunch 6: ok, Dinner 6: ok, Agastya's tiffin 5: ok, Evening snack 6: ok\) in \d+ ms; problems: /);
+    // The snack came after Sunday was left out, so it is still planned on Sunday: 7.
+    expect(lines[0]).toMatch(/^round 1: 5 calls \(Breakfast 6: ok, Lunch 6: ok, Dinner 6: ok, Agastya's tiffin 5: ok, Evening snack 7: ok\) in \d+ ms; problems: /);
     expect(lines.at(-1)).toMatch(/^planned in \d+ ms/);
     for (const m of allMeals(await k.week())) expect(m.dishes.length).toBeGreaterThan(0);
   });

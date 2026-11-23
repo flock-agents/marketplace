@@ -120,7 +120,7 @@ export function weekContext(db: Db, weekStart: string): WeekContext {
  *  interview gives us enough data to populate a good week"). Given with the context, where the week is planned. */
 export const PLAN_METHOD = `Build the week from family_dishes, the family's own food: choose and rotate, do not invent.
 1. Each person first: read their rules (house.rules) and notes. Who has an only, avoid or swap rule needs their own dish or a portion_note.
-2. Each meal of each cooking day: take that meal's dishes from family_dishes and spread them over the week, so each main dish
+2. Each meal of each day: take that meal's dishes from family_dishes and spread them over the week, so each main dish
    is on two days at most (roti, rice and sides such as chutney, curd, plain dal come back freely; sambar and rasam are mains).
    Prefer dishes not on last_week; a dish rated didnt_work rarely. A dish listed with for is that person's: theirs only.
    A tiffin from the child's own list. Where the list runs short, add a dish like theirs that every rule allows (a new one
@@ -128,10 +128,10 @@ export const PLAN_METHOD = `Build the week from family_dishes, the family's own 
 3. A person who cannot eat the shared dish gets their own, and the shared one is for: ["everyone"], except: [them].
 4. Read the week through once: every person fed at every meal they eat at home, every rule kept, no main on three days.
 5. A refusal names what is wrong: change only those meals, and keep every other meal exactly as you sent it.
-One day, done right (Meera eats only plain idli or dosa at breakfast; Agastya has a tiffin; Lakshmi has millet for rice):
-  Breakfast: Plain idli for ["Meera"]; Rava idli for ["everyone"] except ["Meera"]; Coconut chutney for ["everyone"]
-  Agastya's tiffin: Vegetable poha for ["Agastya"]
-  Lunch: Rajma for ["everyone"]; Steamed rice for ["everyone"], portion_note "millet in place of rice for Lakshmi"; Curd for ["everyone"]
+One day, done right (Kabir eats only plain idli or dosa at breakfast and has a tiffin; Nani has millet for rice):
+  Breakfast: Plain idli for ["Kabir"]; Rava idli for ["everyone"] except ["Kabir"]; Coconut chutney for ["everyone"]
+  Kabir's tiffin: Vegetable poha for ["Kabir"]
+  Lunch: Rajma for ["everyone"]; Steamed rice for ["everyone"], portion_note "millet in place of rice for Nani"; Curd for ["everyone"]
   Dinner: Paneer butter masala for ["everyone"]; Phulka for ["everyone"]`;
 
 // ── What was sent, checked ──
@@ -299,14 +299,12 @@ function mealOf(db: Db, v: unknown, slots: string[], agent: boolean): Meal {
   return meal;
 }
 
-/** The meals sent for a week, each on a cooking day of that week and once only. */
+/** The meals sent for a week, each in that week and once only. Every day is planned: there is no day a meal is refused on. */
 function weekMealsSent(db: Db, sent: unknown[], weekStart: string, agent: boolean): { meals: Meal[]; seen: Set<string> } {
   const slots = slotNames(db);
   const meals = sent.map((m) => mealOf(db, m, slots, agent));
   const seen = new Set<string>();
-  const cooking = houseView(getHouse(db)).cooking_days;
   for (const m of meals) {
-    if (!cooking.includes(weekdayOf(m.date))) refuse(`${m.date} ${m.slot}: ${weekdayOf(m.date)} is not a cooking day (cooking days: ${cooking.join(", ")}); add it with set_cooking_days, or set_meal for one meal`, "NOT_COOKING_DAY");
     if (mondayOf(m.date) !== weekStart) refuse(`${m.date} ${m.slot} is not in the week of ${weekStart}`);
     if (seen.has(`${m.date} ${m.slot}`)) refuse(`${m.date} ${m.slot} is in meals twice`);
     seen.add(`${m.date} ${m.slot}`);
@@ -366,25 +364,29 @@ function guardMeal(tx: Db, meal: MealRow, missing: string[], eaters: string[] = 
   refuseWrite(tx, missing, meal.status === "final" ? breaksIn(tx, mondayOf(meal.date), [meal]) : [], eaters);
 }
 
-/** Each extra slot (a child's tiffin) without a meal on one of its days that is a cooking day from today on. */
+/** Each extra slot (a child's tiffin) without a meal on one of its days from today on. */
 export function slotGaps(week: WeekView, house: HouseView, today: string): string[] {
   const meals = week.days.flatMap((d) => d.meals), gaps: string[] = [];
   for (const slot of house.extra_slots) {
     for (const date of weekDates(week.week_start)) {
       const day = weekdayOf(date);
-      if (date < today || !house.cooking_days.includes(day) || (slot.days?.length && !slot.days.includes(day))) continue;
+      if (date < today || (slot.days?.length && !slot.days.includes(day)) || orderedIn(house, day, slot.name)) continue;
       if (!meals.some((m) => m.date === date && dishKey(m.slot) === dishKey(slot.name))) gaps.push(mealLabel({ date, slot: slot.name }));
     }
   }
   return gaps;
 }
 
-/** A cooking day from today on with no meal at all, for the menu, which is the whole week (flock-fast eval 2026-11-22: a
+/** Is this meal one the family eats out or orders in every week (`order_in`). */
+const orderedIn = (house: HouseView, day: string, slot: string) => house.order_in.some((o) => o.day === day && dishKey(o.slot) === dishKey(slot));
+
+/** A day from today on with no meal at all, nor one the family eats out or orders in every week, for the menu, which is the whole week (flock-fast eval 2026-11-22: a
  *  week sent with Sunday empty). One meal, or one ordered in, is enough: a home may skip a meal. A day's meals kept from
  *  the menu stay without ingredients until the day is planned, so the close refuses an unplanned day too. */
 export function emptyDays(week: WeekView, house: HouseView, today: string): string[] {
   const meals = week.days.flatMap((d) => d.meals);
-  return weekDates(week.week_start).filter((date) => date >= today && house.cooking_days.includes(weekdayOf(date)) && !meals.some((m) => m.date === date))
+  return weekDates(week.week_start).filter((date) => date >= today && !meals.some((m) => m.date === date)
+    && !SLOTS.every((s) => orderedIn(house, weekdayOf(date), s)))
     .map((date) => `${weekdayOf(date)} ${date}: no meal at all`);
 }
 
@@ -420,7 +422,7 @@ export const repeatsSaid = (repeated: string[]) =>
   `A main dish is on more than ${MAIN_DAYS_MAX} days: ${repeated.join("; ")}: plan something else on the other days (roti, rice, sides, a person's only dishes and a dish for one person alone may come back).`;
 
 /** The checks a week passes before its closing call answers the message: every dish has its ingredients, and every extra slot
- *  (a child's tiffin) has a meal on each of its days that is a cooking day from today on. Refused with every problem named, so
+ *  (a child's tiffin) has a meal on each of its days from today on. Refused with every problem named, so
  *  one fix round is enough. A main dish on more than MAIN_DAYS_MAX days is refused too (overRepeated); the family's own changes
  *  once the week is sent never are. */
 function checkWeek(week: WeekView, house: HouseView, today: string, breaks: RuleBreak[]): void {
@@ -443,7 +445,7 @@ function checkWeek(week: WeekView, house: HouseView, today: string, breaks: Rule
 }
 
 /** The checks plan_menu makes on a whole week's menu (the stepped plan, makePlan.ts, makes the same): the rules a name
- *  breaks, a cooking day with no meal and an extra slot without its meal (`gaps`), and a main dish on too many days. */
+ *  breaks, a day with no meal and an extra slot without its meal (`gaps`), and a main dish on too many days. */
 export function menuChecks(view: WeekView, house: HouseView, people: { name: string }[], today: string): { breaks: RuleBreak[]; gaps: string[]; repeated: string[] } {
   return { breaks: ruleBreaks(view, house, people), gaps: [...emptyDays(view, house, today), ...slotGaps(view, house, today)], repeated: overRepeated(view, house) };
 }
@@ -481,7 +483,7 @@ export function saveWeek(db: Db, emit: Emit, weekStart: string, sent: unknown[],
 export function closeWeek(db: Db, weekStart: string, basePath: string, unmet: string[] = []): { week: WeekView; message: string; intro?: string; instructions: string } {
   const week = weekView(db, weekStart);
   const house = getHouse(db), view = houseView(house);
-  const monday = view.cooking_days.includes("Mon") ? week.days[0].meals : [];
+  const monday = week.days[0].meals;
   const out: { week: WeekView; message: string; intro?: string; instructions: string } = { week, message: weekMessage({ monday, link: weekLink(basePath, weekStart), unmet }), instructions: "" };
   if (!house.intro_sent_at) {
     // The daily items the cart is filled with as they come due: an item delivered on a subscription (a milkman) never goes in a cart.

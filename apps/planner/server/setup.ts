@@ -1,14 +1,16 @@
 // apply_setup { household, transcript }: the family's whole setup in one call, at the end of the interview ("model reads, code
 // writes"). Flock keeps the replies word for word and sends them here with every household fact it holds; the app reads them
-// with ONE balanced model call into a household profile (people, the cook, cooking days, extra meals, meals ordered in, food
-// rules, the family's dishes, the shopping apps, subscriptions), checks and normalises that profile in code, and writes its own
-// rows in a fixed order through its own routes: people, cook, cooking days, slots and meals ordered in, rules, dishes, shopping
-// apps, subscriptions. Every write is add/upsert, one item at a time, so a thing the app cannot take is "noted, not enforced"
+// with ONE balanced model call into a household profile (people, the cook, who cooks on the cook's days off, extra meals, meals
+// ordered in, food rules, the family's dishes, the shopping apps, subscriptions), checks and normalises that profile in code,
+// and writes its own rows in a fixed order through its own routes: people, cook, slots and meals ordered in, rules, dishes,
+// shopping apps, subscriptions. Every day is planned (owner, 23 Nov: many families cook every day themselves): a day the cook
+// does not come is cooked by the family, and only a meal the family says is eaten out or ordered in is not cooked. Every write is add/upsert, one item at a time, so a thing the app cannot take is "noted, not enforced"
 // and never costs the rest (12 simulated runs of the per-reply saves failed on one refused field sinking a whole batch, on
 // wrong field names, on corrections that were never saved, and on rules copied from the help text's examples).
 // Code's checks: every rule carries a quote of the family's own words, and a rule whose quote is not in what the family said
 // (their replies or the household facts) is dropped; a rule's person must be on the Family page (a group word, "adults",
-// is each of them); a slot word is the one meal it names ("Tiffin" is "Agastya's tiffin"); "everyone" is the whole house.
+// is each of them); a slot word is the one meal it names ("Tiffin" is "Kabir's tiffin"); "everyone" is the whole house, and an
+// extra meal said without names is everyone's (owner, 23 Nov).
 import type { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { people as peopleTable } from "./db/schema";
@@ -16,7 +18,7 @@ import { appOf, GROUPS, RULE_KINDS, SLOTS } from "./db/constants";
 import { WEEKDAYS, type Weekday } from "./dates";
 import { closest } from "./agentOps";
 import { CATEGORIES, CHECKED_KINDS, rulesSaid } from "./rules";
-import { daysSaid, getHouse, houseView, isObject, refuse, slotsSaid, writeRoutes, type Db, type Emit } from "./family";
+import { daysSaid, getHouse, LONG_DAY, houseView, isObject, refuse, slotsSaid, writeRoutes, type Db, type Emit } from "./family";
 import type { ModelCall, ModelResult } from "./model";
 
 // ── The model's answer ──
@@ -25,14 +27,13 @@ const STR = { type: "string" }, STRS = { type: "array", items: STR };
 const OPT_STR = { type: ["string", "null"] };
 export const SETUP_SCHEMA = {
   type: "object",
-  required: ["people", "cook", "cookingDays", "homeCook", "slots", "orderIn", "rules", "dishes", "groceryApps", "subscriptions", "unplaced"],
+  required: ["people", "cook", "homeCook", "slots", "orderIn", "rules", "dishes", "groceryApps", "subscriptions", "unplaced"],
   properties: {
     people: { type: "array", items: { type: "object", required: ["name", "group"], properties: {
       name: STR, group: { type: "string", enum: ["child", "adult", "elder"] }, age: { type: ["number", "null"] }, relationship: OPT_STR } } },
     cook: { anyOf: [{ type: "null" }, { type: "object", required: ["name", "days", "visits"], properties: {
       name: STR, days: STRS, visits: { type: "array", items: { type: "object", required: ["at", "meals"], properties: { at: STR, meals: STRS } } },
       timeLimit: OPT_STR, newRecipes: { type: ["string", "null"], enum: ["open", "set_menu", null] }, note: OPT_STR } }] },
-    cookingDays: STRS,
     homeCook: { type: "array", items: { type: "object", required: ["day", "slots", "by"], properties: { day: STR, slots: STRS, by: STR, note: OPT_STR } } },
     slots: { type: "array", items: { type: "object", required: ["name", "days", "for", "quote"], properties: { name: STR, days: STRS, for: STRS, quote: STR } } },
     orderIn: { type: "array", items: { type: "object", required: ["day", "slot"], properties: { day: STR, slot: STR, note: OPT_STR } } },
@@ -60,15 +61,15 @@ Read it all first, then write. A later reply wins over an earlier one: "actually
 Write:
 - people: everyone who eats at home: name exactly as the family writes it, group child (under 18) | adult | elder (60 and over, or a grandparent), age when said, relationship to the speaker when said or clear ("my father": "father"; "my wife": "wife").
 - cook: the paid cook, or null. days as Mon..Sun. visits: each time they come, "HH:MM" 24-hour, with the meals (Breakfast, Lunch, Dinner) that visit makes ("breakfast and lunch in the morning, dinner at 6pm" is two visits; times ["7am", "6pm"] with meals Breakfast, Lunch, Dinner is the same two visits). A corrected time ("actually she comes at 7:30") changes only the visit it is nearest to; the other visit stays. timeLimit: their time limit in the family's words. newRecipes: open (tries new recipes from reels, videos) or set_menu (sticks to familiar dishes, even if one new dish now and then). note: anything else about the cook (what they will not cook, what they are not good at).
-- cookingDays: every weekday food is cooked at home, by the cook or by the family.
-- homeCook: on days the cook does not come, who of the family cooks which meals ({ day, slots, by, note }).
-- slots: only meals the family names besides Breakfast, Lunch and Dinner: a child's school tiffin ("<child>'s tiffin"; a tiffin named anywhere, even only in a rule, is a slot), an evening snack ("Evening snack"). Food eaten at home after school is that child's Lunch, not a slot. days: the weekdays it is eaten (empty: every day). for: who eats it, by name (empty: everyone). "We have an evening snack" in an answer about the adults' meals is the adults' snack. quote: the family's words that name it, from an A line (as for rules); a meal the family never named is no slot.
-- orderIn: every regular meal not cooked at home, ordered in or eaten out: { day, slot, note: "eaten out" or "ordered from Swiggy" }. "Sunday lunch we eat out" is orderIn { Sun, Lunch, "eaten out" }, also when someone cooks Sunday's other meals.
+- Every day of the week is planned and cooked at home: a day the cook does not come, the family cooks. Only a meal the family says is eaten out or ordered in is not cooked (orderIn). Never leave a day or a meal out because the cook is off or because the family did not mention it.
+- homeCook: on days the cook does not come, who of the family cooks which meals ({ day, slots, by, note }), when said.
+- slots: only meals the family names besides Breakfast, Lunch and Dinner: a child's school tiffin ("<child>'s tiffin", for that child; a tiffin named anywhere, even only in a rule, is a slot), an evening snack ("Evening snack"). Food eaten at home after school is that child's Lunch, not a slot. days: the weekdays it is eaten (empty: every day). for: only the people the family names for it, by name; a meal said without names is everyone's: for empty, even when it was said in an answer about the adults or the children. quote: the family's words that name it, from an A line (as for rules); a meal the family never named is no slot.
+- orderIn: every regular meal not cooked at home because it is ordered in or eaten out: { day, slot, note: "eaten out" or "ordered from Swiggy" }. "Sunday lunch we eat out" is orderIn { Sun, Lunch, "eaten out" } only: Sunday's other meals are still cooked. "We don't cook on Sunday, we go to my parents'" is all three Sunday meals.
 - rules: the family's food rules, one per thing they said: what must or must not be eaten. What someone usually eats ("milk every morning", "curd rice when he's tired") is no rule: it is a dish, or nothing. kind is one of:
   veg (vegetarian home) | no_eggs ("vegetarian, no eggs" is two rules: veg and no_eggs) | avoid { items, who?, days?, slots? } (no dish with these) | swap { who, items, to } (who has "to" in place of items, e.g. less rice: items ["@white_rice"], to "millets or a small portion of rice") | only { who, items, slots? } | require { slots, items } | cap { per_meal, slots? } (at most per_meal dishes to cook in a meal: a cook's time limit) or cap { items, per_week } | fasting { who, days, slots } (who eats nothing at those meals on those days: "fasts Monday till evening" is slots ["Breakfast","Lunch"]) | other { note } (anything else: "less salt", "less spicy for the child", a cook's limit with no number).
-  items are plain foods ("mushroom", "rice") or categories: ${CATEGORY_LIST}. "No sugar" is avoid ["@sweet"]; "nut-free" is avoid ["@nuts"]; "no rice at night" is avoid ["@white_rice"] at slots ["Dinner"].
+  items are plain foods ("mushroom", "rice") or categories: ${CATEGORY_LIST}. "No sugar" is avoid ["@sweet"]; "no nuts" is avoid ["@nuts"]; "no rice at night" is avoid ["@white_rice"] at slots ["Dinner"].
   who is one person's name from people; leave it out for the whole house. days are Mon..Sun, left out for every day; slots are meal names (Breakfast, Lunch, Dinner, or a slot you wrote), left out for every meal.
-  quote: the family's exact words this rule comes from, copied character for character from one A line or household fact (a short span, e.g. "no mushrooms"). Never from a Q: line, never your own words: when the app read a rule back ("Gowri eats no sugar, jaggery") and the family said it was right, quote the A line where the family first said it ("no sugar"). No quote, no rule.
+  quote: the family's exact words this rule comes from, copied character for character from one A line or household fact (a short span, e.g. "no mushrooms"). Never from a Q: line, never your own words: when the app read a rule back ("Nani eats no sugar, jaggery") and the family said it was right, quote the A line where the family first said it ("no sugar"). No quote, no rule.
 - dishes: the family's own dishes from their answers about the past week: { name, slots, for }. for: the people it is theirs when only some eat it ("Father had ragi dosa" is for the father by name); empty when everyone at that meal eats it. A child's tiffin dishes go in the tiffin slot. Plain names ("Idli", "Rajma chawal"); no drinks.
 - groceryApps: main and fallback, each one of zepto, swiggy-instamart, zomato-blinkit, bigbasket, amazon, or null.
 - subscriptions: what comes on a subscription: { item, source, note } ("milk", "Country Delight", "1 litre every morning").
@@ -76,11 +77,11 @@ Write:
 
 Example (another family). household: people Arjun (adult), Divya (adult, wife), Tara (8), Lalitha (72, Divya's mother); help: cook Sunita Mon-Fri 8am.
 Q: Sunita cooks Breakfast and Lunch at 8am. Is that right? A1: yes, and she comes back at 5 for dinner
-Q: Is food cooked at home on weekends? A2: Saturday Divya cooks everything. Sunday we go to my in-laws for lunch, dinner we order from Zomato
+Q: Is food cooked at home on weekends? A2: Saturday Divya cooks everything. Sunday we go to my in-laws for lunch, dinner we order from Zomato. We all have a snack at 5
 A3: oh and Sunita comes at 8:30 actually
 Q: Any food rules? A4: we're eggetarian, eggs fine but no meat. Amma doesn't eat onion or garlic, and she fasts on Saturdays till sunset.
 Q: Tara's tiffin? A5: Mon-Fri, sandwiches or poha, school says no peanuts
-gives cook { name "Sunita", days Mon..Fri, visits [{ at "08:30", meals [Breakfast, Lunch] }, { at "17:00", meals [Dinner] }] }, cookingDays Mon..Sat (Sunday dinner is ordered and lunch is out, so Sunday is no cooking day; and its two meals go in orderIn), homeCook [{ day Sat, slots [Breakfast, Lunch, Dinner], by "Divya" }], orderIn [{ Sun, Lunch, "eaten out" }, { Sun, Dinner, "ordered from Zomato" }], slots [{ "Tara's tiffin", Mon..Fri, ["Tara"] }], rules [{ egg, quote "eggs fine but no meat" }, { avoid, who "Lalitha", items ["onion","garlic"], quote "doesn't eat onion or garlic" }, { fasting, who "Lalitha", days [Sat], slots [Breakfast, Lunch], quote "fasts on Saturdays till sunset" }, { avoid, items ["@peanut"], slots ["Tara's tiffin"], quote "no peanuts" }], dishes [{ Sandwich, ["Tara's tiffin"] }, { Poha, ["Tara's tiffin"] }].
+gives cook { name "Sunita", days Mon..Fri, visits [{ at "08:30", meals [Breakfast, Lunch] }, { at "17:00", meals [Dinner] }] }, homeCook [{ day Sat, slots [Breakfast, Lunch, Dinner], by "Divya" }], orderIn [{ Sun, Lunch, "eaten out" }, { Sun, Dinner, "ordered from Zomato" }] (Sunday breakfast is still cooked at home: nobody said otherwise), slots [{ "Tara's tiffin", Mon..Fri, ["Tara"] }, { "Evening snack", [], [] (no names: everyone) }], rules [{ egg, quote "eggs fine but no meat" }, { avoid, who "Lalitha", items ["onion","garlic"], quote "doesn't eat onion or garlic" }, { fasting, who "Lalitha", days [Sat], slots [Breakfast, Lunch], quote "fasts on Saturdays till sunset" }, { avoid, items ["@peanut"], slots ["Tara's tiffin"], quote "no peanuts" }], dishes [{ Sandwich, ["Tara's tiffin"] }, { Poha, ["Tara's tiffin"] }].
 That family is only an example: write what THIS family said, nothing from the example.`;
 
 // ── Reading the model's answer leniently ──
@@ -89,7 +90,6 @@ type Visit = { at: string; meals?: string[] };
 export type Profile = {
   people: { name: string; group: string; age?: number; relationship?: string }[];
   cook: { name: string; days: Weekday[]; visits: Visit[]; timeLimit?: string; newRecipes?: "open" | "set_menu"; note?: string } | null;
-  cookingDays: Weekday[];
   homeCook: { day: Weekday; slots: string[]; by: string; note?: string }[];
   slots: { name: string; days: Weekday[]; for: string[]; quote?: string }[];
   orderIn: { day: Weekday; slot: string; note?: string }[];
@@ -160,7 +160,6 @@ export function profileOf(json: unknown): Profile {
         return at ? [{ at, ...(isObject(v) && strs(v.meals).length ? { meals: strs(v.meals) } : {}) }] : [];
       }),
       ...opt("timeLimit", cook.timeLimit), ...(cook.newRecipes === "open" || cook.newRecipes === "set_menu" ? { newRecipes: cook.newRecipes } : {}), ...opt("note", cook.note) } : null,
-    cookingDays: daysOf(j.cookingDays),
     homeCook: arr(j.homeCook).filter(isObject).flatMap((h) => daysOf(h.day).map((day) => ({ day, slots: strs(h.slots), by: str(h.by), ...opt("note", h.note) }))),
     slots: arr(j.slots).filter(isObject).filter((s) => str(s.name)).map((s) => ({ name: str(s.name), days: daysOf(s.days), for: strs(s.for), ...opt("quote", s.quote) })),
     orderIn: arr(j.orderIn).filter(isObject).flatMap((o) => daysOf(o.day).map((day) => ({ day, slot: str(o.slot), ...opt("note", o.note) }))),
@@ -317,29 +316,38 @@ export async function applySetup(deps: { db: Db; model: ModelCall; post: Post; h
     }
     const fixed = cookVisits(visits, cookTimesOf(deps.household, p.cook.name), deps.transcript.filter((l) => /^A\d*:/i.test(l)));
     visits.splice(0, visits.length, ...fixed);
-    const days = p.cook.days.length ? p.cook.days : p.cookingDays;
-    const body = { name: p.cook.name, days, ...(visits.length ? { arrival: visits } : {}),
+    const days = p.cook.days.length ? p.cook.days : cookDaysOf(deps.household, p.cook.name);
+    const body = { name: p.cook.name, ...(days.length ? { days } : {}), ...(visits.length ? { arrival: visits } : {}),
       ...(p.cook.timeLimit ? { time_limit: p.cook.timeLimit } : {}), ...(p.cook.newRecipes ? { new_recipes: p.cook.newRecipes } : {}), ...(p.cook.note ? { note: p.cook.note } : {}) };
     let res = await deps.post("/api/family/cook", body);
     if (!res.ok && visits.length) res = await deps.post("/api/family/cook", { ...body, arrival: visits.map((v) => v.at) });
     if (!res.ok) noted.push(`the cook ${p.cook.name}: not saved (${res.reason})`);
   }
 
-  // 3. Cooking days: the days said, the cook's, and the days the family cooks.
-  const cooking = WEEKDAYS.filter((d) => p.cookingDays.includes(d) || p.homeCook.some((h) => h.day === d) || (p.cook?.days ?? []).includes(d));
-  if (cooking.length) {
-    const res = await deps.post("/api/family/cooking-days", { days: cooking });
-    if (!res.ok) noted.push(`cooking days: not saved (${res.reason})`);
-  }
-
-  // 4. Extra meals, then the meals ordered in or eaten out.
+  // 3. Extra meals, then the meals ordered in or eaten out. Every day is planned: there are no cooking days to save.
   for (const s of p.slots) {
     if (SLOTS.some((x) => same(x, s.name))) continue;
     // A meal the family never named is no slot (sim: an "Evening snack" in a family that never spoke of one).
     const kind = plainWords(s.name).split(" ").pop() ?? "";
-    if (!saidByFamily(s.quote ?? "", said) && (!said.some((l) => ` ${l} `.includes(` ${kind} `) || ` ${l} `.includes(` ${kind}s `)))) {
+    const hasKind = (l: string) => ` ${l} `.includes(` ${kind} `) || ` ${l} `.includes(` ${kind}s `);
+    if (!saidByFamily(s.quote ?? "", said) && !said.some(hasKind)) {
       dropped.push(`the ${s.name} ("${s.quote ?? ""}"): not something the family said`); continue; }
-    const who = whoOf(s.for);
+    // Unnamed is everyone (owner, 23 Nov): a meal is only some people's when the family's line that names it names them too
+    // (sim: "we have an evening snack", said in the answer about the adults, was saved as the adults' snack). A tiffin is the
+    // school child's.
+    const q = plainWords(s.quote ?? "");
+    const lines = q.length >= 3 && said.some((l) => l.includes(q)) ? said.filter((l) => l.includes(q)) : said.filter(hasKind);
+    const named = /tiffin|lunch ?box/i.test(s.name) ? s.for : s.for.filter((w) => {
+      const t = plainWords(w);
+      if (GROUP_WORDS[t]) return lines.some((l) => ` ${l} `.includes(` ${t} `));
+      const n = personOf(w);
+      const fam = family.find((x) => x.name === n);
+      const refs = [...new Set([t, ...(fam ? [plainWords(fam.name), plainWords(fam.name).split(" ")[0], ...(fam.relationship ? [plainWords(fam.relationship)] : [])] : []),
+        ...(fam && speaker && same(fam.name, speaker) ? ["i", "me", "my", "myself"] : [])])].filter(Boolean);
+      return lines.some((l) => refs.some((r) => ` ${l} `.includes(` ${r} `)));
+    });
+    if (named.length < s.for.length) noted.push(`${s.name}: no names said with it, so it is for everyone`);
+    const who = whoOf(named.length === s.for.length ? s.for : []);
     if (who.unknown.length) noted.push(`${s.name}: ${who.unknown.join(", ")} is not on the Family page, so it is for everyone`);
     const res = await deps.post("/api/family/slots", { add: true, extra_slots: [{ name: s.name, ...(s.days.length && s.days.length < 7 ? { days: s.days } : {}), ...(who.names.length && !who.unknown.length ? { for: who.names } : {}) }] });
     if (!res.ok) noted.push(`${s.name}: not saved (${res.reason})`);
@@ -355,19 +363,13 @@ export async function applySetup(deps: { db: Db; model: ModelCall; post: Post; h
     const words = all.filter((s) => plainWords(t).split(" ").some((x) => x.length >= 4 && plainWords(s).split(" ").includes(x)));
     return words.length === 1 ? words[0] : closest(t, all);
   };
-  // On a day the cook does not come, the family cooks only the meals said: a main meal nobody cooks that day is not
-  // planned (sim: "Sunday lunch we eat out. Ankita makes a quick breakfast and dinner" came back with Sunday lunch nowhere).
+  // Only a meal the family says is eaten out or ordered in is not cooked: a day the cook does not come is cooked by the family,
+  // every meal of it (owner, 23 Nov: "Needs to have a plan for Sunday"). A home-cook entry that says the meal is eaten out
+  // or ordered is a meal ordered in (sim: { Sun, Lunch, by Ankita, "eaten out" }).
   const orderIn = [...p.orderIn];
-  // A home-cook entry that says the meal is eaten out or ordered is a meal ordered in (sim: { Sun, Lunch, by Ankita, "eaten out" }).
   for (const h of p.homeCook.filter((x) => /eat(en|ing)? out|order|outside|restaurant/i.test(x.note ?? "")))
     for (const slot of h.slots) if (!orderIn.some((o) => o.day === h.day && same(o.slot, slot))) orderIn.push({ day: h.day, slot, note: h.note });
   p.homeCook = p.homeCook.filter((x) => !/eat(en|ing)? out|order|outside|restaurant/i.test(x.note ?? ""));
-  for (const day of WEEKDAYS) {
-    const home = p.homeCook.filter((x) => x.day === day);
-    if (!home.length || (p.cook?.days ?? []).includes(day) || home.some((x) => !x.slots.length)) continue;
-    for (const slot of SLOTS) if (!home.some((x) => x.slots.some((s) => same(s, slot))) && !orderIn.some((o) => o.day === day && same(o.slot, slot)))
-      orderIn.push({ day, slot, note: "not cooked at home" });
-  }
   /** A child's tiffin a rule or a dish names that is no meal yet (sim: "agastya's tiffin nut-free" with no tiffin slot):
    *  made, school days Mon–Fri, and said. */
   const tiffinOf = async (w: string, who?: string): Promise<string | null> => {
@@ -402,10 +404,11 @@ export async function applySetup(deps: { db: Db; model: ModelCall; post: Post; h
     }
     return null;
   };
-  // 5. Rules: each one alone, so one the app cannot take costs nothing else. Not said by the family: dropped.
+  // 4. Rules: each one alone, so one the app cannot take costs nothing else. Not said by the family: dropped.
   const savedRules: (SetupRule & { saved_as: string })[] = [];
+  // Who cooks on the cook's days off goes to the menu as a note on those meals (a family member cooking may want simpler dishes).
   const homeRules: SetupRule[] = p.homeCook.filter((h) => h.by).map((h) => ({ kind: "other", days: [h.day], ...(h.slots.length ? { slots: h.slots } : {}),
-    note: `${h.by} cooks${h.note ? ` (${h.note})` : ""}`, quote: "" }));
+    note: homeCookNote(h), quote: "" }));
   for (const rule of [...p.rules, ...homeRules]) {
     const fromHome = homeRules.includes(rule);
     // A person's rule quoted from the app's read-back ("Gowri Shankar eats no sugar, jaggery") is still theirs when one of the
@@ -450,7 +453,7 @@ export async function applySetup(deps: { db: Db; model: ModelCall; post: Post; h
     }
   }
 
-  // 6. The family's dishes, each alone.
+  // 5. The family's dishes, each alone.
   for (const d of p.dishes) {
     if (DRINKS.test(d.name)) continue;
     const found: (string | null)[] = [];
@@ -462,7 +465,7 @@ export async function applySetup(deps: { db: Db; model: ModelCall; post: Post; h
     if (!res.ok) noted.push(`${d.name}: not saved (${res.reason})`);
   }
 
-  // 7. Shopping apps and subscriptions.
+  // 6. Shopping apps and subscriptions.
   const main = appOf(p.groceryApps.main ?? ""), fallback = appOf(p.groceryApps.fallback ?? "");
   if (main) {
     const res = await deps.post("/api/family/shopping-apps", { main, fallback: fallback && fallback !== main ? fallback : null, connected: houseView(getHouse(deps.db)).connected_apps });
@@ -476,6 +479,16 @@ export async function applySetup(deps: { db: Db; model: ModelCall; post: Post; h
 
   const back = readBack(deps.db, p);
   return { ok: true, said: noted.length ? `${back}\nNoted, not checked by the planner:\n${noted.map((n) => `- ${n}`).join("\n")}` : back, noted, dropped, rules: savedRules, profile: p, model: r.model };
+}
+
+/** The note a day-off cooking entry is saved with: the menu reads it, and the read-back finds it by it. */
+const homeCookNote = (h: { by: string; note?: string }) => `${h.by} cooks${h.note ? ` (${h.note})` : ""}`;
+
+/** The cook's days in the household facts (help: { role: cook, name, days }), for a cook whose days the transcript left out. */
+function cookDaysOf(household: unknown, cook: string): Weekday[] {
+  const help = isObject(household) ? arr(household["household.help"] ?? household.help) : [];
+  const h = help.filter(isObject).find((x) => /cook/i.test(str(x.role)) && (!str(x.name) || same(str(x.name), cook)));
+  return h ? daysOf(h.days) : [];
 }
 
 const hourOf = (at: string) => Number(at.slice(0, 2));
@@ -550,9 +563,18 @@ export function readBack(db: Db, p: Profile): string {
   const lines: string[] = [];
   lines.push(`At home: ${andWords(fam.map((x) => `${x.name} (${x.group}${x.note?.startsWith("age ") ? `, ${x.note.slice(4)}` : ""})`))}.`);
   if (h.cook_name) lines.push(`${h.cook_name} cooks ${daysSaid(h.cook_days)}${h.cook_visits.length ? `: ${andWords(h.cook_visits.map((v) => `${v.meals?.length ? `${andWords(v.meals.map((m) => m.toLowerCase()))} ` : ""}at ${v.at}`))}` : ""}.`);
-  lines.push(`Cooking at home ${daysSaid(h.cooking_days)}.`);
+  // Every day is planned: the days the cook does not come, the family cooks (by whom, when said).
+  const off = h.cook_name && h.cook_days.length ? WEEKDAYS.filter((d) => !h.cook_days.includes(d)) : h.cook_name ? [] : [...WEEKDAYS];
+  if (off.length === 7) lines.push("The family cooks every day.");
+  else if (off.length) {
+    const by = (d: Weekday) => [...new Set(p.homeCook.filter((x) => x.day === d && x.by).map((x) => x.by))];
+    const groups = new Map<string, Weekday[]>();
+    for (const d of off) { const k = andWords(by(d)) || "the family"; groups.set(k, [...(groups.get(k) ?? []), d]); }
+    lines.push([...groups].map(([who, days]) => `${days.length === 1 ? `On ${LONG_DAY[days[0]]}` : `On ${andWords(days.map((d) => LONG_DAY[d]))}`} ${who} cooks.`).join(" "));
+  }
   lines.push(slotsSaid(h));
-  const rules = rulesSaid(h.rules);
+  const homeNotes = new Set(p.homeCook.filter((x) => x.by).map(homeCookNote));
+  const rules = rulesSaid(h.rules.filter((r) => !(r.kind === "other" && !r.who && r.note && homeNotes.has(r.note))));
   if (rules) lines.push(`Food rules:\n${rules}`);
   const dishCount = p.dishes.length;
   if (dishCount) lines.push(`${dishCount} of your dishes noted to plan from.`);

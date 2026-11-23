@@ -67,7 +67,8 @@ const ruleWords = (r: Rule): string => {
   return r.days.length && !r.days.every((d) => /^(Mon|Tue|Wed|Thu|Fri|Sat|Sun)$/.test(d)) ? `${text} (${r.days.join(", ")})` : text;
 };
 
-/** Every meal of the week from `today` on, on the cooking days: Breakfast, Lunch, Dinner, and each extra slot on its days for its
+/** Every meal of the week from `today` on, every day (owner, 23 Nov: a day the cook does not come is cooked by the family,
+ *  never skipped): Breakfast, Lunch, Dinner, and each extra slot on its days for its
  *  people; a meal the family orders in every week is ordered in. A meal everyone who eats it fasts at is no meal (live run
  *  2026-11-23: the father, alone at home, fasts Thursday breakfast and lunch; code could neither fill those meals nor keep
  *  his fast, and the plan ended "I don't know any dishes for breakfast, lunch"). */
@@ -76,7 +77,7 @@ export function slotNeeds(c: WeekContext, today: string): SlotNeed[] {
   const out: SlotNeed[] = [];
   for (const date of weekDates(c.week_start)) {
     const day = weekdayOf(date);
-    if (date < today || !h.cooking_days.includes(day)) continue;
+    if (date < today) continue;
     const slots = [...SLOTS, ...h.extra_slots.filter((s) => !s.days?.length || s.days.includes(day)).map((s) => s.name)];
     for (const slot of slots) {
       const who = dinersOf(slot, people, h.extra_slots);
@@ -85,7 +86,7 @@ export function slotNeeds(c: WeekContext, today: string): SlotNeed[] {
       const fam = Object.entries(c.family_dishes).find(([s]) => same(s, slot))?.[1] ?? [];
       const order = h.order_in.find((o) => o.day === day && same(o.slot, slot));
       const visit = h.cook_visits.find((v) => v.meals?.some((m) => same(m, slot)));
-      const cook = !h.cook_name ? "the family cooks" : !h.cook_days.includes(day as never) ? `${h.cook_name} does not come: the family cooks`
+      const cook = !h.cook_name ? "the family cooks" : !h.cook_days.includes(day as never) ? `${h.cook_name} does not come: the family cooks, so dishes quick and simple to make`
         : visit ? `${h.cook_name} cooks it (comes at ${visit.at})` : `${h.cook_name} comes${h.cook_visits.length ? ` at ${h.cook_visits.map((v) => v.at).join(" and ")}` : ""}`;
       out.push({ key: keyOf(date, slot), date, day, slot, who, cook,
         rules: h.rules.filter((r) => ruleHolds(r, day, slot, who)).map(ruleWords),
@@ -481,7 +482,7 @@ async function planWeek(deps: MakePlanDeps & { log: (line: string) => void }, in
   if (!c.people.length) return done({ ok: false, reason: "no_family", say: "Tell me who eats at home first, then I'll plan the week." });
   const needs = slotNeeds(c, today);
   const toPlan = needs.filter((n) => !n.ordered_in);
-  if (!needs.length) return done({ ok: false, reason: "no_meals", say: "There are no cooking days left to plan in that week." });
+  if (!needs.length) return done({ ok: false, reason: "no_meals", say: "There are no days left to plan in that week." });
   const stopped = (r: Extract<ModelResult, { ok: false }>): MakePlanResult => done({ ok: false, reason: r.code, say: stopSaid(r.code) });
 
   // b. The menu: one call per meal of the day, all at once, then only the meals that fail (again by meal of the day), at
