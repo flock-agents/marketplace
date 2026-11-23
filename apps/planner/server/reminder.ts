@@ -12,7 +12,7 @@ import type { Hono } from "hono";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { item_events, items, order_lines, orders, slot_dishes } from "./db/schema";
 import { APP_NAMES, CART_SYNC, ESTIMATE, type GroceryApp } from "./db/constants";
-import { listLibrary, listSlotDays, updateSlotDish } from "./slotStore";
+import { listLibrary, listSlotDays, listSlots, updateSlotDish } from "./slotStore";
 import { dishKey } from "./dishText";
 import { addDays, mondayOf, todayStr } from "./dates";
 import { refuse, shoppingApps, writeRoutes, type Db, type Emit } from "./family";
@@ -67,7 +67,10 @@ function lastingThrough(tx: Db, daily: { item: string; lasts_days: number | null
 /** The meals a reminder covers: tonight's dinner when it is cooked (afternoon); every meal of tomorrow (evening). */
 function coveredMeals(tx: Db, which: Which, date: string): MealView[] {
   const day = weekView(tx, mondayOf(date)).days.find((d) => d.date === date)?.meals ?? [];
-  return which === "afternoon" ? day.filter((m) => m.slot === "Dinner" && !m.ordered_in && m.dishes.length)
+  // The afternoon covers tonight's dinner and every add-on to it (a person's own dinner is cooked even when the family's is
+  // ordered in).
+  const dinner = new Set(["Dinner", ...listSlots(tx, { all: true }).filter((s) => s.kind === "addon" && s.addon_of === "Dinner").map((s) => s.name)]);
+  return which === "afternoon" ? day.filter((m) => dinner.has(m.slot) && !m.ordered_in && m.dishes.length)
     : day.filter((m) => m.ordered_in || m.dishes.length);
 }
 

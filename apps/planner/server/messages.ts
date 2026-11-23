@@ -74,7 +74,7 @@ export const feedbackLine = (f: { dish: string; from: "suggestion" | "reel" }): 
  *  far the cart is from free delivery. `app`: the app chat's text, without the item lines (its block asks them). Empty: "". */
 export function reminderText(r: ReminderText, opts: { app?: boolean } = {}): string {
   if (r.empty) return "";
-  const meal = (m: MealView) => (m.ordered_in ? "ordering in" : m.dishes.map(dishText).join(", "));
+  const meal = (m: MealView) => (m.skip === "eaten_out" ? "eating out" : m.ordered_in ? "ordering in" : m.dishes.map(dishText).join(", "));
   const top: string[] = [];
   if (r.meals.length) {
     const meals = r.meals.map(meal).join(" · ");
@@ -135,7 +135,7 @@ export function weekSendText(intro: boolean): string {
 /** The Sunday message once the week is planned: Monday's meals and the link to the rest. `monday` is Monday's meals, empty when it has
  *  none. `unmet`: what the plan could not keep (the stepped plan's last resort), said plainly. */
 export function weekMessage(i: { monday: MealView[]; link: string; unmet?: string[] }): string {
-  const meals = i.monday.map((m) => (m.ordered_in ? "ordering in" : m.dishes.map(dishText).join(", "))).filter(Boolean);
+  const meals = i.monday.map((m) => (m.skip === "eaten_out" ? "eating out" : m.ordered_in ? "ordering in" : m.dishes.map(dishText).join(", "))).filter(Boolean);
   return [
     "Next week is planned.",
     `Monday: ${meals.length ? meals.join(" · ") : "nothing planned"}`,

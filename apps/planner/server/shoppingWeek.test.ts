@@ -79,7 +79,7 @@ const onOpenCarts = (k: K) => new Set(k.rows("order_lines").filter((l) => (l.qty
  *  every slot-day of tomorrow with dishes or not cooked at home (19:00). */
 function mealsDue(k: K, which: Which, date: string) {
   return listSlotDays(k.kit.db as any, { from: date, to: date })
-    .filter((d) => (which === "afternoon" ? d.slot === "Dinner" && !d.skip && d.dishes.length > 0 : !!d.skip || d.dishes.length > 0));
+    .filter((d) => (which === "afternoon" ? (d.slot === "Dinner" || d.slot === "Gopal's dinner") && !d.skip && d.dishes.length > 0 : !!d.skip || d.dishes.length > 0));
 }
 /** The ingredients a reminder must ask about: its meals' ingredients in order, each once, but not an everyday item with a
  *  cycle, a monthly or subscribed item, or one already on an open cart (`cart`: as it was before the reminder). */
@@ -214,19 +214,19 @@ describe("a week of shopping on the slot model", () => {
     const ALL = ["Breakfast", "Kabir's tiffin", "Lunch", "Dinner", "Gopal's dinner"];
     // The whole week, as the family saw it: meals covered, ingredients asked, items put on, running-low asks, next-day question.
     expect(table.map((x) => [x.day, x.which, x.meals, x.ask, x.added, x.asks, x.feedback])).toEqual([
-      [MON, "afternoon", ["Dinner"], ["palak", "moong dal", "tomato", "bhindi"], ["milk", "curd"], ["tea", "sugar", "toor dal", "oil", "ghee"], []],
+      [MON, "afternoon", ["Dinner", "Gopal's dinner"], ["palak", "moong dal", "tomato", "bhindi"], ["milk", "curd"], ["tea", "sugar", "toor dal", "oil", "ghee"], []],
       [MON, "evening", ALL, ["dosa batter", "coconut", "roasted chana", "besan", "tomato", "rajma", "kabuli chana", "onion", "garlic", "chole masala"], [], ["tea", "sugar", "toor dal", "oil", "ghee"], []],
-      [TUE, "afternoon", ["Dinner"], ["onion", "garlic", "tomato", "chole masala"], ["milk", "bread"], ["rice"], []],
+      [TUE, "afternoon", ["Dinner", "Gopal's dinner"], ["onion", "garlic", "tomato", "chole masala"], ["milk", "bread"], ["rice"], []],
       [TUE, "evening", ALL, ["poha", "peanuts", "curry leaves", "idli batter", "tomato", "potato", "cauliflower"], [], ["rice"], []],
-      [WED, "afternoon", ["Dinner"], ["tomato", "potato", "cauliflower"], ["milk", "curd", "bread"], [], ["Besan cheela (reel)"]],
+      [WED, "afternoon", ["Dinner", "Gopal's dinner"], ["tomato", "potato", "cauliflower"], ["milk", "curd", "bread"], [], ["Besan cheela (reel)"]],
       [WED, "evening", ALL, ["rava", "carrot", "peas", "coconut", "roasted chana", "cucumber", "palak", "moong dal", "tomato", "bhindi"], [], [], []],
-      [THU, "afternoon", ["Dinner"], ["palak", "tomato", "ginger"], ["milk"], [], []],
+      [THU, "afternoon", ["Dinner", "Gopal's dinner"], ["palak", "tomato", "ginger"], ["milk"], [], []],
       [THU, "evening", ALL, ["idli batter", "coconut", "roasted chana", "lemon", "peanuts", "drumstick", "tomato", "sambar powder", "tamarind", "rajma"], [], [], []],
-      [FRI, "afternoon", ["Dinner"], [], ["milk", "curd"], [], []],
+      [FRI, "afternoon", ["Dinner", "Gopal's dinner"], [], ["milk", "curd"], [], []],
       [FRI, "evening", ["Breakfast", "Lunch", "Dinner (ordered in)", "Gopal's dinner"], ["potato", "coconut", "roasted chana", "mixed vegetables", "bisi bele bath powder"], [], ["atta"], []],
-      [SAT, "afternoon", [], [], ["milk", "curd", "bread"], ["atta"], []],
+      [SAT, "afternoon", ["Gopal's dinner"], [], ["milk", "curd", "bread"], ["atta"], []],
       [SAT, "evening", ["Breakfast", "Lunch (eaten out)", "Dinner", "Gopal's dinner"], ["ragi flour", "coconut", "roasted chana", "tomato", "potato", "cauliflower"], [], [], []],
-      [SUN, "afternoon", ["Dinner"], ["tomato", "potato", "cauliflower"], ["milk"], [], ["Bisi bele bath (suggestion)"]],
+      [SUN, "afternoon", ["Dinner", "Gopal's dinner"], ["tomato", "potato", "cauliflower"], ["milk"], [], ["Bisi bele bath (suggestion)"]],
       [SUN, "evening", [], [], ["tea", "sugar", "ghee"], [], []],
     ]);
 

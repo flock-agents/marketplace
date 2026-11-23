@@ -345,8 +345,8 @@ describe("apply_setup v2: the checks, pure", () => {
   it("the diff: an item is applied when its quote is in a new reply or a new reply names it; removals only by name", () => {
     const saved: Saved = { slots: [], cook: null, seed: [], state: null, rules: [],
       library: [{ key: "poha", slot: "Breakfast", name: "Poha" }, { key: "upma", slot: "Breakfast", name: "Upma" }] as any };
-    const next = base({ library: [{ name: "Idli", slot: "Breakfast", frequency: null, days: null, quote: "we also have idli" },
-      { name: "Dosa", slot: "Breakfast", frequency: null, days: null, quote: "dosa" }] });
+    const next = base({ library: [{ name: "Idli", slot: "Breakfast", frequency: null, days: null, quote: "we also have idli", often: "" },
+      { name: "Dosa", slot: "Breakfast", frequency: null, days: null, quote: "dosa", often: "" }] });
     const ops = diffSetup(saved, next, [plainWords("we also have idli, no more poha")], false);
     expect(ops.library.map((d) => d.name)).toEqual(["Idli"]);
     expect(ops.removeLibrary).toEqual([{ name: "Poha", slot: "Breakfast" }]);
