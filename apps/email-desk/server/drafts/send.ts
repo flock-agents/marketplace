@@ -16,11 +16,12 @@
 // last text written (the agent's latest update, which the card shows). Gmail's draft is made to hold that text before the
 // send, whatever Gmail holds (the source's approved-draft rule); short of that, nothing sends.
 //
-// A crash between the ledger's in_flight and its sent leaves an in_flight row. Within this process a turn never sees
-// another's in_flight (the turn serialises sends), so one seen in a turn is a crash's. The source's rule: such a send is
-// taken back by the person's next press, which sends again. Kept, with one guard for Review Focus 1: a send that already
-// went out leaves Gmail without the draft (sendDraft consumes it), so a retaken send (in_flight or failed before) whose
-// Gmail draft is gone is recorded sent, and not sent again.
+// The ledger is claimed (in_flight) only just before Gmail's sendDraft runs: anything that fails before it (the edit, the
+// text sync) writes no ledger row, so a ledger row that is not `sent` always means sendDraft was asked and may have
+// reached Gmail: in_flight left by a crash, or failed by sendDraft's own answer. The source's rule for such a row: check
+// Gmail, then the next press sends again. Gmail's draft still there: it did not go out, so the press sends it. Gmail shows
+// no draft: that is never read as sent (getDraft also reads nothing when the compose did not open in time), and never
+// sent again either: the answer is SEND_FAILED telling the person to look in Gmail's Sent (Review Focus 1).
 import type { CardClosedEvent, PlatformContext } from "@flock/app-sdk";
 import { getStore } from "../store";
 import { changeDraft, gmail, removeDraft, withThreadTurn, type OpCtx } from "../ops";
@@ -78,12 +79,16 @@ async function sendInTurn(id: string, editedBody: string | undefined, ctx: OpCtx
   let draft = getDraft(db, id);
   if (!draft) return notFound();
   if (draft.sentAt !== null) return { ok: true, sentAt: new Date(draft.sentAt).toISOString() };
-  // A row left in_flight (a crash's) or failed: an earlier attempt may have reached Gmail.
-  const retaken = before !== null;
+
+  // sendDraft was asked before (a crash's in_flight, or its own failure): send again only while Gmail still holds the draft.
+  if (before) {
+    const held = await readGmailDraft(ctx.platform, draft);
+    if (!held.ok) return sendFailed(`could not check the draft in Gmail (${held.reason})`);
+    if (held.body === null) return sendFailed(MAY_HAVE_GONE_OUT);
+  }
 
   // The person's edit on the card is saved as theirs first (their press token makes it theirs, ruling R5), then sent.
   if (editedBody !== undefined && editedBody !== draft.bodyWritten) {
-    if (retaken && (await goneFromGmail(ctx.platform, draft))) return recordSent(draft, key, "went out before a restart");
     const edited = await changeDraft(id, { body: editedBody, by: "person" }, ctx);
     if ("error" in edited) {
       if (edited.code === "NOT_FOUND") return notFound();
@@ -97,7 +102,12 @@ async function sendInTurn(id: string, editedBody: string | undefined, ctx: OpCtx
     if (!draft) return notFound();
   }
 
-  // Claim the send: in_flight, before Gmail is asked. A failed or crash-left row is taken back (the source's rule).
+  // Gmail's draft must hold the text the record (and so the card) holds. A failure here sent nothing and leaves no ledger
+  // row, so the next press is a plain first send.
+  const synced = await syncDraftText(ctx.platform, draft);
+  if (synced !== "ok") return sendFailed(synced.reason);
+
+  // Claim the send (in_flight) just before Gmail is asked to send; a failed row is taken back here.
   const now = Date.now();
   db.run(
     `INSERT INTO send_ledger (idempotency_key, account_id, thread_id, draft_id, state, result, created_at, updated_at)
@@ -106,20 +116,15 @@ async function sendInTurn(id: string, editedBody: string | undefined, ctx: OpCtx
        updated_at = excluded.updated_at WHERE send_ledger.state != 'sent'`,
     [key, draft.accountId, draft.threadId, draft.draftId, now, now],
   );
-
-  // Gmail's draft must hold the text the record (and so the card) holds.
-  const synced = await syncDraftText(ctx.platform, draft);
-  if (synced === "gone") {
-    if (retaken) return recordSent(draft, key, "went out before a restart");
-    return fail(key, "the draft is no longer in Gmail");
-  }
-  if (synced !== "ok") return fail(key, synced.reason);
-
   const sent = await gmail(ctx.platform, "sendDraft", { draftId: draft.draftId }, draft.accountId, { pressToken });
   if (!sent.ok) return fail(key, sent.reason || "Gmail did not send it");
   return recordSent(draft, key);
 }
 
+/** A retake after sendDraft was asked, with Gmail showing no draft: it may have been sent, so it is not sent again. */
+const MAY_HAVE_GONE_OUT = "it may already have gone out. Check Sent in Gmail.";
+
+/** sendDraft itself failed: the ledger keeps `failed` with the reason (the next press checks Gmail first). */
 function fail(key: string, reason: string): SendRefusal {
   getStore().run("UPDATE send_ledger SET state = 'failed', result = ?, updated_at = ? WHERE idempotency_key = ?", [reason, Date.now(), key]);
   return sendFailed(reason);
@@ -127,7 +132,7 @@ function fail(key: string, reason: string): SendRefusal {
 
 /** The ledger says sent and the row has its sent stamp (the source's "Sent by Flock" record; 2.4 reads the draft as no
  *  longer open). The platform closes the card on the answer. */
-function recordSent(draft: DraftRecord, key: string, note?: string): { ok: true; sentAt: string } {
+function recordSent(draft: DraftRecord, key: string): { ok: true; sentAt: string } {
   const db = getStore();
   const at = Date.now();
   const sentAt = new Date(at).toISOString();
@@ -135,7 +140,7 @@ function recordSent(draft: DraftRecord, key: string, note?: string): { ok: true;
     `INSERT INTO send_ledger (idempotency_key, account_id, thread_id, draft_id, state, result, created_at, updated_at)
      VALUES (?, ?, ?, ?, 'sent', ?, ?, ?)
      ON CONFLICT(idempotency_key) DO UPDATE SET state = 'sent', result = excluded.result, updated_at = excluded.updated_at`,
-    [key, draft.accountId, draft.threadId, draft.draftId, JSON.stringify({ sentAt, ...(note ? { note } : {}) }), at, at],
+    [key, draft.accountId, draft.threadId, draft.draftId, JSON.stringify({ sentAt }), at, at],
   );
   db.run("UPDATE draft_records SET sent_at = ?, sent_by = 'person', updated_at = ? WHERE id = ?", [at, at, draft.id]);
   return { ok: true, sentAt };
@@ -169,29 +174,27 @@ function normalizeDraftText(text: string): string {
 
 type DraftRead = { ok: true; body: string | null } | { ok: false; reason: string };
 
-/** Gmail's text for the draft; body null when Gmail no longer holds it. */
+/** Gmail's text for the draft; body null when Gmail showed none (gone, or its compose did not open in time: never proof
+ *  of a send). */
 async function readGmailDraft(platform: PlatformContext, draft: DraftRecord): Promise<DraftRead> {
   const r = await gmail<{ body?: unknown }>(platform, "getDraft", { draftId: draft.draftId }, draft.accountId);
   if (!r.ok) return r.code === "DRAFT_NOT_FOUND" ? { ok: true, body: null } : { ok: false, reason: r.reason };
   return { ok: true, body: typeof r.data?.body === "string" ? r.data.body : null };
 }
 
-async function goneFromGmail(platform: PlatformContext, draft: DraftRecord): Promise<boolean> {
-  const r = await readGmailDraft(platform, draft);
-  return r.ok && r.body === null;
-}
+const NO_DRAFT_SHOWN = "Gmail did not show the draft. Try again, or dismiss this card if you deleted it in Gmail.";
 
 /** Make Gmail's draft hold the record's text: a read, and a write plus a read-back only when it differs. */
-async function syncDraftText(platform: PlatformContext, draft: DraftRecord): Promise<"ok" | "gone" | { reason: string }> {
+async function syncDraftText(platform: PlatformContext, draft: DraftRecord): Promise<"ok" | { reason: string }> {
   const before = await readGmailDraft(platform, draft);
-  if (before.ok && before.body === null) return "gone";
+  if (before.ok && before.body === null) return { reason: NO_DRAFT_SHOWN };
   if (before.ok && sameDraftText(draft.bodyWritten, before.body!)) return "ok";
 
   const write = await gmail(platform, "updateDraft", { draftId: draft.draftId, body: draft.bodyWritten }, draft.accountId);
   if (!write.ok) return { reason: `Gmail could not take the draft's text (${write.reason})` };
   const after = await readGmailDraft(platform, draft);
   if (!after.ok) return { reason: `could not check Gmail holds the draft's text (${after.reason})` };
-  if (after.body === null) return "gone";
+  if (after.body === null) return { reason: NO_DRAFT_SHOWN };
   if (!sameDraftText(draft.bodyWritten, after.body)) return { reason: "Gmail's draft still differs from the card's text" };
   return "ok";
 }

@@ -257,27 +257,64 @@ describe("send_draft", () => {
     expect(out.status).toBe(502);
     expect(out.error).toContain("compose did not open");
     expect(sends()).toHaveLength(0);
+    // Nothing reached sendDraft: no ledger row, so the next press is a plain first send.
+    expect(ledger(id)).toBeNull();
+    const again = await send({ id }, pressCtx("press-token-2"));
+    expect(again.ok).toBe(true);
+    expect(sends()).toHaveLength(1);
+    expect(f.gmail.has("gm-1")).toBe(false);
+    expect(ledger(id).state).toBe("sent");
+  });
+
+  test("a draft deleted in Gmail: two presses both fail, nothing is recorded sent", async () => {
+    const id = await create();
+    f.gmail.delete("gm-1");
+    const first = await send({ id });
+    const second = await send({ id }, pressCtx("press-token-2"));
+    for (const out of [first, second]) {
+      expect(out.code).toBe("SEND_FAILED");
+      expect(out.error).not.toMatch(/[–—]/);
+    }
+    expect(sends()).toHaveLength(0);
+    expect(row(id).sent_at).toBeNull();
+    expect(ledger(id)).toBeNull();
+    expect(f.withdrawn).toHaveLength(0);
+  });
+
+  test("sendDraft failed, then Gmail shows no draft: SEND_FAILED asking to check Gmail, never sent again", async () => {
+    const id = await create();
+    f.failNext.sendDraft = { reason: "timed out" };
+    expect((await send({ id })).code).toBe("SEND_FAILED");
+    f.gmail.delete("gm-1");
+    const out = await send({ id }, pressCtx("press-token-2"));
+    expect(out).toEqual({ error: "Could not send: it may already have gone out. Check Sent in Gmail.", code: "SEND_FAILED", status: 502 });
+    expect(sends()).toHaveLength(1);
+    expect(row(id).sent_at).toBeNull();
     expect(ledger(id).state).toBe("failed");
   });
 
-  test("a first press on a draft Gmail no longer holds fails and sends nothing", async () => {
+  test("an edit pressed after a failed send whose draft is gone is not saved or sent", async () => {
     const id = await create();
+    f.failNext.sendDraft = { reason: "timed out" };
+    await send({ id });
     f.gmail.delete("gm-1");
-    const out = await send({ id });
-    expect(out.code).toBe("SEND_FAILED");
-    expect(sends()).toHaveLength(0);
+    f.calls.length = 0;
+    const out = await send({ id, editedBody: "Hi Asha, changed my mind." }, pressCtx("press-token-2"));
+    expect(out.error).toContain("Check Sent in Gmail");
+    expect(f.calls.map((c) => c.functionName)).toEqual(["getDraft"]);
     expect(row(id).sent_at).toBeNull();
   });
 
-  test("a send a crash cut short, gone from Gmail: recorded sent, nothing sent again", async () => {
+  test("a send a crash cut short, gone from Gmail: SEND_FAILED asking to check Gmail, nothing sent", async () => {
     const id = await create();
     db.run("INSERT INTO send_ledger (idempotency_key, account_id, thread_id, draft_id, state, created_at, updated_at) VALUES (?, ?, ?, 'gm-1', 'in_flight', 1, 1)", [`draft:${id}`, ACCOUNT, THREAD]);
     f.gmail.delete("gm-1");
     const out = await send({ id });
-    expect(out.ok).toBe(true);
+    expect(out.code).toBe("SEND_FAILED");
+    expect(out.error).toContain("Check Sent in Gmail");
     expect(sends()).toHaveLength(0);
-    expect(ledger(id).state).toBe("sent");
-    expect(row(id).sent_at).not.toBeNull();
+    expect(row(id).sent_at).toBeNull();
+    expect(ledger(id).state).toBe("in_flight");
   });
 
   test("a send a crash cut short, still in Gmail: the press sends it", async () => {
