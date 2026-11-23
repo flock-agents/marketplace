@@ -57,13 +57,14 @@ export function readSetup(k: Kit, res: any = {}): SetupOut {
   const seed = days.filter((d) => !d.date).map((d) => ({ slot: d.slot, dishes: dishesOf(dishes, d.id) }));
   const house = has(k, "house") ? k.rows("house")[0] ?? {} : {};
   const visits = json<any>(house.cook_arrival, null);
+  const state = json<any>(house.setup_state, {}) ?? {};
   return {
     ok: res?.ok !== false,
     slots, library, rules, seed,
     cook: house.cook_name ? { name: house.cook_name, days: json(house.cook_days, []), visits: Array.isArray(visits) ? visits : visits ? [{ at: String(visits) }] : typeof house.cook_arrival === "string" ? [{ at: house.cook_arrival }] : [] } : null,
-    family_cooks: json(res?.family_cooks ?? house.family_cooks, []),
-    unplaced: [...json<any[]>(res?.unplaced, []), ...json<any[]>(res?.noted, []).map((n) => (typeof n === "string" ? { text: n } : n))],
-    lunch_unclear: json(res?.lunch_unclear, []),
+    family_cooks: json(res?.family_cooks ?? res?.read?.family_cooks ?? state.family_cooks ?? house.family_cooks, []),
+    unplaced: [...json<any[]>(res?.unplaced ?? res?.read?.unplaced, []), ...json<any[]>(res?.noted, []).map((n) => (typeof n === "string" ? { text: n } : n))],
+    lunch_unclear: json(res?.lunch_unclear ?? res?.read?.lunch_unclear ?? state.lunch_unclear, []),
     ...(res?.attendance ? { attendance: res.attendance } : {}),
     said: res?.said ?? res?.say,
     settings: { new_dishes_per_week: settingOf(k, "new_dishes_per_week") ?? 2 },
