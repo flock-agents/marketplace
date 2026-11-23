@@ -346,7 +346,7 @@ describe("set_slots add: true and the slots read back", () => {
     await op("set_slots", { add: true, extra_slots: [{ name: "Agastya's tiffin", days: ["Mon", "Tue", "Wed", "Thu", "Fri"], for: ["Agastya"] }] });
     const r = await op("set_slots", { add: true, extra_slots: [{ name: "Evening snack" }], order_in: [{ day: "Sun", slot: "Dinner" }] });
     expect(r.house.extra_slots.map((s: any) => s.name)).toEqual(["Agastya's tiffin", "Evening snack"]);
-    expect(r.said).toBe("Each day we'll plan Breakfast, Lunch and Dinner, plus Agastya's tiffin Mon–Fri and Evening snack every day. Sunday dinner you order in.");
+    expect(r.said).toBe("Each day we'll plan Breakfast, Lunch and Dinner, plus Agastya's tiffin Mon–Fri and Evening snack every day for everyone. Sunday dinner you order in.");
     const again = await op("set_slots", { add: true, extra_slots: [{ name: "agastya's tiffin", days: ["Mon", "Wed", "Fri"], for: ["Agastya"] }], order_in: [{ day: "Sat", slot: "Lunch" }] });
     expect(again.house.extra_slots).toEqual([{ name: "Evening snack" }, { name: "agastya's tiffin", days: ["Mon", "Wed", "Fri"], for: ["Agastya"] }]);
     expect(again.house.order_in).toEqual([{ day: "Sun", slot: "Dinner" }, { day: "Sat", slot: "Lunch" }]);

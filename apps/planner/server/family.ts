@@ -313,11 +313,13 @@ export function daysSaid(days: readonly string[] | undefined): string {
 const andWords = (xs: string[]) => (xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`);
 
 /** The meals a week is planned with, in the words the setup reads back: "Each day we'll plan Breakfast, Lunch and Dinner,
- *  plus Agastya's tiffin Mon–Fri and Evening snack every day. Sunday dinner you order in." */
+ *  plus Agastya's tiffin Mon–Fri and Evening snack every day for everyone. Sunday dinner you order in." */
 export function slotsSaid(h: Pick<HouseView, "extra_slots" | "order_in">): string {
   const extra = h.extra_slots.map((s) => {
     const whose = (s.for ?? []).filter((p) => !s.name.toLowerCase().includes(p.toLowerCase()));
-    return `${s.name} ${daysSaid(s.days)}${whose.length ? ` for ${andWords(whose)}` : ""}`;
+    // "for everyone" said aloud, so a slot saved for the whole house when it is two people's is caught at the read-back
+    // (sim run 8: the adults' evening snack saved for everyone, and the read-back gave no way to see it).
+    return `${s.name} ${daysSaid(s.days)}${whose.length ? ` for ${andWords(whose)}` : (s.for ?? []).length ? "" : " for everyone"}`;
   });
   const out = [`Each day we'll plan Breakfast, Lunch and Dinner${extra.length ? `, plus ${andWords(extra)}` : ""}.`];
   if (h.order_in.length) {
