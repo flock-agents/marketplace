@@ -8,9 +8,10 @@
 //   - the collecting half changes shape. On #370 the extraction ran in-process and handed each family fact and to-do to the
 //     batch as it wrote them (FamilyRouting). Over the wire, `memory.extract` with `familyCandidates` answers them back as
 //     `family.blocks` (FamilyBlockWire), so the batch takes whole blocks (`addBlocks`);
-//   - the wiki marks (markFacts / pushedRefOf / clearStale: "pending", "pushed:<ref>", a correction reusing the ref its older
-//     fact went under) are Flock's wiki rows, which no SDK call reaches. The outcome names which refs went and which fell
-//     back, for Flock to mark when it serves that (reported to the lead, not reached into);
+//   - the wiki marks (#370's markFacts / pushedRefOf) are Flock's: each item carries `factIds`, the wiki ids of the facts it
+//     came from (FamilyBlockWire.factIds), and Flock marks those facts `pushed:<ref>` once the calendar takes the item (which
+//     also keeps them out of Calendar Desk). A correction (FamilyBlockWire.prevRef, the ref an earlier import sent the fact
+//     these replace under) is sent under that ref, so the calendar moves the item instead of adding another (ruling R24);
 //   - the naming call is `platform.model.json` on the Fast tier (the caller's `name` dep), not callInternalLLM.
 //
 // The mapping (pure, unit-tested):
@@ -37,6 +38,8 @@ export const MAX_IMPORT_BYTES = 32 * 1024;
 const MAX_TITLE = 120;
 const MAX_NOTES = 500;
 const MAX_MATCH = 6;
+/** At most this many fact ids on one item (the SDK's ImportItem.factIds). */
+export const MAX_FACT_IDS = 20;
 
 export interface ItemContext {
   /** The owner-local date, YYYY-MM-DD. */
@@ -54,6 +57,10 @@ export interface FamilyBlock {
   threadKey: string;
   messageId: string | null;
   facts: ExtractedFactWire[];
+  /** The wiki ids of each fact, index for index with `facts` (a fact met twice in a run may have two). */
+  factIds?: string[][];
+  /** The ref an earlier import sent a fact these facts replace under (a correction), or null. */
+  prevRef?: string | null;
   tasks: HeldTask[];
 }
 /** One import item and what it came from: its facts' words and the start times they give (what the run names it from). */
@@ -161,6 +168,13 @@ function matchOf(messageId: string | null, texts: string[]): string[] {
   return out.slice(0, MAX_MATCH);
 }
 const addMatch = (item: ImportItem, ids: string[]) => { for (const n of ids) if (!item.match.includes(n) && item.match.length < MAX_MATCH) item.match.push(n); };
+const addFactIds = (item: ImportItem, ids: readonly string[]) => {
+  for (const id of ids) {
+    if (!id) continue;
+    const list = (item.factIds ??= []);
+    if (!list.includes(id) && list.length < MAX_FACT_IDS) list.push(id);
+  }
+};
 
 /** Folds `next` (another fact of the same mail and date) into `p`: an event over a deadline, an event's name over a clause,
  *  the earliest time, the first family member and place, every fact's words in the notes. */
@@ -183,7 +197,9 @@ function fold(p: PlannedItem, next: Omit<ImportItem, "ref" | "match">, named: bo
  *
  * One item per mail per date (live 2026-11-22: a circular's "Annual Day on Friday" and "report by 8 am" were two rows, a fee
  * and its late-fee rule two deadlines): the facts a mail gives for one day are one thing on the family's calendar. Its ref is
- * the mail's anchor and that date, so it is stable however the item comes to be named.
+ * the mail's anchor and that date, so it is stable however the item comes to be named. A correction (`prevRef`) is sent under
+ * the ref the earlier import used: the block's first item made from its facts takes it, unless another item already has it.
+ * Each item carries the wiki ids of the facts it came from (`factIds`, at most MAX_FACT_IDS).
  */
 export function planImport(blocks: readonly FamilyBlock[], ctx: ItemContext): { planned: PlannedItem[]; leftover: HeldTask[] } {
   const planned: PlannedItem[] = [];
@@ -191,11 +207,12 @@ export function planImport(blocks: readonly FamilyBlock[], ctx: ItemContext): { 
   for (const b of blocks) {
     const anchor = refAnchor(b.messageId, b.threadKey);
     const mine: PlannedItem[] = [];
-    const place = (item: Omit<ImportItem, "ref" | "match">, texts: string[], named: boolean, content: string | null): PlannedItem => {
+    const place = (item: Omit<ImportItem, "ref" | "match">, texts: string[], named: boolean, content: string | null, ids: readonly string[] = []): PlannedItem => {
       const same = mine.find((p) => p.item.date === item.date);
       if (same) {
         fold(same, item, named, content);
         addMatch(same.item, matchOf(b.messageId, texts));
+        addFactIds(same.item, ids);
         return same;
       }
       const { notes: _notes, ...rest } = item;
@@ -204,6 +221,7 @@ export function planImport(blocks: readonly FamilyBlock[], ctx: ItemContext): { 
       if (item.start_time) p.times.push(item.start_time);
       if (content) { p.facts.push(content); p.item.notes = clip(content, MAX_NOTES); }
       else if (item.notes) p.item.notes = item.notes;
+      addFactIds(p.item, ids);
       mine.push(p);
       return p;
     };
@@ -212,12 +230,15 @@ export function planImport(blocks: readonly FamilyBlock[], ctx: ItemContext): { 
       if (!todos.some((t) => t.title === todo.title && t.due === todo.due)) todos.push(todo);
       p.tasks.push(h);
     };
-    for (const fact of b.facts) {
+    b.facts.forEach((fact, i) => {
       const item = factItem(fact, ctx);
-      if (!item) continue;
+      if (!item) return;
       const named = (fact.entities ?? []).some((e) => e.type === "event" && e.name.trim());
-      place(item, [fact.content], named, clip(fact.content, MAX_NOTES));
-    }
+      place(item, [fact.content], named, clip(fact.content, MAX_NOTES), b.factIds?.[i] ?? []);
+    });
+    // A correction goes under the ref its earlier fact went under: the calendar moves that item rather than adding another.
+    const prev = b.prevRef?.trim();
+    if (prev && mine.length > 0 && !mine.some((p) => p.item.ref === prev) && !planned.some((p) => p.item.ref === prev)) mine[0]!.item.ref = prev;
     const events = [...mine];
     for (const h of b.tasks) {
       const due = todoDue(h.task, ctx.tz);
@@ -328,7 +349,7 @@ export interface FlushOutcome {
   /** Items that did not go (failed, refused, or over the op's limits). */
   fellBack: number;
   tasksPublished: number;
-  /** The refs the Family Calendar took, and those that fell back (for Flock to mark its facts by, once it can). */
+  /** The refs the Family Calendar took, and those that fell back (Flock marks the facts of the taken ones by their factIds). */
   pushedRefs: string[];
   fellBackRefs: string[];
 }
@@ -361,13 +382,18 @@ export class FamilyPushBatch {
       if (!key) continue;
       let b = this.blocks.get(key);
       if (!b) {
-        b = { threadKey: key, messageId: w.ctx?.messageId ?? null, facts: [], tasks: [] };
+        b = { threadKey: key, messageId: w.ctx?.messageId ?? null, facts: [], factIds: [], prevRef: null, tasks: [] };
         this.blocks.set(key, b);
       }
-      for (const f of w.facts ?? []) {
-        if (!this.takesFact(f) || b.facts.some((x) => x.content === f.content)) continue;
-        b.facts.push(f);
-      }
+      if (!b.prevRef && w.prevRef) b.prevRef = w.prevRef;
+      (w.facts ?? []).forEach((f, i) => {
+        const id = typeof w.factIds?.[i] === "string" ? w.factIds[i]! : null;
+        if (!this.takesFact(f)) return;
+        const at = b!.facts.findIndex((x) => x.content === f.content);
+        if (at >= 0) { if (id && !b!.factIds![at]!.includes(id)) b!.factIds![at]!.push(id); return; }
+        b!.facts.push(f);
+        b!.factIds!.push(id ? [id] : []);
+      });
       for (const t of w.heldTasks ?? []) {
         if (!t?.title || b.tasks.some((h) => h.task.title === t.title && h.task.due === t.due)) continue;
         b.tasks.push({ task: t, threadKey: key });
@@ -402,7 +428,9 @@ export class FamilyPushBatch {
     const head = { source: `email:${this.opts.sourceId}`, label: this.opts.label };
     let bytes = Buffer.byteLength(JSON.stringify({ ...head, items: [] }));
     for (const p of bySoonest) {
-      const size = Buffer.byteLength(JSON.stringify(p.item)) + 1;
+      // Measured as Flock measures the 32 KB: without `factIds`, which never reach the calendar.
+      const { factIds: _ids, ...sent } = p.item;
+      const size = Buffer.byteLength(JSON.stringify(sent)) + 1;
       if (chosen.size < MAX_IMPORT_ITEMS && bytes + size <= MAX_IMPORT_BYTES) { chosen.add(p); bytes += size; } else back.push(p);
     }
     if (back.length) deps.log("family_push_over_limit", `${back.length} item(s) over the op's limits fall back`);

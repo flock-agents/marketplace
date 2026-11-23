@@ -6,7 +6,8 @@
 //   - ref = the mail's Message-ID + "#" + the date; match = the Message-ID plus the reference numbers it carries;
 //   - one call per run: source "email:<this copy>", label "<first name>'s email"; a failure puts the to-dos on Home.
 // Not ported, and why: familyCalendarTargets / importRefusal / callImportEvents stay in Flock (plan Task 1.6, tested there);
-// the wiki marks (markFacts, clearStale, pushedRefOf corrections) are Flock's rows the app cannot reach; the secret check is
+// the wiki marks themselves (markFacts, clearStale) are Flock's rows: the app sends each item's factIds and a correction's
+// prevRef, and Flock marks (R24); the secret check is
 // Flock's (it scrubs what it hands back). family-push-pipeline.test.ts drives Flock's own extraction pipeline and wiki: the
 // app's half of it (blocks in, one import, Home fallback) is in memory-extraction.test.ts.
 import { describe, test, expect } from "bun:test";
@@ -167,6 +168,38 @@ describe("planImport: items, their to-dos, ref and match", () => {
     ], CTX);
     expect(planned.map((p) => p.item.ref)).toEqual(["<a@x>#2026-12-12", "gmail-thread:b#2026-12-13", "gmail-thread:b#2026-12-14"]);
   });
+  test("an item carries the wiki ids of the facts it came from, so Flock marks them imported (R24)", () => {
+    const { planned } = planImport([{
+      threadKey: "t", messageId: MID,
+      facts: [fact(), fact({ content: "Annual Day starts at 10:00 in the school hall." }), fact({ when: { date: "2026-12-14", time: null } })],
+      factIds: [["w-1"], ["w-2", "w-2b"], ["w-3"]],
+      tasks: [held(task("Buy the costume", "2026-12-05"), "t")],
+    }], CTX);
+    expect(planned.map((p) => [p.item.date, p.item.factIds])).toEqual([["2026-12-12", ["w-1", "w-2", "w-2b"]], ["2026-12-14", ["w-3"]]]);
+  });
+  test("an item made only from a to-do carries no fact ids", () => {
+    const { planned } = planImport([{ threadKey: "t", messageId: null, facts: [], factIds: [], tasks: [held(task("Pay the Axis card bill", "2026-12-10"), "t")] }], CTX);
+    expect(planned[0]!.item.factIds).toBeUndefined();
+  });
+  test("at most 20 fact ids on one item", () => {
+    const facts = Array.from({ length: 25 }, (_, i) => fact({ content: `Annual Day note ${i}.` }));
+    const { planned } = planImport([{ threadKey: "t", messageId: MID, facts, factIds: facts.map((_, i) => [`w-${i}`]), tasks: [] }], CTX);
+    expect(planned).toHaveLength(1);
+    expect(planned[0]!.item.factIds).toHaveLength(20);
+  });
+  test("a correction goes under the ref the earlier import used, so the calendar moves that item (R24)", () => {
+    const earlier = `${MID}#2026-12-11`;
+    const { planned } = planImport([{
+      threadKey: "t", messageId: MID, facts: [fact()], factIds: [["w-1"]], prevRef: earlier,
+      tasks: [held(task("Buy the costume", "2026-12-05"), "t")],
+    }], CTX);
+    expect(planned).toHaveLength(1);
+    expect(planned[0]!.item).toMatchObject({ ref: earlier, date: "2026-12-12", factIds: ["w-1"], todos: [{ title: "Buy the costume", due: "2026-12-05" }] });
+  });
+  test("no correction: the item keeps its own ref", () => {
+    const { planned } = planImport([{ threadKey: "t", messageId: MID, facts: [fact()], factIds: [["w-1"]], prevRef: null, tasks: [] }], CTX);
+    expect(planned[0]!.item.ref).toBe(`${MID}#2026-12-12`);
+  });
   test("the same fact met twice in a mail is one item", () => {
     const { planned } = planImport([{ threadKey: "t", messageId: MID, facts: [fact(), fact()], tasks: [] }], CTX);
     expect(planned).toHaveLength(1);
@@ -216,6 +249,19 @@ describe("FamilyPushBatch", () => {
     await b.flush(f.deps);
     expect(f.calls[0]!.items).toHaveLength(1);
     expect(f.calls[0]!.items[0]!.todos).toEqual([{ title: "Buy the costume", due: "2026-12-05" }]);
+  });
+  test("the payload carries each item's fact ids and a correction's earlier ref (R24)", async () => {
+    const b = batch();
+    const corrected = { ...wire("t-fee", [feeFact()]), prevRef: "gmail-thread:t-fee#2026-12-08" };
+    b.addBlocks([wire("t-annual", [fact()]), corrected]);
+    // The same mail met again in the run: its fact's second id joins the first.
+    b.addBlocks([{ ...wire("t-annual", [fact()]), factIds: ["t-annual-again"] }]);
+    const f = flushDeps(accepted);
+    await b.flush(f.deps);
+    expect(f.calls[0]!.items.map((i) => [i.ref, i.factIds])).toEqual([
+      [`${MID}#2026-12-12`, ["t-annual-f0", "t-annual-again"]],
+      ["gmail-thread:t-fee#2026-12-08", ["t-fee-f0"]],
+    ]);
   });
   test("one call for the run: source email:<this copy>, the label, every item; nothing on Home", async () => {
     const b = batch();
