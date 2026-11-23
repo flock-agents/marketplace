@@ -90,11 +90,11 @@ describe("Email Desk manifest", () => {
 
   test("marketplace file and catalog item agree", () => {
     expect(marketplace.version).toBe("3.0.0");
-    // R28: the SDK's READ_TURN_MIN_FLOCK, in all three places, so the rc installs on the Flock it ships against.
-    expect(marketplace.minFlockVersion).toBe("0.24.0-beta.2");
-    expect(manifest.minFlockVersion).toBe("0.24.0-beta.2");
+    // R28: the SDK's READ_TURN_MIN_FLOCK, in all three places: 0.25.0, the Flock release readTurn ships in (0.24.0 lacks it).
+    expect(marketplace.minFlockVersion).toBe("0.25.0");
+    expect(manifest.minFlockVersion).toBe("0.25.0");
     const item = catalog.items.find((i: any) => i.slug === "email-desk");
-    expect(item.minFlockVersion).toBe("0.24.0-beta.2");
+    expect(item.minFlockVersion).toBe("0.25.0");
     expect(item.type).toBe("app");
     expect(item.usage).toBe("app");
     expect(item.latestVersion).toBe("3.0.0");
