@@ -31,7 +31,7 @@ When `create_draft` refuses, its `error` says what to do:
 - `VOICE_LEARNING`: the person's voice is still being learned. Write nothing now. Try again after the time the error gives. If you cannot come back later, leave it; Email Desk offers it again.
 - `DRAFT_EXISTS`: a draft for this thread is already open (the error names its id). Change that draft with `update_draft` instead of writing a new one.
 - `PLACEHOLDER` or `QUALITY`: fix exactly what the error names and call `create_draft` once more.
-- `NOT_DESK_THREAD`: this thread is not in the person's mail on this desk. Leave it.
+- `NOT_DESK_THREAD`: none of the person's mailboxes has this thread. Leave it.
 - `SEND_UNCONFIRMED`: a reply on this thread was sent and Email Desk could not confirm it went, so it may have gone already. Stop: write nothing, never redraft, and do not call `create_draft` or `update_draft` again for it. Tell the person to check Sent in Gmail.
 - `SENT`: the reply on this thread already went out. Write nothing.
 

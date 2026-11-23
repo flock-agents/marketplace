@@ -14,7 +14,7 @@
 import type { OpHandler, PlatformContext } from "@flock/app-sdk";
 import { getStore } from "./store";
 import {
-  bodyRefusal, draftExistsRefusal, gmailRefusal, notDeskThreadRefusal, notFoundRefusal, personEditedRefusal, updateRefusal,
+  bodyRefusal, draftExistsRefusal, gmailRefusal, notFoundRefusal, personEditedRefusal, updateRefusal,
   sendUnconfirmedRefusal, voiceLearningRefusal, type DraftAuthor, type DraftRefusal,
 } from "./drafts/rules";
 import { deleteDraft, draftStatus, getDraft, lockDraft, openDraftForThread, recordDraft, setDraftBody, type DraftRecord } from "./drafts/records";
@@ -24,6 +24,7 @@ import { addressingForDraft, confirmedAddressing, type DraftAddressing, type Rep
 import { releaseThreadHold, settleUnconfirmedSend, threadSendInDoubt } from "./drafts/send-check";
 import { tryAfterText, voiceStateFor, voiceLearningUntil } from "./voice/crawl";
 import { processTimezone } from "./lib/local-day";
+import { resolveDeskThread } from "./desk-thread";
 
 export interface OpCtx {
   platform: PlatformContext;
@@ -107,15 +108,7 @@ export async function withThreadTurn<T>(accountId: string, threadId: string, fn:
   }
 }
 
-/** The account this copy read the thread in: the journal holds a row of it (in `accountId`'s mailbox, when named). */
-export function deskThreadAccount(threadId: string, accountId: string): string | null {
-  if (!threadId) return null;
-  const db = getStore();
-  const row = (accountId
-    ? db.query("SELECT account_id FROM ingest_events WHERE thread_key = ? AND account_id = ? LIMIT 1").get(threadId, accountId)
-    : db.query("SELECT account_id FROM ingest_events WHERE thread_key = ? ORDER BY ts DESC LIMIT 1").get(threadId)) as { account_id: string } | null;
-  return row?.account_id ?? null;
-}
+export { deskThreadAccount } from "./desk-thread";
 
 /** The id Gmail holds for a thread's draft after a write that returned none (source recoverDraftIdForThread). Null when
  *  Gmail holds none, or could not be asked. */
@@ -129,11 +122,13 @@ async function recoverDraftId(platform: PlatformContext, accountId: string, thre
 /** create_draft: the rules, then Gmail's reply draft, then the record, then the card. */
 export async function createDraft(p: Record<string, unknown>, ctx: OpCtx): Promise<{ id: string } | DraftRefusal> {
   const threadId = str(p.threadId);
-  const accountId = deskThreadAccount(threadId, str(p.accountId));
-  if (!accountId) return notDeskThreadRefusal();
   const body = typeof p.body === "string" ? p.body : "";
   const bad = bodyRefusal(body, "agent");
   if (bad) return bad;
+  // Any thread of the person's own mailboxes: one the journal does not hold is read from Gmail now and kept (desk-thread.ts).
+  const where = await resolveDeskThread(ctx.platform, threadId, str(p.accountId));
+  if ("code" in where) return where;
+  const accountId = where.accountId;
   // The mailbox's voice is being learned right now (Task 2.9): a draft written now would miss it. Past the crawl's cap the
   // mailbox is no longer learning, so this never holds a draft for longer than that (Review Focus 5).
   if (voiceStateFor(accountId) === "learning") {

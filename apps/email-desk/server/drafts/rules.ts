@@ -59,8 +59,10 @@ export function voiceLearningRefusal(until: number, when: string): DraftRefusal 
   return { error: `Voice still learning, try after ${when}. Nothing was written.`, code: "VOICE_LEARNING", tryAfter: new Date(until).toISOString() };
 }
 
-export function notDeskThreadRefusal(): DraftRefusal {
-  return refuse("NOT_DESK_THREAD", "This thread is not one Email Desk has read in this mailbox, so no draft was written.");
+/** The thread is in none of this person's mailboxes: Gmail has no such thread, or it was named under an account this copy
+ *  does not hold. */
+export function notInMailboxRefusal(): DraftRefusal {
+  return refuse("NOT_DESK_THREAD", "There is no such email thread in this person's Gmail, so nothing was written.");
 }
 
 export function notFoundRefusal(): DraftRefusal {
