@@ -80,6 +80,14 @@ describe("the house", () => {
     expect(JSON.parse(rows("house")[0].rules)[1].slots).toEqual(["Agastya's tiffin"]);
   });
 
+  it("set_cook takes visits as arrival (sim runs 9-11: every 7:30 correction sent as visits was lost)", async () => {
+    const { op, rows } = await boot();
+    await op("set_cook", { name: "Lakshmi", days: ["Mon"], arrival: "07:00" });
+    const r = await op("set_cook", { name: "Lakshmi", visits: [{ at: "07:30", meals: ["Breakfast", "Lunch"] }, { at: "18:00", meals: ["Dinner"] }] });
+    expect(r.code).toBeUndefined();
+    expect(JSON.parse(rows("house")[0].cook_arrival)[0].at).toBe("07:30");
+  });
+
   it("set_cook refuses an arrival that is not HH:MM", async () => {
     const { op, rows } = await boot();
     for (const arrival of ["7.30am", "7:30", "24:00", "07:60", 730, undefined])

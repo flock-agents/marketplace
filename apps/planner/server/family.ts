@@ -435,6 +435,9 @@ export function mountFamilyRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: { a
   // every time; the cook's days and arrival time the first time. Only the fields given change; null clears a word field.
   // A cook who comes twice a day has a list of visits as arrival, each with the meals it makes when the family said.
   write("/api/family/cook", (b, by) => {
+    // visits: the interview's own name for the times (planner.cook.visits), the same shape as arrival (sim runs 9-11:
+    // every 7:30 correction was sent as visits and lost).
+    if (b.arrival === undefined && b.visits !== undefined) b = { ...b, arrival: b.visits };
     const had = getHouse(db);
     const set: Partial<typeof house.$inferInsert> = { cook_name: name(b.name, "the cook's name") };
     if (b.days !== undefined || !had.cook_days) set.cook_days = JSON.stringify(weekdays(b.days, "days"));

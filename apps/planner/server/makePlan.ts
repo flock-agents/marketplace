@@ -582,7 +582,11 @@ async function planWeek(deps: MakePlanDeps & { log: (line: string) => void }, in
     : { date: n.date, slot: n.slot, dishes: menu.get(n.key)!.dishes.map((d) => {
       const e = eatersFor(d, n.who, people), key = `${n.key}|${dishKey(d.name)}`;
       const note = [d.portion_note, ...(notes.get(key) ?? [])].filter(Boolean).join("; ");
-      return { name: d.name, for: "for" in e ? e.for : [EVERYONE], ...(note ? { portion_note: note } : {}), ingredients: got.get(key) ?? [] };
+      // "everyone" at a meal only some people eat (the adults' evening snack) is those people, not the whole family
+      // (sim run 11: dhokla saved for everyone at Shiva and Ankita's snack).
+      const all = "for" in e ? e.for : [EVERYONE];
+      const forWho = all.length === 1 && same(all[0], EVERYONE) && n.who.length && n.who.length < people.length ? n.who : all;
+      return { name: d.name, for: forWho, ...(note ? { portion_note: note } : {}), ingredients: got.get(key) ?? [] };
     }) });
   // A week planned part way through keeps its meals before today.
   saveWeek(deps.db, deps.emit, weekStart, meals, { keepRest: weekDates(weekStart).some((d) => d < today) });

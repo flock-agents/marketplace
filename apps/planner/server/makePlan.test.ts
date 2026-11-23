@@ -179,7 +179,7 @@ describe("make_plan: the week in steps", () => {
     expect(fix.map((m: any) => `${m.day} ${m.slot}`)).toEqual(["Mon Agastya's tiffin", "Tue Agastya's tiffin", "Wed Agastya's tiffin", "Thu Agastya's tiffin", "Fri Agastya's tiffin"]);
     expect(fix[0].wrong).toEqual(["no dish: every meal needs at least one dish"]);
     expect(fix[0].who).toEqual(["Agastya"]);
-    expect((await k.meal("2026-11-27", "Agastya's tiffin")).dishes[0].for_people).toEqual(["everyone"]);
+    expect((await k.meal("2026-11-27", "Agastya's tiffin")).dishes[0].for_people).toEqual(["Agastya"]); // the slot's eaters, not the whole family
     expect(await k.meal("2026-11-28", "Agastya's tiffin")).toBeUndefined();
   });
 

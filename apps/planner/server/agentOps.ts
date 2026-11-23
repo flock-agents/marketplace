@@ -102,7 +102,7 @@ export const FIELDS: Record<string, { fields: string[]; need?: string[] }> = {
 const MOVED: Record<string, Record<string, string>> = {
   set_house_rules: { grocery_app: "the grocery app is set with set_shopping_apps { main, fallback, connected }" },
   // Sim run 9: a cook correction sent its times as visits (the interview's fact name), and the 7:30 was lost.
-  set_cook: { visits: "the times go in arrival: [{ at: \"07:30\", meals: [\"Breakfast\", \"Lunch\"] }]", times: "the times go in arrival: [{ at, meals }]" },
+  set_cook: { times: "the times go in arrival: [{ at, meals }]" },
 };
 
 /** How alike two names are: shared words count most, then the edit distance between them. Lower is closer. */
@@ -183,6 +183,12 @@ export function agentOps(hono: () => Hono<any>): Record<string, OpHandler> {
   const ops: Record<string, OpHandler> = {};
   for (const [name, route] of Object.entries(ROUTES)) {
     ops[name] = async (payload, ctx) => {
+      // The cook's times sent under the interview's fact name (planner.cook.visits): the same shape as arrival (sim runs
+      // 9-11: every 7:30 correction was sent as visits and lost).
+      if (name === "set_cook" && payload && payload.visits !== undefined && payload.arrival === undefined) {
+        const { visits, ...rest } = payload as Record<string, unknown>;
+        payload = { ...rest, arrival: visits };
+      }
       const bad = checkFields(name, payload ?? {});
       if (bad) return bad;
       const c = route(payload ?? {});
