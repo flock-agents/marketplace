@@ -117,42 +117,22 @@ describe("the messages", () => {
     k.plan([...monday, meal(TUE, "Lunch", "Rajma chawal", "Jeera aloo")]);
   };
 
-  it("the evening asks once how today's home food went, each dish once, staples and ordered-in meals aside", async () => {
+  // A plan is a suggestion (spec §1, §5.7): no reminder asks how the day's food went or whether the plan was cooked. The
+  // family's own word about a dish is still kept (rate_dishes), and shows next time.
+  it("no reminder asks how today's food went: the evening and afternoon say nothing about what was cooked", async () => {
     const k = await start();
     await planned(k);
     const r = await k.op("get_reminder", { which: "evening" });
-    expect(r.rate_today).toEqual({ date: MON, dishes: ["Dal", "Bhindi"] });
-    expect(r.text.split("\n\n").at(-1)).toBe("How was today's food: Dal and Bhindi? Good, okay or didn't work, and anything that went well or didn't?");
-    expect(r.text.match(/How was today's food/g)).toHaveLength(1);
-    expect(r.app_text).toContain("How was today's food: Dal and Bhindi?");
-    expect(REMINDER_PROMPT("evening")).toContain("rate_dishes");
-  });
-
-  it("asks nothing about a day nothing was eaten at home, nor in the afternoon, nor about a dish already rated today", async () => {
-    const k = await start();
-    await planned(k, [{ date: MON, slot: "Lunch", ordered_in: true }]);
-    const r = await k.op("get_reminder", { which: "evening" });
-    expect(r.rate_today).toBeNull();
-    expect(r.text).not.toContain("How was");
-
+    expect(r.rate_today).toBeUndefined();
+    for (const said of ["How was", "did you", "Did you"]) expect(r.text).not.toContain(said);
+    expect(REMINDER_PROMPT("evening")).not.toContain("how today's food went");
     const k2 = await start(15);
     await planned(k2);
     expect((await k2.op("get_reminder", { which: "afternoon" })).text).not.toContain("How was");
-
+    // A day with only today's home food and nothing else to say: nothing to send.
     const k3 = await start();
-    await planned(k3);
-    await k3.op("rate_dishes", { ratings: [{ dish: "dal", rating: "good" }] });
-    expect((await k3.op("get_reminder", { which: "evening" })).rate_today).toEqual({ date: MON, dishes: ["Bhindi"] });
-    await k3.op("rate_dishes", { ratings: [{ dish: "Bhindi", rating: "okay" }] });
-    expect((await k3.op("get_reminder", { which: "evening" })).rate_today).toBeNull();
-  });
-
-  it("an evening with only today's food to ask about is not empty: the family is still asked", async () => {
-    const k = await start();
-    k.plan([meal(MON, "Lunch", "Dal")]);
-    const r = await k.op("get_reminder", { which: "evening" });
-    expect(r.empty).toBe(false);
-    expect(r.text).toBe("How was today's food: Dal? Good, okay or didn't work, and anything that went well or didn't?");
+    k3.plan([meal(MON, "Lunch", "Dal")]);
+    expect((await k3.op("get_reminder", { which: "evening" })).empty).toBe(true);
   });
 
   it("the cook's message carries last time's note and the dish's video for the day's dishes", async () => {

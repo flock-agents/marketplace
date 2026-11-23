@@ -83,7 +83,7 @@ export const slot_dishes = sqliteTable("slot_dishes", {
   position: integer("position"),
   dish: text("dish").notNull(),                                // the dish's name (library key by dishKey)
   new: integer("new").default(0),                              // 1: a new suggestion of the planner's
-  feedback_asked: integer("feedback_asked").default(0),        // 1: the next-day untried-dish question was sent for this placement
+  feedback_asked: integer("feedback_asked").default(0),        // 1: the next-day untried-dish question was sent for this placement; 2: the family answered it (record_feedback)
   note: text("note"),                                          // only when this dish needs a change for someone
   not_for: text("not_for"),                                    // JSON string[]: people at the slot-day a hard rule keeps it from (code's, never the model's); null/[] = everyone
 });

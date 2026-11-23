@@ -65,6 +65,12 @@ describe("staplesOf", () => {
     const old = Array.from({ length: 14 }, (_, i) => ({ slot: "Lunch", dishes: ["Roti", "Dal"], date: `2026-10-${String(10 + i).padStart(2, "0")}` }));
     expect([...staplesOf([...rows, ...old], "Lunch")].sort()).toEqual(["dal", "roti"]);
   });
+  test("fewer than 3 rows with dishes: only the daily dishes", () => {
+    const two = [{ slot: "Dinner", dishes: ["Jowar roti"] }, { slot: "Dinner", dishes: ["Jowar roti"] }];
+    expect([...staplesOf(two, "Dinner")]).toEqual([]);
+    expect([...staplesOf(two, "Dinner", ["Phulka"])]).toEqual(["phulka"]);
+    expect([...staplesOf([...two, { slot: "Dinner", dishes: ["Jowar roti", "Dal"] }], "Dinner")]).toEqual(["jowar roti"]);
+  });
 });
 
 describe("scorePlan", () => {
@@ -104,6 +110,13 @@ describe("scorePlan", () => {
     expect(fails(q)).toEqual(["new_budget"]);
     at(q, "Wed", "Dinner").dishes.find((d) => d.name === "Kheer")!.not_for = [];
     expect(fails(q)).toEqual(["hard_rules", "new_budget"]);
+    // not_for spares a rule only while the person keeps a dish of their own there (or at their own add-on that day).
+    const r = goodWeek();
+    for (const d of at(r, "Wed", "Lunch").dishes) d.not_for = ["Dadu Ram"];
+    expect(fails(r)).toEqual(["hard_rules"]);
+    const o = goodWeek();
+    for (const d of at(o, "Wed", "Dinner").dishes) d.not_for = ["Dadu Ram"];
+    expect(fails(o)).toEqual([]);
   });
 
   test("hard rules fail closed: a tag nobody read blocks the dish; the eval's own vocabulary overrides a wrong read", () => {
@@ -186,5 +199,30 @@ describe("scorePlan", () => {
     const s = scorePlan(FIX, baselineWeek(FIX, MON), loaded());
     expect(s.rates.filled[0]).toBe(s.rates.filled[1]);
     expect(s.rates.hard_rules[0]).toBe(s.rates.hard_rules[1]);
+  });
+});
+
+describe("scorePlan: a slot too thin for the default rules", () => {
+  // Chotu's tiffin with one seed row of each of its two dishes: no staple, 2 dishes × 2 days < 5 school days.
+  const thinFix = structuredClone(FIX);
+  thinFix.truth.library = thinFix.truth.library.filter((d) => d.slot !== "Chotu's tiffin" || d.name === "Sandwich");
+  thinFix.truth.library.push({ name: "Paratha roll", slot: "Chotu's tiffin" } as any);
+  thinFix.truth.seed = [...thinFix.truth.seed.filter((r) => r.slot !== "Chotu's tiffin"), { slot: "Chotu's tiffin", dishes: ["Sandwich"] }, { slot: "Chotu's tiffin", dishes: ["Paratha roll"] }];
+  const week = () => {
+    const p = goodWeek();
+    const tiffin: Record<string, string> = { Mon: "Sandwich", Tue: "Paratha roll", Wed: "Sandwich", Thu: "Paratha roll", Fri: "Sandwich" };
+    for (const [d, dish] of Object.entries(tiffin)) at(p, d as Weekday, "Chotu's tiffin").dishes = [{ name: dish }];
+    return p;
+  };
+  const failing = (p: PlanOut) => Object.entries(scorePlan(thinFix, p, setupOfTruth(thinFix)).rates).filter(([, [a, n]]) => a < n).map(([k]) => k).sort();
+
+  test("said in unmet: a dish may come back on an even share of the days, every other day; not said: the default rules hold", () => {
+    expect(failing(week())).toEqual(["default_cap", "repeat_window"]);
+    const said = week();
+    said.unmet = ["only 2 Chotu's tiffin dishes known, so some come back more often than usual"];
+    expect(failing(said)).toEqual([]);
+    // Back the next day is still sooner than the thin slot needs.
+    at(said, "Thu", "Chotu's tiffin").dishes = [{ name: "Sandwich" }];
+    expect(failing(said)).toContain("repeat_window");
   });
 });

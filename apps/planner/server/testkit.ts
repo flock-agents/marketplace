@@ -21,6 +21,7 @@ import { mountReminderRoutes } from "./reminder";
 import { mountMakePlanRoute } from "./makePlan";
 import { NO_MODEL, type ModelCall } from "./model";
 import { mountSetupRoute } from "./setup";
+import { mountChangeRoutes } from "./changes";
 import { commit, saveSlotDay, type SlotDay } from "./slotStore";
 
 /** A slot-day as a test writes it: `ordered_in` is skip "ordered_in"; a dish's `portion_note` is its note. */
@@ -58,6 +59,7 @@ export async function boot(opts: { dbFile?: string; dataDir?: string; token?: st
   mountDishBookRoutes(hono, kit.db, kit.emitChange, { now });
   mountMakePlanRoute(hono, kit.db, kit.emitChange, { basePath: opts.basePath ?? "/a/t", model: opts.model ?? NO_MODEL, now, sqlite: kit.sqlite });
   mountSetupRoute(hono, kit.db, kit.emitChange, { model: opts.model ?? NO_MODEL, budgetMs: opts.setupBudgetMs });
+  mountChangeRoutes(hono, { db: kit.db, emit: kit.emitChange, basePath: opts.basePath ?? "/a/t", model: opts.model ?? NO_MODEL, now, sqlite: kit.sqlite, appToken: opts.token ?? null, log: () => {} });
   /** A request as the owner. */
   const owner = async (method: string, path: string, body?: unknown) => {
     const r = await hono.request(path, { method, headers: { "Content-Type": "application/json", "X-Flock-User": "tester" }, body: body === undefined ? undefined : JSON.stringify(body) });

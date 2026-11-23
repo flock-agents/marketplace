@@ -89,7 +89,10 @@ the estimate's tuning and the 2.0 table names; `family.ts` people, the house row
 and its derived values (staples, looks like, recent); `meals.ts` the week as the pages read it and a planned week's close;
 `legacy.ts` the old shapes `setup.ts` still imports (to delete);
 `setup.ts` `apply_setup` (spec §4: three balanced reads and a fast contains read, structural checks, the writes, the read-back, a correction as a diff); `makePlan.ts` the week's plan (`make_plan`, spec §5): the slot calls in planning order, the fix call, the contains read of
-new dishes, the ingredients, the one-transaction save and the message; `planDays.ts` its slot-days in code (who eats each
+new dishes, the ingredients, the one-transaction save and the message, or (`only`, a later change) the same steps for some
+slot-days of the week with the rest kept and read for the checks; `changes.ts` the later changes of spec §6 (`set_slot`,
+`set_slot_day`, `add_dish`, `set_rule`, `set_setting`, `record_made`) and the answer to the next-day question
+(`record_feedback`, §5.7), each re-planning only the slot-days it touches, never one the family edited or said was made; `planDays.ts` its slot-days in code (who eats each
 slot each day: usual people, `household.weekly` with setup's weekday lunch winning, the Family Calendar's `get_events` or
 `household.dated` read by one fast call, fasts, skip days, edited slot-days kept) and the SDK feature-detection
 (`ctx.household.get`, `ctx.apps.op`); `planChecks.ts` its code checks (library, staples incl. `daily` dishes, new-dish
@@ -113,7 +116,7 @@ row: the cook, connected apps, `history_synced` per app and reader, `sync_sessio
 `intro_sent_at`, the check-in times, notes, `setup_state`: what apply_setup read beside the rows, for a correction's diff) · `slots` (unique name; main | custom | addon with `addon_of`; usual people,
 days, weekly `skip_days`, planning `order`) · `slot_days` (one per date and slot, unique; who it is for, guests, occasion,
 `skip` eaten_out | ordered_in, `status` planned | confirmed, `edited`; a setup seed example has no date and is confirmed) ·
-`slot_dishes` (in order; `new`, `feedback_asked`, a note) · `dish_ingredients` (item, amount, unit, per slot dish; the SQL
+`slot_dishes` (in order; `new`, `feedback_asked`: 1 asked, 2 answered; a note) · `dish_ingredients` (item, amount, unit, per slot dish; the SQL
 name avoids 2.0's `ingredients`) · `library` (one per dish and slot, unique key + slot: frequency, days, `contains` and
 `contains_read` tags, origin setup_named | family_added | planner_suggested, suggested, untried, offers, disliked, and the
 dish's video and ratings, kept the same on every row of a dish) · `rules` (hard or soft, what, who, slots, days, items, to,
@@ -129,9 +132,10 @@ setting `new_dishes_per_week` (0, 2, 4 or 7; 2 until set) caps a week's new dish
 `dishes`, `dish_items`, `dish_book`) and house lists (`rules`, `extra_slots`, `order_in`, `meal_examples`,
 `cooking_days`) are gone, with no migration.
 
-**Operations** (24). `guide`; the family: `set_person`, `set_cook`, `set_shopping_apps`, `apply_setup` (the whole setup
-at once: slots, rules, library, seed slot-days, the cook; called again with more replies it applies only what they changed); the plan: `make_plan { week_start, household? }` (the slot model, spec §5; the change operations of
-spec §6 come with lane D); items: `set_regular` (the older way to state a cycle), `import_order_history` (about 8 orders and 80
+**Operations** (31). `guide`; the family: `set_person`, `set_cook`, `set_shopping_apps`, `apply_setup` (the whole setup
+at once: slots, rules, library, seed slot-days, the cook; called again with more replies it applies only what they changed); the plan: `make_plan { week_start, household? }` (the slot model, spec §5); later changes (spec §6, `changes.ts`):
+`set_slot`, `set_slot_day`, `add_dish` (with the contains read before it answers), `set_rule`, `set_setting`, `record_made`,
+`record_feedback`; items: `set_regular` (the older way to state a cycle), `import_order_history` (about 8 orders and 80
 items a call, one app a call), `record_bought_outside`, `set_item`, `set_subscription`, `answer_running_low`,
 `remember_product`; the reminder and carts: `get_reminder` (afternoon | evening, with an optional date), `get_cart`,
 `set_cart_line`, `order_cart`, `sync_cart`, `record_order`, `cancel_order`; `save_recipe`; dishes: `set_dish_video`,
@@ -188,9 +192,10 @@ the day it is due (`dailyDue`: never a subscribed, `dont_ask` or snoozed one, no
 reel the family saved: never a file) and how it went, the same on each row of the dish; a dish never planned and not in the
 library has no row to keep them on. Every
 planned dish reads both by its name (`DishView.video`, `last_time`: a rating from before the meal's day), so a video
-attached last week shows this week with no call. The 19:00 reminder asks once how today's food eaten at home went (every
-dish of today's meals not ordered in, staples and dishes already rated today aside; nothing on a day with none), answered
-with one `rate_dishes`. Last time's note is under the dish on the Week page and in the cook's message (the reminder's text,
+attached last week shows this week with no call. A rating is kept only when the family says it (`rate_dishes`): a plan is a
+suggestion, and no message asks whether it was cooked. The one question about cooking is the 15:00 reminder's next-day
+question (spec §5.7): one line for each dish on yesterday's plan the family had not eaten before (a planner suggestion, or a
+dish from a reel they sent; never one named in the interview), each placement asked once, answered with `record_feedback`. Last time's note is under the dish on the Week page and in the cook's message (the reminder's text,
 the Sunday message), beside the dish's video link.
 
 **Product pictures.** An item's `image` is the shopping app's picture: from an order's item in `import_order_history` (the

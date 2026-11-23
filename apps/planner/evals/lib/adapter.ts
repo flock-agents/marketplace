@@ -164,7 +164,7 @@ export function readPlan(k: Kit, weekStart: string, res: any = {}): PlanOut {
     slotDays: days.map((d) => ({
       date: d.date, slot: d.slot, people: json(d.people, []), guests: json(d.guests, []), skip: d.skip ?? null, occasion: d.occasion ?? null, note: d.note ?? null,
       dishes: dishes.filter((x) => x.slot_day_id === d.id).sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
-        .map((x) => ({ name: x.dish, new: bool(x.new), note: x.note ?? null })),
+        .map((x) => ({ name: x.dish, new: bool(x.new), note: x.note ?? null, not_for: json<string[]>(x.not_for, []) })),
     })),
     library, unmet: json(res?.unmet, []), message: res?.message ?? res?.say, asked: json(res?.asked, []), ...(res?.relaxed ? { relaxed: res.relaxed } : {}),
   };

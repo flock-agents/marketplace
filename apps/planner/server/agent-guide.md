@@ -62,6 +62,14 @@ what was eaten. A slot-day eaten out or ordered in has no dishes, so nothing is 
   (send that).
 - **Food rules are checked by the app** against what each dish contains: a plan it makes keeps every hard rule.
 
+**Later changes** (a change plans again only the meals it touches, never one the family changed; send its `message`
+word for word, or `say` when it answers `planned: false`):
+- One meal, one day (guests, someone away or visiting, "we're eating out on Friday", "make poha on Tuesday"): `set_slot_day`.
+- For good: a meal slot (`set_slot`), a food rule (`set_rule`, with the family's `quote`; its `id` to change or take one
+  away), a dish they have (`add_dish`; a reel or recipe link for a dish they have not made yet goes in its `link`), how
+  many new dishes a week (`set_setting`). The app reads what a dish contains itself.
+- "We made khichdi instead" (said by them, never asked): `record_made { date, slot, dishes }`.
+
 ## Amounts and units
 
 - `amount` is a number and `unit` its measure, apart: `{ amount: 500, unit: "g" }`, never "500 g" as the amount.
@@ -89,8 +97,10 @@ The wake gives `which`, `date`, `connected` and `since`. In this order:
 
 - **To "still in stock?":** `answer_running_low { answers: [{ item, answer: "low" | "in_stock", days? }] }`. The options are the app's `STOCK_OPTIONS`: "Low, add it" is `low`; "Fine for 3 days" is `in_stock` with `days: 3`; "Fine for a week" is 7;
   "Fine for 2 weeks" is 14; "Fine, not sure how long" is `in_stock` without `days`. A numbered reply ("1 low, 2 fine for 2 weeks") numbers the items in the order asked: one call with every answer.
-- **How today's food went** (the evening reminder asks once): `rate_dishes { ratings: [{ dish, rating: "good" | "okay" |
-  "didnt_work", note, said_by }] }`, one call for the whole reply, each dish by its planned name; also any time they say it.
+- **To "Yesterday's plan had <dish>..."** (the afternoon reminder's only question about cooking, for a dish new to them):
+  `record_feedback { date, slot, dish, made, liked, again }` per dish, from the reminder's `feedback`. No reply: no call.
+- **How a dish went, said by them:** `rate_dishes { ratings: [{ dish, rating: "good" | "okay" | "didnt_work", note, said_by }] }`.
+  Never ask whether the plan was cooked: a plan is a suggestion.
 - **"Add dal":** `set_cart_line { item, qty }`. **"Got atta at the kirana":** `record_bought_outside`. **"Don't ask about
   ghee", "rajma follows the plan":** `set_item`.
 - **A yes to a cart,** or "Order my <App> cart" (the Order button on the Shopping page): the yes to that app's cart.

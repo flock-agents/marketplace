@@ -18,6 +18,14 @@ export const ROUTES: Record<string, Route> = {
   make_plan: (p) => typeof p.week_start === "string" || typeof p.week_start === "number"
     ? { method: "POST", path: `/api/weeks/${encodeURIComponent(String(p.week_start))}/make-plan`, body: p }
     : { error: "week_start is required: the week's Monday as YYYY-MM-DD", code: "APP_REFUSED", status: 400 },
+  // Later changes (docs/slot-model-spec.md §6) and the answer to the next-day question (§5.7): changes.ts.
+  set_slot: (p) => ({ method: "POST", path: "/api/slots", body: p }),
+  set_slot_day: (p) => ({ method: "POST", path: "/api/slot-days", body: p }),
+  add_dish: (p) => ({ method: "POST", path: "/api/library", body: p }),
+  set_rule: (p) => ({ method: "POST", path: "/api/rules", body: p }),
+  set_setting: (p) => ({ method: "POST", path: "/api/planner-settings", body: p }),
+  record_made: (p) => ({ method: "POST", path: "/api/slot-days/made", body: p }),
+  record_feedback: (p) => ({ method: "POST", path: "/api/slot-days/feedback", body: p }),
   set_regular: (p) => ({ method: "POST", path: "/api/regulars", body: p }),
   import_order_history: (p) => ({ method: "POST", path: "/api/order-history", body: p }),
   record_bought_outside: (p) => ({ method: "POST", path: "/api/items/outside", body: p }),
@@ -60,6 +68,13 @@ export const FIELDS: Record<string, { fields: string[]; need?: string[] }> = {
   set_shopping_apps: { fields: ["main", "fallback", "connected"], need: ["main", "connected"] },
   apply_setup: { fields: ["household", "transcript"], need: ["transcript"] },
   make_plan: { fields: ["week_start", "household"], need: ["week_start"] },
+  set_slot: { fields: ["name", "kind", "addon_of", "usual_people", "days", "skip_days", "order", "remove"], need: ["name"] },
+  set_slot_day: { fields: ["date", "slot", "people", "add_people", "remove_people", "guests", "occasion", "new_dishes_allowed", "skip", "dishes"], need: ["date", "slot"] },
+  add_dish: { fields: ["name", "slot", "frequency", "days", "quote", "link"], need: ["name", "slot"] },
+  set_rule: { fields: ["id", "hard", "what", "who", "slots", "days", "items", "to", "frequency", "per_meal", "fasting_food", "quote", "remove"] },
+  set_setting: { fields: ["new_dishes_per_week"], need: ["new_dishes_per_week"] },
+  record_made: { fields: ["date", "slot", "dishes"], need: ["date", "slot", "dishes"] },
+  record_feedback: { fields: ["date", "slot", "dish", "made", "liked", "again"], need: ["date", "dish", "made"] },
   set_regular: { fields: ["item", "amount", "unit", "every", "times_per_week", "weekdays", "for_whom", "active", "paused_until", "remove"], need: ["item"] },
   import_order_history: { fields: ["app", "account", "orders"], need: ["app", "orders"] },
   record_bought_outside: { fields: ["item", "date"], need: ["item"] },

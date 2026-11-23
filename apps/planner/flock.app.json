@@ -778,6 +778,34 @@
         "description": "Plan a whole week and save it, in one call: { week_start: the week's Monday as YYYY-MM-DD, household?: the household facts (Flock sends them; the app also reads them fresh) }. The app plans it in steps itself (who eats each meal from the slots, the weekday patterns and the calendar; each meal slot from the family's own dishes and plates, checked against every food rule per person, how often each dish comes and no dish too soon again; then each day's ingredients), the same way the Sunday run does, and messages nobody. Answers { ok: true, week_start, message, intro?, instructions, unmet? } (send message word for word, then intro once, as instructions say; unmet: what could not be kept, already said in message) or { ok: false, reason, say } (nothing planned: send say word for word). Use it when the family asks for a week planned or planned again;"
       },
       {
+        "name": "set_slot",
+        "description": "Add, change or take away a meal slot for good (a child's tiffin, one person's own dinner, \"Sunday lunch we eat out\"). { name: the slot's name, kind?: main | custom | addon (needed for a new slot), addon_of?: the main slot an addon adds to, usual_people?: [names] ([] is everyone at home), days?: [\"Mon\", ...] ([] is every day), skip_days?: [{ day, skip: eaten_out | ordered_in }], order?: planning order (Breakfast 10, tiffin 20, Lunch 30, snacks 40, Dinner 50, add-ons 60), remove?: true }. The planned weeks' slot-days of that slot from today on are planned again (never one the family changed). Answers { ok, slot, replanned, message? } (send message word for word) or { ok, slot, planned: false, say }."
+      },
+      {
+        "name": "set_slot_day",
+        "description": "A one-off change to one meal on one day: guests, someone away or joining, an occasion, eating out, or the dishes the family wants. { date, slot, people?: [names] (all of them), add_people?: [names] (a visitor too), remove_people?: [names], guests?: [{ count, rules?: [their food rules in words] }], occasion?: in their words (\"dinner party\"), new_dishes_allowed?: how many new dishes that meal may have, skip?: eaten_out | ordered_in | null (cooked at home again), dishes?: [dish names] }. The meal is marked as the family's change and never planned over; its dishes are planned again for the change unless dishes are given or it is eaten out or ordered in. Answers { ok, slot_day, replanned, message? } (send message word for word) or { ok, slot_day, planned: false, say }."
+      },
+      {
+        "name": "add_dish",
+        "description": "Add a dish the family has to a slot's dishes, or one from a reel or recipe link they sent. { name, slot, frequency?: daily | usually | sometimes | rarely | \"<n>/week\", days?: [\"Fri\"] (only those days), quote?: their words, link?: the reel's or recipe's link }. What it contains is read before it answers. With link the dish is new to them: the link is its video, and the day after it is first planned the reminder asks whether they made and liked it. Answers { ok, dish }."
+      },
+      {
+        "name": "set_rule",
+        "description": "Add, change or take away a food rule (an allergy, no onion and garlic, millets twice a week for one person). { id?: the rule's id (to change or take away one; read the rules table), hard?: true for one always kept, what?: veg | egg | no_eggs | avoid | only | swap | require | fasting | cap | note, who?: a person (none: everyone), slots?: [slot names], days?: [\"Mon\", ...], items?: [tags, like \"onion_garlic\", \"peanut\", \"white_rice\"], to?: what a swap puts in place, frequency?: soft only, sometimes | usually | rarely | \"<n>/week\", per_meal?: dishes a meal (cap), fasting_food?: [what they eat when fasting], quote?: the family's own words (needed for a new rule), remove?: true }. The planned meals from today on are checked again and only those that now fail are planned again. Answers { ok, rule, replanned, message? } (send message word for word) or { ok, rule, planned: false, say }."
+      },
+      {
+        "name": "set_setting",
+        "description": "How many new dishes a week the plan may suggest. { new_dishes_per_week: 0 (none), 2 (1 to 2), 4 (3 to 4) or 7 (surprise me) }. Answers { ok, new_dishes_per_week }."
+      },
+      {
+        "name": "record_made",
+        "description": "What the family says they made at a meal, when it was not the plan (\"we made khichdi instead\"). { date, slot, dishes: [dish names] }. The meal's dishes are replaced and kept as made. Only for today or before; a meal still to come is set_slot_day. Answers { ok, slot_day }."
+      },
+      {
+        "name": "record_feedback",
+        "description": "The answer to the reminder's question about a dish on yesterday's plan the family had not had before (\"Did you make it, did you like it, and should I suggest it again?\"). { date: the day it was planned, slot, dish: as the reminder named it, made: true or false, liked?: needed when made, again?: needed when made and liked }. Made, liked and again: it becomes one of their dishes. Made and not liked: never planned again. Liked but not again: not planned again unless they ask. Not made: it may be planned once more. One call for each dish asked about; no reply, no call. Answers { ok, dish, outcome }."
+      },
+      {
         "name": "set_regular",
         "description": "The older way to state an item's cycle, kept so earlier instructions still work; set_item is the one to use. { item, amount, unit, every: day | week | weekdays, times_per_week?, weekdays?: [\"Mon\", ...], for_whom?, active?, paused_until?: YYYY-MM-DD, remove?: true }. The same as set_item { item, usual_amount, unit, every_days }: amount with unit is what is bought each time; every with times_per_week or weekdays is how often (1 l every day; every: week with times_per_week: 2 is twice a week). It is kept on the item as its cycle and shown on the Pantry page; there is no separate list. paused_until snoozes the item up to and including that date; active: false or remove: true takes the stated cycle away; for_whom is not kept (an item has one cycle for the house). Answers { item }."
       },
