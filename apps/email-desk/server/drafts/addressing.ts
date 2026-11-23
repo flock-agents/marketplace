@@ -9,6 +9,11 @@
 // themselves, a read older than ADDRESSING_FRESH_MS when the draft is written, or a draft Gmail did not open as the reply
 // the set needs (more than one person and not Reply all). No set: the card carries none, and no rule sends it (fail
 // closed). The set is kept on the draft's row, so every publish of its card carries the same.
+//
+// Gmail's Reply all answers whatever message is newest when the draft is composed, which may be newer than the read the
+// set came from. So the set is bound to the read's newest message (newestMessageKey), and create_draft reads the thread
+// again once the draft is written (confirmedAddressing): only when that read's newest message is the same one, reaching
+// the same people, does the draft keep the set. A message that came in between, or a read that fails, gives none.
 import { extractEmailAddress } from "../lib/draft-eligibility";
 
 export interface ReplyAddressing {
@@ -50,24 +55,50 @@ export function replyAddressingOf(read: unknown, mailbox: string): ReplyAddressi
   return { to: String(last.from).trim(), cc: others.join(", "), recipients: [from, ...others] };
 }
 
-/** The last live read of each thread (account + thread): who its reply reaches, and when it was read. */
-const reads = new Map<string, { at: number; addressing: ReplyAddressing | null }>();
+/** Which message is the read's newest: its sender, date and the start of its text. Null when the read holds none. */
+export function newestMessageKey(read: unknown): string | null {
+  const messages = Array.isArray((read as { messages?: unknown })?.messages) ? (read as { messages: any[] }).messages : [];
+  const last = messages[messages.length - 1];
+  if (!last || typeof last !== "object") return null;
+  const from = address(last.from);
+  if (!from) return null;
+  const date = typeof last.date === "string" ? last.date.trim() : "";
+  const body = typeof last.body === "string" ? last.body.replace(/\s+/g, " ").trim().slice(0, 200) : "";
+  return `${from}|${date}|${body}`;
+}
+
+/** What a draft written from a read reaches, bound to the read's newest message. */
+export interface DraftAddressing { addressing: ReplyAddressing; newestKey: string }
+
+/** The last live read of each thread (account + thread): who its reply reaches, which message was newest, and when it was
+ *  read. */
+const reads = new Map<string, { at: number; addressing: ReplyAddressing | null; newestKey: string | null }>();
 const keyOf = (accountId: string, threadId: string) => `${accountId}\u0000${threadId}`;
 let clock: () => number = () => Date.now();
 
 /** reply_context read the thread live: what that read says the reply reaches (null: it cannot say). */
-export function noteThreadRead(accountId: string, threadId: string, addressing: ReplyAddressing | null): void {
-  reads.set(keyOf(accountId, threadId), { at: clock(), addressing });
+export function noteThreadRead(accountId: string, threadId: string, addressing: ReplyAddressing | null, newestKey: string | null = null): void {
+  reads.set(keyOf(accountId, threadId), { at: clock(), addressing: addressing && newestKey ? addressing : null, newestKey });
 }
 
-/** Who the draft just written on the thread reaches: the thread's last live read, while fresh, when Gmail opened the reply
- *  that reaches them (`replyMode` from createReplyDraft). Null otherwise. */
-export function addressingForDraft(accountId: string, threadId: string, replyMode: unknown): ReplyAddressing | null {
+/** Who the draft just written on the thread may reach: the thread's last live read, while fresh, when Gmail opened the reply
+ *  that reaches them (`replyMode` from createReplyDraft). Null otherwise. Still to be confirmed (confirmedAddressing). */
+export function addressingForDraft(accountId: string, threadId: string, replyMode: unknown): DraftAddressing | null {
   const read = reads.get(keyOf(accountId, threadId));
-  if (!read?.addressing || clock() - read.at > ADDRESSING_FRESH_MS) return null;
+  if (!read?.addressing || !read.newestKey || clock() - read.at > ADDRESSING_FRESH_MS) return null;
   const mode = typeof replyMode === "string" ? replyMode : "";
   const fits = read.addressing.recipients.length > 1 ? mode === "reply-all" : mode === "reply" || mode === "reply-all";
-  return fits ? read.addressing : null;
+  return fits ? { addressing: read.addressing, newestKey: read.newestKey } : null;
+}
+
+/** The set, when Gmail's read of the thread taken after the draft was written (`reread`, null when it failed) shows the
+ *  same newest message reaching the same people; else null. */
+export function confirmedAddressing(candidate: DraftAddressing, reread: unknown, mailbox: string): ReplyAddressing | null {
+  if (!reread || newestMessageKey(reread) !== candidate.newestKey) return null;
+  const now = replyAddressingOf(reread, mailbox);
+  if (!now || now.to !== candidate.addressing.to || now.cc !== candidate.addressing.cc
+    || now.recipients.join(",") !== candidate.addressing.recipients.join(",")) return null;
+  return candidate.addressing;
 }
 
 /** Tests: forget every read, and set the clock (null: the real one). */

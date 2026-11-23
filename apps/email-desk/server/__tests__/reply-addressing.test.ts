@@ -7,7 +7,10 @@
 //     verified header rows, the person's own newest message, a stored (not live) read, no mailbox address;
 //   - no set when the draft is written long after the read, or with no read at all, or when Gmail did not open Reply all
 //     for a reply that reaches more than one person;
-//   - every publish of the draft's card (an update re-publishes it) carries the same set.
+//   - every publish of the draft's card (an update re-publishes it) carries the same set;
+//   - review fix 1: Gmail's Reply all answers the message newest when the draft is composed, so the set holds only when a
+//     read taken after the draft was written shows the same newest message reaching the same people. A message that came
+//     in between the read and the draft (another sender, the same sender again, someone added), or a failed re-read: no set.
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import type { Database } from "bun:sqlite";
 import { mkdtempSync } from "fs";
@@ -33,6 +36,7 @@ let gmailFails: boolean;
 let replyMode: string | undefined;
 let published: any[];
 let now: number;
+let threadReads: number;
 
 function platform(): any {
   return {
@@ -41,7 +45,7 @@ function platform(): any {
       accounts: async () => ({ ok: true, data: { accounts: [{ accountId: A1, email: ME, label: null }] } }),
       readTurn: async (account: string) => ({ ok: true, data: { turnId: `turn-${account}`, accountId: account, release: async () => {} } }),
       exec: async (req: any) => {
-        if (req.functionName === "getThread") return gmailFails ? { ok: false, reason: "mailbox busy" } : { ok: true, data: gmailThread };
+        if (req.functionName === "getThread") { threadReads++; return gmailFails ? { ok: false, reason: "mailbox busy" } : { ok: true, data: gmailThread }; }
         if (req.functionName === "createReplyDraft") {
           return { ok: true, data: { draftId: "gm-1", draftMessageId: "m-1", bodyAsSaved: String(req.params.body), ...(replyMode ? { replyMode } : {}) } };
         }
@@ -79,7 +83,7 @@ beforeEach(() => {
   _setOpsLogForTesting(() => {});
   now = Date.UTC(2026, 10, 23, 9, 30);
   _resetAddressingForTesting(() => now);
-  published = []; gmailFails = false; replyMode = "reply-all";
+  published = []; gmailFails = false; replyMode = "reply-all"; threadReads = 0;
   gmailThread = threadWith();
   const r = normalizeInboxRow({ id: T1, from: "Asha Rao <asha@acme.com>", subject: "Tuesday?", snippet: "Are you free on Tuesday?", dateFull: "Mon, Nov 23, 2026, 9:00 AM" }, A1, new Date(Date.UTC(2026, 10, 23, 9, 0)));
   appendEvents(db, A1, [r]);
@@ -121,6 +125,7 @@ describe("the draft's card carries who the reply reaches", () => {
     await call("reply_context", { threadId: T1 });
     const made = await call("create_draft", { threadId: T1, body: "Hi all, Tuesday works." });
     expect(made.id).toBeTruthy();
+    expect(threadReads).toBe(2); // reply_context's read, then the one confirming the newest message after the write
     expect(cardContext()).toMatchObject({ to: "Asha Rao <asha@acme.com>", cc: "sam@acme.com, ravi@acme.com", replyAllRecipients: STAMP });
     // An update re-publishes the card with the same people.
     published = [];
@@ -183,5 +188,28 @@ describe("the draft's card carries who the reply reaches", () => {
     await call("reply_context", { threadId: T1 });
     await call("create_draft", { threadId: T1, body: "Hi Asha, Tuesday works." });
     expect(cardContext()).toMatchObject({ to: "Asha Rao <asha@acme.com>", cc: "", replyAllRecipients: ["asha@acme.com"] });
+  });
+
+  const newer = (m: Record<string, unknown>) => ({ ...gmailThread, messages: [...gmailThread.messages, { ...newest(), date: "Mon, 23 Nov 2026, 09:20", ...m }] });
+
+  test("review fix 1: a newer message from someone else between the read and the draft: no set", async () => {
+    await call("reply_context", { threadId: T1 });
+    gmailThread = newer({ from: "Ben <ben@acme.com>", cc: ["sam@acme.com", "kim@acme.com"], body: "Adding Kim." });
+    await call("create_draft", { threadId: T1, body: "Hi all, Tuesday works." });
+    unstamped();
+  });
+
+  test("review fix 1: the same sender writes again, to the same people: no set (another message is newest)", async () => {
+    await call("reply_context", { threadId: T1 });
+    gmailThread = newer({ body: "Or Wednesday?" });
+    await call("create_draft", { threadId: T1, body: "Hi all, Tuesday works." });
+    unstamped();
+  });
+
+  test("review fix 1: the read after the write fails: no set", async () => {
+    await call("reply_context", { threadId: T1 });
+    gmailFails = true;
+    await call("create_draft", { threadId: T1, body: "Hi all, Tuesday works." });
+    unstamped();
   });
 });

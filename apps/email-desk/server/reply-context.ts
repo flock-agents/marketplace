@@ -15,7 +15,7 @@ import { getDraftForThread } from "./drafts/records";
 import { deskThreadAccount, type OpCtx } from "./ops";
 import type { ReadTurnResult } from "./platform-ext";
 import { voiceStateFor as crawlVoiceState, type VoiceState } from "./voice/crawl";
-import { noteThreadRead, replyAddressingOf } from "./drafts/addressing";
+import { newestMessageKey, noteThreadRead, replyAddressingOf } from "./drafts/addressing";
 
 export type { VoiceState };
 
@@ -65,6 +65,12 @@ export const REPLY_CONTEXT_CONSUMER = "email-desk:reply-context";
 
 /** Gmail's read of the thread, under the mailbox's read turn. A turn that is refused (busy, paused, not this person's) or a
  *  failed read answers null, and the caller uses the stored text: the agent's call never waits behind the mailbox. */
+/** Gmail's own read of a thread (getThread under the mailbox's read turn), as it answered; null when it could not be read. */
+export async function liveThreadRead(platform: PlatformContext, accountId: string, threadId: string): Promise<unknown | null> {
+  const live = await liveThread(platform, accountId, threadId);
+  return live ? live.read : null;
+}
+
 async function liveThread(platform: PlatformContext, accountId: string, threadId: string): Promise<{ thread: ContextThread; read: unknown } | null> {
   if (!platform.connectors.readTurn) return null;
   let turn: ReadTurnResult;
@@ -95,7 +101,7 @@ async function readThread(ctx: OpCtx, accountId: string, threadId: string): Prom
 const safeParse = (s: string): unknown => { try { return JSON.parse(s); } catch { return null; } };
 
 /** The copy's own address for a mailbox, to tell the person's messages from the sender's. */
-async function mailboxAddress(platform: PlatformContext, accountId: string): Promise<string> {
+export async function mailboxAddress(platform: PlatformContext, accountId: string): Promise<string> {
   try {
     const r = await platform.connectors.accounts?.("gmail");
     if (r?.ok) return (r.data?.accounts ?? []).find((a) => a.accountId === accountId)?.email ?? "";
@@ -129,7 +135,7 @@ export async function replyContext(
   const sender = senderOf(thread.messages, mailbox);
   // Who a reply written from this read reaches (drafts/addressing.ts): only Gmail's own read can say; a journal read
   // cannot, and replaces an earlier read that could.
-  noteThreadRead(accountId, threadId, got.read ? replyAddressingOf(got.read, mailbox) : null);
+  noteThreadRead(accountId, threadId, got.read ? replyAddressingOf(got.read, mailbox) : null, got.read ? newestMessageKey(got.read) : null);
   const facts = await senderFacts(ctx.platform, thread.subject, sender);
 
   const voice = voiceBlockFor(accountId);
