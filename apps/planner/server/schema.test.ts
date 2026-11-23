@@ -11,7 +11,8 @@ describe("planner data", () => {
   it("shows the new tables to agents and hides the old ones", async () => {
     const { owner } = await boot();
     const s = (await owner("GET", "/api/_data/_schema")).body;
-    expect(Object.keys(s.tables).sort()).toEqual(["dish_book", "dish_items", "dishes", "house", "item_events", "items", "order_lines", "orders", "people", "plan_meals", "products", "regulars", "saved_recipes"]);
+    expect(Object.keys(s.tables).sort()).toEqual(["dish_book", "dish_ingredients", "dish_items", "dishes", "house", "item_events", "items", "library", "order_lines", "orders", "people",
+      "plan_meals", "products", "regulars", "rules", "saved_recipes", "slot_days", "slot_dishes", "slots"]);
   });
 
   it("upgrades a 2.0.x database without a block and keeps its old rows", async () => {
@@ -46,9 +47,11 @@ describe("planner data", () => {
     expect(cols("orders")).not.toContain("place_at");
   });
 
-  it("has three settings: the main app, the fallback and ordering without asking", async () => {
+  it("has four settings: the main app, the fallback, ordering without asking and new dishes a week (2 unless set: 0, 2, 4 or 7)", async () => {
     const { owner } = await boot();
-    expect((await owner("GET", "/api/_app")).body.settings).toEqual({ grocery_app: "zepto", fallback_app: "none", order_without_asking: false });
+    expect((await owner("GET", "/api/_app")).body.settings).toEqual({ grocery_app: "zepto", fallback_app: "none", order_without_asking: false, new_dishes_per_week: 2 });
+    expect((await owner("PATCH", "/api/_app/settings", { new_dishes_per_week: 3 })).status).toBe(400);
+    expect((await owner("PATCH", "/api/_app/settings", { new_dishes_per_week: 7 })).status).toBe(200);
     expect((await owner("PATCH", "/api/_app/settings", { grocery_app: "dmart" })).status).toBe(400);
     expect((await owner("PATCH", "/api/_app/settings", { fallback_app: "zepto" })).status).toBe(200);
     expect((await owner("PATCH", "/api/_app/settings", { fallback_app: "none" })).status).toBe(200);

@@ -1,6 +1,42 @@
 // The app's fixed vocabulary and its one setting. No Drizzle or Bun import here: the pages read these too.
 
+/** The main slots a household starts from (the setup writes them as `slots` rows). The slots table is the list a week is
+ *  planned with; this one is only the default. */
 export const SLOTS = ["Breakfast", "Lunch", "Dinner"] as const;
+
+// ── The slot model (docs/slot-model-spec.md §2) ──
+
+/** A slot: one of the main meals, a custom one (a child's tiffin, an evening snack), or an add-on to a main one for one
+ *  person's different plate ("Papa's dinner"). */
+export const SLOT_KINDS = ["main", "custom", "addon"] as const;
+export type SlotKind = (typeof SLOT_KINDS)[number];
+/** Planning order: Breakfast 10, a custom slot from breakfast (a tiffin) 20, Lunch 30, snacks 40, Dinner 50, add-ons 60 on. */
+export const SLOT_ORDER = { Breakfast: 10, tiffin: 20, Lunch: 30, snack: 40, Dinner: 50, addon: 60 } as const;
+/** A slot-day not cooked at home. */
+export const SKIPS = ["eaten_out", "ordered_in"] as const;
+export type Skip = (typeof SKIPS)[number];
+/** planned: a suggestion the family was shown, never read as eaten; confirmed: the family said what was made (or a setup seed). */
+export const SLOT_DAY_STATUSES = ["planned", "confirmed"] as const;
+export type SlotDayStatus = (typeof SLOT_DAY_STATUSES)[number];
+/** Where a library dish came from. */
+export const LIBRARY_ORIGINS = ["setup_named", "family_added", "planner_suggested"] as const;
+export type LibraryOrigin = (typeof LIBRARY_ORIGINS)[number];
+/** What a rule is. Hard: always kept (veg, egg, no_eggs, avoid, only, swap, require, fasting, cap); a soft one has a
+ *  frequency; note is words only, not checked. */
+export const RULE_WHATS = ["veg", "egg", "no_eggs", "avoid", "only", "swap", "require", "fasting", "cap", "note"] as const;
+export type RuleWhat = (typeof RULE_WHATS)[number];
+/** How often a library dish or a soft rule comes: usually (4–5 a week), sometimes (2–3), rarely (at most 1), or "<n>/week". */
+export const FREQUENCY_WORDS = ["usually", "sometimes", "rarely"] as const;
+export type Frequency = (typeof FREQUENCY_WORDS)[number] | `${number}/week`;
+/** Staples of a slot: dishes in at least this share of the slot's last STAPLE_WINDOW history rows with dishes (owner, 23 Nov). */
+export const STAPLE_SHARE = 0.6;
+export const STAPLE_WINDOW = 14;
+/** At most this many "looks like" examples a slot (seed and confirmed slot-days only). */
+export const LOOKS_LIKE_MAX = 6;
+/** An untried dish placed this many times with no "made it" answer is dropped. */
+export const UNTRIED_MAX_OFFERS = 2;
+/** The new-dishes-a-week choices: none, 1–2, 3–4, surprise me. */
+export const NEW_DISHES_CHOICES = [0, 2, 4, 7] as const;
 
 /** A person's age group: portions and the planning rules follow it. */
 export const GROUPS = ["child", "adult", "elder"] as const;
@@ -100,9 +136,12 @@ export const SETTINGS = [
   { key: "fallback_app", type: "choice" as const, options: ["none", ...SHOP_APPS], default: "none", scope: "owner" as const, label: "When something isn't on your main app",
     check: (v: unknown) => v === "none" || (SHOP_APPS as readonly unknown[]).includes(v) ? null : `fallback_app must be one of: none, ${SHOP_APPS.join(", ")}` },
   { key: "order_without_asking", type: "boolean" as const, default: false, scope: "owner" as const, label: "Order without asking" },
+  { key: "new_dishes_per_week", type: "integer" as const, default: 2, scope: "owner" as const, label: "New dishes a week",
+    check: (v: unknown) => (NEW_DISHES_CHOICES as readonly unknown[]).includes(v) ? null : `new_dishes_per_week must be one of: ${NEW_DISHES_CHOICES.join(", ")}` },
 ];
 
-/** Meal Planner 2.0's tables. The upgrade keeps them as they are (mountKit keepTables): never changed, dropped or shown. */
+/** Meal Planner 2.0's tables. The upgrade keeps them as they are (mountKit keepTables): never changed, dropped or shown. So no
+ *  table of the app's may take one of these names (the slot model's ingredients table is `dish_ingredients`). */
 export const OLD_TABLES = ["ingredients", "recipes", "recipe_ingredients", "meals", "meal_recipes", "diners", "diner_portions", "standing_consumption", "staples", "carts", "groceries", "prep_reminders", "shopping_prefs", "stock", "agent_jobs", "choice_log", "learned_prefs", "message_log"];
 /** Who delivers a subscribed item when the family named nobody (the Pantry item's "Comes on subscription" with "from" left
  *  empty): set_subscription needs a source, and the pill then says just "Subscription". */

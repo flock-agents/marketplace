@@ -81,9 +81,9 @@ describe("the agent's interface", () => {
     expect(manifest.pages).toEqual(["week", "shopping", "pantry", "recipes", "family"]);
     expect(Object.keys(manifest.labels).filter((k) => k.endsWith(".settings"))).toEqual([]);
     const settings: { key: string; label: string; group?: string; help?: string }[] = manifest.settings;
-    expect(settings.map((s) => s.key)).toEqual(["grocery_app", "fallback_app", "order_without_asking"]);
+    expect(settings.map((s) => s.key)).toEqual(["grocery_app", "fallback_app", "order_without_asking", "new_dishes_per_week"]);
     for (const s of settings) {
-      expect(s.group, s.key).toBe("How we order");
+      expect(s.group, s.key).toBe(s.key === "new_dishes_per_week" ? "How we plan" : "How we order");
       expect(s.label.trim().length > 0 && (s.help ?? "").trim().length > 0, s.key).toBe(true);
     }
   });

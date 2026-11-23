@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, real } from "drizzle-orm/sqlite-core";
+import { sqliteTable, text, integer, real, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { kitColumns } from "@flock/app-kit";
 
 // Meal Planner 3.0's tables. None shares a name with a 2.0 table (constants.ts OLD_TABLES): those stay beside these, untouched.
@@ -225,4 +225,101 @@ export const saved_recipes = sqliteTable("saved_recipes", {
   ingredients: text("ingredients"),                            // JSON [{ item, amount, unit }]
   tags: text("tags"),                                          // JSON string[]
   for_people: text("for_people"),                              // JSON string[]
+});
+
+// ── The slot model (docs/slot-model-spec.md §2): its tables, beside the old plan's until those are removed ──
+
+/** A meal of the day the family plans: the main ones, a custom one (a child's tiffin, an evening snack) and an add-on to a main
+ *  one for one person's different plate ("Papa's dinner": two phulkas, no rice). Spec slot-model §2.1. */
+export const slots = sqliteTable("slots", {
+  ...kitColumns(),
+  name: text("name").notNull().unique(),                       // "Breakfast", "Agastya's tiffin", "Papa's dinner"
+  kind: text("kind").notNull(),                                // main | custom | addon (constants.ts SLOT_KINDS)
+  addon_of: text("addon_of"),                                  // an addon's main slot ("Dinner")
+  usual_people: text("usual_people"),                          // JSON string[]: names; empty = everyone at home
+  days: text("days"),                                          // JSON weekday[]; empty = every day
+  skip_days: text("skip_days"),                                // JSON [{ day: weekday, skip: eaten_out | ordered_in }]: every week
+  order: integer("order").notNull(),                           // planning order (constants.ts SLOT_ORDER)
+  active: integer("active").default(1),
+});
+
+/** One slot on one date: who it is for and the dishes made. A setup seed example (the family's past week) has no date and is
+ *  `confirmed`. A `planned` row is a suggestion the family was shown, never read as eaten. Unique (date, slot). */
+export const slot_days = sqliteTable("slot_days", {
+  ...kitColumns(),
+  date: text("date"),                                          // YYYY-MM-DD; null = a seed example from the setup
+  slot: text("slot").notNull(),                                // slots.name
+  people: text("people"),                                      // JSON string[]: who it is for that day (computed, editable)
+  guests: text("guests"),                                      // JSON [{ count, rules?: string[] }]: unnamed guests for this meal only
+  occasion: text("occasion"),                                  // "dinner party", in their words
+  new_dishes_allowed: integer("new_dishes_allowed"),           // this slot-day's own count, in place of the setting
+  skip: text("skip"),                                          // eaten_out | ordered_in | null (constants.ts SKIPS)
+  status: text("status").notNull().default("planned"),         // planned | confirmed (constants.ts SLOT_DAY_STATUSES)
+  edited: integer("edited").default(0),                        // 1: the family changed it; a re-plan never overwrites it
+  note: text("note"),
+}, (t) => [uniqueIndex("slot_days_date_slot").on(t.date, t.slot)]);
+
+/** The dishes made in a slot-day, in order. */
+export const slot_dishes = sqliteTable("slot_dishes", {
+  ...kitColumns(),
+  slot_day_id: text("slot_day_id").notNull().references(() => slot_days.id),
+  position: integer("position"),
+  dish: text("dish").notNull(),                                // the dish's name (library key by dishKey)
+  new: integer("new").default(0),                              // 1: a new suggestion of the planner's
+  feedback_asked: integer("feedback_asked").default(0),        // 1: the next-day untried-dish question was sent for this placement
+  note: text("note"),                                          // only when this dish needs a change for someone
+});
+
+/** What a planned dish needs bought, in the amount for this family. The SQL table is dish_ingredients: "ingredients" is a
+ *  Meal Planner 2.0 table kept untouched on upgraded installs (constants.ts OLD_TABLES). */
+export const ingredients = sqliteTable("dish_ingredients", {
+  ...kitColumns(),
+  slot_dish_id: text("slot_dish_id").notNull().references(() => slot_dishes.id),
+  item: text("item").notNull(),
+  amount: real("amount"),
+  unit: text("unit"),
+});
+
+/** The family's dishes, one row per dish and slot it is eaten at: how often, on which days, what it contains (for the rules),
+ *  where it came from, whether the family has eaten it yet, and its video and how it went. Unique (key, slot). */
+export const library = sqliteTable("library", {
+  ...kitColumns(),
+  key: text("key").notNull(),                                  // the dish's name, normalised (dishText.ts dishKey)
+  slot: text("slot").notNull(),                                // slots.name: the slot it is eaten at
+  name: text("name").notNull(),
+  frequency: text("frequency"),                                // usually | sometimes | rarely | "<n>/week"; null = the default (2 days at most)
+  days: text("days"),                                          // JSON weekday[]: only these days; null = any day
+  contains: text("contains"),                                  // JSON string[]: the tags it has (egg, meat, onion_garlic, white_rice, ...)
+  contains_read: text("contains_read"),                        // JSON string[]: the tags read for it; a rule's tag not here is unknown
+  origin: text("origin").notNull(),                            // setup_named | family_added | planner_suggested (constants.ts LIBRARY_ORIGINS)
+  suggested: integer("suggested").default(0),                  // 1: a planner suggestion not yet kept: offered only as a new dish
+  untried: integer("untried").default(0),                      // 1: the family hasn't eaten it yet
+  offers: integer("offers").default(0),                        // times an untried dish was put on a plan; 2 with no "made it" drops it
+  disliked: integer("disliked").default(0),                    // 1: made and not liked; never planned again
+  prep: text("prep"),                                          // later: "soak overnight"
+  video_url: text("video_url"),                                // a YouTube video, an Instagram reel or any page: the link only
+  video_title: text("video_title"),
+  video_thumbnail: text("video_thumbnail"),
+  rating: text("rating"),                                      // the latest: constants.ts DISH_RATINGS
+  rating_note: text("rating_note"),                            // what went well or didn't, in the family's words ("too oily")
+  rated_on: text("rated_on"),                                  // the day it was eaten
+  rated_by: text("rated_by"),                                  // who said it, by name
+  ratings: text("ratings"),                                    // JSON [{ rating, note, date, by }], newest first, a short history
+}, (t) => [uniqueIndex("library_key_slot").on(t.key, t.slot)]);
+
+/** The family's food rules, one a row, each with the family's own words. Hard ones are always kept; soft ones (`frequency`)
+ *  as often as said. Checked in code against each dish's `contains`. */
+export const rules = sqliteTable("rules", {
+  ...kitColumns(),
+  hard: integer("hard").notNull(),                             // 1 hard (allergy, veg, avoid, fast, no sugar), 0 soft
+  what: text("what").notNull(),                                // veg | egg | no_eggs | avoid | only | swap | require | fasting | cap | note (constants.ts RULE_WHATS)
+  who: text("who"),                                            // a person; null = everyone at that slot-day
+  slots: text("slots"),                                        // JSON string[]; null = every slot
+  days: text("days"),                                          // JSON weekday[]; null = every day
+  items: text("items"),                                        // JSON string[]: tags or categories ("white_rice", "@nuts")
+  to: text("to"),                                              // a swap's target ("millets")
+  frequency: text("frequency"),                                // soft only: usually | sometimes | rarely | "<n>/week"
+  per_meal: integer("per_meal"),                               // cap: dishes per meal
+  fasting_food: text("fasting_food"),                          // JSON string[]: what a fast allows ("fruit"); empty = nothing
+  quote: text("quote").notNull(),                              // the family's own words
 });

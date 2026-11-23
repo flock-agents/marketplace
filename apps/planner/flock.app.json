@@ -48,7 +48,13 @@
     "order_lines",
     "products",
     "saved_recipes",
-    "dish_book"
+    "dish_book",
+    "slots",
+    "slot_days",
+    "slot_dishes",
+    "dish_ingredients",
+    "library",
+    "rules"
   ],
   "objects": [
     "grocery-bag"
@@ -137,6 +143,15 @@
       "label": "Order without asking",
       "group": "How we order",
       "help": "Off: nothing is ordered until you reply or tap Order. On: the agent orders the items it is sure about by itself."
+    },
+    {
+      "key": "new_dishes_per_week",
+      "type": "integer",
+      "default": 2,
+      "scope": "owner",
+      "label": "New dishes a week",
+      "group": "How we plan",
+      "help": "How many dishes the family hasn't had before a week's plan may suggest: 0 (none), 2 (1 or 2), 4 (3 or 4) or 7 (surprise me)."
     }
   ],
   "setupMenu": "Planning the week's meals and groceries",
