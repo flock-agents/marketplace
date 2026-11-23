@@ -20,6 +20,7 @@ import { allOps } from "../registry";
 import { replyContext } from "../reply-context";
 import { recordHarvestRun } from "../platform-ops";
 import { topicTerms, followUpKindForTo, senderOf, threadFromRead } from "../lib/reply-context";
+import { _resetAddressingForTesting } from "../drafts/addressing";
 
 const ME = "me@acme.com";
 const A1 = "acct-1";
@@ -61,7 +62,7 @@ function platform(): any {
           }
           return { ok: true, data: gmailThread };
         }
-        if (req.functionName === "createReplyDraft") return { ok: true, data: { draftId: "gm-1", draftMessageId: "m-1", bodyAsSaved: String(req.params.body) } };
+        if (req.functionName === "createReplyDraft") return { ok: true, data: { draftId: "gm-1", draftMessageId: "m-1", bodyAsSaved: String(req.params.body), replyMode: "reply" } };
         // Gmail still holds the draft it wrote.
         if (req.functionName === "getDraft") return { ok: true, data: { draftId: req.params.draftId, body: "held" } };
         return { ok: false, reason: `unexpected ${req.functionName}` };
@@ -281,6 +282,24 @@ describe("an older thread the journal does not hold (the person's own ask)", () 
     expect(second.json.error).toContain(first.json.id);
     expect(calls.filter((c) => c.functionName === "createReplyDraft")).toHaveLength(0);
     expect(calls.filter((c) => c.functionName === "getThread")).toHaveLength(0);
+  });
+
+  // Live 2026-11-24 (create_draft 70 s on an older thread, fetched on demand by reply_context): 63 s of it was the skill's
+  // own createReplyDraft, the rest one getThread after the write. Every Gmail call the pair makes, pinned: reply_context
+  // reads the thread once; create_draft does not read it again before writing (the journal now holds it, nothing is in
+  // doubt, no open draft to check), writes once, and reads it once after the write, the read Ruling P3-R5 needs before
+  // the card may say who the reply reaches. No getDraft, no findDraftForThread.
+  test("reply_context then create_draft: getThread, createReplyDraft, then one getThread confirming who it reaches", async () => {
+    _resetAddressingForTesting();
+    const verified = { ...oldThread, messages: oldThread.messages.map((m) => ({ ...m, replyTo: [], replyToKnown: true })) };
+    gmailByThread = new Map([[`${A1}|${OLD}`, verified]]);
+    expect((await call("reply_context", { threadId: OLD })).status).toBe(200);
+    expect(calls.map((c) => c.functionName)).toEqual(["getThread"]);
+    calls.length = 0;
+    const made = await call("create_draft", { threadId: OLD, body: "Hi Ravi, the invoice is attached here today." });
+    expect(made.json.id).toBeTruthy();
+    expect(calls.map((c) => c.functionName)).toEqual(["createReplyDraft", "getThread"]);
+    _resetAddressingForTesting();
   });
 
   test("a placeholder is still refused, and Gmail is not read for it", async () => {
