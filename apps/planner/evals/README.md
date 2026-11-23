@@ -38,7 +38,8 @@ its weekly range, sometimes 2–3, usually 4–5). The planner before 8dc4b89 ha
 ```
 cd apps/planner
 bun evals/eval-setup.ts                                  # all 8, repeat 1, new persona chats
-bun evals/eval-setup.ts --reuse-transcripts evals/results/<run>   # re-score a setup change on the same chats
+bun evals/eval-setup.ts --reuse-transcripts evals/results/<run>   # re-score a setup change on the same chats (a --repeat past the
+                                                                  # saved reps reads rep 1 again: the setup's own variance)
 bun evals/eval-setup.ts --only h3,h5 --repeat 3 --concurrency 4
 bun evals/eval-setup.ts --self-test                      # TRUTH scored against itself: every field must pass (no model)
 bun evals/eval-setup.ts --rescore evals/results/<run>/results.json --out evals/results/<run>   # a scorer change, no model
@@ -142,3 +143,6 @@ instead of silently filling.
 `results/` holds the runs (`results.json` with every setup, transcript and week, and `summary.md`). `results/before-257ef20-*`: the
 planner before the how-often change (h3 fixture v1, without the rajma/chole/chapati counts); `results/cf9a391-*`: the
 merged how-often planner, the scorecards to compare against.
+`results/base-reuse-setup`: cf9a391's setup re-read twice on cf9a391's chats (its own variance); `results/fixes-*`: the
+setup fixes of feat/planner-setup-fixes on the same chats (`fixes-reuse-setup`), on new chats (`fixes-fresh-setup`) and
+on those new chats after the last fix (`fixes-fresh-rescored-setup`). `results.json` now keeps each run's model `profile`.

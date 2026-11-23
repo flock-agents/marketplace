@@ -50,8 +50,10 @@ async function runOne(h: Household, rep: number) {
   const tfile = (dir: string) => join(dir, "transcripts", `${h.id}-rep${rep}.json`);
   let tr: Transcript;
   if (REUSE) {
-    if (!existsSync(tfile(REUSE))) throw new Error(`no transcript ${tfile(REUSE)}`);
-    tr = JSON.parse(readFileSync(tfile(REUSE), "utf8"));
+    // A repeat past the saved ones reads the first chat again (the same words, read again: the setup's own variance).
+    const file = existsSync(tfile(REUSE)) ? tfile(REUSE) : join(REUSE, "transcripts", `${h.id}-rep1.json`);
+    if (!existsSync(file)) throw new Error(`no transcript ${tfile(REUSE)}`);
+    tr = JSON.parse(readFileSync(file, "utf8"));
   } else tr = await interview(h, { model: PERSONA });
   writeFileSync(tfile(OUT), JSON.stringify(tr, null, 1));
   const calls: CallRow[] = [];
@@ -65,7 +67,7 @@ async function runOne(h: Household, rep: number) {
     const setup = await setupOfDb(k);
     const score = res.ok ? scoreSetup(h, setup) : { rates: {} as Rates, notes: [`apply_setup failed: ${res.reason} ${res.say ?? ""}`] };
     return { household: h.id, title: h.title, rep, ok: res.ok === true, setup_ms: ms, calls, rates: score.rates, notes: score.notes,
-      said: res.said ?? res.say, noted: res.noted ?? [], dropped: res.dropped ?? [], setup, transcript: tr.lines };
+      said: res.said ?? res.say, noted: res.noted ?? [], dropped: res.dropped ?? [], setup, profile: res.profile, transcript: tr.lines };
   } finally { rmSync(dataDir, { recursive: true, force: true }); }
 }
 

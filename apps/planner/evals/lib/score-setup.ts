@@ -14,7 +14,7 @@ type Saved = Setup["rules"][number];
 
 /** A saved rule as the planner checks it: the older kinds as avoid with their items (rules.ts checkedAs). */
 function asChecked(r: Saved): Saved {
-  const items = r.kind === "veg" || r.kind === "no_meat" || r.kind === "egg" ? ["@meat", "@fish"] : r.kind === "no_eggs" ? ["@egg"] : r.kind === "no_onion_garlic" ? ["onion", "garlic"] : null;
+  const items = r.kind === "veg" ? ["@meat", "@fish", "@egg"] : r.kind === "no_meat" || r.kind === "egg" ? ["@meat", "@fish"] : r.kind === "no_eggs" ? ["@egg"] : r.kind === "no_onion_garlic" ? ["onion", "garlic"] : null;
   return items ? { ...r, kind: "avoid", items } : r;
 }
 const whoOk = (truthWho: string | undefined, saved: string | undefined) => (truthWho ? !!saved && sameName(truthWho, saved) : !saved);
