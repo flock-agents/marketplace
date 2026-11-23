@@ -23,7 +23,8 @@ import { THREAD_BODY_SEPARATOR } from "../lib/thread-format";
 import { _setOpsLogForTesting } from "../ops";
 import { _setLogForTesting } from "../drafts/card";
 import { allOps } from "../registry";
-import { replyAddressingOf, _resetAddressingForTesting, ADDRESSING_FRESH_MS } from "../drafts/addressing";
+import { replyAddressingOf, followUpAddressingOf, _resetAddressingForTesting, ADDRESSING_FRESH_MS } from "../drafts/addressing";
+import { getFollowUp, putFollowUp } from "../routines/follow-up-store";
 
 const ME = "me@acme.com";
 const A1 = "acct-1";
@@ -237,3 +238,71 @@ describe("a routine's draft is marked automated; a chat's never", () => {
   });
 });
 
+
+// Owner decision 2026-11-23: an "always follow up with X" rule sends the follow-up. The follow-up routine marks the thread
+// as awaiting its draft (follow_up_state `drafting`) and wakes the agent in its run; the agent's create_draft there is a
+// follow-up: the newest message is the person's own, and Gmail's Reply all on it reaches its To and Cc. The card says
+// `followUp: true` (Flock scopes it "follow-up:<people>", the always rule's scope), `automated: true`, and who it reaches.
+// The same create_draft from a chat, or on a thread nobody awaits a follow-up on, carries no follow-up set.
+describe("a follow-up draft the routine woke the agent for", () => {
+  const ROUTINE = { "x-flock-routine-id": "routine-follow-up" };
+  /** The person wrote last: to Asha, Sam on Cc. Nobody answered. */
+  const followUpThread = () => ({
+    threadId: T1, subject: "Re: Tuesday?",
+    messages: [
+      newest(),
+      { from: `Me <${ME}>`, to: ["Asha Rao <asha@acme.com>"], cc: ["sam@acme.com"], replyTo: [], replyToKnown: true, date: "Tue, 17 Nov 2026, 10:00", body: "Tuesday at 4 then?" },
+    ],
+  });
+  const awaiting = () => putFollowUp({ accountId: A1, threadId: T1, ownerMsgKey: "k", status: "drafting", checkedAt: now, offeredAt: now, recipientName: "Asha" });
+
+  test("in the routine's run: followUp, automated, and the To and Cc of the person's message; the row is drafted", async () => {
+    gmailThread = followUpThread();
+    awaiting();
+    await call("reply_context", { threadId: T1 });
+    const made = await call("create_draft", { threadId: T1, body: "Hi Asha, just checking in on Tuesday." }, ROUTINE);
+    expect(made.id).toBeTruthy();
+    expect(cardContext()).toMatchObject({
+      followUp: true, automated: true, to: "Asha Rao <asha@acme.com>", cc: "sam@acme.com", replyAllRecipients: ["asha@acme.com", "sam@acme.com"],
+    });
+    expect(published[published.length - 1].title).toBe("Follow up with Asha");
+    expect(getFollowUp(A1, T1)).toMatchObject({ status: "drafted", draftId: made.id });
+  });
+
+  test("from a chat: no follow-up set, and the row still awaits the routine's draft", async () => {
+    gmailThread = followUpThread();
+    awaiting();
+    await call("reply_context", { threadId: T1 });
+    await call("create_draft", { threadId: T1, body: "Hi Asha, just checking in on Tuesday." });
+    expect(cardContext().followUp).toBeUndefined();
+    expect(cardContext().replyAllRecipients).toBeUndefined();
+    expect(getFollowUp(A1, T1)).toMatchObject({ status: "drafting" });
+  });
+
+  test("in a routine run on a thread nobody awaits a follow-up on: the person's own newest message gives no set", async () => {
+    gmailThread = followUpThread();
+    await call("reply_context", { threadId: T1 });
+    await call("create_draft", { threadId: T1, body: "Hi Asha, just checking in on Tuesday." }, ROUTINE);
+    expect(cardContext().followUp).toBeUndefined();
+    expect(cardContext().replyAllRecipients).toBeUndefined();
+  });
+
+  test("someone answered before the draft was written: not the person's message, no follow-up set", async () => {
+    gmailThread = { ...followUpThread(), messages: [...followUpThread().messages, newest({ date: "Wed, 18 Nov 2026, 10:00", body: "Yes, Tuesday at 4." })] };
+    awaiting();
+    await call("reply_context", { threadId: T1 });
+    await call("create_draft", { threadId: T1, body: "Hi Asha, just checking in on Tuesday." }, ROUTINE);
+    expect(cardContext().replyAllRecipients).toBeUndefined();
+  });
+
+  test("followUpAddressingOf: the person's newest message reaches its To and Cc; anyone else's, or a foreign Reply-To, none", () => {
+    expect(followUpAddressingOf(followUpThread(), ME)).toEqual({ to: "Asha Rao <asha@acme.com>", cc: "sam@acme.com", recipients: ["asha@acme.com", "sam@acme.com"] });
+    expect(followUpAddressingOf(threadWith(), ME)).toBeNull();
+    const t = followUpThread();
+    t.messages[1] = { ...t.messages[1]!, replyTo: ["other@acme.com"] } as any;
+    expect(followUpAddressingOf(t, ME)).toBeNull();
+    const u = followUpThread();
+    u.messages[1] = { ...u.messages[1]!, replyToKnown: false } as any;
+    expect(followUpAddressingOf(u, ME)).toBeNull();
+  });
+});

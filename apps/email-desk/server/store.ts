@@ -266,6 +266,8 @@ function createSchema(db: Database): void {
   addColumns(db, "lifecycle_state", [["pending_sweeps", "TEXT"]]);
   addColumns(db, "reply_messages", [["quoted", "TEXT"]]);
   addColumns(db, "follow_up_state", [["session_id", "TEXT"], ["offered_at", "INTEGER"], ["recipient_name", "TEXT"]]);
+  // An "always follow up" rule's thread whose draft the agent was woken for: the TODO to raise if no draft comes (JSON).
+  addColumns(db, "follow_up_state", [["fallback", "TEXT"]]);
   // Who the draft's reply reaches (drafts/addressing.ts, Ruling P3-R5): JSON { to, cc, recipients }, or NULL when unknown.
   addColumns(db, "draft_records", [["reply_all", "TEXT"]]);
   // A draft made in one of the copy's routine runs (Ruling P3-R14/R15): only these may be sent by a standing mail rule.

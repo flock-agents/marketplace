@@ -68,8 +68,11 @@ describe("routines: the manifest and the server agree", () => {
     expect(p).toContain("write-reply");
   });
 
-  test("follow-up never wakes the agent, so it carries no prompt", () => {
-    expect(routine("follow-up").prompt).toBeUndefined();
+  test("follow-up wakes the agent only for an always rule's threads: its prompt names the data and the drafting skill", () => {
+    const p = routine("follow-up").prompt;
+    expect(p).toContain("followUps");
+    expect(p).toContain("write-reply");
+    expect(p).toContain("create_draft");
   });
 });
 

@@ -15,7 +15,7 @@ import { getDraftForThread } from "./drafts/records";
 import type { OpCtx } from "./ops";
 import { readThreadInTurn, resolveDeskThread } from "./desk-thread";
 import { voiceStateFor as crawlVoiceState, type VoiceState } from "./voice/crawl";
-import { newestMessageKey, noteThreadRead, replyAddressingOf } from "./drafts/addressing";
+import { followUpAddressingOf, newestMessageKey, noteThreadRead, replyAddressingOf } from "./drafts/addressing";
 
 export type { VoiceState };
 
@@ -125,7 +125,9 @@ export async function replyContext(
   const sender = senderOf(thread.messages, mailbox);
   // Who a reply written from this read reaches (drafts/addressing.ts): only Gmail's own read can say; a journal read
   // cannot, and replaces an earlier read that could.
-  noteThreadRead(accountId, threadId, got.read ? replyAddressingOf(got.read, mailbox) : null, got.read ? newestMessageKey(got.read) : null);
+  // A follow-up on the person's own newest message (an "always" rule's) reaches that message's To and Cc.
+  noteThreadRead(accountId, threadId, got.read ? replyAddressingOf(got.read, mailbox) : null, got.read ? newestMessageKey(got.read) : null,
+    got.read ? followUpAddressingOf(got.read, mailbox) : null);
   const facts = await senderFacts(ctx.platform, thread.subject, sender);
 
   const voice = voiceBlockFor(accountId);
