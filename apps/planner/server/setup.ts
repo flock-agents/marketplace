@@ -1,7 +1,8 @@
 // apply_setup { household, transcript }: the family's whole setup in one call, at the end of the interview ("model reads, code
 // writes"). Flock keeps the replies word for word and sends them here with every household fact it holds; the app reads them
-// with ONE balanced model call into a household profile (people, the cook, who cooks on the cook's days off, extra meals, meals
-// ordered in, food rules, the family's dishes, the shopping apps, subscriptions), checks and normalises that profile in code,
+// with three balanced model calls at once (the home, the food rules, the dishes) into a household profile (people, the cook,
+// who cooks on the cook's days off, extra meals, meals ordered in, food rules, the family's dishes, the shopping apps,
+// subscriptions), checks and normalises that profile in code,
 // and writes its own rows in a fixed order through its own routes: people, cook, slots and meals ordered in, rules, dishes,
 // shopping apps, subscriptions. Every day is planned (owner, 23 Nov: many families cook every day themselves): a day the cook
 // does not come is cooked by the family, and only a meal the family says is eaten out or ordered in is not cooked. Every write is add/upsert, one item at a time, so a thing the app cannot take is "noted, not enforced"
@@ -21,68 +22,109 @@ import { CATEGORIES, CHECKED_KINDS, rulesSaid } from "./rules";
 import { daysSaid, getHouse, LONG_DAY, houseView, isObject, refuse, slotsSaid, writeRoutes, type Db, type Emit } from "./family";
 import type { ModelCall, ModelResult } from "./model";
 
-// ── The model's answer ──
+// ── The model's answer: three readers at once ──
+// One call for the whole profile took 12–170 s on the Balanced tier's DeepSeek and, live, ran into its 8000-token cap with no
+// JSON (sim 23 Nov). The setup is read by three calls IN PARALLEL over the same input, each with its own small schema: the
+// home (people, the cook, who cooks on the cook's days off, extra meals, meals ordered in, shopping), the food rules, and the
+// family's dishes. Their answers are merged into one profile; the checks and writes below are the same for it.
 
 const STR = { type: "string" }, STRS = { type: "array", items: STR };
 const OPT_STR = { type: ["string", "null"] };
-export const SETUP_SCHEMA = {
+
+const HOME_SCHEMA = {
   type: "object",
-  required: ["people", "cook", "homeCook", "slots", "orderIn", "rules", "dishes", "groceryApps", "subscriptions", "unplaced"],
+  required: ["people"],
   properties: {
     people: { type: "array", items: { type: "object", required: ["name", "group"], properties: {
       name: STR, group: { type: "string", enum: ["child", "adult", "elder"] }, age: { type: ["number", "null"] }, relationship: OPT_STR } } },
-    cook: { anyOf: [{ type: "null" }, { type: "object", required: ["name", "days", "visits"], properties: {
-      name: STR, days: STRS, visits: { type: "array", items: { type: "object", required: ["at", "meals"], properties: { at: STR, meals: STRS } } },
+    cook: { anyOf: [{ type: "null" }, { type: "object", required: ["name"], properties: {
+      name: STR, days: STRS, visits: { type: "array", items: { type: "object", required: ["at"], properties: { at: STR, meals: STRS } } },
       timeLimit: OPT_STR, newRecipes: { type: ["string", "null"], enum: ["open", "set_menu", null] }, note: OPT_STR } }] },
     homeCook: { type: "array", items: { type: "object", required: ["day", "slots", "by"], properties: { day: STR, slots: STRS, by: STR, note: OPT_STR } } },
-    slots: { type: "array", items: { type: "object", required: ["name", "days", "for", "quote"], properties: { name: STR, days: STRS, for: STRS, quote: STR } } },
+    slots: { type: "array", items: { type: "object", required: ["name", "quote"], properties: { name: STR, days: STRS, for: STRS, quote: STR } } },
     orderIn: { type: "array", items: { type: "object", required: ["day", "slot"], properties: { day: STR, slot: STR, note: OPT_STR } } },
+    groceryApps: { type: "object", properties: { main: OPT_STR, fallback: OPT_STR } },
+    subscriptions: { type: "array", items: { type: "object", required: ["item"], properties: { item: STR, source: STR, note: OPT_STR } } },
+  },
+};
+const RULES_SCHEMA = {
+  type: "object",
+  required: ["rules"],
+  properties: {
     rules: { type: "array", items: { type: "object", required: ["kind", "quote"], properties: {
       kind: STR, who: OPT_STR, days: STRS, slots: STRS, items: STRS, to: OPT_STR, per_meal: { type: ["number", "null"] }, per_week: { type: ["number", "null"] },
       note: OPT_STR, quote: STR } } },
-    dishes: { type: "array", items: { type: "object", required: ["name", "slots"], properties: { name: STR, slots: STRS, for: STRS } } },
-    groceryApps: { type: "object", properties: { main: OPT_STR, fallback: OPT_STR } },
-    subscriptions: { type: "array", items: { type: "object", required: ["item", "source"], properties: { item: STR, source: STR, note: OPT_STR } } },
     unplaced: { type: "array", items: { type: "object", required: ["text"], properties: { text: STR, quote: OPT_STR } } },
   },
 };
+/** A dish is a short row, [name, meals, who]: the longest list in the answer, so the fewest tokens per item. */
+const DISHES_SCHEMA = { type: "object", required: ["dishes"], properties: { dishes: { type: "array", items: { type: "array", items: STR } } } };
 
 const CATEGORY_LIST = Object.keys(CATEGORIES).map((c) => `@${c}`).join(", ");
 
-/** The prompt. Its example family is not any test family's: an example copied into the answer is caught by the quote check. */
-export const SETUP_SYSTEM = `You read an Indian family's setup chat with their meal planner and write down their household for the planner, as JSON. Code saves what you write; you only read.
+const COMMON = `You read an Indian family's setup chat with their meal planner and write down ONE PART of their household for the planner, as JSON. Code saves what you write; you only read. Other readers write the other parts at the same time: write only the part asked for here.
 
 You get:
 - household: facts the family gave earlier (people, help at home, routines). Use them, but the transcript wins where it says something else. household.speaker is the name of the person writing the A lines: their "me", "I", "my" is that person.
 - transcript: the planner's questions (Q:) and the family's replies (A1:, A2:, ... numbered), in order. Only A lines and household facts are the family's words. A Q: line is the app talking: never take a rule, a dish or a time from a question's examples or from the app's own read-back of what it understood.
 
 Read it all first, then write. A later reply wins over an earlier one: "actually Sunita comes at 8" changes the cook's morning time to 08:00 even when the household facts say 7am; "almost right, X not Y" changes only X. "Looks right" / "no changes" adds nothing. "later", "busy", off-topic lines (reminders, school, jokes) add nothing.
+Answer at once, compactly: no prose, no explanation, and leave out any field that is empty or null.`;
 
-Write:
-- people: everyone who eats at home: name exactly as the family writes it, group child (under 18) | adult | elder (60 and over, or a grandparent), age when said, relationship to the speaker when said or clear ("my father": "father"; "my wife": "wife").
-- cook: the paid cook, or null. days as Mon..Sun. visits: each time they come, "HH:MM" 24-hour, with the meals (Breakfast, Lunch, Dinner) that visit makes ("breakfast and lunch in the morning, dinner at 6pm" is two visits; times ["7am", "6pm"] with meals Breakfast, Lunch, Dinner is the same two visits). A corrected time ("actually she comes at 7:30") changes only the visit it is nearest to; the other visit stays. timeLimit: their time limit in the family's words. newRecipes: open (tries new recipes from reels, videos) or set_menu (sticks to familiar dishes, even if one new dish now and then). note: anything else about the cook (what they will not cook, what they are not good at).
-- Every day of the week is planned and cooked at home: a day the cook does not come, the family cooks. Only a meal the family says is eaten out or ordered in is not cooked (orderIn). Never leave a day or a meal out because the cook is off or because the family did not mention it.
-- homeCook: on days the cook does not come, who of the family cooks which meals ({ day, slots, by, note }), when said.
-- slots: only meals the family names besides Breakfast, Lunch and Dinner: a child's school tiffin ("<child>'s tiffin", for that child; a tiffin named anywhere, even only in a rule, is a slot), an evening snack ("Evening snack"). Food eaten at home after school is that child's Lunch, not a slot. days: the weekdays it is eaten (empty: every day). for: only the people the family names for it, by name; a meal said without names is everyone's: for empty, even when it was said in an answer about the adults or the children. quote: the family's words that name it, from an A line (as for rules); a meal the family never named is no slot.
-- orderIn: every regular meal not cooked at home because it is ordered in or eaten out: { day, slot, note: "eaten out" or "ordered from Swiggy" }. "Sunday lunch we eat out" is orderIn { Sun, Lunch, "eaten out" } only: Sunday's other meals are still cooked. "We don't cook on Sunday, we go to my parents'" is all three Sunday meals.
-- rules: the family's food rules, one per thing they said: what must or must not be eaten. What someone usually eats ("milk every morning", "curd rice when he's tired") is no rule: it is a dish, or nothing. kind is one of:
-  veg (vegetarian home) | no_eggs ("vegetarian, no eggs" is two rules: veg and no_eggs) | avoid { items, who?, days?, slots? } (no dish with these) | swap { who, items, to } (who has "to" in place of items, e.g. less rice: items ["@white_rice"], to "millets or a small portion of rice") | only { who, items, slots? } | require { slots, items } | cap { per_meal, slots? } (at most per_meal dishes to cook in a meal: a cook's time limit) or cap { items, per_week } | fasting { who, days, slots } (who eats nothing at those meals on those days: "fasts Monday till evening" is slots ["Breakfast","Lunch"]) | other { note } (anything else: "less salt", "less spicy for the child", a cook's limit with no number).
-  items are plain foods ("mushroom", "rice") or categories: ${CATEGORY_LIST}. "No sugar" is avoid ["@sweet"]; "no nuts" is avoid ["@nuts"]; "no rice at night" is avoid ["@white_rice"] at slots ["Dinner"].
-  who is one person's name from people; leave it out for the whole house. days are Mon..Sun, left out for every day; slots are meal names (Breakfast, Lunch, Dinner, or a slot you wrote), left out for every meal.
-  quote: the family's exact words this rule comes from, copied character for character from one A line or household fact (a short span, e.g. "no mushrooms"). Never from a Q: line, never your own words: when the app read a rule back ("Nani eats no sugar, jaggery") and the family said it was right, quote the A line where the family first said it ("no sugar"). No quote, no rule.
-- dishes: the family's own dishes from their answers about the past week: { name, slots, for }. for: the people it is theirs when only some eat it ("Father had ragi dosa" is for the father by name); empty when everyone at that meal eats it. A child's tiffin dishes go in the tiffin slot. Plain names ("Idli", "Rajma chawal"); no drinks.
-- groceryApps: main and fallback, each one of zepto, swiggy-instamart, zomato-blinkit, bigbasket, amazon, or null.
-- subscriptions: what comes on a subscription: { item, source, note } ("milk", "Country Delight", "1 litre every morning").
-- unplaced: anything about food, meals or groceries the family said that fits nowhere above: { text, quote }.
-
-Example (another family). household: people Arjun (adult), Divya (adult, wife), Tara (8), Lalitha (72, Divya's mother); help: cook Sunita Mon-Fri 8am.
+/** The example family, for every part. It is not any test family: an example copied into the answer is caught by the quote check. */
+const EXAMPLE = `Example (another family). household: people Arjun (adult), Divya (adult, wife), Tara (8), Lalitha (72, Divya's mother); help: cook Sunita Mon-Fri 8am.
 Q: Sunita cooks Breakfast and Lunch at 8am. Is that right? A1: yes, and she comes back at 5 for dinner
 Q: Is food cooked at home on weekends? A2: Saturday Divya cooks everything. Sunday we go to my in-laws for lunch, dinner we order from Zomato. We all have a snack at 5
 A3: oh and Sunita comes at 8:30 actually
 Q: Any food rules? A4: we're eggetarian, eggs fine but no meat. Amma doesn't eat onion or garlic, and she fasts on Saturdays till sunset.
-Q: Tara's tiffin? A5: Mon-Fri, sandwiches or poha, school says no peanuts
-gives cook { name "Sunita", days Mon..Fri, visits [{ at "08:30", meals [Breakfast, Lunch] }, { at "17:00", meals [Dinner] }] }, homeCook [{ day Sat, slots [Breakfast, Lunch, Dinner], by "Divya" }], orderIn [{ Sun, Lunch, "eaten out" }, { Sun, Dinner, "ordered from Zomato" }] (Sunday breakfast is still cooked at home: nobody said otherwise), slots [{ "Tara's tiffin", Mon..Fri, ["Tara"] }, { "Evening snack", [], [] (no names: everyone) }], rules [{ egg, quote "eggs fine but no meat" }, { avoid, who "Lalitha", items ["onion","garlic"], quote "doesn't eat onion or garlic" }, { fasting, who "Lalitha", days [Sat], slots [Breakfast, Lunch], quote "fasts on Saturdays till sunset" }, { avoid, items ["@peanut"], slots ["Tara's tiffin"], quote "no peanuts" }], dishes [{ Sandwich, ["Tara's tiffin"] }, { Poha, ["Tara's tiffin"] }].
-That family is only an example: write what THIS family said, nothing from the example.`;
+Q: Tara's tiffin? A5: Mon-Fri, sandwiches or poha, school says no peanuts. Divya has ragi malt for breakfast
+Q: Which grocery app? A6: Blinkit. Milk comes from Country Delight every morning`;
+const NOT_THE_EXAMPLE = "That family is only an example: write what THIS family said, nothing from the example.";
+
+const HOME_PART = `Write this part: who eats at home, the cook, who cooks when the cook does not come, extra meals, meals ordered in, shopping.
+- people: everyone who eats at home: name exactly as the family writes it, group child (under 18) | adult | elder (60 and over, or a grandparent), age when said, relationship to the speaker when said or clear ("my father": "father"; "my wife": "wife").
+- cook: the paid cook, or null. days as Mon..Sun. visits: each time they come, "HH:MM" 24-hour, with the meals (Breakfast, Lunch, Dinner) that visit makes ("breakfast and lunch in the morning, dinner at 6pm" is two visits; times ["7am", "6pm"] with meals Breakfast, Lunch, Dinner is the same two visits). A corrected time ("actually she comes at 7:30") changes only the visit it is nearest to; the other visit stays. timeLimit: their time limit in the family's words. newRecipes: open (tries new recipes from reels, videos) or set_menu (sticks to familiar dishes, even if one new dish now and then). note: anything else about the cook (what they will not cook, what they are not good at).
+- Every day of the week is planned and cooked at home: a day the cook does not come, the family cooks. Only a meal the family says is eaten out or ordered in is not cooked (orderIn). Never leave a day or a meal out because the cook is off or because the family did not mention it.
+- homeCook: on days the cook does not come, who of the family cooks which meals ({ day, slots, by, note }), when said.
+- slots: only meals the family names besides Breakfast, Lunch and Dinner: a child's school tiffin ("<child>'s tiffin", for that child; a tiffin named anywhere, even only in a rule, is a slot), an evening snack ("Evening snack"). Food eaten at home after school is that child's Lunch, not a slot. days: the weekdays it is eaten (empty: every day). for: the people the family names for it, by name ("Asha and Ravi have a snack at 5": for ["Asha", "Ravi"]); a meal said without names is everyone's ("we all have a snack"): for empty, even when it was said in an answer about the adults or the children. quote: the family's words that name it, copied from an A line; a meal the family never named is no slot.
+- orderIn: every regular meal not cooked at home because it is ordered in or eaten out: { day, slot, note: "eaten out" or "ordered from Swiggy" }. "Sunday lunch we eat out" is orderIn { Sun, Lunch, "eaten out" } only: Sunday's other meals are still cooked. "We don't cook on Sunday, we go to my parents'" is all three Sunday meals.
+- groceryApps: main and fallback, each one of zepto, swiggy-instamart, zomato-blinkit, bigbasket, amazon, or null.
+- subscriptions: what comes on a subscription: { item, source, note } ("milk", "Country Delight", "1 litre every morning").
+Food rules and dishes are not this part: other readers write them.`;
+const HOME_EXAMPLE = `gives people [{ Arjun, adult }, { Divya, adult, wife }, { Tara, child, 8 }, { Lalitha, elder, 72, mother-in-law }], cook { name "Sunita", days Mon..Fri, visits [{ at "08:30", meals [Breakfast, Lunch] }, { at "17:00", meals [Dinner] }] }, homeCook [{ day Sat, slots [Breakfast, Lunch, Dinner], by "Divya" }], orderIn [{ Sun, Lunch, "eaten out" }, { Sun, Dinner, "ordered from Zomato" }] (Sunday breakfast is still cooked at home: nobody said otherwise), slots [{ "Tara's tiffin", Mon..Fri, ["Tara"], quote "Tara's tiffin" }, { "Evening snack", quote "a snack at 5" (no names: everyone, for left out) }], groceryApps { main zomato-blinkit }, subscriptions [{ milk, Country Delight, every morning }].`;
+
+const RULES_PART = `Write this part: the family's food rules.
+- rules: the family's food rules, one per thing they said: what must or must not be eaten. What someone usually eats ("milk every morning", "curd rice when he's tired") is no rule: it is a dish, or nothing. kind is one of:
+  veg (vegetarian home) | no_eggs ("vegetarian, no eggs" is two rules: veg and no_eggs) | avoid { items, who?, days?, slots? } (no dish with these) | swap { who, items, to } (who has "to" in place of items, e.g. less rice: items ["@white_rice"], to "millets or a small portion of rice") | only { who, items, slots? } | require { slots, items } | cap { per_meal, slots? } (at most per_meal dishes to cook in a meal: a cook's time limit) or cap { items, per_week } | fasting { who, days, slots } (who eats nothing at those meals on those days: "fasts Monday till evening" is slots ["Breakfast","Lunch"]) | other { note } (anything else: "less salt", "less spicy for the child", a cook's limit with no number).
+  items are plain foods ("mushroom", "rice") or categories: ${CATEGORY_LIST}. "No sugar" is avoid ["@sweet"]; "no nuts" is avoid ["@nuts"]; "no rice at night" is avoid ["@white_rice"] at slots ["Dinner"].
+  who is one person's name as the family writes it, someone who eats at home; leave it out for the whole house. What the cook or other help will not cook is no rule here: another reader writes it with the cook. days are Mon..Sun, left out for every day; slots are meal names (Breakfast, Lunch, Dinner, a child's school tiffin as "<child>'s tiffin", an evening snack as "Evening snack"), left out for every meal.
+  quote: the family's exact words this rule comes from, copied character for character from one A line or household fact (a short span, e.g. "no mushrooms"). Never from a Q: line, never your own words: when the app read a rule back ("Nani eats no sugar, jaggery") and the family said it was right, quote the A line where the family first said it ("no sugar"). No quote, no rule.
+- unplaced: a food wish of the family's that is no rule and is not about who eats, the cook, meal times, dishes, shopping apps or subscriptions (other readers take those): { text, quote }. Usually none.`;
+const RULES_EXAMPLE = `gives rules [{ egg, quote "eggs fine but no meat" }, { avoid, who "Lalitha", items ["onion","garlic"], quote "doesn't eat onion or garlic" }, { fasting, who "Lalitha", days [Sat], slots [Breakfast, Lunch], quote "fasts on Saturdays till sunset" }, { avoid, items ["@peanut"], slots ["Tara's tiffin"], quote "no peanuts" }].`;
+
+const DISHES_PART = `Write this part: the family's own dishes, from their answers (the past week's meals, a child's tiffin, what someone has for a meal). No drinks (tea, coffee, milk, juice).
+- dishes: each dish as a row [name, meals, who]:
+  name: plain ("Idli", "Rajma chawal").
+  meals: the meal it is eaten at: Breakfast, Lunch, Dinner, a child's school tiffin as "<child>'s tiffin", an evening snack as "Evening snack"; two meals as "Breakfast, Dinner".
+  who: the people it is theirs, by name, when only some eat it ("Father had ragi dosa": the father's name; two as "Asha, Ravi"); "" when everyone at that meal eats it.`;
+const DISHES_EXAMPLE = `gives dishes [["Sandwich", "Tara's tiffin", ""], ["Poha", "Tara's tiffin", ""], ["Ragi malt", "Breakfast", "Divya"]] (no milk: a drink).`;
+
+const systemOf = (part: string, example: string) => `${COMMON}\n\n${part}\n\n${EXAMPLE}\n${example}\n${NOT_THE_EXAMPLE}`;
+
+/** The three readers. `need`: the setup fails without this part; a part not needed may come back empty (said, not saved). */
+export const SETUP_PARTS = [
+  { id: "home", purpose: "setup: the home", system: systemOf(HOME_PART, HOME_EXAMPLE), schema: HOME_SCHEMA, maxTokens: 6000, need: true },
+  { id: "rules", purpose: "setup: the food rules", system: systemOf(RULES_PART, RULES_EXAMPLE), schema: RULES_SCHEMA, maxTokens: 6000, need: true },
+  { id: "dishes", purpose: "setup: the dishes", system: systemOf(DISHES_PART, DISHES_EXAMPLE), schema: DISHES_SCHEMA, maxTokens: 4000, need: false },
+] as const;
+/** Every reader's prompt, for the checks on model-facing text. */
+export const SETUP_SYSTEM = SETUP_PARTS.map((p) => p.system).join("\n\n");
+
+/** The whole read's wall clock, both tries of every part included: under Flock's wait for the op (runner/setup-apply.ts,
+ *  3 min), so a slow read is said as failed by the app, never cut off by Flock. A part's second try starts only with at
+ *  least RETRY_FLOOR_MS left. */
+export const SETUP_BUDGET_MS = 150_000;
+const RETRY_FLOOR_MS = 30_000;
 
 // ── Reading the model's answer leniently ──
 
@@ -145,6 +187,14 @@ const kindOf = (v: unknown): string => {
   return (RULE_KINDS as readonly string[]).includes(kind) ? kind : "other";
 };
 
+/** A list written as one string ("Breakfast, Dinner"; "" is none) or as a list. */
+const listOf = (v: unknown): string[] => (typeof v === "string" ? v.split(/\s*[,;/|]\s*|\s+and\s+/) : strs(v)).map(str).filter(Boolean);
+/** A dish as its row [name, meals, who], or as an object { name, slots, for }. */
+function dishOf(d: unknown): Profile["dishes"][number] | null {
+  const [name, slots, who] = Array.isArray(d) ? d : isObject(d) ? [d.name, d.slots ?? d.meals, d.for ?? d.who] : [];
+  return str(name) ? { name: str(name), slots: listOf(slots), for: listOf(who) } : null;
+}
+
 /** The model's JSON as a profile: every list a list, every field its type, nothing thrown away for being a little off. */
 export function profileOf(json: unknown): Profile {
   const j = isObject(json) ? json : {};
@@ -167,7 +217,7 @@ export function profileOf(json: unknown): Profile {
       ...(strs(r.slots).length ? { slots: strs(r.slots) } : {}), ...(strs(r.items).length ? { items: strs(r.items) } : {}), ...opt("to", r.to),
       ...(num(r.per_meal) !== undefined ? { per_meal: num(r.per_meal) } : {}), ...(num(r.per_week) !== undefined ? { per_week: num(r.per_week) } : {}),
       ...opt("note", r.note), quote: str(r.quote) })),
-    dishes: arr(j.dishes).filter(isObject).filter((d) => str(d.name)).map((d) => ({ name: str(d.name), slots: strs(d.slots), for: strs(d.for) })),
+    dishes: arr(j.dishes).map(dishOf).filter((d): d is Profile["dishes"][number] => !!d),
     groceryApps: { main: isObject(j.groceryApps) ? str(j.groceryApps.main) || null : null, fallback: isObject(j.groceryApps) ? str(j.groceryApps.fallback) || null : null },
     subscriptions: arr(j.subscriptions).filter(isObject).filter((s) => str(s.item)).map((s) => ({ item: str(s.item), source: str(s.source), ...opt("note", s.note) })),
     unplaced: arr(j.unplaced).filter(isObject).filter((u) => str(u.text)).map((u) => ({ text: str(u.text), ...opt("quote", u.quote) })),
@@ -229,6 +279,16 @@ export type SetupResult =
   | { ok: true; said: string; noted: string[]; dropped: string[]; rules: (SetupRule & { saved_as: string })[]; profile: Profile; model: string }
   | { ok: false; reason: string; say: string };
 
+const RETRY_CODES: string[] = ["invalid_output", "unavailable", "timeout"];
+/** A model call that answers by `ms` or is a timeout. The call itself is not stopped (the SDK takes no signal): its answer,
+ *  if it comes, is not waited for. */
+async function withDeadline(call: Promise<ModelResult>, ms: number): Promise<ModelResult> {
+  if (ms <= 0) return { ok: false, code: "timeout", message: "no time left for the setup" };
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<ModelResult>((resolve) => { timer = setTimeout(() => resolve({ ok: false, code: "timeout", message: `no answer in ${Math.round(ms / 1000)} s` }), ms); });
+  try { return await Promise.race([call, late]); } finally { clearTimeout(timer); }
+}
+
 /** One write through the app's own route: its answer, or its refusal's reason. */
 type Post = (path: string, body: unknown) => Promise<{ ok: true; body: any } | { ok: false; reason: string }>;
 
@@ -244,21 +304,36 @@ const EVERYONE = /^(everyone|everybody|all|the house|the family|whole family|fam
 
 /** Read the setup and write it. `post` writes through the app's own routes (validation, change events and the writer's stamp
  *  stay theirs). Never refuses the whole: what does not fit is in `noted` and what was not said is in `dropped`. */
-export async function applySetup(deps: { db: Db; model: ModelCall; post: Post; household: unknown; transcript: string[]; log?: (l: string) => void }): Promise<SetupResult> {
+export async function applySetup(deps: { db: Db; model: ModelCall; post: Post; household: unknown; transcript: string[]; log?: (l: string) => void; budgetMs?: number }): Promise<SetupResult> {
   const log = deps.log ?? ((l: string) => console.log(`[planner] apply_setup: ${l}`));
   // The family's replies numbered (A1:, A2:, ...): the model quotes them, not the questions.
   let n = 0;
   const numbered = deps.transcript.map((l) => (/^A\d*:/i.test(l) ? `A${++n}: ${l.replace(/^A\d*:\s*/i, "")}` : l));
   const user = JSON.stringify({ household: deps.household ?? {}, transcript: numbered.join("\n") });
-  const t0 = Date.now();
-  const ask = () => deps.model({ tier: "balanced", purpose: "setup: read the interview", system: SETUP_SYSTEM, user, schema: SETUP_SCHEMA, maxTokens: 8000 });
-  let r: ModelResult = await ask();
-  // The setup is asked once per family: an answer that did not fit, or a model that did not answer, is asked once more.
-  if (!r.ok && (r.code === "invalid_output" || r.code === "unavailable" || r.code === "timeout")) { log(`model ${r.code}: ${r.message.slice(0, 300)}; asking once more`); r = await ask(); }
-  log(`model ${r.ok ? `ok (${r.model})` : `${r.code}: ${r.message.slice(0, 300)}`} in ${Date.now() - t0} ms`);
-  if (!r.ok) return { ok: false, reason: r.code, say: "I couldn't save the setup just now. Tell me \"save my setup\" in a little while; nothing you told me is lost." };
-  const p = profileOf(r.json);
+  // The three readers at once, each tried once more on its own when it did not answer or did not fit, while time is left.
+  const t0 = Date.now(), until = t0 + (deps.budgetMs ?? SETUP_BUDGET_MS);
+  const results = await Promise.all(SETUP_PARTS.map(async (part): Promise<ModelResult> => {
+    const ask = () => withDeadline(deps.model({ tier: "balanced", purpose: part.purpose, system: part.system, user, schema: part.schema, maxTokens: part.maxTokens }), until - Date.now());
+    let r = await ask();
+    if (!r.ok && RETRY_CODES.includes(r.code) && until - Date.now() >= RETRY_FLOOR_MS) {
+      log(`${part.id}: model ${r.code}: ${r.message.slice(0, 300)}; asking once more`);
+      r = await ask();
+    }
+    log(`${part.id}: model ${r.ok ? `ok (${r.model})` : `${r.code}: ${r.message.slice(0, 300)}`} in ${Date.now() - t0} ms`);
+    return r;
+  }));
+  const failed = SETUP_PARTS.map((part, i) => ({ part, r: results[i] })).filter((x) => x.part.need && !x.r.ok);
+  if (failed.length) {
+    const r = failed[0].r as Extract<ModelResult, { ok: false }>;
+    return { ok: false, reason: r.code, say: "I couldn't save the setup just now. Tell me \"save my setup\" in a little while; nothing you told me is lost." };
+  }
+  const jsonOf = (id: string) => { const r = results[SETUP_PARTS.findIndex((x) => x.id === id)]; return r.ok && isObject(r.json) ? r.json : null; };
+  const home = jsonOf("home") ?? {}, rulesRead = jsonOf("rules") ?? {}, dishesRead = jsonOf("dishes");
+  const model = (results[0] as Extract<ModelResult, { ok: true }>).model;
+  const p = profileOf({ ...home, rules: rulesRead.rules, unplaced: rulesRead.unplaced, dishes: dishesRead?.dishes ?? [] });
   const noted: string[] = [], dropped: string[] = [];
+  // The dishes are the one part the setup goes on without: the plan then starts from common dishes, and that is said.
+  if (!dishesRead) noted.push("your dishes could not be read just now: tell me a few you like and I'll add them");
   const said = familyLines(deps.transcript, deps.household);
 
   // 1. People: the model's, then anyone the household facts name that it left out. A group from the age when none fits.
@@ -478,7 +553,7 @@ export async function applySetup(deps: { db: Db; model: ModelCall; post: Post; h
   for (const u of p.unplaced) noted.push(u.text);
 
   const back = readBack(deps.db, p);
-  return { ok: true, said: noted.length ? `${back}\nNoted, not checked by the planner:\n${noted.map((n) => `- ${n}`).join("\n")}` : back, noted, dropped, rules: savedRules, profile: p, model: r.model };
+  return { ok: true, said: noted.length ? `${back}\nNoted, not checked by the planner:\n${noted.map((n) => `- ${n}`).join("\n")}` : back, noted, dropped, rules: savedRules, profile: p, model };
 }
 
 /** The note a day-off cooking entry is saved with: the menu reads it, and the read-back finds it by it. */
@@ -582,7 +657,7 @@ export function readBack(db: Db, p: Profile): string {
 }
 
 /** apply_setup { household, transcript }: answers { ok, said, noted, dropped, rules, profile } or { ok: false, reason, say }. */
-export function mountSetupRoute(hono: Hono<any>, db: Db, _emit: Emit, opts: { model: ModelCall }) {
+export function mountSetupRoute(hono: Hono<any>, db: Db, _emit: Emit, opts: { model: ModelCall; budgetMs?: number }) {
   const write = writeRoutes(hono);
   write("/api/family/setup", async (b, _by, c) => {
     const transcript = transcriptLines(b.transcript);
@@ -594,6 +669,6 @@ export function mountSetupRoute(hono: Hono<any>, db: Db, _emit: Emit, opts: { mo
       const out = await res.json().catch(() => null) as any;
       return res.ok ? { ok: true, body: out } : { ok: false, reason: out?.reason ?? `refused (${res.status})` };
     };
-    return { body: await applySetup({ db, model: opts.model, post, household: b.household, transcript }) };
+    return { body: await applySetup({ db, model: opts.model, post, household: b.household, transcript, budgetMs: opts.budgetMs }) };
   });
 }

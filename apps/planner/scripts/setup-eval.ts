@@ -1,10 +1,11 @@
 // Offline test of apply_setup on past simulated interviews: for each run, a fresh planner database, apply_setup with that
-// run's household facts and its meals transcript, then make_plan for one week, graded in code. The model is the Flock
-// balanced tier's upstream (Gemini 3.5 Flash Lite) reached through OpenRouter with Flock's app-model contract (schema in the
-// system prompt, temperature 0.4, one retry on an answer that does not fit the schema); the fast tier's (Gemini 3.1 Flash
-// Lite) for the plan's ingredients.
+// run's household facts and its meals transcript, then make_plan for one week, graded in code. The model is a Flock tier's
+// upstream reached through OpenRouter with Flock's app-model contract (schema in the system prompt, temperature 0.4, one
+// retry on an answer that does not fit the schema). The live gateway's flock-balanced is deepseek/deepseek-v4-flash (sim
+// fws.log, 23 Nov): pass it with --balanced and --fast. --no-think sends reasoning { enabled: false } (a gateway route
+// set to reasoning "off"); without it the model thinks as it likes (a route with no reasoning setting).
 //
-//   bun scripts/setup-eval.ts --runs <dir,dir,...> [--repeat 3] [--week 2026-11-30] [--out <dir>]
+//   bun scripts/setup-eval.ts --runs <dir,dir,...> [--repeat 3] [--week 2026-11-30] [--out <dir>] [--balanced <id>] [--fast <id>] [--no-think]
 import { readFileSync, mkdirSync, writeFileSync, mkdtempSync, rmSync } from "fs";
 import { join } from "path";
 import { homedir, tmpdir } from "os";
@@ -16,6 +17,7 @@ const RUNS = (arg("runs") ?? "").split(",").filter(Boolean);
 const REPEAT = Number(arg("repeat") ?? 3);
 const WEEK = arg("week") ?? "2026-11-30";
 const OUT = arg("out") ?? join(tmpdir(), `setup-eval-${Date.now()}`);
+const NO_THINK = process.argv.includes("--no-think");
 const UPSTREAM = { balanced: arg("balanced") ?? "google/gemini-3.5-flash-lite", fast: arg("fast") ?? "google/gemini-3.1-flash-lite" };
 mkdirSync(OUT, { recursive: true });
 
@@ -28,12 +30,22 @@ const KEY = (() => {
   return m[1].trim().replace(/^["']|["']$/g, "");
 })();
 
+/** flock-app/server/src/app-model.ts jsonIn. */
 function jsonIn(text: string): unknown {
-  const t = text.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
-  try { return JSON.parse(t); } catch { /* look inside */ }
-  const a = t.indexOf("{"), b = t.lastIndexOf("}");
-  if (a >= 0 && b > a) return JSON.parse(t.slice(a, b + 1));
-  throw new Error("no JSON in the output");
+  const t = text.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
+  const fence = /```(?:json)?[ \t]*\n?([\s\S]*?)```/i.exec(t);
+  for (const x of [t, ...(fence ? [fence[1].trim()] : [])]) {
+    try { return JSON.parse(x); } catch { /* look inside */ }
+  }
+  for (const body of fence ? [fence[1], t] : [t]) {
+    for (const [open, close] of [["{", "}"], ["[", "]"]] as const) {
+      const b = body.lastIndexOf(close);
+      for (let a = body.indexOf(open), n = 0; a >= 0 && a < b && n < 20; a = body.indexOf(open, a + 1), n++) {
+        try { return JSON.parse(body.slice(a, b + 1)); } catch { /* the next opening */ }
+      }
+    }
+  }
+  throw new Error(`no JSON in the output (len=${text.length} end=${JSON.stringify(text.slice(-80))})`);
 }
 const isObj = (v: unknown): v is Record<string, any> => !!v && typeof v === "object" && !Array.isArray(v);
 const typeOf = (v: unknown) => (v === null ? "null" : Array.isArray(v) ? "array" : typeof v === "number" ? (Number.isInteger(v) ? "integer" : "number") : typeof v);
@@ -55,18 +67,20 @@ function schemaProblems(s: any, v: unknown, path = "$", out: string[] = []): str
   return out;
 }
 
-const calls: { purpose: string; tier: string; ms: number; ok: boolean; attempts: number }[] = [];
-async function chat(model: string, system: string, user: string, maxTokens: number): Promise<string> {
+const calls: { purpose: string; tier: string; ms: number; ok: boolean; attempts: number; out: number; think: number }[] = [];
+async function chat(model: string, system: string, user: string, maxTokens: number, usage: { out: number; think: number }): Promise<string> {
   let last = "";
   for (let i = 0; i < 4; i++) {
     try {
       const r = await fetch("https://openrouter.ai/api/v1/chat/completions", {
         method: "POST", headers: { authorization: `Bearer ${KEY}`, "content-type": "application/json" },
-        body: JSON.stringify({ model, max_tokens: maxTokens, temperature: 0.4, messages: [{ role: "system", content: system }, { role: "user", content: user }] }),
+        body: JSON.stringify({ model, max_tokens: maxTokens, temperature: 0.4, messages: [{ role: "system", content: system }, { role: "user", content: user }],
+          usage: { include: true }, ...(NO_THINK ? { reasoning: { enabled: false } } : {}) }),
         signal: AbortSignal.timeout(390_000),
       });
       const j: any = await r.json();
       const content = j?.choices?.[0]?.message?.content;
+      usage.out += j?.usage?.completion_tokens ?? 0; usage.think += j?.usage?.completion_tokens_details?.reasoning_tokens ?? 0;
       if (r.ok && typeof content === "string" && content.trim()) return content;
       last = JSON.stringify(j?.error ?? j).slice(0, 300);
     } catch (e) { last = String(e); }
@@ -74,19 +88,21 @@ async function chat(model: string, system: string, user: string, maxTokens: numb
   }
   throw new Error(last);
 }
-async function model(req: ModelRequest): Promise<ModelResult> {
+async function model(req: ModelRequest, sink?: typeof calls): Promise<ModelResult> {
   const t0 = Date.now(), upstream = UPSTREAM[req.tier];
   const system = req.schema ? `${req.system}\n\nOutput ONLY one JSON value matching this JSON Schema: no prose, no code fence.\n${JSON.stringify(req.schema)}` : req.system;
   let problem = "", attempts = 0;
+  const usage = { out: 0, think: 0 };
   const done = (r: ModelResult) => {
-    calls.push({ purpose: req.purpose ?? "", tier: req.tier, ms: Date.now() - t0, ok: r.ok, attempts });
+    const row = { purpose: req.purpose ?? "", tier: req.tier, ms: Date.now() - t0, ok: r.ok, attempts, ...usage };
+    calls.push(row); sink?.push(row);
     if (!r.ok && req.purpose?.startsWith("setup")) console.log(`[eval] setup call failed: ${r.code} ${r.message.slice(0, 400)}`);
     return r;
   };
   for (let attempt = 0; attempt < (req.schema ? 2 : 1); attempt++) {
     attempts++;
     let text: string;
-    try { text = await chat(upstream, system, attempt === 0 ? req.user : `${req.user}\n\nYour last output could not be used (${problem}). Output only the JSON.`, Math.min(req.maxTokens ?? 4000, 16000)); }
+    try { text = await chat(upstream, system, attempt === 0 ? req.user : `${req.user}\n\nYour last output could not be used (${problem}). Output only the JSON.`, Math.min(req.maxTokens ?? 4000, 16000), usage); }
     catch (e) { return done({ ok: false, code: "unavailable", message: String(e) }); }
     if (!req.schema) return done({ ok: true, text, model: upstream });
     let json: unknown;
@@ -156,7 +172,7 @@ async function runOne(dir: string, rep: number) {
   const dataDir = mkdtempSync(join(tmpdir(), "setup-eval-db-"));
   const before = calls.length;
   const mine: typeof calls = [];
-  const myModel = async (req: ModelRequest) => { const r = await model(req); mine.push(calls[calls.length - 1]); return r; };
+  const myModel = (req: ModelRequest) => model(req, mine);
   void before;
   const k = await boot({ dataDir, model: myModel });
   const t0 = Date.now();
@@ -249,10 +265,13 @@ async function runOne(dir: string, rep: number) {
   // Only a family that said no eggs or no mushrooms is checked for them (seed 13 said nothing: an omelette is fine there).
   c.plan_no_egg_mushroom = !ex.eggs && !ex.mushroom ? null : plan.ok ? bad.length === 0 : false;
   if (bad.length) notes.push(`egg/mushroom dishes: ${bad.map((d) => d.name).join(", ")}`);
+  // The setup's readers run at once: a part's time is its calls' (a retry follows its first try), the setup's the slowest part.
   const sc = mine.filter((x) => x.purpose.startsWith("setup"));
-  const setupCall = sc.length ? { ms: sc.reduce((a, x) => a + x.ms, 0), attempts: sc.reduce((a, x) => a + x.attempts, 0) } : undefined;
+  const parts = [...new Set(sc.map((x) => x.purpose))].map((purpose) => { const xs = sc.filter((x) => x.purpose === purpose);
+    return { part: purpose.replace(/^setup: (the )?/, ""), ms: xs.reduce((a, x) => a + x.ms, 0), attempts: xs.reduce((a, x) => a + x.attempts, 0), out: xs.reduce((a, x) => a + x.out, 0), think: xs.reduce((a, x) => a + x.think, 0), ok: xs.at(-1)!.ok }; });
+  const setupCall = parts.length ? { ms: Math.max(...parts.map((x) => x.ms)), attempts: parts.reduce((a, x) => a + x.attempts, 0) } : undefined;
   rmSync(dataDir, { recursive: true, force: true });
-  const row = { run: name, rep, setup_ms: setupCall?.ms ?? setupMs, setup_attempts: setupCall?.attempts ?? 0, plan_ms: planMs, checks: c, snack: `${snackWho} ${snackDays}`.trim(),
+  const row = { run: name, rep, setup_ms: setupCall?.ms ?? setupMs, setup_wall_ms: setupMs, setup_attempts: setupCall?.attempts ?? 0, parts, plan_ms: planMs, checks: c, snack: `${snackWho} ${snackDays}`.trim(),
     expected_snack: ex.snack, notes, said: setup.said ?? setup.say ?? setup.error, noted: setup.noted ?? [], dropped: setup.dropped ?? [], rules: (setup.rules ?? []).map((r: any) => `${r.saved_as}${r.who ? ` ${r.who}` : ""}${r.items ? ` [${r.items.join(",")}]` : ""}${r.slots ? ` @${r.slots.join(",")}` : ""}${r.days ? ` ${r.days.join(",")}` : ""}${r.per_meal ? ` per_meal=${r.per_meal}` : ""} "${r.quote}"`),
     plan_message: plan.message?.split("\n").slice(0, 3).join(" / "), unmet: plan.unmet ?? [] };
   writeFileSync(join(OUT, `${name}-rep${rep}.json`), JSON.stringify({ ...row, transcript: lines, profile: setup.profile }, null, 1));
@@ -266,7 +285,8 @@ for (let rep = 1; rep <= REPEAT; rep++) {
     results.push(r);
     if (r.error) { console.log(`\n### ${r.run} rep ${rep}: ERROR ${r.error}`); continue; }
     const fails = Object.entries(r.checks).filter(([, v]) => v === false).map(([k]) => k);
-    console.log(`\n### ${r.run} rep ${rep}: ${fails.length ? `FAIL ${fails.join(", ")}` : "ALL PASS"}  setup ${(r.setup_ms / 1000).toFixed(1)}s (attempts ${r.setup_attempts}), plan ${(r.plan_ms / 1000).toFixed(0)}s, snack: ${r.snack} (expected ${r.expected_snack})`);
+    console.log(`\n### ${r.run} rep ${rep}: ${fails.length ? `FAIL ${fails.join(", ")}` : "ALL PASS"}  setup ${(r.setup_ms / 1000).toFixed(1)}s (wall ${(r.setup_wall_ms / 1000).toFixed(1)}s, attempts ${r.setup_attempts}), plan ${(r.plan_ms / 1000).toFixed(0)}s, snack: ${r.snack} (expected ${r.expected_snack})`);
+    console.log(`  parts: ${r.parts.map((x: any) => `${x.part} ${(x.ms / 1000).toFixed(1)}s x${x.attempts} out=${x.out} think=${x.think}${x.ok ? "" : " FAILED"}`).join(" | ")}`);
     for (const n of r.notes) console.log(`  ! ${n}`);
     for (const d of r.dropped) console.log(`  dropped: ${d}`);
     console.log(`  rules: ${r.rules.join(" | ")}`);

@@ -41,24 +41,45 @@ const PROFILE = {
   unplaced: [],
 };
 
-function fake(answer: unknown) {
+type Part = "home" | "rules" | "dishes";
+const partOf = (req: ModelRequest): Part => (/rules/.test(req.purpose ?? "") ? "rules" : /dishes/.test(req.purpose ?? "") ? "dishes" : "home");
+const isResult = (v: unknown): v is ModelResult => !!v && typeof v === "object" && "ok" in (v as object);
+/** A model per reader: each part's slice of `answer` (or `answer` itself when it is a failure); `over` answers a part its own
+ *  way (a result, a JSON value, or a function of the try's number). */
+function fake(answer: unknown, over: Partial<Record<Part, unknown>> = {}) {
   const asked: ModelRequest[] = [];
   const model = async (req: ModelRequest): Promise<ModelResult> => {
     asked.push(req);
-    return answer && typeof answer === "object" && "ok" in (answer as object) ? answer as ModelResult : { ok: true, json: answer, model: "fake" };
+    const part = partOf(req);
+    let a: unknown = part in over ? over[part] : answer;
+    if (typeof a === "function") a = await a(asked.filter((x) => partOf(x) === part).length);
+    if (isResult(a)) return a;
+    if (!(part in over)) {
+      const { rules, unplaced, dishes, ...home } = a as Record<string, unknown>;
+      a = part === "home" ? home : part === "rules" ? { rules, unplaced } : { dishes };
+    }
+    return { ok: true, json: a, model: "fake" };
   };
-  return { model, asked };
+  const sys = (part: Part) => asked.find((x) => partOf(x) === part)!.system;
+  return { model, asked, sys };
 }
 
 describe("apply_setup: the model reads, code writes", () => {
-  it("one balanced call with the household and the transcript; everything saved in order, the late correction kept", async () => {
+  it("three balanced calls at once, each with the household and the transcript; everything saved in order, the late correction kept", async () => {
     const f = fake(PROFILE);
     const k = await boot({ model: f.model });
     const r = await k.op("apply_setup", { household: HOUSEHOLD, transcript: TRANSCRIPT });
     expect(r.ok).toBe(true);
-    expect(f.asked).toHaveLength(1);
-    expect(f.asked[0].tier).toBe("balanced");
-    expect(JSON.parse(f.asked[0].user).transcript).toContain("actually Rani comes at 8:15");
+    expect(f.asked.map(partOf).sort()).toEqual(["dishes", "home", "rules"]);
+    for (const a of f.asked) {
+      expect(a.tier).toBe("balanced");
+      expect(JSON.parse(a.user).transcript).toContain("actually Rani comes at 8:15");
+      expect(JSON.parse(a.user).household).toEqual(HOUSEHOLD);
+    }
+    // Each reader is asked only its own part.
+    expect(Object.keys((f.asked.find((x) => partOf(x) === "rules")!.schema as any).properties)).toEqual(["rules", "unplaced"]);
+    expect(Object.keys((f.asked.find((x) => partOf(x) === "dishes")!.schema as any).properties)).toEqual(["dishes"]);
+    expect(f.sys("home")).not.toContain("- rules:");
     const fam = (await k.owner("GET", "/api/family")).body;
     // Padma was left out by the model: the household facts bring her, an elder.
     expect(fam.people.map((p: any) => [p.name, p.group])).toEqual([["Kiran", "adult"], ["Nisha", "adult"], ["Ishaan", "child"], ["Padma", "elder"]]);
@@ -98,7 +119,7 @@ describe("apply_setup: the model reads, code writes", () => {
     expect(h.extra_slots[1]).toEqual({ name: "Evening snack" });
     expect(r.said).toContain("Evening snack every day for everyone");
     expect(r.noted.join()).toContain("no names said with it, so it is for everyone");
-    expect(f.asked[0].system).toContain("a meal said without names is everyone's");
+    expect(f.sys("home")).toContain("a meal said without names is everyone's");
   });
 
   // Owner, 23 Nov: every day is planned. A day the cook does not come is cooked by the family, every meal of it; only a meal
@@ -110,8 +131,8 @@ describe("apply_setup: the model reads, code writes", () => {
     const h = (await k.owner("GET", "/api/family")).body.house;
     expect(h.order_in).toEqual([]);
     expect(r.said).toContain("On Saturday the family cooks. On Sunday Nisha cooks.");
-    expect(f.asked[0].system).toContain("Every day of the week is planned");
-    expect(f.asked[0].system).not.toContain("cookingDays");
+    expect(f.sys("home")).toContain("Every day of the week is planned");
+    expect(f.sys("home")).not.toContain("cookingDays");
   });
 
   it("a rule the app cannot take is kept as a note and said; the rules after it are still saved", async () => {
@@ -150,6 +171,66 @@ describe("apply_setup: the model reads, code writes", () => {
     const rules = (await k.owner("GET", "/api/family")).body.house.rules;
     expect(rules.filter((x: any) => x.kind !== "other").map((x: any) => [x.kind, x.who ?? null])).toEqual([["no_eggs", null], ["avoid", "Kiran"], ["avoid", "Nisha"]]);
     expect(r.noted.join("\n")).toContain("Grandpa Joe is not on the Family page");
+  });
+
+  it("dishes come back as short rows [name, meals, who]", async () => {
+    const f = fake(PROFILE, { dishes: { dishes: [["Poha", "Breakfast", ""], ["Sandwich", "Tiffin", "Ishaan"], ["Ragi mudde", "Lunch, Dinner", "Padma"], ["Chai", "Evening snack", ""]] } });
+    const k = await boot({ model: f.model });
+    const r = await k.op("apply_setup", { household: HOUSEHOLD, transcript: TRANSCRIPT });
+    expect(r.ok).toBe(true);
+    const book = k.rows("dish_book").map((d) => [d.name, JSON.parse(d.slots), d.eaten_by ? JSON.parse(d.eaten_by) : null]);
+    expect(book).toContainEqual(["Poha", ["Breakfast"], null]);
+    expect(book).toContainEqual(["Sandwich", ["Ishaan's tiffin"], ["Ishaan"]]);
+    expect(book).toContainEqual(["Ragi mudde", ["Lunch", "Dinner"], ["Padma"]]);
+  });
+
+  it("the dishes reader fails: the rest is saved and the missing dishes are said", async () => {
+    const f = fake(PROFILE, { dishes: { ok: false, code: "invalid_output", message: "no JSON in the output" } });
+    const k = await boot({ model: f.model });
+    const r = await k.op("apply_setup", { household: HOUSEHOLD, transcript: TRANSCRIPT });
+    expect(r.ok).toBe(true);
+    // Tried once more on its own; the other readers were asked once.
+    expect(f.asked.map(partOf).sort()).toEqual(["dishes", "dishes", "home", "rules"]);
+    expect(k.rows("dish_book")).toHaveLength(0);
+    expect((await k.owner("GET", "/api/family")).body.house.cook_name).toBe("Rani");
+    expect(r.noted.join()).toContain("dishes could not be read");
+  });
+
+  it("a reader that did not fit is asked once more on its own, and its second answer is used", async () => {
+    const f = fake(PROFILE, { rules: (n: number) => (n === 1 ? { ok: false, code: "invalid_output", message: "no JSON" } : { rules: PROFILE.rules, unplaced: [] }) });
+    const k = await boot({ model: f.model });
+    const r = await k.op("apply_setup", { household: HOUSEHOLD, transcript: TRANSCRIPT });
+    expect(r.ok).toBe(true);
+    expect(f.asked.filter((x) => partOf(x) === "rules")).toHaveLength(2);
+    expect(f.asked.filter((x) => partOf(x) === "home")).toHaveLength(1);
+    expect((await k.owner("GET", "/api/family")).body.house.rules.some((x: any) => x.kind === "veg")).toBe(true);
+  });
+
+  for (const part of ["home", "rules"] as const) {
+    it(`the ${part} reader fails twice: nothing saved, a plain line to say`, async () => {
+      const f = fake(PROFILE, { [part]: { ok: false, code: "unavailable", message: "down" } });
+      const k = await boot({ model: f.model });
+      const r = await k.op("apply_setup", { household: HOUSEHOLD, transcript: TRANSCRIPT });
+      expect(r.ok).toBe(false);
+      expect(r.reason).toBe("unavailable");
+      expect(f.asked.filter((x) => partOf(x) === part)).toHaveLength(2);
+      expect(k.rows("people")).toHaveLength(0);
+    });
+  }
+
+  it("a reader that does not answer within the setup's time is a timeout, not a wait without end", async () => {
+    const never = () => new Promise<ModelResult>(() => {});
+    const k1 = await boot({ model: fake(PROFILE, { dishes: never }).model, setupBudgetMs: 200 });
+    const r1 = await k1.op("apply_setup", { household: HOUSEHOLD, transcript: TRANSCRIPT });
+    expect(r1.ok).toBe(true);
+    expect(r1.noted.join()).toContain("dishes could not be read");
+    const f = fake(PROFILE, { home: never });
+    const k2 = await boot({ model: f.model, setupBudgetMs: 200 });
+    const r2 = await k2.op("apply_setup", { household: HOUSEHOLD, transcript: TRANSCRIPT });
+    expect(r2.ok).toBe(false);
+    expect(r2.reason).toBe("timeout");
+    // No second try with no time left.
+    expect(f.asked.filter((x) => partOf(x) === "home")).toHaveLength(1);
   });
 
   it("the model fails: nothing saved, a plain line to say", async () => {
