@@ -7,6 +7,7 @@
 // at import (same rule as _gmailNav.ts / _threadCache.ts).
 
 import { parsePollResult } from "./_gmailNav";
+import { MARK_FNS, clickMarked } from "./_gmailPress";
 
 export function unreadProbeQuery(): string {
   return "in:unread";
@@ -94,24 +95,27 @@ export interface UnreadDiag {
   probeIds: number;
   wasUnread: boolean;
   markResult?: MarkResult;
-  /** Short (<=300 char) summary of MARK_UNREAD_SCRIPT's `cands` diagnostics, for the live "no
+  /** Short (<=300 char) summary of MARK_UNREAD_ACTIONS's `cands` diagnostics, for the live "no
    *  candidate passes the visibility test" class of bug. Absent when the script never ran or its
    *  result carried no candidate evidence (legacy plain-string result). */
   markCands?: string;
-  /** Which confirmation signal MARK_UNREAD_SCRIPT saw after dispatching the click --
+  /** Which confirmation signal MARK_UNREAD_ACTIONS saw after the click --
    *  "toast" | "nav" | "gone" | "timeout" (see the script's own doc comment). Absent when the
-   *  script never dispatched a click at all (no-control). */
+   *  run never clicked at all (no-control). */
   markConfirm?: string;
-  /** How long (ms) MARK_UNREAD_SCRIPT waited after dispatching the click -- confirmation poll plus
-   *  the fixed 1500ms flush wait. Absent alongside markConfirm when no click was dispatched. */
+  /** How long (ms) MARK_UNREAD_ACTIONS waited after the click -- confirmation poll plus
+   *  the fixed 1500ms flush wait. Absent alongside markConfirm when nothing was clicked. */
   markWaitedMs?: number;
 }
 
 /**
- * In-page, with the thread OPEN: fire real mouse events at Gmail's "Mark as unread" toolbar
- * control. Live-verified 2026-09-24: Gmail's toolbar buttons are divs that ignore a synthetic
- * `.click()` — it leaves the thread read. Dispatching mousedown/mouseup/click MouseEvents is what
- * Gmail's own listeners actually respond to.
+ * Page actions, with the thread OPEN: find Gmail's "Mark as unread" toolbar control, click it
+ * with a REAL click, and confirm. Live-verified 2026-09-24: Gmail's toolbar buttons are divs that
+ * ignore a synthetic `.click()` — it leaves the thread read. Dispatched mousedown/mouseup/click
+ * MouseEvents worked but are script-made (`isTrusted: false`), which Google can tell from real
+ * input. So the find step only MARKS the control (_gmailPress.ts), the click is a real click page
+ * action on that mark, and the confirm step then waits as described below. The find step's
+ * diagnostics travel to the confirm step on `window`, which returns the whole result.
  *
  * Fix round 2 (live 2026-09-24): `offsetParent !== null` was the visibility test, and in Flock's
  * headless Chromium (1280x800) it found NO candidate on 3/3 reads even though the probe located
@@ -151,8 +155,8 @@ export interface UnreadDiag {
  * ASYNC CONFIRMATION (live 2026-09-24, round 3): the click reported `marked`, and a later probe in
  * the SAME run still saw the thread as unread -- yet the thread ended up READ after the caller's
  * restore was immediately followed by a session close/navigate. Gmail applies "mark as unread"
- * through an async request; closing the page right after the click aborts it. So after dispatching
- * the click, this script polls every 250ms for up to 5000ms for ANY of three signals -- (a) a toast
+ * through an async request; closing the page right after the click aborts it. So after the click,
+ * the confirm step polls every 250ms for up to 5000ms for ANY of three signals -- (a) a toast
  * (`[role="alert"]` or `.bAq`) whose text matches /marked as unread/i, (b) the location hash no
  * longer pointing at a single thread (Gmail returns to the list; a hash that only swaps the thread
  * id form, still `#all/<id>` or `#inbox/<id>`, does not count), (c) no eligible visible control
@@ -160,16 +164,15 @@ export interface UnreadDiag {
  * `confirm` records which signal fired (or "timeout") and `waitedMs` the whole wait. No click means
  * no wait: `confirm`/`waitedMs` only appear on a `result: 'marked'` outcome.
  */
-export const MARK_UNREAD_SCRIPT = `(async () => {
+const MARK_UNREAD_TARGET = "restore-unread";
+const MARK_UNREAD_STASH = "__flockMarkUnread";
+
+/** Find step: pick the control (rules above), mark it, and leave the diagnostics on `window`. */
+/** In-page: the control rules above, shared by the find and the confirm step. */
+const MARK_UNREAD_CONTROL_FNS = `
   var MARK_UNREAD_RE = /mark as unread/i;
-  var TOAST_RE = /marked as unread/i;
-  var SINGLE_THREAD_HASH_RE = /#(?:all|inbox)\\/[A-Za-z0-9_-]+/;
   var BODY_SEL = '.a3s, .ii, .adn, [role="listitem"], .gs';
   var TOOLBAR_SEL = '[gh="mtb"]';
-  function cap(v) {
-    var s = String(v == null ? '' : v);
-    return s.length > 40 ? s.slice(0, 40) : s;
-  }
   function matchVia(el) {
     if (MARK_UNREAD_RE.test(el.getAttribute('aria-label') || '')) return 'aria';
     if (MARK_UNREAD_RE.test(el.getAttribute('data-tooltip') || '')) return 'tip';
@@ -190,16 +193,15 @@ export const MARK_UNREAD_SCRIPT = `(async () => {
   }
   function matching() {
     return [...document.querySelectorAll('[aria-label], [data-tooltip], [title]')].filter(function (el) { return matchVia(el) !== ''; });
-  }
-  function visibleEligible() {
-    return matching().filter(isEligible).filter(isVisible);
-  }
-  function hasToast() {
-    var nodes = document.querySelectorAll('[role="alert"], .bAq');
-    for (var i = 0; i < nodes.length; i++) {
-      if (TOAST_RE.test(nodes[i].innerText || '')) return true;
-    }
-    return false;
+  }`;
+
+/** Find step: pick the control (rules above), mark it, and leave the diagnostics on `window`. */
+export const MARK_UNREAD_FIND_SCRIPT = `(() => {
+  ${MARK_FNS}
+  ${MARK_UNREAD_CONTROL_FNS}
+  function cap(v) {
+    var s = String(v == null ? '' : v);
+    return s.length > 40 ? s.slice(0, 40) : s;
   }
   var all = matching();
   var cands = all.slice(0, 8).map(function (el) {
@@ -217,31 +219,56 @@ export const MARK_UNREAD_SCRIPT = `(async () => {
   });
   var pool = all.filter(isEligible).filter(isVisible);
   var b = pool.filter(function (el) { return !!el.closest(TOOLBAR_SEL); })[0] || pool[pool.length - 1];
-  var result = b ? 'marked' : 'no-control';
-  var confirm, waitedMs;
-  if (b) {
-    var hashBefore = location.hash;
-    ['mousedown', 'mouseup', 'click'].forEach((t) => b.dispatchEvent(new MouseEvent(t, { bubbles: true, cancelable: true, view: window })));
+  markAny(b || null, '${MARK_UNREAD_TARGET}');
+  window.${MARK_UNREAD_STASH} = { result: b ? 'marked' : 'no-control', n: all.length, cands: cands, hashBefore: location.hash };
+  return window.${MARK_UNREAD_STASH}.result;
+})()`;
+
+/** Confirm step, after the real click: wait for Gmail's signal (rules above) and return the result JSON. */
+export const MARK_UNREAD_CONFIRM_SCRIPT = `(async () => {
+  ${MARK_UNREAD_CONTROL_FNS}
+  var TOAST_RE = /marked as unread/i;
+  var SINGLE_THREAD_HASH_RE = /#(?:all|inbox)\\/[A-Za-z0-9_-]+/;
+  function visibleEligible() {
+    return matching().filter(isEligible).filter(isVisible);
+  }
+  function hasToast() {
+    var nodes = document.querySelectorAll('[role="alert"], .bAq');
+    for (var i = 0; i < nodes.length; i++) {
+      if (TOAST_RE.test(nodes[i].innerText || '')) return true;
+    }
+    return false;
+  }
+  var found = window.${MARK_UNREAD_STASH} || { result: 'no-control', n: 0, cands: [], hashBefore: location.hash };
+  window.${MARK_UNREAD_STASH} = undefined;
+  var out = { result: found.result, n: found.n, cands: found.cands };
+  if (found.result === 'marked') {
     var started = Date.now();
     var deadline = started + 5000;
-    confirm = 'timeout';
+    var confirm = 'timeout';
     while (Date.now() < deadline) {
       if (hasToast()) { confirm = 'toast'; break; }
       var hashNow = location.hash;
-      if (hashNow !== hashBefore && !SINGLE_THREAD_HASH_RE.test(hashNow)) { confirm = 'nav'; break; }
+      if (hashNow !== found.hashBefore && !SINGLE_THREAD_HASH_RE.test(hashNow)) { confirm = 'nav'; break; }
       if (visibleEligible().length === 0) { confirm = 'gone'; break; }
       await new Promise((r) => setTimeout(r, 250));
     }
     await new Promise((r) => setTimeout(r, 1500));
-    waitedMs = Date.now() - started;
+    out.confirm = confirm;
+    out.waitedMs = Date.now() - started;
   }
-  var out = { result: result, n: all.length, cands: cands };
-  if (confirm !== undefined) { out.confirm = confirm; out.waitedMs = waitedMs; }
   return JSON.stringify(out);
 })()`;
 
+/** The restore as page actions: find and mark, the real click on the mark (if any), confirm. */
+export const MARK_UNREAD_ACTIONS = [
+  { action: "evaluate", script: MARK_UNREAD_FIND_SCRIPT },
+  clickMarked(MARK_UNREAD_TARGET),
+  { action: "evaluate", script: MARK_UNREAD_CONFIRM_SCRIPT },
+];
+
 /**
- * Summarize MARK_UNREAD_SCRIPT's `cands` diagnostics into one string, capped at 300 chars, for
+ * Summarize MARK_UNREAD_ACTIONS's `cands` diagnostics into one string, capped at 300 chars, for
  * `UnreadDiag.markCands`.
  */
 function summarizeCands(cands: unknown, n: unknown): string {
@@ -258,7 +285,7 @@ function summarizeCands(cands: unknown, n: unknown): string {
 }
 
 /**
- * Parse a MARK_UNREAD_SCRIPT result — the page-action content a caller reads off
+ * Parse a MARK_UNREAD_ACTIONS result — the page-action content a caller reads off
  * `persistentInteractRaw`'s `body.content`, which may arrive JSON-string-wrapped (an extra layer
  * of JSON.stringify around the script's own return value). The current script returns a JSON
  * object string (`{"result":...,"n":...,"cands":[...]}`). Anything that is not such an object is

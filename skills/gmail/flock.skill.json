@@ -17,53 +17,10 @@
       "description": "Read, send, and organize emails via browser session",
       "recommended": true,
       "rationale": "Uses your existing Google login \u2014 no app passwords or extra setup needed."
-    },
-    {
-      "type": "account",
-      "credentialSubtype": "imap",
-      "service": "imap",
-      "description": "Direct email access via IMAP with app password",
-      "documentationUrl": "https://myaccount.google.com/apppasswords",
-      "setupInstructions": "Use a Google App Password for IMAP access \u2014 not your normal Google password.",
-      "setupSteps": [
-        {
-          "title": "Open Google App Passwords",
-          "description": "Visit myaccount.google.com/apppasswords"
-        },
-        {
-          "title": "Generate a password",
-          "description": "Create a 16-character app password for \"Mail\""
-        },
-        {
-          "title": "Enter it below",
-          "description": "Use your Gmail address and the generated app password"
-        }
-      ],
-      "fields": [
-        {
-          "name": "email",
-          "type": "email",
-          "label": "Email address",
-          "placeholder": "your.email@gmail.com",
-          "sensitive": false,
-          "required": true
-        },
-        {
-          "name": "password",
-          "type": "password",
-          "label": "App password",
-          "placeholder": "App password (16 characters)",
-          "sensitive": true,
-          "required": true
-        }
-      ]
     }
   ],
   "auth": {
-    "type": "imap+browser",
-    "imap": {
-      "setup_instructions": "Use a Google App Password for IMAP access. Go to myaccount.google.com/apppasswords to generate one."
-    },
+    "type": "browser_session",
     "browser": {
       "sessionName": "google",
       "setup_instructions": "Log in to Gmail via the dashboard browser session."
@@ -83,8 +40,6 @@
       "getEmail",
       "getThread",
       "getThreads",
-      "getVoice",
-      "getReplyContext",
       "listInbox",
       "listLabels",
       "checkEngagedDomains",
@@ -92,9 +47,7 @@
       "markUnread",
       "searchEmails",
       "sendDraft",
-      "shouldTrigger",
       "starMessage",
-      "storeThreadBody",
       "updateDraft",
       "downloadAttachment"
     ],
@@ -117,8 +70,6 @@
       "getEmail": "read",
       "getThread": "read",
       "getThreads": "read",
-      "getVoice": "read",
-      "getReplyContext": "read",
       "listInbox": "read",
       "listLabels": "read",
       "checkEngagedDomains": "read",
@@ -128,9 +79,7 @@
       "sendDraft": "irreversible",
       "sendEmail": "irreversible",
       "replyToMessage": "irreversible",
-      "shouldTrigger": "read",
       "starMessage": "write",
-      "storeThreadBody": "write",
       "updateDraft": "draft"
     }
   },
@@ -213,20 +162,6 @@
         "methods": [
           "GET",
           "POST"
-        ]
-      },
-      {
-        "hostname": "imap.gmail.com",
-        "purpose": "IMAP access for app-password connections",
-        "methods": [
-          "TCP"
-        ]
-      },
-      {
-        "hostname": "smtp.gmail.com",
-        "purpose": "SMTP for sending via app-password connections",
-        "methods": [
-          "TCP"
         ]
       }
     ]
@@ -314,7 +249,7 @@
   },
   "name": "Gmail",
   "slug": "gmail",
-  "version": "1.6.3",
+  "version": "1.6.8",
   "minFlockVersion": "0.13.0",
   "author": "flock"
 }

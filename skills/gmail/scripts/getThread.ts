@@ -27,14 +27,14 @@ import {
 import {
   messagesFromThreadDom,
   assessThreadCompleteness,
-  THREAD_EXPAND_SCRIPT,
-  THREAD_DETAILS_SCRIPT,
+  THREAD_EXPAND_ACTIONS,
+  THREAD_DETAILS_ACTIONS,
   THREAD_SCRAPE_SCRIPT,
 } from "./_threadScrape";
 import { gmailViewUrl, searchViewReadyExpr, pollInPageScript } from "./_gmailNav";
 import { printViewUrl, PRINT_BLOCKS_EXPR, rowsFromPrintBlocks, PRINT_VIEW_SHOWS_DRAFTS } from "./_printView";
 import { readCachedThread, writeCachedThread } from "./_threadCache";
-import { unreadProbeQuery, unreadIdsExpr, wasUnread, probeSummary, MARK_UNREAD_SCRIPT, parseMarkResult, type MarkResult, type UnreadDiag } from "./_unreadState";
+import { unreadProbeQuery, unreadIdsExpr, wasUnread, probeSummary, MARK_UNREAD_ACTIONS, parseMarkResult, type MarkResult, type UnreadDiag } from "./_unreadState";
 
 // Fix round 1 (Critical + Important #3): getThread runs under the same 90s
 // SLOW_SKILL_TIMEOUT_MS ceiling as every other slow skill function (server/src/skill-executor.ts).
@@ -134,7 +134,7 @@ function runScript(): void {
     return;
   }
 
-  // Expand every message before scraping — a collapsed message renders
+  // THREAD_EXPAND_ACTIONS: expand every message before scraping — a collapsed message renders
   // neither its `to` nor its `cc`. Gmail exposes a single "Expand all"
   // control when a thread has multiple messages; fall back to clicking each
   // collapsed row individually when it isn't present (e.g. Gmail's markup
@@ -146,16 +146,14 @@ function runScript(): void {
   // same page/JS realm within this one browserInteract call) so the
   // trailing scrapeScript can compare "how many messages did we see before
   // clicking anything" against "how many did we actually scrape".
-  const expandScript = THREAD_EXPAND_SCRIPT;
 
-  // Open every message's "Show details" panel. Gmail renders the labelled
+  // THREAD_DETAILS_ACTIONS: open every message's "Show details" panel. Gmail renders the labelled
   // header rows ("from:", "to:", "cc:") ONLY once this is expanded -- the
   // collapsed header shows a single merged summary ("to Shiva, me") in which a
   // Cc recipient is indistinguishable from a To one. Verified live on a
   // deliberately cc-only message: the collapsed DOM put both addresses in the
   // same `.hb span[email]` list with no marker, so the old classifier called
   // both "to" and the To-only rule could never fire.
-  const detailsScript = THREAD_DETAILS_SCRIPT;
 
   // ".adn.ads" is Gmail's historical class for an expanded message container.
   //
@@ -187,9 +185,9 @@ function runScript(): void {
     // URL before assuming the page is slow.
     const pageActions = [
       { action: "waitForSelector", selector: "h2.hP", delay: 20000 },
-      { action: "evaluate", script: expandScript },
+      ...THREAD_EXPAND_ACTIONS,
       { action: "wait", delay: 800 },
-      { action: "evaluate", script: detailsScript },
+      ...THREAD_DETAILS_ACTIONS,
       // The details panel renders asynchronously after the click; without this
       // the scrape reads the collapsed header and every recipient falls back to
       // the unverified path.
@@ -284,7 +282,7 @@ function runScript(): void {
           markResult = "skipped-budget";
         } else {
           try {
-            const { httpCode, body } = await persistentInteractRaw(psId, [{ action: "evaluate", script: MARK_UNREAD_SCRIPT }]);
+            const { httpCode, body } = await persistentInteractRaw(psId, [...MARK_UNREAD_ACTIONS]);
             if (httpCode >= 400) {
               markResult = `http-${httpCode}`;
             } else {

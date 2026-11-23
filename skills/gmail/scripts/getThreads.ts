@@ -39,10 +39,10 @@ import {
 } from "../../_shared/_google_helpers";
 import { buildThreadsQuery, type ThreadFilters } from "./_gmailQuery";
 import { gmailViewUrl, searchViewReadyExpr, pollInPageScript, parsePollResult } from "./_gmailNav";
-import { unreadProbeQuery, unreadIdsExpr, unreadIdsFrom, probeSummary, MARK_UNREAD_SCRIPT, parseMarkResult, type MarkResult, type UnreadDiag } from "./_unreadState";
+import { unreadProbeQuery, unreadIdsExpr, unreadIdsFrom, probeSummary, MARK_UNREAD_ACTIONS, parseMarkResult, type MarkResult, type UnreadDiag } from "./_unreadState";
 import {
-  THREAD_EXPAND_SCRIPT,
-  THREAD_DETAILS_SCRIPT,
+  THREAD_EXPAND_ACTIONS,
+  THREAD_DETAILS_ACTIONS,
   THREAD_SCRAPE_SCRIPT,
   messagesFromThreadDom,
   assessThreadCompleteness,
@@ -395,9 +395,9 @@ function runScript(): void {
             // in-session hop and its identity guard stay retired; every thread-view read pays this.
             r = await interactOrThrow(psId, [
               { action: "waitForSelector", selector: "h2.hP", delay: 20000 },
-              { action: "evaluate", script: THREAD_EXPAND_SCRIPT },
+              ...THREAD_EXPAND_ACTIONS,
               { action: "wait", delay: 800 },
-              { action: "evaluate", script: THREAD_DETAILS_SCRIPT },
+              ...THREAD_DETAILS_ACTIONS,
               { action: "wait", delay: 1500 },
               { action: "evaluate", script: THREAD_SCRAPE_SCRIPT },
             ], gmailViewUrl(`#all/${threadId}`));
@@ -409,7 +409,7 @@ function runScript(): void {
             const threadWasUnread = unreadIds.has(threadId);
             if (threadWasUnread) {
               try {
-                const back = await interactOrThrow(psId, [{ action: "evaluate", script: MARK_UNREAD_SCRIPT }]);
+                const back = await interactOrThrow(psId, [...MARK_UNREAD_ACTIONS]);
                 const c = typeof back?.content === "string" ? back.content : "";
                 const parsedMark = parseMarkResult(c);
                 threadMarkResult = parsedMark.marked ? "marked" : "no-control";

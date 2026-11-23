@@ -156,11 +156,11 @@
       "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "skills/gmail",
-      "latestVersion": "1.6.3",
-      "latestTag": "gmail-v1.6.3",
+      "latestVersion": "1.6.8",
+      "latestTag": "gmail-v1.6.8",
       "minFlockVersion": "0.13.0",
       "publishedAt": "2026-08-14T10:00:00Z",
-      "updatedAt": "2026-10-24T12:00:00Z"
+      "updatedAt": "2026-11-24T00:00:00Z"
     },
     {
       "slug": "google-calendar",

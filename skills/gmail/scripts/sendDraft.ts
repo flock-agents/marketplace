@@ -4,12 +4,13 @@
 // reused persistent page, sleep 3s, and click Send on WHATEVER compose was open.
 // A fragment-only goto does not reload (_gmailNav.ts), so on a page another
 // caller was using it could fail -- or SEND A DIFFERENT DRAFT. Now it opens the
-// draft the getDraft way (gmailViewUrl + an in-page poll, ONE call), and clicks
+// draft the getDraft way (gmailViewUrl + an in-page poll, ONE call), and marks
 // Send only inside the expression that has just verified the open compose
-// belongs to draftId (_openDraft.ts). Anything else sends nothing.
+// belongs to draftId (_openDraft.ts). Anything else marks, and sends, nothing.
 //
-// Task 28: the press is a real mouse sequence on the compose's own Send, and the
-// result says sent ONLY once Gmail confirmed it (see below).
+// Task 28: the press lands on the compose's own Send, and the result says sent
+// ONLY once Gmail confirmed it (see below). The press is a real click page
+// action on that marked Send (_gmailPress.ts): page script never clicks.
 //
 // The pure request builder is exported and unit-tested (gmail-open-draft.test.ts);
 // the browser body runs only when SKILL_PARAMS is set.
@@ -19,17 +20,22 @@ import {
   requireBrowserSession,
   validateId,
   persistentCreate,
+  persistentInteractRaw,
   persistentClose,
 } from "../../_shared/_google_helpers";
 import { invalidateCachedThreadForDraft } from "./_threadCache";
 import { openDraftRequest, parseOpenedDraft, draftNotOpenMessage, findDraftCompose, hashNamesOtherId, DRAFT_NOT_OPEN_SENT } from "./_openDraft";
-import { findComposeSend, pressGmailButton, findGmailNotice } from "./_gmailPress";
+import { findComposeSend, findGmailNotice, markGmailTarget, isOnScreen } from "./_gmailPress";
+import { clickTarget } from "../../_shared/_realInput";
 
 // Task 28 (live 2026-10-02 23:39, 35626): `sendBtn.click()` reported "Draft sent
 // successfully" and Gmail sent nothing -- its div[role=button] controls ignore an
-// in-page .click(). Now: press Send with real mouse events (_gmailPress.ts), then
+// in-page .click(). Now: press Send with a real click (_gmailPress.ts), then
 // WAIT for Gmail to confirm, and report sent only on that confirmation. The press
 // is never retried: a second press could send twice.
+
+/** The mark the open step puts on this draft's Send, for the real click. */
+const SEND_TARGET = "send";
 
 /** window keys the open step leaves for the confirmation step (same request, same page). */
 const STEP_KEY = "__flockSendStep";
@@ -96,31 +102,39 @@ export function sendNotConfirmedMessage(result: { notice?: unknown; editorPresen
   return `Send was pressed but Gmail did not confirm it was sent. Check the thread in Gmail before trying again (notice=${notice}, editorPresent=${editor}, composes=${composes}).`;
 }
 
+/** The caller-facing failure when the press-and-confirm request itself failed: Send may or may not have been pressed. */
+export function sendStepFailedMessage(detail: unknown): string {
+  return `Pressing Send did not complete, so it is not known whether the draft was sent. Check the thread in Gmail before trying again (${String(detail ?? "unknown error").slice(0, 200)}).`;
+}
+
 /**
  * In-page step 1 body (runs inside onDraftComposeExpr, so `compose` is the
- * VERIFIED editor): find THIS compose's Send by a bounded walk, press it with
- * mouse events, and keep the editor for the confirmation step. `ok` stays false
- * here: only the confirmation step may say sent.
+ * VERIFIED editor): find THIS compose's Send by a bounded walk, mark it for the
+ * real click, and keep the editor for the confirmation step. The mark is
+ * cleared first, so a refusal leaves nothing to click. `ok` and `pressed` stay
+ * false here: the click comes next, and only the confirmation step may say sent.
  */
-function pressSendBody(): string {
+function markSendBody(): string {
   return `
+    var mark = ${markGmailTarget.toString()};
+    mark(document, null, ${JSON.stringify(SEND_TARGET)}, null);
     var f = (${findComposeSend.toString()})(compose);
     if (!f.button) return { ok: false, pressed: false, message: "Send button not found in this draft's compose (container=" + f.container + ", candidates=" + f.seen + ")" };
-    var pressed = (${pressGmailButton.toString()})(f.button);
-    if (!pressed) return { ok: false, pressed: false, message: "Send button was not on screen (container=" + f.container + ")" };
+    if (!mark(document, f.button, ${JSON.stringify(SEND_TARGET)}, ${isOnScreen.toString()})) return { ok: false, pressed: false, message: "Send button was not on screen (container=" + f.container + ")" };
     window[${JSON.stringify(EDITOR_KEY)}] = compose;
-    return { ok: false, pressed: true, container: f.container };
+    return { ok: false, pressed: false, marked: true, container: f.container };
   `;
 }
 
 /**
- * In-page step 2: read step 1's result and, only when it pressed Send, poll for
+ * In-page step 2, right after the real click on the marked Send: read step 1's
+ * result and, only when it marked Send (so the click pressed it), poll for
  * Gmail's confirmation (judgeSendOutcome; editor-gone must last goneGraceMs),
  * then keep the page open until the undo window closes (undoWindowOpen false
  * for SEND_UNDO_SETTLE_MS), capped at undoCapMs. Hitting the cap is NOT sent
  * (`confirm: "undo-open"`). Returns the pollInPageScript shape
  * `{ ready, waitedMs, result }` so parseOpenedDraft reads it; `result` is step
- * 1's result plus `ok`, `confirm`, `notice`, `editorPresent`, `composes`.
+ * 1's result plus `pressed`, `ok`, `confirm`, `notice`, `editorPresent`, `composes`.
  * Never presses anything.
  */
 export function sendConfirmScript(
@@ -137,7 +151,7 @@ export function sendConfirmScript(
   // No step result at all means the page changed under us after the open step: Send may have
   // been pressed, so report "not confirmed" (check Gmail), never "nothing was sent".
   if (!step) return JSON.stringify({ ready: false, waitedMs: 0, result: { opened: true, pressed: true, ok: false, confirm: 'none', notice: 'page changed before confirmation', editorPresent: !!editor && document.contains(editor) } });
-  if (step.opened !== true || step.pressed !== true) return JSON.stringify({ ready: false, waitedMs: 0, result: step });
+  if (step.opened !== true || step.marked !== true) return JSON.stringify({ ready: false, waitedMs: 0, result: step });
   var judge = ${judgeSendOutcome.toString()};
   var undoOpen = ${undoWindowOpen.toString()};
   var find = ${findDraftCompose.toString()};
@@ -180,17 +194,19 @@ export function sendConfirmScript(
   }
   var out = {};
   for (var k in step) out[k] = step[k];
-  out.ok = ok; out.confirm = how; out.notice = obs.notice; out.editorPresent = obs.editorPresent; out.composes = obs.composes;
+  out.pressed = true; out.ok = ok; out.confirm = how; out.notice = obs.notice; out.editorPresent = obs.editorPresent; out.composes = obs.composes;
   return JSON.stringify({ ready: ok, waitedMs: Date.now() - started, result: out });
 })()`;
 }
 
 /**
- * Open `draftId`, verify it, press ITS Send, then wait for Gmail's confirmation
- * -- one request, two evaluates on the same page. The Send lookup walks out from
- * the verified editor and stops at its compose container (_gmailPress.ts), so
- * another compose's Send, or a page-level "Send feedback", is never pressed.
- * Nothing waits before the verify.
+ * Open `draftId`, verify it and mark ITS Send (`actions`, the opening request);
+ * then, only when Send was marked, the real click on it and the wait for
+ * Gmail's confirmation (`pressActions`, a second request on the same page). The
+ * Send lookup walks out from the verified editor and stops at its compose
+ * container (_gmailPress.ts), so another compose's Send, or a page-level "Send
+ * feedback", is never marked. The click hits the marked element or nothing: a
+ * page that changed under it has no mark. Nothing waits before the verify.
  */
 export function sendDraftRequest(
   draftId: string,
@@ -201,11 +217,13 @@ export function sendDraftRequest(
   undoCapMs?: number,
   undoSettleMs?: number,
 ) {
-  const req = openDraftRequest(draftId, pressSendBody(), nonce, timeoutMs, STEP_KEY);
+  const req = openDraftRequest(draftId, markSendBody(), nonce, timeoutMs, STEP_KEY);
   return {
     url: req.url,
-    actions: [
-      ...req.actions,
+    actions: req.actions,
+    pressActions: [
+      // Not optional: a Send that vanished since it was marked fails the request (never a silent no-op).
+      clickTarget(SEND_TARGET),
       // The evaluate bound covers confirm (10s) + grace (3s) + undo cap (35s) with room; it is one
       // step of one request, so no hold idle clock runs while it waits (the per-operation lock
       // holds the page for the whole request). The manifest gives sendDraft 120s overall.
@@ -228,18 +246,31 @@ function runScript(): void {
   (async () => {
     const req = sendDraftRequest(draftId);
     let psId = "";
-    let sessionResult: any;
+    let content: unknown;
     try {
-      sessionResult = await persistentCreate(req.url, req.actions);
+      // holdLock: open+mark and press+confirm are two requests on one page; the hold spans the
+      // manifest's 120s for sendDraft (open poll 25s + confirm and undo window up to ~50s).
+      const sessionResult = await persistentCreate(req.url, req.actions, { holdLock: true, holdMaxMs: 120000 });
       psId = sessionResult?.persistentSessionId || "";
       if (!psId) {
         errorJson("SESSION_ERROR", "Failed to create persistent session for draft");
+      }
+      content = sessionResult?.content;
+      if ((parseOpenedDraft(content).result as any)?.marked === true) {
+        const press = await persistentInteractRaw(psId, req.pressActions);
+        if (press.httpCode >= 400) {
+          await persistentClose(psId).catch(() => {});
+          psId = "";
+          invalidateCachedThreadForDraft(draftId, "sendDraft");
+          errorJson("BROWSER_ERROR", sendStepFailedMessage(press.body?.message ?? press.body?.error));
+        }
+        content = press.body?.content;
       }
     } finally {
       if (psId) await persistentClose(psId).catch(() => {});
     }
 
-    const { opened, result } = parseOpenedDraft(sessionResult?.content);
+    const { opened, result } = parseOpenedDraft(content);
     if (!opened) {
       errorJson("BROWSER_ERROR", draftNotOpenMessage(DRAFT_NOT_OPEN_SENT, result));
     }

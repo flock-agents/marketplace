@@ -5,6 +5,7 @@ import {
   browserInteract,
 } from "../../_shared/_google_helpers";
 import { invalidateCachedThreadForMessage } from "./_threadCache";
+import { markThenClick } from "./_gmailPress";
 
 const params = JSON.parse(process.env.SKILL_PARAMS || "{}");
 const messageId: string = params.messageId || "";
@@ -18,7 +19,7 @@ validateId(messageId, "messageId");
 
 const actions = [
   { action: "wait", delay: 3000 },
-  { action: "evaluate", script: `(() => { const star = document.querySelector('.T-KT[aria-label*="Not starred"]') || document.querySelector('[data-tooltip*="Not starred"]'); if (star) { star.click(); return {ok:true,message:'Message starred'}; } const alreadyStarred = document.querySelector('.T-KT-Jp[aria-label*="Starred"]'); if (alreadyStarred) { return {ok:true,message:'Message already starred'}; } return {ok:false,message:'Star button not found'}; })()` },
+  ...markThenClick("star", `(() => { const star = document.querySelector('.T-KT[aria-label*="Not starred"]') || document.querySelector('[data-tooltip*="Not starred"]'); if (star) { mark(star, "star"); return {ok:true,message:'Message starred'}; } const alreadyStarred = document.querySelector('.T-KT-Jp[aria-label*="Starred"]'); if (alreadyStarred) { return {ok:true,message:'Message already starred'}; } return {ok:false,message:'Star button not found'}; })()`),
   { action: "wait", delay: 1000 },
 ];
 

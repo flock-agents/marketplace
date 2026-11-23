@@ -18,12 +18,23 @@
 // This function must never send. It composes and saves a draft only — no
 // path in this file calls or falls through to sendDraft/sendEmail.
 
-import { draftRowForThread, DRAFT_ROWS_EXPR, type DraftListRow } from "./_draftRows";
-import { gmailViewUrl, pollInPageScript, parsePollResult, searchViewReadyExpr, DRAFTS_VIEW_READY_EXPR, NAV_TO_DRAFTS_SCRIPT } from "./_gmailNav";
-import { extractDraftBody, COMPOSE_BODY_SCRAPE } from "./_draftBody";
-import { hasTable, bodyToComposeHtml, writeComposeHtmlScript } from "./_bodyHtml";
+import { draftRowForThread, type DraftListRow } from "./_draftRows";
+import { gmailViewUrl, pollInPageScript, parsePollResult, searchViewReadyExpr } from "./_gmailNav";
+import { extractDraftBody } from "./_draftBody";
+import { hasTable, pasteComposeBodyActions } from "./_bodyHtml";
 import { findReplyAll, findReplyAllMenuItem } from "./_replyAll";
-import { SAVE_AND_CLOSE_SCRIPT, waitForDraftSavedScript } from "./_composeSave";
+import { waitForDraftSavedScript } from "./_composeSave";
+import {
+  openThreadActions,
+  parseOpenThread,
+  settleReplyActions,
+  parseSettleReply,
+  writeBodyActions,
+  parseWriteBody,
+  replyFactsFrom,
+  confirmDraftRowActions,
+  type ReplyFacts,
+} from "./_replyDraftSteps";
 import {
   errorJson,
   requireBrowserSession,
@@ -35,7 +46,7 @@ import {
   persistentClose,
 } from "../../_shared/_google_helpers";
 import { invalidateCachedThread, rememberDraftThread } from "./_threadCache";
-import { unreadProbeQuery, unreadIdsExpr, wasUnread, probeSummary, MARK_UNREAD_SCRIPT, parseMarkResult, type MarkResult, type UnreadDiag } from "./_unreadState";
+import { unreadProbeQuery, unreadIdsExpr, wasUnread, probeSummary, MARK_UNREAD_ACTIONS, parseMarkResult, type MarkResult, type UnreadDiag } from "./_unreadState";
 
 // Fix round 1 (Critical + Important #3): the probe and restore ride on TOP of the 90s
 // SLOW_SKILL_TIMEOUT_MS ceiling (server/src/skill-executor.ts) — a draft write that is already
@@ -49,7 +60,7 @@ import { unreadProbeQuery, unreadIdsExpr, wasUnread, probeSummary, MARK_UNREAD_S
 // returns ready:false instead of throwing; an unsettled probe counts as "not unread" (fail-closed).
 // 20s is the skill's usual cold-load ceiling.
 //
-// Async confirmation (2026-09-24 round 3): MARK_UNREAD_SCRIPT itself now polls up to 5000ms for a
+// Async confirmation (2026-09-24 round 3): MARK_UNREAD_ACTIONS' confirmation step now polls up to 5000ms for a
 // confirmation signal plus a fixed 1500ms flush wait (~6.5s worst case) before it returns. Started
 // at the RESTORE_BUDGET_MS ceiling (60s), that puts the restore call's own return at ~66.5s —
 // still well inside the 90s SLOW_SKILL_TIMEOUT_MS. The evaluate action's own per-call timeout
@@ -92,23 +103,28 @@ if (process.env.SKILL_PARAMS !== undefined) {
 //
 // Bounded (3 attempts, 2s apart) so a missing row can never hang the 90s
 // slow-function timeout, and "no row" stays a legitimate, reportable answer.
-async function confirmDraftRow(persistentId: string, threadId: string, attempts = 3, delayMs = 2000): Promise<DraftListRow | null> {
-  for (let i = 0; i < attempts; i++) {
+//
+// 2026-11-24 (speed): the FIRST attempt also carries the click-away
+// (SAVE_AND_CLOSE_ACTIONS) in the same call, with no fixed sleep after it (that
+// click as its own round trip plus a 2s wait cost 10s live). Each attempt polls
+// until the thread's OWN row is in the list, not merely until the list settles,
+// so it waits exactly as long as Gmail's save takes; the row is then matched by
+// the same rule as before. Bounded at 15s, then 2 x 5s.
+const CONFIRM_WAITS_MS = [15_000, 5_000, 5_000];
+async function confirmDraftRow(persistentId: string, threadId: string): Promise<DraftListRow | null> {
+  for (let i = 0; i < CONFIRM_WAITS_MS.length; i++) {
     try {
-      const result = await persistentInteract(
-        persistentId,
-        [{ action: "evaluate", script: NAV_TO_DRAFTS_SCRIPT }],
-        false,
-        pollInPageScript(DRAFTS_VIEW_READY_EXPR, DRAFT_ROWS_EXPR, 25000),
-      );
-      const { result: rows } = parsePollResult<DraftListRow[]>(result?.content);
+      // Raw: a failed step means "not visible yet", never an exit out of the
+      // writer (persistentInteract exits on an HTTP error, so a catch around it
+      // was dead code): the draft may well exist, and the caller must be able to say so.
+      const step = await persistentInteractRaw(persistentId, confirmDraftRowActions(threadId, CONFIRM_WAITS_MS[i], i === 0));
+      if (step.httpCode >= 400) continue;
+      const { result: rows } = parsePollResult<DraftListRow[]>(step.body?.content);
       const found = draftRowForThread(Array.isArray(rows) ? rows : [], threadId);
       if (found) return found;
     } catch {
-      // A failed read means "not visible yet", never a throw out of the writer:
-      // the draft may well exist, and the caller must be able to say so.
+      // As above: not visible yet.
     }
-    if (i < attempts - 1) await new Promise((resolve) => setTimeout(resolve, delayMs));
   }
   return null;
 }
@@ -152,13 +168,100 @@ function runScript(): void {
     // 1. PROBE the unread state BEFORE the thread is opened (opening it marks it read — that is
     //    the very reason this restore exists: a reply only threads when composed from the thread
     //    view). The probe establishes the held session; the thread itself is opened on the SAME
-    //    session next, so nothing else can interleave between "was it unread" and "mark it read".
+    //    session, in the SAME call, so nothing else can interleave between "was it unread" and
+    //    "mark it read".
+    //
+    // ONE CALL, ONE PAGE LOAD (2026-11-24, measured live: the probe's load 12.1s, then a second
+    // full load of `#all/<id>` 12.5s, then finding and pressing Reply all 6.8s, each round trip
+    // ~2.5s before it does anything). The page loaded for the probe is then routed to the thread
+    // IN-SPA -- a hash change, exactly as NAV_TO_DRAFTS_SCRIPT switches to #drafts -- and the
+    // reply controls are found and pressed in the same call (_replyDraftSteps.ts). The old warning
+    // about a reused page leaving the PREVIOUS view up was about page.goto to a bare fragment;
+    // here the page was just loaded fresh on the search LIST, which has no subject heading, so
+    // the visible `h2.hP` that appears after the hop is the thread we routed to (and its legacy
+    // id, when Gmail renders one, must be ours). Until that holds nothing is marked or clicked:
+    // the controls we press can only belong to this thread.
+    //
+    // `#all/<id>`, not `#inbox/<id>` (Ruling R22, 2026-09-24): the inbox route renders
+    // nothing for a thread that is no longer in the inbox (live finding, see getThread.ts).
+    // Follow-up nudges target exactly those threads -- ones the owner started and got no
+    // answer on, or archived after replying. #all resolves every thread, inbox or not, so it
+    // is used for every draft, normal and nudge alike.
+    // Open the in-thread reply editor — same selectors replyToMessage.ts uses.
+    // 20s/15s, not the original 5s: a thread took 19.6s to render on a measured
+    // authenticated load. Ceilings, not delays -- they resolve as soon as the
+    // selector appears, and this function has a 90s budget. See getThread.ts for
+    // the diagnostic trap: a lapsed session also surfaces as a selector timeout.
+    // RECIPIENTS COME FROM GMAIL'S OWN "REPLY ALL" (owner decision, 2026-09-09).
+    //
+    // We used to open a plain Reply and then overwrite To/Cc with the caller's
+    // computed list, on the principle of never trusting Gmail's inference. That
+    // principle cost more than it bought: verified live, an inline reply's To
+    // field is present but 0x0 with its whole ancestor row collapsed, so the
+    // fill reliably failed ("click: Timeout ... locator resolved to
+    // <input size=0>") AFTER the compose was already open -- which both blocked
+    // every draft and risked leaving a stray autosaved compose behind.
+    //
+    // Gmail's Reply all computes exactly what section 2b specifies: the sender plus
+    // everyone on the triggering message's To and Cc, minus the owner. Letting
+    // it do that removes the entire recipient-editing surface, and with it the
+    // abort paths that could strand a half-written compose.
+    //
+    // Falls back to plain Reply when no Reply-all control is present, which is
+    // Gmail's own behaviour for a single-recipient thread -- there, the two are
+    // identical by construction.
+    // FINDING "REPLY ALL" (owner, 2026-09-23). Live, a thread with two people
+    // in Cc was drafted to the sender alone: Gmail's reply-all control at the
+    // foot of a thread is a text link with neither of the attributes this used
+    // to look for, so it fell back to plain Reply. The control is found by
+    // attribute or by its text, "Reply to all" or "Reply all" (_replyAll.ts,
+    // matched against the live element), then through the newest message's
+    // "More" menu. When the executor says the thread needs
+    // reply-all (requireReplyAll), plain Reply is never the fallback: the script
+    // stops before typing anything, so no draft is written without the Cc.
+    const requireReplyAll = params.requireReplyAll === true || params.requireReplyAll === "true";
+    //
+    // REAL INPUT ONLY: each script below only FINDS and MARKS the control; the click is a
+    // real click page action on the mark (markThenClick, _gmailPress.ts), and closing a menu
+    // that held no reply-all item is a real Escape key press.
+    const findReplyAllScript = `(() => {
+        const visible = (el) => !!el && el.offsetParent !== null;
+        const lastOf = (sel) => { const all = [...document.querySelectorAll(sel)].filter(visible); return all[all.length - 1] || null; };
+        const direct = (${findReplyAll.toString()})(document);
+        if (direct) { mark(direct, "reply-open"); window.__flockReplyMode = "reply-all"; return JSON.stringify({ step: "direct" }); }
+        const more = lastOf('[aria-label="More message options"]') || lastOf('[aria-label="More"]') || lastOf('[data-tooltip="More"]');
+        if (more) { mark(more, "reply-open"); window.__flockReplyMode = "menu"; return JSON.stringify({ step: "menu-opened" }); }
+        window.__flockReplyMode = "none";
+        return JSON.stringify({ step: "none" });
+      })()`;
+    // A menu without a reply-all item is left as "menu-miss": the caller closes it with Escape.
+    const pickMenuItemScript = `(() => {
+        if (window.__flockReplyMode !== "menu") return JSON.stringify({ mode: window.__flockReplyMode || "none" });
+        const item = (${findReplyAllMenuItem.toString()})(document);
+        window.__flockReplyMode = item ? "reply-all" : "menu-miss";
+        if (item) mark(item, "reply-menu-item");
+        return JSON.stringify({ mode: window.__flockReplyMode });
+      })()`;
+    const settleReplyModeScript = `(() => {
+        const visible = (el) => !!el && el.offsetParent !== null;
+        let mode = window.__flockReplyMode || "none";
+        if (mode === "menu-miss") mode = "none";
+        if (mode === "reply-all") return JSON.stringify({ ok: true, mode });
+        if (${requireReplyAll ? "true" : "false"}) return JSON.stringify({ ok: false, mode: "none" });
+        const all = [...document.querySelectorAll('[aria-label="Reply"]')].filter(visible);
+        const one = all[all.length - 1] || document.querySelector('.T-I-JW[data-tooltip="Reply"]');
+        if (one) { mark(one, "reply-plain"); return JSON.stringify({ ok: true, mode: "reply" }); }
+        return JSON.stringify({ ok: false, message: "no reply control found" });
+      })()`;
     const probeQuery = unreadProbeQuery();
     const sessionResult = await persistentCreate(
       gmailViewUrl(`#search/${urlencode(probeQuery)}`),
-      [
-        { action: "evaluate", script: pollInPageScript(searchViewReadyExpr(probeQuery), unreadIdsExpr(), PROBE_POLL_MS) },
-      ],
+      openThreadActions(
+        threadId,
+        pollInPageScript(searchViewReadyExpr(probeQuery), unreadIdsExpr(), PROBE_POLL_MS),
+        findReplyAllScript,
+        pickMenuItemScript,
+      ),
       { holdLock: true },
     );
     const persistentId: string = sessionResult?.persistentSessionId || "";
@@ -166,100 +269,12 @@ function runScript(): void {
     if (!persistentId) {
       errorJson("SESSION_ERROR", "Failed to create persistent session for Gmail reply draft");
     }
-    const threadWasUnread = wasUnread(sessionResult?.content, threadId);
-    const probe = probeSummary(sessionResult?.content);
+    const threadOpen = parseOpenThread(sessionResult?.content);
+    const threadWasUnread = wasUnread(threadOpen.probe, threadId);
+    const probe = probeSummary(threadOpen.probe);
+    let facts: ReplyFacts = {};
 
     try {
-      // gmailViewUrl, not a bare fragment: a reused persistent page would treat
-      // "#all/<id>" as a same-document navigation and leave the PREVIOUS view
-      // up (see _gmailNav.ts).
-      //
-      // `#all/<id>`, not `#inbox/<id>` (Ruling R22, 2026-09-24): the inbox route renders
-      // nothing for a thread that is no longer in the inbox (live finding, see getThread.ts).
-      // Follow-up nudges target exactly those threads -- ones the owner started and got no
-      // answer on, or archived after replying -- so under #inbox the h2.hP wait below timed
-      // out and no nudge was ever written. #all resolves every thread, inbox or not, so it
-      // is used for every draft, normal and nudge alike. Here that is not merely a stale read -- the reply
-      // controls we are about to click would belong to whatever thread was
-      // already open, so the draft could be composed on the wrong thread.
-      //
-      // h2.hP is the thread's own subject heading -- waiting on it here (rather than trusting the
-      // bare navigate to have landed) is belt-and-braces: replyOpenActions below waits on the reply
-      // control anyway, but that selector can in principle exist on a still-loading page.
-      await persistentInteract(persistentId, [
-        { action: "waitForSelector", selector: "h2.hP", delay: 20000 },
-      ], false, undefined, gmailViewUrl(`#all/${threadId}`));
-
-      // Open the in-thread reply editor — same selectors replyToMessage.ts uses.
-      // 20s/15s, not the original 5s: a thread took 19.6s to render on a measured
-      // authenticated load. Ceilings, not delays -- they resolve as soon as the
-      // selector appears, and this function has a 90s budget. See getThread.ts for
-      // the diagnostic trap: a lapsed session also surfaces as a selector timeout.
-      // RECIPIENTS COME FROM GMAIL'S OWN "REPLY ALL" (owner decision, 2026-09-09).
-      //
-      // We used to open a plain Reply and then overwrite To/Cc with the caller's
-      // computed list, on the principle of never trusting Gmail's inference. That
-      // principle cost more than it bought: verified live, an inline reply's To
-      // field is present but 0x0 with its whole ancestor row collapsed, so the
-      // fill reliably failed ("click: Timeout ... locator resolved to
-      // <input size=0>") AFTER the compose was already open -- which both blocked
-      // every draft and risked leaving a stray autosaved compose behind.
-      //
-      // Gmail's Reply all computes exactly what section 2b specifies: the sender plus
-      // everyone on the triggering message's To and Cc, minus the owner. Letting
-      // it do that removes the entire recipient-editing surface, and with it the
-      // abort paths that could strand a half-written compose.
-      //
-      // Falls back to plain Reply when no Reply-all control is present, which is
-      // Gmail's own behaviour for a single-recipient thread -- there, the two are
-      // identical by construction.
-      // FINDING "REPLY ALL" (owner, 2026-09-23). Live, a thread with two people
-      // in Cc was drafted to the sender alone: Gmail's reply-all control at the
-      // foot of a thread is a text link with neither of the attributes this used
-      // to look for, so it fell back to plain Reply. The control is found by
-      // attribute or by its text, "Reply to all" or "Reply all" (_replyAll.ts,
-      // matched against the live element), then through the newest message's
-      // "More" menu. When the executor says the thread needs
-      // reply-all (requireReplyAll), plain Reply is never the fallback: the script
-      // stops before typing anything, so no draft is written without the Cc.
-      const requireReplyAll = params.requireReplyAll === true || params.requireReplyAll === "true";
-      const findReplyAllScript = `(() => {
-          const visible = (el) => !!el && el.offsetParent !== null;
-          const lastOf = (sel) => { const all = [...document.querySelectorAll(sel)].filter(visible); return all[all.length - 1] || null; };
-          const direct = (${findReplyAll.toString()})(document);
-          if (direct) { direct.click(); window.__flockReplyMode = "reply-all"; return JSON.stringify({ step: "direct" }); }
-          const more = lastOf('[aria-label="More message options"]') || lastOf('[aria-label="More"]') || lastOf('[data-tooltip="More"]');
-          if (more) { more.click(); window.__flockReplyMode = "menu"; return JSON.stringify({ step: "menu-opened" }); }
-          window.__flockReplyMode = "none";
-          return JSON.stringify({ step: "none" });
-        })()`;
-      const settleReplyModeScript = `(() => {
-          const visible = (el) => !!el && el.offsetParent !== null;
-          let mode = window.__flockReplyMode || "none";
-          if (mode === "menu") {
-            const item = (${findReplyAllMenuItem.toString()})(document);
-            if (item) { item.click(); mode = "reply-all"; }
-            else { document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); mode = "none"; }
-          }
-          if (mode === "reply-all") return JSON.stringify({ ok: true, mode });
-          if (${requireReplyAll ? "true" : "false"}) return JSON.stringify({ ok: false, mode: "none" });
-          const all = [...document.querySelectorAll('[aria-label="Reply"]')].filter(visible);
-          const one = all[all.length - 1] || document.querySelector('.T-I-JW[data-tooltip="Reply"]');
-          if (one) { one.click(); return JSON.stringify({ ok: true, mode: "reply" }); }
-          return JSON.stringify({ ok: false, message: "no reply control found" });
-        })()`;
-      const openResult = await persistentInteract(persistentId, [
-        { action: "waitForSelector", selector: `[aria-label="Reply"],[aria-label="Reply all"],.T-I-JW[data-tooltip="Reply"]`, delay: 20000 },
-        { action: "evaluate", script: findReplyAllScript },
-        { action: "wait", delay: 800 },
-        { action: "evaluate", script: settleReplyModeScript },
-      ]);
-      const opened = (() => {
-        try {
-          return JSON.parse(typeof openResult?.content === "string" ? openResult.content : "{}") || {};
-        } catch { return {}; }
-      })();
-
       // R13(b): the thread was already opened above (marking it read) by the time we get here,
       // whichever way this turns out. Shared by every exit that leaves the thread open-and-read —
       // the refusal right below AND the normal success path further down — so an early refusal
@@ -277,7 +292,7 @@ function runScript(): void {
         try {
           const { httpCode, body } = await persistentInteractRaw(persistentId, [
             { action: "waitForSelector", selector: "h2.hP", delay: RESTORE_WAIT_MS },
-            { action: "evaluate", script: MARK_UNREAD_SCRIPT },
+            ...MARK_UNREAD_ACTIONS,
           ], false, undefined, gmailViewUrl(`#all/${threadId}`));
           if (httpCode >= 400) {
             markResult = `http-${httpCode}`;
@@ -296,7 +311,19 @@ function runScript(): void {
         }
       };
 
-      if (opened.ok !== true) {
+      if (!threadOpen.open) {
+        // The thread never rendered (or something else is on screen): nothing was pressed or
+        // typed. Restore first, exactly as the refusal below does, in case it did open late.
+        await restoreUnreadIfNeeded();
+        await persistentClose(persistentId).catch(() => {});
+        errorJson("BROWSER_ERROR", "The thread did not open in Gmail. Nothing was typed and no draft was written.");
+      }
+      const menuMissed = threadOpen.mode === "menu-miss";
+      // 2. Settle the mode and wait for the editor, in one call (a poll, not a waitForSelector).
+      const settled = parseSettleReply((await persistentInteract(persistentId, settleReplyActions(settleReplyModeScript, menuMissed)))?.content);
+      const opened = settled.settle;
+
+      if (opened.ok !== true || !settled.editor) {
         // Restore BEFORE closing the session — this exit happens after the thread view already
         // marked the thread read but before the success path's own restore would ever run.
         await restoreUnreadIfNeeded();
@@ -304,12 +331,9 @@ function runScript(): void {
         if (requireReplyAll && opened.mode === "none") {
           errorJson("NOT_REPLY_ALL", "Could not open Reply all on this thread, and a plain Reply would leave out people on it. Nothing was typed and no draft was written.");
         }
-        errorJson("BROWSER_ERROR", opened.message || "Could not open a reply on this thread.");
+        errorJson("BROWSER_ERROR", opened.ok === true ? "The reply editor did not open. Nothing was typed." : opened.message || "Could not open a reply on this thread.");
       }
       openMode = typeof opened.mode === "string" ? opened.mode : "";
-      await persistentInteract(persistentId, [
-        { action: "waitForSelector", selector: `div[aria-label*="Message"][contenteditable=true]`, delay: 15000 },
-      ]);
 
       // No recipient editing: Gmail's Reply all already set them (see above).
       // NO SUBJECT STEP. Gmail's Reply all already sets the thread's own
@@ -326,39 +350,36 @@ function runScript(): void {
       // step built on these helpers actually kills the whole draft.
 
       // Body
-      // A body with a Markdown table is written as HTML so the table is real
+      // A body with a Markdown table is pasted as rich text so the table is real
       // (_bodyHtml.ts); every other body is typed, exactly as before.
       const bodyActions = [
         { action: "click", selector: `div[aria-label*="Message"][contenteditable=true]` },
-        hasTable(bodyText)
-          ? { action: "evaluate", script: writeComposeHtmlScript(bodyToComposeHtml(bodyText)) }
-          : { action: "insertText", text: bodyText },
-        // Belt-and-braces, NOT the fix. insertText delivers the text and fires
-        // `input` but not keydown/keyup, and this pair was once believed to be
-        // why Drafts stayed empty -- Gmail supposedly never being told the
-        // compose was dirty. That was wrong: the body always saved, and the
-        // close step then clicked Gmail's trash (see _composeSave.ts). Proven
-        // live to be harmless and it costs nothing, so the real keystrokes
-        // stay; a space followed by a backspace leaves the text identical.
-        { action: "press", key: "Space" },
-        { action: "press", key: "Backspace" },
+        ...(hasTable(bodyText)
+          ? pasteComposeBodyActions(bodyText)
+          : [
+            { action: "insertText", text: bodyText },
+            // Belt-and-braces, NOT the fix. insertText delivers the text and fires
+            // `input` but not keydown/keyup, and this pair was once believed to be
+            // why Drafts stayed empty -- Gmail supposedly never being told the
+            // compose was dirty. That was wrong: the body always saved, and the
+            // close step then clicked Gmail's trash (see _composeSave.ts). Proven
+            // live to be harmless and it costs nothing, so the real keystrokes
+            // stay; a space followed by a backspace leaves the text identical.
+            { action: "press", key: "Space" },
+            { action: "press", key: "Backspace" },
+          ]),
       ];
-      await persistentInteract(persistentId, bodyActions);
 
+      // 3. Type, wait for Gmail's own "Draft saved", and read back -- ONE call (2026-11-24: three
+      //    round trips, 9.9s live).
+      //
       // Wait for GMAIL to say it saved, rather than sleeping a fixed number of
       // seconds and hoping. Its autosave is debounced a couple of seconds after
       // the last input, so something must give it that time before teardown --
       // but a sleep long enough to be safe is also a sleep wasted on every
       // healthy call. Best-effort: a miss is not an error, because the #drafts
       // poll below is what actually decides whether a draft exists.
-      try {
-        const savedResult = await persistentInteract(persistentId, [], false, waitForDraftSavedScript(12000));
-        const savedContent = typeof savedResult?.content === "string" ? savedResult.content : "";
-        autosaveSeen = JSON.parse(savedContent || "{}")?.saved === true;
-      } catch {
-        autosaveSeen = null;
-      }
-
+      //
       // I2: read back what Gmail ACTUALLY holds, while the compose is still
       // open and costs no extra navigation. The caller records this — not the
       // text we sent — as the owner-edit compare baseline, so every later
@@ -367,15 +388,18 @@ function runScript(): void {
       // "owner-edited" for every multi-paragraph body on an untouched draft.
       // Best-effort: a failed read-back leaves bodyAsSaved empty and the caller
       // falls back to the text it sent, which is no worse than before.
-      let bodyAsSaved = "";
-      try {
-        const readBack = await persistentInteract(persistentId, [], false, COMPOSE_BODY_SCRAPE);
-        const html = typeof readBack?.content === "string" ? readBack.content : "";
-        bodyAsSaved = extractDraftBody(html);
-      } catch {
-        bodyAsSaved = "";
-      }
+      //
+      // FACTS (2026-11-24): in the same read, who the reply reaches (the compose's own To/Cc,
+      // set by Gmail's Reply all) and the newest message's id, sender and time, so the caller
+      // need not read the whole thread again to say who the reply reaches. Read only; a half
+      // that cannot be read whole is left out and the caller reads the thread as before.
+      const written = parseWriteBody((await persistentInteract(persistentId, writeBodyActions(bodyActions, waitForDraftSavedScript(12000))))?.content);
+      autosaveSeen = written.autosaveSeen;
+      const bodyAsSaved = written.html ? extractDraftBody(written.html) : "";
+      facts = replyFactsFrom(written.facts);
 
+      // 4. Commit and confirm (confirmDraftRow): the click-away and #drafts in one call.
+      //
       // Finish the compose — NEVER Send, and never Discard either.
       //
       // The old lookup here ended in `.og.T-I-J3`, which is not a save control
@@ -388,16 +412,10 @@ function runScript(): void {
       // An inline reply needs no close click. Gmail has already autosaved it
       // (we waited for it to say so above), exactly as it does for a person who
       // types and then clicks away.
-      await persistentInteract(persistentId, [
-        { action: "evaluate", script: SAVE_AND_CLOSE_SCRIPT },
-        // Room for Gmail to act on the blur it was just given. NOT a substitute
-        // for the confirmation below -- the previous version tore the context
-        // down in this very call, which is what lost brand-new drafts.
-        { action: "wait", delay: 2000 },
-      ]);
       savedBody = bodyAsSaved;
 
-      // Prove the draft exists BEFORE this session dies (see confirmDraftRow).
+      // Prove the draft exists BEFORE this session dies (see confirmDraftRow). Its first
+      // attempt carries the click-away (SAVE_AND_CLOSE_ACTIONS) itself.
       draftRow = await confirmDraftRow(persistentId, threadId);
 
       // Put the thread's unread state BACK the way the probe found it, still inside this same
@@ -475,6 +493,7 @@ function runScript(): void {
       replyMode: openMode,
       restoredUnread,
       unreadDiag,
+      ...facts,
     }));
   })();
 }
