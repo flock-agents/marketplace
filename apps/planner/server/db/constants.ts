@@ -25,8 +25,9 @@ export type LibraryOrigin = (typeof LIBRARY_ORIGINS)[number];
  *  frequency; note is words only, not checked. */
 export const RULE_WHATS = ["veg", "egg", "no_eggs", "avoid", "only", "swap", "require", "fasting", "cap", "note"] as const;
 export type RuleWhat = (typeof RULE_WHATS)[number];
-/** How often a library dish or a soft rule comes: usually (4–5 a week), sometimes (2–3), rarely (at most 1), or "<n>/week". */
-export const FREQUENCY_WORDS = ["usually", "sometimes", "rarely"] as const;
+/** How often a library dish or a soft rule comes: daily (every day, said so by the family: a staple), usually (4–5 a week),
+ *  sometimes (2–3), rarely (at most 1), or "<n>/week". */
+export const FREQUENCY_WORDS = ["daily", "usually", "sometimes", "rarely"] as const;
 export type Frequency = (typeof FREQUENCY_WORDS)[number] | `${number}/week`;
 /** Staples of a slot: dishes in at least this share of the slot's last STAPLE_WINDOW history rows with dishes (owner, 23 Nov). */
 export const STAPLE_SHARE = 0.6;
@@ -35,6 +36,14 @@ export const STAPLE_WINDOW = 14;
 export const LOOKS_LIKE_MAX = 6;
 /** An untried dish placed this many times with no "made it" answer is dropped. */
 export const UNTRIED_MAX_OFFERS = 2;
+/** The tags every library dish's contains is read for at setup, besides every tag a rule names (spec §4.1). */
+export const BASE_TAGS = ["egg", "meat", "fish", "onion_garlic", "nuts", "peanut", "sugar", "white_rice", "dairy"] as const;
+/** The setup's day/count lint (spec §4.2): a dish's quote with one of these words (or a digit) and no frequency or days
+ *  saved gets one re-read. Words only to spot a quote worth a second look; the model reads what they mean. */
+export const LINT_DAY_WORDS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday", "mondays", "tuesdays", "wednesdays",
+  "thursdays", "fridays", "saturdays", "sundays", "mon", "tue", "tues", "wed", "thu", "thur", "thurs", "fri", "sat", "sun", "weekend", "weekends",
+  "weekday", "weekdays", "daily", "everyday", "day", "days", "night", "nights"] as const;
+export const LINT_COUNT_WORDS = ["once", "twice", "thrice", "one", "two", "three", "four", "five", "six", "seven"] as const;
 /** The new-dishes-a-week choices: none, 1–2, 3–4, surprise me. */
 export const NEW_DISHES_CHOICES = [0, 2, 4, 7] as const;
 

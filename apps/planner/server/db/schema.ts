@@ -43,6 +43,7 @@ export const house = sqliteTable("house", {
   asks_confirmed: integer("asks_confirmed").default(0),
   asks_still_have: integer("asks_still_have").default(0),
   sync_session_id: text("sync_session_id"),                    // the session the last sync-cart ask started: the next one reuses it
+  setup_state: text("setup_state"),                            // JSON: what apply_setup read beside the rows (the replies it read, who of the family cooks, weekday lunch, open asks), for a correction's diff
 });
 
 /** A meal of the day the family plans: the main ones, a custom one (a child's tiffin, an evening snack) and an add-on to a main

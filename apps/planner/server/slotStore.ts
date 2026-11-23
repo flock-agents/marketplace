@@ -166,6 +166,16 @@ export function seedSlotDays(db: Db, slot?: string): SlotDay[] {
     .filter((r) => !slot || sameName(r.slot, slot));
   return slotDaysOf(db, rows);
 }
+/** Remove the setup's seed examples (no date), with their dishes; one slot's only when given. Answers how many went. */
+export function deleteSeedSlotDays(tx: Db, by: string, changes: Change[], slot?: string): number {
+  const gone = seedSlotDays(tx, slot);
+  for (const d of gone) {
+    replaceDishes(tx, d.id, [], by, changes);
+    tx.delete(slot_days).where(eq(slot_days.id, d.id)).run();
+    changes.push(["slot_days", d.id, "delete", by]);
+  }
+  return gone.length;
+}
 /** A slot's history (spec §2.2): its seed examples and its dated slot-days before `before`, of any status. */
 export function slotHistory(db: Db, slot: string, before: string): SlotDay[] {
   return [...seedSlotDays(db, slot), ...listSlotDays(db, { to: addDays(before, -1), slot })];
