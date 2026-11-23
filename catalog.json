@@ -399,7 +399,7 @@
       "repo": "flock-agents/marketplace",
       "path": "apps/email-desk",
       "latestVersion": "3.0.0",
-      "latestTag": "email-desk-v3.0.0-rc1",
+      "latestTag": "email-desk-v3.0.0-rc2",
       "minFlockVersion": "0.24.0-beta.2",
       "personalAssistant": {
         "always": true,
