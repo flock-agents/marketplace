@@ -463,12 +463,17 @@ describe("make_plan v2: budgets and offers", () => {
     expect(untried().map((r: any) => [r.name, r.offers])).toEqual(before);
   });
 
-  it("feasibility: a thin library gets more new dishes first, then a 2-day window, then a question; logged in that order", async () => {
+  it("feasibility: a thin library gets a 2-day window first, then its own new dishes for the shortfall and a question; logged in that order", async () => {
     const k = await home({ lib: { ...LIB, Breakfast: ["Poha"] }, newPerWeek: 2 });
     const lines: string[] = [];
-    const r = await k.plan(fakeModel().model, { log: (l) => lines.push(l) });
+    const f = fakeModel();
+    const r = await k.plan(f.model, { log: (l) => lines.push(l) });
     const line = lines.find((l) => l.startsWith("feasibility Breakfast"))!;
-    expect(line).toContain("relaxed: 2 more new dishes, then repeat window 2 days, then asked");
+    // 7 places, Poha on 2: short by 5, 3 new dishes at 2 days each, beside the week's 2.
+    expect(line).toContain("relaxed: repeat window 2 days, then 3 new dishes of their kind for the shortfall (beside the week's setting), then asked");
+    expect(reqOf(f, "Breakfast").new_dishes_allowed).toBe(5);
+    expect(reqOf(f, "Breakfast").short_of_dishes).toBe(true);
+    expect(reqOf(f, "Lunch").short_of_dishes).toBeUndefined();
     expect(r.ok && (r.unmet ?? []).some((u) => u.includes("known"))).toBe(false);
     expect(lines.find((l) => l.startsWith("feasibility Lunch"))).not.toContain("relaxed");
   });
@@ -486,6 +491,30 @@ describe("make_plan v2: budgets and offers", () => {
     expect(r.message).toContain(q1);
     expect(r.message).not.toContain("for lunch");   // the third short slot (Lunch, 3 dishes) is not asked: 2 at most
     expect((r.unmet ?? []).some((u) => u.includes("known"))).toBe(false);
+  });
+
+  it("a short slot's new dishes of the family's kind are placed past the setting, saved untried with an offer each, and the question says what was done", async () => {
+    const k = await home({ newPerWeek: 0, slots: [...MAIN, { name: "Ravi's breakfast", kind: "custom", order: 15, usual_people: ["Ravi"] }],
+      lib: { ...LIB, "Ravi's breakfast": ["Ragi dosa"] } });
+    const plates = ["Ragi dosa", "Ragi idli", "Ragi roti", "Ragi dosa", "Ragi idli", "Ragi roti", "Ragi upma"];
+    const f = fakeModel({ slot: (u) => u.slot === "Ravi's breakfast"
+      ? { days: Object.fromEntries(u.days.map((d: any, i: number) => [d.date, [plates[i]]])), new: ["Ragi idli", "Ragi roti", "Ragi upma"].map((dish) => ({ dish, like: "Ragi dosa" })) }
+      : rotateDays(u) });
+    const r = await k.plan(f.model);
+    if (!r.ok) throw new Error(r.say);
+    // 7 places, Ragi dosa on 2: short by 5, 3 new dishes; the week's setting (0) is not what limits them.
+    expect(reqOf(f, "Ravi's breakfast").new_dishes_allowed).toBe(3);
+    expect(reqOf(f, "Breakfast").new_dishes_allowed).toBe(0);
+    expect(f.fixes()).toHaveLength(0);
+    expect(WEEK.map((d) => k.dishesAt(d, "Ravi's breakfast")[0])).toEqual(plates);
+    for (const name of ["Ragi idli", "Ragi roti", "Ragi upma"]) {
+      const row = k.rows("library").find((x: any) => x.name === name && x.slot === "Ravi's breakfast");
+      expect(row).toMatchObject({ origin: "planner_suggested", suggested: 1, untried: 1, offers: plates.filter((x) => x === name).length });
+    }
+    const q = "I only know 1 dish for Ravi's breakfast, so I've added a few new ones like Ragi idli. What else does Ravi have for Ravi's breakfast?";
+    expect(r.asked).toEqual([q]);
+    expect(r.message).toContain(q);
+    expect(r.message).toContain("Ragi idli (like your Ragi dosa)");
   });
 
   it("an add-on whose only dish is had twice a week is filled on 2 days, spread apart; the other 5 have no slot-day, nothing unmet, nothing said", async () => {

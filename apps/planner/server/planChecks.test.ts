@@ -2,7 +2,7 @@
 // leaves dishes back too soon (resolveSlot), a dish the family has on some days or often put on free days (checkSlot's
 // "few"), and the feasibility check's shared dishes and new dish for a person with nothing of their own.
 import { describe, expect, it } from "bun:test";
-import { checkSlot, feasibility, hardOnly, resolveSlot, rotate, slotFacts, thinAddon, type Proposal, type Week } from "./planChecks";
+import { checkSlot, feasibility, hardOnly, resolveSlot, rotate, settingUsed, slotFacts, thinAddon, type Proposal, type Week } from "./planChecks";
 import { dishKey } from "./dishText";
 import type { PlanDay } from "./planDays";
 import type { HistoryRow, LibraryDish, Rule, Slot } from "./slotStore";
@@ -73,7 +73,7 @@ describe("feasibility", () => {
     expect(r.log[0]).toBe("feasibility Lunch: 4 places (4 × 1), 4 from the library");
     expect([...w.slots.get("lunch")!.takes]).toEqual([["lauki", 2], ["bhindi", 2]]);
     expect(r.log[1]).toStartWith("feasibility Dinner: 4 places (4 × 1), 0 from the library");
-    expect(r.short).toEqual([{ slot: "Dinner", known: 2, supply: 0, places: 4 }]);
+    expect(r.short).toEqual([{ slot: "Dinner", known: 2, supply: 0, places: 4, newDishes: 2 }]);
   });
 
   it("a person who can eat none of a slot's dishes beside the staples on some day gets a new dish there first", () => {
@@ -82,6 +82,76 @@ describe("feasibility", () => {
     const r = feasibility(w, ["Lunch"]);
     expect(r.log[0]).toBe("feasibility Lunch: 1 new dish for Asha (none of its dishes beside the staples is theirs on some day)");
     expect(w.slots.get("lunch")!.newAllowed).toBe(2);
+  });
+});
+
+describe("a short slot's own new dishes (owner, 24 Nov)", () => {
+  // Dinner: 7 days of two non-staple dishes (Roti is every plate's staple), and only two dishes known: 14 places, 4 at most
+  // from the library (each 2 days); short by 10 places, 5 new dishes at 2 days each.
+  const thinDinner = (newBudget: number) => week({ slots: [slot("Lunch"), slot("Dinner", { order: 50 })], newBudget,
+    library: [...["Sambar", "Rasam", "Kootu", "Poriyal", "Avial", "Thoran", "Kadhi"].map((n) => dish(n, "Lunch")), ...["Roti", "Lauki", "Toor dal"].map((n) => dish(n, "Dinner"))],
+    history: { Dinner: seed("Dinner", [["Roti", "Toor dal", "Lauki"], ["Roti", "Chana dal", "Bhindi"], ["Roti", "Urad dal", "Tinda"], ["Roti", "Toor dal", "Karela"]]),
+      Lunch: seed("Lunch", [["Sambar"], ["Rasam"]]) } });
+
+  it("a short slot gets new dishes equal to its shortfall, not limited by the week's setting; a slot that is not short gets none of its own", () => {
+    for (const budget of [0, 1]) {
+      const w = thinDinner(budget);
+      const r = feasibility(w, ["Lunch", "Dinner"]);
+      expect(w.slots.get("dinner")!.shortNew).toBe(5);
+      expect(w.slots.get("dinner")!.short).toBe(true);
+      expect(w.slots.get("lunch")!.shortNew).toBe(0);
+      expect(w.slots.get("lunch")!.newAllowed).toBe(budget);   // the setting, shared, untouched by Dinner's shortfall
+      expect(r.short).toEqual([{ slot: "Dinner", known: 2, supply: 4, places: 14, newDishes: 5 }]);
+      expect(r.log[1]).toContain("relaxed: repeat window 2 days, then 5 new dishes of their kind for the shortfall (beside the week's setting), then asked");
+    }
+  });
+
+  it("the check lets a short slot place its shortfall's new dishes beside the setting; a slot that is not short stays within the setting", () => {
+    const w = thinDinner(1);
+    feasibility(w, ["Lunch", "Dinner"]);
+    const news = ["Methi thepla", "Turai sabzi", "Moong dal", "Gawar sabzi", "Masoor dal"];
+    const plates = WEEK.map((_, i) => ["Roti", news[i % 5], i % 2 ? "Lauki" : "Toor dal"]);
+    const newNames = new Map(news.map((n) => [dishKey(n), { name: n, why: "", like: "Lauki" }]));
+    const dinner = (ps: string[][]) => checkSlot(w, "Dinner", { days: new Map(WEEK.map((d, i) => [d, ps[i]])), newNames });
+    const budgetProblems = (m: Map<string, any[]>) => [...m.values()].flat().filter((x) => x.kind === "new_budget");
+    expect(budgetProblems(dinner(plates))).toEqual([]);
+    // 5 of its own + the setting's 1 = 6; a 7th new dish is past it.
+    const more = ["Sev tamatar", "Tinda masala"];
+    for (const n of more) newNames.set(dishKey(n), { name: n, why: "" });
+    expect(budgetProblems(dinner(plates.map((p, i) => (i === 5 ? ["Roti", more[0], "Lauki"] : p))))).toEqual([]);
+    expect(budgetProblems(dinner(plates.map((p, i) => (i === 5 ? ["Roti", more[0], "Lauki"] : i === 6 ? ["Roti", more[1], "Toor dal"] : p)))).length).toBeGreaterThan(0);
+    // Lunch is not short: two new dishes there with a setting of 1 is one too many.
+    const lunch = checkSlot(w, "Lunch", { days: new Map(WEEK.map((d, i) => [d, [i === 0 ? "Rava upma" : i === 1 ? "Pongal" : ["Sambar", "Rasam", "Kootu", "Poriyal", "Avial"][i - 2]]])),
+      newNames: new Map([["rava upma", { name: "Rava upma", why: "" }], ["pongal", { name: "Pongal", why: "" }]]) });
+    expect(budgetProblems(lunch).length).toBeGreaterThan(0);
+    // Dinner's own new dishes do not use the setting.
+    w.newDishes = new Map(news.map((n) => [dishKey(n), { name: n, slot: "Dinner", why: "" }]));
+    expect(settingUsed(w)).toBe(0);
+    w.newDishes.set("rava upma", { name: "Rava upma", slot: "Lunch", why: "" });
+    expect(settingUsed(w)).toBe(1);
+  });
+
+  it("a swap in a short slot with no known dish that fits takes one of the slot's accepted new dishes before keeping the repeat", () => {
+    const w = thinDinner(0);
+    feasibility(w, ["Lunch", "Dinner"]);
+    w.done.add("lunch");
+    for (const d of w.days.filter((x) => x.slot === "Lunch")) d.dishes = ["Sambar"];
+    // Lauki on Mon and Thu already (its two days); Saturday's plate brings it back a third time. Turai sabzi and Gawar sabzi
+    // are new dishes like Lauki the call placed; Turai is on Friday (too soon), Gawar only on Wednesday (it has room).
+    const plates = [["Roti", "Toor dal", "Lauki"], ["Roti", "Moong dal", "Turai sabzi"], ["Roti", "Masoor dal", "Gawar sabzi"], ["Roti", "Toor dal", "Lauki"],
+      ["Roti", "Moong dal", "Turai sabzi"], ["Roti", "Masoor dal", "Lauki"], ["Roti", "Urad dal", "Methi sabzi"]];
+    const p: Proposal = { days: new Map(WEEK.map((d, i) => [d, plates[i]])), newNames: new Map() };
+    for (const n of ["Moong dal", "Masoor dal", "Urad dal"]) p.newNames.set(dishKey(n), { name: n, why: "", like: "Toor dal" });
+    for (const n of ["Turai sabzi", "Gawar sabzi", "Methi sabzi"]) p.newNames.set(dishKey(n), { name: n, why: "", like: "Lauki" });
+    const lauki = () => WEEK.filter((d) => p.days.get(d)!.includes("Lauki")).length;
+    expect(lauki()).toBe(3);
+    const bad = WEEK.filter((d) => hardOnly(checkSlot(w, "Dinner", p).get(d)).some((x) => x.dish === "Lauki"));
+    expect(bad.length).toBeGreaterThan(0);
+    const r = rotate(w, "Dinner", p, bad, { swapsOnly: true });
+    expect(lauki()).toBe(2);
+    for (const d of WEEK) expect(p.days.get(d)).toHaveLength(3);   // swapped in its place, never dropped
+    expect(p.days.get(WEEK[5])).toEqual(["Roti", "Masoor dal", "Gawar sabzi"]);   // the new dish like Lauki with room took its place
+    expect(r.unmet).toEqual([]);
   });
 });
 
