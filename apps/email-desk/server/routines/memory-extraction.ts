@@ -35,6 +35,7 @@ import { THREAD_BODY_SEPARATOR } from "../lib/thread-format";
 import { localDayStart, processTimezone, todayIn } from "../lib/local-day";
 import { gatherNewMail, EARLIER_MESSAGE_MARK, type GatherResult, type KeptMail } from "./gather";
 import { markHandedOver } from "./seen";
+import { recordHarvestRun } from "../platform-ops";
 import { FamilyPushBatch, NAMING_SCHEMA, emailLabel, slugOf, type HeldTask, type ImportCallResult } from "../family/push";
 import { householdNames, personFirstName } from "../family/context";
 import { blockTaskGate, senderKindOf } from "../lib/task-gates";
@@ -258,6 +259,9 @@ async function runAccount(
 
   // 5. WAKE for the pending draft offers: this run's and any an earlier failed wake left.
   const woke = await wakeForOffers(ctx, accountId, failures);
+  // A run that read the mailbox and put every kept mail into memory is a finished harvest (last_harvest op). A failed chunk
+  // leaves the day open.
+  if (failed === 0) recordHarvestRun(accountId);
   say(accountId, `kept=${g.kept.length} extracted=${extracted.length} failed=${failed} woke=${woke}`);
 }
 

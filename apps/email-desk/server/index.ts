@@ -3,15 +3,15 @@
 // boots, answers /health, runs the routines it has, and prints the ready line.
 import { createFlockApp } from "@flock/app-sdk";
 import { memoryExtraction } from "./routines/memory-extraction";
-import { ops } from "./ops";
+import { allOps } from "./registry";
 import { handleCardClosed } from "./drafts/send";
 
 const flock = createFlockApp({
   lifecycle: {},
   // One run per account of the paired agent's Gmail (flock.app.json routines, event trigger per account).
   routines: { "memory-extraction": memoryExtraction },
-  // The draft ops and send_draft (ops.ts); reply_context and the platform read ops join them in later tasks.
-  ops,
+  // reply_context, the draft ops, send_draft and the platform read ops (registry.ts).
+  ops: allOps,
   // A draft card the person dismissed discards its draft (drafts/send.ts); a sent or expired one changes nothing.
   onCardClosed: (event, ctx) => handleCardClosed(event, ctx),
 });

@@ -74,7 +74,7 @@ export async function withThreadTurn<T>(accountId: string, threadId: string, fn:
 }
 
 /** The account this copy read the thread in: the journal holds a row of it (in `accountId`'s mailbox, when named). */
-function deskThreadAccount(threadId: string, accountId: string): string | null {
+export function deskThreadAccount(threadId: string, accountId: string): string | null {
   if (!threadId) return null;
   const db = getStore();
   const row = (accountId

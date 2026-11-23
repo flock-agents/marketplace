@@ -411,3 +411,21 @@ describe("memory-extraction: the family calendar", () => {
     expect(f.imports).toEqual([]);
   });
 });
+
+describe("memory-extraction: last_harvest", () => {
+  const stamp = () => (db.query("SELECT value FROM app_meta WHERE key = ?").get(`last_harvest:${ACCOUNT}`) as { value: string } | null)?.value ?? null;
+
+  test("a finished run stamps the account; a busy mailbox or a failed chunk does not", async () => {
+    const busy = fake({ gather: { busy: true, note: "mailbox busy", kept: [] } });
+    await busy.run();
+    expect(stamp()).toBeNull();
+
+    const failed = fake({ kept: [kept(1)], extract: () => ({ ok: false, reason: "timeout" }) });
+    await expect(failed.run()).rejects.toThrow();
+    expect(stamp()).toBeNull();
+
+    const before = Date.now();
+    await fake({ kept: [kept(1)] }).run();
+    expect(Number(stamp())).toBeGreaterThanOrEqual(before);
+  });
+});
