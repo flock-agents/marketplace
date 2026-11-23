@@ -104,10 +104,12 @@ const RULES_EXAMPLE = `gives rules [{ egg, quote "eggs fine but no meat" }, { av
 
 const DISHES_PART = `Write this part: the family's own dishes, from their answers (the past week's meals, a child's tiffin, what someone has for a meal). No drinks (tea, coffee, milk, juice).
 - dishes: each dish as a row [name, meals, who]:
-  name: plain ("Idli", "Rajma chawal").
+  name: plain ("Idli", "Rajma chawal"). A meal told as its parts ("rice, dal, a dry sabzi, curd") is each part a dish of that meal: ["Rice", "Lunch", ""], ["Dal", "Lunch", ""], ["Dry sabzi", "Lunch", ""], ["Curd", "Lunch", ""]; "sambar or dal" is two dishes.
   meals: the meal it is eaten at: Breakfast, Lunch, Dinner, a child's school tiffin as "<child>'s tiffin", an evening snack as "Evening snack"; two meals as "Breakfast, Dinner".
-  who: the people it is theirs, by name, when only some eat it ("Father had ragi dosa": the father's name; two as "Asha, Ravi"); "" when everyone at that meal eats it.`;
-const DISHES_EXAMPLE = `gives dishes [["Sandwich", "Tara's tiffin", ""], ["Poha", "Tara's tiffin", ""], ["Ragi malt", "Breakfast", "Divya"]] (no milk: a drink).`;
+  who: the people it is theirs, by name, ONLY when the reply itself says it is one person's or some people's ("Father had ragi dosa", "jowar roti for my mother", "khichdi when she's unwell" said of a child: that person; two as "Asha, Ravi"). Otherwise "": the whole house eats it.
+  A question about the children or about the adults only splits the asking: a dish named in the answer about the adults is not the adults' only, and one in the answer about a child is not that child's only, unless the reply names who. "Same as us" / "same as the adults" means the same dishes for everyone. A dish named in two answers is one dish for everyone, unless every reply that names it names who.`;
+const DISHES_EXAMPLE = `More of that family's answers (Q: What do the adults eat for lunch? A7: rice, rasam or dal, a poriyal, curd. Amma has the same, less rice. Q: Tara's dinner? A8: same as us, roti with dal or a sabzi, less spicy. Khichdi when she's unwell.)
+gives dishes [["Sandwich", "Tara's tiffin", ""], ["Poha", "Tara's tiffin", ""], ["Ragi malt", "Breakfast", "Divya"], ["Rice", "Lunch", ""], ["Rasam", "Lunch", ""], ["Dal", "Lunch, Dinner", ""], ["Poriyal", "Lunch", ""], ["Curd", "Lunch", ""], ["Roti", "Dinner", ""], ["Sabzi", "Dinner", ""], ["Khichdi", "Dinner", "Tara"]] (no milk: a drink; the lunch in the answer about the adults names no one, so it is everyone's; "less rice" is a rule, not a dish).`;
 
 const systemOf = (part: string, example: string) => `${COMMON}\n\n${part}\n\n${EXAMPLE}\n${example}\n${NOT_THE_EXAMPLE}`;
 
@@ -528,7 +530,8 @@ export async function applySetup(deps: { db: Db; model: ModelCall; post: Post; h
     }
   }
 
-  // 5. The family's dishes, each alone.
+  // 5. The family's dishes: one row a dish (a dish sent again takes the meals and eaters sent), then each alone.
+  const rows: DishRow[] = [];
   for (const d of p.dishes) {
     if (DRINKS.test(d.name)) continue;
     const found: (string | null)[] = [];
@@ -536,7 +539,10 @@ export async function applySetup(deps: { db: Db; model: ModelCall; post: Post; h
     const slots = [...new Set(found.filter((s): s is string => !!s))];
     if (!slots.length) { noted.push(`${d.name}: no meal for it (${d.slots.join(", ")})`); continue; }
     const who = whoOf(d.for);
-    const res = await deps.post("/api/dish-book/family", { dishes: [{ name: d.name, slots, ...(who.names.length && !who.unknown.length ? { for: who.names } : {}) }] });
+    rows.push({ name: d.name, slots, who: who.names.length && !who.unknown.length ? who.names : null });
+  }
+  for (const d of mergeDishes(rows, names)) {
+    const res = await deps.post("/api/dish-book/family", { dishes: [{ name: d.name, slots: d.slots, ...(d.who ? { for: d.who } : {}) }] });
     if (!res.ok) noted.push(`${d.name}: not saved (${res.reason})`);
   }
 
@@ -554,6 +560,25 @@ export async function applySetup(deps: { db: Db; model: ModelCall; post: Post; h
 
   const back = readBack(deps.db, p);
   return { ok: true, said: noted.length ? `${back}\nNoted, not checked by the planner:\n${noted.map((n) => `- ${n}`).join("\n")}` : back, noted, dropped, rules: savedRules, profile: p, model };
+}
+
+/** A dish as read, its meals and eaters on the app's names; `who` null: everyone at those meals. */
+export type DishRow = { name: string; slots: string[]; who: string[] | null };
+/** The dishes read, one row a dish (live run 2026-11-23: "Curd" read once in the adults' answer and once in the child's,
+ *  the last row saved won and the dish became one person's): rows of the same dish (its name lower case, single spaces) are
+ *  one, its meals the union of theirs; its eaters the union of theirs, or everyone when any row is everyone's. A dish whose
+ *  eaters are the whole family (`family`) is everyone's. A child's tiffin dish keeps its child: a dish of one person's is
+ *  never taken to fill another meal. */
+export function mergeDishes(rows: DishRow[], family: string[]): DishRow[] {
+  const byKey = new Map<string, DishRow>();
+  for (const r of rows) {
+    const key = r.name.trim().toLowerCase().replace(/\s+/g, " ");
+    const had = byKey.get(key);
+    if (!had) { byKey.set(key, { name: r.name, slots: [...r.slots], who: r.who ? [...r.who] : null }); continue; }
+    for (const s of r.slots) if (!had.slots.includes(s)) had.slots.push(s);
+    had.who = had.who && r.who ? [...new Set([...had.who, ...r.who])] : null;
+  }
+  return [...byKey.values()].map((d) => (d.who && family.length && family.every((p) => d.who!.some((w) => same(w, p))) ? { ...d, who: null } : d));
 }
 
 /** The note a day-off cooking entry is saved with: the menu reads it, and the read-back finds it by it. */

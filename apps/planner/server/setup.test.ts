@@ -2,7 +2,7 @@
 // in a fixed order; a rule the family never said is dropped; one the app cannot take is kept as a note; nothing sinks the rest.
 import { describe, it, expect } from "bun:test";
 import { boot } from "./testkit";
-import { clockOf, cookVisits, cookTimesOf, daysOf, saidByFamily, familyLines, plainWords } from "./setup";
+import { clockOf, cookVisits, cookTimesOf, daysOf, mergeDishes, saidByFamily, familyLines, plainWords, SETUP_PARTS } from "./setup";
 import type { ModelRequest, ModelResult } from "./model";
 
 const HOUSEHOLD = {
@@ -171,6 +171,41 @@ describe("apply_setup: the model reads, code writes", () => {
     const rules = (await k.owner("GET", "/api/family")).body.house.rules;
     expect(rules.filter((x: any) => x.kind !== "other").map((x: any) => [x.kind, x.who ?? null])).toEqual([["no_eggs", null], ["avoid", "Kiran"], ["avoid", "Nisha"]]);
     expect(r.noted.join("\n")).toContain("Grandpa Joe is not on the Family page");
+  });
+
+  // Live run 2026-11-23: the dishes named in the adults' answer were saved as the adults' (rice, sambar, curd for two people),
+  // and a dish read in two answers kept only the last one's eaters ("Chapati" the child's only). A question's group only
+  // splits the asking; the same dish read twice is one dish.
+  it("the same dish read in several rows is one dish: its meals and eaters joined, everyone's when any row is", async () => {
+    const f = fake(PROFILE, { dishes: { dishes: [["Rice", "Lunch", "Kiran, Nisha"], ["Rice", "Lunch", "Ishaan"], ["Chapati", "Dinner", "Ishaan"], ["chapati", "Dinner", ""],
+      ["Dal", "Lunch", "Kiran"], ["Dal", "Dinner", "Padma"], ["Curd", "Lunch", "Kiran, Nisha, Ishaan, Padma"], ["Sandwich", "Tiffin", "Ishaan"]] } });
+    const k = await boot({ model: f.model });
+    const r = await k.op("apply_setup", { household: HOUSEHOLD, transcript: TRANSCRIPT });
+    expect(r.ok).toBe(true);
+    const book = k.rows("dish_book").filter((d) => d.slots).map((d) => [d.name, JSON.parse(d.slots), d.eaten_by ? JSON.parse(d.eaten_by) : null]);
+    expect(book).toContainEqual(["Rice", ["Lunch"], ["Kiran", "Nisha", "Ishaan"]]);
+    expect(book).toContainEqual(["Chapati", ["Dinner"], null]);
+    expect(book).toContainEqual(["Dal", ["Lunch", "Dinner"], ["Kiran", "Padma"]]);
+    expect(book).toContainEqual(["Curd", ["Lunch"], null]);   // the whole family named: everyone
+    expect(book).toContainEqual(["Sandwich", ["Ishaan's tiffin"], ["Ishaan"]]);   // a tiffin dish keeps its child
+    expect(book.filter((d) => /chapati/i.test(d[0] as string))).toHaveLength(1);
+  });
+
+  it("mergeDishes: union of meals; eaters joined, or everyone", () => {
+    const fam = ["A", "B", "C"];
+    expect(mergeDishes([{ name: "Idli", slots: ["Breakfast"], who: ["A"] }, { name: " idli ", slots: ["Dinner"], who: null }], fam))
+      .toEqual([{ name: "Idli", slots: ["Breakfast", "Dinner"], who: null }]);
+    expect(mergeDishes([{ name: "Oats", slots: ["Breakfast"], who: ["C"] }, { name: "Oats", slots: ["Breakfast"], who: ["C"] }], fam))
+      .toEqual([{ name: "Oats", slots: ["Breakfast"], who: ["C"] }]);
+    expect(mergeDishes([{ name: "Rice", slots: ["Lunch"], who: ["A", "B"] }, { name: "Rice", slots: ["Lunch"], who: ["C"] }], fam))
+      .toEqual([{ name: "Rice", slots: ["Lunch"], who: null }]);
+  });
+
+  it("the dishes reader is told a question's group is not who eats the dish, and a meal told as its parts is a dish each", () => {
+    const sys = SETUP_PARTS.find((p) => p.id === "dishes")!.system;
+    expect(sys).toContain("only splits the asking");
+    expect(sys).toContain("\"Same as us\" / \"same as the adults\" means the same dishes for everyone");
+    expect(sys).toContain("is each part a dish of that meal");
   });
 
   it("dishes come back as short rows [name, meals, who]", async () => {
