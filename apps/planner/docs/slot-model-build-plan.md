@@ -1,35 +1,33 @@
-# Slot model — build plan and resume notes (23 Nov 2026)
+# Slot model — build state and resume notes (24 Nov 2026)
 
-Start here after the session compaction. The design is settled; nothing of the slot model is built yet.
+Built and merge-ready, not pushed, no PR (owner tests first). Spec: `slot-model-spec.md` (owner decisions through 24 Nov folded in).
 
-## Read first
-- Spec (final, owner-approved, no open questions): `apps/planner/docs/slot-model-spec.md` (commits 6e096e2 → 68c3653).
-- Design page: https://claude.ai/artifact/G6kUr6SWuXe75wQoCLNmHD (source: session scratchpad `meal-planner-pipeline.html`).
-- Memory: `planner-slot-model.md`, `planner-two-evals.md`, `app-owns-setup-consolidation.md`.
-- Old run log / handover: `~/Developer/flock/.superpowers-archive/HANDOVER-whatsapp-onboarding-testing.md` (the `~/Developer/flock-wa-onboarding` folder no longer exists).
+## Branches (merge together; Flock first)
+| Repo | Branch | Worktree | What |
+|---|---|---|---|
+| marketplace (planner) | `feat/planner-slot-model` | `~/Developer/mp-slot-model` | Tables, setup v2, plan v2, later-change ops, next-day untried-dish question, evals (h1–h8 + held-out h9–h12), 7-day shopping simulation. 585 tests. |
+| flock | `feat/household-weekly` | `~/Developer/flock-household` | `household.weekly` (from h4), nicknames, `household.dated` + Butler tool, make_plan gets household, `ctx.household.get`, `ctx.apps.op` (app→app read ops) |
+| marketplace (family-calendar) | `feat/famcal-get-events` | `~/Developer/mp-famcal-events` | `get_events {from,to}` (3.1.0) |
+Merged lane branches (can delete): feat/planner-slot-schema, -setup-v2, -plan-v2, -slot-evals, -later-changes.
 
-## Where the code is
-| Repo / folder | Branch | State |
-|---|---|---|
-| `~/Developer/marketplace-runner` (planner) | `feat/planner-runner-saves` | apply_setup (3 parallel reads), how-often, setup fixes, evals (`apps/planner/evals/`), spec. Suite 471/0. Not pushed. |
-| `~/Developer/mp-plan-best` | `feat/planner-plan-best` | Sol/best-tier experiment. NOT to merge (weekly plans stay on balanced). Keep only as reference. |
-| `~/Developer/flock-runner` (worktree of `~/Developer/flock`) | `feat/interview-runner` @ 5ea1aa08a | setupApply flow, ack+question in one message, app-model `best` tier (5ea1aa08a — unused by the planner now; decide keep/revert). Folder was re-created from the branch on 23 Nov. |
-| `~/Developer/flock-sim` | `feat/interview-sim` | must-pass bar, 6 scenarios, two stacks (`--stacks a,b`). Last merged Flock at 9b31c9d5c. |
-Other planner worktrees (`mp-how-often`, `mp-setup-fixes`, `mp-dish-eaters`, `mp-evals`) are merged; can be removed. Stray locked worktree `~/Developer/flock/.claude/worktrees/agent-a8e6597d4754221dc` can be removed.
+## Last measured (DeepSeek v4 flash = live balanced)
+- Eval 1 (setup): h1–h8 95%, held-out 91%; hard rules 100%.
+- Eval 2 (plan): h1–h8 filled/attendance/hard rules 100%, dish_frequency 97%; judges 3.4. Held-out judges 3.3 (`evals/results/plan-truth-heldout-short-new/`).
+- Shopping week simulation: all checks pass (`server/shoppingWeek.test.ts`).
 
-## Build order (lanes from the spec §9; parallel where independent)
-1. **Evals first** — update Eval 1 (slots, attendance from weekly patterns, library with frequency/days/contains/origin, personal vs shared placement, seed history) and Eval 2 (slot-days filled, rules via open contains, frequency/repeat windows with staples exempt, shape tracked, judge). Add held-out households h9–h12 (written separately, run only at milestones), the day-word lint, the name guard, a "no new word lists" guard for setup.
-2. **Schema** (lane A): new tables replace old ones outright; old ops removed (no migration — new interview unreleased).
-3. **Setup v2** (apply_setup): slots incl. add-on slots, library + open contains batch, seed history, rules with quotes, weekday attendance read-back, corrections applied as diffs.
-4. **Plan v2** (make_plan): slot-days (usual − weekly absences ± calendar events − skip_days/fasts + guests), feasibility check (seed + confirmed counts only), ordered slot calls (breakfast → tiffin → lunch → dinner → add-ons, ≤3 concurrent), checks, rotation fill, ingredients, message (All-week notes once; festival question inferred by the routine).
-5. **Later changes + feedback**: set_slot, set_slot_day (guests, occasion), add_dish (link), set_rule, set_setting, record_made, record_feedback; next-day question for untried dishes (planner_suggested + reel/link adds).
-6. **Flock**: household read structures weekly patterns + nicknames (per speaker); send them; Family Calendar `get_events {from,to}` (new, minimal) read path.
-7. **Acceptance**: both evals pass on held-out homes → then WhatsApp sim batch (two stacks) → owner reads two real weeks.
+## Open — optimise later
+1. **Short slots don't get new dishes in practice.** Code gives a short slot its own new-dish allowance (owner 24 Nov), but DeepSeek proposed none for h9/h12 dinners: it reuses lunch's dishes from `looks_like`. Next: show the model the used-up dishes explicitly as "used up", and/or require `new` entries when `short_of_dishes` and the library is empty; capture raw answers.
+2. **Short-slot repeats are hard problems now** → many `unmet` lines when no new dish is placed (h9 1→10). Cheapest fix: keep them soft unless the slot has accepted new dishes.
+3. Lunch runs before dinner and uses up shared dishes under the 2-days default cap; dinner then repeats lunch (same_day_repeat 23/28 held-out).
+4. Eval scorer's default_cap doesn't know add-on standing dishes (dea3b74) — scorer fix.
+5. Setup: a person's own meals on new families (held-out personal placement 57%); dish frequency/days 70%; dishes read occasionally passes 150 s.
+6. h4 make_plan ≈325 s vs 330 s limit.
+7. Shopping: the family's message says "Your cart: milk" not "I've added milk"; unanswered low items ride into orders at qty 0.
+8. Cleanup: delete `server/legacy.ts`; regenerate catalog.json/row-schema.json/settings.json; CHANGELOG; trim committed eval results before PR; Week page not run in a browser.
+9. Owner decision pending: ingredient stripping (distrust reads that tag most of a dish; keep ingredients for people a dish is not_for) — recommended keep.
 
-## Working rules (owner)
-- Plan before build: show breakdown, wait for go. No PR before the owner tests. Never push unless asked.
-- Never run the full Flock server suite; single test files with a private `TMUX_TMPDIR` and `env -u FLOCK_HOME -u DATA_DIR`. Planner suite (`bun test server/ src/`) is fine.
-- `git -C <repo>`, add files by path, never `-a`. Commit trailer: Co-Authored-By + Claude-Session lines.
-- Don't touch owner instances (35626, 35850); only stop other stacks when the owner says so. Sim: load `~/.flock-wa-onboarding-test/sim/current.env` first; ≤2 stacks.
-- Live gateway maps fast/balanced/best all to `deepseek/deepseek-v4-flash` (FWS DB routes, not the config file). OpenRouter key has a daily limit (owner raised it 23 Nov); never print keys.
-- Evals: tune on h1–h8, score on fresh chats; no test-family names in any model-facing text.
+## Acceptance still to do
+WhatsApp sim batch on two stacks (`~/Developer/flock-sim`), then the owner reads two real weeks. Owner instances 35626/35850 were down on 23 Nov (not touched by this work).
+
+## Working rules
+Plan before build; no PR before the owner tests; never push unless asked. Never the full Flock server suite. `git -C`, add by path. No eval family names in prompts; no word lists for meaning (guard tests). OpenRouter key has a $20/day limit (hit 24 Nov).
