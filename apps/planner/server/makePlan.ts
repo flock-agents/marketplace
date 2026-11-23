@@ -24,7 +24,7 @@ import { STOP_CODES, stopSaid, type ModelCall, type ModelFailure, type ModelRequ
 import { commit, deleteSlotDays, listLibrary, listRules, listSlotDays, listSlots, newDishesPerWeek, recent, saveSlotDay, slotHistory, upsertLibrary,
   type Rule, type Slot } from "./slotStore";
 import { buildDays, slotDayKey, lunchSaid, platformPeers, readEvents, readHousehold, ruleHolds, withLunchSaid, type PlanDay, type Peers } from "./planDays";
-import { addDaily, canonTag, checkSlot, factsOf, feasibility, ownAddon, forbidden, frequencyRange, hardOnly, isStapleAt, notFor, plannable, rotate, ruleBreaks, ruleTags,
+import { addDaily, canonTag, checkSlot, factsOf, feasibility, ownAddon, forbidden, frequencyRange, hardOnly, isStapleAt, notFor, plannable, resolveSlot, rotate, ruleBreaks, ruleTags, softSwapNotes,
   slotFacts, swapNotes, type Problem, type Proposal, type Week } from "./planChecks";
 
 export type MakePlanResult =
@@ -50,7 +50,7 @@ export const SLOT_SCHEMA = { type: "object", required: ["days"], properties: {
 export const SLOT_SYSTEM = [
   "You plan one meal slot of an Indian family's week: the dishes made at that slot on each day in `days`. Answer with JSON only: { days: { \"YYYY-MM-DD\": [dish names] }, new: [{ dish, why }], notes: { \"YYYY-MM-DD\": note } }.",
   "Every date in `days` without `skip` gets its dishes; a date with `skip` gets none. Dish names only, no ingredients. A day's dishes are made once and eaten by everyone in its `for`.",
-  "Shape each day like `looks_like`, this family's own plates at this slot: the same parts (a staple, a dal, a dry vegetable, a side…) and as many dishes as `plate` says, never thinner. `staples` come as often as the plates show them. The rest from `library`: rotate them so a dish is not within `gap` days of itself here; a dish comes at most `left` more days, at least `at_least` days when given, and only on its `days`. A dish with `days` is what the family has on those days: put it on each of them where its people can eat it.",
+  "Shape each day like `looks_like`, this family's own plates at this slot: the same parts (a staple, a dal, a dry vegetable, a side…) and as many dishes as `plate` says, never thinner. `staples` come as often as the plates show them, and only on a day shaped like a plate that has them (a one-pot rice dish needs no plain rice beside it). The rest from `library`: rotate them so a dish is not within `gap` days of itself here; a dish comes at most `left` more days, at least `at_least` days when given, and only on its `days`. A dish with `days` is what the family has on those days: put it on each of them where its people can eat it.",
   "A dish's `not_for` people do not eat it: that is fine, as long as each of them has a dish of their own that day beside the staples. `guests` eat that meal too: keep their `rules` for them the same way. People in a day's `own_slot` get their own dish at their own slot that day.",
   "A dish that is not in `library` or `staples` is new: list it in `new` with why it suits this family (like which dish of theirs), at most `new_dishes_allowed` new dishes in all; none when it is 0.",
   "Every rule in `rules` holds for its person (everyone when it says so): a dish against their rule is simply not theirs, so on every day they are in `for` they need at least one dish they can eat beside the staples, as their past plates show. A rule with a count a week is kept that many times in the week, not every day. `notes_for_people` are preferences to keep in mind. A person in `fasting` eats only what it says.",
@@ -61,7 +61,8 @@ export const SLOT_SYSTEM = [
 export const FIX_SYSTEM = [
   "You fix some days of one meal slot of an Indian family's week. Answer with JSON only, in the same shape: { days: { \"YYYY-MM-DD\": [dish names] }, new: [{ dish, why }], notes: { ... } }.",
   "Send back ONLY the dates in `fix`, each day whole (all its dishes), changed so every reason given for it is gone. The other days stay as `now` has them. `week` lists what is off across the week: keep it in mind.",
-  "Everything of the first request still holds: the library, staples, `left`, `days`, the rules (each person needs a dish they can eat) and the new-dish limit.",
+  "Everything of the first request still holds: the library, staples, `left`, `days`, the rules (each person and the guests need a dish they can eat) and the new-dish limit.",
+  "notes: only a word for someone at the table that day; never what you changed or why.",
 ].join("\n");
 
 /** The model's slot answer, read leniently: only the dates asked, dish names as strings, each once. */
@@ -85,6 +86,15 @@ export const CONTAINS_SCHEMA = { type: "object", required: ["dishes"], propertie
 export const CONTAINS_SYSTEM = [
   "For each Indian dish given, say which of the given tags it has as usually made at home. Answer with JSON only: { dishes: [{ dish, has: [tags], not: [tags] }] }, every dish, its name exactly as given.",
   "Every tag of `tags` goes in has or in not; a tag you cannot tell for that dish goes in neither.",
+].join("\n");
+
+// ── The guests' food rules (their words) → the tags they forbid ──
+
+export const GUESTS_SCHEMA = { type: "object", required: ["rules"], properties: { rules: { type: "array", items: { type: "object", required: ["rule", "never"],
+  properties: { rule: { type: "string" }, never: { type: "array", items: { type: "string" } } } } } } };
+export const GUESTS_SYSTEM = [
+  "Guests are coming for a meal. For each of their food rules, in their words, say which of the given tags a dish must not have for them. Answer with JSON only: { rules: [{ rule, never: [tags] }] }, every rule, its words exactly as given.",
+  "Only tags from `tags`; [] when the rule forbids none of them.",
 ].join("\n");
 
 // ── The ingredients (§5.5) ──
@@ -226,6 +236,20 @@ async function planWeek(deps: MakePlanDeps & { log: (line: string) => void }, in
   for (const l of feas.log) log(l);
   const unmet: string[] = [...feas.unmet];
   const tags = ruleTags(rules);
+  // The guests' food rules, in their words, read once into the tags they forbid (code then checks them like a person's).
+  const guestWords = uniq(days.filter((d) => !d.fixed).flatMap((d) => d.guests.flatMap((g) => g.rules ?? [])).map((x) => x.trim().toLowerCase()).filter(Boolean));
+  if (guestWords.length) {
+    const r = await model({ tier: "fast", purpose: "meal plan: guests' food rules", system: GUESTS_SYSTEM, schema: GUESTS_SCHEMA, maxTokens: 800,
+      user: JSON.stringify({ tags, rules: guestWords }) }, INGREDIENTS_RESERVE_MS);
+    if (!r.ok) { log(`guests' rules read failed (${r.code}): not checked`); if (isStop(r.code)) return stopped(r); }
+    else {
+      w.guestTags = new Map();
+      const raw = isObject(r.json) && Array.isArray(r.json.rules) ? r.json.rules : [];
+      for (const x of raw) if (isObject(x) && typeof x.rule === "string" && guestWords.includes(x.rule.trim().toLowerCase()))
+        w.guestTags.set(x.rule.trim().toLowerCase(), strs(x.never).map(canonTag).filter((t) => tags.includes(t)));
+      log(`guests' rules: ${[...w.guestTags].map(([k, v]) => `${k} → ${v.join(", ") || "nothing"}`).join("; ")}`);
+    }
+  }
 
   /** Read what the dishes not in the library contain, in batches (what is not read fails closed). */
   const readContains = async (dishes: string[]): Promise<Failure | null> => {
@@ -326,9 +350,16 @@ async function planWeek(deps: MakePlanDeps & { log: (line: string) => void }, in
     const still = hard();
     if (still.length) {
       const r = rotate(w, s.name, p, still);
-      unmet.push(...r.unmet);
       log(`${s.name}: code filled ${r.changed.join("; ")}`);
       problems = checkSlot(w, s.name, p);
+      // Still back too soon or too often: the slot's week chosen again in code, its plates as they are first.
+      const again = hard().length ? resolveSlot(w, s.name, p) : null;
+      if (again) {
+        for (const [d, ds] of again) p.days.set(d, ds);
+        log(`${s.name}: code chose the week again: ${[...again].map(([d, ds]) => `${weekdayOf(d)} ${ds.join(", ")}`).join("; ")}`);
+        problems = checkSlot(w, s.name, p);
+        unmet.push(...hard().flatMap((d) => hardOnly(problems.get(d)).filter((x) => x.kind === "rule" && !x.dish).map((x) => `${weekdayOf(d)} ${s.name}: ${x.text.split(":")[0]}`)));
+      } else unmet.push(...r.unmet);
     }
     for (const d of mine) {
       d.dishes = p.days.get(d.date) ?? [];
@@ -370,6 +401,8 @@ async function planWeek(deps: MakePlanDeps & { log: (line: string) => void }, in
   const dishNotes = new Map<string, string[]>();   // date|slot|dish key
   const noteOn = (d: PlanDay, dish: string, t: string) => { const k = `${d.date}|${d.slot}|${dishKey(dish)}`; dishNotes.set(k, uniq([...(dishNotes.get(k) ?? []), t])); };
   for (const d of toPlan) for (const dish of d.dishes) for (const t of swapNotes(w, d, dish)) noteOn(d, dish, t);
+  // A soft swap with a count the week falls short of, kept by a note on some of the person's days.
+  for (const [k, t] of softSwapNotes(w)) { const [date, slot] = k.split("|"); const d = toPlan.find((x) => x.date === date && same(x.slot, slot)); const dish = d?.dishes.find((x) => k.endsWith(`|${dishKey(x)}`)); if (d && dish) noteOn(d, dish, t); }
 
   // 5. Each day's ingredients, one fast call a day (all days at once), once more for what it left out.
   const got = new Map<string, (Ingredient & { tags: string[] })[]>();   // date|slot|dish key
@@ -396,15 +429,19 @@ async function planWeek(deps: MakePlanDeps & { log: (line: string) => void }, in
   }));
   const ingStop = dayStops.find((x) => x);
   if (ingStop) return stopped(ingStop);
-  // An ingredient someone at the slot-day must avoid comes out; a dish others share says so.
+  // An ingredient someone at the slot-day must avoid comes out; a dish others share says so. Not for a person the dish is
+  // not for (the fish stays in the fish curry), and not when the read tags more than half of a dish's ingredients against
+  // one rule: that read is wrong (rice, oil and onion all tagged for a no-red-meat rule), and the dish's checked contains
+  // already holds.
   for (const d of toPlan) for (const dish of d.dishes) {
     const k = `${d.date}|${d.slot}|${dishKey(dish)}`, list = got.get(k);
     if (!list) continue;
     let left = list;
-    const notHis = notFor(w, d, dish);   // a dish not for them is not changed for them (the fish stays in the fish curry)
+    const notHis = notFor(w, d, dish);
     for (const p of d.people.filter((x) => !notHis.includes(x))) for (const r of hardAt(d, p)) {
       const out = left.filter((i) => i.tags.some((t) => forbidden(r).includes(t)));
       if (!out.length) continue;
+      if (out.length * 2 > list.length) { log(`${weekdayOf(d.date)} ${d.slot} ${dish}: the ingredients read tags ${out.length} of ${list.length} against ${p}'s rule; not believed, kept`); continue; }
       left = left.filter((i) => !out.includes(i));
       log(`${weekdayOf(d.date)} ${d.slot} ${dish}: took out ${out.map((i) => i.item).join(", ")} (${p})`);
       if (r.who && d.people.length > 1) noteOn(d, dish, `no ${andList(uniq(out.map((i) => i.item.toLowerCase())))} for ${p}`);

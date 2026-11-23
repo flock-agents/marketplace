@@ -93,7 +93,8 @@ export function slotFacts(slot: Slot, library: LibraryDish[], history: HistoryRo
 
 export type Week = { days: PlanDay[]; slots: Map<string, SlotFacts>; rules: Rule[]; library: LibraryDish[]; facts: Map<string, DishFacts>;
   /** The slots whose dishes are settled (fixed ones count always). */ done: Set<string>; newBudget: number;
-  /** New dishes placed so far, by key, with the slot they were placed at. */ newDishes: Map<string, { name: string; slot: string; why: string }> };
+  /** New dishes placed so far, by key, with the slot they were placed at. */ newDishes: Map<string, { name: string; slot: string; why: string }>;
+  /** What each of the week's guest rules (their words) forbids, as tags, from one read; none read: not checked. */ guestTags?: Map<string, string[]> };
 
 const slotKey = (s: string) => s.toLowerCase();
 export const isStapleAt = (w: Week, slot: string, dish: string): boolean => !!w.slots.get(slotKey(slot))?.staples.some((x) => dishKey(x) === dishKey(dish));
@@ -135,6 +136,31 @@ export function swapNotes(w: Week, d: PlanDay, dish: string): string[] {
     out.push(`${r.to} in place of ${(r.items ?? []).join(", ")} for ${p}`);
   return uniq(out);
 }
+/** Soft swaps with a count ("millets are good for him, a few times a week"), kept by code where the week falls short: on
+ *  slot-days the person eats a dish with the swapped item, spread one a day, a note "<to> in place of <items> for <who>"
+ *  until the count's least is met. Answers the notes by date|slot|dish key. */
+export function softSwapNotes(w: Week): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const r of w.rules.filter((x) => !x.hard && x.what === "swap" && x.frequency && x.to && x.who && x.items?.length)) {
+    const range = frequencyRange(r.frequency);
+    if (!range) continue;
+    const to = canonTag(r.to!), items = r.items!.map(canonTag);
+    const theirs = w.days.filter((d) => !d.skip && d.dishes.length && d.people.some((p) => same(p, r.who!)) && ruleHolds(r, d.date, w.slots.get(slotKey(d.slot))?.slot, d.slot));
+    const has = (d: PlanDay, t: string[]) => d.dishes.filter((x) => !notFor(w, d, x).some((p) => same(p, r.who!)) && t.some((y) => factsOf(w, d.slot, x).tags.has(y)));
+    let kept = theirs.filter((d) => has(d, [to]).length).length;
+    const done = new Set(theirs.filter((d) => has(d, [to]).length).map((d) => d.date));
+    for (const d of theirs) {
+      if (kept >= range[0]) break;
+      if (done.has(d.date)) continue;
+      const dish = has(d, items)[0];
+      if (!dish) continue;
+      out.set(`${d.date}|${d.slot}|${dishKey(dish)}`, `${r.to} in place of ${r.items!.join(", ").replace(/_/g, " ")} for ${r.who}`);
+      done.add(d.date); kept++;
+    }
+  }
+  return out;
+}
+
 /** A hard require that holds at a slot-day and no dish of it keeps. */
 function requireBreaks(w: Week, d: PlanDay, dishes: string[]): string[] {
   const out: string[] = [];
@@ -214,6 +240,14 @@ export function checkSlot(w: Week, slotName: string, p: Proposal): Map<string, P
         add(d.date, { kind: "rule", text: `${person} has nothing to eat on ${d.date} ${slotName}${mains.length ? ` but staples` : ""}: add a dish ${person} can eat, from the library or a new one (${uniq(mains.flatMap((x) => ruleBreaks(w, { ...d, people: [person] }, x))).join("; ")})`, soft: false });
     }
     for (const t of requireBreaks(w, d, dishes)) add(d.date, { kind: "rule", text: t, soft: false });
+    // Guests with food rules ("vegetarian") need a dish of their own the same way, failing closed.
+    const words = uniq(d.guests.flatMap((g) => g.rules ?? []));
+    const forb = uniq(words.flatMap((x) => w.guestTags?.get(x.trim().toLowerCase()) ?? []));
+    if (forb.length) {
+      const theirs = dishes.filter((x) => { const f = factsOf(w, slotName, x); return forb.every((t) => !f.tags.has(t) && readFor(f.read, t)); });
+      if (!theirs.length || (mains.length && !theirs.some((x) => mains.includes(x))))
+        add(d.date, { kind: "rule", text: `the guests (${words.join(", ")}) have nothing to eat on ${d.date} ${slotName}${mains.length ? " but staples" : ""}: add a dish without ${forb.join(", ").replace(/_/g, " ")}, from the library or a new one`, soft: false });
+    }
   }
 
   // 3. Days and how often, across all slots. A daily dish is on every slot-day of its slot.
@@ -237,8 +271,9 @@ export function checkSlot(w: Week, slotName: string, p: Proposal): Map<string, P
   }
   // Too few for a dish the family has often (sometimes, usually, n a week), once no later slot can have it: put on the days it
   // can still go (its days, not within the repeat window of itself); none left, the softest note.
-  for (const row of sf.library.filter((x) => x.frequency && x.frequency !== "daily" && plannable(x))) {
-    const range = frequencyRange(row.frequency);
+  // A dish had only on some days ("khichdi on Saturday night") comes at least once on them.
+  for (const row of sf.library.filter((x) => ((x.frequency && x.frequency !== "daily") || (!x.frequency && x.days?.length)) && plannable(x))) {
+    const range: [number, number] | null = row.frequency ? frequencyRange(row.frequency) : [1, DEFAULT_DISH_DAYS];
     if (!range || !range[0]) continue;
     const later = w.days.some((d) => !same(d.slot, slotName) && !counts(w, d) && !d.skip && w.library.some((x) => x.key === row.key && same(x.slot, d.slot)));
     if (later) continue;
@@ -248,7 +283,7 @@ export function checkSlot(w: Week, slotName: string, p: Proposal): Map<string, P
     if (short <= 0) continue;
     const on = [...all.keys()];
     const free = room.filter((d) => !all.has(d.date) && on.every((x) => Math.abs(dayDiff(x, d.date)) >= sf.window) && notFor(w, d, row.name).length < d.people.length);
-    const text = `${row.name}: the family has it ${row.frequency}, on ${range[0]} days a week; it is on ${all.size}`;
+    const text = row.frequency ? `${row.name}: the family has it ${row.frequency}, on ${range[0]} days a week; it is on ${all.size}` : `${row.name}: the family has it on ${row.days!.join(", ")}; it is on none`;
     const picked: string[] = [];
     for (const d of free) if (picked.length < short && picked.every((x) => Math.abs(dayDiff(x, d.date)) >= sf.window)) picked.push(d.date);
     for (const date of picked) add(date, { kind: "few", dish: row.name, text: `${text}: add it on ${weekdayOf(date)}`, soft: false });
@@ -436,6 +471,60 @@ export function rotate(w: Week, slotName: string, p: Proposal, failing: string[]
     changed.push(`${weekdayOf(date)} ${slotName} → ${plate.join(", ") || "nothing"}`);
   }
   return { unmet, changed };
+}
+
+/** The last resort's second step, when rotation day by day still leaves a dish back too soon or too often: the slot's whole
+ *  week of non-staple dishes chosen again in code, day by day with backtracking, each day's staples kept. A day's choices are
+ *  its own plate as planned, then the family's own plates at this slot (their non-staple parts, as units, so a plate keeps
+ *  its shape), then single library dishes, the least used first. A choice may leave no problem on its day or before but a
+ *  person with nothing of their own where the library has nothing for them. Answers the new days, or null when no week was
+ *  found within `nodes` tries or it is no better. */
+export function resolveSlot(w: Week, slotName: string, p: Proposal, nodes = 4000): Map<string, string[]> | null {
+  const sf = w.slots.get(slotKey(slotName))!;
+  const mine = w.days.filter((d) => same(d.slot, slotName) && !d.fixed && !d.skip).sort((a, b) => a.date.localeCompare(b.date));
+  if (!mine.length) return null;
+  const staple = (x: string) => isStapleAt(w, slotName, x);
+  const lib = sf.library.filter((x) => plannable(x) && !staple(x.name));
+  const libKeys = new Set(lib.map((x) => x.key));
+  const now = checkSlot(w, slotName, p);
+  // Not counted: soft ones, a dish short of its count (a later day may add it), and a person with nothing of their own that
+  // the plate as it is already had (the library has nothing for them there).
+  const tolerated = (x: Problem, date: string) => x.soft || x.kind === "few" || (x.kind === "rule" && !!now.get(date)?.some((y) => y.text === x.text));
+  const countAt = (ps: Map<string, Problem[]>, date: string) => (ps.get(date) ?? []).filter((x) => !tolerated(x, date)).length;
+  const before = [...now.keys()].reduce((n, d) => n + countAt(now, d), 0);
+  if (!before) return null;
+  // The units: the family's plates' non-staple parts, then each dish alone; every part a plannable library dish here.
+  const units: string[][] = [];
+  const seen = new Set<string>();
+  const addUnit = (u: string[]) => { const k = u.map(dishKey).sort().join("+"); if (u.length && !seen.has(k)) { seen.add(k); units.push(u); } };
+  for (const row of sf.looks_like) { const parts = row.split(",").map((x) => x.trim()).filter((x) => x && !staple(x)); if (parts.every((x) => libKeys.has(dishKey(x)))) addUnit(parts.map((x) => lib.find((y) => y.key === dishKey(x))!.name)); }
+  for (const d of lib) addUnit([d.name]);
+  const trial: Proposal = { days: new Map(p.days), newNames: p.newNames };
+  const choices = (d: PlanDay): string[][] => {
+    const had = p.days.get(d.date) ?? [];
+    const mineNow = had.filter((x) => !staple(x));
+    const fits = (u: string[]) => u.every((x) => { const r = lib.find((y) => y.key === dishKey(x)); return !r || !r.days?.length || r.days.includes(weekdayOf(d.date)); });
+    const own = mineNow.length && mineNow.every((x) => libKeys.has(dishKey(x)) || p.newNames.has(dishKey(x))) ? [mineNow] : [];
+    return [...own, ...units.filter(fits)];
+  };
+  const stapleOf = (d: PlanDay) => (p.days.get(d.date) ?? []).filter(staple);
+  let tries = 0;
+  const pick = (i: number): boolean => {
+    if (i === mine.length) return true;
+    const d = mine[i];
+    for (const u of choices(d)) {
+      if (++tries > nodes) return false;
+      trial.days.set(d.date, [...stapleOf(d), ...u]);
+      const ps = checkSlot(w, slotName, { days: new Map([...trial.days].filter(([x]) => mine.slice(0, i + 1).some((y) => y.date === x) || !mine.some((y) => y.date === x))), newNames: p.newNames });
+      if (mine.slice(0, i + 1).every((y) => !countAt(ps, y.date)) && pick(i + 1)) return true;
+    }
+    trial.days.set(d.date, p.days.get(d.date) ?? []);
+    return false;
+  };
+  if (!pick(0)) return null;
+  const end = checkSlot(w, slotName, trial);
+  const after = [...end.keys()].reduce((n, d) => n + countAt(end, d), 0);
+  return after < before ? new Map(mine.map((d) => [d.date, trial.days.get(d.date) ?? []])) : null;
 }
 
 /** A daily dish missing from a slot-day of its slot, put in by code (where every rule there allows it). */

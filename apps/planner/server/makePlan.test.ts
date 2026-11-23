@@ -217,6 +217,32 @@ describe("make_plan v2: hard rules per person, fail closed", () => {
     expect(sun.find((d) => d.dish === "Fish curry")!.ingredients.map((i) => i.item)).toEqual(["rohu"]);
   });
 
+  it("a soft swap with a count the week falls short of is kept by code's note on some of the person's days, one a day, up to its least", async () => {
+    const k = await home({ rules: [{ hard: false, what: "swap", who: "Ravi", items: ["white_rice"], to: "millet", frequency: "sometimes", quote: "millets are good for Ravi" }],
+      lib: { Breakfast: LIB.Breakfast, Dinner: LIB.Dinner, Lunch: [] },
+      library: ["Rice", "Sambar", "Rajma", "Kadhi", "Chole"].map((name) => ({ name, slot: "Lunch", contains: name === "Rice" ? ["white_rice"] : [], contains_read: [...READ, "white_rice", "millet"] })),
+      seed: [1, 2, 3].map(() => ({ slot: "Lunch", dishes: ["Rice", "Sambar"] })) });
+    const f = fakeModel();
+    await k.plan(f.model);
+    const notes = WEEK.flatMap((d) => k.at(d, "Lunch")!.dishes.filter((x) => x.note).map((x) => `${d} ${x.dish}: ${x.note}`));
+    expect(notes).toEqual([`${MON} Rice: millet in place of white rice for Ravi`, `${WEEK[1]} Rice: millet in place of white rice for Ravi`]);
+  });
+
+  it("guests' food rules are read once into tags and kept like a person's: a fish-only dinner for vegetarian guests gets a dish of theirs", async () => {
+    const k = await home({ library: [{ name: "Fish fry", slot: "Dinner", contains: ["fish"], contains_read: READ }] });
+    const SAT = WEEK[5];
+    commit(k.kit.db, k.kit.emitChange, (tx, ch) => saveSlotDay(tx, { date: SAT, slot: "Dinner", people: ["Asha", "Ravi", "Kabir"], guests: [{ count: 4, rules: ["Vegetarian"] }], edited: true, dishes: [] }, "app", ch));
+    const f = fakeModel({ slot: (u) => u.slot === "Dinner" ? { days: { ...(rotateDays(u) as any).days, [SAT]: ["Fish fry"] } } : rotateDays(u),
+      fix: (u) => ({ days: Object.fromEntries(u.fix.map((x: any) => [x.date, ["Fish fry"]])) }),
+      day: (u) => (u.rules ? { rules: [{ rule: "vegetarian", never: ["meat", "fish", "unknown_tag"] }] } : ingredients(u)) });
+    await k.plan(f.model);
+    const read = f.calls.find((c) => c.req.purpose === "meal plan: guests' food rules")!;
+    expect(read.user.rules).toEqual(["vegetarian"]);
+    expect(f.fixes().find((c) => c.user.slot === "Dinner")!.user.fix[0].wrong[0]).toContain("the guests (Vegetarian) have nothing to eat");
+    const sat = k.dishesAt(SAT, "Dinner");
+    expect(sat.some((x) => x !== "Fish fry")).toBe(true);
+  });
+
   it("a person left with nothing they can eat is sent back; a dish never read for their rule's item is not theirs (fail closed); code adds one for them", async () => {
     const k = await home({ people, rules: [GRANDMA], library: [{ name: "Mystery curry", slot: "Lunch", contains: [], contains_read: [] }] });
     const f = fakeModel({ slot: (u) => u.slot === "Lunch" ? { days: { ...(rotateDays(u) as any).days, [MON]: ["Mystery curry"] } } : rotateDays(u),
@@ -490,6 +516,13 @@ describe("make_plan v2: failures", () => {
     const first = k.at(MON, "Breakfast")!.dishes[0];
     expect(first.ingredients.map((i) => i.item)).toEqual(["rice"]);
     expect(first.note).toBe("no jaggery for Asha");
+    // A read that tags most of a dish against the rule is not believed: nothing taken out, no note.
+    const g = fakeModel({ day: (u) => ({ dishes: u.dishes.map((d: any) => ({ slot: d.slot, name: d.name, ingredients: [{ item: "rice", amount: 100, unit: "g", tags: ["sugar"] },
+      { item: "oil", amount: 10, unit: "ml", tags: ["sugar"] }, { item: "salt", amount: 1, unit: "g", tags: [] }] })) }) });
+    await k.plan(g.model);
+    const again = k.at(MON, "Breakfast")!.dishes[0];
+    expect(again.ingredients.map((i) => i.item)).toEqual(["rice", "oil", "salt"]);
+    expect(again.note).toBeNull();
   });
 
   it("make_plan needs a Monday, a family and the slots; two runs for one week at once are one run", async () => {
