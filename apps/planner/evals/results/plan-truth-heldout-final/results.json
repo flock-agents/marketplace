@@ -1,0 +1,9003 @@
+{
+ "kind": "eval2",
+ "mode": "truth",
+ "heldout": true,
+ "week": "2026-11-30",
+ "model": "deepseek/deepseek-v4-flash",
+ "judges": [
+  "anthropic/claude-sonnet-5.5",
+  "openai/gpt-5"
+ ],
+ "minutes": 9.8,
+ "spend": {
+  "calls": 92,
+  "in": 87049,
+  "out": 150612,
+  "cost": 0.46226993999999993
+ },
+ "totals": {
+  "filled": [
+   111,
+   111
+  ],
+  "attendance": [
+   111,
+   111
+  ],
+  "skips_kept": [
+   3,
+   3
+  ],
+  "no_stray": [
+   4,
+   4
+  ],
+  "hard_rules": [
+   11,
+   11
+  ],
+  "from_library": [
+   212,
+   212
+  ],
+  "new_budget": [
+   4,
+   4
+  ],
+  "default_cap": [
+   39,
+   44
+  ],
+  "dish_frequency": [
+   16,
+   18
+  ],
+  "daily_dishes": [
+   7,
+   7
+  ],
+  "repeat_window": [
+   11,
+   17
+  ],
+  "same_day_repeat": [
+   28,
+   28
+  ],
+  "guests": [
+   1,
+   1
+  ],
+  "soft_frequency": [
+   1,
+   1
+  ]
+ },
+ "results": [
+  {
+   "household": "h9-mehta",
+   "title": "Jain joint family, morning cook, grandmother's early dinner, eating out one night",
+   "source": "truth",
+   "ok": true,
+   "plan_ms": 74677,
+   "refused": [],
+   "rates": {
+    "filled": [
+     27,
+     27
+    ],
+    "attendance": [
+     27,
+     27
+    ],
+    "skips_kept": [
+     1,
+     1
+    ],
+    "no_stray": [
+     1,
+     1
+    ],
+    "hard_rules": [
+     1,
+     1
+    ],
+    "from_library": [
+     52,
+     52
+    ],
+    "new_budget": [
+     1,
+     1
+    ],
+    "default_cap": [
+     9,
+     10
+    ],
+    "dish_frequency": [
+     3,
+     4
+    ],
+    "daily_dishes": [
+     7,
+     7
+    ],
+    "repeat_window": [
+     1,
+     4
+    ],
+    "same_day_repeat": [
+     7,
+     7
+    ]
+   },
+   "tracked": {
+    "shape": [
+     26,
+     27
+    ]
+   },
+   "notes": [
+    "dish_frequency: Khichdi (2/week) on Mon Ba's dinner, Tue Ba's dinner, Wed Ba's dinner, Thu Ba's dinner, Fri Ba's dinner, Sat Ba's dinner, Sun Ba's dinner",
+    "default_cap: Bhakri (no frequency, not a staple) on 6 days: Mon Dinner, Tue Dinner, Wed Dinner, Thu Dinner, Fri Dinner, Sat Dinner",
+    "repeat_window: Lunch (window 2): Dal Mon and Tue",
+    "repeat_window: Dinner (window 2): Bhakri Mon and Tue; Bhakri Tue and Wed; Bhakri Wed and Thu; Bhakri Thu and Fri; Bhakri Fri and Sat",
+    "repeat_window: Ba's dinner (window 2): Khichdi Mon and Tue; Khichdi Tue and Wed; Khichdi Wed and Thu; Khichdi Thu and Fri; Khichdi Fri and Sat; Khichdi Sat and Sun"
+   ],
+   "facts": {
+    "hard_breaks": 0,
+    "new_dishes": 0,
+    "shape_Breakfast": "1.0 vs 1.0",
+    "shape_Lunch": "3.6 vs 3.3",
+    "shape_Dinner": "1.0 vs 2.0",
+    "shape_Ba's dinner": "2.0 vs 2.0",
+    "dishes": 52,
+    "family_dish_share": 100,
+    "unmet": 3,
+    "flagged": 1
+   },
+   "judge": {
+    "worst": "Dinner is plain Bhakri alone six nights, with no shaak, and no Khichdi, Kadhi or Thepla at dinner, so there is no variety. | All dinners are just bhakri without shaak or khichdi/kadhi, unlike their usual dinners; dinner shape and variety are missing.",
+    "by": {
+     "anthropic/claude-sonnet-5.5": {
+      "worst": "Dinner is plain Bhakri alone six nights, with no shaak, and no Khichdi, Kadhi or Thepla at dinner, so there is no variety.",
+      "fits_dishes": 4,
+      "meal_shape": 2,
+      "variety": 2,
+      "per_person": 5,
+      "overall": 3
+     },
+     "openai/gpt-5": {
+      "worst": "All dinners are just bhakri without shaak or khichdi/kadhi, unlike their usual dinners; dinner shape and variety are missing.",
+      "fits_dishes": 5,
+      "meal_shape": 1,
+      "variety": 1,
+      "per_person": 5,
+      "overall": 2
+     }
+    },
+    "fits_dishes": 4.5,
+    "meal_shape": 1.5,
+    "variety": 1.5,
+    "per_person": 5,
+    "overall": 2.5
+   },
+   "unmet": [
+    "only 2 Ba's dinner dishes known, so some come back more often than usual",
+    "only 6 Lunch dishes known, so some come back more often than usual",
+    "only 7 Dinner dishes known, so some come back more often than usual"
+   ],
+   "message": "Your week is planned.\n\n*Monday*\nBreakfast: Poha\nBa's dinner: Khichdi, Doodh\nLunch: Rotli, Dal, Bhaat, Tindora shaak\nDinner: Bhakri\n\n*Tuesday*\nBreakfast: Khakhra\nBa's dinner: Khichdi, Doodh\nLunch: Rotli, Dal, Bhaat, Bhindi shaak\nDinner: Bhakri\n\n*Wednesday*\nBreakfast: Thepla\nBa's dinner: Khichdi, Doodh\nLunch: Rotli, Kadhi, Bhaat, Cabbage shaak\nDinner: Bhakri\n\n*Thursday*\nBreakfast: Poha\nBa's dinner: Khichdi, Doodh\nLunch: Rotli, Dal, Bhaat, Bhindi shaak\nDinner: Bhakri\n\n*Friday*\nBreakfast: Khakhra\nBa's dinner: Khichdi, Doodh\nLunch: Rotli, Kadhi, Bhaat, Tindora shaak\nDinner: Bhakri\n\n*Saturday*\nBreakfast: Thepla\nBa's dinner: Khichdi, Doodh\nLunch: Rotli, Dal, Bhaat, Cabbage shaak\nDinner: Bhakri\n\n*Sunday*\nBreakfast: Dhokla\nBa's dinner: Khichdi, Doodh\nLunch: Dal dhokli\nDinner: eating out\n\nAll week: Hitesh: I have high cholesterol, so less oil for me.\n\nI couldn't keep everything this week: only 2 Ba's dinner dishes known, so some come back more often than usual; only 6 Lunch dishes known, so some come back more often than usual; only 7 Dinner dishes known, so some come back more often than usual. Tell me what to change.\n\nThe whole week: [Week page](/a/t/?flock_scope=app#/week?week=2026-11-30)\nTell me anything to change.",
+   "week": "Mon: Breakfast [Hitesh, Bhavna, Dhruv, Kantaben]: Poha | Ba's dinner [Kantaben]: Khichdi, Doodh | Lunch [Hitesh, Bhavna, Dhruv, Kantaben]: Rotli, Dal, Bhaat, Tindora shaak | Dinner [Hitesh, Bhavna, Dhruv]: Bhakri\nTue: Breakfast [Hitesh, Bhavna, Dhruv, Kantaben]: Khakhra | Ba's dinner [Kantaben]: Khichdi, Doodh | Lunch [Hitesh, Bhavna, Dhruv, Kantaben]: Rotli, Dal, Bhaat, Bhindi shaak | Dinner [Hitesh, Bhavna, Dhruv]: Bhakri\nWed: Breakfast [Hitesh, Bhavna, Dhruv, Kantaben]: Thepla | Ba's dinner [Kantaben]: Khichdi, Doodh | Lunch [Hitesh, Bhavna, Dhruv, Kantaben]: Rotli, Kadhi, Bhaat, Cabbage shaak | Dinner [Hitesh, Bhavna, Dhruv]: Bhakri\nThu: Breakfast [Hitesh, Bhavna, Kantaben]: Poha | Ba's dinner [Kantaben]: Khichdi, Doodh | Lunch [Hitesh, Bhavna, Kantaben]: Rotli, Dal, Bhaat, Bhindi shaak | Dinner [Hitesh, Bhavna]: Bhakri\nFri: Breakfast [Hitesh, Bhavna, Kantaben]: Khakhra | Ba's dinner [Kantaben]: Khichdi, Doodh | Lunch [Hitesh, Bhavna, Kantaben]: Rotli, Kadhi, Bhaat, Tindora shaak | Dinner [Hitesh, Bhavna]: Bhakri\nSat: Breakfast [Hitesh, Bhavna, Dhruv, Kantaben]: Thepla | Ba's dinner [Kantaben]: Khichdi, Doodh | Lunch [Hitesh, Bhavna, Dhruv, Kantaben]: Rotli, Dal, Bhaat, Cabbage shaak | Dinner [Hitesh, Bhavna, Dhruv]: Bhakri\nSun: Breakfast [Hitesh, Bhavna, Dhruv, Kantaben]: Dhokla | Ba's dinner [Kantaben]: Khichdi, Doodh | Lunch [Hitesh, Bhavna, Dhruv, Kantaben]: Dal dhokli | Dinner [Hitesh, Bhavna, Dhruv]: (eaten out)",
+   "plan": {
+    "ok": true,
+    "week_start": "2026-11-30",
+    "slotDays": [
+     {
+      "date": "2026-11-30",
+      "slot": "Breakfast",
+      "people": [
+       "Hitesh",
+       "Bhavna",
+       "Dhruv",
+       "Kantaben"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Poha",
+        "new": false,
+        "note": null,
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-11-30",
+      "slot": "Ba's dinner",
+      "people": [
+       "Kantaben"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Khichdi",
+        "new": false,
+        "note": null,
+        "not_for": []
+       },
+       {
+        "name": "Doodh",
+        "new": false,
+        "note": null,
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-11-30",
+      "slot": "Lunch",
+      "people": [
+       "Hitesh",
+       "Bhavna",
+       "Dhruv",
+       "Kantaben"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Rotli",
+        "new": false,
+        "note": null,
+        "not_for": []
+       },
+       {
+        "name": "Dal",
+        "new": false,
+        "note": null,
+        "not_for": []
+       },
+       {
+        "name": "Bhaat",
+        "new": false,
+        "note": null,
+        "not_for": []
+       },
+       {
+        "name": "Tindora shaak",
+        "new": false,
+        "note": null,
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-11-30",
+      "slot": "Dinner",
+      "people": [
+       "Hitesh",
+       "Bhavna",
+       "Dhruv"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Bhakri",
+        "new": false,
+        "note": null,
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-12-01",
+      "slot": "Breakfast",
+      "people": [
+       "Hitesh",
+       "Bhavna",
+       "Dhruv",
+       "Kantaben"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Khakhra",
+        "new": false,
+        "note": null,
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-12-01",
+      "slot": "Ba's dinner",
+      "people": [
+       "Kantaben"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Khichdi",
+        "new": false,
+        "note": null,
+        "not_for": []
+       },
+       {
+        "name": "Doodh",
+        "new": false,
+        "note": null,
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-12-01",
+      "slot": "Lunch",
+      "people": [
+       "Hitesh",
+       "Bhavna",
+       "Dhruv",
+       "Kantaben"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Rotli",
+        "new": false,
+        "note": null,
+        "not_for": []
+       },
+       {
+        "name": "Dal",
+        "new": false,
+        "note": null,
+        "not_for": []
+       },
+       {
+        "name": "Bhaat",
+        "new": false,
+        "note": null,
+        "not_for": []
+       },
+       {
+        "name": "Bhindi shaak",
+        "new": false,
+        "note": null,
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-12-01",
+      "slot": "Dinner",
+      "people": [
+       "Hitesh",
+       "Bhavna",
+       "Dhruv"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Bhakri",
+        "new": false,
+        "note": null,
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-12-02",
+      "slot": "Breakfast",
+      "people": [
+       "Hitesh",
+       "Bhavna",
+       "Dhruv",
+       "Kantaben"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Thepla",
+        "new": false,
+        "note": null,
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-12-02",
+      "slot": "Ba's dinner",
+      "people": [
+       "Kantaben"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Khichdi",
+        "new": false,
+        "note": null,
+        "not_for": []
+       },
+       {
+        "name": "Doodh",
+        "new": false,
+        "note": null,
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-12-02",
+      "slot": "Lunch",
+      "people": [
+       "Hitesh",
+       "Bhavna",
+       "Dhruv",
+       "Kantaben"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Rotli",
+        "new": false,
+        "note": null,
+        "not_for": []
+       },
+       {
+        "name": "Kadhi",
+        "new": false,
+        "note": null,
+        "not_for": []
+       },
+       {
+        "name": "Bhaat",
+        "new": false,
+        "note": null,
+        "not_for": []
+       },
+       {
+        "name": "Cabbage shaak",
+        "new": false,
+        "note": null,
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-12-02",
+      "slot": "Dinner",
+      "people": [
+       "Hitesh",
+       "Bhavna",
+       "Dhruv"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Bhakri",
+        "new": false,
+        "note": null,
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-12-03",
+      "slot": "Breakfast",
+      "people": [
+       "Hitesh",
+       "Bhavna",
+       "Kantaben"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Poha",
+        "new": false,
+        "note": null,
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-12-03",
+      "slot": "Ba's dinner",
+      "people": [
+       "Kantaben"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Khichdi",
+        "new": false,
+        "note": null,
+        "not_for": []
+       },
+       {
+        "name": "Doodh",
+        "new": false,
+        "note": null,
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-12-03",
+      "slot": "Lunch",
+      "people": [
+       "Hitesh",
+       "Bhavna",
+       "Kantaben"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Rotli",
+        "new": false,
+        "note": null,
+        "not_for": []
+       },
+       {
+        "name": "Dal",
+        "new": false,
+        "note": null,
+        "not_for": []
+       },
+       {
+        "name": "Bhaat",
+        "new": false,
+        "note": null,
+        "not_for": []
+       },
+       {
+        "name": "Bhindi shaak",
+        "new": false,
+        "note": null,
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-12-03",
+      "slot": "Dinner",
+      "people": [
+       "Hitesh",
+       "Bhavna"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Bhakri",
+        "new": false,
+        "note": null,
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-12-04",
+      "slot": "Breakfast",
+      "people": [
+       "Hitesh",
+       "Bhavna",
+       "Kantaben"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Khakhra",
+        "new": false,
+        "note": null,
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-12-04",
+      "slot": "Ba's dinner",
+      "people": [
+       "Kantaben"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Khichdi",
+        "new": false,
+        "note": null,
+        "not_for": []
+       },
+       {
+        "name": "Doodh",
+        "new": false,
+        "note": null,
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-12-04",
+      "slot": "Lunch",
+      "people": [
+       "Hitesh",
+       "Bhavna",
+       "Kantaben"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Rotli",
+        "new": false,
+        "note": null,
+        "not_for": []
+       },
+       {
+        "name": "Kadhi",
+        "new": false,
+        "note": null,
+        "not_for": []
+       },
+       {
+        "name": "Bhaat",
+        "new": false,
+        "note": null,
+        "not_for": []
+       },
+       {
+        "name": "Tindora shaak",
+        "new": false,
+        "note": null,
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-12-04",
+      "slot": "Dinner",
+      "people": [
+       "Hitesh",
+       "Bhavna"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Bhakri",
+        "new": false,
+        "note": null,
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-12-05",
+      "slot": "Breakfast",
+      "people": [
+       "Hitesh",
+       "Bhavna",
+       "Dhruv",
+       "Kantaben"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Thepla",
+        "new": false,
+        "note": null,
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-12-05",
+      "slot": "Ba's dinner",
+      "people": [
+       "Kantaben"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Khichdi",
+        "new": false,
+        "note": null,
+        "not_for": []
+       },
+       {
+        "name": "Doodh",
+        "new": false,
+        "note": null,
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-12-05",
+      "slot": "Lunch",
+      "people": [
+       "Hitesh",
+       "Bhavna",
+       "Dhruv",
+       "Kantaben"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Rotli",
+        "new": false,
+        "note": null,
+        "not_for": []
+       },
+       {
+        "name": "Dal",
+        "new": false,
+        "note": null,
+        "not_for": []
+       },
+       {
+        "name": "Bhaat",
+        "new": false,
+        "note": null,
+        "not_for": []
+       },
+       {
+        "name": "Cabbage shaak",
+        "new": false,
+        "note": null,
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-12-05",
+      "slot": "Dinner",
+      "people": [
+       "Hitesh",
+       "Bhavna",
+       "Dhruv"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Bhakri",
+        "new": false,
+        "note": null,
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-12-06",
+      "slot": "Breakfast",
+      "people": [
+       "Hitesh",
+       "Bhavna",
+       "Dhruv",
+       "Kantaben"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Dhokla",
+        "new": false,
+        "note": null,
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-12-06",
+      "slot": "Ba's dinner",
+      "people": [
+       "Kantaben"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Khichdi",
+        "new": false,
+        "note": null,
+        "not_for": []
+       },
+       {
+        "name": "Doodh",
+        "new": false,
+        "note": null,
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-12-06",
+      "slot": "Lunch",
+      "people": [
+       "Hitesh",
+       "Bhavna",
+       "Dhruv",
+       "Kantaben"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Dal dhokli",
+        "new": false,
+        "note": null,
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-12-06",
+      "slot": "Dinner",
+      "people": [
+       "Hitesh",
+       "Bhavna",
+       "Dhruv"
+      ],
+      "guests": [],
+      "skip": "eaten_out",
+      "occasion": null,
+      "note": null,
+      "dishes": []
+     }
+    ],
+    "library": [
+     {
+      "slot": "Breakfast",
+      "name": "Thepla",
+      "frequency": null,
+      "days": null,
+      "contains": [],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom"
+      ],
+      "origin": "setup_named",
+      "quote": null
+     },
+     {
+      "slot": "Dinner",
+      "name": "Thepla",
+      "frequency": null,
+      "days": null,
+      "contains": [],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom"
+      ],
+      "origin": "setup_named",
+      "quote": null
+     },
+     {
+      "slot": "Ba's dinner",
+      "name": "Thepla",
+      "frequency": null,
+      "days": null,
+      "contains": [],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom"
+      ],
+      "origin": "setup_named",
+      "quote": null
+     },
+     {
+      "slot": "Breakfast",
+      "name": "Khakhra",
+      "frequency": null,
+      "days": null,
+      "contains": [],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom"
+      ],
+      "origin": "setup_named",
+      "quote": null
+     },
+     {
+      "slot": "Breakfast",
+      "name": "Poha",
+      "frequency": null,
+      "days": null,
+      "contains": [
+       "white_rice"
+      ],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom"
+      ],
+      "origin": "setup_named",
+      "quote": null
+     },
+     {
+      "slot": "Breakfast",
+      "name": "Dhokla",
+      "frequency": null,
+      "days": [
+       "Sun"
+      ],
+      "contains": [],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom"
+      ],
+      "origin": "setup_named",
+      "quote": null
+     },
+     {
+      "slot": "Lunch",
+      "name": "Rotli",
+      "frequency": null,
+      "days": null,
+      "contains": [],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom"
+      ],
+      "origin": "setup_named",
+      "quote": null
+     },
+     {
+      "slot": "Lunch",
+      "name": "Dal",
+      "frequency": null,
+      "days": null,
+      "contains": [],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom"
+      ],
+      "origin": "setup_named",
+      "quote": null
+     },
+     {
+      "slot": "Lunch",
+      "name": "Bhaat",
+      "frequency": null,
+      "days": null,
+      "contains": [
+       "white_rice"
+      ],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom"
+      ],
+      "origin": "setup_named",
+      "quote": null
+     },
+     {
+      "slot": "Lunch",
+      "name": "Tindora shaak",
+      "frequency": null,
+      "days": null,
+      "contains": [],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom"
+      ],
+      "origin": "setup_named",
+      "quote": null
+     },
+     {
+      "slot": "Lunch",
+      "name": "Bhindi shaak",
+      "frequency": null,
+      "days": null,
+      "contains": [],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom"
+      ],
+      "origin": "setup_named",
+      "quote": null
+     },
+     {
+      "slot": "Lunch",
+      "name": "Cabbage shaak",
+      "frequency": null,
+      "days": null,
+      "contains": [],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom"
+      ],
+      "origin": "setup_named",
+      "quote": null
+     },
+     {
+      "slot": "Dinner",
+      "name": "Tindora shaak",
+      "frequency": null,
+      "days": null,
+      "contains": [],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom"
+      ],
+      "origin": "setup_named",
+      "quote": null
+     },
+     {
+      "slot": "Dinner",
+      "name": "Bhindi shaak",
+      "frequency": null,
+      "days": null,
+      "contains": [],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom"
+      ],
+      "origin": "setup_named",
+      "quote": null
+     },
+     {
+      "slot": "Dinner",
+      "name": "Cabbage shaak",
+      "frequency": null,
+      "days": null,
+      "contains": [],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom"
+      ],
+      "origin": "setup_named",
+      "quote": null
+     },
+     {
+      "slot": "Lunch",
+      "name": "Kadhi",
+      "frequency": "sometimes",
+      "days": null,
+      "contains": [
+       "dairy"
+      ],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom"
+      ],
+      "origin": "setup_named",
+      "quote": null
+     },
+     {
+      "slot": "Lunch",
+      "name": "Dal dhokli",
+      "frequency": null,
+      "days": [
+       "Sun"
+      ],
+      "contains": [],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom"
+      ],
+      "origin": "setup_named",
+      "quote": null
+     },
+     {
+      "slot": "Dinner",
+      "name": "Khichdi",
+      "frequency": "2/week",
+      "days": null,
+      "contains": [
+       "white_rice"
+      ],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom"
+      ],
+      "origin": "setup_named",
+      "quote": null
+     },
+     {
+      "slot": "Dinner",
+      "name": "Kadhi",
+      "frequency": "2/week",
+      "days": null,
+      "contains": [
+       "dairy"
+      ],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom"
+      ],
+      "origin": "setup_named",
+      "quote": null
+     },
+     {
+      "slot": "Dinner",
+      "name": "Bhakri",
+      "frequency": null,
+      "days": null,
+      "contains": [
+       "millet"
+      ],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom"
+      ],
+      "origin": "setup_named",
+      "quote": null
+     },
+     {
+      "slot": "Ba's dinner",
+      "name": "Khichdi",
+      "frequency": null,
+      "days": null,
+      "contains": [
+       "white_rice"
+      ],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom"
+      ],
+      "origin": "setup_named",
+      "quote": null
+     },
+     {
+      "slot": "Ba's dinner",
+      "name": "Doodh",
+      "frequency": "daily",
+      "days": null,
+      "contains": [
+       "dairy"
+      ],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom"
+      ],
+      "origin": "setup_named",
+      "quote": null
+     }
+    ],
+    "unmet": [
+     "only 2 Ba's dinner dishes known, so some come back more often than usual",
+     "only 6 Lunch dishes known, so some come back more often than usual",
+     "only 7 Dinner dishes known, so some come back more often than usual"
+    ],
+    "message": "Your week is planned.\n\n*Monday*\nBreakfast: Poha\nBa's dinner: Khichdi, Doodh\nLunch: Rotli, Dal, Bhaat, Tindora shaak\nDinner: Bhakri\n\n*Tuesday*\nBreakfast: Khakhra\nBa's dinner: Khichdi, Doodh\nLunch: Rotli, Dal, Bhaat, Bhindi shaak\nDinner: Bhakri\n\n*Wednesday*\nBreakfast: Thepla\nBa's dinner: Khichdi, Doodh\nLunch: Rotli, Kadhi, Bhaat, Cabbage shaak\nDinner: Bhakri\n\n*Thursday*\nBreakfast: Poha\nBa's dinner: Khichdi, Doodh\nLunch: Rotli, Dal, Bhaat, Bhindi shaak\nDinner: Bhakri\n\n*Friday*\nBreakfast: Khakhra\nBa's dinner: Khichdi, Doodh\nLunch: Rotli, Kadhi, Bhaat, Tindora shaak\nDinner: Bhakri\n\n*Saturday*\nBreakfast: Thepla\nBa's dinner: Khichdi, Doodh\nLunch: Rotli, Dal, Bhaat, Cabbage shaak\nDinner: Bhakri\n\n*Sunday*\nBreakfast: Dhokla\nBa's dinner: Khichdi, Doodh\nLunch: Dal dhokli\nDinner: eating out\n\nAll week: Hitesh: I have high cholesterol, so less oil for me.\n\nI couldn't keep everything this week: only 2 Ba's dinner dishes known, so some come back more often than usual; only 6 Lunch dishes known, so some come back more often than usual; only 7 Dinner dishes known, so some come back more often than usual. Tell me what to change.\n\nThe whole week: [Week page](/a/t/?flock_scope=app#/week?week=2026-11-30)\nTell me anything to change.",
+    "asked": [],
+    "relaxed": {
+     "Ba's dinner": 2,
+     "Lunch": 2,
+     "Dinner": 2
+    }
+   },
+   "loaded": {
+    "ok": true,
+    "slots": [
+     {
+      "name": "Breakfast",
+      "kind": "main",
+      "addon_of": null,
+      "usual_people": [],
+      "days": [],
+      "skip_days": []
+     },
+     {
+      "name": "Lunch",
+      "kind": "main",
+      "addon_of": null,
+      "usual_people": [],
+      "days": [],
+      "skip_days": []
+     },
+     {
+      "name": "Dinner",
+      "kind": "main",
+      "addon_of": null,
+      "usual_people": [
+       "Hitesh",
+       "Bhavna",
+       "Dhruv"
+      ],
+      "days": [],
+      "skip_days": [
+       {
+        "day": "Sun",
+        "skip": "eaten_out"
+       }
+      ]
+     },
+     {
+      "name": "Ba's dinner",
+      "kind": "custom",
+      "addon_of": null,
+      "usual_people": [
+       "Kantaben"
+      ],
+      "days": [],
+      "skip_days": []
+     }
+    ],
+    "library": [
+     {
+      "slot": "Breakfast",
+      "name": "Thepla",
+      "frequency": null,
+      "days": null,
+      "contains": [],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom"
+      ],
+      "origin": "setup_named"
+     },
+     {
+      "slot": "Dinner",
+      "name": "Thepla",
+      "frequency": null,
+      "days": null,
+      "contains": [],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom"
+      ],
+      "origin": "setup_named"
+     },
+     {
+      "slot": "Ba's dinner",
+      "name": "Thepla",
+      "frequency": null,
+      "days": null,
+      "contains": [],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom"
+      ],
+      "origin": "setup_named"
+     },
+     {
+      "slot": "Breakfast",
+      "name": "Khakhra",
+      "frequency": null,
+      "days": null,
+      "contains": [],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom"
+      ],
+      "origin": "setup_named"
+     },
+     {
+      "slot": "Breakfast",
+      "name": "Poha",
+      "frequency": null,
+      "days": null,
+      "contains": [
+       "white_rice"
+      ],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom"
+      ],
+      "origin": "setup_named"
+     },
+     {
+      "slot": "Breakfast",
+      "name": "Dhokla",
+      "frequency": null,
+      "days": [
+       "Sun"
+      ],
+      "contains": [],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom"
+      ],
+      "origin": "setup_named"
+     },
+     {
+      "slot": "Lunch",
+      "name": "Rotli",
+      "frequency": null,
+      "days": null,
+      "contains": [],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom"
+      ],
+      "origin": "setup_named"
+     },
+     {
+      "slot": "Lunch",
+      "name": "Dal",
+      "frequency": null,
+      "days": null,
+      "contains": [],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom"
+      ],
+      "origin": "setup_named"
+     },
+     {
+      "slot": "Lunch",
+      "name": "Bhaat",
+      "frequency": null,
+      "days": null,
+      "contains": [
+       "white_rice"
+      ],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom"
+      ],
+      "origin": "setup_named"
+     },
+     {
+      "slot": "Lunch",
+      "name": "Tindora shaak",
+      "frequency": null,
+      "days": null,
+      "contains": [],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom"
+      ],
+      "origin": "setup_named"
+     },
+     {
+      "slot": "Lunch",
+      "name": "Bhindi shaak",
+      "frequency": null,
+      "days": null,
+      "contains": [],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom"
+      ],
+      "origin": "setup_named"
+     },
+     {
+      "slot": "Lunch",
+      "name": "Cabbage shaak",
+      "frequency": null,
+      "days": null,
+      "contains": [],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom"
+      ],
+      "origin": "setup_named"
+     },
+     {
+      "slot": "Dinner",
+      "name": "Tindora shaak",
+      "frequency": null,
+      "days": null,
+      "contains": [],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom"
+      ],
+      "origin": "setup_named"
+     },
+     {
+      "slot": "Dinner",
+      "name": "Bhindi shaak",
+      "frequency": null,
+      "days": null,
+      "contains": [],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom"
+      ],
+      "origin": "setup_named"
+     },
+     {
+      "slot": "Dinner",
+      "name": "Cabbage shaak",
+      "frequency": null,
+      "days": null,
+      "contains": [],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom"
+      ],
+      "origin": "setup_named"
+     },
+     {
+      "slot": "Lunch",
+      "name": "Kadhi",
+      "frequency": "sometimes",
+      "days": null,
+      "contains": [
+       "dairy"
+      ],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom"
+      ],
+      "origin": "setup_named"
+     },
+     {
+      "slot": "Lunch",
+      "name": "Dal dhokli",
+      "frequency": null,
+      "days": [
+       "Sun"
+      ],
+      "contains": [],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom"
+      ],
+      "origin": "setup_named"
+     },
+     {
+      "slot": "Dinner",
+      "name": "Khichdi",
+      "frequency": "2/week",
+      "days": null,
+      "contains": [
+       "white_rice"
+      ],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom"
+      ],
+      "origin": "setup_named"
+     },
+     {
+      "slot": "Dinner",
+      "name": "Kadhi",
+      "frequency": "2/week",
+      "days": null,
+      "contains": [
+       "dairy"
+      ],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom"
+      ],
+      "origin": "setup_named"
+     },
+     {
+      "slot": "Dinner",
+      "name": "Bhakri",
+      "frequency": null,
+      "days": null,
+      "contains": [
+       "millet"
+      ],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom"
+      ],
+      "origin": "setup_named"
+     },
+     {
+      "slot": "Ba's dinner",
+      "name": "Khichdi",
+      "frequency": null,
+      "days": null,
+      "contains": [
+       "white_rice"
+      ],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom"
+      ],
+      "origin": "setup_named"
+     },
+     {
+      "slot": "Ba's dinner",
+      "name": "Doodh",
+      "frequency": "daily",
+      "days": null,
+      "contains": [
+       "dairy"
+      ],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom"
+      ],
+      "origin": "setup_named"
+     }
+    ],
+    "rules": [
+     {
+      "hard": true,
+      "what": "avoid",
+      "who": null,
+      "slots": null,
+      "days": null,
+      "items": [
+       "meat",
+       "fish",
+       "egg",
+       "onion_garlic",
+       "root_veg"
+      ],
+      "to": null,
+      "frequency": null,
+      "per_meal": null,
+      "fasting_food": null,
+      "quote": "Hardest part: Jain food every day without repeating, and Ba's early dinner."
+     },
+     {
+      "hard": false,
+      "what": "note",
+      "who": "Hitesh",
+      "slots": null,
+      "days": null,
+      "items": null,
+      "to": null,
+      "frequency": null,
+      "per_meal": null,
+      "fasting_food": null,
+      "quote": "I have high cholesterol, so less oil for me."
+     }
+    ],
+    "seed": [
+     {
+      "slot": "Breakfast",
+      "dishes": [
+       "Thepla"
+      ]
+     },
+     {
+      "slot": "Breakfast",
+      "dishes": [
+       "Khakhra"
+      ]
+     },
+     {
+      "slot": "Breakfast",
+      "dishes": [
+       "Poha"
+      ]
+     },
+     {
+      "slot": "Breakfast",
+      "dishes": [
+       "Dhokla"
+      ]
+     },
+     {
+      "slot": "Lunch",
+      "dishes": [
+       "Rotli",
+       "Dal",
+       "Bhaat",
+       "Tindora shaak"
+      ]
+     },
+     {
+      "slot": "Lunch",
+      "dishes": [
+       "Rotli",
+       "Dal",
+       "Bhaat",
+       "Bhindi shaak"
+      ]
+     },
+     {
+      "slot": "Lunch",
+      "dishes": [
+       "Rotli",
+       "Kadhi",
+       "Bhaat",
+       "Cabbage shaak"
+      ]
+     },
+     {
+      "slot": "Lunch",
+      "dishes": [
+       "Dal dhokli"
+      ]
+     },
+     {
+      "slot": "Dinner",
+      "dishes": [
+       "Khichdi",
+       "Kadhi"
+      ]
+     },
+     {
+      "slot": "Dinner",
+      "dishes": [
+       "Bhakri",
+       "Bhindi shaak"
+      ]
+     },
+     {
+      "slot": "Dinner",
+      "dishes": [
+       "Thepla",
+       "Cabbage shaak"
+      ]
+     },
+     {
+      "slot": "Ba's dinner",
+      "dishes": [
+       "Khichdi",
+       "Doodh"
+      ]
+     },
+     {
+      "slot": "Ba's dinner",
+      "dishes": [
+       "Thepla",
+       "Doodh"
+      ]
+     }
+    ],
+    "cook": {
+     "name": "Ramila",
+     "days": [
+      "Mon",
+      "Tue",
+      "Wed",
+      "Thu",
+      "Fri",
+      "Sat",
+      "Sun"
+     ],
+     "visits": [
+      {
+       "at": "08:00",
+       "meals": [
+        "Breakfast",
+        "Lunch"
+       ]
+      }
+     ]
+    },
+    "family_cooks": [],
+    "unplaced": [
+     {
+      "text": "On ashtami and chaudas Ba doesn't eat green vegetables.",
+      "quote": "On ashtami and chaudas Ba doesn't eat green vegetables."
+     }
+    ],
+    "lunch_unclear": [],
+    "attendance": {
+     "Breakfast": {
+      "Mon": [
+       "Hitesh",
+       "Bhavna",
+       "Dhruv",
+       "Kantaben"
+      ],
+      "Tue": [
+       "Hitesh",
+       "Bhavna",
+       "Dhruv",
+       "Kantaben"
+      ],
+      "Wed": [
+       "Hitesh",
+       "Bhavna",
+       "Dhruv",
+       "Kantaben"
+      ],
+      "Thu": [
+       "Hitesh",
+       "Bhavna",
+       "Dhruv",
+       "Kantaben"
+      ],
+      "Fri": [
+       "Hitesh",
+       "Bhavna",
+       "Dhruv",
+       "Kantaben"
+      ],
+      "Sat": [
+       "Hitesh",
+       "Bhavna",
+       "Dhruv",
+       "Kantaben"
+      ],
+      "Sun": [
+       "Hitesh",
+       "Bhavna",
+       "Dhruv",
+       "Kantaben"
+      ]
+     },
+     "Lunch": {
+      "Mon": [
+       "Hitesh",
+       "Bhavna",
+       "Dhruv",
+       "Kantaben"
+      ],
+      "Tue": [
+       "Hitesh",
+       "Bhavna",
+       "Dhruv",
+       "Kantaben"
+      ],
+      "Wed": [
+       "Hitesh",
+       "Bhavna",
+       "Dhruv",
+       "Kantaben"
+      ],
+      "Thu": [
+       "Hitesh",
+       "Bhavna",
+       "Dhruv",
+       "Kantaben"
+      ],
+      "Fri": [
+       "Hitesh",
+       "Bhavna",
+       "Dhruv",
+       "Kantaben"
+      ],
+      "Sat": [
+       "Hitesh",
+       "Bhavna",
+       "Dhruv",
+       "Kantaben"
+      ],
+      "Sun": [
+       "Hitesh",
+       "Bhavna",
+       "Dhruv",
+       "Kantaben"
+      ]
+     },
+     "Dinner": {
+      "Mon": [
+       "Hitesh",
+       "Bhavna",
+       "Dhruv"
+      ],
+      "Tue": [
+       "Hitesh",
+       "Bhavna",
+       "Dhruv"
+      ],
+      "Wed": [
+       "Hitesh",
+       "Bhavna",
+       "Dhruv"
+      ],
+      "Thu": [
+       "Hitesh",
+       "Bhavna",
+       "Dhruv"
+      ],
+      "Fri": [
+       "Hitesh",
+       "Bhavna",
+       "Dhruv"
+      ],
+      "Sat": [
+       "Hitesh",
+       "Bhavna",
+       "Dhruv"
+      ],
+      "Sun": [
+       "Hitesh",
+       "Bhavna",
+       "Dhruv"
+      ]
+     },
+     "Ba's dinner": {
+      "Mon": [
+       "Kantaben"
+      ],
+      "Tue": [
+       "Kantaben"
+      ],
+      "Wed": [
+       "Kantaben"
+      ],
+      "Thu": [
+       "Kantaben"
+      ],
+      "Fri": [
+       "Kantaben"
+      ],
+      "Sat": [
+       "Kantaben"
+      ],
+      "Sun": [
+       "Kantaben"
+      ]
+     }
+    },
+    "settings": {
+     "new_dishes_per_week": 2
+    }
+   },
+   "calls": 13,
+   "cost": 0.005238106999999999
+  },
+  {
+   "household": "h10-qureshi",
+   "title": "Single parent + toddler, hybrid office days, evening cook, toddler's own dinner",
+   "source": "truth",
+   "ok": true,
+   "plan_ms": 80096,
+   "refused": [],
+   "rates": {
+    "filled": [
+     24,
+     24
+    ],
+    "attendance": [
+     24,
+     24
+    ],
+    "guests": [
+     1,
+     1
+    ],
+    "skips_kept": [
+     1,
+     1
+    ],
+    "no_stray": [
+     1,
+     1
+    ],
+    "hard_rules": [
+     3,
+     3
+    ],
+    "from_library": [
+     34,
+     34
+    ],
+    "new_budget": [
+     1,
+     1
+    ],
+    "default_cap": [
+     13,
+     14
+    ],
+    "dish_frequency": [
+     3,
+     3
+    ],
+    "repeat_window": [
+     3,
+     4
+    ],
+    "same_day_repeat": [
+     7,
+     7
+    ]
+   },
+   "tracked": {
+    "shape": [
+     23,
+     24
+    ]
+   },
+   "notes": [
+    "default_cap: Dal rice (no frequency, not a staple) on 3 days: Tue Zayan's dinner, Fri Zayan's dinner, Sun Zayan's dinner",
+    "repeat_window: Zayan's dinner (window 3): Dal rice Fri and Sun"
+   ],
+   "facts": {
+    "hard_breaks": 0,
+    "new_dishes": 1,
+    "shape_Breakfast": "1.0 vs 1.0",
+    "shape_Lunch": "1.5 vs 1.7",
+    "shape_Dinner": "2.2 vs 2.3",
+    "shape_Zayan's dinner": "1.1 vs 1.0",
+    "dishes": 34,
+    "family_dish_share": 97,
+    "unmet": 1,
+    "flagged": 1
+   },
+   "judge": {
+    "worst": "Zayan's dinner on Sunday has a vegetable biryani he cannot eat. Many 'no X for Zayan' notes on dishes he normally eats, such as 'no rice for Zayan' on dal chawal, make little sense. | Zayan is wrongly excluded from 'for everyone' meals (Mon breakfast; Mon/Fri lunch) by banning rice/dal/atta, leaving the toddler without food at those slots.",
+    "by": {
+     "anthropic/claude-sonnet-5.5": {
+      "worst": "Zayan's dinner on Sunday has a vegetable biryani he cannot eat. Many 'no X for Zayan' notes on dishes he normally eats, such as 'no rice for Zayan' on dal chawal, make little sense.",
+      "fits_dishes": 3,
+      "meal_shape": 2,
+      "variety": 3,
+      "per_person": 2,
+      "overall": 2
+     },
+     "openai/gpt-5": {
+      "worst": "Zayan is wrongly excluded from 'for everyone' meals (Mon breakfast; Mon/Fri lunch) by banning rice/dal/atta, leaving the toddler without food at those slots.",
+      "fits_dishes": 4,
+      "meal_shape": 3,
+      "variety": 5,
+      "per_person": 1,
+      "overall": 2
+     }
+    },
+    "fits_dishes": 3.5,
+    "meal_shape": 2.5,
+    "variety": 4,
+    "per_person": 1.5,
+    "overall": 2
+   },
+   "unmet": [
+    "Sun Zayan's dinner: Dal rice comes back sooner than usual"
+   ],
+   "message": "Your week is planned.\n\n*Monday*\nBreakfast: Idli (no peanuts for Zayan; no idli rice and urad dal for Zayan)\nZayan's dinner: Khichdi\nLunch: Dal chawal (no peanuts for Zayan; no rice and toor dal for Zayan), Roti (no peanuts for Zayan; no atta for Zayan), Sabzi (no peanuts for Zayan)\nDinner: Roti, Chicken curry\n\n*Tuesday*\nBreakfast: Paratha\nZayan's dinner: Dal rice\nDinner: Roti, Sabzi, Dal\n\n*Wednesday*\nBreakfast: Upma (no peanuts for Zayan; no sugar for Zayan)\nZayan's dinner: Vegetable daliya\nDinner: Roti, Fish curry\n\n*Thursday*\nBreakfast: Ragi porridge (no jaggery for Zayan)\nZayan's dinner: Khichdi\nDinner: Roti, Chicken curry\n\n*Friday*\nBreakfast: Bread omelette (no bread for Zayan)\nZayan's dinner: Dal rice\nLunch: Dal chawal (no rice for Zayan)\nDinner: Roti, Dal\n\n*Saturday*\nBreakfast: Banana pancake (no nuts for Zayan; no sugar for Zayan)\nZayan's dinner: Vegetable daliya\nLunch: Roti\nDinner: ordering in\n\n*Sunday*\nBreakfast: Idli\nZayan's dinner: Vegetable biryani (not for Zayan), Dal rice. Zayan\nLunch: Chicken biryani\nDinner: Roti, Mutton curry\n\nAll week: No sugar for Zayan, he's only 2, and less salt.\n\nNew this week: Vegetable biryani (All library dishes (Khichdi, Dal rice, Vegetable daliya) have been used twice this week, so a new dish is needed. Vegetable biryani is nut-free, sugar-free, and halal, suitable for Zayan.)\n\nI couldn't keep everything this week: Sun Zayan's dinner: Dal rice comes back sooner than usual. Tell me what to change.\n\nThe whole week: [Week page](/a/t/?flock_scope=app#/week?week=2026-11-30)\nTell me anything to change.",
+   "week": "Mon: Breakfast [Farah, Zayan]: Idli (no peanuts for Zayan; no idli rice and urad dal for Zayan) | Zayan's dinner [Zayan]: Khichdi | Lunch [Farah, Zayan]: Dal chawal (no peanuts for Zayan; no rice and toor dal for Zayan), Roti (no peanuts for Zayan; no atta for Zayan), Sabzi (no peanuts for Zayan) | Dinner [Farah]: Roti, Chicken curry\nTue: Breakfast [Farah, Zayan]: Paratha | Zayan's dinner [Zayan]: Dal rice | Dinner [Farah]: Roti, Sabzi, Dal\nWed: Breakfast [Farah, Zayan]: Upma (no peanuts for Zayan; no sugar for Zayan) | Zayan's dinner [Zayan]: Vegetable daliya | Dinner [Farah]: Roti, Fish curry\nThu: Breakfast [Farah, Zayan]: Ragi porridge (no jaggery for Zayan) | Zayan's dinner [Zayan]: Khichdi | Dinner [Farah]: Roti, Chicken curry\nFri: Breakfast [Farah, Zayan]: Bread omelette (no bread for Zayan) | Zayan's dinner [Zayan]: Dal rice | Lunch [Farah, Zayan]: Dal chawal (no rice for Zayan) | Dinner [Farah, 3 guests]: Roti, Dal\nSat: Breakfast [Farah, Zayan]: Banana pancake (no nuts for Zayan; no sugar for Zayan) | Zayan's dinner [Zayan]: Vegetable daliya | Lunch [Farah, Zayan]: Roti | Dinner [Farah]: (ordered in)\nSun: Breakfast [Farah, Zayan]: Idli | Zayan's dinner [Zayan]: Vegetable biryani (not for Zayan), Dal rice — Zayan | Lunch [Farah, Zayan]: Chicken biryani | Dinner [Farah]: Roti, Mutton curry",
+   "plan": {
+    "ok": true,
+    "week_start": "2026-11-30",
+    "slotDays": [
+     {
+      "date": "2026-11-30",
+      "slot": "Breakfast",
+      "people": [
+       "Farah",
+       "Zayan"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Idli",
+        "new": false,
+        "note": "no peanuts for Zayan; no idli rice and urad dal for Zayan",
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-11-30",
+      "slot": "Zayan's dinner",
+      "people": [
+       "Zayan"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Khichdi",
+        "new": false,
+        "note": null,
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-11-30",
+      "slot": "Lunch",
+      "people": [
+       "Farah",
+       "Zayan"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Dal chawal",
+        "new": false,
+        "note": "no peanuts for Zayan; no rice and toor dal for Zayan",
+        "not_for": []
+       },
+       {
+        "name": "Roti",
+        "new": false,
+        "note": "no peanuts for Zayan; no atta for Zayan",
+        "not_for": []
+       },
+       {
+        "name": "Sabzi",
+        "new": false,
+        "note": "no peanuts for Zayan",
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-11-30",
+      "slot": "Dinner",
+      "people": [
+       "Farah"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Roti",
+        "new": false,
+        "note": null,
+        "not_for": []
+       },
+       {
+        "name": "Chicken curry",
+        "new": false,
+        "note": null,
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-12-01",
+      "slot": "Breakfast",
+      "people": [
+       "Farah",
+       "Zayan"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Paratha",
+        "new": false,
+        "note": null,
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-12-01",
+      "slot": "Zayan's dinner",
+      "people": [
+       "Zayan"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Dal rice",
+        "new": false,
+        "note": null,
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-12-01",
+      "slot": "Dinner",
+      "people": [
+       "Farah"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Roti",
+        "new": false,
+        "note": null,
+        "not_for": []
+       },
+       {
+        "name": "Sabzi",
+        "new": false,
+        "note": null,
+        "not_for": []
+       },
+       {
+        "name": "Dal",
+        "new": false,
+        "note": null,
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-12-02",
+      "slot": "Breakfast",
+      "people": [
+       "Farah",
+       "Zayan"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Upma",
+        "new": false,
+        "note": "no peanuts for Zayan; no sugar for Zayan",
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-12-02",
+      "slot": "Zayan's dinner",
+      "people": [
+       "Zayan"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Vegetable daliya",
+        "new": false,
+        "note": null,
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-12-02",
+      "slot": "Dinner",
+      "people": [
+       "Farah"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Roti",
+        "new": false,
+        "note": null,
+        "not_for": []
+       },
+       {
+        "name": "Fish curry",
+        "new": false,
+        "note": null,
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-12-03",
+      "slot": "Breakfast",
+      "people": [
+       "Farah",
+       "Zayan"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Ragi porridge",
+        "new": false,
+        "note": "no jaggery for Zayan",
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-12-03",
+      "slot": "Zayan's dinner",
+      "people": [
+       "Zayan"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Khichdi",
+        "new": false,
+        "note": null,
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-12-03",
+      "slot": "Dinner",
+      "people": [
+       "Farah"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Roti",
+        "new": false,
+        "note": null,
+        "not_for": []
+       },
+       {
+        "name": "Chicken curry",
+        "new": false,
+        "note": null,
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-12-04",
+      "slot": "Breakfast",
+      "people": [
+       "Farah",
+       "Zayan"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Bread omelette",
+        "new": false,
+        "note": "no bread for Zayan",
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-12-04",
+      "slot": "Zayan's dinner",
+      "people": [
+       "Zayan"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Dal rice",
+        "new": false,
+        "note": null,
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-12-04",
+      "slot": "Lunch",
+      "people": [
+       "Farah",
+       "Zayan"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Dal chawal",
+        "new": false,
+        "note": "no rice for Zayan",
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-12-04",
+      "slot": "Dinner",
+      "people": [
+       "Farah"
+      ],
+      "guests": [
+       {
+        "count": 3
+       }
+      ],
+      "skip": null,
+      "occasion": "her sister's family for dinner",
+      "note": null,
+      "dishes": [
+       {
+        "name": "Roti",
+        "new": false,
+        "note": null,
+        "not_for": []
+       },
+       {
+        "name": "Dal",
+        "new": false,
+        "note": null,
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-12-05",
+      "slot": "Breakfast",
+      "people": [
+       "Farah",
+       "Zayan"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Banana pancake",
+        "new": false,
+        "note": "no nuts for Zayan; no sugar for Zayan",
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-12-05",
+      "slot": "Zayan's dinner",
+      "people": [
+       "Zayan"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Vegetable daliya",
+        "new": false,
+        "note": null,
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-12-05",
+      "slot": "Lunch",
+      "people": [
+       "Farah",
+       "Zayan"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Roti",
+        "new": false,
+        "note": null,
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-12-05",
+      "slot": "Dinner",
+      "people": [
+       "Farah"
+      ],
+      "guests": [],
+      "skip": "ordered_in",
+      "occasion": null,
+      "note": null,
+      "dishes": []
+     },
+     {
+      "date": "2026-12-06",
+      "slot": "Breakfast",
+      "people": [
+       "Farah",
+       "Zayan"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Idli",
+        "new": false,
+        "note": null,
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-12-06",
+      "slot": "Zayan's dinner",
+      "people": [
+       "Zayan"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": "Zayan",
+      "dishes": [
+       {
+        "name": "Vegetable biryani",
+        "new": true,
+        "note": null,
+        "not_for": [
+         "Zayan"
+        ]
+       },
+       {
+        "name": "Dal rice",
+        "new": false,
+        "note": null,
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-12-06",
+      "slot": "Lunch",
+      "people": [
+       "Farah",
+       "Zayan"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Chicken biryani",
+        "new": false,
+        "note": null,
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-12-06",
+      "slot": "Dinner",
+      "people": [
+       "Farah"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Roti",
+        "new": false,
+        "note": null,
+        "not_for": []
+       },
+       {
+        "name": "Mutton curry",
+        "new": false,
+        "note": null,
+        "not_for": []
+       }
+      ]
+     }
+    ],
+    "library": [
+     {
+      "slot": "Breakfast",
+      "name": "Paratha",
+      "frequency": null,
+      "days": null,
+      "contains": [],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom",
+       "pork"
+      ],
+      "origin": "setup_named",
+      "quote": null
+     },
+     {
+      "slot": "Breakfast",
+      "name": "Bread omelette",
+      "frequency": null,
+      "days": null,
+      "contains": [
+       "egg"
+      ],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom",
+       "pork"
+      ],
+      "origin": "setup_named",
+      "quote": null
+     },
+     {
+      "slot": "Breakfast",
+      "name": "Upma",
+      "frequency": null,
+      "days": null,
+      "contains": [],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom",
+       "pork"
+      ],
+      "origin": "setup_named",
+      "quote": null
+     },
+     {
+      "slot": "Breakfast",
+      "name": "Banana pancake",
+      "frequency": null,
+      "days": null,
+      "contains": [],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom",
+       "pork"
+      ],
+      "origin": "setup_named",
+      "quote": null
+     },
+     {
+      "slot": "Breakfast",
+      "name": "Idli",
+      "frequency": null,
+      "days": null,
+      "contains": [
+       "white_rice"
+      ],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom",
+       "pork"
+      ],
+      "origin": "setup_named",
+      "quote": null
+     },
+     {
+      "slot": "Breakfast",
+      "name": "Ragi porridge",
+      "frequency": null,
+      "days": null,
+      "contains": [
+       "millet"
+      ],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom",
+       "pork"
+      ],
+      "origin": "setup_named",
+      "quote": null
+     },
+     {
+      "slot": "Lunch",
+      "name": "Dal chawal",
+      "frequency": null,
+      "days": null,
+      "contains": [
+       "white_rice"
+      ],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom",
+       "pork"
+      ],
+      "origin": "setup_named",
+      "quote": null
+     },
+     {
+      "slot": "Lunch",
+      "name": "Roti",
+      "frequency": null,
+      "days": null,
+      "contains": [],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom",
+       "pork"
+      ],
+      "origin": "setup_named",
+      "quote": null
+     },
+     {
+      "slot": "Dinner",
+      "name": "Roti",
+      "frequency": null,
+      "days": null,
+      "contains": [],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom",
+       "pork"
+      ],
+      "origin": "setup_named",
+      "quote": null
+     },
+     {
+      "slot": "Lunch",
+      "name": "Sabzi",
+      "frequency": null,
+      "days": null,
+      "contains": [],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom",
+       "pork"
+      ],
+      "origin": "setup_named",
+      "quote": null
+     },
+     {
+      "slot": "Dinner",
+      "name": "Sabzi",
+      "frequency": null,
+      "days": null,
+      "contains": [],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom",
+       "pork"
+      ],
+      "origin": "setup_named",
+      "quote": null
+     },
+     {
+      "slot": "Lunch",
+      "name": "Chicken biryani",
+      "frequency": null,
+      "days": [
+       "Sun"
+      ],
+      "contains": [
+       "meat",
+       "white_rice"
+      ],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom",
+       "pork"
+      ],
+      "origin": "setup_named",
+      "quote": null
+     },
+     {
+      "slot": "Lunch",
+      "name": "Khichdi",
+      "frequency": null,
+      "days": null,
+      "contains": [
+       "white_rice"
+      ],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom",
+       "pork"
+      ],
+      "origin": "setup_named",
+      "quote": null
+     },
+     {
+      "slot": "Lunch",
+      "name": "Dal rice",
+      "frequency": null,
+      "days": null,
+      "contains": [
+       "white_rice"
+      ],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom",
+       "pork"
+      ],
+      "origin": "setup_named",
+      "quote": null
+     },
+     {
+      "slot": "Dinner",
+      "name": "Chicken curry",
+      "frequency": null,
+      "days": null,
+      "contains": [
+       "meat"
+      ],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom",
+       "pork"
+      ],
+      "origin": "setup_named",
+      "quote": null
+     },
+     {
+      "slot": "Dinner",
+      "name": "Dal",
+      "frequency": null,
+      "days": null,
+      "contains": [],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom",
+       "pork"
+      ],
+      "origin": "setup_named",
+      "quote": null
+     },
+     {
+      "slot": "Dinner",
+      "name": "Fish curry",
+      "frequency": null,
+      "days": [
+       "Wed"
+      ],
+      "contains": [
+       "fish"
+      ],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom",
+       "pork"
+      ],
+      "origin": "setup_named",
+      "quote": null
+     },
+     {
+      "slot": "Dinner",
+      "name": "Mutton curry",
+      "frequency": "rarely",
+      "days": null,
+      "contains": [
+       "meat"
+      ],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom",
+       "pork"
+      ],
+      "origin": "setup_named",
+      "quote": null
+     },
+     {
+      "slot": "Zayan's dinner",
+      "name": "Khichdi",
+      "frequency": null,
+      "days": null,
+      "contains": [
+       "white_rice"
+      ],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom",
+       "pork"
+      ],
+      "origin": "setup_named",
+      "quote": null
+     },
+     {
+      "slot": "Zayan's dinner",
+      "name": "Dal rice",
+      "frequency": null,
+      "days": null,
+      "contains": [
+       "white_rice"
+      ],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom",
+       "pork"
+      ],
+      "origin": "setup_named",
+      "quote": null
+     },
+     {
+      "slot": "Zayan's dinner",
+      "name": "Vegetable daliya",
+      "frequency": null,
+      "days": null,
+      "contains": [],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom",
+       "pork"
+      ],
+      "origin": "setup_named",
+      "quote": null
+     },
+     {
+      "slot": "Zayan's dinner",
+      "name": "Vegetable biryani",
+      "frequency": null,
+      "days": null,
+      "contains": [
+       "onion_garlic",
+       "dairy",
+       "nuts",
+       "white_rice"
+      ],
+      "contains_read": [
+       "onion_garlic",
+       "dairy",
+       "nuts",
+       "white_rice",
+       "egg",
+       "meat",
+       "fish",
+       "peanut",
+       "sugar",
+       "pork"
+      ],
+      "origin": "planner_suggested",
+      "suggested": true,
+      "untried": true
+     }
+    ],
+    "unmet": [
+     "Sun Zayan's dinner: Dal rice comes back sooner than usual"
+    ],
+    "message": "Your week is planned.\n\n*Monday*\nBreakfast: Idli (no peanuts for Zayan; no idli rice and urad dal for Zayan)\nZayan's dinner: Khichdi\nLunch: Dal chawal (no peanuts for Zayan; no rice and toor dal for Zayan), Roti (no peanuts for Zayan; no atta for Zayan), Sabzi (no peanuts for Zayan)\nDinner: Roti, Chicken curry\n\n*Tuesday*\nBreakfast: Paratha\nZayan's dinner: Dal rice\nDinner: Roti, Sabzi, Dal\n\n*Wednesday*\nBreakfast: Upma (no peanuts for Zayan; no sugar for Zayan)\nZayan's dinner: Vegetable daliya\nDinner: Roti, Fish curry\n\n*Thursday*\nBreakfast: Ragi porridge (no jaggery for Zayan)\nZayan's dinner: Khichdi\nDinner: Roti, Chicken curry\n\n*Friday*\nBreakfast: Bread omelette (no bread for Zayan)\nZayan's dinner: Dal rice\nLunch: Dal chawal (no rice for Zayan)\nDinner: Roti, Dal\n\n*Saturday*\nBreakfast: Banana pancake (no nuts for Zayan; no sugar for Zayan)\nZayan's dinner: Vegetable daliya\nLunch: Roti\nDinner: ordering in\n\n*Sunday*\nBreakfast: Idli\nZayan's dinner: Vegetable biryani (not for Zayan), Dal rice. Zayan\nLunch: Chicken biryani\nDinner: Roti, Mutton curry\n\nAll week: No sugar for Zayan, he's only 2, and less salt.\n\nNew this week: Vegetable biryani (All library dishes (Khichdi, Dal rice, Vegetable daliya) have been used twice this week, so a new dish is needed. Vegetable biryani is nut-free, sugar-free, and halal, suitable for Zayan.)\n\nI couldn't keep everything this week: Sun Zayan's dinner: Dal rice comes back sooner than usual. Tell me what to change.\n\nThe whole week: [Week page](/a/t/?flock_scope=app#/week?week=2026-11-30)\nTell me anything to change.",
+    "asked": []
+   },
+   "loaded": {
+    "ok": true,
+    "slots": [
+     {
+      "name": "Breakfast",
+      "kind": "main",
+      "addon_of": null,
+      "usual_people": [],
+      "days": [],
+      "skip_days": []
+     },
+     {
+      "name": "Lunch",
+      "kind": "main",
+      "addon_of": null,
+      "usual_people": [],
+      "days": [],
+      "skip_days": []
+     },
+     {
+      "name": "Dinner",
+      "kind": "main",
+      "addon_of": null,
+      "usual_people": [
+       "Farah"
+      ],
+      "days": [],
+      "skip_days": [
+       {
+        "day": "Sat",
+        "skip": "ordered_in"
+       }
+      ]
+     },
+     {
+      "name": "Zayan's dinner",
+      "kind": "custom",
+      "addon_of": null,
+      "usual_people": [
+       "Zayan"
+      ],
+      "days": [],
+      "skip_days": []
+     }
+    ],
+    "library": [
+     {
+      "slot": "Breakfast",
+      "name": "Paratha",
+      "frequency": null,
+      "days": null,
+      "contains": [],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom",
+       "pork"
+      ],
+      "origin": "setup_named"
+     },
+     {
+      "slot": "Breakfast",
+      "name": "Bread omelette",
+      "frequency": null,
+      "days": null,
+      "contains": [
+       "egg"
+      ],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom",
+       "pork"
+      ],
+      "origin": "setup_named"
+     },
+     {
+      "slot": "Breakfast",
+      "name": "Upma",
+      "frequency": null,
+      "days": null,
+      "contains": [],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom",
+       "pork"
+      ],
+      "origin": "setup_named"
+     },
+     {
+      "slot": "Breakfast",
+      "name": "Banana pancake",
+      "frequency": null,
+      "days": null,
+      "contains": [],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom",
+       "pork"
+      ],
+      "origin": "setup_named"
+     },
+     {
+      "slot": "Breakfast",
+      "name": "Idli",
+      "frequency": null,
+      "days": null,
+      "contains": [
+       "white_rice"
+      ],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom",
+       "pork"
+      ],
+      "origin": "setup_named"
+     },
+     {
+      "slot": "Breakfast",
+      "name": "Ragi porridge",
+      "frequency": null,
+      "days": null,
+      "contains": [
+       "millet"
+      ],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom",
+       "pork"
+      ],
+      "origin": "setup_named"
+     },
+     {
+      "slot": "Lunch",
+      "name": "Dal chawal",
+      "frequency": null,
+      "days": null,
+      "contains": [
+       "white_rice"
+      ],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom",
+       "pork"
+      ],
+      "origin": "setup_named"
+     },
+     {
+      "slot": "Lunch",
+      "name": "Roti",
+      "frequency": null,
+      "days": null,
+      "contains": [],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom",
+       "pork"
+      ],
+      "origin": "setup_named"
+     },
+     {
+      "slot": "Dinner",
+      "name": "Roti",
+      "frequency": null,
+      "days": null,
+      "contains": [],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom",
+       "pork"
+      ],
+      "origin": "setup_named"
+     },
+     {
+      "slot": "Lunch",
+      "name": "Sabzi",
+      "frequency": null,
+      "days": null,
+      "contains": [],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom",
+       "pork"
+      ],
+      "origin": "setup_named"
+     },
+     {
+      "slot": "Dinner",
+      "name": "Sabzi",
+      "frequency": null,
+      "days": null,
+      "contains": [],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom",
+       "pork"
+      ],
+      "origin": "setup_named"
+     },
+     {
+      "slot": "Lunch",
+      "name": "Chicken biryani",
+      "frequency": null,
+      "days": [
+       "Sun"
+      ],
+      "contains": [
+       "meat",
+       "white_rice"
+      ],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom",
+       "pork"
+      ],
+      "origin": "setup_named"
+     },
+     {
+      "slot": "Lunch",
+      "name": "Khichdi",
+      "frequency": null,
+      "days": null,
+      "contains": [
+       "white_rice"
+      ],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom",
+       "pork"
+      ],
+      "origin": "setup_named"
+     },
+     {
+      "slot": "Lunch",
+      "name": "Dal rice",
+      "frequency": null,
+      "days": null,
+      "contains": [
+       "white_rice"
+      ],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom",
+       "pork"
+      ],
+      "origin": "setup_named"
+     },
+     {
+      "slot": "Dinner",
+      "name": "Chicken curry",
+      "frequency": null,
+      "days": null,
+      "contains": [
+       "meat"
+      ],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom",
+       "pork"
+      ],
+      "origin": "setup_named"
+     },
+     {
+      "slot": "Dinner",
+      "name": "Dal",
+      "frequency": null,
+      "days": null,
+      "contains": [],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom",
+       "pork"
+      ],
+      "origin": "setup_named"
+     },
+     {
+      "slot": "Dinner",
+      "name": "Fish curry",
+      "frequency": null,
+      "days": [
+       "Wed"
+      ],
+      "contains": [
+       "fish"
+      ],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom",
+       "pork"
+      ],
+      "origin": "setup_named"
+     },
+     {
+      "slot": "Dinner",
+      "name": "Mutton curry",
+      "frequency": "rarely",
+      "days": null,
+      "contains": [
+       "meat"
+      ],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom",
+       "pork"
+      ],
+      "origin": "setup_named"
+     },
+     {
+      "slot": "Zayan's dinner",
+      "name": "Khichdi",
+      "frequency": null,
+      "days": null,
+      "contains": [
+       "white_rice"
+      ],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom",
+       "pork"
+      ],
+      "origin": "setup_named"
+     },
+     {
+      "slot": "Zayan's dinner",
+      "name": "Dal rice",
+      "frequency": null,
+      "days": null,
+      "contains": [
+       "white_rice"
+      ],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom",
+       "pork"
+      ],
+      "origin": "setup_named"
+     },
+     {
+      "slot": "Zayan's dinner",
+      "name": "Vegetable daliya",
+      "frequency": null,
+      "days": null,
+      "contains": [],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom",
+       "pork"
+      ],
+      "origin": "setup_named"
+     }
+    ],
+    "rules": [
+     {
+      "hard": true,
+      "what": "avoid",
+      "who": null,
+      "slots": null,
+      "days": null,
+      "items": [
+       "pork"
+      ],
+      "to": null,
+      "frequency": null,
+      "per_meal": null,
+      "fasting_food": null,
+      "quote": "We eat everything, halal only, no pork."
+     },
+     {
+      "hard": true,
+      "what": "avoid",
+      "who": "Zayan",
+      "slots": null,
+      "days": null,
+      "items": [
+       "nuts"
+      ],
+      "to": null,
+      "frequency": null,
+      "per_meal": null,
+      "fasting_food": null,
+      "quote": "Zayan is allergic to cashews, so no nuts at all for him."
+     },
+     {
+      "hard": true,
+      "what": "avoid",
+      "who": "Zayan",
+      "slots": null,
+      "days": null,
+      "items": [
+       "sugar"
+      ],
+      "to": null,
+      "frequency": null,
+      "per_meal": null,
+      "fasting_food": null,
+      "quote": "No sugar for Zayan, he's only 2, and less salt."
+     },
+     {
+      "hard": false,
+      "what": "note",
+      "who": "Zayan",
+      "slots": null,
+      "days": null,
+      "items": null,
+      "to": null,
+      "frequency": null,
+      "per_meal": null,
+      "fasting_food": null,
+      "quote": "No sugar for Zayan, he's only 2, and less salt."
+     }
+    ],
+    "seed": [
+     {
+      "slot": "Breakfast",
+      "dishes": [
+       "Paratha"
+      ]
+     },
+     {
+      "slot": "Breakfast",
+      "dishes": [
+       "Bread omelette"
+      ]
+     },
+     {
+      "slot": "Breakfast",
+      "dishes": [
+       "Upma"
+      ]
+     },
+     {
+      "slot": "Breakfast",
+      "dishes": [
+       "Idli"
+      ]
+     },
+     {
+      "slot": "Breakfast",
+      "dishes": [
+       "Ragi porridge"
+      ]
+     },
+     {
+      "slot": "Lunch",
+      "dishes": [
+       "Dal chawal",
+       "Roti",
+       "Sabzi"
+      ]
+     },
+     {
+      "slot": "Lunch",
+      "dishes": [
+       "Khichdi"
+      ]
+     },
+     {
+      "slot": "Lunch",
+      "dishes": [
+       "Chicken biryani"
+      ]
+     },
+     {
+      "slot": "Dinner",
+      "dishes": [
+       "Roti",
+       "Chicken curry"
+      ]
+     },
+     {
+      "slot": "Dinner",
+      "dishes": [
+       "Roti",
+       "Sabzi",
+       "Dal"
+      ]
+     },
+     {
+      "slot": "Dinner",
+      "dishes": [
+       "Roti",
+       "Fish curry"
+      ]
+     },
+     {
+      "slot": "Zayan's dinner",
+      "dishes": [
+       "Khichdi"
+      ]
+     },
+     {
+      "slot": "Zayan's dinner",
+      "dishes": [
+       "Dal rice"
+      ]
+     },
+     {
+      "slot": "Zayan's dinner",
+      "dishes": [
+       "Vegetable daliya"
+      ]
+     }
+    ],
+    "cook": {
+     "name": "Shabana",
+     "days": [
+      "Mon",
+      "Tue",
+      "Wed",
+      "Thu",
+      "Fri"
+     ],
+     "visits": [
+      {
+       "at": "17:00",
+       "meals": [
+        "Dinner"
+       ]
+      }
+     ]
+    },
+    "family_cooks": [
+     {
+      "person": "Farah",
+      "days": [
+       "Mon",
+       "Tue",
+       "Wed",
+       "Thu",
+       "Fri",
+       "Sat",
+       "Sun"
+      ]
+     }
+    ],
+    "unplaced": [
+     {
+      "text": "We eat everything, halal only, no pork.",
+      "quote": "We eat everything, halal only, no pork."
+     }
+    ],
+    "lunch_unclear": [],
+    "attendance": {
+     "Breakfast": {
+      "Mon": [
+       "Farah",
+       "Zayan"
+      ],
+      "Tue": [
+       "Farah",
+       "Zayan"
+      ],
+      "Wed": [
+       "Farah",
+       "Zayan"
+      ],
+      "Thu": [
+       "Farah",
+       "Zayan"
+      ],
+      "Fri": [
+       "Farah",
+       "Zayan"
+      ],
+      "Sat": [
+       "Farah",
+       "Zayan"
+      ],
+      "Sun": [
+       "Farah",
+       "Zayan"
+      ]
+     },
+     "Lunch": {
+      "Mon": [
+       "Farah",
+       "Zayan"
+      ],
+      "Tue": [],
+      "Wed": [],
+      "Thu": [],
+      "Fri": [
+       "Farah",
+       "Zayan"
+      ],
+      "Sat": [
+       "Farah",
+       "Zayan"
+      ],
+      "Sun": [
+       "Farah",
+       "Zayan"
+      ]
+     },
+     "Dinner": {
+      "Mon": [
+       "Farah"
+      ],
+      "Tue": [
+       "Farah"
+      ],
+      "Wed": [
+       "Farah"
+      ],
+      "Thu": [
+       "Farah"
+      ],
+      "Fri": [
+       "Farah"
+      ],
+      "Sat": [
+       "Farah"
+      ],
+      "Sun": [
+       "Farah"
+      ]
+     },
+     "Zayan's dinner": {
+      "Mon": [
+       "Zayan"
+      ],
+      "Tue": [
+       "Zayan"
+      ],
+      "Wed": [
+       "Zayan"
+      ],
+      "Thu": [
+       "Zayan"
+      ],
+      "Fri": [
+       "Zayan"
+      ],
+      "Sat": [
+       "Zayan"
+      ],
+      "Sun": [
+       "Zayan"
+      ]
+     }
+    },
+    "settings": {
+     "new_dishes_per_week": 2
+    }
+   },
+   "calls": 18,
+   "cost": 0.005495084
+  },
+  {
+   "household": "h11-dsouza",
+   "title": "Couple, alternate-week office days, non-veg weekends only, lactose intolerant",
+   "source": "truth",
+   "ok": true,
+   "plan_ms": 61887,
+   "refused": [],
+   "rates": {
+    "filled": [
+     20,
+     20
+    ],
+    "attendance": [
+     20,
+     20
+    ],
+    "skips_kept": [
+     1,
+     1
+    ],
+    "no_stray": [
+     1,
+     1
+    ],
+    "hard_rules": [
+     2,
+     2
+    ],
+    "from_library": [
+     54,
+     54
+    ],
+    "new_budget": [
+     1,
+     1
+    ],
+    "default_cap": [
+     8,
+     8
+    ],
+    "dish_frequency": [
+     6,
+     6
+    ],
+    "repeat_window": [
+     3,
+     3
+    ],
+    "same_day_repeat": [
+     7,
+     7
+    ],
+    "soft_frequency": [
+     1,
+     1
+    ]
+   },
+   "tracked": {
+    "shape": [
+     18,
+     20
+    ]
+   },
+   "notes": [],
+   "facts": {
+    "hard_breaks": 0,
+    "new_dishes": 1,
+    "shape_Breakfast": "1.0 vs 1.0",
+    "shape_Lunch": "3.7 vs 3.7",
+    "shape_Dinner": "3.5 vs 2.7",
+    "dishes": 54,
+    "family_dish_share": 98,
+    "unmet": 0,
+    "flagged": 0
+   },
+   "judge": {
+    "worst": "Ragi malt is not one of their dishes, and ghee/dairy notes for Ishita are applied inconsistently, with overnight oats twice. | Sunday breakfast ragi malt isn’t in their dishes; swap to ragi dosa or besan chilla.",
+    "by": {
+     "anthropic/claude-sonnet-5.5": {
+      "worst": "Ragi malt is not one of their dishes, and ghee/dairy notes for Ishita are applied inconsistently, with overnight oats twice.",
+      "fits_dishes": 4,
+      "meal_shape": 4,
+      "variety": 3,
+      "per_person": 3,
+      "overall": 3
+     },
+     "openai/gpt-5": {
+      "worst": "Sunday breakfast ragi malt isn’t in their dishes; swap to ragi dosa or besan chilla.",
+      "fits_dishes": 4,
+      "meal_shape": 4,
+      "variety": 5,
+      "per_person": 4,
+      "overall": 4
+     }
+    },
+    "fits_dishes": 4,
+    "meal_shape": 4,
+    "variety": 4,
+    "per_person": 3.5,
+    "overall": 3.5
+   },
+   "unmet": [],
+   "message": "Your week is planned.\n\n*Monday*\nBreakfast: Ragi dosa (no curd for Ishita)\nLunch: Rice, Dal, Sabzi, Salad\nDinner: Roti, Dal, Sabzi\n\n*Tuesday*\nBreakfast: Overnight oats (no milk for Ishita)\nLunch: Rice, Dal, Sabzi, Salad\nDinner: Roti, Dal, Sabzi\n\n*Wednesday*\nBreakfast: Poha\nLunch: Rajma, Rice, Salad\nDinner: Roti, Dal, Sabzi\n\n*Thursday*\nBreakfast: Upma\nLunch: Rice, Dal, Sabzi, Salad\nDinner: Roti, Dal, Sabzi\n\n*Friday*\nBreakfast: Ragi dosa\nLunch: Rice, Dal, Sabzi, Salad\nDinner: ordering in\n\n*Saturday*\nBreakfast: Overnight oats (no milk and yogurt for Ishita)\nLunch: Chole, Rice, Salad\nDinner: Roti, Dal, Sabzi, Chicken curry. Rohan joins: Chicken curry for him only\n\n*Sunday*\nBreakfast: Ragi malt (no milk for Ishita)\nLunch: Dal, Rice, Sabzi, Salad\nDinner: Roti, Dal, Sabzi, Egg curry, Fish fry\n\nAll week: no ghee for Ishita\n\nNew this week: Ragi malt (Vikram wants to eat millets three times a week; ragi is a millet and the family already enjoys ragi dosa, so ragi malt is a natural addition for breakfast.)\n\nThe whole week: [Week page](/a/t/?flock_scope=app#/week?week=2026-11-30)\nTell me anything to change.",
+   "week": "Mon: Breakfast [Vikram, Ishita]: Ragi dosa (no curd for Ishita) | Lunch [Vikram, Ishita]: Rice, Dal, Sabzi, Salad | Dinner [Vikram, Ishita]: Roti (no ghee for Ishita), Dal, Sabzi\nTue: Breakfast [Vikram, Ishita]: Overnight oats (no milk for Ishita) | Lunch [Vikram, Ishita]: Rice, Dal, Sabzi, Salad | Dinner [Vikram, Ishita]: Roti, Dal, Sabzi\nWed: Breakfast [Vikram, Ishita]: Poha | Lunch [Vikram, Ishita]: Rajma, Rice, Salad | Dinner [Vikram, Ishita]: Roti, Dal, Sabzi\nThu: Breakfast [Vikram, Ishita]: Upma (no ghee for Ishita) | Lunch [Vikram, Ishita]: Rice, Dal (no ghee for Ishita), Sabzi, Salad | Dinner [Vikram, Ishita]: Roti (no ghee for Ishita), Dal (no ghee for Ishita), Sabzi\nFri: Breakfast [Vikram, Ishita]: Ragi dosa | Lunch [Vikram, Ishita]: Rice, Dal (no ghee for Ishita), Sabzi (no ghee for Ishita), Salad | Dinner [Vikram, Ishita]: (ordered in)\nSat: Breakfast [Vikram, Ishita, Rohan]: Overnight oats (no milk and yogurt for Ishita) | Lunch [Vikram, Ishita, Rohan]: Chole, Rice, Salad | Dinner [Vikram, Ishita, Rohan]: Roti, Dal, Sabzi, Chicken curry — Rohan joins: Chicken curry for him only\nSun: Breakfast [Vikram, Ishita, Rohan]: Ragi malt (no milk for Ishita) | Lunch [Vikram, Ishita, Rohan]: Dal, Rice, Sabzi, Salad | Dinner [Vikram, Ishita, Rohan]: Roti, Dal, Sabzi, Egg curry, Fish fry",
+   "plan": {
+    "ok": true,
+    "week_start": "2026-11-30",
+    "slotDays": [
+     {
+      "date": "2026-11-30",
+      "slot": "Breakfast",
+      "people": [
+       "Vikram",
+       "Ishita"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Ragi dosa",
+        "new": false,
+        "note": "no curd for Ishita",
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-11-30",
+      "slot": "Lunch",
+      "people": [
+       "Vikram",
+       "Ishita"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Rice",
+        "new": false,
+        "note": null,
+        "not_for": []
+       },
+       {
+        "name": "Dal",
+        "new": false,
+        "note": null,
+        "not_for": []
+       },
+       {
+        "name": "Sabzi",
+        "new": false,
+        "note": null,
+        "not_for": []
+       },
+       {
+        "name": "Salad",
+        "new": false,
+        "note": null,
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-11-30",
+      "slot": "Dinner",
+      "people": [
+       "Vikram",
+       "Ishita"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Roti",
+        "new": false,
+        "note": "no ghee for Ishita",
+        "not_for": []
+       },
+       {
+        "name": "Dal",
+        "new": false,
+        "note": null,
+        "not_for": []
+       },
+       {
+        "name": "Sabzi",
+        "new": false,
+        "note": null,
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-12-01",
+      "slot": "Breakfast",
+      "people": [
+       "Vikram",
+       "Ishita"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Overnight oats",
+        "new": false,
+        "note": "no milk for Ishita",
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-12-01",
+      "slot": "Lunch",
+      "people": [
+       "Vikram",
+       "Ishita"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Rice",
+        "new": false,
+        "note": null,
+        "not_for": []
+       },
+       {
+        "name": "Dal",
+        "new": false,
+        "note": null,
+        "not_for": []
+       },
+       {
+        "name": "Sabzi",
+        "new": false,
+        "note": null,
+        "not_for": []
+       },
+       {
+        "name": "Salad",
+        "new": false,
+        "note": null,
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-12-01",
+      "slot": "Dinner",
+      "people": [
+       "Vikram",
+       "Ishita"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Roti",
+        "new": false,
+        "note": null,
+        "not_for": []
+       },
+       {
+        "name": "Dal",
+        "new": false,
+        "note": null,
+        "not_for": []
+       },
+       {
+        "name": "Sabzi",
+        "new": false,
+        "note": null,
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-12-02",
+      "slot": "Breakfast",
+      "people": [
+       "Vikram",
+       "Ishita"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Poha",
+        "new": false,
+        "note": null,
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-12-02",
+      "slot": "Lunch",
+      "people": [
+       "Vikram",
+       "Ishita"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Rajma",
+        "new": false,
+        "note": null,
+        "not_for": []
+       },
+       {
+        "name": "Rice",
+        "new": false,
+        "note": null,
+        "not_for": []
+       },
+       {
+        "name": "Salad",
+        "new": false,
+        "note": null,
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-12-02",
+      "slot": "Dinner",
+      "people": [
+       "Vikram",
+       "Ishita"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Roti",
+        "new": false,
+        "note": null,
+        "not_for": []
+       },
+       {
+        "name": "Dal",
+        "new": false,
+        "note": null,
+        "not_for": []
+       },
+       {
+        "name": "Sabzi",
+        "new": false,
+        "note": null,
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-12-03",
+      "slot": "Breakfast",
+      "people": [
+       "Vikram",
+       "Ishita"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Upma",
+        "new": false,
+        "note": "no ghee for Ishita",
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-12-03",
+      "slot": "Lunch",
+      "people": [
+       "Vikram",
+       "Ishita"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Rice",
+        "new": false,
+        "note": null,
+        "not_for": []
+       },
+       {
+        "name": "Dal",
+        "new": false,
+        "note": "no ghee for Ishita",
+        "not_for": []
+       },
+       {
+        "name": "Sabzi",
+        "new": false,
+        "note": null,
+        "not_for": []
+       },
+       {
+        "name": "Salad",
+        "new": false,
+        "note": null,
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-12-03",
+      "slot": "Dinner",
+      "people": [
+       "Vikram",
+       "Ishita"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Roti",
+        "new": false,
+        "note": "no ghee for Ishita",
+        "not_for": []
+       },
+       {
+        "name": "Dal",
+        "new": false,
+        "note": "no ghee for Ishita",
+        "not_for": []
+       },
+       {
+        "name": "Sabzi",
+        "new": false,
+        "note": null,
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-12-04",
+      "slot": "Breakfast",
+      "people": [
+       "Vikram",
+       "Ishita"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Ragi dosa",
+        "new": false,
+        "note": null,
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-12-04",
+      "slot": "Lunch",
+      "people": [
+       "Vikram",
+       "Ishita"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Rice",
+        "new": false,
+        "note": null,
+        "not_for": []
+       },
+       {
+        "name": "Dal",
+        "new": false,
+        "note": "no ghee for Ishita",
+        "not_for": []
+       },
+       {
+        "name": "Sabzi",
+        "new": false,
+        "note": "no ghee for Ishita",
+        "not_for": []
+       },
+       {
+        "name": "Salad",
+        "new": false,
+        "note": null,
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-12-04",
+      "slot": "Dinner",
+      "people": [
+       "Vikram",
+       "Ishita"
+      ],
+      "guests": [],
+      "skip": "ordered_in",
+      "occasion": null,
+      "note": null,
+      "dishes": []
+     },
+     {
+      "date": "2026-12-05",
+      "slot": "Breakfast",
+      "people": [
+       "Vikram",
+       "Ishita",
+       "Rohan"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Overnight oats",
+        "new": false,
+        "note": "no milk and yogurt for Ishita",
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-12-05",
+      "slot": "Lunch",
+      "people": [
+       "Vikram",
+       "Ishita",
+       "Rohan"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Chole",
+        "new": false,
+        "note": null,
+        "not_for": []
+       },
+       {
+        "name": "Rice",
+        "new": false,
+        "note": null,
+        "not_for": []
+       },
+       {
+        "name": "Salad",
+        "new": false,
+        "note": null,
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-12-05",
+      "slot": "Dinner",
+      "people": [
+       "Vikram",
+       "Ishita",
+       "Rohan"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": "Rohan joins: Chicken curry for him only",
+      "dishes": [
+       {
+        "name": "Roti",
+        "new": false,
+        "note": null,
+        "not_for": []
+       },
+       {
+        "name": "Dal",
+        "new": false,
+        "note": null,
+        "not_for": []
+       },
+       {
+        "name": "Sabzi",
+        "new": false,
+        "note": null,
+        "not_for": []
+       },
+       {
+        "name": "Chicken curry",
+        "new": false,
+        "note": null,
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-12-06",
+      "slot": "Breakfast",
+      "people": [
+       "Vikram",
+       "Ishita",
+       "Rohan"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Ragi malt",
+        "new": true,
+        "note": "no milk for Ishita",
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-12-06",
+      "slot": "Lunch",
+      "people": [
+       "Vikram",
+       "Ishita",
+       "Rohan"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Dal",
+        "new": false,
+        "note": null,
+        "not_for": []
+       },
+       {
+        "name": "Rice",
+        "new": false,
+        "note": null,
+        "not_for": []
+       },
+       {
+        "name": "Sabzi",
+        "new": false,
+        "note": null,
+        "not_for": []
+       },
+       {
+        "name": "Salad",
+        "new": false,
+        "note": null,
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-12-06",
+      "slot": "Dinner",
+      "people": [
+       "Vikram",
+       "Ishita",
+       "Rohan"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Roti",
+        "new": false,
+        "note": null,
+        "not_for": []
+       },
+       {
+        "name": "Dal",
+        "new": false,
+        "note": null,
+        "not_for": []
+       },
+       {
+        "name": "Sabzi",
+        "new": false,
+        "note": null,
+        "not_for": []
+       },
+       {
+        "name": "Egg curry",
+        "new": false,
+        "note": null,
+        "not_for": []
+       },
+       {
+        "name": "Fish fry",
+        "new": false,
+        "note": null,
+        "not_for": []
+       }
+      ]
+     }
+    ],
+    "library": [
+     {
+      "slot": "Breakfast",
+      "name": "Poha",
+      "frequency": null,
+      "days": null,
+      "contains": [
+       "white_rice"
+      ],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom"
+      ],
+      "origin": "setup_named",
+      "quote": null
+     },
+     {
+      "slot": "Breakfast",
+      "name": "Upma",
+      "frequency": null,
+      "days": null,
+      "contains": [],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom"
+      ],
+      "origin": "setup_named",
+      "quote": null
+     },
+     {
+      "slot": "Breakfast",
+      "name": "Ragi dosa",
+      "frequency": null,
+      "days": null,
+      "contains": [
+       "millet"
+      ],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom"
+      ],
+      "origin": "setup_named",
+      "quote": null
+     },
+     {
+      "slot": "Breakfast",
+      "name": "Besan chilla",
+      "frequency": null,
+      "days": null,
+      "contains": [],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom"
+      ],
+      "origin": "setup_named",
+      "quote": null
+     },
+     {
+      "slot": "Breakfast",
+      "name": "Overnight oats",
+      "frequency": "sometimes",
+      "days": null,
+      "contains": [],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom"
+      ],
+      "origin": "setup_named",
+      "quote": null
+     },
+     {
+      "slot": "Lunch",
+      "name": "Dal",
+      "frequency": null,
+      "days": null,
+      "contains": [],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom"
+      ],
+      "origin": "setup_named",
+      "quote": null
+     },
+     {
+      "slot": "Dinner",
+      "name": "Dal",
+      "frequency": null,
+      "days": null,
+      "contains": [],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom"
+      ],
+      "origin": "setup_named",
+      "quote": null
+     },
+     {
+      "slot": "Lunch",
+      "name": "Rice",
+      "frequency": null,
+      "days": null,
+      "contains": [
+       "white_rice"
+      ],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom"
+      ],
+      "origin": "setup_named",
+      "quote": null
+     },
+     {
+      "slot": "Lunch",
+      "name": "Sabzi",
+      "frequency": null,
+      "days": null,
+      "contains": [],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom"
+      ],
+      "origin": "setup_named",
+      "quote": null
+     },
+     {
+      "slot": "Dinner",
+      "name": "Sabzi",
+      "frequency": null,
+      "days": null,
+      "contains": [],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom"
+      ],
+      "origin": "setup_named",
+      "quote": null
+     },
+     {
+      "slot": "Lunch",
+      "name": "Salad",
+      "frequency": null,
+      "days": null,
+      "contains": [],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom"
+      ],
+      "origin": "setup_named",
+      "quote": null
+     },
+     {
+      "slot": "Lunch",
+      "name": "Rajma",
+      "frequency": "rarely",
+      "days": null,
+      "contains": [],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom"
+      ],
+      "origin": "setup_named",
+      "quote": null
+     },
+     {
+      "slot": "Lunch",
+      "name": "Chole",
+      "frequency": "rarely",
+      "days": null,
+      "contains": [],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom"
+      ],
+      "origin": "setup_named",
+      "quote": null
+     },
+     {
+      "slot": "Dinner",
+      "name": "Roti",
+      "frequency": null,
+      "days": null,
+      "contains": [],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom"
+      ],
+      "origin": "setup_named",
+      "quote": null
+     },
+     {
+      "slot": "Dinner",
+      "name": "Chicken curry",
+      "frequency": null,
+      "days": [
+       "Sat",
+       "Sun"
+      ],
+      "contains": [
+       "meat"
+      ],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom"
+      ],
+      "origin": "setup_named",
+      "quote": null
+     },
+     {
+      "slot": "Dinner",
+      "name": "Egg curry",
+      "frequency": null,
+      "days": [
+       "Sat",
+       "Sun"
+      ],
+      "contains": [
+       "egg"
+      ],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom"
+      ],
+      "origin": "setup_named",
+      "quote": null
+     },
+     {
+      "slot": "Dinner",
+      "name": "Fish fry",
+      "frequency": null,
+      "days": [
+       "Sun"
+      ],
+      "contains": [
+       "fish"
+      ],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom"
+      ],
+      "origin": "setup_named",
+      "quote": null
+     },
+     {
+      "slot": "Breakfast",
+      "name": "Ragi malt",
+      "frequency": null,
+      "days": null,
+      "contains": [
+       "millet",
+       "sugar"
+      ],
+      "contains_read": [
+       "millet",
+       "sugar",
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "white_rice",
+       "dairy"
+      ],
+      "origin": "planner_suggested",
+      "suggested": true,
+      "untried": true
+     }
+    ],
+    "unmet": [],
+    "message": "Your week is planned.\n\n*Monday*\nBreakfast: Ragi dosa (no curd for Ishita)\nLunch: Rice, Dal, Sabzi, Salad\nDinner: Roti, Dal, Sabzi\n\n*Tuesday*\nBreakfast: Overnight oats (no milk for Ishita)\nLunch: Rice, Dal, Sabzi, Salad\nDinner: Roti, Dal, Sabzi\n\n*Wednesday*\nBreakfast: Poha\nLunch: Rajma, Rice, Salad\nDinner: Roti, Dal, Sabzi\n\n*Thursday*\nBreakfast: Upma\nLunch: Rice, Dal, Sabzi, Salad\nDinner: Roti, Dal, Sabzi\n\n*Friday*\nBreakfast: Ragi dosa\nLunch: Rice, Dal, Sabzi, Salad\nDinner: ordering in\n\n*Saturday*\nBreakfast: Overnight oats (no milk and yogurt for Ishita)\nLunch: Chole, Rice, Salad\nDinner: Roti, Dal, Sabzi, Chicken curry. Rohan joins: Chicken curry for him only\n\n*Sunday*\nBreakfast: Ragi malt (no milk for Ishita)\nLunch: Dal, Rice, Sabzi, Salad\nDinner: Roti, Dal, Sabzi, Egg curry, Fish fry\n\nAll week: no ghee for Ishita\n\nNew this week: Ragi malt (Vikram wants to eat millets three times a week; ragi is a millet and the family already enjoys ragi dosa, so ragi malt is a natural addition for breakfast.)\n\nThe whole week: [Week page](/a/t/?flock_scope=app#/week?week=2026-11-30)\nTell me anything to change.",
+    "asked": []
+   },
+   "loaded": {
+    "ok": true,
+    "slots": [
+     {
+      "name": "Breakfast",
+      "kind": "main",
+      "addon_of": null,
+      "usual_people": [],
+      "days": [],
+      "skip_days": []
+     },
+     {
+      "name": "Lunch",
+      "kind": "main",
+      "addon_of": null,
+      "usual_people": [],
+      "days": [],
+      "skip_days": []
+     },
+     {
+      "name": "Dinner",
+      "kind": "main",
+      "addon_of": null,
+      "usual_people": [],
+      "days": [],
+      "skip_days": [
+       {
+        "day": "Fri",
+        "skip": "ordered_in"
+       }
+      ]
+     }
+    ],
+    "library": [
+     {
+      "slot": "Breakfast",
+      "name": "Poha",
+      "frequency": null,
+      "days": null,
+      "contains": [
+       "white_rice"
+      ],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom"
+      ],
+      "origin": "setup_named"
+     },
+     {
+      "slot": "Breakfast",
+      "name": "Upma",
+      "frequency": null,
+      "days": null,
+      "contains": [],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom"
+      ],
+      "origin": "setup_named"
+     },
+     {
+      "slot": "Breakfast",
+      "name": "Ragi dosa",
+      "frequency": null,
+      "days": null,
+      "contains": [
+       "millet"
+      ],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom"
+      ],
+      "origin": "setup_named"
+     },
+     {
+      "slot": "Breakfast",
+      "name": "Besan chilla",
+      "frequency": null,
+      "days": null,
+      "contains": [],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom"
+      ],
+      "origin": "setup_named"
+     },
+     {
+      "slot": "Breakfast",
+      "name": "Overnight oats",
+      "frequency": "sometimes",
+      "days": null,
+      "contains": [],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom"
+      ],
+      "origin": "setup_named"
+     },
+     {
+      "slot": "Lunch",
+      "name": "Dal",
+      "frequency": null,
+      "days": null,
+      "contains": [],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom"
+      ],
+      "origin": "setup_named"
+     },
+     {
+      "slot": "Dinner",
+      "name": "Dal",
+      "frequency": null,
+      "days": null,
+      "contains": [],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom"
+      ],
+      "origin": "setup_named"
+     },
+     {
+      "slot": "Lunch",
+      "name": "Rice",
+      "frequency": null,
+      "days": null,
+      "contains": [
+       "white_rice"
+      ],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom"
+      ],
+      "origin": "setup_named"
+     },
+     {
+      "slot": "Lunch",
+      "name": "Sabzi",
+      "frequency": null,
+      "days": null,
+      "contains": [],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom"
+      ],
+      "origin": "setup_named"
+     },
+     {
+      "slot": "Dinner",
+      "name": "Sabzi",
+      "frequency": null,
+      "days": null,
+      "contains": [],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom"
+      ],
+      "origin": "setup_named"
+     },
+     {
+      "slot": "Lunch",
+      "name": "Salad",
+      "frequency": null,
+      "days": null,
+      "contains": [],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom"
+      ],
+      "origin": "setup_named"
+     },
+     {
+      "slot": "Lunch",
+      "name": "Rajma",
+      "frequency": "rarely",
+      "days": null,
+      "contains": [],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom"
+      ],
+      "origin": "setup_named"
+     },
+     {
+      "slot": "Lunch",
+      "name": "Chole",
+      "frequency": "rarely",
+      "days": null,
+      "contains": [],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom"
+      ],
+      "origin": "setup_named"
+     },
+     {
+      "slot": "Dinner",
+      "name": "Roti",
+      "frequency": null,
+      "days": null,
+      "contains": [],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom"
+      ],
+      "origin": "setup_named"
+     },
+     {
+      "slot": "Dinner",
+      "name": "Chicken curry",
+      "frequency": null,
+      "days": [
+       "Sat",
+       "Sun"
+      ],
+      "contains": [
+       "meat"
+      ],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom"
+      ],
+      "origin": "setup_named"
+     },
+     {
+      "slot": "Dinner",
+      "name": "Egg curry",
+      "frequency": null,
+      "days": [
+       "Sat",
+       "Sun"
+      ],
+      "contains": [
+       "egg"
+      ],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom"
+      ],
+      "origin": "setup_named"
+     },
+     {
+      "slot": "Dinner",
+      "name": "Fish fry",
+      "frequency": null,
+      "days": [
+       "Sun"
+      ],
+      "contains": [
+       "fish"
+      ],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom"
+      ],
+      "origin": "setup_named"
+     }
+    ],
+    "rules": [
+     {
+      "hard": true,
+      "what": "avoid",
+      "who": null,
+      "slots": null,
+      "days": [
+       "Mon",
+       "Tue",
+       "Wed",
+       "Thu",
+       "Fri"
+      ],
+      "items": [
+       "meat",
+       "fish",
+       "egg"
+      ],
+      "to": null,
+      "frequency": null,
+      "per_meal": null,
+      "fasting_food": null,
+      "quote": "Ishita makes breakfast and her lunch box; I cook dinner on weekdays; weekends we cook together."
+     },
+     {
+      "hard": true,
+      "what": "avoid",
+      "who": "Ishita",
+      "slots": null,
+      "days": null,
+      "items": [
+       "dairy"
+      ],
+      "to": null,
+      "frequency": null,
+      "per_meal": null,
+      "fasting_food": null,
+      "quote": "Ishita is lactose intolerant: no milk, curd, paneer or ghee for her."
+     },
+     {
+      "hard": false,
+      "what": "require",
+      "who": "Vikram",
+      "slots": null,
+      "days": null,
+      "items": [
+       "millet"
+      ],
+      "to": null,
+      "frequency": "3/week",
+      "per_meal": null,
+      "fasting_food": null,
+      "quote": "I'm trying to eat millets three times a week."
+     }
+    ],
+    "seed": [
+     {
+      "slot": "Breakfast",
+      "dishes": [
+       "Poha"
+      ]
+     },
+     {
+      "slot": "Breakfast",
+      "dishes": [
+       "Upma"
+      ]
+     },
+     {
+      "slot": "Breakfast",
+      "dishes": [
+       "Ragi dosa"
+      ]
+     },
+     {
+      "slot": "Breakfast",
+      "dishes": [
+       "Besan chilla"
+      ]
+     },
+     {
+      "slot": "Lunch",
+      "dishes": [
+       "Dal",
+       "Rice",
+       "Sabzi",
+       "Salad"
+      ]
+     },
+     {
+      "slot": "Lunch",
+      "dishes": [
+       "Dal",
+       "Rice",
+       "Sabzi",
+       "Salad"
+      ]
+     },
+     {
+      "slot": "Lunch",
+      "dishes": [
+       "Rajma",
+       "Rice",
+       "Salad"
+      ]
+     },
+     {
+      "slot": "Dinner",
+      "dishes": [
+       "Roti",
+       "Dal",
+       "Sabzi"
+      ]
+     },
+     {
+      "slot": "Dinner",
+      "dishes": [
+       "Roti",
+       "Dal",
+       "Sabzi"
+      ]
+     },
+     {
+      "slot": "Dinner",
+      "dishes": [
+       "Roti",
+       "Chicken curry"
+      ]
+     }
+    ],
+    "cook": null,
+    "family_cooks": [
+     {
+      "person": "Ishita",
+      "days": [
+       "Mon",
+       "Tue",
+       "Wed",
+       "Thu",
+       "Fri",
+       "Sat",
+       "Sun"
+      ]
+     },
+     {
+      "person": "Vikram",
+      "days": [
+       "Mon",
+       "Tue",
+       "Wed",
+       "Thu",
+       "Fri",
+       "Sat",
+       "Sun"
+      ]
+     }
+    ],
+    "unplaced": [],
+    "lunch_unclear": [
+     "Vikram"
+    ],
+    "attendance": {
+     "Breakfast": {
+      "Mon": [
+       "Vikram",
+       "Ishita"
+      ],
+      "Tue": [
+       "Vikram",
+       "Ishita"
+      ],
+      "Wed": [
+       "Vikram",
+       "Ishita"
+      ],
+      "Thu": [
+       "Vikram",
+       "Ishita"
+      ],
+      "Fri": [
+       "Vikram",
+       "Ishita"
+      ],
+      "Sat": [
+       "Vikram",
+       "Ishita"
+      ],
+      "Sun": [
+       "Vikram",
+       "Ishita"
+      ]
+     },
+     "Lunch": {
+      "Mon": [
+       "Vikram",
+       "Ishita"
+      ],
+      "Tue": [
+       "Vikram",
+       "Ishita"
+      ],
+      "Wed": [
+       "Vikram",
+       "Ishita"
+      ],
+      "Thu": [
+       "Vikram",
+       "Ishita"
+      ],
+      "Fri": [
+       "Vikram",
+       "Ishita"
+      ],
+      "Sat": [
+       "Vikram",
+       "Ishita"
+      ],
+      "Sun": [
+       "Vikram",
+       "Ishita"
+      ]
+     },
+     "Dinner": {
+      "Mon": [
+       "Vikram",
+       "Ishita"
+      ],
+      "Tue": [
+       "Vikram",
+       "Ishita"
+      ],
+      "Wed": [
+       "Vikram",
+       "Ishita"
+      ],
+      "Thu": [
+       "Vikram",
+       "Ishita"
+      ],
+      "Fri": [
+       "Vikram",
+       "Ishita"
+      ],
+      "Sat": [
+       "Vikram",
+       "Ishita"
+      ],
+      "Sun": [
+       "Vikram",
+       "Ishita"
+      ]
+     }
+    },
+    "settings": {
+     "new_dishes_per_week": 2
+    }
+   },
+   "calls": 14,
+   "cost": 0.006923649000000001
+  },
+  {
+   "household": "h12-sen",
+   "title": "Bengali–Marwari home, fish add-on for two, diabetic vegetarian father-in-law",
+   "source": "truth",
+   "ok": true,
+   "plan_ms": 137953,
+   "refused": [],
+   "rates": {
+    "filled": [
+     40,
+     40
+    ],
+    "attendance": [
+     40,
+     40
+    ],
+    "no_stray": [
+     1,
+     1
+    ],
+    "hard_rules": [
+     5,
+     5
+    ],
+    "from_library": [
+     72,
+     72
+    ],
+    "new_budget": [
+     1,
+     1
+    ],
+    "default_cap": [
+     9,
+     12
+    ],
+    "dish_frequency": [
+     4,
+     5
+    ],
+    "repeat_window": [
+     4,
+     6
+    ],
+    "same_day_repeat": [
+     7,
+     7
+    ]
+   },
+   "tracked": {
+    "shape": [
+     40,
+     40
+    ]
+   },
+   "notes": [
+    "default_cap: Aloo posto (no frequency, not a staple) on 6 days: Mon Lunch, Tue Dinner, Wed Dinner, Thu Lunch, Fri Dinner, Sat Dinner",
+    "default_cap: Gatte ki sabzi (no frequency, not a staple) on 5 days: Mon Dinner, Tue Lunch, Wed Dinner, Thu Dinner, Fri Lunch",
+    "default_cap: Roti (no frequency, not a staple) on 7 days: Mon Dinner, Tue Dinner, Wed Dinner, Thu Dinner, Fri Dinner, Sat Dinner, Sun Dinner",
+    "dish_frequency: Macher jhol (2/week) on Mon Debjani and Mili's fish, Tue Debjani and Mili's fish, Wed Debjani and Mili's fish, Thu Debjani and Mili's fish, Fri Debjani and Mili's fish, Sat Debjani and Mili's fish, Sun Debjani and Mili's fish",
+    "repeat_window: Mili's tiffin (window 2): Paratha roll Tue and Wed",
+    "repeat_window: Debjani and Mili's fish (window 2): Macher jhol Mon and Tue; Macher jhol Tue and Wed; Macher jhol Wed and Thu; Macher jhol Thu and Fri; Macher jhol Fri and Sat; Macher jhol Sat and Sun"
+   ],
+   "facts": {
+    "hard_breaks": 0,
+    "new_dishes": 0,
+    "shape_Breakfast": "1.1 vs 1.3",
+    "shape_Lunch": "3.6 vs 3.7",
+    "shape_Dinner": "2.9 vs 3.0",
+    "shape_Mili's tiffin": "1.0 vs 1.0",
+    "shape_Debjani and Mili's fish": "1.0 vs 1.0",
+    "shape_Papaji's dinner": "1.0 vs 1.0",
+    "dishes": 72,
+    "family_dish_share": 100,
+    "unmet": 9,
+    "flagged": 1
+   },
+   "judge": {
+    "worst": "Macher jhol is planned all 7 days instead of the family's twice a week. | Macher jhol given every night; Debjani and Mili only have it twice a week.",
+    "by": {
+     "anthropic/claude-sonnet-5.5": {
+      "worst": "Macher jhol is planned all 7 days instead of the family's twice a week.",
+      "fits_dishes": 4,
+      "meal_shape": 4,
+      "variety": 2,
+      "per_person": 3,
+      "overall": 3
+     },
+     "openai/gpt-5": {
+      "worst": "Macher jhol given every night; Debjani and Mili only have it twice a week.",
+      "fits_dishes": 5,
+      "meal_shape": 5,
+      "variety": 1,
+      "per_person": 5,
+      "overall": 3
+     }
+    },
+    "fits_dishes": 4.5,
+    "meal_shape": 4.5,
+    "variety": 1.5,
+    "per_person": 4,
+    "overall": 3
+   },
+   "unmet": [
+    "only 4 Dinner dishes known, so some come back more often than usual",
+    "only 1 Debjani and Mili's fish dish known, so some come back more often than usual",
+    "only 2 Papaji's dinner dishes known, so some come back more often than usual",
+    "Wed Mili's tiffin: Paratha roll comes back sooner than usual",
+    "Wed Debjani and Mili's fish: no known dish fits everyone there",
+    "Thu Debjani and Mili's fish: no known dish fits everyone there",
+    "Fri Debjani and Mili's fish: no known dish fits everyone there",
+    "Sat Debjani and Mili's fish: no known dish fits everyone there",
+    "Sun Debjani and Mili's fish: no known dish fits everyone there"
+   ],
+   "message": "Your week is planned.\n\n*Monday*\nBreakfast: Poha\nMili's tiffin: Sandwich\nLunch: Rice, Dal, Aloo posto, Roti\nDinner: Roti, Dal, Gatte ki sabzi\nDebjani and Mili's fish: Macher jhol\nPapaji's dinner: Bajra roti\n\n*Tuesday*\nBreakfast: Besan chilla\nMili's tiffin: Paratha roll\nLunch: Rice, Dal, Gatte ki sabzi, Roti\nDinner: Roti, Dal, Aloo posto\nDebjani and Mili's fish: Macher jhol\nPapaji's dinner: Jowar roti\n\n*Wednesday*\nBreakfast: Toast (no jam for Omprakash)\nMili's tiffin: Paratha roll\nLunch: Rice, Kadhi, Roti\nDinner: Roti, Aloo posto, Gatte ki sabzi\nDebjani and Mili's fish: Macher jhol\nPapaji's dinner: Bajra roti\n\n*Thursday*\nBreakfast: Poha\nMili's tiffin: Sandwich\nLunch: Rice, Dal, Aloo posto, Roti\nDinner: Roti, Dal, Gatte ki sabzi\nDebjani and Mili's fish: Macher jhol\nPapaji's dinner: Jowar roti\n\n*Friday*\nBreakfast: Besan chilla\nMili's tiffin: Pasta\nLunch: Rice, Dal, Gatte ki sabzi, Roti\nDinner: Roti, Dal, Aloo posto\nDebjani and Mili's fish: Macher jhol\nPapaji's dinner: Bajra roti\n\n*Saturday*\nBreakfast: Toast\nLunch: Rice, Kadhi, Roti\nDinner: Roti, Aloo posto, Dal\nDebjani and Mili's fish: Macher jhol\nPapaji's dinner: Jowar roti\n\n*Sunday*\nBreakfast: Luchi, Cholar dal. Cholar dal for Omprakash: no sugar, less salt\nLunch: Rice, Dal, Roti\nDinner: Roti, Dal\nDebjani and Mili's fish: Macher jhol\nPapaji's dinner: Bajra roti\n\nAll week: Omprakash: Papaji is pure veg, no eggs, and less salt for him.; Mili eats what we eat, less spicy.; no sugar for Omprakash\n\nI couldn't keep everything this week: only 4 Dinner dishes known, so some come back more often than usual; only 1 Debjani and Mili's fish dish known, so some come back more often than usual; only 2 Papaji's dinner dishes known, so some come back more often than usual; Wed Mili's tiffin: Paratha roll comes back sooner than usual; Wed Debjani and Mili's fish: no known dish fits everyone there; Thu Debjani and Mili's fish: no known dish fits everyone there; Fri Debjani and Mili's fish: no known dish fits everyone there; Sat Debjani and Mili's fish: no known dish fits everyone there; Sun Debjani and Mili's fish: no known dish fits everyone there. Tell me what to change.\n\nThe whole week: [Week page](/a/t/?flock_scope=app#/week?week=2026-11-30)\nTell me anything to change.",
+   "week": "Mon: Breakfast [Debjani, Sanjay, Mili, Omprakash]: Poha (no sugar for Omprakash) | Mili's tiffin [Mili]: Sandwich | Lunch [Debjani, Sanjay, Omprakash]: Rice, Dal, Aloo posto, Roti | Dinner [Debjani, Sanjay, Mili, Omprakash]: Roti, Dal, Gatte ki sabzi | Debjani and Mili's fish [Debjani, Mili]: Macher jhol | Papaji's dinner [Omprakash]: Bajra roti\nTue: Breakfast [Debjani, Sanjay, Mili, Omprakash]: Besan chilla | Mili's tiffin [Mili]: Paratha roll | Lunch [Debjani, Sanjay, Omprakash]: Rice, Dal, Gatte ki sabzi, Roti | Dinner [Debjani, Sanjay, Mili, Omprakash]: Roti, Dal, Aloo posto | Debjani and Mili's fish [Debjani, Mili]: Macher jhol | Papaji's dinner [Omprakash]: Jowar roti\nWed: Breakfast [Debjani, Sanjay, Mili, Omprakash]: Toast (no jam for Omprakash) | Mili's tiffin [Mili]: Paratha roll | Lunch [Debjani, Sanjay, Omprakash]: Rice, Kadhi, Roti | Dinner [Debjani, Sanjay, Mili, Omprakash]: Roti, Aloo posto, Gatte ki sabzi | Debjani and Mili's fish [Debjani, Mili]: Macher jhol | Papaji's dinner [Omprakash]: Bajra roti\nThu: Breakfast [Debjani, Sanjay, Mili, Omprakash]: Poha (no sugar for Omprakash) | Mili's tiffin [Mili]: Sandwich | Lunch [Debjani, Sanjay, Omprakash]: Rice, Dal, Aloo posto, Roti | Dinner [Debjani, Sanjay, Mili, Omprakash]: Roti, Dal, Gatte ki sabzi | Debjani and Mili's fish [Debjani, Mili]: Macher jhol | Papaji's dinner [Omprakash]: Jowar roti\nFri: Breakfast [Debjani, Sanjay, Mili, Omprakash, Shefali]: Besan chilla | Mili's tiffin [Mili]: Pasta | Lunch [Debjani, Sanjay, Omprakash, Shefali]: Rice, Dal, Gatte ki sabzi, Roti | Dinner [Debjani, Sanjay, Mili, Omprakash, Shefali]: Roti, Dal, Aloo posto | Debjani and Mili's fish [Debjani, Mili]: Macher jhol | Papaji's dinner [Omprakash]: Bajra roti\nSat: Breakfast [Debjani, Sanjay, Mili, Omprakash, Shefali]: Toast | Lunch [Debjani, Sanjay, Mili, Omprakash, Shefali]: Rice, Kadhi, Roti | Dinner [Debjani, Sanjay, Mili, Omprakash, Shefali]: Roti, Aloo posto, Dal | Debjani and Mili's fish [Debjani, Mili]: Macher jhol | Papaji's dinner [Omprakash]: Jowar roti\nSun: Breakfast [Debjani, Sanjay, Mili, Omprakash, Shefali]: Luchi, Cholar dal (no sugar for Omprakash) — Cholar dal for Omprakash: no sugar, less salt | Lunch [Debjani, Sanjay, Mili, Omprakash, Shefali]: Rice, Dal, Roti | Dinner [Debjani, Sanjay, Mili, Omprakash, Shefali]: Roti, Dal | Debjani and Mili's fish [Debjani, Mili]: Macher jhol | Papaji's dinner [Omprakash]: Bajra roti",
+   "plan": {
+    "ok": true,
+    "week_start": "2026-11-30",
+    "slotDays": [
+     {
+      "date": "2026-11-30",
+      "slot": "Breakfast",
+      "people": [
+       "Debjani",
+       "Sanjay",
+       "Mili",
+       "Omprakash"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Poha",
+        "new": false,
+        "note": "no sugar for Omprakash",
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-11-30",
+      "slot": "Mili's tiffin",
+      "people": [
+       "Mili"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Sandwich",
+        "new": false,
+        "note": null,
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-11-30",
+      "slot": "Lunch",
+      "people": [
+       "Debjani",
+       "Sanjay",
+       "Omprakash"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Rice",
+        "new": false,
+        "note": null,
+        "not_for": []
+       },
+       {
+        "name": "Dal",
+        "new": false,
+        "note": null,
+        "not_for": []
+       },
+       {
+        "name": "Aloo posto",
+        "new": false,
+        "note": null,
+        "not_for": []
+       },
+       {
+        "name": "Roti",
+        "new": false,
+        "note": null,
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-11-30",
+      "slot": "Dinner",
+      "people": [
+       "Debjani",
+       "Sanjay",
+       "Mili",
+       "Omprakash"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Roti",
+        "new": false,
+        "note": null,
+        "not_for": []
+       },
+       {
+        "name": "Dal",
+        "new": false,
+        "note": null,
+        "not_for": []
+       },
+       {
+        "name": "Gatte ki sabzi",
+        "new": false,
+        "note": null,
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-11-30",
+      "slot": "Debjani and Mili's fish",
+      "people": [
+       "Debjani",
+       "Mili"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Macher jhol",
+        "new": false,
+        "note": null,
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-11-30",
+      "slot": "Papaji's dinner",
+      "people": [
+       "Omprakash"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Bajra roti",
+        "new": false,
+        "note": null,
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-12-01",
+      "slot": "Breakfast",
+      "people": [
+       "Debjani",
+       "Sanjay",
+       "Mili",
+       "Omprakash"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Besan chilla",
+        "new": false,
+        "note": null,
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-12-01",
+      "slot": "Mili's tiffin",
+      "people": [
+       "Mili"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Paratha roll",
+        "new": false,
+        "note": null,
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-12-01",
+      "slot": "Lunch",
+      "people": [
+       "Debjani",
+       "Sanjay",
+       "Omprakash"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Rice",
+        "new": false,
+        "note": null,
+        "not_for": []
+       },
+       {
+        "name": "Dal",
+        "new": false,
+        "note": null,
+        "not_for": []
+       },
+       {
+        "name": "Gatte ki sabzi",
+        "new": false,
+        "note": null,
+        "not_for": []
+       },
+       {
+        "name": "Roti",
+        "new": false,
+        "note": null,
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-12-01",
+      "slot": "Dinner",
+      "people": [
+       "Debjani",
+       "Sanjay",
+       "Mili",
+       "Omprakash"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Roti",
+        "new": false,
+        "note": null,
+        "not_for": []
+       },
+       {
+        "name": "Dal",
+        "new": false,
+        "note": null,
+        "not_for": []
+       },
+       {
+        "name": "Aloo posto",
+        "new": false,
+        "note": null,
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-12-01",
+      "slot": "Debjani and Mili's fish",
+      "people": [
+       "Debjani",
+       "Mili"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Macher jhol",
+        "new": false,
+        "note": null,
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-12-01",
+      "slot": "Papaji's dinner",
+      "people": [
+       "Omprakash"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Jowar roti",
+        "new": false,
+        "note": null,
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-12-02",
+      "slot": "Breakfast",
+      "people": [
+       "Debjani",
+       "Sanjay",
+       "Mili",
+       "Omprakash"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Toast",
+        "new": false,
+        "note": "no jam for Omprakash",
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-12-02",
+      "slot": "Mili's tiffin",
+      "people": [
+       "Mili"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Paratha roll",
+        "new": false,
+        "note": null,
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-12-02",
+      "slot": "Lunch",
+      "people": [
+       "Debjani",
+       "Sanjay",
+       "Omprakash"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Rice",
+        "new": false,
+        "note": null,
+        "not_for": []
+       },
+       {
+        "name": "Kadhi",
+        "new": false,
+        "note": null,
+        "not_for": []
+       },
+       {
+        "name": "Roti",
+        "new": false,
+        "note": null,
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-12-02",
+      "slot": "Dinner",
+      "people": [
+       "Debjani",
+       "Sanjay",
+       "Mili",
+       "Omprakash"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Roti",
+        "new": false,
+        "note": null,
+        "not_for": []
+       },
+       {
+        "name": "Aloo posto",
+        "new": false,
+        "note": null,
+        "not_for": []
+       },
+       {
+        "name": "Gatte ki sabzi",
+        "new": false,
+        "note": null,
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-12-02",
+      "slot": "Debjani and Mili's fish",
+      "people": [
+       "Debjani",
+       "Mili"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Macher jhol",
+        "new": false,
+        "note": null,
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-12-02",
+      "slot": "Papaji's dinner",
+      "people": [
+       "Omprakash"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Bajra roti",
+        "new": false,
+        "note": null,
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-12-03",
+      "slot": "Breakfast",
+      "people": [
+       "Debjani",
+       "Sanjay",
+       "Mili",
+       "Omprakash"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Poha",
+        "new": false,
+        "note": "no sugar for Omprakash",
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-12-03",
+      "slot": "Mili's tiffin",
+      "people": [
+       "Mili"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Sandwich",
+        "new": false,
+        "note": null,
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-12-03",
+      "slot": "Lunch",
+      "people": [
+       "Debjani",
+       "Sanjay",
+       "Omprakash"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Rice",
+        "new": false,
+        "note": null,
+        "not_for": []
+       },
+       {
+        "name": "Dal",
+        "new": false,
+        "note": null,
+        "not_for": []
+       },
+       {
+        "name": "Aloo posto",
+        "new": false,
+        "note": null,
+        "not_for": []
+       },
+       {
+        "name": "Roti",
+        "new": false,
+        "note": null,
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-12-03",
+      "slot": "Dinner",
+      "people": [
+       "Debjani",
+       "Sanjay",
+       "Mili",
+       "Omprakash"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Roti",
+        "new": false,
+        "note": null,
+        "not_for": []
+       },
+       {
+        "name": "Dal",
+        "new": false,
+        "note": null,
+        "not_for": []
+       },
+       {
+        "name": "Gatte ki sabzi",
+        "new": false,
+        "note": null,
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-12-03",
+      "slot": "Debjani and Mili's fish",
+      "people": [
+       "Debjani",
+       "Mili"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Macher jhol",
+        "new": false,
+        "note": null,
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-12-03",
+      "slot": "Papaji's dinner",
+      "people": [
+       "Omprakash"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Jowar roti",
+        "new": false,
+        "note": null,
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-12-04",
+      "slot": "Breakfast",
+      "people": [
+       "Debjani",
+       "Sanjay",
+       "Mili",
+       "Omprakash",
+       "Shefali"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Besan chilla",
+        "new": false,
+        "note": null,
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-12-04",
+      "slot": "Mili's tiffin",
+      "people": [
+       "Mili"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Pasta",
+        "new": false,
+        "note": null,
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-12-04",
+      "slot": "Lunch",
+      "people": [
+       "Debjani",
+       "Sanjay",
+       "Omprakash",
+       "Shefali"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Rice",
+        "new": false,
+        "note": null,
+        "not_for": []
+       },
+       {
+        "name": "Dal",
+        "new": false,
+        "note": null,
+        "not_for": []
+       },
+       {
+        "name": "Gatte ki sabzi",
+        "new": false,
+        "note": null,
+        "not_for": []
+       },
+       {
+        "name": "Roti",
+        "new": false,
+        "note": null,
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-12-04",
+      "slot": "Dinner",
+      "people": [
+       "Debjani",
+       "Sanjay",
+       "Mili",
+       "Omprakash",
+       "Shefali"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Roti",
+        "new": false,
+        "note": null,
+        "not_for": []
+       },
+       {
+        "name": "Dal",
+        "new": false,
+        "note": null,
+        "not_for": []
+       },
+       {
+        "name": "Aloo posto",
+        "new": false,
+        "note": null,
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-12-04",
+      "slot": "Debjani and Mili's fish",
+      "people": [
+       "Debjani",
+       "Mili"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Macher jhol",
+        "new": false,
+        "note": null,
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-12-04",
+      "slot": "Papaji's dinner",
+      "people": [
+       "Omprakash"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Bajra roti",
+        "new": false,
+        "note": null,
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-12-05",
+      "slot": "Breakfast",
+      "people": [
+       "Debjani",
+       "Sanjay",
+       "Mili",
+       "Omprakash",
+       "Shefali"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Toast",
+        "new": false,
+        "note": null,
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-12-05",
+      "slot": "Lunch",
+      "people": [
+       "Debjani",
+       "Sanjay",
+       "Mili",
+       "Omprakash",
+       "Shefali"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Rice",
+        "new": false,
+        "note": null,
+        "not_for": []
+       },
+       {
+        "name": "Kadhi",
+        "new": false,
+        "note": null,
+        "not_for": []
+       },
+       {
+        "name": "Roti",
+        "new": false,
+        "note": null,
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-12-05",
+      "slot": "Dinner",
+      "people": [
+       "Debjani",
+       "Sanjay",
+       "Mili",
+       "Omprakash",
+       "Shefali"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Roti",
+        "new": false,
+        "note": null,
+        "not_for": []
+       },
+       {
+        "name": "Aloo posto",
+        "new": false,
+        "note": null,
+        "not_for": []
+       },
+       {
+        "name": "Dal",
+        "new": false,
+        "note": null,
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-12-05",
+      "slot": "Debjani and Mili's fish",
+      "people": [
+       "Debjani",
+       "Mili"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Macher jhol",
+        "new": false,
+        "note": null,
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-12-05",
+      "slot": "Papaji's dinner",
+      "people": [
+       "Omprakash"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Jowar roti",
+        "new": false,
+        "note": null,
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-12-06",
+      "slot": "Breakfast",
+      "people": [
+       "Debjani",
+       "Sanjay",
+       "Mili",
+       "Omprakash",
+       "Shefali"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": "Cholar dal for Omprakash: no sugar, less salt",
+      "dishes": [
+       {
+        "name": "Luchi",
+        "new": false,
+        "note": null,
+        "not_for": []
+       },
+       {
+        "name": "Cholar dal",
+        "new": false,
+        "note": "no sugar for Omprakash",
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-12-06",
+      "slot": "Lunch",
+      "people": [
+       "Debjani",
+       "Sanjay",
+       "Mili",
+       "Omprakash",
+       "Shefali"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Rice",
+        "new": false,
+        "note": null,
+        "not_for": []
+       },
+       {
+        "name": "Dal",
+        "new": false,
+        "note": null,
+        "not_for": []
+       },
+       {
+        "name": "Roti",
+        "new": false,
+        "note": null,
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-12-06",
+      "slot": "Dinner",
+      "people": [
+       "Debjani",
+       "Sanjay",
+       "Mili",
+       "Omprakash",
+       "Shefali"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Roti",
+        "new": false,
+        "note": null,
+        "not_for": []
+       },
+       {
+        "name": "Dal",
+        "new": false,
+        "note": null,
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-12-06",
+      "slot": "Debjani and Mili's fish",
+      "people": [
+       "Debjani",
+       "Mili"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Macher jhol",
+        "new": false,
+        "note": null,
+        "not_for": []
+       }
+      ]
+     },
+     {
+      "date": "2026-12-06",
+      "slot": "Papaji's dinner",
+      "people": [
+       "Omprakash"
+      ],
+      "guests": [],
+      "skip": null,
+      "occasion": null,
+      "note": null,
+      "dishes": [
+       {
+        "name": "Bajra roti",
+        "new": false,
+        "note": null,
+        "not_for": []
+       }
+      ]
+     }
+    ],
+    "library": [
+     {
+      "slot": "Breakfast",
+      "name": "Poha",
+      "frequency": null,
+      "days": null,
+      "contains": [
+       "white_rice"
+      ],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom",
+       "beef"
+      ],
+      "origin": "setup_named",
+      "quote": null
+     },
+     {
+      "slot": "Breakfast",
+      "name": "Besan chilla",
+      "frequency": null,
+      "days": null,
+      "contains": [],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom",
+       "beef"
+      ],
+      "origin": "setup_named",
+      "quote": null
+     },
+     {
+      "slot": "Breakfast",
+      "name": "Toast",
+      "frequency": null,
+      "days": null,
+      "contains": [],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom",
+       "beef"
+      ],
+      "origin": "setup_named",
+      "quote": null
+     },
+     {
+      "slot": "Breakfast",
+      "name": "Luchi",
+      "frequency": null,
+      "days": [
+       "Sun"
+      ],
+      "contains": [],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom",
+       "beef"
+      ],
+      "origin": "setup_named",
+      "quote": null
+     },
+     {
+      "slot": "Breakfast",
+      "name": "Cholar dal",
+      "frequency": null,
+      "days": [
+       "Sun"
+      ],
+      "contains": [],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom",
+       "beef"
+      ],
+      "origin": "setup_named",
+      "quote": null
+     },
+     {
+      "slot": "Mili's tiffin",
+      "name": "Sandwich",
+      "frequency": null,
+      "days": null,
+      "contains": [],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom",
+       "beef"
+      ],
+      "origin": "setup_named",
+      "quote": null
+     },
+     {
+      "slot": "Mili's tiffin",
+      "name": "Paratha roll",
+      "frequency": null,
+      "days": null,
+      "contains": [],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom",
+       "beef"
+      ],
+      "origin": "setup_named",
+      "quote": null
+     },
+     {
+      "slot": "Mili's tiffin",
+      "name": "Pasta",
+      "frequency": null,
+      "days": [
+       "Fri"
+      ],
+      "contains": [],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom",
+       "beef"
+      ],
+      "origin": "setup_named",
+      "quote": null
+     },
+     {
+      "slot": "Lunch",
+      "name": "Rice",
+      "frequency": null,
+      "days": null,
+      "contains": [
+       "white_rice"
+      ],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom",
+       "beef"
+      ],
+      "origin": "setup_named",
+      "quote": null
+     },
+     {
+      "slot": "Lunch",
+      "name": "Dal",
+      "frequency": null,
+      "days": null,
+      "contains": [],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom",
+       "beef"
+      ],
+      "origin": "setup_named",
+      "quote": null
+     },
+     {
+      "slot": "Dinner",
+      "name": "Dal",
+      "frequency": null,
+      "days": null,
+      "contains": [],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom",
+       "beef"
+      ],
+      "origin": "setup_named",
+      "quote": null
+     },
+     {
+      "slot": "Lunch",
+      "name": "Aloo posto",
+      "frequency": null,
+      "days": null,
+      "contains": [
+       "root_veg"
+      ],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom",
+       "beef"
+      ],
+      "origin": "setup_named",
+      "quote": null
+     },
+     {
+      "slot": "Lunch",
+      "name": "Gatte ki sabzi",
+      "frequency": null,
+      "days": null,
+      "contains": [
+       "dairy"
+      ],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom",
+       "beef"
+      ],
+      "origin": "setup_named",
+      "quote": null
+     },
+     {
+      "slot": "Lunch",
+      "name": "Roti",
+      "frequency": null,
+      "days": null,
+      "contains": [],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom",
+       "beef"
+      ],
+      "origin": "setup_named",
+      "quote": null
+     },
+     {
+      "slot": "Dinner",
+      "name": "Roti",
+      "frequency": null,
+      "days": null,
+      "contains": [],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom",
+       "beef"
+      ],
+      "origin": "setup_named",
+      "quote": null
+     },
+     {
+      "slot": "Lunch",
+      "name": "Kadhi",
+      "frequency": "sometimes",
+      "days": null,
+      "contains": [
+       "dairy"
+      ],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom",
+       "beef"
+      ],
+      "origin": "setup_named",
+      "quote": null
+     },
+     {
+      "slot": "Dinner",
+      "name": "Aloo posto",
+      "frequency": null,
+      "days": null,
+      "contains": [
+       "root_veg"
+      ],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom",
+       "beef"
+      ],
+      "origin": "setup_named",
+      "quote": null
+     },
+     {
+      "slot": "Dinner",
+      "name": "Gatte ki sabzi",
+      "frequency": null,
+      "days": null,
+      "contains": [
+       "dairy"
+      ],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom",
+       "beef"
+      ],
+      "origin": "setup_named",
+      "quote": null
+     },
+     {
+      "slot": "Debjani and Mili's fish",
+      "name": "Macher jhol",
+      "frequency": "2/week",
+      "days": null,
+      "contains": [],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom",
+       "beef"
+      ],
+      "origin": "setup_named",
+      "quote": null
+     },
+     {
+      "slot": "Papaji's dinner",
+      "name": "Bajra roti",
+      "frequency": null,
+      "days": null,
+      "contains": [
+       "millet"
+      ],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom",
+       "beef"
+      ],
+      "origin": "setup_named",
+      "quote": null
+     },
+     {
+      "slot": "Papaji's dinner",
+      "name": "Jowar roti",
+      "frequency": null,
+      "days": null,
+      "contains": [
+       "millet"
+      ],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom",
+       "beef"
+      ],
+      "origin": "setup_named",
+      "quote": null
+     }
+    ],
+    "unmet": [
+     "only 4 Dinner dishes known, so some come back more often than usual",
+     "only 1 Debjani and Mili's fish dish known, so some come back more often than usual",
+     "only 2 Papaji's dinner dishes known, so some come back more often than usual",
+     "Wed Mili's tiffin: Paratha roll comes back sooner than usual",
+     "Wed Debjani and Mili's fish: no known dish fits everyone there",
+     "Thu Debjani and Mili's fish: no known dish fits everyone there",
+     "Fri Debjani and Mili's fish: no known dish fits everyone there",
+     "Sat Debjani and Mili's fish: no known dish fits everyone there",
+     "Sun Debjani and Mili's fish: no known dish fits everyone there"
+    ],
+    "message": "Your week is planned.\n\n*Monday*\nBreakfast: Poha\nMili's tiffin: Sandwich\nLunch: Rice, Dal, Aloo posto, Roti\nDinner: Roti, Dal, Gatte ki sabzi\nDebjani and Mili's fish: Macher jhol\nPapaji's dinner: Bajra roti\n\n*Tuesday*\nBreakfast: Besan chilla\nMili's tiffin: Paratha roll\nLunch: Rice, Dal, Gatte ki sabzi, Roti\nDinner: Roti, Dal, Aloo posto\nDebjani and Mili's fish: Macher jhol\nPapaji's dinner: Jowar roti\n\n*Wednesday*\nBreakfast: Toast (no jam for Omprakash)\nMili's tiffin: Paratha roll\nLunch: Rice, Kadhi, Roti\nDinner: Roti, Aloo posto, Gatte ki sabzi\nDebjani and Mili's fish: Macher jhol\nPapaji's dinner: Bajra roti\n\n*Thursday*\nBreakfast: Poha\nMili's tiffin: Sandwich\nLunch: Rice, Dal, Aloo posto, Roti\nDinner: Roti, Dal, Gatte ki sabzi\nDebjani and Mili's fish: Macher jhol\nPapaji's dinner: Jowar roti\n\n*Friday*\nBreakfast: Besan chilla\nMili's tiffin: Pasta\nLunch: Rice, Dal, Gatte ki sabzi, Roti\nDinner: Roti, Dal, Aloo posto\nDebjani and Mili's fish: Macher jhol\nPapaji's dinner: Bajra roti\n\n*Saturday*\nBreakfast: Toast\nLunch: Rice, Kadhi, Roti\nDinner: Roti, Aloo posto, Dal\nDebjani and Mili's fish: Macher jhol\nPapaji's dinner: Jowar roti\n\n*Sunday*\nBreakfast: Luchi, Cholar dal. Cholar dal for Omprakash: no sugar, less salt\nLunch: Rice, Dal, Roti\nDinner: Roti, Dal\nDebjani and Mili's fish: Macher jhol\nPapaji's dinner: Bajra roti\n\nAll week: Omprakash: Papaji is pure veg, no eggs, and less salt for him.; Mili eats what we eat, less spicy.; no sugar for Omprakash\n\nI couldn't keep everything this week: only 4 Dinner dishes known, so some come back more often than usual; only 1 Debjani and Mili's fish dish known, so some come back more often than usual; only 2 Papaji's dinner dishes known, so some come back more often than usual; Wed Mili's tiffin: Paratha roll comes back sooner than usual; Wed Debjani and Mili's fish: no known dish fits everyone there; Thu Debjani and Mili's fish: no known dish fits everyone there; Fri Debjani and Mili's fish: no known dish fits everyone there; Sat Debjani and Mili's fish: no known dish fits everyone there; Sun Debjani and Mili's fish: no known dish fits everyone there. Tell me what to change.\n\nThe whole week: [Week page](/a/t/?flock_scope=app#/week?week=2026-11-30)\nTell me anything to change.",
+    "asked": [],
+    "relaxed": {
+     "Dinner": 2,
+     "Debjani and Mili's fish": 2,
+     "Papaji's dinner": 2
+    }
+   },
+   "loaded": {
+    "ok": true,
+    "slots": [
+     {
+      "name": "Breakfast",
+      "kind": "main",
+      "addon_of": null,
+      "usual_people": [],
+      "days": [],
+      "skip_days": []
+     },
+     {
+      "name": "Lunch",
+      "kind": "main",
+      "addon_of": null,
+      "usual_people": [],
+      "days": [],
+      "skip_days": []
+     },
+     {
+      "name": "Dinner",
+      "kind": "main",
+      "addon_of": null,
+      "usual_people": [],
+      "days": [],
+      "skip_days": []
+     },
+     {
+      "name": "Mili's tiffin",
+      "kind": "custom",
+      "addon_of": null,
+      "usual_people": [
+       "Mili"
+      ],
+      "days": [
+       "Mon",
+       "Tue",
+       "Wed",
+       "Thu",
+       "Fri"
+      ],
+      "skip_days": []
+     },
+     {
+      "name": "Debjani and Mili's fish",
+      "kind": "addon",
+      "addon_of": "Dinner",
+      "usual_people": [
+       "Debjani",
+       "Mili"
+      ],
+      "days": [],
+      "skip_days": []
+     },
+     {
+      "name": "Papaji's dinner",
+      "kind": "addon",
+      "addon_of": "Dinner",
+      "usual_people": [
+       "Omprakash"
+      ],
+      "days": [],
+      "skip_days": []
+     }
+    ],
+    "library": [
+     {
+      "slot": "Breakfast",
+      "name": "Poha",
+      "frequency": null,
+      "days": null,
+      "contains": [
+       "white_rice"
+      ],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom",
+       "beef"
+      ],
+      "origin": "setup_named"
+     },
+     {
+      "slot": "Breakfast",
+      "name": "Besan chilla",
+      "frequency": null,
+      "days": null,
+      "contains": [],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom",
+       "beef"
+      ],
+      "origin": "setup_named"
+     },
+     {
+      "slot": "Breakfast",
+      "name": "Toast",
+      "frequency": null,
+      "days": null,
+      "contains": [],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom",
+       "beef"
+      ],
+      "origin": "setup_named"
+     },
+     {
+      "slot": "Breakfast",
+      "name": "Luchi",
+      "frequency": null,
+      "days": [
+       "Sun"
+      ],
+      "contains": [],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom",
+       "beef"
+      ],
+      "origin": "setup_named"
+     },
+     {
+      "slot": "Breakfast",
+      "name": "Cholar dal",
+      "frequency": null,
+      "days": [
+       "Sun"
+      ],
+      "contains": [],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom",
+       "beef"
+      ],
+      "origin": "setup_named"
+     },
+     {
+      "slot": "Mili's tiffin",
+      "name": "Sandwich",
+      "frequency": null,
+      "days": null,
+      "contains": [],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom",
+       "beef"
+      ],
+      "origin": "setup_named"
+     },
+     {
+      "slot": "Mili's tiffin",
+      "name": "Paratha roll",
+      "frequency": null,
+      "days": null,
+      "contains": [],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom",
+       "beef"
+      ],
+      "origin": "setup_named"
+     },
+     {
+      "slot": "Mili's tiffin",
+      "name": "Pasta",
+      "frequency": null,
+      "days": [
+       "Fri"
+      ],
+      "contains": [],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom",
+       "beef"
+      ],
+      "origin": "setup_named"
+     },
+     {
+      "slot": "Lunch",
+      "name": "Rice",
+      "frequency": null,
+      "days": null,
+      "contains": [
+       "white_rice"
+      ],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom",
+       "beef"
+      ],
+      "origin": "setup_named"
+     },
+     {
+      "slot": "Lunch",
+      "name": "Dal",
+      "frequency": null,
+      "days": null,
+      "contains": [],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom",
+       "beef"
+      ],
+      "origin": "setup_named"
+     },
+     {
+      "slot": "Dinner",
+      "name": "Dal",
+      "frequency": null,
+      "days": null,
+      "contains": [],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom",
+       "beef"
+      ],
+      "origin": "setup_named"
+     },
+     {
+      "slot": "Lunch",
+      "name": "Aloo posto",
+      "frequency": null,
+      "days": null,
+      "contains": [
+       "root_veg"
+      ],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom",
+       "beef"
+      ],
+      "origin": "setup_named"
+     },
+     {
+      "slot": "Lunch",
+      "name": "Gatte ki sabzi",
+      "frequency": null,
+      "days": null,
+      "contains": [
+       "dairy"
+      ],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom",
+       "beef"
+      ],
+      "origin": "setup_named"
+     },
+     {
+      "slot": "Lunch",
+      "name": "Roti",
+      "frequency": null,
+      "days": null,
+      "contains": [],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom",
+       "beef"
+      ],
+      "origin": "setup_named"
+     },
+     {
+      "slot": "Dinner",
+      "name": "Roti",
+      "frequency": null,
+      "days": null,
+      "contains": [],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom",
+       "beef"
+      ],
+      "origin": "setup_named"
+     },
+     {
+      "slot": "Lunch",
+      "name": "Kadhi",
+      "frequency": "sometimes",
+      "days": null,
+      "contains": [
+       "dairy"
+      ],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom",
+       "beef"
+      ],
+      "origin": "setup_named"
+     },
+     {
+      "slot": "Dinner",
+      "name": "Aloo posto",
+      "frequency": null,
+      "days": null,
+      "contains": [
+       "root_veg"
+      ],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom",
+       "beef"
+      ],
+      "origin": "setup_named"
+     },
+     {
+      "slot": "Dinner",
+      "name": "Gatte ki sabzi",
+      "frequency": null,
+      "days": null,
+      "contains": [
+       "dairy"
+      ],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom",
+       "beef"
+      ],
+      "origin": "setup_named"
+     },
+     {
+      "slot": "Debjani and Mili's fish",
+      "name": "Macher jhol",
+      "frequency": "2/week",
+      "days": null,
+      "contains": [],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom",
+       "beef"
+      ],
+      "origin": "setup_named"
+     },
+     {
+      "slot": "Papaji's dinner",
+      "name": "Bajra roti",
+      "frequency": null,
+      "days": null,
+      "contains": [
+       "millet"
+      ],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom",
+       "beef"
+      ],
+      "origin": "setup_named"
+     },
+     {
+      "slot": "Papaji's dinner",
+      "name": "Jowar roti",
+      "frequency": null,
+      "days": null,
+      "contains": [
+       "millet"
+      ],
+      "contains_read": [
+       "egg",
+       "meat",
+       "fish",
+       "onion_garlic",
+       "nuts",
+       "peanut",
+       "sugar",
+       "white_rice",
+       "dairy",
+       "root_veg",
+       "millet",
+       "mushroom",
+       "beef"
+      ],
+      "origin": "setup_named"
+     }
+    ],
+    "rules": [
+     {
+      "hard": true,
+      "what": "avoid",
+      "who": "Sanjay",
+      "slots": null,
+      "days": null,
+      "items": [
+       "meat",
+       "fish"
+      ],
+      "to": null,
+      "frequency": null,
+      "per_meal": null,
+      "fasting_food": null,
+      "quote": "Hardest part: two kitchens in one, Bengali for me and Mili, Marwari veg for Sanjay and Papaji, and his sugar."
+     },
+     {
+      "hard": true,
+      "what": "avoid",
+      "who": "Omprakash",
+      "slots": null,
+      "days": null,
+      "items": [
+       "meat",
+       "fish",
+       "egg"
+      ],
+      "to": null,
+      "frequency": null,
+      "per_meal": null,
+      "fasting_food": null,
+      "quote": "Hardest part: two kitchens in one, Bengali for me and Mili, Marwari veg for Sanjay and Papaji, and his sugar."
+     },
+     {
+      "hard": true,
+      "what": "avoid",
+      "who": null,
+      "slots": null,
+      "days": null,
+      "items": [
+       "beef"
+      ],
+      "to": null,
+      "frequency": null,
+      "per_meal": null,
+      "fasting_food": null,
+      "quote": "No beef in the house."
+     },
+     {
+      "hard": true,
+      "what": "avoid",
+      "who": "Omprakash",
+      "slots": null,
+      "days": null,
+      "items": [
+       "sugar"
+      ],
+      "to": null,
+      "frequency": null,
+      "per_meal": null,
+      "fasting_food": null,
+      "quote": "Hardest part: two kitchens in one, Bengali for me and Mili, Marwari veg for Sanjay and Papaji, and his sugar."
+     },
+     {
+      "hard": true,
+      "what": "avoid",
+      "who": "Omprakash",
+      "slots": [
+       "Dinner"
+      ],
+      "days": null,
+      "items": [
+       "white_rice"
+      ],
+      "to": null,
+      "frequency": null,
+      "per_meal": null,
+      "fasting_food": null,
+      "quote": "Papaji has bajra or jowar roti at night, never rice."
+     },
+     {
+      "hard": false,
+      "what": "note",
+      "who": "Omprakash",
+      "slots": null,
+      "days": null,
+      "items": null,
+      "to": null,
+      "frequency": null,
+      "per_meal": null,
+      "fasting_food": null,
+      "quote": "Papaji is pure veg, no eggs, and less salt for him."
+     },
+     {
+      "hard": false,
+      "what": "note",
+      "who": "Mili",
+      "slots": null,
+      "days": null,
+      "items": null,
+      "to": null,
+      "frequency": null,
+      "per_meal": null,
+      "fasting_food": null,
+      "quote": "Mili eats what we eat, less spicy."
+     }
+    ],
+    "seed": [
+     {
+      "slot": "Breakfast",
+      "dishes": [
+       "Poha"
+      ]
+     },
+     {
+      "slot": "Breakfast",
+      "dishes": [
+       "Besan chilla"
+      ]
+     },
+     {
+      "slot": "Breakfast",
+      "dishes": [
+       "Toast"
+      ]
+     },
+     {
+      "slot": "Breakfast",
+      "dishes": [
+       "Luchi",
+       "Cholar dal"
+      ]
+     },
+     {
+      "slot": "Mili's tiffin",
+      "dishes": [
+       "Sandwich"
+      ]
+     },
+     {
+      "slot": "Mili's tiffin",
+      "dishes": [
+       "Paratha roll"
+      ]
+     },
+     {
+      "slot": "Mili's tiffin",
+      "dishes": [
+       "Pasta"
+      ]
+     },
+     {
+      "slot": "Lunch",
+      "dishes": [
+       "Rice",
+       "Dal",
+       "Aloo posto",
+       "Roti"
+      ]
+     },
+     {
+      "slot": "Lunch",
+      "dishes": [
+       "Rice",
+       "Dal",
+       "Gatte ki sabzi",
+       "Roti"
+      ]
+     },
+     {
+      "slot": "Lunch",
+      "dishes": [
+       "Rice",
+       "Kadhi",
+       "Roti"
+      ]
+     },
+     {
+      "slot": "Dinner",
+      "dishes": [
+       "Roti",
+       "Dal",
+       "Gatte ki sabzi"
+      ]
+     },
+     {
+      "slot": "Dinner",
+      "dishes": [
+       "Roti",
+       "Dal",
+       "Aloo posto"
+      ]
+     },
+     {
+      "slot": "Debjani and Mili's fish",
+      "dishes": [
+       "Macher jhol"
+      ]
+     },
+     {
+      "slot": "Papaji's dinner",
+      "dishes": [
+       "Bajra roti"
+      ]
+     },
+     {
+      "slot": "Papaji's dinner",
+      "dishes": [
+       "Jowar roti"
+      ]
+     }
+    ],
+    "cook": {
+     "name": "Pushpa",
+     "days": [
+      "Mon",
+      "Tue",
+      "Wed",
+      "Thu",
+      "Fri",
+      "Sat"
+     ],
+     "visits": [
+      {
+       "at": "07:00",
+       "meals": [
+        "Breakfast",
+        "Lunch"
+       ]
+      },
+      {
+       "at": "19:30",
+       "meals": [
+        "Dinner"
+       ]
+      }
+     ]
+    },
+    "family_cooks": [
+     {
+      "person": "Debjani",
+      "days": [
+       "Sun"
+      ]
+     }
+    ],
+    "unplaced": [],
+    "lunch_unclear": [],
+    "attendance": {
+     "Breakfast": {
+      "Mon": [
+       "Debjani",
+       "Sanjay",
+       "Mili",
+       "Omprakash"
+      ],
+      "Tue": [
+       "Debjani",
+       "Sanjay",
+       "Mili",
+       "Omprakash"
+      ],
+      "Wed": [
+       "Debjani",
+       "Sanjay",
+       "Mili",
+       "Omprakash"
+      ],
+      "Thu": [
+       "Debjani",
+       "Sanjay",
+       "Mili",
+       "Omprakash"
+      ],
+      "Fri": [
+       "Debjani",
+       "Sanjay",
+       "Mili",
+       "Omprakash"
+      ],
+      "Sat": [
+       "Debjani",
+       "Sanjay",
+       "Mili",
+       "Omprakash"
+      ],
+      "Sun": [
+       "Debjani",
+       "Sanjay",
+       "Mili",
+       "Omprakash"
+      ]
+     },
+     "Lunch": {
+      "Mon": [
+       "Debjani",
+       "Sanjay",
+       "Omprakash"
+      ],
+      "Tue": [
+       "Debjani",
+       "Sanjay",
+       "Omprakash"
+      ],
+      "Wed": [
+       "Debjani",
+       "Sanjay",
+       "Omprakash"
+      ],
+      "Thu": [
+       "Debjani",
+       "Sanjay",
+       "Omprakash"
+      ],
+      "Fri": [
+       "Debjani",
+       "Sanjay",
+       "Omprakash"
+      ],
+      "Sat": [
+       "Debjani",
+       "Sanjay",
+       "Mili",
+       "Omprakash"
+      ],
+      "Sun": [
+       "Debjani",
+       "Sanjay",
+       "Mili",
+       "Omprakash"
+      ]
+     },
+     "Dinner": {
+      "Mon": [
+       "Debjani",
+       "Sanjay",
+       "Mili",
+       "Omprakash"
+      ],
+      "Tue": [
+       "Debjani",
+       "Sanjay",
+       "Mili",
+       "Omprakash"
+      ],
+      "Wed": [
+       "Debjani",
+       "Sanjay",
+       "Mili",
+       "Omprakash"
+      ],
+      "Thu": [
+       "Debjani",
+       "Sanjay",
+       "Mili",
+       "Omprakash"
+      ],
+      "Fri": [
+       "Debjani",
+       "Sanjay",
+       "Mili",
+       "Omprakash"
+      ],
+      "Sat": [
+       "Debjani",
+       "Sanjay",
+       "Mili",
+       "Omprakash"
+      ],
+      "Sun": [
+       "Debjani",
+       "Sanjay",
+       "Mili",
+       "Omprakash"
+      ]
+     },
+     "Mili's tiffin": {
+      "Mon": [
+       "Mili"
+      ],
+      "Tue": [
+       "Mili"
+      ],
+      "Wed": [
+       "Mili"
+      ],
+      "Thu": [
+       "Mili"
+      ],
+      "Fri": [
+       "Mili"
+      ]
+     },
+     "Debjani and Mili's fish": {
+      "Mon": [
+       "Debjani",
+       "Mili"
+      ],
+      "Tue": [
+       "Debjani",
+       "Mili"
+      ],
+      "Wed": [
+       "Debjani",
+       "Mili"
+      ],
+      "Thu": [
+       "Debjani",
+       "Mili"
+      ],
+      "Fri": [
+       "Debjani",
+       "Mili"
+      ],
+      "Sat": [
+       "Debjani",
+       "Mili"
+      ],
+      "Sun": [
+       "Debjani",
+       "Mili"
+      ]
+     },
+     "Papaji's dinner": {
+      "Mon": [
+       "Omprakash"
+      ],
+      "Tue": [
+       "Omprakash"
+      ],
+      "Wed": [
+       "Omprakash"
+      ],
+      "Thu": [
+       "Omprakash"
+      ],
+      "Fri": [
+       "Omprakash"
+      ],
+      "Sat": [
+       "Omprakash"
+      ],
+      "Sun": [
+       "Omprakash"
+      ]
+     }
+    },
+    "settings": {
+     "new_dishes_per_week": 2
+    }
+   },
+   "calls": 19,
+   "cost": 0.01294485
+  }
+ ]
+}
