@@ -20,7 +20,7 @@ import {
 import { deleteDraft, draftStatus, getDraft, lockDraft, openDraftForThread, recordDraft, setDraftBody, type DraftRecord } from "./drafts/records";
 import { answeredMessage, publishDraftCard, withdrawDraftCard } from "./drafts/card";
 import { sendDraft } from "./drafts/send";
-import { addressingForDraft, confirmedAddressing, type DraftAddressing, type ReplyAddressing } from "./drafts/addressing";
+import { addressingForDraft, confirmedAddressing, confirmedByWrite, type DraftAddressing, type ReplyAddressing } from "./drafts/addressing";
 import { releaseThreadHold, settleUnconfirmedSend, threadSendInDoubt } from "./drafts/send-check";
 import { tryAfterText, voiceStateFor, voiceLearningUntil } from "./voice/crawl";
 import { processTimezone } from "./lib/local-day";
@@ -187,7 +187,7 @@ async function writeNewDraft(accountId: string, threadId: string, body: string, 
   // Gmail's own Reply all sets who the reply reaches; the skill still asks for a `to` and a subject.
   const params: Record<string, unknown> = { threadId, to: answered?.address || answered?.from || "", body };
   if (answered?.subject) params.subject = answered.subject;
-  const written = await gmail<{ draftId?: unknown; draftMessageId?: unknown; bodyAsSaved?: unknown; reason?: unknown; replyMode?: unknown }>(
+  const written = await gmail<{ draftId?: unknown; draftMessageId?: unknown; bodyAsSaved?: unknown; reason?: unknown; replyMode?: unknown; reply?: unknown; newestMessage?: unknown }>(
     ctx.platform, "createReplyDraft", params, accountId);
   let ids: { draftId: string; draftMessageId: string } | null = null;
   if (written.ok && str(written.data?.draftId)) ids = { draftId: str(written.data.draftId), draftMessageId: str(written.data.draftMessageId) };
@@ -204,7 +204,11 @@ async function writeNewDraft(accountId: string, threadId: string, body: string, 
   const automated = typeof ctx.routineId === "string" && ctx.routineId.length > 0;
   const followUp = automated && followUpAwaitingDraft(accountId, threadId);
   const candidate = written.ok ? addressingForDraft(accountId, threadId, written.data?.replyMode, followUp) : null;
-  const replyAll = candidate ? await confirmAfterWrite(ctx.platform, accountId, threadId, candidate, followUp) : null;
+  // The write's own read of the reply it composed (gmail 1.6.8+) proves the set without reading the thread again; when it
+  // cannot (an older skill, a half it could not read, anything that differs), the thread is read after the write as before.
+  const replyAll = candidate
+    ? confirmedByWrite(candidate, written.ok ? written.data : null) ?? await confirmAfterWrite(ctx.platform, accountId, threadId, candidate, followUp)
+    : null;
   const draft = recordDraft(db, {
     accountId, threadId, draftId: ids.draftId, draftMessageId: ids.draftMessageId,
     bodyWritten: saved || body, answeredMessageRef: answered?.eventId ?? "", why, replyAll,
