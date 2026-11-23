@@ -551,6 +551,8 @@ export function rotate(w: Week, slotName: string, p: Proposal, failing: string[]
     const all = (ds: string[]) => checkSlot(w, slotName, { days: new Map(p.days).set(date, ds), newNames: p.newNames });
     const hardAt = (ds: string[]) => hardOnly(all(ds).get(date));
     const others = (ds: string[]) => [...all(ds).entries()].filter(([x]) => x !== date && x !== "").reduce((n, [, ps]) => n + hardOnly(ps).length, 0);
+    /** The other days' hard problems, less those of a kind that does not count here (the least bad: a dish back early). */
+    const othersBut = (ds: string[], skip: (x: Problem) => boolean) => [...all(ds).entries()].filter(([x]) => x !== date && x !== "").reduce((n, [, ps]) => n + hardOnly(ps).filter((x) => !skip(x)).length, 0);
     const own = (ds: string[], dish: string) => hardAt(ds).filter((x) => x.dish && dishKey(x.dish) === dishKey(dish));
     /** Is `next` better than `plate` here, no worse elsewhere, and the new dish clean (or, `least`, only back early). */
     const better = (plate: string[], next: string[], dish: string, least: boolean) =>
@@ -590,8 +592,8 @@ export function rotate(w: Week, slotName: string, p: Proposal, failing: string[]
       if (!hardAt(plate).some((x) => x.text === r.text)) continue;
       const cands = standIns(w, slotName, p, date, null, plate);
       // Feeds them: the person's problem gone, and the dish's own faults at most a repeat (the least bad), none elsewhere.
-      const feeds = (c: string, least: boolean) => { const next = [...plate, c]; return !hardAt(next).some((x) => x.text === r.text) && others(next) <= others(plate)
-        && (least ? own(next, c).every(comesBack) : !own(next, c).length); };
+      const feeds = (c: string, least: boolean) => { const next = [...plate, c]; return !hardAt(next).some((x) => x.text === r.text)
+        && (least ? othersBut(next, comesBack) <= othersBut(plate, comesBack) && own(next, c).every(comesBack) : others(next) <= others(plate) && !own(next, c).length); };
       const add = cands.find((c) => feeds(c, false)) ?? cands.find((c) => feeds(c, true));
       if (add) { plate = [...plate, add]; if (own(plate, add).length) noted.push(add); }
     }

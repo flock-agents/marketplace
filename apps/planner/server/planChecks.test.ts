@@ -138,3 +138,16 @@ describe("add-on days (owner, 23 Nov)", () => {
     expect(hardCount(w, "Fish", p)).toBe(0);
   });
 });
+
+describe("a person with nothing of their own (rotate)", () => {
+  it("gets a dish they can eat even when the only one comes back early", () => {
+    const allergy: Rule = { id: "a", hard: true, what: "avoid", who: "Ravi", slots: null, days: null, items: ["peanut"], to: null, frequency: null, per_meal: null, fasting_food: null, quote: "no peanuts for Ravi" };
+    const lib = [dish("Poha", "Breakfast", { contains: ["peanut"], contains_read: [...READ, "peanut"] }), dish("Upma", "Breakfast", { contains_read: [...READ, "peanut"] })];
+    const w = week({ slots: [slot("Breakfast", { order: 10 })], library: lib, rules: [allergy] });
+    for (const d of w.days.filter((x) => ![WEEK[0], WEEK[1], WEEK[3]].includes(x.date))) d.skip = "eaten_out";
+    const p: Proposal = { days: new Map([[WEEK[0], ["Upma"]], [WEEK[1], ["Poha"]], [WEEK[3], ["Upma"]]]), newNames: new Map() };
+    const r = rotate(w, "Breakfast", p, [WEEK[1]]);
+    expect(p.days.get(WEEK[1])).toEqual(["Poha", "Upma"]);
+    expect(r.unmet).toEqual(["Tue Breakfast: Upma comes back sooner than usual"]);
+  });
+});
