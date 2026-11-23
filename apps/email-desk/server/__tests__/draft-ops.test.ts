@@ -364,7 +364,7 @@ describe("withThreadTurn", () => {
 });
 
 describe("ops", () => {
-  test("serves the three draft ops", () => {
-    expect(Object.keys(ops).sort()).toEqual(["create_draft", "discard_draft", "update_draft"]);
+  test("serves the three draft ops and send_draft", () => {
+    expect(Object.keys(ops).sort()).toEqual(["create_draft", "discard_draft", "send_draft", "update_draft"]);
   });
 });

@@ -1,9 +1,9 @@
 // The app's ops (Op contract). Registered in index.ts; the SDK's ops router hands each `(payload, { platform, agentId,
 // pressToken })`. Who may call the declared ones is Flock's rule (routes/app-ops.ts), not this file's.
 //
-// Drafts (Task 2.5): create_draft, update_draft, discard_draft. The rules are drafts/rules.ts; the record drafts/records.ts;
+// Drafts (Task 2.5): create_draft, update_draft, discard_draft; send_draft (Task 2.6, drafts/send.ts) on the person's press. The rules are drafts/rules.ts; the record drafts/records.ts;
 // the card drafts/card.ts. Gmail is reached only through connectors.exec as the copy's paired agent; a draft write needs no
-// press token (only a send does), so none is ever passed here.
+// press token (only a send does), so only send_draft ever passes one.
 //
 // Who wrote a body (ruling R5): `by: "person"` counts only when the call carries a press token, which Flock mints for the
 // person's own save on the card (draftSaveOp). An agent saying `by: "person"` without one is the agent: the lock applies
@@ -16,6 +16,7 @@ import {
 } from "./drafts/rules";
 import { deleteDraft, draftStatus, getDraft, lockDraft, openDraftForThread, recordDraft, setDraftBody } from "./drafts/records";
 import { answeredMessage, publishDraftCard, withdrawDraftCard } from "./drafts/card";
+import { sendDraft } from "./drafts/send";
 
 export interface OpCtx {
   platform: PlatformContext;
@@ -34,11 +35,19 @@ export function _setOpsLogForTesting(fn: ((line: string) => void) | null): void 
 
 const str = (v: unknown): string => (typeof v === "string" ? v.trim() : "");
 
-type Gmail<T> = { ok: true; data: T } | { ok: false; reason: string; code?: string };
+export type Gmail<T> = { ok: true; data: T } | { ok: false; reason: string; code?: string };
 
-async function gmail<T>(platform: PlatformContext, functionName: string, params: Record<string, unknown>, accountId: string): Promise<Gmail<T>> {
+/** One Gmail skill call as the copy's paired agent, on `accountId`. Only a send passes `approval` (the person's press
+ *  token, sideEffect): no draft write ever does. Never throws. */
+export async function gmail<T>(
+  platform: PlatformContext, functionName: string, params: Record<string, unknown>, accountId: string,
+  approval?: { pressToken: string },
+): Promise<Gmail<T>> {
   try {
-    const r = await platform.connectors.exec<T>({ skillId: "gmail", functionName, params, accountHint: accountId, timeoutMs: GMAIL_WRITE_TIMEOUT_MS });
+    const r = await platform.connectors.exec<T>({
+      skillId: "gmail", functionName, params, accountHint: accountId, timeoutMs: GMAIL_WRITE_TIMEOUT_MS,
+      ...(approval ? { pressToken: approval.pressToken, sideEffect: true } : {}),
+    });
     if (r.ok) return { ok: true, data: r.data };
     if (r.skipped) return { ok: false, reason: "Email Desk is not set up with an agent" };
     return { ok: false, reason: r.message ?? r.reason, ...(r.code ? { code: r.code } : {}) };
@@ -170,29 +179,43 @@ export async function changeDraft(id: string, p: Record<string, unknown>, ctx: O
  *  discard a draft the person edited, which would let it draft over their edit; nothing changes then. */
 export async function discardDraft(p: Record<string, unknown>, ctx: OpCtx): Promise<{ ok: true } | DraftRefusal> {
   const id = str(p.id);
-  const found = getDraft(getStore(), id);
-  if (found) {
-    const refused = await withThreadTurn(found.accountId, found.threadId, async (): Promise<DraftRefusal | null> => {
-      const db = getStore();
-      const draft = getDraft(db, id);
-      if (!draft || draft.sentAt !== null) return null;
-      if (draft.personEdited && !ctx.pressToken) return personEditedRefusal();
-      const gone = await gmail(ctx.platform, "discardDraft", { draftId: draft.draftId }, draft.accountId);
-      // Already gone from Gmail is the end we want; any other failure leaves a stray Gmail draft, logged.
-      if (!gone.ok && gone.code !== "DRAFT_NOT_FOUND") {
-        log(`[email-desk] Gmail could not discard draft ${draft.id} (${gone.reason}); its record and card are gone anyway`);
-      }
-      deleteDraft(db, draft.id);
-      return null;
-    });
-    if (refused) return refused;
-  }
+  const refused = await removeDraft(ctx.platform, id, { byPerson: !!ctx.pressToken, onGmailFailure: "log" });
+  if (refused) return refused;
   if (id) await withdrawDraftCard(ctx.platform, id);
   return { ok: true };
+}
+
+/**
+ * The discard itself, in the thread's turn: Gmail discardDraft, then the row deleted (ruling R19). A sent draft, or no
+ * row, is left alone (null). The agent may not discard the person's edit (R18); the person may (`byPerson`: their press,
+ * or their own ✕ on the card). A Gmail failure other than "already gone" is logged and the row deleted anyway (`log`,
+ * the op's R15), or thrown with the row kept (`throw`, the card's close: Flock asks again later, card-closed.ts).
+ */
+export async function removeDraft(
+  platform: PlatformContext, id: string, opts: { byPerson: boolean; onGmailFailure: "log" | "throw" },
+): Promise<DraftRefusal | null> {
+  const found = getDraft(getStore(), id);
+  if (!found) return null;
+  return withThreadTurn(found.accountId, found.threadId, async (): Promise<DraftRefusal | null> => {
+    const db = getStore();
+    const draft = getDraft(db, id);
+    if (!draft || draft.sentAt !== null) return null;
+    if (draft.personEdited && !opts.byPerson) return personEditedRefusal();
+    const gone = await gmail(platform, "discardDraft", { draftId: draft.draftId }, draft.accountId);
+    // Already gone from Gmail is the end we want; any other failure leaves a stray Gmail draft.
+    if (!gone.ok && gone.code !== "DRAFT_NOT_FOUND") {
+      if (opts.onGmailFailure === "throw") throw new Error(`Gmail could not discard draft ${draft.id}: ${gone.reason}`);
+      log(`[email-desk] Gmail could not discard draft ${draft.id} (${gone.reason}); its record and card are gone anyway`);
+    }
+    deleteDraft(db, draft.id);
+    return null;
+  });
 }
 
 export const ops: Record<string, OpHandler> = {
   create_draft: (p, ctx) => createDraft(p, ctx),
   update_draft: (p, ctx) => updateDraft(p, ctx),
   discard_draft: (p, ctx) => discardDraft(p, ctx),
+  // Served, never declared (manifest.test.ts): only the card's Send reaches it, with the person's press token.
+  send_draft: (p, ctx) => sendDraft(p, ctx),
 };
