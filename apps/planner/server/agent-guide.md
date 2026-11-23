@@ -1,134 +1,144 @@
-# Meal Planner — the agent's guide
+# Meal Planner: the agent's guide
 
-The Meal Planner app owns meals, recipes, the shopping list, drafts and orders, kitchen stock and every shopping
-preference. You never keep any of that in memory or chat, never guess quantities, and never build a cart from a chat
-message alone. Every meal/grocery/pantry request, in every chat, starts by reading the app; every change goes through an
-operation; then tell the family what the app now says, not what you think it says. The rows are the owner's: never
-delete or "tidy" rows you did not add in this task (a row with `updated_by: user:*` is theirs).
+The app keeps the family's people, food rules, meals (slots) and dishes, the week's plan, the items they buy, one cart per shopping app and the saved recipes. You do the thinking (what to cook, how much, which product); the app keeps the results and runs the clock. Keep none of it in memory or chat: read the app, change it through an operation, then say what it now says.
 
-Call operations, read rows and change settings with the api tool. An operation: `POST /api/apps/<this app>/ops/<name>`
-with its input as the body (a JSON object). Read rows (never write them) at
-`/a/<this app>/api/_data/<table>` (`?col=value` filters; fields at `/_schema`). Write a row directly only when no
-operation makes that change (e.g. a meal's coach_check, a diner's targets).
+- **An operation:** `POST /api/apps/<this app>/ops/<name>` with its input as the JSON body (the api tool).
+- **Reading:** the family: `GET /a/<this app>/api/family`; a week: `GET /a/<this app>/api/weeks/<its Monday>`. Rows:
+  `GET /a/<this app>/api/_data/<table>` (`?col=value` filters): people, house, slots, slot_days, slot_dishes,
+  dish_ingredients, library, rules, items, item_events, orders, order_lines, products, saved_recipes. Never write one.
+- **A refusal** says in plain words what to fix (`error`): fix the call and send it again. 404: no such row. 409: the
+  row is in a state the call does not fit. Use only the operations and fields listed at the end of this guide. Dates YYYY-MM-DD, times HH:MM (24-hour), weekdays Mon to Sun; a week is its Monday.
+- **Words to the family are plain:** "what you buy every day", "your cart", "running low", never an operation's or a field's
+  name. Say "you"; the cook is "the cook" or their name. The app writes some messages itself (a plan's `message` and
+  `intro`, a reminder's `text`, an order's `message`): send those word for word.
 
-## How the family wants this to work
+## The two problems and the loop
 
-- **Lazy by design.** Nothing needs their input; silence means "carry on as planned". Infer, then let them correct.
-- **Few messages.** You message the family only when a shopping-window wake asks you to (at most 3 per window), or when
-  they talk to you. Background work never messages anyone.
-- **Never ask about background facts** (shelf life, recipe ingredients, pack sizes, which recipe a dish is): make an
-  informed guess and save it in the app. A correction from them is data for next time.
-- **Only a family member's explicit yes places an order.** Never answer your own question; silence, a routine wake or
-  your own message is never a yes.
+1. **What to eat.** Every Sunday at 11 the app plans next week, every day of it, and wakes you to send it. The plan is kept whether or not anyone replies; the family changes a meal by replying or on the Week page.
+2. **What to order.** The app guesses from order history what is running out, and keeps one open cart per shopping app.
+   At 15:00 (tonight's dinner) and 19:00 (tomorrow's meals) every day a reminder wakes you: the meals, the carts and
+   the few items that may be running low.
 
-## The household comes first
+**Nothing is ordered until the family replies or taps Order**, except with the setting Order without asking (off unless
+turned on): the reminder then lists the carts in `ordered`, and you order those.
 
-Nothing in the app runs (no routine, no job, no shopping) until the `household.profile` setting holds what the family
-told you about themselves: who eats, food habits, which meals to plan, where they shop. Save it from their words in
-the first conversation (`PATCH /a/<this app>/api/_app/settings {"household.profile": {"people": "…", "food": "…", "meals": [...],
-"shops": [...], "notes": "…"}}`), and update it when they say something new. Never fill it from a guess or from the
-rows already in the app: until it is set, those rows are samples.
+## The first conversation
 
-## Meals = recipes + a note
+Save each answer as it comes, in the family's own words. Never fill a field from a guess: ask, or leave it empty. No
+plan or reminder runs until one person is saved. Do not ask what is at home: the app works that out. **The whole setup at once:** `apply_setup { household, transcript }` (the household facts, and the questions and replies as `Q:` / `A:` lines, word for word, in order) reads and saves all below in one call; read its `said` back, `noted` is kept but not checked.
 
-Each meal links to one or more recipes and may carry a free-text `note`; `dish` is only the label. The app computes the
-rough shopping need from the recipes; you review it against the note (the `review_meal` job).
+| The family tells you | Save it with |
+|---|---|
+| Who eats at home; for each: relation, child / adult / elder, how much they eat ("2 rotis, small rice"), diet, allergies, dislikes, targets | `set_person`, one call a person. `group` is needed for a new person; `remove: true` takes someone out of the family |
+| The cook: name, days, arrival; what they make well; what they do not make well or will not make; their time ("off to the next house: a dish or two in the morning"); new recipes from reels, or a set menu of familiar dishes | `set_cook { name, days, arrival, makes_well, wont_make, time_limit, new_recipes: "open" or "set_menu", note }`: name every time, days and arrival the first time. A cook who comes twice a day: `arrival: [{ at: "06:00", meals: ["Breakfast", "Lunch"] }, { at: "16:30", meals: ["Dinner"] }]` |
+| **A cook's limit, said any time** (in chat, or fixing a plan: "swap the chole, the cook can't make it") | Its words in the cook's `wont_make` or `time_limit` at once. A plan correction keeps the limit, not only the swap. A vague limit ("no fancy stuff") stays words: ask "which dishes?" once when it matters |
+| The shopping apps: the main one, the one to try when something is not on it, the ones they have signed in to | `set_shopping_apps { main, fallback, connected }`: `zepto`, `swiggy-instamart`, `zomato-blinkit` (Blinkit), `bigbasket` or `amazon`; `fallback` is `null` for none. `connected` is only the apps signed in to in Flock, `[]` when none yet (main and fallback are not added to it): send it again after each sign-in |
+| How often something is bought, only when they say it or there are no orders to learn it from ("milk every day, 1 litre") | `set_item { item, group, usual_amount, unit, every_days }` (see Items and their cycles) |
+| An item delivered outside the apps (a milkman, Country Delight) | `set_subscription { item, source, active: true }`: a subscription is a pantry item's setting (the family can turn it on or off on the item's page too); it stays in the Pantry as a subscription and is left out of every cart and every question |
 
-- `save_meal` `{meal_id?, date, slot, dish, note?, time?, outcome?, outcome_source?, coach_check?, coach_notes?}` — creates
-  (no meal_id) or changes a meal. `remove_meal` `{meal_id}`.
-- `set_meal_recipes` `{meal_id, recipes:[{recipe_id, servings?}]}` — the meal's recipe set, in order.
-- When the plan changes (leftovers, eating out, a swap, guests), change the **recipes and note**, not just the dish text —
-  e.g. Fri lunch → recipes `[Puri aloo sabzi]`, note `"leftovers from tonight"`.
-- **Only you add recipes.** `search` `{q}` first for the same dish under another spelling ("Poori aloo sabzi" = "Puri aloo
-  sabzi"); only if none exists, `write_recipe` `{name, method?, lines:[{ingredient_id, item, qty_per_adult, unit,
-  category}]}` (one regular adult portion; reuse catalog ingredients — search them too). `write_recipe` `{recipe_id,
-  lines}` adds lines to an existing recipe.
-- **What happened to a meal:** the app assumes a meal was cooked once its latest time passes (breakfast 11:00, lunch 15:00,
-  dinner 23:00 by default). When the family says otherwise ("we ate out", "skipped lunch"), `save_meal` `{meal_id,
-  outcome:"skipped", outcome_source:"owner"}` (or change its recipes and note for a swap).
+## Reading order history
 
-## Background jobs: answer, never ask
+After a sign-in, and at the start of every reminder, read each connected app's orders placed since the wake's `since[app]` (3 months back only for an app not yet in `since`) and give them to `import_order_history`: the oldest first, about 8 orders and 80 items a call, one app a call, delivered or paid orders only (never a cancelled or failed one).
+Each order has its `date` and `order_ref`; each item its `item` (the family's word: "atta"), `group`, `product`, `product_id`, `pack`, `count` and `image`: the product's picture link exactly as the order's details give it (Zepto's order detail, Instamart's order items), never one you made or searched for. The same order sent twice is recorded once. Which connectors can read orders:
+- **BigBasket and Blinkit:** `view-order-history`, then `track-order` for each order to get its items.
+- **Zepto and Instamart:** the order tools of their own connection, when it has them; when it has none, skip the app.
+- **Amazon:** cannot. Skip it.
 
-The app's **Background jobs** routine wakes you with the open jobs (`list_jobs` lists them; a job with `facts_at` has its
-facts at that path). Answer each: `answer_job` `{job_id, answer:{…}}`, then any `more_jobs` the reply lists. A 400 says
-what to fix; a 409 means the job went stale — skip it. Never message the family about a job.
+Take the pack from the product name ("Aashirvaad Atta 5 kg") when the app gives none. Send every item's `group` too:
+`daily` (milk, curd), `few_days` (vegetables, eggs, bread), `monthly` (atta, oil, cleaning). The app works out each item's cycle from the purchases by itself: ask the family to confirm nothing, and add nothing as an everyday item.
+**More than one person may order,** each on their own account of an app: each person's agent gives that person's orders, all count for the one house, and `since` and the answer's `read_until` are how far you yourself have read.
+**Holding more than one account of an app** ("Zepto (Arjun)", "Zepto (Meera)"): read each account and send each with its `account` (its account id, else its label; always the same one). Read it from `since["zepto:<account>"]`, else 3 months back. Each account's `read_until` is its own.
 
-- **review_meal** — dish, note and recipe lines are in the facts. Answer `{adjustments:[{ingredient_id, action:
-  "drop"|"scale"|"add", factor?, qty?, unit?, reason}], recipes?:[{recipe_id, servings?}]}`. `recipes` only when the set is
-  wrong for the dish (required when the meal has none yet); `adjustments: []` when the recipes are right as they are.
-- **fill_recipe** — a planned recipe has no ingredient lines: `write_recipe` `{recipe_id, lines}`, then answer `{}`. The app
-  refuses until every line has a catalog ingredient and a quantity.
-- **find_patterns** — recent choices, learned prefs, meals and orders. Answer `{patterns:[{id?, kind:
-  drop_item|add_item|service|swap|meal_latest|order_window|taste|engagement_time, subject?, summary (one line), rule,
-  confidence 0..1, evidence:[choice ids], auto_apply}], retire?:[learned_pref ids]}`. Rule shapes the app applies:
-  `service` → `{service, unless_cheaper_by}` (₹); `engagement_time`, `meal_latest`, `order_window` → `{time:"HH:MM", …}`.
-  Set `auto_apply` only when the evidence clearly agrees; never re-add a pattern the owner switched off.
+## The week's plan
 
-Background facts the same way: an ingredient's **shelf life in this home** — `set_shelf_life` `{ingredient_id,
-shelf_life_days, note}` from the city, its weather and season, and how the family stores it.
+The week is planned slot by slot: each slot (Breakfast, Lunch, Dinner, a child's tiffin, one person's add-on) on each day
+has the people it is for and the dishes made in it, each with its ingredients. A plan is a suggestion, not a record of
+what was eaten. A slot-day eaten out or ordered in has no dishes, so nothing is bought for it. Every day is planned.
 
-## The shopping window
+- **The weekly run:** the app plans the week itself on Sunday and wakes you only to send the family its `message` (and
+  `intro` once) word for word: plan nothing then.
+- **A week planned, or planned again, on request** ("plan next week", "redo the week"): `make_plan { week_start }` does the
+  same and answers `message` (and `intro`) to send word for word as its `instructions` say, or `say` when it could not plan
+  (send that).
+- **Food rules are checked by the app** against what each dish contains: a plan it makes keeps every hard rule.
 
-Each window has one **draft** that stays live until a yes: it follows the meals and the family's edits. A yes freezes it;
-it becomes ordered, or is let go quietly when no yes comes (or skipped by the family). Its items move to the next draft
-only if a meal they're for is still after that order arrives; the family's own additions always move.
+**Later changes** (a change plans again only the meals it touches, never one the family changed; send its `message`
+word for word, or `say` when it answers `planned: false`):
+- One meal, one day (guests, someone away or visiting, "we're eating out on Friday", "make poha on Tuesday"): `set_slot_day`.
+- For good: a meal slot (`set_slot`), a food rule (`set_rule`, with the family's `quote`; its `id` to change or take one
+  away), a dish they have (`add_dish`; a reel or recipe link for a dish they have not made yet goes in its `link`), how
+  many new dishes a week (`set_setting`). The app reads what a dish contains itself.
+- "We made khichdi instead" (said by them, never asked): `record_made { date, slot, dishes }`.
 
-`get_draft` → `{draft:{id, order_at, span:{label:"Thu breakfast → Sat dinner"}, lines, removed, quotes, best, yes,
-next_message, …}}`. Always quote the span when sharing a list.
+- **A plan's question about a meal short of dishes** ("I only know 2 dishes for <meal> … What else does <person> have? Or should I suggest a few?", also in its `asked`): dishes named → `add_dish { name, slot, quote }` each, at that slot; "suggest" → `set_slot_day { date, slot, new_dishes_allowed }` on that slot's next days, or `set_setting { new_dishes_per_week }` for more variety everywhere. An add-on (one person's own beside the family's meal) is planned only as often as its dishes are had; its other days have none, which is not a missing meal.
 
-The app sends a window's first two messages itself, with no wake: the **reminder** the evening before (what's due, the
-span, and the kitchen items worth a look) and the **heads-up** shortly before ("Anything to cancel or add?"). Replies
-reach you as usual: apply them with the operations below.
+## Amounts and units
 
-The app's **Shopping timeline** routine wakes you only for the **price** step (at the order time), with its message id:
-compare prices on each service in `data.services` (Price comparison, below), post each with `add_quote`
-`{cart_id, service, total, fees?, lines?, screenshot_url?}`, then share the app's `best` service, the rough total and the
-screenshot, and ask once for a yes. Then `ack_message` `{message_id}`. Send nothing else.
+- `amount` is a number and `unit` its measure, apart: `{ amount: 500, unit: "g" }`, never "500 g" as the amount.
+- Use `g` or `kg`, `ml` or `l`, `pc` (things counted: 2 onions, 6 eggs); the app adds these up and works out the packs. When none fits, use the pack's own word (`pack`, `bunch`, `loaf`): the app cannot count packs for it and asks you.
+  One name and one unit for an item everywhere ("curd", always in `g`): a second makes a second line.
 
-Chat edits, any time before the yes — then reply with the draft as the app now has it:
+## Items and their cycles
 
-- add / drop / restore: `edit_draft` `{add:[{item:"curd"}], remove:["onion"], restore:[…]}`
-- move the window: `move_window` `{order_at:"2026-11-01T18:00"}` (the reply lists meals it can't reach in time)
-- "we already have X": `have_item` `{ingredient_id, item, use_by?}`
-- "we're out of X" / "running low": `pantry_answer` `{items:[{ingredient_id, have:"out"}]}`
-- what's at home: `pantry`
+Every item has one cycle for the house: how much is bought and how often ("500 ml every day", "30 pc about once a week"), worked out from everyone's purchases and shown on the Pantry page. A `daily` item goes on the cart by itself when it is due; the others are asked about.
+Only when the family says it, or there are no orders: `set_item { item, group, usual_amount, unit, every_days }` ("milk every day, 1 litre": `usual_amount: 1, unit: "l", every_days: 1`; once a week is 7); `set_regular` is its older name. A holiday: `snooze_days`. Never by itself or asked: `dont_ask: true`. `remember_product { item, app, product_id, name_on_app, pack_amount,
+pack_unit }` keeps the product an item is bought as: `item` is the family's word ("milk"), never the name on the app.
 
-**On a yes** (from chat): `record_yes` `{cart_id, service, by}`, place the order, then record it immediately:
-`record_order` `{cart_id, service, total, order_ref, delivery_eta}`. When the page's "Order with …" wakes you, the yes is
-already recorded: place it with that service and record it; don't ask again. An order placed on a service but missing
-from the app is a bug, not done. "Skip this order" from chat: `skip_order` `{cart_id}`.
+## A reminder
 
-## Price comparison
+The wake gives `which`, `date`, `connected` and `since`. In this order:
+1. Read each connected app's new orders and `import_order_history` them (above), so nothing bought already is asked about.
+2. `get_reminder { which, date }` with the wake's `date`. When it is `empty`, stop and send nothing.
+3. Copy each cart in `carts` with `sync: true` to its app with its connector, then `sync_cart` what the app's cart now
+   holds (the delivery gap included).
+4. `get_reminder` again, same `which` and `date`: nothing is asked or added twice, and its `delivery_gap` is now the
+   app's cart. Send that answer: its `text` on WhatsApp word for word, or its `app_text` with its `block` in the app chat.
+5. Check out every cart in `ordered` (see the next section), and send its `message` first.
 
-The price step, or a family member asking which service is cheapest:
+## What the family replies
 
-1. **One delivery address** for every service, matched by the address itself, not its label. Use the household's known
-   delivery address; ask the family only if none is known.
-2. **One background session per connected grocery service**, all started in one step. Tell each its service, the address
-   and the exact items, in the family's own words for each item, never a rewrite ("tender coconut" stays "tender
-   coconut", not "fresh coconuts").
-3. Each session uses that service's own skill or connector to select the address, empty the cart, add the items, and
-   report each item (or that it's unavailable) and the total with every fee, as that skill or connector reads it.
-   - **Zepto and Swiggy Instamart** (`zepto`, `swiggy-instamart`) are their official connections, never their websites:
-     the cart and the bill come only from the connector's own tools. Zepto: `view_cart` gives the items, the total with
-     every fee is the "Order Total" `get_payment_methods` returns. BigBasket and Blinkit (`bigbasket`, `zomato-blinkit`)
-     are skills: `view-cart`, then `checkout` after the yes.
-   - **Never place an order to read a price**: an order on a connector can't be cancelled.
-   - **The item itself:** a product that matches every word the family used for it; another kind is not the item (a
-     brown coconut is not a "tender coconut"). None on that service: report it unavailable, never a substitute.
-   - **The same quantity on every service**, in the family's unit (pack sizes noted), so the totals compare like for like.
-4. **Compare the totals** at that one address, and flag uncertain matches (another brand or pack size). No order
-   without a family member's yes on that exact total.
+- **To "still in stock?":** `answer_running_low { answers: [{ item, answer: "low" | "in_stock", days? }] }`. The options are the app's `STOCK_OPTIONS`: "Low, add it" is `low`; "Fine for 3 days" is `in_stock` with `days: 3`; "Fine for a week" is 7;
+  "Fine for 2 weeks" is 14; "Fine, not sure how long" is `in_stock` without `days`. A numbered reply ("1 low, 2 fine for 2 weeks") numbers the items in the order asked: one call with every answer.
+- **To "Yesterday's plan had <dish>..."** (the afternoon reminder's only question about cooking, for a dish new to them):
+  `record_feedback { date, slot, dish, made, liked, again }` per dish, from the reminder's `feedback`. No reply: no call.
+- **How a dish went, said by them:** `rate_dishes { ratings: [{ dish, rating: "good" | "okay" | "didnt_work", note, said_by }] }`.
+  Never ask whether the plan was cooked: a plan is a suggestion.
+- **"Add dal":** `set_cart_line { item, qty }`. **"Got atta at the kirana":** `record_bought_outside`. **"Don't ask about
+  ghee", "rajma follows the plan":** `set_item`.
+- **A yes to a cart,** or "Order my <App> cart" (the Order button on the Shopping page): the yes to that app's cart.
 
-## Building a service cart
+## The cart and ordering
 
-For each draft line, use the ingredient's `prefs`, falling back to the `prefs.category_defaults` setting for its category:
+Each shopping app has one open cart (`get_cart`), shown on the Shopping page.
+- **Add, change, take off:** `set_cart_line { item, qty }` (qty 0 takes it off); the app picks the shopping app. Put the
+  same change on that app's own cart with its connector and `sync_cart` what it holds, in the same turn. With a product you
+  picked, send its `image` link as the app gives it: the Pantry and Shopping pages show it (never in a message).
+- **A cart being ordered:** only lower or remove one of its lines ("remove the ghee"); anything else goes to the open
+  cart, which `set_cart_line` does for you. **The `sync-cart` ask** (edits on the Cart page): make the app's cart hold
+  exactly its lines, then `sync_cart`.
+- **Not on the app today** (`in_stock: false` in `sync_cart`): with a fallback app set, take the line off its app with
+  `set_cart_line { item, qty: 0, app }`, move it with `set_cart_line { item, qty, app: <fallback> }`, copy both carts. Else leave it marked.
 
-- **Pack:** the pack(s) whose total lands in the line's range and within `pack_min…pack_max` (`pack_unit`); convert with
-  `unit_conversions`. Never exceed the top of the range "to be safe".
-- **Price:** `cheapest` = lowest ₹/unit; `balanced` = cheapest among `brands_preferred`, else mid-priced; `premium` =
-  best-rated / preferred brand. Never pick from `brands_avoid`.
-- **Substitutions:** `allowed` — swap and mark `substituted: true`; `ask` — leave it out and say so; `never` — leave it out.
-- **service:** if not `any`, only that service may supply the line. **never_auto_add:** only if named in this conversation.
-- Flag (don't add) a price more than `price.jump_pct` above usual; say when the cart crosses `spend.weekly_limit`.
-- Follow the ingredient's free-text `notes`.
+To order: `get_cart`, make the app's cart match it, then `order_cart { app }` and send its `message` word for word.
+Check out with the app's connector, and ask the family again only if something changed (out of stock, a substitute, a
+higher total):
+- **Zepto:** read the total with `get_payment_methods`; never `create_order` to read a price.
+- **BigBasket and Blinkit:** `checkout` to review, then pay.
+- **Amazon** cannot edit a cart: build it at order time from its lines.
+
+Then `record_order { order_id, placed: true, app_order_ref }`, and later `paid: true`, or `paid: false` when it was not paid (its items go back on the open cart; you tell the family, the clock will not).
+`cancel_order` stops one: before it was placed nothing was bought; once placed it counts as not paid, and you tell the family. A late `paid: true` may answer `taken_off`: take those items off that checkout on the app too. An order nobody paid in 24 hours is closed by the clock, which tells the family once.
+
+## Saved recipes and a dish's video
+
+A shared reel, short or link with "save this" is `save_recipe { links: [the link], name, notes, ingredients, tags }`:
+take the name and ingredients from the link's title and caption (none when it lists none). On the code `NEEDS_NAME`,
+ask the family what to call it and save again with `name`. A link shared twice is saved once. When it is for a dish, it is that dish's video too.
+**A dish's video is its own,** kept by its name: `set_dish_video { dish, url, title, thumbnail }` once (a dish of the
+family's, or one planned before), and every week the dish is planned shows it (the Week page, the cook's message). "Find a video for rajma": search yourself (YouTube), pick one and
+attach it; a link only, never a file. `get_dish { dish }` reads a dish's video and how it went last time.
+
+## A profile carried over from the old Meal Planner
+
+On an upgraded install the weekly run first hands you a `profile`: what the family once said, as text. Structure it with `set_person` / `set_cook` / `set_item`, everyone at home first, in their words, and ask about anything unclear.
+No week is planned until someone at home is saved. Once they are, tell the family the app was rebuilt and plan the coming week with `make_plan { week_start }`.

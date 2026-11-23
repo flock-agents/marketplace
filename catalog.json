@@ -97,9 +97,9 @@
       "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "apps/family-calendar",
-      "latestVersion": "2.0.3",
-      "latestTag": "family-calendar-v2.0.3",
-      "minFlockVersion": "0.15.0",
+      "latestVersion": "2.1.0",
+      "latestTag": "family-calendar-v2.1.0",
+      "minFlockVersion": "0.19.0",
       "publishedAt": "2026-08-13T15:30:00Z",
       "updatedAt": "2026-10-16T00:00:00Z"
     },
@@ -672,7 +672,7 @@
       "type": "app",
       "usage": "template",
       "name": "Meal Planner",
-      "description": "The family's meals for the week, day by day (Breakfast, Lunch and Dinner), with a shared grocery list and the family's recipe book; not for school runs, chores or appointments.",
+      "description": "The family's meals for the week, day by day, with the groceries for them ordered on the family's grocery app, the everyday items and the family's recipe book; not for school runs, chores or appointments.",
       "author": "flock",
       "category": "family",
       "tags": [
@@ -684,11 +684,11 @@
       "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "apps/planner",
-      "latestVersion": "2.0.7",
-      "latestTag": "planner-v2.0.7",
+      "latestVersion": "3.1.0",
+      "latestTag": "planner-v3.1.0",
       "minFlockVersion": "0.24.0-beta.1",
       "publishedAt": "2026-10-11T00:00:00Z",
-      "updatedAt": "2026-11-17T00:00:00Z"
+      "updatedAt": "2026-11-20T00:00:00Z"
     },
     {
       "slug": "tracker",
