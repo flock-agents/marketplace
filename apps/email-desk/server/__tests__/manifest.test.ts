@@ -92,4 +92,10 @@ describe("Email Desk manifest", () => {
     expect(item.path).toBe("apps/email-desk");
     expect(item.personalAssistant).toEqual({ always: true, useCase: "email", skills: ["gmail"] });
   });
+
+  test("every Personal Assistant gets email-desk before calendar-desk (the catalog's order is the install order)", () => {
+    const pa = catalog.items.filter((i: any) => i.personalAssistant?.always).map((i: any) => i.slug);
+    expect(pa.indexOf("email-desk")).toBeGreaterThanOrEqual(0);
+    expect(pa.indexOf("email-desk")).toBeLessThan(pa.indexOf("calendar-desk"));
+  });
 });
