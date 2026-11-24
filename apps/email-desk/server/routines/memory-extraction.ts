@@ -42,7 +42,7 @@ import { getStore } from "../store";
 import { THREAD_BODY_SEPARATOR } from "../lib/thread-format";
 import { blockAddressing } from "../lib/addressing";
 import { localDayStart, processTimezone, todayIn } from "../lib/local-day";
-import { gatherNewMail, EARLIER_MESSAGE_MARK, type GatherResult, type KeptMail } from "./gather";
+import { gatherNewMail, gatherWaitingOutBusy, EARLIER_MESSAGE_MARK, type GatherResult, type KeptMail } from "./gather";
 import { markHandedOver } from "./seen";
 import { recordHarvestRun } from "../platform-ops";
 import { harvestHourOf, isMemoryRunDue, routineSettings } from "./harvest-schedule";
@@ -189,7 +189,7 @@ export async function memoryExtraction(ctx: RoutineContext): Promise<void> {
 }
 
 export async function runMemoryExtraction(ctx: RoutineCtx, deps: MemoryExtractionDeps = {}): Promise<void> {
-  const gather = deps.gather ?? ((c, a) => gatherNewMail(c, a));
+  const gather = deps.gather ?? ((c, a) => gatherWaitingOutBusy(() => gatherNewMail(c, a)));
   const handOver = deps.handOver ?? markHandedOver;
   const voice: Voice = {
     ensure: deps.ensureVoice ?? ((c, a) => ensureVoiceCrawl(c.platform as never, a)),

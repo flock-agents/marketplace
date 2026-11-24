@@ -384,6 +384,32 @@ async function mailboxOf(ctx: RoutineCtx, accountId: string): Promise<{ email: s
   }
 }
 
+/** How long the routine's read waits out a mailbox another reader holds, and how often it asks again. */
+export const BUSY_WAIT_MS = 120_000;
+export const BUSY_RETRY_MS = 10_000;
+
+/**
+ * One read, asked again while the mailbox is busy, for up to `waitMs`. Flock triggers a copy's routines for an account at the
+ * same moment, so Build memory and the follow-up check race for the one read turn; the loser used to give up until the next
+ * hourly tick (35626, 2026-11-24: the follow-up held the turn for 8 s and the memory read ended "mailbox busy"). Any other
+ * outcome, and the last busy one, is returned as it is.
+ */
+export async function gatherWaitingOutBusy(
+  once: () => Promise<GatherResult>,
+  opts: { waitMs?: number; retryMs?: number; sleep?: (ms: number) => Promise<void> } = {},
+): Promise<GatherResult> {
+  const waitMs = opts.waitMs ?? BUSY_WAIT_MS;
+  const retryMs = opts.retryMs ?? BUSY_RETRY_MS;
+  const sleep = opts.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
+  let waited = 0;
+  for (;;) {
+    const g = await once();
+    if (!g.busy || waited >= waitMs) return g;
+    await sleep(retryMs);
+    waited += retryMs;
+  }
+}
+
 /**
  * Read the account's new mail inside the mailbox's read turn, journal it, and return what passed the read/skip rules.
  * A refused turn reads nothing, changes nothing and returns normally with `note` (busy: `busy: true`, "mailbox busy").

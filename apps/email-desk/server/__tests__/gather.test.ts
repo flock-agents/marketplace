@@ -4,7 +4,7 @@ import { mkdtempSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { openStore, _setStoreForTesting } from "../store";
-import { gatherNewMail, HARVEST_CONSUMER, EARLIER_MESSAGE_MARK } from "../routines/gather";
+import { gatherNewMail, gatherWaitingOutBusy, BUSY_RETRY_MS, HARVEST_CONSUMER, EARLIER_MESSAGE_MARK, type GatherResult } from "../routines/gather";
 import { runMemoryExtraction } from "../routines/memory-extraction";
 import { THREAD_BODY_SEPARATOR } from "../lib/thread-format";
 import { markHandedOver, wasHandedOver } from "../routines/seen";
@@ -481,5 +481,33 @@ describe("the engaged-domain lookup, one domain per call", () => {
     } finally {
       console.warn = warn;
     }
+  });
+});
+
+describe("a busy mailbox is waited out (gatherWaitingOutBusy)", () => {
+  const busy = { kept: [], skipped: 0, deferred: 0, cursor: "1", busy: true, note: "mailbox busy" } as GatherResult;
+  const read = { kept: [], skipped: 0, deferred: 0, cursor: "2" } as GatherResult;
+
+  test("asks again after the follow-up's turn ends, and returns that read", async () => {
+    const answers = [busy, busy, read];
+    const sleeps: number[] = [];
+    const g = await gatherWaitingOutBusy(async () => answers.shift()!, { sleep: async (ms) => { sleeps.push(ms); } });
+    expect(g).toBe(read);
+    expect(sleeps).toEqual([BUSY_RETRY_MS, BUSY_RETRY_MS]);
+  });
+
+  test("gives up after the wait, returning busy", async () => {
+    let calls = 0;
+    const g = await gatherWaitingOutBusy(async () => { calls++; return busy; }, { waitMs: 30_000, retryMs: 10_000, sleep: async () => {} });
+    expect(g.busy).toBe(true);
+    expect(calls).toBe(4);
+  });
+
+  test("any other outcome is returned at once", async () => {
+    let calls = 0;
+    const quarantined = { ...read, stopped: "quarantined", note: "mailbox paused by Flock" } as GatherResult;
+    const g = await gatherWaitingOutBusy(async () => { calls++; return quarantined; }, { sleep: async () => { throw new Error("no wait"); } });
+    expect(g).toBe(quarantined);
+    expect(calls).toBe(1);
   });
 });
