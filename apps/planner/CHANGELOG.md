@@ -14,6 +14,9 @@ question).
 - **No brackets.** The people and connectLater lines lose their brackets (Flock's guard reads "(…)" as an unfilled
   placeholder).
 - An older Flock ignores `reask` and `fallback` (its interview parser copies only the keys it knows).
+- **Needs Flock 0.25.0-beta.1** (`minFlockVersion`, was 0.24.0-beta.1): the pages need the component library 1.10.11 or later
+  (the cart's ItemPicker; Flock 0.24.0 ships 1.10.10 and the build fails there), and the setup reads `household.get` and
+  `apps.op`, which 0.24.0 does not have. 0.25.0-beta.1, not 0.25.0: a beta sorts before its release.
 
 ## 4.0.1
 
