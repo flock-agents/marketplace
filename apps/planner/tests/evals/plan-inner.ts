@@ -9,6 +9,8 @@ import { join } from "path";
 import { tmpdir } from "os";
 // @ts-ignore: resolved in the assembled app, where evals/ sits beside server/
 import { boot } from "../server/testkit";
+// @ts-ignore: resolved in the assembled app
+import { WEEKLY_PROMPT } from "../server/routines/weekly-plan";
 import { ask, flagsOf, jsonOf, modelOpts } from "./lib/model";
 import { scoreWeek, type Fixture, type Outcome } from "./lib/score";
 import { addDays, LEGACY_KINDS, mdTable, pct, type RunRecord } from "./lib/common";
@@ -16,8 +18,10 @@ import { addDays, LEGACY_KINDS, mdTable, pct, type RunRecord } from "./lib/commo
 const { flags } = flagsOf(process.argv.slice(2));
 const repeats = Number(flags.repeats ?? 3);
 const maxRounds = Number(flags.rounds ?? 3);
-const dayRounds = Number(flags["day-rounds"] ?? 3);
+const dayRounds = Number(flags["day-rounds"] ?? 4);
 const whole = flags.whole === "true";
+const menuFirst = flags["no-menu"] !== "true";
+const menuRounds = Number(flags["menu-rounds"] ?? 4);
 const WEEKDAY = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const weekdayOf = (date: string) => WEEKDAY[new Date(`${date}T00:00:00Z`).getUTCDay()];
 const only = flags.fixtures ? flags.fixtures.split(",") : null;
@@ -33,24 +37,25 @@ const FRAME = `
 ## This run (the eval harness)
 
 You are the meal agent on the weekly run. You have no tools here: the harness makes the app calls for you. Reply with ONE JSON
-object and nothing else: { "meals": [ ...every meal of the week... ], "repeats_ok"?: true }, each meal as plan_week takes it ({ date, slot,
-ordered_in?, note?, dishes?: [{ name, for: ["everyone"] or [names], portion_note?, ingredients: [{ item, amount, unit }] }] }). The harness sends it
-as plan_week { week_start, mode: "final", meals } and then the closing plan_week { week_start, mode: "final", repeats_ok }
-(repeats_ok only when you send it). If the app
+object and nothing else: { "meals": [ ...every meal of the week... ] }, each meal as plan_week takes it ({ date, slot,
+ordered_in?, note?, dishes?: [{ name, for: ["everyone"] or [names], except?: [names], portion_note?, ingredients: [{ item, amount, unit }] }] }). The harness sends it
+as plan_week { week_start, mode: "final", meals } and then the closing plan_week { week_start, mode: "final" }. If the app
 refuses either, you get its answer and send the whole week again, fixed.`;
 
 const DAY_FRAME = `
 
 ## This run (the eval harness)
 
-You are the meal agent on the weekly run, planning one cooking day a call as the guide says. You have no tools here: the
-harness makes the app calls for you. Each time you are asked for a day, reply with ONE JSON object and nothing else:
+You are the meal agent on the weekly run, as the guide says. You have no tools here: the harness makes the app calls for you.
+When asked for the menu, reply with ONE JSON object and nothing else: { "meals": [ ...every meal of the week, dishes by name
+and for only, no ingredients... ] }; the harness sends it as plan_menu { week_start, meals }. If the app
+refuses, you get its answer: send the whole menu again, fixed.
+Each time you are asked for a day, reply with ONE JSON object and nothing else:
 { "meals": [ ...that day's meals only... ] }, each meal as plan_week takes it ({ date, slot, ordered_in?, note?, dishes?: [{ name,
-for: ["everyone"] or [names], portion_note?, ingredients: [{ item, amount, unit }] }] }). The harness sends it as
+for: ["everyone"] or [names], except?: [names], portion_note?, ingredients: [{ item, amount, unit }] }] }). The harness sends it as
 plan_week { week_start, mode: "final", keep_rest: true, meals }. If the app refuses, you get its answer: send that day again, fixed.
 After the last day the harness makes the closing plan_week { week_start, mode: "final" }. If it is refused, reply with
-{ "meals": [ ...only the meals you change, each meal whole... ], "repeats_ok"?: true } (repeats_ok only when the family asked
-for a dish more than once); the harness sends them with keep_rest and closes again.`;
+{ "meals": [ ...only the meals you change, each meal whole... ] }; the harness sends them with keep_rest and closes again.`;
 
 async function seed(k: any, fx: Fixture): Promise<{ notes: string[] }> {
   const notes: string[] = [];
@@ -85,6 +90,15 @@ async function seed(k: any, fx: Fixture): Promise<{ notes: string[] }> {
     const w = await k.owner("POST", `/api/weeks/${prev}/plan`, { mode: "final", meals });
     if (w.status >= 400) throw new Error(`${fx.id}: last week refused: ${JSON.stringify(w.body)}`);
   }
+  // The family's own dishes, as the interview saves what each person ate over the past week (set_family_dishes): the
+  // fixture's family_dishes (what its answers name), else its past week, each dish with every meal it was eaten at.
+  const slotsOf = new Map<string, Set<string>>();
+  for (const m of fx.last_week) for (const d of m.dishes ?? []) (slotsOf.get(d) ?? slotsOf.set(d, new Set()).get(d)!).add(m.slot);
+  const family = fx.family_dishes ?? [...slotsOf].map(([name, slots]) => ({ name, slots: [...slots] }));
+  if (family.length) {
+    const r = await k.op("set_family_dishes", { dishes: family });
+    notes.push(r?.error ? `set_family_dishes refused: ${r.error}` : `family dishes: ${family.length}`);
+  }
   return { notes };
 }
 
@@ -109,19 +123,29 @@ async function byDay(k: any, fx: Fixture, guide: string, ctx: any, transcript: s
       return null;
     }
   };
+  if (menuFirst) {
+    let asked = `First the whole week's menu: every meal of every cooking day (the extra slots too), each dish by name with its for (and a portion_note where one person's portion differs), no ingredients, as { "meals": [...] }.`;
+    for (let n = 0; n < menuRounds; n++) {
+      const payload = await call(asked);
+      if (!payload) { asked = "Send the menu again as the JSON object only."; continue; }
+      const r = await k.op("plan_menu", { week_start: fx.week_start, meals: payload.meals });
+      if (!r?.error) { transcript.push(`The app took the menu. ${r.next ?? ""}`); break; }
+      const said = refusalText(r);
+      refusals.push(said);
+      asked = `${said}\n\nSend the whole menu again, fixed, as the same JSON object.`;
+    }
+  }
   const days = Array.from({ length: 7 }, (_, i) => addDays(fx.week_start, i))
     .filter((d) => d >= fx.today && (ctx.context?.house?.cooking_days ?? fx.cooking_days).map((x: string) => x.slice(0, 3).toLowerCase()).includes(weekdayOf(d).toLowerCase()));
   for (const date of days) {
-    let asked = `Plan ${weekdayOf(date)} ${date}: every meal of that day (its extra slots too), as { "meals": [...] }.`;
+    let asked = menuFirst
+      ? `Give ${weekdayOf(date)} ${date} its ingredients: every meal of that day from the menu (the same dishes, names and for), each dish with its ingredients, as { "meals": [...] }.`
+      : `Plan ${weekdayOf(date)} ${date}: every meal of that day (its extra slots too), as { "meals": [...] }.`;
     for (let n = 0; n < dayRounds; n++) {
       const payload = await call(asked);
       if (!payload) { asked = `Send ${weekdayOf(date)} ${date} again as the JSON object only.`; continue; }
       const r = await k.op("plan_week", { week_start: fx.week_start, mode: "final", keep_rest: true, meals: payload.meals });
-      if (!r?.error) {
-        // The app took the day but names the dishes it now repeats: the agent fixes that day while it is on it.
-        if (r?.note && n < dayRounds - 1) { asked = `The app took it, and says: ${r.note}\n\nSend ${weekdayOf(date)} ${date} again, fixed, as the same JSON object.`; continue; }
-        transcript.push(r?.note ? `The app took it, and says: ${r.note}` : "The app took it."); break;
-      }
+      if (!r?.error) { transcript.push("The app took it."); break; }
       const said = refusalText(r);
       refusals.push(said);
       asked = `${said}\n\nSend ${weekdayOf(date)} ${date} again, fixed, as the same JSON object.`;
@@ -131,13 +155,13 @@ async function byDay(k: any, fx: Fixture, guide: string, ctx: any, transcript: s
   for (let n = 0; r?.error && n < maxRounds; n++) {
     const said = refusalText(r);
     refusals.push(said);
-    const payload = await call(`The closing plan_week was refused. ${said}\n\nReply with only the meals you change, each meal whole, as { "meals": [...], "repeats_ok"?: true }.`);
+    const payload = await call(`The closing plan_week was refused. ${said}\n\nReply with only the meals you change, each meal whole, as { "meals": [...] }.`);
     if (!payload) continue;
     if (payload.meals?.length) {
       const w = await k.op("plan_week", { week_start: fx.week_start, mode: "final", keep_rest: true, meals: payload.meals });
       if (w?.error) { r = w; continue; }
     }
-    r = await k.op("plan_week", { week_start: fx.week_start, mode: "final", ...(payload.repeats_ok === true ? { repeats_ok: true } : {}) });
+    r = await k.op("plan_week", { week_start: fx.week_start, mode: "final" });
   }
   return { rounds, accepted: !r?.error, cost, ms };
 }
@@ -149,8 +173,11 @@ async function once(fx: Fixture, guide: string, rep: number): Promise<RunRecord>
     const { notes } = await seed(k, fx);
     const ctx = await k.op("plan_week", { week_start: fx.week_start, mode: "draft" });
     if (!ctx?.context) throw new Error(`${fx.id}: plan_week draft gave no context: ${JSON.stringify(ctx).slice(0, 300)}`);
-    const opening = `The weekly run woke you to plan next week. week_start: ${fx.week_start} (today is ${fx.today}).\n` +
-      `plan_week { week_start: "${fx.week_start}", mode: "draft" } answered:\n${JSON.stringify(ctx, null, 1)}\n\nWrite the whole week now.`;
+    // The Sunday wake as the live agent gets it (routines/weekly-plan.ts): its prompt and the week's context as its data.
+    const opening = whole
+      ? `The weekly run woke you to plan next week. week_start: ${fx.week_start} (today is ${fx.today}).\n` +
+        `plan_week { week_start: "${fx.week_start}", mode: "draft" } answered:\n${JSON.stringify(ctx, null, 1)}\n\nWrite the whole week now.`
+      : `${WEEKLY_PROMPT(fx.week_start)}\n\nData (today is ${fx.today}):\n${JSON.stringify({ week_start: fx.week_start, context: ctx.context }, null, 1)}`;
     const transcript: string[] = [opening];
     const refusals: string[] = [];
     let rounds = 0, accepted = false, cost = 0, ms = 0;
@@ -172,8 +199,7 @@ async function once(fx: Fixture, guide: string, rep: number): Promise<RunRecord>
       const meals = Array.isArray(payload) ? payload : payload.meals;
       transcript.push(`Your reply:\n${JSON.stringify(Array.isArray(payload) ? { meals } : payload)}`);
       let r = await k.op("plan_week", { week_start: fx.week_start, mode: "final", meals });
-      const repeatsOk = !Array.isArray(payload) && payload.repeats_ok === true;
-      if (!r?.error) r = await k.op("plan_week", { week_start: fx.week_start, mode: "final", ...(repeatsOk ? { repeats_ok: true } : {}) });
+      if (!r?.error) r = await k.op("plan_week", { week_start: fx.week_start, mode: "final" });
       if (r?.error) {
         const said = `The app refused (${r.code}): ${r.error}${r.detail?.rule_breaks ? `\nrule_breaks: ${JSON.stringify(r.detail.rule_breaks)}` : ""}`;
         refusals.push(said);
@@ -194,7 +220,7 @@ const guideOp = async () => {
 };
 const guide = await guideOp();
 const records: RunRecord[] = [];
-console.log(`plan eval: ${fixtures.map((f) => f.id).join(", ")} × ${repeats}, model ${mo.model}, ${whole ? `whole week, up to ${maxRounds} rounds` : `a day a call, up to ${dayRounds} calls a day + ${maxRounds} to close`}\n`);
+console.log(`plan eval: ${fixtures.map((f) => f.id).join(", ")} × ${repeats}, model ${mo.model}, ${whole ? `whole week, up to ${maxRounds} rounds` : `${menuFirst ? `menu first (up to ${menuRounds} calls), then ` : ""}a day a call, up to ${dayRounds} calls a day + ${maxRounds} to close`}\n`);
 for (const fx of fixtures) for (let rep = 1; rep <= repeats; rep++) {
   process.stdout.write(`${fx.id} #${rep} … `);
   try {

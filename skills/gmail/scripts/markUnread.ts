@@ -5,6 +5,7 @@ import {
   browserInteract,
 } from "../../_shared/_google_helpers";
 import { invalidateCachedThreadForMessage } from "./_threadCache";
+import { markThenClick } from "./_gmailPress";
 
 const params = JSON.parse(process.env.SKILL_PARAMS || "{}");
 const messageId: string = params.messageId || "";
@@ -18,7 +19,7 @@ validateId(messageId, "messageId");
 
 const actions = [
   { action: "wait", delay: 3000 },
-  { action: "evaluate", script: `(() => { const btn = document.querySelector('[aria-label="Mark as unread"]') || document.querySelector('[data-tooltip="Mark as unread"]'); if (btn) { btn.click(); return {ok:true,message:'Email marked as unread'}; } return {ok:false,message:'Mark-as-unread button not found. This may only work from within a thread view.'}; })()` },
+  ...markThenClick("mark-unread", `(() => { const btn = document.querySelector('[aria-label="Mark as unread"]') || document.querySelector('[data-tooltip="Mark as unread"]'); if (btn) { mark(btn, "mark-unread"); return {ok:true,message:'Email marked as unread'}; } return {ok:false,message:'Mark-as-unread button not found. This may only work from within a thread view.'}; })()`),
   { action: "wait", delay: 1000 },
 ];
 

@@ -8,6 +8,8 @@ import type { Emit } from "../family";
 export type RoutineCtx = {
   kit: { db: BunSQLiteDatabase<any>; sqlite: Database; emitChange: Emit };
   routine?: { trigger?: unknown };
+  /** The SDK's PlatformContext: the model call the weekly plan makes (model.ts sdkModel). */
+  platform?: unknown;
   /** The agent this routine wakes (the SDK's RoutineContext.agentId). */
   agentId?: string;
   /** The SDK's Result: `ok: false` with a reason when the agent was not woken. A wake held for later is `ok`. */
@@ -24,3 +26,7 @@ export async function wake(ctx: RoutineCtx, message: string, data: unknown): Pro
   const r = await ctx.wakeAgent(message, data);
   if (!r?.ok) throw new Error(`the agent was not woken: ${r?.reason ?? "no answer"}`);
 }
+
+/** What a routine needs of the app's environment that its context does not carry: the app's own path, for the Week link in
+ *  the plan's message (set at boot from flock.env.basePath). */
+export const routineEnv: { basePath: string } = { basePath: "/" };

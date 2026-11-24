@@ -3,10 +3,9 @@ import { describe, it, expect } from "bun:test";
 import { boot } from "./testkit";
 
 const REEL = "https://www.instagram.com/reel/abc123/";
-const MON = "2026-11-23";
 
 describe("save_recipe", () => {
-  it("save_recipe dedupes by link, needs a name for a new one, links from a dish", async () => {
+  it("save_recipe dedupes by link and needs a name for a new one", async () => {
     const { op, rows } = await boot();
     const first = await op("save_recipe", { name: "Dal makhani", links: [REEL], tags: ["Saturday fun dinner"] });
     expect(first.recipe).toMatchObject({ name: "Dal makhani", links: [REEL], source: "instagram", thumbnail: null, tags: ["Saturday fun dinner"] });
@@ -20,14 +19,6 @@ describe("save_recipe", () => {
     expect(unnamed).toMatchObject({ code: "NEEDS_NAME", status: 400 });
     expect(rows("saved_recipes")).toHaveLength(1);
 
-    const { dish } = await op("set_dish", { date: MON, slot: "Dinner", name: "Dal makhani", for: ["everyone"], recipe_id: first.recipe.id, video_url: REEL,
-      ingredients: [{ item: "urad dal", amount: 200, unit: "g" }] });
-    expect(dish.recipe_id).toBe(first.recipe.id);
-    const { context } = await op("plan_week", { week_start: MON, mode: "draft" });
-    expect(context.recipes).toEqual([{ id: first.recipe.id, name: "Dal makhani", tags: ["Saturday fun dinner"], for_people: [] }]);
-    const { week } = await op("plan_week", { week_start: MON, mode: "final" });
-    expect(week.days[0].meals[0].dishes[0]).toMatchObject({ name: "Dal makhani", for_people: ["everyone"], recipe_id: first.recipe.id, video_url: REEL,
-      ingredients: [{ item: "urad dal", amount: 200, unit: "g" }] });
   });
 
   it("takes the source from the first link and the thumbnail from a YouTube one", async () => {

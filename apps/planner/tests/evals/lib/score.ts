@@ -16,6 +16,8 @@ export type Fixture = {
   slots: { extra_slots: { name: string; days?: string[]; for?: string[] }[]; order_in: { day: string; slot: string; note?: string }[] };
   absent: { who: string; days: string[]; slots: string[] }[];
   last_week: { date: string; slot: string; dishes?: string[]; ordered_in?: boolean; note?: string }[];
+  /** What the family's answers about the past week name, as set_family_dishes saves it. */
+  family_dishes?: { name: string; slots: string[]; for?: string[] }[];
   told: Record<string, string>; rules: Record<string, any>[]; expect: Expectation[];
 };
 export type Outcome = { id: string; says: string; pass: boolean; breaks: string[]; heuristic?: boolean; soft?: boolean };

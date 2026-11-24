@@ -5,6 +5,7 @@ import { KitError, kitFetch, subscribeEvents } from "../flock/ui";
 import type { HouseView, PersonRow, shoppingApps } from "../../server/family";
 import type { DishView, MealView, WeekView } from "../../server/meals";
 import type { CartView, LineRow } from "../../server/cart";
+import type { Rule, Slot } from "../../server/slotStore";
 import type { itemView, PantryRow, pantryView } from "../../server/items";
 
 export type { CartView, DishView, HouseView, LineRow, MealView, PantryRow, PersonRow, WeekView };
@@ -16,7 +17,7 @@ export type ItemView = NonNullable<ReturnType<typeof itemView>>;
 /** A saved recipe as the kit's data route gives it: its lists still JSON text. */
 export type RecipeRow = { id: string; name: string; links: string | null; source: string | null; thumbnail: string | null; notes: string | null;
   ingredients: string | null; tags: string | null; for_people: string | null };
-export type Family = { people: PersonRow[]; house: HouseView; shopping: Shopping };
+export type Family = { people: PersonRow[]; house: HouseView; slots: Slot[]; rules: Rule[]; shopping: Shopping };
 
 /** Why a call failed, in the server's own words when it gave a reason. */
 export const why = (e: unknown): string =>

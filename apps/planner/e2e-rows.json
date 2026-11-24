@@ -1,13 +1,16 @@
 { "people": [
   { "$key": "meera", "name": "Meera", "relationship": "mother", "group": "adult", "portions": "2 rotis, 1 cup rice", "diet": "vegetarian" },
   { "$key": "agastya", "name": "Agastya", "relationship": "son", "group": "child", "portions": "2 rotis", "dislikes": "bitter gourd" }
-], "plan_meals": [
-  { "$key": "mon-lunch", "date": "2026-11-23", "slot": "Lunch", "status": "final" },
-  { "$key": "mon-dinner", "date": "2026-11-23", "slot": "Dinner", "status": "final" }
+], "slots": [
+  { "$key": "lunch", "name": "Lunch", "kind": "main", "order": 30 },
+  { "$key": "dinner", "name": "Dinner", "kind": "main", "order": 50 }
+], "slot_days": [
+  { "$key": "mon-lunch", "date": "2026-11-23", "slot": "Lunch", "status": "planned" },
+  { "$key": "mon-dinner", "date": "2026-11-23", "slot": "Dinner", "status": "planned" }
 ], "items": [
   { "$key": "atta", "item": "atta", "name": "Atta", "group": "monthly" }
-], "dishes": [
-  { "$key": "rice", "meal_id": { "$ref": "plan_meals/mon-lunch" }, "position": 0, "name": "Rice" },
-  { "$key": "sambar", "meal_id": { "$ref": "plan_meals/mon-lunch" }, "position": 1, "name": "Drumstick sambar" },
-  { "$key": "rotis", "meal_id": { "$ref": "plan_meals/mon-dinner" }, "position": 0, "name": "Rotis", "for_people": "[\"Agastya\"]", "portion_note": "2 for Agastya" }
+], "slot_dishes": [
+  { "$key": "rice", "slot_day_id": { "$ref": "slot_days/mon-lunch" }, "position": 0, "dish": "Rice" },
+  { "$key": "sambar", "slot_day_id": { "$ref": "slot_days/mon-lunch" }, "position": 1, "dish": "Drumstick sambar" },
+  { "$key": "rotis", "slot_day_id": { "$ref": "slot_days/mon-dinner" }, "position": 0, "dish": "Rotis", "note": "2 for Agastya" }
 ] }

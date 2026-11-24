@@ -1,17 +1,20 @@
 // The food rules the app checks (docs/specs/2026-11-21-planner-food-rules-check.md). The model writes the plan; the app refuses
 // a plan that breaks a rule the family stated, naming each break so the agent fixes it before anyone sees it. Pure: no
 // database here, and nothing the pages cannot import (the Family page writes a rule in words with ruleText).
-import { RULE_LABELS } from "./db/constants";
+import { RULE_LABELS, RULE_TIMES, type Often } from "./db/constants";
 import { WEEKDAYS, weekdayOf, type Weekday } from "./dates";
 
-/** A house rule as it is kept. `days` empty: every day; no `who`: everyone; no `slots`: every meal. */
-export type Rule = { kind: string; who?: string; days: string[]; slots?: string[]; items?: string[]; to?: string; per_week?: number; per_meal?: number; note?: string };
+/** A house rule as it is kept. `days` empty: every day; no `who`: everyone; no `slots`: every meal. A soft rule (a swap,
+ *  require or other with `often` or `per_week`) is kept that many times a week, not at every meal ("millets are good for him":
+ *  sometimes, 2 to 3 meals a week); a cap's per_week is its most meals a week. */
+export type Rule = { kind: string; who?: string; days: string[]; slots?: string[]; items?: string[]; to?: string; per_week?: number; per_meal?: number; often?: Often; note?: string };
 export type RuleDish = { name: string; for_people: string[] | null; portion_note: string | null; ingredients: (string | { item: string })[] };
 export type RuleMeal = { date: string; slot: string; ordered_in?: boolean; dishes: RuleDish[] };
 /** A week as the checks read it: a WeekView is one. */
 export type RuleWeek = { days: { date: string; meals: RuleMeal[] }[] };
-/** One break: the meal ("Mon 2026-11-23 Breakfast"), the dish when it is one dish, whose rule, the rule in words, and the fix. */
-export type RuleBreak = { meal: string; dish?: string; who?: string; rule: string; fix: string };
+/** One break: the meal ("Mon 2026-11-23 Breakfast"), the dish when it is one dish, whose rule, the rule in words, and the fix.
+ *  `soft`: a soft rule kept too many times this week ("over") or too few ("under", a softer problem); `to`: a soft swap's. */
+export type RuleBreak = { meal: string; dish?: string; who?: string; rule: string; fix: string; soft?: "over" | "under"; to?: string };
 
 /** The kinds the app checks, and what each needs besides its kind. A cap takes exactly one of per_week (then it needs items) or
  *  per_meal (items optional: without them every dish to cook counts); the Family page's check says so. */
@@ -19,6 +22,23 @@ export const CHECKED_KINDS = ["avoid", "only", "swap", "require", "cap"] as cons
 export const KIND_NEEDS: Record<(typeof CHECKED_KINDS)[number], string[]> = {
   avoid: ["items"], only: ["who", "items"], swap: ["who", "items", "to"], require: ["slots", "items"], cap: [],
 };
+
+/** The kinds a rule may be soft in: kept some times a week (`often` or `per_week`), not every time. Every other rule is hard. */
+export const SOFT_KINDS = ["swap", "require", "other"] as const;
+export const isSoft = (r: Pick<Rule, "kind" | "often" | "per_week">): boolean =>
+  (SOFT_KINDS as readonly string[]).includes(r.kind) && (!!r.often || r.per_week != null);
+/** The meals a week a soft rule is kept at, least and most: per_week exactly, else by how often (constants.ts RULE_TIMES). */
+export const timesOf = (r: Pick<Rule, "often" | "per_week">): [number, number] =>
+  r.per_week != null ? [r.per_week, r.per_week] : RULE_TIMES[r.often ?? "sometimes"];
+/** A number of times a week, in words: "once a week", "twice a week", "2–3 times a week", "at most once a week". */
+export function timesText([lo, hi]: [number, number]): string {
+  const n = (x: number) => (x === 1 ? "once" : x === 2 ? "twice" : `${x} times`);
+  if (lo === hi) return `${n(lo)} a week`;
+  if (lo === 0) return `at most ${n(hi)} a week`;
+  return `${lo}–${hi} times a week`;
+}
+/** How often a soft rule is kept, in words (" 2–3 times a week"), or "" for a hard rule. */
+const oftenText = (r: Rule) => (isSoft(r) ? ` ${timesText(timesOf(r))}` : "");
 
 /** What a per_meal cap does not count as a dish to cook: a side. A dish is a side when its name has one of SIDE_WORDS, or its
  *  whole name is one of SIDE_NAMES ("Curd", but not "Curd rice"). */
@@ -40,12 +60,15 @@ export const CATEGORIES: Record<string, string[]> = {
   protein: ["paneer", "dal", "daal", "toor", "moong", "masoor", "urad", "chana", "chole", "rajma", "soya", "soy", "tofu", "sprouts", "curd", "dahi", "yogurt", "lobia",
     "besan", "egg", "chicken", "fish", "mutton", "lentil", "chickpea", "kidney bean", "prawn"],
   mushroom: ["mushroom", "shiitake", "khumb", "guchhi", "morel"],
-  baked: ["bake", "baked", "cake", "muffin", "pizza", "bread loaf", "garlic bread", "oven"],
+  // What needs an oven to make at home: a cook's "no baking, no oven". Not bread, pav or buns, which are bought (a pav bhaji
+  // or a bread upma needs no oven), and not tandoori food (a tawa or a tandoor, not an oven at home).
+  baked: ["bake", "baked", "oven", "cake", "cupcake", "muffin", "pizza", "bread loaf", "garlic bread", "focaccia", "brownie", "cookie", "biscuit",
+    "puff", "pie", "tart", "quiche", "croissant", "lasagna", "lasagne", "casserole", "gratin", "souffle", "nankhatai", "khari"],
   chilli: ["chilli", "chili", "chillies", "chilies", "mirchi", "red chilli", "green chilli", "chilli powder", "kashmiri chilli", "sambar powder", "rasam powder",
     "curry powder", "garam masala", "pickle", "achaar", "achar", "schezwan", "chilli flakes"],
   sweet: ["sugar", "jaggery", "gur", "honey", "sheera", "halwa", "kheer", "payasam", "ladoo", "laddu", "jamun", "barfi", "mithai", "jalebi", "condensed milk"],
   soy: ["soy", "soya", "soya chunks", "tofu", "soy sauce", "edamame"],
-  gluten: ["wheat", "atta", "maida", "rava", "sooji", "semolina", "bread", "roti", "chapati", "phulka", "paratha", "naan", "pasta", "noodle", "barley", "dalia", "seitan"],
+  gluten: ["wheat", "atta", "maida", "rava", "sooji", "semolina", "bread", "roti", "chapati", "phulka", "paratha", "naan", "pasta", "noodle", "barley", "dalia", "seitan", "vermicelli", "semiya", "sevai", "seviyan"],
   dairy: ["milk", "curd", "dahi", "paneer", "ghee", "butter", "cream", "cheese", "khoa", "raita", "lassi", "buttermilk", "chaas", "malai", "makhani", "kadhi"],
   dal: ["dal", "toor", "arhar", "moong", "masoor", "urad", "chana dal"],
   pickle: ["pickle", "achaar", "achar", "papad"],
@@ -78,7 +101,7 @@ export const SAME_AS: Record<string, string> = {
   matar: "pea", mutter: "pea", palak: "spinach", keerai: "spinach", gobi: "cauliflower", phool: "cauliflower", bhindi: "okra", vendakkai: "okra",
   baingan: "brinjal", vankaya: "brinjal", kathirikai: "brinjal", lauki: "bottle gourd", karela: "bitter gourd", kumbh: "mushroom", khumb: "mushroom",
   suji: "semolina", sooji: "semolina", rava: "semolina", ravva: "semolina", maida: "refined wheat flour", gehun: "wheat", godhuma: "wheat",
-  dahi: "curd", thayir: "curd", mosaru: "curd", doodh: "milk", paal: "milk", makhan: "butter", malai: "cream",
+  dahi: "curd", thayir: "curd", mosaru: "curd", yogurt: "curd", yoghurt: "curd", doodh: "milk", paal: "milk", makhan: "butter", malai: "cream",
   anda: "egg", ande: "egg", muttai: "egg", murgh: "chicken", murg: "chicken", kozhi: "chicken", machli: "fish", machchi: "fish", meen: "fish",
   gosht: "mutton", jhinga: "prawn", kaju: "cashew", badam: "almond", akhrot: "walnut", pista: "pistachio", moongphali: "peanut",
   shengdana: "peanut", kadalai: "peanut", nilakadalai: "peanut", chawal: "rice", chaawal: "rice", akki: "rice", cheeni: "sugar", gud: "jaggery", shahad: "honey",
@@ -124,6 +147,9 @@ export function hit(text: string, item: string, opts: { name?: boolean } = {}): 
 }
 export const matches = (text: string, item: string, opts: { name?: boolean } = {}): boolean => hit(text, item, opts) !== null;
 
+/** What a swap gives, each way it may be given: "millets or a small portion of rice" is "millets" and "a small portion of rice". */
+export const alternatives = (to: string): string[] => to.split(/\s*(?:,|\bor\b|\/)\s*/i).map((x) => x.trim()).filter(Boolean);
+
 const ingredientName = (i: string | { item: string }) => (typeof i === "string" ? i : i.item);
 /** The word of `item` a dish has, in its name (negations dropped) or in one of its ingredients (as given), or null. */
 export function dishHit(d: { name: string; ingredients?: (string | { item: string })[] }, item: string): string | null {
@@ -137,19 +163,18 @@ export const isSide = (name: string): boolean => {
   return SIDE_WORDS.some((w) => at(n.split(" "), wordsOf(w)).length > 0) || SIDE_NAMES.some((s) => wordsOf(s).join(" ") === n);
 };
 
-/** Is a dish one the family's own `only` rules name ("Tara eats only plain dosa, curd rice…")? Such a dish has to come back
- *  in the week, so the repeat check lets it. */
+/** Is a dish one the family's own `only` rules name ("Meera eats only plain idli, plain dosa…")? Such a dish has to come
+ *  back in the week, so the weekly plan's repeat check lets it. */
 export const namedInOnlyRule = (name: string, rules: { kind: string; items?: string[] }[]): boolean =>
   rules.some((r) => r.kind === "only" && (r.items ?? []).some((i) => matches(name, i, { name: true })));
 
-/** A side that comes back on many days of a week (owner 2026-11-22): any side a per_meal cap leaves out, and sambar, rasam,
- *  a plain dal, boiled eggs. Only for the repeat check: a cap still counts sambar as a dish to cook. */
-const REPEAT_SIDE_WORDS = ["sambar", "rasam"];
+/** A side, which comes back on many days of a week (owner 2026-11-22): any side a per_meal cap leaves out, and a plain dal,
+ *  boiled eggs. Sambar and rasam are mains (owner 2026-11-22: "sambar, rasam is not sides. Its the main"). */
 const REPEAT_SIDE_NAMES = ["dal", "plain dal", "dal tadka", "dal fry", "toor dal", "moong dal", "boiled egg", "boiled eggs"];
 export const isRepeatableSide = (name: string): boolean => {
   if (isSide(name)) return true;
   const n = wordsOf(stripNegations(name));
-  return REPEAT_SIDE_WORDS.some((w) => at(n, wordsOf(w)).length > 0) || REPEAT_SIDE_NAMES.some((s) => wordsOf(s).join(" ") === n.join(" "));
+  return REPEAT_SIDE_NAMES.some((x) => wordsOf(x).join(" ") === n.join(" "));
 };
 
 // ── Who eats what ──
@@ -189,24 +214,56 @@ export function ruleText(r: Rule, opts: { days?: boolean } = {}): string {
   switch (r.kind) {
     case "avoid": return `${r.who ? `${r.who} eats ` : ""}no ${listText(r.items)}${scope}`;
     case "only": return `${r.who ?? "everyone"} eats only ${listText(r.items)}${scope}`;
-    case "swap": return `${r.who ?? "everyone"} has ${r.to} in place of ${listText(r.items)}${scope}`;
-    case "require": return `${r.who ?? "everyone"} has ${listText(r.items, " or ")}${scope}`;
+    case "swap": return `${r.who ?? "everyone"} has ${r.to} in place of ${listText(r.items)}${scope}${oftenText(r)}`;
+    case "require": return `${r.who ?? "everyone"} has ${listText(r.items, " or ")}${scope}${oftenText(r)}`;
     case "cap": {
       if (r.per_meal != null) { const n = r.per_meal; return `at most ${n} dish${n === 1 ? "" : "es"}${r.items?.length ? ` with ${listText(r.items)}` : ""} a meal${r.who ? ` for ${r.who}` : ""}${scope}`; }
       const n = r.per_week ?? 0; return `${listText(r.items)} in at most ${n} meal${n === 1 ? "" : "s"} a week${r.who ? ` for ${r.who}` : ""}${scope}`;
     }
+    case "fasting":
+      // A fast the app checks (who, days, slots): no meal for that person then.
+      if (r.who && r.slots?.length) return `${r.who} fasts${scope}`;
+      return `${RULE_LABELS.fasting}${r.who ? ` for ${r.who}` : ""}${scope}`;
     default: return `${RULE_LABELS[r.kind as keyof typeof RULE_LABELS] ?? r.kind}${r.who ? ` for ${r.who}` : ""}${scope}`;
   }
 }
 
-/** An older kind as the checked rule it is (spec: veg, no_meat and egg avoid meat and fish; no_eggs avoids eggs;
- *  no_onion_garlic avoids onion and garlic). fasting and other are a note only. */
-function checkedAs(r: Rule): Rule | null {
-  if ((CHECKED_KINDS as readonly string[]).includes(r.kind)) return r;
-  const items = r.kind === "veg" || r.kind === "no_meat" || r.kind === "egg" ? ["@meat", "@fish"]
+/** The rules in plain words, as read back to the family: one line for everyone, then one line per person, in the order they
+ *  first come ("Everyone: no root vegetables on Tue" / "Meera: eats only plain idli at Breakfast"). An other or fasting rule is
+ *  its note. "" when there are none. */
+export function rulesSaid(list: readonly Rule[]): string {
+  const groups = new Map<string, string[]>();
+  for (const r of list) {
+    const key = r.who ?? "";
+    let text = isCheckedFast(r) ? `${ruleText(r)}${r.note ? ` (${r.note})` : ""}`
+      : (r.kind === "other" || r.kind === "fasting") && r.note ? `${r.note}${scopeText(r)}${oftenText(r)}` : ruleText(r);
+    if (r.who && text.startsWith(`${r.who} `)) text = text.slice(r.who.length + 1);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key)!.push(text);
+  }
+  const order = [...(groups.has("") ? [""] : []), ...[...groups.keys()].filter((k) => k)];
+  return order.map((k) => `${k || "Everyone"}: ${groups.get(k)!.join("; ")}`).join("\n");
+}
+
+/** An older kind as the checked rule it is (spec: veg avoids meat, fish and eggs, as constants.ts says of it: "vegetarian (no
+ *  meat, no eggs)", eval 23 Nov: a grandparent's "pure vegetarian" let eggs through; no_meat and egg ("eggs but no meat")
+ *  avoid meat and fish; no_eggs avoids eggs; no_onion_garlic avoids onion and garlic). A family that says eggs are fine is
+ *  `egg`, not veg (setup.ts). A fast with who, days and slots is checked (isCheckedFast); one without slots, and other, are a
+ *  note only. */
+export function checkedAs(r: Rule): Rule | null {
+  if ((CHECKED_KINDS as readonly string[]).includes(r.kind) || isCheckedFast(r)) return r;
+  const items = r.kind === "veg" ? ["@meat", "@fish", "@egg"] : r.kind === "no_meat" || r.kind === "egg" ? ["@meat", "@fish"]
     : r.kind === "no_eggs" ? ["@egg"] : r.kind === "no_onion_garlic" ? ["onion", "garlic"] : null;
   return items ? { ...r, kind: "avoid", items } : null;
 }
+
+/** A fast the app checks: a person (who), the weekdays (days) and the meals (slots) they eat nothing at. A fast without
+ *  slots ("fasts on Ekadashi") stays a note; a fast with foods allowed is an `only` rule. */
+export const isCheckedFast = (r: Rule): boolean =>
+  r.kind === "fasting" && !!r.who && !!r.slots?.length && r.days.length > 0 && r.days.every((d) => isWeekday(d));
+
+const LONG_DAYS: Record<string, string> = { Mon: "Monday", Tue: "Tuesday", Wed: "Wednesday", Thu: "Thursday", Fri: "Friday", Sat: "Saturday", Sun: "Sunday" };
+const andList = (xs: string[]) => (xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`);
 
 // ── The checks ──
 
@@ -234,8 +291,18 @@ function breaksOf(shown: Rule, meals: RuleMeal[], people: { name: string }[], sl
   const eaten = (m: RuleMeal, who: string) => eatenBy(m, who, diners(m));
   const firstHit = (d: RuleDish) => items.map((i) => dishHit(d, i)).find((h) => h !== null) ?? null;
   const out: Found[] = [];
-  const add = (m: RuleMeal, b: Omit<RuleBreak, "meal" | "rule">, about = [mealLabel(m)]) =>
-    out.push({ meal: mealLabel(m), ...(b.dish ? { dish: b.dish } : {}), ...(b.who ? { who: b.who } : {}), rule, fix: b.fix, about });
+  const add = (m: RuleMeal, b: Omit<RuleBreak, "meal" | "rule">, about = [mealLabel(m)]): void => void
+    out.push({ meal: mealLabel(m), ...(b.dish ? { dish: b.dish } : {}), ...(b.who ? { who: b.who } : {}), rule, fix: b.fix, about,
+      ...(b.soft ? { soft: b.soft } : {}), ...(b.to ? { to: b.to } : {}) });
+  /** A soft rule's count: the meals past its most (in the week's order, the last ones) are breaks ("over"); too few, the first
+   *  meals that could keep it and do not are softer breaks ("under"). */
+  const overUnder = <K extends { m: RuleMeal; d: RuleDish }, O extends { m: RuleMeal; d?: RuleDish }>(kept: K[], open: O[], over: (x: K) => string,
+    under: (x: O) => string, who?: string, to?: string) => {
+    const [lo, hi] = timesOf(r);
+    const about = kept.map((x) => mealLabel(x.m));
+    for (const x of kept.slice(hi)) add(x.m, { dish: x.d.name, who, fix: over(x), soft: "over", ...(to ? { to } : {}) }, about);
+    for (const x of open.slice(0, Math.max(0, lo - kept.length))) add(x.m, { ...(x.d ? { dish: x.d.name } : {}), who, fix: under(x), soft: "under", ...(to ? { to } : {}) });
+  };
   switch (r.kind) {
     case "avoid":
       for (const m of inScope) for (const d of r.who ? eaten(m, r.who) : m.dishes) {
@@ -250,17 +317,61 @@ function breaksOf(shown: Rule, meals: RuleMeal[], people: { name: string }[], sl
         for (const d of ate) if (!items.some((i) => matches(d.name, i, { name: true }))) add(m, { dish: d.name, who: r.who, fix: `add a dish for ${r.who}` });
       }
       break;
-    case "swap":
+    case "swap": {
+      if (isSoft(r)) {
+        // Kept some times a week: a meal keeps it with a portion_note that says so, or a dish of the person's own that is what
+        // the swap gives ("Millet roti" for them). Too many is a break; too few a softer one, on meals that could keep it.
+        const who = r.who!, tos = alternatives(r.to!);
+        const alone = (d: RuleDish) => d.for_people?.length === 1 && same(d.for_people[0], who);
+        // The note names them, or the dish is theirs alone ("Rice" for them, "millet in place of white rice").
+        const said = (d: RuleDish) => (alone(d) || matches(d.portion_note ?? "", who)) && tos.some((t) => matches(d.portion_note ?? "", t));
+        const own = (d: RuleDish) => !forEveryone(d.for_people) && !!d.for_people?.some((p) => same(p, who)) && tos.some((t) => matches(d.name, t, { name: true }));
+        const kept: { m: RuleMeal; d: RuleDish }[] = [], open: { m: RuleMeal; d: RuleDish }[] = [];
+        for (const m of inScope) {
+          const ate = eaten(m, who);
+          // Any dish of theirs whose portion_note says the swap keeps it at this meal, rice in its name or not (eval 23 Nov:
+          // "millet in place of rice" on sambar and bisi bele bath went uncounted, and the swap stayed at every lunch).
+          const k = ate.find((d) => said(d) || own(d));
+          if (k) kept.push({ m, d: k });
+          else { const d = ate.find((x) => firstHit(x)); if (d) open.push({ m, d }); }
+        }
+        overUnder(kept, open, (x) => `${r.to} for ${who} is ${timesText(timesOf(r))}, now in ${kept.length} meals (${kept.map((y) => shortLabel(y.m)).join(", ")}): here ${who} has ${x.d.name} as it is (no "${r.to}" portion_note, no dish of their own for it)`,
+          (x) => `say "${r.to} for ${who}" in its portion_note here: ${timesText(timesOf(r))}, now ${kept.length}`, who, r.to);
+        break;
+      }
       for (const m of inScope) for (const d of eaten(m, r.who!)) {
         const h = firstHit(d), note = d.portion_note ?? "";
         if (h && !(matches(note, r.who!) && matches(note, r.to!)))
           add(m, { dish: d.name, who: r.who, fix: `it has ${h}: say "${r.to} for ${r.who}" in its portion_note, or give ${r.who} a dish of their own` });
       }
       break;
+    }
     case "require":
+      if (isSoft(r)) {
+        const kept: { m: RuleMeal; d: RuleDish }[] = [], open: { m: RuleMeal; d?: RuleDish }[] = [];
+        for (const m of inScope) {
+          if (r.who && !eatsAt(m, r.who)) continue;
+          const d = (r.who ? eaten(m, r.who) : m.dishes).find((x) => firstHit(x));
+          if (d) kept.push({ m, d }); else open.push({ m });
+        }
+        const whom = r.who ?? "everyone";
+        overUnder(kept, open, () => `${listText(items, " or ")} for ${whom} is ${timesText(timesOf(r))}, now in ${kept.length} meals (${kept.map((y) => shortLabel(y.m)).join(", ")}): plan this meal without it`,
+          () => `add a dish with ${listText(items, " or ")} that ${whom} eats: ${timesText(timesOf(r))}, now ${kept.length}`, r.who);
+        break;
+      }
       for (const m of inScope) for (const who of r.who ? (eatsAt(m, r.who) ? [r.who] : []) : diners(m))
         if (!eaten(m, who).some((d) => firstHit(d))) add(m, { who, fix: `add a dish with ${listText(items, " or ")} that ${who} eats` });
       break;
+    case "fasting": {
+      // Every dish the person would eat at a meal they fast at: one naming them, or one for everyone not leaving them out.
+      const fasts = `${r.who}, who fasts at ${andList(r.slots!)} on ${andList(days.map((d) => LONG_DAYS[d]))}`;
+      for (const m of inScope) for (const d of eaten(m, r.who!)) {
+        const all = forEveryone(d.for_people);
+        add(m, { dish: d.name, who: r.who, fix: all ? `${d.name} is for everyone, which includes ${fasts}: make it for everyone except ${r.who} (except: ["${r.who}"])`
+          : `${d.name} is for ${fasts}: plan nothing for ${r.who} at this meal` });
+      }
+      break;
+    }
     case "cap": {
       if (r.per_meal != null) {
         const cap = r.per_meal;
@@ -288,9 +399,9 @@ function breaksOf(shown: Rule, meals: RuleMeal[], people: { name: string }[], sl
 /** The house as the checks read it: its rules, and its extra slots (who eats each). */
 export type RuleHouse = { rules: Rule[]; extra_slots?: RuleSlot[] };
 
-function found(week: RuleWeek, house: RuleHouse, people: { name: string }[]): Found[] {
+function found(week: RuleWeek, house: RuleHouse, people: { name: string }[], opts: { under?: boolean } = {}): Found[] {
   const meals = week.days.flatMap((d) => d.meals).sort((a, b) => a.date.localeCompare(b.date) || slotRank(a.slot) - slotRank(b.slot) || a.slot.localeCompare(b.slot));
-  const all = house.rules.flatMap((r) => breaksOf(r, meals, people, house.extra_slots ?? []));
+  const all = house.rules.flatMap((r) => breaksOf(r, meals, people, house.extra_slots ?? [])).filter((b) => opts.under || b.soft !== "under");
   const order = new Map(meals.map((m, i) => [mealLabel(m), i]));
   // By meal, in the week's order; within a meal, in the order of the rules.
   return all.map((b, i) => ({ b, i })).sort((x, y) => (order.get(x.b.meal) ?? 0) - (order.get(y.b.meal) ?? 0) || x.i - y.i).map((x) => x.b);
@@ -298,16 +409,23 @@ function found(week: RuleWeek, house: RuleHouse, people: { name: string }[]): Fo
 
 const plain = ({ about: _about, ...b }: Found): RuleBreak => b;
 
-/** Every break of the house's rules in a week. */
-export function ruleBreaks(week: RuleWeek, house: RuleHouse, people: { name: string }[]): RuleBreak[] {
-  return found(week, house, people).map(plain);
+/** Every break of the house's rules in a week. A soft rule kept too few times is left out unless `under` (the stepped plan
+ *  asks for it, as a softer problem; plan_menu and the closing call never refuse a week for it). */
+export function ruleBreaks(week: RuleWeek, house: RuleHouse, people: { name: string }[], opts: { under?: boolean } = {}): RuleBreak[] {
+  return found(week, house, people, opts).map(plain);
 }
 
 /** The breaks a change to some meals of the week is answerable for: the breaks in those meals, and a cap over the week that
  *  one of them counts towards. `meals`: their labels, as mealLabel writes them. */
 export function ruleBreaksIn(week: RuleWeek, house: RuleHouse, people: { name: string }[], meals: string[]): RuleBreak[] {
   const mine = new Set(meals);
-  return found(week, house, people).filter((b) => b.about.some((m) => mine.has(m))).map(plain);
+  const short = (label: string) => label.replace(/ \d{4}-\d{2}-\d{2}/, "");
+  return found(week, house, people).filter((b) => b.about.some((m) => mine.has(m))).map((b) => {
+    // A cap over the week already used up by meals not being written now: those stay, this meal is the one to change.
+    const kept = b.about.filter((m) => !mine.has(m));
+    if (b.soft || !b.fix.startsWith("now in ") || !kept.length || !mine.has(b.meal)) return plain(b);
+    return { ...plain(b), fix: `${kept.map(short).join(", ")} already ${kept.length === 1 ? "has" : "have"} it, as many as the rule allows: plan ${short(b.meal)} without it` };
+  });
 }
 
 /** Every break in one message: "Mon 2026-11-23 Breakfast: Rava idli — Meera eats only … (add a dish for Meera)". */

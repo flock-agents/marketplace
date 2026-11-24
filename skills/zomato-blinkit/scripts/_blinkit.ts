@@ -5,7 +5,8 @@
  * Markup confirmed live on 35720 on 2026-10-16 (signed-in session, cart drawer open):
  * Blinkit has NO /cart page (it redirects home); the cart is a drawer opened from the header
  * button `[class*="CartButton__Button"]` ("3 items ₹120", or "My Cart" when empty). A
- * Playwright click on that button hung live; a script `el.click()` opened it.
+ * Playwright click on that button hung live (2026-10-16), when a script `el.click()` opened it; a
+ * script's click is now never used (sites tell it from real input), so it is Flock's real click.
  * Drawer: `CartWrapper__CartContainer`; a line: `CartProduct__Container` >
  * `DefaultProductCard__ProductTitle`, `DefaultProductCard__Price`,
  * `AddToCart__UpdatedButtonContainer` (quantity, between two icon-font glyphs).
@@ -14,6 +15,7 @@
  * styled-components: the `Name__Part` prefix before `-sc-` is stable, the hash is not.
  */
 import type { GroceryServiceConfig } from "../../_shared/_grocery_helpers";
+import { MARK_JS, clickTarget } from "../../_shared/_realInput";
 import type { ShopSite } from "./_shop";
 
 export { headerShowsItems } from "./_shop";
@@ -29,20 +31,23 @@ export const HOME_URL = "https://blinkit.com/";
 /** The header cart button, present on every page once the app has rendered. */
 export const CART_BUTTON = '[class*="CartButton"]';
 
-/** Opens the cart drawer unless it is already open. */
-export const OPEN_CART_SCRIPT = `(() => {
+/** The mark Flock's real click on the header cart button goes to. */
+const CART_BUTTON_MARK = "blinkit-cart";
+
+/** Marks the header cart button for Flock's click, unless the drawer is already open. */
+const MARK_CART_BUTTON_SCRIPT = `(() => {
+  ${MARK_JS}
   const shown = (el) => !!el && el.getClientRects().length > 0;
-  if (shown(document.querySelector('[class*="CartWrapper__CartContainer"]')) || shown(document.querySelector('[class*="CartProduct__Container"]'))) return "already_open";
+  if (shown(document.querySelector('[class*="CartWrapper__CartContainer"]')) || shown(document.querySelector('[class*="CartProduct__Container"]'))) { flockMark("${CART_BUTTON_MARK}", null); return "already_open"; }
   const btn = document.querySelector('[class*="CartButton__Button"]') || document.querySelector('[class*="CartButton__Container"]') || document.querySelector('[class*="CartButton"]');
-  if (!btn) return "no_cart_button";
-  btn.click();
-  return "clicked";
+  return flockMark("${CART_BUTTON_MARK}", btn) ? "marked" : "no_cart_button";
 })()`;
 
-/** The page actions that open the drawer and give it time to render. */
+/** The page actions that open the drawer (a real click on the cart button) and give it time to render. */
 export const OPEN_CART_ACTIONS = [
   { action: "waitForSelector", selector: CART_BUTTON, delay: 15000 },
-  { action: "evaluate", script: OPEN_CART_SCRIPT },
+  { action: "evaluate", script: MARK_CART_BUTTON_SCRIPT },
+  clickTarget(CART_BUTTON_MARK, true),
   { action: "wait", delay: 2500 },
 ];
 

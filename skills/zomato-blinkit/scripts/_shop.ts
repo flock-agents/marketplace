@@ -2,10 +2,13 @@
  * What the grocery website skills (BigBasket, Blinkit) share: the saved-address picker, the
  * cart page check, emptying the cart, and the bill with every fee. Each skill ships an identical
  * copy (tests/grocery checks they match); the site's own selectors come from its `_<site>.ts`.
- * The in-page scripts are strings Flock's browser runs on the page; the rest is plain logic.
+ * The in-page scripts are strings Flock's browser runs on the page; the rest is plain logic. A page
+ * script never presses anything itself: it marks the element (flockMark) and Flock clicks the mark
+ * with real input, since sites tell a script's click from a person's.
  * Not a callable function: the manifest's allowedFunctions does not name it.
  */
-import type { GroceryServiceConfig } from "../../_shared/_grocery_helpers";
+import { PRESS_KIT_JS, type GroceryServiceConfig, type PageAction, type PressLoop } from "../../_shared/_grocery_helpers";
+import { clickTarget } from "../../_shared/_realInput";
 
 /** One shop's pages, as these scripts read them. */
 export interface ShopSite {
@@ -20,7 +23,7 @@ export interface ShopSite {
   /** The header's cart button ("3 items ₹120"), when the shop has one. */
   cartHeader?: string;
   /** Page actions that bring the cart up after loading cartUrl (Blinkit opens its drawer). */
-  openCart: unknown[];
+  openCart: PageAction[];
   /** One line of the cart. */
   cartLines: string;
   /** Inside a line: its remove or minus control, tried before the generic ones. */
@@ -231,16 +234,11 @@ export function parseJson(content: unknown): any {
 // In-page scripts. String.raw keeps every backslash as written: these run in the page as is.
 
 const PAGE_KIT = String.raw`
+  ${PRESS_KIT_JS}
   const visible = (el) => !!el && el.getClientRects().length > 0;
   const text = (el) => ((el && (el.innerText || el.textContent)) || "").replace(/\s+/g, " ").trim();
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const until = async (test, ms) => { const end = Date.now() + ms; while (Date.now() < end) { const v = test(); if (v) return v; await sleep(250); } return test(); };
-  const press = (el) => {
-    el.scrollIntoView({ block: "center" });
-    const r = el.getBoundingClientRect();
-    const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
-    (hit && el.contains(hit) ? hit : el).click();
-  };
   const rupees = (s) => { const all = String(s || "").match(/₹\s*-?[\d,]+(?:\.\d+)?/g) || []; const last = all[all.length - 1]; return last ? Math.abs(parseFloat(last.replace(/[₹\s,]/g, ""))) : null; };
   const EMPTY = /(basket|cart) is empty|no items in (your )?(basket|cart)|nothing in (your )?(basket|cart)|don.t have any items in your (basket|cart)/i;
 `;
@@ -301,62 +299,88 @@ export function cartReadScript(site: ShopSite): string {
 
 const GENERIC_REMOVE = '[class*="remove" i], [class*="delete" i], [aria-label*="remove" i], [aria-label*="delete" i], [class*="minus" i], [class*="decrement" i], [class*="decrease" i], [aria-label*="decrease" i]';
 
+/** The mark Flock's real clicks while emptying the cart go to, and its page state. */
+const EMPTY_MARK = "cart-empty";
+/** At most this many presses while emptying (each line takes one, two with a "Remove?" prompt); the 70s deadline ends it sooner. */
+const MAX_EMPTY_PRESSES = 200;
+
 /**
  * Empties the cart on the page it is run on: the page's own "Empty basket" / "Clear cart" when it
  * has one, else each line's remove (or minus, until the line goes). Confirms a "Remove?" prompt.
- * → { pageUrl, cartShown, headerText, removed: [names], remaining } or { error, code, message }.
+ * Each press is Flock's real click on the control a step marked (runPressLoop).
+ * `finish` → { pageUrl, cartShown, headerText, removed: [names], remaining } or { error, code, message }.
  */
-export function emptyCartScript(site: ShopSite): string {
-  return String.raw`(async () => {
+export function emptyCartLoop(site: ShopSite): PressLoop {
+  const start = String.raw`(async () => {
   ${PAGE_KIT}
   ${lineReader(site)}
-  const SHOWN = ${JSON.stringify(site.cartShown || "")};
-  const HEADER = ${JSON.stringify(site.cartHeader || "")};
+  const MARK = ${JSON.stringify(EMPTY_MARK)};
   const CONTROLS = [${JSON.stringify(site.removeControls || "")}, ${JSON.stringify(GENERIC_REMOVE)}].filter(Boolean);
   const buttons = () => Array.from(document.querySelectorAll('button, a, [role="button"]')).filter(visible);
-  const confirmPrompt = async () => {
+  const s = flockState(MARK, true);
+  flockClear(MARK);
+  /** Marks el for Flock's click; after it, a "Remove?" prompt's yes is pressed when one shows, then then() runs. */
+  const press = (el, then) => { flockMark(MARK, el); s.next = confirmPrompt(then); return true; };
+  const confirmPrompt = (then) => async () => {
     await sleep(600);
     const yes = buttons().find((b) => /^(yes|remove|delete|empty|clear|confirm|ok|okay)( (it|all|items?|basket|cart))?$/i.test(text(b)));
-    if (yes) { press(yes); await sleep(800); }
+    if (!yes) { s.next = then; return false; }
+    s.next = async () => { await sleep(800); s.next = then; return false; };
+    return flockMark(MARK, yes);
   };
-  await until(() => lines().length || EMPTY.test(document.body.innerText), 10000);
-  const removed = lines().map(nameOf);
-  const clearAll = buttons().find((b) => /^(empty|clear) (my |your )?(basket|cart)$|^remove all( items)?$/i.test(text(b)));
-  if (clearAll && lines().length) {
-    press(clearAll);
-    await confirmPrompt();
-    await until(() => !lines().length, 6000);
-  }
-  const deadline = Date.now() + 70000;
-  let stuck = 0;
-  while (lines().length && Date.now() < deadline && stuck < 3) {
+  const eachLine = () => { s.deadline = Date.now() + 70000; s.stuck = 0; s.next = nextLine; return false; };
+  const nextLine = () => {
+    if (!(lines().length && Date.now() < s.deadline && s.stuck < 3)) { s.done = true; return false; }
     const line = lines()[0];
     const before = text(line) + "|" + lines().length;
     let control = null;
     for (const sel of CONTROLS) { control = Array.from(line.querySelectorAll(sel)).find(visible); if (control) break; }
     if (!control) control = Array.from(line.querySelectorAll('button, [role="button"]')).find((b) => /^[-−–]$/.test(text(b)));
-    if (!control) return JSON.stringify({ error: true, code: "PAGE_CHANGED", message: "A cart line has no remove or minus control: the page may have changed.", removed: [] });
-    press(control);
-    await confirmPrompt();
-    const moved = await until(() => !lines().length || (text(lines()[0]) + "|" + lines().length) !== before, 4000);
-    stuck = moved ? 0 : stuck + 1;
-  }
+    if (!control) { s.done = true; s.answer = { error: true, code: "PAGE_CHANGED", message: "A cart line has no remove or minus control: the page may have changed.", removed: [] }; return false; }
+    return press(control, async () => {
+      const moved = await until(() => !lines().length || (text(lines()[0]) + "|" + lines().length) !== before, 4000);
+      s.stuck = moved ? 0 : s.stuck + 1;
+      s.next = nextLine;
+      return false;
+    });
+  };
+  s.step = async () => {
+    flockMark(MARK, null);
+    while (!s.done) if (await s.next()) return;
+  };
+  await until(() => lines().length || EMPTY.test(document.body.innerText), 10000);
+  s.removed = lines().map(nameOf);
+  const clearAll = buttons().find((b) => /^(empty|clear) (my |your )?(basket|cart)$|^remove all( items)?$/i.test(text(b)));
+  s.next = clearAll && lines().length
+    ? () => press(clearAll, async () => { await until(() => !lines().length, 6000); return eachLine(); })
+    : eachLine;
+  await s.step();
+})()`;
+  const finish = String.raw`(() => {
+  ${PAGE_KIT}
+  ${lineReader(site)}
+  const SHOWN = ${JSON.stringify(site.cartShown || "")};
+  const HEADER = ${JSON.stringify(site.cartHeader || "")};
+  const s = flockState(${JSON.stringify(EMPTY_MARK)});
+  flockClear(${JSON.stringify(EMPTY_MARK)});
+  if (s.answer) return JSON.stringify(s.answer);
   return JSON.stringify({
     pageUrl: location.href,
     cartShown: !!SHOWN && visible(document.querySelector(SHOWN)),
     emptyShown: EMPTY.test(document.body.innerText),
     headerText: HEADER ? text(document.querySelector(HEADER)).substring(0, 60) : "",
-    removed,
+    removed: s.removed || [],
     remaining: lines().length,
   });
 })()`;
+  return { key: EMPTY_MARK, mark: EMPTY_MARK, start, finish, presses: MAX_EMPTY_PRESSES };
 }
 
 /**
- * The saved-address picker's page kit: finds the header control and the saved entries, opens and
- * closes the picker. With `site.addressPicker` it uses the site's own markup. Without it (a site not
- * yet checked live) a generic reader finds entries by class ("address") or, inside an overlay, by
- * their text (an address line: a pincode, or two commas).
+ * The saved-address picker's page kit: finds the header control, the saved entries and what to
+ * press; Flock does the pressing (the scripts below mark it). With `site.addressPicker` it uses the
+ * site's own markup. Without it (a site not yet checked live) a generic reader finds entries by
+ * class ("address") or, inside an overlay, by their text (an address line: a pincode, or two commas).
  */
 const addressKit = (site: ShopSite) => String.raw`
   const PICKER = ${JSON.stringify(site.addressPicker || null)};
@@ -424,71 +448,69 @@ const addressKit = (site: ShopSite) => String.raw`
     const found = [chain.find(reactHandler), item, chain.find((el) => el.matches(INTERACTIVE) || setsPointer(el)), chain[chain.length - 1], addressElOf(entry)];
     return [...new Set(found.filter(Boolean))].filter((el) => !el.closest(EDIT));
   };
-  /** Presses the target itself (no child takes the events), aimed at the middle of aim; click false stops at mouseup. */
-  const pressOn = (target, aim, click = true) => {
-    aim.scrollIntoView({ block: "center" });
-    const r = aim.getBoundingClientRect();
-    const at = { bubbles: true, cancelable: true, view: window, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 };
-    for (const type of ["pointerdown", "mousedown", "pointerup", "mouseup"]) target.dispatchEvent(new (type.startsWith("pointer") ? PointerEvent : MouseEvent)(type, at));
-    if (click) target.dispatchEvent(new MouseEvent("click", at));
-  };
   const describe = (el) => (el.tagName.toLowerCase() + (el.getAttribute("role") ? "[role=" + el.getAttribute("role") + "]" : "") + "." + String(el.className || "").split(/\s+/)[0]).substring(0, 80);
-  /** true when the picker shows its entries, false when it did not, null with no header control. */
-  const openPicker = async () => {
-    if (entries().length && (PICKER || scopes().length)) return true;
-    const el = await until(opener, 10000);
-    if (!el) return null;
-    press(el);
-    if (await until(() => entries().length, 3000)) return true;
-    if (!isOpen()) pressOn(el, el, false);
-    return !!(await until(() => entries().length, 8000));
-  };
-  /** Closes the picker without picking: Escape, else the opener again (a menu) or the picker's close button. */
-  const closePicker = async () => {
-    if (!entries().length) return true;
-    (document.activeElement || document.body).dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", code: "Escape", keyCode: 27, bubbles: true, cancelable: true }));
-    if (await until(() => !entries().length, 1500)) return true;
-    const close = expanded() ? opener() : scopes().flatMap((root) => Array.from(root.querySelectorAll('[aria-label*="close" i], [class*="close" i]'))).find(visible);
-    if (close) press(close);
-    return !!(await until(() => !entries().length, 1500));
+  /** After Flock pressed the header control (afterOpen): waits for the picker's entries. */
+  const settleOpen = async (afterOpen) => {
+    flockClear(${JSON.stringify(OPEN_MARK)});
+    if (afterOpen) await until(() => entries().length, 11000);
   };
   const confirmButton = () => scopes().flatMap((root) => Array.from(root.querySelectorAll('button, [role="button"]'))).filter(visible).find((b) => CONFIRM.test(text(b))) || null;
 `;
 
+/** The marks Flock's real clicks in the address picker go to. */
+const OPEN_MARK = "addr-open";
+const PICK_MARK = "addr-pick";
+const CONFIRM_MARK = "addr-confirm";
+const CLOSE_MARK = "addr-close";
+
 /**
- * Opens the header's saved-address picker, waits for its entries and reads each one (label and
- * address); with `close`, closes it again without picking. `opened` says whether the picker opened,
- * so no entries in an opened picker is "none saved", not a picker that never showed.
- * → { saved: [SavedAddress], opened, location, pageUrl } or { error, code, message }.
+ * Marks the header control that opens the saved-address picker, unless the picker already shows
+ * its entries. → { shown: true } or { shown: false, control } (control false: no header control).
  */
-export function addressListScript(site: ShopSite, close: boolean): string {
+export function addressOpenerScript(site: ShopSite): string {
   return String.raw`(async () => {
   ${PAGE_KIT}
   ${addressKit(site)}
-  const shown = await openPicker();
-  if (shown === null) return JSON.stringify({ error: true, code: "NO_LOCATION_CONTROL", message: "No delivery-location control in the page header: the page may have changed." });
+  flockClear(${JSON.stringify(OPEN_MARK)});
+  if (entries().length && (PICKER || scopes().length)) return JSON.stringify({ shown: true });
+  const el = await until(opener, 10000);
+  return JSON.stringify({ shown: false, control: flockMark(${JSON.stringify(OPEN_MARK)}, el) });
+})()`;
+}
+
+/**
+ * Reads each saved address in the open picker (label and address), after waiting for its entries
+ * when Flock just pressed its header control (`afterOpen`). `opened` says whether the picker
+ * opened, so no entries in an opened picker is "none saved", not a picker that never showed.
+ * → { saved: [SavedAddress], opened, location, pageUrl }.
+ */
+export function addressListScript(site: ShopSite, afterOpen: boolean): string {
+  return String.raw`(async () => {
+  ${PAGE_KIT}
+  ${addressKit(site)}
+  await settleOpen(${afterOpen});
   const saved = readSaved();
   const opened = saved.length > 0 || isOpen();
-  if (${close}) await closePicker();
   return JSON.stringify({ saved, opened, location: locationText(), pageUrl: location.href });
 })()`;
 }
 
 /**
- * Presses the given saved address's entry, found again by its own label and text (never its
- * position). `attempt` picks the press target (pressTargets, best first), so a retry presses the next
- * one out. The press is left to run after the script returns, so a page that reloads on a new
- * address cannot cut it off.
+ * Marks the given saved address's entry for Flock's press, found again by its own label and text
+ * (never its position). `attempt` picks the press target (pressTargets, best first), so a retry
+ * presses the next one out. A target holding the entry's edit icon is not pressed itself: its
+ * address is (inside it, so the target still gets the press), as a real click lands where it aims.
  * → { selected, pressed, last } or { error, code, message, saved }.
  */
-export function addressPickScript(site: ShopSite, pick: SavedAddress, attempt = 0): string {
+export function addressPickScript(site: ShopSite, pick: SavedAddress, attempt: number, afterOpen: boolean): string {
   const wanted = JSON.stringify({ label: pick.label, text: pick.text });
   return String.raw`(async () => {
   ${PAGE_KIT}
   ${addressKit(site)}
   const PICK = ${wanted};
   const ATTEMPT = ${attempt};
-  if ((await openPicker()) === null) return JSON.stringify({ error: true, code: "NO_LOCATION_CONTROL", message: "No delivery-location control in the page header: the page may have changed." });
+  await settleOpen(${afterOpen});
+  flockClear(${JSON.stringify(PICK_MARK)});
   const list = entries();
   const saved = readSaved();
   const same = (a) => a.text === PICK.text && a.label === PICK.label;
@@ -498,14 +520,14 @@ export function addressPickScript(site: ShopSite, pick: SavedAddress, attempt = 
   if (!targets.length) return JSON.stringify({ error: true, code: "PAGE_CHANGED", message: "The saved address's entry has nothing to press but its edit icon.", saved });
   const target = targets[Math.min(ATTEMPT, targets.length - 1)];
   const aim = addressElOf(list[at]);
-  setTimeout(() => pressOn(target, aim), 50);
+  flockMark(${JSON.stringify(PICK_MARK)}, target.querySelector(EDIT) ? aim : target);
   return JSON.stringify({ selected: saved[at], pressed: describe(target), last: ATTEMPT >= targets.length - 1 });
 })()`;
 }
 
 /**
- * After a pick: presses a "change address?" confirm when one shows (again left to run after the
- * script returns), else waits for the header to change from `before` and reads it.
+ * After Flock's press on the entry (or on a confirm): marks a "change address?" confirm for the
+ * next press when one shows, else waits for the header to change from `before` and reads it.
  * → { prompted: true } or { prompted: false, stillOpen, location, pageUrl }.
  */
 export function addressSettleScript(site: ShopSite, before: string): string {
@@ -513,25 +535,80 @@ export function addressSettleScript(site: ShopSite, before: string): string {
   ${PAGE_KIT}
   ${addressKit(site)}
   const BEFORE = ${JSON.stringify(before)};
+  flockClear("addr-");
   await until(() => confirmButton() || (opener() && locationText() !== BEFORE), 6000);
-  const prompt = confirmButton();
-  if (prompt) { setTimeout(() => press(prompt), 50); return JSON.stringify({ prompted: true }); }
+  if (flockMark(${JSON.stringify(CONFIRM_MARK)}, confirmButton())) return JSON.stringify({ prompted: true });
   return JSON.stringify({ prompted: false, stillOpen: entries().length > 0, location: locationText(), pageUrl: location.href });
 })()`;
 }
 
-/** Closes the picker without picking. → { closed, location }. */
-export function addressCloseScript(site: ShopSite): string {
+/**
+ * After Flock's Escape: whether the picker closed; when it did not, marks the control that closes
+ * it (the opener again for a menu, else the picker's close button). → { closed, location }.
+ */
+export function addressEscapedScript(site: ShopSite): string {
   return String.raw`(async () => {
   ${PAGE_KIT}
   ${addressKit(site)}
-  const closed = await closePicker();
+  flockClear(${JSON.stringify(CLOSE_MARK)});
+  if (await until(() => !entries().length, 1500)) return JSON.stringify({ closed: true, location: locationText() });
+  const close = expanded() ? opener() : scopes().flatMap((root) => Array.from(root.querySelectorAll('[aria-label*="close" i], [class*="close" i]'))).find(visible);
+  flockMark(${JSON.stringify(CLOSE_MARK)}, close);
+  return JSON.stringify({ closed: false, location: locationText() });
+})()`;
+}
+
+/** After Flock's press on the close control: whether the picker closed. → { closed, location }. */
+export function addressClosedScript(site: ShopSite): string {
+  return String.raw`(async () => {
+  ${PAGE_KIT}
+  ${addressKit(site)}
+  flockClear(${JSON.stringify(CLOSE_MARK)});
+  const closed = !!(await until(() => !entries().length, 1500));
   return JSON.stringify({ closed, location: locationText() });
 })()`;
 }
 
-/** Runs one page script on the open page, after waiting `waitMs`; its JSON answer, or null. */
-export type PageStep = (script: string, waitMs?: number) => Promise<any>;
+/** Runs page actions on the open page; the JSON answer of the last one (an evaluate), or null. */
+export type PageStep = (actions: PageAction[]) => Promise<any>;
+
+const evaluate = (script: string): PageAction => ({ action: "evaluate", script });
+
+/**
+ * Runs `script(afterOpen)` with the saved-address picker open: when it is closed, Flock first
+ * presses its header control (and the script waits for the entries). The script's answer, a
+ * NO_LOCATION_CONTROL error with no header control, or null when the page could not be read.
+ */
+async function inOpenPicker(site: ShopSite, step: PageStep, script: (afterOpen: boolean) => string): Promise<any> {
+  const opener = await step([evaluate(addressOpenerScript(site))]);
+  if (!opener) return null;
+  if (opener.shown) return step([evaluate(script(false))]);
+  if (!opener.control) return { error: true, code: "NO_LOCATION_CONTROL", message: "No delivery-location control in the page header: the page may have changed." };
+  return step([clickTarget(OPEN_MARK, true), evaluate(script(true))]);
+}
+
+/**
+ * Closes the picker without picking, when `open`: Flock's Escape, else its press on the opener again
+ * (a menu) or the picker's close button. → { closed, location } (location null: not read), or null.
+ */
+async function closePicker(site: ShopSite, step: PageStep, open: boolean): Promise<{ closed: boolean; location: string | null } | null> {
+  if (!open) return { closed: true, location: null };
+  const escaped = await step([{ action: "press", key: "Escape" }, evaluate(addressEscapedScript(site))]);
+  if (!escaped || escaped.closed) return escaped;
+  return step([clickTarget(CLOSE_MARK, true), evaluate(addressClosedScript(site))]);
+}
+
+/**
+ * list-addresses on an open page: opens the header's picker, reads every saved address, closes it
+ * again without picking. → addressListScript's answer, its location read after closing, or an
+ * error answer, or null.
+ */
+export async function listSavedAddresses(site: ShopSite, step: PageStep): Promise<any> {
+  const read = await inOpenPicker(site, step, (afterOpen) => addressListScript(site, afterOpen));
+  if (!read || read.error) return read;
+  const closed = await closePicker(site, step, read.saved.length > 0);
+  return { ...read, location: closed?.location || read.location };
+}
 
 export interface AddressProblem { ok: false; code: string; message: string; candidates?: SavedAddress[]; location?: string }
 export interface AddressSet { ok: true; address: SavedAddress; location: string; alreadySet: boolean; stillOpen: boolean }
@@ -550,12 +627,17 @@ const SETTLE_MS = 1500;
 /** Presses tried per pick, each on the next press target out (pressTargets). */
 const MAX_PRESSES = 4;
 
-/** Presses the address once (target `attempt`), confirms a prompt, and reads the header; null when the page did not settle. */
+/**
+ * Presses the address once (target `attempt`) with Flock's real click, confirms a prompt, and reads
+ * the header; a problem when the page did not settle.
+ */
 async function pressAndSettle(site: ShopSite, address: SavedAddress, before: string, attempt: number, step: PageStep) {
-  const picked = await step(addressPickScript(site, address, attempt));
+  const picked = await inOpenPicker(site, step, (afterOpen) => addressPickScript(site, address, attempt, afterOpen));
   if (!picked || picked.error) return { problem: { ok: false, code: picked?.code || "PAGE_CHANGED", message: picked?.message || "Could not select the address." } as AddressProblem };
+  const settle = [clickTarget(PICK_MARK, true), clickTarget(CONFIRM_MARK, true), { action: "wait", delay: SETTLE_MS }, evaluate(addressSettleScript(site, before))];
   let settled: any = null;
-  for (let tries = 0; tries < 3 && (!settled || settled.prompted); tries++) settled = await step(addressSettleScript(site, before), SETTLE_MS);
+  for (let tries = 0; tries < 3 && (!settled || settled.prompted); tries++) settled = await step(settle);
+  if (settled?.prompted) await step([clickTarget(CONFIRM_MARK, true)]);
   if (!settled || settled.prompted) return { problem: { ok: false, code: "PAGE_CHANGED", message: "The page did not settle after picking the address: check the header's location." } as AddressProblem };
   return { last: !!picked.last, location: String(settled.location || ""), stillOpen: !!settled.stillOpen };
 }
@@ -568,7 +650,7 @@ async function pressAndSettle(site: ShopSite, address: SavedAddress, before: str
  * after. A header that never shows it is ADDRESS_NOT_SWITCHED, never a success.
  */
 export async function selectAddress(site: ShopSite, wanted: string, step: PageStep): Promise<AddressPick> {
-  const listed = await step(addressListScript(site, false));
+  const listed = await inOpenPicker(site, step, (afterOpen) => addressListScript(site, afterOpen));
   const missing = noSavedAddresses(site, listed);
   if (missing) return missing;
   const saved: SavedAddress[] = listed.saved;
@@ -582,21 +664,23 @@ export async function selectAddress(site: ShopSite, wanted: string, step: PageSt
   const address = match.address;
   const before = String(listed.location || "");
   const close = async (location: string, alreadySet: boolean): Promise<AddressSet> => {
-    const closed = await step(addressCloseScript(site));
+    const closed = await closePicker(site, step, true);
     return { ok: true, address, location: closed?.location || location, alreadySet, stillOpen: closed?.closed === false };
   };
   const shownBefore = (a: SavedAddress) => headerShows(before, a);
   if (shownBefore(address) && !saved.some((a) => a !== address && shownBefore(a))) return close(before, true);
 
   let location = before;
+  let stillOpen = true;
   for (let attempt = 0; attempt < MAX_PRESSES; attempt++) {
     const pressed = await pressAndSettle(site, address, before, attempt, step);
     if ("problem" in pressed) return pressed.problem!;
     location = pressed.location;
+    stillOpen = pressed.stillOpen;
     if (locationShows(location, address, address.selected ? "" : before)) return pressed.stillOpen ? close(location, false) : { ok: true, address, location, alreadySet: false, stillOpen: false };
     if (pressed.last) break;
   }
-  await step(addressCloseScript(site));
+  await closePicker(site, step, stillOpen);
   return {
     ok: false,
     code: "ADDRESS_NOT_SWITCHED",

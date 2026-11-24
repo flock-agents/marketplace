@@ -1,14 +1,19 @@
 import { useState } from "react";
 import { Button, Confirm, Field, Heading, Row, Stack } from "../flock/ui";
-import { joined, send, typedList, why, type DishView } from "./shared";
+import { send, why, type DishView } from "./shared";
 
 type Line = { key: number; item: string; amount: number | null; unit: string };
 
-/** One dish, open under its row on the Week page: its name, who it is for, the portions, and what it needs bought. `dish`
- *  null is a new dish for the meal at `at`. Saved through the same route the agent's set_dish uses. */
-export function DishPanel({ dish, at, onDone }: { dish: DishView | null; at: { date: string; slot: string }; onDone: () => void }) {
+/** A meal's dishes as the slot-day change takes them: each with its note and what it needs bought, kept as they are. */
+export const dishesSent = (dishes: DishView[]) => dishes.map((d) => ({ dish: d.name, note: d.portion_note,
+  ingredients: d.ingredients.map((i) => ({ item: i.item, amount: i.amount, unit: i.unit })) }));
+
+/** One dish, open under its row on the Week page: its name, the portions, and what it needs bought. `dish` null is a new dish
+ *  for the meal at `at`; `dishes` are the meal's dishes now. Saved as the meal's whole list of dishes through the route the
+ *  agent's set_slot_day uses (the same checks; the meal is then the family's own, never planned over). A new dish with no
+ *  items listed has them read by the app. */
+export function DishPanel({ dish, dishes, at, onDone }: { dish: DishView | null; dishes: DishView[]; at: { date: string; slot: string }; onDone: () => void }) {
   const [name, setName] = useState(dish?.name ?? "");
-  const [who, setWho] = useState(joined(dish?.for_people));
   const [note, setNote] = useState(dish?.portion_note ?? "");
   const [lines, setLines] = useState<Line[]>(() => (dish?.ingredients ?? []).map((i, key) => ({ key, item: i.item, amount: i.amount, unit: i.unit ?? "" })));
   const [busy, setBusy] = useState(false);
@@ -17,19 +22,19 @@ export function DishPanel({ dish, at, onDone }: { dish: DishView | null; at: { d
   const setLine = (key: number, patch: Partial<Line>) => setLines((all) => all.map((l) => (l.key === key ? { ...l, ...patch } : l)));
   const addLine = () => setLines((all) => [...all, { key: Math.max(-1, ...all.map((l) => l.key)) + 1, item: "", amount: null, unit: "" }]);
 
-  const run = async (body: object) => {
+  const run = async (list: object[]) => {
     setBusy(true); setProblem(null);
-    try { await send("dishes", { ...(dish ? { dish_id: dish.id } : at), ...body }); onDone(); }
+    try { await send("slot-days", { date: at.date, slot: at.slot, dishes: list }); onDone(); }
     catch (e) { setProblem(why(e)); setBusy(false); }
   };
+  const others = dishesSent(dishes);
   const save = () => {
     if (!name.trim()) { setProblem("Give the dish a name."); return; }
     const bad = lines.find((l) => l.item.trim() && l.amount != null && !(l.amount > 0));
     if (bad) { setProblem(`The amount of ${bad.item.trim()} must be above 0, or left empty.`); return; }
-    void run({
-      name: name.trim(), for: typedList(who), portion_note: note.trim() || null,
-      ingredients: lines.filter((l) => l.item.trim()).map((l) => ({ item: l.item.trim(), amount: l.amount, unit: l.unit.trim() || null })),
-    });
+    const items = lines.filter((l) => l.item.trim()).map((l) => ({ item: l.item.trim(), amount: l.amount, unit: l.unit.trim() || null }));
+    const one = { dish: name.trim(), note: note.trim() || null, ...(items.length || dish ? { ingredients: items } : {}) };
+    void run(dish ? dishes.map((d, i) => (d.id === dish.id ? one : others[i])) : [...others, one]);
   };
 
   return (
@@ -37,7 +42,6 @@ export function DishPanel({ dish, at, onDone }: { dish: DishView | null; at: { d
       <Stack gap="md">
         <Heading level={3}>{dish ? `Edit ${dish.name}` : `Add a dish to ${at.slot}`}</Heading>
         <Field type="text" name="name" label="Dish" required value={name} onChange={(v) => setName(String(v ?? ""))} />
-        <Field type="text" name="for" label="For (names with commas; leave empty for everyone)" placeholder="Dad, Agastya" value={who} onChange={(v) => setWho(String(v ?? ""))} />
         <Field type="text" name="portion_note" label="Portions" placeholder="4 for me, 1 for wife" value={note} onChange={(v) => setNote(String(v ?? ""))} />
         <Stack gap="sm">
           <Heading level={3}>What it needs bought</Heading>
@@ -62,7 +66,7 @@ export function DishPanel({ dish, at, onDone }: { dish: DishView | null; at: { d
       </Stack>
       {dish ? (
         <Confirm open={asking} title={`Remove ${dish.name}?`} body="It is taken off this meal."
-          confirmLabel="Remove" tone="danger" onConfirm={() => { setAsking(false); void run({ remove: true }); }} onCancel={() => setAsking(false)} />
+          confirmLabel="Remove" tone="danger" onConfirm={() => { setAsking(false); void run(dishes.filter((d) => d.id !== dish.id).map((d) => others[dishes.indexOf(d)])); }} onCancel={() => setAsking(false)} />
       ) : null}
     </form>
   );

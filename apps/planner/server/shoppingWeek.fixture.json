@@ -1,0 +1,144 @@
+{
+  "_about": "A family's planned week on the slot model (what make_plan saves), for shoppingWeek.test.ts. Shaped on the plan-truth eval's mixed South/North household (evals/results/plan-truth-2026-11-231602, h3): four people, a child's tiffin, the grandfather's own phulka at dinner, Saturday dinner ordered in, Sunday lunch eaten out. Names are made up. Gopal keeps a hard no-onion-garlic rule: every dish he eats was saved without onion or garlic (make_plan takes them out); the chole is not for him, so it keeps them. Amounts are hand-written for four. Order history is dated back from Sunday 29 Nov 2026.",
+  "week_start": "2026-11-30",
+  "people": [
+    { "name": "Meera", "group": "adult" },
+    { "name": "Arjun", "group": "adult" },
+    { "name": "Kabir", "group": "child" },
+    { "name": "Gopal", "group": "adult" }
+  ],
+  "slots": [
+    { "name": "Breakfast", "kind": "main", "order": 10 },
+    { "name": "Kabir's tiffin", "kind": "custom", "order": 20, "usual_people": ["Kabir"] },
+    { "name": "Lunch", "kind": "main", "order": 30 },
+    { "name": "Dinner", "kind": "main", "order": 50 },
+    { "name": "Gopal's dinner", "kind": "addon", "addon_of": "Dinner", "order": 60, "usual_people": ["Gopal"] }
+  ],
+  "rules": [
+    { "hard": true, "what": "avoid", "who": "Gopal", "items": ["onion_garlic"], "quote": "Gopal doesn't eat onion or garlic" }
+  ],
+  "library": [
+    { "name": "Besan cheela", "slot": "Kabir's tiffin", "origin": "family_added", "untried": true, "video_url": "https://www.instagram.com/reel/besan-cheela" },
+    { "name": "Bisi bele bath", "slot": "Lunch", "origin": "planner_suggested", "suggested": true, "untried": true },
+    { "name": "Chole", "slot": "Dinner", "origin": "setup_named", "contains": ["onion_garlic"], "contains_read": ["onion_garlic"] },
+    { "name": "Aloo gobi", "slot": "Dinner", "origin": "setup_named", "contains": [], "contains_read": ["onion_garlic"] },
+    { "name": "Chapati", "slot": "Dinner", "origin": "setup_named", "contains": [], "contains_read": ["onion_garlic"] },
+    { "name": "Kadhi", "slot": "Dinner", "origin": "setup_named", "contains": [], "contains_read": ["onion_garlic"] }
+  ],
+  "everyone": ["Meera", "Arjun", "Kabir", "Gopal"],
+  "slot_days": [
+    { "date": "2026-11-30", "slot": "Breakfast", "dishes": [
+      { "dish": "Idli", "ingredients": [{ "item": "idli batter", "amount": 750, "unit": "g" }] },
+      { "dish": "Chutney", "ingredients": [{ "item": "coconut", "amount": 1, "unit": "pc" }, { "item": "roasted chana", "amount": 30, "unit": "g" }, { "item": "green chilli", "amount": 2, "unit": "pc" }] }] },
+    { "date": "2026-11-30", "slot": "Kabir's tiffin", "people": ["Kabir"], "dishes": [
+      { "dish": "Paratha roll", "ingredients": [{ "item": "atta", "amount": 150, "unit": "g" }, { "item": "potato", "amount": 200, "unit": "g" }, { "item": "oil", "amount": 15, "unit": "ml" }] }] },
+    { "date": "2026-11-30", "slot": "Lunch", "dishes": [
+      { "dish": "Rice", "ingredients": [{ "item": "rice", "amount": 400, "unit": "g" }] },
+      { "dish": "Sambar", "ingredients": [{ "item": "toor dal", "amount": 150, "unit": "g" }, { "item": "drumstick", "amount": 2, "unit": "pc" }, { "item": "tomato", "amount": 200, "unit": "g" }, { "item": "sambar powder", "amount": 20, "unit": "g" }, { "item": "tamarind", "amount": 15, "unit": "g" }] },
+      { "dish": "Curd", "ingredients": [{ "item": "curd", "amount": 400, "unit": "g" }] }] },
+    { "date": "2026-11-30", "slot": "Dinner", "dishes": [
+      { "dish": "Chapati", "ingredients": [{ "item": "atta", "amount": 400, "unit": "g" }] },
+      { "dish": "Palak dal", "ingredients": [{ "item": "palak", "amount": 250, "unit": "g" }, { "item": "moong dal", "amount": 150, "unit": "g" }, { "item": "tomato", "amount": 100, "unit": "g" }] },
+      { "dish": "Bhindi", "ingredients": [{ "item": "bhindi", "amount": 500, "unit": "g" }, { "item": "oil", "amount": 30, "unit": "ml" }] }] },
+    { "date": "2026-11-30", "slot": "Gopal's dinner", "people": ["Gopal"], "dishes": [
+      { "dish": "Phulka", "ingredients": [{ "item": "atta", "amount": 100, "unit": "g" }] }] },
+
+    { "date": "2026-12-01", "slot": "Breakfast", "dishes": [
+      { "dish": "Dosa", "ingredients": [{ "item": "dosa batter", "amount": 1000, "unit": "g" }] },
+      { "dish": "Chutney", "ingredients": [{ "item": "coconut", "amount": 1, "unit": "pc" }, { "item": "roasted chana", "amount": 30, "unit": "g" }] }] },
+    { "date": "2026-12-01", "slot": "Kabir's tiffin", "people": ["Kabir"], "dishes": [
+      { "dish": "Besan cheela", "ingredients": [{ "item": "besan", "amount": 150, "unit": "g" }, { "item": "tomato", "amount": 50, "unit": "g" }] }] },
+    { "date": "2026-12-01", "slot": "Lunch", "dishes": [
+      { "dish": "Rajma chawal", "ingredients": [{ "item": "rajma", "amount": 250, "unit": "g" }, { "item": "rice", "amount": 400, "unit": "g" }, { "item": "tomato", "amount": 200, "unit": "g" }] },
+      { "dish": "Curd", "ingredients": [{ "item": "curd", "amount": 400, "unit": "g" }] }] },
+    { "date": "2026-12-01", "slot": "Dinner", "dishes": [
+      { "dish": "Chapati", "ingredients": [{ "item": "atta", "amount": 400, "unit": "g" }] },
+      { "dish": "Chole", "not_for": ["Gopal"], "ingredients": [{ "item": "kabuli chana", "amount": 250, "unit": "g" }, { "item": "onion", "amount": 300, "unit": "g" }, { "item": "garlic", "amount": 20, "unit": "g" }, { "item": "tomato", "amount": 200, "unit": "g" }, { "item": "chole masala", "amount": 20, "unit": "g" }] }] },
+    { "date": "2026-12-01", "slot": "Gopal's dinner", "people": ["Gopal"], "dishes": [
+      { "dish": "Phulka", "ingredients": [{ "item": "atta", "amount": 100, "unit": "g" }] }] },
+
+    { "date": "2026-12-02", "slot": "Breakfast", "dishes": [
+      { "dish": "Poha", "note": "no sugar for Gopal", "ingredients": [{ "item": "poha", "amount": 300, "unit": "g" }, { "item": "peanuts", "amount": 50, "unit": "g" }, { "item": "curry leaves", "amount": 1, "unit": "pc" }] }] },
+    { "date": "2026-12-02", "slot": "Kabir's tiffin", "people": ["Kabir"], "dishes": [
+      { "dish": "Mini idli", "ingredients": [{ "item": "idli batter", "amount": 300, "unit": "g" }] }] },
+    { "date": "2026-12-02", "slot": "Lunch", "dishes": [
+      { "dish": "Rice", "ingredients": [{ "item": "rice", "amount": 400, "unit": "g" }] },
+      { "dish": "Curd", "ingredients": [{ "item": "curd", "amount": 400, "unit": "g" }] }] },
+    { "date": "2026-12-02", "slot": "Dinner", "dishes": [
+      { "dish": "Chapati", "ingredients": [{ "item": "atta", "amount": 400, "unit": "g" }] },
+      { "dish": "Dal", "ingredients": [{ "item": "toor dal", "amount": 150, "unit": "g" }, { "item": "tomato", "amount": 100, "unit": "g" }] },
+      { "dish": "Aloo gobi", "ingredients": [{ "item": "potato", "amount": 300, "unit": "g" }, { "item": "cauliflower", "amount": 1, "unit": "pc" }, { "item": "tomato", "amount": 100, "unit": "g" }] }] },
+    { "date": "2026-12-02", "slot": "Gopal's dinner", "people": ["Gopal"], "dishes": [
+      { "dish": "Phulka", "ingredients": [{ "item": "atta", "amount": 100, "unit": "g" }] }] },
+
+    { "date": "2026-12-03", "slot": "Breakfast", "people": ["Meera", "Arjun", "Kabir"], "dishes": [
+      { "dish": "Upma", "ingredients": [{ "item": "rava", "amount": 200, "unit": "g" }, { "item": "carrot", "amount": 100, "unit": "g" }, { "item": "peas", "amount": 100, "unit": "g" }] },
+      { "dish": "Chutney", "ingredients": [{ "item": "coconut", "amount": 1, "unit": "pc" }, { "item": "roasted chana", "amount": 30, "unit": "g" }] }] },
+    { "date": "2026-12-03", "slot": "Kabir's tiffin", "people": ["Kabir"], "dishes": [
+      { "dish": "Vegetable sandwich", "ingredients": [{ "item": "bread", "amount": 4, "unit": "pc" }, { "item": "cucumber", "amount": 1, "unit": "pc" }] }] },
+    { "date": "2026-12-03", "slot": "Lunch", "people": ["Meera", "Arjun", "Kabir"], "dishes": [
+      { "dish": "Rice", "ingredients": [{ "item": "rice", "amount": 300, "unit": "g" }] },
+      { "dish": "Curd", "ingredients": [{ "item": "curd", "amount": 300, "unit": "g" }] }] },
+    { "date": "2026-12-03", "slot": "Dinner", "dishes": [
+      { "dish": "Chapati", "ingredients": [{ "item": "atta", "amount": 400, "unit": "g" }] },
+      { "dish": "Palak dal", "ingredients": [{ "item": "palak", "amount": 250, "unit": "g" }, { "item": "moong dal", "amount": 150, "unit": "g" }, { "item": "tomato", "amount": 100, "unit": "g" }] },
+      { "dish": "Bhindi", "ingredients": [{ "item": "bhindi", "amount": 500, "unit": "g" }, { "item": "oil", "amount": 30, "unit": "ml" }] }] },
+    { "date": "2026-12-03", "slot": "Gopal's dinner", "people": ["Gopal"], "dishes": [
+      { "dish": "Phulka", "ingredients": [{ "item": "atta", "amount": 100, "unit": "g" }] }] },
+
+    { "date": "2026-12-04", "slot": "Breakfast", "dishes": [
+      { "dish": "Idli", "ingredients": [{ "item": "idli batter", "amount": 750, "unit": "g" }] },
+      { "dish": "Chutney", "ingredients": [{ "item": "coconut", "amount": 1, "unit": "pc" }, { "item": "roasted chana", "amount": 30, "unit": "g" }] }] },
+    { "date": "2026-12-04", "slot": "Kabir's tiffin", "people": ["Kabir"], "dishes": [
+      { "dish": "Lemon rice", "ingredients": [{ "item": "rice", "amount": 150, "unit": "g" }, { "item": "lemon", "amount": 2, "unit": "pc" }, { "item": "peanuts", "amount": 30, "unit": "g" }] }] },
+    { "date": "2026-12-04", "slot": "Lunch", "dishes": [
+      { "dish": "Rice", "ingredients": [{ "item": "rice", "amount": 300, "unit": "g" }] },
+      { "dish": "Sambar", "ingredients": [{ "item": "toor dal", "amount": 150, "unit": "g" }, { "item": "drumstick", "amount": 2, "unit": "pc" }, { "item": "tomato", "amount": 200, "unit": "g" }, { "item": "sambar powder", "amount": 20, "unit": "g" }, { "item": "tamarind", "amount": 15, "unit": "g" }] },
+      { "dish": "Curd", "ingredients": [{ "item": "curd", "amount": 400, "unit": "g" }] },
+      { "dish": "Rajma chawal", "ingredients": [{ "item": "rajma", "amount": 200, "unit": "g" }, { "item": "rice", "amount": 200, "unit": "g" }, { "item": "tomato", "amount": 150, "unit": "g" }] }] },
+    { "date": "2026-12-04", "slot": "Dinner", "dishes": [
+      { "dish": "Chapati", "ingredients": [{ "item": "atta", "amount": 400, "unit": "g" }] }] },
+    { "date": "2026-12-04", "slot": "Gopal's dinner", "people": ["Gopal"], "dishes": [
+      { "dish": "Phulka", "ingredients": [{ "item": "atta", "amount": 100, "unit": "g" }] }] },
+
+    { "date": "2026-12-05", "slot": "Breakfast", "dishes": [
+      { "dish": "Aloo paratha", "ingredients": [{ "item": "atta", "amount": 400, "unit": "g" }, { "item": "potato", "amount": 400, "unit": "g" }, { "item": "ghee", "amount": 30, "unit": "g" }] },
+      { "dish": "Chutney", "ingredients": [{ "item": "coconut", "amount": 1, "unit": "pc" }, { "item": "roasted chana", "amount": 30, "unit": "g" }] }] },
+    { "date": "2026-12-05", "slot": "Lunch", "dishes": [
+      { "dish": "Rice", "ingredients": [{ "item": "rice", "amount": 300, "unit": "g" }] },
+      { "dish": "Curd", "ingredients": [{ "item": "curd", "amount": 400, "unit": "g" }] },
+      { "dish": "Bisi bele bath", "new": true, "ingredients": [{ "item": "rice", "amount": 200, "unit": "g" }, { "item": "toor dal", "amount": 100, "unit": "g" }, { "item": "mixed vegetables", "amount": 300, "unit": "g" }, { "item": "bisi bele bath powder", "amount": 30, "unit": "g" }] }] },
+    { "date": "2026-12-05", "slot": "Dinner", "skip": "ordered_in" },
+    { "date": "2026-12-05", "slot": "Gopal's dinner", "people": ["Gopal"], "dishes": [
+      { "dish": "Phulka", "ingredients": [{ "item": "atta", "amount": 100, "unit": "g" }] }] },
+
+    { "date": "2026-12-06", "slot": "Breakfast", "dishes": [
+      { "dish": "Ragi dosa", "ingredients": [{ "item": "ragi flour", "amount": 250, "unit": "g" }] },
+      { "dish": "Chutney", "ingredients": [{ "item": "coconut", "amount": 1, "unit": "pc" }, { "item": "roasted chana", "amount": 30, "unit": "g" }] }] },
+    { "date": "2026-12-06", "slot": "Lunch", "skip": "eaten_out" },
+    { "date": "2026-12-06", "slot": "Dinner", "dishes": [
+      { "dish": "Chapati", "ingredients": [{ "item": "atta", "amount": 400, "unit": "g" }] },
+      { "dish": "Dal", "ingredients": [{ "item": "toor dal", "amount": 150, "unit": "g" }, { "item": "tomato", "amount": 100, "unit": "g" }] },
+      { "dish": "Aloo gobi", "ingredients": [{ "item": "potato", "amount": 300, "unit": "g" }, { "item": "cauliflower", "amount": 1, "unit": "pc" }, { "item": "tomato", "amount": 100, "unit": "g" }] }] },
+    { "date": "2026-12-06", "slot": "Gopal's dinner", "people": ["Gopal"], "dishes": [
+      { "dish": "Phulka", "ingredients": [{ "item": "atta", "amount": 100, "unit": "g" }] }] }
+  ],
+  "products": [
+    { "item": "milk", "app": "zepto", "product_id": "z-milk", "name_on_app": "Amul Taaza toned milk", "pack": "500 ml", "price": 28 },
+    { "item": "curd", "app": "zepto", "product_id": "z-curd", "name_on_app": "Mother Dairy dahi", "pack": "400 g", "price": 50 },
+    { "item": "bread", "app": "zepto", "product_id": "z-bread", "name_on_app": "Harvest Gold white bread", "pack": "400 g", "price": 45 }
+  ],
+  "history": {
+    "milk": { "group": "daily", "pack": "500 ml", "count": 2, "dates": ["2026-11-16", "2026-11-17", "2026-11-18", "2026-11-19", "2026-11-20", "2026-11-21", "2026-11-22", "2026-11-23", "2026-11-24", "2026-11-25", "2026-11-26", "2026-11-27", "2026-11-28", "2026-11-29"] },
+    "curd": { "group": "daily", "pack": "400 g", "dates": ["2026-11-17", "2026-11-19", "2026-11-21", "2026-11-23", "2026-11-25", "2026-11-27", "2026-11-29"] },
+    "bread": { "group": "daily", "pack": "400 g", "dates": ["2026-11-17", "2026-11-20", "2026-11-23", "2026-11-26", "2026-11-29"] },
+    "atta": { "group": "monthly", "pack": "10 kg", "dates": ["2026-10-09", "2026-10-29", "2026-11-18"] },
+    "tea": { "group": "monthly", "pack": "500 g", "dates": ["2026-09-30", "2026-10-30"] },
+    "sugar": { "group": "monthly", "pack": "1 kg", "dates": ["2026-10-01", "2026-10-31"] },
+    "toor dal": { "group": "monthly", "pack": "1 kg", "dates": ["2026-10-02", "2026-11-01"] },
+    "oil": { "group": "monthly", "pack": "1 l", "dates": ["2026-10-03", "2026-11-02"] },
+    "ghee": { "group": "monthly", "pack": "500 g", "dates": ["2026-10-04", "2026-11-03"] },
+    "rice": { "group": "monthly", "pack": "5 kg", "dates": ["2026-10-05", "2026-11-04"] }
+  },
+  "subscriptions": [{ "item": "paneer", "source": "the dairy" }]
+}

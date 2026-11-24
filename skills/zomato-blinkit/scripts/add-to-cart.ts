@@ -10,6 +10,8 @@ import {
   persistentCreate,
   persistentInteract,
   persistentClose,
+  pressLoop,
+  PRESS_KIT_JS,
   type GroceryServiceConfig,
 } from "../../_shared/_grocery_helpers";
 
@@ -81,30 +83,51 @@ if (checkParsed.error) {
   process.exit(1);
 }
 
-// Click "Add to cart" once, then the stepper's "+" for each further unit. The stepper's
-// +/− are icon-font glyphs: "+" is the last clickable part of the control that replaced
-// the button (not confirmed live; see the task report).
+/** The mark Flock's real clicks on "Add to cart" and the stepper's "+" go to, and its page state. */
+const ADD_MARK = "blinkit-add";
+
+// Press "Add to cart" once, then the stepper's "+" for each further unit, each a real click on the
+// element the script marked. The stepper's +/− are icon-font glyphs: "+" is the last clickable part
+// of the control that replaced the button (not confirmed live; see the task report). A "+" that is not
+// on screen ends the presses, as a missing one does: a real click cannot reach it.
+const markAddScript = `(() => {
+  ${PRESS_KIT_JS}
+  ${findMainButton}
+  const s = flockState("${ADD_MARK}", true);
+  flockClear("${ADD_MARK}");
+  s.name = name;
+  if (!addBtn) { s.missing = true; s.done = true; return; }
+  const holder = addBtn.parentElement;
+  s.holder = holder;
+  s.step = async () => {
+    flockMark("${ADD_MARK}", null);
+    await flockSettle(s);
+    const plus = (holder && (holder.querySelector('[class*="icon-plus"], [aria-label*="add" i], [aria-label*="increase" i]')
+      || Array.from(holder.querySelectorAll('[role="button"], button, div')).filter((e) => !e.children.length || e.getAttribute('role') === 'button').pop()));
+    if (!plus || plus.getClientRects().length === 0) { s.done = true; return; }
+    flockMark("${ADD_MARK}", plus);
+    s.settleMs = 900;
+  };
+  flockMark("${ADD_MARK}", addBtn);
+  s.settleMs = 1500;
+})()`;
+
 const addScript = `(async () => {
+  ${PRESS_KIT_JS}
   const quantity = ${quantity};
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-  ${findMainButton}
-  if (!addBtn) {
+  const s = flockState("${ADD_MARK}");
+  flockClear("${ADD_MARK}");
+  await flockSettle(s);
+  if (s.missing) {
     return JSON.stringify({ error: true, code: 'PAGE_CHANGED', message: 'Could not find the Add to cart button. The page layout may have changed.' });
   }
-  const holder = addBtn.parentElement;
-  addBtn.click();
-  await sleep(1500);
+  const holder = s.holder;
+  const name = s.name;
   const stepperQty = () => {
     const t = ((holder && holder.innerText) || "").split("\\n").map((s) => s.trim()).find((s) => /^\\d+$/.test(s));
     return t ? parseInt(t, 10) : 0;
   };
-  for (let i = 1; i < quantity; i++) {
-    const plus = (holder && (holder.querySelector('[class*="icon-plus"], [aria-label*="add" i], [aria-label*="increase" i]')
-      || Array.from(holder.querySelectorAll('[role="button"], button, div')).filter((e) => !e.children.length || e.getAttribute('role') === 'button').pop()));
-    if (!plus) break;
-    plus.click();
-    await sleep(900);
-  }
   await sleep(600);
   const header = document.querySelector('[class*="CartButton__Button"]') || document.querySelector('[class*="CartButton"]');
   const headerText = ((header && header.innerText) || "").replace(/\\s+/g, " ");
@@ -120,7 +143,7 @@ const addScript = `(async () => {
   });
 })()`;
 
-const result = await persistentInteract(config, persistentId, [], true, addScript);
+const result = await persistentInteract(config, persistentId, pressLoop({ key: ADD_MARK, mark: ADD_MARK, start: markAddScript, finish: addScript, presses: quantity }), true);
 const content: string = result.content || "{}";
 
 let parsed: any;

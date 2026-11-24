@@ -1,7 +1,7 @@
 // Nothing runs until the app knows the family: at least one person at home. A plan or an order made before that is noise.
 // An install upgraded from Meal Planner 2.0 has no people yet, only the profile the family once gave in their own words
 // (the `household.profile` setting): that text is carried into house.profile_to_structure, and while it waits there the
-// routines run so the agent can be asked to turn it into people, rules, the cook and the slots.
+// routines run so the agent can be asked to turn it into people, the cook and the items.
 import type { Database } from "bun:sqlite";
 
 const OLD_PROFILE_KEY = "household.profile";
@@ -16,9 +16,11 @@ export function familyKnown(sqlite: Database): boolean {
   return (read<{ n: number }>(sqlite, `SELECT count(*) n FROM people WHERE active = 1`)?.n ?? 0) > 0;
 }
 
-/** True while a profile carried over from 2.0 waits to be structured. */
+/** True while a profile carried over from 2.0 waits to be structured: it is there and nobody at home is saved yet. (Saving
+ *  the first person is what structures it: the old set_house_rules { structured: true } went with the old house rules.) */
 export function profilePending(sqlite: Database): boolean {
-  return (read<{ n: number }>(sqlite, `SELECT count(*) n FROM house WHERE profile_to_structure IS NOT NULL AND profile_to_structure != ''`)?.n ?? 0) > 0;
+  return !familyKnown(sqlite)
+    && (read<{ n: number }>(sqlite, `SELECT count(*) n FROM house WHERE profile_to_structure IS NOT NULL AND profile_to_structure != ''`)?.n ?? 0) > 0;
 }
 
 /** Whether routines do anything yet. */

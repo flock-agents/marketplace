@@ -100,12 +100,6 @@
             "minLength": 1,
             "description": "This row's name within the request, for $ref"
           },
-          "rules": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
           "cook_name": {
             "type": [
               "string",
@@ -154,18 +148,6 @@
               "null"
             ]
           },
-          "extra_slots": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "order_in": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
           "notes": {
             "type": [
               "string",
@@ -197,12 +179,6 @@
             ]
           },
           "plan_time": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "cooking_days": {
             "type": [
               "string",
               "null"
@@ -255,6 +231,12 @@
               "string",
               "null"
             ]
+          },
+          "setup_state": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "additionalProperties": false,
@@ -263,7 +245,74 @@
         ]
       }
     },
-    "plan_meals": {
+    "slots": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "$key": {
+            "type": "string",
+            "minLength": 1,
+            "description": "This row's name within the request, for $ref"
+          },
+          "name": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "addon_of": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "usual_people": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "days": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "skip_days": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "order": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "active": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "$key",
+          "name",
+          "kind",
+          "order"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "slot_days": {
       "type": "array",
       "items": {
         "type": "object",
@@ -274,12 +323,54 @@
             "description": "This row's name within the request, for $ref"
           },
           "date": {
-            "type": "string"
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "slot": {
             "type": "string"
           },
-          "ordered_in": {
+          "people": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "guests": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "occasion": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "new_dishes_allowed": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "skip": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "type": "string"
+          },
+          "edited": {
             "anyOf": [
               {
                 "type": "integer",
@@ -296,21 +387,16 @@
               "string",
               "null"
             ]
-          },
-          "status": {
-            "type": "string"
           }
         },
         "required": [
           "$key",
-          "date",
-          "slot",
-          "status"
+          "slot"
         ],
         "additionalProperties": false
       }
     },
-    "dishes": {
+    "slot_dishes": {
       "type": "array",
       "items": {
         "type": "object",
@@ -320,7 +406,7 @@
             "minLength": 1,
             "description": "This row's name within the request, for $ref"
           },
-          "meal_id": {
+          "slot_day_id": {
             "anyOf": [
               {
                 "type": "string"
@@ -330,7 +416,7 @@
                 "properties": {
                   "$ref": {
                     "type": "string",
-                    "pattern": "^plan_meals/.+"
+                    "pattern": "^slot_days/.+"
                   }
                 },
                 "required": [
@@ -352,45 +438,40 @@
               }
             ]
           },
-          "name": {
+          "dish": {
             "type": "string"
           },
-          "for_people": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "portion_note": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "recipe_id": {
+          "new": {
             "anyOf": [
               {
-                "type": [
-                  "string",
-                  "null"
-                ]
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
               },
               {
-                "type": "object",
-                "properties": {
-                  "$ref": {
-                    "type": "string",
-                    "pattern": "^saved_recipes/.+"
-                  }
-                },
-                "required": [
-                  "$ref"
-                ],
-                "additionalProperties": false
+                "type": "null"
               }
             ]
           },
-          "video_url": {
+          "feedback_asked": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "note": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "not_for": {
             "type": [
               "string",
               "null"
@@ -399,13 +480,13 @@
         },
         "required": [
           "$key",
-          "meal_id",
-          "name"
+          "slot_day_id",
+          "dish"
         ],
         "additionalProperties": false
       }
     },
-    "dish_items": {
+    "dish_ingredients": {
       "type": "array",
       "items": {
         "type": "object",
@@ -415,7 +496,7 @@
             "minLength": 1,
             "description": "This row's name within the request, for $ref"
           },
-          "dish_id": {
+          "slot_dish_id": {
             "anyOf": [
               {
                 "type": "string"
@@ -425,7 +506,7 @@
                 "properties": {
                   "$ref": {
                     "type": "string",
-                    "pattern": "^dishes/.+"
+                    "pattern": "^slot_dishes/.+"
                   }
                 },
                 "required": [
@@ -459,8 +540,252 @@
         },
         "required": [
           "$key",
-          "dish_id",
+          "slot_dish_id",
           "item"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "library": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "$key": {
+            "type": "string",
+            "minLength": 1,
+            "description": "This row's name within the request, for $ref"
+          },
+          "key": {
+            "type": "string"
+          },
+          "slot": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "frequency": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "days": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "contains": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "contains_read": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "origin": {
+            "type": "string"
+          },
+          "suggested": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "untried": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "offers": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "disliked": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "prep": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "video_url": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "video_title": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "video_thumbnail": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "rating": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "rating_note": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "rated_on": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "rated_by": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "ratings": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "$key",
+          "key",
+          "slot",
+          "name",
+          "origin"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "rules": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "$key": {
+            "type": "string",
+            "minLength": 1,
+            "description": "This row's name within the request, for $ref"
+          },
+          "hard": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "what": {
+            "type": "string"
+          },
+          "who": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "slots": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "days": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "items": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "to": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "frequency": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "per_meal": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "fasting_food": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "quote": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "$key",
+          "hard",
+          "what",
+          "quote"
         ],
         "additionalProperties": false
       }
@@ -1363,79 +1688,6 @@
         },
         "required": [
           "$key",
-          "name"
-        ],
-        "additionalProperties": false
-      }
-    },
-    "dish_book": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "properties": {
-          "$key": {
-            "type": "string",
-            "minLength": 1,
-            "description": "This row's name within the request, for $ref"
-          },
-          "key": {
-            "type": "string"
-          },
-          "name": {
-            "type": "string"
-          },
-          "video_url": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "video_title": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "video_thumbnail": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "rating": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "rating_note": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "rated_on": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "rated_by": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "ratings": {
-            "type": [
-              "string",
-              "null"
-            ]
-          }
-        },
-        "required": [
-          "$key",
-          "key",
           "name"
         ],
         "additionalProperties": false

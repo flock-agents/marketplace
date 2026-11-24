@@ -18,7 +18,7 @@ and imports nothing from the app's rule code.
 | `colliding-rules` | low-carb dad, vegan mum, soy-allergic dal-hating boy, no-onion/garlic/egg grandmother: needs separate dishes | 11 |
 
 Each fixture: `people`, `cook`, `cooking_days`, `slots`, `absent` (who is away for which meal), `last_week`, `told` (the
-answers as said, by setup question id), `rules` (the contract-shape rules a correct interview saves, by hand) and `expect`
+answers as said, by setup question id; `said_later`: what the family says afterwards in chat, such as the cook's limits), `rules` (the contract-shape rules a correct interview saves, by hand) and `expect`
 (`{ id, says, check }`; `heuristic: true` = judged from dish-name lists, e.g. "under 20 minutes"; `soft: true` = nice to have).
 
 ## Model access
