@@ -637,3 +637,14 @@ describe("make_plan v2: guards", () => {
     }
   });
 });
+
+
+describe("a plan note that explains itself", () => {
+  it("is left out: it is never a word for someone at the table (onboarding run 24)", async () => {
+    const { explainsItself } = await import("./makePlan");
+    expect(explainsItself("Gowri Shankar fasting, no onion garlic; Idli is safe, Chutney avoided by him")).toBe(true);
+    expect(explainsItself("Swapped poha for upma because of the rule")).toBe(true);
+    expect(explainsItself("millet rice for one person only")).toBe(false);
+    expect(explainsItself("less oil for Dad")).toBe(false);
+  });
+});

@@ -303,6 +303,13 @@ describe("apply_setup v2: the checks, pure", () => {
     expect(c.noted).toEqual([`"tiffin must be nut-free": not saved, there is no meal called Brunch`]);
     expect(c.read.rules.map((r) => r.what)).toEqual(["note"]);
   });
+  it("a note that is only the cook's limit again stays with the cook, not the family's notes (onboarding run 24)", () => {
+    const cook = { name: "Lakshmi", days: [], visits: [], limits_words: "she has two hours, so 3 to 4 dishes in all", quote: "" } as any;
+    const line = ["A: Yes, she has two hours, so 3 to 4 dishes in all"];
+    const c = checkRead(base({ cook, rules: [{ hard: false, what: "note", quote: "Yes, she has two hours, so 3 to 4 dishes in all" }] }), { household: hh, said: familyLines(line, {}) });
+    expect(c.read.rules).toEqual([]);
+    expect(c.dropped.join("\n")).toContain("the cook's limit");
+  });
   it("hard whats are always hard and never carry a frequency", () => {
     const c = checkRead(base({ rules: [{ hard: false, what: "avoid", items: ["sugar"], frequency: "sometimes", quote: "Amma has no sugar" }] }), { household: hh, said });
     expect(c.read.rules[0]).toMatchObject({ hard: true, frequency: null });
