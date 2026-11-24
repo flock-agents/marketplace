@@ -12,16 +12,20 @@ type Route = (p: Record<string, unknown>) => Call | { error: string; code: strin
 /** Each operation: where it goes in the app's own API. */
 export const ROUTES: Record<string, Route> = {
   set_person: (p) => ({ method: "POST", path: "/api/family/people", body: p }),
-  set_house_rules: (p) => ({ method: "POST", path: "/api/family/rules", body: p }),
   set_cook: (p) => ({ method: "POST", path: "/api/family/cook", body: p }),
-  set_slots: (p) => ({ method: "POST", path: "/api/family/slots", body: p }),
-  set_cooking_days: (p) => ({ method: "POST", path: "/api/family/cooking-days", body: p }),
   set_shopping_apps: (p) => ({ method: "POST", path: "/api/family/shopping-apps", body: p }),
-  plan_week: (p) => typeof p.week_start === "string" || typeof p.week_start === "number"
-    ? { method: "POST", path: `/api/weeks/${encodeURIComponent(String(p.week_start))}/plan`, body: p }
+  apply_setup: (p) => ({ method: "POST", path: "/api/family/setup", body: p }),
+  make_plan: (p) => typeof p.week_start === "string" || typeof p.week_start === "number"
+    ? { method: "POST", path: `/api/weeks/${encodeURIComponent(String(p.week_start))}/make-plan`, body: p }
     : { error: "week_start is required: the week's Monday as YYYY-MM-DD", code: "APP_REFUSED", status: 400 },
-  set_meal: (p) => ({ method: "POST", path: "/api/meals", body: p }),
-  set_dish: (p) => ({ method: "POST", path: "/api/dishes", body: p }),
+  // Later changes (docs/slot-model-spec.md §6) and the answer to the next-day question (§5.7): changes.ts.
+  set_slot: (p) => ({ method: "POST", path: "/api/slots", body: p }),
+  set_slot_day: (p) => ({ method: "POST", path: "/api/slot-days", body: p }),
+  add_dish: (p) => ({ method: "POST", path: "/api/library", body: p }),
+  set_rule: (p) => ({ method: "POST", path: "/api/rules", body: p }),
+  set_setting: (p) => ({ method: "POST", path: "/api/planner-settings", body: p }),
+  record_made: (p) => ({ method: "POST", path: "/api/slot-days/made", body: p }),
+  record_feedback: (p) => ({ method: "POST", path: "/api/slot-days/feedback", body: p }),
   set_regular: (p) => ({ method: "POST", path: "/api/regulars", body: p }),
   import_order_history: (p) => ({ method: "POST", path: "/api/order-history", body: p }),
   record_bought_outside: (p) => ({ method: "POST", path: "/api/items/outside", body: p }),
@@ -60,14 +64,17 @@ export const ROUTES: Record<string, Route> = {
 export const FIELDS: Record<string, { fields: string[]; need?: string[] }> = {
   guide: { fields: [] },
   set_person: { fields: ["name", "relationship", "group", "portions", "diet", "allergies", "dislikes", "targets", "note", "remove"], need: ["name"] },
-  set_house_rules: { fields: ["rules", "notes", "structured"] },
   set_cook: { fields: ["name", "days", "arrival", "makes_well", "wont_make", "time_limit", "new_recipes", "note"], need: ["name"] },
-  set_slots: { fields: ["extra_slots", "order_in"] },
-  set_cooking_days: { fields: ["days"], need: ["days"] },
   set_shopping_apps: { fields: ["main", "fallback", "connected"], need: ["main", "connected"] },
-  plan_week: { fields: ["week_start", "mode", "meals", "keep_rest", "repeats_ok"], need: ["week_start", "mode"] },
-  set_meal: { fields: ["date", "slot", "meal_id", "ordered_in", "note", "dishes"] },
-  set_dish: { fields: ["dish_id", "meal_id", "date", "slot", "name", "for", "portion_note", "recipe_id", "video_url", "ingredients", "position", "remove"] },
+  apply_setup: { fields: ["household", "transcript"], need: ["transcript"] },
+  make_plan: { fields: ["week_start", "household"], need: ["week_start"] },
+  set_slot: { fields: ["name", "kind", "addon_of", "usual_people", "days", "skip_days", "order", "remove"], need: ["name"] },
+  set_slot_day: { fields: ["date", "slot", "people", "add_people", "remove_people", "guests", "occasion", "new_dishes_allowed", "skip", "dishes"], need: ["date", "slot"] },
+  add_dish: { fields: ["name", "slot", "frequency", "days", "quote", "link"], need: ["name", "slot"] },
+  set_rule: { fields: ["id", "hard", "what", "who", "slots", "days", "items", "to", "frequency", "per_meal", "fasting_food", "quote", "remove"] },
+  set_setting: { fields: ["new_dishes_per_week"], need: ["new_dishes_per_week"] },
+  record_made: { fields: ["date", "slot", "dishes"], need: ["date", "slot", "dishes"] },
+  record_feedback: { fields: ["date", "slot", "dish", "made", "liked", "again"], need: ["date", "dish", "made"] },
   set_regular: { fields: ["item", "amount", "unit", "every", "times_per_week", "weekdays", "for_whom", "active", "paused_until", "remove"], need: ["item"] },
   import_order_history: { fields: ["app", "account", "orders"], need: ["app", "orders"] },
   record_bought_outside: { fields: ["item", "date"], need: ["item"] },
@@ -90,7 +97,8 @@ export const FIELDS: Record<string, { fields: string[]; need?: string[] }> = {
 
 /** A field sent to the wrong operation that has a home elsewhere: the refusal names that operation. */
 const MOVED: Record<string, Record<string, string>> = {
-  set_house_rules: { grocery_app: "the grocery app is set with set_shopping_apps { main, fallback, connected }" },
+  // Sim run 9: a cook correction sent its times as visits (the interview's fact name), and the 7:30 was lost.
+  set_cook: { times: "the times go in arrival: [{ at, meals }]" },
 };
 
 /** How alike two names are: shared words count most, then the edit distance between them. Lower is closer. */
@@ -112,7 +120,7 @@ export function closest(given: string, names: string[]): string | null {
   for (const n of names) { const d = distance(given, n); if (d < score) { score = d; best = n; } }
   return best !== null && score <= Math.max(3, Math.ceil(given.length / 2)) ? best : null;
 }
-/** Words an agent reaches for that name another operation: "save" and "add" a meal is set_meal. */
+/** Words an agent reaches for that name another operation: "save" and "add" a person is set_person. */
 const OP_WORDS: Record<string, string> = { save: "set", add: "set", update: "set", create: "set", change: "set", edit: "set", put: "set" };
 
 const fieldList = (op: string) => (FIELDS[op].fields.length ? FIELDS[op].fields.join(", ") : "none");
@@ -171,6 +179,12 @@ export function agentOps(hono: () => Hono<any>): Record<string, OpHandler> {
   const ops: Record<string, OpHandler> = {};
   for (const [name, route] of Object.entries(ROUTES)) {
     ops[name] = async (payload, ctx) => {
+      // The cook's times sent under the interview's fact name (planner.cook.visits): the same shape as arrival (sim runs
+      // 9-11: every 7:30 correction was sent as visits and lost).
+      if (name === "set_cook" && payload && payload.visits !== undefined && payload.arrival === undefined) {
+        const { visits, ...rest } = payload as Record<string, unknown>;
+        payload = { ...rest, arrival: visits };
+      }
       const bad = checkFields(name, payload ?? {});
       if (bad) return bad;
       const c = route(payload ?? {});

@@ -4,15 +4,17 @@
 // running low asked together (at most ESTIMATE.maxAsks, each counted once per reminder; after two unanswered asks an item is
 // snoozed instead). With "Order without asking" on, the confident ones go on the cart and every open cart is ordered. A dry
 // run (the routine's "anything to say?") answers the same and changes nothing. Lines put on while an app's cart is being
-// ordered go to a new open cart of that app (cart.ts setLine). The evening one also asks once how today's food eaten at home
-// went (rate_today), and the meals' dishes carry last time's note and their video link (messages.ts dishExtras).
+// ordered go to a new open cart of that app (cart.ts setLine). The meals' dishes carry last time's note and their video link
+// (messages.ts dishExtras). The afternoon one, the first of the day, also asks the next-day question (spec §5.7) about each
+// dish on yesterday's plan the family had not eaten before: the only question the app asks about what was cooked (a plan is
+// a suggestion; there is no "did you cook it" anywhere else).
 import type { Hono } from "hono";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
-import { item_events, items, order_lines, orders } from "./db/schema";
-import { APP_NAMES, CART_SYNC, ESTIMATE, STAPLE_DISHES, type GroceryApp } from "./db/constants";
-import { bookOf } from "./dishBook";
+import { item_events, items, order_lines, orders, slot_dishes } from "./db/schema";
+import { APP_NAMES, CART_SYNC, ESTIMATE, type GroceryApp } from "./db/constants";
+import { listLibrary, listSlotDays, listSlots, updateSlotDish } from "./slotStore";
 import { dishKey } from "./dishText";
-import { addDays, mondayOf, todayStr } from "./dates";
+import { addDays, mondayOf, todayStr, weekdayLong } from "./dates";
 import { refuse, shoppingApps, writeRoutes, type Db, type Emit } from "./family";
 import { dateOf, weekView, type MealView } from "./meals";
 import { dailyState, itemFor, itemStates, recomputeItem } from "./items";
@@ -27,8 +29,10 @@ export type Reminder = { which: Which; date: string /* the meals' date: today (a
   meals: MealView[]; ask_ingredients: string[]; added: { app: GroceryApp; item: string }[]; cart_items: string[];
   asks: { item: string; days_ago: number }[]; delivery_gap: { app: string; rupees: number } | null;
   ordered: { order_id: string; app: GroceryApp; message: string }[]; empty: boolean;
-  /** Evening only: today's food eaten at home, asked about once (how it went), each dish once; null on a day with none. */
-  rate_today: { date: string; dishes: string[] } | null;
+  /** Afternoon only: yesterday's untried dishes asked about (spec §5.7), each placement once, at most FEEDBACK_MAX (an older
+   *  one carried over says its `day`); the answer is record_feedback
+   *  { date, slot, dish, made, liked?, again? }. `from`: a planner suggestion, or a dish from a reel or link the family sent. */
+  feedback: { date: string; slot: string; dish: string; from: "suggestion" | "reel"; /** a day before yesterday: its weekday */ day?: string }[];
   text: string /* WhatsApp: numbered */; app_text: string; block: object | null /* flock-ui JSON */;
   carts: { order_id: string; app: GroceryApp; status: "open" | "ordering"; lines: LineRow[]; sync: boolean }[] };
 
@@ -47,26 +51,84 @@ function onCarts(tx: Db, statuses: string[], forDate?: string): Set<string> {
   return new Set(rows.filter((l) => (forDate ? l.for_date === forDate : (l.qty ?? 0) > 0)).map((l) => normItem(l.item)));
 }
 
+/** The daily items an order she said yes to (ordering, placed, paid) brings for `day` already: a line of the item for an
+ *  earlier date that, by the item's cycle, lasts through `day` (curd every 2 days, ordered for Tuesday, is Wednesday's too).
+ *  Needed because an order placed for tomorrow is bought on the day it is placed (cart.ts markPlaced), a day before it is
+ *  used: its run-out alone would put the item on again a day early, every cycle. */
+function lastingThrough(tx: Db, daily: { item: string; lasts_days: number | null }[], day: string): Set<string> {
+  const lasts = new Map(daily.map((i) => [i.item, i.lasts_days]));
+  const rows = tx.select({ item: order_lines.item, qty: order_lines.qty, for_date: order_lines.for_date }).from(order_lines)
+    .innerJoin(orders, eq(order_lines.order_id, orders.id)).where(inArray(orders.status, ["ordering", "placed", "paid"])).all();
+  return new Set(rows.filter((l) => {
+    const n = lasts.get(normItem(l.item));
+    return n != null && (l.qty ?? 0) > 0 && !!l.for_date && l.for_date < day && addDays(l.for_date, Math.max(1, Math.round(n))) > day;
+  }).map((l) => normItem(l.item)));
+}
+
 /** The meals a reminder covers: tonight's dinner when it is cooked (afternoon); every meal of tomorrow (evening). */
 function coveredMeals(tx: Db, which: Which, date: string): MealView[] {
   const day = weekView(tx, mondayOf(date)).days.find((d) => d.date === date)?.meals ?? [];
-  return which === "afternoon" ? day.filter((m) => m.slot === "Dinner" && !m.ordered_in && m.dishes.length)
+  // The afternoon covers tonight's dinner and every add-on to it (a person's own dinner is cooked even when the family's is
+  // ordered in).
+  const dinner = new Set(["Dinner", ...listSlots(tx, { all: true }).filter((s) => s.kind === "addon" && s.addon_of === "Dinner").map((s) => s.name)]);
+  return which === "afternoon" ? day.filter((m) => dinner.has(m.slot) && !m.ordered_in && m.dishes.length)
     : day.filter((m) => m.ordered_in || m.dishes.length);
 }
 
-const STAPLES = new Set<string>(STAPLE_DISHES);
+/** At most this many next-day questions in one reminder (owner 24 Nov): the most recent placements; the rest wait for a
+ *  later day's reminder, up to FEEDBACK_CARRY_DAYS days back. */
+export const FEEDBACK_MAX = 3;
+export const FEEDBACK_CARRY_DAYS = 2;
 
-/** The evening's question about today: every dish of today's meals eaten at home (planned, not ordered in), each once, staples
- *  (roti, rice, curd) aside, and none the family already said how it went today. Null when there is none: a day nothing was
- *  eaten at home asks nothing. */
-function rateToday(tx: Db, today: string): Reminder["rate_today"] {
-  const meals = weekView(tx, mondayOf(today)).days.find((d) => d.date === today)?.meals ?? [];
-  const names: string[] = [];
-  for (const m of meals) for (const d of m.ordered_in ? [] : m.dishes)
-    if (!STAPLES.has(dishKey(d.name)) && !names.some((n) => dishKey(n) === dishKey(d.name))) names.push(d.name.trim());
-  const book = bookOf(tx, names);
-  const dishes = names.filter((n) => book.get(dishKey(n))?.rated_on !== today);
-  return dishes.length ? { date: today, dishes } : null;
+/** The next-day question (spec §5.7): each dish on yesterday's plan (`yesterday`) the family had not eaten before (`untried`:
+ *  a planner suggestion, or a dish saved from a reel or link they sent; never one named in the interview, never one they
+ *  disliked), each placement once, one dish once. At most FEEDBACK_MAX a reminder, the most recent placements first (owner
+ *  24 Nov: a short slot's new dishes can make many); the others stay unasked (feedback_asked 0) and are asked by a later
+ *  day's reminder, while they are at most FEEDBACK_CARRY_DAYS days older than its yesterday ("Monday's plan had ...").
+ *  Which reminder asks which placement is worked out the same way every time, day by day from the oldest, so the same
+ *  reminder built again (the agent's second get_reminder) answers the same; a placement is marked asked (feedback_asked 1)
+ *  as its reminder is built, and record_feedback sets 2. */
+export function feedbackAsks(tx: Db, yesterday: string, by: string, changes: Change[]): Reminder["feedback"] {
+  type Placed = { id: string; date: string; slot: string; dish: string; from: "suggestion" | "reel" };
+  // Two weeks back: enough days before the carry window for each day's share to come out as it did on that day.
+  const from = addDays(yesterday, -14);
+  // Every placement that was or is a question: an untried dish not disliked nor named in the interview, or one asked already.
+  const placed: Placed[] = [];
+  for (const d of listSlotDays(tx, { from, to: yesterday })) {
+    if (d.skip) continue;
+    for (const x of d.dishes) {
+      const asked = tx.select({ v: slot_dishes.feedback_asked }).from(slot_dishes).where(eq(slot_dishes.id, x.id)).get()?.v ?? 0;
+      const rows = listLibrary(tx, { names: [x.dish] });
+      const row = rows.find((r) => r.slot.trim().toLowerCase() === d.slot.trim().toLowerCase()) ?? rows[0];
+      if (!row || row.origin === "setup_named") continue;
+      if (!asked && (!row.untried || row.disliked)) continue;
+      placed.push({ id: x.id, date: d.date!, slot: d.slot, dish: x.dish, from: row.origin === "family_added" ? "reel" : "suggestion" });
+    }
+  }
+  const answered = (x: Placed) => (tx.select({ v: slot_dishes.feedback_asked }).from(slot_dishes).where(eq(slot_dishes.id, x.id)).get()?.v ?? 0) > 1;
+  // Each day's reminder from the oldest: the most recent placements of its window not taken by an earlier day, one per dish.
+  const taken = new Set<string>();
+  let mine: Placed[] = [];
+  for (let day = from; day <= yesterday; day = addDays(day, 1)) {
+    const pool = placed.filter((x) => x.date <= day && x.date >= addDays(day, -FEEDBACK_CARRY_DAYS) && !taken.has(x.id)).reverse();
+    const pick: Placed[] = [];
+    for (const x of pool) if (pick.length < FEEDBACK_MAX && !pick.some((y) => dishKey(y.dish) === dishKey(x.dish))) pick.push(x);
+    for (const x of pick) taken.add(x.id);
+    mine = pick;
+  }
+  const out: Reminder["feedback"] = [];
+  for (const x of mine) {
+    if (answered(x)) continue;
+    // Only now askable: still untried and not disliked (an answer to another placement of the dish may have settled it).
+    const rows = listLibrary(tx, { names: [x.dish] });
+    const row = rows.find((r) => r.slot.trim().toLowerCase() === x.slot.trim().toLowerCase()) ?? rows[0];
+    if (!row?.untried || row.disliked) continue;
+    out.push({ date: x.date, slot: x.slot, dish: x.dish, from: x.from, ...(x.date !== yesterday ? { day: weekdayLong(x.date) } : {}) });
+    const asked = tx.select({ v: slot_dishes.feedback_asked }).from(slot_dishes).where(eq(slot_dishes.id, x.id)).get()?.v ?? 0;
+    if (!asked) updateSlotDish(tx, x.id, { feedback_asked: true }, by, changes);
+  }
+  // Most recent last in the message reads oddly: in plan order (oldest first).
+  return out.reverse();
 }
 
 type Schedule = (key: string, run: null, ms: number) => void;
@@ -103,11 +165,12 @@ function build(tx: Db, which: Which, now: Date, by: string, changes: Change[], s
   }
 
   // The daily items due tomorrow by their cycle, at the usual amount, unless a line of the item for tomorrow is already on a
-  // cart (her own qty there stands).
+  // cart (her own qty there stands), or one she said yes to for an earlier day still lasts through tomorrow.
   const added: Reminder["added"] = [];
   const forTomorrow = onCarts(tx, ["open", "ordering", "placed", "paid"], tomorrow);
+  const lasting = lastingThrough(tx, daily, tomorrow);
   for (const it of daily) {
-    if (!dailyDue(dailyState(it), tomorrow, today) || forTomorrow.has(it.item)) continue;
+    if (!dailyDue(dailyState(it), tomorrow, today) || forTomorrow.has(it.item) || lasting.has(it.item)) continue;
     const app = lineApp(tx, it), p = productFor(tx, it.name, app);
     const packs = (p && it.usual_amount != null ? packsFor(it.usual_amount, it.unit, p.pack_amount, p.pack_unit) : null) ?? 1;
     const open = cartOf(tx, app, "open"), had = open ? lineFor(tx, open.id, it.name) : null;
@@ -181,10 +244,10 @@ function build(tx: Db, which: Which, now: Date, by: string, changes: Change[], s
   const short = open.find((c) => (c.delivery_gap ?? 0) > 0);
   const carts = all.map((c) => ({ order_id: c.order_id, app: c.app as GroceryApp, status: c.status as "open" | "ordering", lines: c.lines,
     sync: c.status === "open" && CART_SYNC[c.app as GroceryApp] && shop.connected.includes(c.app as GroceryApp) && touched.has(c.order_id) }));
-  const rate_today = which === "evening" ? rateToday(tx, today) : null;
+  const feedback = which === "afternoon" ? feedbackAsks(tx, addDays(today, -1), by, changes) : [];
   const r: Reminder = { which, date, meals, ask_ingredients, added, cart_items, asks,
     delivery_gap: short ? { app: APP_NAMES[short.app as GroceryApp] ?? short.app, rupees: short.delivery_gap! } : null, ordered,
-    empty: !meals.length && !cart_items.length && !asks.length && !ordered.length && !rate_today, rate_today, text: "", app_text: "", block: null, carts };
+    empty: !meals.length && !cart_items.length && !asks.length && !ordered.length && !feedback.length, feedback, text: "", app_text: "", block: null, carts };
   r.text = reminderText(r);
   r.app_text = reminderText(r, { app: true });
   r.block = stockBlock(asks, `stock-${date}-${which}`);

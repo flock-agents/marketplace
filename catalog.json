@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "updatedAt": "2026-11-19T00:00:00Z",
+  "updatedAt": "2026-11-23T00:00:00Z",
   "items": [
     {
       "slug": "linear",
@@ -126,7 +126,7 @@
         "id": "household",
         "label": "Run the household",
         "description": "Groceries, meals, family routines",
-        "emoji": "\ud83c\udfe0",
+        "emoji": "🏠",
         "order": 40,
         "agentName": "Family Butler",
         "services": [
@@ -156,11 +156,11 @@
       "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "skills/gmail",
-      "latestVersion": "1.6.5",
-      "latestTag": "gmail-v1.6.5",
-      "minFlockVersion": "0.24.0-beta.1",
+      "latestVersion": "1.6.6",
+      "latestTag": "gmail-v1.6.6",
+      "minFlockVersion": "0.24.0",
       "publishedAt": "2026-08-14T10:00:00Z",
-      "updatedAt": "2026-11-10T00:00:00Z"
+      "updatedAt": "2026-11-23T00:00:00Z"
     },
     {
       "slug": "google-calendar",
@@ -177,11 +177,11 @@
       "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "skills/google-calendar",
-      "latestVersion": "1.0.3",
-      "latestTag": "google-calendar-v1.0.3",
-      "minFlockVersion": "0.24.0-beta.1",
+      "latestVersion": "1.0.4",
+      "latestTag": "google-calendar-v1.0.4",
+      "minFlockVersion": "0.24.0",
       "publishedAt": "2026-10-06T00:00:00Z",
-      "updatedAt": "2026-11-10T00:00:00Z"
+      "updatedAt": "2026-11-23T00:00:00Z"
     },
     {
       "slug": "google-drive",
@@ -221,11 +221,11 @@
       "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "skills/google-docs",
-      "latestVersion": "1.0.1",
-      "latestTag": "google-docs-v1.0.1",
-      "minFlockVersion": "0.24.0-beta.1",
+      "latestVersion": "1.0.2",
+      "latestTag": "google-docs-v1.0.2",
+      "minFlockVersion": "0.24.0",
       "publishedAt": "2026-10-25T00:00:00Z",
-      "updatedAt": "2026-11-10T00:00:00Z"
+      "updatedAt": "2026-11-23T00:00:00Z"
     },
     {
       "slug": "google-sheets",
@@ -266,11 +266,11 @@
       "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "skills/zomato-blinkit",
-      "latestVersion": "1.4.2",
-      "latestTag": "zomato-blinkit-v1.4.2",
-      "minFlockVersion": "0.24.0-beta.1",
+      "latestVersion": "1.4.3",
+      "latestTag": "zomato-blinkit-v1.4.3",
+      "minFlockVersion": "0.24.0",
       "publishedAt": "2026-08-14T10:00:00Z",
-      "updatedAt": "2026-11-10T00:00:00Z"
+      "updatedAt": "2026-11-23T00:00:00Z"
     },
     {
       "slug": "bigbasket",
@@ -288,11 +288,11 @@
       "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "skills/bigbasket",
-      "latestVersion": "1.4.2",
-      "latestTag": "bigbasket-v1.4.2",
-      "minFlockVersion": "0.24.0-beta.1",
+      "latestVersion": "1.4.3",
+      "latestTag": "bigbasket-v1.4.3",
+      "minFlockVersion": "0.24.0",
       "publishedAt": "2026-08-14T10:00:00Z",
-      "updatedAt": "2026-11-10T00:00:00Z"
+      "updatedAt": "2026-11-23T00:00:00Z"
     },
     {
       "slug": "amazon",
@@ -331,17 +331,17 @@
       "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "skills/linkedin",
-      "latestVersion": "1.2.3",
-      "latestTag": "linkedin-v1.2.3",
-      "minFlockVersion": "0.24.0-beta.1",
+      "latestVersion": "1.2.4",
+      "latestTag": "linkedin-v1.2.4",
+      "minFlockVersion": "0.24.0",
       "publishedAt": "2026-08-19T05:23:00Z",
-      "updatedAt": "2026-11-10T00:00:00Z"
+      "updatedAt": "2026-11-23T00:00:00Z"
     },
     {
       "slug": "slack",
       "type": "connector",
       "name": "Slack",
-      "description": "Full Slack workspace integration \u2014 read channels, search messages, manage saved items, post messages, add reactions, and manage user groups. Equivalent to the korotovsky/slack-mcp-server feature set, via browser session auth.",
+      "description": "Full Slack workspace integration — read channels, search messages, manage saved items, post messages, add reactions, and manage user groups. Equivalent to the korotovsky/slack-mcp-server feature set, via browser session auth.",
       "author": "flock",
       "category": "integration",
       "tags": [
@@ -364,7 +364,7 @@
       "type": "app",
       "usage": "app",
       "name": "Slack Desk",
-      "description": "Builds memory from your Slack conversations and surfaces tasks you missed \u2014 reads only, never posts",
+      "description": "Builds memory from your Slack conversations and surfaces tasks you missed — reads only, never posts",
       "author": "flock",
       "category": "productivity",
       "tags": [
@@ -412,7 +412,7 @@
         "id": "calendar",
         "label": "Manage my calendar",
         "description": "What's coming up, reminders, prep before meetings",
-        "emoji": "\ud83d\udcc5",
+        "emoji": "📅",
         "order": 30
       },
       "publishedAt": "2026-10-03T00:00:00Z",
@@ -441,7 +441,7 @@
         "id": "slack",
         "label": "Catch up on Slack",
         "description": "What you missed, what's asked of you",
-        "emoji": "\ud83d\udcac",
+        "emoji": "💬",
         "order": 20,
         "agentName": "Slack Assistant",
         "services": [
@@ -475,7 +475,7 @@
         "id": "email",
         "label": "Stay on top of email",
         "description": "Finds what needs you, drafts replies",
-        "emoji": "\ud83d\udce5",
+        "emoji": "📥",
         "order": 10,
         "agentName": "Inbox Assistant",
         "services": [

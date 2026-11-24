@@ -7,5 +7,8 @@
   },
   "order_without_asking": {
     "type": "boolean"
+  },
+  "new_dishes_per_week": {
+    "type": "integer"
   }
 }

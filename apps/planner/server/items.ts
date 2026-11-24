@@ -5,8 +5,8 @@
 // Purchases count for the whole house, whoever's account they came from. Her answers to "still in stock?" snooze an item and teach its pattern. The Pantry and the
 // item page read it all, and never name the app an item is bought on.
 import type { Hono } from "hono";
-import { and, eq, inArray } from "drizzle-orm";
-import { dish_items, dishes, house, item_events, items, order_lines, orders, plan_meals, products } from "./db/schema";
+import { and, eq, inArray, isNotNull, isNull } from "drizzle-orm";
+import { house, ingredients, item_events, items, order_lines, orders, products, slot_days, slot_dishes } from "./db/schema";
 import { appOf, ESTIMATE, HISTORY_DAYS, ITEM_GROUPS, SHOP_APPS, TAG_TEXT, type GroceryApp } from "./db/constants";
 import { addDays, todayStr } from "./dates";
 import { getHouse, houseView, isObject, name, readUntil, refuse, words, writeRoutes, type Db, type Emit, type HistorySynced } from "./family";
@@ -24,6 +24,13 @@ export type Purchase = { item: string; date: string; app: GroceryApp | "outside"
 
 const stamp = (by: string) => ({ updated_at: new Date().toISOString(), updated_by: by });
 const DAY_MS = 86_400_000;
+/** What the house buys most often, from its purchases, in a line the setup reads back after an import: at most 8 items bought
+ *  within about ten days, most often first ("milk (1 l every day), eggs (30 pc once a week)"); "" when none is known yet. */
+export function boughtSaid(db: Db): string {
+  return db.select().from(items).all().filter((i) => i.lasts_days != null && i.lasts_days > 0 && i.lasts_days <= 10 && !i.subscription)
+    .sort((a, b) => a.lasts_days! - b.lasts_days! || a.name.localeCompare(b.name)).slice(0, 8)
+    .map((i) => `${i.name} (${cycleText(i, i.stated_days != null && i.lasts_days === i.stated_days)})`).join(", ");
+}
 const utc = (date: string) => { const [y, m, d] = date.split("-").map(Number); return Date.UTC(y, m - 1, d); };
 const daysBetween = (from: string, to: string) => Math.round((utc(to) - utc(from)) / DAY_MS);
 
@@ -34,13 +41,14 @@ export function itemFor(db: Db, given: string, opts: { group?: string; create?: 
   return db.insert(items).values({ item: normItem(given), name: given.trim(), group: opts.group ?? null, updated_by: "app" }).returning().get();
 }
 
-/** What the final plan uses of a follows-plan item from `from` on, by date, in the item's unit. */
+/** What the plan uses of a follows-plan item from `from` on, by date, in the item's unit: every dated slot-day cooked at home
+ *  (planned or confirmed; one eaten out or ordered in has no dishes to buy for). */
 function planUse(db: Db, it: ItemRow, from: string): { date: string; amount: number }[] {
-  const rows = db.select({ date: plan_meals.date, item: dish_items.item, amount: dish_items.amount, unit: dish_items.unit })
-    .from(dish_items).innerJoin(dishes, eq(dish_items.dish_id, dishes.id)).innerJoin(plan_meals, eq(dishes.meal_id, plan_meals.id))
-    .where(eq(plan_meals.status, "final")).all();
+  const rows = db.select({ date: slot_days.date, item: ingredients.item, amount: ingredients.amount, unit: ingredients.unit })
+    .from(ingredients).innerJoin(slot_dishes, eq(ingredients.slot_dish_id, slot_dishes.id)).innerJoin(slot_days, eq(slot_dishes.slot_day_id, slot_days.id))
+    .where(and(isNotNull(slot_days.date), isNull(slot_days.skip))).all();
   return rows.flatMap((r) => {
-    if (normItem(r.item) !== it.item || r.date < from || r.amount == null) return [];
+    if (normItem(r.item) !== it.item || r.date == null || r.date < from || r.amount == null) return [];
     const b = toBase(r.amount, r.unit);
     return b && b.unit === it.unit ? [{ date: r.date, amount: b.amount }] : [];
   });
@@ -335,7 +343,7 @@ export function mountItemRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: { now
     const probably = out.filter((r) => r.confident && r.run_out && r.run_out <= day && r.group && r.group !== "daily" && !r.subscription && !r.dont_ask && r.last_bought)
       .map((r) => ({ item: r.name, days_ago: daysBetween(r.last_bought!, day) })).sort((x, y) => y.days_ago - x.days_ago);
     return { body: { recorded, duplicates, skipped_old: read.length - kept.length - future, skipped_future: future, needs_group: out.filter((r) => !r.group).map((r) => r.name),
-      probably_out: probably, read_until: readTo(houseView(getHouse(db)).history_synced) } };
+      probably_out: probably, read_until: readTo(houseView(getHouse(db)).history_synced), said: boughtSaid(db) } };
   });
 
   // record_bought_outside { item, date? }: bought outside the apps ("from the kirana"): a purchase of the usual amount.

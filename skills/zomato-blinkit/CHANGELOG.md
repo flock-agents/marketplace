@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.4.3
+
+- Page scripts never click, focus or type: add-to-cart, remove-from-cart and the shared shop flow only find and mark their element (`data-flock-target`), and Flock's own click, type and press actions do the input. Which element is found, the waits, error codes and JSON outputs are unchanged.
+- The unused shell scripts (`add-to-cart.sh`, `keep-alive.sh`, `remove-from-cart.sh`, `search-products.sh`, `track-order.sh`, `view-order-history.sh`, `_helpers.sh`, `_health-check.sh`) are removed; the `.ts` scripts were always the ones that ran.
+
 ## 1.4.2
 
 - After adding, `view-cart` is compared line by line with what was meant (an add's `success` is not proof), and every mismatch is reported before asking for the yes. Moved here from the Meal Planner app's guide.

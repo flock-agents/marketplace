@@ -63,14 +63,12 @@ describe("migrateOldProfile", () => {
     expect(profilePending(known.kit.sqlite)).toBe(false);
   });
 
-  it("the agent clears the carried profile once it has structured it, and it does not come back", async () => {
-    const { kit, op, rows } = await boot();
+  it("the carried profile is structured once the agent saves someone at home, and it does not come back", async () => {
+    const { kit, op } = await boot();
     oldProfile(kit.sqlite, JSON.stringify({ people: "2 adults, 1 child" }));
     migrateOldProfile(kit.sqlite);
-    await op("set_person", { name: "Meera", group: "adult" });
     expect(profilePending(kit.sqlite)).toBe(true);
-    expect((await op("set_house_rules", { notes: "2 adults, 1 child", structured: true })).house.profile_to_structure).toBeNull();
-    expect(rows("house")[0]).toMatchObject({ notes: "2 adults, 1 child", profile_to_structure: null });
+    await op("set_person", { name: "Meera", group: "adult" });
     expect(profilePending(kit.sqlite)).toBe(false);
     expect(migrateOldProfile(kit.sqlite)).toBe("already");
     expect(profilePending(kit.sqlite)).toBe(false);

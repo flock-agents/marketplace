@@ -5,7 +5,7 @@ import {
 } from "../../_shared/_google_helpers";
 import { AGENDA_PARSE_JS } from "./agenda-parse";
 import type { RawEventDetail } from "./event-detail-parse";
-import { pickDetailRows, mergeDetails, detailScript, DETAIL_MS_PER_EVENT, DETAIL_BUDGET_CAP_MS, DETAIL_DEADLINE_MARGIN_MS } from "./detail-pick";
+import { pickDetailRows, mergeDetails, detailActions, DETAIL_MS_PER_EVENT, DETAIL_BUDGET_CAP_MS, DETAIL_DEADLINE_MARGIN_MS } from "./detail-pick";
 
 const params = JSON.parse(process.env.SKILL_PARAMS || "{}");
 const calendarId: string = params.calendarId || "primary";
@@ -129,12 +129,12 @@ function parseContent(result: any): any {
     const rows = ids.map((id) => ({ id, title: titleOf.get(id) ?? "" }));
     if (ids.length) {
       try {
-        // The evaluate action's delay bounds the in-page script; the script stops itself a margin earlier and
-        // returns what it has. The call is soft: a server error here leaves the agenda result to print.
+        // The walk starts no row a margin before the budget and returns what it has. The call is soft: a
+        // server error here leaves the agenda result to print.
         const budget = Math.min(DETAIL_BUDGET_CAP_MS, 10_000 + ids.length * DETAIL_MS_PER_EVENT);
         const r = await browserInteract(
           agendaUrl,
-          [{ action: "wait", delay: 3000 }, { action: "evaluate", script: detailScript(rows, budget - DETAIL_DEADLINE_MARGIN_MS), delay: budget }],
+          [{ action: "wait", delay: 3000 }, ...detailActions(rows, budget - DETAIL_DEADLINE_MARGIN_MS)],
           undefined, undefined, { soft: true },
         );
         const rawById: Record<string, RawEventDetail> | null = r && typeof r.content === "string" ? JSON.parse(r.content) : null;

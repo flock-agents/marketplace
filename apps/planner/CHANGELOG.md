@@ -1,5 +1,81 @@
 # Changelog
 
+## 4.0.0
+
+The slot model (`docs/slot-model-spec.md`). The old plan tables and operations are replaced outright, with no migration: no
+family has the new setup interview yet. Calendar stays and the fresh household need a Flock with `ctx.apps.op` and
+`ctx.household.get`; on an older Flock the plan uses the household facts it was sent.
+
+- **A week is slots filled day by day.** Breakfast, Lunch, Dinner, the family's own slots (a child's tiffin, an evening
+  snack) and a person's add-on (his phulkas at dinner, her fish twice a week) are each planned for the people eating that
+  day: the usual people, less who is at the office or school that weekday, plus or minus the Family Calendar's stays and
+  trips (or the household's dated facts), less a fast. Guests and an occasion can be set on one meal.
+- **Setup reads, code checks.** `apply_setup` reads the household facts and the family's replies in four parallel model
+  reads (home, rules, dishes, how often) and one fast read of each dish's tags; code keeps only what the family's own words
+  back (a frequency needs their sentence), saves slots, rules with quotes, the dish library per slot and last week's meals
+  as examples, and reads it back in plain words. A correction applies only what the new reply names.
+- **The plan keeps their shape and their rules.** One model call per slot in order (breakfast first, add-ons last, at most
+  3 at once), shown the family's own plates as the template. Code checks every person's hard rules (a dish someone cannot eat
+  is "not for" them, as long as they have something of their own), days and how often across slots, a 3-day repeat window
+  (staples, from at least 3 confirmed meals or dishes they said to have every day, are exempt), and swaps a rejected dish
+  for another of theirs, never leaving a plate thinner. A short slot is asked about ("I only know 2 dinners for Ba…") and
+  gets new dishes like theirs.
+- **Changes later, without setup again.** `set_slot`, `set_slot_day` (people, guests, occasion, eaten out, dishes),
+  `add_dish` (with a reel or recipe link), `set_rule`, `set_setting`, `record_made`, `record_feedback`. A change re-plans
+  only the meals it touches and never overwrites one the family changed.
+- **New dishes are asked about once, the next day.** The 15:00 reminder asks about yesterday's new dishes (made it? liked
+  it? again?), at most 3 a day; a kept dish joins the library, a disliked one never comes back. The evening "how was today's
+  food" check-in is gone.
+- **Shopping follows the slot model.** Ingredients come from the planned meals (eaten out and ordered in bring none); the
+  15:00 reminder covers tonight's dinner and anyone's own dinner; an everyday item ordered for tomorrow is not put on again
+  while that order still covers it (curd every 2 days was being bought every day).
+- **Removed:** `set_meal`, `set_family_dishes`, `set_slots`, `set_house_rules`, `plan_week`, `plan_menu`, `set_dish`,
+  `set_cooking_days`, `rate_today`, and the tables `plan_meals`, `dishes`, `dish_items`, `dish_book`.
+- **Evals:** `evals/` scores setup (Eval 1) and the plan (Eval 2) separately on 8 households, with 4 held out.
+
+## 3.5.0
+
+Needs a Flock that gives apps a model call (the manifest's new top-level `"model": true`); on one without it the Sunday
+run keeps the agent-planned week of 3.4.0.
+
+- **The week is planned in steps the app drives.** One long agent session failed in every simulated run (a week cut off
+  half sent, repeats not fixed, meals with no dish). Now the app works out every meal itself (who eats it, that meal's
+  family dishes, the rules that hold there, the cook), asks the model once for the week's menu, and checks it in code with
+  plan_menu's checks plus "every meal and extra slot has a dish"; only the meals that fail go back, with why, up to 5 times.
+  What is still wrong is fixed in code with a family dish that keeps every rule; when the rules cannot all be kept (two
+  breakfast dishes for six days) a dish repeats, and the message says so ("Idli repeats on 3 days (Mon, Wed, Fri): only 2 breakfast dishes
+  known"). Each day's ingredients come from one cheap call, tried once more on its own. The week is saved final and closed
+  as before (`message`, and `intro` the first time). Calls are metered by Flock; no credits, the day's limit or too many
+  calls stop the plan with a plain line for the family.
+- **`make_plan { week_start }`**, a new operation, does exactly that (Flock's first plan and "plan the week" in chat), inside
+  Flock's 6 minutes. The Sunday run does the same and wakes the agent only to send the message word for word.
+- **Extra meals are never wiped.** `set_slots { add: true }` adds a slot (the same name replaces it) and an order-in meal;
+  each past-week meal question can save one (a child's tiffin, an evening snack), and the meals part ends by reading every
+  slot back ("Each day we'll plan Breakfast, Lunch and Dinner, plus Agastya's tiffin Mon–Fri... Anything to add or change?").
+- **A fast is checked.** `{ kind: "fasting", who, days, slots }` ("fasts Thursday till evening": Breakfast, Lunch) refuses any
+  dish that person would eat then; without slots it stays a note.
+- **A cook's limit is a checked rule, whenever it is said.** The setup no longer asks it; a limit said in chat or while
+  fixing a plan is saved as avoid / cap rules (`@baked` for "no oven", now covering what needs an oven) plus the cook's
+  words. A vague one stays words.
+
+## 3.4.0
+
+- **The setup interview, for Flock's interview runner.** Flock sends each setup question as written and reads each reply
+  in one call, writing every answer into the app itself; the Butler no longer makes the calls. So each question's
+  `answer` names every operation it writes (a list: the cook's limits save `set_cook` and `set_house_rules`), every
+  `help` says how to read the reply into those payloads (the food-rule examples stay), and every question is the exact
+  line a person reads. Needs a Flock with the interview runner (a list `answer`, and `show` values; see below).
+- **No question repeats the household answer.** A new first step saves everyone at home with `set_person`, read from
+  the household answer, before any rule names them. The cook's name, days and visits (each with its meals) are read
+  from the household answer when it said them, so the cook question is asked only for what is missing; the
+  cooking-days question then asks only what the cook's days leave ("Is food cooked at home on Sunday too?"). The
+  elders question no longer asks what the diet question covered ("Besides that diet, ...", and no sugar-free).
+- **Rules are added, not replaced, one answer at a time.** `set_house_rules { add: true, rules }` adds the rules sent
+  to the ones there (a rule already there is not added twice); without `add` the list sent is the list kept, as
+  before. It answers `said`, every rule in plain words, which the read-back shows (`{{rulesSaid}}`, Flock's `show`).
+  `import_order_history` answers `said`, what the house buys most often, which the order findings show.
+- Past-week meals no longer write `set_person` notes; what each person eats is in the family's dishes (`for`).
+
 ## 3.2.0
 
 - **The setup interview lives in the app.** The questions the Butler asks when the Meal Planner is set up are now the

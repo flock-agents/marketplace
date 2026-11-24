@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.6.6
+
+- Gmail connects only through the Google sign-in: the IMAP (app password) connection, the `imap+browser` auth type and the imap/smtp hosts leave the manifest, `gmail-imap.py` is removed, and the instructions no longer mention IMAP.
+- Page scripts never click, focus or type: compose, reply, draft update and send, labels, archive, star, unread and thread reads only find and mark their element (`data-flock-target`), and Flock's own click, type and press actions do the input. Which element is found, the waits, error codes and JSON outputs are unchanged.
+- A body with a table is pasted into the compose as rich text (a real paste, Flock 0.24.0) instead of written by a page script.
+- The unused shell scripts (`applyLabel.sh`, `archiveMessage.sh`, `createDraft.sh`, `createLabel.sh`, `getEmail.sh`, `listInbox.sh`, `listLabels.sh`, `markRead.sh`, `markUnread.sh`, `replyToMessage.sh`, `searchEmails.sh`, `sendEmail.sh`, `starMessage.sh`, `_gmail_helpers.sh`) are removed; the `.ts` scripts were always the ones that ran.
+
 ## 1.6.5
 
 - Functions run with the run_skill tool, not `gmail-exec.sh` or `POST /api/internal/skill-exec`; the browser fallback is the browser tool, and a reconnect is a connector hand-off (the connector-handoff guide). Carries Flock's bundled 1.6.4 send wording: a reply whose words the owner gave is sent; one without them is shown first.

@@ -86,14 +86,32 @@ loaf, garlic bread, oven), and from the 2026-11-22 eval:
   `Mon 2026-11-23 Breakfast: Rava idli — Meera eats only plain idli, plain dosa, banana sheera (add a dish for Meera)`.
   Also `rule_breaks: [{ meal, dish?, who?, rule, fix }]` in the body.
 - Never on the family's own edits in the app (they may break their own rules).
-- The repeat check (REPEATED_DISHES) lets come back what a rule forces: a dish an `only` rule names (Tara's five) and a
-  grain's staple ("Jowar roti" like "Roti"). Live eval on flock-fast 2026-11-22: these refusals kept Flash from finishing a week.
-- Sides come back freely (owner 2026-11-22: "sides can be repeated on multiple days"): any side a per_meal cap leaves out, and
-  sambar, rasam, a plain dal, boiled eggs (`isRepeatableSide`). A day the agent plans as a part (`keep_rest`) answers with
-  `repeats` and a `note` naming the dishes now on more than one day, so it is fixed while that day is being planned.
+- Variety (owner 2026-11-22): the weekly plan (plan_menu, the closing plan_week) refuses a main dish on more than two days
+  (REPEATED_DISHES; `MAIN_DAYS_MAX`); roti, rice (a grain's too), sides (chutney, curd, plain dal, boiled eggs; sambar
+  and rasam are mains) and the dishes an `only` rule names are not counted. set_meal / set_dish, the family's changes in chat, never check
+  it: the family edits the week after it is sent and what they say wins. Two days of a dish and last week's dishes (3–4 at
+  most) are the guide's to ask for, in the menu step. `repeats_ok` is gone.
+- `except` (2026-11-22): `for: ["everyone"], except: ["Meera"]` is everyone who eats that meal but Meera, kept as their
+  names. The flock-fast eval left a child with no breakfast when the shared dish's eaters were typed out by hand.
 - Indian food words are read as their English one before any matching (`SAME_AS` in rules.ts: aloo potato, suji semolina,
   matar peas, dahi curd, palak spinach…), so a rule or category never needs each spelling. Kadhi is `@dairy`. Found by the
   flock-fast eval: "Aloo matar" (no potato in its ingredients) for a Jain family, "Suji sheera" for a gluten-free child.
+
+## The menu first (plan_menu), 2026-11-22
+Planned a day at a time, the agent never sees the week whole, and repeats pile up at the close (flock-fast eval). The weekly
+run now starts with `plan_menu { week_start, meals }`: every meal's dishes by name and who eats each, no
+ingredients, in one call (well under 16 KB). The app checks the week as a whole: eaters (MISSING_EATERS), the rules a name
+shows (RULE_BROKEN), each extra slot's days (MISSING_SLOTS), every problem named in one refusal; variety is the guide's. Kept as the week's draft when it passes; the agent then gives each day its ingredients (plan_week final,
+keep_rest), where the rules on ingredients are checked, and closes as before.
+
+## The family's own dishes (2026-11-22)
+Owner: "A good prompt can always fix failures that needs a higher model. The interview gives us enough data to populate a
+good week." The interview's past-week answers (what each person ate at breakfast, lunch, dinner, a tiffin) are saved with
+`set_family_dishes { dishes: [{ name, slots, for? }] }` in the dish book (its `slots` and `eaten_by`). The week's context
+gives them as `family_dishes` by meal, with `how_to_plan` (meals.ts PLAN_METHOD): choose and rotate the family's own food,
+each person's rules first, `except` for a shared dish, one day done right as the example, and on a refusal change only the
+meals named. The Sunday wake (routines/weekly-plan.ts WEEKLY_PROMPT) is the same steps: menu, days, close. The plan eval
+opens with that wake and seeds each fixture's `family_dishes` (its answers name them).
 
 ## The interview writes rules in this shape
 Every answer that states a rule is saved as a checked kind with `set_house_rules` (people's notes keep the story; the

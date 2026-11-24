@@ -3,18 +3,37 @@
 // stand-in pages: hand-made pages with the shops' markup as the scripts expect it and made-up
 // data, NOT saved copies of the real sites. A real-site run is still what confirms the selectors.
 //
-// Run: bun test tests/grocery. The page tests need a Flock checkout (playwright-core):
-// FLOCK_APP_DIR=<flock>/flock-app bun test tests/grocery.
-import { describe, expect, it, beforeAll, afterAll } from "bun:test";
+// The scripts press with real input only (Flock 0.24.0): a page script finds and marks what to press
+// (`data-flock-target`), and Flock's own click, press or scroll does it. The page tests run those page
+// actions as Flock does, with Playwright's real input, and check the page saw no other input.
+//
+// Run: FLOCK_APP_DIR=<flock>/flock-app bun test ./tests/grocery. The scripts import Flock's shared
+// skill helpers and the page tests use its playwright-core (see _flock.ts); without a Flock checkout
+// only the file checks run.
+import { describe, expect, it, beforeAll, afterAll, setDefaultTimeout } from "bun:test";
 import { readFileSync, existsSync } from "fs";
 import { join } from "path";
-import {
+import { canBrowse, hasShared, playwrightPath, sayWhySkipped, sharedDir } from "./_flock";
+import type { PageStep, SavedAddress, ShopSite } from "../../skills/bigbasket/scripts/_shop";
+
+type Shop = typeof import("../../skills/bigbasket/scripts/_shop");
+type BigBasket = typeof import("../../skills/bigbasket/scripts/_bigbasket");
+type Blinkit = typeof import("../../skills/zomato-blinkit/scripts/_blinkit");
+type PageAction = Record<string, unknown>;
+/** Flock's own press loop (skills/_shared/_grocery_helpers.ts), resolved through FLOCK_APP_DIR. */
+type GroceryHelpers = { pressLoop(loop: ReturnType<Shop["emptyCartLoop"]>): PageAction[] };
+
+sayWhySkipped();
+const helpers = (hasShared ? await import(join(sharedDir, "_grocery_helpers.ts")) : {}) as GroceryHelpers;
+const shop = (hasShared ? await import("../../skills/bigbasket/scripts/_shop") : {}) as Shop;
+const bigbasket = (hasShared ? await import("../../skills/bigbasket/scripts/_bigbasket") : {}) as BigBasket;
+const blinkitScripts = (hasShared ? await import("../../skills/zomato-blinkit/scripts/_blinkit") : {}) as Blinkit;
+const {
   matchAddress, summarizeBill, notTheCart, locationShows, headerShows,
-  cartReadScript, emptyCartScript, addressListScript, selectAddress, noSavedAddresses,
-  type PageStep, type SavedAddress, type ShopSite,
-} from "../../skills/bigbasket/scripts/_shop";
-import { BIGBASKET, searchScript, addFromSearchScript } from "../../skills/bigbasket/scripts/_bigbasket";
-import { BLINKIT_SITE } from "../../skills/zomato-blinkit/scripts/_blinkit";
+  cartReadScript, emptyCartLoop, listSavedAddresses, selectAddress, noSavedAddresses,
+} = shop;
+const { BIGBASKET, searchActions, searchScript, addFromSearchActions } = bigbasket;
+const { BLINKIT_SITE, OPEN_CART_ACTIONS } = blinkitScripts;
 
 const skills = join(import.meta.dir, "../../skills");
 
@@ -51,7 +70,7 @@ describe("BigBasket search-products", () => {
   it("add-to-cart adds from the search results when given the query, without the product page", () => {
     const add = readFileSync(join(skills, "bigbasket/scripts/add-to-cart.ts"), "utf8");
     expect(add).toContain("if (query) await addFromSearch(query);");
-    expect(add).toContain("addFromSearchScript(productId, quantity)");
+    expect(add).toContain("addFromSearchActions(productId, quantity)");
   });
 });
 
@@ -66,7 +85,7 @@ const homeNoPin: SavedAddress = { index: 0, label: "Home", text: "B204, B Block 
 const homeOtherPin: SavedAddress = { index: 1, label: "Home", text: "B204, 2nd Floor, Block B, Lotus Grove Residency, Whitefield, Bangalore, 560066", selected: false };
 const office: SavedAddress = { index: 2, label: "Work", text: "Floor 6, Northwind Tech Park, Outer Ring Rd, Marathahalli, Bengaluru 560037", selected: true };
 
-describe("matchAddress", () => {
+describe.skipIf(!hasShared)("matchAddress", () => {
   it("finds the agreed address by its flat or house number and building, however it is written", () => {
     expect(matchAddress(saved, "12 Lake Road, Indiranagar, Bengaluru 560038")).toMatchObject({ ok: true, address: { index: 0 } });
     expect(matchAddress(saved, "7 temple st jayanagar")).toMatchObject({ ok: true, address: { index: 2 } });
@@ -130,7 +149,7 @@ describe("matchAddress", () => {
   });
 });
 
-describe("summarizeBill", () => {
+describe.skipIf(!hasShared)("summarizeBill", () => {
   it("takes the page's own total to pay, with the fees listed", () => {
     const totals = summarizeBill([
       { label: "Item total", amount: 240 },
@@ -149,7 +168,7 @@ describe("summarizeBill", () => {
   });
 });
 
-describe("notTheCart", () => {
+describe.skipIf(!hasShared)("notTheCart", () => {
   const read = { pageUrl: "https://www.bigbasket.com/basket/", cartShown: false, emptyShown: false, headerText: "", items: [{ name: "Milk", quantity: 1, price: 27, href: "" }], bill: [] };
   const blinkit: ShopSite = { ...BIGBASKET, cartPath: undefined, cartShown: ".drawer", cartHeader: ".cart-button" };
 
@@ -291,8 +310,10 @@ const WORK_ENTRY: Entry = { label: "Work", address: "Floor 6, Northwind Tech Par
 
 /**
  * Where a stand-in Blinkit picker listens for the pick: on the whole picker (any press inside an entry
- * picks it); on each entry's outer container only, for presses on the container itself (as live: pressing
- * the inner address text did not switch); on a pointer-cursor wrapper around the container only; or nowhere.
+ * picks it); on each entry's outer container only (as live: the inner address text has no handler of its
+ * own; a real press on it reaches the container, as real clicks bubble); on a pointer-cursor wrapper around
+ * the container only, for a press that lands on the wrapper itself (its own area below the entry; entries
+ * there have no edit icon, so the wrapper is pressed, not aimed through); or nowhere.
  */
 type BlinkitHandler = "picker" | "outer-only" | "wrapper" | "none";
 
@@ -310,8 +331,8 @@ const blinkitPicker = (entries: Entry[], handler: BlinkitHandler = "picker") => 
 </div></div></header>
 <div id="picker" style="display:none;position:fixed;top:0;left:0;width:420px;height:100%;background:#fff">
   <div>Change Location</div><button>Detect my location</button>
-  ${entries.map((e, i) => `${handler === "wrapper" ? `<div class="pick-wrapper" style="cursor:pointer" data-i="${i}">` : ""}<div class="AddressListItem__Container-sc-wi2msz-1" data-i="${i}"><div class="AddressListItem__AddressDetails-sc-wi2msz-3" style="display:flex">
-    <div class="AddressListItem__AddressLabel-sc-wi2msz-4">${e.label}</div><div class="AddressListItem__AddressDetails-sc-wi2msz-3" style="flex:1">${e.address}</div><div class="AddressListItem__AddressEditIcon-sc-wi2msz-5" style="width:24px">✎</div>
+  ${entries.map((e, i) => `${handler === "wrapper" ? `<div class="pick-wrapper" style="cursor:pointer;padding-bottom:48px" data-i="${i}">` : ""}<div class="AddressListItem__Container-sc-wi2msz-1" data-i="${i}"><div class="AddressListItem__AddressDetails-sc-wi2msz-3" style="display:flex">
+    <div class="AddressListItem__AddressLabel-sc-wi2msz-4">${e.label}</div><div class="AddressListItem__AddressDetails-sc-wi2msz-3" style="flex:1">${e.address}</div>${handler === "wrapper" ? "" : `<div class="AddressListItem__AddressEditIcon-sc-wi2msz-5" style="width:24px">✎</div>`}
   </div></div>${handler === "wrapper" ? "</div>" : ""}`).join("")}
 </div>
 <script>
@@ -332,8 +353,8 @@ const blinkitPicker = (entries: Entry[], handler: BlinkitHandler = "picker") => 
     if ("${handler}" !== "picker") return;
     const item = e.target.closest('[class*="AddressListItem__Container"]'); if (item) pick(entries[item.dataset.i]);
   });
-  const own = { "outer-only": '[class*="AddressListItem__Container"]', wrapper: ".pick-wrapper" }["${handler}"];
-  if (own) for (const el of document.querySelectorAll(own)) el.addEventListener("click", (e) => { if (e.target === el) pick(entries[el.dataset.i]); });
+  if ("${handler}" === "outer-only") for (const el of document.querySelectorAll('[class*="AddressListItem__Container"]')) el.addEventListener("click", (e) => { if (!e.target.closest('[class*="AddressEditIcon"]')) pick(entries[el.dataset.i]); });
+  if ("${handler}" === "wrapper") for (const el of document.querySelectorAll(".pick-wrapper")) el.addEventListener("click", (e) => { if (e.target === el) pick(entries[el.dataset.i]); });
 </script></body></html>`;
 
 /**
@@ -374,11 +395,20 @@ const bigbasketMenu = (entries: Entry[], opts: { confirm?: boolean; keepOpen?: b
   document.getElementById("yes").addEventListener("click", () => { document.getElementById("confirm").hidden = true; apply(pending); });
 </script></body></html>`;
 
-const appDir = process.env.FLOCK_APP_DIR;
-const playwrightPath = appDir ? join(appDir, "node_modules", "playwright-core") : "";
-const canBrowse = !!appDir && existsSync(playwrightPath);
+/** Logs every input event a page gets, with whether it was real (isTrusted); served ahead of the page's own scripts. */
+const INPUT_LOG = `<script>window.__input = [];
+for (const type of ["click", "mousedown", "mouseup", "pointerdown", "pointerup", "keydown", "wheel"]) {
+  document.addEventListener(type, (e) => window.__input.push({ type, trusted: e.isTrusted }), true);
+}</script>`;
+/** `html` with the input log first in its head. */
+const logged = (html: string): string => html.replace(/<head>|<body>/i, (tag) => tag + INPUT_LOG);
+/** The scripts' fixed waits are for a live shop; these pages are ready at once. */
+const WAIT_CAP_MS = 150;
+const evaluate = (script: string): PageAction => ({ action: "evaluate", script });
 
 describe.skipIf(!canBrowse)("the in-page scripts on stand-in pages", () => {
+  // A pick waits for the page in each of its steps, as it does live (the fixed waits are capped, the page scripts' own are not).
+  setDefaultTimeout(60_000);
   let browser: any;
   beforeAll(async () => {
     const { chromium } = await import(playwrightPath);
@@ -386,31 +416,75 @@ describe.skipIf(!canBrowse)("the in-page scripts on stand-in pages", () => {
   });
   afterAll(async () => { await browser?.close(); });
 
-  /** Serves `html` at `url` (nothing leaves the machine), runs the page actions' click if any, then `script`. */
-  async function run(url: string, html: string, script: string, before?: string): Promise<any> {
+  /**
+   * Runs page actions as Flock's browser does: a click is a real click on its selector (an `optional`
+   * one is skipped when nothing carries it), a press a real key, a scroll a real wheel; an evaluate's
+   * answer is the content. → the last evaluate's answer.
+   */
+  async function runActions(tab: any, actions: PageAction[]): Promise<unknown> {
+    let last: unknown = null;
+    for (const act of actions as any[]) {
+      switch (act.action) {
+        case "evaluate": last = await tab.evaluate(act.script); break;
+        case "click":
+          if (act.optional && !(await tab.$(act.selector))) break;
+          await tab.click(act.selector, { timeout: 2_000 });
+          break;
+        case "press": await tab.keyboard.press(act.key); break;
+        case "scroll": await tab.mouse.wheel(0, act.deltaY ?? 300); break;
+        case "wait": await tab.waitForTimeout(Math.min(act.delay ?? 1000, WAIT_CAP_MS)); break;
+        case "waitForSelector": await tab.waitForSelector(act.selector, { timeout: 5_000 }); break;
+        default: throw new Error(`Not in these tests: ${act.action}`);
+      }
+    }
+    return last;
+  }
+
+  /**
+   * Reads `expression` in the page's own world (where its scripts and the input log live). Flock's
+   * playwright-core runs an evaluate in an isolated world unless told otherwise (the third argument;
+   * stock Playwright ignores it), as it runs the skills' page scripts.
+   */
+  const inPage = (tab: any, expression: string): Promise<any> => tab.evaluate(expression, undefined, false);
+
+  /** Serves `html` at `url` (nothing leaves the machine) and runs `body` on it; then the page must have seen real input only. */
+  async function onPage<T>(url: string, html: string, body: (tab: any) => Promise<T>): Promise<T> {
     const tab = await browser.newPage();
     try {
-      await tab.route("**/*", (route: any) => route.fulfill({ status: 200, contentType: "text/html; charset=utf-8", body: html }));
+      await tab.route("**/*", (route: any) => route.fulfill({ status: 200, contentType: "text/html; charset=utf-8", body: logged(html) }));
       await tab.goto(url);
-      if (before) await tab.evaluate(before);
-      return JSON.parse(await tab.evaluate(script));
+      const out = await body(tab);
+      expect(await inPage(tab, "window.__input.filter((e) => !e.trusted)")).toEqual([]);
+      return out;
     } finally { await tab.close(); }
   }
+
+  /** The JSON answer of `actions` run on `html` at `url`. */
+  const run = (url: string, html: string, actions: PageAction[]): Promise<any> =>
+    onPage(url, html, async (tab) => JSON.parse(String(await runActions(tab, actions))));
+
+  /** Runs page actions in `tab` as set-delivery-location runs them in the signed-in browser. */
+  const stepOn = (tab: any): PageStep => async (actions) => {
+    try { return JSON.parse(String(await runActions(tab, actions))); } catch { return null; }
+  };
+
+  /** Empty-cart's page actions: the cart brought up, then the press loop (a few presses are plenty on these pages). */
+  const emptying = (site: ShopSite): PageAction[] => [...site.openCart, ...helpers.pressLoop({ ...emptyCartLoop(site), presses: 12 })];
 
   const blinkit: ShopSite = {
     ...BIGBASKET,
     cartPath: undefined,
     cartShown: '[class*="CartWrapper__CartContainer"], [class*="CartProduct__Container"]',
     cartHeader: '[class*="CartButton__Button"], [class*="CartButton"]',
+    openCart: OPEN_CART_ACTIONS,
     cartLines: '[class*="CartProduct__Container"]',
     removeControls: '[class*="AddToCart__UpdatedButtonContainer"] [class*="AddMinusIcon"]',
     addressPicker: undefined,
     addressOpeners: ['[class*="LocationBar__Container"]'],
   };
-  const openDrawer = `document.querySelector('[class*="CartButton__Button"]').click()`;
 
   it("BigBasket search reads each card's id, name and pack, skipping the rating lines", async () => {
-    const out = await run("https://www.bigbasket.com/ps/?q=onion", BB_SEARCH, searchScript(10, 500));
+    const out = await run("https://www.bigbasket.com/ps/?q=onion", BB_SEARCH, [...searchActions(500), evaluate(searchScript(10))]);
     expect(out.products.map((p: any) => [p.id, p.name, p.quantity, p.price, p.mrp])).toEqual([
       ["40000101", "fresho! Onion", "1 kg", 38, 47],
       ["40000102", "Amul Butter - Pasteurised", "100 g", 56, null],
@@ -418,32 +492,33 @@ describe.skipIf(!canBrowse)("the in-page scripts on stand-in pages", () => {
   });
 
   it("BigBasket add-to-cart adds from the search results: the card's Add, then + for each more unit", async () => {
-    const tab = await browser.newPage();
-    try {
-      await tab.route("**/*", (route: any) => route.fulfill({ status: 200, contentType: "text/html; charset=utf-8", body: BB_SEARCH_ADD }));
-      await tab.goto("https://www.bigbasket.com/ps/?q=onion");
-      const out = JSON.parse(await tab.evaluate(addFromSearchScript("40000101", 3, 500)));
+    await onPage("https://www.bigbasket.com/ps/?q=onion", BB_SEARCH_ADD, async (tab) => {
+      const out = JSON.parse(String(await runActions(tab, addFromSearchActions("40000101", 3, 500))));
       expect(out).toMatchObject({ success: true, productId: "40000101", quantityAdded: 3, quantityAsked: 3 });
       expect(await tab.textContent(".qty")).toBe("3");
-    } finally { await tab.close(); }
-  });
+      expect(await inPage(tab, "window.__input.filter((e) => e.type === 'click').length")).toBe(3);
+    });
+  }, 20_000);
 
   it("BigBasket add-to-cart says out of stock, or not in these results, without clicking anything else", async () => {
-    const out = await run("https://www.bigbasket.com/ps/?q=butter", BB_SEARCH_ADD, addFromSearchScript("40000102", 1, 500));
-    expect(out).toMatchObject({ error: true, code: "OUT_OF_STOCK" });
-    const missing = await run("https://www.bigbasket.com/ps/?q=butter", BB_SEARCH_ADD, addFromSearchScript("49999999", 1, 300));
-    expect(missing).toMatchObject({ error: true, code: "NOT_IN_RESULTS" });
-  });
+    await onPage("https://www.bigbasket.com/ps/?q=butter", BB_SEARCH_ADD, async (tab) => {
+      const out = JSON.parse(String(await runActions(tab, addFromSearchActions("40000102", 1, 500))));
+      expect(out).toMatchObject({ error: true, code: "OUT_OF_STOCK" });
+      const missing = JSON.parse(String(await runActions(tab, addFromSearchActions("49999999", 1, 300))));
+      expect(missing).toMatchObject({ error: true, code: "NOT_IN_RESULTS" });
+      expect(await inPage(tab, "window.__input.filter((e) => e.type === 'click').length")).toBe(0);
+    });
+  }, 20_000);
 
   it("BigBasket search with no product cards answers an empty list, not a timeout", async () => {
     const started = Date.now();
-    const out = await run("https://www.bigbasket.com/ps/?q=laptop", BB_NO_RESULTS, searchScript(10, 500));
+    const out = await run("https://www.bigbasket.com/ps/?q=laptop", BB_NO_RESULTS, [...searchActions(500), evaluate(searchScript(10))]);
     expect(out).toEqual({ products: [], totalResults: 0, noCards: true });
     expect(Date.now() - started).toBeLessThan(4000);
   });
 
   it("reads a cart page: its lines and every fee, FREE delivery as 0, the page's total", async () => {
-    const read = await run("https://www.bigbasket.com/basket/", BASKET, cartReadScript(BIGBASKET));
+    const read = await run("https://www.bigbasket.com/basket/", BASKET, [evaluate(cartReadScript(BIGBASKET))]);
     expect(notTheCart(BIGBASKET, read)).toBeNull();
     expect(read.items.map((i: any) => [i.name, i.quantity, i.price, BIGBASKET.productId(i.href)])).toEqual([
       ["Fresho Tomato 1 kg", 2, 40, "40000001"],
@@ -453,37 +528,24 @@ describe.skipIf(!canBrowse)("the in-page scripts on stand-in pages", () => {
   });
 
   it("refuses the home page and its suggestions as the cart (what blinkit.com/cart shows)", async () => {
-    const asBasket = await run("https://www.bigbasket.com/", HOME_WITH_SUGGESTIONS, cartReadScript(BIGBASKET));
+    const asBasket = await run("https://www.bigbasket.com/", HOME_WITH_SUGGESTIONS, [evaluate(cartReadScript(BIGBASKET))]);
     expect(notTheCart(BIGBASKET, asBasket)).toContain("not BigBasket's cart page");
-    const asDrawer = await run("https://blinkit.com/cart", HOME_WITH_SUGGESTIONS, cartReadScript(blinkit));
+    const asDrawer = await run("https://blinkit.com/cart", HOME_WITH_SUGGESTIONS, [evaluate(cartReadScript(blinkit))]);
     expect(notTheCart(blinkit, asDrawer)).toContain("did not open");
   }, 30_000); // each read waits out its own cart wait (up to 10s) on a page that never shows the cart
 
   it("empties a cart page by each line's remove, and says what it removed", async () => {
-    const out = await run("https://www.bigbasket.com/basket/", BASKET, emptyCartScript(BIGBASKET));
+    const out = await run("https://www.bigbasket.com/basket/", BASKET, emptying(BIGBASKET));
     expect(out).toMatchObject({ remaining: 0, emptyShown: true, removed: ["Fresho Tomato 1 kg", "Amul Taaza Milk 500 ml"] });
-  });
+  }, 30_000);
 
   it("empties Blinkit's drawer with the stepper's minus, every unit", async () => {
-    const out = await run("https://blinkit.com/", BLINKIT_DRAWER, emptyCartScript(blinkit), openDrawer);
+    const out = await run("https://blinkit.com/", BLINKIT_DRAWER, emptying(blinkit));
     expect(out).toMatchObject({ remaining: 0, headerText: "My Cart", removed: ["Amul Butter 100 g", "Britannia Bread 400 g"] });
     expect(notTheCart(blinkit, { ...out, items: [], bill: [] })).toBeNull();
-  });
+  }, 30_000);
 
-  /** Runs the page scripts in `tab` as set-delivery-location runs them in the signed-in browser. */
-  const stepOn = (tab: any): PageStep => async (script, waitMs) => {
-    if (waitMs) await tab.waitForTimeout(waitMs);
-    try { return JSON.parse(await tab.evaluate(script)); } catch { return null; }
-  };
-  async function onPage<T>(url: string, html: string, body: (tab: any) => Promise<T>): Promise<T> {
-    const tab = await browser.newPage();
-    try {
-      await tab.route("**/*", (route: any) => route.fulfill({ status: 200, contentType: "text/html; charset=utf-8", body: html }));
-      await tab.goto(url);
-      return await body(tab);
-    } finally { await tab.close(); }
-  }
-  const listOn = (site: ShopSite) => (tab: any) => tab.evaluate(addressListScript(site, true)).then(JSON.parse);
+  const listOn = (site: ShopSite) => (tab: any) => listSavedAddresses(site, stepOn(tab));
 
   it("Blinkit list-addresses opens the header's picker, reads each saved entry's label and address, and closes it", async () => {
     await onPage("https://blinkit.com/", blinkitPicker([HOME_ENTRY, WORK_ENTRY]), async (tab) => {
@@ -517,13 +579,13 @@ describe.skipIf(!canBrowse)("the in-page scripts on stand-in pages", () => {
     expect(bare).toMatchObject({ error: true, code: "NO_LOCATION_CONTROL" });
   }, 30_000);
 
-  it("Blinkit set-delivery-location: another pincode still matches by flat and building; it presses the entry's outer container (the only one listening, as live), never the edit icon, and the header shows it", async () => {
+  it("Blinkit set-delivery-location: another pincode still matches by flat and building; its press reaches the entry's outer container (the only one listening, as live), never the edit icon, and the header shows it", async () => {
     await onPage("https://blinkit.com/", blinkitPicker([WORK_ENTRY, HOME_ENTRY], "outer-only"), async (tab) => {
       const out = await selectAddress(BLINKIT_SITE, "B-204, Lotus Grove Residency, Varthur Road, Bengaluru 560087", stepOn(tab));
       expect(out).toMatchObject({ ok: true, address: { label: "Home", text: HOME_ENTRY.address }, alreadySet: false, stillOpen: false });
       expect(out.ok && out.location).toContain("B204, B Block Lotus Grove Residency");
-      expect(await tab.evaluate("window.edited")).toBe(false);
-      expect(await tab.evaluate("window.presses")).toBe(1);
+      expect(await inPage(tab, "window.edited")).toBe(false);
+      expect(await inPage(tab, "window.presses")).toBe(1);
     });
   });
 
@@ -532,7 +594,8 @@ describe.skipIf(!canBrowse)("the in-page scripts on stand-in pages", () => {
       const out = await selectAddress(BLINKIT_SITE, "B204, Lotus Grove Residency, Whitefield", stepOn(tab));
       expect(out).toMatchObject({ ok: true, address: { label: "Home" }, stillOpen: false });
       expect(out.ok && out.location).toContain("Lotus Grove Residency");
-      expect(await tab.evaluate("window.edited")).toBe(false);
+      expect(await inPage(tab, "window.edited")).toBe(false);
+      expect(await inPage(tab, "window.presses")).toBe(2); // the container, then the wrapper
     });
   }, 40_000);
 
@@ -542,7 +605,7 @@ describe.skipIf(!canBrowse)("the in-page scripts on stand-in pages", () => {
       expect(out).toMatchObject({ ok: false, code: "ADDRESS_NOT_SWITCHED" });
       expect(!out.ok && out.location).toContain("Koramangala");
       expect(await tab.isVisible("#picker")).toBe(false);
-      expect(await tab.evaluate("window.edited")).toBe(false);
+      expect(await inPage(tab, "window.edited")).toBe(false);
     });
   }, 60_000);
 
@@ -566,7 +629,7 @@ describe.skipIf(!canBrowse)("the in-page scripts on stand-in pages", () => {
     await onPage("https://www.bigbasket.com/", bigbasketMenu([WORK_ENTRY, HOME_ENTRY], { current: HOME_ENTRY }), async (tab) => {
       const out = await selectAddress(BIGBASKET, "B204, Lotus Grove Residency, Bengaluru 560087", stepOn(tab));
       expect(out).toMatchObject({ ok: true, address: { label: "Home" }, alreadySet: true, stillOpen: false });
-      expect(await tab.evaluate("window.picked")).toBe(0);
+      expect(await inPage(tab, "window.picked")).toBe(0);
       expect(await tab.isVisible('[role="menu"]')).toBe(false);
     });
   });
@@ -598,7 +661,7 @@ describe.skipIf(!canBrowse)("the in-page scripts on stand-in pages", () => {
 
   it("the generic reader (a site not checked live) lists a picker by its address classes and selects one", async () => {
     await onPage("https://blinkit.com/", ADDRESS_PICKER, async (tab) => {
-      const listed = JSON.parse(await tab.evaluate(addressListScript(blinkit, false)));
+      const listed = await listOn(blinkit)(tab);
       expect(listed.saved.map((a: SavedAddress) => [a.label, a.selected])).toEqual([["Home", false], ["Work", true]]);
       expect(listed.location).toContain("Bellandur");
     });

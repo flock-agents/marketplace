@@ -5,9 +5,9 @@ icon: 📧
 category: integration
 requiresInstance: true
 auth:
-  type: imap+browser
+  type: browser_session
   session_name: google
-  setup_instructions: "Connect via App Password (IMAP) or browser session login. IMAP: go to myaccount.google.com/apppasswords. Browser: log in to Gmail via the dashboard browser session."
+  setup_instructions: "Log in to Gmail via the dashboard browser session."
 tier: installable
 ---
 
@@ -69,14 +69,9 @@ Why it must be this function and not `createDraft`:
 If `getThread` returns `incomplete: true`, stop — its recipient list may already
 be missing people, so there is no safe reply to compose from it.
 
-## Connection Types
+## Connection
 
-Two connection methods are supported. **Use browser session by default. Use IMAP only as fallback when no browser session is connected.**
-
-1. **Browser Session** *(default)* — Full Gmail experience: rich compose, CC/BCC, attachments via upload, formatting. Log in to Gmail via the dashboard browser session.
-2. **IMAP (App Password)** *(fallback)* — Direct protocol access, plain text only. Used automatically when no browser session is available. Requires a Google App Password (myaccount.google.com/apppasswords).
-
-The skill checks for a browser session first. If no browser session is connected, it falls back to IMAP credentials.
+Gmail runs through the owner's Google sign-in in the browser session: rich compose, CC/BCC, attachments via upload, formatting.
 
 ## Available Functions
 
@@ -353,13 +348,12 @@ user you searched a mailbox the response does not name.
 
 If the Gmail skill is not connected or credentials have expired:
 - Ask the owner to reconnect with a connector hand-off (the connector-handoff guide)
-- For IMAP: the owner updates their App Password in **Skills & Integrations**
 - Never tell users to "grant access to" or "approve access for" anything other than Flock
 
 ## Browser Session Notes
 
 When using browser session mode:
 - Email IDs are Gmail's internal thread IDs extracted from the DOM, not RFC message IDs
-- Operations are slower than IMAP (each action launches a headless browser navigation)
+- Each action launches a headless browser navigation, so operations take a few seconds
 - Gmail's DOM selectors can change with updates — if extraction returns empty results, the skill may need selector updates
 - The skill auto-detects expired sessions and marks them as outdated for the user to re-login

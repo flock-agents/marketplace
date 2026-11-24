@@ -1,4 +1,10 @@
 import { FLOCK_API } from "../../_shared/_helpers";
+import { targetSelector } from "../../_shared/_realInput";
+import {
+  LOAD_MORE_PROBE_JS, MAX_LOAD_ROUNDS, MAX_COMMENTS, REPLY_TARGET, REPLY_BOX,
+  firstLookActions, loadMoreRoundActions, parseProbe, targetProbeScript, openReplyActions, replyBoxScript, sendReplyActions,
+  type LoadMoreProbe, type TargetProbe,
+} from "./linkedin-comments-page";
 const RATE_FILE = "/tmp/skill-linkedin-rate";
 const DRAFTS_DIR = `${process.env.SKILL_DATA_DIR || "/tmp"}/linkedin-drafts`;
 
@@ -143,25 +149,57 @@ async function persistentCreate(url: string, pageActions?: any[]): Promise<any> 
   return body;
 }
 
-async function persistentInteract(
+// A verify evalScript becomes a TRAILING `evaluate` action — top-level evaluateScript is ignored
+// when pageActions is present, so it would otherwise be dropped (content would be the last action,
+// e.g. a screenshot base64). Appending it makes its return value the content. (CRAFO-988/989)
+async function interactRaw(
   persistentId: string, pageActions: any[], close = false, evalScript?: string
-): Promise<any> {
+): Promise<{ httpCode: number; body: any }> {
   const { sessionName, agentId } = getSessionAndAgent();
-  await rateLimit();
-
-  // A verify evalScript becomes a TRAILING `evaluate` action — top-level
-  // evaluateScript is ignored when pageActions is present, so it would otherwise
-  // be dropped (content would be the last action, e.g. a screenshot base64).
-  // Appending it makes its return value the content. (CRAFO-988/989)
   const actions = evalScript ? [...pageActions, { action: "evaluate", script: evalScript }] : pageActions;
   const payload: Record<string, unknown> = {
     sessionName, agentId, persistentSessionId: persistentId, pageActions: actions, extractText: true,
   };
   if (close) payload.closePersistentSession = true;
+  return browserFetchPost(payload);
+}
 
-  const { httpCode, body } = await browserFetchPost(payload);
+async function persistentInteract(
+  persistentId: string, pageActions: any[], close = false, evalScript?: string
+): Promise<any> {
+  await rateLimit();
+  const { httpCode, body } = await interactRaw(persistentId, pageActions, close, evalScript);
   checkError(httpCode, body, "BROWSER");
   return body;
+}
+
+/** A step on the page already open (a load-more round, a probe): it loads no new page, so no rate-limit pause. */
+async function pageStep(persistentId: string, pageActions: any[], evalScript: string): Promise<any> {
+  const { httpCode, body } = await interactRaw(persistentId, pageActions, false, evalScript);
+  checkError(httpCode, body, "BROWSER");
+  return body;
+}
+
+/** One load-more round, then `probeScript`'s answer. A click that did not land (a button LinkedIn
+ *  re-rendered mid-round) does not end the read: the page is probed again as it is. */
+async function loadMoreRound(persistentId: string, buttons: number, waitMs: number, settleMs: number, probeScript: string): Promise<string> {
+  const { httpCode, body } = await interactRaw(persistentId, loadMoreRoundActions(buttons, waitMs, settleMs), false, probeScript);
+  const answered = httpCode < 400 ? body : await pageStep(persistentId, [], probeScript);
+  return String(answered?.content ?? "");
+}
+
+/** Expands every comment thread with real clicks on the load-more buttons, to exhaustion
+ *  (ceiling MAX_LOAD_ROUNDS) or until more than MAX_COMMENTS are shown. */
+async function expandComments(persistentId: string, settleMs: number): Promise<{ truncated: boolean; rounds: number }> {
+  const first = await persistentInteract(persistentId, [{ action: "wait", delay: settleMs }, ...firstLookActions(1200)], false, LOAD_MORE_PROBE_JS);
+  const none: LoadMoreProbe = { buttons: 0, comments: 0 };
+  let probe = parseProbe<LoadMoreProbe>(first?.content) ?? none;
+  let rounds = 0;
+  for (; rounds < MAX_LOAD_ROUNDS && probe.buttons > 0; rounds++) {
+    probe = parseProbe<LoadMoreProbe>(await loadMoreRound(persistentId, probe.buttons, 1100, 400, LOAD_MORE_PROBE_JS)) ?? none;
+    if (probe.comments > MAX_COMMENTS) break;
+  }
+  return { truncated: (rounds >= MAX_LOAD_ROUNDS || probe.comments > MAX_COMMENTS) && probe.buttons > 0, rounds };
 }
 
 // Parse a verify-script JSON result defensively — the write action has already
@@ -340,41 +378,20 @@ async function cmdComments(postUrl: string): Promise<void> {
   const persistentId = sessionResult?.persistentSessionId || "";
   if (!persistentId) errorJson("SESSION_ERROR", "Failed to create persistent session for reading comments");
 
-  // Let the post page settle; the extract script itself scrolls + clicks
-  // "load more comments" (selector-free, so a 0-comment post won't hard-fail).
-  const settleActions = [{ action: "wait", delay: 3500 }];
+  // Let the post page settle, then expand every thread with real clicks on its load-more buttons
+  // (selector-free, so a 0-comment post won't hard-fail).
+  const { truncated, rounds } = await expandComments(persistentId, 3500);
 
   // Derive the post's numeric activity id up front — used to emit a canonical activity URL and to
   // CONSTRUCT a per-comment deep-link permalink when LinkedIn doesn't expose a real anchor.
   const actMatch = postUrl.match(/urn:li:activity:(\d+)/) || postUrl.match(/activity[:\-](\d+)/i);
   const postActivityId = actMatch ? actMatch[1] : "";
 
-  // Async IIFE — Playwright awaits the returned Promise; the trailing evaluate's
-  // return value becomes `content`.
-  const extractScript = `(async () => {
-    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-    // Include nested reply-expansion buttons ("show previous replies" / "more replies") so nested
-    // threads are pulled in too, not just top-level comments.
-    const loadMoreSel = 'button.comments-comments-list__load-more-button, button.show-prev-replies, button[aria-label*="more comment" i], button[aria-label*="more repl" i], button[aria-label*="previous repl" i], button[aria-label*="Load more" i], button.scaffold-finite-scroll__load-button';
-    const MAX_ROUNDS = 40;   // safety ceiling; we otherwise paginate to EXHAUSTION (no more buttons)
-    const MAX_COMMENTS = 400; // hard cap on entities so a viral post can't run unbounded
-    const countAll = () => document.querySelectorAll('article.comments-comment-entity, .comments-comment-entity, .comments-comment-item').length;
-    window.scrollTo(0, document.body.scrollHeight);
-    await sleep(1200);
-    let rounds = 0;
-    for (; rounds < MAX_ROUNDS; rounds++) {
-      // Click EVERY visible load-more (top-level AND nested) each round, not just the first.
-      const btns = Array.from(document.querySelectorAll(loadMoreSel)).filter((b) => b && b.offsetParent !== null && !b.disabled);
-      if (!btns.length) break; // exhausted — nothing left to expand
-      for (const b of btns) { try { b.click(); } catch (e) {} }
-      await sleep(1100);
-      window.scrollTo(0, document.body.scrollHeight);
-      await sleep(400);
-      if (countAll() > MAX_COMMENTS) break;
-    }
-    const remaining = Array.from(document.querySelectorAll(loadMoreSel)).filter((b) => b && b.offsetParent !== null && !b.disabled);
-    const truncated = (rounds >= MAX_ROUNDS || countAll() > MAX_COMMENTS) && remaining.length > 0;
-
+  // The trailing evaluate's return value becomes `content`. A read only: it moves nothing on the page.
+  const extractScript = `(() => {
+    const truncated = ${truncated};
+    const rounds = ${rounds};
+    const MAX_COMMENTS = ${MAX_COMMENTS};
     const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
     const lc = (s) => norm(s).toLowerCase();
     const pick = (root, sels) => { for (const s of sels) { const n = root.querySelector(s); if (n && n.innerText && n.innerText.trim()) return n.innerText.trim(); } return ''; };
@@ -447,7 +464,7 @@ async function cmdComments(postUrl: string): Promise<void> {
     return JSON.stringify({ postAuthor: postAuthorRaw, ownerName: (postAuthorRaw || '').split('\\n')[0], postUrl: canonicalPostUrl, postActivityId: canonicalActId, postTextPreview: postText.slice(0, 500), commentCount: comments.length, totalWithReplies: totalWithReplies, truncated: truncated, rounds: rounds, comments: comments });
   })()`;
 
-  const result = await persistentInteract(persistentId, settleActions, true, extractScript);
+  const result = await persistentInteract(persistentId, [], true, extractScript);
   const content = result?.content || "";
   const trimmed = String(content).replace(/\s/g, "");
   if (!trimmed || /^\{"ok":/.test(trimmed)) {
@@ -467,6 +484,31 @@ async function cmdComments(postUrl: string): Promise<void> {
   console.log(JSON.stringify({ source: "linkedin_post_comments", url: postUrl, error: true, code: "PARSE_ERROR", message: "Could not parse extracted comments", raw: content }));
 }
 
+/** Step 1 of reply-comment: finds the target comment (expanding threads with real load-more clicks,
+ *  ceiling MAX_LOAD_ROUNDS, stopping the moment it is shown), clicks its Reply button with real input,
+ *  and marks its inline reply editor and submit button. `open` is null when the page gave no readable
+ *  answer; `content` is that answer, for the auth-wall check. */
+async function openTargetReply(
+  persistentId: string, targetCommentId: string, targetName: string
+): Promise<{ open: any; content: string }> {
+  const probeScript = targetProbeScript(targetCommentId, targetName);
+  const first = await persistentInteract(persistentId, [{ action: "wait", delay: 3500 }, ...firstLookActions(1000)], false, probeScript);
+  let content = String(first?.content ?? "");
+  let probe = parseProbe<TargetProbe>(content);
+  for (let i = 0; i < MAX_LOAD_ROUNDS && probe && !probe.found && probe.buttons > 0; i++) {
+    content = await loadMoreRound(persistentId, probe.buttons, 1000, 300, probeScript);
+    probe = parseProbe<TargetProbe>(content);
+  }
+  if (!probe) return { open: null, content };
+  const { matchedBy } = probe;
+  if (!probe.found) return { open: { found: false, commentCount: probe.comments }, content };
+  if (!probe.hasReplyButton) return { open: { found: true, replyOpen: false, matchedBy, reason: "no_reply_button" }, content };
+  const { httpCode, body } = await interactRaw(persistentId, openReplyActions(), false, replyBoxScript(matchedBy));
+  if (httpCode >= 400) return { open: { found: true, replyOpen: false, matchedBy, reason: "reply_click_failed" }, content };
+  content = String(body?.content ?? "");
+  return { open: parseProbe(content), content };
+}
+
 async function cmdReplyComment(
   postUrl: string, replyText: string, targetCommentId: string, targetName: string
 ): Promise<void> {
@@ -484,86 +526,17 @@ async function cmdReplyComment(
   if (!persistentId) errorJson("SESSION_ERROR", "Failed to create persistent session for replying");
 
   // Step 1 — load comments, LOCATE the exact target comment, click its Reply button, and mark the
-  // opened reply editor + its submit button with data-attributes so Step 2 can target them
-  // precisely (DOM state persists across calls within the SAME persistent session). Prefer the
-  // stable commentId (URN); fall back to a case-insensitive commenter-name match.
-  const settleActions = [{ action: "wait", delay: 3500 }];
-  const openReplyScript = `(async () => {
-    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-    const loadMoreSel = 'button.comments-comments-list__load-more-button, button.show-prev-replies, button[aria-label*="more comment" i], button[aria-label*="more repl" i], button[aria-label*="previous repl" i], button[aria-label*="Load more" i], button.scaffold-finite-scroll__load-button';
-    const norm = (s) => (s || '').toLowerCase().replace(/\\s+/g, ' ').trim();
-    const wantId = ${JSON.stringify(targetCommentId || "")};
-    const wantName = norm(${JSON.stringify(targetName || "")});
-    const idOf = (el) => {
-      const c = el.getAttribute('data-id') || el.getAttribute('data-urn') || '';
-      if (/urn:li:comment/i.test(c)) return c;
-      const inner = el.querySelector('[data-id*="urn:li:comment" i], [data-urn*="urn:li:comment" i]');
-      return inner ? (inner.getAttribute('data-id') || inner.getAttribute('data-urn') || '') : '';
-    };
-    const nameOf = (el) => {
-      const n = el.querySelector('.comments-comment-meta__description-title, .comments-post-meta__name-text, .comments-comment-item__post-meta .hoverable-link-text, .comments-comment-meta__description a');
-      return n ? norm(n.innerText.split('\\n')[0]) : '';
-    };
-    const findTarget = () => {
-      const nodes = Array.from(document.querySelectorAll('article.comments-comment-entity, .comments-comment-entity, .comments-comment-item'));
-      if (wantId) { const t = nodes.find((el) => idOf(el) === wantId); if (t) return { target: t, matchedBy: 'id', count: nodes.length }; }
-      if (wantName) { const t = nodes.find((el) => nameOf(el).indexOf(wantName) >= 0); if (t) return { target: t, matchedBy: 'name', count: nodes.length }; }
-      return { target: null, matchedBy: '', count: nodes.length };
-    };
-    // Paginate to EXHAUSTION (ceiling 40), but STOP EARLY the moment the target comment is present
-    // — a comment deep in the tail is no longer missed by a hard 8-page cap.
-    window.scrollTo(0, document.body.scrollHeight);
-    await sleep(1000);
-    let found = findTarget();
-    for (let i = 0; i < 40 && !found.target; i++) {
-      const btns = Array.from(document.querySelectorAll(loadMoreSel)).filter((b) => b && b.offsetParent !== null && !b.disabled);
-      if (!btns.length) break;
-      for (const b of btns) { try { b.click(); } catch (e) {} }
-      await sleep(1000);
-      window.scrollTo(0, document.body.scrollHeight);
-      await sleep(300);
-      found = findTarget();
-    }
-    const target = found.target, matchedBy = found.matchedBy;
-    if (!target) return JSON.stringify({ found: false, commentCount: found.count });
-    target.setAttribute('data-flock-target', '1');
-    target.scrollIntoView({ block: 'center' });
-    await sleep(500);
-    const replyBtn = target.querySelector('button.comments-comment-social-bar__reply-action-button, button[aria-label*="Reply" i], .comments-comment-social-bar__action-button--reply, button.comment-button');
-    if (!replyBtn) return JSON.stringify({ found: true, replyOpen: false, matchedBy, reason: 'no_reply_button' });
-    try { replyBtn.click(); } catch (e) { return JSON.stringify({ found: true, replyOpen: false, matchedBy, reason: 'reply_click_failed' }); }
-    await sleep(1500);
-    // CRITICAL GUARD: the inline reply composer MUST live inside THIS comment's subtree. We scope
-    // the query to \`target\` (querySelector only returns descendants) and DELIBERATELY do NOT fall
-    // back to any page-level editor. LinkedIn's top-level "Add a comment" box is NOT a reply —
-    // typing there posts a stray top-level comment on the whole post (the exact bug we prevent).
-    // If no inline composer appears (LinkedIn "reused the main box"), we ABORT rather than mis-post.
-    const box = target.querySelector('.comments-comment-box .ql-editor[contenteditable="true"], .comments-comment-texteditor .ql-editor[contenteditable="true"], form[class*="comments-comment-box"] .ql-editor[contenteditable="true"], .ql-editor[contenteditable="true"]');
-    const placeholderOf = (b) => ((b && (b.getAttribute('data-placeholder') || b.getAttribute('aria-placeholder') || b.getAttribute('aria-label'))) || '').toLowerCase();
-    // Reject if it is (or resolves to) the top-level composer: not inside the comment, or shows the
-    // "Add a comment" placeholder rather than a reply placeholder.
-    if (!box || !target.contains(box) || /add a comment/.test(placeholderOf(box))) {
-      return JSON.stringify({ found: true, replyOpen: false, matchedBy, reason: 'no_inline_reply_box', placeholder: placeholderOf(box) });
-    }
-    box.setAttribute('data-flock-reply', '1');
-    try { box.focus(); } catch (e) {}
-    // Scope the submit button to the reply composer's own form so we never click the top-level Post.
-    const form = box.closest('form.comments-comment-box__form, form[class*="comments-comment-box"], .comments-comment-box') || target;
-    const submit = form.querySelector('button.comments-comment-box__submit-button, button[class*="comments-comment-box__submit"], button.artdeco-button--primary[type="submit"]');
-    if (submit) submit.setAttribute('data-flock-reply-submit', '1');
-    return JSON.stringify({ found: true, replyOpen: true, matchedBy, placeholder: placeholderOf(box), hasSubmit: !!submit });
-  })()`;
-
-  const openRes = await persistentInteract(persistentId, settleActions, false, openReplyScript);
-  let open: any;
-  try { open = JSON.parse(String(openRes?.content ?? "")); } catch { open = null; }
+  // opened reply editor + its submit button so Step 2 can target them precisely (DOM state persists
+  // across calls within the SAME persistent session). Prefer the stable commentId (URN); fall back
+  // to a case-insensitive commenter-name match.
+  const { open, content: openContent } = await openTargetReply(persistentId, targetCommentId, targetName);
   // Unparseable Step-1 result usually means the post fell back to an auth wall — surface
   // SESSION_OUTDATED (and mark the session) instead of a misleading COMMENT_NOT_FOUND.
   // checkSessionExpired exits the process on a match; if it returns, fall through to the
   // COMMENT_NOT_FOUND branch below (which performs the single session close).
   if (!open) {
     await persistentClose(persistentId);
-    checkSessionExpired(String(openRes?.content ?? ""));
+    checkSessionExpired(openContent);
     errorJson("COMMENT_NOT_FOUND", "Could not read the post's comments (unexpected response). Re-read with 'comments' and retry.");
   }
   if (!open.found) {
@@ -585,18 +558,11 @@ async function cmdReplyComment(
   // Both marks were set in Step 1 and scoped to the target comment; we never use a page-wide
   // selector here, so a submit can only ever land on this comment's inline reply. Same persistent
   // session, so the Step-1 marks are still on the DOM. Close the session on this call.
-  const typeActions = [
-    { action: "click", selector: `[data-flock-reply="1"]` },
-    { action: "insertText", text: replyText },
-    { action: "wait", delay: 800 },
-    { action: "click", selector: `[data-flock-reply-submit="1"]` },
-    { action: "wait", delay: 2500 },
-  ];
   const needle = replyText.slice(0, 60);
   const verifyScript = `(() => {
     const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim().toLowerCase();
-    const target = document.querySelector('[data-flock-target="1"]');
-    const ed = document.querySelector('[data-flock-reply="1"]');
+    const target = document.querySelector(${JSON.stringify(targetSelector(REPLY_TARGET))});
+    const ed = document.querySelector(${JSON.stringify(targetSelector(REPLY_BOX))});
     const needle = norm(${JSON.stringify(needle)});
     const stillTyped = !!ed && needle.length > 0 && norm(ed.innerText).indexOf(needle) >= 0;
     // The posted reply should now appear WITHIN the target comment's subtree (nested), proving it
@@ -607,7 +573,7 @@ async function cmdReplyComment(
     return JSON.stringify({ success: false, nested: false, message: 'Reply may not have posted (composer still holds the text) — verify on LinkedIn.' });
   })()`;
 
-  const sendRes = await persistentInteract(persistentId, typeActions, true, verifyScript);
+  const sendRes = await persistentInteract(persistentId, sendReplyActions(replyText), true, verifyScript);
   console.log(JSON.stringify({ matchedBy: open.matchedBy, ...parseVerify(sendRes?.content) }));
 }
 

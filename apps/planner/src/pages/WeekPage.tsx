@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { Button, Callout, Card, Confirm, ErrorCard, Field, Icon, Page, Row, Schedule, Skeleton, Stack, Value, safeHref, scheduleAddKey, useApp, useChat, useTable, useToast } from "../flock/ui";
-import { addDays, dayLabel, mondayOf, todayStr, weekDates, weekdayLong, weekdayOf } from "../../server/dates";
+import { Button, Card, Confirm, ErrorCard, Field, Icon, Page, Row, Schedule, Skeleton, Stack, Value, safeHref, scheduleAddKey, useApp, useChat, useTable, useToast } from "../flock/ui";
+import { addDays, dayLabel, mondayOf, todayStr } from "../../server/dates";
 import { DishPanel } from "./DishPanel";
 import { PlayLink } from "./Thumb";
 import { lastTimeText } from "../../server/dishText";
@@ -11,14 +11,10 @@ import { send, useLive, why, type DishView, type Family, type MealView, type Rec
  *  and the slot tapped if any) with the slot the new dish goes in. */
 type Open = { meal: string; dish?: string } | { date: string; tapped?: string; slot?: string } | null;
 const sameSlot = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
-/** "Sunday 29": a day as the not-a-cooking-day note names it. */
-const dayWords = (date: string) => `${weekdayLong(date)} ${Number(date.slice(8))}`;
-/** "Sunday 29 Nov". */
-const longLabel = (date: string) => dayLabel(date).replace(weekdayOf(date), weekdayLong(date));
 
-/** The week as a schedule of its cooking days: each meal with its dishes named once and, under them, only what differs from
+/** The week as a schedule of every day (every day is planned): each meal with its dishes named once and, under them, only what differs from
  *  everyone eating it (a person's portions, a dish for one person); an ordered-in meal muted. A meal opens in place,
- *  its dishes editable there. A day that is not a cooking day says so, with a way to plan it this once. */
+ *  its dishes editable there. */
 export function WeekPage() {
   const thisWeek = mondayOf(todayStr());
   // The planned week: the one the link names ("#/week?week=…", the Sunday message), else next week. The page opens on it when
@@ -26,9 +22,9 @@ export function WeekPage() {
   const [planned] = useState(() => linkWeek(typeof location === "undefined" ? "" : location.hash) ?? addDays(thisWeek, 7));
   const [weekStart, setWeekStart] = useState(thisWeek);
   const [chosen, setChosen] = useState(false);
-  const week = useLive<WeekView>(`weeks/${weekStart}`, ["plan_meals", "dishes", "dish_items", "dish_book"]);
-  const other = useLive<WeekView>(`weeks/${planned}`, ["plan_meals"]);
-  const family = useLive<Family>("family", ["house", "people"]);
+  const week = useLive<WeekView>(`weeks/${weekStart}`, ["slot_days", "slot_dishes", "dish_ingredients", "library"]);
+  const other = useLive<WeekView>(`weeks/${planned}`, ["slot_days"]);
+  const family = useLive<Family>("family", ["house", "people", "slots"]);
   const recipes = useTable<RecipeRow>("saved_recipes", { limit: 500 });
   const agent = agentName(useApp().display);
   const chat = useChat();
@@ -47,7 +43,8 @@ export function WeekPage() {
   }, [chosen, weekStart, thisWeek, planned, week.data, other.data]);
   const done = () => { setOpen(null); void week.refetch(); };
   const orderIn = async (date: string, slot: string, on: boolean) => {
-    try { await send("meals", { date, slot, ordered_in: on }); setOpen(null); void week.refetch(); }
+    // The same change as the agent's set_slot_day: ordered in takes its dishes off; cooked at home again plans its dishes.
+    try { await send("slot-days", { date, slot, skip: on ? "ordered_in" : null }); setOpen(null); void week.refetch(); }
     catch (e) { toast.show({ message: `Couldn't save: ${why(e)}`, tone: "danger" }); }
   };
   /** A dish's video: the dish's own (kept by its name across weeks), else the first link of the recipe it points at. Only a
@@ -65,15 +62,14 @@ export function WeekPage() {
     return shown.length ? <Row>{shown.map(({ d, link }) => <PlayLink key={d.id} href={link!.href} thumbnail={link!.thumbnail} label={`Watch the ${d.name} video`} />)}</Row> : null;
   };
 
-  const house = family.data?.house;
   const everyone = (family.data?.people ?? []).map((p) => p.name);
   const today = todayStr();
   const meals = (week.data?.days ?? []).flatMap((d) => d.meals).filter((m) => m.ordered_in || m.dishes.length);
-  // Breakfast, Lunch, the family's own meals, then Dinner; any other slot a meal was planned in after them.
-  const slots = ["Breakfast", "Lunch", ...(house?.extra_slots ?? []).map((s) => s.name), "Dinner"];
+  // The house's slots in planning order (Breakfast, Lunch and Dinner until any is saved); any other slot a meal was planned in after them.
+  const saved = (family.data?.slots ?? []).map((s) => s.name);
+  const slots = saved.length ? saved : ["Breakfast", "Lunch", "Dinner"];
   for (const m of meals) if (!slots.some((s) => sameSlot(s, m.slot))) slots.push(m.slot);
   const slotOf = (m: MealView) => slots.find((s) => sameSlot(s, m.slot)) ?? m.slot;
-  const offDays = house ? weekDates(weekStart).filter((d) => d >= today && !house.cooking_days.includes(weekdayOf(d)) && !meals.some((m) => m.date === d)) : [];
   const status = week.data?.status ?? null;
   const subtitle = status === null ? `Not planned yet · ask ${agent} to plan it`
     : `${week.data?.planned_at ? plannedText(week.data.planned_at) : "Planned"} · tell ${agent} to change anything`;
@@ -87,7 +83,7 @@ export function WeekPage() {
         {m.ordered_in ? <p className="pl-quiet">Ordered in: nothing is cooked or bought for it.</p> : (
           <>
             {m.dishes.map((d) => {
-              if (editing === d.id) return <DishPanel key={d.id} dish={d} at={{ date: m.date, slot: m.slot }} onDone={done} />;
+              if (editing === d.id) return <DishPanel key={d.id} dish={d} dishes={m.dishes} at={{ date: m.date, slot: m.slot }} onDone={done} />;
               const link = linkOf(d), note = dishNote(d), last = lastTimeText(d.last_time);
               return (
                 <div className="pl-dish" key={d.id}>
@@ -103,7 +99,7 @@ export function WeekPage() {
                 </div>
               );
             })}
-            {editing === "new" ? <DishPanel key={`${m.id}-new`} dish={null} at={{ date: m.date, slot: m.slot }} onDone={done} />
+            {editing === "new" ? <DishPanel key={`${m.id}-new`} dish={null} dishes={m.dishes} at={{ date: m.date, slot: m.slot }} onDone={done} />
               : <Row><Button size="sm" variant="ghost" icon="plus" onClick={() => setOpen({ meal: m.id, dish: "new" })}>Add a dish</Button></Row>}
           </>
         )}
@@ -120,7 +116,7 @@ export function WeekPage() {
       )}
       {o.slot ? (
         <>
-          <DishPanel key={`${o.date}-${o.slot}`} dish={null} at={{ date: o.date, slot: o.slot }} onDone={done} />
+          <DishPanel key={`${o.date}-${o.slot}`} dish={null} dishes={meals.find((m) => m.date === o.date && sameSlot(m.slot, o.slot!))?.dishes ?? []} at={{ date: o.date, slot: o.slot }} onDone={done} />
           <Row><Button size="sm" variant="ghost" onClick={() => void orderIn(o.date, o.slot!, true)}>{`${o.slot} is ordered in`}</Button></Row>
         </>
       ) : <Row><Button size="sm" variant="ghost" onClick={() => setOpen(null)}>Cancel</Button></Row>}
@@ -134,7 +130,7 @@ export function WeekPage() {
 
   return (
     <Page
-      title={weekTitle(weekStart, !!house?.cooking_days.includes("Sun"))} subtitle={subtitle}
+      title={weekTitle(weekStart)} subtitle={subtitle}
       actions={
         <Row>
           {status === "draft" ? <Value kind="select" value="Draft" tones={{ Draft: "warning" }} /> : null}
@@ -157,16 +153,6 @@ export function WeekPage() {
               onSelect={(m) => setOpen(opened?.id === m.id ? null : { meal: m.id })}
               onAdd={(date, slot) => setOpen({ date, tapped: slot, slot })}
               expanded={expanded} />
-            {offDays.map((d) => (
-              <Callout key={d} tone="muted" icon="sun" title={`${dayWords(d)} isn't a cooking day`}>
-                <Stack gap="sm">
-                  <span>{chat.available ? `Change this on the Family page, or plan just this ${weekdayLong(d)}.` : `Change this on the Family page, or ask ${agent} to plan just this ${weekdayLong(d)}.`}</span>
-                  {chat.available ? (
-                    <Row><Button variant="soft" size="sm" onClick={() => chat.openChat({ message: `Plan ${longLabel(d)} too`, send: true })}>{`Plan ${weekdayLong(d)} too`}</Button></Row>
-                  ) : null}
-                </Stack>
-              </Callout>
-            ))}
           </>
         )}
       <Confirm

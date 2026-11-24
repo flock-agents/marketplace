@@ -1,8 +1,8 @@
-// The food rules the app checks before a plan is kept (docs/specs/2026-11-21-planner-food-rules-check.md): the matcher, the
-// breaks of each kind of rule, and run 11's week, refused naming each break and passed once corrected.
+// The food rules the app checks before a plan is kept (docs/specs/2026-11-21-planner-food-rules-check.md): the matcher and the
+// breaks of each kind of rule, as pure functions. (Run 11's week through plan_week went with the old plan operations; lane C
+// checks rules against the slot model's rules rows and each dish's contains.)
 import { describe, it, expect } from "bun:test";
-import { boot } from "./testkit";
-import { breaksText, dishHas, isSide, matches, ruleBreaks, ruleText, type RuleWeek } from "./rules";
+import { breaksText, dishHas, isSide, matches, ruleBreaks, ruleBreaksIn, rulesSaid, ruleText, type RuleWeek } from "./rules";
 
 describe("matches", () => {
   it("drops a negation from a dish's name: in brackets, and 'without X' / 'no X'", () => {
@@ -23,6 +23,7 @@ describe("matches", () => {
     expect(matches("Aloo matar", "@green_leafy", { name: true })).toBe(true);
     expect(matches("Suji sheera", "@gluten", { name: true })).toBe(true);
     expect(matches("Kadhi chana", "@dairy", { name: true })).toBe(true);
+    expect(matches("yogurt", "@dairy")).toBe(true);
     expect(matches("Palak paneer", "spinach", { name: true })).toBe(true);
     expect(matches("Rava idli", "@white_rice", { name: true })).toBe(false);
     expect(matches("Akki roti", "@white_rice", { name: true })).toBe(true);
@@ -213,6 +214,9 @@ describe("ruleBreaks", () => {
     const b = ruleBreaks(w, { rules }, people);
     expect(keys(b)).toEqual(["Tue 2026-11-24 Lunch|Chapati|"]);
     expect(b[0].fix).toContain("Mon Lunch, Mon Dinner, Tue Lunch");
+    // Writing Tuesday alone (a day of the weekly run): Monday's two stay, Tuesday is the one to change, said so.
+    const tue = ruleBreaksIn(w, { rules }, people, ["Tue 2026-11-24 Lunch"]);
+    expect(tue[0].fix).toBe("Mon Lunch, Mon Dinner already have it, as many as the rule allows: plan Tue Lunch without it");
   });
 
   // Live eval 2026-11-22: the cook's "max 2 dishes in the morning" broken by per-person variants (3 to cook).
@@ -249,13 +253,47 @@ describe("ruleBreaks", () => {
       { date: "2026-11-25", slot: "Lunch", dishes: [{ name: "Fish fry" }] }]);
     const rule = (kind: string, days: string[] = []) => ({ kind: kind as any, days });
     expect(keys(ruleBreaks(w, { rules: [rule("no_eggs", ["Tue"])] }, people))).toEqual(["Tue 2026-11-24 Lunch|Egg curry|"]);
-    expect(keys(ruleBreaks(w, { rules: [rule("veg")] }, people))).toEqual(["Tue 2026-11-24 Lunch|Chicken 65|", "Wed 2026-11-25 Lunch|Fish fry|"]);
+    // Vegetarian is no meat, fish or eggs (constants.ts; eval 23 Nov: a grandparent's "pure vegetarian" let eggs through).
+    expect(keys(ruleBreaks(w, { rules: [rule("veg")] }, people))).toEqual(["Tue 2026-11-24 Lunch|Egg curry|", "Tue 2026-11-24 Lunch|Chicken 65|", "Wed 2026-11-25 Lunch|Fish fry|"]);
+    expect(keys(ruleBreaks(w, { rules: [rule("egg")] }, people))).toEqual(["Tue 2026-11-24 Lunch|Chicken 65|", "Wed 2026-11-25 Lunch|Fish fry|"]);
     expect(keys(ruleBreaks(w, { rules: [rule("egg", ["Wed"])] }, people))).toEqual(["Wed 2026-11-25 Lunch|Fish fry|"]);
     expect(keys(ruleBreaks(w, { rules: [rule("no_meat", ["Tue"])] }, people))).toEqual(["Tue 2026-11-24 Lunch|Chicken 65|"]);
     expect(keys(ruleBreaks(w, { rules: [rule("no_onion_garlic", ["Tue"])] }, people))).toEqual(["Tue 2026-11-24 Lunch|Egg curry|"]);
     expect(ruleBreaks(w, { rules: [rule("fasting", ["Tue"]), { kind: "other", days: [], note: "no fish" }] }, people)).toEqual([]);
     // A day in the family's own words ("Ekadashi") is not a weekday the app can check.
     expect(ruleBreaks(w, { rules: [rule("veg", ["Ekadashi"])] }, people)).toEqual([]);
+  });
+
+  // Lane B (2026-11-23): a cook's "no baking, no oven" is avoid @baked: what needs an oven, not what is bought baked.
+  it("@baked takes what needs an oven, not bread, pav, buns or tandoori food", () => {
+    for (const dish of ["Chocolate cake", "Veg puffs", "Garlic bread", "Pizza", "Baked vegetables", "Oats cookies", "Banana muffins", "Brownies", "Veg lasagna"])
+      expect(matches(dish, "@baked", { name: true }), dish).toBe(true);
+    for (const dish of ["Pav bhaji", "Bread upma", "Bun dosa", "Tandoori roti", "Paneer tikka", "Rava kesari", "Puri bhaji", "Masala dosa", "Bread pakora"])
+      expect(matches(dish, "@baked", { name: true }), dish).toBe(false);
+    const w = week([{ date: "2026-11-23", slot: "Dinner", dishes: [{ name: "Veg puffs" }, { name: "Dal" }] }]);
+    const cook = [{ kind: "avoid" as const, days: [], items: ["@baked"], note: "no oven" }];
+    expect(keys(ruleBreaks(w, { rules: cook }, people))).toEqual(["Mon 2026-11-23 Dinner|Veg puffs|"]);
+    expect(rulesSaid(cook)).toBe("Everyone: no baked food");
+  });
+
+  // Lane B (2026-11-23): "fasts Thursday till evening" was a note nobody checked; with who, days and slots it is checked.
+  it("a fast with who, days and slots is checked: a dish for that person, or for everyone without except of them, is a break", () => {
+    const fast = [{ kind: "fasting" as const, who: "Lakshmi", days: ["Thu"], slots: ["Breakfast", "Lunch"], note: "fast till evening, light dinner" }];
+    const thu = "2026-11-26";
+    const w = week([
+      { date: thu, slot: "Breakfast", dishes: [{ name: "Upma", for_people: ["everyone"] }] },
+      { date: thu, slot: "Lunch", dishes: [{ name: "Rajma", for_people: ["Shiva", "Ankita", "Agastya", "Meera"] }, { name: "Curd rice", for_people: ["Lakshmi"] }] },
+      { date: thu, slot: "Dinner", dishes: [{ name: "Khichdi", for_people: ["everyone"] }] },
+      { date: "2026-11-27", slot: "Breakfast", dishes: [{ name: "Poha", for_people: ["everyone"] }] }]);
+    const b = ruleBreaks(w, { rules: fast }, people);
+    expect(keys(b)).toEqual(["Thu 2026-11-26 Breakfast|Upma|Lakshmi", "Thu 2026-11-26 Lunch|Curd rice|Lakshmi"]);
+    expect(b[0].rule).toBe("Lakshmi fasts at Breakfast, Lunch on Thu");
+    expect(b[0].fix).toBe('Upma is for everyone, which includes Lakshmi, who fasts at Breakfast and Lunch on Thursday: make it for everyone except Lakshmi (except: ["Lakshmi"])');
+    expect(b[1].fix).toContain("plan nothing for Lakshmi at this meal");
+    // Without slots it stays a note; so does a day in the family's words.
+    expect(ruleBreaks(w, { rules: [{ kind: "fasting", who: "Lakshmi", days: ["Thu"], note: "fasts" }] }, people)).toEqual([]);
+    expect(ruleBreaks(w, { rules: [{ kind: "fasting", who: "Lakshmi", days: ["Ekadashi"], slots: ["Breakfast"] }] }, people)).toEqual([]);
+    expect(rulesSaid(fast)).toBe("Lakshmi: fasts at Breakfast, Lunch on Thu (fast till evening, light dinner)");
   });
 
   it("names each break in one line: meal, dish, the rule, and the fix", () => {
@@ -265,173 +303,56 @@ describe("ruleBreaks", () => {
   });
 });
 
-// ── Run 11 (the plan saved for 23–29 Nov), through the agent's operations ──
+// Owner, 23 Nov: a soft wish ("millets are good for him") is kept some meals of the week, not at every one: too many is a
+// break, too few a softer one (only when asked for, as the stepped plan does).
+describe("a soft rule, kept some times a week", () => {
+  const DAYS = ["2026-11-23", "2026-11-24", "2026-11-25", "2026-11-26", "2026-11-27"];
+  const swap = { kind: "swap", who: "Meera", items: ["@white_rice"], to: "millets", often: "sometimes" as const, days: [] };
+  /** Five lunches of rice for everyone; the first `n` say "millets for Meera". */
+  const lunches = (n: number) => week(DAYS.map((date, i) => ({ date, slot: "Lunch", dishes: [{ name: "Rice", for_people: ["everyone"], portion_note: i < n ? "millets in place of rice for Meera" : null },
+    { name: "Sambar", for_people: ["everyone"] }] })));
 
-const RUN11_RULES = [
-  { kind: "only", who: "Meera", slots: ["Breakfast"], items: ["plain idli", "plain dosa", "banana sheera"], note: "Meera only eats these for breakfast" },
-  { kind: "swap", who: "Lakshmi", items: ["@white_rice"], to: "millet", note: "diabetic" },
-  { kind: "only", who: "Lakshmi", days: ["Thu"], items: ["sabudana khichdi", "fruit"], note: "Thursday fast" },
-  { kind: "require", who: "Shiva", slots: ["Lunch", "Dinner"], items: ["@protein"] },
-  { kind: "avoid", items: ["@peanut"] },
-  { kind: "avoid", items: ["@mushroom", "@baked"] },
-  { kind: "cap", items: ["chapati", "phulka"], per_week: 2 },
-  { kind: "avoid", days: ["Tue"], items: ["@root_veg"] },
-  { kind: "veg" },
-  { kind: "no_eggs" },
-];
-
-const ing = (...items: string[]) => items.map((item) => ({ item, amount: 100, unit: "g" }));
-/** A dish as the agent sends it: for everyone unless `more` says who eats it. */
-const dish = (name: string, items: string[], more: Record<string, unknown> = {}) => ({ name, for: ["everyone"], ingredients: ing(...items), ...more });
-/** Everyone at home but these. */
-const allBut = (...not: string[]) => ["Shiva", "Ankita", "Lakshmi", "Agastya", "Meera"].filter((n) => !not.includes(n));
-
-/** The week as it was saved in run 11, near enough: each rule broken somewhere. */
-const BROKEN = [
-  { date: "2026-11-23", slot: "Breakfast", dishes: [dish("Rava idli", ["rava", "curd"])] },
-  { date: "2026-11-23", slot: "Lunch", dishes: [dish("Dal tadka", ["toor dal", "tomato"]), dish("Phulka", ["atta"])] },
-  { date: "2026-11-23", slot: "Dinner", dishes: [dish("Mushroom masala", ["mushroom", "tomato", "onion"]), dish("Chapati", ["atta"])] },
-  { date: "2026-11-24", slot: "Lunch", dishes: [dish("Aloo gobi", ["potato", "cauliflower", "ginger"]), dish("Chapati", ["atta"]), dish("Moong dal", ["moong dal"])] },
-  { date: "2026-11-24", slot: "Dinner", dishes: [dish("Lemon rice (no peanuts)", ["rice", "lemon", "curry leaves"]), dish("Curd", ["curd"])] },
-  { date: "2026-11-26", slot: "Breakfast", dishes: [dish("Oats dosa", ["oats", "rice flour", "curd"])] },
-  { date: "2026-11-27", slot: "Dinner", dishes: [dish("Veg pulao", ["basmati rice", "carrot", "peas"]), dish("Cucumber salad", ["cucumber", "lemon"])] },
-  { date: "2026-11-28", slot: "Breakfast", dishes: [dish("Banana walnut cake", ["banana", "walnut", "maida"])] },
-  { date: "2026-11-28", slot: "Lunch", dishes: [dish("Egg curry", ["eggs", "tomato"]), dish("Jeera rice", ["basmati rice", "cumin"])] },
-];
-
-const RUN11_BREAKS = [
-  "Mon 2026-11-23 Breakfast|Rava idli|Meera",
-  "Mon 2026-11-23 Dinner|Mushroom masala|",
-  "Mon 2026-11-23 Dinner||Shiva",
-  "Tue 2026-11-24 Lunch|Aloo gobi|",
-  "Tue 2026-11-24 Lunch|Chapati|",
-  "Tue 2026-11-24 Dinner|Lemon rice (no peanuts)|Lakshmi",
-  "Thu 2026-11-26 Breakfast|Oats dosa|Meera",
-  "Thu 2026-11-26 Breakfast|Oats dosa|Lakshmi",
-  "Thu 2026-11-26 Breakfast|Oats dosa|Lakshmi",
-  "Fri 2026-11-27 Dinner|Veg pulao|Lakshmi",
-  "Fri 2026-11-27 Dinner||Shiva",
-  "Sat 2026-11-28 Breakfast|Banana walnut cake|",
-  "Sat 2026-11-28 Breakfast|Banana walnut cake|Meera",
-  "Sat 2026-11-28 Lunch|Egg curry|",
-  "Sat 2026-11-28 Lunch|Jeera rice|Lakshmi",
-].sort();
-
-/** The same week with every rule kept. */
-const FIXED = [
-  { date: "2026-11-23", slot: "Breakfast", dishes: [dish("Plain idli", ["idli rice", "urad dal"], { for: ["Meera"] }), dish("Rava idli", ["rava", "curd"], { for: allBut("Meera") })] },
-  { date: "2026-11-23", slot: "Lunch", dishes: [dish("Dal tadka", ["toor dal", "tomato"]), dish("Phulka", ["atta"])] },
-  { date: "2026-11-23", slot: "Dinner", dishes: [dish("Paneer butter masala", ["paneer", "tomato", "cream"]), dish("Chapati", ["atta"])] },
-  { date: "2026-11-24", slot: "Lunch", dishes: [dish("Cabbage poriyal", ["cabbage", "coconut"]), dish("Bajra roti", ["bajra flour"]), dish("Moong dal", ["moong dal"])] },
-  { date: "2026-11-24", slot: "Dinner", dishes: [dish("Lemon rice (no peanuts)", ["rice", "lemon", "curry leaves"], { portion_note: "millet lemon rice for Lakshmi" }), dish("Curd", ["curd"])] },
-  { date: "2026-11-26", slot: "Breakfast", dishes: [dish("Plain dosa", ["dosa rice", "urad dal"], { for: ["Meera"] }),
-    dish("Sabudana khichdi", ["sabudana", "potato", "ghee"], { for: ["Lakshmi"] }), dish("Oats upma", ["oats", "carrot", "beans"], { for: allBut("Meera", "Lakshmi") })] },
-  { date: "2026-11-27", slot: "Dinner", dishes: [dish("Veg pulao", ["basmati rice", "carrot", "peas"], { portion_note: "millet pulao for Lakshmi" }), dish("Rajma", ["rajma", "tomato", "onion"])] },
-  { date: "2026-11-28", slot: "Breakfast", dishes: [dish("Banana sheera", ["sooji", "banana", "ghee"], { for: ["Meera"] }), dish("Vegetable upma", ["sooji", "carrot", "peas"], { for: allBut("Meera") })] },
-  { date: "2026-11-28", slot: "Lunch", dishes: [dish("Chole", ["chole", "onion", "tomato"]), dish("Jeera rice", ["basmati rice", "cumin"], { portion_note: "millet for Lakshmi" })] },
-];
-
-async function run11() {
-  const k = await boot();
-  for (const name of ["Shiva", "Ankita", "Lakshmi", "Agastya", "Meera"]) await k.op("set_person", { name, group: name === "Agastya" ? "child" : "adult" });
-  const saved = await k.op("set_house_rules", { rules: RUN11_RULES });
-  expect(saved.house.rules).toHaveLength(RUN11_RULES.length);
-  return k;
-}
-
-describe("run 11: the plan for 23–29 Nov", () => {
-  it("a final plan_week with meals that breaks the family's rules is refused, naming every break, and nothing is saved", async () => {
-    const { op, rows } = await run11();
-    const r = await op("plan_week", { week_start: "2026-11-23", mode: "final", meals: BROKEN });
-    expect(r.code).toBe("RULE_BROKEN");
-    expect(keys(r.detail.rule_breaks).sort()).toEqual(RUN11_BREAKS);
-    expect(r.error).toContain("Mon 2026-11-23 Breakfast: Rava idli — Meera eats only plain idli, plain dosa, banana sheera at Breakfast (add a dish for Meera)");
-    expect(r.error).toContain("Fri 2026-11-27 Dinner: Shiva has protein at Lunch, Dinner");
-    expect(rows("plan_meals")).toHaveLength(0);
+  it("2–3 meals keep it: no break; a hard swap would want every meal", () => {
+    for (const n of [2, 3]) expect(ruleBreaks(lunches(n), { rules: [swap] }, people, { under: true })).toEqual([]);
+    const { often: _o, ...hard } = swap;
+    expect(keys(ruleBreaks(lunches(2), { rules: [hard] }, people))).toEqual(["Wed 2026-11-25 Lunch|Rice|Meera", "Thu 2026-11-26 Lunch|Rice|Meera", "Fri 2026-11-27 Lunch|Rice|Meera"]);
   });
 
-  it("the corrected week passes, and closes with its message", async () => {
-    const { op } = await run11();
-    const r = await op("plan_week", { week_start: "2026-11-23", mode: "final", meals: FIXED });
-    expect(r.code).toBeUndefined();
-    expect(r.week.status).toBe("final");
-    const closed = await op("plan_week", { week_start: "2026-11-23", mode: "final" });
-    expect(closed.code).toBeUndefined();
-    expect(closed.message).toBeDefined();
+  it("every meal (the live run): the meals past 3 are breaks, 'over'", () => {
+    const b = ruleBreaks(lunches(5), { rules: [swap] }, people);
+    expect(keys(b)).toEqual(["Thu 2026-11-26 Lunch|Rice|Meera", "Fri 2026-11-27 Lunch|Rice|Meera"]);
+    expect(b.every((x) => x.soft === "over" && x.to === "millets")).toBe(true);
+    expect(b[0].rule).toBe("Meera has millets in place of white rice 2–3 times a week");
+    expect(b[0].fix).toContain("now in 5 meals");
+    // The swap said on a dish with no rice in its name (sambar, bisi bele bath) is the swap kept at that meal too (eval 23 Nov).
+    const onSambar = week(DAYS.map((date) => ({ date, slot: "Lunch", dishes: [{ name: "Sambar", for_people: ["everyone"], portion_note: "millet in place of rice for Meera" }] })));
+    expect(keys(ruleBreaks(onSambar, { rules: [swap] }, people))).toEqual(["Thu 2026-11-26 Lunch|Sambar|Meera", "Fri 2026-11-27 Lunch|Sambar|Meera"]);
+    // A dish of theirs alone says the swap without naming them ("Rice" for Meera: "millet in place of white rice").
+    const own = week(DAYS.map((date) => ({ date, slot: "Lunch", dishes: [{ name: "Rice", for_people: ["Meera"], portion_note: "millet in place of white rice" }] })));
+    expect(keys(ruleBreaks(own, { rules: [swap] }, people))).toEqual(["Thu 2026-11-26 Lunch|Rice|Meera", "Fri 2026-11-27 Lunch|Rice|Meera"]);
   });
 
-  it("a draft that breaks the rules is kept as a draft; making it final is refused with every break", async () => {
-    const { op, rows } = await run11();
-    expect((await op("plan_week", { week_start: "2026-11-23", mode: "draft", meals: BROKEN })).week.status).toBe("draft");
-    const r = await op("plan_week", { week_start: "2026-11-23", mode: "final" });
-    expect(r.code).toBe("RULE_BROKEN");
-    expect(keys(r.detail.rule_breaks).sort()).toEqual(RUN11_BREAKS);
-    expect(rows("plan_meals").every((m) => m.status === "draft")).toBe(true);
+  it("too few: a softer break on the meals that could keep it, only when asked (plan_menu never refuses for it)", () => {
+    expect(ruleBreaks(lunches(0), { rules: [swap] }, people)).toEqual([]);
+    const b = ruleBreaks(lunches(0), { rules: [swap] }, people, { under: true });
+    expect(keys(b)).toEqual(["Mon 2026-11-23 Lunch|Rice|Meera", "Tue 2026-11-24 Lunch|Rice|Meera"]);
+    expect(b.every((x) => x.soft === "under")).toBe(true);
   });
 
-  it("rule breaks and missing ingredients are told together, so one round fixes both", async () => {
-    const { op } = await run11();
-    const meals = [{ date: "2026-11-23", slot: "Breakfast", dishes: [{ name: "Rava idli" }] }];
-    const r = await op("plan_week", { week_start: "2026-11-23", mode: "final", meals });
-    expect(r.code).toBe("RULE_BROKEN");
-    expect(r.detail.missing_ingredients).toEqual(["Mon 2026-11-23 Breakfast: Rava idli"]);
-    expect(r.detail.missing_eaters).toEqual(["Mon 2026-11-23 Breakfast: Rava idli (no for)"]);
-    expect(r.error).toContain("Every planned dish names who eats it");
-    expect(keys(r.detail.rule_breaks)).toEqual(["Mon 2026-11-23 Breakfast|Rava idli|Meera"]);
-    expect(r.error).toContain("Without ingredients");
-    // The closing call too: a dish on two days and a rule broken in one refusal.
-    await op("plan_week", { week_start: "2026-11-23", mode: "draft", meals: [...FIXED.slice(0, 2),
-      { date: "2026-11-25", slot: "Lunch", dishes: [dish("Rava idli", ["rava", "curd"]), dish("Mushroom curry", ["mushroom"])] }] });
-    const closing = await op("plan_week", { week_start: "2026-11-23", mode: "final" });
-    expect(closing.code).toBe("RULE_BROKEN");
-    expect(closing.detail.repeated).toEqual(["Rava idli (Mon, Wed)"]);   // a dal is a side: it may come back
-    expect(keys(closing.detail.rule_breaks)).toEqual(["Wed 2026-11-25 Lunch|Mushroom curry|"]);
+  it("a dish of the person's own that is the swap counts; per_week is exact", () => {
+    const own = week(DAYS.map((date, i) => ({ date, slot: "Lunch", dishes: i < 4 ? [{ name: "Foxtail millet pongal", for_people: ["Meera"] }, { name: "Rice", for_people: ["everyone"] }]
+      : [{ name: "Rice", for_people: ["everyone"] }] })));
+    expect(keys(ruleBreaks(own, { rules: [{ ...swap, often: undefined, per_week: 2 }] }, people))).toEqual(["Wed 2026-11-25 Lunch|Foxtail millet pongal|Meera", "Thu 2026-11-26 Lunch|Foxtail millet pongal|Meera"]);
+    expect(ruleText({ ...swap, often: undefined, per_week: 2 })).toBe("Meera has millets in place of white rice twice a week");
   });
 
-  it("with keep_rest, a day's meals are checked, and a cap over the week the day adds to", async () => {
-    const { op } = await run11();
-    expect((await op("plan_week", { week_start: "2026-11-23", mode: "final", keep_rest: true, meals: FIXED.slice(0, 3) })).code).toBeUndefined();
-    const r = await op("plan_week", { week_start: "2026-11-23", mode: "final", keep_rest: true,
-      meals: [{ date: "2026-11-24", slot: "Lunch", dishes: [dish("Chapati", ["atta"]), dish("Moong dal", ["moong dal"])] }] });
-    expect(r.code).toBe("RULE_BROKEN");
-    expect(keys(r.detail.rule_breaks)).toEqual(["Tue 2026-11-24 Lunch|Chapati|"]);
-  });
-
-  it("set_meal and set_dish by the agent on a final week are refused when they break a rule; nothing changes", async () => {
-    const { op, rows } = await run11();
-    const { week } = await op("plan_week", { week_start: "2026-11-23", mode: "final", meals: FIXED });
-    const r = await op("set_meal", { date: "2026-11-23", slot: "Breakfast", dishes: [dish("Rava idli", ["rava", "curd"])] });
-    expect(r.code).toBe("RULE_BROKEN");
-    expect(keys(r.detail.rule_breaks)).toEqual(["Mon 2026-11-23 Breakfast|Rava idli|Meera"]);
-    const monB = week.days[0].meals.find((m: any) => m.slot === "Breakfast");
-    expect(rows("dishes").filter((d) => d.meal_id === monB.id).map((d) => d.name).sort()).toEqual(["Plain idli", "Rava idli"]);
-    // Taking Shiva's protein away from a dinner.
-    const paneer = week.days[0].meals.find((m: any) => m.slot === "Dinner").dishes[0];
-    const removed = await op("set_dish", { dish_id: paneer.id, remove: true });
-    expect(removed.code).toBe("RULE_BROKEN");
-    expect(keys(removed.detail.rule_breaks)).toEqual(["Mon 2026-11-23 Dinner||Shiva"]);
-    expect(rows("dishes").some((d) => d.id === paneer.id)).toBe(true);
-    // A third chapati meal: the cap over the week.
-    const cap = await op("set_dish", { date: "2026-11-25", slot: "Dinner", ...dish("Chapati", ["atta"]) });
-    expect(cap.code).toBe("RULE_BROKEN");
-    // The new dinner also has no protein for Shiva: both are named.
-    expect(keys(cap.detail.rule_breaks).sort()).toEqual(["Wed 2026-11-25 Dinner|Chapati|", "Wed 2026-11-25 Dinner||Shiva"]);
-    expect(rows("plan_meals").some((m) => m.date === "2026-11-25")).toBe(false);
-    // A change that keeps the rules goes through.
-    expect((await op("set_dish", { dish_id: paneer.id, name: "Palak paneer", ingredients: ing("palak", "paneer") })).dish.name).toBe("Palak paneer");
-  });
-
-  it("set_meal by the agent on a draft week is not checked: the final call is", async () => {
-    const { op } = await run11();
-    await op("plan_week", { week_start: "2026-11-23", mode: "draft", meals: FIXED });
-    expect((await op("set_meal", { date: "2026-11-23", slot: "Breakfast", dishes: [dish("Rava idli", ["rava"])] })).meal).toBeDefined();
-  });
-
-  it("the family's own edits are never checked", async () => {
-    const { op, owner } = await run11();
-    await op("plan_week", { week_start: "2026-11-23", mode: "final", meals: FIXED });
-    const r = await owner("POST", "/api/meals", { date: "2026-11-23", slot: "Breakfast", dishes: [{ name: "Mushroom toast" }] });
-    expect(r.status).toBe(200);
-    expect((await owner("POST", "/api/dishes", { date: "2026-11-24", slot: "Lunch", name: "Chapati" })).status).toBe(200);
+  it("a soft require: fruit three times a week, counted over the week", () => {
+    const fruit = { kind: "require", who: "Agastya", items: ["fruit"], per_week: 3, days: [] };
+    const snacks = (n: number) => week(DAYS.map((date, i) => ({ date, slot: "Dinner", dishes: [{ name: i < n ? "Fruit bowl" : "Dhokla", for_people: ["everyone"] }] })));
+    expect(ruleBreaks(snacks(3), { rules: [fruit] }, people, { under: true })).toEqual([]);
+    expect(keys(ruleBreaks(snacks(5), { rules: [fruit] }, people))).toEqual(["Thu 2026-11-26 Dinner|Fruit bowl|Agastya", "Fri 2026-11-27 Dinner|Fruit bowl|Agastya"]);
+    expect(keys(ruleBreaks(snacks(1), { rules: [fruit] }, people, { under: true }))).toEqual(["Tue 2026-11-24 Dinner||Agastya", "Wed 2026-11-25 Dinner||Agastya"]);
+    expect(rulesSaid([fruit, { kind: "other", who: "Agastya", note: "something light at night", often: "sometimes", days: [] }]))
+      .toBe("Agastya: has fruit 3 times a week; something light at night 2–3 times a week");
   });
 });
