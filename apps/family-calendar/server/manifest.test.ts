@@ -18,9 +18,9 @@ const operations: { name: string; description: string }[] = manifest.agentInterf
 const desc = (name: string) => operations.find((o) => o.name === name)!.description;
 
 describe("the agent's interface", () => {
-  it("declares guide, add_events, import_events, plan_done and brief, each with a handler, and says what each takes", () => {
+  it("declares guide, add_events, import_events, plan_done, brief and get_events, each with a handler, and says what each takes", () => {
     expect(operations.map((o) => o.name).sort()).toEqual([...OPERATION_NAMES].sort());
-    expect(OPERATION_NAMES).toEqual(["guide", "add_events", "import_events", "plan_done", "brief"]);
+    expect(OPERATION_NAMES).toEqual(["guide", "add_events", "import_events", "plan_done", "brief", "get_events"]);
     const handlers = agentOps(() => null as any, () => null as any);
     for (const o of operations) { expect(o.description, o.name).toContain("{"); expect(typeof handlers[o.name], o.name).toBe("function"); }
   });
@@ -34,6 +34,8 @@ describe("the agent's interface", () => {
     expect(FIELDS_SECTION).toContain("- add_events { events: [{ title, who?, date?, end_date?, weekdays?, repeat?, monthly_by?, start_time?, end_time?, location?, notes?, reminder?, kind?, added_by? }], members?: [{ name, emoji?, colour? }], added_by? }");
     expect(FIELDS_SECTION).toContain("- plan_done { planId, events: [{ event, type, steps: [{ key, kind, title, due, due_time?, show_from?, why? }] }] }");
     expect(FIELDS_SECTION).toContain("- brief { kind: morning | evening }");
+    for (const f of ["from", "to", "end_date", "repeat", "kind", "who", "62 days", "home or away"]) expect(desc("get_events"), f).toContain(f);
+    expect(FIELDS_SECTION).toContain("- get_events { from: YYYY-MM-DD, to: YYYY-MM-DD }");
   });
 
   it("an operation refuses a field it does not take, with its field list", async () => {

@@ -3,7 +3,7 @@
   "usage": "app",
   "icon": "icon.svg",
   "description": "Family events, schedules, and reminders at a glance",
-  "version": "3.0.0",
+  "version": "3.1.0",
   "minFlockVersion": "0.19.0",
   "type": "fullstack",
   "access": "private",
@@ -115,8 +115,12 @@
       {
         "name": "brief",
         "description": "The day for the family's morning or evening brief: { kind: morning | evening } (morning: today, evening: tomorrow). Answers { day, timezone, events: [{ id, title, date?: the first day, only for an event over several days, end_date: its last day (null for one day), start_time, end_time, who, location, notes, kind, status, sources, added_by, todos: { open, titles } }], changed: [{ id, title, date, status: cancelled | moved, was? }], new: [{ id, title, date, sources }], todos_due: [{ title, due, event }] }. new and changed are what came in since the last brief; each call moves that mark on. Empty lists: say nothing."
+      },
+      {
+        "name": "get_events",
+        "description": "Read the family's calendar between two days, for other apps and agents working out who is home or away (a meal plan, a trip). Read only. { from: YYYY-MM-DD, to: YYYY-MM-DD } (to on or after from, at most 62 days counting both). Answers { events: [{ id, title, date, end_date?, repeat, kind: event | deadline, start_time?, end_time?, who?: one member's name (left out: everyone), notes? }] }, by date. A repeating event is an entry per day it falls on in the range (the same id); an event over several days (a trip) is one entry with its own first date and end_date when any of its days is in the range; cancelled events are left out."
       }
     ],
-    "instructions": "Family Calendar owns this family's members and events. Read the app before you answer and tell the family what it now shows. Anything with a day is an event: a class, a pick-up, an appointment, a birthday (repeat yearly); a day something is due by is an event of kind deadline. Add events with add_events, all of them in one call, weekly ones with weekdays. Never write events, members or to-dos one row at a time through the data route, and never make a reminder row: there is none. To-dos come from the plan-prep routine: when it wakes you, decide what the family must physically do before each event and report it with plan_done. The app itself wakes you every 15 minutes with the nudges that are due and the words to send: set up no reminders or routines of your own for what is on the calendar. For a brief, call brief. Call guide before you first add anything."
+    "instructions": "Family Calendar owns this family's members and events. Read the app before you answer and tell the family what it now shows. Anything with a day is an event: a class, a pick-up, an appointment, a birthday (repeat yearly); a day something is due by is an event of kind deadline. Add events with add_events, all of them in one call, weekly ones with weekdays. Never write events, members or to-dos one row at a time through the data route, and never make a reminder row: there is none. To-dos come from the plan-prep routine: when it wakes you, decide what the family must physically do before each event and report it with plan_done. The app itself wakes you every 15 minutes with the nudges that are due and the words to send: set up no reminders or routines of your own for what is on the calendar. For a brief, call brief; to read days ahead (who is home or away), get_events. Call guide before you first add anything."
   }
 }
