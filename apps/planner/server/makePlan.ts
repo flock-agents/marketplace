@@ -30,7 +30,7 @@ import { addDaily, canonTag, checkSlot, factsOf, feasibility, ownAddon, forbidde
 export type MakePlanResult =
   | { ok: true; week_start: string; message: string; intro?: string; instructions: string; unmet?: string[]; asked?: string[]; no_ingredients?: string[];
       /** Slots whose repeat window the feasibility check narrowed (§5.2), with the days it now is. */ relaxed?: Record<string, number> }
-  | { ok: false; reason: string; say: string };
+  | { ok: false; reason: string; say: string; /** A question for the family (no_dishes). */ ask?: string };
 type Ingredient = { item: string; amount: number | null; unit: string | null };
 type Failure = Extract<ModelResult, { ok: false }>;
 
@@ -56,6 +56,7 @@ export const SLOT_SYSTEM = [
   "`short_of_dishes` given: the family's known dishes here do not cover the week. Their plates in `looks_like` are the template: where the library runs out, add new dishes that sit in the same place on their plates and are of the same cuisine (another dry vegetable like their Kantola fry, another fish curry like their Fish moilee), each listed in `new` with `like`. Never a plate thinner than their usual plates, and never a bare staple, because the known dishes ran out.",
   "Every rule in `rules` holds for its person (everyone when it says so): a dish against their rule is simply not theirs, so on every day they are in `for` they need at least one dish they can eat beside the staples, as their past plates show. A rule with a count a week is kept that many times in the week, not every day. `notes_for_people` are preferences to keep in mind. A person in `fasting` eats only what it says.",
   "Do not repeat what `already_this_week` has at another meal the same day, and avoid what `recent` had. An add-on slot (`main_slot` given) holds only what its people have in place of, or beside, the main slot's dishes that day, and only as often as its dishes' `left` and `days` allow: a day past that gets [] (they eat the main slot's dishes), never a dish again past its `left`.",
+  "Each day's dishes are one whole meal as a home serves it, like their plates: at lunch and dinner one main dish with the rice or bread it is eaten with (dal with rice, a sabzi with roti), never three curries or three mains side by side with nothing to eat them with. With no `looks_like`, a plate is a main, a side and its rice or bread.",
   "notes: only for a day that needs a word for someone at the table (\"millet rice for one person only\"); never about your choices or changes; leave other days out.",
 ].join("\n");
 
@@ -136,7 +137,16 @@ export type MakePlanDeps = { db: Db; emit: Emit; model: ModelCall; weekStart: st
    *  the answer's message names only them, and no intro is sent. None: the whole week. */
   only?: { date: string; slot: string }[];
   /** The raw database, for what setup kept beside the rows (house.setup_state: weekday lunch); none: not read. */
-  sqlite?: { query: (q: string) => { get: () => unknown } } };
+  sqlite?: { query: (q: string) => { get: () => unknown } };
+  /** The family said to plan with new dishes where the planner knows none of theirs (their answer to the no_dishes question). */
+  suggest_new?: boolean };
+
+/** The question when the planner knows none of the family's dishes for some meals (reason no_dishes). */
+export function noDishesAsk(slots: string[]): string {
+  const names = slots.map((n) => (/^(Breakfast|Lunch|Dinner)$/.test(n) ? n.toLowerCase() : n));
+  const list = names.length === 1 ? names[0] : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
+  return `I don't know your dishes for ${list} yet. What do you usually have? A few dishes each is enough. Or say "suggest some" and I'll plan with new dishes like a home kitchen's.`;
+}
 
 /** make_plan's time: inside Flock's 6 minutes for an operation, with room to save and answer. */
 export const OP_BUDGET_MS = 330_000;
@@ -234,6 +244,11 @@ async function planWeek(deps: MakePlanDeps & { log: (line: string) => void }, in
     w.slots.set(s.name.toLowerCase(), slotFacts(s, library, history, recent(history, weekStart, 3)));
     if (!order.includes(s.name)) w.done.add(s.name.toLowerCase());
   }
+  // Never a plan from an empty library (#29): a meal with none of the family's dishes and no plate of theirs to go by is
+  // asked about, unless they said to suggest new dishes there.
+  const unknown = order.filter((n) => { const sf = w.slots.get(n.toLowerCase())!;
+    return sf.slot.kind !== "addon" && !sf.looks_like.length && !sf.library.some((d) => plannable(d)); });
+  if (unknown.length && !deps.only && !deps.suggest_new) return done({ ok: false, reason: "no_dishes", ask: noDishesAsk(unknown), say: noDishesAsk(unknown) });
   const feas = feasibility(w, order);
   for (const l of feas.log) log(l);
   const unmet: string[] = [];
@@ -596,7 +611,7 @@ function kindsOf(problems: Map<string, Problem[]>): string {
   return n.size ? [...n].map(([k, v]) => `${k} ${v}`).join(", ") : "none";
 }
 
-/** make_plan { week_start, household? }: the week planned in steps (makePlan), saved; answers { ok, week_start, message, intro?,
+/** make_plan { week_start, household?, suggest_new? }: the week planned in steps (makePlan), saved; answers { ok, week_start, message, intro?,
  *  instructions, unmet?, asked? } or { ok: false, reason, say }. `platform`: the SDK's platform context, read at each call for the
  *  fresh household and the calendar (an older SDK has neither). */
 export function mountMakePlanRoute(hono: Hono<any>, db: Db, emit: Emit, opts: { basePath: string; model: ModelCall; now?: () => Date; platform?: () => unknown;
@@ -608,6 +623,6 @@ export function mountMakePlanRoute(hono: Hono<any>, db: Db, emit: Emit, opts: { 
     const today = todayStr((opts.now ?? (() => new Date()))());
     if (addDays(weekStart, 6) < today) refuse(`the week of ${weekStart} is over: plan this week or a later one`);
     return { body: await makePlan({ db, emit, model: opts.model, weekStart, today, basePath: opts.basePath, budgetMs: OP_BUDGET_MS,
-      household: b.household, peers: opts.platform ? platformPeers(opts.platform()) : undefined, sqlite: opts.sqlite }) };
+      household: b.household, peers: opts.platform ? platformPeers(opts.platform()) : undefined, sqlite: opts.sqlite, suggest_new: b.suggest_new === true }) };
   });
 }

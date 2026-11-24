@@ -142,6 +142,9 @@ const LINT_SCHEMA = { type: "object", required: ["dishes"], properties: { dishes
 /** Every prompt the setup sends, for the checks on model-facing text. */
 export const SETUP_SYSTEM = [...SETUP_PARTS.map((p) => p.system), CONTAINS_SYSTEM, LINT_SYSTEM].join("\n\n");
 
+/** The question when no dish of theirs could be read: the plan needs their own dishes to start from. */
+export const DISHES_ASK = "I couldn't read your dishes from that. What do you usually have for breakfast, lunch and dinner? A few dishes for each is enough.";
+
 /** The whole setup's wall clock: under Flock's wait for the op (3 min). A second try starts only with RETRY_FLOOR_MS left. */
 export const SETUP_BUDGET_MS = 150_000;
 const RETRY_FLOOR_MS = 30_000;
@@ -904,7 +907,7 @@ export async function applySetup(deps: { db: Db; emit: Emit; model: ModelCall; p
   const model = (results[0] as Extract<ModelResult, { ok: true }>).model;
   const read = readOf(json(0), json(1), json(2), json(3));
   const noted: string[] = [];
-  if (!results[2].ok) noted.push("your dishes could not be read just now: tell me a few you like and I'll add them");
+
 
   // 2. The checks, and the lint's one re-read.
   const replies = repliesOf(deps.transcript);
@@ -922,6 +925,9 @@ export async function applySetup(deps: { db: Db; emit: Emit; model: ModelCall; p
   const before = new Set(saved.state?.replies ?? []);
   const fresh = first ? said : replies.map(plainWords).filter((l) => l && !before.has(l));
   const ops = diffSetup(first ? none : saved, checked.read, fresh, first);
+  // No dish read (the read failed, or found none in the replies): asked as a real question, never a quiet note (#29); make_plan
+  // will not plan a meal it knows no dish for.
+  if (!checked.read.library.length && !saved.library.length) checked.asks.push(DISHES_ASK);
   ops.state.asks = checked.asks;
   for (const d of ops.discarded) log(`not in the new replies, not changed: ${d}`);
   commit(deps.db, deps.emit, (tx, changes) => writeOps(tx, ops, { first, household, replies: replies.map(plainWords) }, by, changes));
@@ -981,6 +987,9 @@ export function mountSetupRoute(hono: Hono<any>, db: Db, emit: Emit, opts: { mod
   write("/api/family/setup", async (b, by, c) => {
     const transcript = transcriptLines(b.transcript);
     if (!transcript.length) refuse("transcript is required: the planner's questions and the family's replies, word for word, as Q: / A: lines");
+    // A setup is read from the family's own replies (owner 24 Nov, #29: an agent sent one line of its own, "Ankita is the only
+    // person eating at home", and the setup saved with no dishes). No reply, nothing to read: refused, never saved empty.
+    if (!transcript.some((l) => /^A\d*:/i.test(l))) refuse("transcript has no family replies: send the planner's questions and the family's replies word for word, as Q: / A: lines (\"A: rice, sambar and a poriyal\"), never a summary");
     const headers: Record<string, string> = { "Content-Type": "application/json" };
     for (const k of ["x-flock-agent", "x-flock-user"]) { const v = c.req.header(k); if (v) headers[k] = v; }
     const post: Post = async (path, body) => {
