@@ -510,17 +510,6 @@
       "latestVersion": "1.0.2",
       "latestTag": "inbox-assistant-v1.0.2",
       "minFlockVersion": "0.7.0",
-      "onboardingCard": {
-        "id": "email",
-        "label": "Stay on top of email",
-        "description": "Finds what needs you, drafts replies",
-        "emoji": "📥",
-        "order": 10,
-        "agentName": "Inbox Assistant",
-        "services": [
-          "gmail"
-        ]
-      },
       "publishedAt": "2026-09-28T00:00:00Z",
       "updatedAt": "2026-11-05T00:00:00Z"
     },
