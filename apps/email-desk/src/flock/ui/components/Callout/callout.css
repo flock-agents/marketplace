@@ -1,0 +1,9 @@
+.fl-callout { display: flex; gap: 10px; font-size: 14px; background: var(--callout); border-radius: 12px; padding: 12px 14px; color: var(--ink-2); }
+.fl-callout b { color: var(--ink); font-weight: 550; }
+.fl-callout svg { margin-top: 2px; color: var(--ink-2); flex: none; }
+.fl-callout-muted { color: var(--ink-3); }
+.fl-callout-success { background: var(--ok-bg); } .fl-callout-success svg { color: var(--ok); }
+.fl-callout-warning { background: var(--risk-bg); } .fl-callout-warning svg { color: var(--risk); }
+.fl-callout-danger { background: var(--block-bg); } .fl-callout-danger svg { color: var(--block); }
+.fl-callout-info { background: var(--info-bg); } .fl-callout-info svg { color: var(--info); }
+.fl-callout-accent { background: var(--ua-soft); } .fl-callout-accent svg { color: var(--ua); }

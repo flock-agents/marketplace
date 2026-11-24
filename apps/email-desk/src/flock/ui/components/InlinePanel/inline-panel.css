@@ -1,0 +1,4 @@
+/* A form or detail opened in place under the row that was clicked. It never widens the page: on a phone it is the list's width. */
+.fl-inline { box-sizing: border-box; min-width: 0; max-width: 100%; overflow-wrap: anywhere; scroll-margin: 12px; }
+.fl-inline:focus { outline: none; }
+.fl-inline:focus-visible { outline: 2px solid var(--ua); outline-offset: 2px; border-radius: 12px; }

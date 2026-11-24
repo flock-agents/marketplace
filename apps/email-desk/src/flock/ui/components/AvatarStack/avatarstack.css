@@ -1,0 +1,4 @@
+.fl-avs { display: inline-flex; }
+.fl-avs .fl-avatar { border: 2px solid var(--surface); margin-left: -8px; width: 28px; height: 28px; box-sizing: border-box; }
+.fl-avs .fl-avatar:first-child { margin-left: 0; }
+.fl-avs .fl-av-more { background: var(--tint); color: var(--ink-2); }

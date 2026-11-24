@@ -40,8 +40,6 @@
       "getEmail",
       "getThread",
       "getThreads",
-      "getVoice",
-      "getReplyContext",
       "listInbox",
       "listLabels",
       "checkEngagedDomains",
@@ -49,9 +47,7 @@
       "markUnread",
       "searchEmails",
       "sendDraft",
-      "shouldTrigger",
       "starMessage",
-      "storeThreadBody",
       "updateDraft",
       "downloadAttachment"
     ],
@@ -74,8 +70,6 @@
       "getEmail": "read",
       "getThread": "read",
       "getThreads": "read",
-      "getVoice": "read",
-      "getReplyContext": "read",
       "listInbox": "read",
       "listLabels": "read",
       "checkEngagedDomains": "read",
@@ -85,9 +79,7 @@
       "sendDraft": "irreversible",
       "sendEmail": "irreversible",
       "replyToMessage": "irreversible",
-      "shouldTrigger": "read",
       "starMessage": "write",
-      "storeThreadBody": "write",
       "updateDraft": "draft"
     }
   },
@@ -257,7 +249,7 @@
   },
   "name": "Gmail",
   "slug": "gmail",
-  "version": "1.6.6",
+  "version": "1.6.8",
   "minFlockVersion": "0.13.0",
   "author": "flock"
 }

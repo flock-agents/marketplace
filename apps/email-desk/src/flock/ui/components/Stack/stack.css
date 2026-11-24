@@ -1,0 +1,14 @@
+.fl-stack { display: flex; flex-direction: column; min-width: 0; }
+.fl-hstack { display: flex; flex-direction: row; min-width: 0; }
+.fl-hstack-wrap { flex-wrap: wrap; }
+.fl-gap-xs { gap: var(--space-1); }
+.fl-gap-sm { gap: var(--space-2); }
+.fl-gap-md { gap: var(--space-3); }
+.fl-gap-lg { gap: var(--gap-page); }
+.fl-align-start { align-items: flex-start; }
+.fl-align-center { align-items: center; }
+.fl-align-end { align-items: flex-end; }
+.fl-align-baseline { align-items: baseline; }
+.fl-justify-start { justify-content: flex-start; }
+.fl-justify-between { justify-content: space-between; }
+.fl-justify-end { justify-content: flex-end; }

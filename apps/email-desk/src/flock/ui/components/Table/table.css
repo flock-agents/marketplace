@@ -1,0 +1,53 @@
+.fl-tbl { border: 1px solid var(--line); border-radius: 14px; overflow: hidden; background: var(--surface); }
+.fl-tbl-scroll { overflow-x: auto; }
+.fl-tbl table { width: 100%; border-collapse: collapse; min-width: 620px; font-size: 14px; }
+.fl-tbl th { text-align: left; font: 500 13px var(--body); color: var(--ink-3); padding: 10px 16px; background: var(--surface-2); border-bottom: 1px solid var(--line); white-space: nowrap; }
+.fl-tbl th + th, .fl-tbl td + td { border-left: 1px solid var(--line); }
+.fl-tbl td { padding: 11px 16px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+.fl-tbl-compact td { padding-block: 7px; }
+.fl-tbl tbody tr:last-child td { border-bottom: 0; }
+.fl-tbl tbody tr.fl-clickable { cursor: pointer; transition: background .12s; }
+.fl-tbl tbody tr.fl-clickable:hover, .fl-tbl tbody tr[aria-selected="true"] { background: var(--hover); }
+.fl-tbl tbody tr:focus-visible { outline: 2px solid var(--ua); outline-offset: -2px; }
+.fl-tbl .fl-end { text-align: right; }
+.fl-w-narrow { width: 1%; white-space: nowrap; } .fl-w-wide { width: 40%; }
+.fl-tbl-foot { display: flex; justify-content: center; padding: 10px 16px; border-top: 1px solid var(--line); }
+/* Phones: each row becomes a card, like a list row (REF_BLOCKS 214). */
+.fl-tcards { list-style: none; margin: 0; padding: 0; }
+.fl-tcard { position: relative; border-bottom: 1px solid var(--line); transition: background .12s; }
+.fl-tcard:last-child { border-bottom: 0; }
+.fl-tcard.fl-selected, .fl-tcard.fl-clickable:hover { background: var(--hover); }
+.fl-tcard-main { display: flex; flex-direction: column; gap: 6px; padding: 12px 16px; }
+.fl-tbl-compact .fl-tcard-main { padding-block: 8px; gap: 4px; }
+.fl-tcard-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+/* Stretched button: the title is the card's one button; its ::after covers the card. Chips and lines sit above it,
+   but only their own links and controls take clicks, so everything else still opens the row. */
+.fl-tcard-open { padding: 0; margin: 0; text-align: left; background: none; border: 0; color: inherit; cursor: pointer; }
+.fl-tcard-open::after { content: ""; position: absolute; inset: 0; }
+.fl-tcard-cover { position: absolute; inset: 0; width: 100%; height: 100%; }   /* title holds its own link: a separate, empty button covers the card */
+.fl-tcard-cover::after { content: none; }
+.fl-tcard-cover:focus-visible { outline: 2px solid var(--ua); outline-offset: -2px; }
+.fl-tcard-open:not(.fl-tcard-cover):focus-visible { outline: none; }
+.fl-tcard-open:focus-visible::after { outline: 2px solid var(--ua); outline-offset: -2px; }
+.fl-tcard-title { min-width: 0; font: 500 15px var(--body); color: var(--ink); overflow-wrap: anywhere; }
+.fl-tcard-end, .fl-tcard-chips, .fl-tcard-lines, .fl-tcard-layer { position: relative; z-index: 1; pointer-events: none; }
+.fl-tcard-layer :is(a, button, input, select, textarea, label, summary, [role], [tabindex]), .fl-tcard-end :is(a, button, input, select, textarea, label, summary, [role], [tabindex]), .fl-tcard-chips :is(a, button, input, select, textarea, label, summary, [role], [tabindex]), .fl-tcard-lines :is(a, button, input, select, textarea, label, summary, [role], [tabindex]) { pointer-events: auto; }
+.fl-tcard-end { flex: none; font-weight: 600; white-space: nowrap; color: var(--ink); }
+.fl-tcard-chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 13px; }
+.fl-tcard-lines { display: flex; flex-direction: column; gap: 2px; font-size: 13px; color: var(--ink-2); }
+.fl-tcard-label { color: var(--ink-3); }
+.fl-tbl-note { margin: 0; padding: 8px 16px; font-size: 13px; color: var(--block); border-top: 1px solid var(--line); }
+/* Phones: the links and controls in a row card (a title link, a status select) are 40px tap targets. A link's extra reach is a pseudo
+   element around it, so the card does not grow; a select, which cannot take one, is taller. */
+@media (max-width: 720px), (pointer: coarse) {
+  .fl-tcard a { position: relative; }
+  .fl-tcard a::before { content: ""; position: absolute; inset: -10px -6px; }
+  .fl-tcard select { min-height: 40px; }
+  .fl-tbl td select { min-height: 40px; }
+  /* The title button measured 20px (its ::after already covers the card, but a tap audit reads the box): vertical padding with an equal negative margin makes it 40px without growing the card. */
+  .fl-tcard-title { padding: 10px 0; margin: -10px 0; }
+}
+/* A form or detail opened in place under its row: the full width of the table (desktop) or of the card list (phone). */
+.fl-tbl-inline > td { padding: 12px 16px 16px; background: var(--surface-2); }
+.fl-tcard-inline { padding: 12px 12px 16px; border-bottom: 1px solid var(--line); background: var(--surface-2); min-width: 0; }
+.fl-tcard-inline:last-child { border-bottom: 0; }

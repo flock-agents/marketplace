@@ -1,0 +1,6 @@
+.fl-section { display: flex; flex-direction: column; gap: var(--gap-box); min-width: 0; }
+.fl-section-subtle { background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius-lg); padding: var(--pad-box); gap: var(--gap-box); }
+.fl-section-head { display: flex; align-items: center; gap: 10px; }
+.fl-section-head h2 { font: 600 15px var(--body); letter-spacing: -.02em; margin: 0; color: var(--ink); }
+.fl-section-actions { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.fl-section-body { display: flex; flex-direction: column; gap: var(--gap-section); min-width: 0; }

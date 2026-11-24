@@ -1,0 +1,42 @@
+.fl-chart { position: relative; display: flex; flex-direction: column; gap: 10px; }
+.fl-plot { max-width: 100%; height: auto; display: block; overflow: visible; }
+.fl-ax { font: 500 11.5px var(--mono); fill: var(--ink-3); }
+.fl-grid { stroke: var(--line); stroke-width: 1; }
+/* series colour comes from the tone class, set once as --c */
+.fl-chart .fl-s-neutral, .fl-share-wrap .fl-s-neutral { --c: var(--ink-2); } .fl-chart .fl-s-accent, .fl-share-wrap .fl-s-accent { --c: var(--ua); } .fl-chart .fl-s-success, .fl-share-wrap .fl-s-success { --c: var(--ok); }
+.fl-chart .fl-s-warning, .fl-share-wrap .fl-s-warning { --c: var(--risk); } .fl-chart .fl-s-danger, .fl-share-wrap .fl-s-danger { --c: var(--block); } .fl-chart .fl-s-info, .fl-share-wrap .fl-s-info { --c: var(--info); } .fl-chart .fl-s-muted, .fl-share-wrap .fl-s-muted { --c: var(--ink-4); }
+.fl-line { stroke: var(--c); stroke-width: 2.4; stroke-linejoin: round; stroke-linecap: round; }
+.fl-dot { fill: var(--surface); stroke: var(--c); stroke-width: 2; }
+.fl-bar { fill: var(--c); }
+.fl-legend { display: flex; gap: 16px; font-size: 13px; color: var(--ink-2); flex-wrap: wrap; }
+.fl-legend span { display: inline-flex; align-items: center; gap: 7px; }
+.fl-legend i, .fl-slegend i { width: 10px; height: 10px; border-radius: 3px; background: var(--c); flex: none; display: inline-block; }
+/* share (allocation) bar */
+.fl-share-wrap { display: flex; flex-direction: column; gap: 12px; }
+.fl-share { display: flex; height: 12px; border-radius: 6px; overflow: hidden; gap: 2px; }
+.fl-share-seg { display: block; height: 100%; background: var(--c); }
+.fl-slegend { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px 16px; }
+.fl-slegend div { display: flex; align-items: center; gap: 8px; font-size: 13.5px; min-width: 0; }
+.fl-slegend em { font-style: normal; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fl-slegend span { color: var(--ink-3); font: 500 12px var(--mono); margin-left: auto; }
+/* the value at the pointer, a tap or the keyboard's point: an overlay, so the chart keeps its height */
+.fl-plot:focus { outline: none; } .fl-plot:focus-visible, .fl-share:focus-visible { outline: 2px solid var(--ua); outline-offset: 3px; border-radius: 6px; }
+.fl-plot { touch-action: pan-y; }
+.fl-guide { stroke: var(--ink-4); stroke-width: 1; stroke-dasharray: 3 3; pointer-events: none; }
+.fl-dot-on { stroke-width: 2.5; }
+.fl-col-on { fill: color-mix(in srgb, var(--ink) 5%, transparent); pointer-events: none; }
+.fl-plot[data-active] .fl-bar:not(.fl-bar-on), .fl-share[data-active] .fl-share-seg:not(.fl-share-on) { opacity: .45; }
+.fl-bar, .fl-share-seg { transition: opacity .12s; }
+.fl-share-wrap { position: relative; }
+.fl-tip { position: absolute; z-index: 2; pointer-events: none; box-sizing: border-box; max-width: 100%; min-width: 0; padding: 7px 10px; display: flex; flex-direction: column; gap: 4px;
+  background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 6px 18px -8px color-mix(in srgb, var(--ink) 35%, transparent); font-size: 12.5px; line-height: 1.3; }
+.fl-tip-head { font: 600 11.5px var(--mono); color: var(--ink-3); }
+.fl-tip-row { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.fl-tip-row i { width: 8px; height: 8px; border-radius: 2px; background: var(--c); flex: none; display: inline-block; }
+.fl-tip-row em { font-style: normal; color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.fl-tip-row b { font: 600 12.5px var(--mono); margin-left: auto; padding-left: 10px; white-space: nowrap; }
+.fl-tip-row span { font: 500 12px var(--mono); color: var(--ink-3); white-space: nowrap; }
+.fl-tip .fl-s-neutral { --c: var(--ink-2); } .fl-tip .fl-s-accent { --c: var(--ua); } .fl-tip .fl-s-success { --c: var(--ok); } .fl-tip .fl-s-warning { --c: var(--risk); }
+.fl-tip .fl-s-danger { --c: var(--block); } .fl-tip .fl-s-info { --c: var(--info); } .fl-tip .fl-s-muted { --c: var(--ink-4); }
+.fl-chart-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
+@media (prefers-reduced-motion: reduce) { .fl-bar, .fl-share-seg { transition: none; } }

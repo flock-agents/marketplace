@@ -156,11 +156,11 @@
       "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "skills/gmail",
-      "latestVersion": "1.6.6",
-      "latestTag": "gmail-v1.6.6",
+      "latestVersion": "1.6.8",
+      "latestTag": "gmail-v1.6.8",
       "minFlockVersion": "0.24.0",
       "publishedAt": "2026-08-14T10:00:00Z",
-      "updatedAt": "2026-11-23T00:00:00Z"
+      "updatedAt": "2026-11-24T00:00:00Z"
     },
     {
       "slug": "google-calendar",
@@ -381,6 +381,45 @@
       "minFlockVersion": "0.23.1",
       "publishedAt": "2026-09-23T00:00:00Z",
       "updatedAt": "2026-11-05T00:00:00Z"
+    },
+    {
+      "slug": "email-desk",
+      "type": "app",
+      "usage": "app",
+      "name": "Email Desk",
+      "description": "Reads your Gmail into your assistant's memory and drafts replies in your voice for you to send. Nothing sends without you",
+      "author": "flock",
+      "category": "productivity",
+      "tags": [
+        "email",
+        "gmail",
+        "drafts"
+      ],
+      "icon": "icon.svg",
+      "repo": "flock-agents/marketplace",
+      "path": "apps/email-desk",
+      "latestVersion": "3.0.0",
+      "latestTag": "email-desk-v3.0.0",
+      "minFlockVersion": "0.25.0",
+      "personalAssistant": {
+        "always": true,
+        "useCase": "email",
+        "skills": [
+          "gmail"
+        ]
+      },
+      "publishedAt": "2026-11-23T00:00:00Z",
+      "updatedAt": "2026-11-23T00:00:00Z",
+      "onboardingCard": {
+        "id": "email",
+        "label": "Stay on top of email",
+        "description": "Finds what needs you, drafts replies",
+        "emoji": "\ud83d\udce5",
+        "order": 10,
+        "services": [
+          "gmail"
+        ]
+      }
     },
     {
       "slug": "calendar-desk",

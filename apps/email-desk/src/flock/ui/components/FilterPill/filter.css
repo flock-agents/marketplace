@@ -1,0 +1,11 @@
+.fl-drop { position: relative; display: inline-flex; align-items: center; gap: 7px; font: 500 13.5px var(--body); border: 1px solid var(--line-2); border-radius: var(--radius-pill); padding: 6px 10px 6px 13px; background: var(--surface); color: var(--ink); cursor: pointer; max-width: 100%; }
+.fl-drop:focus-within { outline: 2px solid var(--ua); outline-offset: 2px; }
+.fl-drop-label { color: var(--ink-3); }
+.fl-drop select { appearance: none; border: 0; background: none; font: inherit; color: inherit; cursor: pointer; padding: 0 2px; min-width: 0; text-overflow: ellipsis; }
+.fl-drop select:focus { outline: none; }
+.fl-drop svg { color: var(--ink-3); flex: none; pointer-events: none; }
+/* Phones: the filter is a 40px tap target; its select fills the pill, so the whole pill takes the tap. */
+@media (max-width: 720px), (pointer: coarse) {
+  .fl-drop { min-height: 40px; box-sizing: border-box; padding-block: 0; }
+  .fl-drop select { align-self: stretch; min-height: 40px; }
+}

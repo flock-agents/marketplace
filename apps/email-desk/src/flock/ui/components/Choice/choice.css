@@ -1,0 +1,20 @@
+.fl-choice { display: flex; flex-direction: column; gap: 12px; font-family: var(--body); color: var(--ink); }
+.fl-choice-q { font-size: 14px; font-weight: 500; color: var(--ink); margin: 0; }
+.fl-choice-opts { display: flex; flex-wrap: wrap; gap: 8px; }
+/* Owner 2026-10-21: an option is an accent outline on a pale accent fill; only the picked one is solid, and it stays
+   solid once the block is answered and locked. */
+.fl-choice-opts > .fl-choice-opt { background: var(--ua-soft); border-color: color-mix(in srgb, var(--ua) 55%, transparent); color: var(--ink); }
+.fl-choice-opts > .fl-choice-opt:hover:not(:disabled) { background: color-mix(in srgb, var(--ua) 18%, transparent); border-color: var(--ua); }
+.fl-choice-opts > .fl-choice-opt[aria-pressed="true"] { background: var(--ua); border-color: var(--ua); color: var(--on-ua); }
+.fl-choice-opts > .fl-choice-opt[aria-pressed="true"]:disabled { opacity: 1; }
+.fl-choice-opt:disabled { cursor: default; }
+.fl-choice-send { align-self: flex-start; }
+.fl-ocards { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.fl-mini-write { display: flex; gap: 8px; align-items: center; }
+.fl-mini-write .fl-inp { flex: 1; min-width: 0; }
+.fl-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+@media (max-width: 720px) {
+  .fl-ocards { grid-template-columns: 1fr; gap: 10px; }
+  .fl-choice-opt { min-height: 40px; }
+}
+@media (pointer: coarse) { .fl-choice-opt { min-height: 40px; } }

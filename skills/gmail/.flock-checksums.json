@@ -1,17 +1,15 @@
 {
   "version": 1,
-  "generatedAt": "2026-11-23T14:23:04.721Z",
-  "sourceVersion": "1.6.6",
-  "sourceTag": "gmail-v1.6.6",
+  "generatedAt": "2026-11-23T21:40:37.017Z",
+  "sourceVersion": "1.6.8",
+  "sourceTag": "gmail-v1.6.8",
   "files": {
-    "CHANGELOG.md": "a8796b9e9419cdfef2133987356e99cb324895be565a9d925b9b2145e2ae3f8e",
+    "CHANGELOG.md": "1ba73f3b3d3cdca4678347bcdc7475c02d33857c3eb6e55b750a8273017afd35",
     "icon.svg": "40c228f85eadb886954e48734e43fcaccd895af7633e3ff3f4ec88b993f55184",
     "scripts/_unreadState.ts": "81b9c965418022310b23bc94f7180fd1e265dae285f724a965ee516714c9bb36",
     "scripts/gmail-exec.ts": "263d996127591a2a1e13b10b4ba1c52a315a0a6e1c2c601c22522a9c724f4ce6",
     "scripts/_gmailNav.ts": "55a90f174bc378fb425e5ea9c02f2c294679a696dec5f0f54cd86ff73661a0d2",
     "scripts/listInbox.ts": "31a7dfeba62bf63b281b9a1ccbf6d5b56c45545b680b0b375e431cb97e43fc95",
-    "scripts/getVoice.ts": "98a222eb211efb6d2f15f955d6f01f1b624998ed6b6c5e5a0cfb63c500b67bbc",
-    "scripts/shouldTrigger.ts": "788a8f63848314ce9b6b6dd90686b539feb0a5217622af5df60530911d15ef7e",
     "scripts/discardDraft.ts": "c1001c879273d026931345a36d5755407a04acb01964a460bf6acd84b983d3db",
     "scripts/listDraftThreads.ts": "004943cef3f32379f420d15caa267579c2e534b20ffc1ef8f52c01b0bde87d6d",
     "scripts/_composeFlow.ts": "55bb5d6b77e65c2bd79ed69079ba9e609a26937296aecac1340f5afc2d6e7006",
@@ -24,7 +22,7 @@
     "scripts/listLabels.ts": "0ba9675ea7a3cc9db9983cb36484a28e5b20f3c33e80524c05d706ffcc5e7f97",
     "scripts/_composeSave.ts": "ded5837713158398b332022fc5869b895c542cc52f9806086de702a1b1ad308e",
     "scripts/checkEngagedDomains.ts": "0464bfe5cd565ffdea71cdefd6c40c55eef40704a5bf230706b8240639f2f3a6",
-    "scripts/createReplyDraft.ts": "07a99eb610333a2eeff5279486bdd837d0ec95ac171d0a1d6b37577ea0bc8672",
+    "scripts/createReplyDraft.ts": "5d734fc4e3e131cdce4fa438b58a1499ebc099ee6911aae5b807e1ecb5a24023",
     "scripts/_composeWindow.ts": "a8f8365e2bb0d9d8b252b74f920025a35aeda973f73be9753060caf25878d603",
     "scripts/_draftRows.ts": "6f7153aa3c05d241330fadf98ea17cabfe65388eafd1638e3142c969bd5c158b",
     "scripts/gmail-exec.sh": "f81449463f850a1548a97210d4628f59bae45afa7facbddbd5383587eedb11d0",
@@ -48,13 +46,13 @@
     "scripts/_replyAll.ts": "b9e1c0ec3e190f7384b390a24b16f0254a127459f8c1328566865909aa2afa30",
     "scripts/applyLabel.ts": "7044c02f3d230cdb8653db84dc6bab1f0945ece1b2f7784d6dfa168877d92ad8",
     "scripts/sendDraft.ts": "99d6e9b8fbe67c3aac37da5c1643a09b5c47d374ecc58bf8b23b4723d931d006",
+    "scripts/_replyDraftSteps.ts": "48d7c4e1f418fc6262110c65535d1b487bd9423d43fcd562d0ff2e3b867b3446",
     "scripts/createDraft.ts": "078524d7987c17b32d96fbc0227d22076142c91dc9855b0867fd5a864e0f69f6",
-    "scripts/getReplyContext.ts": "545223cba6a6fa6135f752f1c8dd24af30599fd9eaf6fae99619efadf6c67422",
     "scripts/_threadCache.ts": "54870371de9330b7dbc480ab0ead4e57112f16489d911387b0fd8188a6aaaf58",
     "scripts/_printView.ts": "00fe791777037f4f603b0892162a2d8fac372f1ba869116d90088cd26ad6b3ba",
     "scripts/markUnread.ts": "f8f0790e49de1d0a86c714c02aced4a93957a0c757729e3d1617b45f4ee1a2eb",
     "scripts/markRead.ts": "61c01d8e9488d816aba2986519365dbc15d6fa70e0758eaa97d895d44a63a5e0",
-    "flock.skill.json": "6a56e281af68511ca10233e5aa4ba1a942678161958de6aa03512e757ceb487e",
-    "instructions.md": "7acef1ce4742a1f7c4d0693faaf0e3ec1491825def6b84d0a1285f4d02a1e219"
+    "flock.skill.json": "a0e91d3ddf102fffe44fb75fb06fd2b1fa752e0a03f4b5802fec6e712a8902f3",
+    "instructions.md": "2a08237967242386b3bc54688760e402dc196d6475a4500666248cd246949dc2"
   }
 }

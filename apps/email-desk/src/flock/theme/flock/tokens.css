@@ -1,0 +1,73 @@
+/* Flock theme "flock" — the flock.app website's language. Components read ONLY these variables. */
+@font-face { font-family: "Geist"; src: url("./fonts/Geist-Variable.woff2") format("woff2"); font-weight: 100 900; font-display: swap; }
+@font-face { font-family: "Geist Mono"; src: url("./fonts/GeistMono-Variable.woff2") format("woff2"); font-weight: 100 900; font-display: swap; }
+:root {
+  color-scheme: light;
+  --bg: #ffffff; --bg-warm: #faf7f2; --tint: #f5f2ed; --tint-2: #f0ece6;
+  --ink: #1d1b16; --ink-2: #56524a; --ink-3: #8b867b; --ink-4: #b3ada2;
+  --line: rgba(29,27,22,.09); --line-2: rgba(29,27,22,.16);
+  --accent: #b83c20; --accent-strong: #f06040;
+  --ua: var(--ua-coral); --ua-soft: color-mix(in srgb, var(--ua) 10%, transparent); --on-ua: #ffffff;
+  --ua-coral: #f06040; --ua-teal: #0f766e; --ua-blue: #2f6bc4; --ua-green: #2f7d4f; --ua-violet: #6d5bd0; --ua-amber: #9c6410;
+  --ok-bg: #e3f4ea; --ok: #17703f; --risk-bg: #fdecd8; --risk: #a2560b; --block-bg: #fde3e1; --block: #b42318; --info-bg: #e5edfb; --info: #2f5fc4;
+  --body: "Geist", ui-sans-serif, -apple-system, "Helvetica Neue", Arial, sans-serif;
+  --mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --hand: "Caveat", "Bradley Hand", "Segoe Print", cursive;
+  --panel-shadow: 0 40px 80px -44px rgba(40,20,10,.45), 0 2px 0 rgba(29,27,22,.03);
+  /* the phone chat sheet (AppShell): a warm card over a stronger dim of the app */
+  --sheet-scrim: rgba(15,17,21,.18); --sheet-card: #fbf8f3; --sheet-line: rgba(0,0,0,.08); --sheet-shadow: 0 -6px 28px -6px rgba(0,0,0,.28);
+  --surface: #ffffff; --surface-2: #fbfaf8; --hover: #fcfbf9; --callout: #f7f4ef; --dot: #e2ddd5; --cbx: #cfc8bd;
+  --on-ink: #ffffff; --on-ink-soft: rgba(255,255,255,.12); --nav-bg: rgba(255,255,255,.85); --grid-line: rgba(29,27,22,.07); --scrim: rgba(29,27,22,.45);
+  --obj-ink: #1d1b16; --glow-a: #ffd7c4; --glow-b: #e5dcff; --glow-c: #d8ecff; --glow-d: #e3f4ea; --glow-op: .7;
+  --t-coral: #fdeee8; --t-blue: #e3f1f5; --t-green: #eef5ec; --t-violet: #f0ecfa; --t-coral-ink: #b83c20; --t-blue-ink: #0e7490; --t-green-ink: #2f5d50; --t-violet-ink: #6d5bd0;
+  --radius: 10px; --radius-lg: 16px; --radius-pill: 999px;
+  /* spacing: every gap and padding in the library and in apps comes from this scale (COMPONENTS.md "Layout") */
+  --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px; --space-5: 20px; --space-6: 24px; --space-7: 32px;
+  --gap-page: 18px;   /* between a page's sections and columns */
+  --gap-section: 12px; /* between the things inside a section */
+  --gap-box: 10px;    /* between the things inside a box (Card, subtle Section, Callout) */
+  --pad-box: 14px 16px;
+  --sample: .7; /* opacity of a sample row's content (the kit marks seeded rows _sample) */
+  /* object palette: flat fills used by objects/*.svg (see objects/STYLE.md) */
+  --obj-shadow: #1d1b16; --obj-die: transparent; --obj-lift: transparent; /* dark-only finish */
+  --obj-paper: #fffdf8; --obj-yellow: #f5c95c; --obj-orange: #f2994a; --obj-coral: #e8603f; --obj-blue: #9cc3e6;
+  --obj-green: #9cc5a1; --obj-green-soft: #cfe6d2; --obj-tan: #d9b38c; --obj-brown: #c9a27a;
+  --obj-stone: #e6dfd2; --obj-pink: #f3b8a6; --obj-dark: #2a2925; --obj-white: #ffffff;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  color-scheme: dark;
+  --bg: #121110; --bg-warm: #171614; --tint: #24221f; --tint-2: #2c2a26;
+  --ink: #f2efe9; --ink-2: #c4bfb5; --ink-3: #8f897e; --ink-4: #635e56;
+  --line: rgba(255,255,255,.08); --line-2: rgba(255,255,255,.14);
+  --accent: #f06040; --accent-strong: #f06040;
+  --ua-coral: #f06040; --ua-teal: #2fb5a5; --ua-blue: #6f9bf0; --ua-green: #5fb883; --ua-violet: #9b8cf0; --ua-amber: #e0a23b;
+  --ok-bg: rgba(52,211,153,.13); --ok: #5fd49f; --risk-bg: rgba(240,170,60,.15); --risk: #f0b35a; --block-bg: rgba(248,113,113,.13); --block: #f88a8a; --info-bg: rgba(110,150,240,.15); --info: #93b3f5;
+  --surface: #1a1917; --surface-2: #1f1e1b; --hover: #22201d; --callout: #22201d; --dot: #3a3834; --cbx: #57534c;
+  --on-ua: #121110; --on-ink: #121110; --on-ink-soft: rgba(0,0,0,.08); --nav-bg: rgba(18,17,16,.85); --grid-line: rgba(255,255,255,.07); --scrim: rgba(0,0,0,.6);
+  --obj-ink: #1d1b16; --glow-a: rgba(240,106,72,.16); --glow-b: rgba(140,120,230,.14); --glow-c: rgba(110,150,240,.14); --glow-d: rgba(52,211,153,.12); --glow-op: .5;
+  --t-coral: rgba(240,106,72,.14); --t-blue: rgba(56,170,200,.14); --t-green: rgba(90,180,120,.13); --t-violet: rgba(150,130,240,.15); --t-coral-ink: #f6a48c; --t-blue-ink: #7fd0e2; --t-green-ink: #8fd5a9; --t-violet-ink: #b9a9f5;
+  --obj-shadow: #000000; --obj-die: #fffdf8; --obj-lift: rgba(0,0,0,.6);
+  --sample: .7;
+  --panel-shadow: 0 40px 80px -44px rgba(0,0,0,.8), 0 0 0 1px rgba(255,255,255,.02);
+  --sheet-scrim: rgba(0,0,0,.62); --sheet-card: #262422; --sheet-line: rgba(255,255,255,.14); --sheet-shadow: 0 -6px 28px -6px rgba(0,0,0,.7);
+} }
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #121110; --bg-warm: #171614; --tint: #24221f; --tint-2: #2c2a26;
+  --ink: #f2efe9; --ink-2: #c4bfb5; --ink-3: #8f897e; --ink-4: #635e56;
+  --line: rgba(255,255,255,.08); --line-2: rgba(255,255,255,.14);
+  --accent: #f06040; --accent-strong: #f06040;
+  --ua-coral: #f06040; --ua-teal: #2fb5a5; --ua-blue: #6f9bf0; --ua-green: #5fb883; --ua-violet: #9b8cf0; --ua-amber: #e0a23b;
+  --ok-bg: rgba(52,211,153,.13); --ok: #5fd49f; --risk-bg: rgba(240,170,60,.15); --risk: #f0b35a; --block-bg: rgba(248,113,113,.13); --block: #f88a8a; --info-bg: rgba(110,150,240,.15); --info: #93b3f5;
+  --surface: #1a1917; --surface-2: #1f1e1b; --hover: #22201d; --callout: #22201d; --dot: #3a3834; --cbx: #57534c;
+  --on-ua: #121110; --on-ink: #121110; --on-ink-soft: rgba(0,0,0,.08); --nav-bg: rgba(18,17,16,.85); --grid-line: rgba(255,255,255,.07); --scrim: rgba(0,0,0,.6);
+  --obj-ink: #1d1b16; --glow-a: rgba(240,106,72,.16); --glow-b: rgba(140,120,230,.14); --glow-c: rgba(110,150,240,.14); --glow-d: rgba(52,211,153,.12); --glow-op: .5;
+  --t-coral: rgba(240,106,72,.14); --t-blue: rgba(56,170,200,.14); --t-green: rgba(90,180,120,.13); --t-violet: rgba(150,130,240,.15); --t-coral-ink: #f6a48c; --t-blue-ink: #7fd0e2; --t-green-ink: #8fd5a9; --t-violet-ink: #b9a9f5;
+  --obj-shadow: #000000; --obj-die: #fffdf8; --obj-lift: rgba(0,0,0,.6);
+  --sample: .7;
+  --panel-shadow: 0 40px 80px -44px rgba(0,0,0,.8), 0 0 0 1px rgba(255,255,255,.02);
+  --sheet-scrim: rgba(0,0,0,.62); --sheet-card: #262422; --sheet-line: rgba(255,255,255,.14); --sheet-shadow: 0 -6px 28px -6px rgba(0,0,0,.7);
+}
+html { color-scheme: light dark; }
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--body); -webkit-font-smoothing: antialiased; }
+*, *::before, *::after { box-sizing: border-box; }

@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.6.8
+
+- `createReplyDraft` takes five browser calls, not eleven: the unread probe's page load is the only one (the thread opens in the same call), the mode settle and editor wait are one call, and typing, "Draft saved" and the body read-back are one. No fixed sleep after the click-away: the first #drafts check polls for the draft's own row.
+- While the compose is open it reads the reply's own To/Cc/Bcc and the newest message's id, sender and time, returned as `reply` and `newestMessage` (each only when read whole), so a caller can skip a thread read after the write.
+
+## 1.6.7
+
+- `getVoice`, `getReplyContext`, `shouldTrigger` and `storeThreadBody` are removed: reply context and voice live in the Email Desk app, which reads the thread itself.
 ## 1.6.6
 
 - Gmail connects only through the Google sign-in: the IMAP (app password) connection, the `imap+browser` auth type and the imap/smtp hosts leave the manifest, `gmail-imap.py` is removed, and the instructions no longer mention IMAP.

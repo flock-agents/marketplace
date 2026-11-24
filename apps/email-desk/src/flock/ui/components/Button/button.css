@@ -1,0 +1,26 @@
+/* Flock's own button (owner 2026-10-21: the kit matches core Flock): 12px corners, 13px/600, 34px tall, flat, no lift.
+   ink and app are the one primary, filled with the app accent (default coral, Flock's #f06040); an app whose accent was
+   picked keeps it. soft is Flock's pale secondary. */
+.fl-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; font: 600 13px/1 var(--body); padding: 0 14px; min-height: 34px; border-radius: 12px; border: 1px solid transparent; cursor: pointer; transition: background-color .15s, border-color .15s, color .15s; text-decoration: none; white-space: nowrap; }
+.fl-btn:disabled { opacity: .5; cursor: default; }
+.fl-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.fl-btn-ink, .fl-btn-app { background: var(--ua); border-color: var(--ua); color: var(--on-ua); }
+.fl-btn-ink:hover:not(:disabled), .fl-btn-app:hover:not(:disabled) { filter: brightness(.92); }
+.fl-btn-soft { background: var(--surface-2); color: var(--ink-2); border-color: var(--line-2); }
+.fl-btn-soft:hover:not(:disabled) { background: var(--tint); color: var(--ink); }
+.fl-btn-ghost { background: none; color: var(--ink-2); }
+.fl-btn-ghost:hover:not(:disabled) { background: var(--bg-warm); color: var(--ink); }
+.fl-btn-danger { background: var(--surface); color: var(--block); border-color: color-mix(in srgb, var(--block) 25%, transparent); }
+.fl-btn-sm { min-height: 30px; padding: 0 12px; }
+.fl-split { position: relative; display: inline-flex; border-radius: 12px; }
+.fl-split > .fl-btn:first-child { border-radius: 12px 0 0 12px; padding-right: 12px; }
+.fl-split > .fl-btn:nth-child(2) { border-radius: 0 12px 12px 0; padding: 0 10px 0 8px; border-left: 1px solid color-mix(in srgb, currentColor 22%, transparent); }
+.fl-menu { position: absolute; top: calc(100% + 6px); right: 0; z-index: 20; min-width: 160px; display: flex; flex-direction: column; padding: 4px; background: var(--surface); border: 1px solid var(--line-2); border-radius: 12px; box-shadow: var(--panel-shadow); }
+.fl-menu button { text-align: left; background: none; border: 0; border-radius: 8px; padding: 8px 10px; font: 500 14px var(--body); color: var(--ink); cursor: pointer; }
+.fl-menu button:hover { background: var(--tint); }
+.fl-spin { width: 14px; height: 14px; border-radius: 50%; border: 1.8px solid var(--line-2); border-top-color: currentColor; animation: fl-spin 1s linear infinite; }
+@keyframes fl-spin { to { transform: rotate(360deg); } }
+/* Phones: a primary button is a 40px tap target (spec §3.10). Small buttons stay compact. */
+@media (max-width: 720px), (pointer: coarse) { .fl-btn:not(.fl-btn-sm) { min-height: 40px; } }
+/* A small button (Edit and Delete in a row) is still a 40px tap target on a phone; its padding keeps the desktop size. */
+@media (max-width: 720px), (pointer: coarse) { .fl-btn-sm { min-height: 40px; } }

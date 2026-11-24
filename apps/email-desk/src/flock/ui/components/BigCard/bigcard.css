@@ -1,0 +1,31 @@
+.fl-ocard, .fl-info { appearance: none; margin: 0; box-sizing: border-box; position: relative; border-radius: 18px; padding: 18px 20px; display: flex; flex-direction: column; align-items: stretch; gap: 4px; background: radial-gradient(120% 140% at 100% 0%, var(--glow-a) 0%, transparent 55%), radial-gradient(90% 120% at 0% 100%, var(--glow-b) 0%, transparent 60%), var(--surface); border: 1px solid var(--line); font-family: var(--body); color: var(--ink); text-align: left; }
+.fl-ocard { cursor: pointer; transition: transform .15s, border-color .15s, opacity .15s; }
+.fl-ocard:hover:not(:disabled) { transform: translateY(-1px); border-color: var(--line-2); }
+.fl-ocard:focus-visible { outline: 2px solid var(--ua); outline-offset: 2px; }
+.fl-ocard:disabled { cursor: default; }
+.fl-ocard-label { font: 600 11px var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+.fl-ocard-title { font-size: 17px; font-weight: 600; letter-spacing: -.015em; margin-top: 2px; }
+.fl-ocard-value { font: 560 40px/1 var(--body); letter-spacing: -.05em; margin-top: 16px; font-variant-numeric: tabular-nums; }
+.fl-ocard-value small { font: 500 14px var(--body); letter-spacing: 0; color: var(--ink-3); margin-left: 4px; }
+.fl-ocard-caption { color: var(--ink-2); font-size: 13.5px; line-height: 1.45; margin-top: 8px; }
+/* label/value rows for comparing cards side by side (owner 2026-10-21) */
+.fl-ocard-facts { display: flex; flex-direction: column; margin-top: 12px; border-top: 1px solid var(--line); }
+.fl-ocard-fact { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 6px 0; border-bottom: 1px solid var(--line); font-size: 13px; line-height: 1.4; }
+.fl-ocard-fact-l { color: var(--ink-3); font-size: 12px; flex: none; }
+.fl-ocard-fact-v { color: var(--ink); text-align: right; min-width: 0; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.fl-ocard .fl-props, .fl-info .fl-props { margin-top: 12px; }
+.fl-ocard-on { border-color: var(--ua); box-shadow: 0 0 0 1px var(--ua); }
+.fl-ocard-off { opacity: .5; }
+/* no label line beside the badge: keep a long title clear of it */
+.fl-ocard-badge + .fl-ocard-title { padding-right: 76px; }
+.fl-ocard-badge { position: absolute; top: 14px; right: 14px; display: inline-flex; align-items: center; gap: 4px; padding: 3px 9px; border-radius: 999px; background: var(--ua); color: var(--on-ua); font: 600 11px var(--body); }
+@media (max-width: 720px) {
+  .fl-ocard, .fl-info { padding: 16px 18px; }
+  .fl-ocard-value { font-size: 34px; margin-top: 12px; }
+}
+/* a photo of the option, edge to edge at the top of the card */
+.fl-ocard-img { display: block; margin: -18px -20px 10px; }
+.fl-ocard-img .fl-img { border-radius: 17px 17px 0 0; }
+.fl-ocard-img .fl-img img { object-fit: contain; background: var(--surface); }
+.fl-ocard-badge { z-index: 1; }
+@media (max-width: 720px) { .fl-ocard-img { margin: -16px -18px 10px; } }

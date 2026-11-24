@@ -1,0 +1,3 @@
+.fl-props { display: flex; flex-wrap: wrap; gap: 8px; list-style: none; margin: 0; padding: 0; }
+.fl-prop { display: inline-flex; align-items: center; gap: 7px; padding: 5px 12px; border-radius: var(--radius-pill); border: 1px solid var(--line-2); background: var(--surface); font-size: 13px; max-width: 100%; }
+.fl-prop i { font-style: normal; color: var(--ink-3); }
