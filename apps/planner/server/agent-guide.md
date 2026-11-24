@@ -59,7 +59,9 @@ what was eaten. A slot-day eaten out or ordered in has no dishes, so nothing is 
   `intro` once) word for word: plan nothing then.
 - **A week planned, or planned again, on request** ("plan next week", "redo the week"): `make_plan { week_start }` does the
   same and answers `message` (and `intro`) to send word for word as its `instructions` say, or `say` when it could not plan
-  (send that).
+  (send that). `reason: "no_dishes"`: the app knows none of the family's dishes for some meals and `say` asks them: add
+  what they answer with `add_dish`, then `make_plan` again; when they say to suggest some, `make_plan { week_start,
+  suggest_new: true }`.
 - **Food rules are checked by the app** against what each dish contains: a plan it makes keeps every hard rule.
 
 **Later changes** (a change plans again only the meals it touches, never one the family changed; send its `message`

@@ -8,7 +8,7 @@
   "bird": "bird:penguin;color=night;head=tophat;face=monocle",
   "category": "family",
   "tags": ["household", "grocery", "family", "meal-planning"],
-  "minFlockVersion": "0.15.0",
+  "minFlockVersion": "0.25.0-beta.1",
   "sortOrder": 0,
 
   "agent": {

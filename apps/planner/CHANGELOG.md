@@ -1,5 +1,38 @@
 # Changelog
 
+## 4.0.2
+
+Re-ask lines and fallbacks for Flock's code-worded interview (Flock sends every setup line as written; no model words a
+question).
+
+- **A simpler line when a reply is unclear.** Every setup question that asks has a `reask`, the owner-approved simpler line
+  Flock sends after "Sorry, I didn't quite get that." Written generically ("the cook", "the children", "the adults",
+  "the elders"); Flock puts the family's names in at send time.
+- **A line for an empty value.** `people` (`{{householdPeople}}`, `{{householdMeals}}`), `cook` (`{{householdCook}}`) and
+  `orderFindings` (`{{boughtSaid}}`) carry a `fallback`, sent when the value comes back empty, instead of a model wording
+  the step.
+- **No brackets.** The people and connectLater lines lose their brackets (Flock's guard reads "(…)" as an unfilled
+  placeholder).
+- An older Flock ignores `reask` and `fallback` (its interview parser copies only the keys it knows).
+- **Needs Flock 0.25.0-beta.1** (`minFlockVersion`, was 0.24.0-beta.1): the pages need the component library 1.10.11 or later
+  (the cart's ItemPicker; Flock 0.24.0 ships 1.10.10 and the build fails there), and the setup reads `household.get` and
+  `apps.op`, which 0.24.0 does not have. 0.25.0-beta.1, not 0.25.0: a beta sorts before its release.
+
+## 4.0.1
+
+Fixes from the second onboarding live run (#21, #29).
+
+- **A setup is read from the family's own replies.** `apply_setup` refuses a transcript with no `A:` lines (the live run's
+  agent sent one line of its own, and the setup saved with no dishes).
+- **No dishes, a question.** When no dish of theirs could be read, the read-back asks for a few per meal, never a quiet
+  "noted" line; `make_plan` answers `reason: "no_dishes"` with that question instead of planning a week of invented,
+  repeated dishes. `make_plan { suggest_new: true }` plans with new dishes when the family says "suggest some".
+- **Enough new dishes for the week.** A main meal with no dish or plate of theirs counts as a full plate (3), so the
+  shortfall's new dishes cover the week without breaking the repeat rule (was 4 for 21 places).
+- **Whole meals.** The slot prompt asks for one main with its rice or bread at lunch and dinner, never three curries.
+- **Who eats which meal (#21).** With the household's weekday pattern known, the people question proposes who eats at
+  home at which meal (`{{householdMeals}}`, filled by Flock) for them to confirm.
+
 ## 4.0.0
 
 The slot model (`docs/slot-model-spec.md`). The old plan tables and operations are replaced outright, with no migration: no

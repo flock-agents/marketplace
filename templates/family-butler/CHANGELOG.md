@@ -10,6 +10,8 @@
 - **Reminders are group TODOs.** The `reminders` skill is gone; the `todos` skill is in its place. The SOUL's new Reminders section: "remind us about X" in the family group is a group TODO made from the group chat (`POST /api/internal/todos`), at the time asked; a day with no time is set for 9 am and the butler says so; no date at all, it asks once "When?". Never the Family Calendar for a reminder: the calendar is for events, and its to-dos come from its planning. README and SUGGESTIONS say the same. Needs Flock's group TODOs (feat/group-todos).
 - **The morning brief's weather line says where the weather comes from.** A live 8 AM brief had no weather: the prompt asked for it but named no way to get it, and the `weather` skill SUGGESTIONS.json pointed at no longer exists (Flock removed its bundled weather MCP). The morning prompt now says: one WebSearch (every Flock agent has the tool; the template adds nothing) for today's weather in the city the family lives in, as the butler knows it from the family's chats and its memory, never guessed from the brief's timezone; no known city or nothing found, the line is left out without a word. The `weather` suggestion is gone.
 - Installed Butlers keep their own tasks and apps until Flock applies the template to them again.
+- **Needs Flock 0.25.0-beta.1** (`minFlockVersion`, was 0.15.0 in the template and 0.24.0-beta.1 in the catalog): group TODOs and
+  the internal TODO route the briefs read are not in Flock 0.24.0.
 
 ## 1.8.0
 

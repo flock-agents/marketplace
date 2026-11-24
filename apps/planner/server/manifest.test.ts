@@ -15,7 +15,7 @@ const guide = readFileSync(join(import.meta.dir, "agent-guide.md"), "utf8");
 const instructions: string = manifest.agentInterface.instructions;
 const operations: { name: string; description: string }[] = manifest.agentInterface.operations;
 type Target = { operation?: string; setting?: string; preference?: string };
-type SetupQ = { id: string; ask?: string; help?: string; when?: string; fixed?: boolean; multi?: boolean; fills?: string[]; after?: string[]; default?: unknown;
+type SetupQ = { id: string; ask?: string; reask?: string; clarify?: string; fallback?: string; help?: string; when?: string; fixed?: boolean; multi?: boolean; fills?: string[]; after?: string[]; default?: unknown;
   action?: string; args?: unknown; answer?: Target | Target[]; show?: Record<string, { operation: string; field: string }> };
 const setup: SetupQ[] = manifest.setup;
 const joiner: SetupQ[] = manifest.setupJoiner;
@@ -144,7 +144,7 @@ describe("the agent's interface", () => {
   // 3.4.0: Flock's interview runner sends every setup line as written and a model reads each reply into the facts and each
   // target's payload, reading `help`. So an ask is the line a person reads, and a help speaks to that reader, not the Butler.
   it("every setup line is the exact line a person reads, and every help is how to read the reply", () => {
-    const FLOCK_VALUES = ["firstName", "inviter", "sharedApps", "appLink", "appId", "appName", "plannerId", "offerLink", "sharedAppLink", "shareQuestion", "said", "menu", "householdPeople", "householdCook"];
+    const FLOCK_VALUES = ["firstName", "inviter", "sharedApps", "appLink", "appId", "appName", "plannerId", "offerLink", "sharedAppLink", "shareQuestion", "said", "menu", "householdPeople", "householdCook", "householdMeals"];
     for (const q of [...setup, ...joiner]) {
       if (q.action) continue;
       expect(q.fixed, q.id).toBe(true);
@@ -174,6 +174,26 @@ describe("the agent's interface", () => {
     for (const q of setup) expect(q.ask ?? "", q.id).not.toMatch(/\b(brand|pack size)/i);
     const final = setup[setup.length - 1];
     expect([final.id, final.action, final.args]).toEqual(["final", "make_plan", {}]);
+  });
+
+  // 4.0.2 (code-worded questions): Flock sends every line as written. An unclear reply gets "Sorry, I didn't quite get
+  // that." and the question's simpler `reask`; a line whose {{value}} comes back empty sends its `fallback` instead. Both are
+  // generic ("the cook", "the children"): Flock puts the family's names in at send time. No literal brackets in any line a
+  // person reads, since Flock's guard takes "(...)" for an unfilled placeholder. An older Flock ignores these keys.
+  it("every asking question has a re-ask, every line with a value that can be empty has a fallback, and no line has brackets", () => {
+    for (const q of [...setup]) {
+      for (const k of ["reask", "clarify", "fallback"] as const) if (q[k] !== undefined) {
+        expect(typeof q[k], `${q.id}.${k}`).toBe("string");
+        expect(q[k]!.trim().length > 0, `${q.id}.${k}`).toBe(true);
+        expect(q[k]!, `${q.id}.${k}`).not.toMatch(/\{\{|[()]/);
+      }
+      if (q.action) { expect(q.reask, q.id).toBeUndefined(); continue; }
+      expect(q.reask, `${q.id} (${q.when ?? "always"}) needs a reask`).toBeTruthy();
+      expect(q.ask ?? "", q.id).not.toMatch(/[()]/);
+      expect(Boolean(q.fallback), `${q.id} (${q.when ?? "always"}) fallback iff its ask has a value`).toBe(/\{\{\w+\}\}/.test(q.ask ?? ""));
+    }
+    expect(setup.find((q) => q.id === "cook" && q.when === "household.help has cook")!.reask).toBe("Which meals does the cook make, and when does the cook come?");
+    expect(setup.find((q) => q.id === "orderFindings")!.fallback).toBe("Is there anything your home buys every week that I should know about?");
   });
 
   // Lane B (2026-11-23): the cook's limits are not a setup question; a limit said any time is kept in the cook's words (the
@@ -314,7 +334,7 @@ describe("the agent's interface", () => {
     const served = (await agentOps(() => null as any).guide({}, { agentId: null } as any)) as { guide: string };
     expect(served.guide).toContain(FIELDS_SECTION);
     expect(FIELDS_SECTION).toContain("- set_cook { name, days?, arrival?, makes_well?, wont_make?, time_limit?, new_recipes?, note? }");
-    expect(FIELDS_SECTION).toContain("- make_plan { week_start, household? }");
+    expect(FIELDS_SECTION).toContain("- make_plan { week_start, household?, suggest_new? }");
   });
 
   // Owner, 23 Nov: the test family's names and lines (the simulated runs' family) are in no text a model reads, so a model
