@@ -21,8 +21,9 @@ export function EventEditor({ title, names, event, date, onSave, onCancel, onRem
     const r = normaliseEvent(values);
     if (!r.ok) { setErrors(r.errors); return; }
     setErrors({});
-    // A new timed event is nudged half an hour before unless the form says otherwise, as one the agent adds is.
-    await onSave(!event && r.row.start_time && r.row.reminder_minutes === null ? { ...r.row, reminder_minutes: 30 } : r.row);
+    // A new timed event is nudged half an hour before unless the form says otherwise, as one the agent adds is; a weekly
+    // or daily routine is not (owner ruling 2026-11-24).
+    await onSave(!event && r.row.start_time && r.row.reminder_minutes === null && r.row.repeat !== "weekly" && r.row.repeat !== "daily" ? { ...r.row, reminder_minutes: 30 } : r.row);
   };
   return (
     <Card title={title} actions={onRemove ? <Button size="sm" variant="ghost" icon="trash" onClick={() => setAsking(true)}>Delete</Button> : undefined}>

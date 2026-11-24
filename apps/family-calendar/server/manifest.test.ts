@@ -56,7 +56,7 @@ describe("the agent's interface", () => {
     expect(r.error).toBeUndefined();
     expect(r).toMatchObject({ added: 5, members_added: ["Agastya", "Gowri Shankar", "Ankita"] });
     expect(r.events.map((e: any) => [e.title, e.reminder_minutes, e.added_by])).toEqual([
-      ["Skating class", 30, "Shiva"], ["Skating class", 30, "Shiva"], ["Art class", null, "Shiva"], ["Dentist", 60, "Shiva"], ["Grandma's birthday", null, "Shiva"]]);
+      ["Skating class", null, "Shiva"], ["Skating class", null, "Shiva"], ["Art class", null, "Shiva"], ["Dentist", 60, "Shiva"], ["Grandma's birthday", null, "Shiva"]]);
   });
 
   it("says the calendar holds events, to-dos come from plan-prep, never a reminder row, and what the app sends itself", () => {
