@@ -98,7 +98,7 @@
       "repo": "flock-agents/marketplace",
       "path": "apps/family-calendar",
       "latestVersion": "3.0.0",
-      "latestTag": "family-calendar-v3.0.0",
+      "latestTag": "family-calendar-v3.0.0-rc3",
       "minFlockVersion": "0.19.0",
       "publishedAt": "2026-08-13T15:30:00Z",
       "updatedAt": "2026-11-22T00:00:00Z"
@@ -120,7 +120,7 @@
       "repo": "flock-agents/marketplace",
       "path": "templates/family-butler",
       "latestVersion": "1.9.0",
-      "latestTag": "family-butler-v1.9.0",
+      "latestTag": "family-butler-v1.9.0-rc3",
       "minFlockVersion": "0.24.0-beta.1",
       "onboardingCard": {
         "id": "household",
@@ -157,7 +157,7 @@
       "repo": "flock-agents/marketplace",
       "path": "skills/gmail",
       "latestVersion": "1.6.8",
-      "latestTag": "gmail-v1.6.8",
+      "latestTag": "gmail-v1.6.8-rc1",
       "minFlockVersion": "0.24.0",
       "publishedAt": "2026-08-14T10:00:00Z",
       "updatedAt": "2026-11-24T00:00:00Z"
@@ -399,7 +399,7 @@
       "repo": "flock-agents/marketplace",
       "path": "apps/email-desk",
       "latestVersion": "3.0.0",
-      "latestTag": "email-desk-v3.0.0",
+      "latestTag": "email-desk-v3.0.0-rc4",
       "minFlockVersion": "0.25.0",
       "personalAssistant": {
         "always": true,
@@ -438,7 +438,7 @@
       "repo": "flock-agents/marketplace",
       "path": "apps/calendar-desk",
       "latestVersion": "2.1.0",
-      "latestTag": "calendar-desk-v2.1.0",
+      "latestTag": "calendar-desk-v2.1.0-rc2",
       "minFlockVersion": "0.24.0-beta.2",
       "personalAssistant": {
         "always": true,
@@ -723,8 +723,8 @@
       "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "apps/planner",
-      "latestVersion": "3.1.0",
-      "latestTag": "planner-v3.1.0",
+      "latestVersion": "4.0.0",
+      "latestTag": "planner-v4.0.0-rc1",
       "minFlockVersion": "0.24.0-beta.1",
       "publishedAt": "2026-10-11T00:00:00Z",
       "updatedAt": "2026-11-20T00:00:00Z"
