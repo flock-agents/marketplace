@@ -273,9 +273,13 @@ async function planWeek(deps: MakePlanDeps & { log: (line: string) => void }, in
     }
   }
 
-  /** Read what the dishes not in the library contain, in batches (what is not read fails closed). */
+  /** A library dish not read for every tag the rules name (setup ran out of time before it read them: onboarding run 26). */
+  const hardTags = uniq(rules.filter((r) => r.hard).flatMap(forbidden));
+  const unreadIn = (d: (typeof library)[number]) => hardTags.some((t) => !d.contains_read.map(canonTag).includes(t));
+  /** Read what the dishes contain, in batches: one not in the library, or a library dish not read for every tag (what is
+   *  not read fails closed). */
   const readContains = async (dishes: string[]): Promise<Failure | null> => {
-    const need = uniq(dishes.map(dishKey)).filter((k) => !w.facts.has(k) && !library.some((d) => d.key === k));
+    const need = uniq(dishes.map(dishKey)).filter((k) => { const row = library.find((d) => d.key === k); return !w.facts.has(k) && (!row || unreadIn(row)); });
     const names = need.map((k) => dishes.find((x) => dishKey(x) === k)!);
     for (let i = 0; i < names.length; i += CONTAINS_BATCH) {
       const batch = names.slice(i, i + CONTAINS_BATCH);
@@ -286,11 +290,20 @@ async function planWeek(deps: MakePlanDeps & { log: (line: string) => void }, in
       for (const x of raw) {
         if (!isObject(x) || typeof x.dish !== "string" || !need.includes(dishKey(x.dish))) continue;
         const has = strs(x.has).map(canonTag).filter((t) => tags.includes(t)), not = strs(x.not).map(canonTag).filter((t) => tags.includes(t) && !has.includes(t));
-        w.facts.set(dishKey(x.dish), { tags: new Set(has), read: new Set([...has, ...not]) });
+        // A library dish keeps what it was read for already.
+        const row = library.find((d) => d.key === dishKey(x.dish));
+        w.facts.set(dishKey(x.dish), { tags: new Set([...(row?.contains ?? []).map(canonTag), ...has]), read: new Set([...(row?.contains_read ?? []).map(canonTag), ...has, ...not]) });
       }
     }
     return null;
   };
+  // The library's dishes not read for every tag are read now, before any slot is planned: else every one of them fails closed.
+  const unread = library.filter(unreadIn).map((d) => d.name);
+  if (unread.length) {
+    log(`contains: ${unread.length} library dishes not read for every tag: reading them first`);
+    const f = await readContains(unread);
+    if (f) return stopped(f);
+  }
   const settled = (d: PlanDay) => d.fixed || w.done.has(d.slot.toLowerCase());
 
   /** The request for one slot's call (§5.3), from the week as it is now. */
@@ -509,6 +522,11 @@ async function planWeek(deps: MakePlanDeps & { log: (line: string) => void }, in
       const eaten = library.some((x) => x.key === k && !x.untried);
       upsertLibrary(tx, { name: v.name, slot: placedAt, origin: "planner_suggested", suggested: true, untried: !eaten,
         ...(w.facts.has(k) ? { contains: [...f.tags], contains_read: [...f.read] } : {}) }, by, ch);
+    }
+    // Library dishes read in this run (they were not read for every tag): kept, so the next week does not read them again.
+    for (const row of library) {
+      const f = w.facts.get(row.key);
+      if (f && !w.newDishes.has(row.key)) upsertLibrary(tx, { name: row.name, slot: row.slot, contains: [...f.tags], contains_read: [...f.read] }, by, ch);
     }
     for (const d of days.filter((x) => !x.fixed && !emptyAddon(x))) {
       const note = [notesBy.get(`${d.date}|${d.slot}`), ...d.fasting].filter(Boolean).join("; ") || null;
