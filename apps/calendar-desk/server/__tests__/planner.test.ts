@@ -4,7 +4,7 @@ import { ok, failed, type PlatformContext } from "@flock/app-sdk";
 process.env.APP_DATA_DIR = mkdtempSync(join(tmpdir(), "calendar-desk-planner-"));
 const S = await import("../store");
 const P = await import("../planning-store");
-const { runPlanning, capitalisedRuns } = await import("../planner");
+const { runPlanning, capitalisedRuns, pointer } = await import("../planner");
 const { handlePlanReport } = await import("../plan-report");
 
 function wipe() { for (const t of ["events", "cursors", "planned", "plans", "plan_steps"]) S._db.exec(`DELETE FROM ${t}`); }
@@ -368,5 +368,17 @@ describe("the ask cards of an older Calendar Desk", () => {
     expect(p.withdrawals).toEqual([{ ref: "ask:cab-local", reason: "no longer used" }]);
     await runPlanning(p.ctx, NOW);
     expect(p.lists.filter((o) => o.prefix === "ask:")).toHaveLength(1);
+  });
+});
+
+describe("Calendar Desk pointer", () => {
+  test("a copy's pointer starts with its own id", () => {
+    const prev = process.env.APP_ID;
+    try {
+      process.env.APP_ID = "calendar-desk-1a2b3c4d";
+      expect(pointer("k1")).toBe("calendar-desk-1a2b3c4d:k1");
+      delete process.env.APP_ID;
+      expect(pointer("k1")).toBe("calendar-desk:k1");
+    } finally { if (prev === undefined) delete process.env.APP_ID; else process.env.APP_ID = prev; }
   });
 });
