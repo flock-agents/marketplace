@@ -57,8 +57,10 @@ add_events { events: [
   only: never with `repeat` or `weekdays`, and never on a deadline. `end_date: null` makes it one day again.
 - `start_time` and `end_time`; neither for an all-day event (a birthday, a holiday, most trips). On an event over several
   days they are each day's times. `location` and `notes` are free text.
-- `reminder`: whole minutes before the start (`60`). A timed event is nudged 30 minutes before unless you say; `null` for
-  none. There is no "evening before": the 9 pm brief already tells the family about tomorrow.
+- `reminder`: whole minutes before the start (`60`). A timed one-off (or monthly, yearly) event is nudged 30 minutes before
+  unless you say; `null` for none. A weekly or daily routine (school, office, a class and its drops and pick-ups) is only on
+  the calendar, with no nudge: give it a `reminder` only when the family asks for one. There is no "evening before": the
+  9 pm brief already tells the family about tomorrow.
 - `kind`: `"deadline"` for a day something is due by; leave it out for an event.
 - `added_by`: the family member who asked you, for the whole call or on one event; the page shows "added by" them.
 - `members` is optional: each `{ name, emoji?, colour? }` is added, or changed when the name is there (colours: accent, info,
@@ -81,7 +83,8 @@ with its `date` and `end_date`, cancelled events not at all, and a due date with
 - **Nudges, every 15 minutes.** The app looks for what has come due: an event's `reminder` before it starts, and a due date
   a week before its day. It wakes you with the lines to send (`reminders: [{ who, text }]`): send each `text` as it is to
   the person in `who`, or to everyone when `who` is empty. So do not set up reminders, timers or routines of your own for
-  what is on the calendar. Tell the family plainly what each of them will be nudged about and when.
+  what is on the calendar. A weekly routine is not nudged: never tell the family anyone is reminded before school, office
+  or a class. Reminders are for dated things (a fee, a form, an appointment, a school event).
 - **Plan-prep, every hour.** When events came in from a source and are new or have moved, the app wakes you with them and
   its planning instructions (Calendar Desk's planning rules, for a family). Read the family's TODOs first and tie one that
   already covers the work; then give each event its type and decide its steps, each with a kind from the instructions'

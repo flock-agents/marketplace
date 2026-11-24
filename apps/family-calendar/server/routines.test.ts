@@ -10,7 +10,9 @@ const at = (day: number, hour: number, min = 0) => new Date(2026, 10, day, hour,
 async function start() {
   const k = await boot({ now: () => at(20, 17, 30) });
   await k.op("add_events", { events: [
-    { title: "Skating class", who: "Agastya", weekdays: ["Tue", "Thu"], start_time: "16:00", end_time: "17:30", notes: "Gowri Shankar drops and picks up" },
+    // A weekly class is nudged only when the call asks (3.1.1: a weekly routine has no nudge by default).
+    { title: "Skating class", who: "Agastya", weekdays: ["Tue", "Thu"], start_time: "16:00", end_time: "17:30", notes: "Gowri Shankar drops and picks up", reminder: 30 },
+    { title: "School", who: "Agastya", weekdays: ["Mon", "Tue", "Wed", "Thu", "Fri"], start_time: "07:30", end_time: "15:00" },
     { title: "Keyboard class", who: "Agastya", weekdays: ["Sat"], start_time: "16:00", location: "Music school", reminder: 60 },
     { title: "Art class", who: "Agastya", weekdays: ["Fri"], start_time: "17:00", reminder: null },
     { title: "Grandma's birthday", date: "1950-11-28", repeat: "yearly" },
@@ -35,6 +37,13 @@ describe("due-reminders", () => {
     await k.run(at(24, 15, 45));
     expect(k.wakes).toHaveLength(1);
     expect(k.state()).toEqual({ until: "2026-11-24T15:45" });
+  });
+
+  it("a weekly routine (school) is never nudged: it is only on the calendar (owner 2026-11-24)", async () => {
+    const k = await start();
+    await k.run(at(23, 6, 45));
+    await k.run(at(23, 7, 30));                       // Monday morning: school at 7:30, nothing sent
+    expect(k.wakes).toEqual([]);
   });
 
   it("an hour before when it says so; none when it says none; a yearly all-day event has no nudge", async () => {

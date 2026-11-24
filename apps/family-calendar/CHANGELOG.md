@@ -1,5 +1,11 @@
 # Changelog
 
+## 3.1.1
+
+Needs Flock 0.19.0 or later.
+
+- **A weekly routine is not nudged.** A new timed event that repeats every week or every day (school, office, a class and its drops and pick-ups) gets no reminder unless the call (or the event form) asks for one: it is only on the calendar. A one-off, monthly or yearly timed event is still nudged 30 minutes before unless it says otherwise, and a due date a week before. The agent guide no longer asks the agent to tell the family what each of them is nudged about; it says never to promise a nudge before school, office or a class. Events already on the calendar keep the reminder they have.
+
 ## 3.1.0
 
 Needs Flock 0.19.0 or later.
