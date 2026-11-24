@@ -1,5 +1,13 @@
 # Changelog
 
+## 4.0.3
+
+- The plan's message leaves out a note that explains the plan's own choices ("Idli is safe, Chutney avoided by him"):
+  only a word for someone at the table is said. A person's fast is still said by code.
+- A note that is only the cook's limit again ("Yes, she has two hours, so 3 to 4 dishes in all") stays with the cook,
+  not under the family's notes or "All week".
+- The how-it-works message that follows the first week opens "How it works:" (the week's message already says it is planned).
+
 ## 4.0.2
 
 Re-ask lines and fallbacks for Flock's code-worded interview (Flock sends every setup line as written; no model words a

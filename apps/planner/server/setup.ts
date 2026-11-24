@@ -423,6 +423,14 @@ export const ruleKey = (r: Pick<ReadRule, "what" | "who" | "items" | "slots" | "
 
 export type Checked = { read: SetupRead; dropped: string[]; asks: string[]; noted: string[]; lint: ReadDish[]; slotDays: Map<string, Weekday[]> };
 
+/** Whether a note's words are the cook's own limit or words about the cook (its words hold the cook's limit, or the other way round). */
+function aboutTheCook(quote: string, cook: SetupRead["cook"]): boolean {
+  const norm = (t: string | null | undefined) => (t ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  const q = norm(quote);
+  if (!q || !cook) return false;
+  return [cook.limits_words, cook.quote].map(norm).some((c) => c.length >= 8 && (q.includes(c) || c.includes(q)));
+}
+
 /** The read made safe to store: what the family did not say is dropped, unknown names are asked, slots resolved. */
 export function checkRead(read: SetupRead, ctx: { household: Household; said: string[]; sentences?: string[] }): Checked {
   const dropped: string[] = [], asks: string[] = [], noted: string[] = [], lint: ReadDish[] = [];
@@ -479,6 +487,9 @@ export function checkRead(read: SetupRead, ctx: { household: Household; said: st
     if (r.what !== "cap") r.per_meal = null;
     const need = NEEDS[r.what];
     if (need && !need(r)) { dropped.push(`${what}: not complete for a ${r.what} rule, kept as a note`); r = { ...r, what: "note", items: null, to: null, per_meal: null, fasting_food: null }; }
+    // A note that is only the cook's limit again ("Yes, she has two hours, so 3 to 4 dishes in all"): the cook keeps it, not
+    // the family's notes (onboarding run 24 showed it under "All week" in the plan).
+    if (r.what === "note" && !r.who && aboutTheCook(r.quote, read.cook)) { dropped.push(`${what}: the cook's limit, kept with the cook`); continue; }
     if (rules.some((x) => ruleKey(x) === ruleKey(r))) continue;
     rules.push(r);
   }

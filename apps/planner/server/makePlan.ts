@@ -69,6 +69,11 @@ export const FIX_SYSTEM = [
 ].join("\n");
 
 /** The model's slot answer, read leniently: only the dates asked, dish names as strings, each once. */
+/** A note that explains the plan's own choices, not a word for someone at the table (the prompt says never; onboarding run 24:
+ *  "Gowri Shankar fasting, no onion garlic; Idli is safe, Chutney avoided by him"): left out. A person's fast is said by code. */
+const CHOICE_WORDS = /\b(safe|avoid(s|ed|ing)?|chose|chosen|choosing|instead|swap(ped|s)?|replac(e|ed|es|ing)|because|so that|kept|fasting|fasts|fast day|rule|allowed|compl(y|ies|iant))\b/i;
+export const explainsItself = (note: string): boolean => CHOICE_WORDS.test(note) || note.length > 80;
+
 function proposalOf(json: unknown, dates: string[], emptyOk = false): { days: Map<string, string[]>; newNames: Map<string, { name: string; why: string; like?: string }>; notes: Map<string, string> } {
   const out = { days: new Map<string, string[]>(), newNames: new Map<string, { name: string; why: string; like?: string }>(), notes: new Map<string, string>() };
   if (!isObject(json)) return out;
@@ -78,7 +83,7 @@ function proposalOf(json: unknown, dates: string[], emptyOk = false): { days: Ma
   }
   if (Array.isArray(json.new)) for (const n of json.new) if (isObject(n) && typeof n.dish === "string" && n.dish.trim())
     out.newNames.set(dishKey(n.dish), { name: n.dish.trim(), why: typeof n.why === "string" ? n.why.trim() : "", ...(typeof n.like === "string" && n.like.trim() ? { like: n.like.trim() } : {}) });
-  if (isObject(json.notes)) for (const [date, t] of Object.entries(json.notes)) if (dates.includes(date) && typeof t === "string" && t.trim()) out.notes.set(date, t.trim());
+  if (isObject(json.notes)) for (const [date, t] of Object.entries(json.notes)) if (dates.includes(date) && typeof t === "string" && t.trim() && !explainsItself(t)) out.notes.set(date, t.trim());
   return out;
 }
 
