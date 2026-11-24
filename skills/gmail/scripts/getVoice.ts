@@ -11,5 +11,5 @@
 import { errorJson } from "../../_shared/_google_helpers";
 
 if (process.env.SKILL_PARAMS !== undefined) {
-  errorJson("NOT_INTERCEPTED", "getVoice is answered by the Flock platform, not by this script. Call it through gmail-exec.sh.");
+  errorJson("NOT_INTERCEPTED", "getVoice is answered by the Flock platform, not by this script. Call it with the run_skill tool (skill gmail).");
 }

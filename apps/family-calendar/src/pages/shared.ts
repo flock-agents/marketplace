@@ -1,6 +1,6 @@
 export interface Member { id: string; name: string; colour: string; emoji: string | null; created_at: string; updated_at: string; updated_by: string | null; _sample?: boolean }
 export interface Event {
-  id: string; title: string; date: string; start_time: string | null; end_time: string | null; who: string | null; location: string | null;
+  id: string; title: string; date: string; repeat: string; start_time: string | null; end_time: string | null; who: string | null; location: string | null;
   notes: string | null; reminder_minutes: number | null; created_at: string; updated_at: string; updated_by: string | null; _sample?: boolean;
 }
 export interface Reminder { id: string; title: string; due: string; repeat: string; who: string | null; created_at: string; updated_at: string; updated_by: string | null; _sample?: boolean }
@@ -44,7 +44,8 @@ export const undo = (changeId: string, onFail: () => void) => { void kitFetch(`_
 /** The form fields for one event. `names` (the family) are suggestions for Who; any name is accepted. */
 export const eventFields = (names: string[]) => [
   { type: "text", name: "title", label: "What", required: true, placeholder: "Dentist" },
-  { type: "date", name: "date", label: "Date", required: true },
+  { type: "date", name: "date", label: "Date (the first day, when it repeats)", required: true },
+  { type: "select", name: "repeat", label: "Repeat", options: REPEATS, optionLabels: REPEAT_LABELS },
   { type: "text", name: "start_time", label: "Starts", placeholder: "16:30, or leave empty for all day" },
   { type: "text", name: "end_time", label: "Ends", placeholder: "17:00" },
   { type: "text", name: "who", label: "Who", options: names, placeholder: "Everyone" },

@@ -15,23 +15,18 @@
 // the quoted original thread as a non-editable descendant INSIDE that same
 // contenteditable region, and a select-all scoped to the parent selects (and
 // then deletes) that descendant too — every owner-edit round-trip silently
-// deleted the conversation below the reply. This now reads the existing
-// compose HTML, computes a replacement that splices in the new body while
-// leaving everything from the quoted block onward byte-for-byte untouched
-// (spliceDraftBody, unit-tested), and writes that back directly rather than
-// depending on select-all at all.
+// deleted the conversation below the reply. The next version read the
+// existing compose HTML and wrote a spliced replacement back directly. That write never
+// reached Gmail's save (Task 28, 2026-10-03; see "Writing THIS draft with real
+// input" below). The quote is now protected by selecting ONLY the main-body
+// Range (mainBodyRange) and typing over it with insertText. The editor is
+// focused by a real click and selected by a real select-all key press; page
+// script only narrows that selection off an in-editor quote, and never clicks,
+// focuses or dispatches an event itself.
 //
-// Task 28 (2026-10-03): that direct innerHTML write never reached Gmail's save
-// (see "Writing THIS draft with real input" below). The quote is now protected
-// by selecting ONLY the main-body Range (mainBodyRange) and typing over it with
-// insertText; spliceDraftBody stays as a pure, tested helper but no longer
-// drives the write.
-//
-// The pure splice (spliceDraftBody) is exported and unit-tested against an
-// HTML fixture with no browser. The browser-driving script body only runs
-// when this file executes as a skill script — gated on SKILL_PARAMS, same
-// posture as checkEngagedDomains.ts — so importing this module for its pure
-// export never touches the browser.
+// The browser-driving script body only runs when this file executes as a skill
+// script — gated on SKILL_PARAMS, same posture as checkEngagedDomains.ts — so
+// importing this module for its pure exports never touches the browser.
 
 import {
   errorJson,
@@ -42,34 +37,18 @@ import {
   persistentInteractRaw,
   persistentClose,
 } from "../../_shared/_google_helpers";
-import { SAVE_AND_CLOSE_SCRIPT, waitForDraftSavedScript } from "./_composeSave";
+import { SAVE_AND_CLOSE_ACTIONS, waitForDraftSavedScript } from "./_composeSave";
+import { markGmailTarget, isOnScreen } from "./_gmailPress";
+import { clickTarget } from "../../_shared/_realInput";
 import { invalidateCachedThreadForDraft } from "./_threadCache";
-import { bodyToComposeHtml } from "./_bodyHtml";
 import { COMPOSE_BODY_SCRAPE, extractDraftBody } from "./_draftBody";
 import { openDraftRequest, onDraftComposeExpr, parseOpenedDraft, draftNotOpenMessage, DRAFT_NOT_OPEN_WRITTEN } from "./_openDraft";
 import { pollInPageScript, DRAFTS_VIEW_READY_EXPR, NAV_TO_DRAFTS_SCRIPT } from "./_gmailNav";
 
 // --- Pure splice (unit-tested, no browser) ---
 
-const QUOTE_MARKER_RE = /<blockquote[^>]*class="[^"]*gmail_quote[^"]*"/i;
 
 
-/**
- * Compute the new compose HTML for `newBody`, preserving Gmail's quoted
- * original content (`blockquote.gmail_quote`) from `existingHtml` byte-for-
- * byte. When no quote is present, the new body replaces the whole compose
- * HTML. Never depends on selecting the existing composed text — the caller
- * writes this result directly, so the quoted block (a non-editable
- * descendant of the same contenteditable region) is never at risk of being
- * selected and deleted alongside it.
- */
-export function spliceDraftBody(existingHtml: string, newBody: string): string {
-  const html = existingHtml || "";
-  const composedHtml = bodyToComposeHtml(newBody);
-  const quoteIdx = html.search(QUOTE_MARKER_RE);
-  if (quoteIdx === -1) return composedHtml;
-  return composedHtml + html.slice(quoteIdx);
-}
 
 // --- Opening and writing THIS draft (pure builders, unit-tested) ---
 //
@@ -141,36 +120,66 @@ export function mainBodyRange(doc: Document, editor: Element): Range | null {
 /** Marker for a refusal thrown from an in-page step, so the action list aborts before typing. */
 export const REFUSED_MARKER = "FLOCK_REFUSED:";
 const QUOTE_BEFORE_KEY = "__flockQuoteBefore";
+/** The mark the write puts on the verified editor, for the real click that focuses it. */
+const EDITOR_TARGET = "draft-body";
 
-/**
- * In-page: re-verify `draftId`'s compose (onDraftComposeExpr), focus it,
- * select its main body, and remember the in-editor quote's HTML (if any) for
- * the read-back. Focus first: focusing after would collapse the selection.
- *
- * It THROWS on any refusal (not opened, not ok): it runs as the first action
- * of the same list as insertText (updateDraftWriteActions), and a throwing
- * evaluate aborts the list (executePageActions rethrows), so nothing is ever
- * typed into a compose that was not verified and selected. The refusal is
- * carried as `FLOCK_REFUSED:<uri-encoded JSON>` (parseRefusal).
- */
-export function selectMainBodyScript(draftId: string): string {
-  const inner = onDraftComposeExpr(draftId, `
-    if (compose.focus) compose.focus();
-    var range = (${mainBodyRange.toString()})(document, compose);
-    if (!range) return { ok: false, message: "The draft's text could not be told apart from its quoted history; nothing was written." };
-    var sel = window.getSelection();
-    if (!sel) return { ok: false, message: "The page gave no selection to write into; nothing was written." };
-    sel.removeAllRanges();
-    sel.addRange(range);
-    var q = compose.querySelector(${JSON.stringify(QUOTE_SELECTOR)});
-    window[${JSON.stringify(QUOTE_BEFORE_KEY)}] = q ? q.outerHTML : null;
-    return { ok: true, quote: !!q };
-  `);
+/** Wrap an onDraftComposeExpr step so any refusal (not opened, not ok) THROWS, carrying `FLOCK_REFUSED:<json>`. */
+function throwingStep(inner: string): string {
   return `(function(){
     var r = ${inner};
     if (!r || r.opened !== true || r.ok !== true) throw new Error(${JSON.stringify(REFUSED_MARKER)} + encodeURIComponent(JSON.stringify(r || {})));
     return r;
   })()`;
+}
+
+/**
+ * In-page: re-verify `draftId`'s compose (onDraftComposeExpr), check its main
+ * body can be told apart from the quote, and mark the editor for the real click
+ * that focuses it. THROWS on any refusal (throwingStep), before anything is
+ * clicked or typed.
+ */
+export function markDraftEditorScript(draftId: string): string {
+  return throwingStep(onDraftComposeExpr(draftId, `
+    var mark = ${markGmailTarget.toString()};
+    mark(document, null, ${JSON.stringify(EDITOR_TARGET)}, null);
+    if (!(${mainBodyRange.toString()})(document, compose)) return { ok: false, message: "The draft's text could not be told apart from its quoted history; nothing was written." };
+    if (!mark(document, compose, ${JSON.stringify(EDITOR_TARGET)}, ${isOnScreen.toString()})) return { ok: false, message: "The draft's editor was not on screen; nothing was written." };
+    return { ok: true };
+  `));
+}
+
+/**
+ * In-page, after the real click into the editor and the real select-all:
+ * re-verify `draftId`'s compose, make the selection exactly its main body, and
+ * remember the in-editor quote's HTML (if any) for the read-back. With a quote
+ * in the editor the select-all also covered the quote, so the selection is
+ * narrowed to mainBodyRange (a selection change, not an input event); without
+ * one the select-all must already cover exactly the main body.
+ *
+ * It THROWS on any refusal (not opened, not ok): it runs in the same list as
+ * insertText (updateDraftWriteActions), and a throwing evaluate aborts the list
+ * (executePageActions rethrows), so nothing is ever typed into a compose that
+ * was not verified and selected. The refusal is carried as
+ * `FLOCK_REFUSED:<uri-encoded JSON>` (parseRefusal).
+ */
+export function selectMainBodyScript(draftId: string): string {
+  return throwingStep(onDraftComposeExpr(draftId, `
+    var range = (${mainBodyRange.toString()})(document, compose);
+    if (!range) return { ok: false, message: "The draft's text could not be told apart from its quoted history; nothing was written." };
+    var sel = window.getSelection();
+    if (!sel) return { ok: false, message: "The page gave no selection to write into; nothing was written." };
+    var q = compose.querySelector(${JSON.stringify(QUOTE_SELECTOR)});
+    if (q) {
+      sel.removeAllRanges();
+      sel.addRange(range);
+    } else {
+      var strip = function (t) { return String(t || "").replace(/\\s+/g, ""); };
+      var held = sel.rangeCount > 0 && compose.contains(sel.getRangeAt(0).commonAncestorContainer);
+      if (!held || strip(sel.toString()) !== strip(range.toString())) return { ok: false, message: "Could not select the draft's text; nothing was written." };
+    }
+    window[${JSON.stringify(QUOTE_BEFORE_KEY)}] = q ? q.outerHTML : null;
+    return { ok: true, quote: !!q };
+  `));
 }
 
 /**
@@ -187,13 +196,21 @@ export function parseRefusal(text: unknown): Record<string, unknown> | null {
 }
 
 /**
- * The write as ONE action list: select (throws on refusal), then type with the
- * real-input page actions exactly as createReplyDraft types a body. One round
- * trip, so nothing (another caller, a Gmail focus handler between calls) can
- * collapse or move the selection between select and type.
+ * The write as ONE action list, all real input: verify and mark the editor
+ * (throws on refusal), a real click into it, a real select-all, the selection
+ * check (throws on refusal), then type with the real-input page actions exactly
+ * as createReplyDraft types a body. One round trip, so nothing (another caller,
+ * a Gmail focus handler between calls) can collapse or move the selection
+ * between select and type.
  */
-export function updateDraftWriteActions(draftId: string, body: string): Array<{ action: string; script?: string; text?: string; key?: string }> {
-  return [{ action: "evaluate", script: selectMainBodyScript(draftId) }, ...updateDraftTypeActions(body)];
+export function updateDraftWriteActions(draftId: string, body: string): Array<{ action: string; script?: string; text?: string; key?: string; selector?: string }> {
+  return [
+    { action: "evaluate", script: markDraftEditorScript(draftId) },
+    clickTarget(EDITOR_TARGET),
+    { action: "press", key: "ControlOrMeta+a" },
+    { action: "evaluate", script: selectMainBodyScript(draftId) },
+    ...updateDraftTypeActions(body),
+  ];
 }
 
 /**
@@ -325,7 +342,7 @@ function runScript(): void {
       };
 
       // 1+2. Select the main body of the RE-VERIFIED compose and type over it, in ONE action list.
-      //      The select evaluate throws on any refusal, which aborts the list before insertText.
+      //      The mark and select evaluates throw on any refusal, which aborts the list before insertText.
       const write = await persistentInteractRaw(persistentId, updateDraftWriteActions(draftId, bodyText));
       if (write.httpCode >= 400) {
         const refusal = parseRefusal(write.body?.message ?? write.body?.error);
@@ -359,7 +376,7 @@ function runScript(): void {
       //    click away to the drafts list in-page, which is what commits an inline edit
       //    (createReplyDraft's confirmDraftRow). Closing the page instead could drop a save
       //    still in flight: live 2026-10-05, updateDraft reported ok and Gmail kept the old text.
-      await persistentInteract(persistentId, [{ action: "evaluate", script: SAVE_AND_CLOSE_SCRIPT }]);
+      await persistentInteract(persistentId, SAVE_AND_CLOSE_ACTIONS);
       await persistentInteract(persistentId, [{ action: "evaluate", script: NAV_TO_DRAFTS_SCRIPT }], false,
         pollInPageScript(DRAFTS_VIEW_READY_EXPR, "true", DRAFTS_NAV_TIMEOUT_MS)).catch(() => null);
 

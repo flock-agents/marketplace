@@ -67,9 +67,9 @@ Skills can require different connection types:
 {
   "requires": {
     "type": "browser_session",
-    "service": "zepto",
-    "description": "Log in to Zepto via the dashboard browser session",
-    "rationale": "Zepto has no public API — browser session required."
+    "service": "bigbasket",
+    "description": "Log in to BigBasket via the dashboard browser session",
+    "rationale": "BigBasket has no public API — browser session required."
   }
 }
 ```

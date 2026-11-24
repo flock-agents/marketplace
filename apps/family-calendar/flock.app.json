@@ -3,8 +3,8 @@
   "usage": "app",
   "icon": "icon.svg",
   "description": "Family events, schedules, and reminders at a glance",
-  "version": "2.0.3",
-  "minFlockVersion": "0.15.0",
+  "version": "2.1.0",
+  "minFlockVersion": "0.19.0",
   "type": "fullstack",
   "access": "private",
   "spa": true,
@@ -63,5 +63,31 @@
       "A trip plan (use itinerary)",
       "A personal task list (use checklist)"
     ]
+  },
+  "routines": [
+    {
+      "id": "due-reminders",
+      "name": "Reminders",
+      "description": "Every 15 minutes, when an event's reminder or a reminder of its own has come due: asks the agent to tell the person it is for. Nothing due, nothing sent.",
+      "trigger": {
+        "type": "schedule",
+        "cron": "*/15 * * * *"
+      },
+      "executionMode": "app-relay",
+      "handler": "due-reminders"
+    }
+  ],
+  "agentInterface": {
+    "operations": [
+      {
+        "name": "guide",
+        "description": "The full guide for working with this app: events and reminders, add_events with an example, and what the app sends on its own. Read it before you first add anything. {}"
+      },
+      {
+        "name": "add_events",
+        "description": "Put events on the family's calendar, as many as you have, in one call. { events: [{ title, who?: one family member's name (added to the family when new; left out: everyone), date?: YYYY-MM-DD for an event on one day, weekdays?: [\"Tue\", \"Thu\"] for one that happens every week (from today, or from date), repeat?: none | daily | weekly | monthly (with a date: from that date on), start_time?: \"16:00\", end_time?: \"17:30\" (neither: all day), location?, notes?: who drops, picks up or what to bring, reminder?: \"evening before\" or whole minutes before the start }], members?: [{ name, emoji?, colour?: accent | info | success | warning | danger }] }. A class, a school run, a drop or a pick-up is an event, never a reminder; an event's own reminder is its reminder field, never a row in reminders. A weekly event is kept once per weekday and shown every week: never add a row per week. Every event is checked first and one bad event refuses the whole call, naming the event and the field: fix it and send the call again. The same event sent again changes the one there. The first call clears the sample family. A call carries 16 KB at most (about 60 events). Answers { added, updated, members_added, samples_cleared, events: [{ id, title, who, date, repeat, start_time, end_time, reminder_minutes }] }."
+      }
+    ],
+    "instructions": "Family Calendar owns this family's members, events and reminders. Read the app before you answer and tell the family what it now shows. Anything that happens at a time (a class, the school run, a pick-up, an appointment, a birthday) is an event: add events with add_events, all of them in one call, weekly ones with weekdays. Never write events, members or reminders one row at a time through the data route. A reminder before an event is that event's reminder field (\"evening before\", or minutes); the reminders table is only for a nudge with no event behind it. The app itself wakes you every 15 minutes with the reminders that are due and the words to send: set up no reminders or routines of your own for what is on the calendar. Call guide before you first add anything."
   }
 }

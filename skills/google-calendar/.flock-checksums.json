@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "generatedAt": "2026-11-23T14:23:04.693Z",
+  "sourceVersion": "1.0.4",
+  "sourceTag": "google-calendar-v1.0.4",
+  "files": {
+    "CHANGELOG.md": "57148060b62368adce18173440fba4d6ebda22d3f91a026d507b38b8e02809e1",
+    "icon.svg": "0096e1f8eda91794a3c75f608a4df8cea5f6a57f31079a35936698266ee5fcd2",
+    "scripts/event-detail-parse.ts": "d7d2530ae301946131ef0ab085bc0a20ecc94885320e8233722b816805a28f1f",
+    "scripts/agenda-parse.ts": "fe8af4ee8dfd91bad5d4bcd01b2d178df285ad4841f74e86e4daaf9c9ddd85b8",
+    "scripts/listEvents.ts": "6598fc8a9bcc7b41da9c69678c753dbd56138331160c471c16f41d01a66915ac",
+    "scripts/createEvent.ts": "c690fbe8e0c7b37669c1d1c1ff4fbeb7ca8f181fef18700bbf46e7529bb52847",
+    "scripts/event-exists.ts": "0bbfd136b59359c9fcde833a69995e3c17beeb525213c9a81deb3703139e0f07",
+    "scripts/detail-pick.ts": "4f39ca17364b58c97c54ca8d6e1b893d26a389e35ce1634a68a2408b2d50ee18",
+    "scripts/getEvent.ts": "4ecc196a5032c54197c1ab09ee6cb0a84953e71e83eaf3f7134b7140364acfbb",
+    "scripts/calendar-exec.sh": "ee9c0e623eff4e13f427cdd384a7b73086642bbbd0836fccfd45e0fe8d3fd921",
+    "scripts/updateEvent.ts": "425482faa4afbd86b3d07cf638a796c1cede9c142c53acb7cc64afe4fe8c2e8d",
+    "scripts/save-button.ts": "7756ed0fd9bf873a7aa30828a4952e3cea91f9a4d542c8047b669e0673e63225",
+    "flock.skill.json": "8fc98c2a70ff23891068d5a582075046a1984cf156c7a2e0e3626700fce14fe4",
+    "instructions.md": "fd35b75a18c0cdf087c1ebacbe3adee7bea7e55a7cede9c2f7e57674e37549c7"
+  }
+}

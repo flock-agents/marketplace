@@ -80,22 +80,11 @@ export function bodyToComposeHtml(body: string): string {
 
 
 /**
- * The in-page script that writes `html` into the open compose, keeping any
- * quoted original Gmail put there -- the same splice-and-write updateDraft has
- * always used (set innerHTML, then fire `input` so Gmail autosaves). Used by
- * the create scripts only for a body with a table: typing stays the path for
- * everything else, so a plain draft is written exactly as before.
+ * A body with a table put into the focused compose as a person's paste of rich text (a table
+ * copied from a sheet): the server pastes it (insertText with html), so Gmail sees a real paste
+ * and keeps the table. The plain text on the clipboard is the body as written. The caller has
+ * clicked into the editor first.
  */
-export function writeComposeHtmlScript(html: string): string {
-  return `(() => {
-    const all = document.querySelectorAll('div[aria-label*="Message"][contenteditable="true"]');
-    const compose = all[all.length - 1];
-    if (!compose) return JSON.stringify({ ok: false, message: "Compose area not found." });
-    const current = compose.innerHTML;
-    const q = current.search(/<(blockquote|div)[^>]*class="[^"]*gmail_quote/i);
-    compose.innerHTML = ${JSON.stringify(html)} + (q === -1 ? "" : current.slice(q));
-    compose.dispatchEvent(new Event('input', { bubbles: true }));
-    compose.dispatchEvent(new Event('keyup', { bubbles: true }));
-    return JSON.stringify({ ok: true });
-  })()`;
+export function pasteComposeBodyActions(body: string): Array<{ action: "insertText"; text: string; html: string }> {
+  return [{ action: "insertText", text: body, html: bodyToComposeHtml(body) }];
 }

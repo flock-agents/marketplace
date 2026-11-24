@@ -1,7 +1,9 @@
 #!/usr/bin/env bun
 /**
  * Add a product to cart on BigBasket.
- * Params: productId, quantity?
+ * Params: productId, quantity?, query?
+ * With `query` (the search the product was found with) it adds from those search results: the card's
+ * Add, then its "+" for each more unit, without opening the product page. Without it, the product page.
  */
 import {
   getParam,
@@ -12,8 +14,13 @@ import {
   persistentCreate,
   persistentInteract,
   persistentClose,
+  browserInteract,
+  urlencode,
+  pressLoop,
+  PRESS_KIT_JS,
   type GroceryServiceConfig,
 } from "../../_shared/_grocery_helpers";
+import { addFromSearchActions } from "./_bigbasket";
 
 const config: GroceryServiceConfig = {
   name: "BigBasket",
@@ -33,6 +40,23 @@ if (quantity > 10) {
   errorJson("QUANTITY_LIMIT", "Maximum quantity per item is 10");
 }
 
+const query = getParam("query");
+if (query) await addFromSearch(query);
+
+/** Adds from the search results page and exits: the result line, or the error line with exit 1. */
+async function addFromSearch(searchQuery: string): Promise<never> {
+  const searchUrl = `${config.baseUrl}/ps/?q=${urlencode(searchQuery)}`;
+  const result = await browserInteract(config, searchUrl, addFromSearchActions(productId, quantity));
+  let out: any;
+  try {
+    out = JSON.parse((result as any)?.content || "");
+  } catch {
+    errorJson("PAGE_CHANGED", "Could not read the search results. The service may have updated its layout.");
+  }
+  console.log(JSON.stringify(out));
+  process.exit(out.error ? 1 : 0);
+}
+
 const productUrl = `${config.baseUrl}/pd/${productId}`;
 
 const sessionResult = await persistentCreate(config, productUrl);
@@ -43,8 +67,11 @@ if (!persistentId) {
 }
 
 const checkActions = [
-  { action: "waitForSelector", selector: `[class*="add-to-cart"], [class*="AddToCart"], [qa="add"], button[class*="add"], [class*="ATCButton"], [data-testid="add-btn"], [class*="out-of-stock"], [class*="OutOfStock"]`, delay: 5000 },
+  { action: "waitForSelector", selector: `h1`, delay: 5000 },
 ];
+
+/** The product page's own Add button (found by its text). */
+const FIND_ADD = `Array.from(document.querySelectorAll("button")).find((b) => /^add( to basket)?$/i.test(b.innerText.trim()))`;
 
 const checkScript = `(() => {
   const outOfStock = document.querySelector('[class*="out-of-stock"], [class*="OutOfStock"], [class*="sold-out"], [class*="SoldOut"], [class*="currently-unavailable"]');
@@ -53,7 +80,7 @@ const checkScript = `(() => {
     const name = (nameEl?.textContent || 'This product').trim().substring(0, 200);
     return JSON.stringify({ error: true, code: 'OUT_OF_STOCK', message: name + ' is currently out of stock' });
   }
-  const addBtn = document.querySelector('[class*="add-to-cart"], [class*="AddToCart"], [qa="add"], button[class*="add"], [class*="ATCButton"], [data-testid="add-btn"]');
+  const addBtn = ${FIND_ADD};
   return JSON.stringify({ inStock: true, hasButton: !!addBtn });
 })()`;
 
@@ -73,16 +100,29 @@ if (checkParsed.error) {
   process.exit(1);
 }
 
+/** The mark Flock's real click on the Add button goes to, and its page state. */
+const ADD_MARK = "bb-product-add";
+
+// The Add button is marked once and pressed `quantity` times, each press a real click while it is
+// still on screen (a press on a button the page took away does nothing).
+const markAddScript = `(() => {
+  ${PRESS_KIT_JS}
+  const s = flockState("${ADD_MARK}", true);
+  const addBtn = ${FIND_ADD};
+  s.missing = !addBtn;
+  s.done = !addBtn;
+  s.step = () => { flockMark("${ADD_MARK}", addBtn.isConnected && addBtn.getClientRects().length > 0 ? addBtn : null); };
+  if (addBtn) s.step();
+})()`;
+
 const addScript = `(() => {
-  const quantity = ${quantity};
-  const addBtn = document.querySelector('[class*="add-to-cart"], [class*="AddToCart"], [qa="add"], button[class*="add"], [class*="ATCButton"], [data-testid="add-btn"]');
-  if (!addBtn) {
+  ${PRESS_KIT_JS}
+  const s = flockState("${ADD_MARK}");
+  flockClear("${ADD_MARK}");
+  if (s.missing) {
     return JSON.stringify({ error: true, code: 'PAGE_CHANGED', message: 'Could not find add-to-cart button. The page layout may have changed.' });
   }
-
-  for (let i = 0; i < quantity; i++) {
-    addBtn.click();
-  }
+  const quantity = ${quantity};
 
   return new Promise(resolve => {
     setTimeout(() => {
@@ -107,9 +147,7 @@ const addScript = `(() => {
   });
 })()`;
 
-const addActions = [{ action: "screenshot" }];
-
-const result = await persistentInteract(config, persistentId, addActions, true, addScript);
+const result = await persistentInteract(config, persistentId, pressLoop({ key: ADD_MARK, mark: ADD_MARK, start: markAddScript, finish: addScript, presses: quantity }), true);
 const content = (result as any)?.content || "{}";
 
 let parsed: any;

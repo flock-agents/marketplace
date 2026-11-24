@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { addMonths, eventOrder, mondayOf, nextDue, normaliseEvent, normaliseReminder, ordinal, parseClock, repeatText, splitDue } from "../src/pages/dates";
+import { addMonths, clock12, eveningBeforeMinutes, eventOrder, eventRemindersDue, minutesBefore, mondayOf, nextDue, nextOccurrence, normaliseEvent, normaliseReminder, occurrences, ordinal, parseClock, repeatText, splitDue } from "../src/pages/dates";
 
 const REPEATS = ["none", "daily", "weekly", "monthly"];
 
@@ -77,8 +77,8 @@ describe("nextDue: when a reminder next comes round", () => {
 describe("the event form's values as a row", () => {
   it("normalises the times and blanks, keeps a whole number of minutes", () => {
     const r = normaliseEvent({ title: " Dentist ", date: "2026-10-16", start_time: "4:30 pm", end_time: "5pm", who: "", location: "Smile Dental", notes: undefined, reminder_minutes: 60 });
-    expect(r).toEqual({ ok: true, row: { title: "Dentist", date: "2026-10-16", start_time: "16:30", end_time: "17:00", who: null, location: "Smile Dental", notes: null, reminder_minutes: 60 } });
-    expect(normaliseEvent({ title: "Birthday", date: "2026-10-17" })).toEqual({ ok: true, row: { title: "Birthday", date: "2026-10-17", start_time: null, end_time: null, who: null, location: null, notes: null, reminder_minutes: null } });
+    expect(r).toEqual({ ok: true, row: { title: "Dentist", date: "2026-10-16", repeat: "none", start_time: "16:30", end_time: "17:00", who: null, location: "Smile Dental", notes: null, reminder_minutes: 60 } });
+    expect(normaliseEvent({ title: "Birthday", date: "2026-10-17" })).toEqual({ ok: true, row: { title: "Birthday", date: "2026-10-17", repeat: "none", start_time: null, end_time: null, who: null, location: null, notes: null, reminder_minutes: null } });
   });
   it("names each field that is wrong", () => {
     const r = normaliseEvent({ title: "", date: "16/10/2026", start_time: "half four", end_time: "17:00", reminder_minutes: -5 });
@@ -88,6 +88,61 @@ describe("the event form's values as a row", () => {
     if (!order.ok) expect(order.errors).toEqual({ end_time: "Must be after the start" });
     const noStart = normaliseEvent({ title: "X", date: "2026-10-16", end_time: "16:00" });
     if (!noStart.ok) expect(Object.keys(noStart.errors)).toEqual(["start_time"]);
+  });
+});
+
+describe("an event that repeats", () => {
+  const skating = { date: "2026-11-24", repeat: "weekly" };   // a Tuesday
+  it("falls on its weekday in every week from its first day on, and a one-off only on its date", () => {
+    expect(occurrences(skating, "2026-11-20", "2026-11-26")).toEqual(["2026-11-24"]);
+    expect(occurrences(skating, "2026-11-27", "2026-12-03")).toEqual(["2026-12-01"]);
+    expect(occurrences(skating, "2027-03-01", "2027-03-14")).toEqual(["2027-03-02", "2027-03-09"]);
+    expect(occurrences(skating, "2026-11-24", "2026-11-24")).toEqual(["2026-11-24"]);
+    expect(occurrences(skating, "2026-11-13", "2026-11-19")).toEqual([]);   // before it began
+    expect(occurrences({ date: "2026-11-24", repeat: "none" }, "2026-11-20", "2026-11-26")).toEqual(["2026-11-24"]);
+    expect(occurrences({ date: "2026-11-24" }, "2026-11-27", "2026-12-03")).toEqual([]);
+  });
+  it("every day from its first; every month on its day, the last day of a shorter month", () => {
+    expect(occurrences({ date: "2026-11-22", repeat: "daily" }, "2026-11-20", "2026-11-24")).toEqual(["2026-11-22", "2026-11-23", "2026-11-24"]);
+    const rent = { date: "2026-10-31", repeat: "monthly" };
+    expect(occurrences(rent, "2026-11-01", "2027-03-31")).toEqual(["2026-11-30", "2026-12-31", "2027-01-31", "2027-02-28", "2027-03-31"]);
+    expect(occurrences(rent, "2026-11-20", "2026-11-26")).toEqual([]);
+    expect(nextOccurrence(rent, "2026-12-01")).toBe("2026-12-31");
+    expect(nextOccurrence({ date: "2026-11-22", repeat: "daily" }, "2026-12-01")).toBe("2026-12-01");
+  });
+  it("is listed at the next day it falls on", () => {
+    expect(nextOccurrence(skating, "2026-11-20")).toBe("2026-11-24");
+    expect(nextOccurrence(skating, "2026-11-24")).toBe("2026-11-24");
+    expect(nextOccurrence(skating, "2026-11-25")).toBe("2026-12-01");
+    expect(nextOccurrence(skating, "2026-10-01")).toBe("2026-11-24");   // not begun yet
+    expect(nextOccurrence({ date: "2026-11-24", repeat: "none" }, "2026-11-25")).toBeNull();
+  });
+  it("the form keeps how it repeats, and names a repeat it does not know", () => {
+    expect(normaliseEvent({ title: "Skating", date: "2026-11-24", repeat: "weekly" })).toMatchObject({ ok: true, row: { repeat: "weekly" } });
+    const bad = normaliseEvent({ title: "Skating", date: "2026-11-24", repeat: "yearly" });
+    if (!bad.ok) expect(Object.keys(bad.errors)).toEqual(["repeat"]); else throw new Error("yearly was taken");
+  });
+});
+
+describe("an event's own reminder", () => {
+  it("is due its minutes before the start; the evening before is 7 pm the day before", () => {
+    expect(minutesBefore("2026-11-24", "16:00", 60)).toBe("2026-11-24T15:00");
+    expect(minutesBefore("2026-11-24", "00:30", 60)).toBe("2026-11-23T23:30");
+    expect(eveningBeforeMinutes("16:00")).toBe(21 * 60);
+    expect(minutesBefore("2026-11-24", "16:00", eveningBeforeMinutes("16:00"))).toBe("2026-11-23T19:00");
+    expect(minutesBefore("2026-11-24", "00:00", eveningBeforeMinutes(null))).toBe("2026-11-23T19:00");   // an all-day event
+    expect(clock12("16:30")).toBe("4:30 pm");
+    expect(clock12("06:00")).toBe("6 am");
+  });
+  it("comes due once per day of the event, after the window's start and up to its end", () => {
+    const skating = { date: "2026-11-24", repeat: "weekly", start_time: "16:00", reminder_minutes: eveningBeforeMinutes("16:00") };
+    expect(eventRemindersDue(skating, "2026-11-23T18:45", "2026-11-23T19:00")).toEqual([{ date: "2026-11-24", at: "2026-11-23T19:00" }]);
+    expect(eventRemindersDue(skating, "2026-11-23T19:00", "2026-11-23T19:15")).toEqual([]);   // said in the run before
+    expect(eventRemindersDue(skating, "2026-11-30T18:45", "2026-11-30T19:00")).toEqual([{ date: "2026-12-01", at: "2026-11-30T19:00" }]);   // and every week
+    expect(eventRemindersDue({ ...skating, reminder_minutes: null }, "2026-11-23T18:45", "2026-11-23T19:00")).toEqual([]);
+    const dentist = { date: "2026-11-27", repeat: "none", start_time: "11:00", reminder_minutes: 60 };
+    expect(eventRemindersDue(dentist, "2026-11-27T09:45", "2026-11-27T10:00")).toEqual([{ date: "2026-11-27", at: "2026-11-27T10:00" }]);
+    expect(eventRemindersDue(dentist, "2026-12-04T09:45", "2026-12-04T10:00")).toEqual([]);
   });
 });
 

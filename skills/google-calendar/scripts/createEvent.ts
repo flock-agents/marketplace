@@ -4,6 +4,7 @@ import {
   browserInteract,
   urlencode,
 } from "../../_shared/_google_helpers";
+import { saveEventActions } from "./save-button";
 
 const params = JSON.parse(process.env.SKILL_PARAMS || "{}");
 const summary: string = params.summary || "";
@@ -36,11 +37,9 @@ let editUrl = `https://calendar.google.com/calendar/r/eventedit?text=${urlencode
 if (description) editUrl += `&details=${urlencode(description)}`;
 if (location) editUrl += `&location=${urlencode(location)}`;
 
-const CLICK_SAVE = `(function(){var btns=document.querySelectorAll("button");for(var i=0;i<btns.length;i++){var t=btns[i].textContent.trim();if(t==="Save"||t==="save"){btns[i].click();return{ok:true,message:"Event created via browser"}}}var alt=document.querySelector("[aria-label=Save]");if(alt){alt.click();return{ok:true,message:"Event created via browser"}}return{ok:false,message:"Save button not found"}})()`;
-
 const pageActions = [
   { action: "wait", delay: 3000 },
-  { action: "evaluate", script: CLICK_SAVE },
+  ...saveEventActions("Event created via browser"),
   { action: "wait", delay: 2000 },
 ];
 

@@ -1,23 +1,35 @@
-// Shared, PURE "act on Gmail the way Gmail accepts it" helpers for the draft
-// writers (sendDraft, updateDraft) and the compose save step. No browser, no
-// side effects, no script entrypoint -- safe to import from another skill
-// script (same rule as _gmailNav.ts / _openDraft.ts).
+// Shared, PURE "act on Gmail with REAL input" helpers for every Gmail script.
+// No browser, no side effects, no script entrypoint -- safe to import from
+// another skill script (same rule as _gmailNav.ts / _openDraft.ts).
 //
-// WHY THIS EXISTS (task 28, live 2026-10-02 23:39-23:42 on 35626)
-// ---------------------------------------------------------------
-// Save draft and Approve & send both reported success, and Gmail's own API
-// showed nothing had happened: the draft kept its original body and the thread
-// held no sent message. sendDraft called `sendBtn.click()`, and Gmail's
-// `div[role=button]` controls ignore an in-page `.click()` (memory "Gmail
-// toolbar needs mouse events", live-verified 2026-09-24 for Mark as unread).
-// What Gmail's listeners answer is a mousedown, mouseup, click sequence on the
-// on-screen element -- the pattern MARK_UNREAD_SCRIPT (_unreadState.ts) already
-// uses inline. It lives here once, as a function, so both draft writers and the
-// save-and-close step press buttons the same way.
+// WHY THIS EXISTS
+// ---------------
+// Task 28 (live 2026-10-02): Gmail's `div[role=button]` controls ignore an
+// in-page `.click()`, so Send and Save reported success and did nothing. The
+// first fix dispatched mousedown/mouseup/click MouseEvents from page script.
+// Those are still script-made: every such event carries `isTrusted: false`,
+// which Google can see, and an account driven that way risks being flagged.
 //
-// Every function here is SELF-CONTAINED: it runs in the page too, inlined via
-// Function.prototype.toString (like findDraftCompose), so it may reference
-// nothing outside its own body.
+// THE RULE NOW: page script only FINDS an element and MARKS it (_shared/_realInput.ts TARGET_ATTR);
+// the click itself is a `click` page action, which Flock performs with real
+// input through the browser. A mark is cleared before it is set again, so a
+// click never lands on an element a previous step marked. The element a
+// script finds is exactly the one it found before; only the delivery changed.
+//
+// Every function inlined into the page (via Function.prototype.toString) is
+// SELF-CONTAINED: it may reference nothing outside its own body.
+
+import { clickTarget } from "../../_shared/_realInput";
+
+/** A real click on the element marked `name`; skipped when nothing carries the mark. */
+export function clickMarked(name: string) {
+  return clickTarget(name, true);
+}
+
+/** Real clicks on the elements marked `${prefix}0` .. `${prefix}${count - 1}` (see markGmailTargets). */
+export function clickEachMarked(prefix: string, count: number) {
+  return Array.from({ length: count }, (_, i) => clickMarked(`${prefix}${i}`));
+}
 
 /** Is `el` on screen: a non-empty box and not `visibility:hidden`? (A display:none ancestor gives a zero box.) */
 export function isOnScreen(el: Element | null): boolean {
@@ -30,31 +42,83 @@ export function isOnScreen(el: Element | null): boolean {
 }
 
 /**
- * Press a Gmail control: dispatch mousedown, mouseup, click (bubbles, cancelable,
- * view: window) on `el` -- only when it is on screen. Returns whether it pressed.
- * A hidden element is never pressed: Gmail keeps hidden copies of controls (a
- * "Send feedback to Google" menuitem sat beside the live Send), and pressing one
- * of those is at best nothing and at worst the wrong action.
+ * Mark `el` as the target `name` for the next click action, after clearing
+ * that mark from every element in `doc`. Returns whether `el` was marked.
+ * An element `onScreen` rejects is never marked (pass null to skip the check):
+ * Gmail keeps hidden copies of controls (a "Send feedback to Google" menuitem
+ * sat beside the live Send), a real click cannot reach one, and aiming at one
+ * is at best nothing and at worst the wrong action.
  */
-export function pressGmailButton(el: Element | null): boolean {
-  if (!el || typeof (el as any).getBoundingClientRect !== "function") return false;
-  const r = (el as any).getBoundingClientRect();
-  if (!r || r.width <= 0 || r.height <= 0) return false;
-  const win: any = el.ownerDocument && el.ownerDocument.defaultView;
-  const cs = win && win.getComputedStyle ? win.getComputedStyle(el) : null;
-  if (cs && cs.visibility === "hidden") return false;
-  const Ctor: any = (win && win.MouseEvent) || MouseEvent;
-  const types = ["mousedown", "mouseup", "click"];
-  for (let i = 0; i < types.length; i++) {
-    el.dispatchEvent(new Ctor(types[i], { bubbles: true, cancelable: true, view: win }));
-  }
+export function markGmailTarget(doc: Document, el: Element | null, name: string, onScreen: ((el: Element) => boolean) | null = isOnScreen): boolean {
+  const attr = "data-flock-target";
+  const stale = doc.querySelectorAll("[" + attr + '="' + name + '"]');
+  for (let i = 0; i < stale.length; i++) stale[i].removeAttribute(attr);
+  if (!el || (onScreen && !onScreen(el))) return false;
+  el.setAttribute(attr, name);
   return true;
+}
+
+/**
+ * Mark each on-screen element of `els` as `${prefix}0`, `${prefix}1`, ... (at
+ * most `max`), after clearing every `${prefix}*` mark in `doc`. Returns how
+ * many were marked; clickEachMarked(prefix, max) then clicks them in order.
+ */
+export function markGmailTargets(doc: Document, els: ArrayLike<Element>, prefix: string, max: number, onScreen: (el: Element) => boolean = isOnScreen): number {
+  const attr = "data-flock-target";
+  const stale = doc.querySelectorAll("[" + attr + '^="' + prefix + '"]');
+  for (let i = 0; i < stale.length; i++) stale[i].removeAttribute(attr);
+  let n = 0;
+  for (let i = 0; i < els.length && n < max; i++) {
+    if (!onScreen(els[i])) continue;
+    els[i].setAttribute(attr, prefix + n);
+    n++;
+  }
+  return n;
+}
+
+/**
+ * In-page prelude: `mark(el, name)` (on-screen only), `markAny(el, name)` (no
+ * screen check, for callers that already filtered) and `markAll(els, prefix,
+ * max)`, all bound to `document`.
+ */
+export const MARK_FNS = `var onScreen = ${isOnScreen.toString()};
+  var mark = function (el, name) { return (${markGmailTarget.toString()})(document, el, name, onScreen); };
+  var markAny = function (el, name) { return (${markGmailTarget.toString()})(document, el, name, null); };
+  var markAll = function (els, prefix, max) { return (${markGmailTargets.toString()})(document, els, prefix, max, onScreen); };`;
+
+const STEP_RESULT_KEY = "__flockStepResult";
+
+/**
+ * A find-and-mark script, then a real click on its mark, then the script's own
+ * result again as the step's last result. The mark `name` is cleared before the
+ * script runs, so a script that finds nothing leaves nothing to click. `markScript` is an in-page
+ * expression (MARK_FNS is in scope) that marks `name` -- or nothing -- and
+ * returns what the old click script returned. Read back last so a caller that
+ * reads the step's result sees exactly what it saw when the script clicked.
+ */
+export function markThenClick(name: string, markScript: string): Array<{ action: string; script?: string; selector?: string; optional?: true }> {
+  return [
+    { action: "evaluate", script: `(function(){ ${MARK_FNS} mark(null, ${JSON.stringify(name)}); return (window[${JSON.stringify(STEP_RESULT_KEY)}] = ${markScript}); })()` },
+    clickMarked(name),
+    { action: "evaluate", script: `window[${JSON.stringify(STEP_RESULT_KEY)}]` },
+  ];
+}
+
+/**
+ * markThenClick on a text field, then `text` typed into it with real input
+ * (`insertText`, the way every Gmail body is typed). For a field Gmail has just
+ * opened empty (a menu's or a dialog's own box): when the script marks nothing
+ * the click is skipped and the text goes to the focus, which is then that
+ * menu or dialog, where it inserts nothing.
+ */
+export function markThenType(name: string, markScript: string, text: string): Array<{ action: string; script?: string; selector?: string; optional?: true; text?: string }> {
+  return [...markThenClick(name, markScript), { action: "insertText", text }];
 }
 
 /**
  * The text of a Gmail notice (snackbar / toast) matching `re`, or "". Gmail
  * shows "Message sent", "Draft saved", "Marked as unread" in `[role="alert"]`
- * or the `.bAq` snackbar span (the same nodes MARK_UNREAD_SCRIPT watches). Reads
+ * or the `.bAq` snackbar span (the same nodes MARK_UNREAD_CONFIRM_SCRIPT watches). Reads
  * innerText where the browser has it, textContent otherwise (jsdom). The text is
  * capped at 80 chars: it is diagnostics, never page content to relay.
  */

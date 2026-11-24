@@ -41,12 +41,14 @@ import {
 import { invalidateCachedThreadForDraft } from "./_threadCache";
 import { gmailViewUrl, pollInPageScript, parsePollResult, COMPOSE_OPEN_EXPR, DRAFTS_VIEW_READY_EXPR, NAV_TO_DRAFTS_SCRIPT } from "./_gmailNav";
 import { draftIdFromRows, DRAFT_ROWS_EXPR, type DraftListRow } from "./_draftRows";
+import { markThenClick } from "./_gmailPress";
 
-// Click Gmail's discard control, and ONLY that. Every selector names a discard
-// affordance explicitly; there is no positional fallback and no generic
-// toolbar-button search. The element's own label is re-checked after selection,
-// so a Gmail markup change that made one of these selectors match a different
-// button (Send being the one that matters) fails the check instead of firing.
+// Mark Gmail's discard control, and ONLY that, for a real click. Every selector
+// names a discard affordance explicitly; there is no positional fallback and no
+// generic toolbar-button search. The element's own label is re-checked after
+// selection, so a Gmail markup change that made one of these selectors match a
+// different button (Send being the one that matters) fails the check instead of
+// being marked -- and an unmarked page gets no click (markThenClick).
 const DISCARD_SCRIPT = `(() => {
   const SELECTORS = [
     '[aria-label="Discard draft"]',
@@ -71,7 +73,7 @@ const DISCARD_SCRIPT = `(() => {
     return JSON.stringify({ ok: false, reason: 'refusing-send-adjacent-control' });
   }
 
-  btn.click();
+  mark(btn, 'discard');
   return JSON.stringify({ ok: true });
 })()`;
 
@@ -126,12 +128,7 @@ function runScript(): void {
         errorJson("DRAFT_NOT_FOUND", `Draft ${draftId} did not open — not reporting a discard that did not happen.`);
       }
 
-      const result = await persistentInteract(
-        psId,
-        [],
-        false,
-        DISCARD_SCRIPT,
-      );
+      const result = await persistentInteract(psId, markThenClick("discard", DISCARD_SCRIPT));
       const content = typeof result?.content === "string" ? result.content : "";
       let outcome: { ok?: boolean; reason?: string } = {};
       try {

@@ -5,6 +5,7 @@ import {
   browserInteract,
 } from "../../_shared/_google_helpers";
 import { invalidateCachedThreadForMessage } from "./_threadCache";
+import { markThenClick } from "./_gmailPress";
 
 const params = JSON.parse(process.env.SKILL_PARAMS || "{}");
 const messageId: string = params.messageId || "";
@@ -18,7 +19,7 @@ validateId(messageId, "messageId");
 
 const actions = [
   { action: "wait", delay: 3000 },
-  { action: "evaluate", script: `(() => { const btn = document.querySelector('[aria-label="Archive"]') || document.querySelector('[data-tooltip="Archive"]'); if (btn) { btn.click(); return {ok:true}; } return {ok:false,message:'Archive button not found'}; })()` },
+  ...markThenClick("archive", `(() => { const btn = document.querySelector('[aria-label="Archive"]') || document.querySelector('[data-tooltip="Archive"]'); if (btn) { mark(btn, "archive"); return {ok:true}; } return {ok:false,message:'Archive button not found'}; })()`),
   { action: "wait", delay: 2000 },
 ];
 

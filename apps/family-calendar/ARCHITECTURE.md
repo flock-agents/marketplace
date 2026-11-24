@@ -84,18 +84,28 @@ Start here when the owner says "our week", "the family calendar", "remind everyo
 
 Three tables (server/db/schema.ts), each with the kit's `id`, `created_at`, `updated_at`, `updated_by`.
 - `members`: the family. `name` (required), `colour` (a theme tone: accent, info, success, warning, danger; never a hex colour) and `emoji`. Their events carry their colour in the week view.
-- `events`: one row per event on one date. `title` (required), `date` (required, ISO), `start_time` and `end_time` ("16:30", 24-hour; both empty for an all-day event), `who` (a member's `name`, or empty for everyone), `location`, `notes` and `reminder_minutes` (how long before the start to remind, if at all).
-  Something that happens every week (football every Tuesday at 5pm) is one row per date: add the next few weeks' rows, never one row with a rule.
+- `events`: one row per event. `title` (required), `date` (required, ISO), `repeat` (none, daily, weekly, monthly; the default is none), `start_time` and `end_time` ("16:30", 24-hour; both empty for an all-day event), `who` (a member's `name`, or empty for everyone), `location`, `notes` and `reminder_minutes` (how long before the start to remind, if at all; "the evening before" is kept as the minutes back to 19:00 the day before).
+  Something that happens every week (football every Tuesday at 5pm) is one row: `repeat` weekly and `date` its first day; one on two weekdays is two rows. The pages work out the days it falls on (`occurrences` in src/pages/dates.ts); there is never a row per week. The sample week in seed.ts is older and still one row per date.
 - `reminders`: `title` (required), `due` (required, a local date-time "2026-10-17T08:00": the first or only time it is due), `repeat` (none, daily, weekly, monthly; the default is none) and `who`. A repeating reminder is one row; the pages work out when it next comes round from `due` (a monthly one on the 31st falls on the last day of a shorter month).
 
 An install updated from 1.x also has `v1_members`, `v1_events` and `v1_reminders` (or `v1_members_2` and so on, when those names were taken): the 1.x tables, kept as they were (server/db/migrate-v1.ts renames them and carries their rows into the three tables above on the first start after the update; mountKit's `keepTables` keeps every `v1_*` table). The pages and `/api/_data` never read them; leave them alone.
 
-For the agent: write `who` exactly as the member's `name` (the week view matches on it); times are 24-hour "HH:MM" and dates "YYYY-MM-DD" in the family's own time, never UTC. "Remind everyone about the dentist on Friday" is a `reminders` row due the evening before (or `reminder_minutes` on the dentist's `events` row, when the event is there). "When is grandma's birthday" is `GET /api/_data/events?q=birthday`. "Who is picking up the kids on Thursday" is the `events` on that date whose `who` is set.
+### The agent's operations
+
+Declared in flock.app.json `agentInterface.operations` and served by server/agentOps.ts, as Meal Planner's are. The agent's own text is server/agent-guide.md (the `guide` operation) and `agentInterface.instructions`; server/manifest.test.ts holds them to the code.
+- `add_events { events: [{ title, who?, date?, weekdays?, repeat?, start_time?, end_time?, location?, notes?, reminder? }], members?: [{ name, emoji?, colour? }] }` (server/events.ts, `POST /api/events/add`): a family's week in one call. Every event is checked first and one bad event refuses the whole call, naming the event and the field. `weekdays` makes one weekly row per weekday, from the first such day on or after `date` (today when left out). `who` names a member, made when new. `reminder` is "evening before" or minutes, kept as `reminder_minutes`. The same event sent again (title, person, start time and day) changes the one there. The first call clears the samples through the kit's own route.
+- Events are what the Week and Events pages show. A class, a drop or a pick-up written as a `reminders` row shows on neither: the first live setup did exactly that, 7 reminders and no event, and the week read "Nothing on these days". The guide says so, and says never to write these rows one at a time through `/api/_data`.
+
+For the agent: write `who` exactly as the member's `name` (the week view matches on it; `add_events` does); times are 24-hour "HH:MM" and dates "YYYY-MM-DD" in the family's own time, never UTC. "Remind everyone about the dentist on Friday" is the dentist's event with its `reminder`; a `reminders` row is for a nudge with no event behind it ("pack the PE kit"). "When is grandma's birthday" is `GET /api/_data/events?q=birthday`. "Who is picking up the kids on Thursday" is the `events` on that date whose `who` is set.
+
+### The routine
+
+`due-reminders` (flock.app.json `routines`, every 15 minutes, handler in server/routines.ts): what came due since its last run (an event's `reminder_minutes` before each day it falls on, and each `reminders` row at its next time) is handed to the agent with the words to send, `{ reminders: [{ who, text }] }`. Nothing due: no wake. Where the last run stopped is the routine's own state; a run looks back an hour at most, so a first run or one after a long stop sends no backlog, and a wake that did not go is a failed run, tried again.
 
 ### Pages
 
-- `week` (src/pages/WeekPage.tsx): the **Schedule** component, seven days from today (today and tomorrow large, later days compact, days already gone behind "Earlier"), with each event's time, who it is for (with their emoji) and where, and the member's colour on the dot. Previous/next 7 days (loaded by date range). A tap opens the event in place under its row (src/pages/EventEditor.tsx: a Form, with Delete and an Undo); "+ Add" on a day opens the same editor there. The family (src/pages/FamilyList.tsx) sits under the week: add, edit and remove members in place.
-- `events` (src/pages/EventsPage.tsx): every event from today on as a Table (what, when, time, who, where), soonest first, with search; Add opens under the header and a tap opens the event in place.
+- `week` (src/pages/WeekPage.tsx): the **Schedule** component, seven days from today (today and tomorrow large, later days compact, days already gone behind "Earlier"), with each event of those days (a repeating one on each day it falls on; opened, it is edited as the one row it is), its time, who it is for (with their emoji) and where, and the member's colour on the dot. Previous/next 7 days (loaded by date range). A tap opens the event in place under its row (src/pages/EventEditor.tsx: a Form, with Delete and an Undo); "+ Add" on a day opens the same editor there. The family (src/pages/FamilyList.tsx) sits under the week: add, edit and remove members in place.
+- `events` (src/pages/EventsPage.tsx): every event from today on as a Table (what, when, time, who, where), soonest first, a repeating one once at the next day it falls on ("Weekly on Tuesdays, 4:00 pm"), with search; Add opens under the header and a tap opens the event in place.
 - `reminders` (src/pages/RemindersPage.tsx): a RowList, the one due soonest first (one-offs already past at the end, marked Done), each with how it repeats, who it is for and when it next comes round. Add opens under the header; a tap opens the reminder in place.
 - Times are typed ("16:30" or "4:30 pm") and normalised by src/pages/dates.ts (tested by server/dates.test.ts); a bad one is said under its field. The event, reminder or member last picked is sent to the chat as its context.
 
@@ -109,6 +119,8 @@ Renaming a column or table needs the owner's approval, so do it before the app h
 
 ### Honest limits
 
-- A repeating event is one row per date; the app does not expand a rule. The agent adds the coming weeks' rows when asked ("football every Tuesday").
-- `reminder_minutes` and `reminders` are what the paired agent reads to remind people (a routine that checks what is due in the next hour and messages the family); the app itself sends nothing.
-- The week view lists up to 500 events for its seven days.
+- A repeating event is one row, so it has no exceptions: one week cannot be skipped or moved (a holiday), and it has no last day; changing or deleting it changes every week.
+- The app decides what is due and wakes the agent with the words; the agent delivers them. The app has no channel of its own, so with no agent paired, or on a Flock older than 0.19.0 (no routine handlers), nothing is sent.
+- A reminder is said within 15 minutes after it is due, in the time of the machine Flock runs on.
+- The Reminders page lists only the `reminders` rows; an event's own reminder shows on the event ("Remind, minutes before").
+- The week view lists up to 500 events for its seven days, and up to 500 repeating ones.
