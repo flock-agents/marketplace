@@ -9,6 +9,8 @@ import { mountKit, NO_APPROVALS } from "@flock/app-kit";
 import * as schema from "./schema";
 import { seed } from "./seed";
 import { localParts, toneOf, v1Import, prepareV1Data, v1Names, v1ImportId, V1_IMPORT_ID, type V1Rows } from "./migrate-v1";
+import { finishV1Todos } from "./migrate-v2";
+import { ensureInternalTables } from "../calendar";
 
 const KEPT = Object.values(v1Names());   // v1_members, v1_events, v1_reminders
 
@@ -93,7 +95,7 @@ describe("the 1.x rows as 2.0 rows", () => {
     ]);
   });
   it("splits every event into date and times, names its member, and keeps what 2.0 has no field for in the notes", () => {
-    expect(plan.rows.events).toEqual([
+    expect(plan.rows.events.filter((e) => e.$key.startsWith("e"))).toEqual([
       { $key: "e1", title: "Football", date: "2026-10-13", start_time: "17:00", end_time: "18:00", who: "Kabir", location: null, notes: "Shin pads\nCategory: Social.", reminder_minutes: null },
       { $key: "e2", title: "Dentist", date: "2026-10-14", start_time: "17:00", end_time: "17:30", who: "Priya", location: null, notes: "Category: Medical. Status: tentative.", reminder_minutes: null },
       { $key: "e3", title: "School trip", date: "2026-10-20", start_time: "08:00", end_time: null, who: null, location: null, notes: "Category: School.\nUntil 2026-10-21 18:00.", reminder_minutes: null },
@@ -103,11 +105,11 @@ describe("the 1.x rows as 2.0 rows", () => {
       { $key: "e7", title: "Diwali", date: "2026-11-08", start_time: null, end_time: null, who: null, location: null, notes: "Category: Social.", reminder_minutes: null },
     ]);
   });
-  it("keeps every reminder as a one-off for its event's member, except one already done ahead of its time", () => {
-    expect(plan.rows.reminders).toEqual([
-      { $key: "r1", title: "Insurance card in the bag", due: "2026-10-13T19:00", repeat: "none", who: "Priya" },
-      { $key: "r2", title: "Call grandma", due: "2026-10-01T18:00", repeat: "none", who: null },
-      { $key: "r4", title: "Pack the kit", due: "2026-10-13T07:30", repeat: "none", who: "Kabir" },
+  it("makes every reminder a deadline event on its day and time, for its event's member, except one already done ahead of its time", () => {
+    expect(plan.rows.events.filter((e) => e.$key.startsWith("r"))).toEqual([
+      { $key: "r1", title: "Insurance card in the bag", date: "2026-10-13", repeat: "none", start_time: "19:00", end_time: null, who: "Priya", location: null, notes: null, reminder_minutes: 0, kind: "deadline" },
+      { $key: "r2", title: "Call grandma", date: "2026-10-01", repeat: "none", start_time: "18:00", end_time: null, who: null, location: null, notes: null, reminder_minutes: 0, kind: "deadline" },
+      { $key: "r4", title: "Pack the kit", date: "2026-10-13", repeat: "none", start_time: "07:30", end_time: null, who: "Kabir", location: null, notes: null, reminder_minutes: 0, kind: "deadline" },
     ]);
   });
   it("leaves out any reminder the family dealt with (done, dismissed, …) whose time has not come, and keeps a past one", () => {
@@ -116,7 +118,7 @@ describe("the 1.x rows as 2.0 rows", () => {
       r(1, "2026-11-01T09:00", "dismissed"), r(2, "2026-11-01T09:00", "Cancelled"), r(3, "2026-11-01T09:00", "done"),
       r(4, "2026-10-01T09:00", "dismissed"), r(5, "2026-11-01T09:00", "pending"), r(6, "2026-11-01T09:00", " Pending "), r(7, "2026-11-01T09:00", null),
     ] }, NOW)!;
-    expect(plan.rows.reminders.map((x) => x.$key)).toEqual(["r4", "r5", "r6", "r7"]);
+    expect(plan.rows.events.map((x) => x.$key)).toEqual(["r4", "r5", "r6", "r7"]);
   });
   it("is nothing at all when 1.x had no rows", () => {
     expect(v1Import({ members: [], events: [], reminders: [] }, NOW)).toBeNull();
@@ -175,15 +177,15 @@ describe("the first start after the update", () => {
     expect(kit.importState).toEqual({ state: "done", importId: V1_IMPORT_ID });
     const all = (t: string) => kit.sqlite.query(`SELECT * FROM "${t}" ORDER BY rowid`).all() as Record<string, unknown>[];
     expect(all("members").map((m) => [m.name, m.colour, m.emoji])).toEqual([["Priya", "accent", "👩"], ["Kabir", "success", "⚽"], ["Nani", "danger", "👤"]]);
-    expect(all("events").map((e) => [e.title, e.date, e.start_time, e.end_time, e.who])).toEqual([
+    expect(all("events").filter((e) => e.kind === "event").map((e) => [e.title, e.date, e.start_time, e.end_time, e.who])).toEqual([
       ["Football", "2026-10-13", "17:00", "18:00", "Kabir"], ["Dentist", "2026-10-14", "17:00", "17:30", "Priya"],
       ["School trip", "2026-10-20", "08:00", null, null], ["Plumber", "2026-10-22", null, null, null], ["Something", "2026-10-01", null, null, "Nani"],
       ["School holiday", "2026-10-26", null, null, null], ["Diwali", "2026-11-08", null, null, null],
     ]);
-    expect(all("reminders").map((r) => [r.title, r.due, r.repeat, r.who])).toEqual([
-      ["Insurance card in the bag", "2026-10-13T19:00", "none", "Priya"], ["Call grandma", "2026-10-01T18:00", "none", null], ["Pack the kit", "2026-10-13T07:30", "none", "Kabir"],
+    expect(all("events").filter((e) => e.kind === "deadline").map((r) => [r.title, r.date, r.start_time, r.repeat, r.who])).toEqual([
+      ["Insurance card in the bag", "2026-10-13", "19:00", "none", "Priya"], ["Call grandma", "2026-10-01", "18:00", "none", null], ["Pack the kit", "2026-10-13", "07:30", "none", "Kabir"],
     ]);
-    for (const r of [...all("members"), ...all("events"), ...all("reminders")]) expect(r.updated_by).toBe("app:family-calendar");
+    for (const r of [...all("members"), ...all("events")]) expect(r.updated_by).toBe("app:family-calendar");
     expect(all("_samples")).toEqual([]);
     kit.sqlite.close();
     expect(v1Snapshot(dir, KEPT)).toEqual(before);
@@ -192,9 +194,21 @@ describe("the first start after the update", () => {
     // The next start: nothing moves, nothing is imported twice, the 1.x tables are still kept.
     const again = await boot(dir);
     expect(again.status.state).toBe("ok");
-    expect((again.sqlite.query(`SELECT count(*) AS n FROM "events"`).get() as { n: number }).n).toBe(7);
+    expect((again.sqlite.query(`SELECT count(*) AS n FROM "events"`).get() as { n: number }).n).toBe(10);   // 7 events and 3 from reminders
     again.sqlite.close();
     expect(v1Snapshot(dir, KEPT)).toEqual(before);
+  });
+
+  it("a 1.x reminder still to come gets its to-do once the import is in, once", async () => {
+    const dir = v1DataDir({ members: [], events: [], reminders: [{ id: 5, title: "Pay the fees", due_time: "2026-11-01T09:00", event_id: null, status: "pending" }] });
+    const kit = await boot(dir);
+    ensureInternalTables(kit.sqlite);
+    expect(finishV1Todos(kit as any, NOW)).toBe(1);
+    const fees = kit.sqlite.query(`SELECT id FROM events WHERE title = 'Pay the fees'`).get() as { id: string };
+    expect(kit.sqlite.query(`SELECT event_id, key, title, due, show_from, status, synced FROM todos`).all())
+      .toEqual([{ event_id: fees.id, key: "pay-the-fees", title: "Pay the fees", due: "2026-11-01", show_from: "2026-10-29", status: "open", synced: 0 }]);
+    expect(finishV1Todos(kit as any, NOW)).toBe(0);
+    kit.sqlite.close();
   });
 
   it("an install whose 1.x tables were empty starts with the samples, like a fresh one, and keeps the empty 1.x tables", async () => {
@@ -231,7 +245,7 @@ const count = (dir: string, table: string) => {
   const db = new Database(join(dir, "app.db"), { readonly: true });
   try { return (db.query(`SELECT count(*) AS n FROM "${table}"`).get() as { n: number }).n; } finally { db.close(); }
 };
-const titles = (kit: Awaited<ReturnType<typeof boot>>) => (kit.sqlite.query(`SELECT title FROM "events" ORDER BY title`).all() as { title: string }[]).map((r) => r.title);
+const titles = (kit: Awaited<ReturnType<typeof boot>>) => (kit.sqlite.query(`SELECT title FROM "events" WHERE kind = 'event' ORDER BY title`).all() as { title: string }[]).map((r) => r.title);
 
 describe("an update that did not go straight through", () => {
   it("a rolled-back attempt's import file is replaced with the rows as they are now, so a row added since comes across", async () => {

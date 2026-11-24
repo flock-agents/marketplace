@@ -3,12 +3,11 @@ import { useEffect, useState } from "react";
 import { AppShell, AgentChat, useApp, useHashRoute, label, type AppShellProps } from "./flock/ui";
 import { WeekPage } from "./pages/WeekPage";
 import { EventsPage } from "./pages/EventsPage";
-import { RemindersPage } from "./pages/RemindersPage";
 import type { Selected } from "./pages/shared";
 
 // The name, object, accent, starters and labels come from the app's display (GET /api/_app); these are the fallbacks.
-const STARTERS = ["What's on this week?", "Remind everyone about the dentist on Friday", "Who is picking up the kids on Thursday?"];
-const PAGE_IDS = ["week", "events", "reminders"];
+const STARTERS = ["What's on this week?", "What do we need to do before the school trip?", "Who is picking up the kids on Thursday?"];
+const PAGE_IDS = ["week", "events"];
 
 export default function App() {
   const app = useApp();
@@ -18,7 +17,6 @@ export default function App() {
   const pages = [
     { id: "week", label: label("nav.week", "Week"), icon: "calendar-days" },
     { id: "events", label: label("nav.events", "Events"), icon: "list" },
-    { id: "reminders", label: label("nav.reminders", "Reminders"), icon: "bell" },
   ];
   return (
     <AppShell
@@ -36,7 +34,6 @@ export default function App() {
       }}
     >
       {page === "events" ? <EventsPage selected={selected} onSelect={setSelected} />
-        : page === "reminders" ? <RemindersPage selected={selected} onSelect={setSelected} />
         : <WeekPage selected={selected} onSelect={setSelected} />}
     </AppShell>
   );

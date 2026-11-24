@@ -1,4 +1,5 @@
-// Carries a 1.x install's rows into 2.0's tables on the first start after the update.
+// Carries a 1.x install's rows into the current tables on the first start after the update (written for 2.0; since 3.0 a 1.x reminder
+// becomes a deadline event with a to-do, as a 2.x one does in migrate-v2.ts).
 //
 // 1.x kept its rows in the same app.db, in tables with the SAME names as 2.0's (members, events, reminders) but another shape
 // (integer ids, hex colours, ISO date-times, a member_id link). Left there, the kit's schema sync would drop their columns. So, before
@@ -16,6 +17,7 @@ import { Database } from "bun:sqlite";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { join } from "path";
 import type { COLOURS } from "./constants";
+import { reminderAsDeadline } from "./reminder-events";
 
 const TABLES = ["members", "events", "reminders"] as const;
 type V1Table = (typeof TABLES)[number];
@@ -39,7 +41,7 @@ export interface V1Rows { members: V1Member[]; events: V1Event[]; reminders: V1R
 
 type Colour = (typeof COLOURS)[number];
 type Row = Record<string, unknown> & { $key: string };
-export interface V1Import { importId: string; by: string; rows: { members: Row[]; events: Row[]; reminders: Row[] } }
+export interface V1Import { importId: string; by: string; rows: { members: Row[]; events: Row[] } }
 
 const pad = (n: number) => String(n).padStart(2, "0");
 const localDate = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -115,9 +117,10 @@ function eventRow(e: V1Event, who: string | null, now: Date): Row {
  * becomes the nearest tone. An event names its member by name (`who`), splits its start into date and time, keeps its end time when it
  * ends the same day (else says when it ends in the notes), becomes all-day (no times) when it ran midnight to midnight, and keeps its
  * category and a status other than confirmed in the notes.
- * A reminder keeps its title and due time (repeat none) and is for its event's member. One the family already dealt with (any status
- * but pending) whose time has not come is left out: 2.0 has no status and would remind about it again. One whose time has passed comes
- * across either way (2.0 shows a past one-off as done). Everything stays in the v1_* tables either way.
+ * A reminder becomes a deadline event on its due date, at its time ($key r<id>), for its event's member (3.0 has no reminders
+ * table: reminder-events.ts); its to-do is made after the import (migrate-v2.ts finishV1Todos: the to-dos table is the app's own,
+ * which a boot import cannot write). One the family already dealt with (any status but pending) whose time has not come is left
+ * out. One whose time has passed comes across either way. Everything stays in the v1_* tables either way.
  */
 export function v1Import(v1: V1Rows, now = new Date(), importId = V1_IMPORT_ID): V1Import | null {
   const names = new Map(v1.members.map((m) => [m.id, m.name]));
@@ -127,15 +130,16 @@ export function v1Import(v1: V1Rows, now = new Date(), importId = V1_IMPORT_ID):
 
   const members: Row[] = v1.members.map((m) => ({ $key: `m${m.id}`, name: m.name, colour: toneOf(m.color), emoji: m.emoji?.trim() || null }));
   const events: Row[] = v1.events.map((e) => eventRow(e, whoOf(e.member_id), now));
-  const reminders: Row[] = [];
   for (const r of v1.reminders) {
     const at = localParts(r.due_time) ?? localParts(r.created_at);
     const due = `${at?.date ?? localDate(now)}T${at?.time ?? "00:00"}`;
     if (!isPending(r.status) && due > nowLocal) continue;
-    reminders.push({ $key: `r${r.id}`, title: r.title, due, repeat: "none", who: whoOf(r.event_id === null ? null : eventMember.get(r.event_id) ?? null) });
+    const { event } = reminderAsDeadline({ title: r.title, due, repeat: "none", who: whoOf(r.event_id === null ? null : eventMember.get(r.event_id) ?? null) }, localDate(now));
+    events.push({ $key: `r${r.id}`, title: event.title, date: event.date, repeat: event.repeat, start_time: event.start_time, end_time: null, who: event.who, location: null, notes: null,
+      reminder_minutes: event.reminder_minutes, kind: "deadline" });
   }
-  if (!members.length && !events.length && !reminders.length) return null;
-  return { importId, by: IMPORT_BY, rows: { members, events, reminders } };
+  if (!members.length && !events.length) return null;
+  return { importId, by: IMPORT_BY, rows: { members, events } };
 }
 
 /** 1.x's API stored whatever status it was sent (its own pages wrote "pending" and "done", and listed only those two). Only pending,
@@ -203,7 +207,8 @@ function importNextSet(db: Database, dataDir: string, now?: Date): Pick<V1Outcom
     }
     mkdirSync(join(dataDir, ".flock"), { recursive: true });
     writeFileSync(target, JSON.stringify(plan, null, 2));
-    return { imported: { importId: id, members: plan.rows.members.length, events: plan.rows.events.length, reminders: plan.rows.reminders.length }, waiting: null };
+    const fromReminders = plan.rows.events.filter((e) => e.$key.startsWith("r")).length;
+    return { imported: { importId: id, members: plan.rows.members.length, events: plan.rows.events.length - fromReminders, reminders: fromReminders }, waiting: null };
   }
   return { imported: null, waiting: null };
 }
@@ -211,7 +216,7 @@ function importNextSet(db: Database, dataDir: string, now?: Date): Pick<V1Outcom
 export interface V1Outcome {
   /** The tables this start renamed. */
   moved: string[];
-  /** The import this start wrote for the kit, if any. */
+  /** The import this start wrote for the kit, if any (`reminders`: how many became deadline events). */
   imported: { importId: string; members: number; events: number; reminders: number } | null;
   /** A set left for a later start because someone else's import is waiting. */
   waiting: string | null;

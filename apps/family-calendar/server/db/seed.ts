@@ -1,5 +1,5 @@
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
-import { events, members, reminders } from "./schema";
+import { events, members } from "./schema";
 
 const pad = (n: number) => String(n).padStart(2, "0");
 const iso = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -36,7 +36,6 @@ const EVERY_WEEK: Line[][] = [
 const ONE_OFF: [number, Line][] = [
   [3, line("Parents' evening", "18:00", "19:00", null, "Little Flowers School", "Both of us; Aarav's class teacher at 18:00, Diya's at 18:30")],
   [4, line("Dentist", "16:30", "17:00", "Diya", "Smile Dental, 5th Block", "Six-month check-up; bring the insurance card", 60)],
-  [5, line("Grandma's birthday", null, null, null, "Grandma's house", "Cake from Iyengar's; Diya is making the card")],
 ];
 
 /**
@@ -54,16 +53,11 @@ export const sampleEvents = (from = new Date()) => {
   return rows;
 };
 
-/** The family's reminders: a one-off for the dentist, and a daily, a weekly and a monthly one. */
-export const sampleReminders = (from = new Date()) => {
-  const monday = mondayOf(from);
-  return [
-    { title: "Dentist tomorrow: insurance card in the bag", due: `${plusDays(monday, 3)}T19:00`, repeat: "none", who: "Anita" },
-    { title: "Pack the PE kit", due: `${monday}T07:30`, repeat: "weekly", who: "Aarav" },
-    { title: "Water the plants", due: `${monday}T18:00`, repeat: "daily", who: "Diya" },
-    { title: "Pay the school fees", due: `${nextFirst(from)}T09:00`, repeat: "monthly", who: "Vikram" },
-  ];
-};
+/** What comes round every year or is due by a day: grandma's birthday every year, and the school fees due on the 1st of each month. */
+export const sampleDates = (from = new Date()) => [
+  { title: "Grandma's birthday", date: `1950-${plusDays(mondayOf(from), 5).slice(5)}`, repeat: "yearly", start_time: null, end_time: null, who: null, location: "Grandma's house", notes: "Cake from Iyengar's; Diya is making the card", reminder_minutes: null, kind: "event" },
+  { title: "School fees due", date: nextFirst(from), repeat: "monthly", start_time: null, end_time: null, who: "Vikram", location: null, notes: "Pay on the school portal", reminder_minutes: null, kind: "deadline" },
+];
 
 /** One second apart and all in the past, so the rows keep this order instead of tying on created_at. */
 export const staggered = <T extends object>(rows: T[], from = new Date()) =>
@@ -71,6 +65,5 @@ export const staggered = <T extends object>(rows: T[], from = new Date()) =>
 
 export async function seed(db: BunSQLiteDatabase<any>) {
   await db.insert(members).values(staggered(sampleMembers()));
-  await db.insert(events).values(staggered(sampleEvents()));
-  await db.insert(reminders).values(staggered(sampleReminders()));
+  await db.insert(events).values(staggered([...sampleEvents(), ...sampleDates()]));
 }

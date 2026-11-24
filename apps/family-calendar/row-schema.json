@@ -93,36 +93,49 @@
                 "type": "null"
               }
             ]
-          }
-        },
-        "required": [
-          "$key",
-          "title",
-          "date"
-        ],
-        "additionalProperties": false
-      }
-    },
-    "reminders": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "properties": {
-          "$key": {
-            "type": "string",
-            "minLength": 1,
-            "description": "This row's name within the request, for $ref"
           },
-          "title": {
+          "kind": {
             "type": "string"
           },
-          "due": {
+          "status": {
             "type": "string"
           },
-          "repeat": {
-            "type": "string"
+          "added_by": {
+            "type": [
+              "string",
+              "null"
+            ]
           },
-          "who": {
+          "planned_at": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "plan_basis": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "imported": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "monthly_by": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "end_date": {
             "type": [
               "string",
               "null"
@@ -132,7 +145,7 @@
         "required": [
           "$key",
           "title",
-          "due"
+          "date"
         ],
         "additionalProperties": false
       }

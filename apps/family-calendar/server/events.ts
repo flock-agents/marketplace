@@ -4,9 +4,11 @@
 import type { Context, Hono } from "hono";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import { eq } from "drizzle-orm";
-import { events, members } from "./db/schema";
-import { COLOURS, REPEATS } from "./db/constants";
-import { addDays, eveningBeforeMinutes, isoDate, parseClock, parseDate, toMin } from "../src/pages/dates";
+import { events, members, todos } from "./db/schema";
+import { COLOURS, KINDS, MONTHLY_BY, REPEATS } from "./db/constants";
+import { addDays, isoDate, monthlyByProblem, parseClock, parseDate, toMin, weekOfMonth } from "../src/pages/dates";
+import { extras, setTodoDone, syncTodos, type Cal, type TasksPlatform } from "./calendar";
+import { mountWidget } from "./widget";
 
 type Db = BunSQLiteDatabase<any>;
 /** Tell live pages a row changed, and who changed it (the kit's emitChange). */
@@ -28,16 +30,20 @@ const isObject = (v: unknown): v is Record<string, unknown> => !!v && typeof v =
 const same = (a: string | null, b: string | null): boolean => (a ?? "").trim().toLowerCase() === (b ?? "").trim().toLowerCase();
 
 /** One event's fields, exactly as add_events reads them: the guide and the manifest name the same. */
-export const EVENT_FIELDS = ["title", "who", "date", "weekdays", "repeat", "start_time", "end_time", "location", "notes", "reminder"];
+export const EVENT_FIELDS = ["title", "who", "date", "end_date", "weekdays", "repeat", "monthly_by", "start_time", "end_time", "location", "notes", "reminder", "kind", "added_by"];
+/** A timed event is nudged this long before it starts unless it says otherwise (`reminder`). */
+export const DEFAULT_REMINDER_MINUTES = 30;
 export const MEMBER_FIELDS = ["name", "emoji", "colour"];
 
 /** An event as sent, checked: the rows it becomes (one per weekday for a weekly one). */
-type Checked = { title: string; who: string | null; dates: string[]; repeat: (typeof REPEATS)[number]; dated: boolean; start_time: string | null; end_time: string | null;
-  location?: string | null; notes?: string | null; reminder_minutes?: number | null };
+type Checked = { title: string; who: string | null; dates: string[]; repeat: (typeof REPEATS)[number]; dated: boolean;
+  /** a monthly event's reading: "weekday" or "last_weekday"; null by date; absent when the call left it out */ monthly_by?: "weekday" | "last_weekday" | null;
+  /** the last day of an event over several days; null for one day; absent when the call left it out */ end_date?: string | null; start_time: string | null; end_time: string | null;
+  location?: string | null; notes?: string | null; reminder_minutes?: number | null; kind?: (typeof KINDS)[number]; added_by?: string | null };
 
 /** Check one event. Every problem is said with its field, so the caller fixes the call in one go. */
 function checkEvent(v: unknown, today: string, near: (given: string, names: string[]) => string | null): { ok: Checked } | { errors: string[] } {
-  if (!isObject(v)) return { errors: ["must be an object: { title, who?, date? or weekdays?, start_time?, end_time?, location?, notes?, reminder? }"] };
+  if (!isObject(v)) return { errors: ["must be an object: { title, who?, date? or weekdays?, end_date?, repeat?, monthly_by?, start_time?, end_time?, location?, notes?, reminder?, kind?, added_by? }"] };
   const errors: string[] = [];
   for (const k of Object.keys(v)) if (!EVENT_FIELDS.includes(k)) { const n = near(k, EVENT_FIELDS); errors.push(`${k} is not a field of an event${n ? ` (did you mean ${n}?)` : ""}; the fields: ${EVENT_FIELDS.join(", ")}`); }
   const title = text(v.title);
@@ -59,7 +65,16 @@ function checkEvent(v: unknown, today: string, near: (given: string, names: stri
       if (repeat && repeat !== "weekly") errors.push("an event with weekdays happens every week: leave repeat out, or give a date instead of weekdays");
     }
   }
-  if (!days.length && v.date == null) errors.push(repeat && repeat !== "none" ? `a ${repeat} event needs the date of its first day${repeat === "weekly" ? ", or weekdays" : ""}`
+  // A monthly event by weekday of the month: the first Sunday (monthly_by "weekday", from a date that is a first Sunday), the
+  // last Friday ("last_weekday", from a last Friday). Left out or "date": the date's day of the month.
+  let monthly_by: Checked["monthly_by"];
+  if (v.monthly_by != null) {
+    if (!(MONTHLY_BY as readonly unknown[]).includes(v.monthly_by)) errors.push(`monthly_by must be one of: ${MONTHLY_BY.join(", ")} (weekday: the same weekday of the month as date, like the 1st Sunday; last_weekday: the last such weekday)`);
+    else if (repeat !== "monthly") errors.push('monthly_by is only for repeat "monthly": leave it out, or say repeat "monthly"');
+    else if (v.monthly_by === "date") monthly_by = null;
+    else if (date) { const p = monthlyByProblem(date, v.monthly_by as string); if (p) errors.push(p); else monthly_by = v.monthly_by as "weekday" | "last_weekday"; }
+  }
+  if (!days.length && v.date == null) errors.push(repeat && repeat !== "none" ? `a ${repeat} event needs the date of its first day${repeat === "weekly" ? ", or weekdays" : repeat === "yearly" ? " (a birthday's date, any year)" : ""}`
     : "give a date (YYYY-MM-DD) for an event on one day, or weekdays for one that happens every week");
 
   // The times: typed as on the page ("16:30" or "4:30 pm"); none means all day.
@@ -73,20 +88,36 @@ function checkEvent(v: unknown, today: string, near: (given: string, names: stri
   if (times.start_time && times.end_time && toMin(times.end_time) <= toMin(times.start_time)) errors.push(`end_time (${times.end_time}) must be after start_time (${times.start_time})`);
   for (const k of ["location", "notes"] as const) if (v[k] != null && typeof v[k] !== "string") errors.push(`${k} must be text`);
 
-  // The reminder: how long before the start, kept on the event itself (reminder_minutes).
+  // The reminder: how long before the start, kept on the event itself (reminder_minutes). There is no "evening before" any more:
+  // the 9 pm brief tells the family about tomorrow.
   let reminder_minutes: number | null | undefined;
   if (v.reminder === null) reminder_minutes = null;
   else if (typeof v.reminder === "number" && Number.isInteger(v.reminder) && v.reminder >= 0) reminder_minutes = v.reminder;
-  else if (typeof v.reminder === "string" && /^(the\s+)?evening[\s_-]+before$/i.test(v.reminder.trim())) reminder_minutes = eveningBeforeMinutes(times.start_time);
-  else if (v.reminder !== undefined) errors.push(`reminder must be "evening before" or whole minutes before the start, like 60 (${JSON.stringify(v.reminder)} is neither)`);
+  else if (typeof v.reminder === "string" && /^(the\s+)?evening[\s_-]+before$/i.test(v.reminder.trim())) errors.push(`reminder "evening before" is gone: the 9 pm brief already tells the family about tomorrow. Leave reminder out (a timed event is nudged ${DEFAULT_REMINDER_MINUTES} minutes before), or give whole minutes`);
+  else if (v.reminder !== undefined) errors.push(`reminder must be whole minutes before the start, like 60, or null for none (${JSON.stringify(v.reminder)} is not)`);
+  const kind = v.kind == null ? undefined : (KINDS as readonly unknown[]).includes(v.kind) ? (v.kind as (typeof KINDS)[number]) : null;
+  if (kind === null) errors.push(`kind must be one of: ${KINDS.join(", ")} (a deadline is a day something is due by)`);
+  if (v.added_by != null && typeof v.added_by !== "string") errors.push("added_by must be the name of the family member who asked");
+  // An event over several days in a row (a trip, a stay, a holiday): `date` is the first day, `end_date` the last. Once only: a
+  // repeating event, or one on weekdays, has one day each time; a deadline is the one day something is due by.
+  let end_date: string | null | undefined;
+  if (v.end_date === null) end_date = null;
+  else if (v.end_date !== undefined) {
+    const last = realDate(v.end_date);
+    if (!last) errors.push(`end_date must be a real date as YYYY-MM-DD (${JSON.stringify(v.end_date)} is not)`);
+    else if ((repeat && repeat !== "none") || v.weekdays != null) errors.push("end_date is for an event on several days in a row, once: leave out repeat, or end_date");
+    else if (kind === "deadline") errors.push("end_date is not for a deadline (a deadline is the one day something is due by)");
+    else if (date && last <= date) errors.push(`end_date (${last}) must be after date (${date}): it is the last day; leave it out for an event on one day`);
+    else end_date = last;
+  }
 
   if (errors.length) return { errors };
   const from = date ?? today;
   const uniqueDays = [...new Set(days)].sort((a, b) => a - b);
-  return { ok: { title: title!, who: text(v.who), repeat: uniqueDays.length ? "weekly" : repeat ?? "none", dated: date != null,
+  return { ok: { title: title!, who: text(v.who), repeat: uniqueDays.length ? "weekly" : repeat ?? "none", dated: date != null, ...(monthly_by !== undefined ? { monthly_by } : {}), ...(end_date !== undefined ? { end_date } : {}),
     dates: uniqueDays.length ? uniqueDays.map((d) => firstOn(from, d)) : [from], ...times,
     ...(v.location !== undefined ? { location: text(v.location) } : {}), ...(v.notes !== undefined ? { notes: text(v.notes) } : {}),
-    ...(reminder_minutes !== undefined ? { reminder_minutes } : {}) } };
+    ...(reminder_minutes !== undefined ? { reminder_minutes } : {}), ...(kind ? { kind } : {}), ...(v.added_by !== undefined ? { added_by: text(v.added_by) } : {}) } };
 }
 
 type CheckedMember = { name: string; emoji?: string | null; colour?: string };
@@ -108,10 +139,35 @@ const writer = (c: Context): string => {
   const user = c.req.header("x-flock-user")?.trim(); return user ? `user:${user}` : "app";
 };
 
-/** `now`: the app's clock, for tests. `near`: the closest of a list of names to a mistyped one (agentOps.ts closest). */
-export function mountEventRoutes(hono: Hono<any>, kit: { db: Db; emitChange: Emit }, deps: { now?: () => Date; near?: (given: string, names: string[]) => string | null } = {}) {
+/** `now`: the app's clock, for tests. `near`: the closest of a list of names to a mistyped one (agentOps.ts closest).
+ *  `platform`: Flock's to-do list (the SDK's PlatformContext), for a to-do ticked on the page. */
+export function mountEventRoutes(hono: Hono<any>, kit: { db: Db; sqlite: any; emitChange: Emit }, deps: { now?: () => Date; near?: (given: string, names: string[]) => string | null; platform?: () => TasksPlatform | null } = {}) {
   const { db } = kit;
   const near = deps.near ?? (() => null);
+  const cal: Cal = { kit, now: deps.now ?? (() => new Date()), platform: deps.platform ?? (() => null) };
+
+  // "Your Schedule" in Flock reads the family's days here (flock.app.json widgets).
+  mountWidget(hono, db, cal.now);
+
+  // Each event's source labels and to-dos, for the pages (the two tables are the app's own: not on /api/_data).
+  hono.get("/api/events/extras", (c) => c.json({ events: extras(db) }));
+
+  // A to-do ticked (or unticked) on the page: { event_id, key, done }. Settled here, and taken off Flock's list.
+  hono.post("/api/todos/done", async (c) => {
+    const b = (await c.req.json().catch(() => null)) as Record<string, unknown> | null;
+    if (!b || typeof b.event_id !== "string" || typeof b.key !== "string" || typeof b.done !== "boolean") return c.json({ ok: false, reason: "send { event_id, key, done }" }, 400);
+    const by = writer(c);
+    // Who ticked it, as Flock knows them: "owner" for the owner, else the proxy's X-Flock-User ("user:<id>").
+    const user = c.req.header("x-flock-user")?.trim() || null;
+    const person = c.req.header("x-flock-role")?.trim() === "owner" ? "owner" : user;
+    const t = setTodoDone(cal, b.event_id, b.key, b.done, by, person);
+    if (!t) return c.json({ ok: false, reason: "no such to-do" }, 404);
+    kit.emitChange("events", b.event_id, "update", by);
+    await syncTodos(cal);
+    // Someone else had settled it on Flock's list first: say so ("Already done by Ravi.").
+    const now = cal.kit.db.select().from(todos).where(eq(todos.id, t.id)).get();
+    return c.json({ ok: true, todo: { key: t.key, title: t.title, due: t.due, done: t.status === "done" }, ...(now?.done_note ? { message: now.done_note } : {}) });
+  });
 
   // add_events { events: [...], members?: [...] } → POST /api/events/add. All or nothing: a refusal (400) names each bad event
   // and field, and nothing is written. An event sent again (the same title, person, start time and day) changes the one there,
@@ -120,8 +176,10 @@ export function mountEventRoutes(hono: Hono<any>, kit: { db: Db; emitChange: Emi
     let b: unknown = null;
     try { b = await c.req.json(); } catch { /* no JSON: refused below */ }
     const refuse = (reason: string) => c.json({ ok: false, reason }, 400);
-    if (!isObject(b) || !Array.isArray(b.events) || !b.events.length) return refuse("events must be a list with at least one event: { title, who?, date? or weekdays?, start_time?, end_time?, location?, notes?, reminder? }");
+    if (!isObject(b) || !Array.isArray(b.events) || !b.events.length) return refuse("events must be a list with at least one event: { title, who?, date? or weekdays?, end_date?, repeat?, monthly_by?, start_time?, end_time?, location?, notes?, reminder?, kind?, added_by? }");
     if (b.members != null && !Array.isArray(b.members)) return refuse("members must be a list of { name, emoji?, colour? }");
+    if (b.added_by != null && typeof b.added_by !== "string") return refuse("added_by must be the name of the family member who asked");
+    const addedBy = text(b.added_by);
     const today = isoDate((deps.now ?? (() => new Date()))());
     const problems: string[] = [], checked: Checked[] = [], people: CheckedMember[] = [];
     (b.events as unknown[]).forEach((e, i) => {
@@ -174,18 +232,26 @@ export function mountEventRoutes(hono: Hono<any>, kit: { db: Db; emitChange: Emi
         const who = e.who ? member({ name: e.who }).name : null;
         for (const date of e.dates) {
           // The same event: on the same day for a one-off, the same weekday for a weekly one, the same day of the month for a
-          // monthly one; a daily one has no day to differ by.
-          const day = (d: string) => (e.repeat === "weekly" ? parseDate(d).getDay() : e.repeat === "monthly" ? parseDate(d).getDate() : e.repeat === "daily" ? 0 : d);
-          const had = existing.find((x) => same(x.title, e.title) && same(x.who, who) && x.repeat === e.repeat && (x.start_time ?? null) === e.start_time && day(x.date) === day(date));
-          const set = { end_time: e.end_time, ...(e.location !== undefined ? { location: e.location } : {}), ...(e.notes !== undefined ? { notes: e.notes } : {}),
-            ...(e.reminder_minutes !== undefined ? { reminder_minutes: e.reminder_minutes } : {}) };
+          // monthly one (or the same weekday of the month, read as this call says: so a meeting first kept by date and sent again
+          // with monthly_by is changed, not doubled); a daily one has no day to differ by.
+          const day = (d: string, x?: EventRow) => {
+            const reading = e.monthly_by !== undefined ? e.monthly_by : (x?.monthly_by ?? null);
+            return e.repeat === "weekly" ? parseDate(d).getDay() : e.repeat === "monthly" ? (reading === "weekday" ? `${weekOfMonth(d)}:${parseDate(d).getDay()}` : reading === "last_weekday" ? `last:${parseDate(d).getDay()}` : parseDate(d).getDate())
+              : e.repeat === "yearly" ? d.slice(5) : e.repeat === "daily" ? 0 : d;
+          };
+          const had = existing.find((x) => same(x.title, e.title) && same(x.who, who) && x.repeat === e.repeat && (x.start_time ?? null) === e.start_time && day(x.date, x) === day(date, x));
+          const set = { end_time: e.end_time, ...(e.monthly_by !== undefined ? { monthly_by: e.monthly_by } : {}), ...(e.end_date !== undefined ? { end_date: e.end_date } : {}), ...(e.location !== undefined ? { location: e.location } : {}), ...(e.notes !== undefined ? { notes: e.notes } : {}),
+            ...(e.reminder_minutes !== undefined ? { reminder_minutes: e.reminder_minutes } : {}), ...(e.kind ? { kind: e.kind } : {}) };
           let row: EventRow;
           if (had) {
             // A repeating event already there keeps the day it began, unless this call says the date.
             row = tx.update(events).set({ ...set, ...(e.repeat !== "none" && !e.dated ? {} : { date }), updated_at: new Date().toISOString(), updated_by: by }).where(eq(events.id, had.id)).returning().get();
             existing[existing.indexOf(had)] = row; updated++; changes.push(["events", row.id, "update"]);
           } else {
-            row = tx.insert(events).values({ title: e.title, date, repeat: e.repeat, start_time: e.start_time, who, ...set, updated_by: by }).returning().get();
+            // A new timed event is nudged before it starts unless the call said otherwise; who asked is kept as added_by.
+            const added_by = e.added_by !== undefined ? e.added_by : addedBy;
+            row = tx.insert(events).values({ title: e.title, date, repeat: e.repeat, start_time: e.start_time, who, added_by,
+              ...(e.start_time && e.reminder_minutes === undefined ? { reminder_minutes: DEFAULT_REMINDER_MINUTES } : {}), ...set, updated_by: by }).returning().get();
             existing.push(row); made++; changes.push(["events", row.id, "insert"]);
           }
           rows.push(row);
@@ -195,6 +261,8 @@ export function mountEventRoutes(hono: Hono<any>, kit: { db: Db; emitChange: Emi
     });
     for (const [table, id, op] of changes) kit.emitChange(table, id, op, by);
     return c.json({ ...out, samples_cleared,
-      events: out.events.map((r) => ({ id: r.id, title: r.title, who: r.who, date: r.date, repeat: r.repeat, start_time: r.start_time, end_time: r.end_time, reminder_minutes: r.reminder_minutes })) });
+      // monthly_by: how a monthly event comes round ("date" when by its day of the month); null for any other.
+      // end_date: the last day of an event over several days; null for one day.
+      events: out.events.map((r) => ({ id: r.id, title: r.title, who: r.who, date: r.date, end_date: r.end_date ?? null, repeat: r.repeat, monthly_by: r.repeat === "monthly" ? r.monthly_by ?? "date" : null, start_time: r.start_time, end_time: r.end_time, reminder_minutes: r.reminder_minutes, kind: r.kind, added_by: r.added_by })) });
   });
 }
