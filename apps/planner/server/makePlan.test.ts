@@ -285,6 +285,20 @@ describe("make_plan v2: hard rules per person, fail closed", () => {
     if (r.ok) expect(r.relaxed).toEqual({ "Ravi's breakfast": 2 });
   });
 
+  it("library dishes setup never read are read before the week is planned, so they are not all failed closed (onboarding run 26)", async () => {
+    const k = await home({ people, rules: [{ hard: true, what: "veg", quote: "we are vegetarian" }],
+      library: Object.entries(LIB).flatMap(([slot, names]) => names.map((name) => ({ name, slot, contains: [], contains_read: [] }))) });
+    const f = fakeModel({ slot: rotateDays, contains: (u) => ({ dishes: u.dishes.map((d: string) => ({ dish: d, has: [], not: ["egg", "meat", "fish", "onion_garlic"] })) }) });
+    const r = await k.plan(f.model);
+    expect(r.ok).toBe(true);
+    const first = f.contains()[0];
+    expect(first.user.dishes).toEqual(expect.arrayContaining(["Poha", "Sambar", "Palak paneer"]));
+    // Everyone has their dishes: none is "not for" anyone for want of a read.
+    expect(k.at(MON, "Breakfast")!.dishes.every((d) => d.not_for.length === 0)).toBe(true);
+    if (r.ok) expect(r.unmet ?? []).toEqual([]);
+    expect(getLibraryDish(k.kit.db, "Poha", "Breakfast")!.contains_read.sort()).toEqual(["egg", "fish", "meat", "onion_garlic"]);
+  });
+
   it("a new dish gets a contains read before the check, for the rules' tags and the base ones; what it has is saved on its library row", async () => {
     const k = await home({ people, rules: [{ hard: true, what: "avoid", who: "Nani", items: ["sugar"], quote: "no sugar for Nani" }],
       library: Object.entries(LIB).flatMap(([slot, names]) => names.map((name) => ({ name, slot, contains: [], contains_read: [...READ, "sugar"] }))) });

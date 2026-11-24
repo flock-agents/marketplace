@@ -7,6 +7,8 @@
 - A note that is only the cook's limit again ("Yes, she has two hours, so 3 to 4 dishes in all") stays with the cook,
   not under the family's notes or "All week".
 - The how-it-works message that follows the first week opens "How it works:" (the week's message already says it is planned).
+- make_plan reads the library dishes setup never read for a hard rule's tags (setup ran out of time) before planning,
+  and keeps what it read: before, every such dish failed closed and the week came out with 65 unmet places.
 
 ## 4.0.2
 
