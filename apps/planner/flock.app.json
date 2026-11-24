@@ -3,7 +3,7 @@
   "usage": "template",
   "icon": "icon.svg",
   "description": "The family's meals for every day of the week, a running-out guess for the things they buy from their order history, and a reminder each afternoon and evening with one cart per shopping app that is ordered only when they say yes; not for school runs, chores or appointments.",
-  "version": "4.0.0",
+  "version": "4.0.2",
   "minFlockVersion": "0.24.0-beta.1",
   "type": "fullstack",
   "access": "private",
@@ -177,6 +177,7 @@
       "id": "pain",
       "fixed": true,
       "ask": "What's the hardest part of meals for you? Or something else.",
+      "reask": "What's the most annoying part of meals at home?",
       "choices": [
         "Deciding what to make every day",
         "Remembering to order what the meals need",
@@ -193,6 +194,7 @@
       "id": "apps",
       "fixed": true,
       "ask": "Which apps do you order groceries on: Zepto, Blinkit, Instamart, BigBasket or Amazon? If you sign me in, I'll read your past orders to learn what your home buys and how often, so the plan and the shopping list fit you from the first week, and I can fill the cart for you. Nothing is ordered without your yes.",
+      "reask": "Which grocery apps do you use: Zepto, Blinkit, Instamart, BigBasket or Amazon?",
       "fills": [
         "groceryApps:list"
       ],
@@ -211,6 +213,7 @@
       "fixed": true,
       "when": "groceryApps",
       "ask": "Which is your main app, and which do you use when something isn't there?",
+      "reask": "Which app do you order from most?",
       "fills": [
         "mainApp:text",
         "fallbackApp"
@@ -225,7 +228,27 @@
     {
       "id": "people",
       "fixed": true,
+      "ask": "{{householdPeople}} {{householdMeals}} Is that right? Tell me who eats home-cooked food, and at which meals: office lunch out, a school lunch, someone home all day.",
+      "reask": "Who eats the meals cooked at home, and which meals?",
+      "fallback": "Who eats at home? Tell me their names, and who is a child or an elder.",
+      "fills": [
+        "people:list"
+      ],
+      "answer": [
+        {
+          "operation": "set_person",
+          "required": true
+        }
+      ],
+      "help": "The line names who lives with them (household.people) and guesses, from their weekday pattern (household.weekly: office, school, classes and their times), who has which meal at home. people: each { name, relationship?, group: child | adult | elder } after this reply: everyone the line names (a plain \"that's it\" or \"yes\" keeps them all), plus anyone they add, without anyone they take out (someone who never eats at home is taken out). Who eats which meal (\"Kiran has lunch at the office\", \"school gives the boy lunch\", \"Nana is home all day\") is kept word for word in the transcript: apply_setup reads it into the meals' people and weekday lunches. The cook and other help are left out; \"me\", \"I\" or \"myself\" is the person named in you.areTalkingTo, by that name.",
+      "when": "household.people and household.weekly"
+    },
+    {
+      "id": "people",
+      "fixed": true,
       "ask": "{{householdPeople}} Anyone else who eats at home, or anyone who doesn't?",
+      "reask": "Who eats the meals cooked at home, and which meals?",
+      "fallback": "Who eats at home? Tell me their names, and who is a child or an elder.",
       "fills": [
         "people:list"
       ],
@@ -242,6 +265,7 @@
       "id": "people",
       "fixed": true,
       "ask": "Who eats at home? Tell me their names, and who is a child or an elder.",
+      "reask": "Who eats at home? Just names is fine.",
       "fills": [
         "people:list"
       ],
@@ -259,6 +283,7 @@
       "fixed": true,
       "when": "household.help has cook and cook.days",
       "ask": "Which meals does the cook make, and at what time does the cook come for them?",
+      "reask": "Which meals does the cook make, and when does the cook come?",
       "fills": [
         "cook.name:text",
         "cook.days:list",
@@ -277,6 +302,7 @@
       "fixed": true,
       "when": "household.help has cook and cook.visits",
       "ask": "Which days of the week does the cook come?",
+      "reask": "Which days does the cook come?",
       "fills": [
         "cook.name:text",
         "cook.days:list",
@@ -295,6 +321,8 @@
       "fixed": true,
       "when": "household.help has cook",
       "ask": "{{householdCook}} Is that right, and does the cook come for any other meals?",
+      "reask": "Which meals does the cook make, and when does the cook come?",
+      "fallback": "Which meals does the cook make, and at what time does the cook come for them?",
       "fills": [
         "cook.name:text",
         "cook.days:list",
@@ -313,6 +341,7 @@
       "fixed": true,
       "when": "household.help has cook",
       "ask": "Is the cook short of time, say off to the next house, so only a dish or two in the morning?",
+      "reask": "Does the cook have time for a full meal in the morning, or just a dish or two?",
       "fills": [
         "cookTime:text"
       ],
@@ -330,6 +359,7 @@
       "fixed": true,
       "when": "cook.days = mon,tue,wed,thu,fri,sat,sun",
       "ask": "The cook comes every day: is food cooked at home all seven days?",
+      "reask": "Is food cooked at home every day of the week?",
       "fills": [
         "cookingDays:list"
       ],
@@ -350,6 +380,7 @@
       "fixed": true,
       "when": "cook.days = mon,tue,wed,thu,fri,sat",
       "ask": "On Sunday, when the cook doesn't come, who cooks? Or is a meal eaten out?",
+      "reask": "Who cooks on Sundays? Or do you eat out?",
       "fills": [
         "cookingDays:list"
       ],
@@ -370,6 +401,7 @@
       "fixed": true,
       "when": "cook.days = mon,tue,wed,thu,fri",
       "ask": "On Saturday and Sunday, when the cook doesn't come, who cooks? Or is a meal eaten out?",
+      "reask": "Who cooks on Saturdays and Sundays? Or do you eat out?",
       "fills": [
         "cookingDays:list"
       ],
@@ -390,6 +422,7 @@
       "fixed": true,
       "when": "cook.days",
       "ask": "On the days the cook doesn't come, who cooks? Or is a meal eaten out?",
+      "reask": "Who cooks when the cook doesn't come? Or do you eat out?",
       "fills": [
         "cookingDays:list"
       ],
@@ -410,6 +443,7 @@
       "fixed": true,
       "when": "!cook.days",
       "ask": "Who cooks at home, and on which days? Is any day's meal eaten out?",
+      "reask": "Who does the cooking, and on which days?",
       "fills": [
         "cookingDays:list"
       ],
@@ -430,6 +464,7 @@
       "fixed": true,
       "when": "household.children",
       "ask": "What did the children have for breakfast over the past week? Tell me in as much detail as you can.",
+      "reask": "What do the children usually eat for breakfast? A few examples from this week are enough.",
       "multi": true,
       "fills": [
         "pastWeek.kidsBreakfast:text"
@@ -442,6 +477,7 @@
       "fixed": true,
       "when": "household.children",
       "ask": "The children's lunch over the past week, or their school tiffin?",
+      "reask": "What did the children eat for lunch, or carry in the tiffin, this week?",
       "multi": true,
       "fills": [
         "pastWeek.kidsLunch:text"
@@ -454,6 +490,7 @@
       "fixed": true,
       "when": "household.children",
       "ask": "The children's dinner over the past week?",
+      "reask": "What did the children have for dinner on a few nights this week?",
       "multi": true,
       "fills": [
         "pastWeek.kidsDinner:text"
@@ -464,6 +501,7 @@
       "id": "adultsBreakfast",
       "fixed": true,
       "ask": "What did the adults have for breakfast over the past week? Tell me in as much detail as you can.",
+      "reask": "What do the adults usually have for breakfast? A few examples are enough.",
       "multi": true,
       "fills": [
         "pastWeek.adultsBreakfast:text"
@@ -475,6 +513,7 @@
       "id": "adultsLunch",
       "fixed": true,
       "ask": "The adults' lunch over the past week?",
+      "reask": "What did the adults have for lunch on a few days this week?",
       "multi": true,
       "fills": [
         "pastWeek.adultsLunch:text"
@@ -485,6 +524,7 @@
       "id": "adultsDinner",
       "fixed": true,
       "ask": "The adults' dinner over the past week?",
+      "reask": "What did the adults have for dinner on a few nights this week?",
       "multi": true,
       "fills": [
         "pastWeek.adultsDinner:text"
@@ -495,6 +535,7 @@
       "id": "diet",
       "fixed": true,
       "ask": "Is anyone on a diet? High protein, low carb, diabetic, anything a doctor asked for.",
+      "reask": "Does anyone eat to a diet, like diabetic, low carb or high protein?",
       "fills": [
         "diet:text",
         "dietElders:text"
@@ -514,6 +555,7 @@
       "fixed": true,
       "when": "household.elders and dietElders",
       "ask": "Besides that diet, do the elders eat anything differently: less salt, softer food, no onion or garlic, a fasting day?",
+      "reask": "Do the elders need anything different, like less salt or softer food?",
       "fills": [
         "elders:text"
       ],
@@ -532,6 +574,7 @@
       "fixed": true,
       "when": "household.elders",
       "ask": "Do the elders eat anything differently from the rest: less salt, softer food, no onion or garlic, a fasting day?",
+      "reask": "Do the elders need anything different, like less salt or softer food?",
       "fills": [
         "elders:text"
       ],
@@ -549,6 +592,7 @@
       "id": "rules",
       "fixed": true,
       "ask": "Any food rules for the house? Veg, egg or non-veg days, fasting days, allergies, a dish someone won't touch.",
+      "reask": "Any food rules at home, like veg days, fasting or allergies?",
       "fills": [
         "rules:text"
       ],
@@ -561,6 +605,7 @@
       "id": "orderIn",
       "fixed": true,
       "ask": "How often do you order in, and on which days?",
+      "reask": "Do you order food in? Roughly how often?",
       "fills": [
         "orderIn:text"
       ],
@@ -573,6 +618,7 @@
       "id": "subscriptions",
       "fixed": true,
       "ask": "Does anything come on a subscription, like Country Delight or a milkman?",
+      "reask": "Does anything get delivered regularly, like milk?",
       "fills": [
         "subscriptions:list"
       ],
@@ -590,7 +636,8 @@
       "id": "connectLater",
       "when": "!groceryApps and household.groceriesBy",
       "fixed": true,
-      "ask": "Before I make the final plan, shall I sign in to your grocery app (Zepto, Blinkit, Instamart, BigBasket or Amazon) and read your past orders, so the plan and the shopping list fit what your home buys?",
+      "ask": "Before I make the final plan, shall I sign in to your grocery app, Zepto, Blinkit, Instamart, BigBasket or Amazon, and read your past orders, so the plan and the shopping list fit what your home buys?",
+      "reask": "Should I sign in to your grocery app to see what you usually buy? Yes or no is fine.",
       "fills": [
         "laterApps:list"
       ],
@@ -613,6 +660,8 @@
       "when": "groceryApps",
       "fixed": true,
       "ask": "From your orders, your home buys {{boughtSaid}}. Is anything off?",
+      "reask": "Does that list look right, or should I change something?",
+      "fallback": "Is there anything your home buys every week that I should know about?",
       "show": {
         "boughtSaid": {
           "operation": "import_order_history",
@@ -771,11 +820,11 @@
       },
       {
         "name": "apply_setup",
-        "description": "Save the family's whole meal setup at the end of the interview, in one call. { household: every household fact you hold (people, help at home, routines), transcript: the planner's questions and the family's replies, word for word and in order, as lines \"Q: ...\" and \"A: ...\" (corrections, later and off-topic replies included, as they happened) }. The app reads them itself and saves the people, the meals (slots: a child's tiffin, one person's own plate, meals eaten out or ordered in), the cook, the food rules (only what the family said), the family's dishes and example meals, the shopping apps and subscriptions. Answers { ok, said: what was saved in plain words, ending with one question, to read back to the family (send it word for word; a correction is the same call again with the reply added to the transcript, and its said is only what changed), noted: what was kept but is not checked, dropped, asks } or { ok: false, say }."
+        "description": "Save the family's whole meal setup at the end of the interview, in one call. { household: every household fact you hold (people, help at home, routines), transcript: the planner's questions and the family's replies, word for word and in order, as lines \"Q: ...\" and \"A: ...\" (never a summary of your own: a transcript without the family's A: lines is refused; corrections, later and off-topic replies included, as they happened) }. The app reads them itself and saves the people, the meals (slots: a child's tiffin, one person's own plate, meals eaten out or ordered in), the cook, the food rules (only what the family said), the family's dishes and example meals, the shopping apps and subscriptions. Answers { ok, said: what was saved in plain words, ending with one question, to read back to the family (send it word for word; a correction is the same call again with the reply added to the transcript, and its said is only what changed), noted: what was kept but is not checked, dropped, asks } or { ok: false, say }."
       },
       {
         "name": "make_plan",
-        "description": "Plan a whole week and save it, in one call: { week_start: the week's Monday as YYYY-MM-DD, household?: the household facts (Flock sends them; the app also reads them fresh) }. The app plans it in steps itself (who eats each meal from the slots, the weekday patterns and the calendar; each meal slot from the family's own dishes and plates, checked against every food rule per person, how often each dish comes and no dish too soon again; then each day's ingredients), the same way the Sunday run does, and messages nobody. Answers { ok: true, week_start, message, intro?, instructions, unmet? } (send message word for word, then intro once, as instructions say; unmet: what could not be kept, already said in message) or { ok: false, reason, say } (nothing planned: send say word for word). Use it when the family asks for a week planned or planned again;"
+        "description": "Plan a whole week and save it, in one call: { week_start: the week's Monday as YYYY-MM-DD, household?: the household facts (Flock sends them; the app also reads them fresh), suggest_new?: true only when the family answered a no_dishes question with \"suggest some\" }. The app plans it in steps itself (who eats each meal from the slots, the weekday patterns and the calendar; each meal slot from the family's own dishes and plates, checked against every food rule per person, how often each dish comes and no dish too soon again; then each day's ingredients), the same way the Sunday run does, and messages nobody. Answers { ok: true, week_start, message, intro?, instructions, unmet? } (send message word for word, then intro once, as instructions say; unmet: what could not be kept, already said in message) or { ok: false, reason, say } (nothing planned: send say word for word; reason no_dishes: say is a question, the planner knows none of the family's dishes for some meals: add their answer with add_dish, then make_plan again, or make_plan with suggest_new: true when they say to suggest some). Use it when the family asks for a week planned or planned again;"
       },
       {
         "name": "set_slot",
