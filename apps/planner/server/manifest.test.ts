@@ -144,7 +144,7 @@ describe("the agent's interface", () => {
   // 3.4.0: Flock's interview runner sends every setup line as written and a model reads each reply into the facts and each
   // target's payload, reading `help`. So an ask is the line a person reads, and a help speaks to that reader, not the Butler.
   it("every setup line is the exact line a person reads, and every help is how to read the reply", () => {
-    const FLOCK_VALUES = ["firstName", "inviter", "sharedApps", "appLink", "appId", "appName", "plannerId", "offerLink", "sharedAppLink", "shareQuestion", "said", "menu", "householdPeople", "householdCook"];
+    const FLOCK_VALUES = ["firstName", "inviter", "sharedApps", "appLink", "appId", "appName", "plannerId", "offerLink", "sharedAppLink", "shareQuestion", "said", "menu", "householdPeople", "householdCook", "householdMeals"];
     for (const q of [...setup, ...joiner]) {
       if (q.action) continue;
       expect(q.fixed, q.id).toBe(true);
@@ -314,7 +314,7 @@ describe("the agent's interface", () => {
     const served = (await agentOps(() => null as any).guide({}, { agentId: null } as any)) as { guide: string };
     expect(served.guide).toContain(FIELDS_SECTION);
     expect(FIELDS_SECTION).toContain("- set_cook { name, days?, arrival?, makes_well?, wont_make?, time_limit?, new_recipes?, note? }");
-    expect(FIELDS_SECTION).toContain("- make_plan { week_start, household? }");
+    expect(FIELDS_SECTION).toContain("- make_plan { week_start, household?, suggest_new? }");
   });
 
   // Owner, 23 Nov: the test family's names and lines (the simulated runs' family) are in no text a model reads, so a model

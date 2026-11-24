@@ -4,7 +4,7 @@
 import { describe, it, expect } from "bun:test";
 import { boot } from "./testkit";
 import { checkRead, diffSetup, familyLines, familySentences, frequencyOf, householdOf, lunchLine, personOf, plainWords, quoteHasDayOrCount, readOf, resolveSlot,
-  ruleSaid, saidByFamily, SETUP_PARTS, SETUP_SYSTEM, CONTAINS_BATCH, daysOf, clockOf, type Saved, type SetupRead } from "./setup";
+  ruleSaid, saidByFamily, DISHES_ASK, SETUP_PARTS, SETUP_SYSTEM, CONTAINS_BATCH, daysOf, clockOf, type Saved, type SetupRead } from "./setup";
 import { HOUSEHOLDS } from "../evals/households";
 import type { ModelRequest, ModelResult } from "./model";
 
@@ -223,14 +223,26 @@ describe("apply_setup v2: the model reads, code checks and writes", () => {
     });
   }
 
-  it("the dishes reader fails: the rest is saved and the missing dishes are said", async () => {
+  it("the dishes reader fails: the rest is saved and the family is asked for their dishes, a real question, not a note (#29)", async () => {
     const f = fake({ dishes: { ok: false, code: "unavailable", message: "down" } });
     const k = await boot({ model: f.model });
     const r = await k.op("apply_setup", { household: HOUSEHOLD, transcript: TRANSCRIPT });
     expect(r.ok).toBe(true);
     expect(k.rows("rules").length).toBeGreaterThan(0);
     expect(k.rows("library")).toHaveLength(0);
-    expect(r.said).toContain("Noted, not checked:\n- your dishes could not be read just now");
+    expect(r.asks).toContain(DISHES_ASK);
+    expect(r.noted.join("\n")).not.toContain("dishes");
+    expect(r.said).toContain(DISHES_ASK);
+  });
+
+  it("a transcript with none of the family's replies is refused, never saved empty (#29: the agent sent its own one line)", async () => {
+    const f = fake();
+    const k = await boot({ model: f.model });
+    const r = await k.op("apply_setup", { transcript: "Ankita is the only person eating at home.", household: { people: [{ name: "Ankita", group: "adult", relationship: "self" }] } });
+    expect(r.ok).not.toBe(true);
+    expect(JSON.stringify(r)).toContain("no family replies");
+    expect(f.asked).toHaveLength(0);
+    expect(k.rows("library")).toHaveLength(0);
   });
 
   it("a reader that does not answer within the setup's time is a timeout, not a wait without end", async () => {

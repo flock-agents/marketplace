@@ -67,6 +67,9 @@ export const plannable = (d: LibraryDish): boolean => !d.disliked && !isDropped(
 /** The rows staples are counted from (a single filter, so it can be flipped: STAPLES_FROM_PLANNED). */
 export const stapleRows = (rows: HistoryRow[]): HistoryRow[] => rows.filter((r) => r.date === null || r.status === "confirmed" || STAPLES_FROM_PLANNED);
 
+/** The non-staple dishes counted on a main meal's plate when the family gave no plate of theirs (#29). */
+export const UNKNOWN_MAIN_PLATE = 3;
+
 export type SlotFacts = { slot: Slot; library: LibraryDish[]; staples: string[]; daily: string[]; looks_like: string[]; typical: number;
   /** The fewest and most dishes on the slot's past plates (seed and confirmed); null: none. */ plate: [number, number] | null;
   /** Days of each shared dish the feasibility check set aside for this slot (by key). */ takes: Map<string, number>;
@@ -84,8 +87,10 @@ export function slotFacts(slot: Slot, library: LibraryDish[], history: HistoryRo
   const keys = new Set(all.map(dishKey));
   const rows = looksLikeRows(history);
   const counts = rows.map((r) => r.dishes.filter((d) => !keys.has(dishKey(d.dish))).length).sort((a, b) => a - b);
-  // A plate of staples only (two phulkas every night) has no other dish to fill; no history: one.
-  const typical = counts.length ? counts[Math.floor((counts.length - 1) / 2)] : 1;
+  // A plate of staples only (two phulkas every night) has no other dish to fill; no history: one. A main meal with no plate
+  // and no dish of theirs (planned from new dishes only, the family said "suggest some") is counted as the plate a model
+  // fills, a main, a side and its rice or bread (#29: one a plate made 4 new dishes for 21 places, and repeats).
+  const typical = counts.length ? counts[Math.floor((counts.length - 1) / 2)] : slot.kind === "main" && !mine.some(plannable) ? UNKNOWN_MAIN_PLATE : 1;
   const sizes = rows.map((r) => r.dishes.length).filter((n) => n > 0);
   const plate: [number, number] | null = sizes.length ? [Math.min(...sizes), Math.max(...sizes)] : null;
   return { slot, library: mine, staples: all, daily, looks_like: looksLike(history), typical, plate, takes: new Map(), recent: recentRows, window: REPEAT_WINDOW_DAYS, newAllowed: 0, short: false, shortNew: 0 };

@@ -67,7 +67,7 @@ export const FIELDS: Record<string, { fields: string[]; need?: string[] }> = {
   set_cook: { fields: ["name", "days", "arrival", "makes_well", "wont_make", "time_limit", "new_recipes", "note"], need: ["name"] },
   set_shopping_apps: { fields: ["main", "fallback", "connected"], need: ["main", "connected"] },
   apply_setup: { fields: ["household", "transcript"], need: ["transcript"] },
-  make_plan: { fields: ["week_start", "household"], need: ["week_start"] },
+  make_plan: { fields: ["week_start", "household", "suggest_new"], need: ["week_start"] },
   set_slot: { fields: ["name", "kind", "addon_of", "usual_people", "days", "skip_days", "order", "remove"], need: ["name"] },
   set_slot_day: { fields: ["date", "slot", "people", "add_people", "remove_people", "guests", "occasion", "new_dishes_allowed", "skip", "dishes"], need: ["date", "slot"] },
   add_dish: { fields: ["name", "slot", "frequency", "days", "quote", "link"], need: ["name", "slot"] },
