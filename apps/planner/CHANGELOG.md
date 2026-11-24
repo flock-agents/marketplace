@@ -1,5 +1,20 @@
 # Changelog
 
+## 4.0.2
+
+Re-ask lines and fallbacks for Flock's code-worded interview (Flock sends every setup line as written; no model words a
+question).
+
+- **A simpler line when a reply is unclear.** Every setup question that asks has a `reask`, the owner-approved simpler line
+  Flock sends after "Sorry, I didn't quite get that." Written generically ("the cook", "the children", "the adults",
+  "the elders"); Flock puts the family's names in at send time.
+- **A line for an empty value.** `people` (`{{householdPeople}}`, `{{householdMeals}}`), `cook` (`{{householdCook}}`) and
+  `orderFindings` (`{{boughtSaid}}`) carry a `fallback`, sent when the value comes back empty, instead of a model wording
+  the step.
+- **No brackets.** The people and connectLater lines lose their brackets (Flock's guard reads "(…)" as an unfilled
+  placeholder).
+- An older Flock ignores `reask` and `fallback` (its interview parser copies only the keys it knows).
+
 ## 4.0.1
 
 Fixes from the second onboarding live run (#21, #29).
