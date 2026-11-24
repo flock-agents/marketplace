@@ -70,6 +70,12 @@ add_events { events: [
 To change or remove one event later, tell the family to open it on the Week page, or change that one row
 (`/api/_data/events/<id>`). A repeating event is one row: changing it changes every week.
 
+## Reading days ahead: `get_events`
+
+To see who is home or away over a stretch (a meal plan, a trip, a visit), read the calendar with `get_events`
+(`{ from: "2026-12-01", to: "2026-12-14" }`, at most 62 days). A repeating event comes once per day it falls on, a trip once
+with its `date` and `end_date`, cancelled events not at all, and a due date with `kind: "deadline"`. It changes nothing.
+
 ## What the app sends on its own
 
 - **Nudges, every 15 minutes.** The app looks for what has come due: an event's `reminder` before it starts, and a due date

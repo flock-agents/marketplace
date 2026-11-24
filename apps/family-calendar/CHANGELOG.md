@@ -1,5 +1,11 @@
 # Changelog
 
+## 3.1.0
+
+Needs Flock 0.19.0 or later.
+
+- **Reading the calendar between two days** (`get_events { from, to }`, at most 62 days): for other apps and agents working out who is home or away over a stretch (Meal Planner plans its meals around it). A repeating event is an entry per day it falls on in the range, on the same days the Week page shows (the first Sunday of a month, a 29 February birthday on the 28th); a trip is one entry with its own first and last day when any of its days is in the range; cancelled events are left out; a due date comes with `kind: "deadline"`. Each entry: `id, title, date, end_date?, repeat, kind, start_time?, end_time?, who?, notes?`. Read only; a bad day, a range backwards or longer than 62 days is refused, saying which.
+
 ## 3.0.0
 
 Needs Flock 0.19.0 or later.

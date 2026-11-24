@@ -6,6 +6,7 @@ import type { Hono } from "hono";
 import type { OpHandler } from "@flock/app-sdk";
 import guide from "./agent-guide.md" with { type: "text" };
 import { EVENT_FIELDS, MEMBER_FIELDS } from "./events";
+import { GET_EVENTS_FIELDS, getEvents } from "./getEvents";
 import { BRIEF_FIELDS, IMPORT_FIELDS, ITEM_FIELDS, PLAN_DONE_FIELDS, STEP_FIELDS, brief, importEvents, planDone, type Cal } from "./calendar";
 
 /** Each operation's fields, exactly as its route reads them. A field outside the list is refused with the list, so a guessed
@@ -16,6 +17,7 @@ export const FIELDS: Record<string, { fields: string[]; need?: string[] }> = {
   import_events: { fields: IMPORT_FIELDS, need: ["source", "items"] },
   plan_done: { fields: PLAN_DONE_FIELDS, need: ["planId", "events"] },
   brief: { fields: BRIEF_FIELDS, need: ["kind"] },
+  get_events: { fields: GET_EVENTS_FIELDS, need: ["from", "to"] },
 };
 
 /** How alike two names are: shared words count most, then the edit distance between them. Lower is closer. */
@@ -57,6 +59,7 @@ export const FIELDS_SECTION = ["## Operations and their fields (exactly these; n
   `- add_events { events: [{ ${EVENT_FIELDS.map((k) => (k === "title" ? k : `${k}?`)).join(", ")} }], members?: [{ ${MEMBER_FIELDS.map((k) => (k === "name" ? k : `${k}?`)).join(", ")} }], added_by? }`,
   `- plan_done { planId, events: [{ event, type, steps: [{ ${STEP_FIELDS.map((k) => (["key", "kind", "title", "due"].includes(k) ? k : `${k}?`)).join(", ")} }] }] }`,
   "- brief { kind: morning | evening }",
+  "- get_events { from: YYYY-MM-DD, to: YYYY-MM-DD } (read only, at most 62 days)",
   `- import_events { source, label?, items: [{ ${ITEM_FIELDS.map((k) => (["ref", "title", "date"].includes(k) ? k : `${k}?`)).join(", ")} }] } (Flock's own harvest calls this one, not you)`].join("\n");
 
 /** The operation names, for the manifest test: every declared operation has a handler. */
@@ -81,5 +84,6 @@ export function agentOps(hono: () => Hono<any>, cal: () => Omit<Cal, "platform">
     import_events: async (payload, ctx) => checkFields("import_events", payload ?? {}) ?? importEvents(withFlock(ctx), payload ?? {}),
     plan_done: async (payload, ctx) => checkFields("plan_done", payload ?? {}) ?? planDone(withFlock(ctx), payload ?? {}, by(ctx)),
     brief: async (payload, ctx) => checkFields("brief", payload ?? {}) ?? brief(withFlock(ctx), payload ?? {}),
+    get_events: async (payload) => checkFields("get_events", payload ?? {}) ?? getEvents(cal().kit.db, payload ?? {}),
   };
 }
