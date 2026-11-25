@@ -5,7 +5,7 @@ import { describe, it, expect } from "bun:test";
 import { boot } from "./testkit";
 import { saysNoEggs, buildMeal, codePlace, cuisinesOf, regionalFor, kitchenLine, needsNamed, placeOf, wordOf, KINDS_SYSTEM, type MealDish, type Place } from "./setup";
 import { checkRead, diffSetup, familyLines, familySentences, frequencyOf, householdOf, lunchLine, personOf, plainWords, quoteHasDayOrCount, readOf, resolveSlot,
-  ruleSaid, saidByFamily, DISHES_ASK, SETUP_PARTS, SETUP_SYSTEM, CONTAINS_BATCH, daysOf, clockOf, itemWord, allergyAsk, answeredIn, type Saved, type SetupRead } from "./setup";
+  ruleSaid, saidByFamily, DISHES_ASK, SETUP_PARTS, SETUP_SYSTEM, CONTAINS_BATCH, daysOf, clockOf, itemWord, allergyAsk, answeredIn, mealOf, type Saved, type SetupRead } from "./setup";
 import { isAllergyRule } from "./allergy";
 import { HOUSEHOLDS } from "../evals/households";
 import { regionalWordOf } from "./kinds";
@@ -197,6 +197,24 @@ describe("apply_setup v2: the model reads, code checks and writes", () => {
       "What does Padma eat on the Monday fast?",
       "Does Kiran take lunch from home to the office?",
     ].join("\n"));
+  });
+
+  it("a person's own meal in place of the family's (instead): their own slot, the family meal without them, said plainly (class 3)", async () => {
+    const T = [...TRANSCRIPT, "Q: Does Amma eat with you at night?", "A: No, Amma eats before sunset, her own dinner of phulkas. She doesn't sit for our dinner."];
+    const own = { name: "Padma's dinner", kind: "addon", addon_of: "Dinner", usual_people: ["Amma"], instead: true, quote: "Amma eats before sunset, her own dinner of phulkas" };
+    const f = fake({ home: { ...HOME, slots: [...HOME.slots.filter((x) => x.name !== "Padma's dinner"), own] } });
+    const k = await boot({ model: f.model });
+    const r = await k.op("apply_setup", { household: HOUSEHOLD, transcript: T });
+    expect(r.ok).toBe(true);
+    const fam = (await k.owner("GET", "/api/family")).body;
+    const mine = fam.slots.find((s: any) => s.name === "Padma's dinner");
+    expect(mine).toMatchObject({ kind: "custom", usual_people: ["Padma"], order: 55 });
+    expect(fam.slots.find((s: any) => s.name === "Dinner").usual_people).toEqual(["Kiran", "Nisha", "Ishaan"]);
+    expect(r.said).toContain("Padma has a separate dinner (Padma's dinner), not the family's; Dinner is for Kiran, Nisha and Ishaan.");
+    expect(r.said).not.toContain("Padma's dinner for Padma at dinner");
+    // Its meal is dinner (new items are suggested as for dinner), and one in place of lunch is lunch.
+    expect(mealOf(mine)).toBe("dinner");
+    expect(mealOf({ name: "Ravi's lunch", kind: "custom", addon_of: null, order: 35 })).toBe("lunch");
   });
 
   it("a correction re-reads and applies only what the new reply said; the rest is discarded; the read-back says only that", async () => {
@@ -418,6 +436,17 @@ describe("apply_setup v2: the checks, pure", () => {
     const c = checkRead(read, { household: hh, said: lines, sentences: lines });
     expect(c.read.library.find((d) => d.name === "Chicken curry")!.days).toBeNull();
     expect(c.dropped.some((x) => x.includes("the meal's own days"))).toBe(true);
+  });
+  it("a dish said of a person who has their own meal in place of the family's goes on their meal, never the family's (class 6)", () => {
+    const reply = ["A: Amma eats at six on her own: khichdi or upma, every night. We have roti and sabzi."];
+    const lines = familySentences(reply, HOUSEHOLD);
+    const read = readOf({ slots: [...HOME.slots.slice(0, 3), { name: "Padma's dinner", kind: "addon", addon_of: "Dinner", usual_people: ["Amma"], instead: true, quote: "Amma eats at six on her own" }] }, {},
+      { library: [["Khichdi", "Dinner", "khichdi or upma"], ["Upma", "Dinner", "khichdi or upma"], ["Roti", "Dinner", "roti and sabzi"], ["Sabzi", "Dinner", "roti and sabzi"]],
+        seed: [["Dinner", "Khichdi", "khichdi or upma"], ["Dinner", "Roti, Sabzi", "roti and sabzi"]] });
+    const c = checkRead(read, { household: hh, said: familyLines(reply, HOUSEHOLD), sentences: lines });
+    expect(c.read.library.map((d) => `${d.name}@${d.slot}`).sort()).toEqual(["Khichdi@Padma's dinner", "Roti@Dinner", "Sabzi@Dinner", "Upma@Padma's dinner"]);
+    expect(c.read.seed.map((x) => `${x.dishes.join("+")}@${x.slot}`)).toEqual(["Khichdi@Padma's dinner", "Roti+Sabzi@Dinner"]);
+    expect(c.read.slots.find((x) => x.name === "Dinner")!.usual_people).toEqual(["Kiran", "Nisha", "Ishaan"]);
   });
   it("a dish read without its words is linted by the family's sentence that names it with a day", () => {
     const lines = familyLines(["A: Weeknights dal and rice. Sunday dinner we make something simple like pasta maybe."], HOUSEHOLD);
@@ -961,6 +990,15 @@ describe("apply_setup v2: the prompts", () => {
     expect(SETUP_PARTS.find((p) => p.id === "often")!.system).toContain("[name, slot, quote, often, frequency, days]");
     expect(SETUP_PARTS.find((p) => p.id === "often")!.system).toContain("daily");
     expect(SETUP_SYSTEM).toContain("never a nickname");
+  });
+  it("read a person's own meal in place of the family's as instead, and a meal ordered in for some as its skip when the others have their own (classes 3, 4)", () => {
+    const home = SETUP_PARTS.find((p) => p.id === "home")!;
+    expect(JSON.stringify(home.schema)).toContain('"instead":{"type":"boolean"}');
+    expect(home.system).toContain("instead: true on such a meal when the person does not eat the main meal at all");
+    expect(home.system).toContain("it is that meal's skip all the same when the others at home have their own meal in its place that day");
+  });
+  it("read a dish joined to a list with its own words as that dish's, at any meal (class 5: every day at someone's own dinner)", () => {
+    expect(SETUP_PARTS.find((p) => p.id === "often")!.system).toContain("A dish joined to a list with its own words, at any meal and for anyone");
   });
   it("never name an eval household's people, cook or surname", () => {
     for (const h of HOUSEHOLDS) for (const name of [...h.truth.people.map((p) => p.name), ...(h.truth.cook ? [h.truth.cook.name] : [])])

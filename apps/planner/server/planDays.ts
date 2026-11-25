@@ -127,7 +127,8 @@ export const EVENTS_SYSTEM = [
 
 /** Is a calendar entry part of its person's week (owner, 25 Nov: never asked, never read): everyone it names has a weekday
  *  pattern (household.weekly) that has them out on each of its days in the week, and the entry is that routine: it repeats
- *  (a weekly class, school, office), names the pattern's place ("Office" for an office pattern), or sits inside the
+ *  (a weekly class, school, office), is the pattern's place by name ("Office" for an office pattern; "School trip to Udaipur"
+ *  is more than the place, and read), or sits inside the
  *  pattern's hours. A one-off entry on such a day (a dinner out, a trip) may change who eats at home: not covered. */
 export function coveredByWeek(h: { title: string; who: string | null; from: string; to: string; repeat?: string; start_time?: string; end_time?: string },
   weekly: Weekly[] | null | undefined, week: { from: string; to: string }): boolean {
@@ -137,12 +138,17 @@ export function coveredByWeek(h: { title: string; who: string | null; from: stri
   for (let d = h.from < week.from ? week.from : h.from; d <= (h.to > week.to ? week.to : h.to); d = addDays(d, 1)) days.push(weekdayOf(d));
   if (!names.length || !days.length) return false;
   const out = (w: Weekly) => (w.where ? !same(w.where, "home") : w.lunch === "away" || w.lunch === "carries");
-  const title = h.title.toLowerCase();
+  // The title is the place itself ("Office", "<name> school"), not more ("School trip to Udaipur", "Office offsite": those may
+  // take them away from meals at home, so they are read).
+  const wordsOf = (x: string) => x.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+  const nameWords = new Set(names.flatMap(wordsOf));
+  const title = wordsOf(h.title).filter((x) => !nameWords.has(x));
+  const isPlace = (w: Weekly) => !!w.where && title.length > 0 && title.every((x) => wordsOf(w.where).includes(x));
   return names.every((n) => {
     const mine = weekly.filter((w) => same(w.person, n) && out(w));
     if (!days.every((d) => mine.some((w) => w.weekdays.includes(d)))) return false;
     const repeats = !!h.repeat && h.repeat !== "none";
-    return repeats || mine.some((w) => (!!w.where && title.includes(w.where.toLowerCase()))
+    return repeats || mine.some((w) => isPlace(w)
       || (!!w.from && !!w.to && !!h.start_time && !!h.end_time && w.from <= h.start_time && h.end_time <= w.to));
   });
 }

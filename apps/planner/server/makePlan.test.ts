@@ -540,6 +540,11 @@ describe("make_plan: who eats (spec §5.1)", () => {
     expect(coveredByWeek(ev("Office", "Shiva", MON, { repeat: "weekly" }), null, wk)).toBe(false);
     expect(coveredByWeek(ev("School run", "Shiva and Agastya", MON, { repeat: "weekly" }), weekly, wk)).toBe(true);
     expect(coveredByWeek(ev("School run", "Shiva, Ankita", MON, { repeat: "weekly" }), weekly, wk)).toBe(false);
+    // Class 3: an entry that names the place but is more than the routine (a school trip, an office offsite) may take them away
+    // from meals at home: read, not taken as the routine. The place alone ("Office", "Agastya school") is the routine.
+    expect(coveredByWeek(ev("School trip to Udaipur", "Agastya", WEEK[3], { to: WEEK[4] }), weekly, wk)).toBe(false);
+    expect(coveredByWeek(ev("Office offsite", "Shiva", WEEK[1]), weekly, wk)).toBe(false);
+    expect(coveredByWeek(ev("Agastya school", "Agastya", WEEK[1]), weekly, wk)).toBe(true);
   });
 
   it("run 31: the routine's entries are not sent to the calendar call nor asked; the one it is unsure of is the message's only question", async () => {
@@ -594,6 +599,20 @@ describe("make_plan: who eats (spec §5.1)", () => {
     expect(k.at("2026-12-06", "Ravi's dinner")).toMatchObject({ skip: "eaten_out", dishes: [] });
     expect(k.dishesAt("2026-12-05", "Ravi's dinner").length).toBeGreaterThan(0);
     if (r.ok) expect(r.message).toContain("Dinner: eating out");
+  });
+
+  it("a meal ordered in on its day gets no dishes; a person's own meal in place of it is still cooked, and they are never at the family's (classes 3, 4)", async () => {
+    const k = await home({
+      slots: [MAIN[0], MAIN[1], { ...MAIN[2], usual_people: ["Asha", "Ravi"], skip_days: [{ day: "Sat", skip: "ordered_in" }] },
+        { name: "Kabir's dinner", kind: "custom", order: 55, usual_people: ["Kabir"] }],
+      library: ["Khichdi", "Dal rice"].map((name) => ({ name, slot: "Kabir's dinner" })),
+    });
+    await k.plan(fakeModel().model);
+    expect(k.at("2026-12-05", "Dinner")).toMatchObject({ skip: "ordered_in", dishes: [] });
+    expect(k.dishesAt("2026-12-05", "Dinner")).toEqual([]);
+    expect(k.dishesAt("2026-12-05", "Kabir's dinner").length).toBeGreaterThan(0);
+    for (const d of WEEK) expect(k.at(d, "Dinner")!.people).not.toContain("Kabir");
+    for (const d of WEEK) expect(k.at(d, "Kabir's dinner")!.people).toEqual(["Kabir"]);
   });
 
   it("an edited slot-day is kept: with dishes it is not planned again; without, its people, guests and occasion stay as the family set them", async () => {

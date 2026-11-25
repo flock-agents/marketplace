@@ -14,7 +14,7 @@
 // (planChecks.leaveOutNotes). Pure and deterministic: no database, no model, ties broken by date and slot.
 import { CATALOG, catalogContains, catalogKind, matchDish, norm, regionalWordOf, suggestable, suggestMeals, type CatalogItem, type MealKind, type MealTemplate,
   type TemplatePart } from "./kinds";
-import { TEMPLATE_DAYS } from "./db/constants";
+import { INSTEAD_STEP, TEMPLATE_DAYS } from "./db/constants";
 import { addDays, weekdayOf } from "./dates";
 import { dishKey } from "./dishText";
 import { isAllergyRule } from "./allergy";
@@ -143,6 +143,8 @@ function mealOf(s: Slot, slots: Slot[]): string | null {
   const n = norm(s.name);
   if (MEAL_NAMES.includes(n)) return n;
   if (s.kind === "addon" && s.addon_of) { const m = slots.find((x) => same(x.name, s.addon_of!)); if (m && m !== s) return mealOf(m, slots); }
+  // A person's own meal in place of a main meal (class 3) sits just after it: that meal.
+  if (s.kind === "custom") { const own = slots.find((m) => m.kind === "main" && m.order + INSTEAD_STEP === s.order); if (own && own !== s) return mealOf(own, slots); }
   if (s.kind === "custom") return s.order <= 20 ? "tiffin" : s.order <= 45 ? "snack" : "dinner";
   return s.order <= 10 ? "breakfast" : s.order <= 30 ? "lunch" : "dinner";
 }
@@ -303,21 +305,22 @@ export function fillWeek(input: FillInput): FillResult {
   /** The diet tags the family's own dishes have (their meat, fish and eggs). */
   const familyTags = new Set(famRows.flatMap((r) => [...withParents([...r.contains, ...(catalogContains(catalogNameOf(r) ?? "") ?? []).map(asPlanner)])]));
   const noAgain = new Set(library.filter((r) => r.disliked || isDropped(r)).map((r) => r.key));
-  /** The kinds and sub-kinds the family named as a category ("dal", "a poriyal"): their catalog items are the family's. */
+  /** The kinds and sub-kinds the family named as a category ("dal", "a poriyal"): their catalog items are the family's, at the
+   *  meal they named it for (class 1: "uthappam" said of dinner makes no breakfast dosa theirs). */
   const categories = famRows.map(categoryPlace).filter((x): x is Place => !!x);
-  /** Is a catalog item of a kind within a category the family named. */
-  /** The days a family's category item may come on: where every category word of theirs that holds it is kept to days
-   *  ("pongal on Sundays"), those days; else any day. */
-  const catDays = (kind: string, sub: string | null): string[] | null => {
-    const rows = famRows.filter((r) => { const c = categoryPlace(r); return !!c && sameKind(c.kind, kind) && (!c.sub || sameKind(c.sub, sub)); });
-    return rows.length && rows.every((r) => r.days?.length) ? uniq(rows.flatMap((r) => r.days ?? [])) : null;
-  };
+  const categoriesAt = (slot: string) => famRows.filter((r) => same(r.slot, slot)).map(categoryPlace).filter((x): x is Place => !!x);
   /** The family's category words at a slot that hold an item of this kind and sub-kind. */
   const catRowsAt = (slot: string, kind: string, sub: string | null) =>
     famRows.filter((r) => { if (!same(r.slot, slot)) return false; const c = categoryPlace(r); return !!c && sameKind(c.kind, kind) && (!c.sub || sameKind(c.sub, sub)); });
-  /** The dates a category's items were placed at a slot, by slot|category key. */
-  const catUse = new Map<string, Set<string>>();
+  /** The days a family's category item may come on at a meal: where every category word of theirs there that holds it is kept
+   *  to days ("pongal on Sundays"), those days; else any day. */
+  const catDays = (slot: string, kind: string, sub: string | null): string[] | null => {
+    const rows = catRowsAt(slot, kind, sub);
+    return rows.length && rows.every((r) => r.days?.length) ? uniq(rows.flatMap((r) => r.days ?? [])) : null;
+  };
   const named = (kind: string, sub: string | null) => categories.some((c) => sameKind(c.kind, kind) && (!c.sub || sameKind(c.sub, sub)));
+  /** Did the family name this kind or sub-kind as a category at this meal. */
+  const namedAt = (slot: string, kind: string, sub: string | null) => categoriesAt(slot).some((c) => sameKind(c.kind, kind) && (!c.sub || sameKind(c.sub, sub)));
   w.ownItems = new Set(CATALOG.kinds.flatMap((k) => (k.staple ? [] : k.items.filter((it) => named(k.name, it.sub ?? null)).map((it) => dishKey(it.name)))));
   /** The catalog's items of a kind (one sub-kind when given) for this family at this meal: regional only within their
    *  cuisines; their sub-kinds (`prefer`) first, then their cuisines, then everyday ones; never one of their dishes, nor one
@@ -333,7 +336,7 @@ export function fillWeek(input: FillInput): FillResult {
     // Sunday chicken is never a mutton yakhni).
     if (!family) items = items.filter((it) => (catalogContains(it.name) ?? []).map(asPlanner).every((t) => !DIET_TAGS.includes(t) || familyTags.has(t)));
     items = items.filter((it) => !familyCatalog.has(norm(it.name)) && !noAgain.has(dishKey(it.name)) && !famRows.some((r) => r.key === dishKey(it.name))
-      && named(ck.name, it.sub) === family);
+      && namedAt(s.name, ck.name, it.sub) === family);
     const off = items.length ? hash(`${firstDate}|${ck.name}|${sub ?? ""}`) % items.length : 0;
     return items.map((it, i) => ({ name: it.name, key: dishKey(it.name), kind: ck.name, sub: it.sub, family, catalog: true, idx: (i - off + items.length) % items.length,
       // The family's cuisines first, then an everyday item of no one cuisine, then another cuisine's.
@@ -341,12 +344,13 @@ export function fillWeek(input: FillInput): FillResult {
       .sort((a, b) => Number(prefer.some((p) => sameKind(p, b.sub))) - Number(prefer.some((p) => sameKind(p, a.sub))) || (b.cuisine ?? 0) - (a.cuisine ?? 0) || a.idx - b.idx)
       .map((x, i) => ({ ...x, idx: i }));
   };
-  /** The family's items of a kind (one sub-kind when given), their own sub-kinds of it first; then the catalog's items of the
-   *  kinds and sub-kinds they named as a category. */
+  /** The family's items of a kind (one sub-kind when given) at this meal, their own sub-kinds of it first; then the catalog's
+   *  items of the kinds and sub-kinds they named as a category there. Class 1: a family dish fills places only at the meal it
+   *  was named for ("rasam rice" said of dinner never fills lunch's rasam); the rotation still counts it across the meals. */
   const familyPool = (s: Slot, kind: string, sub: string | null, prefer: string[] = []): Item[] => {
     const slot = s.name;
     const seen = new Set<string>(), out: Item[] = [];
-    const rows = [...famRows.filter((r) => same(r.slot, slot)), ...famRows.filter((r) => !same(r.slot, slot))];
+    const rows = famRows.filter((r) => same(r.slot, slot));
     for (const r of rows) {
       if (seen.has(r.key) || isCategoryName(r.name)) continue;
       const pl = placeOf(r);
@@ -355,8 +359,9 @@ export function fillWeek(input: FillInput): FillResult {
       out.push({ name: r.name, key: r.key, kind, sub: pl.sub, family: true, idx: out.length, row: r });
     }
     const theirs = prefer.length ? [...out.filter((x) => prefer.some((p) => sameKind(p, x.sub))), ...out.filter((x) => !prefer.some((p) => sameKind(p, x.sub)))] : out;
-    const cat = categories.some((c) => sameKind(c.kind, kind)) ? catalogPool(s, kind, sub, uniq([...prefer, ...categories.filter((c) => sameKind(c.kind, kind) && c.sub).map((c) => c.sub!)]), true) : [];
-    return [...theirs, ...cat.filter((x) => !seen.has(x.key)).map((x) => ({ ...x, days: catDays(x.kind, x.sub) }))].map((x, i) => ({ ...x, idx: i }));
+    const cats = categoriesAt(slot);
+    const cat = cats.some((c) => sameKind(c.kind, kind)) ? catalogPool(s, kind, sub, uniq([...prefer, ...cats.filter((c) => sameKind(c.kind, kind) && c.sub).map((c) => c.sub!)]), true) : [];
+    return [...theirs, ...cat.filter((x) => !seen.has(x.key)).map((x) => ({ ...x, days: catDays(slot, x.kind, x.sub) }))].map((x, i) => ({ ...x, idx: i }));
   };
   /** The brand-new variants of a kind (one sub-kind when given): the catalog's items outside what the family named; never a
    *  staple's or an own kind's. */
@@ -364,10 +369,12 @@ export function fillWeek(input: FillInput): FillResult {
     const mk = (s.kinds ?? []).find((k) => sameKind(k.name, kind));
     return mk?.own || mk?.staple ? [] : catalogPool(s, kind, sub, prefer, false);
   };
-  /** The family's usual item of a staple kind at a slot: their dish of it had most at this slot, else any of theirs, else the
-   *  name on their plates, else the catalog's first. */
+  /** The family's usual item of a staple kind at a slot: their dish of it had most at this slot, else any of theirs (never one of
+   *  another person's own meal), else the name on their plates, else the catalog's first. */
   const stapleOf = (s: Slot, kind: string): string => {
-    const rows = famRows.filter((r) => sameKind(placeOf(r)?.kind, kind));
+    // Class 6: one person's own meal (an add-on, or a meal of named people) keeps its dishes; the family's meal never takes them.
+    const personal = (slot: string) => { const x = slotByKey.get(slot.toLowerCase()); return !!x && x.kind !== "main" && x.usual_people.length > 0; };
+    const rows = famRows.filter((r) => sameKind(placeOf(r)?.kind, kind) && (same(r.slot, s.name) || !personal(r.slot)));
     const hist = input.history.get(s.name.toLowerCase()) ?? [];
     const count = (k: string) => hist.filter((h) => h.dishes.some((x) => dishKey(x.dish) === k)).length;
     const here = rows.filter((r) => same(r.slot, s.name)).sort((a, b) => count(b.key) - count(a.key));
@@ -418,16 +425,43 @@ export function fillWeek(input: FillInput): FillResult {
     for (const it of items) { const ls = wordsFor(s.name, it); if (!ls.length) return []; for (const l of ls) out.set(l.row.key, l); }
     return [...out.values()];
   };
-  /** The words of a part that still allow it on a date (its day, and its count not yet reached that week); null when none does.
-   *  `uses`: the dates each row's words were used at this meal, by slot|row key. */
+  // Class 2 (lead, 26 Nov: "uthappam sometimes" is 2–3 uthappam a week in all): a count said of a dish holds across the day's
+  // meals. Each meal keeps its own count, and all the meals where the family said a count of it share the most they said
+  // ("kadhi sometimes" at lunch and "khichdi and kadhi twice a week" at dinner: at most 3 kadhi days in all). A meal where the
+  // family has the dish with no such words is free of them (no row of words there, nothing counted).
+  /** The most days a week the family's words allow a dish or category word (by its key) at any meal; Infinity when none says. */
+  const mostOf = (key: string): number => {
+    const ms = famRows.filter((r) => r.key === key).map((r) => limitOf(r)?.max).filter((x): x is number => x != null);
+    return ms.length ? Math.max(...ms) : Infinity;
+  };
+  const usesOf = (uses: Map<string, Set<string>>, k: string, date: string) => [...(uses.get(k) ?? [])].filter((x) => x !== date).length;
+  /** Do a row's words still allow it at this meal on a date: its days, its count at this meal, and the count across the meals. */
+  const wordsAllow = (slot: string, l: Limit, date: string, uses: Map<string, Set<string>>) => (!l.days || l.days.includes(weekdayOf(date)))
+    && (l.max == null || (usesOf(uses, `${slot.toLowerCase()}|${l.row.key}`, date) < l.max && usesOf(uses, `*|${l.row.key}`, date) < mostOf(l.row.key)));
+  /** The words of a part that still allow it on a date; null when none does. `uses`: the dates each row's words were used, by
+   *  slot|row key at its meal and *|row key across the meals. */
   const openLimit = (slot: string, lims: Limit[], date: string, uses: Map<string, Set<string>>): Limit | null =>
-    lims.find((l) => (!l.days || l.days.includes(weekdayOf(date)))
-      && (l.max == null || [...(uses.get(`${slot.toLowerCase()}|${l.row.key}`) ?? [])].filter((x) => x !== date).length < l.max)) ?? null;
+    lims.find((l) => wordsAllow(slot, l, date, uses)) ?? null;
   const markLimit = (slot: string, l: Limit, date: string, uses: Map<string, Set<string>>) => {
-    const k = `${slot.toLowerCase()}|${l.row.key}`;
-    uses.set(k, (uses.get(k) ?? new Set()).add(date));
+    for (const k of [`${slot.toLowerCase()}|${l.row.key}`, `*|${l.row.key}`]) uses.set(k, (uses.get(k) ?? new Set()).add(date));
+  };
+  /** The family's worded rows that hold an item at a meal: the category words there for a catalog item of theirs, else the
+   *  item's own row (at this meal, else at another: a dish they spoke of elsewhere keeps its words). */
+  const saidRowsAt = (slot: string, it: Item): Limit[] => {
+    if (it.catalog && it.family) return catRowsAt(slot, it.kind, it.sub).map(limitOf).filter((x): x is Limit => !!x);
+    if (!it.family) return [];
+    const r = rowAt(slot, it.key);
+    const l = r ? limitOf(r) : null;
+    return l ? [l] : [];
   };
   const limitUse = new Map<string, Set<string>>();   // as filled
+  const planUse = new Map<string, Set<string>>();    // as templates are given, every meal together
+  // The week's fixed days count for the family's words too.
+  for (const d of days.filter((x) => x.fixed && !x.skip)) for (const x of d.dishes) {
+    const r = rowAt(d.slot, dishKey(x)), m = r ? null : matchDish(x);
+    const ls = r ? [limitOf(r)] : m ? catRowsAt(d.slot, m.kind, m.sub).map(limitOf) : [];
+    for (const l of ls) if (l) { markLimit(d.slot, l, d.date, limitUse); markLimit(d.slot, l, d.date, planUse); }
+  }
 
   // ── Templates for each slot's days ──
   const tplOf = new Map<string, number>();   // slotDayKey → template index
@@ -440,7 +474,6 @@ export function fillWeek(input: FillInput): FillResult {
     if (!ts.length || !mine.length) continue;
     // Each template's limited parts (the family's words above), and the week's uses of those words as templates are given.
     const tplLimits = ts.map((t) => t.parts.map((p) => partLimits(s, p)).filter((ls) => ls.length));
-    const planUse = new Map<string, Set<string>>();
     const allowed = (i: number, date: string) => tplLimits[i].every((ls) => !!openLimit(s.name, ls, date, planUse));
     const mark = (i: number, date: string) => { for (const ls of tplLimits[i]) { const l = openLimit(s.name, ls, date, planUse); if (l) markLimit(s.name, l, date, planUse); } };
     // A template made for a dish kept to days ("pongal on Sundays": a part whose every item is held to days) comes only on
@@ -543,19 +576,16 @@ export function fillWeek(input: FillInput): FillResult {
     const row = it.family ? rowAt(s.name, it.key) : undefined;
     if (row?.days?.length && !row.days.includes(weekdayOf(d.date))) return false;
     if (!row && it.days?.length && !it.days.includes(weekdayOf(d.date))) return false;
-    // A category the family said how often of at this meal ("dal sometimes"): its items together, that often there.
-    if (!row && it.catalog && it.family) for (const c of catRowsAt(s.name, it.kind, it.sub)) {
-      const r = c.frequency && c.frequency !== "daily" ? frequencyRange(c.frequency) : null;
-      if (r && [...(catUse.get(`${s.name.toLowerCase()}|${c.key}`) ?? [])].filter((x) => x !== d.date).length >= r[1]) return false;
-    }
-    const range = row && row.frequency !== "daily" ? frequencyRange(row.frequency) : null;
-    const usedOther = [...(usedDates.get(it.key) ?? [])].filter((x) => x !== d.date);
-    if (!loose && range && usedOther.length >= range[1]) return false;
+    // The family's words on it (its own, or a category's said at this meal: "dal sometimes"): their count at this meal and
+    // across the meals (class 2).
+    if (!loose && saidRowsAt(s.name, it).some((l) => l.max != null && !wordsAllow(s.name, { ...l, days: null }, d.date, limitUse))) return false;
     if (loose) return true;
     if (s.kind !== "addon" && hadOn(d.date, s.name).has(it.key)) return false;
     if (!o.next && hadOn(addDays(d.date, -1)).has(it.key)) return false;
     if (!o.repeat && usedDates.get(it.key)?.size) return false;
-    if (o.next && s.kind === "addon" && (row?.frequency || row?.days?.length) && hadOn(addDays(d.date, -1)).has(it.key)) return false;
+    // An add-on's dish the family said how often of comes back the next day only when they have it every day or most days
+    // (class 5: "milk every day" at her own dinner is there every day, whatever kind of meal it is).
+    if (o.next && s.kind === "addon" && ((row?.frequency && row.frequency !== "daily" && row.frequency !== "usually") || row?.days?.length) && hadOn(addDays(d.date, -1)).has(it.key)) return false;
     return true;
   };
   /** The best item of the steps for `who` (the slot-day's people, or one person being fed). */
@@ -582,7 +612,7 @@ export function fillWeek(input: FillInput): FillResult {
     return best?.name ?? null;
   };
   const put = (s: Slot, d: PlanDay, plate: Plate, it: Item, part: number, staple: boolean) => {
-    if (it.catalog && it.family) for (const c of catRowsAt(s.name, it.kind, it.sub)) { const k = `${s.name.toLowerCase()}|${c.key}`; catUse.set(k, (catUse.get(k) ?? new Set()).add(d.date)); }
+    for (const l of saidRowsAt(s.name, it)) markLimit(s.name, l, d.date, limitUse);
     plate.push({ name: it.name, key: it.key, part, staple, isNew: !it.family, kind: it.kind, sub: it.sub });
     use(d.date, s.name, it.name);
     dayOf(d).dishes.push(it.name);
@@ -724,12 +754,14 @@ export function fillWeek(input: FillInput): FillResult {
     if (s.kind !== "addon" && atTable.length && !plate.some((x) => !x.staple) && t.parts.some((p) => !isStaplePart(s, p))) {
       if (feed(s, d, plate, atTable, t.parts.length, [], [], null)) res.log.push(`${label(d)}: nothing of its template that day; another dish of theirs instead`);
     }
-    // An add-on day with nothing: fine where its people eat the main meal's dishes; else one of its dishes comes back.
+    // An add-on day with nothing: fine where its people eat the main meal's dishes; else one of its dishes comes back (its fixed
+    // dishes, or its own items of a part's kind), one its people may eat first.
     if (s.kind === "addon" && !plate.length && !mainFeeds(w, dayOf(d))) {
-      const fam = (s.templates ?? []).flatMap((x) => x.parts).flatMap((p) => ("items" in p ? p.items : []))
+      const fam = uniq((s.templates ?? []).flatMap((x) => x.parts).flatMap((p) => ("items" in p ? p.items : familyPool(s, p.kind, p.sub ?? null).filter((x) => !x.catalog).map((x) => x.name))))
         .map((n, i): Item => ({ name: n, key: dishKey(n), kind: n, sub: null, family: true, idx: i }));
       const near = fam.filter((it) => fits(s, d, plate, it, { repeat: true, next: true, zero: false }, true))
-        .sort((a, b) => (lastUsed.get(a.key) ?? "").localeCompare(lastUsed.get(b.key) ?? "") || a.idx - b.idx)[0];
+        .sort((a, b) => excluded(d, d.people, a.name).length - excluded(d, d.people, b.name).length
+          || (lastUsed.get(a.key) ?? "").localeCompare(lastUsed.get(b.key) ?? "") || a.idx - b.idx)[0];
       if (near) { put(s, d, plate, near, 0, false); res.unmet.push(`${label(d)}: ${near.name} comes back sooner than usual`); }
     }
     // Nobody left with nothing: each person has an item beside the staples they can eat (where the plate has more than staples).

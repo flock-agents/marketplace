@@ -260,9 +260,14 @@ export function scorePlan(h: Household, plan0: PlanOut, loaded: SetupOut, o: { f
       continue;
     }
     if (!freq && !days) continue;
-    // The family's words on a dish hold where they said them: "dal sometimes" of dinner does not count the lunch dal.
+    // The family's words on a dish hold across the day's meals (owner rule 3; lead, 26 Nov: "uthappam sometimes" is 2–3 in all),
+    // except at a meal where the family has that dish, or for a category word that category, as their own with no such words:
+    // "dal sometimes" of dinner does not count the lunch dal, nor "uthappam sometimes" of dinner breakfast's own dosas.
     const said = new Set(rows.filter((d) => d.frequency || d.days).map((d) => lc(d.slot)));
-    const ps = placements(name).filter((sd) => said.has(lc(sd.slot)) || rows.every((d) => lc(d.slot) !== lc(sd.slot)));
+    const cat = categoryOf(name);
+    const sameCat = (x: string) => { const k = cat && categoryOf(x); return !!k && k.kind === cat!.kind && (!cat!.sub || k.sub === cat!.sub); };
+    const ownThere = (slot: string) => t.library.some((d) => lc(d.slot) === lc(slot) && (d.name === name || sameCat(d.name)));
+    const ps = placements(name).filter((sd) => said.has(lc(sd.slot)) || !ownThere(sd.slot));
     // Counted in days (spec §2.1: "≤2 days", "2–3/wk"): dal at lunch and dinner on Monday is one day. Never more often than
     // said; fewer is fine (owner, 25 Nov: "people want variety"). Only on its days when they named days.
     const n = new Set(ps.map((sd) => sd.date)).size;
