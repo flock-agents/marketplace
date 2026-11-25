@@ -80,7 +80,8 @@ describe("set_slot_day: a one-off change", () => {
     expect(k.f().slots()).toHaveLength(1);
     const u = k.f().slots()[0].user;
     expect(u.slot).toBe("Dinner");
-    expect(u.days).toEqual([{ date: SAT, for: ["Asha", "Ravi", "Kabir"], guests: [{ count: 4, rules: ["vegetarian"] }], occasion: "dinner party" }]);
+    expect(u.days).toHaveLength(1);
+    expect(u.days[0]).toMatchObject({ date: SAT, for: ["Asha", "Ravi", "Kabir"], guests: [{ count: 4, rules: ["vegetarian"] }], occasion: "dinner party" });
     // The rest of the week is read for the checks, not planned: only Saturday's dinner changed.
     expect(changed(before, k.snapshot())).toEqual([`${SAT}|Dinner`]);
     const d = k.at(SAT, "Dinner")!;
