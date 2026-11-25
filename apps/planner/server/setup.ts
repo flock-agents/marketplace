@@ -107,7 +107,8 @@ const DISHES_PART = `Write this part: the family's own dishes, from their answer
   slot: the meal it is eaten at. A reply is about the meal its question asks for: a breakfast answer is Breakfast, also when said of a child. A child's tiffin ("<child>'s tiffin", or the family's word for the box) holds only what the family says goes in the tiffin or box. One person's own plate "<person>'s <meal>" ONLY when the family's sentence names that person and a dish made for them at that meal (their own dish, "for Amma", "instead of"). A dish someone has that the others have too stays on the shared meal.
   quote: the family's words naming the dish.
 - seed: each "past week" answer as example meals: [slot, "dish, dish, dish", quote], one row per kind of plate they described, for every meal they described: a child's tiffin and one person's own plate too ("rice, rasam or dal, a poriyal, curd" is ["Lunch", "Rice, Rasam, Poriyal, Curd", quote] and ["Lunch", "Rice, Dal, Poriyal, Curd", quote]). Every seed dish is also in library.`;
-const DISHES_EXAMPLE = `gives library [["Sandwich", "Tara's tiffin", "sandwiches or poha"], ["Poha", "Tara's tiffin", "sandwiches or poha"], ["Phulka", "Lalitha's dinner", "Paati has just two phulkas at night"], ["Rice", "Lunch", "Most days rice"], ["Rasam", "Lunch", "rasam or dal"], ["Dal", "Lunch", "rasam or dal"], ["Poriyal", "Lunch", "a poriyal"], ["Curd", "Lunch", "curd"], ["Pulao", "Lunch", "Pulao twice"], ["Puri", "Lunch", "puri on Sundays"], ["Lemon rice", "Lunch", "Lemon rice every Friday"], ["Salad", "Lunch", "Salad every day"], ["Idli", "Breakfast", "usually idli or dosa"], ["Dosa", "Breakfast", "usually idli or dosa"], ["Upma", "Breakfast", "upma once"], ["Bread toast", "Breakfast", "bread toast on busy days"], ["Ragi dosa", "Breakfast", "Divu has ragi dosa too"] (the others have it too: shared), ["Ragi porridge", "Lalitha's breakfast", "Paati has her own ragi porridge"]], seed [["Lunch", "Rice, Rasam, Poriyal, Curd", "Most days rice, rasam or dal, a poriyal, curd"], ["Lunch", "Rice, Dal, Poriyal, Curd", "Most days rice, rasam or dal, a poriyal, curd"], ["Breakfast", "Idli", "usually idli or dosa"], ["Breakfast", "Dosa", "usually idli or dosa"], ["Tara's tiffin", "Sandwich", "sandwiches or poha"], ["Tara's tiffin", "Poha", "sandwiches or poha"], ["Lalitha's dinner", "Phulka", "Paati has just two phulkas at night"], ["Lalitha's breakfast", "Ragi porridge", "Paati has her own ragi porridge"]].`;
+const DISHES_EXAMPLE = `gives library [["Sandwich", "Tara's tiffin", "sandwiches or poha"], ["Poha", "Tara's tiffin", "sandwiches or poha"], ["Phulka", "Lalitha's dinner", "Paati has just two phulkas at night"], ["Rice", "Lunch", "Most days rice"], ["Rasam", "Lunch", "rasam or dal"], ["Dal", "Lunch", "rasam or dal"], ["Poriyal", "Lunch", "a poriyal"], ["Curd", "Lunch", "curd"], ["Pulao", "Lunch", "Pulao twice"], ["Puri", "Lunch", "puri on Sundays"], ["Lemon rice", "Lunch", "Lemon rice every Friday"], ["Salad", "Lunch", "Salad every day"], ["Idli", "Breakfast", "usually idli or dosa"], ["Dosa", "Breakfast", "usually idli or dosa"], ["Upma", "Breakfast", "upma once"], ["Bread toast", "Breakfast", "bread toast on busy days"], ["Ragi dosa", "Breakfast", "Divu has ragi dosa too"] (the others have it too: shared), ["Ragi porridge", "Lalitha's breakfast", "Paati has her own ragi porridge"]], seed [["Lunch", "Rice, Rasam, Poriyal, Curd", "Most days rice, rasam or dal, a poriyal, curd"], ["Lunch", "Rice, Dal, Poriyal, Curd", "Most days rice, rasam or dal, a poriyal, curd"], ["Breakfast", "Idli", "usually idli or dosa"], ["Breakfast", "Dosa", "usually idli or dosa"], ["Tara's tiffin", "Sandwich", "sandwiches or poha"], ["Tara's tiffin", "Poha", "sandwiches or poha"], ["Lalitha's dinner", "Phulka", "Paati has just two phulkas at night"], ["Lalitha's breakfast", "Ragi porridge", "Paati has her own ragi porridge"]].
+And "Divu and I carry chapati sabzi to office, Paati has rice, dal and curd at home" (one lunch, cooked once, for different people) gives library [["Chapati", "Lunch", "chapati sabzi"], ["Sabzi", "Lunch", "chapati sabzi"], ["Rice", "Lunch", "rice, dal and curd"], ["Dal", "Lunch", "rice, dal and curd"], ["Curd", "Lunch", "rice, dal and curd"]], seed [["Lunch", "Chapati, Sabzi, Rice, Dal, Curd", "Divu and I carry chapati sabzi to office, Paati has rice, dal and curd at home"]]: one row, never one per person.`;
 
 const OFTEN_SCHEMA = { type: "object", required: ["often"], properties: { often: { type: "array", items: { type: "array", items: STR } } } };
 const OFTEN_PART = `Write this part: how often the family has a dish, or the weekdays they have it, for every dish whose own words say so. Another reader lists the dishes: leave out a dish with no such words.
@@ -665,7 +666,9 @@ export function diffSetup(saved: Saved, next: SetupRead, fresh: string[], all: b
   for (const r of next.rules) {
     const had = saved.rules.find((x) => ruleKey(x) === ruleKey(r));
     if (had && ruleSame(had, r)) continue;
-    if (inNew(r.quote)) { ops.rules.push(r); applied.push(r); if (had) ops.removeRules.push(had.id); if (!all) ops.changed.push(`${had ? "Changed" : "Added"}: ${ruleLine(r)}.`); }
+    // A fast's food, said in answer to the read-back's question ("Sabudana khichdi and fruit"): the food named is enough.
+    const foodSaid = !!had && r.what === "fasting" && !had.fasting_food?.length && !!r.fasting_food?.some((x) => named(x));
+    if (inNew(r.quote) || foodSaid) { ops.rules.push(r); applied.push(r); if (had) ops.removeRules.push(had.id); if (!all) ops.changed.push(`${had ? "Changed" : "Added"}: ${ruleLine(r)}.`); }
     else ops.discarded.push(`rule ${ruleKey(r)}`);
   }
   if (!all) for (const r of saved.rules) {
@@ -833,6 +836,10 @@ export function lunchLine(people: string[], weekly: WeeklyEntry[] | null, said: 
   return `Weekday lunch is for ${home.length ? andWords(home) : "nobody at home"}${parts.length ? `; ${parts.join("; ")}` : ""}.`;
 }
 
+/** The read-back's question for a fast with no food said: "What does Gowri Shankar eat on his Tuesday fast?" */
+export const fastingAsk = (who: string, days: readonly string[] | null): string =>
+  `What does ${who} eat on ${days?.length && days.length < 7 ? `the ${andWords(days.map((d) => LONG_DAY[d as keyof typeof LONG_DAY] ?? d))} fast` : "a fasting day"}?`;
+
 /** The setup read back from the rows: people, the cook, slots, weekday lunch, meals out, rules, every-day dishes, "Noted, not
  *  checked", then one question. */
 export function readBack(db: Db, household: Household, extra: { noted: string[]; asks: string[] }): string {
@@ -983,6 +990,13 @@ export async function applySetup(deps: { db: Db; emit: Emit; model: ModelCall; p
     const res = await deps.post("/api/items/subscription", { item: s.item, source: s.source || "a subscription", active: true });
     if (!res.ok) noted.push(`${s.item} subscription: not saved (${res.reason})`);
     else if (!first) ops.changed.push(`${s.item} comes on subscription.`);
+  }
+
+  // A fast saved with nothing said of what they eat on it (run 28: "He fasts on Tuesdays"): the plan would leave that person
+  // without food that day, so the read-back asks. Their answer comes back as a correction and fills the rule's fasting_food.
+  for (const r of listRules(deps.db)) if (r.what === "fasting" && r.who && !r.fasting_food?.length) {
+    const a = fastingAsk(r.who, r.days);
+    if (!checked.asks.includes(a)) checked.asks.push(a);
   }
 
   // 6. The read-back: the whole setup the first time; on a correction, only what changed.

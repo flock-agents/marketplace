@@ -21,6 +21,10 @@
   ("Sabzi", "Dal", "Idli with chutney") is planned as a particular one each day ("Bhindi sabzi"), and the same dish with
   another accompaniment ("Idli with tomato chutney" for their "Idli with coconut chutney") is theirs too: neither is a new
   dish nor uses up the new-dish limit; its contents are read, and it is not saved to the library.
+- One meal told for different people ("Divu and I carry roti sabzi to office, Amma has dal, rice and curd at home") is one
+  example plate with every dish of it, by a worked example in the dishes read (setup eval 91% vs 89%, two runs each).
+- A fast saved with no food said is asked about in the read-back ("What does Gowri Shankar eat on the Tuesday fast?"); the
+  answer fills the fast's food, also when the reader quotes the first sentence.
 - Builds again: rc3's contains read did not type-check (tsc), so the app failed to install.
 
 ## 4.0.2

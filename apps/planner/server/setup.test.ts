@@ -136,7 +136,7 @@ describe("apply_setup v2: the model reads, code checks and writes", () => {
     expect(fam.rules.find((x: any) => x.slots?.includes("Ishaan's tiffin")).items).toEqual(["nuts"]);
     expect(r.dropped.join("\n")).toContain("no onion garlic on Tuesdays");
     expect(r.dropped.join("\n")).toContain("a hard rule holds every time");
-    expect(r.asks).toEqual(["Who is Ravi? I don't have them among the people at home."]);
+    expect(r.asks).toEqual(["Who is Ravi? I don't have them among the people at home.", "What does Padma eat on the Monday fast?"]);
     // Library: days backed by a day word kept, unbacked dropped; the lint re-read the count; daily kept; contains read.
     const book = lib(k);
     expect(book["Lemon rice@Lunch"]).toMatchObject({ days: ["Fri"], contains: ["white_rice"], origin: "setup_named" });
@@ -169,6 +169,7 @@ describe("apply_setup v2: the model reads, code checks and writes", () => {
       "Your usual dishes:\n- Breakfast: Curd, Sambar\n- Ishaan's tiffin: Poriyal\n- Lunch: Beans poriyal, Curd, Lemon rice, Rajma, Rice, Salad, Sambar\n- Padma's dinner: Phulka",
       "Every day: salad at lunch.",
       "Who is Ravi? I don't have them among the people at home.",
+      "What does Padma eat on the Monday fast?",
       "Does Kiran take lunch from home to the office?",
     ].join("\n"));
   });
@@ -194,8 +195,25 @@ describe("apply_setup v2: the model reads, code checks and writes", () => {
     expect(lib(k)["Rajma@Lunch"]).toMatchObject({ days: ["Sun"] });
     expect(fam.house.cook_days).toEqual(["Mon", "Tue", "Wed", "Thu", "Fri"]);   // an unrelated difference: kept as saved
     expect(fam.rules.some((x: any) => x.what === "swap")).toBe(true);
-    expect(r.said).toBe(["Removed Evening snack.", "Changed: Rajma at lunch, on Sundays.", "Who is Ravi? I don't have them among the people at home.", "Anything else to change?"].join("\n"));
+    expect(r.said).toBe(["Removed Evening snack.", "Changed: Rajma at lunch, on Sundays.", "Who is Ravi? I don't have them among the people at home.", "What does Padma eat on the Monday fast?", "Anything else to change?"].join("\n"));
     expect(JSON.parse(k.rows("house")[0].setup_state).weekday_lunch).toEqual([{ person: "Kiran", lunch: "carries", quote: "Kiran takes lunch from home" }]);
+  });
+
+  it("a fast with no food said is asked about in the read-back; the answer fills it and the question goes (onboarding run 28)", async () => {
+    const NEW = "Sabudana khichdi and fruit";
+    const answered = (req: ModelRequest) => JSON.parse(req.user).transcript.includes(NEW);
+    const fasting = RULES.rules.find((x) => x.what === "fasting")!;
+    const f = fake({ rules: (req: ModelRequest) => (answered(req)
+      ? { ...RULES, rules: RULES.rules.map((x) => (x === fasting ? { ...x, fasting_food: ["sabudana khichdi", "fruit"] } : x)) } : RULES) });
+    const k = await boot({ model: f.model });
+    const first = await k.op("apply_setup", { household: HOUSEHOLD, transcript: TRANSCRIPT });
+    expect(first.said).toContain("What does Padma eat on the Monday fast?");
+    const r = await k.op("apply_setup", { household: HOUSEHOLD, transcript: [...TRANSCRIPT, "Q: What does Padma eat on the Monday fast?", `A: ${NEW}`] });
+    expect(r.ok).toBe(true);
+    const fasts = (await k.owner("GET", "/api/family")).body.rules.filter((x: any) => x.what === "fasting");
+    expect(fasts).toHaveLength(1);
+    expect(fasts[0].fasting_food).toEqual(["sabudana khichdi", "fruit"]);
+    expect(r.said).not.toContain("What does Padma eat");
   });
 
   it("the same call again with no new reply changes nothing", async () => {
