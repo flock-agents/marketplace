@@ -21,8 +21,10 @@ export type HouseRow = typeof house.$inferSelect;
 export type CookVisit = { at: string; meals?: string[] };
 /** The house row with its lists read: what the routes answer with. Every day is planned; a meal not cooked at home is a slot's
  *  skip_days (slotStore.ts). */
-export type HouseView = Omit<HouseRow, "cook_days" | "connected_apps" | "history_synced"> &
-  { cook_days: Weekday[]; cook_visits: CookVisit[]; connected_apps: GroceryApp[]; history_synced: HistorySynced };
+export type HouseView = Omit<HouseRow, "cook_days" | "connected_apps" | "history_synced" | "cuisines"> &
+  { cook_days: Weekday[]; cook_visits: CookVisit[]; connected_apps: GroceryApp[]; history_synced: HistorySynced;
+    /** The family's cuisine profile (kinds.json cuisines); null = not read yet. */
+    cuisines: string[] | null };
 /** How far each app's order history was read, by reader: whoever gave the orders (`agent:<id>`, a person's own agent reading
  *  that person's account). `*` is a date kept before readers were told apart. */
 export type HistorySynced = Record<string, Record<string, string>>;
@@ -68,7 +70,8 @@ export function houseView(row: HouseRow): HouseView {
   const visits = cookVisits(row.cook_arrival);
   // cook_arrival stays one time for whoever reads it as before (the first visit); cook_visits is every visit.
   return { ...row, cook_arrival: visits[0]?.at ?? null, cook_visits: visits, cook_days: list(row.cook_days),
-    connected_apps: list<GroceryApp>(row.connected_apps), history_synced: historySynced(row.history_synced) };
+    connected_apps: list<GroceryApp>(row.connected_apps), history_synced: historySynced(row.history_synced),
+    cuisines: row.cuisines == null ? null : list<string>(row.cuisines) };
 }
 
 /** The names of the meals a cook's visit may make: the active slots, else the main ones before any slot is saved. */

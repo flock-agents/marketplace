@@ -36,6 +36,7 @@ export const house = sqliteTable("house", {
   intro_sent_at: text("intro_sent_at"),
   afternoon_time: text("afternoon_time"),                      // "HH:MM": when the afternoon reminder really runs, written by that routine
   evening_time: text("evening_time"),                          // "HH:MM": the same for the evening reminder
+  cuisines: text("cuisines"),                                  // JSON string[]: the family's cuisine profile (kinds.json cuisines), shown in the read-back; null = not read yet
   plan_time: text("plan_time"),                                // "HH:MM": the same for the weekly plan
   connected_apps: text("connected_apps"),                      // JSON GroceryApp[]: the shopping apps the family has signed in to (the main app only once it is)
   history_synced: text("history_synced"),                      // JSON { [app or "app:account"]: { [reader]: "YYYY-MM-DD" } }: how far each reader (a person's agent) read each app's order history, per shop account when named; a plain date is from before readers were kept apart
@@ -58,6 +59,8 @@ export const slots = sqliteTable("slots", {
   skip_days: text("skip_days"),                                // JSON [{ day: weekday, skip: eaten_out | ordered_in }]: every week
   order: integer("order").notNull(),                           // planning order (constants.ts SLOT_ORDER)
   active: integer("active").default(1),
+  kinds: text("kinds"),                                        // JSON MealKind[] (kinds.ts): the dish families this meal is built from; null = not read yet
+  templates: text("templates"),                                // JSON MealTemplate[] (kinds.ts): the ways it is plated, [Roti, Sabzi]; null = not read yet
 });
 
 /** One slot on one date: who it is for and the dishes made. A setup seed example (the family's past week) has no date and is
@@ -239,6 +242,9 @@ export const library = sqliteTable("library", {
   rated_on: text("rated_on"),                                  // the day it was eaten
   rated_by: text("rated_by"),                                  // who said it, by name
   ratings: text("ratings"),                                    // JSON [{ rating, note, date, by }], newest first, a short history
+  kind: text("kind"),                                          // the kind it is a variant of (a catalog kind, or the slot's own kind); null = not mapped yet
+  sub: text("sub"),                                            // its catalog sub-kind ("Poriyal/Thoran"); null for an own kind or not mapped
+  catalog_item: text("catalog_item"),                          // the catalog item it is (kinds.json), whose contents it can take; null = a dish only this family makes
 }, (t) => [uniqueIndex("library_key_slot").on(t.key, t.slot)]);
 
 /** The family's food rules, one a row, each with the family's own words. Hard ones are always kept; soft ones (`frequency`)
