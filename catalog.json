@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "updatedAt": "2026-11-24T00:00:00Z",
+  "updatedAt": "2026-11-25T00:00:00Z",
   "items": [
     {
       "slug": "linear",
@@ -360,6 +360,28 @@
       "updatedAt": "2026-09-23T00:00:00Z"
     },
     {
+      "slug": "whatsapp",
+      "type": "connector",
+      "name": "WhatsApp",
+      "description": "Read your WhatsApp chats and groups, search them, and send a message you approved",
+      "author": "flock",
+      "category": "integration",
+      "tags": [
+        "whatsapp",
+        "messaging",
+        "chat",
+        "social"
+      ],
+      "icon": "icon.svg",
+      "repo": "flock-agents/marketplace",
+      "path": "skills/whatsapp",
+      "latestVersion": "1.0.0",
+      "latestTag": "whatsapp-v1.0.0",
+      "minFlockVersion": "0.24.0",
+      "publishedAt": "2026-11-25T00:00:00Z",
+      "updatedAt": "2026-11-25T00:00:00Z"
+    },
+    {
       "slug": "slack-desk",
       "type": "app",
       "usage": "app",
@@ -414,7 +436,7 @@
         "id": "email",
         "label": "Stay on top of email",
         "description": "Finds what needs you, drafts replies",
-        "emoji": "\ud83d\udce5",
+        "emoji": "📥",
         "order": 10,
         "services": [
           "gmail"
