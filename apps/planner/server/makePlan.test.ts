@@ -7,6 +7,7 @@ import { readFileSync } from "fs";
 import { join } from "path";
 import { boot } from "./testkit";
 import { CONTAINS_SYSTEM, FIX_SYSTEM, INGREDIENT_SYSTEM, makePlan, SLOT_SYSTEM } from "./makePlan";
+import { isVariantOf } from "./planChecks";
 import { EVENTS_SYSTEM, lunchSaid, platformPeers, readHousehold, withLunchSaid, type CalendarEvent } from "./planDays";
 import type { ModelRequest, ModelResult } from "./model";
 import { addRule, commit, getLibraryDish, listSlotDays, saveSlotDay, upsertLibrary, upsertSlot, type LibraryInput, type RuleInput, type SlotInput } from "./slotStore";
@@ -670,5 +671,43 @@ describe("a plan note that explains itself", () => {
     expect(explainsItself("Swapped poha for upma because of the rule")).toBe(true);
     expect(explainsItself("millet rice for one person only")).toBe(false);
     expect(explainsItself("less oil for Dad")).toBe(false);
+  });
+});
+
+// Onboarding run 28: "Sabzi" and "Dal" were the family's own lunch dishes; a particular sabzi each day was a new dish, over the
+// new-dish limit, so lunch came as "Sabzi" or without one. A particular way of their entry is their dish.
+describe("make_plan: a particular way of a family's dish", () => {
+  it("is a variant when it keeps every word of their name and adds to it", () => {
+    expect(isVariantOf("Sabzi", "Bhindi sabzi")).toBe(true);
+    expect(isVariantOf("Dal", "Moong dal")).toBe(true);
+    expect(isVariantOf("Idli with chutney", "Idli with coconut chutney")).toBe(true);
+    expect(isVariantOf("Sabzi", "Sabzi")).toBe(false);
+    expect(isVariantOf("Sabzi", "Paneer tikka")).toBe(false);
+    expect(isVariantOf("Idli with chutney", "Coconut chutney")).toBe(false);
+    // The same dish with another accompaniment.
+    expect(isVariantOf("Idli with coconut chutney", "Idli with tomato chutney")).toBe(true);
+    expect(isVariantOf("Idli with coconut chutney", "Dosa with coconut chutney")).toBe(false);
+    expect(isVariantOf("Bhindi sabzi", "Aloo gobi sabzi")).toBe(false);
+  });
+
+  it("plans as their dish: not new, not over the limit, its contents read, never saved to the library", async () => {
+    const VEG = ["Bhindi", "Aloo gobi", "Lauki", "Beans", "Cabbage", "Tinda", "Karela"];
+    const k = await home({ lib: { Breakfast: ["Poha", "Upma", "Idli", "Dosa"], Lunch: ["Rice", "Sabzi"], Dinner: ["Palak paneer", "Aloo gobi", "Bhindi", "Dal makhani"] },
+      seed: [{ slot: "Lunch", dishes: ["Rice", "Sabzi"] }], newPerWeek: 1, rules: [{ hard: true, what: "veg", who: null, quote: "we are vegetarian" }] });
+    const f = fakeModel({
+      slot: (u) => u.slot !== "Lunch" ? rotateDays(u) : {
+        days: Object.fromEntries(u.days.filter((d: any) => !d.skip).map((d: any, i: number) => [d.date, ["Rice", `${VEG[i]} sabzi`]])),
+        new: VEG.map((v) => ({ dish: `${v} sabzi`, why: "their sabzi", like: "Sabzi" })) },
+      contains: (u) => ({ dishes: u.dishes.map((d: string) => ({ dish: d, has: [], not: u.tags })) }),
+    });
+    const r: any = await k.plan(f.model);
+    expect(r.ok).toBe(true);
+    expect(k.dishesAt(WEEK[0], "Lunch")).toEqual(["Rice", "Bhindi sabzi"]);
+    expect(k.dishesAt(WEEK[2], "Lunch")).toEqual(["Rice", "Lauki sabzi"]);
+    expect(f.fixes().filter((c) => c.user.slot === "Lunch")).toHaveLength(0);
+    expect((r.new_dishes ?? []).map((d: any) => d.name)).not.toContain("Bhindi sabzi");
+    expect(k.at(WEEK[0], "Lunch")!.dishes.find((d) => d.dish === "Bhindi sabzi")!.new).toBe(false);
+    expect(f.contains().flatMap((c) => c.user.dishes)).toContain("Bhindi sabzi");
+    expect(k.rows("library").map((x: any) => x.name)).not.toContain("Bhindi sabzi");
   });
 });
