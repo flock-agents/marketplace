@@ -375,3 +375,15 @@ describe("a template made for a pinned dish, and one that would repeat yesterday
     for (const d of WEEK) expect(r.at(d, "Dinner").filter((x) => x !== "Phulka").length).toBeGreaterThan(0);
   });
 });
+
+describe("a category kept to a day", () => {
+  it("'pongal on Sundays' said as the category: a pongal on Sunday, none on other days", () => {
+    const kinds: MealKind[] = [{ name: "Idli" }, { name: "Dosa" }, { name: "Khichdi", subs: ["Pongal"] }];
+    const lib = [...["Rava idli", "Kanchipuram idli"].map((n) => dish(n, "Breakfast", "Idli")), ...["Masala dosa", "Ghee roast dosa"].map((n) => dish(n, "Breakfast", "Dosa")),
+      dish("Pongal", "Breakfast", "Khichdi", { sub: "Pongal", days: ["Sun"] })];
+    const r = run({ slots: [slot("Breakfast", { kinds, templates: [T({ kind: "Idli" }), T({ kind: "Dosa" }), T({ kind: "Khichdi", sub: "Pongal" })] })], library: lib });
+    expect(r.at(WEEK[6], "Breakfast").some((x) => /pongal/i.test(x))).toBe(true);
+    expect(r.at(WEEK[6], "Breakfast")).not.toContain("Pongal");
+    for (const d of WEEK.slice(0, 6)) expect(r.at(d, "Breakfast").some((x) => /pongal/i.test(x))).toBe(false);
+  });
+});

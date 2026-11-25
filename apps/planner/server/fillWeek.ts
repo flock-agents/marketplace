@@ -84,7 +84,8 @@ const holdsStaple = (name: string, base: string): boolean => { const ws = wordsO
 type Place = { kind: string; sub: string | null };
 /** A candidate for a part: a family item (a library row) or a catalog variant. */
 type Item = { name: string; key: string; kind: string; sub: string | null; family: boolean; idx: number; row?: LibraryDish; cuisine?: number;
-  /** A catalog item (of a category the family named, when `family`). */ catalog?: boolean };
+  /** A catalog item (of a category the family named, when `family`). */ catalog?: boolean;
+  /** The days a category the family kept to days allows its items on ("pongal on Sundays"). */ days?: string[] | null };
 
 /** A family dish's kind and sub-kind: as stored, else as its words match the catalog. */
 export function placeOf(row: Pick<LibraryDish, "kind" | "sub" | "catalog_item" | "name">): Place | null {
@@ -293,6 +294,12 @@ export function fillWeek(input: FillInput): FillResult {
   /** The kinds and sub-kinds the family named as a category ("dal", "a poriyal"): their catalog items are the family's. */
   const categories = famRows.map(categoryPlace).filter((x): x is Place => !!x);
   /** Is a catalog item of a kind within a category the family named. */
+  /** The days a family's category item may come on: where every category word of theirs that holds it is kept to days
+   *  ("pongal on Sundays"), those days; else any day. */
+  const catDays = (kind: string, sub: string | null): string[] | null => {
+    const rows = famRows.filter((r) => { const c = categoryPlace(r); return !!c && sameKind(c.kind, kind) && (!c.sub || sameKind(c.sub, sub)); });
+    return rows.length && rows.every((r) => r.days?.length) ? uniq(rows.flatMap((r) => r.days ?? [])) : null;
+  };
   const named = (kind: string, sub: string | null) => categories.some((c) => sameKind(c.kind, kind) && (!c.sub || sameKind(c.sub, sub)));
   /** The catalog's items of a kind (one sub-kind when given) for this family at this meal: regional only within their
    *  cuisines; their sub-kinds (`prefer`) first, then their cuisines, then everyday ones; never one of their dishes, nor one
@@ -328,7 +335,7 @@ export function fillWeek(input: FillInput): FillResult {
     }
     const theirs = prefer.length ? [...out.filter((x) => prefer.some((p) => sameKind(p, x.sub))), ...out.filter((x) => !prefer.some((p) => sameKind(p, x.sub)))] : out;
     const cat = categories.some((c) => sameKind(c.kind, kind)) ? catalogPool(s, kind, sub, uniq([...prefer, ...categories.filter((c) => sameKind(c.kind, kind) && c.sub).map((c) => c.sub!)]), true) : [];
-    return [...theirs, ...cat.filter((x) => !seen.has(x.key))].map((x, i) => ({ ...x, idx: i }));
+    return [...theirs, ...cat.filter((x) => !seen.has(x.key)).map((x) => ({ ...x, days: catDays(x.kind, x.sub) }))].map((x, i) => ({ ...x, idx: i }));
   };
   /** The brand-new variants of a kind (one sub-kind when given): the catalog's items outside what the family named; never a
    *  staple's or an own kind's. */
@@ -377,7 +384,7 @@ export function fillWeek(input: FillInput): FillResult {
     const pinnedOnly = ts.map((t) => t.parts.some((p) => {
       if (isStaplePart(s, p)) return false;
       const { fam } = poolsOf(s, p);
-      return fam.length > 0 && fam.every((x) => !x.catalog && !!x.row?.days?.length);
+      return fam.length > 0 && fam.every((x) => (x.catalog ? !!x.days?.length : !!x.row?.days?.length));
     }));
     const free = ts.map((_, i) => i).filter((i) => !pinnedOnly[i]);
     const left = free.length && free.length < ts.length
@@ -386,10 +393,12 @@ export function fillWeek(input: FillInput): FillResult {
     const weight = [...left];
     // A pinned dish's day takes the template that holds it.
     for (const d of mine) {
-      const pins = famRows.filter((r) => same(r.slot, s.name) && r.days?.includes(weekdayOf(d.date)) && !isCategoryName(r.name));
-      if (!pins.length) continue;
-      pinsOf.set(slotDayKey(d.date, s.name), pins);
-      const i = ts.findIndex((t) => holds(t, pins[0]));
+      const kept = famRows.filter((r) => same(r.slot, s.name) && r.days?.includes(weekdayOf(d.date)));
+      // A category word kept to a day ("pongal on Sundays") chooses the day's template; an item of it fills the part.
+      const pins = kept.filter((r) => !isCategoryName(r.name));
+      if (!kept.length) continue;
+      if (pins.length) pinsOf.set(slotDayKey(d.date, s.name), pins);
+      const i = ts.findIndex((t) => holds(t, pins[0] ?? kept[0]));
       if (i < 0) continue;
       tplOf.set(slotDayKey(d.date, s.name), i);
       if (left[i] > 0) left[i]--;
@@ -456,6 +465,7 @@ export function fillWeek(input: FillInput): FillResult {
     if (noAgain.has(it.key)) return false;
     const row = it.family ? rowAt(s.name, it.key) : undefined;
     if (row?.days?.length && !row.days.includes(weekdayOf(d.date))) return false;
+    if (!row && it.days?.length && !it.days.includes(weekdayOf(d.date))) return false;
     const range = row && row.frequency !== "daily" ? frequencyRange(row.frequency) : null;
     const usedOther = [...(usedDates.get(it.key) ?? [])].filter((x) => x !== d.date);
     if (!loose && range && usedOther.length >= range[1]) return false;
