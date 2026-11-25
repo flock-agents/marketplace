@@ -980,6 +980,12 @@ describe("apply_setup v2: the prompts", () => {
     expect(SETUP_PARTS.find((p) => p.id === "often")!.system).toContain("daily");
     expect(SETUP_SYSTEM).toContain("never a nickname");
   });
+  it("read a person's own meal in place of the family's as instead, and a meal ordered in for some as its skip when the others have their own (classes 3, 4)", () => {
+    const home = SETUP_PARTS.find((p) => p.id === "home")!;
+    expect(JSON.stringify(home.schema)).toContain('"instead":{"type":"boolean"}');
+    expect(home.system).toContain("instead: true on such a meal when the person does not eat the main meal at all");
+    expect(home.system).toContain("it is that meal's skip all the same when the others at home have their own meal in its place that day");
+  });
   it("never name an eval household's people, cook or surname", () => {
     for (const h of HOUSEHOLDS) for (const name of [...h.truth.people.map((p) => p.name), ...(h.truth.cook ? [h.truth.cook.name] : [])])
       expect(SETUP_SYSTEM, `${h.id} ${name}`).not.toMatch(new RegExp(`\\b${name}\\b`, "i"));

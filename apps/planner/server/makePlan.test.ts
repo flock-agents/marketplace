@@ -597,6 +597,20 @@ describe("make_plan: who eats (spec §5.1)", () => {
     if (r.ok) expect(r.message).toContain("Dinner: eating out");
   });
 
+  it("a meal ordered in on its day gets no dishes; a person's own meal in place of it is still cooked, and they are never at the family's (classes 3, 4)", async () => {
+    const k = await home({
+      slots: [MAIN[0], MAIN[1], { ...MAIN[2], usual_people: ["Asha", "Ravi"], skip_days: [{ day: "Sat", skip: "ordered_in" }] },
+        { name: "Kabir's dinner", kind: "custom", order: 55, usual_people: ["Kabir"] }],
+      library: ["Khichdi", "Dal rice"].map((name) => ({ name, slot: "Kabir's dinner" })),
+    });
+    await k.plan(fakeModel().model);
+    expect(k.at("2026-12-05", "Dinner")).toMatchObject({ skip: "ordered_in", dishes: [] });
+    expect(k.dishesAt("2026-12-05", "Dinner")).toEqual([]);
+    expect(k.dishesAt("2026-12-05", "Kabir's dinner").length).toBeGreaterThan(0);
+    for (const d of WEEK) expect(k.at(d, "Dinner")!.people).not.toContain("Kabir");
+    for (const d of WEEK) expect(k.at(d, "Kabir's dinner")!.people).toEqual(["Kabir"]);
+  });
+
   it("an edited slot-day is kept: with dishes it is not planned again; without, its people, guests and occasion stay as the family set them", async () => {
     const k = await home();
     commit(k.kit.db, k.kit.emitChange, (tx, ch) => {
