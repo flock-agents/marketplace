@@ -658,7 +658,7 @@ export function fillWeek(input: FillInput): FillResult {
     // A dish that already holds a staple of the plate ("rasam rice", "curd rice", "rajma chawal") takes that plain staple's
     // place: never "Rice" beside "Rasam rice".
     for (const x of [...plate]) {
-      const base = x.staple ? stapleWord(x.name) : null;
+      const base = stapleWord(x.name);
       if (!base || !plate.some((y) => y !== x && y.key !== x.key && holdsStaple(y.name, base))) continue;
       plate.splice(plate.indexOf(x), 1);
       const ds = dayOf(d).dishes, at = ds.findIndex((n) => dishKey(n) === x.key);

@@ -338,7 +338,13 @@ describe("a plate is never empty", () => {
   });
 });
 
-describe("a plate never doubles its staple", () => {
+describe("a plate never doubles its staple (class 3)", () => {
+  it("varan bhaat beside the plate's rice, at any meal: the rice goes", () => {
+    const kinds: MealKind[] = [{ name: "Roti", staple: true }, { name: "Rice", staple: true }, { name: "Dal", subs: ["Amti/Varan"] }];
+    const lib = [dish("Poli", "Lunch", "Roti"), dish("Steamed rice", "Lunch", "Rice"), dish("Varan bhaat", "Lunch", "Dal", { sub: "Amti/Varan" })];
+    const r = run({ slots: [slot("Lunch", { kinds, templates: [T({ kind: "Roti" }, { kind: "Rice" }, { kind: "Dal", sub: "Amti/Varan" })] })], library: lib, newCap: 0 });
+    for (const d of WEEK.filter((x) => r.at(x, "Lunch").includes("Varan bhaat"))) expect(r.at(d, "Lunch")).toEqual(["Poli", "Varan bhaat"]);
+  });
   it("a family dish that already holds the plate's rice ('rasam rice') takes the plain rice's place", () => {
     const kinds: MealKind[] = [{ name: "Rice", staple: true }, { name: "Rice curry", subs: ["Sambar", "Rasam"] }, { name: "Curd", staple: true }];
     const lib = [dish("Rice", "Lunch", "Rice"), dish("Curd", "Lunch", "Curd"), dish("Drumstick sambar", "Lunch", "Rice curry", { sub: "Sambar" }),
