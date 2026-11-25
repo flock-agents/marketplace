@@ -108,7 +108,8 @@ export function scorePlan(h: Household, plan0: PlanOut, loaded: SetupOut, o: { f
   /** What a planned dish has, and which tags are known. TRUTH's own dishes: TRUTH's tags, known as far as the loaded
    *  library read them. Other dishes: the planner's read. The eval's vocabulary of the planned name always counts. */
   const dishFacts = (name: string, slot: string): { tags: Set<string>; known: Set<string> } => {
-    const tags = tagsOfName(name);
+    // "Dal without onion and garlic", "Chivda (no peanuts)": what a name says it is made without is not in it.
+    const tags = tagsOfName(name.replace(/\(?\b(without|no|minus|sans)\b[^()]*\)?/gi, " "));
     const tn = dishNameOf(name, truthNames);
     const tdish = tn ? t.library.find((d) => d.name === tn && lc(d.slot) === lc(slot)) ?? t.library.find((d) => d.name === tn) : undefined;
     const exact = tdish && plain(tdish.name) === plain(name);

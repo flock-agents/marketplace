@@ -314,3 +314,13 @@ describe("scorePlan: owner's 25 Nov rules", () => {
     expect(fails(q)).toContain("main_twice");
   });
 });
+
+describe("scorePlan: a dish named made without an item", () => {
+  test("\"Dal without onion and garlic\" breaks no onion-garlic rule by its name", () => {
+    const p = goodWeek();
+    at(p, "Mon", "Lunch").dishes = [{ name: "Rice" }, { name: "Dal without onion and garlic" }];
+    at(p, "Tue", "Lunch").dishes = [{ name: "Rice" }, { name: "Moong dal (no onion garlic)" }];
+    const s = scorePlan(FIX, p, loaded(), { failClosed: false });
+    expect(s.notes.filter((n) => /without onion|no onion/i.test(n) && n.startsWith("hard_rules"))).toEqual([]);
+  });
+});
