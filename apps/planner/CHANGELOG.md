@@ -9,6 +9,9 @@
 - The how-it-works message that follows the first week opens "How it works:" (the week's message already says it is planned).
 - make_plan reads the library dishes setup never read for a hard rule's tags (setup ran out of time) before planning,
   and keeps what it read: before, every such dish failed closed and the week came out with 65 unmet places.
+- Setup reads the family's dishes on the fast tier (no reasoning): on balanced the reasoning ran into the token cap and
+  cut the answer off, so the read was asked twice and used most of setup's time (setup eval: 3–11 s vs 18–146 s for
+  that read, 94% vs 78% of checks).
 
 ## 4.0.2
 
