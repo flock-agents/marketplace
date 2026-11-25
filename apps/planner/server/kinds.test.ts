@@ -161,3 +161,11 @@ describe("stored", () => {
     expect(houseView(getHouse(kit.db)).cuisines).toEqual(["tamil", "south"]);
   });
 });
+
+describe("usal (decided 16, 18)", () => {
+  it("bare usal is the Rajma/Chole sub-kind of Dal; usal pav stays a Misal", async () => {
+    const { matchDish } = await import("./kinds");
+    expect(matchDish("Usal")).toMatchObject({ kind: "Dal", sub: "Rajma/Chole" });
+    expect(matchDish("Usal pav")).toMatchObject({ kind: "Pav meal", sub: "Misal" });
+  });
+});
