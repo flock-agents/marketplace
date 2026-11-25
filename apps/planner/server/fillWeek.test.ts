@@ -337,3 +337,22 @@ describe("a plate is never empty", () => {
     for (const d of [WEEK[1], WEEK[3]]) expect(r.at(d, "Breakfast").some((x) => eggs.includes(x))).toBe(false);
   });
 });
+
+describe("a plate never doubles its staple", () => {
+  it("a family dish that already holds the plate's rice ('rasam rice') takes the plain rice's place", () => {
+    const kinds: MealKind[] = [{ name: "Rice", staple: true }, { name: "Rice curry", subs: ["Sambar", "Rasam"] }, { name: "Curd", staple: true }];
+    const lib = [dish("Rice", "Lunch", "Rice"), dish("Curd", "Lunch", "Curd"), dish("Drumstick sambar", "Lunch", "Rice curry", { sub: "Sambar" }),
+      dish("Rasam rice", "Lunch", "Rice curry", { sub: "Rasam" }), dish("Tomato rasam", "Lunch", "Rice curry", { sub: "Rasam" })];
+    const r = run({ slots: [slot("Lunch", { kinds, templates: [T({ kind: "Rice" }, { kind: "Rice curry" }, { kind: "Curd" })] })], library: lib, newCap: 0 });
+    const withIt = WEEK.filter((d) => r.at(d, "Lunch").includes("Rasam rice"));
+    expect(withIt.length).toBeGreaterThan(0);
+    for (const d of withIt) expect(r.at(d, "Lunch")).not.toContain("Rice");
+    for (const d of WEEK.filter((x) => !withIt.includes(x))) expect(r.at(d, "Lunch")).toContain("Rice");
+  });
+  it("curd rice as the plate's curd: no plain rice beside it", () => {
+    const kinds: MealKind[] = [{ name: "Rice", staple: true }, { name: "Curd", staple: true }];
+    const lib = [dish("Steamed rice", "Tiffin", "Rice"), dish("Curd rice", "Tiffin", "Curd")];
+    const r = run({ slots: [slot("Tiffin", { kind: "custom", order: 20, kinds, templates: [T({ kind: "Rice" }, { kind: "Curd" })] })], library: lib, newCap: 0 });
+    for (const d of WEEK) expect(r.at(d, "Tiffin")).toEqual(["Curd rice"]);
+  });
+});

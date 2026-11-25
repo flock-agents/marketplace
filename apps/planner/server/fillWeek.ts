@@ -61,6 +61,24 @@ const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLow
 const uniq = <T>(xs: T[]) => [...new Set(xs)];
 const hash = (s: string) => { let h = 0; for (const c of s) h = (h * 31 + c.charCodeAt(0)) >>> 0; return h; };
 
+// ── Staples held in a dish's name ──
+
+/** The words for one staple, as a family says it on a plate. */
+const STAPLE_WORDS: Record<string, string[]> = {
+  rice: ["rice", "chawal", "chaval", "bhaat", "bhat", "annam", "sadam", "saadam"],
+  roti: ["roti", "rotis", "chapati", "chapatis", "chapathi", "phulka", "phulkas", "fulka", "poli", "rotli"],
+  curd: ["curd", "dahi", "yogurt", "thayir", "mosaru"],
+};
+const wordsOf = (x: string) => norm(x).split(" ").filter(Boolean);
+/** The staple a plain staple's name is ("Rice", "Steamed rice", "Phulka"), or null for a dish. */
+function stapleWord(name: string): string | null {
+  const ws = wordsOf(name).filter((w) => w !== "plain" && w !== "steamed");
+  if (ws.length !== 1) return null;
+  return Object.keys(STAPLE_WORDS).find((k) => STAPLE_WORDS[k].includes(ws[0])) ?? null;
+}
+/** Does a dish's name hold that staple ("rasam rice", "kadhi chawal", "curd rice"), being more than the staple itself. */
+const holdsStaple = (name: string, base: string): boolean => { const ws = wordsOf(name); return ws.length > 1 && ws.some((w) => STAPLE_WORDS[base].includes(w)); };
+
 // ── Items ──
 
 type Place = { kind: string; sub: string | null };
@@ -598,6 +616,15 @@ export function fillWeek(input: FillInput): FillResult {
         const theirs = (name: string) => { prep(name); return guestsCan(w, dayOf(d), name); };
         if (!plate.some((x) => !x.staple && theirs(x.name)) && !feed(s, d, plate, [], t.parts.length, [], [], null, theirs)) res.unmet.push(`${label(d)}: the guests have nothing of their own`);
       }
+    }
+    // A dish that already holds a staple of the plate ("rasam rice", "curd rice", "rajma chawal") takes that plain staple's
+    // place: never "Rice" beside "Rasam rice".
+    for (const x of [...plate]) {
+      const base = x.staple ? stapleWord(x.name) : null;
+      if (!base || !plate.some((y) => y !== x && y.key !== x.key && holdsStaple(y.name, base))) continue;
+      plate.splice(plate.indexOf(x), 1);
+      const ds = dayOf(d).dishes, at = ds.findIndex((n) => dishKey(n) === x.key);
+      if (at >= 0) ds.splice(at, 1);
     }
     const row = dayOf(d);
     res.plates.set(k, plate.map((x) => ({ name: x.name, new: x.isNew, not_for: notFor(w, row, x.name), note: onionNotes(w, row, x.name).join("; ") || null })));
