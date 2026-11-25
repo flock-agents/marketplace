@@ -1,7 +1,7 @@
 // 4. Telugu family with grandparents and a paid cook: diabetic grandmother (no sugar; ragi is good for her: soft, a few
 // times a week; Ekadashi fast twice a month: not a weekday), grandfather less salt and soft food, two working adults, a teen
 // with a school tiffin. Non-veg (chicken) Sunday lunch for the three younger ones; the grandparents are pure veg.
-import { avoid, dish, mains, MON_SAT, note, SCHOOL, veg, type Household } from "../lib/truth";
+import { avoid, dish, mains, MON_SAT, note, SCHOOL, veg, items, tpl, type Household } from "../lib/truth";
 
 export const h4: Household = {
   id: "h4-reddy", title: "Grandparents + cook: diabetic grandmother, Ekadashi, soft food, teen tiffin",
@@ -62,9 +62,9 @@ export const h4: Household = {
       ...dish("Allam chutney", ["Breakfast"]), ...dish("Bread toast", ["Breakfast"], { frequency: "sometimes" }),
       ...dish("Ragi dosa", ["Sarojini's breakfast"]), ...dish("Ragi java", ["Sarojini's breakfast"]),
       ...dish("Chapati roll", ["Karan's tiffin"]), ...dish("Lemon rice", ["Karan's tiffin"]), ...dish("Veg pulao", ["Karan's tiffin"]), ...dish("Curd rice", ["Karan's tiffin"]),
-      ...dish("Rice", ["Lunch", "Dinner"]), ...dish("Pappu", ["Lunch", "Dinner"]), ...dish("Rasam", ["Lunch"]), ...dish("Curd", ["Lunch"]), ...dish("Pachadi", ["Lunch"]),
-      ...dish("Dondakaya curry", ["Lunch"]), ...dish("Beans curry", ["Lunch"]), ...dish("Bendakaya curry", ["Lunch"]),
-      ...dish("Dondakaya curry", ["Dinner"], { unsaid: true }), ...dish("Beans curry", ["Dinner"], { unsaid: true }), ...dish("Bendakaya curry", ["Dinner"], { unsaid: true }),
+      ...dish("Rice", ["Lunch", "Dinner"]), ...dish("Pappu", ["Lunch", "Dinner"]), ...dish("Rasam", ["Lunch"]), ...dish("Curd", ["Lunch"]), ...dish("Pachadi", ["Lunch"], { kind: "Chutney" }),
+      ...dish("Dondakaya curry", ["Lunch"], { kind: "Sabzi" }), ...dish("Beans curry", ["Lunch"], { kind: "Sabzi" }), ...dish("Bendakaya curry", ["Lunch"], { kind: "Sabzi" }),
+      ...dish("Dondakaya curry", ["Dinner"], { unsaid: true, kind: "Sabzi" }), ...dish("Beans curry", ["Dinner"], { unsaid: true, kind: "Sabzi" }), ...dish("Bendakaya curry", ["Dinner"], { unsaid: true, kind: "Sabzi" }),
       ...dish("Chicken curry", ["Lunch"], { days: ["Sun"], alsoSlots: ["Sunday chicken"] }),
       ...dish("Chapati", ["Dinner"]), ...dish("Jowar roti", ["Sarojini's dinner"]),
     ],
@@ -89,6 +89,16 @@ export const h4: Household = {
       { slot: "Sarojini's dinner", dishes: ["Jowar roti"] }, { slot: "Sarojini's dinner", dishes: ["Jowar roti"] },
     ],
     week: [{ kind: "away", person: "Srinivas", days: ["Wed", "Thu"], dated: { person: "Srinivas", what: "work trip to Mumbai", from: "2026-12-02", to: "2026-12-03" } }],
+    cuisines: ["south", "andhra"], cuisinesAlso: ["karnataka", "tamil", "north"],
+    meals: [
+      { slot: "Breakfast", staples: ["Chutney"], templates: [tpl(["Idli", "Chutney"]), tpl(["Dosa", "Chutney"]), tpl(["Upma", "Chutney"])] },
+      { slot: "Sarojini's breakfast", templates: [tpl(["Dosa"]), tpl(["Porridge"])] },
+      { slot: "Karan's tiffin", templates: [tpl(["Roll"]), tpl(["Flavoured rice"]), tpl(["Pulao"]), tpl([items("Curd rice")])] },
+      // Two of three seeded lunches have the pachadi: the plate with it.
+      { slot: "Lunch", staples: ["Rice", "Curd"], templates: [tpl(["Rice", "Dal/Pappu", "Sabzi", "Rice curry/Rasam", "Curd", "Chutney"])] },
+      { slot: "Dinner", staples: ["Roti", "Rice"], templates: [tpl(["Roti", "Sabzi"]), tpl(["Rice", "Dal/Pappu"])] },
+      { slot: "Sarojini's dinner", staples: ["Bhakri"], templates: [tpl(["Bhakri"])] },
+    ],
     judgeNotes: ["Grandparents pure veg, no eggs; chicken only Sunday lunch for Srinivas, Padma, Karan.", "Sarojini: no sugar; her own ragi breakfast and jowar roti at night; ragi a few times a week; Ekadashi fast (fruit) twice a month.",
       "Venkat: less salt and soft food.", "Karan's tiffin Monday to Friday.", "Srinivas is away Wednesday and Thursday this week."],
   },

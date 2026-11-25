@@ -7,6 +7,11 @@ describe("vocab", () => {
   test("tags by name, broad tags included, undone by a word in front", () => {
     expect([...tagsOfName("Chicken curry")]).toEqual(expect.arrayContaining(["chicken", "meat"]));
     expect(tagsOfName("Kosha mangsho").has("red_meat")).toBe(true);
+    // Keema is mutton unless it names another meat (or none): chicken keema is chicken, soya keema no meat.
+    expect(tagsOfName("Keema matar").has("red_meat")).toBe(true);
+    expect(tagsOfName("Chicken keema").has("red_meat")).toBe(false);
+    expect(tagsOfName("Chicken keema").has("chicken")).toBe(true);
+    expect(tagsOfName("Soya keema").has("meat")).toBe(false);
     expect(tagsOfName("Millet rice").has("white_rice")).toBe(false);
     expect(tagsOfName("Millet rice").has("millet")).toBe(true);
     expect(tagsOfName("Ragi dosa").has("white_rice")).toBe(false);
