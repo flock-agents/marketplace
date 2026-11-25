@@ -368,10 +368,12 @@ export function fillWeek(input: FillInput): FillResult {
     const mk = (s.kinds ?? []).find((k) => sameKind(k.name, kind));
     return mk?.own || mk?.staple ? [] : catalogPool(s, kind, sub, prefer, false);
   };
-  /** The family's usual item of a staple kind at a slot: their dish of it had most at this slot, else any of theirs, else the
-   *  name on their plates, else the catalog's first. */
+  /** The family's usual item of a staple kind at a slot: their dish of it had most at this slot, else any of theirs (never one of
+   *  another person's own meal), else the name on their plates, else the catalog's first. */
   const stapleOf = (s: Slot, kind: string): string => {
-    const rows = famRows.filter((r) => sameKind(placeOf(r)?.kind, kind));
+    // Class 6: one person's own meal (an add-on, or a meal of named people) keeps its dishes; the family's meal never takes them.
+    const personal = (slot: string) => { const x = slotByKey.get(slot.toLowerCase()); return !!x && x.kind !== "main" && x.usual_people.length > 0; };
+    const rows = famRows.filter((r) => sameKind(placeOf(r)?.kind, kind) && (same(r.slot, s.name) || !personal(r.slot)));
     const hist = input.history.get(s.name.toLowerCase()) ?? [];
     const count = (k: string) => hist.filter((h) => h.dishes.some((x) => dishKey(x.dish) === k)).length;
     const here = rows.filter((r) => same(r.slot, s.name)).sort((a, b) => count(b.key) - count(a.key));

@@ -594,3 +594,20 @@ describe("a dish had every day comes every day it is had there, in any kind of m
     for (const d of WEEK) expect(r.at(d, "Nani's dinner")).toContain("Milk");
   });
 });
+
+describe("a dish of one person's own meal never comes to the family's (class 6)", () => {
+  it("her bajra roti every day at her own dinner is never the family dinner's roti, nor her daily dish theirs", () => {
+    const own = slot("Nani's dinner", { kind: "custom", usual_people: ["Nani"], order: 55, templates: [T({ kind: "Roti" }, { items: ["Milk"] })] });
+    const dinner = slot("Dinner", { usual_people: ["Asha", "Ravi"], kinds: [{ name: "Roti", staple: true }, { name: "Sabzi" }], templates: [T({ kind: "Roti" }, { kind: "Sabzi" })] });
+    const lib = [...SABZIS.map((n) => dish(n, "Dinner", "Sabzi")), dish("Bajra roti", "Nani's dinner", "Roti", { frequency: "daily" }),
+      dish("Milk", "Nani's dinner", null, { frequency: "daily", contains: ["dairy"] })];
+    const days = WEEK.flatMap((d) => [day(d, "Dinner", ["Asha", "Ravi"]), day(d, "Nani's dinner", ["Nani"])]);
+    const r = run({ slots: [dinner, own], library: lib, days });
+    for (const d of WEEK) {
+      expect(r.at(d, "Dinner")).not.toContain("Bajra roti");
+      expect(r.at(d, "Dinner")).not.toContain("Milk");
+      expect(r.at(d, "Dinner")).toHaveLength(2);
+      expect(r.at(d, "Nani's dinner")).toEqual(["Bajra roti", "Milk"]);
+    }
+  });
+});

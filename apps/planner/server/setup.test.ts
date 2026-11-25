@@ -437,6 +437,17 @@ describe("apply_setup v2: the checks, pure", () => {
     expect(c.read.library.find((d) => d.name === "Chicken curry")!.days).toBeNull();
     expect(c.dropped.some((x) => x.includes("the meal's own days"))).toBe(true);
   });
+  it("a dish said of a person who has their own meal in place of the family's goes on their meal, never the family's (class 6)", () => {
+    const reply = ["A: Amma eats at six on her own: khichdi or upma, every night. We have roti and sabzi."];
+    const lines = familySentences(reply, HOUSEHOLD);
+    const read = readOf({ slots: [...HOME.slots.slice(0, 3), { name: "Padma's dinner", kind: "addon", addon_of: "Dinner", usual_people: ["Amma"], instead: true, quote: "Amma eats at six on her own" }] }, {},
+      { library: [["Khichdi", "Dinner", "khichdi or upma"], ["Upma", "Dinner", "khichdi or upma"], ["Roti", "Dinner", "roti and sabzi"], ["Sabzi", "Dinner", "roti and sabzi"]],
+        seed: [["Dinner", "Khichdi", "khichdi or upma"], ["Dinner", "Roti, Sabzi", "roti and sabzi"]] });
+    const c = checkRead(read, { household: hh, said: familyLines(reply, HOUSEHOLD), sentences: lines });
+    expect(c.read.library.map((d) => `${d.name}@${d.slot}`).sort()).toEqual(["Khichdi@Padma's dinner", "Roti@Dinner", "Sabzi@Dinner", "Upma@Padma's dinner"]);
+    expect(c.read.seed.map((x) => `${x.dishes.join("+")}@${x.slot}`)).toEqual(["Khichdi@Padma's dinner", "Roti+Sabzi@Dinner"]);
+    expect(c.read.slots.find((x) => x.name === "Dinner")!.usual_people).toEqual(["Kiran", "Nisha", "Ishaan"]);
+  });
   it("a dish read without its words is linted by the family's sentence that names it with a day", () => {
     const lines = familyLines(["A: Weeknights dal and rice. Sunday dinner we make something simple like pasta maybe."], HOUSEHOLD);
     const read = readOf({ slots: HOME.slots.slice(0, 4) }, {}, { library: [["Pasta", "Dinner", ""]] });

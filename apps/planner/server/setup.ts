@@ -653,6 +653,33 @@ export function checkRead(read: SetupRead, ctx: { household: Household; said: st
       library.push({ name, slot, frequency: null, days: null, quote: s.quote, often: "" });
   }
 
+  // Class 6: a person with their own meal in place of a main meal eats nothing of the family's there. A dish or plate of that
+  // meal said in a sentence of the family's that names only them ("<child> has khichdi or dal rice every night") is their own
+  // meal's, never the family's (structure: whom the sentence names).
+  const insteadSlots = slots.filter((x) => x.instead_of);
+  if (insteadSlots.length) {
+    const lines = ctx.sentences ?? said;
+    const ownOf = (slot: string, quote: string): string | null => {
+      const mine = insteadSlots.find((x) => x.instead_of === slot);
+      const line = mine && quote ? lines.find((l) => saidByFamily(quote, [l])) : undefined;
+      if (!mine || !line) return null;
+      const who = people.filter((p) => names(p).some((n) => namedIn(n, [line]))).map((p) => p.name);
+      return who.length && who.every((p) => mine.usual_people.includes(p)) ? mine.name : null;
+    };
+    for (const d of [...library]) {
+      const to = ownOf(d.slot, d.quote);
+      if (!to) continue;
+      const there = library.find((x) => x !== d && dishKey(x.name) === dishKey(d.name) && x.slot === to);
+      if (there) { there.frequency ??= d.frequency; there.days ??= d.days; library.splice(library.indexOf(d), 1); } else d.slot = to;
+    }
+    for (const x of [...seed]) {
+      const to = ownOf(x.slot, x.quote);
+      if (!to) continue;
+      if (seed.some((y) => y !== x && y.slot === to && y.dishes.join("|").toLowerCase() === x.dishes.join("|").toLowerCase())) seed.splice(seed.indexOf(x), 1);
+      else x.slot = to;
+    }
+  }
+
   // The cook, who of the family cooks, lunch.
   const cook = read.cook ? { ...read.cook, visits: read.cook.visits.map((v) => ({ at: v.at,
     ...(v.meals ? { meals: uniq(v.meals.map(slotOf).filter((m): m is string => !!m)) } : {}) })).map((v) => (v.meals?.length ? v : { at: v.at })) } : null;
