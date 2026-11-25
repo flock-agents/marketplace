@@ -236,10 +236,59 @@ describe("the plan's message", () => {
     // The eval's new dishes, which pasted the model's paragraph ("Aloo jeera (Ramesh and Kamla cannot eat dal, sabzi, kadhi, or dal
     // baati. This simple potato dish ...)"; "Daliya (Another name for dalia ... ? Actually, ...)").
     const msg = plan({ new_dishes: [{ name: "Aloo jeera", like: "Sabzi" }, { name: "Daliya", like: "Dalia" }, { name: "Upma" }] });
-    expect(msg).toContain("New this week: Aloo jeera (like your Sabzi); Daliya (like your Dalia); Upma");
+    expect(msg).toContain("New this week: Aloo jeera (like your Sabzi), Daliya (like your Dalia), Upma. OK to try these, or should I swap any?");
     const reasons = [...(/New this week:([^\n]*)/.exec(msg)![1].matchAll(/\(([^)]*)\)/g))].map((m) => m[1]);
     expect(reasons.every((r) => r.length <= NEW_DISH_TEXT_MAX)).toBe(true);
-    expect(questions(msg)).toEqual([]);
     expect(changeMessage({ meals: [], unmet: [], new_dishes: [{ name: "Palak paneer", like: "Sabzi" }], link: "/w" })).toContain("New: Palak paneer (like your Sabzi)");
+  });
+});
+
+// Brand-new variants (owner, 25 Nov): a dish the family never had is named in the week's message as its one question, each
+// with its day and the dish of theirs it is like, and again in the evening before the day it is cooked.
+describe("the question about the week's brand-new dishes", () => {
+  const questions = (msg: string) => msg.split("\n").filter((l) => l.trim().endsWith("?"));
+  const plan = (t: Partial<PlanText>): string => planMessage({ days: [{ label: "Monday", meals: [{ slot: "Dinner", skip: null, note: null, dishes: [{ name: "Dal", note: null }] }] }],
+    standing: [], unmet: [], new_dishes: [], question: null, link: "/a/t/#/week", ...t });
+  const TUE = "2026-12-01", THU = "2026-12-03", FRI = "2026-12-04";
+  const puttu = { dish: "Ragi puttu", date: TUE, slot: "Breakfast", like: "Puttu" };
+  const poriyal = { dish: "Beetroot poriyal", date: THU, slot: "Lunch", like: "Beans poriyal" };
+
+  it("is the message's one question: each dish, its short weekday and the family's dish it is like", () => {
+    expect(questions(plan({ new_dishes: [poriyal, puttu] }))).toEqual([
+      "New this week: Ragi puttu on Tue (like your Puttu), Beetroot poriyal on Thu (like your Beans poriyal). OK to try these, or should I swap any?"]);
+    expect(questions(plan({ new_dishes: [puttu] }))).toEqual(["New this week: Ragi puttu on Tue (like your Puttu). OK to try it, or should I swap it?"]);
+  });
+
+  it("one dish on two days is named once with both days; one with no dish of theirs to compare is named alone", () => {
+    expect(questions(plan({ new_dishes: [puttu, { ...puttu, date: FRI }] })))
+      .toEqual(["New this week: Ragi puttu on Tue and Fri (like your Puttu). OK to try it, or should I swap it?"]);
+    expect(questions(plan({ new_dishes: [{ dish: "Kambu koozh", date: THU, slot: "Breakfast", like: null }] })))
+      .toEqual(["New this week: Kambu koozh on Thu. OK to try it, or should I swap it?"]);
+  });
+
+  it("sits where the one question goes: after what could not be kept, before the Week page", () => {
+    const msg = plan({ new_dishes: [puttu], unmet: ["Tue Dinner: Rajma comes back sooner than usual"] });
+    const lines = msg.split("\n");
+    const at = lines.findIndex((l) => l.startsWith("New this week:"));
+    expect(at).toBeGreaterThan(lines.findIndex((l) => l.startsWith("I couldn't keep everything")));
+    expect(at).toBeLessThan(lines.findIndex((l) => l.startsWith("The whole week:")));
+  });
+
+  it("with a more urgent question (meals short of dishes, calendar entries), the new dishes are only named and that question is the one", () => {
+    const q = planQuestion({ short: [{ meal: "dinner", added: true }], events: [] })!;
+    const msg = plan({ new_dishes: [puttu, poriyal], question: q });
+    expect(questions(msg)).toEqual([q]);
+    expect(msg).toContain("New this week: Ragi puttu on Tue (like your Puttu), Beetroot poriyal on Thu (like your Beans poriyal).\n\n" + q);
+  });
+
+  it("the evening before: tomorrow's new dishes named at their meal with the same question", () => {
+    const base: ReminderText = { which: "evening", meals: [meal(TUE, "Breakfast", [dish("Ragi puttu", { new: true })])], ask_ingredients: ["ragi flour"], added: [],
+      cart_items: [], asks: [], delivery_gap: null, ordered: [], carts: [], empty: false };
+    expect(reminderText({ ...base, new_dishes: [{ dish: "Ragi puttu", meal: "breakfast", like: "Puttu" }] }))
+      .toBe("Tomorrow: Ragi puttu\nTomorrow's new dish: Ragi puttu at breakfast (like your Puttu). OK to make it, or swap?\nDo you have ragi flour?");
+    expect(reminderText({ ...base, new_dishes: [{ dish: "Ragi puttu", meal: "breakfast", like: "Puttu" }, { dish: "Beetroot poriyal", meal: "lunch", like: "Beans poriyal" }] }))
+      .toContain("Tomorrow's new dishes: Ragi puttu at breakfast (like your Puttu) and Beetroot poriyal at lunch (like your Beans poriyal). OK to make them, or swap any?");
+    expect(reminderText({ ...base, new_dishes: [{ dish: "Ragi puttu", meal: "Kabir's tiffin", like: null }] })).toContain("Tomorrow's new dish: Ragi puttu at Kabir's tiffin. OK to make it, or swap?");
+    expect(reminderText(base)).not.toContain("new dish");
   });
 });

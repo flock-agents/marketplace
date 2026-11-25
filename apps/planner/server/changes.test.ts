@@ -412,6 +412,94 @@ describe("the next-day question (§5.7)", () => {
   });
 });
 
+// ── Brand-new variants (owner, 25 Nov): asked about the evening before, and the three answers ──
+
+/** Monday 30 Nov, 19:00: Tuesday has a brand-new Ragi puttu at breakfast (like their Puttu) and a new Beetroot poriyal at
+ *  lunch (like their Beans poriyal), beside a family dish, a reel dish and a staple. */
+async function tomorrowNew(at = new Date(2026, 10, 30, 19, 0)) {
+  const k = await home({ now: at, library: [
+    { name: "Puttu", slot: "Breakfast", origin: "setup_named", kind: "Puttu" },
+    { name: "Ragi puttu", slot: "Breakfast", origin: "planner_suggested", suggested: true, untried: true, offers: 1, kind: "Puttu" },
+    { name: "Beans poriyal", slot: "Lunch", origin: "setup_named", kind: "Sabzi", sub: "Poriyal/Thoran" },
+    { name: "Cabbage sabzi", slot: "Lunch", origin: "setup_named", kind: "Sabzi", sub: "Sabzi" },
+    { name: "Beetroot poriyal", slot: "Lunch", origin: "planner_suggested", suggested: true, untried: true, offers: 1, kind: "Sabzi", sub: "Poriyal/Thoran" },
+    { name: "Korean paneer", slot: "Dinner", origin: "family_added", untried: true, offers: 1 } ] });
+  k.plan([
+    { date: MON, slot: "Breakfast", dishes: [{ name: "Poha" }] },
+    { date: TUE, slot: "Breakfast", dishes: [{ name: "Ragi puttu", new: true }] },
+    { date: TUE, slot: "Lunch", dishes: [{ name: "Sambar" }, { name: "Beetroot poriyal", new: true }] },
+    { date: TUE, slot: "Dinner", dishes: [{ name: "Korean paneer" }, { name: "Bhindi" }] },
+    { date: WED, slot: "Breakfast", dishes: [{ name: "Upma" }] },
+  ]);
+  return k;
+}
+const TOMORROW_NEW = "Tomorrow's new dishes: Ragi puttu at breakfast (like your Puttu) and Beetroot poriyal at lunch (like your Beans poriyal). OK to make them, or swap any?";
+
+describe("a brand-new dish, the evening before it is cooked", () => {
+  it("the evening reminder names tomorrow's new dishes with the family's dish each is like, and asks OK or swap once", async () => {
+    const k = await tomorrowNew();
+    const r = await k.op("get_reminder", { which: "evening" });
+    expect(r.new_dishes).toEqual([{ date: TUE, slot: "Breakfast", dish: "Ragi puttu", meal: "breakfast", like: "Puttu" },
+      { date: TUE, slot: "Lunch", dish: "Beetroot poriyal", meal: "lunch", like: "Beans poriyal" }]);
+    expect(r.text).toContain(TOMORROW_NEW);
+    expect(r.app_text).toContain(TOMORROW_NEW);
+    // Never a family dish, a reel dish or a staple.
+    expect(r.text).not.toContain("new dish: Korean");
+    // The agent's second get_reminder says the same; a dry run too.
+    expect((await k.op("get_reminder", { which: "evening" })).text).toContain(TOMORROW_NEW);
+    expect(buildReminder(k.kit.db, "evening", new Date(2026, 10, 30, 19, 0), { dryRun: true }).new_dishes).toHaveLength(2);
+    // The afternoon (tonight's dinner) never asks it.
+    expect(buildReminder(k.kit.db, "afternoon", new Date(2026, 11, 1, 15, 0), { dryRun: true }).new_dishes).toEqual([]);
+    expect(REMINDER_PROMPT("evening")).toContain("answer: \"ok\"");
+  });
+
+  it("ok: it becomes theirs; not asked again the evening before, nor the next day", async () => {
+    const k = await tomorrowNew();
+    const r = await k.op("record_feedback", { date: TUE, slot: "Breakfast", dish: "Ragi puttu", answer: "ok" });
+    expect(r.outcome).toBe("accepted");
+    expect(getLibraryDish(k.kit.db, "Ragi puttu", "Breakfast")).toMatchObject({ untried: false, suggested: false, disliked: false });
+    // Still planned, as it was.
+    expect(k.dishesAt(TUE, "Breakfast")).toEqual(["Ragi puttu"]);
+    const again = await k.op("get_reminder", { which: "evening" });
+    expect(again.new_dishes.map((x: any) => x.dish)).toEqual(["Beetroot poriyal"]);
+    expect(again.text).toContain("Tomorrow's new dish: Beetroot poriyal at lunch (like your Beans poriyal). OK to make it, or swap?");
+    const next = buildReminder(k.kit.db, "afternoon", new Date(2026, 11, 2, 15, 0), { dryRun: true });
+    expect(next.feedback.map((x) => x.dish)).toEqual(["Beetroot poriyal", "Korean paneer"]);
+  });
+
+  it("don't like: never suggested again, and that day's dish is planned again without it", async () => {
+    const k = await tomorrowNew();
+    const r = await k.op("record_feedback", { date: TUE, slot: "Lunch", dish: "Beetroot poriyal", answer: "dont_like" });
+    expect(r.outcome).toBe("disliked");
+    expect(r.replanned).toEqual([{ date: TUE, slot: "Lunch" }]);
+    expect(getLibraryDish(k.kit.db, "Beetroot poriyal", "Lunch")).toMatchObject({ disliked: true });
+    expect(k.dishesAt(TUE, "Lunch")).not.toContain("Beetroot poriyal");
+    expect((await k.op("get_reminder", { which: "evening" })).new_dishes.map((x: any) => x.dish)).toEqual(["Ragi puttu"]);
+  });
+
+  it("swap: only that day's dish is planned again, with nothing new; the dish itself is not disliked", async () => {
+    const k = await tomorrowNew();
+    const before = k.snapshot();
+    const r = await k.op("record_feedback", { date: TUE, slot: "Breakfast", dish: "Ragi puttu", answer: "swap" });
+    expect(r.outcome).toBe("swapped");
+    expect(r.replanned).toEqual([{ date: TUE, slot: "Breakfast" }]);
+    expect(changed(before, k.snapshot())).toEqual([`${TUE}|Breakfast`]);
+    expect(k.dishesAt(TUE, "Breakfast")).not.toContain("Ragi puttu");
+    expect(k.at(TUE, "Breakfast")!.new_dishes_allowed).toBe(0);
+    expect(k.at(TUE, "Breakfast")!.dishes.every((d) => !d.new)).toBe(true);
+    expect(getLibraryDish(k.kit.db, "Ragi puttu", "Breakfast")).toMatchObject({ untried: true, disliked: false });
+  });
+
+  it("an answer needs made or answer; swap is only for a day still to come; made with answer is refused", async () => {
+    const k = await tomorrowNew();
+    expect((await k.op("record_feedback", { date: TUE, slot: "Breakfast", dish: "Ragi puttu" })).error).toContain("made or answer");
+    expect((await k.op("record_feedback", { date: TUE, slot: "Breakfast", dish: "Ragi puttu", answer: "maybe" })).error).toContain("answer must be one of");
+    expect((await k.op("record_feedback", { date: TUE, slot: "Breakfast", dish: "Ragi puttu", answer: "ok", made: true, liked: true, again: true })).error).toContain("not both");
+    k.plan([{ date: SUN, slot: "Breakfast", dishes: [{ name: "Ragi puttu", new: true }] }]);
+    expect((await k.op("record_feedback", { date: SUN, slot: "Breakfast", dish: "Ragi puttu", answer: "swap" })).error).toContain("has passed");
+  });
+});
+
 describe("the Week page's edits go through the same change", () => {
   it("a dish edited on the page: the meal's whole list with its items, saved edited; ordered in and back", async () => {
     const k = await planned();

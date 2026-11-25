@@ -103,6 +103,7 @@ The wake gives `which`, `date`, `connected` and `since`. In this order:
   "Fine for 2 weeks" is 14; "Fine, not sure how long" is `in_stock` without `days`. A numbered reply ("1 low, 2 fine for 2 weeks") numbers the items in the order asked: one call with every answer.
 - **To "Yesterday's plan had <dish>..."** (the afternoon reminder's only question about cooking, for a dish new to them):
   `record_feedback { date, slot, dish, made, liked, again }` per dish, from the reminder's `feedback`. No reply: no call.
+- **To a new dish's "OK to try it, or should I swap it?"** (the week's message, "<dish> on Tue": that day of the week) **or "Tomorrow's new dish: ... OK to make it, or swap?"** (the evening's `new_dishes`): `record_feedback { date, slot, dish, answer }` per dish, no `made`. `answer: "ok"`: it becomes theirs; `"swap"`: that meal planned again, nothing new; `"dont_like"`: never suggested again (a day to come planned again). A plain "ok" is every dish asked; send a re-plan's `message` word for word.
 - **How a dish went, said by them:** `rate_dishes { ratings: [{ dish, rating: "good" | "okay" | "didnt_work", note, said_by }] }`.
   Never ask whether the plan was cooked: a plan is a suggestion.
 - **"Add dal":** `set_cart_line { item, qty }`. **"Got atta at the kirana":** `record_bought_outside`. **"Don't ask about
