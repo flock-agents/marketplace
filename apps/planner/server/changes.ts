@@ -10,7 +10,7 @@
 //   set_rule        { id?, hard?, what?, who?, slots?, days?, items?, to?, frequency?, per_meal?, fasting_food?, quote?, remove? }
 //   set_setting     { new_dishes_per_week }
 //   record_made     { date, slot, dishes }
-//   record_feedback { date, slot, dish, made, liked?, again? }
+//   record_feedback { date, slot, dish, made, liked?, again? }, or before it is cooked { date, slot, dish, answer: ok | swap | dont_like }
 import type { Context, Hono } from "hono";
 import { asc, eq, gte } from "drizzle-orm";
 import { people as people_t, slot_dishes, slot_days } from "./db/schema";
@@ -162,7 +162,7 @@ export function failingSlotDays(db: Db, today: string): Target[] {
     const saved = listSlotDays(db, { from: week, to: addDays(week, 6) });
     const days: PlanDay[] = saved.map((d) => ({ date: d.date!, slot: d.slot, people: d.people, guests: d.guests, occasion: d.occasion, new_dishes_allowed: d.new_dishes_allowed,
       skip: d.skip, edited: d.edited, fixed: !replannable(d, today), why: [], fasting: [], dishes: d.dishes.map((x) => x.dish), note: d.note }));
-    const w: Week = { days, slots: new Map(), rules, library, facts: new Map(), done: new Set(), newBudget: newDishesPerWeek(db), newDishes: new Map() };
+    const w: Week = { days, slots: new Map(), rules, library, facts: new Map(), done: new Set(), newDishes: new Map() };
     for (const s of slots) {
       const history = slotHistory(db, s.name, week);
       w.slots.set(s.name.toLowerCase(), slotFacts(s, library, history, recent(history, week, 3)));
@@ -287,7 +287,9 @@ export function mountChangeRoutes(hono: Hono<any>, deps: Omit<ChangeDeps, "now">
     const link = b.link === undefined || b.link === null ? null : typeof b.link === "string" && /^https?:\/\//i.test(b.link.trim()) ? b.link.trim() : refuse("link must be the reel's or recipe's http(s) link");
     if (b.quote !== undefined) words(b.quote, "quote");
     const had = getLibraryDish(db, dish, slot.name);
-    const row = commit(db, emit, (tx, ch) => upsertLibrary(tx, { name: had?.name ?? dish, slot: slot.name, frequency, days,
+    // How often or the days changed: the family's words for them are the quote given, else none (old words would be wrong).
+    const said = frequency === undefined && days === undefined ? undefined : (frequency || days?.length) && typeof b.quote === "string" ? b.quote.trim() || null : null;
+    const row = commit(db, emit, (tx, ch) => upsertLibrary(tx, { name: had?.name ?? dish, slot: slot.name, frequency, days, said,
       // The family's own dish now, not a suggestion; one named in setup keeps its origin.
       ...(had?.origin === "setup_named" ? {} : { origin: "family_added" as const }), suggested: false,
       ...(link ? { video_url: link, ...(had && !had.untried ? {} : { untried: true }) } : had ? {} : { untried: false }) }, by, ch));
@@ -357,10 +359,19 @@ export function mountChangeRoutes(hono: Hono<any>, deps: Omit<ChangeDeps, "now">
     return { body: { ok: true, slot_day: day } };
   });
 
-  // record_feedback: the answer to the next-day question about a dish the family had not eaten before (spec §5.7).
+  // record_feedback: the answer to the next-day question about a dish the family had not eaten before (spec §5.7), or
+  // (`answer`) to "OK to try / make it, or swap?" about a brand-new dish before it is cooked (owner, 25 Nov): ok makes it
+  // theirs; swap plans that slot-day again with nothing new; dont_like marks it disliked and, on a day to come, plans that
+  // slot-day again too.
   write("/api/slot-days/feedback", async (b, by) => {
     const date = dateOf(b.date, "date");
     const dishName = name(b.dish, "dish");
+    if (b.answer !== undefined) {
+      if (b.made !== undefined || b.liked !== undefined || b.again !== undefined) refuse("send answer (before it is cooked) or made (after), not both");
+      if (!(NEW_DISH_ANSWERS as readonly unknown[]).includes(b.answer)) refuse(`answer must be one of: ${NEW_DISH_ANSWERS.join(", ")}`);
+      return newDishAnswer(date, dishName, typeof b.slot === "string" ? b.slot : "", b.answer as NewDishAnswer, by);
+    }
+    if (b.made === undefined) refuse("made or answer is needed: made (true or false) after the day, answer (ok, swap, dont_like) before it is cooked");
     const made = flag(b.made, "made");
     const liked = b.liked === undefined || b.liked === null ? null : flag(b.liked, "liked");
     const again = b.again === undefined || b.again === null ? null : flag(b.again, "again");
@@ -387,4 +398,33 @@ export function mountChangeRoutes(hono: Hono<any>, deps: Omit<ChangeDeps, "now">
     });
     return { body: { ok: true, dish: dishName, outcome, library: listLibrary(db, { names: [dishName] }) } };
   });
+
+  /** The answer to "OK to try it, or should I swap it?" (the week's message) or "OK to make it, or swap?" (the evening before). */
+  async function newDishAnswer(date: string, dishName: string, slotName: string, answer: NewDishAnswer, by: string) {
+    const onDay = listSlotDays(db, { from: date, to: date }).filter((x) => x.dishes.some((y) => dishKey(y.dish) === dishKey(dishName)));
+    const day = onDay.find((x) => !slotName || same(x.slot, slotName)) ?? onDay[0];
+    if (!day) return { status: 404 as const, body: { reason: `${dishName} was not on the plan on ${date}` } };
+    const placed = day.dishes.find((y) => dishKey(y.dish) === dishKey(dishName))!;
+    if (!listLibrary(db, { names: [dishName] }).length) return { status: 404 as const, body: { reason: `${dishName} is not in the library` } };
+    const again = answer === "swap" || (answer === "dont_like" && date >= today());
+    if (answer === "swap" && date < today()) refuse(`${date} has passed: a dish already cooked or not is answered with made`);
+    if (again && day.status === "confirmed") return { status: 409 as const, body: { reason: `${day.slot} on ${date} is already recorded as made` } };
+    commit(db, emit, (tx, ch) => {
+      if (answer === "ok") updateLibraryByName(tx, dishName, { untried: 0, suggested: 0 }, by, ch);
+      if (answer === "dont_like") updateLibraryByName(tx, dishName, { disliked: 1 }, by, ch);
+      if (answer !== "swap") {
+        tx.update(slot_dishes).set({ feedback_asked: FEEDBACK_ANSWERED, updated_at: new Date().toISOString(), updated_by: by }).where(eq(slot_dishes.id, placed.id)).run();
+        ch.push(["slot_dishes", placed.id, "update", by]);
+      }
+      // Planned again with nothing new that day (set_slot_day's new_dishes_allowed 0), kept as the family's change.
+      if (again) saveSlotDay(tx, { date, slot: day.slot, new_dishes_allowed: 0, edited: true }, by, ch);
+    });
+    const r = again ? await replan(d, [{ date, slot: day.slot }]) : { replanned: [] };
+    const outcome = answer === "ok" ? "accepted" : answer === "swap" ? "swapped" : "disliked";
+    return { body: { ok: true, dish: dishName, outcome, library: listLibrary(db, { names: [dishName] }), ...r } };
+  }
 }
+
+/** The answers to the question about a brand-new dish before it is cooked. */
+export const NEW_DISH_ANSWERS = ["ok", "swap", "dont_like"] as const;
+type NewDishAnswer = (typeof NEW_DISH_ANSWERS)[number];

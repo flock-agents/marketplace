@@ -53,8 +53,8 @@ export const h9: Household = {
     library: [
       ...dish("Thepla", ["Breakfast", "Dinner", "Ba's dinner"]), ...dish("Khakhra", ["Breakfast"]), ...dish("Poha", ["Breakfast"]), ...dish("Dhokla", ["Breakfast"], { days: ["Sun"] }),
       ...dish("Rotli", ["Lunch"]), ...dish("Dal", ["Lunch"]), ...dish("Bhaat", ["Lunch"]),
-      ...dish("Tindora shaak", ["Lunch"]), ...dish("Bhindi shaak", ["Lunch"]), ...dish("Cabbage shaak", ["Lunch"]),
-      ...dish("Tindora shaak", ["Dinner"], { unsaid: true }), ...dish("Bhindi shaak", ["Dinner"], { unsaid: true }), ...dish("Cabbage shaak", ["Dinner"], { unsaid: true }),
+      ...dish("Tindora shaak", ["Lunch"]), ...dish("Bhindi shaak", ["Lunch"], { kind: "Sabzi" }), ...dish("Cabbage shaak", ["Lunch"], { kind: "Sabzi" }),
+      ...dish("Tindora shaak", ["Dinner"], { unsaid: true }), ...dish("Bhindi shaak", ["Dinner"], { unsaid: true, kind: "Sabzi" }), ...dish("Cabbage shaak", ["Dinner"], { unsaid: true, kind: "Sabzi" }),
       ...dish("Kadhi", ["Lunch"], { frequency: "sometimes" }), ...dish("Dal dhokli", ["Lunch"], { days: ["Sun"] }),
       ...dish("Khichdi", ["Dinner"], { frequency: "2/week" }), ...dish("Kadhi", ["Dinner"], { frequency: "2/week" }), ...dish("Bhakri", ["Dinner"]),
       ...dish("Khichdi", ["Ba's dinner"]), ...dish("Doodh", ["Ba's dinner"], { frequency: "daily", contains: ["dairy"] }),
@@ -72,6 +72,7 @@ export const h9: Household = {
       { slot: "Ba's dinner", dishes: ["Khichdi", "Doodh"] }, { slot: "Ba's dinner", dishes: ["Thepla", "Doodh"] },
     ],
     week: [{ kind: "away", person: "Dhruv", days: ["Thu", "Fri"], dated: { person: "Dhruv", what: "school trip to Udaipur", from: "2026-12-03", to: "2026-12-04" } }],
+    cuisines: ["gujarat", "west"], cuisinesAlso: ["north", "rajasthan", "central"],
     judgeNotes: ["Jain: no onion, garlic, potato or any root vegetable, no eggs or meat, for everyone.", "Ba (Kantaben) has her own early dinner at 5:30 (khichdi or thepla with milk), even on Sunday when the rest eat out.",
       "Hitesh: less oil.", "Dhruv is away on a school trip Thursday and Friday this week."],
   },

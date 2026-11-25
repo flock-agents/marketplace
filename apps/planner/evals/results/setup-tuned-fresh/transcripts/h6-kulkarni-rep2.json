@@ -38,7 +38,9 @@
   "Q: How often do you order in, and on which days?",
   "A: We hardly order in, maybe once in a while on a weekend evening if we're too tired.",
   "Q: Does anything come on a subscription, like Country Delight or a milkman?",
-  "A: Chitale milk every morning, that's a subscription."
+  "A: Chitale milk every morning, that's a subscription.",
+  "Q: Do you cook everything without peanuts, or only Ishaan's food?",
+  "A: Everything at home is without peanuts, we don't even use groundnut oil."
  ],
  "questions": 17,
  "model": "deepseek/deepseek-v4-flash",

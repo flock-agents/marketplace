@@ -87,16 +87,17 @@ the routes; `agentOps.ts` maps each operation to one of those routes, so the age
 the estimate's tuning and the 2.0 table names; `family.ts` people, the house row, the cook and shopping apps;
 `slotStore.ts` the slot model's typed rows, reads and writes (slots, slot-days with dishes and ingredients, library, rules)
 and its derived values (staples, looks like, recent); `meals.ts` the week as the pages read it and a planned week's close;
-`setup.ts` `apply_setup` (spec §4: four balanced reads (home, rules, dishes, how often) and a fast contains read, structural checks, the writes, the read-back, a correction as a diff); `makePlan.ts` the week's plan (`make_plan`, spec §5): the slot calls in planning order, the fix call, the contains read of
-new dishes, the ingredients, the one-transaction save and the message, or (`only`, a later change) the same steps for some
+`setup.ts` `apply_setup` (spec §4: four balanced reads (home, rules, dishes, how often) and a fast contains read, structural checks, the writes, the read-back, a correction as a diff); `makePlan.ts` the week's plan (`make_plan`, spec §5): the plates' parts read, the slot calls in planning order (per-day allowed
+lists, must-have rice or bread, spares), the contains and careful allergy reads of new dishes, the one targeted call for gaps, the ingredients, the one-transaction save and the message, or (`only`, a later change) the same steps for some
 slot-days of the week with the rest kept and read for the checks; `changes.ts` the later changes of spec §6 (`set_slot`,
 `set_slot_day`, `add_dish`, `set_rule`, `set_setting`, `record_made`) and the answer to the next-day question
 (`record_feedback`, §5.7), each re-planning only the slot-days it touches, never one the family edited or said was made; `planDays.ts` its slot-days in code (who eats each
 slot each day: usual people, `household.weekly` with setup's weekday lunch winning, the Family Calendar's `get_events` or
 `household.dated` read by one fast call, fasts, skip days, edited slot-days kept) and the SDK feature-detection
-(`ctx.household.get`, `ctx.apps.op`); `planChecks.ts` its code checks (library, staples incl. `daily` dishes, new-dish
-budget, hard rules per person with `not_for` and fail-closed contains, days and frequency across slots, the repeat window,
-no main twice a day, soft counts), the feasibility pre-check and rotation; `dishText.ts` a dish in one line; `regulars.ts` `set_regular` as a way to state an item's cycle, and the move of old everyday items into item cycles;
+(`ctx.household.get`, `ctx.apps.op`); `planChecks.ts` its code checks and the walk (the plates' parts and must-have rice or
+bread, staples incl. `daily` dishes, new-dish budget, hard rules per person with `not_for` and fail-closed contains, allergies
+vouched by the family's plates or read carefully, days and at most two days a week across slots, no main twice a day, soft
+counts), the feasibility pre-check; `dishText.ts` a dish in one line; `regulars.ts` `set_regular` as a way to state an item's cycle, and the move of old everyday items into item cycles;
 `items.ts` items, their events, order history and the answers; `estimate.ts` the estimate and an item's cycle as pure functions; `cart.ts` carts
 and their life; `cartRoutes.ts` the cart operations and keeping each app's own cart in step; `reminder.ts` what a reminder
 says and does; `products.ts` remembered products and pack arithmetic (g, ml, pc); `recipes.ts` saved recipes;
@@ -116,7 +117,7 @@ row: the cook, connected apps, `history_synced` per app and reader, `sync_sessio
 days, weekly `skip_days`, planning `order`) · `slot_days` (one per date and slot, unique; who it is for, guests, occasion,
 `skip` eaten_out | ordered_in, `status` planned | confirmed, `edited`; a setup seed example has no date and is confirmed) ·
 `slot_dishes` (in order; `new`, `feedback_asked`: 1 asked, 2 answered; a note) · `dish_ingredients` (item, amount, unit, per slot dish; the SQL
-name avoids 2.0's `ingredients`) · `library` (one per dish and slot, unique key + slot: frequency, days, `contains` and
+name avoids 2.0's `ingredients`) · `library` (one per dish and slot, unique key + slot: frequency, days, `said` (the family's words for them, sent to the plan call), `contains` and
 `contains_read` tags, origin setup_named | family_added | planner_suggested, suggested, untried, offers, disliked, and the
 dish's video and ratings, kept the same on every row of a dish) · `rules` (hard or soft, what, who, slots, days, items, to,
 frequency, per_meal, fasting_food, the family's `quote`) · `regulars` (retired: its rows became item cycles, nothing reads

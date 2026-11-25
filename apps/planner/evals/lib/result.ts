@@ -7,11 +7,18 @@ export type SavedSlot = {
   name: string; kind: "main" | "custom" | "addon"; addon_of: string | null;
   usual_people: string[]; days: string[]; skip_days: { day: string; skip: string }[];
   order?: number; active?: boolean;
+  /** Kinds model (server/kinds.ts MealKind[] / MealTemplate[]): null = not read yet; undefined = the adapter could not read it. */
+  kinds?: SavedMealKind[] | null; templates?: SavedTemplate[] | null;
 };
+export type SavedMealKind = { name: string; subs?: string[]; staple?: boolean; own?: boolean };
+export type SavedPart = { kind: string; sub?: string } | { items: string[] };
+export type SavedTemplate = { parts: SavedPart[]; share?: string | null; said?: string | null };
 export type SavedDish = {
   slot: string; name: string; frequency: string | null; days: string[] | null;
   contains: string[]; contains_read: string[]; origin: string;
   suggested?: boolean; untried?: boolean; quote?: string | null;
+  /** Kinds model: the catalog kind it is a variant of (or the slot's own kind), its sub-kind, the catalog item it is. */
+  kind?: string | null; sub?: string | null; catalog_item?: string | null;
 };
 export type SavedRule = {
   hard: boolean; what: string; who: string | null; slots: string[] | null; days: string[] | null; items: string[] | null;
@@ -36,6 +43,8 @@ export type SetupOut = {
   attendance?: Record<string, Partial<Record<Weekday, string[]>>>;
   said?: string;
   settings?: { new_dishes_per_week?: number };
+  /** The family's cuisine profile (house.cuisines, catalog cuisine words); null = not read yet. */
+  cuisines?: string[] | null;
 };
 
 export type PlanDish = { name: string; new?: boolean; note?: string | null; /** people this dish is not for, when the app says so in a structured way */ not_for?: string[] };

@@ -32,6 +32,7 @@ const WORDS: Record<string, string[]> = {
 const UNDO: Record<string, RegExp> = {
   white_rice: /\b(millet|ragi|jowar|bajra|brown|red|foxtail|kodo|samai|oats?|quinoa|rava|wheat|moong|cauliflower)\s+(rice|idli|dosa|pongal|khichdi|upma|pulao)\b/i,
   egg: /\beggless\b/i,
+  mutton: /\b(chicken|soya|soy|veg|vegetable|paneer|egg|fish|prawn)\s+keema\b/i,
   sugar: /\b(no|without|sugar[- ]?free)\s*sugar\b|\bsugar[- ]?free\b/i,
 };
 /** Dishes that are of a tag whatever their wording (a vegetarian kitchen's "rice" in a word list misses "bisi bele"). */

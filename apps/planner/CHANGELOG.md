@@ -1,10 +1,18 @@
 # Changelog
 
+## 4.1.1
+
+- The kinds model: each meal is a set of templates of dish kinds (from the family's own words), filled by code with no model call per meal (a week in ~1 s). The family's own dishes first; no dish again until every option has been used, never the next day; new dishes only of kinds the family has, asked about in the plan's one question and the day-before reminder.
+- A catalog of Indian dish kinds (kinds.json, 64 kinds, 724 items) with ingredients (main / can be left out): food rules and allergies are checked on the main ingredients; a leave-out ingredient is a "make without X for P" note. Regional words (curry/kari, pachadi) are read in the family's context.
+- Setup builds the meal templates, the family's cuisines and a read-back of "Your usual meals" in their own words.
+
 ## 4.0.3
 
-- A meal with none of the family's dishes known (a child's tiffin nobody named dishes for) is left out of the week and
-  asked about in the plan's message; make_plan refuses only when no meal is known. Before, one such meal refused the whole
-  week, and onboarding asked the same question on every reply (stage, 25 Nov).
+- The plan's message asks one question at most: the meals short of dishes are named together ("I know only a few dishes
+  for dinner and Vihaan's tiffin, so I've added some new ones. What else do you make for these?"), and a calendar entry
+  it could not read is folded into that question. A calendar entry that is part of someone's weekly routine (office,
+  school, a weekly class on a day household.weekly has them out) is never read nor asked (a run asked 17 such lines).
+  A new dish is said with the family's dish it stands in for ("Palak paneer (like your Sabzi)"), never the model's reason.
 - The plan's message leaves out a note that explains the plan's own choices ("Idli is safe, Chutney avoided by him"):
   only a word for someone at the table is said. A person's fast is still said by code.
 - A note that is only the cook's limit again ("Yes, she has two hours, so 3 to 4 dishes in all") stays with the cook,
@@ -24,7 +32,84 @@
   ("Sabzi", "Dal", "Idli with chutney") is planned as a particular one each day ("Bhindi sabzi"), and the same dish with
   another accompaniment ("Idli with tomato chutney" for their "Idli with coconut chutney") is theirs too: neither is a new
   dish nor uses up the new-dish limit; its contents are read, and it is not saved to the library.
+- One meal told for different people ("Divu and I carry roti sabzi to office, Amma has dal, rice and curd at home") is one
+  example plate with every dish of it, by a worked example in the dishes read (setup eval 91% vs 89%, two runs each).
+- A fast saved with no food said is asked about in the read-back ("What does Gowri Shankar eat on the Tuesday fast?"); the
+  answer fills the fast's food, also when the reader quotes the first sentence.
 - Builds again: rc3's contains read did not type-check (tsc), so the app failed to install.
+- The week is planned with per-day lists (owner, 25 Nov). Each day in a meal's call carries the family's dishes allowed
+  that day (on their days, with days left this week counting the meals already planned, someone there can eat them, not
+  another meal's main that day) and the rice or bread it must have ("Roti or Rice", from the family's own lunch and dinner
+  plates; at another meal only when every plate of theirs has one). A main comes at most twice a week unless the family's
+  own words say more often; staples are free.
+- One fast read a plan says each dish's part on the family's plates (rice or bread, a complete dish, a main, a side): the
+  rice, bread and sides are the meal's staples. It replaces the fixed word list of staple dishes.
+- The meal's call also names a few spare dishes for each part of the plate. Code then walks the week Monday to Sunday: a
+  dish past its days a week, off its days, not allowed that day or that nobody there can eat is replaced by one of its part
+  from that day's allowed dishes or the spares (a spare is new unless it is a particular way of a family dish, and counts
+  toward its days); a person with nothing of their own gets a dish beside; the missing rice or bread is added. The fix call
+  and the rotation in code are gone. Only a day still with a gap gets one small targeted call (that day, the part, who eats,
+  their rules, what not to repeat); what it cannot fill takes the closest allowed dish, said as coming back sooner than
+  usual. Nobody is left without food. A dish the family has on set days ("pongal on Sundays") that the call left
+  out takes the place of any main on that day where it fits (one of its part first), keeping the day's rice or bread and
+  everyone's own dish. A particular way of a family dish keeps its own days a week.
+- Allergies (owner, 25 Nov): a family dish on the family's own plates at a meal the allergic person eats is safe for them
+  by the family's word (no read); when it has the item, its note keeps their portion aside ("Ishaan's Poha without
+  peanut") and its ingredients are bought as usual. Every other dish (new, a spare, a particular way of a family dish, a
+  family dish only others eat) is read on the balanced tier, an unsure answer counting as having it. A house-wide allergy
+  makes every family dish safe; new ones are still read.
+- An allergy kept on one person is asked about once in the read-back ("Do you cook everything without peanuts, or only
+  Ishaan's food?"). "Everything" makes it one house rule (no person, same items, hard, the allergy's own words kept);
+  "only his food" or "his own food" keeps it on the person. Either way it is not asked again.
+- The home read makes a box or tiffin whose food is not the home meal ("snack box: sandwiches, chivda") a slot, also when
+  it is told in the lunch answer, by a worked example; someone who carries the home lunch gets no slot.
+- "<person>'s breakfast" with no such slot of theirs is Breakfast, never another slot of theirs (a child's breakfast
+  dishes went to their tiffin once a grandparent had their own breakfast).
+- "Vegetarian, eggs okay for Vivaan and Varun" gives no eggs to everyone else at home: the rules read is shown it by a
+  worked example, and setup adds any no-eggs rule it left out (a house vegetarian rule, no house egg rule, egg rules for
+  named people). Before, Egg paratha was planned for the two who eat no eggs.
+- A list of the week's breakfasts or tiffins ("Poha, idli, dosa, upma") is one example plate per dish, not one plate of
+  all of them (the plan put six dishes on every breakfast); only one meal told for different people is joined into one
+  plate. The same dish twice on one example plate is kept once.
+- A dish the family gave a how often or days for keeps them whatever its part on the plate (luchi "on Sundays" only on
+  Sundays, "1/week" once), also as the rice or bread a day must have. A rice, bread or side has no weekly count only beside
+  a main on that day's plate (roti beside sabzi); alone as the plate (a paratha or idli breakfast) it is a dish like any
+  other, twice a week. A main beside idli or dosa with no rice (sambar) is a side there; near rice it is a main (owner).
+- Fewer days than the family said is fine (owner: "people want variety"): no least is asked for or pushed in; only a dish
+  with its own days ("pongal on Sundays") is put on them.
+- A box or tiffin with no dishes known no longer stops the plan: every other meal is planned, the box is left out and
+  named in the plan's one question.
+- Nobody without food (tier C): a dish of a meal that is only one person's (her own dinner) is made for her, so her rules
+  hold for it by the family's word; a person with nothing of their own is fed past the week's new-dish budget; the
+  targeted call and the spares name a family dish as made for them ("Dal without onion and garlic"); a daily dal or other
+  daily main counts as a main when checking that each person has a dish of their own.
+- The plan call gets the family's own words for how often or on which days they have a dish, beside its count and days
+  (`said: "rajma or chole twice a week"`), and the week's prompt says what such words mean ("on Sundays" only Sundays,
+  "twice a week" at most twice, "sometimes" fewer is fine, "most days" may be more than twice). Setup keeps the words in
+  a new `library.said` column (added by the schema sync); add_dish sets it from its quote when it changes how often or
+  the days. Code's caps and days still win.
+- A count or weekdays said over two dishes is each one's: "rajma or chole twice a week" is once a week each (the count
+  shared, rounded up), "luchi with alur dom on Sunday" Sunday for both; two eaten together keep the whole count
+  ("chapati and a kurma twice a week": twice each). By a worked example in the how-often read, and the same in the lint.
+  "Usually", "sometimes" or "most days" over a list or a whole plate is still no dish's: sharing those too spread them
+  over lists in the setup eval (no_unsaid_frequency 88% vs 96%, total down).
+  Setup eval (10 households x 2, reused chats, prod tiers): 96.8% vs 96.1% of checks; dish_frequency 79% vs 67%;
+  no_unsaid_frequency 91% vs 96%.
+- A dish tied to a day keeps it: a dish the dishes read lists twice at one meal (once per sentence naming it) takes the
+  how-often read on both rows (before, neither, and luchi lost its Sunday); one dish read at three meals is no longer
+  "a whole list's" words; a dish's how-often words are placed in the sentence with its own quote first; and the lint
+  matches a dish asked twice to each answer in turn.
+- The family's dishes guide the week; they are not its whole menu (owner, 25 Nov: "we are overbiasing it with the user's
+  existing meal plan"). Week one is guided by their answers (their dishes and example plates); later weeks also by what
+  was planned and kept at each meal in the four weeks before. At least 30% of each week's mains at a meal are their own;
+  the rest are new dishes for variety, with no weekly new-dish budget (the new-dishes-a-week setting no longer limits the
+  plan). No main more than twice a week still holds.
+- Every new dish names `like`: a dish of theirs at the same meal and the same part of the plate ("Moong dal usal" like
+  their "Usal"). Code drops a new dish whose `like` is not one of theirs there (no pasta unless they have pasta at that
+  meal) and takes the next spare; spares come with their `like` too. A meal with no dish of theirs at all is still asked
+  about, or planned from new dishes when the family said "suggest some".
+- Removed with the budget: the feasibility check (shortfall, its own new dishes, the narrowed repeat window,
+  `short_of_dishes`, `relaxed` in the result) and the "I know only a few dishes for …" question for a thin meal.
 
 ## 4.0.2
 

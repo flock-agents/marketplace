@@ -7,12 +7,14 @@
 // ordered go to a new open cart of that app (cart.ts setLine). The meals' dishes carry last time's note and their video link
 // (messages.ts dishExtras). The afternoon one, the first of the day, also asks the next-day question (spec §5.7) about each
 // dish on yesterday's plan the family had not eaten before: the only question the app asks about what was cooked (a plan is
-// a suggestion; there is no "did you cook it" anywhere else).
+// a suggestion; there is no "did you cook it" anywhere else). The evening one names tomorrow's brand-new dishes (a planner
+// suggestion the family never had, placed as new) with "OK to make it, or swap?" (owner, 25 Nov); the answer is
+// record_feedback's `answer`.
 import type { Hono } from "hono";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { item_events, items, order_lines, orders, slot_dishes } from "./db/schema";
 import { APP_NAMES, CART_SYNC, ESTIMATE, type GroceryApp } from "./db/constants";
-import { listLibrary, listSlotDays, listSlots, updateSlotDish } from "./slotStore";
+import { listLibrary, listSlotDays, listSlots, updateSlotDish, type LibraryDish } from "./slotStore";
 import { dishKey } from "./dishText";
 import { addDays, mondayOf, todayStr, weekdayLong } from "./dates";
 import { refuse, shoppingApps, writeRoutes, type Db, type Emit } from "./family";
@@ -33,6 +35,10 @@ export type Reminder = { which: Which; date: string /* the meals' date: today (a
    *  one carried over says its `day`); the answer is record_feedback
    *  { date, slot, dish, made, liked?, again? }. `from`: a planner suggestion, or a dish from a reel or link the family sent. */
   feedback: { date: string; slot: string; dish: string; from: "suggestion" | "reel"; /** a day before yesterday: its weekday */ day?: string }[];
+  /** Evening only: tomorrow's brand-new dishes, asked "OK to make it, or swap?" (owner, 25 Nov); the answer is record_feedback
+   *  { date, slot, dish, answer: ok | swap | dont_like }. `meal`: the slot as the text says it; `like`: the family's own dish
+   *  of the same kind at that meal, null when they have none. */
+  new_dishes: { date: string; slot: string; dish: string; meal: string; like: string | null }[];
   text: string /* WhatsApp: numbered */; app_text: string; block: object | null /* flock-ui JSON */;
   carts: { order_id: string; app: GroceryApp; status: "open" | "ordering"; lines: LineRow[]; sync: boolean }[] };
 
@@ -129,6 +135,37 @@ export function feedbackAsks(tx: Db, yesterday: string, by: string, changes: Cha
   }
   // Most recent last in the message reads oddly: in plan order (oldest first).
   return out.reverse();
+}
+
+/** The family's own dish a new one is like: at the same meal, of the same kind, the same sub-kind first; never one the
+ *  planner suggested and they have not kept, nor one they dislike. */
+function likeOf(lib: LibraryDish[], row: LibraryDish): string | null {
+  if (!row.kind) return null;
+  const same = (a: string | null, b: string | null) => !!a && !!b && a.trim().toLowerCase() === b.trim().toLowerCase();
+  const theirs = lib.filter((r) => r.key !== row.key && same(r.slot, row.slot) && same(r.kind, row.kind) && !r.untried && !r.disliked && r.origin !== "planner_suggested");
+  return (theirs.find((r) => same(r.sub, row.sub)) ?? theirs[0])?.name ?? null;
+}
+
+/** Tomorrow's brand-new dishes (owner, 25 Nov): each placement marked new whose dish is a planner suggestion still untried
+ *  and not disliked, not answered yet (feedback_asked 2). One already said OK to is the family's own and is not asked again;
+ *  a dish they named or sent, a staple and a pinned dish are never new. Reads only, so the same reminder built again (the
+ *  agent's second get_reminder, a dry run) asks the same. */
+export function tomorrowNewDishes(tx: Db, date: string): Reminder["new_dishes"] {
+  const slots = listSlots(tx, { all: true }), lib = listLibrary(tx);
+  const out: Reminder["new_dishes"] = [];
+  for (const d of listSlotDays(tx, { from: date, to: date })) {
+    if (d.skip) continue;
+    for (const x of d.dishes) {
+      if (!x.new) continue;
+      const answered = (tx.select({ v: slot_dishes.feedback_asked }).from(slot_dishes).where(eq(slot_dishes.id, x.id)).get()?.v ?? 0) > 1;
+      const rows = lib.filter((r) => r.key === dishKey(x.dish));
+      const row = rows.find((r) => r.slot.trim().toLowerCase() === d.slot.trim().toLowerCase()) ?? rows[0];
+      if (answered || !row || row.origin !== "planner_suggested" || !row.untried || row.disliked) continue;
+      const slot = slots.find((s) => s.name.trim().toLowerCase() === d.slot.trim().toLowerCase());
+      out.push({ date, slot: d.slot, dish: x.dish, meal: slot?.kind === "main" ? d.slot.toLowerCase() : d.slot, like: likeOf(lib, row) });
+    }
+  }
+  return out;
 }
 
 type Schedule = (key: string, run: null, ms: number) => void;
@@ -245,7 +282,8 @@ function build(tx: Db, which: Which, now: Date, by: string, changes: Change[], s
   const carts = all.map((c) => ({ order_id: c.order_id, app: c.app as GroceryApp, status: c.status as "open" | "ordering", lines: c.lines,
     sync: c.status === "open" && CART_SYNC[c.app as GroceryApp] && shop.connected.includes(c.app as GroceryApp) && touched.has(c.order_id) }));
   const feedback = which === "afternoon" ? feedbackAsks(tx, addDays(today, -1), by, changes) : [];
-  const r: Reminder = { which, date, meals, ask_ingredients, added, cart_items, asks,
+  const new_dishes = which === "evening" && meals.length ? tomorrowNewDishes(tx, date) : [];
+  const r: Reminder = { which, date, meals, ask_ingredients, added, cart_items, asks, new_dishes,
     delivery_gap: short ? { app: APP_NAMES[short.app as GroceryApp] ?? short.app, rupees: short.delivery_gap! } : null, ordered,
     empty: !meals.length && !cart_items.length && !asks.length && !ordered.length && !feedback.length, feedback, text: "", app_text: "", block: null, carts };
   r.text = reminderText(r);

@@ -1,8 +1,9 @@
 // TRUTH in the planner's own shapes (result.ts SetupOut): what Eval 2 loads into a fresh planner, and what Eval 1's
 // --self-test scores against itself. Plus the Eval 2 perturbations: TRUTH with one deliberate defect.
-import type { SavedDish, SavedRule, SetupOut } from "./result";
+import type { SavedDish, SavedMealKind, SavedRule, SavedSlot, SavedTemplate, SetupOut } from "./result";
+import { catalogKindNamed, kindOf } from "./catalog";
 import { BASE_TAGS, canonTag, tagsOfName, withParents } from "./vocab";
-import { MAIN_SLOTS, WEEK, sameName, type Household, type TruthDish, type TruthSlot, type Weekday } from "./truth";
+import { MAIN_SLOTS, WEEK, sameName, type Household, type TruthDish, type TruthMeal, type TruthSlot, type Weekday } from "./truth";
 
 /** The tags of a truth dish: its name's, plus its overrides, minus what it lacks. */
 export function truthTags(d: TruthDish): Set<string> {
@@ -40,13 +41,52 @@ export function weeklyPeople(h: Household, slot: TruthSlot, day: Weekday): strin
   return usual.filter((p) => !h.truth.away.some((a) => sameName(a.person, p) && a.days.includes(day) && (a.slots.includes(slot.name) || (!!base && a.slots.includes(base.name)))));
 }
 
+/** A TRUTH dish's place in the catalog: TRUTH's own kind where it gives one, else the eval's catalog reading; a dish its slot
+ *  holds as a kind of the family's own is that kind. Kind and sub-kind only where the catalog has them; the item only when the
+ *  name is the item. */
+export function truthDishKind(d: TruthDish, meal?: TruthMeal): { kind: string | null; sub: string | null; catalog_item: string | null } {
+  if (meal?.own?.some((o) => o.toLowerCase() === d.name.toLowerCase())) return { kind: d.name, sub: null, catalog_item: null };
+  if (d.kind) return { kind: d.kind, sub: d.sub ?? null, catalog_item: null };
+  const hit = kindOf(d.name);
+  if (!hit) return { kind: null, sub: null, catalog_item: null };
+  // A kind of one sub-kind names none (server/kinds.ts: "a kind of one sub-kind has no sub-kind of its own to name").
+  const many = (catalogKindNamed(hit.kind)?.subs.length ?? 0) > 1;
+  return { kind: hit.kind, sub: many ? hit.sub : null, catalog_item: hit.by === "item" ? hit.item : null };
+}
+
+/** A slot's expected kinds and templates (kinds model), from TRUTH's meal for it: every kind its templates name, its staples,
+ *  its own kinds, and the family's own sub-kinds of each (their dishes' at that slot, and the templates'). */
+export function mealShape(h: Household, slot: string): { kinds: SavedMealKind[]; templates: SavedTemplate[] } | null {
+  const meal = h.truth.meals?.find((m) => m.slot === slot);
+  if (!meal) return null;
+  const kinds = new Map<string, SavedMealKind>();
+  const kindNamed = (name: string) => kinds.get(name) ?? kinds.set(name, { name }).get(name)!;
+  for (const tp of meal.templates) for (const p of tp.parts) if ("kind" in p) kindNamed(p.kind);
+  for (const k of meal.staples ?? []) kindNamed(k);
+  for (const [name, k] of kinds) {
+    if (meal.staples?.includes(name)) k.staple = true;
+    if (meal.own?.includes(name)) { k.own = true; continue; }
+    const cat = catalogKindNamed(name);
+    if (!cat || cat.subs.length < 2) continue;
+    const subs = new Set<string>();
+    for (const d of h.truth.library.filter((x) => x.slot === slot)) { const m = truthDishKind(d, meal); if (m.kind === name && m.sub) subs.add(m.sub); }
+    for (const tp of meal.templates) for (const p of tp.parts) if ("kind" in p && p.kind === name && p.sub) subs.add(p.sub);
+    if (subs.size) k.subs = [...subs];
+  }
+  return { kinds: [...kinds.values()], templates: meal.templates.map((tp) => ({ parts: tp.parts.map((p) => ({ ...p })), share: tp.share ?? null })) };
+}
+
 export function setupOfTruth(h: Household): SetupOut {
   const t = h.truth;
   const tags = ruleTags(h);
   const slots = t.slots.filter((s) => !s.optional);
+  // Kinds model: when TRUTH states a slot's templates, its dishes carry their kinds too (Eval 2 then plans from the new shape);
+  // otherwise kinds, templates and the dishes' kinds stay null and the planner derives them from the seed.
+  const mealOf = (slot: string) => t.meals?.find((m) => m.slot === slot);
   const library: SavedDish[] = t.library.filter((d) => slots.some((s) => s.name === d.slot)).map((d) => ({
     slot: d.slot, name: d.name, frequency: d.frequency ?? null, days: d.days ?? null,
     contains: [...truthTags(d)].filter((x) => tags.includes(x) || BASE_TAGS.includes(x as any)), contains_read: tags, origin: "setup_named",
+    ...(mealOf(d.slot) ? truthDishKind(d, mealOf(d.slot)) : {}),
   }));
   const rules: SavedRule[] = t.rules.map((r) => ({
     hard: r.hard, what: r.what, who: r.who ?? null, slots: r.slots ?? null, days: r.days ?? null, items: r.items ?? null, to: r.to ?? null,
@@ -60,11 +100,12 @@ export function setupOfTruth(h: Household): SetupOut {
   // A deep copy: callers mutate it (perturbations, tests), and TRUTH shares arrays like SCHOOL.
   return copy({
     ok: true,
-    slots: slots.map((s) => ({ name: s.name, kind: s.kind, addon_of: s.addon_of ?? null, usual_people: s.usual_people ?? [], days: s.days ?? [], skip_days: s.skip_days ?? [] })),
+    slots: slots.map((s): SavedSlot => { const shape = mealShape(h, s.name); return { name: s.name, kind: s.kind, addon_of: s.addon_of ?? null, usual_people: s.usual_people ?? [], days: s.days ?? [], skip_days: s.skip_days ?? [], ...(shape ? shape : {}) }; }),
     library, rules, seed: t.seed.map((x) => ({ slot: x.slot, dishes: [...x.dishes] })),
     cook: t.cook ? { name: t.cook.name, days: t.cook.days, visits: t.cook.visits } : null,
     family_cooks: t.familyCooks, unplaced: (t.noted ?? []).map((n) => ({ text: quoteOf(h, n.re), quote: quoteOf(h, n.re) })),
     lunch_unclear: t.lunchUnclear ?? [], attendance, settings: { new_dishes_per_week: 2 },
+    ...(t.cuisines ? { cuisines: [...t.cuisines] } : {}),
   });
 }
 
