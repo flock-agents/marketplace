@@ -233,7 +233,14 @@ export function scorePlan(h: Household, plan0: PlanOut, loaded: SetupOut, o: { f
   // ── 4. The family's own words on a dish (frequency, days, daily), counted in days across all slots ──
   // Owner, 25 Nov (kinds model rule 3): the old twice-a-week cap (default_cap, main_twice) is gone; only what the family said
   // about a dish still limits it.
-  const placements = (name: string) => cooked.flatMap((sd) => sd.dishes.filter((d) => dishNameOf(d.name, truthNames) === name).map(() => sd));
+  // Owner rule 3 (class 1): words said of a category ("pasta on Sundays", "kurma twice a week": a kind or sub-kind's own word,
+  // no one dish) hold for every item of it, whatever its name ("Macaroni" is a pasta).
+  const categoryOf = (name: string) => { const k = kindOf(name); return k && k.by !== "item" && !isStapleKind(k.kind) ? k : null; };
+  const placements = (name: string) => {
+    const cat = categoryOf(name);
+    const isIt = (x: string) => { if (dishNameOf(x, truthNames) === name) return true; const k = cat && kindOf(x); return !!k && k.kind === cat!.kind && (!cat!.sub || k.sub === cat!.sub); };
+    return cooked.flatMap((sd) => sd.dishes.filter((d) => isIt(d.name)).map(() => sd));
+  };
   for (const name of truthNames) {
     const rows = t.library.filter((d) => d.name === name);
     const freq = rows.find((d) => d.frequency)?.frequency, days = rows.find((d) => d.days)?.days;

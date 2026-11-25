@@ -186,6 +186,16 @@ describe("scorePlan", () => {
     expect(freq(p)).toHaveLength(1);
   });
 
+  test("words said of a category hold for its items, named or not ('pasta on Sundays': a macaroni on Wednesday breaks it)", () => {
+    const h = { ...FIX, truth: { ...FIX.truth, library: [...FIX.truth.library, { name: "Pasta", slot: "Dinner", days: ["Sun" as Weekday] }] } };
+    const freq = (p: PlanOut) => scorePlan(h, p, loaded()).notes.filter((n) => n.startsWith("dish_frequency: Pasta"));
+    const p = goodWeek();
+    at(p, "Sun", "Dinner").dishes = [{ name: "Masala pasta" }];
+    expect(freq(p)).toEqual([]);
+    at(p, "Wed", "Dinner").dishes = [{ name: "Macaroni" }];
+    expect(freq(p)).toHaveLength(1);
+  });
+
   // ── Rotation, owner 25 Nov (kinds model rule 3). Expectations written from the rules before the scorer. ──
   test("not_next_day: the same item on consecutive days in its slot fails", () => {
     const p = goodWeek();
