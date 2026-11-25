@@ -12,6 +12,11 @@
 - Setup reads the family's dishes on the fast tier (no reasoning): on balanced the reasoning ran into the token cap and
   cut the answer off, so the read was asked twice and used most of setup's time (setup eval: 3–11 s vs 18–146 s for
   that read, 94% vs 78% of checks).
+- The bread, rice or curd on the family's own plates at a meal is a staple there, however few plates were told (two lunch
+  plates "Roti, Sabzi" and "Dal, Rice, Sabzi, Curd" left roti a two-days-a-week dish and lunch came without it).
+- make_plan checks whether each meal has enough dishes after it has read what the family's dishes contain, not before
+  (before, every unread dish counted as nobody's and a meal got new dishes it did not need).
+- The setup read-back lists the family's usual dishes per meal, so a meal read wrong or missing is seen before the plan.
 
 ## 4.0.2
 

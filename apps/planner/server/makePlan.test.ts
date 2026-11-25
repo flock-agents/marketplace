@@ -128,6 +128,15 @@ describe("make_plan v2: a week that passes", () => {
 });
 
 describe("make_plan v2: history (spec §2.2)", () => {
+  it("the bread and rice on the family's own plates are staples however few plates there are (onboarding run 28)", async () => {
+    const k = await home({ seed: [{ slot: "Lunch", dishes: ["Roti", "Sabzi"] }, { slot: "Lunch", dishes: ["Dal", "Rice", "Sabzi", "Curd"] }] });
+    const f = fakeModel();
+    await k.plan(f.model);
+    const u = reqOf(f, "Lunch");
+    expect(u.staples).toEqual(expect.arrayContaining(["Roti", "Rice", "Curd"]));
+    expect(u.staples).not.toContain("Sabzi");
+    expect(u.library.map((d: any) => d.dish)).not.toContain("Roti");
+  });
   it("looks_like holds only the seed and confirmed rows; recent includes planned ones; staples come from confirmed rows only", async () => {
     const k = await home({
       seed: [{ slot: "Lunch", dishes: ["Rice", "Dal", "Curd"] }],
@@ -144,8 +153,9 @@ describe("make_plan v2: history (spec §2.2)", () => {
     expect(u.looks_like).toEqual(["Rice, Khichdi", "Rice, Sambar", "Rice, Dal, Curd"]);
     expect(u.looks_like.join(" ")).not.toContain("Paneer");
     expect(u.recent).toEqual({ "2026-11-27": ["Rice", "Khichdi"], "2026-11-28": ["Roti", "Paneer"], "2026-11-29": ["Roti", "Chole"] });
-    // Roti is in 2 of 5 history rows, but planned rows never feed staples: Rice (3 of 3 seed and confirmed rows) does.
-    expect(u.staples).toEqual(["Rice"]);
+    // Roti is in 2 of 5 history rows, but planned rows never feed staples: Rice (3 of 3 seed and confirmed rows) does, and
+    // Curd, a staple word on the seed's own plate.
+    expect(u.staples).toEqual(["Rice", "Curd"]);
     // Chole was shown on Sunday: on Monday it is within 3 days of itself, so code swaps it in its place (not sent back).
     const g = fakeModel({ slot: (x) => x.slot === "Lunch" ? { days: Object.fromEntries(x.days.map((d: any, i: number) => [d.date, ["Rice", ["Chole", "Rajma", "Kadhi", "Sambar"][i % 4]]])) } : rotateDays(x) });
     await k.plan(g.model);
