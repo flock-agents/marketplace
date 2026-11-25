@@ -5,7 +5,7 @@ import type { PlanOut, PlanSlotDay, SavedDish, SetupOut } from "./result";
 import { meanDishes, staplesOf, type HistoryRow } from "./history";
 import { truthTags, weeklyPeople } from "./truth-setup";
 import { canonTag, hasItem, PARENT, tagsOfName } from "./vocab";
-import type { Rates } from "./score-setup";
+import { slotMap, type Rates } from "./score-setup";
 import {
   WEEK, dateOf, dayOf, dishNameOf, frequencyRange, plain, sameName, sameNames, weekdayOfDate,
   type Household, type Skip, type TruthRule, type TruthSlot, type Weekday,
@@ -67,7 +67,12 @@ export type PlanScore = { rates: Rates; tracked: Rates; notes: string[]; facts: 
 /** `o.failClosed` (default true): a dish never read for a rule's item counts as a break (Eval 2 tests that the planner fails
  *  closed). The end-to-end eval sets it false: there the question is whether a forbidden food was served, judged from the
  *  dish's read and its name; an unread one is counted in facts.unread, not as a break. */
-export function scorePlan(h: Household, plan: PlanOut, loaded: SetupOut, o: { failClosed?: boolean } = {}): PlanScore {
+export function scorePlan(h: Household, plan0: PlanOut, loaded: SetupOut, o: { failClosed?: boolean } = {}): PlanScore {
+  // The planner's own slot names read as TRUTH's ("School tiffin" is the household's "Snack box"), as Eval 1 maps them.
+  const names = new Map([...slotMap(h.truth.slots, (loaded.slots ?? []) as any)].map(([tn, sn]) => [lc(sn), tn]));
+  const asTruth = (x: string) => names.get(lc(x)) ?? x;
+  const plan: PlanOut = { ...plan0, slotDays: plan0.slotDays.map((sd) => ({ ...sd, slot: asTruth(sd.slot) })), library: plan0.library.map((d) => ({ ...d, slot: asTruth(d.slot) })) };
+  loaded = { ...loaded, library: loaded.library.map((d) => ({ ...d, slot: asTruth(d.slot) })) };
   const t = h.truth, rates: Rates = {}, tracked: Rates = {}, notes: string[] = [], facts: PlanScore["facts"] = {};
   const add = (field: string, ok: boolean, why?: string, into = rates) => { const r = (into[field] ??= [0, 0]); r[1]++; if (ok) r[0]++; else if (why) notes.push(`${field}: ${why}`); };
   const exp = expectedSlotDays(h, plan.week_start);
@@ -109,7 +114,8 @@ export function scorePlan(h: Household, plan: PlanOut, loaded: SetupOut, o: { fa
     const exact = tdish && plain(tdish.name) === plain(name);
     if (tdish && exact) truthTags(tdish).forEach((x) => tags.add(x));
     const row = libRow(loaded.library, name, slot) ?? libRow(plan.library, name, slot);
-    if (row) row.contains.map(canonTag).forEach((x) => tags.add(x));
+    // A family dish has what the family's TRUTH says (a house that cooks without peanuts: its poha has none), not the planner's read.
+    if (row && !(tdish && exact)) row.contains.map(canonTag).forEach((x) => tags.add(x));
     return { tags, known: new Set((row?.contains_read ?? []).map(canonTag)) };
   };
   const knows = (known: Set<string>, item: string) => { for (let x: string | undefined = canonTag(item); x; x = PARENT[x]) if (known.has(x)) return true; return false; };
@@ -248,7 +254,9 @@ export function scorePlan(h: Household, plan: PlanOut, loaded: SetupOut, o: { fa
       const [min, max] = frequencyRange(freq);
       // Counted in days (spec §2.1: "≤2 days", "2–3/wk"): dal at lunch and dinner on Monday is one day.
       const n = new Set(ps.map((sd) => sd.date)).size;
-      const okCount = !freq || (n <= max && n >= Math.min(min, room));
+      // Never more often than said; fewer is fine (owner, 25 Nov: "people want variety").
+      const okCount = !freq || n <= max;
+      void min; void room;
       const okDays = !days || ps.every((sd) => days.includes(dayOfSd(sd)));
       add("dish_frequency", okCount && okDays, `${name} (${[freq, days?.join(",")].filter(Boolean).join(", ")}) on ${ps.map((sd) => `${dayOfSd(sd)} ${sd.slot}`).join(", ") || "no day"}`);
     } else if (new Set(counted.map((sd) => sd.date)).size > capOf(rows.map((d) => d.slot).filter((x) => !isStaple(x, name)))) add("default_cap", false, `${name} (no frequency, not a staple) on ${new Set(counted.map((sd) => sd.date)).size} days: ${counted.map((sd) => `${dayOfSd(sd)} ${sd.slot}`).join(", ")}`);
@@ -328,7 +336,9 @@ export function scorePlan(h: Household, plan: PlanOut, loaded: SetupOut, o: { fa
   for (const slot of ["Breakfast", "Dinner"]) {
     const sds = cooked.filter((x) => lc(x.slot) === lc(slot));
     const days = new Map<string, Set<string>>();
-    for (const sd of sds) for (const d of sd.dishes) if (!isBareStaple(d.name) && !hasWord(d.name, ACCOMPANIMENTS)) (days.get(plain(d.name)) ?? days.set(plain(d.name), new Set()).get(plain(d.name))!).add(sd.date);
+    // Sambar is a main beside rice, else a side (owner, 25 Nov): beside idli or dosa it may come every morning.
+    const side = (x: string, plate: string[]) => hasWord(x, ACCOMPANIMENTS) || (hasWord(x, ["sambar", "sambhar"]) && !plate.some((y) => y !== x && hasWord(y, ["rice", "chawal", "bhaat", "bhat", "annam", "sadam"])));
+    for (const sd of sds) for (const d of sd.dishes) if (!isBareStaple(d.name) && !side(d.name, sd.dishes.map((x) => x.name))) (days.get(plain(d.name)) ?? days.set(plain(d.name), new Set()).get(plain(d.name))!).add(sd.date);
     for (const [name, ds] of days) {
       const row = t.library.find((d) => lc(d.slot) === lc(slot) && plain(d.name) === name);
       const said = row ? frequencyRange(row.frequency)?.[1] ?? (row.days?.length ? row.days.length : 0) : 0;

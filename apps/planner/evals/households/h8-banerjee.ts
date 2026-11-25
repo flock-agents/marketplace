@@ -17,7 +17,7 @@ export const h8: Household = {
     "household.mealsBy": "Rituparna", "household.groceriesBy": "Sourav",
     "household.weekly": [{ person: "Sourav", where: "office", weekdays: SCHOOL, from: "10:00", to: "17:00", lunch: "away" },
       { person: "Rituparna", where: "office", weekdays: SCHOOL, from: "10:00", to: "18:00", lunch: "away" },
-      { person: "Riya", where: "school", weekdays: SCHOOL, from: "07:00", to: "13:00", lunch: "home" }],
+      { person: "Riya", where: "school", weekdays: SCHOOL, from: "07:00", to: "13:00", lunch: "away" }],
   },
   groceryApps: ["Blinkit"],
   facts: [
@@ -28,7 +28,7 @@ export const h8: Household = {
     { id: "cookTime", text: "She has time." },
     { id: "cookingDays", text: "Yes, all seven days at home." },
     { id: "kidsBreakfast", text: "Riya has toast and egg, or muri; luchi on Sunday." },
-    { id: "kidsLunch", text: "Riya takes a tiffin Monday to Friday: egg roll, chowmein, sandwich. Lunch at home after school, same as ours." },
+    { id: "kidsLunch", text: "Riya takes a tiffin Monday to Friday: egg roll, chowmein, sandwich. They eat that at school." },
     { id: "kidsDinner", text: "Same as ours." },
     { id: "adultsBreakfast", text: "Breakfast: toast and egg, muri, chire bhaja; luchi with alur dom on Sunday." },
     { id: "adultsLunch", text: "Lunch is bhaat, dal, ekta bhaja, ekta torkari ar maacher jhol. Fish curry most days, rui or katla. Kosha mangsho on Sunday." },
@@ -53,7 +53,7 @@ export const h8: Household = {
       { name: "Gita's lunch", kind: "addon", addon_of: "Lunch", usual_people: ["Gita"], match: /gita|\bma\b|mother|grand/i, optional: true },
     ],
     // Both eat lunch at work on weekdays.
-    away: [{ person: "Sourav", slots: ["Lunch"], days: SCHOOL }, { person: "Rituparna", slots: ["Lunch"], days: SCHOOL }],
+    away: [{ person: "Sourav", slots: ["Lunch"], days: SCHOOL }, { person: "Rituparna", slots: ["Lunch"], days: SCHOOL }, { person: "Riya", slots: ["Lunch"], days: SCHOOL }],
     library: [
       ...dish("Toast", ["Breakfast"]), ...dish("Egg", ["Breakfast"]), ...dish("Muri", ["Breakfast"]), ...dish("Chire bhaja", ["Breakfast"]),
       ...dish("Luchi", ["Breakfast"], { days: ["Sun"] }), ...dish("Alur dom", ["Breakfast"], { days: ["Sun"] }),

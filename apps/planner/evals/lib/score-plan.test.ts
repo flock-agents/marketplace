@@ -301,3 +301,16 @@ describe("attendance: a child with their own box", () => {
     expect(att(bad)[1] - att(bad)[0]).toBe(1);
   });
 });
+
+describe("scorePlan: owner's 25 Nov rules", () => {
+  const set = (p: PlanOut, day: Weekday, slot: string, dishes: string[]) => { at(p, day, slot).dishes = dishes.map((name) => ({ name })); return p; };
+  test("sambar beside idli is a side every morning; beside rice it is a main, twice a week at most", () => {
+    const p = goodWeek();
+    const B: Record<string, string> = { Mon: "Upma", Tue: "Poha", Wed: "Pongal", Thu: "Upma", Fri: "Poha", Sat: "Idli", Sun: "Dosa" };
+    for (const d of ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as Weekday[]) set(p, d, "Breakfast", [B[d], "Sambar"]);
+    expect(fails(p)).not.toContain("main_twice");
+    const q = goodWeek();
+    for (const d of ["Mon", "Tue", "Wed"] as Weekday[]) set(q, d, "Dinner", ["Rice", "Sambar"]);
+    expect(fails(q)).toContain("main_twice");
+  });
+});

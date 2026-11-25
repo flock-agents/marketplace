@@ -18,7 +18,7 @@ export const h3: Household = {
     "household.mealsBy": "Ankita", "household.groceriesBy": "Ankita",
     "household.weekly": [{ person: "Shiva", where: "office", weekdays: SCHOOL, from: "09:30", to: "18:00", lunch: "carries" },
       { person: "Ankita", where: "office", weekdays: SCHOOL, from: "09:30", to: "18:00", lunch: "carries" },
-      { person: "Agastya", where: "school", weekdays: SCHOOL, from: "08:30", to: "14:30", lunch: "home" },
+      { person: "Agastya", where: "school", weekdays: SCHOOL, from: "08:30", to: "14:30", lunch: "away" },
       { person: GS, where: "home", weekdays: SCHOOL, lunch: "home" }],
   },
   groceryApps: ["Zepto", "Instamart"],
@@ -54,7 +54,7 @@ export const h3: Household = {
       { name: "Gowri Shankar's dinner", kind: "addon", addon_of: "Dinner", usual_people: [GS], match: /gowri|father|appa|grand|phulka/i },
       { name: "Gowri Shankar's breakfast", kind: "addon", addon_of: "Breakfast", usual_people: [GS], match: /gowri|father|appa|grand/i, optional: true },
     ],
-    away: [],
+    away: [{ person: "Agastya", slots: ["Lunch"], days: SCHOOL }],
     library: [
       ...dish("Idli", ["Breakfast"]), ...dish("Dosa", ["Breakfast"]), ...dish("Poha", ["Breakfast"]), ...dish("Upma", ["Breakfast"]),
       ...dish("Sandwich", ["Breakfast"]), ...dish("Chutney", ["Breakfast"]), ...dish("Aloo paratha", ["Breakfast"], { days: ["Sat", "Sun"] }),

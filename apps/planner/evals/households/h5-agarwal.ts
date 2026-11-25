@@ -16,7 +16,7 @@ export const h5: Household = {
     "household.mealsBy": "Pooja", "household.groceriesBy": "Pooja",
     "household.weekly": [{ person: "Ankit", where: "shop", weekdays: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"], from: "10:00", to: "20:00", lunch: "home" },
       { person: "Ramesh", where: "shop", weekdays: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"], from: "10:00", to: "20:00", lunch: "home" },
-      { person: "Reyansh", where: "school", weekdays: SCHOOL, from: "07:30", to: "13:30", lunch: "home" }],
+      { person: "Reyansh", where: "school", weekdays: SCHOOL, from: "07:30", to: "13:30", lunch: "away" }],
   },
   groceryApps: [],
   facts: [
@@ -47,7 +47,7 @@ export const h5: Household = {
       { name: "Reyansh's tiffin", kind: "custom", usual_people: ["Reyansh"], days: SCHOOL, match: /tiffin|lunch ?box|school/i },
       { name: "Ramesh's breakfast", kind: "addon", addon_of: "Breakfast", usual_people: ["Ramesh"], match: /ramesh|papa|father/i, optional: true },
     ],
-    away: [],
+    away: [{ person: "Reyansh", slots: ["Lunch"], days: SCHOOL }],
     // A home with an elder who never eats onion or garlic: Pooja's everyday dishes are made without (names say so where not).
     library: [
       ...dish("Poha", ["Breakfast", "Reyansh's tiffin"]), ...dish("Paratha", ["Breakfast", "Reyansh's tiffin"]), ...dish("Besan chilla", ["Breakfast"]),

@@ -17,8 +17,8 @@ export const h6: Household = {
     "household.mealsBy": "Snehal", "household.groceriesBy": "Amit",
     "household.weekly": [{ person: "Amit", where: "office", weekdays: SCHOOL, from: "10:00", to: "19:00", lunch: "carries" },
       { person: "Snehal", where: "school", weekdays: SCHOOL, from: "08:00", to: "15:00", lunch: "home" },
-      { person: "Aditi", where: "school", weekdays: SCHOOL, from: "08:00", to: "14:30", lunch: "home" },
-      { person: "Ishaan", where: "school", weekdays: SCHOOL, from: "08:00", to: "14:30", lunch: "home" }],
+      { person: "Aditi", where: "school", weekdays: SCHOOL, from: "08:00", to: "14:30", lunch: "away" },
+      { person: "Ishaan", where: "school", weekdays: SCHOOL, from: "08:00", to: "14:30", lunch: "away" }],
   },
   groceryApps: ["Zepto"],
   facts: [
@@ -29,7 +29,7 @@ export const h6: Household = {
     { id: "cookTime", text: "She's fine on time." },
     { id: "cookingDays", text: "Weekends we cook: I do Saturday, Snehal does Sunday." },
     { id: "kidsBreakfast", text: "Kids had poha, upma, sheera, and thalipeeth on the weekend." },
-    { id: "kidsLunch", text: "Both take a snack box to school Monday to Friday: sandwich, fruits, chivda, idli; noodles sometimes on Friday for Ishaan. Lunch at home after school, same as ours." },
+    { id: "kidsLunch", text: "Both take a snack box to school Monday to Friday: sandwich, fruits, chivda, idli; noodles sometimes on Friday for Ishaan. They eat that at school." },
     { id: "kidsDinner", text: "Same as ours." },
     { id: "adultsBreakfast", text: "Poha, upma, sheera; thalipeeth on weekends." },
     { id: "adultsLunch", text: "Lunch: poli, bhaji, varan bhaat, koshimbir. Amti sometimes instead of varan." },
@@ -50,7 +50,7 @@ export const h6: Household = {
       ...mains(),
       { name: "Snack box", kind: "custom", usual_people: ["Aditi", "Ishaan"], days: SCHOOL, match: /snack|box|tiffin/i },
     ],
-    away: [],
+    away: [{ person: "Aditi", slots: ["Lunch"], days: SCHOOL }, { person: "Ishaan", slots: ["Lunch"], days: SCHOOL }],
     // Poha, chivda and koshimbir usually have peanuts in a Maharashtrian kitchen; not in this one (everything at home is without).
     library: [
       ...dish("Poha", ["Breakfast"]), ...dish("Upma", ["Breakfast"]), ...dish("Sheera", ["Breakfast"]), ...dish("Thalipeeth", ["Breakfast"], { days: ["Sat", "Sun"] }),
