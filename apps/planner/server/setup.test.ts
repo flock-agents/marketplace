@@ -371,6 +371,25 @@ describe("apply_setup v2: the checks, pure", () => {
   const said = familyLines(TRANSCRIPT, HOUSEHOLD);
   const base = (over: Partial<SetupRead>): SetupRead => ({ ...readOf({ slots: HOME.slots.slice(0, 4) }, {}, {}), ...over });
 
+  it("eggs for some people in a vegetarian house: everyone else gets no eggs, when the reader left it out (eval h13)", () => {
+    const lines = familyLines(["A: pure veg at home. Eggs okay for Ishaan and Kiran."], HOUSEHOLD);
+    const egg = (rules: unknown[]) => checkRead(readOf({}, { rules }, {}), { household: hh, said: lines }).read.rules
+      .filter((r) => r.what === "egg" || r.what === "no_eggs").map((r) => `${r.what} ${r.who ?? "house"}`);
+    const veg = { hard: true, what: "veg", quote: "pure veg at home" };
+    const eggs = ["Ishaan", "Kiran"].map((who) => ({ hard: true, what: "egg", who, quote: "Eggs okay for Ishaan and Kiran" }));
+    expect(egg([veg, ...eggs])).toEqual(["egg Ishaan", "egg Kiran", "no_eggs Nisha", "no_eggs Padma"]);
+    // Read already: nothing added twice.
+    expect(egg([veg, ...eggs, { hard: true, what: "no_eggs", who: "Nisha", quote: "Eggs okay for Ishaan and Kiran" }])).toEqual(["egg Ishaan", "egg Kiran", "no_eggs Nisha", "no_eggs Padma"]);
+    // No vegetarian house, or a house egg rule: nothing added.
+    expect(egg(eggs)).toEqual(["egg Ishaan", "egg Kiran"]);
+    expect(egg([veg, { hard: true, what: "egg", quote: "Eggs okay for Ishaan and Kiran" }, ...eggs])).toEqual(["egg house", "egg Ishaan", "egg Kiran"]);
+  });
+
+  it("the same dish twice on one example plate is one dish", () => {
+    const read = readOf({}, {}, { seed: [["Lunch", "Rice, Sambar, Beans poriyal, Sambar", "rice, sambar, beans poriyal, curd"]] });
+    expect(checkRead(read, { household: hh, said }).read.seed[0].dishes).toEqual(["Rice", "Sambar", "Beans poriyal"]);
+  });
+
   it("names: a name, a nickname, a unique first name; never a guess", () => {
     expect(personOf("Amma", hh.people)).toBe("Padma");
     expect(personOf("nishu", hh.people)).toBe("Nisha");
