@@ -103,7 +103,7 @@ const lib = (k: Awaited<ReturnType<typeof boot>>) => Object.fromEntries(k.rows("
   { frequency: d.frequency, days: d.days ? JSON.parse(d.days) : null, contains: JSON.parse(d.contains), read: JSON.parse(d.contains_read), origin: d.origin }]));
 
 describe("apply_setup v2: the model reads, code checks and writes", () => {
-  it("three balanced reads at once, then contains on the fast tier; everything written in order and read back", async () => {
+  it("four reads at once (the dishes on fast, the rest balanced), then contains on the fast tier; everything written in order and read back", async () => {
     const f = fake();
     const k = await boot({ model: f.model });
     const r = await k.op("apply_setup", { household: HOUSEHOLD, transcript: TRANSCRIPT });
@@ -111,7 +111,7 @@ describe("apply_setup v2: the model reads, code checks and writes", () => {
     expect(f.of("home").length + f.of("rules").length + f.of("dishes").length + f.of("often").length).toBe(4);
     for (const p of ["home", "rules", "dishes", "often"] as Part[]) {
       const a = f.of(p)[0];
-      expect(a.tier).toBe("balanced");
+      expect(a.tier).toBe(p === "dishes" ? "fast" : "balanced");
       expect(JSON.parse(a.user).household).toEqual(HOUSEHOLD);
       expect(JSON.parse(a.user).transcript).toContain("A2: actually Rani comes at 8:15");
     }
@@ -166,6 +166,7 @@ describe("apply_setup v2: the model reads, code checks and writes", () => {
       "Weekday lunch is for Nisha and Padma; Kiran's at the office; Ishaan takes lunch to school.",
       "Sunday lunch is eaten out.",
       "Food rules:\n- Everyone: vegetarian; no nuts at Ishaan's tiffin\n- Padma: no sugar; fasts on Mondays at breakfast and lunch; millets in place of white rice, 2–3 times a week; no white rice at dinner",
+      "Your usual dishes:\n- Breakfast: Curd, Sambar\n- Ishaan's tiffin: Poriyal\n- Lunch: Beans poriyal, Curd, Lemon rice, Rajma, Rice, Salad, Sambar\n- Padma's dinner: Phulka",
       "Every day: salad at lunch.",
       "Who is Ravi? I don't have them among the people at home.",
       "Does Kiran take lunch from home to the office?",
@@ -302,6 +303,13 @@ describe("apply_setup v2: the checks, pure", () => {
       { hard: true, what: "swap", who: "Padma", items: ["white_rice"], quote: "Millets are good for Amma" }] }), { household: hh, said });
     expect(c.noted).toEqual([`"tiffin must be nut-free": not saved, there is no meal called Brunch`]);
     expect(c.read.rules.map((r) => r.what)).toEqual(["note"]);
+  });
+  it("a note that is only the cook's limit again stays with the cook, not the family's notes (onboarding run 24)", () => {
+    const cook = { name: "Lakshmi", days: [], visits: [], limits_words: "she has two hours, so 3 to 4 dishes in all", quote: "" } as any;
+    const line = ["A: Yes, she has two hours, so 3 to 4 dishes in all"];
+    const c = checkRead(base({ cook, rules: [{ hard: false, what: "note", quote: "Yes, she has two hours, so 3 to 4 dishes in all" }] }), { household: hh, said: familyLines(line, {}) });
+    expect(c.read.rules).toEqual([]);
+    expect(c.dropped.join("\n")).toContain("the cook's limit");
   });
   it("hard whats are always hard and never carry a frequency", () => {
     const c = checkRead(base({ rules: [{ hard: false, what: "avoid", items: ["sugar"], frequency: "sometimes", quote: "Amma has no sugar" }] }), { household: hh, said });
