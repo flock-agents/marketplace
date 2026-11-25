@@ -626,7 +626,7 @@ describe("an add-on's own dishes kept to their words still feed its person when 
     const lib = [dish("Peanut butter toast", "Breakfast", "Toast", { contains: ["sugar", "nuts"] }), dish("Jam toast", "Breakfast", "Toast", { contains: ["sugar"] }),
       dish("Ragi dosa", "Nani's breakfast", "Dosa", { frequency: "sometimes" }), dish("Ragi java", "Nani's breakfast", "Porridge", { frequency: "sometimes" })];
     const days = WEEK.flatMap((d) => [day(d, "Breakfast", ["Asha", "Nani"]), day(d, "Nani's breakfast", ["Nani"])]);
-    const r = run({ slots: [bf, own], library: lib, days, newCap: 0, rules: [rule({ who: "Nani", items: ["sugar"], quote: "no sugar for her" })] });
+    const r = run({ slots: [bf, own], library: lib, days, newCap: 0, rules: [rule({ who: "Nani", items: ["sugar", "nuts"], quote: "no sugar or nuts for her" })] });
     for (const d of WEEK) expect(r.at(d, "Nani's breakfast").length + r.at(d, "Breakfast").filter((x) => !/toast/i.test(x)).length).toBeGreaterThan(0);
   });
 });
