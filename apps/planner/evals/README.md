@@ -28,6 +28,11 @@ at milestones, on fresh chats). Each holds Flock's `household.*` facts (with str
 - `library`: one row per dish and slot, `frequency` (`daily` | `usually` | `sometimes` | `rarely` | `n/week`), `days`, `contains` overrides, `alsoSlots`, `unsaid`, `aka` (other names the family uses, Eval 1 only)
 - `rules`: hard/soft, `what`, who/slots/days/items/to/frequency/per_meal/fasting_food, a `quote` pattern of the family's words; `noted` for what no weekday rule holds (Ekadashi)
 - `seed`: past meals per slot; `week`: stays, trips and guests for Eval 2; `familyCooks`, `cook`
+- `cuisines` / `cuisinesAlso`: the cuisine profile in catalog words; `meals`: per slot, the expected templates in kinds terms
+  (`tpl(["Rice", "Rice curry/Sambar", items("Rajma chawal")])`), its staple kinds and own kinds, only where the seed and facts
+  state them plainly (h1–h8, h13, h14); a dish's `kind`/`sub` where the catalog cannot place its name. When a household has
+  `meals`, Eval 2 loads slots.kinds / templates, library kind / sub / catalog_item and house.cuisines (adapter.ts, checked
+  with the app's own `checkMealShape`); without, they stay null and the planner derives them from the seed.
 
 Held-out: h9 Jain joint family with a morning cook and the grandmother's own early dinner; h10 single mother + toddler
 (hybrid office days, the toddler's own dinner); h11 couple with alternate-week office days (lunch unclear), non-veg
@@ -51,7 +56,10 @@ Fields: `slots_present`, `slot_kind` (incl. `addon_of`), `slot_people`, `slot_da
 the shared one), `no_wrong_personal`, `rows_on_right_slot`, `dish_frequency` (frequency + days per dish, `daily` too),
 `no_unsaid_frequency`, `hard_rules`, `soft_rules`, `hard_soft`, `rule_frequency`, `no_unsaid_rules`, `rule_quotes`
 (quote in the family's words), `hard_no_frequency`, `noted`, `seed_present` (per seeded slot), `seed_on_slot`.
-Informational: `dish_coverage`. Contains: `accuracy`, `recall` (a missed yes lets a hard rule through), `read`, per tag.
+Kinds model (25 Nov): `cuisines` (house.cuisines against TRUTH's `cuisines`: each must be read, one outside `cuisines` and
+`cuisinesAlso` is a miss), `templates` (each TRUTH template of a slot matched by a saved one with the same kinds part for
+part; a fixed-dishes part by one holding one of its dishes), `template_staples` (TRUTH's staple kinds saved as staples).
+Informational: `dish_coverage`, `template_subs` (a matched template names TRUTH's sub-kinds). Contains: `accuracy`, `recall` (a missed yes lets a hard rule through), `read`, per tag.
 
 ## Eval 2 — plan
 

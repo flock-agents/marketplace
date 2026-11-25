@@ -73,3 +73,22 @@ describe("households", () => {
     });
   });
 });
+
+// Kinds model (25 Nov): TRUTH's cuisines are catalog words; its meals name its own slots and only shapes the app accepts
+// (server/kinds.ts checkMealShape, through the adapter); every family dish at a slot with a meal has a kind.
+describe("households: kinds model truth", () => {
+  test("cuisines are the catalog's words; meals are on real slots and pass the app's shape check", async () => {
+    const { CUISINES } = await import("./catalog");
+    const { shapeErrors } = await import("./adapter");
+    for (const h of ALL_HOUSEHOLDS) {
+      for (const c of [...(h.truth.cuisines ?? []), ...(h.truth.cuisinesAlso ?? [])]) expect(CUISINES).toContain(c);
+      for (const m of h.truth.meals ?? []) expect(h.truth.slots.some((s) => s.name === m.slot && !s.optional)).toBe(true);
+      expect(shapeErrors(setupOfTruth(h))).toEqual([]);
+      const meals = new Set((h.truth.meals ?? []).map((m) => m.slot));
+      const unmapped = setupOfTruth(h).library.filter((d) => meals.has(d.slot) && !d.kind).map((d) => `${d.slot}: ${d.name}`);
+      expect(unmapped).toEqual([]);
+    }
+    // The tier households (e2e) all have cuisines and meals.
+    for (const id of ["h1", "h2", "h3", "h4", "h5", "h6", "h7", "h8", "h13", "h14"]) { const h = pick(id)[0]; expect(h.truth.cuisines?.length).toBeGreaterThan(0); expect(h.truth.meals?.length).toBeGreaterThan(0); }
+  });
+});

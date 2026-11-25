@@ -76,6 +76,7 @@ export const h10: Household = {
       { slot: "Zayan's dinner", dishes: ["Khichdi"] }, { slot: "Zayan's dinner", dishes: ["Dal rice"] }, { slot: "Zayan's dinner", dishes: ["Vegetable daliya"] },
     ],
     week: [{ kind: "guests", day: "Fri", slot: "Dinner", count: 3, occasion: "her sister's family for dinner" }],
+    cuisines: ["north"], cuisinesAlso: ["punjab", "south", "central", "continental"],
     judgeNotes: ["Zayan (2) has his own mashed dinner every night (khichdi, dal rice, daliya), also on Saturday when Farah orders in for herself.",
       "Nobody is home for lunch Tuesday to Thursday.", "No pork; Zayan: no nuts (cashew allergy), no sugar, less salt.", "Fish curry on Wednesday; three guests at Friday dinner this week."],
   },

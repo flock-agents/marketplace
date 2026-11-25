@@ -1,6 +1,6 @@
 // 2. South Indian (Tamil), one child, the wife cooks every meal, no cook; vegetarian, no eggs; the husband carries lunch to
 // office. Frequency words: curd rice when Ananya's not well, pongal on Sundays. Correction: the order-in night.
-import { avoid, dish, mains, noEggs, note, SCHOOL, veg, WEEK, type Household } from "../lib/truth";
+import { avoid, dish, mains, noEggs, note, SCHOOL, veg, WEEK, items, tpl, type Household } from "../lib/truth";
 
 export const h2: Household = {
   id: "h2-iyer", title: "South Indian veg, wife cooks every meal, no cook",
@@ -67,6 +67,15 @@ export const h2: Household = {
       { slot: "Dinner", dishes: ["Dosa", "Kurma"] }, { slot: "Dinner", dishes: ["Chapati", "Kurma"] }, { slot: "Dinner", dishes: ["Uthappam", "Kurma"] }, { slot: "Dinner", dishes: ["Rasam rice"] },
     ],
     week: [{ kind: "guests", day: "Sun", slot: "Lunch", count: 2, occasion: "relatives for lunch" }],
+    cuisines: ["south", "tamil"], cuisinesAlso: ["kerala"],
+    meals: [
+      { slot: "Breakfast", staples: ["Chutney"], templates: [tpl(["Idli", "Chutney", "Rice curry/Sambar"]), tpl(["Dosa", "Chutney", "Rice curry/Sambar"]), tpl(["Upma", "Chutney"]),
+        tpl(["Khichdi/Pongal", "Chutney", "Rice curry/Sambar"])] },
+      { slot: "Lunch", staples: ["Rice", "Curd"], templates: [tpl(["Rice", "Rice curry/Sambar", "Rice curry/Rasam", "Sabzi/Poriyal/Thoran", "Curd"]),
+        tpl(["Rice", "Rice curry/Rasam", "Rice curry/Kootu", "Curd"])] },
+      // Rasam rice when it's late: not stated plainly enough as a plate to score.
+      { slot: "Dinner", staples: ["Roti"], templates: [tpl(["Dosa", "Gravy/Kurma"]), tpl(["Roti", "Gravy/Kurma"])] },
+    ],
     judgeNotes: ["Pure vegetarian, no eggs; Karthik eats no brinjal.", "Saturday dinner ordered in.", "Meenakshi cooks every meal herself.", "Two guests at Sunday lunch this week."],
   },
 };
