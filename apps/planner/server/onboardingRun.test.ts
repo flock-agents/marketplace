@@ -122,19 +122,16 @@ describe("live run 2, #29: her past week's dishes reach the setup and the plan",
     expect(k.rows("slot_days").filter((x) => x.date)).toHaveLength(0);
   });
 
-  it("\"suggest some\": the week is planned from new dishes, each main meal counted as a full plate so the shortfall covers the week", async () => {
+  it("\"suggest some\": every meal is asked for new dishes where none of theirs is known, with no budget", async () => {
     const f = fake({ dishes: { ok: false, code: "invalid_output", message: "no dishes in the answer" } });
-    const logs: string[] = [];
-    const orig = console.log;
-    console.log = (...a: unknown[]) => { logs.push(a.join(" ")); };
-    try {
-      const k = await boot({ model: f.model, now: NOW });
-      await k.op("apply_setup", { household: HOUSEHOLD, transcript: TRANSCRIPT });
-      await k.op("make_plan", { week_start: "2026-11-30", suggest_new: true });
-    } finally { console.log = orig; }
-    const lunch = logs.find((l) => /feasibility Lunch:/.test(l)) ?? "";
-    // 7 days × 3 a plate = 21 places; a dish comes on 2 days at most: 11 new dishes, not 4.
-    expect(lunch).toContain("21 places (7 × 3), 0 from the library");
-    expect(lunch).toContain("11 new dishes of their kind");
+    const k = await boot({ model: f.model, now: NOW });
+    await k.op("apply_setup", { household: HOUSEHOLD, transcript: TRANSCRIPT });
+    const p = await k.op("make_plan", { week_start: "2026-11-30", suggest_new: true });
+    // Every meal is asked of the model (this fake answers nothing, so no week is made); no budget limits its new dishes.
+    const lunch = f.of("plan").filter((r) => /meal plan: the week's Lunch/.test(r.purpose ?? ""));
+    expect(lunch).toHaveLength(1);
+    expect(JSON.parse(lunch[0].user).new_dishes_allowed).toBeUndefined();
+    expect(p).toMatchObject({ ok: false, reason: "no_dishes" });
   });
+
 });

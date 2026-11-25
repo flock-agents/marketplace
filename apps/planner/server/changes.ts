@@ -162,7 +162,7 @@ export function failingSlotDays(db: Db, today: string): Target[] {
     const saved = listSlotDays(db, { from: week, to: addDays(week, 6) });
     const days: PlanDay[] = saved.map((d) => ({ date: d.date!, slot: d.slot, people: d.people, guests: d.guests, occasion: d.occasion, new_dishes_allowed: d.new_dishes_allowed,
       skip: d.skip, edited: d.edited, fixed: !replannable(d, today), why: [], fasting: [], dishes: d.dishes.map((x) => x.dish), note: d.note }));
-    const w: Week = { days, slots: new Map(), rules, library, facts: new Map(), done: new Set(), newBudget: newDishesPerWeek(db), newDishes: new Map() };
+    const w: Week = { days, slots: new Map(), rules, library, facts: new Map(), done: new Set(), newDishes: new Map() };
     for (const s of slots) {
       const history = slotHistory(db, s.name, week);
       w.slots.set(s.name.toLowerCase(), slotFacts(s, library, history, recent(history, week, 3)));

@@ -58,9 +58,10 @@ export const STAPLES_FROM_PLANNED = false;
  *  DEFAULT_DISH_DAYS days at most; a daily dish on every slot-day of its slot. */
 export const FREQUENCY_DAYS: Record<"usually" | "sometimes" | "rarely" | "daily", [number, number]> = { usually: [4, 5], sometimes: [2, 3], rarely: [0, 1], daily: [7, 7] };
 export const DEFAULT_DISH_DAYS = 2;
-/** A non-staple dish is not on a slot within this many days of itself; the feasibility check may widen it to the relaxed one. */
+/** A non-staple dish is kept off a slot within this many days of itself where another dish fits. */
 export const REPEAT_WINDOW_DAYS = 3;
-export const REPEAT_WINDOW_RELAXED = 2;
+/** Later weeks are guided by what was planned and kept at a slot this many days back (owner 25 Nov). */
+export const HISTORY_GUIDE_DAYS = 28;
 /** At most this many slot calls run at once. */
 export const SLOT_CALLS_AT_ONCE = 3;
 /** At most this many dishes a contains read asks about in one call. */

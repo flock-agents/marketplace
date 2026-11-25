@@ -141,7 +141,9 @@ describe("make_plan v2: a week that passes", () => {
     expect(u.gap).toBeUndefined();
     expect(u.rules).toEqual(["Asha: no sugar for me [never: sugar]"]);
     expect(u.notes_for_people).toEqual(["Kabir: less spicy"]);
-    expect(typeof u.new_dishes_allowed).toBe("number");
+    // No new-dish budget and no shortfall (owner 25 Nov): their dishes guide, the rest is free for variety.
+    expect(u.new_dishes_allowed).toBeUndefined();
+    expect(u.short_of_dishes).toBeUndefined();
     expect(u.occasion).toBeNull();
     // The library dishes were never read for sugar: each is not for Asha (fail closed), said to the model.
     expect(u.library[0].not_for).toEqual(["Asha"]);
@@ -174,9 +176,10 @@ describe("make_plan v2: history (spec §2.2)", () => {
     expect(u.looks_like).toEqual(["Rice, Khichdi", "Rice, Sambar", "Rice, Dal, Curd"]);
     expect(u.looks_like.join(" ")).not.toContain("Paneer");
     expect(u.recent).toEqual({ "2026-11-27": ["Rice", "Khichdi"], "2026-11-28": ["Roti", "Paneer"], "2026-11-29": ["Roti", "Chole"] });
-    // Roti is in 2 of 5 history rows, but planned rows never feed staples: Rice (3 of 3 seed and confirmed rows) does, and
-    // Curd, a staple word on the seed's own plate.
-    expect(u.staples).toEqual(["Rice", "Curd"]);
+    // Rice (3 of 3 seed and confirmed rows) and Curd are staples; Roti, planned last week, is a dish of theirs that guides
+    // this week (owner 25 Nov), a bread, so a staple too; Paneer and Chole, planned and kept, are theirs in the library.
+    expect(u.staples).toEqual(["Rice", "Curd", "Roti"]);
+    expect(u.library.map((d: any) => d.dish)).toEqual(expect.arrayContaining(["Paneer", "Chole"]));
     // Chole was shown on Sunday: on Monday it is within 3 days of itself, so code swaps it in its place (not sent back).
     const g = fakeModel({ slot: (x) => x.slot === "Lunch" ? { days: Object.fromEntries(x.days.map((d: any, i: number) => [d.date, ["Rice", ["Chole", "Rajma", "Kadhi", "Sambar"][i % 4]]])) } : rotateDays(x) });
     await k.plan(g.model);
@@ -239,11 +242,10 @@ describe("make_plan v2: hard rules per person, fail closed", () => {
       seed: [1, 2, 3].map(() => ({ slot: "Lunch", dishes: ["Rice", "Dal"] })),
       library: [{ name: "Rice", slot: "Lunch", contains: [], contains_read: READ }, { name: "Dal", slot: "Lunch", frequency: "daily", contains: [], contains_read: READ },
         { name: "Fish curry", slot: "Lunch", days: ["Sun"], contains: ["fish"], contains_read: READ }] });
-    const f = fakeModel({ slot: (u) => u.slot === "Lunch" ? { days: Object.fromEntries(u.days.map((d: any) => [d.date, d.date === WEEK[6] ? ["Rice", "Dal", "Fish curry", "Lauki"] : ["Rice", "Dal"]])), new: [{ dish: "Lauki", why: "for Nani" }] } : rotateDays(u),
+    const f = fakeModel({ slot: (u) => u.slot === "Lunch" ? { days: Object.fromEntries(u.days.map((d: any) => [d.date, d.date === WEEK[6] ? ["Rice", "Dal", "Fish curry", "Lauki"] : ["Rice", "Dal"]])), new: [{ dish: "Lauki", why: "for Nani", like: "Fish curry", part: "main" }] } : rotateDays(u),
       contains: (u) => ({ dishes: u.dishes.map((d: string) => ({ dish: d, has: [], not: READ })) }),
       day: (u) => ({ dishes: u.dishes.map((d: any) => ({ slot: d.slot, name: d.name, ingredients: [{ item: d.name === "Fish curry" ? "rohu" : d.name.toLowerCase(), amount: 200, unit: "g", tags: d.name === "Fish curry" ? ["fish"] : [] }] })) }) });
     await k.plan(f.model);
-    expect(reqOf(f, "Lunch").new_dishes_allowed).toBeGreaterThanOrEqual(1);
     const sun = k.at(WEEK[6], "Lunch")!.dishes;
     expect(sun.map((d) => [d.dish, d.not_for])).toEqual([["Rice", []], ["Dal", []], ["Fish curry", ["Nani"]], ["Lauki", []]]);
     expect(sun.find((d) => d.dish === "Fish curry")!.ingredients.map((i) => i.item)).toEqual(["rohu"]);
@@ -322,10 +324,10 @@ describe("make_plan v2: hard rules per person, fail closed", () => {
     const g = f.gaps()[0];
     expect(g.req.system).toBe(GAP_SYSTEM);
     expect(g.req.tier).toBe("balanced");
-    expect(g.user.gaps.map((x: any) => x.date)).toEqual([WEEK[4], WEEK[5]]);
+    expect(g.user.gaps).toHaveLength(2);
+    expect(g.user.new_dishes_allowed).toBeUndefined();
     expect(g.user.gaps[0]).toMatchObject({ for: ["Ravi"], not: expect.arrayContaining(["Ragi dosa", "Ragi malt"]) });
     if (r.ok) expect((r.unmet ?? []).join(" ")).toContain("comes back sooner than usual");
-    if (r.ok) expect(r.relaxed).toEqual({ "Ravi's breakfast": 2 });
   });
 
   it("library dishes setup never read are read before the week is planned, so they are not all failed closed (onboarding run 26)", async () => {
@@ -346,7 +348,7 @@ describe("make_plan v2: hard rules per person, fail closed", () => {
     const k = await home({ people, rules: [{ hard: true, what: "avoid", who: "Nani", items: ["sugar"], quote: "no sugar for Nani" }],
       library: Object.entries(LIB).flatMap(([slot, names]) => names.map((name) => ({ name, slot, contains: [], contains_read: [...READ, "sugar"] }))) });
     const f = fakeModel({
-      slot: (u) => u.slot === "Breakfast" ? { days: { ...(rotateDays(u) as any).days, [MON]: ["Poha", "Sheera"] }, new: [{ dish: "Sheera", why: "a sweet like their halwa" }] } : rotateDays(u),
+      slot: (u) => u.slot === "Breakfast" ? { days: { ...(rotateDays(u) as any).days, [MON]: ["Poha", "Sheera"] }, new: [{ dish: "Sheera", why: "a sweet like their halwa", like: "Upma", part: "main" }] } : rotateDays(u),
       contains: (u) => ({ dishes: u.dishes.map((d: string) => ({ dish: d, has: ["sugar"], not: ["egg", "meat", "fish", "onion_garlic"] })) }),
     });
     const r = await k.plan(f.model);
@@ -357,8 +359,8 @@ describe("make_plan v2: hard rules per person, fail closed", () => {
     const row = getLibraryDish(k.kit.db, "Sheera", "Breakfast")!;
     expect(row).toMatchObject({ origin: "planner_suggested", suggested: true, untried: true, offers: 1, contains: ["sugar"] });
     expect(row.contains_read.sort()).toEqual(["egg", "fish", "meat", "onion_garlic", "sugar"]);
-    // The model's reason is never pasted (owner, 25 Nov); with no dish of theirs it stands in for, the name alone.
-    if (r.ok) expect(r.message).toContain("New this week: Sheera\n");
+    // The model's reason is never pasted (owner, 25 Nov); the dish of theirs it stands in for is.
+    if (r.ok) expect(r.message).toContain("New this week: Sheera (like your Upma)\n");
     if (r.ok) expect(r.message).not.toContain("a sweet like their halwa");
   });
 });
@@ -507,7 +509,7 @@ describe("make_plan v2: who eats (spec §5.1)", () => {
     expect(r2.ok && r2.asked).toBeFalsy();
   });
 
-  it("a meal short of dishes and an entry it could not read are one question; a new dish is said with the dish it stands in for, not the model's why", async () => {
+  it("an entry it could not read is the one question, not a meal with few dishes; a new dish is said with the dish it stands in for, not the model's why", async () => {
     const k = await home({ newPerWeek: 0, slots: [...MAIN, { name: "Ravi's breakfast", kind: "custom", order: 15, usual_people: ["Ravi"] }],
       lib: { ...LIB, "Ravi's breakfast": ["Ragi dosa"] } });
     const plates = ["Ragi dosa", "Ragi idli", "Ragi roti", "Ragi dosa", "Ragi idli", "Ragi roti", "Ragi upma"];
@@ -519,7 +521,8 @@ describe("make_plan v2: who eats (spec §5.1)", () => {
       events: () => ({ changes: [{ id: "e3", effect: "unsure" }] }) });
     const r = await k.plan(f.model, { peers: { calendar: async () => [{ id: "e3", title: "Thing", date: WEEK[3], kind: "event" }] } });
     if (!r.ok) throw new Error(r.say);
-    const q = "I know only a few dishes for Ravi's breakfast, so I've added some new ones. What else do you make for Ravi's breakfast, and does \"Thing\" (Thu) change who eats at home?";
+    // A meal with few dishes of theirs is no question any more (owner 25 Nov): new dishes like theirs fill it.
+    const q = "Does \"Thing\" (Thu) change who eats at home?";
     expect(r.asked).toEqual([q]);
     expect(r.message.split("\n").filter((l) => l.trim().endsWith("?"))).toEqual([q]);
     expect(r.message).toContain("New this week: Ragi idli (like your Ragi dosa); Ragi roti (like your Ragi dosa); Ragi upma (like your Ragi dosa)");
@@ -581,21 +584,21 @@ describe("make_plan v2: who eats (spec §5.1)", () => {
   });
 });
 
-describe("make_plan v2: budgets and offers", () => {
-  it("new dishes past the week's setting are replaced by code with the family's; within it they are saved untried, each placement an offer, not counted twice on a re-plan", async () => {
-    const k = await home({ newPerWeek: 2 });
+describe("make_plan: their dishes guide the week (owner 25 Nov)", () => {
+  it("new dishes like theirs come with no weekly budget; one like nothing of theirs is replaced by code; new ones saved untried, each placement an offer, not counted twice on a re-plan", async () => {
+    const k = await home({ newPerWeek: 0 });
     const f = fakeModel({ slot: (u) => u.slot === "Dinner"
-      ? { days: { ...(rotateDays(u) as any).days, [MON]: ["Thai curry"], "2026-12-01": ["Ramen"], "2026-12-02": ["Tacos"] }, new: [{ dish: "Thai curry" }, { dish: "Ramen" }, { dish: "Tacos" }] }
+      ? { days: { ...(rotateDays(u) as any).days, [MON]: ["Paneer bhurji"], "2026-12-01": ["Matar paneer"], "2026-12-02": ["Tacos"] },
+          new: [{ dish: "Paneer bhurji", like: "Palak paneer", part: "main" }, { dish: "Matar paneer", like: "Palak paneer", part: "main" }, { dish: "Tacos", like: "Burrito", part: "main" }] }
       : rotateDays(u) });
     const lines: string[] = [];
     await k.plan(f.model, { log: (l) => lines.push(l) });
-    // The week's budget is shared: each slot may use it, the week's check keeps the total.
-    expect(reqOf(f, "Dinner").new_dishes_allowed).toBe(2);
+    expect(reqOf(f, "Dinner").new_dishes_allowed).toBeUndefined();
     expect(f.gaps()).toHaveLength(0);
-    expect(lines.some((l) => l.includes("Wed Dinner: Tacos → ") && l.includes("no room for another new dish"))).toBe(true);
+    expect(lines.some((l) => l.includes("Wed Dinner: Tacos → ") && l.includes("not like a dish of theirs at Dinner"))).toBe(true);
     expect(LIB.Dinner).toContain(k.dishesAt("2026-12-02", "Dinner")[0]);
     const news = k.week().flatMap((d) => d.dishes.filter((x) => x.new).map((x) => x.dish));
-    expect(new Set(news)).toEqual(new Set(["Thai curry", "Ramen"]));
+    expect(new Set(news)).toEqual(new Set(["Paneer bhurji", "Matar paneer"]));
     const untried = () => k.rows("library").filter((r: any) => r.untried === 1);
     for (const r of untried()) expect(r.offers).toBe(k.week().filter((d) => d.dishes.some((x) => x.dish === r.name)).length);
     const before = untried().map((r: any) => [r.name, r.offers]);
@@ -603,36 +606,43 @@ describe("make_plan v2: budgets and offers", () => {
     expect(untried().map((r: any) => [r.name, r.offers])).toEqual(before);
   });
 
-  it("feasibility: a thin library gets a 2-day window first, then its own new dishes for the shortfall and a question; logged in that order", async () => {
-    const k = await home({ lib: { ...LIB, Breakfast: ["Poha"] }, newPerWeek: 2 });
-    const lines: string[] = [];
-    const f = fakeModel();
-    const r = await k.plan(f.model, { log: (l) => lines.push(l) });
-    const line = lines.find((l) => l.startsWith("feasibility Breakfast"))!;
-    // 7 places, Poha on 2: short by 5, 3 new dishes at 2 days each, beside the week's 2.
-    expect(line).toContain("relaxed: repeat window 2 days, then 3 new dishes of their kind for the shortfall (beside the week's setting), then asked");
-    expect(reqOf(f, "Breakfast").new_dishes_allowed).toBe(5);
-    expect(reqOf(f, "Breakfast").short_of_dishes).toBe(true);
-    expect(reqOf(f, "Lunch").short_of_dishes).toBeUndefined();
-    expect(r.ok && (r.unmet ?? []).some((u) => u.includes("known"))).toBe(false);
-    expect(lines.find((l) => l.startsWith("feasibility Lunch"))).not.toContain("relaxed");
+  it("a later week is guided by what was planned and kept at the slot: those dishes are theirs (not new again), and a new dish may be like one of them", async () => {
+    const k = await home({ lib: { ...LIB, Dinner: ["Palak paneer", "Aloo gobi"] },
+      history: [{ date: "2026-11-24", slot: "Dinner", status: "planned", dishes: ["Paneer bhurji"] }, { date: "2026-11-26", slot: "Dinner", status: "planned", dishes: ["Lauki kofta"] },
+        { date: "2026-10-01", slot: "Dinner", status: "planned", dishes: ["Ancient curry"] }] });
+    const f = fakeModel({ slot: (u) => u.slot === "Dinner"
+      ? { days: Object.fromEntries(u.days.map((d: any, i: number) => [d.date, [["Paneer bhurji", "Lauki kofta", "Palak paneer", "Aloo gobi", "Malai kofta", "Paneer bhurji", "Lauki kofta"][i]]])),
+          new: [{ dish: "Malai kofta", like: "Lauki kofta", part: "main" }] } : rotateDays(u) });
+    const r = await k.plan(f.model);
+    if (!r.ok) throw new Error(r.say);
+    const lib = reqOf(f, "Dinner").library.map((d: any) => d.dish);
+    expect(lib).toEqual(expect.arrayContaining(["Paneer bhurji", "Lauki kofta"]));
+    expect(lib).not.toContain("Ancient curry");   // more than four weeks back
+    expect(WEEK.map((d) => k.dishesAt(d, "Dinner")[0])).toEqual(["Paneer bhurji", "Lauki kofta", "Palak paneer", "Aloo gobi", "Malai kofta", "Paneer bhurji", "Lauki kofta"]);
+    expect(r.message).toContain("New this week: Malai kofta (like your Lauki kofta)");
+    expect(r.message).not.toContain("Paneer bhurji (like");
   });
 
-  it("slots short of dishes are asked about in one question naming them, not said in unmet; at most 2, the thinnest first", async () => {
+  it("at least 30% of a week's mains are their own: a call of new dishes only keeps their dishes on the rest", async () => {
+    const k = await home();
+    const news = ["Thalipeeth", "Sabudana khichdi", "Misal", "Sheera", "Dhokla", "Handvo", "Khaman"];
+    const f = fakeModel({ slot: (u) => u.slot === "Breakfast" ? { days: Object.fromEntries(u.days.map((d: any, i: number) => [d.date, [news[i]]])), new: news.map((dish) => ({ dish, like: "Poha", part: "main" })) } : rotateDays(u) });
+    await k.plan(f.model);
+    const all = WEEK.map((d) => k.dishesAt(d, "Breakfast")[0]);
+    expect(all.filter((x) => LIB.Breakfast.includes(x)).length).toBeGreaterThanOrEqual(Math.ceil(7 * 0.3));
+    expect(all.filter((x) => news.includes(x))).toHaveLength(4);   // 70% of 7 places, rounded down
+  });
+
+  it("a meal with few dishes of theirs is no question (owner 25 Nov): new dishes like theirs fill it", async () => {
     const k = await home({ newPerWeek: 0, slots: [...MAIN, { name: "Ravi's breakfast", kind: "custom", order: 15, usual_people: ["Ravi"] }],
       lib: { Breakfast: ["Poha", "Upma"], Lunch: ["Sambar", "Rajma", "Kadhi"], Dinner: LIB.Dinner, "Ravi's breakfast": ["Ragi dosa"] } });
     const r = await k.plan(fakeModel().model);
     if (!r.ok) throw new Error(r.say);
-    // No new dish placed (the setting is 0): asked whether to suggest some.
-    const q = "I know only a few dishes for Ravi's breakfast and breakfast. What else do you make for these, or should I suggest a few?";
-    expect(r.asked).toEqual([q]);
-    expect(r.message).toContain(q);
-    expect(r.message.split("\n").filter((l) => l.trim().endsWith("?"))).toEqual([q]);
-    expect(r.message).not.toContain("for lunch");   // the third short slot (Lunch, 3 dishes) is not asked: 2 at most
-    expect((r.unmet ?? []).some((u) => u.includes("known"))).toBe(false);
+    expect(r.asked ?? []).toEqual([]);
+    expect(r.message).not.toContain("I know only a few");
   });
 
-  it("a short slot's new dishes of the family's kind are placed past the setting, saved untried with an offer each, and the question says what was done", async () => {
+  it("a meal with one dish of theirs is filled with new dishes like it, saved untried with an offer each", async () => {
     const k = await home({ newPerWeek: 0, slots: [...MAIN, { name: "Ravi's breakfast", kind: "custom", order: 15, usual_people: ["Ravi"] }],
       lib: { ...LIB, "Ravi's breakfast": ["Ragi dosa"] } });
     const plates = ["Ragi dosa", "Ragi idli", "Ragi roti", "Ragi dosa", "Ragi idli", "Ragi roti", "Ragi upma"];
@@ -641,18 +651,13 @@ describe("make_plan v2: budgets and offers", () => {
       : rotateDays(u) });
     const r = await k.plan(f.model);
     if (!r.ok) throw new Error(r.say);
-    // 7 places, Ragi dosa on 2: short by 5, 3 new dishes; the week's setting (0) is not what limits them.
-    expect(reqOf(f, "Ravi's breakfast").new_dishes_allowed).toBe(3);
-    expect(reqOf(f, "Breakfast").new_dishes_allowed).toBe(0);
     expect(f.gaps()).toHaveLength(0);
     expect(WEEK.map((d) => k.dishesAt(d, "Ravi's breakfast")[0])).toEqual(plates);
     for (const name of ["Ragi idli", "Ragi roti", "Ragi upma"]) {
       const row = k.rows("library").find((x: any) => x.name === name && x.slot === "Ravi's breakfast");
       expect(row).toMatchObject({ origin: "planner_suggested", suggested: 1, untried: 1, offers: plates.filter((x) => x === name).length });
     }
-    const q = "I know only a few dishes for Ravi's breakfast, so I've added some new ones. What else do you make for Ravi's breakfast?";
-    expect(r.asked).toEqual([q]);
-    expect(r.message).toContain(q);
+    expect(r.asked ?? []).toEqual([]);
     expect(r.message).toContain("Ragi idli (like your Ragi dosa)");
   });
 
@@ -727,10 +732,11 @@ describe("make_plan: per-day lists, spares and the walk (owner 25 Nov)", () => {
     expect(f.parts()[0].req.system).toBe(PARTS_SYSTEM);
   });
 
-  it("spares come in the same call, are read for what they contain, and take a place that cannot stay; a used spare is new", async () => {
-    const k = await home({ newPerWeek: 2, lib: { ...LIB, Dinner: ["Palak paneer", "Aloo gobi"] } });
+  it("spares come in the same call with the dish of theirs each is like, are read for what they contain, and take a place that cannot stay; a used spare is new; one like nothing of theirs never", async () => {
+    const k = await home({ lib: { ...LIB, Dinner: ["Palak paneer", "Aloo gobi"] } });
     // Dinner asks Palak paneer every day: two days, then Aloo gobi's two, then the spares.
-    const f = fakeModel({ slot: (u) => u.slot === "Dinner" ? { days: Object.fromEntries(u.days.map((d: any) => [d.date, ["Palak paneer"]])), spares: { main: ["Paneer bhurji", "Matar paneer", "Kadai paneer"] } } : rotateDays(u),
+    const f = fakeModel({ slot: (u) => u.slot === "Dinner" ? { days: Object.fromEntries(u.days.map((d: any) => [d.date, ["Palak paneer"]])),
+      spares: { main: [{ dish: "Kadai paneer", like: "Pizza" }, { dish: "Paneer bhurji", like: "Palak paneer" }, { dish: "Matar paneer", like: "Aloo gobi" }] } } : rotateDays(u),
       contains: (u) => ({ dishes: u.dishes.map((d: string) => ({ dish: d, has: ["dairy"], not: u.tags.filter((t: string) => t !== "dairy") })) }) });
     const r = await k.plan(f.model);
     if (!r.ok) throw new Error(r.say);
@@ -741,10 +747,10 @@ describe("make_plan: per-day lists, spares and the walk (owner 25 Nov)", () => {
     expect(all.filter((x) => x === "Palak paneer")).toHaveLength(2);
     expect(all.filter((x) => x === "Aloo gobi")).toHaveLength(2);
     expect(all.filter((x) => x === "Paneer bhurji")).toHaveLength(2);
-    // The budget of 2 new dishes: Paneer bhurji and Matar paneer, never Kadai paneer.
     expect(all.filter((x) => x === "Matar paneer").length).toBeGreaterThan(0);
-    expect(all).not.toContain("Kadai paneer");
-    expect(k.at(WEEK[4], "Dinner")!.dishes[0].new).toBe(true);
+    expect(all).not.toContain("Kadai paneer");   // "like" their Pizza: no such dish of theirs
+    expect(reqOf(f, "Dinner").days[0].new_dishes_allowed).toBeUndefined();
+    expect(WEEK.map((d) => k.at(d, "Dinner")!.dishes[0]).filter((x) => x.new).map((x) => x.dish).sort()).toEqual(all.filter((x) => x === "Paneer bhurji" || x === "Matar paneer").sort());
     expect(k.rows("library").find((x: any) => x.name === "Paneer bhurji")).toMatchObject({ origin: "planner_suggested", untried: 1 });
     expect(f.gaps()).toHaveLength(0);
   });
@@ -818,7 +824,7 @@ describe("make_plan: allergies (owner 25 Nov)", () => {
 
   it("every other dish is read carefully on the balanced tier, unsure counted as having it: one that may have it is not his, and he gets one of his own", async () => {
     const k = await home({ rules: [ALLERGY], newPerWeek: 2, library: Object.entries(LIB).flatMap(([slot, ns]) => ns.map((name) => ({ name, slot, contains: [], contains_read: readAll }))) });
-    const f = fakeModel({ slot: (u) => u.slot === "Breakfast" ? { days: { ...(rotateDays(u) as any).days, [MON]: ["Sabudana khichdi"] }, new: [{ dish: "Sabudana khichdi", why: "a quick one" }] } : rotateDays(u),
+    const f = fakeModel({ slot: (u) => u.slot === "Breakfast" ? { days: { ...(rotateDays(u) as any).days, [MON]: ["Sabudana khichdi"] }, new: [{ dish: "Sabudana khichdi", why: "a quick one", like: "Upma", part: "main" }] } : rotateDays(u),
       contains: (u) => ({ dishes: u.dishes.map((d: string) => ({ dish: d, has: [], not: u.tags })) }),
       careful: (u) => ({ dishes: u.dishes.map((d: string) => ({ dish: d, has: d === "Sabudana khichdi" ? ["peanut"] : [] })) }) });
     await k.plan(f.model);

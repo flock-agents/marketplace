@@ -93,6 +93,17 @@
   how-often read on both rows (before, neither, and luchi lost its Sunday); one dish read at three meals is no longer
   "a whole list's" words; a dish's how-often words are placed in the sentence with its own quote first; and the lint
   matches a dish asked twice to each answer in turn.
+- The family's dishes guide the week; they are not its whole menu (owner, 25 Nov: "we are overbiasing it with the user's
+  existing meal plan"). Week one is guided by their answers (their dishes and example plates); later weeks also by what
+  was planned and kept at each meal in the four weeks before. At least 30% of each week's mains at a meal are their own;
+  the rest are new dishes for variety, with no weekly new-dish budget (the new-dishes-a-week setting no longer limits the
+  plan). No main more than twice a week still holds.
+- Every new dish names `like`: a dish of theirs at the same meal and the same part of the plate ("Moong dal usal" like
+  their "Usal"). Code drops a new dish whose `like` is not one of theirs there (no pasta unless they have pasta at that
+  meal) and takes the next spare; spares come with their `like` too. A meal with no dish of theirs at all is still asked
+  about, or planned from new dishes when the family said "suggest some".
+- Removed with the budget: the feasibility check (shortfall, its own new dishes, the narrowed repeat window,
+  `short_of_dishes`, `relaxed` in the result) and the "I know only a few dishes for …" question for a thin meal.
 
 ## 4.0.2
 

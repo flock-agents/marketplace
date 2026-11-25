@@ -2,7 +2,8 @@
 // Sunday run). The model reads words and fills slots; code stores, counts and checks:
 //   1. the week's slot-days in code (planDays.ts): who each slot is for on each day, from the slots, the weekday patterns,
 //      the calendar (or the household's dated stays), fasts and the meals eaten out; a slot-day the family changed is kept;
-//   2. the feasibility check (planChecks.ts): where a slot's library is too thin, relaxed in a fixed order, logged;
+//   2. each slot's guide (owner 25 Nov): the family's own dishes there (their library and plates, and what was planned and
+//      kept there in the four weeks before); at least OWN_SHARE of the week's mains from them, the rest new dishes like theirs;
 //   3. one balanced call per slot for the whole week, in planning order (breakfast, tiffin, lunch, snacks, dinner, add-ons),
 //      at most SLOT_CALLS_AT_ONCE at once, an add-on after its main slot (it gets that slot's dishes); each day carries the
 //      dishes allowed that day and the rice or bread it must have (code's, from the plates' parts read); the call names
@@ -17,24 +18,24 @@
 import type { Hono } from "hono";
 import { asc } from "drizzle-orm";
 import { people as people_t } from "./db/schema";
-import { CONTAINS_BATCH, DEFAULT_DISH_DAYS, REPEAT_WINDOW_DAYS, SLOT_CALLS_AT_ONCE } from "./db/constants";
+import { CONTAINS_BATCH, DEFAULT_DISH_DAYS, HISTORY_GUIDE_DAYS, SLOT_CALLS_AT_ONCE } from "./db/constants";
 import { addDays, todayStr, weekDates, weekdayLong, weekdayOf } from "./dates";
 import { dishKey } from "./dishText";
 import { closeWeek, dateOf } from "./meals";
-import { changeMessage, planMessage, planQuestion, weekLink, type ShortAsk } from "./messages";
+import { changeMessage, planMessage, planQuestion, weekLink } from "./messages";
 import { isObject, refuse, writeRoutes, type Db, type Emit } from "./family";
 import { STOP_CODES, stopSaid, type ModelCall, type ModelFailure, type ModelRequest, type ModelResult } from "./model";
-import { commit, deleteSlotDays, listLibrary, listRules, listSlotDays, listSlots, newDishesPerWeek, recent, saveSlotDay, slotHistory, upsertLibrary,
+import { commit, deleteSlotDays, listLibrary, listRules, listSlotDays, listSlots, recent, saveSlotDay, slotHistory, upsertLibrary,
   type Rule, type Slot } from "./slotStore";
 import { buildDays, slotDayKey, lunchSaid, platformPeers, readEvents, readHousehold, ruleHolds, withLunchSaid, type PlanDay, type Peers } from "./planDays";
-import { applyParts, canonTag, carefulTags, allergyNotes, factsOf, feasibility, ownAddon, forbidden, frequencyRange, isStapleAt, isVariantRow, notFor, plannable, ruleBreaks, ruleTags,
-  settingUsed, softSwapNotes, slotFacts, swapNotes, usedUp, capOf, vouched, walkSlot, PART_KINDS, type Gap, type NewName, type Part, type PartKind, type Proposal, type ShortSlot,
+import { applyParts, canonTag, carefulTags, allergyNotes, factsOf, historyRow, isDropped, ownAddon, forbidden, frequencyRange, isStapleAt, isVariantRow, notFor, plannable, ruleBreaks, ruleTags,
+  softSwapNotes, slotFacts, swapNotes, usedUp, capOf, vouched, walkSlot, PART_KINDS, type Gap, type NewName, type Part, type PartKind, type Proposal,
   type Week } from "./planChecks";
 import { isAllergyRule } from "./allergy";
 
 export type MakePlanResult =
   | { ok: true; week_start: string; message: string; intro?: string; instructions: string; unmet?: string[]; asked?: string[]; no_ingredients?: string[];
-      /** Slots whose repeat window the feasibility check narrowed (§5.2), with the days it now is. */ relaxed?: Record<string, number> }
+    }
   | { ok: false; reason: string; say: string; /** A question for the family (no_dishes). */ ask?: string };
 type Ingredient = { item: string; amount: number | null; unit: string | null };
 type Failure = Extract<ModelResult, { ok: false }>;
@@ -50,21 +51,21 @@ const strs = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is st
 export const SLOT_SCHEMA = { type: "object", required: ["days"], properties: {
   days: { type: "object", additionalProperties: { type: "array", items: { type: "string" } } },
   new: { type: "array", items: { type: "object", required: ["dish"], properties: { dish: { type: "string" }, why: { type: "string" }, like: { type: "string" }, part: { type: "string" } } } },
-  spares: { type: "object", additionalProperties: { type: "array", items: { type: "string" } } },
+  spares: { type: "object", additionalProperties: { type: "array", items: { type: "object", required: ["dish", "like"], properties: { dish: { type: "string" }, like: { type: "string" } } } } },
   notes: { type: "object", additionalProperties: { type: "string" } } } };
 
 export const SLOT_SYSTEM = [
-  "You plan one meal slot of an Indian family's week: the dishes made at that slot on each day in `days`. Answer with JSON only: { days: { \"YYYY-MM-DD\": [dish names] }, new: [{ dish, why, like, part }], spares: { part: [dish names] }, notes: { \"YYYY-MM-DD\": note } }.",
+  "You plan one meal slot of an Indian family's week: the dishes made at that slot on each day in `days`. Answer with JSON only: { days: { \"YYYY-MM-DD\": [dish names] }, new: [{ dish, why, like, part }], spares: { part: [{ dish, like }] }, notes: { \"YYYY-MM-DD\": note } }.",
   "Every date in `days` without `skip` gets its dishes; a date with `skip` gets none. Dish names only, no ingredients. A day's dishes are made once and eaten by everyone in its `for`.",
-  "A good week is one this family would happily eat: their own dishes first, in the proportions their plates show; a different main dish from one day to the next; everyday home food on weekdays and their special dishes on the days they have them; food the children and elders at the table can eat.",
+  "Their dishes (`library`, `looks_like`) guide the week; they are not its whole menu. A good week is one this family would happily eat: at least a third of its dishes their own, the rest new dishes like theirs for variety; a different main dish from one day to the next; everyday home food on weekdays and their special dishes on the days they have them; food the children and elders at the table can eat.",
   "Read each plate in `looks_like` as its parts: the main dish, the dal, the dry or gravy vegetable, the rice or bread it is eaten with, the side (curd, raita, chutney, salad). Each `library` dish says its `part`; make every day of the same parts as one of their plates, with as many dishes as `plate` says, never thinner.",
-  "Each day's dishes come from its own `allowed` list (the family's dishes that fit that day: on their days, with days left this week, someone there can eat them) and `staples`, plus one of its `must_have` (the rice or bread their plates have here) unless a dish that day already has its rice or bread (a one-pot rice dish, dosa). A dish's `left` is how many more days it may come this week: never more. A dish with `days` is what the family has on those days: put it on each of them where it is allowed. Fewer days than `how_often` is fine: a varied week is better.",
+  "A day's dishes of theirs come from its own `allowed` list (their dishes that fit that day: on their days, with days left this week, someone there can eat them), with `staples` and new dishes like theirs, plus one of its `must_have` (the rice or bread their plates have here) unless a dish that day already has its rice or bread (a one-pot rice dish, dosa). A dish's `left` is how many more days it may come this week: never more. A dish with `days` is what the family has on those days: put it on each of them where it is allowed. Fewer days than `how_often` is fine: a varied week is better.",
   "A dish's `said` is the family's own words for how often or on which days they have it: \"on Sundays\" means only on Sundays; \"twice a week\" at most twice; \"sometimes\" now and then, fewer is fine; \"most days\" or \"usually\" may come more often than twice. Words said over the one or the other of two dishes (\"chole or kadhi twice a week\") are shared between them: twice in all. Its `left`, `days` and `allowed` already hold these words and always win.",
   "A dish's `not_for` people do not eat it: that is fine, as long as each of them has a dish of their own that day beside the staples. `guests` eat that meal too: keep their `rules` for them the same way. People in a day's `own_slot` get their own dish at their own slot that day.",
-  "Some library dishes name a kind of dish, not one dish: \"Sabzi\", \"Dal\", \"Chutney\", \"Paratha\", or a dish with one (\"Idli with chutney\"). Never write that name as it is day after day: each day, name one particular dish of that kind, as a home cook of this family's region makes it, keeping every word of the family's name in it (\"Bhindi sabzi\", \"Aloo gobi sabzi\", \"Moong dal\", \"Dal tadka\", \"Methi paratha\", \"Idli with coconut chutney\"). The same goes for one of their dishes with another accompaniment (\"Idli with tomato chutney\" for their \"Idli with coconut chutney\"). List each in `new` with `like` set to the family's dish name exactly as given: it is their own dish made a particular way, so it does not use up `new_dishes_allowed`. Vary it across the week, keep it quick enough for the cook, and keep every rule of the people eating it.",
+  "Some library dishes name a kind of dish, not one dish: \"Sabzi\", \"Dal\", \"Chutney\", \"Paratha\", or a dish with one (\"Idli with chutney\"). Never write that name as it is day after day: each day, name one particular dish of that kind, as a home cook of this family's region makes it, keeping every word of the family's name in it (\"Bhindi sabzi\", \"Aloo gobi sabzi\", \"Moong dal\", \"Dal tadka\", \"Methi paratha\", \"Idli with coconut chutney\"). The same goes for one of their dishes with another accompaniment (\"Idli with tomato chutney\" for their \"Idli with coconut chutney\"). List each in `new` with `like` set to the family's dish name exactly as given: it is their own dish made a particular way, so it counts as theirs. Vary it across the week, keep it quick enough for the cook, and keep every rule of the people eating it.",
   "Write the names of `library` and `staples` dishes exactly as given.",
-  "Any other dish is new: list it in `new` with why in a few words, `like` (the dish of theirs it stands in for) and `part`; at most `new_dishes_allowed` new dishes in all; none when it is 0. `short_of_dishes` given: their known dishes do not cover the week, so add new dishes that sit in the same place on their plates and are of the same cuisine, each listed in `new`.",
-  "spares: for each part in `parts`, 3 more dishes this family would happily eat in that place at this slot, not already in your days: a particular way of one of their dishes first, then dishes of the same cuisine. When someone's rule rules out how a part's dishes are usually made, one spare is a particular way of their dish made for them, named so (\"Lauki sabzi without onion and garlic\"). They are used where a day's dish cannot stay.",
+  "Any other dish is new: list it in `new` with why in a few words, `part`, and `like`: one of their dishes at this meal in the same part of the plate (\"Moong dal usal\" like their \"Usal\", \"Methi thepla\" like their \"Paratha\"). A new dish is of the same cuisine and region, the same part of the plate, similar effort for the cook and the family's kind of ingredients, never a dish of another kind (no pasta unless they have pasta at this meal); their food rules hold. One with no `like` of theirs is not used. No new dish on a day whose `new_dishes_allowed` is 0.",
+  "spares: for each part in `parts`, 3 more dishes this family would happily eat in that place at this slot, not already in your days, each with its `like` (one of their dishes here of that part): a particular way of one of their dishes first, then new dishes like theirs. When someone's rule rules out how a part's dishes are usually made, one spare is a particular way of their dish made for them, named so (\"Lauki sabzi without onion and garlic\"). They are used where a day's dish cannot stay.",
   "Every rule in `rules` holds for its person (everyone when it says so): a dish against their rule is simply not theirs, so on every day they are in `for` they need at least one dish they can eat beside the staples. A rule with a count a week is kept that many times in the week, not every day. `notes_for_people` are preferences to keep in mind. A person in `fasting` eats only what it says.",
   "Do not repeat what `already_this_week` has at another meal the same day, and avoid what `recent` had. An add-on slot (`main_slot` given) holds only what its people have in place of, or beside, the main slot's dishes that day: a day with nothing allowed for it gets [] (they eat the main slot's dishes).",
   "Each day's dishes are one whole meal as a home serves it, like their plates: at lunch and dinner one main dish with the rice or bread it is eaten with (dal with rice, a sabzi with roti), never three curries or three mains side by side with nothing to eat them with. With no `looks_like`, a plate is a main, a side and its rice or bread.",
@@ -76,7 +77,7 @@ export const GAP_SYSTEM = [
   "You fill a few places in one meal slot of an Indian family's week. Answer with JSON only: { days: { \"YYYY-MM-DD\": [dish names] }, new: [{ dish, why, like, part }] }.",
   "For each item of `gaps`, one dish (two at most) for that date: of its `part` (any part when none), that every person in its `for` can eat under their `rules`, quick for a home cook, and none of `not` (already had enough this week, or on that day's plate already).",
   "When a dish is wanted for one person whose rule rules out how the family's dishes are usually made, name one of their dishes as made for that person, the rule's item left out in its name (\"Dal without onion and garlic\", \"Aloo gobi sabzi without onion and garlic\"), so it is theirs.",
-  "A particular way of one of the family's dishes (every word of their name kept, like \"Moong dal\" for their \"Dal\") is best: list it in `new` with `like` their name. Any other dish is new: list it in `new` with why in a few words, `like` and `part`; at most `new_dishes_allowed` of those, none when it is 0.",
+  "A particular way of one of the family's dishes (every word of their name kept, like \"Moong dal\" for their \"Dal\") is best: list it in `new` with `like` their name. Any other dish is new: list it in `new` with why in a few words, `part`, and `like`, one of `family_dishes` in the same part of the plate (same cuisine, similar effort); one with no `like` of theirs is not used.",
 ].join("\n");
 
 /** The plates' parts (one fast read a run): what each dish is on the family's plates at each slot. */
@@ -104,7 +105,18 @@ function proposalOf(json: unknown, dates: string[], emptyOk = false): { days: Ma
   if (Array.isArray(json.new)) for (const n of json.new) if (isObject(n) && typeof n.dish === "string" && n.dish.trim())
     out.newNames.set(dishKey(n.dish), { name: n.dish.trim(), why: typeof n.why === "string" ? n.why.trim() : "", ...(typeof n.like === "string" && n.like.trim() ? { like: n.like.trim() } : {}),
       ...(typeof n.part === "string" && n.part.trim() ? { part: n.part.trim().toLowerCase() } : {}) });
-  if (isObject(json.spares)) for (const [part, ds] of Object.entries(json.spares)) { const list = strs(ds); if (part.trim() && list.length) out.spares.set(part.trim().toLowerCase(), list); }
+  // Spares, each with the family's dish it is like (a plain name is read too: then only a particular way of theirs is used).
+  if (isObject(json.spares)) for (const [part, ds] of Object.entries(json.spares)) {
+    const pt = part.trim().toLowerCase(), list: string[] = [];
+    for (const x of Array.isArray(ds) ? ds : []) {
+      const dish = typeof x === "string" ? x.trim() : isObject(x) && typeof x.dish === "string" ? x.dish.trim() : "";
+      if (!dish) continue;
+      list.push(dish);
+      const like = isObject(x) && typeof x.like === "string" && x.like.trim() ? x.like.trim() : undefined;
+      if (!out.newNames.has(dishKey(dish))) out.newNames.set(dishKey(dish), { name: dish, why: "", ...(like ? { like } : {}), ...(pt ? { part: pt } : {}) });
+    }
+    if (pt && list.length) out.spares.set(pt, list);
+  }
   if (isObject(json.notes)) for (const [date, t] of Object.entries(json.notes)) if (dates.includes(date) && typeof t === "string" && t.trim() && !explainsItself(t)) out.notes.set(date, t.trim());
   return out;
 }
@@ -267,14 +279,19 @@ async function planWeek(deps: MakePlanDeps & { log: (line: string) => void }, in
   const toPlan = days.filter((d) => !d.fixed && !d.skip);
   if (!days.some((d) => !d.fixed)) return done({ ok: false, reason: "no_meals", say: only ? "There is no meal left to plan there." : "There are no days left to plan in that week." });
 
-  // 2. Each slot's facts, and the feasibility check.
+  // 2. Each slot's facts and guide: the family's dishes, and what was planned and kept at the slot in the weeks before
+  // (owner 25 Nov: later weeks are guided by the slot's history), as rows of theirs for this run.
   const library = listLibrary(db);
   const order = slots.filter((s) => days.some((d) => same(d.slot, s.name) && !d.fixed)).map((s) => s.name);
-  // A change plans inside the week's budget of new dishes: those already on the week's other slot-days count.
-  const newKept = only ? new Set(days.filter((d) => d.fixed).flatMap((d) => saved.find((x) => x.date === d.date && same(x.slot, d.slot))?.dishes.filter((x) => x.new).map((x) => dishKey(x.dish)) ?? [])).size : 0;
-  const w: Week = { days, slots: new Map(), rules, library, facts: new Map(), done: new Set(), newBudget: Math.max(0, newDishesPerWeek(db) - newKept), newDishes: new Map() };
+  const w: Week = { days, slots: new Map(), rules, library, facts: new Map(), done: new Set(), newDishes: new Map() };
+  const histories = new Map(slots.map((s) => [s.name, slotHistory(db, s.name, weekStart)]));
+  for (const s of slots) for (const r of histories.get(s.name)!.filter((x) => x.date && x.date >= addDays(weekStart, -HISTORY_GUIDE_DAYS) && !x.skip)) for (const x of r.dishes) {
+    const k = dishKey(x.dish), any = library.filter((y) => y.key === k);
+    if (any.some((y) => y.disliked || isDropped(y)) || library.some((y) => y.key === k && same(y.slot, s.name) && (plannable(y) || isVariantRow(y)))) continue;
+    library.push(historyRow(s.name, x.dish.trim(), any.find((y) => same(y.slot, s.name)) ?? any[0]));
+  }
   for (const s of slots) {
-    const history = slotHistory(db, s.name, weekStart);
+    const history = histories.get(s.name)!;
     w.slots.set(s.name.toLowerCase(), slotFacts(s, library, history, recent(history, weekStart, 3)));
     if (!order.includes(s.name)) w.done.add(s.name.toLowerCase());
   }
@@ -383,15 +400,10 @@ async function planWeek(deps: MakePlanDeps & { log: (line: string) => void }, in
   if (f1 ?? f2) return stopped((f1 ?? f2)!);
   const f3 = await carefulRead(order.flatMap((n) => w.slots.get(n.toLowerCase())!.library.filter(plannable).map((d) => d.name)));
   if (f3) return stopped(f3);
-  // The feasibility check after those reads: before them, every unread dish counted as nobody's and a slot came out short (run 28).
-  const feas = feasibility(w, order);
-  for (const l of feas.log) log(l);
   const settled = (d: PlanDay) => d.fixed || w.done.has(d.slot.toLowerCase());
   /** The week's settled main slots' dish on a date (the same main twice a day is not allowed). */
   const atOtherMain = (s: Slot, date: string, dish: string) => s.kind === "main" && days.some((x) => x.date === date && !same(x.slot, s.name) && settled(x)
     && w.slots.get(x.slot.toLowerCase())?.slot.kind === "main" && x.dishes.some((y) => dishKey(y) === dishKey(dish)) && !isStapleAt(w, x.slot, dish));
-  /** A slot's new-dish room now: its own shortfall's, and its share of the week's setting less what other slots used. */
-  const roomOf = (s: Slot) => { const sf = w.slots.get(s.name.toLowerCase())!; return sf.shortNew + Math.min(sf.newAllowed, Math.max(0, w.newBudget - settingUsed(w, (_, x) => same(x, s.name)))); };
 
   /** The request for one slot's call (§5.3), from the week as it is now: each day with who eats, the dishes allowed that day
    *  and the rice or bread it must have (owner 25 Nov). */
@@ -402,9 +414,7 @@ async function planWeek(deps: MakePlanDeps & { log: (line: string) => void }, in
     const usedDays = (k: string) => new Set(days.filter((d) => settled(d) && d.dishes.some((x) => dishKey(x) === k)).map((d) => d.date)).size;
     const lib = sf.library.filter((d) => plannable(d) && !sf.staples.some((x) => dishKey(x) === d.key)).flatMap((d) => {
       const max = capOf(w, s.name, d.name) ?? DEFAULT_DISH_DAYS;
-      // What a later slot sharing the dish was set aside (feasibility) is not this slot's to use.
-      const later = [...w.slots.values()].filter((x) => x !== sf && order.includes(x.slot.name) && !w.done.has(x.slot.name.toLowerCase())).reduce((n, x) => n + (x.takes.get(d.key) ?? 0), 0);
-      const left = Math.max(0, max - usedDays(d.key) - later);
+      const left = Math.max(0, max - usedDays(d.key));
       const not = eaters.filter((p) => mine.some((x) => x.people.includes(p) && ruleBreaks(w, { ...x, people: [p] }, d.name).length));
       if (!left || (eaters.length && not.length === eaters.length)) return [];
       // No least (owner 25 Nov: "fewer than said is fine: people want variety"); only the most and the days.
@@ -431,8 +441,7 @@ async function planWeek(deps: MakePlanDeps & { log: (line: string) => void }, in
         ...(d.new_dishes_allowed != null ? { new_dishes_allowed: d.new_dishes_allowed } : {}) }),
       looks_like: sf.looks_like, ...(sf.plate ? { plate: sf.plate[0] === sf.plate[1] ? `${sf.plate[0]} dish${sf.plate[0] === 1 ? "" : "es"}` : `${sf.plate[0]} to ${sf.plate[1]} dishes` } : {}),
       ...(parts.length ? { parts } : {}), staples: sf.staples, library: lib, already_this_week: already, recent: sf.recent, rules: ruleLines,
-      // A short slot's own new dishes (its shortfall) beside the week's setting, which other slots share (owner 24 Nov).
-      notes_for_people: notes, new_dishes_allowed: roomOf(s), ...(sf.short ? { short_of_dishes: true } : {}),
+      notes_for_people: notes,
       occasion: null, ...(main ? { main_slot: main } : {}),
     };
   };
@@ -440,12 +449,11 @@ async function planWeek(deps: MakePlanDeps & { log: (line: string) => void }, in
   const gapRequest = (s: Slot, gaps: Gap[], p: Proposal) => {
     const sf = w.slots.get(s.name.toLowerCase())!;
     const full = usedUp(w, s.name, p);
-    const placedNew = uniq([...p.days.values()].flat().filter((x) => { const row = sf.library.find((y) => y.key === dishKey(x)); return !(row && plannable(row)) && !isStapleAt(w, s.name, x); }).map(dishKey)).length;
     return { slot: s.name, looks_like: sf.looks_like, gaps: gaps.map((g) => {
       const holds = (r: Rule) => r.what !== "fasting" && r.what !== "note" && (!r.who || g.for.some((x) => same(x, r.who!))) && ruleHolds(r, g.date, s, s.name);
       return { date: g.date, ...(g.part ? { part: g.part } : {}), for: g.for, why: g.why, have: p.days.get(g.date) ?? [], rules: rules.filter(holds).map((r) => ruleLine(r, w, s.name)),
         not: uniq([...full, ...(p.days.get(g.date) ?? [])]) }; }),
-      family_dishes: sf.library.filter((d) => plannable(d) && !isStapleAt(w, s.name, d.name)).map((d) => d.name), new_dishes_allowed: Math.max(0, roomOf(s) - placedNew) };
+      family_dishes: sf.library.filter((d) => plannable(d) && !isStapleAt(w, s.name, d.name)).map((d) => d.name) };
   };
 
   // 3–4. The slot calls, in planning order, at most SLOT_CALLS_AT_ONCE at once; each walked in code, a gap asked once.
@@ -648,18 +656,16 @@ async function planWeek(deps: MakePlanDeps & { log: (line: string) => void }, in
   // not a line in unmet, and the calendar entries the plan could not read, folded together. A new dish is said with the
   // family's dish it stands in for, never the model's reason.
   const question = planQuestion({ short: only ? [] : [...leftOut.filter((n) => slots.find((s) => same(s.name, n))?.kind !== "addon")
-    .map((n) => ({ meal: slots.find((s) => same(s.name, n))?.kind === "main" ? n.toLowerCase() : n, added: false })), ...shortAsks(feas.short, slots, toPlan, w)], events: read.asked });
+    .map((n) => ({ meal: slots.find((s) => same(s.name, n))?.kind === "main" ? n.toLowerCase() : n, added: false }))], events: read.asked });
   const asked = question ? [question] : [];
   const newDishes = [...w.newDishes.values()].map((v) => ({ name: v.name, like: v.like ?? null }));
-  const relaxed = Object.fromEntries([...w.slots.values()].filter((x) => x.window !== REPEAT_WINDOW_DAYS && order.includes(x.slot.name)).map((x) => [x.slot.name, x.window]));
-  const relaxedOut = Object.keys(relaxed).length ? { relaxed } : {};
   if (only) {
     const message = changeMessage({
       meals: days.filter((d) => !d.fixed && !emptyAddon(d)).map((d) => ({ label: `${weekdayLong(d.date)} ${d.slot}`, skip: d.skip,
         dishes: d.dishes.map((name) => ({ name, not_for: notFor(w, d, name), note: (dishNotes.get(`${d.date}|${d.slot}|${dishKey(name)}`) ?? []).join("; ") || null })) })),
       unmet: uniq(unmet), new_dishes: newDishes, link: weekLink(deps.basePath, weekStart) });
     return done({ ok: true, week_start: weekStart, message, instructions: "Send message to the family word for word, as one message, then end your turn.",
-      ...(unmet.length ? { unmet: uniq(unmet) } : {}), ...(asked.length ? { asked } : {}), ...(noIngredients.length ? { no_ingredients: noIngredients } : {}), ...relaxedOut });
+      ...(unmet.length ? { unmet: uniq(unmet) } : {}), ...(asked.length ? { asked } : {}), ...(noIngredients.length ? { no_ingredients: noIngredients } : {}) });
   }
   const closed = closeWeek(db, weekStart, deps.basePath, unmet);
   const standing = rules.filter((r) => r.what === "note" && !r.hard).map(noteLine);
@@ -670,22 +676,7 @@ async function planWeek(deps: MakePlanDeps & { log: (line: string) => void }, in
     standing, unmet: uniq(unmet), new_dishes: newDishes, question, link: weekLink(deps.basePath, weekStart),
   });
   return done({ ok: true, week_start: weekStart, message, ...(closed.intro ? { intro: closed.intro } : {}), instructions: closed.instructions,
-    ...(unmet.length ? { unmet: uniq(unmet) } : {}), ...(asked.length ? { asked } : {}), ...(noIngredients.length ? { no_ingredients: noIngredients } : {}), ...relaxedOut });
-}
-
-/** At most this many meals short of dishes are named in the plan's question. */
-export const SHORT_QUESTIONS_MAX = 2;
-
-/** The slots too thin for their week (the feasibility check's `short`) as the plan's one question names them, the thinnest
- *  first, at most SHORT_QUESTIONS_MAX: the meal's name as said ("dinner", "Kabir's tiffin") and whether new dishes were
- *  placed there (owner 25 Nov: "I know only a few dishes for dinner and Kabir's tiffin, so I've added some new ones"). */
-export function shortAsks(short: ShortSlot[], slots: Slot[], planned: PlanDay[], w: Week): ShortAsk[] {
-  const ratio = (x: ShortSlot) => (x.places ? x.supply / x.places : 1);
-  return [...short].sort((a, b) => ratio(a) - ratio(b) || a.known - b.known).slice(0, SHORT_QUESTIONS_MAX).map((x) => {
-    const slot = slots.find((s) => same(s.name, x.slot));
-    const added = planned.some((d) => same(d.slot, x.slot) && d.dishes.some((dish) => { const nw = w.newDishes.get(dishKey(dish)); return !!nw && same(nw.slot, x.slot); }));
-    return { meal: slot?.kind === "main" ? x.slot.toLowerCase() : x.slot, added };
-  });
+    ...(unmet.length ? { unmet: uniq(unmet) } : {}), ...(asked.length ? { asked } : {}), ...(noIngredients.length ? { no_ingredients: noIngredients } : {}) });
 }
 
 /** A note rule as said: "Asha: less spicy", the name only when the family's words do not have it. */
