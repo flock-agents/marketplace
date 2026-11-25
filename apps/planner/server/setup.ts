@@ -1060,7 +1060,11 @@ export function codePlace(name: string, word = name.trim().toLowerCase()): Place
     const sub = m.sub ?? soleSub(k);
     return { kind: k.name, sub, item: null, own: false, named: "dish", parts: [{ kind: "Rice", sub: null }, { kind: k.name, sub }], word };
   }
-  if (!whole) return null;
+  if (!whole) {
+    // A vegetable said on its own ("bhindi", "lauki") is the catalog's sabzi of it: a side of the plate.
+    const veg = ws.length <= 2 ? matchDish(`${name} sabzi`) : null;
+    return veg?.by === "item" && veg.kind === "Sabzi" ? { kind: "Sabzi", sub: veg.sub, item: veg.item, own: false, named: "dish", word } : null;
+  }
   const k = catalogKind(whole.kind)!;
   return { kind: k.name, sub: whole.sub ?? soleSub(k), item: whole.item, own: false, named: whole.by === "item" ? "dish" : "category", word };
 }

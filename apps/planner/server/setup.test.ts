@@ -575,6 +575,10 @@ describe("the kinds model: each dish placed, each meal's templates, the cuisines
   it("code places what the catalog names: an item is a dish, a sub-kind or kind a category; rice with a curry or curd is two parts", () => {
     expect(codePlace("Beans poriyal")).toMatchObject({ kind: "Sabzi", sub: "Poriyal/Thoran", item: "Beans poriyal", named: "dish" });
     expect(codePlace("Poriyal")).toMatchObject({ kind: "Sabzi", sub: "Poriyal/Thoran", item: null, named: "category" });
+    // A vegetable said on its own ("bhindi", "lauki") is its sabzi: a side of the plate, never a meal by itself.
+    expect(codePlace("Bhindi")).toMatchObject({ kind: "Sabzi", sub: "Sabzi", item: "Bhindi sabzi", named: "dish" });
+    expect(codePlace("Lauki")).toMatchObject({ kind: "Sabzi", item: "Lauki sabzi", named: "dish" });
+    expect(codePlace("Muri")).toBeNull();
     // Decided 3: curd rice is plated as rice and curd; so are rice and a curry eaten mixed.
     expect(codePlace("Curd rice")!.parts).toEqual([{ kind: "Rice", sub: null }, { kind: "Curd", sub: "Curd" }]);
     expect(codePlace("Kadhi chawal")!.parts).toEqual([{ kind: "Rice", sub: null }, { kind: "Rice curry", sub: "Kadhi" }]);
@@ -584,7 +588,7 @@ describe("the kinds model: each dish placed, each meal's templates, the cuisines
     expect(codePlace("Lemon rice")).toMatchObject({ kind: "Flavoured rice", item: "Lemon rice" });
     expect(codePlace("Lemon rice")!.parts).toBeUndefined();
     // Not in the catalog: the kinds read places it.
-    expect(codePlace("Bhindi")).toBeNull();
+    expect(codePlace("Kovakkai")).toBeNull();
     expect(codePlace("Boiled chicken")).toBeNull();
   });
 
@@ -715,20 +719,20 @@ describe("apply_setup: the kinds model, end to end with a fake model", () => {
     "Q: What did you have for breakfast last week?",
     "A: Khichdi most days, boiled chicken on gym days, appam with vegetable stew on Sundays.",
     "Q: And dinner?",
-    "A: Phulka with bhindi or chicken curry. We're Malayali, by the way.",
+    "A: Phulka with kovakkai or chicken curry. We're Malayali, by the way.",
   ];
   const DISHES2 = {
     library: [["Khichdi", "Breakfast", "Khichdi most days"], ["Boiled chicken", "Breakfast", "boiled chicken on gym days"], ["Appam", "Breakfast", "appam with vegetable stew"],
-      ["Vegetable stew", "Breakfast", "appam with vegetable stew"], ["Phulka", "Dinner", "Phulka with bhindi"], ["Bhindi", "Dinner", "Phulka with bhindi"],
+      ["Vegetable stew", "Breakfast", "appam with vegetable stew"], ["Phulka", "Dinner", "Phulka with kovakkai"], ["Kovakkai", "Dinner", "Phulka with kovakkai"],
       ["Chicken curry", "Dinner", "chicken curry"]],
     seed: [["Breakfast", "Khichdi", "Khichdi most days"], ["Breakfast", "Boiled chicken", "boiled chicken on gym days"], ["Breakfast", "Appam, Vegetable stew", "appam with vegetable stew"],
-      ["Dinner", "Phulka, Bhindi", "Phulka with bhindi or chicken curry"], ["Dinner", "Phulka, Chicken curry", "Phulka with bhindi or chicken curry"]],
+      ["Dinner", "Phulka, Kovakkai", "Phulka with kovakkai or chicken curry"], ["Dinner", "Phulka, Chicken curry", "Phulka with kovakkai or chicken curry"]],
   };
   const OFTEN2 = { often: [["Khichdi", "Breakfast", "Khichdi most days", "most days", "usually", ""],
     ["Boiled chicken", "Breakfast", "boiled chicken on gym days", "on gym days", "sometimes", ""],
     ["Appam", "Breakfast", "appam with vegetable stew on Sundays", "on Sundays", "", "Sun"], ["Vegetable stew", "Breakfast", "appam with vegetable stew on Sundays", "on Sundays", "", "Sun"]] };
   const KINDS = { dishes: [{ name: "Khichdi", meal: "breakfast", named: "dish" }, { name: "Boiled chicken", meal: "breakfast", own: true, named: "dish" },
-    { name: "Bhindi", meal: "dinner", kind: "Sabzi", sub: "Sabzi", named: "dish" }] };
+    { name: "Kovakkai", meal: "dinner", kind: "Sabzi", sub: "Sabzi", named: "dish" }] };
   const fake2 = (more: Partial<Record<Part, unknown>> = {}) => fake({ home: { slots: [{ name: "Breakfast", kind: "main" }, { name: "Lunch", kind: "main" }, { name: "Dinner", kind: "main" }] },
     rules: { rules: [] }, dishes: DISHES2, often: OFTEN2, kinds: KINDS, contains: containsOf(), lint: { dishes: [] }, ...more });
 
@@ -743,17 +747,17 @@ describe("apply_setup: the kinds model, end to end with a fake model", () => {
     expect(asked).toHaveLength(1);
     expect(asked[0].tier).toBe("fast");
     const user = JSON.parse(asked[0].user);
-    expect(user.dishes.map((d: any) => d.name).sort()).toEqual(["Bhindi", "Boiled chicken", "Khichdi"]);
+    expect(user.dishes.map((d: any) => d.name).sort()).toEqual(["Boiled chicken", "Khichdi", "Kovakkai"]);
     expect(user.dishes.find((d: any) => d.name === "Khichdi").known).toBe("Khichdi / Khichdi");
     expect(user.catalog.some((l: string) => l.startsWith("Sabzi [") && l.includes("Poriyal/Thoran"))).toBe(true);
     // The library: kind, sub-kind and catalog item; a catalog item's contents from the catalog, not asked of the model.
     const row = (n: string) => k.rows("library").find((d) => d.name === n)!;
-    expect([row("Bhindi").kind, row("Bhindi").sub, row("Bhindi").catalog_item]).toEqual(["Sabzi", "Sabzi", null]);
+    expect([row("Kovakkai").kind, row("Kovakkai").sub, row("Kovakkai").catalog_item]).toEqual(["Sabzi", "Sabzi", null]);
     expect([row("Boiled chicken").kind, row("Boiled chicken").catalog_item]).toEqual(["Boiled chicken", null]);
     expect([row("Chicken curry").kind, row("Chicken curry").sub, row("Chicken curry").catalog_item]).toEqual(["Chicken", "Curry", "Chicken curry"]);
     expect(JSON.parse(row("Chicken curry").contains).sort()).toEqual(["chicken", "meat", "onion_garlic"]);
     expect(f.of("contains").flatMap((c) => JSON.parse(c.user).dishes)).not.toContain("Chicken curry");
-    expect(f.of("contains").flatMap((c) => JSON.parse(c.user).dishes)).toContain("Bhindi");
+    expect(f.of("contains").flatMap((c) => JSON.parse(c.user).dishes)).toContain("Kovakkai");
     // Breakfast: khichdi named as a dish at breakfast stays theirs; boiled chicken a kind of their own; appam with the stew fixed.
     const fam = (await k.owner("GET", "/api/family")).body;
     const slot = (n: string) => fam.slots.find((s: any) => s.name === n);
@@ -768,7 +772,7 @@ describe("apply_setup: the kinds model, end to end with a fake model", () => {
     expect(slot("Lunch").templates).toBeNull();      // no dish said for lunch: not read
     // Cuisines: appam and the stew are Kerala (appam Tamil too), and they said Malayali.
     expect(fam.house.cuisines).toEqual(["tamil", "kerala", "south"]);
-    expect(r.said).toContain("Your usual meals:\n- Breakfast: khichdi (most days); or boiled chicken (2–3 times a week); or appam and vegetable stew (on Sundays)\n- Dinner: phulka and bhindi; or phulka and chicken curry");
+    expect(r.said).toContain("Your usual meals:\n- Breakfast: khichdi (most days); or boiled chicken (2–3 times a week); or appam and vegetable stew (on Sundays)\n- Dinner: phulka and kovakkai; or phulka and chicken curry");
     expect(r.said).toContain("Your kitchen: Tamil, Kerala, South Indian. Tell me if that's not right.");
     expect(r.said).not.toContain("Your usual dishes");
   });
@@ -817,7 +821,7 @@ describe("apply_setup: the kinds model, end to end with a fake model", () => {
     expect(Date.now() - t0).toBeLessThan(5000);
     expect(r.ok).toBe(true);
     const fam = (await k.owner("GET", "/api/family")).body;
-    expect(fam.slots.find((s: any) => s.name === "Dinner").templates[0].parts).toEqual([{ kind: "Roti" }, { items: ["Bhindi"] }]);
+    expect(fam.slots.find((s: any) => s.name === "Dinner").templates[0].parts).toEqual([{ kind: "Roti" }, { items: ["Kovakkai"] }]);
   });
 
   it("the kinds read fails: the setup still saves; what code could not place is the family's fixed dish", async () => {
@@ -826,7 +830,7 @@ describe("apply_setup: the kinds model, end to end with a fake model", () => {
     const r = await k.op("apply_setup", { household: FAMILY, transcript: T });
     expect(r.ok).toBe(true);
     const fam = (await k.owner("GET", "/api/family")).body;
-    expect(fam.slots.find((s: any) => s.name === "Dinner").templates[0].parts).toEqual([{ kind: "Roti" }, { items: ["Bhindi"] }]);
+    expect(fam.slots.find((s: any) => s.name === "Dinner").templates[0].parts).toEqual([{ kind: "Roti" }, { items: ["Kovakkai"] }]);
     expect(fam.slots.find((s: any) => s.name === "Breakfast").templates.slice(0, 2).map((t: any) => t.parts)).toEqual([[{ items: ["Khichdi"] }], [{ items: ["Boiled chicken"] }]]);
   });
 });
