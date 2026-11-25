@@ -426,3 +426,14 @@ describe("a dish had every day (class 2: daily items)", () => {
     for (const d of WEEK) expect(r.at(d, "Dinner")).toContain("Kachumber");
   });
 });
+
+describe("a category said how often of", () => {
+  it("'dal sometimes' at dinner: dals there on at most three days, though both templates hold a dal", () => {
+    const kinds: MealKind[] = [{ name: "Roti", staple: true }, { name: "Sabzi" }, { name: "Dal" }, { name: "Chicken" }];
+    const lib = [dish("Phulka", "Dinner", "Roti"), ...SABZIS.map((n) => dish(n, "Dinner", "Sabzi")), dish("Dal", "Dinner", "Dal", { frequency: "sometimes" }),
+      ...["Chicken curry", "Kadai chicken"].map((n) => dish(n, "Dinner", "Chicken", { contains: ["chicken"] }))];
+    const r = run({ slots: [slot("Dinner", { kinds, templates: [T({ kind: "Roti" }, { kind: "Chicken" }, { kind: "Sabzi" }, { kind: "Dal" }), T({ kind: "Roti" }, { kind: "Sabzi" }, { kind: "Dal" })] })], library: lib });
+    expect(WEEK.filter((d) => r.at(d, "Dinner").some((x) => /dal/i.test(x))).length).toBeLessThanOrEqual(3);
+    for (const d of WEEK) expect(r.at(d, "Dinner").length).toBeGreaterThanOrEqual(2);
+  });
+});

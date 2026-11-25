@@ -301,6 +301,11 @@ export function fillWeek(input: FillInput): FillResult {
     const rows = famRows.filter((r) => { const c = categoryPlace(r); return !!c && sameKind(c.kind, kind) && (!c.sub || sameKind(c.sub, sub)); });
     return rows.length && rows.every((r) => r.days?.length) ? uniq(rows.flatMap((r) => r.days ?? [])) : null;
   };
+  /** The family's category words at a slot that hold an item of this kind and sub-kind. */
+  const catRowsAt = (slot: string, kind: string, sub: string | null) =>
+    famRows.filter((r) => { if (!same(r.slot, slot)) return false; const c = categoryPlace(r); return !!c && sameKind(c.kind, kind) && (!c.sub || sameKind(c.sub, sub)); });
+  /** The dates a category's items were placed at a slot, by slot|category key. */
+  const catUse = new Map<string, Set<string>>();
   const named = (kind: string, sub: string | null) => categories.some((c) => sameKind(c.kind, kind) && (!c.sub || sameKind(c.sub, sub)));
   w.ownItems = new Set(CATALOG.kinds.flatMap((k) => (k.staple ? [] : k.items.filter((it) => named(k.name, it.sub ?? null)).map((it) => dishKey(it.name)))));
   /** The catalog's items of a kind (one sub-kind when given) for this family at this meal: regional only within their
@@ -468,6 +473,11 @@ export function fillWeek(input: FillInput): FillResult {
     const row = it.family ? rowAt(s.name, it.key) : undefined;
     if (row?.days?.length && !row.days.includes(weekdayOf(d.date))) return false;
     if (!row && it.days?.length && !it.days.includes(weekdayOf(d.date))) return false;
+    // A category the family said how often of at this meal ("dal sometimes"): its items together, that often there.
+    if (!row && it.catalog && it.family) for (const c of catRowsAt(s.name, it.kind, it.sub)) {
+      const r = c.frequency && c.frequency !== "daily" ? frequencyRange(c.frequency) : null;
+      if (r && [...(catUse.get(`${s.name.toLowerCase()}|${c.key}`) ?? [])].filter((x) => x !== d.date).length >= r[1]) return false;
+    }
     const range = row && row.frequency !== "daily" ? frequencyRange(row.frequency) : null;
     const usedOther = [...(usedDates.get(it.key) ?? [])].filter((x) => x !== d.date);
     if (!loose && range && usedOther.length >= range[1]) return false;
@@ -502,6 +512,7 @@ export function fillWeek(input: FillInput): FillResult {
     return best?.name ?? null;
   };
   const put = (s: Slot, d: PlanDay, plate: Plate, it: Item, part: number, staple: boolean) => {
+    if (it.catalog && it.family) for (const c of catRowsAt(s.name, it.kind, it.sub)) { const k = `${s.name.toLowerCase()}|${c.key}`; catUse.set(k, (catUse.get(k) ?? new Set()).add(d.date)); }
     plate.push({ name: it.name, key: it.key, part, staple, isNew: !it.family, kind: it.kind, sub: it.sub });
     use(d.date, s.name, it.name);
     dayOf(d).dishes.push(it.name);
