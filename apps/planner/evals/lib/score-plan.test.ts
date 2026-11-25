@@ -313,6 +313,9 @@ describe("scorePlan: the base minimum", () => {
     expect(fails(set(goodWeek(), "Mon", "Dinner", ["Dal rice", "Rice", "Lauki"]))).toContain("no_doubled_staple");
     expect(fails(set(goodWeek(), "Mon", "Dinner", ["Roti with aloo gobi", "Roti", "Rajma"]))).toContain("no_doubled_staple");
     expect(fails(set(goodWeek(), "Mon", "Dinner", ["Khichdi"]))).not.toContain("whole_plate");
+    // Decided 8: a flavoured rice, a biryani, a khichdi is a whole plate, whatever its name ("vangi bath").
+    expect(fails(set(goodWeek(), "Mon", "Lunch", ["Vangi bath"]))).not.toContain("whole_plate");
+    expect(fails(set(goodWeek(), "Mon", "Lunch", ["Puliyogare", "Curd"]))).not.toContain("whole_plate");
   });
   test("a main three days running at breakfast: the next day, not a cap (owner 25 Nov)", () => {
     const p = goodWeek();

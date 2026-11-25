@@ -337,14 +337,16 @@ export function scorePlan(h: Household, plan0: PlanOut, loaded: SetupOut, o: { f
   //    nobody without food, a clean message. Its own word lists (the scorer reads dish names
   //    the way a person would, apart from the planner's code).
   const isBareStaple = isBareStapleName;
-  const carb = (x: string) => hasWord(x, BREAD_RICE) || hasWord(x, ONE_POT);
+  // Decided 8: the one-pot rice kinds (khichdi, biryani, flavoured rice) are each a whole plate, whatever the dish's name.
+  const onePotKind = (x: string) => ["Khichdi", "Biryani", "Flavoured rice", "Pulao"].includes(kindOf(x)?.kind ?? "");
+  const carb = (x: string) => hasWord(x, BREAD_RICE) || hasWord(x, ONE_POT) || onePotKind(x);
   for (const sd of cooked) {
     const ds = sd.dishes.map((d) => d.name);
     // An add-on plate holds only the difference ("Dadu's dinner: Phulka"): a staple alone is right there.
     const addon = t.slots.find((x) => lc(x.name) === lc(sd.slot))?.kind === "addon";
     if (!addon) add("not_bare", !ds.every(isBareStaple), `${dayOfSd(sd)} ${sd.slot}: only ${ds.join(", ")}`);
     if (/^(lunch|dinner)$/i.test(sd.slot)) {
-      const onePot = ds.some((x) => hasWord(x, ONE_POT) || (carb(x) && words(x).length > 1 && !isBareStaple(x)));
+      const onePot = ds.some((x) => hasWord(x, ONE_POT) || onePotKind(x) || (carb(x) && words(x).length > 1 && !isBareStaple(x)));
       const whole = ds.some(carb) && (ds.length >= 2 ? ds.some((x) => !isBareStaple(x)) : onePot);
       add("whole_plate", whole, `${dayOfSd(sd)} ${sd.slot}: ${ds.join(", ")}`);
     }
