@@ -1,23 +1,16 @@
-// What code checks and mends of a week's plan (docs/slot-model-spec.md §5.2, §5.4; owner 25 Nov): each slot's facts and the
-// plates' parts (the rice or bread a day must have, the staples); every hard rule kept for every person at every slot-day,
-// read from what each dish contains and failing closed where a dish was never read for a rule's item, an allergy by the
-// family's word for their own dishes or a careful read; and the walk, which makes the slot call's week right day by day:
-// every dish one of the family's (their library and plates, and what was planned and kept here before), a staple, a
-// particular way of a family dish, or a new one like a dish of theirs at that slot and part, with at least OWN_SHARE of the
-// week's mains their own (owner 25 Nov: their dishes guide the week, they are not its whole menu; never disliked or
-// dropped), on its days, at most its days a week across all slots, no main twice a day, nobody without food. Pure: no
-// database, no model.
-import { BASE_TAGS, DEFAULT_DISH_DAYS, FREQUENCY_DAYS, REPEAT_WINDOW_DAYS, SLOT_ORDER, STAPLES_FROM_PLANNED, TAG_PARENT,
-  UNTRIED_MAX_OFFERS, type Frequency } from "./db/constants";
+// What code checks of a week's plan (docs/slot-model-spec.md §5.4; owner 25 Nov; kinds model contract rules 6 and 7): each
+// slot's facts (its staples, its plates); every hard rule kept for every person at every slot-day, read from what each dish
+// contains and failing closed where a dish was never read for a rule's item, an allergy by the family's word for their own
+// dishes or a careful read; onion and garlic a note, never a block (rule 7); who is left with nothing; the checks a saved
+// week is read against (changes.ts). The week itself is filled by fillWeek.ts. Pure: no database, no model.
+import { BASE_TAGS, FREQUENCY_DAYS, STAPLES_FROM_PLANNED, TAG_PARENT, UNTRIED_MAX_OFFERS, type Frequency } from "./db/constants";
 import { isAllergyRule } from "./allergy";
-import { addDays, weekdayOf } from "./dates";
 import { dishKey } from "./dishText";
 import { looksLike, looksLikeRows, staples, type HistoryRow, type LibraryDish, type Rule, type Slot } from "./slotStore";
 import { ruleHolds, type PlanDay } from "./planDays";
 
 const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
 const uniq = <T>(xs: T[]) => [...new Set(xs)];
-const dayDiff = (a: string, b: string) => Math.round((Date.parse(`${b}T12:00:00`) - Date.parse(`${a}T12:00:00`)) / 86_400_000);
 
 // ── Tags ──
 
@@ -56,7 +49,7 @@ export function ruleTags(rules: Rule[]): string[] {
 
 // ── A slot's own facts for the week ──
 
-/** How many days a week a dish may come, [min, max], by its frequency (null: none said, at most DEFAULT_DISH_DAYS). */
+/** How many days a week a dish may come, [min, max], by its frequency (null: none said: no count). */
 export function frequencyRange(f: Frequency | null): [number, number] | null {
   if (!f) return null;
   if (f in FREQUENCY_DAYS) return FREQUENCY_DAYS[f as keyof typeof FREQUENCY_DAYS];
@@ -71,92 +64,23 @@ export const plannable = (d: LibraryDish): boolean => !d.disliked && !isDropped(
 /** The rows staples are counted from (a single filter, so it can be flipped: STAPLES_FROM_PLANNED). */
 export const stapleRows = (rows: HistoryRow[]): HistoryRow[] => rows.filter((r) => r.date === null || r.status === "confirmed" || STAPLES_FROM_PLANNED);
 
-/** The non-staple dishes counted on a main meal's plate when the family gave no plate of theirs (#29). */
-export const UNKNOWN_MAIN_PLATE = 3;
+export type SlotFacts = { slot: Slot; library: LibraryDish[]; staples: string[]; looks_like: string[];
+  /** The family's own plates here (seed and confirmed), each its dishes. */ plates: string[][] };
 
-// ── The plates' parts (one fast read a run, makePlan's PARTS call) ──
-
-/** What a dish is on the plate: the rice or bread eaten with the rest; a complete dish (its own rice or bread, or a meal by
- *  itself: rajma chawal, khichdi, dosa); a main eaten with rice or bread (dal, sabzi, curry); a side (curd, salad, pickle). */
-export const PART_KINDS = ["rice_or_bread", "complete", "main", "side"] as const;
-export type PartKind = (typeof PART_KINDS)[number];
-/** A dish's place on the family's plates: `part` its plain name (the same name for dishes that take the same place). */
-export type Part = { part: string; kind: PartKind };
-/** Kinds that are staples of a slot (no weekly cap): the rice or bread, and the sides. */
-const BASE_KINDS: PartKind[] = ["rice_or_bread", "side"];
-
-export type SlotFacts = { slot: Slot; library: LibraryDish[]; staples: string[]; daily: string[]; looks_like: string[];
-  /** The family's own plates here (seed and confirmed), each its dishes. */ plates: string[][]; typical: number;
-  /** The fewest and most dishes on the slot's past plates (seed and confirmed); null: none. */ plate: [number, number] | null;
-  /** Each dish's part on the plate, by key (the parts read; new dishes, spares and variants as they come). */ parts: Map<string, Part>;
-  /** The rice or bread every day here has (one of them), from the family's plates; [] none. */ mustHave: string[];
-  recent: Record<string, string[]>; window: number;
-  /** The family's own dishes here, by key (owner 25 Nov: they guide the week): their library dishes, the dishes on their
-   *  plates, and what was planned and kept here in the weeks before (history rows, see historyRow). */ own: Set<string> };
-
-/** The typical count of non-staple dishes on the family's plates here (the median); none: one, or a main meal's plate. */
-function typicalOf(sf: Pick<SlotFacts, "slot" | "library" | "plates" | "staples">): number {
-  const keys = new Set(sf.staples.map(dishKey));
-  const counts = sf.plates.map((r) => r.filter((d) => !keys.has(dishKey(d))).length).sort((a, b) => a - b);
-  // A plate of staples only (two phulkas every night) has no other dish to fill; no history: one. A main meal with no plate
-  // and no dish of theirs (planned from new dishes only, the family said "suggest some") is counted as the plate a model
-  // fills, a main, a side and its rice or bread (#29: one a plate made 4 new dishes for 21 places, and repeats).
-  return counts.length ? counts[Math.floor((counts.length - 1) / 2)] : sf.slot.kind === "main" && !sf.library.some(plannable) ? UNKNOWN_MAIN_PLATE : 1;
-}
-
-/** A slot's staples (history's, from confirmed rows only, and every dish the family has daily; the parts read adds the
- *  rice, bread and sides: applyParts), looks like (seed and confirmed), recent (any status) and the typical count of
- *  non-staple dishes on a plate. */
-export function slotFacts(slot: Slot, library: LibraryDish[], history: HistoryRow[], recentRows: Record<string, string[]>): SlotFacts {
+/** A slot's staples (history's, from confirmed rows only; every dish the family has daily; and the library dishes of the
+ *  slot's staple kinds), looks like and plates (seed and confirmed). */
+export function slotFacts(slot: Slot, library: LibraryDish[], history: HistoryRow[], _recent?: unknown): SlotFacts {
   const mine = library.filter((d) => same(d.slot, slot.name));
   const daily = mine.filter((d) => d.frequency === "daily" && plannable(d)).map((d) => d.name);
-  const all = [...staples(stapleRows(history)), ...daily].filter((x, i, xs) => xs.findIndex((y) => dishKey(y) === dishKey(x)) === i);
-  const rows = looksLikeRows(history);
-  const plates = rows.map((r) => r.dishes.map((d) => d.dish.trim()));
-  const sizes = rows.map((r) => r.dishes.length).filter((n) => n > 0);
-  const plate: [number, number] | null = sizes.length ? [Math.min(...sizes), Math.max(...sizes)] : null;
-  const sf: SlotFacts = { slot, library: mine, staples: all, daily, looks_like: looksLike(history), plates, typical: 1, plate, parts: new Map(), mustHave: [],
-    recent: recentRows, window: REPEAT_WINDOW_DAYS,
-    own: new Set([...mine.filter(plannable).map((d) => d.key), ...plates.flat().map(dishKey)]) };
-  sf.typical = typicalOf(sf);
-  return sf;
+  const stapleKinds = new Set((slot.kinds ?? []).filter((k) => k.staple).map((k) => k.name.toLowerCase()));
+  const ofStapleKind = mine.filter((d) => plannable(d) && d.kind && stapleKinds.has(d.kind.toLowerCase())).map((d) => d.name);
+  const all = [...staples(stapleRows(history)), ...daily, ...ofStapleKind].filter((x, i, xs) => xs.findIndex((y) => dishKey(y) === dishKey(x)) === i);
+  const plates = looksLikeRows(history).map((r) => r.dishes.map((d) => d.dish.trim()));
+  return { slot, library: mine, staples: all, looks_like: looksLike(history), plates };
 }
 
-/** The parts read applied to a slot: each dish's part; the rice, bread and sides on its plates or in its library are its
- *  staples (no weekly cap); the typical plate counted again; and its must-have rice or bread. */
-export function applyParts(sf: SlotFacts, parts: Map<string, Part>): void {
-  const names = [...sf.plates.flat(), ...sf.library.map((d) => d.name), ...sf.staples];
-  for (const n of names) { const x = parts.get(dishKey(n)); if (x) sf.parts.set(dishKey(n), x); }
-  const kind = (n: string) => sf.parts.get(dishKey(n))?.kind;
-  const base = names.filter((n) => BASE_KINDS.includes(kind(n) as PartKind) && !sf.library.some((d) => d.key === dishKey(n) && !plannable(d)));
-  // A staple has no weekly count only as the family has it (owner 25 Nov): never one they gave a how often or days for, and
-  // only one that sits beside a main on each of their plates it is on (roti beside sabzi); alone as the plate (a paratha
-  // breakfast, an idli breakfast) it is a dish like any other.
-  const row = (n: string) => sf.library.find((d) => d.key === dishKey(n));
-  const daily = (n: string) => row(n)?.frequency === "daily";
-  const said = (n: string) => !daily(n) && (!!row(n)?.frequency || !!row(n)?.days?.length);
-  const mainish = (n: string) => kind(n) === "main" || kind(n) === "complete" || (!kind(n) && !base.some((b) => dishKey(b) === dishKey(n)));
-  const beside = (n: string) => sf.plates.filter((pl) => pl.some((x) => dishKey(x) === dishKey(n))).every((pl) => pl.some((x) => dishKey(x) !== dishKey(n) && mainish(x)));
-  sf.staples = [...sf.staples, ...base].filter((x, i, xs) => xs.findIndex((y) => dishKey(y) === dishKey(x)) === i).filter((n) => daily(n) || (!said(n) && beside(n)));
-  sf.typical = typicalOf(sf);
-  sf.mustHave = mustHaveOf(sf);
-}
-/** The rice or bread a slot's every day has (owner 25 Nov): at lunch and dinner, the rice or bread the family's plates have;
- *  at another slot only when every plate of theirs has one (or a complete dish). */
-function mustHaveOf(sf: SlotFacts): string[] {
-  const kind = (x: string) => sf.parts.get(dishKey(x))?.kind;
-  const breads = sf.plates.flat().filter((x) => kind(x) === "rice_or_bread").filter((x, i, xs) => xs.findIndex((y) => dishKey(y) === dishKey(x)) === i);
-  if (!breads.length) return [];
-  const meal = sf.slot.kind === "main" && sf.slot.order >= SLOT_ORDER.Lunch;
-  return meal || sf.plates.every((pl) => pl.some((x) => kind(x) === "rice_or_bread" || kind(x) === "complete")) ? breads : [];
-}
-/** A dish's part at a slot, when known. */
-export const partOf = (w: Week, slot: string, dish: string): Part | undefined => w.slots.get(slotKey(slot))?.parts.get(dishKey(dish));
-/** Is a dish a main of the plate (a person needs one of their own where the plate has one): a main or complete dish by the
- *  parts read, else any dish that is not a staple there (a daily dal is still a main). */
-export const mainAt = (w: Week, slot: string, dish: string): boolean => { const k = partOf(w, slot, dish)?.kind; return k === "main" || k === "complete" || (!k && !isStapleAt(w, slot, dish)); };
-/** Does a dish bring the day's rice or bread: it is one, or a complete dish. */
-const isBase = (w: Week, slot: string, dish: string) => { const k = partOf(w, slot, dish)?.kind; return k === "rice_or_bread" || k === "complete"; };
+/** Is a dish a main of the plate (a person needs one of their own where the plate has one): any dish that is not a staple there. */
+export const mainAt = (w: Week, slot: string, dish: string): boolean => !isStapleAt(w, slot, dish);
 
 // ── The week as checked: every slot-day, the slots done ──
 
@@ -171,38 +95,6 @@ export type Week = { days: PlanDay[]; slots: Map<string, SlotFacts>; rules: Rule
 const slotKey = (s: string) => s.toLowerCase();
 export const isStapleAt = (w: Week, slot: string, dish: string): boolean => !!w.slots.get(slotKey(slot))?.staples.some((x) => dishKey(x) === dishKey(dish));
 const libAt = (w: Week, slot: string, dish: string): LibraryDish | undefined => w.library.find((d) => same(d.slot, slot) && d.key === dishKey(dish));
-/** A dish at an add-on slot with no how-often or days said: that person's standing difference (his phulkas every dinner).
- *  Like a staple there, it has no weekly cap and no repeat window; only a said frequency or days thins it (owner, 24 Nov). */
-const standing = (w: Week, slot: string, dish: string): boolean => {
-  if (w.slots.get(slotKey(slot))?.slot.kind !== "addon") return false;
-  const row = libAt(w, slot, dish);
-  return !!row && !row.frequency && !row.days?.length;
-};
-
-/** A dish that is one of the family's own entry made a particular way: its name keeps every word of the entry's and adds to it
- *  ("Bhindi sabzi" of "Sabzi", "Moong dal" of "Dal", "Idli with coconut chutney" of "Idli with chutney"), or the same dish
- *  with another accompaniment ("Idli with tomato chutney" of "Idli with coconut chutney"). The slot call
- *  names it so, with the entry as its `like`; it is the family's dish, not a new one. */
-export function isVariantOf(entry: string, dish: string): boolean {
-  const words = (x: string) => x.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
-  const e = words(entry), d = words(dish);
-  if (e.length > 0 && d.length > e.length && e.every((x) => d.includes(x))) return true;
-  // The same dish with another accompaniment: "Idli with tomato chutney" of their "Idli with coconut chutney".
-  const main = (w: string[]) => (w.includes("with") ? w.slice(0, w.indexOf("with")).join(" ") : null);
-  const em = main(e), dm = main(d);
-  return !!em && em === dm && e.join(" ") !== d.join(" ");
-}
-/** The library row a variant plans as: the entry's own row (its how often and days) under the variant's name, read afresh
- *  for what it contains; never saved to the library. */
-export const variantRow = (entry: LibraryDish, name: string): LibraryDish => ({ ...entry, id: `variant:${dishKey(name)}`, key: dishKey(name), name,
-  contains: [], contains_read: [], suggested: false, untried: false, offers: 0, rating: null, rating_note: null, rated_on: null, rated_by: null, ratings: [] });
-export const isVariantRow = (d: LibraryDish): boolean => d.id.startsWith("variant:") || d.id.startsWith("history:");
-/** A dish planned and kept at a slot in the weeks before (owner 25 Nov: later weeks are guided by the slot's history), as a
- *  row of the family's for this run: what its library row says (any slot), else nothing read yet; never saved. */
-export const historyRow = (slot: string, name: string, row?: LibraryDish): LibraryDish => ({ ...(row ?? { frequency: null, days: null, said: null, contains: [], contains_read: [],
-  origin: "planner_suggested" as const, prep: null, video_url: null, video_title: null, video_thumbnail: null }), id: `history:${slot}|${dishKey(name)}`, key: dishKey(name), slot, name,
-  suggested: false, untried: false, offers: 0, disliked: false, rating: null, rating_note: null, rated_on: null, rated_by: null, ratings: [] } as LibraryDish);
-
 /** What a dish contains and was read for, at a slot: its library row there, else any row of it, else a read made this run. */
 export function factsOf(w: Week, slot: string, dish: string): DishFacts {
   const row = libAt(w, slot, dish) ?? w.library.find((d) => d.key === dishKey(dish));
@@ -214,7 +106,7 @@ export function factsOf(w: Week, slot: string, dish: string): DishFacts {
 /** Is a dish the family's own: in their library (not a suggestion of the planner's, not a variant of one of theirs), or on
  *  one of their own plates. */
 function familyDish(w: Week, key: string): boolean {
-  return w.library.some((d) => d.key === key && !isVariantRow(d) && !d.suggested && d.origin !== "planner_suggested")
+  return w.library.some((d) => d.key === key && !d.suggested && d.origin !== "planner_suggested")
     || [...w.slots.values()].some((sf) => sf.plates.some((pl) => pl.some((x) => dishKey(x) === key)));
 }
 /** Does the family vouch for a dish under an allergy rule (owner 25 Nov): a house-wide one, every family dish (the house
@@ -249,7 +141,7 @@ export function allergyNotes(w: Week, d: PlanDay, dish: string): string[] {
 export function ownSlotDish(w: Week, person: string, dish: string): boolean {
   const key = dishKey(dish);
   return [...w.slots.values()].some((sf) => sf.slot.usual_people.length === 1 && same(sf.slot.usual_people[0], person)
-    && (sf.library.some((d) => d.key === key && !isVariantRow(d) && !d.suggested && d.origin !== "planner_suggested") || sf.plates.some((pl) => pl.some((x) => dishKey(x) === key))));
+    && (sf.library.some((d) => d.key === key && !d.suggested && d.origin !== "planner_suggested") || sf.plates.some((pl) => pl.some((x) => dishKey(x) === key))));
 }
 
 /** The hard rules that hold for one person at a slot-day. */
@@ -274,10 +166,29 @@ export function ruleBreaks(w: Week, d: PlanDay, dish: string): string[] {
       }
     }
     if (r.what === "swap" && f.tags.has(t)) continue;   // a swap: the dish stays, with a note for them (swapNotes)
+    // Onion and garlic never block a dish (contract rule 7): it is made without, or their portion kept aside (onionNotes);
+    // only a dish that is mostly onion is not theirs.
+    if (t === ONION_GARLIC && !isAllergyRule(r) && !mostlyOnion(dish)) continue;
     if (f.tags.has(t)) out.push(`${dish} has ${t.replace(/_/g, " ")}: against ${p}'s rule "${r.quote}"`);
     else if (!readFor(f.read, t)) out.push(`${dish}: not known whether it has ${t.replace(/_/g, " ")}, so it cannot go to ${p} ("${r.quote}")`);
   }
   return uniq(out);
+}
+const ONION_GARLIC = "onion_garlic";
+/** A dish that is mostly onion, by its name (contract rule 7: onion, pyaaz, kanda, vengayam, ulli). */
+export const mostlyOnion = (dish: string): boolean => /\b(onions?|pyaa?z|pyaza|kanda|vengaya\w*|ulli)\b/i.test(dish);
+/** The note on a dish that has onion or garlic, for the people at the slot-day whose hard rule says none (contract rule 7):
+ *  "make without onion and garlic, or keep <person>'s portion aside". None for a dish that is mostly onion (not theirs). */
+export function onionNotes(w: Week, d: PlanDay, dish: string): string[] {
+  if (mostlyOnion(dish)) return [];
+  const f = factsOf(w, d.slot, dish);
+  if (!f.tags.has(ONION_GARLIC)) return [];
+  // Only the people the dish is for (the chicken that is not for her needs no word on onion).
+  const who = d.people.filter((p) => rulesFor(w, d, p).some((r) => !isAllergyRule(r) && r.what !== "swap" && forbidden(r).includes(ONION_GARLIC))
+    && !notFor(w, { ...d, people: [p] }, dish).length);
+  if (!who.length) return [];
+  const names = who.length === 1 ? who[0] : `${who.slice(0, -1).join(", ")} and ${who[who.length - 1]}`;
+  return [`make without onion and garlic, or keep ${names}'s portion aside`];
 }
 /** The people at a slot-day a dish is not for: a hard rule of theirs it breaks, or an item of their rule it was never read
  *  for (fail closed). Code's, never the model's (owner, 23 Nov: a fish lunch with dal for the vegetarian grandmother passes). */
@@ -349,10 +260,8 @@ export function mainFeeds(w: Week, d: PlanDay): boolean {
 
 export type ProblemKind = "rule" | "soft_over" | "few";
 export type Problem = { kind: ProblemKind; text: string; dish?: string; soft: boolean };
-/** A dish the slot call says is new: why it suits, the family's dish it is like, and its part on the plate. */
-export type NewName = { name: string; why: string; like?: string; part?: string };
-/** A slot's proposal: its dishes by date, the dishes it says are new (by key), and its spare dishes by part. */
-export type Proposal = { days: Map<string, string[]>; newNames: Map<string, NewName>; spares?: Map<string, string[]> };
+/** A slot's dishes by date, as checked. */
+export type Proposal = { days: Map<string, string[]> };
 
 /** Is a slot settled or still to come: does it count now. */
 const counts = (w: Week, d: PlanDay) => d.fixed || w.done.has(slotKey(d.slot));
@@ -407,339 +316,12 @@ function unfed(w: Week, d: PlanDay, dishes: string[]): string[] {
   return out;
 }
 /** The tags the guests at a slot-day may not have (their words, read once); [] none or not read. */
-const guestForbids = (w: Week, d: PlanDay) => uniq(d.guests.flatMap((g) => g.rules ?? []).flatMap((x) => w.guestTags?.get(x.trim().toLowerCase()) ?? []));
+export const guestForbids = (w: Week, d: PlanDay) => uniq(d.guests.flatMap((g) => g.rules ?? []).flatMap((x) => w.guestTags?.get(x.trim().toLowerCase()) ?? []));
 /** Can the guests eat a dish: none of what their rules forbid, and read for each of it. */
-function guestsCan(w: Week, d: PlanDay, dish: string): boolean {
+export function guestsCan(w: Week, d: PlanDay, dish: string): boolean {
   const f = factsOf(w, d.slot, dish);
   return guestForbids(w, d).every((t) => !f.tags.has(t) && readFor(f.read, t));
 }
 
-// ── The walk (owner 25 Nov): the slot call's week made right in code, day by day ──
-//
-// Monday to Sunday, each dish of the call's day stays when it fits that day: one of the slot's dishes (its library, a
-// staple, a particular way of one of the family's dishes, or a new one like one of theirs there), never disliked or
-// dropped, on its days, within its days a week (counted across the week's meals so far: no main more than twice a week
-// unless the family's own words say more), not the main at another meal that day, and someone there can eat it. One that
-// does not fit is replaced by a dish of the same part from that day's allowed dishes or the call's spares with room; a
-// person with nothing of their own gets a dish beside; the rice or bread the family's plates have is added where missing.
-// What still cannot be filled is a gap: makePlan asks one targeted call for the slot's gap days, then the walk runs again
-// and fills what is left with the closest dish that day's people can eat, said in unmet. Nobody is left without food.
-
-/** A day's place the walk could not fill: the part it needs (null: any), who it is for, and why. `place`: a dish's place
- *  on the plate (filled again by the last walk); else a person's (or the guests') own dish, which the last walk finds again. */
-export type Gap = { date: string; part: string | null; for: string[]; why: string; place: boolean };
-export type WalkResult = { gaps: Gap[]; unmet: string[]; changed: string[] };
-
-/** Is a dish free of the weekly count on a plate (owner 25 Nov): never one the family gave a how often or days for (daily
- *  aside); a staple beside a main there; a main beside a complete dish with no rice or bread there ("sambar is a main near
- *  rice, otherwise a side": beside idli or dosa); an add-on person's standing dish. No plate given: a staple is. */
-function freeOn(w: Week, slot: string, dish: string, plate?: string[]): boolean {
-  if (standing(w, slot, dish)) return true;
-  const row = libAt(w, slot, dish) ?? w.library.find((x) => x.key === dishKey(dish));
-  if (row?.frequency === "daily") return true;
-  if (row?.frequency || row?.days?.length) return false;
-  const kind = (x: string) => partOf(w, slot, x)?.kind;
-  const others = (plate ?? []).filter((x) => dishKey(x) !== dishKey(dish));
-  const mainish = (x: string) => kind(x) === "main" || kind(x) === "complete" || (!kind(x) && !isStapleAt(w, slot, x));
-  if (isStapleAt(w, slot, dish)) return !plate || others.some(mainish);
-  return !!plate && kind(dish) === "main" && others.some((x) => kind(x) === "complete") && !others.some((x) => kind(x) === "rice_or_bread");
-}
-/** How many days a week a dish may come, counted across meals (owner 25 Nov): what the family said (its frequency's most;
- *  its days, one each; "1/week" is one), else DEFAULT_DISH_DAYS. null: no count on that plate (freeOn). */
-export function capOf(w: Week, slot: string, dish: string, plate?: string[]): number | null {
-  if (freeOn(w, slot, dish, plate)) return null;
-  const row = libAt(w, slot, dish) ?? w.library.find((x) => x.key === dishKey(dish));
-  const r = frequencyRange(row?.frequency ?? null);
-  return r ? r[1] : row?.days?.length ? row.days.length : DEFAULT_DISH_DAYS;
-}
-/** The dates a dish is on this week across the meals that count: settled ones, and this slot's own days (before `before`
- *  only, when given: the walk counts the days it has made). */
-function datesUsed(w: Week, slotName: string, key: string, p: Proposal, before?: string): Set<string> {
-  const out = new Set<string>();
-  for (const d of w.days) {
-    if (same(d.slot, slotName) && !d.fixed) { if ((!before || d.date < before) && !d.skip && (p.days.get(d.date) ?? []).some((x) => dishKey(x) === key)) out.add(d.date); continue; }
-    if (counts(w, d) && d.dishes.some((x) => dishKey(x) === key)) out.add(d.date);
-  }
-  return out;
-}
-/** A dish named as a particular way of one of the slot's family dishes ("Bhindi sabzi" of their "Sabzi"): planned as that
- *  dish under its own name (its row, how often and days; read afresh for what it contains; never saved). Answers the
- *  name; a variant's row joins the week's library the first time. */
-export function asVariant(w: Week, slotName: string, dish: string, like?: string): { name: string; entry?: string } {
-  const sf = w.slots.get(slotKey(slotName))!, k = dishKey(dish);
-  if (sf.library.some((x) => x.key === k) || isStapleAt(w, slotName, dish)) return { name: dish };
-  const entries = sf.library.filter((x) => plannable(x) && !isVariantRow(x));
-  const entry = (like ? entries.find((x) => x.key === dishKey(like) && isVariantOf(x.name, dish)) : undefined) ?? entries.find((x) => isVariantOf(x.name, dish));
-  if (!entry) return { name: dish };
-  const row = variantRow(entry, dish);
-  sf.library.push(row);
-  sf.own.add(k);
-  if (!w.library.some((x) => x.key === k && same(x.slot, slotName))) w.library.push(row);
-  const part = sf.parts.get(entry.key);
-  if (part) sf.parts.set(k, part);
-  return { name: dish, entry: entry.name };
-}
-
-/** The slot's dishes that have had their days this week (the targeted call is told not to use them). */
-export function usedUp(w: Week, slotName: string, p: Proposal): string[] {
-  const sf = w.slots.get(slotKey(slotName))!;
-  return sf.library.filter((x) => plannable(x) && !isStapleAt(w, slotName, x.name)).filter((x) => { const cap = capOf(w, slotName, x.name); return cap !== null && datesUsed(w, slotName, x.key, p).size >= cap; })
-    .map((x) => x.name);
-}
-
-/** A main still to come on a day's plate (a gap's place), as the weekly count reads a staple beside it. */
-const GAP_MAIN = "\u0000 a main to come";
-/** The least share of a week's mains at a slot that are the family's own dishes (owner 25 Nov). */
+/** The least share of a week's non-staple items that are the family's own (owner 25 Nov, contract rule 4). */
 export const OWN_SHARE = 0.3;
-
-/** The slot's week walked Monday to Sunday (see above). `final`: what cannot be filled takes the closest dish that day's
- *  people can eat (said in unmet) instead of being a gap; an add-on is always walked so (a day of it may be empty: its
- *  person eats the main slot's dishes). `gaps`: the first walk's, filled now; `extra`: the targeted call's dishes by date,
- *  tried first. Changes `p.days`; answers the gaps, the lines for unmet and the log. */
-export function walkSlot(w: Week, slotName: string, p: Proposal, opts: { final?: boolean; gaps?: Gap[]; extra?: Map<string, string[]> } = {}): WalkResult {
-  const sf = w.slots.get(slotKey(slotName))!;
-  const addon = sf.slot.kind === "addon", final = !!opts.final || addon;
-  const res: WalkResult = { gaps: [], unmet: [], changed: [] };
-  // At least OWN_SHARE of the week's mains here are the family's own (owner 25 Nov); the rest is free for variety. Counted
-  // in places: the mains the call's days hold with the places still to fill (the family's usual plate at least).
-  const mine0 = w.days.filter((d) => same(d.slot, slotName) && !d.fixed && !d.skip);
-  const places = mine0
-    .reduce((n, d) => n + Math.max(1, sf.typical, (p.days.get(d.date) ?? []).filter((x) => mainAt(w, slotName, x)).length
-      + (opts.gaps ?? []).filter((g) => g.date === d.date && g.place).length), 0);
-  // A meal with no dish of theirs at all (planned from new dishes, the family said "suggest some"): no share, no like.
-  const guided = [...sf.own].some((k) => !isStapleAt(w, slotName, k));
-  // Never more of theirs than their counts allow: with one dish of theirs (twice a week), the rest are new.
-  const ownRoom = sf.library.filter((x) => plannable(x) && mainAt(w, slotName, x.name)).reduce((n, x) => n + Math.min(mine0.length, capOf(w, slotName, x.name) ?? mine0.length), 0);
-  const newMax = guided ? Math.max(Math.floor(places * (1 - OWN_SHARE)), places - ownRoom) : Infinity;
-  let newPlaced = 0;
-  /** Is a new dish like one of the family's here (owner 25 Nov: "not suddenly Pasta"): its `like` is a dish of theirs at this
-   *  slot, of the same part of the plate when both are known. */
-  const likeTheirs = (dish: string) => {
-    if (!guided) return true;
-    const like = p.newNames.get(dishKey(dish))?.like;
-    if (!like || !sf.own.has(dishKey(like))) return false;
-    const a = partName(dish), b = sf.parts.get(dishKey(like))?.part?.toLowerCase();
-    return !a || !b || a === b;
-  };
-  const known = (name: string) => { const row = libAt(w, slotName, name); return (!!row && plannable(row)) || isStapleAt(w, slotName, name); };
-  const day = (d: PlanDay) => `${weekdayOf(d.date)} ${slotName}`;
-  const canEat = (d: PlanDay, dish: string) => !d.people.length || notFor(w, d, dish).length < d.people.length;
-  const mine = w.days.filter((d) => same(d.slot, slotName) && !d.fixed && !d.skip).sort((a, b) => a.date.localeCompare(b.date));
-
-  /** What a dish sits beside on a day: the plate so far, the call's dishes still to walk, and a main for a place still to
-   *  be filled (a gap: the targeted call or the closest dish fills it). */
-  const companions = (d: PlanDay, plate: string[], dish: string) => [...plate, ...pending, dish,
-    ...([...res.gaps, ...(opts.gaps ?? [])].some((g) => g.date === d.date && g.place && g.part !== sf.parts.get(dishKey(dish))?.part) ? [GAP_MAIN] : [])];
-  /** Why a dish cannot be on this day's plate (null: it can). `loose`: its days a week, its days and the other meals that day
-   *  not counted (the closest dish, the last resort). */
-  const why = (d: PlanDay, dish: string, plate: string[], loose = false, needy = false): string | null => {
-    const k = dishKey(dish);
-    if (plate.some((x) => dishKey(x) === k)) return "twice on the plate";
-    const any = w.library.filter((x) => x.key === k);
-    if (any.some((x) => x.disliked)) return `${dish}: the family did not like it`;
-    if (any.some(isDropped)) return `${dish}: offered twice and never made`;
-    if (!known(dish) && !sf.own.has(k)) {
-      if (d.new_dishes_allowed === 0) return `${dish}: no new dish on this day`;
-      if (!likeTheirs(dish)) return `${dish}: not like a dish of theirs at ${slotName}`;
-      // A person (or the guests) with nothing of their own is fed past the share: nobody goes without food.
-      if (!needy && newPlaced >= newMax) return `${dish}: too few of their own dishes this week`;
-    }
-    if (!canEat(d, dish)) return `${dish}: nobody there can eat it`;
-    const row = libAt(w, slotName, dish);
-    if (row?.days?.length && !row.days.includes(weekdayOf(d.date))) return `${dish} is had on ${row.days.join(", ")} only`;
-    if (loose) return null;
-    const cap = capOf(w, slotName, dish, companions(d, plate, dish));
-    if (cap !== null) { const used = datesUsed(w, slotName, k, p, d.date); if (!used.has(d.date) && used.size >= cap) return `${dish} has had its ${cap} days this week`; }
-    if (sf.slot.kind === "main" && !isStapleAt(w, slotName, dish)) {
-      const other = w.days.find((x) => x.date === d.date && !same(x.slot, slotName) && counts(w, x) && w.slots.get(slotKey(x.slot))?.slot.kind === "main"
-        && x.dishes.some((y) => dishKey(y) === k) && !isStapleAt(w, x.slot, dish));
-      if (other) return `${dish} is already at ${other.slot} that day`;
-    }
-    return null;
-  };
-  const take = (plate: string[], dish: string) => { plate.push(dish); if (!known(dish) && !sf.own.has(dishKey(dish)) && mainAt(w, slotName, dish)) newPlaced++; };
-  const partName = (dish: string) => (sf.parts.get(dishKey(dish))?.part ?? p.newNames.get(dishKey(dish))?.part)?.trim().toLowerCase() ?? null;
-  /** The dishes that may take a place: the targeted call's for the day, the slot's library dishes of that part (the least
-   *  used this week first, not yesterday's), then the spares of that part. No part: any, a part not on the plate first. */
-  const choices = (d: PlanDay, part: string | null, plate: string[]): string[] => {
-    const yday = new Set((p.days.get(addDays(d.date, -1)) ?? []).map(dishKey));
-    const onPlate = new Set(plate.map(partName));
-    const ok = (name: string) => !part || partName(name) === part;
-    const lib = sf.library.filter((x) => plannable(x) && !isStapleAt(w, slotName, x.name) && ok(x.name))
-      .map((x, i) => ({ name: x.name, i, u: datesUsed(w, slotName, x.key, p, d.date).size, y: yday.has(x.key) ? 1 : 0, o: onPlate.has(partName(x.name)) ? 1 : 0 }))
-      .sort((a, b) => a.o - b.o || a.y - b.y || a.u - b.u || a.i - b.i).map((x) => x.name);
-    const spares = [...(p.spares ?? new Map<string, string[]>()).entries()].filter(([k]) => !part || k === part).flatMap(([, v]) => v);
-    const extra = (opts.extra?.get(d.date) ?? []).filter((x) => !part || !partName(x) || partName(x) === part);
-    return uniq([...extra, ...lib, ...spares].map((x) => asVariant(w, slotName, x).name)).filter((x) => !reserved.has(dishKey(x)));
-  };
-  /** Back within the slot's repeat window of itself here (this week's days before, or last week's): a staple or a
-   *  person's standing add-on dish never is. Kept when nothing else fits; an add-on's day is then left to the main slot. */
-  const soon = (d: PlanDay, dish: string, plate: string[]) => {
-    if (capOf(w, slotName, dish, companions(d, plate, dish)) === null) return false;
-    const k = dishKey(dish);
-    const before = [...Object.entries(sf.recent), ...[...p.days.entries()].filter(([dt]) => dt < d.date)].filter(([, ds]) => ds.some((x) => dishKey(x) === k)).map(([dt]) => dt);
-    return before.some((dt) => dayDiff(dt, d.date) < sf.window);
-  };
-  const pick = (d: PlanDay, part: string | null, plate: string[], must?: (dish: string) => boolean) => {
-    const ok = choices(d, part, plate).filter((c) => !why(d, c, plate, false, !!must) && (!must || must(c)));
-    return ok.find((c) => !soon(d, c, plate)) ?? ok[0];
-  };
-  /** The closest dish that day's people can eat (the last resort): an allowed dish of another part that fits the day (one
-   *  of the same kind first); none, the one that could not stay, then the slot's dishes of that part, then any of its
-   *  dishes, the least used first, its days a week not counted. */
-  const closest = (d: PlanDay, was: string | null, part: string | null, plate: string[], must?: (dish: string) => boolean) => {
-    const kind = was ? sf.parts.get(dishKey(was))?.kind : undefined;
-    const fits = choices(d, null, plate).filter((c) => !why(d, c, plate, false, !!must) && (!must || must(c)));
-    const allowed = fits.find((c) => !!kind && sf.parts.get(dishKey(c))?.kind === kind) ?? fits[0];
-    if (allowed) return allowed;
-    const lib = (pt: string | null) => sf.library.filter((x) => plannable(x) && !isStapleAt(w, slotName, x.name) && (!pt || partName(x.name) === pt))
-      .sort((a, b) => datesUsed(w, slotName, a.key, p).size - datesUsed(w, slotName, b.key, p).size).map((x) => x.name);
-    return uniq([...(was ? [was] : []), ...(opts.extra?.get(d.date) ?? []), ...lib(part), ...lib(null), ...sf.staples])
-      .find((c) => !why(d, c, plate, true, !!must) && (!must || must(c)));
-  };
-  /** A place that cannot be filled: a gap on the first walk, the closest dish on the last (said in unmet when it is past
-   *  its count or off its day). */
-  const fill = (d: PlanDay, plate: string[], g: Gap, was: string | null, must?: (dish: string) => boolean): boolean => {
-    const c = pick(d, g.part, plate, must);
-    if (c) { take(plate, c); if (was) standsAt.set(dishKey(c), dishKey(was)); res.changed.push(`${day(d)}: ${was ? `${was} → ` : "+ "}${c}${was ? ` (${g.why})` : ""}`); return true; }
-    if (!final) { res.gaps.push(g); return false; }
-    const near = addon ? null : closest(d, was, g.part, plate, must);
-    if (!near) return false;
-    const off = why(d, near, plate);
-    take(plate, near);
-    if (was) standsAt.set(dishKey(near), dishKey(was));
-    res.changed.push(`${day(d)}: ${was && was !== near ? `${was} → ` : was ? "kept " : "+ "}${near} (closest)`);
-    if (off) res.unmet.push(`${day(d)}: ${near} comes back sooner than usual`);
-    return true;
-  };
-
-  /** The call's dishes of the day still to be walked: not taken for another place before their own turn. */
-  let reserved = new Set<string>(), pending: string[] = [];
-  /** A dish put in the place of one of the call's (by key): it stands where that one stood on the plate. */
-  const standsAt = new Map<string, string>();
-  mine.forEach((d, n) => {
-    const was = uniq((p.days.get(d.date) ?? []).map((x) => asVariant(w, slotName, x, p.newNames.get(dishKey(x))?.like).name));
-    const plate: string[] = [];
-    reserved = new Set(was.map(dishKey)); pending = [...was];
-    // 1. The call's dishes, each kept or replaced in its part: the mains first, so a staple is judged beside them (a staple
-    //    is free of the weekly count only beside a main), then the gaps of the first walk, then the staples.
-    const isBaseName = (x: string) => isStapleAt(w, slotName, x) || BASE_KINDS.includes(partOf(w, slotName, x)?.kind as PartKind);
-    const mainsFirst = [...was.filter((x) => !isBaseName(x)), ...was.filter(isBaseName)];
-    let gapsDone = false;
-    const gapsHere = () => {
-      if (gapsDone) return;
-      gapsDone = true;
-      // 2. The first walk's gaps of this day.
-      for (const g of (opts.gaps ?? []).filter((x) => x.date === d.date && x.place)) fill(d, plate, g, null);
-    };
-    for (const x of mainsFirst) {
-      if (isBaseName(x)) gapsHere();
-      reserved.delete(dishKey(x)); pending = pending.filter((y) => dishKey(y) !== dishKey(x));
-      const no = why(d, x, plate);
-      if (!no && soon(d, x, plate)) {
-        const c = pick(d, partName(x), plate);
-        if (c && !soon(d, c, plate)) { take(plate, c); res.changed.push(`${day(d)}: ${x} → ${c} (back too soon)`); continue; }
-        if (addon) continue;   // the add-on's person eats the main slot's dishes that day
-      }
-      if (!no) { take(plate, x); continue; }
-      if (no === "twice on the plate") continue;
-      fill(d, plate, { date: d.date, part: partName(x), for: d.people, why: no, place: true }, x);
-    }
-    gapsHere();
-    // The plate in the call's order, what was added after.
-    const at = (x: string) => { const k = standsAt.get(dishKey(x)) ?? dishKey(x); const i = was.findIndex((y) => dishKey(y) === k); return i < 0 ? was.length : i; };
-    const sorted = plate.map((x, i) => ({ x, i })).sort((a, b) => at(a.x) - at(b.x) || a.i - b.i).map((y) => y.x);
-    plate.splice(0, plate.length, ...sorted);
-    // 3. A day the call left empty (not an add-on's): one of the family's plates at this slot, part by part.
-    if (!was.length && !addon && !(opts.gaps ?? []).some((g) => g.date === d.date && g.place)) {
-      const tpl = sf.plates.length ? sf.plates[n % sf.plates.length].filter((x) => !isStapleAt(w, slotName, x)) : [];
-      const parts = tpl.length ? uniq(tpl.map(partName)) : [null];
-      for (const part of parts) fill(d, plate, { date: d.date, part, for: d.people, why: "the day had no dish", place: true }, null);
-    }
-    // 4. The daily dishes, where someone there can eat them.
-    for (const dish of sf.daily) {
-      const row = libAt(w, slotName, dish);
-      if (plate.length && (!row?.days?.length || row.days.includes(weekdayOf(d.date))) && !plate.some((x) => dishKey(x) === dishKey(dish)) && canEat(d, dish)) plate.push(dish);
-    }
-    // 5. Each person (and the guests) with a dish of their own; a require kept. Not at an add-on (its person eats the main).
-    if (!addon && plate.length) {
-      for (const person of d.people) {
-        if (ownAddon(w, d, person)) continue;
-        const theirs = (x: string) => !notFor(w, d, x).includes(person) && mainAt(w, slotName, x);
-        if (plate.some(theirs) || !plate.some((x) => mainAt(w, slotName, x)) && plate.some((x) => !notFor(w, d, x).includes(person))) continue;
-        const one = { ...d, people: [person] };
-        const ok = fill(one, plate, { date: d.date, part: null, for: [person], why: `${person} has nothing of their own`, place: false }, null, theirs);
-        if (!ok && final) {
-          const can = plate.filter((x) => !notFor(w, d, x).includes(person));
-          res.unmet.push(can.length ? `${day(d)}: ${person} has only ${can.join(", ")}` : `${day(d)}: ${person} has nothing to eat there`);
-        }
-      }
-      for (const r of w.rules.filter((x) => x.hard && x.what === "require" && x.items?.length && x.who && d.people.some((p) => same(p, x.who!)) && ruleHolds(x, d.date, sf.slot, slotName))) {
-        const has = (x: string) => !notFor(w, d, x).includes(r.who!) && r.items!.some((i) => factsOf(w, slotName, x).tags.has(canonTag(i)));
-        if (plate.some(has)) continue;
-        const ok = fill({ ...d, people: [r.who!] }, plate, { date: d.date, part: null, for: [r.who!], why: `${r.who} needs a dish with ${r.items!.join(" or ")} ("${r.quote}")`, place: false }, null, has);
-        if (!ok && final) res.unmet.push(`${day(d)}: no dish with ${r.items!.join(" or ")} for ${r.who}`);
-      }
-      if (guestForbids(w, d).length && !plate.some((x) => guestsCan(w, d, x) && mainAt(w, slotName, x))) {
-        const ok = fill(d, plate, { date: d.date, part: null, for: ["guests"], why: `the guests (${uniq(d.guests.flatMap((g) => g.rules ?? [])).join(", ")}) need a dish of theirs`, place: false }, null,
-          (x) => guestsCan(w, d, x));
-        if (!ok && final) res.unmet.push(`${day(d)}: the guests have nothing of their own`);
-      }
-    }
-    // 6. The rice or bread the family's plates have here, where the day has none (a complete dish brings its own).
-    if (sf.mustHave.length && plate.length && !plate.some((x) => isBase(w, slotName, x))) {
-      // One that fits the day: its days and its count as the family said (luchi on Sundays stays on Sundays).
-      const fits = sf.mustHave.filter((x) => !why(d, x, plate));
-      const near = (x: string) => sf.plates.filter((pl) => pl.some((y) => dishKey(y) === dishKey(x))).reduce((m, pl) => Math.max(m, plate.filter((y) => pl.some((z) => dishKey(z) === dishKey(y))).length), 0);
-      const used = (x: string) => [...p.days.entries()].filter(([dt, ds]) => dt < d.date && ds.some((y) => dishKey(y) === dishKey(x))).length;
-      const one = fits.sort((a, b) => near(b) - near(a) || used(a) - used(b))[0];
-      if (one) { plate.unshift(one); res.changed.push(`${day(d)}: + ${one} (its rice or bread)`); }
-    }
-    // An add-on day left with nothing: fine where its people eat the main slot's dishes; else the closest dish, said.
-    if (addon && !plate.length && was.length) {
-      d.dishes = [];
-      if (!mainFeeds(w, d)) {
-        const near = closest(d, was[0], partName(was[0]), plate);
-        if (near) { plate.push(near); res.unmet.push(`${day(d)}: ${near} comes back sooner than usual`); }
-      }
-    }
-    if (plate.join("|") !== was.join("|") && !res.changed.some((x) => x.startsWith(day(d)))) res.changed.push(`${day(d)} → ${plate.join(", ") || "nothing (empty)"}`);
-    p.days.set(d.date, plate);
-  });
-  if (final) ownDays(w, slotName, p, res);
-  return res;
-}
-
-/** A family dish with its own days ("khichdi on Saturday night", "pongal on Sundays") on each of them, when the call left
- *  it out and no later meal has it: put in the place of a main on a day it fits (one of its part first, else any), where
- *  nobody is then left without a dish of their own and the day keeps its rice or bread. A dish they have often is never
- *  pushed up to a least (owner 25 Nov: "fewer than said is fine: people want variety"). */
-function ownDays(w: Week, slotName: string, p: Proposal, res: WalkResult): void {
-  const sf = w.slots.get(slotKey(slotName))!;
-  const mine = w.days.filter((d) => same(d.slot, slotName) && !d.fixed && !d.skip).sort((a, b) => a.date.localeCompare(b.date));
-  const wanted = sf.library.filter((x) => plannable(x) && !isVariantRow(x) && !x.frequency && !!x.days?.length && !isStapleAt(w, slotName, x.name));
-  const wantedKeys = new Set(wanted.map((x) => x.key));
-  for (const row of wanted) {
-    if (w.days.some((d) => !same(d.slot, slotName) && !counts(w, d) && !d.skip && w.library.some((x) => x.key === row.key && same(x.slot, d.slot)))) continue;
-    const part = sf.parts.get(row.key)?.part;
-    const on = mine.filter((d) => !row.days?.length || row.days.includes(weekdayOf(d.date)));
-    const least = on.length;
-    const cap = capOf(w, slotName, row.name) ?? Infinity;
-    for (const d of on) {
-      const used = datesUsed(w, slotName, row.key, p);
-      if (used.size >= Math.min(least, cap)) break;
-      const plate = p.days.get(d.date) ?? [];
-      if (used.has(d.date) || notFor(w, d, row.name).length === d.people.length) continue;
-      if (sf.slot.kind === "main" && w.days.some((x) => x.date === d.date && !same(x.slot, slotName) && counts(w, x) && w.slots.get(slotKey(x.slot))?.slot.kind === "main" && x.dishes.some((y) => dishKey(y) === row.key))) continue;
-      const swap = (j: number) => plate.map((x, k) => (k === j ? row.name : x));
-      const keepsBase = (next: string[]) => !sf.mustHave.length || !plate.some((x) => isBase(w, slotName, x)) || next.some((x) => isBase(w, slotName, x));
-      const places = plate.map((x, j) => ({ x, j })).filter(({ x }) => !wantedKeys.has(dishKey(x)) && !isStapleAt(w, slotName, x))
-        .sort((a, b) => Number(!!part && sf.parts.get(dishKey(b.x))?.part === part) - Number(!!part && sf.parts.get(dishKey(a.x))?.part === part));
-      const i = places.map(({ j }) => j).find((j) => keepsBase(swap(j)) && unfed(w, d, swap(j)).length <= unfed(w, d, plate).length);
-      if (i === undefined) continue;
-      const next = swap(i);
-      p.days.set(d.date, next);
-      res.changed.push(`${weekdayOf(d.date)} ${slotName}: ${plate[i]} → ${row.name} (its day)`);
-    }
-  }
-}
