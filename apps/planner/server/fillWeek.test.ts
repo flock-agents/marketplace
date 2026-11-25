@@ -401,3 +401,22 @@ describe("a house-wide allergy and a category the family named (class 1: empty m
     }
   });
 });
+
+describe("a dish had every day (class 2: daily items)", () => {
+  it("'eggs every morning', said as the category, comes every day beside whatever the template brings, a different egg dish where it can", () => {
+    const kinds: MealKind[] = [{ name: "Egg", subs: ["Eggs"] }, { name: "Porridge" }, { name: "Toast" }];
+    const lib = [dish("Eggs", "Breakfast", "Egg", { sub: "Eggs", frequency: "daily" }), dish("Oats porridge", "Breakfast", "Porridge"), dish("Butter toast", "Breakfast", "Toast")];
+    const r = run({ slots: [slot("Breakfast", { kinds, templates: [T({ kind: "Egg", sub: "Eggs" }), T({ kind: "Porridge" }), T({ kind: "Toast" })] })], library: lib });
+    for (const d of WEEK) {
+      const p = r.at(d, "Breakfast");
+      expect(p.filter((x) => /egg|omelette|half fry|bhurji/i.test(x)).length).toBe(1);
+      expect(p).not.toContain("Eggs");
+    }
+  });
+  it("a dish of theirs had every day is on every plate of its meal", () => {
+    const kinds: MealKind[] = [{ name: "Roti", staple: true }, { name: "Sabzi" }];
+    const lib = [dish("Phulka", "Dinner", "Roti"), ...SABZIS.map((n) => dish(n, "Dinner", "Sabzi")), dish("Kachumber", "Dinner", "Salad", { frequency: "daily" })];
+    const r = run({ slots: [slot("Dinner", { kinds, templates: [T({ kind: "Roti" }, { kind: "Sabzi" })] })], library: lib });
+    for (const d of WEEK) expect(r.at(d, "Dinner")).toContain("Kachumber");
+  });
+});

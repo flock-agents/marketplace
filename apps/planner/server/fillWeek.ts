@@ -606,6 +606,21 @@ export function fillWeek(input: FillInput): FillResult {
     });
     // A pinned dish no template part holds: on the plate beside.
     for (const pin of pins) if (!plate.some((x) => x.key === pin.key)) put(s, d, plate, { name: pin.name, key: pin.key, kind: placeOf(pin)?.kind ?? pin.name, sub: null, family: true, idx: 0, row: pin }, t.parts.length, false);
+    // A dish the family has every day (or usually) at this meal comes on its days whatever the template (class 2): the dish
+    // itself, or for a category they named ("eggs every morning") an item of it, rotated but never held back by rotation.
+    const mineDays = planned.filter((x) => same(x.slot, s.name)).map((x) => x.date).sort();
+    const nth = mineDays.indexOf(d.date);
+    for (const r of famRows.filter((x) => same(x.slot, s.name) && (x.frequency === "daily" || x.frequency === "usually"))) {
+      const want = r.frequency === "daily" ? mineDays.length : Math.round((TEMPLATE_DAYS.usually * mineDays.length) / 7);
+      const on = Math.floor(((nth + 1) * want) / mineDays.length) > Math.floor((nth * want) / mineDays.length);
+      if (!on || (r.days?.length && !r.days.includes(weekdayOf(d.date)))) continue;
+      const cat = categoryPlace(r);
+      if (plate.some((x) => x.key === r.key || (!!cat && sameKind(x.kind, cat.kind) && (!cat.sub || sameKind(x.sub, cat.sub))))) continue;
+      const pool: Item[] = cat ? familyPool(s, cat.kind, cat.sub).filter((x) => x.catalog)
+        : [{ name: r.name, key: r.key, kind: placeOf(r)?.kind ?? r.name, sub: placeOf(r)?.sub ?? null, family: true, idx: 0, row: r }];
+      const got = choose(s, d, plate, [{ items: pool, isNew: false, share: false, repeat: true, next: true, zero: false }], atTable, false);
+      if (got) put(s, d, plate, got.it, t.parts.length, false);
+    }
     // Still nothing beside the staples where the template had more (no template could be filled that day): the family's own
     // dish of this meal had longest ago, or one of another part's kind. Nobody's meal is ever empty.
     if (s.kind !== "addon" && atTable.length && !plate.some((x) => !x.staple) && t.parts.some((p) => !isStaplePart(s, p))) {
