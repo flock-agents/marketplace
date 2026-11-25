@@ -1052,6 +1052,79 @@ Punugulu|Goli baje|Shingara|Maddur vada|Jhal muri
 Phirni|Ada pradhaman|Sakkarai pongal|Rava kesari|Pineapple kesari|Banana sheera
 `.split(/[|\n]/).map((x) => x.trim()).filter(Boolean));
 
+// ---------------- OWNER ROUND 6 (2026-11-25): coarse kinds with sub-kinds ----------------
+// Lunch/dinner kinds are coarse; each item carries a "sub" (the name families use, often regional).
+// Templates name a kind or a sub-kind; rotation prefers the family's own sub-kinds.
+const SRC = new Map();
+for (const k of kinds) for (const it of k.items) SRC.set(it.split("|")[0].trim(), k.name);
+moveItem("Chicken keema", "Chicken curry");
+merge(mk("V","Sabzi","sabji; subzi; sukhi sabzi; dry sabzi; bhaji; poriyal; porial; thoran; torkari; palya; vepudu; upkari; shaak; fugath; sukke; bhaja; bharta; chokha; pitika; bharit; bharwa; bharli; stuffed vegetable","north south west east central","lunch dinner tiffin",false,"main","mixed"),
+  [["Sabzi"],["Bhaja"],["Bharta"],["Stuffed vegetable"]]);
+merge(mk("V","Gravy","gravy sabzi; rasedar sabzi; curry; tari wali sabzi; masala; korma; kurma; kofta; kofta curry; salan; rassa; dalna; shaak; paneer; paneer sabzi; avial; olan; erissery; kalan; theeyal; stew; ishtu","north south west east","breakfast lunch dinner",false,"main","veg"),
+  [["Gravy"],["Kerala curry","kerala"]]);
+merge(mk("N","Chicken","chicken; murgh; kozhi; kodi; chicken curry; chicken fry; chicken dry","north south west east","lunch dinner snack",false,"main","nonveg"),
+  [["Chicken curry"],["Chicken fry"]]);
+merge(mk("N","Mutton","mutton; gosht; mangsho; lamb; goat; keema; kheema; mince","north south west east","breakfast lunch dinner",false,"main","nonveg"),
+  [["Mutton curry"],["Keema"]]);
+merge(mk("N","Fish & seafood","fish; machli; meen; maach; mach; seafood; prawns; jhinga; chingri; kolambi; royyalu; eral; shrimp","north south west east","lunch dinner snack",false,"main","nonveg"),
+  [["Fish curry"],["Fish fry"],["Prawn"]]);
+merge(mk("N","Egg","eggs; anda; muttai; egg curry; anda curry","north south west east","breakfast lunch dinner tiffin",false,"main","egg"),
+  [["Eggs"],["Egg curry"]]);
+const S = ALL;
+const SUBDEF = {
+  Sabzi: [["Sabzi","sukhi sabzi; bhaji; shaak; sukke; fugath","north west central"],["Poriyal/Thoran","poriyal; porial; thoran; upkari; palya","south"],["Vepudu","vepudu","andhra"],["Torkari/Ghonto","torkari; ghonto; chorchori; posto","bengal odisha"],["Bhaja","bhaja","bengal odisha"],["Bharta/Chokha","bharta; chokha; pitika; bhorta; bharit; pora","north east bengal assam maharashtra northeast"],["Bharwa","bharwa; bharli; gutti; bharela; stuffed","north west andhra"]],
+  Gravy: [["Curry","rasedar sabzi; tari wali sabzi; masala; rassa; shaak; salan","north west east"],["Paneer","paneer sabzi; paneer gravy","north"],["Kofta","kofta curry; kofte","north"],["Kurma","korma; kurma","south"],["Dalna","dalna","bengal"],["Kerala curry","avial; aviyal; olan; erissery; kalan; theeyal; stew; ishtu","kerala"]],
+  Dal: [["Dal","daal; dal tadka; dal fry","north central east"],["Rajma/Chole","rajma; chole; chana; usal; lobia; ghugni; kadala curry; legume curry",S],["Pappu","pappu","andhra"],["Amti/Varan","amti; varan","maharashtra"],["Pithla/Zunka","pithla; pitla; zunka; jhunka","maharashtra"],["Gujarati dal","khatti meethi dal","gujarat"],["Bengali dal","cholar dal; musur dal; bhaja moong dal","bengal"],["Dalma","dalma","odisha"],["Paruppu","paruppu; parippu; tovve; bele","tamil kerala karnataka"]],
+  "Rice curry": [["Sambar","sambhar; huli","south"],["Rasam","saaru; charu","south"],["Kuzhambu/Pulusu","kuzhambu; kulambu; pulusu; gojju","tamil andhra karnataka"],["Kootu","koottu","tamil kerala"],["Kadhi","kadi","north west sindhi"],["Mor kuzhambu/Pulissery","mor kuzhambu; majjige huli; pulissery; moru curry","tamil karnataka kerala"]],
+  Chicken: [["Curry","chicken curry; murgh; kozhi curry; kodi kura; chicken gravy",S],["Fry/Dry","chicken fry; chicken dry; sukka; roast; varuval",S],["Keema","chicken keema; chicken mince","north west"]],
+  Mutton: [["Curry","mutton curry; gosht; mangsho; mangshor jhol",S],["Fry/Dry","mutton fry; sukka; roast","south"],["Keema","kheema; qeema; mince","north west"]],
+  "Fish & seafood": [["Fish curry","macher jhol; meen curry; meen kuzhambu; chepala pulusu; ambot tik; tenga; machli curry",S],["Fish fry","maach bhaja; meen varuval; tawa fish",S],["Prawn","prawns; jhinga; chingri; kolambi; royyalu; eral; shrimp",S]],
+  Egg: [["Eggs","omelette; bhurji; anda; boiled eggs",S],["Egg curry","anda curry; muttai kuzhambu; dimer dalna; egg masala",S]],
+};
+const LEGUME = new Set(["Rajma","Jammu rajma","Chole","Pindi chole","Kala chana curry","Lobia","Safed matar","Ghugni","Kadala curry","Chana ghassi","Sprouts curry","Matki usal","Moong usal","Vatana usal"]);
+function subOf(kind, name, cuis) {
+  const src = SRC.get(name), has = (...c) => c.some((x) => cuis.includes(x));
+  switch (kind) {
+    case "Sabzi":
+      if (src === "Bhaja") return "Bhaja";
+      if (src === "Bharta") return "Bharta/Chokha";
+      if (src === "Stuffed vegetable") return "Bharwa";
+      if (has("andhra")) return "Vepudu";
+      if (has("south", "tamil", "kerala", "karnataka")) return "Poriyal/Thoran";
+      if (has("bengal", "odisha")) return "Torkari/Ghonto";
+      return "Sabzi";
+    case "Gravy":
+      if (src === "Kerala curry") return "Kerala curry";
+      if (/paneer/i.test(name)) return "Paneer";
+      if (/kofta/i.test(name)) return "Kofta";
+      if (/dalna/i.test(name)) return "Dalna";
+      if (/kurma/i.test(name)) return "Kurma";
+      return "Curry";
+    case "Dal":
+      if (LEGUME.has(name)) return "Rajma/Chole";
+      if (/pappu/i.test(name)) return "Pappu";
+      if (["Varan", "Amti"].includes(name)) return "Amti/Varan";
+      if (["Pithla", "Zunka"].includes(name)) return "Pithla/Zunka";
+      if (name === "Dalma") return "Dalma";
+      if (name === "Gujarati dal") return "Gujarati dal";
+      if (["Cholar dal", "Bengali masoor dal", "Sona moong dal"].includes(name)) return "Bengali dal";
+      if (["Paruppu", "Kerala parippu curry", "Tovve"].includes(name)) return "Paruppu";
+      return "Dal";
+    case "Rice curry":
+      if (/sambar/i.test(name)) return "Sambar";
+      if (/rasam|saaru/i.test(name)) return "Rasam";
+      if (/kootu/i.test(name)) return "Kootu";
+      if (["Mor kuzhambu", "Majjige huli", "Pulissery"].includes(name)) return "Mor kuzhambu/Pulissery";
+      if (/kadhi/i.test(name)) return "Kadhi";
+      return "Kuzhambu/Pulusu";
+    case "Chicken": return name === "Chicken keema" ? "Keema" : src === "Chicken fry" ? "Fry/Dry" : "Curry";
+    case "Mutton": return src === "Keema" ? "Keema" : ["Mutton sukka", "Kerala mutton roast"].includes(name) ? "Fry/Dry" : "Curry";
+    case "Fish & seafood": return src === "Fish fry" ? "Fish fry" : src === "Prawn" ? "Prawn" : "Fish curry";
+    case "Egg": return src === "Eggs" ? "Eggs" : "Egg curry";
+  }
+  return kind;
+}
+
 // ---------------- BUILD ----------------
 const errors = [];
 const MEAT_OVERRIDE = { "Ambur biryani": ["chicken", "mutton"], "Kolkata biryani": ["chicken", "mutton"], "Malabar biryani": ["chicken"] };
@@ -1095,10 +1168,14 @@ for (const k of kinds) {
     if (regional && (k.staple || NO_SUGGEST_KINDS.has(k.name))) errors.push("regional item in a staple kind: " + name);
     it.suggest = !(k.staple || NO_SUGGEST_KINDS.has(k.name) || (NO_SUGGEST.has(name) && !regional));
     if (regional) { it.regional = true; usedReg.add(name); }
+    it.sub = subOf(k.name, name, it.cuisines || []);
     usedNo.add(name);
     return it;
   });
-  out.kinds.push({ name: k.name, aka: semi(k.aka), cuisines: kc, meals, staple: k.staple, part: k.part, diet: k.diet, items });
+  const subs = (SUBDEF[k.name] || [[k.name, "", k.cuisines]]).map(([n, a, c]) => ({ name: n, aka: semi(a), cuisines: sp(c) }));
+  for (const sb of subs) if (!items.some((it) => it.sub === sb.name)) errors.push(`${k.name}: sub ${sb.name} has no items`);
+  for (const it of items) if (!subs.some((sb) => sb.name === it.sub)) errors.push(`${it.name}: sub ${it.sub} not in ${k.name}`);
+  out.kinds.push({ name: k.name, aka: semi(k.aka), cuisines: kc, meals, staple: k.staple, part: k.part, diet: k.diet, subs, items });
 }
 for (const n of NO_SUGGEST) if (!usedNo.has(n)) errors.push("NO_SUGGEST names no item: " + n);
 for (const n of REGIONAL) if (!usedReg.has(n)) errors.push("REGIONAL names no item: " + n);
@@ -1185,10 +1262,17 @@ for (const [g, title, note] of GROUPS) {
       const aka = it.aka ? ` (${it.aka.join(", ")})` : "";
       return `${it.name}${aka}${extra.length ? ` [${extra.join("; ")}]` : ""}`;
     };
-    const yes = k.items.filter((it) => it.suggest && !it.regional), reg = k.items.filter((it) => it.regional), no = k.items.filter((it) => !it.suggest);
-    if (yes.length) md += `**Suggested:** ${yes.map(fmt).join(", ")}\n\n`;
-    if (reg.length) md += `**Suggested in its region:** ${reg.map(fmt).join(", ")}\n\n`;
-    if (no.length) md += `**Recognised only:** ${no.map(fmt).join(", ")}\n\n`;
+    const lines = (its) => {
+      const yes = its.filter((it) => it.suggest && !it.regional), reg = its.filter((it) => it.regional), no = its.filter((it) => !it.suggest);
+      if (yes.length) md += `**Suggested:** ${yes.map(fmt).join(", ")}\n\n`;
+      if (reg.length) md += `**Suggested in its region:** ${reg.map(fmt).join(", ")}\n\n`;
+      if (no.length) md += `**Recognised only:** ${no.map(fmt).join(", ")}\n\n`;
+    };
+    if (k.subs.length < 2) lines(k.items);
+    else for (const sb of k.subs) {
+      md += `#### ${k.name} → ${sb.name}\n${[sb.aka.length ? `aka ${sb.aka.join(", ")}` : null, sb.cuisines.join(", ")].filter(Boolean).join("; ")}\n\n`;
+      lines(k.items.filter((it) => it.sub === sb.name));
+    }
   }
 }
 md += fs.readFileSync(`${__dirname}/decided.md`, "utf8").trimEnd() + "\n\n";

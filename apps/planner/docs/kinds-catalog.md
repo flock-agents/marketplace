@@ -153,13 +153,6 @@ aka sandwiches; continental, west; complete; breakfast, tiffin, snack; veg and n
 
 **Suggested in its region:** Bombay sandwich [root veg; maharashtra]
 
-### Eggs
-aka anda, muttai, egg; north, south, west, east; main; breakfast, dinner, tiffin; egg; all: egg
-
-**Suggested:** Masala omelette (omelette, anda omelette) [onion/garlic], Plain omelette, Egg bhurji (anda bhurji) [onion/garlic], Boiled eggs, Half fry (fried egg, bull's eye), Bread omelette [wheat, onion/garlic]
-
-**Suggested in its region:** Akuri [onion/garlic, dairy; parsi], Egg podimas (muttai podimas) [onion/garlic; tamil], Scrambled eggs [dairy; continental]
-
 ### Dhokla
 aka khaman, farsan, muthia, muthiya, handvo, handwa; gujarat; snack; breakfast, snack, tiffin
 
@@ -215,56 +208,184 @@ Dal covers every lentil and legume dal, rajma and chole included. Rice curry cov
 ### Dal
 aka daal, pappu, paruppu, amti, varan, dali, dalma, tovve, bele, parippu, lentils, rajma, chole, chhole, chana, usal, lobia, ghugni, kadala curry, kabuli chana, rassa, pithla, pitla, zunka, jhunka; north, south, west, east, central; main; lunch, dinner
 
-**Suggested:** Moong dal (yellow moong dal, dhuli moong) [onion/garlic], Masoor dal (red lentil dal) [onion/garlic], Toor dal (arhar dal, tuvar dal) [onion/garlic], Chana dal (chane ki dal) [onion/garlic], Urad dal (dhuli urad dal) [onion/garlic], Mixed dal (panchratna dal) [onion/garlic], Dal tadka (yellow dal tadka) [dairy, onion/garlic], Dal fry [onion/garlic], Palak dal (dal palak) [onion/garlic], Lauki chana dal [onion/garlic], Tomato pappu [onion/garlic; andhra], Mamidikaya pappu (mango dal) [onion/garlic; andhra], Dosakaya pappu [onion/garlic; andhra], Rajma (rajma masala, rajma chawal) [onion/garlic], Chole (chana masala, chhole, kabuli chana) [onion/garlic], Kala chana curry (kale chane) [onion/garlic], Lobia (lobia masala, chawli) [onion/garlic], Safed matar (ragda, white peas curry) [onion/garlic], Matki usal [onion/garlic, coconut; maharashtra], Moong usal [onion/garlic, coconut; maharashtra], Sprouts curry (moong sprouts curry) [onion/garlic], Pithla (pitla) [onion/garlic; maharashtra], Zunka (jhunka) [onion/garlic; maharashtra]
+#### Dal → Dal
+aka daal, dal tadka, dal fry; north, central, east
 
-**Suggested in its region:** Panchmel dal [dairy, onion/garlic; rajasthan], Dal makhani [dairy, onion/garlic; punjab], Khatti dal [onion/garlic; andhra], Gujarati dal (gujarati toor dal, khatti meethi dal) [sugar, peanut; gujarat], Varan (varan bhaat dal) [maharashtra], Amti (katachi amti, toor dal amti) [sugar, coconut; maharashtra], Muddha pappu (plain pappu) [andhra], Palakura pappu (spinach pappu) [onion/garlic; andhra], Paruppu (paruppu kadayal) [tamil], Kerala parippu curry (parippu) [coconut; kerala], Tovve [karnataka], Cholar dal [coconut, sugar, dairy; bengal], Bengali masoor dal (musur dal) [onion/garlic; bengal], Sona moong dal (bhaja moong dal) [dairy; bengal], Dalma [root veg, brinjal, coconut; odisha], Sai bhaji (sindhi sai bhaji) [onion/garlic, root veg, brinjal; sindhi], Jammu rajma (chitra rajma) [onion/garlic; kashmir], Pindi chole [onion/garlic; punjab], Ghugni [onion/garlic; east], Vatana usal [onion/garlic, coconut; maharashtra], Kadala curry [onion/garlic, coconut; kerala], Chana ghassi [coconut; karnataka]
+**Suggested:** Moong dal (yellow moong dal, dhuli moong) [onion/garlic], Masoor dal (red lentil dal) [onion/garlic], Toor dal (arhar dal, tuvar dal) [onion/garlic], Chana dal (chane ki dal) [onion/garlic], Urad dal (dhuli urad dal) [onion/garlic], Mixed dal (panchratna dal) [onion/garlic], Dal tadka (yellow dal tadka) [dairy, onion/garlic], Dal fry [onion/garlic], Palak dal (dal palak) [onion/garlic], Lauki chana dal [onion/garlic]
+
+**Suggested in its region:** Panchmel dal [dairy, onion/garlic; rajasthan], Dal makhani [dairy, onion/garlic; punjab], Khatti dal [onion/garlic; andhra], Sai bhaji (sindhi sai bhaji) [onion/garlic, root veg, brinjal; sindhi]
+
+#### Dal → Rajma/Chole
+aka rajma, chole, chana, usal, lobia, ghugni, kadala curry, legume curry; north, south, west, east
+
+**Suggested:** Rajma (rajma masala, rajma chawal) [onion/garlic], Chole (chana masala, chhole, kabuli chana) [onion/garlic], Kala chana curry (kale chane) [onion/garlic], Lobia (lobia masala, chawli) [onion/garlic], Safed matar (ragda, white peas curry) [onion/garlic], Matki usal [onion/garlic, coconut; maharashtra], Moong usal [onion/garlic, coconut; maharashtra], Sprouts curry (moong sprouts curry) [onion/garlic]
+
+**Suggested in its region:** Jammu rajma (chitra rajma) [onion/garlic; kashmir], Pindi chole [onion/garlic; punjab], Ghugni [onion/garlic; east], Vatana usal [onion/garlic, coconut; maharashtra], Kadala curry [onion/garlic, coconut; kerala], Chana ghassi [coconut; karnataka]
+
+#### Dal → Pappu
+aka pappu; andhra
+
+**Suggested:** Tomato pappu [onion/garlic; andhra], Mamidikaya pappu (mango dal) [onion/garlic; andhra], Dosakaya pappu [onion/garlic; andhra]
+
+**Suggested in its region:** Muddha pappu (plain pappu) [andhra], Palakura pappu (spinach pappu) [onion/garlic; andhra]
+
+#### Dal → Amti/Varan
+aka amti, varan; maharashtra
+
+**Suggested in its region:** Varan (varan bhaat dal) [maharashtra], Amti (katachi amti, toor dal amti) [sugar, coconut; maharashtra]
+
+#### Dal → Pithla/Zunka
+aka pithla, pitla, zunka, jhunka; maharashtra
+
+**Suggested:** Pithla (pitla) [onion/garlic; maharashtra], Zunka (jhunka) [onion/garlic; maharashtra]
+
+#### Dal → Gujarati dal
+aka khatti meethi dal; gujarat
+
+**Suggested in its region:** Gujarati dal (gujarati toor dal, khatti meethi dal) [sugar, peanut; gujarat]
+
+#### Dal → Bengali dal
+aka cholar dal, musur dal, bhaja moong dal; bengal
+
+**Suggested in its region:** Cholar dal [coconut, sugar, dairy; bengal], Bengali masoor dal (musur dal) [onion/garlic; bengal], Sona moong dal (bhaja moong dal) [dairy; bengal]
+
+#### Dal → Dalma
+aka dalma; odisha
+
+**Suggested in its region:** Dalma [root veg, brinjal, coconut; odisha]
+
+#### Dal → Paruppu
+aka paruppu, parippu, tovve, bele; tamil, kerala, karnataka
+
+**Suggested in its region:** Paruppu (paruppu kadayal) [tamil], Kerala parippu curry (parippu) [coconut; kerala], Tovve [karnataka]
 
 ### Rice curry
 aka sambar, sambhar, rasam, kuzhambu, kulambu, kootu, kadhi, kadi, saaru, charu, pulusu, mor kuzhambu, majjige huli, pulissery, huli, gojju; south, north, west, sindhi; main; breakfast, lunch, dinner
 
-**Suggested:** Drumstick sambar (murungakkai sambar) [onion/garlic; south], Mixed vegetable sambar [onion/garlic, root veg; south], Onion sambar (vengaya sambar, small onion sambar) [onion/garlic; south], Radish sambar (mullangi sambar) [onion/garlic, root veg; south], Brinjal sambar (kathirikai sambar) [onion/garlic, brinjal; south], Pumpkin sambar (parangikai sambar) [onion/garlic; south], Okra sambar (vendakkai sambar) [onion/garlic; south], Tiffin sambar (idli sambar) [onion/garlic; south], Tomato rasam (thakkali rasam, tomato charu) [onion/garlic; south], Pepper rasam (milagu rasam) [onion/garlic; south], Lemon rasam (elumichai rasam) [south], Garlic rasam (poondu rasam) [onion/garlic; south], Paruppu rasam (dal rasam) [south], Pineapple rasam [sugar; south], Jeera rasam (jeeragam rasam) [south], Kollu rasam (horsegram rasam) [onion/garlic; south], Vatha kuzhambu (vathal kuzhambu) [onion/garlic; tamil], Kara kuzhambu [onion/garlic; tamil], Poondu kuzhambu (garlic kuzhambu) [onion/garlic; tamil], Ennai kathirikai kuzhambu [brinjal, onion/garlic; tamil], Paruppu urundai kuzhambu [onion/garlic; tamil], Puli kuzhambu (tamarind kuzhambu) [onion/garlic; tamil], Sorakaya pulusu [onion/garlic; andhra], Bendakaya pulusu (okra pulusu) [onion/garlic; andhra], Pineapple gojju [sugar; karnataka], Hagalakai gojju (bitter gourd gojju) [karela, sugar; karnataka], Chow chow kootu [coconut; tamil/kerala], Poricha kootu [coconut; tamil/kerala], Keerai kootu (spinach kootu) [coconut; tamil/kerala], Pudalangai kootu (snake gourd kootu) [coconut; tamil/kerala], Kathirikai kootu (brinjal kootu) [coconut, brinjal; tamil/kerala], Cabbage kootu [coconut; tamil/kerala], Punjabi kadhi pakora (kadhi pakoda) [dairy, onion/garlic; punjab], Gujarati kadhi [dairy, sugar; gujarat], Sindhi kadhi [root veg; sindhi], Mor kuzhambu [dairy, coconut; tamil]
+#### Rice curry → Sambar
+aka sambhar, huli; south
 
-**Suggested in its region:** Arachuvitta sambar [coconut; tamil], Udupi sambar (huli) [coconut, sugar; karnataka], Kerala sambar [coconut, onion/garlic; kerala], Mysore rasam [coconut; karnataka], Udupi saaru (udupi rasam) [sugar; karnataka], Mukkala pulusu [onion/garlic, root veg, brinjal; andhra], Rajasthani kadhi [dairy; rajasthan], Maharashtrian kadhi (taak kadhi) [dairy; maharashtra], Majjige huli [dairy, coconut; karnataka], Pulissery (moru curry) [dairy, coconut; kerala]
+**Suggested:** Drumstick sambar (murungakkai sambar) [onion/garlic; south], Mixed vegetable sambar [onion/garlic, root veg; south], Onion sambar (vengaya sambar, small onion sambar) [onion/garlic; south], Radish sambar (mullangi sambar) [onion/garlic, root veg; south], Brinjal sambar (kathirikai sambar) [onion/garlic, brinjal; south], Pumpkin sambar (parangikai sambar) [onion/garlic; south], Okra sambar (vendakkai sambar) [onion/garlic; south], Tiffin sambar (idli sambar) [onion/garlic; south]
+
+**Suggested in its region:** Arachuvitta sambar [coconut; tamil], Udupi sambar (huli) [coconut, sugar; karnataka], Kerala sambar [coconut, onion/garlic; kerala]
+
+#### Rice curry → Rasam
+aka saaru, charu; south
+
+**Suggested:** Tomato rasam (thakkali rasam, tomato charu) [onion/garlic; south], Pepper rasam (milagu rasam) [onion/garlic; south], Lemon rasam (elumichai rasam) [south], Garlic rasam (poondu rasam) [onion/garlic; south], Paruppu rasam (dal rasam) [south], Pineapple rasam [sugar; south], Jeera rasam (jeeragam rasam) [south], Kollu rasam (horsegram rasam) [onion/garlic; south]
+
+**Suggested in its region:** Mysore rasam [coconut; karnataka], Udupi saaru (udupi rasam) [sugar; karnataka]
+
+#### Rice curry → Kuzhambu/Pulusu
+aka kuzhambu, kulambu, pulusu, gojju; tamil, andhra, karnataka
+
+**Suggested:** Vatha kuzhambu (vathal kuzhambu) [onion/garlic; tamil], Kara kuzhambu [onion/garlic; tamil], Poondu kuzhambu (garlic kuzhambu) [onion/garlic; tamil], Ennai kathirikai kuzhambu [brinjal, onion/garlic; tamil], Paruppu urundai kuzhambu [onion/garlic; tamil], Puli kuzhambu (tamarind kuzhambu) [onion/garlic; tamil], Sorakaya pulusu [onion/garlic; andhra], Bendakaya pulusu (okra pulusu) [onion/garlic; andhra], Pineapple gojju [sugar; karnataka], Hagalakai gojju (bitter gourd gojju) [karela, sugar; karnataka]
+
+**Suggested in its region:** Mukkala pulusu [onion/garlic, root veg, brinjal; andhra]
+
+#### Rice curry → Kootu
+aka koottu; tamil, kerala
+
+**Suggested:** Chow chow kootu [coconut; tamil/kerala], Poricha kootu [coconut; tamil/kerala], Keerai kootu (spinach kootu) [coconut; tamil/kerala], Pudalangai kootu (snake gourd kootu) [coconut; tamil/kerala], Kathirikai kootu (brinjal kootu) [coconut, brinjal; tamil/kerala], Cabbage kootu [coconut; tamil/kerala]
+
+#### Rice curry → Kadhi
+aka kadi; north, west, sindhi
+
+**Suggested:** Punjabi kadhi pakora (kadhi pakoda) [dairy, onion/garlic; punjab], Gujarati kadhi [dairy, sugar; gujarat], Sindhi kadhi [root veg; sindhi]
+
+**Suggested in its region:** Rajasthani kadhi [dairy; rajasthan], Maharashtrian kadhi (taak kadhi) [dairy; maharashtra]
+
+#### Rice curry → Mor kuzhambu/Pulissery
+aka mor kuzhambu, majjige huli, pulissery, moru curry; tamil, karnataka, kerala
+
+**Suggested:** Mor kuzhambu [dairy, coconut; tamil]
+
+**Suggested in its region:** Majjige huli [dairy, coconut; karnataka], Pulissery (moru curry) [dairy, coconut; kerala]
 
 ## Lunch and dinner: vegetables
 
 ### Sabzi
-aka sabji, subzi, sukhi sabzi, dry sabzi, bhaji, poriyal, porial, thoran, torkari, palya, vepudu, upkari, shaak, fugath, sukke; north, south, west, east, central; main; lunch, dinner, tiffin
+aka sabji, subzi, sukhi sabzi, dry sabzi, bhaji, poriyal, porial, thoran, torkari, palya, vepudu, upkari, shaak, fugath, sukke, bhaja, bharta, chokha, pitika, bharit, bharwa, bharli, stuffed vegetable; north, south, west, east, central; main; lunch, dinner, tiffin; veg and non-veg
 
-**Suggested:** Bhindi sabzi (bhindi fry, bhindi masala, vendakkai poriyal) [onion/garlic], Aloo gobi [root veg, onion/garlic], Jeera aloo (aloo jeera) [root veg], Aloo methi [root veg, onion/garlic], Aloo bhaji (puri bhaji, batata bhaji, batatyachi bhaji) [root veg], Lauki sabzi (doodhi sabzi, ghiya), Tinda sabzi [onion/garlic], Turai sabzi (tori, ridge gourd sabzi) [onion/garlic], Parwal sabzi (potol) [onion/garlic], Karela sabzi (karela fry) [karela, onion/garlic], Cabbage sabzi (patta gobhi) [onion/garlic], Beans sabzi (french beans sabzi), Gajar matar [root veg], Kaddu sabzi (khatta meetha kaddu, pumpkin sabzi) [sugar], Arbi sabzi (arbi fry, colocasia) [root veg], Baingan aloo (aloo baingan) [brinjal, root veg, onion/garlic], Aloo shimla mirch (capsicum aloo) [root veg], Kundru sabzi (tondli, tindora, tindora nu shaak) [onion/garlic], Mixed vegetable sabzi (mix veg sukhi) [root veg, onion/garlic], Suran sabzi (yam sabzi) [root veg], Methi bhaji (methichi bhaji) [onion/garlic; maharashtra], Carrot poriyal [root veg, coconut; south], Beetroot poriyal (beetroot thoran) [root veg, coconut; south], Vazhakkai poriyal (raw banana fry, kachche kele ki sabzi) [south], Keerai poriyal (spinach poriyal, cheera thoran) [coconut; south], Mochar ghonto [root veg, coconut; bengal], Paneer bhurji [dairy, onion/garlic]
+#### Sabzi → Sabzi
+aka sukhi sabzi, bhaji, shaak, sukke, fugath; north, west, central
 
-**Suggested in its region:** Ker sangri [rajasthan], Haak (haak saag) [kashmir], Bateta nu shaak [root veg, sugar; gujarat], Beans poriyal (beans thoran, beans palya) [coconut; south], Cabbage thoran (cabbage poriyal) [coconut; south], Urulaikizhangu roast (potato roast, aloo fry) [root veg; south], Senai roast (yam fry, suran fry) [root veg; south], Kovakkai fry [onion/garlic; south], Bendakaya vepudu [onion/garlic; andhra], Dondakaya vepudu [onion/garlic, peanut; andhra], Shukto [karela, brinjal, root veg, dairy, sugar; bengal], Chorchori [root veg, brinjal; bengal], Lau ghonto [dairy; bengal], Aloo posto [root veg; bengal], Bandhakopir torkari [root veg; bengal]
+**Suggested:** Bhindi sabzi (bhindi fry, bhindi masala, vendakkai poriyal) [onion/garlic], Aloo gobi [root veg, onion/garlic], Jeera aloo (aloo jeera) [root veg], Aloo methi [root veg, onion/garlic], Aloo bhaji (puri bhaji, batata bhaji, batatyachi bhaji) [root veg], Lauki sabzi (doodhi sabzi, ghiya), Tinda sabzi [onion/garlic], Turai sabzi (tori, ridge gourd sabzi) [onion/garlic], Parwal sabzi (potol) [onion/garlic], Karela sabzi (karela fry) [karela, onion/garlic], Cabbage sabzi (patta gobhi) [onion/garlic], Beans sabzi (french beans sabzi), Gajar matar [root veg], Kaddu sabzi (khatta meetha kaddu, pumpkin sabzi) [sugar], Arbi sabzi (arbi fry, colocasia) [root veg], Baingan aloo (aloo baingan) [brinjal, root veg, onion/garlic], Aloo shimla mirch (capsicum aloo) [root veg], Kundru sabzi (tondli, tindora, tindora nu shaak) [onion/garlic], Mixed vegetable sabzi (mix veg sukhi) [root veg, onion/garlic], Suran sabzi (yam sabzi) [root veg], Methi bhaji (methichi bhaji) [onion/garlic; maharashtra], Paneer bhurji [dairy, onion/garlic]
 
-### Gravy
-aka gravy sabzi, rasedar sabzi, curry, tari wali sabzi, masala, korma, kurma, kofta, kofta curry, salan, rassa, dalna, shaak, paneer, paneer sabzi; north, south, west, east; main; lunch, dinner
+**Suggested in its region:** Ker sangri [rajasthan], Haak (haak saag) [kashmir], Bateta nu shaak [root veg, sugar; gujarat]
 
-**Suggested:** Aloo matar [root veg, onion/garlic], Aloo tamatar (aloo rasedar) [root veg], Aloo palak (palak aloo) [root veg, onion/garlic], Dum aloo [root veg, dairy, onion/garlic], Matar mushroom [mushroom, onion/garlic], Mushroom masala [mushroom, onion/garlic], Mix veg curry (mixed vegetable curry) [root veg, onion/garlic], Baingan masala [brinjal, onion/garlic], Methi matar malai [dairy, nuts, onion/garlic], Kathal sabzi (jackfruit curry, echorer dalna) [onion/garlic, root veg], Soya chunks curry (soya curry) [soy, onion/garlic], Sarson da saag (sarson ka saag) [dairy, onion/garlic; punjab], Gatte ki sabzi [dairy, onion/garlic; rajasthan], Papad ki sabzi [dairy; rajasthan], Nadru yakhni [dairy; kashmir], Palak paneer (saag paneer) [dairy, onion/garlic], Matar paneer [dairy, onion/garlic], Paneer butter masala [dairy, nuts, sugar, onion/garlic], Kadai paneer [dairy, onion/garlic], Shahi paneer [dairy, nuts, onion/garlic], Paneer tikka masala [dairy, onion/garlic], Paneer do pyaza [dairy, onion/garlic], Achari paneer [dairy, onion/garlic], Lauki kofta [onion/garlic], Malai kofta [dairy, nuts, root veg, onion/garlic], Paneer kofta [dairy, onion/garlic], Palak kofta [onion/garlic], Raw banana kofta (kachche kele ke kofte) [onion/garlic]
+#### Sabzi → Poriyal/Thoran
+aka poriyal, porial, thoran, upkari, palya; south
 
-**Suggested in its region:** Kashmiri dum aloo [root veg, dairy; kashmir], Vegetable kurma (veg korma) [root veg, coconut, nuts, onion/garlic; south], Sev tameta (sev tameta nu shaak) [onion/garlic, sugar; gujarat], Undhiyu [root veg, brinjal, coconut, peanut, sugar, wheat; gujarat], Aloo dalna [root veg, dairy, sugar; bengal], Potol dalna [root veg, dairy, sugar; bengal], Santula [root veg, brinjal; odisha], Papaya khar (khar) [assam], Khatkhate [coconut, root veg; goa]
+**Suggested:** Carrot poriyal [root veg, coconut; south], Beetroot poriyal (beetroot thoran) [root veg, coconut; south], Vazhakkai poriyal (raw banana fry, kachche kele ki sabzi) [south], Keerai poriyal (spinach poriyal, cheera thoran) [coconut; south]
 
-### Stuffed vegetable
-aka bharwa, bharli, gutti, bharela, bharva; north, west, andhra; main; lunch, dinner
+**Suggested in its region:** Beans poriyal (beans thoran, beans palya) [coconut; south], Cabbage thoran (cabbage poriyal) [coconut; south], Urulaikizhangu roast (potato roast, aloo fry) [root veg; south], Senai roast (yam fry, suran fry) [root veg; south], Kovakkai fry [onion/garlic; south]
+
+#### Sabzi → Vepudu
+aka vepudu; andhra
+
+**Suggested in its region:** Bendakaya vepudu [onion/garlic; andhra], Dondakaya vepudu [onion/garlic, peanut; andhra]
+
+#### Sabzi → Torkari/Ghonto
+aka torkari, ghonto, chorchori, posto; bengal, odisha
+
+**Suggested:** Mochar ghonto [root veg, coconut; bengal]
+
+**Suggested in its region:** Shukto [karela, brinjal, root veg, dairy, sugar; bengal], Chorchori [root veg, brinjal; bengal], Lau ghonto [dairy; bengal], Aloo posto [root veg; bengal], Bandhakopir torkari [root veg; bengal]
+
+#### Sabzi → Bhaja
+aka bhaja; bengal, odisha
+
+**Suggested:** Begun bhaja [brinjal], Alu bhaja (jhuri alu bhaja) [root veg], Potol bhaja, Uchhe bhaja (korola bhaja) [karela], Kumro bhaja (pumpkin bhaja), Beguni [brinjal]
+
+#### Sabzi → Bharta/Chokha
+aka bharta, chokha, pitika, bhorta, bharit, pora; north, east, bengal, assam, maharashtra, northeast
+
+**Suggested:** Baingan bharta [brinjal, onion/garlic], Aloo chokha [root veg, onion/garlic; east], Tomato chokha [onion/garlic; east]
+
+**Suggested in its region:** Baingan chokha [brinjal, onion/garlic; east], Aloo pitika [root veg, onion/garlic; assam], Begun pora [brinjal, onion/garlic; bengal], Vangyache bharit (baingan bharit) [brinjal, onion/garlic, peanut; maharashtra], Eromba [non-veg; fish; northeast]
+
+#### Sabzi → Bharwa
+aka bharwa, bharli, gutti, bharela, stuffed; north, west, andhra
 
 **Suggested:** Bharwa bhindi (stuffed bhindi) [onion/garlic], Bharwa baingan (stuffed baingan) [brinjal, onion/garlic], Bharwa karela (stuffed karela) [karela, onion/garlic], Bharwa tinda [onion/garlic], Bharwa parwal [onion/garlic], Stuffed capsicum (bharwa shimla mirch) [root veg, onion/garlic]
 
 **Suggested in its region:** Gutti vankaya [brinjal, onion/garlic, peanut; andhra], Bharli vangi [brinjal, onion/garlic, peanut, coconut; maharashtra], Bharela ringan bateta [brinjal, root veg, peanut, sugar; gujarat]
 
-### Kerala curry
-aka avial, aviyal, olan, erissery, kalan, theeyal, stew, ishtu, kappa; kerala; main; breakfast, lunch, dinner; all: coconut
+### Gravy
+aka gravy sabzi, rasedar sabzi, curry, tari wali sabzi, masala, korma, kurma, kofta, kofta curry, salan, rassa, dalna, shaak, paneer, paneer sabzi, avial, olan, erissery, kalan, theeyal, stew, ishtu; north, south, west, east; main; breakfast, lunch, dinner
 
-**Suggested:** Aviyal (avial) [dairy, root veg], Olan, Erissery, Kalan [dairy, root veg], Kootu curry [root veg], Vegetable stew (ishtu) [root veg, onion/garlic], Ulli theeyal (theeyal) [onion/garlic], Pavakka theeyal [karela, onion/garlic], Kappa puzhukku (kappa, tapioca mash) [root veg]
+#### Gravy → Curry
+aka rasedar sabzi, tari wali sabzi, masala, rassa, shaak, salan; north, west, east
 
-### Bhaja
-aka bhaji (bengali fry); bengal, odisha; side; lunch, dinner
+**Suggested:** Aloo matar [root veg, onion/garlic], Aloo tamatar (aloo rasedar) [root veg], Aloo palak (palak aloo) [root veg, onion/garlic], Dum aloo [root veg, dairy, onion/garlic], Matar mushroom [mushroom, onion/garlic], Mushroom masala [mushroom, onion/garlic], Mix veg curry (mixed vegetable curry) [root veg, onion/garlic], Baingan masala [brinjal, onion/garlic], Methi matar malai [dairy, nuts, onion/garlic], Kathal sabzi (jackfruit curry, echorer dalna) [onion/garlic, root veg], Soya chunks curry (soya curry) [soy, onion/garlic], Sarson da saag (sarson ka saag) [dairy, onion/garlic; punjab], Gatte ki sabzi [dairy, onion/garlic; rajasthan], Papad ki sabzi [dairy; rajasthan], Nadru yakhni [dairy; kashmir]
 
-**Suggested:** Begun bhaja [brinjal], Alu bhaja (jhuri alu bhaja) [root veg], Potol bhaja, Uchhe bhaja (korola bhaja) [karela], Kumro bhaja (pumpkin bhaja), Beguni [brinjal]
+**Suggested in its region:** Kashmiri dum aloo [root veg, dairy; kashmir], Sev tameta (sev tameta nu shaak) [onion/garlic, sugar; gujarat], Undhiyu [root veg, brinjal, coconut, peanut, sugar, wheat; gujarat], Santula [root veg, brinjal; odisha], Papaya khar (khar) [assam], Khatkhate [coconut, root veg; goa]
 
-### Bharta
-aka chokha, pitika, bhorta, bharit, pora; north, east, bengal, assam, maharashtra, northeast; side; lunch, dinner; veg and non-veg
+#### Gravy → Paneer
+aka paneer sabzi, paneer gravy; north
 
-**Suggested:** Baingan bharta [brinjal, onion/garlic], Aloo chokha [root veg, onion/garlic; east], Tomato chokha [onion/garlic; east]
+**Suggested:** Palak paneer (saag paneer) [dairy, onion/garlic], Matar paneer [dairy, onion/garlic], Paneer butter masala [dairy, nuts, sugar, onion/garlic], Kadai paneer [dairy, onion/garlic], Shahi paneer [dairy, nuts, onion/garlic], Paneer tikka masala [dairy, onion/garlic], Paneer do pyaza [dairy, onion/garlic], Achari paneer [dairy, onion/garlic], Paneer kofta [dairy, onion/garlic]
 
-**Suggested in its region:** Baingan chokha [brinjal, onion/garlic; east], Aloo pitika [root veg, onion/garlic; assam], Begun pora [brinjal, onion/garlic; bengal], Vangyache bharit (baingan bharit) [brinjal, onion/garlic, peanut; maharashtra], Eromba [non-veg; fish; northeast]
+#### Gravy → Kofta
+aka kofta curry, kofte; north
+
+**Suggested:** Lauki kofta [onion/garlic], Malai kofta [dairy, nuts, root veg, onion/garlic], Palak kofta [onion/garlic], Raw banana kofta (kachche kele ke kofte) [onion/garlic]
+
+#### Gravy → Kurma
+aka korma, kurma; south
+
+**Suggested in its region:** Vegetable kurma (veg korma) [root veg, coconut, nuts, onion/garlic; south]
+
+#### Gravy → Dalna
+aka dalna; bengal
+
+**Suggested in its region:** Aloo dalna [root veg, dairy, sugar; bengal], Potol dalna [root veg, dairy, sugar; bengal]
+
+#### Gravy → Kerala curry
+aka avial, aviyal, olan, erissery, kalan, theeyal, stew, ishtu; kerala
+
+**Suggested:** Aviyal (avial) [coconut, dairy, root veg; kerala], Olan [coconut; kerala], Erissery [coconut; kerala], Kalan [coconut, dairy, root veg; kerala], Kootu curry [coconut, root veg; kerala], Vegetable stew (ishtu) [coconut, root veg, onion/garlic; kerala], Ulli theeyal (theeyal) [coconut, onion/garlic; kerala], Pavakka theeyal [karela, coconut, onion/garlic; kerala], Kappa puzhukku (kappa, tapioca mash) [coconut, root veg; kerala]
 
 ## Lunch and dinner: rice dishes
 
@@ -305,15 +426,35 @@ aka chinese rice; indo-chinese; complete; lunch, dinner, tiffin; veg and non-veg
 
 ## Lunch and dinner: non-veg
 
-### Chicken curry
-aka murgh, kozhi curry, murgir jhol, kodi kura, chicken gravy; north, south, west, east; main; lunch, dinner; nonveg; all: chicken, onion/garlic
+### Egg
+aka eggs, anda, muttai, egg curry, anda curry; north, south, west, east; main; breakfast, lunch, dinner, tiffin; egg; all: egg
+
+#### Egg → Eggs
+aka omelette, bhurji, anda, boiled eggs; north, south, west, east
+
+**Suggested:** Masala omelette (omelette, anda omelette) [onion/garlic], Plain omelette, Egg bhurji (anda bhurji) [onion/garlic], Boiled eggs, Half fry (fried egg, bull's eye), Bread omelette [wheat, onion/garlic]
+
+**Suggested in its region:** Akuri [onion/garlic, dairy; parsi], Egg podimas (muttai podimas) [onion/garlic; tamil], Scrambled eggs [dairy; continental]
+
+#### Egg → Egg curry
+aka anda curry, muttai kuzhambu, dimer dalna, egg masala; north, south, west, east
+
+**Suggested:** Egg curry (anda curry) [onion/garlic], Egg masala [onion/garlic]
+
+**Suggested in its region:** Egg roast (mutta roast) [onion/garlic; kerala], Egg stew [onion/garlic, coconut, root veg; kerala], Dimer dalna (dimer jhol) [onion/garlic, root veg; bengal], Muttai kuzhambu [onion/garlic; tamil]
+
+### Chicken
+aka chicken, murgh, kozhi, kodi, chicken curry, chicken fry, chicken dry; north, south, west, east; main; lunch, dinner, snack; nonveg; all: chicken, onion/garlic
+
+#### Chicken → Curry
+aka chicken curry, murgh, kozhi curry, kodi kura, chicken gravy; north, south, west, east
 
 **Suggested:** Chicken curry (home-style chicken curry), Butter chicken (murgh makhani) [dairy, nuts, sugar], Chicken korma [dairy, nuts], Chicken do pyaza, Chicken saagwala (palak chicken)
 
 **Suggested in its region:** Kadai chicken [north/punjab], Chettinad chicken [coconut; tamil], Nadan chicken curry (kerala chicken curry) [coconut; kerala], Chicken stew [coconut, root veg; kerala], Andhra chicken curry (kodi kura) [andhra], Kolhapuri chicken [coconut; maharashtra], Chicken xacuti [coconut; goa], Murgir jhol [root veg; bengal], Kosha murgi [dairy; bengal]
 
-### Chicken fry
-aka chicken dry, chicken roast, sukka, chicken varuval, chicken starter; north, south, west, east; main; lunch, dinner, snack; nonveg; all: chicken, onion/garlic
+#### Chicken → Fry/Dry
+aka chicken fry, chicken dry, sukka, roast, varuval; north, south, west, east
 
 **Suggested:** Chicken fry (kozhi varuval), Chicken 65 [egg, dairy], Pepper chicken
 
@@ -321,17 +462,30 @@ aka chicken dry, chicken roast, sukka, chicken varuval, chicken starter; north, 
 
 **Recognised only:** Tandoori chicken [dairy], Chicken tikka [dairy]
 
-### Mutton curry
-aka gosht, mangsho, lamb curry, goat curry, mutton; north, south, west, east; main; lunch, dinner; nonveg; all: mutton
+#### Chicken → Keema
+aka chicken keema, chicken mince; north, west
+
+**Suggested:** Chicken keema
+
+### Mutton
+aka mutton, gosht, mangsho, lamb, goat, keema, kheema, mince; north, south, west, east; main; breakfast, lunch, dinner; nonveg; all: mutton
+
+#### Mutton → Curry
+aka mutton curry, gosht, mangsho, mangshor jhol; north, south, west, east
 
 **Suggested:** Mutton curry (home-style mutton curry, goat curry) [onion/garlic], Mutton korma [onion/garlic, dairy, nuts], Dalcha [onion/garlic; andhra]
 
-**Suggested in its region:** Rogan josh [onion/garlic, dairy; kashmir], Mutton yakhni [dairy; kashmir], Laal maas [onion/garlic, dairy; rajasthan], Kosha mangsho [onion/garlic, dairy; bengal], Mangshor jhol [onion/garlic, root veg; bengal], Mutton sukka [onion/garlic, coconut; karnataka], Kerala mutton roast [onion/garlic; kerala], Mutton stew [onion/garlic, coconut, root veg; kerala], Tambda rassa (kolhapuri mutton) [onion/garlic, coconut; maharashtra], Dhansak [onion/garlic, brinjal, sugar; parsi], Salli boti [onion/garlic, root veg, sugar; parsi]
+**Suggested in its region:** Rogan josh [onion/garlic, dairy; kashmir], Mutton yakhni [dairy; kashmir], Laal maas [onion/garlic, dairy; rajasthan], Kosha mangsho [onion/garlic, dairy; bengal], Mangshor jhol [onion/garlic, root veg; bengal], Mutton stew [onion/garlic, coconut, root veg; kerala], Tambda rassa (kolhapuri mutton) [onion/garlic, coconut; maharashtra], Dhansak [onion/garlic, brinjal, sugar; parsi], Salli boti [onion/garlic, root veg, sugar; parsi]
 
-### Keema
-aka kheema, qeema, mince; north, west; main; breakfast, lunch, dinner; nonveg; all: onion/garlic
+#### Mutton → Fry/Dry
+aka mutton fry, sukka, roast; south
 
-**Suggested:** Keema matar [mutton], Keema aloo (aloo keema) [mutton, root veg], Chicken keema [chicken], Keema pav [mutton, wheat; maharashtra]
+**Suggested in its region:** Mutton sukka [onion/garlic, coconut; karnataka], Kerala mutton roast [onion/garlic; kerala]
+
+#### Mutton → Keema
+aka kheema, qeema, mince; north, west
+
+**Suggested:** Keema matar [onion/garlic], Keema aloo (aloo keema) [onion/garlic, root veg], Keema pav [onion/garlic, wheat; maharashtra]
 
 ### Pork
 aka pork curry, sorpotel, vindaloo, pandi curry; goa, northeast, karnataka; main; lunch, dinner; nonveg; all: pork, onion/garlic
@@ -340,33 +494,29 @@ aka pork curry, sorpotel, vindaloo, pandi curry; goa, northeast, karnataka; main
 
 **Suggested in its region:** Pork vindaloo [sugar; goa], Sorpotel [goa], Pandi curry (coorg pork curry) [karnataka], Smoked pork with bamboo shoot (naga pork) [northeast], Pork with akhuni (pork with axone) [soy; northeast]
 
-### Fish curry
-aka machli, meen curry, macher jhol, maach, chepala pulusu, ambot tik, tenga, mach; south, west, east, bengal, kerala, goa; main; lunch, dinner; nonveg; all: fish
+### Fish & seafood
+aka fish, machli, meen, maach, mach, seafood, prawns, jhinga, chingri, kolambi, royyalu, eral, shrimp; north, south, west, east; main; lunch, dinner, snack; nonveg
 
-**Suggested:** Fish masala curry (machli curry, machli ka salan) [onion/garlic]
+#### Fish & seafood → Fish curry
+aka macher jhol, meen curry, meen kuzhambu, chepala pulusu, ambot tik, tenga, machli curry; north, south, west, east
 
-**Suggested in its region:** Macher jhol (maacher jhol) [onion/garlic, root veg; bengal], Shorshe maach (shorshe ilish, mustard fish) [bengal], Doi maach [dairy, onion/garlic, sugar; bengal], Meen kuzhambu (meen kulambu) [onion/garlic; tamil], Kerala fish curry (meen curry, kudampuli fish curry) [onion/garlic, coconut; kerala], Fish moilee (meen molee) [onion/garlic, coconut; kerala], Goan fish curry [onion/garlic, coconut; goa], Ambot tik [onion/garlic; goa], Malvani fish curry [onion/garlic, coconut; maharashtra], Fish gassi (meen gassi) [onion/garlic, coconut; karnataka], Chepala pulusu [onion/garlic; andhra], Masor tenga [assam], Machha besara [onion/garlic; odisha]
+**Suggested:** Fish masala curry (machli curry, machli ka salan) [fish, onion/garlic]
 
-### Fish fry
-aka meen varuval, maach bhaja, tawa fish; south, west, east, bengal; side; lunch, dinner, snack; nonveg; all: fish
+**Suggested in its region:** Macher jhol (maacher jhol) [fish, onion/garlic, root veg; bengal], Shorshe maach (shorshe ilish, mustard fish) [fish; bengal], Doi maach [fish, dairy, onion/garlic, sugar; bengal], Meen kuzhambu (meen kulambu) [fish, onion/garlic; tamil], Kerala fish curry (meen curry, kudampuli fish curry) [fish, onion/garlic, coconut; kerala], Fish moilee (meen molee) [fish, onion/garlic, coconut; kerala], Goan fish curry [fish, onion/garlic, coconut; goa], Ambot tik [fish, onion/garlic; goa], Malvani fish curry [fish, onion/garlic, coconut; maharashtra], Fish gassi (meen gassi) [fish, onion/garlic, coconut; karnataka], Chepala pulusu [fish, onion/garlic; andhra], Masor tenga [fish; assam], Machha besara [fish, onion/garlic; odisha]
 
-**Suggested:** Masala fish fry (tawa fish fry) [onion/garlic], Rava fish fry [wheat]
+#### Fish & seafood → Fish fry
+aka maach bhaja, meen varuval, tawa fish; north, south, west, east
 
-**Suggested in its region:** Meen varuval (meen varuthathu) [onion/garlic; south], Maach bhaja [bengal], Amritsari fish [onion/garlic, egg; punjab], Bombil fry (bombay duck fry) [wheat, rice; maharashtra], Pomfret fry (paplet fry) [onion/garlic, wheat; maharashtra/goa]
+**Suggested:** Masala fish fry (tawa fish fry) [fish, onion/garlic], Rava fish fry [fish, wheat]
 
-### Prawn
-aka prawns, jhinga, chingri, kolambi, royyalu, eral, konju, shrimp; south, west, east, bengal, goa, kerala; main; lunch, dinner; nonveg; all: prawn, onion/garlic
+**Suggested in its region:** Meen varuval (meen varuthathu) [fish, onion/garlic; south], Maach bhaja [fish; bengal], Amritsari fish [fish, onion/garlic, egg; punjab], Bombil fry (bombay duck fry) [fish, wheat, rice; maharashtra], Pomfret fry (paplet fry) [fish, onion/garlic, wheat; maharashtra/goa]
 
-**Suggested:** Prawn curry (eral kuzhambu, kolambi curry) [coconut], Prawn masala, Prawn fry (prawn rava fry, kolambi fry)
+#### Fish & seafood → Prawn
+aka prawns, jhinga, chingri, kolambi, royyalu, eral, shrimp; north, south, west, east
 
-**Suggested in its region:** Chingri malai curry [coconut; bengal], Prawn balchao [sugar; goa], Prawn ghee roast [dairy; karnataka], Royyala iguru [andhra]
+**Suggested:** Prawn curry (eral kuzhambu, kolambi curry) [prawn, onion/garlic, coconut], Prawn masala [prawn, onion/garlic], Prawn fry (prawn rava fry, kolambi fry) [prawn, onion/garlic]
 
-### Egg curry
-aka anda curry, muttai kuzhambu, dimer dalna, egg masala; north, south, west, east; main; lunch, dinner; egg; all: egg, onion/garlic
-
-**Suggested:** Egg curry (anda curry), Egg masala
-
-**Suggested in its region:** Egg roast (mutta roast) [kerala], Egg stew [coconut, root veg; kerala], Dimer dalna (dimer jhol) [root veg; bengal], Muttai kuzhambu [tamil]
+**Suggested in its region:** Chingri malai curry [prawn, onion/garlic, coconut; bengal], Prawn balchao [prawn, onion/garlic, sugar; goa], Prawn ghee roast [prawn, onion/garlic, dairy; karnataka], Royyala iguru [fish, onion/garlic; andhra]
 
 ## Indo-Chinese and continental (eaten at home)
 
@@ -533,11 +683,16 @@ Round 5 (owner, 25 Nov):
 14. **No beef items for now.** Beef is decided on the fly: a family's own beef dish is recognised and planned for them.
 15. **Flavour-base variants are suggestable**: another tempering, sauce, masala, filling or topping (dal tadka, dal fry, masala khichdi, schezwan fried rice and noodles, chilli garlic noodles, pink sauce pasta, macaroni, mac and cheese, hot and sour and manchow soup, masala chaas, sambar vada, patti samosa, Mysore masala and onion dosa, and the like). Recognised only now means only the same dish in another shape or needing other equipment or its own plate (thatte, mini/button, Kanchipuram and sambar idli; set dosa; tandoori and tikka needing an oven), and staples.
 
+Round 6 (owner, 25 Nov):
+
+16. **Lunch and dinner kinds are coarse, with sub-kinds named the way families say them** (often regional). Each item has a `sub`; each kind lists its `subs` ({ name, aka, cuisines }). Sabzi holds Sabzi, Poriyal/Thoran, Vepudu, Torkari/Ghonto, Bhaja, Bharta/Chokha and Bharwa. Gravy holds Curry, Paneer, Kofta, Kurma, Dalna and Kerala curry. Dal holds Dal, Rajma/Chole (incl. usal), Pappu, Amti/Varan, Pithla/Zunka, Gujarati dal, Bengali dal, Dalma and Paruppu. Rice curry holds Sambar, Rasam, Kuzhambu/Pulusu, Kootu, Kadhi and Mor kuzhambu/Pulissery. Non-veg is by meat: Chicken, Mutton (incl. keema), Fish & seafood and Egg, each with Curry, Fry/Dry, Keema, Fish fry or Prawn sub-kinds. Regional styles stay regional items inside these sub-kinds. Breakfast kinds stay dish families.
+17. **Templates may name a kind or a sub-kind**; rotation prefers the family's own sub-kinds. A plate's two items of one kind come from different sub-kinds where the template says so (sambar and rasam).
+
 ## Open questions
 
 Grain choices still open. Points already decided are in the section above.
 
-1. **Small kinds kept on purpose**: Curd (1 item, a staple) and Mudde (2, a staple). Folded so far: Pesarattu, Adai and Uttapam into Dosa; Gravy sabzi, Paneer and Kofta curry into Gravy; Handvo into Dhokla; Pithla/zunka into Dal; Makhana into Namkeen; Sabudana into Upma, Vada and Thalipeeth; Misal and Pav bhaji into Pav meal; Dalia and Oats into Upma, Khichdi and Porridge.
+1. **Sub-kinds and kinds to check**: Pork stays its own kind (6 items: pork curry plus Goan, Coorg and Naga styles), not under Mutton, so a "no pork" household is easy to read. Eggs (breakfast) and Egg curry are one Egg kind with two sub-kinds. Some sub-kinds have one item (Gujarati dal, Dalma, Kurma, Chicken keema) and Amti/Varan, Pithla/Zunka and Vepudu have two: keep them as sub-kinds so a family's own word maps to them, or fold into the plain sub-kind? Sundal, Pav meal, Kozhukattai, Curd (1 item) and Mudde (2) stay kinds. Palya and upkari are names under Poriyal/Thoran (no Karnataka-only items yet). Eromba (Manipuri fish mash) sits under Bharta/Chokha, so Sabzi is a mixed-diet kind.
 2. **Regional or not**: some calls were close. Dal makhani, phirni and kadai chicken are marked regional (north); Mysore masala dosa, kara kuzhambu and Puneri and Kolhapuri misal are suggested to everyone (flavour-base variants), not marked regional. Items already narrow and suggested on their own (pesarattu, gatte, mochar ghonto, sabudana khichdi) are not marked regional, but their cuisines narrow them the same way. Should they be marked regional too?
 3. **Prawn curry and prawn fry are both suggested**, as different dishes of one kind. Chicken fry and fish fry, by contrast, are their own kinds.
 4. **Contents err towards safety**: parathas and theplas carry dairy (ghee or curd); rava upma carries both cashew and peanut.
