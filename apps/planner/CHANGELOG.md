@@ -26,6 +26,25 @@
 - A fast saved with no food said is asked about in the read-back ("What does Gowri Shankar eat on the Tuesday fast?"); the
   answer fills the fast's food, also when the reader quotes the first sentence.
 - Builds again: rc3's contains read did not type-check (tsc), so the app failed to install.
+- The week is planned with per-day lists (owner, 25 Nov). Each day in a meal's call carries the family's dishes allowed
+  that day (on their days, with days left this week counting the meals already planned, someone there can eat them, not
+  another meal's main that day) and the rice or bread it must have ("Roti or Rice", from the family's own lunch and dinner
+  plates; at another meal only when every plate of theirs has one). A main comes at most twice a week unless the family's
+  own words say more often; staples are free.
+- One fast read a plan says each dish's part on the family's plates (rice or bread, a complete dish, a main, a side): the
+  rice, bread and sides are the meal's staples. It replaces the fixed word list of staple dishes.
+- The meal's call also names a few spare dishes for each part of the plate. Code then walks the week Monday to Sunday: a
+  dish past its days a week, off its days, not allowed that day or that nobody there can eat is replaced by one of its part
+  from that day's allowed dishes or the spares (a spare is new unless it is a particular way of a family dish, and counts
+  toward its days); a person with nothing of their own gets a dish beside; the missing rice or bread is added. The fix call
+  and the rotation in code are gone. Only a day still with a gap gets one small targeted call (that day, the part, who eats,
+  their rules, what not to repeat); what it cannot fill takes the closest allowed dish, said as coming back sooner than
+  usual. Nobody is left without food.
+- Allergies (owner, 25 Nov): a family dish on the family's own plates at a meal the allergic person eats is safe for them
+  by the family's word (no read); when it has the item, its note keeps their portion aside ("Ishaan's Poha without
+  peanut") and its ingredients are bought as usual. Every other dish (new, a spare, a particular way of a family dish, a
+  family dish only others eat) is read on the balanced tier, an unsure answer counting as having it. A house-wide allergy
+  makes every family dish safe; new ones are still read.
 
 ## 4.0.2
 
