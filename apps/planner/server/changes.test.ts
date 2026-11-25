@@ -71,17 +71,14 @@ async function planned(o: Parameters<typeof home>[0] = {}) {
 const changed = (a: Record<string, string>, b: Record<string, string>) => Object.keys({ ...a, ...b }).filter((x) => a[x] !== b[x]).sort();
 
 describe("set_slot_day: a one-off change", () => {
-  it("guests: marks the slot-day edited and re-plans only it, with its guests and occasion in the one slot call", async () => {
+  it("guests: marks the slot-day edited and re-plans only it, with its guests and occasion, by code (no plan call)", async () => {
     const k = await planned();
     const before = k.snapshot();
     const r = await k.op("set_slot_day", { date: SAT, slot: "Dinner", guests: [{ count: 4, rules: ["vegetarian"] }], occasion: "dinner party" });
     expect(r.ok).toBe(true);
     expect(r.replanned).toEqual([{ date: SAT, slot: "Dinner" }]);
-    expect(k.f().slots()).toHaveLength(1);
-    const u = k.f().slots()[0].user;
-    expect(u.slot).toBe("Dinner");
-    expect(u.days).toHaveLength(1);
-    expect(u.days[0]).toMatchObject({ date: SAT, for: ["Asha", "Ravi", "Kabir"], guests: [{ count: 4, rules: ["vegetarian"] }], occasion: "dinner party" });
+    expect(k.f().slots()).toHaveLength(0);
+    expect(k.at(SAT, "Dinner")).toMatchObject({ people: ["Asha", "Ravi", "Kabir"], guests: [{ count: 4, rules: ["vegetarian"] }], occasion: "dinner party" });
     // The rest of the week is read for the checks, not planned: only Saturday's dinner changed.
     expect(changed(before, k.snapshot())).toEqual([`${SAT}|Dinner`]);
     const d = k.at(SAT, "Dinner")!;
@@ -98,7 +95,6 @@ describe("set_slot_day: a one-off change", () => {
     const k = await planned();
     const r = await k.op("set_slot_day", { date: TUE, slot: "Lunch", remove_people: ["ravi"] });
     expect(r.ok).toBe(true);
-    expect(k.f().slots()[0].user.days[0].for).toEqual(["Asha", "Kabir"]);
     expect(k.at(TUE, "Lunch")!.people).toEqual(["Asha", "Kabir"]);
     const r2 = await k.op("set_slot_day", { date: TUE, slot: "Lunch", add_people: ["Nani"] });
     expect(r2.slot_day.people).toEqual(["Asha", "Kabir", "Nani"]);
@@ -145,31 +141,33 @@ describe("set_slot_day: a one-off change", () => {
     expect(r.replanned).toEqual([]);
     expect(k.f().slots()).toHaveLength(0);
     await k.op("make_plan", { week_start: MON });
-    const dinner = k.f().slots().find((c) => c.user.slot === "Dinner")!.user;
-    expect(dinner.days.find((d: any) => d.date === TUE).guests).toEqual([{ count: 2 }]);
+    expect(k.at(TUE, "Dinner")!.guests).toEqual([{ count: 2 }]);
+    expect(k.dishesAt(TUE, "Dinner").length).toBeGreaterThan(0);
     expect(k.at(TUE, "Dinner")!.edited).toBe(true);
   });
 });
 
 describe("a re-plan never overwrites an edited slot-day", () => {
   it("set_rule re-plans the failing slot-days only; the family's own meal with the dish stays as they set it", async () => {
-    const k = await planned({ has: { Rajma: ["onion_garlic"], Chole: ["onion_garlic"] } });
+    const k = await planned({ has: { Rajma: ["dairy"], Chole: ["dairy"] } });
     // The family set Wednesday's lunch themselves, with chole.
     await k.op("set_slot_day", { date: WED, slot: "Lunch", dishes: ["Chole", "Rice"] });
     const before = k.snapshot();
-    const lunchWith = (dish: string) => WEEK.filter((d) => d >= MON && k.dishesAt(d, "Lunch").includes(dish) && d !== WED);
-    const failing = [...lunchWith("Rajma"), ...lunchWith("Chole")].sort();
-    expect(failing.length).toBeGreaterThan(0);
-    // Rajma and Chole were read for onion and garlic (READ), as having none: say they do now.
-    commit(k.kit.db, k.kit.emitChange, (tx, ch) => { for (const n of ["Rajma", "Chole"]) upsertLibrary(tx, { name: n, slot: "Lunch", contains: ["onion_garlic"] }, "app", ch); });
+    // Rajma and Chole were read for dairy (READ), as having none: say they do now. (Onion and garlic never block a dish:
+    // kinds model rule 7.)
+    commit(k.kit.db, k.kit.emitChange, (tx, ch) => { for (const n of ["Rajma", "Chole"]) upsertLibrary(tx, { name: n, slot: "Lunch", contains: ["dairy"] }, "app", ch); });
+    // The slot-days with a dish that has dairy (the family's Rajma and Chole, and any new dish the catalog says has it).
+    const dairy = (name: string, slot: string) => { const rows = k.rows("library").filter((r: any) => r.name === name);
+      const row = rows.find((r: any) => r.slot === slot) ?? rows[0]; return !!row && JSON.parse(row.contains ?? "[]").includes("dairy"); };
+    const failing = k.week().filter((d) => !(d.date === WED && d.slot === "Lunch") && d.dishes.some((x) => dairy(x.dish, d.slot))).map((d) => `${d.date}|${d.slot}`).sort();
+    expect(failing.filter((x) => x.endsWith("|Lunch")).length).toBeGreaterThan(0);
     k.f().reset();
-    const r = await k.op("set_rule", { hard: true, what: "avoid", items: ["onion_garlic"], quote: "no onion or garlic at home now" });
+    const r = await k.op("set_rule", { hard: true, what: "avoid", items: ["dairy"], quote: "no dairy at home now" });
     expect(r.ok).toBe(true);
-    expect(r.replanned.map((x: any) => x.date).sort()).toEqual(failing);
-    expect(r.replanned.every((x: any) => x.slot === "Lunch")).toBe(true);
-    expect(changed(before, k.snapshot())).toEqual(failing.map((d) => `${d}|Lunch`));
+    expect(r.replanned.map((x: any) => `${x.date}|${x.slot}`).sort()).toEqual(failing);
+    expect(changed(before, k.snapshot())).toEqual(failing);
     expect(k.dishesAt(WED, "Lunch")).toEqual(["Chole", "Rice"]);
-    for (const d of failing) for (const x of ["Rajma", "Chole"]) expect(k.dishesAt(d, "Lunch")).not.toContain(x);
+    for (const key of failing) { const [d, slot] = key.split("|"); for (const x of ["Rajma", "Chole"]) expect(k.dishesAt(d, slot)).not.toContain(x); }
   });
 });
 
@@ -226,8 +224,8 @@ describe("set_slot", () => {
     const r = await k.op("set_slot", { name: "Kabir's tiffin", kind: "custom", usual_people: ["Kabir"], days: ["Mon", "Tue", "Wed", "Thu", "Fri"], order: 20 });
     expect(r.ok).toBe(true);
     expect(r.replanned.map((x: any) => x.date)).toEqual(WEEK.slice(0, 5));
-    expect(k.f().slots().map((c) => c.user.slot)).toEqual(["Kabir's tiffin"]);
-    expect(k.f().slots()[0].user.days.map((d: any) => d.for)).toEqual(Array(5).fill(["Kabir"]));
+    expect(k.f().slots()).toHaveLength(0);
+    for (const d of WEEK.slice(0, 5)) expect(k.at(d, "Kabir's tiffin")!.people).toEqual(["Kabir"]);
     expect(changed(before, k.snapshot())).toEqual(WEEK.slice(0, 5).map((d) => `${d}|Kabir's tiffin`));
     for (const d of WEEK.slice(0, 5)) expect(k.dishesAt(d, "Kabir's tiffin").length).toBe(1);
   });
@@ -520,13 +518,13 @@ describe("the Week page's edits go through the same change", () => {
     expect((await k.owner("POST", "/api/slot-days", { date: TUE, slot: "Lunch", dishes: [{ dish: "Papad", ingredients: [{ item: "papad", amount: -1 }] }] })).body.reason).toContain("above 0");
   });
 
-  it("with no model call: the change is kept and the answer says it could not be planned", async () => {
+  it("with no model answering: the change is kept and planned by code, its ingredients named as missing", async () => {
     const k = await planned();
     k.use({ ...fake(), model: async () => ({ ok: false, code: "unavailable", message: "none" }) } as any);
     const r = await k.op("set_slot_day", { date: TUE, slot: "Dinner", guests: [{ count: 2 }] });
     expect(r.ok).toBe(true);
-    expect(r.planned).toBe(false);
-    expect(typeof r.say).toBe("string");
+    expect(r.planned).not.toBe(false);
     expect(k.at(TUE, "Dinner")!.guests).toEqual([{ count: 2 }]);
+    expect(k.dishesAt(TUE, "Dinner").length).toBeGreaterThan(0);
   });
 });

@@ -54,16 +54,12 @@ export const STAPLES_FROM_PLANNED = false;
 
 // ── The weekly plan (make_plan, spec §5; decided defaults, tunable) ──
 
-/** The days (inclusive range [min, max]) a week a dish or a soft rule comes, by how often. A dish with nothing said comes on
- *  DEFAULT_DISH_DAYS days at most; a daily dish on every slot-day of its slot. */
+/** The days (inclusive range [min, max]) a week a dish or a soft rule comes, by how often. A daily dish comes on every
+ *  slot-day of its slot. A dish with nothing said has no count: the rotation spreads it (kinds model, owner 25 Nov). */
 export const FREQUENCY_DAYS: Record<"usually" | "sometimes" | "rarely" | "daily", [number, number]> = { usually: [4, 5], sometimes: [2, 3], rarely: [0, 1], daily: [7, 7] };
-export const DEFAULT_DISH_DAYS = 2;
-/** A non-staple dish is kept off a slot within this many days of itself where another dish fits. */
-export const REPEAT_WINDOW_DAYS = 3;
-/** Later weeks are guided by what was planned and kept at a slot this many days back (owner 25 Nov). */
-export const HISTORY_GUIDE_DAYS = 28;
-/** At most this many slot calls run at once. */
-export const SLOT_CALLS_AT_ONCE = 3;
+/** How many days of a 7-day week a meal's template comes when the family said it in words ("usually", "sometimes"): a part
+ *  week has its share of these. "<n>/week" is exactly n. */
+export const TEMPLATE_DAYS: Record<"usually" | "sometimes" | "rarely" | "daily", number> = { usually: 5, sometimes: 2, rarely: 1, daily: 7 };
 /** At most this many dishes a contains read asks about in one call. */
 export const CONTAINS_BATCH = 40;
 /** A tag that is a kind of another: a chicken dish has meat, a peanut dish has nuts. */

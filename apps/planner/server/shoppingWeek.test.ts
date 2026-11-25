@@ -274,15 +274,13 @@ describe("a week of shopping on the slot model", () => {
     expect(k.rows("library").find((l) => l.name === "Besan cheela")).toMatchObject({ untried: 0 });
   });
 
-  it("a re-plan takes onion and garlic out of what Gopal eats, as stored, and the reminder for that day never asks for them", async () => {
-    // The fake model: the slot call answers kadhi for Friday's dinner; the day's ingredients read puts onion and garlic in it.
+  it("a re-plan keeps onion and garlic in what is bought, the dish saying how Gopal's portion is kept (kinds model rule 7)", async () => {
+    // The fake model: the day's ingredients read puts onion and garlic in every dish. The week is filled by code.
     const purposes: string[] = [];
     const model = async (req: ModelRequest): Promise<ModelResult> => {
       const u = JSON.parse(req.user), p = req.purpose ?? "";
       purposes.push(p);
       const ok = (json: unknown): ModelResult => ({ ok: true, json, model: "fake" });
-      if (p.startsWith("meal plan: the week's") || p.startsWith("meal plan: fix the"))
-        return ok({ days: Object.fromEntries(u.days.filter((d: any) => !d.skip).map((d: any) => [d.date, ["Kadhi"]])) });
       if (p.includes("contain")) return ok({ dishes: [] });
       if (p.includes("calendar")) return ok({ changes: [] });
       return ok({ dishes: u.dishes.map((d: any) => ({ slot: d.slot, name: d.name, ingredients: [
@@ -298,14 +296,13 @@ describe("a week of shopping on the slot model", () => {
     expect(purposes).toContain("meal plan: a day's ingredients");
     const fri = listSlotDays(k.kit.db as any, { from: FRI, to: FRI }).find((d) => d.slot === "Dinner")!;
     expect(fri.people).toContain("Gopal");
-    const kadhi = fri.dishes.find((x) => x.dish === "Kadhi")!;
-    expect(kadhi.not_for).toEqual([]);
-    expect(kadhi.ingredients.map((i) => i.item)).toEqual(["besan", "curd", "curry leaves", "ghee"]);
-    expect(kadhi.note).toBe("no onion and garlic for Gopal");
-    // Thursday 19:00 covers Friday: it asks besan and curry leaves (curd is everyday, ghee monthly), never onion or garlic.
+    const his = fri.dishes.filter((x) => !x.not_for.includes("Gopal"));
+    expect(his.length).toBeGreaterThan(0);
+    for (const x of his) {
+      expect(x.ingredients.map((i) => i.item)).toEqual(["besan", "curd", "onion", "garlic", "curry leaves", "ghee"]);
+      expect(x.note).toContain("make without onion and garlic, or keep Gopal's portion aside");
+    }
     const ran = await k.run("evening", THU);
-    expect(ran!.first.meals.find((m: any) => m.slot === "Dinner").dishes.map((d: any) => d.name)).toContain("Kadhi");
     expect(ran!.first.ask_ingredients).toEqual(expect.arrayContaining(["besan", "curry leaves"]));
-    for (const x of ONION_GARLIC) expect(ran!.first.ask_ingredients).not.toContain(x);
   });
 });

@@ -122,16 +122,19 @@ describe("live run 2, #29: her past week's dishes reach the setup and the plan",
     expect(k.rows("slot_days").filter((x) => x.date)).toHaveLength(0);
   });
 
-  it("\"suggest some\": every meal is asked for new dishes where none of theirs is known, with no budget", async () => {
+  it("\"suggest some\": every meal is planned with new dishes where none of theirs is known, by code, with no budget", async () => {
     const f = fake({ dishes: { ok: false, code: "invalid_output", message: "no dishes in the answer" } });
     const k = await boot({ model: f.model, now: NOW });
     await k.op("apply_setup", { household: HOUSEHOLD, transcript: TRANSCRIPT });
     const p = await k.op("make_plan", { week_start: "2026-11-30", suggest_new: true });
-    // Every meal is asked of the model (this fake answers nothing, so no week is made); no budget limits its new dishes.
-    const lunch = f.of("plan").filter((r) => /meal plan: the week's Lunch/.test(r.purpose ?? ""));
-    expect(lunch).toHaveLength(1);
-    expect(JSON.parse(lunch[0].user).new_dishes_allowed).toBeUndefined();
-    expect(p).toMatchObject({ ok: false, reason: "no_dishes" });
+    // The week is filled by code (kinds model): no model call plans a meal; every meal cooked at home has new dishes.
+    expect(f.of("plan").filter((r) => /meal plan: the week/.test(r.purpose ?? ""))).toHaveLength(0);
+    expect(p.ok).toBe(true);
+    const days = k.rows("slot_days").filter((x) => x.date && !x.skip);
+    expect(days.length).toBeGreaterThan(0);
+    const dishes = k.rows("slot_dishes");
+    for (const d of days) expect(dishes.filter((x) => x.slot_day_id === d.id).length).toBeGreaterThan(0);
+    expect(dishes.filter((x) => x.new === 1).length).toBeGreaterThan(dishes.length / 2);
   });
 
 });
