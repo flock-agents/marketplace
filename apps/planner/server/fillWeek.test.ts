@@ -2,7 +2,7 @@
 // contract, owner rules 1–8). Expected plates are worked out from the owner's rules, not read off the code.
 import { describe, expect, it } from "bun:test";
 import { fillWeek, templateCounts, type FillInput, type FillResult } from "./fillWeek";
-import { suggestable, type MealKind, type MealTemplate } from "./kinds";
+import { catalogIngredients, suggestable, type MealKind, type MealTemplate } from "./kinds";
 import { OWN_SHARE } from "./planChecks";
 import { slotDayKey, type PlanDay } from "./planDays";
 import { dishKey } from "./dishText";
@@ -297,14 +297,16 @@ describe("an allergy (rule 6: new items read carefully)", () => {
     expect(r.placed.length).toBeGreaterThan(0);
     expect(r.provisional.sort()).toEqual(uniqSorted(r.placed.map((p) => p.dish)));
   });
-  it("after it, a variant read as maybe having it is not his, and one never read is not used for him", () => {
+  it("after it, a variant read as maybe having it is not his (unless only an ingredient it can be made without brings it: a note, decided 21), and one never read is not used for him", () => {
     const first = base({});
     const bad = first.placed[0].dish;
     const careful = new Map<string, Set<string>>([[dishKey("Kanda poha"), new Set()], ...first.placed.slice(1).map((p) => [dishKey(p.dish), new Set<string>()] as [string, Set<string>]),
       [dishKey(bad), new Set(["peanut"])]]);
     const r = base({ careful, strict: true });
+    const leaveOutPeanuts = (catalogIngredients(bad) ?? []).some((i) => i.name === "peanuts" && !i.main);
     for (const d of WEEK) for (const x of r.plates.get(slotDayKey(d, "Breakfast"))!) {
-      if (x.name === bad) expect(x.not_for).toEqual(["Ravi"]);
+      if (x.name === bad) expect(x.not_for).toEqual(leaveOutPeanuts ? [] : ["Ravi"]);
+      if (x.name === bad && leaveOutPeanuts) expect(x.note).toContain("make without peanuts for Ravi");
       if (!careful.has(dishKey(x.name))) expect(x.not_for).toEqual(["Ravi"]);
     }
     expect(r.provisional).toEqual([]);
@@ -395,15 +397,19 @@ describe("a category kept to a day", () => {
 });
 
 describe("a house-wide allergy and a category the family named (class 1: empty meals)", () => {
-  it("the family's 'poha' under 'nothing at home has peanuts': their poha items are theirs, cooked without; breakfast is never empty", () => {
+  it("the family's 'poha' under 'nothing at home has peanuts': their poha items are checked like any catalog item (decided 21: no longer vouched), made without peanuts; breakfast is never empty", () => {
     const peanut = rule({ items: ["peanut"], quote: "nothing at home has peanuts, he is allergic" });
     const r = fillWeek({ days: WEEK.map((d) => day(d, "Breakfast", ["Asha", "Ravi"])), slots: [slot("Breakfast", { kinds: [{ name: "Poha" }], templates: [T({ kind: "Poha" })] })],
-      library: [dish("Poha", "Breakfast", "Poha")], rules: [peanut], history: new Map(), cuisines: [], careful: new Map(), strict: true });
+      library: [dish("Poha", "Breakfast", "Poha")], rules: [peanut], history: new Map(), cuisines: [], careful: new Map() });
+    // Not vouched: each item placed is to be read carefully (here, on the catalog's word until then).
+    expect(r.provisional.length).toBeGreaterThan(0);
     for (const d of WEEK) {
       const plate = r.plates.get(slotDayKey(d, "Breakfast"))!;
       expect(plate.length).toBe(1);
       expect(plate[0].not_for).toEqual([]);
       expect(plate[0].name).not.toBe("Poha");
+      const peanuts = (catalogIngredients(plate[0].name) ?? []).some((i) => i.name === "peanuts");
+      expect(plate[0].note).toBe(peanuts ? "make without peanuts" : null);
     }
   });
 });

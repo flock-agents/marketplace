@@ -338,15 +338,11 @@ async function planWeek(deps: MakePlanDeps & { log: (line: string) => void }, in
   // white rice for ..."), and one person's allergy kept aside on a family dish that has it ("Ishaan's Poha without peanuts").
   const dishNotes = new Map<string, string[]>();   // date|slot|dish key
   const noteOn = (d: PlanDay, dish: string, t: string) => { const k = `${d.date}|${d.slot}|${dishKey(dish)}`; dishNotes.set(k, uniq([...(dishNotes.get(k) ?? []), t])); };
-  // An item of a category the family named, under a house-wide allergy: the house cooks it without (vouched), and says so.
-  const houseAllergies = rules.filter((r) => isAllergyRule(r) && !r.who);
-  const cookedWithout = (dish: string): string[] => (w.ownItems?.has(dishKey(dish))
-    ? uniq(houseAllergies.filter((r) => vouched(w, r, dish)).flatMap(forbidden).filter((t) => w.facts.get(dishKey(dish))?.tags.has(t))) : []);
+  // (An item of a category the family named is checked like any catalog item, decided 21: the fill's note says what to make
+  // it without.)
   for (const d of toPlan) for (const dish of d.dishes) {
-    const without = cookedWithout(dish);
-    if (without.length) noteOn(d, dish, `without ${andList(without.map((t) => t.replace(/_/g, " ")))}`);
     const own = placedAs.get(`${d.date}|${d.slot}|${dishKey(dish)}`)?.note;
-    for (const t of [...(own ? [own] : []), ...swapNotes(w, d, dish), ...allergyNotes(w, d, dish)]) noteOn(d, dish, t);
+    for (const t of [...(own ? own.split("; ") : []), ...swapNotes(w, d, dish), ...allergyNotes(w, d, dish)]) noteOn(d, dish, t);
   }
   // A soft swap with a count the week falls short of, kept by a note on some of the person's days.
   for (const [k, t] of softSwapNotes(w)) { const [date, slot] = k.split("|"); const d = toPlan.find((x) => x.date === date && same(x.slot, slot)); const dish = d?.dishes.find((x) => k.endsWith(`|${dishKey(x)}`)); if (d && dish) noteOn(d, dish, t); }
@@ -400,7 +396,9 @@ async function planWeek(deps: MakePlanDeps & { log: (line: string) => void }, in
       if (out.length * 2 > list.length) { log(`${weekdayOf(d.date)} ${d.slot} ${dish}: the ingredients read tags ${out.length} of ${list.length} against ${p}'s rule; not believed, kept`); continue; }
       left = left.filter((i) => !out.includes(i));
       log(`${weekdayOf(d.date)} ${d.slot} ${dish}: took out ${out.map((i) => i.item).join(", ")} (${p})`);
-      if (r.who && d.people.length > 1) noteOn(d, dish, `no ${andList(uniq(out.map((i) => i.item.toLowerCase())))} for ${p}`);
+      // (Not said twice: the fill's "make without cashews for <person>" already says it.)
+      if (r.who && d.people.length > 1 && !(dishNotes.get(k) ?? []).some((t) => t.startsWith("make without") && t.includes(p)))
+        noteOn(d, dish, `no ${andList(uniq(out.map((i) => i.item.toLowerCase())))} for ${p}`);
     }
     got.set(k, left);
   }
@@ -430,9 +428,8 @@ async function planWeek(deps: MakePlanDeps & { log: (line: string) => void }, in
       const k = dishKey(v.dish);
       if (library.some((x) => x.key === k) || newDishes.has(k)) continue;
       const f = w.facts.get(k);
-      const out = cookedWithout(v.dish);
       upsertLibrary(tx, { name: v.dish, slot: v.slot, origin: "planner_suggested", suggested: false, untried: false, kind: v.kind, sub: v.sub, catalog_item: v.dish,
-        ...(f ? { contains: [...f.tags].filter((t) => !out.includes(t)), contains_read: [...f.read] } : {}) }, by, ch);
+        ...(f ? { contains: [...f.tags], contains_read: [...f.read] } : {}) }, by, ch);
     }
     // Library dishes read by a model in this run (they were not read for every tag): kept, so the next week does not read them again.
     for (const row of library) {

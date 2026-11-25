@@ -9,15 +9,16 @@
 //     their own; else one of theirs comes back (the one had longest ago, never the next day);
 //   - a part of the family's own dishes ({items}) or a kind only they have: their dishes only, rotated.
 // Food rules: an item someone at the table may not eat is passed over while another fits; when none does, it stays with
-// `not_for` them and they get their own item for that part. Nobody at a meal is left with nothing. Onion and garlic are a
-// note, never a block (planChecks.onionNotes). Pure and deterministic: no database, no model, ties broken by date and slot.
+// `not_for` them and they get their own item for that part. Nobody at a meal is left with nothing. A rule broken only by an
+// ingredient the dish can be made without (onion and garlic, cashews in upma: decided 21) is a note, never a block
+// (planChecks.leaveOutNotes). Pure and deterministic: no database, no model, ties broken by date and slot.
 import { CATALOG, catalogContains, catalogKind, matchDish, norm, regionalWordOf, suggestable, suggestMeals, type CatalogItem, type MealKind, type MealTemplate,
   type TemplatePart } from "./kinds";
 import { TEMPLATE_DAYS } from "./db/constants";
 import { addDays, weekdayOf } from "./dates";
 import { dishKey } from "./dishText";
 import { isAllergyRule } from "./allergy";
-import { canonTag, carefulTags, factsOf, forbidden, frequencyRange, guestForbids, guestsCan, isDropped, isStapleAt, mainFeeds, notFor, onionNotes, ownAddon,
+import { canonTag, carefulTags, factsOf, forbidden, frequencyRange, guestForbids, guestsCan, isDropped, isStapleAt, leaveOutNotes, mainFeeds, notFor, ownAddon,
   readFor, slotFacts, withParents, OWN_SHARE, type DishFacts, type Week } from "./planChecks";
 import { ruleHolds, slotDayKey, type PlanDay } from "./planDays";
 import type { HistoryRow, LibraryDish, Rule, Slot } from "./slotStore";
@@ -762,7 +763,7 @@ export function fillWeek(input: FillInput): FillResult {
       if (at >= 0) ds.splice(at, 1);
     }
     const row = dayOf(d);
-    res.plates.set(k, plate.map((x) => ({ name: x.name, new: x.isNew, not_for: notFor(w, row, x.name), note: onionNotes(w, row, x.name).join("; ") || null })));
+    res.plates.set(k, plate.map((x) => ({ name: x.name, new: x.isNew, not_for: notFor(w, row, x.name), note: leaveOutNotes(w, row, x.name).join("; ") || null })));
   }
   res.unmet = uniq(res.unmet);
   res.facts = w.facts;

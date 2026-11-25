@@ -1,12 +1,15 @@
 // What code checks of a week's plan (docs/slot-model-spec.md §5.4; owner 25 Nov; kinds model contract rules 6 and 7): each
 // slot's facts (its staples, its plates); every hard rule kept for every person at every slot-day, read from what each dish
 // contains and failing closed where a dish was never read for a rule's item, an allergy by the family's word for their own
-// dishes or a careful read; onion and garlic a note, never a block (rule 7); who is left with nothing; the checks a saved
+// dishes or a careful read; a rule broken only by ingredients the dish can be made without a note, never a block (rule 7,
+// decided 21: onion and garlic, cashews in upma), one broken by a main ingredient the dish not theirs; who is left with
+// nothing; a catalog item read by the catalog for every tag its own read left out; the checks a saved
 // week is read against (changes.ts). The week itself is filled by fillWeek.ts. Pure: no database, no model.
 import { BASE_TAGS, FREQUENCY_DAYS, STAPLES_FROM_PLANNED, TAG_PARENT, UNTRIED_MAX_OFFERS, type Frequency } from "./db/constants";
 import { isAllergyRule } from "./allergy";
 import { dishKey } from "./dishText";
 import { looksLike, looksLikeRows, staples, type HistoryRow, type LibraryDish, type Rule, type Slot } from "./slotStore";
+import { catalogIngredients, contentsItem, plannerTags } from "./kinds";
 import { ruleHolds, type PlanDay } from "./planDays";
 
 const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
@@ -27,8 +30,19 @@ export function readFor(read: Set<string>, item: string): boolean {
   for (let t: string | undefined = canonTag(item); t; t = TAG_PARENT[t]) if (read.has(t)) return true;
   return false;
 }
-/** What a dish contains and was read for. */
-export type DishFacts = { tags: Set<string>; read: Set<string> };
+/** One ingredient of a dish: the tags it brings (with their families), and whether the dish is itself without it. */
+export type DishIngredient = { name: string; main: boolean; tags: Set<string> };
+/** What a dish contains and was read for; for a catalog item, its ingredients (decided 21: a rule broken only by ingredients
+ *  the dish can be made without is a note, not a block). */
+export type DishFacts = { tags: Set<string>; read: Set<string>; ingredients?: DishIngredient[] };
+/** The ingredients that bring a tag into a dish when it can be made without every one of them (decided 21): none of its main
+ *  ingredients brings it. Null when one does, when no ingredient of it does (the tag came from a read: it is the dish's), or
+ *  when the dish's ingredients are not known. */
+export function leaveOut(f: DishFacts, tag: string): string[] | null {
+  if (!f.ingredients?.length) return null;
+  const hits = f.ingredients.filter((x) => x.tags.has(canonTag(tag)));
+  return hits.length && hits.every((x) => !x.main) ? hits.map((x) => x.name) : null;
+}
 
 /** The tags a hard rule forbids to its person: vegetarian forbids meat and fish; no eggs, eggs; an avoid and a swap, their
  *  items; eggs-but-no-meat, its items or meat and fish. */
@@ -100,13 +114,33 @@ export type Week = { days: PlanDay[]; slots: Map<string, SlotFacts>; rules: Rule
 const slotKey = (s: string) => s.toLowerCase();
 export const isStapleAt = (w: Week, slot: string, dish: string): boolean => !!w.slots.get(slotKey(slot))?.staples.some((x) => dishKey(x) === dishKey(dish));
 const libAt = (w: Week, slot: string, dish: string): LibraryDish | undefined => w.library.find((d) => same(d.slot, slot) && d.key === dishKey(dish));
-/** What a dish contains and was read for, at a slot: its library row there, else any row of it, else a read made this run. */
+/** What a dish contains and was read for, at a slot: a read made this run, else its library row there, else any row of it;
+ *  and for a catalog item (or a staple named by its kind: "Rice" is Steamed rice) the catalog's answer for every tag that read
+ *  left out, and its ingredients. A planned catalog item is so read for every catalog tag: none is left unknown to fail
+ *  closed on (owner, 26 Nov: a Steamed rice saved without pork, nuts or sugar read). */
 export function factsOf(w: Week, slot: string, dish: string): DishFacts {
   const row = libAt(w, slot, dish) ?? w.library.find((d) => d.key === dishKey(dish));
   const run = w.facts.get(dishKey(dish));
-  if (run) return run;
-  return row ? { tags: withParents(row.contains), read: new Set(row.contains_read.map(canonTag)) } : { tags: new Set(), read: new Set() };
+  const base = run ?? (row ? { tags: withParents(row.contains), read: new Set(row.contains_read.map(canonTag)) } : { tags: new Set<string>(), read: new Set<string>() });
+  return withCatalog(base, contentsItem(row?.catalog_item ?? null) ?? contentsItem(row?.name ?? dish));
 }
+const withCatalogMemo = new WeakMap<DishFacts, Map<string, DishFacts>>();
+/** A dish's facts with its catalog item's laid over what they left unread, and the item's ingredients. */
+export function withCatalog(f: DishFacts, item: string | null): DishFacts {
+  if (!item) return f;
+  const memo = withCatalogMemo.get(f) ?? new Map<string, DishFacts>();
+  withCatalogMemo.set(f, memo);
+  const had = memo.get(item);
+  if (had) return had;
+  const t = plannerTags(item);
+  if (!t) return f;
+  const cat = withParents(t.contains);
+  const out: DishFacts = { tags: new Set([...f.tags, ...[...cat].filter((x) => !readFor(f.read, x))]), read: new Set([...f.read, ...withParents(t.read)]),
+    ingredients: f.ingredients ?? (catalogIngredients(item) ?? []).map((x) => ({ name: x.name, main: x.main, tags: withParents(x.tags) })) };
+  memo.set(item, out);
+  return out;
+}
+
 
 /** Is a dish the family's own: in their library (not a suggestion of the planner's, not a variant of one of theirs), or on
  *  one of their own plates. */
@@ -119,22 +153,12 @@ function familyDish(w: Week, key: string): boolean {
  *  without it, or keeps their portion aside). Such a dish needs no read for that allergy. */
 export function vouched(w: Week, r: Rule, dish: string): boolean {
   const key = dishKey(dish);
-  // An item of a category the family named is theirs: under a house-wide allergy the house cooks it without, as it cooks
-  // their poha or dal; never one whose name is the allergen ("peanut chutney").
-  if (!r.who && w.ownItems?.has(key) && !namesItem(dish, r)) return true;
+  // An item of a category the family named counts as theirs for variety, never for their allergies: the catalog picked it,
+  // so it is checked like any other (decided 21).
   if (!familyDish(w, key)) return false;
   if (!r.who) return true;
   return [...w.slots.values()].some((sf) => sf.plates.some((pl) => pl.some((x) => dishKey(x) === key))
     && (sf.slot.usual_people.some((p) => same(p, r.who!)) || w.days.some((d) => same(d.slot, sf.slot.name) && d.people.some((p) => same(p, r.who!)))));
-}
-/** The other words for an allergy tag a dish name may use. */
-const TAG_WORDS: Record<string, string[]> = { peanut: ["groundnut", "shengdana", "singdana", "moongphali", "kadalai"], nuts: ["kaju", "cashew", "badam", "almond", "walnut", "pista", "akhrot"],
-  dairy: ["paneer", "curd", "dahi", "milk", "ghee", "butter", "cheese", "malai"], egg: ["omelette", "anda"] };
-/** Does a dish's name say an item of the rule ("peanut chutney" under a peanut allergy). */
-function namesItem(dish: string, r: Rule): boolean {
-  const ws = dish.toLowerCase().split(/[^a-z]+/).filter(Boolean).map((x) => x.replace(/s$/, ""));
-  const tags = forbidden(r).flatMap((t) => [t, ...Object.keys(TAG_PARENT).filter((k) => TAG_PARENT[k] === t)]);
-  return tags.some((t) => ws.includes(t) || (TAG_WORDS[t] ?? []).some((x) => ws.includes(x.replace(/s$/, ""))));
 }
 /** The allergy tags a dish must be read for carefully (balanced, unsure counts as having it): those of every allergy rule
  *  the family does not vouch for it under. */
@@ -173,19 +197,23 @@ export function ruleBreaks(w: Week, d: PlanDay, dish: string): string[] {
   for (const p of d.people) for (const r of rulesFor(w, d, p)) for (const t of forbidden(r)) {
     if (r.who && ownSlotDish(w, p, dish)) continue;
     if (isAllergyRule(r)) {
-      // The family's word for their own dish; every other dish by the careful read only (owner 25 Nov).
+      // The family's word for their own dish; every other dish by the careful read only (owner 25 Nov), where an allergen
+      // that only an ingredient the dish can be made without brings is a note (decided 21: suji upma without cashews).
       if (vouched(w, r, dish)) continue;
       if (w.careful) {
         const c = w.careful.get(dishKey(dish));
         if (!c) out.push(`${dish}: not read carefully for ${t.replace(/_/g, " ")}, so it cannot go to ${p} ("${r.quote}")`);
-        else if (c.has(t)) out.push(`${dish} may have ${t.replace(/_/g, " ")}: against ${p}'s rule "${r.quote}"`);
+        else if (c.has(t) && !leaveOut(f, t)) out.push(`${dish} may have ${t.replace(/_/g, " ")}: against ${p}'s rule "${r.quote}"`);
         continue;
       }
     }
     if (r.what === "swap" && f.tags.has(t)) continue;   // a swap: the dish stays, with a note for them (swapNotes)
-    // Onion and garlic never block a dish (contract rule 7): it is made without, or their portion kept aside (onionNotes);
-    // only a dish that is mostly onion is not theirs.
-    if (t === ONION_GARLIC && !isAllergyRule(r) && !mostlyOnion(dish)) continue;
+    // Onion and garlic never block a dish whose ingredients are not known (contract rule 7): it is made without, or their
+    // portion kept aside (leaveOutNotes); only a dish that is mostly onion is not theirs. A catalog item says by its
+    // ingredients: onion that is a main one (kanda poha) is not theirs.
+    if (t === ONION_GARLIC && !isAllergyRule(r) && !f.ingredients?.length && !mostlyOnion(dish)) continue;
+    // Decided 21: only ingredients the dish can be made without break the rule: it stays theirs, with a note.
+    if (f.tags.has(t) && leaveOut(f, t)) continue;
     if (f.tags.has(t)) out.push(`${dish} has ${t.replace(/_/g, " ")}: against ${p}'s rule "${r.quote}"`);
     else if (!readFor(f.read, t)) out.push(`${dish}: not known whether it has ${t.replace(/_/g, " ")}, so it cannot go to ${p} ("${r.quote}")`);
   }
@@ -194,18 +222,50 @@ export function ruleBreaks(w: Week, d: PlanDay, dish: string): string[] {
 const ONION_GARLIC = "onion_garlic";
 /** A dish that is mostly onion, by its name (contract rule 7: onion, pyaaz, kanda, vengayam, ulli). */
 export const mostlyOnion = (dish: string): boolean => /\b(onions?|pyaa?z|pyaza|kanda|vengaya\w*|ulli)\b/i.test(dish);
+const andList = (xs: string[]) => (xs.length < 2 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`);
 /** The note on a dish that has onion or garlic, for the people at the slot-day whose hard rule says none (contract rule 7):
  *  "make without onion and garlic, or keep <person>'s portion aside". None for a dish that is mostly onion (not theirs). */
-export function onionNotes(w: Week, d: PlanDay, dish: string): string[] {
-  if (mostlyOnion(dish)) return [];
+export const onionNotes = (w: Week, d: PlanDay, dish: string): string[] => leaveOutNotes(w, d, dish).filter((x) => x.startsWith("make without onion and garlic, or keep"));
+/** The notes on a dish someone at the slot-day eats though a hard rule or allergy of theirs is against one of its ingredients
+ *  the dish can be made without (decided 21): "make without cashews for Anya"; one the whole house keeps, "make without
+ *  peanuts"; onion and garlic as contract rule 7 says it, "make without onion and garlic, or keep <person>'s portion aside"
+ *  (also for a dish whose ingredients are not known, unless it is mostly onion). Only for the people the dish is for (the
+ *  chicken that is not for her needs no word on onion); a family dish one person's allergy is kept aside for is allergyNotes'. */
+export function leaveOutNotes(w: Week, d: PlanDay, dish: string): string[] {
   const f = factsOf(w, d.slot, dish);
-  if (!f.tags.has(ONION_GARLIC)) return [];
-  // Only the people the dish is for (the chicken that is not for her needs no word on onion).
-  const who = d.people.filter((p) => rulesFor(w, d, p).some((r) => !isAllergyRule(r) && r.what !== "swap" && forbidden(r).includes(ONION_GARLIC))
-    && !notFor(w, { ...d, people: [p] }, dish).length);
-  if (!who.length) return [];
-  const names = who.length === 1 ? who[0] : `${who.slice(0, -1).join(", ")} and ${who[who.length - 1]}`;
-  return [`make without onion and garlic, or keep ${names}'s portion aside`];
+  const onion: string[] = [];
+  const without = new Map<string, Set<string>>();   // person ("" the house) → ingredients
+  for (const p of d.people) {
+    if (notFor(w, { ...d, people: [p] }, dish).length) continue;
+    for (const r of rulesFor(w, d, p)) {
+      if (r.what === "swap" || (r.who && ownSlotDish(w, p, dish)) || (isAllergyRule(r) && vouched(w, r, dish))) continue;
+      for (const t of forbidden(r)) {
+        if (!f.tags.has(t)) continue;
+        const names = leaveOut(f, t);
+        if (t === ONION_GARLIC && !isAllergyRule(r) && (names || (!f.ingredients?.length && !mostlyOnion(dish)))) { if (!onion.includes(p)) onion.push(p); continue; }
+        if (!names) continue;
+        const k = r.who ? p : "";
+        without.set(k, new Set([...(without.get(k) ?? []), ...names]));
+      }
+    }
+  }
+  const out: string[] = [];
+  if (onion.length) out.push(`make without onion and garlic, or keep ${andList(onion)}'s portion aside`);
+  // Onion and garlic already said for a person are not said again; the house's leave-outs are not said again per person.
+  const onionNames = new Set((f.ingredients ?? []).filter((x) => x.tags.has(ONION_GARLIC)).map((x) => x.name));
+  const house = without.get("") ?? new Set<string>();
+  const byText = new Map<string, string[]>();
+  for (const [k, names] of without) {
+    const left = [...names].filter((n) => (k === "" || !house.has(n)) && !(onion.includes(k) && onionNames.has(n)));
+    if (!left.length) continue;
+    const text = andList(left);
+    byText.set(text, [...(byText.get(text) ?? []), k]);
+  }
+  for (const [text, who] of byText) {
+    const people = who.filter(Boolean);
+    out.push(who.includes("") ? `make without ${text}` : `make without ${text} for ${andList(people)}`);
+  }
+  return out;
 }
 /** The people at a slot-day a dish is not for: a hard rule of theirs it breaks, or an item of their rule it was never read
  *  for (fail closed). Code's, never the model's (owner, 23 Nov: a fish lunch with dal for the vegetarian grandmother passes). */

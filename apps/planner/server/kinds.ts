@@ -7,15 +7,20 @@ import { FREQUENCY_WORDS, type Frequency } from "./db/constants";
 
 // ── The catalog ──
 
-export type CatalogItem = { name: string; aka?: string[]; cuisines?: string[]; contains: string[]; suggest: boolean; regional?: boolean;
-  sub: string; diet?: string; meals?: string[] };
+/** One ingredient of a catalog item: `main` when the dish is not itself without it (mooli in mooli thepla, onion in kanda poha);
+ *  else it is a garnish, tempering or add-in the dish can be made without (cashews in upma, ghee on top). Decided 21. */
+export type CatalogIngredient = { name: string; main: boolean };
+/** `contains` is derived from all its ingredients, `contains_main` from its main ones (scripts/kinds/ingredients.js). */
+export type CatalogItem = { name: string; aka?: string[]; cuisines?: string[]; contains: string[]; contains_main: string[]; ingredients: CatalogIngredient[];
+  suggest: boolean; regional?: boolean; sub: string; diet?: string; meals?: string[] };
 export type CatalogSub = { name: string; aka: string[]; cuisines: string[]; meals: string[] };
 export type CatalogKind = { name: string; aka: string[]; cuisines: string[]; meals: string[]; staple: boolean; part: string; diet: string;
   subs: CatalogSub[]; items: CatalogItem[] };
 /** A word that means different dishes by region (decided 20): each meaning holds in its cuisines. */
 export type RegionalMeaning = { cuisines: string[]; kind: string; sub: string | null };
 export type RegionalWord = { word: string; forms: string[]; meanings: RegionalMeaning[] };
-export type Catalog = { version: number; tags: string[]; parents: Record<string, string>; kinds: CatalogKind[]; notes?: string[]; regional?: RegionalWord[] };
+export type Catalog = { version: number; tags: string[]; parents: Record<string, string>; kinds: CatalogKind[]; notes?: string[]; regional?: RegionalWord[];
+  /** Every ingredient the items name, and the content tags it brings (decided 21). */ ingredients?: Record<string, string[]> };
 
 export const CATALOG = catalogJson as Catalog;
 
@@ -72,9 +77,13 @@ export function matchDish(words: string): DishMatch | null {
 }
 
 export const catalogKind = (name: string): CatalogKind | null => CATALOG.kinds.find((k) => norm(k.name) === norm(name)) ?? null;
+let byItemName: Map<string, { kind: CatalogKind; item: CatalogItem }> | null = null;
 export const catalogItem = (name: string): { kind: CatalogKind; item: CatalogItem } | null => {
-  for (const kind of CATALOG.kinds) { const item = kind.items.find((i) => norm(i.name) === norm(name)); if (item) return { kind, item }; }
-  return null;
+  if (!byItemName) {
+    byItemName = new Map();
+    for (const kind of CATALOG.kinds) for (const item of kind.items) if (!byItemName.has(norm(item.name))) byItemName.set(norm(item.name), { kind, item });
+  }
+  return byItemName.get(norm(name)) ?? null;
 };
 
 /** The meals a NEW item of this kind, sub-kind or item may be suggested at (decided 18). They never limit a family's own dish. */
@@ -180,15 +189,48 @@ export const PLANNER_READ_TAGS: string[] = [...new Set([...CATALOG.tags, "meat",
 const PLANNER_PARENTS: Record<string, string[]> = { chicken: ["meat"], mutton: ["meat", "red_meat"], pork: ["meat", "red_meat"],
   beef: ["meat", "red_meat"], prawn: ["fish"], peanut: ["nuts"] };
 
+/** Catalog tags in the planner's words, each with the planner's families of it. */
+const asPlannerTags = (tags: readonly string[]): string[] => {
+  const out = new Set<string>();
+  for (const t of tags) { out.add(t); for (const p of PLANNER_PARENTS[t] ?? []) out.add(p); }
+  return [...out];
+};
 /** An item's contents as the planner's tags (egg, meat, fish, onion_garlic, nuts, peanut, sugar, white_rice, dairy and the
- *  catalog's own: chicken, prawn, coconut, ...), and the tags that answer covers (`read`, every one in PLANNER_READ_TAGS). Null
- *  for a dish not in the catalog: its contents are read by the model. */
-export function plannerTags(itemName: string): { contains: string[]; read: string[] } | null {
+ *  catalog's own: chicken, prawn, coconut, ...): `contains` from all its ingredients, `main` from its main ones (decided 21:
+ *  a rule broken only by an ingredient it can be made without is a note, not a block), and the tags that answer covers
+ *  (`read`, every one in PLANNER_READ_TAGS: the catalog leaves none unknown). Null for a dish not in the catalog: its
+ *  contents are read by the model. */
+export function plannerTags(itemName: string): { contains: string[]; main: string[]; read: string[] } | null {
   const hit = catalogItem(itemName);
   if (!hit) return null;
-  const out = new Set<string>();
-  for (const t of hit.item.contains) { out.add(t); for (const p of PLANNER_PARENTS[t] ?? []) out.add(p); }
-  return { contains: [...out], read: PLANNER_READ_TAGS };
+  return { contains: asPlannerTags(hit.item.contains), main: asPlannerTags(hit.item.contains_main), read: PLANNER_READ_TAGS };
+}
+
+/** A catalog item's ingredients, each with the planner's tags it brings (cashews: nuts; peanuts: peanut and nuts; onion:
+ *  onion_garlic and root_veg), main or one the dish can be made without. Null for a dish not in the catalog. */
+export function catalogIngredients(itemName: string): { name: string; main: boolean; tags: string[] }[] | null {
+  const hit = catalogItem(itemName);
+  if (!hit) return null;
+  return hit.item.ingredients.map((x) => ({ name: x.name, main: x.main, tags: asPlannerTags(CATALOG.ingredients?.[x.name] ?? []) }));
+}
+
+/** The catalog item a dish is, for its contents: the item its words name, or for a staple named by its kind alone ("Rice",
+ *  "Roti", "Curd") the kind's everyday item (Steamed rice, Phulka, Curd). Null otherwise. */
+const contentsMemo = new Map<string, string | null>();
+export function contentsItem(words: string | null | undefined): string | null {
+  if (!words) return null;
+  if (contentsMemo.has(words)) return contentsMemo.get(words)!;
+  const out = contentsItemOf(words);
+  contentsMemo.set(words, out);
+  return out;
+}
+function contentsItemOf(words: string): string | null {
+  const direct = catalogItem(words);
+  if (direct) return direct.item.name;
+  const m = matchDish(words);
+  if (m?.by === "item") return m.item;
+  const k = m?.by === "kind" ? catalogKind(m.kind) : null;
+  return k?.staple ? k.items[0]?.name ?? null : null;
 }
 
 // ── Words that mean different dishes by region (decided 20) ──

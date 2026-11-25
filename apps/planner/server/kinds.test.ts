@@ -71,7 +71,7 @@ describe("catalogContains", () => {
 
 describe("plannerTags: an item's contents in the planner's tags (setup prefills them)", () => {
   it("meats are meat (mutton, pork and beef red meat too), seafood is the planner's fish, peanuts are nuts", () => {
-    expect(plannerTags("Chicken curry")!.contains.sort()).toEqual(["chicken", "meat", "onion_garlic"]);
+    expect(plannerTags("Chicken curry")!.contains.sort()).toEqual(["chicken", "meat", "onion_garlic", "root_veg"]);
     expect(plannerTags("Prawn masala")!.contains).toEqual(expect.arrayContaining(["prawn", "fish"]));
     expect(plannerTags("Macher jhol")!.contains).toContain("fish");
     expect(plannerTags("Macher jhol")!.contains).not.toContain("seafood");
