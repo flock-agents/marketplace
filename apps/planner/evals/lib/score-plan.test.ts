@@ -6,7 +6,7 @@ import { setupOfTruth, perturb } from "./truth-setup";
 import { staplesOf } from "./history";
 import { baselineWeek } from "./baseline";
 import { PLAN_FIX as FIX } from "./test-fixture";
-import { dateOf, type Weekday } from "./truth";
+import { avoid, dateOf, type Weekday } from "./truth";
 import type { PlanOut, SavedDish } from "./result";
 import { BASE_TAGS } from "./vocab";
 
@@ -421,5 +421,28 @@ describe("scorePlan: a dish named made without an item", () => {
     at(p, "Tue", "Lunch").dishes = [{ name: "Rice" }, { name: "Moong dal (no onion garlic)" }];
     const s = scorePlan(FIX, p, loaded(), { failClosed: false });
     expect(s.notes.filter((n) => /without onion|no onion/i.test(n) && n.startsWith("hard_rules"))).toEqual([]);
+  });
+});
+
+describe("scorePlan: onion and garlic (owner rule 7, decided 5)", () => {
+  // Onion and garlic never block a dish: it is planned with "make without onion and garlic, or keep <person>'s portion
+  // aside"; only a dish that is mostly onion is a break.
+  const h = { ...FIX, truth: { ...FIX.truth, library: FIX.truth.library.map((d) => (d.name === "Lauki" ? { ...d, contains: ["onion_garlic"] } : d)),
+    rules: [...FIX.truth.rules, avoid("no_og", "Dadu Ram: no onion or garlic", ["onion_garlic"], /onion/i, { who: "Dadu Ram" })] } };
+  const withOnion = () => { const l = loaded(); l.library = l.library.map((d) => (d.name === "Lauki" ? { ...d, contains: ["onion_garlic"] } : d)); return l; };
+  const og = (p: PlanOut) => scorePlan(h, p, withOnion(), { failClosed: false }).notes.filter((n) => n.startsWith("hard_rules: Dadu Ram: no onion"));
+  const noted = (p: PlanOut, name: string, note: string) => { for (const sd of p.slotDays) for (const d of sd.dishes) if (d.name === name) d.note = note; return p; };
+  test("a dish with onion and no note for him is a break", () => {
+    expect(og(goodWeek())).toHaveLength(1);
+  });
+  test("the same dish with the note naming him is kept", () => {
+    expect(og(noted(goodWeek(), "Lauki", "make without onion and garlic, or keep Dadu Ram's portion aside"))).toEqual([]);
+    expect(og(noted(goodWeek(), "Lauki", "make without onion and garlic, or keep Asha and Dadu Ram's portion aside"))).toEqual([]);
+  });
+  test("a note for someone else, or a dish that is mostly onion, is still a break", () => {
+    expect(og(noted(goodWeek(), "Lauki", "make without onion and garlic, or keep Asha's portion aside"))).toHaveLength(1);
+    const p = goodWeek();
+    at(p, "Wed", "Dinner").dishes = [{ name: "Roti" }, { name: "Pyaaz ki sabzi", note: "make without onion and garlic, or keep Dadu Ram's portion aside" }];
+    expect(og(p)).toHaveLength(1);
   });
 });

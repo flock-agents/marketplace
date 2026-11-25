@@ -22,6 +22,11 @@ const ONE_POT = ["khichdi", "khichuri", "pulao", "pulav", "biryani", "pongal", "
 /** A dish that is only a staple (a plate of these alone is bare). */
 const PLAIN_STAPLES = ["roti", "rotis", "bhakri", "bhakar", "bhaat", "bhat", "poli", "rotli", "fulka", "chapati", "phulka", "rice", "plain", "steamed", "curd", "dahi", "salad", "papad", "pickle", "achar", "raita", "buttermilk", "chaas", "bread"];
 export const OWN_SHARE = 0.3;
+/** A dish that is mostly onion, by its name (owner rule 7: onion, pyaaz, kanda, vengayam, ulli). */
+const MOSTLY_ONION = /\b(onions?|pyaa?z|pyaza|kanda|vengaya\w*|ulli)\b/i;
+/** A dish's note says it is made without onion and garlic, or the person's portion kept aside (owner rule 7). */
+const onionNoted = (note: string | null | undefined, person: string): boolean =>
+  !!note && note.split(/;\s*/).some((n) => /without onion/i.test(n) && /portion aside/i.test(n) && new RegExp(`\\b${person.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(n));
 export const NEW_WHY_MAX = 60;
 
 export type ExpectedSlotDay = { day: Weekday; date: string; slot: string; people: string[]; guests: number; guestItems: string[]; skip: Skip | null; fastingWithFood: string[] };
@@ -156,6 +161,9 @@ export function scorePlan(h: Household, plan0: PlanOut, loaded: SetupOut, o: { f
         if (!eaters.length) continue;
         const f = dishFacts(d.name, sd.slot);
         for (const it of items) {
+          // Owner rule 7 (decided 5): onion and garlic never block a dish; it is made without, or their portion kept aside, as
+          // the dish's note says for each of them. Only a dish that is mostly onion breaks the rule.
+          if (canonTag(it) === "onion_garlic" && !MOSTLY_ONION.test(d.name) && eaters.every((p) => onionNoted(d.note, p))) continue;
           if (hasItem(f.tags, it)) bad.push(`${dayOfSd(sd)} ${sd.slot}: ${d.name} has ${it} (${eaters.join(", ")})`);
           else if (!knows(f.known, it)) { if (o.failClosed !== false) bad.push(`${dayOfSd(sd)} ${sd.slot}: ${d.name}: ${it} unread (fail-closed)`); else unread++; }
         }
