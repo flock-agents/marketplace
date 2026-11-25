@@ -632,6 +632,10 @@ describe("the kinds model: each dish placed, each meal's templates, the cuisines
     // A curry with nothing to go with at lunch gets the meal's rice or bread.
     const l = buildMeal("lunch", [dish("Rice"), dish("Sambar"), dish("Curd"), dish("Chicken curry")], [["Rice", "Sambar", "Curd"], ["Chicken curry"]]);
     expect(l.templates.map(kinds)).toEqual([["Rice", "Rice curry", "Curd"], ["Rice", "Chicken"]]);
+    // "Bhakri or poli with usal or pithla" told dish by dish: each bread with each curry, never all on one plate.
+    const m = buildMeal("dinner", [dish("Bhakri"), dish("Poli", { place: codePlace("Chapati") }), dish("Usal"), dish("Pithla")], [["Bhakri"], ["Poli"], ["Usal"], ["Pithla"]]);
+    expect(m.templates.map(kinds)).toEqual([["Bhakri", "Dal"], ["Bhakri", "Dal"], ["Roti", "Dal"], ["Roti", "Dal"]]);
+    expect(m.templates.every((t) => t.parts.length === 2)).toBe(true);
     // An egg breakfast is a whole breakfast.
     expect(buildMeal("breakfast", [dish("Idli"), dish("Bread omelette")], [["Idli"], ["Bread omelette"]]).templates.map(kinds)).toEqual([["Idli"], ["Egg"]]);
   });

@@ -1252,7 +1252,18 @@ export function buildMeal(meal: string, dishes: MealDish[], seeds: string[][]): 
     const plates = drafts.filter((t) => !sideOnly.includes(t));
     const bare = plates.filter((t) => t.parts.every((p) => !isSide(p)));
     const onto = bare.length ? bare : small ? plates : [];
-    for (const s of sideOnly) {
+    // At lunch or dinner each bare plate goes with each plate of sides as its own way of making the meal ("bhakri or poli
+    // with usal or pithla": four plates), never every curry on one plate.
+    if (!small && bare.length) {
+      const was = [...drafts];
+      drafts.length = 0;
+      for (const b of was) {
+        if (sideOnly.includes(b)) continue;
+        if (!bare.includes(b)) { add(b); continue; }
+        for (const s of sideOnly) add({ parts: [...b.parts.map((p) => ({ ...p, words: [...p.words] })), ...s.parts.filter((p) => !b.parts.some((x) => partKey(x.part) === partKey(p.part))).map((p) => ({ ...p, words: [...p.words] }))],
+          defining: uniq([...b.defining, ...s.defining]) });
+      }
+    } else for (const s of sideOnly) {
       if (onto.length) {
         for (const t of onto) for (const p of s.parts) if (!t.parts.some((x) => partKey(x.part) === partKey(p.part))) t.parts.push({ ...p, words: [...p.words] });
       } else {
