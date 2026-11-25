@@ -384,7 +384,9 @@ async function planWeek(deps: MakePlanDeps & { log: (line: string) => void }, in
       // A family dish one person's allergy is kept aside for: the rest of the family has it as made (its note says so).
       if (isAllergyRule(r) && r.who && vouched(w, r, dish)) continue;
       // Onion and garlic stay bought (contract rule 7): the dish says how their portion is kept.
-      if (forbidden(r).includes("onion_garlic") && !avoided(r, dish).includes("onion_garlic") && left.some((i) => i.tags.includes("onion_garlic")) && d.people.length > 1)
+      // (Once per person: the fill's note may already name them.)
+      const said = (dishNotes.get(k) ?? []).some((t) => t.startsWith("make without onion and garlic") && t.split(/,|\band\b/).some((x) => x.includes(p)));
+      if (forbidden(r).includes("onion_garlic") && !avoided(r, dish).includes("onion_garlic") && left.some((i) => i.tags.includes("onion_garlic")) && d.people.length > 1 && !said)
         noteOn(d, dish, `make without onion and garlic, or keep ${p}'s portion aside`);
       const out = left.filter((i) => i.tags.some((t) => avoided(r, dish).includes(t)));
       if (!out.length) continue;
