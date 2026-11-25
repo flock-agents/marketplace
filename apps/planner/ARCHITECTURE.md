@@ -117,7 +117,7 @@ row: the cook, connected apps, `history_synced` per app and reader, `sync_sessio
 days, weekly `skip_days`, planning `order`) · `slot_days` (one per date and slot, unique; who it is for, guests, occasion,
 `skip` eaten_out | ordered_in, `status` planned | confirmed, `edited`; a setup seed example has no date and is confirmed) ·
 `slot_dishes` (in order; `new`, `feedback_asked`: 1 asked, 2 answered; a note) · `dish_ingredients` (item, amount, unit, per slot dish; the SQL
-name avoids 2.0's `ingredients`) · `library` (one per dish and slot, unique key + slot: frequency, days, `contains` and
+name avoids 2.0's `ingredients`) · `library` (one per dish and slot, unique key + slot: frequency, days, `said` (the family's words for them, sent to the plan call), `contains` and
 `contains_read` tags, origin setup_named | family_added | planner_suggested, suggested, untried, offers, disliked, and the
 dish's video and ratings, kept the same on every row of a dish) · `rules` (hard or soft, what, who, slots, days, items, to,
 frequency, per_meal, fasting_food, the family's `quote`) · `regulars` (retired: its rows became item cycles, nothing reads

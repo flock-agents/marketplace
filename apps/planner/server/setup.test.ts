@@ -148,6 +148,10 @@ describe("apply_setup v2: the model reads, code checks and writes", () => {
     expect(f.of("lint")).toHaveLength(1);
     expect(JSON.parse(f.of("lint")[0].user).dishes.map((d: any) => d.name)).toEqual(["Rajma", "Phulka"]);   // "two phulkas at night": re-read, nothing saved
     expect(book["Salad@Lunch"].frequency).toBe("daily");
+    // The family's words for how often are kept beside it, for the plan call; none where nothing stands.
+    const saidOf = (name: string, slot: string) => k.rows("library").find((d) => d.name === name && d.slot === slot)?.said ?? null;
+    expect([saidOf("Lemon rice", "Lunch"), saidOf("Rajma", "Lunch"), saidOf("Salad", "Lunch"), saidOf("Rice", "Lunch"), saidOf("Curd", "Breakfast")])
+      .toEqual(["Lemon rice on Fridays", "Rajma twice", "Salad every day", null, null]);
     expect(book["Phulka@Padma's dinner"]).toBeTruthy();
     expect(book["Rice@Lunch"].read).toEqual(expect.arrayContaining(["sugar", "nuts", "white_rice", "egg"]));
     expect(r.contains_missing).toBe(0);
@@ -435,6 +439,41 @@ describe("apply_setup v2: the checks, pure", () => {
       { household: hh, said: familyLines(line, {}), sentences });
     expect(Object.fromEntries(c.read.library.map((d) => [d.name, d.frequency]))).toEqual({ Rice: null, Sambar: null, Curd: null, Rajma: "2/week", "Beans poriyal": null });
     expect(c.dropped.join("\n")).toContain("is said of the whole list");
+  });
+  it("how often said over two dishes is each one's; a dish read twice at a meal, or at several meals, keeps its days (eval h8, h13)", () => {
+    const line = ["A: Ishaan has toast, or muri; luchi on Sunday.", "A: Breakfast: toast, muri, chire bhaja; luchi with alur dom on Sunday.",
+      "A: Dinner: dal, rice, roti and a sabzi most nights, rajma or chole twice a week, khichdi once.", "A: Paratha on Sunday."];
+    const sentences = familySentences(line, {});
+    const read = readOf({}, {}, { library: [["Luchi", "Breakfast", "luchi on Sunday"], ["Luchi", "Breakfast", "luchi with alur dom on Sunday"],
+      ["Alur dom", "Breakfast", "luchi with alur dom on Sunday"], ["Rajma", "Dinner", "rajma or chole twice a week"], ["Chole", "Dinner", "rajma or chole twice a week"],
+      ["Dal", "Dinner", "dal, rice, roti and a sabzi most nights"], ["Rice", "Dinner", "dal, rice, roti and a sabzi most nights"],
+      ["Roti", "Dinner", "dal, rice, roti and a sabzi most nights"], ["Paratha", "Breakfast", "Paratha on Sunday"], ["Paratha", "Lunch", "Paratha on Sunday"],
+      ["Paratha", "Dinner", "Paratha on Sunday"]] },
+      { often: [["Luchi", "Breakfast", "luchi with alur dom on Sunday", "on Sunday", "", "Sun"], ["Alur dom", "Breakfast", "luchi with alur dom on Sunday", "on Sunday", "", "Sun"],
+        ["Rajma", "Dinner", "rajma or chole twice a week", "twice a week", "1/week", ""], ["Chole", "Dinner", "rajma or chole twice a week", "twice a week", "1/week", ""],
+        ["Dal", "Dinner", "most nights", "most nights", "usually", ""], ["Rice", "Dinner", "most nights", "most nights", "usually", ""],
+        ["Roti", "Dinner", "most nights", "most nights", "usually", ""],
+        ["Paratha", "Breakfast", "Paratha on Sunday", "on Sunday", "", "Sun"], ["Paratha", "Lunch", "Paratha on Sunday", "on Sunday", "", "Sun"],
+        ["Paratha", "Dinner", "Paratha on Sunday", "on Sunday", "", "Sun"]] });
+    // Both Luchi rows at Breakfast take the read (before, two rows of one meal took neither).
+    expect(read.library.filter((d) => d.name === "Luchi").map((d) => d.days)).toEqual([["Sun"], ["Sun"]]);
+    const c = checkRead(base({ library: read.library }), { household: hh, said: familyLines(line, {}), sentences });
+    const got = Object.fromEntries(c.read.library.map((d) => [`${d.name}@${d.slot}`, { frequency: d.frequency, days: d.days, said: d.said ?? null }]));
+    expect(got["Luchi@Breakfast"]).toEqual({ frequency: null, days: ["Sun"], said: "luchi with alur dom on Sunday" });
+    expect(got["Alur dom@Breakfast"]).toEqual({ frequency: null, days: ["Sun"], said: "luchi with alur dom on Sunday" });
+    expect(got["Rajma@Dinner"]).toEqual({ frequency: "1/week", days: null, said: "rajma or chole twice a week" });
+    expect(got["Chole@Dinner"]).toEqual({ frequency: "1/week", days: null, said: "rajma or chole twice a week" });
+    // The whole plate's words stay no dish's; one dish at three meals is one dish, not a list.
+    for (const d of ["Dal", "Rice", "Roti"]) expect(got[`${d}@Dinner`].frequency, d).toBeNull();
+    for (const m of ["Breakfast", "Lunch", "Dinner"]) expect(got[`Paratha@${m}`].days, m).toEqual(["Sun"]);
+  });
+  it("the often and lint prompts share a count said over two dishes, by a worked example", () => {
+    const often = SETUP_PARTS.find((p) => p.id === "often")!.system;
+    expect(often).toContain(`["Chole", "Dinner", "chole or kadhi twice a week", "twice a week", "1/week", ""], ["Kadhi", "Dinner", "chole or kadhi twice a week", "twice a week", "1/week", ""]`);
+    expect(often).toContain(`["Kadala curry", "Breakfast", "Puttu with kadala curry on Sunday mornings", "on Sunday mornings", "", "Sun"]`);
+    expect(often).toContain("most days rice, dal and a sabzi");
+    expect(SETUP_SYSTEM).toContain(`"chole or kadhi twice a week": "1/week"`);
+    expect(often).toContain(`"chapati and a kurma twice a week": "2/week" each`);   // eaten together: not shared
   });
   it("the day/count lint: a quote with a day word or a number", () => {
     expect(quoteHasDayOrCount("Rajma twice")).toBe(true);
