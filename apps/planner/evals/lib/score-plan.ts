@@ -20,6 +20,8 @@ const ONE_POT = ["khichdi", "khichuri", "pulao", "pulav", "biryani", "pongal", "
   "dosa", "uthappam", "uttapam", "idli", "pesarattu", "adai", "appam", "idiyappam", "paniyaram"];
 /** A dish that is only a staple (a plate of these alone is bare). */
 const PLAIN_STAPLES = ["roti", "rotis", "bhaat", "bhat", "poli", "rotli", "fulka", "chapati", "phulka", "rice", "plain", "steamed", "curd", "dahi", "salad", "papad", "pickle", "achar", "raita", "buttermilk", "chaas", "bread"];
+/** What goes beside a main and may come every day like a staple (owner: "staples are fine"): never a main for the twice-a-week rule. */
+const ACCOMPANIMENTS = ["chutney", "pickle", "achar", "papad", "raita", "salad", "curd", "dahi", "buttermilk", "chaas", "kachumber", "koshimbir"];
 export const OWN_SHARE = 0.75;
 export const NEW_WHY_MAX = 60;
 
@@ -326,7 +328,7 @@ export function scorePlan(h: Household, plan: PlanOut, loaded: SetupOut, o: { fa
   for (const slot of ["Breakfast", "Dinner"]) {
     const sds = cooked.filter((x) => lc(x.slot) === lc(slot));
     const days = new Map<string, Set<string>>();
-    for (const sd of sds) for (const d of sd.dishes) if (!isBareStaple(d.name)) (days.get(plain(d.name)) ?? days.set(plain(d.name), new Set()).get(plain(d.name))!).add(sd.date);
+    for (const sd of sds) for (const d of sd.dishes) if (!isBareStaple(d.name) && !hasWord(d.name, ACCOMPANIMENTS)) (days.get(plain(d.name)) ?? days.set(plain(d.name), new Set()).get(plain(d.name))!).add(sd.date);
     for (const [name, ds] of days) {
       const row = t.library.find((d) => lc(d.slot) === lc(slot) && plain(d.name) === name);
       const said = row ? frequencyRange(row.frequency)?.[1] ?? (row.days?.length ? row.days.length : 0) : 0;
