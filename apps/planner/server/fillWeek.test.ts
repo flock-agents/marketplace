@@ -611,3 +611,16 @@ describe("a dish of one person's own meal never comes to the family's (class 6)"
     }
   });
 });
+
+describe("an add-on's own dishes kept to their words still feed its person when the main meal cannot (class 1 with rule 6)", () => {
+  it("her ragi dosa or ragi java a few times a week: on the other days, with nothing at breakfast she may eat, one of hers comes back", () => {
+    const bf = slot("Breakfast", { kinds: [{ name: "Toast" }], templates: [T({ kind: "Toast" })] });
+    const own = slot("Nani's breakfast", { kind: "addon", addon_of: "Breakfast", usual_people: ["Nani"], order: 60,
+      templates: [share(T({ kind: "Dosa" }), "sometimes"), share(T({ kind: "Porridge" }), "sometimes")] });
+    const lib = [dish("Peanut butter toast", "Breakfast", "Toast", { contains: ["sugar", "nuts"] }), dish("Jam toast", "Breakfast", "Toast", { contains: ["sugar"] }),
+      dish("Ragi dosa", "Nani's breakfast", "Dosa", { frequency: "sometimes" }), dish("Ragi java", "Nani's breakfast", "Porridge", { frequency: "sometimes" })];
+    const days = WEEK.flatMap((d) => [day(d, "Breakfast", ["Asha", "Nani"]), day(d, "Nani's breakfast", ["Nani"])]);
+    const r = run({ slots: [bf, own], library: lib, days, newCap: 0, rules: [rule({ who: "Nani", items: ["sugar"], quote: "no sugar for her" })] });
+    for (const d of WEEK) expect(r.at(d, "Nani's breakfast").length + r.at(d, "Breakfast").filter((x) => !/toast/i.test(x)).length).toBeGreaterThan(0);
+  });
+});

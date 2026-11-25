@@ -753,12 +753,14 @@ export function fillWeek(input: FillInput): FillResult {
     if (s.kind !== "addon" && atTable.length && !plate.some((x) => !x.staple) && t.parts.some((p) => !isStaplePart(s, p))) {
       if (feed(s, d, plate, atTable, t.parts.length, [], [], null)) res.log.push(`${label(d)}: nothing of its template that day; another dish of theirs instead`);
     }
-    // An add-on day with nothing: fine where its people eat the main meal's dishes; else one of its dishes comes back.
+    // An add-on day with nothing: fine where its people eat the main meal's dishes; else one of its dishes comes back (its fixed
+    // dishes, or its own items of a part's kind), one its people may eat first.
     if (s.kind === "addon" && !plate.length && !mainFeeds(w, dayOf(d))) {
-      const fam = (s.templates ?? []).flatMap((x) => x.parts).flatMap((p) => ("items" in p ? p.items : []))
+      const fam = uniq((s.templates ?? []).flatMap((x) => x.parts).flatMap((p) => ("items" in p ? p.items : familyPool(s, p.kind, p.sub ?? null).filter((x) => !x.catalog).map((x) => x.name))))
         .map((n, i): Item => ({ name: n, key: dishKey(n), kind: n, sub: null, family: true, idx: i }));
       const near = fam.filter((it) => fits(s, d, plate, it, { repeat: true, next: true, zero: false }, true))
-        .sort((a, b) => (lastUsed.get(a.key) ?? "").localeCompare(lastUsed.get(b.key) ?? "") || a.idx - b.idx)[0];
+        .sort((a, b) => excluded(d, d.people, a.name).length - excluded(d, d.people, b.name).length
+          || (lastUsed.get(a.key) ?? "").localeCompare(lastUsed.get(b.key) ?? "") || a.idx - b.idx)[0];
       if (near) { put(s, d, plate, near, 0, false); res.unmet.push(`${label(d)}: ${near.name} comes back sooner than usual`); }
     }
     // Nobody left with nothing: each person has an item beside the staples they can eat (where the plate has more than staples).
