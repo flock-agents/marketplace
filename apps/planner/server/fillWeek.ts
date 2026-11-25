@@ -315,8 +315,6 @@ export function fillWeek(input: FillInput): FillResult {
     const rows = catRowsAt(slot, kind, sub);
     return rows.length && rows.every((r) => r.days?.length) ? uniq(rows.flatMap((r) => r.days ?? [])) : null;
   };
-  /** The dates a category's items were placed at a slot, by slot|category key. */
-  const catUse = new Map<string, Set<string>>();
   const named = (kind: string, sub: string | null) => categories.some((c) => sameKind(c.kind, kind) && (!c.sub || sameKind(c.sub, sub)));
   /** Did the family name this kind or sub-kind as a category at this meal. */
   const namedAt = (slot: string, kind: string, sub: string | null) => categoriesAt(slot).some((c) => sameKind(c.kind, kind) && (!c.sub || sameKind(c.sub, sub)));
@@ -422,16 +420,43 @@ export function fillWeek(input: FillInput): FillResult {
     for (const it of items) { const ls = wordsFor(s.name, it); if (!ls.length) return []; for (const l of ls) out.set(l.row.key, l); }
     return [...out.values()];
   };
-  /** The words of a part that still allow it on a date (its day, and its count not yet reached that week); null when none does.
-   *  `uses`: the dates each row's words were used at this meal, by slot|row key. */
+  // Class 2 (lead, 26 Nov: "uthappam sometimes" is 2–3 uthappam a week in all): a count said of a dish holds across the day's
+  // meals. Each meal keeps its own count, and all the meals where the family said a count of it share the most they said
+  // ("kadhi sometimes" at lunch and "khichdi and kadhi twice a week" at dinner: at most 3 kadhi days in all). A meal where the
+  // family has the dish with no such words is free of them (no row of words there, nothing counted).
+  /** The most days a week the family's words allow a dish or category word (by its key) at any meal; Infinity when none says. */
+  const mostOf = (key: string): number => {
+    const ms = famRows.filter((r) => r.key === key).map((r) => limitOf(r)?.max).filter((x): x is number => x != null);
+    return ms.length ? Math.max(...ms) : Infinity;
+  };
+  const usesOf = (uses: Map<string, Set<string>>, k: string, date: string) => [...(uses.get(k) ?? [])].filter((x) => x !== date).length;
+  /** Do a row's words still allow it at this meal on a date: its days, its count at this meal, and the count across the meals. */
+  const wordsAllow = (slot: string, l: Limit, date: string, uses: Map<string, Set<string>>) => (!l.days || l.days.includes(weekdayOf(date)))
+    && (l.max == null || (usesOf(uses, `${slot.toLowerCase()}|${l.row.key}`, date) < l.max && usesOf(uses, `*|${l.row.key}`, date) < mostOf(l.row.key)));
+  /** The words of a part that still allow it on a date; null when none does. `uses`: the dates each row's words were used, by
+   *  slot|row key at its meal and *|row key across the meals. */
   const openLimit = (slot: string, lims: Limit[], date: string, uses: Map<string, Set<string>>): Limit | null =>
-    lims.find((l) => (!l.days || l.days.includes(weekdayOf(date)))
-      && (l.max == null || [...(uses.get(`${slot.toLowerCase()}|${l.row.key}`) ?? [])].filter((x) => x !== date).length < l.max)) ?? null;
+    lims.find((l) => wordsAllow(slot, l, date, uses)) ?? null;
   const markLimit = (slot: string, l: Limit, date: string, uses: Map<string, Set<string>>) => {
-    const k = `${slot.toLowerCase()}|${l.row.key}`;
-    uses.set(k, (uses.get(k) ?? new Set()).add(date));
+    for (const k of [`${slot.toLowerCase()}|${l.row.key}`, `*|${l.row.key}`]) uses.set(k, (uses.get(k) ?? new Set()).add(date));
+  };
+  /** The family's worded rows that hold an item at a meal: the category words there for a catalog item of theirs, else the
+   *  item's own row (at this meal, else at another: a dish they spoke of elsewhere keeps its words). */
+  const saidRowsAt = (slot: string, it: Item): Limit[] => {
+    if (it.catalog && it.family) return catRowsAt(slot, it.kind, it.sub).map(limitOf).filter((x): x is Limit => !!x);
+    if (!it.family) return [];
+    const r = rowAt(slot, it.key);
+    const l = r ? limitOf(r) : null;
+    return l ? [l] : [];
   };
   const limitUse = new Map<string, Set<string>>();   // as filled
+  const planUse = new Map<string, Set<string>>();    // as templates are given, every meal together
+  // The week's fixed days count for the family's words too.
+  for (const d of days.filter((x) => x.fixed && !x.skip)) for (const x of d.dishes) {
+    const r = rowAt(d.slot, dishKey(x)), m = r ? null : matchDish(x);
+    const ls = r ? [limitOf(r)] : m ? catRowsAt(d.slot, m.kind, m.sub).map(limitOf) : [];
+    for (const l of ls) if (l) { markLimit(d.slot, l, d.date, limitUse); markLimit(d.slot, l, d.date, planUse); }
+  }
 
   // ── Templates for each slot's days ──
   const tplOf = new Map<string, number>();   // slotDayKey → template index
@@ -444,7 +469,6 @@ export function fillWeek(input: FillInput): FillResult {
     if (!ts.length || !mine.length) continue;
     // Each template's limited parts (the family's words above), and the week's uses of those words as templates are given.
     const tplLimits = ts.map((t) => t.parts.map((p) => partLimits(s, p)).filter((ls) => ls.length));
-    const planUse = new Map<string, Set<string>>();
     const allowed = (i: number, date: string) => tplLimits[i].every((ls) => !!openLimit(s.name, ls, date, planUse));
     const mark = (i: number, date: string) => { for (const ls of tplLimits[i]) { const l = openLimit(s.name, ls, date, planUse); if (l) markLimit(s.name, l, date, planUse); } };
     // A template made for a dish kept to days ("pongal on Sundays": a part whose every item is held to days) comes only on
@@ -547,14 +571,9 @@ export function fillWeek(input: FillInput): FillResult {
     const row = it.family ? rowAt(s.name, it.key) : undefined;
     if (row?.days?.length && !row.days.includes(weekdayOf(d.date))) return false;
     if (!row && it.days?.length && !it.days.includes(weekdayOf(d.date))) return false;
-    // A category the family said how often of at this meal ("dal sometimes"): its items together, that often there.
-    if (!row && it.catalog && it.family) for (const c of catRowsAt(s.name, it.kind, it.sub)) {
-      const r = c.frequency && c.frequency !== "daily" ? frequencyRange(c.frequency) : null;
-      if (r && [...(catUse.get(`${s.name.toLowerCase()}|${c.key}`) ?? [])].filter((x) => x !== d.date).length >= r[1]) return false;
-    }
-    const range = row && row.frequency !== "daily" ? frequencyRange(row.frequency) : null;
-    const usedOther = [...(usedDates.get(it.key) ?? [])].filter((x) => x !== d.date);
-    if (!loose && range && usedOther.length >= range[1]) return false;
+    // The family's words on it (its own, or a category's said at this meal: "dal sometimes"): their count at this meal and
+    // across the meals (class 2).
+    if (!loose && saidRowsAt(s.name, it).some((l) => l.max != null && !wordsAllow(s.name, { ...l, days: null }, d.date, limitUse))) return false;
     if (loose) return true;
     if (s.kind !== "addon" && hadOn(d.date, s.name).has(it.key)) return false;
     if (!o.next && hadOn(addDays(d.date, -1)).has(it.key)) return false;
@@ -586,7 +605,7 @@ export function fillWeek(input: FillInput): FillResult {
     return best?.name ?? null;
   };
   const put = (s: Slot, d: PlanDay, plate: Plate, it: Item, part: number, staple: boolean) => {
-    if (it.catalog && it.family) for (const c of catRowsAt(s.name, it.kind, it.sub)) { const k = `${s.name.toLowerCase()}|${c.key}`; catUse.set(k, (catUse.get(k) ?? new Set()).add(d.date)); }
+    for (const l of saidRowsAt(s.name, it)) markLimit(s.name, l, d.date, limitUse);
     plate.push({ name: it.name, key: it.key, part, staple, isNew: !it.family, kind: it.kind, sub: it.sub });
     use(d.date, s.name, it.name);
     dayOf(d).dishes.push(it.name);

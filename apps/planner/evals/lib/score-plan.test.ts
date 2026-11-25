@@ -196,6 +196,18 @@ describe("scorePlan", () => {
     expect(freq(p)).toHaveLength(1);
   });
 
+  test("a how-often said of a dish holds across the day's meals, except at a meal where the family named that category themselves ('uthappam sometimes' at dinner; breakfast's own dosas are free)", () => {
+    const h = { ...FIX, truth: { ...FIX.truth, library: [...FIX.truth.library, { name: "Uthappam", slot: "Dinner", frequency: "sometimes" as const }, { name: "Dosa", slot: "Breakfast" }] } };
+    const freq = (p: PlanOut) => scorePlan(h, p, loaded()).notes.filter((n) => n.startsWith("dish_frequency: Uthappam"));
+    const p = goodWeek();
+    for (const d of ["Mon", "Tue", "Wed", "Thu"] as Weekday[]) at(p, d, "Breakfast").dishes = [{ name: "Plain dosa" }];
+    for (const d of ["Mon", "Wed"] as Weekday[]) at(p, d, "Dinner").dishes = [{ name: "Rava uttapam" }];
+    expect(freq(p)).toEqual([]);
+    // A meal with no word of theirs for it counts: two at dinner and two at lunch are four.
+    for (const d of ["Tue", "Fri"] as Weekday[]) at(p, d, "Lunch").dishes = [{ name: "Rice" }, { name: "Plain dosa" }];
+    expect(freq(p)).toHaveLength(1);
+  });
+
   // ── Rotation, owner 25 Nov (kinds model rule 3). Expectations written from the rules before the scorer. ──
   test("not_next_day: the same item on consecutive days in its slot fails", () => {
     const p = goodWeek();
