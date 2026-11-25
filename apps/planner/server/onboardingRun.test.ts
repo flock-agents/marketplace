@@ -122,19 +122,19 @@ describe("live run 2, #29: her past week's dishes reach the setup and the plan",
     expect(k.rows("slot_days").filter((x) => x.date)).toHaveLength(0);
   });
 
-  it("\"suggest some\": the week is planned from new dishes, each main meal counted as a full plate so the shortfall covers the week", async () => {
+  it("\"suggest some\": every meal is planned with new dishes where none of theirs is known, by code, with no budget", async () => {
     const f = fake({ dishes: { ok: false, code: "invalid_output", message: "no dishes in the answer" } });
-    const logs: string[] = [];
-    const orig = console.log;
-    console.log = (...a: unknown[]) => { logs.push(a.join(" ")); };
-    try {
-      const k = await boot({ model: f.model, now: NOW });
-      await k.op("apply_setup", { household: HOUSEHOLD, transcript: TRANSCRIPT });
-      await k.op("make_plan", { week_start: "2026-11-30", suggest_new: true });
-    } finally { console.log = orig; }
-    const lunch = logs.find((l) => /feasibility Lunch:/.test(l)) ?? "";
-    // 7 days × 3 a plate = 21 places; a dish comes on 2 days at most: 11 new dishes, not 4.
-    expect(lunch).toContain("21 places (7 × 3), 0 from the library");
-    expect(lunch).toContain("11 new dishes of their kind");
+    const k = await boot({ model: f.model, now: NOW });
+    await k.op("apply_setup", { household: HOUSEHOLD, transcript: TRANSCRIPT });
+    const p = await k.op("make_plan", { week_start: "2026-11-30", suggest_new: true });
+    // The week is filled by code (kinds model): no model call plans a meal; every meal cooked at home has new dishes.
+    expect(f.of("plan").filter((r) => /meal plan: the week/.test(r.purpose ?? ""))).toHaveLength(0);
+    expect(p.ok).toBe(true);
+    const days = k.rows("slot_days").filter((x) => x.date && !x.skip);
+    expect(days.length).toBeGreaterThan(0);
+    const dishes = k.rows("slot_dishes");
+    for (const d of days) expect(dishes.filter((x) => x.slot_day_id === d.id).length).toBeGreaterThan(0);
+    expect(dishes.filter((x) => x.new === 1).length).toBeGreaterThan(dishes.length / 2);
   });
+
 });

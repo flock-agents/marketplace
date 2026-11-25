@@ -20,7 +20,7 @@
   "A: Poha, upma, sheera, and thalipeeth on the weekend. Weekdays she makes whatever we have, usually those same things.",
   "Q: The children's lunch over the past week, or their school tiffin?",
   "A: School tiffin is sandwich, fruits, chivda, idli. Noodles sometimes on Friday for Ishaan.",
-  "A: Lunch at home after school, same as ours.",
+  "A: They eat that at school.",
   "Q: The children's dinner over the past week?",
   "A: Same as ours: bhakri or poli with usal or pithla. Fish fry on Saturday dinner, chicken rassa on Sunday lunch.",
   "Q: What did the adults have for breakfast over the past week? Tell me in as much detail as you can.",
@@ -38,7 +38,9 @@
   "A: Rarely. Only if we're super busy, maybe once in two weeks or so.",
   "A: Weekend mostly if we do, but not fixed.",
   "Q: Does anything come on a subscription, like Country Delight or a milkman?",
-  "A: Chitale milk every morning, that's a daily subscription."
+  "A: Chitale milk every morning, that's a daily subscription.",
+  "Q: Do you cook everything without peanuts, or only Ishaan's food?",
+  "A: Everything at home is without peanuts, we don't even use groundnut oil."
  ],
  "questions": 17,
  "model": "deepseek/deepseek-v4-flash",

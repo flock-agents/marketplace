@@ -1,7 +1,7 @@
 // 8. Bengali family with grandparents and a cook every day: rice + dal + bhaja + a torkari + fish curry most days, luchi on
 // Sunday morning, mutton on Sunday. The grandmother is vegetarian with no onion or garlic (and no fish, no eggs); the
 // grandfather diabetic, no sweets. Frequency words: fish curry most days, luchi on Sunday, kosha mangsho on Sunday.
-import { avoid, dish, mains, note, SCHOOL, veg, WEEK, type Household } from "../lib/truth";
+import { avoid, dish, mains, note, SCHOOL, veg, WEEK, items, tpl, type Household } from "../lib/truth";
 
 export const h8: Household = {
   id: "h8-banerjee", title: "Bengali, grandparents, cook every day, fish most days, veg no-onion-garlic grandmother",
@@ -17,7 +17,7 @@ export const h8: Household = {
     "household.mealsBy": "Rituparna", "household.groceriesBy": "Sourav",
     "household.weekly": [{ person: "Sourav", where: "office", weekdays: SCHOOL, from: "10:00", to: "17:00", lunch: "away" },
       { person: "Rituparna", where: "office", weekdays: SCHOOL, from: "10:00", to: "18:00", lunch: "away" },
-      { person: "Riya", where: "school", weekdays: SCHOOL, from: "07:00", to: "13:00", lunch: "home" }],
+      { person: "Riya", where: "school", weekdays: SCHOOL, from: "07:00", to: "13:00", lunch: "away" }],
   },
   groceryApps: ["Blinkit"],
   facts: [
@@ -28,7 +28,7 @@ export const h8: Household = {
     { id: "cookTime", text: "She has time." },
     { id: "cookingDays", text: "Yes, all seven days at home." },
     { id: "kidsBreakfast", text: "Riya has toast and egg, or muri; luchi on Sunday." },
-    { id: "kidsLunch", text: "Riya takes a tiffin Monday to Friday: egg roll, chowmein, sandwich. Lunch at home after school, same as ours." },
+    { id: "kidsLunch", text: "Riya takes a tiffin Monday to Friday: egg roll, chowmein, sandwich. They eat that at school." },
     { id: "kidsDinner", text: "Same as ours." },
     { id: "adultsBreakfast", text: "Breakfast: toast and egg, muri, chire bhaja; luchi with alur dom on Sunday." },
     { id: "adultsLunch", text: "Lunch is bhaat, dal, ekta bhaja, ekta torkari ar maacher jhol. Fish curry most days, rui or katla. Kosha mangsho on Sunday." },
@@ -53,10 +53,10 @@ export const h8: Household = {
       { name: "Gita's lunch", kind: "addon", addon_of: "Lunch", usual_people: ["Gita"], match: /gita|\bma\b|mother|grand/i, optional: true },
     ],
     // Both eat lunch at work on weekdays.
-    away: [{ person: "Sourav", slots: ["Lunch"], days: SCHOOL }, { person: "Rituparna", slots: ["Lunch"], days: SCHOOL }],
+    away: [{ person: "Sourav", slots: ["Lunch"], days: SCHOOL }, { person: "Rituparna", slots: ["Lunch"], days: SCHOOL }, { person: "Riya", slots: ["Lunch"], days: SCHOOL }],
     library: [
       ...dish("Toast", ["Breakfast"]), ...dish("Egg", ["Breakfast"]), ...dish("Muri", ["Breakfast"]), ...dish("Chire bhaja", ["Breakfast"]),
-      ...dish("Luchi", ["Breakfast"], { days: ["Sun"] }), ...dish("Alur dom", ["Breakfast"], { days: ["Sun"] }),
+      ...dish("Luchi", ["Breakfast"], { days: ["Sun"] }), ...dish("Alur dom", ["Breakfast"], { days: ["Sun"], kind: "Gravy", sub: "Curry" }),
       ...dish("Egg roll", ["Riya's tiffin"]), ...dish("Chowmein", ["Riya's tiffin"]), ...dish("Sandwich", ["Riya's tiffin"]),
       ...dish("Bhaat", ["Lunch"]), ...dish("Dal", ["Lunch", "Dinner"]), ...dish("Bhaja", ["Lunch"]), ...dish("Torkari", ["Lunch", "Dinner"]),
       ...dish("Maacher jhol", ["Lunch"], { frequency: "usually", aka: ["Fish curry"] }), ...dish("Kosha mangsho", ["Lunch"], { days: ["Sun"] }),
@@ -77,6 +77,16 @@ export const h8: Household = {
       { slot: "Lunch", dishes: ["Bhaat", "Dal", "Bhaja", "Torkari", "Kosha mangsho"] },
       { slot: "Dinner", dishes: ["Roti", "Torkari", "Dal"] }, { slot: "Dinner", dishes: ["Roti", "Torkari", "Fish"] },
       { slot: "Gita's dinner", dishes: ["Veg torkari"] }, { slot: "Gita's dinner", dishes: ["Veg torkari"] },
+    ],
+    cuisines: ["bengal", "east"], cuisinesAlso: ["odisha", "indo_chinese", "continental"],
+    meals: [
+      { slot: "Breakfast", own: ["Muri"], templates: [tpl(["Toast", "Egg"]), tpl(["Muri"]), tpl(["Poha"]), tpl(["Puri", "Gravy"])] },
+      { slot: "Riya's tiffin", templates: [tpl(["Roll"]), tpl(["Noodles"]), tpl(["Sandwich"])] },
+      // Two sabzis a plate from different sub-kinds (decided 2, 17): a bhaja and a torkari.
+      { slot: "Lunch", staples: ["Rice"], templates: [tpl(["Rice", "Dal", "Sabzi/Bhaja", "Sabzi/Torkari/Ghonto", "Fish & seafood"]),
+        tpl(["Rice", "Dal", "Sabzi/Bhaja", "Sabzi/Torkari/Ghonto", "Mutton"])] },
+      { slot: "Dinner", staples: ["Roti"], templates: [tpl(["Roti", "Sabzi/Torkari/Ghonto", "Dal"]), tpl(["Roti", "Sabzi/Torkari/Ghonto", "Fish & seafood"])] },
+      { slot: "Gita's dinner", templates: [tpl(["Sabzi/Torkari/Ghonto"])] },
     ],
     judgeNotes: ["A Bengali home: lunch is bhaat + dal + a bhaja + a torkari + fish curry most days; luchi-alur dom Sunday morning; mutton Sunday.",
       "Gita: vegetarian (no fish, meat, eggs) and no onion or garlic: she needs her own dishes wherever the rest have fish.", "Pradip: diabetic, no sweets, less oil.", "No beef or pork.",

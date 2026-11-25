@@ -5,12 +5,14 @@
 //
 // What it needs from the app:
 //   tables  slots, library, rules, slot_days (+ seed rows: date null, status confirmed), slot_dishes, house (cook_*),
-//           settings.new_dishes_per_week — column names as spec §2.1
+//           settings.new_dishes_per_week — column names as spec §2.1; kinds model (25 Nov): slots.kinds / slots.templates,
+//           library.kind / sub / catalog_item, house.cuisines (null = not read yet)
 //   ops     apply_setup { household, transcript } → { ok, said, noted?, unplaced?, lunch_unclear?, family_cooks?, attendance? }
 //           make_plan { week_start, household } → { ok, message, unmet?, asked?, relaxed? }
 //           set_slot_day { date, slot, guests, occasion }   (Eval 2 guests)
 //           add_dish { name, slot }                          (Eval 1 contains accuracy: the contains read of one dish)
 import type { ModelCall } from "../../server/model";
+import { checkMealShape, type MealKind, type MealTemplate } from "../../server/kinds";
 import type { PlanOut, SavedDish, SavedRule, SavedSlot, SetupOut } from "./result";
 import { WEEK, dateOf, type Household, type WeekEvent } from "./truth";
 
@@ -43,10 +45,11 @@ export async function runSetup(k: Kit, h: Household, transcript: string[]): Prom
 export function readSetup(k: Kit, res: any = {}): SetupOut {
   const slots: SavedSlot[] = has(k, "slots") ? k.rows("slots").filter((r) => r.active === undefined || r.active === null || bool(r.active)).map((r) => ({
     name: r.name, kind: r.kind, addon_of: r.addon_of ?? null, usual_people: json(r.usual_people, []), days: json(r.days, []), skip_days: json(r.skip_days, []), order: r.order,
+    ...("kinds" in r ? { kinds: json(r.kinds, null) } : {}), ...("templates" in r ? { templates: json(r.templates, null) } : {}),
   })) : [];
   const library: SavedDish[] = has(k, "library") ? k.rows("library").filter((r) => !bool(r.suggested)).map((r) => ({
     slot: r.slot, name: r.name, frequency: r.frequency ?? null, days: json(r.days, null), contains: json(r.contains, []), contains_read: json(r.contains_read, []),
-    origin: r.origin, quote: r.quote ?? null,
+    origin: r.origin, quote: r.quote ?? null, kind: r.kind ?? null, sub: r.sub ?? null, catalog_item: r.catalog_item ?? null,
   })) : [];
   const rules: SavedRule[] = has(k, "rules") ? k.rows("rules").map((r) => ({
     hard: bool(r.hard), what: r.what, who: r.who ?? null, slots: json(r.slots, null), days: json(r.days, null), items: json(r.items, null), to: r.to ?? null,
@@ -68,6 +71,7 @@ export function readSetup(k: Kit, res: any = {}): SetupOut {
     ...(res?.attendance ? { attendance: res.attendance } : {}),
     said: res?.said ?? res?.say,
     settings: { new_dishes_per_week: settingOf(k, "new_dishes_per_week") ?? 2 },
+    ...("cuisines" in house ? { cuisines: json<string[] | null>(house.cuisines, null) } : {}),
   };
 }
 
@@ -123,17 +127,31 @@ export function loadSetup(k: Kit, s: SetupOut): string[] {
     catch (e) { refused.push(`${table}: ${String(e).slice(0, 160)}`); return null; }
   };
   const order = (sl: SetupOut["slots"][number]) => sl.kind === "addon" ? 60 : sl.name === "Breakfast" ? 10 : sl.name === "Lunch" ? 30 : sl.name === "Dinner" ? 50 : /breakfast/i.test(sl.addon_of ?? "") ? 20 : 20;
-  for (const sl of s.slots) insert("slots", { name: sl.name, kind: sl.kind, addon_of: sl.addon_of, usual_people: sl.usual_people, days: sl.days, skip_days: sl.skip_days, order: sl.order ?? order(sl), active: 1 });
+  // Kinds model: a slot's kinds and templates, a dish's kind, sub-kind and catalog item, when the setup has them (TRUTH with
+  // templates); left out (null) otherwise, and the planner derives them from the seed. A shape the app would refuse is reported.
+  for (const sl of s.slots) {
+    if (sl.kinds && sl.templates) for (const e of checkMealShape(sl.kinds as MealKind[], sl.templates as MealTemplate[])) refused.push(`slots ${sl.name} shape: ${e}`);
+    insert("slots", { name: sl.name, kind: sl.kind, addon_of: sl.addon_of, usual_people: sl.usual_people, days: sl.days, skip_days: sl.skip_days, order: sl.order ?? order(sl), active: 1,
+      ...(sl.kinds ? { kinds: sl.kinds } : {}), ...(sl.templates ? { templates: sl.templates } : {}) });
+  }
   for (const d of s.library) insert("library", { key: d.name.toLowerCase(), slot: d.slot, name: d.name, frequency: d.frequency, days: d.days, contains: d.contains, contains_read: d.contains_read,
-    origin: d.origin ?? "setup_named", suggested: 0, untried: 0, offers: 0, disliked: 0 });
+    origin: d.origin ?? "setup_named", suggested: 0, untried: 0, offers: 0, disliked: 0,
+    ...(d.kind ? { kind: d.kind, sub: d.sub ?? null, catalog_item: d.catalog_item ?? null } : {}) });
   for (const r of s.rules) insert("rules", { hard: r.hard ? 1 : 0, what: r.what, who: r.who, slots: r.slots, days: r.days, items: r.items, to: r.to, frequency: r.frequency, per_meal: r.per_meal, fasting_food: r.fasting_food, quote: r.quote });
   for (const row of s.seed) {
     const id = insert("slot_days", { date: null, slot: row.slot, people: [], guests: [], status: "confirmed", edited: 0 });
     if (id) row.dishes.forEach((dish, position) => insert("slot_dishes", { slot_day_id: id, position, dish, new: 0, feedback_asked: 0 }));
   }
+  // The house row is made the first time the app asks for it (family.ts getHouse): make it here, or the updates below match
+  // no row and the cook and cuisines are silently not loaded.
+  if (s.cook || s.cuisines?.length) { try { if (!db.query(`SELECT 1 FROM "house" LIMIT 1`).get()) insert("house", {}); } catch (e) { refused.push(`house: ${String(e).slice(0, 120)}`); } }
   if (s.cook) {
     try { db.query(`UPDATE "house" SET cook_name = ?, cook_days = ?, cook_arrival = ?`).run(s.cook.name, JSON.stringify(s.cook.days), JSON.stringify(s.cook.visits)); }
     catch (e) { refused.push(`house cook: ${String(e).slice(0, 120)}`); }
+  }
+  if (s.cuisines?.length) {
+    try { db.query(`UPDATE "house" SET cuisines = ?`).run(JSON.stringify(s.cuisines)); }
+    catch (e) { refused.push(`house cuisines: ${String(e).slice(0, 120)}`); }
   }
   return refused;
 }
@@ -168,4 +186,10 @@ export function readPlan(k: Kit, weekStart: string, res: any = {}): PlanOut {
     })),
     library, unmet: json(res?.unmet, []), message: res?.message ?? res?.say, asked: json(res?.asked, []), ...(res?.relaxed ? { relaxed: res.relaxed } : {}),
   };
+}
+
+/** What the app's own shape check (server/kinds.ts checkMealShape) says of each slot's kinds and templates in a setup: TRUTH
+ *  must be a shape the app accepts, or Eval 2 plans from something the app would refuse. */
+export function shapeErrors(s: SetupOut): string[] {
+  return s.slots.flatMap((sl) => (sl.kinds && sl.templates ? checkMealShape(sl.kinds as MealKind[], sl.templates as MealTemplate[]).map((e) => `${sl.name}: ${e}`) : []));
 }

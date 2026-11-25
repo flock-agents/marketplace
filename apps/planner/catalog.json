@@ -434,6 +434,12 @@
           "nullable": true,
           "note": "JSON weekday[]; null = every day"
         },
+        "said": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "the family's own words for how often or which days (\"rajma or chole twice a week\"); null = none"
+        },
         "contains": {
           "type": "string",
           "required": false,

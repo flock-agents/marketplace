@@ -3,7 +3,7 @@
   "usage": "template",
   "icon": "icon.svg",
   "description": "The family's meals for every day of the week, a running-out guess for the things they buy from their order history, and a reminder each afternoon and evening with one cart per shopping app that is ordered only when they say yes; not for school runs, chores or appointments.",
-  "version": "4.0.3",
+  "version": "4.1.0",
   "minFlockVersion": "0.24.0-beta.1",
   "type": "fullstack",
   "access": "private",
@@ -852,7 +852,7 @@
       },
       {
         "name": "record_feedback",
-        "description": "The answer to the reminder's question about a dish on yesterday's plan the family had not had before (\"Did you make it, did you like it, and should I suggest it again?\"). { date: the day it was planned, slot, dish: as the reminder named it, made: true or false, liked?: needed when made, again?: needed when made and liked }. Made, liked and again: it becomes one of their dishes. Made and not liked: never planned again. Liked but not again: not planned again unless they ask. Not made: it may be planned once more. One call for each dish asked about; no reply, no call. Answers { ok, dish, outcome }."
+        "description": "The answer to the reminder's question about a dish on yesterday's plan the family had not had before (\"Did you make it, did you like it, and should I suggest it again?\"). { date: the day it was planned, slot, dish: as the reminder named it, made: true or false, liked?: needed when made, again?: needed when made and liked; answer?: ok | swap | dont_like (in place of made, before a brand-new dish is cooked) }. Made, liked and again: it becomes one of their dishes. Made and not liked: never planned again. Liked but not again: not planned again unless they ask. Not made: it may be planned once more. One call for each dish asked about; no reply, no call. The answer to a brand-new dish's \"OK to try these, or should I swap any?\" (the week's message) or \"OK to make it, or swap?\" (the evening before): ok: it becomes one of their dishes; swap: that day's meal is planned again with nothing new; dont_like: never suggested again, and a day still to come is planned again without it. Answers { ok, dish, outcome, replanned?, message? }: send message word for word when there is one."
       },
       {
         "name": "set_regular",
