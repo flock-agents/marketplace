@@ -99,3 +99,12 @@ describe("checkSlot (a saved week against the rules, changes.ts)", () => {
     expect(ps.get(WEEK[1])).toBeUndefined();
   });
 });
+
+describe("a rule item said in the plural (safety)", () => {
+  it("'peanuts', 'eggs', 'mushrooms' are the tags peanut, egg, mushroom", async () => {
+    const { forbidden } = await import("./planChecks");
+    const r = (items: string[]) => ({ id: "r", hard: true, what: "avoid", who: null, slots: null, days: null, items, to: null, frequency: null, per_meal: null, fasting_food: null, quote: "" }) as any;
+    expect(forbidden(r(["peanuts"]))).toEqual(["peanut"]);
+    expect(forbidden(r(["Eggs", "mushrooms", "nuts"]))).toEqual(["egg", "mushroom", "nuts"]);
+  });
+});

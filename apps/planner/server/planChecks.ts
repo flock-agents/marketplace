@@ -32,8 +32,11 @@ export type DishFacts = { tags: Set<string>; read: Set<string> };
 
 /** The tags a hard rule forbids to its person: vegetarian forbids meat and fish; no eggs, eggs; an avoid and a swap, their
  *  items; eggs-but-no-meat, its items or meat and fish. */
+/** The tags a rule item may be said as in the plural ("peanuts", "eggs", "mushrooms"): read as the tag. */
+const KNOWN_TAGS = new Set<string>([...BASE_TAGS, ...Object.keys(TAG_PARENT), ...Object.values(TAG_PARENT), "mushroom", "brinjal", "karela", "coconut", "soy", "wheat", "root_veg", "prawn"]);
+const ruleItem = (t: string): string => { const c = canonTag(t); return !KNOWN_TAGS.has(c) && c.endsWith("s") && KNOWN_TAGS.has(c.slice(0, -1)) ? c.slice(0, -1) : c; };
 export function forbidden(r: Rule): string[] {
-  const items = (r.items ?? []).map(canonTag);
+  const items = (r.items ?? []).map(ruleItem);
   switch (r.what) {
     case "veg": return uniq(["meat", "fish", ...items]);
     case "no_eggs": return uniq(["egg", ...items]);
