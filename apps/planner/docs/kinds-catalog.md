@@ -243,7 +243,7 @@ aka pappu; andhra
 **Suggested in its region:** Muddha pappu (plain pappu) [andhra], Palakura pappu (spinach pappu) [onion/garlic; andhra]
 
 #### Dal → Amti/Varan
-aka amti, varan; maharashtra
+aka amti, aamti, varan; maharashtra
 
 **Suggested in its region:** Varan (varan bhaat dal) [maharashtra], Amti (katachi amti, toor dal amti) [sugar, coconut; maharashtra]
 

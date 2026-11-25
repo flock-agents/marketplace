@@ -4,7 +4,8 @@
 // cuisine profile.
 import { describe, it, expect } from "bun:test";
 import { boot } from "./testkit";
-import { CATALOG, catalogContains, checkMealShape, matchDish, suggestable, suggestMeals, type MealKind, type MealTemplate } from "./kinds";
+import { CATALOG, catalogContains, catalogSub, checkMealShape, matchDish, plannerTags, suggestable, suggestMeals, type MealKind, type MealTemplate } from "./kinds";
+import { BASE_TAGS } from "./db/constants";
 import { commit, getLibraryDish, getSlot, upsertLibrary, upsertSlot } from "./slotStore";
 import { getHouse, houseView } from "./family";
 import { house } from "./db/schema";
@@ -30,6 +31,7 @@ describe("matchDish", () => {
     expect(matchDish("poriyal")).toEqual({ kind: "Sabzi", sub: "Poriyal/Thoran", item: null, by: "sub" });
     expect(matchDish("Thoran")).toMatchObject({ kind: "Sabzi", sub: "Poriyal/Thoran" });
     expect(matchDish("pappu")).toMatchObject({ kind: "Dal", sub: "Pappu", by: "sub" });
+    expect(matchDish("aamti")).toMatchObject({ kind: "Dal", sub: "Amti/Varan", by: "sub" });
     expect(matchDish("Sambar")).toMatchObject({ kind: "Rice curry", sub: "Sambar", by: "sub" });
   });
   it("then a kind", () => {
@@ -63,6 +65,32 @@ describe("catalogContains", () => {
     expect(catalogContains("Macher jhol")).toEqual(expect.arrayContaining(["fish", "seafood"]));
     expect(catalogContains("Idli")).toEqual(["white_rice"]);
     expect(catalogContains("Grandma's special")).toBeNull();
+  });
+});
+
+describe("plannerTags: an item's contents in the planner's tags (setup prefills them)", () => {
+  it("meats are meat (mutton, pork and beef red meat too), seafood is the planner's fish, peanuts are nuts", () => {
+    expect(plannerTags("Chicken curry")!.contains.sort()).toEqual(["chicken", "meat", "onion_garlic"]);
+    expect(plannerTags("Prawn masala")!.contains).toEqual(expect.arrayContaining(["prawn", "fish"]));
+    expect(plannerTags("Macher jhol")!.contains).toContain("fish");
+    expect(plannerTags("Macher jhol")!.contains).not.toContain("seafood");
+    expect(plannerTags("Mutton curry")!.contains).toEqual(expect.arrayContaining(["mutton", "meat", "red_meat"]));
+    expect(plannerTags("Lemon rice")!.contains.sort()).toEqual(["nuts", "peanut", "white_rice"]);
+    expect(plannerTags("Grandma's special")).toBeNull();
+  });
+  it("answers every base tag: what an item does not list, it does not have", () => {
+    const t = plannerTags("Idli")!;
+    expect(t.contains).toEqual(["white_rice"]);
+    for (const tag of BASE_TAGS) expect(t.read).toContain(tag);
+  });
+});
+
+describe("catalogSub", () => {
+  it("a kind's sub-kind by either half of its name or another name; null when it is not that kind's", () => {
+    expect(catalogSub("Sabzi", "thoran")).toBe("Poriyal/Thoran");
+    expect(catalogSub("Rice curry", "Sambar")).toBe("Sambar");
+    expect(catalogSub("Dal", "Sambar")).toBeNull();
+    expect(catalogSub("No such kind", "Sambar")).toBeNull();
   });
 });
 
