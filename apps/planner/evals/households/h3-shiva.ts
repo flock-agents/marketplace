@@ -2,7 +2,7 @@
 // Agastya (6), Gowri Shankar (63, diabetic, fasts Thursday till evening); cook Lakshmi Mon–Sat; Sunday lunch out, Saturday
 // dinner ordered in; vegetarian, no eggs, no mushrooms, nut-free tiffin. Meal shape in the owner's own words (23 Nov).
 // Frequency words: weekend parathas, curd rice when he's tired, millets are good for him (soft), no sugar (hard).
-import { avoid, dish, mains, MON_SAT, noEggs, note, SCHOOL, veg, type Household } from "../lib/truth";
+import { avoid, dish, mains, MON_SAT, noEggs, note, SCHOOL, veg, items, tpl, type Household } from "../lib/truth";
 
 const GS = "Gowri Shankar";
 export const h3: Household = {
@@ -59,12 +59,12 @@ export const h3: Household = {
       ...dish("Idli", ["Breakfast"]), ...dish("Dosa", ["Breakfast"]), ...dish("Poha", ["Breakfast"]), ...dish("Upma", ["Breakfast"]),
       ...dish("Sandwich", ["Breakfast"]), ...dish("Chutney", ["Breakfast"]), ...dish("Aloo paratha", ["Breakfast"], { days: ["Sat", "Sun"] }),
       ...dish("Ragi dosa", ["Breakfast"], { alsoSlots: ["Gowri Shankar's breakfast"] }), ...dish("Oats", ["Breakfast"], { alsoSlots: ["Gowri Shankar's breakfast"] }),
-      ...dish("Paratha roll", ["Agastya's tiffin"]), ...dish("Besan cheela", ["Agastya's tiffin"]), ...dish("Mini idli", ["Agastya's tiffin"]),
+      ...dish("Paratha roll", ["Agastya's tiffin"], { kind: "Roll" }), ...dish("Besan cheela", ["Agastya's tiffin"]), ...dish("Mini idli", ["Agastya's tiffin"]),
       ...dish("Vegetable sandwich", ["Agastya's tiffin"]), ...dish("Lemon rice", ["Agastya's tiffin"], { days: ["Fri"], notContains: ["nuts", "peanut"] }),
       ...dish("Rice", ["Lunch"]), ...dish("Sambar", ["Lunch"]), ...dish("Dal", ["Lunch", "Dinner"]),
       ...dish("Rajma chawal", ["Lunch"], { frequency: "2/week" }), ...dish("Bisi bele bath", ["Lunch"], { days: ["Sat"] }), ...dish("Curd", ["Lunch"], { unsaid: true }),
-      ...dish("Bhindi", ["Lunch"], { unsaid: true }), ...dish("Aloo gobi", ["Lunch"], { unsaid: true }),
-      ...dish("Chapati", ["Dinner"], { frequency: "usually" }), ...dish("Palak dal", ["Dinner"]), ...dish("Bhindi", ["Dinner"]),
+      ...dish("Bhindi", ["Lunch"], { unsaid: true, kind: "Sabzi" }), ...dish("Aloo gobi", ["Lunch"], { unsaid: true }),
+      ...dish("Chapati", ["Dinner"], { frequency: "usually" }), ...dish("Palak dal", ["Dinner"]), ...dish("Bhindi", ["Dinner"], { kind: "Sabzi" }),
       ...dish("Aloo gobi", ["Dinner"]), ...dish("Chole", ["Dinner"], { frequency: "1/week" }), ...dish("Curd rice", ["Dinner"], { frequency: "sometimes" }),
       ...dish("Phulka", ["Gowri Shankar's dinner"]),
     ],
@@ -90,6 +90,15 @@ export const h3: Household = {
       { slot: "Lunch", dishes: ["Bisi bele bath", "Curd"] }, { slot: "Lunch", dishes: ["Rice", "Sambar", "Aloo gobi", "Curd"] },
       { slot: "Dinner", dishes: ["Chapati", "Palak dal", "Bhindi"] }, { slot: "Dinner", dishes: ["Chapati", "Chole"] }, { slot: "Dinner", dishes: ["Chapati", "Dal", "Aloo gobi"] },
       { slot: "Gowri Shankar's dinner", dishes: ["Phulka"] }, { slot: "Gowri Shankar's dinner", dishes: ["Phulka"] },
+    ],
+    cuisines: ["south", "north"], cuisinesAlso: ["tamil", "karnataka", "punjab", "west", "central", "continental"],
+    meals: [
+      { slot: "Breakfast", templates: [tpl(["Idli", "Chutney"]), tpl(["Dosa", "Chutney"]), tpl(["Poha"]), tpl(["Upma", "Chutney"]), tpl(["Paratha"])] },
+      { slot: "Agastya's tiffin", templates: [tpl(["Roll"]), tpl(["Chilla"]), tpl(["Idli"]), tpl(["Sandwich"]), tpl(["Flavoured rice"])] },
+      { slot: "Lunch", staples: ["Rice", "Curd"], templates: [tpl(["Rice", "Rice curry/Sambar", "Sabzi", "Curd"]), tpl(["Rice", "Dal", "Sabzi", "Curd"]),
+        tpl([items("Rajma chawal"), "Curd"], "2/week"), tpl(["Flavoured rice", "Curd"])] },
+      { slot: "Dinner", staples: ["Roti"], templates: [tpl(["Roti", "Dal", "Sabzi"]), tpl(["Roti", "Dal/Rajma/Chole"])] },
+      { slot: "Gowri Shankar's dinner", staples: ["Roti"], templates: [tpl(["Roti"])] },
     ],
     judgeNotes: ["Gowri Shankar fasts Thursday till evening: he is not at Thursday breakfast and lunch.", "Gowri Shankar: no sugar, less rice and no rice at night (his own phulkas at dinner); millets good for him two or three times a week.",
       "Agastya's tiffin Monday to Friday, nut-free.", "Sunday lunch eaten out, Saturday dinner ordered in; Ankita cooks quick Sunday breakfast and dinner.", "Cook has an hour in the morning: breakfast plus at most two lunch dishes."],

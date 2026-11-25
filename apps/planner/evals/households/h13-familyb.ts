@@ -4,7 +4,7 @@
 // the lunch boxes and dinner (reheated at 8), two hours, 3 to 4 dishes in all; Saturday dinner ordered in. Vegetarian, eggs
 // only for Vivaan and Varun; Vivaan won't eat karela; Varun wants more protein. ONE lunch, cooked once: the couple carry it,
 // Raghavan eats it at home. Frequency words: dal-rice-roti-sabzi most nights, rajma or chole twice a week, khichdi once.
-import { avoid, dish, mains, note, SCHOOL, veg, WEEK, type Household } from "../lib/truth";
+import { avoid, dish, mains, note, SCHOOL, veg, WEEK, items, tpl, type Household } from "../lib/truth";
 
 export const h13: Household = {
   id: "h13-familyb", title: "Tier B: elder with no diet of his own, cook every day one visit, eggs for two",
@@ -80,6 +80,14 @@ export const h13: Household = {
       { slot: "Vivaan's tiffin", dishes: ["Pasta"] }, { slot: "Vivaan's tiffin", dishes: ["Fruit"] },
       { slot: "Lunch", dishes: ["Roti", "Sabzi", "Dal", "Rice", "Curd"] },
       { slot: "Dinner", dishes: ["Dal", "Rice", "Roti", "Sabzi"] }, { slot: "Dinner", dishes: ["Rajma"] }, { slot: "Dinner", dishes: ["Chole"] }, { slot: "Dinner", dishes: ["Khichdi"] },
+    ],
+    cuisines: ["north", "south"], cuisinesAlso: ["west", "central", "punjab", "continental"],
+    meals: [
+      { slot: "Breakfast", templates: [tpl(["Poha"]), tpl(["Idli", "Chutney"]), tpl(["Dosa"]), tpl(["Upma"]), tpl(["Cereal"]), tpl(["Paratha"])] },
+      { slot: "Vivaan's tiffin", templates: [tpl(["Sandwich"]), tpl(["Roll"]), tpl([items("Curd rice")]), tpl(["Pasta"]), tpl(["Fruit"])] },
+      { slot: "Lunch", staples: ["Roti", "Rice", "Curd"], templates: [tpl(["Roti", "Sabzi", "Dal", "Rice", "Curd"])] },
+      // Rajma and chole stand alone in the seed: their plate is not stated plainly enough to score.
+      { slot: "Dinner", staples: ["Roti", "Rice"], templates: [tpl(["Roti", "Rice", "Dal", "Sabzi"]), tpl(["Khichdi"])] },
     ],
     judgeNotes: ["Raghavan (72) has no diet and no rule of his own beyond no eggs: he eats what everyone eats, no own plate.",
       "One lunch cooked once (roti, sabzi, dal, rice, curd): Varun and Anjali carry it, Raghavan eats it at home; Vivaan has his tiffin on school days.",

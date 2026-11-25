@@ -61,6 +61,7 @@ export const h11: Household = {
       { slot: "Dinner", dishes: ["Roti", "Dal", "Sabzi"] }, { slot: "Dinner", dishes: ["Roti", "Dal", "Sabzi"] }, { slot: "Dinner", dishes: ["Roti", "Chicken curry"] },
     ],
     week: [{ kind: "stay", person: "Rohan", days: ["Sat", "Sun"], dated: { person: "Rohan", what: "Vikram's brother staying the weekend", from: "2026-12-05", to: "2026-12-06" } }],
+    cuisines: ["north"], cuisinesAlso: ["goa", "south", "west", "continental"],
     judgeNotes: ["Non-veg and eggs only Saturday and Sunday; weekdays fully veg.", "Ishita: no dairy at all (lactose intolerant).", "Vikram: millets three times a week.",
       "Friday dinner ordered in.", "Vikram's brother Rohan stays Saturday and Sunday this week."],
   },

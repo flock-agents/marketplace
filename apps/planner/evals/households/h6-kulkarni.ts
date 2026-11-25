@@ -2,7 +2,7 @@
 // Mon–Fri, the younger with a peanut allergy (in a cuisine that puts peanuts in poha and chivda; asked by the read-back,
 // the family cooks everything without peanuts, so the rule is the whole house's and their own dishes have none), a cook
 // Mon–Fri, the parents cook on weekends. Frequency words: noodles sometimes on Friday for Ishaan, thalipeeth on weekends.
-import { avoid, dish, mains, SCHOOL, veg, type Household } from "../lib/truth";
+import { avoid, dish, mains, SCHOOL, veg, items, tpl, type Household } from "../lib/truth";
 
 export const h6: Household = {
   id: "h6-kulkarni", title: "Maharashtrian, non-veg weekends, two snack boxes, peanut allergy, cook Mon–Fri",
@@ -75,6 +75,13 @@ export const h6: Household = {
       { slot: "Dinner", dishes: ["Bhakri", "Usal"] }, { slot: "Dinner", dishes: ["Poli", "Pithla"] }, { slot: "Dinner", dishes: ["Bhakri", "Pithla"] }, { slot: "Dinner", dishes: ["Fish fry", "Poli"] },
     ],
     week: [{ kind: "guests", day: "Sat", slot: "Dinner", count: 4, rules: ["vegetarian"], items: ["meat", "fish"], occasion: "dinner with friends" }],
+    cuisines: ["maharashtra", "west"], cuisinesAlso: ["central", "south", "continental", "indo_chinese"],
+    meals: [
+      { slot: "Breakfast", templates: [tpl(["Poha"]), tpl(["Upma"]), tpl(["Halwa"]), tpl(["Thalipeeth"])] },
+      { slot: "Snack box", templates: [tpl(["Sandwich", "Fruit"]), tpl(["Namkeen", "Fruit"]), tpl(["Idli", "Fruit"]), tpl(["Noodles"])] },
+      { slot: "Lunch", staples: ["Roti"], templates: [tpl(["Roti", "Sabzi", "Dal/Amti/Varan", "Salad"]), tpl(["Chicken", "Roti"])] },
+      { slot: "Dinner", staples: ["Roti", "Bhakri"], templates: [tpl(["Bhakri", "Dal"]), tpl(["Roti", "Dal"]), tpl(["Fish & seafood", "Roti"])] },
+    ],
     judgeNotes: ["Non-veg only Saturday and Sunday (fish fry Saturday dinner, chicken rassa Sunday lunch).", "Ishaan has a peanut allergy and the whole house cooks without peanuts or groundnut oil: the family's poha, chivda and koshimbir have none.",
       "Snack boxes Monday to Friday for both children.", "Four vegetarian guests for Saturday dinner this week."],
   },

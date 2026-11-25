@@ -1,7 +1,7 @@
 // 7. Young working couple, long hours: a cook on weekdays only, one visit that makes lunch and dinner (no breakfast);
 // weekends mostly out or ordered in (Saturday lunch out, Saturday dinner and Sunday lunch ordered in); high protein for one;
 // she eats no red meat. Frequency words: eggs every morning for Nikhil, biryani once a month.
-import { avoid, dish, mains, note, SCHOOL, WEEK, type Household } from "../lib/truth";
+import { avoid, dish, mains, note, SCHOOL, WEEK, items, tpl, type Household } from "../lib/truth";
 
 export const h7: Household = {
   id: "h7-menon", title: "Young couple, weekday cook one visit (lunch+dinner), weekends out, high protein",
@@ -58,6 +58,12 @@ export const h7: Household = {
       { slot: "Breakfast", dishes: ["Eggs", "Oats"] }, { slot: "Breakfast", dishes: ["Eggs", "Smoothie"] }, { slot: "Breakfast", dishes: ["Eggs", "Toast"] },
       { slot: "Lunch", dishes: ["Chicken curry", "Rice", "Sabzi", "Salad"] }, { slot: "Lunch", dishes: ["Dal", "Rice", "Sabzi", "Salad"] }, { slot: "Lunch", dishes: ["Paneer", "Rice", "Sabzi", "Salad"] },
       { slot: "Dinner", dishes: ["Roti", "Chicken", "Sabzi"] }, { slot: "Dinner", dishes: ["Roti", "Paneer", "Sabzi"] }, { slot: "Dinner", dishes: ["Roti", "Dal", "Sabzi"] },
+    ],
+    cuisines: ["north"], cuisinesAlso: ["south", "kerala", "continental", "west"],
+    meals: [
+      { slot: "Breakfast", staples: ["Egg"], own: ["Smoothie"], templates: [tpl(["Egg", "Porridge"]), tpl(["Egg", "Smoothie"]), tpl(["Egg", "Toast"])] },
+      { slot: "Lunch", staples: ["Rice", "Salad"], templates: [tpl(["Chicken", "Rice", "Sabzi", "Salad"]), tpl(["Dal", "Rice", "Sabzi", "Salad"]), tpl(["Gravy/Paneer", "Rice", "Sabzi", "Salad"])] },
+      { slot: "Dinner", staples: ["Roti"], templates: [tpl(["Roti", "Chicken", "Sabzi"]), tpl(["Roti", "Gravy/Paneer", "Sabzi"]), tpl(["Roti", "Dal", "Sabzi"])] },
     ],
     judgeNotes: ["Rekha cooks lunch and dinner at one 11am visit on weekdays; they make breakfast.", "Saturday lunch out; Saturday dinner and Sunday lunch ordered in; Tanya cooks a simple Sunday dinner.",
       "Nikhil high protein, eggs every morning; Tanya no red meat."],

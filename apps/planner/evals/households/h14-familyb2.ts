@@ -3,7 +3,7 @@
 // corrected to 6:30); Lavanya cooks Sunday. Senthil carries lunch to office; Nila (15) takes a school lunch box. Vegetarian,
 // eggs for Nila only. Frequency words: dosa most mornings, pongal on Sundays, sambar or rasam with rice at lunch most days,
 // kootu some days, chapati and a kurma at night twice a week, an omelette for Nila some mornings.
-import { avoid, dish, mains, SCHOOL, veg, WEEK, type Household } from "../lib/truth";
+import { avoid, dish, mains, SCHOOL, veg, WEEK, items, tpl, type Household } from "../lib/truth";
 
 export const h14: Household = {
   id: "h14-familyb2", title: "Tier B: Tamil family, both grandparents with no diet of their own, cook Mon–Sat lunch and dinner",
@@ -79,6 +79,14 @@ export const h14: Household = {
       { slot: "Nila's lunch box", dishes: ["Tomato rice"] },
       { slot: "Lunch", dishes: ["Rice", "Sambar", "Poriyal", "Curd"] }, { slot: "Lunch", dishes: ["Rice", "Rasam", "Poriyal", "Curd"] }, { slot: "Lunch", dishes: ["Rice", "Sambar", "Kootu", "Curd"] },
       { slot: "Dinner", dishes: ["Chapati", "Kurma"] }, { slot: "Dinner", dishes: ["Idli", "Sambar"] }, { slot: "Dinner", dishes: ["Dosa", "Sambar"] },
+    ],
+    cuisines: ["south", "tamil"], cuisinesAlso: ["kerala"],
+    meals: [
+      { slot: "Breakfast", templates: [tpl(["Dosa", "Chutney"]), tpl(["Idli", "Chutney"]), tpl(["Upma"]), tpl(["Khichdi/Pongal"])] },
+      { slot: "Nila's lunch box", templates: [tpl(["Flavoured rice"]), tpl([items("Curd rice")]), tpl(["Roll"])] },
+      { slot: "Lunch", staples: ["Rice", "Curd"], templates: [tpl(["Rice", "Rice curry/Sambar", "Sabzi/Poriyal/Thoran", "Curd"]), tpl(["Rice", "Rice curry/Rasam", "Sabzi/Poriyal/Thoran", "Curd"]),
+        tpl(["Rice", "Rice curry/Sambar", "Rice curry/Kootu", "Curd"])] },
+      { slot: "Dinner", staples: ["Roti"], templates: [tpl(["Roti", "Gravy/Kurma"], "2/week"), tpl(["Idli", "Rice curry/Sambar"]), tpl(["Dosa", "Rice curry/Sambar"])] },
     ],
     judgeNotes: ["Murugesan and Kamakshi have no diet or rule of their own beyond no eggs: they eat what everyone eats, no own plate.",
       "Vegetarian; only Nila eats eggs (an omelette some mornings).", "Valli cooks lunch (8am) and dinner (6:30pm) Monday to Saturday; Lavanya makes breakfast every day and cooks all of Sunday.",

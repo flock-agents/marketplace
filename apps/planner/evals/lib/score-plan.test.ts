@@ -5,7 +5,7 @@ import { expectedSlotDays, scorePlan } from "./score-plan";
 import { setupOfTruth, perturb } from "./truth-setup";
 import { staplesOf } from "./history";
 import { baselineWeek } from "./baseline";
-import { FIX } from "./test-fixture";
+import { PLAN_FIX as FIX } from "./test-fixture";
 import { dateOf, type Weekday } from "./truth";
 import type { PlanOut, SavedDish } from "./result";
 import { BASE_TAGS } from "./vocab";
@@ -15,29 +15,34 @@ const ALL3 = ["Asha", "Chotu", "Dadu Ram"];
 const read = [...BASE_TAGS];
 const newRow = (name: string, slot: string, contains: string[]): SavedDish => ({ slot, name, frequency: null, days: null, contains, contains_read: read, origin: "planner_suggested", suggested: true, untried: true });
 
-/** The good week, by hand (see the plan notes in the test file's history: every count and window kept). */
+/** The good week, by hand, held to the owner's rules (25 Nov kinds model): every slot-day filled for the right people, the
+ *  food rules kept, a real dish named each time, the family's own items rotated within their kinds (no item back before the
+ *  others of its kind are used, never the next day, never at lunch and dinner the same day), staples every day, new items
+ *  only of the family's kinds. Breakfast rotates Poha, Upma, Idli and a new Rava idli; lunch's Toor dal and rice are staples,
+ *  its sabzi (Bhindi, Aloo gobi) shares the Sabzi kind with dinner's Lauki; dinner's Toor dal and Rajma (2/week) rotate. */
 function goodWeek(): PlanOut {
   const sd = (day: Weekday, slot: string, people: string[], dishes: string[], o: { skip?: string; guests?: number; isNew?: string[] } = {}) =>
     ({ date: dateOf(MON, day), slot, people, guests: o.guests ? [{ count: o.guests }] : [], skip: o.skip ?? null, dishes: dishes.map((name) => ({ name, ...(o.isNew?.includes(name) ? { new: true } : {}) })) });
   const withNani = (d: Weekday, ps: string[]) => (["Fri", "Sat", "Sun"].includes(d) ? [...ps, "Nani"] : ps);
-  const B: Record<Weekday, string> = { Mon: "Poha", Tue: "Upma", Wed: "Idli", Thu: "Poha", Fri: "Upma", Sat: "Idli", Sun: "Dosa" };
-  const L: Record<Weekday, string[]> = { Mon: ["Rice", "Dal", "Bhindi"], Tue: ["Rice", "Dal", "Aloo gobi"], Wed: ["Rice", "Dal"], Thu: ["Rice", "Dal", "Bhindi"], Fri: ["Rice", "Dal", "Aloo gobi"], Sat: ["Rice", "Dal"], Sun: ["Rice", "Dal"] };
-  const D: Record<Weekday, string[]> = { Mon: ["Roti", "Dal"], Tue: ["Roti", "Lauki"], Wed: ["Roti", "Rajma"], Thu: ["Roti", "Dal"], Fri: ["Roti", "Lauki"], Sat: [], Sun: ["Roti", "Rajma"] };
+  const B: Record<Weekday, string> = { Mon: "Poha", Tue: "Upma", Wed: "Idli", Thu: "Poha", Fri: "Upma", Sat: "Idli", Sun: "Rava idli" };
+  const L: Record<Weekday, string[]> = { Mon: ["Rice", "Toor dal", "Bhindi"], Tue: ["Rice", "Toor dal", "Aloo gobi"], Wed: ["Rice", "Toor dal"], Thu: ["Rice", "Toor dal", "Bhindi"], Fri: ["Rice", "Toor dal", "Aloo gobi"], Sat: ["Rice", "Toor dal"], Sun: ["Rice", "Toor dal"] };
+  const D: Record<Weekday, string[]> = { Mon: ["Roti", "Toor dal"], Tue: ["Roti", "Lauki"], Wed: ["Roti", "Rajma"], Thu: ["Roti", "Toor dal"], Fri: ["Roti", "Lauki"], Sat: [], Sun: ["Roti", "Rajma"] };
   const days: Weekday[] = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
   const slotDays = days.flatMap((d) => {
     const weekday = !["Sat", "Sun"].includes(d);
     const out = [
-      sd(d, "Breakfast", withNani(d, d === "Mon" ? ["Asha", "Chotu"] : ALL3), [B[d]], { isNew: ["Dosa"] }),
+      sd(d, "Breakfast", withNani(d, d === "Mon" ? ["Asha", "Chotu"] : ALL3), [B[d]], { isNew: ["Rava idli"] }),
       sd(d, "Lunch", withNani(d, d === "Mon" ? ["Chotu"] : weekday ? ["Chotu", "Dadu Ram"] : ALL3), L[d], { guests: d === "Sun" ? 2 : 0 }),
       d === "Sat" ? sd(d, "Dinner", withNani(d, ALL3), [], { skip: "ordered_in" }) : sd(d, "Dinner", withNani(d, ALL3), D[d]),
-      d === "Sat" ? sd(d, "Dadu's dinner", ["Dadu Ram"], [], { skip: "ordered_in" }) : sd(d, "Dadu's dinner", ["Dadu Ram"], ["Phulka", ...(d === "Tue" || d === "Fri" ? ["Ragi roti"] : [])], { isNew: ["Ragi roti"] }),
+      d === "Sat" ? sd(d, "Dadu's dinner", ["Dadu Ram"], [], { skip: "ordered_in" }) : sd(d, "Dadu's dinner", ["Dadu Ram"], ["Phulka", ...(d === "Tue" || d === "Fri" ? ["Bajra roti"] : [])], { isNew: ["Bajra roti"] }),
     ];
     if (weekday) out.push(sd(d, "Chotu's tiffin", ["Chotu"], ["Sandwich"]));
     return out;
   });
-  return { ok: true, week_start: MON, slotDays, library: [newRow("Dosa", "Breakfast", ["white_rice"]), newRow("Ragi roti", "Dadu's dinner", ["millet"])], unmet: [] };
+  return { ok: true, week_start: MON, slotDays, library: [newRow("Rava idli", "Breakfast", ["wheat"]), newRow("Bajra roti", "Dadu's dinner", ["millet"])], unmet: [] };
 }
 const loaded = () => setupOfTruth(FIX);
+const set = (p: PlanOut, day: Weekday, slot: string, dishes: string[]) => { at(p, day, slot).dishes = dishes.map((name) => ({ name })); return p; };
 const fails = (p: PlanOut, l = loaded()) => Object.entries(scorePlan(FIX, p, l).rates).filter(([, [a, n]]) => a < n).map(([k]) => k).sort();
 const at = (p: PlanOut, day: Weekday, slot: string) => p.slotDays.find((x) => x.date === dateOf(MON, day) && x.slot === slot)!;
 
@@ -107,9 +112,10 @@ describe("scorePlan", () => {
     const q = goodWeek();
     at(q, "Wed", "Dinner").dishes.push({ name: "Kheer", new: true, not_for: ["Dadu Ram"] });
     q.library.push(newRow("Kheer", "Dinner", ["sugar", "dairy"]));
-    expect(fails(q)).toEqual(["new_budget"]);
+    // Kheer is no kind of the family's dinner (Roti, Dal, Sabzi, Khichdi): a new kind too.
+    expect(fails(q)).toEqual(["new_budget", "no_new_kind"]);
     at(q, "Wed", "Dinner").dishes.find((d) => d.name === "Kheer")!.not_for = [];
-    expect(fails(q)).toEqual(["hard_rules", "new_budget"]);
+    expect(fails(q)).toEqual(["hard_rules", "new_budget", "no_new_kind"]);
     // not_for spares a rule only while the person keeps a dish of their own there (or at their own add-on that day).
     const r = goodWeek();
     for (const d of at(r, "Wed", "Lunch").dishes) d.not_for = ["Dadu Ram"];
@@ -124,18 +130,20 @@ describe("scorePlan", () => {
     l.library.find((d) => d.name === "Upma")!.contains_read = ["sugar"];
     expect(fails(goodWeek(), l)).toEqual(["hard_rules"]);
     const p = goodWeek();
-    p.library.find((d) => d.name === "Dosa")!.contains_read = [];
+    p.library.find((d) => d.name === "Rava idli")!.contains_read = [];
     expect(fails(p)).toEqual(["hard_rules"]);
     const q = goodWeek();
     at(q, "Sun", "Breakfast").dishes = [{ name: "Masala omelette", new: true }];
     q.library = [newRow("Masala omelette", "Breakfast", []), q.library[1]];
-    expect(fails(q)).toEqual(["hard_rules"]);
+    // An omelette is an Egg: no kind of their breakfast (Poha, Upma, Idli) either.
+    expect(fails(q)).toEqual(["hard_rules", "no_new_kind"]);
   });
 
   test("library: a dish from another slot's library, and too many new dishes", () => {
     const p = goodWeek();
-    at(p, "Wed", "Lunch").dishes = [{ name: "Rice" }, { name: "Dal" }, { name: "Lauki" }];
-    expect(fails(p)).toEqual(["default_cap", "from_library"]);
+    at(p, "Wed", "Lunch").dishes = [{ name: "Rice" }, { name: "Toor dal" }, { name: "Lauki" }];
+    // Lauki is dinner's; and Tuesday dinner's Lauki is back at Wednesday lunch, the next day.
+    expect(fails(p)).toEqual(["from_library", "not_next_day"]);
     const q = goodWeek();
     at(q, "Wed", "Lunch").dishes.push({ name: "Cabbage poriyal", new: true });
     q.library.push(newRow("Cabbage poriyal", "Lunch", []));
@@ -145,46 +153,85 @@ describe("scorePlan", () => {
   test("a short slot the planner asks about has its own new dishes for its shortfall beside the setting (owner 24 Nov)", () => {
     // Breakfast: 7 days of one dish, Poha, Upma and Idli 2 days each: short by 1, so 1 new dish of its own.
     const p = goodWeek();
-    at(p, "Wed", "Breakfast").dishes = [{ name: "Pesarattu", new: true }];
-    p.library.push(newRow("Pesarattu", "Breakfast", []));
+    at(p, "Wed", "Breakfast").dishes = [{ name: "Semiya upma", new: true }];
+    p.library.push(newRow("Semiya upma", "Breakfast", []));
     expect(fails(p)).toEqual(["new_budget"]);   // 3 new dishes, setting 2, and no slot said to be short
-    p.asked = ["I only know 3 dishes for breakfast, so I've added a new one, Pesarattu. What else do you have for breakfast?"];
+    p.asked = ["I only know 3 dishes for breakfast, so I've added a new one, Semiya upma. What else do you have for breakfast?"];
     expect(fails(p)).toEqual([]);
     // Its allowance is the shortfall, no more: a second new breakfast dish is past it.
-    at(p, "Thu", "Breakfast").dishes = [{ name: "Rava dosa", new: true }];
-    p.library.push(newRow("Rava dosa", "Breakfast", []));
+    at(p, "Thu", "Breakfast").dishes = [{ name: "Kanda poha", new: true }];
+    p.library.push(newRow("Kanda poha", "Breakfast", []));
     expect(fails(p)).toEqual(["new_budget"]);
   });
 
-  test("frequency and days per dish, counted in days across slots; the default cap; staples exempt", () => {
+  test("frequency and days per dish, counted in days across slots; no default cap any more (owner 25 Nov); staples exempt", () => {
     const p = goodWeek();
     at(p, "Mon", "Dinner").dishes = [{ name: "Roti" }, { name: "Rajma" }];
     expect(fails(p)).toContain("dish_frequency");
     const q = goodWeek();
     at(q, "Sun", "Dinner").dishes = [{ name: "Roti" }, { name: "Khichdi" }];
     expect(fails(q)).toEqual(["dish_frequency"]);
+    // Bhindi a third day (Mon, Thu, Sun), every other sabzi of theirs used, never the next day: fine now.
     const r = goodWeek();
     at(r, "Sun", "Lunch").dishes.push({ name: "Bhindi" });
-    expect(fails(r)).toEqual(["default_cap"]);
-    // Rice at lunch every day is a staple: no cap, no window.
-    expect(fails(goodWeek())).not.toContain("default_cap");
+    expect(fails(r)).toEqual([]);
+    expect(scorePlan(FIX, r, loaded()).rates.default_cap).toBeUndefined();
   });
 
-  test("repeat window (3 days in a slot) and the same main twice a day across main slots", () => {
+  // ── Rotation, owner 25 Nov (kinds model rule 3). Expectations written from the rules before the scorer. ──
+  test("not_next_day: the same item on consecutive days in its slot fails", () => {
     const p = goodWeek();
-    at(p, "Tue", "Breakfast").dishes = [{ name: "Poha" }];
-    at(p, "Thu", "Breakfast").dishes = [{ name: "Idli" }];
-    at(p, "Sat", "Breakfast").dishes = [{ name: "Upma" }];
-    at(p, "Fri", "Breakfast").dishes = [{ name: "Idli" }];
-    expect(fails(p)).toContain("repeat_window");
+    at(p, "Tue", "Breakfast").dishes = [{ name: "Poha" }];   // Poha Mon and Tue
+    at(p, "Thu", "Breakfast").dishes = [{ name: "Upma" }];   // Upma Thu and Fri
+    expect(fails(p)).toEqual(["not_next_day"]);
+  });
+  test("not_next_day: the same item at lunch and at dinner the same day, or dinner then the next lunch (a kind both use)", () => {
+    const p = goodWeek();
+    at(p, "Tue", "Dinner").dishes = [{ name: "Roti" }, { name: "Aloo gobi" }];   // Aloo gobi Tue lunch and Tue dinner
+    at(p, "Fri", "Dinner").dishes = [{ name: "Roti" }, { name: "Lauki" }];
+    expect(fails(p)).toContain("not_next_day");
     const q = goodWeek();
-    at(q, "Wed", "Lunch").dishes.push({ name: "Bhindi" });
-    at(q, "Thu", "Lunch").dishes = [{ name: "Rice" }, { name: "Dal" }];
-    at(q, "Wed", "Dinner").dishes = [{ name: "Roti" }, { name: "Rajma" }, { name: "Bhindi" }];
-    expect(fails(q)).toContain("same_day_repeat");
+    at(q, "Wed", "Dinner").dishes = [{ name: "Roti" }, { name: "Bhindi" }];      // Bhindi Wed dinner, Thu lunch
+    expect(fails(q)).toContain("not_next_day");
+    // A staple is exempt: Toor dal at every lunch, rice every day, Phulka every night.
+    expect(fails(goodWeek())).not.toContain("not_next_day");
+    // Still a staple when the loaded seed (what setup saved, end to end) misses it: TRUTH's seed makes the family's staples too.
+    const l = loaded();
+    l.seed = l.seed.filter((r) => r.slot !== "Lunch");
+    expect(fails(goodWeek(), l)).not.toContain("not_next_day");
+  });
+  test("no_early_repeat: an item back while another of the family's items of its kind went unused this week", () => {
+    // Lunch's sabzi: Bhindi Mon and Thu, Aloo gobi never (dinner's Lauki is made Tue and Fri).
+    const p = goodWeek();
+    for (const d of ["Tue", "Fri"] as Weekday[]) set(p, d, "Lunch", ["Rice", "Toor dal"]);
+    expect(fails(p)).toEqual(["no_early_repeat"]);
+    expect(scorePlan(FIX, p, loaded()).notes.find((n) => n.startsWith("no_early_repeat"))).toContain("Aloo gobi");
+    // Counted across lunch and dinner for a kind both use: Bhindi and Aloo gobi back at lunch while dinner's Lauki is never made.
+    const q = goodWeek();
+    const D: Record<string, string> = { Mon: "Toor dal", Tue: "Rajma", Wed: "Toor dal", Thu: "Rajma", Fri: "Toor dal", Sun: "Toor dal" };
+    for (const [d, x] of Object.entries(D)) set(q, d as Weekday, "Dinner", ["Roti", x]);
+    expect(fails(q)).toEqual(["no_early_repeat"]);
+    expect(scorePlan(FIX, q, loaded()).notes.filter((n) => n.startsWith("no_early_repeat")).join(" ")).toContain("Lauki");
+    // Breakfast's kinds are dish families (Poha, Upma, Idli): Poha back while Idli waits is no early repeat of a kind.
+    const r = goodWeek();
+    for (const d of ["Wed", "Sat"] as Weekday[]) set(r, d, "Breakfast", ["Upma"]);
+    set(r, "Fri", "Breakfast", ["Poha"]);
+    expect(fails(r)).not.toContain("no_early_repeat");
+  });
+  test("no_early_repeat: the family's own words allow a repeat (a frequency or days on the dish)", () => {
+    const h = structuredClone(FIX);
+    h.truth.library = h.truth.library.map((d) => (d.name === "Bhindi" ? { ...d, frequency: "sometimes" as const } : d));
+    const p = goodWeek();
+    const D: Record<string, string> = { Mon: "Toor dal", Tue: "Rajma", Wed: "Toor dal", Thu: "Rajma", Fri: "Toor dal", Sun: "Toor dal" };
+    for (const [d, x] of Object.entries(D)) set(p, d as Weekday, "Dinner", ["Roti", x]);
+    const s = scorePlan(h, p, setupOfTruth(h));
+    // Bhindi twice is within "sometimes" (2–3) and their words let it come back; Aloo gobi (no words) back while Lauki waits fails.
+    expect(Object.entries(s.rates).filter(([, [a, n]]) => a < n).map(([k]) => k)).toEqual(["no_early_repeat"]);
+    expect(s.notes.filter((n) => n.startsWith("no_early_repeat")).join(" ")).toContain("Aloo gobi");
+    expect(s.notes.filter((n) => n.startsWith("no_early_repeat")).join(" ")).not.toContain("Bhindi back");
   });
 
-  test("a daily dish on every slot-day of its slot (hard), exempt from the repeat window and the cap", () => {
+  test("a daily dish on every slot-day of its slot (hard), exempt from the rotation checks", () => {
     const p = goodWeek();
     expect(scorePlan(FIX, p, loaded()).rates.daily_dishes).toEqual([6, 6]);
     at(p, "Wed", "Dadu's dinner").dishes = [{ name: "Lauki" }];
@@ -216,11 +263,12 @@ describe("scorePlan", () => {
   });
 });
 
-describe("scorePlan: a slot too thin for the default rules", () => {
-  // Chotu's tiffin with one seed row of each of its two dishes: no staple, 2 dishes × 2 days < 5 school days.
+describe("scorePlan: a slot with only two dishes", () => {
+  // Chotu's tiffin with one seed row of each of its two dishes: no staple. Owner 25 Nov: no cap and no window any more, so
+  // alternating them all week is right; the same box two days running is not.
   const thinFix = structuredClone(FIX);
   thinFix.truth.library = thinFix.truth.library.filter((d) => d.slot !== "Chotu's tiffin" || d.name === "Sandwich");
-  thinFix.truth.library.push({ name: "Paratha roll", slot: "Chotu's tiffin" } as any);
+  thinFix.truth.library.push({ name: "Paratha roll", slot: "Chotu's tiffin", kind: "Roll" });
   thinFix.truth.seed = [...thinFix.truth.seed.filter((r) => r.slot !== "Chotu's tiffin"), { slot: "Chotu's tiffin", dishes: ["Sandwich"] }, { slot: "Chotu's tiffin", dishes: ["Paratha roll"] }];
   const week = () => {
     const p = goodWeek();
@@ -230,14 +278,11 @@ describe("scorePlan: a slot too thin for the default rules", () => {
   };
   const failing = (p: PlanOut) => Object.entries(scorePlan(thinFix, p, setupOfTruth(thinFix)).rates).filter(([, [a, n]]) => a < n).map(([k]) => k).sort();
 
-  test("said in unmet: a dish may come back on an even share of the days, every other day; not said: the default rules hold", () => {
-    expect(failing(week())).toEqual(["default_cap", "repeat_window"]);
-    const said = week();
-    said.unmet = ["only 2 Chotu's tiffin dishes known, so some come back more often than usual"];
-    expect(failing(said)).toEqual([]);
-    // Back the next day is still sooner than the thin slot needs.
-    at(said, "Thu", "Chotu's tiffin").dishes = [{ name: "Sandwich" }];
-    expect(failing(said)).toContain("repeat_window");
+  test("alternating passes, said in unmet or not; back the next day fails", () => {
+    expect(failing(week())).toEqual([]);
+    const next = week();
+    at(next, "Thu", "Chotu's tiffin").dishes = [{ name: "Sandwich" }];
+    expect(failing(next)).toEqual(["not_next_day"]);
   });
 });
 
@@ -254,7 +299,6 @@ describe("add-on days may be empty (owner 23 Nov)", () => {
 
 // The owner's base minimum (25 Nov), with onboarding run 31's own failures as the bad cases.
 describe("scorePlan: the base minimum", () => {
-  const set = (p: PlanOut, day: Weekday, slot: string, dishes: string[]) => { at(p, day, slot).dishes = dishes.map((name) => ({ name })); return p; };
   test("a bare staple, a lunch with no bread or rice, a staple twice", () => {
     expect(fails(set(goodWeek(), "Mon", "Lunch", ["Rice"]))).toEqual(expect.arrayContaining(["not_bare", "whole_plate"]));
     expect(fails(set(goodWeek(), "Mon", "Lunch", ["Dal", "Bhindi"]))).toContain("whole_plate");
@@ -262,10 +306,78 @@ describe("scorePlan: the base minimum", () => {
     expect(fails(set(goodWeek(), "Mon", "Dinner", ["Roti with aloo gobi", "Roti", "Rajma"]))).toContain("no_doubled_staple");
     expect(fails(set(goodWeek(), "Mon", "Dinner", ["Khichdi"]))).not.toContain("whole_plate");
   });
-  test("a main three times at breakfast", () => {
+  test("a main three days running at breakfast: the next day, not a cap (owner 25 Nov)", () => {
     const p = goodWeek();
     for (const d of ["Mon", "Tue", "Wed"] as Weekday[]) set(p, d, "Breakfast", ["Poha"]);
-    expect(fails(p)).toContain("main_twice");
+    expect(fails(p)).toEqual(["not_next_day"]);
+  });
+  test("real_dish: a bare kind or sub-kind word is not a dish; a staple's, an item's or a breakfast family's word is", () => {
+    for (const bare of ["Sabzi", "Dal", "Curry", "Poriyal"]) expect(fails(set(goodWeek(), "Mon", "Dinner", ["Roti", bare]))).toContain("real_dish");
+    expect(fails(set(goodWeek(), "Mon", "Dinner", ["Roti", "Toor dal"]))).not.toContain("real_dish");
+    expect(fails(goodWeek())).not.toContain("real_dish");   // Rice, Roti, Idli, Poha
+    // The family's own bare word for a dish they fixed to a day is theirs to keep ("kadhi on Sundays").
+    const h = structuredClone(FIX);
+    h.truth.library.push({ name: "Kadhi", slot: "Dinner", days: ["Sun"] });
+    const p = set(goodWeek(), "Sun", "Dinner", ["Roti", "Kadhi"]);
+    expect(Object.entries(scorePlan(h, p, setupOfTruth(h)).rates).filter(([, [a, n]]) => a < n).map(([k]) => k)).not.toContain("real_dish");
+  });
+  test("no_new_kind: a new dish is of a kind the family's own dishes at that meal are; unplaceable fails", () => {
+    const withNew = (name: string) => { const p = set(goodWeek(), "Mon", "Dinner", ["Roti", name]); at(p, "Mon", "Dinner").dishes[1].new = true; p.library.push(newRow(name, "Dinner", [])); return p; };
+    expect(fails(withNew("Jeera aloo"))).not.toContain("no_new_kind");   // a Sabzi, like their Lauki
+    expect(fails(withNew("Moong dal"))).not.toContain("no_new_kind");    // a Dal
+    expect(fails(withNew("Pasta"))).toContain("no_new_kind");
+    expect(fails(withNew("Mix veg curry"))).toContain("no_new_kind");    // Gravy: they make no gravy at dinner
+    expect(fails(withNew("Zorba special"))).toContain("no_new_kind");    // the catalog cannot place it
+  });
+  test("own_share: at least 30% of the week's non-staple items are the family's own; staples do not count", () => {
+    const p = goodWeek();
+    const news = ["Masala dosa", "Rava dosa", "Set dosa", "Neer dosa", "Onion uttapam", "Pesarattu", "Ghee roast dosa"];
+    (["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as Weekday[]).forEach((d, i) => set(p, d, "Breakfast", [news[i]]));
+    for (const d of ["Mon", "Tue", "Wed", "Thu", "Fri"] as Weekday[]) set(p, d, "Lunch", ["Rice", "Toor dal", ["Jeera aloo", "Gajar matar", "Cabbage sabzi", "Aloo methi", "Beans sabzi"][["Mon", "Tue", "Wed", "Thu", "Fri"].indexOf(d)]]);
+    for (const d of ["Tue", "Fri"] as Weekday[]) set(p, d, "Dinner", ["Roti", d === "Tue" ? "Tinda sabzi" : "Turai sabzi"]);
+    // Their own non-staples: Toor dal and Rajma at dinner, 4 of 18 (22%); rice, roti and lunch's toor dal are staples.
+    expect(fails(p)).toContain("own_share");
+    expect(scorePlan(FIX, p, loaded()).notes.find((n) => n.startsWith("own_share"))).toContain("22%");
+  });
+  test("a part named as a category (\"sambar\", \"sabzi\") makes the catalog's items of it theirs; the bare word stays no dish", () => {
+    // Lead's rule (25 Nov): their dinner has "Sambar" (a sub-kind) and "Sabzi" (the kind's own sub-kind) as categories.
+    const h = structuredClone(FIX);
+    h.truth.library.push({ name: "Sambar", slot: "Dinner" }, { name: "Sabzi", slot: "Dinner" });
+    const p = goodWeek();
+    const news = ["Masala dosa", "Rava dosa", "Set dosa", "Neer dosa", "Onion uttapam", "Pesarattu", "Ghee roast dosa"];
+    (["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as Weekday[]).forEach((d, i) => set(p, d, "Breakfast", [news[i]]));
+    const sab = ["Jeera aloo", "Gajar matar", "Aloo shimla mirch", "Methi bhaji", "Baingan aloo", "Arbi fry", "Karela fry"];
+    (["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as Weekday[]).forEach((d, i) => set(p, d, "Lunch", ["Rice", "Toor dal", sab[i]]));
+    for (const [d, x] of [["Tue", "Dum aloo"], ["Fri", "Aloo matar"]] as const) set(p, d, "Dinner", ["Roti", x]);
+    // Under 30% their own, so the scorer lists what is not theirs.
+    set(p, "Mon", "Dinner", ["Roti", "Drumstick sambar", "Pepper rasam", "Aloo methi", "Beans poriyal"]);
+    for (const d of at(p, "Mon", "Dinner").dishes.slice(1)) d.new = true;
+    const sc = scorePlan(h, p, setupOfTruth(h));
+    const notTheirs = sc.notes.find((n) => n.startsWith("own_share"))!.split("not theirs ")[1].split(", ");
+    // Any Sambar is theirs, a Rasam is not (they named no rasam); a sabzi of their Sabzi sub-kind is, a poriyal is not.
+    expect(notTheirs).toContain("Pepper rasam");
+    expect(notTheirs).toContain("Beans poriyal");
+    expect(notTheirs).not.toContain("Drumstick sambar");
+    expect(notTheirs).not.toContain("Aloo methi");
+    // Theirs is never new: no_new_kind does not look at them (Pepper rasam is a Rice curry, a kind their Sambar is: passes too).
+    expect(sc.notes.filter((n) => n.startsWith("no_new_kind")).join(" ")).not.toMatch(/Drumstick sambar|Aloo methi/);
+    // The bare word itself is still no dish.
+    const q = set(goodWeek(), "Mon", "Dinner", ["Roti", "Sambar"]);
+    expect(Object.entries(scorePlan(h, q, setupOfTruth(h)).rates).filter(([, [a, n]]) => a < n).map(([k]) => k)).toContain("real_dish");
+  });
+  test("a category makes a week their own: without it the same week is under 30%", () => {
+    const h = structuredClone(FIX);
+    h.truth.library.push({ name: "Sabzi", slot: "Lunch" });
+    const p = goodWeek();
+    const news = ["Masala dosa", "Rava dosa", "Set dosa", "Neer dosa", "Onion uttapam", "Pesarattu", "Ghee roast dosa"];
+    (["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as Weekday[]).forEach((d, i) => set(p, d, "Breakfast", [news[i]]));
+    const sab = ["Jeera aloo", "Gajar matar", "Cabbage sabzi", "Aloo methi", "Beans sabzi", "Tinda sabzi", "Turai sabzi"];
+    (["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as Weekday[]).forEach((d, i) => set(p, d, "Lunch", ["Rice", "Toor dal", sab[i]]));
+    for (const [d, x] of [["Tue", "Kaddu sabzi"], ["Fri", "Parwal sabzi"]] as const) set(p, d, "Dinner", ["Roti", x]);
+    const share = (hh: typeof h) => scorePlan(hh, p, setupOfTruth(hh)).rates.own_share;
+    // Theirs without the category: dinner's toor dal and rajma, 4 of 20 non-staples (20%); with lunch's "Sabzi", 11 of 20.
+    expect(share(FIX)).toEqual([0, 1]);
+    expect(share(h)).toEqual([1, 1]);
   });
   test("nobody without food; a clean message with one question at most", () => {
     const p = goodWeek();
@@ -299,19 +411,6 @@ describe("attendance: a child with their own box", () => {
     const bad = baselineWeek(h13, MON);
     bad.slotDays.find((x) => x.date === MON && x.slot === "Lunch")!.people.push("Vivaan");
     expect(att(bad)[1] - att(bad)[0]).toBe(1);
-  });
-});
-
-describe("scorePlan: owner's 25 Nov rules", () => {
-  const set = (p: PlanOut, day: Weekday, slot: string, dishes: string[]) => { at(p, day, slot).dishes = dishes.map((name) => ({ name })); return p; };
-  test("sambar beside idli is a side every morning; beside rice it is a main, twice a week at most", () => {
-    const p = goodWeek();
-    const B: Record<string, string> = { Mon: "Upma", Tue: "Poha", Wed: "Pongal", Thu: "Upma", Fri: "Poha", Sat: "Idli", Sun: "Dosa" };
-    for (const d of ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as Weekday[]) set(p, d, "Breakfast", [B[d], "Sambar"]);
-    expect(fails(p)).not.toContain("main_twice");
-    const q = goodWeek();
-    for (const d of ["Mon", "Tue", "Wed"] as Weekday[]) set(q, d, "Dinner", ["Rice", "Sambar"]);
-    expect(fails(q)).toContain("main_twice");
   });
 });
 
