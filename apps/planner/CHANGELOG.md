@@ -82,10 +82,13 @@
   "twice a week" at most twice, "sometimes" fewer is fine, "most days" may be more than twice). Setup keeps the words in
   a new `library.said` column (added by the schema sync); add_dish sets it from its quote when it changes how often or
   the days. Code's caps and days still win.
-- How often said over two dishes is each one's: "rajma or chole twice a week" is once a week each (a count shared,
-  rounded up), "poha or upma most mornings" most days each, "luchi with alur dom on Sunday" Sunday for both, by a worked
-  example in the how-often read and the same in the lint. A meal's whole plate ("most days rice, dal and a sabzi") is
-  still no dish's.
+- A count or weekdays said over two dishes is each one's: "rajma or chole twice a week" is once a week each (the count
+  shared, rounded up), "luchi with alur dom on Sunday" Sunday for both; two eaten together keep the whole count
+  ("chapati and a kurma twice a week": twice each). By a worked example in the how-often read, and the same in the lint.
+  "Usually", "sometimes" or "most days" over a list or a whole plate is still no dish's: sharing those too spread them
+  over lists in the setup eval (no_unsaid_frequency 88% vs 96%, total down).
+  Setup eval (10 households x 2, reused chats, prod tiers): 96.8% vs 96.1% of checks; dish_frequency 79% vs 67%;
+  no_unsaid_frequency 91% vs 96%.
 - A dish tied to a day keeps it: a dish the dishes read lists twice at one meal (once per sentence naming it) takes the
   how-often read on both rows (before, neither, and luchi lost its Sunday); one dish read at three meals is no longer
   "a whole list's" words; a dish's how-often words are placed in the sentence with its own quote first; and the lint

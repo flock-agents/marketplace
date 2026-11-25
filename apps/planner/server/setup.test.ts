@@ -472,7 +472,8 @@ describe("apply_setup v2: the checks, pure", () => {
     expect(often).toContain(`["Chole", "Dinner", "chole or kadhi twice a week", "twice a week", "1/week", ""], ["Kadhi", "Dinner", "chole or kadhi twice a week", "twice a week", "1/week", ""]`);
     expect(often).toContain(`["Kadala curry", "Breakfast", "Puttu with kadala curry on Sunday mornings", "on Sunday mornings", "", "Sun"]`);
     expect(often).toContain("most days rice, dal and a sabzi");
-    expect(SETUP_SYSTEM).toContain(`"twice a week" over two: "1/week"`);
+    expect(SETUP_SYSTEM).toContain(`"chole or kadhi twice a week": "1/week"`);
+    expect(often).toContain(`"chapati and a kurma twice a week": "2/week" each`);   // eaten together: not shared
   });
   it("the day/count lint: a quote with a day word or a number", () => {
     expect(quoteHasDayOrCount("Rajma twice")).toBe(true);
