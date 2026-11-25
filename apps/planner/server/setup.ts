@@ -22,6 +22,7 @@ import { cookVisits, daysSaid, getHouse, houseView, isObject, LONG_DAY, refuse, 
 import { addRule, commit, deleteSeedSlotDays, listLibrary, listRules, listSlots, removeLibrary, removeRule, saveSlotDay, seedSlotDays,
   upsertLibrary, upsertSlot, type Change, type LibraryDish, type Rule, type RuleInput } from "./slotStore";
 import type { ModelCall, ModelResult } from "./model";
+import { isAllergyRule } from "./allergy";
 
 // ── The prompts: one made-up example family for every part (never a test family: the name guard checks) ──
 
@@ -69,6 +70,7 @@ const HOME_SCHEMA = {
 const HOME_PART = `Write this part: the meals (slots), the cook, who of the family cooks, shopping.
 - slots: every meal planned at home. Always Breakfast, Lunch and Dinner (kind "main"), each with skip_days when the family said that meal is eaten out or ordered in on a weekday every week ({ day, skip: eaten_out | ordered_in }; "Sunday lunch we eat out" is Lunch skip_days [{ Sun, eaten_out }] only: Sunday's other meals are still cooked) and a quote for that.
   kind "custom": a meal the family names besides those: a child's school tiffin, lunch box or snack box ("<child>'s tiffin", or the family's word for a box two children share; usual_people [those children], days the school days), an evening snack ("Evening snack"). after: the main meal it comes after (a tiffin: Breakfast; an evening snack: Lunch). usual_people: the people the family names for it; a meal said without names is everyone's: usual_people empty. days: the weekdays it is eaten, empty for every day.
+  A box or tiffin the family names its own food for, food that is not the home meal ("snack box: sandwiches or pasta", "lunch box: pulao, curd rice"), is always a custom slot, also when it is told in an answer about lunch: its people are the ones it is said of (a box told in answer to a question about the children is the children's). Someone who carries the home meal ("takes roti sabzi from home", "carries his lunch") has no slot: Lunch is cooked for them.
   kind "addon": one person's own plate at a main meal: the family names a dish made for that person at that meal, in place of or beside the shared dishes ("father has two phulkas, no rice at night", "bajra roti for her at night", "her own ragi porridge", "his own soup", a child's different dinner): name "<person>'s <meal>" ("Lalitha's dinner"), addon_of the main meal, usual_people [that person]. It holds only the difference; the person still eats the main meal's shared dishes. Someone who has a dish the others have too ("Divu has ragi dosa too", "same as us, less spicy") has no add-on.
   quote: the family's words that name a custom or add-on meal (one the family never named is no slot).
 - cook: the paid cook, or null. days. visits: each time they come, "HH:MM" 24-hour, with the meals that visit makes. limits_words: the cook's time or skill limits in the family's words. quote: the family's latest words about the cook's days or times.
@@ -78,7 +80,8 @@ const HOME_PART = `Write this part: the meals (slots), the cook, who of the fami
 - weekday_lunch: for someone away on weekdays (household.weekly), where they have lunch when the replies say it: away (eats out or at work), carries (takes lunch from home), home. Only from the family's words.
 - lunch_unclear: the people away on weekdays whose weekday lunch neither household.weekly nor the replies tell.
 Food rules and dishes are not this part: other readers write them.`;
-const HOME_EXAMPLE = `gives slots [{ Breakfast, main }, { Lunch, main, skip_days [{ Sun, eaten_out }], quote "Sunday we go to my in-laws for lunch" }, { Dinner, main, skip_days [{ Sun, ordered_in }], quote "dinner we order from Zomato" }, { "Tara's tiffin", custom, after Breakfast, usual_people [Tara], days Mon..Fri, quote "Mon-Fri, sandwiches or poha" }, { "Evening snack", custom, after Lunch, quote "We all have a snack at 5" (said for everyone: no usual_people) }, { "Lalitha's dinner", addon, addon_of Dinner, usual_people [Lalitha], quote "Paati has just two phulkas at night" }, { "Lalitha's breakfast", addon, addon_of Breakfast, usual_people [Lalitha], quote "Paati has her own ragi porridge" }] (no add-on for Divya: her ragi dosa is shared; none for Tara: same dinner), cook { name "Savita", days Mon..Fri, visits [{ at "08:30", meals [Breakfast, Lunch] }, { at "17:00", meals [Dinner] }], quote "Savita comes at 8:30 actually" }, family_cooks [{ person "Divya", days [Sat], quote "Saturday Divu cooks everything" }] (who cooks on Sunday was not said: left out), apps { main "Blinkit" }, subscriptions [{ milk, Country Delight, every morning }], lunch_unclear ["Rahul"] (at the office on weekdays, his lunch never said; Tara carries hers).`;
+const HOME_EXAMPLE = `gives slots [{ Breakfast, main }, { Lunch, main, skip_days [{ Sun, eaten_out }], quote "Sunday we go to my in-laws for lunch" }, { Dinner, main, skip_days [{ Sun, ordered_in }], quote "dinner we order from Zomato" }, { "Tara's tiffin", custom, after Breakfast, usual_people [Tara], days Mon..Fri, quote "Mon-Fri, sandwiches or poha" }, { "Evening snack", custom, after Lunch, quote "We all have a snack at 5" (said for everyone: no usual_people) }, { "Lalitha's dinner", addon, addon_of Dinner, usual_people [Lalitha], quote "Paati has just two phulkas at night" }, { "Lalitha's breakfast", addon, addon_of Breakfast, usual_people [Lalitha], quote "Paati has her own ragi porridge" }] (no add-on for Divya: her ragi dosa is shared; none for Tara: same dinner), cook { name "Savita", days Mon..Fri, visits [{ at "08:30", meals [Breakfast, Lunch] }, { at "17:00", meals [Dinner] }], quote "Savita comes at 8:30 actually" }, family_cooks [{ person "Divya", days [Sat], quote "Saturday Divu cooks everything" }] (who cooks on Sunday was not said: left out), apps { main "Blinkit" }, subscriptions [{ milk, Country Delight, every morning }], lunch_unclear ["Rahul"] (at the office on weekdays, his lunch never said; Tara carries hers).
+And "Q: The children's lunch, or their school tiffin? A: Snack box Monday to Friday: sandwiches, pasta or chivda, and fruit. Lunch at home after school, same as ours." with "Q: Rahul's lunch? A: He takes roti sabzi from home" gives the slot { "Snack box", custom, after Breakfast, usual_people [Tara], days Mon..Fri, quote "Snack box Monday to Friday" } (the children's box: Tara is the child) and weekday_lunch [{ person "Rahul", lunch carries, quote "He takes roti sabzi from home" }], no slot for Rahul: he carries the home lunch.`;
 
 const RULES_SCHEMA = {
   type: "object", required: ["rules"],
@@ -95,8 +98,10 @@ Rules are said in any reply, the meals' answers too ("same dinner, just less spi
 - hard: true for what holds at every meal: allergies, vegetarian, eggs, no eggs, avoid, only, fasts, caps, "no sugar", "never". A note is never hard. false for a wish said loosely ("X is good for her", "better", "more fruit", "try to", "sometimes"): give it frequency: usually (most days) | sometimes (a few times a week; any "good for" / "better" / "try to") | rarely | "<n>/week" when they gave a number. A hard rule never has a frequency. "No sugar" / "no sweets" is always hard avoid ["sugar"]. "Less X" is a note, never avoid.
 - items: tags, lower case with underscores: a plain food ("mushroom", "chicken", "paneer") or one of egg, meat, fish, onion_garlic, nuts, peanut, sugar, white_rice, dairy, root_veg, millet. "No nuts" is nuts (peanuts too); peanut only when peanuts alone are named. "No rice at night" is avoid ["white_rice"] at slots ["Dinner"]. Meat on some days only ("chicken only on weekends") is avoid ["meat", "fish"] on the other days, one rule for each person it is said of (left out when said of the whole house).
 - who: one person's name (household.people), left out for the whole house. days left out for every day; slots are meal names (Breakfast, Lunch, Dinner, "<child>'s tiffin", "Evening snack", "<person>'s <meal>"), left out for every meal.
+- An allergy is a hard avoid for that person, quoting the words that say allergy. When the family says the whole kitchen goes without it ("everything at home is without it", "we don't use it at all"), add a hard avoid with no who, quoting those words; "only his food" or "he has his own food" adds nothing.
 - unplaced: a food wish that is no rule and no dish, cook or shopping matter: { text, quote }. Usually none.`;
-const RULES_EXAMPLE = `gives rules [{ hard, egg, quote "eggs fine but no meat" }, { hard, veg, who "Lalitha", quote "Amma is pure veg" }, { hard, no_eggs, who "Lalitha", quote "Amma is pure veg, no eggs" }, { hard, avoid, who "Lalitha", items ["onion_garlic"], quote "she doesn't eat onion or garlic" }, { hard, fasting, who "Lalitha", days [Sat], slots [Breakfast, Lunch], fasting_food ["fruit"], quote "fasts on Saturdays till sunset, only fruit" }, { soft, swap, who "Lalitha", items ["white_rice"], to "brown rice", frequency "sometimes", quote "Brown rice is better for her" }, { soft, note, who "Lalitha", quote "less oil" }, { hard, avoid, who "Lalitha", items ["white_rice"], slots ["Dinner"], quote "no rice" }, { hard, avoid, items ["peanut"], slots ["Tara's tiffin"], quote "no peanuts" }, { soft, note, who "Tara", quote "just less spicy" }].`;
+const RULES_EXAMPLE = `gives rules [{ hard, egg, quote "eggs fine but no meat" }, { hard, veg, who "Lalitha", quote "Amma is pure veg" }, { hard, no_eggs, who "Lalitha", quote "Amma is pure veg, no eggs" }, { hard, avoid, who "Lalitha", items ["onion_garlic"], quote "she doesn't eat onion or garlic" }, { hard, fasting, who "Lalitha", days [Sat], slots [Breakfast, Lunch], fasting_food ["fruit"], quote "fasts on Saturdays till sunset, only fruit" }, { soft, swap, who "Lalitha", items ["white_rice"], to "brown rice", frequency "sometimes", quote "Brown rice is better for her" }, { soft, note, who "Lalitha", quote "less oil" }, { hard, avoid, who "Lalitha", items ["white_rice"], slots ["Dinner"], quote "no rice" }, { hard, avoid, items ["peanut"], slots ["Tara's tiffin"], quote "no peanuts" }, { soft, note, who "Tara", quote "just less spicy" }].
+And "A: Tara is allergic to sesame" with "Q: Do you cook everything without sesame, or only Tara's food? A: We don't use sesame at home at all" gives [{ hard, avoid, who "Tara", items ["sesame"], quote "Tara is allergic to sesame" }, { hard, avoid, items ["sesame"], quote "We don't use sesame at home at all" } (the whole house: no who)]; had they said "only her food", only the first.`;
 
 /** Short rows, the fewest tokens per item: the dishes are the longest answer. */
 const DISHES_SCHEMA = { type: "object", required: ["library"], properties: {
@@ -364,6 +369,13 @@ export function resolveSlot(word: string, slots: string[]): string | null {
   const hit = slots.find((s) => same(s, word));
   if (hit) return hit;
   const words = (s: string) => plainWords(s.replace(/['’]s\b/gi, "")).split(" ").filter(Boolean);
+  // "<person>'s <meal>" is that meal: the person's own slot of it when there is one, else the main meal; never another slot of
+  // theirs (eval h4: "Karan's breakfast" went to "Karan's tiffin" once "Sarojini's breakfast" made "breakfast" name two slots).
+  const ws = words(word), last = ws[ws.length - 1], meal = SLOTS.find((m) => m.toLowerCase() === last);
+  if (meal && ws.length > 1) {
+    const own = slots.filter((s) => !same(s, meal) && words(s).includes(last) && ws.slice(0, -1).some((w) => words(s).includes(w)));
+    return own.length === 1 ? own[0] : slots.find((s) => same(s, meal)) ?? null;
+  }
   const named = new Set<string>();
   for (const w of words(word)) {
     const has = slots.filter((s) => words(s).includes(w));
@@ -690,6 +702,8 @@ export function diffSetup(saved: Saved, next: SetupRead, fresh: string[], all: b
     if (named(d.name)) { ops.removeLibrary.push({ name: d.name, slot: d.slot }); ops.changed.push(`Removed: ${d.name} at ${mealWord(d.slot)}.`); }
   }
 
+  houseAllergies(ops, saved, all);
+
   const seedKey = (s: ReadSeed) => `${s.slot.toLowerCase()}|${s.dishes.map(dishKey).join("|")}`;
   for (const s of next.seed) if (inNew(s.quote) && !saved.seed.some((x) => seedKey(x) === seedKey(s))) ops.seed.push(s);
 
@@ -713,6 +727,26 @@ export function diffSetup(saved: Saved, next: SetupRead, fresh: string[], all: b
   if (main && (all || named(APP_NAMES[main]))) ops.apps = { main, fallback: fallback && fallback !== main ? fallback : null };
   ops.subscriptions = next.subscriptions.filter((s) => all || named(s.item));
   return ops;
+}
+
+/** A house-wide hard avoid, on every meal and day: what "everything at home is without peanuts" reads as. */
+const houseWide = (r: ReadRule): boolean => !r.who && r.hard && r.what === "avoid" && !!r.items?.length && !r.slots?.length && !r.days?.length;
+const allergyOf = (r: ReadRule): boolean => !!r.who && isAllergyRule({ hard: r.hard, what: r.what, items: r.items ?? null, quote: r.quote });
+
+/** An allergy the whole kitchen goes without (the read-back asked "Do you cook everything without peanuts, or only Ishaan's
+ *  food?" and the family said everything; or they said so to begin with): one house rule, hard, in place of the person's
+ *  allergy rule it covers (every item of it), keeping the allergy's own words as its quote so it is still read as an allergy
+ *  (isAllergyRule). Structure only: which words mean the whole house is the rules reader's read. */
+export function houseAllergies(ops: Ops, saved: Saved, all: boolean): void {
+  for (const h of ops.rules.filter(houseWide)) {
+    const covers = (p: ReadRule) => allergyOf(p) && p.items!.every((i) => h.items!.includes(i));
+    const fromNext = ops.rules.filter((p) => p !== h && covers(p));
+    const fromSaved = saved.rules.filter((p) => covers(p) && !ops.removeRules.includes(p.id));
+    if (!fromNext.length && !fromSaved.length) continue;
+    ops.rules = ops.rules.filter((p) => !fromNext.includes(p));
+    for (const p of fromSaved) { ops.removeRules.push(p.id); if (!all) ops.changed.push(`Removed: ${ruleLine(p)} (now for everyone).`); }
+    if (!isAllergyRule({ hard: h.hard, what: h.what, items: h.items ?? null, quote: h.quote })) h.quote = (fromNext[0] ?? fromSaved[0]).quote;
+  }
 }
 
 // ── Writing (§4.3): people → slots → rules → library → seed → cook, in one transaction; then apps and subscriptions ──
@@ -839,6 +873,22 @@ export function lunchLine(people: string[], weekly: WeeklyEntry[] | null, said: 
 /** The read-back's question for a fast with no food said: "What does Gowri Shankar eat on his Tuesday fast?" */
 export const fastingAsk = (who: string, days: readonly string[] | null): string =>
   `What does ${who} eat on ${days?.length && days.length < 7 ? `the ${andWords(days.map((d) => LONG_DAY[d as keyof typeof LONG_DAY] ?? d))} fast` : "a fasting day"}?`;
+
+/** The family's word for a rule's item, from the rule's own words ("peanuts" for the tag peanut), else the tag in words. */
+export function itemWord(tag: string, quote: string): string {
+  const t = plainWords(tagWords(tag));
+  return (t && new RegExp(`(?:^| )(${t}(?:e?s)?)(?= |$)`).exec(plainWords(quote))?.[1]) || tagWords(tag);
+}
+/** The read-back's question for an allergy kept on one person (owner, 25 Nov): "Do you cook everything without peanuts, or
+ *  only Ishaan's food?" The answer comes back as a correction: "everything" makes it one house rule (houseAllergies). */
+export const allergyAsk = (r: Pick<Rule, "who" | "items" | "quote">): string =>
+  `Do you cook everything without ${andWords((r.items ?? []).map((i) => itemWord(i, r.quote)))}, or only ${r.who}'s food?`;
+/** A read-back question the family has answered: it is a Q line of the transcript, with a reply after it. */
+export function answeredIn(question: string, transcript: string[]): boolean {
+  const q = plainWords(question);
+  const at = transcript.findIndex((l) => /^Q:/i.test(l) && plainWords(l.replace(/^Q:\s*/i, "")).includes(q));
+  return at >= 0 && transcript.slice(at + 1).some((l) => /^A\d*:/i.test(l));
+}
 
 /** The setup read back from the rows: people, the cook, slots, weekday lunch, meals out, rules, every-day dishes, "Noted, not
  *  checked", then one question. */
@@ -997,6 +1047,12 @@ export async function applySetup(deps: { db: Db; emit: Emit; model: ModelCall; p
   for (const r of listRules(deps.db)) if (r.what === "fasting" && r.who && !r.fasting_food?.length) {
     const a = fastingAsk(r.who, r.days);
     if (!checked.asks.includes(a)) checked.asks.push(a);
+  }
+  // An allergy kept on one person: does the whole kitchen go without it, or only their food? Asked once per allergy; whatever
+  // the answer, it is not asked again (it is in the transcript). "Everything" comes back as a house rule (houseAllergies).
+  for (const r of listRules(deps.db)) if (r.who && isAllergyRule(r)) {
+    const a = allergyAsk(r);
+    if (!checked.asks.includes(a) && !answeredIn(a, deps.transcript)) checked.asks.push(a);
   }
 
   // 6. The read-back: the whole setup the first time; on a correction, only what changed.

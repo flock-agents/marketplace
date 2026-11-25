@@ -4,7 +4,8 @@
 import { describe, it, expect } from "bun:test";
 import { boot } from "./testkit";
 import { checkRead, diffSetup, familyLines, familySentences, frequencyOf, householdOf, lunchLine, personOf, plainWords, quoteHasDayOrCount, readOf, resolveSlot,
-  ruleSaid, saidByFamily, DISHES_ASK, SETUP_PARTS, SETUP_SYSTEM, CONTAINS_BATCH, daysOf, clockOf, type Saved, type SetupRead } from "./setup";
+  ruleSaid, saidByFamily, DISHES_ASK, SETUP_PARTS, SETUP_SYSTEM, CONTAINS_BATCH, daysOf, clockOf, itemWord, allergyAsk, answeredIn, type Saved, type SetupRead } from "./setup";
+import { isAllergyRule } from "./allergy";
 import { HOUSEHOLDS } from "../evals/households";
 import type { ModelRequest, ModelResult } from "./model";
 
@@ -216,6 +217,75 @@ describe("apply_setup v2: the model reads, code checks and writes", () => {
     expect(r.said).not.toContain("What does Padma eat");
   });
 
+  describe("an allergy on one person: the read-back asks whether the whole kitchen goes without it (owner, 25 Nov)", () => {
+    const ALLERGY = "Ishaan is allergic to peanuts, so nothing with peanuts for him, not even groundnut oil.";
+    const ASK = "Do you cook everything without peanuts, or only Ishaan's food?";
+    const T0 = [...TRANSCRIPT, "Q: Any allergies?", `A: ${ALLERGY}`];
+    const PERSON = { hard: true, what: "avoid", who: "Ishaan", items: ["peanut"], quote: "Ishaan is allergic to peanuts" };
+    const HOUSE = (quote: string) => ({ hard: true, what: "avoid", items: ["peanut"], quote });
+    /** The rules reader: the person's allergy always; a house rule when the reply says the whole kitchen. */
+    const rulesFor = (houseWords?: string) => (req: ModelRequest) => {
+      const t = JSON.parse(req.user).transcript as string;
+      return { ...RULES, rules: [...RULES.rules, PERSON, ...(houseWords && t.includes(houseWords) ? [HOUSE(houseWords)] : [])] };
+    };
+    const peanutRules = async (k: Awaited<ReturnType<typeof boot>>) => (await k.owner("GET", "/api/family")).body.rules.filter((x: any) => x.items?.includes("peanut"));
+
+    it("asks once per allergy, in the family's word for it", async () => {
+      const k = await boot({ model: fake({ rules: rulesFor() }).model });
+      const r = await k.op("apply_setup", { household: HOUSEHOLD, transcript: T0 });
+      expect(r.asks).toContain(ASK);
+      expect(r.said.split("\n").filter((l: string) => l === ASK)).toHaveLength(1);
+    });
+
+    it("\"everything\": the rule becomes the whole house's (no person, same items, hard, still an allergy); not asked again", async () => {
+      const NEW = "Everything at home is without peanuts, we don't even use groundnut oil.";
+      const k = await boot({ model: fake({ rules: rulesFor("Everything at home is without peanuts") }).model });
+      await k.op("apply_setup", { household: HOUSEHOLD, transcript: T0 });
+      const r = await k.op("apply_setup", { household: HOUSEHOLD, transcript: [...T0, `Q: ${ASK}`, `A: ${NEW}`] });
+      expect(r.ok).toBe(true);
+      const got = await peanutRules(k);
+      expect(got).toHaveLength(1);
+      expect(got[0]).toMatchObject({ who: null, hard: true, what: "avoid", items: ["peanut"] });
+      expect(isAllergyRule(got[0])).toBe(true);
+      expect(r.said).not.toContain(ASK);
+      expect(r.said).toContain("Removed: Ishaan: no peanut (now for everyone).");
+      // Once more with nothing new: still one house rule, still not asked.
+      const again = await k.op("apply_setup", { household: HOUSEHOLD, transcript: [...T0, `Q: ${ASK}`, `A: ${NEW}`] });
+      expect(await peanutRules(k)).toHaveLength(1);
+      expect(again.said).not.toContain(ASK);
+    });
+
+    it("\"everything\" already in the first setup's chat: one house rule from the start, no question", async () => {
+      const k = await boot({ model: fake({ rules: rulesFor("Everything at home is without peanuts") }).model });
+      const r = await k.op("apply_setup", { household: HOUSEHOLD, transcript: [...T0, `Q: ${ASK}`, "A: Everything at home is without peanuts, we don't even use groundnut oil."] });
+      const got = await peanutRules(k);
+      expect(got.map((x: any) => [x.who, x.hard, x.quote])).toEqual([[null, true, "Ishaan is allergic to peanuts"]]);
+      expect(r.asks).not.toContain(ASK);
+    });
+
+    for (const answer of ["Only his food, we keep his aside.", "He has his own food, a different dish."]) {
+      it(`"${answer}": the rule stays on Ishaan, and the question is not asked again`, async () => {
+        const k = await boot({ model: fake({ rules: rulesFor() }).model });
+        await k.op("apply_setup", { household: HOUSEHOLD, transcript: T0 });
+        const r = await k.op("apply_setup", { household: HOUSEHOLD, transcript: [...T0, `Q: ${ASK}`, `A: ${answer}`] });
+        expect(r.ok).toBe(true);
+        expect((await peanutRules(k)).map((x: any) => [x.who, x.hard])).toEqual([["Ishaan", true]]);
+        expect(r.asks).not.toContain(ASK);
+        expect(r.said).not.toContain(ASK);
+        const later = await k.op("apply_setup", { household: HOUSEHOLD, transcript: [...T0, `Q: ${ASK}`, `A: ${answer}`, "Q: Anything else?", "A: Kiran takes lunch from home."] });
+        expect(later.said).not.toContain(ASK);
+      });
+    }
+
+    it("the family's word for the item, else the tag in words", () => {
+      expect(itemWord("peanut", "nothing with peanuts for him")).toBe("peanuts");
+      expect(itemWord("dairy", "she is allergic to milk")).toBe("dairy");
+      expect(allergyAsk({ who: "Ishaan", items: ["peanut", "sesame"], quote: "allergic to peanuts and sesame" })).toBe("Do you cook everything without peanuts and sesame, or only Ishaan's food?");
+      expect(answeredIn(ASK, [`Q: ${ASK}`])).toBe(false);
+      expect(answeredIn(ASK, [`Q: ${ASK}`, "A: only his"])).toBe(true);
+    });
+  });
+
   it("the same call again with no new reply changes nothing", async () => {
     const f = fake();
     const k = await boot({ model: f.model });
@@ -313,7 +383,9 @@ describe("apply_setup v2: the checks, pure", () => {
     expect(resolveSlot("tiffin", slots)).toBe("Ishaan's tiffin");
     expect(resolveSlot("Padma's dinner", slots)).toBe("Padma's dinner");
     expect(resolveSlot("Nisha's breakfast", slots)).toBe("Breakfast");
-    expect(resolveSlot("Kiran's dinner", slots)).toBeNull();
+    expect(resolveSlot("Kiran's dinner", slots)).toBe("Dinner");                // no own dinner: the main meal, not Padma's
+    expect(resolveSlot("Ishaan's breakfast", slots)).toBe("Breakfast");         // never his tiffin (eval h4)
+    expect(resolveSlot("Ishaan's breakfast", [...slots, "Padma's breakfast"])).toBe("Breakfast");
     expect(resolveSlot("supper", slots)).toBeNull();
   });
   it("a rule's slot that is no meal is noted, not saved; an incomplete rule is kept as a note", () => {

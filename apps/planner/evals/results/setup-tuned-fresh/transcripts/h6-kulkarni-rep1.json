@@ -38,7 +38,9 @@
   "A: Rarely. Only if we're super busy, maybe once in two weeks or so.",
   "A: Weekend mostly if we do, but not fixed.",
   "Q: Does anything come on a subscription, like Country Delight or a milkman?",
-  "A: Chitale milk every morning, that's a daily subscription."
+  "A: Chitale milk every morning, that's a daily subscription.",
+  "Q: Do you cook everything without peanuts, or only Ishaan's food?",
+  "A: Everything at home is without peanuts, we don't even use groundnut oil."
  ],
  "questions": 17,
  "model": "deepseek/deepseek-v4-flash",

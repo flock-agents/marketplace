@@ -50,6 +50,13 @@
   peanut") and its ingredients are bought as usual. Every other dish (new, a spare, a particular way of a family dish, a
   family dish only others eat) is read on the balanced tier, an unsure answer counting as having it. A house-wide allergy
   makes every family dish safe; new ones are still read.
+- An allergy kept on one person is asked about once in the read-back ("Do you cook everything without peanuts, or only
+  Ishaan's food?"). "Everything" makes it one house rule (no person, same items, hard, the allergy's own words kept);
+  "only his food" or "his own food" keeps it on the person. Either way it is not asked again.
+- The home read makes a box or tiffin whose food is not the home meal ("snack box: sandwiches, chivda") a slot, also when
+  it is told in the lunch answer, by a worked example; someone who carries the home lunch gets no slot.
+- "<person>'s breakfast" with no such slot of theirs is Breakfast, never another slot of theirs (a child's breakfast
+  dishes went to their tiffin once a grandparent had their own breakfast).
 
 ## 4.0.2
 
