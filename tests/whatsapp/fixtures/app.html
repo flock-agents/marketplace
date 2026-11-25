@@ -71,6 +71,7 @@ function openChat(c) {
     if (!text) return;
     c.messages.push({ id: "true_x_" + c.messages.length, pre: "[11:00, 25/11/2026] You: ", text, pending: document.body.dataset.slow === "1" });
     document.body.dataset.sent = JSON.stringify(JSON.parse(document.body.dataset.sent || "[]").concat([{ chat: c.name, text }]));
+    if (/^https?:/.test(location.protocol)) fetch("/__dummy/send", { method: "POST", body: JSON.stringify({ chat: c.name, text }) });
     box.innerHTML = "";
     openChat(c);
   });

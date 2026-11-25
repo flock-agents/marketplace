@@ -70,29 +70,36 @@ Returns `{chat, sent, pending, message}`. `sent: null` means it was sent but not
 
 ## Sign-in
 
-WhatsApp links Flock's browser as one of the person's devices. You do it with your `browser` tool; the person only types a code on their phone. Code first; a QR code only when they ask for it. Never type their number with `act` (Flock refuses typing into a phone box): `sign_in` types it.
+WhatsApp links Flock's browser as one of the person's devices. You do it with your `browser` tool; the person only types a link code on their phone. Link code first; a QR code only when they ask for it. Never type their number with `act` (Flock refuses typing into a phone box): `sign_in` types it. Read the window a few seconds apart, never in a fast loop: Flock allows only so many browser steps a minute.
+
+**The one exception to the private-browser skill.** That skill says the person cannot see your browser, so a QR code or a prompt reaches them only through a hand-off, never described in chat. For this WhatsApp link code only, you read it off the page and post it in chat yourself: WhatsApp shows it so the person types it on their own phone. Never post any other code that way, and never write this one to a file, a note or another chat.
+
+**Only in their own chat.** Send the link code only in the person's own chat with you: the Flock app, or their own WhatsApp chat with you. Never in a group or shared chat: if the ask came from one, tell them in a few words that you'll message them privately, and do the sign-in in their own chat.
+
+**Call it a link code.** In everything the person reads, and in your `waiting-on-user` question, it is a "link code". Never "verification code", "OTP", "security code" or "passcode".
 
 1. **Their number.** `sign_in` uses the number of the person who asked (the one they message you from, or the one saved for them). Pass it as `identifier` only when they gave it in this chat. If `sign_in` says it has no number, ask them for their WhatsApp number and end your turn with the `waiting-on-user` block.
 2. **Open WhatsApp.** `open` `https://web.whatsapp.com` with `purpose` `connector`. Read until it shows "Scan to log in" (it can take a few seconds).
-3. **Send the number.** `sign_in` with that `windowId` (and `identifier` when you have one). It clicks "Log in with phone number", types the number after the country code the box shows, and presses "Next".
+3. **Send the number.** `sign_in` with that `windowId` (and `identifier` when you have one). It clicks "Log in with phone number", types the number after the country code the box shows, and goes on.
    - If it says this would sign in a new WhatsApp account, ask the person exactly what it says, end your turn, and on their yes use `sign_in` again.
    - If their number has a different country code from the one the box shows (+91 for India), first click the country button (such as "🇮🇳 India") with `act`, pick their country, then `sign_in`.
-4. **Read the code yourself.** `sign_in` then answers that the site asked for a code and tells you to ask the owner for it. On WhatsApp it is the other way round: never ask the person for a code and never use `sign_in` with `code`. `read` the window: the "Enter code on phone" screen shows an 8-character code (letters and numbers, such as `K7QD-2M9X`; its characters may read one per line, so join them in order).
-5. **Give the person the code.** This WhatsApp code is the one sign-in code you post in chat yourself: WhatsApp shows it so the person types it on their own phone. For this code only, it replaces the private-browser rule against describing a page's prompt in chat; never post any other code, and never write this one to a file, a note or another chat. In the Flock app send it as a card:
+   - If it says the box didn't hold the number, or that the page didn't ask for a code, `read` the window once. Showing "Enter code on phone": go on to step 4. Anything else: don't try `sign_in` again; offer the QR code (step 8).
+4. **Read the link code yourself.** `sign_in` then answers that the site asked for a code and tells you to ask the owner for it. On WhatsApp it is the other way round: never ask the person for a code and never use `sign_in` with `code`. `read` the window: the "Enter code on phone" screen shows an 8-character link code (letters and numbers, such as `K7QD-2M9X`; its characters may read one per line, so join them in order).
+5. **Give the person the link code.** In the Flock app send it as a card:
 
    ```action-card
    {
      "type": "info",
      "icon": "🔗",
-     "title": "Your WhatsApp code: K7QD-2M9X",
+     "title": "Your WhatsApp link code: K7QD-2M9X",
      "body": "**Easiest:** WhatsApp will send your phone a notification, *Enter code to link new device*. Tap it, tap **Confirm**, unlock with your fingerprint, face or PIN, then type the code.\n\n**Or from the menu:**\n- Android: ⋮ (top right) > Linked devices > Link a device > Link with phone number instead\n- iPhone: Settings > Linked devices > Link device > Link with phone number instead\n\nUnlock, then type the code. If it doesn't work, just ask me for a new one.\n\nOn a computer and rather scan a QR code? Just say so."
    }
    ```
 
-   On a channel such as WhatsApp, send the same words as plain text, the code on its own line. Do not say how long the code lasts. Then end your turn with the `waiting-on-user` block, without `codeValidMinutes`, e.g. `{ "question": "Type the code on your phone and tell me when it's done" }`. Keep the window open.
+   In their own WhatsApp chat with you, send the same words as plain text, the link code on its own line. Do not say how long it lasts. Then end your turn with the `waiting-on-user` block, without `codeValidMinutes`, e.g. `{ "question": "Type the link code on your phone and tell me when it's done" }`. Keep the window open.
 6. **When they say it's done**, `read` the window. Their chats show (the search box and the chat list, maybe after "Loading your chats" for a while): it is linked. Then `close` that window, `open` `https://web.whatsapp.com` again (the link is kept), `read` until the chats show, and use `signed_in` on this NEW window with kind `handoff` (add `forAgentId` when you sign in for another agent). The first window stays marked as waiting for a code, so `signed_in` refuses there. Tell them in a few words that WhatsApp is linked.
-7. **A new code** (they say it didn't work, the code screen is still showing, or Flock wakes you saying the code timed out): `close` the window, `open` `https://web.whatsapp.com` again and repeat steps 3 to 5 there. `sign_in` in the same window sends nothing again, and never press a Resend-style button. At most 3 codes in one conversation; after that, offer the QR code.
-8. **QR code, when they ask for it** (they are on a computer, or the code is not working): `hand_to_owner` on the window with the reason "Scan the QR code with WhatsApp on your phone (Linked devices > Link a device), wait until your chats appear, then press Done". It reloads the page onto the QR code, which cancels any code you gave them: say so in a few words. If the QR code runs out, they click it in that same window to get a new one. When you are woken, `read` the window; once the chats show, use `signed_in` on that window with kind `handoff` (the hand-off already cleared its code wait), then `close` it.
+7. **A new link code** (they say it didn't work, the code screen is still showing, or Flock wakes you saying the code timed out): `close` the window, `open` `https://web.whatsapp.com` again and use `sign_in` there with its `windowId` and `url` `https://web.whatsapp.com`, then steps 4 and 5. Without `url`, or in the same window, `sign_in` sends nothing again. Never press a Resend-style button. At most 3 link codes in one conversation; after that, offer the QR code.
+8. **QR code, when they ask for it** (they are on a computer, or the link code is not working): if the window shows the code screen, click "Log in with QR code" with `act` and read until "Scan to log in" (a hand-off lends a page with nothing to type in as it is, so it would show them the code screen). Then `hand_to_owner` on the window with the reason "Scan the QR code with WhatsApp on your phone (Linked devices > Link a device), wait until your chats appear, then press Done". Going back to the QR code cancels any link code you gave them: say so in a few words. If the QR code runs out, they click it in that same window to get a new one. When you are woken, `read` the window; once the chats show, use `signed_in` on that window with kind `handoff` (the hand-off already cleared its code wait), then `close` it.
 
 ## Talking to the person
 

@@ -73,10 +73,27 @@ describe("the sign-in steps", () => {
     expect(signIn).toContain("`open` `https://web.whatsapp.com` with `purpose` `connector`");
   });
 
+  it("post the link code only in the person's own chat, as the one exception to the private-browser rule", () => {
+    expect(signIn).toContain("The one exception to the private-browser skill");
+    expect(signIn).toContain("For this WhatsApp link code only");
+    expect(signIn).toContain("Only in their own chat.");
+    expect(signIn).toContain("Never in a group or shared chat");
+  });
+
+  it("call it a link code wherever the person or the waiting card sees it", () => {
+    const seen = [...signIn.matchAll(/```action-card\n([\s\S]*?)```/g)].map((m) => m[1]).concat([...signIn.matchAll(/"question": "([^"]+)"/g)].map((m) => m[1]));
+    expect(seen.length).toBeGreaterThanOrEqual(2);
+    for (const words of seen) expect(words).not.toMatch(/verification code|\botp\b|security code|passcode/i);
+    expect(JSON.parse(seen[0]).title).toContain("link code");
+    expect(seen.some((q) => q.includes("link code"))).toBe(true);
+  });
+
   it("record the link on a new window with kind handoff, and the QR code through hand_to_owner", () => {
     expect(signIn).toMatch(/`close` that window, `open` `https:\/\/web\.whatsapp\.com` again[\s\S]*`signed_in` on this NEW window with kind `handoff`/);
     expect(signIn).toContain("`hand_to_owner`");
-    expect(signIn).toContain("At most 3 codes");
+    expect(signIn).toContain("At most 3 link codes");
+    expect(signIn).toContain("use `sign_in` there with its `windowId` and `url` `https://web.whatsapp.com`");
+    expect(signIn).toContain('click "Log in with QR code" with `act`');
     expect(signIn).not.toContain("codeValidMinutes\": ");
   });
 });

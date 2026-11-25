@@ -1,10 +1,10 @@
 {
   "version": 1,
-  "generatedAt": "2026-11-25T18:27:20.750Z",
+  "generatedAt": "2026-11-25T19:25:21.225Z",
   "sourceVersion": "1.0.0",
   "sourceTag": "whatsapp-v1.0.0",
   "files": {
-    "CHANGELOG.md": "1f0a2b7fd5f78a962cc30a90806e0a9e3d21c3b70bce8bc1b24c63537b590171",
+    "CHANGELOG.md": "699056f7684c7a664c6cd6477898bb1f1f45bc727ed85f7d73758571f2e78577",
     "icon.svg": "1d9a927c3ad3cca31305211227611789007bb568d9414e9a78e1be9f84569e9f",
     "scripts/list-chats.ts": "7c4de88c869b1f56a738b1f5b15ea37e69c882ca2e6ef222ecc6a3e0d43a83bf",
     "scripts/_limits.ts": "dea75c61d18528ac188d4a174007614fc5f76351c8dd832f00c2ee6abd9a3901",
@@ -14,6 +14,6 @@
     "scripts/send-message.ts": "6d2daaca10749f53796bf59249fb2c8858ff6bcc1b8631755f58cec60203a701",
     "scripts/_whatsapp.ts": "4b819baa7c0b868810ebff365bae973481b1a0f5ca0f8c11e11c77773459a9c0",
     "flock.skill.json": "b0b795d7e263df8345e700335b29f380f6aca144d732a100948a459156a034e6",
-    "instructions.md": "6f956f6f02443b324b26a453663dbfaac601c287c1d7a05e746d4033775ec6cd"
+    "instructions.md": "0e689f2314f7f614a21d640df7dea5136f426af4f7b275a4636427838482f810"
   }
 }
