@@ -1,15 +1,15 @@
-// make_plan on the slot model (makePlan.ts, planDays.ts, planChecks.ts; docs/slot-model-spec.md §5) with a fake model: the
-// slot-days worked out in code (weekly patterns, the calendar or dated stays, fasts, meals eaten out, edited slot-days kept),
-// one call per slot in planning order (at most 3 at once, an add-on after its main) with each day's allowed dishes and the
-// rice or bread it must have, code's walk of the week (dishes kept or replaced, spares, nobody without food), the one
-// targeted call for gaps, allergies, each day's ingredients, the save and the message. The fake answers by the call's purpose.
+// make_plan on the kinds model (makePlan.ts, planDays.ts, fillWeek.ts, planChecks.ts; docs/kinds-model-build.md) with a fake
+// model: the slot-days worked out in code (weekly patterns, the calendar or dated stays, fasts, meals eaten out, edited
+// slot-days kept), the week filled by code from each meal's templates (no model call plans a meal), what dishes contain read
+// only where nothing else knows it, allergies read carefully, each day's ingredients, the save and the message. The fake
+// answers by the call's purpose.
 import { describe, it, expect } from "bun:test";
 import { readFileSync } from "fs";
 import { join } from "path";
 import { boot } from "./testkit";
-import { CAREFUL_SYSTEM, CONTAINS_SYSTEM, GAP_SYSTEM, INGREDIENT_SYSTEM, makePlan, PARTS_SYSTEM, SLOT_SYSTEM } from "./makePlan";
-import { isVariantOf } from "./planChecks";
+import { CAREFUL_SYSTEM, CONTAINS_SYSTEM, GUESTS_SYSTEM, INGREDIENT_SYSTEM, makePlan } from "./makePlan";
 import { coveredByWeek, EVENTS_SYSTEM, lunchSaid, platformPeers, readHousehold, withLunchSaid, type CalendarEvent } from "./planDays";
+import type { MealKind, MealTemplate } from "./kinds";
 import type { ModelRequest, ModelResult } from "./model";
 import { addRule, commit, getLibraryDish, listSlotDays, saveSlotDay, upsertLibrary, upsertSlot, type LibraryInput, type RuleInput, type SlotInput } from "./slotStore";
 import { DELIVER_PROMPT, FESTIVAL_PROMPT } from "./routines/weekly-plan";
@@ -17,97 +17,80 @@ import { DELIVER_PROMPT, FESTIVAL_PROMPT } from "./routines/weekly-plan";
 const MON = "2026-11-30", TODAY = "2026-11-29";
 const WEEK = ["2026-11-30", "2026-12-01", "2026-12-02", "2026-12-03", "2026-12-04", "2026-12-05", "2026-12-06"];
 const quiet = () => {};
-const MAIN: SlotInput[] = [{ name: "Breakfast", kind: "main", order: 10 }, { name: "Lunch", kind: "main", order: 30 }, { name: "Dinner", kind: "main", order: 50 }];
-/** Four dishes a slot: a week of seven days rotates them two days each at most, four days apart. */
-const LIB: Record<string, string[]> = { Breakfast: ["Poha", "Upma", "Idli", "Dosa"], Lunch: ["Sambar", "Rajma", "Kadhi", "Chole"], Dinner: ["Palak paneer", "Aloo gobi", "Bhindi", "Dal makhani"] };
-const READ = ["egg", "meat", "fish", "onion_garlic"];
+const READ = ["egg", "meat", "fish", "onion_garlic", "nuts", "peanut", "sugar", "white_rice", "dairy"];
+const T = (...parts: MealTemplate["parts"]): MealTemplate => ({ parts });
+/** A made-up family's meals: breakfast one of four dishes, lunch rice with a dal and a sabzi, dinner roti with a sabzi or a gravy. */
+const SHAPES: Record<string, { kinds: MealKind[]; templates: MealTemplate[] }> = {
+  Breakfast: { kinds: [{ name: "Poha" }, { name: "Upma" }, { name: "Idli" }, { name: "Dosa" }], templates: [T({ kind: "Poha" }), T({ kind: "Upma" }), T({ kind: "Idli" }), T({ kind: "Dosa" })] },
+  Lunch: { kinds: [{ name: "Rice", staple: true }, { name: "Dal" }, { name: "Sabzi" }], templates: [T({ kind: "Rice" }, { kind: "Dal" }, { kind: "Sabzi" })] },
+  Dinner: { kinds: [{ name: "Roti", staple: true }, { name: "Sabzi" }, { name: "Gravy" }], templates: [T({ kind: "Roti" }, { kind: "Sabzi" }), T({ kind: "Roti" }, { kind: "Gravy" })] },
+};
+const MAIN: SlotInput[] = [{ name: "Breakfast", kind: "main", order: 10, ...SHAPES.Breakfast }, { name: "Lunch", kind: "main", order: 30, ...SHAPES.Lunch },
+  { name: "Dinner", kind: "main", order: 50, ...SHAPES.Dinner }];
+/** The family's dishes, with their kinds: [name, kind, sub?]. */
+const LIB: Record<string, [string, string, string?][]> = {
+  Breakfast: [["Kanda poha", "Poha"], ["Rava upma", "Upma"], ["Idli", "Idli"], ["Masala dosa", "Dosa"], ["Plain dosa", "Dosa"], ["Batata poha", "Poha"]],
+  Lunch: [["Rice", "Rice"], ["Dal tadka", "Dal", "Dal"], ["Moong dal", "Dal", "Dal"], ["Masoor dal", "Dal", "Dal"], ["Toor dal", "Dal", "Dal"], ["Aloo gobi", "Sabzi"], ["Bhindi sabzi", "Sabzi"],
+    ["Lauki sabzi", "Sabzi"], ["Jeera aloo", "Sabzi"], ["Cabbage sabzi", "Sabzi"], ["Beans sabzi", "Sabzi"], ["Tinda sabzi", "Sabzi"]],
+  Dinner: [["Phulka", "Roti"], ["Palak paneer", "Gravy"], ["Aloo matar", "Gravy"], ["Malai kofta", "Gravy"], ["Matar paneer", "Gravy"]],
+};
 
 type Call = { req: ModelRequest; user: any };
-/** The plates' parts as a test reads them: rice and breads, sides, else a main whose part is its last word's kind. */
-const BREADS = ["rice", "roti", "chapati", "phulka", "bhakri", "jowar roti", "bajra roti", "ragi roti"];
-const SIDES = ["curd", "raita", "salad", "pickle", "papad", "chutney"];
-function partOfName(name: string): { part: string; kind: string } {
-  const n = name.toLowerCase();
-  if (BREADS.includes(n)) return { part: "rice or bread", kind: "rice_or_bread" };
-  if (SIDES.includes(n)) return { part: "side", kind: "side" };
-  if (n.endsWith("dal")) return { part: "dal", kind: "main" };
-  if (n.endsWith("sabzi")) return { part: "sabzi", kind: "main" };
-  return { part: "main", kind: "main" };
-}
-const parts = (u: any) => ({ dishes: u.slots.flatMap((s: any) => s.dishes.map((dish: string) => ({ slot: s.slot, dish, ...partOfName(dish) }))) });
-/** A fake model by purpose. `slot`: a slot call's answer (default: staples, then the library in turn); `gap`: the targeted
- *  call's (default: nothing); `contains`; `careful` (the allergy read; default: has nothing); `parts`; `day` (ingredients);
- *  `events`; `wait`: how long a slot call takes. */
-function fakeModel(h: { slot?: (u: any) => unknown; gap?: (u: any) => unknown; contains?: (u: any) => unknown; careful?: (u: any) => unknown; parts?: (u: any) => unknown;
-  day?: (u: any) => unknown; events?: (u: any) => unknown; wait?: (u: any) => number } = {}) {
+/** A fake model by purpose: `contains`, `careful` (default: has nothing), `guests`, `day` (ingredients), `events`. */
+function fakeModel(h: { contains?: (u: any) => unknown; careful?: (u: any) => unknown; guests?: (u: any) => unknown; day?: (u: any) => unknown; events?: (u: any) => unknown;
+  wait?: number } = {}) {
   const calls: Call[] = [];
-  let running = 0, most = 0;
   const wrap = (v: unknown): ModelResult => (v && typeof v === "object" && "ok" in (v as object) ? v as ModelResult : { ok: true, json: v, model: "fake" });
   const model = async (req: ModelRequest): Promise<ModelResult> => {
     const user = JSON.parse(req.user);
     calls.push({ req, user });
+    if (h.wait) await Bun.sleep(h.wait);
     const p = req.purpose ?? "";
-    if (p.startsWith("meal plan: the week's")) {
-      running++; most = Math.max(most, running);
-      try {
-        const ms = h.wait?.(user) ?? 0;
-        if (ms) await Bun.sleep(ms);
-        return wrap((h.slot ?? rotateDays)(user));
-      } finally { running--; }
-    }
-    if (p.startsWith("meal plan: gaps in the")) return wrap((h.gap ?? (() => ({ days: {} })))(user));
     if (p.includes("carefully")) return wrap((h.careful ?? ((u: any) => ({ dishes: u.dishes.map((d: string) => ({ dish: d, has: [] })) })))(user));
     if (p.includes("contain")) return wrap((h.contains ?? (() => ({ dishes: [] })))(user));
-    if (p.includes("parts")) return wrap((h.parts ?? parts)(user));
+    if (p.includes("guests")) return wrap((h.guests ?? (() => ({ rules: [] })))(user));
     if (p.includes("calendar")) return wrap((h.events ?? (() => ({ changes: [] })))(user));
     return wrap((h.day ?? ingredients)(user));
   };
   const of = (s: string) => calls.filter((c) => (c.req.purpose ?? "").includes(s));
-  return { model, calls, slots: () => of("the week's "), gaps: () => of("gaps in the"), contains: () => of("contain").filter((c) => !c.req.purpose!.includes("carefully")),
-    careful: () => of("carefully"), parts: () => of("parts"), days: () => of("ingredients"), events: () => of("calendar"), most: () => most };
-}
-/** A good answer: each day the staples, then the library's dishes in turn. A fix answers its `fix` dates the same way. */
-function rotateDays(u: any): unknown {
-  const lib = u.library.map((d: any) => d.dish);
-  const all = u.days.filter((d: any) => !d.skip).map((d: any) => d.date);
-  const dates = (u.fix ? u.fix.map((f: any) => f.date) : all) as string[];
-  return { days: Object.fromEntries(dates.map((date) => [date, [...u.staples, ...(lib.length ? [lib[all.indexOf(date) % lib.length]] : [])]])) };
+  return { model, calls, contains: () => of("contain").filter((c) => !c.req.purpose!.includes("carefully")), careful: () => of("carefully"), days: () => of("ingredients"),
+    events: () => of("calendar"), guests: () => of("guests") };
 }
 const ingredients = (u: any) => ({ dishes: u.dishes.map((d: any) => ({ slot: d.slot, name: d.name, ingredients: [{ item: d.name.toLowerCase(), amount: 200, unit: "g", tags: [] }] })) });
 
-async function home(o: { people?: [string, string][]; slots?: SlotInput[]; lib?: Record<string, string[]>; library?: LibraryInput[]; rules?: RuleInput[];
+async function home(o: { people?: [string, string][]; slots?: SlotInput[]; lib?: Record<string, [string, string, string?][]>; library?: LibraryInput[]; rules?: RuleInput[];
   seed?: { slot: string; dishes: string[] }[]; history?: { date: string; slot: string; dishes: string[]; status: "planned" | "confirmed" }[]; newPerWeek?: number } = {}) {
   const k = await boot({ now: () => new Date(2026, 10, 29, 11, 0) });
   for (const [name, group] of o.people ?? [["Asha", "adult"], ["Ravi", "adult"], ["Kabir", "child"]]) await k.op("set_person", { name, group });
   if (o.newPerWeek !== undefined) k.kit.sqlite.run(`INSERT INTO _settings (id, created_at, updated_at, updated_by, key, value, scope) VALUES ('n1', '', '', 'app', 'new_dishes_per_week', ?, 'owner')`, [JSON.stringify(o.newPerWeek)]);
   commit(k.kit.db, k.kit.emitChange, (tx, ch) => {
     for (const s of o.slots ?? MAIN) upsertSlot(tx, s, "app", ch);
-    for (const [slot, names] of Object.entries(o.lib ?? LIB)) for (const name of names) upsertLibrary(tx, { name, slot, origin: "setup_named", contains: [], contains_read: READ }, "app", ch);
+    for (const [slot, rows] of Object.entries(o.lib ?? LIB)) for (const [name, kind, sub] of rows)
+      upsertLibrary(tx, { name, slot, kind, sub: sub ?? null, origin: "setup_named", contains: [], contains_read: READ }, "app", ch);
     for (const d of o.library ?? []) upsertLibrary(tx, { contains_read: READ, ...d }, "app", ch);
     for (const r of o.rules ?? []) addRule(tx, r, "app", ch);
     for (const s of o.seed ?? []) saveSlotDay(tx, { date: null, slot: s.slot, dishes: s.dishes.map((dish) => ({ dish })) }, "app", ch);
     for (const h of o.history ?? []) saveSlotDay(tx, { date: h.date, slot: h.slot, status: h.status, dishes: h.dishes.map((dish) => ({ dish })) }, "app", ch);
   });
-  const plan = (model: (r: ModelRequest) => Promise<ModelResult>, x: { household?: unknown; peers?: any; log?: (l: string) => void } = {}) =>
-    makePlan({ db: k.kit.db, emit: k.kit.emitChange, model, weekStart: MON, today: TODAY, basePath: "/a/t", log: x.log ?? quiet, household: x.household, peers: x.peers, sqlite: k.kit.sqlite });
+  const plan = (model: (r: ModelRequest) => Promise<ModelResult>, x: { household?: unknown; peers?: any; log?: (l: string) => void; suggest_new?: boolean } = {}) =>
+    makePlan({ db: k.kit.db, emit: k.kit.emitChange, model, weekStart: MON, today: TODAY, basePath: "/a/t", log: x.log ?? quiet, household: x.household, peers: x.peers,
+      sqlite: k.kit.sqlite, suggest_new: x.suggest_new });
   const week = () => listSlotDays(k.kit.db, { from: MON, to: WEEK[6] });
   const at = (date: string, slot: string) => week().find((d) => d.date === date && d.slot === slot);
   const dishesAt = (date: string, slot: string) => at(date, slot)?.dishes.map((d) => d.dish) ?? [];
   return { ...k, plan, week, at, dishesAt };
 }
-const reqOf = (f: ReturnType<typeof fakeModel>, slot: string) => f.slots().find((c) => c.user.slot === slot)!.user;
+const STAPLES = ["Rice", "Phulka"];
 
-describe("make_plan v2: a week that passes", () => {
-  it("one call per slot, one ingredients call a day, every slot-day saved planned with ingredients, and the week by day in the message", async () => {
-    const k = await home({ seed: [{ slot: "Lunch", dishes: ["Rice", "Sambar", "Curd"] }, { slot: "Lunch", dishes: ["Rice", "Rajma", "Curd"] }, { slot: "Lunch", dishes: ["Rice", "Kadhi", "Curd"] }] });
+describe("make_plan: the week filled by code from the templates", () => {
+  it("no model call plans a meal: only each day's ingredients are asked; every slot-day saved planned, with ingredients; the week by day in the message", async () => {
+    const k = await home();
     const f = fakeModel();
-    const r = await k.plan(f.model);
-    expect(r.ok).toBe(true);
-    expect(f.slots().map((c) => c.user.slot)).toEqual(["Breakfast", "Lunch", "Dinner"]);
-    expect(f.gaps()).toHaveLength(0);
-    expect(f.days()).toHaveLength(7);
-    expect(f.slots().every((c) => c.req.tier === "balanced" && c.req.system === SLOT_SYSTEM && !!c.req.schema)).toBe(true);
-    expect(f.days().every((c) => c.req.tier === "fast")).toBe(true);
+    const lines: string[] = [];
+    const r = await k.plan(f.model, { log: (l) => lines.push(l) });
+    if (!r.ok) throw new Error(r.say);
+    expect(f.calls.map((c) => c.req.purpose)).toEqual(Array(7).fill("meal plan: a day's ingredients"));
+    expect(f.days().every((c) => c.req.tier === "fast" && c.req.system === INGREDIENT_SYSTEM)).toBe(true);
     expect(k.week()).toHaveLength(21);
     for (const d of k.week()) {
       expect(d.status).toBe("planned");
@@ -115,324 +98,395 @@ describe("make_plan v2: a week that passes", () => {
       expect(d.dishes.length).toBeGreaterThan(0);
       for (const x of d.dishes) expect(x.ingredients.length).toBeGreaterThan(0);
     }
-    // The seed makes Rice and Curd Lunch's staples (in every row of its history), so they come every day.
-    expect(reqOf(f, "Lunch").staples).toEqual(["Rice", "Curd"]);
-    expect(reqOf(f, "Lunch").looks_like).toEqual(["Rice, Sambar, Curd", "Rice, Rajma, Curd", "Rice, Kadhi, Curd"]);
-    expect(k.dishesAt(MON, "Lunch")).toEqual(["Rice", "Curd", "Chole"]);
-    if (!r.ok) throw new Error();
+    // Every lunch is the family's plate: rice, a dal, a sabzi; every dinner roti with a sabzi or a gravy.
+    for (const d of WEEK) {
+      expect(k.dishesAt(d, "Lunch")).toHaveLength(3);
+      expect(k.dishesAt(d, "Lunch")[0]).toBe("Rice");
+      expect(k.dishesAt(d, "Dinner")).toHaveLength(2);
+      expect(k.dishesAt(d, "Dinner")[0]).toBe("Phulka");
+    }
     expect(r.message).toContain("Your week is planned.");
-    expect(r.message).toContain("*Monday*\nBreakfast: Dosa\nLunch: Rice, Curd, Chole\nDinner:");
-    expect(r.message).toContain("*Sunday*");
+    expect(r.message).toContain(`*Monday*\nBreakfast: ${k.dishesAt(MON, "Breakfast").join(", ")}\nLunch: ${k.dishesAt(MON, "Lunch").join(", ")}\nDinner:`);
     expect(r.message).toContain("[Week page](/a/t/?flock_scope=app#/week?week=2026-11-30)");
     expect(r.intro).toContain("How it works");
-    expect(r.unmet).toBeUndefined();
+    expect(lines.some((l) => l.startsWith("filled 21 slot-days in "))).toBe(true);
   });
 
-  it("the request is the spec's: days with who, allowed and must_have, looks_like, staples, library with part and left, already_this_week, recent, rules, notes, new_dishes_allowed", async () => {
-    const k = await home({ rules: [{ hard: true, what: "avoid", who: "Asha", items: ["sugar"], quote: "no sugar for me" },
-      { hard: false, what: "note", who: "Kabir", quote: "less spicy" }] });
-    const f = fakeModel({ wait: (u) => (u.slot === "Breakfast" ? 0 : 5) });
-    await k.plan(f.model);
-    const u = reqOf(f, "Lunch");
-    expect(u.days).toHaveLength(7);
-    expect(u.days[0]).toEqual({ date: MON, for: ["Asha", "Ravi", "Kabir"], allowed: ["Chole", "Kadhi", "Rajma", "Sambar"] });
-    expect(u.library.map((d: any) => [d.dish, d.part, d.left])).toEqual([["Chole", "main", 2], ["Kadhi", "main", 2], ["Rajma", "main", 2], ["Sambar", "main", 2]]);
-    expect(u.parts).toEqual(["main"]);
-    expect(u.gap).toBeUndefined();
-    expect(u.rules).toEqual(["Asha: no sugar for me [never: sugar]"]);
-    expect(u.notes_for_people).toEqual(["Kabir: less spicy"]);
-    // No new-dish budget and no shortfall (owner 25 Nov): their dishes guide, the rest is free for variety.
-    expect(u.new_dishes_allowed).toBeUndefined();
-    expect(u.short_of_dishes).toBeUndefined();
-    expect(u.occasion).toBeNull();
-    // The library dishes were never read for sugar: each is not for Asha (fail closed), said to the model.
-    expect(u.library[0].not_for).toEqual(["Asha"]);
-  });
-});
-
-describe("make_plan v2: history (spec §2.2)", () => {
-  it("the bread and rice on the family's own plates are staples however few plates there are (onboarding run 28)", async () => {
-    const k = await home({ seed: [{ slot: "Lunch", dishes: ["Roti", "Sabzi"] }, { slot: "Lunch", dishes: ["Dal", "Rice", "Sabzi", "Curd"] }] });
-    const f = fakeModel();
-    await k.plan(f.model);
-    const u = reqOf(f, "Lunch");
-    expect(u.staples).toEqual(expect.arrayContaining(["Roti", "Rice", "Curd"]));
-    expect(u.staples).not.toContain("Sabzi");
-    expect(u.library.map((d: any) => d.dish)).not.toContain("Roti");
-  });
-  it("looks_like holds only the seed and confirmed rows; recent includes planned ones; staples come from confirmed rows only", async () => {
-    const k = await home({
-      seed: [{ slot: "Lunch", dishes: ["Rice", "Dal", "Curd"] }],
-      history: [
-        { date: "2026-11-26", slot: "Lunch", status: "confirmed", dishes: ["Rice", "Sambar"] },
-        { date: "2026-11-27", slot: "Lunch", status: "confirmed", dishes: ["Rice", "Khichdi"] },
-        { date: "2026-11-28", slot: "Lunch", status: "planned", dishes: ["Roti", "Paneer"] },
-        { date: "2026-11-29", slot: "Lunch", status: "planned", dishes: ["Roti", "Chole"] },
-      ],
-    });
-    const f = fakeModel();
-    await k.plan(f.model);
-    const u = reqOf(f, "Lunch");
-    expect(u.looks_like).toEqual(["Rice, Khichdi", "Rice, Sambar", "Rice, Dal, Curd"]);
-    expect(u.looks_like.join(" ")).not.toContain("Paneer");
-    expect(u.recent).toEqual({ "2026-11-27": ["Rice", "Khichdi"], "2026-11-28": ["Roti", "Paneer"], "2026-11-29": ["Roti", "Chole"] });
-    // Rice (3 of 3 seed and confirmed rows) and Curd are staples; Roti, planned last week, is a dish of theirs that guides
-    // this week (owner 25 Nov), a bread, so a staple too; Paneer and Chole, planned and kept, are theirs in the library.
-    expect(u.staples).toEqual(["Rice", "Curd", "Roti"]);
-    expect(u.library.map((d: any) => d.dish)).toEqual(expect.arrayContaining(["Paneer", "Chole"]));
-    // Chole was shown on Sunday: on Monday it is within 3 days of itself, so code swaps it in its place (not sent back).
-    const g = fakeModel({ slot: (x) => x.slot === "Lunch" ? { days: Object.fromEntries(x.days.map((d: any, i: number) => [d.date, ["Rice", ["Chole", "Rajma", "Kadhi", "Sambar"][i % 4]]])) } : rotateDays(x) });
-    await k.plan(g.model);
-    expect(g.gaps()).toHaveLength(0);
-    expect(k.dishesAt(MON, "Lunch")).toHaveLength(2);
-    expect(k.dishesAt(MON, "Lunch")).not.toContain("Chole");
+  it("the owner's rules hold over the week: no dish two days running, none at two meals a day, none twice on a plate, never a bare category", async () => {
+    const k = await home();
+    await k.plan(fakeModel().model);
+    const nonStaple = (d: string) => [...k.dishesAt(d, "Breakfast"), ...k.dishesAt(d, "Lunch"), ...k.dishesAt(d, "Dinner")].filter((x) => !STAPLES.includes(x));
+    for (let i = 0; i < 7; i++) {
+      const today = nonStaple(WEEK[i]);
+      expect(new Set(today).size).toBe(today.length);
+      if (i) for (const x of today) expect(nonStaple(WEEK[i - 1])).not.toContain(x);
+      for (const x of today) expect(["Sabzi", "Dal", "Gravy"]).not.toContain(x);
+    }
+    // The family's own dishes first: the first lunch sabzis are theirs.
+    const sabzis = WEEK.map((d) => k.dishesAt(d, "Lunch")[2]);
+    expect(sabzis.slice(0, 4).every((x) => LIB.Lunch.some(([n]) => n === x))).toBe(true);
   });
 
-  it("a dish the family has daily is a staple by their word: given as one, and put on every slot-day of its slot when the model leaves it out", async () => {
-    const k = await home({ library: [{ name: "Salad", slot: "Lunch", frequency: "daily", origin: "setup_named" }] });
-    const f = fakeModel({ slot: (u) => ({ days: Object.fromEntries(u.days.map((d: any, i: number) => [d.date, [u.library[i % u.library.length].dish]])) }) });
-    await k.plan(f.model);
-    expect(reqOf(f, "Lunch").staples).toEqual(["Salad"]);
-    for (const date of WEEK) expect(k.dishesAt(date, "Lunch")).toContain("Salad");
-    expect(f.gaps()).toHaveLength(0);
+  it("a meal set up before templates is planned from its seed plates: the rice and curd on every plate, a part per dish", async () => {
+    const k = await home({ slots: [MAIN[0], { name: "Lunch", kind: "main", order: 30 }, MAIN[2]],
+      lib: { ...LIB, Lunch: [["Rice", "Rice"], ["Curd", "Curd"], ["Drumstick sambar", "Rice curry", "Sambar"], ["Arachuvitta sambar", "Rice curry", "Sambar"], ["Tomato rasam", "Rice curry", "Rasam"]] },
+      seed: [1, 2, 3].map(() => ({ slot: "Lunch", dishes: ["Rice", "Drumstick sambar", "Curd"] })) });
+    const r = await k.plan(fakeModel().model);
+    if (!r.ok) throw new Error(r.say);
+    for (const d of WEEK) {
+      const p = k.dishesAt(d, "Lunch");
+      expect(p[0]).toBe("Rice");
+      expect(p.at(-1)).toBe("Curd");
+      expect(p).toHaveLength(3);
+      expect(p[1].toLowerCase()).toContain("sambar");
+    }
+  });
+
+  it("a later week is guided by what was had: last week's dishes come last", async () => {
+    const k = await home({ history: [{ date: "2026-11-29", slot: "Lunch", status: "planned", dishes: ["Rice", "Dal tadka", "Aloo gobi"] },
+      { date: "2026-11-28", slot: "Lunch", status: "confirmed", dishes: ["Rice", "Moong dal", "Bhindi sabzi"] }] });
+    await k.plan(fakeModel().model);
+    const mon = k.dishesAt(MON, "Lunch");
+    for (const x of ["Dal tadka", "Aloo gobi", "Moong dal", "Bhindi sabzi"]) expect(mon).not.toContain(x);
+  });
+
+  it("a disliked dish and a dropped untried one are never planned", async () => {
+    const k = await home({ library: [{ name: "Karela sabzi", slot: "Lunch", kind: "Sabzi", disliked: true }, { name: "Reel sabzi", slot: "Lunch", kind: "Sabzi", untried: true, offers: 2, origin: "family_added" }] });
+    await k.plan(fakeModel().model);
+    for (const d of k.week()) for (const x of d.dishes) expect(["Karela sabzi", "Reel sabzi"]).not.toContain(x.dish);
+  });
+
+  it("a pinned dish is on its days only; a dish said once a week comes once", async () => {
+    const k = await home({ slots: [{ ...MAIN[0], kinds: [...SHAPES.Breakfast.kinds, { name: "Paratha" }], templates: [...SHAPES.Breakfast.templates, T({ kind: "Paratha" })] }, MAIN[1], MAIN[2]],
+      library: [{ name: "Aloo paratha", slot: "Breakfast", kind: "Paratha", days: ["Sat", "Sun"] }, { name: "Rajma", slot: "Lunch", kind: "Dal", sub: "Rajma/Chole", frequency: "1/week" }] });
+    await k.plan(fakeModel().model);
+    expect(WEEK.filter((d) => k.dishesAt(d, "Breakfast").includes("Aloo paratha"))).toEqual([WEEK[5], WEEK[6]]);
+    expect(WEEK.filter((d) => k.dishesAt(d, "Lunch").includes("Rajma")).length).toBeLessThanOrEqual(1);
   });
 });
 
-describe("make_plan v2: never planned", () => {
-  it("a disliked dish and a dropped untried dish are not offered; planned, each is replaced in its place by code, no call back, never saved", async () => {
-    const k = await home({ library: [{ name: "Karela", slot: "Dinner", disliked: true }, { name: "Reel pasta", slot: "Dinner", untried: true, offers: 2, origin: "family_added" }] });
-    const f = fakeModel({ slot: (u) => u.slot === "Dinner" ? { days: { ...(rotateDays(u) as any).days, [MON]: ["Karela"], "2026-12-01": ["Reel pasta"] }, new: [{ dish: "Karela" }, { dish: "Reel pasta" }] } : rotateDays(u) });
-    const lines: string[] = [];
-    const r = await k.plan(f.model, { log: (l) => lines.push(l) });
-    expect(r.ok).toBe(true);
-    expect(reqOf(f, "Dinner").library.map((d: any) => d.dish)).not.toContain("Karela");
-    expect(reqOf(f, "Dinner").library.map((d: any) => d.dish)).not.toContain("Reel pasta");
-    for (const d of k.week()) for (const x of d.dishes) expect(["Karela", "Reel pasta"]).not.toContain(x.dish);
-    expect(k.dishesAt(MON, "Dinner")).toHaveLength(1);
-    expect(k.dishesAt("2026-12-01", "Dinner")).toHaveLength(1);
-    expect(lines.some((l) => l.includes("Mon Dinner: Karela → ") && l.includes("the family did not like it"))).toBe(true);
-    expect(lines.some((l) => l.includes("Tue Dinner: Reel pasta → ") && l.includes("offered twice and never made"))).toBe(true);
-    // No call back: one call for the slot, no gap call.
-    expect(f.gaps()).toHaveLength(0);
-    expect(f.slots().filter((c) => c.user.slot === "Dinner")).toHaveLength(1);
+describe("make_plan: new dishes (kinds model rule 4)", () => {
+  const FEW = { ...LIB, Lunch: [["Rice", "Rice"], ["Dal tadka", "Dal", "Dal"], ...LIB.Lunch.filter(([, kind]) => kind === "Sabzi")] as [string, string, string?][] };
+  it("only once the family's own have come: of the part's kind, saved untried with an offer each placement, said with the dish of theirs it stands in for", async () => {
+    const k = await home({ lib: FEW });
+    const r = await k.plan(fakeModel().model);
+    if (!r.ok) throw new Error(r.say);
+    const dals = WEEK.map((d) => k.dishesAt(d, "Lunch")[1]);
+    expect(dals[0]).toBe("Dal tadka");
+    const news = k.week().flatMap((d) => d.dishes.filter((x) => x.new).map((x) => x.dish));
+    expect(news.length).toBeGreaterThan(0);
+    for (const n of news) {
+      const row = getLibraryDish(k.kit.db, n, k.week().find((d) => d.dishes.some((x) => x.dish === n))!.slot)!;
+      expect(row).toMatchObject({ origin: "planner_suggested", suggested: true, untried: true, catalog_item: n });
+      expect(row.kind).toBeString();
+    }
+    const untried = () => k.rows("library").filter((x: any) => x.untried === 1);
+    const placements = (name: string) => k.week().filter((d) => d.dishes.some((x) => x.dish === name)).length;
+    for (const row of untried()) expect(row.offers).toBe(placements(row.name));
+    const newDal = news.find((n) => dals.includes(n))!;
+    expect(r.message).toContain("New this week: ");
+    expect(r.message).toContain(`${newDal} (like your Dal tadka)`);
+    // Planned again: the offers of the placements it replaces are taken back first.
+    await k.plan(fakeModel().model);
+    for (const row of untried()) expect(row.offers).toBeLessThanOrEqual(Math.max(placements(row.name), 1));
   });
 
+  it("the family's new-dishes setting caps them when they set it; a slot-day set to no new dish gets none", async () => {
+    const none = await home({ lib: FEW, newPerWeek: 0 });
+    await none.plan(fakeModel().model);
+    expect(none.week().flatMap((d) => d.dishes).filter((x) => x.new)).toEqual([]);
+    const k = await home({ lib: FEW });
+    commit(k.kit.db, k.kit.emitChange, (tx, ch) => saveSlotDay(tx, { date: WEEK[1], slot: "Lunch", people: ["Asha", "Ravi", "Kabir"], new_dishes_allowed: 0, edited: true }, "app", ch));
+    await k.plan(fakeModel().model);
+    expect(k.at(WEEK[1], "Lunch")!.dishes.filter((x) => x.new)).toEqual([]);
+    expect(k.dishesAt(WEEK[1], "Lunch")).toHaveLength(3);
+  });
+
+  it("a part they named as a category (\"dal\", \"sabzi\") is filled with real dishes of it, theirs: none new, none a bare word", async () => {
+    const k = await home({ lib: { ...LIB, Lunch: [["Rice", "Rice"], ["Dal", "Dal", "Dal"], ["Sabzi", "Sabzi", "Sabzi"]] } });
+    const r = await k.plan(fakeModel().model);
+    if (!r.ok) throw new Error(r.say);
+    for (const d of WEEK) {
+      const p = k.at(d, "Lunch")!.dishes;
+      expect(p).toHaveLength(3);
+      expect(p.map((x) => x.dish)).not.toContain("Dal");
+      expect(p.map((x) => x.dish)).not.toContain("Sabzi");
+      expect(p.every((x) => !x.new)).toBe(true);
+    }
+  });
+
+  it("\"suggest some\" for a meal with none of theirs: a plain plate of that meal, every part a real dish", async () => {
+    const k = await home({ slots: [MAIN[0], MAIN[1], { name: "Dinner", kind: "main", order: 50 }], lib: { Breakfast: LIB.Breakfast, Lunch: LIB.Lunch } });
+    const r = await k.plan(fakeModel().model, { suggest_new: true });
+    if (!r.ok) throw new Error(r.say);
+    for (const d of WEEK) {
+      const p = k.dishesAt(d, "Dinner");
+      expect(p.length).toBeGreaterThanOrEqual(3);
+      for (const x of p) expect(["Sabzi", "Dal"]).not.toContain(x);
+    }
+  });
 });
 
-describe("make_plan v2: hard rules per person, fail closed", () => {
+describe("make_plan: hard rules per person, fail closed", () => {
   const GRANDMA: RuleInput = { hard: true, what: "veg", who: "Nani", quote: "Nani is vegetarian" };
   const people: [string, string][] = [["Asha", "adult"], ["Nani", "elder"]];
+  const FISH_LUNCH: SlotInput = { name: "Lunch", kind: "main", order: 30, kinds: [{ name: "Rice", staple: true }, { name: "Fish & seafood" }, { name: "Dal" }],
+    templates: [T({ kind: "Rice" }, { kind: "Fish & seafood" }, { kind: "Dal" })] };
 
-  it("a fish lunch beside dal with a vegetarian grandmother passes: the fish is not for her, said in the message", async () => {
-    const k = await home({ people, rules: [GRANDMA], lib: { Breakfast: LIB.Breakfast, Dinner: LIB.Dinner, Lunch: ["Dal", "Sambar", "Rajma", "Kadhi"] },
-      library: [{ name: "Fish curry", slot: "Lunch", contains: ["fish"], contains_read: READ }] });
-    const f = fakeModel({ slot: (u) => u.slot === "Lunch" ? { days: Object.fromEntries(u.days.map((d: any, i: number) => [d.date, i === 0 ? ["Fish curry", "Dal"] : [["Sambar", "Rajma", "Kadhi", "Dal"][i % 4]]])) } : rotateDays(u) });
+  it("a fish lunch with a vegetarian grandmother: the fish is not for her, she has her own dish for its part, the fish stays in the fish curry", async () => {
+    const k = await home({ people, rules: [GRANDMA], slots: [MAIN[0], FISH_LUNCH, MAIN[2]],
+      library: [{ name: "Rohu curry", slot: "Lunch", kind: "Fish & seafood", sub: "Fish curry", contains: ["fish"] }] });
+    const f = fakeModel({ day: (u) => ({ dishes: u.dishes.map((d: any) => ({ slot: d.slot, name: d.name, ingredients: [{ item: d.name === "Rohu curry" ? "rohu" : d.name.toLowerCase(), amount: 200, unit: "g", tags: d.name === "Rohu curry" ? ["fish"] : [] }] })) }) });
     const r = await k.plan(f.model);
-    expect(f.gaps()).toHaveLength(0);
-    expect(k.at(MON, "Lunch")!.dishes.map((d) => [d.dish, d.not_for])).toEqual([["Fish curry", ["Nani"]], ["Dal", []]]);
-    expect(reqOf(f, "Lunch").library.find((d: any) => d.dish === "Fish curry").not_for).toEqual(["Nani"]);
-    if (r.ok) expect(r.message).toContain("Lunch: Fish curry (not for Nani), Dal");
-    // The week page reads it too.
+    if (!r.ok) throw new Error(r.say);
+    const mon = k.at(MON, "Lunch")!.dishes;
+    const fish = mon.find((d) => d.dish === "Rohu curry")!;
+    expect(fish.not_for).toEqual(["Nani"]);
+    expect(fish.ingredients.map((i) => i.item)).toEqual(["rohu"]);
+    expect(mon.filter((d) => d.dish !== "Rice" && !d.not_for.length).length).toBeGreaterThanOrEqual(2);
+    expect(r.message).toContain("Rohu curry (not for Nani)");
     const week = (await k.owner("GET", `/api/weeks/${MON}`)).body;
-    expect(week.days[0].meals.find((m: any) => m.slot === "Lunch").dishes[0].not_for).toEqual(["Nani"]);
+    expect(week.days[0].meals.find((m: any) => m.slot === "Lunch").dishes.find((d: any) => d.name === "Rohu curry").not_for).toEqual(["Nani"]);
+    // Never a fish or meat dish given to her: whatever is not marked not for her has none.
+    for (const d of k.week()) for (const x of d.dishes) if (!x.not_for.includes("Nani")) expect(x.dish).not.toMatch(/fish|chicken|mutton|prawn|rohu|macher|meen/i);
   });
 
-  it("a dish not for someone keeps its ingredients (the fish stays in the fish curry); a slot where one person has none of its dishes gets a new dish for them", async () => {
-    const k = await home({ people, rules: [GRANDMA], newPerWeek: 2, lib: { Breakfast: LIB.Breakfast, Dinner: LIB.Dinner, Lunch: [] },
-      seed: [1, 2, 3].map(() => ({ slot: "Lunch", dishes: ["Rice", "Dal"] })),
-      library: [{ name: "Rice", slot: "Lunch", contains: [], contains_read: READ }, { name: "Dal", slot: "Lunch", frequency: "daily", contains: [], contains_read: READ },
-        { name: "Fish curry", slot: "Lunch", days: ["Sun"], contains: ["fish"], contains_read: READ }] });
-    const f = fakeModel({ slot: (u) => u.slot === "Lunch" ? { days: Object.fromEntries(u.days.map((d: any) => [d.date, d.date === WEEK[6] ? ["Rice", "Dal", "Fish curry", "Lauki"] : ["Rice", "Dal"]])), new: [{ dish: "Lauki", why: "for Nani", like: "Fish curry", part: "main" }] } : rotateDays(u),
-      contains: (u) => ({ dishes: u.dishes.map((d: string) => ({ dish: d, has: [], not: READ })) }),
-      day: (u) => ({ dishes: u.dishes.map((d: any) => ({ slot: d.slot, name: d.name, ingredients: [{ item: d.name === "Fish curry" ? "rohu" : d.name.toLowerCase(), amount: 200, unit: "g", tags: d.name === "Fish curry" ? ["fish"] : [] }] })) }) });
+  it("a dish never read for her rule's item is not hers (fail closed), read first when setup never read it; she gets a dish of her own", async () => {
+    const k = await home({ people, rules: [GRANDMA], slots: [MAIN[0], { name: "Lunch", kind: "main", order: 30, kinds: [{ name: "Rice", staple: true }], templates: [T({ kind: "Rice" }, { items: ["Mystery curry"] })] }, MAIN[2]],
+      library: [{ name: "Mystery curry", slot: "Lunch", contains: [], contains_read: [] }] });
+    const f = fakeModel({ contains: (u) => ({ dishes: u.dishes.map((d: string) => ({ dish: d, has: [], not: [] })) }) });
+    const r = await k.plan(f.model);
+    expect(f.contains()[0].user.dishes).toEqual(["Mystery curry"]);
+    expect(f.contains()[0].req.system).toBe(CONTAINS_SYSTEM);
+    const mon = k.at(MON, "Lunch")!.dishes;
+    expect(mon.find((x) => x.dish === "Mystery curry")!.not_for).toEqual(["Nani"]);
+    expect(mon.some((x) => x.dish !== "Rice" && !x.not_for.includes("Nani"))).toBe(true);
+    if (r.ok) expect((r.unmet ?? []).filter((u) => u.includes("nothing"))).toEqual([]);
+  });
+
+  it("a read that says chicken but not meat still counts as meat (a tag's family is added)", async () => {
+    const k = await home({ people, rules: [GRANDMA], slots: [MAIN[0], { name: "Lunch", kind: "main", order: 30, kinds: [{ name: "Rice", staple: true }], templates: [T({ kind: "Rice" }, { items: ["House special"] })] }, MAIN[2]],
+      library: [{ name: "House special", slot: "Lunch", contains: [], contains_read: [] }] });
+    const f = fakeModel({ contains: (u) => ({ dishes: u.dishes.map((d: string) => ({ dish: d, has: ["chicken"], not: ["meat", "fish", "egg"] })) }) });
     await k.plan(f.model);
-    const sun = k.at(WEEK[6], "Lunch")!.dishes;
-    expect(sun.map((d) => [d.dish, d.not_for])).toEqual([["Rice", []], ["Dal", []], ["Fish curry", ["Nani"]], ["Lauki", []]]);
-    expect(sun.find((d) => d.dish === "Fish curry")!.ingredients.map((i) => i.item)).toEqual(["rohu"]);
+    expect(k.at(MON, "Lunch")!.dishes.find((x) => x.dish === "House special")!.not_for).toEqual(["Nani"]);
   });
 
-  it("a soft swap with a count the week falls short of is kept by code's note on some of the person's days, one a day, up to its least", async () => {
+  it("library dishes setup never read are read before the week is planned; a dish the catalog knows needs no read", async () => {
+    const k = await home({ people, rules: [{ hard: true, what: "veg", quote: "we are vegetarian" }],
+      library: [{ name: "Grandma's kootu", slot: "Lunch", kind: "Sabzi", contains: [], contains_read: [] }, { name: "Aloo gobi", slot: "Lunch", kind: "Sabzi", contains: [], contains_read: [] }] });
+    const f = fakeModel({ contains: (u) => ({ dishes: u.dishes.map((d: string) => ({ dish: d, has: [], not: ["egg", "meat", "fish", "onion_garlic"] })) }) });
+    const r = await k.plan(f.model);
+    expect(r.ok).toBe(true);
+    const read = f.contains().flatMap((c) => c.user.dishes);
+    expect(read).toContain("Grandma's kootu");
+    expect(read).not.toContain("Aloo gobi");
+    expect(getLibraryDish(k.kit.db, "Grandma's kootu", "Lunch")!.contains_read.sort()).toEqual(["egg", "fish", "meat", "onion_garlic"]);
+  });
+
+  it("guests' food rules are read once into tags: a fish-only dinner for vegetarian guests gets a dish of theirs beside", async () => {
+    const k = await home({ slots: [MAIN[0], MAIN[1], { name: "Dinner", kind: "main", order: 50, kinds: [{ name: "Roti", staple: true }], templates: [T({ kind: "Roti" }, { items: ["Fish fry"] })] }],
+      library: [{ name: "Fish fry", slot: "Dinner", kind: "Fish & seafood", contains: ["fish"] }] });
+    const SAT = WEEK[5];
+    commit(k.kit.db, k.kit.emitChange, (tx, ch) => saveSlotDay(tx, { date: SAT, slot: "Dinner", people: ["Asha", "Ravi", "Kabir"], guests: [{ count: 4, rules: ["Vegetarian"] }], edited: true, dishes: [] }, "app", ch));
+    const f = fakeModel({ guests: () => ({ rules: [{ rule: "vegetarian", never: ["meat", "fish", "unknown_tag"] }] }) });
+    await k.plan(f.model);
+    expect(f.guests()).toHaveLength(1);
+    expect(f.guests()[0].req.system).toBe(GUESTS_SYSTEM);
+    expect(f.guests()[0].user.rules).toEqual(["vegetarian"]);
+    const sat = k.dishesAt(SAT, "Dinner");
+    expect(sat).toContain("Fish fry");
+    expect(sat.filter((x) => x !== "Fish fry" && x !== "Phulka").length).toBeGreaterThan(0);
+  });
+
+  it("a person with their own add-on that day is fed there; the add-on has its dishes", async () => {
+    const k = await home({ people, rules: [GRANDMA], slots: [MAIN[0], FISH_LUNCH, MAIN[2], { name: "Nani's lunch", kind: "addon", addon_of: "Lunch", order: 60, usual_people: ["Nani"] }],
+      library: [{ name: "Rohu curry", slot: "Lunch", kind: "Fish & seafood", contains: ["fish"] }, ...["Lauki sabzi", "Tinda sabzi", "Turai sabzi"].map((name) => ({ name, slot: "Nani's lunch", kind: "Sabzi" }))] });
+    const r = await k.plan(fakeModel().model);
+    if (!r.ok) throw new Error(r.say);
+    for (const d of WEEK) expect(k.dishesAt(d, "Nani's lunch").length).toBeGreaterThan(0);
+    expect((r.unmet ?? []).filter((u) => u.includes("Nani"))).toEqual([]);
+  });
+
+  it("a soft swap with a count the week falls short of is kept by a note on some of the person's days, one a day, up to its least", async () => {
     const k = await home({ rules: [{ hard: false, what: "swap", who: "Ravi", items: ["white_rice"], to: "millet", frequency: "sometimes", quote: "millets are good for Ravi" }],
-      lib: { Breakfast: LIB.Breakfast, Dinner: LIB.Dinner, Lunch: [] },
-      library: ["Rice", "Sambar", "Rajma", "Kadhi", "Chole"].map((name) => ({ name, slot: "Lunch", contains: name === "Rice" ? ["white_rice"] : [], contains_read: [...READ, "white_rice", "millet"] })),
-      seed: [1, 2, 3].map(() => ({ slot: "Lunch", dishes: ["Rice", "Sambar"] })) });
-    const f = fakeModel();
-    await k.plan(f.model);
+      library: [{ name: "Rice", slot: "Lunch", kind: "Rice", contains: ["white_rice"], contains_read: [...READ, "millet"] }] });
+    await k.plan(fakeModel().model);
     const notes = WEEK.flatMap((d) => k.at(d, "Lunch")!.dishes.filter((x) => x.note).map((x) => `${d} ${x.dish}: ${x.note}`));
     expect(notes).toEqual([`${MON} Rice: millet in place of white rice for Ravi`, `${WEEK[1]} Rice: millet in place of white rice for Ravi`]);
   });
 
-  it("guests' food rules are read once into tags and kept like a person's: a fish-only dinner for vegetarian guests gets a dish of theirs beside, by code", async () => {
-    const k = await home({ library: [{ name: "Fish fry", slot: "Dinner", contains: ["fish"], contains_read: READ }] });
-    const SAT = WEEK[5];
-    commit(k.kit.db, k.kit.emitChange, (tx, ch) => saveSlotDay(tx, { date: SAT, slot: "Dinner", people: ["Asha", "Ravi", "Kabir"], guests: [{ count: 4, rules: ["Vegetarian"] }], edited: true, dishes: [] }, "app", ch));
-    // The week's other days without the fish fry, so only Saturday is wrong (and for the guests only).
-    const others = (u: any) => ({ ...u, library: u.library.filter((d: any) => d.dish !== "Fish fry") });
-    const f = fakeModel({ slot: (u) => u.slot === "Dinner" ? { days: { ...(rotateDays(others(u)) as any).days, [SAT]: ["Fish fry"] } } : rotateDays(u),
-      day: (u) => (u.rules ? { rules: [{ rule: "vegetarian", never: ["meat", "fish", "unknown_tag"] }] } : ingredients(u)) });
+  it("onion and garlic: a dish is planned for the person with a note, and stays bought (kinds model rule 7)", async () => {
+    const k = await home({ rules: [{ hard: true, what: "avoid", who: "Ravi", items: ["onion_garlic"], quote: "Ravi eats no onion or garlic" }],
+      library: LIB.Lunch.filter(([, kind]) => kind === "Sabzi").map(([name]) => ({ name, slot: "Lunch", kind: "Sabzi", contains: ["onion_garlic"] })) });
+    const f = fakeModel({ day: (u) => ({ dishes: u.dishes.map((d: any) => ({ slot: d.slot, name: d.name, ingredients: [{ item: "onion", amount: 50, unit: "g", tags: ["onion_garlic"] }, { item: d.name.toLowerCase(), amount: 200, unit: "g", tags: [] }] })) }) });
     await k.plan(f.model);
-    const read = f.calls.find((c) => c.req.purpose === "meal plan: guests' food rules")!;
-    expect(read.user.rules).toEqual(["vegetarian"]);
-    const sat = k.dishesAt(SAT, "Dinner");
-    expect(sat[0]).toBe("Fish fry");
-    expect(sat).toHaveLength(2);
-    expect(LIB.Dinner).toContain(sat[1]);
-    expect(f.gaps()).toHaveLength(0);
+    const sabzi = k.at(MON, "Lunch")!.dishes[2];
+    expect(sabzi.not_for).toEqual([]);
+    expect(sabzi.note).toBe("make without onion and garlic, or keep Ravi's portion aside");
+    expect(sabzi.ingredients.map((i) => i.item)).toContain("onion");
   });
 
-  it("a person left with nothing they can eat gets a dish of their own beside, by code; a dish never read for their rule's item is not theirs (fail closed)", async () => {
-    const k = await home({ people, rules: [GRANDMA], library: [{ name: "Mystery curry", slot: "Lunch", contains: [], contains_read: [] }] });
-    const f = fakeModel({ slot: (u) => u.slot === "Lunch" ? { days: { ...(rotateDays(u) as any).days, [MON]: ["Mystery curry"] } } : rotateDays(u),
-      contains: (u) => ({ dishes: u.dishes.map((d: string) => ({ dish: d, has: [], not: [] })) }) });
+  it("an ingredient tagged with what a person at the slot-day avoids is taken out, and a shared dish says so", async () => {
+    const k = await home({ rules: [{ hard: true, what: "avoid", who: "Asha", items: ["sugar"], quote: "no sugar for me" }] });
+    const f = fakeModel({ day: (u) => ({ dishes: u.dishes.map((d: any) => ({ slot: d.slot, name: d.name, ingredients: [{ item: "rice", amount: 100, unit: "g", tags: [] },
+      ...(d.slot === "Breakfast" ? [{ item: "jaggery", amount: 10, unit: "g", tags: ["sugar"] }] : [])] })) }) });
+    await k.plan(f.model);
+    expect(f.days()[0].user.dishes[0].tags).toEqual(["sugar"]);
+    const first = k.at(MON, "Breakfast")!.dishes[0];
+    expect(first.ingredients.map((i) => i.item)).toEqual(["rice"]);
+    expect(first.note).toBe("no jaggery for Asha");
+  });
+});
+
+describe("make_plan: an add-on and a box", () => {
+  it("an add-on whose only dish is had twice a week is filled on 2 days, spread apart; the other 5 have no slot-day, nothing unmet, nothing said", async () => {
+    const k = await home({ slots: [...MAIN, { name: "Ravi's fish", kind: "addon", addon_of: "Dinner", order: 60, usual_people: ["Ravi"] }],
+      library: [{ name: "Rohu curry", slot: "Ravi's fish", kind: "Fish & seafood", frequency: "2/week", contains: ["fish"] }] });
+    const r = await k.plan(fakeModel().model);
+    if (!r.ok) throw new Error(r.say);
+    const fish = k.week().filter((d) => d.slot === "Ravi's fish");
+    expect(fish).toHaveLength(2);
+    expect(fish.every((d) => d.dishes.map((x) => x.dish).join() === "Rohu curry")).toBe(true);
+    const [a, b] = fish.map((d) => Date.parse(d.date!)).sort();
+    expect((b - a) / 86_400_000).toBeGreaterThanOrEqual(2);
+    expect((r.unmet ?? []).filter((u) => u.includes("Ravi's fish"))).toEqual([]);
+    expect(r.message.split("Ravi's fish:").length - 1).toBe(2);
+    await k.plan(fakeModel().model);
+    expect(k.week().filter((d) => d.slot === "Ravi's fish")).toHaveLength(2);
+  });
+
+  it("a box with no dishes does not stop the plan: it is left out and named in the one question; nothing known at all is asked", async () => {
+    const k = await home({ slots: [...MAIN, { name: "Snack box", kind: "custom", order: 20, usual_people: ["Kabir"], days: ["Mon", "Tue", "Wed", "Thu", "Fri"] }] });
     const lines: string[] = [];
-    const r = await k.plan(f.model, { log: (l) => lines.push(l) });
-    const mon = k.at(MON, "Lunch")!.dishes;
-    expect(mon[0].dish).toBe("Mystery curry");
-    expect(mon[0].not_for).toEqual(["Nani"]);
-    expect(mon).toHaveLength(2);
-    expect(mon[1].not_for).toEqual([]);
-    expect(lines.some((l) => l.includes("Mon Lunch: + ") )).toBe(true);
-    expect(f.gaps()).toHaveLength(0);
-    if (r.ok) expect(r.unmet ?? []).toEqual([]);
+    const r = await k.plan(fakeModel().model, { log: (l) => lines.push(l) });
+    if (!r.ok) throw new Error(r.say);
+    expect(k.week().filter((d) => d.slot === "Snack box")).toEqual([]);
+    expect(k.week()).toHaveLength(21);
+    expect(r.asked).toHaveLength(1);
+    expect(r.asked![0]).toContain("Snack box");
+    expect(lines.some((l) => l.includes("no dishes known for Snack box"))).toBe(true);
+    const bare = await home({ lib: {}, slots: MAIN.map((s) => ({ name: s.name, kind: s.kind, order: s.order })) });
+    expect(await bare.plan(fakeModel().model)).toMatchObject({ ok: false, reason: "no_dishes" });
   });
+});
 
-  it("a person with their own add-on that day is fed there: the main slot is not sent back for them, and the call is told", async () => {
-    const k = await home({ people, rules: [GRANDMA], slots: [...MAIN, { name: "Nani's lunch", kind: "addon", addon_of: "Lunch", order: 60, usual_people: ["Nani"] }],
-      lib: { ...LIB, Lunch: ["Fish curry", "Prawn curry", "Chicken curry", "Egg curry"], "Nani's lunch": ["Lauki", "Tinda", "Turai"] },
-      library: ["Fish curry", "Prawn curry", "Chicken curry", "Egg curry"].map((name) => ({ name, slot: "Lunch", contains: ["fish"], contains_read: READ })) });
-    const f = fakeModel();
-    await k.plan(f.model);
-    expect(f.gaps().filter((c) => c.user.slot === "Lunch")).toHaveLength(0);
-    expect(reqOf(f, "Lunch").days[0].own_slot).toEqual(["Nani"]);
-    expect(k.dishesAt(MON, "Nani's lunch").length).toBeGreaterThan(0);
-  });
+describe("make_plan: allergies (owner 25 Nov)", () => {
+  const ALLERGY: RuleInput = { hard: true, what: "avoid", who: "Kabir", items: ["peanut"], quote: "Kabir is allergic to peanuts" };
+  const readAll = [...READ, "nuts"];
+  const POHA_ONLY: SlotInput = { name: "Breakfast", kind: "main", order: 10, kinds: [{ name: "Poha" }], templates: [T({ kind: "Poha" })] };
 
-  it("a slot too thin for its week: its gap days go to one targeted call; what that cannot fill takes the closest dish, never one on the wrong day", async () => {
-    const k = await home({ slots: [...MAIN, { name: "Ravi's breakfast", kind: "custom", order: 15, usual_people: ["Ravi"] }],
-      lib: { ...LIB, "Ravi's breakfast": ["Ragi dosa", "Ragi malt"] }, library: [{ name: "Thalipeeth", slot: "Ravi's breakfast", days: ["Sun"], contains: [], contains_read: READ }], newPerWeek: 0 });
-    const f = fakeModel({ slot: (u) => u.slot === "Ravi's breakfast" ? { days: Object.fromEntries(u.days.map((d: any) => [d.date, ["Thalipeeth"]])) } : rotateDays(u),
-      gap: (u) => ({ days: Object.fromEntries(u.gaps.map((x: any) => [x.date, ["Thalipeeth"]])) }) });
+  it("a family dish on their own plates at a slot Kabir eats is his by their word: no careful read, the note keeps his portion aside, its peanuts still bought", async () => {
+    const k = await home({ rules: [ALLERGY], seed: [{ slot: "Breakfast", dishes: ["Kanda poha"] }, { slot: "Breakfast", dishes: ["Rava upma"] }],
+      library: [{ name: "Kanda poha", slot: "Breakfast", kind: "Poha", contains: ["peanut"], contains_read: readAll }] });
+    const f = fakeModel({ day: (u) => ({ dishes: u.dishes.map((d: any) => ({ slot: d.slot, name: d.name, ingredients: [{ item: d.name === "Kanda poha" ? "peanuts" : "rice", amount: 50, unit: "g", tags: d.name === "Kanda poha" ? ["peanut"] : [] }] })) }) });
     const r = await k.plan(f.model);
-    for (const date of WEEK.slice(0, 6)) {
-      const ds = k.dishesAt(date, "Ravi's breakfast");
-      expect(ds).not.toContain("Thalipeeth");
-      expect(ds.length).toBe(1);
+    if (!r.ok) throw new Error(r.say);
+    expect(f.careful().flatMap((c) => c.user.dishes)).not.toContain("Kanda poha");
+    const day = WEEK.find((d) => k.dishesAt(d, "Breakfast").includes("Kanda poha"))!;
+    const poha = k.at(day, "Breakfast")!.dishes.find((x) => x.dish === "Kanda poha")!;
+    expect(poha.not_for).toEqual([]);
+    expect(poha.note).toBe("Kabir's Kanda poha without peanut");
+    expect(poha.ingredients.map((i) => i.item)).toEqual(["peanuts"]);
+  });
+
+  it("every other dish is read carefully on the balanced tier, the new ones placed too: one that may have it is not his, and he has his own", async () => {
+    const k = await home({ rules: [ALLERGY], slots: [POHA_ONLY, MAIN[1], MAIN[2]], lib: { ...LIB, Breakfast: [["Kanda poha", "Poha"]] } });
+    const f = fakeModel({ careful: (u) => ({ dishes: u.dishes.map((d: string) => ({ dish: d, has: d === "Kanda poha" ? [] : ["peanut"] })) }) });
+    await k.plan(f.model);
+    const c = f.careful();
+    expect(c.length).toBeGreaterThanOrEqual(2);
+    expect(c.every((x) => x.req.tier === "balanced" && x.req.system === CAREFUL_SYSTEM)).toBe(true);
+    expect(CAREFUL_SYSTEM).toContain("not sure");
+    expect(c[0].user.dishes).toContain("Kanda poha");
+    expect(c.slice(1).flatMap((x) => x.user.dishes).length).toBeGreaterThan(0);
+    for (const d of WEEK) {
+      const plate = k.at(d, "Breakfast")!.dishes;
+      for (const x of plate) if (x.dish !== "Kanda poha") expect(x.not_for).toEqual(["Kabir"]);
+      expect(plate.some((x) => !x.not_for.includes("Kabir"))).toBe(true);
     }
-    // Ragi dosa and Ragi malt have two days each: the other two weekdays were the gaps, asked once in one targeted call
-    // with only those days; its answer (Thalipeeth again) does not fit, so the closest dish stays and is said.
-    expect(f.gaps()).toHaveLength(1);
-    const g = f.gaps()[0];
-    expect(g.req.system).toBe(GAP_SYSTEM);
-    expect(g.req.tier).toBe("balanced");
-    expect(g.user.gaps).toHaveLength(2);
-    expect(g.user.new_dishes_allowed).toBeUndefined();
-    expect(g.user.gaps[0]).toMatchObject({ for: ["Ravi"], not: expect.arrayContaining(["Ragi dosa", "Ragi malt"]) });
-    if (r.ok) expect((r.unmet ?? []).join(" ")).toContain("comes back sooner than usual");
   });
 
-  it("library dishes setup never read are read before the week is planned, so they are not all failed closed (onboarding run 26)", async () => {
-    const k = await home({ people, rules: [{ hard: true, what: "veg", quote: "we are vegetarian" }],
-      library: Object.entries(LIB).flatMap(([slot, names]) => names.map((name) => ({ name, slot, contains: [], contains_read: [] }))) });
-    const f = fakeModel({ slot: rotateDays, contains: (u) => ({ dishes: u.dishes.map((d: string) => ({ dish: d, has: [], not: ["egg", "meat", "fish", "onion_garlic"] })) }) });
-    const r = await k.plan(f.model);
-    expect(r.ok).toBe(true);
-    const first = f.contains()[0];
-    expect(first.user.dishes).toEqual(expect.arrayContaining(["Poha", "Sambar", "Palak paneer"]));
-    // Everyone has their dishes: none is "not for" anyone for want of a read.
-    expect(k.at(MON, "Breakfast")!.dishes.every((d) => d.not_for.length === 0)).toBe(true);
-    if (r.ok) expect(r.unmet ?? []).toEqual([]);
-    expect(getLibraryDish(k.kit.db, "Poha", "Breakfast")!.contains_read.sort()).toEqual(["egg", "fish", "meat", "onion_garlic"]);
-  });
-
-  it("a new dish gets a contains read before the check, for the rules' tags and the base ones; what it has is saved on its library row", async () => {
-    const k = await home({ people, rules: [{ hard: true, what: "avoid", who: "Nani", items: ["sugar"], quote: "no sugar for Nani" }],
-      library: Object.entries(LIB).flatMap(([slot, names]) => names.map((name) => ({ name, slot, contains: [], contains_read: [...READ, "sugar"] }))) });
-    const f = fakeModel({
-      slot: (u) => u.slot === "Breakfast" ? { days: { ...(rotateDays(u) as any).days, [MON]: ["Poha", "Sheera"] }, new: [{ dish: "Sheera", why: "a sweet like their halwa", like: "Upma", part: "main" }] } : rotateDays(u),
-      contains: (u) => ({ dishes: u.dishes.map((d: string) => ({ dish: d, has: ["sugar"], not: ["egg", "meat", "fish", "onion_garlic"] })) }),
-    });
-    const r = await k.plan(f.model);
-    const read = f.contains().find((c) => c.user.dishes.includes("Sheera"))!;
-    expect(read.req.system).toBe(CONTAINS_SYSTEM);
-    expect(read.user.tags).toEqual(["egg", "meat", "fish", "onion_garlic", "nuts", "peanut", "sugar", "white_rice", "dairy"]);
-    expect(k.at(MON, "Breakfast")!.dishes.map((d) => [d.dish, d.not_for, d.new])).toEqual([["Poha", [], false], ["Sheera", ["Nani"], true]]);
-    const row = getLibraryDish(k.kit.db, "Sheera", "Breakfast")!;
-    expect(row).toMatchObject({ origin: "planner_suggested", suggested: true, untried: true, offers: 1, contains: ["sugar"] });
-    expect(row.contains_read.sort()).toEqual(["egg", "fish", "meat", "onion_garlic", "sugar"]);
-    // The model's reason is never pasted (owner, 25 Nov); the dish of theirs it stands in for is.
-    if (r.ok) expect(r.message).toContain("New this week: Sheera (like your Upma)\n");
-    if (r.ok) expect(r.message).not.toContain("a sweet like their halwa");
+  it("a careful read that leaves a dish out counts as having it (fail closed)", async () => {
+    const k = await home({ rules: [ALLERGY], slots: [POHA_ONLY, MAIN[1], MAIN[2]], lib: { ...LIB, Breakfast: [["Kanda poha", "Poha"], ["Batata poha", "Poha"]] }, newPerWeek: 0 });
+    const f = fakeModel({ careful: (u) => ({ dishes: u.dishes.filter((d: string) => d !== "Kanda poha").map((d: string) => ({ dish: d, has: [] })) }) });
+    await k.plan(f.model);
+    for (const d of WEEK) for (const x of k.at(d, "Breakfast")!.dishes) expect(x.not_for).toEqual(x.dish === "Kanda poha" ? ["Kabir"] : []);
   });
 });
 
-describe("make_plan v2: ordered slot calls", () => {
-  it("in planning order, never more than 3 at once; an add-on starts after its main slot and gets that slot's dishes", async () => {
-    const k = await home({
-      slots: [...MAIN, { name: "Kabir's tiffin", kind: "custom", order: 20, usual_people: ["Kabir"], days: ["Mon", "Tue", "Wed", "Thu", "Fri"] },
-        { name: "Snack", kind: "custom", order: 40 }, { name: "Ravi's dinner", kind: "addon", addon_of: "Dinner", order: 60, usual_people: ["Ravi"] }],
-      lib: { ...LIB, "Kabir's tiffin": ["Sandwich", "Paratha roll", "Poha cutlet", "Idli fry"], Snack: ["Chana", "Makhana", "Fruit chaat", "Sprouts"], "Ravi's dinner": ["Phulka", "Bajra roti", "Jowar roti", "Ragi roti"] },
-    });
-    const f = fakeModel({ wait: (u) => (u.slot === "Dinner" ? 30 : 10) });
+describe("make_plan: failures", () => {
+  it("out of credits on a read stops at once: a plain line, nothing saved, nothing more asked", async () => {
+    const k = await home({ rules: [{ hard: true, what: "veg", who: "Asha", quote: "Asha is vegetarian" }], library: [{ name: "Mystery curry", slot: "Lunch", contains: [], contains_read: [] }] });
+    const f = fakeModel({ contains: () => ({ ok: false, code: "out_of_credits", message: "no credits" }) });
     const r = await k.plan(f.model);
-    expect(r.ok).toBe(true);
-    expect(f.most()).toBe(3);
-    expect(f.slots().map((c) => c.user.slot)).toEqual(["Breakfast", "Kabir's tiffin", "Lunch", "Snack", "Dinner", "Ravi's dinner"]);
-    const addon = reqOf(f, "Ravi's dinner");
-    expect(addon.main_slot[MON]).toEqual(k.dishesAt(MON, "Dinner"));
-    expect(addon.days.every((d: any) => JSON.stringify(d.for) === '["Ravi"]')).toBe(true);
-    expect(reqOf(f, "Kabir's tiffin").days.map((d: any) => d.date)).toEqual(WEEK.slice(0, 5));
+    expect(r).toEqual({ ok: false, reason: "out_of_credits", say: expect.stringContaining("credits have run out") });
+    expect(k.week()).toHaveLength(0);
+    expect(f.days()).toHaveLength(0);
   });
 
-  it("no same main twice a day across main slots: a lunch that repeats breakfast's main is swapped in its place by code", async () => {
-    const k = await home({ lib: { Breakfast: ["Poha", "Upma", "Idli", "Dosa"], Lunch: ["Poha", "Rajma", "Kadhi", "Chole", "Sambar"], Dinner: LIB.Dinner } });
-    const f = fakeModel({ slot: (u) => u.slot === "Lunch" ? { days: { ...(rotateDays(u) as any).days, [MON]: ["Dosa"] }, new: [{ dish: "Dosa" }] } : rotateDays(u),
-      wait: (u) => (u.slot === "Lunch" ? 10 : 0) });
-    const lines: string[] = [];
-    await k.plan(f.model, { log: (l) => lines.push(l) });
-    expect(k.dishesAt(MON, "Breakfast")).toContain("Dosa");
-    expect(k.dishesAt(MON, "Lunch")).toHaveLength(1);
-    expect(k.dishesAt(MON, "Lunch")).not.toContain("Dosa");
-    expect(lines.some((l) => l.startsWith("Lunch: code: Mon Lunch: Dosa → ") && l.includes("already at Breakfast that day"))).toBe(true);
-    expect(f.gaps()).toHaveLength(0);
+  it("the day's budget spent while the ingredients are asked stops too, nothing saved", async () => {
+    const k = await home();
+    const r = await k.plan(fakeModel({ day: () => ({ ok: false, code: "daily_budget", message: "spent" }) }).model);
+    expect(r).toMatchObject({ ok: false, reason: "daily_budget" });
+    expect(k.week()).toHaveLength(0);
+  });
+
+  it("a day's ingredients are asked once more for what was left out, then saved without them and named", async () => {
+    const k = await home();
+    const f = fakeModel({ day: (u) => (u.date === MON ? { dishes: [] } : ingredients(u)) });
+    const r = await k.plan(f.model);
+    expect(f.days().filter((c) => c.user.date === MON)).toHaveLength(2);
+    if (!r.ok) throw new Error(r.say);
+    expect(r.no_ingredients).toEqual([...k.dishesAt(MON, "Breakfast").map((x) => `Mon Breakfast: ${x}`), ...k.dishesAt(MON, "Lunch").map((x) => `Mon Lunch: ${x}`),
+      ...k.dishesAt(MON, "Dinner").map((x) => `Mon Dinner: ${x}`)]);
+  });
+
+  it("make_plan needs a Monday, a family and the slots; two runs for one week at once are one run; with no model the week is still planned", async () => {
+    const k = await home();
+    expect((await k.op("make_plan", { week_start: "2026-12-01" })).error).toContain("must be a Monday");
+    const bare = await boot({ now: () => new Date(2026, 10, 29, 11, 0) });
+    expect(await bare.op("make_plan", { week_start: MON })).toMatchObject({ ok: false, reason: "no_family" });
+    await bare.op("set_person", { name: "Asha", group: "adult" });
+    expect(await bare.op("make_plan", { week_start: MON })).toMatchObject({ ok: false, reason: "no_slots" });
+    const f = fakeModel({ wait: 5 });
+    const [a, b] = await Promise.all([k.plan(f.model), k.plan(f.model)]);
+    expect(a).toEqual(b);
+    expect(f.days()).toHaveLength(7);
+    // Flock's op, no model to ask: planned by code, the ingredients named as missing.
+    const r = await k.op("make_plan", { week_start: MON, household: { "household.weekly": [] } });
+    expect(r.ok).toBe(true);
+    expect(r.no_ingredients.length).toBeGreaterThan(0);
   });
 });
 
-describe("make_plan v2: who eats (spec §5.1)", () => {
+describe("make_plan: who eats (spec §5.1)", () => {
   it("a child carrying a box of their own is not at the home lunch on those days; a parent carrying the home lunch is (owner, 25 Nov)", async () => {
     const k = await home({ slots: [...MAIN, { name: "Kabir's tiffin", kind: "custom", order: 20, usual_people: ["Kabir"], days: ["Mon", "Tue", "Wed", "Thu", "Fri"] }],
-      lib: { ...LIB, "Kabir's tiffin": ["Sandwich", "Pasta", "Curd rice"] } });
+      library: ["Sandwich", "Pasta", "Curd rice"].map((name) => ({ name, slot: "Kabir's tiffin" })) });
     const weekly = [{ person: "Kabir", where: "school", weekdays: ["Mon", "Tue", "Wed", "Thu", "Fri"], from: "08:00", to: "14:00", lunch: "carries" },
       { person: "Ravi", where: "office", weekdays: ["Mon", "Tue", "Wed", "Thu", "Fri"], from: "09:00", to: "18:00", lunch: "carries" }];
-    const f = fakeModel();
-    await k.plan(f.model, { household: { "household.weekly": weekly } });
-    const u = reqOf(f, "Lunch");
-    expect(u.days[0].for).toEqual(["Asha", "Ravi"]);
-    expect(u.days[0].why).toContain("Kabir: has their own box on Mon");
-    expect(u.days[5].for).toEqual(["Asha", "Ravi", "Kabir"]);
+    await k.plan(fakeModel().model, { household: { "household.weekly": weekly } });
+    expect(k.at(MON, "Lunch")!.people).toEqual(["Asha", "Ravi"]);
+    expect(k.at(WEEK[5], "Lunch")!.people).toEqual(["Asha", "Ravi", "Kabir"]);
+    expect(k.dishesAt(MON, "Kabir's tiffin").length).toBeGreaterThan(0);
   });
 
   it("household.weekly: away at weekday lunch is left out Mon to Fri, home on the weekend; the fresh household wins over the payload", async () => {
     const k = await home();
     const weekly = [{ person: "Ravi", where: "office", weekdays: ["Mon", "Tue", "Wed", "Thu", "Fri"], from: "09:00", to: "18:00" }];
-    const f = fakeModel();
-    await k.plan(f.model, { household: { "household.weekly": [] }, peers: { household: async () => ({ "household.weekly": weekly }) } });
-    const u = reqOf(f, "Lunch");
-    expect(u.days[0]).toMatchObject({ date: MON, for: ["Asha", "Kabir"], why: "Ravi: office on Mon" });
-    expect(u.days[5].for).toEqual(["Asha", "Ravi", "Kabir"]);
-    // The pattern's hours cover lunch, not breakfast or dinner.
-    expect(reqOf(f, "Dinner").days[0].for).toEqual(["Asha", "Ravi", "Kabir"]);
-    expect(reqOf(f, "Breakfast").days[0].for).toEqual(["Asha", "Ravi", "Kabir"]);
-    // A day out covering breakfast's or dinner's whole span is away; leaving for school at 7:30 or back at 9 is not.
-    const h = fakeModel();
-    await k.plan(h.model, { household: { "household.weekly": [{ person: "Kabir", where: "school", weekdays: ["Mon"], from: "07:30", to: "13:30", lunch: "home" },
+    await k.plan(fakeModel().model, { household: { "household.weekly": [] }, peers: { household: async () => ({ "household.weekly": weekly }) } });
+    expect(k.at(MON, "Lunch")!.people).toEqual(["Asha", "Kabir"]);
+    expect(k.at(WEEK[5], "Lunch")!.people).toEqual(["Asha", "Ravi", "Kabir"]);
+    expect(k.at(MON, "Dinner")!.people).toEqual(["Asha", "Ravi", "Kabir"]);
+    expect(k.at(MON, "Breakfast")!.people).toEqual(["Asha", "Ravi", "Kabir"]);
+    await k.plan(fakeModel().model, { household: { "household.weekly": [{ person: "Kabir", where: "school", weekdays: ["Mon"], from: "07:30", to: "13:30", lunch: "home" },
       { person: "Ravi", where: "office", weekdays: ["Mon"], from: "09:00", to: "21:00" }, { person: "Asha", where: "night shift", weekdays: ["Mon"], from: "18:00", to: "23:00" }] } });
-    expect(reqOf(h, "Breakfast").days[0].for).toEqual(["Asha", "Ravi", "Kabir"]);
-    expect(reqOf(h, "Lunch").days[0].for).toEqual(["Asha", "Kabir"]);
-    expect(reqOf(h, "Dinner").days[0].for).toEqual(["Ravi", "Kabir"]);
-    // Not a list: unknown, planned with the usual people.
-    const g = fakeModel();
-    await k.plan(g.model, { household: { "household.weekly": "office" } });
-    expect(reqOf(g, "Lunch").days[0].for).toEqual(["Asha", "Ravi", "Kabir"]);
+    expect(k.at(MON, "Breakfast")!.people).toEqual(["Asha", "Ravi", "Kabir"]);
+    expect(k.at(MON, "Lunch")!.people).toEqual(["Asha", "Kabir"]);
+    expect(k.at(MON, "Dinner")!.people).toEqual(["Ravi", "Kabir"]);
+    await k.plan(fakeModel().model, { household: { "household.weekly": "office" } });
+    expect(k.at(MON, "Lunch")!.people).toEqual(["Asha", "Ravi", "Kabir"]);
   });
 
   it("what setup read of weekday lunch (house.setup_state) wins over household.weekly; read tolerantly", async () => {
@@ -440,7 +494,7 @@ describe("make_plan v2: who eats (spec §5.1)", () => {
     expect(withLunchSaid(h, [{ person: "Ravi", lunch: "home" }, { person: "Asha", lunch: "carries" }]).weekly).toEqual([
       { person: "Ravi", where: "office", weekdays: ["Mon"], lunch: "home" }, { person: "Asha", where: "", weekdays: ["Mon", "Tue", "Wed", "Thu", "Fri"], lunch: "carries" }]);
     const k = await home();
-    expect(lunchSaid(k.kit.sqlite)).toEqual([]);   // no setup_state column on this branch: none
+    expect(lunchSaid(k.kit.sqlite)).toEqual([]);
     const fake = { query: () => ({ get: () => ({ setup_state: JSON.stringify({ weekday_lunch: [{ person: "Asha", lunch: "away", quote: "I eat at work" }, { person: "X", lunch: "maybe" }] }) }) }) };
     expect(lunchSaid(fake)).toEqual([{ person: "Asha", lunch: "away" }]);
   });
@@ -469,13 +523,11 @@ describe("make_plan v2: who eats (spec §5.1)", () => {
       { person: "Ankita", where: "home", weekdays: ["Mon", "Tue", "Wed", "Thu", "Fri"] }] }).weekly;
     const wk = { from: MON, to: WEEK[6] };
     const ev = (title: string, who: string | null, from: string, x: Partial<{ to: string; repeat: string; start_time: string; end_time: string }> = {}) => ({ title, who, from, to: x.to ?? from, ...x });
-    // Run 31's: "Office" (Shiva), Mon; "School" (Agastya), Tue; "Football" (Agastya), Tue: the week already has them out.
     expect(coveredByWeek(ev("Office", "Shiva", MON, { repeat: "weekly" }), weekly, wk)).toBe(true);
     expect(coveredByWeek(ev("School", "Agastya", WEEK[1], { repeat: "weekly" }), weekly, wk)).toBe(true);
     expect(coveredByWeek(ev("Football", "Agastya", WEEK[1], { repeat: "weekly", start_time: "16:00", end_time: "17:30" }), weekly, wk)).toBe(true);
-    expect(coveredByWeek(ev("Office", "Shiva", MON), weekly, wk)).toBe(true);                                      // names the place
-    expect(coveredByWeek(ev("Client call", "Shiva", MON, { start_time: "11:00", end_time: "12:00" }), weekly, wk)).toBe(true);   // in office hours
-    // What may change who eats at home: a one-off dinner out, a trip, a Saturday, someone home all day, no one named, no patterns.
+    expect(coveredByWeek(ev("Office", "Shiva", MON), weekly, wk)).toBe(true);
+    expect(coveredByWeek(ev("Client call", "Shiva", MON, { start_time: "11:00", end_time: "12:00" }), weekly, wk)).toBe(true);
     expect(coveredByWeek(ev("Dinner with clients", "Shiva", WEEK[1], { start_time: "20:00", end_time: "22:00" }), weekly, wk)).toBe(false);
     expect(coveredByWeek(ev("Pune trip", "Shiva", MON, { to: WEEK[2] }), weekly, wk)).toBe(false);
     expect(coveredByWeek(ev("Football", "Agastya", WEEK[5], { repeat: "weekly" }), weekly, wk)).toBe(false);
@@ -502,31 +554,10 @@ describe("make_plan v2: who eats (spec §5.1)", () => {
     expect(r.asked).toEqual(['Does "Dinner at the Raos" (Shiva, Thu) change who eats at home?']);
     expect(r.message).not.toContain("Office");
     expect(r.message.split("\n").filter((l) => l.trim().endsWith("?"))).toEqual(r.asked!);
-    // The whole routine and nothing else: no calendar call at all.
     const g = fakeModel();
     const r2 = await k.plan(g.model, { household: { "household.weekly": weekly }, peers: { calendar: async () => events.filter((e) => e.id !== "d1") } });
     expect(g.events()).toHaveLength(0);
     expect(r2.ok && r2.asked).toBeFalsy();
-  });
-
-  it("an entry it could not read is the one question, not a meal with few dishes; a new dish is said with the dish it stands in for, not the model's why", async () => {
-    const k = await home({ newPerWeek: 0, slots: [...MAIN, { name: "Ravi's breakfast", kind: "custom", order: 15, usual_people: ["Ravi"] }],
-      lib: { ...LIB, "Ravi's breakfast": ["Ragi dosa"] } });
-    const plates = ["Ragi dosa", "Ragi idli", "Ragi roti", "Ragi dosa", "Ragi idli", "Ragi roti", "Ragi upma"];
-    const why = "A lentil and rice pancake that fits the family's preference for variety and is less spicy for Ravi, who likes ragi in the morning.";
-    const f = fakeModel({
-      slot: (u) => u.slot === "Ravi's breakfast"
-        ? { days: Object.fromEntries(u.days.map((d: any, i: number) => [d.date, [plates[i]]])), new: ["Ragi idli", "Ragi roti", "Ragi upma"].map((dish) => ({ dish, why, like: "Ragi dosa" })) }
-        : rotateDays(u),
-      events: () => ({ changes: [{ id: "e3", effect: "unsure" }] }) });
-    const r = await k.plan(f.model, { peers: { calendar: async () => [{ id: "e3", title: "Thing", date: WEEK[3], kind: "event" }] } });
-    if (!r.ok) throw new Error(r.say);
-    // A meal with few dishes of theirs is no question any more (owner 25 Nov): new dishes like theirs fill it.
-    const q = "Does \"Thing\" (Thu) change who eats at home?";
-    expect(r.asked).toEqual([q]);
-    expect(r.message.split("\n").filter((l) => l.trim().endsWith("?"))).toEqual([q]);
-    expect(r.message).toContain("New this week: Ragi idli (like your Ragi dosa); Ragi roti (like your Ragi dosa); Ragi upma (like your Ragi dosa)");
-    expect(r.message).not.toContain("pancake");
   });
 
   it("no calendar (an older SDK, or none installed): the household's dated stays are read instead", async () => {
@@ -547,460 +578,49 @@ describe("make_plan v2: who eats (spec §5.1)", () => {
   it("a fast with nothing to eat takes the person off that slot-day; one with fasting food keeps them, with a note; a skip day is skipped, not asked", async () => {
     const k = await home({
       slots: [MAIN[0], MAIN[1], { ...MAIN[2], skip_days: [{ day: "Sun", skip: "eaten_out" }] }, { name: "Ravi's dinner", kind: "addon", addon_of: "Dinner", order: 60, usual_people: ["Ravi"] }],
-      lib: { ...LIB, "Ravi's dinner": ["Phulka", "Jowar roti"] },
+      library: ["Phulka", "Jowar roti"].map((name) => ({ name, slot: "Ravi's dinner" })),
       rules: [{ hard: true, what: "fasting", who: "Asha", days: ["Thu"], slots: ["Breakfast", "Lunch"], quote: "I fast Thursdays till evening" },
         { hard: true, what: "fasting", who: "Ravi", days: ["Mon"], fasting_food: ["fruit", "sabudana"], quote: "Monday fast, only fruit" }],
     });
-    const f = fakeModel();
-    const r = await k.plan(f.model);
+    const r = await k.plan(fakeModel().model);
     expect(k.at("2026-12-03", "Lunch")!.people).toEqual(["Ravi", "Kabir"]);
-    expect(reqOf(f, "Lunch").days[3].why).toBe("Asha fasts (I fast Thursdays till evening)");
-    expect(reqOf(f, "Lunch").days[0].fasting).toEqual(["Ravi fasts: only fruit, sabudana (Monday fast, only fruit)"]);
     expect(k.at(MON, "Lunch")!.people).toContain("Ravi");
-    expect(reqOf(f, "Dinner").days[6]).toEqual({ date: "2026-12-06", skip: "eaten_out" });
+    expect(k.at(MON, "Lunch")!.note).toBe("Ravi fasts: only fruit, sabudana (Monday fast, only fruit)");
     expect(k.at("2026-12-06", "Dinner")).toMatchObject({ skip: "eaten_out", dishes: [] });
-    // An add-on goes with its main slot: eaten out too.
     expect(k.at("2026-12-06", "Ravi's dinner")).toMatchObject({ skip: "eaten_out", dishes: [] });
     expect(k.dishesAt("2026-12-05", "Ravi's dinner").length).toBeGreaterThan(0);
     if (r.ok) expect(r.message).toContain("Dinner: eating out");
   });
 
-  it("an edited slot-day is kept: with dishes it is not asked again; without, its people, guests and occasion stay as the family set them", async () => {
+  it("an edited slot-day is kept: with dishes it is not planned again; without, its people, guests and occasion stay as the family set them", async () => {
     const k = await home();
     commit(k.kit.db, k.kit.emitChange, (tx, ch) => {
       saveSlotDay(tx, { date: "2026-12-02", slot: "Lunch", people: ["Asha"], edited: true, dishes: [{ dish: "Biryani" }] }, "user:x", ch);
       saveSlotDay(tx, { date: "2026-12-03", slot: "Dinner", people: ["Asha", "Ravi", "Kabir"], guests: [{ count: 4 }], occasion: "dinner party", edited: true }, "user:x", ch);
     });
-    const f = fakeModel();
-    await k.plan(f.model);
     await k.plan(fakeModel().model);
-    expect(reqOf(f, "Lunch").days.map((d: any) => d.date)).not.toContain("2026-12-02");
+    await k.plan(fakeModel().model);
     expect(k.at("2026-12-02", "Lunch")).toMatchObject({ people: ["Asha"], edited: true });
     expect(k.dishesAt("2026-12-02", "Lunch")).toEqual(["Biryani"]);
-    expect(reqOf(f, "Dinner").days[3]).toMatchObject({ date: "2026-12-03", guests: [{ count: 4 }], occasion: "dinner party" });
     expect(k.at("2026-12-03", "Dinner")).toMatchObject({ edited: true, guests: [{ count: 4 }], occasion: "dinner party" });
     expect(k.dishesAt("2026-12-03", "Dinner").length).toBeGreaterThan(0);
     expect(k.week()).toHaveLength(21);
   });
 });
 
-describe("make_plan: their dishes guide the week (owner 25 Nov)", () => {
-  it("new dishes like theirs come with no weekly budget; one like nothing of theirs is replaced by code; new ones saved untried, each placement an offer, not counted twice on a re-plan", async () => {
-    const k = await home({ newPerWeek: 0 });
-    const f = fakeModel({ slot: (u) => u.slot === "Dinner"
-      ? { days: { ...(rotateDays(u) as any).days, [MON]: ["Paneer bhurji"], "2026-12-01": ["Matar paneer"], "2026-12-02": ["Tacos"] },
-          new: [{ dish: "Paneer bhurji", like: "Palak paneer", part: "main" }, { dish: "Matar paneer", like: "Palak paneer", part: "main" }, { dish: "Tacos", like: "Burrito", part: "main" }] }
-      : rotateDays(u) });
-    const lines: string[] = [];
-    await k.plan(f.model, { log: (l) => lines.push(l) });
-    expect(reqOf(f, "Dinner").new_dishes_allowed).toBeUndefined();
-    expect(f.gaps()).toHaveLength(0);
-    expect(lines.some((l) => l.includes("Wed Dinner: Tacos → ") && l.includes("not like a dish of theirs at Dinner"))).toBe(true);
-    expect(LIB.Dinner).toContain(k.dishesAt("2026-12-02", "Dinner")[0]);
-    const news = k.week().flatMap((d) => d.dishes.filter((x) => x.new).map((x) => x.dish));
-    expect(new Set(news)).toEqual(new Set(["Paneer bhurji", "Matar paneer"]));
-    const untried = () => k.rows("library").filter((r: any) => r.untried === 1);
-    for (const r of untried()) expect(r.offers).toBe(k.week().filter((d) => d.dishes.some((x) => x.dish === r.name)).length);
-    const before = untried().map((r: any) => [r.name, r.offers]);
-    await k.plan(f.model);
-    expect(untried().map((r: any) => [r.name, r.offers])).toEqual(before);
-  });
-
-  it("a later week is guided by what was planned and kept at the slot: those dishes are theirs (not new again), and a new dish may be like one of them", async () => {
-    const k = await home({ lib: { ...LIB, Dinner: ["Palak paneer", "Aloo gobi"] },
-      history: [{ date: "2026-11-24", slot: "Dinner", status: "planned", dishes: ["Paneer bhurji"] }, { date: "2026-11-26", slot: "Dinner", status: "planned", dishes: ["Lauki kofta"] },
-        { date: "2026-10-01", slot: "Dinner", status: "planned", dishes: ["Ancient curry"] }] });
-    const f = fakeModel({ slot: (u) => u.slot === "Dinner"
-      ? { days: Object.fromEntries(u.days.map((d: any, i: number) => [d.date, [["Paneer bhurji", "Lauki kofta", "Palak paneer", "Aloo gobi", "Malai kofta", "Paneer bhurji", "Lauki kofta"][i]]])),
-          new: [{ dish: "Malai kofta", like: "Lauki kofta", part: "main" }] } : rotateDays(u) });
-    const r = await k.plan(f.model);
-    if (!r.ok) throw new Error(r.say);
-    const lib = reqOf(f, "Dinner").library.map((d: any) => d.dish);
-    expect(lib).toEqual(expect.arrayContaining(["Paneer bhurji", "Lauki kofta"]));
-    expect(lib).not.toContain("Ancient curry");   // more than four weeks back
-    expect(WEEK.map((d) => k.dishesAt(d, "Dinner")[0])).toEqual(["Paneer bhurji", "Lauki kofta", "Palak paneer", "Aloo gobi", "Malai kofta", "Paneer bhurji", "Lauki kofta"]);
-    expect(r.message).toContain("New this week: Malai kofta (like your Lauki kofta)");
-    expect(r.message).not.toContain("Paneer bhurji (like");
-  });
-
-  it("at least 30% of a week's mains are their own: a call of new dishes only keeps their dishes on the rest", async () => {
-    const k = await home();
-    const news = ["Thalipeeth", "Sabudana khichdi", "Misal", "Sheera", "Dhokla", "Handvo", "Khaman"];
-    const f = fakeModel({ slot: (u) => u.slot === "Breakfast" ? { days: Object.fromEntries(u.days.map((d: any, i: number) => [d.date, [news[i]]])), new: news.map((dish) => ({ dish, like: "Poha", part: "main" })) } : rotateDays(u) });
-    await k.plan(f.model);
-    const all = WEEK.map((d) => k.dishesAt(d, "Breakfast")[0]);
-    expect(all.filter((x) => LIB.Breakfast.includes(x)).length).toBeGreaterThanOrEqual(Math.ceil(7 * 0.3));
-    expect(all.filter((x) => news.includes(x))).toHaveLength(4);   // 70% of 7 places, rounded down
-  });
-
-  it("a meal with few dishes of theirs is no question (owner 25 Nov): new dishes like theirs fill it", async () => {
-    const k = await home({ newPerWeek: 0, slots: [...MAIN, { name: "Ravi's breakfast", kind: "custom", order: 15, usual_people: ["Ravi"] }],
-      lib: { Breakfast: ["Poha", "Upma"], Lunch: ["Sambar", "Rajma", "Kadhi"], Dinner: LIB.Dinner, "Ravi's breakfast": ["Ragi dosa"] } });
-    const r = await k.plan(fakeModel().model);
-    if (!r.ok) throw new Error(r.say);
-    expect(r.asked ?? []).toEqual([]);
-    expect(r.message).not.toContain("I know only a few");
-  });
-
-  it("a meal with one dish of theirs is filled with new dishes like it, saved untried with an offer each", async () => {
-    const k = await home({ newPerWeek: 0, slots: [...MAIN, { name: "Ravi's breakfast", kind: "custom", order: 15, usual_people: ["Ravi"] }],
-      lib: { ...LIB, "Ravi's breakfast": ["Ragi dosa"] } });
-    const plates = ["Ragi dosa", "Ragi idli", "Ragi roti", "Ragi dosa", "Ragi idli", "Ragi roti", "Ragi upma"];
-    const f = fakeModel({ slot: (u) => u.slot === "Ravi's breakfast"
-      ? { days: Object.fromEntries(u.days.map((d: any, i: number) => [d.date, [plates[i]]])), new: ["Ragi idli", "Ragi roti", "Ragi upma"].map((dish) => ({ dish, like: "Ragi dosa" })) }
-      : rotateDays(u) });
-    const r = await k.plan(f.model);
-    if (!r.ok) throw new Error(r.say);
-    expect(f.gaps()).toHaveLength(0);
-    expect(WEEK.map((d) => k.dishesAt(d, "Ravi's breakfast")[0])).toEqual(plates);
-    for (const name of ["Ragi idli", "Ragi roti", "Ragi upma"]) {
-      const row = k.rows("library").find((x: any) => x.name === name && x.slot === "Ravi's breakfast");
-      expect(row).toMatchObject({ origin: "planner_suggested", suggested: 1, untried: 1, offers: plates.filter((x) => x === name).length });
-    }
-    expect(r.asked ?? []).toEqual([]);
-    expect(r.message).toContain("Ragi idli (like your Ragi dosa)");
-  });
-
-  it("an add-on whose only dish is had twice a week is filled on 2 days, spread apart; the other 5 have no slot-day, nothing unmet, nothing said", async () => {
-    const k = await home({ slots: [...MAIN, { name: "Ravi's fish", kind: "addon", addon_of: "Dinner", order: 60, usual_people: ["Ravi"] }],
-      library: [{ name: "Fish curry", slot: "Ravi's fish", frequency: "2/week", contains: ["fish"], contains_read: READ }] });
-    const f = fakeModel({ slot: (u) => u.slot === "Ravi's fish" ? { days: Object.fromEntries(u.days.map((d: any) => [d.date, ["Fish curry"]])) } : rotateDays(u) });
-    const r = await k.plan(f.model);
-    if (!r.ok) throw new Error(r.say);
-    const fish = k.week().filter((d) => d.slot === "Ravi's fish");
-    expect(fish).toHaveLength(2);
-    expect(f.gaps()).toHaveLength(0);
-    expect(fish.every((d) => d.dishes.map((x) => x.dish).join() === "Fish curry")).toBe(true);
-    const [a, b] = fish.map((d) => Date.parse(d.date!)).sort();
-    expect((b - a) / 86_400_000).toBeGreaterThanOrEqual(3);
-    expect(r.unmet ?? []).toEqual([]);
-    expect(r.asked ?? []).toEqual([]);
-    expect(r.message.split("Ravi's fish:").length - 1).toBe(2);
-    expect(r.message).not.toContain("nothing planned");
-    expect(r.message).not.toContain("ordering in");
-    // The week view has only those two; a re-plan of the week keeps it so.
-    const view = (await k.owner("GET", `/api/weeks/${MON}`)).body;
-    expect(view.days.flatMap((d: any) => d.meals).filter((m: any) => m.slot === "Ravi's fish")).toHaveLength(2);
-    await k.plan(f.model);
-    expect(k.week().filter((d) => d.slot === "Ravi's fish")).toHaveLength(2);
-  });
-});
-
-describe("make_plan: per-day lists, spares and the walk (owner 25 Nov)", () => {
-  it("each day's allowed list keeps a dish to its days and to its days a week; a call that ignores them is put right by code, no call back", async () => {
-    const k = await home({ lib: { ...LIB, Breakfast: ["Poha", "Upma", "Idli", "Dosa", "Besan chilla"] },
-      library: [{ name: "Aloo paratha", slot: "Breakfast", days: ["Sat", "Sun"], origin: "setup_named" }] });
-    const f = fakeModel({ slot: (u) => u.slot === "Breakfast" ? { days: Object.fromEntries(u.days.map((d: any) => [d.date, ["Aloo paratha"]])) } : rotateDays(u) });
-    await k.plan(f.model);
-    const u = reqOf(f, "Breakfast");
-    expect(u.days[0].allowed).not.toContain("Aloo paratha");
-    expect(u.days[5].allowed).toContain("Aloo paratha");
-    expect(u.library.find((d: any) => d.dish === "Aloo paratha")).toMatchObject({ days: ["Sat", "Sun"], left: 2 });
-    expect(WEEK.filter((d) => k.dishesAt(d, "Breakfast").includes("Aloo paratha"))).toEqual([WEEK[5], WEEK[6]]);
-    // Monday to Friday: the family's other breakfasts, none more than twice.
-    const n = new Map<string, number>();
-    for (const d of WEEK.slice(0, 5)) for (const x of k.dishesAt(d, "Breakfast")) n.set(x, (n.get(x) ?? 0) + 1);
-    expect(Math.max(...n.values())).toBeLessThanOrEqual(2);
-    expect(f.gaps()).toHaveLength(0);
-  });
-
-  it("a main is at most twice a week counted across slots: what breakfast used is not left for dinner", async () => {
-    const k = await home({ slots: [...MAIN, { name: "Snack", kind: "custom", order: 40 }],
-      lib: { Breakfast: ["Dosa", "Poha", "Upma", "Idli"], Lunch: LIB.Lunch, Snack: ["Chana", "Makhana", "Sprouts", "Fruit chaat"], Dinner: ["Dosa", "Palak paneer", "Aloo gobi", "Bhindi", "Dal makhani"] } });
-    // Breakfast puts Dosa on Monday and Wednesday; dinner (asked once breakfast is done) asks it every day.
-    const f = fakeModel({ slot: (u) => u.slot === "Breakfast" ? { days: Object.fromEntries(u.days.map((d: any, i: number) => [d.date, [["Dosa", "Poha", "Dosa", "Upma", "Idli", "Poha", "Upma"][i]]])) }
-      : u.slot === "Dinner" ? { days: Object.fromEntries(u.days.map((d: any) => [d.date, ["Dosa"]])) } : rotateDays(u), wait: (u) => (u.slot === "Breakfast" ? 0 : 20) });
-    await k.plan(f.model);
-    expect(reqOf(f, "Dinner").library.find((d: any) => d.dish === "Dosa")).toBeUndefined();   // no days left
-    expect(reqOf(f, "Dinner").days[4].allowed).not.toContain("Dosa");
-    expect(WEEK.filter((d) => k.dishesAt(d, "Dinner").includes("Dosa"))).toEqual([]);
-    expect(WEEK.filter((d) => k.dishesAt(d, "Breakfast").includes("Dosa"))).toHaveLength(2);
-  });
-
-  it("must_have: the rice or bread the family's lunch plates have is asked for each day and added where the call left it out", async () => {
-    const k = await home({ lib: { ...LIB, Lunch: ["Dal", "Bhindi sabzi", "Lauki sabzi", "Rajma", "Chole", "Kadhi", "Aloo sabzi"] },
-      seed: [{ slot: "Lunch", dishes: ["Roti", "Bhindi sabzi"] }, { slot: "Lunch", dishes: ["Dal", "Rice", "Lauki sabzi", "Curd"] }] });
-    const f = fakeModel({ slot: (u) => u.slot === "Lunch" ? { days: Object.fromEntries(u.days.map((d: any, i: number) => [d.date, [u.library[i % u.library.length].dish]])) } : rotateDays(u) });
-    await k.plan(f.model);
-    const u = reqOf(f, "Lunch");
-    expect(u.days[0].must_have).toEqual(["Roti or Rice"]);
-    expect(reqOf(f, "Breakfast").days[0].must_have).toBeUndefined();
-    expect(u.staples).toEqual(expect.arrayContaining(["Roti", "Rice", "Curd"]));
-    for (const d of WEEK) expect(["Roti", "Rice"]).toContain(k.dishesAt(d, "Lunch")[0]);
-    expect(f.parts()).toHaveLength(1);
-    expect(f.parts()[0].req.tier).toBe("fast");
-    expect(f.parts()[0].req.system).toBe(PARTS_SYSTEM);
-  });
-
-  it("spares come in the same call with the dish of theirs each is like, are read for what they contain, and take a place that cannot stay; a used spare is new; one like nothing of theirs never", async () => {
-    const k = await home({ lib: { ...LIB, Dinner: ["Palak paneer", "Aloo gobi"] } });
-    // Dinner asks Palak paneer every day: two days, then Aloo gobi's two, then the spares.
-    const f = fakeModel({ slot: (u) => u.slot === "Dinner" ? { days: Object.fromEntries(u.days.map((d: any) => [d.date, ["Palak paneer"]])),
-      spares: { main: [{ dish: "Kadai paneer", like: "Pizza" }, { dish: "Paneer bhurji", like: "Palak paneer" }, { dish: "Matar paneer", like: "Aloo gobi" }] } } : rotateDays(u),
-      contains: (u) => ({ dishes: u.dishes.map((d: string) => ({ dish: d, has: ["dairy"], not: u.tags.filter((t: string) => t !== "dairy") })) }) });
-    const r = await k.plan(f.model);
-    if (!r.ok) throw new Error(r.say);
-    expect(reqOf(f, "Dinner").parts).toEqual(["main"]);
-    const read = f.contains().flatMap((c) => c.user.dishes);
-    expect(read).toEqual(expect.arrayContaining(["Paneer bhurji", "Matar paneer", "Kadai paneer"]));
-    const all = WEEK.map((d) => k.dishesAt(d, "Dinner")[0]);
-    expect(all.filter((x) => x === "Palak paneer")).toHaveLength(2);
-    expect(all.filter((x) => x === "Aloo gobi")).toHaveLength(2);
-    expect(all.filter((x) => x === "Paneer bhurji")).toHaveLength(2);
-    expect(all.filter((x) => x === "Matar paneer").length).toBeGreaterThan(0);
-    expect(all).not.toContain("Kadai paneer");   // "like" their Pizza: no such dish of theirs
-    expect(reqOf(f, "Dinner").days[0].new_dishes_allowed).toBeUndefined();
-    expect(WEEK.map((d) => k.at(d, "Dinner")!.dishes[0]).filter((x) => x.new).map((x) => x.dish).sort()).toEqual(all.filter((x) => x === "Paneer bhurji" || x === "Matar paneer").sort());
-    expect(k.rows("library").find((x: any) => x.name === "Paneer bhurji")).toMatchObject({ origin: "planner_suggested", untried: 1 });
-    expect(f.gaps()).toHaveLength(0);
-  });
-});
-
-describe("make_plan: a box with no dishes (owner 25 Nov)", () => {
-  it("does not stop the plan: every other meal is planned, the box is left out and named in the one question", async () => {
-    const k = await home({ slots: [...MAIN, { name: "Snack box", kind: "custom", order: 20, usual_people: ["Kabir"], days: ["Mon", "Tue", "Wed", "Thu", "Fri"] }] });
-    const f = fakeModel();
-    const lines: string[] = [];
-    const r = await k.plan(f.model, { log: (l) => lines.push(l) });
-    if (!r.ok) throw new Error(r.say);
-    expect(f.slots().map((c) => c.user.slot)).toEqual(["Breakfast", "Lunch", "Dinner"]);
-    expect(k.week().filter((d) => d.slot === "Snack box")).toEqual([]);
-    expect(k.week()).toHaveLength(21);
-    expect(r.asked).toHaveLength(1);
-    expect(r.asked![0]).toContain("Snack box");
-    expect(r.message).toContain(r.asked![0]);
-    expect(lines.some((l) => l.includes("no dishes known for Snack box"))).toBe(true);
-    // No meal known at all: still the question, nothing planned.
-    const bare = await home({ lib: {} });
-    expect(await bare.plan(fakeModel().model)).toMatchObject({ ok: false, reason: "no_dishes" });
-  });
-
-  it("the request has no least for a dish the family has often (\"fewer than said is fine\")", async () => {
-    const k = await home({ library: [{ name: "Kadhi", slot: "Lunch", frequency: "usually" }] });
-    const f = fakeModel();
-    await k.plan(f.model);
-    const kadhi = reqOf(f, "Lunch").library.find((d: any) => d.dish === "Kadhi");
-    expect(kadhi).toMatchObject({ how_often: "usually", left: 5 });
-    expect(kadhi.at_least).toBeUndefined();
-  });
-
-  it("a dish's own words for how often or which days go to the call beside its count and days; code's caps still win", async () => {
-    const k = await home({ library: [{ name: "Rajma", slot: "Lunch", frequency: "1/week", said: "rajma or chole twice a week" },
-      { name: "Chole", slot: "Lunch", frequency: "1/week", said: "rajma or chole twice a week" },
-      { name: "Puri", slot: "Breakfast", days: ["Sun"], said: "puri on Sunday mornings" },
-      { name: "Kadhi", slot: "Lunch", said: "kadhi twice" }] });   // words without a count or days saved: not sent
-    const f = fakeModel({ slot: (u) => u.slot === "Lunch" ? { days: Object.fromEntries(u.days.map((d: any) => [d.date, ["Rajma"]])) } : rotateDays(u) });
-    await k.plan(f.model);
-    const lunch = reqOf(f, "Lunch").library;
-    expect(lunch.find((d: any) => d.dish === "Rajma")).toMatchObject({ how_often: "1/week", left: 1, said: "rajma or chole twice a week" });
-    expect(lunch.find((d: any) => d.dish === "Chole")).toMatchObject({ said: "rajma or chole twice a week" });
-    expect(lunch.find((d: any) => d.dish === "Kadhi").said).toBeUndefined();
-    expect(reqOf(f, "Breakfast").library.find((d: any) => d.dish === "Puri")).toMatchObject({ days: ["Sun"], said: "puri on Sunday mornings" });
-    expect(WEEK.filter((d) => k.dishesAt(d, "Lunch").includes("Rajma"))).toHaveLength(1);
-    expect(SLOT_SYSTEM).toContain("`said`");
-  });
-});
-
-describe("make_plan: allergies (owner 25 Nov)", () => {
-  const ALLERGY: RuleInput = { hard: true, what: "avoid", who: "Kabir", items: ["peanut"], quote: "Kabir is allergic to peanuts" };
-  const readAll = [...READ, "peanut", "nuts"];
-
-  it("a family dish on their own plates at a slot Kabir eats is his by their word: no careful read, the note keeps his portion aside, its peanuts still bought", async () => {
-    const k = await home({ rules: [ALLERGY], seed: [{ slot: "Breakfast", dishes: ["Poha"] }, { slot: "Breakfast", dishes: ["Upma"] }],
-      library: [{ name: "Poha", slot: "Breakfast", contains: ["peanut"], contains_read: readAll }],
-      lib: { ...LIB, Breakfast: ["Upma", "Idli", "Dosa"] } });
-    const f = fakeModel({ slot: (u) => u.slot === "Breakfast" ? { days: { ...(rotateDays(u) as any).days, [MON]: ["Poha"] } } : rotateDays(u),
-      careful: (u) => ({ dishes: u.dishes.map((d: string) => ({ dish: d, has: [] })) }),
-      day: (u) => ({ dishes: u.dishes.map((d: any) => ({ slot: d.slot, name: d.name, ingredients: [{ item: d.name === "Poha" ? "peanuts" : "rice", amount: 50, unit: "g", tags: d.name === "Poha" ? ["peanut"] : [] }] })) }) });
-    const r = await k.plan(f.model);
-    if (!r.ok) throw new Error(r.say);
-    expect(f.careful().flatMap((c) => c.user.dishes)).not.toContain("Poha");
-    expect(f.careful().flatMap((c) => c.user.dishes)).not.toContain("Upma");
-    const poha = k.at(MON, "Breakfast")!.dishes.find((x) => x.dish === "Poha")!;
-    expect(poha.not_for).toEqual([]);
-    expect(poha.note).toBe("Kabir's Poha without peanut");
-    expect(poha.ingredients.map((i) => i.item)).toEqual(["peanuts"]);
-  });
-
-  it("every other dish is read carefully on the balanced tier, unsure counted as having it: one that may have it is not his, and he gets one of his own", async () => {
-    const k = await home({ rules: [ALLERGY], newPerWeek: 2, library: Object.entries(LIB).flatMap(([slot, ns]) => ns.map((name) => ({ name, slot, contains: [], contains_read: readAll }))) });
-    const f = fakeModel({ slot: (u) => u.slot === "Breakfast" ? { days: { ...(rotateDays(u) as any).days, [MON]: ["Sabudana khichdi"] }, new: [{ dish: "Sabudana khichdi", why: "a quick one", like: "Upma", part: "main" }] } : rotateDays(u),
-      contains: (u) => ({ dishes: u.dishes.map((d: string) => ({ dish: d, has: [], not: u.tags })) }),
-      careful: (u) => ({ dishes: u.dishes.map((d: string) => ({ dish: d, has: d === "Sabudana khichdi" ? ["peanut"] : [] })) }) });
-    await k.plan(f.model);
-    const c = f.careful();
-    expect(c.length).toBeGreaterThan(0);
-    expect(c.every((x) => x.req.tier === "balanced" && x.req.system === CAREFUL_SYSTEM)).toBe(true);
-    expect(CAREFUL_SYSTEM).toContain("not sure");
-    // The library's dishes (on no plate of theirs) are read carefully up front; the new dish when the call names it.
-    expect(c[0].user.dishes).toEqual(expect.arrayContaining(["Poha", "Sambar"]));
-    expect(c.flatMap((x) => x.user.dishes)).toContain("Sabudana khichdi");
-    const mon = k.at(MON, "Breakfast")!.dishes;
-    expect(mon.find((x) => x.dish === "Sabudana khichdi")!.not_for).toEqual(["Kabir"]);
-    expect(mon.some((x) => x.dish !== "Sabudana khichdi" && !x.not_for.length)).toBe(true);
-  });
-
-  it("a careful read that leaves a dish out counts as having it (fail closed)", async () => {
-    const k = await home({ rules: [ALLERGY], library: Object.entries(LIB).flatMap(([slot, ns]) => ns.map((name) => ({ name, slot, contains: [], contains_read: readAll }))) });
-    const f = fakeModel({ careful: (u) => ({ dishes: u.dishes.filter((d: string) => d !== "Poha").map((d: string) => ({ dish: d, has: [] })) }) });
-    await k.plan(f.model);
-    for (const d of WEEK) for (const x of k.at(d, "Breakfast")!.dishes) expect(x.not_for).toEqual(x.dish === "Poha" ? ["Kabir"] : []);
-  });
-
-  it("a house-wide allergy: every family dish is safe by their word (no read); a new one is still read carefully", async () => {
-    const k = await home({ rules: [{ ...ALLERGY, who: null, quote: "nobody here has peanuts, an allergy" }], newPerWeek: 1 });
-    const f = fakeModel({ slot: (u) => u.slot === "Dinner" ? { days: { ...(rotateDays(u) as any).days, [MON]: ["Thai curry"] }, new: [{ dish: "Thai curry" }] } : rotateDays(u),
-      contains: (u) => ({ dishes: u.dishes.map((d: string) => ({ dish: d, has: [], not: u.tags })) }) });
-    await k.plan(f.model);
-    expect(f.careful().flatMap((c) => c.user.dishes)).toEqual(["Thai curry"]);
-  });
-});
-
-describe("make_plan v2: failures", () => {
-  it("out of credits on a slot call stops at once: a plain line, nothing saved, nothing more asked", async () => {
-    const k = await home();
-    const f = fakeModel({ slot: () => ({ ok: false, code: "out_of_credits", message: "no credits" }) });
-    const r = await k.plan(f.model);
-    expect(r).toEqual({ ok: false, reason: "out_of_credits", say: expect.stringContaining("credits have run out") });
-    expect(k.week()).toHaveLength(0);
-    expect(f.days()).toHaveLength(0);
-    expect(f.gaps()).toHaveLength(0);
-  });
-
-  it("the day's budget spent while the ingredients are asked stops too, nothing saved", async () => {
-    const k = await home();
-    const r = await k.plan(fakeModel({ day: () => ({ ok: false, code: "daily_budget", message: "spent" }) }).model);
-    expect(r).toMatchObject({ ok: false, reason: "daily_budget" });
-    expect(k.week()).toHaveLength(0);
-  });
-
-  it("an unreadable answer: code fills each day from the family's dishes, no call back; a model never answering plans no week", async () => {
-    const k = await home();
-    const f = fakeModel({ slot: (u) => (u.slot === "Lunch" ? { nonsense: true } : rotateDays(u)) });
-    const r = await k.plan(f.model);
-    expect(r.ok).toBe(true);
-    expect(f.gaps()).toHaveLength(0);
-    for (const date of WEEK) expect(k.dishesAt(date, "Lunch")).toHaveLength(1);
-    // Each of the four dishes on two days at most.
-    const n = new Map<string, number>();
-    for (const date of WEEK) for (const x of k.dishesAt(date, "Lunch")) n.set(x, (n.get(x) ?? 0) + 1);
-    expect(Math.max(...n.values())).toBeLessThanOrEqual(2);
-    const down = await home();
-    const g = fakeModel({ slot: () => ({ ok: false, code: "unavailable", message: "down" }) });
-    expect(await down.plan(g.model)).toMatchObject({ ok: false, reason: "unavailable" });
-    expect(down.week()).toHaveLength(0);
-  });
-
-  it("a day's ingredients are asked once more for what was left out, then saved without them and named", async () => {
-    const k = await home();
-    const f = fakeModel({ day: (u) => (u.date === MON ? { dishes: [] } : ingredients(u)) });
-    const r = await k.plan(f.model);
-    expect(f.days().filter((c) => c.user.date === MON)).toHaveLength(2);
-    expect(r.ok && r.no_ingredients).toEqual(["Mon Breakfast: Dosa", "Mon Lunch: Chole", "Mon Dinner: Aloo gobi"]);
-  });
-
-  it("an ingredient tagged with what a person at the slot-day avoids is taken out, and a shared dish says so", async () => {
-    const k = await home({ rules: [{ hard: true, what: "avoid", who: "Asha", items: ["sugar"], quote: "no sugar for me" }],
-      library: Object.entries(LIB).flatMap(([slot, ns]) => ns.map((name) => ({ name, slot, contains: [], contains_read: [...READ, "sugar"] }))) });
-    const f = fakeModel({ day: (u) => ({ dishes: u.dishes.map((d: any) => ({ slot: d.slot, name: d.name, ingredients: [{ item: "rice", amount: 100, unit: "g", tags: [] },
-      ...(d.slot === "Breakfast" ? [{ item: "jaggery", amount: 10, unit: "g", tags: ["sugar"] }] : [])] })) }) });
-    await k.plan(f.model);
-    expect(f.days()[0].user.dishes[0].tags).toEqual(["sugar"]);
-    const first = k.at(MON, "Breakfast")!.dishes[0];
-    expect(first.ingredients.map((i) => i.item)).toEqual(["rice"]);
-    expect(first.note).toBe("no jaggery for Asha");
-    // A read that tags most of a dish against the rule is not believed: nothing taken out, no note.
-    const g = fakeModel({ day: (u) => ({ dishes: u.dishes.map((d: any) => ({ slot: d.slot, name: d.name, ingredients: [{ item: "rice", amount: 100, unit: "g", tags: ["sugar"] },
-      { item: "oil", amount: 10, unit: "ml", tags: ["sugar"] }, { item: "salt", amount: 1, unit: "g", tags: [] }] })) }) });
-    await k.plan(g.model);
-    const again = k.at(MON, "Breakfast")!.dishes[0];
-    expect(again.ingredients.map((i) => i.item)).toEqual(["rice", "oil", "salt"]);
-    expect(again.note).toBeNull();
-  });
-
-  it("make_plan needs a Monday, a family and the slots; two runs for one week at once are one run", async () => {
-    const k = await home();
-    expect((await k.op("make_plan", { week_start: "2026-12-01" })).error).toContain("must be a Monday");
-    const bare = await boot({ now: () => new Date(2026, 10, 29, 11, 0) });
-    expect(await bare.op("make_plan", { week_start: MON })).toMatchObject({ ok: false, reason: "no_family" });
-    await bare.op("set_person", { name: "Asha", group: "adult" });
-    expect(await bare.op("make_plan", { week_start: MON })).toMatchObject({ ok: false, reason: "no_slots" });
-    const f = fakeModel({ wait: () => 5 });
-    const [a, b] = await Promise.all([k.plan(f.model), k.plan(f.model)]);
-    expect(a).toEqual(b);
-    expect(f.slots()).toHaveLength(3);
-  });
-
-  it("make_plan takes the household Flock sends", async () => {
-    const k = await home();
-    const r = await k.op("make_plan", { week_start: MON, household: { "household.weekly": [] } });
-    // No model on this boot: the plan stops with a plain line; the household was taken, not refused as a field.
-    expect(r).toMatchObject({ ok: false, reason: "unavailable" });
-  });
-});
-
-describe("make_plan v2: guards", () => {
+describe("make_plan: guards", () => {
   // Eval households (tuned h1–h8 and held-out h9–h12) and the sim family: no name of theirs in any model-facing text.
   const NAMES = ["Sharma", "Iyer", "Shiva", "Reddy", "Agarwal", "Kulkarni", "Menon", "Banerjee", "Ankita", "Agastya", "Gowri", "Lakshmi", "Mehta", "Qureshi",
     "Dsouza", "D'souza", "Gita", "Geeta", "Vihaan", "Reyansh", "Zayan", "Farah", "Shabana", "Debjani", "Sourav", "Rituparna", "Kantaben", "Selvi", "Srinivas"];
   it("no eval household name in any text a plan's model reads", () => {
-    for (const t of [SLOT_SYSTEM, GAP_SYSTEM, PARTS_SYSTEM, CAREFUL_SYSTEM, CONTAINS_SYSTEM, INGREDIENT_SYSTEM, EVENTS_SYSTEM, DELIVER_PROMPT(true), FESTIVAL_PROMPT(MON)])
+    for (const t of [GUESTS_SYSTEM, CAREFUL_SYSTEM, CONTAINS_SYSTEM, INGREDIENT_SYSTEM, EVENTS_SYSTEM, DELIVER_PROMPT(true), FESTIVAL_PROMPT(MON)])
       for (const n of NAMES) expect(t.toLowerCase(), n).not.toContain(n.toLowerCase());
   });
   it("no word lists for meaning in the plan's code: no regex of day names, kinship words or less/more", () => {
-    for (const file of ["makePlan.ts", "planDays.ts", "planChecks.ts"]) {
+    for (const file of ["makePlan.ts", "planDays.ts", "planChecks.ts", "fillWeek.ts"]) {
       const src = readFileSync(join(import.meta.dir, file), "utf8");
       for (const r of src.match(/\/\^?\(?[^/\n*][^/\n]*\/[gimsuy]*\.test|new RegExp\([^)]*\)|\/[^/\n]+\/[gimsuy]*(?=\.test|,\s*"|\))/g) ?? [])
         expect(r, `${file}: ${r}`).not.toMatch(/monday|tuesday|\bmon\b|\bsun\b|weekend|amma|papa|nani|mother|father|\bless\b|\bmore\b/i);
     }
-  });
-});
-
-
-describe("a plan note that explains itself", () => {
-  it("is left out: it is never a word for someone at the table (onboarding run 24)", async () => {
-    const { explainsItself } = await import("./makePlan");
-    expect(explainsItself("Gowri Shankar fasting, no onion garlic; Idli is safe, Chutney avoided by him")).toBe(true);
-    expect(explainsItself("Swapped poha for upma because of the rule")).toBe(true);
-    expect(explainsItself("millet rice for one person only")).toBe(false);
-    expect(explainsItself("less oil for Dad")).toBe(false);
-  });
-});
-
-// Onboarding run 28: "Sabzi" and "Dal" were the family's own lunch dishes; a particular sabzi each day was a new dish, over the
-// new-dish limit, so lunch came as "Sabzi" or without one. A particular way of their entry is their dish.
-describe("make_plan: a particular way of a family's dish", () => {
-  it("is a variant when it keeps every word of their name and adds to it", () => {
-    expect(isVariantOf("Sabzi", "Bhindi sabzi")).toBe(true);
-    expect(isVariantOf("Dal", "Moong dal")).toBe(true);
-    expect(isVariantOf("Idli with chutney", "Idli with coconut chutney")).toBe(true);
-    expect(isVariantOf("Sabzi", "Sabzi")).toBe(false);
-    expect(isVariantOf("Sabzi", "Paneer tikka")).toBe(false);
-    expect(isVariantOf("Idli with chutney", "Coconut chutney")).toBe(false);
-    // The same dish with another accompaniment.
-    expect(isVariantOf("Idli with coconut chutney", "Idli with tomato chutney")).toBe(true);
-    expect(isVariantOf("Idli with coconut chutney", "Dosa with coconut chutney")).toBe(false);
-    expect(isVariantOf("Bhindi sabzi", "Aloo gobi sabzi")).toBe(false);
-  });
-
-  it("plans as their dish: not new, not over the limit, its contents read, never saved to the library", async () => {
-    const VEG = ["Bhindi", "Aloo gobi", "Lauki", "Beans", "Cabbage", "Tinda", "Karela"];
-    const k = await home({ lib: { Breakfast: ["Poha", "Upma", "Idli", "Dosa"], Lunch: ["Rice", "Sabzi"], Dinner: ["Palak paneer", "Aloo gobi", "Bhindi", "Dal makhani"] },
-      seed: [{ slot: "Lunch", dishes: ["Rice", "Sabzi"] }], newPerWeek: 1, rules: [{ hard: true, what: "veg", who: null, quote: "we are vegetarian" }] });
-    const f = fakeModel({
-      slot: (u) => u.slot !== "Lunch" ? rotateDays(u) : {
-        days: Object.fromEntries(u.days.filter((d: any) => !d.skip).map((d: any, i: number) => [d.date, ["Rice", `${VEG[i]} sabzi`]])),
-        new: VEG.map((v) => ({ dish: `${v} sabzi`, why: "their sabzi", like: "Sabzi" })) },
-      contains: (u) => ({ dishes: u.dishes.map((d: string) => ({ dish: d, has: [], not: u.tags })) }),
-    });
-    const r: any = await k.plan(f.model);
-    expect(r.ok).toBe(true);
-    expect(k.dishesAt(WEEK[0], "Lunch")).toEqual(["Rice", "Bhindi sabzi"]);
-    expect(k.dishesAt(WEEK[2], "Lunch")).toEqual(["Rice", "Lauki sabzi"]);
-    expect(f.gaps().filter((c) => c.user.slot === "Lunch")).toHaveLength(0);
-    expect((r.new_dishes ?? []).map((d: any) => d.name)).not.toContain("Bhindi sabzi");
-    expect(k.at(WEEK[0], "Lunch")!.dishes.find((d) => d.dish === "Bhindi sabzi")!.new).toBe(false);
-    expect(f.contains().flatMap((c) => c.user.dishes)).toContain("Bhindi sabzi");
-    expect(k.rows("library").map((x: any) => x.name)).not.toContain("Bhindi sabzi");
   });
 });
