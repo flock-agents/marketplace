@@ -601,7 +601,12 @@ export function checkRead(read: SetupRead, ctx: { household: Household; said: st
     library.push(d);
   }
   dropShared(library, dropped);
-  for (const d of library) if (!d.frequency && !d.days && !d.shared && quoteHasDayOrCount(d.quote) && saidByFamily(d.quote, said)) lint.push(d);
+  for (const d of library) {
+    if (d.frequency || d.days || d.shared) continue;
+    // A dish read without its words: the family's sentence that names it ("Sunday dinner ... something simple like pasta").
+    if (!d.quote?.trim()) d.quote = said.find((l) => namedIn(d.name, [l]) && quoteHasDayOrCount(l)) ?? d.quote;
+    if (d.quote && quoteHasDayOrCount(d.quote) && saidByFamily(d.quote, said)) lint.push(d);
+  }
 
   // The seed: the past week's plates, in the family's words; each of its dishes is in the library too.
   const seed: ReadSeed[] = [];

@@ -397,6 +397,12 @@ describe("apply_setup v2: the checks, pure", () => {
   const said = familyLines(TRANSCRIPT, HOUSEHOLD);
   const base = (over: Partial<SetupRead>): SetupRead => ({ ...readOf({ slots: HOME.slots.slice(0, 4) }, {}, {}), ...over });
 
+  it("a dish read without its words is linted by the family's sentence that names it with a day", () => {
+    const lines = familyLines(["A: Weeknights dal and rice. Sunday dinner we make something simple like pasta maybe."], HOUSEHOLD);
+    const read = readOf({ slots: HOME.slots.slice(0, 4) }, {}, { library: [["Pasta", "Dinner", ""]] });
+    const c = checkRead(read, { household: hh, said: lines });
+    expect(c.lint.map((d) => d.name)).toEqual(["Pasta"]);
+  });
   it("eggs for some people in a vegetarian house: everyone else gets no eggs, when the reader left it out (eval h13)", () => {
     const lines = familyLines(["A: pure veg at home. Eggs okay for Ishaan and Kiran."], HOUSEHOLD);
     const egg = (rules: unknown[]) => checkRead(readOf({}, { rules }, {}), { household: hh, said: lines }).read.rules
