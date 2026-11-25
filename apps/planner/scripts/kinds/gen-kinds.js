@@ -1080,6 +1080,8 @@ const SUBDEF = {
   Mutton: [["Curry","mutton curry; gosht; mangsho; mangshor jhol",S],["Fry/Dry","mutton fry; sukka; roast","south"],["Keema","kheema; qeema; mince","north west"]],
   "Fish & seafood": [["Fish curry","macher jhol; meen curry; meen kuzhambu; chepala pulusu; ambot tik; tenga; machli curry",S],["Fish fry","maach bhaja; meen varuval; tawa fish",S],["Prawn","prawns; jhinga; chingri; kolambi; royyalu; eral; shrimp",S]],
   Egg: [["Eggs","omelette; bhurji; anda; boiled eggs",S],["Egg curry","anda curry; muttai kuzhambu; dimer dalna; egg masala",S]],
+  Khichdi: [["Khichdi","khichri; khichuri; khichadi","north west east"],["Pongal","ven pongal; khara pongal; huggi; pongali","south"]],
+  "Pav meal": [["Misal","misal pav; usal pav; usal","maharashtra"],["Pav bhaji","bhaji pav; masala pav","maharashtra gujarat"],["Vada pav","dabeli","maharashtra gujarat"]],
 };
 const LEGUME = new Set(["Rajma","Jammu rajma","Chole","Pindi chole","Kala chana curry","Lobia","Safed matar","Ghugni","Kadala curry","Chana ghassi","Sprouts curry","Matki usal","Moong usal","Vatana usal"]);
 function subOf(kind, name, cuis) {
@@ -1121,9 +1123,31 @@ function subOf(kind, name, cuis) {
     case "Mutton": return src === "Keema" ? "Keema" : ["Mutton sukka", "Kerala mutton roast"].includes(name) ? "Fry/Dry" : "Curry";
     case "Fish & seafood": return src === "Fish fry" ? "Fish fry" : src === "Prawn" ? "Prawn" : "Fish curry";
     case "Egg": return src === "Eggs" ? "Eggs" : "Egg curry";
+    case "Khichdi": return /pongal/i.test(name) ? "Pongal" : "Khichdi";
+    case "Pav meal": return /misal|usal/i.test(name) ? "Misal" : /bhaji|masala pav/i.test(name) ? "Pav bhaji" : "Vada pav";
   }
   return kind;
 }
+
+// ---------------- OWNER ROUND 7 (2026-11-25): meals = where NEW items may be suggested ----------------
+// A kind's, sub-kind's or item's meals say where the planner may suggest a new item of it. They never limit matching:
+// a family's own dish at a meal outside its meals is planned as that fixed item (a template part of items, nothing new
+// suggested for it), e.g. "appam with stew" = [Appam, items: Vegetable stew]. Sub-kind meals default to the kind's;
+// item meals default to the sub-kind's; the kind's emitted meals are the union of its parts'.
+const KIND_MEALS = { Gravy: "lunch dinner", "Rice curry": "lunch dinner", Mutton: "lunch dinner", Khichdi: "lunch dinner", Halwa: "lunch dinner snack" };
+const SUB_MEALS = {
+  "Rice curry": { Sambar: "breakfast lunch dinner tiffin" },
+  Khichdi: { Pongal: "breakfast dinner" },
+  Egg: { Eggs: "breakfast dinner tiffin snack", "Egg curry": "lunch dinner" },
+  Chicken: { Curry: "lunch dinner", Keema: "lunch dinner" },
+  "Fish & seafood": { "Fish curry": "lunch dinner", Prawn: "lunch dinner" },
+  "Pav meal": { Misal: "breakfast dinner snack", "Pav bhaji": "dinner snack", "Vada pav": "snack" },
+};
+const ITEM_MEALS = {
+  "Suji halwa": "breakfast lunch dinner snack", "Rava kesari": "breakfast lunch dinner snack", "Pineapple kesari": "breakfast lunch dinner snack", "Banana sheera": "breakfast lunch dinner snack",
+  "Masala vada": "snack", "Batata vada": "snack", "Maddur vada": "snack", "Sabudana vada": "snack",
+};
+for (const [n, m] of Object.entries(KIND_MEALS)) kinds[kindIdx(n)].meals = m;
 
 // ---------------- BUILD ----------------
 const errors = [];
@@ -1142,13 +1166,15 @@ function dietOf(tags) {
   if (tags.includes("egg")) return "egg";
   return "veg";
 }
-const usedNo = new Set(), usedReg = new Set();
+const usedNo = new Set(), usedReg = new Set(), usedMeals = new Set();
 const out = { version: 1, tags: TAGS, parents: PARENTS, kinds: [] };
 for (const k of kinds) {
   const kc = sp(k.cuisines);
   for (const c of kc) if (!CUISINES.includes(c)) errors.push(`${k.name}: cuisine ${c}`);
-  const meals = sp(k.meals);
-  for (const m of meals) if (!MEALS.includes(m)) errors.push(`${k.name}: meal ${m}`);
+  const kindMeals = sp(k.meals);
+  const ordered = (ms) => [...MEALS.filter((m) => ms.includes(m)), ...ms.filter((m) => !MEALS.includes(m))];
+  const subMeals = (sb) => ordered(sp((SUB_MEALS[k.name] || {})[sb]).length ? sp(SUB_MEALS[k.name][sb]) : kindMeals);
+  for (const sb of Object.keys(SUB_MEALS[k.name] || {})) if (!(SUBDEF[k.name] || []).some(([n]) => n === sb)) errors.push(`SUB_MEALS: ${k.name} has no sub ${sb}`);
   if (!PARTS.includes(k.part)) errors.push(`${k.name}: part ${k.part}`);
   const items = k.items.map((s) => {
     const [name, aka, tags, cuis] = s.split("|").map((x) => (x || "").trim());
@@ -1169,16 +1195,20 @@ for (const k of kinds) {
     it.suggest = !(k.staple || NO_SUGGEST_KINDS.has(k.name) || (NO_SUGGEST.has(name) && !regional));
     if (regional) { it.regional = true; usedReg.add(name); }
     it.sub = subOf(k.name, name, it.cuisines || []);
+    if (ITEM_MEALS[name]) { const im = ordered(sp(ITEM_MEALS[name])); if (im.join() !== subMeals(it.sub).join()) it.meals = im; usedMeals.add(name); }
     usedNo.add(name);
     return it;
   });
-  const subs = (SUBDEF[k.name] || [[k.name, "", k.cuisines]]).map(([n, a, c]) => ({ name: n, aka: semi(a), cuisines: sp(c) }));
+  const subs = (SUBDEF[k.name] || [[k.name, "", k.cuisines]]).map(([n, a, c]) => ({ name: n, aka: semi(a), cuisines: sp(c), meals: subMeals(n) }));
+  const meals = MEALS.filter((m) => subs.some((sb) => sb.meals.includes(m)) || items.some((it) => (it.meals || []).includes(m)));
+  for (const m of [...meals, ...subs.flatMap((sb) => sb.meals), ...items.flatMap((it) => it.meals || [])]) if (!MEALS.includes(m)) errors.push(`${k.name}: meal ${m}`);
   for (const sb of subs) if (!items.some((it) => it.sub === sb.name)) errors.push(`${k.name}: sub ${sb.name} has no items`);
   for (const it of items) if (!subs.some((sb) => sb.name === it.sub)) errors.push(`${it.name}: sub ${it.sub} not in ${k.name}`);
   out.kinds.push({ name: k.name, aka: semi(k.aka), cuisines: kc, meals, staple: k.staple, part: k.part, diet: k.diet, subs, items });
 }
 for (const n of NO_SUGGEST) if (!usedNo.has(n)) errors.push("NO_SUGGEST names no item: " + n);
 for (const n of REGIONAL) if (!usedReg.has(n)) errors.push("REGIONAL names no item: " + n);
+for (const n of Object.keys(ITEM_MEALS)) if (!usedMeals.has(n)) errors.push("ITEM_MEALS names no item: " + n);
 out.notes = [
   "Owner 25 Nov: curd rice is plated as rice + curd, never a one-pot item; flavoured rices are one-pot and a plate may hold two different ones.",
   "Owner 25 Nov: onion_garlic is not a blocker: an item that has it can be made without for whoever avoids it (a note on the plate), except an item that is mostly onion.",
@@ -1219,7 +1249,7 @@ This is the review copy of \`server/kinds.json\`. Please read it as a cook would
 - *Planning*: for variety the planner picks a NEW item of the same kind for the slot (another dry vegetable for a dry vegetable), and repeats an item only when all fitting items have been used. It prefers items of the family's cuisines; an item's own cuisines narrow it further.
 - *Food rules and allergies*: each item lists what it contains **as usually made in an Indian home** (contents below in brackets). Where a common version has something (peanuts in Maharashtrian poha, cashews in rava upma, garlic in tomato rasam) it is listed, so a rule is never broken by a guess. A family's own recipe can still say otherwise.
 
-**Reading the headings**: Kind, its other names, its cuisines, its place on the plate (staple, main, side, complete = a whole plate alone, sweet, snack, drink), and the meals it appears at. Contents shared by every item of the kind are said once on the heading line ("all: rice"); each item's brackets show the rest. A diet is shown on an item only in kinds that mix veg and non-veg.
+**Reading the headings**: Kind, its other names, its cuisines, its place on the plate (staple, main, side, complete = a whole plate alone, sweet, snack, drink), and the meals new items of it may be suggested at (a sub-kind or item that differs says so). A family's own dish is planned at whatever meal they eat it; at a meal outside these it stays their fixed dish and nothing new is suggested in its place. Contents shared by every item of the kind are said once on the heading line ("all: rice"); each item's brackets show the rest. A diet is shown on an item only in kinds that mix veg and non-veg.
 
 ## What we suggest
 
@@ -1259,6 +1289,7 @@ for (const [g, title, note] of GROUPS) {
       if (it.diet && it.diet !== "veg") extra.push(it.diet === "nonveg" ? "non-veg" : it.diet);
       if (own.length) extra.push(own.join(", "));
       if (it.cuisines) extra.push(it.cuisines.join("/"));
+      if (it.meals) extra.push(`suggested at ${it.meals.join(", ")}`);
       const aka = it.aka ? ` (${it.aka.join(", ")})` : "";
       return `${it.name}${aka}${extra.length ? ` [${extra.join("; ")}]` : ""}`;
     };
@@ -1270,7 +1301,7 @@ for (const [g, title, note] of GROUPS) {
     };
     if (k.subs.length < 2) lines(k.items);
     else for (const sb of k.subs) {
-      md += `#### ${k.name} → ${sb.name}\n${[sb.aka.length ? `aka ${sb.aka.join(", ")}` : null, sb.cuisines.join(", ")].filter(Boolean).join("; ")}\n\n`;
+      md += `#### ${k.name} → ${sb.name}\n${[sb.aka.length ? `aka ${sb.aka.join(", ")}` : null, sb.cuisines.join(", "), sb.meals.join() !== k.meals.join() ? `suggested at ${sb.meals.join(", ")}` : null].filter(Boolean).join("; ")}\n\n`;
       lines(k.items.filter((it) => it.sub === sb.name));
     }
   }

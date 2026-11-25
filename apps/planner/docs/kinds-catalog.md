@@ -11,7 +11,7 @@ This is the review copy of `server/kinds.json`. Please read it as a cook would a
 - *Planning*: for variety the planner picks a NEW item of the same kind for the slot (another dry vegetable for a dry vegetable), and repeats an item only when all fitting items have been used. It prefers items of the family's cuisines; an item's own cuisines narrow it further.
 - *Food rules and allergies*: each item lists what it contains **as usually made in an Indian home** (contents below in brackets). Where a common version has something (peanuts in Maharashtrian poha, cashews in rava upma, garlic in tomato rasam) it is listed, so a rule is never broken by a guess. A family's own recipe can still say otherwise.
 
-**Reading the headings**: Kind, its other names, its cuisines, its place on the plate (staple, main, side, complete = a whole plate alone, sweet, snack, drink), and the meals it appears at. Contents shared by every item of the kind are said once on the heading line ("all: rice"); each item's brackets show the rest. A diet is shown on an item only in kinds that mix veg and non-veg.
+**Reading the headings**: Kind, its other names, its cuisines, its place on the plate (staple, main, side, complete = a whole plate alone, sweet, snack, drink), and the meals new items of it may be suggested at (a sub-kind or item that differs says so). A family's own dish is planned at whatever meal they eat it; at a meal outside these it stays their fixed dish and nothing new is suggested in its place. Contents shared by every item of the kind are said once on the heading line ("all: rice"); each item's brackets show the rest. A diet is shown on an item only in kinds that mix veg and non-veg.
 
 ## What we suggest
 
@@ -69,7 +69,7 @@ aka parantha, parotha, prantha, porota; north, punjab, west; complete; breakfast
 **Recognised only:** Lachha paratha (plain paratha, tikona paratha)
 
 ### Thepla
-aka theplu, methi na thepla; gujarat; complete; breakfast, tiffin, dinner, snack; all: dairy, wheat
+aka theplu, methi na thepla; gujarat; complete; breakfast, dinner, tiffin, snack; all: dairy, wheat
 
 **Suggested:** Methi thepla (methi na thepla), Plain thepla (masala thepla), Dudhi thepla (lauki thepla), Palak thepla, Bajra methi thepla, Mooli thepla
 
@@ -79,7 +79,7 @@ aka thalipith, thalipeet; maharashtra; complete; breakfast, snack
 **Suggested:** Bhajani thalipeeth [wheat, rice, onion/garlic], Jowar thalipeeth [onion/garlic], Methi thalipeeth [wheat, rice, onion/garlic], Kakdi thalipeeth (cucumber thalipeeth) [rice, onion/garlic], Sabudana thalipeeth (upvas thalipeeth) [peanut, root veg]
 
 ### Chilla
-aka cheela, chila, pudla, puda, poodla; north, west, central; complete; breakfast, tiffin, dinner; all: onion/garlic
+aka cheela, chila, pudla, puda, poodla; north, west, central; complete; breakfast, dinner, tiffin; all: onion/garlic
 
 **Suggested:** Besan chilla (besan cheela, pudla), Moong dal chilla (moong dal cheela), Paneer chilla (stuffed paneer chilla) [dairy], Rava chilla (sooji chilla) [wheat, dairy], Oats chilla, Vegetable chilla [root veg]
 
@@ -113,7 +113,7 @@ aka akki rotti, rotti, rice roti; karnataka; complete; breakfast, dinner
 **Suggested in its region:** Pathiri (ari pathiri) [rice; kerala]
 
 ### Paniyaram
-aka kuzhi paniyaram, paddu, gunta ponganalu, appe, guliyappa; south, maharashtra; complete; breakfast, snack, tiffin
+aka kuzhi paniyaram, paddu, gunta ponganalu, appe, guliyappa; south, maharashtra; complete; breakfast, tiffin, snack
 
 **Suggested:** Kara paniyaram (kuzhi paniyaram, paddu, gunta ponganalu) [rice, onion/garlic], Sweet paniyaram (inippu paniyaram) [rice, sugar], Rava appe [wheat, dairy, onion/garlic], Ragi paniyaram [rice, onion/garlic]
 
@@ -154,7 +154,7 @@ aka sandwiches; continental, west; complete; breakfast, tiffin, snack; veg and n
 **Suggested in its region:** Bombay sandwich [root veg; maharashtra]
 
 ### Dhokla
-aka khaman, farsan, muthia, muthiya, handvo, handwa; gujarat; snack; breakfast, snack, tiffin
+aka khaman, farsan, muthia, muthiya, handvo, handwa; gujarat; snack; breakfast, tiffin, snack
 
 **Suggested:** Khaman dhokla (khaman) [sugar], Khatta dhokla (idada) [rice, dairy], Rava dhokla (sooji dhokla) [wheat, dairy], Moong dal dhokla, Khandvi [dairy, coconut], Methi muthia (muthia, muthiya) [wheat, dairy, sugar], Dudhi muthia (lauki muthia) [wheat, dairy, sugar], Handvo (mixed dal handvo) [rice, dairy, sugar], Rava handvo (sooji handvo) [wheat, dairy], Vegetable handvo [rice, dairy, root veg, sugar]
 
@@ -163,7 +163,20 @@ aka khaman, farsan, muthia, muthiya, handvo, handwa; gujarat; snack; breakfast, 
 ### Pav meal
 aka pav bhaji, bhaji pav, misal, misal pav, usal pav, vada pav, dabeli, pav; maharashtra, gujarat; complete; breakfast, dinner, snack; all: wheat
 
-**Suggested:** Misal pav [onion/garlic], Puneri misal [onion/garlic, rice, sugar], Kolhapuri misal [onion/garlic, coconut], Usal pav [onion/garlic], Pav bhaji [dairy, root veg, onion/garlic], Jain pav bhaji [dairy], Masala pav [dairy, onion/garlic], Dabeli (kutchi dabeli) [root veg, peanut, sugar; gujarat], Vada pav [root veg, onion/garlic; maharashtra]
+#### Pav meal → Misal
+aka misal pav, usal pav, usal; maharashtra
+
+**Suggested:** Misal pav [onion/garlic], Puneri misal [onion/garlic, rice, sugar], Kolhapuri misal [onion/garlic, coconut], Usal pav [onion/garlic]
+
+#### Pav meal → Pav bhaji
+aka bhaji pav, masala pav; maharashtra, gujarat; suggested at dinner, snack
+
+**Suggested:** Pav bhaji [dairy, root veg, onion/garlic], Jain pav bhaji [dairy], Masala pav [dairy, onion/garlic]
+
+#### Pav meal → Vada pav
+aka dabeli; maharashtra, gujarat; suggested at snack
+
+**Suggested:** Dabeli (kutchi dabeli) [root veg, peanut, sugar; gujarat], Vada pav [root veg, onion/garlic; maharashtra]
 
 ### Pitha
 aka pithe, pitta; east, bengal, odisha, assam; snack; breakfast, snack; all: rice
@@ -260,7 +273,7 @@ aka paruppu, parippu, tovve, bele; tamil, kerala, karnataka
 **Suggested in its region:** Paruppu (paruppu kadayal) [tamil], Kerala parippu curry (parippu) [coconut; kerala], Tovve [karnataka]
 
 ### Rice curry
-aka sambar, sambhar, rasam, kuzhambu, kulambu, kootu, kadhi, kadi, saaru, charu, pulusu, mor kuzhambu, majjige huli, pulissery, huli, gojju; south, north, west, sindhi; main; breakfast, lunch, dinner
+aka sambar, sambhar, rasam, kuzhambu, kulambu, kootu, kadhi, kadi, saaru, charu, pulusu, mor kuzhambu, majjige huli, pulissery, huli, gojju; south, north, west, sindhi; main; breakfast, lunch, dinner, tiffin
 
 #### Rice curry → Sambar
 aka sambhar, huli; south
@@ -270,33 +283,33 @@ aka sambhar, huli; south
 **Suggested in its region:** Arachuvitta sambar [coconut; tamil], Udupi sambar (huli) [coconut, sugar; karnataka], Kerala sambar [coconut, onion/garlic; kerala]
 
 #### Rice curry → Rasam
-aka saaru, charu; south
+aka saaru, charu; south; suggested at lunch, dinner
 
 **Suggested:** Tomato rasam (thakkali rasam, tomato charu) [onion/garlic; south], Pepper rasam (milagu rasam) [onion/garlic; south], Lemon rasam (elumichai rasam) [south], Garlic rasam (poondu rasam) [onion/garlic; south], Paruppu rasam (dal rasam) [south], Pineapple rasam [sugar; south], Jeera rasam (jeeragam rasam) [south], Kollu rasam (horsegram rasam) [onion/garlic; south]
 
 **Suggested in its region:** Mysore rasam [coconut; karnataka], Udupi saaru (udupi rasam) [sugar; karnataka]
 
 #### Rice curry → Kuzhambu/Pulusu
-aka kuzhambu, kulambu, pulusu, gojju; tamil, andhra, karnataka
+aka kuzhambu, kulambu, pulusu, gojju; tamil, andhra, karnataka; suggested at lunch, dinner
 
 **Suggested:** Vatha kuzhambu (vathal kuzhambu) [onion/garlic; tamil], Kara kuzhambu [onion/garlic; tamil], Poondu kuzhambu (garlic kuzhambu) [onion/garlic; tamil], Ennai kathirikai kuzhambu [brinjal, onion/garlic; tamil], Paruppu urundai kuzhambu [onion/garlic; tamil], Puli kuzhambu (tamarind kuzhambu) [onion/garlic; tamil], Sorakaya pulusu [onion/garlic; andhra], Bendakaya pulusu (okra pulusu) [onion/garlic; andhra], Pineapple gojju [sugar; karnataka], Hagalakai gojju (bitter gourd gojju) [karela, sugar; karnataka]
 
 **Suggested in its region:** Mukkala pulusu [onion/garlic, root veg, brinjal; andhra]
 
 #### Rice curry → Kootu
-aka koottu; tamil, kerala
+aka koottu; tamil, kerala; suggested at lunch, dinner
 
 **Suggested:** Chow chow kootu [coconut; tamil/kerala], Poricha kootu [coconut; tamil/kerala], Keerai kootu (spinach kootu) [coconut; tamil/kerala], Pudalangai kootu (snake gourd kootu) [coconut; tamil/kerala], Kathirikai kootu (brinjal kootu) [coconut, brinjal; tamil/kerala], Cabbage kootu [coconut; tamil/kerala]
 
 #### Rice curry → Kadhi
-aka kadi; north, west, sindhi
+aka kadi; north, west, sindhi; suggested at lunch, dinner
 
 **Suggested:** Punjabi kadhi pakora (kadhi pakoda) [dairy, onion/garlic; punjab], Gujarati kadhi [dairy, sugar; gujarat], Sindhi kadhi [root veg; sindhi]
 
 **Suggested in its region:** Rajasthani kadhi [dairy; rajasthan], Maharashtrian kadhi (taak kadhi) [dairy; maharashtra]
 
 #### Rice curry → Mor kuzhambu/Pulissery
-aka mor kuzhambu, majjige huli, pulissery, moru curry; tamil, karnataka, kerala
+aka mor kuzhambu, majjige huli, pulissery, moru curry; tamil, karnataka, kerala; suggested at lunch, dinner
 
 **Suggested:** Mor kuzhambu [dairy, coconut; tamil]
 
@@ -353,7 +366,7 @@ aka bharwa, bharli, gutti, bharela, stuffed; north, west, andhra
 **Suggested in its region:** Gutti vankaya [brinjal, onion/garlic, peanut; andhra], Bharli vangi [brinjal, onion/garlic, peanut, coconut; maharashtra], Bharela ringan bateta [brinjal, root veg, peanut, sugar; gujarat]
 
 ### Gravy
-aka gravy sabzi, rasedar sabzi, curry, tari wali sabzi, masala, korma, kurma, kofta, kofta curry, salan, rassa, dalna, shaak, paneer, paneer sabzi, avial, olan, erissery, kalan, theeyal, stew, ishtu; north, south, west, east; main; breakfast, lunch, dinner
+aka gravy sabzi, rasedar sabzi, curry, tari wali sabzi, masala, korma, kurma, kofta, kofta curry, salan, rassa, dalna, shaak, paneer, paneer sabzi, avial, olan, erissery, kalan, theeyal, stew, ishtu; north, south, west, east; main; lunch, dinner
 
 #### Gravy → Curry
 aka rasedar sabzi, tari wali sabzi, masala, rassa, shaak, salan; north, west, east
@@ -408,9 +421,17 @@ aka biriyani, dum biryani; north, south, west, east; complete; lunch, dinner; ve
 ### Khichdi
 aka khichri, khichuri, khichadi, pongal, ven pongal, khara pongal, huggi, pongali; north, south, west, east; complete; breakfast, lunch, dinner; all: dairy
 
-**Suggested:** Moong dal khichdi [rice], Masala khichdi [rice, onion/garlic, root veg], Vegetable khichdi [rice, root veg], Bajra khichdi [rajasthan], Dalia khichdi [wheat], Ven pongal (khara pongal, ghee pongal, huggi) [rice, nuts; south], Rava pongal [wheat, nuts; south], Millet pongal (thinai pongal, varagu pongal, samai pongal) [nuts; south], Oats pongal [nuts; south], Godhumai rava pongal (broken wheat pongal, dalia pongal) [wheat, nuts; south]
+#### Khichdi → Khichdi
+aka khichri, khichuri, khichadi; north, west, east; suggested at lunch, dinner
+
+**Suggested:** Moong dal khichdi [rice], Masala khichdi [rice, onion/garlic, root veg], Vegetable khichdi [rice, root veg], Bajra khichdi [rajasthan], Dalia khichdi [wheat]
 
 **Suggested in its region:** Gujarati khichdi (toor dal khichdi) [rice; gujarat], Bhuna khichuri (bhoger khichuri) [rice, root veg; bengal]
+
+#### Khichdi → Pongal
+aka ven pongal, khara pongal, huggi, pongali; south; suggested at breakfast, dinner
+
+**Suggested:** Ven pongal (khara pongal, ghee pongal, huggi) [rice, nuts; south], Rava pongal [wheat, nuts; south], Millet pongal (thinai pongal, varagu pongal, samai pongal) [nuts; south], Oats pongal [nuts; south], Godhumai rava pongal (broken wheat pongal, dalia pongal) [wheat, nuts; south]
 
 ### Flavoured rice
 aka variety rice, chitranna, kalanda sadam, mixed rice, bath, pulihora, sadam; south, odisha; complete; lunch, dinner, tiffin; all: rice
@@ -427,17 +448,17 @@ aka chinese rice; indo-chinese; complete; lunch, dinner, tiffin; veg and non-veg
 ## Lunch and dinner: non-veg
 
 ### Egg
-aka eggs, anda, muttai, egg curry, anda curry; north, south, west, east; main; breakfast, lunch, dinner, tiffin; egg; all: egg
+aka eggs, anda, muttai, egg curry, anda curry; north, south, west, east; main; breakfast, lunch, dinner, tiffin, snack; egg; all: egg
 
 #### Egg → Eggs
-aka omelette, bhurji, anda, boiled eggs; north, south, west, east
+aka omelette, bhurji, anda, boiled eggs; north, south, west, east; suggested at breakfast, dinner, tiffin, snack
 
 **Suggested:** Masala omelette (omelette, anda omelette) [onion/garlic], Plain omelette, Egg bhurji (anda bhurji) [onion/garlic], Boiled eggs, Half fry (fried egg, bull's eye), Bread omelette [wheat, onion/garlic]
 
 **Suggested in its region:** Akuri [onion/garlic, dairy; parsi], Egg podimas (muttai podimas) [onion/garlic; tamil], Scrambled eggs [dairy; continental]
 
 #### Egg → Egg curry
-aka anda curry, muttai kuzhambu, dimer dalna, egg masala; north, south, west, east
+aka anda curry, muttai kuzhambu, dimer dalna, egg masala; north, south, west, east; suggested at lunch, dinner
 
 **Suggested:** Egg curry (anda curry) [onion/garlic], Egg masala [onion/garlic]
 
@@ -447,7 +468,7 @@ aka anda curry, muttai kuzhambu, dimer dalna, egg masala; north, south, west, ea
 aka chicken, murgh, kozhi, kodi, chicken curry, chicken fry, chicken dry; north, south, west, east; main; lunch, dinner, snack; nonveg; all: chicken, onion/garlic
 
 #### Chicken → Curry
-aka chicken curry, murgh, kozhi curry, kodi kura, chicken gravy; north, south, west, east
+aka chicken curry, murgh, kozhi curry, kodi kura, chicken gravy; north, south, west, east; suggested at lunch, dinner
 
 **Suggested:** Chicken curry (home-style chicken curry), Butter chicken (murgh makhani) [dairy, nuts, sugar], Chicken korma [dairy, nuts], Chicken do pyaza, Chicken saagwala (palak chicken)
 
@@ -463,12 +484,12 @@ aka chicken fry, chicken dry, sukka, roast, varuval; north, south, west, east
 **Recognised only:** Tandoori chicken [dairy], Chicken tikka [dairy]
 
 #### Chicken → Keema
-aka chicken keema, chicken mince; north, west
+aka chicken keema, chicken mince; north, west; suggested at lunch, dinner
 
 **Suggested:** Chicken keema
 
 ### Mutton
-aka mutton, gosht, mangsho, lamb, goat, keema, kheema, mince; north, south, west, east; main; breakfast, lunch, dinner; nonveg; all: mutton
+aka mutton, gosht, mangsho, lamb, goat, keema, kheema, mince; north, south, west, east; main; lunch, dinner; nonveg; all: mutton
 
 #### Mutton → Curry
 aka mutton curry, gosht, mangsho, mangshor jhol; north, south, west, east
@@ -498,7 +519,7 @@ aka pork curry, sorpotel, vindaloo, pandi curry; goa, northeast, karnataka; main
 aka fish, machli, meen, maach, mach, seafood, prawns, jhinga, chingri, kolambi, royyalu, eral, shrimp; north, south, west, east; main; lunch, dinner, snack; nonveg
 
 #### Fish & seafood → Fish curry
-aka macher jhol, meen curry, meen kuzhambu, chepala pulusu, ambot tik, tenga, machli curry; north, south, west, east
+aka macher jhol, meen curry, meen kuzhambu, chepala pulusu, ambot tik, tenga, machli curry; north, south, west, east; suggested at lunch, dinner
 
 **Suggested:** Fish masala curry (machli curry, machli ka salan) [fish, onion/garlic]
 
@@ -512,7 +533,7 @@ aka maach bhaja, meen varuval, tawa fish; north, south, west, east
 **Suggested in its region:** Meen varuval (meen varuthathu) [fish, onion/garlic; south], Maach bhaja [fish; bengal], Amritsari fish [fish, onion/garlic, egg; punjab], Bombil fry (bombay duck fry) [fish, wheat, rice; maharashtra], Pomfret fry (paplet fry) [fish, onion/garlic, wheat; maharashtra/goa]
 
 #### Fish & seafood → Prawn
-aka prawns, jhinga, chingri, kolambi, royyalu, eral, shrimp; north, south, west, east
+aka prawns, jhinga, chingri, kolambi, royyalu, eral, shrimp; north, south, west, east; suggested at lunch, dinner
 
 **Suggested:** Prawn curry (eral kuzhambu, kolambi curry) [prawn, onion/garlic, coconut], Prawn masala [prawn, onion/garlic], Prawn fry (prawn rava fry, kolambi fry) [prawn, onion/garlic]
 
@@ -590,7 +611,7 @@ aka phal, cut fruit; north, south, west, east, continental; snack; breakfast, ti
 **Suggested:** Seasonal fruit (cut fruit), Banana, Apple slices, Papaya, Fruit custard [dairy, sugar]
 
 ### Roll
-aka frankie, kathi roll, wrap; north, bengal, west; complete; tiffin, dinner, snack; veg and non-veg; all: wheat
+aka frankie, kathi roll, wrap; north, bengal, west; complete; dinner, tiffin, snack; veg and non-veg; all: wheat
 
 **Suggested:** Paneer roll (paneer frankie) [dairy, onion/garlic], Veg frankie [root veg, onion/garlic], Aloo roll [root veg], Chapati roll (roti roll, sabzi roll), Egg roll (anda roll) [egg; egg, onion/garlic; bengal], Chicken kathi roll (chicken roll) [non-veg; chicken, onion/garlic]
 
@@ -621,9 +642,9 @@ aka singara, shingara; north, east; snack; snack; veg and non-veg; all: wheat
 ### Vada
 aka vadai, wada; south, west; snack; breakfast, snack
 
-**Suggested:** Medu vada (uzhunnu vada, ulundu vadai) [onion/garlic], Masala vada (paruppu vadai, dal vada) [onion/garlic], Sambar vada (sambar vadai) [onion/garlic], Batata vada (aloo vada) [root veg, onion/garlic], Rava vada [wheat, onion/garlic], Sabudana vada [peanut, root veg; maharashtra/gujarat/north]
+**Suggested:** Medu vada (uzhunnu vada, ulundu vadai) [onion/garlic], Masala vada (paruppu vadai, dal vada) [onion/garlic; suggested at snack], Sambar vada (sambar vadai) [onion/garlic], Batata vada (aloo vada) [root veg, onion/garlic; suggested at snack], Rava vada [wheat, onion/garlic], Sabudana vada [peanut, root veg; maharashtra/gujarat/north; suggested at snack]
 
-**Suggested in its region:** Maddur vada [wheat, onion/garlic; karnataka]
+**Suggested in its region:** Maddur vada [wheat, onion/garlic; karnataka; suggested at snack]
 
 ### Chaat
 aka chat; north, west, east; snack; snack
@@ -649,9 +670,9 @@ aka payasam, payesh, payas, kheeri, pradhaman; north, south, west, east; sweet; 
 ### Halwa
 aka sheera, shira, kesari, kesari bath, halua; north, south, west, east; sweet; breakfast, lunch, dinner, snack; all: dairy, nuts, sugar
 
-**Suggested:** Suji halwa (sooji halwa, sheera, shira) [wheat], Aate ka halwa (atte ka sheera) [wheat], Gajar halwa (gajar ka halwa) [root veg], Moong dal halwa, Lauki halwa (dudhi halwa)
+**Suggested:** Suji halwa (sooji halwa, sheera, shira) [wheat; suggested at breakfast, lunch, dinner, snack], Aate ka halwa (atte ka sheera) [wheat], Gajar halwa (gajar ka halwa) [root veg], Moong dal halwa, Lauki halwa (dudhi halwa)
 
-**Suggested in its region:** Rava kesari (kesari bath, kesari) [wheat; south], Pineapple kesari [wheat; south], Banana sheera [wheat; maharashtra]
+**Suggested in its region:** Rava kesari (kesari bath, kesari) [wheat; south; suggested at breakfast, lunch, dinner, snack], Pineapple kesari [wheat; south; suggested at breakfast, lunch, dinner, snack], Banana sheera [wheat; maharashtra; suggested at breakfast, lunch, dinner, snack]
 
 ### Ladoo
 aka laddu, unde, naru; north, south, west, east; sweet; snack
@@ -687,6 +708,10 @@ Round 6 (owner, 25 Nov):
 
 16. **Lunch and dinner kinds are coarse, with sub-kinds named the way families say them** (often regional). Each item has a `sub`; each kind lists its `subs` ({ name, aka, cuisines }). Sabzi holds Sabzi, Poriyal/Thoran, Vepudu, Torkari/Ghonto, Bhaja, Bharta/Chokha and Bharwa. Gravy holds Curry, Paneer, Kofta, Kurma, Dalna and Kerala curry. Dal holds Dal, Rajma/Chole (incl. usal), Pappu, Amti/Varan, Pithla/Zunka, Gujarati dal, Bengali dal, Dalma and Paruppu. Rice curry holds Sambar, Rasam, Kuzhambu/Pulusu, Kootu, Kadhi and Mor kuzhambu/Pulissery. Non-veg is by meat: Chicken, Mutton (incl. keema), Fish & seafood and Egg, each with Curry, Fry/Dry, Keema, Fish fry or Prawn sub-kinds. Regional styles stay regional items inside these sub-kinds. Breakfast kinds stay dish families.
 17. **Templates may name a kind or a sub-kind**; rotation prefers the family's own sub-kinds. A plate's two items of one kind come from different sub-kinds where the template says so (sambar and rasam).
+
+Round 7 (owner, 25 Nov):
+
+18. **Meals say where a new item may be suggested, never what a family may eat.** A kind, sub-kind or item lists the meals the planner may suggest a new item of it at; a sub-kind or item can differ from its kind. A family's own dish at a meal outside its meals is a fixed part of their template (`items`: only their dishes, nothing new suggested), so "appam with stew" is [Appam, Vegetable stew] and never brings aviyal or paneer butter masala to breakfast. Gravy, Mutton, the rice curries other than sambar, the khichdis other than pongal, egg curries, chicken and fish curries are lunch and dinner only; sambar, pongal, misal and the breakfast halwas (suji halwa, rava and pineapple kesari, banana sheera) keep breakfast. Khichdi has sub-kinds Khichdi and Pongal; Pav meal has Misal, Pav bhaji and Vada pav.
 
 ## Open questions
 

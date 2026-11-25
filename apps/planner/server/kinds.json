@@ -55,6 +55,11 @@
           "aka": [],
           "cuisines": [
             "south"
+          ],
+          "meals": [
+            "breakfast",
+            "dinner",
+            "tiffin"
           ]
         }
       ],
@@ -200,6 +205,11 @@
           "aka": [],
           "cuisines": [
             "south"
+          ],
+          "meals": [
+            "breakfast",
+            "dinner",
+            "tiffin"
           ]
         }
       ],
@@ -564,6 +574,11 @@
             "north",
             "south",
             "west"
+          ],
+          "meals": [
+            "breakfast",
+            "dinner",
+            "tiffin"
           ]
         }
       ],
@@ -734,6 +749,11 @@
             "south",
             "east",
             "central"
+          ],
+          "meals": [
+            "breakfast",
+            "tiffin",
+            "snack"
           ]
         }
       ],
@@ -941,6 +961,12 @@
             "north",
             "punjab",
             "west"
+          ],
+          "meals": [
+            "breakfast",
+            "lunch",
+            "dinner",
+            "tiffin"
           ]
         }
       ],
@@ -1142,8 +1168,8 @@
       ],
       "meals": [
         "breakfast",
-        "tiffin",
         "dinner",
+        "tiffin",
         "snack"
       ],
       "staple": false,
@@ -1155,6 +1181,12 @@
           "aka": [],
           "cuisines": [
             "gujarat"
+          ],
+          "meals": [
+            "breakfast",
+            "dinner",
+            "tiffin",
+            "snack"
           ]
         }
       ],
@@ -1246,6 +1278,10 @@
           "aka": [],
           "cuisines": [
             "maharashtra"
+          ],
+          "meals": [
+            "breakfast",
+            "snack"
           ]
         }
       ],
@@ -1320,8 +1356,8 @@
       ],
       "meals": [
         "breakfast",
-        "tiffin",
-        "dinner"
+        "dinner",
+        "tiffin"
       ],
       "staple": false,
       "part": "complete",
@@ -1334,6 +1370,11 @@
             "north",
             "west",
             "central"
+          ],
+          "meals": [
+            "breakfast",
+            "dinner",
+            "tiffin"
           ]
         }
       ],
@@ -1431,6 +1472,10 @@
           "cuisines": [
             "kerala",
             "tamil"
+          ],
+          "meals": [
+            "breakfast",
+            "dinner"
           ]
         }
       ],
@@ -1496,6 +1541,10 @@
           "aka": [],
           "cuisines": [
             "kerala"
+          ],
+          "meals": [
+            "breakfast",
+            "dinner"
           ]
         }
       ],
@@ -1578,6 +1627,11 @@
             "kerala",
             "tamil",
             "karnataka"
+          ],
+          "meals": [
+            "breakfast",
+            "dinner",
+            "tiffin"
           ]
         }
       ],
@@ -1671,6 +1725,10 @@
           "cuisines": [
             "south",
             "maharashtra"
+          ],
+          "meals": [
+            "breakfast",
+            "snack"
           ]
         }
       ],
@@ -1747,6 +1805,10 @@
           "aka": [],
           "cuisines": [
             "karnataka"
+          ],
+          "meals": [
+            "breakfast",
+            "dinner"
           ]
         }
       ],
@@ -1820,8 +1882,8 @@
       ],
       "meals": [
         "breakfast",
-        "snack",
-        "tiffin"
+        "tiffin",
+        "snack"
       ],
       "staple": false,
       "part": "complete",
@@ -1833,6 +1895,11 @@
           "cuisines": [
             "south",
             "maharashtra"
+          ],
+          "meals": [
+            "breakfast",
+            "tiffin",
+            "snack"
           ]
         }
       ],
@@ -1916,6 +1983,12 @@
             "west",
             "east",
             "south"
+          ],
+          "meals": [
+            "breakfast",
+            "lunch",
+            "dinner",
+            "tiffin"
           ]
         }
       ],
@@ -2050,6 +2123,10 @@
             "north",
             "rajasthan",
             "east"
+          ],
+          "meals": [
+            "breakfast",
+            "snack"
           ]
         }
       ],
@@ -2145,6 +2222,9 @@
             "west",
             "south",
             "continental"
+          ],
+          "meals": [
+            "breakfast"
           ]
         }
       ],
@@ -2255,6 +2335,9 @@
           "aka": [],
           "cuisines": [
             "continental"
+          ],
+          "meals": [
+            "breakfast"
           ]
         }
       ],
@@ -2327,6 +2410,11 @@
           "aka": [],
           "cuisines": [
             "continental"
+          ],
+          "meals": [
+            "breakfast",
+            "tiffin",
+            "snack"
           ]
         }
       ],
@@ -2431,6 +2519,11 @@
           "cuisines": [
             "continental",
             "west"
+          ],
+          "meals": [
+            "breakfast",
+            "tiffin",
+            "snack"
           ]
         }
       ],
@@ -2570,7 +2663,8 @@
         "breakfast",
         "lunch",
         "dinner",
-        "tiffin"
+        "tiffin",
+        "snack"
       ],
       "staple": false,
       "part": "main",
@@ -2589,6 +2683,12 @@
             "south",
             "west",
             "east"
+          ],
+          "meals": [
+            "breakfast",
+            "dinner",
+            "tiffin",
+            "snack"
           ]
         },
         {
@@ -2604,6 +2704,10 @@
             "south",
             "west",
             "east"
+          ],
+          "meals": [
+            "lunch",
+            "dinner"
           ]
         }
       ],
@@ -2813,8 +2917,8 @@
       ],
       "meals": [
         "breakfast",
-        "snack",
-        "tiffin"
+        "tiffin",
+        "snack"
       ],
       "staple": false,
       "part": "snack",
@@ -2825,6 +2929,11 @@
           "aka": [],
           "cuisines": [
             "gujarat"
+          ],
+          "meals": [
+            "breakfast",
+            "tiffin",
+            "snack"
           ]
         }
       ],
@@ -2979,11 +3088,47 @@
       "diet": "veg",
       "subs": [
         {
-          "name": "Pav meal",
-          "aka": [],
+          "name": "Misal",
+          "aka": [
+            "misal pav",
+            "usal pav",
+            "usal"
+          ],
+          "cuisines": [
+            "maharashtra"
+          ],
+          "meals": [
+            "breakfast",
+            "dinner",
+            "snack"
+          ]
+        },
+        {
+          "name": "Pav bhaji",
+          "aka": [
+            "bhaji pav",
+            "masala pav"
+          ],
           "cuisines": [
             "maharashtra",
             "gujarat"
+          ],
+          "meals": [
+            "dinner",
+            "snack"
+          ]
+        },
+        {
+          "name": "Vada pav",
+          "aka": [
+            "dabeli"
+          ],
+          "cuisines": [
+            "maharashtra",
+            "gujarat"
+          ],
+          "meals": [
+            "snack"
           ]
         }
       ],
@@ -2995,7 +3140,7 @@
             "onion_garlic"
           ],
           "suggest": true,
-          "sub": "Pav meal"
+          "sub": "Misal"
         },
         {
           "name": "Puneri misal",
@@ -3006,7 +3151,7 @@
             "sugar"
           ],
           "suggest": true,
-          "sub": "Pav meal"
+          "sub": "Misal"
         },
         {
           "name": "Kolhapuri misal",
@@ -3016,7 +3161,7 @@
             "coconut"
           ],
           "suggest": true,
-          "sub": "Pav meal"
+          "sub": "Misal"
         },
         {
           "name": "Usal pav",
@@ -3025,7 +3170,7 @@
             "onion_garlic"
           ],
           "suggest": true,
-          "sub": "Pav meal"
+          "sub": "Misal"
         },
         {
           "name": "Pav bhaji",
@@ -3036,7 +3181,7 @@
             "onion_garlic"
           ],
           "suggest": true,
-          "sub": "Pav meal"
+          "sub": "Pav bhaji"
         },
         {
           "name": "Jain pav bhaji",
@@ -3045,7 +3190,7 @@
             "dairy"
           ],
           "suggest": true,
-          "sub": "Pav meal"
+          "sub": "Pav bhaji"
         },
         {
           "name": "Masala pav",
@@ -3055,7 +3200,7 @@
             "onion_garlic"
           ],
           "suggest": true,
-          "sub": "Pav meal"
+          "sub": "Pav bhaji"
         },
         {
           "name": "Dabeli",
@@ -3072,7 +3217,7 @@
             "sugar"
           ],
           "suggest": true,
-          "sub": "Pav meal"
+          "sub": "Vada pav"
         },
         {
           "name": "Vada pav",
@@ -3085,7 +3230,7 @@
             "onion_garlic"
           ],
           "suggest": true,
-          "sub": "Pav meal"
+          "sub": "Vada pav"
         }
       ]
     },
@@ -3117,6 +3262,10 @@
             "bengal",
             "odisha",
             "assam"
+          ],
+          "meals": [
+            "breakfast",
+            "snack"
           ]
         }
       ],
@@ -3260,6 +3409,11 @@
             "west",
             "east",
             "central"
+          ],
+          "meals": [
+            "lunch",
+            "dinner",
+            "tiffin"
           ]
         }
       ],
@@ -3370,6 +3524,10 @@
             "gujarat",
             "rajasthan",
             "karnataka"
+          ],
+          "meals": [
+            "lunch",
+            "dinner"
           ]
         }
       ],
@@ -3470,6 +3628,10 @@
             "south",
             "west",
             "east"
+          ],
+          "meals": [
+            "lunch",
+            "dinner"
           ]
         }
       ],
@@ -3552,6 +3714,10 @@
             "south",
             "west",
             "east"
+          ],
+          "meals": [
+            "lunch",
+            "dinner"
           ]
         }
       ],
@@ -3599,6 +3765,10 @@
           "cuisines": [
             "karnataka",
             "andhra"
+          ],
+          "meals": [
+            "lunch",
+            "dinner"
           ]
         }
       ],
@@ -3684,6 +3854,10 @@
             "north",
             "central",
             "east"
+          ],
+          "meals": [
+            "lunch",
+            "dinner"
           ]
         },
         {
@@ -3703,6 +3877,10 @@
             "south",
             "west",
             "east"
+          ],
+          "meals": [
+            "lunch",
+            "dinner"
           ]
         },
         {
@@ -3712,6 +3890,10 @@
           ],
           "cuisines": [
             "andhra"
+          ],
+          "meals": [
+            "lunch",
+            "dinner"
           ]
         },
         {
@@ -3722,6 +3904,10 @@
           ],
           "cuisines": [
             "maharashtra"
+          ],
+          "meals": [
+            "lunch",
+            "dinner"
           ]
         },
         {
@@ -3734,6 +3920,10 @@
           ],
           "cuisines": [
             "maharashtra"
+          ],
+          "meals": [
+            "lunch",
+            "dinner"
           ]
         },
         {
@@ -3743,6 +3933,10 @@
           ],
           "cuisines": [
             "gujarat"
+          ],
+          "meals": [
+            "lunch",
+            "dinner"
           ]
         },
         {
@@ -3754,6 +3948,10 @@
           ],
           "cuisines": [
             "bengal"
+          ],
+          "meals": [
+            "lunch",
+            "dinner"
           ]
         },
         {
@@ -3763,6 +3961,10 @@
           ],
           "cuisines": [
             "odisha"
+          ],
+          "meals": [
+            "lunch",
+            "dinner"
           ]
         },
         {
@@ -3777,6 +3979,10 @@
             "tamil",
             "kerala",
             "karnataka"
+          ],
+          "meals": [
+            "lunch",
+            "dinner"
           ]
         }
       ],
@@ -4381,7 +4587,8 @@
       "meals": [
         "breakfast",
         "lunch",
-        "dinner"
+        "dinner",
+        "tiffin"
       ],
       "staple": false,
       "part": "main",
@@ -4395,6 +4602,12 @@
           ],
           "cuisines": [
             "south"
+          ],
+          "meals": [
+            "breakfast",
+            "lunch",
+            "dinner",
+            "tiffin"
           ]
         },
         {
@@ -4405,6 +4618,10 @@
           ],
           "cuisines": [
             "south"
+          ],
+          "meals": [
+            "lunch",
+            "dinner"
           ]
         },
         {
@@ -4419,6 +4636,10 @@
             "tamil",
             "andhra",
             "karnataka"
+          ],
+          "meals": [
+            "lunch",
+            "dinner"
           ]
         },
         {
@@ -4429,6 +4650,10 @@
           "cuisines": [
             "tamil",
             "kerala"
+          ],
+          "meals": [
+            "lunch",
+            "dinner"
           ]
         },
         {
@@ -4440,6 +4665,10 @@
             "north",
             "west",
             "sindhi"
+          ],
+          "meals": [
+            "lunch",
+            "dinner"
           ]
         },
         {
@@ -4454,6 +4683,10 @@
             "tamil",
             "karnataka",
             "kerala"
+          ],
+          "meals": [
+            "lunch",
+            "dinner"
           ]
         }
       ],
@@ -5130,6 +5363,11 @@
             "north",
             "west",
             "central"
+          ],
+          "meals": [
+            "lunch",
+            "dinner",
+            "tiffin"
           ]
         },
         {
@@ -5143,6 +5381,11 @@
           ],
           "cuisines": [
             "south"
+          ],
+          "meals": [
+            "lunch",
+            "dinner",
+            "tiffin"
           ]
         },
         {
@@ -5152,6 +5395,11 @@
           ],
           "cuisines": [
             "andhra"
+          ],
+          "meals": [
+            "lunch",
+            "dinner",
+            "tiffin"
           ]
         },
         {
@@ -5165,6 +5413,11 @@
           "cuisines": [
             "bengal",
             "odisha"
+          ],
+          "meals": [
+            "lunch",
+            "dinner",
+            "tiffin"
           ]
         },
         {
@@ -5175,6 +5428,11 @@
           "cuisines": [
             "bengal",
             "odisha"
+          ],
+          "meals": [
+            "lunch",
+            "dinner",
+            "tiffin"
           ]
         },
         {
@@ -5194,6 +5452,11 @@
             "assam",
             "maharashtra",
             "northeast"
+          ],
+          "meals": [
+            "lunch",
+            "dinner",
+            "tiffin"
           ]
         },
         {
@@ -5209,6 +5472,11 @@
             "north",
             "west",
             "andhra"
+          ],
+          "meals": [
+            "lunch",
+            "dinner",
+            "tiffin"
           ]
         }
       ],
@@ -6084,7 +6352,6 @@
         "east"
       ],
       "meals": [
-        "breakfast",
         "lunch",
         "dinner"
       ],
@@ -6106,6 +6373,10 @@
             "north",
             "west",
             "east"
+          ],
+          "meals": [
+            "lunch",
+            "dinner"
           ]
         },
         {
@@ -6116,6 +6387,10 @@
           ],
           "cuisines": [
             "north"
+          ],
+          "meals": [
+            "lunch",
+            "dinner"
           ]
         },
         {
@@ -6126,6 +6401,10 @@
           ],
           "cuisines": [
             "north"
+          ],
+          "meals": [
+            "lunch",
+            "dinner"
           ]
         },
         {
@@ -6136,6 +6415,10 @@
           ],
           "cuisines": [
             "south"
+          ],
+          "meals": [
+            "lunch",
+            "dinner"
           ]
         },
         {
@@ -6145,6 +6428,10 @@
           ],
           "cuisines": [
             "bengal"
+          ],
+          "meals": [
+            "lunch",
+            "dinner"
           ]
         },
         {
@@ -6161,6 +6448,10 @@
           ],
           "cuisines": [
             "kerala"
+          ],
+          "meals": [
+            "lunch",
+            "dinner"
           ]
         }
       ],
@@ -6744,6 +7035,11 @@
             "west",
             "east",
             "kashmir"
+          ],
+          "meals": [
+            "lunch",
+            "dinner",
+            "tiffin"
           ]
         }
       ],
@@ -6943,6 +7239,10 @@
             "south",
             "west",
             "east"
+          ],
+          "meals": [
+            "lunch",
+            "dinner"
           ]
         }
       ],
@@ -7137,12 +7437,35 @@
       "subs": [
         {
           "name": "Khichdi",
-          "aka": [],
+          "aka": [
+            "khichri",
+            "khichuri",
+            "khichadi"
+          ],
           "cuisines": [
             "north",
-            "south",
             "west",
             "east"
+          ],
+          "meals": [
+            "lunch",
+            "dinner"
+          ]
+        },
+        {
+          "name": "Pongal",
+          "aka": [
+            "ven pongal",
+            "khara pongal",
+            "huggi",
+            "pongali"
+          ],
+          "cuisines": [
+            "south"
+          ],
+          "meals": [
+            "breakfast",
+            "dinner"
           ]
         }
       ],
@@ -7246,7 +7569,7 @@
             "nuts"
           ],
           "suggest": true,
-          "sub": "Khichdi"
+          "sub": "Pongal"
         },
         {
           "name": "Rava pongal",
@@ -7259,7 +7582,7 @@
             "nuts"
           ],
           "suggest": true,
-          "sub": "Khichdi"
+          "sub": "Pongal"
         },
         {
           "name": "Millet pongal",
@@ -7276,7 +7599,7 @@
             "nuts"
           ],
           "suggest": true,
-          "sub": "Khichdi"
+          "sub": "Pongal"
         },
         {
           "name": "Oats pongal",
@@ -7288,7 +7611,7 @@
             "nuts"
           ],
           "suggest": true,
-          "sub": "Khichdi"
+          "sub": "Pongal"
         },
         {
           "name": "Godhumai rava pongal",
@@ -7305,7 +7628,7 @@
             "nuts"
           ],
           "suggest": true,
-          "sub": "Khichdi"
+          "sub": "Pongal"
         }
       ]
     },
@@ -7339,6 +7662,11 @@
           "cuisines": [
             "south",
             "odisha"
+          ],
+          "meals": [
+            "lunch",
+            "dinner",
+            "tiffin"
           ]
         }
       ],
@@ -7509,6 +7837,11 @@
           "aka": [],
           "cuisines": [
             "indo_chinese"
+          ],
+          "meals": [
+            "lunch",
+            "dinner",
+            "tiffin"
           ]
         }
       ],
@@ -7599,6 +7932,12 @@
           "aka": [],
           "cuisines": [
             "indo_chinese"
+          ],
+          "meals": [
+            "lunch",
+            "dinner",
+            "tiffin",
+            "snack"
           ]
         }
       ],
@@ -7719,6 +8058,11 @@
           "aka": [],
           "cuisines": [
             "continental"
+          ],
+          "meals": [
+            "lunch",
+            "dinner",
+            "tiffin"
           ]
         }
       ],
@@ -7840,6 +8184,10 @@
           "aka": [],
           "cuisines": [
             "indo_chinese"
+          ],
+          "meals": [
+            "dinner",
+            "snack"
           ]
         }
       ],
@@ -7953,6 +8301,10 @@
           "cuisines": [
             "continental",
             "indo_chinese"
+          ],
+          "meals": [
+            "dinner",
+            "snack"
           ]
         }
       ],
@@ -8093,6 +8445,10 @@
             "south",
             "west",
             "east"
+          ],
+          "meals": [
+            "lunch",
+            "dinner"
           ]
         },
         {
@@ -8109,6 +8465,11 @@
             "south",
             "west",
             "east"
+          ],
+          "meals": [
+            "lunch",
+            "dinner",
+            "snack"
           ]
         },
         {
@@ -8120,6 +8481,10 @@
           "cuisines": [
             "north",
             "west"
+          ],
+          "meals": [
+            "lunch",
+            "dinner"
           ]
         }
       ],
@@ -8441,7 +8806,6 @@
         "east"
       ],
       "meals": [
-        "breakfast",
         "lunch",
         "dinner"
       ],
@@ -8462,6 +8826,10 @@
             "south",
             "west",
             "east"
+          ],
+          "meals": [
+            "lunch",
+            "dinner"
           ]
         },
         {
@@ -8473,6 +8841,10 @@
           ],
           "cuisines": [
             "south"
+          ],
+          "meals": [
+            "lunch",
+            "dinner"
           ]
         },
         {
@@ -8485,6 +8857,10 @@
           "cuisines": [
             "north",
             "west"
+          ],
+          "meals": [
+            "lunch",
+            "dinner"
           ]
         }
       ],
@@ -8748,6 +9124,10 @@
             "goa",
             "northeast",
             "karnataka"
+          ],
+          "meals": [
+            "lunch",
+            "dinner"
           ]
         }
       ],
@@ -8887,6 +9267,10 @@
             "south",
             "west",
             "east"
+          ],
+          "meals": [
+            "lunch",
+            "dinner"
           ]
         },
         {
@@ -8901,6 +9285,11 @@
             "south",
             "west",
             "east"
+          ],
+          "meals": [
+            "lunch",
+            "dinner",
+            "snack"
           ]
         },
         {
@@ -8919,6 +9308,10 @@
             "south",
             "west",
             "east"
+          ],
+          "meals": [
+            "lunch",
+            "dinner"
           ]
         }
       ],
@@ -9351,6 +9744,10 @@
             "south",
             "west",
             "east"
+          ],
+          "meals": [
+            "lunch",
+            "dinner"
           ]
         }
       ],
@@ -9491,6 +9888,12 @@
             "south",
             "west",
             "east"
+          ],
+          "meals": [
+            "lunch",
+            "dinner",
+            "tiffin",
+            "snack"
           ]
         }
       ],
@@ -9660,6 +10063,12 @@
             "south",
             "west",
             "east"
+          ],
+          "meals": [
+            "breakfast",
+            "lunch",
+            "dinner",
+            "snack"
           ]
         }
       ],
@@ -9915,6 +10324,12 @@
             "south",
             "west",
             "east"
+          ],
+          "meals": [
+            "breakfast",
+            "lunch",
+            "dinner",
+            "tiffin"
           ]
         }
       ],
@@ -10055,6 +10470,10 @@
             "south",
             "west",
             "east"
+          ],
+          "meals": [
+            "lunch",
+            "dinner"
           ]
         }
       ],
@@ -10148,6 +10567,11 @@
             "south",
             "west",
             "east"
+          ],
+          "meals": [
+            "lunch",
+            "dinner",
+            "snack"
           ]
         }
       ],
@@ -10254,6 +10678,11 @@
             "west",
             "east",
             "continental"
+          ],
+          "meals": [
+            "breakfast",
+            "tiffin",
+            "snack"
           ]
         }
       ],
@@ -10309,8 +10738,8 @@
         "west"
       ],
       "meals": [
-        "tiffin",
         "dinner",
+        "tiffin",
         "snack"
       ],
       "staple": false,
@@ -10324,6 +10753,11 @@
             "north",
             "bengal",
             "west"
+          ],
+          "meals": [
+            "dinner",
+            "tiffin",
+            "snack"
           ]
         }
       ],
@@ -10445,6 +10879,10 @@
             "south",
             "west",
             "east"
+          ],
+          "meals": [
+            "tiffin",
+            "snack"
           ]
         }
       ],
@@ -10640,6 +11078,10 @@
             "south",
             "west",
             "east"
+          ],
+          "meals": [
+            "tiffin",
+            "snack"
           ]
         }
       ],
@@ -10754,6 +11196,9 @@
             "south",
             "west",
             "east"
+          ],
+          "meals": [
+            "snack"
           ]
         }
       ],
@@ -10903,6 +11348,9 @@
           "cuisines": [
             "north",
             "east"
+          ],
+          "meals": [
+            "snack"
           ]
         }
       ],
@@ -10995,6 +11443,10 @@
           "cuisines": [
             "south",
             "west"
+          ],
+          "meals": [
+            "breakfast",
+            "snack"
           ]
         }
       ],
@@ -11021,7 +11473,10 @@
             "onion_garlic"
           ],
           "suggest": true,
-          "sub": "Vada"
+          "sub": "Vada",
+          "meals": [
+            "snack"
+          ]
         },
         {
           "name": "Sambar vada",
@@ -11044,7 +11499,10 @@
             "onion_garlic"
           ],
           "suggest": true,
-          "sub": "Vada"
+          "sub": "Vada",
+          "meals": [
+            "snack"
+          ]
         },
         {
           "name": "Maddur vada",
@@ -11057,7 +11515,10 @@
           ],
           "suggest": true,
           "regional": true,
-          "sub": "Vada"
+          "sub": "Vada",
+          "meals": [
+            "snack"
+          ]
         },
         {
           "name": "Rava vada",
@@ -11080,7 +11541,10 @@
             "root_veg"
           ],
           "suggest": true,
-          "sub": "Vada"
+          "sub": "Vada",
+          "meals": [
+            "snack"
+          ]
         }
       ]
     },
@@ -11108,6 +11572,9 @@
             "north",
             "west",
             "east"
+          ],
+          "meals": [
+            "snack"
           ]
         }
       ],
@@ -11285,6 +11752,10 @@
           "aka": [],
           "cuisines": [
             "tamil"
+          ],
+          "meals": [
+            "tiffin",
+            "snack"
           ]
         }
       ],
@@ -11379,6 +11850,11 @@
             "south",
             "west",
             "east"
+          ],
+          "meals": [
+            "lunch",
+            "dinner",
+            "snack"
           ]
         }
       ],
@@ -11545,6 +12021,11 @@
             "south",
             "west",
             "east"
+          ],
+          "meals": [
+            "lunch",
+            "dinner",
+            "snack"
           ]
         }
       ],
@@ -11563,7 +12044,13 @@
             "nuts"
           ],
           "suggest": true,
-          "sub": "Halwa"
+          "sub": "Halwa",
+          "meals": [
+            "breakfast",
+            "lunch",
+            "dinner",
+            "snack"
+          ]
         },
         {
           "name": "Rava kesari",
@@ -11582,7 +12069,13 @@
           ],
           "suggest": true,
           "regional": true,
-          "sub": "Halwa"
+          "sub": "Halwa",
+          "meals": [
+            "breakfast",
+            "lunch",
+            "dinner",
+            "snack"
+          ]
         },
         {
           "name": "Pineapple kesari",
@@ -11597,7 +12090,13 @@
           ],
           "suggest": true,
           "regional": true,
-          "sub": "Halwa"
+          "sub": "Halwa",
+          "meals": [
+            "breakfast",
+            "lunch",
+            "dinner",
+            "snack"
+          ]
         },
         {
           "name": "Banana sheera",
@@ -11612,7 +12111,13 @@
           ],
           "suggest": true,
           "regional": true,
-          "sub": "Halwa"
+          "sub": "Halwa",
+          "meals": [
+            "breakfast",
+            "lunch",
+            "dinner",
+            "snack"
+          ]
         },
         {
           "name": "Aate ka halwa",
@@ -11695,6 +12200,9 @@
             "south",
             "west",
             "east"
+          ],
+          "meals": [
+            "snack"
           ]
         }
       ],
