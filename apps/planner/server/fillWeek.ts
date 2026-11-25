@@ -591,13 +591,17 @@ export function fillWeek(input: FillInput): FillResult {
   /** The best item of the steps for `who` (the slot-day's people, or one person being fed). */
   const choose = (s: Slot, d: PlanDay, plate: Plate, steps: Step[], who: string[], feeding: boolean, must?: (name: string) => boolean): { it: Item; ex: string[] } | null => {
     const samePart = (it: Item) => plate.filter((x) => sameKind(x.kind, it.kind) && !x.staple);
+    // Everyone at the meal counts for the plate (contract rule 6: an item someone there may not eat is passed over while another
+    // fits), the people fed at their own meal beside it too: that meal is a fallback for them, never a reason to give the
+    // shared plate an item they cannot eat (h4: French toast for the whole breakfast while egg-free toasts fitted).
+    const beside = feeding ? [] : dayOf(d).people.filter((p) => !who.includes(p));
     for (const st of steps) {
       if (!st.items.length || (st.isNew && !newAllowed(d, st.share, feeding))) continue;
       const ok = st.items.filter((it) => fits(s, d, plate, it, st) && (!must || must(it.name)))
-        .map((it) => ({ it, ex: excluded(d, who, it.name) }))
+        .map((it) => ({ it, ex: excluded(d, who, it.name), also: beside.length ? excluded(d, beside, it.name).length : 0 }))
         .filter((x) => (st.zero ? !x.ex.length : !who.length || x.ex.length < who.length));
       if (!ok.length) continue;
-      ok.sort((a, b) => a.ex.length - b.ex.length
+      ok.sort((a, b) => a.ex.length - b.ex.length || a.also - b.also
         || Number(samePart(a.it).some((x) => sameKind(x.sub, a.it.sub))) - Number(samePart(b.it).some((x) => sameKind(x.sub, b.it.sub)))
         || (usedDates.get(a.it.key)?.size ?? 0) - (usedDates.get(b.it.key)?.size ?? 0)
         || (lastUsed.get(a.it.key) ?? "").localeCompare(lastUsed.get(b.it.key) ?? "") || a.it.idx - b.it.idx);

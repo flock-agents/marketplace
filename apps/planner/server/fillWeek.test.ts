@@ -660,3 +660,21 @@ describe("a rule kept to days and meals holds in every meal outside them (safety
     }
   });
 });
+
+describe("nobody at a meal is left with nothing (safety)", () => {
+  it("a person fed at their own breakfast still counts at the family's: the shared item is one they can eat while one fits", () => {
+    const slots = [slot("Breakfast", { kinds: [{ name: "Toast" }], templates: [T({ kind: "Toast" })] }),
+      slot("Dadu's breakfast", { kind: "addon", addon_of: "Breakfast", order: 60, usual_people: ["Dadu"] })];
+    const lib = [dish("French toast", "Breakfast", "Toast", { contains: ["egg", "dairy"] }), dish("Bread butter toast", "Breakfast", "Toast", { contains: ["dairy"] }),
+      dish("Ragi malt", "Dadu's breakfast", "Porridge")];
+    const days = [...WEEK.map((d) => day(d, "Breakfast", ["Asha", "Ravi", "Dadu"])), ...WEEK.map((d) => day(d, "Dadu's breakfast", ["Dadu"]))];
+    const r = run({ slots, library: lib, days, newCap: 0, rules: [rule({ what: "veg", who: "Dadu", quote: "Dadu is pure veg" }), rule({ what: "no_eggs", who: "Dadu", quote: "no eggs for Dadu" })] });
+    // The first morning both fit: the one Dadu can eat comes first.
+    expect(r.at(WEEK[0], "Breakfast")).toEqual(["Bread butter toast"]);
+    // Every morning the shared plate holds something for him, or his own breakfast does.
+    for (const d of WEEK) {
+      const shared = r.plates.get(slotDayKey(d, "Breakfast"))!, own = r.plates.get(slotDayKey(d, "Dadu's breakfast")) ?? [];
+      expect(shared.some((x) => !x.not_for.includes("Dadu")) || own.some((x) => !x.not_for.includes("Dadu"))).toBe(true);
+    }
+  });
+});
