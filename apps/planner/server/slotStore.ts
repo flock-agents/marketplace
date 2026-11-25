@@ -40,7 +40,8 @@ export type SlotDay = { id: string; date: string | null; slot: string; people: s
   dishes: SlotDish[]; created_at: string | null };
 export type RatingEntry = { rating: string; note: string | null; date: string; by: string | null };
 export type LibraryDish = { id: string; key: string; slot: string; name: string; frequency: Frequency | null; days: Weekday[] | null;
-  contains: string[]; contains_read: string[]; origin: LibraryOrigin; suggested: boolean; untried: boolean; offers: number;
+  /** The family's own words for how often or on which days ("rajma or chole twice a week"), given to the plan call beside them. */
+  said: string | null; contains: string[]; contains_read: string[]; origin: LibraryOrigin; suggested: boolean; untried: boolean; offers: number;
   disliked: boolean; prep: string | null; video_url: string | null; video_title: string | null; video_thumbnail: string | null;
   rating: string | null; rating_note: string | null; rated_on: string | null; rated_by: string | null; ratings: RatingEntry[] };
 export type Rule = { id: string; hard: boolean; what: RuleWhat; who: string | null; slots: string[] | null; days: Weekday[] | null;
@@ -54,7 +55,7 @@ export type SlotDishInput = { dish: string; new?: boolean; feedback_asked?: bool
 /** `dishes` given: they replace the slot-day's dishes (and their ingredients). `date` null: a seed example, always a new row. */
 export type SlotDayInput = { date: string | null; slot: string; people?: string[]; guests?: Guest[]; occasion?: string | null;
   new_dishes_allowed?: number | null; skip?: Skip | null; status?: SlotDayStatus; edited?: boolean; note?: string | null; dishes?: SlotDishInput[] };
-export type LibraryInput = { name: string; slot: string; origin?: LibraryOrigin; frequency?: Frequency | null; days?: Weekday[] | null;
+export type LibraryInput = { name: string; slot: string; origin?: LibraryOrigin; frequency?: Frequency | null; days?: Weekday[] | null; said?: string | null;
   contains?: string[]; contains_read?: string[]; suggested?: boolean; untried?: boolean; offers?: number; disliked?: boolean;
   prep?: string | null; video_url?: string | null; video_title?: string | null; video_thumbnail?: string | null };
 export type RuleInput = Omit<Rule, "id" | "who" | "slots" | "days" | "items" | "to" | "frequency" | "per_meal" | "fasting_food"> &
@@ -74,7 +75,7 @@ const sameName = (a: string, b: string) => a.trim().toLowerCase() === b.trim().t
 export const slotOf = (r: SlotRow): Slot => ({ id: r.id, name: r.name, kind: r.kind as SlotKind, addon_of: r.addon_of, usual_people: arr(r.usual_people),
   days: arr(r.days), skip_days: arr(r.skip_days), order: r.order, active: r.active !== 0 });
 export const libraryOf = (r: LibraryRow): LibraryDish => ({ id: r.id, key: r.key, slot: r.slot, name: r.name, frequency: (r.frequency as Frequency | null) ?? null,
-  days: arrOrNull(r.days), contains: arr(r.contains), contains_read: arr(r.contains_read), origin: r.origin as LibraryOrigin, suggested: !!r.suggested,
+  days: arrOrNull(r.days), said: r.said ?? null, contains: arr(r.contains), contains_read: arr(r.contains_read), origin: r.origin as LibraryOrigin, suggested: !!r.suggested,
   untried: !!r.untried, offers: r.offers ?? 0, disliked: !!r.disliked, prep: r.prep, video_url: r.video_url, video_title: r.video_title,
   video_thumbnail: r.video_thumbnail, rating: r.rating, rating_note: r.rating_note, rated_on: r.rated_on, rated_by: r.rated_by, ratings: arr(r.ratings) });
 export const ruleOf = (r: RuleRow): Rule => ({ id: r.id, hard: !!r.hard, what: r.what as RuleWhat, who: r.who, slots: arrOrNull(r.slots), days: arrOrNull(r.days),
@@ -256,7 +257,7 @@ export function getLibraryDish(db: Db, name: string, slot: string): LibraryDish 
  *  one is `family_added` unless an origin is given. */
 export function upsertLibrary(tx: Db, d: LibraryInput, by: string, changes: Change[]): LibraryDish {
   const had = getLibraryDish(tx, d.name, d.slot);
-  const set = given({ origin: d.origin, frequency: d.frequency, days: d.days === undefined ? undefined : js(d.days),
+  const set = given({ origin: d.origin, frequency: d.frequency, days: d.days === undefined ? undefined : js(d.days), said: d.said,
     contains: d.contains && js(d.contains), contains_read: d.contains_read && js(d.contains_read), suggested: bit(d.suggested), untried: bit(d.untried),
     offers: d.offers, disliked: bit(d.disliked), prep: d.prep, video_url: d.video_url, video_title: d.video_title, video_thumbnail: d.video_thumbnail });
   if (had) {

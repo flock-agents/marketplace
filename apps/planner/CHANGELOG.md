@@ -77,6 +77,19 @@
   hold for it by the family's word; a person with nothing of their own is fed past the week's new-dish budget; the
   targeted call and the spares name a family dish as made for them ("Dal without onion and garlic"); a daily dal or other
   daily main counts as a main when checking that each person has a dish of their own.
+- The plan call gets the family's own words for how often or on which days they have a dish, beside its count and days
+  (`said: "rajma or chole twice a week"`), and the week's prompt says what such words mean ("on Sundays" only Sundays,
+  "twice a week" at most twice, "sometimes" fewer is fine, "most days" may be more than twice). Setup keeps the words in
+  a new `library.said` column (added by the schema sync); add_dish sets it from its quote when it changes how often or
+  the days. Code's caps and days still win.
+- How often said over two dishes is each one's: "rajma or chole twice a week" is once a week each (a count shared,
+  rounded up), "poha or upma most mornings" most days each, "luchi with alur dom on Sunday" Sunday for both, by a worked
+  example in the how-often read and the same in the lint. A meal's whole plate ("most days rice, dal and a sabzi") is
+  still no dish's.
+- A dish tied to a day keeps it: a dish the dishes read lists twice at one meal (once per sentence naming it) takes the
+  how-often read on both rows (before, neither, and luchi lost its Sunday); one dish read at three meals is no longer
+  "a whole list's" words; a dish's how-often words are placed in the sentence with its own quote first; and the lint
+  matches a dish asked twice to each answer in turn.
 
 ## 4.0.2
 

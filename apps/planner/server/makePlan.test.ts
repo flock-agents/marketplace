@@ -777,6 +777,22 @@ describe("make_plan: a box with no dishes (owner 25 Nov)", () => {
     expect(kadhi).toMatchObject({ how_often: "usually", left: 5 });
     expect(kadhi.at_least).toBeUndefined();
   });
+
+  it("a dish's own words for how often or which days go to the call beside its count and days; code's caps still win", async () => {
+    const k = await home({ library: [{ name: "Rajma", slot: "Lunch", frequency: "1/week", said: "rajma or chole twice a week" },
+      { name: "Chole", slot: "Lunch", frequency: "1/week", said: "rajma or chole twice a week" },
+      { name: "Puri", slot: "Breakfast", days: ["Sun"], said: "puri on Sunday mornings" },
+      { name: "Kadhi", slot: "Lunch", said: "kadhi twice" }] });   // words without a count or days saved: not sent
+    const f = fakeModel({ slot: (u) => u.slot === "Lunch" ? { days: Object.fromEntries(u.days.map((d: any) => [d.date, ["Rajma"]])) } : rotateDays(u) });
+    await k.plan(f.model);
+    const lunch = reqOf(f, "Lunch").library;
+    expect(lunch.find((d: any) => d.dish === "Rajma")).toMatchObject({ how_often: "1/week", left: 1, said: "rajma or chole twice a week" });
+    expect(lunch.find((d: any) => d.dish === "Chole")).toMatchObject({ said: "rajma or chole twice a week" });
+    expect(lunch.find((d: any) => d.dish === "Kadhi").said).toBeUndefined();
+    expect(reqOf(f, "Breakfast").library.find((d: any) => d.dish === "Puri")).toMatchObject({ days: ["Sun"], said: "puri on Sunday mornings" });
+    expect(WEEK.filter((d) => k.dishesAt(d, "Lunch").includes("Rajma"))).toHaveLength(1);
+    expect(SLOT_SYSTEM).toContain("`said`");
+  });
 });
 
 describe("make_plan: allergies (owner 25 Nov)", () => {

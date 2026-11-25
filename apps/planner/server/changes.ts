@@ -287,7 +287,9 @@ export function mountChangeRoutes(hono: Hono<any>, deps: Omit<ChangeDeps, "now">
     const link = b.link === undefined || b.link === null ? null : typeof b.link === "string" && /^https?:\/\//i.test(b.link.trim()) ? b.link.trim() : refuse("link must be the reel's or recipe's http(s) link");
     if (b.quote !== undefined) words(b.quote, "quote");
     const had = getLibraryDish(db, dish, slot.name);
-    const row = commit(db, emit, (tx, ch) => upsertLibrary(tx, { name: had?.name ?? dish, slot: slot.name, frequency, days,
+    // How often or the days changed: the family's words for them are the quote given, else none (old words would be wrong).
+    const said = frequency === undefined && days === undefined ? undefined : (frequency || days?.length) && typeof b.quote === "string" ? b.quote.trim() || null : null;
+    const row = commit(db, emit, (tx, ch) => upsertLibrary(tx, { name: had?.name ?? dish, slot: slot.name, frequency, days, said,
       // The family's own dish now, not a suggestion; one named in setup keeps its origin.
       ...(had?.origin === "setup_named" ? {} : { origin: "family_added" as const }), suggested: false,
       ...(link ? { video_url: link, ...(had && !had.untried ? {} : { untried: true }) } : had ? {} : { untried: false }) }, by, ch));

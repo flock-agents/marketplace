@@ -222,6 +222,7 @@ export const library = sqliteTable("library", {
   name: text("name").notNull(),
   frequency: text("frequency"),                                // usually | sometimes | rarely | "<n>/week"; null = the default (2 days at most)
   days: text("days"),                                          // JSON weekday[]: only these days; null = any day
+  said: text("said"),                                          // the family's own words for how often or which days ("rajma or chole twice a week"); null = none
   contains: text("contains"),                                  // JSON string[]: the tags it has (egg, meat, onion_garlic, white_rice, ...)
   contains_read: text("contains_read"),                        // JSON string[]: the tags read for it; a rule's tag not here is unknown
   origin: text("origin").notNull(),                            // setup_named | family_added | planner_suggested (constants.ts LIBRARY_ORIGINS)

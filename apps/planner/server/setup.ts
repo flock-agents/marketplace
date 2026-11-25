@@ -122,10 +122,11 @@ const OFTEN_SCHEMA = { type: "object", required: ["often"], properties: { often:
 const OFTEN_PART = `Write this part: how often the family has a dish, or the weekdays they have it, for every dish whose own words say so. Another reader lists the dishes: leave out a dish with no such words.
 - often: one row per such dish and meal: [name, slot, quote, often, frequency, days].
   name, slot: the dish ("Lemon rice") and the meal it is eaten at (Breakfast, Lunch, Dinner, "<child>'s tiffin", "<person>'s <meal>"). quote: the family's words naming the dish.
-  often: the family's exact words, copied from the same sentence, that say how often or on which weekdays they have THIS one dish ("twice", "on Sundays", "every Friday", "most nights", "every day"; "sometimes appam", "bread toast on busy days", "pasta if it's late", "khichdi when someone is unwell" are about that one dish: sometimes). Words said over a whole list or a whole meal are about none of its dishes alone, so give no row for them: "usually idli or dosa", "most days rice, dal and a sabzi", "that's our usual", "mostly", "on weekdays it's poha or upma". The meal's own days (a tiffin's school days, the days the cook comes) are no dish's days. A count of the dish itself ("two phulkas") is not how often.
-  frequency: from often: daily (every day), usually (most days, most nights), sometimes (sometimes, "when she's unwell", "on busy days", now and then), rarely (once in a while), "<n>/week" for a count ("twice": "2/week", "once": "1/week"), else "".
-  days: from often: the weekdays the dish is tied to every week ("every Friday": "Fri"; "pancakes at the weekend": "Sat, Sun"), else "". A list of what was eaten on which day last week is no days.`;
-const OFTEN_EXAMPLE = `gives often [["Pulao", "Lunch", "Pulao twice", "twice", "2/week", ""], ["Puri", "Lunch", "puri on Sundays", "on Sundays", "", "Sun"], ["Lemon rice", "Lunch", "Lemon rice every Friday", "every Friday", "", "Fri"], ["Salad", "Lunch", "Salad every day", "every day", "daily", ""], ["Upma", "Breakfast", "upma once", "once", "1/week", ""], ["Bread toast", "Breakfast", "bread toast on busy days", "on busy days", "sometimes", ""]]. No row for rice, rasam, dal, poriyal or curd ("Most days" is said of the whole plate), none for idli or dosa ("usually" is said of the list), none for the tiffin's dishes (Mon-Fri are the tiffin's days), none for the phulkas ("two" is how many).`;
+  often: the family's exact words, copied from the same sentence, that say how often or on which weekdays they have THIS one dish ("twice", "on Sundays", "every Friday", "most nights", "every day"; "sometimes appam", "bread toast on busy days", "pasta if it's late", "khichdi when someone is unwell" are about that one dish: sometimes). Words said over two dishes, the one or the other ("chole or kadhi twice a week", "poha or upma most mornings") or one eaten with the other ("puri with aloo on Sundays"), are both dishes': a row for each, with the same often and quote. Words said over a meal's whole plate or a longer list are about none of its dishes alone, so give no row for them: "most days rice, dal and a sabzi", "rasam or dal" inside a plate of rice, poriyal and curd, "that's our usual", "mostly", "on weekdays it's poha, upma or idli". The meal's own days (a tiffin's school days, the days the cook comes) are no dish's days. A count of the dish itself ("two phulkas") is not how often.
+  frequency: from often: daily (every day), usually (most days, most nights), sometimes (sometimes, "when she's unwell", "on busy days", now and then), rarely (once in a while), "<n>/week" for a count ("twice": "2/week", "once": "1/week"), else "". A count said over two dishes is shared between them, rounded up: "twice a week" over the two is "1/week" each, "once" over the two is "1/week" each, "four times a week" over the two is "2/week" each.
+  days: from often: the weekdays the dish is tied to every week ("every Friday": "Fri"; "pancakes at the weekend": "Sat, Sun"; "on Sunday mornings": "Sun"), else "". Days said over two dishes are each one's days. A list of what was eaten on which day last week is no days.`;
+const OFTEN_EXAMPLE = `gives often [["Pulao", "Lunch", "Pulao twice", "twice", "2/week", ""], ["Puri", "Lunch", "puri on Sundays", "on Sundays", "", "Sun"], ["Lemon rice", "Lunch", "Lemon rice every Friday", "every Friday", "", "Fri"], ["Salad", "Lunch", "Salad every day", "every day", "daily", ""], ["Upma", "Breakfast", "upma once", "once", "1/week", ""], ["Bread toast", "Breakfast", "bread toast on busy days", "on busy days", "sometimes", ""], ["Idli", "Breakfast", "usually idli or dosa", "usually", "usually", ""], ["Dosa", "Breakfast", "usually idli or dosa", "usually", "usually", ""]]. Idli and dosa share "usually" (the one or the other). No row for rice, rasam, dal, poriyal or curd ("Most days" is said of the whole plate), none for the tiffin's dishes (Mon-Fri are the tiffin's days), none for the phulkas ("two" is how many).
+And "Dinner is roti, dal and a sabzi most nights, chole or kadhi twice a week. Puttu with kadala curry on Sunday mornings." gives often [["Chole", "Dinner", "chole or kadhi twice a week", "twice a week", "1/week", ""], ["Kadhi", "Dinner", "chole or kadhi twice a week", "twice a week", "1/week", ""], ["Puttu", "Breakfast", "Puttu with kadala curry on Sunday mornings", "on Sunday mornings", "", "Sun"], ["Kadala curry", "Breakfast", "Puttu with kadala curry on Sunday mornings", "on Sunday mornings", "", "Sun"]]: twice between chole and kadhi is once each; both Sunday dishes keep Sun. No row for roti, dal or sabzi ("most nights" is said of the whole plate).`;
 
 const systemOf = (part: string, example: string) => `${COMMON}\n\n${part}\n\n${EXAMPLE}\n${example}\n${NOT_THE_EXAMPLE}`;
 
@@ -145,8 +146,8 @@ Example: dishes ["Masala dosa", "Fruit salad"], tags ["onion_garlic", "white_ric
 const CONTAINS_SCHEMA = { type: "object", additionalProperties: { type: "object", additionalProperties: { type: "boolean" } } };
 
 export const LINT_SYSTEM = `Each dish below comes with the family's words naming it (quote) and their whole reply (line). Read from the line only how often the family has THIS one dish, or the weekdays they have it every week. Answer { "dishes": [{ "name", "often", "frequency", "days" }] }, one entry per dish:
-often: the exact words of the line that say it, about this dish alone, else "". Words about another dish of the line, or said over a whole list or meal ("usually idli or dosa", "that's our usual", a tiffin's "Mon-Fri"), are not this dish's: "". A count of something else ("two phulkas") or a list of last week's days is neither.
-frequency (from often only): daily (every day) | usually (most days) | sometimes | rarely | "<n>/week" for a count ("twice": "2/week"), else "". days (from often only): weekdays (Mon..Sun) the dish is tied to every week ("on Fridays"), else [].`;
+often: the exact words of the line that say it, about this dish, else "". Words said over this dish and one other, the one or the other ("chole or kadhi twice a week") or one eaten with the other ("puri with aloo on Sundays"), are this dish's too. Words about another dish of the line, or said over a meal's whole plate or a longer list ("most days rice, dal and a sabzi", "that's our usual", a tiffin's "Mon-Fri"), are not this dish's: "". A count of something else ("two phulkas") or a list of last week's days is neither.
+frequency (from often only): daily (every day) | usually (most days) | sometimes | rarely | "<n>/week" for a count ("twice": "2/week"); a count said over two dishes is shared, rounded up ("twice a week" over two: "1/week"), else "". days (from often only): weekdays (Mon..Sun) the dish is tied to every week ("on Fridays", "on Sunday mornings": ["Sun"]), else [].`;
 const LINT_SCHEMA = { type: "object", required: ["dishes"], properties: { dishes: { type: "array", items: { type: "object", required: ["name"],
   properties: { name: STR, often: STR, frequency: STR, days: DAYS } } } } };
 
@@ -213,8 +214,8 @@ export type Cook = { name: string; days: Weekday[]; visits: Visit[]; limits_word
 export type FamilyCook = { person: string; days: Weekday[]; quote: string };
 export type WeekdayLunch = { person: string; lunch: "away" | "carries" | "home"; quote: string };
 /** `often`: the family's words saying how often or on which days they have this dish (none: ""); frequency and days stand only
- *  on them. */
-export type ReadDish = { name: string; slot: string; frequency: Frequency | null; days: Weekday[] | null; quote: string; often: string;
+ *  on them. `said`: the family's phrase they sit in ("rajma or chole twice a week"), kept for the plan call. */
+export type ReadDish = { name: string; slot: string; frequency: Frequency | null; days: Weekday[] | null; quote: string; often: string; said?: string;
   /** Set by the checks: the family sentence (index) that backs `often`; `shared`: its words were dropped as a whole list's. */
   oftenAt?: number; shared?: boolean };
 export type ReadSeed = { slot: string; dishes: string[]; quote: string };
@@ -274,21 +275,25 @@ export function readOf(home: unknown, rules: unknown, dishes: unknown, often: un
   };
 }
 
-/** The how-often read laid on the dishes read: a row of the same dish and meal takes its words, else the one row of that dish;
- *  a dish the dishes read does not list is left out (its name may be another's). By name and meal as written. */
+/** The how-often read laid on the dishes read: the rows of the same dish and meal take its words (the dishes read may list one
+ *  dish twice at a meal, once per sentence naming it: both), else the one row of that dish; a dish the dishes read does not
+ *  list is left out (its name may be another's). By name and meal as written. */
 function withOften(library: ReadDish[], often: ReadDish[]): ReadDish[] {
   const out = library.map((d) => ({ ...d }));
   // The same name, else a name one holds as whole words ("Cornflakes" in "Cornflakes with milk"; "Parathas" for "Paratha").
   const words = (n: string) => ` ${plainWords(n).replace(/\b(\w{4,})s\b/g, "$1")} `;
   const holds = (a: string, b: string) => words(a).includes(words(b)) || words(b).includes(words(a));
-  const pick = (xs: ReadDish[], f: ReadDish) => { const at = xs.filter((x) => same(x.slot, f.slot)); return at.length === 1 ? at[0] : xs.length === 1 ? xs[0] : null; };
+  const pick = (xs: ReadDish[], f: ReadDish) => { const at = xs.filter((x) => same(x.slot, f.slot)); return at.length ? at : xs.length === 1 ? xs : []; };
   for (const f of often) {
     const exact = out.filter((d) => dishKey(d.name) === dishKey(f.name));
-    const d = exact.length ? pick(exact, f) : pick(out.filter((x) => holds(x.name, f.name)), f);
-    if (d) Object.assign(d, { frequency: f.frequency, days: f.days, often: f.often });
+    for (const d of exact.length ? pick(exact, f) : pick(out.filter((x) => holds(x.name, f.name)), f))
+      Object.assign(d, { frequency: f.frequency, days: f.days, often: f.often, said: saidOf(f.often, [f.quote, d.quote]) });
   }
   return out;
 }
+/** The family's phrase a dish's how-often words sit in: the first of `quotes` that holds them ("rajma or chole twice a week"),
+ *  else the words alone. */
+export const saidOf = (often: string, quotes: string[]): string => quotes.find((q) => q && wordsIn(plainWords(q), often))?.trim() || often;
 
 // ── What the family said: the quote check ──
 
@@ -403,7 +408,9 @@ const wordsIn = (line: string, words: string): boolean => { const w = plainWords
 export function backHowOften(d: ReadDish, said: string[], slotDays: Weekday[], dropped: string[]): void {
   if (!d.frequency && !d.days) return;
   const what = () => JSON.stringify({ frequency: d.frequency, days: d.days });
-  const at = d.often ? said.findIndex((l) => wordsIn(l, d.often) && (wordsIn(l, d.quote) || namedIn(d.name, [l]))) : -1;
+  // The sentence with the dish's own quote first, else one naming it: "luchi with alur dom on Sunday" is not "luchi on Sunday".
+  const withQuote = d.often ? said.findIndex((l) => wordsIn(l, d.often) && wordsIn(l, d.quote)) : -1;
+  const at = withQuote >= 0 ? withQuote : d.often ? said.findIndex((l) => wordsIn(l, d.often) && namedIn(d.name, [l])) : -1;
   d.oftenAt = at >= 0 ? at : undefined;
   if (at < 0) { dropped.push(`how often for ${d.name} ${what()}: ${d.often ? `"${d.often}" is not said with it` : "no words of the family say it"}`); d.frequency = null; d.days = null; return; }
   if (d.days && !hasDayWord(d.often)) { dropped.push(`days for ${d.name} (${d.days.join(", ")}): no day in "${d.often}"`); d.days = null; }
@@ -423,7 +430,8 @@ export function dropShared(library: ReadDish[], dropped: string[]): void {
     const k = `${d.oftenAt}|${plainWords(d.often)}`;
     groups.set(k, [...(groups.get(k) ?? []), d]);
   }
-  for (const g of groups.values()) if (g.length >= SHARED_OFTEN_MIN) {
+  // Counted by dish, not by row: "paratha on Sunday" read at three meals is one dish's days.
+  for (const g of groups.values()) if (new Set(g.map((d) => dishKey(d.name))).size >= SHARED_OFTEN_MIN) {
     dropped.push(`how often for ${g.map((d) => d.name).join(", ")}: "${g[0].often}" is said of the whole list`);
     for (const d of g) Object.assign(d, { frequency: null, days: null, shared: true });
   }
@@ -535,6 +543,8 @@ export function checkRead(read: SetupRead, ctx: { household: Household; said: st
     if (had) {
       had.frequency ??= d.frequency;
       if (d.days) had.days = WEEKDAYS.filter((x) => had.days?.includes(x) || d.days!.includes(x));
+      if ((d.frequency || d.days) && d.said && d.said !== had.said) had.said = had.said && (had.frequency || had.days) ? `${had.said}; ${d.said}` : d.said;
+      if (!had.often && d.often) Object.assign(had, { often: d.often, oftenAt: d.oftenAt });
       continue;
     }
     library.push(d);
@@ -596,12 +606,16 @@ async function lintReread(model: ModelCall, dishes: ReadDish[], replies: string[
     line: replies.find((l) => plainWords(l).includes(plainWords(d.quote))) ?? d.quote }));
   const r = await withDeadline(model({ tier: "balanced", purpose: "setup: how often (lint)", system: LINT_SYSTEM, user: JSON.stringify({ dishes: words }), schema: LINT_SCHEMA, maxTokens: 2000 }), until - Date.now());
   if (!r.ok) { log(`lint: model ${r.code}: ${r.message.slice(0, 200)}`); return; }
+  const done = new Set<ReadDish>();
   for (const x of arr(isObject(r.json) ? r.json.dishes : null).filter(isObject)) {
-    const d = dishes.find((y) => same(y.name, str(x.name)));
+    // One dish at two meals is asked twice, in order: each answer is the next of that name.
+    const d = dishes.find((y) => same(y.name, str(x.name)) && !done.has(y));
     if (!d) continue;
+    done.add(d);
     const f = frequencyOf(x.frequency), days = daysOf(x.days);
     if (!f && !days.length) continue;
-    Object.assign(d, { frequency: f, days: days.length ? days : null, often: str(x.often) });
+    const line = words.find((w) => w.name === d.name && w.slot === d.slot)?.line ?? "";
+    Object.assign(d, { frequency: f, days: days.length ? days : null, often: str(x.often), said: saidOf(str(x.often), [d.quote, ...line.split(/[.!?;,]+/), ...line.split(/[.!?;]+/)]) });
     backHowOften(d, check.said, check.slotDays.get(d.slot) ?? [], check.dropped);
     if (d.frequency || d.days) log(`lint: ${d.name} re-read as ${d.frequency ?? ""} ${(d.days ?? []).join(",")} ("${d.often}")`.trim());
   }
@@ -798,6 +812,7 @@ function writeOps(tx: Db, ops: Ops, opts: { first: boolean; household: Household
   for (const r of ops.rules) addRule(tx, r, by, changes);
   for (const d of ops.removeLibrary) removeLibrary(tx, d.name, d.slot, by, changes);
   for (const d of ops.library) upsertLibrary(tx, { name: d.name, slot: d.slot, frequency: d.frequency, days: d.days,
+    said: d.frequency || d.days ? d.said || d.often || null : null,
     ...(listLibrary(tx, { names: [d.name], slot: d.slot }).length ? {} : { origin: "setup_named" as const, untried: false }) }, by, changes);
   for (const s of ops.seed) saveSlotDay(tx, { date: null, slot: s.slot, status: "confirmed", dishes: s.dishes.map((dish) => ({ dish })) }, by, changes);
   const h = getHouse(tx);
