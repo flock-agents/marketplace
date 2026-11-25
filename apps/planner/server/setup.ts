@@ -1227,6 +1227,33 @@ export function buildMeal(meal: string, dishes: MealDish[], seeds: string[][]): 
     for (const t of drafts) t.parts.push({ part: { items: [d.name] }, words: [d.place?.word ?? d.name.toLowerCase()], dish: d });
   }
 
+  // A plate of only sides and curries ("with coconut chutney and sambar", "kurma" told on its own) is no meal alone: its parts go
+  // on the plates that have nothing beside their dish or bread yet ([Idli] → [Idli, Chutney, Sambar]; [Dosa], [Chapati] take the
+  // kurma, [Rice, Rasam] does not). With no such plate: at breakfast, a tiffin or a snack onto every plate; at lunch or dinner
+  // a curry gets the meal's rice or bread. An egg dish at breakfast is a whole breakfast.
+  const small = SMALL_MEALS.includes(meal);
+  const isSide = (p: PlatePart): boolean => {
+    if (!("kind" in p.part) || p.dish?.place?.own || isStaple(p.part.kind)) return false;
+    const part = catalogKind(p.part.kind)?.part;
+    return part === "side" || (part === "main" && !(small && norm(p.part.kind) === "egg"));
+  };
+  const sideOnly = drafts.filter((t) => t.parts.length && t.parts.every(isSide));
+  if (sideOnly.length && sideOnly.length < drafts.length) {
+    const plates = drafts.filter((t) => !sideOnly.includes(t));
+    const bare = plates.filter((t) => t.parts.every((p) => !isSide(p)));
+    const onto = bare.length ? bare : small ? plates : [];
+    for (const s of sideOnly) {
+      if (onto.length) {
+        for (const t of onto) for (const p of s.parts) if (!t.parts.some((x) => partKey(x.part) === partKey(p.part))) t.parts.push({ ...p, words: [...p.words] });
+      } else {
+        const base = plates.flatMap((t) => t.parts).find((p) => isBase(p.part));
+        if (base && !s.parts.some((p) => partKey(p.part) === partKey(base.part))) s.parts.unshift({ ...base, words: base.words.slice(0, 1) });
+        continue;
+      }
+      drafts.splice(drafts.indexOf(s), 1);
+    }
+  }
+
   // The kinds the plates use: the family's sub-kinds of each (rotation prefers them), staple and own from the catalog.
   const kinds: MealKind[] = [];
   for (const t of drafts) for (const p of t.parts) {

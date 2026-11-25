@@ -188,7 +188,7 @@ describe("apply_setup v2: the model reads, code checks and writes", () => {
       "Weekday lunch is for Nisha and Padma; Kiran's at the office; Ishaan takes lunch to school.",
       "Sunday lunch is eaten out.",
       "Food rules:\n- Everyone: vegetarian; no nuts at Ishaan's tiffin\n- Padma: no sugar; fasts on Mondays at breakfast and lunch; millets in place of white rice, 2–3 times a week; no white rice at dinner",
-      "Your usual meals:\n- Breakfast: curd; or sambar\n- Ishaan's tiffin: poriyal"
+      "Your usual meals:\n- Breakfast: curd and sambar\n- Ishaan's tiffin: poriyal"
         + "\n- Lunch: rice, sambar, beans poriyal, curd and salad; or lemon rice and salad (on Fridays); or rice, rajma and salad (twice a week)\n- Padma's dinner: phulka",
       "Your kitchen: South Indian. Tell me if that's not right.",
       "Every day: salad at lunch.",
@@ -609,6 +609,23 @@ describe("the kinds model: each dish placed, each meal's templates, the cuisines
     // Asked only whether it is a category: code's place is kept.
     const known = codePlace("Dosa")!;
     expect(placeOf({ name: "Dosa", meal: "lunch", words: "", known }, { kind: "Upma", named: "category" }, "a dosa")).toMatchObject({ kind: "Dosa", named: "category", word: "a dosa" });
+  });
+
+  it("a side or curry told as its own plate goes with the plates it is eaten with, never a meal alone", () => {
+    // "Idli, dosa, upma, pongal. With coconut chutney and sambar." read as one-dish plates: chutney and sambar go on every
+    // breakfast plate that has nothing beside it yet; never a morning of chutney alone.
+    const b = buildMeal("breakfast", [dish("Idli"), dish("Dosa"), dish("Upma"), dish("Coconut chutney"), dish("Sambar")],
+      [["Idli"], ["Dosa"], ["Upma"], ["Coconut chutney"], ["Sambar"]]);
+    const kinds = (t: { parts: any[] }) => t.parts.map((p) => p.kind ?? `items:${p.items.join("|")}`);
+    expect(b.templates.map(kinds)).toEqual([["Idli", "Chutney", "Rice curry"], ["Dosa", "Chutney", "Rice curry"], ["Upma", "Chutney", "Rice curry"]]);
+    // "Dosa or chapati with kurma, or rasam rice": kurma goes with the dosa and the chapati, not on the rasam rice.
+    const d = buildMeal("dinner", [dish("Dosa"), dish("Chapati"), dish("Kurma"), dish("Rasam rice")], [["Dosa"], ["Chapati"], ["Kurma"], ["Rasam rice"]]);
+    expect(d.templates.map(kinds)).toEqual([["Dosa", "Gravy"], ["Roti", "Gravy"], ["Rice", "Rice curry"]]);
+    // A curry with nothing to go with at lunch gets the meal's rice or bread.
+    const l = buildMeal("lunch", [dish("Rice"), dish("Sambar"), dish("Curd"), dish("Chicken curry")], [["Rice", "Sambar", "Curd"], ["Chicken curry"]]);
+    expect(l.templates.map(kinds)).toEqual([["Rice", "Rice curry", "Curd"], ["Rice", "Chicken"]]);
+    // An egg breakfast is a whole breakfast.
+    expect(buildMeal("breakfast", [dish("Idli"), dish("Bread omelette")], [["Idli"], ["Bread omelette"]]).templates.map(kinds)).toEqual([["Idli"], ["Egg"]]);
   });
 
   it("category words are their kind or sub-kind; a named dish is its kind (variety among it); staples are their kind", () => {
