@@ -708,7 +708,8 @@ export function walkSlot(w: Week, slotName: string, p: Proposal, opts: { final?:
 
 /** A family dish with its own days ("khichdi on Saturday night") on each of them, and one they have often (sometimes,
  *  usually, n a week) on at least that many days, when the call left it short and no later meal has it: put in the place of
- *  a dish of its part on a day it fits, where nobody is then left without a dish of their own. */
+ *  a main on a day it fits (one of its part first, else any; owner 25 Nov), where nobody is then left without a dish of
+ *  their own and the day keeps its rice or bread. */
 function ownDays(w: Week, slotName: string, p: Proposal, res: WalkResult): void {
   const sf = w.slots.get(slotKey(slotName))!;
   const mine = w.days.filter((d) => same(d.slot, slotName) && !d.fixed && !d.skip).sort((a, b) => a.date.localeCompare(b.date));
@@ -718,7 +719,6 @@ function ownDays(w: Week, slotName: string, p: Proposal, res: WalkResult): void 
   for (const row of wanted) {
     if (w.days.some((d) => !same(d.slot, slotName) && !counts(w, d) && !d.skip && w.library.some((x) => x.key === row.key && same(x.slot, d.slot)))) continue;
     const part = sf.parts.get(row.key)?.part;
-    if (!part) continue;
     const on = mine.filter((d) => !row.days?.length || row.days.includes(weekdayOf(d.date)));
     const least = row.frequency ? frequencyRange(row.frequency)![0] : on.length;
     const cap = capOf(w, slotName, row.name) ?? Infinity;
@@ -728,10 +728,13 @@ function ownDays(w: Week, slotName: string, p: Proposal, res: WalkResult): void 
       const plate = p.days.get(d.date) ?? [];
       if (used.has(d.date) || notFor(w, d, row.name).length === d.people.length) continue;
       if (sf.slot.kind === "main" && w.days.some((x) => x.date === d.date && !same(x.slot, slotName) && counts(w, x) && w.slots.get(slotKey(x.slot))?.slot.kind === "main" && x.dishes.some((y) => dishKey(y) === row.key))) continue;
-      const i = plate.findIndex((x) => !wantedKeys.has(dishKey(x)) && !isStapleAt(w, slotName, x) && sf.parts.get(dishKey(x))?.part === part);
-      if (i < 0) continue;
-      const next = plate.map((x, j) => (j === i ? row.name : x));
-      if (unfed(w, d, next).length > unfed(w, d, plate).length) continue;
+      const swap = (j: number) => plate.map((x, k) => (k === j ? row.name : x));
+      const keepsBase = (next: string[]) => !sf.mustHave.length || !plate.some((x) => isBase(w, slotName, x)) || next.some((x) => isBase(w, slotName, x));
+      const places = plate.map((x, j) => ({ x, j })).filter(({ x }) => !wantedKeys.has(dishKey(x)) && !isStapleAt(w, slotName, x))
+        .sort((a, b) => Number(!!part && sf.parts.get(dishKey(b.x))?.part === part) - Number(!!part && sf.parts.get(dishKey(a.x))?.part === part));
+      const i = places.map(({ j }) => j).find((j) => keepsBase(swap(j)) && unfed(w, d, swap(j)).length <= unfed(w, d, plate).length);
+      if (i === undefined) continue;
+      const next = swap(i);
       p.days.set(d.date, next);
       res.changed.push(`${weekdayOf(d.date)} ${slotName}: ${plate[i]} → ${row.name} (its day)`);
     }

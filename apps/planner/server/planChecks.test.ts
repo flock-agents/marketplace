@@ -211,6 +211,40 @@ describe("the walk: a dish the family has on its days", () => {
     walkSlot(w, "Dinner", p, { final: true });
     expect(daysWith(p, "Khichdi")).toEqual([WEEK[5]]);
   });
+
+  it("one the family has often takes the place of any main when no dish of its part is there: as often as they said (owner 25 Nov)", () => {
+    const PARTS: Record<string, [string, Part["kind"]]> = { Rice: ["rice or bread", "rice_or_bread"], Curd: ["side", "side"], Sambar: ["sambar", "main"], Rasam: ["rasam", "main"],
+      Poriyal: ["dry vegetable", "main"], Avial: ["dry vegetable", "main"], Thoran: ["dry vegetable", "main"], Kootu: ["kootu", "main"] };
+    const lib = [...["Sambar", "Rasam", "Poriyal", "Avial", "Thoran"].map((n) => dish(n, "Lunch", { frequency: n === "Sambar" || n === "Rasam" ? "usually" as any : null })),
+      dish("Kootu", "Lunch", { frequency: "sometimes" })];
+    const w = week({ slots: [slot("Lunch")], library: lib, parts: PARTS, history: { Lunch: seed("Lunch", [["Rice", "Sambar", "Poriyal", "Curd"], ["Rice", "Rasam", "Avial", "Curd"]]) } });
+    const p = plan([["Rice", "Sambar", "Poriyal", "Curd"], ["Rice", "Rasam", "Avial", "Curd"], ["Rice", "Sambar", "Thoran", "Curd"], ["Rice", "Rasam", "Poriyal", "Curd"],
+      ["Rice", "Sambar", "Avial", "Curd"], ["Rice", "Rasam", "Thoran", "Curd"], ["Rice", "Sambar", "Poriyal", "Curd"]]);
+    walkSlot(w, "Lunch", p, { final: true });
+    // Kootu "sometimes": 2 days at least, though no kootu was on any plate; each day keeps its rice and four dishes.
+    expect(daysWith(p, "Kootu")).toHaveLength(2);
+    for (const d of WEEK) { expect(p.days.get(d)).toContain("Rice"); expect(p.days.get(d)).toHaveLength(4); }
+  });
+
+  it("never takes the place of the dish that brings the day's rice or bread", () => {
+    const PARTS: Record<string, [string, Part["kind"]]> = { Roti: ["rice or bread", "rice_or_bread"], Khichdi: ["one-pot", "complete"], Kootu: ["kootu", "main"] };
+    const lib = [dish("Khichdi", "Dinner", { frequency: "7/week" as any }), dish("Kootu", "Dinner", { frequency: "sometimes" })];
+    const w = week({ slots: [slot("Dinner", { order: 50 })], library: lib, parts: PARTS, history: { Dinner: seed("Dinner", [["Roti", "Kootu"], ["Khichdi"]]) } });
+    const p = plan([["Khichdi"]]);
+    walkSlot(w, "Dinner", p, { final: true });
+    for (const d of WEEK) expect(p.days.get(d)!.some((x) => x === "Khichdi" || x === "Roti")).toBe(true);
+  });
+});
+
+describe("the walk: a particular way of a family dish keeps its own days a week (owner 25 Nov)", () => {
+  it("each variant has its own two days, not a share of the family dish's", () => {
+    const w = week({ slots: [slot("Breakfast", { order: 10 })], library: [dish("Dosa", "Breakfast")], parts: { Dosa: ["breakfast dish", "complete"] } });
+    const p = plan([["Dosa"], ["Dosa"], ["Rava dosa"], ["Rava dosa"], ["Masala dosa"], ["Masala dosa"], ["Set dosa"]]);
+    const r = walkSlot(w, "Breakfast", p, { final: true });
+    expect(WEEK.map((d) => p.days.get(d)![0])).toEqual(["Dosa", "Dosa", "Rava dosa", "Rava dosa", "Masala dosa", "Masala dosa", "Set dosa"]);
+    expect(r.unmet).toEqual([]);
+    expect(w.library.filter((x) => x.id.startsWith("variant:")).map((x) => x.name)).toEqual(["Rava dosa", "Masala dosa", "Set dosa"]);
+  });
 });
 
 describe("feasibility", () => {
