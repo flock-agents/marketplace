@@ -3,11 +3,12 @@
 // reads back from the rows, and applies a correction as a diff.
 import { describe, it, expect } from "bun:test";
 import { boot } from "./testkit";
-import { saysNoEggs, buildMeal, codePlace, cuisinesOf, kitchenLine, needsNamed, placeOf, wordOf, KINDS_SYSTEM, type MealDish, type Place } from "./setup";
+import { saysNoEggs, buildMeal, codePlace, cuisinesOf, regionalFor, kitchenLine, needsNamed, placeOf, wordOf, KINDS_SYSTEM, type MealDish, type Place } from "./setup";
 import { checkRead, diffSetup, familyLines, familySentences, frequencyOf, householdOf, lunchLine, personOf, plainWords, quoteHasDayOrCount, readOf, resolveSlot,
   ruleSaid, saidByFamily, DISHES_ASK, SETUP_PARTS, SETUP_SYSTEM, CONTAINS_BATCH, daysOf, clockOf, itemWord, allergyAsk, answeredIn, type Saved, type SetupRead } from "./setup";
 import { isAllergyRule } from "./allergy";
 import { HOUSEHOLDS } from "../evals/households";
+import { regionalWordOf } from "./kinds";
 import type { ModelRequest, ModelResult } from "./model";
 
 // A made-up test family (not an eval household).
@@ -645,6 +646,19 @@ describe("the kinds model: each dish placed, each meal's templates, the cuisines
     expect(codePlace("Pachadi", "pachadi", ["south"])).toBeNull();
     expect(codePlace("Cabbage curry")).toBeNull();
     expect(codePlace("Chicken curry", "chicken curry", TN)).toMatchObject({ kind: "Chicken", item: "Chicken curry" });
+  });
+
+  it("unsaid, the region is what most of the family's dishes point to alone; dishes eaten across regions point nowhere", () => {
+    const curry = regionalWordOf("curry")!;
+    // An Andhra home that names no region: pappu and pesarattu are Andhra; idli is all South India; jowar roti (a bhakri,
+    // eaten in four states) and a chapati roll point elsewhere or nowhere.
+    const ap = { said: [], dishes: [["andhra", "south"], ["andhra", "south"], ["south"], ["maharashtra", "gujarat", "rajasthan", "karnataka", "west"], ["bengal", "east"]] };
+    expect(regionalFor(curry, ap)?.sub).toBe("Vepudu");
+    expect(codePlace("Dondakaya curry", "dondakaya curry", ap)).toMatchObject({ kind: "Sabzi", sub: "Vepudu", item: "Dondakaya vepudu" });
+    // What they say wins; a split the dishes do not settle is the kinds read's.
+    expect(regionalFor(curry, { said: ["punjab", "north"], dishes: ap.dishes })?.kind).toBe("Gravy");
+    expect(regionalFor(curry, { said: [], dishes: [["andhra"], ["tamil"]] })).toBeNull();
+    expect(regionalFor(curry, { said: [], dishes: [["south"], ["north", "south", "west", "east"]] })).toBeNull();
   });
 
   it("a category word at a meal the catalog does not suggest it at is asked: a category or one dish (decided 19)", () => {
