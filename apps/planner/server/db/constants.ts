@@ -125,9 +125,6 @@ export const appOf = (v: unknown): GroceryApp | null => (typeof v === "string" ?
 /** Can the agent copy a cart into the app? Amazon has no cart tool: its cart is built when the family orders. */
 export const CART_SYNC: Record<GroceryApp, boolean> = { zepto: true, "swiggy-instamart": true, "zomato-blinkit": true, bigbasket: true, amazon: false };
 
-/** Dishes served with most meals: a week may hold them on many days without counting as a repeat. */
-export const STAPLE_DISHES = ["roti", "rotis", "chapati", "chapatis", "phulka", "phulkas", "rice", "plain rice", "steamed rice", "curd", "dahi", "raita",
-  "salad", "papad", "pickle", "buttermilk", "chaas", "milk", "fruit", "fruits"] as const;
 
 /** How often the family has a dish, or keeps a soft rule, in their words (owner, 23 Nov): usually (most days, most nights,
  *  daily), sometimes (sometimes, "when he's tired", now and then), rarely (once in a while, occasionally). */

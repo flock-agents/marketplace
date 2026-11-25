@@ -1,5 +1,7 @@
 # Meal plan prompt (planner 4.0.3)
 
+Superseded (2026-11-25, later): the prompt now carries per-day `allowed` and `must_have`, asks for `spares`, and FIX_SYSTEM is gone (code walks the week; one targeted GAP_SYSTEM call for gaps). See makePlan.ts for the current text.
+
 New in this draft (2026-11-25): what a good week is; plates read as parts; a family's kind-of-dish entry (Sabzi, Dal, "Idli with chutney") named as a particular dish each day, and the same dish with another accompaniment, both counted as the family's own dish (code: `isVariantOf` in planChecks.ts), not a new one.
 
 Source: `~/Developer/mp-onb2-planner/apps/planner/server/makePlan.ts` — `SLOT_SYSTEM` (line ~50), `FIX_SYSTEM` (~63), `SLOT_SCHEMA` (~45); the request is built by `request()` (~310).
