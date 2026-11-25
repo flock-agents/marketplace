@@ -64,6 +64,23 @@ describe("the checksums", () => {
   });
 });
 
+describe("the sign-in steps", () => {
+  const signIn = instructions.slice(instructions.indexOf("## Sign-in"), instructions.indexOf("## Talking to the person"));
+
+  it("send the number with sign_in, never typed with act, and never ask the person for a code", () => {
+    expect(signIn).toContain("Never type their number with `act`");
+    expect(signIn).toContain("never ask the person for a code and never use `sign_in` with `code`");
+    expect(signIn).toContain("`open` `https://web.whatsapp.com` with `purpose` `connector`");
+  });
+
+  it("record the link on a new window with kind handoff, and the QR code through hand_to_owner", () => {
+    expect(signIn).toMatch(/`close` that window, `open` `https:\/\/web\.whatsapp\.com` again[\s\S]*`signed_in` on this NEW window with kind `handoff`/);
+    expect(signIn).toContain("`hand_to_owner`");
+    expect(signIn).toContain("At most 3 codes");
+    expect(signIn).not.toContain("codeValidMinutes\": ");
+  });
+});
+
 describe("what the person reads", () => {
   const sendCard = instructions.match(/```action-card\n([\s\S]*?)```/)?.[1] ?? "";
 
