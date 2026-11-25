@@ -359,6 +359,9 @@ export function scorePlan(h: Household, plan0: PlanOut, loaded: SetupOut, o: { f
   const newPart = /New this week:([^\n]*)/i.exec(msg)?.[1] ?? "";
   const longWhy = [...newPart.matchAll(/\(([^)]*)\)/g)].map((m) => m[1]).filter((w) => w.length > NEW_WHY_MAX);
   add("short_new_reasons", !longWhy.length, `${longWhy.length} reasons over ${NEW_WHY_MAX} characters: ${longWhy[0]?.slice(0, 90) ?? ""}`);
+  // Every new dish is like a dish of theirs at that meal (owner, 25 Nov: "not suddenly pasta"): the message says which.
+  const newItems = newPart.split(/;\s*/).map((x) => x.trim().replace(/\.$/, "")).filter(Boolean);
+  if (newItems.length) add("new_like", newItems.every((x) => /\(like your [^)]+\)/i.test(x)), `new dishes without a dish of theirs: ${newItems.filter((x) => !/\(like your /i.test(x)).join("; ")}`);
   const questions = msg.split("\n").filter((l) => l.trim().endsWith("?"));
   add("one_question", questions.length <= 1, `${questions.length} questions: ${questions.slice(0, 2).join(" | ")}`);
 

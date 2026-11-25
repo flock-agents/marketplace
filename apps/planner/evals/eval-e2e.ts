@@ -26,7 +26,7 @@ export const SAFETY = ["plan_made", "setup_time", "plan_time", "hard_rules", "no
 /** Must pass in tiers A and B, every run. dish_frequency is held to THEIR_DAYS of its checks, the rest to all. */
 // No new-dish budget (owner, 25 Nov: the family's dishes guide the week, at least OWN_SHARE of it; the rest is for variety).
 export const BASE = ["filled", "attendance", "not_bare", "whole_plate", "no_doubled_staple", "own_share", "main_twice", "dish_frequency",
-  "message_clean", "short_new_reasons", "one_question"];
+  "message_clean", "short_new_reasons", "one_question", "new_like"];
 export const THEIR_DAYS = 0.8;
 export const SETUP_MAX_MS = 150_000, PLAN_MAX_MS = 300_000;
 
