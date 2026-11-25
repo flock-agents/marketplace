@@ -409,6 +409,15 @@ describe("apply_setup v2: the checks, pure", () => {
     expect(lunch(["Nisha", "Padma"])).toEqual([]);                 // Kiran (office) and Ishaan (school) are away Mon–Fri only
     expect(lunch(["Kiran", "Nisha", "Ishaan"])).toEqual(["Kiran", "Nisha", "Ishaan"]);   // Padma is not away: kept as said
   });
+  it("a dish's days that are just the days its meal is cooked (lunch out at weekends) say nothing of the dish (eval h7)", () => {
+    const read = readOf({ slots: [{ name: "Lunch", kind: "main", skip_days: [{ day: "Sat", skip: "eaten_out" }, { day: "Sun", skip: "ordered_in" }], quote: "weekends we eat out" }] }, {},
+      { library: [["Chicken curry", "Lunch", "Weekdays lunch is chicken curry, rice and a sabzi"]] },
+      { often: [["Chicken curry", "Lunch", "Weekdays lunch is chicken curry, rice and a sabzi", "Weekdays", "", "Mon,Tue,Wed,Thu,Fri"]] });
+    const lines = familyLines(["A: Weekdays lunch is chicken curry, rice and a sabzi. Weekends we eat out."], HOUSEHOLD);
+    const c = checkRead(read, { household: hh, said: lines, sentences: lines });
+    expect(c.read.library.find((d) => d.name === "Chicken curry")!.days).toBeNull();
+    expect(c.dropped.some((x) => x.includes("the meal's own days"))).toBe(true);
+  });
   it("a dish read without its words is linted by the family's sentence that names it with a day", () => {
     const lines = familyLines(["A: Weeknights dal and rice. Sunday dinner we make something simple like pasta maybe."], HOUSEHOLD);
     const read = readOf({ slots: HOME.slots.slice(0, 4) }, {}, { library: [["Pasta", "Dinner", ""]] });

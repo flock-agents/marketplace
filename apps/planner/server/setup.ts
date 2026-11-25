@@ -529,7 +529,9 @@ export function checkRead(read: SetupRead, ctx: { household: Household; said: st
   for (const m of SLOTS) if (!slots.some((s) => s.name === m))
     slots.push({ name: m, kind: "main", addon_of: null, after: null, usual_people: [], days: [], skip_days: [], quote: "" });
   const slotNames = slots.map((s) => s.name);
-  const slotDays = new Map(slots.map((s) => [s.name, s.days]));
+  // The days each meal is cooked at home: its days less the days it is eaten out or ordered in ("weekday lunch is ..." where
+  // weekend lunch is out names the meal's days, not the dish's).
+  const slotDays = new Map(slots.map((s) => [s.name, (s.days.length ? s.days : [...WEEKDAYS]).filter((d) => !(s.skip_days ?? []).some((x) => x.day === d))]));
   const slotOf = (w: string) => resolveSlot(w, slotNames);
 
   // Rules.
