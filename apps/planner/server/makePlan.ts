@@ -254,8 +254,6 @@ async function planWeek(deps: MakePlanDeps & { log: (line: string) => void }, in
   const unknown = order.filter((n) => { const sf = w.slots.get(n.toLowerCase())!;
     return sf.slot.kind !== "addon" && !sf.looks_like.length && !sf.library.some((d) => plannable(d)); });
   if (unknown.length && !deps.only && !deps.suggest_new) return done({ ok: false, reason: "no_dishes", ask: noDishesAsk(unknown), say: noDishesAsk(unknown) });
-  const feas = feasibility(w, order);
-  for (const l of feas.log) log(l);
   const unmet: string[] = [];
   const tags = ruleTags(rules);
   // The guests' food rules, in their words, read once into the tags they forbid (code then checks them like a person's).
@@ -304,6 +302,9 @@ async function planWeek(deps: MakePlanDeps & { log: (line: string) => void }, in
     const f = await readContains(unread);
     if (f) return stopped(f);
   }
+  // The feasibility check after that read: before it, every unread dish counted as nobody's and a slot came out short (run 28).
+  const feas = feasibility(w, order);
+  for (const l of feas.log) log(l);
   const settled = (d: PlanDay) => d.fixed || w.done.has(d.slot.toLowerCase());
 
   /** The request for one slot's call (§5.3), from the week as it is now. */

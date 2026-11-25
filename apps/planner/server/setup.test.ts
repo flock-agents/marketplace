@@ -166,6 +166,7 @@ describe("apply_setup v2: the model reads, code checks and writes", () => {
       "Weekday lunch is for Nisha and Padma; Kiran's at the office; Ishaan takes lunch to school.",
       "Sunday lunch is eaten out.",
       "Food rules:\n- Everyone: vegetarian; no nuts at Ishaan's tiffin\n- Padma: no sugar; fasts on Mondays at breakfast and lunch; millets in place of white rice, 2–3 times a week; no white rice at dinner",
+      "Your usual dishes:\n- Breakfast: Curd, Sambar\n- Ishaan's tiffin: Poriyal\n- Lunch: Beans poriyal, Curd, Lemon rice, Rajma, Rice, Salad, Sambar\n- Padma's dinner: Phulka",
       "Every day: salad at lunch.",
       "Who is Ravi? I don't have them among the people at home.",
       "Does Kiran take lunch from home to the office?",

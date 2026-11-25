@@ -866,6 +866,9 @@ export function readBack(db: Db, household: Household, extra: { noted: string[];
   const by = new Map<string, string[]>();
   for (const r of rules) { const k = r.who ?? "Everyone"; by.set(k, [...(by.get(k) ?? []), ruleSaid(r)]); }
   if (by.size) lines.push(`Food rules:\n${[...by].map(([who, rs]) => `- ${who}: ${rs.join("; ")}`).join("\n")}`);
+  // The family's own dishes per meal, so a meal read wrong or left out (run 28: the adults' dinner never asked) is seen here.
+  const dishLines = slots.map((s) => [s.name, saved.library.filter((d) => same(d.slot, s.name)).map((d) => d.name)] as const).filter(([, ds]) => ds.length);
+  if (dishLines.length) lines.push(`Your usual dishes:\n${dishLines.map(([slot, ds]) => `- ${slot}: ${ds.join(", ")}`).join("\n")}`);
   const daily = saved.library.filter((d) => d.frequency === "daily").map((d) => `${d.name.toLowerCase()} at ${mealWord(d.slot)}`);
   if (daily.length) lines.push(`Every day: ${andWords(daily)}.`);
   const noted = uniq([...saved.rules.filter((r) => r.what === "note").map((r) => `${r.who ? `${r.who}: ` : ""}${ruleSaid(r)}`), ...(state?.noted ?? []), ...extra.noted]);
