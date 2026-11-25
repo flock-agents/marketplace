@@ -29,7 +29,7 @@ Read LinkedIn notifications, browse your feed, publish posts, send messages, and
 
 ## Authentication
 
-This skill uses an authenticated browser session (no public API for individuals). The user must be signed in to LinkedIn in Flock's browser session named "linkedin" (the sign-in guide). The session must be in **ready** state — if it is `setting_up` or `outdated`, commands will fail with a session error.
+This skill uses an authenticated browser session (no public API for individuals). The user must be signed in to LinkedIn in a Flock browser session (its name is in `BROWSER_SESSION`, e.g. `linkedin-connect-1732512000000`; the sign-in guide). The session must be in **ready** state — if it is `setting_up` or `outdated`, commands will fail with a session error.
 
 Invoke it with the run_skill tool: skill `linkedin`, function always `linkedin`, and the command first in `params._args`, then its arguments, each as one string:
 `{"_args": ["<command>", ...args]}`.
@@ -172,8 +172,8 @@ All responses are JSON. Errors follow:
 
 The script handles browser session lifecycle states automatically:
 
-- **SESSION_NOT_READY** — the "linkedin" session is not in `ready` state (either `setting_up` or `outdated`). Ask the owner to sign in again with a connector hand-off, target `{"sessionName": "linkedin"}` (the private-browser skill, **Connectors**): they get a sign-in card in your chat. Never send them to the dashboard or the Connectors page. Do **not** retry.
-- **SESSION_OUTDATED** — the script detected that LinkedIn returned a login page instead of authenticated content. The session has been automatically marked as outdated. Ask the owner to sign in again with the same connector hand-off, target `{"sessionName": "linkedin"}`.
+- **SESSION_NOT_READY** — the LinkedIn browser session is not in `ready` state (either `setting_up` or `outdated`). Ask the owner to sign in again with a connector hand-off, target `{"sessionName": "<the session named in the error>"}` (its `BROWSER_SESSION`, e.g. `linkedin-connect-1732512000000`, never just `"linkedin"`; the private-browser skill, **Connectors**): they get a sign-in card in your chat. Never send them to the dashboard or the Connectors page. Do **not** retry.
+- **SESSION_OUTDATED** — the script detected that LinkedIn returned a login page instead of authenticated content. The session has been automatically marked as outdated. Ask the owner to sign in again with the same connector hand-off, on the session named in the error.
 - **CRAWL_ERROR (HTTP 403)** — either the session isn't ready or your agent lacks access. Tell the user to check browser session settings.
 
 ## Limitations
