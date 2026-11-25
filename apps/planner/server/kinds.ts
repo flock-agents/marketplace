@@ -157,3 +157,31 @@ export function checkMealShape(kinds: readonly MealKind[], templates: readonly M
   });
   return errs;
 }
+
+// ── For the setup: a sub-kind by the family's words, and an item's contents in the planner's tags ──
+
+/** A kind's sub-kind as the catalog names it, from either half of its name or another name of it ("Thoran" is
+ *  "Poriyal/Thoran"); null when it is none of the kind's. */
+export function catalogSub(kind: string, words: string | null | undefined): string | null {
+  const k = catalogKind(kind);
+  if (!k || !words) return null;
+  return k.subs.find((sb) => subNames(sb).some((w) => norm(w) === norm(words)))?.name ?? null;
+}
+
+/** The tags the catalog answers for every one of its items, in the planner's words: every catalog tag, and the planner's own
+ *  families of them (meat, red_meat). An item has a tag of these or does not: the catalog leaves none unknown. */
+export const PLANNER_READ_TAGS: string[] = [...new Set([...CATALOG.tags, "meat", "red_meat"])];
+/** The planner's tag families (db/constants TAG_PARENT): a catalog tag adds these. Seafood is the planner's fish; peanuts are nuts. */
+const PLANNER_PARENTS: Record<string, string[]> = { chicken: ["meat"], mutton: ["meat", "red_meat"], pork: ["meat", "red_meat"],
+  beef: ["meat", "red_meat"], prawn: ["fish"], peanut: ["nuts"] };
+
+/** An item's contents as the planner's tags (egg, meat, fish, onion_garlic, nuts, peanut, sugar, white_rice, dairy and the
+ *  catalog's own: chicken, prawn, coconut, ...), and the tags that answer covers (`read`, every one in PLANNER_READ_TAGS). Null
+ *  for a dish not in the catalog: its contents are read by the model. */
+export function plannerTags(itemName: string): { contains: string[]; read: string[] } | null {
+  const hit = catalogItem(itemName);
+  if (!hit) return null;
+  const out = new Set<string>();
+  for (const t of hit.item.contains) { out.add(t); for (const p of PLANNER_PARENTS[t] ?? []) out.add(p); }
+  return { contains: [...out], read: PLANNER_READ_TAGS };
+}
