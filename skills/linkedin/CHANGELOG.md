@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.6-beta.1
+
+- Asking the owner to sign in again names the LinkedIn browser session from the error (its `BROWSER_SESSION`, such as `linkedin-connect-…`), not a fixed "linkedin" session.
+
 ## 1.2.5
 
 Needs Flock 0.25.0-beta.2: the script uses `signInAgainAsk` from Flock's shared helpers.

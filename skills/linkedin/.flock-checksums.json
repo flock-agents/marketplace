@@ -1,16 +1,16 @@
 {
   "version": 1,
-  "generatedAt": "2026-11-25T08:42:40.905Z",
-  "sourceVersion": "1.2.5",
-  "sourceTag": "linkedin-v1.2.5",
+  "generatedAt": "2026-11-25T10:32:51.154Z",
+  "sourceVersion": "1.2.6-beta.1",
+  "sourceTag": "linkedin-v1.2.6-beta.1",
   "files": {
-    "CHANGELOG.md": "2a271114df64a4c5150809519a48bde473490f0ea1e9314ecd77b20b01813748",
+    "CHANGELOG.md": "c011502ee8de3fc11105abefad2c995d6f0cc9fafcee53d385c10377d5b881fb",
     "icon.svg": "6e004c7bf1433180d3f374e267ffa045f376badfe89c7c681afad954d0a13e4e",
     "DISCOVERY.md": "15293fe65bf245bdadf81396e96675eda6ced8607f66020c04a209d095697673",
     "scripts/linkedin.ts": "764f3753fa978c9f9c844b53818e696e7f24d4b093018f553247767b7552cfc7",
     "scripts/linkedin-comments-page.ts": "e5e0e4c5e430d2ab129b8c4cb1bb5e449c4765bb93568676b7fd9d50c967a6f5",
     "scripts/linkedin-exec.sh": "ea63f13d18b1f2f011a1813c2ebbcf6a4be6f426d77f7bc37c32152c0d657dec",
-    "flock.skill.json": "98592ed820ae6299c07e882ecba965156e58cc1d0ae83653d2dc86ef95f9148a",
-    "instructions.md": "f3332d593e4322fba85851525ce378a6f506a6a78a7b74158b3dfb54023ed851"
+    "flock.skill.json": "1b507a281ef0e18105e42658b54724a318c02bb17bb69f0db26d9cf7dc5ad087",
+    "instructions.md": "6747aaa0295bf4dd689b28797d55a2e2d066dfa38b66815e0e6ab637f5d82659"
   }
 }
