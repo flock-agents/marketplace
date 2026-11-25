@@ -835,7 +835,7 @@ describe("apply_setup: the kinds model, end to end with a fake model", () => {
     expect([row("Kovakkai").kind, row("Kovakkai").sub, row("Kovakkai").catalog_item]).toEqual(["Sabzi", "Sabzi", null]);
     expect([row("Boiled chicken").kind, row("Boiled chicken").catalog_item]).toEqual(["Boiled chicken", null]);
     expect([row("Chicken curry").kind, row("Chicken curry").sub, row("Chicken curry").catalog_item]).toEqual(["Chicken", "Curry", "Chicken curry"]);
-    expect(JSON.parse(row("Chicken curry").contains).sort()).toEqual(["chicken", "meat", "onion_garlic"]);
+    expect(JSON.parse(row("Chicken curry").contains).sort()).toEqual(["chicken", "meat", "onion_garlic", "root_veg"]);
     expect(f.of("contains").flatMap((c) => JSON.parse(c.user).dishes)).not.toContain("Chicken curry");
     expect(f.of("contains").flatMap((c) => JSON.parse(c.user).dishes)).toContain("Kovakkai");
     // Breakfast: khichdi named as a dish at breakfast stays theirs; boiled chicken a kind of their own; appam with the stew fixed.

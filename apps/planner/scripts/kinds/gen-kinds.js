@@ -1160,8 +1160,40 @@ const REGIONAL_WORDS = [
   { word: "pachadi", forms: "pachadi; pachdi", meanings: [["andhra karnataka", "Chutney", null], ["kerala tamil", "Raita", null]] },
 ];
 
-// ---------------- BUILD ----------------
+// ---------------- INGREDIENTS (owner 26 Nov, decided 21) ----------------
+// Every item's ingredients (scripts/kinds/ingredients.js), each main or leave-out-able; its contents are DERIVED from them:
+// `contains` from all of them, `contains_main` from the main ones. The hand tags above are kept only to compare against.
+const ING = require("./ingredients.js");
 const errors = [];
+const ingTags = new Map();
+for (const [tag, list] of Object.entries(ING.INGREDIENT_TAGS)) {
+  if (!TAGS.includes(tag)) errors.push(`ingredients: ${tag} is not a catalog tag`);
+  for (const n of semi(list)) ingTags.set(n, [...(ingTags.get(n) || []), tag]);
+}
+for (const n of semi(ING.PLAIN.replace(/\n/g, " "))) {
+  if (ingTags.has(n) && ingTags.get(n).length) errors.push(`ingredients: ${n} is both plain and tagged`);
+  ingTags.set(n, []);
+}
+const itemIngredients = new Map();
+for (const line of ING.ITEMS.split("\n").map((l) => l.trim()).filter((l) => l && !l.startsWith("#"))) {
+  const at = line.indexOf(":");
+  if (at < 0) { errors.push(`ingredients: no colon in "${line}"`); continue; }
+  const name = line.slice(0, at).trim();
+  const [main, leave] = line.slice(at + 1).split("|");
+  const list = [...(main || "").split(",").map((x) => ({ name: x.trim(), main: true })), ...(leave || "").split(",").map((x) => ({ name: x.trim(), main: false }))].filter((x) => x.name);
+  if (itemIngredients.has(name)) errors.push(`ingredients: ${name} listed twice`);
+  if (!list.some((x) => x.main)) errors.push(`ingredients: ${name} has no main ingredient`);
+  for (const x of list) if (!ingTags.has(x.name)) errors.push(`ingredients: ${name}: unknown ingredient "${x.name}" (add it to INGREDIENT_TAGS or PLAIN)`);
+  if (new Set(list.map((x) => x.name)).size !== list.length) errors.push(`ingredients: ${name} names an ingredient twice`);
+  itemIngredients.set(name, list);
+}
+const tagsOf = (list) => TAGS.filter((t) => list.some((x) => (ingTags.get(x.name) || []).includes(t)));
+const usedIng = new Set();
+/** Each item's derived contents against its old hand tags, for the generator's report. */
+const report = { lost: [], gained: [], onion: [] };
+const SAFETY = ["root_veg", "nuts", "peanut", "dairy", "egg", "chicken", "mutton", "pork", "beef", "fish", "prawn"];
+
+// ---------------- BUILD ----------------
 const MEAT_OVERRIDE = { "Ambur biryani": ["chicken", "mutton"], "Kolkata biryani": ["chicken", "mutton"], "Malabar biryani": ["chicken"] };
 function resolveTag(t, name, kind) {
   if (t === "m") {
@@ -1195,8 +1227,23 @@ for (const k of kinds) {
     const ic = sp(cuis);
     for (const c of ic) if (!CUISINES.includes(c)) errors.push(`${name}: cuisine ${c}`);
     if (ic.length) it.cuisines = ic;
-    const contains = [...new Set(sp(tags).flatMap((t) => { if (!T[t]) errors.push(`${name}: tag ${t}`); return resolveTag(t, name, k.name); }))];
+    const hand = [...new Set(sp(tags).flatMap((t) => { if (!T[t]) errors.push(`${name}: tag ${t}`); return resolveTag(t, name, k.name); }))];
+    const ings = itemIngredients.get(name);
+    if (!ings) errors.push(`${name}: no ingredients (scripts/kinds/ingredients.js)`);
+    usedIng.add(name);
+    // In the old hand tags' order where they hold, the rest in the catalog's tag order.
+    const byHand = (ts) => [...hand.filter((t) => ts.includes(t)), ...ts.filter((t) => !hand.includes(t))];
+    const contains = byHand(tagsOf(ings || []));
     it.contains = contains;
+    it.contains_main = byHand(tagsOf((ings || []).filter((x) => x.main)));
+    it.ingredients = (ings || []).map((x) => ({ name: x.name, main: x.main }));
+    const lost = hand.filter((t) => !contains.includes(t)), gained = contains.filter((t) => !hand.includes(t) && SAFETY.includes(t));
+    if (lost.length) report.lost.push(`${name} (${k.name}): ${lost.join(", ")} [${(ings || []).map((x) => x.name + (x.main ? "" : "*")).join(", ")}]`);
+    // A root_veg that comes only from onion, garlic or shallots (the planner's root vegetables include them) is counted apart.
+    const onionOnly = (t) => t === "root_veg" && (ings || []).filter((x) => (ingTags.get(x.name) || []).includes("root_veg")).every((x) => (ingTags.get(x.name) || []).includes("onion_garlic"));
+    const real = gained.filter((t) => !onionOnly(t));
+    if (gained.some(onionOnly)) report.onion.push(name + (it.contains_main.includes("root_veg") ? " (main)" : ""));
+    if (real.length) report.gained.push(`${name} (${k.name}): +${real.map((t) => t + (it.contains_main.includes(t) ? " (main)" : "")).join(", +")} [${(ings || []).map((x) => x.name + (x.main ? "" : "*")).join(", ")}]`);
     const d = dietOf(contains);
     if (k.diet === "mixed") it.diet = d;
     else if (d !== k.diet) errors.push(`${name}: diet ${d} in ${k.diet} kind ${k.name}`);
@@ -1229,6 +1276,7 @@ for (const r of out.regional) for (const f of r.forms) for (const k of out.kinds
   if ([k.name, ...k.aka].some((w) => w.toLowerCase() === f)) errors.push(`regional ${f}: a name of kind ${k.name}`);
   for (const it of k.items) if ([it.name, ...(it.aka || [])].some((w) => w.toLowerCase() === f)) errors.push(`regional ${f}: a name of item ${it.name}`);
 }
+for (const n of itemIngredients.keys()) if (!usedIng.has(n)) errors.push("ingredients: names no item: " + n);
 for (const n of NO_SUGGEST) if (!usedNo.has(n)) errors.push("NO_SUGGEST names no item: " + n);
 for (const n of REGIONAL) if (!usedReg.has(n)) errors.push("REGIONAL names no item: " + n);
 for (const n of Object.keys(ITEM_MEALS)) if (!usedMeals.has(n)) errors.push("ITEM_MEALS names no item: " + n);
@@ -1239,6 +1287,12 @@ out.notes = [
   "Owner 25 Nov: the planner proposes only suggest:true items as new variety. suggest:false items are kept so setup recognises a family's words: same main ingredient in another shape, style, regional preparation or equipment, restaurant-style versions, ingredients a normal household doesn't keep, and every staple (a household uses its own roti and rice).",
 ];
 if (errors.length) { console.error(errors.join("\n")); process.exit(1); }
+
+// The derived contents against the old hand tags: each tag the ingredients do not give (reviewed: the old tag was wrong, or
+// the ingredients were fixed), and each safety tag they add (where a rule now holds where it did not).
+console.log(`ingredients: ${report.lost.length} items lose an old hand tag:\n  ${report.lost.join("\n  ")}`);
+console.log(`ingredients: ${report.gained.length} items gain a safety tag (root veg, nuts, peanut, dairy, egg, meat, fish; * = leave-out-able):\n  ${report.gained.join("\n  ")}`);
+console.log(`ingredients: ${report.onion.length} more gain root_veg only from onion or garlic (the planner's root vegetables include them): ${report.onion.join(", ")}`);
 
 const fs = require("fs");
 const root = process.argv[2];
@@ -1270,7 +1324,7 @@ This is the review copy of \`server/kinds.json\`. Please read it as a cook would
 **How it is used.**
 - *Setup*: the family's own words ("aloo sabzi", "poriyal", "pappu", "kande pohe") are matched to a kind through the kind's and items' other names (aka), so the family's plates become templates of kinds.
 - *Planning*: for variety the planner picks a NEW item of the same kind for the slot (another dry vegetable for a dry vegetable), and repeats an item only when all fitting items have been used. It prefers items of the family's cuisines; an item's own cuisines narrow it further.
-- *Food rules and allergies*: each item lists what it contains **as usually made in an Indian home** (contents below in brackets). Where a common version has something (peanuts in Maharashtrian poha, cashews in rava upma, garlic in tomato rasam) it is listed, so a rule is never broken by a guess. A family's own recipe can still say otherwise.
+- *Food rules and allergies*: each item lists its **ingredients as usually made in an Indian home**, and its contents (in brackets) are derived from them. Each ingredient is **main** (the dish is not itself without it: mooli in mooli thepla, onion in kanda poha, paneer in paneer bhurji) or one the dish can be made **without** (a garnish, tempering or add-in: cashews in rava upma, peanuts and onion in vegetable poha, ghee on top). For each person at the table and each of their hard rules or allergies: a main ingredient that breaks it means the dish is not theirs (they get another item); only ingredients it can be made without mean the dish is fine for them, with a note "make without cashews for Anya" (decided 21). A family's own recipe can still say otherwise.
 
 **Reading the headings**: Kind, its other names, its cuisines, its place on the plate (staple, main, side, complete = a whole plate alone, sweet, snack, drink), and the meals new items of it may be suggested at (a sub-kind or item that differs says so). A family's own dish is planned at whatever meal they eat it; at a meal outside these it stays their fixed dish and nothing new is suggested in its place. Contents shared by every item of the kind are said once on the heading line ("all: rice"); each item's brackets show the rest. A diet is shown on an item only in kinds that mix veg and non-veg.
 
@@ -1314,13 +1368,15 @@ for (const [g, title, note] of GROUPS) {
       if (it.cuisines) extra.push(it.cuisines.join("/"));
       if (it.meals) extra.push(`suggested at ${it.meals.join(", ")}`);
       const aka = it.aka ? ` (${it.aka.join(", ")})` : "";
-      return `${it.name}${aka}${extra.length ? ` [${extra.join("; ")}]` : ""}`;
+      // Its ingredients: the main ones, then those it can be made without (decided 21).
+      const main = it.ingredients.filter((x) => x.main).map((x) => x.name), leave = it.ingredients.filter((x) => !x.main).map((x) => x.name);
+      return `- ${it.name}${aka}${extra.length ? ` [${extra.join("; ")}]` : ""}: ${main.join(", ")}${leave.length ? `; *without:* ${leave.join(", ")}` : ""}`;
     };
     const lines = (its) => {
       const yes = its.filter((it) => it.suggest && !it.regional), reg = its.filter((it) => it.regional), no = its.filter((it) => !it.suggest);
-      if (yes.length) md += `**Suggested:** ${yes.map(fmt).join(", ")}\n\n`;
-      if (reg.length) md += `**Suggested in its region:** ${reg.map(fmt).join(", ")}\n\n`;
-      if (no.length) md += `**Recognised only:** ${no.map(fmt).join(", ")}\n\n`;
+      if (yes.length) md += `**Suggested:**\n${yes.map(fmt).join("\n")}\n\n`;
+      if (reg.length) md += `**Suggested in its region:**\n${reg.map(fmt).join("\n")}\n\n`;
+      if (no.length) md += `**Recognised only:**\n${no.map(fmt).join("\n")}\n\n`;
     };
     if (k.subs.length < 2) lines(k.items);
     else for (const sb of k.subs) {
