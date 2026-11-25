@@ -17,6 +17,7 @@
 - make_plan checks whether each meal has enough dishes after it has read what the family's dishes contain, not before
   (before, every unread dish counted as nobody's and a meal got new dishes it did not need).
 - The setup read-back lists the family's usual dishes per meal, so a meal read wrong or missing is seen before the plan.
+- Builds again: rc3's contains read did not type-check (tsc), so the app failed to install.
 
 ## 4.0.2
 

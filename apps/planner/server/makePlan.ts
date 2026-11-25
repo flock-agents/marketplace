@@ -287,10 +287,11 @@ async function planWeek(deps: MakePlanDeps & { log: (line: string) => void }, in
       const raw = isObject(r.json) && Array.isArray(r.json.dishes) ? r.json.dishes : [];
       for (const x of raw) {
         if (!isObject(x) || typeof x.dish !== "string" || !need.includes(dishKey(x.dish))) continue;
+        const key = dishKey(x.dish);
         const has = strs(x.has).map(canonTag).filter((t) => tags.includes(t)), not = strs(x.not).map(canonTag).filter((t) => tags.includes(t) && !has.includes(t));
         // A library dish keeps what it was read for already.
-        const row = library.find((d) => d.key === dishKey(x.dish));
-        w.facts.set(dishKey(x.dish), { tags: new Set([...(row?.contains ?? []).map(canonTag), ...has]), read: new Set([...(row?.contains_read ?? []).map(canonTag), ...has, ...not]) });
+        const row = library.find((d) => d.key === key);
+        w.facts.set(key, { tags: new Set([...(row?.contains ?? []).map(canonTag), ...has]), read: new Set([...(row?.contains_read ?? []).map(canonTag), ...has, ...not]) });
       }
     }
     return null;
