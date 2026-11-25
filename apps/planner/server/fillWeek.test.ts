@@ -582,3 +582,15 @@ describe("a count said of a dish holds across the day's meals (class 2)", () => 
     expect(WEEK.filter((d) => [...r.at(d, "Lunch"), ...r.at(d, "Dinner")].includes("Aloo gobi")).length).toBeLessThanOrEqual(2);
   });
 });
+
+describe("a dish had every day comes every day it is had there, in any kind of meal (class 5)", () => {
+  for (const kind of ["addon", "custom"] as const) it(`'a glass of milk every day' at her own dinner (${kind})`, () => {
+    const own = slot("Nani's dinner", { kind, addon_of: kind === "addon" ? "Dinner" : null, usual_people: ["Nani"], order: kind === "addon" ? 60 : 55 });
+    const lib = [dish("Phulka", "Dinner", "Roti"), ...SABZIS.map((n) => dish(n, "Dinner", "Sabzi")),
+      dish("Vegetable upma", "Nani's dinner", "Upma"), dish("Ragi roti", "Nani's dinner", "Roti"), dish("Milk", "Nani's dinner", null, { frequency: "daily", contains: ["dairy"] })];
+    const days = WEEK.flatMap((d) => [day(d, "Dinner", ["Asha", "Ravi"]), day(d, "Nani's dinner", ["Nani"])]);
+    const r = run({ slots: [slot("Dinner"), own], library: lib, days, history: { Dinner: seed([["Phulka", "Aloo gobi"], ["Phulka", "Lauki sabzi"]]),
+      "Nani's dinner": seed([["Vegetable upma", "Milk"], ["Ragi roti", "Milk"]]) } });
+    for (const d of WEEK) expect(r.at(d, "Nani's dinner")).toContain("Milk");
+  });
+});

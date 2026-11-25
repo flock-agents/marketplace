@@ -986,6 +986,9 @@ describe("apply_setup v2: the prompts", () => {
     expect(home.system).toContain("instead: true on such a meal when the person does not eat the main meal at all");
     expect(home.system).toContain("it is that meal's skip all the same when the others at home have their own meal in its place that day");
   });
+  it("read a dish joined to a list with its own words as that dish's, at any meal (class 5: every day at someone's own dinner)", () => {
+    expect(SETUP_PARTS.find((p) => p.id === "often")!.system).toContain("A dish joined to a list with its own words, at any meal and for anyone");
+  });
   it("never name an eval household's people, cook or surname", () => {
     for (const h of HOUSEHOLDS) for (const name of [...h.truth.people.map((p) => p.name), ...(h.truth.cook ? [h.truth.cook.name] : [])])
       expect(SETUP_SYSTEM, `${h.id} ${name}`).not.toMatch(new RegExp(`\\b${name}\\b`, "i"));

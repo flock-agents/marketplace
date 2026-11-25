@@ -580,7 +580,9 @@ export function fillWeek(input: FillInput): FillResult {
     if (s.kind !== "addon" && hadOn(d.date, s.name).has(it.key)) return false;
     if (!o.next && hadOn(addDays(d.date, -1)).has(it.key)) return false;
     if (!o.repeat && usedDates.get(it.key)?.size) return false;
-    if (o.next && s.kind === "addon" && (row?.frequency || row?.days?.length) && hadOn(addDays(d.date, -1)).has(it.key)) return false;
+    // An add-on's dish the family said how often of comes back the next day only when they have it every day or most days
+    // (class 5: "milk every day" at her own dinner is there every day, whatever kind of meal it is).
+    if (o.next && s.kind === "addon" && ((row?.frequency && row.frequency !== "daily" && row.frequency !== "usually") || row?.days?.length) && hadOn(addDays(d.date, -1)).has(it.key)) return false;
     return true;
   };
   /** The best item of the steps for `who` (the slot-day's people, or one person being fed). */
