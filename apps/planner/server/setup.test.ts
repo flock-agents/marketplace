@@ -403,6 +403,12 @@ describe("apply_setup v2: the checks, pure", () => {
     const rules = checkRead(read, { household: hh, said: familyLines(reply, HOUSEHOLD), sentences: familySentences(reply, HOUSEHOLD) }).read.rules;
     expect(rules.some((r) => r.what === "no_eggs" && r.who === "Ishaan")).toBe(true);
   });
+  it("a main meal's people never drop someone who is only away on weekdays: weekends they are at it (eval h6)", () => {
+    const lunch = (usual: string[]) => checkRead(readOf({ slots: [{ name: "Lunch", kind: "main", usual_people: usual, quote: "" }] }, {}, {}), { household: hh, said }).read.slots
+      .find((x) => x.name === "Lunch")!.usual_people;
+    expect(lunch(["Nisha", "Padma"])).toEqual([]);                 // Kiran (office) and Ishaan (school) are away Mon–Fri only
+    expect(lunch(["Kiran", "Nisha", "Ishaan"])).toEqual(["Kiran", "Nisha", "Ishaan"]);   // Padma is not away: kept as said
+  });
   it("a dish read without its words is linted by the family's sentence that names it with a day", () => {
     const lines = familyLines(["A: Weeknights dal and rice. Sunday dinner we make something simple like pasta maybe."], HOUSEHOLD);
     const read = readOf({ slots: HOME.slots.slice(0, 4) }, {}, { library: [["Pasta", "Dinner", ""]] });

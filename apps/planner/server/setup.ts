@@ -509,7 +509,15 @@ export function checkRead(read: SetupRead, ctx: { household: Household; said: st
   for (const s of read.slots) {
     const main = SLOTS.find((m) => same(m, s.name));
     if (slots.some((x) => same(x.name, s.name))) continue;
-    if (main) { slots.push({ ...s, name: main, kind: "main", addon_of: null, after: null, usual_people: uniq(known(s.usual_people)) }); continue; }
+    if (main) {
+      // A main meal's people left out only because they are away on weekdays (school, office: household.weekly) are its
+      // people still: the weekly absences take them off those days, never the weekend's (eval h6: no children at Sunday lunch).
+      let usual = uniq(known(s.usual_people));
+      const out = people.map((p) => p.name).filter((p) => !usual.includes(p));
+      const weekdaysOnly = (p: string) => (ctx.household.weekly ?? []).some((w) => w.person === p && w.where !== "home" && w.weekdays.length > 0 && w.weekdays.every((d) => WEEKDAYS.indexOf(d) < 5));
+      if (usual.length && out.length && out.every(weekdaysOnly)) usual = [];
+      slots.push({ ...s, name: main, kind: "main", addon_of: null, after: null, usual_people: usual }); continue;
+    }
     if (!saidByFamily(s.quote, said)) { dropped.push(`the ${s.name} ("${s.quote}"): not something the family said`); continue; }
     const usual = uniq(known(s.usual_people));
     let kind: SlotKind = s.kind === "addon" ? "addon" : "custom";
