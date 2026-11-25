@@ -529,3 +529,26 @@ describe("a regional word the family used as a category (decided 20)", () => {
     expect(r.ownItems?.size).toBeGreaterThan(0);
   });
 });
+
+describe("a family dish fills places only at the meal it was named for (class 1)", () => {
+  it("their dinner's 'rasam rice' never fills lunch's rasam place: lunch takes rasams of its own, dinner has its rasam rice", () => {
+    const lunch = slot("Lunch", { kinds: [{ name: "Rice", staple: true }, { name: "Rice curry", subs: ["Rasam"] }, { name: "Curd", staple: true }],
+      templates: [T({ kind: "Rice" }, { kind: "Rice curry", sub: "Rasam" }, { kind: "Curd" })] });
+    const dinner = slot("Dinner", { kinds: [{ name: "Roti", staple: true }, { name: "Gravy", subs: ["Kurma"] }, { name: "Rice", staple: true }, { name: "Rice curry", subs: ["Rasam"] }],
+      templates: [T({ kind: "Roti" }, { kind: "Gravy", sub: "Kurma" }), share(T({ kind: "Rice" }, { kind: "Rice curry", sub: "Rasam" }), "sometimes")] });
+    const lib = [dish("Rice", "Lunch", "Rice"), dish("Rasam", "Lunch", "Rice curry", { sub: "Rasam" }), dish("Curd", "Lunch", "Curd"),
+      dish("Chapati", "Dinner", "Roti"), dish("Kurma", "Dinner", "Gravy", { sub: "Kurma" }), dish("Rasam rice", "Dinner", "Rice curry", { sub: "Rasam", frequency: "sometimes" })];
+    const r = run({ slots: [lunch, dinner], library: lib, cuisines: ["south", "tamil"] });
+    expect(WEEK.filter((d) => r.at(d, "Lunch").includes("Rasam rice"))).toEqual([]);
+    for (const d of WEEK) expect(r.at(d, "Lunch").some((x) => /rasam/i.test(x))).toBe(true);
+    expect(WEEK.filter((d) => r.at(d, "Dinner").includes("Rasam rice")).length).toBeGreaterThan(0);
+  });
+  it("a category named at dinner ('uthappam sometimes') makes its items theirs at dinner only: breakfast's dosas are breakfast's own", () => {
+    const bf = slot("Breakfast", { kinds: [{ name: "Dosa" }], templates: [T({ kind: "Dosa" })] });
+    const dinner = slot("Dinner", { kinds: [{ name: "Dosa" }, { name: "Gravy", subs: ["Kurma"] }], templates: [T({ kind: "Dosa" }, { kind: "Gravy", sub: "Kurma" })] });
+    const lib = [dish("Masala dosa", "Breakfast", "Dosa"), dish("Rava dosa", "Breakfast", "Dosa"), dish("Neer dosa", "Breakfast", "Dosa"),
+      dish("Uthappam", "Dinner", "Dosa", { frequency: "sometimes" }), dish("Kurma", "Dinner", "Gravy", { sub: "Kurma" })];
+    const r = run({ slots: [bf, dinner], library: lib, newCap: 0, cuisines: ["south"] });
+    for (const d of WEEK) expect(["Masala dosa", "Rava dosa", "Neer dosa"]).toContain(r.at(d, "Breakfast")[0]);
+  });
+});

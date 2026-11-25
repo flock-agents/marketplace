@@ -302,21 +302,24 @@ export function fillWeek(input: FillInput): FillResult {
   /** The diet tags the family's own dishes have (their meat, fish and eggs). */
   const familyTags = new Set(famRows.flatMap((r) => [...withParents([...r.contains, ...(catalogContains(catalogNameOf(r) ?? "") ?? []).map(asPlanner)])]));
   const noAgain = new Set(library.filter((r) => r.disliked || isDropped(r)).map((r) => r.key));
-  /** The kinds and sub-kinds the family named as a category ("dal", "a poriyal"): their catalog items are the family's. */
+  /** The kinds and sub-kinds the family named as a category ("dal", "a poriyal"): their catalog items are the family's, at the
+   *  meal they named it for (class 1: "uthappam" said of dinner makes no breakfast dosa theirs). */
   const categories = famRows.map(categoryPlace).filter((x): x is Place => !!x);
-  /** Is a catalog item of a kind within a category the family named. */
-  /** The days a family's category item may come on: where every category word of theirs that holds it is kept to days
-   *  ("pongal on Sundays"), those days; else any day. */
-  const catDays = (kind: string, sub: string | null): string[] | null => {
-    const rows = famRows.filter((r) => { const c = categoryPlace(r); return !!c && sameKind(c.kind, kind) && (!c.sub || sameKind(c.sub, sub)); });
-    return rows.length && rows.every((r) => r.days?.length) ? uniq(rows.flatMap((r) => r.days ?? [])) : null;
-  };
+  const categoriesAt = (slot: string) => famRows.filter((r) => same(r.slot, slot)).map(categoryPlace).filter((x): x is Place => !!x);
   /** The family's category words at a slot that hold an item of this kind and sub-kind. */
   const catRowsAt = (slot: string, kind: string, sub: string | null) =>
     famRows.filter((r) => { if (!same(r.slot, slot)) return false; const c = categoryPlace(r); return !!c && sameKind(c.kind, kind) && (!c.sub || sameKind(c.sub, sub)); });
+  /** The days a family's category item may come on at a meal: where every category word of theirs there that holds it is kept
+   *  to days ("pongal on Sundays"), those days; else any day. */
+  const catDays = (slot: string, kind: string, sub: string | null): string[] | null => {
+    const rows = catRowsAt(slot, kind, sub);
+    return rows.length && rows.every((r) => r.days?.length) ? uniq(rows.flatMap((r) => r.days ?? [])) : null;
+  };
   /** The dates a category's items were placed at a slot, by slot|category key. */
   const catUse = new Map<string, Set<string>>();
   const named = (kind: string, sub: string | null) => categories.some((c) => sameKind(c.kind, kind) && (!c.sub || sameKind(c.sub, sub)));
+  /** Did the family name this kind or sub-kind as a category at this meal. */
+  const namedAt = (slot: string, kind: string, sub: string | null) => categoriesAt(slot).some((c) => sameKind(c.kind, kind) && (!c.sub || sameKind(c.sub, sub)));
   w.ownItems = new Set(CATALOG.kinds.flatMap((k) => (k.staple ? [] : k.items.filter((it) => named(k.name, it.sub ?? null)).map((it) => dishKey(it.name)))));
   /** The catalog's items of a kind (one sub-kind when given) for this family at this meal: regional only within their
    *  cuisines; their sub-kinds (`prefer`) first, then their cuisines, then everyday ones; never one of their dishes, nor one
@@ -332,7 +335,7 @@ export function fillWeek(input: FillInput): FillResult {
     // Sunday chicken is never a mutton yakhni).
     if (!family) items = items.filter((it) => (catalogContains(it.name) ?? []).map(asPlanner).every((t) => !DIET_TAGS.includes(t) || familyTags.has(t)));
     items = items.filter((it) => !familyCatalog.has(norm(it.name)) && !noAgain.has(dishKey(it.name)) && !famRows.some((r) => r.key === dishKey(it.name))
-      && named(ck.name, it.sub) === family);
+      && namedAt(s.name, ck.name, it.sub) === family);
     const off = items.length ? hash(`${firstDate}|${ck.name}|${sub ?? ""}`) % items.length : 0;
     return items.map((it, i) => ({ name: it.name, key: dishKey(it.name), kind: ck.name, sub: it.sub, family, catalog: true, idx: (i - off + items.length) % items.length,
       // The family's cuisines first, then an everyday item of no one cuisine, then another cuisine's.
@@ -340,12 +343,13 @@ export function fillWeek(input: FillInput): FillResult {
       .sort((a, b) => Number(prefer.some((p) => sameKind(p, b.sub))) - Number(prefer.some((p) => sameKind(p, a.sub))) || (b.cuisine ?? 0) - (a.cuisine ?? 0) || a.idx - b.idx)
       .map((x, i) => ({ ...x, idx: i }));
   };
-  /** The family's items of a kind (one sub-kind when given), their own sub-kinds of it first; then the catalog's items of the
-   *  kinds and sub-kinds they named as a category. */
+  /** The family's items of a kind (one sub-kind when given) at this meal, their own sub-kinds of it first; then the catalog's
+   *  items of the kinds and sub-kinds they named as a category there. Class 1: a family dish fills places only at the meal it
+   *  was named for ("rasam rice" said of dinner never fills lunch's rasam); the rotation still counts it across the meals. */
   const familyPool = (s: Slot, kind: string, sub: string | null, prefer: string[] = []): Item[] => {
     const slot = s.name;
     const seen = new Set<string>(), out: Item[] = [];
-    const rows = [...famRows.filter((r) => same(r.slot, slot)), ...famRows.filter((r) => !same(r.slot, slot))];
+    const rows = famRows.filter((r) => same(r.slot, slot));
     for (const r of rows) {
       if (seen.has(r.key) || isCategoryName(r.name)) continue;
       const pl = placeOf(r);
@@ -354,8 +358,9 @@ export function fillWeek(input: FillInput): FillResult {
       out.push({ name: r.name, key: r.key, kind, sub: pl.sub, family: true, idx: out.length, row: r });
     }
     const theirs = prefer.length ? [...out.filter((x) => prefer.some((p) => sameKind(p, x.sub))), ...out.filter((x) => !prefer.some((p) => sameKind(p, x.sub)))] : out;
-    const cat = categories.some((c) => sameKind(c.kind, kind)) ? catalogPool(s, kind, sub, uniq([...prefer, ...categories.filter((c) => sameKind(c.kind, kind) && c.sub).map((c) => c.sub!)]), true) : [];
-    return [...theirs, ...cat.filter((x) => !seen.has(x.key)).map((x) => ({ ...x, days: catDays(x.kind, x.sub) }))].map((x, i) => ({ ...x, idx: i }));
+    const cats = categoriesAt(slot);
+    const cat = cats.some((c) => sameKind(c.kind, kind)) ? catalogPool(s, kind, sub, uniq([...prefer, ...cats.filter((c) => sameKind(c.kind, kind) && c.sub).map((c) => c.sub!)]), true) : [];
+    return [...theirs, ...cat.filter((x) => !seen.has(x.key)).map((x) => ({ ...x, days: catDays(slot, x.kind, x.sub) }))].map((x, i) => ({ ...x, idx: i }));
   };
   /** The brand-new variants of a kind (one sub-kind when given): the catalog's items outside what the family named; never a
    *  staple's or an own kind's. */
