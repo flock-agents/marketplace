@@ -13,7 +13,7 @@
 // note, never a block (planChecks.onionNotes). Pure and deterministic: no database, no model, ties broken by date and slot.
 import { CATALOG, catalogContains, catalogKind, matchDish, norm, regionalWordOf, suggestable, suggestMeals, type CatalogItem, type MealKind, type MealTemplate,
   type TemplatePart } from "./kinds";
-import { TEMPLATE_DAYS } from "./db/constants";
+import { INSTEAD_STEP, TEMPLATE_DAYS } from "./db/constants";
 import { addDays, weekdayOf } from "./dates";
 import { dishKey } from "./dishText";
 import { isAllergyRule } from "./allergy";
@@ -142,6 +142,8 @@ function mealOf(s: Slot, slots: Slot[]): string | null {
   const n = norm(s.name);
   if (MEAL_NAMES.includes(n)) return n;
   if (s.kind === "addon" && s.addon_of) { const m = slots.find((x) => same(x.name, s.addon_of!)); if (m && m !== s) return mealOf(m, slots); }
+  // A person's own meal in place of a main meal (class 3) sits just after it: that meal.
+  if (s.kind === "custom") { const own = slots.find((m) => m.kind === "main" && m.order + INSTEAD_STEP === s.order); if (own && own !== s) return mealOf(own, slots); }
   if (s.kind === "custom") return s.order <= 20 ? "tiffin" : s.order <= 45 ? "snack" : "dinner";
   return s.order <= 10 ? "breakfast" : s.order <= 30 ? "lunch" : "dinner";
 }

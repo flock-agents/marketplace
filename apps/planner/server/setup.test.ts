@@ -5,7 +5,7 @@ import { describe, it, expect } from "bun:test";
 import { boot } from "./testkit";
 import { saysNoEggs, buildMeal, codePlace, cuisinesOf, regionalFor, kitchenLine, needsNamed, placeOf, wordOf, KINDS_SYSTEM, type MealDish, type Place } from "./setup";
 import { checkRead, diffSetup, familyLines, familySentences, frequencyOf, householdOf, lunchLine, personOf, plainWords, quoteHasDayOrCount, readOf, resolveSlot,
-  ruleSaid, saidByFamily, DISHES_ASK, SETUP_PARTS, SETUP_SYSTEM, CONTAINS_BATCH, daysOf, clockOf, itemWord, allergyAsk, answeredIn, type Saved, type SetupRead } from "./setup";
+  ruleSaid, saidByFamily, DISHES_ASK, SETUP_PARTS, SETUP_SYSTEM, CONTAINS_BATCH, daysOf, clockOf, itemWord, allergyAsk, answeredIn, mealOf, type Saved, type SetupRead } from "./setup";
 import { isAllergyRule } from "./allergy";
 import { HOUSEHOLDS } from "../evals/households";
 import { regionalWordOf } from "./kinds";
@@ -197,6 +197,24 @@ describe("apply_setup v2: the model reads, code checks and writes", () => {
       "What does Padma eat on the Monday fast?",
       "Does Kiran take lunch from home to the office?",
     ].join("\n"));
+  });
+
+  it("a person's own meal in place of the family's (instead): their own slot, the family meal without them, said plainly (class 3)", async () => {
+    const T = [...TRANSCRIPT, "Q: Does Amma eat with you at night?", "A: No, Amma eats before sunset, her own dinner of phulkas. She doesn't sit for our dinner."];
+    const own = { name: "Padma's dinner", kind: "addon", addon_of: "Dinner", usual_people: ["Amma"], instead: true, quote: "Amma eats before sunset, her own dinner of phulkas" };
+    const f = fake({ home: { ...HOME, slots: [...HOME.slots.filter((x) => x.name !== "Padma's dinner"), own] } });
+    const k = await boot({ model: f.model });
+    const r = await k.op("apply_setup", { household: HOUSEHOLD, transcript: T });
+    expect(r.ok).toBe(true);
+    const fam = (await k.owner("GET", "/api/family")).body;
+    const mine = fam.slots.find((s: any) => s.name === "Padma's dinner");
+    expect(mine).toMatchObject({ kind: "custom", usual_people: ["Padma"], order: 55 });
+    expect(fam.slots.find((s: any) => s.name === "Dinner").usual_people).toEqual(["Kiran", "Nisha", "Ishaan"]);
+    expect(r.said).toContain("Padma has a separate dinner (Padma's dinner), not the family's; Dinner is for Kiran, Nisha and Ishaan.");
+    expect(r.said).not.toContain("Padma's dinner for Padma at dinner");
+    // Its meal is dinner (new items are suggested as for dinner), and one in place of lunch is lunch.
+    expect(mealOf(mine)).toBe("dinner");
+    expect(mealOf({ name: "Ravi's lunch", kind: "custom", addon_of: null, order: 35 })).toBe("lunch");
   });
 
   it("a correction re-reads and applies only what the new reply said; the rest is discarded; the read-back says only that", async () => {

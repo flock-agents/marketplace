@@ -14,7 +14,7 @@
 import type { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { house, people as peopleTable } from "./db/schema";
-import { APP_NAMES, appOf, BASE_TAGS, FREQUENCY_WORDS, GROUPS, LINT_COUNT_WORDS, LINT_DAY_WORDS, RULE_WHATS, SKIPS, SLOT_ORDER, SLOTS,
+import { APP_NAMES, appOf, BASE_TAGS, FREQUENCY_WORDS, GROUPS, LINT_COUNT_WORDS, LINT_DAY_WORDS, RULE_WHATS, SKIPS, SLOT_ORDER, SLOTS, INSTEAD_STEP,
   type Frequency, type GroceryApp, type RuleWhat, type Skip, type SlotKind } from "./db/constants";
 import { WEEKDAYS, clockText, type Weekday } from "./dates";
 import { dishKey } from "./dishText";
@@ -59,7 +59,7 @@ const HOME_SCHEMA = {
     slots: { type: "array", items: { type: "object", required: ["name", "kind"], properties: {
       name: STR, kind: { type: "string", enum: ["main", "custom", "addon"] }, addon_of: STR, after: { type: "string", enum: [...SLOTS] },
       usual_people: STRS, days: DAYS, skip_days: { type: "array", items: { type: "object", required: ["day", "skip"], properties: { day: STR, skip: { type: "string", enum: [...SKIPS] } } } },
-      quote: STR } } },
+      instead: { type: "boolean" }, quote: STR } } },
     cook: { anyOf: [{ type: "null" }, { type: "object", required: ["name"], properties: {
       name: STR, days: DAYS, visits: { type: "array", items: { type: "object", required: ["at"], properties: { at: STR, meals: STRS } } }, limits_words: STR, quote: STR } }] },
     family_cooks: { type: "array", items: { type: "object", required: ["person", "days"], properties: { person: STR, days: DAYS, quote: STR } } },
@@ -74,6 +74,7 @@ const HOME_PART = `Write this part: the meals (slots), the cook, who of the fami
   kind "custom": a meal the family names besides those: a child's school tiffin, lunch box or snack box ("<child>'s tiffin", or the family's word for a box two children share; usual_people [those children], days the school days), an evening snack ("Evening snack"). after: the main meal it comes after (a tiffin: Breakfast; an evening snack: Lunch). usual_people: the people the family names for it; a meal said without names is everyone's: usual_people empty. days: the weekdays it is eaten, empty for every day.
   A box or tiffin the family names its own food for, food that is not the home meal ("snack box: sandwiches or pasta", "lunch box: pulao, curd rice"), is always a custom slot, also when it is told in an answer about lunch: its people are the ones it is said of (a box told in answer to a question about the children is the children's). Someone who carries the home meal ("takes roti sabzi from home", "carries his lunch") has no slot: Lunch is cooked for them.
   kind "addon": one person's own plate at a main meal: the family names a dish made for that person at that meal, in place of or beside the shared dishes ("father has two phulkas, no rice at night", "bajra roti for her at night", "her own ragi porridge", "his own soup", a child's different dinner): name "<person>'s <meal>" ("Lalitha's dinner"), addon_of the main meal, usual_people [that person]. It holds only the difference; the person still eats the main meal's shared dishes. Someone who has a dish the others have too ("Divu has ragi dosa too", "same as us, less spicy") has no add-on.
+  instead: true on such a meal when the person does not eat the main meal at all, only their own, at its time or another ("she eats before sunset, on her own", "he doesn't eat our dinner", "she doesn't sit with us for dinner", "his own mashed food every night"): that meal is theirs alone and the main meal is cooked for the others. Left out when they also eat the shared dishes.
   quote: the family's words that name a custom or add-on meal (one the family never named is no slot).
 - cook: the paid cook, or null. days. visits: each time they come, "HH:MM" 24-hour, with the meals that visit makes. limits_words: the cook's time or skill limits in the family's words. quote: the family's latest words about the cook's days or times.
 - family_cooks: on days the cook does not come, who of the family cooks ({ person, days, quote }), only when said.
@@ -230,7 +231,10 @@ export function frequencyOf(v: unknown): Frequency | null {
 export const tagOf = (v: string): string => v.trim().toLowerCase().replace(/^@/, "").replace(/[\s-]+/g, "_");
 
 export type ReadSlot = { name: string; kind: SlotKind; addon_of: string | null; after: string | null; usual_people: string[]; days: Weekday[];
-  skip_days: { day: Weekday; skip: Skip }[]; quote: string };
+  skip_days: { day: Weekday; skip: Skip }[]; quote: string;
+  /** The read: the person does not eat the main meal at all, only this one of theirs. `instead_of`: after the checks, that main
+   *  meal (the slot is custom, at its place; the main meal is cooked for the others). */
+  instead?: boolean; instead_of?: string | null };
 export type Visit = { at: string; meals?: string[] };
 export type Cook = { name: string; days: Weekday[]; visits: Visit[]; limits_words: string | null; quote: string };
 export type FamilyCook = { person: string; days: Weekday[]; quote: string };
@@ -258,7 +262,7 @@ export function readOf(home: unknown, rules: unknown, dishes: unknown, often: un
       skip_days: arr(s.skip_days).filter(isObject).flatMap((x) => {
         const skip = str(x.skip) as Skip;
         return (SKIPS as readonly string[]).includes(skip) ? daysOf(x.day).map((day) => ({ day, skip })) : [];
-      }), quote: str(s.quote) })),
+      }), quote: str(s.quote), ...(s.instead === true ? { instead: true } : {}) })),
     cook: cook ? { name: str(cook.name), days: daysOf(cook.days), limits_words: str(cook.limits_words) || null, quote: str(cook.quote),
       visits: arr(cook.visits).flatMap((v): Visit[] => {
         const at = clockOf(isObject(v) ? v.at : v);
@@ -525,10 +529,23 @@ export function checkRead(read: SetupRead, ctx: { household: Household; said: st
     const addon_of = kind === "addon" ? SLOTS.find((m) => same(m, s.addon_of ?? "")) ?? null : null;
     if (kind === "addon" && !addon_of) kind = "custom";
     if (kind === "addon" && !usual.length) { dropped.push(`the ${s.name}: nobody at home it is for`); continue; }
-    slots.push({ ...s, kind, addon_of, after: SLOTS.find((m) => same(m, s.after ?? "")) ?? null, usual_people: usual });
+    // A person's own meal in place of a main meal (class 3: "she eats before sunset, on her own"): a meal of theirs alone, not
+    // beside the family's (an add-on's people eat the main meal too, and it goes where the main meal goes, out or ordered in).
+    const instead_of = s.instead && usual.length ? SLOTS.find((m) => same(m, s.addon_of ?? "") || same(m, s.after ?? "")) ?? null : null;
+    if (instead_of) { slots.push({ ...s, kind: "custom", addon_of: null, after: instead_of, usual_people: usual, instead_of }); continue; }
+    slots.push({ ...s, kind, addon_of, after: SLOTS.find((m) => same(m, s.after ?? "")) ?? null, usual_people: usual, instead_of: null });
   }
   for (const m of SLOTS) if (!slots.some((s) => s.name === m))
     slots.push({ name: m, kind: "main", addon_of: null, after: null, usual_people: [], days: [], skip_days: [], quote: "" });
+  // The main meal of a person who has their own in its place is cooked for the others (its people said plainly in the read-back,
+  // so the family can correct it); its change stands on the family's words for that meal of theirs.
+  for (const s of slots.filter((x) => x.instead_of)) {
+    const main = slots.find((x) => x.name === s.instead_of)!;
+    const others = (main.usual_people.length ? main.usual_people : people.map((p) => p.name)).filter((p) => !s.usual_people.includes(p));
+    if (!others.length) continue;
+    main.usual_people = others;
+    if (!main.quote) main.quote = s.quote;
+  }
   const slotNames = slots.map((s) => s.name);
   // The days each meal is cooked at home: its days less the days it is eaten out or ordered in ("weekday lunch is ..." where
   // weekend lunch is out names the meal's days, not the dish's).
@@ -856,7 +873,8 @@ export function houseAllergies(ops: Ops, saved: Saved, all: boolean): void {
 // ── Writing (§4.3): people → slots → rules → library → seed → cook, in one transaction; then apps and subscriptions ──
 
 const orderOf = (s: ReadSlot, i: number): number => s.kind === "main" ? SLOT_ORDER[s.name as (typeof SLOTS)[number]]
-  : s.kind === "addon" ? SLOT_ORDER.addon + i : s.after === "Breakfast" ? SLOT_ORDER.tiffin : s.after === "Dinner" ? SLOT_ORDER.Dinner + 5 : SLOT_ORDER.snack;
+  : s.kind === "addon" ? SLOT_ORDER.addon + i : s.instead_of ? SLOT_ORDER[s.instead_of as (typeof SLOTS)[number]] + INSTEAD_STEP
+  : s.after === "Breakfast" ? SLOT_ORDER.tiffin : s.after === "Dinner" ? SLOT_ORDER.Dinner + INSTEAD_STEP : SLOT_ORDER.snack;
 const groupOf = (p: HPerson): string => (GROUPS as readonly string[]).includes(p.group) ? p.group
   : p.age !== undefined ? (p.age < 18 ? "child" : p.age >= 60 ? "elder" : "adult") : "adult";
 
@@ -995,6 +1013,14 @@ export function answeredIn(question: string, transcript: string[]): boolean {
   return at >= 0 && transcript.slice(at + 1).some((l) => /^A\d*:/i.test(l));
 }
 
+/** The main meal a slot is someone's own meal in place of: a custom slot of named people just after a main meal (its order) whose
+ *  people are not among that meal's. */
+export function insteadOf(s: Pick<Slot, "kind" | "order" | "usual_people">, slots: Pick<Slot, "name" | "kind" | "order" | "usual_people">[]) {
+  if (s.kind !== "custom" || !s.usual_people.length) return null;
+  const main = slots.find((m) => m.kind === "main" && m.order + INSTEAD_STEP === s.order);
+  return main && main.usual_people.length && !s.usual_people.some((p) => main.usual_people.some((q) => same(p, q))) ? main : null;
+}
+
 /** The setup read back from the rows: people, the cook, slots, weekday lunch, meals out, rules, every-day dishes, "Noted, not
  *  checked", then one question. */
 export function readBack(db: Db, household: Household, extra: { noted: string[]; asks: string[] }): string {
@@ -1017,6 +1043,11 @@ export function readBack(db: Db, household: Household, extra: { noted: string[];
   const extraSlots = slots.filter((s) => s.kind !== "main").map((s) => s.kind === "addon"
     ? `${s.name} for ${andWords(s.usual_people)} at ${mealWord(s.addon_of ?? "")}` : `${s.name}${daysPart(s.days)}${s.usual_people.length ? ` for ${andWords(s.usual_people)}` : ""}`);
   lines.push(`Each day: ${andWords(slots.filter((s) => s.kind === "main").map((s) => s.name))}${extraSlots.length ? `, plus ${andWords(extraSlots)}` : ""}.`);
+  // A person's own meal in place of the family's, said plainly so a family can correct it.
+  for (const s of slots) {
+    const main = insteadOf(s, slots);
+    if (main) lines.push(`${andWords(s.usual_people)} ${s.usual_people.length > 1 ? "have" : "has"} a separate ${mealWord(main.name)} (${s.name}), not the family's; ${main.name} is for ${andWords(main.usual_people)}.`);
+  }
   const lunch = lunchLine(fam, household.weekly, state?.weekday_lunch ?? [], slots.find((s) => s.name === "Lunch")?.usual_people ?? []);
   if (lunch) lines.push(lunch);
   // Meals eaten out or ordered in.
@@ -1144,7 +1175,9 @@ export const needsNamed = (p: Place, meal: string): boolean =>
 export function mealOf(s: Pick<Slot, "name" | "kind" | "addon_of" | "order">): string {
   if (s.kind === "main") return s.name.toLowerCase();
   if (s.kind === "addon") return (s.addon_of ?? "dinner").toLowerCase();
-  return s.order === SLOT_ORDER.tiffin ? "tiffin" : s.order === SLOT_ORDER.Dinner + 5 ? "dinner" : "snack";
+  // A person's own meal in place of a main meal sits just after it: that meal.
+  const own = SLOTS.find((m) => s.order === SLOT_ORDER[m] + INSTEAD_STEP);
+  return s.order === SLOT_ORDER.tiffin ? "tiffin" : own ? own.toLowerCase() : "snack";
 }
 
 /** The catalog as the kinds read sees it: one line per kind, its meals and its sub-kinds. */

@@ -12,6 +12,8 @@ export const SLOT_KINDS = ["main", "custom", "addon"] as const;
 export type SlotKind = (typeof SLOT_KINDS)[number];
 /** Planning order: Breakfast 10, a custom slot from breakfast (a tiffin) 20, Lunch 30, snacks 40, Dinner 50, add-ons 60 on. */
 export const SLOT_ORDER = { Breakfast: 10, tiffin: 20, Lunch: 30, snack: 40, Dinner: 50, addon: 60 } as const;
+/** A person's own meal in place of a main meal (a custom slot) sits this far after it in the day's order: its meal is that one. */
+export const INSTEAD_STEP = 5;
 /** A slot-day not cooked at home. */
 export const SKIPS = ["eaten_out", "ordered_in"] as const;
 export type Skip = (typeof SKIPS)[number];

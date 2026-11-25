@@ -536,6 +536,11 @@ describe("make_plan: who eats (spec §5.1)", () => {
     expect(coveredByWeek(ev("Office", "Shiva", MON, { repeat: "weekly" }), null, wk)).toBe(false);
     expect(coveredByWeek(ev("School run", "Shiva and Agastya", MON, { repeat: "weekly" }), weekly, wk)).toBe(true);
     expect(coveredByWeek(ev("School run", "Shiva, Ankita", MON, { repeat: "weekly" }), weekly, wk)).toBe(false);
+    // Class 3: an entry that names the place but is more than the routine (a school trip, an office offsite) may take them away
+    // from meals at home: read, not taken as the routine. The place alone ("Office", "Agastya school") is the routine.
+    expect(coveredByWeek(ev("School trip to Udaipur", "Agastya", WEEK[3], { to: WEEK[4] }), weekly, wk)).toBe(false);
+    expect(coveredByWeek(ev("Office offsite", "Shiva", WEEK[1]), weekly, wk)).toBe(false);
+    expect(coveredByWeek(ev("Agastya school", "Agastya", WEEK[1]), weekly, wk)).toBe(true);
   });
 
   it("run 31: the routine's entries are not sent to the calendar call nor asked; the one it is unsure of is the message's only question", async () => {
