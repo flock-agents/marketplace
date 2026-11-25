@@ -312,3 +312,28 @@ describe("an allergy (rule 6: new items read carefully)", () => {
   });
 });
 const uniqSorted = (xs: string[]) => [...new Set(xs)].sort();
+
+describe("a plate is never empty", () => {
+  const weekdays = WEEK.slice(0, 5), weekend = WEEK.slice(5);
+  const vegWeekdays = rule({ items: ["meat", "fish"], days: ["Mon", "Tue", "Wed", "Thu", "Fri"], quote: "non-veg only on weekends" });
+  it("a template that cannot be filled that day (fish on a weekday the house keeps vegetarian) gives way to another of the meal's", () => {
+    const kinds: MealKind[] = [{ name: "Roti", staple: true }, { name: "Sabzi" }, { name: "Fish & seafood" }];
+    const fish = ["Surmai fry", "Bangda curry"];
+    const lib = [dish("Phulka", "Dinner", "Roti"), ...SABZIS.map((n) => dish(n, "Dinner", "Sabzi")), ...fish.map((n) => dish(n, "Dinner", "Fish & seafood", { contains: ["fish"] }))];
+    const r = run({ slots: [slot("Dinner", { kinds, templates: [T({ kind: "Roti" }, { kind: "Sabzi" }), T({ kind: "Roti" }, { kind: "Fish & seafood" })] })], library: lib, rules: [vegWeekdays], newCap: 0 });
+    for (const d of WEEK) expect(r.at(d, "Dinner").filter((x) => x !== "Phulka").length).toBeGreaterThan(0);
+    const fishy = (x: string) => fish.includes(x) || /fish|prawn/i.test(x);
+    for (const d of weekdays) expect(r.at(d, "Dinner").some(fishy)).toBe(false);
+    expect(weekend.some((d) => r.at(d, "Dinner").some(fishy))).toBe(true);
+    expect(r.unmet.filter((u) => u.includes("nothing for"))).toEqual([]);
+  });
+  it("a one-dish breakfast that has nothing that day is another of the family's breakfasts, never an empty one", () => {
+    const kinds: MealKind[] = [{ name: "Egg" }, { name: "Poha" }];
+    const eggs = ["Egg bhurji", "Masala omelette"];
+    const lib = [...eggs.map((n) => dish(n, "Breakfast", "Egg", { contains: ["egg"] })), ...["Kanda poha", "Batata poha", "Matar poha"].map((n) => dish(n, "Breakfast", "Poha"))];
+    const r = run({ slots: [slot("Breakfast", { kinds, templates: [T({ kind: "Egg" }), T({ kind: "Poha" })] })], library: lib, newCap: 0,
+      rules: [rule({ what: "no_eggs", days: ["Tue", "Thu"], quote: "no eggs on Tuesday and Thursday" })] });
+    for (const d of WEEK) expect(r.at(d, "Breakfast").length).toBeGreaterThan(0);
+    for (const d of [WEEK[1], WEEK[3]]) expect(r.at(d, "Breakfast").some((x) => eggs.includes(x))).toBe(false);
+  });
+});

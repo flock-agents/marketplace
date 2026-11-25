@@ -472,12 +472,26 @@ export function fillWeek(input: FillInput): FillResult {
       .map((r, i) => ({ name: r.name, key: r.key, kind: placeOf(r)?.kind ?? r.name, sub: placeOf(r)?.sub ?? null, family: true, idx: i, row: r }));
     tries.push(stepsFor(here, []));
     for (const k of otherKinds(s, kind)) tries.push(stepsFor([], newPool(s, k.name, null)));
-    for (const k of ["Dal", "Sabzi"]) tries.push(stepsFor([], newPool({ ...s, kinds: [] }, k, null)));
+    // A plain dal or sabzi only at lunch or dinner (never a new kind at breakfast or in a tiffin).
+    if (["lunch", "dinner"].includes(mealOf(s, input.slots) ?? "")) for (const k of ["Dal", "Sabzi"]) tries.push(stepsFor([], newPool({ ...s, kinds: [] }, k, null)));
     for (const steps of tries) {
       const got = choose(s, d, plate, steps, who, true, must);
       if (got) { put(s, d, plate, got.it, part, false); return true; }
     }
     return false;
+  };
+
+  /** A non-staple part's candidates: the family's items of it, and the brand-new variants (of the family's own sub-kinds first:
+   *  the meal's, else those of their items). */
+  const poolsOf = (s: Slot, p: TemplatePart) => {
+    const kind = "items" in p ? null : p.kind;
+    const sub = "items" in p ? null : p.sub ?? null;
+    const mk = kind ? (s.kinds ?? []).find((x) => sameKind(x.name, kind)) : undefined;
+    const fam: Item[] = "items" in p
+      ? p.items.map((n, i) => { const r = rowAt(s.name, dishKey(n)); const pl = r ? placeOf(r) : null; return { name: n.trim(), key: dishKey(n), kind: pl?.kind ?? n, sub: pl?.sub ?? null, family: true, idx: i, row: r }; })
+      : familyPool(s, kind!, sub, sub ? [] : mk?.subs ?? []);
+    const neu: Item[] = "items" in p || mk?.own ? [] : newPool(s, kind!, sub, sub ? [] : mk?.subs?.length ? mk.subs : uniq(fam.map((x) => x.sub).filter((x): x is string => !!x)));
+    return { kind, sub, fam, neu };
   };
 
   // ── Day by day, the meals in their order ──
@@ -486,12 +500,27 @@ export function fillWeek(input: FillInput): FillResult {
   for (const d of todo) {
     const s = shapeOf(d.slot);
     const k = slotDayKey(d.date, s.name);
-    const ti = tplOf.get(k);
+    let ti = tplOf.get(k);
     const plate: Plate = [];
     const people = d.people;
     // The people fed at their own add-on that day are not fed here.
     const atTable = s.kind === "addon" ? people : people.filter((p) => !ownAddon(w, dayOf(d), p));
     if (ti === undefined) { res.plates.set(k, []); continue; }
+    // A template that cannot be filled that day (fish on a day the house keeps vegetarian, a breakfast whose items are all
+    // kept from someone) gives way to another of the meal's: the one had least this week, never yesterday's when another
+    // fits. A plate is never left bare of what its template promised.
+    const can = (i: number) => s.templates![i].parts.every((p) => isStaplePart(s, p) || (() => {
+      const { fam, neu, kind, sub } = poolsOf(s, p);
+      if ((pinsOf.get(k) ?? []).some((r) => fam.some((x) => x.key === r.key) || (!!kind && sameKind(placeOf(r)?.kind, kind) && (!sub || sameKind(placeOf(r)?.sub, sub))))) return true;
+      return !!choose(s, d, [], stepsFor(fam, neu), atTable, false);
+    })());
+    if (!can(ti)) {
+      const had = (i: number) => planned.filter((x) => same(x.slot, s.name) && x.date < d.date && tplOf.get(slotDayKey(x.date, s.name)) === i).length;
+      const yesterday = tplOf.get(slotDayKey(addDays(d.date, -1), s.name));
+      const other = s.templates!.map((_, i) => i).filter((i) => i !== ti)
+        .sort((a, b) => Number(a === yesterday) - Number(b === yesterday) || had(a) - had(b) || a - b).find(can);
+      if (other !== undefined) { res.log.push(`${label(d)}: template ${ti + 1} cannot be filled that day; template ${other + 1} instead`); ti = other; tplOf.set(k, ti); }
+    }
     const t = s.templates![ti];
     const pins = [...(pinsOf.get(k) ?? [])];
     t.parts.forEach((p, part) => {
@@ -511,14 +540,7 @@ export function fillWeek(input: FillInput): FillResult {
         }
         return;
       }
-      const kind = "items" in p ? null : p.kind;
-      const sub = "items" in p ? null : p.sub ?? null;
-      const mk = kind ? (s.kinds ?? []).find((x) => sameKind(x.name, kind)) : undefined;
-      const fam: Item[] = "items" in p
-        ? p.items.map((n, i) => { const r = rowAt(s.name, dishKey(n)); const pl = r ? placeOf(r) : null; return { name: n.trim(), key: dishKey(n), kind: pl?.kind ?? n, sub: pl?.sub ?? null, family: true, idx: i, row: r }; })
-        : familyPool(s, kind!, sub, sub ? [] : mk?.subs ?? []);
-      // A new variant of the family's own sub-kinds first: the meal's, else those of their items.
-      const neu: Item[] = "items" in p || mk?.own ? [] : newPool(s, kind!, sub, sub ? [] : mk?.subs?.length ? mk.subs : uniq(fam.map((x) => x.sub).filter((x): x is string => !!x)));
+      const { kind, sub, fam, neu } = poolsOf(s, p);
       // A pinned dish of this part, on its day.
       const pin = pins.find((r) => fam.some((x) => x.key === r.key) || ("items" in p ? false : sameKind(placeOf(r)?.kind, kind) && (!sub || sameKind(placeOf(r)?.sub, sub))));
       let got: { it: Item; ex: string[] } | null = null;
@@ -543,6 +565,11 @@ export function fillWeek(input: FillInput): FillResult {
     });
     // A pinned dish no template part holds: on the plate beside.
     for (const pin of pins) if (!plate.some((x) => x.key === pin.key)) put(s, d, plate, { name: pin.name, key: pin.key, kind: placeOf(pin)?.kind ?? pin.name, sub: null, family: true, idx: 0, row: pin }, t.parts.length, false);
+    // Still nothing beside the staples where the template had more (no template could be filled that day): the family's own
+    // dish of this meal had longest ago, or one of another part's kind. Nobody's meal is ever empty.
+    if (s.kind !== "addon" && atTable.length && !plate.some((x) => !x.staple) && t.parts.some((p) => !isStaplePart(s, p))) {
+      if (feed(s, d, plate, atTable, t.parts.length, [], [], null)) res.log.push(`${label(d)}: nothing of its template that day; another dish of theirs instead`);
+    }
     // An add-on day with nothing: fine where its people eat the main meal's dishes; else one of its dishes comes back.
     if (s.kind === "addon" && !plate.length && !mainFeeds(w, dayOf(d))) {
       const fam = (s.templates ?? []).flatMap((x) => x.parts).flatMap((p) => ("items" in p ? p.items : []))
