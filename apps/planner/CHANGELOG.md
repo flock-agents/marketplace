@@ -57,6 +57,12 @@
   it is told in the lunch answer, by a worked example; someone who carries the home lunch gets no slot.
 - "<person>'s breakfast" with no such slot of theirs is Breakfast, never another slot of theirs (a child's breakfast
   dishes went to their tiffin once a grandparent had their own breakfast).
+- "Vegetarian, eggs okay for Vivaan and Varun" gives no eggs to everyone else at home: the rules read is shown it by a
+  worked example, and setup adds any no-eggs rule it left out (a house vegetarian rule, no house egg rule, egg rules for
+  named people). Before, Egg paratha was planned for the two who eat no eggs.
+- A list of the week's breakfasts or tiffins ("Poha, idli, dosa, upma") is one example plate per dish, not one plate of
+  all of them (the plan put six dishes on every breakfast); only one meal told for different people is joined into one
+  plate. The same dish twice on one example plate is kept once.
 
 ## 4.0.2
 
