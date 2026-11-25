@@ -78,9 +78,15 @@ export function scorePlan(h: Household, plan0: PlanOut, loaded: SetupOut, o: { f
   const at = (date: string, slot: string) => plan.slotDays.find((x) => x.date === date && lc(x.slot) === lc(slot));
   const truthNames = [...new Set(t.library.map((d) => d.name))];
   const history: HistoryRow[] = loaded.seed.map((r) => ({ slot: r.slot, dishes: r.dishes, date: null }));
-  // The seed is the only history a fresh eval week has (planned rows never count); `daily` dishes are staples too.
+  // The seed is the only history a fresh eval week has (planned rows never count); `daily` dishes are staples too. A staple is
+  // the family's: TRUTH's seed makes them as well as the loaded one (in the end-to-end eval the loaded seed is what setup saved,
+  // and a seed row setup missed must not turn the family's every-day dish into one that must rotate).
+  // Only the rotation checks (section 5) use that union; the older checks keep the loaded seed's staples.
+  const truthHistory: HistoryRow[] = t.seed.map((r) => ({ slot: r.slot, dishes: r.dishes, date: null }));
   const staples = new Map(t.slots.map((s) => [s.name, staplesOf(history, s.name, t.library.filter((d) => d.slot === s.name && d.frequency === "daily").map((d) => d.name))]));
+  const truthStaples = new Map(t.slots.map((s) => [s.name, staplesOf(truthHistory, s.name)]));
   const isStaple = (slot: string, dish: string) => !!staples.get(slot)?.has(plain(dish));
+  const isFamilyStaple = (slot: string, dish: string) => isStaple(slot, dish) || !!truthStaples.get(slot)?.has(plain(dish));
   const dayOfSd = (sd: PlanSlotDay) => weekdayOfDate(sd.date);
   const cooked = plan.slotDays.filter((x) => !x.skip && x.dishes.length);
   const words = (x: string) => plain(x).split(" ").filter(Boolean);
@@ -255,9 +261,9 @@ export function scorePlan(h: Household, plan0: PlanOut, loaded: SetupOut, o: { f
     const row = tn ? t.library.find((d) => d.name === tn && lc(d.slot) === lc(slot)) ?? t.library.find((d) => d.name === tn) : undefined;
     return row ? truthKind(row)?.kind ?? null : null;
   };
-  const exempt = (slot: string, name: string) => isStaple(slot, name) || isStapleKind(kindAt(name, slot)) || isBareStapleName(name);
+  const exempt = (slot: string, name: string) => isFamilyStaple(slot, name) || isStapleKind(kindAt(name, slot)) || isBareStapleName(name);
   /** The family's words that let a dish come back: a frequency, days, or daily (the dish_frequency check holds their count). */
-  const saidRow = (name: string) => { const tn = dishNameOf(name, truthNames); return tn && plain(tn) === plain(name) ? t.library.find((d) => d.name === tn && (d.frequency || d.days)) : undefined; };
+  const saidRow = (name: string) => { const tn = dishNameOf(name, truthNames); return tn ? t.library.find((d) => d.name === tn && (d.frequency || d.days)) : undefined; };
   const famKinds = (slot: string) => new Set(t.library.filter((d) => lc(d.slot) === lc(slot)).map((d) => truthKind(d)?.kind).filter((x): x is string => !!x));
   const LD = ["lunch", "dinner"];
   const sharedLD = (kind: string | null) => !!kind && LD.every((s) => famKinds(s).has(kind));
@@ -340,11 +346,9 @@ export function scorePlan(h: Household, plan0: PlanOut, loaded: SetupOut, o: { f
   // A real dish (owner, 25 Nov): never a bare kind or sub-kind word ("Sabzi", "Dal", "Curry", "Poriyal"), unless it is the
   // family's own dish they named for every day or for set days (a fixed dish in their words: "eggs every morning").
   for (const sd of cooked) for (const d of sd.dishes) {
-    if (!isBareKindWord(d.name)) continue;
-    const fixed = t.library.some((x) => plain(x.name) === plain(d.name) && lc(x.slot) === lc(sd.slot) && (x.frequency === "daily" || !!x.days?.length));
-    if (!fixed) add("real_dish", false, `${dayOfSd(sd)} ${sd.slot}: "${d.name}" is a kind, not a dish`);
+    const fixed = () => t.library.some((x) => plain(x.name) === plain(d.name) && lc(x.slot) === lc(sd.slot) && (x.frequency === "daily" || !!x.days?.length));
+    add("real_dish", !isBareKindWord(d.name) || fixed(), `${dayOfSd(sd)} ${sd.slot}: "${d.name}" is a kind, not a dish`);
   }
-  if (cooked.length && !rates.real_dish) add("real_dish", true);
   // Their own food: a family dish, or a particular way of one ("Bhindi sabzi" of their "Sabzi").
   const variantOf = (entry: string, dish: string) => { const e = words(entry), d = words(dish); return e.length > 0 && d.length > e.length && e.every((w) => d.includes(w)); };
   const own = (x: string) => !!dishNameOf(x, truthNames) || truthNames.some((n) => variantOf(n, x));

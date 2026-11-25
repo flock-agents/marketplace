@@ -49,24 +49,27 @@ function one(hits: KindHit[]): KindHit | null {
 export function kindOf(name: string): KindHit | null {
   const n = key(name);
   if (!n) return null;
-  for (const lv of ["item", "sub", "kind"] as const) {
-    const hit = one(entries.filter((e) => e.hit.by === lv && e.words === n).map((e) => e.hit));
+  // The same words in another order ("Methi malai matar" for "Methi matar malai") are the same name.
+  const bag = (w: string) => w.split(" ").sort().join(" ");
+  for (const same of [(w: string) => w === n, (w: string) => bag(w) === bag(n)]) for (const lv of ["item", "sub", "kind"] as const) {
+    const hit = one(entries.filter((e) => e.hit.by === lv && same(e.words)).map((e) => e.hit));
     if (hit) return hit;
   }
   const padded = ` ${n} `;
   const inside = entries.filter((e) => e.words && padded.includes(` ${e.words} `));
   const len = Math.max(0, ...inside.map((e) => e.words.split(" ").length));
-  let hits = inside.filter((e) => e.words.split(" ").length === len).map((e) => e.hit);
-  if (!hits.length) return null;
-  const narrow = (keep: (h: KindHit) => boolean) => { const k = hits.filter(keep); if (k.length) hits = k; };
-  if (new Set(hits.map((h) => h.kind)).size > 1) narrow((h) => PROTEIN.has(h.kind));
-  if (new Set(hits.map((h) => h.kind)).size > 1) narrow((h) => !isStapleKind(h.kind));
-  for (const lv of ["item", "sub", "kind"] as const) {
-    const at = hits.filter((h) => h.by === lv);
-    if (!at.length) continue;
-    const hit = one(at);
-    // A name that holds an item is a variant of it, not the item: its kind and sub-kind only.
-    return hit ? { ...hit, item: null, by: lv === "kind" ? "kind" : "sub" } : null;
+  const all = inside.filter((e) => e.words.split(" ").length === len).map((e) => e.hit);
+  if (!all.length) return null;
+  // Narrowed first to a protein, then to non-staples; a narrowing that leaves no single place is dropped ("Dry sabji": "dry"
+  // is a chicken and a mutton sub-kind's word, "sabji" the Sabzi kind's).
+  const protein = all.filter((h) => PROTEIN.has(h.kind)), dish = all.filter((h) => !isStapleKind(h.kind));
+  for (const hits of [protein, dish.filter((h) => protein.includes(h) || !protein.length), dish, all]) {
+    if (!hits.length) continue;
+    for (const lv of ["item", "sub", "kind"] as const) {
+      const hit = one(hits.filter((h) => h.by === lv));
+      // A name that holds an item is a variant of it, not the item: its kind and sub-kind only.
+      if (hit) return { ...hit, item: null, by: lv === "kind" ? "kind" : "sub" };
+    }
   }
   return null;
 }

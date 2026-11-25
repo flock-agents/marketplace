@@ -14,6 +14,10 @@ describe("kindOf", () => {
     expect(kindOf("Chicken rassa")?.kind).toBe("Chicken");
     expect(kindOf("Kadhi chawal")?.kind).toBe("Rice curry");
     expect(kindOf("Rui maacher jhol")?.kind).toBe("Fish & seafood");
+    // "dry" is a chicken and a mutton sub-kind's word: no protein named, so the Sabzi word decides.
+    expect(kindOf("Dry sabji")?.kind).toBe("Sabzi");
+    // The same words in another order are the same item.
+    expect(kindOf("Methi malai matar")).toMatchObject({ kind: "Gravy", item: "Methi matar malai" });
   });
   test("unplaceable names are null", () => {
     expect(kindOf("Zorba special")).toBeNull();

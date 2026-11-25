@@ -195,6 +195,10 @@ describe("scorePlan", () => {
     expect(fails(q)).toContain("not_next_day");
     // A staple is exempt: Toor dal at every lunch, rice every day, Phulka every night.
     expect(fails(goodWeek())).not.toContain("not_next_day");
+    // Still a staple when the loaded seed (what setup saved, end to end) misses it: TRUTH's seed makes the family's staples too.
+    const l = loaded();
+    l.seed = l.seed.filter((r) => r.slot !== "Lunch");
+    expect(fails(goodWeek(), l)).not.toContain("not_next_day");
   });
   test("no_early_repeat: an item back while another of the family's items of its kind went unused this week", () => {
     // Lunch's sabzi: Bhindi Mon and Thu, Aloo gobi never (dinner's Lauki is made Tue and Fri).
