@@ -5,7 +5,8 @@ planning are measured separately and on families other than the one a change was
 planner runs in-process and models are called over OpenRouter with Flock's app-model contract (key read from
 `~/Developer/flock/flock-web-services/.env`, never printed).
 
-Everything under `lib/` except `adapter.ts` is pure and imports nothing from `server/`: the scorers, the truth types and
+Everything under `lib/` except `adapter.ts` is pure and imports no code from `server/` (`lib/catalog.ts` reads
+`server/kinds.json` as data: kinds are the catalog's by definition, but the eval places dish names in it its own way): the scorers, the truth types and
 the eval's own food vocabulary are written from the spec alone, with unit tests on a hand-made household
 (`bun test evals/`). **`lib/adapter.ts` is the only file that touches the app** (spec §2.1 table/column names; ops
 `apply_setup`, `make_plan`, `set_slot_day`, `add_dish`): adjust it there if lanes A–D name something differently.
@@ -64,12 +65,20 @@ bun evals/eval-plan.ts --from-eval1 <results.json> | --compare a b | --rescore <
 Gating fields: `filled` (every expected slot-day), `skips_kept`, `no_stray`, `attendance` (usual − weekly absences ±
 stays/trips − fasts without fasting food), `guests`, `hard_rules` (per person on each slot-day, items vs contains,
 **fail-closed**: a tag the loaded library never read counts as a break; the eval's vocabulary of the planned name always
-counts), `guest_rules`, `from_library` (library, staple, or an allowed new dish), `new_budget`, `dish_frequency` (days
-across all slots), `default_cap` (no frequency: ≤ 2 days unless a staple), `daily_dishes` (a `daily` dish on every
-slot-day of its slot), `repeat_window` (3 days per slot, staples exempt, the planner's reported relaxation honoured),
-`same_day_repeat` (a non-staple twice a day across main slots), `soft_frequency` (cross-slot counts), `cap_rules`.
-Staples: ≥ 60% of a slot's last 14 seed + confirmed rows, plus `daily` dishes. Tracked, not gating: `shape` (dish count
-per slot-day within ±1 of the slot's history). Facts: hard_breaks, new_dishes, family_dish_share, unmet, flagged.
+counts), `guest_rules`, `from_library` (library, staple, or an allowed new dish), `new_budget`, `dish_frequency` (only the
+family's own words limit a dish: its frequency in days across all slots, its named days), `daily_dishes` (a `daily` dish on
+every slot-day of its slot), `soft_frequency` (cross-slot counts), `cap_rules`.
+Kinds model (owner, 25 Nov; the twice-a-week cap and the 3-day window are gone): `no_early_repeat` (an item back in its slot,
+Lunch and Dinner counted together for a kind the family has at both, while another of the family's items of that kind went
+unused that week, unless their words on the dish allow it), `not_next_day` (the same item on consecutive days in its slot
+group, or at lunch and dinner the same day), `real_dish` (no bare kind or sub-kind word: "Sabzi", "Dal", "Curry", "Poriyal",
+except the family's own dish they fixed to a day or to every day), `no_new_kind` (a dish not the family's is of a kind their
+own dishes at that slot are of; one the catalog cannot place fails), `own_share` (≥ 30% of the week's non-staple items).
+Kinds come from `lib/catalog.ts`: `server/kinds.json` read as data (no server code), placed by the eval's own matcher, with
+TRUTH's `kind`/`sub` on a dish the catalog cannot place ("Bhindi").
+Staples (exempt from rotation): ≥ 60% of a slot's last 14 seed + confirmed rows, `daily` dishes, and the catalog's staple
+kinds (roti, rice, curd, bhakri). Tracked, not gating: `shape` (dish count per slot-day within ±1 of the slot's history).
+Facts: hard_breaks, new_dishes, family_dish_share, unmet, flagged.
 
 ## Guards (`bun test server/`)
 
