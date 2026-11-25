@@ -386,6 +386,44 @@ export function fillWeek(input: FillInput): FillResult {
     return { kind, sub, fam, neu };
   };
 
+  // ── The family's own words on a dish or a category (its days, how often) at a meal ──
+  // Owner rule 3: "the family's own words still limit". A day or count said of a dish or category limits every placement that
+  // stands for it at that meal: the dish itself, the items of the category, an item put in a part whose every item of theirs
+  // is held by such words (a new variant there stands for their dish too), and so the template that part is in.
+  type Limit = { row: LibraryDish; days: string[] | null; max: number | null };
+  const limitOf = (r: LibraryDish): Limit | null => {
+    const days = r.days?.length ? r.days : null;
+    // "usually" and "daily" say how often at least, never a most.
+    const range = r.frequency && r.frequency !== "daily" && r.frequency !== "usually" ? frequencyRange(r.frequency) : null;
+    return days || range ? { row: r, days, max: range ? range[1] : null } : null;
+  };
+  /** The rows of the family's words at this meal that hold an item: its own row there, or the category words there that hold it. */
+  const wordsFor = (slot: string, it: Item): Limit[] => {
+    const rows = it.catalog && it.family ? catRowsAt(slot, it.kind, it.sub) : famRows.filter((r) => r.key === it.key && same(r.slot, slot));
+    return rows.map(limitOf).filter((x): x is Limit => !!x);
+  };
+  /** A part's limits: the words that hold every item of the family's that fills it (a staple: its usual item); none when one
+   *  of their items is free of such words. */
+  const partLimits = (s: Slot, p: TemplatePart): Limit[] => {
+    const items: Item[] = isStaplePart(s, p)
+      ? (() => { const kind = (p as { kind: string }).kind, n = stapleOf(s, kind); return [{ name: n, key: dishKey(n), kind, sub: null, family: true, idx: 0 }]; })()
+      : poolsOf(s, p).fam;
+    if (!items.length) return [];
+    const out = new Map<string, Limit>();
+    for (const it of items) { const ls = wordsFor(s.name, it); if (!ls.length) return []; for (const l of ls) out.set(l.row.key, l); }
+    return [...out.values()];
+  };
+  /** The words of a part that still allow it on a date (its day, and its count not yet reached that week); null when none does.
+   *  `uses`: the dates each row's words were used at this meal, by slot|row key. */
+  const openLimit = (slot: string, lims: Limit[], date: string, uses: Map<string, Set<string>>): Limit | null =>
+    lims.find((l) => (!l.days || l.days.includes(weekdayOf(date)))
+      && (l.max == null || [...(uses.get(`${slot.toLowerCase()}|${l.row.key}`) ?? [])].filter((x) => x !== date).length < l.max)) ?? null;
+  const markLimit = (slot: string, l: Limit, date: string, uses: Map<string, Set<string>>) => {
+    const k = `${slot.toLowerCase()}|${l.row.key}`;
+    uses.set(k, (uses.get(k) ?? new Set()).add(date));
+  };
+  const limitUse = new Map<string, Set<string>>();   // as filled
+
   // ── Templates for each slot's days ──
   const tplOf = new Map<string, number>();   // slotDayKey → template index
   const pinsOf = new Map<string, LibraryDish[]>();
@@ -395,9 +433,14 @@ export function fillWeek(input: FillInput): FillResult {
     const ts = s.templates ?? [];
     const mine = planned.filter((d) => same(d.slot, s.name)).sort((a, b) => a.date.localeCompare(b.date));
     if (!ts.length || !mine.length) continue;
-    // A template made for a pinned dish ("pongal on Sundays": its part has only their dishes kept to days) comes only on
+    // Each template's limited parts (the family's words above), and the week's uses of those words as templates are given.
+    const tplLimits = ts.map((t) => t.parts.map((p) => partLimits(s, p)).filter((ls) => ls.length));
+    const planUse = new Map<string, Set<string>>();
+    const allowed = (i: number, date: string) => tplLimits[i].every((ls) => !!openLimit(s.name, ls, date, planUse));
+    const mark = (i: number, date: string) => { for (const ls of tplLimits[i]) { const l = openLimit(s.name, ls, date, planUse); if (l) markLimit(s.name, l, date, planUse); } };
+    // A template made for a dish kept to days ("pongal on Sundays": a part whose every item is held to days) comes only on
     // those days; the week's other days are spread over the rest.
-    const pinnedOnly = ts.map((t) => t.parts.some((p) => {
+    const pinnedOnly = ts.map((t, i) => tplLimits[i].some((ls) => ls.every((l) => !!l.days)) || t.parts.some((p) => {
       if (isStaplePart(s, p)) return false;
       const { fam } = poolsOf(s, p);
       return fam.length > 0 && fam.every((x) => (x.catalog ? !!x.days?.length : !!x.row?.days?.length));
@@ -406,6 +449,14 @@ export function fillWeek(input: FillInput): FillResult {
     const left = free.length && free.length < ts.length
       ? (() => { const c = templateCounts(free.map((i) => ts[i]), mine.length), out = ts.map(() => 0); free.forEach((i, j) => { out[i] = c[j]; }); return out; })()
       : templateCounts(ts, mine.length);
+    // A template whose part is held to a count ("chapati and a kurma twice a week") comes at most that often; its other days go
+    // to the templates free of such words.
+    const most = tplLimits.map((parts) => Math.min(Infinity, ...parts.map((ls) => (ls.every((l) => l.max != null) ? ls.reduce((n, l) => n + l.max!, 0) : Infinity))));
+    const open = free.filter((i) => most[i] === Infinity);
+    for (const i of free) {
+      if (left[i] <= most[i] || !open.length || open.includes(i)) continue;
+      for (let x = left[i] - most[i], j = 0; x > 0; x--, j++) { left[open[j % open.length]]++; left[i]--; }
+    }
     const weight = [...left];
     // A pinned dish's day takes the template that holds it.
     for (const d of mine) {
@@ -417,16 +468,20 @@ export function fillWeek(input: FillInput): FillResult {
       const i = ts.findIndex((t) => holds(t, pins[0] ?? kept[0]));
       if (i < 0) continue;
       tplOf.set(slotDayKey(d.date, s.name), i);
+      mark(i, d.date);
       if (left[i] > 0) left[i]--;
       else { const j = left.indexOf(Math.max(...left)); if (left[j] > 0) left[j]--; }
     }
-    // The rest spread evenly (a smooth weighted round), never the same template two days running when another is left.
+    // The rest spread evenly (a smooth weighted round), never the same template two days running when another is left; never
+    // one the family's words keep from that day.
     const cur = ts.map(() => 0);
     const tplAt = (date: string) => tplOf.get(slotDayKey(date, s.name));
     for (const d of mine) {
       const k = slotDayKey(d.date, s.name);
       if (tplOf.has(k)) continue;
-      const cand = ts.map((_, i) => i).filter((i) => left[i] > 0);
+      let cand = ts.map((_, i) => i).filter((i) => left[i] > 0 && allowed(i, d.date));
+      if (!cand.length) cand = ts.map((_, i) => i).filter((i) => allowed(i, d.date) && !pinnedOnly[i]);
+      if (!cand.length) cand = ts.map((_, i) => i).filter((i) => left[i] > 0);
       if (!cand.length) { tplOf.set(k, 0); continue; }
       for (const i of cand) cur[i] += weight[i];
       const total = cand.reduce((n, i) => n + weight[i], 0);
@@ -434,8 +489,9 @@ export function fillWeek(input: FillInput): FillResult {
       const near = new Set([tplAt(addDays(d.date, -1)), tplAt(addDays(d.date, 1))]);
       const pick = ranked.find((i) => !near.has(i)) ?? ranked[0];
       cur[pick] -= total;
-      left[pick]--;
+      if (left[pick] > 0) left[pick]--;
       tplOf.set(k, pick);
+      mark(pick, d.date);
     }
   }
 
@@ -573,11 +629,12 @@ export function fillWeek(input: FillInput): FillResult {
     // A template that cannot be filled that day (fish on a day the house keeps vegetarian, a breakfast whose items are all
     // kept from someone), or only with an item had yesterday, gives way to another of the meal's: the one had least this
     // week, never yesterday's when another fits. A plate is never left bare of what its template promised.
-    const can = (i: number, fresh: boolean) => s.templates![i].parts.every((p) => isStaplePart(s, p) || (() => {
+    const wordsAllow = (p: TemplatePart) => { const ls = partLimits(s, p); return !ls.length || !!openLimit(s.name, ls, d.date, limitUse); };
+    const can = (i: number, fresh: boolean) => s.templates![i].parts.every((p) => wordsAllow(p) && (isStaplePart(s, p) || (() => {
       const { fam, neu, kind, sub } = poolsOf(s, p);
       if ((pinsOf.get(k) ?? []).some((r) => fam.some((x) => x.key === r.key) || (!!kind && sameKind(placeOf(r)?.kind, kind) && (!sub || sameKind(placeOf(r)?.sub, sub))))) return true;
       return !!choose(s, d, [], stepsFor(fam, neu).filter((st) => !fresh || !st.next), atTable, false);
-    })());
+    })()));
     if (!can(ti, true)) {
       const had = (i: number) => planned.filter((x) => same(x.slot, s.name) && x.date < d.date && tplOf.get(slotDayKey(x.date, s.name)) === i).length;
       const yesterday = tplOf.get(slotDayKey(addDays(d.date, -1), s.name));
@@ -590,12 +647,17 @@ export function fillWeek(input: FillInput): FillResult {
     const pins = [...(pinsOf.get(k) ?? [])];
     t.parts.forEach((p, part) => {
       // A staple: their usual item, every time; a person who may not eat it gets another of its kind.
+      const lims = partLimits(s, p), lim = lims.length ? openLimit(s.name, lims, d.date, limitUse) : null;
       if (isStaplePart(s, p)) {
         const kind = (p as { kind: string }).kind;
-        const name = stapleOf(s, kind);
+        // Their staple kept to its words ("chapati twice a week"): past them, another of theirs of its kind free of such words.
+        const other = lims.length && !lim ? famRows.find((r) => same(r.slot, s.name) && sameKind(placeOf(r)?.kind, kind) && !limitOf(r) && !isCategoryName(r.name)) : undefined;
+        const name = other?.name ?? stapleOf(s, kind);
         const it: Item = { name, key: dishKey(name), kind, sub: null, family: true, idx: 0 };
         if (plate.some((x) => x.key === it.key)) return;
+        if (lims.length && !lim && !other) res.log.push(`${label(d)}: ${name} past the family's words for it (no other ${kind} of theirs)`);
         put(s, d, plate, it, part, true);
+        if (lim && !other) markLimit(s.name, lim, d.date, limitUse);
         for (const who of excluded(d, atTable, name)) {
           if (plate.some((x) => x.part === part && x.key !== it.key && !excluded(d, [who], x.name).length)) continue;
           const alts: Item[] = uniq([...famRows.filter((r) => sameKind(placeOf(r)?.kind, kind)).map((r) => r.name), ...(catalogKind(kind)?.items ?? []).map((i) => i.name)])
@@ -614,6 +676,9 @@ export function fillWeek(input: FillInput): FillResult {
         const it: Item = fam.find((x) => x.key === pin.key) ?? { name: pin.name, key: pin.key, kind: kind ?? pin.name, sub: placeOf(pin)?.sub ?? null, family: true, idx: 0, row: pin };
         if (!plate.some((x) => x.key === it.key)) got = { it, ex: excluded(d, atTable, it.name) };
       }
+      // A part the family's words keep from this day (its days, or its count reached): left off, never filled by something
+      // standing in for their dish.
+      if (!pin && lims.length && !lim) { res.log.push(`${label(d)}: its ${sub ?? kind ?? "own dish"} kept to the family's words; left off`); return; }
       got ??= choose(s, d, plate, stepsFor(fam, neu), atTable, false);
       if (!got) {
         if (s.kind !== "addon") res.unmet.push(`${label(d)}: nothing for its ${sub ?? kind ?? "own dish"}`);
@@ -621,6 +686,7 @@ export function fillWeek(input: FillInput): FillResult {
       }
       if (got.it.family && usedDates.get(got.it.key)?.has(addDays(d.date, -1)) && s.kind !== "addon" && !pin) res.unmet.push(`${label(d)}: ${got.it.name} comes back sooner than usual`);
       put(s, d, plate, got.it, part, false);
+      if (lims.length) { const l = wordsFor(s.name, got.it).find((x) => lims.some((y) => y.row.key === x.row.key)) ?? lim; if (l) markLimit(s.name, l, d.date, limitUse); }
       // Their own item for this part, for each person the item is not for.
       for (const who of got.ex) {
         if (!atTable.includes(who)) continue;
