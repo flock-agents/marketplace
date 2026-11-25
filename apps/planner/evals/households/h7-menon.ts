@@ -47,7 +47,7 @@ export const h7: Household = {
       ...dish("Eggs", ["Breakfast"], { frequency: "daily", alsoSlots: ["Nikhil's breakfast"] }), ...dish("Oats", ["Breakfast"], { alsoSlots: ["Tanya's breakfast"] }),
       ...dish("Smoothie", ["Breakfast"], { alsoSlots: ["Tanya's breakfast"] }), ...dish("Toast", ["Breakfast"], { frequency: "sometimes" }),
       ...dish("Chicken curry", ["Lunch"]), ...dish("Dal", ["Lunch"]), ...dish("Rice", ["Lunch"]), ...dish("Sabzi", ["Lunch", "Dinner"]), ...dish("Salad", ["Lunch"]),
-      ...dish("Paneer", ["Lunch", "Dinner"]), ...dish("Roti", ["Dinner"]), ...dish("Chicken", ["Dinner"]), ...dish("Dal", ["Dinner"], { frequency: "sometimes" }),
+      ...dish("Paneer", ["Lunch", "Dinner"]), ...dish("Roti", ["Dinner"]), ...dish("Chicken", ["Dinner"]), ...dish("Dal", ["Dinner"], { frequency: "sometimes" }), ...dish("Pasta", ["Dinner"], { days: ["Sun"] }),
       ...dish("Biryani", ["Dinner"], { frequency: "rarely", contains: ["chicken"] }),
     ],
     rules: [

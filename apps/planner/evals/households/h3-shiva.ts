@@ -65,7 +65,7 @@ export const h3: Household = {
       ...dish("Rajma chawal", ["Lunch"], { frequency: "2/week" }), ...dish("Bisi bele bath", ["Lunch"], { days: ["Sat"] }), ...dish("Curd", ["Lunch"], { unsaid: true }),
       ...dish("Bhindi", ["Lunch"], { unsaid: true, kind: "Sabzi" }), ...dish("Aloo gobi", ["Lunch"], { unsaid: true }),
       ...dish("Chapati", ["Dinner"], { frequency: "usually" }), ...dish("Palak dal", ["Dinner"]), ...dish("Bhindi", ["Dinner"], { kind: "Sabzi" }),
-      ...dish("Aloo gobi", ["Dinner"]), ...dish("Chole", ["Dinner"], { frequency: "1/week" }), ...dish("Curd rice", ["Dinner"], { frequency: "sometimes" }),
+      ...dish("Gravy", ["Dinner"]), ...dish("Aloo gobi", ["Dinner"]), ...dish("Chole", ["Dinner"], { frequency: "1/week" }), ...dish("Curd rice", ["Dinner"], { frequency: "sometimes" }),
       ...dish("Phulka", ["Gowri Shankar's dinner"]),
     ],
     rules: [
