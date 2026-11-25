@@ -11,7 +11,7 @@
 // Food rules: an item someone at the table may not eat is passed over while another fits; when none does, it stays with
 // `not_for` them and they get their own item for that part. Nobody at a meal is left with nothing. Onion and garlic are a
 // note, never a block (planChecks.onionNotes). Pure and deterministic: no database, no model, ties broken by date and slot.
-import { CATALOG, catalogContains, catalogKind, matchDish, norm, suggestable, suggestMeals, type CatalogItem, type MealKind, type MealTemplate,
+import { CATALOG, catalogContains, catalogKind, matchDish, norm, regionalWordOf, suggestable, suggestMeals, type CatalogItem, type MealKind, type MealTemplate,
   type TemplatePart } from "./kinds";
 import { TEMPLATE_DAYS } from "./db/constants";
 import { addDays, weekdayOf } from "./dates";
@@ -103,6 +103,8 @@ export const catalogNameOf = (row: Pick<LibraryDish, "catalog_item" | "name">): 
 /** A family's word that names a kind or sub-kind ("Dal", "Sabzi", "Sambar", "a poriyal"), not one dish: never placed as
  *  it is. The catalog's items of it are the family's own (lead's rule, 25 Nov). A staple's name ("Rice", "Roti") is its dish. */
 export function isCategoryName(name: string): boolean {
+  // A regional word alone ("a curry", "pachadi", decided 20) names whatever its meaning for the family is: a category.
+  if (regionalWordOf(name)) return true;
   const m = matchDish(name);
   if (!m || m.by === "item") return false;
   return !catalogKind(m.kind)?.staple;
@@ -110,6 +112,8 @@ export function isCategoryName(name: string): boolean {
 /** Where a family's category word sits: its kind, and its sub-kind when it named one. */
 function categoryPlace(r: LibraryDish): Place | null {
   if (r.catalog_item || !isCategoryName(r.name)) return null;
+  // A regional word: where setup placed it for this family (none when it was not placed).
+  if (regionalWordOf(r.name)) { const k = r.kind ? catalogKind(r.kind) : null; return k && !k.staple ? { kind: k.name, sub: k.subs.length > 1 ? r.sub ?? null : null } : null; }
   const m = matchDish(r.name)!;
   const kind = r.kind && catalogKind(r.kind) ? r.kind : m.kind;
   const sub = m.by === "sub" ? m.sub : r.sub;

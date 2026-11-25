@@ -4,7 +4,8 @@
 // cuisine profile.
 import { describe, it, expect } from "bun:test";
 import { boot } from "./testkit";
-import { CATALOG, catalogContains, catalogSub, checkMealShape, matchDish, plannerTags, suggestable, suggestMeals, type MealKind, type MealTemplate } from "./kinds";
+import { CATALOG, catalogContains, catalogSub, checkMealShape, matchDish, plannerTags, regionalDish, regionalIn, regionalMeaning, regionalWordOf, suggestable, suggestMeals, type MealKind,
+  type MealTemplate } from "./kinds";
 import { BASE_TAGS } from "./db/constants";
 import { commit, getLibraryDish, getSlot, upsertLibrary, upsertSlot } from "./slotStore";
 import { getHouse, houseView } from "./family";
@@ -167,5 +168,48 @@ describe("usal (decided 16, 18)", () => {
     const { matchDish } = await import("./kinds");
     expect(matchDish("Usal")).toMatchObject({ kind: "Dal", sub: "Rajma/Chole" });
     expect(matchDish("Usal pav")).toMatchObject({ kind: "Pav meal", sub: "Misal" });
+  });
+});
+
+// Owner, 26 Nov (decided 20): "curry means dry sabji even in Tamil Nadu and generally South India: it's actually kari";
+// "pachadi" is a chutney in Andhra and Telangana but a curd dish (raita-like) in Kerala and Tamil Nadu.
+describe("regional words (decided 20)", () => {
+  const curry = regionalWordOf("curry")!, pachadi = regionalWordOf("pachadi")!;
+  const at = (w: typeof curry, cs: string[]) => { const m = regionalMeaning(w, cs); return m ? [m.kind, m.sub] : null; };
+  it("are never matched plainly: the word alone is no kind until the family's region says which", () => {
+    expect(matchDish("curry")).toBeNull();
+    expect(matchDish("pachadi")).toBeNull();
+    expect(regionalWordOf("a kura")?.word).toBe("curry");
+    expect(regionalWordOf("kari")?.word).toBe("curry");
+    expect(regionalWordOf("sabzi")).toBeNull();
+  });
+  it("curry: a dry vegetable dish in South India (a vepudu in Andhra, a poriyal or thoran in Tamil Nadu, Kerala, Karnataka); a gravy elsewhere", () => {
+    expect(at(curry, ["tamil", "south"])).toEqual(["Sabzi", "Poriyal/Thoran"]);
+    expect(at(curry, ["kerala"])).toEqual(["Sabzi", "Poriyal/Thoran"]);
+    expect(at(curry, ["andhra", "south"])).toEqual(["Sabzi", "Vepudu"]);
+    expect(at(curry, ["south"])).toEqual(["Sabzi", "Poriyal/Thoran"]);
+    expect(at(curry, ["punjab", "north"])).toEqual(["Gravy", "Curry"]);
+    expect(at(curry, ["bengal", "east"])).toEqual(["Gravy", "Curry"]);
+  });
+  it("pachadi: a chutney in Andhra, Telangana and Karnataka; a curd dish in Kerala and Tamil Nadu", () => {
+    expect(at(pachadi, ["andhra", "south"])).toEqual(["Chutney", null]);
+    expect(at(pachadi, ["karnataka"])).toEqual(["Chutney", null]);
+    expect(at(pachadi, ["tamil", "south"])).toEqual(["Raita", null]);
+    expect(at(pachadi, ["kerala"])).toEqual(["Raita", null]);
+  });
+  it("a region that is not clear (none, South India alone for pachadi, or two regions that disagree) settles nothing", () => {
+    expect(at(curry, [])).toBeNull();
+    expect(at(pachadi, ["south"])).toBeNull();
+    expect(at(curry, ["tamil", "andhra", "south"])).toBeNull();
+  });
+  it("a dish named with one is placed by its vegetable and the word's meaning; a dish of another kind is not", () => {
+    const place = (name: string, cs: string[]) => { const r = regionalIn(name)!; const m = regionalMeaning(r.word, cs); return m ? regionalDish(r.base, m) : null; };
+    expect(place("Dondakaya curry", ["andhra"])).toMatchObject({ kind: "Sabzi", sub: "Vepudu" });
+    expect(place("Beans curry", ["tamil"])).toMatchObject({ kind: "Sabzi", sub: "Poriyal/Thoran" });
+    expect(place("Tomato pachadi", ["andhra"])).toMatchObject({ kind: "Chutney" });
+    expect(place("Cucumber pachadi", ["kerala"])).toMatchObject({ kind: "Raita" });
+    expect(place("Aloo curry", ["north"])).toMatchObject({ kind: "Gravy", sub: "Curry" });
+    expect(place("Paneer curry", ["tamil"])).toBeNull();
+    expect(matchDish("Chicken curry")?.kind).toBe("Chicken");
   });
 });

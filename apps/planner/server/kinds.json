@@ -6324,7 +6324,6 @@
       "aka": [
         "gravy sabzi",
         "rasedar sabzi",
-        "curry",
         "tari wali sabzi",
         "masala",
         "korma",
@@ -9718,7 +9717,6 @@
     {
       "name": "Raita",
       "aka": [
-        "pachadi",
         "thayir pachadi",
         "perugu pachadi"
       ],
@@ -10036,8 +10034,7 @@
         "thogayal",
         "thuvaiyal",
         "chammanthi",
-        "podi",
-        "pachadi (andhra)"
+        "podi"
       ],
       "cuisines": [
         "north",
@@ -12310,6 +12307,84 @@
           ],
           "suggest": true,
           "sub": "Ladoo"
+        }
+      ]
+    }
+  ],
+  "regional": [
+    {
+      "word": "curry",
+      "forms": [
+        "curry",
+        "curries",
+        "kari",
+        "kura",
+        "koora"
+      ],
+      "meanings": [
+        {
+          "cuisines": [
+            "andhra"
+          ],
+          "kind": "Sabzi",
+          "sub": "Vepudu"
+        },
+        {
+          "cuisines": [
+            "tamil",
+            "kerala",
+            "karnataka",
+            "south"
+          ],
+          "kind": "Sabzi",
+          "sub": "Poriyal/Thoran"
+        },
+        {
+          "cuisines": [
+            "north",
+            "west",
+            "east",
+            "central",
+            "northeast",
+            "punjab",
+            "rajasthan",
+            "kashmir",
+            "gujarat",
+            "maharashtra",
+            "goa",
+            "sindhi",
+            "parsi",
+            "bengal",
+            "odisha",
+            "assam"
+          ],
+          "kind": "Gravy",
+          "sub": "Curry"
+        }
+      ]
+    },
+    {
+      "word": "pachadi",
+      "forms": [
+        "pachadi",
+        "pachdi"
+      ],
+      "meanings": [
+        {
+          "cuisines": [
+            "andhra",
+            "karnataka"
+          ],
+          "kind": "Chutney",
+          "sub": null
+        },
+        {
+          "cuisines": [
+            "kerala",
+            "tamil"
+          ],
+          "kind": "Raita",
+          "sub": null
         }
       ]
     }

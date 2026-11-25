@@ -21,7 +21,7 @@ import { dishKey } from "./dishText";
 import { cookVisits, daysSaid, getHouse, houseView, isObject, LONG_DAY, refuse, writeRoutes, type Db, type Emit } from "./family";
 import { addRule, commit, deleteSeedSlotDays, listLibrary, listRules, listSlots, removeLibrary, removeRule, saveSlotDay, seedSlotDays,
   upsertLibrary, upsertSlot, type Change, type LibraryDish, type Rule, type RuleInput, type Slot } from "./slotStore";
-import { CATALOG, catalogKind, catalogSub, checkMealShape, matchDish, norm, plannerTags, suggestMeals, type CatalogKind, type MealKind, type MealTemplate,
+import { CATALOG, catalogKind, catalogSub, checkMealShape, matchDish, norm, plannerTags, regionalDish, regionalIn, regionalMeaning, regionalWordOf, suggestMeals, type CatalogKind, type MealKind, type MealTemplate,
   type TemplatePart } from "./kinds";
 import type { ModelCall, ModelResult } from "./model";
 import { isAllergyRule } from "./allergy";
@@ -160,7 +160,8 @@ export const KINDS_SYSTEM = `Each dish below is one an Indian family named for a
 - named: "category" when the family's words mean any dish of a kind or sub-kind ("any dry veg", "a different dosa each time", "some dal or other"); "dish" when they name one dish. A dish's name said alone is a dish.
 - parts: for a dish that is rice mixed with a curry or with curd, its two parts as [{ "kind", "sub" }]: the rice and the other. Else leave it out.
 - known: a dish that comes with known (its kind and sub-kind, already found) needs only named; copy its kind and sub.
-Example (another family, not this one): dishes [{ "name": "Tondli", "meal": "lunch", "words": "rice, dal and tondli" }, { "name": "Parwal", "meal": "dinner", "words": "parwal with gravy" }, { "name": "Dry veg", "meal": "dinner", "words": "roti with any dry veg" }, { "name": "Dahi chawal", "meal": "lunch", "words": "dahi chawal when it's hot" }, { "name": "Sambar sadam", "meal": "lunch", "words": "sambar sadam" }, { "name": "Masala oats", "meal": "breakfast", "words": "masala oats" }, { "name": "Steamed sweet potato", "meal": "breakfast", "words": "steamed sweet potato" }, { "name": "Upma", "meal": "lunch", "known": "Upma", "words": "upma when we're rushed" }, { "name": "Dosa", "meal": "lunch", "known": "Dosa", "words": "a different dosa every Saturday" }] gives [{ "Tondli", lunch, kind "Sabzi", sub "Sabzi", named "dish" }, { "Parwal", dinner, kind "Gravy", sub "Curry", named "dish" }, { "Dry veg", dinner, kind "Sabzi", sub "Sabzi", named "category" }, { "Dahi chawal", lunch, kind "Curd", sub "Curd", named "dish", parts [{ "Rice" }, { "Curd" }] }, { "Sambar sadam", lunch, kind "Rice curry", sub "Sambar", named "dish", parts [{ "Rice" }, { "Rice curry", "Sambar" }] }, { "Masala oats", breakfast, kind "Porridge", named "dish" }, { "Steamed sweet potato", breakfast, own true, named "dish" }, { "Upma", lunch, kind "Upma", named "dish" }, { "Dosa", lunch, kind "Dosa", named "category" }].`;
+- regional: some words mean different dishes by region; each comes with its meaning in each region. For a dish named with one, read the family's region from their other dishes (family_dishes) and their words, and place it as that region's meaning; a dish named with the word and a vegetable ("carrot curry") is that vegetable's dish of the meaning's kind. Nothing tells the region: the dish's own words decide (said with gravy: Gravy; dry or fried: Sabzi).
+Example (another family, not this one): dishes [{ "name": "Tondli", "meal": "lunch", "words": "rice, dal and tondli" }, { "name": "Parwal", "meal": "dinner", "words": "parwal with gravy" }, { "name": "Dry veg", "meal": "dinner", "words": "roti with any dry veg" }, { "name": "Dahi chawal", "meal": "lunch", "words": "dahi chawal when it's hot" }, { "name": "Sambar sadam", "meal": "lunch", "words": "sambar sadam" }, { "name": "Masala oats", "meal": "breakfast", "words": "masala oats" }, { "name": "Steamed sweet potato", "meal": "breakfast", "words": "steamed sweet potato" }, { "name": "Upma", "meal": "lunch", "known": "Upma", "words": "upma when we're rushed" }, { "name": "Dosa", "meal": "lunch", "known": "Dosa", "words": "a different dosa every Saturday" }] gives [{ "Tondli", lunch, kind "Sabzi", sub "Sabzi", named "dish" }, { "Parwal", dinner, kind "Gravy", sub "Curry", named "dish" }, { "Dry veg", dinner, kind "Sabzi", sub "Sabzi", named "category" }, { "Dahi chawal", lunch, kind "Curd", sub "Curd", named "dish", parts [{ "Rice" }, { "Curd" }] }, { "Sambar sadam", lunch, kind "Rice curry", sub "Sambar", named "dish", parts [{ "Rice" }, { "Rice curry", "Sambar" }] }, { "Masala oats", breakfast, kind "Porridge", named "dish" }, { "Steamed sweet potato", breakfast, own true, named "dish" }, { "Upma", lunch, kind "Upma", named "dish" }, { "Dosa", lunch, kind "Dosa", named "category" }]. Another family: family_dishes ["Rice", "Mor kuzhambu", "Curry", "Pachadi", "Carrot curry"], regional curry and pachadi, dishes [{ "name": "Pachadi", "meal": "lunch", "words": "rice with mor kuzhambu, a curry and pachadi, the curd one" }, { "name": "Carrot curry", "meal": "lunch", "words": "curry is mostly carrot curry" }] gives [{ "Pachadi", lunch, kind "Raita", named "category" }, { "Carrot curry", lunch, kind "Sabzi", sub "Poriyal/Thoran", named "dish" }] (mor kuzhambu and the curd pachadi tell a Tamil kitchen).`;
 const KINDS_SCHEMA = { type: "object", required: ["dishes"], properties: { dishes: { type: "array", items: { type: "object", required: ["name"], properties: {
   name: STR, meal: STR, kind: STR, sub: STR, own: { type: "boolean" }, named: { type: "string", enum: ["dish", "category"] },
   parts: { type: "array", items: { type: "object", required: ["kind"], properties: { kind: STR, sub: STR } } } } } } } };
@@ -1077,8 +1078,23 @@ const isStaple = (kind: string): boolean => !!catalogKind(kind)?.staple;
 /** Where code places a dish, from the catalog alone; null when the catalog does not name it (the model reads it). An item is a
  *  dish; a sub-kind or kind is a category. Rice said with a curry or curd that the catalog names ("rasam rice", "rajma chawal")
  *  is two parts: the rice and the other (never when the words are one rice dish of the catalog's: "lemon rice"). */
-export function codePlace(name: string, word = name.trim().toLowerCase()): Place | null {
+export function codePlace(name: string, word = name.trim().toLowerCase(), region: readonly string[] = []): Place | null {
+  // A word that means different dishes by region (decided 20: "curry", "pachadi") is settled here only when the family's region
+  // (their other dishes' cuisines, the region they name) says which; else the kinds read decides.
+  const rw = regionalWordOf(name);
+  if (rw) {
+    const m = regionalMeaning(rw, region), k = m ? catalogKind(m.kind) : null;
+    return m && k ? { kind: k.name, sub: m.sub ?? soleSub(k), item: null, own: false, named: "category", word } : null;
+  }
   const whole = matchDish(name);
+  const rin = regionalIn(name);
+  if (rin && (!whole || rin.word.meanings.some((x) => norm(x.kind) === norm(whole.kind)))) {
+    // A dish named with one ("cabbage curry", "tomato pachadi"): its vegetable and the word's meaning. A catalog item of the
+    // word's own kinds yields to the meaning ("cucumber pachadi" in an Andhra home is a chutney); one of another kind stays.
+    const m = regionalMeaning(rin.word, region), hit = m ? regionalDish(rin.base, m) : null;
+    if (hit) return { kind: hit.kind, sub: hit.sub, item: hit.item, own: false, named: "dish", word };
+    if (!whole) return null;
+  }
   const ws = norm(name).split(" ");
   if (ws.length > 1) for (const [rice, rest] of [[ws[ws.length - 1], ws.slice(0, -1)], [ws[0], ws.slice(1)]] as const) {
     if (!RICE_WORDS.has(rice)) continue;
@@ -1138,11 +1154,19 @@ export function placeOf(ask: KindsAsk, x: Record<string, unknown>, word: string)
 
 /** The kinds read: one fast call for every dish asked. A dish the answer leaves out, or a failed call, is not placed (the
  *  caller keeps what code found, or none). */
-export async function kindsRead(model: ModelCall, asks: KindsAsk[], until: number, log: (l: string) => void): Promise<Map<string, Place>> {
+/** The regional words among these dishes' names, each with its meanings by region, for the kinds read (decided 20). */
+export function regionalLines(names: string[]): { word: string; meanings: string[] }[] {
+  const words = uniq(names.map((n) => regionalWordOf(n) ?? regionalIn(n)?.word).filter((w): w is NonNullable<typeof w> => !!w).map((w) => w.word));
+  return words.map((w) => CATALOG.regional!.find((r) => r.word === w)!).map((r) => ({ word: r.word,
+    meanings: r.meanings.map((m) => `${m.cuisines.map((c) => CUISINE_NAMES[c] ?? c).join(", ")}: ${[m.kind, m.sub].filter(Boolean).join(" / ")}`) }));
+}
+
+export async function kindsRead(model: ModelCall, asks: KindsAsk[], until: number, log: (l: string) => void, family: string[] = []): Promise<Map<string, Place>> {
   const out = new Map<string, Place>();
   if (!asks.length) return out;
+  const regional = regionalLines(asks.map((a) => a.name));
   const user = JSON.stringify({ catalog: catalogLines(), dishes: asks.map((a) => ({ name: a.name, meal: a.meal, words: a.words,
-    ...(a.known ? { known: [a.known.kind, a.known.sub].filter(Boolean).join(" / ") } : {}) })) });
+    ...(a.known ? { known: [a.known.kind, a.known.sub].filter(Boolean).join(" / ") } : {}) })), ...(regional.length ? { regional, family_dishes: family } : {}) });
   // Its own deadline, inside the setup's: never what pushes the setup past its budget (eval h4 ran 150.09 s); on a timeout what
   // it would place stays the family's fixed dish.
   const by = Math.min(until - KINDS_MARGIN_MS, Date.now() + KINDS_MS);
@@ -1344,7 +1368,7 @@ const REGION_OF: Record<string, string> = { tamil: "south", kerala: "south", kar
   goa: "west", parsi: "west", sindhi: "west", rajasthan: "north", punjab: "north", kashmir: "north", bengal: "east", odisha: "east", assam: "northeast" };
 /** The words a family says its region or kitchen in, for each catalog cuisine. */
 export const CUISINE_WORDS: Record<string, string[]> = { tamil: ["tamil", "tamilian"], kerala: ["kerala", "keralite", "malayali"], karnataka: ["karnataka", "kannadiga"],
-  andhra: ["andhra", "telugu"], maharashtra: ["maharashtrian", "marathi"], gujarat: ["gujarati"], goa: ["goan"], parsi: ["parsi"], sindhi: ["sindhi"],
+  andhra: ["andhra", "telugu", "telangana"], maharashtra: ["maharashtrian", "marathi"], gujarat: ["gujarati"], goa: ["goan"], parsi: ["parsi"], sindhi: ["sindhi"],
   rajasthan: ["rajasthani", "marwari"], punjab: ["punjabi"], kashmir: ["kashmiri"], bengal: ["bengali"], odisha: ["odia", "oriya"], assam: ["assamese"],
   south: ["south indian"], north: ["north indian"] };
 /** A cuisine in words, for the read-back. */
@@ -1382,15 +1406,25 @@ export const kitchenLine = (cuisines: readonly string[]): string | null =>
 
 /** The meals whose kinds are read now, and their dishes' places: code's, else what was read before, else asked of the kinds
  *  read (`asks`; until it answers, code's place as a dish, or none). */
-export type KindsPlan = { slots: Slot[]; places: Map<string, Place | null>; asks: KindsAsk[]; cache: Record<string, Place> };
+export type KindsPlan = { slots: Slot[]; places: Map<string, Place | null>; asks: KindsAsk[]; cache: Record<string, Place>;
+  /** All the family's dish names: the kinds read's context for a regional word. */ family?: string[] };
 const placeKey = (slot: string, key: string) => `${slot.toLowerCase()}|${key}`;
 const cacheKey = (meal: string, key: string) => `${meal}|${key}`;
 const familyDishes = (db: Db, slot: string): LibraryDish[] => listLibrary(db, { slot }).filter((d) => d.origin !== "planner_suggested");
 
 /** Every meal on a first setup; on a correction the meals whose dishes or example plates changed, a meal with a dish the new
  *  replies name (read again, not from before: "the khichdi is any khichdi"), and any meal not read so yet. */
+/** The family's region as their words tell it (decided 20): the cuisines of their dishes code can place without a regional
+ *  word, and the regions they name. What a regional word of theirs means is read against it. */
+export function familyRegion(db: Db, lines: string[]): string[] {
+  const places = listLibrary(db).filter((d) => d.origin !== "planner_suggested" && !regionalWordOf(d.name) && !regionalIn(d.name))
+    .map((d) => codePlace(d.name)).filter((p): p is Place => !!p);
+  return cuisinesOf(places, lines);
+}
+
 export function planKinds(db: Db, opts: { first: boolean; ops: Pick<Ops, "library" | "removeLibrary" | "seed">; read: Pick<SetupRead, "library">; cache: Record<string, Place>;
-  fresh?: string[] }): KindsPlan {
+  fresh?: string[]; lines?: string[] }): KindsPlan {
+  const region = familyRegion(db, opts.lines ?? []);
   const renamed = (name: string) => !opts.first && !!opts.fresh && namedIn(name, opts.fresh);
   const touched = new Set([...opts.ops.library, ...opts.ops.removeLibrary, ...opts.ops.seed].map((d) => d.slot.toLowerCase()));
   const slots = listSlots(db).filter((s) => opts.first || touched.has(s.name.toLowerCase()) || s.templates === null
@@ -1402,7 +1436,7 @@ export function planKinds(db: Db, opts: { first: boolean; ops: Pick<Ops, "librar
       const quote = opts.read.library.find((x) => dishKey(x.name) === d.key && same(x.slot, slot.name))?.quote ?? "";
       const had = renamed(d.name) ? undefined : opts.cache[cacheKey(meal, d.key)];
       const word = quote ? wordOf(d.name, quote) : had?.word ?? wordOf(d.name);
-      const code = codePlace(d.name, word);
+      const code = codePlace(d.name, word, region);
       if (code && !needsNamed(code, meal)) places.set(placeKey(slot.name, d.key), code);
       else if (had) places.set(placeKey(slot.name, d.key), { ...had, word });
       else {
@@ -1412,7 +1446,8 @@ export function planKinds(db: Db, opts: { first: boolean; ops: Pick<Ops, "librar
       }
     }
   }
-  return { slots, places, asks, cache: opts.cache };
+  const family = uniq(listLibrary(db).filter((d) => d.origin !== "planner_suggested").map((d) => d.name));
+  return { slots, places, asks, cache: opts.cache, family };
 }
 
 /** A catalog item's contents laid on a dish's row: the catalog answers its tags (what it does not list, the item does not have),
@@ -1527,7 +1562,7 @@ export async function applySetup(deps: { db: Db; emit: Emit; model: ModelCall; p
   // the contains read asks only what the catalog cannot say. Then the contains read and the kinds read (what code could not
   // place) at once.
   const before4 = savedOf(deps.db).state;
-  const plan = planKinds(deps.db, { first, ops, read: checked.read, cache: before4?.places ?? {}, fresh });
+  const plan = planKinds(deps.db, { first, ops, read: checked.read, cache: before4?.places ?? {}, fresh, lines: said });
   commit(deps.db, deps.emit, (tx, changes) => {
     for (const slot of plan.slots) for (const d of familyDishes(tx, slot.name)) {
       const p = plan.places.get(placeKey(slot.name, d.key));
@@ -1546,7 +1581,7 @@ export async function applySetup(deps: { db: Db; emit: Emit; model: ModelCall; p
     ask.set(d.key, had);
   }
   const [contains, placed] = await Promise.all([ask.size ? containsRead(deps.model, ask, until, log) : new Map<string, Record<string, boolean>>(),
-    kindsRead(deps.model, plan.asks, until, log)]);
+    kindsRead(deps.model, plan.asks, until, log, plan.family)]);
   commit(deps.db, deps.emit, (tx, changes) => {
     for (const d of lib) {
       const r = contains.get(d.key);

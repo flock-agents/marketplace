@@ -12,7 +12,10 @@ export type CatalogItem = { name: string; aka?: string[]; cuisines?: string[]; c
 export type CatalogSub = { name: string; aka: string[]; cuisines: string[]; meals: string[] };
 export type CatalogKind = { name: string; aka: string[]; cuisines: string[]; meals: string[]; staple: boolean; part: string; diet: string;
   subs: CatalogSub[]; items: CatalogItem[] };
-export type Catalog = { version: number; tags: string[]; parents: Record<string, string>; kinds: CatalogKind[]; notes?: string[] };
+/** A word that means different dishes by region (decided 20): each meaning holds in its cuisines. */
+export type RegionalMeaning = { cuisines: string[]; kind: string; sub: string | null };
+export type RegionalWord = { word: string; forms: string[]; meanings: RegionalMeaning[] };
+export type Catalog = { version: number; tags: string[]; parents: Record<string, string>; kinds: CatalogKind[]; notes?: string[]; regional?: RegionalWord[] };
 
 export const CATALOG = catalogJson as Catalog;
 
@@ -51,6 +54,8 @@ const ix = (): Index => (index ??= buildIndex(CATALOG));
  *  kind, each by its name or other names, as said or as a singular. Null when nothing matches, or when the words name more than
  *  one place at the level that matched ("shaak" is both a dry and a gravy vegetable): those are left to the model. */
 export function matchDish(words: string): DishMatch | null {
+  // A regional word alone ("curry", "pachadi") is read in the family's context, never matched plainly (decided 20).
+  if (regionalWordOf(words)) return null;
   for (const level of ["items", "subs", "kinds"] as const) {
     for (const f of forms(words)) {
       const hits = ix()[level].get(f);
@@ -184,4 +189,55 @@ export function plannerTags(itemName: string): { contains: string[]; read: strin
   const out = new Set<string>();
   for (const t of hit.item.contains) { out.add(t); for (const p of PLANNER_PARENTS[t] ?? []) out.add(p); }
   return { contains: [...out], read: PLANNER_READ_TAGS };
+}
+
+// ── Words that mean different dishes by region (decided 20) ──
+
+const BROAD_REGIONS = ["south", "north", "west", "east", "central", "northeast"];
+/** The regional word these words are, alone ("curry", "a kura", "curries"); null for any other words. */
+export function regionalWordOf(words: string): RegionalWord | null {
+  const fs = forms(words.replace(/^\s*(a|an|some|any|one)\s+/i, ""));
+  return (CATALOG.regional ?? []).find((r) => r.forms.some((f) => fs.includes(norm(f)))) ?? null;
+}
+/** A dish named with a regional word ("dondakaya curry", "tomato pachadi", "kura beans"): the word and the rest of the name (its
+ *  vegetable or base). Null when the name holds none, or is the word alone. */
+export function regionalIn(words: string): { word: RegionalWord; base: string } | null {
+  const ws = norm(words).split(" ").filter(Boolean);
+  if (ws.length < 2) return null;
+  for (const [w, rest] of [[ws[ws.length - 1], ws.slice(0, -1)], [ws[0], ws.slice(1)]] as const) {
+    const r = regionalWordOf(w);
+    if (r) return { word: r, base: rest.join(" ") };
+  }
+  return null;
+}
+/** What a regional word means for a family of these cuisines: the one meaning their narrow cuisines (Tamil, Andhra) name, else
+ *  the one their broad regions name. Null when their cuisines name none, or more than one (the region is not clear). */
+export function regionalMeaning(word: RegionalWord, cuisines: readonly string[]): RegionalMeaning | null {
+  const fam = cuisines.map(norm);
+  const narrow = fam.filter((c) => !BROAD_REGIONS.includes(c)), broad = fam.filter((c) => BROAD_REGIONS.includes(c));
+  const by = (cs: string[]) => {
+    const hits = word.meanings.filter((m) => m.cuisines.some((c) => cs.includes(norm(c))));
+    return new Set(hits.map((m) => `${m.kind}|${m.sub ?? ""}`)).size === 1 ? hits[0] : hits.length ? "many" : null;
+  };
+  const n = narrow.length ? by(narrow) : null;
+  if (n === "many") return null;
+  if (n) return n;
+  const b = broad.length ? by(broad) : null;
+  return b && b !== "many" ? b : null;
+}
+/** A dish named with a regional word, placed by its meaning and its base: the meaning's kind and sub-kind, and the catalog item
+ *  of that sub-kind (else kind) whose name holds the base, when exactly one does ("dondakaya curry" in an Andhra home is the
+ *  Vepudu item "Dondakaya vepudu"). Null when the base is a dish of another kind (a paneer or chicken curry is no vegetable). */
+export function regionalDish(base: string, m: RegionalMeaning): DishMatch | null {
+  const k = catalogKind(m.kind);
+  if (!k) return null;
+  // The base is a vegetable or fruit (the catalog names it not, or as a vegetable dish, a salad or fruit), or a dish of the
+  // meaning's own kind (its sub-kind then kept: a paneer curry in a North Indian home is a paneer gravy).
+  const b = matchDish(base);
+  if (b && !["Sabzi", "Salad", "Fruit"].includes(b.kind) && b.kind !== k.name) return null;
+  const sub = b && b.kind === k.name && b.sub ? b.sub : m.sub ?? (k.subs.length === 1 ? k.subs[0].name : null);
+  const bw = norm(base).split(" ");
+  const holds = (it: CatalogItem) => [it.name, ...(it.aka ?? [])].some((w) => { const ws = norm(w).split(" "); return bw.every((x) => ws.includes(x)); });
+  const hit = k.items.filter((it) => (!sub || norm(it.sub) === norm(sub)) && holds(it));
+  return hit.length === 1 ? { kind: k.name, sub: hit[0].sub, item: hit[0].name, by: "item" } : { kind: k.name, sub, item: null, by: "sub" };
 }

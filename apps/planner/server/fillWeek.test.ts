@@ -519,3 +519,13 @@ describe("the family's day and count words hold for whatever stands for the dish
     expect(WEEK.slice(0, 6).filter((d) => r.at(d, "Dinner").some((x) => /dal/i.test(x))).length).toBeGreaterThan(0);
   });
 });
+
+describe("a regional word the family used as a category (decided 20)", () => {
+  it("'a curry' in an Andhra home, stored as Sabzi / Vepudu: never the bare word on a plate, always a real dry vegetable dish", () => {
+    const kinds: MealKind[] = [{ name: "Rice", staple: true }, { name: "Sabzi", subs: ["Vepudu"] }];
+    const lib = [dish("Rice", "Lunch", "Rice"), dish("Curry", "Lunch", "Sabzi", { sub: "Vepudu" }), dish("Cabbage curry", "Lunch", "Sabzi", { sub: "Vepudu" })];
+    const r = run({ slots: [slot("Lunch", { kinds, templates: [T({ kind: "Rice" }, { kind: "Sabzi", sub: "Vepudu" })] })], library: lib, cuisines: ["andhra", "south"] });
+    for (const d of WEEK) { expect(r.at(d, "Lunch")).not.toContain("Curry"); expect(r.at(d, "Lunch")).toHaveLength(2); }
+    expect(r.ownItems?.size).toBeGreaterThan(0);
+  });
+});

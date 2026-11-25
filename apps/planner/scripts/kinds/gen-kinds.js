@@ -454,7 +454,7 @@ K("V","Sabzi","sabji; subzi; sukhi sabzi; dry sabzi; bhaji; poriyal; porial; tho
  "Aloo posto | | rv | bengal",
  "Bandhakopir torkari | | rv | bengal",
 ]);
-K("V","Gravy sabzi","rasedar sabzi; curry; tari wali sabzi; kurma; korma; rassa; dalna; shaak","north south west east","lunch dinner",false,"main","veg",[
+K("V","Gravy sabzi","rasedar sabzi; tari wali sabzi; kurma; korma; rassa; dalna; shaak","north south west east","lunch dinner",false,"main","veg",[
  "Aloo matar | | rv og",
  "Aloo tamatar | aloo rasedar | rv",
  "Aloo palak | palak aloo | rv og",
@@ -736,7 +736,7 @@ K("N","Egg curry","anda curry; muttai kuzhambu; dimer dalna; egg masala","north 
 ]);
 
 // ---------------- SIDES ----------------
-K("SD","Raita","pachadi; thayir pachadi; perugu pachadi","north south west east","lunch dinner",false,"side","veg",[
+K("SD","Raita","thayir pachadi; perugu pachadi","north south west east","lunch dinner",false,"side","veg",[
  "Boondi raita | | d",
  "Cucumber raita | kheera raita | d",
  "Onion raita | onion tomato raita | d og",
@@ -762,7 +762,7 @@ K("SD","Salad","kachumber; koshimbir; kosambari","north south west east","lunch 
  "Fruit chaat | fruit salad |",
  "Chana salad | chickpea salad | og",
 ]);
-K("SD","Chutney","chatni; thogayal; thuvaiyal; chammanthi; podi; pachadi (andhra)","north south west east","breakfast lunch dinner snack",false,"side","veg",[
+K("SD","Chutney","chatni; thogayal; thuvaiyal; chammanthi; podi","north south west east","breakfast lunch dinner snack",false,"side","veg",[
  "Coconut chutney | thengai chutney; kobbari pachadi | c",
  "Tomato chutney | thakkali chutney | og",
  "Onion tomato chutney | kara chutney | og",
@@ -1023,7 +1023,7 @@ Tandoori chicken|Chicken tikka
 // Owner review 4: Uttapam is a Dosa; one Gravy kind (gravy sabzi + paneer gravies + kofta curries).
 fold("Uttapam", "Dosa");
 moveItem("Paneer bhurji", "Sabzi");
-merge(mk("V","Gravy","gravy sabzi; rasedar sabzi; curry; tari wali sabzi; masala; korma; kurma; kofta; kofta curry; salan; rassa; dalna; shaak; paneer; paneer sabzi","north south west east","lunch dinner",false,"main","veg"),
+merge(mk("V","Gravy","gravy sabzi; rasedar sabzi; tari wali sabzi; masala; korma; kurma; kofta; kofta curry; salan; rassa; dalna; shaak; paneer; paneer sabzi","north south west east","lunch dinner",false,"main","veg"),
   [["Gravy sabzi"],["Paneer"],["Kofta curry"]]);
 
 // Owner review 3: a regional style of a dish listed elsewhere is suggested only to a family whose
@@ -1060,7 +1060,7 @@ for (const k of kinds) for (const it of k.items) SRC.set(it.split("|")[0].trim()
 moveItem("Chicken keema", "Chicken curry");
 merge(mk("V","Sabzi","sabji; subzi; sukhi sabzi; dry sabzi; bhaji; poriyal; porial; thoran; torkari; palya; vepudu; upkari; shaak; fugath; sukke; bhaja; bharta; chokha; pitika; bharit; bharwa; bharli; stuffed vegetable","north south west east central","lunch dinner tiffin",false,"main","mixed"),
   [["Sabzi"],["Bhaja"],["Bharta"],["Stuffed vegetable"]]);
-merge(mk("V","Gravy","gravy sabzi; rasedar sabzi; curry; tari wali sabzi; masala; korma; kurma; kofta; kofta curry; salan; rassa; dalna; shaak; paneer; paneer sabzi; avial; olan; erissery; kalan; theeyal; stew; ishtu","north south west east","breakfast lunch dinner",false,"main","veg"),
+merge(mk("V","Gravy","gravy sabzi; rasedar sabzi; tari wali sabzi; masala; korma; kurma; kofta; kofta curry; salan; rassa; dalna; shaak; paneer; paneer sabzi; avial; olan; erissery; kalan; theeyal; stew; ishtu","north south west east","breakfast lunch dinner",false,"main","veg"),
   [["Gravy"],["Kerala curry","kerala"]]);
 merge(mk("N","Chicken","chicken; murgh; kozhi; kodi; chicken curry; chicken fry; chicken dry","north south west east","lunch dinner snack",false,"main","nonveg"),
   [["Chicken curry"],["Chicken fry"]]);
@@ -1081,7 +1081,7 @@ const SUBDEF = {
   "Fish & seafood": [["Fish curry","macher jhol; meen curry; meen kuzhambu; chepala pulusu; ambot tik; tenga; machli curry",S],["Fish fry","maach bhaja; meen varuval; tawa fish",S],["Prawn","prawns; jhinga; chingri; kolambi; royyalu; eral; shrimp",S]],
   Egg: [["Eggs","omelette; bhurji; anda; boiled eggs",S],["Egg curry","anda curry; muttai kuzhambu; dimer dalna; egg masala",S]],
   Khichdi: [["Khichdi","khichri; khichuri; khichadi","north west east"],["Pongal","ven pongal; khara pongal; huggi; pongali","south"]],
-  "Pav meal": [["Misal","misal pav; usal pav; usal","maharashtra"],["Pav bhaji","bhaji pav; masala pav","maharashtra gujarat"],["Vada pav","dabeli","maharashtra gujarat"]],
+  "Pav meal": [["Misal","misal pav; usal pav","maharashtra"],["Pav bhaji","bhaji pav; masala pav","maharashtra gujarat"],["Vada pav","dabeli","maharashtra gujarat"]],
 };
 const LEGUME = new Set(["Rajma","Jammu rajma","Chole","Pindi chole","Kala chana curry","Lobia","Safed matar","Ghugni","Kadala curry","Chana ghassi","Sprouts curry","Matki usal","Moong usal","Vatana usal"]);
 function subOf(kind, name, cuis) {
@@ -1149,6 +1149,17 @@ const ITEM_MEALS = {
 };
 for (const [n, m] of Object.entries(KIND_MEALS)) kinds[kindIdx(n)].meals = m;
 
+// ---------------- OWNER 26 NOV: words that mean different dishes by region (decided 20) ----------------
+// A regional word is read in the family's context, never by plain aka matching: "curry" (kari, kura) is a dry vegetable dish
+// in South Indian homes and a gravy elsewhere; "pachadi" is a chutney in Andhra, Telangana and Karnataka and a curd dish
+// (raita-like) in Kerala and Tamil Nadu. Each meaning names the cuisines it holds in and its kind (and sub-kind). Setup
+// resolves the word in code only when the family's region is clear from their other words; else the kinds read decides.
+const SOUTH_OTHER = "tamil kerala karnataka south", NOT_SOUTH = "north west east central northeast punjab rajasthan kashmir gujarat maharashtra goa sindhi parsi bengal odisha assam";
+const REGIONAL_WORDS = [
+  { word: "curry", forms: "curry; curries; kari; kura; koora", meanings: [["andhra", "Sabzi", "Vepudu"], [SOUTH_OTHER, "Sabzi", "Poriyal/Thoran"], [NOT_SOUTH, "Gravy", "Curry"]] },
+  { word: "pachadi", forms: "pachadi; pachdi", meanings: [["andhra karnataka", "Chutney", null], ["kerala tamil", "Raita", null]] },
+];
+
 // ---------------- BUILD ----------------
 const errors = [];
 const MEAT_OVERRIDE = { "Ambur biryani": ["chicken", "mutton"], "Kolkata biryani": ["chicken", "mutton"], "Malabar biryani": ["chicken"] };
@@ -1205,6 +1216,18 @@ for (const k of kinds) {
   for (const sb of subs) if (!items.some((it) => it.sub === sb.name)) errors.push(`${k.name}: sub ${sb.name} has no items`);
   for (const it of items) if (!subs.some((sb) => sb.name === it.sub)) errors.push(`${it.name}: sub ${it.sub} not in ${k.name}`);
   out.kinds.push({ name: k.name, aka: semi(k.aka), cuisines: kc, meals, staple: k.staple, part: k.part, diet: k.diet, subs, items });
+}
+out.regional = REGIONAL_WORDS.map((r) => ({ word: r.word, forms: semi(r.forms), meanings: r.meanings.map(([c, kind, sub]) => {
+  const k = out.kinds.find((x) => x.name === kind);
+  if (!k) errors.push(`regional ${r.word}: no kind ${kind}`);
+  else if (sub && !k.subs.some((sb) => sb.name === sub)) errors.push(`regional ${r.word}: ${kind} has no sub ${sub}`);
+  for (const x of sp(c)) if (!CUISINES.includes(x)) errors.push(`regional ${r.word}: cuisine ${x}`);
+  return { cuisines: sp(c), kind, sub };
+}) }));
+// A regional word is in no kind's, sub-kind's or item's own names (it is read in context, never matched plainly).
+for (const r of out.regional) for (const f of r.forms) for (const k of out.kinds) {
+  if ([k.name, ...k.aka].some((w) => w.toLowerCase() === f)) errors.push(`regional ${f}: a name of kind ${k.name}`);
+  for (const it of k.items) if ([it.name, ...(it.aka || [])].some((w) => w.toLowerCase() === f)) errors.push(`regional ${f}: a name of item ${it.name}`);
 }
 for (const n of NO_SUGGEST) if (!usedNo.has(n)) errors.push("NO_SUGGEST names no item: " + n);
 for (const n of REGIONAL) if (!usedReg.has(n)) errors.push("REGIONAL names no item: " + n);
@@ -1306,6 +1329,9 @@ for (const [g, title, note] of GROUPS) {
     }
   }
 }
+md += `## Words that mean different dishes by region\n\nRead in the family's context, never by plain matching (decided 20).\n\n`;
+for (const r of out.regional) md += `- **${r.word}** (${r.forms.join(", ")}): ${r.meanings.map((m) => `${m.cuisines.join(", ")}: ${m.kind}${m.sub ? ` → ${m.sub}` : ""}`).join("; ")}\n`;
+md += "\n";
 md += fs.readFileSync(`${__dirname}/decided.md`, "utf8").trimEnd() + "\n\n";
 md += fs.readFileSync(`${__dirname}/open-questions.md`, "utf8");
 fs.writeFileSync(`${root}/docs/kinds-catalog.md`, md);

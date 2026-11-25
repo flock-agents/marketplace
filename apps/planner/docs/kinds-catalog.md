@@ -164,7 +164,7 @@ aka khaman, farsan, muthia, muthiya, handvo, handwa; gujarat; snack; breakfast, 
 aka pav bhaji, bhaji pav, misal, misal pav, usal pav, vada pav, dabeli, pav; maharashtra, gujarat; complete; breakfast, dinner, snack; all: wheat
 
 #### Pav meal → Misal
-aka misal pav, usal pav, usal; maharashtra
+aka misal pav, usal pav; maharashtra
 
 **Suggested:** Misal pav [onion/garlic], Puneri misal [onion/garlic, rice, sugar], Kolhapuri misal [onion/garlic, coconut], Usal pav [onion/garlic]
 
@@ -366,7 +366,7 @@ aka bharwa, bharli, gutti, bharela, stuffed; north, west, andhra
 **Suggested in its region:** Gutti vankaya [brinjal, onion/garlic, peanut; andhra], Bharli vangi [brinjal, onion/garlic, peanut, coconut; maharashtra], Bharela ringan bateta [brinjal, root veg, peanut, sugar; gujarat]
 
 ### Gravy
-aka gravy sabzi, rasedar sabzi, curry, tari wali sabzi, masala, korma, kurma, kofta, kofta curry, salan, rassa, dalna, shaak, paneer, paneer sabzi, avial, olan, erissery, kalan, theeyal, stew, ishtu; north, south, west, east; main; lunch, dinner
+aka gravy sabzi, rasedar sabzi, tari wali sabzi, masala, korma, kurma, kofta, kofta curry, salan, rassa, dalna, shaak, paneer, paneer sabzi, avial, olan, erissery, kalan, theeyal, stew, ishtu; north, south, west, east; main; lunch, dinner
 
 #### Gravy → Curry
 aka rasedar sabzi, tari wali sabzi, masala, rassa, shaak, salan; north, west, east
@@ -564,7 +564,7 @@ aka shorba; continental, indo-chinese; side; dinner, snack; veg and non-veg; all
 ## Sides (any meal)
 
 ### Raita
-aka pachadi, thayir pachadi, perugu pachadi; north, south, west, east; side; lunch, dinner; all: dairy
+aka thayir pachadi, perugu pachadi; north, south, west, east; side; lunch, dinner; all: dairy
 
 **Suggested:** Boondi raita, Cucumber raita (kheera raita), Onion raita (onion tomato raita) [onion/garlic], Mixed vegetable raita [onion/garlic], Mint raita (pudina raita), Pineapple raita [sugar], Aloo raita [root veg], Lauki raita, Beetroot raita [root veg]
 
@@ -576,7 +576,7 @@ aka kachumber, koshimbir, kosambari; north, south, west, east; side; lunch, dinn
 **Suggested:** Kachumber (kachumber salad) [onion/garlic], Green salad (sliced salad) [onion/garlic], Koshimbir (kakdi koshimbir) [peanut, dairy; maharashtra], Kosambari (hesarubele kosambari) [coconut; karnataka], Sprouts salad (moong sprouts salad) [onion/garlic], Carrot salad [root veg], Beetroot salad [root veg], Corn salad (sweet corn salad), Cucumber salad (kakdi salad, kheera salad), Laccha onion (laccha pyaaz, onion salad) [onion/garlic], Fruit chaat (fruit salad), Chana salad (chickpea salad) [onion/garlic]
 
 ### Chutney
-aka chatni, thogayal, thuvaiyal, chammanthi, podi, pachadi (andhra); north, south, west, east; side; breakfast, lunch, dinner, snack
+aka chatni, thogayal, thuvaiyal, chammanthi, podi; north, south, west, east; side; breakfast, lunch, dinner, snack
 
 **Suggested:** Coconut chutney (thengai chutney, kobbari pachadi) [coconut], Tomato chutney (thakkali chutney) [onion/garlic], Onion tomato chutney (kara chutney) [onion/garlic], Onion chutney (vengaya chutney) [onion/garlic], Mint chutney (pudina chutney, hari chutney) [onion/garlic], Coriander chutney (dhaniya chutney, green chutney), Peanut chutney (palli chutney, shenga chutney) [peanut, onion/garlic], Tamarind chutney (imli chutney, saunth) [sugar], Beerakaya pachadi (ridge gourd chutney) [onion/garlic; andhra], Idli podi (gunpowder, milagai podi, chutney powder) [south]
 
@@ -679,6 +679,13 @@ aka laddu, unde, naru; north, south, west, east; sweet; snack
 
 **Suggested:** Besan ladoo [dairy, sugar, nuts], Rava ladoo [wheat, dairy, coconut, sugar, nuts], Coconut ladoo (nariyal ladoo, narkel naru) [coconut, sugar, dairy], Til ladoo (til gul) [sugar, peanut], Dry fruit ladoo [nuts], Atta ladoo (pinni, aate ke ladoo) [wheat, dairy, sugar, nuts], Gond ladoo [wheat, dairy, sugar, nuts], Ragi ladoo [dairy, sugar, nuts], Peanut ladoo (shenga ladoo) [peanut, sugar]
 
+## Words that mean different dishes by region
+
+Read in the family's context, never by plain matching (decided 20).
+
+- **curry** (curry, curries, kari, kura, koora): andhra: Sabzi → Vepudu; tamil, kerala, karnataka, south: Sabzi → Poriyal/Thoran; north, west, east, central, northeast, punjab, rajasthan, kashmir, gujarat, maharashtra, goa, sindhi, parsi, bengal, odisha, assam: Gravy → Curry
+- **pachadi** (pachadi, pachdi): andhra, karnataka: Chutney; kerala, tamil: Raita
+
 ## Decided (owner, 25 Nov)
 
 1. **A pinned dish stays fixed.** "Rajma every Sunday": Sunday's template holds the item Rajma, not the kind Dal; other days rotate within Dal.
@@ -713,6 +720,10 @@ Round 7 (owner, 25 Nov):
 
 18. **Meals say where a new item may be suggested, never what a family may eat.** A kind, sub-kind or item lists the meals the planner may suggest a new item of it at; a sub-kind or item can differ from its kind. A family's own dish at a meal outside its meals is a fixed part of their template (`items`: only their dishes, nothing new suggested), so "appam with stew" is [Appam, Vegetable stew] and never brings aviyal or paneer butter masala to breakfast. Gravy, Mutton, the rice curries other than sambar, the khichdis other than pongal, egg curries, chicken and fish curries are lunch and dinner only; sambar, pongal, misal and the breakfast halwas (suji halwa, rava and pineapple kesari, banana sheera) keep breakfast. Khichdi has sub-kinds Khichdi and Pongal; Pav meal has Misal, Pav bhaji and Vada pav.
 19. **The family's words win over the catalog's meals.** A part the family names as a category ("some khichdi", "any dal", "a different khichdi each time") is that kind or sub-kind, and new items of it are suggested at that meal even where the catalog does not list the meal. A part they name as a dish ("khichdi", "boiled chicken", "vegetable stew") at a meal outside the catalog's meals is that fixed dish. The catalog's meals decide only the parts the family left general. A dish with no kind in the catalog goes under a nearby kind only when it plays the same part on the plate; otherwise it is a kind of the family's own (`own`), its template holding just their dish, and nothing new is suggested for it.
+
+Round 8 (owner, 26 Nov):
+
+20. **Regional words are read in context.** Some words mean different dishes by region: "curry" (kari, kura) is a dry vegetable dish in South Indian homes (a Vepudu in Andhra and Telangana, a Poriyal/Thoran in Tamil Nadu, Kerala and Karnataka) and a gravy elsewhere; "pachadi" is a chutney in Andhra, Telangana and Karnataka and a curd dish (raita-like) in Kerala and Tamil Nadu. These words are in no kind's or item's other names (`regional` in the catalog lists each word's meanings by cuisine). Setup settles one in code only when the family's region is clear from their other words (their other dishes' narrow cuisines, a state or region they name); otherwise the kinds read decides from the family's whole answer. A dish named with one ("dondakaya curry", "tomato pachadi") goes where its vegetable and the word's meaning put it (a dish of another kind, a paneer or chicken curry, is not moved), and the family's own word is kept in the read-back.
 
 ## Open questions
 

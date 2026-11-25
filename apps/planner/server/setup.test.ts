@@ -626,6 +626,27 @@ describe("the kinds model: each dish placed, each meal's templates, the cuisines
     expect(codePlace("Boiled chicken")).toBeNull();
   });
 
+  // Owner, 26 Nov (decided 20): "curry means dry sabji even in Tamil Nadu and generally South India: it's actually kari";
+  // "pachadi" is a chutney in Andhra and Telangana, a curd dish in Kerala and Tamil Nadu.
+  it("a regional word is settled by code only where the family's region is clear; the family's word is kept", () => {
+    const AP = ["andhra", "south"], TN = ["tamil", "south"], PB = ["punjab", "north"];
+    expect(codePlace("Curry", "a curry", AP)).toMatchObject({ kind: "Sabzi", sub: "Vepudu", item: null, named: "category", word: "a curry" });
+    expect(codePlace("Curry", "curry", TN)).toMatchObject({ kind: "Sabzi", sub: "Poriyal/Thoran", named: "category" });
+    expect(codePlace("Curry", "curry", PB)).toMatchObject({ kind: "Gravy", sub: "Curry", named: "category" });
+    expect(codePlace("Pachadi", "a pachadi", AP)).toMatchObject({ kind: "Chutney", named: "category", word: "a pachadi" });
+    expect(codePlace("Pachadi", "pachadi", ["kerala"])).toMatchObject({ kind: "Raita", named: "category" });
+    // A dish named with the word: its vegetable, the word's meaning, the family's name kept.
+    expect(codePlace("Cabbage curry", "cabbage curry", AP)).toMatchObject({ kind: "Sabzi", sub: "Vepudu", named: "dish", word: "cabbage curry" });
+    expect(codePlace("Avarakkai curry", "avarakkai curry", TN)).toMatchObject({ kind: "Sabzi", sub: "Poriyal/Thoran", named: "dish" });
+    expect(codePlace("Lauki curry", "lauki curry", PB)).toMatchObject({ kind: "Gravy", named: "dish" });
+    expect(codePlace("Cucumber pachadi", "cucumber pachadi", AP)).toMatchObject({ kind: "Chutney", named: "dish" });
+    // The region not clear: the kinds read decides. A dish of another kind is not moved by the word.
+    expect(codePlace("Curry")).toBeNull();
+    expect(codePlace("Pachadi", "pachadi", ["south"])).toBeNull();
+    expect(codePlace("Cabbage curry")).toBeNull();
+    expect(codePlace("Chicken curry", "chicken curry", TN)).toMatchObject({ kind: "Chicken", item: "Chicken curry" });
+  });
+
   it("a category word at a meal the catalog does not suggest it at is asked: a category or one dish (decided 19)", () => {
     expect(needsNamed(codePlace("Khichdi")!, "breakfast")).toBe(true);
     expect(needsNamed(codePlace("Khichdi")!, "dinner")).toBe(false);
@@ -820,6 +841,45 @@ describe("apply_setup: the kinds model, end to end with a fake model", () => {
     expect(r.said).toContain("Your usual meals:\n- Breakfast: khichdi (most days); or boiled chicken (2–3 times a week); or appam and vegetable stew (on Sundays)\n- Dinner: phulka and kovakkai; or phulka and chicken curry");
     expect(r.said).toContain("Your kitchen: Tamil, Kerala, South Indian. Tell me if that's not right.");
     expect(r.said).not.toContain("Your usual dishes");
+  });
+
+  // Decided 20, end to end: a made-up Telugu home ("tomato pappu" says Andhra) and one whose region nothing says.
+  const regional = (lunch: string, library: string[][], seed: string[][]) => {
+    const tr = ["Q: What did you have for lunch last week?", `A: ${lunch}`];
+    const f = fake({ home: { slots: [{ name: "Lunch", kind: "main" }] }, rules: { rules: [] }, dishes: { library, seed }, often: { often: [] },
+      kinds: (req: ModelRequest) => ({ dishes: JSON.parse(req.user).dishes.map((d: any) => ({ name: d.name, meal: d.meal, kind: "Sabzi", sub: "Sabzi", named: d.name === "Curry" ? "category" : "dish" })) }),
+      contains: containsOf(), lint: { dishes: [] } });
+    return { tr, f };
+  };
+  it("a regional word in a home whose region is clear is placed by code, never asked, and read back in the family's words", async () => {
+    const line = "Rice, tomato pappu, a curry and a pachadi. Curry is usually cabbage curry.";
+    const { tr, f } = regional(line, [["Rice", "Lunch", line], ["Tomato pappu", "Lunch", line], ["Curry", "Lunch", line], ["Pachadi", "Lunch", line], ["Cabbage curry", "Lunch", line]],
+      [["Lunch", "Rice, Tomato pappu, Curry, Pachadi", line]]);
+    const k = await boot({ model: f.model });
+    const r = await k.op("apply_setup", { household: FAMILY, transcript: tr });
+    expect(r.ok).toBe(true);
+    expect(f.of("kinds").flatMap((q) => JSON.parse(q.user).dishes.map((d: any) => d.name))).toEqual([]);
+    const row = (n: string) => k.rows("library").find((d) => d.name === n)!;
+    expect([row("Curry").kind, row("Curry").sub]).toEqual(["Sabzi", "Vepudu"]);
+    expect([row("Cabbage curry").kind, row("Cabbage curry").sub]).toEqual(["Sabzi", "Vepudu"]);
+    expect(row("Pachadi").kind).toBe("Chutney");
+    const lunch = (await k.owner("GET", "/api/family")).body.slots.find((s: any) => s.name === "Lunch");
+    expect(lunch.kinds.map((x: any) => x.name)).not.toContain("Gravy");
+    expect(lunch.kinds.map((x: any) => x.name)).not.toContain("Raita");
+    expect(r.said).toContain("a curry");
+    expect(r.said).toContain("a pachadi");
+  });
+  it("a regional word in a home whose region nothing says is asked of the kinds read, with the word's meanings and the family's dishes", async () => {
+    const line = "Rice, dal and a curry.";
+    const { tr, f } = regional(line, [["Rice", "Lunch", line], ["Dal", "Lunch", line], ["Curry", "Lunch", line]], [["Lunch", "Rice, Dal, Curry", line]]);
+    const k = await boot({ model: f.model });
+    const r = await k.op("apply_setup", { household: { ...FAMILY, "household.people": FAMILY["household.people"] }, transcript: tr });
+    expect(r.ok).toBe(true);
+    const user = JSON.parse(f.of("kinds")[0].user);
+    expect(user.dishes.map((d: any) => d.name)).toEqual(["Curry"]);
+    expect(user.regional.map((x: any) => x.word)).toEqual(["curry"]);
+    expect(user.regional[0].meanings.join(" ")).toMatch(/Sabzi.*Gravy/);
+    expect(user.family_dishes).toEqual(expect.arrayContaining(["Rice", "Dal", "Curry"]));
   });
 
   it("a correction reads again only the meal whose dishes changed, asks the kinds read nothing it read before, and says the new plates", async () => {
