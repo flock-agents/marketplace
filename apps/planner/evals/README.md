@@ -82,6 +82,9 @@ unused that week, unless their words on the dish allow it), `not_next_day` (the 
 group, or at lunch and dinner the same day), `real_dish` (no bare kind or sub-kind word: "Sabzi", "Dal", "Curry", "Poriyal",
 except the family's own dish they fixed to a day or to every day), `no_new_kind` (a dish not the family's is of a kind their
 own dishes at that slot are of; one the catalog cannot place fails), `own_share` (≥ 30% of the week's non-staple items).
+A part the family named as a category (a bare kind or sub-kind word in their library at a slot: "Sambar", "Sabzi") makes the
+catalog's items of it theirs at that slot (that sub-kind; for a kind's own word, the family's sub-kinds of it) for `own_share`
+and `no_new_kind` (lead's rule, 25 Nov); the bare word itself still fails `real_dish`.
 Kinds come from `lib/catalog.ts`: `server/kinds.json` read as data (no server code), placed by the eval's own matcher, with
 TRUTH's `kind`/`sub` on a dish the catalog cannot place ("Bhindi").
 Staples (exempt from rotation): ≥ 60% of a slot's last 14 seed + confirmed rows, `daily` dishes, and the catalog's staple

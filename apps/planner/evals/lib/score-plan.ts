@@ -351,15 +351,32 @@ export function scorePlan(h: Household, plan0: PlanOut, loaded: SetupOut, o: { f
   }
   // Their own food: a family dish, or a particular way of one ("Bhindi sabzi" of their "Sabzi").
   const variantOf = (entry: string, dish: string) => { const e = words(entry), d = words(dish); return e.length > 0 && d.length > e.length && e.every((w) => d.includes(w)); };
-  const own = (x: string) => !!dishNameOf(x, truthNames) || truthNames.some((n) => variantOf(n, x));
+  /** Lead's rule (25 Nov, owner to confirm): a part the family named as a category ("dal", "sabzi", "sambar", "a poriyal": a
+   *  bare kind or sub-kind word in their library at a slot) is filled from the catalog's items of it, and those items are
+   *  theirs. A sub-kind word ("Sambar") makes that sub-kind's items theirs; a kind's own sub-kind word ("Sabzi", "Dal") makes
+   *  the kind's items in the family's sub-kinds at that slot theirs; a kind-level word ("Curry") the whole kind's. */
+  const categoryOwn = (x: string, slot: string): boolean => {
+    const hit = kindOf(x);
+    if (!hit) return false;
+    for (const row of t.library.filter((d) => lc(d.slot) === lc(slot) && isBareKindWord(d.name))) {
+      const cat = kindOf(row.name);
+      if (!cat || cat.kind !== hit.kind) continue;
+      if (!cat.sub) return true;
+      const subs = new Set([cat.sub, ...t.library.filter((d) => lc(d.slot) === lc(slot)).map((d) => truthKind(d)).filter((k) => k?.kind === hit.kind && k.sub).map((k) => k!.sub!)]);
+      if (hit.sub && subs.has(hit.sub)) return true;
+    }
+    return false;
+  };
+  const own = (x: string, slot: string) => !!dishNameOf(x, truthNames) || truthNames.some((n) => variantOf(n, x)) || categoryOwn(x, slot);
   // At least OWN_SHARE of the week's non-staple items are the family's own (kinds model rule 4).
-  const all = cooked.flatMap((x) => x.dishes.filter((d) => !exempt(x.slot, d.name)).map((d) => d.name));
-  if (all.length) add("own_share", all.filter(own).length / all.length >= OWN_SHARE, `${Math.round((100 * all.filter(own).length) / all.length)}% of non-staples their own (want ${OWN_SHARE * 100}%): not theirs ${[...new Set(all.filter((x) => !own(x)))].join(", ")}`);
+  const all = cooked.flatMap((x) => x.dishes.filter((d) => !exempt(x.slot, d.name)).map((d) => ({ name: d.name, slot: x.slot })));
+  const mine = all.filter((x) => own(x.name, x.slot));
+  if (all.length) add("own_share", mine.length / all.length >= OWN_SHARE, `${Math.round((100 * mine.length) / all.length)}% of non-staples their own (want ${OWN_SHARE * 100}%): not theirs ${[...new Set(all.filter((x) => !mine.includes(x)).map((x) => x.name))].join(", ")}`);
   // Never a new kind (kinds model rule 4): a dish that is not the family's is of a kind their own dishes at that meal are of.
   // A new dish the catalog cannot place fails (nothing says it is like theirs).
   const seenNew = new Set<string>();
   for (const sd of cooked) for (const d of sd.dishes) {
-    if (own(d.name) || exempt(sd.slot, d.name) || seenNew.has(`${lc(sd.slot)}|${plain(d.name)}`)) continue;
+    if (own(d.name, sd.slot) || exempt(sd.slot, d.name) || seenNew.has(`${lc(sd.slot)}|${plain(d.name)}`)) continue;
     seenNew.add(`${lc(sd.slot)}|${plain(d.name)}`);
     const k = kindOf(d.name)?.kind ?? null, theirs = famKinds(sd.slot);
     add("no_new_kind", !!k && theirs.has(k), `${sd.slot}: ${d.name} is ${k ? `a ${k}` : "of no kind the catalog knows"}${k ? `; their ${sd.slot} kinds: ${[...theirs].join(", ")}` : ""}`);

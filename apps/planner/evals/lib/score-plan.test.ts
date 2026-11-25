@@ -339,6 +339,46 @@ describe("scorePlan: the base minimum", () => {
     expect(fails(p)).toContain("own_share");
     expect(scorePlan(FIX, p, loaded()).notes.find((n) => n.startsWith("own_share"))).toContain("22%");
   });
+  test("a part named as a category (\"sambar\", \"sabzi\") makes the catalog's items of it theirs; the bare word stays no dish", () => {
+    // Lead's rule (25 Nov): their dinner has "Sambar" (a sub-kind) and "Sabzi" (the kind's own sub-kind) as categories.
+    const h = structuredClone(FIX);
+    h.truth.library.push({ name: "Sambar", slot: "Dinner" }, { name: "Sabzi", slot: "Dinner" });
+    const p = goodWeek();
+    const news = ["Masala dosa", "Rava dosa", "Set dosa", "Neer dosa", "Onion uttapam", "Pesarattu", "Ghee roast dosa"];
+    (["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as Weekday[]).forEach((d, i) => set(p, d, "Breakfast", [news[i]]));
+    const sab = ["Jeera aloo", "Gajar matar", "Aloo shimla mirch", "Methi bhaji", "Baingan aloo", "Arbi fry", "Karela fry"];
+    (["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as Weekday[]).forEach((d, i) => set(p, d, "Lunch", ["Rice", "Toor dal", sab[i]]));
+    for (const [d, x] of [["Tue", "Dum aloo"], ["Fri", "Aloo matar"]] as const) set(p, d, "Dinner", ["Roti", x]);
+    // Under 30% their own, so the scorer lists what is not theirs.
+    set(p, "Mon", "Dinner", ["Roti", "Drumstick sambar", "Pepper rasam", "Aloo methi", "Beans poriyal"]);
+    for (const d of at(p, "Mon", "Dinner").dishes.slice(1)) d.new = true;
+    const sc = scorePlan(h, p, setupOfTruth(h));
+    const notTheirs = sc.notes.find((n) => n.startsWith("own_share"))!.split("not theirs ")[1].split(", ");
+    // Any Sambar is theirs, a Rasam is not (they named no rasam); a sabzi of their Sabzi sub-kind is, a poriyal is not.
+    expect(notTheirs).toContain("Pepper rasam");
+    expect(notTheirs).toContain("Beans poriyal");
+    expect(notTheirs).not.toContain("Drumstick sambar");
+    expect(notTheirs).not.toContain("Aloo methi");
+    // Theirs is never new: no_new_kind does not look at them (Pepper rasam is a Rice curry, a kind their Sambar is: passes too).
+    expect(sc.notes.filter((n) => n.startsWith("no_new_kind")).join(" ")).not.toMatch(/Drumstick sambar|Aloo methi/);
+    // The bare word itself is still no dish.
+    const q = set(goodWeek(), "Mon", "Dinner", ["Roti", "Sambar"]);
+    expect(Object.entries(scorePlan(h, q, setupOfTruth(h)).rates).filter(([, [a, n]]) => a < n).map(([k]) => k)).toContain("real_dish");
+  });
+  test("a category makes a week their own: without it the same week is under 30%", () => {
+    const h = structuredClone(FIX);
+    h.truth.library.push({ name: "Sabzi", slot: "Lunch" });
+    const p = goodWeek();
+    const news = ["Masala dosa", "Rava dosa", "Set dosa", "Neer dosa", "Onion uttapam", "Pesarattu", "Ghee roast dosa"];
+    (["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as Weekday[]).forEach((d, i) => set(p, d, "Breakfast", [news[i]]));
+    const sab = ["Jeera aloo", "Gajar matar", "Cabbage sabzi", "Aloo methi", "Beans sabzi", "Tinda sabzi", "Turai sabzi"];
+    (["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as Weekday[]).forEach((d, i) => set(p, d, "Lunch", ["Rice", "Toor dal", sab[i]]));
+    for (const [d, x] of [["Tue", "Kaddu sabzi"], ["Fri", "Parwal sabzi"]] as const) set(p, d, "Dinner", ["Roti", x]);
+    const share = (hh: typeof h) => scorePlan(hh, p, setupOfTruth(hh)).rates.own_share;
+    // Theirs without the category: dinner's toor dal and rajma, 4 of 20 non-staples (20%); with lunch's "Sabzi", 11 of 20.
+    expect(share(FIX)).toEqual([0, 1]);
+    expect(share(h)).toEqual([1, 1]);
+  });
   test("nobody without food; a clean message with one question at most", () => {
     const p = goodWeek();
     p.unmet = ["Tue Lunch: Dadu Ram has nothing to eat on 2026-12-01 Lunch but staples"];
