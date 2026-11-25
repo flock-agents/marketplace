@@ -17,6 +17,10 @@
 - make_plan checks whether each meal has enough dishes after it has read what the family's dishes contain, not before
   (before, every unread dish counted as nobody's and a meal got new dishes it did not need).
 - The setup read-back lists the family's usual dishes per meal, so a meal read wrong or missing is seen before the plan.
+- The week's prompt says what a good week is and reads the family's plates as parts. A kind of dish the family names
+  ("Sabzi", "Dal", "Idli with chutney") is planned as a particular one each day ("Bhindi sabzi"), and the same dish with
+  another accompaniment ("Idli with tomato chutney" for their "Idli with coconut chutney") is theirs too: neither is a new
+  dish nor uses up the new-dish limit; its contents are read, and it is not saved to the library.
 - Builds again: rc3's contains read did not type-check (tsc), so the app failed to install.
 
 ## 4.0.2

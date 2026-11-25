@@ -125,6 +125,25 @@ const standing = (w: Week, slot: string, dish: string): boolean => {
   return !!row && !row.frequency && !row.days?.length;
 };
 
+/** A dish that is one of the family's own entry made a particular way: its name keeps every word of the entry's and adds to it
+ *  ("Bhindi sabzi" of "Sabzi", "Moong dal" of "Dal", "Idli with coconut chutney" of "Idli with chutney"), or the same dish
+ *  with another accompaniment ("Idli with tomato chutney" of "Idli with coconut chutney"). The slot call
+ *  names it so, with the entry as its `like`; it is the family's dish, not a new one. */
+export function isVariantOf(entry: string, dish: string): boolean {
+  const words = (x: string) => x.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+  const e = words(entry), d = words(dish);
+  if (e.length > 0 && d.length > e.length && e.every((x) => d.includes(x))) return true;
+  // The same dish with another accompaniment: "Idli with tomato chutney" of their "Idli with coconut chutney".
+  const main = (w: string[]) => (w.includes("with") ? w.slice(0, w.indexOf("with")).join(" ") : null);
+  const em = main(e), dm = main(d);
+  return !!em && em === dm && e.join(" ") !== d.join(" ");
+}
+/** The library row a variant plans as: the entry's own row (its how often and days) under the variant's name, read afresh
+ *  for what it contains; never saved to the library. */
+export const variantRow = (entry: LibraryDish, name: string): LibraryDish => ({ ...entry, id: `variant:${dishKey(name)}`, key: dishKey(name), name,
+  contains: [], contains_read: [], suggested: false, untried: false, offers: 0, rating: null, rating_note: null, rated_on: null, rated_by: null, ratings: [] });
+export const isVariantRow = (d: LibraryDish): boolean => d.id.startsWith("variant:");
+
 /** What a dish contains and was read for, at a slot: its library row there, else any row of it, else a read made this run. */
 export function factsOf(w: Week, slot: string, dish: string): DishFacts {
   const row = libAt(w, slot, dish) ?? w.library.find((d) => d.key === dishKey(dish));
