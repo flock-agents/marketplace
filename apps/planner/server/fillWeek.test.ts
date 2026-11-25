@@ -437,3 +437,12 @@ describe("a category said how often of", () => {
     for (const d of WEEK) expect(r.at(d, "Dinner").length).toBeGreaterThanOrEqual(2);
   });
 });
+
+describe("a dish had most days, kept by its template's share", () => {
+  it("'idli most days' with an idli template @usually: never a second idli beside another breakfast", () => {
+    const kinds: MealKind[] = [{ name: "Idli" }, { name: "Dosa" }];
+    const lib = [dish("Idli", "Breakfast", "Idli", { frequency: "usually" }), ...["Masala dosa", "Rava dosa"].map((n) => dish(n, "Breakfast", "Dosa"))];
+    const r = run({ slots: [slot("Breakfast", { kinds, templates: [share(T({ kind: "Idli" }), "usually"), T({ kind: "Dosa" })] })], library: lib });
+    for (const d of WEEK) expect(r.at(d, "Breakfast")).toHaveLength(1);
+  });
+});

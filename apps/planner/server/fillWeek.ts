@@ -625,8 +625,11 @@ export function fillWeek(input: FillInput): FillResult {
       const want = r.frequency === "daily" ? mineDays.length : Math.round((TEMPLATE_DAYS.usually * mineDays.length) / 7);
       const on = Math.floor(((nth + 1) * want) / mineDays.length) > Math.floor((nth * want) / mineDays.length);
       if (!on || (r.days?.length && !r.days.includes(weekdayOf(d.date)))) continue;
-      const cat = categoryPlace(r);
-      if (plate.some((x) => x.key === r.key || (!!cat && sameKind(x.kind, cat.kind) && (!cat.sub || sameKind(x.sub, cat.sub))))) continue;
+      const cat = categoryPlace(r), pl = cat ?? placeOf(r);
+      // Already there, or an item of its kind is (oats idli on an idli morning); or a template of the meal that holds it
+      // has the family's share for it ("idli most days": the template comes that often).
+      if (plate.some((x) => x.key === r.key || (!!pl && sameKind(x.kind, pl.kind) && (!pl.sub || !catalogKind(pl.kind) || catalogKind(pl.kind)!.subs.length < 2 || sameKind(x.sub, pl.sub))))) continue;
+      if ((s.templates ?? []).some((tp) => tp.share === r.frequency && holds(tp, r))) continue;
       const pool: Item[] = cat ? familyPool(s, cat.kind, cat.sub).filter((x) => x.catalog)
         : [{ name: r.name, key: r.key, kind: placeOf(r)?.kind ?? r.name, sub: placeOf(r)?.sub ?? null, family: true, idx: 0, row: r }];
       const got = choose(s, d, plate, [{ items: pool, isNew: false, share: false, repeat: true, next: true, zero: false }], atTable, false);
