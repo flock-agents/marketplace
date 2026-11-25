@@ -482,7 +482,9 @@ export const ruleKey = (r: Pick<ReadRule, "what" | "who" | "items" | "slots" | "
 export function saysNoEggs(line: string): boolean {
   const l = plainWords(line);
   return /\bpure (?:veg|vegetarian)\b|\beggless\b/.test(l)
-    || /\b(?:no|not|without|never|nor|doesnt|dont|wont|cant|avoids?)(?: (?:eat|eats|eating|have|has|take|takes|touch|touches|even|any|like|likes))* (?:eggs?|anda|ande|andaa)\b/.test(l);
+    || /\b(?:no|not|without|never|nor|doesnt|dont|wont|cant|avoids?)(?: (?:eat|eats|eating|have|has|take|takes|touch|touches|even|any|like|likes))* (?:eggs?|anda|ande|andaa)\b/.test(l)
+    // "no fish, meat, eggs, onion or garlic": eggs in the list after the no.
+    || /\b(?:no|not|without|never)(?: (?:fish|meat|chicken|mutton|seafood|prawns?|beef|pork|non veg|nonveg|onions?|garlic|or|and|nor|any))+ (?:eggs?|anda|ande)\b(?! (?:are|is) (?:fine|ok|okay|allowed))/.test(l);
 }
 
 export type Checked = { read: SetupRead; dropped: string[]; asks: string[]; noted: string[]; lint: ReadDish[]; slotDays: Map<string, Weekday[]> };
@@ -577,7 +579,9 @@ export function checkRead(read: SetupRead, ctx: { household: Household; said: st
     const me = people.find((p) => p.name === v.who);
     if (!me) continue;
     const others = people.filter((p) => p !== me).flatMap(names);
-    const line = [v.quote, ...said.filter((l) => names(me).some((n) => namedIn(n, [l])) && !others.some((n) => namedIn(n, [l])))].find(saysNoEggs);
+    // Sentence by sentence first ("Baba is diabetic. Ma is vegetarian, no fish, meat, eggs" is two people's), then whole replies.
+    const own = (ls: string[]) => ls.filter((l) => names(me).some((n) => namedIn(n, [l])) && !others.some((n) => namedIn(n, [l])));
+    const line = [v.quote, ...own(ctx.sentences ?? []), ...own(said)].find(saysNoEggs);
     if (line) rules.push({ hard: true, what: "no_eggs", who: v.who, quote: line, slots: null, days: null, items: null, to: null, frequency: null, per_meal: null, fasting_food: null });
   }
 

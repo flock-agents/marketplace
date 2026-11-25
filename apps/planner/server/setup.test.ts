@@ -397,6 +397,12 @@ describe("apply_setup v2: the checks, pure", () => {
   const said = familyLines(TRANSCRIPT, HOUSEHOLD);
   const base = (over: Partial<SetupRead>): SetupRead => ({ ...readOf({ slots: HOME.slots.slice(0, 4) }, {}, {}), ...over });
 
+  it("a person's vegetarian rule with eggs in their no-list, in a reply that names someone else too: their no_eggs (eval h8)", () => {
+    const reply = ["A: Padma is diabetic, no sweets at all. Ishaan is vegetarian, no fish, meat, eggs, onion or garlic."];
+    const read = readOf({}, { rules: [{ hard: true, what: "veg", who: "Ishaan", quote: "Ishaan is vegetarian" }] }, {});
+    const rules = checkRead(read, { household: hh, said: familyLines(reply, HOUSEHOLD), sentences: familySentences(reply, HOUSEHOLD) }).read.rules;
+    expect(rules.some((r) => r.what === "no_eggs" && r.who === "Ishaan")).toBe(true);
+  });
   it("a dish read without its words is linted by the family's sentence that names it with a day", () => {
     const lines = familyLines(["A: Weeknights dal and rice. Sunday dinner we make something simple like pasta maybe."], HOUSEHOLD);
     const read = readOf({ slots: HOME.slots.slice(0, 4) }, {}, { library: [["Pasta", "Dinner", ""]] });
@@ -431,6 +437,9 @@ describe("apply_setup v2: the checks, pure", () => {
     expect(noEggs("Amma is vegetarian; Kiran has no eggs.", [veg("Amma is vegetarian")])).toEqual([]);
     expect(saysNoEggs("eggless cake only")).toBe(true);
     expect(saysNoEggs("we eat eggs")).toBe(false);
+    // A list of what someone never eats, eggs among it.
+    expect(saysNoEggs("Nani is vegetarian, no fish, meat, eggs, onion or garlic")).toBe(true);
+    expect(saysNoEggs("no fish or meat, eggs are fine")).toBe(false);
   });
 
   it("the same dish twice on one example plate is one dish", () => {
