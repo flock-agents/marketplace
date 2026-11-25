@@ -1,4 +1,4 @@
-import { FLOCK_API } from "../../_shared/_helpers";
+import { FLOCK_API, signInAgainAsk } from "../../_shared/_helpers";
 import { targetSelector } from "../../_shared/_realInput";
 import {
   LOAD_MORE_PROBE_JS, MAX_LOAD_ROUNDS, MAX_COMMENTS, REPLY_TARGET, REPLY_BOX,
@@ -27,8 +27,12 @@ function errorJson(code: string, msg: string): never {
   process.exit(1);
 }
 
+function linkedinSessionName(): string {
+  return process.env.BROWSER_SESSION || "linkedin";
+}
+
 function getSessionAndAgent(): { sessionName: string; agentId: string } {
-  const sessionName = process.env.BROWSER_SESSION || "linkedin";
+  const sessionName = linkedinSessionName();
   const agentId = process.env.FLOCK_AGENT_ID || "";
   if (!agentId) errorJson("MISSING_AGENT", "FLOCK_AGENT_ID is not set; skill must be invoked via skill-exec");
   return { sessionName, agentId };
@@ -76,7 +80,7 @@ function checkError(httpCode: number, body: any, context: string): void {
   const serverCodes = [String(body?.error ?? ""), String(body?.code ?? "")];
   const detail = String(body?.message ?? body?.error ?? "(unknown)");
   if (serverCodes.includes("session_not_ready")) {
-    errorJson("SESSION_NOT_READY", "LinkedIn browser session is not ready — Flock has either not finished connecting it or already marked it outdated. Log in via the dashboard.");
+    errorJson("SESSION_NOT_READY", `LinkedIn browser session is not ready — Flock has either not finished connecting it or already marked it outdated. ${signInAgainAsk(linkedinSessionName())}`);
   }
   if (serverCodes.includes("access_denied")) {
     errorJson("ACCESS_DENIED", `Flock refused this request and never contacted LinkedIn: ${detail}`);
@@ -114,7 +118,7 @@ function checkSessionExpired(pageContent: string): void {
         reason: "LinkedIn returned login/auth page instead of authenticated content",
       }),
     }).catch(() => {});
-    errorJson("SESSION_OUTDATED", "LinkedIn session has expired. Marked as outdated — user needs to re-login via the dashboard.");
+    errorJson("SESSION_OUTDATED", `LinkedIn session has expired. Marked as outdated. ${signInAgainAsk(linkedinSessionName())}`);
   }
 }
 
@@ -240,7 +244,7 @@ async function cmdFeed(count: number): Promise<void> {
   let content = await crawlUrl("https://www.linkedin.com/feed/");
   const trimmed = (content || "").replace(/\s/g, "");
   if (!trimmed || /^\{"ok":/.test(trimmed)) {
-    errorJson("NO_CONTENT", "LinkedIn feed returned no extractable text — the session may be logged out or blocked. Reconnect the LinkedIn browser session via the Flock dashboard.");
+    errorJson("NO_CONTENT", `LinkedIn feed returned no extractable text — the session may be logged out or blocked. Try once more; only if a sign-in page is what comes back, mark the session outdated and: ${signInAgainAsk(linkedinSessionName())}`);
   }
   content = content.substring(0, 20480);
   console.log(JSON.stringify({ source: "linkedin_feed", format: "raw_text", content, requestedCount: count }));
@@ -468,7 +472,7 @@ async function cmdComments(postUrl: string): Promise<void> {
   const content = result?.content || "";
   const trimmed = String(content).replace(/\s/g, "");
   if (!trimmed || /^\{"ok":/.test(trimmed)) {
-    errorJson("NO_CONTENT", "Could not extract comments — the page may have failed to load or the session is logged out. Reconnect the LinkedIn session via the Flock dashboard if this persists.");
+    errorJson("NO_CONTENT", `Could not extract comments — the page may have failed to load or the session is logged out. If this persists and a sign-in page is what comes back: ${signInAgainAsk(linkedinSessionName())}`);
   }
 
   let parsed: any;

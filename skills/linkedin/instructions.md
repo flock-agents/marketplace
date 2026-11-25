@@ -172,13 +172,13 @@ All responses are JSON. Errors follow:
 
 The script handles browser session lifecycle states automatically:
 
-- **SESSION_NOT_READY** — the "linkedin" session is not in `ready` state (either `setting_up` or `outdated`). Tell the user to check the Flock dashboard and log in or re-authenticate. Do **not** retry.
-- **SESSION_OUTDATED** — the script detected that LinkedIn returned a login page instead of authenticated content. The session has been automatically marked as outdated. Tell the user to re-login via the Flock dashboard.
+- **SESSION_NOT_READY** — the "linkedin" session is not in `ready` state (either `setting_up` or `outdated`). Ask the owner to sign in again with a connector hand-off, target `{"sessionName": "linkedin"}` (the private-browser skill, **Connectors**): they get a sign-in card in your chat. Never send them to the dashboard or the Connectors page. Do **not** retry.
+- **SESSION_OUTDATED** — the script detected that LinkedIn returned a login page instead of authenticated content. The session has been automatically marked as outdated. Ask the owner to sign in again with the same connector hand-off, target `{"sessionName": "linkedin"}`.
 - **CRAWL_ERROR (HTTP 403)** — either the session isn't ready or your agent lacks access. Tell the user to check browser session settings.
 
 ## Limitations
 
-- Depends on authenticated browser session — session expires require user re-login via Flock dashboard
+- Depends on authenticated browser session — when it expires, ask the owner to sign in again with a connector hand-off (above)
 - No official API — uses page scraping which can be fragile
 - Rate limiting is aggressive (wait 3+ seconds between requests)
 - Post publishing and messaging use persistent browser sessions for multi-step flows
