@@ -26,6 +26,13 @@
 - A fast saved with no food said is asked about in the read-back ("What does Gowri Shankar eat on the Tuesday fast?"); the
   answer fills the fast's food, also when the reader quotes the first sentence.
 - Builds again: rc3's contains read did not type-check (tsc), so the app failed to install.
+- An allergy kept on one person is asked about once in the read-back ("Do you cook everything without peanuts, or only
+  Ishaan's food?"). "Everything" makes it one house rule (no person, same items, hard, the allergy's own words kept);
+  "only his food" or "his own food" keeps it on the person. Either way it is not asked again.
+- The home read makes a box or tiffin whose food is not the home meal ("snack box: sandwiches, chivda") a slot, also when
+  it is told in the lunch answer, by a worked example; someone who carries the home lunch gets no slot.
+- "<person>'s breakfast" with no such slot of theirs is Breakfast, never another slot of theirs (a child's breakfast
+  dishes went to their tiffin once a grandparent had their own breakfast).
 
 ## 4.0.2
 
