@@ -174,6 +174,10 @@ export const DISHES_ASK = "I couldn't read your dishes from that. What do you us
 /** The whole setup's wall clock: under Flock's wait for the op (3 min). A second try starts only with RETRY_FLOOR_MS left. */
 export const SETUP_BUDGET_MS = 150_000;
 const RETRY_FLOOR_MS = 30_000;
+/** The model calls end this long before the budget: the saving after them is inside it too. */
+const SAVE_MARGIN_MS = 2_000;
+/** The how-often lint's own time at most. */
+const LINT_MS = 30_000;
 /** The kinds read's own time: at most KINDS_MS, and done KINDS_MARGIN_MS before the setup's budget ends. */
 export const KINDS_MS = 45_000;
 const KINDS_MARGIN_MS = 3_000;
@@ -642,7 +646,8 @@ async function lintReread(model: ModelCall, dishes: ReadDish[], replies: string[
   if (!dishes.length) return;
   const words = dishes.map((d) => ({ name: d.name, slot: d.slot, quote: d.quote,
     line: replies.find((l) => plainWords(l).includes(plainWords(d.quote))) ?? d.quote }));
-  const r = await withDeadline(model({ tier: "balanced", purpose: "setup: how often (lint)", system: LINT_SYSTEM, user: JSON.stringify({ dishes: words }), schema: LINT_SCHEMA, maxTokens: 2000 }), until - Date.now());
+  // Its own deadline (LINT_MS): a second look, never what holds the setup to its budget's end (eval h1, h4: 48–60 s, then out of tokens).
+  const r = await withDeadline(model({ tier: "balanced", purpose: "setup: how often (lint)", system: LINT_SYSTEM, user: JSON.stringify({ dishes: words }), schema: LINT_SCHEMA, maxTokens: 2000 }), Math.min(until - Date.now(), LINT_MS));
   if (!r.ok) { log(`lint: model ${r.code}: ${r.message.slice(0, 200)}`); return; }
   const done = new Set<ReadDish>();
   for (const x of arr(isObject(r.json) ? r.json.dishes : null).filter(isObject)) {
@@ -1424,7 +1429,7 @@ export async function applySetup(deps: { db: Db; emit: Emit; model: ModelCall; p
   let n = 0;
   const numbered = deps.transcript.map((l) => (/^A\d*:/i.test(l) ? `A${++n}: ${l.replace(/^A\d*:\s*/i, "")}` : l));
   const user = JSON.stringify({ household: deps.household ?? {}, transcript: numbered.join("\n") });
-  const t0 = Date.now(), until = t0 + (deps.budgetMs ?? SETUP_BUDGET_MS);
+  const t0 = Date.now(), until = t0 + (deps.budgetMs ?? SETUP_BUDGET_MS) - SAVE_MARGIN_MS;
 
   // 1. The four reads at once.
   const results = await Promise.all(SETUP_PARTS.map(async (part): Promise<ModelResult> => {
