@@ -2,7 +2,7 @@
 // own plates, every other dish read carefully), onion and garlic as a note (kinds model rule 7), and the check a saved week is
 // read against (changes.ts). The week's fill is fillWeek.test.ts's.
 import { describe, expect, it } from "bun:test";
-import { allergyNotes, carefulTags, checkSlot, mostlyOnion, notFor, onionNotes, ruleBreaks, slotFacts, vouched, type Proposal, type Week } from "./planChecks";
+import { allergyNotes, carefulTags, checkSlot, leaveOutNotes, mostlyOnion, notFor, onionNotes, ruleBreaks, slotFacts, vouched, type Proposal, type Week } from "./planChecks";
 import { dishKey } from "./dishText";
 import type { PlanDay } from "./planDays";
 import type { HistoryRow, LibraryDish, Rule, Slot } from "./slotStore";
@@ -54,8 +54,14 @@ describe("allergies (owner 25 Nov)", () => {
     expect(carefulTags(w, "Peanut chikki")).toEqual(["peanut"]);
     expect(carefulTags(w, "Sabudana khichdi")).toEqual(["peanut"]);
     expect(ruleBreaks(w, d, "Sabudana khichdi")[0]).toContain("not read carefully for peanut");
+    // Peanuts are one of its ingredients the dish can be made without (decided 21): read as having them, it is still his.
     w.careful!.set(dishKey("Sabudana khichdi"), new Set(["peanut"]));
-    expect(ruleBreaks(w, d, "Sabudana khichdi")[0]).toContain("may have peanut");
+    expect(ruleBreaks(w, d, "Sabudana khichdi")).toEqual([]);
+    // A main ingredient (peanut ladoo), or one the dish is not known to be made without (a dish the catalog does not know).
+    w.careful!.set(dishKey("Peanut ladoo"), new Set(["peanut"]));
+    expect(ruleBreaks(w, d, "Peanut ladoo")[0]).toContain("may have peanut");
+    w.careful!.set(dishKey("Groundnut usili"), new Set(["peanut"]));
+    expect(ruleBreaks(w, d, "Groundnut usili")[0]).toContain("may have peanut");
     w.careful!.set(dishKey("Rava idli"), new Set());
     expect(ruleBreaks(w, d, "Rava idli")).toEqual([]);
   });
@@ -83,9 +89,13 @@ describe("onion and garlic (kinds model rule 7)", () => {
     for (const x of ["Onion uttapam", "Kanda bhaji", "Vengaya sambar", "Ulli theeyal", "Chicken do pyaza"]) expect(mostlyOnion(x), x).toBe(true);
     for (const x of ["Bhindi masala", "Dal tadka"]) expect(mostlyOnion(x), x).toBe(false);
   });
-  it("an onion allergy still blocks", () => {
+  it("an onion allergy blocks a dish whose onion is a main ingredient, or whose ingredients are not known; one the dish can be made without is a note (decided 21)", () => {
     const w = week({ slots: [slot("Dinner", { order: 50 })], library: lib, rules: [rule({ who: "Ravi", items: ["onion_garlic"], quote: "Ravi is allergic to onion" })] });
-    expect(notFor(w, w.days[0], "Bhindi masala")).toEqual(["Ravi"]);
+    expect(notFor(w, w.days[0], "Aloo pyaaz")).toEqual(["Ravi"]);
+    expect(notFor(w, w.days[0], "Onion uttapam")).toEqual(["Ravi"]);
+    // Bhindi masala is the catalog's Bhindi sabzi: okra, with onion it can be made without.
+    expect(notFor(w, w.days[0], "Bhindi masala")).toEqual([]);
+    expect(leaveOutNotes(w, w.days[0], "Bhindi masala")).toEqual(["make without onion for Ravi"]);
   });
 });
 

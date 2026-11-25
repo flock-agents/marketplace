@@ -7,6 +7,7 @@ import { feedbackLine } from "./messages";
 import { buildReminder } from "./reminder";
 import { REMINDER_PROMPT } from "./routines/reminders";
 import type { ModelRequest, ModelResult } from "./model";
+import { plannerTags } from "./kinds";
 import { addRule, commit, getLibraryDish, listSlotDays, newDishesPerWeek, upsertLibrary, upsertSlot, type LibraryInput, type SlotInput } from "./slotStore";
 
 const SUN = "2026-11-29", MON = "2026-11-30", TUE = "2026-12-01", WED = "2026-12-02", SAT = "2026-12-05";
@@ -156,9 +157,13 @@ describe("a re-plan never overwrites an edited slot-day", () => {
     // Rajma and Chole were read for dairy (READ), as having none: say they do now. (Onion and garlic never block a dish:
     // kinds model rule 7.)
     commit(k.kit.db, k.kit.emitChange, (tx, ch) => { for (const n of ["Rajma", "Chole"]) upsertLibrary(tx, { name: n, slot: "Lunch", contains: ["dairy"] }, "app", ch); });
-    // The slot-days with a dish that has dairy (the family's Rajma and Chole, and any new dish the catalog says has it).
+    // The slot-days with a dish that has dairy (the family's Rajma and Chole, and any new dish the catalog says has it), but
+    // not one whose dairy is only an ingredient it can be made without (ghee on top: a note, decided 21).
     const dairy = (name: string, slot: string) => { const rows = k.rows("library").filter((r: any) => r.name === name);
-      const row = rows.find((r: any) => r.slot === slot) ?? rows[0]; return !!row && JSON.parse(row.contains ?? "[]").includes("dairy"); };
+      const row = rows.find((r: any) => r.slot === slot) ?? rows[0];
+      const cat = plannerTags(row?.catalog_item ?? name);
+      if (cat && cat.contains.includes("dairy") && !cat.main.includes("dairy")) return false;
+      return !!row && JSON.parse(row.contains ?? "[]").includes("dairy"); };
     const failing = k.week().filter((d) => !(d.date === WED && d.slot === "Lunch") && d.dishes.some((x) => dairy(x.dish, d.slot))).map((d) => `${d.date}|${d.slot}`).sort();
     expect(failing.filter((x) => x.endsWith("|Lunch")).length).toBeGreaterThan(0);
     k.f().reset();

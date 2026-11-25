@@ -9,7 +9,7 @@ import { join } from "path";
 import { boot } from "./testkit";
 import { CAREFUL_SYSTEM, CONTAINS_SYSTEM, GUESTS_SYSTEM, INGREDIENT_SYSTEM, makePlan } from "./makePlan";
 import { coveredByWeek, EVENTS_SYSTEM, lunchSaid, platformPeers, readHousehold, withLunchSaid, type CalendarEvent } from "./planDays";
-import type { MealKind, MealTemplate } from "./kinds";
+import { catalogIngredients, type MealKind, type MealTemplate } from "./kinds";
 import type { ModelRequest, ModelResult } from "./model";
 import { addRule, commit, getLibraryDish, listSlotDays, saveSlotDay, upsertLibrary, upsertSlot, type LibraryInput, type RuleInput, type SlotInput } from "./slotStore";
 import { DELIVER_PROMPT, FESTIVAL_PROMPT } from "./routines/weekly-plan";
@@ -390,7 +390,7 @@ describe("make_plan: allergies (owner 25 Nov)", () => {
     expect(poha.ingredients.map((i) => i.item)).toEqual(["peanuts"]);
   });
 
-  it("every other dish is read carefully on the balanced tier, the new ones placed too: one that may have it is not his, and he has his own", async () => {
+  it("every other dish is read carefully on the balanced tier, the new ones placed too: one that may have it is not his (unless only an ingredient it can be made without brings it, decided 21), and he has his own", async () => {
     const k = await home({ rules: [ALLERGY], slots: [POHA_ONLY, MAIN[1], MAIN[2]], lib: { ...LIB, Breakfast: [["Kanda poha", "Poha"]] } });
     const f = fakeModel({ careful: (u) => ({ dishes: u.dishes.map((d: string) => ({ dish: d, has: d === "Kanda poha" ? [] : ["peanut"] })) }) });
     await k.plan(f.model);
@@ -402,7 +402,11 @@ describe("make_plan: allergies (owner 25 Nov)", () => {
     expect(c.slice(1).flatMap((x) => x.user.dishes).length).toBeGreaterThan(0);
     for (const d of WEEK) {
       const plate = k.at(d, "Breakfast")!.dishes;
-      for (const x of plate) if (x.dish !== "Kanda poha") expect(x.not_for).toEqual(["Kabir"]);
+      for (const x of plate) if (x.dish !== "Kanda poha") {
+        const leaveOut = (catalogIngredients(x.dish) ?? []).some((i) => i.name === "peanuts" && !i.main);
+        expect(x.not_for).toEqual(leaveOut ? [] : ["Kabir"]);
+        if (leaveOut) expect(x.note).toContain("make without peanuts for Kabir");
+      }
       expect(plate.some((x) => !x.not_for.includes("Kabir"))).toBe(true);
     }
   });
