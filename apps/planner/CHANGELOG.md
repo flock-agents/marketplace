@@ -44,9 +44,9 @@
   toward its days); a person with nothing of their own gets a dish beside; the missing rice or bread is added. The fix call
   and the rotation in code are gone. Only a day still with a gap gets one small targeted call (that day, the part, who eats,
   their rules, what not to repeat); what it cannot fill takes the closest allowed dish, said as coming back sooner than
-  usual. Nobody is left without food. A dish the family has on set days or often ("Kootu sometimes", "pongal on
-  Sundays") that the call left short takes the place of any main on a day it fits (one of its part first), keeping the
-  day's rice or bread and everyone's own dish. A particular way of a family dish keeps its own days a week.
+  usual. Nobody is left without food. A dish the family has on set days ("pongal on Sundays") that the call left
+  out takes the place of any main on that day where it fits (one of its part first), keeping the day's rice or bread and
+  everyone's own dish. A particular way of a family dish keeps its own days a week.
 - Allergies (owner, 25 Nov): a family dish on the family's own plates at a meal the allergic person eats is safe for them
   by the family's word (no read); when it has the item, its note keeps their portion aside ("Ishaan's Poha without
   peanut") and its ingredients are bought as usual. Every other dish (new, a spare, a particular way of a family dish, a
@@ -65,6 +65,18 @@
 - A list of the week's breakfasts or tiffins ("Poha, idli, dosa, upma") is one example plate per dish, not one plate of
   all of them (the plan put six dishes on every breakfast); only one meal told for different people is joined into one
   plate. The same dish twice on one example plate is kept once.
+- A dish the family gave a how often or days for keeps them whatever its part on the plate (luchi "on Sundays" only on
+  Sundays, "1/week" once), also as the rice or bread a day must have. A rice, bread or side has no weekly count only beside
+  a main on that day's plate (roti beside sabzi); alone as the plate (a paratha or idli breakfast) it is a dish like any
+  other, twice a week. A main beside idli or dosa with no rice (sambar) is a side there; near rice it is a main (owner).
+- Fewer days than the family said is fine (owner: "people want variety"): no least is asked for or pushed in; only a dish
+  with its own days ("pongal on Sundays") is put on them.
+- A box or tiffin with no dishes known no longer stops the plan: every other meal is planned, the box is left out and
+  named in the plan's one question.
+- Nobody without food (tier C): a dish of a meal that is only one person's (her own dinner) is made for her, so her rules
+  hold for it by the family's word; a person with nothing of their own is fed past the week's new-dish budget; the
+  targeted call and the spares name a family dish as made for them ("Dal without onion and garlic"); a daily dal or other
+  daily main counts as a main when checking that each person has a dish of their own.
 
 ## 4.0.2
 

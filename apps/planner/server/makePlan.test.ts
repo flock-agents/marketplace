@@ -237,7 +237,7 @@ describe("make_plan v2: hard rules per person, fail closed", () => {
   it("a dish not for someone keeps its ingredients (the fish stays in the fish curry); a slot where one person has none of its dishes gets a new dish for them", async () => {
     const k = await home({ people, rules: [GRANDMA], newPerWeek: 2, lib: { Breakfast: LIB.Breakfast, Dinner: LIB.Dinner, Lunch: [] },
       seed: [1, 2, 3].map(() => ({ slot: "Lunch", dishes: ["Rice", "Dal"] })),
-      library: [{ name: "Rice", slot: "Lunch", contains: [], contains_read: READ }, { name: "Dal", slot: "Lunch", contains: [], contains_read: READ },
+      library: [{ name: "Rice", slot: "Lunch", contains: [], contains_read: READ }, { name: "Dal", slot: "Lunch", frequency: "daily", contains: [], contains_read: READ },
         { name: "Fish curry", slot: "Lunch", days: ["Sun"], contains: ["fish"], contains_read: READ }] });
     const f = fakeModel({ slot: (u) => u.slot === "Lunch" ? { days: Object.fromEntries(u.days.map((d: any) => [d.date, d.date === WEEK[6] ? ["Rice", "Dal", "Fish curry", "Lauki"] : ["Rice", "Dal"]])), new: [{ dish: "Lauki", why: "for Nani" }] } : rotateDays(u),
       contains: (u) => ({ dishes: u.dishes.map((d: string) => ({ dish: d, has: [], not: READ })) }),
@@ -747,6 +747,35 @@ describe("make_plan: per-day lists, spares and the walk (owner 25 Nov)", () => {
     expect(k.at(WEEK[4], "Dinner")!.dishes[0].new).toBe(true);
     expect(k.rows("library").find((x: any) => x.name === "Paneer bhurji")).toMatchObject({ origin: "planner_suggested", untried: 1 });
     expect(f.gaps()).toHaveLength(0);
+  });
+});
+
+describe("make_plan: a box with no dishes (owner 25 Nov)", () => {
+  it("does not stop the plan: every other meal is planned, the box is left out and named in the one question", async () => {
+    const k = await home({ slots: [...MAIN, { name: "Snack box", kind: "custom", order: 20, usual_people: ["Kabir"], days: ["Mon", "Tue", "Wed", "Thu", "Fri"] }] });
+    const f = fakeModel();
+    const lines: string[] = [];
+    const r = await k.plan(f.model, { log: (l) => lines.push(l) });
+    if (!r.ok) throw new Error(r.say);
+    expect(f.slots().map((c) => c.user.slot)).toEqual(["Breakfast", "Lunch", "Dinner"]);
+    expect(k.week().filter((d) => d.slot === "Snack box")).toEqual([]);
+    expect(k.week()).toHaveLength(21);
+    expect(r.asked).toHaveLength(1);
+    expect(r.asked![0]).toContain("Snack box");
+    expect(r.message).toContain(r.asked![0]);
+    expect(lines.some((l) => l.includes("no dishes known for Snack box"))).toBe(true);
+    // No meal known at all: still the question, nothing planned.
+    const bare = await home({ lib: {} });
+    expect(await bare.plan(fakeModel().model)).toMatchObject({ ok: false, reason: "no_dishes" });
+  });
+
+  it("the request has no least for a dish the family has often (\"fewer than said is fine\")", async () => {
+    const k = await home({ library: [{ name: "Kadhi", slot: "Lunch", frequency: "usually" }] });
+    const f = fakeModel();
+    await k.plan(f.model);
+    const kadhi = reqOf(f, "Lunch").library.find((d: any) => d.dish === "Kadhi");
+    expect(kadhi).toMatchObject({ how_often: "usually", left: 5 });
+    expect(kadhi.at_least).toBeUndefined();
   });
 });
 

@@ -58,12 +58,12 @@ export const SLOT_SYSTEM = [
   "Every date in `days` without `skip` gets its dishes; a date with `skip` gets none. Dish names only, no ingredients. A day's dishes are made once and eaten by everyone in its `for`.",
   "A good week is one this family would happily eat: their own dishes first, in the proportions their plates show; a different main dish from one day to the next; everyday home food on weekdays and their special dishes on the days they have them; food the children and elders at the table can eat.",
   "Read each plate in `looks_like` as its parts: the main dish, the dal, the dry or gravy vegetable, the rice or bread it is eaten with, the side (curd, raita, chutney, salad). Each `library` dish says its `part`; make every day of the same parts as one of their plates, with as many dishes as `plate` says, never thinner.",
-  "Each day's dishes come from its own `allowed` list (the family's dishes that fit that day: on their days, with days left this week, someone there can eat them) and `staples`, plus one of its `must_have` (the rice or bread their plates have here) unless a dish that day already has its rice or bread (a one-pot rice dish, dosa). A dish's `left` is how many more days it may come this week: never more. A dish with `days` is what the family has on those days: put it on each of them where it is allowed.",
+  "Each day's dishes come from its own `allowed` list (the family's dishes that fit that day: on their days, with days left this week, someone there can eat them) and `staples`, plus one of its `must_have` (the rice or bread their plates have here) unless a dish that day already has its rice or bread (a one-pot rice dish, dosa). A dish's `left` is how many more days it may come this week: never more. A dish with `days` is what the family has on those days: put it on each of them where it is allowed. Fewer days than `how_often` is fine: a varied week is better.",
   "A dish's `not_for` people do not eat it: that is fine, as long as each of them has a dish of their own that day beside the staples. `guests` eat that meal too: keep their `rules` for them the same way. People in a day's `own_slot` get their own dish at their own slot that day.",
   "Some library dishes name a kind of dish, not one dish: \"Sabzi\", \"Dal\", \"Chutney\", \"Paratha\", or a dish with one (\"Idli with chutney\"). Never write that name as it is day after day: each day, name one particular dish of that kind, as a home cook of this family's region makes it, keeping every word of the family's name in it (\"Bhindi sabzi\", \"Aloo gobi sabzi\", \"Moong dal\", \"Dal tadka\", \"Methi paratha\", \"Idli with coconut chutney\"). The same goes for one of their dishes with another accompaniment (\"Idli with tomato chutney\" for their \"Idli with coconut chutney\"). List each in `new` with `like` set to the family's dish name exactly as given: it is their own dish made a particular way, so it does not use up `new_dishes_allowed`. Vary it across the week, keep it quick enough for the cook, and keep every rule of the people eating it.",
   "Write the names of `library` and `staples` dishes exactly as given.",
   "Any other dish is new: list it in `new` with why in a few words, `like` (the dish of theirs it stands in for) and `part`; at most `new_dishes_allowed` new dishes in all; none when it is 0. `short_of_dishes` given: their known dishes do not cover the week, so add new dishes that sit in the same place on their plates and are of the same cuisine, each listed in `new`.",
-  "spares: for each part in `parts`, 3 more dishes this family would happily eat in that place at this slot, not already in your days: a particular way of one of their dishes first, then dishes of the same cuisine. They are used where a day's dish cannot stay.",
+  "spares: for each part in `parts`, 3 more dishes this family would happily eat in that place at this slot, not already in your days: a particular way of one of their dishes first, then dishes of the same cuisine. When someone's rule rules out how a part's dishes are usually made, one spare is a particular way of their dish made for them, named so (\"Lauki sabzi without onion and garlic\"). They are used where a day's dish cannot stay.",
   "Every rule in `rules` holds for its person (everyone when it says so): a dish against their rule is simply not theirs, so on every day they are in `for` they need at least one dish they can eat beside the staples. A rule with a count a week is kept that many times in the week, not every day. `notes_for_people` are preferences to keep in mind. A person in `fasting` eats only what it says.",
   "Do not repeat what `already_this_week` has at another meal the same day, and avoid what `recent` had. An add-on slot (`main_slot` given) holds only what its people have in place of, or beside, the main slot's dishes that day: a day with nothing allowed for it gets [] (they eat the main slot's dishes).",
   "Each day's dishes are one whole meal as a home serves it, like their plates: at lunch and dinner one main dish with the rice or bread it is eaten with (dal with rice, a sabzi with roti), never three curries or three mains side by side with nothing to eat them with. With no `looks_like`, a plate is a main, a side and its rice or bread.",
@@ -74,6 +74,7 @@ export const SLOT_SYSTEM = [
 export const GAP_SYSTEM = [
   "You fill a few places in one meal slot of an Indian family's week. Answer with JSON only: { days: { \"YYYY-MM-DD\": [dish names] }, new: [{ dish, why, like, part }] }.",
   "For each item of `gaps`, one dish (two at most) for that date: of its `part` (any part when none), that every person in its `for` can eat under their `rules`, quick for a home cook, and none of `not` (already had enough this week, or on that day's plate already).",
+  "When a dish is wanted for one person whose rule rules out how the family's dishes are usually made, name one of their dishes as made for that person, the rule's item left out in its name (\"Dal without onion and garlic\", \"Aloo gobi sabzi without onion and garlic\"), so it is theirs.",
   "A particular way of one of the family's dishes (every word of their name kept, like \"Moong dal\" for their \"Dal\") is best: list it in `new` with `like` their name. Any other dish is new: list it in `new` with why in a few words, `like` and `part`; at most `new_dishes_allowed` of those, none when it is 0.",
 ].join("\n");
 
@@ -83,7 +84,7 @@ export const PARTS_SCHEMA = { type: "object", required: ["dishes"], properties: 
 export const PARTS_SYSTEM = [
   "For each meal slot of an Indian family, say each dish's place on their plates. Answer with JSON only: { dishes: [{ slot, dish, part, kind }] }, every dish of every slot, slot and dish exactly as given.",
   "part: a short plain name of the dish's place on the plates at that slot, the same name for dishes that take the same place (\"dal\", \"dry vegetable\", \"curry\", \"breakfast dish\", \"rice or bread\", \"side\").",
-  "kind: rice_or_bread (plain rice or a plain bread the rest is eaten with: rice, roti, chapati, phulka, bhakri); complete (a dish with its own rice or bread, or a meal by itself: rajma chawal, khichdi, biryani, curd rice, dosa, idli, poha, paratha); side (curd, raita, salad, pickle, papad, chutney, buttermilk, fruit); main (eaten with rice or bread: dal, sabzi, curry). Read each dish as the family's `plates` show it.",
+  "kind: rice_or_bread (plain rice or a plain bread the rest is eaten with: rice, roti, chapati, phulka, bhakri); complete (a dish with its own rice or bread, or a meal by itself: rajma chawal, khichdi, biryani, curd rice, dosa, idli, poha, paratha); side (curd, raita, salad, pickle, papad, chutney, buttermilk, fruit); main (eaten with rice or bread: dal, sabzi, curry, sambar, rasam). Read each dish as the family's `plates` show it.",
 ].join("\n");
 
 /** The model's slot answer, read leniently: only the dates asked, dish names as strings, each once. */
@@ -277,10 +278,19 @@ async function planWeek(deps: MakePlanDeps & { log: (line: string) => void }, in
     if (!order.includes(s.name)) w.done.add(s.name.toLowerCase());
   }
   // Never a plan from an empty library (#29): a meal with none of the family's dishes and no plate of theirs to go by is
-  // asked about, unless they said to suggest new dishes there.
+  // asked about, unless they said to suggest new dishes there. Only when no meal is known does it stop the plan: else that
+  // meal (a snack box nobody named dishes for) is left out of the week and named in the plan's one question (owner 25 Nov).
   const unknown = order.filter((n) => { const sf = w.slots.get(n.toLowerCase())!;
     return sf.slot.kind !== "addon" && !sf.looks_like.length && !sf.library.some((d) => plannable(d)); });
-  if (unknown.length && !deps.only && !deps.suggest_new) return done({ ok: false, reason: "no_dishes", ask: noDishesAsk(unknown), say: noDishesAsk(unknown) });
+  const leftOut: string[] = [];
+  if (unknown.length && !deps.only && !deps.suggest_new) {
+    if (unknown.length === order.length) return done({ ok: false, reason: "no_dishes", ask: noDishesAsk(unknown), say: noDishesAsk(unknown) });
+    const out = (n: string) => unknown.some((u) => same(u, n)) || (() => { const s = slots.find((x) => same(x.name, n)); return s?.kind === "addon" && !!s.addon_of && unknown.some((u) => same(u, s.addon_of!)); })();
+    for (const xs of [days, toPlan]) for (let i = xs.length - 1; i >= 0; i--) if (!xs[i].fixed && out(xs[i].slot)) xs.splice(i, 1);
+    for (const n of order.filter(out)) { leftOut.push(n); w.done.add(n.toLowerCase()); }
+    order.splice(0, order.length, ...order.filter((n) => !out(n)));
+    log(`no dishes known for ${leftOut.join(", ")}: left out of this week, asked`);
+  }
   const unmet: string[] = [];
   const tags = ruleTags(rules);
   // The guests' food rules, in their words, read once into the tags they forbid (code then checks them like a person's).
@@ -391,17 +401,14 @@ async function planWeek(deps: MakePlanDeps & { log: (line: string) => void }, in
     const usedDays = (k: string) => new Set(days.filter((d) => settled(d) && d.dishes.some((x) => dishKey(x) === k)).map((d) => d.date)).size;
     const lib = sf.library.filter((d) => plannable(d) && !sf.staples.some((x) => dishKey(x) === d.key)).flatMap((d) => {
       const max = capOf(w, s.name, d.name) ?? DEFAULT_DISH_DAYS;
-      const min = (frequencyRange(d.frequency) ?? [0, max])[0];
       // What a later slot sharing the dish was set aside (feasibility) is not this slot's to use.
       const later = [...w.slots.values()].filter((x) => x !== sf && order.includes(x.slot.name) && !w.done.has(x.slot.name.toLowerCase())).reduce((n, x) => n + (x.takes.get(d.key) ?? 0), 0);
       const left = Math.max(0, max - usedDays(d.key) - later);
       const not = eaters.filter((p) => mine.some((x) => x.people.includes(p) && ruleBreaks(w, { ...x, people: [p] }, d.name).length));
       if (!left || (eaters.length && not.length === eaters.length)) return [];
-      // Its room here: the slot-days on its days; a dish the family has often comes at least that often.
-      const room = mine.filter((x) => !x.skip && (!d.days?.length || d.days.includes(weekdayOf(x.date)))).length;
-      const least = Math.min(room, Math.max(0, min - usedDays(d.key)));
+      // No least (owner 25 Nov: "fewer than said is fine: people want variety"); only the most and the days.
       const part = sf.parts.get(d.key)?.part;
-      return [{ dish: d.name, ...(part ? { part } : {}), left, ...(least ? { at_least: least } : {}), ...(d.days?.length ? { days: d.days } : {}), ...(d.frequency ? { how_often: d.frequency } : {}), ...(not.length ? { not_for: not } : {}) }];
+      return [{ dish: d.name, ...(part ? { part } : {}), left, ...(d.days?.length ? { days: d.days } : {}), ...(d.frequency ? { how_often: d.frequency } : {}), ...(not.length ? { not_for: not } : {}) }];
     });
     /** The library dishes that fit a day: on their days, with days left, someone there can eat them, not another main that day. */
     const allowed = (x: PlanDay) => lib.filter((e) => (!e.days || e.days.includes(weekdayOf(x.date))) && (!x.people.length || notFor(w, x, e.dish).length < x.people.length)
@@ -638,7 +645,8 @@ async function planWeek(deps: MakePlanDeps & { log: (line: string) => void }, in
   // 6. The message. One question at most (owner 25 Nov): the slots too thin for their week, the thinnest first (owner 23 Nov),
   // not a line in unmet, and the calendar entries the plan could not read, folded together. A new dish is said with the
   // family's dish it stands in for, never the model's reason.
-  const question = planQuestion({ short: only ? [] : shortAsks(feas.short, slots, toPlan, w), events: read.asked });
+  const question = planQuestion({ short: only ? [] : [...leftOut.filter((n) => slots.find((s) => same(s.name, n))?.kind !== "addon")
+    .map((n) => ({ meal: slots.find((s) => same(s.name, n))?.kind === "main" ? n.toLowerCase() : n, added: false })), ...shortAsks(feas.short, slots, toPlan, w)], events: read.asked });
   const asked = question ? [question] : [];
   const newDishes = [...w.newDishes.values()].map((v) => ({ name: v.name, like: v.like ?? null }));
   const relaxed = Object.fromEntries([...w.slots.values()].filter((x) => x.window !== REPEAT_WINDOW_DAYS && order.includes(x.slot.name)).map((x) => [x.slot.name, x.window]));
