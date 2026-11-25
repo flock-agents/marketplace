@@ -711,3 +711,23 @@ describe("make_plan: a particular way of a family's dish", () => {
     expect(k.rows("library").map((x: any) => x.name)).not.toContain("Bhindi sabzi");
   });
 });
+
+describe("make_plan: a meal with no dishes known (stage 25 Nov)", () => {
+  it("is left out of the week and asked about in the message; the other meals are planned", async () => {
+    const k = await home({ slots: [...MAIN, { name: "Kabir's tiffin", kind: "custom", order: 20, usual_people: ["Kabir"], days: ["Mon", "Tue", "Wed", "Thu", "Fri"] }] });
+    const f = fakeModel();
+    const r = await k.plan(f.model);
+    expect(r.ok).toBe(true);
+    if (!r.ok) throw new Error();
+    expect(f.slots().map((c) => c.user.slot)).toEqual(["Breakfast", "Lunch", "Dinner"]);
+    expect(k.week().filter((d) => d.slot === "Kabir's tiffin")).toHaveLength(0);
+    expect(k.week().filter((d) => d.slot !== "Kabir's tiffin")).toHaveLength(21);
+    expect(r.asked).toEqual(["I don't know any dishes for Kabir's tiffin yet, so it's not in this week's plan. What does Kabir usually have for it? Or should I suggest some?"]);
+    expect(r.message).toContain("I don't know any dishes for Kabir's tiffin yet");
+  });
+  it("still refuses when no meal is known at all", async () => {
+    const k = await home({ lib: {} });
+    const r = await k.plan(fakeModel().model);
+    expect(r).toMatchObject({ ok: false, reason: "no_dishes" });
+  });
+});

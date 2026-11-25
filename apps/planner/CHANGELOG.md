@@ -2,6 +2,9 @@
 
 ## 4.0.3
 
+- A meal with none of the family's dishes known (a child's tiffin nobody named dishes for) is left out of the week and
+  asked about in the plan's message; make_plan refuses only when no meal is known. Before, one such meal refused the whole
+  week, and onboarding asked the same question on every reply (stage, 25 Nov).
 - The plan's message leaves out a note that explains the plan's own choices ("Idli is safe, Chutney avoided by him"):
   only a word for someone at the table is said. A person's fast is still said by code.
 - A note that is only the cook's limit again ("Yes, she has two hours, so 3 to 4 dishes in all") stays with the cook,

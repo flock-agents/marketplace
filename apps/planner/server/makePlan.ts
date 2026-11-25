@@ -258,7 +258,18 @@ async function planWeek(deps: MakePlanDeps & { log: (line: string) => void }, in
   // asked about, unless they said to suggest new dishes there.
   const unknown = order.filter((n) => { const sf = w.slots.get(n.toLowerCase())!;
     return sf.slot.kind !== "addon" && !sf.looks_like.length && !sf.library.some((d) => plannable(d)); });
-  if (unknown.length && !deps.only && !deps.suggest_new) return done({ ok: false, reason: "no_dishes", ask: noDishesAsk(unknown), say: noDishesAsk(unknown) });
+  // Only when no meal is known does it stop the plan: else that meal (a tiffin nobody named dishes for) is left out of the
+  // week, with its add-ons, and asked about in the plan's message (stage 25 Nov: one unknown tiffin refused the whole week,
+  // and onboarding asked the same question on every reply).
+  const leftOut: string[] = [];
+  if (unknown.length && !deps.only && !deps.suggest_new) {
+    if (unknown.length === order.length) return done({ ok: false, reason: "no_dishes", ask: noDishesAsk(unknown), say: noDishesAsk(unknown) });
+    const out = (n: string) => unknown.some((u) => same(u, n)) || (() => { const s = slots.find((x) => same(x.name, n)); return s?.kind === "addon" && !!s.addon_of && unknown.some((u) => same(u, s.addon_of!)); })();
+    for (const xs of [days, toPlan]) for (let i = xs.length - 1; i >= 0; i--) if (!xs[i].fixed && out(xs[i].slot)) xs.splice(i, 1);
+    for (const n of order.filter(out)) { leftOut.push(n); w.done.add(n.toLowerCase()); }
+    order.splice(0, order.length, ...order.filter((n) => !out(n)));
+    log(`no dishes known for ${leftOut.join(", ")}: left out of this week, asked`);
+  }
   const unmet: string[] = [];
   const tags = ruleTags(rules);
   // The guests' food rules, in their words, read once into the tags they forbid (code then checks them like a person's).
@@ -572,7 +583,7 @@ async function planWeek(deps: MakePlanDeps & { log: (line: string) => void }, in
     ...[...backs.values()].map((x) => (x.days.length === 1 ? `${x.days[0]} ${x.slot}: ${x.dish}${BACK}` : `${x.dish} at ${x.slot}${BACK} (${x.days.join(", ")})`)));
 
   // 6. The message. A slot too thin for its week is asked about, the thinnest first (owner 23 Nov), not a line in unmet.
-  const asked = [...read.asked, ...(only ? [] : shortQuestions(feas.short, slots, toPlan, w))];
+  const asked = [...read.asked, ...(only ? [] : leftOutQuestions(leftOut, slots)), ...(only ? [] : shortQuestions(feas.short, slots, toPlan, w))];
   const relaxed = Object.fromEntries([...w.slots.values()].filter((x) => x.window !== REPEAT_WINDOW_DAYS && order.includes(x.slot.name)).map((x) => [x.slot.name, x.window]));
   const relaxedOut = Object.keys(relaxed).length ? { relaxed } : {};
   if (only) {
@@ -593,6 +604,20 @@ async function planWeek(deps: MakePlanDeps & { log: (line: string) => void }, in
   });
   return done({ ok: true, week_start: weekStart, message, ...(closed.intro ? { intro: closed.intro } : {}), instructions: closed.instructions,
     ...(unmet.length ? { unmet: uniq(unmet) } : {}), ...(asked.length ? { asked } : {}), ...(noIngredients.length ? { no_ingredients: noIngredients } : {}), ...relaxedOut });
+}
+
+/** One question per meal left out of the week for want of any dish of theirs there (an add-on goes with its meal, unasked):
+ *  "I don't know any dishes for Kabir's tiffin yet, so it's not in this week's plan. What does Kabir usually have for it?
+ *  Or should I suggest some?" */
+export function leftOutQuestions(leftOut: string[], slots: Slot[]): string[] {
+  return leftOut.flatMap((n) => {
+    const slot = slots.find((s) => same(s.name, n));
+    if (slot?.kind === "addon") return [];
+    const label = slot?.kind === "main" ? n.toLowerCase() : n;
+    const who = slot?.usual_people ?? [];
+    const ask = who.length ? `What ${who.length === 1 ? "does" : "do"} ${andList(who)} usually have for it?` : "What do you usually have for it?";
+    return [`I don't know any dishes for ${label} yet, so it's not in this week's plan. ${ask} Or should I suggest some?`];
+  });
 }
 
 /** At most this many questions about a slot short of dishes in one plan's message. */
