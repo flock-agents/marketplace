@@ -199,7 +199,9 @@ export function templateCounts(templates: MealTemplate[], n: number): number[] {
   let sum = out.reduce((a, b) => a + b, 0);
   while (sum > n) { const i = out.indexOf(Math.max(...out)); out[i]--; sum--; }
   const free = want.map((x, i) => (x === null ? i : -1)).filter((i) => i >= 0);
-  const spread = free.length ? free : templates.map((_, i) => i);
+  // Days left with every template given a share go to those said in words ("sometimes"), never past an exact "2/week".
+  const worded = templates.map((t, i) => (t.share && t.share in TEMPLATE_DAYS ? i : -1)).filter((i) => i >= 0);
+  const spread = free.length ? free : worded.length ? worded : templates.map((_, i) => i);
   for (let j = 0; sum < n; j++, sum++) out[spread[j % spread.length]]++;
   return out;
 }

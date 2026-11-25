@@ -1,7 +1,7 @@
 // fillWeek.ts on hand-made weeks, no database and no model: the week filled by code from the meals' templates (kinds model
 // contract, owner rules 1–8). Expected plates are worked out from the owner's rules, not read off the code.
 import { describe, expect, it } from "bun:test";
-import { fillWeek, type FillInput, type FillResult } from "./fillWeek";
+import { fillWeek, templateCounts, type FillInput, type FillResult } from "./fillWeek";
 import { suggestable, type MealKind, type MealTemplate } from "./kinds";
 import { OWN_SHARE } from "./planChecks";
 import { slotDayKey, type PlanDay } from "./planDays";
@@ -444,5 +444,12 @@ describe("a dish had most days, kept by its template's share", () => {
     const lib = [dish("Idli", "Breakfast", "Idli", { frequency: "usually" }), ...["Masala dosa", "Rava dosa"].map((n) => dish(n, "Breakfast", "Dosa"))];
     const r = run({ slots: [slot("Breakfast", { kinds, templates: [share(T({ kind: "Idli" }), "usually"), T({ kind: "Dosa" })] })], library: lib });
     for (const d of WEEK) expect(r.at(d, "Breakfast")).toHaveLength(1);
+  });
+});
+
+describe("template shares (rule 1)", () => {
+  it("an exact '2/week' is never exceeded: the days left go to the templates said in words", () => {
+    const t = (sh: MealTemplate["share"]) => share(T({ kind: "Dosa" }), sh);
+    expect(templateCounts([t("2/week"), t("sometimes"), t("sometimes")], 7)).toEqual([2, 3, 2]);
   });
 });
