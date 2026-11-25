@@ -547,6 +547,9 @@ export function fillWeek(input: FillInput): FillResult {
     return false;
   };
 
+  /** Does an add-on have anything to give: a template with a part, or a dish of the family's at it. */
+  const canFeed = (slot: string) => (shapeOf(slot).templates ?? []).some((t) => t.parts.length) || famRows.some((r) => same(r.slot, slot));
+
   // ── Day by day, the meals in their order ──
   const order = (d: PlanDay) => slotByKey.get(d.slot.toLowerCase())?.order ?? 99;
   const todo = [...planned].sort((a, b) => a.date.localeCompare(b.date) || order(a) - order(b) || a.slot.localeCompare(b.slot));
@@ -557,7 +560,8 @@ export function fillWeek(input: FillInput): FillResult {
     const plate: Plate = [];
     const people = d.people;
     // The people fed at their own add-on that day are not fed here.
-    const atTable = s.kind === "addon" ? people : people.filter((p) => !ownAddon(w, dayOf(d), p));
+    // (Only an add-on that has something to give: one with no dish of theirs and no template feeds nobody.)
+    const atTable = s.kind === "addon" ? people : people.filter((p) => { const a = ownAddon(w, dayOf(d), p); return !a || !canFeed(a.slot); });
     if (ti === undefined) { res.plates.set(k, []); continue; }
     // A template that cannot be filled that day (fish on a day the house keeps vegetarian, a breakfast whose items are all
     // kept from someone), or only with an item had yesterday, gives way to another of the meal's: the one had least this

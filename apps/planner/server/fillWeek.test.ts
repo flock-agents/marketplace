@@ -453,3 +453,14 @@ describe("template shares (rule 1)", () => {
     expect(templateCounts([t("2/week"), t("sometimes"), t("sometimes")], 7)).toEqual([2, 3, 2]);
   });
 });
+
+describe("an add-on with nothing to give (safety)", () => {
+  it("a grandmother's own breakfast with no dish of hers: she is fed at the family's breakfast", () => {
+    const slots = [slot("Breakfast", { kinds: [{ name: "Porridge" }, { name: "Idli" }], templates: [T({ kind: "Porridge" }), T({ kind: "Idli" })] }),
+      slot("Dadi's breakfast", { kind: "addon", addon_of: "Breakfast", order: 15, usual_people: ["Dadi"] })];
+    const lib = [dish("Ragi java", "Breakfast", "Porridge", { contains: ["sugar", "dairy"] }), ...["Rava idli", "Kanchipuram idli"].map((n) => dish(n, "Breakfast", "Idli"))];
+    const days = [...WEEK.map((d) => day(d, "Breakfast", ["Asha", "Dadi"])), ...WEEK.map((d) => day(d, "Dadi's breakfast", ["Dadi"]))];
+    const r = run({ slots, library: lib, days, newCap: 0, rules: [rule({ who: "Dadi", items: ["sugar"], quote: "Dadi: no sugar" })] });
+    for (const d of WEEK) expect(r.plates.get(slotDayKey(d, "Breakfast"))!.some((x) => !x.not_for.includes("Dadi"))).toBe(true);
+  });
+});
