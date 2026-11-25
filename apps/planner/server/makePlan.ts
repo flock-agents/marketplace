@@ -27,9 +27,9 @@ import { isObject, list, refuse, writeRoutes, type Db, type Emit } from "./famil
 import { STOP_CODES, stopSaid, type ModelCall, type ModelFailure, type ModelRequest, type ModelResult } from "./model";
 import { commit, deleteSlotDays, listLibrary, listRules, listSlotDays, listSlots, saveSlotDay, slotHistory, upsertLibrary, type LibraryDish,
   type Rule } from "./slotStore";
-import { buildDays, slotDayKey, lunchSaid, platformPeers, readEvents, readHousehold, ruleHolds, withLunchSaid, type PlanDay, type Peers } from "./planDays";
+import { buildDays, slotDayKey, lunchSaid, platformPeers, readEvents, readHousehold, withLunchSaid, type PlanDay, type Peers } from "./planDays";
 import { canonTag, carefulTags, allergyNotes, forbidden, isDropped, mostlyOnion, notFor, plannable, readFor, ruleTags, slotFacts, softSwapNotes, swapNotes,
-  vouched, withParents, type Week } from "./planChecks";
+  ruleBinds, vouched, withParents, type Week } from "./planChecks";
 import { CATALOG_READ, catalogNameOf, fillWeek, type FillResult } from "./fillWeek";
 import { isAllergyRule } from "./allergy";
 
@@ -350,7 +350,7 @@ async function planWeek(deps: MakePlanDeps & { log: (line: string) => void }, in
   // 5. Each day's ingredients, one fast call a day (all days at once), once more for what it left out.
   const got = new Map<string, (Ingredient & { tags: string[] })[]>();   // date|slot|dish key
   const noIngredients: string[] = [];
-  const hardAt = (d: PlanDay, p: string) => rules.filter((r) => r.hard && r.what !== "swap" && (!r.who || same(r.who, p)) && ruleHolds(r, d.date, w.slots.get(d.slot.toLowerCase())?.slot, d.slot));
+  const hardAt = (d: PlanDay, p: string) => rules.filter((r) => r.hard && r.what !== "swap" && (!r.who || same(r.who, p)) && ruleBinds(r, d.date, w.slots.get(d.slot.toLowerCase())?.slot, d.slot));
   /** The tags a rule takes out of a dish's ingredients: onion and garlic stay where a portion is kept aside (contract rule 7). */
   const avoided = (r: Rule, dish: string) => forbidden(r).filter((t) => t !== "onion_garlic" || isAllergyRule(r) || mostlyOnion(dish));
   const avoidTags = (d: PlanDay) => uniq(d.people.flatMap((p) => hardAt(d, p).flatMap(forbidden)));

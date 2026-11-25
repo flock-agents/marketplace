@@ -72,6 +72,8 @@ const STAPLE_WORDS: Record<string, string[]> = {
   curd: ["curd", "dahi", "yogurt", "thayir", "mosaru"],
 };
 const wordsOf = (x: string) => norm(x).split(" ").filter(Boolean);
+/** Words a family puts around a category's name ("some dal", "any poriyal", "a different khichdi"): not the name. */
+const FILLER = ["a", "an", "any", "some", "the", "different", "other", "plain", "simple"];
 /** The staple a plain staple's name is ("Rice", "Steamed rice", "Phulka"), or null for a dish. */
 function stapleWord(name: string): string | null {
   const ws = wordsOf(name).filter((w) => w !== "plain" && w !== "steamed");
@@ -323,9 +325,11 @@ export function fillWeek(input: FillInput): FillResult {
   const namedAt = (slot: string, kind: string, sub: string | null) => categoriesAt(slot).some((c) => sameKind(c.kind, kind) && (!c.sub || sameKind(c.sub, sub)));
   w.ownItems = new Set(CATALOG.kinds.flatMap((k) => (k.staple ? [] : k.items.filter((it) => named(k.name, it.sub ?? null)).map((it) => dishKey(it.name)))));
   /** The catalog's items of a kind (one sub-kind when given) for this family at this meal: regional only within their
-   *  cuisines; their sub-kinds (`prefer`) first, then their cuisines, then everyday ones; never one of their dishes, nor one
-   *  they disliked or dropped. Ties rotate with the week. */
-  const catalogPool = (s: Slot, kind: string, sub: string | null, prefer: string[], family: boolean): Item[] => {
+   *  cuisines; the items called by the family's own word for the category (`said`: their "upma" is an upma, before a
+   *  sabudana khichdi of the same kind; their "poha" a poha, before an avalakki oggarane) first, then their sub-kinds
+   *  (`prefer`), then their cuisines, then everyday ones; never one of their dishes, nor one they disliked or dropped. Ties
+   *  rotate with the week. */
+  const catalogPool = (s: Slot, kind: string, sub: string | null, prefer: string[], family: boolean, said: string[][] = []): Item[] => {
     const ck = catalogKind(kind);
     if (!ck || ck.staple) return [];
     const meal = mealOf(s, input.slots);
@@ -338,11 +342,13 @@ export function fillWeek(input: FillInput): FillResult {
     items = items.filter((it) => !familyCatalog.has(norm(it.name)) && !noAgain.has(dishKey(it.name)) && !famRows.some((r) => r.key === dishKey(it.name))
       && namedAt(s.name, ck.name, it.sub) === family);
     const off = items.length ? hash(`${firstDate}|${ck.name}|${sub ?? ""}`) % items.length : 0;
+    const says = (name: string) => { const ws = wordsOf(name); return said.some((x) => x.length > 0 && x.every((w) => ws.includes(w))); };
     return items.map((it, i) => ({ name: it.name, key: dishKey(it.name), kind: ck.name, sub: it.sub, family, catalog: true, idx: (i - off + items.length) % items.length,
       // The family's cuisines first, then an everyday item of no one cuisine, then another cuisine's.
-      cuisine: (it.cuisines ?? []).some((c) => cuisines.has(norm(c))) ? 2 : (it.cuisines ?? []).length ? 0 : 1 }))
-      .sort((a, b) => Number(prefer.some((p) => sameKind(p, b.sub))) - Number(prefer.some((p) => sameKind(p, a.sub))) || (b.cuisine ?? 0) - (a.cuisine ?? 0) || a.idx - b.idx)
-      .map((x, i) => ({ ...x, idx: i }));
+      cuisine: (it.cuisines ?? []).some((c) => cuisines.has(norm(c))) ? 2 : (it.cuisines ?? []).length ? 0 : 1, says: says(it.name) }))
+      .sort((a, b) => Number(b.says) - Number(a.says) || Number(prefer.some((p) => sameKind(p, b.sub))) - Number(prefer.some((p) => sameKind(p, a.sub)))
+        || (b.cuisine ?? 0) - (a.cuisine ?? 0) || a.idx - b.idx)
+      .map(({ says: _, ...x }, i) => ({ ...x, idx: i }));
   };
   /** The family's items of a kind (one sub-kind when given) at this meal, their own sub-kinds of it first; then the catalog's
    *  items of the kinds and sub-kinds they named as a category there. Class 1: a family dish fills places only at the meal it
@@ -360,7 +366,10 @@ export function fillWeek(input: FillInput): FillResult {
     }
     const theirs = prefer.length ? [...out.filter((x) => prefer.some((p) => sameKind(p, x.sub))), ...out.filter((x) => !prefer.some((p) => sameKind(p, x.sub)))] : out;
     const cats = categoriesAt(slot);
-    const cat = cats.some((c) => sameKind(c.kind, kind)) ? catalogPool(s, kind, sub, uniq([...prefer, ...cats.filter((c) => sameKind(c.kind, kind) && c.sub).map((c) => c.sub!)]), true) : [];
+    // The family's own words for the category here ("upma", "poha"): the items called by them are their own items of it.
+    // A regional word ("curry", decided 20) means another dish by region: never matched by name.
+    const said = rows.filter((r) => { const c = categoryPlace(r); return !!c && sameKind(c.kind, kind) && !regionalWordOf(r.name); }).map((r) => wordsOf(r.name).filter((w) => !FILLER.includes(w)));
+    const cat = cats.some((c) => sameKind(c.kind, kind)) ? catalogPool(s, kind, sub, uniq([...prefer, ...cats.filter((c) => sameKind(c.kind, kind) && c.sub).map((c) => c.sub!)]), true, said) : [];
     return [...theirs, ...cat.filter((x) => !seen.has(x.key)).map((x) => ({ ...x, days: catDays(slot, x.kind, x.sub) }))].map((x, i) => ({ ...x, idx: i }));
   };
   /** The brand-new variants of a kind (one sub-kind when given): the catalog's items outside what the family named; never a
@@ -591,13 +600,17 @@ export function fillWeek(input: FillInput): FillResult {
   /** The best item of the steps for `who` (the slot-day's people, or one person being fed). */
   const choose = (s: Slot, d: PlanDay, plate: Plate, steps: Step[], who: string[], feeding: boolean, must?: (name: string) => boolean): { it: Item; ex: string[] } | null => {
     const samePart = (it: Item) => plate.filter((x) => sameKind(x.kind, it.kind) && !x.staple);
+    // Everyone at the meal counts for the plate (contract rule 6: an item someone there may not eat is passed over while another
+    // fits), the people fed at their own meal beside it too: that meal is a fallback for them, never a reason to give the
+    // shared plate an item they cannot eat (h4: French toast for the whole breakfast while egg-free toasts fitted).
+    const beside = feeding ? [] : dayOf(d).people.filter((p) => !who.includes(p));
     for (const st of steps) {
       if (!st.items.length || (st.isNew && !newAllowed(d, st.share, feeding))) continue;
       const ok = st.items.filter((it) => fits(s, d, plate, it, st) && (!must || must(it.name)))
-        .map((it) => ({ it, ex: excluded(d, who, it.name) }))
+        .map((it) => ({ it, ex: excluded(d, who, it.name), also: beside.length ? excluded(d, beside, it.name).length : 0 }))
         .filter((x) => (st.zero ? !x.ex.length : !who.length || x.ex.length < who.length));
       if (!ok.length) continue;
-      ok.sort((a, b) => a.ex.length - b.ex.length
+      ok.sort((a, b) => a.ex.length - b.ex.length || a.also - b.also
         || Number(samePart(a.it).some((x) => sameKind(x.sub, a.it.sub))) - Number(samePart(b.it).some((x) => sameKind(x.sub, b.it.sub)))
         || (usedDates.get(a.it.key)?.size ?? 0) - (usedDates.get(b.it.key)?.size ?? 0)
         || (lastUsed.get(a.it.key) ?? "").localeCompare(lastUsed.get(b.it.key) ?? "") || a.it.idx - b.it.idx);

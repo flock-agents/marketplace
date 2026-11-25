@@ -56,8 +56,17 @@ export function forbidden(r: Rule): string[] {
     case "no_eggs": return uniq(["egg", ...items]);
     case "egg": return items.length ? items : ["meat", "fish"];
     case "avoid": case "swap": return items;
+    // "Chicken only at Sunday lunch": a rule kept to days or meals forbids its items everywhere else (ruleBinds).
+    case "only": return r.days?.length || r.slots?.length ? items : [];
     default: return [];
   }
+}
+/** Does a hard rule bind at a slot-day: an "only" rule kept to days or meals ("chicken only at Sunday lunch") binds everywhere
+ *  outside them, in every kind of meal (a tiffin, someone's own meal), and never inside; every other rule where its days and
+ *  meals hold. */
+export function ruleBinds(r: Rule, date: string, slot: Slot | undefined, slotName: string): boolean {
+  if (r.what === "only") return !!(r.days?.length || r.slots?.length) && !ruleHolds(r, date, slot, slotName);
+  return ruleHolds(r, date, slot, slotName);
 }
 /** Every tag the family's rules name, and the base ones: what a new dish is read for. */
 export function ruleTags(rules: Rule[]): string[] {
@@ -188,7 +197,7 @@ export function ownSlotDish(w: Week, person: string, dish: string): boolean {
 /** The hard rules that hold for one person at a slot-day. */
 function rulesFor(w: Week, d: PlanDay, person: string): Rule[] {
   const slot = w.slots.get(slotKey(d.slot))?.slot;
-  return w.rules.filter((r) => r.hard && (!r.who || same(r.who, person)) && ruleHolds(r, d.date, slot, d.slot));
+  return w.rules.filter((r) => r.hard && (!r.who || same(r.who, person)) && ruleBinds(r, d.date, slot, d.slot));
 }
 /** Why a dish cannot go to the people of a slot-day (empty: it can): an item it has, or one it was never read for. Pass a
  *  slot-day with one person to ask for that person. */

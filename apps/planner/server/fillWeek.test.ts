@@ -630,3 +630,64 @@ describe("an add-on's own dishes kept to their words still feed its person when 
     for (const d of WEEK) expect(r.at(d, "Nani's breakfast").length + r.at(d, "Breakfast").filter((x) => !/toast/i.test(x)).length).toBeGreaterThan(0);
   });
 });
+
+describe("a rule kept to days and meals holds in every meal outside them (safety: \"chicken only at Sunday lunch\")", () => {
+  const only = ["Ravi", "Karan"].map((who) => rule({ what: "only", who, items: ["chicken"], days: ["Sun"], slots: ["Lunch"], quote: "We eat chicken only on Sunday lunch." }));
+  it("a new pulao in a child's tiffin never carries chicken, while Sunday lunch keeps the family's chicken", () => {
+    const tiffin = slot("Karan's tiffin", { kind: "custom", order: 20, usual_people: ["Karan"], kinds: [{ name: "Pulao" }], templates: [T({ kind: "Pulao" })] });
+    const lunch = slot("Lunch", { kinds: [{ name: "Rice", staple: true }, { name: "Dal" }, { name: "Chicken" }], templates: [T({ kind: "Rice" }, { kind: "Dal" })] });
+    const lib = [dish("Veg pulao", "Karan's tiffin", "Pulao"), dish("Rice", "Lunch", "Rice"), dish("Dal tadka", "Lunch", "Dal"), dish("Moong dal", "Lunch", "Dal"),
+      dish("Chicken curry", "Lunch", "Chicken", { contains: ["chicken"], days: ["Sun"] })];
+    const days = [...WEEK.map((d) => day(d, "Karan's tiffin", ["Karan"])), ...WEEK.map((d) => day(d, "Lunch", ["Ravi", "Asha"]))];
+    const r = run({ slots: [tiffin, lunch], library: lib, rules: only, days });
+    const tiffins = WEEK.flatMap((d) => r.at(d, "Karan's tiffin"));
+    expect(tiffins.length).toBeGreaterThanOrEqual(7);
+    expect(tiffins.filter((x) => /chicken|murgh/i.test(x))).toEqual([]);
+    expect(r.placed.length).toBeGreaterThan(0);   // new pulaos were placed: they were checked like the family's
+    expect(r.at(WEEK[6], "Lunch")).toContain("Chicken curry");
+    expect(r.dishAt(WEEK[6], "Lunch", "Chicken curry")!.not_for).toEqual([]);
+  });
+  it("a chicken dish on a weekday dinner is not for the people the rule is of", () => {
+    const dinner = slot("Dinner", { kinds: [{ name: "Roti", staple: true }, { name: "Chicken" }, { name: "Sabzi" }], templates: [T({ kind: "Roti" }, { kind: "Chicken" })] });
+    const lib = [dish("Phulka", "Dinner", "Roti"), dish("Chicken curry", "Dinner", "Chicken", { contains: ["chicken"] }), ...SABZIS.map((n) => dish(n, "Dinner", "Sabzi"))];
+    const r = run({ slots: [dinner], library: lib, rules: only, people: ["Ravi", "Karan", "Asha"], newCap: 0 });
+    for (const d of WEEK) {
+      const c = r.dishAt(d, "Dinner", "Chicken curry");
+      if (c) expect(c.not_for.sort()).toEqual(["Karan", "Ravi"]);
+      // Ravi and Karan each still have something beside the staple.
+      const plate = r.plates.get(slotDayKey(d, "Dinner"))!;
+      for (const p of ["Ravi", "Karan"]) expect(plate.some((x) => x.name !== "Phulka" && !x.not_for.includes(p))).toBe(true);
+    }
+  });
+});
+
+describe("nobody at a meal is left with nothing (safety)", () => {
+  it("a person fed at their own breakfast still counts at the family's: the shared item is one they can eat while one fits", () => {
+    const slots = [slot("Breakfast", { kinds: [{ name: "Toast" }], templates: [T({ kind: "Toast" })] }),
+      slot("Dadu's breakfast", { kind: "addon", addon_of: "Breakfast", order: 60, usual_people: ["Dadu"] })];
+    const lib = [dish("French toast", "Breakfast", "Toast", { contains: ["egg", "dairy"] }), dish("Bread butter toast", "Breakfast", "Toast", { contains: ["dairy"] }),
+      dish("Ragi malt", "Dadu's breakfast", "Porridge")];
+    const days = [...WEEK.map((d) => day(d, "Breakfast", ["Asha", "Ravi", "Dadu"])), ...WEEK.map((d) => day(d, "Dadu's breakfast", ["Dadu"]))];
+    const r = run({ slots, library: lib, days, newCap: 0, rules: [rule({ what: "veg", who: "Dadu", quote: "Dadu is pure veg" }), rule({ what: "no_eggs", who: "Dadu", quote: "no eggs for Dadu" })] });
+    // The first morning both fit: the one Dadu can eat comes first.
+    expect(r.at(WEEK[0], "Breakfast")).toEqual(["Bread butter toast"]);
+    // Every morning the shared plate holds something for him, or his own breakfast does.
+    for (const d of WEEK) {
+      const shared = r.plates.get(slotDayKey(d, "Breakfast"))!, own = r.plates.get(slotDayKey(d, "Dadu's breakfast")) ?? [];
+      expect(shared.some((x) => !x.not_for.includes("Dadu")) || own.some((x) => !x.not_for.includes("Dadu"))).toBe(true);
+    }
+  });
+});
+
+describe("rotation: the family's own items of a kind come before another item of it comes back (rule 3)", () => {
+  it("a family that says \"upma\" and \"poha\" gets upmas and pohas, not a sabudana khichdi or avalakki oggarane, before any repeat", () => {
+    const kinds: MealKind[] = [{ name: "Upma" }, { name: "Poha" }];
+    const lib = [dish("Upma", "Breakfast", "Upma"), dish("Poha", "Breakfast", "Poha")];
+    // Regional items of their cuisines rank high among the catalog's; the family's own word still comes first.
+    const r = run({ slots: [slot("Breakfast", { kinds, templates: [T({ kind: "Upma" }), T({ kind: "Poha" })] })], library: lib, cuisines: ["maharashtra", "karnataka"], newCap: 0 });
+    const all = WEEK.flatMap((d) => r.at(d, "Breakfast"));
+    expect(all).toHaveLength(7);
+    for (const x of all) expect(x).toMatch(/\b(upma|poha)\b/i);
+    expect(new Set(all).size).toBe(7);
+  });
+});
