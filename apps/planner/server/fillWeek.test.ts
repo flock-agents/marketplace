@@ -464,3 +464,14 @@ describe("an add-on with nothing to give (safety)", () => {
     for (const d of WEEK) expect(r.plates.get(slotDayKey(d, "Breakfast"))!.some((x) => !x.not_for.includes("Dadi"))).toBe(true);
   });
 });
+
+describe("a new item's diet (rule 4: new variants are like the family's own)", () => {
+  it("a house whose only meat is chicken is never suggested a mutton or egg pulao", () => {
+    const kinds: MealKind[] = [{ name: "Pulao" }];
+    const lib = [dish("Veg pulao", "Tiffin", "Pulao"), dish("Chicken curry", "Lunch", "Chicken", { contains: ["chicken"] })];
+    const r = run({ slots: [slot("Tiffin", { kind: "custom", order: 20, kinds, templates: [T({ kind: "Pulao" })] })], library: lib });
+    const all = WEEK.flatMap((d) => r.at(d, "Tiffin"));
+    expect(all.some((x) => /mutton|yakhni|egg|fish|prawn/i.test(x))).toBe(false);
+    expect(r.placed.length).toBeGreaterThan(0);
+  });
+});

@@ -121,6 +121,8 @@ const sameKind = (a: string | null | undefined, b: string | null | undefined) =>
 
 /** The catalog's tags for an item, as the planner's: seafood is fish, and each tag with its parents. All of the catalog's
  *  tags are read. */
+/** The tags that say what a diet is: meat, fish, eggs. */
+const DIET_TAGS = ["egg", "chicken", "mutton", "pork", "beef", "fish", "prawn", "meat", "red_meat"];
 const asPlanner = (t: string) => (t === "seafood" ? "fish" : canonTag(t));
 export const CATALOG_READ = withParents([...CATALOG.tags, ...Object.values(CATALOG.parents), "meat", "red_meat", "nuts"].map(asPlanner));
 function catalogFacts(item: string): DishFacts | null {
@@ -293,6 +295,8 @@ export function fillWeek(input: FillInput): FillResult {
   const famRows = library.filter(familyRow);
   /** The catalog items the family's own dishes are (never offered to them as new). */
   const familyCatalog = new Set(library.flatMap((r) => { const m = catalogNameOf(r); return m ? [norm(m)] : []; }));
+  /** The diet tags the family's own dishes have (their meat, fish and eggs). */
+  const familyTags = new Set(famRows.flatMap((r) => [...withParents([...r.contains, ...(catalogContains(catalogNameOf(r) ?? "") ?? []).map(asPlanner)])]));
   const noAgain = new Set(library.filter((r) => r.disliked || isDropped(r)).map((r) => r.key));
   /** The kinds and sub-kinds the family named as a category ("dal", "a poriyal"): their catalog items are the family's. */
   const categories = famRows.map(categoryPlace).filter((x): x is Place => !!x);
@@ -320,6 +324,9 @@ export function fillWeek(input: FillInput): FillResult {
     let items: CatalogItem[] = suggestable(ck.name, { sub, cuisines: [...cuisines] });
     // The catalog's meals decide only what the family left general (decided 18, 19).
     if (meal && !family && suggestMeals({ kind: ck.name, sub }).includes(meal)) items = items.filter((it) => suggestMeals({ kind: ck.name, item: it.name }).includes(meal));
+    // A brand-new item brings no meat, fish or egg the family's own dishes never have (a pulao of a house whose only meat is a
+    // Sunday chicken is never a mutton yakhni).
+    if (!family) items = items.filter((it) => (catalogContains(it.name) ?? []).map(asPlanner).every((t) => !DIET_TAGS.includes(t) || familyTags.has(t)));
     items = items.filter((it) => !familyCatalog.has(norm(it.name)) && !noAgain.has(dishKey(it.name)) && !famRows.some((r) => r.key === dishKey(it.name))
       && named(ck.name, it.sub) === family);
     const off = items.length ? hash(`${firstDate}|${ck.name}|${sub ?? ""}`) % items.length : 0;
