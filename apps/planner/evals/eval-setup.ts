@@ -32,7 +32,12 @@ const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, "");
 const OUT = arg("out") ?? join(import.meta.dir, "results", `setup${HELD ? "-heldout" : ""}-${stamp}`);
 const log0 = console.log;
 if (!flag("verbose")) console.log = (...a: unknown[]) => { if (!String(a[0] ?? "").startsWith("[planner]")) log0(...a); };
-const model = (sink: CallRow[]) => appModel({ upstream: { balanced: MODEL, fast: MODEL }, noThink: flag("no-think"), sink });
+// --prod-tiers: balanced reasons low, fast not at all, as Flock's routes run them. --fast-reads home,rules,dishes,often: those
+// readers on the fast tier (a trial of a tier change without touching the app).
+const FAST_READS = (arg("fast-reads") ?? "").split(",").filter(Boolean);
+const retier = FAST_READS.length ? (r: any) => (FAST_READS.some((id) => r.purpose === READ_PURPOSE[id]) ? { ...r, tier: "fast" } : r) : undefined;
+const READ_PURPOSE: Record<string, string> = { home: "setup: the home", rules: "setup: the food rules", dishes: "setup: the dishes", often: "setup: how often each dish" };
+const model = (sink: CallRow[]) => appModel({ upstream: { balanced: MODEL, fast: MODEL }, noThink: flag("no-think"), prodTiers: flag("prod-tiers"), retier, sink });
 
 if (flag("self-test")) {
   let bad = 0;
