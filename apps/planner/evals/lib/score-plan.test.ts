@@ -177,6 +177,14 @@ describe("scorePlan", () => {
     expect(fails(r)).toEqual([]);
     expect(scorePlan(FIX, r, loaded()).rates.default_cap).toBeUndefined();
   });
+  test("a frequency said of a dish at one meal holds at that meal only ('dal sometimes' at dinner; dal every lunch is fine)", () => {
+    const h = { ...FIX, truth: { ...FIX.truth, library: FIX.truth.library.map((d) => (d.name === "Toor dal" && d.slot === "Dinner" ? { ...d, frequency: "sometimes" as const } : d)) } };
+    const freq = (p: PlanOut) => scorePlan(h, p, loaded()).notes.filter((n) => n.startsWith("dish_frequency: Toor dal"));
+    expect(freq(goodWeek())).toEqual([]);
+    const p = goodWeek();
+    for (const d of ["Tue", "Wed", "Fri", "Sun"] as Weekday[]) at(p, d, "Dinner").dishes = [{ name: "Roti" }, { name: "Toor dal" }];
+    expect(freq(p)).toHaveLength(1);
+  });
 
   // ── Rotation, owner 25 Nov (kinds model rule 3). Expectations written from the rules before the scorer. ──
   test("not_next_day: the same item on consecutive days in its slot fails", () => {

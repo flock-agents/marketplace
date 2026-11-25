@@ -244,7 +244,9 @@ export function scorePlan(h: Household, plan0: PlanOut, loaded: SetupOut, o: { f
       continue;
     }
     if (!freq && !days) continue;
-    const ps = placements(name);
+    // The family's words on a dish hold where they said them: "dal sometimes" of dinner does not count the lunch dal.
+    const said = new Set(rows.filter((d) => d.frequency || d.days).map((d) => lc(d.slot)));
+    const ps = placements(name).filter((sd) => said.has(lc(sd.slot)) || rows.every((d) => lc(d.slot) !== lc(sd.slot)));
     // Counted in days (spec §2.1: "≤2 days", "2–3/wk"): dal at lunch and dinner on Monday is one day. Never more often than
     // said; fewer is fine (owner, 25 Nov: "people want variety"). Only on its days when they named days.
     const n = new Set(ps.map((sd) => sd.date)).size;
