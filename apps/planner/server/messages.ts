@@ -2,7 +2,7 @@
 // how-to-use intro and the line about an order nobody paid for; and what a recipe's link says about itself (where it is from, its thumbnail). Text in, text out: nothing
 // here reads the database, and nothing imported here is server-only, so the pages can use it too.
 import { APP_NAMES, type GroceryApp } from "./db/constants";
-import { clockText } from "./dates";
+import { clockText, weekdayOf } from "./dates";
 import { dishKey, dishText, lastTimeText } from "./dishText";
 import type { MealView } from "./meals";
 
@@ -45,7 +45,26 @@ export type ReminderText = { which: "afternoon" | "evening"; meals: MealView[]; 
   cart_items: string[]; asks: { item: string; days_ago: number }[]; delivery_gap: { app: string; rupees: number } | null;
   ordered: { order_id: string; app: string }[]; carts: { order_id: string; lines: OrderLineText[] }[]; empty: boolean;
   /** The next-day question (spec §5.7): yesterday's dishes the family had not eaten before, one line each. */
-  feedback?: { dish: string; from: "suggestion" | "reel" }[] };
+  feedback?: { dish: string; from: "suggestion" | "reel" }[];
+  /** The evening's question (owner, 25 Nov): tomorrow's brand-new dishes, each at its meal as said ("breakfast", "Kabir's
+   *  tiffin") with the family's dish it is like. */
+  new_dishes?: TomorrowNew[] };
+
+/** A brand-new dish on tomorrow's plan, as the evening reminder names it. */
+export type TomorrowNew = { dish: string; meal: string; like?: string | null };
+/** "Ragi puttu at breakfast (like your Puttu)". */
+const atMealText = (n: TomorrowNew): string => {
+  const like = n.like?.trim();
+  const text = `${capital(n.dish)} at ${n.meal}`;
+  return like && dishKey(like) !== dishKey(n.dish) && `${n.dish} (like your ${like})`.length <= NEW_DISH_TEXT_MAX ? `${text} (like your ${like})` : text;
+};
+/** The evening before a brand-new dish is cooked, the same question as the week's message (owner, 25 Nov): "Tomorrow's new
+ *  dish: Ragi puttu at breakfast (like your Puttu). OK to make it, or swap?". Null with none. */
+export function tomorrowNewLine(news: TomorrowNew[]): string | null {
+  if (!news.length) return null;
+  const one = news.length === 1;
+  return `Tomorrow's new dish${one ? "" : "es"}: ${andList(news.map(atMealText))}. ${one ? "OK to make it, or swap?" : "OK to make them, or swap any?"}`;
+}
 
 type ExtraDish = { name: string; video?: { url: string } | null; last_time?: Parameters<typeof lastTimeText>[0] };
 /** What the cook should know about the meals' dishes, a line each, only for a dish with something to say: how it went last time
@@ -80,6 +99,8 @@ export function reminderText(r: ReminderText, opts: { app?: boolean } = {}): str
     const meals = r.meals.map(meal).join(" · ");
     top.push(r.which === "afternoon" ? `Tonight: ${meals}. ${ANYTHING}` : `Tomorrow: ${meals}`);
     top.push(...dishExtras(r.meals));
+    const news = r.which === "evening" ? tomorrowNewLine(r.new_dishes ?? []) : null;
+    if (news) top.push(news);
     if (r.ask_ingredients.length) top.push(`Do you have ${andList(r.ask_ingredients)}?`);
   }
   const rest: string[] = [];
@@ -155,16 +176,45 @@ export type PlanText = {
   standing: string[]; unmet: string[]; new_dishes: NewDish[]; question: string | null; link: string;
 };
 
-/** A new dish as the message names it: the family's dish it stands in for (`like`), when the model said one. */
-export type NewDish = { name: string; like?: string | null };
+/** A new dish as the message names it: the family's dish it stands in for (`like`), when known, and where it is placed
+ *  (`date`, `slot`: one entry a placement). Its name is `dish` (the kinds planner) or `name` (the older one). */
+export type NewDish = { dish?: string; name?: string; like?: string | null; date?: string | null; slot?: string | null };
+const newName = (n: NewDish): string => (n.dish ?? n.name ?? "").trim();
 /** A new dish's text in the message, at most this long: its reason is never more than the dish it stands in for. */
 export const NEW_DISH_TEXT_MAX = 60;
 /** "Palak paneer (like your Sabzi)", or the name alone: the model's own reason is never pasted (owner, 25 Nov), and a text
  *  that would run past NEW_DISH_TEXT_MAX is the name alone. */
-export function newDishText(n: NewDish): string {
-  const like = n.like?.trim();
-  const text = like && dishKey(like) !== dishKey(n.name) ? `${n.name} (like your ${like})` : n.name;
-  return text.length <= NEW_DISH_TEXT_MAX ? text : n.name;
+export function newDishText(n: NewDish, days: string[] = []): string {
+  const name = newName(n), like = n.like?.trim();
+  const on = days.length ? ` on ${andList(days)}` : "";
+  const text = like && dishKey(like) !== dishKey(name) ? `${name} (like your ${like})` : name;
+  return text.length <= NEW_DISH_TEXT_MAX ? text.replace(name, `${name}${on}`) : `${name}${on}`;
+}
+
+/** The new dishes, one entry a dish, its days in date order (short weekdays), the dishes by their first day. */
+function newDishesText(news: NewDish[]): string[] {
+  const by = new Map<string, { n: NewDish; dates: string[] }>();
+  for (const n of news) {
+    const k = dishKey(newName(n));
+    if (!k) continue;
+    const x = by.get(k) ?? { n, dates: [] };
+    if (n.date && !x.dates.includes(n.date)) x.dates.push(n.date);
+    if (!x.n.like && n.like) x.n = { ...x.n, like: n.like };
+    by.set(k, x);
+  }
+  const first = (x: { dates: string[] }) => [...x.dates].sort()[0] ?? "9999";
+  return [...by.values()].sort((a, b) => first(a).localeCompare(first(b)))
+    .map((x) => newDishText(x.n, [...x.dates].sort().map((d) => weekdayOf(d))));
+}
+
+/** The week's brand-new dishes (owner, 25 Nov): "New this week: Ragi puttu on Tue (like your Puttu), Beetroot poriyal on
+ *  Thu (like your Beans poriyal)." and, when it is the message's one question, "OK to try these, or should I swap any?".
+ *  Null with none. */
+export function newThisWeekLine(news: NewDish[], ask: boolean): string | null {
+  const named = newDishesText(news);
+  if (!named.length) return null;
+  const one = named.length === 1;
+  return `New this week: ${named.join(", ")}.${ask ? ` ${one ? "OK to try it, or should I swap it?" : "OK to try these, or should I swap any?"}` : ""}`;
 }
 
 /** A meal short of the family's dishes, as the plan's question names it ("dinner", "Kabir's tiffin"), and whether new
@@ -211,7 +261,7 @@ export function changeMessage(t: { meals: { label: string; skip: string | null; 
   const lines = ["Updated the plan:"];
   for (const m of t.meals) lines.push(`${m.label}: ${m.skip ? (m.skip === "eaten_out" ? "eating out" : "ordering in")
     : m.dishes.map((x) => dishText({ name: x.name, portion_note: x.note, not_for: x.not_for })).join(", ") || "nothing planned"}`);
-  if (t.new_dishes.length) lines.push("", `New: ${t.new_dishes.map(newDishText).join("; ")}`);
+  if (t.new_dishes.length) lines.push("", `New: ${newDishesText(t.new_dishes).join(", ")}`);
   if (t.unmet.length) lines.push("", `I couldn't keep everything: ${t.unmet.join("; ")}. Tell me what to change.`);
   lines.push("", `The whole week: [Week page](${t.link})`);
   return lines.join("\n");
@@ -220,8 +270,10 @@ export function changeMessage(t: { meals: { label: string; skip: string | null; 
 /** A note on this many days or more is said once, under "All week", not on each day. */
 const ALL_WEEK_DAYS = 3;
 
-/** The plan's message (spec §5.6): the week by day, the standing notes once ("All week"), the new dishes, what could not be
- *  kept and the one question (planQuestion); then the Week page. */
+/** The plan's message (spec §5.6): the week by day, the standing notes once ("All week"), what could not be kept and the
+ *  one question; then the Week page. The one question (owner, 25 Nov) is planQuestion's when there is one: a meal short of
+ *  dishes or a calendar entry changes what is planned at all, and each new dish is asked about again the evening before it
+ *  is cooked, so then the new dishes are only named. Else it is the new dishes' "OK to try these, or should I swap any?". */
 export function planMessage(t: PlanText): string {
   const daysWith = new Map<string, Set<string>>();
   const seen = (note: string | null, day: string) => { if (note) daysWith.set(note, (daysWith.get(note) ?? new Set()).add(day)); };
@@ -241,8 +293,9 @@ export function planMessage(t: PlanText): string {
   }
   const standing = [...new Set([...t.standing, ...allWeek])];
   if (standing.length) lines.push("", `All week: ${standing.join("; ")}`.replace(/\?+\s*$/, "."));
-  if (t.new_dishes.length) lines.push("", `New this week: ${t.new_dishes.map(newDishText).join("; ")}`);
   if (t.unmet.length) lines.push("", `I couldn't keep everything this week: ${t.unmet.join("; ")}. Tell me what to change.`);
+  const news = newThisWeekLine(t.new_dishes, !t.question);
+  if (news) lines.push("", news);
   if (t.question) lines.push("", t.question);
   lines.push("", `The whole week: [Week page](${t.link})`, "Tell me anything to change.");
   return lines.join("\n");
