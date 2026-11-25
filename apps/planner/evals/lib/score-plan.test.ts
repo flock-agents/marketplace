@@ -321,6 +321,10 @@ describe("scorePlan: the base minimum", () => {
     const p = goodWeek();
     for (const d of ["Mon", "Tue", "Wed"] as Weekday[]) set(p, d, "Breakfast", ["Poha"]);
     expect(fails(p)).toEqual(["not_next_day"]);
+    // The family's words as setup saved them ("poha most days": usually) let it come day after day.
+    const l = loaded();
+    l.library = l.library.map((d) => (d.name === "Poha" ? { ...d, frequency: "usually" } : d));
+    expect(fails(p, l)).not.toContain("not_next_day");
   });
   test("real_dish: a bare kind or sub-kind word is not a dish; a staple's, an item's or a breakfast family's word is", () => {
     for (const bare of ["Sabzi", "Dal", "Curry", "Poriyal"]) expect(fails(set(goodWeek(), "Mon", "Dinner", ["Roti", bare]))).toContain("real_dish");

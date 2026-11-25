@@ -274,6 +274,9 @@ export function scorePlan(h: Household, plan0: PlanOut, loaded: SetupOut, o: { f
   const exempt = (slot: string, name: string) => isFamilyStaple(slot, name) || isStapleKind(kindAt(name, slot)) || isBareStapleName(name);
   /** The family's words that let a dish come back: a frequency, days, or daily (the dish_frequency check holds their count). */
   const saidRow = (name: string) => { const tn = dishNameOf(name, truthNames); return tn ? t.library.find((d) => d.name === tn && (d.frequency || d.days)) : undefined; };
+  /** The family's words as setup read them (lead, 25 Nov): a dish of theirs saved as had every day or usually at that slot
+   *  ("idli most days") may come day after day there. */
+  const setupOften = (name: string, slot: string) => loaded.library.some((d) => lc(d.slot) === lc(slot) && plain(d.name) === plain(name) && (d.frequency === "daily" || d.frequency === "usually"));
   const famKinds = (slot: string) => new Set(t.library.filter((d) => lc(d.slot) === lc(slot)).map((d) => truthKind(d)?.kind).filter((x): x is string => !!x));
   const LD = ["lunch", "dinner"];
   const sharedLD = (kind: string | null) => !!kind && LD.every((s) => famKinds(s).has(kind));
@@ -298,7 +301,7 @@ export function scorePlan(h: Household, plan0: PlanOut, loaded: SetupOut, o: { f
     const group = g.split("|")[0], first = us[0], said = saidRow(first.name);
     // Next day, or lunch and dinner the same day. Their words allow it only when they said it for most days (usually, daily,
     // 5+ a week) or named both days.
-    const often = !!said?.frequency && frequencyRange(said.frequency)[0] >= 4;
+    const often = (!!said?.frequency && frequencyRange(said.frequency)[0] >= 4) || setupOften(first.name, first.slot);
     const close = us.slice(1).map((u, i) => [us[i], u] as const).filter(([a, b]) => { const gap = days1(a.date, b.date); return gap === 1 || (gap === 0 && a.slot !== b.slot); })
       .filter(([a, b]) => !often && !(said?.days?.includes(dayOfSd({ date: a.date } as PlanSlotDay)) && said.days.includes(dayOfSd({ date: b.date } as PlanSlotDay))));
     add("not_next_day", !close.length, `${group}: ${first.name} on ${close.map(([a, b]) => `${weekdayOfDate(a.date)} ${a.slot} and ${weekdayOfDate(b.date)} ${b.slot}`).join("; ")}`);
@@ -314,7 +317,7 @@ export function scorePlan(h: Household, plan0: PlanOut, loaded: SetupOut, o: { f
   // Lunch and dinner the same day, for an item whose kind is not shared (the group above did not see both).
   for (const date of [...new Set(cooked.map((x) => x.date))]) {
     const at2 = (slot: string) => uses.filter((u) => u.date === date && lc(u.slot) === slot && groupOf(u) !== "Lunch+Dinner");
-    const both = at2("lunch").filter((u) => at2("dinner").some((v) => v.id === u.id) && !(saidRow(u.name)?.frequency && frequencyRange(saidRow(u.name)!.frequency)[0] >= 4));
+    const both = at2("lunch").filter((u) => at2("dinner").some((v) => v.id === u.id) && !(saidRow(u.name)?.frequency && frequencyRange(saidRow(u.name)!.frequency)[0] >= 4) && !setupOften(u.name, u.slot));
     if (both.length) add("not_next_day", false, `${weekdayOfDate(date)}: ${both.map((u) => u.name).join(", ")} at lunch and dinner`);
   }
 
