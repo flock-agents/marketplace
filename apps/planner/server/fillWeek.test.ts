@@ -630,3 +630,33 @@ describe("an add-on's own dishes kept to their words still feed its person when 
     for (const d of WEEK) expect(r.at(d, "Nani's breakfast").length + r.at(d, "Breakfast").filter((x) => !/toast/i.test(x)).length).toBeGreaterThan(0);
   });
 });
+
+describe("a rule kept to days and meals holds in every meal outside them (safety: \"chicken only at Sunday lunch\")", () => {
+  const only = ["Ravi", "Karan"].map((who) => rule({ what: "only", who, items: ["chicken"], days: ["Sun"], slots: ["Lunch"], quote: "We eat chicken only on Sunday lunch." }));
+  it("a new pulao in a child's tiffin never carries chicken, while Sunday lunch keeps the family's chicken", () => {
+    const tiffin = slot("Karan's tiffin", { kind: "custom", order: 20, usual_people: ["Karan"], kinds: [{ name: "Pulao" }], templates: [T({ kind: "Pulao" })] });
+    const lunch = slot("Lunch", { kinds: [{ name: "Rice", staple: true }, { name: "Dal" }, { name: "Chicken" }], templates: [T({ kind: "Rice" }, { kind: "Dal" })] });
+    const lib = [dish("Veg pulao", "Karan's tiffin", "Pulao"), dish("Rice", "Lunch", "Rice"), dish("Dal tadka", "Lunch", "Dal"), dish("Moong dal", "Lunch", "Dal"),
+      dish("Chicken curry", "Lunch", "Chicken", { contains: ["chicken"], days: ["Sun"] })];
+    const days = [...WEEK.map((d) => day(d, "Karan's tiffin", ["Karan"])), ...WEEK.map((d) => day(d, "Lunch", ["Ravi", "Asha"]))];
+    const r = run({ slots: [tiffin, lunch], library: lib, rules: only, days });
+    const tiffins = WEEK.flatMap((d) => r.at(d, "Karan's tiffin"));
+    expect(tiffins.length).toBeGreaterThanOrEqual(7);
+    expect(tiffins.filter((x) => /chicken|murgh/i.test(x))).toEqual([]);
+    expect(r.placed.length).toBeGreaterThan(0);   // new pulaos were placed: they were checked like the family's
+    expect(r.at(WEEK[6], "Lunch")).toContain("Chicken curry");
+    expect(r.dishAt(WEEK[6], "Lunch", "Chicken curry")!.not_for).toEqual([]);
+  });
+  it("a chicken dish on a weekday dinner is not for the people the rule is of", () => {
+    const dinner = slot("Dinner", { kinds: [{ name: "Roti", staple: true }, { name: "Chicken" }, { name: "Sabzi" }], templates: [T({ kind: "Roti" }, { kind: "Chicken" })] });
+    const lib = [dish("Phulka", "Dinner", "Roti"), dish("Chicken curry", "Dinner", "Chicken", { contains: ["chicken"] }), ...SABZIS.map((n) => dish(n, "Dinner", "Sabzi"))];
+    const r = run({ slots: [dinner], library: lib, rules: only, people: ["Ravi", "Karan", "Asha"], newCap: 0 });
+    for (const d of WEEK) {
+      const c = r.dishAt(d, "Dinner", "Chicken curry");
+      if (c) expect(c.not_for.sort()).toEqual(["Karan", "Ravi"]);
+      // Ravi and Karan each still have something beside the staple.
+      const plate = r.plates.get(slotDayKey(d, "Dinner"))!;
+      for (const p of ["Ravi", "Karan"]) expect(plate.some((x) => x.name !== "Phulka" && !x.not_for.includes(p))).toBe(true);
+    }
+  });
+});
