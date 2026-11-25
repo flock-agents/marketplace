@@ -610,6 +610,10 @@ describe("the kinds model: each dish placed, each meal's templates, the cuisines
     expect(placeOf({ name: "Tondli", meal: "lunch", words: "" }, { kind: "Sabzi", sub: "Fritters" }, "tondli").sub).toBeNull();
     expect(placeOf({ name: "Mor sadam", meal: "lunch", words: "" }, { kind: "Curd", parts: [{ kind: "Rice" }, { kind: "Curd" }, { kind: "Nonsense" }] }, "mor sadam").parts)
       .toEqual([{ kind: "Rice", sub: "Rice" }, { kind: "Curd", sub: "Curd" }]);
+    // Parts say how one dish is plated (curd rice is rice and curd); a dish of a kind that is a whole item (a roll) is not
+    // split into a roti and a paneer gravy.
+    expect(placeOf({ name: "Roti roll with paneer", meal: "tiffin", words: "" }, { kind: "Roll", parts: [{ kind: "Roti" }, { kind: "Gravy", sub: "Paneer" }] }, "roti roll with paneer").parts)
+      .toBeUndefined();
     // Asked only whether it is a category: code's place is kept.
     const known = codePlace("Dosa")!;
     expect(placeOf({ name: "Dosa", meal: "lunch", words: "", known }, { kind: "Upma", named: "category" }, "a dosa")).toMatchObject({ kind: "Dosa", named: "category", word: "a dosa" });

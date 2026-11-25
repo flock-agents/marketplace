@@ -1104,7 +1104,8 @@ export function placeOf(ask: KindsAsk, x: Record<string, unknown>, word: string)
     const pk = catalogKind(str(p.kind));
     return pk ? [{ kind: pk.name, sub: catalogSub(pk.name, str(p.sub)) ?? soleSub(pk) }] : [];
   });
-  return { kind: k.name, sub, item: null, own: false, named, ...(parts.length >= 2 ? { parts } : {}), word };
+  // Parts are how this dish is plated (curd rice: rice and curd), so the dish's own kind is one of them.
+  return { kind: k.name, sub, item: null, own: false, named, ...(parts.length >= 2 && parts.some((p) => p.kind === k.name) ? { parts } : {}), word };
 }
 
 /** The kinds read: one fast call for every dish asked. A dish the answer leaves out, or a failed call, is not placed (the
