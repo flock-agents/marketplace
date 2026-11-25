@@ -148,20 +148,70 @@ export function weekMessage(i: { monday: MealView[]; link: string; unmet?: strin
 }
 
 /** What make_plan's message is made of: each day planned (`label`: "Monday"), its slot-days with their dishes (who a dish is
- *  not for, its note); the family's standing notes (said once); what could not be kept; the new dishes; what to ask (a calendar
- *  entry the plan could not read for meals). */
+ *  not for, its note); the family's standing notes (said once); what could not be kept; the new dishes; the one question
+ *  (planQuestion: meals short of dishes, calendar entries the plan could not read for meals), or null. */
 export type PlanText = {
   days: { label: string; meals: { slot: string; skip: string | null; note: string | null; dishes: { name: string; note: string | null; not_for?: string[] }[] }[] }[];
-  standing: string[]; unmet: string[]; new_dishes: { name: string; why: string }[]; asked: string[]; link: string;
+  standing: string[]; unmet: string[]; new_dishes: NewDish[]; question: string | null; link: string;
 };
+
+/** A new dish as the message names it: the family's dish it stands in for (`like`), when the model said one. */
+export type NewDish = { name: string; like?: string | null };
+/** A new dish's text in the message, at most this long: its reason is never more than the dish it stands in for. */
+export const NEW_DISH_TEXT_MAX = 60;
+/** "Palak paneer (like your Sabzi)", or the name alone: the model's own reason is never pasted (owner, 25 Nov), and a text
+ *  that would run past NEW_DISH_TEXT_MAX is the name alone. */
+export function newDishText(n: NewDish): string {
+  const like = n.like?.trim();
+  const text = like && dishKey(like) !== dishKey(n.name) ? `${n.name} (like your ${like})` : n.name;
+  return text.length <= NEW_DISH_TEXT_MAX ? text : n.name;
+}
+
+/** A meal short of the family's dishes, as the plan's question names it ("dinner", "Kabir's tiffin"), and whether new
+ *  dishes were added there. */
+export type ShortAsk = { meal: string; added: boolean };
+/** A calendar entry the plan could not read for meals: its title, whose, and when ("Thu", "Mon to Wed"). */
+export type EventAsk = { title: string; who: string | null; when: string };
+/** At most this many calendar entries are named in the question; the rest are counted. */
+export const EVENTS_NAMED = 3;
+
+/** The plan's one question (owner, 25 Nov: at most one in the whole message), or null with nothing to ask: the meals short
+ *  of dishes, named together ("I know only a few dishes for dinner and Kabir's tiffin, so I've added some new ones. What
+ *  else do you make for these?"), and the calendar entries it could not read, folded into the same question. */
+export function planQuestion(o: { short: ShortAsk[]; events: EventAsk[] }): string | null {
+  const plain = (s: string) => s.replace(/[?\n\r]+/g, " ").replace(/\s+/g, " ").trim();
+  let lead = "";
+  const asks: string[] = [];
+  if (o.short.length) {
+    const meals = o.short.map((s) => s.meal), added = o.short.filter((s) => s.added).map((s) => s.meal);
+    lead = `I know only a few dishes for ${andList(meals)}${added.length === meals.length ? ", so I've added some new ones"
+      : added.length ? `, so I've added some new ones for ${andList(added)}` : ""}. `;
+    asks.push(`what else do you make for ${meals.length === 1 ? meals[0] : "these"}${added.length < meals.length ? ", or should I suggest a few" : ""}`);
+  }
+  // One entry on several days (a repeating one comes once per day) is named once, with its days.
+  const byEntry = new Map<string, { title: string; who: string | null; when: string[] }>();
+  for (const e of o.events) {
+    const k = `${plain(e.title).toLowerCase()}|${(e.who ?? "").toLowerCase()}`;
+    const x = byEntry.get(k) ?? { title: plain(e.title), who: e.who ? plain(e.who) : null, when: [] };
+    if (!x.when.includes(e.when)) x.when.push(e.when);
+    byEntry.set(k, x);
+  }
+  if (byEntry.size) {
+    const all = [...byEntry.values()];
+    const named = all.slice(0, EVENTS_NAMED).map((e) => `"${e.title}" (${[e.who, e.when.join(", ")].filter(Boolean).join(", ")})`);
+    const more = all.length - named.length;
+    asks.push(`${all.length === 1 ? "does" : "do"} ${andList(more ? [...named, `${more} more`] : named)} change who eats at home`);
+  }
+  return asks.length ? `${lead}${capital(asks.join(", and "))}?` : null;
+}
 /** What a later change re-planned (spec §6), as the agent sends it: each slot-day planned again with its dishes, the new ones,
  *  what could not be kept, and the Week page. */
 export function changeMessage(t: { meals: { label: string; skip: string | null; dishes: { name: string; note: string | null; not_for?: string[] }[] }[];
-  unmet: string[]; new_dishes: { name: string; why: string }[]; link: string }): string {
+  unmet: string[]; new_dishes: NewDish[]; link: string }): string {
   const lines = ["Updated the plan:"];
   for (const m of t.meals) lines.push(`${m.label}: ${m.skip ? (m.skip === "eaten_out" ? "eating out" : "ordering in")
     : m.dishes.map((x) => dishText({ name: x.name, portion_note: x.note, not_for: x.not_for })).join(", ") || "nothing planned"}`);
-  if (t.new_dishes.length) lines.push("", `New: ${t.new_dishes.map((n) => (n.why ? `${n.name} (${n.why})` : n.name)).join("; ")}`);
+  if (t.new_dishes.length) lines.push("", `New: ${t.new_dishes.map(newDishText).join("; ")}`);
   if (t.unmet.length) lines.push("", `I couldn't keep everything: ${t.unmet.join("; ")}. Tell me what to change.`);
   lines.push("", `The whole week: [Week page](${t.link})`);
   return lines.join("\n");
@@ -171,7 +221,7 @@ export function changeMessage(t: { meals: { label: string; skip: string | null; 
 const ALL_WEEK_DAYS = 3;
 
 /** The plan's message (spec §5.6): the week by day, the standing notes once ("All week"), the new dishes, what could not be
- *  kept and the questions; then the Week page. */
+ *  kept and the one question (planQuestion); then the Week page. */
 export function planMessage(t: PlanText): string {
   const daysWith = new Map<string, Set<string>>();
   const seen = (note: string | null, day: string) => { if (note) daysWith.set(note, (daysWith.get(note) ?? new Set()).add(day)); };
@@ -185,14 +235,15 @@ export function planMessage(t: PlanText): string {
     for (const m of d.meals) {
       const what = m.skip ? (m.skip === "eaten_out" ? "eating out" : "ordering in")
         : m.dishes.map((x) => dishText({ name: x.name, portion_note: shown(x.note), not_for: x.not_for })).join(", ") || "nothing planned";
-      lines.push(`${m.slot}: ${what}${shown(m.note) ? `. ${m.note}` : ""}`);
+      // Only the plan's one question ends in "?": a note the model wrote as a question does not.
+      lines.push(`${m.slot}: ${what}${shown(m.note) ? `. ${m.note}` : ""}`.replace(/\?+\s*$/, "."));
     }
   }
   const standing = [...new Set([...t.standing, ...allWeek])];
-  if (standing.length) lines.push("", `All week: ${standing.join("; ")}`);
-  if (t.new_dishes.length) lines.push("", `New this week: ${t.new_dishes.map((n) => (n.why ? `${n.name} (${n.why})` : n.name)).join("; ")}`);
+  if (standing.length) lines.push("", `All week: ${standing.join("; ")}`.replace(/\?+\s*$/, "."));
+  if (t.new_dishes.length) lines.push("", `New this week: ${t.new_dishes.map(newDishText).join("; ")}`);
   if (t.unmet.length) lines.push("", `I couldn't keep everything this week: ${t.unmet.join("; ")}. Tell me what to change.`);
-  if (t.asked.length) lines.push("", ...t.asked);
+  if (t.question) lines.push("", t.question);
   lines.push("", `The whole week: [Week page](${t.link})`, "Tell me anything to change.");
   return lines.join("\n");
 }

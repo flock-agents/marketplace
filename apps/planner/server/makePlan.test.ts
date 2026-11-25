@@ -8,7 +8,7 @@ import { join } from "path";
 import { boot } from "./testkit";
 import { CONTAINS_SYSTEM, FIX_SYSTEM, INGREDIENT_SYSTEM, makePlan, SLOT_SYSTEM } from "./makePlan";
 import { isVariantOf } from "./planChecks";
-import { EVENTS_SYSTEM, lunchSaid, platformPeers, readHousehold, withLunchSaid, type CalendarEvent } from "./planDays";
+import { coveredByWeek, EVENTS_SYSTEM, lunchSaid, platformPeers, readHousehold, withLunchSaid, type CalendarEvent } from "./planDays";
 import type { ModelRequest, ModelResult } from "./model";
 import { addRule, commit, getLibraryDish, listSlotDays, saveSlotDay, upsertLibrary, upsertSlot, type LibraryInput, type RuleInput, type SlotInput } from "./slotStore";
 import { DELIVER_PROMPT, FESTIVAL_PROMPT } from "./routines/weekly-plan";
@@ -325,7 +325,9 @@ describe("make_plan v2: hard rules per person, fail closed", () => {
     const row = getLibraryDish(k.kit.db, "Sheera", "Breakfast")!;
     expect(row).toMatchObject({ origin: "planner_suggested", suggested: true, untried: true, offers: 1, contains: ["sugar"] });
     expect(row.contains_read.sort()).toEqual(["egg", "fish", "meat", "onion_garlic", "sugar"]);
-    if (r.ok) expect(r.message).toContain("New this week: Sheera (a sweet like their halwa)");
+    // The model's reason is never pasted (owner, 25 Nov); with no dish of theirs it stands in for, the name alone.
+    if (r.ok) expect(r.message).toContain("New this week: Sheera\n");
+    if (r.ok) expect(r.message).not.toContain("a sweet like their halwa");
   });
 });
 
@@ -422,8 +424,73 @@ describe("make_plan v2: who eats (spec §5.1)", () => {
     expect(k.at("2026-12-01", "Breakfast")!.people).toEqual(["Asha", "Kabir"]);
     expect(k.at("2026-12-05", "Lunch")!.people).toEqual(["Asha", "Ravi", "Kabir", "Nani"]);
     expect(k.at("2026-12-05", "Breakfast")!.people).toEqual(["Asha", "Ravi", "Kabir"]);
-    expect(r.ok && r.asked).toEqual(['"Thing", Thu: does it change who eats at home?']);
-    if (r.ok) expect(r.message).toContain('"Thing", Thu: does it change who eats at home?');
+    expect(r.ok && r.asked).toEqual(['Does "Thing" (Thu) change who eats at home?']);
+    if (r.ok) expect(r.message).toContain('\nDoes "Thing" (Thu) change who eats at home?\n');
+  });
+
+  it("an entry that is part of its person's week (office, school, a weekly class) is never read nor asked; one that may change who eats is", () => {
+    const weekly = readHousehold({ "household.weekly": [{ person: "Shiva", where: "office", weekdays: ["Mon", "Tue", "Wed", "Thu", "Fri"], from: "09:00", to: "18:00" },
+      { person: "Agastya", where: "school", weekdays: ["Mon", "Tue", "Wed", "Thu", "Fri"], from: "08:00", to: "15:00" },
+      { person: "Ankita", where: "home", weekdays: ["Mon", "Tue", "Wed", "Thu", "Fri"] }] }).weekly;
+    const wk = { from: MON, to: WEEK[6] };
+    const ev = (title: string, who: string | null, from: string, x: Partial<{ to: string; repeat: string; start_time: string; end_time: string }> = {}) => ({ title, who, from, to: x.to ?? from, ...x });
+    // Run 31's: "Office" (Shiva), Mon; "School" (Agastya), Tue; "Football" (Agastya), Tue: the week already has them out.
+    expect(coveredByWeek(ev("Office", "Shiva", MON, { repeat: "weekly" }), weekly, wk)).toBe(true);
+    expect(coveredByWeek(ev("School", "Agastya", WEEK[1], { repeat: "weekly" }), weekly, wk)).toBe(true);
+    expect(coveredByWeek(ev("Football", "Agastya", WEEK[1], { repeat: "weekly", start_time: "16:00", end_time: "17:30" }), weekly, wk)).toBe(true);
+    expect(coveredByWeek(ev("Office", "Shiva", MON), weekly, wk)).toBe(true);                                      // names the place
+    expect(coveredByWeek(ev("Client call", "Shiva", MON, { start_time: "11:00", end_time: "12:00" }), weekly, wk)).toBe(true);   // in office hours
+    // What may change who eats at home: a one-off dinner out, a trip, a Saturday, someone home all day, no one named, no patterns.
+    expect(coveredByWeek(ev("Dinner with clients", "Shiva", WEEK[1], { start_time: "20:00", end_time: "22:00" }), weekly, wk)).toBe(false);
+    expect(coveredByWeek(ev("Pune trip", "Shiva", MON, { to: WEEK[2] }), weekly, wk)).toBe(false);
+    expect(coveredByWeek(ev("Football", "Agastya", WEEK[5], { repeat: "weekly" }), weekly, wk)).toBe(false);
+    expect(coveredByWeek(ev("Yoga", "Ankita", MON, { repeat: "weekly" }), weekly, wk)).toBe(false);
+    expect(coveredByWeek(ev("Office", null, MON, { repeat: "weekly" }), weekly, wk)).toBe(false);
+    expect(coveredByWeek(ev("Office", "Shiva", MON, { repeat: "weekly" }), null, wk)).toBe(false);
+    expect(coveredByWeek(ev("School run", "Shiva and Agastya", MON, { repeat: "weekly" }), weekly, wk)).toBe(true);
+    expect(coveredByWeek(ev("School run", "Shiva, Ankita", MON, { repeat: "weekly" }), weekly, wk)).toBe(false);
+  });
+
+  it("run 31: the routine's entries are not sent to the calendar call nor asked; the one it is unsure of is the message's only question", async () => {
+    const k = await home({ people: [["Shiva", "adult"], ["Ankita", "adult"], ["Agastya", "child"]] });
+    const weekly = [{ person: "Shiva", where: "office", weekdays: ["Mon", "Tue", "Wed", "Thu", "Fri"], from: "09:00", to: "18:00" },
+      { person: "Agastya", where: "school", weekdays: ["Mon", "Tue", "Wed", "Thu", "Fri"], from: "08:00", to: "15:00" }];
+    const routine = [["Office", "Shiva", "o1", "09:00", "18:00"], ["School", "Agastya", "s1", "08:00", "15:00"], ["Football", "Agastya", "f1", "16:00", "17:30"]] as const;
+    const events: CalendarEvent[] = [
+      ...WEEK.slice(0, 5).flatMap((date) => routine.map(([title, who, id, start_time, end_time]) => ({ id, title, date, repeat: "weekly", kind: "event", who, start_time, end_time }))),
+      { id: "d1", title: "Dinner at the Raos", date: WEEK[3], repeat: "none", kind: "event", who: "Shiva", start_time: "20:00" }];
+    const f = fakeModel({ events: () => ({ changes: [{ id: "d1", effect: "unsure" }] }) });
+    const r = await k.plan(f.model, { household: { "household.weekly": weekly }, peers: { calendar: async () => events } });
+    if (!r.ok) throw new Error(r.say);
+    expect(f.events()).toHaveLength(1);
+    expect(f.events()[0].user.entries.map((e: any) => e.id)).toEqual(["d1"]);
+    expect(r.asked).toEqual(['Does "Dinner at the Raos" (Shiva, Thu) change who eats at home?']);
+    expect(r.message).not.toContain("Office");
+    expect(r.message.split("\n").filter((l) => l.trim().endsWith("?"))).toEqual(r.asked!);
+    // The whole routine and nothing else: no calendar call at all.
+    const g = fakeModel();
+    const r2 = await k.plan(g.model, { household: { "household.weekly": weekly }, peers: { calendar: async () => events.filter((e) => e.id !== "d1") } });
+    expect(g.events()).toHaveLength(0);
+    expect(r2.ok && r2.asked).toBeFalsy();
+  });
+
+  it("a meal short of dishes and an entry it could not read are one question; a new dish is said with the dish it stands in for, not the model's why", async () => {
+    const k = await home({ newPerWeek: 0, slots: [...MAIN, { name: "Ravi's breakfast", kind: "custom", order: 15, usual_people: ["Ravi"] }],
+      lib: { ...LIB, "Ravi's breakfast": ["Ragi dosa"] } });
+    const plates = ["Ragi dosa", "Ragi idli", "Ragi roti", "Ragi dosa", "Ragi idli", "Ragi roti", "Ragi upma"];
+    const why = "A lentil and rice pancake that fits the family's preference for variety and is less spicy for Ravi, who likes ragi in the morning.";
+    const f = fakeModel({
+      slot: (u) => u.slot === "Ravi's breakfast"
+        ? { days: Object.fromEntries(u.days.map((d: any, i: number) => [d.date, [plates[i]]])), new: ["Ragi idli", "Ragi roti", "Ragi upma"].map((dish) => ({ dish, why, like: "Ragi dosa" })) }
+        : rotateDays(u),
+      events: () => ({ changes: [{ id: "e3", effect: "unsure" }] }) });
+    const r = await k.plan(f.model, { peers: { calendar: async () => [{ id: "e3", title: "Thing", date: WEEK[3], kind: "event" }] } });
+    if (!r.ok) throw new Error(r.say);
+    const q = "I know only a few dishes for Ravi's breakfast, so I've added some new ones. What else do you make for Ravi's breakfast, and does \"Thing\" (Thu) change who eats at home?";
+    expect(r.asked).toEqual([q]);
+    expect(r.message.split("\n").filter((l) => l.trim().endsWith("?"))).toEqual([q]);
+    expect(r.message).toContain("New this week: Ragi idli (like your Ragi dosa); Ragi roti (like your Ragi dosa); Ragi upma (like your Ragi dosa)");
+    expect(r.message).not.toContain("pancake");
   });
 
   it("no calendar (an older SDK, or none installed): the household's dated stays are read instead", async () => {
@@ -516,17 +583,16 @@ describe("make_plan v2: budgets and offers", () => {
     expect(lines.find((l) => l.startsWith("feasibility Lunch"))).not.toContain("relaxed");
   });
 
-  it("a slot short of dishes is asked about in the family's terms, not said in unmet: its people, the dish that comes up a lot; at most 2, the thinnest first", async () => {
+  it("slots short of dishes are asked about in one question naming them, not said in unmet; at most 2, the thinnest first", async () => {
     const k = await home({ newPerWeek: 0, slots: [...MAIN, { name: "Ravi's breakfast", kind: "custom", order: 15, usual_people: ["Ravi"] }],
       lib: { Breakfast: ["Poha", "Upma"], Lunch: ["Sambar", "Rajma", "Kadhi"], Dinner: LIB.Dinner, "Ravi's breakfast": ["Ragi dosa"] } });
     const r = await k.plan(fakeModel().model);
     if (!r.ok) throw new Error(r.say);
-    const q1 = "I only know 1 dish for Ravi's breakfast, so Ragi dosa comes up a lot. What else does Ravi have for Ravi's breakfast? Or should I suggest a few?";
-    expect(r.asked).toHaveLength(2);
-    expect(r.asked![0]).toBe(q1);
-    expect(r.asked![1]).toStartWith("I only know 2 dishes for breakfast, so ");
-    expect(r.asked![1]).toEndWith(" comes up a lot. What else do you have for breakfast? Or should I suggest a few?");
-    expect(r.message).toContain(q1);
+    // No new dish placed (the setting is 0): asked whether to suggest some.
+    const q = "I know only a few dishes for Ravi's breakfast and breakfast. What else do you make for these, or should I suggest a few?";
+    expect(r.asked).toEqual([q]);
+    expect(r.message).toContain(q);
+    expect(r.message.split("\n").filter((l) => l.trim().endsWith("?"))).toEqual([q]);
     expect(r.message).not.toContain("for lunch");   // the third short slot (Lunch, 3 dishes) is not asked: 2 at most
     expect((r.unmet ?? []).some((u) => u.includes("known"))).toBe(false);
   });
@@ -549,7 +615,7 @@ describe("make_plan v2: budgets and offers", () => {
       const row = k.rows("library").find((x: any) => x.name === name && x.slot === "Ravi's breakfast");
       expect(row).toMatchObject({ origin: "planner_suggested", suggested: 1, untried: 1, offers: plates.filter((x) => x === name).length });
     }
-    const q = "I only know 1 dish for Ravi's breakfast, so I've added a few new ones like Ragi idli. What else does Ravi have for Ravi's breakfast?";
+    const q = "I know only a few dishes for Ravi's breakfast, so I've added some new ones. What else do you make for Ravi's breakfast?";
     expect(r.asked).toEqual([q]);
     expect(r.message).toContain(q);
     expect(r.message).toContain("Ragi idli (like your Ragi dosa)");

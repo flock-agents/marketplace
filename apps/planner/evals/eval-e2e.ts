@@ -24,7 +24,7 @@ export const TIERS: Record<string, "A" | "B" | "C"> = {
 /** Must pass in every tier, every run (owner: nobody without food; no food rule broken). */
 export const SAFETY = ["plan_made", "setup_time", "plan_time", "hard_rules", "nobody_without_food"];
 /** Must pass in tiers A and B, every run. dish_frequency is held to THEIR_DAYS of its checks, the rest to all. */
-export const BASE = ["filled", "not_bare", "whole_plate", "no_doubled_staple", "own_share", "main_twice", "new_budget", "dish_frequency",
+export const BASE = ["filled", "attendance", "not_bare", "whole_plate", "no_doubled_staple", "own_share", "main_twice", "new_budget", "dish_frequency",
   "message_clean", "short_new_reasons", "one_question"];
 export const THEIR_DAYS = 0.8;
 export const SETUP_MAX_MS = 150_000, PLAN_MAX_MS = 300_000;

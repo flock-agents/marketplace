@@ -18,7 +18,7 @@ import { CONTAINS_BATCH, DEFAULT_DISH_DAYS, REPEAT_WINDOW_DAYS, SLOT_CALLS_AT_ON
 import { addDays, todayStr, weekDates, weekdayLong, weekdayOf } from "./dates";
 import { dishKey } from "./dishText";
 import { closeWeek, dateOf } from "./meals";
-import { changeMessage, planMessage, weekLink } from "./messages";
+import { changeMessage, planMessage, planQuestion, weekLink, type ShortAsk } from "./messages";
 import { isObject, refuse, writeRoutes, type Db, type Emit } from "./family";
 import { STOP_CODES, stopSaid, type ModelCall, type ModelFailure, type ModelRequest, type ModelResult } from "./model";
 import { commit, deleteSlotDays, listLibrary, listRules, listSlotDays, listSlots, newDishesPerWeek, recent, saveSlotDay, slotHistory, upsertLibrary,
@@ -234,7 +234,7 @@ async function planWeek(deps: MakePlanDeps & { log: (line: string) => void }, in
   const household = withLunchSaid(readHousehold(fresh ?? deps.household), deps.sqlite ? lunchSaid(deps.sqlite) : []);
   log(`household: ${fresh ? "read fresh" : deps.household !== undefined ? "as sent" : "none"}; weekly ${household.weekly ? `${household.weekly.length} patterns` : "unknown"}`);
   const events = deps.peers?.calendar ? await deps.peers.calendar(from, weekEnd) : null;
-  const read = await readEvents({ events, dated: household.dated, from, to: weekEnd, people, slots: slots.map((s) => s.name), model: (req) => model(req, INGREDIENTS_RESERVE_MS), log });
+  const read = await readEvents({ events, dated: household.dated, from, to: weekEnd, people, slots: slots.map((s) => s.name), weekly: household.weekly, model: (req) => model(req, INGREDIENTS_RESERVE_MS), log });
   if (read.stop) return stopped(read.stop);
   const rules = listRules(db);
   const only = deps.only ? new Set(deps.only.map((x) => slotDayKey(x.date, x.slot))) : undefined;
@@ -571,15 +571,19 @@ async function planWeek(deps: MakePlanDeps & { log: (line: string) => void }, in
   if (backs.size) unmet.splice(0, unmet.length, ...uniq(unmet).filter((u) => !u.endsWith(BACK)),
     ...[...backs.values()].map((x) => (x.days.length === 1 ? `${x.days[0]} ${x.slot}: ${x.dish}${BACK}` : `${x.dish} at ${x.slot}${BACK} (${x.days.join(", ")})`)));
 
-  // 6. The message. A slot too thin for its week is asked about, the thinnest first (owner 23 Nov), not a line in unmet.
-  const asked = [...read.asked, ...(only ? [] : shortQuestions(feas.short, slots, toPlan, w))];
+  // 6. The message. One question at most (owner 25 Nov): the slots too thin for their week, the thinnest first (owner 23 Nov),
+  // not a line in unmet, and the calendar entries the plan could not read, folded together. A new dish is said with the
+  // family's dish it stands in for, never the model's reason.
+  const question = planQuestion({ short: only ? [] : shortAsks(feas.short, slots, toPlan, w), events: read.asked });
+  const asked = question ? [question] : [];
+  const newDishes = [...w.newDishes.values()].map((v) => ({ name: v.name, like: v.like ?? null }));
   const relaxed = Object.fromEntries([...w.slots.values()].filter((x) => x.window !== REPEAT_WINDOW_DAYS && order.includes(x.slot.name)).map((x) => [x.slot.name, x.window]));
   const relaxedOut = Object.keys(relaxed).length ? { relaxed } : {};
   if (only) {
     const message = changeMessage({
       meals: days.filter((d) => !d.fixed && !emptyAddon(d)).map((d) => ({ label: `${weekdayLong(d.date)} ${d.slot}`, skip: d.skip,
         dishes: d.dishes.map((name) => ({ name, not_for: notFor(w, d, name), note: (dishNotes.get(`${d.date}|${d.slot}|${dishKey(name)}`) ?? []).join("; ") || null })) })),
-      unmet: uniq(unmet), new_dishes: [...w.newDishes.values()].map((v) => ({ name: v.name, why: v.why })), link: weekLink(deps.basePath, weekStart) });
+      unmet: uniq(unmet), new_dishes: newDishes, link: weekLink(deps.basePath, weekStart) });
     return done({ ok: true, week_start: weekStart, message, instructions: "Send message to the family word for word, as one message, then end your turn.",
       ...(unmet.length ? { unmet: uniq(unmet) } : {}), ...(asked.length ? { asked } : {}), ...(noIngredients.length ? { no_ingredients: noIngredients } : {}), ...relaxedOut });
   }
@@ -589,37 +593,24 @@ async function planWeek(deps: MakePlanDeps & { log: (line: string) => void }, in
     days: weekDates(weekStart).filter((d) => d >= from).map((date) => ({ label: weekdayLong(date), meals: days.filter((d) => d.date === date && !d.fixed && !emptyAddon(d)).map((d) => ({
       slot: d.slot, skip: d.skip, note: [notesBy.get(`${d.date}|${d.slot}`), ...d.fasting].filter(Boolean).join("; ") || null,
       dishes: d.dishes.map((name) => ({ name, not_for: notFor(w, d, name), note: (dishNotes.get(`${d.date}|${d.slot}|${dishKey(name)}`) ?? []).join("; ") || null })) })) })),
-    standing, unmet: uniq(unmet), new_dishes: [...w.newDishes.values()].map((v) => ({ name: v.name, why: v.why })), asked, link: weekLink(deps.basePath, weekStart),
+    standing, unmet: uniq(unmet), new_dishes: newDishes, question, link: weekLink(deps.basePath, weekStart),
   });
   return done({ ok: true, week_start: weekStart, message, ...(closed.intro ? { intro: closed.intro } : {}), instructions: closed.instructions,
     ...(unmet.length ? { unmet: uniq(unmet) } : {}), ...(asked.length ? { asked } : {}), ...(noIngredients.length ? { no_ingredients: noIngredients } : {}), ...relaxedOut });
 }
 
-/** At most this many questions about a slot short of dishes in one plan's message. */
+/** At most this many meals short of dishes are named in the plan's question. */
 export const SHORT_QUESTIONS_MAX = 2;
 
-/** One plain question per slot too thin for its week (the feasibility check's `short`), the thinnest first, at most
- *  SHORT_QUESTIONS_MAX, saying what was done (owner 24 Nov): how many of its dishes are known, the new ones added there (the
- *  one placed most), and what else its people have there. Built from the slot's own name, people and dishes: "I only know 2
- *  dishes for <slot>, so I've added a few new ones like <dish>. What else does <person> have for <slot>?". No new dish
- *  placed there: the dish that came up most, and whether to suggest a few. */
-export function shortQuestions(short: ShortSlot[], slots: Slot[], planned: PlanDay[], w: Week): string[] {
+/** The slots too thin for their week (the feasibility check's `short`) as the plan's one question names them, the thinnest
+ *  first, at most SHORT_QUESTIONS_MAX: the meal's name as said ("dinner", "Kabir's tiffin") and whether new dishes were
+ *  placed there (owner 25 Nov: "I know only a few dishes for dinner and Kabir's tiffin, so I've added some new ones"). */
+export function shortAsks(short: ShortSlot[], slots: Slot[], planned: PlanDay[], w: Week): ShortAsk[] {
   const ratio = (x: ShortSlot) => (x.places ? x.supply / x.places : 1);
   return [...short].sort((a, b) => ratio(a) - ratio(b) || a.known - b.known).slice(0, SHORT_QUESTIONS_MAX).map((x) => {
     const slot = slots.find((s) => same(s.name, x.slot));
-    const label = slot?.kind === "main" ? x.slot.toLowerCase() : x.slot;
-    const n = new Map<string, { name: string; days: number; isNew: boolean }>();
-    for (const d of planned.filter((y) => same(y.slot, x.slot))) for (const dish of uniq(d.dishes.filter((y) => !isStapleAt(w, x.slot, y)))) {
-      const k = dishKey(dish), nw = w.newDishes.get(k);
-      n.set(k, { name: n.get(k)?.name ?? dish, days: (n.get(k)?.days ?? 0) + 1, isNew: !!nw && same(nw.slot, x.slot) });
-    }
-    const byDays = [...n.values()].sort((a, b) => b.days - a.days);
-    const fresh = byDays.filter((y) => y.isNew), top = byDays[0];
-    const who = slot?.usual_people ?? [];
-    const ask = who.length ? `What else ${who.length === 1 ? "does" : "do"} ${andList(who)} have for ${label}?` : `What else do you have for ${label}?`;
-    const known = `I only know ${x.known} dish${x.known === 1 ? "" : "es"} for ${label}`;
-    if (fresh.length) return `${known}, so I've added ${fresh.length === 1 ? `a new one, ${fresh[0].name}` : `a few new ones like ${fresh[0].name}`}. ${ask}`;
-    return `${known}${top && top.days > 1 ? `, so ${top.name} comes up a lot` : ""}. ${ask} Or should I suggest a few?`;
+    const added = planned.some((d) => same(d.slot, x.slot) && d.dishes.some((dish) => { const nw = w.newDishes.get(dishKey(dish)); return !!nw && same(nw.slot, x.slot); }));
+    return { meal: slot?.kind === "main" ? x.slot.toLowerCase() : x.slot, added };
   });
 }
 

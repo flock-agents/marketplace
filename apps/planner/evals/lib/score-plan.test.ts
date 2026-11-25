@@ -276,3 +276,28 @@ describe("scorePlan: the base minimum", () => {
     expect(fails(p)).toEqual(expect.arrayContaining(["nobody_without_food", "message_clean", "short_new_reasons", "one_question"]));
   });
 });
+
+// Attendance gates tiers A and B (eval-e2e BASE, owner 25 Nov). A child with a school box of their own is not at the home
+// weekday lunch: TRUTH's `away` says so, and the scorer holds the planner to it (h13: Lunch is for Anjali, Varun, Raghavan
+// on weekdays; Vivaan joins at the weekend).
+describe("attendance: a child with their own box", () => {
+  test("is left out of the weekday home lunch, in at the weekend, for every household that has one", async () => {
+    const { HOUSEHOLDS } = await import("../households");
+    const h13 = HOUSEHOLDS.find((h) => h.id === "h13-familyb")!;
+    const lunch = (h: typeof h13, d: Weekday) => expectedSlotDays(h, MON).find((e) => e.day === d && e.slot === "Lunch")!.people;
+    expect(lunch(h13, "Mon")).toEqual(["Anjali", "Varun", "Raghavan"]);
+    expect(lunch(h13, "Sat")).toEqual(["Anjali", "Varun", "Vivaan", "Raghavan"]);
+    for (const [id, child] of [["h1-sharma", "Vihaan"], ["h13-familyb", "Vivaan"], ["h14-familyb2", "Nila"], ["h4-reddy", "Karan"]]) {
+      const h = HOUSEHOLDS.find((x) => x.id === id)!;
+      for (const d of ["Mon", "Tue", "Wed", "Thu", "Fri"] as Weekday[]) expect(lunch(h, d)).not.toContain(child);
+      expect(lunch(h, "Sun")).toContain(child);
+    }
+    // The truth's own week passes attendance; the child put back at Monday's lunch fails it.
+    const good = baselineWeek(h13, MON), setup = setupOfTruth(h13);
+    const att = (p: PlanOut) => scorePlan(h13, p, setup, { failClosed: false }).rates.attendance;
+    expect(att(good)[0]).toBe(att(good)[1]);
+    const bad = baselineWeek(h13, MON);
+    bad.slotDays.find((x) => x.date === MON && x.slot === "Lunch")!.people.push("Vivaan");
+    expect(att(bad)[1] - att(bad)[0]).toBe(1);
+  });
+});

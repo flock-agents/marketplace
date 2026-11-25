@@ -1,8 +1,8 @@
 // The messages the app writes for the agent to send, word for word: the order going out, the reminder, the
 // how-to-use intro, the unpaid line; and what a recipe link says about itself.
 import { describe, it, expect } from "bun:test";
-import { andList, clockText, dishText, introText, linkSource, orderingNowText, reminderText, unpaidText, weekLink, weekMessage, youtubeThumb,
-  type ReminderText } from "./messages";
+import { andList, changeMessage, clockText, dishText, introText, linkSource, NEW_DISH_TEXT_MAX, newDishText, orderingNowText, planMessage, planQuestion,
+  reminderText, unpaidText, weekLink, weekMessage, youtubeThumb, type PlanText, type ReminderText } from "./messages";
 import type { DishView, MealView } from "./meals";
 
 const dish = (name: string, d: Partial<DishView> = {}): DishView =>
@@ -182,5 +182,64 @@ describe("recipe links", () => {
     expect(youtubeThumb("https://www.instagram.com/reel/abc")).toBeNull();
     expect(youtubeThumb("https://www.youtube.com/@somechannel")).toBeNull();
     expect(youtubeThumb("not a link")).toBeNull();
+  });
+});
+
+// The plan's message (owner, 25 Nov): at most one question in it, calendar entries folded into that one, and a new dish's
+// reason never more than the dish of theirs it stands in for. The bad cases are the base-minimum eval's and run 31's.
+describe("the plan's message", () => {
+  const questions = (msg: string) => msg.split("\n").filter((l) => l.trim().endsWith("?"));
+  const plan = (t: Partial<PlanText>): string => planMessage({ days: [{ label: "Monday", meals: [{ slot: "Dinner", skip: null, note: null, dishes: [{ name: "Dal", note: null }] }] }],
+    standing: [], unmet: [], new_dishes: [], question: null, link: "/a/t/#/week", ...t });
+
+  it("names every meal short of dishes in one question, in the owner's words", () => {
+    // Was two lines: "I only know 5 dishes for dinner, so I've added a few new ones like Vegetable curry. What else do you have for
+    // dinner?" and "I only know 4 dishes for Vihaan's tiffin, so I've added a few new ones like Aloo paratha. What else does Vihaan
+    // have for Vihaan's tiffin?"
+    expect(planQuestion({ short: [{ meal: "dinner", added: true }, { meal: "Vihaan's tiffin", added: true }], events: [] }))
+      .toBe("I know only a few dishes for dinner and Vihaan's tiffin, so I've added some new ones. What else do you make for these?");
+    expect(planQuestion({ short: [{ meal: "dinner", added: true }], events: [] }))
+      .toBe("I know only a few dishes for dinner, so I've added some new ones. What else do you make for dinner?");
+    // Nothing new placed somewhere: whether to suggest some, in the same question.
+    expect(planQuestion({ short: [{ meal: "Vihaan's tiffin", added: true }, { meal: "breakfast", added: false }], events: [] }))
+      .toBe("I know only a few dishes for Vihaan's tiffin and breakfast, so I've added some new ones for Vihaan's tiffin. What else do you make for these, or should I suggest a few?");
+    expect(planQuestion({ short: [], events: [] })).toBeNull();
+  });
+
+  it("folds the calendar entries it could not read into the same question: each entry once with its days, at most 3 named", () => {
+    expect(planQuestion({ short: [], events: [{ title: "Thing", who: null, when: "Thu" }] })).toBe('Does "Thing" (Thu) change who eats at home?');
+    expect(planQuestion({ short: [{ meal: "dinner", added: true }], events: [{ title: "Party", who: "Shiva", when: "Sat" }] }))
+      .toBe('I know only a few dishes for dinner, so I\'ve added some new ones. What else do you make for dinner, and does "Party" (Shiva, Sat) change who eats at home?');
+    // Run 31: a repeating entry came once a day, a question each. Now each entry once, its days together; past 3, counted.
+    const run31 = [["Office", "Shiva"], ["School", "Agastya"], ["Football", "Agastya"], ["Swimming", "Agastya"], ["Yoga", "Ankita"]]
+      .flatMap(([title, who]) => ["Mon", "Tue"].map((when) => ({ title, who, when })));
+    expect(planQuestion({ short: [], events: run31 }))
+      .toBe('Do "Office" (Shiva, Mon, Tue), "School" (Agastya, Mon, Tue), "Football" (Agastya, Mon, Tue) and 2 more change who eats at home?');
+    // A title with a question mark or a line break in it cannot make a second question line.
+    expect(planQuestion({ short: [], events: [{ title: "Who comes?\nMaybe", who: null, when: "Fri" }] })).toBe('Does "Who comes Maybe" (Fri) change who eats at home?');
+  });
+
+  it("never ends with more than one question line, whatever the notes say", () => {
+    const q = planQuestion({ short: [{ meal: "dinner", added: true }, { meal: "Vihaan's tiffin", added: true }], events: [{ title: "Thing", who: null, when: "Thu" }] });
+    const msg = plan({ question: q, days: [{ label: "Monday", meals: [{ slot: "Dinner", skip: null, note: "Is this too spicy for Nani?", dishes: [{ name: "Dal", note: null }] }] }] });
+    expect(questions(msg)).toEqual([q!]);
+    expect(msg).toContain("Dinner: Dal. Is this too spicy for Nani.");
+    expect(questions(plan({}))).toEqual([]);
+  });
+
+  it("a new dish is said with the dish of theirs it stands in for, never the model's reason, and under 60 characters", () => {
+    expect(newDishText({ name: "Palak paneer", like: "Sabzi" })).toBe("Palak paneer (like your Sabzi)");
+    expect(newDishText({ name: "Kadhi" })).toBe("Kadhi");
+    expect(newDishText({ name: "Ragi dosa", like: "ragi dosa" })).toBe("Ragi dosa");
+    // Too long with its reason: the name alone.
+    expect(newDishText({ name: "Mini idlis with coconut chutney", like: "Idli with chutney and podi" })).toBe("Mini idlis with coconut chutney");
+    // The eval's new dishes, which pasted the model's paragraph ("Aloo jeera (Ramesh and Kamla cannot eat dal, sabzi, kadhi, or dal
+    // baati. This simple potato dish ...)"; "Daliya (Another name for dalia ... ? Actually, ...)").
+    const msg = plan({ new_dishes: [{ name: "Aloo jeera", like: "Sabzi" }, { name: "Daliya", like: "Dalia" }, { name: "Upma" }] });
+    expect(msg).toContain("New this week: Aloo jeera (like your Sabzi); Daliya (like your Dalia); Upma");
+    const reasons = [...(/New this week:([^\n]*)/.exec(msg)![1].matchAll(/\(([^)]*)\)/g))].map((m) => m[1]);
+    expect(reasons.every((r) => r.length <= NEW_DISH_TEXT_MAX)).toBe(true);
+    expect(questions(msg)).toEqual([]);
+    expect(changeMessage({ meals: [], unmet: [], new_dishes: [{ name: "Palak paneer", like: "Sabzi" }], link: "/w" })).toContain("New: Palak paneer (like your Sabzi)");
   });
 });

@@ -2,6 +2,11 @@
 
 ## 4.0.3
 
+- The plan's message asks one question at most: the meals short of dishes are named together ("I know only a few dishes
+  for dinner and Vihaan's tiffin, so I've added some new ones. What else do you make for these?"), and a calendar entry
+  it could not read is folded into that question. A calendar entry that is part of someone's weekly routine (office,
+  school, a weekly class on a day household.weekly has them out) is never read nor asked (a run asked 17 such lines).
+  A new dish is said with the family's dish it stands in for ("Palak paneer (like your Sabzi)"), never the model's reason.
 - The plan's message leaves out a note that explains the plan's own choices ("Idli is safe, Chutney avoided by him"):
   only a word for someone at the table is said. A person's fast is still said by code.
 - A note that is only the cook's limit again ("Yes, she has two hours, so 3 to 4 dishes in all") stays with the cook,
