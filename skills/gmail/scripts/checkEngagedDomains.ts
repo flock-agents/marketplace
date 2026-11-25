@@ -44,12 +44,20 @@
 import {
   requireBrowserSession,
   persistentCreate,
-  persistentInteract,
+  persistentStep,
   persistentClose,
   urlencode,
   errorJson,
 } from "../../_shared/_google_helpers";
-import { gmailViewUrl, pollInPageScript, parsePollResult, searchViewReadyExpr } from "./_gmailNav";
+import {
+  gmailViewUrl,
+  pollInPageScript,
+  parsePollResult,
+  searchViewReadyExpr,
+  createGmailNavigator,
+  VISIBLE_ROWS_EXPR,
+  type GmailNavigator,
+} from "./_gmailNav";
 
 // --- Pure helpers (unit-tested, no browser) ---
 
@@ -157,6 +165,13 @@ export function describeSearchDiag(d: SearchDiag): string {
 
 // --- Script entrypoint (browser-driven search) ---
 
+// How long one search may take to settle on a full load.
+const SEARCH_POLL_MS = 20_000;
+
+// On-screen evidence only: domain 2+ is routed in-app, where the previous domain's rows or
+// "No matches" are still in the page (_gmailNav.ts searchViewReadyExpr).
+const VISIBLE_ONLY = { visibleOnly: true };
+
 // Count result rows. `tr.zA` is the same row selector searchEmails.ts and the
 // rest of this skill use; the count is all we need -- we never read who or when.
 //
@@ -167,10 +182,12 @@ export function describeSearchDiag(d: SearchDiag): string {
 // Unit tests cannot catch that: they import the module WITHOUT SKILL_PARAMS, so
 // runScript() never runs. Keep every module-level const the script body reads
 // above the guard.
+// VISIBLE rows only: a hidden earlier view's rows (the inbox, or the previous
+// domain's search) are not this search's answer (_gmailNav.ts VISIBLE_ROWS_EXPR).
 const SEARCH_DIAG_EXPR = `(function(){
   var main = document.querySelector('div[role="main"]');
   return JSON.stringify({
-    rows: document.querySelectorAll('tr.zA').length,
+    rows: ${VISIBLE_ROWS_EXPR}.length,
     hash: location.hash,
     title: document.title,
     text: main ? String(main.innerText || '').slice(0, 300) : ''
@@ -200,9 +217,10 @@ function runScript(): void {
     // `.AO` is Gmail's results container -- the same waitFor searchEmails.ts
     // uses, so an empty result set still settles rather than timing out.
     const searchActions = [{ action: "waitForSelector", selector: ".AO", delay: 20000 }];
-    const searchUrl = (domain: string) => gmailViewUrl(`#search/${urlencode(`in:sent to:@${domain}`)}`);
+    const searchHash = (query: string) => `#search/${urlencode(query)}`;
 
     let psId = "";
+    let navigator: GmailNavigator | null = null;
     try {
       for (let i = 0; i < domains.length; i++) {
         const domain = domains[i];
@@ -211,21 +229,30 @@ function runScript(): void {
         // nextPauseMs.
         if (i > 0) await new Promise((resolve) => setTimeout(resolve, nextPauseMs()));
 
-        const settle = pollInPageScript(searchViewReadyExpr(`in:sent to:@${domain}`), SEARCH_DIAG_EXPR, 20000);
-        let result: any;
-        if (!psId) {
-          const created = await persistentCreate(searchUrl(domain), [...searchActions, { action: "evaluate", script: settle }]);
+        const query = `in:sent to:@${domain}`;
+        let landed: { ready: boolean; result: unknown };
+        if (!navigator) {
+          const settle = pollInPageScript(searchViewReadyExpr(query, VISIBLE_ONLY), SEARCH_DIAG_EXPR, SEARCH_POLL_MS);
+          const created = await persistentCreate(gmailViewUrl(searchHash(query)), [...searchActions, { action: "evaluate", script: settle }]);
           psId = created?.persistentSessionId || "";
           if (!psId) errorJson("SESSION_ERROR", "Failed to create persistent session for the engaged-domain lookup");
-          result = created;
+          navigator = createGmailNavigator(persistentStep(psId));
+          landed = parsePollResult<unknown>(created?.content);
         } else {
-          // Re-navigate the SAME authenticated context. A nonce'd URL forces a
-          // real cross-document load, so the results we scrape are this domain's
-          // and never the previous query's still on screen (_gmailNav.ts).
-          result = await persistentInteract(psId, searchActions, false, settle, searchUrl(domain));
+          // The SAME authenticated page, routed inside the already loaded app; the
+          // navigator falls back to a real load (gmailViewUrl) when that does not
+          // provably land, so the results are this domain's, never the previous
+          // query's still on screen (_gmailNav.ts).
+          landed = await navigator.go<unknown>({
+            hash: searchHash(query),
+            readyExpr: searchViewReadyExpr(query, VISIBLE_ONLY),
+            resultExpr: SEARCH_DIAG_EXPR,
+            reloadTimeoutMs: SEARCH_POLL_MS,
+            reloadActions: searchActions,
+          });
         }
 
-        const { ready, result: raw } = parsePollResult<unknown>(result?.content);
+        const { ready, result: raw } = landed;
         const diag = readSearchDiag(raw);
         if (!ready) {
           // Never guess. A search that did not finish rendering is NOT "no sent
