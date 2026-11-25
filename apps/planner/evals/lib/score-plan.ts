@@ -22,7 +22,7 @@ const ONE_POT = ["khichdi", "khichuri", "pulao", "pulav", "biryani", "pongal", "
 const PLAIN_STAPLES = ["roti", "rotis", "bhakri", "bhakar", "bhaat", "bhat", "poli", "rotli", "fulka", "chapati", "phulka", "rice", "plain", "steamed", "curd", "dahi", "salad", "papad", "pickle", "achar", "raita", "buttermilk", "chaas", "bread"];
 /** What goes beside a main and may come every day like a staple (owner: "staples are fine"): never a main for the twice-a-week rule. */
 const ACCOMPANIMENTS = ["chutney", "pickle", "achar", "papad", "raita", "salad", "curd", "dahi", "buttermilk", "chaas", "kachumber", "koshimbir"];
-export const OWN_SHARE = 0.75;
+export const OWN_SHARE = 0.3;
 export const NEW_WHY_MAX = 60;
 
 export type ExpectedSlotDay = { day: Weekday; date: string; slot: string; people: string[]; guests: number; guestItems: string[]; skip: Skip | null; fastingWithFood: string[] };
