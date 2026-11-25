@@ -7,12 +7,11 @@
  * sent but not seen in the chat yet; read the chat later before saying it went.
  *
  * Refused before anything is typed: a list of chats, a mention of everyone, a chat that is not in
- * the chat list (no new numbers), and the send limits (_limits.ts): 5 an hour, 20 a day, a minute
- * apart, and never the same text to a second chat within 24 hours. The open chat's own header must
- * name the chat asked for, or nothing is typed.
+ * the chat list (no new numbers), and the limits (_limits.ts: 5 sends an hour, 20 a day, plus the
+ * WhatsApp opens and time every function counts). The open chat's own header must name the chat
+ * asked for, or nothing is typed.
  */
-import { PARAMS, main, openWhatsApp, openChat, step, fail, text } from "./_whatsapp";
-import { forgetRead, takeSendSlot, chatKey } from "./_limits";
+import { PARAMS, main, openWhatsApp, openChat, step, fail, text, sameName } from "./_whatsapp";
 import { markComposeScript, typeActions, markSendScript, sendActions, verifySentScript } from "./_page";
 
 const MAX_TEXT = 4000;
@@ -29,10 +28,9 @@ await main(async () => {
   if (message.length > MAX_TEXT) fail("TOO_LONG", `The message is ${message.length} characters; at most ${MAX_TEXT}.`);
   if (MASS_MENTION.test(message)) fail("MASS_MENTION", "Messages that mention everyone in a group are never sent.");
 
-  takeSendSlot(chat, message);
-  await openWhatsApp();
+  await openWhatsApp("send");
   const box = await openChat<{ chat: string; found: boolean }>(chat, markComposeScript(chat));
-  if (!box || chatKey(box.chat) !== chatKey(chat)) fail("CHAT_MISMATCH", `The chat that opened is "${box?.chat ?? "unreadable"}", not "${chat}": nothing was typed.`);
+  if (!box || !sameName(box.chat, chat)) fail("CHAT_MISMATCH", `The chat that opened is "${box?.chat ?? "unreadable"}", not "${chat}": nothing was typed.`);
   if (!box!.found) fail("CANNOT_SEND", `"${chat}" has no message box (you may not be allowed to send there): nothing was typed.`);
 
   const typed = await step<{ typed: boolean; found: boolean }>(typeActions(message), markSendScript(message));
@@ -40,7 +38,6 @@ await main(async () => {
   if (!typed!.found) fail("PAGE_CHANGED", "The Send button was not found, so nothing was sent. The text may be left as an unsent draft in that chat.");
 
   const sent = await step<{ sent: true | null; pending: boolean }>(sendActions(), verifySentScript(message));
-  forgetRead(`chat:${chatKey(chat)}`);
   const seen = sent?.sent === true;
   return {
     chat: box!.chat,

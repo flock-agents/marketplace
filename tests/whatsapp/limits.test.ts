@@ -1,12 +1,13 @@
-// WhatsApp skill: the read and send limits (_limits.ts), kept in a file so they hold across runs.
-// Each test gets its own data folder; `now` is passed in, so no test waits.
+// WhatsApp skill: the limits (_limits.ts), kept in a file so they hold across runs. Opens of WhatsApp
+// Web (10 an hour, 60 a day), minutes it is open (30 a calendar day in the Flock's timezone), sends
+// (5 an hour, 20 a day). Each test gets its own data folder; `now` is passed in, so no test waits.
 //
 // Run: bun test tests/whatsapp.
 import { describe, expect, it, beforeEach, afterEach } from "bun:test";
 import { mkdtempSync, rmSync, readFileSync, writeFileSync, utimesSync, existsSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import { LIMITS, LimitHit, cachedRead, keepRead, forgetRead, takeReadSlot, takeSendSlot, chatKey, textHash } from "../../skills/whatsapp/scripts/_limits";
+import { LIMITS, LimitHit, takeSlot, addOpenTime, nextMidnight, dayOf, timeZoneOf } from "../../skills/whatsapp/scripts/_limits";
 
 const MIN = 60_000;
 const HOUR = 60 * MIN;
@@ -20,103 +21,117 @@ afterEach(() => { rmSync(dir, { recursive: true, force: true }); });
 function refusal(fn: () => unknown): LimitHit | null {
   try { fn(); return null; } catch (e) { if (e instanceof LimitHit) return e; throw e; }
 }
+const at = (now: number, timeZone = "UTC") => ({ dir, now, timeZone });
+const state = () => JSON.parse(readFileSync(join(dir, "whatsapp", "limits.json"), "utf8"));
 
-describe("reads", () => {
-  it("allow 20 an hour, then refuse with when the next frees up", () => {
-    for (let i = 0; i < LIMITS.readsPerHour; i++) takeReadSlot({ dir, now: T0 + i * MIN });
-    const hit = refusal(() => takeReadSlot({ dir, now: T0 + 30 * MIN }));
-    expect(hit?.code).toBe("READ_LIMIT_HOUR");
+describe("opens of WhatsApp Web", () => {
+  it("allow 10 a rolling hour, then refuse until the oldest ages out", () => {
+    for (let i = 0; i < LIMITS.opensPerHour; i++) takeSlot("read", at(T0 + i * MIN));
+    const hit = refusal(() => takeSlot("read", at(T0 + 30 * MIN)));
+    expect(hit?.code).toBe("OPEN_LIMIT_HOUR");
     expect(hit?.freesAt).toBe(T0 + HOUR);
     expect(hit?.message).toContain("frees up in about 30 minutes");
-    expect(refusal(() => takeReadSlot({ dir, now: T0 + HOUR }))).toBeNull();
+    expect(refusal(() => takeSlot("read", at(T0 + HOUR)))).toBeNull();
   });
 
-  it("allow 100 a day", () => {
-    for (let h = 0; h < 5; h++) for (let i = 0; i < 20; i++) takeReadSlot({ dir, now: T0 + h * HOUR + i * MIN });
-    const hit = refusal(() => takeReadSlot({ dir, now: T0 + 6 * HOUR }));
-    expect(hit?.code).toBe("READ_LIMIT_DAY");
+  it("allow 60 a rolling day", () => {
+    for (let h = 0; h < 6; h++) for (let i = 0; i < 10; i++) takeSlot("read", at(T0 + h * HOUR + i * MIN));
+    const hit = refusal(() => takeSlot("read", at(T0 + 7 * HOUR)));
+    expect(hit?.code).toBe("OPEN_LIMIT_DAY");
     expect(hit?.freesAt).toBe(T0 + 24 * HOUR);
   });
 
-  it("keep a read for 10 minutes, with its age, and forget it after", () => {
-    keepRead("chat:mom", { chat: "Mom", messages: [] }, { dir, now: T0 });
-    expect(cachedRead("chat:mom", { dir, now: T0 + 4 * MIN })).toEqual({ result: { chat: "Mom", messages: [] }, ageSeconds: 240 });
-    expect(cachedRead("chat:mom", { dir, now: T0 + 10 * MIN })).toBeNull();
-    keepRead("chat:mom", { chat: "Mom", messages: [] }, { dir, now: T0 });
-    forgetRead("chat:mom", { dir, now: T0 + MIN });
-    expect(cachedRead("chat:mom", { dir, now: T0 + 2 * MIN })).toBeNull();
+  it("a send counts as an open too", () => {
+    for (let i = 0; i < 9; i++) takeSlot("read", at(T0 + i * 1000));
+    takeSlot("send", at(T0 + MIN));
+    expect(refusal(() => takeSlot("read", at(T0 + 2 * MIN)))?.code).toBe("OPEN_LIMIT_HOUR");
+  });
+});
+
+describe("minutes WhatsApp Web is open", () => {
+  it("add up across runs, failed ones too, and answer the minutes left", () => {
+    takeSlot("read", at(T0));
+    expect(addOpenTime(10 * MIN, at(T0 + 10 * MIN))).toBe(20);
+    expect(addOpenTime(4.5 * MIN, at(T0 + 20 * MIN))).toBe(15);
+    expect(state().usage).toEqual({ day: "2026-11-25", ms: 14.5 * MIN });
   });
 
-  it("hold across runs: the state is a file in the skill's data folder", () => {
-    takeReadSlot({ dir, now: T0 });
-    const state = JSON.parse(readFileSync(join(dir, "whatsapp", "limits.json"), "utf8"));
-    expect(state.reads).toEqual([T0]);
+  it("refuse to start once 30 minutes are spent today, until midnight in the Flock's timezone", () => {
+    addOpenTime(30 * MIN, at(T0, "Asia/Kolkata"));
+    const hit = refusal(() => takeSlot("read", at(T0 + MIN, "Asia/Kolkata")));
+    expect(hit?.code).toBe("TIME_LIMIT_DAY");
+    expect(hit?.message).toContain("Asia/Kolkata");
+    expect(hit?.freesAt).toBe(Date.UTC(2026, 10, 25, 18, 30));
+    expect(refusal(() => takeSlot("read", at(Date.UTC(2026, 10, 25, 18, 31), "Asia/Kolkata")))).toBeNull();
   });
 
-  it("refuse without a data folder rather than run unlimited", () => {
-    const before = process.env.SKILL_DATA_DIR;
-    delete process.env.SKILL_DATA_DIR;
-    try { expect(refusal(() => takeReadSlot({ now: T0 }))?.code).toBe("NO_DATA_DIR"); }
-    finally { if (before !== undefined) process.env.SKILL_DATA_DIR = before; }
+  it("still start with a little left, answering how much is left so the run caps its waits", () => {
+    addOpenTime(29 * MIN, at(T0));
+    expect(takeSlot("read", at(T0 + MIN))).toBe(MIN);
+    expect(addOpenTime(80_000, at(T0 + 3 * MIN))).toBe(0);
+    expect(refusal(() => takeSlot("read", at(T0 + 4 * MIN)))?.code).toBe("TIME_LIMIT_DAY");
+  });
+
+  it("count the calendar day in UTC when no timezone is given", () => {
+    const before = process.env.FLOCK_TIMEZONE;
+    delete process.env.FLOCK_TIMEZONE;
+    try {
+      expect(timeZoneOf({})).toBe("UTC");
+      expect(timeZoneOf({ timeZone: "Not/AZone" })).toBe("UTC");
+    } finally { if (before !== undefined) process.env.FLOCK_TIMEZONE = before; }
+    expect(dayOf(Date.UTC(2026, 10, 25, 23, 0), "UTC")).toBe("2026-11-25");
+    expect(nextMidnight(Date.UTC(2026, 10, 25, 23, 0), "UTC")).toBe(Date.UTC(2026, 10, 26));
+    expect(nextMidnight(Date.UTC(2026, 2, 7, 12, 0), "America/New_York")).toBe(Date.UTC(2026, 2, 8, 5));
+    expect(nextMidnight(Date.UTC(2026, 2, 8, 12, 0), "America/New_York")).toBe(Date.UTC(2026, 2, 9, 4));
   });
 });
 
 describe("sends", () => {
-  it("are at least a minute apart", () => {
-    takeSendSlot("Mom", "hi", { dir, now: T0 });
-    const hit = refusal(() => takeSendSlot("Mom", "hello again", { dir, now: T0 + 30_000 }));
-    expect(hit?.code).toBe("SEND_TOO_SOON");
-    expect(hit?.freesAt).toBe(T0 + MIN);
-    expect(refusal(() => takeSendSlot("Mom", "hello again", { dir, now: T0 + MIN }))).toBeNull();
+  it("allow 5 a rolling hour and 20 a rolling day", () => {
+    for (let i = 0; i < 5; i++) takeSlot("send", at(T0 + i * MIN));
+    const hour = refusal(() => takeSlot("send", at(T0 + 20 * MIN)));
+    expect(hour?.code).toBe("SEND_LIMIT_HOUR");
+    expect(hour?.freesAt).toBe(T0 + HOUR);
+    for (let h = 1; h < 4; h++) for (let i = 0; i < 5; i++) takeSlot("send", at(T0 + h * 2 * HOUR + i * MIN));
+    const day = refusal(() => takeSlot("send", at(T0 + 8 * HOUR)));
+    expect(day?.code).toBe("SEND_LIMIT_DAY");
+    expect(day?.freesAt).toBe(T0 + 24 * HOUR);
   });
 
-  it("allow 5 an hour and 20 a day", () => {
-    for (let i = 0; i < 5; i++) takeSendSlot("Mom", `message ${i}`, { dir, now: T0 + i * 2 * MIN });
-    expect(refusal(() => takeSendSlot("Mom", "message 5", { dir, now: T0 + 20 * MIN }))?.code).toBe("SEND_LIMIT_HOUR");
-    for (let h = 1; h < 4; h++) for (let i = 0; i < 5; i++) takeSendSlot("Mom", `m ${h} ${i}`, { dir, now: T0 + h * 2 * HOUR + i * 2 * MIN });
-    const hit = refusal(() => takeSendSlot("Mom", "one more", { dir, now: T0 + 8 * HOUR }));
-    expect(hit?.code).toBe("SEND_LIMIT_DAY");
-    expect(hit?.freesAt).toBe(T0 + 24 * HOUR);
+  it("have no gap between them and no rule about the same text", () => {
+    expect(refusal(() => { takeSlot("send", at(T0)); takeSlot("send", at(T0 + 1000)); })).toBeNull();
   });
 
-  it("never send the same text to a second chat within 24 hours (case and spacing aside)", () => {
-    takeSendSlot("Mom", "Happy Diwali!", { dir, now: T0 });
-    const hit = refusal(() => takeSendSlot("Dad", "  happy   diwali! ", { dir, now: T0 + 2 * HOUR }));
-    expect(hit?.code).toBe("SAME_TEXT_OTHER_CHAT");
-    expect(hit?.freesAt).toBe(T0 + 24 * HOUR);
-    expect(refusal(() => takeSendSlot("mom", "Happy Diwali!", { dir, now: T0 + 2 * HOUR }))).toBeNull();
-    expect(refusal(() => takeSendSlot("Dad", "Happy Diwali!", { dir, now: T0 + 27 * HOUR }))).toBeNull();
-  });
-
-  it("count as a read of WhatsApp too", () => {
-    for (let i = 0; i < 19; i++) takeReadSlot({ dir, now: T0 + i * 1000 });
-    takeSendSlot("Mom", "hi", { dir, now: T0 + MIN });
-    expect(refusal(() => takeReadSlot({ dir, now: T0 + 2 * MIN }))?.code).toBe("READ_LIMIT_HOUR");
-  });
-
-  it("keep only a hash of what was sent", () => {
-    takeSendSlot("Mom", "a private note", { dir, now: T0 });
-    const raw = readFileSync(join(dir, "whatsapp", "limits.json"), "utf8");
-    expect(raw).not.toContain("private");
-    expect(raw).toContain(textHash("a private note"));
-    expect(chatKey("  Family  🏡 ")).toBe("family 🏡");
+  it("a refused send takes no open", () => {
+    for (let i = 0; i < 5; i++) takeSlot("send", at(T0 + i * MIN));
+    refusal(() => takeSlot("send", at(T0 + 6 * MIN)));
+    expect(state().opens.length).toBe(5);
   });
 });
 
 describe("the state file", () => {
   it("a broken file starts fresh instead of failing every run", () => {
-    takeReadSlot({ dir, now: T0 });
+    takeSlot("read", at(T0));
     writeFileSync(join(dir, "whatsapp", "limits.json"), "{not json");
-    expect(refusal(() => takeReadSlot({ dir, now: T0 + MIN }))).toBeNull();
+    expect(refusal(() => takeSlot("read", at(T0 + MIN)))).toBeNull();
+    writeFileSync(join(dir, "whatsapp", "limits.json"), JSON.stringify({ opens: "x", sends: [1, "y"], usage: { day: 3 } }));
+    expect(addOpenTime(MIN, at(T0 + 2 * MIN))).toBe(29);
+  });
+
+  it("refuse without a data folder rather than run unlimited", () => {
+    const before = process.env.SKILL_DATA_DIR;
+    delete process.env.SKILL_DATA_DIR;
+    try { expect(refusal(() => takeSlot("read", { now: T0 }))?.code).toBe("NO_DATA_DIR"); }
+    finally { if (before !== undefined) process.env.SKILL_DATA_DIR = before; }
   });
 
   it("a lock left by a run that died is taken over after 30 seconds", () => {
-    takeReadSlot({ dir, now: T0 });
+    takeSlot("read", at(T0));
     const lock = join(dir, "whatsapp", "limits.json.lock");
     writeFileSync(lock, "");
     const old = (Date.now() - 60_000) / 1000;
     utimesSync(lock, old, old);
-    expect(refusal(() => takeReadSlot({ dir, now: T0 + MIN }))).toBeNull();
+    expect(refusal(() => takeSlot("read", at(T0 + MIN)))).toBeNull();
     expect(existsSync(lock)).toBe(false);
   });
 });

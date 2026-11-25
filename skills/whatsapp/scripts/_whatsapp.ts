@@ -5,7 +5,7 @@
  */
 import { FLOCK_API, emitResult } from "../../_shared/_helpers";
 import { errorJson } from "../../_shared/_grocery_helpers";
-import { LimitHit } from "./_limits";
+import { LimitHit, takeSlot, addOpenTime } from "./_limits";
 import {
   WHATSAPP_URL, SCREEN_PROBE_JS, MARK_SEARCH_JS, useHereActions, findRowScript, searchActions, searchResultsScript, openRowActions, parse,
   type ScreenProbe, type SearchRead,
@@ -18,6 +18,12 @@ const agentId = process.env.FLOCK_AGENT_ID || "";
 /** How long WhatsApp Web may take to show the chats (it syncs first after a while away). */
 const LOAD_WAIT_MS = 60_000;
 const POLL_MS = 3000;
+/** What a run needs after the chats show (finding a chat, reading, typing, closing). */
+const AFTER_LOAD_MS = 20_000;
+const MIN_LOAD_WAIT_MS = 5_000;
+
+/** When this run started holding WhatsApp Web open (0: it never did). */
+let startedAt = 0;
 
 export const SIGN_IN_AGAIN = "Sign in again with the whatsapp skill's own Sign-in steps (instructions.md, Sign-in): the person links WhatsApp with a code on their phone. Do not retry before that.";
 
@@ -68,15 +74,20 @@ async function markOutdated(): Promise<void> {
   }).catch(() => {});
 }
 
-/** Opens WhatsApp Web and waits for the chats. Signed out: the sign-in is marked outdated and the
- *  run refuses. "Use here" (WhatsApp open in another window of this same browser): clicked once. */
-export async function openWhatsApp(): Promise<void> {
+/** Opens WhatsApp Web and waits for the chats, after taking its slot (_limits.ts; `send` takes a send
+ *  too). The wait is cut short when little of today's open time is left. Signed out: the sign-in is
+ *  marked outdated and the run refuses. "Use here" (WhatsApp open in another window of this same
+ *  browser): clicked once. */
+export async function openWhatsApp(kind: "read" | "send" = "read"): Promise<void> {
+  const left = takeSlot(kind);
+  const loadWait = Math.max(MIN_LOAD_WAIT_MS, Math.min(LOAD_WAIT_MS, left - AFTER_LOAD_MS));
+  startedAt = Date.now();
   const first = await browserFetch({ url: WHATSAPP_URL, createPersistentSession: true, pageActions: [{ action: "wait", delay: POLL_MS }, { action: "evaluate", script: SCREEN_PROBE_JS }] });
   opened = first?.persistentSessionId || "";
   if (!opened) fail("BROWSER_ERROR", "Flock's browser opened no window for WhatsApp.");
   let probe = parse<ScreenProbe>(first?.content);
   let usedHere = false;
-  for (const started = Date.now(); Date.now() - started < LOAD_WAIT_MS;) {
+  for (const started = Date.now(); Date.now() - started < loadWait;) {
     if (probe?.screen === "chats") return;
     if (probe?.screen === "logged_out") {
       await markOutdated();
@@ -89,7 +100,7 @@ export async function openWhatsApp(): Promise<void> {
     }
     probe = await step<ScreenProbe>([{ action: "wait", delay: POLL_MS }], SCREEN_PROBE_JS);
   }
-  fail("NOT_LOADED", `WhatsApp Web did not show the chats within a minute (it showed: ${probe?.screen ?? "nothing readable"}${probe?.detail ? `, "${probe.detail}"` : ""}). Try again later.`);
+  fail("NOT_LOADED", `WhatsApp Web did not show the chats in time (it showed: ${probe?.screen ?? "nothing readable"}${probe?.detail ? `, "${probe.detail}"` : ""}). Try again later.`);
 }
 
 /** Opens the existing chat named exactly `name`: from the chat list, else from the Chats section of
@@ -122,15 +133,27 @@ export async function main(body: () => Promise<Record<string, unknown>>): Promis
   } finally {
     if (opened) await post("/api/internal/browser-fetch", { sessionName, agentId, persistentSessionId: opened, closePersistentSession: true }).catch(() => {});
   }
-  if (failure) errorJson(failure.code, failure.message);
-  emitResult(result);
+  const minutesLeftToday = startedAt ? countOpenTime(Date.now() - startedAt) : null;
+  if (failure) errorJson(failure.code, minutesLeftToday === null ? failure.message : `${failure.message} (${minutesLeftToday} minutes of WhatsApp time left today.)`);
+  emitResult({ ...result, ...(minutesLeftToday === null ? {} : { minutesLeftToday }) });
   process.exit(0);
+}
+
+/** Adds the run's open time to today's total, even for a failed run; null when it cannot be kept. */
+function countOpenTime(ms: number): number | null {
+  try { return addOpenTime(ms); } catch { return null; }
 }
 
 /** A whole number param within [1, max], else `fallback`. */
 export function count(value: unknown, fallback: number, max: number): number {
   const n = parseInt(String(value ?? ""), 10);
   return Number.isFinite(n) && n >= 1 ? Math.min(n, max) : fallback;
+}
+
+/** Whether two chat names are the same, case and spacing aside. */
+export function sameName(a: string, b: string): boolean {
+  const key = (s: string) => s.normalize("NFKC").replace(/\s+/g, " ").trim().toLowerCase();
+  return key(a) === key(b);
 }
 
 /** A one-line text param, trimmed, or "". */

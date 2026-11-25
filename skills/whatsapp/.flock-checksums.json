@@ -1,19 +1,19 @@
 {
   "version": 1,
-  "generatedAt": "2026-11-25T18:10:47.000Z",
+  "generatedAt": "2026-11-25T18:27:20.750Z",
   "sourceVersion": "1.0.0",
   "sourceTag": "whatsapp-v1.0.0",
   "files": {
-    "CHANGELOG.md": "e92366a416282f551795f69edd05535646d9d9263c6a21785ddaa7525cad4f99",
+    "CHANGELOG.md": "1f0a2b7fd5f78a962cc30a90806e0a9e3d21c3b70bce8bc1b24c63537b590171",
     "icon.svg": "1d9a927c3ad3cca31305211227611789007bb568d9414e9a78e1be9f84569e9f",
-    "scripts/list-chats.ts": "528330d64998c44c9e50861239608651d47654d4f8a4b0ca7c56eaa935d7b5df",
-    "scripts/_limits.ts": "2702c8a311c3a171dc58fc798467e7d36e66491845ab0627212eff653c1b775e",
-    "scripts/search.ts": "7073cafa37e703b671eb0f54e0c831c8d50991750d934da7efd11c07bad3bfa0",
-    "scripts/read-chat.ts": "2825acf740cb2f668e5fc6baf95a5332d99d7ab0186454300a788daf319128ea",
+    "scripts/list-chats.ts": "7c4de88c869b1f56a738b1f5b15ea37e69c882ca2e6ef222ecc6a3e0d43a83bf",
+    "scripts/_limits.ts": "dea75c61d18528ac188d4a174007614fc5f76351c8dd832f00c2ee6abd9a3901",
+    "scripts/search.ts": "8bdd14d937e82e87a9a49bfe50445b09b94e0dfabcc620dbfc932049f48533e8",
+    "scripts/read-chat.ts": "a487f5dc86f4f602c28b1c3ab8c5ca2c492e2c2b42d374b0956c6dd65438894d",
     "scripts/_page.ts": "e39c1856326bf267d4fac264db6bdb75e106f17ef5a3aa8622ae94026004fc6f",
-    "scripts/send-message.ts": "1dc4ce4318da57e3c01836b231abcc49477da425424716a6dd3b33f5dea6a83f",
-    "scripts/_whatsapp.ts": "5780fef1d840b3b6da728c4f687750eb765294d87cab63d584f3701ba4d80219",
+    "scripts/send-message.ts": "6d2daaca10749f53796bf59249fb2c8858ff6bcc1b8631755f58cec60203a701",
+    "scripts/_whatsapp.ts": "4b819baa7c0b868810ebff365bae973481b1a0f5ca0f8c11e11c77773459a9c0",
     "flock.skill.json": "b0b795d7e263df8345e700335b29f380f6aca144d732a100948a459156a034e6",
-    "instructions.md": "64826932642e5045bd9438116429fb33b47aa46f98ab313f80f4b9cb78575184"
+    "instructions.md": "6f956f6f02443b324b26a453663dbfaac601c287c1d7a05e746d4033775ec6cd"
   }
 }

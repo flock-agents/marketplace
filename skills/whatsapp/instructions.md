@@ -52,12 +52,12 @@ Returns `{chat, sent, pending, message}`. `sent: null` means it was sent but not
 
 ## Limits (the skill enforces them; plan around them)
 
-- WhatsApp is loaded at most **20 times an hour and 100 times a day** (every function counts, sends too).
-- The same chat is read at most **once every 10 minutes**: inside that, `read-chat` answers the kept read with `cached: true` and `ageSeconds`. `list-chats` and `search` keep theirs the same way. Say how old it is when it matters.
-- At most **5 sends an hour and 20 a day**, at least **a minute apart**, and never the same text to a second chat within 24 hours.
-- A limit hit is an error saying when it frees up (`READ_LIMIT_HOUR`, `READ_LIMIT_DAY`, `SEND_TOO_SOON`, `SEND_LIMIT_HOUR`, `SEND_LIMIT_DAY`, `SAME_TEXT_OTHER_CHAT`). Tell the person in a few words and when you can try. Never retry in a loop and never wait it out silently.
+- Every function opens WhatsApp once (sends too): at most **10 opens an hour and 60 a day**.
+- WhatsApp is open at most **30 minutes a day** in total (the Flock's own day). Each result says `minutesLeftToday`; with little left a run gives up waiting sooner.
+- At most **5 sends an hour and 20 a day**.
+- A limit hit is an error saying when it frees up (`OPEN_LIMIT_HOUR`, `OPEN_LIMIT_DAY`, `TIME_LIMIT_DAY`, `SEND_LIMIT_HOUR`, `SEND_LIMIT_DAY`). Tell the person in a few words and when you can try. Never retry in a loop and never wait it out silently.
 - A routine that watches a chat runs **no more often than every 30 minutes**, and only reads.
-- Read as little as answers the ask: one `read-chat` rather than `list-chats` and then every chat.
+- Read as little as answers the ask: one `read-chat` rather than `list-chats` and then every chat, and reuse what you read a few minutes ago instead of reading it again.
 
 ## Errors
 
