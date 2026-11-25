@@ -13,13 +13,13 @@ import {
 
 
 /** The scorer's own words for a plate (owner, 25 Nov base minimum). Bread or rice, on its own or in a dish's name. */
-const BREAD_RICE = ["roti", "rotis", "bhaat", "bhat", "poli", "chapatis", "rotli", "fulka", "luchi", "kulcha", "chapati", "chapathi", "phulka", "paratha", "parotta", "puri", "poori", "bhakri", "naan", "luchi", "rice", "chawal", "appam", "dosa", "idiyappam", "thepla", "bread", "kulcha", "bhature", "ragi", "millet"];
+const BREAD_RICE = ["roti", "rotis", "bhakar", "bhaat", "bhat", "poli", "chapatis", "rotli", "fulka", "luchi", "kulcha", "chapati", "chapathi", "phulka", "paratha", "parotta", "puri", "poori", "bhakri", "naan", "luchi", "rice", "chawal", "appam", "dosa", "idiyappam", "thepla", "bread", "kulcha", "bhature", "ragi", "millet"];
 /** A one-pot dish is a whole plate on its own. */
 const ONE_POT = ["khichdi", "khichuri", "pulao", "pulav", "biryani", "pongal", "bisibele", "bisi", "tehri", "upma", "poha", "chawal", "noodles", "pasta", "thali",
   // A dosa-family dish is a meal with its chutney or sambar.
   "dosa", "uthappam", "uttapam", "idli", "pesarattu", "adai", "appam", "idiyappam", "paniyaram"];
 /** A dish that is only a staple (a plate of these alone is bare). */
-const PLAIN_STAPLES = ["roti", "rotis", "bhaat", "bhat", "poli", "rotli", "fulka", "chapati", "phulka", "rice", "plain", "steamed", "curd", "dahi", "salad", "papad", "pickle", "achar", "raita", "buttermilk", "chaas", "bread"];
+const PLAIN_STAPLES = ["roti", "rotis", "bhakri", "bhakar", "bhaat", "bhat", "poli", "rotli", "fulka", "chapati", "phulka", "rice", "plain", "steamed", "curd", "dahi", "salad", "papad", "pickle", "achar", "raita", "buttermilk", "chaas", "bread"];
 /** What goes beside a main and may come every day like a staple (owner: "staples are fine"): never a main for the twice-a-week rule. */
 const ACCOMPANIMENTS = ["chutney", "pickle", "achar", "papad", "raita", "salad", "curd", "dahi", "buttermilk", "chaas", "kachumber", "koshimbir"];
 export const OWN_SHARE = 0.75;
@@ -341,8 +341,10 @@ export function scorePlan(h: Household, plan0: PlanOut, loaded: SetupOut, o: { f
     const side = (x: string, plate: string[]) => hasWord(x, ACCOMPANIMENTS) || (hasWord(x, ["sambar", "sambhar"]) && !plate.some((y) => y !== x && hasWord(y, ["rice", "chawal", "bhaat", "bhat", "annam", "sadam"])));
     for (const sd of sds) for (const d of sd.dishes) if (!isBareStaple(d.name) && !side(d.name, sd.dishes.map((x) => x.name))) (days.get(plain(d.name)) ?? days.set(plain(d.name), new Set()).get(plain(d.name))!).add(sd.date);
     for (const [name, ds] of days) {
-      const row = t.library.find((d) => lc(d.slot) === lc(slot) && plain(d.name) === name);
-      const said = row ? frequencyRange(row.frequency)?.[1] ?? (row.days?.length ? row.days.length : 0) : 0;
+      // The family's own dish, or the one it is a particular way of ("scrambled eggs" of their eggs every morning): its own words.
+      const ofIt = (d: { name: string }) => plain(d.name) === name || variantOf(d.name, name);
+      const rows = t.library.filter((d) => lc(d.slot) === lc(slot) && ofIt(d));
+      const said = Math.max(0, ...rows.map((row) => frequencyRange(row.frequency)?.[1] ?? (row.days?.length ? row.days.length : 0)));
       if (ds.size > Math.max(2, said)) add("main_twice", false, `${slot}: ${name} on ${ds.size} days`);
     }
     if (sds.length) add("main_twice", true);
