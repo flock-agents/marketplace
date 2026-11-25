@@ -4,7 +4,7 @@
 //   Tier C, elders with their own diet: the safety checks pass every run; the rest is reported.
 // Each household runs REPEAT times (default 3). The app is touched only through lib/adapter.ts.
 //
-//   bun evals/eval-e2e.ts [--only h1,h13] [--repeat 3] [--concurrency 4] [--transcripts <dir>] [--out <dir>] [--judge]
+//   bun evals/eval-e2e.ts [--only h1,h13] [--heldout2] [--repeat 3] [--concurrency 4] [--transcripts <dir>] [--out <dir>] [--judge]
 import { mkdirSync, writeFileSync, readFileSync, existsSync, mkdtempSync, rmSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
@@ -20,6 +20,8 @@ export const TIERS: Record<string, "A" | "B" | "C"> = {
   "h1-sharma": "A", "h2-iyer": "A", "h6-kulkarni": "A", "h7-menon": "A",
   "h13-familyb": "B", "h14-familyb2": "B",
   "h3-shiva": "C", "h4-reddy": "C", "h5-agarwal": "C", "h8-banerjee": "C",
+  // The second held-out set (--heldout2 only).
+  "h15-gupta": "A", "h16-pillai": "A", "h17-subramanian": "B",
 };
 /** Must pass in every tier, every run (owner: nobody without food; no food rule broken). */
 export const SAFETY = ["plan_made", "setup_time", "plan_time", "hard_rules", "nobody_without_food"];
@@ -41,7 +43,7 @@ const OUT = arg("out") ?? join(import.meta.dir, "results", `e2e-${stamp}`);
 const WEEK0 = "2026-11-30";
 const log0 = console.log;
 if (!flag("verbose")) console.log = (...a: unknown[]) => { if (!String(a[0] ?? "").startsWith("[planner]")) log0(...a); };
-const HH = pick(arg("only")).filter((h) => TIERS[h.id]);
+const HH = pick(arg("only"), { heldout2: flag("heldout2") }).filter((h) => TIERS[h.id]);
 
 type Rates = Record<string, [number, number]>;
 const ok = (r: Rates, k: string) => !r[k] || r[k][0] === r[k][1];
