@@ -2,6 +2,8 @@
 
 ## 1.6.9
 
+Needs Flock 0.25.0-beta.2: the scripts use `persistentStep` from Flock's shared Google helpers.
+
 - `getEmail` reads through Gmail's print view first (body, date and snippet from the newest message, as before), falling back to the conversation view when the print view is missing, empty or slow (15s).
 - Views switch inside the already loaded Gmail app instead of full page reloads. A switch counts only once the old view has left the screen, else it does a full load; one slow page no longer turns in-app switching off for the session.
 - `checkEngagedDomains` counts only on-screen rows and the empty-state copy.

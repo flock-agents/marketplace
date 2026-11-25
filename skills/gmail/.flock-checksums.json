@@ -1,10 +1,10 @@
 {
   "version": 1,
-  "generatedAt": "2026-11-25T08:05:52.236Z",
+  "generatedAt": "2026-11-25T08:26:29.438Z",
   "sourceVersion": "1.6.9",
   "sourceTag": "gmail-v1.6.9",
   "files": {
-    "CHANGELOG.md": "e48180081ee5aec28055fe34e02fab1d93dd9edd71ee71899f5479ff895d4d81",
+    "CHANGELOG.md": "fdc330c1a61eb268622698a14d9d8881cfd4af2debe53b23a7b65ffd713d1e5f",
     "icon.svg": "40c228f85eadb886954e48734e43fcaccd895af7633e3ff3f4ec88b993f55184",
     "scripts/_unreadState.ts": "81b9c965418022310b23bc94f7180fd1e265dae285f724a965ee516714c9bb36",
     "scripts/gmail-exec.ts": "263d996127591a2a1e13b10b4ba1c52a315a0a6e1c2c601c22522a9c724f4ce6",

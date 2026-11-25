@@ -158,9 +158,9 @@
       "path": "skills/gmail",
       "latestVersion": "1.6.9",
       "latestTag": "gmail-v1.6.9",
-      "minFlockVersion": "0.25.0-beta.1",
+      "minFlockVersion": "0.25.0-beta.2",
       "publishedAt": "2026-08-14T10:00:00Z",
-      "updatedAt": "2026-11-24T00:00:00Z"
+      "updatedAt": "2026-11-25T00:00:00Z"
     },
     {
       "slug": "google-calendar",
