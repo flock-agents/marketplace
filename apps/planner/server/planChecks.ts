@@ -90,7 +90,9 @@ export type Week = { days: PlanDay[]; slots: Map<string, SlotFacts>; rules: Rule
   /** What each of the week's guest rules (their words) forbids, as tags, from one read; none read: not checked. */ guestTags?: Map<string, string[]>;
   /** The careful allergy read (owner 25 Nov), by dish key: the allergy tags the dish has or may have. Given: a dish the
    *  family does not vouch for is safe for an allergy only by this read (none: not safe). Not given: the contains read. */
-  careful?: Map<string, Set<string>> };
+  careful?: Map<string, Set<string>>;
+  /** The catalog's items of a category the family named ("poha", "dal"): theirs (lead's rule, 25 Nov), by dish key. */
+  ownItems?: Set<string> };
 
 const slotKey = (s: string) => s.toLowerCase();
 export const isStapleAt = (w: Week, slot: string, dish: string): boolean => !!w.slots.get(slotKey(slot))?.staples.some((x) => dishKey(x) === dishKey(dish));
@@ -114,10 +116,22 @@ function familyDish(w: Week, key: string): boolean {
  *  without it, or keeps their portion aside). Such a dish needs no read for that allergy. */
 export function vouched(w: Week, r: Rule, dish: string): boolean {
   const key = dishKey(dish);
+  // An item of a category the family named is theirs: under a house-wide allergy the house cooks it without, as it cooks
+  // their poha or dal; never one whose name is the allergen ("peanut chutney").
+  if (!r.who && w.ownItems?.has(key) && !namesItem(dish, r)) return true;
   if (!familyDish(w, key)) return false;
   if (!r.who) return true;
   return [...w.slots.values()].some((sf) => sf.plates.some((pl) => pl.some((x) => dishKey(x) === key))
     && (sf.slot.usual_people.some((p) => same(p, r.who!)) || w.days.some((d) => same(d.slot, sf.slot.name) && d.people.some((p) => same(p, r.who!)))));
+}
+/** The other words for an allergy tag a dish name may use. */
+const TAG_WORDS: Record<string, string[]> = { peanut: ["groundnut", "shengdana", "singdana", "moongphali", "kadalai"], nuts: ["kaju", "cashew", "badam", "almond", "walnut", "pista", "akhrot"],
+  dairy: ["paneer", "curd", "dahi", "milk", "ghee", "butter", "cheese", "malai"], egg: ["omelette", "anda"] };
+/** Does a dish's name say an item of the rule ("peanut chutney" under a peanut allergy). */
+function namesItem(dish: string, r: Rule): boolean {
+  const ws = dish.toLowerCase().split(/[^a-z]+/).filter(Boolean).map((x) => x.replace(/s$/, ""));
+  const tags = forbidden(r).flatMap((t) => [t, ...Object.keys(TAG_PARENT).filter((k) => TAG_PARENT[k] === t)]);
+  return tags.some((t) => ws.includes(t) || (TAG_WORDS[t] ?? []).some((x) => ws.includes(x.replace(/s$/, ""))));
 }
 /** The allergy tags a dish must be read for carefully (balanced, unsure counts as having it): those of every allergy rule
  *  the family does not vouch for it under. */

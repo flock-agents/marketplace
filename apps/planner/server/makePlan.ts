@@ -316,6 +316,7 @@ async function planWeek(deps: MakePlanDeps & { log: (line: string) => void }, in
   for (const line of filled.log) log(line);
   log(`filled ${toPlan.length} slot-days in ${clock() - t0} ms: ${filled.placed.length} new dishes placed`);
   for (const [k, v] of filled.facts) if (!w.facts.has(k)) w.facts.set(k, v);
+  if (filled.ownItems) w.ownItems = filled.ownItems;
   unmet.push(...filled.unmet);
   /** Each placed dish's own fields (new, not for, its note), by date|slot|dish key. */
   const placedAs = new Map<string, { new: boolean; not_for: string[]; note: string | null }>();
@@ -337,7 +338,13 @@ async function planWeek(deps: MakePlanDeps & { log: (line: string) => void }, in
   // white rice for ..."), and one person's allergy kept aside on a family dish that has it ("Ishaan's Poha without peanuts").
   const dishNotes = new Map<string, string[]>();   // date|slot|dish key
   const noteOn = (d: PlanDay, dish: string, t: string) => { const k = `${d.date}|${d.slot}|${dishKey(dish)}`; dishNotes.set(k, uniq([...(dishNotes.get(k) ?? []), t])); };
+  // An item of a category the family named, under a house-wide allergy: the house cooks it without (vouched), and says so.
+  const houseAllergies = rules.filter((r) => isAllergyRule(r) && !r.who);
+  const cookedWithout = (dish: string): string[] => (w.ownItems?.has(dishKey(dish))
+    ? uniq(houseAllergies.filter((r) => vouched(w, r, dish)).flatMap(forbidden).filter((t) => w.facts.get(dishKey(dish))?.tags.has(t))) : []);
   for (const d of toPlan) for (const dish of d.dishes) {
+    const without = cookedWithout(dish);
+    if (without.length) noteOn(d, dish, `without ${andList(without.map((t) => t.replace(/_/g, " ")))}`);
     const own = placedAs.get(`${d.date}|${d.slot}|${dishKey(dish)}`)?.note;
     for (const t of [...(own ? [own] : []), ...swapNotes(w, d, dish), ...allergyNotes(w, d, dish)]) noteOn(d, dish, t);
   }
@@ -423,8 +430,9 @@ async function planWeek(deps: MakePlanDeps & { log: (line: string) => void }, in
       const k = dishKey(v.dish);
       if (library.some((x) => x.key === k) || newDishes.has(k)) continue;
       const f = w.facts.get(k);
+      const out = cookedWithout(v.dish);
       upsertLibrary(tx, { name: v.dish, slot: v.slot, origin: "planner_suggested", suggested: false, untried: false, kind: v.kind, sub: v.sub, catalog_item: v.dish,
-        ...(f ? { contains: [...f.tags], contains_read: [...f.read] } : {}) }, by, ch);
+        ...(f ? { contains: [...f.tags].filter((t) => !out.includes(t)), contains_read: [...f.read] } : {}) }, by, ch);
     }
     // Library dishes read by a model in this run (they were not read for every tag): kept, so the next week does not read them again.
     for (const row of library) {

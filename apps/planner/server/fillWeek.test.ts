@@ -387,3 +387,17 @@ describe("a category kept to a day", () => {
     for (const d of WEEK.slice(0, 6)) expect(r.at(d, "Breakfast").some((x) => /pongal/i.test(x))).toBe(false);
   });
 });
+
+describe("a house-wide allergy and a category the family named (class 1: empty meals)", () => {
+  it("the family's 'poha' under 'nothing at home has peanuts': their poha items are theirs, cooked without; breakfast is never empty", () => {
+    const peanut = rule({ items: ["peanut"], quote: "nothing at home has peanuts, he is allergic" });
+    const r = fillWeek({ days: WEEK.map((d) => day(d, "Breakfast", ["Asha", "Ravi"])), slots: [slot("Breakfast", { kinds: [{ name: "Poha" }], templates: [T({ kind: "Poha" })] })],
+      library: [dish("Poha", "Breakfast", "Poha")], rules: [peanut], history: new Map(), cuisines: [], careful: new Map(), strict: true });
+    for (const d of WEEK) {
+      const plate = r.plates.get(slotDayKey(d, "Breakfast"))!;
+      expect(plate.length).toBe(1);
+      expect(plate[0].not_for).toEqual([]);
+      expect(plate[0].name).not.toBe("Poha");
+    }
+  });
+});

@@ -55,6 +55,7 @@ export type FillResult = {
   /** Variants placed where an allergy holds, safe only by the catalog's contents so far: to be read carefully. */ provisional: string[];
   /** Each slot's templates and kinds as planned (read off its seed plates when it had none). */ templates: Map<string, MealTemplate[]>; kinds: Map<string, MealKind[]>;
   /** What the dishes checked contain (the run's reads with the catalog's), by dish key: the notes and the ingredients read it. */ facts: Map<string, DishFacts>;
+  /** The catalog's items of the categories the family named (theirs), by dish key. */ ownItems?: Set<string>;
 };
 
 const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
@@ -301,6 +302,7 @@ export function fillWeek(input: FillInput): FillResult {
     return rows.length && rows.every((r) => r.days?.length) ? uniq(rows.flatMap((r) => r.days ?? [])) : null;
   };
   const named = (kind: string, sub: string | null) => categories.some((c) => sameKind(c.kind, kind) && (!c.sub || sameKind(c.sub, sub)));
+  w.ownItems = new Set(CATALOG.kinds.flatMap((k) => (k.staple ? [] : k.items.filter((it) => named(k.name, it.sub ?? null)).map((it) => dishKey(it.name)))));
   /** The catalog's items of a kind (one sub-kind when given) for this family at this meal: regional only within their
    *  cuisines; their sub-kinds (`prefer`) first, then their cuisines, then everyday ones; never one of their dishes, nor one
    *  they disliked or dropped. Ties rotate with the week. */
@@ -652,6 +654,7 @@ export function fillWeek(input: FillInput): FillResult {
   }
   res.unmet = uniq(res.unmet);
   res.facts = w.facts;
+  res.ownItems = w.ownItems;
   res.provisional = uniq([...res.plates.values()].flat().filter((x) => provisional.has(dishKey(x.name))).map((x) => x.name));
   return res;
 }
