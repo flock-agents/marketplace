@@ -185,7 +185,7 @@ describe("make_plan: new dishes (kinds model rule 4)", () => {
     for (const row of untried()) expect(row.offers).toBe(placements(row.name));
     const newDal = news.find((n) => dals.includes(n))!;
     expect(r.message).toContain("New this week: ");
-    expect(r.message).toContain(`${newDal} (like your Dal tadka)`);
+    expect(r.message).toMatch(new RegExp(`${newDal} on \\w{3}[^(]*\\(like your Dal tadka\\)`));
     // Planned again: the offers of the placements it replaces are taken back first.
     await k.plan(fakeModel().model);
     for (const row of untried()) expect(row.offers).toBeLessThanOrEqual(Math.max(placements(row.name), 1));
