@@ -471,3 +471,26 @@ describe("scorePlan: onion and garlic (owner rule 7, decided 5)", () => {
     expect(og(p)).toHaveLength(1);
   });
 });
+
+describe("scorePlan: made without a leave-out ingredient (decided 21)", () => {
+  // A catalog dish is someone's when its MAIN ingredients keep their rule and the note says it is made without the rest for
+  // them ("make without cashews for Asha"); a main ingredient that breaks the rule is a break whatever the note.
+  const h = { ...FIX, truth: { ...FIX.truth, rules: [...FIX.truth.rules, avoid("no_nuts", "Asha: no nuts", ["nuts"], /nut/i, { who: "Asha" }),
+    avoid("no_root", "Asha: no root vegetables", ["root_veg"], /root/i, { who: "Asha" })] } };
+  // What the plan saved about each dish's contents (the app's library rows), as a run's setup carries them.
+  const lib = () => { const l = loaded(); l.library = [...l.library, { name: "Rava upma", slot: "Breakfast", contains: ["wheat", "nuts", "peanut", "dairy", "onion_garlic"] } as any,
+    { name: "Mooli thepla", slot: "Breakfast", contains: ["wheat", "root_veg"] } as any]; return l; };
+  const breaks = (p: PlanOut, rule: RegExp) => scorePlan(h, p, lib(), { failClosed: false }).notes.filter((n) => n.startsWith("hard_rules") && rule.test(n));
+  test("rava upma (cashews leave-out) with the note for her is kept; without the note, a break", () => {
+    const p = goodWeek();
+    at(p, "Mon", "Breakfast").dishes = [{ name: "Rava upma", note: "make without cashews and peanuts for Asha" }];
+    expect(breaks(p, /no nuts/)).toEqual([]);
+    at(p, "Mon", "Breakfast").dishes = [{ name: "Rava upma" }];
+    expect(breaks(p, /no nuts/)).toHaveLength(1);
+  });
+  test("mooli thepla (radish is main) is a break for no root vegetables, note or not", () => {
+    const p = goodWeek();
+    at(p, "Mon", "Breakfast").dishes = [{ name: "Mooli thepla", note: "make without radish for Asha" }];
+    expect(breaks(p, /no root/)).toHaveLength(1);
+  });
+});

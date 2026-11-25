@@ -6,7 +6,7 @@ import { meanDishes, staplesOf, type HistoryRow } from "./history";
 import { truthTags, weeklyPeople } from "./truth-setup";
 import { canonTag, hasItem, PARENT, tagsOfName } from "./vocab";
 import { slotMap, type Rates } from "./score-setup";
-import { isBareKindWord, isStapleKind, kindOf } from "./catalog";
+import { isBareKindWord, isStapleKind, kindOf, mainTagsOf } from "./catalog";
 import {
   WEEK, dateOf, dayOf, dishNameOf, frequencyRange, plain, sameName, sameNames, weekdayOfDate,
   type Household, type Skip, type TruthDish, type TruthRule, type TruthSlot, type Weekday,
@@ -25,6 +25,11 @@ export const OWN_SHARE = 0.3;
 /** A dish that is mostly onion, by its name (owner rule 7: onion, pyaaz, kanda, vengayam, ulli). */
 const MOSTLY_ONION = /\b(onions?|pyaa?z|pyaza|kanda|vengaya\w*|ulli)\b/i;
 /** A dish's note says it is made without onion and garlic, or the person's portion kept aside (owner rule 7). */
+/** A dish's note says it is made without something for this person (decided 21: "make without cashews for Anya"), or for the
+ *  whole house when no one is named ("make without peanuts"). */
+const withoutNoted = (note: string | null | undefined, person: string): boolean =>
+  !!note && note.split(/;\s*/).some((n) => /\bwithout\b/i.test(n)
+    && (new RegExp(`\\b${person.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(n) || !/\bfor\b/i.test(n)));
 const onionNoted = (note: string | null | undefined, person: string): boolean =>
   !!note && note.split(/;\s*/).some((n) => /without onion/i.test(n) && /portion aside/i.test(n) && new RegExp(`\\b${person.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(n));
 export const NEW_WHY_MAX = 60;
@@ -164,6 +169,10 @@ export function scorePlan(h: Household, plan0: PlanOut, loaded: SetupOut, o: { f
           // Owner rule 7 (decided 5): onion and garlic never block a dish; it is made without, or their portion kept aside, as
           // the dish's note says for each of them. Only a dish that is mostly onion breaks the rule.
           if (canonTag(it) === "onion_garlic" && !MOSTLY_ONION.test(d.name) && eaters.every((p) => onionNoted(d.note, p))) continue;
+          // Decided 21: a catalog dish whose MAIN ingredients keep the rule is theirs when the note says it is made without the
+          // rest for each of them (suji upma without cashews). A main ingredient that breaks it is a break.
+          const main = mainTagsOf(d.name);
+          if (main && !hasItem(new Set(main), it) && eaters.every((p) => withoutNoted(d.note, p))) continue;
           if (hasItem(f.tags, it)) bad.push(`${dayOfSd(sd)} ${sd.slot}: ${d.name} has ${it} (${eaters.join(", ")})`);
           else if (!knows(f.known, it)) { if (o.failClosed !== false) bad.push(`${dayOfSd(sd)} ${sd.slot}: ${d.name}: ${it} unread (fail-closed)`); else unread++; }
         }

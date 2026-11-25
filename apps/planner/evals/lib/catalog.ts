@@ -4,7 +4,7 @@
 // templates) and by truth-setup.ts to load TRUTH's library with kinds.
 import catalogJson from "../../server/kinds.json";
 
-type CItem = { name: string; aka?: string[]; cuisines?: string[]; sub: string; suggest: boolean; regional?: boolean; contains: string[] };
+type CItem = { name: string; aka?: string[]; cuisines?: string[]; sub: string; suggest: boolean; regional?: boolean; contains: string[]; contains_main?: string[] };
 type CSub = { name: string; aka: string[]; cuisines: string[] };
 type CKind = { name: string; aka: string[]; cuisines: string[]; staple: boolean; part: string; diet: string; subs: CSub[]; items: CItem[] };
 const CAT = catalogJson as unknown as { kinds: CKind[] };
@@ -84,3 +84,12 @@ export function isBareKindWord(name: string): boolean {
 
 /** The catalog's cuisine words. */
 export const CUISINES: string[] = [...new Set(CAT.kinds.flatMap((k) => [...k.cuisines, ...k.subs.flatMap((s) => s.cuisines), ...k.items.flatMap((i) => i.cuisines ?? [])]))].sort();
+
+/** The tags of a catalog item's MAIN ingredients (decided 21: a dish is not someone's only when a main ingredient breaks their
+ *  rule; a leave-out-able one is a "make without" note). By the item's own name or other names only; null when the dish is not
+ *  a catalog item (then nothing is known about which of its ingredients can be left out). */
+export function mainTagsOf(name: string): string[] | null {
+  const n = cnorm(name);
+  for (const k of CAT.kinds) for (const it of k.items) if ([it.name, ...(it.aka ?? [])].some((w) => cnorm(w) === n)) return it.contains_main ?? null;
+  return null;
+}
