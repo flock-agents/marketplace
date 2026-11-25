@@ -448,6 +448,10 @@ describe("apply_setup v2: the checks, pure", () => {
     expect(resolveSlot("Ishaan's breakfast", slots)).toBe("Breakfast");         // never his tiffin (eval h4)
     expect(resolveSlot("Ishaan's breakfast", [...slots, "Padma's breakfast"])).toBe("Breakfast");
     expect(resolveSlot("supper", slots)).toBeNull();
+    // A packed meal by another name: the one packed-meal slot.
+    expect(resolveSlot("School tiffin", ["Breakfast", "Lunch", "Dinner", "Snack box"])).toBe("Snack box");
+    expect(resolveSlot("Nila's tiffin", ["Breakfast", "Lunch", "Dinner", "Nila's lunch box"])).toBe("Nila's lunch box");
+    expect(resolveSlot("tiffin", ["Lunch", "Kabir's box", "Mira's box"])).toBeNull();
   });
   it("a rule's slot that is no meal is noted, not saved; an incomplete rule is kept as a note", () => {
     const c = checkRead(base({ rules: [{ hard: true, what: "avoid", items: ["nuts"], slots: ["Brunch"], quote: "tiffin must be nut-free" },

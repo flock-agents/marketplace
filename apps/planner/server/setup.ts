@@ -410,8 +410,17 @@ export function resolveSlot(word: string, slots: string[]): string | null {
     const has = slots.filter((s) => words(s).includes(w));
     if (has.length === 1) named.add(has[0]);
   }
-  return named.size === 1 ? [...named][0] : null;
+  if (named.size) return named.size === 1 ? [...named][0] : null;
+  // A packed meal by another name ("school tiffin" for the "Snack box", "dabba" for "Nila's lunch box"): the one slot that is a
+  // packed meal.
+  if (words(word).some((w) => BOX_WORDS.includes(w))) {
+    const boxes = slots.filter((s) => words(s).some((w) => BOX_WORDS.includes(w)));
+    if (boxes.length === 1) return boxes[0];
+  }
+  return null;
 }
+/** The words a family names a packed meal by. */
+const BOX_WORDS = ["tiffin", "box", "lunchbox", "dabba", "tiffinbox"];
 
 // ── The checks (§4.2): structure only ──
 
