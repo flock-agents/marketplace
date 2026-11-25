@@ -226,6 +226,12 @@ export function buildDays(o: { weekStart: string; from: string; slots: Slot[]; p
       if (main?.kind === "main" && o.household.weekly) for (const w of o.household.weekly) {
         const p = people.find((x) => same(x, w.person));
         if (p && awayBy(w, day, main)) { people = people.filter((x) => x !== p); why.push(`${p}: ${w.where || "away"} on ${day}`); }
+        // Away for lunch with a box of their own that day (a child's tiffin of sandwiches, pasta: not the home lunch): they eat
+        // that box, not the home lunch (owner, 25 Nov: counted at lunch only when they take what is made at home).
+        else if (p && s.kind === "main" && main.order === SLOT_ORDER.Lunch && w.weekdays.includes(day) && w.where !== "home"
+          && o.slots.some((x) => x.kind === "custom" && x.active !== false && x.usual_people.some((u) => same(u, p)) && (!x.days.length || x.days.includes(day)))) {
+          people = people.filter((x) => x !== p); why.push(`${p}: has their own box on ${day}`);
+        }
       }
       for (const c of o.changes) {
         if (!c.dates.includes(date) || (c.slots && !c.slots.some((x) => same(x, s.name) || (!!s.addon_of && same(x, s.addon_of))))) continue;

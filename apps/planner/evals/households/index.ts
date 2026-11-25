@@ -1,4 +1,4 @@
-// The fixed eval set: eight varied households, the same for both evals. The held-out four (heldout/) are only picked with
+// The fixed eval set: ten varied households (h13 and h14 are tier B: elders with no diet of their own), the same for both evals. The held-out four (heldout/) are only picked with
 // `heldout: true` (the evals' --heldout flag), never by default.
 import type { Household } from "../lib/truth";
 import { h1 } from "./h1-sharma";
@@ -9,9 +9,11 @@ import { h5 } from "./h5-agarwal";
 import { h6 } from "./h6-kulkarni";
 import { h7 } from "./h7-menon";
 import { h8 } from "./h8-banerjee";
+import { h13 } from "./h13-familyb";
+import { h14 } from "./h14-familyb2";
 import { HELDOUT } from "./heldout";
 
-export const HOUSEHOLDS: Household[] = [h1, h2, h3, h4, h5, h6, h7, h8];
+export const HOUSEHOLDS: Household[] = [h1, h2, h3, h4, h5, h6, h7, h8, h13, h14];
 export { HELDOUT };
 /** Every household, tuning and held-out: for checks that must cover all of them (the name guard). */
 export const ALL_HOUSEHOLDS: Household[] = [...HOUSEHOLDS, ...HELDOUT];

@@ -251,3 +251,28 @@ describe("add-on days may be empty (owner 23 Nov)", () => {
     expect(fails(p)).toContain("filled");
   });
 });
+
+// The owner's base minimum (25 Nov), with onboarding run 31's own failures as the bad cases.
+describe("scorePlan: the base minimum", () => {
+  const set = (p: PlanOut, day: Weekday, slot: string, dishes: string[]) => { at(p, day, slot).dishes = dishes.map((name) => ({ name })); return p; };
+  test("a bare staple, a lunch with no bread or rice, a staple twice", () => {
+    expect(fails(set(goodWeek(), "Mon", "Lunch", ["Rice"]))).toEqual(expect.arrayContaining(["not_bare", "whole_plate"]));
+    expect(fails(set(goodWeek(), "Mon", "Lunch", ["Dal", "Bhindi"]))).toContain("whole_plate");
+    expect(fails(set(goodWeek(), "Mon", "Dinner", ["Dal rice", "Rice", "Lauki"]))).toContain("no_doubled_staple");
+    expect(fails(set(goodWeek(), "Mon", "Dinner", ["Roti with aloo gobi", "Roti", "Rajma"]))).toContain("no_doubled_staple");
+    expect(fails(set(goodWeek(), "Mon", "Dinner", ["Khichdi"]))).not.toContain("whole_plate");
+  });
+  test("a main three times at breakfast", () => {
+    const p = goodWeek();
+    for (const d of ["Mon", "Tue", "Wed"] as Weekday[]) set(p, d, "Breakfast", ["Poha"]);
+    expect(fails(p)).toContain("main_twice");
+  });
+  test("nobody without food; a clean message with one question at most", () => {
+    const p = goodWeek();
+    p.unmet = ["Tue Lunch: Dadu Ram has nothing to eat on 2026-12-01 Lunch but staples"];
+    p.message = ["Your week is planned.", "Dinner: Chole, Rice, Roti. Chole is not for Dadu Ram; he has palak paneer with roti.",
+      "New this week: Palak paneer (A vegetarian, high-protein dish that can be made without onion or garlic, and suits all family members.)",
+      '"Office" (Asha), Mon: does it change who eats at home?', '"School" (Chotu), Mon: does it change who eats at home?'].join("\n");
+    expect(fails(p)).toEqual(expect.arrayContaining(["nobody_without_food", "message_clean", "short_new_reasons", "one_question"]));
+  });
+});
