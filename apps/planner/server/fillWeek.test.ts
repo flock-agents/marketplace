@@ -678,3 +678,16 @@ describe("nobody at a meal is left with nothing (safety)", () => {
     }
   });
 });
+
+describe("rotation: the family's own items of a kind come before another item of it comes back (rule 3)", () => {
+  it("a family that says \"upma\" and \"poha\" gets upmas and pohas, not a sabudana khichdi or avalakki oggarane, before any repeat", () => {
+    const kinds: MealKind[] = [{ name: "Upma" }, { name: "Poha" }];
+    const lib = [dish("Upma", "Breakfast", "Upma"), dish("Poha", "Breakfast", "Poha")];
+    // Regional items of their cuisines rank high among the catalog's; the family's own word still comes first.
+    const r = run({ slots: [slot("Breakfast", { kinds, templates: [T({ kind: "Upma" }), T({ kind: "Poha" })] })], library: lib, cuisines: ["maharashtra", "karnataka"], newCap: 0 });
+    const all = WEEK.flatMap((d) => r.at(d, "Breakfast"));
+    expect(all).toHaveLength(7);
+    for (const x of all) expect(x).toMatch(/\b(upma|poha)\b/i);
+    expect(new Set(all).size).toBe(7);
+  });
+});
