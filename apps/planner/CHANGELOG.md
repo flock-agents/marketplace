@@ -44,7 +44,9 @@
   toward its days); a person with nothing of their own gets a dish beside; the missing rice or bread is added. The fix call
   and the rotation in code are gone. Only a day still with a gap gets one small targeted call (that day, the part, who eats,
   their rules, what not to repeat); what it cannot fill takes the closest allowed dish, said as coming back sooner than
-  usual. Nobody is left without food.
+  usual. Nobody is left without food. A dish the family has on set days or often ("Kootu sometimes", "pongal on
+  Sundays") that the call left short takes the place of any main on a day it fits (one of its part first), keeping the
+  day's rice or bread and everyone's own dish. A particular way of a family dish keeps its own days a week.
 - Allergies (owner, 25 Nov): a family dish on the family's own plates at a meal the allergic person eats is safe for them
   by the family's word (no read); when it has the item, its note keeps their portion aside ("Ishaan's Poha without
   peanut") and its ingredients are bought as usual. Every other dish (new, a spare, a particular way of a family dish, a
