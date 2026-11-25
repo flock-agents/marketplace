@@ -31,6 +31,7 @@ describe("matchDish", () => {
     expect(matchDish("poriyal")).toEqual({ kind: "Sabzi", sub: "Poriyal/Thoran", item: null, by: "sub" });
     expect(matchDish("Thoran")).toMatchObject({ kind: "Sabzi", sub: "Poriyal/Thoran" });
     expect(matchDish("pappu")).toMatchObject({ kind: "Dal", sub: "Pappu", by: "sub" });
+    expect(matchDish("aamti")).toMatchObject({ kind: "Dal", sub: "Amti/Varan", by: "sub" });
     expect(matchDish("Sambar")).toMatchObject({ kind: "Rice curry", sub: "Sambar", by: "sub" });
   });
   it("then a kind", () => {
