@@ -1357,6 +1357,7 @@
           "name": "Rava upma",
           "aka": [
             "sooji upma",
+            "suji upma",
             "uppittu",
             "upeet"
           ],
@@ -26240,6 +26241,370 @@
       ]
     }
   ],
+  "ingredients": {
+    "akhuni": [
+      "soy"
+    ],
+    "almonds": [
+      "nuts"
+    ],
+    "amaranth": [],
+    "amla": [],
+    "apple": [],
+    "arbi": [
+      "root_veg"
+    ],
+    "atta": [
+      "wheat"
+    ],
+    "baby corn": [],
+    "bajra": [],
+    "bajra flour": [],
+    "bamboo shoot": [],
+    "banana": [],
+    "banana flower": [],
+    "basil": [],
+    "basmati rice": [
+      "white_rice"
+    ],
+    "beetroot": [
+      "root_veg"
+    ],
+    "besan": [],
+    "bombil": [
+      "fish"
+    ],
+    "boondi": [],
+    "bread": [
+      "wheat"
+    ],
+    "breadcrumbs": [
+      "wheat"
+    ],
+    "brinjal": [
+      "brinjal"
+    ],
+    "broken wheat": [
+      "wheat"
+    ],
+    "brown rice": [],
+    "butter": [
+      "dairy"
+    ],
+    "buttermilk": [
+      "dairy"
+    ],
+    "cabbage": [],
+    "capsicum": [],
+    "carrot": [
+      "root_veg"
+    ],
+    "cashews": [
+      "nuts"
+    ],
+    "cauliflower": [],
+    "chana dal": [],
+    "cheese": [
+      "dairy"
+    ],
+    "chicken": [
+      "chicken"
+    ],
+    "chickpeas": [],
+    "chocos": [
+      "wheat",
+      "sugar"
+    ],
+    "chow chow": [],
+    "coconut": [
+      "coconut"
+    ],
+    "coconut milk": [
+      "coconut"
+    ],
+    "collard greens": [],
+    "condensed milk": [
+      "dairy",
+      "sugar"
+    ],
+    "coriander": [],
+    "corn": [],
+    "cornflakes": [],
+    "cream": [
+      "dairy"
+    ],
+    "cucumber": [],
+    "cumin": [],
+    "curd": [
+      "dairy"
+    ],
+    "curry leaves": [],
+    "dates": [
+      "sugar"
+    ],
+    "dill": [],
+    "drumstick": [],
+    "drumstick leaves": [],
+    "dry coconut": [
+      "coconut"
+    ],
+    "dry fish": [
+      "fish"
+    ],
+    "dry fruits": [
+      "nuts"
+    ],
+    "egg": [
+      "egg"
+    ],
+    "elephant foot yam": [
+      "root_veg"
+    ],
+    "fish": [
+      "fish"
+    ],
+    "french beans": [],
+    "fried onions": [
+      "onion_garlic",
+      "root_veg"
+    ],
+    "fruit": [],
+    "garlic": [
+      "onion_garlic",
+      "root_veg"
+    ],
+    "ghee": [
+      "dairy"
+    ],
+    "ginger": [
+      "root_veg"
+    ],
+    "gond": [],
+    "gongura": [],
+    "green chilli": [],
+    "green peas": [],
+    "hilsa": [
+      "fish"
+    ],
+    "honey": [
+      "sugar"
+    ],
+    "horse gram": [],
+    "idli rice": [
+      "white_rice"
+    ],
+    "ivy gourd": [],
+    "jackfruit": [],
+    "jaggery": [
+      "sugar"
+    ],
+    "jam": [
+      "sugar"
+    ],
+    "jowar flour": [],
+    "kala chana": [],
+    "karela": [
+      "karela"
+    ],
+    "ker": [],
+    "khakhra": [
+      "wheat"
+    ],
+    "khoa": [
+      "dairy"
+    ],
+    "kokum": [],
+    "lauki": [],
+    "lemon": [],
+    "lime": [],
+    "lobia": [],
+    "lotus stem": [
+      "root_veg"
+    ],
+    "macaroni": [
+      "wheat"
+    ],
+    "maida": [
+      "wheat"
+    ],
+    "makhana": [],
+    "makki atta": [],
+    "masoor dal": [],
+    "matki": [],
+    "matta rice": [],
+    "methi": [],
+    "milk": [
+      "dairy"
+    ],
+    "millet": [],
+    "mint": [],
+    "mixed vegetables": [],
+    "mooli": [
+      "root_veg"
+    ],
+    "moong dal": [],
+    "muesli": [
+      "wheat"
+    ],
+    "multigrain atta": [
+      "wheat"
+    ],
+    "mushroom": [
+      "mushroom"
+    ],
+    "mustard greens": [],
+    "mustard oil": [],
+    "mustard paste": [],
+    "mutton": [
+      "mutton"
+    ],
+    "mutton keema": [
+      "mutton"
+    ],
+    "noodles": [
+      "wheat"
+    ],
+    "oats": [],
+    "okra": [],
+    "onion": [
+      "onion_garlic",
+      "root_veg"
+    ],
+    "paneer": [
+      "dairy"
+    ],
+    "papad": [],
+    "papaya": [],
+    "papdi": [
+      "wheat"
+    ],
+    "parwal": [],
+    "pasta": [
+      "wheat"
+    ],
+    "pav": [
+      "wheat"
+    ],
+    "peanut butter": [
+      "peanut"
+    ],
+    "peanuts": [
+      "peanut"
+    ],
+    "pepper": [],
+    "pineapple": [],
+    "pistachios": [
+      "nuts"
+    ],
+    "podi": [],
+    "poha": [
+      "white_rice"
+    ],
+    "pomfret": [
+      "fish"
+    ],
+    "poppy seeds": [],
+    "pork": [
+      "pork"
+    ],
+    "potato": [
+      "root_veg"
+    ],
+    "prawns": [
+      "prawn"
+    ],
+    "puffed rice": [
+      "white_rice"
+    ],
+    "pumpkin": [],
+    "puri shells": [
+      "wheat"
+    ],
+    "ragi flour": [],
+    "raisins": [],
+    "rajma": [],
+    "raw banana": [],
+    "raw mango": [],
+    "raw papaya": [],
+    "raw rice": [
+      "white_rice"
+    ],
+    "red chilli": [],
+    "rice": [
+      "white_rice"
+    ],
+    "rice flour": [
+      "white_rice"
+    ],
+    "rice rava": [
+      "white_rice"
+    ],
+    "rohu": [
+      "fish"
+    ],
+    "sabudana": [],
+    "saffron": [],
+    "sangri": [],
+    "sattu": [],
+    "seasonal fruit": [],
+    "sesame": [],
+    "sev": [],
+    "shallots": [
+      "onion_garlic",
+      "root_veg"
+    ],
+    "snake gourd": [],
+    "sooji": [
+      "wheat"
+    ],
+    "soy sauce": [
+      "soy"
+    ],
+    "soya chunks": [
+      "soy"
+    ],
+    "spinach": [],
+    "spring onion": [
+      "onion_garlic",
+      "root_veg"
+    ],
+    "sprouts": [],
+    "sugar": [
+      "sugar"
+    ],
+    "sweet chutney": [
+      "sugar"
+    ],
+    "sweet corn": [],
+    "sweet potato": [
+      "root_veg"
+    ],
+    "tamarind": [],
+    "tapioca": [
+      "root_veg"
+    ],
+    "tinda": [],
+    "tomato": [],
+    "toor dal": [],
+    "turai": [],
+    "urad dal": [],
+    "urad papad": [],
+    "vermicelli": [
+      "wheat"
+    ],
+    "vinegar": [],
+    "wheat flakes": [
+      "wheat"
+    ],
+    "wheat flour": [
+      "wheat"
+    ],
+    "white peas": [],
+    "whole moong": [],
+    "yam": [
+      "root_veg"
+    ]
+  },
   "regional": [
     {
       "word": "curry",

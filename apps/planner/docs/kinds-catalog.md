@@ -84,7 +84,7 @@ aka dosai, dose, dosey, pesarattu, pesara dosa, moong dal dosa, green gram dosa,
 aka uppittu, uppumavu, kharabath, upeet, uppuma, khara bath; north, south, west; complete; breakfast, dinner, tiffin; all: root veg
 
 **Suggested:**
-- Rava upma (sooji upma, uppittu, upeet) [wheat, onion/garlic, nuts, peanut, dairy]: sooji; *without:* cashews, peanuts, onion, ghee, curry leaves
+- Rava upma (sooji upma, suji upma, uppittu, upeet) [wheat, onion/garlic, nuts, peanut, dairy]: sooji; *without:* cashews, peanuts, onion, ghee, curry leaves
 - Vegetable upma (khara bath) [wheat, onion/garlic, nuts, dairy]: sooji, mixed vegetables; *without:* carrot, green peas, onion, cashews, ghee
 - Semiya upma (vermicelli upma, shevai upma) [wheat, onion/garlic, nuts]: vermicelli; *without:* onion, carrot, green peas, cashews
 - Dalia upma (broken wheat upma, godhuma rava upma, vegetable dalia, namkeen dalia, masala dalia) [wheat, onion/garlic]: broken wheat; *without:* onion, carrot, green peas

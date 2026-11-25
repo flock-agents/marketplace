@@ -59,7 +59,7 @@ K("B","Pongal","ven pongal; khara pongal; huggi; pongali","south","breakfast",fa
  "Godhumai rava pongal | broken wheat pongal; dalia pongal | w d n",
 ]);
 K("B","Upma","uppittu; uppumavu; kharabath; upeet; uppuma; khara bath","north south west","breakfast dinner tiffin",false,"complete","veg",[
- "Rava upma | sooji upma; uppittu; upeet | w og n p",
+ "Rava upma | sooji upma; suji upma; uppittu; upeet | w og n p",
  "Vegetable upma | khara bath | w og rv n",
  "Semiya upma | vermicelli upma; shevai upma | w og n",
  "Dalia upma | broken wheat upma; godhuma rava upma; vegetable dalia; namkeen dalia; masala dalia | w og",
@@ -1264,6 +1264,9 @@ for (const k of kinds) {
   for (const it of items) if (!subs.some((sb) => sb.name === it.sub)) errors.push(`${it.name}: sub ${it.sub} not in ${k.name}`);
   out.kinds.push({ name: k.name, aka: semi(k.aka), cuisines: kc, meals, staple: k.staple, part: k.part, diet: k.diet, subs, items });
 }
+// Every ingredient the items name, with the tags it brings: the planner reads which ingredient breaks a rule from these.
+out.ingredients = Object.fromEntries([...new Set(out.kinds.flatMap((k) => k.items.flatMap((it) => it.ingredients.map((x) => x.name))))].sort()
+  .map((n) => [n, ingTags.get(n) || []]));
 out.regional = REGIONAL_WORDS.map((r) => ({ word: r.word, forms: semi(r.forms), meanings: r.meanings.map(([c, kind, sub]) => {
   const k = out.kinds.find((x) => x.name === kind);
   if (!k) errors.push(`regional ${r.word}: no kind ${kind}`);
