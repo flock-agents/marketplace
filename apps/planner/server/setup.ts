@@ -1303,6 +1303,13 @@ export function buildMeal(meal: string, dishes: MealDish[], seeds: string[][]): 
     }
   }
 
+  // At lunch or dinner a plate of only a bread or rice ("chapati" told on its own) is no meal: where another plate has that
+  // bread with something, the bare one goes (eval h2: "Wed dinner: only Chapati").
+  if (!small) for (const t of [...drafts]) {
+    if (!t.parts.length || !t.parts.every((p) => isBase(p.part))) continue;
+    if (drafts.some((x) => x !== t && x.parts.some((p) => !isBase(p.part)) && t.parts.every((p) => x.parts.some((q) => partKey(q.part) === partKey(p.part))))) drafts.splice(drafts.indexOf(t), 1);
+  }
+
   // The kinds the plates use: the family's sub-kinds of each (rotation prefers them), staple and own from the catalog.
   const kinds: MealKind[] = [];
   for (const t of drafts) for (const p of t.parts) {
