@@ -59,6 +59,8 @@ export const h13: Household = {
       ...dish("Aloo paratha", ["Breakfast"], { days: ["Sun"] }), ...dish("Cornflakes", ["Breakfast"], { alsoSlots: ["Vivaan's breakfast"], contains: ["dairy"] }),
       ...dish("Sandwich", ["Vivaan's tiffin"]), ...dish("Paneer roti roll", ["Vivaan's tiffin"], { aka: ["Roti roll"] }), ...dish("Curd rice", ["Vivaan's tiffin"]),
       ...dish("Pasta", ["Vivaan's tiffin"]), ...dish("Fruit", ["Vivaan's tiffin"]),
+      // "fruit with some snack": a snack beside the fruit, any of the dry snacks (the catalog's Namkeen).
+      ...dish("Snack", ["Vivaan's tiffin"], { kind: "Namkeen" }),
       ...dish("Roti", ["Lunch"]), ...dish("Sabzi", ["Lunch"]), ...dish("Dal", ["Lunch"]), ...dish("Rice", ["Lunch"]), ...dish("Curd", ["Lunch"]),
       ...dish("Dal", ["Dinner"], { frequency: "usually" }), ...dish("Rice", ["Dinner"], { frequency: "usually" }), ...dish("Roti", ["Dinner"], { frequency: "usually" }),
       ...dish("Sabzi", ["Dinner"], { frequency: "usually" }),
