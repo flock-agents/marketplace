@@ -349,6 +349,20 @@ export function fillWeek(input: FillInput): FillResult {
     return onPlate ?? catalogKind(kind)?.items[0]?.name ?? kind;
   };
 
+  const isStaplePart = (s: Slot, p: TemplatePart) => "kind" in p && (!!(s.kinds ?? []).find((k) => sameKind(k.name, p.kind))?.staple || !!catalogKind(p.kind)?.staple);
+  /** A non-staple part's candidates: the family's items of it, and the brand-new variants (of the family's own sub-kinds first:
+   *  the meal's, else those of their items). */
+  const poolsOf = (s: Slot, p: TemplatePart) => {
+    const kind = "items" in p ? null : p.kind;
+    const sub = "items" in p ? null : p.sub ?? null;
+    const mk = kind ? (s.kinds ?? []).find((x) => sameKind(x.name, kind)) : undefined;
+    const fam: Item[] = "items" in p
+      ? p.items.map((n, i) => { const r = rowAt(s.name, dishKey(n)); const pl = r ? placeOf(r) : null; return { name: n.trim(), key: dishKey(n), kind: pl?.kind ?? n, sub: pl?.sub ?? null, family: true, idx: i, row: r }; })
+      : familyPool(s, kind!, sub, sub ? [] : mk?.subs ?? []);
+    const neu: Item[] = "items" in p || mk?.own ? [] : newPool(s, kind!, sub, sub ? [] : mk?.subs?.length ? mk.subs : uniq(fam.map((x) => x.sub).filter((x): x is string => !!x)));
+    return { kind, sub, fam, neu };
+  };
+
   // ── Templates for each slot's days ──
   const tplOf = new Map<string, number>();   // slotDayKey → template index
   const pinsOf = new Map<string, LibraryDish[]>();
@@ -358,7 +372,17 @@ export function fillWeek(input: FillInput): FillResult {
     const ts = s.templates ?? [];
     const mine = planned.filter((d) => same(d.slot, s.name)).sort((a, b) => a.date.localeCompare(b.date));
     if (!ts.length || !mine.length) continue;
-    const left = templateCounts(ts, mine.length);
+    // A template made for a pinned dish ("pongal on Sundays": its part has only their dishes kept to days) comes only on
+    // those days; the week's other days are spread over the rest.
+    const pinnedOnly = ts.map((t) => t.parts.some((p) => {
+      if (isStaplePart(s, p)) return false;
+      const { fam } = poolsOf(s, p);
+      return fam.length > 0 && fam.every((x) => !x.catalog && !!x.row?.days?.length);
+    }));
+    const free = ts.map((_, i) => i).filter((i) => !pinnedOnly[i]);
+    const left = free.length && free.length < ts.length
+      ? (() => { const c = templateCounts(free.map((i) => ts[i]), mine.length), out = ts.map(() => 0); free.forEach((i, j) => { out[i] = c[j]; }); return out; })()
+      : templateCounts(ts, mine.length);
     const weight = [...left];
     // A pinned dish's day takes the template that holds it.
     for (const d of mine) {
@@ -391,7 +415,6 @@ export function fillWeek(input: FillInput): FillResult {
   }
 
   // OWN_SHARE: the week's non-staple places, of which at most the rest are new.
-  const isStaplePart = (s: Slot, p: TemplatePart) => "kind" in p && (!!(s.kinds ?? []).find((k) => sameKind(k.name, p.kind))?.staple || !!catalogKind(p.kind)?.staple);
   let places = 0;
   for (const d of planned) {
     const s = shapeOf(d.slot), i = tplOf.get(slotDayKey(d.date, d.slot));
@@ -499,19 +522,6 @@ export function fillWeek(input: FillInput): FillResult {
     return false;
   };
 
-  /** A non-staple part's candidates: the family's items of it, and the brand-new variants (of the family's own sub-kinds first:
-   *  the meal's, else those of their items). */
-  const poolsOf = (s: Slot, p: TemplatePart) => {
-    const kind = "items" in p ? null : p.kind;
-    const sub = "items" in p ? null : p.sub ?? null;
-    const mk = kind ? (s.kinds ?? []).find((x) => sameKind(x.name, kind)) : undefined;
-    const fam: Item[] = "items" in p
-      ? p.items.map((n, i) => { const r = rowAt(s.name, dishKey(n)); const pl = r ? placeOf(r) : null; return { name: n.trim(), key: dishKey(n), kind: pl?.kind ?? n, sub: pl?.sub ?? null, family: true, idx: i, row: r }; })
-      : familyPool(s, kind!, sub, sub ? [] : mk?.subs ?? []);
-    const neu: Item[] = "items" in p || mk?.own ? [] : newPool(s, kind!, sub, sub ? [] : mk?.subs?.length ? mk.subs : uniq(fam.map((x) => x.sub).filter((x): x is string => !!x)));
-    return { kind, sub, fam, neu };
-  };
-
   // ── Day by day, the meals in their order ──
   const order = (d: PlanDay) => slotByKey.get(d.slot.toLowerCase())?.order ?? 99;
   const todo = [...planned].sort((a, b) => a.date.localeCompare(b.date) || order(a) - order(b) || a.slot.localeCompare(b.slot));
@@ -525,19 +535,20 @@ export function fillWeek(input: FillInput): FillResult {
     const atTable = s.kind === "addon" ? people : people.filter((p) => !ownAddon(w, dayOf(d), p));
     if (ti === undefined) { res.plates.set(k, []); continue; }
     // A template that cannot be filled that day (fish on a day the house keeps vegetarian, a breakfast whose items are all
-    // kept from someone) gives way to another of the meal's: the one had least this week, never yesterday's when another
-    // fits. A plate is never left bare of what its template promised.
-    const can = (i: number) => s.templates![i].parts.every((p) => isStaplePart(s, p) || (() => {
+    // kept from someone), or only with an item had yesterday, gives way to another of the meal's: the one had least this
+    // week, never yesterday's when another fits. A plate is never left bare of what its template promised.
+    const can = (i: number, fresh: boolean) => s.templates![i].parts.every((p) => isStaplePart(s, p) || (() => {
       const { fam, neu, kind, sub } = poolsOf(s, p);
       if ((pinsOf.get(k) ?? []).some((r) => fam.some((x) => x.key === r.key) || (!!kind && sameKind(placeOf(r)?.kind, kind) && (!sub || sameKind(placeOf(r)?.sub, sub))))) return true;
-      return !!choose(s, d, [], stepsFor(fam, neu), atTable, false);
+      return !!choose(s, d, [], stepsFor(fam, neu).filter((st) => !fresh || !st.next), atTable, false);
     })());
-    if (!can(ti)) {
+    if (!can(ti, true)) {
       const had = (i: number) => planned.filter((x) => same(x.slot, s.name) && x.date < d.date && tplOf.get(slotDayKey(x.date, s.name)) === i).length;
       const yesterday = tplOf.get(slotDayKey(addDays(d.date, -1), s.name));
-      const other = s.templates!.map((_, i) => i).filter((i) => i !== ti)
-        .sort((a, b) => Number(a === yesterday) - Number(b === yesterday) || had(a) - had(b) || a - b).find(can);
-      if (other !== undefined) { res.log.push(`${label(d)}: template ${ti + 1} cannot be filled that day; template ${other + 1} instead`); ti = other; tplOf.set(k, ti); }
+      const others = s.templates!.map((_, i) => i).filter((i) => i !== ti)
+        .sort((a, b) => Number(a === yesterday) - Number(b === yesterday) || had(a) - had(b) || a - b);
+      const other = others.find((i) => can(i, true)) ?? (can(ti, false) ? undefined : others.find((i) => can(i, false)));
+      if (other !== undefined) { res.log.push(`${label(d)}: template ${ti + 1} cannot be filled that day without a repeat; template ${other + 1} instead`); ti = other; tplOf.set(k, ti); }
     }
     const t = s.templates![ti];
     const pins = [...(pinsOf.get(k) ?? [])];

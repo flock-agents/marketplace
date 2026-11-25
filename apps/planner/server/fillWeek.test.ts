@@ -356,3 +356,22 @@ describe("a plate never doubles its staple", () => {
     for (const d of WEEK) expect(r.at(d, "Tiffin")).toEqual(["Curd rice"]);
   });
 });
+
+describe("a template made for a pinned dish, and one that would repeat yesterday's item", () => {
+  it("a template whose part is only a dish kept to a day ('pongal on Sundays') comes only on that day", () => {
+    const kinds: MealKind[] = [{ name: "Idli" }, { name: "Dosa" }, { name: "Khichdi", subs: ["Pongal"] }];
+    const lib = [...["Rava idli", "Kanchipuram idli"].map((n) => dish(n, "Breakfast", "Idli")), ...["Masala dosa", "Ghee roast dosa"].map((n) => dish(n, "Breakfast", "Dosa")),
+      dish("Ven pongal", "Breakfast", "Khichdi", { sub: "Pongal", days: ["Sun"] })];
+    const r = run({ slots: [slot("Breakfast", { kinds, templates: [T({ kind: "Idli" }), T({ kind: "Dosa" }), T({ kind: "Khichdi", sub: "Pongal" })] })], library: lib });
+    expect(r.at(WEEK[6], "Breakfast")).toEqual(["Ven pongal"]);
+    for (const d of WEEK.slice(0, 6)) expect(r.at(d, "Breakfast").some((x) => /pongal/i.test(x))).toBe(false);
+  });
+  it("where a part's only item was had yesterday, another of the meal's templates comes instead of the repeat", () => {
+    const kinds: MealKind[] = [{ name: "Roti", staple: true }, { name: "Dosa" }, { name: "Gravy", own: true }];
+    const lib = [dish("Phulka", "Dinner", "Roti"), dish("Veg stew", "Dinner", "Gravy"), ...["Plain dosa", "Masala dosa", "Rava dosa", "Onion dosa"].map((n) => dish(n, "Dinner", "Dosa"))];
+    const r = run({ slots: [slot("Dinner", { kinds, templates: [share(T({ kind: "Roti" }, { kind: "Gravy" }), "5/week"), T({ kind: "Dosa" })] })], library: lib });
+    const stew = WEEK.map((d) => r.at(d, "Dinner").includes("Veg stew"));
+    for (let i = 1; i < 7; i++) expect(stew[i] && stew[i - 1]).toBe(false);
+    for (const d of WEEK) expect(r.at(d, "Dinner").filter((x) => x !== "Phulka").length).toBeGreaterThan(0);
+  });
+});
