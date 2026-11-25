@@ -96,7 +96,7 @@ const RULES_SCHEMA = {
 };
 const RULES_PART = `Write this part: the family's food rules, one per thing they said: what must or must not be eaten. What someone usually eats is no rule (another reader writes dishes).
 Rules are said in any reply, the meals' answers too ("same dinner, just less spicy for her").
-- what is one of: veg { who? } (vegetarian: no meat or fish; eggs are their own rule) | egg { who? } (eats eggs, no meat or fish) | no_eggs { who? } (no eggs: "pure veg, no eggs" is two rules, veg and no_eggs) | avoid { items, who?, days?, slots? } (no dish with these) | only { who, items, slots? } | swap { who, items, to } (who has "to" in place of items) | require { items, slots, who? } (one of items at those meals) | fasting { who, days, slots, fasting_food } (who eats nothing at those meals on those days but fasting_food; "till sunset" is slots [Breakfast, Lunch]) | cap { per_meal, slots? } (at most per_meal dishes to cook in a meal: a cook's time limit) | note { who? } (anything else, kept in the family's words: "less oil", "less spicy for the child", "high protein").
+- what is one of: veg { who? } (vegetarian: no meat or fish; eggs are their own rule) | egg { who? } (eats eggs, no meat or fish) | no_eggs { who? } (no eggs: "pure veg, no eggs" is two rules, veg and no_eggs; so is vegetarian said with no eggs in the same sentence or reply: "she's vegetarian and won't touch eggs", "pure veg") | avoid { items, who?, days?, slots? } (no dish with these) | only { who, items, slots? } | swap { who, items, to } (who has "to" in place of items) | require { items, slots, who? } (one of items at those meals) | fasting { who, days, slots, fasting_food } (who eats nothing at those meals on those days but fasting_food; "till sunset" is slots [Breakfast, Lunch]) | cap { per_meal, slots? } (at most per_meal dishes to cook in a meal: a cook's time limit) | note { who? } (anything else, kept in the family's words: "less oil", "less spicy for the child", "high protein").
 - An egg exception to a vegetarian house ("vegetarian, eggs okay for Tara") is veg for the house, egg for each person named, and no_eggs for every other person at home, one rule each.
 - hard: true for what holds at every meal: allergies, vegetarian, eggs, no eggs, avoid, only, fasts, caps, "no sugar", "never". A note is never hard. false for a wish said loosely ("X is good for her", "better", "more fruit", "try to", "sometimes"): give it frequency: usually (most days) | sometimes (a few times a week; any "good for" / "better" / "try to") | rarely | "<n>/week" when they gave a number. A hard rule never has a frequency. "No sugar" / "no sweets" is always hard avoid ["sugar"]. "Less X" is a note, never avoid.
 - items: tags, lower case with underscores: a plain food ("mushroom", "chicken", "paneer") or one of egg, meat, fish, onion_garlic, nuts, peanut, sugar, white_rice, dairy, root_veg, millet. "No nuts" is nuts (peanuts too); peanut only when peanuts alone are named. "No rice at night" is avoid ["white_rice"] at slots ["Dinner"]. Meat on some days only ("chicken only on weekends") is avoid ["meat", "fish"] on the other days, one rule for each person it is said of (left out when said of the whole house).
@@ -104,6 +104,7 @@ Rules are said in any reply, the meals' answers too ("same dinner, just less spi
 - An allergy is a hard avoid for that person, quoting the words that say allergy. When the family says the whole kitchen goes without it ("everything at home is without it", "we don't use it at all"), add a hard avoid with no who, quoting those words; "only his food" or "he has his own food" adds nothing.
 - unplaced: a food wish that is no rule and no dish, cook or shopping matter: { text, quote }. Usually none.`;
 const RULES_EXAMPLE = `gives rules [{ hard, egg, quote "eggs fine but no meat" }, { hard, veg, who "Lalitha", quote "Amma is pure veg" }, { hard, no_eggs, who "Lalitha", quote "Amma is pure veg, no eggs" }, { hard, avoid, who "Lalitha", items ["onion_garlic"], quote "she doesn't eat onion or garlic" }, { hard, fasting, who "Lalitha", days [Sat], slots [Breakfast, Lunch], fasting_food ["fruit"], quote "fasts on Saturdays till sunset, only fruit" }, { soft, swap, who "Lalitha", items ["white_rice"], to "brown rice", frequency "sometimes", quote "Brown rice is better for her" }, { soft, note, who "Lalitha", quote "less oil" }, { hard, avoid, who "Lalitha", items ["white_rice"], slots ["Dinner"], quote "no rice" }, { hard, avoid, items ["peanut"], slots ["Tara's tiffin"], quote "no peanuts" }, { soft, note, who "Tara", quote "just less spicy" }].
+And "A: Divu is vegetarian. She won't touch eggs either." gives [{ hard, veg, who "Divya", quote "Divu is vegetarian" }, { hard, no_eggs, who "Divya", quote "She won't touch eggs either" }]: both, every time.
 And "A: Vegetarian. Eggs okay for Tara and Rahul." gives [{ hard, veg, quote "Vegetarian" }, { hard, egg, who "Tara", quote "Eggs okay for Tara and Rahul" }, { hard, egg, who "Rahul", quote "Eggs okay for Tara and Rahul" }, { hard, no_eggs, who "Divya", quote "Eggs okay for Tara and Rahul" }, { hard, no_eggs, who "Lalitha", quote "Eggs okay for Tara and Rahul" }] (Divya and Lalitha are not named for eggs: no eggs for them).
 And "A: Tara is allergic to sesame" with "Q: Do you cook everything without sesame, or only Tara's food? A: We don't use sesame at home at all" gives [{ hard, avoid, who "Tara", items ["sesame"], quote "Tara is allergic to sesame" }, { hard, avoid, items ["sesame"], quote "We don't use sesame at home at all" } (the whole house: no who)]; had they said "only her food", only the first.`;
 
@@ -173,6 +174,9 @@ export const DISHES_ASK = "I couldn't read your dishes from that. What do you us
 /** The whole setup's wall clock: under Flock's wait for the op (3 min). A second try starts only with RETRY_FLOOR_MS left. */
 export const SETUP_BUDGET_MS = 150_000;
 const RETRY_FLOOR_MS = 30_000;
+/** The kinds read's own time: at most KINDS_MS, and done KINDS_MARGIN_MS before the setup's budget ends. */
+export const KINDS_MS = 45_000;
+const KINDS_MARGIN_MS = 3_000;
 /** At most this many dishes in one contains call. */
 export const CONTAINS_BATCH = 40;
 const RETRY_CODES: string[] = ["invalid_output", "unavailable", "timeout"];
@@ -460,6 +464,14 @@ const NEEDS: Partial<Record<RuleWhat, (r: ReadRule) => boolean>> = {
 export const ruleKey = (r: Pick<ReadRule, "what" | "who" | "items" | "slots" | "days" | "to">): string =>
   JSON.stringify([r.what, r.who?.toLowerCase() ?? null, [...(r.items ?? [])].sort(), [...(r.slots ?? [])].map((s) => s.toLowerCase()).sort(), [...(r.days ?? [])].sort(), r.to?.toLowerCase() ?? null]);
 
+/** Words that say no eggs: "no eggs", "doesn't eat eggs", "won't touch anda", "without egg", "eggless", "pure veg". Only to
+ *  back a no_eggs rule the reader left out beside a person's vegetarian rule. */
+export function saysNoEggs(line: string): boolean {
+  const l = plainWords(line);
+  return /\bpure (?:veg|vegetarian)\b|\beggless\b/.test(l)
+    || /\b(?:no|not|without|never|nor|doesnt|dont|wont|cant|avoids?)(?: (?:eat|eats|eating|have|has|take|takes|touch|touches|even|any|like|likes))* (?:eggs?|anda|ande|andaa)\b/.test(l);
+}
+
 export type Checked = { read: SetupRead; dropped: string[]; asks: string[]; noted: string[]; lint: ReadDish[]; slotDays: Map<string, Weekday[]> };
 
 /** Whether a note's words are the cook's own limit or words about the cook (its words hold the cook's limit, or the other way round). */
@@ -541,6 +553,19 @@ export function checkRead(read: SetupRead, ctx: { household: Household; said: st
     for (const p of people) if (!rules.some((r) => (r.what === "egg" || r.what === "no_eggs") && r.who === p.name)) {
       rules.push({ hard: true, what: "no_eggs", who: p.name, quote: eggFor[0].quote, slots: null, days: null, items: null, to: null, frequency: null, per_meal: null, fasting_food: null });
     }
+  }
+
+  // A person's vegetarian rule with their no-eggs words beside it ("<person> is vegetarian and won't touch eggs"): their
+  // no_eggs rule, when the reader left it out (eval h8: read once in three). Backed by the veg rule's own words, or a reply
+  // that names that person and nobody else at home and says no eggs; an egg rule of theirs wins.
+  const names = (p: HPerson) => [p.name, ...p.nicknames];
+  for (const v of rules.filter((r) => r.what === "veg" && r.who)) {
+    if (rules.some((r) => r.who === v.who && (r.what === "no_eggs" || r.what === "egg"))) continue;
+    const me = people.find((p) => p.name === v.who);
+    if (!me) continue;
+    const others = people.filter((p) => p !== me).flatMap(names);
+    const line = [v.quote, ...said.filter((l) => names(me).some((n) => namedIn(n, [l])) && !others.some((n) => namedIn(n, [l])))].find(saysNoEggs);
+    if (line) rules.push({ hard: true, what: "no_eggs", who: v.who, quote: line, slots: null, days: null, items: null, to: null, frequency: null, per_meal: null, fasting_food: null });
   }
 
   // The library: a dish on a slot that exists, said by the family; its days or count backed by its quote.
@@ -1080,7 +1105,10 @@ export async function kindsRead(model: ModelCall, asks: KindsAsk[], until: numbe
   if (!asks.length) return out;
   const user = JSON.stringify({ catalog: catalogLines(), dishes: asks.map((a) => ({ name: a.name, meal: a.meal, words: a.words,
     ...(a.known ? { known: [a.known.kind, a.known.sub].filter(Boolean).join(" / ") } : {}) })) });
-  const r = await askOnce(model, { tier: "fast", purpose: "setup: kinds", system: KINDS_SYSTEM, user, schema: KINDS_SCHEMA, maxTokens: 4000 }, until, log);
+  // Its own deadline, inside the setup's: never what pushes the setup past its budget (eval h4 ran 150.09 s); on a timeout what
+  // it would place stays the family's fixed dish.
+  const by = Math.min(until - KINDS_MARGIN_MS, Date.now() + KINDS_MS);
+  const r = await askOnce(model, { tier: "fast", purpose: "setup: kinds", system: KINDS_SYSTEM, user, schema: KINDS_SCHEMA, maxTokens: 4000 }, by, log);
   if (!r.ok || !isObject(r.json)) { log(`kinds: ${r.ok ? "no answer" : `${r.code}: ${r.message.slice(0, 200)}`}`); return out; }
   const rows = arr(r.json.dishes).filter(isObject);
   for (const a of asks) {

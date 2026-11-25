@@ -3,7 +3,7 @@
 // reads back from the rows, and applies a correction as a diff.
 import { describe, it, expect } from "bun:test";
 import { boot } from "./testkit";
-import { buildMeal, codePlace, cuisinesOf, kitchenLine, needsNamed, placeOf, wordOf, KINDS_SYSTEM, type MealDish, type Place } from "./setup";
+import { saysNoEggs, buildMeal, codePlace, cuisinesOf, kitchenLine, needsNamed, placeOf, wordOf, KINDS_SYSTEM, type MealDish, type Place } from "./setup";
 import { checkRead, diffSetup, familyLines, familySentences, frequencyOf, householdOf, lunchLine, personOf, plainWords, quoteHasDayOrCount, readOf, resolveSlot,
   ruleSaid, saidByFamily, DISHES_ASK, SETUP_PARTS, SETUP_SYSTEM, CONTAINS_BATCH, daysOf, clockOf, itemWord, allergyAsk, answeredIn, type Saved, type SetupRead } from "./setup";
 import { isAllergyRule } from "./allergy";
@@ -411,6 +411,22 @@ describe("apply_setup v2: the checks, pure", () => {
     expect(egg([veg, { hard: true, what: "egg", quote: "Eggs okay for Ishaan and Kiran" }, ...eggs])).toEqual(["egg house", "egg Ishaan", "egg Kiran"]);
   });
 
+  it("a person's vegetarian rule with their no-eggs words beside it gets its no_eggs rule, when the reader left it out (eval h8)", () => {
+    const noEggs = (reply: string, rules: unknown[]) => checkRead(readOf({}, { rules }, {}), { household: hh, said: familyLines([`A: ${reply}`], HOUSEHOLD) }).read.rules
+      .filter((r) => r.what === "no_eggs" || r.what === "egg").map((r) => `${r.what} ${r.who}`);
+    const veg = (quote: string) => ({ hard: true, what: "veg", who: "Padma", quote });
+    expect(noEggs("Amma is vegetarian and doesn't eat eggs.", [veg("Amma is vegetarian")])).toEqual(["no_eggs Padma"]);
+    expect(noEggs("Amma is vegetarian. She won't touch anda either.", [veg("Amma is vegetarian")])).toEqual(["no_eggs Padma"]);
+    expect(noEggs("Amma is pure veg.", [veg("Amma is pure veg")])).toEqual(["no_eggs Padma"]);
+    // Read already, or eggs are fine for her, or the no-eggs words are someone else's: nothing added.
+    expect(noEggs("Amma is vegetarian, no eggs.", [veg("Amma is vegetarian"), { hard: true, what: "no_eggs", who: "Padma", quote: "no eggs" }])).toEqual(["no_eggs Padma"]);
+    expect(noEggs("Amma is vegetarian but eggs are fine.", [veg("Amma is vegetarian")])).toEqual([]);
+    expect(noEggs("Amma is vegetarian, no meat but eggs okay.", [veg("Amma is vegetarian")])).toEqual([]);
+    expect(noEggs("Amma is vegetarian; Kiran has no eggs.", [veg("Amma is vegetarian")])).toEqual([]);
+    expect(saysNoEggs("eggless cake only")).toBe(true);
+    expect(saysNoEggs("we eat eggs")).toBe(false);
+  });
+
   it("the same dish twice on one example plate is one dish", () => {
     const read = readOf({}, {}, { seed: [["Lunch", "Rice, Sambar, Beans poriyal, Sambar", "rice, sambar, beans poriyal, curd"]] });
     expect(checkRead(read, { household: hh, said }).read.seed[0].dishes).toEqual(["Rice", "Sambar", "Beans poriyal"]);
@@ -774,6 +790,17 @@ describe("apply_setup: the kinds model, end to end with a fake model", () => {
     // Decided 19: a category word is its kind at that meal, new khichdis suggested at breakfast too.
     expect(fam.slots.find((s: any) => s.name === "Breakfast").templates[0]).toEqual({ parts: [{ kind: "Khichdi", sub: "Khichdi" }], share: "usually", said: "Khichdi most days" });
     expect(r.said).toContain("Breakfast: khichdi (most days); or boiled chicken");
+  });
+
+  it("the kinds read does not answer: it stops inside the setup's budget, the setup saves, its dishes are fixed parts", async () => {
+    const f = fake2({ kinds: () => new Promise(() => {}) });
+    const k = await boot({ model: f.model, setupBudgetMs: 5000 });
+    const t0 = Date.now();
+    const r = await k.op("apply_setup", { household: FAMILY, transcript: T });
+    expect(Date.now() - t0).toBeLessThan(5000);
+    expect(r.ok).toBe(true);
+    const fam = (await k.owner("GET", "/api/family")).body;
+    expect(fam.slots.find((s: any) => s.name === "Dinner").templates[0].parts).toEqual([{ kind: "Roti" }, { items: ["Bhindi"] }]);
   });
 
   it("the kinds read fails: the setup still saves; what code could not place is the family's fixed dish", async () => {
