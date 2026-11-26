@@ -12,14 +12,8 @@ import {
   browserInteract,
   pressLoop,
   PRESS_KIT_JS,
-  type GroceryServiceConfig,
 } from "../../_shared/_grocery_helpers";
-
-const config: GroceryServiceConfig = {
-  name: "BigBasket",
-  baseUrl: "https://www.bigbasket.com",
-  loginPattern: /bigbasket\.com\/signin|bigbasket\.com\/login/i,
-};
+import { CONFIG as config } from "./_bigbasket";
 
 const productId = getParam("productId");
 

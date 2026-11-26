@@ -16,17 +16,24 @@
  */
 import type { GroceryServiceConfig } from "../../_shared/_grocery_helpers";
 import { MARK_JS, clickTarget } from "../../_shared/_realInput";
-import type { ShopSite } from "./_shop";
+import { baseUrlFrom, sitePattern, type ShopSite } from "./_shop";
 
 export { headerShowsItems } from "./_shop";
 
+/** Blinkit's site, or the stand-in shop an isolated e2e Flock points it at. */
+export const BASE_URL = baseUrlFrom(process.env.FLOCK_CONNECTOR_BASE_URL, "https://blinkit.com");
+
 export const BLINKIT: GroceryServiceConfig = {
   name: "Blinkit",
-  baseUrl: "https://blinkit.com",
-  loginPattern: /blinkit\.com\/login|blinkit\.com\/auth/i,
+  baseUrl: BASE_URL,
+  loginPattern: sitePattern(BASE_URL, "login|auth"),
 };
 
-export const HOME_URL = "https://blinkit.com/";
+export const HOME_URL = `${BASE_URL}/`;
+
+/** The payment page (blinkit.com/checkout) and a placed order's page (blinkit.com/order/<id>). */
+export const PAYMENT_PAGE = sitePattern(BASE_URL, "checkout");
+export const ORDER_PAGE = sitePattern(BASE_URL, "order/");
 
 /** The header cart button, present on every page once the app has rendered. */
 export const CART_BUTTON = '[class*="CartButton"]';

@@ -8,14 +8,8 @@ import {
   errorJson,
   requireBrowserSession,
   browserWrite,
-  type GroceryServiceConfig,
 } from "../../_shared/_grocery_helpers";
-
-const config: GroceryServiceConfig = {
-  name: "BigBasket",
-  baseUrl: "https://www.bigbasket.com",
-  loginPattern: /bigbasket\.com\/signin|bigbasket\.com\/login/i,
-};
+import { CONFIG as config } from "./_bigbasket";
 
 let maxResults = parseInt(getParam("maxResults") || "10", 10);
 

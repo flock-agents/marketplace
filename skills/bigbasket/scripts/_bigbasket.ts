@@ -3,8 +3,18 @@
  * The cart is the /basket page. The bill selectors are NOT confirmed live: they are the generic
  * ones in _shop.ts.
  */
-import { PRESS_KIT_JS, pressLoop, type PageAction } from "../../_shared/_grocery_helpers";
-import type { AddressPicker, ShopSite } from "./_shop";
+import { PRESS_KIT_JS, pressLoop, type GroceryServiceConfig, type PageAction } from "../../_shared/_grocery_helpers";
+import { baseUrlFrom, sitePattern, type AddressPicker, type ShopSite } from "./_shop";
+
+/** BigBasket's site, or the stand-in shop an isolated e2e Flock points it at. */
+export const BASE_URL = baseUrlFrom(process.env.FLOCK_CONNECTOR_BASE_URL, "https://www.bigbasket.com");
+
+/** What every BigBasket script hands Flock's browser helpers. */
+export const CONFIG: GroceryServiceConfig = {
+  name: "BigBasket",
+  baseUrl: BASE_URL,
+  loginPattern: sitePattern(BASE_URL, "signin|login"),
+};
 
 /**
  * The saved-address picker, as captured live (signed in, 2026-11-11): the header's "Delivery in 6 mins /
@@ -23,13 +33,9 @@ const ADDRESS_PICKER: AddressPicker = {
 };
 
 export const BIGBASKET: ShopSite = {
-  config: {
-    name: "BigBasket",
-    baseUrl: "https://www.bigbasket.com",
-    loginPattern: /bigbasket\.com\/signin|bigbasket\.com\/login/i,
-  },
-  homeUrl: "https://www.bigbasket.com/",
-  cartUrl: "https://www.bigbasket.com/basket/",
+  config: CONFIG,
+  homeUrl: `${BASE_URL}/`,
+  cartUrl: `${BASE_URL}/basket/`,
   cartPath: /^\/basket\b/i,
   openCart: [{ action: "wait", delay: 3000 }],
   cartLines: '[class*="cart-item"], [class*="CartItem"], [class*="BasketItem"], [data-testid="cart-item"], [class*="itemlist"] > div, [class*="ItemList"] > div',

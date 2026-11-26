@@ -7,14 +7,8 @@ import {
   requireBrowserSession,
   errorJson,
   browserNavigate,
-  type GroceryServiceConfig,
 } from "../../_shared/_grocery_helpers";
-
-const config: GroceryServiceConfig = {
-  name: "Blinkit",
-  baseUrl: "https://blinkit.com",
-  loginPattern: /blinkit\.com\/login|blinkit\.com\/auth/i,
-};
+import { BLINKIT as config } from "./_blinkit";
 
 const SKILL_ID = process.env.SKILL_ID || "zomato-blinkit";
 const BROWSER_SESSION_NAME = process.env.BROWSER_SESSION || "blinkit";

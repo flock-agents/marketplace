@@ -10,6 +10,32 @@
 import { PRESS_KIT_JS, type GroceryServiceConfig, type PageAction, type PressLoop } from "../../_shared/_grocery_helpers";
 import { clickTarget } from "../../_shared/_realInput";
 
+/**
+ * The shop's base URL: `override` (FLOCK_CONNECTOR_BASE_URL, which Flock sets only in an isolated e2e
+ * Flock, pointing at a stand-in shop) when it is a bare http(s) origin, else `fallback` (the real
+ * site). A trailing slash is dropped; a path, query, fragment or user part makes it fall back.
+ */
+export function baseUrlFrom(override: string | undefined, fallback: string): string {
+  if (!override) return fallback;
+  try {
+    const url = new URL(override.trim());
+    const bare = url.pathname === "/" && !url.search && !url.hash && !url.username && !url.password;
+    return /^https?:$/.test(url.protocol) && bare ? url.origin : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+/**
+ * A pattern for pages of the shop at `baseUrl`: its host (port kept, a leading "www." dropped so
+ * any subdomain matches, as the hand-written patterns did), "/", then one of `paths` (a regex
+ * source, e.g. "signin|login"). Case-insensitive.
+ */
+export function sitePattern(baseUrl: string, paths: string): RegExp {
+  const host = new URL(baseUrl).host.replace(/^www\./i, "");
+  return new RegExp(`${host.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\/(?:${paths})`, "i");
+}
+
 /** One shop's pages, as these scripts read them. */
 export interface ShopSite {
   config: GroceryServiceConfig;

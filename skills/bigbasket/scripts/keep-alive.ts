@@ -7,15 +7,9 @@ import {
   errorJson,
   requireBrowserSession,
   browserNavigate,
-  type GroceryServiceConfig,
 } from "../../_shared/_grocery_helpers";
+import { CONFIG as config } from "./_bigbasket";
 import { writeFileSync } from "fs";
-
-const config: GroceryServiceConfig = {
-  name: "BigBasket",
-  baseUrl: "https://www.bigbasket.com",
-  loginPattern: /bigbasket\.com\/signin|bigbasket\.com\/login/i,
-};
 
 const SKILL_ID = process.env.SKILL_ID || "bigbasket";
 const BROWSER_SESSION = process.env.BROWSER_SESSION || "bigbasket";

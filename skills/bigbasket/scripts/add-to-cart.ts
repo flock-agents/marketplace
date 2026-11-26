@@ -18,15 +18,8 @@ import {
   urlencode,
   pressLoop,
   PRESS_KIT_JS,
-  type GroceryServiceConfig,
 } from "../../_shared/_grocery_helpers";
-import { addFromSearchActions } from "./_bigbasket";
-
-const config: GroceryServiceConfig = {
-  name: "BigBasket",
-  baseUrl: "https://www.bigbasket.com",
-  loginPattern: /bigbasket\.com\/signin|bigbasket\.com\/login/i,
-};
+import { CONFIG as config, addFromSearchActions } from "./_bigbasket";
 
 const productId = getParam("productId");
 let quantity = parseInt(getParam("quantity") || "1", 10);

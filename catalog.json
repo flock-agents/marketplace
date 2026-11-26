@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "updatedAt": "2026-11-25T00:00:00Z",
+  "updatedAt": "2026-11-27T00:00:00Z",
   "items": [
     {
       "slug": "linear",
@@ -266,11 +266,11 @@
       "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "skills/zomato-blinkit",
-      "latestVersion": "1.4.3",
-      "latestTag": "zomato-blinkit-v1.4.3",
+      "latestVersion": "1.4.4",
+      "latestTag": "zomato-blinkit-v1.4.4",
       "minFlockVersion": "0.24.0",
       "publishedAt": "2026-08-14T10:00:00Z",
-      "updatedAt": "2026-11-23T00:00:00Z"
+      "updatedAt": "2026-11-27T00:00:00Z"
     },
     {
       "slug": "bigbasket",
@@ -288,11 +288,11 @@
       "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "skills/bigbasket",
-      "latestVersion": "1.4.3",
-      "latestTag": "bigbasket-v1.4.3",
+      "latestVersion": "1.4.4",
+      "latestTag": "bigbasket-v1.4.4",
       "minFlockVersion": "0.24.0",
       "publishedAt": "2026-08-14T10:00:00Z",
-      "updatedAt": "2026-11-23T00:00:00Z"
+      "updatedAt": "2026-11-27T00:00:00Z"
     },
     {
       "slug": "amazon",

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.4.4
+
+- Every script reads BigBasket's address from one place (`scripts/_bigbasket.ts`). An isolated test Flock can point it at a stand-in shop with `FLOCK_CONNECTOR_BASE_URL` (a bare http(s) address; anything else is ignored); without it, nothing changes: the real site, and the same sign-in page check (`bigbasket.com/signin`, `bigbasket.com/login`).
+
 ## 1.4.3
 
 - Page scripts never click, focus or type: add-to-cart, remove-from-cart, search and the shared shop flow only find and mark their element (`data-flock-target`), and Flock's own click, type and press actions do the input. Search scrolls with real wheel input. Which element is found, the waits, error codes and JSON outputs are unchanged.

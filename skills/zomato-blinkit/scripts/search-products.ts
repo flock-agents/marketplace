@@ -9,14 +9,8 @@ import {
   errorJson,
   urlencode,
   browserInteract,
-  type GroceryServiceConfig,
 } from "../../_shared/_grocery_helpers";
-
-const config: GroceryServiceConfig = {
-  name: "Blinkit",
-  baseUrl: "https://blinkit.com",
-  loginPattern: /blinkit\.com\/login|blinkit\.com\/auth/i,
-};
+import { BLINKIT as config } from "./_blinkit";
 
 const PARAMS = JSON.parse(process.env.SKILL_PARAMS || "{}");
 const query: string = PARAMS.query || "";

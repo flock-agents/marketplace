@@ -21,7 +21,7 @@ import {
   persistentInteract,
   persistentCapture,
 } from "../../_shared/_grocery_helpers";
-import { BLINKIT as config, HOME_URL, OPEN_CART_ACTIONS, READ_CART_SCRIPT, headerShowsItems } from "./_blinkit";
+import { BLINKIT as config, HOME_URL, OPEN_CART_ACTIONS, ORDER_PAGE, PAYMENT_PAGE, READ_CART_SCRIPT, headerShowsItems } from "./_blinkit";
 
 const PARAMS = JSON.parse(process.env.SKILL_PARAMS || "{}");
 const phase: string = PARAMS.phase || "review";
@@ -68,7 +68,7 @@ async function review(): Promise<void> {
     { action: "waitForSelector", selector: PAYMENT_FRAME, delay: 20000 },
   ]);
   const url = String(atPay.url || "");
-  if (!/blinkit\.com\/checkout/i.test(url)) {
+  if (!PAYMENT_PAGE.test(url)) {
     errorJson("NOT_AT_PAYMENT_PAGE", "Clicked Proceed To Pay but Blinkit did not open its payment page. The session is still open; look at the page or hand it to the person.");
   }
 
@@ -109,7 +109,7 @@ async function status(): Promise<void> {
   const url = String(page.url || "");
   let state: "paid" | "pending" | "failed" = "pending";
   if (/payment (?:has )?failed|transaction failed|payment (?:was )?declined|payment unsuccessful|payment cancelled/i.test(text)) state = "failed";
-  else if (/order (?:placed|confirmed|received)|payment successful|thank you for (?:your )?order|arriving in/i.test(text) || /blinkit\.com\/order\//i.test(url)) state = "paid";
+  else if (/order (?:placed|confirmed|received)|payment successful|thank you for (?:your )?order|arriving in/i.test(text) || ORDER_PAGE.test(url)) state = "paid";
   const idMatch = state === "paid" ? text.match(/order\s*(?:id|#|no\.?)\s*[:#]?\s*([A-Z0-9-]{6,40})/i) : null;
   console.log(JSON.stringify({ platform: "blinkit", state, ...(idMatch ? { orderId: idMatch[1] } : {}), persistentSessionId: givenId }));
 }
