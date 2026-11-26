@@ -1650,6 +1650,19 @@ describe("setup checks what a read left out (H1-H3)", () => {
     // A third person with no name is still the only child.
     expect(homeViolations(read, ctx(["she carries a lunch box"])).map((v) => v.missing)).toEqual(["lunch box (Ira)"]);
   });
+  it("homeViolations: a first-person sentence about a child's box is the child's (fix round 2)", () => {
+    const ctx = (sentences: string[], household: unknown = I_HOUSEHOLD) => ({ household: householdOf(household), sentences });
+    const read = checkedHome(noBoxes, ["a bowl of sprouts beside it"]);
+    expect(homeViolations(read, ctx(["i pack a lunch box for the kid"])).map((v) => v.missing)).toEqual(["lunch box (Ira)"]);
+    expect(homeViolations(read, ctx(["my son carries a breakfast box"])).map((v) => v.missing)).toEqual(["breakfast box (Ira)"]);
+    expect(homeViolations(read, ctx(["i give her a tiffin"])).map((v) => v.missing)).toEqual(["tiffin (Ira)"]);
+    expect(homeViolations(read, ctx(["i carry my lunch box"]))).toEqual([]);
+    // Two children and no name: the box with no person, and the question asks whose it is.
+    const two = { ...I_HOUSEHOLD, "household.people": [...I_HOUSEHOLD["household.people"], { name: "Arjun", relation: "son", group: "child", age: 5 }] };
+    const v = homeViolations(checkedHome(noBoxes, ["a bowl of sprouts beside it"], two), ctx(["i pack a lunch box for the kids"], two));
+    expect(v.map((x) => x.missing)).toEqual(["lunch box"]);
+    expect(v[0].ask).toBe("Who carries the lunch box, and what goes in it?");
+  });
   it("homeViolations: a bare box word is any box of that person's (fix 5)", () => {
     const ctx = (sentences: string[]) => ({ household: householdOf(I_HOUSEHOLD), sentences });
     const read = checkedHome(withBoxes, boxSentences);

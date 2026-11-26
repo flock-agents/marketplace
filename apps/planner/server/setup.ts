@@ -807,13 +807,15 @@ const isChild = (p: HPerson) => p.group === "child" || (p.age !== undefined && p
 const BOX_MEALS = ["breakfast", "lunch", "dinner", "snack"];
 /** The words that make a sentence the speaker's own (household.speaker). */
 const FIRST_PERSON = ["i", "my", "me", "mine", "im", "ive", "id"];
+/** Words that put another person in a sentence: a child word, or a third-person pronoun ("I pack a lunch box for the kid"). */
+const OTHER_PERSON = ["kid", "kids", "son", "sons", "daughter", "daughters", "child", "children", "boy", "boys", "girl", "girls", "him", "her", "his", "he", "she"];
 const isBoxName = (name: string) => plainWords(name.replace(/['’]s\b/gi, "")).split(" ").some((w) => BOX_WORDS.includes(w));
 /** The home read checked (H1), structure only:
  *  (i) each family sentence holding a box word names a box that resolves, among its person's meals, to a custom slot. The box
  *  is the box word with the meal word before it ("breakfast box", "lunch box"), else the word alone ("tiffin": any box of the
- *  person's); its person the one the sentence names, else the speaker for a sentence in the first person ("I", "my"), else the
- *  child the question before it names, else the one child at home. A grown-up's box is no slot of its own (they carry the
- *  home lunch, or an extras add-on: (ii)).
+ *  person's); its person the one the sentence names, else the speaker for a sentence in the first person ("I", "my") that
+ *  holds no other person (no child word, no "he"/"she"/"her"), else the child the question before it names, else the one
+ *  child at home. A grown-up's box is no slot of its own (they carry the home lunch, or an extras add-on: (ii)).
  *  (ii) each extras add-on of Lunch with no days has, for every person on it, a household.weekly or a weekday_lunch entry.
  *  (iii) each meal in place of a main meal says what it has of that meal (home_meal, H3; a part with its words). Left out, it is
  *  re-read, never asked by itself: the box's dishes may still fill it (writeKinds asks when nothing does). */
@@ -838,7 +840,8 @@ export function homeViolations(read: SetupRead, ctx: { household: Household; sen
       const box = w === "lunchbox" ? "lunch box" : w === "tiffinbox" ? "tiffin" : w === "box" && BOX_MEALS.includes(ws[i - 1]) ? `${ws[i - 1]} box` : w;
       const inLine = named(s), kids = inLine.filter(isChild), inQ = q ? named(q).filter(isChild) : [];
       // Said in the first person with no one named ("I carry my lunch box"): the speaker's box, never the only child's.
-      const firstPerson = !inLine.length && ws.some((x) => FIRST_PERSON.includes(x));
+      // A first-person sentence about a child ("my son carries a breakfast box") is the child's: the person comes as for any other.
+      const firstPerson = !inLine.length && ws.some((x) => FIRST_PERSON.includes(x)) && !ws.some((x) => OTHER_PERSON.includes(x));
       const person = inLine.length === 1 ? inLine[0] : kids.length === 1 ? kids[0] : inLine.length ? null
         : firstPerson ? speaker : inQ.length === 1 ? inQ[0] : children.length === 1 ? children[0] : null;
       if (firstPerson && !person) return;
