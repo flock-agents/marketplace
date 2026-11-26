@@ -19,6 +19,8 @@ export type PersonRow = typeof people.$inferSelect;
 export type HouseRow = typeof house.$inferSelect;
 /** One visit of the cook: when they come, and the meals that visit makes when the family said. */
 export type CookVisit = { at: string; meals?: string[] };
+/** A visit as saved: setup keeps one said by its meals alone, with no clock time (spec §6.3, §9.3: "morning" is no time). */
+export type SavedVisit = { at?: string; meals?: string[] };
 /** The house row with its lists read: what the routes answer with. Every day is planned; a meal not cooked at home is a slot's
  *  skip_days (slotStore.ts). */
 export type HouseView = Omit<HouseRow, "cook_days" | "connected_apps" | "history_synced" | "cuisines"> &
@@ -59,16 +61,19 @@ export function readUntil(synced: HistorySynced, app: string, reader: string, le
 
 const CLOCK = /^([01]\d|2[0-3]):[0-5]\d$/;
 /** The cook's visits from `cook_arrival`: one plain "HH:MM" (every row before a cook could come twice) is one visit; a cook who
- *  comes more than once, or whose visit names its meals, is kept as a JSON list. Earliest first. */
-export function cookVisits(arrival: string | null): CookVisit[] {
+ *  comes more than once, or whose visit names its meals, is kept as a JSON list. Earliest first. A visit with its meals and
+ *  no time (setup, D10) is kept too. */
+export function cookVisits(arrival: string | null): SavedVisit[] {
   if (!arrival) return [];
   if (CLOCK.test(arrival)) return [{ at: arrival }];
-  return list<CookVisit>(arrival).filter((v) => isObject(v) && typeof v.at === "string" && CLOCK.test(v.at));
+  return list<SavedVisit>(arrival).filter((v) => isObject(v) && (typeof v.at === "string" ? CLOCK.test(v.at)
+    : v.at === undefined && Array.isArray(v.meals) && v.meals.length > 0));
 }
 
 export function houseView(row: HouseRow): HouseView {
-  const visits = cookVisits(row.cook_arrival);
-  // cook_arrival stays one time for whoever reads it as before (the first visit); cook_visits is every visit.
+  // The page's visits are the timed ones (a visit with no time is setup's and the plan's: savedOf, houseCook).
+  const visits = cookVisits(row.cook_arrival).filter((v): v is CookVisit => !!v.at);
+  // cook_arrival stays one time for whoever reads it as before (the first visit); cook_visits is every timed visit.
   return { ...row, cook_arrival: visits[0]?.at ?? null, cook_visits: visits, cook_days: list(row.cook_days),
     connected_apps: list<GroceryApp>(row.connected_apps), history_synced: historySynced(row.history_synced),
     cuisines: row.cuisines == null ? null : list<string>(row.cuisines) };

@@ -61,8 +61,8 @@ const HOME_SCHEMA = {
       name: STR, kind: { type: "string", enum: ["main", "custom", "addon"] }, addon_of: STR, after: { type: "string", enum: [...SLOTS] },
       usual_people: STRS, days: DAYS, skip_days: { type: "array", items: { type: "object", required: ["day", "skip"], properties: { day: STR, skip: { type: "string", enum: [...SKIPS] } } } },
       instead_of: { type: "string", enum: [...SLOTS] }, extras: { type: "boolean" }, quote: STR } } },
-    cook: { anyOf: [{ type: "null" }, { type: "object", required: ["name"], properties: {
-      name: STR, days: DAYS, visits: { type: "array", items: { type: "object", required: ["at"], properties: { at: STR, meals: STRS } } }, limits_words: STR, quote: STR } }] },
+    cook: { anyOf: [{ type: "null" }, { type: "object", properties: {
+      name: STR, days: DAYS, visits: { type: "array", items: { type: "object", required: ["meals"], properties: { at: STR, meals: STRS } } }, limits_words: STR, quote: STR } }] },
     family_cooks: { type: "array", items: { type: "object", required: ["person", "days"], properties: { person: STR, days: DAYS, quote: STR } } },
     apps: { type: "object", properties: { main: STR, fallback: STR } },
     subscriptions: { type: "array", items: { type: "object", required: ["item"], properties: { item: STR, source: STR, note: STR } } },
@@ -79,7 +79,7 @@ const HOME_PART = `Write this part: the meals (slots), the cook, who of the fami
   A box a child eats in place of a meal is kind "custom", instead_of that meal, its days the school days: a school tiffin or lunch box is instead_of Lunch, unless the family calls it a breakfast box (instead_of Breakfast); a box packed with the home meal's own dish is such a box too. A snack box the child has besides a lunch at home has no instead_of.
   extras: true on an add-on that is food the person has beside the home meal, the home meal still theirs ("I take 4 eggs and some salad with my lunch": "<person>'s lunch box", addon_of Lunch, extras true, days the days they carry it). Left out otherwise.
   quote: the family's words that name a custom or add-on meal (one the family never named is no slot).
-- cook: the paid cook, or null. days. visits: each time they come, "HH:MM" 24-hour, with the meals that visit makes. limits_words: the cook's time or skill limits in the family's words. quote: the family's latest words about the cook's days or times.
+- cook: the paid cook, or null. name: only the name the family gives her (never "cook" or another role word); left out when none is said. days. visits: each time they come, with the meals that visit makes; at: "HH:MM" 24-hour only when a clock time is said, left out for "morning" or "twice a day". limits_words: the cook's time or skill limits in the family's words. quote: the family's latest words about the cook's days or times.
 - family_cooks: on days the cook does not come, who of the family cooks ({ person, days, quote }), only when said.
 - apps: the grocery app (main) and the one used when something is missing (fallback), as the family names them.
 - subscriptions: what comes on a subscription: { item, source, note }.
@@ -249,8 +249,11 @@ export type ReadSlot = { name: string; kind: SlotKind; addon_of: string | null; 
   extras?: boolean };
 /** A box or meal that has another meal's dish (§5.4): `words` the family's words for the part it takes ("sabzi"), "" the whole plate. */
 export type ReadLink = { slot: string; from: string; words: string; quote: string };
-export type Visit = { at: string; meals?: string[] };
-export type Cook = { name: string; days: Weekday[]; visits: Visit[]; limits_words: string | null; quote: string };
+/** One time the cook comes: its clock time when said, the meals it makes when said; never neither (spec §6.3, §9.3: "morning"
+ *  is no clock time, and the visit is still hers with its meals). */
+export type Visit = { at?: string; meals?: string[] };
+/** The paid cook: `name` null when the family never named her (a role is never a name: "your cook"). */
+export type Cook = { name: string | null; days: Weekday[]; visits: Visit[]; limits_words: string | null; quote: string };
 export type FamilyCook = { person: string; days: Weekday[]; quote: string };
 export type WeekdayLunch = { person: string; lunch: "away" | "carries" | "home"; quote: string };
 /** `often`: the family's words saying how often or on which days they have this dish (none: ""); frequency and days stand only
@@ -268,7 +271,8 @@ export type SetupRead = { slots: ReadSlot[]; cook: Cook | null; family_cooks: Fa
 /** The three answers as one read: every list a list, every field its type, nothing thrown away for being a little off. */
 export function readOf(home: unknown, rules: unknown, dishes: unknown, often: unknown = null): SetupRead {
   const h = isObject(home) ? home : {}, r = isObject(rules) ? rules : {}, d = isObject(dishes) ? dishes : {}, o = isObject(often) ? often : {};
-  const cook = isObject(h.cook) && str(h.cook.name) ? h.cook : null;
+  // A cook is kept without a name (D10: "your cook" by contract) when the read says anything of her: a name, days or a visit.
+  const cook = isObject(h.cook) && (str(h.cook.name) || daysOf(h.cook.days).length || arr(h.cook.visits).length) ? h.cook : null;
   const kind = (v: unknown): SlotKind => (v === "addon" || v === "custom" || v === "main" ? v : "custom");
   return {
     slots: arr(h.slots).filter(isObject).filter((s) => str(s.name)).map((s) => ({ name: str(s.name), kind: kind(s.kind), addon_of: str(s.addon_of) || null,
@@ -277,10 +281,11 @@ export function readOf(home: unknown, rules: unknown, dishes: unknown, often: un
         const skip = str(x.skip) as Skip;
         return (SKIPS as readonly string[]).includes(skip) ? daysOf(x.day).map((day) => ({ day, skip })) : [];
       }), quote: str(s.quote), ...(str(s.instead_of) ? { instead_of: str(s.instead_of) } : {}), ...(s.extras === true ? { extras: true } : {}) })),
-    cook: cook ? { name: str(cook.name), days: daysOf(cook.days), limits_words: str(cook.limits_words) || null, quote: str(cook.quote),
+    cook: cook ? { name: str(cook.name) || null, days: daysOf(cook.days), limits_words: str(cook.limits_words) || null, quote: str(cook.quote),
       visits: arr(cook.visits).flatMap((v): Visit[] => {
-        const at = clockOf(isObject(v) ? v.at : v);
-        return at ? [{ at, ...(isObject(v) && strs(v.meals).length ? { meals: strs(v.meals) } : {}) }] : [];
+        // Free text in the clock slot ("morning") is no time: the visit keeps its meals, never a made-up time.
+        const at = clockOf(isObject(v) ? v.at : v), meals = isObject(v) ? strs(v.meals) : [];
+        return at || meals.length ? [{ ...(at ? { at } : {}), ...(meals.length ? { meals } : {}) }] : [];
       }) } : null,
     family_cooks: arr(h.family_cooks).filter(isObject).filter((x) => str(x.person)).map((x) => ({ person: str(x.person), days: daysOf(x.days), quote: str(x.quote) })),
     apps: { main: isObject(h.apps) ? str(h.apps.main) || null : null, fallback: isObject(h.apps) ? str(h.apps.fallback) || null : null },
@@ -717,8 +722,10 @@ export function checkRead(read: SetupRead, ctx: { household: Household; said: st
   }
 
   // The cook, who of the family cooks, lunch.
-  const cook = read.cook ? { ...read.cook, visits: read.cook.visits.map((v) => ({ at: v.at,
-    ...(v.meals ? { meals: uniq(v.meals.map(slotOf).filter((m): m is string => !!m)) } : {}) })).map((v) => (v.meals?.length ? v : { at: v.at })) } : null;
+  const cook = read.cook ? { ...read.cook, visits: read.cook.visits.flatMap((v): Visit[] => {
+    const meals = v.meals ? uniq(v.meals.map(slotOf).filter((m): m is string => !!m)) : [];
+    return v.at || meals.length ? [{ ...(v.at ? { at: v.at } : {}), ...(meals.length ? { meals } : {}) }] : [];
+  }) } : null;
   const family_cooks = read.family_cooks.flatMap((f) => { const p = personOf(f.person, people); if (!p) ask(f.person); return p && f.days.length ? [{ ...f, person: p }] : []; });
   const weekday_lunch = read.weekday_lunch.flatMap((w) => { const p = personOf(w.person, people); return p ? [{ ...w, person: p }] : []; });
   const lunchKnown = (p: string) => weekday_lunch.some((w) => w.person === p) || !!ctx.household.weekly?.find((w) => w.person === p)?.lunch;
@@ -836,7 +843,8 @@ export function savedOf(db: Db): Saved {
     rules: listRules(db),
     library: listLibrary(db).filter((d) => d.origin !== "planner_suggested"),
     seed: seedSlotDays(db).map((s) => ({ slot: s.slot, dishes: s.dishes.map((d) => d.dish), quote: "" })),
-    cook: h.cook_name ? { name: h.cook_name, days: view.cook_days, visits: cookVisits(h.cook_arrival), limits_words: h.cook_time_limit, quote: "" } : null,
+    // A cook without a name is saved with her days (cook_days set, never null for a cook): that is the cook being there.
+    cook: h.cook_name || h.cook_days ? { name: h.cook_name, days: view.cook_days, visits: cookVisits(h.cook_arrival), limits_words: h.cook_time_limit, quote: "" } : null,
     state,
   };
 }
@@ -934,7 +942,7 @@ export function diffSetup(saved: Saved, next: SetupRead, fresh: string[], all: b
   for (const s of next.seed) if (inNew(s.quote) && !saved.seed.some((x) => seedKey(x) === seedKey(s))) ops.seed.push(s);
 
   if (!cookSame(saved.cook, next.cook)) {
-    const cookSaid = next.cook ? inNew(next.cook.quote) || named(next.cook.name) : !!saved.cook && named(saved.cook.name);
+    const cookSaid = next.cook ? inNew(next.cook.quote) || (!!next.cook.name && named(next.cook.name)) : !!saved.cook?.name && named(saved.cook.name);
     if (cookSaid || all) { ops.cook = next.cook; if (!all) ops.changed.push(next.cook ? `${cookLine(next.cook)}` : `No cook.`); }
     else ops.discarded.push("cook");
   }
@@ -1019,7 +1027,9 @@ function writeOps(tx: Db, ops: Ops, opts: { first: boolean; household: Household
   if (ops.cook !== undefined) {
     const c = ops.cook;
     Object.assign(set, { cook_name: c?.name ?? null, cook_days: c ? JSON.stringify(c.days) : null, cook_time_limit: c?.limits_words ?? null,
-      cook_arrival: !c || !c.visits.length ? null : c.visits.length === 1 && !c.visits[0].meals ? c.visits[0].at : JSON.stringify([...c.visits].sort((a, b) => a.at.localeCompare(b.at))) });
+      // Earliest first when every visit has its time; visits without one stay in the order said.
+      cook_arrival: !c || !c.visits.length ? null : c.visits.length === 1 && !c.visits[0].meals && c.visits[0].at ? c.visits[0].at
+        : JSON.stringify(c.visits.every((v) => v.at) ? [...c.visits].sort((a, b) => a.at!.localeCompare(b.at!)) : c.visits) });
   }
   const state: SetupState = { replies: opts.replies, ...ops.state };
   tx.update(house).set({ ...set, setup_state: JSON.stringify(state), updated_at: now, updated_by: by }).where(eq(house.id, h.id)).run();
@@ -1080,8 +1090,11 @@ const ruleLine = (r: ReadRule) => `${r.who ?? "Everyone"}: ${ruleSaid({ ...r, it
   frequency: r.frequency ?? null, per_meal: r.per_meal ?? null, fasting_food: r.fasting_food ?? null })}`;
 const dishLine = (d: ReadDish) => `${d.name} at ${mealWord(d.slot)}${d.frequency ? `, ${frequencyText(d.frequency)}` : ""}${d.days ? `, ${daysSaid(d.days)}` : ""}`;
 function cookLine(c: Pick<Cook, "name" | "days" | "visits" | "limits_words">): string {
-  const visits = c.visits.map((v) => `${v.meals?.length ? `${andWords(v.meals.map(mealWord))} ` : ""}at ${clockText(v.at)}`);
-  return `${c.name} cooks ${daysSaid(c.days)}${visits.length ? `: ${andWords(visits)}` : ""}${c.limits_words ? ` (${c.limits_words})` : ""}.`;
+  const visits = c.visits.map((v) => [v.meals?.length ? andWords(v.meals.map(mealWord)) : "", v.at ? `at ${clockText(v.at)}` : ""].filter(Boolean).join(" "));
+  // Visits said by their meals alone are told apart by a comma: "breakfast and lunch, and dinner".
+  const said = visits.length > 1 && c.visits.some((v) => !v.at) ? `${visits.slice(0, -1).join(", ")}, and ${visits[visits.length - 1]}` : andWords(visits);
+  // A role is never a name (spec §6.3): a cook the family never named is "your cook".
+  return `${c.name ?? "Your cook"} cooks ${daysSaid(c.days)}${visits.length ? `: ${said}` : ""}${c.limits_words ? ` (${c.limits_words})` : ""}.`;
 }
 const placeText = (w: string) => (w === "office" ? "the office" : w);
 

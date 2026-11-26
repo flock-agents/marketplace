@@ -100,7 +100,7 @@ export function ingredientsFrom(json: unknown): { slot: string; name: string; in
  *  (a box replacing one of them, an add-on of one, a slot with a part linked to one); `cap` the rule's per_meal (the least
  *  when two fit); its days the rule's, else the cook's (`days`), else every day; `label` the main meals ("breakfast and
  *  lunch"). No cook, or no cap rule: none. */
-export function visitsOf(rules: Rule[], cook: { name: string | null; visits: { at: string; meals?: string[] }[]; days?: Weekday[] } | null, slots: Slot[]): Visit[] {
+export function visitsOf(rules: Rule[], cook: { name: string | null; visits: { at?: string; meals?: string[] }[]; days?: Weekday[] } | null, slots: Slot[]): Visit[] {
   if (!cook) return [];
   const caps = rules.filter((r) => r.hard && r.what === "cap" && !!r.per_meal && !!r.slots?.length);
   const out: Visit[] = [];
@@ -118,10 +118,11 @@ export function visitsOf(rules: Rule[], cook: { name: string | null; visits: { a
   return out;
 }
 /** The house's cook as visitsOf reads it (without making the house row); none saved: null. */
-function houseCook(db: Db): { name: string | null; visits: { at: string; meals?: string[] }[]; days: Weekday[] } | null {
+export function houseCook(db: Db): { name: string | null; visits: { at?: string; meals?: string[] }[]; days: Weekday[] } | null {
   try {
     const row = db.select({ name: house.cook_name, days: house.cook_days, arrival: house.cook_arrival }).from(house).orderBy(asc(house.created_at)).limit(1).get();
-    if (!row?.name) return null;
+    // A cook the family never named is there by her days (setup saves cook_days for every cook).
+    if (!row?.name && !row?.days) return null;
     return { name: row.name, visits: cookVisits(row.arrival), days: list<Weekday>(row.days) };
   } catch { return null; }
 }

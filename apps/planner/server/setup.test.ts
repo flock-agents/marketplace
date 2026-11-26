@@ -5,8 +5,10 @@ import { describe, it, expect } from "bun:test";
 import { boot } from "./testkit";
 import { saysNoEggs, buildMeal, codePlace, nearestDish, cuisinesOf, regionalFor, kitchenLine, needsNamed, placeOf, wordOf, KINDS_SYSTEM, type MealDish, type Place } from "./setup";
 import { checkRead, diffSetup, familyLines, familySentences, frequencyOf, householdOf, lunchLine, personOf, plainWords, quoteHasDayOrCount, readOf, resolveSlot,
-  ruleSaid, saidByFamily, DISHES_ASK, SETUP_PARTS, SETUP_SYSTEM, CONTAINS_BATCH, daysOf, clockOf, itemWord, allergyAsk, answeredIn, mealOf, type Saved, type SetupRead } from "./setup";
+  ruleSaid, saidByFamily, savedOf, DISHES_ASK, SETUP_PARTS, SETUP_SYSTEM, CONTAINS_BATCH, daysOf, clockOf, itemWord, allergyAsk, answeredIn, mealOf, type Saved, type SetupRead } from "./setup";
 import { isAllergyRule } from "./allergy";
+import { houseCook, visitsOf } from "./makePlan";
+import { listRules, listSlots } from "./slotStore";
 import { HOUSEHOLDS } from "../evals/households";
 import { mealKinds, regionalWordOf } from "./kinds";
 import { resolveGives } from "./targets";
@@ -1295,6 +1297,24 @@ describe("setup reads into the one meaning model (§5, §6.4)", () => {
     expect(SETUP_PARTS.find((p) => p.id === "rules")!.system).toContain("a cook short of time with a number of dishes is cap { per_meal: the larger number said, slots: that visit's meals }");
     expect(ruleSaid({ what: "cap", per_meal: 4, slots: ["Breakfast", "Lunch"], days: MON_SAT as any, items: null, to: null, frequency: null, fasting_food: null, quote: "" }))
       .toBe("at most 4 dishes in the morning visit");
+  });
+
+  it("a cook with no name and no clock time is kept: her days, her visits' meals, her cap; the read-back says \"your cook\" (F5, D10)", async () => {
+    const home = { ...W_HOME, cook: { days: MON_SAT, visits: [{ meals: ["Breakfast", "Lunch"] }, { meals: ["Dinner"] }], limits_words: "3-4 dishes in the morning",
+      quote: "comes at 7 for breakfast and lunch" } };
+    const { k, r, fam } = await walk({ home });
+    expect(savedOf(k.kit.db).cook).toMatchObject({ name: null, days: MON_SAT, visits: [{ meals: ["Breakfast", "Lunch"] }, { meals: ["Dinner"] }] });
+    expect([fam.house.cook_name, fam.house.cook_days, fam.house.cook_visits]).toEqual([null, MON_SAT, []]);   // the page's visits are timed ones
+    expect(r.said).toContain("Your cook cooks Mon–Sat: breakfast and lunch, and dinner");
+    expect(r.said).not.toContain("the family cooks");
+    expect(r.said).not.toContain(" at undefined");
+    // The plan reads her: the morning visit keeps the cap (spec §9.3).
+    const visits = visitsOf(listRules(k.kit.db), houseCook(k.kit.db), listSlots(k.kit.db));
+    expect(visits.map((v): unknown[] => [v.cook, v.cap, v.days])).toEqual([[null, 4, MON_SAT]]);
+    expect(visits[0].meals).toEqual(expect.arrayContaining(["Breakfast", "Lunch"]));
+    // A visit with neither a time nor a meal is no visit; a name the model gives stays hers.
+    const { k: k2 } = await walk({ home: { ...home, cook: { ...home.cook, name: "Lakshmi", visits: [{ at: "morning" }, { meals: ["Dinner"] }] } } });
+    expect(savedOf(k2.kit.db).cook).toMatchObject({ name: "Lakshmi", visits: [{ meals: ["Dinner"] }] });
   });
 
   it("the read-back says templates and rules in the family's words", async () => {
