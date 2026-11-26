@@ -755,6 +755,33 @@ export function fillWeek(input: FillInput): FillResult {
     const pc = placeOfDish(w, p.from, x.name);
     return WET_SUBS.some((ws) => sameKind(ws, pc.sub)) || (!!pc.item && catalogItem(pc.item)?.kind.name === "Gravy");
   };
+  /** A slot-day's plate as planned: each dish with whom it is not for and its notes; the plate kept for the meals linked to it.
+   *  Dishes from `from` on are checked for what is not known of them (once each). */
+  const keepPlate = (d: PlanDay, k: string, plate: Plate, from = 0) => {
+    const row = dayOf(d);
+    // A dish for some people only is checked for them.
+    const rowFor = (x: Plate[number]) => (x.for.length ? { ...row, people: x.for } : row);
+    res.plates.set(k, plate.map((x) => ({ name: x.name, new: x.isNew, not_for: notFor(w, rowFor(x), x.name), note: leaveOutNotes(w, rowFor(x), x.name).join("; ") || null,
+      for_people: [...x.for], linked: x.linked })));
+    filled.set(k, plate);
+    // A dish whose fit for someone's rule is not known is planned and asked: once per placement, per person and ingredient.
+    for (const x of plate.slice(from)) { prep(x.name); res.unknowns.push(...ruleUnknowns(w, rowFor(x), x.name)); }
+  };
+  /** Does a dish at a meal hold one of a require's items, by what it contains (its saved contents, else its catalog item's). */
+  const holdsItem = (r: Rule, slot: string, name: string) => { prep(name); return r.items!.some((i) => factsOf(w, slot, name).tags.has(canonTag(i))); };
+  /** A require of a person whose own add-on of that meal comes later that day (H12): met when a dish of that add-on holds its
+   *  item, else fed on the meal's plate once the add-on is filled (or found to have nothing). */
+  type Waiting = { r: Rule; who: string; s: Slot; d: PlanDay; k: string; plate: Plate; part: number; addon: PlanDay };
+  const waiting: Waiting[] = [];
+  const ownHolds = (x: Pick<Waiting, "r" | "who" | "addon">, names: string[]) =>
+    names.some((n) => holdsItem(x.r, x.addon.slot, n) && !excluded(x.addon, [x.who], n).length);
+  const settle = (x: Waiting) => {
+    waiting.splice(waiting.indexOf(x), 1);
+    if (ownHolds(x, (filled.get(slotDayKey(x.addon.date, x.addon.slot)) ?? []).map((y) => y.name))) return;
+    const from = x.plate.length;
+    if (feed(x.s, x.d, x.plate, [x.who], x.part, [], [], null, (n) => holdsItem(x.r, x.s.name, n))) keepPlate(x.d, x.k, x.plate, from);
+    else res.unmet.push(`${label(x.d)}: no dish with ${x.r.items!.join(" or ")} for ${x.who}`);
+  };
   for (const d of todo) {
     const s = shapeOf(d.slot);
     const k = slotDayKey(d.date, s.name);
@@ -969,8 +996,17 @@ export function fillWeek(input: FillInput): FillResult {
       // A require kept: one dish with its item for its person.
       for (const r of rules.filter((x) => x.hard && x.what === "require" && x.items?.length && x.who && atTable.some((p) => same(p, x.who!)) && ruleHolds(x, d.date, s, s.name, weekSlotList))) {
         const who = atTable.find((p) => same(p, r.who!))!;
-        const has = (name: string) => { prep(name); return r.items!.some((i) => factsOf(w, s.name, name).tags.has(canonTag(i))); };
+        const has = (name: string) => holdsItem(r, s.name, name);
         if (plate.some((x) => has(x.name) && !excluded(d, [who], x.name).length)) continue;
+        // Their own add-on of this meal that day (an extras add-on beside it) meets it when a dish of it holds the item (H12):
+        // known now when that day is fixed or already filled, else once it is filled.
+        const addon = ownAddon(w, dayOf(d), who);
+        if (addon) {
+          const ak = slotDayKey(addon.date, addon.slot);
+          const theirs = addon.fixed ? addon.dishes : filled.get(ak)?.map((x) => x.name);
+          if (!theirs) { waiting.push({ r, who, s, d, k, plate, part: t.parts.length, addon }); continue; }
+          if (ownHolds({ r, who, addon }, theirs)) continue;
+        }
         if (!feed(s, d, plate, [who], t.parts.length, [], [], null, has)) res.unmet.push(`${label(d)}: no dish with ${r.items!.join(" or ")} for ${who}`);
       }
       // The guests: a dish of theirs beside the staples.
@@ -988,15 +1024,11 @@ export function fillWeek(input: FillInput): FillResult {
       const ds = dayOf(d).dishes, at = ds.findIndex((n) => dishKey(n) === x.key);
       if (at >= 0) ds.splice(at, 1);
     }
-    const row = dayOf(d);
-    // A dish for some people only is checked for them.
-    const rowFor = (x: Plate[number]) => (x.for.length ? { ...row, people: x.for } : row);
-    res.plates.set(k, plate.map((x) => ({ name: x.name, new: x.isNew, not_for: notFor(w, rowFor(x), x.name), note: leaveOutNotes(w, rowFor(x), x.name).join("; ") || null,
-      for_people: [...x.for], linked: x.linked })));
-    filled.set(k, plate);
-    // A dish whose fit for someone's rule is not known is planned and asked: once per placement, per person and ingredient.
-    for (const x of plate) { prep(x.name); res.unknowns.push(...ruleUnknowns(w, rowFor(x), x.name)); }
+    keepPlate(d, k, plate);
+    for (const x of waiting.filter((y) => slotDayKey(y.addon.date, y.addon.slot) === k)) settle(x);
   }
+  // A require still waiting on an add-on that was never filled (no template that day): its add-on gave nothing.
+  for (const x of [...waiting]) settle(x);
   // A cook's visit over her limit on a day no template kept it (§9.3, OD6): said, never a part dropped. Every distinct dish she
   // COOKS in the visit's meals that day counts (a box's own item, a swap item; not a staple or no-cook item); a linked dish is the other meal's, once.
   for (const v of visits) {

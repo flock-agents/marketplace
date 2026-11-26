@@ -2095,4 +2095,17 @@ describe("a rule read whole, a require that is an add-on dish, a cook from help 
     expect(rulesOf(k)).toMatchObject([{ what: "note", who: "Lalitha", quote: "Millets are good for Lalitha" }]);
   });
 
+  // H12a
+  it("checkRead drops a require that restates an add-on dish", () => {
+    const box = { name: "Rahul's lunch box", kind: "addon", addon_of: "Lunch", usual_people: ["Rahul"], extras: true, quote: "I take 4 boiled eggs with my lunch" };
+    const eggs = { hard: true, what: "require", who: "Rahul", items: ["egg"], slots: ["Lunch"], quote: "I take 4 boiled eggs" };
+    const read = readOf({ slots: [...mains, box] }, { rules: [eggs] }, { library: [["4 boiled eggs", "Rahul's lunch box", "I take 4 boiled eggs with my lunch"]] });
+    const c = checkRead(read, { household: hh, said, sentences });
+    expect(c.read.rules).toEqual([]);
+    expect(c.dropped.some((d) => d.includes("I take 4 boiled eggs") && d.includes("Rahul's lunch box"))).toBe(true);
+    // The same require for someone else, or with no add-on dish in its sentence, stands.
+    expect(checkRead(readOf({ slots: [...mains, box] }, { rules: [{ ...eggs, who: "Kavya" }] }, { library: [["4 boiled eggs", "Rahul's lunch box", "I take 4 boiled eggs with my lunch"]] }),
+      { household: hh, said, sentences }).read.rules).toHaveLength(1);
+    expect(checkRead(readOf({ slots: [...mains, box] }, { rules: [eggs] }, { library: [] }), { household: hh, said, sentences }).read.rules).toHaveLength(1);
+  });
 });

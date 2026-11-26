@@ -1043,3 +1043,26 @@ describe("per-person versions of a shared meal (§5.4) and the cook's visit (§9
     });
   });
 });
+
+describe("a require met by the person's own add-on of that meal (H12)", () => {
+  // A made-up family (F7): Ravi takes his own bowl beside the home lunch. The bowl's name says nothing of egg: it is known by
+  // what it contains, never by its words.
+  const lunch = slot("Lunch", { templates: [T({ kind: "Rice" }, { kind: "Dal" })] });
+  const bowl = (contains: string[]) => [dish("Ravi's protein bowl", "Ravi's lunch", null, { contains })];
+  const own = slot("Ravi's lunch", { kind: "addon", addon_of: "Lunch", usual_people: ["Ravi"], extras: true, order: 60, templates: [T({ items: ["Ravi's protein bowl"] })] });
+  const lib = [dish("Rice", "Lunch", "Rice"), dish("Dal tadka", "Lunch", "Dal"), dish("Moong dal", "Lunch", "Dal"), dish("Egg curry", "Lunch", "Gravy", { contains: ["egg"] })];
+  const days = WEEK.flatMap((d) => [day(d, "Lunch", ["Asha", "Ravi"]), day(d, "Ravi's lunch", ["Ravi"])]);
+  const eggs = rule({ what: "require", who: "Ravi", items: ["egg"], slots: ["Lunch"], quote: "Ravi has eggs at lunch" });
+  it("his add-on has a dish with egg: no egg dish is added to the shared lunch, and nothing is unmet", () => {
+    const r = run({ slots: [lunch, own], library: [...lib, ...bowl(["egg"])], days, newCap: 0, rules: [eggs] });
+    for (const d of WEEK) {
+      expect(r.at(d, "Ravi's lunch")).toEqual(["Ravi's protein bowl"]);
+      expect(r.at(d, "Lunch")).not.toContain("Egg curry");
+    }
+    expect(r.unmet.filter((u) => u.includes("no dish with egg"))).toEqual([]);
+  });
+  it("his add-on has no dish with egg: the shared lunch gives him one", () => {
+    const r = run({ slots: [lunch, own], library: [...lib, ...bowl([])], days, newCap: 0, rules: [eggs] });
+    for (const d of WEEK) expect(r.at(d, "Lunch")).toContain("Egg curry");
+  });
+});

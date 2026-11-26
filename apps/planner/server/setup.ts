@@ -791,6 +791,23 @@ export function checkRead(read: SetupRead, ctx: { household: Household; said: st
     }
   }
 
+  // H12: a require of one person at a meal, said in the very sentence of a dish of their own extras add-on of that meal ("I take
+  // 4 boiled eggs with my lunch"), is that dish told again, no rule: the add-on already gives it. Structure only: whose add-on,
+  // of which meal, and whether the rule's words lie in that dish's sentence.
+  const lines = ctx.sentences ?? said;
+  const sentenceOf = (quote: string) => { const q = plainWords(quote); return q ? [q, ...lines.filter((l) => saidByFamily(quote, [l]))] : []; };
+  const addonDish = (r: ReadRule, meal: string): ReadDish | undefined => {
+    const mine = slots.filter((x) => x.kind === "addon" && x.extras && x.addon_of === meal && x.usual_people.includes(r.who!)).map((x) => x.name);
+    return library.find((d) => mine.includes(d.slot) && saidByFamily(r.quote, sentenceOf(d.quote)));
+  };
+  for (const r of [...rules]) {
+    if (r.what !== "require" || !r.who || !r.slots?.length) continue;
+    const dishes = r.slots.map((m) => addonDish(r, m));
+    if (dishes.some((d) => !d)) continue;
+    dropped.push(`require ${r.items?.join(", ")} for ${r.who} ("${r.quote}"): ${dishes.map((d) => `${d!.name} of ${d!.slot}`).join(", ")} told again, no rule`);
+    rules.splice(rules.indexOf(r), 1);
+  }
+
   // The cook, who of the family cooks, lunch.
   const cook = read.cook ? { ...read.cook, visits: read.cook.visits.flatMap((v): Visit[] => {
     const meals = v.meals ? uniq(v.meals.map(slotOf).filter((m): m is string => !!m)) : [];
