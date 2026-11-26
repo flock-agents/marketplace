@@ -48,10 +48,10 @@ aka idly, iddli, idlis; south; complete; breakfast, dinner, tiffin
 - Sambar idli (sambar dip idli) [rice, onion/garlic, dairy, root veg]: idli rice, urad dal, toor dal; *without:* onion, shallots, ghee
 
 ### Dosa
-aka dosai, dose, dosey, pesarattu, pesara dosa, moong dal dosa, green gram dosa, adai, adai dosai, adai dosa, uttapam, uthappam, oothappam, uttappa; south; complete; breakfast, dinner, tiffin; veg and non-veg
+aka dosai, dosey; south; complete; breakfast, dinner, tiffin; veg and non-veg
 
 **Suggested:**
-- Plain dosa (sada dosa, dosai) [rice, dairy]: idli rice, urad dal; *without:* ghee
+- Plain dosa (sada dosa, dosai, dose) [rice, dairy]: idli rice, urad dal; *without:* ghee
 - Masala dosa [rice, root veg, onion/garlic, dairy]: idli rice, urad dal, potato; *without:* onion, ghee
 - Mysore masala dosa [rice, root veg, onion/garlic, dairy; karnataka]: idli rice, urad dal, potato, red chilli; *without:* onion, garlic, ghee, butter
 - Ghee roast dosa (ghee roast, nei roast) [rice, dairy]: idli rice, urad dal, ghee
@@ -61,9 +61,9 @@ aka dosai, dose, dosey, pesarattu, pesara dosa, moong dal dosa, green gram dosa,
 - Ragi dosa [rice, onion/garlic, root veg]: ragi flour, idli rice, urad dal; *without:* onion
 - Wheat dosa (godhuma dosa, atta dosa) [wheat, onion/garlic, root veg]: atta; *without:* onion, green chilli
 - Egg dosa (muttai dosai) [egg; rice, egg, onion/garlic, root veg]: idli rice, urad dal, egg; *without:* onion
-- Pesarattu (pesara dosa) [rice, onion/garlic, root veg; andhra]: whole moong, rice; *without:* onion, ginger, green chilli
+- Pesarattu (pesara dosa, moong dal dosa, green gram dosa) [rice, onion/garlic, root veg; andhra]: whole moong, rice; *without:* onion, ginger, green chilli
 - Upma pesarattu (MLA pesarattu) [rice, onion/garlic, wheat, nuts, root veg; andhra]: whole moong, rice, sooji; *without:* onion, ginger, cashews
-- Adai (adai dosai) [rice, onion/garlic, root veg; tamil/kerala]: rice, toor dal, chana dal, urad dal; *without:* onion, shallots
+- Adai (adai dosai, adai dosa) [rice, onion/garlic, root veg; tamil/kerala]: rice, toor dal, chana dal, urad dal; *without:* onion, shallots
 - Vegetable adai [rice, onion/garlic, root veg; tamil/kerala]: rice, toor dal, chana dal; *without:* carrot, onion, cabbage
 - Murungai keerai adai (drumstick leaf adai) [rice, onion/garlic, root veg; tamil/kerala]: rice, toor dal, chana dal, drumstick leaves; *without:* onion
 - Onion uttapam (vengaya uthappam) [rice, onion/garlic, dairy, root veg]: idli rice, urad dal, onion; *without:* ghee
@@ -78,7 +78,7 @@ aka dosai, dose, dosey, pesarattu, pesara dosa, moong dal dosa, green gram dosa,
 **Recognised only:**
 - Set dosa (sponge dosa) [rice, dairy; karnataka]: idli rice, urad dal, poha; *without:* butter
 - Kal dosai (kal dosa) [rice; tamil]: idli rice, urad dal
-- Plain uttapam [rice, dairy]: idli rice, urad dal; *without:* ghee
+- Plain uttapam (uttapam, uthappam, oothappam, uttappa) [rice, dairy]: idli rice, urad dal; *without:* ghee
 
 ### Upma
 aka uppittu, uppumavu, kharabath, upeet, uppuma, khara bath; north, south, west; complete; breakfast, dinner, tiffin; all: root veg
@@ -138,7 +138,7 @@ aka parantha, parotha, prantha, porota; north, punjab, west; complete; breakfast
 - Lachha paratha (tikona paratha): atta, ghee
 
 ### Thepla
-aka theplu, methi na thepla; gujarat; complete; breakfast, dinner, tiffin, snack; all: dairy, wheat
+aka theplu; gujarat; complete; breakfast, dinner, tiffin, snack; all: dairy, wheat
 
 **Suggested:**
 - Methi thepla (methi na thepla): atta, methi; *without:* curd, ghee
@@ -254,14 +254,14 @@ aka kochuri, kachauri; north, rajasthan, east; snack; breakfast, snack; all: whe
 - Hing kochuri [bengal]: maida, urad dal
 
 ### Porridge
-aka oats, oatmeal, dalia, daliya, ragi malt, kanji; north, west, south, continental; complete; breakfast
+north, west, south, continental; complete; breakfast
 
 **Suggested:**
-- Oats porridge (oatmeal) [dairy, sugar; continental]: oats, milk; *without:* sugar
+- Oats porridge (oatmeal, oats) [dairy, sugar; continental]: oats, milk; *without:* sugar
 - Overnight oats [dairy, sugar, nuts; continental]: oats, milk; *without:* sugar, honey, almonds
-- Sweet milk dalia (meetha dalia, dalia porridge) [wheat, dairy, sugar, nuts; north/west]: broken wheat, milk, sugar; *without:* almonds, cashews
+- Sweet milk dalia (meetha dalia, dalia porridge, dalia, daliya) [wheat, dairy, sugar, nuts; north/west]: broken wheat, milk, sugar; *without:* almonds, cashews
 - Ragi malt (ragi porridge, ragi java, ragi kanji) [dairy, sugar; south]: ragi flour, milk; *without:* jaggery
-- Rice kanji (ganji, rice porridge, arisi kanji) [rice]: rice
+- Rice kanji (ganji, rice porridge, arisi kanji, kanji) [rice]: rice
 
 **Suggested in its region:**
 - Lapsi (fada ni lapsi) [wheat, dairy, sugar, nuts; gujarat]: broken wheat, ghee, jaggery; *without:* almonds
@@ -802,7 +802,7 @@ aka avial, aviyal, olan, erissery, kalan, theeyal, stew, ishtu; kerala
 Khichdi, Biryani and Flavoured rice are each a whole plate on their own (with papad, raita or pickle at most); a khichdi night rotates only khichdis, a biryani lunch only biryanis, and a plate may hold two different flavoured rices. Pulao is not a whole plate: it stands where plain rice stands and needs a dal or curry beside it.
 
 ### Pulao
-aka pulav, pilaf, ghee rice, neychoru; north, south, west, east, kashmir; main; lunch, dinner, tiffin; veg and non-veg; all: rice
+aka pulav, pilaf; north, south, west, east, kashmir; main; lunch, dinner, tiffin; veg and non-veg; all: rice
 
 **Suggested:**
 - Vegetable pulao (veg pulao) [dairy, onion/garlic, root veg]: basmati rice, mixed vegetables; *without:* carrot, potato, onion, ghee
@@ -838,13 +838,13 @@ aka biriyani, dum biryani; north, south, west, east; complete; lunch, dinner; ve
 - Ambur biryani (dindigul biryani) [non-veg; chicken, mutton, dairy; tamil]: rice, chicken, mutton; *without:* curd, onion
 
 ### Khichdi
-aka khichri, khichuri, khichadi, pongal, ven pongal, khara pongal, huggi, pongali; north, south, west, east; complete; breakfast, lunch, dinner; all: dairy
+aka khichri, khichadi, pongal, ven pongal, khara pongal, huggi, pongali; north, south, west, east; complete; breakfast, lunch, dinner; all: dairy
 
 #### Khichdi → Khichdi
 aka khichri, khichuri, khichadi; north, west, east; suggested at lunch, dinner
 
 **Suggested:**
-- Moong dal khichdi [rice]: rice, moong dal; *without:* ghee
+- Moong dal khichdi (khichuri) [rice]: rice, moong dal; *without:* ghee
 - Masala khichdi [rice, onion/garlic, root veg]: rice, moong dal, mixed vegetables; *without:* potato, onion, ghee
 - Vegetable khichdi [rice, root veg]: rice, moong dal, mixed vegetables; *without:* potato, carrot, ghee
 - Bajra khichdi [rajasthan]: bajra, moong dal; *without:* ghee
@@ -1361,10 +1361,10 @@ aka sundal; tamil; snack; tiffin, snack; all: coconut
 ## Sweets
 
 ### Kheer
-aka payasam, payesh, payas, kheeri, pradhaman; north, south, west, east; sweet; lunch, dinner, snack; all: dairy, nuts, sugar
+aka kheeri; north, south, west, east; sweet; lunch, dinner, snack; all: dairy, nuts, sugar
 
 **Suggested:**
-- Rice kheer (chawal ki kheer, paal payasam, payesh) [rice]: rice, milk, sugar; *without:* cashews, almonds, raisins
+- Rice kheer (chawal ki kheer, paal payasam, payesh, payasam, payas) [rice]: rice, milk, sugar; *without:* cashews, almonds, raisins
 - Semiya payasam (seviyan kheer, vermicelli kheer) [wheat]: vermicelli, milk, sugar; *without:* cashews, raisins, ghee
 - Sabudana kheer (javvarisi payasam): sabudana, milk, sugar; *without:* cashews
 - Makhana kheer: makhana, milk, sugar; *without:* almonds
@@ -1373,7 +1373,7 @@ aka payasam, payesh, payas, kheeri, pradhaman; north, south, west, east; sweet; 
 
 **Suggested in its region:**
 - Phirni [rice; north]: rice, milk, sugar; *without:* almonds, pistachios
-- Ada pradhaman [rice, coconut; kerala]: rice flour, coconut milk, jaggery; *without:* cashews, ghee
+- Ada pradhaman (pradhaman) [rice, coconut; kerala]: rice flour, coconut milk, jaggery; *without:* cashews, ghee
 - Sakkarai pongal (sweet pongal, chakkara pongali) [rice; south]: rice, moong dal, jaggery, ghee; *without:* cashews
 
 ### Halwa

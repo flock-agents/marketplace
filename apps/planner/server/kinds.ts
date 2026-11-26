@@ -97,6 +97,19 @@ export function bareDish(kind: string, sub?: string | null): string | null {
   return sb?.bare ?? k.bare ?? null;
 }
 
+/** Whether a family's words for a kind or sub-kind may name its bare dish (H7): the kind's or a sub-kind's own name, or another
+ *  name of it that no item's names hold. One an item holds names that family of items ("saaru": Udupi saaru is one), never the
+ *  bare dish. */
+export function bareWord(kind: string, words: string): boolean {
+  const k = catalogKind(kind);
+  if (!k) return false;
+  const fs = forms(words);
+  const own = [k.name, ...k.subs.flatMap((s) => [...s.name.split("/"), s.name])].map(norm);
+  if (fs.some((f) => own.includes(f))) return true;
+  const holds = (n: string) => fs.some((f) => ` ${norm(n)} `.includes(` ${f} `));
+  return !k.items.some((it) => [it.name, ...(it.aka ?? [])].some(holds));
+}
+
 /** The meals a NEW item of this kind, sub-kind or item may be suggested at (decided 18). They never limit a family's own dish. */
 export function suggestMeals(m: { kind: string; sub?: string | null; item?: string | null }): string[] {
   const k = catalogKind(m.kind);

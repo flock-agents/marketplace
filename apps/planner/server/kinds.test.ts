@@ -21,6 +21,27 @@ describe("the catalog", () => {
   });
 });
 
+// H7: a kind alias that is a word of an item's names names that family of items ("uthappam": the uttapams), never the kind's
+// bare dish ("dosa" is Plain dosa). Where a kind has a bare dish, its own other names are words of that dish or of no item.
+describe("the catalog's kind aliases (H7)", () => {
+  const words = (s: string) => ` ${s.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().split(" ").map((w) => (w.length > 3 && w.endsWith("s") ? w.slice(0, -1) : w)).join(" ")} `;
+  const holds = (names: string[], a: string) => names.some((n) => words(n).includes(words(a)));
+  it("no kind alias names a family of its items", () => {
+    const offenders: string[] = [];
+    for (const k of CATALOG.kinds) {
+      if (!k.bare) continue;
+      const bares = new Set([k.bare, ...k.subs.map((s) => s.bare).filter((x): x is string => !!x)]);
+      const namesOf = (it: (typeof k.items)[number]) => [it.name, ...(it.aka ?? [])];
+      for (const a of k.aka) {
+        if (k.items.some((it) => bares.has(it.name) && holds(namesOf(it), a))) continue;
+        const fam = k.items.filter((it) => !bares.has(it.name) && holds(namesOf(it), a));
+        if (fam.length) offenders.push(`${k.name}: "${a}" names ${fam.map((it) => it.name).join(", ")}`);
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+});
+
 describe("matchDish", () => {
   it("an item first, by its name or other names, as said or as a singular", () => {
     expect(matchDish("Aloo gobi")).toEqual({ kind: "Sabzi", sub: "Sabzi", item: "Aloo gobi", by: "item" });
@@ -37,7 +58,9 @@ describe("matchDish", () => {
   });
   it("then a kind", () => {
     expect(matchDish("Dosa")).toEqual({ kind: "Dosa", sub: null, item: null, by: "kind" });
-    expect(matchDish("uthappam")).toMatchObject({ kind: "Dosa", by: "kind" });
+    expect(matchDish("dosey")).toMatchObject({ kind: "Dosa", by: "kind" });
+    // A dish family's name is its item's (H7): uthappam is an uttapam, never the Dosa kind's word.
+    expect(matchDish("uthappam")).toMatchObject({ kind: "Dosa", item: "Plain uttapam", by: "item" });
   });
   it("leaves to the model words that name two places, and words it does not know", () => {
     expect(matchDish("shaak")).toBeNull();          // a dry and a gravy vegetable

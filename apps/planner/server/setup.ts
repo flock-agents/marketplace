@@ -21,7 +21,7 @@ import { dishKey } from "./dishText";
 import { cookVisits, daysSaid, getHouse, houseView, isObject, LONG_DAY, refuse, writeRoutes, type Db, type Emit } from "./family";
 import { addRule, commit, deleteSeedSlotDays, getLibraryDish, listLibrary, listRules, listSlots, removeLibrary, removeRule, renameDish, saveSlotDay, seedSlotDays,
   upsertLibrary, upsertSlot, type Change, type LibraryDish, type Rule, type RuleInput, type Slot } from "./slotStore";
-import { bareDish, CATALOG, catalogItem, catalogKind, catalogSub, checkMealShape, matchDish, norm, plannerTags, regionalDish, regionalIn, regionalMeaning, regionalWordOf, suggestMeals, type CatalogKind, type RegionalMeaning, type RegionalWord, type MealTemplate,
+import { bareDish, bareWord, CATALOG, catalogItem, catalogKind, catalogSub, checkMealShape, matchDish, norm, plannerTags, regionalDish, regionalIn, regionalMeaning, regionalWordOf, suggestMeals, type CatalogKind, type RegionalMeaning, type RegionalWord, type MealTemplate,
   isKindPart, isLinkedPart, type ItemsPart, type KindPart, type LinkedPart } from "./kinds";
 import { resolveGives, targetsOf, targetText, type RuleTarget } from "./targets";
 import type { ModelCall, ModelResult } from "./model";
@@ -1569,7 +1569,8 @@ export function codePlace(name: string, word = name.trim().toLowerCase(), region
   const k = catalogKind(whole.kind)!;
   // A kind or sub-kind word said bare ("dosa", "rasam") names its decided dish (§5.1, the catalog's bare list): a dish; said
   // as any of it ("some dal", "any dosa") or with no decided dish ("upma", "sabzi") it is a category.
-  const bare = whole.by !== "item" && !/^(?:some|any|all|different|a different) /.test(plainWords(word)) && !!bareDish(k.name, whole.sub);
+  // Only the kind's or sub-kind's own name, or another name of it no item holds, is bare (H7: "saaru" holds Udupi saaru: any rasam).
+  const bare = whole.by !== "item" && !/^(?:some|any|all|different|a different) /.test(plainWords(word)) && !!bareDish(k.name, whole.sub) && bareWord(k.name, name);
   return { kind: k.name, sub: whole.sub ?? soleSub(k), item: whole.item, own: false, named: whole.by === "item" || bare ? "dish" : "category", word };
 }
 
@@ -1578,7 +1579,7 @@ export function codePlace(name: string, word = name.trim().toLowerCase(), region
 export function bareOf(name: string, p: Place | null): string | null {
   if (!p?.kind || p.own || p.parts || p.item || p.named !== "dish" || isStaple(p.kind)) return null;
   const m = matchDish(name);
-  if (!m || m.by === "item" || norm(m.kind) !== norm(p.kind)) return null;
+  if (!m || m.by === "item" || norm(m.kind) !== norm(p.kind) || !bareWord(p.kind, name)) return null;
   return bareDish(p.kind, m.sub ?? p.sub);
 }
 

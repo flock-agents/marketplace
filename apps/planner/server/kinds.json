@@ -371,19 +371,7 @@
       "name": "Dosa",
       "aka": [
         "dosai",
-        "dose",
-        "dosey",
-        "pesarattu",
-        "pesara dosa",
-        "moong dal dosa",
-        "green gram dosa",
-        "adai",
-        "adai dosai",
-        "adai dosa",
-        "uttapam",
-        "uthappam",
-        "oothappam",
-        "uttappa"
+        "dosey"
       ],
       "cuisines": [
         "south"
@@ -416,7 +404,8 @@
           "name": "Plain dosa",
           "aka": [
             "sada dosa",
-            "dosai"
+            "dosai",
+            "dose"
           ],
           "contains": [
             "white_rice",
@@ -884,7 +873,9 @@
         {
           "name": "Pesarattu",
           "aka": [
-            "pesara dosa"
+            "pesara dosa",
+            "moong dal dosa",
+            "green gram dosa"
           ],
           "cuisines": [
             "andhra"
@@ -975,7 +966,8 @@
         {
           "name": "Adai",
           "aka": [
-            "adai dosai"
+            "adai dosai",
+            "adai dosa"
           ],
           "cuisines": [
             "tamil",
@@ -1221,6 +1213,12 @@
         },
         {
           "name": "Plain uttapam",
+          "aka": [
+            "uttapam",
+            "uthappam",
+            "oothappam",
+            "uttappa"
+          ],
           "contains": [
             "white_rice",
             "dairy"
@@ -2751,8 +2749,7 @@
     {
       "name": "Thepla",
       "aka": [
-        "theplu",
-        "methi na thepla"
+        "theplu"
       ],
       "cuisines": [
         "gujarat"
@@ -4728,14 +4725,7 @@
     },
     {
       "name": "Porridge",
-      "aka": [
-        "oats",
-        "oatmeal",
-        "dalia",
-        "daliya",
-        "ragi malt",
-        "kanji"
-      ],
+      "aka": [],
       "cuisines": [
         "north",
         "west",
@@ -4768,7 +4758,8 @@
         {
           "name": "Oats porridge",
           "aka": [
-            "oatmeal"
+            "oatmeal",
+            "oats"
           ],
           "cuisines": [
             "continental"
@@ -4839,7 +4830,9 @@
           "name": "Sweet milk dalia",
           "aka": [
             "meetha dalia",
-            "dalia porridge"
+            "dalia porridge",
+            "dalia",
+            "daliya"
           ],
           "cuisines": [
             "north",
@@ -4961,7 +4954,8 @@
           "aka": [
             "ganji",
             "rice porridge",
-            "arisi kanji"
+            "arisi kanji",
+            "kanji"
           ],
           "contains": [
             "white_rice"
@@ -14913,9 +14907,7 @@
       "name": "Pulao",
       "aka": [
         "pulav",
-        "pilaf",
-        "ghee rice",
-        "neychoru"
+        "pilaf"
       ],
       "cuisines": [
         "north",
@@ -15914,7 +15906,6 @@
       "name": "Khichdi",
       "aka": [
         "khichri",
-        "khichuri",
         "khichadi",
         "pongal",
         "ven pongal",
@@ -15976,6 +15967,9 @@
       "items": [
         {
           "name": "Moong dal khichdi",
+          "aka": [
+            "khichuri"
+          ],
           "contains": [
             "white_rice",
             "dairy"
@@ -25327,11 +25321,7 @@
     {
       "name": "Kheer",
       "aka": [
-        "payasam",
-        "payesh",
-        "payas",
-        "kheeri",
-        "pradhaman"
+        "kheeri"
       ],
       "cuisines": [
         "north",
@@ -25371,7 +25361,9 @@
           "aka": [
             "chawal ki kheer",
             "paal payasam",
-            "payesh"
+            "payesh",
+            "payasam",
+            "payas"
           ],
           "contains": [
             "white_rice",
@@ -25602,6 +25594,9 @@
         },
         {
           "name": "Ada pradhaman",
+          "aka": [
+            "pradhaman"
+          ],
           "cuisines": [
             "kerala"
           ],

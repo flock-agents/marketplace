@@ -1135,6 +1135,35 @@ function subOf(kind, name, cuis) {
   return kind;
 }
 
+// ---------------- H7 (lead, OD-C, 26 Nov): a dish family's name is its item's other name ----------------
+// A kind's other name that names some of its items ("uthappam": the uttapams; "oats": oats porridge) is said for that item, never
+// for the kind's bare dish ("dosa" is Plain dosa, so "uthappam" was saved as Plain dosa). Each such name moves from the kind to
+// the item it names; a spelling an item's other name also holds ("dose", "khichuri") moves to the bare dish itself.
+function toItem(kindName, itemName, words) {
+  const k = kinds[kindIdx(kindName)], ws = semi(words), aka = semi(k.aka);
+  const i = k.items.findIndex((it) => it.split("|")[0].trim() === itemName);
+  if (i < 0) throw new Error(`no item ${itemName} in ${kindName}`);
+  for (const w of ws) if (!aka.includes(w)) throw new Error(`${w} is no other name of ${kindName}`);
+  k.aka = aka.filter((a) => !ws.includes(a)).join("; ");
+  const p = k.items[i].split("|"); while (p.length < 4) p.push("");
+  const own = semi(p[1]);
+  p[1] = ` ${[...own, ...ws.filter((w) => !own.includes(w) && w !== itemName.toLowerCase())].join("; ")} `;
+  k.items[i] = p.join("|");
+}
+toItem("Dosa", "Plain dosa", "dose");
+toItem("Dosa", "Plain uttapam", "uttapam; uthappam; oothappam; uttappa");
+toItem("Dosa", "Pesarattu", "pesarattu; pesara dosa; moong dal dosa; green gram dosa");
+toItem("Dosa", "Adai", "adai; adai dosai; adai dosa");
+toItem("Thepla", "Methi thepla", "methi na thepla");
+toItem("Porridge", "Oats porridge", "oats; oatmeal");
+toItem("Porridge", "Sweet milk dalia", "dalia; daliya");
+toItem("Porridge", "Ragi malt", "ragi malt");
+toItem("Porridge", "Rice kanji", "kanji");
+toItem("Pulao", "Ghee rice", "ghee rice; neychoru");
+toItem("Kheer", "Rice kheer", "payasam; payesh; payas");
+toItem("Kheer", "Ada pradhaman", "pradhaman");
+toItem("Khichdi", "Moong dal khichdi", "khichuri");
+
 // ---------------- OWNER ROUND 7 (2026-11-25): meals = where NEW items may be suggested ----------------
 // A kind's, sub-kind's or item's meals say where the planner may suggest a new item of it. They never limit matching:
 // a family's own dish at a meal outside its meals is planned as that fixed item (a template part of items, nothing new

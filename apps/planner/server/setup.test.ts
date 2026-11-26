@@ -3,7 +3,7 @@
 // reads back from the rows, and applies a correction as a diff.
 import { describe, it, expect } from "bun:test";
 import { boot } from "./testkit";
-import { saysNoEggs, buildMeal, codePlace, nearestDish, cuisinesOf, regionalFor, kitchenLine, needsNamed, placeOf, wordOf, KINDS_SYSTEM, type MealDish, type Place } from "./setup";
+import { saysNoEggs, buildMeal, bareOf, codePlace, nearestDish, cuisinesOf, regionalFor, kitchenLine, needsNamed, placeOf, wordOf, KINDS_SYSTEM, type MealDish, type Place } from "./setup";
 import { keptOften, swapItems } from "./setup";
 import { dishKey } from "./dishText";
 import { checkRead, diffSetup, familyLines, familySentences, frequencyOf, householdOf, lunchLine, personOf, plainWords, quoteHasDayOrCount, readOf, resolveSlot,
@@ -748,6 +748,25 @@ describe("the kinds model: each dish placed, each meal's templates, the cuisines
     expect(needsNamed(codePlace("Sambar")!, "breakfast")).toBe(false);   // sambar keeps breakfast (decided 18)
     expect(needsNamed(codePlace("Rice")!, "breakfast")).toBe(false);     // a staple is just their rice
     expect(needsNamed(codePlace("Idli")!, "lunch")).toBe(false);         // an item names one dish
+  });
+
+  // H7: a dish family's name is an item's other name, never the kind's bare word. A bare word is the kind's or sub-kind's own
+  // name, or another name of it that no item's names hold.
+  it("codePlace \"uthappam\" is no bare Plain dosa (H7)", () => {
+    expect(bareOf("Uthappam", codePlace("Uthappam"))).toBeNull();
+    expect(codePlace("Uthappam")).toMatchObject({ kind: "Dosa", item: "Plain uttapam", named: "dish" });
+    expect(codePlace("Oats")).toMatchObject({ kind: "Porridge", item: "Oats porridge", named: "dish" });   // never Rice kanji
+    expect(bareOf("Oats", codePlace("Oats"))).toBeNull();
+  });
+  it("a bare word is a kind's or sub-kind's own name, or another name of it no item holds; one an item holds is a category (H7)", () => {
+    // "saaru" is the Rasam sub-kind's other name, and a word of Udupi saaru: any rasam, never Tomato rasam.
+    expect(codePlace("Saaru")).toMatchObject({ kind: "Rice curry", sub: "Rasam", item: null, named: "category" });
+    expect(bareOf("Saaru", { ...codePlace("Saaru")!, named: "dish" })).toBeNull();
+    // Their own names and spellings no item holds stay the decided dish (§5.1).
+    expect(bareOf("Rasam", codePlace("Rasam"))).toBe("Tomato rasam");
+    expect(bareOf("Dosa", codePlace("Dosa"))).toBe("Plain dosa");
+    expect(bareOf("Parantha", codePlace("Parantha"))).toBe("Plain paratha");
+    expect(bareOf("Dosey", codePlace("Dosey"))).toBe("Plain dosa");
   });
 
   it("the kinds read's answer is checked against the catalog: an unknown kind is the family's own, an unknown sub-kind none", () => {
@@ -2237,5 +2256,31 @@ describe("a rule read whole, a require that is an add-on dish, a cook from help 
     const k = await boot({ model: f.model });
     expect((await k.op("apply_setup", { household: { ...R_HOUSEHOLD, "household.help": help }, transcript: R_TRANSCRIPT })).ok).toBe(true);
     expect(savedOf(k.kit.db).cook).toMatchObject({ name: null, days: MON_SAT, visits: [{ meals: ["Breakfast", "Lunch"] }, { meals: ["Dinner"] }] });
+  });
+});
+
+// H7, end to end with a fake model: a dish family's name is its item's, never the kind's bare dish. A made-up family.
+describe("apply_setup: dish families (H7)", () => {
+  const FAMILY = { "household.people": [{ name: "Sameer", group: "adult" }, { name: "Tanvi", group: "adult" }], "household.speaker": "Sameer" };
+  const home = { slots: [{ name: "Breakfast", kind: "main" }, { name: "Lunch", kind: "main" }, { name: "Dinner", kind: "main" }] };
+  const setup = (lines: string[], library: string[][], seed: string[][], often: string[][], more: Partial<Record<Part, unknown>> = {}) => {
+    const tr = lines.flatMap((l, i) => [`Q: Question ${i + 1}?`, `A: ${l}`]);
+    const f = fake({ home, rules: { rules: [] }, dishes: { library, seed }, often: { often }, kinds: { dishes: [] }, contains: containsOf(), lint: { dishes: [] }, ...more });
+    return { tr, f };
+  };
+  const row = (k: Awaited<ReturnType<typeof boot>>, name: string, slot: string) => k.rows("library").find((d) => d.name === name && d.slot === slot);
+
+  it("dosa or phulka with kurma, uthappam sometimes: dinner keeps Plain dosa and an Uthappam row, sometimes (H7)", async () => {
+    const q = "Dinner is dosa or phulka with kurma, and uthappam sometimes.";
+    const { tr, f } = setup([q],
+      [["Dosa", "Dinner", q], ["Phulka", "Dinner", q], ["Kurma", "Dinner", q], ["Uthappam", "Dinner", q]],
+      [["Dinner", "Dosa, Kurma", q], ["Dinner", "Phulka, Kurma", q]],
+      [["Uthappam", "Dinner", q, "sometimes", "sometimes", ""]]);
+    const k = await boot({ model: f.model });
+    expect((await k.op("apply_setup", { household: FAMILY, transcript: tr })).ok).toBe(true);
+    expect(row(k, "Plain dosa", "Dinner")).toBeDefined();
+    const u = row(k, "Uthappam", "Dinner")!;
+    expect(u).toBeDefined();
+    expect([u.frequency, u.kind, u.catalog_item]).toEqual(["sometimes", "Dosa", "Plain uttapam"]);
   });
 });

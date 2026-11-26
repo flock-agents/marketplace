@@ -202,11 +202,24 @@ describe("scorePlan", () => {
     const freq = (p: PlanOut) => scorePlan(h, p, loaded()).notes.filter((n) => n.startsWith("dish_frequency: Uthappam"));
     const p = goodWeek();
     for (const d of ["Mon", "Tue", "Wed", "Thu"] as Weekday[]) at(p, d, "Breakfast").dishes = [{ name: "Plain dosa" }];
-    for (const d of ["Mon", "Wed"] as Weekday[]) at(p, d, "Dinner").dishes = [{ name: "Rava uttapam" }];
+    for (const d of ["Mon", "Wed"] as Weekday[]) at(p, d, "Dinner").dishes = [{ name: "Uthappam" }];
     expect(freq(p)).toEqual([]);
-    // A meal with no word of theirs for it counts: two at dinner and two at lunch are four.
-    for (const d of ["Tue", "Fri"] as Weekday[]) at(p, d, "Lunch").dishes = [{ name: "Rice" }, { name: "Plain dosa" }];
+    // A meal with no word of theirs for it counts: two at dinner and two at lunch are four. (H7: their uthappam, never a dosa.)
+    for (const d of ["Tue", "Fri"] as Weekday[]) at(p, d, "Lunch").dishes = [{ name: "Rice" }, { name: "Uthappam" }];
     expect(freq(p)).toHaveLength(1);
+  });
+
+  // H7 (B6): "uthappam" names the uttapams (an item's other name in the catalog), never the Dosa kind: dosas are no uthappam.
+  test("uthappam sometimes at dinner: a week of dosas and no uttapam passes dish_frequency (H7)", () => {
+    const h = { ...FIX, truth: { ...FIX.truth, library: [...FIX.truth.library, { name: "Uthappam", slot: "Dinner", frequency: "sometimes" as const },
+      { name: "Plain dosa", slot: "Dinner" }, { name: "Plain dosa", slot: "Breakfast" }] } };
+    const p = goodWeek();
+    for (const d of ["Mon", "Thu"] as Weekday[]) at(p, d, "Dinner").dishes = [{ name: "Plain dosa" }];
+    at(p, "Tue", "Breakfast").dishes = [{ name: "Onion dosa" }];
+    // Four more dosa days at lunch, a meal they named no dosa at: still no uthappam.
+    for (const d of ["Mon", "Tue", "Wed", "Thu"] as Weekday[]) at(p, d, "Lunch").dishes = [{ name: "Rice" }, { name: "Plain dosa" }];
+    const notes = scorePlan(h, p, loaded()).notes.filter((n) => n.startsWith("dish_frequency: Uthappam"));
+    expect(notes).toEqual([]);
   });
 
   // ── Rotation, owner 25 Nov (kinds model rule 3). Expectations written from the rules before the scorer. ──
