@@ -419,7 +419,8 @@ describe("apply_setup v2: the model reads, code checks and writes", () => {
       const all = containsOf()(req) as Record<string, unknown>;
       delete all["Dish 45"];
       return all;
-    } });
+    // The kinds read places every dish as the family's own (one it left out would be asked, not saved: F4).
+    }, kinds: (req: ModelRequest) => ({ dishes: JSON.parse(req.user).dishes.map((d: any) => ({ name: d.name, meal: d.meal, own: true, named: "dish" })) }) });
     const k = await boot({ model: f.model });
     const r = await k.op("apply_setup", { household: HOUSEHOLD, transcript: TRANSCRIPT });
     expect(f.of("contains").map((c) => JSON.parse(c.user).dishes.length).sort((a, b) => b - a)).toEqual([CONTAINS_BATCH, 5]);
@@ -1198,6 +1199,34 @@ describe("setup reads into the one meaning model (§5, §6.4)", () => {
     expect(names("Lunch")).not.toContain("Sambar");
     expect(k.rows("library").some((d) => d.name === "Dry sabji")).toBe(false);
     expect(slot("Lunch").kinds).toBeUndefined();
+  });
+
+  // F4 (D3e): a kinds answer that leaves a dish out is asked again, once, for only what it left out; a word still unplaced is
+  // asked of the family in the read-back, never a dish on a plate (§5.1: no category word as a dish).
+  const noDry = { dishes: W_KINDS.dishes.filter((d) => d.name !== "Dry sabji") };
+  const dry = { name: "Dry sabji", meal: "lunch", kind: "Sabzi", sub: "Sabzi", named: "category" };
+  const itemsOf = (s: any) => s.templates.flatMap((t: any) => t.parts).filter((p: any) => "items" in p).flatMap((p: any) => p.items);
+  it("a kinds answer that leaves a dish out is asked again for it alone; placed then, it is its kind's part (F4)", async () => {
+    const { f, slot, k, r } = await walk({ kinds: (_req: ModelRequest, n: number) => (n === 1 ? noDry : { dishes: [dry] }) });
+    const asked = f.of("kinds").map((q) => JSON.parse(q.user).dishes.map((d: any) => d.name));
+    expect(asked).toHaveLength(2);
+    expect(asked[1]).toEqual(["Dry sabji"]);
+    for (const t of slot("Lunch").templates) expect(t.parts).toContainEqual(expect.objectContaining({ kind: "Sabzi", words: "dry sabji" }));
+    expect(itemsOf(slot("Lunch"))).not.toContain("Dry sabji");
+    expect(k.rows("library").some((d) => d.name === "Dry sabji")).toBe(false);
+    expect(r.asks.join("\n")).not.toContain("dry sabji");
+  });
+  it("a dish both kinds answers leave out is asked of the family, never saved as a dish on a plate (F4)", async () => {
+    const { f, slot, k, r } = await walk({ kinds: noDry });
+    expect(f.of("kinds")).toHaveLength(2);
+    expect(itemsOf(slot("Lunch"))).not.toContain("Dry sabji");
+    for (const t of slot("Lunch").templates) expect(t.parts).not.toContainEqual(expect.objectContaining({ words: "dry sabji" }));
+    expect(k.rows("library").some((d) => d.name === "Dry sabji")).toBe(false);
+    const asks = r.asks.filter((a: string) => a.includes("dry sabji"));
+    expect(asks).toHaveLength(1);
+    expect(r.said).toContain(asks[0]);
+    // The rest of the plate stands: rice and sambar.
+    expect(slot("Lunch").templates[0].parts).toEqual([{ kind: "Rice", words: "rice" }, { kind: "Rice curry", sub: "Sambar", words: "sambar" }]);
   });
 
   it("a bare dosa is their Plain dosa; a bare upma stays a category", async () => {

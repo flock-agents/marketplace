@@ -1350,8 +1350,6 @@ export function placeOf(ask: KindsAsk, x: Record<string, unknown>, word: string)
   return { kind: k.name, sub, item: null, own: false, named, ...(parts.length >= 2 && parts.some((p) => p.kind === k.name) ? { parts } : {}), word };
 }
 
-/** The kinds read: one fast call for every dish asked. A dish the answer leaves out, or a failed call, is not placed (the
- *  caller keeps what code found, or none). */
 /** The regional words among these dishes' names, each with its meanings by region, for the kinds read (decided 20). */
 export function regionalLines(names: string[]): { word: string; meanings: string[] }[] {
   const words = uniq(names.map((n) => regionalWordOf(n) ?? regionalIn(n)?.word).filter((w): w is NonNullable<typeof w> => !!w).map((w) => w.word));
@@ -1359,23 +1357,41 @@ export function regionalLines(names: string[]): { word: string; meanings: string
     meanings: r.meanings.map((m) => `${m.cuisines.map((c) => CUISINE_NAMES[c] ?? c).join(", ")}: ${[m.kind, m.sub].filter(Boolean).join(" / ")}`) }));
 }
 
-export async function kindsRead(model: ModelCall, asks: KindsAsk[], until: number, log: (l: string) => void, family: string[] = []): Promise<Map<string, Place>> {
+/** The kinds read's answer: the dishes it placed, and those an answer came back without, even when asked again (F4: a partial
+ *  read). A failed call leaves nothing `left`: what it would place stays as code found it. */
+export type KindsPlaced = { placed: Map<string, Place>; left: KindsAsk[] };
+
+/** The kinds read: one fast call for every dish asked, and one more for the dishes its answer left out. A failed call places
+ *  nothing (the caller keeps what code found, or none). */
+export async function kindsRead(model: ModelCall, asks: KindsAsk[], until: number, log: (l: string) => void, family: string[] = []): Promise<KindsPlaced> {
   const out = new Map<string, Place>();
-  if (!asks.length) return out;
-  const regional = regionalLines(asks.map((a) => a.name));
-  const user = JSON.stringify({ catalog: catalogLines(), dishes: asks.map((a) => ({ name: a.name, meal: a.meal, words: a.words,
-    ...(a.known ? { known: [a.known.kind, a.known.sub].filter(Boolean).join(" / ") } : {}) })), ...(regional.length ? { regional, family_dishes: family } : {}) });
+  if (!asks.length) return { placed: out, left: [] };
   // Its own deadline, inside the setup's: never what pushes the setup past its budget (eval h4 ran 150.09 s); on a timeout what
   // it would place stays the family's fixed dish.
   const by = Math.min(until - KINDS_MARGIN_MS, Date.now() + KINDS_MS);
-  const r = await askOnce(model, { tier: "fast", purpose: "setup: kinds", system: KINDS_SYSTEM, user, schema: KINDS_SCHEMA, maxTokens: 4000 }, by, log);
-  if (!r.ok || !isObject(r.json)) { log(`kinds: ${r.ok ? "no answer" : `${r.code}: ${r.message.slice(0, 200)}`}`); return out; }
-  const rows = arr(r.json.dishes).filter(isObject);
-  for (const a of asks) {
-    const x = rows.find((y) => dishKey(str(y.name)) === dishKey(a.name) && (!str(y.meal) || same(str(y.meal), a.meal)));
-    if (x) out.set(`${a.meal}|${dishKey(a.name)}`, placeOf(a, x, wordOf(a.name, a.words)));
-  }
-  return out;
+  const ask = async (these: KindsAsk[]): Promise<KindsAsk[] | null> => {
+    const regional = regionalLines(these.map((a) => a.name));
+    const user = JSON.stringify({ catalog: catalogLines(), dishes: these.map((a) => ({ name: a.name, meal: a.meal, words: a.words,
+      ...(a.known ? { known: [a.known.kind, a.known.sub].filter(Boolean).join(" / ") } : {}) })), ...(regional.length ? { regional, family_dishes: family } : {}) });
+    const r = await askOnce(model, { tier: "fast", purpose: "setup: kinds", system: KINDS_SYSTEM, user, schema: KINDS_SCHEMA, maxTokens: 4000 }, by, log);
+    // No dishes list at all is no answer (a failed read), not one that left every dish out.
+    if (!r.ok || !isObject(r.json) || !Array.isArray(r.json.dishes)) { log(`kinds: ${r.ok ? "no answer" : `${r.code}: ${r.message.slice(0, 200)}`}`); return null; }
+    const rows = r.json.dishes.filter(isObject);
+    const left: KindsAsk[] = [];
+    for (const a of these) {
+      const x = rows.find((y) => dishKey(str(y.name)) === dishKey(a.name) && (!str(y.meal) || same(str(y.meal), a.meal)));
+      if (x) out.set(`${a.meal}|${dishKey(a.name)}`, placeOf(a, x, wordOf(a.name, a.words)));
+      else left.push(a);
+    }
+    return left;
+  };
+  const left = await ask(asks);
+  if (!left?.length) return { placed: out, left: [] };
+  // An answer that left dishes out (eval h18 rep 3: "Dry sabji" read as nothing, saved as a dish on the plate): asked again,
+  // once, for only those.
+  log(`kinds: the answer left out ${left.map((a) => `${a.name} (${a.meal})`).join(", ")}; asking once more for them`);
+  const again = await ask(left);
+  return { placed: out, left: again ?? left };
 }
 
 /** One of the family's dishes at a meal, with its place and how often they said they have it. */
@@ -1751,9 +1767,9 @@ function linkKind(tx: Db, l: ReadLink): { kind: string; sub: string | null } | n
 /** Write the kinds read: each dish's kind, sub-kind and catalog item; each meal's kinds and templates (a shape the store refuses
  *  is logged and that meal left as it was, never the setup failed); the family's cuisines; what was read, kept for corrections.
  *  Gives each meal's line in the family's words, and the cuisines. */
-export function writeKinds(tx: Db, plan: KindsPlan, placed: Map<string, Place>, opts: { lines: string[]; log: (l: string) => void }, by: string,
-  changes: Change[]): { meals: Record<string, string>; changed: string[]; cuisines: string[] } {
-  const meals: Record<string, string> = {}, cache = { ...plan.cache }, changed: string[] = [];
+export function writeKinds(tx: Db, plan: KindsPlan, placed: Map<string, Place>, opts: { lines: string[]; log: (l: string) => void; left?: KindsAsk[] }, by: string,
+  changes: Change[]): { meals: Record<string, string>; changed: string[]; cuisines: string[]; asks: string[] } {
+  const meals: Record<string, string> = {}, cache = { ...plan.cache }, changed: string[] = [], asks: string[] = [];
   const h0 = getHouse(tx);
   let state0: Partial<SetupState> = {};
   try { state0 = h0.setup_state ? JSON.parse(h0.setup_state) : {}; } catch { state0 = {}; }
@@ -1762,6 +1778,16 @@ export function writeKinds(tx: Db, plan: KindsPlan, placed: Map<string, Place>, 
     const meal = mealOf(slot), dishes: MealDish[] = [];
     for (const d of familyDishes(tx, slot.name)) {
       let place = placed.get(cacheKey(meal, d.key)) ?? plan.places.get(placeKey(slot.name, d.key)) ?? null;
+      // A dish the kinds read's answers left out, twice, that code cannot place either (F4, D3e): its word may be a category
+      // ("dry sabji"), so it is no dish on a plate and no library row (§5.1); the family is asked what it is.
+      const left = !place && opts.left?.find((a) => a.meal === meal && dishKey(a.name) === d.key && !a.known);
+      if (left) {
+        opts.log(`kinds: ${slot.name}: ${d.name} not placed by the kinds read, asked`);
+        removeLibrary(tx, d.name, d.slot, by, changes);
+        const a = kindsAsk(wordOf(left.name, left.words), slot);
+        if (!asks.includes(a)) asks.push(a);
+        continue;
+      }
       // Kept for a correction: a dish asked of the kinds read and not answered is asked again then.
       if (place && !plan.asks.some((a) => a.meal === meal && dishKey(a.name) === d.key && !placed.has(cacheKey(meal, d.key)))) cache[cacheKey(meal, d.key)] = place;
       let name = d.name;
@@ -1825,8 +1851,12 @@ export function writeKinds(tx: Db, plan: KindsPlan, placed: Map<string, Place>, 
   tx.update(house).set({ cuisines: JSON.stringify(cuisines), setup_state: JSON.stringify({ ...state, places: cache, meals: { ...state.meals, ...meals }, categories }),
     updated_at: new Date().toISOString(), updated_by: by }).where(eq(house.id, h.id)).run();
   changes.push(["house", h.id, "update", by]);
-  return { meals, changed, cuisines };
+  return { meals, changed, cuisines, asks };
 }
+
+/** The read-back's question for a word the kinds read could not place (F4): one dish of theirs, or any of its kind. */
+export const kindsAsk = (word: string, slot: Pick<Slot, "name" | "kind">): string =>
+  `What do you mean by "${word}" at ${slot.kind === "main" ? slot.name.toLowerCase() : slot.name}: one dish you make (which one?), or a different one each time?`;
 
 // ── apply_setup ──
 
@@ -1913,7 +1943,7 @@ export async function applySetup(deps: { db: Db; emit: Emit; model: ModelCall; p
     missing.forEach((t) => had.tags.add(t));
     ask.set(d.key, had);
   }
-  const [contains, placed] = await Promise.all([ask.size ? containsRead(deps.model, ask, until, log) : new Map<string, Record<string, boolean>>(),
+  const [contains, { placed, left }] = await Promise.all([ask.size ? containsRead(deps.model, ask, until, log) : new Map<string, Record<string, boolean>>(),
     kindsRead(deps.model, plan.asks, until, log, plan.family)]);
   commit(deps.db, deps.emit, (tx, changes) => {
     for (const d of lib) {
@@ -1929,7 +1959,8 @@ export async function applySetup(deps: { db: Db; emit: Emit; model: ModelCall; p
   if (missing) log(`contains: ${missing} dishes not read for every tag (unknown: the plan fails closed on them)`);
   // Each meal's kinds and templates; on a correction, a meal whose plates now read differently, and the cuisines, are said.
   const cuisinesBefore = houseView(getHouse(deps.db)).cuisines ?? [];
-  const kinds = commit(deps.db, deps.emit, (tx, changes) => writeKinds(tx, plan, placed, { lines: said, log }, by, changes));
+  const kinds = commit(deps.db, deps.emit, (tx, changes) => writeKinds(tx, plan, placed, { lines: said, log, left }, by, changes));
+  for (const a of kinds.asks) if (!checked.asks.includes(a)) checked.asks.push(a);
   if (!first) {
     for (const [slot, line] of Object.entries(kinds.meals)) if (line && (line !== before4?.meals?.[slot] || kinds.changed.includes(slot))) ops.changed.push(`${slot}: ${line}.`);
     if (kinds.cuisines.join() !== cuisinesBefore.join()) ops.changed.push(kitchenLine(kinds.cuisines) ?? "No kitchen of a region noted.");
