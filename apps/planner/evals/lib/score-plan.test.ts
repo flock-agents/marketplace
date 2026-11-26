@@ -1020,3 +1020,19 @@ describe("H14: the cap check knows the meal's staples", () => {
     expect(capFails(capH(["Rice", "Curd"]), ["Rice", "Bhindi", "Aloo gobi", "Lauki"])).toBe(1);
   });
 });
+
+describe("h18 boxes: J7 and J8", async () => {
+  const h = (await import("../households")).ALL_HOUSEHOLDS.find((x) => x.id === "h18-shiva-walkthrough")!;
+  const sdOf = (p: PlanOut, day: Weekday, slot: string) => p.slotDays.find((x) => x.date === dateOf(MON, day) && x.slot === slot)!;
+  const notesOf = (p: PlanOut, field: string) => scorePlan(h, p, setupOfTruth(h), { failClosed: false }).notes.filter((n) => n.startsWith(`${field}:`));
+  // J7: a swap's item for the box's person may be the box's whole plate when the swapped dish was the whole source plate.
+  test("linked_parts: the swap's item for the whole plate on its day passes", () => {
+    const p = baselineWeek(h, MON);
+    sdOf(p, "Thu", "Breakfast").dishes = [{ name: "Rice upma" }];
+    sdOf(p, "Thu", "Agastya's breakfast box").dishes = [{ name: "Pancakes", for_people: ["Agastya"] } as any];
+    expect(notesOf(p, "linked_parts").filter((n) => /Thu Agastya's breakfast box/.test(n))).toEqual([]);
+    // Bad: the same box on a day whose Breakfast is no Upma has no swap to stand in for the plate.
+    sdOf(p, "Thu", "Breakfast").dishes = [{ name: "Idli" }];
+    expect(notesOf(p, "linked_parts").filter((n) => /Thu Agastya's breakfast box/.test(n))).toHaveLength(1);
+  });
+});

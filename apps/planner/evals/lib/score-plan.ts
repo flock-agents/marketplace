@@ -580,7 +580,16 @@ export function scorePlan(h: Household, plan0: PlanOut, loaded: SetupOut, o: { f
       if (ofLinkFree(sd)) continue;
       const src = at(sd.date, p.from);
       if (!src || src.skip || !src.dishes.length) continue;
-      const have = new Set(sd.dishes.map((d) => plain(d.name))), mine = ofKind(sd).map((d) => plain(d.name)), want = ofKind(src).map((d) => plain(d.name));
+      const have = new Set(sd.dishes.map((d) => plain(d.name)));
+      // A source dish a hard swap of the box's person replaces (it binds this slot or the source meal, hits the dish, and its
+      // item is on the box for that person) is on the box by its item: the swap's item may stand in for the whole source plate.
+      for (const d of src.dishes) {
+        if (t.rules.some((r) => r.hard && r.what === "swap" && r.who && r.gives && "item" in r.gives && r.targets?.length
+          && (r.slots ?? []).some((s) => lc(s) === lc(sd.slot) || lc(s) === lc(p.from))
+          && r.targets.some((tg) => hitsTarget(tg, d.name, src.slot))
+          && sd.dishes.some((b) => b.for_people?.some((x) => sameName(x, r.who!)) && hitsTarget(r.gives!, b.name, sd.slot)))) have.add(plain(d.name));
+      }
+      const mine = ofKind(sd).map((d) => plain(d.name)), want = ofKind(src).map((d) => plain(d.name));
       // The whole plate of the source is on the box (a swap's item may stand in for one of its dishes).
       const whole = src.dishes.every((d) => have.has(plain(d.name))) || (src.dishes.filter((d) => !have.has(plain(d.name))).length <= sd.dishes.filter((d) => d.for_people?.length).length && src.dishes.some((d) => have.has(plain(d.name))));
       const same = p.kind ? mine.length === want.length && want.every((n) => have.has(n)) : whole;
