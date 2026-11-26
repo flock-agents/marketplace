@@ -2259,8 +2259,9 @@ describe("a rule read whole, a require that is an add-on dish, a cook from help 
   });
 });
 
-// H7, end to end with a fake model: a dish family's name is its item's, never the kind's bare dish. A made-up family.
-describe("apply_setup: dish families (H7)", () => {
+// H7 and H8, end to end with a fake model: a dish family's name is its item's (never the kind's bare dish), and days said of a
+// kind word stay on the template (never one dish's pin). A made-up family.
+describe("apply_setup: dish families (H7) and kind words with days (H8)", () => {
   const FAMILY = { "household.people": [{ name: "Sameer", group: "adult" }, { name: "Tanvi", group: "adult" }], "household.speaker": "Sameer" };
   const home = { slots: [{ name: "Breakfast", kind: "main" }, { name: "Lunch", kind: "main" }, { name: "Dinner", kind: "main" }] };
   const setup = (lines: string[], library: string[][], seed: string[][], often: string[][], more: Partial<Record<Part, unknown>> = {}) => {
@@ -2282,5 +2283,39 @@ describe("apply_setup: dish families (H7)", () => {
     const u = row(k, "Uthappam", "Dinner")!;
     expect(u).toBeDefined();
     expect([u.frequency, u.kind, u.catalog_item]).toEqual(["sometimes", "Dosa", "Plain uttapam"]);
+  });
+
+  const wq = "Breakfast is aloo paratha or poha, and parathas at the weekend.";
+  const weekend = () => setup([wq],
+    [["Aloo paratha", "Breakfast", wq], ["Poha", "Breakfast", wq], ["Paratha", "Breakfast", wq]],
+    [["Breakfast", "Aloo paratha", wq], ["Breakfast", "Poha", wq], ["Breakfast", "Paratha", wq]],
+    [["Paratha", "Breakfast", wq, "at the weekend", "", "Sat,Sun"]]);
+  it("parathas at the weekend beside aloo paratha: the days are the template's, the Plain paratha row has none (H8)", async () => {
+    const { tr, f } = weekend();
+    const k = await boot({ model: f.model });
+    expect((await k.op("apply_setup", { household: FAMILY, transcript: tr })).ok).toBe(true);
+    const bf = (await k.owner("GET", "/api/family")).body.slots.find((s: any) => s.name === "Breakfast");
+    expect(bf.templates).toContainEqual(expect.objectContaining({ parts: [expect.objectContaining({ kind: "Paratha", dish: "Plain paratha" })], days: ["Sat", "Sun"] }));
+    const plain = row(k, "Plain paratha", "Breakfast")!;
+    expect(plain).toBeDefined();
+    expect([plain.days, plain.frequency]).toEqual([null, null]);
+    expect(row(k, "Aloo paratha", "Breakfast")).toBeDefined();
+  });
+  it("a correction that builds breakfast again keeps the weekend on its template (H8)", async () => {
+    const NEW = "Upma on some breakfasts too.";
+    const lib1 = [["Aloo paratha", "Breakfast", wq], ["Poha", "Breakfast", wq], ["Paratha", "Breakfast", wq]];
+    const seed1 = [["Breakfast", "Aloo paratha", wq], ["Breakfast", "Poha", wq], ["Breakfast", "Paratha", wq]];
+    const often1 = [["Paratha", "Breakfast", wq, "at the weekend", "", "Sat,Sun"]];
+    const { tr, f } = setup([wq], lib1, seed1, often1, {
+      dishes: (_r: ModelRequest, n: number) => (n === 1 ? { library: lib1, seed: seed1 } : { library: [...lib1, ["Upma", "Breakfast", NEW]], seed: [...seed1, ["Breakfast", "Upma", NEW]] }),
+      often: (_r: ModelRequest, n: number) => ({ often: n === 1 ? often1 : [...often1, ["Upma", "Breakfast", NEW, "on some", "sometimes", ""]] }) });
+    const k = await boot({ model: f.model });
+    expect((await k.op("apply_setup", { household: FAMILY, transcript: tr })).ok).toBe(true);
+    const before = (await k.owner("GET", "/api/family")).body.slots.find((s: any) => s.name === "Breakfast").templates;
+    expect((await k.op("apply_setup", { household: FAMILY, transcript: [...tr, "Q: Anything to change?", `A: ${NEW}`] })).ok).toBe(true);
+    const after = (await k.owner("GET", "/api/family")).body.slots.find((s: any) => s.name === "Breakfast").templates;
+    expect(after.length).toBeGreaterThan(before.length);   // built again: the upma plate is new
+    expect(after).toContainEqual(expect.objectContaining({ parts: [expect.objectContaining({ kind: "Paratha", dish: "Plain paratha" })], days: ["Sat", "Sun"] }));
+    expect(row(k, "Plain paratha", "Breakfast")!.days).toBeNull();
   });
 });

@@ -1066,3 +1066,23 @@ describe("a require met by the person's own add-on of that meal (H12)", () => {
     for (const d of WEEK) expect(r.at(d, "Lunch")).toContain("Egg curry");
   });
 });
+
+// H8: days said of a kind word ("parathas at the weekend") are its template's: the dish its bare word names has none of its own,
+// so the days rotate the kind's dishes (never the same one the next day). A dish named by its own name keeps its pin.
+describe("days on a kind word's template (H8)", () => {
+  const bf = (lib: LibraryDish[], templates: MealTemplate[]) => run({ slots: [slot("Breakfast", { templates })], library: lib, newCap: 0 });
+  it("a weekend template of the paratha kind, Plain paratha and Aloo paratha rows with no days: Sat Plain paratha, Sun Aloo paratha", () => {
+    const r = bf([dish("Plain paratha", "Breakfast", "Paratha", { catalog_item: "Plain paratha" }), dish("Aloo paratha", "Breakfast", "Paratha", { catalog_item: "Aloo paratha" }),
+      dish("Poha", "Breakfast", "Poha", { catalog_item: "Kanda poha" })],
+    [T({ kind: "Paratha", dish: "Aloo paratha" }), T({ kind: "Poha", dish: "Poha" }), { parts: [{ kind: "Paratha", dish: "Plain paratha" }], days: ["Sat", "Sun"] }]);
+    const sat = r.at(WEEK[5], "Breakfast"), sun = r.at(WEEK[6], "Breakfast");
+    expect(sat).toEqual(["Plain paratha"]);
+    expect(sun).toEqual(["Aloo paratha"]);
+  });
+  it("guard: a row named by its own dish name with days [Sat, Sun] is on both days", () => {
+    const r = run({ slots: [slot("Dinner", { templates: [T({ kind: "Roti" }, { kind: "Sabzi" }), T({ kind: "Roti" }, { kind: "Chicken" })] })],
+      library: [dish("Phulka", "Dinner", "Roti"), ...SABZIS.map((n) => dish(n, "Dinner", "Sabzi")), dish("Chicken curry", "Dinner", "Chicken", { sub: "Curry", catalog_item: "Chicken curry", days: ["Sat", "Sun"] })] });
+    expect(r.at(WEEK[5], "Dinner")).toContain("Chicken curry");
+    expect(r.at(WEEK[6], "Dinner")).toContain("Chicken curry");
+  });
+});

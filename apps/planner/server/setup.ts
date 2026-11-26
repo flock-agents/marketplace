@@ -1078,7 +1078,11 @@ export type SetupState = { replies: string[]; family_cooks: FamilyCook[]; weekda
   links?: ReadLink[];
   /** The family's category words per meal ("dry sabji"): never library rows (§5.3), kept here so a correction can build the
    *  meal's plates again. Nothing in planning reads them. */
-  categories?: Record<string, MealDishRow[]> };
+  categories?: Record<string, MealDishRow[]>;
+  /** The how-often a bare kind word was said with, per meal, by the dish it names ("parathas at the weekend": Plain paratha, Sat
+   *  and Sun; H8). The days are the meal's template's, never that dish's row; kept here so a correction builds the template
+   *  again with them. Nothing in planning reads them. */
+  bare_words?: Record<string, MealDishRow[]> };
 /** A category word of a meal, as kept for corrections. */
 export type MealDishRow = { name: string; frequency: Frequency | null; days: Weekday[] | null; said: string | null };
 export type Saved = { slots: ReadSlot[]; rules: (Rule)[]; library: LibraryDish[]; seed: ReadSeed[]; cook: Cook | null; state: SetupState | null };
@@ -1124,7 +1128,8 @@ export function diffSetup(saved: Saved, next: SetupRead, fresh: string[], all: b
   const named = (name: string) => all || namedIn(name, fresh);
   const ops: Ops = { slots: [], removeSlots: [], rules: [], removeRules: [], library: [], removeLibrary: [], seed: [], subscriptions: [],
     state: { family_cooks: saved.state?.family_cooks ?? [], weekday_lunch: saved.state?.weekday_lunch ?? [], lunch_unclear: next.lunch_unclear,
-      noted: saved.state?.noted ?? [], asks: [], places: saved.state?.places, meals: saved.state?.meals, links: saved.state?.links, categories: saved.state?.categories },
+      noted: saved.state?.noted ?? [], asks: [], places: saved.state?.places, meals: saved.state?.meals, links: saved.state?.links, categories: saved.state?.categories,
+      bare_words: saved.state?.bare_words },
     changed: [], discarded: [] };
 
   for (const s of next.slots) {
@@ -2107,6 +2112,7 @@ export function writeKinds(tx: Db, plan: KindsPlan, placed: Map<string, Place>, 
   let state0: Partial<SetupState> = {};
   try { state0 = h0.setup_state ? JSON.parse(h0.setup_state) : {}; } catch { state0 = {}; }
   const categories: Record<string, MealDishRow[]> = { ...(state0.categories ?? {}) };
+  const bareWords: Record<string, MealDishRow[]> = { ...(state0.bare_words ?? {}) };
   const allSlots = listSlots(tx), swaps = swapItems(listRules(tx));
   for (const slot of plan.slots) {
     const meal = mealOf(slot), dishes: MealDish[] = [];
@@ -2114,6 +2120,7 @@ export function writeKinds(tx: Db, plan: KindsPlan, placed: Map<string, Place>, 
     // (§9.4, G1): its library row stays (its ingredients are read), it is on no template.
     const at = [slot.name, replacedMeal(slot, allSlots)?.name].filter((x): x is string => !!x);
     const swapsHere = swaps.filter((w) => w.slots.some((s) => at.some((a) => same(a, s))));
+    const keptWords = bareWords[slot.name] ?? [], words: MealDishRow[] = [];
     for (const d of familyDishes(tx, slot.name)) {
       let place = placed.get(cacheKey(meal, d.key)) ?? plan.places.get(placeKey(slot.name, d.key)) ?? null;
       // A dish the kinds read's answers left out, twice, that code cannot place either (F4, D3e): its word may be a category
@@ -2128,18 +2135,25 @@ export function writeKinds(tx: Db, plan: KindsPlan, placed: Map<string, Place>, 
       }
       // Kept for a correction: a dish asked of the kinds read and not answered is asked again then.
       if (place && !plan.asks.some((a) => a.meal === meal && dishKey(a.name) === d.key && !placed.has(cacheKey(meal, d.key)))) cache[cacheKey(meal, d.key)] = place;
-      let name = d.name;
+      let name = d.name, how: Pick<MealDish, "frequency" | "days" | "said"> = { frequency: d.frequency, days: d.days, said: d.said };
       // A bare kind word is the dish the catalog decided for it (§5.1: "dosa" is Plain dosa), saved as their dish under that name.
       const bare = bareOf(name, place);
       const hit = bare ? catalogItem(bare) : null;
       const near = bare ? null : nearestDish({ name, place, frequency: d.frequency, days: d.days, said: d.said }, meal);
       if (bare && place) {
         opts.log(`kinds: ${slot.name}: ${d.name} is their ${bare}`);
+        const into = !!getLibraryDish(tx, bare, d.slot);
         renameDish(tx, d.name, d.slot, bare, by, changes);
         name = bare; place = { ...place, item: hit?.item.name ?? null, sub: hit?.item.sub ?? place.sub };
         cache[cacheKey(meal, dishKey(name))] = place;
         const c = catalogContents(getLibraryDish(tx, name, d.slot) ?? d, place.item);
         if (c) upsertLibrary(tx, { name, slot: d.slot, ...c }, by, changes);
+        // H8: days and how-often said of the kind word ("parathas at the weekend") are the word's: its template keeps them, never
+        // the one dish it names (a pin of Plain paratha both days). The renamed row keeps none; a row it joined keeps its own.
+        if (d.frequency || d.days?.length) {
+          if (!into) upsertLibrary(tx, { name, slot: d.slot, frequency: null, days: null, said: null }, by, changes);
+          words.push({ name, ...how });
+        }
       } else if (near) {
         opts.log(`kinds: ${slot.name}: ${d.name} kept as ${near.name}`);
         renameDish(tx, d.name, d.slot, near.name, by, changes);
@@ -2148,6 +2162,9 @@ export function writeKinds(tx: Db, plan: KindsPlan, placed: Map<string, Place>, 
         const c = catalogContents(getLibraryDish(tx, name, d.slot) ?? d, place.item);
         if (c) upsertLibrary(tx, { name, slot: d.slot, ...c }, by, changes);
       }
+      // A row a bare word was saved as before, with no how-often of its own: the word's, as kept, for its template (H8).
+      const kept = !bare && !d.frequency && !d.days?.length ? keptWords.find((w) => dishKey(w.name) === dishKey(name)) : undefined;
+      if (kept) { how = { frequency: kept.frequency, days: kept.days, said: kept.said }; words.push(kept); }
       if (dishes.some((x) => dishKey(x.name) === dishKey(name))) continue;   // their word and the dish both said: one dish
       upsertLibrary(tx, { name, slot: d.slot, kind: place?.kind ?? null, sub: place?.sub ?? null, catalog_item: place?.parts ? null : place?.item ?? null }, by, changes);
       const swap = swapsHere.find((w) => w.keys.includes(dishKey(name)) || w.keys.includes(d.key));
@@ -2155,8 +2172,10 @@ export function writeKinds(tx: Db, plan: KindsPlan, placed: Map<string, Place>, 
       // Not read now (a correction of another meal): as it was saved, on no template when the swap left it off then.
       const off = swap && (qs ? swapOnly(d.name, opts.sentences, swap) : !onTemplates(slot.templates, [name, d.name]));
       if (off) { opts.log(`kinds: ${slot.name}: ${name} is only a swap's dish, on no template`); continue; }
-      dishes.push({ name, place, frequency: d.frequency, days: d.days, said: d.said });
+      dishes.push({ name, place, ...how });
     }
+    if (words.length) bareWords[slot.name] = words;
+    else delete bareWords[slot.name];
     // The meal's category words read before (a correction): not library rows, kept in the setup's memory with their places.
     for (const c of categories[slot.name] ?? []) if (!dishes.some((x) => dishKey(x.name) === dishKey(c.name)))
       dishes.push({ ...c, place: cache[cacheKey(meal, dishKey(c.name))] ?? null });
@@ -2204,7 +2223,7 @@ export function writeKinds(tx: Db, plan: KindsPlan, placed: Map<string, Place>, 
   const h = getHouse(tx);
   let state: Partial<SetupState> = {};
   try { state = h.setup_state ? JSON.parse(h.setup_state) : {}; } catch { state = {}; }
-  tx.update(house).set({ cuisines: JSON.stringify(cuisines), setup_state: JSON.stringify({ ...state, places: cache, meals: { ...state.meals, ...meals }, categories }),
+  tx.update(house).set({ cuisines: JSON.stringify(cuisines), setup_state: JSON.stringify({ ...state, places: cache, meals: { ...state.meals, ...meals }, categories, bare_words: bareWords }),
     updated_at: new Date().toISOString(), updated_by: by }).where(eq(house.id, h.id)).run();
   changes.push(["house", h.id, "update", by]);
   return { meals, changed, cuisines, asks };
