@@ -1,22 +1,22 @@
 {
   "version": 1,
-  "generatedAt": "2026-11-26T12:29:39.610Z",
+  "generatedAt": "2026-11-26T12:50:09.317Z",
   "sourceVersion": "2.0.0",
   "sourceTag": "whatsapp-v2.0.0-rc1",
   "files": {
-    "CHANGELOG.md": "3782b702047e47d91f3fd853d5b57e58d7c3c3b0e509a88f5555bf632ea61476",
+    "CHANGELOG.md": "27fbdd6a9eee101a0b7cf04f8e8166935bb8a156f014659cb990346baaafe5a1",
     "icon.svg": "1d9a927c3ad3cca31305211227611789007bb568d9414e9a78e1be9f84569e9f",
-    "server/_limits.ts": "9c284acc65e3e3f92c536729fe4c827553f45bb947ad4ebf899898c6a3a36df0",
+    "server/_limits.ts": "a8d153ea54c7db7c4b5aa55c3aa782483a2a642bb9a7534d24df2a83f3266ba0",
     "server/_messages.ts": "c7174c4754b1ee057ecdcdbafdc4db8b347e01c21008c0852c3b741515c8198f",
     "server/_guide.ts": "97138ea72b70c705f4800d31b73a4491e3562767a07915e9a34b7a7a77853415",
-    "server/_store.ts": "d912d5bb4827f5a992fe310d3414c4b221305f4fb0fe2fc8e70983511c90f7e6",
+    "server/_store.ts": "2026b173dd5b5845863ef34a0fd443bb4acbe8731d19c147c4d1ae3b171f77de",
     "server/_mcp.ts": "38d08f5d89cd425bacb8ddf22748a3557088a69b96f798fcfdb5309aa81688cf",
-    "server/lib/baileys.bundle.js": "aebdcf180e25c13a0b62f12fd526cf386c9d1459440848ab8a9701d6ff1d74f4",
-    "server/_tools.ts": "d4d52a62524435215826cd7b2c51ea8d3084659c4be2d0d3dfa470e9ecb016c1",
-    "server/_socket.ts": "a271564edc238b91a1a3df3a40217250b3139aec9e32801ee9bfa70dd2a94df6",
-    "server/server.ts": "36d2b4ad2abb7669f75d3c9ec3e6a8593fd361084e1c7a2a8340df00b7854d70",
-    "server/_whatsapp.ts": "22535746fc3662d73b15e0485cf7cb000fcf4c2e134aebc6ed6a28d0745c4de9",
+    "server/lib/baileys.bundle.js": "893b0dd6fef0c4e966d275e16e154c762545acaa69bc02f85dbbbd37119b9554",
+    "server/_tools.ts": "e69ef8a788b2ae312c0625336314c5af84b5a8c6b2705cdf134273a041941ada",
+    "server/_socket.ts": "96d2ebcced2afa0bbf4e598ca879d94d256141c03680fc63fe4586916acdd898",
+    "server/server.ts": "d45788d8d7a1adeb4ee6744c052043ead0ba5fabbde2b0f236a4a5ca7f69563d",
+    "server/_whatsapp.ts": "45b3326c369cdb7cc7a420701ec1c0ae3268f72938a918d96c967c90d54df02f",
     "flock.skill.json": "bc874749afe68df7a978ab4aec2e05e9ebd36c69ac4f69e790ee724c506a208f",
-    "instructions.md": "988a4b081238815e0a9dc097f11d1c032a7e5719cdbc15a71b42db34978c56c2"
+    "instructions.md": "e15fd16ef36790d18f1b47cef5d4b8f96e194f68cea11d09f6f7902b1132ffde"
   }
 }
