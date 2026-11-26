@@ -47,9 +47,10 @@ describe("the manifest", () => {
 });
 
 describe("the catalog entry", () => {
-  it("points at this package and the tag to create", () => {
+  it("points at this package and its tag (an rc tag on stage, the final tag on v2)", () => {
     const entry = catalog.items.find((i: any) => i.slug === "whatsapp");
-    expect(entry).toMatchObject({ type: "connector", path: "skills/whatsapp", latestVersion: manifest.version, latestTag: `whatsapp-v${manifest.version}`, minFlockVersion: manifest.minFlockVersion });
+    expect(entry).toMatchObject({ type: "connector", path: "skills/whatsapp", latestVersion: manifest.version, minFlockVersion: manifest.minFlockVersion });
+    expect(entry.latestTag).toMatch(new RegExp(`^whatsapp-v${manifest.version.replace(/\./g, "\\.")}(-rc\\d+)?$`));
   });
 });
 
