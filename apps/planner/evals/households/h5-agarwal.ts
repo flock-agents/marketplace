@@ -26,7 +26,7 @@ export const h5: Household = {
   facts: [
     { id: "pain", text: "Hardest part: deciding what to make, with everyone's different rules." },
     { id: "apps", text: "We don't use apps; the kirana delivers." },
-    { id: "lunchWhere", text: "Wife Pooja (32), son Reyansh (8), Papa Ramesh (66) and Mummy Kamla (62)." },
+    { id: "lunchWhere", text: "Reyansh takes a tiffin to school Monday to Friday." },
     { id: "otherDays", text: "No cook; Pooja cooks every meal, every day. We never eat out. We don't order in." },
     { id: "childSame", text: "Reyansh takes a tiffin to school Monday to Friday: paratha with sabzi, poha, aloo sandwich.", differs: true },
     { id: "familyBreakfast", text: "Breakfast is poha, paratha, besan chilla, dalia for Papa." },

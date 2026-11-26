@@ -2,7 +2,13 @@
 // Mon–Fri, the younger with a peanut allergy (in a cuisine that puts peanuts in poha and chivda; asked by the read-back,
 // the family cooks everything without peanuts, so the rule is the whole house's and their own dishes have none), a cook
 // Mon–Fri, the parents cook on weekends. Frequency words: noodles sometimes on Friday for Ishaan, thalipeeth on weekends.
-import { avoid, dish, mains, part, SCHOOL, veg, items, tpl, type Household } from "../lib/truth";
+import { avoid, dish, mains, part, SCHOOL, veg, items, kindPart, tpl, type Household } from "../lib/truth";
+
+// Their words for category parts, and their one dish of pithla (a catalog item).
+const BHAJI = kindPart("Sabzi", { words: "bhaji" });
+const USAL = kindPart("Dal", { sub: "Rajma/Chole", words: "usal" });
+const PITHLA = kindPart("Dal", { sub: "Pithla/Zunka", dish: "Pithla", words: "pithla" });
+const FISH_FRY = kindPart("Fish & seafood", { sub: "Fish fry", words: "fish fry" });
 
 export const h6: Household = {
   id: "h6-kulkarni", title: "Maharashtrian, non-veg weekends, two snack boxes, peanut allergy, cook Mon–Fri",
@@ -24,7 +30,7 @@ export const h6: Household = {
   facts: [
     { id: "pain", text: "Hardest part: deciding what to make." },
     { id: "apps", text: "Zepto." },
-    { id: "lunchWhere", text: "Wife Snehal (38), daughter Aditi (10), son Ishaan (6)." },
+    { id: "lunchWhere", text: "Both take a snack box to school Monday to Friday. They eat that at school." },
     { id: "cook", text: "Cook Mangala comes Monday to Friday, 7 in the morning for breakfast and lunch, 6 in the evening for dinner." },
     { id: "cookTime", text: "She's fine on time." },
     { id: "otherDays", text: "Weekends we cook: I do Saturday, Snehal does Sunday. Sometimes Sunday dinner, not fixed." },
@@ -73,8 +79,8 @@ export const h6: Household = {
     meals: [
       { slot: "Breakfast", templates: [tpl(["Poha"]), tpl(["Upma"]), tpl(["Halwa"]), { parts: [part("Thalipeeth")], days: ["Sat", "Sun"] }] },
       { slot: "Snack box", templates: [tpl(["Sandwich", "Fruit"]), tpl(["Namkeen", "Fruit"]), tpl(["Idli", "Fruit"]), { parts: [part("Noodles")], days: ["Fri"] }] },
-      { slot: "Lunch", staples: ["Roti"], templates: [tpl(["Roti", "Sabzi", "Dal/Amti/Varan", "Salad"]), tpl(["Chicken", "Roti"])] },
-      { slot: "Dinner", staples: ["Roti", "Bhakri"], templates: [tpl(["Bhakri", "Dal"]), tpl(["Roti", "Dal"]), { parts: [part("Fish & seafood"), part("Roti")], days: ["Sat"] }] },
+      { slot: "Lunch", staples: ["Roti"], templates: [tpl(["Roti", BHAJI, "Dal/Amti/Varan", "Salad"]), tpl(["Chicken", "Roti"])] },
+      { slot: "Dinner", staples: ["Roti", "Bhakri"], templates: [tpl(["Bhakri", USAL]), tpl(["Roti", USAL]), tpl(["Bhakri", PITHLA]), tpl(["Roti", PITHLA]), { parts: [FISH_FRY, part("Roti")], days: ["Sat"] }] },
     ],
     judgeNotes: ["Non-veg only Saturday and Sunday (fish fry Saturday dinner, chicken rassa Sunday lunch).", "Ishaan has a peanut allergy and the whole house cooks without peanuts or groundnut oil: the family's poha, chivda and koshimbir have none.",
       "Snack boxes Monday to Friday for both children.", "Four vegetarian guests for Saturday dinner this week."],

@@ -1,7 +1,7 @@
 // 8. Bengali family with grandparents and a cook every day: rice + dal + bhaja + a torkari + fish curry most days, luchi on
 // Sunday morning, mutton on Sunday. The grandmother is vegetarian with no onion or garlic (and no fish, no eggs); the
 // grandfather diabetic, no sweets. Frequency words: fish curry most days, luchi on Sunday, kosha mangsho on Sunday.
-import { avoid, dish, mains, note, SCHOOL, veg, WEEK, items, tpl, type Household } from "../lib/truth";
+import { avoid, dish, mains, note, SCHOOL, veg, WEEK, items, kindPart, tpl, type Household } from "../lib/truth";
 
 export const h8: Household = {
   id: "h8-banerjee", title: "Bengali, grandparents, cook every day, fish most days, veg no-onion-garlic grandmother",
@@ -23,7 +23,7 @@ export const h8: Household = {
   facts: [
     { id: "pain", text: "Hardest part: deciding the menu every day, Mala asks every morning." },
     { id: "apps", text: "Blinkit, and the fish from the bazaar." },
-    { id: "lunchWhere", text: "Wife Rituparna (40), daughter Riya (12), Baba Pradip (72) and Ma Gita (68)." },
+    { id: "lunchWhere", text: "Riya takes a tiffin Monday to Friday. They eat that at school." },
     { id: "cook", text: "Cook Mala comes every day, 8 in the morning for breakfast and lunch, 6 in the evening for dinner." },
     { id: "cookTime", text: "She has time." },
     { id: "otherDays", text: "Yes, all seven days at home. Rarely, maybe Saturday dinner sometimes. No fixed day." },
@@ -80,7 +80,7 @@ export const h8: Household = {
       // Two sabzis a plate from different sub-kinds (decided 2, 17): a bhaja and a torkari.
       { slot: "Lunch", staples: ["Rice"], templates: [tpl(["Rice", "Dal", "Sabzi/Bhaja", "Sabzi/Torkari/Ghonto", "Fish & seafood"]),
         tpl(["Rice", "Dal", "Sabzi/Bhaja", "Sabzi/Torkari/Ghonto", "Mutton"])] },
-      { slot: "Dinner", staples: ["Roti"], templates: [tpl(["Roti", "Sabzi/Torkari/Ghonto", "Dal"]), tpl(["Roti", "Sabzi/Torkari/Ghonto", "Fish & seafood"], "sometimes")] },
+      { slot: "Dinner", staples: ["Roti"], templates: [tpl(["Roti", "Sabzi/Torkari/Ghonto", "Dal"]), tpl(["Roti", "Sabzi/Torkari/Ghonto", kindPart("Fish & seafood", { words: "fish" })], "sometimes")] },
       { slot: "Gita's dinner", templates: [tpl(["Sabzi/Torkari/Ghonto"])] },
     ],
     judgeNotes: ["A Bengali home: lunch is bhaat + dal + a bhaja + a torkari + fish curry most days; luchi-alur dom Sunday morning; mutton Sunday.",

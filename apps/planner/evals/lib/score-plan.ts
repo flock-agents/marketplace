@@ -440,7 +440,8 @@ export function scorePlan(h: Household, plan0: PlanOut, loaded: SetupOut, o: { f
   // items part.
   const truthParts = (t.meals ?? []).flatMap((m) => m.templates.flatMap((tp) => tp.parts));
   const partWords = new Set(truthParts.flatMap((p) => ("words" in p && p.words ? [plain(p.words)] : [])));
-  const itemDishes = new Set(truthParts.flatMap((p) => ("items" in p ? p.items.map(plain) : [])));
+  // Their dishes: a fixed-dishes part's, and a kind part's one dish (their word "pithla" is the dish Pithla).
+  const itemDishes = new Set(truthParts.flatMap((p) => ("items" in p ? p.items.map(plain) : "dish" in p && p.dish ? [plain(p.dish)] : [])));
   for (const sd of cooked) for (const d of sd.dishes) {
     const fixed = () => t.library.some((x) => plain(x.name) === plain(d.name) && lc(x.slot) === lc(sd.slot) && (x.frequency === "daily" || !!x.days?.length));
     const category = (isBareKindWord(d.name) || partWords.has(plain(d.name))) && !itemDishes.has(plain(d.name));

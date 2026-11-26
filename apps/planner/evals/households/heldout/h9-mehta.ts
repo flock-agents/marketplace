@@ -20,7 +20,7 @@ export const h9: Household = {
   facts: [
     { id: "pain", text: "Hardest part: Jain food every day without repeating, and Ba's early dinner." },
     { id: "apps", text: "BigBasket for the monthly things, Zepto for daily." },
-    { id: "lunchWhere", text: "Wife Bhavna (46), son Dhruv (17) and my mother Kantaben (76), we call her Ba." },
+    { id: "lunchWhere", text: "Dhruv eats lunch at home after school, same as us." },
     { id: "cook", text: "Cook Ramila comes every day at 8 in the morning and makes breakfast and lunch." },
     { id: "cookTime", text: "She has about two hours, no rush." },
     { id: "otherDays", text: "Ramila comes all seven days, only mornings. Bhavna makes dinner every night. One night a week we eat out. We never order in. Saturday dinner we go out to a Jain restaurant." },

@@ -26,7 +26,7 @@ export const h17: Household = {
   facts: [
     { id: "pain", text: "Hardest part: balancing my side's South Indian food and Simran's North Indian food so everyone is happy." },
     { id: "apps", text: "Groceries on Zepto, almost everything." },
-    { id: "lunchWhere", text: "Lives with wife Simran (37), my mother Lakshmi (67), we call her Amma, and son Ishaan (6)." },
+    { id: "lunchWhere", text: "Ishaan takes a lunch box to school Monday to Friday." },
     { id: "cook", text: "Cook Manjula comes Monday to Saturday: 7:30 in the morning for breakfast and lunch (she packs my lunch and Ishaan's lunch box), and 6:30 in the evening for dinner." },
     { id: "cookTime", text: "Manjula has about two hours in the morning, an hour in the evening." },
     { id: "otherDays", text: "On Sunday Manjula is off; Simran cooks breakfast and lunch, and Sunday dinner we all go out. Sunday dinner we go out, all four of us. We don't order in much otherwise." },

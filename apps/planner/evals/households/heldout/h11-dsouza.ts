@@ -19,7 +19,7 @@ export const h11: Household = {
   facts: [
     { id: "pain", text: "Hardest part: we both cook and keep making the same three things." },
     { id: "apps", text: "Zepto only." },
-    { id: "lunchWhere", text: "Just me and my wife Ishita (30)." },
+    { id: "lunchWhere", text: "Ishita makes breakfast and her lunch box." },
     { id: "otherDays", text: "No cook. Ishita makes breakfast and her lunch box; I cook dinner on weekdays; weekends we cook together. Friday dinner we order in. Friday dinner, every week." },
     { id: "familyBreakfast", text: "Breakfast: poha, upma, ragi dosa, besan chilla; overnight oats for Ishita on busy days." },
     { id: "familyLunch", text: "Lunch: dal, rice, a sabzi and salad. Rajma or chole once a week." },

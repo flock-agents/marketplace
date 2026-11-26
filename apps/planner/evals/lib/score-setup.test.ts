@@ -306,3 +306,15 @@ describe("scoreSetup: seed plates in their words", () => {
     expect(scoreSetup(h, s).rates.seed_on_slot).toEqual([0, 1]);
   });
 });
+
+// A kind part's one dish is theirs even when their word for the part is the dish's name ("usal or pithla": Pithla).
+describe("scoreSetup: real_dish and a part's one dish", () => {
+  test("a library row that is a part's dish passes; their bare word for another part fails", async () => {
+    const h = (await import("../households")).HOUSEHOLDS.find((x) => x.id === "h6-kulkarni")!;
+    const s = setupOfTruth(h);
+    expect(s.library.some((d) => d.name === "Pithla" && d.slot === "Dinner")).toBe(true);
+    expect(scoreSetup(h, s).rates.real_dish).toEqual([s.library.length, s.library.length]);
+    s.library.push({ ...s.library[0], name: "Usal", slot: "Dinner" });
+    expect(scoreSetup(h, s).notes).toContain("real_dish: Usal saved as a dish at Dinner: it is their word for a part");
+  });
+});

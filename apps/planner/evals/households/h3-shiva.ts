@@ -6,6 +6,9 @@ import { avoid, dish, mains, MON_SAT, noEggs, note, SCHOOL, veg, items, kindPart
 
 // Their bare words that name one dish (scripts/kinds/bare-decided.md).
 const DOSA = kindPart("Dosa", { dish: "Plain dosa", words: "dosa" });
+// Their words for a category part.
+const SABJI = kindPart("Sabzi", { words: "sabji" });
+const DRY_SABJI = kindPart("Sabzi", { words: "dry sabji" });
 
 const GS = "Gowri Shankar";
 export const h3: Household = {
@@ -28,7 +31,7 @@ export const h3: Household = {
   facts: [
     { id: "pain", text: "Hardest part: deciding what to make every day and remembering to order what the meals need." },
     { id: "apps", text: "Groceries on Zepto (main); Instamart when something is not on Zepto." },
-    { id: "lunchWhere", text: "Lives with wife Ankita, son Agastya (6) and father Gowri Shankar (63)." },
+    { id: "lunchWhere", text: "Shiva and Ankita take lunch boxes. Agastya takes a school tiffin Monday to Friday." },
     { id: "cook", text: "Cook Lakshmi comes Monday to Saturday, 7 in the morning for breakfast and lunch, and 6 in the evening for dinner." },
     { id: "cookTime", text: "Lakshmi has about an hour in the morning: breakfast plus at most two dishes for lunch." },
     { id: "otherDays", text: "Sunday: Ankita makes a quick breakfast and dinner; Sunday lunch is eaten out. Order in once a week, usually Saturday dinner from Swiggy." },
@@ -91,11 +94,11 @@ export const h3: Household = {
     ],
     cuisines: ["south", "north"], cuisinesAlso: ["tamil", "karnataka", "punjab", "west", "central", "continental"],
     meals: [
-      { slot: "Breakfast", templates: [tpl(["Idli", "Chutney"]), tpl([DOSA, "Chutney"]), tpl(["Poha"]), tpl(["Upma", "Chutney"]), tpl(["Paratha"])] },
+      { slot: "Breakfast", templates: [tpl(["Idli", "Chutney"]), tpl([DOSA, "Chutney"]), tpl(["Poha"]), tpl(["Upma", "Chutney"]), tpl(["Paratha"]), tpl(["Sandwich"])] },
       { slot: "Agastya's tiffin", templates: [tpl(["Roll"]), tpl(["Chilla"]), tpl(["Idli"]), tpl(["Sandwich"]), tpl(["Flavoured rice"])] },
-      { slot: "Lunch", staples: ["Rice", "Curd"], templates: [tpl(["Rice", "Rice curry/Sambar", "Sabzi", "Curd"]), tpl(["Rice", "Dal", "Sabzi", "Curd"]),
+      { slot: "Lunch", staples: ["Rice", "Curd"], templates: [tpl(["Rice", "Rice curry/Sambar", SABJI, "Curd"]), tpl(["Rice", "Dal", SABJI, "Curd"]),
         tpl([items("Rajma chawal"), "Curd"], "2/week"), tpl(["Flavoured rice", "Curd"])] },
-      { slot: "Dinner", staples: ["Roti"], templates: [tpl(["Roti", "Dal", "Sabzi"]), tpl(["Roti", "Dal/Rajma/Chole"])] },
+      { slot: "Dinner", staples: ["Roti"], templates: [tpl(["Roti", "Dal", DRY_SABJI]), tpl(["Roti", kindPart("Gravy", { words: "gravy" })]), tpl(["Roti", "Dal/Rajma/Chole"])] },
       { slot: "Gowri Shankar's dinner", staples: ["Roti"], templates: [tpl(["Roti"])] },
     ],
     judgeNotes: ["Gowri Shankar fasts Thursday till evening: he is not at Thursday breakfast and lunch.", "Gowri Shankar: no sugar, less rice and no rice at night (his own phulkas at dinner); millets good for him two or three times a week.",

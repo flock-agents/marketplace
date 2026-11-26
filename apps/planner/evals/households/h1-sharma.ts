@@ -21,7 +21,7 @@ export const h1: Household = {
   facts: [
     { id: "pain", text: "Hardest part: deciding what to make every day; Sunita keeps asking." },
     { id: "apps", text: "Groceries on Blinkit mostly, BigBasket for the monthly stuff." },
-    { id: "lunchWhere", text: "Lives with wife Neha (36) and son Vihaan (7). Nobody else eats at home." },
+    { id: "lunchWhere", text: "Vihaan takes a school tiffin Monday to Friday." },
     { id: "cook", text: "Cook Sunita comes Monday to Saturday: 8 in the morning for breakfast and lunch (she also packs Vihaan's tiffin), and 7 in the evening for dinner." },
     { id: "cookTime", text: "Sunita has enough time, about two hours in the morning." },
     { id: "otherDays", text: "On Sunday Sunita is off and Neha cooks all three meals. We order dinner on Sunday night from Zomato. Order in once a week, Sunday dinner from Zomato." },

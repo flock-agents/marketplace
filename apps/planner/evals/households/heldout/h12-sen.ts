@@ -22,7 +22,7 @@ export const h12: Household = {
   facts: [
     { id: "pain", text: "Hardest part: two kitchens in one, Bengali for me and Mili, Marwari veg for Sanjay and Papaji, and his sugar." },
     { id: "apps", text: "Blinkit, and BigBasket for the monthly things." },
-    { id: "lunchWhere", text: "Husband Sanjay (46), daughter Mili (9) and my father-in-law Omprakash (77), we call him Papaji." },
+    { id: "lunchWhere", text: "Mili takes a tiffin Monday to Friday." },
     { id: "cook", text: "Cook Pushpa comes Monday to Saturday, 7 in the morning for breakfast and lunch, and 6 in the evening for dinner." },
     { id: "cookTime", text: "She's fine on time." },
     { id: "otherDays", text: "Sunday I cook everything. Rarely, no fixed day." },

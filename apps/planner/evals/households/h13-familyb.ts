@@ -27,7 +27,7 @@ export const h13: Household = {
   facts: [
     { id: "pain", text: "Hardest part: deciding every day what Shanti should make, and Vivaan's tiffin." },
     { id: "apps", text: "Blinkit only." },
-    { id: "lunchWhere", text: "Husband Varun, son Vivaan (6) and Varun's father Raghavan (72), I call him Dad." },
+    { id: "lunchWhere", text: "Varun and I carry roti sabzi to office. Dad has dal, rice, sabzi and curd at home. Vivaan takes a tiffin to school." },
     { id: "cook", text: "Cook Shanti comes every day at 7 in the morning and makes breakfast, the lunch boxes and dinner in one go." },
     { id: "cookTime", text: "She has two hours. Makes 3 to 4 dishes in all." },
     { id: "otherDays", text: "Food at home all seven days, except Saturday dinner, which we order in. Once a week, Saturday dinner." },

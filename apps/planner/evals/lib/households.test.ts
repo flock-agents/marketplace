@@ -70,8 +70,10 @@ describe("households", () => {
       for (const s of t.slots.filter((x) => x.kind === "addon")) expect(slotNames).toContain(s.addon_of!);
       for (const s of t.slots.filter((x) => x.kind !== "main")) expect(s.match).toBeDefined();
     });
+    // A category word left the library (spec §5.3) but stays in the past week's plates: it must be the very word of one of the
+    // slot's TRUTH parts (its kind, sub-kind or their words), so no removed row's word is lost from TRUTH.
     test("seed dishes are library dishes of their slot, or their words for one of its parts (history keeps the words)", () => {
-      for (const r of t.seed) for (const d of r.dishes) expect([d, t.library.some((x) => x.name === d && x.slot === r.slot) || partWords(h, r.slot).has(plain(d)) || kindWordOf(h, r.slot, d)]).toEqual([d, true]);
+      for (const r of t.seed) for (const d of r.dishes) expect([r.slot, d, t.library.some((x) => x.name === d && x.slot === r.slot) || partWords(h, r.slot).has(plain(d))]).toEqual([r.slot, d, true]);
     });
     test("every rule's quote and every noted item is something the family said", () => {
       for (const r of t.rules) expect(r.quote.test(words)).toBe(true);

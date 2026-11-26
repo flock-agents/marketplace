@@ -21,7 +21,7 @@ export const h10: Household = {
   facts: [
     { id: "pain", text: "Hardest part: planning two kinds of food every day, mine and Zayan's." },
     { id: "apps", text: "Instamart mostly, Blinkit sometimes." },
-    { id: "lunchWhere", text: "Just me and my son Zayan, he's 2." },
+    { id: "lunchWhere", text: "On daycare days they feed him. My lunch at home: dal chawal, roti and a sabzi." },
     { id: "cook", text: "Cook Shabana comes Monday to Friday at 5 in the evening, only for dinner." },
     { id: "cookTime", text: "She has an hour." },
     { id: "otherDays", text: "I make breakfast every day, and lunch on the days I'm home. Weekends I cook dinner too. Saturday dinner I order in for myself, every week." },

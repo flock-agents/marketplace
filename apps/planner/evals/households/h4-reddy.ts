@@ -6,6 +6,8 @@ import { avoid, dish, mains, MON_SAT, note, SCHOOL, veg, items, kindPart, tpl, t
 // Their bare words that name one dish (scripts/kinds/bare-decided.md).
 const DOSA = kindPart("Dosa", { dish: "Plain dosa", words: "dosa" });
 const RASAM = kindPart("Rice curry", { sub: "Rasam", dish: "Tomato rasam", words: "rasam" });
+// Their word for the sabzi part: "one curry", "a curry".
+const CURRY = kindPart("Sabzi", { words: "curry" });
 
 export const h4: Household = {
   id: "h4-reddy", title: "Grandparents + cook: diabetic grandmother, Ekadashi, soft food, teen tiffin",
@@ -28,7 +30,7 @@ export const h4: Household = {
   facts: [
     { id: "pain", text: "Hardest part: cooking separately for my parents' health every day." },
     { id: "apps", text: "BigBasket only." },
-    { id: "lunchWhere", text: "Wife Padma (42), son Karan (15), my mother Sarojini (70) and father Venkat (74)." },
+    { id: "lunchWhere", text: "Karan takes a school tiffin Monday to Friday." },
     { id: "cook", text: "Cook Kavitha comes Monday to Saturday, 7:30 morning for breakfast and lunch, 6:30 evening for dinner." },
     { id: "cookTime", text: "Kavitha has time, no rush." },
     { id: "otherDays", text: "Sunday Padma cooks everything. We hardly order in, maybe once a month. No fixed day." },
@@ -95,8 +97,8 @@ export const h4: Household = {
       { slot: "Sarojini's breakfast", templates: [tpl(["Dosa"]), tpl(["Porridge"])] },
       { slot: "Karan's tiffin", templates: [tpl(["Roll"]), tpl(["Flavoured rice"]), tpl(["Pulao"]), tpl([items("Curd rice")])] },
       // Two of three seeded lunches have the pachadi: the plate with it.
-      { slot: "Lunch", staples: ["Rice", "Curd"], templates: [tpl(["Rice", "Dal/Pappu", "Sabzi", RASAM, "Curd", "Chutney"])] },
-      { slot: "Dinner", staples: ["Roti", "Rice"], templates: [tpl(["Roti", "Sabzi"]), tpl(["Rice", "Dal/Pappu"])] },
+      { slot: "Lunch", staples: ["Rice", "Curd"], templates: [tpl(["Rice", "Dal/Pappu", CURRY, RASAM, "Curd", "Chutney"])] },
+      { slot: "Dinner", staples: ["Roti", "Rice"], templates: [tpl(["Roti", CURRY]), tpl(["Rice", "Dal/Pappu"])] },
       { slot: "Sarojini's dinner", staples: ["Bhakri"], templates: [tpl(["Bhakri"])] },
     ],
     judgeNotes: ["Grandparents pure veg, no eggs; chicken only Sunday lunch for Srinivas, Padma, Karan.", "Sarojini: no sugar; her own ragi breakfast and jowar roti at night; ragi a few times a week; Ekadashi fast (fruit) twice a month.",

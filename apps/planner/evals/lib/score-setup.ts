@@ -229,7 +229,8 @@ export function scoreSetup(h: Household, s: SetupOut, o: { transcript?: string[]
   // ── One meaning model (spec §5.1, §5.3, §7): a category word is never a library row, nor a filling a kind ──
   const truthParts = (t.meals ?? []).flatMap((m) => m.templates.flatMap((tp) => tp.parts));
   const partWords = new Set(truthParts.flatMap((p) => ("words" in p && p.words ? [plain(p.words)] : [])));
-  const itemDishes = new Set(truthParts.flatMap((p) => ("items" in p ? p.items.map(plain) : [])));
+  // Their dishes: a fixed-dishes part's, and a kind part's one dish (their word "pithla" is the dish Pithla).
+  const itemDishes = new Set(truthParts.flatMap((p) => ("items" in p ? p.items.map(plain) : "dish" in p && p.dish ? [plain(p.dish)] : [])));
   if (partWords.size) for (const x of s.library) add("real_dish", !partWords.has(plain(x.name)) || itemDishes.has(plain(x.name)), `${x.name} saved as a dish at ${x.slot}: it is their word for a part`);
   // A filling said with a kind ("paratha with egg or cheese inside") is an item of that kind, never a kind of the family's own.
   const fillings = new Set(truthParts.flatMap((p) => ("items" in p ? p.items.flatMap((it) => plain(it).split(" ").filter((w) => tagsOfName(w).size > 0)) : [])));

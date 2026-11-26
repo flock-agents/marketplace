@@ -27,7 +27,7 @@ export const h16: Household = {
   facts: [
     { id: "pain", text: "Hardest part: telling Lathika chechi the next day's menu every evening; we keep repeating." },
     { id: "apps", text: "Groceries on Swiggy Instamart; fish from the fish stall at the market on Saturday mornings." },
-    { id: "lunchWhere", text: "Lives with wife Revathi (37) and son Advaith (7). Nobody else eats at home." },
+    { id: "lunchWhere", text: "Advaith takes a lunch box to school Monday to Friday." },
     { id: "cook", text: "Cook Lathika chechi comes Monday to Saturday: 7 in the morning for breakfast and lunch (she packs all three lunches), and 5 in the evening for dinner." },
     { id: "cookTime", text: "Lathika has about an hour and a half in the morning, enough for puttu or appam and the lunch." },
     { id: "otherDays", text: "Sunday Lathika is off. I cook on Sunday, breakfast and the biryani at lunch. Sunday dinner we order on Swiggy. Sunday dinner we order in on Swiggy, porotta and chicken usually." },

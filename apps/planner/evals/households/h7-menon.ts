@@ -1,7 +1,10 @@
 // 7. Young working couple, long hours: a cook on weekdays only, one visit that makes lunch and dinner (no breakfast);
 // weekends mostly out or ordered in (Saturday lunch out, Saturday dinner and Sunday lunch ordered in); high protein for one;
 // she eats no red meat. Frequency words: eggs every morning for Nikhil, biryani once a month.
-import { avoid, dish, mains, note, SCHOOL, WEEK, items, tpl, type Household } from "../lib/truth";
+import { avoid, dish, mains, note, SCHOOL, WEEK, items, kindPart, tpl, type Household } from "../lib/truth";
+
+// Their word for the egg part: "eggs every morning".
+const EGGS = kindPart("Egg", { words: "eggs" });
 
 export const h7: Household = {
   id: "h7-menon", title: "Young couple, weekday cook one visit (lunch+dinner), weekends out, high protein",
@@ -19,7 +22,7 @@ export const h7: Household = {
   facts: [
     { id: "pain", text: "Hardest part: we never know what to tell Rekha, and groceries run out." },
     { id: "apps", text: "Zepto mainly, Blinkit if Zepto doesn't have it." },
-    { id: "lunchWhere", text: "Just me and my wife Tanya (29)." },
+    { id: "lunchWhere", text: "Lunch box: chicken curry or dal, rice, a sabzi, salad." },
     { id: "cook", text: "Cook Rekha comes Monday to Friday, once, at 10 in the morning, and makes lunch and dinner in one go. We make breakfast ourselves." },
     { id: "cookTime", text: "She has an hour and a half." },
     { id: "otherDays", text: "Weekends: Saturday lunch we eat out, Saturday dinner and Sunday lunch we order in. Breakfast I make every day. Sunday dinner Tanya cooks something simple. Saturday dinner and Sunday lunch, every week." },
@@ -58,7 +61,7 @@ export const h7: Household = {
     ],
     cuisines: ["north"], cuisinesAlso: ["south", "kerala", "continental", "west"],
     meals: [
-      { slot: "Breakfast", staples: ["Egg"], own: ["Smoothie"], templates: [tpl(["Egg", "Porridge"]), tpl(["Egg", "Smoothie"]), tpl(["Egg", "Toast"], "sometimes")] },
+      { slot: "Breakfast", staples: ["Egg"], own: ["Smoothie"], templates: [tpl([EGGS, "Porridge"]), tpl([EGGS, "Smoothie"]), tpl([EGGS, "Toast"], "sometimes")] },
       { slot: "Lunch", staples: ["Rice", "Salad"], templates: [tpl(["Chicken", "Rice", "Sabzi", "Salad"]), tpl(["Dal", "Rice", "Sabzi", "Salad"]), tpl(["Gravy/Paneer", "Rice", "Sabzi", "Salad"])] },
       { slot: "Dinner", staples: ["Roti"], templates: [tpl(["Roti", "Chicken", "Sabzi"]), tpl(["Roti", "Gravy/Paneer", "Sabzi"]), tpl(["Roti", "Dal", "Sabzi"], "sometimes")] },
     ],

@@ -21,7 +21,7 @@ export const h15: Household = {
   facts: [
     { id: "pain", text: "Hardest part: Pooja runs out of ideas and we end up making the same four things." },
     { id: "apps", text: "Groceries on Blinkit; sabzi from the thela outside most mornings." },
-    { id: "lunchWhere", text: "Lives with wife Pooja (33) and daughter Myra (5). Nobody else eats at home." },
+    { id: "lunchWhere", text: "Myra takes a small tiffin to school Monday to Friday for the break. She comes home by 1 and has lunch with Pooja." },
     { id: "cook", text: "No cook. Pooja does all the cooking herself, every day. Sushila the maid only cleans and does the dishes." },
     { id: "cookTime", text: "Pooja has about an hour in the morning before her work calls start, and cooks dinner around 7:30." },
     { id: "otherDays", text: "Pooja cooks every day of the week. On Sunday we go out for lunch. We eat out once a week, Sunday dinner, usually at a place in Hazratganj. We rarely order in." },

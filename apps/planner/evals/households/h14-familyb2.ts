@@ -32,7 +32,7 @@ export const h14: Household = {
   facts: [
     { id: "pain", text: "Hardest part: thinking of something different every day, everyone gets bored of the same thing." },
     { id: "apps", text: "BigBasket mostly; Instamart when something is needed quickly." },
-    { id: "lunchWhere", text: "Husband Senthil, daughter Nila (15), and Senthil's parents Murugesan (74) and Kamakshi (68), Appa and Amma." },
+    { id: "lunchWhere", text: "Senthil carries his lunch. Nila takes a lunch box to school." },
     { id: "cook", text: "Cook Valli comes Monday to Saturday, 8 in the morning for lunch and 6 in the evening for dinner. I make breakfast myself every day." },
     { id: "cookTime", text: "She's fine on time." },
     { id: "otherDays", text: "Sunday I cook everything. Rarely, no fixed day." },

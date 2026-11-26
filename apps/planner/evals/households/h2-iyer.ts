@@ -26,7 +26,7 @@ export const h2: Household = {
   facts: [
     { id: "pain", text: "Hardest part: remembering to order what the meals need." },
     { id: "apps", text: "Only Instamart." },
-    { id: "lunchWhere", text: "Wife Meenakshi (33) and daughter Ananya (5). Just the three of us." },
+    { id: "lunchWhere", text: "Ananya eats lunch at home after playschool, same as us. Karthik takes the same in his lunch box." },
     { id: "otherDays", text: "No cook. Meenakshi cooks every meal, all seven days. We order in one night a week, Friday dinner. Once a week, Friday dinner, usually from a Saravana Bhavan on Swiggy." },
     { id: "childSame", text: "Ananya eats lunch at home after playschool, same as us, rice with sambar or rasam and curd. Curd rice when she's not well.", differs: false },
     { id: "familyBreakfast", text: "Breakfast: idli, dosa, upma, pongal on Sundays; with coconut chutney and sambar." },
@@ -37,7 +37,7 @@ export const h2: Household = {
     { id: "subscriptions", text: "Aavin milk packets every morning from the milkman." },
   ],
   correction: { after: "otherDays", line: "sorry, saturday dinner we order, not friday", fact: "otherDays",
-    corrected: "No cook. Meenakshi cooks every meal, all seven days. We order in one night a week, Friday dinner. Once a week, Saturday dinner, usually from a Saravana Bhavan on Swiggy." },
+    corrected: "No cook. Meenakshi cooks every meal, all seven days. We order in one night a week, Saturday dinner. Once a week, Saturday dinner, usually from a Saravana Bhavan on Swiggy." },
   truth: {
     people: [{ name: "Karthik", group: "adult" }, { name: "Meenakshi", group: "adult" }, { name: "Ananya", group: "child", age: 5 }],
     cook: null,
