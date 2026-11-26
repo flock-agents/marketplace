@@ -701,6 +701,23 @@ describe("make_plan: the contains read reads only what is unknown (J1)", () => {
   });
 });
 
+describe("make_plan: no rice is the catalog's rice tag (J9)", () => {
+  it("an avoid of rice at dinner keeps an idli (rice batter, by the catalog) from its person, with no contains call", async () => {
+    // Saved before J9: the ingredient "rice", which no catalog item carries.
+    const NO_RICE: RuleInput = { hard: true, what: "avoid", who: "Lalitha", items: ["rice"], slots: ["Dinner"], quote: "no rice at night for Lalitha",
+      targets: [{ type: "kind", kind: "Rice" }, { type: "ingredient", tag: "rice" }] };
+    // The fixture's breakfast Idli (read as without white rice) is left out: this Idli is known by the catalog alone.
+    const k = await home({ people: [["Asha", "adult"], ["Lalitha", "elder"]], rules: [NO_RICE], lib: { ...LIB, Breakfast: LIB.Breakfast.filter(([n]) => n !== "Idli") },
+      slots: [MAIN[0], MAIN[1], { name: "Dinner", kind: "main", order: 50, templates: [T({ items: ["Idli"] })] }],
+      library: [{ name: "Idli", slot: "Dinner", kind: "Idli", catalog_item: "Idli", contains: [], contains_read: [] }] });
+    const f = fakeModel();
+    const r = await k.plan(f.model);
+    if (!r.ok) throw new Error(r.say);
+    expect(f.contains().flatMap((c) => c.user.dishes)).not.toContain("Idli");
+    expect(k.at(MON, "Dinner")!.dishes.find((x) => x.dish === "Idli")!.not_for).toEqual(["Lalitha"]);
+  });
+});
+
 describe("make_plan: failures", () => {
   it("out of credits on a read stops at once: a plain line, nothing saved, nothing more asked", async () => {
     const k = await home({ rules: [{ hard: true, what: "veg", who: "Asha", quote: "Asha is vegetarian" }], library: [{ name: "Mystery curry", slot: "Lunch", contains: [], contains_read: [] }] });

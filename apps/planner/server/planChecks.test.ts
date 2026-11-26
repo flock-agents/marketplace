@@ -219,7 +219,7 @@ describe("one meaning model checks", () => {
 describe("a swap on rice stays on the Rice kind (G4 review)", () => {
   it("does not fire on Curd rice (kind Curd), fires on Rice", () => {
     const swap = rule({ who: "Ravi", what: "swap", slots: ["Dinner"], items: ["rice"], to: "ragi mudde", targets: targetsFor({ what: "swap", items: ["rice"] }), gives: { type: "item", item: "Ragi mudde", kind: null }, quote: "ragi mudde for rice" });
-    const lib = [dish("Curd rice", "Dinner", { kind: "Curd", contains: ["rice", "curd"], contains_read: [...READ, "rice", "curd"] }), dish("Rice", "Dinner", { kind: "Rice" })];
+    const lib = [dish("Curd rice", "Dinner", { kind: "Curd", contains: ["white_rice", "rice", "curd"], contains_read: [...READ, "rice", "curd"] }), dish("Rice", "Dinner", { kind: "Rice" })];
     const w = week({ slots: [slot("Dinner", { order: 30 })], library: lib, rules: [swap] });
     const d = w.days.find((x) => x.slot === "Dinner")!;
     expect(swapsAt(w, d, "Curd rice")).toEqual([]);
@@ -227,10 +227,10 @@ describe("a swap on rice stays on the Rice kind (G4 review)", () => {
   });
 });
 
-describe("a rice rule holds the kind and the ingredient (G4)", () => {
+describe("a rice rule holds the kind and the ingredient (G4; J9: the ingredient is the catalog's white_rice)", () => {
   it("no rice at Dinner breaks Curd rice (kind Curd) by its facts, and Rice by its kind; Ragi mudde is fine", () => {
     const r = rule({ who: "Ravi", slots: ["Dinner"], items: ["rice"], targets: resolveTargets("rice"), quote: "no rice at night" });
-    const lib = [dish("Curd rice", "Dinner", { kind: "Curd", contains: ["rice", "curd"], contains_read: [...READ, "rice", "curd"] }),
+    const lib = [dish("Curd rice", "Dinner", { kind: "Curd", contains: ["white_rice", "rice", "curd"], contains_read: [...READ, "rice", "curd"] }),
       dish("Ragi mudde", "Dinner", { kind: "Millet", contains: ["ragi"], contains_read: [...READ, "rice"] }), dish("Rice", "Dinner", { kind: "Rice" })];
     const w = week({ slots: [slot("Dinner", { order: 30 })], library: lib, rules: [r] });
     const d = w.days.find((x) => x.slot === "Dinner")!;

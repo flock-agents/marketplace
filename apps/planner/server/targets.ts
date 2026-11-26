@@ -34,7 +34,15 @@ function ingredientOf(word: string, keepKind = false): string | null {
   if (SYNONYMS[n]) return SYNONYMS[n];
   const hit = vocab.get(n) ?? (n.endsWith("s") && n.length > 3 ? vocab.get(n.slice(0, -1)) : undefined);
   // A word that is also a whole kind of dish ("poha", "rajma") stays that kind: the rule is about the dish.
-  return hit && (keepKind || matchDish(word)?.by !== "kind") ? hit : null;
+  return hit && (keepKind || matchDish(word)?.by !== "kind") ? catalogTagOf(hit) ?? hit : null;
+}
+/** The catalog's tag an ingredient is (J9, decided D1): the one tag the catalog gives that ingredient, when the tag's own name
+ *  holds the ingredient's word ("rice": white_rice, so idli rice, rice flour and poha are rice too). Null when the catalog gives
+ *  it no tag, or a wider one it is only part of ("curd": dairy, "maida": wheat, "onion": onion_garlic and root_veg), so "no curd"
+ *  stays curd. */
+function catalogTagOf(ingredient: string): string | null {
+  const tags = (CATALOG.ingredients?.[norm(ingredient.replace(/_/g, " "))] ?? []).map(canon);
+  return tags.length === 1 && tags[0].split("_").includes(canon(ingredient)) ? tags[0] : null;
 }
 
 /** A rule word to its one target: a known tag (BASE_TAGS, TAG_PARENT keys/values, catalog tags, singular of a plural) → ingredient;
@@ -113,9 +121,14 @@ export function targetsFor(r: { what: string; items: string[] | null }): RuleTar
   return out.filter((t) => { const k = JSON.stringify(t); return seen.has(k) ? false : (seen.add(k), true); });
 }
 
-/** A rule's targets as saved, else derived (targetsFor). */
+/** A rule's targets as saved, else derived (targetsFor). A rule saved before J9 with an ingredient the catalog has a tag for
+ *  ("rice") reads as that tag (white_rice). */
 export function targetsOf(r: Pick<Rule, "what" | "items" | "targets">): RuleTarget[] {
-  return r.targets ?? targetsFor(r);
+  if (!r.targets) return targetsFor(r);
+  if (!r.targets.some((t) => t.type === "ingredient" && catalogTagOf(t.tag))) return r.targets;
+  const seen = new Set<string>();
+  return r.targets.map((t): RuleTarget => (t.type === "ingredient" ? { type: "ingredient", tag: catalogTagOf(t.tag) ?? t.tag } : t))
+    .filter((t) => { const k = JSON.stringify(t); return seen.has(k) ? false : (seen.add(k), true); });
 }
 
 export type DishPlace = { kind: string | null; sub: string | null; item: string | null };

@@ -4,7 +4,7 @@ import { hitsTarget, resolveGives, resolveTarget, resolveTargets, targetsOf, tar
 
 describe("rule targets", () => {
   it("a kind word the catalog also lists as an ingredient resolves to both", () => {
-    expect(resolveTargets("rice")).toEqual([{ type: "kind", kind: "Rice" }, { type: "ingredient", tag: "rice" }]);
+    expect(resolveTargets("rice")).toEqual([{ type: "kind", kind: "Rice" }, { type: "ingredient", tag: "white_rice" }]);
     for (const w of ["salad", "upma"]) expect(resolveTargets(w)).toEqual([resolveTarget(w)]);
     expect(resolveTargets("egg")).toEqual([{ type: "ingredient", tag: "egg" }]);
     expect(targetsOf({ what: "avoid", items: ["rice", "rice"], targets: null })).toEqual(resolveTargets("rice"));
@@ -42,6 +42,20 @@ describe("rule targets", () => {
     expect(resolveTarget("poha").type).toBe("kind");
     expect(isAllergyRule({ hard: true, what: "avoid", items: ["shrimp"], quote: "Ira is allergic to shrimp" })).toBe(true);
     expect(isAllergyRule({ hard: true, what: "avoid", items: ["shrimp"], quote: "Ira doesn't eat shrimp" })).toBe(false);
+  });
+
+  // J9 (D1): "rice" is the catalog's rice tag, so idli rice, rice flour and poha are rice too.
+  it("an ingredient word the catalog tags by its own name is that tag; one the catalog tags more widely stays its own word", () => {
+    expect(resolveTargets("rice")).toEqual([{ type: "kind", kind: "Rice" }, { type: "ingredient", tag: "white_rice" }]);
+    expect(resolveTarget("curd")).toEqual({ type: "ingredient", tag: "curd" });
+    expect(resolveTarget("maida")).toEqual({ type: "ingredient", tag: "maida" });
+    expect(resolveTarget("onion")).toEqual({ type: "ingredient", tag: "onion" });
+  });
+  it("a rule saved with the ingredient rice before is read as the catalog's rice tag", () => {
+    const old = [{ type: "kind", kind: "Rice" }, { type: "ingredient", tag: "rice" }] as const;
+    expect(targetsOf({ what: "avoid", items: ["rice"], targets: [...old] })).toEqual([{ type: "kind", kind: "Rice" }, { type: "ingredient", tag: "white_rice" }]);
+    const curd = [{ type: "ingredient", tag: "curd" }] as const;
+    expect(targetsOf({ what: "avoid", items: ["curd"], targets: [...curd] })).toEqual([...curd]);
   });
 
   it("a swap gives an item or a kind, never an ingredient", () => {

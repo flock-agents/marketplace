@@ -95,13 +95,13 @@ export function ruleTargets(r: Pick<Rule, "what" | "items" | "targets" | "days" 
     default: return [];
   }
 }
-/** targetsOf, once per rule object: an older rule without saved targets resolves its words once, not at every check. */
+/** targetsOf, once per rule object: an older rule without saved targets resolves its words once, not at every check; one saved
+ *  before J9 reads its ingredient as the catalog's tag ("rice": white_rice). */
 const targetsMemo = new WeakMap<object, RuleTarget[]>();
 function targetsOfRule(r: Pick<Rule, "what" | "items" | "targets">): RuleTarget[] {
-  if (r.targets) return r.targets;
   const had = targetsMemo.get(r);
   if (had) return had;
-  const out = targetsOf({ what: r.what, items: r.items, targets: null });
+  const out = targetsOf({ what: r.what, items: r.items, targets: r.targets });
   targetsMemo.set(r, out);
   return out;
 }

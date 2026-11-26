@@ -197,7 +197,7 @@ describe("set_rule", () => {
   it("a saved \"no rice at night\" rule holds the kind and the ingredient", async () => {
     const k = await planned();
     const r = await k.op("set_rule", { hard: true, what: "avoid", items: ["rice"], slots: ["Dinner"], quote: "no rice at night" });
-    expect(r.rule.targets).toEqual([{ type: "kind", kind: "Rice" }, { type: "ingredient", tag: "rice" }]);
+    expect(r.rule.targets).toEqual([{ type: "kind", kind: "Rice" }, { type: "ingredient", tag: "white_rice" }]);
   });
 
   it("veg and no_eggs with items keep their derived expansion", async () => {

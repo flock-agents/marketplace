@@ -1402,7 +1402,7 @@ describe("setup reads into the one meaning model (§5, §6.4)", () => {
     const rice = { hard: true, what: "avoid", who: "Gowri Shankar", items: ["rice"], slots: ["Dinner"], quote: "Dad doesn't eat egg or salad" };
     const { k } = await walk({ rules: { rules: [...W_RULES.rules, rice] } });
     const r = k.rows("rules").find((x) => x.what === "avoid" && JSON.parse(x.items ?? "[]").includes("rice"))!;
-    expect(JSON.parse(r.targets)).toEqual([{ type: "kind", kind: "Rice" }, { type: "ingredient", tag: "rice" }]);
+    expect(JSON.parse(r.targets)).toEqual([{ type: "kind", kind: "Rice" }, { type: "ingredient", tag: "white_rice" }]);
     expect(JSON.parse(r.slots)).toEqual(["Dinner"]);
   });
 
