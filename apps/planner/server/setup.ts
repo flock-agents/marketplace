@@ -944,6 +944,29 @@ export function emptyBoxes(read: Pick<SetupRead, "slots" | "links" | "library" |
   }).map((s) => s.name);
 }
 
+/** Does a quote cite a sentence: one holds the other (both in plain words). */
+const cites = (quote: string, sentence: string): boolean => saidByFamily(quote, [sentence]) || saidByFamily(sentence, [plainWords(quote)]);
+/** The family's sentences that name food (a box word, or a word or two-word phrase the catalog places) and that no read library,
+ *  seed, link or rule quote cites (H15): each one is re-read once from the dishes, by its words, then logged; never guessed. */
+export function uncited(read: Pick<SetupRead, "library" | "seed" | "links" | "rules">, sentences: string[]): string[] {
+  const quotes = [...read.library, ...read.seed, ...read.links, ...read.rules].map((x) => x.quote).filter(Boolean);
+  const namesFood = (s: string) => {
+    const ws = s.split(" ");
+    return ws.some((w, i) => BOX_WORDS.includes(w) || !!matchDish(w) || (i > 0 && !!matchDish(`${ws[i - 1]} ${w}`)));
+  };
+  return uniq(sentences.map(plainWords).filter((s) => s && namesFood(s) && !quotes.some((q) => cites(q, s))));
+}
+/** The re-read's rows that write down an uncited sentence (H15) or fill a box read empty (H3), and that the read lacks. */
+function rowsFor(read: SetupRead, again: SetupRead, opts: { sentences: string[]; boxes: string[]; meals: string[] }): Pick<SetupRead, "library" | "seed" | "links"> {
+  const names = opts.meals;
+  const wanted = (x: { slot: string; quote: string }) => opts.boxes.includes(resolveSlot(x.slot, names) ?? "") || opts.sentences.some((s) => cites(x.quote, s));
+  return {
+    library: again.library.filter((d) => wanted(d) && !read.library.some((x) => dishKey(x.name) === dishKey(d.name) && same(x.slot, d.slot))),
+    seed: again.seed.filter((d) => wanted(d) && !read.seed.some((x) => same(x.slot, d.slot) && x.dishes.map(dishKey).join() === d.dishes.map(dishKey).join())),
+    links: again.links.filter((l) => wanted(l) && !read.links.some((x) => same(x.slot, l.slot) && same(x.from, l.from))),
+  };
+}
+
 // ── Model calls ──
 
 /** A model call that answers by `ms` or is a timeout (the call itself is not stopped: the SDK takes no signal). */
@@ -2232,7 +2255,10 @@ export async function applySetup(deps: { db: Db; emit: Emit; model: ModelCall; p
   const reread = (part: (typeof SETUP_PARTS)[number], more: Record<string, unknown>) => askOnce(deps.model, { tier: part.tier, purpose: `${part.purpose} (re-read)`,
     system: part.system, user: JSON.stringify({ ...payload, ...more }), schema: part.schema, maxTokens: part.maxTokens }, until, log);
   const partOf = (id: string) => SETUP_PARTS.find((p) => p.id === id)!;
-  let dishesReread = false;
+  const oftenJson = json(SETUP_PARTS.findIndex((p) => p.id === "often"));
+  // H15: the reply sentences that name food, checked against every quote the read saves (uncited).
+  const replySentences = repliesOf(deps.transcript).flatMap((l) => l.split(/[.!?;]+/)).map(plainWords).filter(Boolean);
+  let dishesReread = false, uncitedAsked = false;
   const boxAsks: string[] = [];
   const homeCtx = { household, sentences, transcript: deps.transcript };
   let gaps = homeViolations(checked.read, homeCtx);
@@ -2254,9 +2280,11 @@ export async function applySetup(deps: { db: Db; emit: Emit; model: ModelCall; p
         read = next; checked = nextChecked; gaps = left;
         if (added.length && until - Date.now() >= RETRY_FLOOR_MS) {
           log(`dishes: ${added.map((x) => x.name).join(", ")} added by the home re-read; reading the dishes again`);
-          dishesReread = true;
-          const d = await reread(partOf("dishes"), { missing: added.map((x) => `what goes in ${x.name}`), meals: checked.read.slots.map((x) => x.name) });
-          const again = d.ok ? readOf(null, null, d.json, json(SETUP_PARTS.findIndex((p) => p.id === "often"))) : null;
+          // An uncited sentence joins this re-read (one dishes re-read per setup): its answer stands for the first.
+          const unwritten = uncited(checked.read, replySentences);
+          dishesReread = true; uncitedAsked = unwritten.length > 0;
+          const d = await reread(partOf("dishes"), { missing: [...added.map((x) => `what goes in ${x.name}`), ...unwritten], meals: checked.read.slots.map((x) => x.name) });
+          const again = d.ok ? readOf(null, null, d.json, oftenJson) : null;
           if (again?.library.length) {
             read = { ...read, library: again.library, seed: again.seed, links: again.links };
             checked = checkRead(read, { household, said, sentences, oftenFailed });
@@ -2271,18 +2299,21 @@ export async function applySetup(deps: { db: Db; emit: Emit; model: ModelCall; p
   }
   // H3: a box in place of a meal with no link and nothing but a swap's item is re-read once from the dishes, naming the box; its
   // rows for that box are taken. Still nothing: writeKinds asks (OD7: no default link).
-  const empty = emptyBoxes(checked.read);
-  if (empty.length && !dishesReread && until - Date.now() >= RETRY_FLOOR_MS) {
-    log(`dishes: nothing read for ${empty.join(", ")}; asking once more`);
-    const r = await reread(partOf("dishes"), { missing: empty.map((b) => `what goes in ${b}`) });
+  // H15: a reply sentence that names food and that no saved quote cites is named in the same re-read (one dishes re-read per
+  // setup); the rows that write it down are taken. Still uncited: logged, never guessed.
+  const empty = emptyBoxes(checked.read), unwritten = dishesReread ? [] : uncited(checked.read, replySentences);
+  if ((empty.length || unwritten.length) && !dishesReread && until - Date.now() >= RETRY_FLOOR_MS) {
+    if (empty.length) log(`dishes: nothing read for ${empty.join(", ")}; asking once more`);
+    if (unwritten.length) log(`dishes: not written down: ${unwritten.map((s) => `"${s}"`).join("; ")}; asking once more`);
+    uncitedAsked = unwritten.length > 0;
+    const r = await reread(partOf("dishes"), { missing: [...empty.map((b) => `what goes in ${b}`), ...unwritten] });
     if (r.ok) {
-      const d = readOf(null, null, r.json), names = checked.read.slots.map((x) => x.name);
-      const mine = (slot: string) => empty.includes(resolveSlot(slot, names) ?? "");
-      read = { ...read, library: [...read.library, ...d.library.filter((x) => mine(x.slot))], seed: [...read.seed, ...d.seed.filter((x) => mine(x.slot))],
-        links: [...read.links, ...d.links.filter((x) => mine(x.slot))] };
+      const more = rowsFor(read, readOf(null, null, r.json, oftenJson), { sentences: unwritten, boxes: empty, meals: checked.read.slots.map((x) => x.name) });
+      read = { ...read, library: [...read.library, ...more.library], seed: [...read.seed, ...more.seed], links: [...read.links, ...more.links] };
       checked = checkRead(read, { household, said, sentences, oftenFailed });
     } else log(`dishes re-read: model ${r.code}: ${r.message.slice(0, 200)}`);
   }
+  for (const s of uncited(checked.read, replySentences)) log(`dishes${uncitedAsked ? " re-read" : ""}: still not written down, nothing guessed: "${s}"`);
   // H6: a rule kept as a note for a field it lacks is re-read once from the rules part, naming what is missing; the re-read's
   // complete rules said in the same words stand in for it. Still incomplete: kept as a note, and logged.
   if (checked.incomplete.length) {

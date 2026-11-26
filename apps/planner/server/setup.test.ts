@@ -7,7 +7,7 @@ import { saysNoEggs, buildMeal, codePlace, nearestDish, cuisinesOf, regionalFor,
 import { keptOften, swapItems } from "./setup";
 import { dishKey } from "./dishText";
 import { checkRead, diffSetup, familyLines, familySentences, frequencyOf, householdOf, lunchLine, personOf, plainWords, quoteHasDayOrCount, readOf, resolveSlot,
-  ruleSaid, saidByFamily, savedOf, homeViolations, swapOnly, kindsRead, kindsAsk, DISHES_ASK, SETUP_PARTS, SETUP_SYSTEM, CONTAINS_BATCH, daysOf, clockOf, itemWord, allergyAsk, answeredIn, mealOf, type Saved, type SetupRead } from "./setup";
+  ruleSaid, saidByFamily, savedOf, homeViolations, swapOnly, uncited, kindsRead, kindsAsk, DISHES_ASK, SETUP_PARTS, SETUP_SYSTEM, CONTAINS_BATCH, daysOf, clockOf, itemWord, allergyAsk, answeredIn, mealOf, type Saved, type SetupRead } from "./setup";
 import { isAllergyRule } from "./allergy";
 import { houseCook, visitsOf } from "./makePlan";
 import { listRules, listSlots } from "./slotStore";
@@ -1736,7 +1736,9 @@ describe("setup checks what a read left out (H1-H3)", () => {
     expect(f.of("dishes")).toHaveLength(2);
     const again = JSON.parse(f.of("dishes")[1].user);
     expect(again.meals).toEqual(expect.arrayContaining(["Ira's breakfast box", "Ira's lunch box", "Lunch"]));
-    expect(again.missing).toEqual(["what goes in Ira's breakfast box", "what goes in Ira's lunch box"]);
+    // The sentences no first-read quote cites join this same re-read (H15).
+    expect(again.missing).toEqual(["what goes in Ira's breakfast box", "what goes in Ira's lunch box", "the breakfast box is our breakfast",
+      "the lunch box has two rotis with the lunch sabzi"]);
     expect(f.of("dishes")[1].system).toContain("A list `meals`, when given, is the family's meals as read");
     expect(JSON.stringify(slot("Ira's lunch box").templates).toLowerCase()).toContain("paratha roll");
     expect(JSON.stringify(slot("Lunch").templates).toLowerCase()).not.toContain("paratha roll");
@@ -1818,13 +1820,69 @@ describe("setup checks what a read left out (H1-H3)", () => {
     const { f, r, slot } = await run({ home: { ...withBoxes, slots: [...mains, sprouts, { ...bbox, home_meal: "none" }, lbox] }, rules: { rules: [swap] },
       dishes: (_req: ModelRequest, n: number) => box(n) }, [...toastTranscript, "A: Or a sandwich."]);
     expect(f.of("dishes")).toHaveLength(2);
-    expect(JSON.parse(f.of("dishes")[1].user).missing).toEqual(["what goes in Ira's breakfast box"]);
+    // The sentences no quote cites join this same re-read (H15).
+    expect(JSON.parse(f.of("dishes")[1].user).missing).toEqual(["what goes in Ira's breakfast box", "ira carries a breakfast box for school", "she carries a lunch box",
+      "the breakfast box is our breakfast", "cheese toast is quick on busy days too", "or a sandwich"]);
     expect(f.of("dishes")[1].system).toContain("A list `missing` names what your last answer left out: write it.");
     expect(JSON.stringify(slot("Ira's breakfast box").templates).toLowerCase()).toContain("sandwich");
     expect(r.asks).not.toContain(boxAsk);
     // A box with its link needs no re-read.
     const { f: f2 } = await run();
-    expect(f2.of("dishes")).toHaveLength(1);
+    expect(f2.of("dishes").slice(1).flatMap((x) => JSON.parse(x.user).missing as string[]).filter((m) => m.startsWith("what goes in"))).toEqual([]);
+  });
+
+  // H15: each meal sentence that names food is written down (A10).
+  const puriSaid = "Her lunch box is usually puri rolled around the sabzi", variantSaid = "Or sometimes with paneer or egg inside it";
+  const puriTranscript = [...I_TRANSCRIPT, "Q: Anything else?", `A: ${puriSaid}. ${variantSaid}.`];
+  const puriRow = ["Puri", "Ira's lunch box", puriSaid];
+  const variantRows = [["Paneer puri", "Ira's lunch box", "sometimes with paneer or egg inside it"], ["Egg puri", "Ira's lunch box", "sometimes with paneer or egg inside it"]];
+  const puriDishes = (variants: boolean) => ({ ...I_DISHES, library: [...I_DISHES.library, puriRow, ...(variants ? variantRows : [])] });
+  const puriOften = { often: variantRows.map((r) => [...r, "sometimes", "sometimes"]) };
+  const variant = plainWords(variantSaid);
+  it("uncited finds the variant sentence", () => {
+    const sentences = ["his box is usually puri rolled around the sabzi", "or sometimes with paneer or egg inside it"];
+    const read = readOf(null, { rules: [] }, { library: [["Puri", "Lunch", "his box is usually puri rolled around the sabzi"]] });
+    expect(uncited(read, sentences)).toEqual(["or sometimes with paneer or egg inside it"]);
+    // A quote that holds the sentence cites it too; a sentence naming no food is never asked about.
+    const both = readOf(null, { rules: [] }, { library: [["Puri", "Lunch", "His box is usually puri rolled around the sabzi. Or sometimes with paneer or egg inside it"]] });
+    expect(uncited(both, sentences)).toEqual([]);
+    expect(uncited(read, [sentences[0], "we are four at home"])).toEqual([]);
+  });
+  it("applySetup re-reads the dishes once for an uncited sentence", async () => {
+    const { f, k } = await run({ dishes: (_req: ModelRequest, n: number) => puriDishes(n > 1), often: puriOften, kinds: ownKinds }, puriTranscript);
+    expect(f.of("dishes")).toHaveLength(2);
+    expect(JSON.parse(f.of("dishes")[1].user).missing).toContain(variant);
+    const saved = lib(k);
+    expect(saved["Paneer puri@Ira's lunch box"]).toMatchObject({ frequency: "sometimes" });
+    expect(saved["Egg puri@Ira's lunch box"]).toMatchObject({ frequency: "sometimes" });
+    expect(Object.keys(saved).filter((x) => x.startsWith("Puri@"))).toEqual(["Puri@Ira's lunch box"]);
+  });
+  it("an uncited sentence still unwritten after its re-read is logged, never guessed", async () => {
+    const lines: string[] = [], was = console.log;
+    console.log = (...a: unknown[]) => { lines.push(a.join(" ")); };
+    let out: Awaited<ReturnType<typeof run>>;
+    try { out = await run({ dishes: puriDishes(false), often: puriOften, kinds: ownKinds }, puriTranscript); } finally { console.log = was; }
+    expect(out.f.of("dishes")).toHaveLength(2);
+    expect(lines.some((l) => l.includes("still not written down") && l.includes(variant))).toBe(true);
+    expect(Object.keys(lib(out.k)).filter((x) => /paneer|egg/i.test(x))).toEqual([]);
+  });
+  it("one dishes re-read only: an uncited sentence joins the re-read for a box the home re-read adds (fix 3)", async () => {
+    const first = { ...noBoxDishes, library: [...noBoxDishes.library, ["Puri", "Lunch", puriSaid]] };
+    const { f, k } = await run({ home: (_req: ModelRequest, n: number) => (n === 1 ? noBoxes : withBoxes),
+      dishes: (_req: ModelRequest, n: number) => (n === 1 ? first : puriDishes(true)), often: puriOften, kinds: ownKinds }, puriTranscript);
+    expect(f.of("dishes")).toHaveLength(2);
+    expect(JSON.parse(f.of("dishes")[1].user).missing).toEqual(expect.arrayContaining(["what goes in Ira's lunch box", variant]));
+    expect(lib(k)["Paneer puri@Ira's lunch box"]).toBeTruthy();
+  });
+  it("one dishes re-read only: an uncited sentence joins the re-read for an empty box (H3)", async () => {
+    const boxRows = [["Cheese toast", "Ira's breakfast box", "cheese toast for her"], ["Sandwich", "Ira's breakfast box", "a sandwich"]];
+    const box = (n: number) => { const d = toastDishes(n === 1 ? undefined : boxRows); return { ...d, library: [...d.library, puriRow, ...(n === 1 ? [] : variantRows)] }; };
+    const { f, k, slot } = await run({ home: { ...withBoxes, slots: [...mains, sprouts, { ...bbox, home_meal: "none" }, lbox] }, rules: { rules: [swap] },
+      dishes: (_req: ModelRequest, n: number) => box(n), often: puriOften, kinds: ownKinds }, [...toastTranscript, "A: Or a sandwich.", `A: ${puriSaid}. ${variantSaid}.`]);
+    expect(f.of("dishes")).toHaveLength(2);
+    expect(JSON.parse(f.of("dishes")[1].user).missing).toEqual(expect.arrayContaining(["what goes in Ira's breakfast box", variant]));
+    expect(JSON.stringify(slot("Ira's breakfast box").templates).toLowerCase()).toContain("sandwich");
+    expect(lib(k)["Egg puri@Ira's lunch box"]).toBeTruthy();
   });
 
   // H2: a swap item is off a meal's templates by the family's sentences, not by the reader's fields (A8, A9).
