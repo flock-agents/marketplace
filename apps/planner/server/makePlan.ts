@@ -115,7 +115,9 @@ export type MakePlanDeps = { db: Db; emit: Emit; model: ModelCall; weekStart: st
   /** Plan only these dates of the week (make_plan from a date: planRange); the week's other days are kept as saved. */
   range?: { from: string; to: string };
   /** false: the slot-days whose dishes the family set are planned again too (their people and meals out kept). */
-  keepEdited?: boolean };
+  keepEdited?: boolean;
+  /** The setup's plans: no how-to intro yet (it comes once the setup is done). */
+  holdIntro?: boolean };
 
 /** The question when the planner knows none of the family's dishes for some meals (reason no_dishes). */
 export function noDishesAsk(slots: string[]): string {
@@ -489,7 +491,7 @@ async function planWeek(deps: MakePlanDeps & { log: (line: string) => void }, in
     return done({ ok: true, week_start: weekStart, message, instructions: "Send message to the family word for word, as one message, then end your turn.",
       ...(unmet.length ? { unmet: uniq(unmet) } : {}), ...(asked.length ? { asked } : {}), ...(noIngredients.length ? { no_ingredients: noIngredients } : {}) });
   }
-  const closed = closeWeek(db, weekStart, deps.basePath, unmet);
+  const closed = closeWeek(db, weekStart, deps.basePath, unmet, { holdIntro: deps.holdIntro });
   const standing = rules.filter((r) => r.what === "note" && !r.hard).map(noteLine);
   const text: PlanText = {
     days: weekDates(weekStart).filter((d) => d >= from && d <= lastDay).map((date) => ({ date, label: weekdayLong(date), meals: days.filter((d) => d.date === date && !d.fixed && !emptyAddon(d)).map((d) => ({

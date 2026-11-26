@@ -57,12 +57,13 @@ export const flag = (v: unknown, what: string): boolean => (typeof v === "boolea
 
 /** What a planned week's closing answers: the week, the Sunday `message` (Monday's meals and the Week link), the how-to `intro`
  *  the first time only (then it is marked sent), and how to send them. */
-export function closeWeek(db: Db, weekStart: string, basePath: string, unmet: string[] = []): { week: WeekView; message: string; intro?: string; instructions: string } {
+export function closeWeek(db: Db, weekStart: string, basePath: string, unmet: string[] = [], opts: { holdIntro?: boolean } = {}): { week: WeekView; message: string; intro?: string; instructions: string } {
   const week = weekView(db, weekStart);
   const house = getHouse(db), view = houseView(house);
   const monday = week.days[0].meals;
   const out: { week: WeekView; message: string; intro?: string; instructions: string } = { week, message: weekMessage({ monday, link: weekLink(basePath, weekStart), unmet }), instructions: "" };
-  if (!house.intro_sent_at) {
+  // The setup's plans hold the how-to back (rerun b, 27 Nov: too long for WhatsApp): it comes once the setup is done.
+  if (!house.intro_sent_at && !opts.holdIntro) {
     // The daily items the cart is filled with as they come due: an item delivered on a subscription (a milkman) never goes in a cart.
     const everyday = db.select().from(items).where(eq(items.group, "daily")).orderBy(asc(items.created_at), sql`rowid`).all()
       .filter((i) => i.lasts_days != null && !i.subscription && !i.dont_ask).map((i) => i.name).slice(0, 2);

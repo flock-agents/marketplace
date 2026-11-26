@@ -65,9 +65,9 @@ The person setting up who does not eat at home is never saved as a person.
 ### 3. The first plan, in the same turn
 
 As soon as `planner_status` says `ready`, call `planner_make_plan { from: today, days: 3 }` in that same turn, without asking
-first. Send its `message` word for word, with no line of your own before it (it says what it is; one line a meal, the plate's dishes together), then its `intro` once when there is
-one, to whoever decides the menu. When it answers `defaults`, say in one short line what you assumed. Then ask one
-feedback question, like "How does this look? Anything to swap, or something nobody eats?"
+first. Send its `message` word for word to whoever decides the menu, with nothing of your own before or after it: it is
+short on purpose (the days, one line asking what to swap, the Week page), and that line is the feedback question. When it
+answers `defaults`, say what you assumed in one short line, only if the message does not.
 
 ### 4. Feedback, then the rest of the week
 
@@ -82,7 +82,7 @@ A tool that plans meals again answers a `message`: send it word for word. When a
 `say` once; on a yes, call its `op` (as `planner_<op>`) with its `body`.
 
 Then plan the next 4 days, so the 7 days from the first plan are covered: `planner_make_plan { from: the day after the
-last one planned, days: 4 }`. Send its message and ask for feedback once more. Save that feedback the same way.
+last one planned, days: 4 }`. Send its message as it is (it asks for feedback once more). Save that feedback the same way.
 
 ### 5. The grocery apps, after the first plan
 
@@ -91,6 +91,9 @@ at a time, each only with the person's yes: save the answer with `planner_set_sh
 and send it again after each sign-in. Once an app is connected, read its past orders with that app's connector and give
 them to `planner_import_order_history` (one app a call, oldest first): they shape the grocery list and the carts. They use
 none, or not now: `planner_set_answered { ids: ["grocery"] }`. The setup is done only once this was asked.
+
+Once `planner_status` says `done`, tell them once, in one short message, how it goes from here (its `next` says what):
+the week's plan every Sunday, a check at 3 pm and 7 pm with the cart, nothing ordered without their yes.
 
 ### 6. Make it theirs, while they are chatting
 

@@ -60,7 +60,7 @@ describe("the first plan's message", () => {
   it("says once that the dishes are suggestions, instead of listing every new one", async () => {
     const { r } = await meeraHome();
     expect(r.message).not.toContain("New this week:");
-    expect(r.message).toContain("These are suggestions for now");
+    expect(r.message).toContain("Suggestions for now: tell me what to swap.");
     expect(r.message.split("Here's the plan").length).toBe(2);
     expect(r.instructions).toContain("nothing of your own before it");
   });
