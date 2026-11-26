@@ -594,7 +594,8 @@ export function fillWeek(input: FillInput): FillResult {
     if (d.new_dishes_allowed === 0) return false;
     if (d.new_dishes_allowed != null && (newOnDay.get(slotDayKey(d.date, d.slot)) ?? 0) >= d.new_dishes_allowed) return false;
     if (feeding) return true;
-    if (input.newCap != null && distinctNew.size >= input.newCap) return false;
+    // A meal they said to suggest for is all new by their word: the weekly cap (its default included) does not hold there.
+    if (input.newCap != null && distinctNew.size >= input.newCap && !(input.suggested ?? []).some((n) => same(n, d.slot))) return false;
     return !share || newCount < newMax;
   };
   /** May an item go on this plate today: not on it already, within the family's own words for it (its days, how often), not

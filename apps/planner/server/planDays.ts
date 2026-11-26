@@ -216,10 +216,16 @@ export function ruleHolds(r: Pick<Rule, "days" | "slots">, date: string, slot: S
  *  (away: not eating the home lunch; carries: the home lunch is cooked for them and packed, so they count; home: at home);
  *  else the pattern's hours covering the slot's whole span (MAIN_SLOT_HOURS: school at 7:30 still eats breakfast, back at
  *  9 still eats dinner); else home. */
+function coversSpan(w: Weekly, order: number): boolean {
+  const span = MAIN_SLOT_HOURS[order];
+  return !!(span && w.from && w.to && w.from <= span[0] && span[1] <= w.to);
+}
 function awayBy(w: Weekly, day: Weekday, slot: Slot): boolean {
   if (!w.weekdays.includes(day) || w.where === "home") return false;
   const base = slot.kind === "main" ? slot : null;
   const order = base?.order;
+  // A school child is off weekday Lunch unless they carry the home lunch (§5.4; owner, 26 Nov: coming home for lunch is not a case).
+  if (order === SLOT_ORDER.Lunch && /school/i.test(w.where) && w.lunch !== "carries" && coversSpan(w, order)) return true;
   if (order === SLOT_ORDER.Lunch && w.lunch) return w.lunch === "away";
   const span = order != null ? MAIN_SLOT_HOURS[order] : undefined;
   return !!(span && w.from && w.to && w.from <= span[0] && span[1] <= w.to);

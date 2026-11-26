@@ -54,6 +54,20 @@ describe("attendance: only a box that replaces a meal takes its person off it", 
     expect(at(d, MON, "Breakfast")!.people).toEqual(["Rohit", "Vihaan"]);
     expect(at(d, MON, "Vihaan's tiffin")!.people).toEqual(["Vihaan"]);
   });
+  describe("a school child at weekday Lunch (OD2)", () => {
+    const slots = [slot("Breakfast", "main", SLOT_ORDER.Breakfast), slot("Lunch", "main", SLOT_ORDER.Lunch), slot("Dinner", "main", SLOT_ORDER.Dinner)];
+    const go = (lunch?: string) => buildDays({ weekStart: MON, from: MON, slots, people: ["Rohit", "Vihaan"], rules: [], changes: [], saved: [],
+      household: { dated: [], weekly: [{ person: "Vihaan", where: "school", weekdays: [...WEEK], from: "08:00", to: "15:00", ...(lunch ? { lunch } : {}) }] } });
+    const lunchAt = (d: ReturnType<typeof go>, date: string) => at(d, date, "Lunch")!.people;
+    const WEEKDAYS5 = ["2026-11-23", "2026-11-24", "2026-11-25", "2026-11-26", "2026-11-27"];
+    it("with no lunch word, off Mon-Fri Lunch", () => { for (const day of WEEKDAYS5) expect(lunchAt(go(), day)).toEqual(["Rohit"]); });
+    it("even when the lunch word says home", () => { for (const day of WEEKDAYS5) expect(lunchAt(go("home"), day)).toEqual(["Rohit"]); });
+    it("whose lunch is carries, stays at Lunch", () => { for (const day of WEEKDAYS5) expect(lunchAt(go("carries"), day)).toEqual(["Rohit", "Vihaan"]); });
+    it("keeps Breakfast, and weekend Lunch", () => {
+      expect(at(go(), MON, "Breakfast")!.people).toEqual(["Rohit", "Vihaan"]);
+      expect(lunchAt(go(), SAT)).toEqual(["Rohit", "Vihaan"]);
+    });
+  });
   it("replacedMeal: only a custom slot with named people one step after a main", () => {
     const s = base();
     expect(replacedMeal(lBox(), s)?.name).toBe("Lunch");

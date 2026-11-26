@@ -16,8 +16,7 @@
 // One run per week at a time: a second make_plan for the same week joins the one running, and a run never starts a model
 // call on top of one still running from before (Flock's SDK cannot abort a call). Nothing here messages anyone.
 import type { Hono } from "hono";
-import { asc, eq } from "drizzle-orm";
-import { _settings } from "@flock/app-kit";
+import { asc } from "drizzle-orm";
 import { house, people as people_t } from "./db/schema";
 import { CONTAINS_BATCH } from "./db/constants";
 import { addDays, todayStr, weekDates, weekdayLong, weekdayOf, WEEKDAYS, type Weekday } from "./dates";
@@ -26,7 +25,7 @@ import { closeWeek, dateOf } from "./meals";
 import { changeMessage, planMessage, planQuestion, weekLink, type CheckAsk } from "./messages";
 import { cookVisits, isObject, list, refuse, writeRoutes, type Db, type Emit } from "./family";
 import { STOP_CODES, stopSaid, type ModelCall, type ModelFailure, type ModelRequest, type ModelResult } from "./model";
-import { commit, deleteSlotDays, listLibrary, listRules, listSlotDays, listSlots, saveSlotDay, slotHistory, upsertLibrary, upsertSlot, type LibraryDish,
+import { commit, deleteSlotDays, listLibrary, listRules, listSlotDays, listSlots, newDishesPerWeek, saveSlotDay, slotHistory, upsertLibrary, upsertSlot, type LibraryDish,
   type Rule, type Slot } from "./slotStore";
 import { buildDays, replacedMeal, slotDayKey, lunchSaid, platformPeers, readEvents, readHousehold, withLunchSaid, type PlanDay, type Peers } from "./planDays";
 import { canonTag, allergyNotes, forbidden, isDropped, mostlyOnion, notFor, plannable, readFor, ruleTags, slotFacts, softSwapNotes, swapNotes,
@@ -552,13 +551,9 @@ function houseCuisines(db: Db): string[] {
   try { const row = db.select({ cuisines: house.cuisines }).from(house).orderBy(asc(house.created_at)).limit(1).get(); return row?.cuisines ? list<string>(row.cuisines) : []; }
   catch { return []; }
 }
-/** The family's new-dishes-a-week setting, only when they set it (a settings row): its default does not cap the plan. */
-function newDishesSet(db: Db): number | null {
-  try {
-    const row = db.select({ value: _settings.value }).from(_settings).where(eq(_settings.key, "new_dishes_per_week")).get();
-    const v = row?.value ? JSON.parse(row.value) : null;
-    return typeof v === "number" && Number.isInteger(v) && v >= 0 ? v : null;
-  } catch { return null; }
+/** The family's new-dishes-a-week setting; unset, the manifest's declared default (OD1), through the one reader. */
+function newDishesSet(db: Db): number {
+  return newDishesPerWeek(db);
 }
 
 /** make_plan { week_start, household?, suggest_new? }: the week planned in steps (makePlan), saved; answers { ok, week_start, message, intro?,

@@ -238,10 +238,11 @@ export function dateOf(monday: string, day: Weekday): string {
 export const weekdayOfDate = (date: string): Weekday => WEEK[(new Date(`${date}T00:00:00Z`).getUTCDay() + 6) % 7];
 
 /** Owner, 26 Nov: "Kids coming home for lunch is not a valid case for now." A school-going child (a TRUTH child with a
- *  `household.weekly` school entry) is away at the shared lunch on their school days, whatever the facts say about coming
+ *  `household.weekly` school entry whose lunch is not "carries") is away at the shared lunch on their school days, whatever the facts say about coming
  *  home: they carry a box or eat at school. The scorer's expectation only; TRUTH is left as written. */
 export function schoolLunchAway(h: Household, person: string, day: Weekday): boolean {
   if (!h.truth.people.some((p) => p.group === "child" && sameName(p.name, person))) return false;
-  const weekly = (h.household["household.weekly"] ?? []) as { person: string; where?: string; weekdays?: string[] }[];
-  return weekly.some((w) => sameName(w.person, person) && /school/i.test(w.where ?? "") && (w.weekdays ?? []).includes(day));
+  const weekly = (h.household["household.weekly"] ?? []) as { person: string; where?: string; weekdays?: string[]; lunch?: string }[];
+  // Unless they carry the home lunch (§5.4): then they eat the shared lunch, packed.
+  return weekly.some((w) => sameName(w.person, person) && /school/i.test(w.where ?? "") && (w.weekdays ?? []).includes(day) && w.lunch !== "carries");
 }

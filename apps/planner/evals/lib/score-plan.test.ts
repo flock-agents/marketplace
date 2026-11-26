@@ -516,6 +516,14 @@ describe("attendance: a school child is away at the weekday lunch (owner, 26 Nov
     expect(lunch("h15-gupta", "Sat")).toContain("Myra");
     expect(lunch("h2-iyer", "Sun")).toContain("Ananya");
   });
+  test("a school child whose weekday lunch is carries stays at the shared Lunch (OD2)", async () => {
+    const { ALL_HOUSEHOLDS } = await import("../households");
+    const g = ALL_HOUSEHOLDS.find((x) => x.id === "h15-gupta")!;
+    const weekly = ((g.household["household.weekly"] ?? []) as { person: string }[]).map((w) => (w.person === "Myra" ? { ...w, lunch: "carries" } : w));
+    const h = { ...g, household: { ...g.household, "household.weekly": weekly } };
+    expect(weekly.some((w: any) => w.person === "Myra" && w.lunch === "carries")).toBe(true);
+    for (const d of ["Mon", "Fri"] as Weekday[]) expect(expectedSlotDays(h, MON).find((e) => e.day === d && e.slot === "Lunch")!.people).toContain("Myra");
+  });
   test("a week with the child at the weekday lunch fails attendance; without her it passes", async () => {
     const { ALL_HOUSEHOLDS } = await import("../households");
     const h = ALL_HOUSEHOLDS.find((x) => x.id === "h15-gupta")!, setup = setupOfTruth(h);

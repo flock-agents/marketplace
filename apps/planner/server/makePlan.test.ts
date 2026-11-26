@@ -210,6 +210,15 @@ describe("make_plan: new dishes (kinds model rule 4)", () => {
     expect(k.dishesAt(WEEK[1], "Lunch")).toHaveLength(3);
   });
 
+  it("with no new-dishes setting row, the manifest's declared default (2) caps the distinct new dishes (OD1)", async () => {
+    const k = await home({ lib: FEW, slots: [MAIN[0], { ...MAIN[1], templates: [T({ kind: "Rice" }, { kind: "Dal", dish: "Dal tadka" }, { kind: "Sabzi" })] }, MAIN[2]] });
+    const r = await k.plan(fakeModel().model);
+    if (!r.ok) throw new Error(r.say);
+    const news = new Set(k.week().flatMap((d) => d.dishes.filter((x) => x.new).map((x) => x.dish)));
+    expect(news.size).toBeGreaterThan(0);
+    expect(news.size).toBeLessThanOrEqual(2);
+  });
+
   it("a part they named as a category (\"dal\", \"sabzi\") is filled with real dishes of it, theirs: none new, none a bare word", async () => {
     const k = await home({ lib: { ...LIB, Lunch: [["Rice", "Rice"], ["Dal", "Dal", "Dal"], ["Sabzi", "Sabzi", "Sabzi"]] } });
     // Task 10: the raw category rows become their parts' words by the one-time migration (as at boot).
