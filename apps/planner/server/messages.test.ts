@@ -1,7 +1,7 @@
 // The messages the app writes for the agent to send, word for word: the order going out, the reminder, the
 // how-to-use intro, the unpaid line; and what a recipe link says about itself.
 import { describe, it, expect } from "bun:test";
-import { andList, changeMessage, clockText, dishText, introText, linkSource, NEW_DISH_TEXT_MAX, newDishText, orderingNowText, planMessage, planQuestion,
+import { andList, changeMessage, CHECKS_NAMED, clockText, dishText, introText, linkSource, NEW_DISH_TEXT_MAX, newDishText, orderingNowText, planMessage, planQuestion,
   reminderText, unpaidText, weekLink, weekMessage, youtubeThumb, type PlanText, type ReminderText } from "./messages";
 import type { DishView, MealView } from "./meals";
 
@@ -217,6 +217,20 @@ describe("the plan's message", () => {
       .toBe('Do "Office" (Shiva, Mon, Tue), "School" (Agastya, Mon, Tue), "Football" (Agastya, Mon, Tue) and 2 more change who eats at home?');
     // A title with a question mark or a line break in it cannot make a second question line.
     expect(planQuestion({ short: [], events: [{ title: "Who comes?\nMaybe", who: null, when: "Fri" }] })).toBe('Does "Who comes Maybe" (Fri) change who eats at home?');
+  });
+
+  it("plan-and-ask checks: three named, allergies first, the rest counted", () => {
+    const GS = "Gowri Shankar";
+    const checks = [{ dish: "Kadhi", who: GS, tag: "egg", allergy: false }, { dish: "Kootu", who: GS, tag: "egg", allergy: false },
+      { dish: "Pesarattu", who: "Agastya", tag: "peanut", allergy: true }, { dish: "Rasam", who: GS, tag: "egg", allergy: false }, { dish: "Dal", who: GS, tag: "egg", allergy: false }];
+    expect(planQuestion({ short: [], events: [], checks }))
+      .toBe("Is the Pesarattu OK for Agastya, no peanut, is the Kadhi OK for Gowri Shankar, no egg, is the Kootu OK for Gowri Shankar, no egg and 2 more to check on the week page?");
+    expect(planQuestion({ short: [], events: [], checks: [checks[0]] })).toBe("Is the Kadhi OK for Gowri Shankar, no egg?");
+    // A tag's underscore is a space; the asks in order: short meals, checks, events; one question mark.
+    expect(planQuestion({ short: [{ meal: "dinner", added: true }], events: [{ title: "Party", who: null, when: "Sat" }],
+      checks: [{ dish: "Bhindi", who: "Nani", tag: "onion_garlic", allergy: false }] }))
+      .toBe('I know only a few dishes for dinner, so I\'ve added some new ones. What else do you make for dinner, and is the Bhindi OK for Nani, no onion garlic, and does "Party" (Sat) change who eats at home?');
+    expect(CHECKS_NAMED).toBe(3);
   });
 
   it("never ends with more than one question line, whatever the notes say", () => {

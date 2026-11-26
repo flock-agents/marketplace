@@ -780,7 +780,10 @@ export function fillWeek(input: FillInput): FillResult {
         if (s.kind !== "addon") res.unmet.push(`${label(d)}: nothing for its ${sub ?? kind ?? "own dish"}`);
         return;
       }
-      if (got.it.family && usedDates.get(got.it.key)?.has(addDays(d.date, -1)) && s.kind !== "addon" && !pin) res.unmet.push(`${label(d)}: ${got.it.name} comes back sooner than usual`);
+      // Said only where the part had another item to give: a part whose one dish it is (a box's Paratha every day it runs)
+      // has it every day, as the family said.
+      const only = !neu.length && fam.every((x) => x.key === got!.it.key);
+      if (got.it.family && usedDates.get(got.it.key)?.has(addDays(d.date, -1)) && s.kind !== "addon" && !pin && !only) res.unmet.push(`${label(d)}: ${got.it.name} comes back sooner than usual`);
       put(s, d, plate, got.it, part, false);
       if (lims.length) { const l = wordsFor(ps.name, got.it).find((x) => lims.some((y) => y.row.key === x.row.key)) ?? lim; if (l) markLimit(ps.name, l, d.date, limitUse); }
       // Their own item for this part, for each person the item is not for.

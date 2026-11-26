@@ -7,9 +7,10 @@ import { describe, it, expect } from "bun:test";
 import { readFileSync } from "fs";
 import { join } from "path";
 import { boot } from "./testkit";
-import { CAREFUL_SYSTEM, CONTAINS_SYSTEM, GUESTS_SYSTEM, INGREDIENT_SYSTEM, makePlan } from "./makePlan";
+import { CONTAINS_SYSTEM, GUESTS_SYSTEM, INGREDIENT_SYSTEM, makePlan } from "./makePlan";
+import { migrateMeaning } from "./migrateMeaning";
 import { coveredByWeek, EVENTS_SYSTEM, lunchSaid, platformPeers, readHousehold, withLunchSaid, type CalendarEvent } from "./planDays";
-import { catalogIngredients, type MealKind, type MealTemplate } from "./kinds";
+import type { MealKind, MealTemplate } from "./kinds";
 import type { ModelRequest, ModelResult } from "./model";
 import { addRule, commit, getLibraryDish, listSlotDays, saveSlotDay, upsertLibrary, upsertSlot, type LibraryInput, type RuleInput, type SlotInput } from "./slotStore";
 import { DELIVER_PROMPT, FESTIVAL_PROMPT } from "./routines/weekly-plan";
@@ -17,6 +18,8 @@ import { DELIVER_PROMPT, FESTIVAL_PROMPT } from "./routines/weekly-plan";
 const MON = "2026-11-30", TODAY = "2026-11-29";
 const WEEK = ["2026-11-30", "2026-12-01", "2026-12-02", "2026-12-03", "2026-12-04", "2026-12-05", "2026-12-06"];
 const quiet = () => {};
+/** The one-time move to the one meaning model (as at boot), for a fixture saved the old way. */
+const migrate = (k: { kit: { sqlite: any; db: any } }) => migrateMeaning(k.kit.sqlite, k.kit.db, new Date(2026, 10, 29, 11, 0), quiet);
 const READ = ["egg", "meat", "fish", "onion_garlic", "nuts", "peanut", "sugar", "white_rice", "dairy"];
 const T = (...parts: MealTemplate["parts"]): MealTemplate => ({ parts });
 /** A made-up family's meals: breakfast one of four dishes, lunch rice with a dal and a sabzi, dinner roti with a sabzi or a gravy. */
@@ -131,6 +134,8 @@ describe("make_plan: the week filled by code from the templates", () => {
     const k = await home({ slots: [MAIN[0], { name: "Lunch", kind: "main", order: 30 }, MAIN[2]],
       lib: { ...LIB, Lunch: [["Rice", "Rice"], ["Curd", "Curd"], ["Drumstick sambar", "Rice curry", "Sambar"], ["Arachuvitta sambar", "Rice curry", "Sambar"], ["Tomato rasam", "Rice curry", "Rasam"]] },
       seed: [1, 2, 3].map(() => ({ slot: "Lunch", dishes: ["Rice", "Drumstick sambar", "Curd"] })) });
+    // Task 10: a meal with no templates plans nothing now; the one-time migration reads its templates off its seed plates.
+    expect(migrate(k)).toBe("migrated");
     const r = await k.plan(fakeModel().model);
     if (!r.ok) throw new Error(r.say);
     for (const d of WEEK) {
@@ -168,7 +173,9 @@ describe("make_plan: the week filled by code from the templates", () => {
 describe("make_plan: new dishes (kinds model rule 4)", () => {
   const FEW = { ...LIB, Lunch: [["Rice", "Rice"], ["Dal tadka", "Dal", "Dal"], ...LIB.Lunch.filter(([, kind]) => kind === "Sabzi")] as [string, string, string?][] };
   it("only once the family's own have come: of the part's kind, saved untried with an offer each placement, said with the dish of theirs it stands in for", async () => {
-    const k = await home({ lib: FEW });
+    // Task 10: their bare "dal" names one dish (a `dish` part): the kind's other items are new (a kind part without a dish
+    // counts the catalog's items as theirs).
+    const k = await home({ lib: FEW, slots: [MAIN[0], { ...MAIN[1], templates: [T({ kind: "Rice" }, { kind: "Dal", dish: "Dal tadka" }, { kind: "Sabzi" })] }, MAIN[2]] });
     const r = await k.plan(fakeModel().model);
     if (!r.ok) throw new Error(r.say);
     const dals = WEEK.map((d) => k.dishesAt(d, "Lunch")[1]);
@@ -204,6 +211,8 @@ describe("make_plan: new dishes (kinds model rule 4)", () => {
 
   it("a part they named as a category (\"dal\", \"sabzi\") is filled with real dishes of it, theirs: none new, none a bare word", async () => {
     const k = await home({ lib: { ...LIB, Lunch: [["Rice", "Rice"], ["Dal", "Dal", "Dal"], ["Sabzi", "Sabzi", "Sabzi"]] } });
+    // Task 10: the raw category rows become their parts' words by the one-time migration (as at boot).
+    expect(migrate(k)).toBe("migrated");
     const r = await k.plan(fakeModel().model);
     if (!r.ok) throw new Error(r.say);
     for (const d of WEEK) {
@@ -216,7 +225,9 @@ describe("make_plan: new dishes (kinds model rule 4)", () => {
   });
 
   it("\"suggest some\" for a meal with none of theirs: a plain plate of that meal, every part a real dish", async () => {
-    const k = await home({ slots: [MAIN[0], MAIN[1], { name: "Dinner", kind: "main", order: 50 }], lib: { Breakfast: LIB.Breakfast, Lunch: LIB.Lunch } });
+    // Task 10: a meal plans from its templates only; the interview always gives one (a plain plate of the meal).
+    const k = await home({ slots: [MAIN[0], MAIN[1], { name: "Dinner", kind: "main", order: 50, templates: [T({ kind: "Roti" }, { kind: "Sabzi" }, { kind: "Dal" })] }],
+      lib: { Breakfast: LIB.Breakfast, Lunch: LIB.Lunch } });
     const r = await k.plan(fakeModel().model, { suggest_new: true });
     if (!r.ok) throw new Error(r.say);
     for (const d of WEEK) {
@@ -301,7 +312,7 @@ describe("make_plan: hard rules per person, fail closed", () => {
   });
 
   it("a person with their own add-on that day is fed there; the add-on has its dishes", async () => {
-    const k = await home({ people, rules: [GRANDMA], slots: [MAIN[0], FISH_LUNCH, MAIN[2], { name: "Nani's lunch", kind: "addon", addon_of: "Lunch", order: 60, usual_people: ["Nani"] }],
+    const k = await home({ people, rules: [GRANDMA], slots: [MAIN[0], FISH_LUNCH, MAIN[2], { name: "Nani's lunch", kind: "addon", addon_of: "Lunch", order: 60, usual_people: ["Nani"], templates: [T({ kind: "Sabzi" })] }],
       library: [{ name: "Rohu curry", slot: "Lunch", kind: "Fish & seafood", contains: ["fish"] }, ...["Lauki sabzi", "Tinda sabzi", "Turai sabzi"].map((name) => ({ name, slot: "Nani's lunch", kind: "Sabzi" }))] });
     const r = await k.plan(fakeModel().model);
     if (!r.ok) throw new Error(r.say);
@@ -342,7 +353,7 @@ describe("make_plan: hard rules per person, fail closed", () => {
 
 describe("make_plan: an add-on and a box", () => {
   it("an add-on whose only dish is had twice a week is filled on 2 days, spread apart; the other 5 have no slot-day, nothing unmet, nothing said", async () => {
-    const k = await home({ slots: [...MAIN, { name: "Ravi's fish", kind: "addon", addon_of: "Dinner", order: 60, usual_people: ["Ravi"] }],
+    const k = await home({ slots: [...MAIN, { name: "Ravi's fish", kind: "addon", addon_of: "Dinner", order: 60, usual_people: ["Ravi"], templates: [T({ items: ["Rohu curry"] })] }],
       library: [{ name: "Rohu curry", slot: "Ravi's fish", kind: "Fish & seafood", frequency: "2/week", contains: ["fish"] }] });
     const r = await k.plan(fakeModel().model);
     if (!r.ok) throw new Error(r.say);
@@ -391,25 +402,21 @@ describe("make_plan: allergies (owner 25 Nov)", () => {
     expect(poha.ingredients.map((i) => i.item)).toEqual(["peanuts"]);
   });
 
-  it("every other dish is read carefully on the balanced tier, the new ones placed too: one that may have it is not his (unless only an ingredient it can be made without brings it, decided 21), and he has his own", async () => {
-    const k = await home({ rules: [ALLERGY], slots: [POHA_ONLY, MAIN[1], MAIN[2]], lib: { ...LIB, Breakfast: [["Kanda poha", "Poha"]] } });
-    const f = fakeModel({ careful: (u) => ({ dishes: u.dishes.map((d: string) => ({ dish: d, has: d === "Kanda poha" ? [] : ["peanut"] })) }) });
-    await k.plan(f.model);
-    const c = f.careful();
-    expect(c.length).toBeGreaterThanOrEqual(2);
-    expect(c.every((x) => x.req.tier === "balanced" && x.req.system === CAREFUL_SYSTEM)).toBe(true);
-    expect(CAREFUL_SYSTEM).toContain("not sure");
-    expect(c[0].user.dishes).toContain("Kanda poha");
-    expect(c.slice(1).flatMap((x) => x.user.dishes).length).toBeGreaterThan(0);
-    for (const d of WEEK) {
-      const plate = k.at(d, "Breakfast")!.dishes;
-      for (const x of plate) if (x.dish !== "Kanda poha") {
-        const leaveOut = (catalogIngredients(x.dish) ?? []).some((i) => i.name === "peanuts" && !i.main);
-        expect(x.not_for).toEqual(leaveOut ? [] : ["Kabir"]);
-        if (leaveOut) expect(x.note).toContain("make without peanuts for Kabir");
-      }
-      expect(plate.some((x) => !x.not_for.includes("Kabir"))).toBe(true);
-    }
+  it("a dish not known for his allergy is planned and asked, allergy first: no careful read, never kept from him unasked", async () => {
+    // one meaning model: unknown = ask (was: every other dish read carefully on the balanced tier, one that may have it not his)
+    const k = await home({ rules: [ALLERGY, { hard: true, what: "no_eggs", who: "Ravi", quote: "Ravi doesn't eat eggs" }],
+      slots: [{ name: "Breakfast", kind: "main", order: 10, templates: [T({ items: ["Grandma's poha"] })] }, MAIN[1], MAIN[2]],
+      library: [{ name: "Grandma's poha", slot: "Breakfast", kind: "Poha", contains: [], contains_read: [] }] });
+    const f = fakeModel();
+    const r = await k.plan(f.model);
+    if (!r.ok) throw new Error(r.say);
+    expect(f.calls.some((c) => c.req.purpose === "meal plan: what dishes contain, carefully (allergies)")).toBe(false);
+    expect(f.calls.every((c) => c.req.tier === "fast")).toBe(true);
+    // The family's own dish, read and still not known: planned for everyone, nobody kept from it.
+    for (const d of WEEK) expect(k.at(d, "Breakfast")!.dishes.find((x) => x.dish === "Grandma's poha")!.not_for).toEqual([]);
+    // Asked once for the week, the allergy first.
+    expect(r.asked).toHaveLength(1);
+    expect(r.asked![0]).toBe("Is the Grandma's poha OK for Kabir, no peanut and is the Grandma's poha OK for Ravi, no egg?");
   });
 
   it("a careful read that leaves a dish out no longer counts as having it: the catalog's word decides", async () => {
@@ -418,6 +425,52 @@ describe("make_plan: allergies (owner 25 Nov)", () => {
     await k.plan(f.model);
     // one meaning model: unknown = ask; the careful read is not read by the checks (Kanda poha's peanuts can be left out)
     for (const d of WEEK) for (const x of k.at(d, "Breakfast")!.dishes) expect(x.not_for).toEqual([]);
+  });
+});
+
+describe("make_plan: plan and ask (one meaning model, Task 10)", () => {
+  const GS = "Gowri Shankar";
+  const FAM: [string, string][] = [["Asha", "adult"], [GS, "elder"], ["Agastya", "child"]];
+  const NO_EGG: RuleInput = { hard: true, what: "no_eggs", who: GS, quote: "Dad doesn't eat egg" };
+
+  it("no careful read: one fast ingredients call a day, and unknowns asked in the one question", async () => {
+    const k = await home({ people: FAM, rules: [NO_EGG], slots: [MAIN[0], { name: "Lunch", kind: "main", order: 30, templates: [T({ kind: "Rice" }, { items: ["Kadhi"] })] }, MAIN[2]],
+      library: [{ name: "Kadhi", slot: "Lunch", kind: "Rice curry", contains: [], contains_read: [] }] });
+    const f = fakeModel();
+    const r = await k.plan(f.model);
+    if (!r.ok) throw new Error(r.say);
+    expect(f.calls.map((c) => c.req.purpose)).not.toContain("meal plan: what dishes contain, carefully (allergies)");
+    expect(f.days()).toHaveLength(7);
+    expect(f.calls.every((c) => c.req.tier === "fast")).toBe(true);
+    expect(k.at(MON, "Lunch")!.dishes.find((x) => x.dish === "Kadhi")!.not_for).toEqual([]);
+    expect(r.asked).toHaveLength(1);
+    expect(r.asked![0]).toContain("OK for");
+    expect(r.asked![0]).toBe("Is the Kadhi OK for Gowri Shankar, no egg?");
+    expect(r.message).toContain("\nIs the Kadhi OK for Gowri Shankar, no egg?\n");
+  });
+
+  it("an over-limit morning is said in the plan", async () => {
+    const k = await home({ people: FAM, rules: [{ hard: true, what: "cap", per_meal: 2, slots: ["Breakfast", "Lunch"], quote: "she makes two dishes in the morning" }] });
+    expect((await k.op("set_cook", { name: "Savita", days: ["Mon", "Tue", "Wed", "Thu", "Fri"], arrival: [{ at: "08:00", meals: ["Breakfast", "Lunch"] }, { at: "17:00", meals: ["Dinner"] }] })).house.cook_visits).toHaveLength(2);
+    const r = await k.plan(fakeModel().model);
+    if (!r.ok) throw new Error(r.say);
+    // Breakfast's dish and lunch's rice, dal and sabzi: 4, over her 2 on her days only; no part dropped.
+    expect(r.unmet!.filter((u) => u.includes("dishes to cook, more than"))).toEqual(
+      ["Mon", "Tue", "Wed", "Thu", "Fri"].map((d) => `${d} breakfast and lunch: 4 dishes to cook, more than Savita's 2`));
+    expect(r.message).toContain("dishes to cook, more than Savita's 2");
+    expect(k.dishesAt(MON, "Lunch")).toHaveLength(3);
+  });
+
+  it("a swap item is saved for its person", async () => {
+    const swap: RuleInput = { hard: true, what: "swap", who: "Agastya", targets: [{ type: "kind", kind: "Upma" }], gives: { type: "item", item: "Pancakes", kind: null },
+      quote: "Pancakes for Agastya when we make upma, he doesn't like it" };
+    const k = await home({ people: FAM, rules: [swap], slots: [{ name: "Breakfast", kind: "main", order: 10, templates: [T({ kind: "Upma" })] }, MAIN[1], MAIN[2]] });
+    const r = await k.plan(fakeModel().model);
+    if (!r.ok) throw new Error(r.say);
+    const mon = k.at(MON, "Breakfast")!.dishes;
+    expect(mon.find((x) => x.dish === "Pancakes")).toMatchObject({ for_people: ["Agastya"] });
+    expect(mon.find((x) => x.dish !== "Pancakes")!.for_people).toEqual([]);
+    expect(r.message).toContain("Pancakes (for Agastya)");
   });
 });
 
@@ -468,7 +521,8 @@ describe("make_plan: failures", () => {
 
 describe("make_plan: who eats (spec §5.1)", () => {
   it("a child carrying a box of their own is not at the home lunch on those days; a parent carrying the home lunch is (owner, 25 Nov)", async () => {
-    const k = await home({ slots: [...MAIN, { name: "Kabir's tiffin", kind: "custom", order: 35, usual_people: ["Kabir"], days: ["Mon", "Tue", "Wed", "Thu", "Fri"] }],
+    const k = await home({ slots: [...MAIN, { name: "Kabir's tiffin", kind: "custom", order: 35, usual_people: ["Kabir"], days: ["Mon", "Tue", "Wed", "Thu", "Fri"],
+      templates: [T({ items: ["Sandwich", "Pasta", "Curd rice"] })] }],
       library: ["Sandwich", "Pasta", "Curd rice"].map((name) => ({ name, slot: "Kabir's tiffin" })) });
     const weekly = [{ person: "Kabir", where: "school", weekdays: ["Mon", "Tue", "Wed", "Thu", "Fri"], from: "08:00", to: "14:00", lunch: "carries" },
       { person: "Ravi", where: "office", weekdays: ["Mon", "Tue", "Wed", "Thu", "Fri"], from: "09:00", to: "18:00", lunch: "carries" }];
@@ -588,7 +642,8 @@ describe("make_plan: who eats (spec §5.1)", () => {
 
   it("a fast with nothing to eat takes the person off that slot-day; one with fasting food keeps them, with a note; a skip day is skipped, not asked", async () => {
     const k = await home({
-      slots: [MAIN[0], MAIN[1], { ...MAIN[2], skip_days: [{ day: "Sun", skip: "eaten_out" }] }, { name: "Ravi's dinner", kind: "addon", addon_of: "Dinner", order: 60, usual_people: ["Ravi"] }],
+      slots: [MAIN[0], MAIN[1], { ...MAIN[2], skip_days: [{ day: "Sun", skip: "eaten_out" }] }, { name: "Ravi's dinner", kind: "addon", addon_of: "Dinner", order: 60, usual_people: ["Ravi"],
+        templates: [T({ items: ["Phulka", "Jowar roti"] })] }],
       library: ["Phulka", "Jowar roti"].map((name) => ({ name, slot: "Ravi's dinner" })),
       rules: [{ hard: true, what: "fasting", who: "Asha", days: ["Thu"], slots: ["Breakfast", "Lunch"], quote: "I fast Thursdays till evening" },
         { hard: true, what: "fasting", who: "Ravi", days: ["Mon"], fasting_food: ["fruit", "sabudana"], quote: "Monday fast, only fruit" }],
@@ -606,7 +661,7 @@ describe("make_plan: who eats (spec §5.1)", () => {
   it("a meal ordered in on its day gets no dishes; a person's own meal in place of it is still cooked, and they are never at the family's (classes 3, 4)", async () => {
     const k = await home({
       slots: [MAIN[0], MAIN[1], { ...MAIN[2], usual_people: ["Asha", "Ravi"], skip_days: [{ day: "Sat", skip: "ordered_in" }] },
-        { name: "Kabir's dinner", kind: "custom", order: 55, usual_people: ["Kabir"] }],
+        { name: "Kabir's dinner", kind: "custom", order: 55, usual_people: ["Kabir"], templates: [T({ items: ["Khichdi", "Dal rice"] })] }],
       library: ["Khichdi", "Dal rice"].map((name) => ({ name, slot: "Kabir's dinner" })),
     });
     await k.plan(fakeModel().model);
@@ -638,7 +693,7 @@ describe("make_plan: guards", () => {
   const NAMES = ["Sharma", "Iyer", "Shiva", "Reddy", "Agarwal", "Kulkarni", "Menon", "Banerjee", "Ankita", "Agastya", "Gowri", "Lakshmi", "Mehta", "Qureshi",
     "Dsouza", "D'souza", "Gita", "Geeta", "Vihaan", "Reyansh", "Zayan", "Farah", "Shabana", "Debjani", "Sourav", "Rituparna", "Kantaben", "Selvi", "Srinivas"];
   it("no eval household name in any text a plan's model reads", () => {
-    for (const t of [GUESTS_SYSTEM, CAREFUL_SYSTEM, CONTAINS_SYSTEM, INGREDIENT_SYSTEM, EVENTS_SYSTEM, DELIVER_PROMPT(true), FESTIVAL_PROMPT(MON)])
+    for (const t of [GUESTS_SYSTEM, CONTAINS_SYSTEM, INGREDIENT_SYSTEM, EVENTS_SYSTEM, DELIVER_PROMPT(true), FESTIVAL_PROMPT(MON)])
       for (const n of NAMES) expect(t.toLowerCase(), n).not.toContain(n.toLowerCase());
   });
   it("no word lists for meaning in the plan's code: no regex of day names, kinship words or less/more", () => {

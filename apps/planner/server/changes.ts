@@ -10,7 +10,8 @@
 //   set_rule        { id?, hard?, what?, who?, slots?, days?, items?, to?, frequency?, per_meal?, fasting_food?, quote?, remove? }
 //   set_setting     { new_dishes_per_week }
 //   record_made     { date, slot, dishes }
-//   record_feedback { date, slot, dish, made, liked?, again? }, or before it is cooked { date, slot, dish, answer: ok | swap | dont_like }
+//   record_feedback { date, slot, dish, made, liked?, again? }, or before it is cooked { date, slot, dish, answer: ok | swap | dont_like },
+//                   or to the plan's check question { date, slot, dish, who, answer: fits | not_for }
 import type { Context, Hono } from "hono";
 import { asc, eq, gte } from "drizzle-orm";
 import { people as people_t, slot_dishes, slot_days } from "./db/schema";
@@ -23,7 +24,7 @@ import type { ModelCall } from "./model";
 import { INGREDIENT_SCHEMA, INGREDIENT_SYSTEM, ingredientsFrom, makePlan, OP_BUDGET_MS, type MakePlanResult } from "./makePlan";
 import { platformPeers, ruleHolds, type PlanDay } from "./planDays";
 import { resolveGives, resolveTarget } from "./targets";
-import { canonTag, checkSlot, forbidden, notFor, ruleTags, slotFacts, type Week } from "./planChecks";
+import { canonTag, checkSlot, forbidden, notFor, readFor, ruleTags, slotFacts, type Week } from "./planChecks";
 import { containsRead, frequencyOf } from "./setup";
 import { addRule, commit, getLibraryDish, getSlot, getSlotDay, listLibrary, listRules, listSlotDays, listSlots, newDishesPerWeek, recent, removeRule,
   removeSlot, saveSlotDay, slotHistory, updateLibraryByName, updateRule, upsertLibrary, upsertSlot, type Guest, type Rule, type RuleInput, type Slot,
@@ -379,7 +380,11 @@ export function mountChangeRoutes(hono: Hono<any>, deps: Omit<ChangeDeps, "now">
     const dishName = name(b.dish, "dish");
     if (b.answer !== undefined) {
       if (b.made !== undefined || b.liked !== undefined || b.again !== undefined) refuse("send answer (before it is cooked) or made (after), not both");
-      if (!(NEW_DISH_ANSWERS as readonly unknown[]).includes(b.answer)) refuse(`answer must be one of: ${NEW_DISH_ANSWERS.join(", ")}`);
+      if ((CHECK_ANSWERS as readonly unknown[]).includes(b.answer)) {
+        if (typeof b.who !== "string" || !b.who.trim()) refuse("who is required with answer fits or not_for");
+        return checkAnswer(date, dishName, typeof b.slot === "string" ? b.slot : "", personNames(db, [b.who], "who")[0], b.answer as CheckAnswer, by);
+      }
+      if (!(NEW_DISH_ANSWERS as readonly unknown[]).includes(b.answer)) refuse(`answer must be one of: ${[...NEW_DISH_ANSWERS, ...CHECK_ANSWERS].join(", ")}`);
       return newDishAnswer(date, dishName, typeof b.slot === "string" ? b.slot : "", b.answer as NewDishAnswer, by);
     }
     if (b.made === undefined) refuse("made or answer is needed: made (true or false) after the day, answer (ok, swap, dont_like) before it is cooked");
@@ -410,6 +415,28 @@ export function mountChangeRoutes(hono: Hono<any>, deps: Omit<ChangeDeps, "now">
     return { body: { ok: true, dish: dishName, outcome, library: listLibrary(db, { names: [dishName] }) } };
   });
 
+  /** The answer to the plan's check question, "Is the Kadhi OK for Gowri Shankar, no egg?" (spec §9.1), saved as the dish's read
+   *  for the person's hard rules' ingredient tags it was not read for (T), so it is never asked again for them: fits, the dish
+   *  is read as without T; not_for, read as having T, and that slot-day planned again (the person gets an item they can eat). */
+  async function checkAnswer(date: string, dishName: string, slotName: string, who: string, answer: CheckAnswer, by: string) {
+    const onDay = listSlotDays(db, { from: date, to: date }).filter((x) => x.dishes.some((y) => dishKey(y.dish) === dishKey(dishName)));
+    const day = onDay.find((x) => !slotName || same(x.slot, slotName)) ?? onDay[0];
+    if (!day) return { status: 404 as const, body: { reason: `${dishName} was not on the plan on ${date}` } };
+    const row = getLibraryDish(db, dishName, day.slot) ?? listLibrary(db, { names: [dishName] })[0];
+    if (!row) return { status: 404 as const, body: { reason: `${dishName} is not in the library` } };
+    const read = new Set(row.contains_read.map(canonTag));
+    const tags = uniq(listRules(db).filter((r) => r.hard && (!r.who || same(r.who, who))).flatMap(forbidden)).filter((t) => !readFor(read, t));
+    const again = answer === "not_for" && date >= today() && day.status !== "confirmed";
+    commit(db, emit, (tx, ch) => {
+      if (!tags.length) return;
+      upsertLibrary(tx, answer === "fits"
+        ? { name: row.name, slot: row.slot, contains_read: uniq([...row.contains_read, ...tags]), contains: row.contains.filter((t) => !tags.includes(canonTag(t))) }
+        : { name: row.name, slot: row.slot, contains_read: uniq([...row.contains_read, ...tags]), contains: uniq([...row.contains, ...tags]) }, by, ch);
+    });
+    const r = again ? await replan(d, [{ date, slot: day.slot }]) : { replanned: [] };
+    return { body: { ok: true, dish: row.name, who, outcome: answer, tags, library: listLibrary(db, { names: [row.name] }), ...r } };
+  }
+
   /** The answer to "OK to try it, or should I swap it?" (the week's message) or "OK to make it, or swap?" (the evening before). */
   async function newDishAnswer(date: string, dishName: string, slotName: string, answer: NewDishAnswer, by: string) {
     const onDay = listSlotDays(db, { from: date, to: date }).filter((x) => x.dishes.some((y) => dishKey(y.dish) === dishKey(dishName)));
@@ -439,3 +466,6 @@ export function mountChangeRoutes(hono: Hono<any>, deps: Omit<ChangeDeps, "now">
 /** The answers to the question about a brand-new dish before it is cooked. */
 export const NEW_DISH_ANSWERS = ["ok", "swap", "dont_like"] as const;
 type NewDishAnswer = (typeof NEW_DISH_ANSWERS)[number];
+/** The answers to the plan's check question about a dish and a person's rule ("Is the Kadhi OK for Gowri Shankar, no egg?"). */
+export const CHECK_ANSWERS = ["fits", "not_for"] as const;
+type CheckAnswer = (typeof CHECK_ANSWERS)[number];

@@ -172,7 +172,7 @@ export function weekMessage(i: { monday: MealView[]; link: string; unmet?: strin
  *  not for, its note); the family's standing notes (said once); what could not be kept; the new dishes; the one question
  *  (planQuestion: meals short of dishes, calendar entries the plan could not read for meals), or null. */
 export type PlanText = {
-  days: { label: string; meals: { slot: string; skip: string | null; note: string | null; dishes: { name: string; note: string | null; not_for?: string[] }[] }[] }[];
+  days: { label: string; meals: { slot: string; skip: string | null; note: string | null; dishes: { name: string; note: string | null; not_for?: string[]; for_people?: string[] }[] }[] }[];
   standing: string[]; unmet: string[]; new_dishes: NewDish[]; question: string | null; link: string;
 };
 
@@ -224,11 +224,18 @@ export type ShortAsk = { meal: string; added: boolean };
 export type EventAsk = { title: string; who: string | null; when: string };
 /** At most this many calendar entries are named in the question; the rest are counted. */
 export const EVENTS_NAMED = 3;
+/** A planned dish whose fit for a person's rule is not known (one meaning model: unknown = plan and ask): "is the Kadhi OK for
+ *  Gowri Shankar, no egg". `tag`: the rule's ingredient tag; `allergy`: the rule is an allergy (asked first). */
+export type CheckAsk = { dish: string; who: string; tag: string; allergy: boolean };
+/** At most this many checks are named in the question; the rest are counted ("2 more to check on the week page"). */
+export const CHECKS_NAMED = 3;
 
 /** The plan's one question (owner, 25 Nov: at most one in the whole message), or null with nothing to ask: the meals short
  *  of dishes, named together ("I know only a few dishes for dinner and Kabir's tiffin, so I've added some new ones. What
- *  else do you make for these?"), and the calendar entries it could not read, folded into the same question. */
-export function planQuestion(o: { short: ShortAsk[]; events: EventAsk[] }): string | null {
+ *  else do you make for these?"), the dishes to check against someone's rule (spec §9.1: allergies first, then as given, by
+ *  first date; CHECKS_NAMED named, the rest counted), and the calendar entries it could not read, folded into the same
+ *  question. */
+export function planQuestion(o: { short: ShortAsk[]; events: EventAsk[]; checks?: CheckAsk[] }): string | null {
   const plain = (s: string) => s.replace(/[?\n\r]+/g, " ").replace(/\s+/g, " ").trim();
   let lead = "";
   const asks: string[] = [];
@@ -237,6 +244,12 @@ export function planQuestion(o: { short: ShortAsk[]; events: EventAsk[] }): stri
     lead = `I know only a few dishes for ${andList(meals)}${added.length === meals.length ? ", so I've added some new ones"
       : added.length ? `, so I've added some new ones for ${andList(added)}` : ""}. `;
     asks.push(`what else do you make for ${meals.length === 1 ? meals[0] : "these"}${added.length < meals.length ? ", or should I suggest a few" : ""}`);
+  }
+  const checks = [...(o.checks ?? [])].sort((a, b) => Number(b.allergy) - Number(a.allergy));
+  if (checks.length) {
+    const named = checks.slice(0, CHECKS_NAMED).map((c) => `is the ${plain(c.dish)} OK for ${plain(c.who)}, no ${plain(c.tag.replace(/_/g, " "))}`);
+    const more = checks.length - named.length;
+    asks.push(andList(more ? [...named, `${more} more to check on the week page`] : named));
   }
   // One entry on several days (a repeating one comes once per day) is named once, with its days.
   const byEntry = new Map<string, { title: string; who: string | null; when: string[] }>();
@@ -256,11 +269,11 @@ export function planQuestion(o: { short: ShortAsk[]; events: EventAsk[] }): stri
 }
 /** What a later change re-planned (spec §6), as the agent sends it: each slot-day planned again with its dishes, the new ones,
  *  what could not be kept, and the Week page. */
-export function changeMessage(t: { meals: { label: string; skip: string | null; dishes: { name: string; note: string | null; not_for?: string[] }[] }[];
+export function changeMessage(t: { meals: { label: string; skip: string | null; dishes: { name: string; note: string | null; not_for?: string[]; for_people?: string[] }[] }[];
   unmet: string[]; new_dishes: NewDish[]; link: string }): string {
   const lines = ["Updated the plan:"];
   for (const m of t.meals) lines.push(`${m.label}: ${m.skip ? (m.skip === "eaten_out" ? "eating out" : "ordering in")
-    : m.dishes.map((x) => dishText({ name: x.name, portion_note: x.note, not_for: x.not_for })).join(", ") || "nothing planned"}`);
+    : m.dishes.map((x) => dishText({ name: x.name, portion_note: x.note, not_for: x.not_for, for_people: x.for_people })).join(", ") || "nothing planned"}`);
   if (t.new_dishes.length) lines.push("", `New: ${newDishesText(t.new_dishes).join(", ")}`);
   if (t.unmet.length) lines.push("", `I couldn't keep everything: ${t.unmet.join("; ")}. Tell me what to change.`);
   lines.push("", `The whole week: [Week page](${t.link})`);
@@ -286,7 +299,7 @@ export function planMessage(t: PlanText): string {
     lines.push("", `*${d.label}*`);
     for (const m of d.meals) {
       const what = m.skip ? (m.skip === "eaten_out" ? "eating out" : "ordering in")
-        : m.dishes.map((x) => dishText({ name: x.name, portion_note: shown(x.note), not_for: x.not_for })).join(", ") || "nothing planned";
+        : m.dishes.map((x) => dishText({ name: x.name, portion_note: shown(x.note), not_for: x.not_for, for_people: x.for_people })).join(", ") || "nothing planned";
       // Only the plan's one question ends in "?": a note the model wrote as a question does not.
       lines.push(`${m.slot}: ${what}${shown(m.note) ? `. ${m.note}` : ""}`.replace(/\?+\s*$/, "."));
     }

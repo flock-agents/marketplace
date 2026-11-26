@@ -758,6 +758,12 @@ describe("per-person versions of a shared meal (§5.4) and the cook's visit (§9
       expect(box[1]).toMatchObject({ name: sabzi.name, linked: true });
     }
   });
+  it("a box's fixed dish every day it runs is not said to come back sooner than usual (Task 10)", () => {
+    const slots = [lunch(T({ kind: "Rice" }, { kind: "Dal" }, { kind: "Sabzi" })), lBox([T({ items: ["Paratha"] }, { from: "Lunch", kind: "Sabzi" })])];
+    const r = run({ slots, library: LIB, days: daysFor(slots), newCap: 0 });
+    for (const d of WEEK.slice(0, 5)) expect(plate(r, d, "Agastya's lunch box")[0].name).toBe("Paratha");
+    expect(r.unmet.filter((u) => u.includes("Paratha"))).toEqual([]);
+  });
   it("a linked dish is not a repeat and not counted twice for the cook", () => {
     const slots = [lunch(T({ kind: "Rice" }, { kind: "Dal" }, { kind: "Sabzi" })), lBox([T({ items: ["Paratha"] }, { from: "Lunch", kind: "Sabzi" })])];
     const visits: Visit[] = [{ cook: null, meals: ["Lunch", "Agastya's lunch box"], days: [...SCHOOL], cap: 4, label: "lunch" }];

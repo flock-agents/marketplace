@@ -514,6 +514,60 @@ describe("a brand-new dish, the evening before it is cooked", () => {
   });
 });
 
+// ── The plan's check question answered (one meaning model, Task 10): "Is the Kadhi OK for Gowri Shankar, no egg?" ──
+
+/** Kadhi never read for egg (the contains read knows nothing), Gowri Shankar eats no egg; every meal with a template of the
+ *  family's dishes. The week of 30 Nov planned. */
+async function checkHome() {
+  const k = await home({ library: [{ name: "Kadhi", slot: "Lunch", origin: "setup_named", contains: [], contains_read: [] }] });
+  await k.op("set_person", { name: "Gowri Shankar", group: "elder" });
+  const blind = fake(), base = blind.model;
+  blind.model = async (req) => ((req.purpose ?? "").includes("contain") ? { ok: true, json: { dishes: [] }, model: "fake" } : base(req));
+  k.use(blind);
+  commit(k.kit.db, k.kit.emitChange, (tx, ch) => {
+    for (const s of MAIN) upsertSlot(tx, { ...s, templates: [{ parts: [{ items: LIB[s.name] }] }] }, "app", ch);
+    addRule(tx, { hard: true, what: "no_eggs", who: "Gowri Shankar", quote: "Dad doesn't eat egg" }, "app", ch);
+  });
+  const r = await k.op("make_plan", { week_start: MON });
+  expect(r.ok).toBe(true);
+  const kadhi = k.week().find((d) => d.date! >= TUE && d.dishes.some((x) => x.dish === "Kadhi"))!;
+  return { k, r, date: kadhi.date! };
+}
+
+describe("the plan's check question answered", () => {
+  it("a 'fits' answer saves the read and the dish is not asked again", async () => {
+    const { k, r, date } = await checkHome();
+    expect(r.asked).toEqual(["Is the Kadhi OK for Gowri Shankar, no egg?"]);
+    expect((await k.op("record_feedback", { date, slot: "Lunch", dish: "Kadhi", answer: "fits" })).error).toContain("who is required with answer fits or not_for");
+    const a = await k.op("record_feedback", { date, slot: "Lunch", dish: "Kadhi", who: "Gowri Shankar", answer: "fits" });
+    expect(a.ok).toBe(true);
+    const row = getLibraryDish(k.kit.db, "Kadhi", "Lunch")!;
+    expect(row.contains_read).toContain("egg");
+    expect(row.contains).not.toContain("egg");
+    const again = await k.op("make_plan", { week_start: MON });
+    expect(again.ok).toBe(true);
+    expect(JSON.stringify(again.asked ?? [])).not.toContain("Kadhi");
+    expect(again.message).not.toContain("OK for");
+  });
+
+  it("a 'not_for' answer keeps the dish from the person and re-plans that day", async () => {
+    const { k, date } = await checkHome();
+    const a = await k.op("record_feedback", { date, slot: "Lunch", dish: "Kadhi", who: "Gowri Shankar", answer: "not_for" });
+    expect(a.ok).toBe(true);
+    expect(a.replanned).toEqual([{ date, slot: "Lunch" }]);
+    const row = getLibraryDish(k.kit.db, "Kadhi", "Lunch")!;
+    expect(row.contains).toContain("egg");
+    expect(row.contains_read).toContain("egg");
+    const lunch = k.at(date, "Lunch")!;
+    expect(lunch.people).toContain("Gowri Shankar");
+    // Gowri Shankar is fed that day: a dish not kept from him; the Kadhi, if still there, is not his.
+    expect(lunch.dishes.some((x) => !x.not_for.includes("Gowri Shankar"))).toBe(true);
+    for (const x of lunch.dishes.filter((y) => y.dish === "Kadhi")) expect(x.not_for).toContain("Gowri Shankar");
+    // Never asked again.
+    expect(JSON.stringify((await k.op("make_plan", { week_start: MON })).asked ?? [])).not.toContain("Kadhi");
+  });
+});
+
 describe("the Week page's edits go through the same change", () => {
   it("a dish edited on the page: the meal's whole list with its items, saved edited; ordered in and back", async () => {
     const k = await planned();
