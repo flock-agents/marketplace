@@ -257,6 +257,16 @@ describe("the plan's message", () => {
   });
 });
 
+describe("a change's reply asks its checks right away (Task 10b)", () => {
+  it("the checks question sits after what could not be kept and before the Week page; none: no question", () => {
+    const meals = [{ label: "Tuesday Dinner", skip: null, dishes: [{ name: "Bhindi masala", note: null }] }];
+    const q = planQuestion({ short: [], events: [], checks: [{ dish: "Bhindi masala", who: "Gowri Shankar", tag: "egg", allergy: false }] });
+    expect(changeMessage({ meals, unmet: ["x"], new_dishes: [], question: q, link: "/w" })).toBe(
+      "Updated the plan:\nTuesday Dinner: Bhindi masala\n\nI couldn't keep everything: x. Tell me what to change.\n\nIs the Bhindi masala OK for Gowri Shankar, no egg?\n\nThe whole week: [Week page](/w)");
+    expect(changeMessage({ meals, unmet: [], new_dishes: [], question: null, link: "/w" })).toBe("Updated the plan:\nTuesday Dinner: Bhindi masala\n\nThe whole week: [Week page](/w)");
+  });
+});
+
 // Brand-new variants (owner, 25 Nov): a dish the family never had is named in the week's message as its one question, each
 // with its day and the dish of theirs it is like, and again in the evening before the day it is cooked.
 describe("the question about the week's brand-new dishes", () => {

@@ -40,8 +40,8 @@ const CONTAINS_BUDGET_MS = 90_000;
 export type ChangeDeps = { db: Db; emit: Emit; model: ModelCall; basePath: string; now: () => Date; platform?: () => unknown;
   sqlite?: { query: (q: string) => { get: () => unknown } }; log?: (line: string) => void };
 type Target = { date: string; slot: string };
-/** What a re-plan answers beside the change: the slot-days planned again, the message to send, or why it could not. */
-export type Replanned = { replanned: Target[]; message?: string; unmet?: string[]; planned?: false; say?: string };
+/** What a re-plan answers beside the change: the slot-days planned again, the message to send, its check question (asked), or why it could not. */
+export type Replanned = { replanned: Target[]; message?: string; unmet?: string[]; asked?: string[]; planned?: false; say?: string };
 
 // ── Re-planning only what a change touches ──
 
@@ -59,7 +59,7 @@ export async function replan(deps: ChangeDeps, targets: Target[]): Promise<Repla
   if (!list.length) return { replanned: [] };
   const today = todayStr(deps.now());
   const out: Replanned = { replanned: [] };
-  const messages: string[] = [], unmet: string[] = [];
+  const messages: string[] = [], unmet: string[] = [], asked: string[] = [];
   for (const week of uniq(list.map((t) => mondayOf(t.date))).sort()) {
     const only = list.filter((t) => mondayOf(t.date) === week);
     const r: MakePlanResult = await makePlan({ db: deps.db, emit: deps.emit, model: deps.model, weekStart: week, today, basePath: deps.basePath,
@@ -68,8 +68,9 @@ export async function replan(deps: ChangeDeps, targets: Target[]): Promise<Repla
     out.replanned.push(...only);
     messages.push(r.message);
     unmet.push(...(r.unmet ?? []));
+    asked.push(...(r.asked ?? []));
   }
-  return { ...out, message: messages.join("\n\n"), ...(unmet.length ? { unmet: uniq(unmet) } : {}) };
+  return { ...out, message: messages.join("\n\n"), ...(unmet.length ? { unmet: uniq(unmet) } : {}), ...(asked.length ? { asked } : {}) };
 }
 
 // ── What was sent, checked ──

@@ -75,9 +75,10 @@ async function home(o: { people?: [string, string][]; slots?: SlotInput[]; lib?:
     for (const s of o.seed ?? []) saveSlotDay(tx, { date: null, slot: s.slot, dishes: s.dishes.map((dish) => ({ dish })) }, "app", ch);
     for (const h of o.history ?? []) saveSlotDay(tx, { date: h.date, slot: h.slot, status: h.status, dishes: h.dishes.map((dish) => ({ dish })) }, "app", ch);
   });
-  const plan = (model: (r: ModelRequest) => Promise<ModelResult>, x: { household?: unknown; peers?: any; log?: (l: string) => void; suggest_new?: boolean } = {}) =>
+  const plan = (model: (r: ModelRequest) => Promise<ModelResult>, x: { household?: unknown; peers?: any; log?: (l: string) => void; suggest_new?: boolean;
+    only?: { date: string; slot: string }[] } = {}) =>
     makePlan({ db: k.kit.db, emit: k.kit.emitChange, model, weekStart: MON, today: TODAY, basePath: "/a/t", log: x.log ?? quiet, household: x.household, peers: x.peers,
-      sqlite: k.kit.sqlite, suggest_new: x.suggest_new });
+      sqlite: k.kit.sqlite, suggest_new: x.suggest_new, only: x.only });
   const week = () => listSlotDays(k.kit.db, { from: MON, to: WEEK[6] });
   const at = (date: string, slot: string) => week().find((d) => d.date === date && d.slot === slot);
   const dishesAt = (date: string, slot: string) => at(date, slot)?.dishes.map((d) => d.dish) ?? [];
@@ -518,6 +519,57 @@ describe("make_plan: plan and ask (one meaning model, Task 10)", () => {
     expect(mon.find((x) => x.dish === "Pancakes")).toMatchObject({ for_people: ["Agastya"] });
     expect(mon.find((x) => x.dish !== "Pancakes")!.for_people).toEqual([]);
     expect(r.message).toContain("Pancakes (for Agastya)");
+  });
+});
+
+describe("make_plan: a change asks its unknowns right away (Task 10b)", () => {
+  const GS = "Gowri Shankar", TUE = WEEK[1];
+  const FAM: [string, string][] = [["Asha", "adult"], [GS, "elder"], ["Agastya", "child"]];
+  const NO_EGG: RuleInput = { hard: true, what: "no_eggs", who: GS, quote: "Dad doesn't eat egg" };
+  const PEANUT: RuleInput = { hard: true, what: "avoid", who: "Agastya", items: ["peanut"], quote: "Agastya is allergic to peanuts" };
+  /** The week planned with Kadhi (never read) at lunch, so the weekly question asks about it; every other dish read. */
+  async function planned(rules: RuleInput[]) {
+    const k = await home({ people: FAM, rules, slots: [MAIN[0], { name: "Lunch", kind: "main", order: 30, templates: [T({ kind: "Rice" }, { items: ["Kadhi"] })] }, MAIN[2]],
+      library: [{ name: "Kadhi", slot: "Lunch", kind: "Rice curry", contains: [], contains_read: [] }] });
+    const week = await k.plan(fakeModel().model);
+    if (!week.ok) throw new Error(week.say);
+    expect(week.asked![0]).toContain("Is the Kadhi OK for ");
+    return k;
+  }
+  /** Dinner now made of this one unread dish: a change that re-plans a dinner places it. */
+  const unreadDinner = (k: Awaited<ReturnType<typeof home>>, dish: string) => commit(k.kit.db, k.kit.emitChange, (tx, ch) => {
+    upsertLibrary(tx, { name: dish, slot: "Dinner", origin: "setup_named", contains: [], contains_read: [] }, "app", ch);
+    upsertSlot(tx, { name: "Dinner", kind: "main", order: 50, templates: [T({ items: [dish] })] }, "app", ch);
+  });
+
+  it("a change that places an unread dish asks about it in its reply", async () => {
+    const k = await planned([NO_EGG]);
+    unreadDinner(k, "Bhindi masala");
+    const r = await k.plan(fakeModel().model, { only: [{ date: TUE, slot: "Dinner" }] });
+    if (!r.ok) throw new Error(r.say);
+    expect(k.dishesAt(TUE, "Dinner")).toContain("Bhindi masala");
+    // Only the slot-days this change re-planned: not the week's Kadhi, already asked.
+    expect(r.asked).toEqual(["Is the Bhindi masala OK for Gowri Shankar, no egg?"]);
+    expect(r.message).toContain("\n\nIs the Bhindi masala OK for Gowri Shankar, no egg?\n\nThe whole week: ");
+    expect(r.message).not.toContain("Kadhi");
+    expect(r.message.split("?\n")).toHaveLength(2);   // one question (the link's "?" aside)
+  });
+
+  it("an allergy unknown from a change is named first", async () => {
+    const k = await planned([NO_EGG, PEANUT]);
+    unreadDinner(k, "Bhindi masala");
+    const r = await k.plan(fakeModel().model, { only: [{ date: TUE, slot: "Dinner" }] });
+    if (!r.ok) throw new Error(r.say);
+    expect(r.asked).toEqual(["Is the Bhindi masala OK for Agastya, no peanut and is the Bhindi masala OK for Gowri Shankar, no egg?"]);
+  });
+
+  it("a change with no unknowns asks nothing", async () => {
+    const k = await planned([NO_EGG]);
+    const r = await k.plan(fakeModel().model, { only: [{ date: TUE, slot: "Dinner" }] });
+    if (!r.ok) throw new Error(r.say);
+    expect(r.asked).toBeUndefined();
+    expect(r.message).not.toContain("OK for");
+    expect(r.message).not.toContain("?\n");
   });
 });
 

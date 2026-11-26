@@ -509,11 +509,12 @@ async function planWeek(deps: MakePlanDeps & { log: (line: string) => void }, in
   // 6. The message. One question at most (owner 25 Nov): the slots too thin for their week, the thinnest first (owner 23 Nov),
   // not a line in unmet, and the calendar entries the plan could not read, folded together. A new dish is said with the
   // family's dish it stands in for, never the model's reason.
-  // The dishes to check (spec §9.1): the whole week's, allergies first (a change's re-plan only says what it planned).
+  // The dishes to check (spec §9.1), allergies first: the whole week's; a change's re-plan (owner, 26 Nov) asks right away
+  // about the ones on the slot-days it planned, and that is its only question.
   const planned = new Set(toPlan.map((d) => slotDayKey(d.date, d.slot)));
-  const checks = only ? [] : checksOf(filled.unknowns.filter((u) => planned.has(slotDayKey(u.date, u.slot))), slots);
+  const checks = checksOf(filled.unknowns.filter((u) => planned.has(slotDayKey(u.date, u.slot))), slots);
   if (checks.length) log(`to check: ${checks.map((c) => `${c.dish} for ${c.who} (${c.tag}${c.allergy ? ", allergy" : ""})`).join("; ")}`);
-  const question = planQuestion({ short: only ? [] : [...leftOut.filter((n) => slots.find((s) => same(s.name, n))?.kind !== "addon")
+  const question = only ? planQuestion({ short: [], checks, events: [] }) : planQuestion({ short: [...leftOut.filter((n) => slots.find((s) => same(s.name, n))?.kind !== "addon")
     .map((n) => ({ meal: slots.find((s) => same(s.name, n))?.kind === "main" ? n.toLowerCase() : n, added: false }))], checks, events: read.asked });
   const asked = question ? [question] : [];
   // One entry a placement, with its day and meal (the message names the weekday).
@@ -524,7 +525,7 @@ async function planWeek(deps: MakePlanDeps & { log: (line: string) => void }, in
       meals: days.filter((d) => !d.fixed && !emptyAddon(d)).map((d) => ({ label: `${weekdayLong(d.date)} ${d.slot}`, skip: d.skip,
         dishes: d.dishes.map((name) => ({ name, not_for: notForOf(d, name), note: (dishNotes.get(`${d.date}|${d.slot}|${dishKey(name)}`) ?? []).join("; ") || null,
           for_people: forOf(d, name) })) })),
-      unmet: uniq(unmet), new_dishes: newNamed, link: weekLink(deps.basePath, weekStart) });
+      unmet: uniq(unmet), new_dishes: newNamed, question, link: weekLink(deps.basePath, weekStart) });
     return done({ ok: true, week_start: weekStart, message, instructions: "Send message to the family word for word, as one message, then end your turn.",
       ...(unmet.length ? { unmet: uniq(unmet) } : {}), ...(asked.length ? { asked } : {}), ...(noIngredients.length ? { no_ingredients: noIngredients } : {}) });
   }

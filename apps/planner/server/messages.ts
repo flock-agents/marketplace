@@ -268,14 +268,16 @@ export function planQuestion(o: { short: ShortAsk[]; events: EventAsk[]; checks?
   return asks.length ? `${lead}${capital(asks.join(", and "))}?` : null;
 }
 /** What a later change re-planned (spec §6), as the agent sends it: each slot-day planned again with its dishes, the new ones,
- *  what could not be kept, and the Week page. */
+ *  what could not be kept, its one question (planQuestion's checks for the dishes it placed: asked right away, owner 26 Nov),
+ *  and the Week page. */
 export function changeMessage(t: { meals: { label: string; skip: string | null; dishes: { name: string; note: string | null; not_for?: string[]; for_people?: string[] }[] }[];
-  unmet: string[]; new_dishes: NewDish[]; link: string }): string {
+  unmet: string[]; new_dishes: NewDish[]; question?: string | null; link: string }): string {
   const lines = ["Updated the plan:"];
   for (const m of t.meals) lines.push(`${m.label}: ${m.skip ? (m.skip === "eaten_out" ? "eating out" : "ordering in")
     : m.dishes.map((x) => dishText({ name: x.name, portion_note: x.note, not_for: x.not_for, for_people: x.for_people })).join(", ") || "nothing planned"}`);
   if (t.new_dishes.length) lines.push("", `New: ${newDishesText(t.new_dishes).join(", ")}`);
   if (t.unmet.length) lines.push("", `I couldn't keep everything: ${t.unmet.join("; ")}. Tell me what to change.`);
+  if (t.question) lines.push("", t.question);
   lines.push("", `The whole week: [Week page](${t.link})`);
   return lines.join("\n");
 }
