@@ -4,7 +4,8 @@
 import { describe, it, expect } from "bun:test";
 import { boot } from "./testkit";
 import { saysNoEggs, buildMeal, codePlace, nearestDish, cuisinesOf, regionalFor, kitchenLine, needsNamed, placeOf, wordOf, KINDS_SYSTEM, type MealDish, type Place } from "./setup";
-import { keptOften } from "./setup";
+import { keptOften, swapItems } from "./setup";
+import { dishKey } from "./dishText";
 import { checkRead, diffSetup, familyLines, familySentences, frequencyOf, householdOf, lunchLine, personOf, plainWords, quoteHasDayOrCount, readOf, resolveSlot,
   ruleSaid, saidByFamily, savedOf, DISHES_ASK, SETUP_PARTS, SETUP_SYSTEM, CONTAINS_BATCH, daysOf, clockOf, itemWord, allergyAsk, answeredIn, mealOf, type Saved, type SetupRead } from "./setup";
 import { isAllergyRule } from "./allergy";
@@ -1399,12 +1400,13 @@ describe("setup reads into the one meaning model (§5, §6.4)", () => {
   // G1 (N2, D3c): a hard swap's item is the person's rule, never a dish of the meal it is had at, nor of the box that replaces
   // that meal; the library keeps its row (its ingredients are read for the person's rules).
   describe("a hard swap's item is no dish of its meal or box (G1)", () => {
-    const qOf = (who: string) => `puri for ${who} when we make pongal, he won't eat it`;
-    const run = async (who: string, said: string, dishes: { library: unknown[][]; seed: unknown[][]; links: unknown[][] }) => {
-      const swap = { hard: true, what: "swap", who, items: ["pongal"], to: "puri", slots: ["Breakfast"], quote: qOf(said) };
-      const f = fake({ home: W_HOME, rules: { rules: [...W_RULES.rules, swap] }, contains: containsOf(), lint: { dishes: [] }, often: W_OFTEN, kinds: W_KINDS, dishes });
+    const qOf = (who: string, to = "puri") => `${to} for ${who} when we make pongal, he won't eat it`;
+    const run = async (who: string, said: string, dishes: { library: unknown[][]; seed: unknown[][]; links: unknown[][] }, more: string[] = [],
+      over: { often?: unknown[][] } = {}, to = "puri") => {
+      const swap = { hard: true, what: "swap", who, items: ["pongal"], to, slots: ["Breakfast"], quote: qOf(said, to) };
+      const f = fake({ home: W_HOME, rules: { rules: [...W_RULES.rules, swap] }, contains: containsOf(), lint: { dishes: [] }, often: { often: over.often ?? W_OFTEN.often }, kinds: W_KINDS, dishes });
       const k = await boot({ model: f.model });
-      const r = await k.op("apply_setup", { household: W_HOUSEHOLD, transcript: [...W_TRANSCRIPT, "Q: Anything else?", `A: Pongal some days too. And ${qOf(said)}.`] });
+      const r = await k.op("apply_setup", { household: W_HOUSEHOLD, transcript: [...W_TRANSCRIPT, "Q: Anything else?", `A: Pongal some days too. And ${qOf(said, to)}.`, ...more] });
       expect(r.ok).toBe(true);
       const fam = (await k.owner("GET", "/api/family")).body;
       return { k, r, slot: (n: string) => fam.slots.find((s: any) => s.name === n) };
@@ -1417,6 +1419,25 @@ describe("setup reads into the one meaning model (§5, §6.4)", () => {
       expect(names(slot("Breakfast"))).not.toContain("puri");
       expect(names(slot("Breakfast"))).toContain("pongal");
       expect(k.rows("library").some((d) => d.name === "Puri" && d.slot === "Breakfast")).toBe(true);
+    });
+    it("a dish of the meal in its own right that is also one person's swap item keeps its template (review 1)", async () => {
+      const own = "Puri for all of us on Sundays";
+      const { k, slot } = await run("Gowri Shankar", "Dad", { ...W_DISHES, library: [...W_DISHES.library, pongal, ["Puri", "Breakfast", own]],
+        seed: [...W_DISHES.seed, ["Breakfast", "Pongal", pongal[2]], ["Breakfast", "Puri", own]] }, [`A: ${own}.`]);
+      expect(names(slot("Breakfast"))).toContain("puri");
+      expect(k.rows("library").some((d) => d.name === "Puri" && d.slot === "Breakfast")).toBe(true);
+      // Read only from the swap's words, but with a how-often of its own: a dish of the meal too.
+      const some = "Puri sometimes for everyone too";
+      const { slot: s2 } = await run("Gowri Shankar", "Dad", { ...W_DISHES, library: [...W_DISHES.library, pongal, ["Puri", "Breakfast", qOf("Dad")]],
+        seed: [...W_DISHES.seed, ["Breakfast", "Pongal", pongal[2]]] }, [`A: ${some}.`], { often: [...W_OFTEN.often, ["Puri", "Breakfast", some, "sometimes", "sometimes", ""]] });
+      expect(names(s2("Breakfast"))).toContain("puri");
+    });
+    it("a swap to a kind word drops nothing by that word: the meal's dish of that kind stays (review 1)", async () => {
+      expect(swapItems([{ what: "swap", hard: true, slots: ["Breakfast"], to: "dosa", gives: resolveGives("dosa"), items: ["pongal"], quote: "q" }]).map((w) => w.keys))
+        .toEqual([[dishKey("Plain dosa")]]);   // the item it gives, never the kind word
+      expect(swapItems([{ what: "swap", hard: true, slots: ["Breakfast"], to: "upma", gives: { type: "kind", kind: "Upma" }, items: ["pongal"], quote: "q" }])).toEqual([]);
+      const { slot } = await run("Gowri Shankar", "Dad", { ...W_DISHES, library: [...W_DISHES.library, pongal], seed: [...W_DISHES.seed, ["Breakfast", "Pongal", pongal[2]]] }, [], {}, "dosa");
+      expect(slot("Breakfast").templates.map((t: any) => t.parts)).toContainEqual([{ kind: "Dosa", dish: "Plain dosa", words: "dosa" }]);
     });
     it("at the box that replaces that meal, linked to it: the box is the meal's whole plate", async () => {
       const { slot } = await run("Agastya", "Agastya", { ...W_DISHES, library: [...W_DISHES.library, pongal, ["Puri", "Agastya's breakfast box", qOf("Agastya")]],
@@ -1533,14 +1554,14 @@ describe("setup reads into the one meaning model (§5, §6.4)", () => {
     expect(JSON.stringify(home.schema)).toContain('"extras":{"type":"boolean"}');
     expect(home.system).toContain("extras: true");
   });
-  it("teach a box that is the home meal as made (a whole link) and a box dish made with a home part (its base and a link) (G2)", () => {
+  it("teach a box that is the home meal as made (a whole link) and a box dish made with a home part (its own dish and a link) (G2)", () => {
     const dishes = SETUP_PARTS.find((p) => p.id === "dishes")!.system;
-    expect(dishes).toContain(`A box that has the home meal as it is made is a link with kind_words "", never its dishes; a dish named with a part of the home meal ("akki roti folded over the day's sabzi") is the box's own bread or base and a link of that part: the part's words are never in a dish name.`);
-    // One worked example of each shape, in a made-up family's words: no library or seed row for the whole-meal box.
-    expect(dishes).toContain(`links [["Ira's morning box", "Breakfast", "", "Ira's morning box is our breakfast, just as it's made"], ["Ira's lunch box", "Lunch", "sabzi", "akki roti folded over that day's sabzi"]]`);
-    expect(dishes).toContain(`library [["Akki roti", "Ira's lunch box", "akki roti folded over that day's sabzi"]]`);
-    expect(dishes).not.toContain(`"Ira's morning box", "Akki`);
-    for (const w of ["has what we have", "for the whole family", "share of our morning plate"]) expect(dishes.toLowerCase(), w).not.toContain(w);
+    expect(dishes).toContain(`A box that has a home meal as it is made is a link to that meal with kind_words "", never its dishes; a box dish named with a part of a home meal is the box's own dish and a link of that part: the part's words are never in its dish name.`);
+    // One worked example, of the whole-meal shape, from Dinner in a made-up family's words: no library or seed row for the box.
+    expect(dishes).toContain(`links [["Rahul's dinner box", "Dinner", "", "whatever is cooked that night, as it is"]] and no library or seed row for the box`);
+    expect(dishes).not.toContain(`["Rahul's dinner box", "Dinner", "whatever`);   // never a seed row for it
+    // Review round 1: no second box example, no flatbread around the day's dish (h18's two-box shape).
+    for (const w of ["ira's", "akki roti", "has what we have", "for the whole family", "share of our morning plate"]) expect(dishes.toLowerCase(), w).not.toContain(w);
   });
 });
 
@@ -1587,7 +1608,7 @@ describe("apply_setup v2: the prompts", () => {
     expect(often).toContain("A dish said with weekdays and a frequency word keeps both: its frequency and its days");
     expect(often).toContain("A dish told in any reply has its row");
     // Review: no trigger phrase or sentence shape lifted from an eval household.
-    for (const w of ["in case we make", "when we make", "who eats differently", "egg inside", "pancakes", "rest of us rotis", "rolled with", "cheese inside", "paneer inside", "what we make for", "has what we have", "for the whole family", "puri wrapped", "puri sabzi", "sabji that we make"]) {
+    for (const w of ["in case we make", "when we make", "who eats differently", "egg inside", "pancakes", "rest of us rotis", "rolled with", "cheese inside", "paneer inside", "what we make for", "has what we have", "for the whole family", "puri wrapped", "puri sabzi", "sabji that we make", "folded over", "morning box", "wrapped around", "breakfast box", "the day's sabzi"]) {
       expect(rules.toLowerCase(), w).not.toContain(w);
       expect(often.toLowerCase(), w).not.toContain(w);
       expect(dishes.toLowerCase(), w).not.toContain(w);
