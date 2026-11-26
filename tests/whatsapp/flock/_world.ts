@@ -140,15 +140,22 @@ export async function startFlock() {
 
   const { createSession } = await flockImport("sessions");
   const { generateToken } = await flockImport("token-store");
+  /** What Flock logged (console.warn / console.log) during each tool call, for the tests to read. */
+  const callLogs: string[] = [];
   /** One tool call as an agent makes it: POST /api/mcp/skills/whatsapp/call with its own token, in a chat of its own. */
   async function call(agentId: string, tool: string, args: Record<string, unknown> = {}): Promise<{ status: number; body: any; answer: any }> {
     const session = createSession(`wa-e2e-${agentId}-${Math.random().toString(36).slice(2)}`, agentId);
+    const { warn, log } = console;
+    const record = (orig: (...a: unknown[]) => void) => (...a: unknown[]) => { callLogs.push(a.map(String).join(" ")); orig(...a); };
+    callLogs.push(`[e2e] call ${agentId} ${tool}`);
+    console.warn = record(warn);
+    console.log = record(log);
     const res = await app.request(`/api/mcp/skills/${SKILL}/call`, {
       method: "POST",
       headers: { Authorization: `Bearer ${generateToken(agentId, session.id)}`, "X-Session-Id": session.id, "Content-Type": "application/json" },
       body: JSON.stringify({ tool, arguments: args }),
     });
-    const body: any = await res.json();
+    const body: any = await res.json().finally(() => { console.warn = warn; console.log = log; });
     let answer: any = null;
     const text = body?.result?.content?.find?.((c: any) => c?.type === "text")?.text;
     if (typeof text === "string") { try { answer = JSON.parse(text); } catch { answer = text; } }
@@ -167,7 +174,7 @@ export async function startFlock() {
     return installSkill(SKILL, dir, item);
   }
 
-  return { DATA_DIR, owner, call, installWhatsApp };
+  return { DATA_DIR, owner, call, callLogs, installWhatsApp };
 }
 
 export type FlockWorld = Awaited<ReturnType<typeof startFlock>>;

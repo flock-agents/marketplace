@@ -99,6 +99,8 @@ describe.skipIf(!enabled)("the WhatsApp connector 2.x in Flock", () => {
       expect(start.env.MCP_DATA_DIR).toBe(dataDir);
       expect(statSync(dataDir).mode & 0o777).toBe(0o700);
       expect(start.env.HTTPS_PROXY).toBeUndefined();
+      const { getTimezone } = await flockImport("config");
+      expect(start.env.FLOCK_TIMEZONE).toBe(getTimezone());
       expect(alive(start.pid)).toBe(true);
       expect(conn().pid).toBe(start.pid);
       mgr.flushToDiskSync();
@@ -146,6 +148,11 @@ describe.skipIf(!enabled)("the WhatsApp connector 2.x in Flock", () => {
       expect(r.status).toBe(200);
       expect(r.answer).toMatchObject({ error: "NOT_LINKED" });
       expect(r.body.error.message).toContain("NOT_LINKED");
+    });
+
+    it("no tool call re-heals the registry (no \"healed requires\" log)", () => {
+      expect(flock.callLogs.filter((l) => l.startsWith("[e2e] call ")).length).toBe(reached);
+      expect(flock.callLogs.filter((l) => l.includes("healed requires"))).toEqual([]);
     });
 
     it("limits.json is kept in MCP_DATA_DIR, every call counted", () => {
@@ -304,6 +311,10 @@ describe.skipIf(!enabled)("the WhatsApp connector 2.x in Flock", () => {
       expect(latestStart().pid).not.toBe(start.pid);
       expect(await isEgressBindingRegistered(bindingOf(latestStart()))).toBe(true);
     });
+  });
+
+  it("across every tool call of the run, the registry was never re-healed", () => {
+    expect(flock.callLogs.filter((l) => l.includes("healed requires"))).toEqual([]);
   });
 
   describe("delete", () => {
