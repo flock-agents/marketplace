@@ -1452,7 +1452,7 @@ describe("setup reads into the one meaning model (§5, §6.4)", () => {
 
   it("the prompts teach links, extras, a filling's item and the box that replaces a meal, with the made-up family", () => {
     const dishes = SETUP_PARTS.find((p) => p.id === "dishes")!, home = SETUP_PARTS.find((p) => p.id === "home")!;
-    expect(dishes.system).toContain("A filling said with a kind is an item of that kind: paratha rolled with egg or cheese inside is Egg paratha roll, Cheese paratha roll");
+    expect(dishes.system).toContain("A filling or stuffing said with a dish makes a dish of its own, named by the filling and the dish, one row for each filling");
     expect(dishes.system).toContain("A meal the person has beside the home meal is their add-on's");
     expect(dishes.system).toContain("A box with the home meal's dish names a link, not a dish");
     expect(dishes.system).toContain("is their rule's (a swap), never a dish of the meal");
@@ -1506,7 +1506,7 @@ describe("apply_setup v2: the prompts", () => {
     expect(often).toContain("A dish said with weekdays and a frequency word keeps both: its frequency and its days");
     expect(often).toContain("A dish told in any reply has its row");
     // Review: no trigger phrase or sentence shape lifted from an eval household.
-    for (const w of ["in case we make", "when we make", "who eats differently", "egg inside", "pancakes", "rest of us rotis"]) {
+    for (const w of ["in case we make", "when we make", "who eats differently", "egg inside", "pancakes", "rest of us rotis", "rolled with", "cheese inside", "paneer inside"]) {
       expect(rules.toLowerCase(), w).not.toContain(w);
       expect(often.toLowerCase(), w).not.toContain(w);
       expect(dishes.toLowerCase(), w).not.toContain(w);
