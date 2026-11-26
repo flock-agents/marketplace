@@ -8,11 +8,11 @@
  * limits and pacing, and a pause when WhatsApp logs the device out or keeps refusing it.
  */
 import {
-  addConnectedTime, clearPause, connectedMsLeft, LimitHit, LIMITS, minutesLeftToday, noteConnect, pause, pausedState,
+  addConnectedTime, clearPause, connectTimeLeft, LimitHit, LIMITS, minutesLeftToday, noteConnect, pause, pausedState,
   reserveSend, takeCall, takeSession, type LimitOpts,
 } from "./_limits";
 import { Store, type StoredChat } from "./_store";
-import { isGroupJid, numberOf } from "./_messages";
+import { isGroupJid } from "./_messages";
 import { LINK_CODE_STEPS, LINK_QR_STEPS, QR_MESSAGE, linkCodeMessage } from "./_guide";
 import type { AuthHandle, WASocketLike } from "./_socket";
 
@@ -54,7 +54,7 @@ const CLOSE = { loggedOut: 401, forbidden: 403, multideviceMismatch: 411, connec
 
 const MAX_SEND_TEXT = 4000;
 const LIST_PARAMS = ["chats", "to", "recipients", "recipient", "numbers", "number", "phone", "jid", "jids"];
-const MASS_MENTION = /(^|\s)@(all|everyone|here|channel|group|members)\b/i;
+const MASS_MENTION = /(^|[^\p{L}\p{N}_@])@(all|everyone|here|channel|group|members)\b/iu;
 
 type Update = { kind: "qr"; qr: string } | { kind: "open" } | { kind: "pending" } | { kind: "newLogin" } | { kind: "closed"; code: number; message: string };
 
@@ -191,7 +191,6 @@ export class WhatsAppService {
 
   private get limitOpts(): LimitOpts { return { dir: this.deps.dataDir, timeZone: this.deps.timeZone }; }
   private minutesLeft(): number { try { return minutesLeftToday(this.limitOpts); } catch { return 0; } }
-  private msLeft(): number { try { return connectedMsLeft(this.limitOpts); } catch { return 0; } }
   private addTime(ms: number): void { try { addConnectedTime(ms, this.limitOpts); } catch { /* kept best effort */ } }
 
   /** Closes `conn` (if still open) and adds its time to today's total, once. */
@@ -214,19 +213,22 @@ export class WhatsAppService {
     this.store.save();
   }
 
-  /** Closes the session after a few idle minutes, in turn with the calls. */
+  /** Closes the session after a few idle minutes, in turn with the calls. A call that ran in between
+   *  (and so started a new idle wait) keeps it open. */
   private scheduleIdleClose(): void {
     const s = this.session;
     if (!s) return;
     if (s.idle) clearTimeout(s.idle);
-    s.idle = unref(setTimeout(() => { void this.exclusive(async () => { if (this.session === s) this.endSession(); }); }, this.t.idleCloseMs));
+    const idle = unref(setTimeout(() => { void this.exclusive(async () => { if (this.session === s && s.idle === idle) this.endSession(); }); }, this.t.idleCloseMs));
+    s.idle = idle;
   }
 
-  /** Stops whatever is open: for the server shutting down. */
-  async shutdown(): Promise<void> {
-    this.cancelLink();
-    if (this.linkTask) await this.linkTask.catch(() => {});
-    await this.exclusive(async () => this.endSession());
+  /** Closes whatever is open and counts its time, at once and without waiting for a call in progress:
+   *  for the server shutting down (Flock kills it 5 seconds after asking it to stop). */
+  shutdown(): void {
+    this.retire(this.linkConn);
+    this.linkConn = null;
+    this.endSession();
   }
 
   /** One tool call: the pause and the runaway guard first, then the call in turn. */
@@ -235,9 +237,10 @@ export class WhatsAppService {
     return this.exclusive(fn);
   }
 
-  /** One call at a time, in the order they came: two connections at once would be two devices fighting. */
+  /** One call at a time, in the order they came: two connections at once would be two devices fighting.
+   *  The queue itself never fails, so one call's error never reaches the next. */
   private exclusive<T>(fn: () => Promise<T>): Promise<T> {
-    const run = this.queue.then(fn, fn);
+    const run = this.queue.then(fn);
     this.queue = run.then(() => undefined, () => undefined);
     return run;
   }
@@ -301,8 +304,8 @@ export class WhatsAppService {
     }
     const session = this.session!;
     for (let attempt = 0; ; attempt++) {
-      const left = this.msLeft();
-      if (left <= 0) { this.endSession(); throw new LimitHit("TIME_LIMIT_DAY", `WhatsApp was connected for ${LIMITS.connectedMsPerDay / 3_600_000} hours today, the most allowed. It frees up at midnight.`, 0); }
+      let left: number;
+      try { left = connectTimeLeft(this.limitOpts); } catch (e) { this.endSession(); throw e; }
       const conn = new Connection(await this.deps.openSocket(auth), auth, this.store, this.now);
       session.conn = conn;
       const first = await conn.next((u) => u.kind === "open" || u.kind === "closed" || u.kind === "qr", Math.min(this.t.openWaitMs, left));
@@ -352,9 +355,28 @@ export class WhatsAppService {
     };
   }
 
-  private cancelLink(): void {
+  /** Ends a waiting link and waits for it to wind down (its time counted). */
+  private async stopLink(): Promise<void> {
     this.linkConn?.end();
     this.linkConn = null;
+    if (this.linkTask) await this.linkTask;
+  }
+
+  /** A link that ends with the device linked: a pause left by a logout is over. */
+  private finishLinked(link: LinkState): void {
+    link.phase = "linked";
+    clearPause(this.limitOpts);
+  }
+
+  /** Why the first connection of a link failed; pauses as any connection would when WhatsApp pushes back. */
+  private linkConnectFailure(first: Update | null): Fail {
+    const reason = first?.kind === "closed" ? `${first.code} ${first.message}` : "no answer in time";
+    const outcome = first?.kind === "closed" ? this.closeOutcome(first.code, first.message) : null;
+    if (outcome) return outcome;
+    if (noteConnect(false, reason, this.limitOpts)) {
+      return new Fail("WHATSAPP_REFUSED", `WhatsApp refused ${LIMITS.failedConnectsToPause} connections in a row (last: ${reason}). WhatsApp is paused: tell the person; do not retry.`);
+    }
+    return new Fail("CONNECT_FAILED", `Could not reach WhatsApp to link (${reason}). Try again later.`);
   }
 
   /** Starts linking: a link code for the person's number (default), or a QR code (`qr: true`). Answers
@@ -366,26 +388,29 @@ export class WhatsAppService {
       if (current.registered()) return this.answer({ linked: true, message: "WhatsApp is already linked. To link another number, `unlink` first." });
       const mode: "code" | "qr" = params.qr === true || params.qr === "true" ? "qr" : "code";
       const digits = mode === "code" ? phoneDigits(params.phone) : "";
-      if (this.linkWaiting()) { this.cancelLink(); await this.linkTask; }
+      if (this.linkWaiting()) await this.stopLink();
       this.endSession();
       this.deps.clearAuth();
+      this.store.clear();
       const auth = await this.deps.loadAuth();
       const left = takeSession(this.limitOpts);
       const startedAt = this.now();
       const link: LinkState = { mode, phase: "waiting", startedAt, endsAt: startedAt + Math.min(this.t.linkWindowMs, left), ...(digits ? { phone: masked(digits) } : {}) };
       const conn = new Connection(await this.deps.openSocket(auth), auth, this.store, this.now);
+      this.linkConn = conn;
       try {
         const first = await conn.next((u) => u.kind === "qr" || u.kind === "closed", Math.min(this.t.firstQrWaitMs, left));
-        if (first?.kind !== "qr") fail("CONNECT_FAILED", `Could not reach WhatsApp to link (${first?.kind === "closed" ? `${first.code} ${first.message}` : "no answer in time"}). Try again later.`);
+        if (first?.kind !== "qr") throw this.linkConnectFailure(first);
+        noteConnect(true, "", this.limitOpts);
         if (mode === "code") link.code = formatCode(String(await conn.sock.requestPairingCode(digits)).toUpperCase());
         else link.qrImage = await this.deps.qrImage((first as { qr: string }).qr);
       } catch (e) {
         this.retire(conn);
+        this.linkConn = null;
         this.deps.clearAuth();
         throw e;
       }
       this.link = link;
-      this.linkConn = conn;
       this.linkTask = this.runLink(conn, auth).finally(() => { this.linkTask = null; });
       return this.answer({ linked: false, link: this.linkView() });
     });
@@ -403,20 +428,24 @@ export class WhatsAppService {
         if (!u) { if (link.phase === "waiting") { link.phase = "expired"; this.deps.clearAuth(); } return; }
         if (u.kind === "qr" && link.mode === "qr") link.qrImage = await this.deps.qrImage(u.qr);
         if (u.kind === "open") {
-          link.phase = "linked";
-          clearPause(this.limitOpts);
+          this.finishLinked(link);
           await current.until(() => current.historyDone, Math.min(this.t.historyWaitMs, Math.max(0, link.endsAt - this.now())));
           try { this.store.applyGroups(await current.sock.groupFetchAllParticipating?.() ?? {}); } catch { /* names from the chat list then */ }
           this.store.markSynced(this.now());
           return;
         }
         if (u.kind !== "closed") continue;
-        if (current !== this.linkConn) { link.phase = link.phase === "waiting" ? "failed" : link.phase; link.error ??= "A new link was started."; return; }
+        if (current !== this.linkConn) { link.phase = link.phase === "waiting" ? "failed" : link.phase; link.error ??= "The link was stopped."; return; }
         const paired = auth.registered();
-        const outcome = paired && u.code === CLOSE.restartRequired ? null : this.closeOutcome(u.code, u.message);
-        if (!paired && u.code !== CLOSE.restartRequired) { link.phase = "failed"; link.error = outcome?.message ?? `WhatsApp closed the link (${u.code} ${u.message}).`; this.deps.clearAuth(); return; }
+        const restart = u.code === CLOSE.restartRequired;
+        const outcome = restart ? null : this.closeOutcome(u.code, u.message);
+        if (!paired && !restart) { link.phase = "failed"; link.error = outcome?.message ?? `WhatsApp closed the link (${u.code} ${u.message}).`; this.deps.clearAuth(); return; }
         if (outcome) { link.phase = "failed"; link.error = outcome.message; return; }
-        if (reconnects >= MAX_RECONNECTS) { link.phase = paired ? "linked" : "failed"; link.error = "WhatsApp did not reconnect after the link."; return; }
+        if (reconnects >= MAX_RECONNECTS) {
+          if (paired) this.finishLinked(link); else link.phase = "failed";
+          link.error = "WhatsApp did not reconnect after the link.";
+          return;
+        }
         reconnects++;
         this.retire(current);
         current = new Connection(await this.deps.openSocket(auth), auth, this.store, this.now);
@@ -445,8 +474,7 @@ export class WhatsAppService {
   /** Unlinks: logs this device out of WhatsApp when it can, then forgets the link and every stored chat. */
   async unlink(): Promise<Record<string, unknown>> {
     return this.call("unlink", async () => {
-      this.cancelLink();
-      if (this.linkTask) await this.linkTask;
+      await this.stopLink();
       this.link = null;
       const auth = await this.deps.loadAuth();
       const paused = pausedState(this.limitOpts);
@@ -471,7 +499,7 @@ export class WhatsAppService {
 
   // --- Reads ---
 
-  /** A fresh read: connect for what arrived since, unless a link just filled the store. */
+  /** A fresh read: on the session's connection, so the store has what arrived since. */
   private async refresh(): Promise<void> {
     await this.withConnection(async () => undefined);
   }
@@ -488,7 +516,7 @@ export class WhatsAppService {
   private chatNamed(name: string): StoredChat {
     const found = this.store.findChats(name);
     if (found.length === 0) fail("CHAT_NOT_FOUND", `No chat named exactly "${name}". Use the name exactly as list-chats or search shows it. Only existing chats can be read or sent to.`);
-    if (found.length > 1) fail("CHAT_AMBIGUOUS", `${found.length} chats are named "${name}". Ask the person which one they mean (one is ${found.map((c) => numberOf(c.jid)).join(", ")}).`);
+    if (found.length > 1) fail("CHAT_AMBIGUOUS", `${found.length} chats are named "${name}", so it is not clear which one. Ask the person which one they mean; renaming one of them on their phone tells them apart.`);
     return found[0];
   }
 
@@ -530,9 +558,8 @@ export class WhatsAppService {
     return this.call("send-message", async () => {
       return this.withConnection(async (conn) => {
         const chat = this.chatNamed(name);
-        const wait = reserveSend(chat.jid, message, { ...this.limitOpts, gapMs: this.t.sendGapMs });
-        const jitter = this.t.sendJitterMinMs + Math.floor(this.random() * (this.t.sendJitterMaxMs - this.t.sendJitterMinMs));
-        await this.sleep(wait + jitter);
+        const jitterMs = this.t.sendJitterMinMs + Math.floor(this.random() * (this.t.sendJitterMaxMs - this.t.sendJitterMinMs));
+        await this.sleep(reserveSend(chat.jid, message, { ...this.limitOpts, gapMs: this.t.sendGapMs, jitterMs }));
         if (conn.ended) fail("SEND_FAILED", "The connection to WhatsApp dropped before sending; nothing went out. Try again.");
         let sent: any;
         try {

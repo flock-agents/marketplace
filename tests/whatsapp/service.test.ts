@@ -249,6 +249,51 @@ describe("when WhatsApp pushes back: pause, never retry", () => {
     expect(w.sockets.length).toBe(made);
   });
 
+  it("a link the phone confirmed clears a logout pause even when WhatsApp's restart then fails to reconnect", async () => {
+    const w = track(world((sock, n, w) => {
+      if (n === 0) { sock.qr(); setTimeout(() => { w.auth.linked = true; sock.close(515, "restart required"); }, 20); }
+      else sock.close(428, "connection lost");
+    }));
+    pause("logged_out", "WhatsApp logged this device out.", { dir: w.dir, timeZone: "UTC" });
+    await w.wa.startLink({ phone: "919812345678" });
+    for (let i = 0; i < 50 && (await w.wa.linkStatus() as any).link.phase === "waiting"; i++) await sleep(10);
+    const status: any = await w.wa.linkStatus();
+    expect(status.link.phase).toBe("linked");
+    expect(status.paused).toBeUndefined();
+    expect(w.sockets.length).toBe(1 + MAX_RECONNECTS);
+  });
+
+  it("an account refused while a link waits pauses everything, a new link too", async () => {
+    const w = track(world((sock) => { sock.qr(); setTimeout(() => sock.close(403, "forbidden"), 20); }));
+    await w.wa.startLink({ phone: "919812345678" });
+    await sleep(80);
+    expect((await w.wa.linkStatus() as any).link.phase).toBe("failed");
+    expect(limits(w).paused).toMatchObject({ kind: "refused" });
+    expect(await codeOf(w.wa.startLink({ phone: "919812345678" }))).toBe("PAUSED_REFUSED");
+    expect(w.sockets.length).toBe(1);
+  });
+
+  it("a link refused at once pauses; one that cannot connect 3 times in a row pauses too, never looping", async () => {
+    const refused = track(world((sock) => sock.close(403, "forbidden")));
+    expect(await codeOf(refused.wa.startLink({ phone: "919812345678" }))).toBe("WHATSAPP_REFUSED");
+    expect(limits(refused).paused).toMatchObject({ kind: "refused" });
+    expect(refused.sockets.every((s) => s.ended)).toBe(true);
+    const failing = track(world((sock) => sock.close(408, "timed out")));
+    expect(await codeOf(failing.wa.startLink({ qr: true }))).toBe("CONNECT_FAILED");
+    expect(await codeOf(failing.wa.startLink({ qr: true }))).toBe("CONNECT_FAILED");
+    expect(await codeOf(failing.wa.startLink({ qr: true }))).toBe("WHATSAPP_REFUSED");
+    expect(await codeOf(failing.wa.startLink({ qr: true }))).toBe("PAUSED_REFUSED");
+    expect(failing.sockets.length).toBe(3);
+  });
+
+  it("a link that gets its QR code resets the failed-connection count", async () => {
+    let n = 0;
+    const w = track(world((sock) => { if (n++ === 1) sock.qr(); else sock.close(408, "timed out"); }));
+    expect(await codeOf(w.wa.startLink({ qr: true }))).toBe("CONNECT_FAILED");
+    expect(await codeOf(w.wa.startLink({ qr: true }))).toBeNull();
+    expect(limits(w).failedConnects).toBe(0);
+  });
+
   it("another device taking over is reported, not fought over", async () => {
     const w = track(world((sock) => sock.close(440, "replaced"), { linked: true }));
     expect(await codeOf(w.wa.listChats({}))).toBe("REPLACED");
@@ -308,6 +353,30 @@ describe("the store and what reads answer", () => {
     expect(out.messages.at(-1).text).toBe("Call me");
   });
 
+  it("two chats with one name: refused, without giving out their numbers", async () => {
+    const w = track(linkedWorld());
+    w.wa.store.applyContacts([{ id: "919833333333@s.whatsapp.net", name: "Mom" }]);
+    w.wa.store.applyChats([{ id: "919833333333@s.whatsapp.net", conversationTimestamp: Math.floor(Date.now() / 1000) }]);
+    const err = await w.wa.readChat({ chat: "Mom" }).catch((e) => e);
+    expect(err.code).toBe("CHAT_AMBIGUOUS");
+    expect(err.message).not.toMatch(/\d{6,}/);
+  });
+
+  it("a broken chat in the saved store is dropped; the rest still reads", async () => {
+    const w0 = track(linkedWorld());
+    await w0.wa.listChats({});
+    w0.wa.shutdown();
+    const saved = JSON.parse(readFileSync(join(w0.dir, "store.json"), "utf8"));
+    saved.chats["bad@s.whatsapp.net"] = null;
+    saved.chats["worse@s.whatsapp.net"] = { jid: "worse@s.whatsapp.net", name: "Worse", kind: "person", lastAt: 1, unread: 0, messages: "x" };
+    saved.chats["919811111111@s.whatsapp.net"].messages.push({ id: 5 });
+    writeFileSync(join(w0.dir, "store.json"), JSON.stringify(saved));
+    const { Store } = await import("../../skills/whatsapp/server/_store");
+    const store = new Store(w0.dir);
+    expect(store.listChats(10).map((c) => c.name)).toEqual(["Mom", "School Parents"]);
+    expect(store.findChats("Mom")[0].messages.map((m) => m.text)).toEqual(["Dinner at 8?"]);
+  });
+
   it("is kept in the data folder only, capped", async () => {
     const w = track(linkedWorld());
     await w.wa.listChats({});
@@ -358,6 +427,7 @@ describe("sending", () => {
     expect(await codeOf(w.wa.sendMessage({ chat: ["Mom", "Ravi"], text: "hi" }))).toBe("ONE_RECIPIENT");
     expect(await codeOf(w.wa.sendMessage({ chat: "Mom", to: "919800000000", text: "hi" }))).toBe("ONE_RECIPIENT");
     expect(await codeOf(w.wa.sendMessage({ chat: "School Parents", text: "@everyone meeting" }))).toBe("MASS_MENTION");
+    for (const text of ["(@all) meeting", "hi,@everyone", "@Here now", "meet\n@group"]) expect(await codeOf(w.wa.sendMessage({ chat: "School Parents", text }))).toBe("MASS_MENTION");
     expect(await codeOf(w.wa.sendMessage({ chat: "Mom", text: "  " }))).toBe("MISSING_PARAM");
     expect(await codeOf(w.wa.sendMessage({ chat: "x".repeat(3), text: "a".repeat(4001) }))).toBe("TOO_LONG");
     expect(w.sockets.length).toBe(0);
@@ -373,9 +443,19 @@ describe("sending", () => {
     const waits = w.sleeps.filter((ms) => ms >= 1_000);
     expect(waits.length).toBe(2);
     expect(waits[0]).toBe(1_500);
-    expect(waits[1]).toBeGreaterThan(1_500 + 4_000);
-    expect(waits[1]).toBeLessThanOrEqual(1_500 + 5_000);
+    expect(waits[1]).toBeGreaterThan(5_000 + 1_500);
+    expect(waits[1]).toBeLessThanOrEqual(1_500 + 5_000 + 1_500);
     expect(w.sockets.flatMap((s) => s.sent).length).toBe(2);
+  });
+
+  it("the pause before a send counts toward the gap after it: sends really go at least the gap plus a pause apart", async () => {
+    let jitter = 0.99;
+    const w = track(world((sock, n) => { sock.open(); if (n === 0) sock.emit("messaging-history.set", history()); }, { linked: true, random: () => jitter, timings: { sendGapMs: 5_000 } }));
+    await w.wa.sendMessage({ chat: "Mom", text: "first" });
+    jitter = 0;
+    await w.wa.sendMessage({ chat: "Mom", text: "second" });
+    const [a, b] = limits(w).sends.map((x: any) => x.at);
+    expect(b - a).toBe(5_000 + 1_000);
   });
 
   it("refuses a new chat past 10 different chats in an hour, but a chat already messaged still works", async () => {
@@ -418,6 +498,94 @@ describe("sending", () => {
     expect(err.code).toBe("SEND_FAILED");
     expect(err.message).toMatch(/nothing went out/);
     expect(w.sockets.flatMap((s) => s.sent)).toEqual([]);
+  });
+});
+
+describe("sessions and links overlapping", () => {
+  it("an idle close that comes due while a call waits its turn leaves the session to that call", async () => {
+    const w = track(linkedWorld());
+    await w.wa.listChats({});
+    const hold = (w.wa as any).exclusive(() => sleep(100));
+    const read = w.wa.readChat({ chat: "Mom" });
+    await hold;
+    await read;
+    await sleep(20);
+    expect(w.sockets[0].ended).toBe(false);
+    expect(w.sockets.length).toBe(1);
+    await sleep(100);
+    expect(w.sockets[0].ended).toBe(true);
+  });
+
+  it("a link asked for while a session is open leaves it alone when WhatsApp is linked", async () => {
+    const w = track(linkedWorld());
+    await w.wa.listChats({});
+    expect(await w.wa.startLink({ phone: "919812345678" })).toMatchObject({ linked: true });
+    expect(w.sockets.length).toBe(1);
+    expect(w.sockets[0].ended).toBe(false);
+  });
+
+  it("unlink while a link waits ends the link without contacting WhatsApp", async () => {
+    const w = track(world((sock) => sock.qr()));
+    await w.wa.startLink({ phone: "919812345678" });
+    const out: any = await w.wa.unlink();
+    expect(out).toMatchObject({ unlinked: true, loggedOut: false });
+    expect(w.sockets.length).toBe(1);
+    expect(w.sockets[0].ended).toBe(true);
+    expect((await w.wa.linkStatus() as any).link.phase).toBe("none");
+  });
+
+  it("a fresh link forgets the chats of the link before it", async () => {
+    const w = track(world((sock) => sock.qr()));
+    w.wa.store.addMessages(history().messages);
+    expect(w.wa.store.chatCount).toBeGreaterThan(0);
+    await w.wa.startLink({ phone: "919812345678" });
+    expect(w.wa.store.chatCount).toBe(0);
+  });
+});
+
+describe("shutting down", () => {
+  it("closes a link still waiting for its first QR code at once, its time counted", async () => {
+    const w = track(world(() => {}));
+    const link = w.wa.startLink({ phone: "919812345678" }).catch((e) => e);
+    await sleep(30);
+    w.wa.shutdown();
+    expect(w.sockets[0].ended).toBe(true);
+    expect(limits(w).usage.ms).toBeGreaterThan(0);
+    await link;
+  });
+
+  it("closes a waiting link and an open session without waiting for a send in progress", async () => {
+    const w = track(world((sock) => sock.qr()));
+    await w.wa.startLink({ phone: "919812345678" });
+    w.wa.shutdown();
+    expect(w.sockets[0].ended).toBe(true);
+    const sending = track(linkedWorld());
+    await sending.wa.listChats({});
+    (sending.wa as any).sleep = () => sleep(200);
+    const send = sending.wa.sendMessage({ chat: "Mom", text: "hi" }).catch((e) => e);
+    await sleep(20);
+    sending.wa.shutdown();
+    expect(sending.sockets[0].ended).toBe(true);
+    expect(limits(sending).usage.ms).toBeGreaterThan(0);
+    expect((await send).code).toBe("SEND_FAILED");
+    expect(sending.sockets[0].sent).toEqual([]);
+  });
+
+  it("counts each connection's time exactly once: a link's two connections, then shutdowns and status calls", async () => {
+    let clock = Date.UTC(2026, 10, 25, 9, 0, 0);
+    const w = track(world((sock, n, w) => {
+      if (n === 0) { sock.qr(); setTimeout(() => { clock += 10_000; w.auth.linked = true; sock.close(515, "restart required"); }, 20); }
+      else { clock += 5_000; sock.open(); sock.emit("messaging-history.set", history()); }
+    }, { now: () => clock, timings: { linkWindowMs: 60_000 } }));
+    await w.wa.startLink({ phone: "919812345678" });
+    for (let i = 0; i < 50 && (await w.wa.linkStatus() as any).link.phase === "waiting"; i++) await sleep(10);
+    await sleep(50);
+    expect(w.sockets.every((s) => s.ended)).toBe(true);
+    expect(limits(w).usage.ms).toBe(15_000);
+    w.wa.shutdown();
+    w.wa.shutdown();
+    await w.wa.linkStatus();
+    expect(limits(w).usage.ms).toBe(15_000);
   });
 });
 

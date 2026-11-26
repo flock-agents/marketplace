@@ -25,9 +25,12 @@ const service = new WhatsAppService({
 });
 
 /** Closes an open WhatsApp session (and counts its time) before the process goes. */
-const stop = () => service.shutdown().catch(() => {}).finally(() => process.exit(0));
+const stop = (): never => {
+  try { service.shutdown(); } catch (e) { console.error("[whatsapp] shutdown:", (e as Error)?.message ?? e); }
+  process.exit(0);
+};
 process.on("SIGTERM", stop);
 process.on("SIGINT", stop);
 process.on("unhandledRejection", (e) => { console.error("[whatsapp] unhandled:", (e as Error)?.message ?? e); });
 await serveStdio(whatsappTools(service), { name: "whatsapp", version: VERSION }, failureOf);
-await stop();
+stop();

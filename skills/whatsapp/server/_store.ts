@@ -19,10 +19,15 @@ export interface StoreData { chats: Record<string, StoredChat>; names: Record<st
 export interface ChatRow { name: string; kind: "group" | "person"; unread: number; lastMessageAt: string | null; preview: string }
 
 const empty = (): StoreData => ({ chats: {}, names: {}, syncedAt: 0 });
+const isRecord = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
+const isStoredChat = (jid: string, c: any): boolean => isRecord(c) && c.jid === jid && typeof c.name === "string" && (c.kind === "group" || c.kind === "person")
+  && typeof c.lastAt === "number" && typeof c.unread === "number" && Array.isArray(c.messages);
+const isStoredMessage = (m: any): m is StoredMessage => isRecord(m) && typeof m.id === "string" && typeof m.at === "number" && typeof m.from === "string"
+  && typeof m.text === "string" && typeof m.mine === "boolean";
 
-/** Two names are the same, case and spacing aside. */
+/** Two names are the same, case, spacing and emoji style aside: as Flock's WhatsApp gate compares them (chatKey). */
 export function sameName(a: string, b: string): boolean {
-  const key = (s: string) => s.normalize("NFKC").replace(/\s+/g, " ").trim().toLowerCase();
+  const key = (s: string) => s.normalize("NFKC").replace(/\uFE0F/g, "").replace(/\s+/g, " ").trim().toLowerCase();
   return key(a) === key(b);
 }
 
@@ -38,11 +43,14 @@ export class Store {
     this.data = Store.read(this.file);
   }
 
+  /** The saved store; a broken file, or a broken chat or name in it, is dropped rather than failing every read. */
   private static read(file: string): StoreData {
-    try {
-      const v = JSON.parse(readFileSync(file, "utf8"));
-      return v && typeof v.chats === "object" && typeof v.names === "object" ? { chats: v.chats, names: v.names, syncedAt: Number(v.syncedAt) || 0 } : empty();
-    } catch { return empty(); }
+    let v: any;
+    try { v = JSON.parse(readFileSync(file, "utf8")); } catch { return empty(); }
+    if (!isRecord(v?.chats) || !isRecord(v?.names)) return empty();
+    const chats = Object.fromEntries(Object.entries(v.chats).filter(([jid, c]) => isStoredChat(jid, c)).map(([jid, c]) => [jid, { ...(c as StoredChat), messages: (c as StoredChat).messages.filter(isStoredMessage) }]));
+    const names = Object.fromEntries(Object.entries(v.names).filter(([, n]) => typeof n === "string"));
+    return { chats: chats as Record<string, StoredChat>, names: names as Record<string, string>, syncedAt: Number(v.syncedAt) || 0 };
   }
 
   /** Saves it, dropping what is past the caps. */

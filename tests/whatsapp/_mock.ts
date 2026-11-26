@@ -62,7 +62,7 @@ export interface World {
 }
 
 /** A service on a fresh data folder. `linked`: a finished link is saved already. */
-export function world(script: (sock: MockSocket, n: number, w: World) => void, opts: { linked?: boolean; timings?: Partial<Timings>; random?: () => number } = {}): World {
+export function world(script: (sock: MockSocket, n: number, w: World) => void, opts: { linked?: boolean; timings?: Partial<Timings>; random?: () => number; now?: () => number } = {}): World {
   const dir = mkdtempSync(join(tmpdir(), "wa-service-"));
   const auth = { linked: !!opts.linked, cleared: 0, saved: 0 };
   const sockets: MockSocket[] = [];
@@ -75,6 +75,7 @@ export function world(script: (sock: MockSocket, n: number, w: World) => void, o
     timeZone: "UTC",
     timings: { ...FAST, ...opts.timings },
     random: opts.random ?? (() => 0.5),
+    ...(opts.now ? { now: opts.now } : {}),
     sleep: (ms) => { sleeps.push(ms); return new Promise((r) => setTimeout(r, Math.min(ms, 30))); },
     loadAuth: async () => handle(),
     clearAuth: () => { auth.linked = false; auth.cleared++; },

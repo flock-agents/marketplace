@@ -3,10 +3,11 @@
 //
 // Run: bun test tests/whatsapp.
 import { afterAll, describe, expect, it } from "bun:test";
-import { mkdtempSync, rmSync } from "fs";
+import { mkdtempSync, readFileSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { handle } from "../../skills/whatsapp/server/_mcp";
+import { whatsappTools } from "../../skills/whatsapp/server/_tools";
 
 const server = join(import.meta.dir, "../../skills/whatsapp/server/server.ts");
 const dataDir = mkdtempSync(join(tmpdir(), "wa-mcp-"));
@@ -68,5 +69,67 @@ describe("the stdio server", () => {
     expect(r).toBeNull();
     const { replies } = await exchange(["not json" as unknown, { jsonrpc: "2.0", id: 2, method: "ping" }].map((m) => m));
     expect(replies.get(2).result).toEqual({});
+  });
+});
+
+describe("what reaches the server", () => {
+  it("answers bad requests with JSON-RPC errors, notifications with nothing, and every request of a burst by its id", async () => {
+    const burst = Array.from({ length: 20 }, (_, i) => call(100 + i, "link-status"));
+    const { replies, code } = await exchange([
+      5, [], { id: 1 }, { jsonrpc: "1.0", id: 2, method: "ping" }, { jsonrpc: "2.0", id: 3, method: 7 },
+      { jsonrpc: "2.0", method: "notifications/cancelled", params: { requestId: 1 } },
+      { jsonrpc: "2.0", id: 4, method: "tools/call", params: { name: "search", arguments: "not an object" } },
+      { jsonrpc: "2.0", id: 5, method: "tools/call", params: { name: "send-message", arguments: { chat: "Mom", text: "x".repeat(200_000) } } },
+      ...burst,
+    ]);
+    expect(code).toBe(0);
+    expect(replies.get(null as any).error.code).toBe(-32600);
+    expect(replies.get(2).error.code).toBe(-32600);
+    expect(replies.get(3).error.code).toBe(-32600);
+    expect(replies.get(4).result.structuredContent.error).toBe("MISSING_PARAM");
+    expect(replies.get(5).result.structuredContent.error).toBe("TOO_LONG");
+    for (let i = 0; i < 20; i++) expect(replies.get(100 + i).result.structuredContent.linked).toBe(false);
+    expect(replies.size).toBe(1 + 3 + 2 + 20);
+  });
+
+  it("every tool's description fits in the 200 characters Flock shows", () => {
+    for (const t of whatsappTools({} as any)) expect(`${t.name}: ${t.description.length <= 200}`).toBe(`${t.name}: true`);
+  });
+});
+
+describe("stopping", () => {
+  it("SIGTERM in the middle of a link closes it at once, counts its time and exits 0, well inside Flock's 5 seconds", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "wa-mcp-stop-"));
+    let connects = 0;
+    let held: unknown = null;
+    const proxy = Bun.listen({ hostname: "127.0.0.1", port: 0, socket: { data(sock) { if (++connects === 1) sock.end(); else held = sock; } } });
+    try {
+      const proc = Bun.spawn(["bun", server], {
+        stdin: "pipe", stdout: "pipe", stderr: "pipe", cwd: tmpdir(),
+        env: { PATH: process.env.PATH ?? "", MCP_DATA_DIR: dir, HTTPS_PROXY: `http://127.0.0.1:${proxy.port}`, NO_PROXY: "localhost,127.0.0.1" },
+      });
+      proc.stdin.write(`${JSON.stringify(call(1, "link", { qr: true }))}\n`);
+      for (let i = 0; i < 250 && !held; i++) await Bun.sleep(20);
+      expect(held).not.toBeNull();
+      await Bun.sleep(100);
+      const started = Date.now();
+      proc.kill("SIGTERM");
+      expect(await proc.exited).toBe(0);
+      expect(Date.now() - started).toBeLessThan(2_000);
+      const limits = JSON.parse(readFileSync(join(dir, "limits.json"), "utf8"));
+      expect(limits.sessions.length).toBe(1);
+      expect(limits.usage.ms).toBeGreaterThan(0);
+    } finally {
+      proxy.stop(true);
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 20_000);
+
+  it("SIGTERM with nothing open exits 0 at once", async () => {
+    const proc = Bun.spawn(["bun", server], { stdin: "pipe", stdout: "pipe", stderr: "pipe", env: { PATH: process.env.PATH ?? "", MCP_DATA_DIR: dataDir }, cwd: tmpdir() });
+    proc.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id: 1, method: "ping" })}\n`);
+    await new Response(proc.stdout).body!.getReader().read();
+    proc.kill("SIGTERM");
+    expect(await proc.exited).toBe(0);
   });
 });
