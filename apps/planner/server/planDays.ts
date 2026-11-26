@@ -4,7 +4,7 @@
 // eat; a slot the family eats out or orders in that weekday is skipped. A slot-day the family changed (`edited`) is kept as
 // it is. Nothing here reads the meaning of a word: a calendar event whose effect on meals code cannot see from its fields
 // goes to one small model call (eventsRead), and what that call is unsure of is asked of the family.
-import { CALENDAR_APP, MAIN_SLOT_HOURS, SLOT_ORDER, type Skip } from "./db/constants";
+import { CALENDAR_APP, INSTEAD_STEP, MAIN_SLOT_HOURS, SLOT_ORDER, type Skip } from "./db/constants";
 import { addDays, weekDates, weekdayOf, type Weekday } from "./dates";
 import { isObject } from "./family";
 import type { EventAsk } from "./messages";
@@ -223,6 +223,12 @@ function awayBy(w: Weekly, day: Weekday, slot: Slot): boolean {
   return !!(span && w.from && w.to && w.from <= span[0] && span[1] <= w.to);
 }
 
+/** The main meal a custom slot replaces (§5.4): the main slot one INSTEAD_STEP before it, when the slot names its people. */
+export function replacedMeal(s: Pick<Slot, "kind" | "order" | "usual_people">, slots: Slot[]): Slot | null {
+  if (s.kind !== "custom" || !s.usual_people.length) return null;
+  return slots.find((m) => m.kind === "main" && m.order + INSTEAD_STEP === s.order) ?? null;
+}
+
 /** The key of a slot-day in a set of them: its date and its slot's name, any capitals. */
 export const slotDayKey = (date: string, slot: string): string => `${date}|${slot.trim().toLowerCase()}`;
 
@@ -260,11 +266,15 @@ export function buildDays(o: { weekStart: string; from: string; slots: Slot[]; p
       if (main?.kind === "main" && o.household.weekly) for (const w of o.household.weekly) {
         const p = people.find((x) => same(x, w.person));
         if (p && awayBy(w, day, main)) { people = people.filter((x) => x !== p); why.push(`${p}: ${w.where || "away"} on ${day}`); }
-        // Away for lunch with a box of their own that day (a child's tiffin of sandwiches, pasta: not the home lunch): they eat
-        // that box, not the home lunch (owner, 25 Nov: counted at lunch only when they take what is made at home).
-        else if (p && s.kind === "main" && main.order === SLOT_ORDER.Lunch && w.weekdays.includes(day) && w.where !== "home"
-          && o.slots.some((x) => x.kind === "custom" && x.active !== false && x.usual_people.some((u) => same(u, p)) && (!x.days.length || x.days.includes(day)))) {
-          people = people.filter((x) => x !== p); why.push(`${p}: has their own box on ${day}`);
+      }
+      // A box that replaces this meal takes its people off it, on the days it runs and when they are at the box that day.
+      if (s.kind === "main") for (const b of o.slots) {
+        if (b.active === false || replacedMeal(b, o.slots) !== s || (b.days.length && !b.days.includes(day))) continue;
+        for (const bp of b.usual_people) {
+          const p = people.find((x) => same(x, bp));
+          if (!p || o.changes.some((c) => c.effect === "away" && c.dates.includes(date) && c.people.some((x) => same(x, bp))
+            && (!c.slots || c.slots.some((x) => same(x, b.name))))) continue;
+          people = people.filter((x) => x !== p); why.push(`${p}: has ${b.name} on ${day}`);
         }
       }
       for (const c of o.changes) {
