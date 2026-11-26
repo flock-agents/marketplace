@@ -19,7 +19,7 @@ import { APP_NAMES, appOf, BASE_TAGS, FREQUENCY_WORDS, GROUPS, LINT_COUNT_WORDS,
 import { WEEKDAYS, clockText, type Weekday } from "./dates";
 import { dishKey } from "./dishText";
 import { cookVisits, daysSaid, getHouse, houseView, isObject, LONG_DAY, refuse, writeRoutes, type Db, type Emit } from "./family";
-import { addRule, commit, deleteSeedSlotDays, listLibrary, listRules, listSlots, removeLibrary, removeRule, saveSlotDay, seedSlotDays,
+import { addRule, commit, deleteSeedSlotDays, getLibraryDish, listLibrary, listRules, listSlots, removeLibrary, removeRule, renameDish, saveSlotDay, seedSlotDays,
   upsertLibrary, upsertSlot, type Change, type LibraryDish, type Rule, type RuleInput, type Slot } from "./slotStore";
 import { CATALOG, catalogKind, catalogSub, checkMealShape, matchDish, norm, plannerTags, regionalDish, regionalIn, regionalMeaning, regionalWordOf, suggestMeals, type CatalogKind, type RegionalMeaning, type RegionalWord, type MealKind, type MealTemplate,
   type TemplatePart } from "./kinds";
@@ -112,7 +112,7 @@ And "A: Tara is allergic to sesame" with "Q: Do you cook everything without sesa
 /** Short rows, the fewest tokens per item: the dishes are the longest answer. */
 const DISHES_SCHEMA = { type: "object", required: ["library"], properties: {
   library: { type: "array", items: { type: "array", items: STR } }, seed: { type: "array", items: { type: "array", items: STR } } } };
-const DISHES_PART = `Write this part: the family's own dishes, from their answers (the past week's meals, a child's tiffin, what someone has for a meal). No everyday tea or coffee; a drink someone has as part of a meal is a dish of that meal ("a glass of milk at night" for one person's dinner, buttermilk with lunch). How often they have each is not this part: another reader writes it.
+const DISHES_PART = `Write this part: the family's own dishes, from their answers (the past week's meals, a child's tiffin, what someone has for a meal). No everyday tea or coffee; a drink someone has as part of a meal is a dish of that meal ("a glass of milk at night" for one person's dinner, buttermilk with lunch). What comes on a subscription or delivery (milk from a dairy every morning) is shopping, never a dish. How often they have each is not this part: another reader writes it.
 - library: each dish the family eats, one row per dish and meal: [name, slot, quote].
   name: plain ("Idli", "Rajma chawal"); keep a quantity in the name when said with it ("4 eggs"). A meal told as its parts ("rice, dal, a dry sabzi, curd") is each part a dish; "sambar or dal" is two dishes.
   slot: the meal it is eaten at. A reply is about the meal its question asks for: a breakfast answer is Breakfast, also when said of a child. A child's tiffin ("<child>'s tiffin", or the family's word for the box) holds only what the family says goes in the tiffin or box. One person's own plate "<person>'s <meal>" ONLY when the family's sentence names that person and a dish made for them at that meal (their own dish, "for Amma", "instead of"). A dish someone has that the others have too stays on the shared meal.
@@ -1280,6 +1280,28 @@ export function partsOf(d: MealDish, meal: string): TemplatePart[] {
   if (p.named === "category") return [p.sub && manySubs(p.kind) ? { kind: p.kind, sub: p.sub } : { kind: p.kind }];
   return suggestMeals({ kind: p.kind, sub: p.sub, item: p.item }).includes(meal) ? [{ kind: p.kind }] : [{ items: [d.name] }];
 }
+
+/** The catalog dish a fixed part is saved as (owner, 26 Nov): a family's sub-kind or kind word kept as a dish at a meal its kind
+ *  is not suggested at ("idiyappam with stew") is planned as a specific dish, never the bare word. Their word names one
+ *  everyday dish when the one dish of that place named "<something> <word>" is its "Vegetable <word>" (or "Veg <word>"):
+ *  "stew" → "Vegetable stew", "kurma" → "Vegetable kurma". Else null: their own words stay. The new place keeps their word for the read-back, and
+ *  stays a fixed part (no rotation into other dishes of the kind). */
+export function nearestDish(d: MealDish, meal: string): { name: string; place: Place } | null {
+  const p = d.place;
+  if (!p?.kind || p.own || p.parts || p.item || isStaple(p.kind)) return null;
+  const fixed = (x: MealDish) => { const ps = partsOf(x, meal); return ps.length === 1 && "items" in ps[0]; };
+  if (!fixed(d)) return null;
+  const m = matchDish(d.name), k = m && m.by !== "item" && norm(m.kind) === norm(p.kind) ? catalogKind(m.kind) : null;
+  if (!k) return null;
+  const n = norm(d.name);
+  const hits = k.items.filter((it) => (!m!.sub || norm(it.sub) === norm(m!.sub))
+    && [it.name, ...(it.aka ?? [])].some((w) => norm(w) === `vegetable ${n}` || norm(w) === `veg ${n}`));
+  // One clear dish: no other dish of the place is a "<something> <word>" ("khichdi" has many: their word stays).
+  const ends = k.items.filter((it) => (!m!.sub || norm(it.sub) === norm(m!.sub)) && [it.name, ...(it.aka ?? [])].some((w) => norm(w).endsWith(` ${n}`)));
+  if (hits.length !== 1 || ends.length !== 1) return null;
+  const place: Place = { ...p, sub: hits[0].sub ?? p.sub, item: hits[0].name, named: "dish" };
+  return fixed({ ...d, name: hits[0].name, place }) ? { name: hits[0].name, place } : null;
+}
 const partKey = (p: TemplatePart): string => ("items" in p ? `i:${p.items.map(dishKey).sort().join("|")}` : `k:${norm(p.kind)}|${norm(p.sub ?? "")}`);
 const draftKey = (t: Draft): string => t.parts.map((p) => partKey(p.part)).sort().join("+");
 /** A dish fits a part already there: the part is its kind (of whatever sub-kind: the family's sub-kinds are the kind's, and
@@ -1556,11 +1578,23 @@ export function writeKinds(tx: Db, plan: KindsPlan, placed: Map<string, Place>, 
   for (const slot of plan.slots) {
     const meal = mealOf(slot), dishes: MealDish[] = [];
     for (const d of familyDishes(tx, slot.name)) {
-      const place = placed.get(cacheKey(meal, d.key)) ?? plan.places.get(placeKey(slot.name, d.key)) ?? null;
+      let place = placed.get(cacheKey(meal, d.key)) ?? plan.places.get(placeKey(slot.name, d.key)) ?? null;
       // Kept for a correction: a dish asked of the kinds read and not answered is asked again then.
       if (place && !plan.asks.some((a) => a.meal === meal && dishKey(a.name) === d.key && !placed.has(cacheKey(meal, d.key)))) cache[cacheKey(meal, d.key)] = place;
-      upsertLibrary(tx, { name: d.name, slot: d.slot, kind: place?.kind ?? null, sub: place?.sub ?? null, catalog_item: place?.parts ? null : place?.item ?? null }, by, changes);
-      dishes.push({ name: d.name, place, frequency: d.frequency, days: d.days, said: d.said });
+      let name = d.name;
+      // A fixed part named by its kind word is saved under the catalog dish it clearly is (their word kept for the read-back).
+      const near = nearestDish({ name, place, frequency: d.frequency, days: d.days, said: d.said }, meal);
+      if (near) {
+        opts.log(`kinds: ${slot.name}: ${d.name} kept as ${near.name}`);
+        renameDish(tx, d.name, d.slot, near.name, by, changes);
+        name = near.name; place = near.place;
+        cache[cacheKey(meal, dishKey(name))] = place;
+        const c = catalogContents(getLibraryDish(tx, name, d.slot) ?? d, place.item);
+        if (c) upsertLibrary(tx, { name, slot: d.slot, ...c }, by, changes);
+      }
+      if (dishes.some((x) => dishKey(x.name) === dishKey(name))) continue;   // their word and the dish both said: one dish
+      upsertLibrary(tx, { name, slot: d.slot, kind: place?.kind ?? null, sub: place?.sub ?? null, catalog_item: place?.parts ? null : place?.item ?? null }, by, changes);
+      dishes.push({ name, place, frequency: d.frequency, days: d.days, said: d.said });
     }
     const seeds = seedSlotDays(tx).filter((s) => same(s.slot, slot.name)).map((s) => s.dishes.map((x) => x.dish));
     const shape = dishes.length ? buildMeal(meal, dishes, seeds) : { kinds: [], templates: [], line: "", dropped: [] };
