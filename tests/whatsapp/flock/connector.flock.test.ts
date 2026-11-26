@@ -207,22 +207,20 @@ describe.skipIf(!enabled)("the WhatsApp connector 2.x in Flock", () => {
     let killed: Start;
     let callsBeforeKill = 0;
 
-    it("a killed server is started again on the health tick, on the same MCP_DATA_DIR", async () => {
+    it("a killed server reads disconnected, with its MCP_DATA_DIR and limits left in place", async () => {
       killed = latestStart();
       callsBeforeKill = limits().calls.length;
       process.kill(killed.pid, "SIGKILL");
       expect(await waitFor(() => !alive(killed.pid) && conn().pid === null)).toBe(true);
-
-      await mgr.runHealthChecks();
-      const restarted = latestStart();
-      expect({ restartedOnTick: restarted.pid !== killed.pid, status: conn().status }).toEqual({ restartedOnTick: true, status: "connected" });
-      expect(alive(restarted.pid)).toBe(true);
-      expect(restarted.env.MCP_DATA_DIR).toBe(dataDir);
+      expect(conn().status).toBe("disconnected");
+      expect(existsSync(dataDir)).toBe(true);
+      expect(limits().calls.length).toBe(callsBeforeKill);
     });
 
-    it("a killed server runs again by the next call at the latest, on the same MCP_DATA_DIR, its limits kept", async () => {
+    it("the next call starts it again, on the same MCP_DATA_DIR, its limits kept", async () => {
       const r = await pa("link-status");
       expect(r.status).toBe(200);
+      expect(r.answer.linked).toBe(false);
       const now = latestStart();
       expect(now.pid).not.toBe(killed.pid);
       expect(alive(now.pid)).toBe(true);
