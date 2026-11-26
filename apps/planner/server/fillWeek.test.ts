@@ -1086,6 +1086,17 @@ describe("days on a kind word's template (H8)", () => {
     expect(sat).toEqual(["Plain paratha"]);
     expect(sun).toEqual(["Aloo paratha"]);
   });
+  // J3 (OD-D, provisional): setup folds a day-less plate of the kind into the word's template; the planner rotates the kind's
+  // dishes on its days and never plates one of them on a weekday.
+  it("the folded weekend template (J3): Sat Plain paratha, Sun Aloo paratha, no paratha on a weekday", () => {
+    const r = bf([dish("Plain paratha", "Breakfast", "Paratha", { catalog_item: "Plain paratha" }), dish("Aloo paratha", "Breakfast", "Paratha", { catalog_item: "Aloo paratha" }),
+      dish("Poha", "Breakfast", "Poha", { catalog_item: "Kanda poha" }), dish("Methi thepla", "Breakfast", "Thepla", { catalog_item: "Methi thepla" })],
+    [T({ kind: "Poha", dish: "Poha" }), T({ kind: "Thepla", dish: "Methi thepla" }),
+      { parts: [{ kind: "Paratha", dish: "Plain paratha", words: "paratha or aloo paratha" }], days: ["Sat", "Sun"] }]);
+    expect(r.at(WEEK[5], "Breakfast")).toEqual(["Plain paratha"]);
+    expect(r.at(WEEK[6], "Breakfast")).toEqual(["Aloo paratha"]);
+    expect(WEEK.slice(0, 5).flatMap((d) => r.at(d, "Breakfast")).filter((x) => /paratha/i.test(x))).toEqual([]);
+  });
   it("guard: a row named by its own dish name with days [Sat, Sun] is on both days", () => {
     const r = run({ slots: [slot("Dinner", { templates: [T({ kind: "Roti" }, { kind: "Sabzi" }), T({ kind: "Roti" }, { kind: "Chicken" })] })],
       library: [dish("Phulka", "Dinner", "Roti"), ...SABZIS.map((n) => dish(n, "Dinner", "Sabzi")), dish("Chicken curry", "Dinner", "Chicken", { sub: "Curry", catalog_item: "Chicken curry", days: ["Sat", "Sun"] })] });

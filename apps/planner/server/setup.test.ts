@@ -2384,6 +2384,40 @@ describe("apply_setup: dish families (H7) and kind words with days (H8)", () => 
     expect(after).toContainEqual(expect.objectContaining({ parts: [expect.objectContaining({ kind: "Paratha", dish: "Plain paratha" })], days: ["Sat", "Sun"] }));
     expect(row(k, "Plain paratha", "Breakfast")!.days).toBeNull();
   });
+  // J3 (provisional ruling on OD-D/D3): days said of a kind word hold for every day-less template of that kind at the meal; a
+  // dish of the kind said with days of its own keeps them. By kinds only, never by names.
+  const kq = "Parathas on weekends.", lq = "last week: poha, methi thepla, aloo paratha";
+  const kindDays = (more: string[][] = [], moreOften: string[][] = [], lines: string[] = []) => setup([kq, lq, ...lines],
+    [["Paratha", "Breakfast", kq], ["Poha", "Breakfast", lq], ["Methi thepla", "Breakfast", lq], ["Aloo paratha", "Breakfast", lq], ...more],
+    [["Breakfast", "Paratha", kq], ["Breakfast", "Poha", lq], ["Breakfast", "Methi thepla", lq], ["Breakfast", "Aloo paratha", lq]],
+    [["Paratha", "Breakfast", kq, "on weekends", "", "Sat,Sun"], ...moreOften]);
+  const parathaPlates = (ts: any[]) => ts.filter((t) => t.parts.some((p: any) => p.kind === "Paratha"));
+  it("writeKinds: a kind word's days hold for a dish of that kind named elsewhere (J3)", async () => {
+    const { tr, f } = kindDays();
+    const k = await boot({ model: f.model });
+    const r = await k.op("apply_setup", { household: FAMILY, transcript: tr });
+    expect(r.ok).toBe(true);
+    const ts = parathaPlates((await k.owner("GET", "/api/family")).body.slots.find((s: any) => s.name === "Breakfast").templates);
+    // One Paratha template, on Sat and Sun, holding Plain paratha (its dish) and Aloo paratha (its words; the row is of its kind).
+    expect(ts).toHaveLength(1);
+    expect(ts[0].days).toEqual(["Sat", "Sun"]);
+    expect(ts[0].parts).toEqual([expect.objectContaining({ kind: "Paratha", dish: "Plain paratha" })]);
+    expect(ts[0].parts[0].words).toContain("aloo paratha");
+    expect([row(k, "Aloo paratha", "Breakfast")?.kind, row(k, "Plain paratha", "Breakfast")?.kind]).toEqual(["Paratha", "Paratha"]);
+    expect(ts.filter((t: any) => !t.days?.length)).toEqual([]);
+    // The read-back says it once, with the word's days.
+    expect(r.said).not.toMatch(/aloo paratha; or|or aloo paratha;/i);
+  });
+  it("guard: a dish of the kind with its own days keeps its own template (aloo paratha on Tuesdays) (J3)", async () => {
+    const tq = "aloo paratha on Tuesdays";
+    const { tr, f } = kindDays([["Aloo paratha", "Breakfast", tq]], [["Aloo paratha", "Breakfast", tq, "on Tuesdays", "", "Tue"]], [tq]);
+    const k = await boot({ model: f.model });
+    expect((await k.op("apply_setup", { household: FAMILY, transcript: tr })).ok).toBe(true);
+    const ts = parathaPlates((await k.owner("GET", "/api/family")).body.slots.find((s: any) => s.name === "Breakfast").templates);
+    expect(ts.find((t: any) => t.parts.some((p: any) => p.dish === "Aloo paratha"))?.days).toEqual(["Tue"]);
+    expect(ts.find((t: any) => t.parts.some((p: any) => p.dish === "Plain paratha"))?.days).toEqual(["Sat", "Sun"]);
+  });
+
   // H8 fix round 1: the result never hangs on the rows' order (the library lists by name: "Plain thepla" before "Thepla", but
   // "Paratha" before "Plain paratha").
   const tq = "Breakfast is poha, and theplas at the weekend.";

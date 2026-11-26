@@ -1774,7 +1774,7 @@ const isDaily = (d: MealDish): boolean => d.frequency === "daily";
  *  dish at breakfast, a tiffin or a snack; a one-dish meal at lunch or dinner), or the meal's staples with it (rajma twice a
  *  week is rice and rajma); a dish they have every day goes on every plate. A plate's share is the family's how-often words on
  *  its own (not staple) dish. Pure. */
-export function buildMeal(meal: string, dishes: MealDish[], seeds: string[][], links: MealLink[] = [], opts: { box?: boolean } = {}): MealShape {
+export function buildMeal(meal: string, dishes: MealDish[], seeds: string[][], links: MealLink[] = [], opts: { box?: boolean; kindWords?: string[] } = {}): MealShape {
   const dropped: string[] = [];
   const byKey = new Map(dishes.map((d) => [dishKey(d.name), d]));
   const used = new Set<string>();
@@ -1919,6 +1919,24 @@ export function buildMeal(meal: string, dishes: MealDish[], seeds: string[][], l
     if (!isKindPart(p) || !p.dish || catalogItem(p.dish)) continue;
     if (drafts.some((o) => o !== t && o.parts.some((x) => isKindPart(x.part) && norm(x.part.kind) === norm(p.kind) && dishKey(x.part.dish ?? "") !== dishKey(p.dish!))))
       t.parts[0] = { ...t.parts[0], part: { items: [p.dish] } };
+  }
+  // J3 (provisional ruling, OD-D/D3): days said of a kind word ("parathas on weekends", `kindWords`: the keys of the dishes such
+  // words name) hold for every other plate of that kind at the meal that has no days or how-often of its own ("aloo paratha" in a
+  // list of last week's): that plate is folded into the word's, its words joining the word's part. A plate qualifies only when it
+  // is one kind part of the word's kind (and its sub-kind, when the word's part has one): by kinds only, never by names. Its dish
+  // stays a library row of the kind, so the planner rotates it on the word's days. A dish with days of its own keeps its plate.
+  for (const w of opts.kindWords?.length ? [...drafts] : []) {
+    const wp = w.parts.length === 1 ? w.parts[0] : null;
+    if (!wp || !isKindPart(wp.part) || !wp.dish?.days?.length || !opts.kindWords!.includes(dishKey(wp.dish.name)) || !drafts.includes(w)) continue;
+    const k = wp.part;
+    for (const o of [...drafts]) {
+      const p = o !== w && o.parts.length === 1 ? o.parts[0] : null;
+      if (!p || !isKindPart(p.part) || norm(p.part.kind) !== norm(k.kind) || (k.sub && norm(p.part.sub ?? "") !== norm(k.sub))) continue;
+      if (o.defining.some((d) => d.days?.length || d.frequency)) continue;
+      wp.words = uniq([...wp.words, ...p.words]);
+      if (p.dish) joined.add(dishKey(p.dish.name));     // its words are on the word's part now
+      drafts.splice(drafts.indexOf(o), 1);
+    }
   }
   const templates: MealTemplate[] = [], words: { words: string[][]; share: Frequency | null; days: Weekday[] | null }[] = [];
   let onParts = new Set<string>(joined);
@@ -2225,7 +2243,8 @@ export function writeKinds(tx: Db, plan: KindsPlan, placed: Map<string, Place>, 
       if (r === undefined) { opts.log(`kinds: ${slot.name}: the link to ${l.from} ("${l.words}") names no kind of it`); return []; }
       return [{ ...(r ?? { kind: null, sub: null }), from: l.from, words: l.words }];
     });
-    let shape = dishes.length || links.length ? buildMeal(meal, dishes, seeds, links, { box: slot.kind === "custom" }) : { templates: [] as MealTemplate[], line: "", dropped: [] as string[], onParts: [] as string[] };
+    let shape = dishes.length || links.length ? buildMeal(meal, dishes, seeds, links,
+      { box: slot.kind === "custom", kindWords: [...words].filter(([, w]) => w.days?.length).map(([key]) => key) }) : { templates: [] as MealTemplate[], line: "", dropped: [] as string[], onParts: [] as string[] };
     for (const d of shape.dropped) opts.log(`kinds: ${slot.name}: ${d}`);
     // H3: a meal in place of a main meal ends with a plate that is not only a swap's item for its people, or it is asked about
     // and planned empty until the family answers (OD7: no default link, no filler).
