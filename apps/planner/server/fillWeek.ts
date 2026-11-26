@@ -271,7 +271,14 @@ export function fillWeek(input: FillInput): FillResult {
 
   // ── Pools ──
   const rowAt = (slot: string, key: string) => library.find((r) => r.key === key && same(r.slot, slot)) ?? library.find((r) => r.key === key);
-  const famRows = library.filter(familyRow);
+  /** A hard swap's item is its person's rule, never a dish of the meal (§9.4, G1): its row at a meal the swap is said at is no
+   *  family row there (no pool, pin, staple or diet of the family's), unless that meal's templates name it (the family eats it too).
+   *  The row stays for the swap itself (rowAt: its contents). By the saved rule's item key and the row's key, never by words. */
+  const swapOnlyRow = (r: LibraryDish) => rules.some((x) => x.hard && x.what === "swap" && x.gives?.type === "item" && dishKey(x.gives.item) === r.key
+      && (!x.slots?.length || x.slots.some((n) => same(n, r.slot))))
+    && !(shaped.find((s) => same(s.name, r.slot))?.templates ?? []).some((t) => t.parts.some((p) =>
+      (isItemsPart(p) && p.items.some((i) => dishKey(i) === r.key)) || (isKindPart(p) && !!p.dish && dishKey(p.dish) === r.key)));
+  const famRows = library.filter((r) => familyRow(r) && !swapOnlyRow(r));
   /** The catalog items the family's own dishes are (never offered to them as new). */
   const familyCatalog = new Set(library.flatMap((r) => { const m = catalogNameOf(r); return m ? [norm(m)] : []; }));
   /** The diet tags the family's own dishes have (their meat, fish and eggs). */

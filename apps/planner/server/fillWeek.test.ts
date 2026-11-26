@@ -1093,3 +1093,36 @@ describe("days on a kind word's template (H8)", () => {
     expect(r.at(WEEK[6], "Dinner")).toContain("Chicken curry");
   });
 });
+
+// P fix round 1 (G1, §9.4): a hard swap's item has a library row at its meal (H11) so its contents are read, but it is no dish of
+// the meal: it reaches a plate only as its person's swap, on a day of what it swaps.
+describe("a swap item's library row is never the family's dish of its meal", () => {
+  const people = ["Mira", "Ravi", "Ira"];
+  const swapRule = (target: string, item: string, kind: string | null) => rule({ who: "Ira", what: "swap", targets: [{ type: "kind", kind: target }],
+    gives: { type: "item", item, kind }, slots: ["Breakfast"], quote: `${item} for Ira when we make ${target.toLowerCase()}` });
+  /** How often the item came: each time only Ira's, beside a dish of the kind it swaps. */
+  const onlyIras = (r: ReturnType<typeof run>, name: string, target: string) => {
+    let seen = 0;
+    for (const d of WEEK) {
+      const p = r.plates.get(slotDayKey(d, "Breakfast")) ?? [];
+      for (const x of p.filter((y) => y.name === name)) {
+        seen++;
+        expect(x.for_people).toEqual(["Ira"]);
+        expect(p.some((y) => r.places.get(dishKey(y.name))?.kind === target)).toBe(true);
+      }
+    }
+    return seen;
+  };
+  it("kind null: never fed to someone kept from the meal's only part; only Ira's beside what it swaps", () => {
+    const lib = [dish("Egg bhurji", "Breakfast", "Egg", { contains: ["egg"] }), dish("Pancakes", "Breakfast", null)];
+    const slots = [slot("Breakfast", { templates: [T({ kind: "Egg", dish: "Egg bhurji" })] })];
+    const r = run({ slots, library: lib, people, newCap: 0, rules: [swapRule("Egg", "Pancakes", null), rule({ who: "Ravi", items: ["egg"], quote: "Ravi has no egg" })] });
+    expect(onlyIras(r, "Pancakes", "Egg")).toBeGreaterThan(0);
+  });
+  it("a catalogued item of a kind the meal has: never in the family's pool of that kind", () => {
+    const lib = [dish("Rava upma", "Breakfast", "Upma"), dish("Butter toast", "Breakfast", "Toast"), dish("Cheese toast", "Breakfast", "Toast", { catalog_item: "Cheese toast" })];
+    const slots = [slot("Breakfast", { templates: [share(T({ kind: "Upma", dish: "Rava upma" }), "1/week"), T({ kind: "Toast", dish: "Butter toast" })] })];
+    const r = run({ slots, library: lib, people, newCap: 0, rules: [swapRule("Upma", "Cheese toast", "Toast")] });
+    expect(onlyIras(r, "Cheese toast", "Upma")).toBeGreaterThan(0);
+  });
+});

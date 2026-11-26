@@ -577,6 +577,22 @@ describe("make_plan: plan and ask (one meaning model, Task 10)", () => {
     expect(toast.note).toBeNull();
     expect(toast.ingredients.map((i: any) => i.item)).toContain("egg");
   });
+  it("a swap item's own person's rule takes from it with no note: nobody else eats it (P fix round 1)", async () => {
+    const people: [string, string][] = [["Mira", "adult"], ["Nanu", "elder"], ["Ira", "child"]];
+    const swap: RuleInput = { hard: true, what: "swap", who: "Ira", targets: [{ type: "kind", kind: "Upma" }], gives: { type: "item", item: "Bread toast", kind: null },
+      quote: "Ira gets bread toast when we make upma" };
+    const noEgg: RuleInput = { hard: true, what: "no_eggs", who: "Ira", quote: "Ira never eats egg" };
+    const k = await home({ people, rules: [swap, noEgg], slots: [{ name: "Breakfast", kind: "main", order: 10, templates: [T({ kind: "Upma" })] }, MAIN[1], MAIN[2]],
+      library: [{ name: "Bread toast", slot: "Breakfast", origin: "setup_named", contains: [], contains_read: READ }] });
+    const day = (u: any) => ({ dishes: u.dishes.map((d: any) => ({ slot: d.slot, name: d.name, ingredients: d.name === "Bread toast"
+      ? [{ item: "bread", amount: 4, unit: "pc", tags: [] }, { item: "egg", amount: 2, unit: "pc", tags: ["egg"] }, { item: "butter", amount: 20, unit: "g", tags: ["dairy"] }]
+      : [{ item: d.name.toLowerCase(), amount: 200, unit: "g", tags: [] }] })) });
+    const r = await k.plan(fakeModel({ day }).model);
+    if (!r.ok) throw new Error(r.say);
+    const toast = k.at(MON, "Breakfast")!.dishes.find((x) => x.dish === "Bread toast")!;
+    expect(toast.ingredients.map((i: any) => i.item)).not.toContain("egg");
+    expect(toast.note).toBeNull();
+  });
 });
 
 describe("make_plan: a change asks its unknowns right away (Task 10b)", () => {

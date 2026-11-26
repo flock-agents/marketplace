@@ -435,7 +435,7 @@ async function planWeek(deps: MakePlanDeps & { log: (line: string) => void }, in
       // Onion and garlic stay bought (contract rule 7): the dish says how their portion is kept.
       // (Once per person: the fill's note may already name them.)
       const said = (dishNotes.get(k) ?? []).some((t) => t.startsWith("make without onion and garlic") && t.split(/,|\band\b/).some((x) => x.includes(p)));
-      if (forbidden(r).includes("onion_garlic") && !avoided(r, dish).includes("onion_garlic") && left.some((i) => i.tags.includes("onion_garlic")) && d.people.length > 1 && !said)
+      if (forbidden(r).includes("onion_garlic") && !avoided(r, dish).includes("onion_garlic") && left.some((i) => i.tags.includes("onion_garlic")) && eaters.length > 1 && !said)
         noteOn(d, dish, `make without onion and garlic, or keep ${p}'s portion aside`);
       const out = left.filter((i) => i.tags.some((t) => avoided(r, dish).includes(t)));
       if (!out.length) continue;
@@ -443,7 +443,7 @@ async function planWeek(deps: MakePlanDeps & { log: (line: string) => void }, in
       left = left.filter((i) => !out.includes(i));
       log(`${weekdayOf(d.date)} ${d.slot} ${dish}: took out ${out.map((i) => i.item).join(", ")} (${p})`);
       // (Not said twice: the fill's "make without cashews for <person>" already says it.)
-      if (r.who && d.people.length > 1 && !(dishNotes.get(k) ?? []).some((t) => t.startsWith("make without") && t.includes(p)))
+      if (r.who && eaters.length > 1 && !(dishNotes.get(k) ?? []).some((t) => t.startsWith("make without") && t.includes(p)))
         noteOn(d, dish, `no ${andList(uniq(out.map((i) => i.item.toLowerCase())))} for ${p}`);
     }
     got.set(k, left);
