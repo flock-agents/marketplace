@@ -767,6 +767,9 @@ describe("the kinds model: each dish placed, each meal's templates, the cuisines
     expect(bareOf("Dosa", codePlace("Dosa"))).toBe("Plain dosa");
     expect(bareOf("Parantha", codePlace("Parantha"))).toBe("Plain paratha");
     expect(bareOf("Dosey", codePlace("Dosey"))).toBe("Plain dosa");
+    // A name only the bare dish's own names hold stays that dish: "charu" (Tomato rasam's "tomato charu") is Tomato rasam.
+    expect(codePlace("Charu")).toMatchObject({ kind: "Rice curry", sub: "Rasam", named: "dish" });
+    expect(bareOf("Charu", codePlace("Charu"))).toBe("Tomato rasam");
   });
 
   it("the kinds read's answer is checked against the catalog: an unknown kind is the family's own, an unknown sub-kind none", () => {
