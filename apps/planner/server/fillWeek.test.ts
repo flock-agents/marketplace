@@ -1025,6 +1025,13 @@ describe("per-person versions of a shared meal (§5.4) and the cook's visit (§9
       expect(lines(run({ slots: bhurji, library: KLIB, days: daysFor(bhurji), newCap: 0, visits: [tight] }))).toContain("Mon breakfast and lunch: 4 dishes to cook, more than the cook's 3");
       expect(lines(run({ slots: salad, library: KLIB, days: daysFor(salad), newCap: 0, visits: [tight] }))).toEqual([]);
     });
+    it("a {kind: Fruit} part counts toward the template's load (Fruit custard is cooked)", () => {
+      const one: Visit = { ...visit, cap: 1, meals: ["Lunch"] };
+      const slots = [lunch(T({ kind: "Sabzi" }, { kind: "Fruit" }), T({ kind: "Sabzi" }))];
+      const r = run({ slots, library: KLIB, days: daysFor(slots), newCap: 0, visits: [one] });
+      // Counted (2 > cap 1) the Fruit template ranks after the plain one, so the first days take the plain one; were Fruit free, it would come first.
+      for (const d of WEEK.slice(0, 2)) expect(plate(r, d, "Lunch")).toHaveLength(1);
+    });
     it("staples and no-cook items do not count, a family's own uncatalogued dish does, a linked dish once", () => {
       const slots = [breakfast(T({ kind: "Upma" }, { kind: "Sabzi" }, { kind: "Dal" })), lunch(T({ kind: "Rice" }, { kind: "Curd" }, { kind: "Salad" }, { kind: "Fruit" }, { items: ["Boiled eggs"] })),
         lBox([T({ items: ["Plain paratha"] }, { from: "Breakfast", kind: "Sabzi" })])];
