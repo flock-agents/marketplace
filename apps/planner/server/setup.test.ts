@@ -855,6 +855,18 @@ describe("the kinds model: each dish placed, each meal's templates, the cuisines
     expect(l.templates[1]).toEqual({ parts: [{ kind: "Rice", words: "rice" }, { kind: "Dal", dish: "Rajma", words: "rajma" }], share: "2/week", said: "rajma twice" });
   });
 
+  it("their own dish of a known kind is that kind with their dish, never fixed; a box's filling variant of it is fixed (review 1)", () => {
+    const kov: Place = { kind: "Sabzi", sub: "Sabzi", item: null, own: false, named: "dish", word: "kovakkai" };
+    const d = buildMeal("dinner", [dish("Phulka"), dish("Kovakkai", { place: kov })], [["Phulka", "Kovakkai"]]);
+    expect(d.templates[0].parts).toEqual([{ kind: "Roti", words: "phulka" }, { kind: "Sabzi", sub: "Sabzi", dish: "Kovakkai", words: "kovakkai" }]);
+    const roll = (n: string): MealDish => dish(n, { place: { kind: "Paratha", sub: null, item: null, own: false, named: "dish", word: n.toLowerCase() }, frequency: "sometimes" });
+    const box = buildMeal("lunch", [dish("Paratha"), roll("Egg paratha roll")], [["Paratha"], ["Egg paratha roll"]], [], { box: true });
+    expect(box.templates.map((t) => t.parts)).toEqual([[{ kind: "Paratha", dish: "Plain paratha", words: "paratha" }], [{ items: ["Egg paratha roll"] }]]);
+    // Not a box: their own paratha dish stays a Paratha part.
+    expect(buildMeal("lunch", [dish("Paratha"), roll("Egg paratha roll")], [["Paratha"], ["Egg paratha roll"]]).templates[1].parts)
+      .toEqual([{ kind: "Paratha", dish: "Egg paratha roll", words: "egg paratha roll" }]);
+  });
+
   it("a dish not placed is itself, never dropped", () => {
     const l = buildMeal("dinner", [dish("Grandma's bake", { place: null })], [["Grandma's bake"]]);
     expect(l.templates).toEqual([{ parts: [{ items: ["Grandma's bake"] }], share: null, said: null }]);
@@ -932,10 +944,11 @@ describe("apply_setup: the kinds model, end to end with a fake model", () => {
       { parts: [{ kind: "Boiled chicken", words: "boiled chicken" }], share: "sometimes", said: "boiled chicken on gym days" },
       { parts: [{ kind: "Appam", dish: "Appam", words: "appam" }, { items: ["Vegetable stew"] }], share: null, said: "appam with vegetable stew on Sundays", days: ["Sun"] }]);
     expect(mealKinds(slot("Breakfast").templates)).toEqual([{ name: "Boiled chicken", own: true }, { name: "Appam" }]);
-    // Kovakkai is a dish of theirs the catalog does not hold: a fixed part; chicken curry their dish of its kind.
-    expect(slot("Dinner").templates).toEqual([{ parts: [{ kind: "Roti", words: "phulka" }, { items: ["Kovakkai"] }], share: null, said: null },
+    // Kovakkai is a sabzi of theirs the catalog does not hold: their dish on a Sabzi part (others offered as new), a library row
+    // with its kind; chicken curry their dish of its kind.
+    expect(slot("Dinner").templates).toEqual([{ parts: [{ kind: "Roti", words: "phulka" }, { kind: "Sabzi", sub: "Sabzi", dish: "Kovakkai", words: "kovakkai" }], share: null, said: null },
       { parts: [{ kind: "Roti", words: "phulka" }, { kind: "Chicken", dish: "Chicken curry", words: "chicken curry" }], share: null, said: null }]);
-    expect(mealKinds(slot("Dinner").templates)).toEqual([{ name: "Roti", staple: true }, { name: "Chicken" }]);
+    expect(mealKinds(slot("Dinner").templates)).toEqual([{ name: "Roti", staple: true }, { name: "Sabzi", subs: ["Sabzi"] }, { name: "Chicken" }]);
     expect(slot("Lunch").templates).toBeNull();      // no dish said for lunch: not read
     // Cuisines: appam and the stew are Kerala (appam Tamil too), and they said Malayali.
     expect(fam.house.cuisines).toEqual(["tamil", "kerala", "south"]);
@@ -1246,6 +1259,38 @@ describe("setup reads into the one meaning model (§5, §6.4)", () => {
     expect(r.said).not.toContain("Agastya: pancake");
   });
 
+  it("a correction that drops a category word (\"no more salad\") removes it from the plates and the read-back (review 1)", async () => {
+    const NEW = "No more salad in my lunch box.";
+    const more = (req: ModelRequest) => JSON.parse(req.user).transcript.includes(NEW);
+    const f = fake({ home: W_HOME, rules: W_RULES, often: W_OFTEN, kinds: W_KINDS, contains: containsOf(), lint: { dishes: [] },
+      dishes: (req: ModelRequest) => (more(req) ? { ...W_DISHES, library: W_DISHES.library.filter((d) => d[0] !== "Salad"),
+        seed: W_DISHES.seed.map((x) => (x[0] === "Shiva's lunch box" ? ["Shiva's lunch box", "4 boiled eggs", extra] : x)) } : W_DISHES) });
+    const k = await boot({ model: f.model });
+    await k.op("apply_setup", { household: W_HOUSEHOLD, transcript: W_TRANSCRIPT });
+    const box = () => k.owner("GET", "/api/family").then((x) => x.body.slots.find((s: any) => s.name === "Shiva's lunch box"));
+    expect((await box()).templates[0].parts).toContainEqual({ kind: "Salad", words: "some salad" });
+    const r = await k.op("apply_setup", { household: W_HOUSEHOLD, transcript: [...W_TRANSCRIPT, "Q: Anything to change?", `A: ${NEW}`] });
+    expect(r.ok).toBe(true);
+    expect((await box()).templates).toEqual([{ parts: [{ items: ["4 boiled eggs"] }], share: null, said: null }]);
+    expect(JSON.parse(k.rows("house")[0].setup_state).categories["Shiva's lunch box"]).toBeUndefined();
+    expect(r.said).toContain("Removed: salad at Shiva's lunch box.");
+    expect(r.said).toContain("Shiva's lunch box: 4 boiled eggs.");
+  });
+
+  it("a correction that changes only a box's link builds the box again (review 1)", async () => {
+    const NEW = "Actually his lunch box roll has the dal we make for dinner.";
+    const more = (req: ModelRequest) => JSON.parse(req.user).transcript.includes(NEW);
+    const f = fake({ home: W_HOME, rules: W_RULES, often: W_OFTEN, kinds: W_KINDS, contains: containsOf(), lint: { dishes: [] },
+      dishes: (req: ModelRequest) => (more(req) ? { ...W_DISHES, links: [["Agastya's lunch box", "Dinner", "dal", "his lunch box roll has the dal we make for dinner"], W_DISHES.links[1]] } : W_DISHES) });
+    const k = await boot({ model: f.model });
+    await k.op("apply_setup", { household: W_HOUSEHOLD, transcript: W_TRANSCRIPT });
+    const r = await k.op("apply_setup", { household: W_HOUSEHOLD, transcript: [...W_TRANSCRIPT, "Q: Anything to change?", `A: ${NEW}`] });
+    expect(r.ok).toBe(true);
+    const box = (await k.owner("GET", "/api/family")).body.slots.find((s: any) => s.name === "Agastya's lunch box");
+    expect(box.templates[0].parts).toEqual([{ kind: "Paratha", dish: "Plain paratha", words: "paratha" }, { from: "Dinner", kind: "Dal", sub: "Dal" }]);   // the dinner's own dal part
+    expect(r.said).toContain("Agastya's lunch box: paratha and the dinner dal");
+  });
+
   it("the speaker is the household's self person; the lists of who looks after what are never read as words", async () => {
     expect(householdOf({ "household.people": [{ name: "Shiva", relation: "self" }], "household.speaker": "" }).speaker).toBe("Shiva");
     const { f } = await walk();
@@ -1257,6 +1302,7 @@ describe("setup reads into the one meaning model (§5, §6.4)", () => {
     expect(dishes.system).toContain("A filling said with a kind is an item of that kind: paratha rolled with egg or cheese inside is Egg paratha roll, Cheese paratha roll");
     expect(dishes.system).toContain("A meal the person has beside the home meal is their add-on's");
     expect(dishes.system).toContain("A box with the home meal's dish names a link, not a dish");
+    expect(dishes.system).toContain("is their rule's (a swap), never a dish of the meal");
     expect(dishes.system).toContain("links: ");
     expect(JSON.stringify(dishes.schema)).toContain('"links"');
     expect(JSON.stringify(home.schema)).toContain('"extras":{"type":"boolean"}');
