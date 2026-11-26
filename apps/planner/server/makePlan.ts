@@ -10,7 +10,8 @@
 //      in rotation, a brand-new variant from the catalog only when theirs have all come; every food rule kept, nobody left
 //      with nothing. Where an allergy holds, the variants placed are read carefully (one balanced call) and the week filled
 //      again with what that read says;
-//   4. each day's ingredients from one fast call, an avoided ingredient taken out; saved in one transaction;
+//   4. the dishes' ingredients, each dish of a meal asked once for all its days (batched), an avoided ingredient taken out;
+//      saved in one transaction;
 //   5. the message: the week by day, standing notes once, what could not be kept, the new dishes, what to ask.
 // One run per week at a time: a second make_plan for the same week joins the one running, and a run never starts a model
 // call on top of one still running from before (Flock's SDK cannot abort a call). Nothing here messages anyone.
@@ -31,6 +32,7 @@ import { buildDays, presentAt, slotDayKey, lunchSaid, platformPeers, readEvents,
 import { canonTag, carefulTags, allergyNotes, forbidden, isDropped, mostlyOnion, notFor, plannable, readFor, ruleTags, slotFacts, softSwapNotes, swapNotes,
   ruleBinds, vouched, withParents, type Week } from "./planChecks";
 import { CATALOG_READ, catalogNameOf, fillWeek, type FillResult } from "./fillWeek";
+import { contentsItem } from "./kinds";
 import { isAllergyRule } from "./allergy";
 import { targetsOf, type Targets } from "./targets";
 
@@ -78,7 +80,7 @@ export const INGREDIENT_SCHEMA = { type: "object", required: ["dishes"], propert
   properties: { slot: { type: "string" }, name: { type: "string" }, ingredients: { type: "array", items: { type: "object", required: ["item", "amount", "unit"],
     properties: { item: { type: "string" }, amount: { type: "number" }, unit: { type: "string" }, tags: { type: "array", items: { type: "string" } } } } } } } } } };
 export const INGREDIENT_SYSTEM = [
-  "You list what an Indian family's dishes for one day need bought. Answer with JSON only: { dishes: [{ slot, name, ingredients: [{ item, amount, unit, tags }] }] }, every dish you are given, its slot and name exactly as given.",
+  "You list what an Indian family's dishes need bought, each for one meal. Answer with JSON only: { dishes: [{ slot, name, ingredients: [{ item, amount, unit, tags }] }] }, every dish you are given, its slot and name exactly as given.",
   "Amounts for the `people` eating that dish at that one meal. item is the plain word (\"atta\", \"toor dal\", \"onion\"); amount a number; unit g, kg, ml, l or pc (things counted). Leave out salt and water.",
   "tags: which of the dish's `tags` the ingredient is (sugar is \"sugar\", onion is \"onion_garlic\"); [] when none or when the dish has no tags.",
 ].join("\n");
@@ -286,9 +288,13 @@ async function planWeek(deps: MakePlanDeps & { log: (line: string) => void }, in
   const allergyTags = uniq(rules.filter((r) => isAllergyRule(r)).flatMap(forbidden));
   const careful = allergyTags.length ? new Map<string, Set<string>>() : undefined;
   if (careful) w.careful = careful;
+  /** A dish the catalog knows as an item (its library row's catalog item, else its name): its ingredients decide. */
+  const inCatalog = (dish: string): boolean => !!(contentsItem(library.find((d) => d.key === dishKey(dish))?.catalog_item ?? null) ?? contentsItem(dish));
   const carefulRead = async (dishes: string[]): Promise<Failure | null> => {
     if (!careful) return null;
-    const need = uniq(dishes.map(dishKey)).filter((k) => !careful.has(k)).map((k) => dishes.find((x) => dishKey(x) === k)!).filter((x) => carefulTags(w, x).length);
+    // A catalog item goes by its ingredients (planChecks allergyLeaveOut): never read, a note says to make it without.
+    const need = uniq(dishes.map(dishKey)).filter((k) => !careful.has(k)).map((k) => dishes.find((x) => dishKey(x) === k)!)
+      .filter((x) => carefulTags(w, x).length && !inCatalog(x));
     for (let i = 0; i < need.length; i += CONTAINS_BATCH) {
       const batch = need.slice(i, i + CONTAINS_BATCH);
       const r = await model({ tier: "balanced", purpose: "meal plan: what dishes contain, carefully (allergies)", system: CAREFUL_SYSTEM, schema: CAREFUL_SCHEMA, maxTokens: 3000,
@@ -317,13 +323,8 @@ async function planWeek(deps: MakePlanDeps & { log: (line: string) => void }, in
   const newCap = newDishesSet(db) ?? (cookSticksToMenu(db) && !deps.suggest_new ? 0 : null);
   const fill = (strict: boolean): FillResult => fillWeek({ days, slots, library, history: histories, rules, cuisines: houseCuisines(db), newCap,
     facts: w.facts, careful, strict, guestTags: w.guestTags, targets });
-  let filled = fill(!careful);
-  if (careful && filled.provisional.length) {
-    log(`careful read of ${filled.provisional.length} new dishes placed where an allergy holds`);
-    const f3 = await carefulRead(filled.provisional);
-    if (f3) return stopped(f3);
-    filled = fill(true);
-  }
+  // The variants placed are catalog items: their ingredients decide, so no read and no second fill (perf, 27 Nov).
+  const filled = fill(true);
   for (const line of filled.log) log(line);
   log(`filled ${toPlan.length} slot-days in ${clock() - t0} ms: ${filled.placed.length} new dishes placed`);
   for (const [k, v] of filled.facts) if (!w.facts.has(k)) w.facts.set(k, v);
@@ -358,33 +359,57 @@ async function planWeek(deps: MakePlanDeps & { log: (line: string) => void }, in
   // A soft swap with a count the week falls short of, kept by a note on some of the person's days.
   for (const [k, t] of softSwapNotes(w)) { const [date, slot] = k.split("|"); const d = toPlan.find((x) => x.date === date && same(x.slot, slot)); const dish = d?.dishes.find((x) => k.endsWith(`|${dishKey(x)}`)); if (d && dish) noteOn(d, dish, t); }
 
-  // 5. Each day's ingredients, one fast call a day (all days at once), once more for what it left out.
+  // 5. The ingredients: each dish of a meal asked once for all its days (perf, 27 Nov: a call a day was 3 to 7 calls), in
+  // batches, once more for what a batch left out; a day with fewer people takes its share of the amounts.
   const got = new Map<string, (Ingredient & { tags: string[] })[]>();   // date|slot|dish key
   const noIngredients: string[] = [];
   const hardAt = (d: PlanDay, p: string) => rules.filter((r) => r.hard && r.what !== "swap" && (!r.who || same(r.who, p)) && ruleBinds(r, d.date, w.slots.get(d.slot.toLowerCase())?.slot, d.slot, presentAt(d)));
   /** The tags a rule takes out of a dish's ingredients: onion and garlic stay where a portion is kept aside (contract rule 7). */
   const avoided = (r: Rule, dish: string) => forbidden(r).filter((t) => t !== "onion_garlic" || isAllergyRule(r) || mostlyOnion(dish));
   const avoidTags = (d: PlanDay) => uniq(d.people.flatMap((p) => hardAt(d, p).flatMap(forbidden)));
-  const dayStops = await Promise.all(uniq(toPlan.map((d) => d.date)).map(async (date): Promise<Failure | null> => {
-    const mine = toPlan.filter((d) => d.date === date);
-    const dishes = mine.flatMap((d) => d.dishes.map((name) => ({ slot: d.slot, name, people: d.people.length + d.guests.reduce((n, g) => n + (g.count || 0), 0),
-      ...(avoidTags(d).length ? { tags: avoidTags(d) } : {}) })));
-    const missing = () => dishes.filter((x) => !got.get(`${date}|${x.slot}|${dishKey(x.name)}`)?.length);
-    for (let attempt = 0; attempt < 2 && missing().length; attempt++) {
-      const r = await model({ tier: "fast", purpose: "meal plan: a day's ingredients", system: INGREDIENT_SYSTEM, schema: INGREDIENT_SCHEMA, maxTokens: 4000,
-        user: JSON.stringify({ date, day: weekdayOf(date), dishes: attempt ? missing() : dishes }) }, SAVE_RESERVE_MS);
-      if (!r.ok) { if (isStop(r.code)) return r; continue; }
+  const eaters = (d: PlanDay) => d.people.length + d.guests.reduce((n, g) => n + (g.count || 0), 0);
+  type Ask = { slot: string; name: string; people: number; tags?: string[]; at: { date: string; people: number }[] };
+  const asks = new Map<string, Ask>();   // slot|dish key
+  for (const d of toPlan) for (const name of d.dishes) {
+    const k = `${d.slot.toLowerCase()}|${dishKey(name)}`, a = asks.get(k) ?? { slot: d.slot, name, people: 0, at: [] };
+    a.people = Math.max(a.people, eaters(d));
+    const tags = uniq([...(a.tags ?? []), ...avoidTags(d)]);
+    if (tags.length) a.tags = tags;
+    a.at.push({ date: d.date, people: eaters(d) });
+    asks.set(k, a);
+  }
+  const answered = new Map<string, (Ingredient & { tags: string[] })[]>();   // slot|dish key
+  const askOf = (a: Ask) => ({ slot: a.slot, name: a.name, people: a.people, ...(a.tags ? { tags: a.tags } : {}) });
+  const firstDate = toPlan.map((d) => d.date).sort()[0] ?? from;
+  const readIngredients = async (list: Ask[]): Promise<Failure | null> => {
+    const batches: Ask[][] = [];
+    for (let i = 0; i < list.length; i += CONTAINS_BATCH) batches.push(list.slice(i, i + CONTAINS_BATCH));
+    const stops = await Promise.all(batches.map(async (batch): Promise<Failure | null> => {
+      const r = await model({ tier: "fast", purpose: "meal plan: the dishes' ingredients", system: INGREDIENT_SYSTEM, schema: INGREDIENT_SCHEMA, maxTokens: 8000,
+        user: JSON.stringify({ date: firstDate, day: weekdayOf(firstDate), dishes: batch.map(askOf) }) }, SAVE_RESERVE_MS);
+      if (!r.ok) return isStop(r.code) ? r : null;
       for (const x of ingredientsFrom(r.json)) {
         if (!x.ingredients.length) continue;
-        const d = mine.find((y) => same(y.slot, x.slot) && y.dishes.some((z) => same(z, x.name))) ?? mine.find((y) => y.dishes.some((z) => same(z, x.name)));
-        if (d) got.set(`${date}|${d.slot}|${dishKey(x.name)}`, x.ingredients);
+        const a = batch.find((y) => same(y.slot, x.slot) && same(y.name, x.name)) ?? batch.find((y) => same(y.name, x.name));
+        if (a) answered.set(`${a.slot.toLowerCase()}|${dishKey(a.name)}`, x.ingredients);
       }
+      return null;
+    }));
+    return stops.find((x) => x) ?? null;
+  };
+  const left = () => [...asks.entries()].filter(([k]) => !answered.get(k)?.length).map(([, a]) => a);
+  for (let attempt = 0; attempt < 2 && left().length; attempt++) {
+    const stop = await readIngredients(left());
+    if (stop) return stopped(stop);
+  }
+  for (const [k, a] of asks) {
+    const list = answered.get(k);
+    for (const at of a.at) {
+      if (!list?.length) { noIngredients.push(`${weekdayOf(at.date)} ${a.slot}: ${a.name}`); continue; }
+      const share = a.people ? at.people / a.people : 1;
+      got.set(`${at.date}|${a.slot}|${dishKey(a.name)}`, list.map((i) => ({ ...i, amount: i.amount == null ? null : Math.round(i.amount * share * 100) / 100 })));
     }
-    if (missing().length) noIngredients.push(...missing().map((x) => `${weekdayOf(date)} ${x.slot}: ${x.name}`));
-    return null;
-  }));
-  const ingStop = dayStops.find((x) => x);
-  if (ingStop) return stopped(ingStop);
+  }
   // An ingredient someone at the slot-day must avoid comes out; a dish others share says so. Not for a person the dish is
   // not for (the fish stays in the fish curry), and not when the read tags more than half of a dish's ingredients against
   // one rule: that read is wrong (rice, oil and onion all tagged for a no-red-meat rule), and the dish's checked contains

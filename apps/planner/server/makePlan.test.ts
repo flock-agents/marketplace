@@ -83,13 +83,13 @@ async function home(o: { people?: [string, string][]; slots?: SlotInput[]; lib?:
 const STAPLES = ["Rice", "Phulka"];
 
 describe("make_plan: the week filled by code from the templates", () => {
-  it("no model call plans a meal: only each day's ingredients are asked; every slot-day saved planned, with ingredients; the week by day in the message", async () => {
+  it("no model call plans a meal: only the dishes' ingredients are asked, in one call for the week; every slot-day saved planned, with ingredients; the week by day in the message", async () => {
     const k = await home();
     const f = fakeModel();
     const lines: string[] = [];
     const r = await k.plan(f.model, { log: (l) => lines.push(l) });
     if (!r.ok) throw new Error(r.say);
-    expect(f.calls.map((c) => c.req.purpose)).toEqual(Array(7).fill("meal plan: a day's ingredients"));
+    expect(f.calls.map((c) => c.req.purpose)).toEqual(["meal plan: the dishes' ingredients"]);
     expect(f.days().every((c) => c.req.tier === "fast" && c.req.system === INGREDIENT_SYSTEM)).toBe(true);
     expect(k.week()).toHaveLength(21);
     for (const d of k.week()) {
@@ -390,22 +390,18 @@ describe("make_plan: allergies (owner 25 Nov)", () => {
     expect(poha.ingredients.map((i) => i.item)).toEqual(["peanuts"]);
   });
 
-  it("every other dish is read carefully on the balanced tier, the new ones placed too: one that may have it is not his (unless only an ingredient it can be made without brings it, decided 21), and he has his own", async () => {
+  it("a catalog dish is never read carefully: its ingredients decide (e2e 27 Nov), a peanut it can be made without is a note, and he has his own", async () => {
     const k = await home({ rules: [ALLERGY], slots: [POHA_ONLY, MAIN[1], MAIN[2]], lib: { ...LIB, Breakfast: [["Kanda poha", "Poha"]] } });
-    const f = fakeModel({ careful: (u) => ({ dishes: u.dishes.map((d: string) => ({ dish: d, has: d === "Kanda poha" ? [] : ["peanut"] })) }) });
+    const f = fakeModel({ careful: (u) => ({ dishes: u.dishes.map((d: string) => ({ dish: d, has: ["peanut"] })) }) });
     await k.plan(f.model);
-    const c = f.careful();
-    expect(c.length).toBeGreaterThanOrEqual(2);
-    expect(c.every((x) => x.req.tier === "balanced" && x.req.system === CAREFUL_SYSTEM)).toBe(true);
+    expect(f.careful()).toEqual([]);
     expect(CAREFUL_SYSTEM).toContain("not sure");
-    expect(c[0].user.dishes).toContain("Kanda poha");
-    expect(c.slice(1).flatMap((x) => x.user.dishes).length).toBeGreaterThan(0);
     for (const d of WEEK) {
       const plate = k.at(d, "Breakfast")!.dishes;
-      for (const x of plate) if (x.dish !== "Kanda poha") {
-        const leaveOut = (catalogIngredients(x.dish) ?? []).some((i) => i.name === "peanuts" && !i.main);
-        expect(x.not_for).toEqual(leaveOut ? [] : ["Kabir"]);
-        if (leaveOut) expect(x.note).toContain("make without peanuts for Kabir");
+      for (const x of plate) {
+        const main = (catalogIngredients(x.dish) ?? []).some((i) => i.name === "peanuts" && i.main);
+        expect(x.not_for).toEqual(main ? ["Kabir"] : []);
+        if (!main) expect(x.note).toContain("make without peanuts for Kabir");
       }
       expect(plate.some((x) => !x.not_for.includes("Kabir"))).toBe(true);
     }
@@ -439,14 +435,24 @@ describe("make_plan: failures", () => {
     expect(k.week()).toHaveLength(0);
   });
 
-  it("a day's ingredients are asked once more for what was left out, then saved without them and named", async () => {
+  it("the ingredients are asked once more for the dishes left out, then saved without them and named on each day", async () => {
     const k = await home();
-    const f = fakeModel({ day: (u) => (u.date === MON ? { dishes: [] } : ingredients(u)) });
+    const f = fakeModel({ day: (u) => ({ dishes: ingredients(u).dishes.filter((d: any) => d.name !== "Phulka") }) });
     const r = await k.plan(f.model);
-    expect(f.days().filter((c) => c.user.date === MON)).toHaveLength(2);
+    expect(f.days()).toHaveLength(2);
+    expect(f.days()[1].user.dishes.map((d: any) => d.name)).toEqual(["Phulka"]);
     if (!r.ok) throw new Error(r.say);
-    expect(r.no_ingredients).toEqual([...k.dishesAt(MON, "Breakfast").map((x) => `Mon Breakfast: ${x}`), ...k.dishesAt(MON, "Lunch").map((x) => `Mon Lunch: ${x}`),
-      ...k.dishesAt(MON, "Dinner").map((x) => `Mon Dinner: ${x}`)]);
+    const phulka = WEEK.filter((d) => k.dishesAt(d, "Dinner").includes("Phulka"));
+    expect(r.no_ingredients).toEqual(phulka.map((d) => `${["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][WEEK.indexOf(d)]} Dinner: Phulka`));
+  });
+
+  it("a dish on several days is asked once, and a day with fewer people takes its share of the amounts", async () => {
+    const k = await home();
+    const f = fakeModel();
+    await k.plan(f.model);
+    const asked = f.days().flatMap((c) => c.user.dishes.map((d: any) => `${d.slot}|${d.name}`));
+    expect(new Set(asked).size).toBe(asked.length);
+    expect(k.at(MON, "Dinner")!.dishes[0].ingredients[0].amount).toBe(200);
   });
 
   it("make_plan needs a Monday, a family and the slots; two runs for one week at once are one run; with no model the week is still planned", async () => {
@@ -459,7 +465,7 @@ describe("make_plan: failures", () => {
     const f = fakeModel({ wait: 5 });
     const [a, b] = await Promise.all([k.plan(f.model), k.plan(f.model)]);
     expect(a).toEqual(b);
-    expect(f.days()).toHaveLength(7);
+    expect(f.days()).toHaveLength(1);
     // Flock's op, no model to ask: planned by code, the ingredients named as missing.
     const r = await k.op("make_plan", { week_start: MON, household: { "household.weekly": [] } });
     expect(r.ok).toBe(true);

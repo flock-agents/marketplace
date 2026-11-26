@@ -78,7 +78,9 @@ Save each thing they say at once:
 - a rule or a goal: as in the table;
 - "all good": `planner_set_answered { ids: ["feedback"] }`.
 
-A tool that plans meals again answers a `message`: send it word for word. When an answer has `proposed_rule`, ask its
+A rule change answers its `stale` meals without planning: once all their changes are saved, one
+`planner_make_plan { meals }` with every stale meal plans them again. A tool that plans meals again answers a `message`:
+send it word for word. When an answer has `proposed_rule`, ask its
 `say` once; on a yes, call its `op` (as `planner_<op>`) with its `body`.
 
 Then plan the next 4 days, so the 7 days from the first plan are covered: `planner_make_plan { from: the day after the
