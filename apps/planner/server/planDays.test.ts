@@ -64,7 +64,7 @@ describe("attendance: only a box that replaces a meal takes its person off it", 
 
 describe("a meal's rules hold at the box that replaces it", () => {
   const slots = base();
-  const rule = { days: undefined, slots: ["Breakfast"] };
+  const rule = { days: [], slots: ["Breakfast"] };
   it("a Breakfast rule holds at the breakfast box, not the lunch box", () => {
     expect(ruleHolds(rule, "2026-11-25", slots[3], slots[3].name, slots)).toBe(true);
     expect(ruleHolds(rule, "2026-11-25", slots[4], slots[4].name, slots)).toBe(false);

@@ -897,7 +897,7 @@ export function fillWeek(input: FillInput): FillResult {
         if (!feed(s, d, plate, [who], t.parts.length, [], [], null)) res.unmet.push(`${label(d)}: ${who} has nothing to eat there`);
       }
       // A require kept: one dish with its item for its person.
-      for (const r of rules.filter((x) => x.hard && x.what === "require" && x.items?.length && x.who && atTable.some((p) => same(p, x.who!)) && ruleHolds(x, d.date, s, s.name, w.slots))) {
+      for (const r of rules.filter((x) => x.hard && x.what === "require" && x.items?.length && x.who && atTable.some((p) => same(p, x.who!)) && ruleHolds(x, d.date, s, s.name, [...w.slots.values()].map((sf) => sf.slot)))) {
         const who = atTable.find((p) => same(p, r.who!))!;
         const has = (name: string) => { prep(name); return r.items!.some((i) => factsOf(w, s.name, name).tags.has(canonTag(i))); };
         if (plate.some((x) => has(x.name) && !excluded(d, [who], x.name).length)) continue;
