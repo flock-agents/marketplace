@@ -22,6 +22,7 @@ import { canonTag, carefulTags, factsOf, forbidden, frequencyRange, guestForbids
   readFor, slotFacts, withParents, OWN_SHARE, type DishFacts, type Week } from "./planChecks";
 import { ruleHolds, slotDayKey, type PlanDay } from "./planDays";
 import type { HistoryRow, LibraryDish, Rule, Slot } from "./slotStore";
+import { deriveTemplates } from "./migrateMeaning";
 
 /** One dish on a filled plate. `new`: a brand-new variant (the family never had it). */
 export type FilledDish = { name: string; new: boolean; not_for: string[]; note: string | null };
@@ -153,39 +154,7 @@ function mealOf(s: Slot, slots: Slot[]): string | null {
 
 /** The kinds of a slot's templates (kinds.ts mealKinds), read through `kindsOf` by the planner's own sites. */
 const kindsOf = (s: Slot): MealKind[] => mealKinds(s.templates ?? []);
-/** A meal set up before templates (or with none): its templates read off its seed and confirmed plates, a part per dish (its
- *  kind, with its sub-kind where the kind has several; a dish the catalog does not know is that dish, `items`); with no
- *  plates, one template per kind of its dishes; with no dishes either, a plain plate of its meal. */
-export function deriveTemplates(s: Slot, plates: string[][], library: LibraryDish[], meal: string | null): MealTemplate[] {
-  const rows = library.filter((r) => familyRow(r));
-  const partOf = (name: string): TemplatePart => {
-    const row = rows.find((r) => r.key === dishKey(name) && same(r.slot, s.name)) ?? rows.find((r) => r.key === dishKey(name));
-    const pl = row ? placeOf(row) : (() => { const m = matchDish(name); return m ? { kind: m.kind, sub: m.sub } : null; })();
-    if (!pl) return { items: [name.trim()] };
-    const ck = catalogKind(pl.kind);
-    if (!ck) return { kind: pl.kind };
-    if (ck.staple) return { kind: ck.name };
-    return ck.subs.length > 1 && pl.sub ? { kind: ck.name, sub: pl.sub } : { kind: ck.name };
-  };
-  const dedupe = (ts: MealTemplate[]) => ts.filter((t, i) => ts.findIndex((u) => JSON.stringify(u.parts) === JSON.stringify(t.parts)) === i);
-  if (plates.length) return dedupe(plates.map((p) => ({ parts: p.map(partOf) })));
-  const mine = rows.filter((r) => same(r.slot, s.name));
-  if (s.kind === "addon") return mine.length ? [{ parts: [{ items: mine.map((r) => r.name) }] }] : [];
-  if (mine.length) {
-    const parts = mine.map((r) => partOf(r.name));
-    const staple = uniq(parts.filter(isKindPart).filter((p) => catalogKind(p.kind)?.staple).map((p) => p.kind)).map((kind) => ({ kind }));
-    const loose = parts.filter(isItemsPart).flatMap((p) => p.items);
-    const kinds = uniq(parts.filter(isKindPart).filter((p) => !catalogKind(p.kind)?.staple).map((p) => p.kind));
-    const ts: MealTemplate[] = kinds.map((kind) => ({ parts: [...staple, { kind }] }));
-    if (loose.length) ts.push({ parts: [...staple, { items: loose }] });
-    return ts.length ? ts : staple.length ? [{ parts: staple }] : [];
-  }
-  // Nothing of theirs (they said to suggest some): a plain plate of the meal.
-  const k = (...xs: string[]): MealTemplate => ({ parts: xs.map((kind) => ({ kind })) });
-  if (meal === "breakfast" || meal === "tiffin") return [k("Poha"), k("Upma"), k("Idli"), k("Paratha")];
-  if (meal === "snack") return [k("Fruit"), k("Chaat"), k("Sundal")];
-  return [k("Roti", "Dal", "Sabzi"), k("Rice", "Dal", "Sabzi")];
-}
+// deriveTemplates (a meal's templates read off its plates) moved to migrateMeaning.ts: it runs there once per install.
 
 /** How many of `n` days each template has: a share in the family's words exactly ("2/week") or as its words' days (a part
  *  week its share of them); the days left spread evenly over the templates with none. */

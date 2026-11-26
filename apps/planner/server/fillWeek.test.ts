@@ -259,18 +259,7 @@ describe("food rules (rule 6) and onion and garlic (rule 7)", () => {
   });
 });
 
-describe("a meal set up before templates", () => {
-  it("is planned from templates read off its seed plates: a part per dish, a dish the catalog does not know kept as theirs", () => {
-    const lib = ["Rice", "Drumstick sambar", "Tomato rasam", "Pepper rasam", "Beans poriyal", "Cabbage poriyal", "Curd", "Paati's kuzhambu"].map((n) => dish(n, "Lunch", null));
-    const r = run({ slots: [slot("Lunch")], library: lib, history: { Lunch: seed([["Rice", "Drumstick sambar", "Beans poriyal", "Curd"], ["Rice", "Tomato rasam", "Curd"], ["Rice", "Paati's kuzhambu", "Curd"]]) } });
-    const ts = r.templates.get("lunch")!;
-    expect(ts).toHaveLength(3);
-    expect(ts[0].parts).toEqual([{ kind: "Rice" }, { kind: "Rice curry", sub: "Sambar" }, { kind: "Sabzi", sub: "Poriyal/Thoran" }, { kind: "Curd" }]);
-    expect(ts[2].parts[1]).toEqual({ items: ["Paati's kuzhambu"] });
-    for (const p of weekOf(r, "Lunch")) { expect(p[0]).toBe("Rice"); expect(p.at(-1)).toBe("Curd"); expect(p.length).toBeGreaterThanOrEqual(3); }
-    expect(WEEK.some((d) => r.at(d, "Lunch").includes("Pepper rasam"))).toBe(true);
-  });
-});
+// "a meal set up before templates" (deriveTemplates) moved to migrateMeaning.test.ts with the function.
 
 describe("an add-on", () => {
   it("a dish had twice a week comes on two days apart; the other days are empty where the main meal feeds its person", () => {

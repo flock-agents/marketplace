@@ -6,6 +6,7 @@ import { OLD_TABLES, SETTINGS } from "./db/constants";
 import { mountFamilyRoutes } from "./family";
 import { mountMealRoutes } from "./meals";
 import { mountRegularRoutes, moveRegulars } from "./regulars";
+import { migrateMeaning } from "./migrateMeaning";
 import { mountProductRoutes } from "./products";
 import { mountRecipeRoutes } from "./recipes";
 import { mountDishBookRoutes } from "./dishBook";
@@ -31,6 +32,8 @@ if (kit.status.state === "ok") {
   migrateOldProfile(kit.sqlite);
   // An installed copy's everyday items become item cycles, once.
   try { moveRegulars(kit.sqlite, kit.db); } catch (e) { console.warn("[planner] the everyday items were not moved to item cycles", e); }
+  // A saved setup moves to the one meaning model (category words onto its templates, typed rule targets), once.
+  try { migrateMeaning(kit.sqlite, kit.db); } catch (e) { console.warn("[planner] the saved setup was not moved to the one meaning model", e); }
 }
 
 mountFamilyRoutes(flock.hono, kit.db, kit.emitChange, { appToken: flock.env.token ?? process.env.FLOCK_APP_TOKEN ?? null });
