@@ -237,12 +237,16 @@ export function dateOf(monday: string, day: Weekday): string {
 }
 export const weekdayOfDate = (date: string): Weekday => WEEK[(new Date(`${date}T00:00:00Z`).getUTCDay() + 6) % 7];
 
+/** The weekday Lunch span, the scorer's own copy (this file imports nothing from server/). */
+const LUNCH_SPAN: [string, string] = ["12:00", "14:30"];
 /** Owner, 26 Nov: "Kids coming home for lunch is not a valid case for now." A school-going child (a TRUTH child with a
- *  `household.weekly` school entry whose lunch is not "carries") is away at the shared lunch on their school days, whatever the facts say about coming
- *  home: they carry a box or eat at school. The scorer's expectation only; TRUTH is left as written. */
+ *  `household.weekly` school entry) is off the shared Lunch on their school days when school covers lunch: the entry's hours
+ *  hold the whole Lunch span, or the family says "away" outright; unless they eat at home ("home") or carry the home lunch
+ *  ("carries": cooked for them and packed, so they count, §5.4). School that ends before lunch leaves them at home. */
 export function schoolLunchAway(h: Household, person: string, day: Weekday): boolean {
   if (!h.truth.people.some((p) => p.group === "child" && sameName(p.name, person))) return false;
-  const weekly = (h.household["household.weekly"] ?? []) as { person: string; where?: string; weekdays?: string[]; lunch?: string }[];
-  // Unless they carry the home lunch (§5.4): then they eat the shared lunch, packed.
-  return weekly.some((w) => sameName(w.person, person) && /school/i.test(w.where ?? "") && (w.weekdays ?? []).includes(day) && w.lunch !== "carries");
+  const weekly = (h.household["household.weekly"] ?? []) as { person: string; where?: string; weekdays?: string[]; lunch?: string | null; from?: string; to?: string }[];
+  const covers = (w: { from?: string; to?: string }) => !!w.from && !!w.to && w.from <= LUNCH_SPAN[0] && LUNCH_SPAN[1] <= w.to;
+  return weekly.some((w) => sameName(w.person, person) && /school/i.test(w.where ?? "") && (w.weekdays ?? []).includes(day)
+    && w.lunch !== "home" && w.lunch !== "carries" && (w.lunch === "away" || covers(w)));
 }

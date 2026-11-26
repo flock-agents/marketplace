@@ -505,34 +505,40 @@ describe("no_new_kind: a regional dish of another cuisine is fine when its kind 
 
 describe("attendance: a school child is away at the weekday lunch (owner, 26 Nov)", () => {
   // "Kids coming home for lunch is not a valid case for now." TRUTH may say the child comes home; the scorer does not expect it.
-  test("a child TRUTH has home for lunch is still left out Mon-Fri; an adult at a school (a teacher) is not", async () => {
+  test("a child whose school covers lunch and who is not home or carrying is left out Mon-Fri; one home for lunch (H13), or an adult at a school, is not", async () => {
     const { ALL_HOUSEHOLDS } = await import("../households");
     const lunch = (id: string, d: Weekday) => expectedSlotDays(ALL_HOUSEHOLDS.find((h) => h.id === id)!, MON).find((e) => e.day === d && e.slot === "Lunch")?.people ?? [];
     for (const d of ["Mon", "Tue", "Wed", "Thu", "Fri"] as Weekday[]) {
-      expect(lunch("h15-gupta", d)).toEqual(["Ankit", "Pooja"]);    // Myra: "home for lunch" in TRUTH
-      expect(lunch("h2-iyer", d)).not.toContain("Ananya");
+      expect(lunch("h15-gupta", d)).toEqual(["Ankit", "Pooja", "Myra"]);    // Myra: school ends 12:30, lunch "home"
+      expect(lunch("h2-iyer", d)).toContain("Ananya");                       // school 09:00-12:00, lunch "home"
+      expect(lunch("h6-kulkarni", d)).not.toContain("Aditi");                // school 08:00-14:30, lunch "away"
       expect(lunch("h6-kulkarni", d)).toContain("Snehal");          // a teacher, home for lunch
     }
     expect(lunch("h15-gupta", "Sat")).toContain("Myra");
     expect(lunch("h2-iyer", "Sun")).toContain("Ananya");
+    expect(lunch("h18-shiva-walkthrough", "Mon")).not.toContain("Agastya");   // school 07:20-15:00, no word for lunch
   });
   test("a school child whose weekday lunch is carries stays at the shared Lunch (OD2)", async () => {
     const { ALL_HOUSEHOLDS } = await import("../households");
-    const g = ALL_HOUSEHOLDS.find((x) => x.id === "h15-gupta")!;
-    const weekly = ((g.household["household.weekly"] ?? []) as { person: string }[]).map((w) => (w.person === "Myra" ? { ...w, lunch: "carries" } : w));
-    const h = { ...g, household: { ...g.household, "household.weekly": weekly } };
-    expect(weekly.some((w: any) => w.person === "Myra" && w.lunch === "carries")).toBe(true);
-    for (const d of ["Mon", "Fri"] as Weekday[]) expect(expectedSlotDays(h, MON).find((e) => e.day === d && e.slot === "Lunch")!.people).toContain("Myra");
+    const g = ALL_HOUSEHOLDS.find((x) => x.id === "h2-iyer")!;
+    const withLunch = (lunch: string | null) => ({ ...g, household: { ...g.household, "household.weekly": ((g.household["household.weekly"] ?? []) as { person: string }[]).map((w) => (w.person === "Ananya" ? { ...w, from: "07:20", to: "15:00", lunch } : w)) } });
+    const lunchOf = (h: Household, d: Weekday) => expectedSlotDays(h, MON).find((e) => e.day === d && e.slot === "Lunch")!.people;
+    for (const d of ["Mon", "Fri"] as Weekday[]) {
+      expect(lunchOf(withLunch("carries"), d)).toContain("Ananya");
+      expect(lunchOf(withLunch(null), d)).not.toContain("Ananya");   // school 08:30-15:30 covers lunch
+    }
   });
   test("a week with the child at the weekday lunch fails attendance; without her it passes", async () => {
     const { ALL_HOUSEHOLDS } = await import("../households");
-    const h = ALL_HOUSEHOLDS.find((x) => x.id === "h15-gupta")!, setup = setupOfTruth(h);
+    const g = ALL_HOUSEHOLDS.find((x) => x.id === "h2-iyer")!;
+    const h = { ...g, household: { ...g.household, "household.weekly": ((g.household["household.weekly"] ?? []) as { person: string }[]).map((w) => (w.person === "Ananya" ? { ...w, lunch: "away" } : w)) } };
+    const setup = setupOfTruth(h);
     const att = (p: PlanOut) => { const [a, n] = scorePlan(h, p, setup, { failClosed: false }).rates.attendance; return n - a; };
     const good = baselineWeek(h, MON);
-    expect(good.slotDays.find((x) => x.date === MON && x.slot === "Lunch")!.people).not.toContain("Myra");
+    expect(good.slotDays.find((x) => x.date === MON && x.slot === "Lunch")!.people).not.toContain("Ananya");
     expect(att(good)).toBe(0);
     const bad = baselineWeek(h, MON);
-    bad.slotDays.find((x) => x.date === MON && x.slot === "Lunch")!.people.push("Myra");
+    bad.slotDays.find((x) => x.date === MON && x.slot === "Lunch")!.people.push("Ananya");
     expect(att(bad)).toBe(1);
   });
 });
@@ -961,5 +967,43 @@ describe("h13 khichdi: G8", () => {
     // Bad: the khichdi itself on two days is past "once".
     dinner(p, "Fri").dishes = [{ name: "Moong dal khichdi" }];
     expect(notes(h, p, "dish_frequency").filter((n) => /khichdi/i.test(n))).toHaveLength(1);
+  });
+});
+
+describe("H13: a child is off the shared Lunch only when school covers lunch and they neither eat at home nor carry", () => {
+  const withSchool = (from: string | undefined, to: string | undefined, lunch: string | null): Household => ({
+    ...FIX, household: { ...FIX.household, "household.weekly": [{ person: "Chotu", where: "school", weekdays: ["Mon", "Tue", "Wed", "Thu", "Fri"], ...(from ? { from, to } : {}), lunch }] },
+  });
+  const there = (h: Household) => (expectedSlotDays(h, MON).find((e) => e.day === "Mon" && e.slot === "Lunch")?.people ?? []).includes("Chotu");
+  test("school 09:00-12:00 with lunch at home is not away", () => expect(there(withSchool("09:00", "12:00", "home"))).toBe(true));
+  test("school 07:20-15:00 with no word for lunch is away", () => expect(there(withSchool("07:20", "15:00", null))).toBe(false));
+  test("lunch carries is not away", () => expect(there(withSchool("07:20", "15:00", "carries"))).toBe(true));
+  test("school that ends before lunch with no word for lunch is not away", () => expect(there(withSchool("08:00", "11:00", null))).toBe(true));
+  test("an explicit away is away, with or without hours", () => {
+    expect(there(withSchool(undefined, undefined, "away"))).toBe(false);
+    expect(there(withSchool("07:30", "13:30", "away"))).toBe(false);
+  });
+});
+
+describe("H14: the cap check knows the meal's staples", () => {
+  const capH = (staples: string[] | undefined): Household => ({
+    ...FIX, truth: { ...FIX.truth, meals: [{ slot: "Lunch", templates: [], ...(staples ? { staples } : {}) }],
+      rules: [...FIX.truth.rules, { id: "cook_limit", title: "three dishes besides staples", hard: false, what: "cap", per_meal: 2, slots: ["Lunch"], days: ["Mon"], quote: /dishes/i }] },
+  });
+  const capFails = (h: Household, dishes: string[]) => {
+    const p = goodWeek();
+    set(p, "Mon", "Lunch", dishes);
+    const [a, n] = scorePlan(h, p, setupOfTruth(h)).rates.cap_rules;
+    return n - a;
+  };
+  test("a dish of a kind the meal lists as staple does not count", () => {
+    expect(capFails(capH(undefined), ["Rice", "Bhindi", "Aloo gobi", "Lauki"])).toBe(1);
+    expect(capFails(capH(["Rice", "Sabzi"]), ["Rice", "Bhindi", "Aloo gobi", "Lauki"])).toBe(0);
+  });
+  test("a dish the meal names as staple does not count", () => {
+    expect(capFails(capH(["Bhindi"]), ["Rice", "Bhindi", "Aloo gobi", "Lauki"])).toBe(0);
+  });
+  test("a plate of one staple and three curries still fails", () => {
+    expect(capFails(capH(["Rice", "Curd"]), ["Rice", "Bhindi", "Aloo gobi", "Lauki"])).toBe(1);
   });
 });

@@ -412,7 +412,11 @@ export function scorePlan(h: Household, plan0: PlanOut, loaded: SetupOut, o: { f
   }
   for (const r of t.rules.filter((x) => x.what === "cap" && x.per_meal)) {
     for (const sd of cooked.filter((x) => (!r.slots?.length || r.slots.includes(x.slot)) && (!r.days?.length || r.days.includes(dayOfSd(x))))) {
-      const n = sd.dishes.filter((d) => !isStaple(sd.slot, d.name)).length;
+      // A staple here: the family's (seed), the meal's own TRUTH staples (a dish or a kind named there), or a staple kind.
+      const mealStaples = (t.meals ?? []).filter((m) => lc(m.slot) === lc(sd.slot)).flatMap((m) => m.staples ?? []).map(plain);
+      const isCapStaple = (name: string) => isFamilyStaple(sd.slot, name) || isStapleKind(kindAt(name, sd.slot))
+        || mealStaples.includes(plain(name)) || mealStaples.includes(plain(kindAt(name, sd.slot) ?? ""));
+      const n = sd.dishes.filter((d) => !isCapStaple(d.name)).length;
       add("cap_rules", n <= r.per_meal!, `${dayOfSd(sd)} ${sd.slot}: ${n} dishes besides staples (${r.title}: at most ${r.per_meal})`);
     }
   }
