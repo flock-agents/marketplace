@@ -970,6 +970,23 @@ function rowsFor(read: SetupRead, again: SetupRead, opts: { sentences: string[];
     links: again.links.filter((l) => wanted(l) && !read.links.some((x) => same(x.slot, l.slot) && same(x.from, l.from))),
   };
 }
+/** A dishes re-read laid on the read (fix round 1): its rows replace the same dish at the same meal (a seed: the same dishes) and
+ *  add the rest; a first-read row it leaves out is kept (the re-read is asked only for what was missing). A dish it puts at a box
+ *  in `boxes` leaves the meal the box replaces (fix 3: it sat there only for want of the box). Meals by the checked slots. */
+export function mergeDishes(read: SetupRead, again: Pick<SetupRead, "library" | "seed" | "links">, opts: { slots: ReadSlot[]; boxes: string[] }):
+  Pick<SetupRead, "library" | "seed" | "links"> {
+  const names = opts.slots.map((x) => x.name), at = (slot: string) => resolveSlot(slot, names) ?? slot;
+  const sameSlot = (a: string, b: string) => same(at(a), at(b));
+  const replaced = (slot: string) => opts.slots.find((x) => opts.boxes.includes(x.name) && sameSlot(x.name, slot))?.instead_of ?? null;
+  const gone = (d: ReadDish) => again.library.some((x) => dishKey(x.name) === dishKey(d.name)
+    && (sameSlot(x.slot, d.slot) || (!!replaced(x.slot) && sameSlot(replaced(x.slot)!, d.slot))));
+  const sameSeed = (a: ReadSeed, b: ReadSeed) => sameSlot(a.slot, b.slot) && a.dishes.map(dishKey).join() === b.dishes.map(dishKey).join();
+  return {
+    library: [...read.library.filter((d) => !gone(d)), ...again.library],
+    seed: [...read.seed.filter((d) => !again.seed.some((x) => sameSeed(x, d))), ...again.seed],
+    links: [...read.links.filter((l) => !again.links.some((x) => sameSlot(x.slot, l.slot) && same(x.from, l.from))), ...again.links],
+  };
+}
 
 // ── Model calls ──
 
@@ -2284,13 +2301,13 @@ export async function applySetup(deps: { db: Db; emit: Emit; model: ModelCall; p
         read = next; checked = nextChecked; gaps = left;
         if (added.length && until - Date.now() >= RETRY_FLOOR_MS) {
           log(`dishes: ${added.map((x) => x.name).join(", ")} added by the home re-read; reading the dishes again`);
-          // An uncited sentence joins this re-read (one dishes re-read per setup): its answer stands for the first.
+          // An uncited sentence joins this re-read (one dishes re-read per setup): its answer is merged into the first read.
           const unwritten = uncited(checked.read, replySentences);
           dishesReread = true; uncitedAsked = unwritten.length > 0;
           const d = await reread(partOf("dishes"), { missing: [...added.map((x) => `what goes in ${x.name}`), ...unwritten], meals: checked.read.slots.map((x) => x.name) });
           const again = d.ok ? readOf(null, null, d.json, oftenJson) : null;
           if (again?.library.length) {
-            read = { ...read, library: again.library, seed: again.seed, links: again.links };
+            read = { ...read, ...mergeDishes(read, again, { slots: checked.read.slots, boxes: added.map((x) => x.name) }) };
             checked = checkRead(read, { household, said, sentences, oftenFailed });
           } else log(`dishes re-read: ${d.ok ? "no dishes in the answer" : `model ${d.code}: ${d.message.slice(0, 200)}`}; the first dishes read stands`);
         } else boxAsks.push(...added.map((x) => boxAsk(x.name, x.instead_of!)));

@@ -1743,6 +1743,15 @@ describe("setup checks what a read left out (H1-H3)", () => {
     expect(JSON.stringify(slot("Ira's lunch box").templates).toLowerCase()).toContain("paratha roll");
     expect(JSON.stringify(slot("Lunch").templates).toLowerCase()).not.toContain("paratha roll");
   });
+  it("a dishes re-read that writes only what was missing keeps the first read's rows; the box's dish still moves off the meal (fix round 1)", async () => {
+    const { f, k } = await run({ home: (_req: ModelRequest, n: number) => (n === 1 ? noBoxes : withBoxes),
+      dishes: (_req: ModelRequest, n: number) => (n === 1 ? noBoxDishes : { library: [["Paratha roll", "Ira's lunch box", rollSaid]], links: I_DISHES.links }), kinds: ownKinds },
+      rollTranscript);
+    expect(f.of("dishes")).toHaveLength(2);
+    const saved = Object.keys(lib(k));
+    expect(saved).toEqual(expect.arrayContaining(["Idli@Breakfast", "Rice@Lunch", "Roti@Dinner", "Sprouts@Rahul's lunch", "Paratha roll@Ira's lunch box"]));
+    expect(saved).not.toContain("Paratha roll@Lunch");
+  });
   it("with no time to read the dishes again, a box the home re-read adds is asked about (fix 3, OD7)", async () => {
     // The home re-read takes the time: the dishes are not read again.
     const slow = async (_req: ModelRequest, n: number) => { if (n === 1) return noBoxes; await Bun.sleep(150); return withBoxes; };
