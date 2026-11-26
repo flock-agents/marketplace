@@ -45,6 +45,24 @@ function catalogTagOf(ingredient: string): string | null {
   return tags.length === 1 && tags[0].split("_").includes(canon(ingredient)) ? tags[0] : null;
 }
 
+/** The words of a family's sentence that name a food the catalog places (J4): a known tag, an ingredient of its lists, a kind, sub-kind
+ *  or item, or a word of a main ingredient's name ("ragi", of "ragi flour"). Whole words, in the order said, plain. Structure only: a
+ *  word the catalog does not know is not a food here. */
+let mainWords: Set<string> | null = null;
+export function foodWordsIn(text: string): string[] {
+  if (!mainWords) {
+    mainWords = new Set();
+    for (const k of CATALOG.kinds) for (const it of k.items) for (const i of it.ingredients) if (i.main) for (const w of norm(i.name).split(" ")) if (w.length > 2) mainWords.add(w);
+  }
+  const ws = norm(text).split(" ").filter(Boolean);
+  const out: string[] = [];
+  for (const w of ws) {
+    const one = w.endsWith("s") && w.length > 3 ? w.slice(0, -1) : w;
+    if (tagOf(w) || ingredientOf(w, true) || matchDish(w) || mainWords.has(w) || mainWords.has(one)) if (!out.includes(w)) out.push(w);
+  }
+  return out;
+}
+
 /** A rule word to its one target: a known tag (BASE_TAGS, TAG_PARENT keys/values, catalog tags, singular of a plural) → ingredient;
  *  else matchDish: item → item, sub → sub, kind → kind; else an ingredient of that word (canonTag). */
 export function resolveTarget(word: string): RuleTarget {

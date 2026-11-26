@@ -2276,6 +2276,40 @@ describe("a rule read whole, a require that is an add-on dish, a cook from help 
     expect(rulesOf(k)).toMatchObject([{ what: "note", who: "Lalitha", quote: "Millets are good for Lalitha" }]);
   });
 
+  // J4 (task 15 round 4): a note that names a food and a how-often is re-read as a rule, then asked.
+  const RAGI_TRANSCRIPT = [...R_TRANSCRIPT.slice(0, 1), "A: Lalitha has hers with less salt. Ragi is good for her, so she has it sometimes.", ...R_TRANSCRIPT.slice(2)];
+  const raggedSaid = familyLines(RAGI_TRANSCRIPT, R_HOUSEHOLD), raggedSentences = familySentences(RAGI_TRANSCRIPT, R_HOUSEHOLD);
+  const ragiNote = { hard: false, what: "note", who: "Lalitha", frequency: "sometimes", quote: "Ragi is good for her" };
+  const ragiRule = { hard: false, what: "require", who: "Lalitha", items: ["ragi"], frequency: "sometimes", quote: "Ragi is good for her" };
+  it("checkRead: a note with a food and a how-often is incomplete", () => {
+    const c = checkRead(readOf({ slots: mains }, { rules: [ragiNote] }, {}), { household: hh, said: raggedSaid, sentences: raggedSentences });
+    expect(c.incomplete).toMatchObject([{ quote: "Ragi is good for her", what: "note", frequency: "sometimes", foods: ["ragi"] }]);
+    expect(c.read.rules).toMatchObject([{ what: "note", quote: "Ragi is good for her" }]);
+    // No how-often, or no food in its words: a plain note, not reported.
+    const plain = { hard: false, what: "note", who: "Lalitha", quote: "with less salt" };
+    expect(checkRead(readOf({ slots: mains }, { rules: [{ ...ragiNote, frequency: null }, { ...plain, frequency: "sometimes" }] }, {}), { household: hh, said: raggedSaid, sentences: raggedSentences }).incomplete).toEqual([]);
+  });
+  it("applySetup: the note is re-read into a soft require", async () => {
+    const f = rFake({ rules: (_req: ModelRequest, n: number) => ({ rules: [n === 1 ? ragiNote : ragiRule] }) });
+    const k = await boot({ model: f.model });
+    const r = await k.op("apply_setup", { household: R_HOUSEHOLD, transcript: RAGI_TRANSCRIPT });
+    expect(r.ok).toBe(true);
+    expect(f.of("rules")).toHaveLength(2);
+    expect(JSON.parse(f.of("rules")[1].user).missing[0]).toContain("the note 'Ragi is good for her' names ragi and 'sometimes': is it a rule to plan it (require) or to swap something for it?");
+    const rules = rulesOf(k);
+    expect(rules).toContainEqual({ what: "require", who: "Lalitha", items: ["ragi"], frequency: "sometimes", quote: "Ragi is good for her" });
+    expect(rules.some((x) => x.what === "note" && x.quote === "Ragi is good for her")).toBe(false);
+  });
+  it("applySetup: still a note after the re-read is asked, and kept as a note", async () => {
+    const f = rFake({ rules: { rules: [ragiNote] } });
+    const k = await boot({ model: f.model });
+    const r = await k.op("apply_setup", { household: R_HOUSEHOLD, transcript: RAGI_TRANSCRIPT });
+    expect(r.ok).toBe(true);
+    expect(f.of("rules")).toHaveLength(2);
+    expect(r.asks).toContain("Should I plan ragi dishes for Lalitha sometimes (2–3 times a week)?");
+    expect(rulesOf(k)).toMatchObject([{ what: "note", who: "Lalitha", quote: "Ragi is good for her" }]);
+  });
+
   // H12a
   it("checkRead drops a require that restates an add-on dish", () => {
     const box = { name: "Rahul's lunch box", kind: "addon", addon_of: "Lunch", usual_people: ["Rahul"], extras: true, quote: "I take 4 boiled eggs with my lunch" };

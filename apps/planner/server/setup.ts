@@ -23,7 +23,9 @@ import { addRule, commit, deleteSeedSlotDays, getLibraryDish, listLibrary, listR
   upsertLibrary, upsertSlot, type Change, type LibraryDish, type Rule, type RuleInput, type Slot } from "./slotStore";
 import { bareDish, bareWord, CATALOG, catalogItem, catalogKind, catalogSub, checkMealShape, matchDish, norm, plannerTags, regionalDish, regionalIn, regionalMeaning, regionalWordOf, suggestMeals, type CatalogKind, type RegionalMeaning, type RegionalWord, type MealTemplate,
   isKindPart, isLinkedPart, type ItemsPart, type KindPart, type LinkedPart } from "./kinds";
-import { resolveGives, targetsOf, targetText, type RuleTarget } from "./targets";
+import { timesOf, timesText } from "./rules";
+import type { Often } from "./db/constants";
+import { foodWordsIn, resolveGives, targetsOf, targetText, type RuleTarget } from "./targets";
 import type { ModelCall, ModelResult } from "./model";
 import { isAllergyRule } from "./allergy";
 import { replacedMeal } from "./planDays";
@@ -559,10 +561,12 @@ export const missingOf = (r: ReadRule): RuleField[] => (NEEDS[r.what] ?? []).fil
   return Array.isArray(v) ? !v.length : !v;
 });
 /** A rule kept as a note for a field it lacks (H6): its quote, its what as read, and the fields left out. */
-export type Incomplete = { quote: string; what: RuleWhat; missing: RuleField[] };
+export type Incomplete = { quote: string; what: RuleWhat; missing: RuleField[];
+  /** A soft note that names a food and a how-often (J4): the foods it names, and how often it said. */ foods?: string[]; frequency?: string };
 /** The re-read's words for an incomplete rule: "the swap 'millets are good for her' has no 'to' (what they have instead)". */
-export const incompleteLine = (x: Incomplete): string =>
-  `the ${x.what} '${x.quote}' has no ${x.missing.map((f) => `'${f}' (${FIELD_WORDS[f]})`).join(" and no ")}`;
+export const incompleteLine = (x: Incomplete): string => x.foods?.length
+  ? `the note '${x.quote}' names ${x.foods.join(" and ")} and '${x.frequency}': is it a rule to plan it (require) or to swap something for it?`
+  : `the ${x.what} '${x.quote}' has no ${x.missing.map((f) => `'${f}' (${FIELD_WORDS[f]})`).join(" and no ")}`;
 /** A rule's identity: two notes are two rules by their words (H6: "less salt" and "less oil" for one person are both kept). */
 export const ruleKey = (r: Pick<ReadRule, "what" | "who" | "items" | "slots" | "days" | "to"> & { quote?: string }): string =>
   JSON.stringify([r.what, r.who?.toLowerCase() ?? null, [...(r.items ?? [])].sort(), [...(r.slots ?? [])].map((s) => s.toLowerCase()).sort(), [...(r.days ?? [])].sort(), r.to?.toLowerCase() ?? null,
@@ -709,6 +713,11 @@ export function checkRead(read: SetupRead, ctx: { household: Household; said: st
     // the family's notes (onboarding run 24 showed it under "All week" in the plan).
     if (r.what === "note" && !r.who && aboutTheCook(r.quote, cook0)) { dropped.push(`${what}: the cook's limit, kept with the cook`); continue; }
     if (rules.some((x) => ruleKey(x) === ruleKey(r))) continue;
+    // J4: a soft note with a how-often whose words name a food the catalog places is a rule the reader wrote down as a note: re-read.
+    if (r.what === "note" && !r.hard && r.frequency && !incomplete.some((x) => x.quote === r.quote)) {
+      const foods = foodWordsIn(r.quote);
+      if (foods.length) incomplete.push({ quote: r.quote, what: "note", missing: [], foods, frequency: r.frequency });
+    }
     rules.push(r);
   }
   // Each rule's targets typed once, here (§5.2, targets.ts): its words still kept (items, to) for the Family page's text.
@@ -2431,6 +2440,13 @@ export async function applySetup(deps: { db: Db; emit: Emit; model: ModelCall; p
       } else log(`rules re-read: model ${r.code}: ${r.message.slice(0, 200)}`);
     }
     for (const x of checked.incomplete) log(`rules${asked ? " re-read" : ""}: still incomplete, kept as a note: ${incompleteLine(x)}`);
+    // J4: a note still naming a food and a how-often is a read-back question, never a saved guess.
+    for (const x of checked.incomplete) if (x.foods?.length) {
+      const n = checked.read.rules.find((g) => g.what === "note" && g.quote === x.quote);
+      const often = x.frequency!, times = timesText(/^\d/.test(often) ? [parseInt(often), parseInt(often)] : timesOf({ often: often as Often }));
+      const ask = `Should I plan ${x.foods.join(" and ")} dishes for ${n?.who ?? "the family"} ${/^\d/.test(often) ? "" : `${often} `}(${times})?`;
+      if (!checked.asks.includes(ask)) checked.asks.push(ask);
+    }
   }
   for (const a of [...gaps.flatMap((v) => (v.ask ? [v.ask] : [])), ...boxAsks]) if (!checked.asks.includes(a)) checked.asks.push(a);
   noted.push(...checked.noted);
