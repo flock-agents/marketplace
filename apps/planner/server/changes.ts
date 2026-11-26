@@ -189,7 +189,7 @@ export function failingSlotDays(db: Db, today: string): Target[] {
 function fastingSlotDays(db: Db, today: string, r: Rule): Target[] {
   if (r.what !== "fasting") return [];
   const slots = listSlots(db, { all: true });
-  return listSlotDays(db, { from: today }).filter((d) => replannable(d, today) && ruleHolds(r, d.date!, slots.find((s) => same(s.name, d.slot)), d.slot)
+  return listSlotDays(db, { from: today }).filter((d) => replannable(d, today) && ruleHolds(r, d.date!, slots.find((s) => same(s.name, d.slot)), d.slot, slots)
     && (!r.who || d.people.some((p) => same(p, r.who!)) || getSlot(db, d.slot)?.usual_people.length === 0)).map((d) => ({ date: d.date!, slot: d.slot }));
 }
 

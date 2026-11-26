@@ -110,9 +110,9 @@ export function forbidden(r: Rule): string[] {
 /** Does a hard rule bind at a slot-day: an "only" rule kept to days or meals ("chicken only at Sunday lunch") binds everywhere
  *  outside them, in every kind of meal (a tiffin, someone's own meal), and never inside; every other rule where its days and
  *  meals hold. */
-export function ruleBinds(r: Rule, date: string, slot: Slot | undefined, slotName: string): boolean {
-  if (r.what === "only") return !!(r.days?.length || r.slots?.length) && !ruleHolds(r, date, slot, slotName);
-  return ruleHolds(r, date, slot, slotName);
+export function ruleBinds(r: Rule, date: string, slot: Slot | undefined, slotName: string, slots?: Slot[]): boolean {
+  if (r.what === "only") return !!(r.days?.length || r.slots?.length) && !ruleHolds(r, date, slot, slotName, slots);
+  return ruleHolds(r, date, slot, slotName, slots);
 }
 /** Every tag the family's rules name, and the base ones: what a new dish is read for. */
 export function ruleTags(rules: Rule[]): string[] {
@@ -166,6 +166,7 @@ export type Week = { days: PlanDay[]; slots: Map<string, SlotFacts>; rules: Rule
   ownItems?: Set<string> };
 
 const slotKey = (s: string) => s.toLowerCase();
+const weekSlots = (w: Week): Slot[] => [...w.slots.values()].map((sf) => sf.slot);
 export const isStapleAt = (w: Week, slot: string, dish: string): boolean => !!w.slots.get(slotKey(slot))?.staples.some((x) => dishKey(x) === dishKey(dish));
 const libAt = (w: Week, slot: string, dish: string): LibraryDish | undefined => w.library.find((d) => same(d.slot, slot) && d.key === dishKey(dish));
 /** Where a dish sits in the catalog: what the fill placed it as, else its library row's kind, sub-kind and catalog item (at the
@@ -268,7 +269,7 @@ export function ownSlotDish(w: Week, person: string, dish: string): boolean {
 /** The hard rules that hold for one person at a slot-day. */
 function rulesFor(w: Week, d: PlanDay, person: string): Rule[] {
   const slot = w.slots.get(slotKey(d.slot))?.slot;
-  return w.rules.filter((r) => r.hard && (!r.who || same(r.who, person)) && ruleBinds(r, d.date, slot, d.slot));
+  return w.rules.filter((r) => r.hard && (!r.who || same(r.who, person)) && ruleBinds(r, d.date, slot, d.slot, weekSlots(w)));
 }
 /** Does a rule speak about this person and dish at all: not a swap (it never breaks: swapsAt), not their own slot's family dish
  *  (made for them, by the family's word), not an allergy the family vouches for the dish under. */
@@ -415,7 +416,7 @@ export function softSwapNotes(w: Week): Map<string, string> {
     // The swap item by its typed `gives` or the tag its word is; the swapped dishes by the rule's targets.
     const to = canonTag(r.to!), gives = r.gives, targets = targetsOfRule(r);
     const isTo = (slot: string, x: string) => (!!gives && dishHits(w, slot, x, gives)) || factsOf(w, slot, x).tags.has(to);
-    const theirs = w.days.filter((d) => !d.skip && d.dishes.length && d.people.some((p) => same(p, r.who!)) && ruleHolds(r, d.date, w.slots.get(slotKey(d.slot))?.slot, d.slot));
+    const theirs = w.days.filter((d) => !d.skip && d.dishes.length && d.people.some((p) => same(p, r.who!)) && ruleHolds(r, d.date, w.slots.get(slotKey(d.slot))?.slot, d.slot, weekSlots(w)));
     const has = (d: PlanDay, hit: (slot: string, x: string) => boolean) => d.dishes.filter((x) => !notFor(w, d, x).some((p) => same(p, r.who!)) && hit(d.slot, x));
     let kept = theirs.filter((d) => has(d, isTo).length).length;
     const done = new Set(theirs.filter((d) => has(d, isTo).length).map((d) => d.date));
@@ -486,7 +487,7 @@ export function checkSlot(w: Week, slotName: string, p: Proposal): Map<string, P
     const range = frequencyRange(r.frequency);
     if (!range) continue;
     const want = (r.what === "swap" ? [r.to ?? ""] : r.items ?? []).map(canonTag).filter(Boolean);
-    const applies = (d: PlanDay) => !d.skip && (!r.who || d.people.some((x) => same(x, r.who!))) && ruleHolds(r, d.date, w.slots.get(slotKey(d.slot))?.slot, d.slot);
+    const applies = (d: PlanDay) => !d.skip && (!r.who || d.people.some((x) => same(x, r.who!))) && ruleHolds(r, d.date, w.slots.get(slotKey(d.slot))?.slot, d.slot, weekSlots(w));
     const hit = (d: PlanDay, ds: string[]) => ds.some((x) => want.some((t) => factsOf(w, d.slot, x).tags.has(t)));
     const elsewhere = w.days.filter((d) => !same(d.slot, slotName) && counts(w, d) && applies(d) && hit(d, d.dishes)).length;
     const here = mine.filter((d) => applies(d) && hit(d, p.days.get(d.date) ?? [])).map((d) => d.date);

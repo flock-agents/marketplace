@@ -826,6 +826,16 @@ describe("per-person versions of a shared meal (§5.4) and the cook's visit (§9
     }
     expect(upmaDays).toBeGreaterThan(0);
   });
+  it("a swap kept to Breakfast holds at the box that replaces Breakfast", () => {
+    const slots = [breakfast(T({ kind: "Upma", words: "upma" })), bBox([T({ from: "Breakfast" })])];
+    const kept = rule({ ...swapUpma, slots: ["Breakfast"] });
+    const r = run({ slots, library: [], days: daysFor(slots), rules: [kept] });
+    for (const d of WEEK.slice(0, 5)) {
+      const box = plate(r, d, "Agastya's breakfast box").map((x) => x.name);
+      expect(box).toContain("Pancakes");
+      expect(box.some((x) => kindOf(r, x) === "Upma")).toBe(false);
+    }
+  });
   it("a swap item is a planned dish for that person", () => {
     const slots = [breakfast(T({ kind: "Upma", words: "upma" }), T({ kind: "Idli", dish: "Idli" }))];
     const r = run({ slots, library: [], days: daysFor(slots), rules: [swapUpma] });

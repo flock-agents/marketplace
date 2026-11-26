@@ -203,10 +203,12 @@ export async function readEvents(o: { events: CalendarEvent[] | null; dated: Dat
 export type PlanDay = { date: string; slot: string; people: string[]; guests: Guest[]; occasion: string | null; new_dishes_allowed: number | null;
   skip: Skip | null; edited: boolean; fixed: boolean; why: string[]; fasting: string[]; dishes: string[]; note: string | null };
 
-/** Does a rule hold on this slot-day: its days, and its slots (an add-on slot is held by its main slot's rules too). */
-export function ruleHolds(r: Pick<Rule, "days" | "slots">, date: string, slot: Slot | undefined, slotName: string): boolean {
+/** Does a rule hold on this slot-day: its days, and its slots (an add-on slot is held by its main slot's rules too; so is a box
+ *  that replaces the meal, when the week's `slots` are given: a meal's rules hold at the box eaten in its place, §5.4). */
+export function ruleHolds(r: Pick<Rule, "days" | "slots">, date: string, slot: Slot | undefined, slotName: string, slots?: Slot[]): boolean {
   if (r.days?.length && !r.days.includes(weekdayOf(date))) return false;
-  if (r.slots?.length && !r.slots.some((s) => same(s, slotName) || (!!slot?.addon_of && same(s, slot.addon_of)))) return false;
+  const meal = slot && slots ? replacedMeal(slot, slots) : null;
+  if (r.slots?.length && !r.slots.some((s) => same(s, slotName) || (!!slot?.addon_of && same(s, slot.addon_of)) || (!!meal && same(s, meal.name)))) return false;
   return true;
 }
 
@@ -284,7 +286,7 @@ export function buildDays(o: { weekStart: string; from: string; slots: Slot[]; p
         else if (!s.usual_people.length || s.kind === "main") for (const p of c.people) if (!people.some((x) => same(x, p))) { people.push(p); why.push(`${p} joins: ${c.why}`); }
       }
       // Fasting: with nothing to eat, the person is not at this slot-day; with fasting food, they stay, with a note.
-      for (const r of o.rules.filter((x) => x.what === "fasting" && ruleHolds(x, date, s, s.name))) {
+      for (const r of o.rules.filter((x) => x.what === "fasting" && ruleHolds(x, date, s, s.name, o.slots))) {
         const who = r.who ? people.filter((p) => same(p, r.who!)) : [...people];
         if (!who.length) continue;
         if (r.fasting_food?.length) for (const p of who) fasting.push(`${p} fasts: only ${r.fasting_food.join(", ")} (${r.quote})`);

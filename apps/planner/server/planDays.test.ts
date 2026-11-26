@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { buildDays, replacedMeal, type Attendance, type Household } from "./planDays";
+import { buildDays, replacedMeal, ruleHolds, type Attendance, type Household } from "./planDays";
 import { INSTEAD_STEP, SLOT_ORDER } from "./db/constants";
 import type { Slot } from "./slotStore";
 
@@ -59,5 +59,17 @@ describe("attendance: only a box that replaces a meal takes its person off it", 
     expect(replacedMeal(lBox(), s)?.name).toBe("Lunch");
     expect(replacedMeal(s[5]!, s)).toBeNull();
     expect(replacedMeal(slot("x", "custom", 31, { usual_people: [] }), s)).toBeNull();
+  });
+});
+
+describe("a meal's rules hold at the box that replaces it", () => {
+  const slots = base();
+  const rule = { days: undefined, slots: ["Breakfast"] };
+  it("a Breakfast rule holds at the breakfast box, not the lunch box", () => {
+    expect(ruleHolds(rule, "2026-11-25", slots[3], slots[3].name, slots)).toBe(true);
+    expect(ruleHolds(rule, "2026-11-25", slots[4], slots[4].name, slots)).toBe(false);
+  });
+  it("without the slots list it does not", () => {
+    expect(ruleHolds(rule, "2026-11-25", slots[3], slots[3].name)).toBe(false);
   });
 });
