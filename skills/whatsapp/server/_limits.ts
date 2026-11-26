@@ -65,22 +65,26 @@ export function timeZoneOf(opts: LimitOpts = {}): string {
   try { new Intl.DateTimeFormat("en-US", { timeZone: tz }); return tz; } catch { return "UTC"; }
 }
 
-/** The calendar day `at` falls on in `tz`, as YYYY-MM-DD. */
-export const dayOf = (at: number, tz: string): string =>
-  new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" }).format(at);
+const dayFormats = new Map<string, Intl.DateTimeFormat>();
 
-/** How far `tz` is ahead of UTC at `at`, in ms. */
-function offsetAt(at: number, tz: string): number {
-  const p = Object.fromEntries(new Intl.DateTimeFormat("en-US", { timeZone: tz, hourCycle: "h23", year: "numeric", month: "numeric", day: "numeric", hour: "numeric", minute: "numeric", second: "numeric" })
-    .formatToParts(at).filter((x) => x.type !== "literal").map((x) => [x.type, Number(x.value)]));
-  return Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute, p.second) - Math.floor(at / 1000) * 1000;
+/** The calendar day `at` falls on in `tz`, as YYYY-MM-DD. */
+export function dayOf(at: number, tz: string): string {
+  let format = dayFormats.get(tz);
+  if (!format) dayFormats.set(tz, format = new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" }));
+  return format.format(at);
 }
 
-/** The next midnight in `tz` after `at`. */
+/** The first instant of the next calendar day in `tz` after `at`. Found by search rather than by
+ *  offsets, so it is right where a DST change skips or repeats midnight itself. */
 export function nextMidnight(at: number, tz: string): number {
-  const [y, m, d] = dayOf(at, tz).split("-").map(Number);
-  const guess = Date.UTC(y, m - 1, d + 1);
-  return guess - offsetAt(guess - offsetAt(guess, tz), tz);
+  const today = dayOf(at, tz);
+  let before = at;
+  let after = at + 2 * DAY;
+  while (after - before > 1) {
+    const mid = Math.floor((before + after) / 2);
+    if (dayOf(mid, tz) === today) before = mid; else after = mid;
+  }
+  return after;
 }
 
 /** The connection's own data folder: never the home folder or the working folder. */
@@ -90,9 +94,10 @@ export function dataDirOf(dir?: string): string {
   return found;
 }
 
-/** The same text as WhatsApp's abuse checks would see it: case, spacing and line breaks aside. Only its hash is kept. */
+/** The same text as WhatsApp's abuse checks would see it: case, spacing, line breaks and invisible characters aside. Only its hash is kept. */
 export function textHash(text: string): string {
-  return createHash("sha256").update(text.normalize("NFKC").toLowerCase().replace(/\s+/g, " ").trim()).digest("hex").slice(0, 32);
+  const normalized = text.normalize("NFKC").replace(/\p{Cf}/gu, "").toLowerCase().replace(/\s+/g, " ").trim();
+  return createHash("sha256").update(normalized).digest("hex").slice(0, 32);
 }
 
 const numbers = (v: unknown): number[] => (Array.isArray(v) ? v.filter((t): t is number => typeof t === "number") : []);
@@ -118,16 +123,25 @@ function load(file: string): LimitState {
 }
 
 const LOCK_STALE_MS = 30_000;
+const LOCK_TRIES = 100;
+const LOCK_RETRY_MS = 50;
+
+/** Takes the lock file, or answers false when another call holds it. Any other error (a folder that
+ *  cannot be written, say) is thrown, never retried. */
+function tryLock(lock: string): boolean {
+  try { closeSync(openSync(lock, "wx", 0o600)); return true; } catch (e) {
+    if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
+  }
+  try { if (Date.now() - statSync(lock).mtimeMs > LOCK_STALE_MS) unlinkSync(lock); } catch { /* released meanwhile */ }
+  return false;
+}
 
 /** One change at a time: two calls at once must not both take the last slot. */
 function withLock<T>(file: string, fn: () => T): T {
   const lock = `${file}.lock`;
-  for (let tries = 0; ; tries++) {
-    try { closeSync(openSync(lock, "wx")); break; } catch {
-      try { if (Date.now() - statSync(lock).mtimeMs > LOCK_STALE_MS) { unlinkSync(lock); continue; } } catch { continue; }
-      if (tries > 100) throw new LimitHit("BUSY", "Another WhatsApp call is busy. Try again in a minute.", Date.now() + MINUTE);
-      Bun.sleepSync(50);
-    }
+  for (let tries = 0; !tryLock(lock); tries++) {
+    if (tries >= LOCK_TRIES) throw new LimitHit("BUSY", "Another WhatsApp call is busy. Try again in a minute.", Date.now() + MINUTE);
+    Bun.sleepSync(LOCK_RETRY_MS);
   }
   try { return fn(); } finally { try { unlinkSync(lock); } catch { /* already gone */ } }
 }
@@ -149,7 +163,7 @@ function update<T>(opts: LimitOpts, fn: (s: LimitState, now: number) => T): T {
       usage: loaded.usage.day === today ? loaded.usage : { day: today, ms: 0 },
     };
     const out = fn(state, now);
-    writeFileSync(`${file}.tmp`, JSON.stringify(state));
+    writeFileSync(`${file}.tmp`, JSON.stringify(state), { mode: 0o600 });
     renameSync(`${file}.tmp`, file);
     return out;
   });
@@ -170,8 +184,9 @@ function windowHit(times: number[], max: number, windowMs: number, now: number):
   return inWindow.length < max ? null : inWindow[inWindow.length - max] + windowMs;
 }
 
-/** When the `max`-th different chat in `windowMs` ages out, if a new chat would be one too many; else null. */
-function newChatHit(sends: SentRecord[], chat: string, max: number, windowMs: number, now: number): number | null {
+/** Null when sending to `chat` keeps `sends` within `max` different chats in `windowMs` (a chat already
+ *  in them always fits), else when enough of them age out (each by its last send) to make room. */
+function distinctChatsHit(sends: SentRecord[], chat: string, max: number, windowMs: number, now: number): number | null {
   const recent = sends.filter((s) => now - s.at < windowMs);
   if (recent.some((s) => s.chat === chat)) return null;
   const lastSentTo = new Map<string, number>();
@@ -201,14 +216,18 @@ export function takeCall(tool: string, opts: LimitOpts = {}): void {
   });
 }
 
+/** The ms of connected time left today, or a refusal until midnight in the Flock's timezone when none is. */
+function timeLeftOrRefuse(s: LimitState, now: number, opts: LimitOpts): number {
+  const left = LIMITS.connectedMsPerDay - s.usage.ms;
+  if (left > 0) return left;
+  const tz = timeZoneOf(opts);
+  return refuse("TIME_LIMIT_DAY", `WhatsApp was connected for ${LIMITS.connectedMsPerDay / HOUR} hours today (${tz} day), the most allowed.`, nextMidnight(now, tz), now);
+}
+
 /** Starts a session (one connection reused while calls keep coming), or refuses. Answers the ms of today's connected time left. */
 export function takeSession(opts: LimitOpts = {}): number {
   return update(opts, (s, now) => {
-    const left = LIMITS.connectedMsPerDay - s.usage.ms;
-    if (left <= 0) {
-      const tz = timeZoneOf(opts);
-      refuse("TIME_LIMIT_DAY", `WhatsApp was connected for ${LIMITS.connectedMsPerDay / HOUR} hours today (${tz} day), the most allowed.`, nextMidnight(now, tz), now);
-    }
+    const left = timeLeftOrRefuse(s, now, opts);
     const hour = windowHit(s.sessions, LIMITS.sessionsPerHour, HOUR, now);
     if (hour) refuse("SESSION_LIMIT_HOUR", `WhatsApp was connected ${LIMITS.sessionsPerHour} separate times in the last hour, the most allowed.`, hour, now);
     const day = windowHit(s.sessions, LIMITS.sessionsPerDay, DAY, now);
@@ -218,29 +237,32 @@ export function takeSession(opts: LimitOpts = {}): number {
   });
 }
 
+/** The ms of connected time left today for one more connection inside a session, or a refusal. */
+export function connectTimeLeft(opts: LimitOpts = {}): number {
+  return update(opts, (s, now) => timeLeftOrRefuse(s, now, opts));
+}
+
 /**
  * Takes one send to `chat` (its WhatsApp id) of `text`, or refuses. Answers how long to wait before
- * sending so sends stay at least `gapMs` apart; the send is counted at that time.
+ * sending: at least `gapMs` after the last send, plus `jitterMs`; the send is counted at that time, so
+ * the next one is spaced from when this one really goes.
  */
-export function reserveSend(chat: string, text: string, opts: LimitOpts & { gapMs?: number } = {}): number {
+export function reserveSend(chat: string, text: string, opts: LimitOpts & { gapMs?: number; jitterMs?: number } = {}): number {
   return update(opts, (s, now) => {
     const times = s.sends.map((x) => x.at);
     const hour = windowHit(times, LIMITS.sendsPerHour, HOUR, now);
     if (hour) refuse("SEND_LIMIT_HOUR", `${LIMITS.sendsPerHour} messages went out in the last hour, the most allowed.`, hour, now);
     const day = windowHit(times, LIMITS.sendsPerDay, DAY, now);
     if (day) refuse("SEND_LIMIT_DAY", `${LIMITS.sendsPerDay} messages went out in the last 24 hours, the most allowed.`, day, now);
-    const chatsHour = newChatHit(s.sends, chat, LIMITS.chatsPerHour, HOUR, now);
+    const chatsHour = distinctChatsHit(s.sends, chat, LIMITS.chatsPerHour, HOUR, now);
     if (chatsHour) refuse("CHAT_LIMIT_HOUR", `Messages went to ${LIMITS.chatsPerHour} different chats in the last hour, the most allowed. Chats already messaged this hour still work.`, chatsHour, now);
-    const chatsDay = newChatHit(s.sends, chat, LIMITS.chatsPerDay, DAY, now);
+    const chatsDay = distinctChatsHit(s.sends, chat, LIMITS.chatsPerDay, DAY, now);
     if (chatsDay) refuse("CHAT_LIMIT_DAY", `Messages went to ${LIMITS.chatsPerDay} different chats in the last 24 hours, the most allowed. Chats already messaged today still work.`, chatsDay, now);
     const hash = textHash(text);
-    const sameText = new Set(s.sends.filter((x) => x.text === hash && x.chat !== chat).map((x) => x.chat));
-    if (sameText.size >= LIMITS.sameTextChatsPerDay) {
-      const oldest = Math.min(...s.sends.filter((x) => x.text === hash).map((x) => x.at));
-      refuse("SAME_TEXT_LIMIT", `This same message already went to ${LIMITS.sameTextChatsPerDay} other chats today. Sending one text to many chats looks like spam to WhatsApp.`, oldest + DAY, now);
-    }
-    const last = times.length ? Math.max(...times) : 0;
-    const at = Math.max(now, last + (opts.gapMs ?? LIMITS.sendGapMs));
+    const sameText = distinctChatsHit(s.sends.filter((x) => x.text === hash), chat, LIMITS.sameTextChatsPerDay, DAY, now);
+    if (sameText) refuse("SAME_TEXT_LIMIT", `This same message already went to ${LIMITS.sameTextChatsPerDay} other chats today. Sending one text to many chats looks like spam to WhatsApp.`, sameText, now);
+    const last = times.length ? Math.max(...times) : -Infinity;
+    const at = Math.max(now, last + (opts.gapMs ?? LIMITS.sendGapMs)) + Math.max(0, opts.jitterMs ?? 0);
     s.sends.push({ at, chat, text: hash });
     return at - now;
   });

@@ -6,11 +6,11 @@
 //
 // Run: bun test tests/whatsapp.
 import { describe, expect, it, beforeEach, afterEach } from "bun:test";
-import { mkdtempSync, rmSync, readFileSync, writeFileSync, utimesSync, existsSync } from "fs";
+import { chmodSync, mkdtempSync, rmSync, readFileSync, statSync, writeFileSync, utimesSync, existsSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import {
-  LIMITS, LimitHit, takeSession, takeCall, reserveSend, addConnectedTime, minutesLeftToday, connectedMsLeft, nextMidnight, dayOf,
+  LIMITS, LimitHit, takeSession, takeCall, reserveSend, addConnectedTime, minutesLeftToday, connectedMsLeft, connectTimeLeft, nextMidnight, dayOf,
   timeZoneOf, textHash, pause, clearPause, pausedState, noteConnect,
 } from "../../skills/whatsapp/server/_limits";
 
@@ -78,6 +78,25 @@ describe("connected time", () => {
     expect(nextMidnight(Date.UTC(2026, 2, 8, 6, 0), "America/New_York")).toBe(Date.UTC(2026, 2, 9, 4, 0));
     expect(timeZoneOf({ timeZone: "Not/AZone" })).toBe("UTC");
   });
+
+  it("midnight is the first instant of the next day even where DST skips midnight itself", () => {
+    expect(nextMidnight(Date.UTC(2026, 8, 5, 15, 0), "America/Santiago")).toBe(Date.UTC(2026, 8, 6, 4, 0));
+    expect(nextMidnight(Date.UTC(2026, 2, 7, 15, 0), "America/Havana")).toBe(Date.UTC(2026, 2, 8, 5, 0));
+    for (const tz of ["America/Santiago", "America/Havana", "Asia/Beirut", "Europe/London", "Australia/Lord_Howe", "Pacific/Chatham", "America/St_Johns", "Asia/Kolkata"]) {
+      for (let t = Date.UTC(2026, 0, 1); t < Date.UTC(2027, 0, 1); t += 7 * HOUR + 13 * MIN) {
+        const m = nextMidnight(t, tz);
+        expect(`${tz} ${t}: ${dayOf(m - 1, tz) === dayOf(t, tz) && dayOf(m, tz) !== dayOf(t, tz)}`).toBe(`${tz} ${t}: true`);
+      }
+    }
+  });
+
+  it("a reconnect inside a session is refused once today's time is used up, until midnight", () => {
+    expect(connectTimeLeft(at(T0))).toBe(LIMITS.connectedMsPerDay);
+    addConnectedTime(LIMITS.connectedMsPerDay, at(T0));
+    const hit = refusal(() => connectTimeLeft(at(T0 + MIN)));
+    expect(hit?.code).toBe("TIME_LIMIT_DAY");
+    expect(hit?.freesAt).toBe(nextMidnight(T0 + MIN, "UTC"));
+  });
 });
 
 describe("the runaway guard", () => {
@@ -112,6 +131,18 @@ describe("sends", () => {
     expect(state().sends.map((s: any) => s.at)).toEqual([T0, T0 + 5 * SEC, T0 + 10 * SEC, T0 + 60 * SEC]);
   });
 
+  it("count the random pause too: the next send is spaced from when this one really goes", () => {
+    expect(reserveSend("a@s.whatsapp.net", "one", { ...at(T0), jitterMs: 3 * SEC })).toBe(3 * SEC);
+    expect(reserveSend("a@s.whatsapp.net", "two", { ...at(T0 + 3 * SEC), jitterMs: 1 * SEC })).toBe(6 * SEC);
+    expect(state().sends.map((s: any) => s.at)).toEqual([T0 + 3 * SEC, T0 + 9 * SEC]);
+  });
+
+  it("sends reserved for later still count toward every window and the gap", () => {
+    for (let i = 0; i < LIMITS.sendsPerHour; i++) reserveSend("a@s.whatsapp.net", `n${i}`, at(T0));
+    expect(state().sends.at(-1).at).toBe(T0 + (LIMITS.sendsPerHour - 1) * 5 * SEC);
+    expect(refusal(() => send("a@s.whatsapp.net", "more", T0))?.code).toBe("SEND_LIMIT_HOUR");
+  });
+
   it("go to at most 10 different chats a rolling hour; chats already messaged still work", () => {
     for (let i = 0; i < LIMITS.chatsPerHour; i++) send(`c${i}@s.whatsapp.net`, `hello ${i}`, T0 + i * MIN);
     const hit = refusal(() => send("new@s.whatsapp.net", "hi", T0 + 20 * MIN));
@@ -138,6 +169,22 @@ describe("sends", () => {
     expect(refusal(() => send("a@s.whatsapp.net", "Meeting at 5 today", T0 + 4 * MIN))).toBeNull();
     expect(refusal(() => send("d@s.whatsapp.net", "Meeting at 6 today", T0 + 5 * MIN))).toBeNull();
     expect(refusal(() => send("d@s.whatsapp.net", "Meeting at 5 today", T0 + 24 * HOUR + 5 * MIN))).toBeNull();
+  });
+
+  it("the same text with invisible characters or other spaces in it is still the same text", () => {
+    expect(textHash("Meeting\u200b at\u00a05\u2060 today")).toBe(textHash("meeting at 5 today"));
+    expect(textHash("Ｍｅｅｔｉｎｇ at 5 today")).toBe(textHash("meeting at 5 today"));
+    expect(textHash("Meeting at 6 today")).not.toBe(textHash("meeting at 5 today"));
+  });
+
+  it("the same text frees up when a chat's last copy of it ages out, not its first", () => {
+    send("a@s.whatsapp.net", "Meeting", T0);
+    send("b@s.whatsapp.net", "Meeting", T0 + MIN);
+    send("c@s.whatsapp.net", "Meeting", T0 + 2 * MIN);
+    send("a@s.whatsapp.net", "Meeting", T0 + 3 * MIN);
+    const hit = refusal(() => send("d@s.whatsapp.net", "Meeting", T0 + 4 * MIN));
+    expect(hit?.code).toBe("SAME_TEXT_LIMIT");
+    expect(hit?.freesAt).toBe(T0 + MIN + 24 * HOUR);
   });
 
   it("keep only a hash of the text, never the text", () => {
@@ -218,6 +265,27 @@ describe("the state file", () => {
     utimesSync(lock, old, old);
     expect(refusal(() => takeSession(at(T0)))).toBeNull();
     expect(existsSync(lock)).toBe(false);
+  });
+
+  it("is readable by its owner only", () => {
+    takeCall("read-chat", at(T0));
+    expect(statSync(join(dir, "limits.json")).mode & 0o777).toBe(0o600);
+  });
+
+  it("a lock held by a live call refuses with BUSY after a few seconds, never hangs", () => {
+    writeFileSync(join(dir, "limits.json.lock"), "");
+    const hit = refusal(() => takeCall("read-chat", at(T0)));
+    expect(hit?.code).toBe("BUSY");
+    expect(existsSync(join(dir, "limits.json.lock"))).toBe(true);
+  }, 15_000);
+
+  it("a folder it cannot write to fails the call at once, never spins on the lock", () => {
+    chmodSync(dir, 0o500);
+    try {
+      const started = Date.now();
+      expect(() => takeCall("read-chat", at(T0))).toThrow(/EACCES|permission/i);
+      expect(Date.now() - started).toBeLessThan(1_000);
+    } finally { chmodSync(dir, 0o700); }
   });
 
   it("refuses to run with no data folder", () => {
