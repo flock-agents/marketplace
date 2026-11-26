@@ -169,6 +169,14 @@ describe.skipIf(!enabled)("the WhatsApp connector 2.x in Flock", () => {
     beforeAll(async () => {
       const { ownerPersonId } = await flockImport("access-list");
       const setup = await flockImport("family/whatsapp-setup");
+      // Connected is not linked: with no code typed (link-status says linked: false), no family list can be saved.
+      expect(setup.whatsappLinked(ownerPersonId())).toBe(false);
+      expect(await setup.finishWhatsAppSetup(ownerPersonId(), { family: [FAMILY_CHAT] })).toMatchObject({ ok: false });
+      // No WhatsApp account here: the connector's "linked: true" answer is stood in, through the gate's own hook.
+      const gate = await flockImport("whatsapp-connector/gate");
+      gate.afterWhatsAppCall({ skillId: SKILL, functionName: "link-status", agentId: PA, params: {}, preferredAccountId: accountId },
+        { success: true, result: { linked: true, link: { phase: "linked" }, chats: 0 }, duration_ms: 0 });
+      expect(setup.whatsappLinked(ownerPersonId())).toBe(true);
       const done = await setup.finishWhatsAppSetup(ownerPersonId(), { family: [FAMILY_CHAT] });
       expect(done).toEqual({ ok: true, family: [FAMILY_CHAT] });
       await setup._settledForTesting();
