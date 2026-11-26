@@ -8,6 +8,7 @@ import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync } 
 import { tmpdir } from "os";
 import { join, relative } from "path";
 import { LINK_CODE_STEPS, LINK_QR_STEPS, QR_MESSAGE, linkCodeMessage } from "../../skills/whatsapp/server/_guide";
+import { bunAtLeast } from "../../skills/whatsapp/server/_socket";
 
 const root = join(import.meta.dir, "../..");
 const skillDir = join(root, "skills/whatsapp");
@@ -65,7 +66,8 @@ describe("the package's files", () => {
   });
 
   const bundleTool = join(root, "tools/whatsapp-bundle");
-  it.skipIf(!existsSync(join(bundleTool, "node_modules")))("the bundle is exactly what tools/whatsapp-bundle builds from the lockfile", async () => {
+  // Bun's bundler output differs between Bun versions; the shipped bundle is built with Bun 1.3.
+  it.skipIf(!existsSync(join(bundleTool, "node_modules")) || !bunAtLeast(Bun.version))("the bundle is exactly what tools/whatsapp-bundle builds from the lockfile", async () => {
     const out = join(mkdtempSync(join(tmpdir(), "wa-bundle-")), "baileys.bundle.js");
     try {
       const build = Bun.spawn(["bun", "build.ts", out], { cwd: bundleTool, stdout: "ignore", stderr: "inherit" });

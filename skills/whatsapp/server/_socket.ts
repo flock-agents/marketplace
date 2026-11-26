@@ -57,12 +57,29 @@ function bypasses(entry: string, host: string): boolean {
   return e === "*" || host === e || host.endsWith(`.${e}`);
 }
 
-/** The egress proxy, after checking NO_PROXY leaves none of WhatsApp's hosts going direct around it. */
-export function egressOf(env: Record<string, string | undefined>): string {
+/** The oldest Bun whose WebSocket honours a proxy `agent`: Bun 1.2.13 ignores it and would go direct. */
+export const MIN_PROXY_BUN = [1, 3, 0];
+
+/** Whether Bun `version` (such as "1.3.13") is at least `min`. */
+export function bunAtLeast(version: string, min: number[] = MIN_PROXY_BUN): boolean {
+  const parts = version.split(/[.-]/).slice(0, 3).map((p) => parseInt(p, 10) || 0);
+  for (let i = 0; i < min.length; i++) if ((parts[i] ?? 0) !== min[i]) return (parts[i] ?? 0) > min[i];
+  return true;
+}
+
+/**
+ * The egress proxy, after checking nothing would go around it: NO_PROXY leaves none of WhatsApp's hosts
+ * direct, and this Bun's WebSocket honours the proxy (an older one would quietly connect direct).
+ */
+export function egressOf(env: Record<string, string | undefined>, bunVersion: string = Bun.version): string {
   const proxy = proxyOf(env);
+  if (!proxy) return "";
   const noProxy = `${env.NO_PROXY ?? ""},${env.no_proxy ?? ""}`.split(",").filter((e) => e.trim());
-  if (proxy && WHATSAPP_HOSTS.some((h) => noProxy.some((e) => bypasses(e, h)))) {
+  if (WHATSAPP_HOSTS.some((h) => noProxy.some((e) => bypasses(e, h)))) {
     throw new Error("NO_PROXY would send WhatsApp around Flock's egress, so nothing connects.");
+  }
+  if (!bunAtLeast(bunVersion)) {
+    throw new Error(`Bun ${bunVersion} would connect to WhatsApp around Flock's egress (its WebSocket ignores the proxy), so nothing connects. Bun ${MIN_PROXY_BUN.join(".")} or newer is needed.`);
   }
   return proxy;
 }
@@ -74,8 +91,8 @@ export function historyFilter(proto: any): (n: { syncType?: number }) => boolean
 }
 
 /** Baileys' settings for one connection. */
-export function socketConfig(lib: BaileysLib, opts: { env: Record<string, string | undefined>; auth: AuthHandle; version: number[]; logger: any }): Record<string, unknown> {
-  const proxy = egressOf(opts.env);
+export function socketConfig(lib: BaileysLib, opts: { env: Record<string, string | undefined>; auth: AuthHandle; version: number[]; logger: any; bunVersion?: string }): Record<string, unknown> {
+  const proxy = egressOf(opts.env, opts.bunVersion);
   const agent = proxy ? new lib.HttpsProxyAgent(proxy) : undefined;
   return {
     version: opts.version,

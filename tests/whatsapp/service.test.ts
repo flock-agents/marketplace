@@ -129,9 +129,9 @@ describe("connecting for a read: one session reused while calls keep coming", ()
   });
 
   it("each call pushes the idle close back", async () => {
-    const w = track(linkedWorld());
+    const w = track(world((sock, n) => { sock.open(); if (n === 0) sock.emit("messaging-history.set", history()); }, { linked: true, timings: { idleCloseMs: 400 } }));
     await w.wa.listChats({});
-    for (let i = 0; i < 4; i++) { await sleep(35); await w.wa.readChat({ chat: "Mom" }); }
+    for (let i = 0; i < 4; i++) { await sleep(200); await w.wa.readChat({ chat: "Mom" }); }
     expect(w.sockets[0].ended).toBe(false);
     expect(w.sockets.length).toBe(1);
   });

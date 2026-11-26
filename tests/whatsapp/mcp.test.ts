@@ -7,6 +7,7 @@ import { mkdtempSync, readFileSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { handle } from "../../skills/whatsapp/server/_mcp";
+import { bunAtLeast } from "../../skills/whatsapp/server/_socket";
 import { whatsappTools } from "../../skills/whatsapp/server/_tools";
 
 const server = join(import.meta.dir, "../../skills/whatsapp/server/server.ts");
@@ -98,7 +99,7 @@ describe("what reaches the server", () => {
 });
 
 describe("stopping", () => {
-  it("SIGTERM in the middle of a link closes it at once, counts its time and exits 0, well inside Flock's 5 seconds", async () => {
+  it.skipIf(!bunAtLeast(Bun.version))("SIGTERM in the middle of a link closes it at once, counts its time and exits 0, well inside Flock's 5 seconds", async () => {
     const dir = mkdtempSync(join(tmpdir(), "wa-mcp-stop-"));
     let connects = 0;
     let held: unknown = null;

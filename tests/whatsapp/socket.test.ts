@@ -7,7 +7,7 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } f
 import { tmpdir } from "os";
 import { join } from "path";
 import * as bundle from "../../skills/whatsapp/server/lib/baileys.bundle.js";
-import { BROWSER, _resetVersionForTesting, authDirOf, clearAuth, egressOf, historyFilter, isLinked, loadAuth, proxyOf, realSocketFactory, socketConfig, waVersion, type BaileysLib } from "../../skills/whatsapp/server/_socket";
+import { BROWSER, _resetVersionForTesting, authDirOf, bunAtLeast, clearAuth, egressOf, historyFilter, isLinked, loadAuth, proxyOf, realSocketFactory, socketConfig, waVersion, type BaileysLib } from "../../skills/whatsapp/server/_socket";
 
 const lib = bundle as unknown as BaileysLib;
 const T = lib.proto.HistorySync.HistorySyncType;
@@ -15,7 +15,9 @@ const T = lib.proto.HistorySync.HistorySyncType;
 class FakeAgent { constructor(public url: string) {} }
 const fakeLib = { ...lib, HttpsProxyAgent: FakeAgent as any, makeCacheableSignalKeyStore: (k: any) => ({ cached: k }) } as BaileysLib;
 const auth = { state: { creds: { me: null }, keys: { k: 1 } }, saveCreds: async () => {}, registered: () => true };
-const config = (env: Record<string, string>) => socketConfig(fakeLib, { env, auth, version: [2, 3000, 1], logger: {} }) as any;
+/** A Bun whose WebSocket honours the proxy, so these check the wiring whatever Bun runs them. */
+const PROXY_BUN = "1.3.13";
+const config = (env: Record<string, string>) => socketConfig(fakeLib, { env, auth, version: [2, 3000, 1], logger: {}, bunVersion: PROXY_BUN }) as any;
 
 afterEach(() => _resetVersionForTesting());
 
@@ -30,11 +32,20 @@ describe("the egress proxy", () => {
   it("refuses a NO_PROXY that would send WhatsApp around the egress", () => {
     const proxy = "http://127.0.0.1:41234";
     for (const noProxy of ["*", ".whatsapp.net", "whatsapp.com", "localhost,*.whatsapp.net", "web.whatsapp.com:443"]) {
-      expect(() => egressOf({ HTTPS_PROXY: proxy, NO_PROXY: noProxy })).toThrow(/egress/);
-      expect(() => config({ HTTPS_PROXY: proxy, no_proxy: noProxy })).toThrow(/egress/);
+      expect(() => egressOf({ HTTPS_PROXY: proxy, NO_PROXY: noProxy }, PROXY_BUN)).toThrow(/NO_PROXY/);
+      expect(() => config({ HTTPS_PROXY: proxy, no_proxy: noProxy })).toThrow(/NO_PROXY/);
     }
-    expect(egressOf({ HTTPS_PROXY: proxy, NO_PROXY: "localhost,127.0.0.1,notwhatsapp.com" })).toBe(proxy);
+    expect(egressOf({ HTTPS_PROXY: proxy, NO_PROXY: "localhost,127.0.0.1,notwhatsapp.com" }, PROXY_BUN)).toBe(proxy);
     expect(egressOf({ NO_PROXY: "*" })).toBe("");
+  });
+
+  it("refuses to connect on a Bun whose WebSocket would ignore the proxy, rather than go direct", () => {
+    const proxy = "http://127.0.0.1:41234";
+    for (const old of ["1.2.13", "1.2.99", "1.1.0", "0.9.0"]) expect(() => egressOf({ HTTPS_PROXY: proxy }, old)).toThrow(/around Flock's egress/);
+    for (const ok of ["1.3.0", "1.3.12", "1.3.13", "1.4.0-canary.1", "2.0.0"]) expect(egressOf({ HTTPS_PROXY: proxy }, ok)).toBe(proxy);
+    expect(egressOf({}, "1.2.13")).toBe("");
+    expect(bunAtLeast("1.3.13")).toBe(true);
+    expect(bunAtLeast("1.2.13")).toBe(false);
   });
 
   it("is not set at all without HTTPS_PROXY: the connection goes direct, as the browser does off cloud", () => {
@@ -46,7 +57,7 @@ describe("the egress proxy", () => {
   });
 
   it("the real proxy agent takes Flock's proxy URL", () => {
-    const c = socketConfig(lib, { env: { HTTPS_PROXY: "http://b1:pw@127.0.0.1:41234" }, auth, version: [2, 3000, 1], logger: lib.pino({ level: "silent" }) }) as any;
+    const c = socketConfig(lib, { env: { HTTPS_PROXY: "http://b1:pw@127.0.0.1:41234" }, auth, version: [2, 3000, 1], logger: lib.pino({ level: "silent" }), bunVersion: PROXY_BUN }) as any;
     expect(c.agent).toBeInstanceOf(lib.HttpsProxyAgent);
     expect(String(c.agent.proxy)).toBe("http://b1:pw@127.0.0.1:41234/");
   });
@@ -140,7 +151,7 @@ function connectRecorder() {
   return { url: `http://127.0.0.1:${server.port}`, asked, stop: () => server.stop(true) };
 }
 
-describe("the egress proxy, for real (a local stand-in proxy; nothing reaches WhatsApp)", () => {
+describe.skipIf(!bunAtLeast(Bun.version))("the egress proxy, for real (a local stand-in proxy; nothing reaches WhatsApp)", () => {
   it("the real factory asks for the version and opens the WebSocket through the proxy", async () => {
     const proxy = connectRecorder();
     try {
