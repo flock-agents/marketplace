@@ -32,7 +32,7 @@ const A = {
 };
 
 /** The manifest's asks as Flock fills them here: no cook's name ("your cook"), one child ("Agastya"), the lunch line from the
- *  weekly facts (the controller's ruling R8 keeps the walk-through's own wording of it). */
+ *  weekly facts (the controller's ruling R8 keeps the walk-through's own wording of it), `differently` in its recall form. */
 const Q: Record<keyof typeof A, string> = {
   pain: "What's the hardest part of meals for you? Or something else.",
   apps: "Which apps do you order groceries on: Zepto, Blinkit, Instamart, BigBasket or Amazon? If you sign me in, I'll read your past orders to learn what your home buys and how often, so the plan and the shopping list fit you from the first week, and I can fill the cart for you. Nothing is ordered without your yes.",
@@ -46,7 +46,8 @@ const Q: Record<keyof typeof A, string> = {
   familyLunch: "What did the family have for lunch over the past week? Tell me the dishes.",
   familyDinner: "What did the family have for dinner over the past week? Tell me the dishes.",
   childMeals: "What does Agastya have at those meals, and what goes in the box?",
-  differently: "Does anyone eat differently: something they don't eat, an allergy, less spice or salt, a fasting day, or something extra on their plate?",
+  // Dad's egg and salad were heard in the lunch answer: Flock asks the recall form, {{heard}} filled (spec §6.2; lead's ruling F8).
+  differently: "You mentioned Dad doesn't eat egg or salad. Anything else, for anyone, like an allergy or a fasting day?",
   subscriptions: "Does anything come on a subscription, like Country Delight or a milkman?",
 };
 const IDS = Object.keys(A) as (keyof typeof A)[];
@@ -88,7 +89,8 @@ export const h18: Household = {
       ...dish("Idli", ["Breakfast"]), ...dish("Plain dosa", ["Breakfast"]), ...dish("Pancakes", ["Breakfast"], { alsoSlots: ["Agastya's breakfast box"] }),
       ...dish("Bread omelette", ["Breakfast"], { days: ["Sun"] }),
       ...dish("Tomato rasam", ["Lunch"]), ...dish("Mixed vegetable kootu", ["Lunch"]),
-      ...dish("4 boiled eggs", ["Shiva's lunch box"]),
+      // The family's words: "4 eggs" (spec §5.1, lead's ruling F8).
+      ...dish("4 eggs", ["Shiva's lunch box"]),
       ...dish("Plain paratha", ["Agastya's lunch box"]),
       ...dish("Egg paratha roll", ["Agastya's lunch box"], { frequency: "sometimes" }), ...dish("Cheese paratha roll", ["Agastya's lunch box"], { frequency: "sometimes" }),
       ...dish("Paneer butter masala", ["Dinner"]), ...dish("Matar paneer", ["Dinner"]), ...dish("Aloo gobi", ["Dinner"]),
@@ -113,7 +115,7 @@ export const h18: Household = {
       { slot: "Agastya's breakfast box", templates: [tpl([linked("Breakfast")])] },
       { slot: "Lunch", staples: ["Rice"], templates: [tpl(["Rice", DRY_SABJI, "Rice curry/Sambar"]), tpl(["Rice", DRY_SABJI, RASAM]), tpl(["Rice", DRY_SABJI, KOOTU]),
         tpl(["Rice", DRY_SABJI, "Rice curry/Kadhi"]), tpl(["Rice", DRY_SABJI, "Dal"])] },
-      { slot: "Shiva's lunch box", templates: [tpl([items("4 boiled eggs"), kindPart("Salad", { words: "salad" })])] },
+      { slot: "Shiva's lunch box", templates: [tpl([items("4 eggs"), kindPart("Salad", { words: "salad" })])] },
       { slot: "Agastya's lunch box", templates: [tpl([kindPart("Paratha", { dish: "Plain paratha", words: "paratha" }), linked("Lunch", "Sabzi")]),
         tpl([items("Egg paratha roll")], "sometimes"), tpl([items("Cheese paratha roll")], "sometimes")] },
       { slot: "Dinner", staples: ["Roti"], templates: [tpl(["Roti", kindPart("Gravy", { words: "north indian gravy" })]), tpl(["Roti", DRY_SABJI]),

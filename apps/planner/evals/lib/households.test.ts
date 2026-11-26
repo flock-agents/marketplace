@@ -216,6 +216,25 @@ describe("households: the one meaning model's shapes", () => {
     expect(tr).toContain("Q: Does Agastya eat what the family eats, or something else at some meals? Does Agastya carry a box to school?");
     expect(tr).toContain("Q: What did the family have for breakfast over the past week? Tell me the dishes.");
   });
+
+  // F8 (Task 15 D1, lead's ruling): Dad's egg and salad were already heard in the lunch answer, so Flock asks `differently` in
+  // its recall form (spec §6.2, §10), the manifest's `recall` with {{heard}} filled; the A line stays word for word.
+  test("h18 asks differently in its recall form, naming Dad, and keeps the family's '4 eggs'", () => {
+    const h = ALL_HOUSEHOLDS.find((x) => x.id === "h18-shiva-walkthrough")!;
+    const tr = h.transcript ?? [];
+    const recall = (MANIFEST.setup as { id: string; recall?: string }[]).find((q) => q.id === "differently")!.recall!;
+    const line = `Q: ${recall.replace("{{heard}}", "Dad doesn't eat egg or salad")}`;
+    expect(line).toBe("Q: You mentioned Dad doesn't eat egg or salad. Anything else, for anyone, like an allergy or a fasting day?");
+    const a = tr.indexOf(`A: ${h.facts.find((f) => f.id === "differently")!.text}`);
+    expect(a).toBeGreaterThan(0);
+    expect(tr[a - 1]).toBe(line);
+    expect(tr).toContain("A: he doesnt eat eggs. nothing too spicy, but nothing else. on saturdays we make egg curry sometimes. And have bread omlette for sunday breakfast. Dad doesnt eat egg. Others are okay with it. So we have to make something else for him if we make egg curry or if mains contains eggs");
+    // The library keeps the family's words (spec §5.1): "4 eggs", never a "4 boiled eggs" they did not say.
+    expect(h.truth.library.filter((d) => d.slot === "Shiva's lunch box").map((d) => d.name)).toEqual(["4 eggs"]);
+    const box = h.truth.meals!.find((m) => m.slot === "Shiva's lunch box")!;
+    expect(box.templates.flatMap((tp) => tp.parts.flatMap((p) => ("items" in p ? p.items : [])))).toEqual(["4 eggs"]);
+    expect(JSON.stringify(h.truth)).not.toContain("boiled");
+  });
 });
 
 // The interview sim asks the manifest's questions as Flock fills them (spec §10 placeholders; first matching variant wins).
