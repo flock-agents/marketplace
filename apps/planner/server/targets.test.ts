@@ -1,8 +1,15 @@
 import { describe, it, expect } from "bun:test";
 import { isAllergyRule } from "./allergy";
-import { hitsTarget, resolveGives, resolveTarget, targetsOf, targetText } from "./targets";
+import { hitsTarget, resolveGives, resolveTarget, resolveTargets, targetsOf, targetText } from "./targets";
 
 describe("rule targets", () => {
+  it("a kind word the catalog also lists as an ingredient resolves to both", () => {
+    expect(resolveTargets("rice")).toEqual([{ type: "kind", kind: "Rice" }, { type: "ingredient", tag: "rice" }]);
+    for (const w of ["salad", "upma"]) expect(resolveTargets(w)).toEqual([resolveTarget(w)]);
+    expect(resolveTargets("egg")).toEqual([{ type: "ingredient", tag: "egg" }]);
+    expect(targetsOf({ what: "avoid", items: ["rice", "rice"], targets: null })).toEqual(resolveTargets("rice"));
+  });
+
   it("tags are ingredients, dish words land on the catalog", () => {
     expect(resolveTarget("egg")).toEqual({ type: "ingredient", tag: "egg" });
     expect(resolveTarget("eggs")).toEqual({ type: "ingredient", tag: "egg" });

@@ -193,6 +193,12 @@ describe("set_rule", () => {
     expect(changed(before, k.snapshot())).toEqual(days.map((d) => `${d}|Dinner`).sort());
   });
 
+  it("a saved \"no rice at night\" rule holds the kind and the ingredient", async () => {
+    const k = await planned();
+    const r = await k.op("set_rule", { hard: true, what: "avoid", items: ["rice"], slots: ["Dinner"], quote: "no rice at night" });
+    expect(r.rule.targets).toEqual([{ type: "kind", kind: "Rice" }, { type: "ingredient", tag: "rice" }]);
+  });
+
   it("set_rule saves typed targets from the agent's items and to", async () => {
     const k = await planned();
     await k.op("set_person", { name: "Agastya", group: "child" });

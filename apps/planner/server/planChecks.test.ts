@@ -4,6 +4,7 @@
 import { describe, expect, it } from "bun:test";
 import { allergyNotes, checkSlot, forbidden, leaveOutNotes, mostlyOnion, notFor, onionNotes, placeOfDish, ruleBreaks, ruleUnknowns, slotFacts, swapNotes, swapsAt, vouched, type Proposal, type Week } from "./planChecks";
 import { dishKey } from "./dishText";
+import { resolveTargets } from "./targets";
 import type { PlanDay } from "./planDays";
 import type { HistoryRow, LibraryDish, Rule, Slot } from "./slotStore";
 
@@ -212,5 +213,18 @@ describe("one meaning model checks", () => {
       expect(notFor(w, d, "Amma's kurma")).toEqual([]);
       expect(ruleUnknowns(w, d, "Amma's kurma").map((u) => [u.who, u.tag, u.date])).toEqual([[GS, "maida", d.date]]);
     }
+  });
+});
+
+describe("a rice rule holds the kind and the ingredient (G4)", () => {
+  it("no rice at Dinner breaks Curd rice (kind Curd) by its facts, and Rice by its kind; Ragi mudde is fine", () => {
+    const r = rule({ who: "Ravi", slots: ["Dinner"], items: ["rice"], targets: resolveTargets("rice"), quote: "no rice at night" });
+    const lib = [dish("Curd rice", "Dinner", { kind: "Curd", contains: ["rice", "curd"], contains_read: [...READ, "rice", "curd"] }),
+      dish("Ragi mudde", "Dinner", { kind: "Millet", contains: ["ragi"], contains_read: [...READ, "rice"] }), dish("Rice", "Dinner", { kind: "Rice" })];
+    const w = week({ slots: [slot("Dinner", { order: 30 })], library: lib, rules: [r] });
+    const d = w.days.find((x) => x.slot === "Dinner")!;
+    expect(ruleBreaks(w, d, "Curd rice")[0]).toContain("Curd rice");
+    expect(ruleBreaks(w, d, "Rice")).not.toEqual([]);
+    expect(ruleBreaks(w, d, "Ragi mudde")).toEqual([]);
   });
 });

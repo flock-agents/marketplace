@@ -25,7 +25,7 @@ function tagOf(word: string): string | null {
  *  or sub-kind carries the same word (Curd, Gravy/Paneer), so "no curd" blocks every dish with curd, not the one dish. */
 const SYNONYMS: Record<string, string> = { shrimp: "prawn", shrimps: "prawn", prawns: "prawn" };
 let vocab: Map<string, string> | null = null;
-function ingredientOf(word: string): string | null {
+function ingredientOf(word: string, keepKind = false): string | null {
   if (!vocab) {
     vocab = new Map();
     for (const k of CATALOG.kinds) for (const it of k.items) for (const i of it.ingredients) vocab.set(norm(i.name), canon(i.name));
@@ -34,7 +34,7 @@ function ingredientOf(word: string): string | null {
   if (SYNONYMS[n]) return SYNONYMS[n];
   const hit = vocab.get(n) ?? (n.endsWith("s") && n.length > 3 ? vocab.get(n.slice(0, -1)) : undefined);
   // A word that is also a whole kind of dish ("poha", "rajma") stays that kind: the rule is about the dish.
-  return hit && matchDish(word)?.by !== "kind" ? hit : null;
+  return hit && (keepKind || matchDish(word)?.by !== "kind") ? hit : null;
 }
 
 /** A rule word to its one target: a known tag (BASE_TAGS, TAG_PARENT keys/values, catalog tags, singular of a plural) → ingredient;
@@ -49,6 +49,15 @@ export function resolveTarget(word: string): RuleTarget {
   if (m?.by === "sub" && m.sub) return { type: "sub", kind: m.kind, sub: m.sub };
   if (m) return { type: "kind", kind: m.kind };
   return { type: "ingredient", tag: canon(word) };
+}
+
+/** A rule word to all its targets: resolveTarget's, plus, for a kind word the catalog's ingredient lists also name ("rice"), the
+ *  ingredient tag, so a dish saved as another kind that lists it (Curd rice, kind Curd) is hit through its facts. */
+export function resolveTargets(word: string): RuleTarget[] {
+  const one = resolveTarget(word);
+  if (one.type !== "kind") return [one];
+  const tag = ingredientOf(word, true);
+  return tag ? [one, { type: "ingredient", tag }] : [one];
 }
 
 const sentence = (w: string): string => { const s = w.trim().replace(/_/g, " "); return s.charAt(0).toUpperCase() + s.slice(1); };
@@ -70,7 +79,7 @@ export function resolveGives(word: string): Exclude<RuleTarget, { type: "ingredi
 /** A rule's targets as saved, else derived from what/items (veg → meat, fish + items; no_eggs → egg + items; egg → items or meat, fish). */
 export function targetsOf(r: Pick<Rule, "what" | "items" | "targets">): RuleTarget[] {
   if (r.targets) return r.targets;
-  const items = (r.items ?? []).map(resolveTarget);
+  const items = (r.items ?? []).flatMap(resolveTargets);
   const ing = (...tags: string[]): RuleTarget[] => tags.map((tag) => ({ type: "ingredient", tag }));
   const out = r.what === "veg" ? [...ing("meat", "fish"), ...items]
     : r.what === "no_eggs" ? [...ing("egg"), ...items]

@@ -23,7 +23,7 @@ import { isObject, name, names, refuse, weekdays, words, writeRoutes, type Db, t
 import type { ModelCall } from "./model";
 import { INGREDIENT_SCHEMA, INGREDIENT_SYSTEM, ingredientsFrom, makePlan, OP_BUDGET_MS, type MakePlanResult } from "./makePlan";
 import { platformPeers, ruleHolds, type PlanDay } from "./planDays";
-import { resolveGives, resolveTarget } from "./targets";
+import { resolveGives, resolveTargets } from "./targets";
 import { canonTag, checkSlot, forbidden, notFor, readFor, ruleTags, slotFacts, type Week } from "./planChecks";
 import { containsRead, frequencyOf } from "./setup";
 import { addRule, commit, getLibraryDish, getSlot, getSlotDay, listLibrary, listRules, listSlotDays, listSlots, newDishesPerWeek, recent, removeRule,
@@ -320,7 +320,7 @@ export function mountChangeRoutes(hono: Hono<any>, deps: Omit<ChangeDeps, "now">
       const said = b.items === null ? null : names(b.items, "items");
       input.items = said && said.map(canonTag);
       // Resolved once, here: what the rule is about is typed from now on (targets.ts).
-      input.targets = said && said.map(resolveTarget);
+      input.targets = said && said.flatMap(resolveTargets);
     }
     if (b.to !== undefined) input.to = words(b.to, "to");
     if (b.frequency !== undefined) input.frequency = b.frequency === null ? null : frequencyOf(b.frequency) ?? refuse('frequency must be usually, sometimes, rarely or "<n>/week"');
