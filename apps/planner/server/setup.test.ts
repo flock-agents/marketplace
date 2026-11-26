@@ -2334,4 +2334,25 @@ describe("apply_setup: dish families (H7) and kind words with days (H8)", () => 
     expect(after).toContainEqual(expect.objectContaining({ parts: [expect.objectContaining({ kind: "Paratha", dish: "Plain paratha" })], days: ["Sat", "Sun"] }));
     expect(row(k, "Plain paratha", "Breakfast")!.days).toBeNull();
   });
+  // H8 fix round 1: the result never hangs on the rows' order (the library lists by name: "Plain thepla" before "Thepla", but
+  // "Paratha" before "Plain paratha").
+  const tq = "Breakfast is poha, and theplas at the weekend.";
+  const tLib = [["Poha", "Breakfast", tq], ["Thepla", "Breakfast", tq]], tSeed = [["Breakfast", "Poha", tq], ["Breakfast", "Thepla", tq]];
+  const plainThepla = (ts: any[]) => ts.find((t) => t.parts.length === 1 && t.parts[0].dish === "Plain thepla");
+  it("a correction of a kind word's days wins, though its dish's row sorts first (theplas only on Sunday now)", async () => {
+    const NEW = "Theplas only on Sunday now.";
+    const { tr, f } = setup([tq], tLib, tSeed, [["Thepla", "Breakfast", tq, "at the weekend", "", "Sat,Sun"]], {
+      dishes: (_r: ModelRequest, n: number) => (n === 1 ? { library: tLib, seed: tSeed } : { library: [["Poha", "Breakfast", tq], ["Thepla", "Breakfast", NEW]], seed: tSeed }),
+      often: (_r: ModelRequest, n: number) => ({ often: [n === 1 ? ["Thepla", "Breakfast", tq, "at the weekend", "", "Sat,Sun"] : ["Thepla", "Breakfast", NEW, "only on Sunday", "", "Sun"]] }) });
+    const k = await boot({ model: f.model });
+    expect((await k.op("apply_setup", { household: FAMILY, transcript: tr })).ok).toBe(true);
+    const bf = async () => (await k.owner("GET", "/api/family")).body.slots.find((s: any) => s.name === "Breakfast").templates;
+    expect(plainThepla(await bf()).days).toEqual(["Sat", "Sun"]);
+    expect((await k.op("apply_setup", { household: FAMILY, transcript: [...tr, "Q: Anything to change?", `A: ${NEW}`] })).ok).toBe(true);
+    expect(plainThepla(await bf()).days).toEqual(["Sun"]);
+    expect(row(k, "Plain thepla", "Breakfast")!.days).toBeNull();
+    // And again on the next correction that builds breakfast, from what was kept.
+    expect((await k.op("apply_setup", { household: FAMILY, transcript: [...tr, "Q: Anything to change?", `A: ${NEW}`, "Q: More?", "A: Poha with peanuts."] })).ok).toBe(true);
+    expect(plainThepla(await bf()).days).toEqual(["Sun"]);
+  });
 });

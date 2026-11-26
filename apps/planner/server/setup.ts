@@ -2139,9 +2139,19 @@ export function writeKinds(tx: Db, plan: KindsPlan, placed: Map<string, Place>, 
     // (§9.4, G1): its library row stays (its ingredients are read), it is on no template.
     const at = [slot.name, replacedMeal(slot, allSlots)?.name].filter((x): x is string => !!x);
     const swapsHere = swaps.filter((w) => w.slots.some((s) => at.some((a) => same(a, s))));
-    const keptWords = bareWords[slot.name] ?? [], words: MealDishRow[] = [];
-    for (const d of familyDishes(tx, slot.name)) {
-      let place = placed.get(cacheKey(meal, d.key)) ?? plan.places.get(placeKey(slot.name, d.key)) ?? null;
+    const rows = familyDishes(tx, slot.name);
+    const placeAt = (d: LibraryDish): Place | null => placed.get(cacheKey(meal, d.key)) ?? plan.places.get(placeKey(slot.name, d.key)) ?? null;
+    // H8: the how-often each bare kind word read now gives the dish it names ("parathas at the weekend": Plain paratha), before
+    // any row is written, so neither the rows' order nor what was kept before decides it: a fresh word wins over both; one said
+    // with no how-often (null) clears what was kept. Its dish's own row keeps its own words on the row.
+    const fresh = new Map<string, MealDishRow | null>();
+    for (const d of rows) {
+      const b = bareOf(d.name, placeAt(d));
+      if (b && !fresh.get(dishKey(b))) fresh.set(dishKey(b), d.frequency || d.days?.length ? { name: b, frequency: d.frequency, days: d.days, said: d.said } : null);
+    }
+    const kept = new Map((bareWords[slot.name] ?? []).map((w) => [dishKey(w.name), w] as const)), words = new Map<string, MealDishRow>();
+    for (const d of rows) {
+      let place = placeAt(d);
       // A dish the kinds read's answers left out, twice, that code cannot place either (F4, D3e): its word may be a category
       // ("dry sabji"), so it is no dish on a plate and no library row (§5.1); the family is asked what it is.
       const left = !place && opts.left?.find((a) => a.meal === meal && dishKey(a.name) === d.key && !a.known);
@@ -2169,10 +2179,7 @@ export function writeKinds(tx: Db, plan: KindsPlan, placed: Map<string, Place>, 
         if (c) upsertLibrary(tx, { name, slot: d.slot, ...c }, by, changes);
         // H8: days and how-often said of the kind word ("parathas at the weekend") are the word's: its template keeps them, never
         // the one dish it names (a pin of Plain paratha both days). The renamed row keeps none; a row it joined keeps its own.
-        if (d.frequency || d.days?.length) {
-          if (!into) upsertLibrary(tx, { name, slot: d.slot, frequency: null, days: null, said: null }, by, changes);
-          words.push({ name, ...how });
-        }
+        if (!into && (d.frequency || d.days?.length)) upsertLibrary(tx, { name, slot: d.slot, frequency: null, days: null, said: null }, by, changes);
       } else if (near) {
         opts.log(`kinds: ${slot.name}: ${d.name} kept as ${near.name}`);
         renameDish(tx, d.name, d.slot, near.name, by, changes);
@@ -2181,10 +2188,12 @@ export function writeKinds(tx: Db, plan: KindsPlan, placed: Map<string, Place>, 
         const c = catalogContents(getLibraryDish(tx, name, d.slot) ?? d, place.item);
         if (c) upsertLibrary(tx, { name, slot: d.slot, ...c }, by, changes);
       }
-      // A row a bare word was saved as before, with no how-often of its own: the word's, as kept, for its template (H8).
-      const kept = !bare && !d.frequency && !d.days?.length ? keptWords.find((w) => dishKey(w.name) === dishKey(name)) : undefined;
-      if (kept) { how = { frequency: kept.frequency, days: kept.days, said: kept.said }; words.push(kept); }
-      if (dishes.some((x) => dishKey(x.name) === dishKey(name))) continue;   // their word and the dish both said: one dish
+      // The dish a bare word names takes the word's how-often for its template (H8): this read's, else, when no word named it now
+      // and its row has none of its own, the one kept from before.
+      const key = dishKey(name), now = fresh.get(key), was = fresh.has(key) || bare || d.frequency || d.days?.length ? undefined : kept.get(key);
+      const word = now ?? was;
+      if (word) { how = { frequency: word.frequency, days: word.days, said: word.said }; words.set(key, word); }
+      if (dishes.some((x) => dishKey(x.name) === key)) continue;   // their word and the dish both said: one dish
       upsertLibrary(tx, { name, slot: d.slot, kind: place?.kind ?? null, sub: place?.sub ?? null, catalog_item: place?.parts ? null : place?.item ?? null }, by, changes);
       const swap = swapsHere.find((w) => w.keys.includes(dishKey(name)) || w.keys.includes(d.key));
       const qs = plan.quotes?.[placeKey(slot.name, d.key)];
@@ -2193,7 +2202,7 @@ export function writeKinds(tx: Db, plan: KindsPlan, placed: Map<string, Place>, 
       if (off) { opts.log(`kinds: ${slot.name}: ${name} is only a swap's dish, on no template`); continue; }
       dishes.push({ name, place, ...how });
     }
-    if (words.length) bareWords[slot.name] = words;
+    if (words.size) bareWords[slot.name] = [...words.values()];
     else delete bareWords[slot.name];
     // The meal's category words read before (a correction): not library rows, kept in the setup's memory with their places.
     for (const c of categories[slot.name] ?? []) if (!dishes.some((x) => dishKey(x.name) === dishKey(c.name)))
