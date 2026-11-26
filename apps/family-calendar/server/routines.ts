@@ -5,7 +5,7 @@
 // - `plan-prep` (hourly): imported events that are new or have moved are handed to the agent with the manifest's planning prompt;
 //   its answer comes back through plan_done (calendar.ts). Nothing to plan: no wake.
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
-import { events } from "./db/schema";
+import { realEvents } from "./samples";
 import { addDays, deadlineNoticeAt, DEADLINE_NOTICE_DAYS, eventRemindersDue, isoDate, pad, shortDate, starts, weekday } from "../src/pages/dates";
 import { eventLine, planPrep, type KitLike, type TasksPlatform } from "./calendar";
 
@@ -28,7 +28,7 @@ const local = (d: Date): string => `${isoDate(d)}T${pad(d.getHours())}:${pad(d.g
 /** Everything due after `from` and up to `to` (local moments), soonest first. A cancelled event says nothing. */
 export function dueBetween(db: BunSQLiteDatabase<any>, from: string, to: string): Due[] {
   const today = to.slice(0, 10), out: Due[] = [];
-  for (const e of db.select().from(events).all()) {
+  for (const e of realEvents(db)) {
     if (e.status === "cancelled") continue;
     for (const r of eventRemindersDue(e, from, to)) out.push({ who: e.who, text: eventLine(e, r.date, today), at: r.at });
     // A deadline, a week before its day.
