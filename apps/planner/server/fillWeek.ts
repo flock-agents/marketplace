@@ -718,11 +718,16 @@ export function fillWeek(input: FillInput): FillResult {
     // kept from someone), or only with an item had yesterday, gives way to another of the meal's: the one had least this
     // week, never yesterday's when another fits. A plate is never left bare of what its template promised.
     const wordsAllow = (p: TemplatePart) => { const ls = partLimits(s, p); return !ls.length || !!openLimit(s.name, ls, d.date, limitUse); };
+    /** An {items} part that is the meal's everyday dish (a box's paratha): its dishes are had daily by the family's words, or its
+     *  template is the meal's usual one (no share, no days) beside templates that each come only "sometimes" (a share). A repeat
+     *  of it never moves the template; any other part keeps "never the next day". */
+    const everyday = (i: number, p: TemplatePart) => isItemsPart(p) && (p.items.every((n) => rowAt(s.name, dishKey(n))?.frequency === "daily")
+      || (!s.templates![i].share && !s.templates![i].days?.length && s.templates!.length > 1 && s.templates!.every((o, j) => j === i || !!o.share)));
     const can = (i: number, fresh: boolean) => onDay(s.templates![i], d.date) && s.templates![i].parts.every((p) => isLinkedPart(p) || (wordsAllow(p) && (isStaplePart(s, p) || (() => {
       const { fam, neu, kind, sub } = poolsOf(s, p);
       if ((pinsOf.get(k) ?? []).some((r) => fam.some((x) => x.key === r.key) || (!!kind && sameKind(placeOf(r)?.kind, kind) && (!sub || sameKind(placeOf(r)?.sub, sub))))) return true;
-      // A part of the family's fixed dishes ("paratha" in the box every day) never moves the template for a repeat of them.
-      return !!choose(s, d, [], stepsFor(fam, neu).filter((st) => !fresh || !st.next || isItemsPart(p)), atTable, false);
+      // The meal's everyday fixed dish ("paratha" in the box every day) never moves the template for a repeat of it.
+      return !!choose(s, d, [], stepsFor(fam, neu).filter((st) => !fresh || !st.next || everyday(i, p)), atTable, false);
     })())));
     if (!can(ti, true)) {
       const had = (i: number) => planned.filter((x) => same(x.slot, s.name) && x.date < d.date && tplOf.get(slotDayKey(x.date, s.name)) === i).length;
@@ -789,8 +794,11 @@ export function fillWeek(input: FillInput): FillResult {
       if (!isLinkedPart(p)) { fillPart(p, part); return; }
       // A linked part: the item the meal it links to has of its kind that day (its whole plate with no kind), as it is there:
       // not used again (no repeat), never new, the cook makes it once.
+      // That meal was filled without this slot-day's people at its table: an item that is a known break for every one of them
+      // here is not theirs (an unknown is kept and asked, §5.2); the part then picks its own item, as on a day it is not cooked.
+      const theirs = (x: Plate[number]) => !atTable.length || excluded(d, atTable, x.name).length < atTable.length;
       const hits = (sourceOf(d.date, p.from) ?? []).filter((x) => !p.kind || (sameKind(x.kind, p.kind) && (!p.sub || sameKind(x.sub, p.sub))));
-      const take = p.kind ? hits.slice(0, 1) : hits;
+      const take = (p.kind ? hits.slice(0, 1) : hits).filter(theirs);
       if (take.length) {
         for (const x of take) if (!plate.some((y) => y.key === x.key)) { plate.push({ ...x, part, isNew: false, for: [], linked: true }); dayOf(d).dishes.push(x.name); }
         return;
@@ -829,7 +837,8 @@ export function fillWeek(input: FillInput): FillResult {
     // longest ago, else a catalog item, new. A linked dish it swaps leaves that person's box.
     const at = { ...dayOf(d), people: atTable };
     for (const x of plate.filter((y) => !y.for.length)) for (const sw of swapsAt(w, at, x.name)) {
-      const who = atTable.find((p) => same(p, sw.who)) ?? sw.who;
+      const who = atTable.find((p) => same(p, sw.who));
+      if (!who) continue;
       const g = sw.gives;
       if (g.type === "ingredient") continue;
       let it: Item | null = null;

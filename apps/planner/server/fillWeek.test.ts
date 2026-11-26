@@ -768,6 +768,33 @@ describe("per-person versions of a shared meal (§5.4) and the cook's visit (§9
     expect(new Set(sabzis).size).toBe(5);
     for (const n of SABZIS) expect(r.unmet.filter((u) => u.includes(n))).toEqual([]);
   });
+  it("a linked dish the box's child may not eat: the box picks its own item", () => {
+    const lib = [...LIB, dish("Paneer butter masala", "Lunch", "Sabzi", { sub: "Paneer", catalog_item: "Paneer butter masala", days: ["Wed"] })];
+    const noPbm = rule({ who: "Agastya", what: "avoid", targets: [{ type: "item", item: "Paneer butter masala", kind: "Sabzi" }], quote: "Agastya won't have paneer butter masala" });
+    const slots = [lunch(T({ kind: "Rice" }, { kind: "Sabzi" })), lBox([T({ items: ["Paratha"] }, { from: "Lunch", kind: "Sabzi" })])];
+    const r = run({ slots, library: lib, days: daysFor(slots), rules: [noPbm], newCap: 0 });
+    expect(plate(r, WEEK[2], "Lunch").map((x) => x.name)).toContain("Paneer butter masala");
+    const box = plate(r, WEEK[2], "Agastya's lunch box");
+    expect(box).toHaveLength(2);
+    expect(box[1].name).not.toBe("Paneer butter masala");
+    expect(kindOf(r, box[1].name)).toBe("Sabzi");
+    expect(box[1]).toMatchObject({ linked: false, not_for: [] });
+  });
+  it("a linked dish whose fit is only unknown stays linked, and is asked", () => {
+    const lib = [...LIB, dish("Mystery sabzi", "Lunch", "Sabzi", { contains_read: [], days: ["Wed"] })];
+    const noEgg = rule({ who: "Agastya", what: "avoid", targets: [{ type: "ingredient", tag: "egg" }], quote: "Agastya doesn't eat egg" });
+    const slots = [lunch(T({ kind: "Rice" }, { kind: "Sabzi" })), lBox([T({ items: ["Paratha"] }, { from: "Lunch", kind: "Sabzi" })])];
+    const r = run({ slots, library: lib, days: daysFor(slots), rules: [noEgg], newCap: 0 });
+    expect(plate(r, WEEK[2], "Agastya's lunch box")[1]).toMatchObject({ name: "Mystery sabzi", linked: true, not_for: [] });
+    expect(r.unknowns.some((u) => u.dish === "Mystery sabzi" && u.who === "Agastya" && u.date === WEEK[2])).toBe(true);
+  });
+  it("a fixed dish of a meal with another way to plate it never comes the next day", () => {
+    const slots = [breakfast(share(T({ items: ["Bread omelette"] }), "5/week"), T({ kind: "Idli", dish: "Idli" }))];
+    const r = run({ slots, library: [], days: daysFor(slots) });
+    const bo = WEEK.map((d) => plate(r, d, "Breakfast").some((x) => x.name === "Bread omelette"));
+    expect(bo.some(Boolean)).toBe(true);
+    for (let i = 1; i < 7; i++) expect(bo[i] && bo[i - 1]).toBe(false);
+  });
   it("a box whose meal is not cooked that day picks its own item", () => {
     const slots = [lunch(T({ kind: "Rice" }, { kind: "Dal" }, { kind: "Sabzi" })), lBox([T({ items: ["Paratha"] }, { from: "Lunch", kind: "Sabzi" })])];
     slots[0].skip_days = [{ day: "Wed", skip: "ordered_in" }];
