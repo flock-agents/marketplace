@@ -260,7 +260,36 @@ The interview sim and the e2e eval run on the merged pair before a live WhatsApp
    targets meat, fish; "only X or Y" / "require X or Y" = a list. Old rules migrate by resolving each item with
    `matchDish` (kind/item) else as an ingredient.
 
-## 10. Left to the builder
+## 10. Contract between the two lanes (fixed before planning)
+
+**Manifest (planner `flock.app.json` `setup[]`, read by Flock `engine/spec.ts` `Question`)**
+- New optional field `recall?: string` on a question: its recall form, with `{{heard}}` where Flock puts what was
+  already heard for it, in the family's words ("You mentioned {{heard}} for breakfast. Anything else?"). Flock asks
+  `recall` (not `ask`) when the question has facts kept from earlier replies (`notes.mentioned`, generalised from A4b).
+  A question with no `recall` keeps today's behaviour.
+- Question ids after the change, in order: `pain`, `apps`, `mainApp`, `lunchWhere`, `cook`, `cookTime`, `otherDays`,
+  `childSame`, `familyBreakfast`, `familyLunch`, `familyDinner`, `childMeals`, `differently`, `subscriptions`,
+  `connectLater`, `orderFindings`, `final`. Removed: `people`, `cookingDays`, `kidsBreakfast`, `kidsLunch`,
+  `kidsDinner`, `adultsBreakfast`, `adultsLunch`, `adultsDinner`, `diet`, `elders`, `rules`, `orderIn`.
+- Facts: `lunchWhere: text`, `cook: text`, `cookTime: text`, `otherDays: text`, `childSame: text`,
+  `childDiffers: list` (items `{ person, meals: ["Breakfast"|"Lunch"|"Dinner"], box: bool }`), `pastWeek.breakfast`,
+  `pastWeek.lunch`, `pastWeek.dinner`, `childMeals: text`, `differently: text` (all `text` in their words unless said).
+- `childMeals` has `when: "childDiffers"` (asked only when the list is non-empty); `childSame` has
+  `when: "household.children"`.
+- New placeholders Flock fills: `{{you}}` (the speaker addressed: "you"), `{{cookName}}` (her name, else "your cook"),
+  `{{children}}` (the child's name, or names joined "Agastya and Mira"), `{{lunchKnown}}` (the weekday lunch line from
+  known facts, speaker as "you", e.g. "On weekdays you and Ankita are at the office and Agastya is at school till 3;
+  Dad has lunch at home."). Each has a `fallback` per spec.ts rules.
+
+**Household facts (Flock → every app, `householdFor`)**
+- `household.people` always contains the speaker: `{ name, relation: "self", group: "adult" }`.
+- No list or `household.weekly` entry names a person `"me"`/`"I"`/`"myself"`: always the person's name.
+- `household.speaker` stays (the name).
+
+**Setup apply** (`apply_setup` op: `{ household, transcript }`) is unchanged in shape; the transcript's Q lines carry
+the new question texts. The planner's setup reader is written against the content, not question ids.
+
+## 11. Left to the builder
 
 - Field names and storage of the new part types and rule targets; how `slots.kinds`' flags move.
 - The migration's exact mapping from today's saved setups (library category rows → template part `words`; tag rules
