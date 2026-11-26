@@ -44,6 +44,16 @@ describe("attendance: only a box that replaces a meal takes its person off it", 
     expect(l.people).not.toContain("Agastya");
     expect(l.why.some((w) => w.includes("has their own box"))).toBe(false);
   });
+  it("a school tiffin saved in place of Lunch takes its child off weekday Lunch even when he carries, never off Breakfast (F1, D2)", () => {
+    const tiffin = slot("Vihaan's tiffin", "custom", SLOT_ORDER.Lunch + INSTEAD_STEP, { usual_people: ["Vihaan"], days: [...WEEK] });
+    const slots = [slot("Breakfast", "main", SLOT_ORDER.Breakfast), slot("Lunch", "main", SLOT_ORDER.Lunch), slot("Dinner", "main", SLOT_ORDER.Dinner), tiffin];
+    const d = buildDays({ weekStart: MON, from: MON, slots, people: ["Rohit", "Vihaan"], rules: [], changes: [], saved: [],
+      household: { dated: [], weekly: [{ person: "Vihaan", where: "school", weekdays: [...WEEK], from: "08:00", to: "15:00", lunch: "carries" }] } });
+    expect(at(d, MON, "Lunch")!.people).toEqual(["Rohit"]);
+    expect(at(d, MON, "Lunch")!.why).toContain("Vihaan: has Vihaan's tiffin on Mon");
+    expect(at(d, MON, "Breakfast")!.people).toEqual(["Rohit", "Vihaan"]);
+    expect(at(d, MON, "Vihaan's tiffin")!.people).toEqual(["Vihaan"]);
+  });
   it("replacedMeal: only a custom slot with named people one step after a main", () => {
     const s = base();
     expect(replacedMeal(lBox(), s)?.name).toBe("Lunch");

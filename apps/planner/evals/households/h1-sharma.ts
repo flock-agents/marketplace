@@ -41,7 +41,7 @@ export const h1: Household = {
     familyCooks: [{ person: "Neha", days: ["Sun"] }],
     slots: [
       ...mains({ Dinner: [{ day: "Sun", skip: "ordered_in" }] }),
-      { name: "Vihaan's tiffin", kind: "custom", usual_people: ["Vihaan"], days: SCHOOL, match: /tiffin|lunch ?box|school/i },
+      { name: "Vihaan's tiffin", kind: "custom", usual_people: ["Vihaan"], days: SCHOOL, replaces: "Lunch", match: /tiffin|lunch ?box|school/i },
     ],
     // Vihaan's weekday lunch is his school tiffin (day care till 6); his parents carry the home lunch.
     away: [{ person: "Vihaan", slots: ["Lunch"], days: SCHOOL }],

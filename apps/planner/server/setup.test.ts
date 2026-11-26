@@ -211,7 +211,7 @@ describe("apply_setup v2: the model reads, code checks and writes", () => {
 
   it("a person's own meal in place of the family's (instead): their own slot, the family meal without them, said plainly (class 3)", async () => {
     const T = [...TRANSCRIPT, "Q: Does Amma eat with you at night?", "A: No, Amma eats before sunset, her own dinner of phulkas. She doesn't sit for our dinner."];
-    const own = { name: "Padma's dinner", kind: "addon", addon_of: "Dinner", usual_people: ["Amma"], instead: true, quote: "Amma eats before sunset, her own dinner of phulkas" };
+    const own = { name: "Padma's dinner", kind: "addon", addon_of: "Dinner", usual_people: ["Amma"], instead_of: "Dinner", quote: "Amma eats before sunset, her own dinner of phulkas" };
     const f = fake({ home: { ...HOME, slots: [...HOME.slots.filter((x) => x.name !== "Padma's dinner"), own] } });
     const k = await boot({ model: f.model });
     const r = await k.op("apply_setup", { household: HOUSEHOLD, transcript: T });
@@ -225,6 +225,17 @@ describe("apply_setup v2: the model reads, code checks and writes", () => {
     // Its meal is dinner (new items are suggested as for dinner), and one in place of lunch is lunch.
     expect(mealOf(mine)).toBe("dinner");
     expect(mealOf({ name: "Ravi's lunch", kind: "custom", addon_of: null, order: 35 })).toBe("lunch");
+  });
+
+  it("a school tiffin read as in place of Lunch is saved at Lunch's box place, whatever meal it comes after (F1, D2)", async () => {
+    const tiffin = { name: "Ishaan's tiffin", kind: "custom", usual_people: ["Ishaan"], days: ["Mon", "Tue", "Wed", "Thu", "Fri"], instead_of: "Lunch", after: "Breakfast",
+      quote: "Ishaan's tiffin must be nut-free" };
+    const f = fake({ home: { ...HOME, slots: [...HOME.slots.filter((x) => x.name !== "Ishaan's tiffin"), tiffin] } });
+    const k = await boot({ model: f.model });
+    const r = await k.op("apply_setup", { household: HOUSEHOLD, transcript: TRANSCRIPT });
+    expect(r.ok).toBe(true);
+    const fam = (await k.owner("GET", "/api/family")).body;
+    expect(fam.slots.find((s: any) => s.name === "Ishaan's tiffin")).toMatchObject({ kind: "custom", usual_people: ["Ishaan"], order: 35 });
   });
 
   it("a correction re-reads and applies only what the new reply said; the rest is discarded; the read-back says only that", async () => {
@@ -454,7 +465,7 @@ describe("apply_setup v2: the checks, pure", () => {
   it("a dish said of a person who has their own meal in place of the family's goes on their meal, never the family's (class 6)", () => {
     const reply = ["A: Amma eats at six on her own: khichdi or upma, every night. We have roti and sabzi."];
     const lines = familySentences(reply, HOUSEHOLD);
-    const read = readOf({ slots: [...HOME.slots.slice(0, 3), { name: "Padma's dinner", kind: "addon", addon_of: "Dinner", usual_people: ["Amma"], instead: true, quote: "Amma eats at six on her own" }] }, {},
+    const read = readOf({ slots: [...HOME.slots.slice(0, 3), { name: "Padma's dinner", kind: "addon", addon_of: "Dinner", usual_people: ["Amma"], instead_of: "Dinner", quote: "Amma eats at six on her own" }] }, {},
       { library: [["Khichdi", "Dinner", "khichdi or upma"], ["Upma", "Dinner", "khichdi or upma"], ["Roti", "Dinner", "roti and sabzi"], ["Sabzi", "Dinner", "roti and sabzi"]],
         seed: [["Dinner", "Khichdi", "khichdi or upma"], ["Dinner", "Roti, Sabzi", "roti and sabzi"]] });
     const c = checkRead(read, { household: hh, said: familyLines(reply, HOUSEHOLD), sentences: lines });
@@ -525,6 +536,12 @@ describe("apply_setup v2: the checks, pure", () => {
     // A packed meal by another name: the one packed-meal slot.
     expect(resolveSlot("School tiffin", ["Breakfast", "Lunch", "Dinner", "Snack box"])).toBe("Snack box");
     expect(resolveSlot("Nila's tiffin", ["Breakfast", "Lunch", "Dinner", "Nila's lunch box"])).toBe("Nila's lunch box");
+    // A box word naming one meal never lands on a box named for another (F1, D3a): the row is asked about, not moved.
+    const agastya = ["Breakfast", "Lunch", "Dinner", "Agastya's breakfast box", "Shiva's lunch"];
+    expect(resolveSlot("Agastya's lunch box", agastya)).toBeNull();
+    expect(resolveSlot("Lunch box", ["Breakfast", "Lunch", "Dinner", "Breakfast box"])).toBeNull();
+    expect(resolveSlot("Agastya's lunch box", [...agastya, "Agastya's lunch box"])).toBe("Agastya's lunch box");
+    expect(resolveSlot("Agastya's box", agastya)).toBe("Agastya's breakfast box");
     expect(resolveSlot("tiffin", ["Lunch", "Kabir's box", "Mira's box"])).toBeNull();
   });
   it("a rule's slot that is no meal is noted, not saved; an incomplete rule is kept as a note", () => {
@@ -1129,8 +1146,9 @@ describe("setup reads into the one meaning model (§5, §6.4)", () => {
   const MON_FRI = ["Mon", "Tue", "Wed", "Thu", "Fri"], MON_SAT = [...MON_FRI, "Sat"];
   const W_HOME = {
     slots: [{ name: "Breakfast", kind: "main" }, { name: "Lunch", kind: "main" }, { name: "Dinner", kind: "main" },
-      { name: "Agastya's breakfast box", kind: "custom", after: "Breakfast", usual_people: ["Agastya"], days: MON_FRI, instead: true, quote: "He carries a breakfast box" },
-      { name: "Agastya's lunch box", kind: "custom", after: "Lunch", usual_people: ["Agastya"], days: MON_FRI, instead: true, quote: "a lunch box" },
+      { name: "Agastya's breakfast box", kind: "custom", after: "Breakfast", usual_people: ["Agastya"], days: MON_FRI, instead_of: "Breakfast", quote: "He carries a breakfast box" },
+      // after Breakfast as the model writes for a school box: the meal it replaces (instead_of) sets its place (F1).
+      { name: "Agastya's lunch box", kind: "custom", after: "Breakfast", usual_people: ["Agastya"], days: MON_FRI, instead_of: "Lunch", quote: "a lunch box" },
       { name: "Shiva's lunch box", kind: "addon", addon_of: "Lunch", usual_people: ["Shiva"], days: MON_FRI, extras: true, quote: "I take 4 boiled eggs and some salad with it" }],
     cook: { name: "Lakshmi", days: MON_SAT, visits: [{ at: "7am", meals: ["Breakfast", "Lunch"] }, { at: "6pm", meals: ["Dinner"] }], limits_words: "3-4 dishes in the morning",
       quote: "Lakshmi comes at 7 for breakfast and lunch" },
@@ -1320,9 +1338,16 @@ describe("apply_setup v2: the prompts", () => {
   });
   it("read a person's own meal in place of the family's as instead, and a meal ordered in for some as its skip when the others have their own (classes 3, 4)", () => {
     const home = SETUP_PARTS.find((p) => p.id === "home")!;
-    expect(JSON.stringify(home.schema)).toContain('"instead":{"type":"boolean"}');
-    expect(home.system).toContain("instead: true on such a meal when the person does not eat the main meal at all");
+    expect(JSON.stringify(home.schema)).toContain('"instead_of":{"type":"string","enum":["Breakfast","Lunch","Dinner"]}');
+    expect(JSON.stringify(home.schema)).not.toContain('"instead":');
+    expect(home.system).toContain("instead_of: the main meal such a meal is eaten in place of, when the person does not eat that meal at all");
     expect(home.system).toContain("it is that meal's skip all the same when the others at home have their own meal in its place that day");
+  });
+  it("read a school box as in place of Lunch unless it is a breakfast box, and each box the family names as its own slot (F1, D2, D3a)", () => {
+    const home = SETUP_PARTS.find((p) => p.id === "home")!;
+    expect(home.system).not.toContain("(a tiffin: Breakfast");
+    expect(home.system).toContain("a school tiffin or lunch box is instead_of Lunch, unless the family calls it a breakfast box");
+    expect(home.system).toContain("Each box the family names is its own slot: a breakfast box and a lunch box are two slots, also for one child.");
   });
   it("read a dish joined to a list with its own words as that dish's, at any meal (class 5: every day at someone's own dinner)", () => {
     expect(SETUP_PARTS.find((p) => p.id === "often")!.system).toContain("A dish joined to a list with its own words, at any meal and for anyone");

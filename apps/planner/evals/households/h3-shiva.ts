@@ -51,7 +51,7 @@ export const h3: Household = {
     familyCooks: [{ person: "Ankita", days: ["Sun"] }],
     slots: [
       ...mains({ Lunch: [{ day: "Sun", skip: "eaten_out" }], Dinner: [{ day: "Sat", skip: "ordered_in" }] }),
-      { name: "Agastya's tiffin", kind: "custom", usual_people: ["Agastya"], days: SCHOOL, match: /tiffin|lunch ?box|school/i },
+      { name: "Agastya's tiffin", kind: "custom", usual_people: ["Agastya"], days: SCHOOL, replaces: "Lunch", match: /tiffin|lunch ?box|school/i },
       // "Father has two phulkas, no rice at night": his dinner is always different, so it gets an add-on with the phulkas.
       { name: "Gowri Shankar's dinner", kind: "addon", addon_of: "Dinner", usual_people: [GS], match: /gowri|father|appa|grand|phulka/i },
       { name: "Gowri Shankar's breakfast", kind: "addon", addon_of: "Breakfast", usual_people: [GS], match: /gowri|father|appa|grand/i, optional: true },
