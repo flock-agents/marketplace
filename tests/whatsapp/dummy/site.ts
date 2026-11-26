@@ -47,6 +47,8 @@ export function whatsappDummy(initial: DummyOptions = {}) {
   const pending = new Map<string, { code: string; phone: string }>();
   const numbersAsked: string[] = [];
   const sent: Sent[] = [];
+  /** Documents the page fetched to download them, by file name. */
+  const docFetches: string[] = [];
   /** Every device that loaded the page. */
   const seen = new Set<string>();
   let useHereNext = 0;
@@ -137,6 +139,10 @@ export function whatsappDummy(initial: DummyOptions = {}) {
       numbersAsked.push(body.phone);
       return json({ code });
     }
+    if (url.pathname === "/__dummy/doc") {
+      docFetches.push(url.searchParams.get("name") ?? "");
+      return json({ ok: true });
+    }
     if (url.pathname === "/__dummy/send" && req.method === "POST") {
       sent.push(await req.json() as Sent);
       return json({ ok: true });
@@ -161,7 +167,7 @@ export function whatsappDummy(initial: DummyOptions = {}) {
   };
 
   return {
-    handle, phone, sent, numbersAsked, options,
+    handle, phone, sent, docFetches, numbersAsked, options,
     pendingCodes: () => [...pending.values()].map((p) => p.code),
     linkedDevices: () => [...linked],
     showUseHereNext(times = 1) { useHereNext = times; },

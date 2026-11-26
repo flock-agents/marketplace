@@ -46,6 +46,18 @@ describe("the manifest", () => {
   });
 });
 
+describe("read-chat's documents", () => {
+  it("instructions say what document holds and the download limits", () => {
+    const readChat = instructions.slice(instructions.indexOf("### read-chat"), instructions.indexOf("### search"));
+    expect(readChat).toContain("`{name, path, size}`");
+    expect(readChat).toContain("`{name, error}`");
+    expect(readChat).toContain("at most 5 a read");
+    expect(readChat).toContain("none over 10 MB");
+    expect(instructions).toContain("at most **5 PDFs a read, each at most 10 MB**");
+    expect(manifest.functions["read-chat"].timeoutMs).toBe(240_000);
+  });
+});
+
 describe("the catalog entry", () => {
   it("points at this package and its tag (an rc tag on stage, the final tag on v2)", () => {
     const entry = catalog.items.find((i: any) => i.slug === "whatsapp");

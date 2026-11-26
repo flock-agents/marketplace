@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.1.0
+
+- `read-chat` downloads the PDFs in the messages it reads (school notices and circulars), in the same WhatsApp Web open, with a real click on each document's download button. Each document now carries `document`: a PDF as `{name, path, size}`, the file in the agent's workspace `downloads/` folder; any other document, or a PDF not downloaded, as `{name, error}` with a short reason. The text stays `[document]`.
+- Limits: PDFs only, at most 5 a read (newest first), none over 10 MB (by the size WhatsApp shows before any click, and by the file kept; a bigger file is deleted), each download waits at most 20 seconds, and none starts when the read is near its own timeout or today's WhatsApp time. A PDF downloaded before (same message, file still there) is given again without downloading it again, so the next read gets the older ones.
+- `read-chat` may run up to 4 minutes (was 2.5).
+- A document's download icon is no longer taken for a voice message.
+
 ## 1.0.0
 
 Needs Flock 0.24.0: the scripts click and type with Flock's real input (`_shared/_realInput`).
