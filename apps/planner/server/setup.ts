@@ -658,6 +658,16 @@ export function checkRead(read: SetupRead, ctx: { household: Household; said: st
   const slotDays = new Map(slots.map((s) => [s.name, (s.days.length ? s.days : [...WEEKDAYS]).filter((d) => !(s.skip_days ?? []).some((x) => x.day === d))]));
   const slotOf = (w: string) => resolveSlot(w, slotNames);
 
+  // H16: a read with no cook (none, or one with no days and no visits) where household.help lists one: that cook, her days and
+  // a visit per entry, with the read's name, limits and words laid on. Help lists a cook, so a cook is saved. With
+  // none listed, a cook the read gives only limits of is no cook (as before H16), and a note about her stays the family's.
+  const help = ctx.household.cooks ?? [];
+  const thin = !read.cook || (!read.cook.days.length && !read.cook.visits.length);
+  const cook0: Cook | null = thin && help.length
+    ? { name: read.cook?.name ?? help.find((c) => c.name)?.name ?? null, days: WEEKDAYS.filter((d) => help.some((c) => c.days.includes(d))),
+      visits: help.flatMap((c): Visit[] => (c.at || c.meals.length ? [{ ...(c.at ? { at: c.at } : {}), ...(c.meals.length ? { meals: c.meals } : {}) }] : [])),
+      limits_words: read.cook?.limits_words ?? null, quote: read.cook?.quote ?? "" }
+    : read.cook && (read.cook.name || !thin) ? read.cook : null;
   // Rules.
   const rules: ReadRule[] = [];
   for (const r0 of read.rules) {
@@ -693,7 +703,7 @@ export function checkRead(read: SetupRead, ctx: { household: Household; said: st
     }
     // A note that is only the cook's limit again ("Yes, she has two hours, so 3 to 4 dishes in all"): the cook keeps it, not
     // the family's notes (onboarding run 24 showed it under "All week" in the plan).
-    if (r.what === "note" && !r.who && aboutTheCook(r.quote, read.cook)) { dropped.push(`${what}: the cook's limit, kept with the cook`); continue; }
+    if (r.what === "note" && !r.who && aboutTheCook(r.quote, cook0)) { dropped.push(`${what}: the cook's limit, kept with the cook`); continue; }
     if (rules.some((x) => ruleKey(x) === ruleKey(r))) continue;
     rules.push(r);
   }
@@ -817,15 +827,6 @@ export function checkRead(read: SetupRead, ctx: { household: Household; said: st
   }
 
   // The cook, who of the family cooks, lunch.
-  // H16: a read with no cook (none, or one with no days and no visits) where household.help lists one: that cook, her days and
-  // a visit per entry, with the read's name, limits and words laid on. Help lists a cook, so a cook is saved.
-  const help = ctx.household.cooks ?? [];
-  const thin = !read.cook || (!read.cook.days.length && !read.cook.visits.length);
-  const cook0: Cook | null = thin && help.length
-    ? { name: read.cook?.name ?? help.find((c) => c.name)?.name ?? null, days: WEEKDAYS.filter((d) => help.some((c) => c.days.includes(d))),
-      visits: help.flatMap((c): Visit[] => (c.at || c.meals.length ? [{ ...(c.at ? { at: c.at } : {}), ...(c.meals.length ? { meals: c.meals } : {}) }] : [])),
-      limits_words: read.cook?.limits_words ?? null, quote: read.cook?.quote ?? "" }
-    : read.cook && (read.cook.name || !thin) ? read.cook : null;
   const cook = cook0 ? { ...cook0, visits: cook0.visits.flatMap((v): Visit[] => {
     const meals = v.meals ? uniq(v.meals.map(slotOf).filter((m): m is string => !!m)) : [];
     return v.at || meals.length ? [{ ...(v.at ? { at: v.at } : {}), ...(meals.length ? { meals } : {}) }] : [];

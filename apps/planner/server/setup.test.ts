@@ -2181,6 +2181,19 @@ describe("a rule read whole, a require that is an add-on dish, a cook from help 
     // No cook in help, none read: no cook.
     expect(checkRead(readOf({ slots: mains, cook: null }, { rules: [] }, {}), { household: hh, said, sentences }).read.cook).toBeNull();
   });
+  it("checkRead: a cook read with only her limits, and no cook in household.help, loses no note (fix round 1)", () => {
+    const lines = familySentences(["A: Our cook has two hours in the morning, so keep it simple."], R_HOUSEHOLD);
+    const read = readOf({ slots: mains, cook: { limits_words: "two hours in the morning", quote: "Our cook has two hours in the morning" } },
+      { rules: [{ hard: false, what: "note", quote: "Our cook has two hours in the morning, so keep it simple" }] }, {});
+    const c = checkRead(read, { household: hh, said: lines, sentences: lines });
+    // As before H16: no cook saved of limits alone, and the family's note about her kept.
+    expect(c.read.cook).toBeNull();
+    expect(c.read.rules).toMatchObject([{ what: "note", quote: "Our cook has two hours in the morning, so keep it simple" }]);
+    // With a cook in help, the limits go with her and the note is hers.
+    const c2 = checkRead(read, { household: householdOf({ ...R_HOUSEHOLD, "household.help": help }), said: lines, sentences: lines });
+    expect(c2.read.cook).toMatchObject({ days: MON_SAT, limits_words: "two hours in the morning" });
+    expect(c2.read.rules).toEqual([]);
+  });
   it("applySetup saves the cook household.help lists when the home read has none", async () => {
     const f = rFake({ home: { slots: mains, cook: null } });
     const k = await boot({ model: f.model });
