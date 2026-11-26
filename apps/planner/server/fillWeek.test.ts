@@ -2,12 +2,13 @@
 // contract, owner rules 1–8). Expected plates are worked out from the owner's rules, not read off the code.
 import { describe, expect, it } from "bun:test";
 import { readFileSync } from "node:fs";
-import { fillWeek, templateCounts, type FillInput, type FillResult } from "./fillWeek";
+import { fillWeek, templateCounts, type FillInput, type FillResult, type Visit } from "./fillWeek";
 import { catalogIngredients, catalogItem, suggestable, type MealKind, type MealTemplate } from "./kinds";
 import { OWN_SHARE } from "./planChecks";
 import { slotDayKey, type PlanDay } from "./planDays";
 import { dishKey } from "./dishText";
 import type { HistoryRow, LibraryDish, Rule, Slot } from "./slotStore";
+import { weekdayOf, type Weekday } from "./dates";
 
 const WEEK = ["2026-11-30", "2026-12-01", "2026-12-02", "2026-12-03", "2026-12-04", "2026-12-05", "2026-12-06"];
 const ALL_READ = ["egg", "meat", "fish", "onion_garlic", "nuts", "peanut", "dairy", "mushroom", "white_rice"];
@@ -24,11 +25,11 @@ const rule = (o: Partial<Rule>): Rule => ({ id: `r${Math.random()}`, hard: true,
 const seed = (rows: string[][]): HistoryRow[] => rows.map((r) => ({ date: null, status: "confirmed", skip: null, dishes: r.map((d) => ({ dish: d })) }) as HistoryRow);
 
 function run(o: { slots: Slot[]; library: LibraryDish[]; people?: string[]; rules?: Rule[]; history?: Record<string, HistoryRow[]>; cuisines?: string[]; newCap?: number | null;
-  days?: PlanDay[] }): FillResult & { at: (date: string, slot: string) => string[]; dishAt: (date: string, slot: string, name: string) => { not_for: string[]; note: string | null; new: boolean } | undefined } {
+  days?: PlanDay[]; visits?: Visit[] }): FillResult & { at: (date: string, slot: string) => string[]; dishAt: (date: string, slot: string, name: string) => { not_for: string[]; note: string | null; new: boolean } | undefined } {
   const people = o.people ?? ["Asha", "Ravi"];
   const days = o.days ?? o.slots.flatMap((s) => WEEK.map((d) => day(d, s.name, people)));
   const input: FillInput = { days, slots: o.slots, library: o.library, rules: o.rules ?? [], history: new Map(Object.entries(o.history ?? {}).map(([k, v]) => [k.toLowerCase(), v])),
-    cuisines: o.cuisines ?? [], newCap: o.newCap ?? null };
+    cuisines: o.cuisines ?? [], newCap: o.newCap ?? null, ...(o.visits ? { visits: o.visits } : {}) };
   const r = fillWeek(input);
   const at = (date: string, s: string) => (r.plates.get(slotDayKey(date, s)) ?? []).map((x) => x.name);
   const dishAt = (date: string, s: string, name: string) => (r.plates.get(slotDayKey(date, s)) ?? []).find((x) => x.name === name);
@@ -720,5 +721,159 @@ describe("one meaning model fill", () => {
   it("never matches a family word", () => {
     const src = readFileSync(new URL("./fillWeek.ts", import.meta.url), "utf8");
     for (const f of ["matchDish(", "regionalWordOf(", "isCategoryName(", "contentsItem("]) expect(src).not.toContain(f);
+  });
+});
+
+describe("per-person versions of a shared meal (§5.4) and the cook's visit (§9.3)", () => {
+  // h18-like: Agastya's boxes replace Breakfast and Lunch on school days; Shiva carries the home lunch plus extras.
+  const SCHOOL: Weekday[] = ["Mon", "Tue", "Wed", "Thu", "Fri"];
+  const FAM = ["Shiva", "Ankita", "Agastya", "Gowri Shankar"];
+  const bBox = (templates: MealTemplate[]) => slot("Agastya's breakfast box", { kind: "custom", order: 15, usual_people: ["Agastya"], days: [...SCHOOL], templates });
+  const lBox = (templates: MealTemplate[]) => slot("Agastya's lunch box", { kind: "custom", order: 35, usual_people: ["Agastya"], days: [...SCHOOL], templates });
+  const sBox = (templates: MealTemplate[]) => slot("Shiva's lunch box", { kind: "addon", addon_of: "Lunch", order: 60, usual_people: ["Shiva"], days: [...SCHOOL], extras: true, templates });
+  const breakfast = (...templates: MealTemplate[]) => slot("Breakfast", { templates });
+  const lunch = (...templates: MealTemplate[]) => slot("Lunch", { templates });
+  const LIB = [dish("Rice", "Lunch", "Rice"), ...SABZIS.map((n) => dish(n, "Lunch", "Sabzi")), ...["Moong dal", "Dal tadka", "Masoor dal"].map((n) => dish(n, "Lunch", "Dal"))];
+  const swapUpma = rule({ who: "Agastya", what: "swap", targets: [{ type: "kind", kind: "Upma" }], gives: { type: "item", item: "Pancakes", kind: null },
+    quote: "Pancakes for Agastya when we make upma, he doesn't like it" });
+  /** The slot-days as planDays builds them: a box's person off the meal it replaces on box days; an extras add-on keeps its person. */
+  const daysFor = (slots: Slot[], skip: { slot: string; date: string }[] = []): PlanDay[] => slots.flatMap((s) => WEEK.flatMap((date) => {
+    if (s.days.length && !s.days.includes(weekdayOf(date))) return [];
+    const box = (meal: string) => slots.find((x) => x.kind === "custom" && x.order === (meal === "Breakfast" ? 15 : 35) && x.days.includes(weekdayOf(date)));
+    const people = s.usual_people.length ? s.usual_people : FAM.filter((p) => !box(s.name)?.usual_people.includes(p));
+    const d = day(date, s.name, people);
+    return [skip.some((x) => x.slot === s.name && x.date === date) ? { ...d, skip: "ordered_in" as const } : d];
+  }));
+  const plate = (r: ReturnType<typeof run>, date: string, s: string) => r.plates.get(slotDayKey(date, s)) ?? [];
+  const kindOf = (r: ReturnType<typeof run>, name: string) => r.places.get(dishKey(name))?.kind ?? null;
+
+  it("the lunch box rolls the day's lunch sabzi", () => {
+    const slots = [lunch(T({ kind: "Rice" }, { kind: "Dal" }, { kind: "Sabzi" })), lBox([T({ items: ["Paratha"] }, { from: "Lunch", kind: "Sabzi" })])];
+    const r = run({ slots, library: LIB, days: daysFor(slots), newCap: 0 });
+    for (const d of WEEK.slice(0, 5)) {
+      const sabzi = plate(r, d, "Lunch").find((x) => kindOf(r, x.name) === "Sabzi")!;
+      const box = plate(r, d, "Agastya's lunch box");
+      expect(box).toHaveLength(2);
+      expect(box[0].name).toBe("Paratha");
+      expect(box[1]).toMatchObject({ name: sabzi.name, linked: true });
+    }
+  });
+  it("a linked dish is not a repeat and not counted twice for the cook", () => {
+    const slots = [lunch(T({ kind: "Rice" }, { kind: "Dal" }, { kind: "Sabzi" })), lBox([T({ items: ["Paratha"] }, { from: "Lunch", kind: "Sabzi" })])];
+    const visits: Visit[] = [{ cook: null, meals: ["Lunch", "Agastya's lunch box"], days: [...SCHOOL], cap: 4, label: "lunch" }];
+    const r = run({ slots, library: LIB, days: daysFor(slots), newCap: 0, visits });
+    // Rice, dal, sabzi and the paratha: 4 dishes, the sabzi once.
+    expect(r.unmet.filter((u) => u.includes("dishes to cook"))).toEqual([]);
+    const sabzis = WEEK.slice(0, 5).map((d) => plate(r, d, "Lunch").find((x) => kindOf(r, x.name) === "Sabzi")!.name);
+    expect(new Set(sabzis).size).toBe(5);
+    for (const n of SABZIS) expect(r.unmet.filter((u) => u.includes(n))).toEqual([]);
+  });
+  it("a box whose meal is not cooked that day picks its own item", () => {
+    const slots = [lunch(T({ kind: "Rice" }, { kind: "Dal" }, { kind: "Sabzi" })), lBox([T({ items: ["Paratha"] }, { from: "Lunch", kind: "Sabzi" })])];
+    slots[0].skip_days = [{ day: "Wed", skip: "ordered_in" }];
+    const r = run({ slots, library: LIB, days: daysFor(slots, [{ slot: "Lunch", date: WEEK[2] }]), newCap: 0 });
+    const box = plate(r, WEEK[2], "Agastya's lunch box");
+    expect(box).toHaveLength(2);
+    expect(kindOf(r, box[1].name)).toBe("Sabzi");
+    expect(box[1].linked).toBe(false);
+  });
+  it("the breakfast box is the family breakfast, and pancakes on upma days", () => {
+    const slots = [breakfast(T({ kind: "Upma", words: "upma" }), T({ kind: "Idli", dish: "Idli" })), bBox([T({ from: "Breakfast" })])];
+    const r = run({ slots, library: [], days: daysFor(slots), rules: [swapUpma] });
+    let upmaDays = 0;
+    for (const d of WEEK.slice(0, 5)) {
+      const fam = plate(r, d, "Breakfast").filter((x) => !x.for_people.length).map((x) => x.name);
+      const box = plate(r, d, "Agastya's breakfast box").map((x) => x.name);
+      const upma = fam.find((x) => kindOf(r, x) === "Upma");
+      if (upma) {
+        upmaDays++;
+        expect(box).toContain("Pancakes");
+        expect(box).not.toContain(upma);
+      } else expect(box).toEqual(fam);
+    }
+    expect(upmaDays).toBeGreaterThan(0);
+  });
+  it("a swap item is a planned dish for that person", () => {
+    const slots = [breakfast(T({ kind: "Upma", words: "upma" }), T({ kind: "Idli", dish: "Idli" }))];
+    const r = run({ slots, library: [], days: daysFor(slots), rules: [swapUpma] });
+    let upmaDays = 0;
+    for (const d of WEEK) {
+      const p = plate(r, d, "Breakfast");
+      const upma = p.find((x) => kindOf(r, x.name) === "Upma");
+      if (upma) {
+        upmaDays++;
+        expect(upma.for_people).toEqual([]);
+        expect(p.find((x) => x.name === "Pancakes")).toMatchObject({ for_people: ["Agastya"], linked: false });
+      } else expect(p.map((x) => x.name)).not.toContain("Pancakes");
+    }
+    expect(upmaDays).toBeGreaterThan(0);
+  });
+  it("a disliked swap item is still given", () => {
+    const slots = [breakfast(T({ kind: "Upma", words: "upma" }))];
+    const r = run({ slots, library: [dish("Pancakes", "Breakfast", null, { disliked: true })], days: daysFor(slots), rules: [swapUpma] });
+    for (const d of WEEK) expect(plate(r, d, "Breakfast").find((x) => x.name === "Pancakes")).toMatchObject({ for_people: ["Agastya"] });
+  });
+  it("a swap that gives a kind the family has no item of: a catalog item, counted as new", () => {
+    const toParatha = rule({ who: "Gowri Shankar", what: "swap", targets: [{ type: "kind", kind: "Roti" }], gives: { type: "kind", kind: "Paratha" }, quote: "Dad has parathas" });
+    const slots = [slot("Dinner", { templates: [T({ kind: "Roti" }, { kind: "Sabzi" })] })];
+    const lib = [dish("Phulka", "Dinner", "Roti"), ...SABZIS.map((n) => dish(n, "Dinner", "Sabzi"))];
+    const r = run({ slots, library: lib, people: FAM, rules: [toParatha] });
+    for (const d of WEEK) {
+      const forDad = plate(r, d, "Dinner").filter((x) => x.for_people.includes("Gowri Shankar"));
+      expect(forDad).toHaveLength(1);
+      expect(kindOf(r, forDad[0].name)).toBe("Paratha");
+      expect(forDad[0].new).toBe(true);
+    }
+    expect(r.placed.filter((x) => x.kind === "Paratha")).toHaveLength(7);
+  });
+  it("extras ride beside the home lunch", () => {
+    const noSabzi = rule({ who: "Shiva", what: "avoid", targets: [{ type: "kind", kind: "Sabzi" }], quote: "Shiva doesn't eat sabzi" });
+    const slots = [lunch(T({ kind: "Rice" }, { kind: "Sabzi" })), sBox([T({ items: ["4 boiled eggs"] }, { kind: "Salad", words: "salad" })])];
+    const r = run({ slots, library: LIB.filter((x) => x.kind !== "Dal"), days: daysFor(slots), rules: [noSabzi] });
+    const mon = plate(r, WEEK[0], "Lunch");
+    // Shiva is at the table: the sabzi is not for him, and he has his own dish there beside the rice.
+    expect(mon.find((x) => kindOf(r, x.name) === "Sabzi")!.not_for).toEqual(["Shiva"]);
+    expect(mon.some((x) => x.name !== "Rice" && !x.not_for.includes("Shiva"))).toBe(true);
+    const box = plate(r, WEEK[0], "Shiva's lunch box").map((x) => x.name);
+    expect(box).toHaveLength(2);
+    expect(box[0]).toBe("4 boiled eggs");
+    expect(catalogItem(box[1])!.kind.name).toBe("Salad");
+  });
+  it("egg or cheese roll on wet sabzi days", () => {
+    const lib = [...LIB, dish("Paneer butter masala", "Lunch", "Sabzi", { sub: "Paneer", catalog_item: "Paneer butter masala", days: ["Wed"] })];
+    const slots = [lunch(T({ kind: "Rice" }, { kind: "Sabzi" })),
+      lBox([T({ items: ["Paratha"] }, { from: "Lunch", kind: "Sabzi" }), share(T({ items: ["Egg paratha roll"] }), "sometimes"), share(T({ items: ["Cheese paratha roll"] }), "sometimes")])];
+    const r = run({ slots, library: lib, days: daysFor(slots), newCap: 0 });
+    const ROLLS = ["Egg paratha roll", "Cheese paratha roll"];
+    expect(plate(r, WEEK[2], "Lunch").map((x) => x.name)).toContain("Paneer butter masala");
+    const box = plate(r, WEEK[2], "Agastya's lunch box").map((x) => x.name);
+    expect(box.length).toBe(1);
+    expect(ROLLS).toContain(box[0]);
+    // The "sometimes" rolls keep their share: the day given to the wet sabzi is taken from another.
+    expect(WEEK.slice(0, 5).filter((d) => ROLLS.includes(plate(r, d, "Agastya's lunch box")[0]?.name ?? "")).length).toBe(2);
+  });
+  it("the cook's morning is kept to her dishes where a template fits, and said where none does", () => {
+    const visit: Visit = { cook: null, meals: ["Breakfast", "Lunch", "Agastya's breakfast box", "Agastya's lunch box"], cap: 4, days: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
+      label: "breakfast and lunch" };
+    const slots = [breakfast(T({ kind: "Upma", words: "upma" }), T({ kind: "Idli", dish: "Idli" }, { kind: "Chutney" })),
+      lunch(T({ kind: "Rice" }, { kind: "Dal" }, { kind: "Sabzi" }), T({ kind: "Rice" }, { kind: "Dal" }, { kind: "Sabzi" }, { kind: "Curd" })),
+      bBox([T({ from: "Breakfast" })]), lBox([T({ from: "Lunch", kind: "Sabzi" })])];
+    const r = run({ slots, library: LIB, days: daysFor(slots), visits: [visit] });
+    let oneDish = 0;
+    for (const d of WEEK.slice(0, 6)) {
+      const b = plate(r, d, "Breakfast"), l = plate(r, d, "Lunch");
+      expect(b.length).toBeGreaterThanOrEqual(1);
+      expect(l.length).toBeGreaterThanOrEqual(3);
+      if (b.length === 1) { oneDish++; expect(l).toHaveLength(3); }
+    }
+    expect(oneDish).toBeGreaterThan(0);
+    // A week where no template fits: every part kept, the day said.
+    const forced = [breakfast(T({ kind: "Idli", dish: "Idli" }, { kind: "Chutney" })), lunch(T({ kind: "Rice" }, { kind: "Dal" }, { kind: "Sabzi" }, { kind: "Curd" })),
+      bBox([T({ from: "Breakfast" })]), lBox([T({ from: "Lunch", kind: "Sabzi" })])];
+    const f = run({ slots: forced, library: LIB, days: daysFor(forced), visits: [visit] });
+    expect(f.unmet).toContain("Mon breakfast and lunch: 6 dishes to cook, more than the cook's 4");
+    for (const d of WEEK.slice(0, 6)) { expect(plate(f, d, "Breakfast")).toHaveLength(2); expect(plate(f, d, "Lunch")).toHaveLength(4); }
+    // Sunday is not one of the visit's days.
+    expect(f.unmet.some((u) => u.startsWith("Sun ") && u.includes("dishes to cook"))).toBe(false);
   });
 });

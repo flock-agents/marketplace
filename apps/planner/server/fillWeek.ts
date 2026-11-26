@@ -10,25 +10,34 @@
 //     only when none of theirs fits, a brand-new item of the kind (sub-kind when given) from the catalog, while at least
 //     OWN_SHARE of the week's non-staple items stay their own; else one of theirs comes back (the one had longest ago);
 //   - a part of the family's own dishes ({items}) or a kind only they have: their dishes only, rotated;
-//   - a linked part ({from, ...}): not filled here yet.
+//   - a linked part ({from, kind?, sub?}): the item the meal it links to has of that kind that day (its whole plate with no
+//     kind), filled after that meal; never a repeat, never new, counted once for the cook. When that meal is not cooked that
+//     day, the part picks its own item (a kind part of its kind; a whole plate: one of that meal's templates).
+// A hard swap's item is a planned dish for its person (`for_people`), placed beside what it swaps (a linked box dish leaves
+// that person's box). An extras add-on's people stay at the main meal. A cook's visit (her morning's meals) prefers the
+// templates that keep her dish count, and a day over it is said (unmet); no part is ever dropped for it.
 // Nothing is ever matched by its words to the catalog: a dish's kind is its part's, its row's, or an exact catalog item's.
 // Food rules: an item someone at the table may not eat (a known break) is passed over while another fits; when none does, it
 // stays with `not_for` them and they get their own item for that part. A dish whose fit for a rule is not known is planned
 // and asked (res.unknowns), never kept from anyone. A rule broken only by an ingredient the dish can be made without is a
 // note, never a block (planChecks.leaveOutNotes). Pure and deterministic: no database, no model, ties broken by date and slot.
 import { CATALOG, catalogContains, catalogItem, catalogKind, norm, suggestable, suggestMeals, type CatalogItem, type MealKind, type MealTemplate, isItemsPart, isKindPart, isLinkedPart, mealKinds,
-  type KindPart, type TemplatePart } from "./kinds";
+  type KindPart, type LinkedPart, type TemplatePart } from "./kinds";
 import { INSTEAD_STEP, TEMPLATE_DAYS } from "./db/constants";
-import { addDays, weekdayOf } from "./dates";
+import { addDays, weekdayOf, type Weekday } from "./dates";
 import { dishKey } from "./dishText";
-import { canonTag, factsOf, frequencyRange, guestForbids, guestsCan, isDropped, isStapleAt, leaveOutNotes, mainFeeds, notFor, ownAddon,
-  readFor, ruleUnknowns, slotFacts, withParents, OWN_SHARE, type DishFacts, type Unknown, type Week } from "./planChecks";
+import { canonTag, factsOf, frequencyRange, guestForbids, guestsCan, isDropped, isStapleAt, leaveOutNotes, mainFeeds, notFor, ownAddon, placeOfDish,
+  readFor, ruleUnknowns, slotFacts, swapsAt, withParents, OWN_SHARE, type DishFacts, type Unknown, type Week } from "./planChecks";
 import type { DishPlace } from "./targets";
 import { ruleHolds, slotDayKey, type PlanDay } from "./planDays";
 import type { HistoryRow, LibraryDish, Rule, Slot } from "./slotStore";
 
-/** One dish on a filled plate. `new`: a brand-new variant (the family never had it). */
-export type FilledDish = { name: string; new: boolean; not_for: string[]; note: string | null };
+/** One dish on a filled plate. `new`: a brand-new variant (the family never had it). `for_people`: only for these people (a swap's
+ *  item); empty = the slot-day's people. `linked`: the item of the meal a linked part links to. */
+export type FilledDish = { name: string; new: boolean; not_for: string[]; note: string | null; for_people: string[]; linked: boolean };
+/** A cook's visit (§9.3): the meals she cooks in one go (her morning: Breakfast, Lunch and the boxes), on its days, at most `cap`
+ *  distinct dishes. `label`: the meals in words ("breakfast and lunch"); `cook` null: "the cook". */
+export type Visit = { cook: string | null; meals: string[]; days: Weekday[]; cap: number; label: string };
 /** A brand-new variant placed: on which slot-day, its kind and catalog item, and the family's item of that kind it stands in for. */
 export type PlacedNew = { dish: string; date: string; slot: string; kind: string; sub: string | null; like: string | null };
 export type FillInput = {
@@ -46,12 +55,14 @@ export type FillInput = {
   /** What dishes contain, read this run (by dish key). */
   facts?: Map<string, DishFacts>;
   guestTags?: Map<string, string[]>;
+  /** The cooks' visits whose dish limits the fill keeps where a template fits (makePlan visitsOf). */
+  visits?: Visit[];
 };
 export type FillResult = {
   /** Each planned slot-day's plate, by slotDayKey. */ plates: Map<string, FilledDish[]>;
   placed: PlacedNew[];
   /** The catalog's items of a category the family named, placed (theirs, not new): to be kept in their library. */ named: PlacedNew[];
-  unmet: string[]; log: string[];
+  /** What the week falls short of: a part with nothing, a dish back sooner than usual, a cook's visit over her limit. */ unmet: string[]; log: string[];
   /** The dishes planned whose fit for someone's rule is not known: planned, and asked (one meaning model: unknown = ask). */ unknowns: Unknown[];
   /** Where every planned item sits, by dish key: its kind, sub-kind and catalog item (the part it filled, or its row). */ places: Map<string, DishPlace>;
   /** Each slot's templates and kinds as planned. */ templates: Map<string, MealTemplate[]>; kinds: Map<string, MealKind[]>;
@@ -150,6 +161,9 @@ export function templateCounts(templates: MealTemplate[], n: number): number[] {
   for (let j = 0; sum < n; j++, sum++) out[spread[j % spread.length]]++;
   return out;
 }
+
+/** The sub-kinds that are wet (the catalog's Gravy sub-kinds): a sabzi of one does not roll (§5.4, egg/cheese days). */
+export const WET_SUBS = ["Curry", "Kofta", "Kurma", "Dalna", "Kerala curry", "Paneer"];
 
 // ── The fill ──
 
@@ -394,6 +408,23 @@ export function fillWeek(input: FillInput): FillResult {
     if (l) { markLimit(d.slot, l, d.date, limitUse); markLimit(d.slot, l, d.date, planUse); }
   }
 
+  // ── The cooks' visits (§9.3) ──
+  const visits = input.visits ?? [];
+  /** The meals a slot's linked parts link to (lower case). */
+  const linkSources = (s: Slot): string[] => uniq((s.templates ?? []).flatMap((t) => t.parts).filter(isLinkedPart).map((p) => p.from.toLowerCase()));
+  /** Is a slot cooked in a visit: one of its meals, an add-on of one, or a box linked to one. */
+  const inVisit = (v: Visit, slot: string): boolean => {
+    const x = slotByKey.get(slot.toLowerCase());
+    if (!x) return false;
+    const of = (n: string) => v.meals.some((m) => same(m, n));
+    return of(x.name) || (!!x.addon_of && of(x.addon_of)) || linkSources(x).some(of);
+  };
+  const visitsAt = (slot: string, date: string) => visits.filter((v) => v.days.includes(weekdayOf(date)) && inVisit(v, slot));
+  /** The dishes a template has the cook make: every part but a linked one (its dish is the other meal's). */
+  const cooked = (t: MealTemplate) => t.parts.filter((p) => !isLinkedPart(p)).length;
+  const visitLoad = new Map<string, number>();   // visit index|date → dishes of the templates given so far
+  const loadOf = (v: Visit, date: string) => visitLoad.get(`${visits.indexOf(v)}|${date}`) ?? 0;
+
   // ── Templates for each slot's days ──
   const tplOf = new Map<string, number>();   // slotDayKey → template index
   const pinsOf = new Map<string, LibraryDish[]>();
@@ -401,7 +432,8 @@ export function fillWeek(input: FillInput): FillResult {
     : isLinkedPart(p) ? false : sameKind(p.kind, placeOf(r)?.kind) && (!p.sub || sameKind(p.sub, placeOf(r)?.sub))));
   /** A template kept to days ("bread omelette on Sundays") comes only on them. */
   const onDay = (t: MealTemplate, date: string) => !t.days?.length || (t.days as string[]).includes(weekdayOf(date));
-  for (const s of shaped) {
+  // The meals in their order of the day, so a visit's later meal sees what its earlier ones were given.
+  for (const s of [...shaped].sort((a, b) => a.order - b.order)) {
     const ts = s.templates ?? [];
     const mine = planned.filter((d) => same(d.slot, s.name)).sort((a, b) => a.date.localeCompare(b.date));
     if (!ts.length || !mine.length) continue;
@@ -457,15 +489,24 @@ export function fillWeek(input: FillInput): FillResult {
       if (!cand.length) { const any = ts.findIndex((t) => onDay(t, d.date)); if (any >= 0) tplOf.set(k, any); else res.log.push(`${weekdayOf(d.date)} ${s.name}: no template for that day`); continue; }
       for (const i of cand) cur[i] += weight[i];
       const total = cand.reduce((n, i) => n + weight[i], 0);
-      const ranked = [...cand].sort((a, b) => cur[b] - cur[a] || a - b);
+      // A template that keeps the cook's visit within her limit that day comes before one that does not (§9.3).
+      const vs = visitsAt(s.name, d.date);
+      const over = (i: number) => Number(vs.some((v) => loadOf(v, d.date) + cooked(ts[i]) > v.cap));
+      const ranked = [...cand].sort((a, b) => over(a) - over(b) || cur[b] - cur[a] || a - b);
       const near = new Set([tplAt(addDays(d.date, -1)), tplAt(addDays(d.date, 1))]);
-      const pick = ranked.find((i) => !near.has(i)) ?? ranked[0];
+      const pick = ranked.find((i) => !near.has(i) && over(i) === over(ranked[0])) ?? ranked[0];
       cur[pick] -= total;
       if (left[pick] > 0) left[pick]--;
       tplOf.set(k, pick);
       mark(pick, d.date);
     }
+    for (const d of mine) {
+      const i = tplOf.get(slotDayKey(d.date, s.name));
+      if (i !== undefined) for (const v of visitsAt(s.name, d.date)) visitLoad.set(`${visits.indexOf(v)}|${d.date}`, loadOf(v, d.date) + cooked(ts[i]));
+    }
   }
+  /** Each slot-day's template as first given (before a day's own change: a wet sabzi's roll day, a template that cannot fill). */
+  const firstTpl = new Map(tplOf);
 
   // OWN_SHARE: the week's non-staple places, of which at most the rest are new.
   let places = 0;
@@ -494,7 +535,8 @@ export function fillWeek(input: FillInput): FillResult {
     { items: neu, isNew: true, share: false, repeat: false, next: false, zero: false },
     { items: fam, isNew: false, share: false, repeat: true, next: true, zero: false },
   ];
-  type Plate = { name: string; key: string; part: number; staple: boolean; isNew: boolean; kind: string | null; sub: string | null }[];
+  /** `for`: only for these people (a swap's item); `linked`: the linked meal's item. */
+  type Plate = { name: string; key: string; part: number; staple: boolean; isNew: boolean; kind: string | null; sub: string | null; for: string[]; linked: boolean }[];
   const newAllowed = (d: PlanDay, share: boolean, feeding: boolean) => {
     if (d.new_dishes_allowed === 0) return false;
     if (d.new_dishes_allowed != null && (newOnDay.get(slotDayKey(d.date, d.slot)) ?? 0) >= d.new_dishes_allowed) return false;
@@ -559,11 +601,11 @@ export function fillWeek(input: FillInput): FillResult {
     const hit = catalogItem(it.name);
     return hit ? { kind: hit.kind.name, sub: hit.item.sub ?? null, item: hit.item.name } : null;
   };
-  const put = (s: Slot, d: PlanDay, plate: Plate, it: Item, part: number, staple: boolean) => {
+  const put = (s: Slot, d: PlanDay, plate: Plate, it: Item, part: number, staple: boolean, forPeople: string[] = []) => {
     const place = res.places.has(it.key) ? null : placeOfItem(s, it);
     if (place) res.places.set(it.key, place);
     for (const l of saidRowsAt(s.name, it)) markLimit(s.name, l, d.date, limitUse);
-    plate.push({ name: it.name, key: it.key, part, staple, isNew: !it.family, kind: it.kind, sub: it.sub });
+    plate.push({ name: it.name, key: it.key, part, staple, isNew: !it.family, kind: it.kind, sub: it.sub, for: forPeople, linked: false });
     use(d.date, s.name, it.name);
     dayOf(d).dishes.push(it.name);
     if (it.family && it.catalog && !res.named.some((x) => dishKey(x.dish) === it.key)) res.named.push({ dish: it.name, date: d.date, slot: s.name, kind: it.kind, sub: it.sub, like: null });
@@ -604,9 +646,39 @@ export function fillWeek(input: FillInput): FillResult {
   /** Does an add-on have anything to give: a template with a part (a meal with none plans nothing). */
   const canFeed = (slot: string) => (shapeOf(slot).templates ?? []).some((t) => t.parts.length);
 
-  // ── Day by day, the meals in their order ──
+  // ── Day by day, the meals in their order; a meal with a linked part after the meal it links to ──
   const order = (d: PlanDay) => slotByKey.get(d.slot.toLowerCase())?.order ?? 99;
-  const todo = [...planned].sort((a, b) => a.date.localeCompare(b.date) || order(a) - order(b) || a.slot.localeCompare(b.slot));
+  const rank = new Map<string, number>();
+  const rankOf = (slot: string, seen: Set<string> = new Set()): number => {
+    const key = slot.toLowerCase(), x = slotByKey.get(key);
+    if (!x) return 99;
+    if (rank.has(key)) return rank.get(key)!;
+    if (seen.has(key)) return x.order;
+    seen.add(key);
+    const r = Math.max(x.order, ...linkSources(x).map((f) => rankOf(f, seen) + 0.5));
+    rank.set(key, r);
+    return r;
+  };
+  const todo = [...planned].sort((a, b) => a.date.localeCompare(b.date) || rankOf(a.slot) - rankOf(b.slot) || order(a) - order(b) || a.slot.localeCompare(b.slot));
+  /** Each filled slot-day's plate as placed (its items' kinds), by slotDayKey: what a linked part reads. */
+  const filled = new Map<string, Plate>();
+  /** What a meal has that day for a linked part: its plate (the dishes for everyone), a fixed day's dishes by their saved place;
+   *  null when it is not cooked that day (no slot-day, skipped, nothing on it). */
+  const sourceOf = (date: string, from: string): Plate | null => {
+    const sd = days.find((x) => x.date === date && same(x.slot, from));
+    if (!sd || sd.skip) return null;
+    const pl = filled.get(slotDayKey(date, from))?.filter((x) => !x.for.length)
+      ?? (sd.fixed ? sd.dishes.map((n) => { const pc = placeOfDish(w, from, n); return { name: n, key: dishKey(n), part: 0, staple: isStapleAt(w, from, n), isNew: false, kind: pc.kind, sub: pc.sub, for: [], linked: false }; }) : null);
+    return pl?.length ? pl : null;
+  };
+  /** The item a linked part to kind K reads is wet (§5.4): its saved place's sub-kind is a Gravy sub-kind, or its catalog item is
+   *  a gravy. */
+  const wetAt = (date: string, p: LinkedPart): boolean => {
+    const x = (sourceOf(date, p.from) ?? []).find((y) => sameKind(y.kind, p.kind) && (!p.sub || sameKind(y.sub, p.sub)));
+    if (!x) return false;
+    const pc = placeOfDish(w, p.from, x.name);
+    return WET_SUBS.some((ws) => sameKind(ws, pc.sub)) || (!!pc.item && catalogItem(pc.item)?.kind.name === "Gravy");
+  };
   for (const d of todo) {
     const s = shapeOf(d.slot);
     const k = slotDayKey(d.date, s.name);
@@ -615,8 +687,33 @@ export function fillWeek(input: FillInput): FillResult {
     const people = d.people;
     // The people fed at their own add-on that day are not fed here.
     // (Only an add-on that has something to give: one with no dish of theirs and no template feeds nobody.)
-    const atTable = s.kind === "addon" ? people : people.filter((p) => { const a = ownAddon(w, dayOf(d), p); return !a || !canFeed(a.slot); });
+    // An extras add-on (Shiva's eggs and salad beside the home lunch) keeps its people at the main meal.
+    const atTable = s.kind === "addon" ? people : people.filter((p) => { const a = ownAddon(w, dayOf(d), p); return !a || !canFeed(a.slot) || !!slotByKey.get(a.slot.toLowerCase())?.extras; });
     if (ti === undefined) { res.plates.set(k, []); continue; }
+    // Egg/cheese days (§5.4): in a meal with a part linked to another's kind, a template of its own with a share (the "sometimes"
+    // roll) comes on the days that kind's item there is wet, its days taken from the other days it was given.
+    {
+      const ts = s.templates!;
+      const linkOf = (i: number) => ts[i].parts.find((p): p is LinkedPart => isLinkedPart(p) && !!p.kind);
+      const linkedTs = ts.map((_, i) => i).filter((i) => !!linkOf(i) && onDay(ts[i], d.date));
+      const alts = ts.map((_, i) => i).filter((i) => !!ts[i].share && !ts[i].parts.some(isLinkedPart) && onDay(ts[i], d.date));
+      if (linkedTs.length && alts.length) {
+        const mineDays = planned.filter((x) => same(x.slot, s.name));
+        const given = (i: number) => mineDays.filter((x) => x.date < d.date && tplOf.get(slotDayKey(x.date, s.name)) === i).length;
+        const lt = linkOf(linkedTs.includes(ti) ? ti : linkedTs[0])!;
+        if (linkedTs.includes(ti) && wetAt(d.date, lt)) {
+          const alt = [...alts].sort((a, b) => given(a) - given(b) || a - b)[0];
+          res.log.push(`${label(d)}: its ${lt.from} ${lt.kind} is wet; template ${alt + 1} instead`);
+          ti = alt; tplOf.set(k, ti);
+        } else if (alts.includes(ti) && !wetAt(d.date, lt)) {
+          const share = mineDays.filter((x) => alts.includes(firstTpl.get(slotDayKey(x.date, s.name)) ?? -1)).length;
+          if (mineDays.filter((x) => x.date < d.date && alts.includes(tplOf.get(slotDayKey(x.date, s.name)) ?? -1)).length >= share) {
+            res.log.push(`${label(d)}: its share of template ${ti + 1} went to a wet day; template ${linkedTs[0] + 1} instead`);
+            ti = linkedTs[0]; tplOf.set(k, ti);
+          }
+        }
+      }
+    }
     // A template that cannot be filled that day (fish on a day the house keeps vegetarian, a breakfast whose items are all
     // kept from someone), or only with an item had yesterday, gives way to another of the meal's: the one had least this
     // week, never yesterday's when another fits. A plate is never left bare of what its template promised.
@@ -624,7 +721,8 @@ export function fillWeek(input: FillInput): FillResult {
     const can = (i: number, fresh: boolean) => onDay(s.templates![i], d.date) && s.templates![i].parts.every((p) => isLinkedPart(p) || (wordsAllow(p) && (isStaplePart(s, p) || (() => {
       const { fam, neu, kind, sub } = poolsOf(s, p);
       if ((pinsOf.get(k) ?? []).some((r) => fam.some((x) => x.key === r.key) || (!!kind && sameKind(placeOf(r)?.kind, kind) && (!sub || sameKind(placeOf(r)?.sub, sub))))) return true;
-      return !!choose(s, d, [], stepsFor(fam, neu).filter((st) => !fresh || !st.next), atTable, false);
+      // A part of the family's fixed dishes ("paratha" in the box every day) never moves the template for a repeat of them.
+      return !!choose(s, d, [], stepsFor(fam, neu).filter((st) => !fresh || !st.next || isItemsPart(p)), atTable, false);
     })())));
     if (!can(ti, true)) {
       const had = (i: number) => planned.filter((x) => same(x.slot, s.name) && x.date < d.date && tplOf.get(slotDayKey(x.date, s.name)) === i).length;
@@ -636,21 +734,21 @@ export function fillWeek(input: FillInput): FillResult {
     }
     const t = s.templates![ti];
     const pins = [...(pinsOf.get(k) ?? [])];
-    t.parts.forEach((p, part) => {
-      // A linked part (the item another meal has for that kind that day): not filled here yet.
-      if (isLinkedPart(p)) return;
+    /** Fill one part on this plate. `ps`: the meal whose items fill it (a linked part's own meal when that meal is not cooked
+     *  that day); the dish is still this slot-day's. */
+    const fillPart = (p: KindPart | TemplatePart, part: number, ps: Slot = s) => {
       // A staple: their usual item, every time; a person who may not eat it gets another of its kind.
-      const lims = partLimits(s, p), lim = lims.length ? openLimit(s.name, lims, d.date, limitUse) : null;
-      if (isStaplePart(s, p)) {
+      const lims = partLimits(ps, p), lim = lims.length ? openLimit(ps.name, lims, d.date, limitUse) : null;
+      if (isStaplePart(ps, p)) {
         const kind = (p as { kind: string }).kind;
         // Their staple kept to its words ("chapati twice a week"): past them, another of theirs of its kind free of such words.
-        const other = lims.length && !lim ? famRows.find((r) => same(r.slot, s.name) && sameKind(placeOf(r)?.kind, kind) && !limitOf(r)) : undefined;
-        const name = other?.name ?? stapleOf(s, kind);
+        const other = lims.length && !lim ? famRows.find((r) => same(r.slot, ps.name) && sameKind(placeOf(r)?.kind, kind) && !limitOf(r)) : undefined;
+        const name = other?.name ?? stapleOf(ps, kind);
         const it: Item = { name, key: dishKey(name), kind, sub: null, family: true, idx: 0 };
         if (plate.some((x) => x.key === it.key)) return;
         if (lims.length && !lim && !other) res.log.push(`${label(d)}: ${name} past the family's words for it (no other ${kind} of theirs)`);
         put(s, d, plate, it, part, true);
-        if (lim && !other) markLimit(s.name, lim, d.date, limitUse);
+        if (lim && !other) markLimit(ps.name, lim, d.date, limitUse);
         for (const who of excluded(d, atTable, name)) {
           if (plate.some((x) => x.part === part && x.key !== it.key && !excluded(d, [who], x.name).length)) continue;
           const alts: Item[] = uniq([...famRows.filter((r) => sameKind(placeOf(r)?.kind, kind)).map((r) => r.name), ...(catalogKind(kind)?.items ?? []).map((i) => i.name)])
@@ -660,9 +758,9 @@ export function fillWeek(input: FillInput): FillResult {
         }
         return;
       }
-      const { kind, sub, fam, neu } = poolsOf(s, p);
+      const { kind, sub, fam, neu } = poolsOf(ps, p);
       // A pinned dish of this part, on its day.
-      const pin = pins.find((r) => fam.some((x) => x.key === r.key) || (!isKindPart(p) ? false : sameKind(placeOf(r)?.kind, kind) && (!sub || sameKind(placeOf(r)?.sub, sub))));
+      const pin = ps !== s ? undefined : pins.find((r) => fam.some((x) => x.key === r.key) || (!isKindPart(p) ? false : sameKind(placeOf(r)?.kind, kind) && (!sub || sameKind(placeOf(r)?.sub, sub))));
       let got: { it: Item; ex: string[] } | null = null;
       if (pin) {
         pins.splice(pins.indexOf(pin), 1);
@@ -679,13 +777,34 @@ export function fillWeek(input: FillInput): FillResult {
       }
       if (got.it.family && usedDates.get(got.it.key)?.has(addDays(d.date, -1)) && s.kind !== "addon" && !pin) res.unmet.push(`${label(d)}: ${got.it.name} comes back sooner than usual`);
       put(s, d, plate, got.it, part, false);
-      if (lims.length) { const l = wordsFor(s.name, got.it).find((x) => lims.some((y) => y.row.key === x.row.key)) ?? lim; if (l) markLimit(s.name, l, d.date, limitUse); }
+      if (lims.length) { const l = wordsFor(ps.name, got.it).find((x) => lims.some((y) => y.row.key === x.row.key)) ?? lim; if (l) markLimit(ps.name, l, d.date, limitUse); }
       // Their own item for this part, for each person the item is not for.
       for (const who of got.ex) {
         if (!atTable.includes(who)) continue;
         if (plate.some((x) => x.part === part && !excluded(d, [who], x.name).length)) continue;
         feed(s, d, plate, [who], part, fam, neu, kind);
       }
+    };
+    t.parts.forEach((p, part) => {
+      if (!isLinkedPart(p)) { fillPart(p, part); return; }
+      // A linked part: the item the meal it links to has of its kind that day (its whole plate with no kind), as it is there:
+      // not used again (no repeat), never new, the cook makes it once.
+      const hits = (sourceOf(d.date, p.from) ?? []).filter((x) => !p.kind || (sameKind(x.kind, p.kind) && (!p.sub || sameKind(x.sub, p.sub))));
+      const take = p.kind ? hits.slice(0, 1) : hits;
+      if (take.length) {
+        for (const x of take) if (!plate.some((y) => y.key === x.key)) { plate.push({ ...x, part, isNew: false, for: [], linked: true }); dayOf(d).dishes.push(x.name); }
+        return;
+      }
+      // That meal is not cooked that day (eaten out, ordered in, or no item of the kind): the part picks its own item, of that
+      // meal's items (Review Focus 1): a kind part of its kind; a whole plate, one of that meal's templates.
+      const ps = slotByKey.get(p.from.toLowerCase()) ? shapeOf(p.from) : s;
+      res.log.push(`${label(d)}: ${p.from} is not cooked that day; its ${p.sub ?? p.kind ?? "plate"} picked on its own`);
+      if (p.kind) { fillPart({ kind: p.kind, ...(p.sub ? { sub: p.sub } : {}) }, part, ps); return; }
+      const pts = (ps.templates ?? []).map((_, i) => i).filter((i) => onDay(ps.templates![i], d.date) && !ps.templates![i].parts.some(isLinkedPart));
+      const had = (i: number) => planned.filter((x) => same(x.slot, ps.name) && tplOf.get(slotDayKey(x.date, ps.name)) === i).length;
+      const pick = pts.sort((a, b) => had(a) - had(b) || a - b)[0];
+      if (pick === undefined) { res.unmet.push(`${label(d)}: nothing for its ${p.from} plate`); return; }
+      for (const q of ps.templates![pick].parts) fillPart(q, part, ps);
     });
     // A pinned dish no template part holds: on the plate beside.
     for (const pin of pins) if (!plate.some((x) => x.key === pin.key)) put(s, d, plate, { name: pin.name, key: pin.key, kind: placeOf(pin)?.kind ?? pin.name, sub: null, family: true, idx: 0, row: pin }, t.parts.length, false);
@@ -704,6 +823,37 @@ export function fillWeek(input: FillInput): FillResult {
       const pool: Item[] = [{ name: r.name, key: r.key, kind: pl?.kind ?? r.name, sub: pl?.sub ?? null, family: true, idx: 0, row: r }];
       const got = choose(s, d, plate, [{ items: pool, isNew: false, share: false, repeat: true, next: true, zero: false }], atTable, false);
       if (got) put(s, d, plate, got.it, t.parts.length, false);
+    }
+    // A hard swap's item is a planned dish for its person (§9.4): beside what it swaps, on this plate, used (rotation, never the
+    // next day) and cooked. An item: that item, even one they disliked (Review Focus 5); a kind: the family's item of it had
+    // longest ago, else a catalog item, new. A linked dish it swaps leaves that person's box.
+    const at = { ...dayOf(d), people: atTable };
+    for (const x of plate.filter((y) => !y.for.length)) for (const sw of swapsAt(w, at, x.name)) {
+      const who = atTable.find((p) => same(p, sw.who)) ?? sw.who;
+      const g = sw.gives;
+      if (g.type === "ingredient") continue;
+      let it: Item | null = null;
+      if (g.type === "item") {
+        const key = dishKey(g.item), row = rowAt(s.name, key), hit = catalogItem(g.item);
+        it = { name: row?.name ?? hit?.item.name ?? g.item.trim(), key, kind: row?.kind ?? g.kind ?? hit?.kind.name ?? g.item.trim(), sub: row?.sub ?? hit?.item.sub ?? null,
+          family: true, idx: 0, ...(row ? { row } : {}) };
+      } else {
+        const sub = g.type === "sub" ? g.sub : null, seen = new Set<string>();
+        const fam: Item[] = famRows.filter((r) => sameKind(placeOf(r)?.kind, g.kind) && (!sub || sameKind(placeOf(r)?.sub, sub)) && !seen.has(r.key) && !!seen.add(r.key))
+          .map((r, i) => ({ name: r.name, key: r.key, kind: g.kind, sub: placeOf(r)?.sub ?? null, family: true, idx: i, row: r }));
+        it = choose(s, d, plate, stepsFor(fam, catalogPool(s, g.kind, sub, [], false)), [who], true)?.it ?? null;
+      }
+      if (!it) { res.unmet.push(`${label(d)}: nothing to give ${who} in place of ${x.name}`); continue; }
+      const given = it;
+      if (!plate.some((y) => y.key === given.key && (!y.for.length || y.for.some((p) => same(p, who))))) put(s, d, plate, given, x.part, false, [who]);
+      if (x.linked) {
+        x.for = (x.for.length ? x.for : atTable).filter((p) => !same(p, who));
+        if (!x.for.length) {
+          plate.splice(plate.indexOf(x), 1);
+          const ds = dayOf(d).dishes, i = ds.findIndex((n) => dishKey(n) === x.key);
+          if (i >= 0) ds.splice(i, 1);
+        }
+      }
     }
     // Still nothing beside the staples where the template had more (no template could be filled that day): the family's own
     // dish of this meal had longest ago, or one of another part's kind. Nobody's meal is ever empty.
@@ -724,7 +874,7 @@ export function fillWeek(input: FillInput): FillResult {
     if (s.kind !== "addon" && plate.length) {
       const mains = plate.filter((x) => !x.staple);
       for (const who of atTable) {
-        const can = plate.filter((x) => !excluded(d, [who], x.name).length);
+        const can = plate.filter((x) => (!x.for.length || x.for.some((p) => same(p, who))) && !excluded(d, [who], x.name).length);
         if (can.length && (!mains.length || can.some((x) => !x.staple))) continue;
         if (!feed(s, d, plate, [who], t.parts.length, [], [], null)) res.unmet.push(`${label(d)}: ${who} has nothing to eat there`);
       }
@@ -751,9 +901,22 @@ export function fillWeek(input: FillInput): FillResult {
       if (at >= 0) ds.splice(at, 1);
     }
     const row = dayOf(d);
-    res.plates.set(k, plate.map((x) => ({ name: x.name, new: x.isNew, not_for: notFor(w, row, x.name), note: leaveOutNotes(w, row, x.name).join("; ") || null })));
+    // A dish for some people only is checked for them.
+    const rowFor = (x: Plate[number]) => (x.for.length ? { ...row, people: x.for } : row);
+    res.plates.set(k, plate.map((x) => ({ name: x.name, new: x.isNew, not_for: notFor(w, rowFor(x), x.name), note: leaveOutNotes(w, rowFor(x), x.name).join("; ") || null,
+      for_people: [...x.for], linked: x.linked })));
+    filled.set(k, plate);
     // A dish whose fit for someone's rule is not known is planned and asked: once per placement, per person and ingredient.
-    for (const x of plate) { prep(x.name); res.unknowns.push(...ruleUnknowns(w, row, x.name)); }
+    for (const x of plate) { prep(x.name); res.unknowns.push(...ruleUnknowns(w, rowFor(x), x.name)); }
+  }
+  // A cook's visit over her limit on a day no template kept it (§9.3): said, never a part dropped. Every distinct dish of the
+  // visit's meals that day counts (a staple, a box's own item, a swap item); a linked dish is the other meal's, once.
+  for (const v of visits) {
+    const dates = uniq(planned.filter((x) => inVisit(v, x.slot)).map((x) => x.date)).filter((x) => v.days.includes(weekdayOf(x))).sort();
+    for (const date of dates) {
+      const n = new Set(days.filter((x) => x.date === date && !x.skip && inVisit(v, x.slot)).flatMap((x) => x.dishes.map(dishKey))).size;
+      if (n > v.cap) res.unmet.push(`${weekdayOf(date)} ${v.label}: ${n} dishes to cook, more than ${v.cook ? `${v.cook}'s` : "the cook's"} ${v.cap}`);
+    }
   }
   res.unmet = uniq(res.unmet);
   res.facts = w.facts;
