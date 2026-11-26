@@ -207,6 +207,16 @@ A question is never skipped. When facts for it were already said (in passing, co
 - Group words follow the count and names: one child → his/her name; several → "the children" or the names.
 - Read-back rule lines are built from the rule's target ("Agastya: Pancakes when it's upma").
 
+### 6.3b "Who looks after it" facts are structured (owner, 26 Nov)
+
+Same root cause as R1, in Flock: `household.schoolBy`, `mealsBy`, `groceriesBy` are saved as free text and every reader
+re-parses the sentence its own way (`family.ts helpedName` splits at the first comma/"and"; `brief.ts someoneElseBy`
+another way). "Ankita looks at X and then I look at Y" became the menu line "Help Ankita looks at X manage school
+updates" (run 15: "Help Ankita mostly manage…"). Target: the parse saves them as a list `[{ person, part? }]`, person
+= a household name (the speaker as their own name), part = their words for that person's share. Every reader uses the
+names; labels are built from names only ("Help Ankita manage school updates", "Help both of you …"); `part` is kept for
+the brief and the calendar. Saved interviews migrate (one-time, the model reads the old text once).
+
 ### 6.4 What the interview hands the planner
 
 The transcript (as today) plus household facts with the speaker in people. Setup reads the family-meal answers into
