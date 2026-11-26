@@ -208,7 +208,7 @@ export function introText(times: { plan: string; afternoon: string; evening: str
   const named = andList(everyday.slice(0, 2));
   const each = `each time I put what is due in the cart${named ? `, like your ${named},` : ""} and mention anything that may be running low.`;
   return [
-    "How it works:",
+    "Your week is planned. How it works:",
     `• Every Sunday ${partOfDay(times.plan)} I plan the week. Change any meal by telling me, or in the app (Week).`,
     `• Every day at ${bare(times.afternoon)} I check tonight's dinner and at ${bare(times.evening)} tomorrow's meals; ${each} Reply and I order it together. Nothing is ordered until you reply.`,
     "• Saw a recipe on Instagram or YouTube? Share it here and say \"save this\"; I'll keep it and can plan it in.",

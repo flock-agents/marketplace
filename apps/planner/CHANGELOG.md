@@ -1,31 +1,5 @@
 # Changelog
 
-## 4.0.3
-
-- A meal with none of the family's dishes known (a child's tiffin nobody named dishes for) is left out of the week and
-  asked about in the plan's message; make_plan refuses only when no meal is known. Before, one such meal refused the whole
-  week, and onboarding asked the same question on every reply (stage, 25 Nov).
-- The plan's message leaves out a note that explains the plan's own choices ("Idli is safe, Chutney avoided by him"):
-  only a word for someone at the table is said. A person's fast is still said by code.
-- A note that is only the cook's limit again ("Yes, she has two hours, so 3 to 4 dishes in all") stays with the cook,
-  not under the family's notes or "All week".
-- The how-it-works message that follows the first week opens "How it works:" (the week's message already says it is planned).
-- make_plan reads the library dishes setup never read for a hard rule's tags (setup ran out of time) before planning,
-  and keeps what it read: before, every such dish failed closed and the week came out with 65 unmet places.
-- Setup reads the family's dishes on the fast tier (no reasoning): on balanced the reasoning ran into the token cap and
-  cut the answer off, so the read was asked twice and used most of setup's time (setup eval: 3–11 s vs 18–146 s for
-  that read, 94% vs 78% of checks).
-- The bread, rice or curd on the family's own plates at a meal is a staple there, however few plates were told (two lunch
-  plates "Roti, Sabzi" and "Dal, Rice, Sabzi, Curd" left roti a two-days-a-week dish and lunch came without it).
-- make_plan checks whether each meal has enough dishes after it has read what the family's dishes contain, not before
-  (before, every unread dish counted as nobody's and a meal got new dishes it did not need).
-- The setup read-back lists the family's usual dishes per meal, so a meal read wrong or missing is seen before the plan.
-- The week's prompt says what a good week is and reads the family's plates as parts. A kind of dish the family names
-  ("Sabzi", "Dal", "Idli with chutney") is planned as a particular one each day ("Bhindi sabzi"), and the same dish with
-  another accompaniment ("Idli with tomato chutney" for their "Idli with coconut chutney") is theirs too: neither is a new
-  dish nor uses up the new-dish limit; its contents are read, and it is not saved to the library.
-- Builds again: rc3's contains read did not type-check (tsc), so the app failed to install.
-
 ## 4.0.2
 
 Re-ask lines and fallbacks for Flock's code-worded interview (Flock sends every setup line as written; no model words a
@@ -40,6 +14,9 @@ question).
 - **No brackets.** The people and connectLater lines lose their brackets (Flock's guard reads "(…)" as an unfilled
   placeholder).
 - An older Flock ignores `reask` and `fallback` (its interview parser copies only the keys it knows).
+- **Needs Flock 0.25.0-beta.1** (`minFlockVersion`, was 0.24.0-beta.1): the pages need the component library 1.10.11 or later
+  (the cart's ItemPicker; Flock 0.24.0 ships 1.10.10 and the build fails there), and the setup reads `household.get` and
+  `apps.op`, which 0.24.0 does not have. 0.25.0-beta.1, not 0.25.0: a beta sorts before its release.
 
 ## 4.0.1
 
