@@ -90,6 +90,53 @@ describe.skipIf(!enabled)("the whatsapp functions on Flock's executor and browse
     expect(old.out.messages[0]).toMatchObject({ from: "Old Friend", text: "See you" });
   });
 
+  it("read-chat downloads a chat's PDFs into the agent's downloads folder: the newest 5, none over 10 MB, PDFs only, in the one open", async () => {
+    const downloads = join(flock.DATA_DIR, "agents", owner.id, "downloads");
+    const { ok, out } = await run("read-chat", { chat: "School Notices", count: 30 });
+    expect(ok).toBe(true);
+    expect(readLimits().opens.length).toBe(1);
+    expect(dummy.docFetches).toEqual(["Exam-Schedule.pdf", "Holiday-List.pdf", "Fees.pdf", "Sports-Day.pdf", "Circular-3.pdf"]);
+    const docs = Object.fromEntries(out.messages.filter((m: any) => m.document).map((m: any) => [m.document.name, m.document]));
+    for (const name of ["Exam-Schedule.pdf", "Holiday-List.pdf", "Fees.pdf", "Sports-Day.pdf", "Circular-3.pdf"]) {
+      expect(docs[name]).toEqual({ name, path: join(downloads, name), size: expect.any(Number) });
+      expect(readFileSync(docs[name].path, "latin1").startsWith("%PDF-")).toBe(true);
+    }
+    expect(docs["Annual-Report.pdf"]).toEqual({ name: "Annual-Report.pdf", error: "not downloaded: 14 MB, over the 10 MB limit" });
+    expect(docs["Timetable.docx"]).toEqual({ name: "Timetable.docx", error: "not downloaded: only PDFs are" });
+    expect(docs["Circular-1.pdf"].error).toContain("at most 5 a read");
+    expect(out.messages.filter((m: any) => m.document).every((m: any) => m.text === "[document]")).toBe(true);
+
+    // The next read gives those 5 again without a click, and downloads the 2 older ones.
+    const again = await run("read-chat", { chat: "School Notices", count: 30 });
+    expect(again.ok).toBe(true);
+    expect(dummy.docFetches.slice(5)).toEqual(["Circular-2.pdf", "Circular-1.pdf"]);
+    const paths = again.out.messages.filter((m: any) => m.document?.path).map((m: any) => m.document.path);
+    expect(paths.length).toBe(7);
+    expect(paths).toContain(join(downloads, "Exam-Schedule.pdf"));
+
+    // 30 days on, the next read deletes Exam-Schedule.pdf first, then downloads it again.
+    const knownFile = join(flock.DATA_DIR, "skill-data", "whatsapp", "documents.json");
+    const known = JSON.parse(readFileSync(knownFile, "utf8"));
+    known["false_120364@g.us_S10"].at = Date.now() - 31 * 24 * 60 * MIN;
+    writeFileSync(knownFile, JSON.stringify(known));
+    const third = await run("read-chat", { chat: "School Notices", count: 30 });
+    expect(third.ok).toBe(true);
+    expect(dummy.docFetches.slice(7)).toEqual(["Exam-Schedule.pdf"]);
+    const exam = third.out.messages.find((m: any) => m.document?.name === "Exam-Schedule.pdf").document;
+    expect(exam).toEqual({ name: "Exam-Schedule.pdf", path: join(downloads, "Exam-Schedule.pdf"), size: expect.any(Number) });
+    expect(existsSync(exam.path)).toBe(true);
+  });
+
+  it("read-chat: a PDF whose download never starts, or far bigger than shown, stays a placeholder with why", async () => {
+    const { ok, out } = await run("read-chat", { chat: "PTA Circulars" });
+    expect(ok).toBe(true);
+    expect(out.messages.map((m: any) => m.document)).toEqual([
+      { name: "Broken.pdf", error: "not downloaded: WhatsApp did not start the download" },
+      { name: "Minutes.pdf", error: "not kept: 11 MB, over the 10 MB limit" },
+    ]);
+    expect(existsSync(join(flock.DATA_DIR, "agents", owner.id, "downloads", "Minutes.pdf"))).toBe(false);
+  });
+
   it("search reads chats and messages, never contacts with no chat", async () => {
     const { ok, out } = await run("search", { query: "friend" });
     expect(ok).toBe(true);

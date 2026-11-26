@@ -32,7 +32,11 @@ Returns `{chats: [{name, kind, unread, lastMessageAt, preview}]}`. `kind` is `gr
 
 ### read-chat
 The last messages of one chat or group. Params `{"chat": "Mom", "count": 10}`: `chat` is the name exactly as `list-chats` shows it; `count` defaults to 10, at most 30.
-Returns `{chat, messages: [{from, time, text, mine}]}`, oldest first. Photos, voice messages, videos and documents are short placeholders such as `[photo]`.
+Returns `{chat, messages: [{from, time, text, mine, document?}]}`, oldest first. Photos, voice messages, videos and documents are short placeholders such as `[photo]` or `[document]`.
+
+A document also has `document`:
+- A PDF: `{name, path, size}`. `path` is a file in your workspace's `downloads/` folder: read it to answer what the notice or circular says. Quote only what answers the ask.
+- Anything else: `{name, error}`, a short reason it was not downloaded. Only PDFs are downloaded, at most 5 a read (the newest first), none over 10 MB. "at most 5 a read" means another `read-chat` of the same chat gets the older ones (PDFs it has already downloaded come back without downloading again). Downloaded PDFs are deleted after 30 days: never rely on an old `path`; read the chat again for a fresh one. Never download a document by hand in your browser.
 
 ### search
 WhatsApp's own search. Params `{"query": "dinner on friday", "max": 10}`.
@@ -55,6 +59,7 @@ Returns `{chat, sent, pending, message}`. `sent: null` means it was sent but not
 - Every function opens WhatsApp once (sends too): at most **10 opens an hour and 60 a day**.
 - WhatsApp is open at most **30 minutes a day** in total (the Flock's own day). Each result says `minutesLeftToday`; with little left a run gives up waiting sooner.
 - At most **5 sends an hour and 20 a day**.
+- `read-chat` downloads at most **5 PDFs a read, each at most 10 MB**, in the same open.
 - A limit hit is an error saying when it frees up (`OPEN_LIMIT_HOUR`, `OPEN_LIMIT_DAY`, `TIME_LIMIT_DAY`, `SEND_LIMIT_HOUR`, `SEND_LIMIT_DAY`). Tell the person in a few words and when you can try. Never retry in a loop and never wait it out silently.
 - A routine that watches a chat runs **no more often than every 30 minutes**, and only reads.
 - Read as little as answers the ask: one `read-chat` rather than `list-chats` and then every chat, and reuse what you read a few minutes ago instead of reading it again.
@@ -92,7 +97,7 @@ WhatsApp links Flock's browser as one of the person's devices. You do it with yo
      "type": "info",
      "icon": "🔗",
      "title": "Your WhatsApp link code: K7QD-2M9X",
-     "body": "**Easiest:** WhatsApp will send your phone a notification, *Enter code to link new device*. Tap it, tap **Confirm**, unlock with your fingerprint, face or PIN, then type the code.\n\n**Or from the menu:**\n- Android: ⋮ (top right) > Linked devices > Link a device > Link with phone number instead\n- iPhone: Settings > Linked devices > Link device > Link with phone number instead\n\nUnlock, then type the code. If it doesn't work, just ask me for a new one.\n\nOn a computer and rather scan a QR code? Just say so."
+     "body": "On your phone:\n- Android: ⋮ (top right) > Linked devices > Link a device > Link with phone number instead\n- iPhone: Settings > Linked devices > Link device > Link with phone number instead\n\nUnlock, then type the code. If it doesn't work, just ask me for a new one.\n\nOn a computer and rather scan a QR code? Just say so."
    }
    ```
 

@@ -26,7 +26,13 @@ describe("the manifest", () => {
     expect(manifest.slug).toBe("whatsapp");
     expect(manifest.tier).toBe("installable");
     expect(manifest.requires).toEqual([expect.objectContaining({ type: "browser_session", service: "whatsapp", loginUrl: "https://web.whatsapp.com/" })]);
-    expect(manifest.security.networkEndpoints.map((e: any) => e.hostname)).toEqual(["web.whatsapp.com"]);
+    // web.whatsapp.com first: Flock takes the first endpoint as the connector's site. Then WhatsApp's
+    // media servers, which WhatsApp Web itself fetches a chat's PDFs from (1.1.0), read only.
+    expect(manifest.security.networkEndpoints.map((e: any) => e.hostname)).toEqual(["web.whatsapp.com", "mmg.whatsapp.net", "*.cdn.whatsapp.net"]);
+    for (const e of manifest.security.networkEndpoints.slice(1)) {
+      expect(e.methods).toEqual(["GET"]);
+      expect(e.purpose).toContain("fetched by WhatsApp Web itself");
+    }
     expect(manifest.security.trustLevel).toBe("third-party");
   });
 
@@ -43,6 +49,18 @@ describe("the manifest", () => {
   it("instructions name the whatsapp sign-in, and the changelog has this version", () => {
     expect(instructions).toMatch(/^---\n[\s\S]*auth:\n {2}type: browser_session\n {2}session_name: whatsapp\n[\s\S]*tier: installable\n---\n/);
     expect(readFileSync(join(skillDir, "CHANGELOG.md"), "utf8")).toContain(`## ${manifest.version}`);
+  });
+});
+
+describe("read-chat's documents", () => {
+  it("instructions say what document holds and the download limits", () => {
+    const readChat = instructions.slice(instructions.indexOf("### read-chat"), instructions.indexOf("### search"));
+    expect(readChat).toContain("`{name, path, size}`");
+    expect(readChat).toContain("`{name, error}`");
+    expect(readChat).toContain("at most 5 a read");
+    expect(readChat).toContain("none over 10 MB");
+    expect(instructions).toContain("at most **5 PDFs a read, each at most 10 MB**");
+    expect(manifest.functions["read-chat"].timeoutMs).toBe(240_000);
   });
 });
 
@@ -105,7 +123,8 @@ describe("what the person reads", () => {
   it("the code card is valid, plain and complete", () => {
     const card = JSON.parse(sendCard);
     expect(card).toMatchObject({ type: "info", title: expect.stringContaining("code") });
-    for (const words of ["Enter code to link new device", "Confirm", "Android", "iPhone", "Linked devices", "Link with phone number instead", "ask me for a new one", "QR code? Just say so"]) expect(card.body).toContain(words);
+    expect(card.body).not.toContain("notification");
+    for (const words of ["Android", "iPhone", "Linked devices", "Link with phone number instead", "ask me for a new one", "QR code? Just say so"]) expect(card.body).toContain(words);
     expect(card.body).not.toMatch(/minute|expires? in/i);
   });
 

@@ -35,7 +35,27 @@ const chats = [
     { id: "false_9197@c.us_D1", pre: "[18:00, 01/02/2026] Old Friend: ", text: "See you" },
   ] },
   { name: "Announcements", group: true, time: "02/02/2026", unread: 0, preview: "Only admins can send", readOnly: true, messages: [] },
+  // Documents, as a school group posts them: 7 PDFs, one shown as 14 MB, and a Word file.
+  { name: "School Notices", group: true, time: "11:20", unread: 0, preview: "Exam-Schedule.pdf", hidden: true, messages: [
+    { id: "false_120364@g.us_S1", pre: "[11:00, 26/11/2026] Principal: ", text: "Notices for this week" },
+    { id: "false_120364@g.us_S2", doc: { name: "Circular-1.pdf", shown: "1 page · PDF · 120 kB", bytes: 4000 } },
+    { id: "false_120364@g.us_S3", doc: { name: "Circular-2.pdf", shown: "2 pages · PDF · 98 kB", bytes: 3000 } },
+    { id: "false_120364@g.us_S4", doc: { name: "Timetable.docx", shown: "DOCX · 30 kB", bytes: 2000, icon: "document-DOCX-icon" } },
+    { id: "false_120364@g.us_S5", doc: { name: "Annual-Report.pdf", shown: "40 pages · PDF · 14 MB", bytes: 3000 } },
+    { id: "false_120364@g.us_S6", doc: { name: "Circular-3.pdf", shown: "1 page · PDF · 77 kB", bytes: 3500 } },
+    { id: "false_120364@g.us_S7", doc: { name: "Sports-Day.pdf", shown: "1 page · PDF · 200 kB", bytes: 5000 } },
+    { id: "false_120364@g.us_S8", doc: { name: "Fees.pdf", shown: "1 page · PDF · 50 kB", bytes: 2500 } },
+    { id: "false_120364@g.us_S9", doc: { name: "Holiday-List.pdf", shown: "1 page · PDF · 60 kB", bytes: 2600 } },
+    { id: "false_120364@g.us_S10", doc: { name: "Exam-Schedule.pdf", shown: "3 pages · PDF · 310 kB", bytes: 6000 } },
+  ] },
+  // A PDF whose download never starts, and one far bigger than the size it shows.
+  { name: "PTA Circulars", group: true, time: "09:15", unread: 0, preview: "Minutes.pdf", hidden: true, messages: [
+    { id: "false_120365@g.us_P1", doc: { name: "Broken.pdf", shown: "1 page · PDF · 20 kB", bytes: 2000, broken: true } },
+    { id: "false_120365@g.us_P2", doc: { name: "Minutes.pdf", shown: "2 pages · PDF · 200 kB", bytes: 11 * 1024 * 1024 } },
+  ] },
 ];
+/** Downloads started, by file name (the Flock runs read it through /__dummy/doc). */
+const downloadsStarted = [];
 const contacts = ["Old Friendly Plumber"];
 
 function row(c) {
@@ -53,6 +73,10 @@ function message(m) {
   let inner = "";
   if (m.media === "photo") inner = '<div><img src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" alt=""></div>' + (m.caption ? '<div class="copyable-text" data-pre-plain-text="' + m.pre + '"><span class="selectable-text"><span>' + m.caption + '</span></span></div>' : "");
   else if (m.media === "ptt") inner = '<div><span data-icon="audio-play"></span><span>0:12</span></div><div><span>10:41</span></div>';
+  else if (m.doc) inner = '<div role="button" tabindex="0" class="doc" title="Download &quot;' + m.doc.name + '&quot;" data-doc="' + m.id + '">'
+    + '<span data-icon="' + (m.doc.icon || "document-PDF-icon") + '"></span><span dir="auto">' + m.doc.name + '</span>'
+    + m.doc.shown.split(" · ").map((s) => '<span>' + s + '</span>').join("")
+    + '<span data-icon="audio-download"></span></div><div><span>11:05</span></div>';
   else if (m.emojiImg) inner = '<div class="copyable-text" data-pre-plain-text="' + m.pre + '"><span class="selectable-text"><span>Me! <img class="emoji" alt="🎉" data-plain-text="🎉" src="data:image/gif;base64,R0lGODlhAQABAAAAACw="></span></span></div>';
   else inner = '<div class="copyable-text" data-pre-plain-text="' + m.pre + '"><span class="selectable-text"><span>' + m.text + '</span></span></div>';
   const ticks = out ? '<span data-icon="' + (m.pending ? "msg-time" : "msg-dblcheck") + '"></span>' : "";
@@ -64,6 +88,23 @@ function openChat(c) {
     : '<footer><div><div contenteditable="true" role="textbox" aria-label="Type a message" id="compose"></div></div><button aria-label="Send" id="send"><span data-icon="send"></span></button></footer>';
   document.getElementById("main-slot").innerHTML = '<div id="main"><header><div><span dir="auto" title="' + c.name + '">' + c.name + '</span></div></header>'
     + '<div id="msgs"><div role="row"><div>TODAY</div></div>' + c.messages.map(message).join("") + "</div>" + footer + "</div>";
+  document.querySelectorAll("[data-doc]").forEach((el) => el.addEventListener("click", async () => {
+    const doc = c.messages.find((m) => m.id === el.getAttribute("data-doc")).doc;
+    if (doc.broken) return;
+    downloadsStarted.push(doc.name);
+    document.body.dataset.downloads = JSON.stringify(downloadsStarted);
+    // As WhatsApp Web does: the file is fetched (here from the dummy, when served), then handed to
+    // the browser as a blob: download.
+    if (/^https?:/.test(location.protocol)) await fetch("/__dummy/doc?name=" + encodeURIComponent(doc.name)).catch(() => {});
+    const body = doc.name.endsWith(".pdf") ? "%PDF-1.4\n% " + doc.name + "\n" : "PK\u0003\u0004 " + doc.name + "\n";
+    const blob = new Blob([body, " ".repeat(Math.max(0, doc.bytes - body.length))], { type: doc.name.endsWith(".pdf") ? "application/pdf" : "application/octet-stream" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = doc.name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }));
   const send = document.getElementById("send");
   if (send) send.addEventListener("click", () => {
     const box = document.getElementById("compose");

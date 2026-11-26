@@ -25,6 +25,8 @@ setDefaultTimeout(30_000);
 
 let browser: any;
 let page: any;
+/** Downloads the `download` page actions started (Playwright Downloads). */
+const downloads: any[] = [];
 
 beforeAll(async () => {
   if (!canBrowse) return;
@@ -47,6 +49,10 @@ async function step<T = any>(actions: Action[], script: string): Promise<T> {
     } else if (a.action === "insertText") await page.keyboard.insertText(a.text);
     else if (a.action === "press") await page.keyboard.press(a.key);
     else if (a.action === "wait") await page.waitForTimeout(Math.min(a.delay ?? 0, 50));
+    else if (a.action === "download") {
+      const [d] = await Promise.all([page.waitForEvent("download", { timeout: 3000 }), page.click(a.selector, { timeout: 2000 })]);
+      downloads.push(d);
+    }
     else throw new Error(`no stand-in for page action ${a.action}`);
   }
   return P.parse<T>(await page.evaluate(script)) as T;
@@ -55,7 +61,7 @@ async function step<T = any>(actions: Action[], script: string): Promise<T> {
 describe("the page scripts as the page gets them", () => {
   itShared("compile, and are read-only (no click, focus, submit or key event)", () => {
     const scripts = [P.SCREEN_PROBE_JS, P.MARK_SEARCH_JS, P.chatListScript(5), P.findRowScript("a'b\"c"), P.searchResultsScript(5, "x"),
-      P.readChatScript(5), P.markComposeScript("x"), P.markSendScript("line 1\nline `2` \\ ${3}"), P.verifySentScript("x")];
+      P.readChatScript(5), P.markDocumentScript("x'\"y"), P.markComposeScript("x"), P.markSendScript("line 1\nline `2` \\ ${3}"), P.verifySentScript("x")];
     for (const s of scripts) {
       expect(() => new Function(`return ${s};`)).not.toThrow();
       expect(s).not.toMatch(/\.click\(|\.focus\(|\.submit\(|dispatchEvent|new (Mouse|Keyboard|Input)Event/);
@@ -202,5 +208,50 @@ describe("sending", () => {
     await step([], P.markComposeScript("Mom"));
     await step(P.typeActions("ok"), P.markSendScript("ok"));
     expect(await step(P.sendActions(), P.verifySentScript("ok"))).toEqual({ sent: true, pending: true, boxEmpty: true });
+  });
+});
+
+describe("documents in a chat", () => {
+  async function openSchool(): Promise<any> {
+    await load("app.html");
+    await step([], P.MARK_SEARCH_JS);
+    await step(P.searchActions("School Notices"), P.searchResultsScript(5, "School Notices"));
+    return step(P.openRowActions(), P.readChatScript(30));
+  }
+
+  itBrowse("are a [document] placeholder carrying the file name, whether it is a PDF, and the size shown", async () => {
+    const read = await openSchool();
+    expect(read.chat).toBe("School Notices");
+    const docs = read.messages.filter((m: any) => m.doc);
+    expect(docs.length).toBe(9);
+    for (const m of docs) expect(m.text).toBe("[document]");
+    expect(docs[0].doc).toEqual({ id: "false_120364@g.us_S2", name: "Circular-1.pdf", pdf: true, size: "120 kB" });
+    expect(docs.find((m: any) => m.doc.name === "Timetable.docx").doc).toMatchObject({ pdf: false, size: "30 kB" });
+    expect(docs.find((m: any) => m.doc.name === "Annual-Report.pdf").doc.size).toBe("14 MB");
+    expect(read.messages[0]).toEqual({ from: "Principal", time: "11:00, 26/11/2026", text: "Notices for this week", mine: false });
+  });
+
+  itBrowse("a document's download icon is not a voice message, and a voice message has no doc", async () => {
+    await load("app.html");
+    await step([], P.findRowScript("Family 🏡"));
+    const family = await step(P.openRowActions(), P.readChatScript(30));
+    expect(family.messages.some((m: any) => m.doc)).toBe(false);
+    const read = await openSchool();
+    expect(read.messages.filter((m: any) => m.text === "[voice message]")).toEqual([]);
+  });
+
+  itBrowse("a document's download button is marked and a real click downloads the file", async () => {
+    await openSchool();
+    expect(await step([], P.markDocumentScript("false_120364@g.us_S10"))).toEqual({ found: true, name: "Exam-Schedule.pdf" });
+    downloads.length = 0;
+    await step(P.downloadActions(5000), "'ok'");
+    expect(downloads.map((d) => d.suggestedFilename())).toEqual(["Exam-Schedule.pdf"]);
+    expect(JSON.parse(await page.evaluate("document.body.dataset.downloads"))).toEqual(["Exam-Schedule.pdf"]);
+    expect(await step([], P.markDocumentScript("false_120364@g.us_missing"))).toEqual({ found: false, name: "" });
+    expect(await page.$('[data-flock-target="wa-doc"]')).toBeNull();
+  });
+
+  itShared("the download is one real click on the mark, waiting as long as asked", () => {
+    expect(P.downloadActions(20_000)).toEqual([{ action: "download", selector: '[data-flock-target="wa-doc"]', delay: 20_000 }]);
   });
 });

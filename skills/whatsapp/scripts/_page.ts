@@ -12,8 +12,12 @@
  * `span[title]`, the footer's contenteditable) with fallbacks, and every reader fails safe: nothing
  * found is an empty read or a refusal, never a guess, and a send only goes out when the open chat's
  * own header names the chat asked for.
+ *
+ * Documents (1.1.0) are read the same way, also unconfirmed on a linked account: a document icon
+ * (`data-icon` naming "document", "doc-" or "pdf"), the bubble titled 'Download "<name>"', its size
+ * as WhatsApp shows it ("1 page · PDF · 120 kB") and its download icon; nothing found is no download.
  */
-import { MARK_JS, clickTarget } from "../../_shared/_realInput";
+import { MARK_JS, clickTarget, targetSelector } from "../../_shared/_realInput";
 
 export const WHATSAPP_URL = "https://web.whatsapp.com/";
 
@@ -23,6 +27,7 @@ export const MARK = {
   search: "wa-search",
   compose: "wa-compose",
   send: "wa-send",
+  doc: "wa-doc",
 } as const;
 
 /** What a screen probe sees. */
@@ -72,6 +77,27 @@ const PAGE_HELPERS = String.raw`${MARK_JS}
   var previewOf = function(row) {
     var titled = Array.from(row.querySelectorAll('span[title]'));
     return titled.length > 1 ? norm(titled[titled.length - 1].getAttribute('title') || titled[titled.length - 1].innerText) : '';
+  };
+  var DOC_ICON = '[data-icon*="document"], [data-icon^="doc-"], [data-icon*="pdf" i]';
+  var SIZE = /(\d+(?:[.,]\d+)?)\s*(bytes|B|kB|KB|MB|GB)(?![a-z])/i;
+  var findMessage = function(id) {
+    var main = document.querySelector('#main');
+    return main ? Array.from(main.querySelectorAll('[data-id]')).find(function(e) { return e.getAttribute('data-id') === id; }) || null : null;
+  };
+  var docOf = function(m) {
+    var icon = m.querySelector(DOC_ICON);
+    var titled = m.querySelector('[title^="Download" i]');
+    if (!icon && !titled) return null;
+    var name = '';
+    var t = titled ? norm(titled.getAttribute('title')).match(/^download\s+["\u201c]?(.+?)["\u201d]?$/i) : null;
+    if (t) name = norm(t[1]);
+    var leaves = Array.from(m.querySelectorAll('span, div')).filter(function(e) { return e.children.length === 0; })
+      .map(function(e) { return norm(e.innerText || e.textContent); }).filter(Boolean);
+    if (!name) name = leaves.find(function(s) { return s.length < 200 && /\.[a-z0-9]{2,5}$/i.test(s); }) || '';
+    var meta = leaves.filter(function(s) { return SIZE.test(s) || /\b(pdf|pages?)\b/i.test(s); }).join(' ');
+    var size = meta.match(SIZE);
+    var iconName = icon ? icon.getAttribute('data-icon') || '' : '';
+    return { id: m.getAttribute('data-id') || '', name: name.slice(0, 200), pdf: /\.pdf$/i.test(name) || /\bpdf\b/i.test(meta) || /pdf/i.test(iconName), size: size ? size[0] : '' };
   };`;
 
 /** Which screen WhatsApp Web shows. "Use here" (WhatsApp open in another window of this same
@@ -174,11 +200,15 @@ export function openRowActions(): any[] {
   return [clickTarget(MARK.row), { action: "wait", delay: 2500 }];
 }
 
-export interface Message { from: string; time: string; text: string; mine: boolean }
+/** A document as the chat shows it: its message's data-id, file name, whether it is a PDF, and the
+ *  size WhatsApp shows ("245 kB", "" when none shows). */
+export interface DocInfo { id: string; name: string; pdf: boolean; size: string }
+export interface Message { from: string; time: string; text: string; mine: boolean; doc?: DocInfo }
 export interface ChatRead { chat: string; messages: Message[] }
 
 /** The open chat's header name and its last `count` messages, oldest first. A message with no text
- *  is a short placeholder ("[photo]", "[voice message]", …). → JSON ChatRead. */
+ *  is a short placeholder ("[photo]", "[voice message]", …); a document also carries `doc` (DocInfo),
+ *  for read-chat to download the PDFs. → JSON ChatRead. */
 export function readChatScript(count: number): string {
   return String.raw`(() => {
   ${PAGE_HELPERS}
@@ -188,9 +218,9 @@ export function readChatScript(count: number): string {
   var chat = head ? norm(head.getAttribute('title') || head.innerText) : '';
   var PRE = /^\[([^\]]+)\]\s*(.*?):\s*$/;
   var placeholder = function(m) {
-    if (m.querySelector('[data-icon*="audio"], [data-icon*="ptt"], audio')) return '[voice message]';
+    if (m.querySelector(DOC_ICON)) return '[document]';
+    if (m.querySelector('[data-icon*="audio"]:not([data-icon*="download"]), [data-icon*="ptt"], audio')) return '[voice message]';
     if (m.querySelector('video, [data-icon*="media-play"], [data-icon*="video"]')) return '[video]';
-    if (m.querySelector('[data-icon*="document"], [data-icon^="doc-"]')) return '[document]';
     if (m.querySelector('[data-icon*="sticker"]') || m.querySelector('img[alt*="sticker" i]')) return '[sticker]';
     if (m.querySelector('[data-icon*="location"]')) return '[location]';
     if (m.querySelector('[data-icon*="vcard"], [data-icon*="contact"]')) return '[contact card]';
@@ -212,10 +242,33 @@ export function readChatScript(count: number): string {
     var from = mine ? 'You' : (pre ? norm(pre[2]) : '') || lastFrom || chat;
     if (!mine) lastFrom = from;
     var time = pre ? norm(pre[1]) : timeOf(m, true);
-    return { from: from, time: time, text: text.slice(0, 2000), mine: mine };
+    var read = { from: from, time: time, text: text.slice(0, 2000), mine: mine };
+    var doc = media === '[document]' ? docOf(m) : null;
+    if (doc) read.doc = doc;
+    return read;
   });
   return JSON.stringify({ chat: chat, messages: out.slice(-${Math.trunc(count)}) });
 })()`;
+}
+
+/** Marks the download button of the document in message `id` of the open chat: its download icon's
+ *  button, else the document itself (WhatsApp titles it 'Download "<name>"').
+ *  → JSON { found, name }. */
+export function markDocumentScript(id: string): string {
+  return String.raw`(() => {
+  ${PAGE_HELPERS}
+  var m = findMessage(${JSON.stringify(id)});
+  var icon = m ? m.querySelector('[data-icon*="download"]') : null;
+  var btn = (icon && (icon.closest('button, [role="button"]') || icon)) || (m ? m.querySelector('[title^="Download" i]') : null);
+  var doc = m ? docOf(m) : null;
+  return JSON.stringify({ found: flockMark('${MARK.doc}', visible(btn) ? btn : null), name: doc ? doc.name : '' });
+})()`;
+}
+
+/** A real click on the marked document's download button, waiting up to `waitMs` for the download
+ *  it starts. Flock keeps the file in the agent's downloads folder and reports it as `downloads`. */
+export function downloadActions(waitMs: number): any[] {
+  return [{ action: "download", selector: targetSelector(MARK.doc), delay: Math.trunc(waitMs) }];
 }
 
 /** Marks the open chat's message box, when the open chat is `name`. → JSON { chat, found }. */

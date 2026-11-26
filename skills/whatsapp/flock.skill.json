@@ -3,7 +3,7 @@
   "slug": "whatsapp",
   "icon": "icon.svg",
   "description": "Read your WhatsApp chats and groups, search them, and send a message you approved",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "flock",
   "category": "integration",
   "tags": [
@@ -32,8 +32,8 @@
       "reason": "Opens WhatsApp Web and waits for it to load the chats (up to a minute after a while away), then reads the list."
     },
     "read-chat": {
-      "timeoutMs": 150000,
-      "reason": "Opens WhatsApp Web, waits for the chats (up to a minute), finds the chat (by the list, else WhatsApp's search) and reads its last messages."
+      "timeoutMs": 240000,
+      "reason": "Opens WhatsApp Web, waits for the chats (up to a minute), finds the chat (by the list, else WhatsApp's search), reads its last messages and downloads up to 5 of their PDFs (up to 20 seconds each)."
     },
     "search": {
       "timeoutMs": 120000,
@@ -65,6 +65,20 @@
         "methods": [
           "GET",
           "POST"
+        ]
+      },
+      {
+        "hostname": "mmg.whatsapp.net",
+        "purpose": "WhatsApp's media servers: PDFs posted in a chat (fetched by WhatsApp Web itself)",
+        "methods": [
+          "GET"
+        ]
+      },
+      {
+        "hostname": "*.cdn.whatsapp.net",
+        "purpose": "WhatsApp's media servers (media-<region>.cdn.whatsapp.net): PDFs posted in a chat (fetched by WhatsApp Web itself)",
+        "methods": [
+          "GET"
         ]
       }
     ]

@@ -24,6 +24,13 @@ const MIN_LOAD_WAIT_MS = 5_000;
 
 /** When this run started holding WhatsApp Web open (0: it never did). */
 let startedAt = 0;
+/** Today's open time that was left when this run took its slot (_limits.ts takeSlot). */
+let openMsLeft = 0;
+
+/** How much of today's WhatsApp open time this run has left now, in ms (0 before it opened). */
+export function openTimeLeftMs(): number {
+  return startedAt ? Math.max(0, openMsLeft - (Date.now() - startedAt)) : 0;
+}
 
 export const SIGN_IN_AGAIN = "Sign in again with the whatsapp skill's own Sign-in steps (instructions.md, Sign-in): the person links WhatsApp with a code on their phone. Do not retry before that.";
 
@@ -68,6 +75,16 @@ export async function step<T>(actions: any[], script: string): Promise<T | null>
   return parse<T>(r?.content);
 }
 
+/** A file the step's page downloaded, as Flock reports it: kept (`path`) or not (`error`). */
+export interface DownloadReport { fileName?: string; path?: string; size?: number; error?: string }
+
+/** One step on the open page that may download: `actions` only, and what Flock kept from them. A
+ *  failed step (no download started) is a Fail like any other, for the caller to judge. */
+export async function downloadStep(actions: any[]): Promise<DownloadReport[]> {
+  const r = await browserFetch({ persistentSessionId: opened, pageActions: [...actions, { action: "evaluate", script: "'ok'" }] });
+  return Array.isArray(r?.downloads) ? r.downloads : [];
+}
+
 async function markOutdated(): Promise<void> {
   await post(`/api/internal/browser-sessions/${encodeURIComponent(sessionName)}/mark-outdated`, {
     agentId, reason: "WhatsApp Web showed its log-in screen (QR code) instead of the chats",
@@ -80,6 +97,7 @@ async function markOutdated(): Promise<void> {
  *  browser): clicked once. */
 export async function openWhatsApp(kind: "read" | "send" = "read"): Promise<void> {
   const left = takeSlot(kind);
+  openMsLeft = left;
   const loadWait = Math.max(MIN_LOAD_WAIT_MS, Math.min(LOAD_WAIT_MS, left - AFTER_LOAD_MS));
   startedAt = Date.now();
   const first = await browserFetch({ url: WHATSAPP_URL, createPersistentSession: true, pageActions: [{ action: "wait", delay: POLL_MS }, { action: "evaluate", script: SCREEN_PROBE_JS }] });
