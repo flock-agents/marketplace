@@ -88,7 +88,7 @@ Independent, can run in parallel worktrees: **T1, T2, T11** at the start; after 
   - `it("every bare dish is an item of its own kind (and sub-kind)")`: for every kind/sub with `bare`, `catalogItem(bare)!.kind.name === kind.name` and, for a sub, `catalogItem(bare)!.item.sub === sub.name`.
   - `it("staples have no bare dish")`: every `k.staple` kind has `bare === null`.
 - [ ] **Step 2: Run** `bun test server/kinds.test.ts` — expect FAIL (`bareDish` not exported).
-- [ ] **Step 3: Implement.** Draft `BARE` in the generator: the spec's fixed values plus the builder's draft for every other non-staple kind (rule for the draft: a bare word means one dish only where families say the kind's name for its one plain everyday item — Idli → "Idli", Dosa → "Plain dosa"; kinds whose word covers many everyday dishes are categories: Upma, Poha, Sabzi, Gravy, Dal, Rice curry, Salad); fixed by owner (26 Nov): Paratha → "Plain paratha" (Dad's parathas and the lunch-box roll are plain parathas; stuffed ones are their own items). Write `bare-draft.md` listing each with "fixed by spec" or "draft". Add types and `bareDish` to `kinds.ts`.
+- [ ] **Step 3: Implement.** Draft `BARE` in the generator: the spec's fixed values plus the builder's draft for every other non-staple kind (rule for the draft: a bare word means one dish only where families say the kind's name for its one plain everyday item — Idli → "Idli", Dosa → "Plain dosa"; kinds whose word covers many everyday dishes are categories: Upma, Poha, Sabzi, Gravy, Dal, Rice curry, Salad); lead's call, owner to confirm: Paratha → "Plain paratha" (Dad's parathas and the lunch-box roll are plain parathas; stuffed ones are their own items). Write `bare-draft.md` listing each with "fixed by spec" or "draft". Add types and `bareDish` to `kinds.ts`.
 - [ ] **Step 4: Run** `node scripts/kinds/gen-kinds.js` then `bun test server/kinds.test.ts` — PASS. Type check: no new errors.
 - [ ] **Step 5: Commit** `feat(catalog): a bare word's dish per kind and sub-kind (draft for owner review)`.
 
@@ -572,7 +572,7 @@ TRUTH:
 3. **Extras add-on** needs a stored flag: new `slots.extras` (an add-on beside the main plate), because today an add-on takes its person off the main plate in `fillWeek` (`atTable`). Old add-ons keep today's behaviour.
 4. **Swap item for one person** is a slot_dishes row with new `for_people` (shown "Pancakes (for Agastya)" by the existing `dishText`), so it lands on the grocery list, history and the cook's count with no new path.
 5. **Plan-and-ask answer** rides `record_feedback` (the existing weekly-reply op) as `answer: "fits" | "not_for"` with `who`.
-6. **Dad's Roti → Paratha** (owner, 26 Nov): gives item Plain paratha (Paratha's `bare` is "Plain paratha"); the lunch-box roll is a plain paratha too.
+6. **Dad's Roti → Paratha** (lead's call from "dad has 2 parathas", owner to confirm): gives item Plain paratha (Paratha's `bare` is "Plain paratha"); the lunch-box roll is a plain paratha too.
 7. **Pancakes is not a family Breakfast template** (owner, 26 Nov): it is only Agastya's swap on Upma days (Breakfast and his box).
 8. **"Wet" sabzi** for egg/cheese roll days = the Lunch item's place is a Gravy kind or sub-kind (§11 left to the builder).
 9. **Legacy slots without templates** get them once in the migration (`deriveTemplates` moves there); the planner no longer derives templates from plate names each run.
