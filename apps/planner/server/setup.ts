@@ -26,6 +26,7 @@ import { bareDish, CATALOG, catalogItem, catalogKind, catalogSub, checkMealShape
 import { resolveGives, targetsOf, targetText, type RuleTarget } from "./targets";
 import type { ModelCall, ModelResult } from "./model";
 import { isAllergyRule } from "./allergy";
+import { replacedMeal } from "./planDays";
 
 // ── The prompts: one made-up example family for every part (never a test family: the name guard checks) ──
 
@@ -1800,6 +1801,11 @@ export function catalogContents(d: Pick<LibraryDish, "contains" | "contains_read
   return { contains: uniq([...d.contains.filter((x) => !t.read.includes(x)), ...t.contains]), contains_read: uniq([...d.contains_read, ...t.read]) };
 }
 
+/** Each hard swap with meals: the meals it is said at and its dish's keys (what it gives, and the family's word for it). */
+const swapItems = (rules: Rule[]): { slots: string[]; keys: string[] }[] => rules
+  .filter((r) => r.what === "swap" && r.hard && r.slots?.length && (r.to || (r.gives && r.gives.type === "item")))
+  .map((r) => ({ slots: r.slots!, keys: uniq([...(r.to ? [dishKey(r.to)] : []), ...(r.gives?.type === "item" ? [dishKey(r.gives.item)] : [])]) }));
+
 /** A category word's place: any dish of a kind or sub-kind, no one dish (§5.3). */
 const isCategory = (p: Place | null): boolean => !!p?.kind && p.named === "category" && !p.item && !p.own && !isStaple(p.kind);
 
@@ -1825,8 +1831,13 @@ export function writeKinds(tx: Db, plan: KindsPlan, placed: Map<string, Place>, 
   let state0: Partial<SetupState> = {};
   try { state0 = h0.setup_state ? JSON.parse(h0.setup_state) : {}; } catch { state0 = {}; }
   const categories: Record<string, MealDishRow[]> = { ...(state0.categories ?? {}) };
+  const allSlots = listSlots(tx), swaps = swapItems(listRules(tx));
   for (const slot of plan.slots) {
     const meal = mealOf(slot), dishes: MealDish[] = [];
+    // A hard swap's item is the person's rule, never a dish of the meal it is had at, nor of the box that replaces that meal
+    // (§9.4, G1): its library row stays (its ingredients are read), it is on no template.
+    const at = [slot.name, replacedMeal(slot, allSlots)?.name].filter((x): x is string => !!x);
+    const swapped = new Set(swaps.filter((w) => w.slots.some((s) => at.some((a) => same(a, s)))).flatMap((w) => w.keys));
     for (const d of familyDishes(tx, slot.name)) {
       let place = placed.get(cacheKey(meal, d.key)) ?? plan.places.get(placeKey(slot.name, d.key)) ?? null;
       // A dish the kinds read's answers left out, twice, that code cannot place either (F4, D3e): its word may be a category
@@ -1863,6 +1874,7 @@ export function writeKinds(tx: Db, plan: KindsPlan, placed: Map<string, Place>, 
       }
       if (dishes.some((x) => dishKey(x.name) === dishKey(name))) continue;   // their word and the dish both said: one dish
       upsertLibrary(tx, { name, slot: d.slot, kind: place?.kind ?? null, sub: place?.sub ?? null, catalog_item: place?.parts ? null : place?.item ?? null }, by, changes);
+      if (swapped.has(dishKey(name)) || swapped.has(d.key)) { opts.log(`kinds: ${slot.name}: ${name} is a swap's dish, on no template`); continue; }
       dishes.push({ name, place, frequency: d.frequency, days: d.days, said: d.said });
     }
     // The meal's category words read before (a correction): not library rows, kept in the setup's memory with their places.

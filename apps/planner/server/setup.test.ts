@@ -1360,6 +1360,42 @@ describe("setup reads into the one meaning model (§5, §6.4)", () => {
       .toEqual(["most Saturdays", "now and then on Saturdays", "twice a week, Mon and Thu"]);
   });
 
+  // G1 (N2, D3c): a hard swap's item is the person's rule, never a dish of the meal it is had at, nor of the box that replaces
+  // that meal; the library keeps its row (its ingredients are read for the person's rules).
+  describe("a hard swap's item is no dish of its meal or box (G1)", () => {
+    const qOf = (who: string) => `puri for ${who} when we make pongal, he won't eat it`;
+    const run = async (who: string, said: string, dishes: { library: unknown[][]; seed: unknown[][]; links: unknown[][] }) => {
+      const swap = { hard: true, what: "swap", who, items: ["pongal"], to: "puri", slots: ["Breakfast"], quote: qOf(said) };
+      const f = fake({ home: W_HOME, rules: { rules: [...W_RULES.rules, swap] }, contains: containsOf(), lint: { dishes: [] }, often: W_OFTEN, kinds: W_KINDS, dishes });
+      const k = await boot({ model: f.model });
+      const r = await k.op("apply_setup", { household: W_HOUSEHOLD, transcript: [...W_TRANSCRIPT, "Q: Anything else?", `A: Pongal some days too. And ${qOf(said)}.`] });
+      expect(r.ok).toBe(true);
+      const fam = (await k.owner("GET", "/api/family")).body;
+      return { k, r, slot: (n: string) => fam.slots.find((s: any) => s.name === n) };
+    };
+    const names = (s: any) => JSON.stringify(s?.templates ?? []).toLowerCase();
+    const pongal = ["Pongal", "Breakfast", "Pongal some days too"];
+    it("at the meal it is had at: no template part, the library row kept", async () => {
+      const { k, slot } = await run("Gowri Shankar", "Dad", { ...W_DISHES, library: [...W_DISHES.library, pongal, ["Puri", "Breakfast", qOf("Dad")]],
+        seed: [...W_DISHES.seed, ["Breakfast", "Pongal", pongal[2]]] });
+      expect(names(slot("Breakfast"))).not.toContain("puri");
+      expect(names(slot("Breakfast"))).toContain("pongal");
+      expect(k.rows("library").some((d) => d.name === "Puri" && d.slot === "Breakfast")).toBe(true);
+    });
+    it("at the box that replaces that meal, linked to it: the box is the meal's whole plate", async () => {
+      const { slot } = await run("Agastya", "Agastya", { ...W_DISHES, library: [...W_DISHES.library, pongal, ["Puri", "Agastya's breakfast box", qOf("Agastya")]],
+        seed: [...W_DISHES.seed, ["Breakfast", "Pongal", pongal[2]]] });
+      expect(slot("Agastya's breakfast box").templates).toEqual([{ parts: [{ from: "Breakfast" }], share: null, said: null }]);
+    });
+    it("at that box with no link: no template of it; the box is left to ask, as an empty box is", async () => {
+      const { k, slot } = await run("Agastya", "Agastya", { ...W_DISHES, library: [...W_DISHES.library, pongal, ["Puri", "Agastya's breakfast box", qOf("Agastya")]],
+        seed: [...W_DISHES.seed, ["Breakfast", "Pongal", pongal[2]]], links: W_DISHES.links.filter((l) => l[0] !== "Agastya's breakfast box") });
+      expect(names(slot("Agastya's breakfast box"))).not.toContain("puri");
+      expect(slot("Agastya's breakfast box").templates ?? []).toEqual([]);
+      expect(k.rows("library").some((d) => d.name === "Puri")).toBe(true);
+    });
+  });
+
   it("the cook's limit is a cap on her morning visit", async () => {
     const { k } = await walk();
     const cap = k.rows("rules").find((r) => r.what === "cap")!;
