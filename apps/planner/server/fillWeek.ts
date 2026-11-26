@@ -455,25 +455,28 @@ export function fillWeek(input: FillInput): FillResult {
   };
   const visitsAt = (slot: string, date: string) => visits.filter((v) => v.days.includes(weekdayOf(date)) && inVisit(v, slot));
   // Owner decision OD6 (26 Nov): a cook's visit cap counts the dishes she COOKS. Not counted: a staple (rice, roti, plain paratha,
-  // curd: a staple kind), a simple extra that needs no cooking (boiled eggs, salad, fruit: the catalog's `nocook` items and kinds),
-  // and the dishes of an `extras` add-on (one person's own, not the cook's plate). A linked dish counts once, as the other meal's.
-  // Judged by the dish's saved place or catalog facts, never by matching its words; a family's own dish the catalog does not know
-  // ("4 eggs") has no facts and counts as cooked unless it is an extras add-on's.
-  const noCookItem = (name: string): boolean => {
+  // curd: a staple kind), a simple extra that needs no cooking (boiled eggs, salad, fruit: the catalog's `capFree` items and kinds),
+  // and, in an `extras` add-on only, a family's own dish the catalog does not know ("4 eggs": a simple extra); a catalogued cooked
+  // dish there (Egg bhurji) counts. A linked dish counts once, as the other meal's. Judged by the dish's saved place or catalog
+  // facts, never by matching its words; elsewhere a dish with no catalog facts counts as cooked.
+  const noCookItem = (name: string, extras = false): boolean => {
     const row = library.find((r) => r.key === dishKey(name));
-    return !!catalogItem(row?.catalog_item ?? name)?.item.nocook;
+    const hit = catalogItem(row?.catalog_item ?? name);
+    return hit ? !!hit.item.capFree || !!hit.kind.staple : extras && !row?.kind;
   };
-  const noCookKind = (kind: string | null | undefined): boolean => { const k = kind ? catalogKind(kind) : null; return !!k && k.items.length > 0 && k.items.every((i) => i.nocook); };
-  /** The dishes a template has the cook make: every part but a linked one, a staple one, a no-cook one, or any of an extras add-on. */
-  const cooked = (t: MealTemplate, s: Slot) => s.extras ? 0 : t.parts.filter((p) => !isLinkedPart(p) && !(isKindPart(p) && (!!catalogKind(p.kind)?.staple || !!kindsOf(s).find((k) => sameKind(k.name, p.kind))?.staple || noCookKind(p.kind)))
-    && !(isItemsPart(p) && p.items.length > 0 && p.items.every(noCookItem))).length;
-  /** Does a dish of a slot need cooking by the cook: not an extras add-on's, a staple, or a no-cook item or kind (by its place). */
+  // A kind part is free when most of its items are (Salad, Fruit: the part picks one of them).
+  const noCookKind = (kind: string | null | undefined): boolean => { const k = kind ? catalogKind(kind) : null; return !!k && k.items.length > 0 && k.items.filter((i) => i.capFree).length * 2 > k.items.length; };
+  /** The dishes a template has the cook make: every part but a linked one, a staple one, or a no-cook one. */
+  const cooked = (t: MealTemplate, s: Slot) => t.parts.filter((p) => !isLinkedPart(p) && !(isKindPart(p) && (!!catalogKind(p.kind)?.staple || !!kindsOf(s).find((k) => sameKind(k.name, p.kind))?.staple || noCookKind(p.kind)))
+    && !(isItemsPart(p) && p.items.length > 0 && p.items.every((n) => noCookItem(n, s.extras)))).length;
+  /** Does a dish of a slot need cooking by the cook: not a staple or a no-cook item or kind (by its place), nor an extras add-on's dish the catalog does not know. */
   const needsCook = (slotName: string, dish: string): boolean => {
-    if (slotByKey.get(slotName.toLowerCase())?.extras) return false;
+    const extras = !!slotByKey.get(slotName.toLowerCase())?.extras;
     if (isStapleAt(w, slotName, dish)) return false;
     const pl = placeOfDish(w, slotName, dish);
     if (pl.kind && catalogKind(pl.kind)?.staple) return false;   // a catalog item of a staple kind (Curd, Rice) the library does not hold
-    return !(pl.item ? !!catalogItem(pl.item)?.item.nocook : noCookKind(pl.kind)) && !(pl.item === null && noCookItem(dish));
+    if (extras && !pl.item && !pl.kind) return false;   // the family's own simple extra ("4 eggs")
+    return !(pl.item ? !!catalogItem(pl.item)?.item.capFree : noCookKind(pl.kind)) && !(pl.item === null && noCookItem(dish));
   };
   const visitLoad = new Map<string, number>();   // visit index|date → dishes of the templates given so far
   const loadOf = (v: Visit, date: string) => visitLoad.get(`${visits.indexOf(v)}|${date}`) ?? 0;

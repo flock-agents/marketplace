@@ -1011,10 +1011,10 @@ fold("Makhana", "Namkeen", "north");
 // ---------------- SUGGEST (owner rules 1-3) ----------------
 // Suggestable = differs by main ingredient. Not suggested: shape/style/regional name of the same dish,
 // special equipment, restaurant-style, ingredients a normal household doesn't keep, and every staple.
-// Owner decision OD6 (26 Nov): items that need no cooking (a cook's visit cap does not count them): every item of these kinds, and these items.
-const NOCOOK_KINDS = new Set(["Salad", "Fruit"]);
+// Owner decision OD6 (26 Nov): items a cook's visit cap does not count (capFree): no-cook extras (salads, cut fruit, boiled eggs) and plain paratha.
+const CAPFREE_KINDS = new Set(["Salad"]);
 // Plain paratha is on the owner's list of staples the cap skips (OD6), though its kind is not a staple kind.
-const NOCOOK_ITEMS = new Set(["Boiled eggs", "Plain paratha"]);
+const CAPFREE_ITEMS = new Set(["Boiled eggs", "Plain paratha", "Seasonal fruit", "Banana", "Apple slices", "Papaya"]);
 const NO_SUGGEST_KINDS = new Set(["Roti", "Bhakri", "Rice", "Curd", "Mudde", "Puri"]);
 // Owner round 5: recognised only = the same dish in another shape, or needing other equipment or its own plate.
 // Flavour-base variants (tempering, sauce, masala, filling, topping) are suggestable.
@@ -1258,7 +1258,7 @@ for (const k of kinds) {
     if (regional && (k.staple || NO_SUGGEST_KINDS.has(k.name))) errors.push("regional item in a staple kind: " + name);
     it.suggest = !(k.staple || NO_SUGGEST_KINDS.has(k.name) || (NO_SUGGEST.has(name) && !regional));
     if (regional) { it.regional = true; usedReg.add(name); }
-    if (NOCOOK_KINDS.has(k.name) || NOCOOK_ITEMS.has(name)) it.nocook = true;
+    if (CAPFREE_KINDS.has(k.name) || CAPFREE_ITEMS.has(name)) it.capFree = true;
     it.sub = subOf(k.name, name, it.cuisines || []);
     if (ITEM_MEALS[name]) { const im = ordered(sp(ITEM_MEALS[name])); if (im.join() !== subMeals(it.sub).join()) it.meals = im; usedMeals.add(name); }
     usedNo.add(name);

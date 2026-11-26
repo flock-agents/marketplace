@@ -1018,6 +1018,13 @@ describe("per-person versions of a shared meal (§5.4) and the cook's visit (§9
       const r = run({ slots, library: KLIB, days: daysFor(slots), newCap: 0, visits: [visit] });
       expect(lines(r)).toContain("Mon breakfast and lunch: 5 dishes to cook, more than the cook's 4");
     });
+    it("a catalogued cooked dish in an extras add-on counts (Egg bhurji), a no-cook one does not", () => {
+      const tight: Visit = { ...visit, cap: 3 };   // breakfast 1 + sabzi + dal = 3
+      const base = (...x: MealTemplate["parts"]) => [breakfast(T({ kind: "Upma" })), lunch(T({ kind: "Rice" }, { kind: "Sabzi" }, { kind: "Dal" })), extras(...x)];
+      const bhurji = base({ items: ["Egg bhurji"] }), salad = base({ items: ["4 eggs"] }, { kind: "Salad" });
+      expect(lines(run({ slots: bhurji, library: KLIB, days: daysFor(bhurji), newCap: 0, visits: [tight] }))).toContain("Mon breakfast and lunch: 4 dishes to cook, more than the cook's 3");
+      expect(lines(run({ slots: salad, library: KLIB, days: daysFor(salad), newCap: 0, visits: [tight] }))).toEqual([]);
+    });
     it("staples and no-cook items do not count, a family's own uncatalogued dish does, a linked dish once", () => {
       const slots = [breakfast(T({ kind: "Upma" }, { kind: "Sabzi" }, { kind: "Dal" })), lunch(T({ kind: "Rice" }, { kind: "Curd" }, { kind: "Salad" }, { kind: "Fruit" }, { items: ["Boiled eggs"] })),
         lBox([T({ items: ["Plain paratha"] }, { from: "Breakfast", kind: "Sabzi" })])];
