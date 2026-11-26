@@ -1778,6 +1778,20 @@ describe("setup checks what a read left out (H1-H3)", () => {
     expect(kept.r.asks).toContain(boxAsk);
     expect(kept.slot("Ira's breakfast box").templates ?? []).toEqual([]);
   });
+  it("an empty box is asked about once, by setup: the plan made after it asks nothing more of it (fix 6)", async () => {
+    const f = iFake({ home: { ...withBoxes, slots: [...mains, sprouts, { ...bbox, home_meal: "none" }, lbox] }, rules: { rules: [swap] }, dishes: toastDishes() });
+    const k = await boot({ model: f.model, now: () => new Date(2026, 10, 29, 11, 0) });
+    const r = await k.op("apply_setup", { household: I_HOUSEHOLD, transcript: toastTranscript });
+    expect(r.asks.filter((a: string) => a.includes("Ira's breakfast box"))).toEqual([boxAsk]);
+    const plan = await k.op("make_plan", { week_start: "2026-11-30" });
+    expect(plan.ok).toBe(true);
+    // No question of the plan's names the box: it is only listed, with nothing in it (no filler).
+    expect(JSON.stringify(plan.asked ?? [])).not.toContain("breakfast box");
+    const lines = String(plan.message).split("\n").filter((l) => l.includes("breakfast box"));
+    expect(lines.length).toBeGreaterThan(0);
+    for (const l of lines) expect(l).toBe("Ira's breakfast box: nothing planned");
+    expect(k.rows("slot_days").filter((d) => d.slot === "Ira's breakfast box" && d.date).flatMap((d) => k.rows("slot_dishes").filter((x) => x.slot_day_id === d.id))).toEqual([]);
+  });
   it("a box with no link and only a swap's item is re-read once from the dishes, naming the box", async () => {
     const box = (n: number) => toastDishes(n === 1 ? undefined : [["Cheese toast", "Ira's breakfast box", "cheese toast for her"], ["Sandwich", "Ira's breakfast box", "a sandwich"]]);
     const { f, r, slot } = await run({ home: { ...withBoxes, slots: [...mains, sprouts, { ...bbox, home_meal: "none" }, lbox] }, rules: { rules: [swap] },
