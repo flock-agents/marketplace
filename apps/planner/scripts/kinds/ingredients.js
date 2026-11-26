@@ -894,4 +894,22 @@ Ragi ladoo: ragi flour, ghee, jaggery | cashews
 Peanut ladoo: peanuts, jaggery
 `;
 
-module.exports = { INGREDIENT_TAGS, PLAIN, ITEMS };
+// NUTRITION (4.2.0): what a dish is rich in, for a person's food goals (people.targets: more protein, fewer carbs, less fat).
+// A dish is rich in one when a MAIN ingredient is listed for it here, or when its kind is (a dal is protein, a puri is fried).
+// A preference only: the plan leans towards a dish that fits, never past a food rule.
+const NUTRITION = {
+  protein: {
+    ingredients: "toor dal; moong dal; masoor dal; urad dal; chana dal; whole moong; rajma; chickpeas; kala chana; lobia; white peas; horse gram; matki; sprouts; besan; sattu; soya chunks; paneer; cheese; egg; chicken; mutton; mutton keema; pork; fish; prawns; dry fish; hilsa; rohu; pomfret; bombil",
+    kinds: "Dal; Egg; Chilla; Sundal; Chicken; Mutton; Pork; Fish & seafood",
+  },
+  carbs: {
+    ingredients: "rice; idli rice; basmati rice; raw rice; matta rice; poha; rice flour; puffed rice; rice rava; maida; sooji; bread; pav; vermicelli; noodles; pasta; macaroni; potato; sweet potato; sabudana; tapioca; corn; sweet corn; cornflakes; sugar; jaggery; condensed milk",
+    kinds: "Pulao; Biryani; Flavoured rice; Fried rice; Noodles; Pasta; Puri; Kheer; Halwa; Ladoo",
+  },
+  fat: {
+    ingredients: "ghee; butter; cream; khoa; cheese; condensed milk; cashews; almonds; coconut; coconut milk; dry coconut; peanuts; peanut butter; fried onions; sev; boondi",
+    kinds: "Puri; Kachori; Pakora; Samosa; Vada; Cutlet; Halwa; Ladoo",
+  },
+};
+
+module.exports = { INGREDIENT_TAGS, PLAIN, ITEMS, NUTRITION };

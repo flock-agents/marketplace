@@ -20,7 +20,10 @@ export type CatalogKind = { name: string; aka: string[]; cuisines: string[]; mea
 export type RegionalMeaning = { cuisines: string[]; kind: string; sub: string | null };
 export type RegionalWord = { word: string; forms: string[]; meanings: RegionalMeaning[] };
 export type Catalog = { version: number; tags: string[]; parents: Record<string, string>; kinds: CatalogKind[]; notes?: string[]; regional?: RegionalWord[];
-  /** Every ingredient the items name, and the content tags it brings (decided 21). */ ingredients?: Record<string, string[]> };
+  /** Every ingredient the items name, and the content tags it brings (decided 21). */ ingredients?: Record<string, string[]>;
+  /** What a dish is rich in, by its main ingredients or its kind (4.2.0: people.targets). */ nutrition?: Record<Nutrient, { ingredients: string[]; kinds: string[] }> };
+/** What a person's food goals lean on. */
+export type Nutrient = "protein" | "carbs" | "fat";
 
 export const CATALOG = catalogJson as Catalog;
 
@@ -104,6 +107,18 @@ export function catalogContains(itemName: string): string[] | null {
   const out = new Set(hit.item.contains);
   for (const t of hit.item.contains) for (let p = CATALOG.parents[t]; p; p = CATALOG.parents[p]) out.add(p);
   return [...out];
+}
+
+/** What a dish is rich in: a main ingredient of its catalog item the catalog lists for that nutrient, or its kind (a dal is
+ *  protein, a puri fried). `kind`: the kind of a family dish the catalog does not hold as an item. */
+export function dishNutrition(name: string, kind?: string | null): Set<Nutrient> {
+  const out = new Set<Nutrient>();
+  const hit = catalogItem(name);
+  const main = new Set((hit?.item.ingredients ?? []).filter((x) => x.main).map((x) => x.name));
+  const kindName = norm(hit?.kind.name ?? kind ?? "");
+  for (const [what, by] of Object.entries(CATALOG.nutrition ?? {}) as [Nutrient, { ingredients: string[]; kinds: string[] }][])
+    if (by.ingredients.some((x) => main.has(x)) || (!!kindName && by.kinds.some((k) => norm(k) === kindName))) out.add(what);
+  return out;
 }
 
 /** The items the planner may suggest as new for a kind (or one of its sub-kinds) to a family of these cuisines: `suggest` items,

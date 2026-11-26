@@ -1266,6 +1266,14 @@ for (const k of kinds) {
 // Every ingredient the items name, with the tags it brings: the planner reads which ingredient breaks a rule from these.
 out.ingredients = Object.fromEntries([...new Set(out.kinds.flatMap((k) => k.items.flatMap((it) => it.ingredients.map((x) => x.name))))].sort()
   .map((n) => [n, ingTags.get(n) || []]));
+// What a dish is rich in (4.2.0, people.targets): main ingredients and kinds, each name checked against the catalog.
+const allIngredients = new Set(Object.keys(out.ingredients));
+out.nutrition = Object.fromEntries(Object.entries(ING.NUTRITION).map(([what, by]) => {
+  const ingredients = semi(by.ingredients), kindNames = semi(by.kinds);
+  for (const n of ingredients) if (!allIngredients.has(n)) errors.push(`nutrition ${what}: ${n} is no item's ingredient`);
+  for (const n of kindNames) if (!out.kinds.some((k) => k.name === n)) errors.push(`nutrition ${what}: no kind ${n}`);
+  return [what, { ingredients, kinds: kindNames }];
+}));
 out.regional = REGIONAL_WORDS.map((r) => ({ word: r.word, forms: semi(r.forms), meanings: r.meanings.map(([c, kind, sub]) => {
   const k = out.kinds.find((x) => x.name === kind);
   if (!k) errors.push(`regional ${r.word}: no kind ${kind}`);
