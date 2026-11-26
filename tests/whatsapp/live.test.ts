@@ -16,7 +16,7 @@ afterAll(() => rmSync(dataDir, { recursive: true, force: true }));
 it.skipIf(!live)("connects to WhatsApp and gets a QR code picture, through the proxy when given one", async () => {
   const proxy = process.env.WHATSAPP_LIVE_PROXY;
   const env: Record<string, string> = { PATH: process.env.PATH ?? "", MCP_DATA_DIR: dataDir, ...(proxy ? { HTTPS_PROXY: proxy, HTTP_PROXY: proxy, NO_PROXY: "localhost,127.0.0.1" } : {}) };
-  const proc = Bun.spawn(["bun", join(import.meta.dir, "../../skills/whatsapp/scripts/server.ts")], { stdin: "pipe", stdout: "pipe", stderr: "pipe", env });
+  const proc = Bun.spawn(["bun", join(import.meta.dir, "../../skills/whatsapp/server/server.ts")], { stdin: "pipe", stdout: "pipe", stderr: "pipe", env });
   proc.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} })}\n${JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "link", arguments: { qr: true } } })}\n`);
   proc.stdin.end();
   const out = await new Response(proc.stdout).text();

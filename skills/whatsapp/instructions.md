@@ -60,12 +60,13 @@ Unlinks WhatsApp from Flock and forgets every stored chat. Params `{}`. Only whe
 
 ## Limits (the connector enforces them; plan around them)
 
-- Every function except `link-status` connects to WhatsApp once (a waiting link counts as one too): at most **10 connections an hour and 60 a day**.
-- Connected at most **30 minutes a day** in total (the Flock's own day). A waiting link uses some of it.
-- At most **5 sends an hour and 20 a day**.
-- A limit hit is an error saying when it frees up (`CONNECT_LIMIT_HOUR`, `CONNECT_LIMIT_DAY`, `TIME_LIMIT_DAY`, `SEND_LIMIT_HOUR`, `SEND_LIMIT_DAY`). Tell the person in a few words and when you can try. Never retry in a loop and never wait it out silently.
-- A routine that watches a chat runs **no more often than every 30 minutes**, and only reads.
-- Read as little as answers the ask: one `read-chat` rather than `list-chats` and then every chat, and reuse what you read a few minutes ago instead of reading it again.
+They are roomy for someone working with you, and tight on what WhatsApp treats as abuse.
+
+- **Reading** (`list-chats`, `read-chat`, `search`) has no count limit. Calls close together share one connection, which closes after 3 quiet minutes: batch what you need in one go rather than spreading reads out. At most 6 separate connections an hour and 40 a day, and 2 hours connected a day.
+- **Sending**: at most 20 messages an hour and 100 a day; at most 10 different chats an hour and 30 a day; the same text to at most 3 chats a day. Sends are spaced a few seconds apart on their own: never send in a loop.
+- **Runaway guard**: at most 120 calls an hour in all. Hitting it means something is looping: stop.
+- A limit hit is an error saying when it frees up (`SESSION_LIMIT_HOUR`, `SESSION_LIMIT_DAY`, `TIME_LIMIT_DAY`, `CALL_LIMIT_HOUR`, `SEND_LIMIT_HOUR`, `SEND_LIMIT_DAY`, `CHAT_LIMIT_HOUR`, `CHAT_LIMIT_DAY`, `SAME_TEXT_LIMIT`). Tell the person in a few words and when you can try. Never retry in a loop and never wait it out silently.
+- A routine that watches a chat runs **no more often than every 30 minutes**, and only reads. Never send on a schedule.
 
 ## Errors
 
@@ -74,7 +75,8 @@ Unlinks WhatsApp from Flock and forgets every stored chat. Params `{}`. Only whe
 - `CHAT_AMBIGUOUS`: two chats have that name. Ask the person which one.
 - `LINK_WAITING`: a link is waiting for the person. Try once they are done.
 - `BUSY`, `CONNECT_FAILED`, `REPLACED`: try once more later.
-- `WHATSAPP_REFUSED`: WhatsApp refused this account. Tell the person in a few words; never retry.
+- `WHATSAPP_REFUSED` / `PAUSED_REFUSED`: WhatsApp refused this account, or kept refusing to connect. Everything is paused. Tell the person in a few words; never retry. Only `unlink` clears it.
+- `PAUSED_LOGGED_OUT`: WhatsApp logged this device out. Link again (below) when the person wants.
 
 ## Linking
 
@@ -87,7 +89,7 @@ WhatsApp links Flock as one of the person's devices (it shows as "Chrome (Flock)
 **Call it a link code.** In everything the person reads, and in your `waiting-on-user` question, it is a "link code". Never "verification code", "OTP", "security code" or "passcode".
 
 1. **Their number.** Use the number of the person who asked (the one they message you from, or the one saved for them), with its country code. If you have none, ask for their WhatsApp number and end your turn with the `waiting-on-user` block.
-2. **Get the link code.** `link` with `{"phone": "<their number>"}`. It answers with `link.code`. Never ask the person for a code: WhatsApp gives it to you and they type it.
+2. **Get the link code.** `link` with `{"phone": "<their number>"}`. It answers with `link.code`, `link.tellThePerson` (the message to send them) and `link.forYou` (what to do). Never ask the person for a code: WhatsApp gives it to you and they type it.
 3. **Give the person the link code.** In the Flock app send it as a card:
 
    ```action-card

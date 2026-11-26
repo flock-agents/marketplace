@@ -1,21 +1,22 @@
 {
   "version": 1,
-  "generatedAt": "2026-11-26T12:14:27.512Z",
+  "generatedAt": "2026-11-26T12:29:39.610Z",
   "sourceVersion": "2.0.0",
   "sourceTag": "whatsapp-v2.0.0-rc1",
   "files": {
-    "CHANGELOG.md": "77bc9d4b70e62bfa6b3cd7fe4a9654051b7ddec39a2d4402e16edf8c82dd7705",
+    "CHANGELOG.md": "3782b702047e47d91f3fd853d5b57e58d7c3c3b0e509a88f5555bf632ea61476",
     "icon.svg": "1d9a927c3ad3cca31305211227611789007bb568d9414e9a78e1be9f84569e9f",
-    "scripts/_limits.ts": "0b1e69350f3a9739b496d56333d50d58ccbf7f12a5b69a68a3c25b5b69c84db6",
-    "scripts/_messages.ts": "c7174c4754b1ee057ecdcdbafdc4db8b347e01c21008c0852c3b741515c8198f",
-    "scripts/_store.ts": "d912d5bb4827f5a992fe310d3414c4b221305f4fb0fe2fc8e70983511c90f7e6",
-    "scripts/_mcp.ts": "38d08f5d89cd425bacb8ddf22748a3557088a69b96f798fcfdb5309aa81688cf",
-    "scripts/lib/baileys.bundle.js": "aebdcf180e25c13a0b62f12fd526cf386c9d1459440848ab8a9701d6ff1d74f4",
-    "scripts/_tools.ts": "b485fd65587909dca7236d2457c93ddf44d35ea0a441d882f1cfac4665b3da00",
-    "scripts/_socket.ts": "a271564edc238b91a1a3df3a40217250b3139aec9e32801ee9bfa70dd2a94df6",
-    "scripts/server.ts": "1ec48cb2786dd3a9082e122f96101ee70a7a97bbd3d4518f137dd1db928b5437",
-    "scripts/_whatsapp.ts": "cbff13381666923d634167bedb1c7fda527a5e4c61a7a906c04d91c491246a79",
-    "flock.skill.json": "b0d20872bfae8696248ace89284e6f6c2785f6294dbc0c7e7d3bcea4ddfc999a",
-    "instructions.md": "ca3c57de80955894790bfa2ccbedf6415de9d73ba97c3a093849b89c9fbc5410"
+    "server/_limits.ts": "9c284acc65e3e3f92c536729fe4c827553f45bb947ad4ebf899898c6a3a36df0",
+    "server/_messages.ts": "c7174c4754b1ee057ecdcdbafdc4db8b347e01c21008c0852c3b741515c8198f",
+    "server/_guide.ts": "97138ea72b70c705f4800d31b73a4491e3562767a07915e9a34b7a7a77853415",
+    "server/_store.ts": "d912d5bb4827f5a992fe310d3414c4b221305f4fb0fe2fc8e70983511c90f7e6",
+    "server/_mcp.ts": "38d08f5d89cd425bacb8ddf22748a3557088a69b96f798fcfdb5309aa81688cf",
+    "server/lib/baileys.bundle.js": "aebdcf180e25c13a0b62f12fd526cf386c9d1459440848ab8a9701d6ff1d74f4",
+    "server/_tools.ts": "d4d52a62524435215826cd7b2c51ea8d3084659c4be2d0d3dfa470e9ecb016c1",
+    "server/_socket.ts": "a271564edc238b91a1a3df3a40217250b3139aec9e32801ee9bfa70dd2a94df6",
+    "server/server.ts": "36d2b4ad2abb7669f75d3c9ec3e6a8593fd361084e1c7a2a8340df00b7854d70",
+    "server/_whatsapp.ts": "22535746fc3662d73b15e0485cf7cb000fcf4c2e134aebc6ed6a28d0745c4de9",
+    "flock.skill.json": "bc874749afe68df7a978ab4aec2e05e9ebd36c69ac4f69e790ee724c506a208f",
+    "instructions.md": "988a4b081238815e0a9dc097f11d1c032a7e5719cdbc15a71b42db34978c56c2"
   }
 }

@@ -3,8 +3,8 @@
 import { mkdtempSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import { WhatsAppService, type Timings } from "../../skills/whatsapp/scripts/_whatsapp";
-import type { AuthHandle, WASocketLike } from "../../skills/whatsapp/scripts/_socket";
+import { WhatsAppService, type Timings } from "../../skills/whatsapp/server/_whatsapp";
+import type { AuthHandle, WASocketLike } from "../../skills/whatsapp/server/_socket";
 
 type Handler = (arg: any) => void;
 
@@ -46,7 +46,10 @@ export class MockSocket implements WASocketLike {
   end(): void { this.ended = true; }
 }
 
-export const FAST: Partial<Timings> = { openWaitMs: 300, pendingWaitMs: 100, settleMs: 5, linkWindowMs: 400, firstQrWaitMs: 300, historyWaitMs: 100, reconnectDelayMs: 1 };
+export const FAST: Partial<Timings> = {
+  openWaitMs: 300, pendingWaitMs: 100, settleMs: 5, linkWindowMs: 400, firstQrWaitMs: 300, historyWaitMs: 100, reconnectDelayMs: 1,
+  idleCloseMs: 60, sendGapMs: 20, sendJitterMinMs: 1_000, sendJitterMaxMs: 3_000,
+};
 
 export interface World {
   dir: string;
@@ -54,20 +57,25 @@ export interface World {
   sockets: MockSocket[];
   auth: { linked: boolean; cleared: number; saved: number };
   qrImages: string[];
+  /** Every wait the service asked for (send pacing and jitter, reconnect backoff); each really waits at most 30 ms. */
+  sleeps: number[];
 }
 
 /** A service on a fresh data folder. `linked`: a finished link is saved already. */
-export function world(script: (sock: MockSocket, n: number, w: World) => void, opts: { linked?: boolean; timings?: Partial<Timings> } = {}): World {
+export function world(script: (sock: MockSocket, n: number, w: World) => void, opts: { linked?: boolean; timings?: Partial<Timings>; random?: () => number } = {}): World {
   const dir = mkdtempSync(join(tmpdir(), "wa-service-"));
   const auth = { linked: !!opts.linked, cleared: 0, saved: 0 };
   const sockets: MockSocket[] = [];
   const qrImages: string[] = [];
   const handle = (): AuthHandle => ({ state: { creds: {}, keys: {} }, saveCreds: async () => { auth.saved++; }, registered: () => auth.linked });
-  const w = { dir, sockets, auth, qrImages } as World;
+  const sleeps: number[] = [];
+  const w = { dir, sockets, auth, qrImages, sleeps } as World;
   w.wa = new WhatsAppService({
     dataDir: dir,
     timeZone: "UTC",
     timings: { ...FAST, ...opts.timings },
+    random: opts.random ?? (() => 0.5),
+    sleep: (ms) => { sleeps.push(ms); return new Promise((r) => setTimeout(r, Math.min(ms, 30))); },
     loadAuth: async () => handle(),
     clearAuth: () => { auth.linked = false; auth.cleared++; },
     qrImage: async (qr) => { qrImages.push(qr); return `data:image/png;base64,${Buffer.from(qr).toString("base64")}`; },

@@ -3,10 +3,10 @@
 //
 // Run: bun test tests/whatsapp.
 import { afterEach, describe, expect, it } from "bun:test";
-import { readFileSync, readdirSync, rmSync } from "fs";
+import { readFileSync, readdirSync, rmSync, writeFileSync } from "fs";
 import { join } from "path";
-import { MAX_RECONNECTS, formatCode, phoneDigits } from "../../skills/whatsapp/scripts/_whatsapp";
-import { LIMITS } from "../../skills/whatsapp/scripts/_limits";
+import { MAX_RECONNECTS, MAX_SESSION_RECONNECTS, formatCode, phoneDigits } from "../../skills/whatsapp/server/_whatsapp";
+import { LIMITS, pause } from "../../skills/whatsapp/server/_limits";
 import { codeOf, history, linkedWorld, sleep, world, type World } from "./_mock";
 
 const made: World[] = [];
@@ -45,7 +45,20 @@ describe("link with a link code", () => {
     expect(status.chats).toBeGreaterThan(0);
     expect(w.sockets.length).toBe(2);
     expect(w.sockets.every((s) => s.ended)).toBe(true);
-    expect(limits(w).connections.length).toBe(2);
+    expect(limits(w).sessions.length).toBe(1);
+    expect(limits(w).usage.ms).toBeGreaterThan(0);
+  });
+
+  it("a finished link clears a pause left by a logout", async () => {
+    const w = track(world((sock, n, w) => {
+      if (n === 0) { sock.qr(); setTimeout(() => { w.auth.linked = true; sock.close(515, "restart required"); }, 20); }
+      else { sock.open(); sock.emit("messaging-history.set", history()); }
+    }));
+    pause("logged_out", "WhatsApp logged this device out.", { dir: w.dir, timeZone: "UTC" });
+    await w.wa.startLink({ phone: "919812345678" });
+    for (let i = 0; i < 50 && (await w.wa.linkStatus() as any).link.phase === "waiting"; i++) await sleep(10);
+    await sleep(50);
+    expect(limits(w).paused).toBeNull();
   });
 
   it("expires after its window when nobody types it: closed, the half-made link forgotten", async () => {
@@ -98,45 +111,81 @@ describe("link with a QR code", () => {
   });
 });
 
-describe("connecting for a read", () => {
-  it("connects, takes in what arrived, answers and closes the connection", async () => {
+describe("connecting for a read: one session reused while calls keep coming", () => {
+  it("connects once for a run of calls, then closes after the idle minutes", async () => {
     const w = track(linkedWorld());
     const out: any = await w.wa.listChats({});
     expect(out.chats.map((c: any) => c.name)).toEqual(["Mom", "School Parents"]);
+    await w.wa.readChat({ chat: "Mom" });
+    await w.wa.search({ query: "sports" });
     expect(w.sockets.length).toBe(1);
+    expect(w.sockets[0].ended).toBe(false);
+    expect(limits(w).sessions.length).toBe(1);
+    expect(limits(w).calls.length).toBe(3);
+    await sleep(150);
     expect(w.sockets[0].ended).toBe(true);
-    expect(limits(w).connections.length).toBe(1);
+    expect(limits(w).usage.ms).toBeGreaterThan(0);
     expect(typeof out.minutesLeftToday).toBe("number");
   });
 
-  it("reconnects at most MAX_RECONNECTS times, each taking a slot, then gives up", async () => {
+  it("each call pushes the idle close back", async () => {
+    const w = track(linkedWorld());
+    await w.wa.listChats({});
+    for (let i = 0; i < 4; i++) { await sleep(35); await w.wa.readChat({ chat: "Mom" }); }
+    expect(w.sockets[0].ended).toBe(false);
+    expect(w.sockets.length).toBe(1);
+  });
+
+  it("after the idle close the next call is a new session", async () => {
+    const w = track(linkedWorld());
+    await w.wa.listChats({});
+    await sleep(150);
+    await w.wa.listChats({});
+    expect(w.sockets.length).toBe(2);
+    expect(limits(w).sessions.length).toBe(2);
+  });
+
+  it("stops at 6 sessions an hour, naming when it frees up", async () => {
+    const w = track(linkedWorld());
+    for (let i = 0; i < LIMITS.sessionsPerHour; i++) { await w.wa.listChats({}); await w.wa.shutdown(); }
+    const err = await w.wa.listChats({}).catch((e) => e);
+    expect(err.code).toBe("SESSION_LIMIT_HOUR");
+    expect(err.message).toMatch(/frees up in about/);
+  });
+
+  it("a connection dropped inside a session (a lease move) reconnects without a new session", async () => {
+    const w = track(linkedWorld());
+    await w.wa.listChats({});
+    w.sockets[0].close(428, "connection lost");
+    await w.wa.readChat({ chat: "Mom" });
+    expect(w.sockets.length).toBe(2);
+    expect(limits(w).sessions.length).toBe(1);
+  });
+
+  it(`after ${MAX_SESSION_RECONNECTS} drops in one session the next call counts as a new session`, async () => {
+    const w = track(linkedWorld());
+    await w.wa.listChats({});
+    for (let i = 0; i < MAX_SESSION_RECONNECTS; i++) { w.sockets.at(-1)!.close(428, "connection lost"); await w.wa.listChats({}); }
+    expect(limits(w).sessions.length).toBe(1);
+    w.sockets.at(-1)!.close(428, "connection lost");
+    await w.wa.listChats({});
+    expect(limits(w).sessions.length).toBe(2);
+  });
+
+  it("reconnects at most MAX_RECONNECTS times in one call, then gives up; one session counted", async () => {
     const w = track(world((sock) => sock.close(408, "timed out"), { linked: true }));
     expect(await codeOf(w.wa.listChats({}))).toBe("CONNECT_FAILED");
     expect(w.sockets.length).toBe(1 + MAX_RECONNECTS);
-    expect(limits(w).connections.length).toBe(1 + MAX_RECONNECTS);
+    expect(limits(w).sessions.length).toBe(1);
+    expect(limits(w).failedConnects).toBe(1);
     expect(w.sockets.every((s) => s.ended)).toBe(true);
   });
 
-  it("the cap holds across a slow drop too: a connection that never answers counts once and is closed", async () => {
+  it("a connection that never answers counts its time and is closed", async () => {
     const w = track(world(() => {}, { linked: true }));
     expect(await codeOf(w.wa.readChat({ chat: "Mom" }))).toBe("CONNECT_FAILED");
     expect(w.sockets.length).toBe(1 + MAX_RECONNECTS);
-  });
-
-  it("logged out on the phone: the link and the stored chats are forgotten, no retry", async () => {
-    const w = track(linkedWorld());
-    await w.wa.listChats({});
-    const lo = track(world((sock) => sock.close(401, "logged out"), { linked: true }));
-    expect(await codeOf(lo.wa.listChats({}))).toBe("NOT_LINKED");
-    expect(lo.sockets.length).toBe(1);
-    expect(lo.auth.linked).toBe(false);
-    expect(lo.wa.store.chatCount).toBe(0);
-  });
-
-  it("a refused account is reported and never retried", async () => {
-    const w = track(world((sock) => sock.close(403, "forbidden"), { linked: true }));
-    expect(await codeOf(w.wa.listChats({}))).toBe("WHATSAPP_REFUSED");
-    expect(w.sockets.length).toBe(1);
+    expect(limits(w).usage.ms).toBeGreaterThan(0);
   });
 
   it("not linked: refused without connecting", async () => {
@@ -145,12 +194,75 @@ describe("connecting for a read", () => {
     expect(w.sockets.length).toBe(0);
   });
 
-  it("stops at the connection limit, naming when it frees up", async () => {
+  it("shutdown closes an open session and counts its time", async () => {
     const w = track(linkedWorld());
-    for (let i = 0; i < LIMITS.connectionsPerHour; i++) await w.wa.listChats({});
-    const err = await w.wa.listChats({}).catch((e) => e);
-    expect(err.code).toBe("CONNECT_LIMIT_HOUR");
-    expect(err.message).toMatch(/frees up in about/);
+    await w.wa.listChats({});
+    await w.wa.shutdown();
+    expect(w.sockets[0].ended).toBe(true);
+    expect(limits(w).usage.ms).toBeGreaterThan(0);
+  });
+});
+
+describe("when WhatsApp pushes back: pause, never retry", () => {
+  it("logged out on the phone: the link and the stored chats are forgotten, tools pause until a new link", async () => {
+    const w = track(world((sock) => sock.close(401, "logged out"), { linked: true }));
+    expect(await codeOf(w.wa.listChats({}))).toBe("NOT_LINKED");
+    expect(w.sockets.length).toBe(1);
+    expect(w.auth.linked).toBe(false);
+    expect(w.wa.store.chatCount).toBe(0);
+    expect(limits(w).paused).toMatchObject({ kind: "logged_out" });
+    expect(await codeOf(w.wa.readChat({ chat: "Mom" }))).toBe("PAUSED_LOGGED_OUT");
+    expect(w.sockets.length).toBe(1);
+    expect((await w.wa.linkStatus() as any).paused).toMatchObject({ kind: "logged_out" });
+  });
+
+  it("logged out while the session sat idle: found on the next call, no reconnect", async () => {
+    const w = track(linkedWorld());
+    await w.wa.listChats({});
+    w.sockets[0].close(401, "logged out");
+    expect(await codeOf(w.wa.listChats({}))).toBe("NOT_LINKED");
+    expect(w.sockets.length).toBe(1);
+    expect(limits(w).paused).toMatchObject({ kind: "logged_out" });
+  });
+
+  it("a refused account pauses everything, even a new link; only unlink clears it, without contacting WhatsApp", async () => {
+    const w = track(world((sock) => sock.close(403, "forbidden"), { linked: true }));
+    expect(await codeOf(w.wa.listChats({}))).toBe("WHATSAPP_REFUSED");
+    expect(w.sockets.length).toBe(1);
+    expect(await codeOf(w.wa.sendMessage({ chat: "Mom", text: "hi" }))).toBe("PAUSED_REFUSED");
+    expect(await codeOf(w.wa.startLink({ phone: "919812345678" }))).toBe("PAUSED_REFUSED");
+    expect(w.sockets.length).toBe(1);
+    const out: any = await w.wa.unlink();
+    expect(out).toMatchObject({ unlinked: true, loggedOut: false });
+    expect(out.note).toMatch(/paused/);
+    expect(w.sockets.length).toBe(1);
+    expect(limits(w).paused).toBeNull();
+  });
+
+  it("3 failed calls in a row pause WhatsApp; the 4th call never connects", async () => {
+    const w = track(world((sock) => sock.close(408, "timed out"), { linked: true }));
+    expect(await codeOf(w.wa.listChats({}))).toBe("CONNECT_FAILED");
+    expect(await codeOf(w.wa.listChats({}))).toBe("CONNECT_FAILED");
+    expect(await codeOf(w.wa.listChats({}))).toBe("WHATSAPP_REFUSED");
+    const made = w.sockets.length;
+    expect(await codeOf(w.wa.listChats({}))).toBe("PAUSED_REFUSED");
+    expect(w.sockets.length).toBe(made);
+  });
+
+  it("another device taking over is reported, not fought over", async () => {
+    const w = track(world((sock) => sock.close(440, "replaced"), { linked: true }));
+    expect(await codeOf(w.wa.listChats({}))).toBe("REPLACED");
+    expect(w.sockets.length).toBe(1);
+  });
+});
+
+describe("the runaway guard", () => {
+  it("refuses the 121st call in an hour without connecting", async () => {
+    const w = track(linkedWorld());
+    const now = Date.now();
+    writeFileSync(join(w.dir, "limits.json"), JSON.stringify({ calls: Array.from({ length: LIMITS.callsPerHour }, (_, i) => now - i * 1000) }));
+    expect(await codeOf(w.wa.listChats({}))).toBe("CALL_LIMIT_HOUR");
+    expect(w.sockets.length).toBe(0);
   });
 });
 
@@ -188,11 +300,10 @@ describe("the store and what reads answer", () => {
     expect(byName.chats.map((c: any) => c.name)).toEqual(["School Parents"]);
   });
 
-  it("new messages that arrive while connected are added and counted unread", async () => {
-    const w = track(linkedWorld((sock, n) => {
-      if (n === 1) sock.emit("messages.upsert", { type: "notify", messages: [{ key: { id: "N1", remoteJid: "919811111111@s.whatsapp.net" }, message: { extendedTextMessage: { text: "Call me" } }, messageTimestamp: Math.floor(Date.now() / 1000) }] });
-    }));
+  it("new messages that arrive while the session is open are added and read on the next call", async () => {
+    const w = track(linkedWorld());
     await w.wa.listChats({});
+    w.sockets[0].emit("messages.upsert", { type: "notify", messages: [{ key: { id: "N1", remoteJid: "919811111111@s.whatsapp.net" }, message: { extendedTextMessage: { text: "Call me" } }, messageTimestamp: Math.floor(Date.now() / 1000) }] });
     const out: any = await w.wa.readChat({ chat: "Mom" });
     expect(out.messages.at(-1).text).toBe("Call me");
   });
@@ -219,7 +330,7 @@ describe("no media is ever downloaded", () => {
   });
 
   it("no script of the connector calls a media download, a profile picture or presence", () => {
-    const dir = join(import.meta.dir, "../../skills/whatsapp/scripts");
+    const dir = join(import.meta.dir, "../../skills/whatsapp/server");
     for (const f of readdirSync(dir).filter((n) => n.endsWith(".ts"))) {
       const src = readFileSync(join(dir, f), "utf8");
       for (const call of ["downloadMediaMessage", "downloadContentFromMessage", "updateMediaMessage", "profilePictureUrl", "presenceSubscribe", "sendPresenceUpdate", "fetchMessageHistory"]) {
@@ -230,14 +341,16 @@ describe("no media is ever downloaded", () => {
 });
 
 describe("sending", () => {
-  it("sends one text to the chat named, with no link preview, then closes", async () => {
+  it("sends one text to the chat named, with no link preview, on the session's connection", async () => {
     const w = track(linkedWorld());
     const out: any = await w.wa.sendMessage({ chat: "Mom", text: "Reaching by 8 https://maps.example/x" });
     expect(out).toMatchObject({ chat: "Mom", sent: true });
     const sent = w.sockets.flatMap((s) => s.sent);
     expect(sent).toEqual([{ jid: "919811111111@s.whatsapp.net", content: { text: "Reaching by 8 https://maps.example/x", linkPreview: null } }]);
-    expect(w.sockets.every((s) => s.ended)).toBe(true);
     expect(limits(w).sends.length).toBe(1);
+    expect(JSON.stringify(limits(w))).not.toContain("Reaching");
+    await sleep(150);
+    expect(w.sockets.every((s) => s.ended)).toBe(true);
   });
 
   it("refuses lists, mass mentions and a missing text before connecting, and a chat not in the list before sending", async () => {
@@ -250,9 +363,39 @@ describe("sending", () => {
     expect(w.sockets.length).toBe(0);
     expect(await codeOf(w.wa.sendMessage({ chat: "+919800000000", text: "hi" }))).toBe("CHAT_NOT_FOUND");
     expect(w.sockets.flatMap((s) => s.sent)).toEqual([]);
+    expect(limits(w).sends).toEqual([]);
   });
 
-  it("stops at 5 sends an hour", async () => {
+  it("waits between sends: the gap plus a random 1 to 3 second pause, never a refusal", async () => {
+    const w = track(world((sock, n) => { sock.open(); if (n === 0) sock.emit("messaging-history.set", history()); }, { linked: true, random: () => 0.25, timings: { sendGapMs: 5_000 } }));
+    await w.wa.sendMessage({ chat: "Mom", text: "first" });
+    await w.wa.sendMessage({ chat: "Mom", text: "second" });
+    const waits = w.sleeps.filter((ms) => ms >= 1_000);
+    expect(waits.length).toBe(2);
+    expect(waits[0]).toBe(1_500);
+    expect(waits[1]).toBeGreaterThan(1_500 + 4_000);
+    expect(waits[1]).toBeLessThanOrEqual(1_500 + 5_000);
+    expect(w.sockets.flatMap((s) => s.sent).length).toBe(2);
+  });
+
+  it("refuses a new chat past 10 different chats in an hour, but a chat already messaged still works", async () => {
+    const w = track(linkedWorld());
+    const now = Date.now();
+    writeFileSync(join(w.dir, "limits.json"), JSON.stringify({ sends: Array.from({ length: LIMITS.chatsPerHour }, (_, i) => ({ at: now - 60_000 * (i + 1), chat: i === 0 ? "919811111111@s.whatsapp.net" : `c${i}@s.whatsapp.net`, text: `h${i}` })) }));
+    expect(await codeOf(w.wa.sendMessage({ chat: "School Parents", text: "hello" }))).toBe("CHAT_LIMIT_HOUR");
+    expect(await codeOf(w.wa.sendMessage({ chat: "Mom", text: "hello" }))).toBeNull();
+  });
+
+  it("refuses the same text to a 4th chat in a day", async () => {
+    const w = track(linkedWorld());
+    const now = Date.now();
+    const { textHash } = await import("../../skills/whatsapp/server/_limits");
+    writeFileSync(join(w.dir, "limits.json"), JSON.stringify({ sends: ["a", "b", "c"].map((c, i) => ({ at: now - 60_000 * (i + 1), chat: `${c}@s.whatsapp.net`, text: textHash("Meeting at 5") })) }));
+    expect(await codeOf(w.wa.sendMessage({ chat: "Mom", text: "meeting AT 5" }))).toBe("SAME_TEXT_LIMIT");
+    expect(w.sockets.flatMap((s) => s.sent)).toEqual([]);
+  });
+
+  it("stops at 20 sends an hour", async () => {
     const w = track(linkedWorld());
     for (let i = 0; i < LIMITS.sendsPerHour; i++) await w.wa.sendMessage({ chat: "Mom", text: `note ${i}` });
     expect(await codeOf(w.wa.sendMessage({ chat: "Mom", text: "one more" }))).toBe("SEND_LIMIT_HOUR");
@@ -264,6 +407,17 @@ describe("sending", () => {
     const err = await w.wa.sendMessage({ chat: "Mom", text: "hi" }).catch((e) => e);
     expect(err.code).toBe("SEND_FAILED");
     expect(err.message).toMatch(/may not have gone out/);
+  });
+
+  it("a connection that drops during the wait sends nothing and says so", async () => {
+    const w = track(linkedWorld());
+    await w.wa.listChats({});
+    const realSleep = (w.wa as any).sleep;
+    (w.wa as any).sleep = async (ms: number) => { w.sockets[0].close(428, "connection lost"); return realSleep(Math.min(ms, 5)); };
+    const err = await w.wa.sendMessage({ chat: "Mom", text: "hi" }).catch((e) => e);
+    expect(err.code).toBe("SEND_FAILED");
+    expect(err.message).toMatch(/nothing went out/);
+    expect(w.sockets.flatMap((s) => s.sent)).toEqual([]);
   });
 });
 

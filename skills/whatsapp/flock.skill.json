@@ -24,7 +24,7 @@
         "transport": "stdio",
         "command": "bun",
         "args": [
-          "{packageDir}/scripts/server.ts"
+          "{packageDir}/server/server.ts"
         ],
         "egress": true,
         "envVars": [],

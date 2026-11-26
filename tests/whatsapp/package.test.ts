@@ -27,8 +27,8 @@ describe("the manifest", () => {
     expect(manifest.requires).toHaveLength(1);
     const [req] = manifest.requires;
     expect(req.type).toBe("mcp_server");
-    expect(req.mcp).toMatchObject({ transport: "stdio", command: "bun", args: ["{packageDir}/scripts/server.ts"], egress: true, envVars: [], credentialsRequired: false });
-    expect(existsSync(join(skillDir, "scripts/server.ts"))).toBe(true);
+    expect(req.mcp).toMatchObject({ transport: "stdio", command: "bun", args: ["{packageDir}/server/server.ts"], egress: true, envVars: [], credentialsRequired: false });
+    expect(existsSync(join(skillDir, "server/server.ts"))).toBe(true);
     for (const a of req.mcp.args) expect(a).not.toMatch(/[;|&`$()><]/);
   });
 
@@ -49,10 +49,10 @@ describe("the manifest", () => {
 
 describe("the package's files", () => {
   it("ships the server, its parts and the one bundle, and no browser script", () => {
-    const scripts = readdirSync(join(skillDir, "scripts")).sort();
-    expect(scripts).toEqual(["_limits.ts", "_mcp.ts", "_messages.ts", "_socket.ts", "_store.ts", "_tools.ts", "_whatsapp.ts", "lib", "server.ts"]);
-    expect(readdirSync(join(skillDir, "scripts/lib"))).toEqual(["baileys.bundle.js"]);
-    const size = statSync(join(skillDir, "scripts/lib/baileys.bundle.js")).size;
+    const scripts = readdirSync(join(skillDir, "server")).sort();
+    expect(scripts).toEqual(["_guide.ts", "_limits.ts", "_mcp.ts", "_messages.ts", "_socket.ts", "_store.ts", "_tools.ts", "_whatsapp.ts", "lib", "server.ts"]);
+    expect(readdirSync(join(skillDir, "server/lib"))).toEqual(["baileys.bundle.js"]);
+    const size = statSync(join(skillDir, "server/lib/baileys.bundle.js")).size;
     expect(size).toBeGreaterThan(1_000_000);
     expect(size).toBeLessThan(10 * 1024 * 1024);
   });

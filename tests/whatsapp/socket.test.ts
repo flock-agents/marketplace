@@ -6,8 +6,8 @@ import { afterEach, describe, expect, it } from "bun:test";
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import * as bundle from "../../skills/whatsapp/scripts/lib/baileys.bundle.js";
-import { BROWSER, _resetVersionForTesting, authDirOf, clearAuth, historyFilter, isLinked, proxyOf, socketConfig, waVersion, type BaileysLib } from "../../skills/whatsapp/scripts/_socket";
+import * as bundle from "../../skills/whatsapp/server/lib/baileys.bundle.js";
+import { BROWSER, _resetVersionForTesting, authDirOf, clearAuth, historyFilter, isLinked, proxyOf, socketConfig, waVersion, type BaileysLib } from "../../skills/whatsapp/server/_socket";
 
 const lib = bundle as unknown as BaileysLib;
 const T = lib.proto.HistorySync.HistorySyncType;

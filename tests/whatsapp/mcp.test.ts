@@ -1,4 +1,4 @@
-// WhatsApp connector: the server as Flock runs it, `bun scripts/server.ts` over stdio, one JSON-RPC
+// WhatsApp connector: the server as Flock runs it, `bun server/server.ts` over stdio, one JSON-RPC
 // message a line. Not linked, so nothing here connects to WhatsApp.
 //
 // Run: bun test tests/whatsapp.
@@ -6,9 +6,9 @@ import { afterAll, describe, expect, it } from "bun:test";
 import { mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import { handle } from "../../skills/whatsapp/scripts/_mcp";
+import { handle } from "../../skills/whatsapp/server/_mcp";
 
-const server = join(import.meta.dir, "../../skills/whatsapp/scripts/server.ts");
+const server = join(import.meta.dir, "../../skills/whatsapp/server/server.ts");
 const dataDir = mkdtempSync(join(tmpdir(), "wa-mcp-"));
 afterAll(() => rmSync(dataDir, { recursive: true, force: true }));
 

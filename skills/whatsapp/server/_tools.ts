@@ -14,7 +14,7 @@ export function whatsappTools(wa: WhatsAppService): Tool[] {
   return [
     {
       name: "link",
-      description: "Link the person's WhatsApp to Flock. Gives an 8-character link code for their number right away (they type it on their phone), or a QR code picture with qr: true. The link waits a few minutes.",
+      description: "Link the person's WhatsApp: gives a link code for them to type on their phone, with the message to send them in their own chat only (follow forYou in the answer); qr: true gives a QR code picture instead.",
       inputSchema: obj({
         phone: { type: "string", description: "The person's WhatsApp number with country code, such as +919812345678 (for a link code)" },
         qr: { type: "boolean", description: "true for a QR code picture instead of a link code" },
@@ -53,7 +53,7 @@ export function whatsappTools(wa: WhatsAppService): Tool[] {
     },
     {
       name: "send-message",
-      description: "Send one text message the person approved to one chat they already have. One chat per send.",
+      description: "Send one message the person approved word for word, to one chat they already have; never on a schedule, never the same text to many chats.",
       inputSchema: obj({
         chat: { type: "string", description: "The chat's name exactly as list-chats shows it" },
         text: { type: "string", description: "The message, exactly as the person approved it" },
