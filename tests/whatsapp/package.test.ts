@@ -4,8 +4,10 @@
 // Run: bun test tests/whatsapp.
 import { describe, expect, it } from "bun:test";
 import { createHash } from "crypto";
-import { existsSync, readFileSync, readdirSync, statSync } from "fs";
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from "fs";
+import { tmpdir } from "os";
 import { join, relative } from "path";
+import { LINK_CODE_STEPS, LINK_QR_STEPS, QR_MESSAGE, linkCodeMessage } from "../../skills/whatsapp/server/_guide";
 
 const root = join(import.meta.dir, "../..");
 const skillDir = join(root, "skills/whatsapp");
@@ -56,6 +58,22 @@ describe("the package's files", () => {
     expect(size).toBeGreaterThan(1_000_000);
     expect(size).toBeLessThan(10 * 1024 * 1024);
   });
+
+  it("the bundle carries no path of the machine it was built on", () => {
+    const bundle = readFileSync(join(skillDir, "server/lib/baileys.bundle.js"), "utf8");
+    expect(bundle).not.toMatch(/"\/(Users|home|private|tmp|var)\//);
+  });
+
+  const bundleTool = join(root, "tools/whatsapp-bundle");
+  it.skipIf(!existsSync(join(bundleTool, "node_modules")))("the bundle is exactly what tools/whatsapp-bundle builds from the lockfile", async () => {
+    const out = join(mkdtempSync(join(tmpdir(), "wa-bundle-")), "baileys.bundle.js");
+    try {
+      const build = Bun.spawn(["bun", "build.ts", out], { cwd: bundleTool, stdout: "ignore", stderr: "inherit" });
+      expect(await build.exited).toBe(0);
+      const sha = (f: string) => createHash("sha256").update(readFileSync(f)).digest("hex");
+      expect(sha(out)).toBe(sha(join(skillDir, "server/lib/baileys.bundle.js")));
+    } finally { rmSync(join(out, ".."), { recursive: true, force: true }); }
+  }, 60_000);
 
   it("the bundle is built from the pinned versions", () => {
     const pkg = JSON.parse(readFileSync(join(root, "tools/whatsapp-bundle/package.json"), "utf8"));
@@ -120,6 +138,21 @@ describe("what the person reads", () => {
       expect(card.body).toContain(words);
     }
     expect(card.body).not.toMatch(/minute|expires? in/i);
+  });
+
+  it("the words link's answer gives the person: short, a \"link code\", no em dashes, no system words", () => {
+    for (const words of [linkCodeMessage("K7QD-2M9X"), QR_MESSAGE]) {
+      expect(words).not.toContain("—");
+      expect(words).not.toMatch(/verification code|\botp\b|security code|passcode|\b(session|connector|socket|proxy|token|server|pairing)\b/i);
+      expect(words.length).toBeLessThan(500);
+    }
+    expect(linkCodeMessage("K7QD-2M9X")).toContain("Your WhatsApp link code: K7QD-2M9X");
+    expect(linkCodeMessage("K7QD-2M9X")).not.toMatch(/minute|expires? in/i);
+    for (const steps of [LINK_CODE_STEPS, LINK_QR_STEPS]) {
+      expect(steps).not.toContain("—");
+      expect(steps).toMatch(/own chat/);
+    }
+    expect(LINK_CODE_STEPS).toMatch(/never in a group or shared chat/);
   });
 
   it("has no em dashes and no system words", () => {

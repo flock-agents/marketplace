@@ -4,7 +4,7 @@
   "type": "module",
   "description": "Builds skills/whatsapp/server/lib/baileys.bundle.js: Baileys and the few libraries the WhatsApp connector's server needs, as one file. Not shipped.",
   "scripts": {
-    "build": "bun build entry.ts --target=bun --minify --outfile=../../skills/whatsapp/server/lib/baileys.bundle.js --external sharp --external jimp --external link-preview-js --external audio-decode"
+    "build": "bun build.ts"
   },
   "dependencies": {
     "@whiskeysockets/baileys": "7.0.0-rc14",
