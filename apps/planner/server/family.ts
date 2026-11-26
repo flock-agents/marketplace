@@ -10,6 +10,7 @@ import { house, people } from "./db/schema";
 import { appOf, COOK_NEW_RECIPES, GROUPS, SETTINGS, SHOP_APPS, SLOTS, type GroceryApp } from "./db/constants";
 import { WEEKDAYS, type Weekday } from "./dates";
 import { listRules, listSlots } from "./slotStore";
+import { targetsInput } from "./targets";
 
 export type Db = BunSQLiteDatabase<any>;
 /** Tell live pages a row changed, and who changed it (the kit's emitChange). */
@@ -29,6 +30,11 @@ export type HouseView = Omit<HouseRow, "cook_days" | "connected_apps" | "history
  *  that person's account). `*` is a date kept before readers were told apart. */
 export type HistorySynced = Record<string, Record<string, string>>;
 export const ANY_READER = "*";
+
+/** The names of the people at home for every meal unless a day says otherwise: in the family and usually home, oldest first. */
+export function homePeople(db: Db): string[] {
+  return db.select().from(people).orderBy(asc(people.created_at)).all().filter((p) => p.active !== 0 && p.usually_home !== 0).map((p) => p.name);
+}
 
 /** The household's one row, made the first time anything asks for it. */
 export function getHouse(db: Db): HouseRow {
@@ -128,7 +134,7 @@ export const words = (v: unknown, what: string): string | null =>
   v === null ? null : typeof v === "string" ? v.trim() || null : refuse(`${what} must be text`);
 export const names = (v: unknown, what: string): string[] =>
   Array.isArray(v) && v.every((n) => typeof n === "string" && n.trim()) ? v.map((n: string) => n.trim()) : refuse(`${what} must be a list of names`);
-const PERSON_WORDS = ["relationship", "portions", "diet", "allergies", "dislikes", "targets", "note"] as const;
+const PERSON_WORDS = ["relationship", "portions", "diet", "allergies", "dislikes", "note"] as const;
 
 const ARRIVAL_SHAPE = 'arrival must be a time as "HH:MM", like "07:30", or for a cook who comes more than once a list of visits: ["06:00", "16:30"] or [{ at: "06:00", meals: ["Breakfast", "Lunch"] }, { at: "16:30", meals: ["Dinner"] }]';
 /** The cook's arrival as sent: one time, or a list of visits (each a time, or { at, meals? }). `slotNames`: the meals a visit
@@ -209,8 +215,10 @@ export function mountFamilyRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: { a
     shopping: shoppingApps(db),
   }));
 
-  // set_person { name, relationship?, group, portions?, diet?, allergies?, dislikes?, targets?, note?, remove?: true }: one person by
-  // name, whatever its capitals. Only the fields given change. `remove` takes them out of the family; their row stays.
+  // set_person { name, relationship?, group, portions?, diet?, allergies?, dislikes?, targets?, usually_home?, note?, remove?: true }:
+  // one person by name, whatever its capitals. Only the fields given change. `remove` takes them out of the family; their row
+  // stays. `targets`: { protein?, carbs?, fat?, note? } or the family's words (targets.ts). `usually_home: false`: in the family
+  // but at a meal only when a slot-day adds them (parents who visit).
   write("/api/family/people", (b, by) => {
     const given = name(b.name, "name");
     const same = db.select().from(people).all().filter((p) => p.name.trim().toLowerCase() === given.toLowerCase());
@@ -220,6 +228,12 @@ export function mountFamilyRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: { a
     if (b.group != null) set.group = (GROUPS as readonly unknown[]).includes(b.group) ? (b.group as string) : refuse(`group must be one of: ${GROUPS.join(", ")}`);
     else if (!existing) refuse(`group is required: one of ${GROUPS.join(", ")}`);
     for (const k of PERSON_WORDS) if (b[k] !== undefined) set[k] = words(b[k], k);
+    if (b.targets !== undefined) {
+      const t = targetsInput(b.targets);
+      if (t && "error" in t) refuse(t.error);
+      set.targets = t ? JSON.stringify(t) : null;
+    }
+    if (b.usually_home !== undefined) set.usually_home = typeof b.usually_home === "boolean" ? (b.usually_home ? 1 : 0) : refuse("usually_home must be true or false");
     const person = existing
       ? db.update(people).set({ ...set, updated_at: new Date().toISOString(), updated_by: by }).where(eq(people.id, existing.id)).returning().get()
       : db.insert(people).values({ ...set, name: given, updated_by: by }).returning().get();
@@ -242,6 +256,17 @@ export function mountFamilyRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: { a
     await patchSettings({ grocery_app: main, fallback_app: fallback ?? "none" }, c);
     saveHouse({ connected_apps: JSON.stringify(SHOP_APPS.filter((a) => connected.has(a))) }, by);
     return { body: { ...shoppingApps(db), house: houseView(getHouse(db)) } };
+  });
+
+  // set_roles { menu?, cooking?, shopping? }: who decides what is cooked, who cooks and who shops, each in the family's
+  // words (a person's name, "the cook", "shared", "each buys their own"); null clears one. Any of them may be someone who
+  // does not eat at home. The plan goes to whoever decides the menu, the carts to whoever shops.
+  write("/api/family/roles", (b, by) => {
+    const set: Partial<typeof house.$inferInsert> = {};
+    for (const [field, column] of [["menu", "menu_by"], ["cooking", "cooking_by"], ["shopping", "shopping_by"]] as const)
+      if (b[field] !== undefined) set[column] = words(b[field], field);
+    if (!Object.keys(set).length) refuse("send menu, cooking or shopping: who decides what is cooked, who cooks, who shops");
+    return saveHouse(set, by);
   });
 
   // set_cook { name, days?, arrival?, makes_well?, wont_make?, time_limit?, new_recipes?, note? }: the cook. A name is needed

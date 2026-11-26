@@ -11,13 +11,21 @@ type Route = (p: Record<string, unknown>) => Call | { error: string; code: strin
 
 /** Each operation: where it goes in the app's own API. */
 export const ROUTES: Record<string, Route> = {
+  // The setup's checklist (agentInterface.setup) and its two small writes: setupStatus.ts.
+  status: (p) => ({ method: "POST", path: "/api/setup/status", body: p }),
+  set_answered: (p) => ({ method: "POST", path: "/api/setup/answered", body: p }),
+  set_cuisine: (p) => ({ method: "POST", path: "/api/setup/cuisine", body: p }),
   set_person: (p) => ({ method: "POST", path: "/api/family/people", body: p }),
   set_cook: (p) => ({ method: "POST", path: "/api/family/cook", body: p }),
+  set_roles: (p) => ({ method: "POST", path: "/api/family/roles", body: p }),
   set_shopping_apps: (p) => ({ method: "POST", path: "/api/family/shopping-apps", body: p }),
   apply_setup: (p) => ({ method: "POST", path: "/api/family/setup", body: p }),
-  make_plan: (p) => typeof p.week_start === "string" || typeof p.week_start === "number"
-    ? { method: "POST", path: `/api/weeks/${encodeURIComponent(String(p.week_start))}/make-plan`, body: p }
-    : { error: "week_start is required: the week's Monday as YYYY-MM-DD", code: "APP_REFUSED", status: 400 },
+  // From a date ({ from, days }), else a whole week ({ week_start }).
+  make_plan: (p) => p.from !== undefined
+    ? { method: "POST", path: "/api/plan", body: p }
+    : typeof p.week_start === "string" || typeof p.week_start === "number"
+      ? { method: "POST", path: `/api/weeks/${encodeURIComponent(String(p.week_start))}/make-plan`, body: p }
+      : { error: "from and days are needed (the first day as YYYY-MM-DD and how many days), or week_start for a whole week (its Monday)", code: "APP_REFUSED", status: 400 },
   // Later changes (docs/slot-model-spec.md §6) and the answer to the next-day question (§5.7): changes.ts.
   set_slot: (p) => ({ method: "POST", path: "/api/slots", body: p }),
   set_slot_day: (p) => ({ method: "POST", path: "/api/slot-days", body: p }),
@@ -63,18 +71,22 @@ export const ROUTES: Record<string, Route> = {
  *  it cannot do without. */
 export const FIELDS: Record<string, { fields: string[]; need?: string[] }> = {
   guide: { fields: [] },
-  set_person: { fields: ["name", "relationship", "group", "portions", "diet", "allergies", "dislikes", "targets", "note", "remove"], need: ["name"] },
+  status: { fields: ["person"] },
+  set_answered: { fields: ["ids", "remove"], need: ["ids"] },
+  set_cuisine: { fields: ["cuisine"], need: ["cuisine"] },
+  set_person: { fields: ["name", "relationship", "group", "portions", "diet", "allergies", "dislikes", "targets", "usually_home", "note", "remove"], need: ["name"] },
   set_cook: { fields: ["name", "days", "arrival", "makes_well", "wont_make", "time_limit", "new_recipes", "note"], need: ["name"] },
+  set_roles: { fields: ["menu", "cooking", "shopping"] },
   set_shopping_apps: { fields: ["main", "fallback", "connected"], need: ["main", "connected"] },
   apply_setup: { fields: ["household", "transcript"], need: ["transcript"] },
-  make_plan: { fields: ["week_start", "household", "suggest_new"], need: ["week_start"] },
+  make_plan: { fields: ["from", "days", "keep_edited", "week_start", "household", "suggest_new"] },
   set_slot: { fields: ["name", "kind", "addon_of", "usual_people", "days", "skip_days", "order", "remove"], need: ["name"] },
   set_slot_day: { fields: ["date", "slot", "people", "add_people", "remove_people", "guests", "occasion", "new_dishes_allowed", "skip", "dishes"], need: ["date", "slot"] },
   add_dish: { fields: ["name", "slot", "frequency", "days", "quote", "link"], need: ["name", "slot"] },
-  set_rule: { fields: ["id", "hard", "what", "who", "slots", "days", "items", "to", "frequency", "per_meal", "fasting_food", "quote", "remove"] },
+  set_rule: { fields: ["id", "hard", "what", "who", "slots", "days", "items", "to", "frequency", "per_meal", "fasting_food", "when_present", "quote", "remove"] },
   set_setting: { fields: ["new_dishes_per_week"], need: ["new_dishes_per_week"] },
   record_made: { fields: ["date", "slot", "dishes"], need: ["date", "slot", "dishes"] },
-  record_feedback: { fields: ["date", "slot", "dish", "made", "liked", "again", "answer"], need: ["date", "dish"] },
+  record_feedback: { fields: ["date", "slot", "dish", "made", "liked", "again", "answer", "who", "quote"], need: ["date", "dish"] },
   set_regular: { fields: ["item", "amount", "unit", "every", "times_per_week", "weekdays", "for_whom", "active", "paused_until", "remove"], need: ["item"] },
   import_order_history: { fields: ["app", "account", "orders"], need: ["app", "orders"] },
   record_bought_outside: { fields: ["item", "date"], need: ["item"] },
@@ -155,12 +167,11 @@ export function checkFields(op: string, p: Record<string, unknown>): { error: st
 /** Operations that take more than one call, or none. */
 type Multi = (p: Record<string, unknown>, call: (c: Call) => Promise<{ status: number; body: any }>) => Promise<unknown>;
 
-/** The guide's last section: every operation with its fields as the code reads them (a field it can do without has "?"). */
-export const FIELDS_SECTION = ["## Operations and their fields (exactly these; no other name or field is taken)", "",
-  ...Object.entries(FIELDS).map(([op, f]) => `- ${op} { ${f.fields.map((k) => (f.need?.includes(k) ? k : `${k}?`)).join(", ")} }`)].join("\n");
+/** What the guide ends with: each operation is a tool of its own with its fields, and setting up has its own skill. */
+export const TOOLS_LINE = "Each operation is also a tool of its own, planner_<name>, with its fields and when to use it: prefer the tools. Setting up follows the planner-setup skill.";
 
 const MULTI: Record<string, Multi> = {
-  guide: async () => ({ guide: `${guide.trimEnd()}\n\n${FIELDS_SECTION}\n` }),
+  guide: async () => ({ guide: `${guide.trimEnd()}\n\n${TOOLS_LINE}\n` }),
 };
 
 /** The operation names, for the manifest test: every declared operation has a handler. */

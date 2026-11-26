@@ -83,7 +83,11 @@ the app stores, estimates, builds the carts and runs the clock.
 
 **Files, one job each.** `server/index.ts` mounts the kit (`settings`, `routines`, `keepTables: OLD_TABLES`; no seed) and
 the routes; `agentOps.ts` maps each operation to one of those routes, so the agent and the pages pass the same checks;
-`agent-guide.md` is the `guide` text; `db/schema.ts` the fifteen tables; `db/constants.ts` the closed lists, the settings,
+`agent-guide.md` is the `guide` text and `skills/planner-setup/instructions.md` the published setup skill (agentInterface.setup);
+`setupStatus.ts` the `status` operation (the setup's checklist: known, missing by when, the stage, the first task) with
+`set_answered` and `set_cuisine`; `planRange.ts` `make_plan { from, days }` (some days, week by week, the defaults of a
+household that named no meals); `targets.ts` people's food goals (read from words, moved at boot, the plan's lean);
+`feedback.ts` plan_feedback and the rule proposed for a dish turned down twice; `db/schema.ts` the sixteen tables; `db/constants.ts` the closed lists, the settings,
 the estimate's tuning and the 2.0 table names; `family.ts` people, the house row, the cook and shopping apps;
 `slotStore.ts` the slot model's typed rows, reads and writes (slots, slot-days with dishes and ingredients, library, rules)
 and its derived values (staples, looks like, recent); `meals.ts` the week as the pages read it and a planned week's close;
@@ -111,16 +115,19 @@ main app, the fallback and Order without asking are manifest settings (group "Ho
 Flock's AppShell adds for the owner; `Thumb.tsx` (a product's picture, a dish's play button); `shared.ts` and `format.ts`.
 
 **Tables** (all public; lists are JSON text, dates `YYYY-MM-DD`, times `HH:MM`, local; the slot model,
-`docs/slot-model-spec.md` §2). `people` (child | adult | elder; portions, diet, allergies in their own words) · `house` (one
+`docs/slot-model-spec.md` §2). `people` (child | adult | elder; portions, diet, allergies in their own words; `targets`
+JSON { protein, carbs, fat, note }; `usually_home` 0 for someone who visits) · `house` (one
 row: the cook, connected apps, `history_synced` per app and reader, `sync_session_id`, `profile_to_structure`,
-`intro_sent_at`, the check-in times, notes, `setup_state`: what apply_setup read beside the rows, for a correction's diff) · `slots` (unique name; main | custom | addon with `addon_of`; usual people,
+`intro_sent_at`, the check-in times, notes, `setup_state`: what apply_setup read beside the rows, for a correction's diff; `setup_answered`: the status items answered with nothing to save) · `slots` (unique name; main | custom | addon with `addon_of`; usual people,
 days, weekly `skip_days`, planning `order`) · `slot_days` (one per date and slot, unique; who it is for, guests, occasion,
 `skip` eaten_out | ordered_in, `status` planned | confirmed, `edited`; a setup seed example has no date and is confirmed) ·
 `slot_dishes` (in order; `new`, `feedback_asked`: 1 asked, 2 answered; a note) · `dish_ingredients` (item, amount, unit, per slot dish; the SQL
 name avoids 2.0's `ingredients`) · `library` (one per dish and slot, unique key + slot: frequency, days, `said` (the family's words for them, sent to the plan call), `contains` and
 `contains_read` tags, origin setup_named | family_added | planner_suggested, suggested, untried, offers, disliked, and the
 dish's video and ratings, kept the same on every row of a dish) · `rules` (hard or soft, what, who, slots, days, items, to,
-frequency, per_meal, fasting_food, the family's `quote`) · `regulars` (retired: its rows became item cycles, nothing reads
+frequency, per_meal, fasting_food, `when_present` (held only at slot-days where one of those people is, a guest's `as`
+counting), the family's `quote`) · `plan_feedback` (date, slot, dish, liked | disliked | swapped_to | skipped | never, to,
+who, quote, proposed) · `regulars` (retired: its rows became item cycles, nothing reads
 it) · `items` (one per thing bought: group daily | few_days | monthly, unit, `subscription`, `dont_ask`, `snoozed_until`,
 the cycle the family stated (`stated_amount`, `stated_days`), the cached estimate: usual amount, lasts days, product, app,
 last bought, run-out, confident; and `image`, the shopping app's picture of it) · `item_events` (a purchase, an answer, an
@@ -132,8 +139,10 @@ setting `new_dishes_per_week` (0, 2, 4 or 7; 2 until set) caps a week's new dish
 `dishes`, `dish_items`, `dish_book`) and house lists (`rules`, `extra_slots`, `order_in`, `meal_examples`,
 `cooking_days`) are gone, with no migration.
 
-**Operations** (31). `guide`; the family: `set_person`, `set_cook`, `set_shopping_apps`, `apply_setup` (the whole setup
-at once: slots, rules, library, seed slot-days, the cook; called again with more replies it applies only what they changed); the plan: `make_plan { week_start, household? }` (the slot model, spec §5); later changes (spec §6, `changes.ts`):
+**Operations** (35), each with an `input` JSON Schema and a one-line `use` in the manifest (Flock offers each as a tool of
+its own, `planner_<name>`; opSchemas.test.ts holds the schemas to agentOps' FIELDS). `guide`; the setup: `status`,
+`set_answered`, `set_cuisine`; the family: `set_roles` (who decides the menu, who cooks, who shops: separate facts), `set_person`, `set_cook`, `set_shopping_apps`, `apply_setup` (the whole setup
+at once: slots, rules, library, seed slot-days, the cook; called again with more replies it applies only what they changed); the plan: `make_plan { from, days, keep_edited? }` or `{ week_start }` (the slot model, spec §5); later changes (spec §6, `changes.ts`):
 `set_slot`, `set_slot_day`, `add_dish` (with the contains read before it answers), `set_rule`, `set_setting`, `record_made`,
 `record_feedback`; items: `set_regular` (the older way to state a cycle), `import_order_history` (about 8 orders and 80
 items a call, one app a call), `record_bought_outside`, `set_item`, `set_subscription`, `answer_running_low`,

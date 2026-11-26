@@ -203,8 +203,17 @@ export async function readEvents(o: { events: CalendarEvent[] | null; dated: Dat
 export type PlanDay = { date: string; slot: string; people: string[]; guests: Guest[]; occasion: string | null; new_dishes_allowed: number | null;
   skip: Skip | null; edited: boolean; fixed: boolean; why: string[]; fasting: string[]; dishes: string[]; note: string | null };
 
-/** Does a rule hold on this slot-day: its days, and its slots (an add-on slot is held by its main slot's rules too). */
-export function ruleHolds(r: Pick<Rule, "days" | "slots">, date: string, slot: Slot | undefined, slotName: string): boolean {
+/** Who is at a slot-day for a rule's when_present: its people, and the people its guests count as. */
+export const presentAt = (d: { people: string[]; guests?: Guest[] }): string[] => [...d.people, ...(d.guests ?? []).flatMap((g) => g.as ?? [])];
+/** Is one of a rule's when_present people at the slot-day (always, for a rule with none). */
+export const presentFor = (r: { when_present?: string[] | null }, present: readonly string[]): boolean =>
+  !r.when_present?.length || r.when_present.some((w) => present.some((p) => same(p, w)));
+
+/** Does a rule hold on this slot-day: its days, its slots (an add-on slot is held by its main slot's rules too), and the
+ *  people it waits for (`present`: who is there, presentAt). */
+export function ruleHolds(r: Pick<Rule, "days" | "slots"> & { when_present?: string[] | null }, date: string, slot: Slot | undefined, slotName: string,
+  present: readonly string[] = []): boolean {
+  if (!presentFor(r, present)) return false;
   if (r.days?.length && !r.days.includes(weekdayOf(date))) return false;
   if (r.slots?.length && !r.slots.some((s) => same(s, slotName) || (!!slot?.addon_of && same(s, slot.addon_of)))) return false;
   return true;
@@ -232,7 +241,9 @@ export const slotDayKey = (date: string, slot: string): string => `${date}|${slo
  *  saved is left out. A slot-day in `only` that the family edited is planned with the people, guests and occasion they set,
  *  its dishes planned again (set_slot_day asks for exactly that). */
 export function buildDays(o: { weekStart: string; from: string; slots: Slot[]; people: string[]; rules: Rule[]; household: Household;
-  changes: Attendance[]; saved: SlotDay[]; only?: Set<string> }): PlanDay[] {
+  changes: Attendance[]; saved: SlotDay[]; only?: Set<string>;
+  /** The last date planned (a range ending inside the week): a later one is kept as saved, like one before `from`. */ to?: string;
+  /** false: a slot-day whose dishes the family set is planned again too, with the people and the rest they set. */ keepEdited?: boolean }): PlanDay[] {
   const out: PlanDay[] = [];
   const bySlot = new Map(o.slots.map((s) => [s.name.toLowerCase(), s]));
   for (const date of weekDates(o.weekStart)) {
@@ -242,7 +253,9 @@ export function buildDays(o: { weekStart: string; from: string; slots: Slot[]; p
       const had = o.saved.find((d) => d.date === date && same(d.slot, s.name));
       const asked = o.only?.has(slotDayKey(date, s.name));
       if (o.only && !asked && !had) continue;
-      if (date < o.from || (o.only && !asked) || (!asked && had?.edited && had.dishes.length) || (had?.edited && had.skip) || had?.status === "confirmed") {
+      const outside = date < o.from || (!!o.to && date > o.to);
+      const keptDishes = o.keepEdited !== false && !asked && had?.edited && had.dishes.length;
+      if (outside || (o.only && !asked) || keptDishes || (had?.edited && had.skip) || had?.status === "confirmed") {
         if (had) out.push({ date, slot: s.name, people: had.people, guests: had.guests, occasion: had.occasion, new_dishes_allowed: had.new_dishes_allowed, skip: had.skip,
           edited: had.edited, fixed: true, why: [], fasting: [], dishes: had.dishes.map((x) => x.dish), note: had.note });
         continue;
@@ -274,7 +287,7 @@ export function buildDays(o: { weekStart: string; from: string; slots: Slot[]; p
         else if (!s.usual_people.length || s.kind === "main") for (const p of c.people) if (!people.some((x) => same(x, p))) { people.push(p); why.push(`${p} joins: ${c.why}`); }
       }
       // Fasting: with nothing to eat, the person is not at this slot-day; with fasting food, they stay, with a note.
-      for (const r of o.rules.filter((x) => x.what === "fasting" && ruleHolds(x, date, s, s.name))) {
+      for (const r of o.rules.filter((x) => x.what === "fasting" && ruleHolds(x, date, s, s.name, people))) {
         const who = r.who ? people.filter((p) => same(p, r.who!)) : [...people];
         if (!who.length) continue;
         if (r.fasting_food?.length) for (const p of who) fasting.push(`${p} fasts: only ${r.fasting_food.join(", ")} (${r.quote})`);

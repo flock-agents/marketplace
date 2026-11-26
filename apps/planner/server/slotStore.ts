@@ -33,7 +33,8 @@ export type Slot = { id: string; name: string; kind: SlotKind; addon_of: string 
   skip_days: SkipDay[]; order: number; active: boolean;
   /** The dish families this meal is built from, and the ways it is plated (kinds.ts); null = not read yet. */
   kinds: MealKind[] | null; templates: MealTemplate[] | null };
-export type Guest = { count: number; rules?: string[] };
+/** Unnamed guests at one meal; `as`: the people of the family they count as for a rule's when_present (the parents, visiting). */
+export type Guest = { count: number; rules?: string[]; as?: string[] };
 export type Ingredient = { item: string; amount: number | null; unit: string | null };
 export type SlotDish = { id: string; position: number; dish: string; new: boolean; feedback_asked: boolean; note: string | null; not_for: string[];
   ingredients: (Ingredient & { id: string })[] };
@@ -50,7 +51,8 @@ export type LibraryDish = { id: string; key: string; slot: string; name: string;
   /** The kind it is a variant of, its catalog sub-kind and the catalog item it is (kinds.ts); null = not mapped / not in the catalog. */
   kind: string | null; sub: string | null; catalog_item: string | null };
 export type Rule = { id: string; hard: boolean; what: RuleWhat; who: string | null; slots: string[] | null; days: Weekday[] | null;
-  items: string[] | null; to: string | null; frequency: Frequency | null; per_meal: number | null; fasting_food: string[] | null; quote: string };
+  items: string[] | null; to: string | null; frequency: Frequency | null; per_meal: number | null; fasting_food: string[] | null;
+  /** The rule holds only at slot-days where one of these people is (or a guest counted as them); null: always. */ when_present?: string[] | null; quote: string };
 
 // ── What a write takes: only the fields given change (an update), the rest take their defaults (an insert) ──
 
@@ -64,8 +66,8 @@ export type LibraryInput = { name: string; slot: string; origin?: LibraryOrigin;
   contains?: string[]; contains_read?: string[]; suggested?: boolean; untried?: boolean; offers?: number; disliked?: boolean;
   prep?: string | null; video_url?: string | null; video_title?: string | null; video_thumbnail?: string | null;
   kind?: string | null; sub?: string | null; catalog_item?: string | null };
-export type RuleInput = Omit<Rule, "id" | "who" | "slots" | "days" | "items" | "to" | "frequency" | "per_meal" | "fasting_food"> &
-  Partial<Pick<Rule, "who" | "slots" | "days" | "items" | "to" | "frequency" | "per_meal" | "fasting_food">>;
+export type RuleInput = Omit<Rule, "id" | "who" | "slots" | "days" | "items" | "to" | "frequency" | "per_meal" | "fasting_food" | "when_present"> &
+  Partial<Pick<Rule, "who" | "slots" | "days" | "items" | "to" | "frequency" | "per_meal" | "fasting_food" | "when_present">>;
 
 // ── JSON lists and flags ──
 
@@ -86,7 +88,8 @@ export const libraryOf = (r: LibraryRow): LibraryDish => ({ id: r.id, key: r.key
   video_thumbnail: r.video_thumbnail, rating: r.rating, rating_note: r.rating_note, rated_on: r.rated_on, rated_by: r.rated_by, ratings: arr(r.ratings),
   kind: r.kind ?? null, sub: r.sub ?? null, catalog_item: r.catalog_item ?? null });
 export const ruleOf = (r: RuleRow): Rule => ({ id: r.id, hard: !!r.hard, what: r.what as RuleWhat, who: r.who, slots: arrOrNull(r.slots), days: arrOrNull(r.days),
-  items: arrOrNull(r.items), to: r.to, frequency: (r.frequency as Frequency | null) ?? null, per_meal: r.per_meal, fasting_food: arrOrNull(r.fasting_food), quote: r.quote });
+  items: arrOrNull(r.items), to: r.to, frequency: (r.frequency as Frequency | null) ?? null, per_meal: r.per_meal, fasting_food: arrOrNull(r.fasting_food),
+  when_present: arrOrNull(r.when_present), quote: r.quote });
 
 /** Run a write in one transaction; the pages hear of its changes only once it is committed. */
 export function commit<T>(db: Db, emit: Emit, run: (tx: Db, changes: Change[]) => T): T {
@@ -322,7 +325,8 @@ export function listRules(db: Db): Rule[] {
 }
 const ruleCols = (r: Partial<RuleInput>) => given({ hard: bit(r.hard), what: r.what, who: r.who, slots: r.slots === undefined ? undefined : js(r.slots),
   days: r.days === undefined ? undefined : js(r.days), items: r.items === undefined ? undefined : js(r.items), to: r.to, frequency: r.frequency,
-  per_meal: r.per_meal, fasting_food: r.fasting_food === undefined ? undefined : js(r.fasting_food), quote: r.quote });
+  per_meal: r.per_meal, fasting_food: r.fasting_food === undefined ? undefined : js(r.fasting_food),
+  when_present: r.when_present === undefined ? undefined : r.when_present?.length ? js(r.when_present) : null, quote: r.quote });
 export function addRule(tx: Db, r: RuleInput, by: string, changes: Change[]): Rule {
   const row = tx.insert(rules).values({ ...ruleCols(r), hard: r.hard ? 1 : 0, what: r.what, quote: r.quote, updated_by: by }).returning().get();
   changes.push(["rules", row.id, "insert", by]);

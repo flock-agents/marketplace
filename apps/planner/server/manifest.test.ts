@@ -3,7 +3,7 @@
 import { describe, it, expect } from "bun:test";
 import { readFileSync } from "fs";
 import { join } from "path";
-import { agentOps, FIELDS, FIELDS_SECTION, OPERATION_NAMES, ROUTES } from "./agentOps";
+import { agentOps, FIELDS, OPERATION_NAMES, ROUTES, TOOLS_LINE } from "./agentOps";
 import { APP_NAMES } from "./db/constants";
 import { SETUP_SYSTEM } from "./setup";
 import { CAREFUL_SYSTEM, CONTAINS_SYSTEM, GUESTS_SYSTEM, INGREDIENT_SYSTEM } from "./makePlan";
@@ -332,9 +332,25 @@ describe("the agent's interface", () => {
       for (const k of keysAt(rest, 0)) expect(FIELDS[op].fields, `${op} ${k} in the guide`).toContain(k);
     }
     const served = (await agentOps(() => null as any).guide({}, { agentId: null } as any)) as { guide: string };
-    expect(served.guide).toContain(FIELDS_SECTION);
-    expect(FIELDS_SECTION).toContain("- set_cook { name, days?, arrival?, makes_well?, wont_make?, time_limit?, new_recipes?, note? }");
-    expect(FIELDS_SECTION).toContain("- make_plan { week_start, household?, suggest_new? }");
+    expect(served.guide.trimEnd().endsWith(TOOLS_LINE)).toBe(true);
+    expect(served.guide).not.toContain("## Operations and their fields");
+  });
+
+  it("declares the setup (agentInterface.setup): its status operation and its published setup skill, which names only real tools and fields", () => {
+    expect(manifest.agentInterface.setup).toEqual({ status: "status", skill: "planner-setup" });
+    expect(operations.map((o) => o.name)).toContain("status");
+    expect(manifest.publishedSkills).toEqual([expect.objectContaining({ id: "planner-setup", setup: true })]);
+    const skill = readFileSync(join(import.meta.dir, "..", "skills", "planner-setup", "instructions.md"), "utf8");
+    for (const said of ["Quickest is a voice note answering all of these", "planner_make_plan { from: today, days: 3 }", "days: 4", "proposed_rule", "Ask, never assume", "planner_set_roles"])
+      expect(skill, said).toContain(said);
+    expect(skill).not.toContain("\u2014");
+    for (const [, op] of skill.matchAll(/\bplanner_([a-z_]+)/g)) expect(OPERATION_NAMES as readonly string[], op).toContain(op);
+    for (const [, op, rest] of skill.matchAll(/`planner_([a-z_]+) (\{[^`]*\})`/g)) {
+      let top = rest.slice(1, -1).replace(/"[^"]*"/g, '""');
+      while (/\{[^{}]*\}|\[[^[\]]*\]/.test(top)) top = top.replace(/\{[^{}]*\}|\[[^[\]]*\]/g, "");
+      const fields = [...`,${top}`.matchAll(/,\s*([a-z_]+)(?=\s*[:,]|\s*$)/g)].map((m) => m[1]);
+      for (const f of fields) expect(FIELDS[op].fields, `${op} ${f} in the skill`).toContain(f);
+    }
   });
 
   // Owner, 23 Nov: the test family's names and lines (the simulated runs' family) are in no text a model reads, so a model

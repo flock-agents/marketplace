@@ -2,6 +2,7 @@ import { useState, type ReactNode } from "react";
 import { Button, Callout, Card, Confirm, Detail, Empty, ErrorCard, Form, Heading, InlinePanel, Page, PropertyChips, Row, RowList, Section, Skeleton, Stack, label, useApp, useToast, type FormProps } from "../flock/ui";
 import { WEEKDAYS } from "../../server/dates";
 import { COOK_NEW_RECIPES, GROUPS } from "../../server/db/constants";
+import { targetsOf, targetsText } from "../../server/targets";
 import { agentName, cookDetails, cookingDaysText, cookVisitsText, profileWaiting } from "./format";
 import { joined, send, useLive, why, type Family, type PersonRow } from "./shared";
 
@@ -97,7 +98,7 @@ export function FamilyPage() {
             at: opened.id, label: `Edit ${opened.name}`, onClose: close,
             content: (
               <Card title={`Edit ${opened.name}`} actions={<Button size="sm" variant="ghost" icon="trash" onClick={() => setRemoving(opened)}>Remove</Button>}>
-                <Form key={opened.id} fields={PERSON_WORDS} initial={{ ...opened }} onCancel={close}
+                <Form key={opened.id} fields={PERSON_WORDS} initial={{ ...opened, targets: targetsText(targetsOf(opened.targets)) }} onCancel={close}
                   onSubmit={(v) => save("family/people", { name: opened.name, ...cleared(v, PERSON_NAMES) })} />
               </Card>
             ),

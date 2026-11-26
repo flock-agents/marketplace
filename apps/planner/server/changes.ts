@@ -7,10 +7,10 @@
 //   set_slot        { name, kind?, addon_of?, usual_people?, days?, skip_days?, order?, remove? }
 //   set_slot_day    { date, slot, people?, add_people?, remove_people?, guests?, occasion?, new_dishes_allowed?, skip?, dishes? }
 //   add_dish        { name, slot, frequency?, days?, quote?, link? }
-//   set_rule        { id?, hard?, what?, who?, slots?, days?, items?, to?, frequency?, per_meal?, fasting_food?, quote?, remove? }
+//   set_rule        { id?, hard?, what?, who?, slots?, days?, items?, to?, frequency?, per_meal?, fasting_food?, when_present?, quote?, remove? }
 //   set_setting     { new_dishes_per_week }
 //   record_made     { date, slot, dishes }
-//   record_feedback { date, slot, dish, made, liked?, again? }, or before it is cooked { date, slot, dish, answer: ok | swap | dont_like }
+//   record_feedback { date, slot, dish, made, liked?, again?, who?, quote? }, or before it is cooked { date, slot, dish, answer: ok | swap | dont_like, who?, quote? }
 import type { Context, Hono } from "hono";
 import { asc, eq, gte } from "drizzle-orm";
 import { people as people_t, slot_dishes, slot_days } from "./db/schema";
@@ -18,12 +18,13 @@ import { BASE_TAGS, NEW_DISHES_CHOICES, RULE_WHATS, SKIPS, SLOT_KINDS, SLOT_ORDE
 import { addDays, mondayOf, todayStr, weekdayOf, type Weekday } from "./dates";
 import { dishKey } from "./dishText";
 import { dateOf, flag } from "./meals";
-import { isObject, name, names, refuse, weekdays, words, writeRoutes, type Db, type Emit } from "./family";
+import { homePeople, isObject, name, names, refuse, weekdays, words, writeRoutes, type Db, type Emit } from "./family";
 import type { ModelCall } from "./model";
 import { INGREDIENT_SCHEMA, INGREDIENT_SYSTEM, ingredientsFrom, makePlan, OP_BUDGET_MS, type MakePlanResult } from "./makePlan";
-import { platformPeers, ruleHolds, type PlanDay } from "./planDays";
+import { platformPeers, presentAt, ruleHolds, type PlanDay } from "./planDays";
 import { canonTag, checkSlot, forbidden, notFor, ruleTags, slotFacts, type Week } from "./planChecks";
 import { containsRead, frequencyOf } from "./setup";
+import { proposeRule, recordFeedback } from "./feedback";
 import { addRule, commit, getLibraryDish, getSlot, getSlotDay, listLibrary, listRules, listSlotDays, listSlots, newDishesPerWeek, recent, removeRule,
   removeSlot, saveSlotDay, slotHistory, updateLibraryByName, updateRule, upsertLibrary, upsertSlot, type Guest, type Rule, type RuleInput, type Slot,
   type SlotDay, type SlotDishInput } from "./slotStore";
@@ -86,11 +87,11 @@ function slotNamed(db: Db, v: unknown, what = "slot"): Slot {
 }
 const skipOf = (v: unknown, what: string): Skip | null => (v === null ? null : (SKIPS as readonly unknown[]).includes(v) ? v as Skip : refuse(`${what} must be one of: ${SKIPS.join(", ")}, or null`));
 function guestsOf(v: unknown): Guest[] {
-  const shape = "guests must be a list of { count, rules? }: unnamed guests for this meal, rules their food rules in words";
+  const shape = "guests must be a list of { count, rules?, as? }: unnamed guests for this meal, rules their food rules in words, as the people of the family they count as";
   if (!Array.isArray(v)) return refuse(shape);
   return v.map((g) => {
     if (!isObject(g) || typeof g.count !== "number" || !Number.isInteger(g.count) || g.count < 1) return refuse(shape);
-    return { count: g.count, ...(g.rules !== undefined ? { rules: names(g.rules, "guests' rules") } : {}) };
+    return { count: g.count, ...(g.rules !== undefined ? { rules: names(g.rules, "guests' rules") } : {}), ...(g.as !== undefined ? { as: names(g.as, "guests' as") } : {}) };
   });
 }
 /** Dishes as sent: names, or { dish, note?, ingredients? }. */
@@ -186,7 +187,7 @@ export function failingSlotDays(db: Db, today: string): Target[] {
 function fastingSlotDays(db: Db, today: string, r: Rule): Target[] {
   if (r.what !== "fasting") return [];
   const slots = listSlots(db, { all: true });
-  return listSlotDays(db, { from: today }).filter((d) => replannable(d, today) && ruleHolds(r, d.date!, slots.find((s) => same(s.name, d.slot)), d.slot)
+  return listSlotDays(db, { from: today }).filter((d) => replannable(d, today) && ruleHolds(r, d.date!, slots.find((s) => same(s.name, d.slot)), d.slot, presentAt(d))
     && (!r.who || d.people.some((p) => same(p, r.who!)) || getSlot(db, d.slot)?.usual_people.length === 0)).map((d) => ({ date: d.date!, slot: d.slot }));
 }
 
@@ -250,7 +251,7 @@ export function mountChangeRoutes(hono: Hono<any>, deps: Omit<ChangeDeps, "now">
     const slot = slotNamed(db, b.slot);
     const had = getSlotDay(db, date, slot.name);
     if (had?.status === "confirmed") return { status: 409, body: { reason: `${slot.name} on ${date} is already recorded as made: record_made changes what was made` } };
-    let ppl = had?.people.length ? had.people : slot.usual_people.length ? slot.usual_people : people(db);
+    let ppl = had?.people.length ? had.people : slot.usual_people.length ? slot.usual_people : homePeople(db);
     if (b.people !== undefined) ppl = personNames(db, b.people, "people", true);
     if (b.add_people !== undefined) ppl = uniq([...ppl, ...personNames(db, b.add_people, "add_people", true)]);
     if (b.remove_people !== undefined) { const gone = personNames(db, b.remove_people, "remove_people", true); ppl = ppl.filter((p) => !gone.some((g) => same(g, p))); }
@@ -266,14 +267,21 @@ export function mountChangeRoutes(hono: Hono<any>, deps: Omit<ChangeDeps, "now">
       refuse("nothing to change: send people, add_people, remove_people, guests, occasion, new_dishes_allowed, skip or dishes");
     const count = ppl.length + (guests ?? had?.guests ?? []).reduce((n, g) => n + g.count, 0);
     if (dishes) await fillIngredients(d, date, slot.name, count, dishes);
-    const saved = commit(db, emit, (tx, ch) => saveSlotDay(tx, { date, slot: slot.name, people: ppl, guests, occasion, new_dishes_allowed: nda, edited: true,
-      ...(skip !== undefined ? { skip } : {}), ...(skip ? { dishes: [] } : {}),
-      ...(dishes ? { dishes: dishes.map(({ given: _g, ...x }) => x) } : {}) }, by, ch));
+    // The dishes the family swapped out for theirs are kept as feedback (a dish swapped out twice is asked about once).
+    const swappedOut = dishes && had ? had.dishes.map((x) => x.dish).filter((x) => !dishes.some((y) => dishKey(y.dish) === dishKey(x))) : [];
+    const { saved, proposal } = commit(db, emit, (tx, ch) => {
+      const saved = saveSlotDay(tx, { date, slot: slot.name, people: ppl, guests, occasion, new_dishes_allowed: nda, edited: true,
+        ...(skip !== undefined ? { skip } : {}), ...(skip ? { dishes: [] } : {}),
+        ...(dishes ? { dishes: dishes.map(({ given: _g, ...x }) => x) } : {}) }, by, ch);
+      const to = dishes?.map((x) => x.dish).join(", ") ?? null;
+      recordFeedback(tx, swappedOut.map((dish) => ({ date, slot: slot.name, dish, action: "swapped_to" as const, to })), by, ch);
+      return { saved, proposal: proposeRule(tx, swappedOut, by, ch) };
+    });
     // Planned again only in a week that has a plan; else the week is planned with it later.
     const weekPlanned = listSlotDays(db, { from: mondayOf(date), to: addDays(mondayOf(date), 6) }).some((x) => x.id !== saved.id);
     const again = !dishes && !skip && date >= today() && (weekPlanned || saved.dishes.length > 0);
     const r = again ? await replan(d, [{ date, slot: slot.name }]) : { replanned: [] };
-    return { body: { ok: true, slot_day: getSlotDay(db, date, slot.name), ...r } };
+    return { body: { ok: true, slot_day: getSlotDay(db, date, slot.name), ...r, ...proposal } };
   });
 
   // add_dish: a dish the family has, added to a slot's library, what it contains read before it answers. From a reel or
@@ -318,6 +326,7 @@ export function mountChangeRoutes(hono: Hono<any>, deps: Omit<ChangeDeps, "now">
     if (b.frequency !== undefined) input.frequency = b.frequency === null ? null : frequencyOf(b.frequency) ?? refuse('frequency must be usually, sometimes, rarely or "<n>/week"');
     if (b.per_meal !== undefined) input.per_meal = b.per_meal === null ? null : typeof b.per_meal === "number" && Number.isInteger(b.per_meal) && b.per_meal > 0 ? b.per_meal : refuse("per_meal must be a whole number above 0");
     if (b.fasting_food !== undefined) input.fasting_food = b.fasting_food === null ? null : names(b.fasting_food, "fasting_food");
+    if (b.when_present !== undefined) input.when_present = b.when_present === null ? null : personNames(db, b.when_present, "when_present", true);
     if (b.quote !== undefined) input.quote = name(b.quote, "quote");
     const merged = { ...(before ?? {}), ...input } as Partial<Rule>;
     if (!before) {
@@ -369,7 +378,7 @@ export function mountChangeRoutes(hono: Hono<any>, deps: Omit<ChangeDeps, "now">
     if (b.answer !== undefined) {
       if (b.made !== undefined || b.liked !== undefined || b.again !== undefined) refuse("send answer (before it is cooked) or made (after), not both");
       if (!(NEW_DISH_ANSWERS as readonly unknown[]).includes(b.answer)) refuse(`answer must be one of: ${NEW_DISH_ANSWERS.join(", ")}`);
-      return newDishAnswer(date, dishName, typeof b.slot === "string" ? b.slot : "", b.answer as NewDishAnswer, by);
+      return newDishAnswer(date, dishName, typeof b.slot === "string" ? b.slot : "", b.answer as NewDishAnswer, by, saidBy(b));
     }
     if (b.made === undefined) refuse("made or answer is needed: made (true or false) after the day, answer (ok, swap, dont_like) before it is cooked");
     const made = flag(b.made, "made");
@@ -387,7 +396,8 @@ export function mountChangeRoutes(hono: Hono<any>, deps: Omit<ChangeDeps, "now">
     const rows = listLibrary(db, { names: [dishName] });
     if (!rows.length) return { status: 404, body: { reason: `${dishName} is not in the library` } };
     const outcome = !made ? "not_made" : !liked ? "disliked" : again ? "kept" : "not_again";
-    commit(db, emit, (tx, ch) => {
+    const said = saidBy(b);
+    const proposal = commit(db, emit, (tx, ch) => {
       // The table of §5.7, the same for a planner suggestion and a reel's dish.
       if (outcome === "kept") updateLibraryByName(tx, dishName, { untried: 0, suggested: 0 }, by, ch);
       else if (outcome === "disliked") updateLibraryByName(tx, dishName, { disliked: 1 }, by, ch);
@@ -395,12 +405,14 @@ export function mountChangeRoutes(hono: Hono<any>, deps: Omit<ChangeDeps, "now">
       if (made) saveSlotDay(tx, { date, slot: day.slot, status: "confirmed" }, by, ch);
       tx.update(slot_dishes).set({ feedback_asked: FEEDBACK_ANSWERED, updated_at: new Date().toISOString(), updated_by: by }).where(eq(slot_dishes.id, placed.id)).run();
       ch.push(["slot_dishes", placed.id, "update", by]);
+      recordFeedback(tx, [{ date, slot: day.slot, dish: placed.dish, action: !made ? "skipped" : liked ? "liked" : "disliked", ...said }], by, ch);
+      return proposeRule(tx, [placed.dish], by, ch);
     });
-    return { body: { ok: true, dish: dishName, outcome, library: listLibrary(db, { names: [dishName] }) } };
+    return { body: { ok: true, dish: dishName, outcome, library: listLibrary(db, { names: [dishName] }), ...proposal } };
   });
 
   /** The answer to "OK to try it, or should I swap it?" (the week's message) or "OK to make it, or swap?" (the evening before). */
-  async function newDishAnswer(date: string, dishName: string, slotName: string, answer: NewDishAnswer, by: string) {
+  async function newDishAnswer(date: string, dishName: string, slotName: string, answer: NewDishAnswer, by: string, said: Said) {
     const onDay = listSlotDays(db, { from: date, to: date }).filter((x) => x.dishes.some((y) => dishKey(y.dish) === dishKey(dishName)));
     const day = onDay.find((x) => !slotName || same(x.slot, slotName)) ?? onDay[0];
     if (!day) return { status: 404 as const, body: { reason: `${dishName} was not on the plan on ${date}` } };
@@ -409,7 +421,7 @@ export function mountChangeRoutes(hono: Hono<any>, deps: Omit<ChangeDeps, "now">
     const again = answer === "swap" || (answer === "dont_like" && date >= today());
     if (answer === "swap" && date < today()) refuse(`${date} has passed: a dish already cooked or not is answered with made`);
     if (again && day.status === "confirmed") return { status: 409 as const, body: { reason: `${day.slot} on ${date} is already recorded as made` } };
-    commit(db, emit, (tx, ch) => {
+    const proposal = commit(db, emit, (tx, ch) => {
       if (answer === "ok") updateLibraryByName(tx, dishName, { untried: 0, suggested: 0 }, by, ch);
       if (answer === "dont_like") updateLibraryByName(tx, dishName, { disliked: 1 }, by, ch);
       if (answer !== "swap") {
@@ -418,12 +430,19 @@ export function mountChangeRoutes(hono: Hono<any>, deps: Omit<ChangeDeps, "now">
       }
       // Planned again with nothing new that day (set_slot_day's new_dishes_allowed 0), kept as the family's change.
       if (again) saveSlotDay(tx, { date, slot: day.slot, new_dishes_allowed: 0, edited: true }, by, ch);
+      if (answer === "ok") return {};
+      recordFeedback(tx, [{ date, slot: day.slot, dish: placed.dish, action: answer === "swap" ? "swapped_to" : "never", ...said }], by, ch);
+      return proposeRule(tx, [placed.dish], by, ch);
     });
     const r = again ? await replan(d, [{ date, slot: day.slot }]) : { replanned: [] };
     const outcome = answer === "ok" ? "accepted" : answer === "swap" ? "swapped" : "disliked";
-    return { body: { ok: true, dish: dishName, outcome, library: listLibrary(db, { names: [dishName] }), ...r } };
+    return { body: { ok: true, dish: dishName, outcome, library: listLibrary(db, { names: [dishName] }), ...r, ...proposal } };
   }
 }
+
+/** Who said a piece of feedback and their words, as record_feedback takes them. */
+type Said = { who: string | null; quote: string | null };
+const saidBy = (b: Record<string, unknown>): Said => ({ who: b.who == null ? null : words(b.who, "who"), quote: b.quote == null ? null : words(b.quote, "quote") });
 
 /** The answers to the question about a brand-new dish before it is cooked. */
 export const NEW_DISH_ANSWERS = ["ok", "swap", "dont_like"] as const;

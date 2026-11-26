@@ -9,7 +9,7 @@ import { addDays, todayStr } from "../dates";
 import { getHouse, houseView, isObject, readUntil, shoppingApps } from "../family";
 import { familyKnown } from "../gate";
 import { buildReminder, type Which } from "../reminder";
-import { wake, type RoutineCtx } from "./ctx";
+import { SEND_TO_LINE, sendTo, wake, type RoutineCtx } from "./ctx";
 
 /** The time of day a routine runs at, as "HH:MM", read from its trigger as Flock sends it (`{ type: "schedule", cron }`, or
  *  the cron itself). `daily`: "0 15 * * *" is 15:00. `weekly`: one day of the week, "0 11 * * 0" is 11:00. Null for anything
@@ -65,7 +65,8 @@ export async function reminder(ctx: RoutineCtx, which: Which, now: Date = new Da
   const synced = houseView(getHouse(db)).history_synced;
   const mine = (app: string) => (ctx.agentId ? readUntil(synced, app, `agent:${ctx.agentId}`, true) : Object.values(synced[app]).sort()[0] ?? null);
   const since = Object.fromEntries(Object.keys(synced).map((app) => [app, mine(app)]).filter((e): e is [string, string] => !!e[1]));
-  await wake(ctx, REMINDER_PROMPT(which), { which, date, connected, since });
+  const to = sendTo(getHouse(db), "shopping");
+  await wake(ctx, `${REMINDER_PROMPT(which)}${to.send_to ? `\n${SEND_TO_LINE}` : ""}`, { which, date, connected, since, ...to });
 }
 
 export const afternoonReminder = (ctx: RoutineCtx, now?: Date) => reminder(ctx, "afternoon", now);

@@ -135,6 +135,27 @@ export const DISH_DAYS_MAX: Record<Often, number> = { usually: 5, sometimes: 2, 
 /** The meals a week a soft rule is kept at, by how often ("millets are good for him": 2 to 3 meals, not every meal). */
 export const RULE_TIMES: Record<Often, [number, number]> = { usually: [4, 5], sometimes: [2, 3], rarely: [0, 1] };
 
+/** What the family said about a planned dish (plan_feedback): liked, disliked, swapped for another, skipped, or never again. */
+export const FEEDBACK_ACTIONS = ["liked", "disliked", "swapped_to", "skipped", "never"] as const;
+export type FeedbackAction = (typeof FEEDBACK_ACTIONS)[number];
+/** The actions that count against a dish, and how many of them make a rule worth proposing once. */
+export const AGAINST_ACTIONS: readonly FeedbackAction[] = ["disliked", "swapped_to", "never"];
+export const PROPOSE_AFTER = 2;
+
+/** A person's food goals (people.targets): more or less protein, carbs and fat than usual. */
+export const TARGET_LEVELS = { protein: ["high", "normal", "low"], carbs: ["low", "normal", "high"], fat: ["low", "normal", "high"] } as const;
+export type TargetKey = keyof typeof TARGET_LEVELS;
+
+/** The first plan's length from today (the setup's first task), and how many days from its start the setup plans before it is done. */
+export const FIRST_PLAN_DAYS = 3;
+export const SETUP_PLAN_DAYS = 7;
+/** A household whose first plan started this long ago is past setup, feedback or not (an install from before 4.2). */
+export const SETUP_SETTLED_DAYS = 14;
+/** The most days one make_plan call plans from a date. */
+export const PLAN_DAYS_MAX = 14;
+/** The meals planned when the family has not said: lunch and dinner. */
+export const DEFAULT_SLOTS = ["Lunch", "Dinner"] as const;
+
 /** How a dish went, as the family says it: good, okay, or didn't work. */
 export const DISH_RATINGS = ["good", "okay", "didnt_work"] as const;
 export type DishRating = (typeof DISH_RATINGS)[number];

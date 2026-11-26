@@ -12,15 +12,16 @@
 // `not_for` them and they get their own item for that part. Nobody at a meal is left with nothing. A rule broken only by an
 // ingredient the dish can be made without (onion and garlic, cashews in upma: decided 21) is a note, never a block
 // (planChecks.leaveOutNotes). Pure and deterministic: no database, no model, ties broken by date and slot.
-import { CATALOG, catalogContains, catalogKind, matchDish, norm, regionalWordOf, suggestable, suggestMeals, type CatalogItem, type MealKind, type MealTemplate,
+import { CATALOG, catalogContains, catalogKind, dishNutrition, matchDish, norm, regionalWordOf, suggestable, suggestMeals, type CatalogItem, type MealKind, type MealTemplate,
   type TemplatePart } from "./kinds";
 import { INSTEAD_STEP, TEMPLATE_DAYS } from "./db/constants";
 import { addDays, weekdayOf } from "./dates";
 import { dishKey } from "./dishText";
 import { isAllergyRule } from "./allergy";
+import { targetScore, type Targets } from "./targets";
 import { canonTag, carefulTags, factsOf, forbidden, frequencyRange, guestForbids, guestsCan, isDropped, isStapleAt, leaveOutNotes, mainFeeds, notFor, ownAddon,
   readFor, slotFacts, withParents, OWN_SHARE, type DishFacts, type Week } from "./planChecks";
-import { ruleHolds, slotDayKey, type PlanDay } from "./planDays";
+import { presentAt, ruleHolds, slotDayKey, type PlanDay } from "./planDays";
 import type { HistoryRow, LibraryDish, Rule, Slot } from "./slotStore";
 
 /** One dish on a filled plate. `new`: a brand-new variant (the family never had it). */
@@ -47,6 +48,9 @@ export type FillInput = {
    *  contents stand in until the read (the variants that leaned on it are answered in `provisional`). */
   strict?: boolean;
   guestTags?: Map<string, string[]>;
+  /** Each person's food goals, by name in lower case: among items equally good for the rotation, one that fits leads (never
+   *  past a food rule or the rotation's own repeats). */
+  targets?: Map<string, Targets>;
 };
 export type FillResult = {
   /** Each planned slot-day's plate, by slotDayKey. */ plates: Map<string, FilledDish[]>;
@@ -597,6 +601,14 @@ export function fillWeek(input: FillInput): FillResult {
     if (o.next && s.kind === "addon" && ((row?.frequency && row.frequency !== "daily" && row.frequency !== "usually") || row?.days?.length) && hadOn(addDays(d.date, -1)).has(it.key)) return false;
     return true;
   };
+  /** How well an item fits the goals of `who` (targets.ts): 0 with no goals at the meal. */
+  const nutrition = new Map<string, ReturnType<typeof dishNutrition>>();
+  const fitFor = (it: Item, who: string[]): number => {
+    const goals = who.map((p) => input.targets?.get(p.trim().toLowerCase())).filter((t): t is Targets => !!t);
+    if (!goals.length) return 0;
+    if (!nutrition.has(it.key)) nutrition.set(it.key, dishNutrition(catalogNameOf(it.row ?? { catalog_item: null, name: it.name }) ?? it.name, it.kind));
+    return targetScore(nutrition.get(it.key)!, goals);
+  };
   /** The best item of the steps for `who` (the slot-day's people, or one person being fed). */
   const choose = (s: Slot, d: PlanDay, plate: Plate, steps: Step[], who: string[], feeding: boolean, must?: (name: string) => boolean): { it: Item; ex: string[] } | null => {
     const samePart = (it: Item) => plate.filter((x) => sameKind(x.kind, it.kind) && !x.staple);
@@ -613,6 +625,7 @@ export function fillWeek(input: FillInput): FillResult {
       ok.sort((a, b) => a.ex.length - b.ex.length || a.also - b.also
         || Number(samePart(a.it).some((x) => sameKind(x.sub, a.it.sub))) - Number(samePart(b.it).some((x) => sameKind(x.sub, b.it.sub)))
         || (usedDates.get(a.it.key)?.size ?? 0) - (usedDates.get(b.it.key)?.size ?? 0)
+        || fitFor(b.it, who) - fitFor(a.it, who)
         || (lastUsed.get(a.it.key) ?? "").localeCompare(lastUsed.get(b.it.key) ?? "") || a.it.idx - b.it.idx);
       return ok[0];
     }
@@ -786,7 +799,7 @@ export function fillWeek(input: FillInput): FillResult {
         if (!feed(s, d, plate, [who], t.parts.length, [], [], null)) res.unmet.push(`${label(d)}: ${who} has nothing to eat there`);
       }
       // A require kept: one dish with its item for its person.
-      for (const r of rules.filter((x) => x.hard && x.what === "require" && x.items?.length && x.who && atTable.some((p) => same(p, x.who!)) && ruleHolds(x, d.date, s, s.name))) {
+      for (const r of rules.filter((x) => x.hard && x.what === "require" && x.items?.length && x.who && atTable.some((p) => same(p, x.who!)) && ruleHolds(x, d.date, s, s.name, presentAt(dayOf(d))))) {
         const who = atTable.find((p) => same(p, r.who!))!;
         const has = (name: string) => { prep(name); return r.items!.some((i) => factsOf(w, s.name, name).tags.has(canonTag(i))); };
         if (plate.some((x) => has(x.name) && !excluded(d, [who], x.name).length)) continue;

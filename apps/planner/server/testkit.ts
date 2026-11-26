@@ -19,6 +19,8 @@ import { mountItemRoutes } from "./items";
 import { mountCartRoutes } from "./cartRoutes";
 import { mountReminderRoutes } from "./reminder";
 import { mountMakePlanRoute } from "./makePlan";
+import { mountPlanRangeRoute } from "./planRange";
+import { mountSetupStatusRoutes } from "./setupStatus";
 import { NO_MODEL, type ModelCall } from "./model";
 import { mountSetupRoute } from "./setup";
 import { mountChangeRoutes } from "./changes";
@@ -58,6 +60,8 @@ export async function boot(opts: { dbFile?: string; dataDir?: string; token?: st
   mountRecipeRoutes(hono, kit.db, kit.emitChange);
   mountDishBookRoutes(hono, kit.db, kit.emitChange, { now });
   mountMakePlanRoute(hono, kit.db, kit.emitChange, { basePath: opts.basePath ?? "/a/t", model: opts.model ?? NO_MODEL, now, sqlite: kit.sqlite });
+  mountPlanRangeRoute(hono, kit.db, kit.emitChange, { basePath: opts.basePath ?? "/a/t", model: opts.model ?? NO_MODEL, now, sqlite: kit.sqlite });
+  mountSetupStatusRoutes(hono, kit.db, kit.emitChange, { now });
   mountSetupRoute(hono, kit.db, kit.emitChange, { model: opts.model ?? NO_MODEL, budgetMs: opts.setupBudgetMs });
   mountChangeRoutes(hono, { db: kit.db, emit: kit.emitChange, basePath: opts.basePath ?? "/a/t", model: opts.model ?? NO_MODEL, now, sqlite: kit.sqlite, appToken: opts.token ?? null, log: () => {} });
   /** A request as the owner. */

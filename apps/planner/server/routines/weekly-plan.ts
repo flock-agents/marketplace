@@ -14,7 +14,7 @@ import { weekSendText } from "../messages";
 import { hasModel, sdkModel, stopSaid, type ModelCall } from "../model";
 import { platformPeers } from "../planDays";
 import { listRules } from "../slotStore";
-import { routineEnv, wake, type RoutineCtx } from "./ctx";
+import { routineEnv, SEND_TO_LINE, sendTo, wake, type RoutineCtx } from "./ctx";
 import { recordTime, scheduleTime } from "./reminders";
 
 const STRUCTURE_PROFILE = (weekStart: string): string => "Structure the family profile below with set_person / set_cook / set_item, everyone at home first. "
@@ -53,8 +53,9 @@ export async function weeklyPlan(ctx: RoutineCtx, now: Date = new Date(), model?
     // What the festival question is judged from: the people's names and the family's own words about fasts and observances.
     const family = db.select().from(people).orderBy(asc(people.created_at)).all().filter((p) => p.active !== 0).map((p) => p.name);
     const observances = listRules(db).filter((x) => x.what === "fasting" || (x.what === "note" && !!x.days?.length)).map((x) => (x.who ? `${x.who}: ${x.quote}` : x.quote));
-    await wake(ctx, `${DELIVER_PROMPT(!!r.intro)} ${FESTIVAL_PROMPT(weekStart)}`,
-      { week_start: weekStart, message: r.message, ...(r.intro ? { intro: r.intro } : {}), family, ...(observances.length ? { observances } : {}) });
+    const to = sendTo(getHouse(db), "menu");
+    await wake(ctx, `${DELIVER_PROMPT(!!r.intro)} ${FESTIVAL_PROMPT(weekStart)}${to.send_to ? ` ${SEND_TO_LINE}` : ""}`,
+      { week_start: weekStart, message: r.message, ...(r.intro ? { intro: r.intro } : {}), family, ...(observances.length ? { observances } : {}), ...to });
     return;
   }
   // No week this time (no credits, the day's budget, nothing known to plan from): the family is told so, plainly.

@@ -22,6 +22,14 @@ export const WAKE_DATA_BUDGET = 18_000;
 export const fitsWake = (data: unknown): boolean => JSON.stringify(data, null, 2).length <= WAKE_DATA_BUDGET;
 
 /** Wake the agent, or throw: a wake that did not go is a failed run in the routine's history, never a message silently lost. */
+/** Who a wake's message is for, when the family said (set_roles): the plan to whoever decides the menu, the reminder and its
+ *  carts to whoever shops. A data field `send_to`, and the line telling the agent what it means. */
+export function sendTo(house: { menu_by: string | null; shopping_by: string | null }, role: "menu" | "shopping"): { send_to?: string } {
+  const who = role === "menu" ? house.menu_by : house.shopping_by;
+  return who ? { send_to: who } : {};
+}
+export const SEND_TO_LINE = "When the data has `send_to`, it is who this is for (who decides the menu, or who shops): send it to them, in their own chat when you can reach them, else here, and say who it is for.";
+
 export async function wake(ctx: RoutineCtx, message: string, data: unknown): Promise<void> {
   const r = await ctx.wakeAgent(message, data);
   if (!r?.ok) throw new Error(`the agent was not woken: ${r?.reason ?? "no answer"}`);

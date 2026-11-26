@@ -2,7 +2,7 @@
 // how-to-use intro and the line about an order nobody paid for; and what a recipe's link says about itself (where it is from, its thumbnail). Text in, text out: nothing
 // here reads the database, and nothing imported here is server-only, so the pages can use it too.
 import { APP_NAMES, type GroceryApp } from "./db/constants";
-import { clockText, weekdayOf } from "./dates";
+import { clockText, daysBetween, weekdayLong, weekdayOf } from "./dates";
 import { dishKey, dishText, lastTimeText } from "./dishText";
 import type { MealView } from "./meals";
 
@@ -172,8 +172,9 @@ export function weekMessage(i: { monday: MealView[]; link: string; unmet?: strin
  *  not for, its note); the family's standing notes (said once); what could not be kept; the new dishes; the one question
  *  (planQuestion: meals short of dishes, calendar entries the plan could not read for meals), or null. */
 export type PlanText = {
-  days: { label: string; meals: { slot: string; skip: string | null; note: string | null; dishes: { name: string; note: string | null; not_for?: string[] }[] }[] }[];
+  days: { date?: string; label: string; meals: { slot: string; skip: string | null; note: string | null; dishes: { name: string; note: string | null; not_for?: string[] }[] }[] }[];
   standing: string[]; unmet: string[]; new_dishes: NewDish[]; question: string | null; link: string;
+  /** The first line; a week's plan says "Your week is planned." */ title?: string;
 };
 
 /** A new dish as the message names it: the family's dish it stands in for (`like`), when known, and where it is placed
@@ -280,7 +281,7 @@ export function planMessage(t: PlanText): string {
   for (const d of t.days) for (const m of d.meals) { seen(m.note, d.label); for (const x of m.dishes) seen(x.note, d.label); }
   const allWeek = [...daysWith].filter(([, ds]) => ds.size >= ALL_WEEK_DAYS).map(([n]) => n);
   const shown = (note: string | null) => (note && !allWeek.includes(note) ? note : null);
-  const lines = ["Your week is planned."];
+  const lines = [t.title ?? "Your week is planned."];
   for (const d of t.days) {
     if (!d.meals.length) continue;
     lines.push("", `*${d.label}*`);
@@ -299,6 +300,21 @@ export function planMessage(t: PlanText): string {
   if (t.question) lines.push("", t.question);
   lines.push("", `The whole week: [Week page](${t.link})`, "Tell me anything to change.");
   return lines.join("\n");
+}
+
+/** The first line of a plan for some days: "Here's the plan for the next 3 days." from today, else its first and last day. */
+export function rangeTitle(from: string, to: string, today: string): string {
+  const n = daysBetween(from, to) + 1;
+  if (from === today) return n === 1 ? "Here's the plan for today." : `Here's the plan for the next ${n} days.`;
+  return n === 1 ? `Here's the plan for ${weekdayLong(from)}.` : `Here's the plan from ${weekdayLong(from)} to ${weekdayLong(to)}.`;
+}
+
+/** A plan made week by week (a range across a Monday) said as one: its days in order, notes and the new dishes once each,
+ *  the first question, the first week's link. */
+export function joinPlanTexts(texts: PlanText[], title: string): PlanText {
+  const uniq = <T>(xs: T[]) => [...new Set(xs)];
+  return { title, days: texts.flatMap((t) => t.days), standing: uniq(texts.flatMap((t) => t.standing)), unmet: uniq(texts.flatMap((t) => t.unmet)),
+    new_dishes: texts.flatMap((t) => t.new_dishes), question: texts.find((t) => t.question)?.question ?? null, link: texts[0]?.link ?? "" };
 }
 
 /** A time of day as it reads inside a sentence: "3", "7:30" (no am or pm). */
