@@ -1,6 +1,6 @@
 {
   "name": "planner",
-  "version": "4.0.3",
+  "version": "4.2.0",
   "description": "The family's meals for every day of the week, a running-out guess for the things they buy from their order history, and a reminder each afternoon and evening with one cart per shopping app that is ordered only when they say yes; not for school runs, chores or appointments.",
   "objects": [
     "grocery-bag"
@@ -67,7 +67,8 @@
         "targets": {
           "type": "string",
           "required": false,
-          "nullable": true
+          "nullable": true,
+          "note": "JSON { protein?, carbs?, fat?, note? } (targets.ts); older rows were free text, moved at boot"
         },
         "note": {
           "type": "string",
@@ -80,6 +81,13 @@
           "required": false,
           "nullable": true,
           "default": 1
+        },
+        "usually_home": {
+          "type": "integer",
+          "required": false,
+          "nullable": true,
+          "default": 1,
+          "note": "0: in the family but not usually at home (parents who visit); a meal has them only when a slot-day adds them"
         }
       }
     },
@@ -158,6 +166,12 @@
           "nullable": true,
           "note": "\"HH:MM\": the same for the evening reminder"
         },
+        "cuisines": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "JSON string[]: the family's cuisine profile (kinds.json cuisines), shown in the read-back; null = not read yet"
+        },
         "plan_time": {
           "type": "string",
           "required": false,
@@ -205,6 +219,30 @@
           "required": false,
           "nullable": true,
           "note": "JSON: what apply_setup read beside the rows (the replies it read, who of the family cooks, weekday lunch, open asks), for a correction's diff"
+        },
+        "menu_by": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "who decides what is cooked, in the family's words: a person's name, \"the cook\", \"shared\"; null = not said"
+        },
+        "cooking_by": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "who cooks: a person, \"the cook\", \"turns\"; null = not said (a hired cook is the cook_* fields)"
+        },
+        "shopping_by": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "who buys the groceries: a person, \"shared\", \"each buys their own\"; null = not said"
+        },
+        "setup_answered": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "JSON string[]: the setup status items the family answered with nothing to save (\"no fasting days\")"
         }
       }
     },
@@ -220,7 +258,7 @@
           "type": "string",
           "required": true,
           "nullable": false,
-          "note": "constants.ts EVENT_KINDS"
+          "note": "the kind it is a variant of (a catalog kind, or the slot's own kind); null = not mapped yet"
         },
         "addon_of": {
           "type": "string",
@@ -257,6 +295,18 @@
           "required": false,
           "nullable": true,
           "default": 1
+        },
+        "kinds": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "JSON MealKind[] (kinds.ts): the dish families this meal is built from; null = not read yet"
+        },
+        "templates": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "JSON MealTemplate[] (kinds.ts): the ways it is plated, [Roti, Sabzi]; null = not read yet"
         }
       }
     },
@@ -266,7 +316,7 @@
           "type": "string",
           "required": false,
           "nullable": true,
-          "note": "YYYY-MM-DD; null = a seed example from the setup"
+          "note": "the slot-day's date; null when said of the dish in general"
         },
         "slot": {
           "type": "string",
@@ -344,7 +394,7 @@
           "type": "string",
           "required": true,
           "nullable": false,
-          "note": "the dish's name (library key by dishKey)"
+          "note": "the dish it is about (for a swap: the one swapped out)"
         },
         "new": {
           "type": "integer",
@@ -537,6 +587,24 @@
           "required": false,
           "nullable": true,
           "note": "JSON [{ rating, note, date, by }], newest first, a short history"
+        },
+        "kind": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "the kind it is a variant of (a catalog kind, or the slot's own kind); null = not mapped yet"
+        },
+        "sub": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "its catalog sub-kind (\"Poriyal/Thoran\"); null for an own kind or not mapped"
+        },
+        "catalog_item": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "the catalog item it is (kinds.json), whose contents it can take; null = a dish only this family makes"
         }
       }
     },
@@ -558,7 +626,7 @@
           "type": "string",
           "required": false,
           "nullable": true,
-          "note": "a person; null = everyone at that slot-day"
+          "note": "who said it, by name, when known"
         },
         "slots": {
           "type": "string",
@@ -582,7 +650,7 @@
           "type": "string",
           "required": false,
           "nullable": true,
-          "note": "a swap's target (\"millets\")"
+          "note": "a swap's dishes in its place, joined"
         },
         "frequency": {
           "type": "string",
@@ -602,11 +670,70 @@
           "nullable": true,
           "note": "JSON string[]: what a fast allows (\"fruit\"); empty = nothing"
         },
+        "when_present": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "JSON string[]: the rule holds only at slot-days where one of these people is (a guest counted as them too); null = always"
+        },
         "quote": {
           "type": "string",
           "required": true,
           "nullable": false,
-          "note": "the family's own words"
+          "note": "their words"
+        }
+      }
+    },
+    "plan_feedback": {
+      "columns": {
+        "date": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "the slot-day's date; null when said of the dish in general"
+        },
+        "slot": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "slots.name: the slot it is eaten at"
+        },
+        "dish": {
+          "type": "string",
+          "required": true,
+          "nullable": false,
+          "note": "the dish it is about (for a swap: the one swapped out)"
+        },
+        "action": {
+          "type": "string",
+          "required": true,
+          "nullable": false,
+          "note": "liked | disliked | swapped_to | skipped | never (constants.ts FEEDBACK_ACTIONS)"
+        },
+        "to": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "a swap's dishes in its place, joined"
+        },
+        "who": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "who said it, by name, when known"
+        },
+        "quote": {
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "note": "their words"
+        },
+        "proposed": {
+          "type": "integer",
+          "required": false,
+          "nullable": true,
+          "default": 0,
+          "note": "1: counted in a rule already proposed to the family"
         }
       }
     },
@@ -827,7 +954,7 @@
           "type": "string",
           "required": true,
           "nullable": false,
-          "note": "YYYY-MM-DD; null = a seed example from the setup"
+          "note": "the slot-day's date; null when said of the dish in general"
         },
         "kind": {
           "type": "string",
@@ -839,7 +966,7 @@
             "ask",
             "unanswered"
           ],
-          "note": "constants.ts EVENT_KINDS"
+          "note": "the kind it is a variant of (a catalog kind, or the slot's own kind); null = not mapped yet"
         },
         "tag": {
           "type": "string",

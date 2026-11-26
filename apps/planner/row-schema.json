@@ -81,6 +81,18 @@
                 "type": "null"
               }
             ]
+          },
+          "usually_home": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -178,6 +190,12 @@
               "null"
             ]
           },
+          "cuisines": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "plan_time": {
             "type": [
               "string",
@@ -233,6 +251,30 @@
             ]
           },
           "setup_state": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "menu_by": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "cooking_by": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "shopping_by": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "setup_answered": {
             "type": [
               "string",
               "null"
@@ -300,6 +342,18 @@
               {
                 "type": "null"
               }
+            ]
+          },
+          "kinds": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "templates": {
+            "type": [
+              "string",
+              "null"
             ]
           }
         },
@@ -699,6 +753,24 @@
               "string",
               "null"
             ]
+          },
+          "kind": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sub": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "catalog_item": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "required": [
@@ -783,6 +855,12 @@
               "null"
             ]
           },
+          "when_present": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "quote": {
             "type": "string"
           }
@@ -792,6 +870,73 @@
           "hard",
           "what",
           "quote"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "plan_feedback": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "$key": {
+            "type": "string",
+            "minLength": 1,
+            "description": "This row's name within the request, for $ref"
+          },
+          "date": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "slot": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "dish": {
+            "type": "string"
+          },
+          "action": {
+            "type": "string"
+          },
+          "to": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "who": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "quote": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "proposed": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "$key",
+          "dish",
+          "action"
         ],
         "additionalProperties": false
       }

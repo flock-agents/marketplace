@@ -1,5 +1,20 @@
 # Changelog
 
+## 4.2.0
+
+- Setting up is quicker: two short groups of questions (who eats and what each person eats; the meals, who cooks and the
+  usual food), and the first plan comes right after, for 3 days from today. Meals not mentioned are lunch and dinner.
+  Then one question on how it looks, the changes saved, and the rest of the week planned.
+- Your Flock always knows where the setup is: the app keeps its own checklist (what it knows, what is still needed, and
+  what can wait until after the first plan), so nothing is asked twice and nothing gets dropped.
+- Plan any few days, not only a whole week ("plan the next 3 days"). Dishes you picked yourself stay unless you ask to
+  plan them again.
+- Food goals per person: more protein, fewer carbs, less oil. The plan leans towards dishes that fit, never past a food
+  rule. Goals written in words before are kept as they were said.
+- Rules for when someone visits: "no eggs when my parents are here" holds only on the days they are added to a meal.
+- Every like, dislike and swap is remembered. A dish turned down twice gets one question: "Should I stop planning it?"
+- Needs a Flock that runs app setups from the app's own checklist.
+
 ## 4.1.1
 
 - The kinds model: each meal is a set of templates of dish kinds (from the family's own words), filled by code with no model call per meal. The family's own dishes first; no dish again until every option has been used, never the next day; new dishes only of kinds the family has, asked about in the plan's one question and the day-before reminder.
