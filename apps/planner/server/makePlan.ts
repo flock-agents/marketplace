@@ -467,10 +467,11 @@ async function planWeek(deps: MakePlanDeps & { log: (line: string) => void }, in
       upsertLibrary(tx, { name: v.name, slot: v.slot, origin: "planner_suggested", suggested: true, untried: !eaten, kind: v.kind, sub: v.sub, catalog_item: v.name,
         ...(f ? { contains: [...f.tags], contains_read: [...f.read] } : {}) }, by, ch);
     }
-    // A catalog item of a category the family named ("dal", "a poriyal"), placed: theirs, kept in their library like a dish they named.
+    // A catalog item of a category the family named ("dal", "a poriyal"), placed: theirs, kept in their library like a dish they
+    // named, at each meal it was placed at (library rows are per meal, §5.3).
     for (const v of filled.named) {
       const k = dishKey(v.dish);
-      if (library.some((x) => x.key === k) || newDishes.has(k)) continue;
+      if (library.some((x) => x.key === k && same(x.slot, v.slot)) || (newDishes.has(k) && same(newDishes.get(k)!.slot, v.slot))) continue;
       const f = w.facts.get(k);
       upsertLibrary(tx, { name: v.dish, slot: v.slot, origin: "planner_suggested", suggested: false, untried: false, kind: v.kind, sub: v.sub, catalog_item: v.dish,
         ...(f ? { contains: [...f.tags], contains_read: [...f.read] } : {}) }, by, ch);

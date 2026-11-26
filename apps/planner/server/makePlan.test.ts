@@ -248,6 +248,23 @@ describe("make_plan: new dishes (kinds model rule 4)", () => {
     // The plain plate is for that plan only: never saved as their templates.
     expect(k.rows("slots").find((x: any) => x.name === "Dinner").templates).toBeNull();
   });
+
+  // H9: library rows are per meal (§5.3); a category item placed at two meals is the family's at both.
+  it("a category item placed at a second meal gets its library row there too, theirs at both", async () => {
+    const k = await home({
+      slots: [{ name: "Breakfast", kind: "main", order: 10, days: ["Mon", "Tue", "Wed"], templates: [T({ kind: "Idli" }, { kind: "Rice curry", sub: "Sambar" })] },
+        { name: "Lunch", kind: "main", order: 30, days: ["Thu", "Fri", "Sat", "Sun"], templates: [T({ kind: "Rice" }, { kind: "Rice curry", sub: "Sambar" })] }],
+      lib: { Breakfast: [["Idli", "Idli"]], Lunch: [["Rice", "Rice"]] },
+      // Two sambars left of the catalog's, and the meals on different days: each sambar comes at both meals.
+      library: ["Drumstick sambar", "Mixed vegetable sambar", "Onion sambar", "Brinjal sambar", "Okra sambar", "Tiffin sambar"]
+        .map((name) => ({ name, slot: "Lunch", kind: "Rice curry", sub: "Sambar", origin: "setup_named" as const, disliked: true })) });
+    const r = await k.plan(fakeModel().model);
+    if (!r.ok) throw new Error(r.say);
+    const sambarAt = (slot: string) => new Set(WEEK.flatMap((d) => k.dishesAt(d, slot)).filter((x) => x.endsWith("sambar")));
+    const both = [...sambarAt("Breakfast")].filter((x) => sambarAt("Lunch").has(x));
+    expect(both.length).toBeGreaterThan(0);
+    for (const slot of ["Breakfast", "Lunch"]) for (const x of sambarAt(slot)) expect(getLibraryDish(k.kit.db, x, slot)).toMatchObject({ slot, suggested: false });
+  });
 });
 
 describe("make_plan: hard rules per person, fail closed", () => {

@@ -64,7 +64,7 @@ export type FillInput = {
 export type FillResult = {
   /** Each planned slot-day's plate, by slotDayKey. */ plates: Map<string, FilledDish[]>;
   placed: PlacedNew[];
-  /** The catalog's items of a category the family named, placed (theirs, not new): to be kept in their library. */ named: PlacedNew[];
+  /** The catalog's items of a category the family named, placed (theirs, not new): to be kept in their library, once per meal. */ named: PlacedNew[];
   /** What the week falls short of: a part with nothing, a dish back sooner than usual, a cook's visit over her limit. */ unmet: string[]; log: string[];
   /** The dishes planned whose fit for someone's rule is not known: planned, and asked (one meaning model: unknown = ask). */ unknowns: Unknown[];
   /** Where every planned item sits, by dish key: its kind, sub-kind and catalog item (the part it filled, or its row). */ places: Map<string, DishPlace>;
@@ -686,7 +686,8 @@ export function fillWeek(input: FillInput): FillResult {
     plate.push({ name: it.name, key: it.key, part, staple, isNew: !it.family, kind: it.kind, sub: it.sub, for: forPeople, linked: false });
     use(d.date, s.name, it.name);
     dayOf(d).dishes.push(it.name);
-    if (it.family && it.catalog && !res.named.some((x) => dishKey(x.dish) === it.key)) res.named.push({ dish: it.name, date: d.date, slot: s.name, kind: it.kind, sub: it.sub, like: null });
+    // Recorded once per meal: library rows are per slot (§5.3), so an item at a second meal is theirs there too.
+    if (it.family && it.catalog && !res.named.some((x) => dishKey(x.dish) === it.key && same(x.slot, s.name))) res.named.push({ dish: it.name, date: d.date, slot: s.name, kind: it.kind, sub: it.sub, like: null });
     if (!it.family) {
       newCount++;
       distinctNew.add(it.key);
