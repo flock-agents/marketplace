@@ -20,7 +20,7 @@ export function ruleTags(h: Household): string[] {
 
 /** The family's sentence a quote pattern comes from (a persona fact, or a household fact). */
 export function quoteOf(h: Household, re: RegExp): string {
-  const texts = [...h.facts.map((f) => (f.id === h.correction.fact ? h.correction.corrected : f.text)), ...Object.values(h.household).filter((v): v is string => typeof v === "string")];
+  const texts = [...h.facts.map((f) => (f.id === h.correction?.fact ? h.correction!.corrected : f.text)), ...Object.values(h.household).filter((v): v is string => typeof v === "string")];
   for (const t of texts) {
     const m = re.exec(t);
     if (m) {

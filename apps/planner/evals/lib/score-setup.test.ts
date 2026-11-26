@@ -186,8 +186,9 @@ describe("scoreSetup: cuisines and templates", () => {
     const h = await h2();
     const s = setupOfTruth(h);
     const lunch = s.slots.find((x) => x.name === "Lunch")!;
-    // [Rice, Sambar, Rasam, Poriyal, Curd] saved as kinds without sub-kinds: the same plate (template_subs notes it).
-    lunch.templates![0].parts = [{ kind: "Rice" }, { kind: "Rice curry" }, { kind: "Rice curry" }, { kind: "Sabzi" }, { kind: "Curd" }];
+    // [Rice, Sambar, Rasam, Poriyal, Curd] saved as kinds without sub-kinds: the same plate (template_subs notes it). Their bare
+    // "rasam" keeps its one dish and words (Tomato rasam): those are compared, sub-kinds are not.
+    lunch.templates![0].parts = [{ kind: "Rice" }, { kind: "Rice curry" }, { kind: "Rice curry", dish: "Tomato rasam", words: "rasam" }, { kind: "Sabzi" }, { kind: "Curd" }];
     expect(failing(h, s)).toEqual([]);
     expect(scoreSetup(h, s).info.template_subs).toEqual([6, 7]);   // of the 7 templates that name sub-kinds, this one no longer does
     // One rice curry only: not the plate.
@@ -289,5 +290,19 @@ describe("scoreSetup: the one meaning model", () => {
     expect(Object.entries(scoreSetup(h, s).rates).filter(([, [p, n]]) => p < n).map(([k]) => k)).toEqual([]);
     const timed = structuredClone(FIX);
     expect(Object.entries(scoreSetup(timed, { ...setupOfTruth(timed), cook: { ...setupOfTruth(timed).cook!, visits: [{ at: "09:00", meals: ["Breakfast", "Lunch", "Dinner"] }] } }).rates).filter(([, [p, n]]) => p < n).map(([k]) => k)).toEqual(["cook_times"]);
+  });
+});
+
+// History keeps the family's words (spec §5.3): a seed plate of their part words ("Rice, Sambar") is that slot's plate, though no
+// category word is a library row; a plate of dishes of no part or row of theirs is not.
+describe("scoreSetup: seed plates in their words", () => {
+  test("a seed row of their part words is on its slot; one of foreign dishes is not", async () => {
+    const h = (await import("../households")).HOUSEHOLDS.find((x) => x.id === "h14-familyb2")!;
+    const s = setupOfTruth(h);
+    expect(h.truth.library.some((d) => d.name === "Sambar" || d.name === "Rice")).toBe(false);
+    s.seed = [{ slot: "Lunch", dishes: ["Rice", "Sambar", "Poriyal", "Curd"] }];
+    expect(scoreSetup(h, s).rates.seed_on_slot).toEqual([1, 1]);
+    s.seed = [{ slot: "Lunch", dishes: ["Pizza", "Burger", "Curd"] }];
+    expect(scoreSetup(h, s).rates.seed_on_slot).toEqual([0, 1]);
   });
 });

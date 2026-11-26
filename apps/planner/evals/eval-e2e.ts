@@ -20,6 +20,8 @@ export const TIERS: Record<string, "A" | "B" | "C"> = {
   "h1-sharma": "A", "h2-iyer": "A", "h6-kulkarni": "A", "h7-menon": "A",
   "h13-familyb": "B", "h14-familyb2": "B",
   "h3-shiva": "C", "h4-reddy": "C", "h5-agarwal": "C", "h8-banerjee": "C",
+  // The owner's walk-through (spec §7): its own fixed transcript, no persona.
+  "h18-shiva-walkthrough": "C",
   // The second held-out set (--heldout2 only).
   "h15-gupta": "A", "h16-pillai": "A", "h17-subramanian": "B",
 };
@@ -57,9 +59,10 @@ const passed = (tier: "A" | "B" | "C", r: Rates): { pass: boolean; failed: strin
 };
 
 async function runOne(h: Household, rep: number) {
-  const file = [join(TR, "transcripts", `${h.id}-rep${rep}.json`), join(TR, "transcripts", `${h.id}-rep1.json`)].find(existsSync);
-  if (!file) throw new Error(`no transcript for ${h.id} in ${TR}`);
-  const tr: Transcript = JSON.parse(readFileSync(file, "utf8"));
+  // A household with fixed lines (h18, the owner's walk-through) is run on them; the others on a saved persona chat.
+  const file = h.transcript ? null : [join(TR, "transcripts", `${h.id}-rep${rep}.json`), join(TR, "transcripts", `${h.id}-rep1.json`)].find(existsSync);
+  if (!h.transcript && !file) throw new Error(`no transcript for ${h.id} in ${TR}`);
+  const tr: Pick<Transcript, "lines"> = h.transcript ? { lines: h.transcript } : JSON.parse(readFileSync(file!, "utf8"));
   const { bootPlanner, runSetup, runPlan } = await import("./lib/adapter");
   const calls: CallRow[] = [];
   const dataDir = mkdtempSync(join(tmpdir(), "planner-e2e-"));

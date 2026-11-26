@@ -1,4 +1,5 @@
-// The fixed eval set: ten varied households (h13 and h14 are tier B: elders with no diet of their own), the same for both evals. The held-out four (heldout/) are only picked with
+// The fixed eval set: eleven varied households (h13 and h14 are tier B: elders with no diet of their own; h18 is the owner's
+// walk-through, its fixed transcript run as Flock sends it), the same for both evals. The held-out four (heldout/) are only picked with
 // `heldout: true` (the evals' --heldout flag), never by default.
 import type { Household } from "../lib/truth";
 import { h1 } from "./h1-sharma";
@@ -11,10 +12,11 @@ import { h7 } from "./h7-menon";
 import { h8 } from "./h8-banerjee";
 import { h13 } from "./h13-familyb";
 import { h14 } from "./h14-familyb2";
+import { h18 } from "./h18-shiva-walkthrough";
 import { HELDOUT } from "./heldout";
 import { HELDOUT2 } from "./heldout2";
 
-export const HOUSEHOLDS: Household[] = [h1, h2, h3, h4, h5, h6, h7, h8, h13, h14];
+export const HOUSEHOLDS: Household[] = [h1, h2, h3, h4, h5, h6, h7, h8, h13, h14, h18];
 export { HELDOUT, HELDOUT2 };
 /** Every household, tuning and held-out: for checks that must cover all of them (the name guard). */
 export const ALL_HOUSEHOLDS: Household[] = [...HOUSEHOLDS, ...HELDOUT, ...HELDOUT2];

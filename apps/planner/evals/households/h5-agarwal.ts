@@ -1,7 +1,11 @@
 // 5. Marwari joint family, the daughter-in-law cooks (no paid cook): grandfather never eats onion or garlic; grandmother no
 // onion or garlic on Tuesdays and Saturdays (corrected from Thursdays); the rest eat them. Vegetarian, no eggs; one child
 // with a tiffin. Frequency words: khichdi on Saturday night, dal baati on Sundays, kadhi chawal sometimes.
-import { avoid, dish, mains, noEggs, SCHOOL, veg, WEEK, items, tpl, type Household } from "../lib/truth";
+import { avoid, dish, mains, noEggs, SCHOOL, veg, WEEK, items, kindPart, tpl, type Household } from "../lib/truth";
+
+// Their bare words that name one dish (scripts/kinds/bare-decided.md).
+const PARATHA = kindPart("Paratha", { dish: "Plain paratha", words: "paratha" });
+const KHICHDI = kindPart("Khichdi", { dish: "Moong dal khichdi", words: "khichdi" });
 
 export const h5: Household = {
   id: "h5-agarwal", title: "Marwari joint family, DIL cooks, no onion-garlic for one elder always / one on days",
@@ -13,7 +17,7 @@ export const h5: Household = {
     "household.children": ["Reyansh"], "household.elders": ["Ramesh", "Kamla"], "household.schoolAge": true,
     "household.help": [{ role: "maid", name: "Geeta", days: "daily", times: "8am" }],
     "household.weekday": "Ankit and Papa at the shop 10 to 8, they come home for lunch. Reyansh school 7:30 to 1:30. Pooja and Mummy at home.",
-    "household.mealsBy": "Pooja", "household.groceriesBy": "Pooja",
+    "household.mealsBy": [{ person: "Pooja" }], "household.groceriesBy": [{ person: "Pooja" }],
     "household.weekly": [{ person: "Ankit", where: "shop", weekdays: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"], from: "10:00", to: "20:00", lunch: "home" },
       { person: "Ramesh", where: "shop", weekdays: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"], from: "10:00", to: "20:00", lunch: "home" },
       { person: "Reyansh", where: "school", weekdays: SCHOOL, from: "07:30", to: "13:30", lunch: "away" }],
@@ -22,22 +26,18 @@ export const h5: Household = {
   facts: [
     { id: "pain", text: "Hardest part: deciding what to make, with everyone's different rules." },
     { id: "apps", text: "We don't use apps; the kirana delivers." },
-    { id: "people", text: "Wife Pooja (32), son Reyansh (8), Papa Ramesh (66) and Mummy Kamla (62)." },
-    { id: "cookingDays", text: "No cook; Pooja cooks every meal, every day. We never eat out." },
-    { id: "kidsBreakfast", text: "Reyansh has poha, paratha, besan chilla, or dalia." },
-    { id: "kidsLunch", text: "Reyansh takes a tiffin to school Monday to Friday: paratha with sabzi, poha, aloo sandwich." },
-    { id: "kidsDinner", text: "Same as everyone." },
-    { id: "adultsBreakfast", text: "Breakfast is poha, paratha, besan chilla, dalia for Papa." },
-    { id: "adultsLunch", text: "Lunch: dal, chawal, roti, ek sabzi; kadhi chawal sometimes. Dal baati on Sundays." },
-    { id: "adultsDinner", text: "Dinner: roti and a sabzi, gatte ki sabzi or aloo matar or bhindi; khichdi on Saturday night." },
-    { id: "diet", text: "Nobody on a diet." },
-    { id: "elders", text: "Papa never eats onion or garlic. Mummy doesn't eat onion or garlic on Tuesdays and Thursdays. Rest of us eat everything." },
-    { id: "rules", text: "Pure vegetarian, no eggs in the house." },
-    { id: "orderIn", text: "We don't order in." },
+    { id: "lunchWhere", text: "Wife Pooja (32), son Reyansh (8), Papa Ramesh (66) and Mummy Kamla (62)." },
+    { id: "otherDays", text: "No cook; Pooja cooks every meal, every day. We never eat out. We don't order in." },
+    { id: "childSame", text: "Reyansh takes a tiffin to school Monday to Friday: paratha with sabzi, poha, aloo sandwich.", differs: true },
+    { id: "familyBreakfast", text: "Breakfast is poha, paratha, besan chilla, dalia for Papa." },
+    { id: "familyLunch", text: "Lunch: dal, chawal, roti, ek sabzi; kadhi chawal sometimes. Dal baati on Sundays." },
+    { id: "familyDinner", text: "Dinner: roti and a sabzi, gatte ki sabzi or aloo matar or bhindi; khichdi on Saturday night." },
+    { id: "childMeals", text: "Reyansh has poha, paratha, besan chilla, or dalia. Same as everyone." },
+    { id: "differently", text: "Nobody on a diet. Papa never eats onion or garlic. Mummy doesn't eat onion or garlic on Tuesdays and Thursdays. Rest of us eat everything. Pure vegetarian, no eggs in the house." },
     { id: "subscriptions", text: "Milk from the dairy, 2 litres daily." },
   ],
-  correction: { after: "rules", line: "sorry I meant Mummy's no onion garlic days are Tuesday and Saturday, not Thursday", fact: "elders",
-    corrected: "Papa never eats onion or garlic. Mummy doesn't eat onion or garlic on Tuesdays and Saturdays. Rest of us eat everything." },
+  correction: { after: "differently", line: "sorry I meant Mummy's no onion garlic days are Tuesday and Saturday, not Thursday", fact: "differently",
+    corrected: "Nobody on a diet. Papa never eats onion or garlic. Mummy doesn't eat onion or garlic on Tuesdays and Saturdays. Rest of us eat everything. Pure vegetarian, no eggs in the house." },
   truth: {
     people: [{ name: "Ankit", group: "adult" }, { name: "Pooja", group: "adult" }, { name: "Reyansh", group: "child", age: 8 }, { name: "Ramesh", group: "elder", age: 66 }, { name: "Kamla", group: "elder", age: 62 }],
     cook: null,
@@ -50,12 +50,12 @@ export const h5: Household = {
     away: [{ person: "Reyansh", slots: ["Lunch"], days: SCHOOL }],
     // A home with an elder who never eats onion or garlic: Pooja's everyday dishes are made without (names say so where not).
     library: [
-      ...dish("Poha", ["Breakfast", "Reyansh's tiffin"]), ...dish("Paratha", ["Breakfast", "Reyansh's tiffin"]), ...dish("Besan chilla", ["Breakfast"]),
+      ...dish("Plain paratha", ["Breakfast", "Reyansh's tiffin"]), ...dish("Besan chilla", ["Breakfast"]),
       ...dish("Dalia", ["Breakfast"], { alsoSlots: ["Ramesh's breakfast"] }), ...dish("Aloo sandwich", ["Reyansh's tiffin"]),
-      ...dish("Dal", ["Lunch"]), ...dish("Chawal", ["Lunch"]), ...dish("Roti", ["Lunch", "Dinner"]),
+      ...dish("Chawal", ["Lunch"]),
       ...dish("Aloo matar", ["Lunch"], { unsaid: true }), ...dish("Bhindi", ["Lunch"], { unsaid: true, kind: "Sabzi" }),
       ...dish("Kadhi chawal", ["Lunch"], { frequency: "sometimes" }), ...dish("Dal baati", ["Lunch"], { days: ["Sun"], contains: ["dairy"] }),
-      ...dish("Gatte ki sabzi", ["Dinner"], { contains: ["dairy"] }), ...dish("Aloo matar", ["Dinner"]), ...dish("Bhindi", ["Dinner"], { kind: "Sabzi" }), ...dish("Khichdi", ["Dinner"], { days: ["Sat"] }),
+      ...dish("Gatte ki sabzi", ["Dinner"], { contains: ["dairy"] }), ...dish("Aloo matar", ["Dinner"]), ...dish("Bhindi", ["Dinner"], { kind: "Sabzi" }), ...dish("Moong dal khichdi", ["Dinner"], { days: ["Sat"] }),
     ],
     rules: [
       veg(/vegetarian|veg/i), noEggs(/egg/i),
@@ -63,19 +63,19 @@ export const h5: Household = {
       avoid("no_og_kamla_days", "Kamla: no onion or garlic on Tue and Sat", ["onion_garlic"], /onion|garlic|tuesday|saturday/i, { who: "Kamla", days: ["Tue", "Sat"] }),
     ],
     seed: [
-      { slot: "Breakfast", dishes: ["Poha"] }, { slot: "Breakfast", dishes: ["Paratha"] }, { slot: "Breakfast", dishes: ["Besan chilla"] },
-      { slot: "Reyansh's tiffin", dishes: ["Paratha"] }, { slot: "Reyansh's tiffin", dishes: ["Poha"] }, { slot: "Reyansh's tiffin", dishes: ["Aloo sandwich"] },
+      { slot: "Breakfast", dishes: ["Poha"] }, { slot: "Breakfast", dishes: ["Plain paratha"] }, { slot: "Breakfast", dishes: ["Besan chilla"] },
+      { slot: "Reyansh's tiffin", dishes: ["Plain paratha"] }, { slot: "Reyansh's tiffin", dishes: ["Poha"] }, { slot: "Reyansh's tiffin", dishes: ["Aloo sandwich"] },
       { slot: "Lunch", dishes: ["Dal", "Chawal", "Roti", "Aloo matar"] }, { slot: "Lunch", dishes: ["Dal", "Chawal", "Roti", "Bhindi"] },
       { slot: "Lunch", dishes: ["Kadhi chawal", "Roti"] }, { slot: "Lunch", dishes: ["Dal", "Chawal", "Roti", "Aloo matar"] },
-      { slot: "Dinner", dishes: ["Roti", "Gatte ki sabzi"] }, { slot: "Dinner", dishes: ["Roti", "Aloo matar"] }, { slot: "Dinner", dishes: ["Roti", "Bhindi"] }, { slot: "Dinner", dishes: ["Khichdi"] },
+      { slot: "Dinner", dishes: ["Roti", "Gatte ki sabzi"] }, { slot: "Dinner", dishes: ["Roti", "Aloo matar"] }, { slot: "Dinner", dishes: ["Roti", "Bhindi"] }, { slot: "Dinner", dishes: ["Moong dal khichdi"] },
     ],
     week: [{ kind: "stay", person: "Sushila", days: ["Thu", "Fri", "Sat", "Sun"], dated: { person: "Sushila", what: "Pooja's mother staying with us", from: "2026-12-03", to: "2026-12-06" } }],
     cuisines: ["north", "rajasthan"], cuisinesAlso: ["west", "central", "sindhi", "gujarat"],
     meals: [
-      { slot: "Breakfast", templates: [tpl(["Poha"]), tpl(["Paratha"]), tpl(["Chilla"])] },
-      { slot: "Reyansh's tiffin", templates: [tpl(["Paratha"]), tpl(["Poha"]), tpl(["Sandwich"])] },
+      { slot: "Breakfast", templates: [tpl(["Poha"]), tpl([PARATHA]), tpl(["Chilla"])] },
+      { slot: "Reyansh's tiffin", templates: [tpl([PARATHA]), tpl(["Poha"]), tpl(["Sandwich"])] },
       { slot: "Lunch", staples: ["Roti", "Rice"], templates: [tpl(["Roti", "Rice", "Dal", "Gravy"]), tpl(["Roti", "Rice", "Dal", "Sabzi"]), tpl([items("Kadhi chawal"), "Roti"], "sometimes")] },
-      { slot: "Dinner", staples: ["Roti"], templates: [tpl(["Roti", "Gravy"]), tpl(["Roti", "Sabzi"]), tpl(["Khichdi"])] },
+      { slot: "Dinner", staples: ["Roti"], templates: [tpl(["Roti", "Gravy"]), tpl(["Roti", "Sabzi"]), tpl([KHICHDI])] },
     ],
     judgeNotes: ["Pure vegetarian, no eggs.", "Ramesh never onion or garlic, and he eats every meal at home.", "Kamla no onion/garlic on Tuesday and Saturday only.",
       "Pooja cooks everything; Reyansh's tiffin Monday to Friday; khichdi Saturday night, dal baati Sunday.", "Pooja's mother Sushila stays Thursday to Sunday this week."],

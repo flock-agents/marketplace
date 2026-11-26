@@ -156,10 +156,13 @@ export type Household = {
   /** Flock's household facts after its own household questions (incl. `household.weekly`, spec §2.3). */
   household: Record<string, unknown>;
   groceryApps: string[];
-  /** What the owner knows and would say, before the correction. */
-  facts: { id: string; text: string }[];
-  /** Sent once, as its own reply, right after the answer to question `after`; the fact `fact` then reads `corrected`. */
-  correction: { after: string; line: string; fact: string; corrected: string };
+  /** What the owner knows and would say, before the correction, keyed by the interview's question ids (flock.app.json
+   *  setup[]). `differs` (on `childSame` only): a child eats something else at some meal or carries a box (Flock's
+   *  childDiffers is non-empty, so childMeals is asked). */
+  facts: { id: string; text: string; differs?: boolean }[];
+  /** Sent once, as its own reply, right after the answer to question `after`; the fact `fact` then reads `corrected`. None
+   *  for a household whose fixed `transcript` is the chat. */
+  correction?: { after: string; line: string; fact: string; corrected: string };
   truth: Truth;
 };
 
@@ -170,9 +173,12 @@ export const dish = (name: string, slots: string[], o: Omit<TruthDish, "name" | 
 /** Breakfast, Lunch and Dinner, with their recurring skip days. */
 export const mains = (skip: Partial<Record<(typeof MAIN_SLOTS)[number], { day: Weekday; skip: Skip }[]>> = {}): TruthSlot[] =>
   MAIN_SLOTS.map((name) => ({ name, kind: "main" as const, ...(skip[name] ? { skip_days: skip[name] } : {}) }));
-export const veg = (quote: RegExp, o: Partial<TruthRule> = {}): TruthRule => ({ id: "veg", title: "Vegetarian", hard: true, what: "veg", items: ["meat", "fish"], quote, also: ["avoid"], ...o });
-export const noEggs = (quote: RegExp, o: Partial<TruthRule> = {}): TruthRule => ({ id: "no_eggs", title: "No eggs", hard: true, what: "no_eggs", items: ["egg"], quote, also: ["avoid"], ...o });
-export const avoid = (id: string, title: string, items: string[], quote: RegExp, o: Partial<TruthRule> = {}): TruthRule => ({ id, title, hard: true, what: "avoid", items, quote, ...o });
+/** An ingredient target per item (spec §9.6: veg = ingredients meat, fish; an avoid of tags = those ingredients). */
+const ingredients = (items: string[]): TruthTarget[] => items.map((ingredient) => ({ ingredient }));
+export const veg = (quote: RegExp, o: Partial<TruthRule> = {}): TruthRule => ({ id: "veg", title: "Vegetarian", hard: true, what: "veg", items: ["meat", "fish"], targets: ingredients(["meat", "fish"]), quote, also: ["avoid"], ...o });
+export const noEggs = (quote: RegExp, o: Partial<TruthRule> = {}): TruthRule => ({ id: "no_eggs", title: "No eggs", hard: true, what: "no_eggs", items: ["egg"], targets: ingredients(["egg"]), quote, also: ["avoid"], ...o });
+/** An avoid of tags: each an ingredient target unless `o.targets` says what the rule is about (a kind: "no salad"). */
+export const avoid = (id: string, title: string, items: string[], quote: RegExp, o: Partial<TruthRule> = {}): TruthRule => ({ id, title, hard: true, what: "avoid", items, targets: ingredients(items), quote, ...o });
 export const note = (id: string, title: string, who: string | undefined, quote: RegExp, o: Partial<TruthRule> = {}): TruthRule => ({ id, title, hard: false, what: "note", ...(who ? { who } : {}), quote, ...o });
 /** The structured weekly pattern Flock reads from the weekday answer (spec §2.3 household.weekly). */
 export type Weekly = { person: string; where: string; weekdays: Weekday[]; from?: string; to?: string; lunch?: "away" | "carries" | "home" | null };

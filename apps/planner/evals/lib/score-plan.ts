@@ -6,7 +6,7 @@ import { meanDishes, staplesOf, type HistoryRow } from "./history";
 import { truthTags, weeklyPeople } from "./truth-setup";
 import { canonTag, hasItem, PARENT, tagsOfName } from "./vocab";
 import { slotMap, type Rates } from "./score-setup";
-import { isBareKindWord, isStapleKind, kindOf, mainTagsOf } from "./catalog";
+import { catalogKindNamed, isBareKindWord, isStapleKind, kindOf, mainTagsOf } from "./catalog";
 import {
   WEEK, dateOf, dayOf, dishNameOf, frequencyRange, plain, sameName, sameNames, schoolLunchAway, weekdayOfDate,
   type Household, type Skip, type TruthDish, type TruthPart, type TruthRule, type TruthSlot, type TruthTarget, type Weekday,
@@ -317,7 +317,11 @@ export function scorePlan(h: Household, plan0: PlanOut, loaded: SetupOut, o: { f
   /** The family's words as setup read them (lead, 25 Nov): a dish of theirs saved as had every day or usually at that slot
    *  ("idli most days") may come day after day there. */
   const setupOften = (name: string, slot: string) => loaded.library.some((d) => lc(d.slot) === lc(slot) && plain(d.name) === plain(name) && (d.frequency === "daily" || d.frequency === "usually"));
-  const famKinds = (slot: string) => new Set(t.library.filter((d) => lc(d.slot) === lc(slot)).map((d) => truthKind(d)?.kind).filter((x): x is string => !!x));
+  /** The kind parts of TRUTH's templates at a slot (one meaning model, spec §5.1: a meal's kinds are those its templates name). */
+  const tplKindParts = (slot: string) => (t.meals ?? []).filter((m) => lc(m.slot) === lc(slot)).flatMap((m) => m.templates.flatMap((tp) => tp.parts))
+    .flatMap((p) => ("kind" in p && p.kind ? [p as { kind: string; sub?: string; dish?: string; from?: string }] : []));
+  const famKinds = (slot: string) => new Set([...t.library.filter((d) => lc(d.slot) === lc(slot)).map((d) => truthKind(d)?.kind), ...tplKindParts(slot).map((p) => p.kind)]
+    .filter((x): x is string => !!x));
   const LD = ["lunch", "dinner"];
   const sharedLD = (kind: string | null) => !!kind && LD.every((s) => famKinds(s).has(kind));
   type Use = { date: string; slot: string; id: string; name: string; kind: string | null };
@@ -458,7 +462,22 @@ export function scorePlan(h: Household, plan0: PlanOut, loaded: SetupOut, o: { f
     }
     return false;
   };
-  const own = (x: string, slot: string) => !!dishNameOf(x, truthNames) || truthNames.some((n) => variantOf(n, x)) || categoryOwn(x, slot);
+  /** The same rule read from TRUTH's templates (spec §5.1: a category word is a part, not a library row): a kind part with no
+   *  one dish makes that kind's items theirs; with a sub-kind, that sub-kind's; a coarse kind's part without one, its items in
+   *  the sub-kinds the slot's parts and dishes name, or in the kind's own-named sub-kind ("Sabzi", "Dal"). A part with `dish`
+   *  makes only that dish theirs (a library row). */
+  const templateOwn = (x: string, slot: string): boolean => {
+    const hit = kindOf(x);
+    if (!hit) return false;
+    const parts = tplKindParts(slot).filter((p) => !p.from && !p.dish && p.kind === hit.kind);
+    if (!parts.length) return false;
+    const coarse = (catalogKindNamed(hit.kind)?.subs.length ?? 0) > 1;
+    if (!coarse) return true;
+    const subs = new Set([...tplKindParts(slot).filter((p) => p.kind === hit.kind && p.sub).map((p) => p.sub!),
+      ...t.library.filter((d) => lc(d.slot) === lc(slot)).map((d) => truthKind(d)).filter((k) => k?.kind === hit.kind && k.sub).map((k) => k!.sub!)]);
+    return parts.some((p) => (p.sub ? p.sub === hit.sub : !!hit.sub && (subs.has(hit.sub) || hit.sub === hit.kind)));
+  };
+  const own = (x: string, slot: string) => !!dishNameOf(x, truthNames) || truthNames.some((n) => variantOf(n, x)) || categoryOwn(x, slot) || templateOwn(x, slot);
   // At least OWN_SHARE of the week's non-staple items are the family's own (kinds model rule 4).
   const all = cooked.flatMap((x) => x.dishes.filter((d) => !exempt(x.slot, d.name)).map((d) => ({ name: d.name, slot: x.slot })));
   const mine = all.filter((x) => own(x.name, x.slot));

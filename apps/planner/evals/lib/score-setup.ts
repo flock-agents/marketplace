@@ -3,7 +3,7 @@
 // are reported but not gating (the persona may not name every dish).
 import type { SavedPart, SavedRule, SavedSlot, SavedTarget, SetupOut } from "./result";
 import { canonTag, itemCovers, tagsOfName } from "./vocab";
-import { catalogKindNamed } from "./catalog";
+import { catalogKindNamed, isBareKindWord, kindOf as catalogKindOf } from "./catalog";
 import { weeklyPeople } from "./truth-setup";
 import {
   MAIN_SLOTS, WEEK, dayOf, dishNameOf, plain, sameDays, sameFrequency, sameName, sameNames, sameSet,
@@ -297,9 +297,19 @@ export function scoreSetup(h: Household, s: SetupOut, o: { transcript?: string[]
     const saved = map.get(slot) ?? slot;
     add("seed_present", s.seed.some((x) => lc(x.slot) === lc(saved) && x.dishes.length > 0), `no seed for ${slot}`);
   }
+  // History keeps the family's words (spec §5.3: a category word is no library row, but a past plate says "rice, sambar"):
+  // a seed dish is the slot's when it is one of its library dishes, a word of its TRUTH template parts, or a coarse kind's
+  // own word ("Bhaji", "Fish") of a kind those parts name.
+  const kindParts = (slot: string) => (t.meals ?? []).filter((m) => lc(m.slot) === lc(slot)).flatMap((m) => m.templates.flatMap((tp) => tp.parts))
+    .flatMap((p) => ("kind" in p && !("from" in p) ? [p] : []));
+  const seedWord = (slot: string, d: string) => {
+    const ps = kindParts(slot), w = plain(d), hit = catalogKindOf(d);
+    return ps.some((p) => [p.kind, ...(p.sub ? [p.sub, ...p.sub.split("/")] : []), ...(p.words ? [p.words] : [])].map(plain).includes(w))
+      || (isBareKindWord(d) && !!hit && ps.some((p) => p.kind === hit.kind));
+  };
   for (const row of s.seed) {
     const slot = truthSlotName(c, row.slot);
-    const own = row.dishes.filter((d) => { const n = nameOf(d); return !!n && slotsOfTruth(n).includes(lc(slot)); });
+    const own = row.dishes.filter((d) => { const n = nameOf(d); return (!!n && slotsOfTruth(n).includes(lc(slot))) || seedWord(slot, d); });
     add("seed_on_slot", own.length * 2 >= row.dishes.length, `${row.slot} seed ${JSON.stringify(row.dishes)}: mostly not ${row.slot} dishes`);
   }
   return { rates, info, notes };

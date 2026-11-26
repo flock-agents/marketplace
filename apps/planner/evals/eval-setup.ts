@@ -78,7 +78,8 @@ mkdirSync(join(OUT, "transcripts"), { recursive: true });
 async function runOne(h: Household, rep: number) {
   const tfile = (dir: string) => join(dir, "transcripts", `${h.id}-rep${rep}.json`);
   let tr: Transcript;
-  if (REUSE) {
+  // A household with fixed lines (h18, the owner's walk-through) is always run on them (interview() returns them).
+  if (REUSE && !h.transcript) {
     // A repeat past the saved ones reads the first chat again (the same words read again: the setup's own variance).
     const file = existsSync(tfile(REUSE)) ? tfile(REUSE) : join(REUSE, "transcripts", `${h.id}-rep1.json`);
     if (!existsSync(file)) throw new Error(`no transcript ${tfile(REUSE)}`);
