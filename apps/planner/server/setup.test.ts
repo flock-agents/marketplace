@@ -7,7 +7,7 @@ import { saysNoEggs, buildMeal, codePlace, nearestDish, cuisinesOf, regionalFor,
 import { keptOften, swapItems } from "./setup";
 import { dishKey } from "./dishText";
 import { checkRead, diffSetup, familyLines, familySentences, frequencyOf, householdOf, lunchLine, personOf, plainWords, quoteHasDayOrCount, readOf, resolveSlot,
-  ruleSaid, saidByFamily, savedOf, homeViolations, swapOnly, DISHES_ASK, SETUP_PARTS, SETUP_SYSTEM, CONTAINS_BATCH, daysOf, clockOf, itemWord, allergyAsk, answeredIn, mealOf, type Saved, type SetupRead } from "./setup";
+  ruleSaid, saidByFamily, savedOf, homeViolations, swapOnly, kindsRead, kindsAsk, DISHES_ASK, SETUP_PARTS, SETUP_SYSTEM, CONTAINS_BATCH, daysOf, clockOf, itemWord, allergyAsk, answeredIn, mealOf, type Saved, type SetupRead } from "./setup";
 import { isAllergyRule } from "./allergy";
 import { houseCook, visitsOf } from "./makePlan";
 import { listRules, listSlots } from "./slotStore";
@@ -1809,5 +1809,39 @@ describe("apply_setup v2: the prompts", () => {
       expect(SETUP_SYSTEM, `${h.id} ${name}`).not.toMatch(new RegExp(`\\b${name}\\b`, "i"));
     for (const name of ["Sharma", "Iyer", "Shiva", "Reddy", "Agarwal", "Kulkarni", "Menon", "Banerjee", "Ankita", "Agastya", "Gowri"])
       expect(SETUP_SYSTEM, name).not.toMatch(new RegExp(`\\b${name}\\b`, "i"));
+  });
+});
+
+describe("the often read's own deadline, and its fallback (H5)", () => {
+  const FAM = { "household.people": [{ name: "Omkar", group: "adult" }, { name: "Devika", group: "adult" }], "household.speaker": "Omkar" };
+  const T = [
+    "Q: What do you have for dinner?",
+    "A: Dinner is rice and dal. On Saturdays we make egg curry sometimes. If we make egg curry, we skip the dal.",
+  ];
+  const SLOTS = [{ name: "Breakfast", kind: "main" }, { name: "Lunch", kind: "main" }, { name: "Dinner", kind: "main" }];
+  const DISHES = { library: [["Rice", "Dinner", "Dinner is rice and dal"], ["Dal", "Dinner", "Dinner is rice and dal"], ["Egg curry", "Dinner", "If we make egg curry"]],
+    seed: [["Dinner", "Rice, Dal", "Dinner is rice and dal"]] };
+
+  it("checkRead: with the often read failed, a dish named in a day sentence is linted", () => {
+    const sentences = familySentences(T, FAM), said = familyLines(T, FAM), household = householdOf(FAM);
+    const read = readOf({ slots: SLOTS }, {}, DISHES);
+    // The often read answered: only a dish whose own quote has a day or a count is linted (Egg curry's has neither).
+    expect(checkRead(read, { household, said, sentences }).lint.map((d) => d.name)).toEqual([]);
+    // It failed: every dish named in a family sentence with a day or count word is.
+    expect(checkRead(read, { household, said, sentences, oftenFailed: true }).lint.map((d) => d.name)).toEqual(["Egg curry"]);
+  });
+
+  it("applySetup: an often read past its own deadline fails and the lint re-reads", async () => {
+    const f = fake({ home: { slots: SLOTS }, rules: { rules: [] }, dishes: DISHES, often: () => new Promise(() => {}), kinds: { dishes: [] }, contains: containsOf(),
+      lint: { dishes: [{ name: "Egg curry", often: "On Saturdays we make egg curry sometimes", frequency: "sometimes", days: ["Sat"] }] } });
+    const k = await boot({ model: f.model, setupBudgetMs: 5000, setupOftenMs: 300 });
+    const t0 = Date.now();
+    const r = await k.op("apply_setup", { household: FAM, transcript: T });
+    // The often read's runaway eats its own time only, never the setup's budget.
+    expect(Date.now() - t0).toBeLessThan(2500);
+    expect(r.ok).toBe(true);
+    expect(f.of("lint")).toHaveLength(1);
+    expect(JSON.parse(f.of("lint")[0].user).dishes.map((d: any) => d.name)).toEqual(["Egg curry"]);
+    expect(lib(k)["Egg curry@Dinner"]).toMatchObject({ frequency: "sometimes", days: ["Sat"] });
   });
 });

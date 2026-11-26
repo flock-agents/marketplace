@@ -206,6 +206,9 @@ const RETRY_FLOOR_MS = 30_000;
 const SAVE_MARGIN_MS = 2_000;
 /** The how-often lint's own time at most. */
 const LINT_MS = 30_000;
+/** The often read's own time at most (H5): a runaway (eval h18 rep 2: 136 s of reasoning) fails by then and the lint re-reads in
+ *  its place, never eating the time the needed reads share. */
+export const OFTEN_MS = 60_000;
 /** The kinds read's own time: at most KINDS_MS, and done KINDS_MARGIN_MS before the setup's budget ends. */
 export const KINDS_MS = 45_000;
 const KINDS_MARGIN_MS = 3_000;
@@ -555,7 +558,7 @@ function aboutTheCook(quote: string, cook: SetupRead["cook"]): boolean {
 }
 
 /** The read made safe to store: what the family did not say is dropped, unknown names are asked, slots resolved. */
-export function checkRead(read: SetupRead, ctx: { household: Household; said: string[]; sentences?: string[] }): Checked {
+export function checkRead(read: SetupRead, ctx: { household: Household; said: string[]; sentences?: string[]; oftenFailed?: boolean }): Checked {
   const dropped: string[] = [], asks: string[] = [], noted: string[] = [], lint: ReadDish[] = [];
   const people = ctx.household.people, said = ctx.said;
   const ask = (name: string) => { const a = `Who is ${name}? I don't have them among the people at home.`; if (!asks.includes(a)) asks.push(a); };
@@ -713,11 +716,15 @@ export function checkRead(read: SetupRead, ctx: { household: Household; said: st
     library.push(d);
   }
   dropShared(library, dropped);
+  // With the often read failed (H5), no dish has its how-often words: every dish named in a family sentence with a day or count
+  // word is linted, not only one whose own quote has one ("if we make egg curry" beside "on Saturdays we make egg curry sometimes").
+  const daySentences = ctx.oftenFailed ? (ctx.sentences ?? said).filter(quoteHasDayOrCount) : [];
   for (const d of library) {
     if (d.frequency || d.days || d.shared) continue;
     // A dish read without its words: the family's sentence that names it ("Sunday dinner ... something simple like pasta").
     if (!d.quote?.trim()) d.quote = said.find((l) => namedIn(d.name, [l]) && quoteHasDayOrCount(l)) ?? d.quote;
     if (d.quote && quoteHasDayOrCount(d.quote) && saidByFamily(d.quote, said)) lint.push(d);
+    else if (namedIn(d.name, daySentences)) lint.push(d);
   }
 
   // The seed: the past week's plates, in the family's words; each of its dishes is in the library too.
@@ -878,8 +885,11 @@ async function askOnce(model: ModelCall, req: Parameters<ModelCall>[0], until: n
 async function lintReread(model: ModelCall, dishes: ReadDish[], replies: string[], until: number, log: (l: string) => void,
   check: { said: string[]; slotDays: Map<string, Weekday[]>; dropped: string[]; library: ReadDish[] }): Promise<void> {
   if (!dishes.length) return;
+  // The line the lint reads: the reply holding the quote; a quote with no day or count word (linted because the often read failed,
+  // H5) is shown the family's sentence that names the dish with one.
+  const reply = (d: ReadDish) => replies.find((l) => plainWords(l).includes(plainWords(d.quote)));
   const words = dishes.map((d) => ({ name: d.name, slot: d.slot, quote: d.quote,
-    line: replies.find((l) => plainWords(l).includes(plainWords(d.quote))) ?? d.quote }));
+    line: (quoteHasDayOrCount(d.quote ?? "") ? reply(d) : check.said.find((l) => namedIn(d.name, [l]) && quoteHasDayOrCount(l)) ?? reply(d)) ?? d.quote }));
   // Its own deadline (LINT_MS): a second look, never what holds the setup to its budget's end (eval h1, h4: 48–60 s, then out of tokens).
   const r = await withDeadline(model({ tier: "balanced", purpose: "setup: how often (lint)", system: LINT_SYSTEM, user: JSON.stringify({ dishes: words }), schema: LINT_SCHEMA, maxTokens: 2000 }), Math.min(until - Date.now(), LINT_MS));
   if (!r.ok) { log(`lint: model ${r.code}: ${r.message.slice(0, 200)}`); return; }
@@ -2082,7 +2092,7 @@ export type SetupResult =
 /** Read the setup and save it (or, when a setup is saved already, the correction the new replies make). Never refuses the
  *  whole: what does not fit is noted, what was not said is dropped. */
 export async function applySetup(deps: { db: Db; emit: Emit; model: ModelCall; post: Post; household: unknown; transcript: string[]; by?: string;
-  log?: (l: string) => void; budgetMs?: number }): Promise<SetupResult> {
+  log?: (l: string) => void; budgetMs?: number; oftenMs?: number }): Promise<SetupResult> {
   const log = deps.log ?? ((l: string) => console.log(`[planner] apply_setup: ${l}`));
   const by = deps.by ?? "app";
   const household = householdOf(deps.household);
@@ -2093,8 +2103,11 @@ export async function applySetup(deps: { db: Db; emit: Emit; model: ModelCall; p
   const t0 = Date.now(), until = t0 + (deps.budgetMs ?? SETUP_BUDGET_MS) - SAVE_MARGIN_MS;
 
   // 1. The four reads at once.
+  // The often read has its own deadline (OFTEN_MS, H5); the needed reads keep the setup's.
+  const oftenUntil = Math.min(until, t0 + (deps.oftenMs ?? OFTEN_MS));
   const results = await Promise.all(SETUP_PARTS.map(async (part): Promise<ModelResult> => {
-    const r = await askOnce(deps.model, { tier: part.tier, purpose: part.purpose, system: part.system, user, schema: part.schema, maxTokens: part.maxTokens }, until, log,
+    const r = await askOnce(deps.model, { tier: part.tier, purpose: part.purpose, system: part.system, user, schema: part.schema, maxTokens: part.maxTokens },
+      part.id === "often" ? oftenUntil : until, log,
       (x) => (x.ok && part.id === "dishes" && !arr(isObject(x.json) ? x.json.library : null).length ? { ok: false, code: "invalid_output", message: "no dishes in the answer" } : x));
     log(`${part.id}: model ${r.ok ? `ok (${r.model})` : `${r.code}: ${r.message.slice(0, 300)}`} in ${Date.now() - t0} ms`);
     return r;
@@ -2114,7 +2127,8 @@ export async function applySetup(deps: { db: Db; emit: Emit; model: ModelCall; p
   const replies = repliesOf(deps.transcript);
   const said = familyLines(deps.transcript, deps.household);
   const sentences = familySentences(deps.transcript, deps.household);
-  let checked = checkRead(read, { household, said, sentences });
+  const oftenFailed = !results[SETUP_PARTS.findIndex((p) => p.id === "often")].ok;
+  let checked = checkRead(read, { household, said, sentences, oftenFailed });
   // H1: what the home read left out (a box the family named, an add-on's carrying days) is asked of the home reader once, with
   // what is missing; its slots, weekday lunch and cook are taken when that clears something and adds nothing. Still left out:
   // asked in the read-back, never guessed (an add-on with no carrying days is not saved).
@@ -2128,7 +2142,7 @@ export async function applySetup(deps: { db: Db; emit: Emit; model: ModelCall; p
     if (r.ok) {
       const h = readOf(r.json, null, null);
       const next = { ...read, slots: h.slots, weekday_lunch: h.weekday_lunch.length ? h.weekday_lunch : read.weekday_lunch, cook: h.cook ?? read.cook };
-      const nextChecked = checkRead(next, { household, said, sentences });
+      const nextChecked = checkRead(next, { household, said, sentences, oftenFailed });
       const left = homeViolations(nextChecked.read, homeCtx);
       // Taken when it clears something and leaves out nothing more that would be asked (a home_meal it leaves out is no question).
       const asked = (vs: HomeViolation[]) => vs.filter((v) => v.ask || v.slot);
@@ -2139,7 +2153,7 @@ export async function applySetup(deps: { db: Db; emit: Emit; model: ModelCall; p
   }
   if (gaps.some((v) => v.slot)) {
     read = { ...read, slots: read.slots.filter((s) => !gaps.some((v) => v.slot && same(v.slot, s.name))) };
-    checked = checkRead(read, { household, said, sentences });
+    checked = checkRead(read, { household, said, sentences, oftenFailed });
   }
   // H3: a box in place of a meal with no link and nothing but a swap's item is re-read once from the dishes, naming the box; its
   // rows for that box are taken. Still nothing: writeKinds asks (OD7: no default link).
@@ -2152,7 +2166,7 @@ export async function applySetup(deps: { db: Db; emit: Emit; model: ModelCall; p
       const mine = (slot: string) => empty.includes(resolveSlot(slot, names) ?? "");
       read = { ...read, library: [...read.library, ...d.library.filter((x) => mine(x.slot))], seed: [...read.seed, ...d.seed.filter((x) => mine(x.slot))],
         links: [...read.links, ...d.links.filter((x) => mine(x.slot))] };
-      checked = checkRead(read, { household, said, sentences });
+      checked = checkRead(read, { household, said, sentences, oftenFailed });
     } else log(`dishes re-read: model ${r.code}: ${r.message.slice(0, 200)}`);
   }
   for (const v of gaps) if (v.ask && !checked.asks.includes(v.ask)) checked.asks.push(v.ask);
@@ -2257,7 +2271,7 @@ export async function applySetup(deps: { db: Db; emit: Emit; model: ModelCall; p
 }
 
 /** apply_setup { household, transcript }: answers { ok, said, changed, noted, dropped, asks, read } or { ok: false, reason, say }. */
-export function mountSetupRoute(hono: Hono<any>, db: Db, emit: Emit, opts: { model: ModelCall; budgetMs?: number }) {
+export function mountSetupRoute(hono: Hono<any>, db: Db, emit: Emit, opts: { model: ModelCall; budgetMs?: number; oftenMs?: number }) {
   const write = writeRoutes(hono);
   write("/api/family/setup", async (b, by, c) => {
     const transcript = transcriptLines(b.transcript);
@@ -2272,6 +2286,6 @@ export function mountSetupRoute(hono: Hono<any>, db: Db, emit: Emit, opts: { mod
       const out = await res.json().catch(() => null) as any;
       return res.ok ? { ok: true, body: out } : { ok: false, reason: out?.reason ?? `refused (${res.status})` };
     };
-    return { body: await applySetup({ db, emit, model: opts.model, post, household: b.household, transcript, by, budgetMs: opts.budgetMs }) };
+    return { body: await applySetup({ db, emit, model: opts.model, post, household: b.household, transcript, by, budgetMs: opts.budgetMs, oftenMs: opts.oftenMs }) };
   });
 }
