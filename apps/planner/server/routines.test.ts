@@ -57,7 +57,8 @@ function carryOldProfile(k: Awaited<ReturnType<typeof app>>, text: string) {
 function kitchen(k: Awaited<ReturnType<typeof app>>) {
   const lib: Record<string, string[]> = { Breakfast: ["Poha", "Upma", "Idli", "Dosa"], Lunch: ["Sambar", "Rajma", "Kadhi", "Chole"], Dinner: ["Palak paneer", "Aloo gobi", "Bhindi", "Dal makhani"] };
   commit(k.kit.db, k.kit.emitChange, (tx, ch) => {
-    for (const [name, order] of [["Breakfast", 10], ["Lunch", 30], ["Dinner", 50]] as const) upsertSlot(tx, { name, kind: "main", order }, "app", ch);
+    // Task 8 (one meaning model): a meal plans from its templates only; each meal's template is its four dishes, rotated.
+    for (const [name, order] of [["Breakfast", 10], ["Lunch", 30], ["Dinner", 50]] as const) upsertSlot(tx, { name, kind: "main", order, templates: [{ parts: [{ items: lib[name] }] }] }, "app", ch);
     for (const [slot, names] of Object.entries(lib)) for (const name of names) upsertLibrary(tx, { name, slot, contains_read: ["egg", "meat", "fish", "onion_garlic"] }, "app", ch);
     addRule(tx, { hard: true, what: "fasting", who: "Asha", days: ["Thu"], fasting_food: ["fruit"], quote: "Thursday fast" }, "app", ch);
   });

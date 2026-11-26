@@ -34,6 +34,7 @@ import { canonTag, allergyNotes, forbidden, isDropped, mostlyOnion, notFor, plan
 import { CATALOG_READ, catalogNameOf, fillWeek, type FillResult, type Visit } from "./fillWeek";
 import { catalogItem, isLinkedPart } from "./kinds";
 import { isAllergyRule } from "./allergy";
+import { plainPlate } from "./migrateMeaning";
 
 export type MakePlanResult =
   | { ok: true; week_start: string; message: string; intro?: string; instructions: string; unmet?: string[]; asked?: string[]; no_ingredients?: string[];
@@ -261,6 +262,11 @@ async function planWeek(deps: MakePlanDeps & { log: (line: string) => void }, in
     for (const n of order.filter(out)) leftOut.push(n);
     log(`no dishes known for ${leftOut.join(", ")}: left out of this week, asked`);
   }
+  // They said to suggest some (their answer to the no_dishes question): a meal with nothing of theirs is planned this once from
+  // a plain plate of that meal, its dishes new (never saved as their templates).
+  const suggested = deps.suggest_new ? unknown.filter((n) => { const s = slots.find((x) => same(x.name, n)); return !!s && s.kind !== "addon" && !s.templates?.length; }) : [];
+  for (const n of suggested) { const i = slots.findIndex((x) => same(x.name, n)); slots[i] = { ...slots[i], templates: plainPlate(slots[i], slots) }; }
+  if (suggested.length) log(`suggesting new dishes for ${suggested.join(", ")}: a plain plate of each`);
   const unmet: string[] = [];
   const tags = ruleTags(rules);
   const w: Week = { days, slots: new Map(slots.map((s) => [s.name.toLowerCase(), slotFacts(s, library, histories.get(s.name.toLowerCase()) ?? [])])), rules, library,
@@ -324,7 +330,7 @@ async function planWeek(deps: MakePlanDeps & { log: (line: string) => void }, in
   const t0 = clock();
   const visits = visitsOf(rules, houseCook(db), slots);
   const filled: FillResult = fillWeek({ days, slots, library, history: histories, rules, cuisines: houseCuisines(db), newCap: newDishesSet(db),
-    facts: w.facts, guestTags: w.guestTags, visits });
+    facts: w.facts, guestTags: w.guestTags, visits, suggested });
   for (const line of filled.log) log(line);
   log(`filled ${toPlan.length} slot-days in ${clock() - t0} ms: ${filled.placed.length} new dishes placed`);
   for (const [k, v] of filled.facts) if (!w.facts.has(k)) w.facts.set(k, v);

@@ -57,6 +57,9 @@ export type FillInput = {
   guestTags?: Map<string, string[]>;
   /** The cooks' visits whose dish limits the fill keeps where a template fits (makePlan visitsOf). */
   visits?: Visit[];
+  /** The meals the family said to suggest dishes for, knowing none of theirs (make_plan suggest_new): a kind part's catalog
+   *  items there are new, never counted as theirs. */
+  suggested?: string[];
 };
 export type FillResult = {
   /** Each planned slot-day's plate, by slotDayKey. */ plates: Map<string, FilledDish[]>;
@@ -287,6 +290,7 @@ export function fillWeek(input: FillInput): FillResult {
     const theirs = prefer.length ? [...out.filter((x) => prefer.some((p) => sameKind(p, x.sub))), ...out.filter((x) => !prefer.some((p) => sameKind(p, x.sub)))] : out;
     return theirs.map((x, i) => ({ ...x, idx: i }));
   };
+  const suggestedAt = (s: Slot) => (input.suggested ?? []).some((n) => same(n, s.name));
   /** A kind part's family pool (§5.1): their rows of it at the meal; then with a `dish`, that dish (theirs, even with no row)
    *  first; with none, the catalog's items of the kind or sub-kind, counted as theirs, those called by their `words` first. */
   const familyPool = (s: Slot, p: KindPart, prefer: string[] = []): Item[] => {
@@ -298,6 +302,8 @@ export function fillWeek(input: FillInput): FillResult {
         ...(hit ? { catalog: true } : {}) };
       return noAgain.has(key) ? rows : [own, ...rows.filter((x) => x.key !== key)].map((x, i) => ({ ...x, idx: i }));
     }
+    // A meal they said to suggest for: nothing of the catalog is theirs there, it is all new.
+    if (suggestedAt(s)) return rows;
     const said = wordsOf(p.words ?? "").filter((x) => !FILLER.includes(x));
     const seen = new Set(rows.map((x) => x.key));
     const cat = catalogPool(s, p.kind, sub, uniq([...prefer, ...(sub ? [sub] : [])]), true, said).filter((x) => !seen.has(x.key));
@@ -340,7 +346,7 @@ export function fillWeek(input: FillInput): FillResult {
     return { kind, sub, fam, neu };
   };
   /** The catalog items the family's category parts make theirs (lead's rule, 25 Nov), by dish key. */
-  w.ownItems = new Set(shaped.flatMap((s) => (s.templates ?? []).flatMap((t) => t.parts)
+  w.ownItems = new Set(shaped.filter((s) => !suggestedAt(s)).flatMap((s) => (s.templates ?? []).flatMap((t) => t.parts)
     .flatMap((p) => (isKindPart(p) && !p.dish && !isStaplePart(s, p) ? suggestable(p.kind, { sub: p.sub ?? null, cuisines: [...cuisines] }).map((it) => dishKey(it.name)) : []))));
 
   // ── The family's own words on a dish (its days, how often) at a meal ──

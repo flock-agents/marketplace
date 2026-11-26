@@ -36,7 +36,12 @@ async function family(model?: (r: ModelRequest) => Promise<ModelResult>) {
   const k = await boot({ now: () => new Date(t), model });
   for (const p of F.people) await k.op("set_person", p);
   commit(k.kit.db, k.kit.emitChange, (tx, ch) => {
-    for (const s of F.slots) upsertSlot(tx, s, "app", ch);
+    // Task 8 (one meaning model): a meal plans from its templates only; each meal's one template is the family's dishes there
+    // (an items part, rotated), as the old planner rotated the library.
+    for (const s of F.slots) {
+      const mine = F.library.filter((l: any) => l.slot === s.name && !l.suggested).map((l: any) => l.name);
+      upsertSlot(tx, { ...s, ...(s.templates || !mine.length ? {} : { templates: [{ parts: [{ items: mine }] }] }) }, "app", ch);
+    }
     for (const r of F.rules) addRule(tx, r, "app", ch);
     for (const l of F.library) upsertLibrary(tx, l, "app", ch);
     for (const d of F.slot_days) saveSlotDay(tx, { date: d.date, slot: d.slot, people: d.people ?? F.everyone, skip: d.skip ?? null,

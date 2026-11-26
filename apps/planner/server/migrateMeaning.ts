@@ -100,6 +100,12 @@ export function deriveTemplates(s: Slot, plates: string[][], library: LibraryDis
   return [k("Roti", "Dal", "Sabzi"), k("Rice", "Dal", "Sabzi")];
 }
 
+/** A plain plate of a meal (its catalog meal's usual shapes), for a meal the family knows none of their dishes for and said to
+ *  suggest some (make_plan suggest_new): used for that plan only, never saved as theirs. An add-on has none. */
+export function plainPlate(s: Slot, slots: Slot[]): MealTemplate[] {
+  return deriveTemplates(s, [], [], mealOf(s, slots));
+}
+
 // ── The migration ──
 
 type SetupPlace = { kind?: string | null; sub?: string | null; item?: string | null; named?: string };

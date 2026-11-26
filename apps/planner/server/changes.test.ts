@@ -49,7 +49,9 @@ async function home(o: { library?: LibraryInput[]; has?: Record<string, string[]
   const k = await boot({ now: () => o.now ?? new Date(2026, 10, 29, 11, 0), model: (req) => f.model(req) });
   for (const [name, group] of [["Asha", "adult"], ["Ravi", "adult"], ["Kabir", "child"]]) await k.op("set_person", { name, group });
   commit(k.kit.db, k.kit.emitChange, (tx, ch) => {
-    for (const s of MAIN) upsertSlot(tx, s, "app", ch);
+    // Task 8 (one meaning model): a meal plans from its templates only. Each meal's one template is the family's dishes there
+    // (an items part: their own dishes, rotated), as the old planner rotated the library.
+    for (const s of MAIN) upsertSlot(tx, { ...s, templates: [{ parts: [{ items: [...LIB[s.name], ...(o.library ?? []).filter((d) => d.slot === s.name && d.origin !== "planner_suggested").map((d) => d.name)] }] }] }, "app", ch);
     for (const [slot, names] of Object.entries(LIB)) for (const name of names) upsertLibrary(tx, { name, slot, origin: "setup_named", contains: [], contains_read: READ }, "app", ch);
     for (const d of o.library ?? []) upsertLibrary(tx, { contains_read: READ, ...d }, "app", ch);
   });
@@ -236,6 +238,10 @@ describe("set_rule", () => {
 describe("set_slot", () => {
   it("a new slot: its slot-days in the planned week from today on are planned, nothing else changes", async () => {
     const k = await planned({ library: ["Sandwich", "Poha roll", "Paratha"].map((name) => ({ name, slot: "Kabir's tiffin", origin: "setup_named" as const })) });
+    // Task 8 (one meaning model): a meal plans from its templates only, and set_slot cannot send any (only setup saves them),
+    // so the tiffin's template is saved first, as setup would, with the slot not yet planned. (Gap flagged in task-10-report.)
+    commit(k.kit.db, k.kit.emitChange, (tx, ch) => upsertSlot(tx, { name: "Kabir's tiffin", kind: "custom", order: 20, active: false,
+      templates: [{ parts: [{ items: ["Sandwich", "Poha roll", "Paratha"] }] }] }, "app", ch));
     const before = k.snapshot();
     const r = await k.op("set_slot", { name: "Kabir's tiffin", kind: "custom", usual_people: ["Kabir"], days: ["Mon", "Tue", "Wed", "Thu", "Fri"], order: 20 });
     expect(r.ok).toBe(true);

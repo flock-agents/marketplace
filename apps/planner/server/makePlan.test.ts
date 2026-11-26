@@ -225,16 +225,18 @@ describe("make_plan: new dishes (kinds model rule 4)", () => {
   });
 
   it("\"suggest some\" for a meal with none of theirs: a plain plate of that meal, every part a real dish", async () => {
-    // Task 10: a meal plans from its templates only; the interview always gives one (a plain plate of the meal).
-    const k = await home({ slots: [MAIN[0], MAIN[1], { name: "Dinner", kind: "main", order: 50, templates: [T({ kind: "Roti" }, { kind: "Sabzi" }, { kind: "Dal" })] }],
-      lib: { Breakfast: LIB.Breakfast, Lunch: LIB.Lunch } });
+    const k = await home({ slots: [MAIN[0], MAIN[1], { name: "Dinner", kind: "main", order: 50 }], lib: { Breakfast: LIB.Breakfast, Lunch: LIB.Lunch } });
     const r = await k.plan(fakeModel().model, { suggest_new: true });
     if (!r.ok) throw new Error(r.say);
     for (const d of WEEK) {
       const p = k.dishesAt(d, "Dinner");
       expect(p.length).toBeGreaterThanOrEqual(3);
       for (const x of p) expect(["Sabzi", "Dal"]).not.toContain(x);
+      // Task 10: the dishes of a meal they said to suggest for are new (not counted as theirs), its staple aside.
+      expect(k.at(d, "Dinner")!.dishes.filter((x) => x.new).length).toBeGreaterThanOrEqual(1);
     }
+    // The plain plate is for that plan only: never saved as their templates.
+    expect(k.rows("slots").find((x: any) => x.name === "Dinner").templates).toBeNull();
   });
 });
 
