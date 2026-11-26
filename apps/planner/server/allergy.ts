@@ -6,6 +6,6 @@ import { targetsOf } from "./targets";
 
 const ALLERGY_WORDS = /\b(allerg\w*|anaphyla\w*|epipen|reacts? to|intoleran\w*|coeliac|celiac)\b/i;
 
-/** A hard avoid rule against an ingredient whose own words say allergy ("Ishaan is allergic to peanuts, not even groundnut oil"). */
+/** A hard avoid rule against something whose own words say allergy ("Ishaan is allergic to peanuts, not even groundnut oil"). */
 export const isAllergyRule = (r: Pick<Rule, "hard" | "what" | "items" | "quote"> & Partial<Pick<Rule, "targets">>): boolean =>
-  r.hard && r.what === "avoid" && targetsOf({ what: r.what, items: r.items, targets: r.targets ?? null }).some((t) => t.type === "ingredient") && ALLERGY_WORDS.test(r.quote);
+  r.hard && r.what === "avoid" && ALLERGY_WORDS.test(r.quote) && targetsOf({ what: r.what, items: r.items, targets: r.targets ?? null }).length > 0;

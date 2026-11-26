@@ -21,11 +21,29 @@ function tagOf(word: string): string | null {
   return c.endsWith("s") && c.length > 3 && TAGS.has(c.slice(0, -1)) ? c.slice(0, -1) : null;
 }
 
+/** A word the catalog's ingredient lists name, with its own spelling ("curd", "paneer", "peanuts"): an ingredient even where a dish
+ *  or sub-kind carries the same word (Curd, Gravy/Paneer), so "no curd" blocks every dish with curd, not the one dish. */
+const SYNONYMS: Record<string, string> = { shrimp: "prawn", shrimps: "prawn", prawns: "prawn" };
+let vocab: Map<string, string> | null = null;
+function ingredientOf(word: string): string | null {
+  if (!vocab) {
+    vocab = new Map();
+    for (const k of CATALOG.kinds) for (const it of k.items) for (const i of it.ingredients) vocab.set(norm(i.name), canon(i.name));
+  }
+  const n = norm(word);
+  if (SYNONYMS[n]) return SYNONYMS[n];
+  const hit = vocab.get(n) ?? (n.endsWith("s") && n.length > 3 ? vocab.get(n.slice(0, -1)) : undefined);
+  // A word that is also a whole kind of dish ("poha", "rajma") stays that kind: the rule is about the dish.
+  return hit && matchDish(word)?.by !== "kind" ? hit : null;
+}
+
 /** A rule word to its one target: a known tag (BASE_TAGS, TAG_PARENT keys/values, catalog tags, singular of a plural) → ingredient;
  *  else matchDish: item → item, sub → sub, kind → kind; else an ingredient of that word (canonTag). */
 export function resolveTarget(word: string): RuleTarget {
   const tag = tagOf(word);
   if (tag) return { type: "ingredient", tag };
+  const ing = ingredientOf(word);
+  if (ing) return { type: "ingredient", tag: ing };
   const m = matchDish(word);
   if (m?.by === "item" && m.item) return { type: "item", item: m.item, kind: m.kind };
   if (m?.by === "sub" && m.sub) return { type: "sub", kind: m.kind, sub: m.sub };

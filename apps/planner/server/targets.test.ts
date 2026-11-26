@@ -1,4 +1,5 @@
 import { describe, it, expect } from "bun:test";
+import { isAllergyRule } from "./allergy";
 import { hitsTarget, resolveGives, resolveTarget, targetsOf, targetText } from "./targets";
 
 describe("rule targets", () => {
@@ -10,6 +11,15 @@ describe("rule targets", () => {
     expect(resolveTarget("rava upma")).toEqual({ type: "item", item: "Rava upma", kind: "Upma" });
     expect(resolveTarget("sambar")).toEqual({ type: "sub", kind: "Rice curry", sub: "Sambar" });
     expect(resolveTarget("maida")).toEqual({ type: "ingredient", tag: "maida" });
+  });
+
+  it("an ingredient word stays an ingredient even where a dish carries it", () => {
+    for (const w of ["curd", "paneer", "peanuts"]) expect(resolveTarget(w).type).toBe("ingredient");
+    expect(resolveTarget("curd")).toEqual({ type: "ingredient", tag: "curd" });
+    expect(resolveTarget("shrimp")).toEqual({ type: "ingredient", tag: "prawn" });
+    expect(resolveTarget("poha").type).toBe("kind");
+    expect(isAllergyRule({ hard: true, what: "avoid", items: ["shrimp"], quote: "Ira is allergic to shrimp" })).toBe(true);
+    expect(isAllergyRule({ hard: true, what: "avoid", items: ["shrimp"], quote: "Ira doesn't eat shrimp" })).toBe(false);
   });
 
   it("a swap gives an item or a kind, never an ingredient", () => {
@@ -25,6 +35,10 @@ describe("rule targets", () => {
     const upma = { type: "kind", kind: "Upma" } as const;
     expect(hitsTarget(upma, { kind: "Upma", sub: "Upma", item: "Rava upma" })).toBe(true);
     expect(hitsTarget(upma, { kind: "Poha", sub: null, item: "Poha" })).toBe(false);
+    expect(hitsTarget({ type: "sub", kind: "Rice curry", sub: "Sambar" }, { kind: "Rice curry", sub: "Sambar", item: "Sambar" })).toBe(true);
+    expect(hitsTarget({ type: "sub", kind: "Rice curry", sub: "Sambar" }, { kind: "Rice curry", sub: "Rasam", item: "Tomato rasam" })).toBe(false);
+    expect(hitsTarget({ type: "item", item: "Pancakes", kind: null }, { kind: null, sub: null, item: "pancakes" })).toBe(true);
+    expect(hitsTarget({ type: "item", item: "Pancakes", kind: null }, { kind: "Dosa", sub: null, item: "Plain dosa" })).toBe(false);
     expect(hitsTarget({ type: "ingredient", tag: "egg" }, { kind: "Upma", sub: null, item: null })).toBeNull();
   });
 
