@@ -1940,6 +1940,17 @@ describe("setup checks what a read left out (H1-H3)", () => {
     expect(out.r.asks).toContain(`You said '${variant}': which meal is that, and what's the dish?`);
     expect(Object.keys(lib(out.k)).filter((x) => /paneer|egg/i.test(x))).toEqual([]);
   });
+  it("a correction asks only for the unwritten sentences of its new replies (J6)", async () => {
+    const f = iFake({ dishes: puriDishes(false), often: puriOften, kinds: ownKinds });
+    const k = await boot({ model: f.model });
+    const first = await k.op("apply_setup", { household: I_HOUSEHOLD, transcript: puriTranscript });
+    expect(first.asks).toContain(`You said '${variant}': which meal is that, and what's the dish?`);
+    const fresh = "pasta for dinner on some days";
+    const r = await k.op("apply_setup", { household: I_HOUSEHOLD, transcript: [...puriTranscript, "Q: Anything else?", `A: ${fresh}.`] });
+    expect(r.ok).toBe(true);
+    expect(r.asks).toContain(`You said '${fresh}': which meal is that, and what's the dish?`);
+    expect(r.asks).not.toContain(`You said '${variant}': which meal is that, and what's the dish?`);
+  });
   it("one dishes re-read only: an uncited sentence joins the re-read for a box the home re-read adds (fix 3)", async () => {
     const first = { ...noBoxDishes, library: [...noBoxDishes.library, ["Puri", "Lunch", puriSaid]] };
     const { f, k } = await run({ home: (_req: ModelRequest, n: number) => (n === 1 ? noBoxes : withBoxes),
