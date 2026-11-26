@@ -1129,6 +1129,10 @@ export function wordOf(name: string, quote = ""): string {
 
 /** The words for plain rice a curry or curd is mixed with ("curd rice", "kadhi chawal", "varan bhaat"). */
 const RICE_WORDS = new Set(["rice", "chawal", "chaval", "bhaat", "bhat", "annam", "anna", "sadam", "saadam"]);
+/** The words for a plain roti said with a dish ("roti sabzi", "phulka dal", "chapati with aloo gobi"; owner, 26 Nov). A paratha
+ *  is not one: it is its own dish. */
+const BREAD_WORDS = new Set(["roti", "chapati", "chapathi", "chapatti", "phulka", "fulka", "rotli", "poli"]);
+const JOIN_WORDS = new Set(["with", "and", "n", "aur"]);
 const soleSub = (k: CatalogKind): string | null => (k.subs.length === 1 ? k.subs[0].name : null);
 const manySubs = (kind: string): boolean => (catalogKind(kind)?.subs.length ?? 0) > 1;
 const isStaple = (kind: string): boolean => !!catalogKind(kind)?.staple;
@@ -1182,6 +1186,20 @@ export function codePlace(name: string, word = name.trim().toLowerCase(), region
     if (whole && whole.kind !== m.kind) continue;
     const sub = m.sub ?? soleSub(k);
     return { kind: k.name, sub, item: null, own: false, named: "dish", parts: [{ kind: "Rice", sub: null }, { kind: k.name, sub }], word };
+  }
+  // A plain roti said with a dish ("roti sabzi", "roti with aloo gobi", "dal roti") is two parts: the roti and the dish (never a
+  // roti of the catalog's own: "missi roti").
+  if (ws.length > 1 && !(whole && isStaple(whole.kind))) for (const [bread, rest0] of [[ws[0], ws.slice(1)], [ws[ws.length - 1], ws.slice(0, -1)]] as const) {
+    if (!BREAD_WORDS.has(bread)) continue;
+    const rest = [...rest0];
+    while (rest.length && JOIN_WORDS.has(rest[0])) rest.shift();
+    while (rest.length && JOIN_WORDS.has(rest[rest.length - 1])) rest.pop();
+    const m = rest.length ? matchDish(rest.join(" ")) : null, k = m ? catalogKind(m.kind) : null;
+    if (!m || !k || k.staple || k.part === "complete") continue;
+    if (whole && whole.kind !== m.kind) continue;
+    const sub = m.sub ?? soleSub(k);
+    return { kind: k.name, sub, item: m.by === "item" ? m.item : null, own: false, named: m.by === "item" ? "dish" : "category",
+      parts: [{ kind: "Roti", sub: null }, { kind: k.name, sub }], word };
   }
   if (!whole) {
     // A vegetable said on its own ("bhindi", "lauki") is the catalog's sabzi of it: a side of the plate.

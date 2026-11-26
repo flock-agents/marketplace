@@ -648,6 +648,16 @@ describe("the kinds model: each dish placed, each meal's templates, the cuisines
     expect(codePlace("Kadhi chawal")!.parts).toEqual([{ kind: "Rice", sub: null }, { kind: "Rice curry", sub: "Kadhi" }]);
     expect(codePlace("Rasam rice")!.parts).toEqual([{ kind: "Rice", sub: null }, { kind: "Rice curry", sub: "Rasam" }]);
     expect(codePlace("Rajma chawal")).toMatchObject({ kind: "Dal", sub: "Rajma/Chole", item: null, parts: [{ kind: "Rice", sub: null }, { kind: "Dal", sub: "Rajma/Chole" }] });
+    // Owner, 26 Nov: a plain bread said with a dish is two parts, the bread and the dish, as rice with a curry is ("roti sabzi"
+    // was saved as one dish, and lunch planned "Rice · Roti sabzi").
+    expect(codePlace("Roti sabzi")).toMatchObject({ kind: "Sabzi", item: null, parts: [{ kind: "Roti", sub: null }, { kind: "Sabzi", sub: "Sabzi" }] });
+    expect(codePlace("Chapati sabzi")!.parts).toEqual([{ kind: "Roti", sub: null }, { kind: "Sabzi", sub: "Sabzi" }]);
+    expect(codePlace("Roti with aloo gobi")).toMatchObject({ kind: "Sabzi", item: "Aloo gobi", named: "dish", parts: [{ kind: "Roti", sub: null }, { kind: "Sabzi", sub: "Sabzi" }] });
+    expect(codePlace("Phulka dal")!.parts).toEqual([{ kind: "Roti", sub: null }, { kind: "Dal", sub: "Dal" }]);
+    // A paratha is not a plain bread; a roti of the catalog's own is one dish.
+    expect(codePlace("Paratha with curd")?.parts).toBeUndefined();
+    expect(codePlace("Missi roti")).toMatchObject({ kind: "Roti", item: "Missi roti" });
+    expect(codePlace("Missi roti")!.parts).toBeUndefined();
     // A rice dish of the catalog's own is one dish.
     expect(codePlace("Lemon rice")).toMatchObject({ kind: "Flavoured rice", item: "Lemon rice" });
     expect(codePlace("Lemon rice")!.parts).toBeUndefined();
@@ -737,6 +747,11 @@ describe("the kinds model: each dish placed, each meal's templates, the cuisines
     // "Dosa sometimes, chapati, chapati with kurma": the bare chapati plate goes; chapati comes with its kurma.
     const c = buildMeal("dinner", [dish("Dosa"), dish("Chapati"), dish("Kurma")], [["Dosa"], ["Chapati"], ["Chapati", "Kurma"]]);
     expect(c.templates.map(kinds)).toEqual([["Dosa"], ["Roti", "Gravy"]]);
+    // "Shiva and I carry roti sabzi to office. Dad has dal, rice, sabzi and curd at home": the carried lunch is roti and a sabzi,
+    // Dad's is dal, rice, sabzi and curd; never one "Rice, Roti sabzi" plate.
+    const rs = buildMeal("lunch", [dish("Roti sabzi"), dish("Dal"), dish("Rice"), dish("Sabzi"), dish("Curd")], [["Roti sabzi"], ["Dal", "Rice", "Sabzi", "Curd"]]);
+    expect(rs.templates.map(kinds)).toEqual([["Roti", "Sabzi"], ["Dal", "Rice", "Sabzi", "Curd"]]);
+    expect(rs.templates.flatMap((t) => t.parts).some((p) => "items" in p)).toBe(false);
     // An egg breakfast is a whole breakfast.
     expect(buildMeal("breakfast", [dish("Idli"), dish("Bread omelette")], [["Idli"], ["Bread omelette"]]).templates.map(kinds)).toEqual([["Idli"], ["Egg"]]);
   });

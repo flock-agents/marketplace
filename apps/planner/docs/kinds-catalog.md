@@ -422,7 +422,6 @@ aka daal, dal tadka, dal fry; north, central, east
 - Masoor dal (red lentil dal) [onion/garlic, root veg]: masoor dal; *without:* onion, garlic, tomato
 - Toor dal (arhar dal, tuvar dal) [onion/garlic, dairy, root veg]: toor dal; *without:* tomato, onion, garlic, ghee
 - Chana dal (chane ki dal) [onion/garlic, dairy, root veg]: chana dal; *without:* onion, garlic, ghee
-- Urad dal (dhuli urad dal) [onion/garlic, dairy, root veg]: urad dal; *without:* onion, garlic, ginger, ghee
 - Mixed dal (panchratna dal) [onion/garlic, dairy, root veg]: toor dal, moong dal, masoor dal, chana dal; *without:* onion, garlic, ghee
 - Dal tadka (yellow dal tadka) [dairy, onion/garlic, root veg]: toor dal; *without:* ghee, onion, garlic, tomato
 - Dal fry [onion/garlic, root veg]: toor dal, tomato; *without:* onion, garlic
@@ -1452,6 +1451,10 @@ Round 8 (owner, 26 Nov):
 Round 9 (owner, 26 Nov):
 
 21. **Dishes are checked by their ingredients, main or leave-out-able.** Every catalog item lists its ingredients as usually made in an Indian home (`scripts/kinds/ingredients.js`); its content tags are derived from them, never written by hand. Each ingredient is **main** (the dish is not itself without it: mooli in mooli thepla, onion in kanda poha, paneer in paneer bhurji) or **leave-out-able** (a garnish, tempering or add-in the dish is still itself without: cashews in suji upma, onion and peanuts in vegetable poha, ghee on top, coriander). For each person at the table and each of their hard rules or allergies: a main ingredient that breaks it means the dish is not theirs (another item, or their own item, as before); only leave-out-able ones mean the dish is fine for them, with a note "make without <ingredients> for <person>" ("make without peanuts" when the whole house keeps the rule; onion and garlic keep rule 5's "make without onion and garlic, or keep <person>'s portion aside"). This holds for the family's own dishes and for catalog-picked ones, including items picked for a category the family named: those count as theirs for variety but are always checked for allergies (the family's own named dishes stay vouched for their allergies). A dish the catalog does not know keeps its read: every tag it has counts as main. Every planned catalog item is read for every catalog tag (none left unknown to fail closed on). Onion, garlic and ginger count as root vegetables, as in the planner's own categories.
+
+Round 10 (owner, 26 Nov):
+
+22. **Urad dal removed**: not an everyday dal for most homes (owner 26 Nov).
 
 ## Open questions
 
