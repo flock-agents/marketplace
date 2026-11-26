@@ -145,8 +145,26 @@ const kindsOf = (s: Slot): MealKind[] => mealKinds(s.templates ?? []);
 // deriveTemplates (a meal's templates read off its plates) moved to migrateMeaning.ts: it runs there once per install.
 
 /** How many of `n` days each template has: a share in the family's words exactly ("2/week") or as its words' days (a part
- *  week its share of them); the days left spread evenly over the templates with none. */
+ *  week its share of them); the days left spread evenly over the templates with none. The templates read from one phrase (the
+ *  same `said` and share: "Or sometimes gobi paratha, aloo paratha, etc.") have that phrase's days once, spread over them. */
 export function templateCounts(templates: MealTemplate[], n: number): number[] {
+  const groups: number[][] = [];
+  const byPhrase = new Map<string, number[]>();
+  templates.forEach((t, i) => {
+    const said = t.share && t.said ? norm(t.said) : "";
+    if (!said) { groups.push([i]); return; }
+    const k = `${t.share}|${said}`;
+    const g = byPhrase.get(k);
+    if (g) g.push(i); else { const ng = [i]; byPhrase.set(k, ng); groups.push(ng); }
+  });
+  const counts = countEach(groups.map((g) => templates[g[0]]), n);
+  const out = templates.map(() => 0);
+  groups.forEach((g, j) => { for (let x = 0; x < counts[j]; x++) out[g[x % g.length]]++; });
+  return out;
+}
+
+/** templateCounts for templates each its own share. */
+function countEach(templates: MealTemplate[], n: number): number[] {
   const want = templates.map((t) => {
     const s = t.share;
     if (!s) return null;

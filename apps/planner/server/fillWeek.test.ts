@@ -436,6 +436,29 @@ describe("template shares (rule 1)", () => {
     const t = (sh: MealTemplate["share"]) => share(T({ kind: "Dosa" }), sh);
     expect(templateCounts([t("2/week"), t("sometimes"), t("sometimes")], 7)).toEqual([2, 3, 2]);
   });
+  // D11: one "sometimes" phrase read as many templates ("Or sometimes gobi paratha, aloo paratha, etc.") is one share.
+  const S = "Or sometimes gobi paratha, aloo paratha, etc.";
+  const said = (sh: MealTemplate["share"], w: string | null): MealTemplate => ({ ...share(T({ kind: "Paratha" }), sh), said: w });
+  it("one said 'sometimes' phrase read as 8 templates takes the phrase's days once; the usual 4 keep the rest", () => {
+    const c = templateCounts([...Array.from({ length: 4 }, () => T({ kind: "Roti" })), ...Array.from({ length: 8 }, () => said("sometimes", S))], 6);
+    const usual = c.slice(0, 4).reduce((a, b) => a + b, 0), some = c.slice(4).reduce((a, b) => a + b, 0);
+    expect(c.reduce((a, b) => a + b, 0)).toBe(6);
+    expect(some).toBeLessThanOrEqual(3);
+    expect(usual).toBeGreaterThanOrEqual(3);
+    for (const x of c.slice(0, 4)) expect(x).toBeGreaterThanOrEqual(0);
+  });
+  it("two templates of one said 'sometimes' over 6 days: together 2-3 (beside a usual template, and beside a 'usually' one)", () => {
+    for (const first of [T({ kind: "Roti" }), share(T({ kind: "Roti" }), "usually")]) {
+      const c = templateCounts([first, said("sometimes", S), said("sometimes", S)], 6);
+      expect(c[1] + c[2]).toBeGreaterThanOrEqual(2);
+      expect(c[1] + c[2]).toBeLessThanOrEqual(3);
+      expect(c.reduce((a, b) => a + b, 0)).toBe(6);
+    }
+  });
+  it("two different said phrases each keep their own share", () => {
+    const c = templateCounts([share(T({ kind: "Roti" }), "usually"), said("sometimes", "gobi paratha sometimes"), said("sometimes", "egg curry sometimes")], 7);
+    expect(c).toEqual([3, 2, 2]);
+  });
 });
 
 describe("an add-on with nothing to give (safety)", () => {
