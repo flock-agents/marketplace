@@ -211,7 +211,9 @@ export function dishNameOf(name: string, names: readonly string[]): string | nul
   const n = dish(name);
   const exact = names.find((d) => dish(d) === n);
   if (exact) return exact;
-  const near = names.filter((d) => { const t = dish(d); return !!t && (` ${n} `.includes(` ${t} `) || ` ${t} `.includes(` ${n} `)); });
+  // The same words in any order are one dish ("Paratha with egg" is "Egg paratha roll"); "with", "inside", "stuffed" and "roll" say nothing.
+  const bag = (s: string) => dish(s).split(" ").filter((w) => w && !["with", "inside", "stuffed", "roll"].includes(w)).sort().join(" ");
+  const near = names.filter((d) => { const t = dish(d); return !!t && (` ${n} `.includes(` ${t} `) || ` ${t} `.includes(` ${n} `) || (!!bag(d) && bag(d) === bag(name))); });
   return [...near].sort((a, b) => b.length - a.length)[0] ?? null;
 }
 

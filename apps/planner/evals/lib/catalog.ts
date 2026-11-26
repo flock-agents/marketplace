@@ -47,6 +47,10 @@ function one(hits: KindHit[]): KindHit | null {
  *  non-staple one (the dish, not its rice: "Kadhi chawal"), then items before sub-kinds before kinds. Still more than one
  *  kind: null (unmapped). */
 export function kindOf(name: string): KindHit | null {
+  // Words after "with", "stuffed with" or "inside" are a filling, never the dish's kind ("Paratha with egg" is a Paratha): the kind
+  // is read from the words before them when those place, else from the whole name as before.
+  const head = name.replace(/\s+(?:stuffed\s+)?with\s+.*$/i, "").replace(/\s+(?:stuffed\s+)?inside\b.*$/i, "").replace(/\s+stuffed$/i, "").trim();
+  if (head && head !== name.trim()) { const hit = kindOf(head); if (hit) return hit; }
   const n = key(name);
   if (!n) return null;
   // The same words in another order ("Methi malai matar" for "Methi matar malai") are the same name.

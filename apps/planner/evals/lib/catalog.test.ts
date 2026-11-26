@@ -39,3 +39,12 @@ test("staple kinds and the cuisine words", () => {
   expect(isStapleKind("Dal")).toBe(false);
   expect(CUISINES).toEqual(expect.arrayContaining(["north", "south", "tamil", "bengal", "maharashtra", "rajasthan", "andhra"]));
 });
+
+describe("kindOf: a filling never decides the kind (J8)", () => {
+  test("words after with / stuffed with / inside are a filling", () => {
+    expect(kindOf("Paratha with egg")?.kind).toBe("Paratha");
+    expect(kindOf("Paratha stuffed with cheese")?.kind).toBe("Paratha");
+    expect(kindOf("Paratha with egg inside")?.kind).toBe("Paratha");
+    expect(kindOf("Chicken rassa")?.kind).toBe("Chicken");
+  });
+});

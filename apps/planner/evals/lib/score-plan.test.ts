@@ -1035,4 +1035,13 @@ describe("h18 boxes: J7 and J8", async () => {
     sdOf(p, "Thu", "Breakfast").dishes = [{ name: "Idli" }];
     expect(notesOf(p, "linked_parts").filter((n) => /Thu Agastya's breakfast box/.test(n))).toHaveLength(1);
   });
+  // J8: a planned dish maps to the family's dish by its words in any order; a filling never decides its kind.
+  test("a lunch-box week of Plain, Paratha with egg, Paratha with cheese, Plain has no early repeat and no new kind", () => {
+    const p = baselineWeek(h, MON);
+    const box = (day: Weekday, name: string) => { sdOf(p, day, "Agastya's lunch box").dishes = [{ name }]; };
+    box("Mon", "Plain paratha"); box("Tue", "Paratha with egg"); box("Thu", "Paratha with cheese"); box("Fri", "Plain paratha");
+    const bad = (f: string) => notesOf(p, f).filter((n) => /paratha/i.test(n));
+    expect(bad("no_new_kind")).toEqual([]);
+    expect(bad("no_early_repeat")).toEqual([]);
+  });
 });
