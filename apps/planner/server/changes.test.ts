@@ -238,10 +238,6 @@ describe("set_rule", () => {
 describe("set_slot", () => {
   it("a new slot: its slot-days in the planned week from today on are planned, nothing else changes", async () => {
     const k = await planned({ library: ["Sandwich", "Poha roll", "Paratha"].map((name) => ({ name, slot: "Kabir's tiffin", origin: "setup_named" as const })) });
-    // Task 8 (one meaning model): a meal plans from its templates only, and set_slot cannot send any (only setup saves them),
-    // so the tiffin's template is saved first, as setup would, with the slot not yet planned. (Gap flagged in task-10-report.)
-    commit(k.kit.db, k.kit.emitChange, (tx, ch) => upsertSlot(tx, { name: "Kabir's tiffin", kind: "custom", order: 20, active: false,
-      templates: [{ parts: [{ items: ["Sandwich", "Poha roll", "Paratha"] }] }] }, "app", ch));
     const before = k.snapshot();
     const r = await k.op("set_slot", { name: "Kabir's tiffin", kind: "custom", usual_people: ["Kabir"], days: ["Mon", "Tue", "Wed", "Thu", "Fri"], order: 20 });
     expect(r.ok).toBe(true);

@@ -20,7 +20,7 @@ import { getHouse, type Db } from "./family";
 import { bareDish, catalogKind, checkMealShape, isItemsPart, isKindPart, matchDish, norm, regionalWordOf, type KindPart, type MealTemplate, type TemplatePart } from "./kinds";
 import { isDropped, slotFacts } from "./planChecks";
 import { mealOf as setupMealOf } from "./setup";
-import { commit, listLibrary, listRules, listSlots, removeLibrary, slotHistory, updateRule, upsertSlot, type LibraryDish, type Slot } from "./slotStore";
+import { commit, listLibrary, listRules, listSlots, removeLibrary, slotHistory, updateRule, upsertSlot, type LibraryDish, type Slot, type SlotDay } from "./slotStore";
 import { resolveGives, targetsOf } from "./targets";
 
 const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
@@ -104,6 +104,18 @@ export function deriveTemplates(s: Slot, plates: string[][], library: LibraryDis
  *  suggest some (make_plan suggest_new): used for that plan only, never saved as theirs. An add-on has none. */
 export function plainPlate(s: Slot, slots: Slot[]): MealTemplate[] {
   return deriveTemplates(s, [], [], mealOf(s, slots));
+}
+
+/** The migration's step 1 for one meal, at plan time (controller, Task 10): a meal with no templates (one added after setup)
+ *  gets them read off its plates and dishes, once, and each of its dishes with no kind saved gets the kind (and sub-kind) the
+ *  read gave it, so the fill (which never reads words) gives them their dish. The caller saves both. */
+export function templatesFromDishes(s: Slot, slots: Slot[], library: LibraryDish[], history: SlotDay[]): { templates: MealTemplate[]; kinds: { row: LibraryDish; kind: string; sub: string | null }[] } {
+  const templates = deriveTemplates(s, slotFacts(s, library, history.filter((d) => !d.skip && d.dishes.length)).plates, library, mealOf(s, slots));
+  const kinds = library.filter((r) => same(r.slot, s.name) && !r.kind && familyRow(r)).flatMap((row) => {
+    const pl = placeOf(row);
+    return pl && catalogKind(pl.kind) ? [{ row, kind: catalogKind(pl.kind)!.name, sub: pl.sub }] : [];
+  });
+  return { templates, kinds };
 }
 
 // ── The migration ──

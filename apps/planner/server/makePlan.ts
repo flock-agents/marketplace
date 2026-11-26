@@ -26,15 +26,15 @@ import { closeWeek, dateOf } from "./meals";
 import { changeMessage, planMessage, planQuestion, weekLink, type CheckAsk } from "./messages";
 import { cookVisits, isObject, list, refuse, writeRoutes, type Db, type Emit } from "./family";
 import { STOP_CODES, stopSaid, type ModelCall, type ModelFailure, type ModelRequest, type ModelResult } from "./model";
-import { commit, deleteSlotDays, listLibrary, listRules, listSlotDays, listSlots, saveSlotDay, slotHistory, upsertLibrary, type LibraryDish,
+import { commit, deleteSlotDays, listLibrary, listRules, listSlotDays, listSlots, saveSlotDay, slotHistory, upsertLibrary, upsertSlot, type LibraryDish,
   type Rule, type Slot } from "./slotStore";
 import { buildDays, replacedMeal, slotDayKey, lunchSaid, platformPeers, readEvents, readHousehold, withLunchSaid, type PlanDay, type Peers } from "./planDays";
 import { canonTag, allergyNotes, forbidden, isDropped, mostlyOnion, notFor, plannable, readFor, ruleTags, slotFacts, softSwapNotes, swapNotes,
   ruleBinds, vouched, withParents, type Week } from "./planChecks";
 import { CATALOG_READ, catalogNameOf, fillWeek, type FillResult, type Visit } from "./fillWeek";
-import { catalogItem, isLinkedPart } from "./kinds";
+import { catalogItem, checkMealShape, isLinkedPart } from "./kinds";
 import { isAllergyRule } from "./allergy";
-import { plainPlate } from "./migrateMeaning";
+import { plainPlate, templatesFromDishes } from "./migrateMeaning";
 
 export type MakePlanResult =
   | { ok: true; week_start: string; message: string; intro?: string; instructions: string; unmet?: string[]; asked?: string[]; no_ingredients?: string[];
@@ -246,6 +246,26 @@ async function planWeek(deps: MakePlanDeps & { log: (line: string) => void }, in
   // 2. The family's dishes and each meal's history (its seed plates and what was planned or kept there before).
   const library = listLibrary(db);
   const histories = new Map(slots.map((s) => [s.name.toLowerCase(), slotHistory(db, s.name, weekStart)]));
+  // A meal with no templates but dishes of theirs (one added after setup: no operation saves templates) gets them read off its
+  // dishes and plates, the boot migration's step 1, saved once: from then on it reads what was saved, never derived again.
+  for (let i = 0; i < slots.length; i++) {
+    const s = slots[i];
+    if (s.templates?.length) continue;
+    const history = (histories.get(s.name.toLowerCase()) ?? []).filter((d) => !d.skip && d.dishes.length);
+    if (!history.length && !library.some((d) => same(d.slot, s.name))) continue;
+    const { templates: ts, kinds } = templatesFromDishes(s, slots, library, history);
+    const errs = ts.length ? checkMealShape(ts, { slot: s.name, slots: slots.map((x) => x.name) }) : ["none read"];
+    if (errs.length) { log(`${s.name}: templates not derived from its dishes (${errs.join("; ")})`); continue; }
+    slots[i] = commit(db, deps.emit, (tx, ch) => {
+      // Their dishes there keep the kind the read gave them, so their own dish fills its part.
+      for (const k of kinds) {
+        const row = upsertLibrary(tx, { name: k.row.name, slot: k.row.slot, kind: k.kind, sub: k.sub }, "app", ch);
+        library.splice(library.indexOf(k.row), 1, row);
+      }
+      return upsertSlot(tx, { name: s.name, templates: ts }, "app", ch);
+    });
+    log(`${s.name}: templates derived from its dishes, saved`);
+  }
   const order = slots.filter((s) => days.some((d) => same(d.slot, s.name) && !d.fixed)).map((s) => s.name);
   // Never a plan from an empty library (#29): a meal with no shape of its own, none of the family's dishes and no plate of
   // theirs is asked about, unless they said to suggest new dishes there. Only when no meal is known does it stop the plan:

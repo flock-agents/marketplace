@@ -370,6 +370,26 @@ describe("make_plan: an add-on and a box", () => {
     expect(k.week().filter((d) => d.slot === "Ravi's fish")).toHaveLength(2);
   });
 
+  it("a meal added after setup has its templates derived from its dishes once, at plan time, and saved (controller, Task 10)", async () => {
+    const k = await home();
+    expect((await k.op("set_slot", { name: "Kabir's tiffin", kind: "custom", usual_people: ["Kabir"], days: ["Mon", "Tue", "Wed", "Thu", "Fri"], order: 20 })).ok).toBe(true);
+    expect((await k.op("add_dish", { name: "Cheese sandwich", slot: "Kabir's tiffin", quote: "he takes a cheese sandwich" })).ok).toBe(true);
+    const tiffin = () => k.rows("slots").find((x: any) => x.name === "Kabir's tiffin");
+    expect(tiffin().templates).toBeNull();
+    const lines: string[] = [];
+    const r = await k.plan(fakeModel().model, { log: (l) => lines.push(l) });
+    if (!r.ok) throw new Error(r.say);
+    const saved = tiffin().templates;
+    expect(JSON.parse(saved).length).toBeGreaterThan(0);
+    expect(lines).toContain("Kabir's tiffin: templates derived from its dishes, saved");
+    expect(k.dishesAt(MON, "Kabir's tiffin")).toContain("Cheese sandwich");
+    // Decided once: a second plan reads the saved templates, never derives again.
+    const again: string[] = [];
+    await k.plan(fakeModel().model, { log: (l) => again.push(l) });
+    expect(tiffin().templates).toBe(saved);
+    expect(again.some((l) => l.includes("templates derived"))).toBe(false);
+  });
+
   it("a box with no dishes does not stop the plan: it is left out and named in the one question; nothing known at all is asked", async () => {
     const k = await home({ slots: [...MAIN, { name: "Snack box", kind: "custom", order: 20, usual_people: ["Kabir"], days: ["Mon", "Tue", "Wed", "Thu", "Fri"] }] });
     const lines: string[] = [];
