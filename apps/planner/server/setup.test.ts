@@ -1506,7 +1506,7 @@ describe("apply_setup v2: the prompts", () => {
     expect(often).toContain("A dish said with weekdays and a frequency word keeps both: its frequency and its days");
     expect(often).toContain("A dish told in any reply has its row");
     // Review: no trigger phrase or sentence shape lifted from an eval household.
-    for (const w of ["in case we make", "when we make", "who eats differently", "egg inside", "pancakes", "rest of us rotis", "rolled with", "cheese inside", "paneer inside"]) {
+    for (const w of ["in case we make", "when we make", "who eats differently", "egg inside", "pancakes", "rest of us rotis", "rolled with", "cheese inside", "paneer inside", "what we make for"]) {
       expect(rules.toLowerCase(), w).not.toContain(w);
       expect(often.toLowerCase(), w).not.toContain(w);
       expect(dishes.toLowerCase(), w).not.toContain(w);
