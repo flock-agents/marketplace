@@ -582,6 +582,23 @@ export function checkRead(read: SetupRead, ctx: { household: Household; said: st
     main.usual_people = others;
     if (!main.quote) main.quote = s.quote;
   }
+  // Weekday lunch as the replies say it, by the household's names.
+  const weekday_lunch = read.weekday_lunch.flatMap((w) => { const p = personOf(w.person, people); return p ? [{ ...w, person: p }] : []; });
+  // An extras add-on of Lunch read with no days (D6: "I take 4 boiled eggs and some salad with it", carried to work) goes with
+  // the lunch its people carry: on their carrying days, never every day. A person's weekday lunch: the replies' word, else
+  // household.weekly's; their days: their weekly entries', else Mon–Fri (as the plan reads a lunch said with no weekly entry:
+  // planDays withLunchSaid). Left as read when anyone of its people does not carry lunch.
+  const weeklyOf = (p: string) => (ctx.household.weekly ?? []).filter((w) => w.person === p && w.weekdays.length);
+  const carryDays = (p: string): Weekday[] | null => {
+    const lunch = weekday_lunch.find((w) => w.person === p)?.lunch ?? weeklyOf(p).find((w) => w.lunch)?.lunch ?? null;
+    if (lunch !== "carries") return null;
+    const ws = weeklyOf(p);
+    return ws.length ? uniq(ws.flatMap((w) => w.weekdays)) : ["Mon", "Tue", "Wed", "Thu", "Fri"];
+  };
+  for (const s of slots) if (s.kind === "addon" && s.extras && s.addon_of === "Lunch" && !s.days.length && s.usual_people.length) {
+    const each = s.usual_people.map(carryDays);
+    if (each.every((d): d is Weekday[] => !!d)) s.days = WEEKDAYS.filter((d) => each.some((x) => x.includes(d)));
+  }
   const slotNames = slots.map((s) => s.name);
   // The days each meal is cooked at home: its days less the days it is eaten out or ordered in ("weekday lunch is ..." where
   // weekend lunch is out names the meal's days, not the dish's).
@@ -727,7 +744,6 @@ export function checkRead(read: SetupRead, ctx: { household: Household; said: st
     return v.at || meals.length ? [{ ...(v.at ? { at: v.at } : {}), ...(meals.length ? { meals } : {}) }] : [];
   }) } : null;
   const family_cooks = read.family_cooks.flatMap((f) => { const p = personOf(f.person, people); if (!p) ask(f.person); return p && f.days.length ? [{ ...f, person: p }] : []; });
-  const weekday_lunch = read.weekday_lunch.flatMap((w) => { const p = personOf(w.person, people); return p ? [{ ...w, person: p }] : []; });
   const lunchKnown = (p: string) => weekday_lunch.some((w) => w.person === p) || !!ctx.household.weekly?.find((w) => w.person === p)?.lunch;
   const lunch_unclear = uniq(read.lunch_unclear.map((n) => personOf(n, people)).filter((p): p is string => !!p && !lunchKnown(p)));
   const unplaced = read.unplaced.filter((u) => saidByFamily(u.quote, said));

@@ -1272,6 +1272,26 @@ describe("setup reads into the one meaning model (§5, §6.4)", () => {
     expect(JSON.parse(k.rows("house")[0].setup_state).weekday_lunch).toContainEqual({ person: "Shiva", lunch: "carries", quote: "I carry the home lunch" });
   });
 
+  it("an extras add-on read with no days runs on the days its person carries lunch, never every day (F6, D6)", async () => {
+    const box = W_HOME.slots.find((s) => s.name === "Shiva's lunch box")!;
+    const home = (days: string[], lunch = W_HOME.weekday_lunch) => ({ ...W_HOME, weekday_lunch: lunch, slots: W_HOME.slots.map((s) => (s === box ? { ...s, days } : s)) });
+    // End to end: Shiva carries (his reply), at the office Mon–Fri (household.weekly).
+    const { slot } = await walk({ home: home([]) });
+    expect(slot("Shiva's lunch box")).toMatchObject({ kind: "addon", extras: true, days: MON_FRI });
+    // Pure: the weekly entry's days; no weekly entry is Mon–Fri (as withLunchSaid reads it); days the read gave stay; a person
+    // who does not carry lunch leaves it as read.
+    const said = familyLines(W_TRANSCRIPT, W_HOUSEHOLD);
+    const days = (h: ReturnType<typeof home>, household: unknown) =>
+      checkRead(readOf(h, { rules: [] }, { library: [] }), { household: householdOf(household), said }).read.slots.find((s) => s.name === "Shiva's lunch box")?.days as string[] | undefined;
+    const weekly = (w: unknown[]) => ({ ...W_HOUSEHOLD, "household.weekly": w });
+    expect(days(home([]), weekly([{ person: "Shiva", where: "office", weekdays: ["Mon", "Tue", "Wed"] }]))).toEqual(["Mon", "Tue", "Wed"]);
+    expect(days(home([]), weekly([]))).toEqual(MON_FRI);
+    // household.weekly's own "carries", with nothing said in the replies.
+    expect(days(home([], []), weekly([{ person: "Shiva", where: "office", weekdays: ["Mon", "Tue"], lunch: "carries" }]))).toEqual(["Mon", "Tue"]);
+    expect(days(home(["Mon", "Wed"]), W_HOUSEHOLD)).toEqual(["Mon", "Wed"]);
+    expect(days(home([], [{ person: "Shiva", lunch: "home", quote: "I carry the home lunch" }]), W_HOUSEHOLD)).toEqual([]);
+  });
+
   it("rules naming a kind or a dish get typed targets", async () => {
     const { k } = await walk();
     const rules = k.rows("rules").map((r) => ({ ...r, items: JSON.parse(r.items ?? "null"), targets: JSON.parse(r.targets ?? "null"), gives: JSON.parse(r.gives ?? "null") }));
