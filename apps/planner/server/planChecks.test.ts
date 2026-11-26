@@ -76,7 +76,7 @@ describe("allergies (owner 25 Nov)", () => {
 
 describe("onion and garlic (kinds model rule 7)", () => {
   const noOnion = rule({ who: "Ravi", items: ["onion_garlic"], quote: "Ravi eats no onion or garlic" });
-  const lib = [dish("Bhindi masala", "Dinner", { contains: ["onion_garlic"] }), dish("Aloo pyaaz", "Dinner", { contains: ["onion_garlic"] }), dish("Lauki sabzi", "Dinner")];
+  const lib = [dish("Bhindi masala", "Dinner", { contains: ["onion_garlic"], catalog_item: "Bhindi sabzi" }), dish("Aloo pyaaz", "Dinner", { contains: ["onion_garlic"] }), dish("Lauki sabzi", "Dinner")];
   it("never blocks a dish: it is his with a note to make it without or keep his portion aside; a dish that is mostly onion is not his", () => {
     const w = week({ slots: [slot("Dinner", { order: 50 })], library: lib, rules: [noOnion] });
     const d = w.days[0];
@@ -92,7 +92,7 @@ describe("onion and garlic (kinds model rule 7)", () => {
     const w = week({ slots: [slot("Dinner", { order: 50 })], library: lib, rules: [rule({ who: "Ravi", items: ["onion_garlic"], quote: "Ravi is allergic to onion" })] });
     expect(notFor(w, w.days[0], "Aloo pyaaz")).toEqual(["Ravi"]);
     expect(notFor(w, w.days[0], "Onion uttapam")).toEqual(["Ravi"]);
-    // Bhindi masala is the catalog's Bhindi sabzi: okra, with onion it can be made without.
+    // Bhindi masala is saved as the catalog's Bhindi sabzi (catalog_item): okra, with onion it can be made without.
     expect(notFor(w, w.days[0], "Bhindi masala")).toEqual([]);
     expect(leaveOutNotes(w, w.days[0], "Bhindi masala")).toEqual(["make without onion for Ravi"]);
   });
@@ -148,6 +148,14 @@ describe("one meaning model checks", () => {
     const w = make({ library: [dish("Kadhi", "Lunch", { contains_read: [] })], rules: [peanut] });
     expect(notFor(w, at([GS, AG]), "Kadhi")).toEqual([]);
     expect(ruleUnknowns(w, at([GS, AG]), "Kadhi")).toEqual([{ dish: "Kadhi", who: AG, tag: "peanut", quote: "Agastya is allergic to peanuts", allergy: true, date: WEEK[0], slot: "Lunch" }]);
+  });
+
+  it("a family dish named like a catalog item but saved without one is the family's own: never read, it is asked, allergy first", () => {
+    const onion = rule({ who: AG, targets: [{ type: "ingredient", tag: "onion_garlic" }], quote: "Agastya is allergic to onion" });
+    const w = make({ library: [dish("Bhindi masala", "Lunch", { contains_read: [] })], rules: [onion] });
+    expect(placeOfDish(w, "Lunch", "Bhindi masala")).toEqual({ kind: null, sub: null, item: null });
+    expect(notFor(w, at([GS, AG]), "Bhindi masala")).toEqual([]);
+    expect(ruleUnknowns(w, at([GS, AG]), "Bhindi masala")).toEqual([{ dish: "Bhindi masala", who: AG, tag: "onion_garlic", quote: "Agastya is allergic to onion", allergy: true, date: WEEK[0], slot: "Lunch" }]);
   });
 
   it("a family dish under an allergy is vouched: no break, no ask", () => {

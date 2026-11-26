@@ -11,7 +11,7 @@ import { BASE_TAGS, FREQUENCY_DAYS, STAPLES_FROM_PLANNED, TAG_PARENT, UNTRIED_MA
 import { isAllergyRule } from "./allergy";
 import { dishKey } from "./dishText";
 import { looksLike, looksLikeRows, staples, type HistoryRow, type LibraryDish, type Rule, type Slot } from "./slotStore";
-import { catalogIngredients, catalogItem, CATALOG, contentsItem, mealKinds, plannerTags } from "./kinds";
+import { catalogIngredients, catalogItem, catalogKind, CATALOG, mealKinds, plannerTags } from "./kinds";
 import { hitsTarget, targetsOf, targetText, type DishPlace, type RuleTarget } from "./targets";
 import { ruleHolds, type PlanDay } from "./planDays";
 
@@ -37,7 +37,9 @@ export function readFor(read: Set<string>, item: string): boolean {
 export type DishIngredient = { name: string; main: boolean; tags: Set<string> };
 /** What a dish contains and was read for; for a catalog item, its ingredients (decided 21: a rule broken only by ingredients
  *  the dish can be made without is a note, not a block). */
-export type DishFacts = { tags: Set<string>; read: Set<string>; ingredients?: DishIngredient[] };
+export type DishFacts = { tags: Set<string>; read: Set<string>; ingredients?: DishIngredient[];
+  /** The catalog item these facts are, by an exact name (the row's catalog_item or the dish's own name): its ingredient list is
+   *  complete, so every ingredient word is known for it. Unset: the family's own dish, known only by its read. */ catalog?: string };
 /** The ingredients that bring a tag into a dish when it can be made without every one of them (decided 21): none of its main
  *  ingredients brings it. Null when one does, when no ingredient of it does (the tag came from a read: it is the dish's), or
  *  when the dish's ingredients are not known. */
@@ -74,7 +76,7 @@ function ingredientTags(tag: string): string[] {
  *  the tag (or a kind it is of), or one read for every tag the ingredient brings and having none of them (a dish read as without
  *  dairy has no curd). */
 export function knownFor(f: DishFacts, tag: string): boolean {
-  if (f.ingredients?.length || readFor(f.read, tag)) return true;
+  if ((f.catalog && f.ingredients?.length) || readFor(f.read, tag)) return true;
   const brings = ingredientTags(tag);
   return brings.length > 0 && brings.every((b) => readFor(f.read, b) && !f.tags.has(b));
 }
@@ -188,14 +190,26 @@ export function dishHits(w: Week, slot: string, dish: string, t: RuleTarget): bo
   return !!hitsTarget(t, placeOfDish(w, slot, dish)) || (t.type === "item" && dishKey(t.item) === dishKey(dish));
 }
 /** What a dish contains and was read for, at a slot: a read made this run, else its library row there, else any row of it;
- *  and for a catalog item (or a staple named by its kind: "Rice" is Steamed rice) the catalog's answer for every tag that read
+ *  and for a catalog item by exact name only (its catalog_item, its own name, or a staple named by its kind: "Rice" is Steamed
+ *  rice; never a word match) the catalog's answer for every tag that read
  *  left out, and its ingredients. A planned catalog item is so read for every catalog tag: none is left unknown to fail
  *  closed on (owner, 26 Nov: a Steamed rice saved without pork, nuts or sugar read). */
 export function factsOf(w: Week, slot: string, dish: string): DishFacts {
   const row = libAt(w, slot, dish) ?? w.library.find((d) => d.key === dishKey(dish));
   const run = w.facts.get(dishKey(dish));
   const base = run ?? (row ? { tags: withParents(row.contains), read: new Set(row.contains_read.map(canonTag)) } : { tags: new Set<string>(), read: new Set<string>() });
-  return withCatalog(base, contentsItem(row?.catalog_item ?? null) ?? contentsItem(row?.name ?? dish));
+  return withCatalog(base, exactCatalogItem(row, dish));
+}
+/** The catalog item a dish is by exact names only (never a word match: planning never matches a family word to the catalog):
+ *  its row's catalog_item, else the catalog item of the dish's own name, else for a staple plate named by its kind alone
+ *  ("Rice") that kind's everyday item (Steamed rice); null for the family's own dish ("Bhindi masala" with no catalog_item). */
+function exactCatalogItem(row: LibraryDish | undefined, dish: string): string | null {
+  if (row?.catalog_item) return catalogItem(row.catalog_item)?.item.name ?? null;
+  const name = row?.name ?? dish;
+  const hit = catalogItem(name);
+  if (hit) return hit.item.name;
+  const k = catalogKind(name);
+  return k?.staple ? k.items[0]?.name ?? null : null;
 }
 const withCatalogMemo = new WeakMap<DishFacts, Map<string, DishFacts>>();
 /** A dish's facts with its catalog item's laid over what they left unread, and the item's ingredients. */
@@ -208,7 +222,7 @@ export function withCatalog(f: DishFacts, item: string | null): DishFacts {
   const t = plannerTags(item);
   if (!t) return f;
   const cat = withParents(t.contains);
-  const out: DishFacts = { tags: new Set([...f.tags, ...[...cat].filter((x) => !readFor(f.read, x))]), read: new Set([...f.read, ...withParents(t.read)]),
+  const out: DishFacts = { tags: new Set([...f.tags, ...[...cat].filter((x) => !readFor(f.read, x))]), read: new Set([...f.read, ...withParents(t.read)]), catalog: item,
     ingredients: f.ingredients ?? (catalogIngredients(item) ?? []).map((x) => ({ name: x.name, main: x.main, tags: withParents(x.tags) })) };
   memo.set(item, out);
   return out;
