@@ -7,7 +7,7 @@ import { saysNoEggs, buildMeal, codePlace, nearestDish, cuisinesOf, regionalFor,
 import { keptOften, swapItems } from "./setup";
 import { dishKey } from "./dishText";
 import { checkRead, diffSetup, familyLines, familySentences, frequencyOf, householdOf, lunchLine, personOf, plainWords, quoteHasDayOrCount, readOf, resolveSlot,
-  ruleSaid, saidByFamily, savedOf, homeViolations, DISHES_ASK, SETUP_PARTS, SETUP_SYSTEM, CONTAINS_BATCH, daysOf, clockOf, itemWord, allergyAsk, answeredIn, mealOf, type Saved, type SetupRead } from "./setup";
+  ruleSaid, saidByFamily, savedOf, homeViolations, swapOnly, DISHES_ASK, SETUP_PARTS, SETUP_SYSTEM, CONTAINS_BATCH, daysOf, clockOf, itemWord, allergyAsk, answeredIn, mealOf, type Saved, type SetupRead } from "./setup";
 import { isAllergyRule } from "./allergy";
 import { houseCook, visitsOf } from "./makePlan";
 import { listRules, listSlots } from "./slotStore";
@@ -1716,6 +1716,34 @@ describe("setup checks what a read left out (H1-H3)", () => {
     // A box with its link needs no re-read.
     const { f: f2 } = await run();
     expect(f2.of("dishes")).toHaveLength(1);
+  });
+
+  // H2: a swap item is off a meal's templates by the family's sentences, not by the reader's fields (A8, A9).
+  const packQ = "bread toast for her breakfast in case we make pongal";
+  const packSwap = { quote: packQ, items: ["pongal"] };
+  const packSentences = ["sometimes we pack ira bread toast for her breakfast in case we make pongal since she doesnt like it", "ira carries a breakfast box"];
+  it("swapOnly: how-often from the swap's own sentence does not keep the dish", () => {
+    // The dish's "sometimes" sits in the swap's own sentence: no sentence names it apart.
+    expect(swapOnly("Bread toast", packSentences, packSwap)).toBe(true);
+  });
+  it("swapOnly: a dish named in another sentence stays", () => {
+    expect(swapOnly("Bread toast", [...packSentences, "bread toast on busy days"], packSwap)).toBe(false);
+    expect(swapOnly("Bread toast", ["ira carries a breakfast box"], packSwap)).toBe(false);   // named nowhere: no sign it is the swap's alone
+  });
+  it("writeKinds: a box's library dish with how-often from the swap's own sentence is on no box template; its library row stays", async () => {
+    // An item the swap gives (a kind word like "bread toast" gives no item: the meal's dish of that kind stays, review 1).
+    const said = "Sometimes we pack Ira cheese toast for her breakfast in case we make pongal since she doesnt like it";
+    const q = "cheese toast for her breakfast in case we make pongal";
+    const sw = { hard: true, what: "swap", who: "Ira", items: ["pongal"], to: "cheese toast", slots: ["Breakfast", "Ira's breakfast box"], quote: q };
+    const { k, slot } = await run({ home: { ...withBoxes, slots: [...mains, sprouts, { ...bbox, home_meal: "none" }, lbox] }, rules: { rules: [sw] },
+      dishes: { ...I_DISHES, library: [...I_DISHES.library, ["Pongal", "Breakfast", "Pongal some days"], ["Cheese toast", "Ira's breakfast box", q], ["Sandwich", "Ira's breakfast box", "a sandwich"]],
+        links: I_DISHES.links.filter((l) => l[0] !== "Ira's breakfast box") },
+      often: { often: [["Cheese toast", "Ira's breakfast box", q, "Sometimes", "sometimes", ""]] } },
+    [...I_TRANSCRIPT, "Q: Anything else?", `A: Pongal some days. ${said}. Or a sandwich.`]);
+    const box = JSON.stringify(slot("Ira's breakfast box").templates).toLowerCase();
+    expect(box).toContain("sandwich");
+    expect(box).not.toContain("cheese toast");
+    expect(k.rows("library").some((d) => d.name === "Cheese toast" && d.slot === "Ira's breakfast box")).toBe(true);
   });
 });
 

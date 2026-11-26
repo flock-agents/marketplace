@@ -1922,12 +1922,12 @@ export const swapItems = (rules: (Pick<Rule, "what" | "hard" | "slots" | "to" | 
       keys: uniq([...(byWord ? [dishKey(r.to!)] : []), ...(r.gives?.type === "item" ? [dishKey(r.gives.item)] : [])]) };
   })
   .filter((w) => w.keys.length);
-/** A dish is only a swap's (G1, review 1) when it has no how-often or days of its own and every place it was named is that swap's
- *  words: inside its quote (or holding it), or naming the dish it replaces. Named apart from the swap, it is a dish of the meal too. */
-export function swapOnly(d: { frequency: unknown; days: unknown[] | null; said: string | null }, quotes: string[], swap: { quote: string; items: string[] }): boolean {
-  if (d.frequency || d.days?.length || d.said || !quotes.length) return false;
-  const sw = plainWords(swap.quote), its = swap.items.map(plainWords).filter(Boolean);
-  return quotes.every((q) => { const w = plainWords(q); return !!w && (sw.includes(w) || w.includes(sw) || its.some((i) => wordsIn(w, i))); });
+/** A dish is only a swap's (G1, review 1; H2) when every family sentence that names it holds the swap's words (or lies inside
+ *  them): by the family's sentences, never by what a reader wrote of it, so a how-often said in the swap's own sentence is the
+ *  swap's too. Named in any other sentence, or in none, it is a dish of the meal. */
+export function swapOnly(name: string, sentences: string[], swap: { quote: string; items: string[] }): boolean {
+  const sw = plainWords(swap.quote), naming = sentences.filter((s) => namedIn(name, [s]));
+  return !!sw && naming.length > 0 && naming.every((s) => ` ${s} `.includes(` ${sw} `) || ` ${sw} `.includes(` ${s} `));
 }
 
 /** A dish on a meal's saved templates: a kind part's dish or a fixed item. */
@@ -1952,7 +1952,7 @@ function linkKind(tx: Db, l: ReadLink): { kind: string; sub: string | null } | n
 /** Write the kinds read: each dish's kind, sub-kind and catalog item; each meal's kinds and templates (a shape the store refuses
  *  is logged and that meal left as it was, never the setup failed); the family's cuisines; what was read, kept for corrections.
  *  Gives each meal's line in the family's words, and the cuisines. */
-export function writeKinds(tx: Db, plan: KindsPlan, placed: Map<string, Place>, opts: { lines: string[]; log: (l: string) => void; left?: KindsAsk[] }, by: string,
+export function writeKinds(tx: Db, plan: KindsPlan, placed: Map<string, Place>, opts: { lines: string[]; sentences: string[]; log: (l: string) => void; left?: KindsAsk[] }, by: string,
   changes: Change[]): { meals: Record<string, string>; changed: string[]; cuisines: string[]; asks: string[] } {
   const meals: Record<string, string> = {}, cache = { ...plan.cache }, changed: string[] = [], asks: string[] = [];
   const h0 = getHouse(tx);
@@ -2005,7 +2005,7 @@ export function writeKinds(tx: Db, plan: KindsPlan, placed: Map<string, Place>, 
       const swap = swapsHere.find((w) => w.keys.includes(dishKey(name)) || w.keys.includes(d.key));
       const qs = plan.quotes?.[placeKey(slot.name, d.key)];
       // Not read now (a correction of another meal): as it was saved, on no template when the swap left it off then.
-      const off = swap && (qs ? swapOnly(d, qs, swap) : !onTemplates(slot.templates, [name, d.name]));
+      const off = swap && (qs ? swapOnly(d.name, opts.sentences, swap) : !onTemplates(slot.templates, [name, d.name]));
       if (off) { opts.log(`kinds: ${slot.name}: ${name} is only a swap's dish, on no template`); continue; }
       dishes.push({ name, place, frequency: d.frequency, days: d.days, said: d.said });
     }
@@ -2212,7 +2212,7 @@ export async function applySetup(deps: { db: Db; emit: Emit; model: ModelCall; p
   if (missing) log(`contains: ${missing} dishes not read for every tag (unknown: the plan fails closed on them)`);
   // Each meal's kinds and templates; on a correction, a meal whose plates now read differently, and the cuisines, are said.
   const cuisinesBefore = houseView(getHouse(deps.db)).cuisines ?? [];
-  const kinds = commit(deps.db, deps.emit, (tx, changes) => writeKinds(tx, plan, placed, { lines: said, log, left }, by, changes));
+  const kinds = commit(deps.db, deps.emit, (tx, changes) => writeKinds(tx, plan, placed, { lines: said, sentences, log, left }, by, changes));
   for (const a of kinds.asks) if (!checked.asks.includes(a)) checked.asks.push(a);
   if (!first) {
     for (const [slot, line] of Object.entries(kinds.meals)) if (line && (line !== before4?.meals?.[slot] || kinds.changed.includes(slot))) ops.changed.push(`${slot}: ${line}.`);
