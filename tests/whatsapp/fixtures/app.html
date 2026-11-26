@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<!--
+  A STAND-IN for signed-in WhatsApp Web, hand-made with made-up data: the markup the skill's page
+  scripts expect (#side, #pane-side rows with span[title], #main with data-id messages carrying
+  data-pre-plain-text, the footer's contenteditable box and Send button, search results in
+  sections). It is NOT a saved copy of the real site: a run on a linked account is what confirms it.
+-->
+<html><head><title>WhatsApp</title></head><body>
+<div id="app">
+  <div id="side">
+    <header><div><div contenteditable="true" role="textbox" aria-label="Search input textbox" data-tab="3" id="search"></div></div></header>
+    <div id="pane-side">
+      <div aria-label="Chat list" role="grid" id="list"></div>
+    </div>
+  </div>
+  <div id="main-slot"></div>
+</div>
+<script>
+(() => {
+const chats = [
+  { name: "Family 🏡", group: true, time: "10:42", unread: 3, preview: "Priya: Dinner at 8?", messages: [
+    { id: "false_120363@g.us_A1", pre: "[10:30, 25/11/2026] Priya: ", text: "Who is coming tonight?" },
+    { id: "true_120363@g.us_A2", pre: "[10:35, 25/11/2026] You: ", text: "Me! 🎉", emojiImg: true },
+    { id: "false_120363@g.us_A3", media: "photo", caption: "The cake" , pre: "[10:40, 25/11/2026] Rahul: " },
+    { id: "false_120363@g.us_A4", media: "ptt" },
+    { id: "false_120363@g.us_A5", pre: "[10:42, 25/11/2026] Priya: ", text: "Dinner at 8?" },
+  ] },
+  { name: "Mom", group: false, time: "Yesterday", unread: 0, preview: "Call me when free", avatar: "default-user", messages: [
+    { id: "false_9198@c.us_B1", pre: "[21:02, 24/11/2026] Mom: ", text: "Call me when free" },
+  ] },
+  { name: "Mommy Bakes", group: false, time: "23/11/2026", unread: 1, preview: "Your order is ready", messages: [
+    { id: "false_9199@c.us_C1", pre: "[09:00, 23/11/2026] Mommy Bakes: ", text: "Your order is ready" },
+  ] },
+  { name: "Old Friend", group: false, time: "01/02/2026", unread: 0, preview: "See you", hidden: true, messages: [
+    { id: "false_9197@c.us_D1", pre: "[18:00, 01/02/2026] Old Friend: ", text: "See you" },
+  ] },
+  { name: "Announcements", group: true, time: "02/02/2026", unread: 0, preview: "Only admins can send", readOnly: true, messages: [] },
+];
+const contacts = ["Old Friendly Plumber"];
+
+function row(c) {
+  const icon = c.group ? '<span data-icon="default-group"></span>' : c.avatar ? '<span data-icon="' + c.avatar + '"></span>' : '<img src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" alt="">';
+  const badge = c.unread ? '<span aria-label="' + c.unread + ' unread messages">' + c.unread + '</span>' : "";
+  return '<div role="listitem"><div tabindex="-1"><div>' + icon + '</div><div><div><span dir="auto" title="' + c.name + '">' + c.name + '</span><div>' + c.time + '</div></div><div><span title="' + c.preview + '">' + c.preview + '</span>' + badge + '</div></div></div></div>';
+}
+
+function renderList() {
+  document.getElementById("list").innerHTML = chats.filter((c) => !c.hidden).map(row).join("");
+}
+
+function message(m) {
+  const out = m.id.startsWith("true_");
+  let inner = "";
+  if (m.media === "photo") inner = '<div><img src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" alt=""></div>' + (m.caption ? '<div class="copyable-text" data-pre-plain-text="' + m.pre + '"><span class="selectable-text"><span>' + m.caption + '</span></span></div>' : "");
+  else if (m.media === "ptt") inner = '<div><span data-icon="audio-play"></span><span>0:12</span></div><div><span>10:41</span></div>';
+  else if (m.emojiImg) inner = '<div class="copyable-text" data-pre-plain-text="' + m.pre + '"><span class="selectable-text"><span>Me! <img class="emoji" alt="🎉" data-plain-text="🎉" src="data:image/gif;base64,R0lGODlhAQABAAAAACw="></span></span></div>';
+  else inner = '<div class="copyable-text" data-pre-plain-text="' + m.pre + '"><span class="selectable-text"><span>' + m.text + '</span></span></div>';
+  const ticks = out ? '<span data-icon="' + (m.pending ? "msg-time" : "msg-dblcheck") + '"></span>' : "";
+  return '<div role="row"><div data-id="' + m.id + '" class="' + (out ? "message-out" : "message-in") + '">' + inner + ticks + '</div></div>';
+}
+
+function openChat(c) {
+  const footer = c.readOnly ? '<footer><div>Only admins can send messages</div></footer>'
+    : '<footer><div><div contenteditable="true" role="textbox" aria-label="Type a message" id="compose"></div></div><button aria-label="Send" id="send"><span data-icon="send"></span></button></footer>';
+  document.getElementById("main-slot").innerHTML = '<div id="main"><header><div><span dir="auto" title="' + c.name + '">' + c.name + '</span></div></header>'
+    + '<div id="msgs"><div role="row"><div>TODAY</div></div>' + c.messages.map(message).join("") + "</div>" + footer + "</div>";
+  const send = document.getElementById("send");
+  if (send) send.addEventListener("click", () => {
+    const box = document.getElementById("compose");
+    const text = box.innerText.replace(/\n+/g, "\n").trim();
+    if (!text) return;
+    c.messages.push({ id: "true_x_" + c.messages.length, pre: "[11:00, 25/11/2026] You: ", text, pending: document.body.dataset.slow === "1" });
+    document.body.dataset.sent = JSON.stringify(JSON.parse(document.body.dataset.sent || "[]").concat([{ chat: c.name, text }]));
+    if (/^https?:/.test(location.protocol)) fetch("/__dummy/send", { method: "POST", body: JSON.stringify({ chat: c.name, text }) });
+    box.innerHTML = "";
+    openChat(c);
+  });
+}
+
+document.getElementById("list").addEventListener("click", (e) => {
+  const item = e.target.closest('[role="listitem"]');
+  if (!item) return;
+  const name = item.querySelector("span[title]").getAttribute("title");
+  openChat(chats.find((c) => c.name === name));
+});
+
+document.getElementById("search").addEventListener("input", (e) => {
+  const q = e.target.innerText.trim().toLowerCase();
+  if (!q) { renderList(); return; }
+  const hitChats = chats.filter((c) => c.name.toLowerCase().includes(q));
+  const hitContacts = contacts.filter((n) => n.toLowerCase().includes(q));
+  const hitMsgs = chats.flatMap((c) => c.messages.filter((m) => (m.text || "").toLowerCase().includes(q)).map((m) => ({ c, m })));
+  let html = "";
+  if (hitChats.length) html += '<div><div>Chats</div></div>' + hitChats.map(row).join("");
+  if (hitContacts.length) html += '<div><div>Contacts</div></div>' + hitContacts.map((n) => '<div role="listitem"><div><span dir="auto" title="' + n + '">' + n + '</span></div></div>').join("");
+  if (hitMsgs.length) html += '<div><div>Messages</div></div>' + hitMsgs.map(({ c, m }) => '<div role="listitem"><div><span dir="auto" title="' + c.name + '">' + c.name + '</span><div>' + c.time + '</div></div><div><span title="' + m.text + '">' + m.text + '</span></div></div>').join("");
+  document.getElementById("list").innerHTML = html;
+});
+
+renderList();
+})();
+</script>
+</body></html>

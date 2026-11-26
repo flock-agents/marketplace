@@ -1,0 +1,72 @@
+{
+  "name": "WhatsApp",
+  "slug": "whatsapp",
+  "icon": "icon.svg",
+  "description": "Read your WhatsApp chats and groups, search them, and send a message you approved",
+  "version": "1.0.0",
+  "author": "flock",
+  "category": "integration",
+  "tags": [
+    "whatsapp",
+    "messaging",
+    "chat",
+    "social"
+  ],
+  "minFlockVersion": "0.24.0",
+  "tier": "installable",
+  "requires": [
+    {
+      "type": "browser_session",
+      "service": "whatsapp",
+      "loginUrl": "https://web.whatsapp.com/",
+      "description": "Link WhatsApp to Flock's browser with a code on your phone",
+      "recommended": true,
+      "rationale": "WhatsApp has no API for personal accounts: WhatsApp Web, linked as one of your devices, is how the agent reads and sends for you."
+    }
+  ],
+  "hasScripts": true,
+  "networkAccess": true,
+  "functions": {
+    "list-chats": {
+      "timeoutMs": 120000,
+      "reason": "Opens WhatsApp Web and waits for it to load the chats (up to a minute after a while away), then reads the list."
+    },
+    "read-chat": {
+      "timeoutMs": 150000,
+      "reason": "Opens WhatsApp Web, waits for the chats (up to a minute), finds the chat (by the list, else WhatsApp's search) and reads its last messages."
+    },
+    "search": {
+      "timeoutMs": 120000,
+      "reason": "Opens WhatsApp Web, waits for the chats (up to a minute), then types the search and reads the results."
+    },
+    "send-message": {
+      "timeoutMs": 150000,
+      "reason": "Opens WhatsApp Web, waits for the chats (up to a minute), opens the chat, types the message, sends it and checks it shows."
+    }
+  },
+  "security": {
+    "allowedFunctions": [
+      "list-chats",
+      "read-chat",
+      "search",
+      "send-message"
+    ],
+    "functionEffects": {
+      "list-chats": "read",
+      "read-chat": "read",
+      "search": "read",
+      "send-message": "irreversible"
+    },
+    "trustLevel": "third-party",
+    "networkEndpoints": [
+      {
+        "hostname": "web.whatsapp.com",
+        "purpose": "WhatsApp Web: the chat list, chats, search and sending",
+        "methods": [
+          "GET",
+          "POST"
+        ]
+      }
+    ]
+  }
+}
