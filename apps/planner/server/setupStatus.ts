@@ -38,6 +38,8 @@ export const STATUS_IDS = ["people", "allergies", "meals", "cook", "menu", "shop
 export type StatusId = (typeof STATUS_IDS)[number];
 
 export const FIRST_TASK = `Make a ${FIRST_PLAN_DAYS}-day meal plan from today`;
+/** Once the setup is done: the how-to, said once in one short message (held back from the setup's plans). */
+export const HOW_IT_WORKS_NEXT = "Setup is done: tell them once, in one short message, how it goes from here: a plan for the week every Sunday, a check at 3 pm and 7 pm with the cart, nothing ordered without their yes, and a reel they send can be saved as a recipe";
 
 // ── What it is read from ──
 
@@ -180,6 +182,7 @@ function nextOf(s: Snapshot, stage: Stage, missing: Missing[], today: string): s
     if (gap.length) return `Plan the rest of the week: make_plan { from: "${gap[0]}", days: ${daysBetween(gap[0], addDays(s.planned[0], SETUP_PLAN_DAYS - 1)) + 1} }, then ask for feedback once more`;
     if (!groceryAsked(s)) return "Offer to connect the grocery apps the family uses, one at a time with the person's yes; then read their past orders (import_order_history)";
   }
+  if (stage === "done") return HOW_IT_WORKS_NEXT;
   return undefined;
 }
 

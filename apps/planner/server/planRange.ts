@@ -8,7 +8,7 @@ import { DEFAULT_SLOTS, PLAN_DAYS_MAX, SETUP_PLAN_DAYS, SLOT_ORDER } from "./db/
 import { addDays, daysBetween, mondayOf, todayStr } from "./dates";
 import { refuse, writeRoutes, type Db, type Emit } from "./family";
 import { dateOf } from "./meals";
-import { joinPlanTexts, planMessage, rangeTitle, weekSendText, type PlanText } from "./messages";
+import { joinPlanTexts, planMessage, rangeTitle, setupPlanMessage, weekSendText, type PlanText } from "./messages";
 import type { ModelCall } from "./model";
 import { makePlan, OP_BUDGET_MS, type MakePlanDeps } from "./makePlan";
 import { platformPeers } from "./planDays";
@@ -50,7 +50,8 @@ export async function planRange(deps: RangeDeps): Promise<RangeResult> {
   const from = deps.from < deps.today ? deps.today : deps.from;
   const to = addDays(deps.from, deps.days - 1);
   if (to < deps.today) refuse(`${deps.from} to ${to} is over: plan from today (${deps.today}) or later`);
-  const suggest_new = deps.suggest_new ?? setupWeek(deps.db, deps.today);
+  const setup = setupWeek(deps.db, deps.today);
+  const suggest_new = deps.suggest_new ?? setup;
   const defaults = applyMealDefaults(deps.db, deps.emit);
   const texts: PlanText[] = [];
   let intro: string | undefined, through: string | undefined;
@@ -58,7 +59,7 @@ export async function planRange(deps: RangeDeps): Promise<RangeResult> {
   const weeks = weekChunks(from, to);
   const budgetMs = Math.floor((deps.budgetMs ?? OP_BUDGET_MS) / weeks.length);
   for (const week of weeks) {
-    const r = await makePlan({ ...deps, weekStart: week.weekStart, range: { from: week.from, to: week.to }, suggest_new, budgetMs });
+    const r = await makePlan({ ...deps, weekStart: week.weekStart, range: { from: week.from, to: week.to }, suggest_new, budgetMs, holdIntro: setup });
     if (!r.ok) return { ...r, ...(through ? { planned_through: through } : {}) };
     through = week.to;
     if (r.text) texts.push(r.text);
@@ -66,7 +67,7 @@ export async function planRange(deps: RangeDeps): Promise<RangeResult> {
     unmet.push(...(r.unmet ?? [])); asked.push(...(r.asked ?? [])); none.push(...(r.no_ingredients ?? []));
   }
   const text = joinPlanTexts(texts, rangeTitle(from, to, deps.today));
-  return { ok: true, from, to, message: planMessage(text), ...(intro ? { intro } : {}), instructions: weekSendText(!!intro),
+  return { ok: true, from, to, message: setup ? setupPlanMessage(text) : planMessage(text), ...(intro ? { intro } : {}), instructions: weekSendText(!!intro),
     ...(defaults.length ? { defaults } : {}), ...(unmet.length ? { unmet: [...new Set(unmet)] } : {}), ...(asked.length ? { asked: [...new Set(asked)] } : {}),
     ...(none.length ? { no_ingredients: none } : {}) };
 }

@@ -14,7 +14,8 @@
 - Rules for when someone visits: "no eggs when my parents are here" holds only on the days they are added to a meal.
 - Allergies follow each dish's ingredients: a dish with the allergen at its heart is kept from that person, one that can be
   made without it says "make without peanuts for Kabir", so everyone has something at every meal.
-- A first plan says once that its dishes are suggestions, instead of listing every new one.
+- The plans made while setting up fit in one WhatsApp message: the days, one line asking what to swap, and the Week page.
+  How it all works comes in one short message once setup is done.
 - After the first plan and your first thoughts on it, your Flock offers to connect your grocery apps one at a time, and
   reads your past orders to know what you usually buy. Never before the first plan.
 - Every like, dislike and swap is remembered. A dish turned down twice gets one question: "Should I stop planning it?"

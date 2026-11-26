@@ -327,6 +327,14 @@ export function joinPlanTexts(texts: PlanText[], title: string): PlanText {
     new_dishes: texts.flatMap((t) => t.new_dishes), question: texts.find((t) => t.question)?.question ?? null, link: texts[0]?.link ?? "" };
 }
 
+/** A plan made while setting up (the first 3 days, then the next 4), short enough for one WhatsApp message: the days, the
+ *  standing notes, one line that the dishes are suggestions, the one question when there is one, and the Week link. */
+export function setupPlanMessage(t: PlanText): string {
+  const full = planMessage({ ...t, new_dishes: [], question: null });
+  const days = full.slice(0, full.indexOf("\n\nThe whole week:"));
+  return [days, "", "Suggestions for now: tell me what to swap.", ...(t.question ? [t.question] : []), `[Week page](${t.link})`].join("\n");
+}
+
 /** A time of day as it reads inside a sentence: "3", "7:30" (no am or pm). */
 const bare = (time: string): string => clockText(time).replace(/ [ap]m$/, "");
 const partOfDay = (time: string): string => { const h = Number(time.split(":")[0]); return h < 12 ? "morning" : h < 17 ? "afternoon" : "evening"; };

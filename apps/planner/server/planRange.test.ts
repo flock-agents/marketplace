@@ -38,7 +38,13 @@ describe("make_plan from a date", () => {
     expect(r.message.startsWith("Here's the plan for the next 3 days.")).toBe(true);
     for (const day of ["*Saturday*", "*Sunday*", "*Monday*"]) expect(r.message).toContain(day);
     expect(r.message).not.toContain("*Tuesday*");
-    expect(r.intro).toContain("How it works");
+    // Short for WhatsApp (rerun b, 27 Nov): the days, one line on swaps, the Week page; the how-to waits for the setup's end.
+    expect(r.intro).toBeUndefined();
+    for (const gone of ["How it works", "The whole week", "Tell me anything to change", "New this week"]) expect(r.message).not.toContain(gone);
+    expect(r.message).toContain("Suggestions for now: tell me what to swap.");
+    expect(r.message.trimEnd().split("\n").at(-1)).toMatch(/^\[Week page\]\(.+\)$/);
+    expect(r.message.length).toBeLessThan(700);
+    expect(k.rows("house")[0].intro_sent_at).toBeNull();
     expect(r.text).toBeUndefined();
   });
 

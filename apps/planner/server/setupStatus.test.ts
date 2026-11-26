@@ -116,7 +116,9 @@ describe("status: the stages", () => {
     expect(s.stage).toBe("feedback");
     expect(s.next).toContain("Offer to connect the grocery apps");
     await op("set_answered", { ids: ["grocery"] });
-    expect((await status()).stage).toBe("done");
+    s = await status();
+    expect(s.stage).toBe("done");
+    expect(s.next).toContain("how it goes from here");
   });
 
   it("a rating saved after the first plan is a round of feedback", async () => {
