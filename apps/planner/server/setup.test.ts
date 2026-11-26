@@ -1353,7 +1353,8 @@ describe("apply_setup v2: the prompts", () => {
     expect(SETUP_PARTS.find((p) => p.id === "often")!.system).toContain("A dish joined to a list with its own words, at any meal and for anyone");
   });
   it("never name an eval household's people, cook or surname", () => {
-    for (const h of HOUSEHOLDS) for (const name of [...h.truth.people.map((p) => p.name), ...(h.truth.cook ? [h.truth.cook.name] : [])])
+    // A cook the family gives no name is written by the role word ("Cook", h18): that word is no name to keep out.
+    for (const h of HOUSEHOLDS) for (const name of [...h.truth.people.map((p) => p.name), ...(h.truth.cook && !/^cook$/i.test(h.truth.cook.name) ? [h.truth.cook.name] : [])])
       expect(SETUP_SYSTEM, `${h.id} ${name}`).not.toMatch(new RegExp(`\\b${name}\\b`, "i"));
     for (const name of ["Sharma", "Iyer", "Shiva", "Reddy", "Agarwal", "Kulkarni", "Menon", "Banerjee", "Ankita", "Agastya", "Gowri"])
       expect(SETUP_SYSTEM, name).not.toMatch(new RegExp(`\\b${name}\\b`, "i"));
