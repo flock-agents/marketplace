@@ -3,7 +3,7 @@
 // reads back from the rows, and applies a correction as a diff.
 import { describe, it, expect } from "bun:test";
 import { boot } from "./testkit";
-import { saysNoEggs, buildMeal, codePlace, cuisinesOf, regionalFor, kitchenLine, needsNamed, placeOf, wordOf, KINDS_SYSTEM, type MealDish, type Place } from "./setup";
+import { saysNoEggs, buildMeal, codePlace, nearestDish, cuisinesOf, regionalFor, kitchenLine, needsNamed, placeOf, wordOf, KINDS_SYSTEM, type MealDish, type Place } from "./setup";
 import { checkRead, diffSetup, familyLines, familySentences, frequencyOf, householdOf, lunchLine, personOf, plainWords, quoteHasDayOrCount, readOf, resolveSlot,
   ruleSaid, saidByFamily, DISHES_ASK, SETUP_PARTS, SETUP_SYSTEM, CONTAINS_BATCH, daysOf, clockOf, itemWord, allergyAsk, answeredIn, mealOf, type Saved, type SetupRead } from "./setup";
 import { isAllergyRule } from "./allergy";
@@ -757,6 +757,21 @@ describe("the kinds model: each dish placed, each meal's templates, the cuisines
     expect(dinner.line).toBe("phulka, dal tadka and aloo gobi or bhindi sabzi; or phulka and aloo gobi or bhindi sabzi");
   });
 
+  it("a fixed part named by its kind word is the one clear catalog dish of it, their word kept; else their word (owner, 26 Nov)", () => {
+    const asDish = (name: string) => dish(name, { place: { ...codePlace(name)!, named: "dish" } });
+    expect(nearestDish(asDish("Stew"), "breakfast")).toEqual({ name: "Vegetable stew",
+      place: { kind: "Gravy", sub: "Kerala curry", item: "Vegetable stew", own: false, named: "dish", word: "stew" } });
+    expect(nearestDish(asDish("Kurma"), "breakfast")?.name).toBe("Vegetable kurma");
+    expect(nearestDish(asDish("Korma"), "breakfast")?.name).toBe("Vegetable kurma");
+    // Not fixed there (a gravy at lunch rotates), many dishes of the word (khichdi), a sub-kind with no one dish (sambar), a dish
+    // the catalog does not hold, or a dish already named: their word stays.
+    expect(nearestDish(asDish("Stew"), "lunch")).toBeNull();
+    expect(nearestDish(asDish("Khichdi"), "breakfast")).toBeNull();
+    expect(nearestDish(dish("Sambar", { place: { ...codePlace("Sambar")!, named: "dish" } }), "snack")).toBeNull();
+    expect(nearestDish(dish("Ammachi's stew"), "breakfast")).toBeNull();
+    expect(nearestDish(asDish("Ishtu"), "breakfast")).toBeNull();
+  });
+
   it("a dish at a meal its kind is not suggested at is a fixed part; a category word there is its kind (decided 18, 19)", () => {
     const b = buildMeal("breakfast", [dish("Appam"), dish("Vegetable stew")], [["Appam", "Vegetable stew"]]);
     expect(b.templates).toEqual([{ parts: [{ kind: "Appam" }, { items: ["Vegetable stew"] }], share: null, said: null }]);
@@ -884,6 +899,33 @@ describe("apply_setup: the kinds model, end to end with a fake model", () => {
     expect(r.said).toContain("Your usual meals:\n- Breakfast: khichdi (most days); or boiled chicken (2–3 times a week); or appam and vegetable stew (on Sundays)\n- Dinner: phulka and kovakkai; or phulka and chicken curry");
     expect(r.said).toContain("Your kitchen: Tamil, Kerala, South Indian. Tell me if that's not right.");
     expect(r.said).not.toContain("Your usual dishes");
+  });
+
+  it("idiyappam with stew at breakfast: the stew is kept fixed as Vegetable stew, read back in their words (owner, 26 Nov)", async () => {
+    const tr = ["Q: What did you have for breakfast last week?", "A: Idiyappam with stew most days, sometimes idiyappam with ammachi's curry."];
+    const line = "Idiyappam with stew most days";
+    const f = fake({ home: { slots: [{ name: "Breakfast", kind: "main" }] }, rules: { rules: [] },
+      dishes: { library: [["Idiyappam", "Breakfast", line], ["Stew", "Breakfast", line], ["Ammachi's curry", "Breakfast", "idiyappam with ammachi's curry"]],
+        seed: [["Breakfast", "Idiyappam, Stew", line], ["Breakfast", "Idiyappam, Ammachi's curry", "idiyappam with ammachi's curry"]] },
+      often: { often: [] }, kinds: { dishes: [{ name: "Stew", meal: "breakfast", named: "dish" }, { name: "Ammachi's curry", meal: "breakfast", own: true, named: "dish" }] },
+      contains: containsOf(), lint: { dishes: [] } });
+    const k = await boot({ model: f.model });
+    const r = await k.op("apply_setup", { household: FAMILY, transcript: tr });
+    expect(r.ok).toBe(true);
+    const names = k.rows("library").map((d) => d.name).sort();
+    expect(names).toEqual(["Ammachi's curry", "Idiyappam", "Vegetable stew"]);
+    const stew = k.rows("library").find((d) => d.name === "Vegetable stew")!;
+    expect([stew.kind, stew.sub, stew.catalog_item]).toEqual(["Gravy", "Kerala curry", "Vegetable stew"]);
+    const bf = (await k.owner("GET", "/api/family")).body.slots.find((s: any) => s.name === "Breakfast");
+    expect(bf.templates.map((t: any) => t.parts)).toEqual([[{ kind: "Idiyappam" }, { items: ["Vegetable stew"] }], [{ kind: "Idiyappam" }, { items: ["Ammachi's curry"] }]]);   // a word the catalog does not hold stays as said
+    expect(bf.kinds.map((x: any) => x.name)).not.toContain("Gravy");
+    expect(r.said).toContain("Breakfast: idiyappam and stew; or idiyappam and ammachi's curry");
+    // A correction that leaves breakfast alone keeps it so, still in their words.
+    const NEW = "Also we are four at home.";
+    const r2 = await k.op("apply_setup", { household: FAMILY, transcript: [...tr, "Q: Anything to change?", `A: ${NEW}`] });
+    expect(r2.ok).toBe(true);
+    expect(k.rows("library").map((d) => d.name).sort()).toEqual(["Ammachi's curry", "Idiyappam", "Vegetable stew"]);
+    expect((await k.owner("GET", "/api/family")).body.slots.find((s: any) => s.name === "Breakfast").templates).toEqual(bf.templates);
   });
 
   // Decided 20, end to end: a made-up Telugu home ("tomato pappu" says Andhra) and one whose region nothing says.
