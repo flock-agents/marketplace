@@ -1,9 +1,0 @@
-<!DOCTYPE html><html><body><div id="app">
-<div class="landing-wrapper">
-  <div>WhatsApp is open in another window. Click "Use here" to use WhatsApp in this window.</div>
-  <div><button>Close</button><button id="use">Use here</button></div>
-</div>
-</div>
-<script>
-document.getElementById("use").addEventListener("click", () => { location.hash = "used"; document.getElementById("app").innerHTML = '<div id="side"><div id="pane-side" aria-label="Chat list" role="grid"><div role="row"><span title="Mom">Mom</span></div></div></div>'; });
-</script></body></html>
