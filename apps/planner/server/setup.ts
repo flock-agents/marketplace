@@ -985,6 +985,9 @@ export async function applySetup(deps: { db: Db; emit: Emit; model: ModelCall; p
 export function mountSetupRoute(hono: Hono<any>, db: Db, emit: Emit, opts: { model: ModelCall; budgetMs?: number }) {
   const write = writeRoutes(hono);
   write("/api/family/setup", async (b, by, c) => {
+    // TEST ONLY (runner hand-over test, never released): the first apply_setup since the app started is refused.
+    const g = globalThis as { __setupRefusedOnce?: boolean };
+    if (!g.__setupRefusedOnce) { g.__setupRefusedOnce = true; return { body: { ok: false, reason: "test_refusal", say: "I couldn't save your setup just now. Tell me \"save my setup\" and I'll try again." } }; }
     const transcript = transcriptLines(b.transcript);
     if (!transcript.length) refuse("transcript is required: the planner's questions and the family's replies, word for word, as Q: / A: lines");
     // A setup is read from the family's own replies (owner 24 Nov, #29: an agent sent one line of its own, "Ankita is the only
