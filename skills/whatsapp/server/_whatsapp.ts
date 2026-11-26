@@ -49,10 +49,6 @@ export interface ServiceDeps {
   timings?: Partial<Timings>;
 }
 
-/** The WebSocket itself failed (network down, the egress refusing): Baileys reports it as
- *  "WebSocket Error (...)", often with code 500 or an HTTP status, though WhatsApp said nothing. Never
- *  a logout or a refusal by WhatsApp, which come as stream errors or a close on an open connection. */
-export const isTransportFailure = (message: string): boolean => message.startsWith("WebSocket Error");
 
 /** WhatsApp's close codes (Baileys DisconnectReason). */
 const CLOSE = { loggedOut: 401, forbidden: 403, multideviceMismatch: 411, connectionReplaced: 440, badSession: 500, restartRequired: 515 } as const;
@@ -60,6 +56,31 @@ const CLOSE = { loggedOut: 401, forbidden: 403, multideviceMismatch: 411, connec
 const MAX_SEND_TEXT = 4000;
 const LIST_PARAMS = ["chats", "to", "recipients", "recipient", "numbers", "number", "phone", "jid", "jids"];
 const MASS_MENTION = /(^|[^\p{L}\p{N}_@])@(all|everyone|here|channel|group|members)\b/iu;
+
+/** A close that is the network's doing, not WhatsApp's: the WebSocket failed (Baileys' "WebSocket
+ *  Error (...)", often with code 500 or the upgrade's HTTP status), or the connection, the egress or
+ *  TLS broke. */
+const TRANSPORT_FAILURE = /WebSocket Error|Failed to connect|Proxy connection failed|ECONN[A-Z]*|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|socket hang up|\bTLS\b|SSL|certificate/i;
+export const isTransportFailure = (message: string): boolean => TRANSPORT_FAILURE.test(message);
+
+export type CloseKind = "logged_out" | "refused" | "replaced" | "failed";
+
+/**
+ * What a close means. Only WhatsApp's own verdict ends the link: a logout (401), a device mismatch
+ * (411), or a bad session (500) WhatsApp sent as a stream error ("Stream Errored (...)", before or after
+ * the connection opened). Baileys also gives 500 to a WebSocket that never connected and to its own
+ * errors ("Cancelled", "All encryptions failed"), which say nothing about the link. A 403 the network
+ * gave is no refusal either. Anything else is a failed connection: retried within the caps, counted
+ * toward the pause.
+ */
+export function closeKind(code: number, message: string): CloseKind {
+  const transport = isTransportFailure(message);
+  if (code === CLOSE.loggedOut || code === CLOSE.multideviceMismatch) return "logged_out";
+  if (code === CLOSE.badSession) return message.startsWith("Stream Errored") && !transport ? "logged_out" : "failed";
+  if (code === CLOSE.forbidden) return transport ? "failed" : "refused";
+  if (code === CLOSE.connectionReplaced) return "replaced";
+  return "failed";
+}
 
 type Update = { kind: "qr"; qr: string } | { kind: "open" } | { kind: "pending" } | { kind: "newLogin" } | { kind: "closed"; code: number; message: string };
 
@@ -257,17 +278,17 @@ export class WhatsAppService {
    * refused the account), or (null) try again.
    */
   private closeOutcome(code: number, message: string): Fail | null {
-    if (isTransportFailure(message)) return null;
-    if (code === CLOSE.loggedOut || code === CLOSE.badSession || code === CLOSE.multideviceMismatch) {
+    const kind = closeKind(code, message);
+    if (kind === "logged_out") {
       this.deps.clearAuth(); this.store.clear();
       pause("logged_out", "WhatsApp logged this device out (it was unlinked on the phone, or WhatsApp ended it).", this.limitOpts);
       return new Fail("NOT_LINKED", "WhatsApp is not linked any more (it was unlinked on the phone, or WhatsApp ended it). Link it again with `link`.");
     }
-    if (code === CLOSE.forbidden) {
+    if (kind === "refused") {
       pause("refused", `WhatsApp refused this account (${message}).`, this.limitOpts);
       return new Fail("WHATSAPP_REFUSED", `WhatsApp refused this account (${message}). Tell the person; do not retry.`);
     }
-    if (code === CLOSE.connectionReplaced) {
+    if (kind === "replaced") {
       noteConnect(false, `${code} ${message}`, this.limitOpts);
       return new Fail("REPLACED", "Another connection of this linked device took over. Try again later.");
     }

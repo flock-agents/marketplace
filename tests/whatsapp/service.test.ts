@@ -5,7 +5,7 @@
 import { afterEach, describe, expect, it } from "bun:test";
 import { readFileSync, readdirSync, rmSync, writeFileSync } from "fs";
 import { join } from "path";
-import { MAX_RECONNECTS, MAX_SESSION_RECONNECTS, formatCode, phoneDigits } from "../../skills/whatsapp/server/_whatsapp";
+import { MAX_RECONNECTS, MAX_SESSION_RECONNECTS, closeKind, formatCode, isTransportFailure, phoneDigits } from "../../skills/whatsapp/server/_whatsapp";
 import { LIMITS, pause } from "../../skills/whatsapp/server/_limits";
 import { codeOf, history, linkedWorld, sleep, world, type World } from "./_mock";
 
@@ -310,16 +310,85 @@ describe("when WhatsApp pushes back: pause, never retry", () => {
     }
   });
 
-  it("a bad session WhatsApp itself reports (a stream error, 500) is still a logout", async () => {
+  it("a 500 Failed to connect before open on a linked device keeps the link and the stored chats", async () => {
+    const w = track(world((sock) => sock.close(500, "WebSocket Error (WebSocket connection to 'wss://web.whatsapp.com/ws/chat' failed: Failed to connect)"), { linked: true }));
+    w.wa.store.addMessages(history().messages);
+    const chats = w.wa.store.chatCount;
+    expect(await codeOf(w.wa.listChats({}))).toBe("CONNECT_FAILED");
+    expect(w.auth.cleared).toBe(0);
+    expect(w.wa.store.chatCount).toBe(chats);
+    expect(limits(w).paused).toBeNull();
+  });
+
+  it("a 500 with a transport message after the session was open reconnects, the link kept", async () => {
+    const w = track(linkedWorld());
+    await w.wa.listChats({});
+    w.sockets[0].close(500, "WebSocket Error (socket hang up)");
+    expect(await codeOf(w.wa.readChat({ chat: "Mom" }))).toBeNull();
+    expect(w.sockets.length).toBe(2);
+    expect(w.auth.cleared).toBe(0);
+    expect(limits(w).paused).toBeNull();
+  });
+
+  it("a bad session WhatsApp reports during the handshake, before open, forgets the link and pauses", async () => {
     const w = track(world((sock) => sock.close(500, "Stream Errored (bad-session)"), { linked: true }));
     expect(await codeOf(w.wa.listChats({}))).toBe("NOT_LINKED");
+    expect(w.auth.linked).toBe(false);
     expect(limits(w).paused).toMatchObject({ kind: "logged_out" });
+    expect(w.sockets.length).toBe(1);
+  });
+
+  it("Baileys' own 500 (Cancelled) is a failed connect: the link kept", async () => {
+    const w = track(world((sock) => sock.close(500, "Cancelled"), { linked: true }));
+    expect(await codeOf(w.wa.listChats({}))).toBe("CONNECT_FAILED");
+    expect(w.auth.cleared).toBe(0);
+    expect(limits(w).paused).toBeNull();
+  });
+
+  it("a real bad session (500 on an open connection, WhatsApp's own words) still forgets the link and pauses", async () => {
+    const w = track(linkedWorld());
+    await w.wa.listChats({});
+    w.sockets[0].close(500, "Stream Errored (bad-session)");
+    expect(await codeOf(w.wa.listChats({}))).toBe("NOT_LINKED");
+    expect(w.auth.linked).toBe(false);
+    expect(w.wa.store.chatCount).toBe(0);
+    expect(limits(w).paused).toMatchObject({ kind: "logged_out" });
+    expect(w.sockets.length).toBe(1);
   });
 
   it("another device taking over is reported, not fought over", async () => {
     const w = track(world((sock) => sock.close(440, "replaced"), { linked: true }));
     expect(await codeOf(w.wa.listChats({}))).toBe("REPLACED");
     expect(w.sockets.length).toBe(1);
+  });
+});
+
+describe("what a close means (closeKind)", () => {
+  const transport = [
+    "WebSocket Error (WebSocket connection to 'wss://web.whatsapp.com/ws/chat' failed: Failed to connect)",
+    "WebSocket Error (WebSocket connection to 'wss://web.whatsapp.com/ws/chat' failed: Proxy connection failed)",
+    "WebSocket Error (Unexpected server response: 403)", "connect ECONNREFUSED 127.0.0.1:443", "read ECONNRESET", "connect ETIMEDOUT",
+    "getaddrinfo ENOTFOUND web.whatsapp.com", "getaddrinfo EAI_AGAIN web.whatsapp.com", "socket hang up", "TLS handshake failed", "unable to verify the first certificate",
+  ];
+  it("knows each transport message shape, and WhatsApp's own words are none", () => {
+    for (const m of transport) expect(`${m}: ${isTransportFailure(m)}`).toBe(`${m}: true`);
+    for (const m of ["Stream Errored (bad-session)", "Stream Errored (conflict)", "Connection Failure", "Intentional Logout", "Connection Terminated"]) expect(`${m}: ${isTransportFailure(m)}`).toBe(`${m}: false`);
+  });
+
+  it("a 500 ends the link only as WhatsApp's stream error, before or after open; Baileys' own 500s and transport failures never", () => {
+    for (const m of transport) expect(closeKind(500, m)).toBe("failed");
+    expect(closeKind(500, "Stream Errored (bad-session)")).toBe("logged_out");
+    expect(closeKind(500, "Stream Errored (WebSocket Error (socket hang up))")).toBe("failed");
+    for (const m of ["Cancelled", "All encryptions failed", "Media upload failed on all hosts", "Connection Failure"]) expect(`${m}: ${closeKind(500, m)}`).toBe(`${m}: failed`);
+  });
+
+  it("401 and 411 are a logout either way; 403 a refusal unless the network gave it; 440 replaced; the rest a failed connect", () => {
+    expect(closeKind(401, "Connection Failure")).toBe("logged_out");
+    expect(closeKind(411, "Multidevice mismatch")).toBe("logged_out");
+    expect(closeKind(403, "Connection Failure")).toBe("refused");
+    expect(closeKind(403, "WebSocket Error (Unexpected server response: 403)")).toBe("failed");
+    expect(closeKind(440, "Stream Errored (conflict)")).toBe("replaced");
+    for (const code of [0, 408, 428, 503, 515]) expect(closeKind(code, "x")).toBe("failed");
   });
 });
 
