@@ -429,10 +429,18 @@ export function scorePlan(h: Household, plan0: PlanOut, loaded: SetupOut, o: { f
     ? p.items.some((it) => plain(it) === plain(x) || dishNameOf(x, [it]) === it)
     : "from" in p ? !p.kind || kindsHere(x, slot).has(p.kind)
     : kindsHere(x, slot).has(p.kind));
-  const matchesTemplate = (ds: string[], slot: string, tps = mealOf(slot)?.templates ?? []) => tps.some((tp) => {
+  const matchesTemplate = (ds: string[], slot: string) => (mealOf(slot)?.templates ?? []).some((tp) => {
     const used = new Set<number>();
     return tp.parts.every((p) => { const i = ds.findIndex((x, j) => !used.has(j) && partHit(p, x, slot)); if (i < 0) return false; used.add(i); return true; });
   });
+  /** The plate is exactly this template's: each part one dish, no dish left over; a fixed dish by its name or a way of it
+   *  ("Egg paratha roll" of items(Egg paratha roll)), never a shorter name it holds ("Paratha roll" is no egg roll). */
+  const plateIs = (ds: string[], slot: string, tp: { parts: TruthPart[] }) => {
+    if (tp.parts.length !== ds.length) return false;
+    const used = new Set<number>();
+    return tp.parts.every((p) => { const i = ds.findIndex((x, j) => !used.has(j) && ("items" in p
+      ? p.items.some((it) => plain(it) === plain(x) || variantOf(it, x)) : partHit(p, x, slot))); if (i < 0) return false; used.add(i); return true; });
+  };
   const LINK = new Set(["and", "with", "n"]);
   /** The family's whole meals at a slot: a seed row of one dish, a template of one fixed-dish part. */
   const wholeMeals = (slot: string) => [...new Set([...seedAt(slot).filter((r) => r.dishes.length === 1).map((r) => r.dishes[0]),
@@ -518,9 +526,10 @@ export function scorePlan(h: Household, plan0: PlanOut, loaded: SetupOut, o: { f
   for (const sd of cooked) for (const d of sd.dishes) {
     if (own(d.name, sd.slot) || exempt(sd.slot, d.name) || linkedDish(sd, d.name) || seenNew.has(`${lc(sd.slot)}|${plain(d.name)}`)) continue;
     seenNew.add(`${lc(sd.slot)}|${plain(d.name)}`);
-    // The family's saved dish row says its kind (spec §5.2: the part's saved kind, never re-read): "Bread omlette", their spelling.
-    const saved = loaded.library.find((x) => lc(x.slot) === lc(sd.slot) && plain(x.name) === plain(d.name) && x.kind);
-    const k = saved?.kind ?? kindOf(d.name)?.kind ?? null, theirs = famKinds(sd.slot);
+    // The catalog's kind first; only a name it cannot place ("Bread omlette", their spelling) takes the kind the family's own saved
+    // row gives it (spec §5.2). A row the planner filed itself (origin planner_suggested) never grades its own dish.
+    const saved = loaded.library.find((x) => lc(x.slot) === lc(sd.slot) && plain(x.name) === plain(d.name) && x.kind && x.origin !== "planner_suggested");
+    const k = kindOf(d.name)?.kind ?? saved?.kind ?? null, theirs = famKinds(sd.slot);
     add("no_new_kind", !!k && theirs.has(k), `${sd.slot}: ${d.name} is ${k ? `a ${k}` : "of no kind the catalog knows"}${k ? `; their ${sd.slot} kinds: ${[...theirs].join(", ")}` : ""}`);
   }
   // Nobody without food: no "nothing to eat" left, and a fasting person's food is there.
@@ -549,7 +558,7 @@ export function scorePlan(h: Household, plan0: PlanOut, loaded: SetupOut, o: { f
     // A day whose plate is a link-free template's ("Egg paratha roll" of the sometimes template) did not use the link.
     const linkFree = meal.templates.filter((x) => !x.parts.some((q) => "from" in q));
     const ofLinkFree = (sd: PlanSlotDay) => { const ds = sd.dishes.filter((d) => !d.for_people?.length).map((d) => d.name);
-      return linkFree.some((x) => x.parts.length === ds.length && matchesTemplate(ds, sd.slot, [x])); };
+      return linkFree.some((x) => plateIs(ds, sd.slot, x)); };
     for (const sd of cooked.filter((x) => lc(x.slot) === lc(meal.slot))) {
       if (ofLinkFree(sd)) continue;
       const src = at(sd.date, p.from);
@@ -560,6 +569,20 @@ export function scorePlan(h: Household, plan0: PlanOut, loaded: SetupOut, o: { f
       const same = p.kind ? mine.length === want.length && want.every((n) => have.has(n)) : whole;
       add("linked_parts", same || whole, `${dayOfSd(sd)} ${sd.slot}: ${p.kind ? `${p.kind} ` : "plate "}of ${p.from} is ${src.dishes.map((d) => d.name).join(", ")}; here ${sd.dishes.map((d) => d.name).join(", ")}`);
     }
+  }
+  // A meal's link-free "sometimes" templates (the egg and cheese rolls) are skipped above, so their days are held here, together
+  // (spec §5.4: the egg/cheese days are the "sometimes" template; Task 15 D4/D11): within their share's range over the meal's
+  // days, and never more days than the usual linked template.
+  for (const meal of t.meals ?? []) {
+    if (!meal.templates.some((x) => x.parts.some((q) => "from" in q))) continue;
+    const odd = meal.templates.filter((x) => !x.parts.some((q) => "from" in q) && x.share && frequencyRange(x.share)[1] < 4);
+    if (!odd.length) continue;
+    const sds = cooked.filter((x) => lc(x.slot) === lc(meal.slot));
+    const hits = sds.filter((sd) => { const ds = sd.dishes.filter((d) => !d.for_people?.length).map((d) => d.name);
+      return odd.some((x) => plateIs(ds, sd.slot, x)); });
+    const max = Math.max(...odd.map((x) => frequencyRange(x.share)[1]));
+    add("dish_frequency", hits.length <= max && hits.length <= sds.length - hits.length,
+      `${meal.slot}: its ${odd.map((x) => x.share).join("/")} plates on ${hits.length} of ${sds.length} days (${hits.map((x) => dayOfSd(x)).join(", ")}), at most ${max} and fewer than its usual plate`);
   }
   // unknowns_asked: a dish never read for a person's ingredient rule is planned and asked: named in the one question, or counted in
   // its "<n> more to check on the week page" (a catalog dish is known by its ingredient list).

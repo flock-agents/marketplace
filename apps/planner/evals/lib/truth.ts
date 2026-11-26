@@ -35,7 +35,7 @@ export type TruthSlot = {
   name: string; kind: SlotKind; addon_of?: string;
   usual_people?: string[]; days?: Weekday[]; skip_days?: { day: Weekday; skip: Skip }[];
   match?: RegExp; optional?: boolean;
-  /** An add-on beside the main plate ("Shiva's lunch box": 4 boiled eggs and a salad): its people stay counted and fed at the
+  /** An add-on beside the main plate ("Shiva's lunch box": 4 eggs and a salad): its people stay counted and fed at the
    *  main meal (spec §5.4). */
   extras?: boolean;
   /** A custom slot that is the person's meal INSTEAD of this main meal ("Agastya's lunch box" replaces Lunch): its people leave

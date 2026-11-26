@@ -828,6 +828,25 @@ describe("scorePlan: F9 links, newness, categories, fixed extras, staples", () =
     expect(notesOf(h, p, setupOfTruth(h), "linked_parts").map((n) => n.slice(14, 35))).toEqual(["Mon Chotu's lunch box", "Tue Chotu's lunch box"]);
   });
 
+  test("(4b) review: the link-free 'sometimes' rolls together stay within 'sometimes' and under the usual linked plate", () => {
+    const h = structuredClone(BOX_FIX);
+    h.truth.meals![0].templates.push(tpl([items("Egg paratha roll")], "sometimes"), tpl([items("Cheese paratha roll")], "sometimes"));
+    h.truth.library.push(...dish("Egg paratha roll", ["Chotu's lunch box"], { frequency: "sometimes" }), ...dish("Cheese paratha roll", ["Chotu's lunch box"], { frequency: "sometimes" }));
+    const rolls = (q: PlanOut) => notesOf(h, q, setupOfTruth(h), "dish_frequency").filter((n) => /Chotu's lunch box: its/.test(n));
+    const p = boxWeek4();
+    sdOf(p, "Tue", "Chotu's lunch box").dishes = [{ name: "Egg paratha roll" }];
+    sdOf(p, "Thu", "Chotu's lunch box").dishes = [{ name: "Cheese paratha roll" }];
+    expect(rolls(p)).toEqual([]);
+    // Bad: a roll on every box day (each roll only 2 days, so the per-dish count alone passes it).
+    sdOf(p, "Mon", "Chotu's lunch box").dishes = [{ name: "Egg paratha roll" }];
+    sdOf(p, "Wed", "Chotu's lunch box").dishes = [{ name: "Cheese paratha roll" }];
+    expect(notesOf(h, p, setupOfTruth(h), "dish_frequency").filter((n) => /paratha roll \(/.test(n))).toEqual([]);
+    expect(rolls(p)).toHaveLength(1);
+    // Bad: three roll days of four (within "sometimes", but more than the usual linked plate).
+    sdOf(p, "Wed", "Chotu's lunch box").dishes = [{ name: "Paratha roll" }];
+    expect(rolls(p)).toHaveLength(1);
+  });
+
   test("(5) a fixed dish of a slot's only template ('4 eggs' every school day) is exempt from not_next_day and no_early_repeat", () => {
     const h = structuredClone(BOX_FIX);
     h.truth.library = h.truth.library.map((d) => (d.name === "Cucumber salad" ? { name: d.name, slot: d.slot } : d));
@@ -864,6 +883,10 @@ describe("scorePlan: F9 links, newness, categories, fixed extras, staples", () =
     const l = setupOfTruth(h);
     l.library.push({ slot: "Breakfast", name: "Bread omlette", frequency: null, days: ["Sun"], contains: ["egg", "wheat"], contains_read: read, origin: "setup_named", kind: "Egg", sub: "Eggs" });
     expect(scorePlan(h, p, l, { failClosed: false }).notes.filter((n) => n.startsWith("no_new_kind") && /omlette/.test(n))).toEqual([]);
+    // Bad: the planner's own row filing a foreign dish (Butter chicken is a Chicken) under a family kind does not grade it.
+    sdOf(p, "Fri", "Breakfast").dishes = [{ name: "Butter chicken", new: true }];
+    l.library.push({ ...newRow("Butter chicken", "Breakfast", ["chicken"]), kind: "Poha", sub: "Poha" });
+    expect(scorePlan(h, p, l, { failClosed: false }).notes.filter((n) => n.startsWith("no_new_kind") && /Butter chicken/.test(n))).toHaveLength(1);
     // Bad: a dish nobody saved and the catalog cannot place still fails.
     sdOf(p, "Sat", "Breakfast").dishes = [{ name: "Zorba special", new: true }];
     expect(scorePlan(h, p, l, { failClosed: false }).notes.filter((n) => n.startsWith("no_new_kind") && /Zorba/.test(n))).toHaveLength(1);
