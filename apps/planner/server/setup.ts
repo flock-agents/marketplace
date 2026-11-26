@@ -116,7 +116,8 @@ Rules are said in any reply, the meals' answers too ("same dinner, just less spi
 - A staple named for one person at a meal that differs from the others' (their bread or rice where the rest have another) is a hard swap for that person at that meal, from the others' staple to theirs; the others' staple is the meal's own, no rule for them. "Lalitha has ragi mudde, not the rice, at lunch" is { hard, swap, who "Lalitha", items ["rice"], to "ragi mudde", slots ["Lunch"] }.
 - A swap tied to another dish being made (the person has their own dish on the days that dish is made) is hard: items [that dish], to their dish, slots [that dish's meal]. A frequency word said with it tells how often that dish comes, never a soft swap. "Tara gets jeera rice whenever there is puliyogare" is { hard, swap, who "Tara", items ["puliyogare"], to "jeera rice", slots ["Lunch"] }.
 - An allergy is a hard avoid for that person, quoting the words that say allergy. When the family says the whole kitchen goes without it ("everything at home is without it", "we don't use it at all"), add a hard avoid with no who, quoting those words; "only his food" or "he has his own food" adds nothing.
-- unplaced: a food wish that is no rule and no dish, cook or shopping matter: { text, quote }. Usually none.`;
+- unplaced: a food wish that is no rule and no dish, cook or shopping matter: { text, quote }. Usually none.
+${MISSING_LINE}`;
 const RULES_EXAMPLE = `gives rules [{ hard, egg, quote "eggs fine but no meat" }, { hard, veg, who "Lalitha", quote "Amma is pure veg" }, { hard, no_eggs, who "Lalitha", quote "Amma is pure veg, no eggs" }, { hard, avoid, who "Lalitha", items ["onion_garlic"], quote "she doesn't eat onion or garlic" }, { hard, fasting, who "Lalitha", days [Sat], slots [Breakfast, Lunch], fasting_food ["fruit"], quote "fasts on Saturdays till sunset, only fruit" }, { soft, swap, who "Lalitha", items ["white_rice"], to "brown rice", frequency "sometimes", quote "Brown rice is better for her" }, { soft, note, who "Lalitha", quote "less oil" }, { hard, avoid, who "Lalitha", items ["rice"], slots ["Dinner"], quote "no rice" }, { hard, avoid, items ["peanut"], slots ["Tara's tiffin"], quote "no peanuts" }, { soft, note, who "Tara", quote "just less spicy" }].
 And "A: Kavu is vegetarian. She won't touch eggs either." gives [{ hard, veg, who "Kavya", quote "Kavu is vegetarian" }, { hard, no_eggs, who "Kavya", quote "She won't touch eggs either" }]: both, every time.
 And "A: Vegetarian. Eggs okay for Tara and Rahul." gives [{ hard, veg, quote "Vegetarian" }, { hard, egg, who "Tara", quote "Eggs okay for Tara and Rahul" }, { hard, egg, who "Rahul", quote "Eggs okay for Tara and Rahul" }, { hard, no_eggs, who "Kavya", quote "Eggs okay for Tara and Rahul" }, { hard, no_eggs, who "Lalitha", quote "Eggs okay for Tara and Rahul" }] (Kavya and Lalitha are not named for eggs: no eggs for them).
@@ -532,13 +533,28 @@ export function dropShared(library: ReadDish[], dropped: string[]): void {
 
 /** The whats a rule is always hard in; swap, require and note may be soft (with a frequency). */
 const HARD_ONLY: RuleWhat[] = ["veg", "egg", "no_eggs", "avoid", "only", "fasting", "cap"];
-/** What a checked rule needs besides its what; without it, it is kept as a note (not checked). */
-const NEEDS: Partial<Record<RuleWhat, (r: ReadRule) => boolean>> = {
-  avoid: (r) => !!r.items?.length, only: (r) => !!r.items?.length && !!r.who, swap: (r) => !!r.items?.length && !!r.to,
-  require: (r) => !!r.items?.length, cap: (r) => !!r.per_meal, fasting: (r) => !!r.who && !!r.days?.length,
+/** The fields a checked rule needs besides its what, each with what it says in words; without one, it is kept as a note (not
+ *  checked) and re-read once (H6). */
+type RuleField = "items" | "who" | "to" | "per_meal" | "days";
+const NEEDS: Partial<Record<RuleWhat, RuleField[]>> = {
+  avoid: ["items"], only: ["items", "who"], swap: ["items", "to"], require: ["items"], cap: ["per_meal"], fasting: ["who", "days"],
 };
-export const ruleKey = (r: Pick<ReadRule, "what" | "who" | "items" | "slots" | "days" | "to">): string =>
-  JSON.stringify([r.what, r.who?.toLowerCase() ?? null, [...(r.items ?? [])].sort(), [...(r.slots ?? [])].map((s) => s.toLowerCase()).sort(), [...(r.days ?? [])].sort(), r.to?.toLowerCase() ?? null]);
+const FIELD_WORDS: Record<RuleField, string> = { items: "the foods it is about", who: "whom it is for", to: "what they have instead",
+  per_meal: "how many dishes", days: "which days" };
+/** The fields a rule of its what needs and does not have. */
+export const missingOf = (r: ReadRule): RuleField[] => (NEEDS[r.what] ?? []).filter((f) => {
+  const v = r[f];
+  return Array.isArray(v) ? !v.length : !v;
+});
+/** A rule kept as a note for a field it lacks (H6): its quote, its what as read, and the fields left out. */
+export type Incomplete = { quote: string; what: RuleWhat; missing: RuleField[] };
+/** The re-read's words for an incomplete rule: "the swap 'millets are good for her' has no 'to' (what they have instead)". */
+export const incompleteLine = (x: Incomplete): string =>
+  `the ${x.what} '${x.quote}' has no ${x.missing.map((f) => `'${f}' (${FIELD_WORDS[f]})`).join(" and no ")}`;
+/** A rule's identity: two notes are two rules by their words (H6: "less salt" and "less oil" for one person are both kept). */
+export const ruleKey = (r: Pick<ReadRule, "what" | "who" | "items" | "slots" | "days" | "to"> & { quote?: string }): string =>
+  JSON.stringify([r.what, r.who?.toLowerCase() ?? null, [...(r.items ?? [])].sort(), [...(r.slots ?? [])].map((s) => s.toLowerCase()).sort(), [...(r.days ?? [])].sort(), r.to?.toLowerCase() ?? null,
+    ...(r.what === "note" ? [plainWords(r.quote ?? "")] : [])]);
 
 /** Words that say no eggs: "no eggs", "doesn't eat eggs", "won't touch anda", "without egg", "eggless", "pure veg". Only to
  *  back a no_eggs rule the reader left out beside a person's vegetarian rule. */
@@ -550,7 +566,8 @@ export function saysNoEggs(line: string): boolean {
     || /\b(?:no|not|without|never)(?: (?:fish|meat|chicken|mutton|seafood|prawns?|beef|pork|non veg|nonveg|onions?|garlic|or|and|nor|any))+ (?:eggs?|anda|ande)\b(?! (?:are|is) (?:fine|ok|okay|allowed))/.test(l);
 }
 
-export type Checked = { read: SetupRead; dropped: string[]; asks: string[]; noted: string[]; lint: ReadDish[]; slotDays: Map<string, Weekday[]> };
+export type Checked = { read: SetupRead; dropped: string[]; asks: string[]; noted: string[]; lint: ReadDish[]; slotDays: Map<string, Weekday[]>;
+  /** The rules kept as notes for a field they lack (H6): re-read once. */ incomplete: Incomplete[] };
 
 /** Whether a note's words are the cook's own limit or words about the cook (its words hold the cook's limit, or the other way round). */
 function aboutTheCook(quote: string, cook: SetupRead["cook"]): boolean {
@@ -562,7 +579,7 @@ function aboutTheCook(quote: string, cook: SetupRead["cook"]): boolean {
 
 /** The read made safe to store: what the family did not say is dropped, unknown names are asked, slots resolved. */
 export function checkRead(read: SetupRead, ctx: { household: Household; said: string[]; sentences?: string[]; oftenFailed?: boolean }): Checked {
-  const dropped: string[] = [], asks: string[] = [], noted: string[] = [], lint: ReadDish[] = [];
+  const dropped: string[] = [], asks: string[] = [], noted: string[] = [], lint: ReadDish[] = [], incomplete: Incomplete[] = [];
   const people = ctx.household.people, said = ctx.said;
   const ask = (name: string) => { const a = `Who is ${name}? I don't have them among the people at home.`; if (!asks.includes(a)) asks.push(a); };
   const known = (names: string[]): string[] => names.flatMap((n) => { const p = personOf(n, people); if (!p) ask(n); return p ? [p] : []; });
@@ -660,8 +677,12 @@ export function checkRead(read: SetupRead, ctx: { household: Household; said: st
     if (r.hard && r.frequency) { dropped.push(`how often for ${what}: a hard rule holds every time`); r.frequency = null; }
     if (r.what !== "fasting") r.fasting_food = null;
     if (r.what !== "cap") r.per_meal = null;
-    const need = NEEDS[r.what];
-    if (need && !need(r)) { dropped.push(`${what}: not complete for a ${r.what} rule, kept as a note`); r = { ...r, what: "note", items: null, to: null, per_meal: null, fasting_food: null }; }
+    const missing = missingOf(r);
+    if (missing.length) {
+      dropped.push(`${what}: not complete for a ${r.what} rule (no ${missing.join(", ")}), kept as a note`);
+      if (!incomplete.some((x) => x.quote === r.quote && x.what === r.what)) incomplete.push({ quote: r.quote, what: r.what, missing });
+      r = { ...r, what: "note", items: null, to: null, per_meal: null, fasting_food: null };
+    }
     // A note that is only the cook's limit again ("Yes, she has two hours, so 3 to 4 dishes in all"): the cook keeps it, not
     // the family's notes (onboarding run 24 showed it under "All week" in the plan).
     if (r.what === "note" && !r.who && aboutTheCook(r.quote, read.cook)) { dropped.push(`${what}: the cook's limit, kept with the cook`); continue; }
@@ -796,7 +817,7 @@ export function checkRead(read: SetupRead, ctx: { household: Household; said: st
     else if (s.home_meal === "a_part" && s.home_part?.trim()) links.push({ slot: s.name, from: s.instead_of, words: s.home_part.trim(), quote: s.quote });
   }
 
-  return { read: { ...read, slots, rules: rules.map(typed), library, seed, cook, family_cooks, weekday_lunch, lunch_unclear, unplaced, links }, dropped, asks, noted, lint, slotDays };
+  return { read: { ...read, slots, rules: rules.map(typed), library, seed, cook, family_cooks, weekday_lunch, lunch_unclear, unplaced, links }, dropped, asks, noted, lint, slotDays, incomplete };
 }
 
 /** What the home read left out (H1), found over the checked read: `missing` in words for the re-read; `ask` the read-back's
@@ -2224,6 +2245,26 @@ export async function applySetup(deps: { db: Db; emit: Emit; model: ModelCall; p
         links: [...read.links, ...d.links.filter((x) => mine(x.slot))] };
       checked = checkRead(read, { household, said, sentences, oftenFailed });
     } else log(`dishes re-read: model ${r.code}: ${r.message.slice(0, 200)}`);
+  }
+  // H6: a rule kept as a note for a field it lacks is re-read once from the rules part, naming what is missing; the re-read's
+  // complete rules said in the same words stand in for it. Still incomplete: kept as a note, and logged.
+  if (checked.incomplete.length) {
+    const asked = until - Date.now() >= RETRY_FLOOR_MS;
+    if (asked) {
+      log(`rules: ${checked.incomplete.map(incompleteLine).join("; ")}; asking once more`);
+      const r = await reread(partOf("rules"), { missing: checked.incomplete.map(incompleteLine) });
+      if (r.ok) {
+        const again = readOf(null, r.json, null).rules;
+        const sameWords = (a: string, b: string) => { const x = plainWords(a), y = plainWords(b); return !!x && !!y && (x.includes(y) || y.includes(x)); };
+        const whole = (x: Incomplete) => again.filter((g) => g.what !== "note" && !missingOf(g).length && sameWords(g.quote, x.quote));
+        const fixed = checked.incomplete.filter((x) => whole(x).length);
+        if (fixed.length) {
+          read = { ...read, rules: [...read.rules.filter((g) => !fixed.some((x) => x.what === g.what && x.quote === g.quote)), ...fixed.flatMap(whole)] };
+          checked = checkRead(read, { household, said, sentences, oftenFailed });
+        }
+      } else log(`rules re-read: model ${r.code}: ${r.message.slice(0, 200)}`);
+    }
+    for (const x of checked.incomplete) log(`rules${asked ? " re-read" : ""}: still incomplete, kept as a note: ${incompleteLine(x)}`);
   }
   for (const a of [...gaps.flatMap((v) => (v.ask ? [v.ask] : [])), ...boxAsks]) if (!checked.asks.includes(a)) checked.asks.push(a);
   noted.push(...checked.noted);

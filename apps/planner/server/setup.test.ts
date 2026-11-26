@@ -2023,3 +2023,76 @@ describe("a word no read placed is never a fixed dish (H4)", () => {
     expect(r.asks).toContain(kindsAsk("dry veg", { name: "Lunch", kind: "main" }));
   });
 });
+
+// Round 3 (task 15, §2): H6 (an incomplete rule is re-read; notes never collapse), H12a (a require that restates an add-on dish
+// is not saved), H16 (a cook in household.help is a saved cook). A made-up family (F7): Rahul at the office, Kavya, Lalitha.
+describe("a rule read whole, a require that is an add-on dish, a cook from help (H6, H12, H16)", () => {
+  const MON_FRI = ["Mon", "Tue", "Wed", "Thu", "Fri"];
+  const R_HOUSEHOLD = {
+    "household.people": [{ name: "Rahul", relation: "self", group: "adult" }, { name: "Kavya", relation: "wife", group: "adult" },
+      { name: "Lalitha", relation: "mother", group: "elder", age: 72 }],
+    "household.weekly": [{ person: "Rahul", where: "office", weekdays: MON_FRI, lunch: "carries" }],
+    "household.speaker": "Rahul",
+  };
+  const R_TRANSCRIPT = [
+    "Q: Any food rules?", "A: Lalitha has hers with less salt, and less oil. Millets are good for Lalitha.",
+    "Q: What did the family have for breakfast last week?", "A: Idli and upma.",
+    "Q: And lunch?", "A: Rice, dal and a sabzi. I take 4 boiled eggs with my lunch.",
+    "Q: And dinner?", "A: Roti, dal and a sabzi.",
+  ];
+  const hh = householdOf(R_HOUSEHOLD);
+  const said = familyLines(R_TRANSCRIPT, R_HOUSEHOLD), sentences = familySentences(R_TRANSCRIPT, R_HOUSEHOLD);
+  const mains = [{ name: "Breakfast", kind: "main" }, { name: "Lunch", kind: "main" }, { name: "Dinner", kind: "main" }];
+  const millet = { hard: false, what: "swap", who: "Lalitha", items: ["millet"], quote: "Millets are good for Lalitha" };
+  const R_DISHES = {
+    library: [["Idli", "Breakfast", "Idli and upma"], ["Upma", "Breakfast", "Idli and upma"], ["Rice", "Lunch", "Rice, dal and a sabzi"],
+      ["Dal", "Lunch", "Rice, dal and a sabzi"], ["Roti", "Dinner", "Roti, dal and a sabzi"], ["Dal", "Dinner", "Roti, dal and a sabzi"]],
+    seed: [["Breakfast", "Idli", "Idli and upma"], ["Lunch", "Rice, Dal", "Rice, dal and a sabzi"], ["Dinner", "Roti, Dal", "Roti, dal and a sabzi"]],
+  };
+  const rFake = (over: Partial<Record<Part, unknown>> = {}) =>
+    fake({ home: { slots: mains }, rules: { rules: [] }, dishes: R_DISHES, often: { often: [] }, contains: containsOf(), lint: { dishes: [] }, kinds: ownKinds, ...over });
+  const rulesOf = (k: Awaited<ReturnType<typeof boot>>) => k.rows("rules").map((r) => ({ what: r.what, who: r.who, items: JSON.parse(r.items ?? "null"), frequency: r.frequency, quote: r.quote }));
+
+  // H6
+  it("checkRead keeps two notes for one person", () => {
+    const read = readOf({ slots: mains }, { rules: [{ hard: false, what: "note", who: "Lalitha", quote: "with less salt" }, { hard: false, what: "note", who: "Lalitha", quote: "less oil" }] }, {});
+    const c = checkRead(read, { household: hh, said, sentences });
+    expect(c.read.rules.filter((r) => r.what === "note" && r.who === "Lalitha").map((r) => r.quote)).toEqual(["with less salt", "less oil"]);
+    // The same note read twice is still one.
+    const twice = readOf({ slots: mains }, { rules: [{ hard: false, what: "note", who: "Lalitha", quote: "less oil" }, { hard: false, what: "note", who: "Lalitha", quote: "Less oil" }] }, {});
+    expect(checkRead(twice, { household: hh, said, sentences }).read.rules).toHaveLength(1);
+  });
+  it("checkRead reports an incomplete swap", () => {
+    const c = checkRead(readOf({ slots: mains }, { rules: [millet] }, {}), { household: hh, said, sentences });
+    expect(c.incomplete).toEqual([{ quote: "Millets are good for Lalitha", what: "swap", missing: ["to"] }]);
+    // Kept as a note meanwhile.
+    expect(c.read.rules).toMatchObject([{ what: "note", who: "Lalitha", quote: "Millets are good for Lalitha" }]);
+    // A complete rule is not reported.
+    expect(checkRead(readOf({ slots: mains }, { rules: [{ ...millet, to: "ragi roti" }] }, {}), { household: hh, said, sentences }).incomplete).toEqual([]);
+  });
+  it("applySetup re-reads an incomplete soft rule once", async () => {
+    const whole = { hard: false, what: "require", who: "Lalitha", items: ["millet"], frequency: "sometimes", quote: "Millets are good for Lalitha" };
+    const salt = { hard: false, what: "note", who: "Lalitha", quote: "with less salt" };
+    const f = rFake({ rules: (_req: ModelRequest, n: number) => ({ rules: n === 1 ? [salt, millet] : [salt, whole] }) });
+    const k = await boot({ model: f.model });
+    expect((await k.op("apply_setup", { household: R_HOUSEHOLD, transcript: R_TRANSCRIPT })).ok).toBe(true);
+    expect(f.of("rules")).toHaveLength(2);
+    expect(JSON.parse(f.of("rules")[1].user).missing).toEqual(["the swap 'Millets are good for Lalitha' has no 'to' (what they have instead)"]);
+    expect(f.of("rules")[1].system).toContain("A list `missing` names what your last answer left out: write it.");
+    const rules = rulesOf(k);
+    expect(rules).toContainEqual({ what: "require", who: "Lalitha", items: ["millet"], frequency: "sometimes", quote: "Millets are good for Lalitha" });
+    expect(rules.filter((r) => r.quote === "Millets are good for Lalitha")).toHaveLength(1);
+    expect(rules.some((r) => r.what === "note" && r.quote === "with less salt")).toBe(true);
+  });
+  it("applySetup keeps a rule still incomplete after its re-read as a note, and logs it", async () => {
+    const f = rFake({ rules: { rules: [millet] } });
+    const lines: string[] = [], was = console.log;
+    const k = await boot({ model: f.model });
+    console.log = (...a: unknown[]) => { lines.push(a.join(" ")); };
+    try { expect((await k.op("apply_setup", { household: R_HOUSEHOLD, transcript: R_TRANSCRIPT })).ok).toBe(true); } finally { console.log = was; }
+    expect(f.of("rules")).toHaveLength(2);
+    expect(lines.some((l) => l.includes("rules re-read: still incomplete") && l.includes("Millets are good for Lalitha"))).toBe(true);
+    expect(rulesOf(k)).toMatchObject([{ what: "note", who: "Lalitha", quote: "Millets are good for Lalitha" }]);
+  });
+
+});
