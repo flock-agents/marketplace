@@ -24,13 +24,16 @@ export const TIERS: Record<string, "A" | "B" | "C"> = {
   "h15-gupta": "A", "h16-pillai": "A", "h17-subramanian": "B",
 };
 /** Must pass in every tier, every run (owner: nobody without food; no food rule broken). */
-export const SAFETY = ["plan_made", "setup_time", "plan_time", "hard_rules", "nobody_without_food"];
+export const SAFETY = ["plan_made", "setup_time", "plan_time", "hard_rules", "nobody_without_food", "no_silent_filler"];
 /** Must pass in tiers A and B, every run. dish_frequency is held to THEIR_DAYS of its checks, the rest to all. */
 // No new-dish budget (owner, 25 Nov: the family's dishes guide the week, at least OWN_SHARE of it; the rest is for variety).
 // Kinds model (owner, 25 Nov): no twice-a-week cap (main_twice gone); an item rotates within its kind (no_early_repeat),
 // never the next day (not_next_day); a real dish each time (real_dish); a new dish only of the family's kinds (no_new_kind).
 export const BASE = ["filled", "attendance", "not_bare", "whole_plate", "no_doubled_staple", "real_dish", "own_share", "no_new_kind",
-  "no_early_repeat", "not_next_day", "dish_frequency", "message_clean", "short_new_reasons", "one_question", "new_like"];
+  "no_early_repeat", "not_next_day", "dish_frequency", "message_clean", "short_new_reasons", "one_question", "new_like",
+  // One meaning model (spec §7): linked parts equal the linked meal's item, the plan's unknowns are in its one question, only a
+  // box that replaces a meal takes its person off it. (real_dish is above: it now also holds their words for a part.)
+  "linked_parts", "unknowns_asked", "box_attendance"];
 export const THEIR_DAYS = 0.8;
 export const SETUP_MAX_MS = 150_000, PLAN_MAX_MS = 300_000;
 

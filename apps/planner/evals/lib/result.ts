@@ -7,11 +7,13 @@ export type SavedSlot = {
   name: string; kind: "main" | "custom" | "addon"; addon_of: string | null;
   usual_people: string[]; days: string[]; skip_days: { day: string; skip: string }[];
   order?: number; active?: boolean;
+  /** An add-on beside the main plate: its people stay at the main meal. */
+  extras?: boolean;
   /** Kinds model (server/kinds.ts MealKind[] / MealTemplate[]): null = not read yet; undefined = the adapter could not read it. */
   kinds?: SavedMealKind[] | null; templates?: SavedTemplate[] | null;
 };
 export type SavedMealKind = { name: string; subs?: string[]; staple?: boolean; own?: boolean };
-export type SavedPart = { kind: string; sub?: string } | { items: string[] };
+export type SavedPart = { kind: string; sub?: string; words?: string; dish?: string } | { items: string[] } | { from: string; kind?: string; sub?: string };
 export type SavedTemplate = { parts: SavedPart[]; share?: string | null; said?: string | null };
 export type SavedDish = {
   slot: string; name: string; frequency: string | null; days: string[] | null;
@@ -20,7 +22,11 @@ export type SavedDish = {
   /** Kinds model: the catalog kind it is a variant of (or the slot's own kind), its sub-kind, the catalog item it is. */
   kind?: string | null; sub?: string | null; catalog_item?: string | null;
 };
+/** server/targets.ts RuleTarget as saved (rules.targets / rules.gives): what a rule is about. */
+export type SavedTarget = { type: "kind"; kind: string } | { type: "sub"; kind: string; sub: string } | { type: "item"; item: string; kind: string | null } | { type: "ingredient"; tag: string };
 export type SavedRule = {
+  /** The typed targets of the rule and, for a hard swap, what it gives; null = not saved typed (an older rule). */
+  targets?: SavedTarget[] | null; gives?: SavedTarget | null;
   hard: boolean; what: string; who: string | null; slots: string[] | null; days: string[] | null; items: string[] | null;
   to: string | null; frequency: string | null; per_meal: number | null; fasting_food: string[] | null; quote: string;
 };
@@ -33,7 +39,7 @@ export type SetupOut = {
   library: SavedDish[];
   rules: SavedRule[];
   seed: SavedSeed[];
-  cook: { name: string; days: string[]; visits: { at: string; meals?: string[] }[] } | null;
+  cook: { name: string; days: string[]; visits: { at?: string; meals?: string[] }[] } | null;
   family_cooks: { person: string; days: string[] }[];
   /** spec §4.1 rules.unplaced + the read-back's "noted, not checked". */
   unplaced: { text: string; quote?: string }[];
@@ -47,7 +53,8 @@ export type SetupOut = {
   cuisines?: string[] | null;
 };
 
-export type PlanDish = { name: string; new?: boolean; note?: string | null; /** people this dish is not for, when the app says so in a structured way */ not_for?: string[] };
+export type PlanDish = { name: string; new?: boolean; note?: string | null; /** people this dish is not for, when the app says so in a structured way */ not_for?: string[];
+  /** people this dish is only for (a swap's item: "Pancakes (for Agastya)"); empty = the slot-day's people */ for_people?: string[] };
 export type PlanSlotDay = {
   date: string; slot: string; people: string[];
   guests: { count: number; rules?: string[] }[];

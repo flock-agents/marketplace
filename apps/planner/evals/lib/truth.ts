@@ -23,7 +23,8 @@ export type RuleWhat = "veg" | "egg" | "no_eggs" | "avoid" | "only" | "swap" | "
 export const MAIN_SLOTS = ["Breakfast", "Lunch", "Dinner"] as const;
 
 export type TruthPerson = { name: string; group: Group; age?: number };
-export type TruthCook = { name: string; days: Weekday[]; visits: { at: string; meals: string[] }[] };
+/** `at` is optional: a visit the household states by its meals only (h18's cook comes with no time said). */
+export type TruthCook = { name: string; days: Weekday[]; visits: { at?: string; meals: string[] }[] };
 
 /** A slot (spec `slots`). `usual_people` omitted = everyone at home; `days` omitted = every day. `match`: how a saved
  *  custom/add-on slot's name is recognised (a main slot by its exact name). `optional`: Eval 1 neither requires nor
@@ -32,6 +33,12 @@ export type TruthSlot = {
   name: string; kind: SlotKind; addon_of?: string;
   usual_people?: string[]; days?: Weekday[]; skip_days?: { day: Weekday; skip: Skip }[];
   match?: RegExp; optional?: boolean;
+  /** An add-on beside the main plate ("Shiva's lunch box": 4 boiled eggs and a salad): its people stay counted and fed at the
+   *  main meal (spec §5.4). */
+  extras?: boolean;
+  /** A custom slot that is the person's meal INSTEAD of this main meal ("Agastya's lunch box" replaces Lunch): its people leave
+   *  that meal on the slot's days, and only there (spec §5.4). It sits at the main's order + 5. */
+  replaces?: string;
 };
 
 /** Away from a slot on some weekdays, by the weekly pattern (household.weekly): "Shiva's at the office". Someone who
@@ -53,17 +60,27 @@ export type TruthDish = {
   kind?: string; sub?: string;
 };
 
-/** One part of a meal template in kinds terms (server/kinds.ts TemplatePart, written here from the contract): a catalog kind,
- *  one sub-kind of it, or a fixed list of the family's own dishes (nothing new suggested). */
-export type TruthPart = { kind: string; sub?: string } | { items: string[] };
-/** One way a meal is plated. `share`: how often, when the family said so ("2/week"). */
-export type TruthTemplate = { parts: TruthPart[]; share?: Frequency };
+/** One part of a meal template (server/kinds.ts TemplatePart, written here from the contract; spec §5.1): a kind or one sub-kind
+ *  of it filled from catalog items (`words`: the family's own words for it, "dry sabji"; `dish`: the one dish their bare word
+ *  names), a fixed list of the family's own dishes, or a link to the item another meal has for a kind that day (no kind: its
+ *  whole plate). */
+export type TruthPart =
+  | { kind: string; sub?: string; words?: string; dish?: string }
+  | { items: string[] }
+  | { from: string; kind?: string; sub?: string };
+/** One way a meal is plated. `share`: how often, when the family said so ("2/week"). `days`: only on these days. */
+export type TruthTemplate = { parts: TruthPart[]; share?: Frequency; said?: string; days?: Weekday[] };
 /** The expected shape of one slot's meals (kinds model): its templates, which of its kinds are staples (the family's usual
  *  item every time: roti, rice, curd) and which are kinds of the family's own (no catalog kind; nothing new suggested). Only
  *  what the household's own seed and facts state plainly; a slot or template not listed is not scored. */
 export type TruthMeal = { slot: string; templates: TruthTemplate[]; staples?: string[]; own?: string[] };
 /** A part: a kind, or a kind and one of its sub-kinds. */
 export const part = (kind: string, sub?: string): TruthPart => (sub ? { kind, sub } : { kind });
+/** A kind part with the family's words and/or the one dish their bare word names. */
+export const kindPart = (kind: string, o: { sub?: string; words?: string; dish?: string } = {}): TruthPart =>
+  ({ kind, ...(o.sub ? { sub: o.sub } : {}), ...(o.words ? { words: o.words } : {}), ...(o.dish ? { dish: o.dish } : {}) });
+/** A linked part: the item the meal `from` has for `kind` (and `sub`) that day; no kind = its whole plate. */
+export const linked = (from: string, kind?: string, sub?: string): TruthPart => ({ from, ...(kind ? { kind } : {}), ...(sub ? { sub } : {}) });
 /** A part of the family's fixed dishes. */
 export const items = (...names: string[]): TruthPart => ({ items: names });
 /** A template from its parts, kind names as plain strings ("Rice", "Sabzi/Poriyal/Thoran" = kind Sabzi, sub-kind
@@ -72,6 +89,10 @@ export const tpl = (parts: (string | TruthPart)[], share?: Frequency): TruthTemp
   parts: parts.map((x) => (typeof x !== "string" ? x : x.includes("/") ? part(x.slice(0, x.indexOf("/")), x.slice(x.indexOf("/") + 1)) : part(x))),
   ...(share ? { share } : {}),
 });
+
+/** What a rule is about, in the eval's own words (spec §5.2): a kind, one sub-kind of it, an item (with its kind when the
+ *  family's word is a kind's item), or an ingredient. */
+export type TruthTarget = { kind: string } | { kind: string; sub: string } | { item: string; kind?: string } | { ingredient: string };
 
 /** A rule (spec `rules`). `quote`: what the saved quote must contain (a fragment of the family's words). `also`: other
  *  `what`s that mean the same here (a swap read as require). Items are tags (vocab.ts) or plain words ("brinjal"). */
@@ -82,6 +103,9 @@ export type TruthRule = {
   quote: RegExp; also?: RuleWhat[];
   /** Hard or soft both accepted (a cook's limit: spec §10.6 says rules, not which kind). */
   hardAny?: boolean;
+  /** What the rule is about, when the family's words name a kind, sub-kind, item or ingredient (spec §5.2): "Dad doesn't eat
+   *  salad" = [{ kind: "Salad" }]. `gives`: what a hard swap gives instead ("Plain paratha" in place of Roti). */
+  targets?: TruthTarget[]; gives?: TruthTarget;
 };
 
 /** Something the family said that no weekday rule can hold (Ekadashi): kept in `unplaced` / "noted, not checked". */
@@ -126,6 +150,9 @@ export type Household = {
   owner: string;
   /** The persona's first line. */
   intro: string;
+  /** Fixed question and answer lines ("Q: ..." / "A: ..."), when the household is scored on them as they are said: no persona
+   *  is simulated, the lines are the transcript. */
+  transcript?: string[];
   /** Flock's household facts after its own household questions (incl. `household.weekly`, spec §2.3). */
   household: Record<string, unknown>;
   groceryApps: string[];

@@ -5,7 +5,8 @@
 //
 // What it needs from the app:
 //   tables  slots, library, rules, slot_days (+ seed rows: date null, status confirmed), slot_dishes, house (cook_*),
-//           settings.new_dishes_per_week — column names as spec §2.1; kinds model (25 Nov): slots.kinds / slots.templates,
+//           settings.new_dishes_per_week — column names as spec §2.1; one meaning model: slots.templates / slots.extras,
+//           rules.targets / rules.gives, slot_dishes.for_people,
 //           library.kind / sub / catalog_item, house.cuisines (null = not read yet)
 //   ops     apply_setup { household, transcript } → { ok, said, noted?, unplaced?, lunch_unclear?, family_cooks?, attendance? }
 //           make_plan { week_start, household } → { ok, message, unmet?, asked?, relaxed? }
@@ -44,7 +45,7 @@ export async function runSetup(k: Kit, h: Household, transcript: string[]): Prom
 /** What the planner saved, in spec shapes. `res`: apply_setup's answer, for what is not a table (lunch_unclear, noted). */
 export function readSetup(k: Kit, res: any = {}): SetupOut {
   const slots: SavedSlot[] = has(k, "slots") ? k.rows("slots").filter((r) => r.active === undefined || r.active === null || bool(r.active)).map((r) => ({
-    name: r.name, kind: r.kind, addon_of: r.addon_of ?? null, usual_people: json(r.usual_people, []), days: json(r.days, []), skip_days: json(r.skip_days, []), order: r.order,
+    name: r.name, kind: r.kind, addon_of: r.addon_of ?? null, usual_people: json(r.usual_people, []), days: json(r.days, []), skip_days: json(r.skip_days, []), order: r.order, extras: bool(r.extras),
     ...("templates" in r ? { templates: json(r.templates, null), kinds: mealKinds(json(r.templates, [])) } : {}),
   })) : [];
   const library: SavedDish[] = has(k, "library") ? k.rows("library").filter((r) => !bool(r.suggested)).map((r) => ({
@@ -54,6 +55,7 @@ export function readSetup(k: Kit, res: any = {}): SetupOut {
   const rules: SavedRule[] = has(k, "rules") ? k.rows("rules").map((r) => ({
     hard: bool(r.hard), what: r.what, who: r.who ?? null, slots: json(r.slots, null), days: json(r.days, null), items: json(r.items, null), to: r.to ?? null,
     frequency: r.frequency ?? null, per_meal: r.per_meal ?? null, fasting_food: json(r.fasting_food, null), quote: r.quote ?? "",
+    targets: json(r.targets, null), gives: json(r.gives, null),
   })) : [];
   const days = has(k, "slot_days") ? k.rows("slot_days") : [];
   const dishes = has(k, "slot_dishes") ? k.rows("slot_dishes") : [];
@@ -127,17 +129,18 @@ export function loadSetup(k: Kit, s: SetupOut): string[] {
     catch (e) { refused.push(`${table}: ${String(e).slice(0, 160)}`); return null; }
   };
   const order = (sl: SetupOut["slots"][number]) => sl.kind === "addon" ? 60 : sl.name === "Breakfast" ? 10 : sl.name === "Lunch" ? 30 : sl.name === "Dinner" ? 50 : /breakfast/i.test(sl.addon_of ?? "") ? 20 : 20;
-  // Kinds model: a slot's kinds and templates, a dish's kind, sub-kind and catalog item, when the setup has them (TRUTH with
-  // templates); left out (null) otherwise, and the planner derives them from the seed. A shape the app would refuse is reported.
+  // One meaning model: a slot's templates (its kinds are derived from them, never stored), a dish's kind, sub-kind and catalog
+  // item, when the setup has them (TRUTH with templates); left out (null) otherwise, and the planner derives them from the seed. A shape the app would refuse is reported.
   for (const sl of s.slots) {
     if (sl.templates) for (const e of checkMealShape(sl.templates as MealTemplate[], { slot: sl.name, slots: s.slots.map((x) => x.name) })) refused.push(`slots ${sl.name} shape: ${e}`);
     insert("slots", { name: sl.name, kind: sl.kind, addon_of: sl.addon_of, usual_people: sl.usual_people, days: sl.days, skip_days: sl.skip_days, order: sl.order ?? order(sl), active: 1,
-      ...(sl.kinds ? { kinds: sl.kinds } : {}), ...(sl.templates ? { templates: sl.templates } : {}) });
+      extras: sl.extras ? 1 : 0, ...(sl.templates ? { templates: sl.templates } : {}) });
   }
   for (const d of s.library) insert("library", { key: d.name.toLowerCase(), slot: d.slot, name: d.name, frequency: d.frequency, days: d.days, contains: d.contains, contains_read: d.contains_read,
     origin: d.origin ?? "setup_named", suggested: 0, untried: 0, offers: 0, disliked: 0,
     ...(d.kind ? { kind: d.kind, sub: d.sub ?? null, catalog_item: d.catalog_item ?? null } : {}) });
-  for (const r of s.rules) insert("rules", { hard: r.hard ? 1 : 0, what: r.what, who: r.who, slots: r.slots, days: r.days, items: r.items, to: r.to, frequency: r.frequency, per_meal: r.per_meal, fasting_food: r.fasting_food, quote: r.quote });
+  for (const r of s.rules) insert("rules", { hard: r.hard ? 1 : 0, what: r.what, who: r.who, slots: r.slots, days: r.days, items: r.items, to: r.to, frequency: r.frequency, per_meal: r.per_meal, fasting_food: r.fasting_food, quote: r.quote,
+    ...(r.targets ? { targets: r.targets } : {}), ...(r.gives ? { gives: r.gives } : {}) });
   for (const row of s.seed) {
     const id = insert("slot_days", { date: null, slot: row.slot, people: [], guests: [], status: "confirmed", edited: 0 });
     if (id) row.dishes.forEach((dish, position) => insert("slot_dishes", { slot_day_id: id, position, dish, new: 0, feedback_asked: 0 }));
@@ -182,7 +185,7 @@ export function readPlan(k: Kit, weekStart: string, res: any = {}): PlanOut {
     slotDays: days.map((d) => ({
       date: d.date, slot: d.slot, people: json(d.people, []), guests: json(d.guests, []), skip: d.skip ?? null, occasion: d.occasion ?? null, note: d.note ?? null,
       dishes: dishes.filter((x) => x.slot_day_id === d.id).sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
-        .map((x) => ({ name: x.dish, new: bool(x.new), note: x.note ?? null, not_for: json<string[]>(x.not_for, []) })),
+        .map((x) => ({ name: x.dish, new: bool(x.new), note: x.note ?? null, not_for: json<string[]>(x.not_for, []), for_people: json<string[]>(x.for_people, []) })),
     })),
     library, unmet: json(res?.unmet, []), message: res?.message ?? res?.say, asked: json(res?.asked, []), ...(res?.relaxed ? { relaxed: res.relaxed } : {}),
   };

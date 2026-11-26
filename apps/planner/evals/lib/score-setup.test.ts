@@ -2,7 +2,8 @@
 import { describe, expect, test } from "bun:test";
 import { effective, familyWords, scoreSetup, slotMap } from "./score-setup";
 import { setupOfTruth } from "./truth-setup";
-import { FIX } from "./test-fixture";
+import { FIX, BOX_FIX } from "./test-fixture";
+import { linked, kindPart } from "./truth";
 import type { SavedRule, SetupOut } from "./result";
 
 const base = () => setupOfTruth(FIX);
@@ -207,5 +208,86 @@ describe("scoreSetup: cuisines and templates", () => {
     expect(failing(h, s)).toEqual(["templates"]);
     lunch.templates![1].parts = [{ items: ["Rajma chawal"] }, { kind: "Raita" }];
     expect(failing(h, s)).toEqual([]);
+  });
+});
+
+
+describe("scoreSetup: the one meaning model", () => {
+  // BOX_FIX with the meals the household's own words give: the lunch sabzi named "dry sabji", an egg paratha roll as fixed dishes.
+  const HW = (() => {
+    const h = structuredClone(BOX_FIX);
+    h.truth.meals = [
+      { slot: "Lunch", templates: [{ parts: [kindPart("Rice"), kindPart("Sabzi", { sub: "Sabzi", words: "dry sabji" })] }] },
+      { slot: "Chotu's lunch box", templates: [{ parts: [kindPart("Paratha", { words: "paratha", dish: "Plain paratha" }), linked("Lunch", "Sabzi")] }, { parts: [{ items: ["Egg paratha roll"] }] }] },
+    ];
+    return h;
+  })();
+  const good = () => setupOfTruth(HW);
+  const failing = (s: SetupOut, h = HW) => Object.entries(scoreSetup(h, s).rates).filter(([, [p, n]]) => p < n).map(([k]) => k).sort();
+  const boxOf = (s: SetupOut) => s.slots.find((x) => x.name === "Chotu's lunch box")!;
+
+  test("TRUTH passes every field, with the box's typed rules, extras and linked part", () => {
+    expect(failing(good())).toEqual([]);
+    expect(boxOf(good()).order).toBe(35);
+    expect(good().slots.find((x) => x.name === "Asha's lunch extras")!.extras).toBe(true);
+    expect(good().rules.find((r) => r.who === "Dadu Ram" && r.what === "swap")).toMatchObject({ targets: [{ type: "kind", kind: "Roti" }], gives: { type: "item", item: "Plain paratha", kind: "Paratha" } });
+  });
+
+  test("templates: a linked part, its words and its dish are compared", () => {
+    const wrongLink = good();
+    boxOf(wrongLink).templates![0].parts = [{ kind: "Paratha", words: "paratha", dish: "Plain paratha" }, { kind: "Sabzi" }];
+    expect(failing(wrongLink)).toEqual(["templates"]);
+    const wrongFrom = good();
+    boxOf(wrongFrom).templates![0].parts = [{ kind: "Paratha", words: "paratha", dish: "Plain paratha" }, { from: "Dinner", kind: "Sabzi" }];
+    expect(failing(wrongFrom)).toEqual(["templates"]);
+    const noWords = good();
+    noWords.slots.find((x) => x.name === "Lunch")!.templates![0].parts = [{ kind: "Rice" }, { kind: "Sabzi", sub: "Sabzi" }];
+    expect(failing(noWords)).toEqual(["templates"]);
+    const noDish = good();
+    boxOf(noDish).templates![0].parts[0] = { kind: "Paratha", words: "paratha" };
+    expect(failing(noDish)).toEqual(["templates"]);
+  });
+
+  test("hard_rules: the saved rule's typed targets and a swap's gives are compared when TRUTH states them", () => {
+    const untyped = good();
+    for (const r of untyped.rules) { delete r.targets; delete r.gives; }
+    expect(failing(untyped)).toEqual(["hard_rules"]);
+    expect(scoreSetup(HW, untyped).notes.filter((n) => n.startsWith("hard_rules: Dadu Ram: parathas")).length).toBe(1);
+    const noGives = good();
+    noGives.rules.find((r) => r.what === "swap")!.gives = null;
+    expect(failing(noGives)).toEqual(["hard_rules"]);
+    const wrongItem = good();
+    wrongItem.rules.find((r) => r.what === "swap")!.gives = { type: "item", item: "Pancakes", kind: null };
+    expect(failing(wrongItem)).toEqual(["hard_rules"]);
+    const wrongTag = good();
+    wrongTag.rules.find((r) => r.who === "Dadu Ram" && r.what === "avoid" && r.items?.includes("egg"))!.targets = [{ type: "ingredient", tag: "dairy" }];
+    expect(failing(wrongTag)).toEqual(["hard_rules"]);
+  });
+
+  test("real_dish: a saved library row named their word for a part fails, a dish of an items part does not", () => {
+    const s = good();
+    s.library.push({ slot: "Lunch", name: "Dry sabji", frequency: null, days: null, contains: [], contains_read: [], origin: "setup_named" });
+    expect(failing(s)).toContain("real_dish");
+    const ok = good();
+    ok.library.push({ slot: "Chotu's lunch box", name: "Egg paratha roll", frequency: null, days: null, contains: [], contains_read: [], origin: "setup_named" });
+    expect(failing(ok)).not.toContain("real_dish");
+  });
+
+  test("no_filling_kind: a saved own kind named after a filling of a TRUTH item fails", () => {
+    const s = good();
+    boxOf(s).kinds = [{ name: "Paratha" }, { name: "Egg", own: true }];
+    boxOf(s).templates![1].parts = [{ items: ["Egg paratha roll"] }, { kind: "Egg" }];
+    expect(failing(s)).toContain("no_filling_kind");
+    expect(scoreSetup(HW, good()).rates.no_filling_kind).toEqual([1, 1]);
+  });
+
+  test("cook_times: a visit TRUTH gives no time for is not compared", () => {
+    const h = structuredClone(FIX);
+    h.truth.cook!.visits = [{ meals: ["Breakfast", "Lunch", "Dinner"] }];
+    const s = setupOfTruth(h);
+    s.cook!.visits = [{ at: "07:30", meals: ["Breakfast", "Lunch", "Dinner"] }];
+    expect(Object.entries(scoreSetup(h, s).rates).filter(([, [p, n]]) => p < n).map(([k]) => k)).toEqual([]);
+    const timed = structuredClone(FIX);
+    expect(Object.entries(scoreSetup(timed, { ...setupOfTruth(timed), cook: { ...setupOfTruth(timed).cook!, visits: [{ at: "09:00", meals: ["Breakfast", "Lunch", "Dinner"] }] } }).rates).filter(([, [p, n]]) => p < n).map(([k]) => k)).toEqual(["cook_times"]);
   });
 });

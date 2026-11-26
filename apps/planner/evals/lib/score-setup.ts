@@ -1,12 +1,13 @@
 // Eval 1's scorecard (spec §8): apply_setup's rows (result.ts SetupOut) against TRUTH, field by field, in code. Every field
 // is a pass rate over the things it counts; a field that does not apply to a household counts nothing there. `info` fields
 // are reported but not gating (the persona may not name every dish).
-import type { SavedPart, SavedRule, SavedSlot, SetupOut } from "./result";
-import { canonTag, itemCovers } from "./vocab";
+import type { SavedPart, SavedRule, SavedSlot, SavedTarget, SetupOut } from "./result";
+import { canonTag, itemCovers, tagsOfName } from "./vocab";
+import { catalogKindNamed } from "./catalog";
 import { weeklyPeople } from "./truth-setup";
 import {
-  MAIN_SLOTS, WEEK, dayOf, dishNameOf, sameDays, sameFrequency, sameName, sameNames, sameSet,
-  type Household, type TruthPart, type TruthRule, type TruthSlot, type Weekday,
+  MAIN_SLOTS, WEEK, dayOf, dishNameOf, plain, sameDays, sameFrequency, sameName, sameNames, sameSet,
+  type Household, type TruthPart, type TruthRule, type TruthSlot, type TruthTarget, type Weekday,
 } from "./truth";
 
 export type Rates = Record<string, [number, number]>;
@@ -107,6 +108,17 @@ export function softSaved(c: Ctx, t: TruthRule, rules: SavedRule[]): SavedRule[]
   return rules.filter((s) => whoOk(c, t, s) && (t.quote.test(s.quote) || t.quote.test(JSON.stringify(s.items ?? [])) || (!!t.items?.length && (s.items ?? []).some((i) => t.items!.some((ti) => itemCovers(i, ti) || itemCovers(ti, i))))));
 }
 
+/** A TRUTH target is a saved one (spec §5.2): the same type and words; an item's kind is compared only when TRUTH gives it. */
+const targetIs = (t: TruthTarget, x: SavedTarget): boolean =>
+  "ingredient" in t ? x.type === "ingredient" && canonTag(x.tag) === canonTag(t.ingredient)
+  : "item" in t ? x.type === "item" && plain(x.item) === plain(t.item) && (!t.kind || lc(x.kind ?? "") === lc(t.kind))
+  : "sub" in t ? x.type === "sub" && lc(x.kind) === lc(t.kind) && lc(x.sub) === lc(t.sub)
+  : x.type === "kind" && lc(x.kind) === lc(t.kind);
+/** A saved rule holds all of TRUTH's targets (and gives, for a swap) when TRUTH states them; one saved untyped does not. */
+const hasTargets = (t: TruthRule, x: SavedRule): boolean =>
+  (!t.targets?.length || (!!x.targets?.length && t.targets.every((tt) => x.targets!.some((xt) => targetIs(tt, xt)))))
+  && (!t.gives || (!!x.gives && targetIs(t.gives, x.gives)));
+
 /** A saved rule the family said: it loosely matches a truth rule or a noted item (same person, the words or an item). */
 function explained(c: Ctx, s: SavedRule): boolean {
   for (const t of c.h.truth.rules) {
@@ -163,7 +175,9 @@ export function scoreSetup(h: Household, s: SetupOut, o: { transcript?: string[]
   // ── Cook and family cooks ──
   if (t.cook) {
     add("cook_days", !!s.cook && sameName(s.cook.name, t.cook.name) && sameDays(t.cook.days, s.cook.days), JSON.stringify(s.cook && { name: s.cook.name, days: s.cook.days }));
-    const visitsOk = !!s.cook && s.cook.visits.length === t.cook.visits.length && t.cook.visits.every((v) => s.cook!.visits.some((x) => x.at === v.at && sameSet(v.meals.map(lc), (x.meals ?? []).map(lc))));
+    // A visit TRUTH gives no time for (the household did not say when she comes) is not compared; the ones with a time are.
+    const timed = t.cook.visits.filter((v) => v.at);
+    const visitsOk = !!s.cook && (s.cook.visits.length === t.cook.visits.length || timed.length < t.cook.visits.length) && timed.every((v) => s.cook!.visits.some((x) => x.at === v.at && sameSet(v.meals.map(lc), (x.meals ?? []).map(lc))));
     add("cook_times", visitsOk, `${JSON.stringify(s.cook?.visits)} (want ${JSON.stringify(t.cook.visits)})`);
   } else add("cook_days", !s.cook || t.people.some((p) => sameName(p.name, s.cook!.name)), `a paid cook saved: ${s.cook?.name}`);
   for (const fc of t.familyCooks) {
@@ -212,6 +226,20 @@ export function scoreSetup(h: Household, s: SetupOut, o: { transcript?: string[]
   }
   if (!rates.no_wrong_personal) add("no_wrong_personal", true);
 
+  // ── One meaning model (spec §5.1, §5.3, §7): a category word is never a library row, nor a filling a kind ──
+  const truthParts = (t.meals ?? []).flatMap((m) => m.templates.flatMap((tp) => tp.parts));
+  const partWords = new Set(truthParts.flatMap((p) => ("words" in p && p.words ? [plain(p.words)] : [])));
+  const itemDishes = new Set(truthParts.flatMap((p) => ("items" in p ? p.items.map(plain) : [])));
+  if (partWords.size) for (const x of s.library) add("real_dish", !partWords.has(plain(x.name)) || itemDishes.has(plain(x.name)), `${x.name} saved as a dish at ${x.slot}: it is their word for a part`);
+  // A filling said with a kind ("paratha with egg or cheese inside") is an item of that kind, never a kind of the family's own.
+  const fillings = new Set(truthParts.flatMap((p) => ("items" in p ? p.items.flatMap((it) => plain(it).split(" ").filter((w) => tagsOfName(w).size > 0)) : [])));
+  if (fillings.size) {
+    const ownKinds = [...new Set(s.slots.flatMap((sl) => [...(sl.kinds ?? []).filter((k) => k.own).map((k) => k.name),
+      ...(sl.templates ?? []).flatMap((tp) => tp.parts.flatMap((p) => ("kind" in p && !("from" in p) && !catalogKindNamed(p.kind) ? [p.kind] : [])))]))];
+    const bad = ownKinds.filter((k) => fillings.has(plain(k)));
+    add("no_filling_kind", !bad.length, `a filling saved as a kind of their own: ${bad.join(", ")}`);
+  }
+
   // ── Rules ──
   for (const r of t.rules) {
     if (r.hardAny) {
@@ -219,7 +247,9 @@ export function scoreSetup(h: Household, s: SetupOut, o: { transcript?: string[]
       add("soft_rules", got.length > 0 || softSaved(c, r, s.rules).some((x) => r.per_meal == null || x.per_meal === r.per_meal), `missing: ${r.title}`);
     } else if (r.hard) {
       const got = ruleSaved(c, r, s.rules);
-      add("hard_rules", got.length > 0, `missing: ${r.title}`);
+      // Where TRUTH names what the rule is about (a kind, an item, a swap's item), the saved rule's typed targets are compared too.
+      const typed = got.some((x) => hasTargets(r, x));
+      add("hard_rules", got.length > 0 && typed, got.length ? `${r.title}: saved targets ${JSON.stringify(got.map((x) => ({ targets: x.targets, gives: x.gives })))} (want ${JSON.stringify({ targets: r.targets, gives: r.gives })})` : `missing: ${r.title}`);
       if (got.length) add("hard_soft", got.every((x) => x.hard), `${r.title} saved as soft`);
     } else {
       const got = softSaved(c, r, s.rules);
@@ -256,7 +286,7 @@ export function scoreSetup(h: Household, s: SetupOut, o: { transcript?: string[]
       const hit = (got.templates ?? []).find((st) => sameParts(tt.parts, st.parts));
       add("templates", !!hit, `${meal.slot}: [${partsText(tt.parts)}] not saved (saved: ${(got.templates ?? []).map((x) => `[${partsText(x.parts)}]`).join(" ") || "none"})`);
       // Where TRUTH names a sub-kind (sambar and rasam), the saved part names it too: reported, not gating.
-      if (hit) { const subs = (ps: readonly (TruthPart | SavedPart)[]) => ps.flatMap((p) => ("kind" in p && p.sub ? [`${lc(p.kind)}/${lc(p.sub)}`] : [])).sort();
+      if (hit) { const subs = (ps: readonly (TruthPart | SavedPart)[]) => ps.flatMap((p) => ("kind" in p && !("from" in p) && p.sub ? [`${lc(p.kind)}/${lc(p.sub)}`] : [])).sort();
         if (subs(tt.parts).length) add("template_subs", subs(tt.parts).every((x) => subs(hit.parts).includes(x)), `${meal.slot}: [${partsText(tt.parts)}] saved as [${partsText(hit.parts)}]`, info); }
     }
     for (const k of meal.staples ?? []) add("template_staples", !!got.kinds?.some((x) => lc(x.name) === lc(k) && x.staple), `${meal.slot}: ${k} not a staple (kinds ${JSON.stringify(got.kinds ?? null)})`);
@@ -275,15 +305,23 @@ export function scoreSetup(h: Household, s: SetupOut, o: { transcript?: string[]
   return { rates, info, notes };
 }
 
-/** A template's parts as text: "Rice, Rice curry/Sambar, items(Rajma chawal)". */
-const partsText = (ps: readonly (TruthPart | SavedPart)[]) => ps.map((p) => ("kind" in p ? `${p.kind}${p.sub ? `/${p.sub}` : ""}` : `items(${p.items.join(", ")})`)).join(", ");
-/** The same plate in kinds terms: the same kinds part for part (as many of each), and each fixed-dishes part of TRUTH matched by
- *  a saved one holding one of its dishes. Sub-kinds are not compared here (template_subs reports them). */
+/** A template's parts as text: "Rice, Rice curry/Sambar, items(Rajma chawal), from Lunch/Sabzi". */
+const partsText = (ps: readonly (TruthPart | SavedPart)[]) => ps.map((p) => ("items" in p ? `items(${p.items.join(", ")})` : "from" in p ? `from ${p.from}${p.kind ? `/${p.kind}` : ""}` : `${p.kind}${p.sub ? `/${p.sub}` : ""}${p.words ? ` "${p.words}"` : ""}${p.dish ? ` =${p.dish}` : ""}`)).join(", ");
+/** The same plate in kinds terms, part for part: a kind part by its kind (sub-kinds are not compared here: template_subs reports
+ *  them) and, where TRUTH gives them, its `words` and `dish`; a linked part by its meal and kind; a fixed-dishes part of TRUTH by
+ *  a saved one holding one of its dishes. */
 export function sameParts(want: readonly (TruthPart | SavedPart)[], got: readonly (TruthPart | SavedPart)[] = []): boolean {
-  const keys = (ps: readonly (TruthPart | SavedPart)[]) => ps.map((p) => ("kind" in p ? lc(p.kind) : "items")).sort();
-  if (JSON.stringify(keys(want)) !== JSON.stringify(keys(got))) return false;
-  const gotItems = got.filter((p): p is { items: string[] } => "items" in p);
-  return want.every((p) => !("items" in p) || gotItems.some((g) => p.items.some((x) => !!dishNameOf(x, g.items))));
+  if (want.length !== got.length) return false;
+  const key = (p: TruthPart | SavedPart) => ("items" in p ? "items" : "from" in p ? `from ${lc(p.from)} ${lc(p.kind ?? "")}` : lc(p.kind));
+  const fits = (w: TruthPart | SavedPart, g: TruthPart | SavedPart): boolean => {
+    if (key(w) !== key(g)) return false;
+    if ("items" in w) return w.items.some((x) => !!dishNameOf(x, (g as { items: string[] }).items));
+    if ("from" in w) return true;
+    const gk = g as { words?: string; dish?: string };
+    return (!w.words || plain(gk.words ?? "") === plain(w.words)) && (!w.dish || plain(gk.dish ?? "") === plain(w.dish));
+  };
+  const used = new Set<number>();
+  return want.every((w) => { const i = got.findIndex((g, j) => !used.has(j) && fits(w, g)); if (i < 0) return false; used.add(i); return true; });
 }
 
 /** Field rates summed over households. */

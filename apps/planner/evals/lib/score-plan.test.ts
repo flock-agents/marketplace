@@ -5,7 +5,7 @@ import { expectedSlotDays, scorePlan } from "./score-plan";
 import { setupOfTruth, perturb } from "./truth-setup";
 import { staplesOf } from "./history";
 import { baselineWeek } from "./baseline";
-import { PLAN_FIX as FIX } from "./test-fixture";
+import { PLAN_FIX as FIX, BOX_FIX } from "./test-fixture";
 import { avoid, dateOf, type Weekday } from "./truth";
 import type { PlanOut, SavedDish } from "./result";
 import { BASE_TAGS } from "./vocab";
@@ -119,10 +119,11 @@ describe("scorePlan", () => {
     // not_for spares a rule only while the person keeps a dish of their own there (or at their own add-on that day).
     const r = goodWeek();
     for (const d of at(r, "Wed", "Lunch").dishes) d.not_for = ["Dadu Ram"];
-    expect(fails(r)).toEqual(["hard_rules"]);
+    // (Rice and dal break no rule of his: a dish kept from him for no reason is also silent filler.)
+    expect(fails(r)).toEqual(["hard_rules", "no_silent_filler"]);
     const o = goodWeek();
     for (const d of at(o, "Wed", "Dinner").dishes) d.not_for = ["Dadu Ram"];
-    expect(fails(o)).toEqual([]);
+    expect(fails(o)).toEqual(["no_silent_filler"]);
   });
 
   test("hard rules fail closed: a tag nobody read blocks the dish; the eval's own vocabulary overrides a wrong read", () => {
@@ -581,5 +582,160 @@ describe("scorePlan: made without a leave-out ingredient (decided 21)", () => {
     const p = goodWeek();
     at(p, "Mon", "Breakfast").dishes = [{ name: "Mooli thepla", note: "make without radish for Asha" }];
     expect(breaks(p, /no root/)).toHaveLength(1);
+  });
+});
+
+
+// ── The one meaning model (spec §5.2–§5.4, §7, §9.1): boxes, linked parts, swaps, asked unknowns ──
+describe("scorePlan: one meaning model", () => {
+  const H = BOX_FIX, boxLoaded = () => setupOfTruth(H);
+  const BOXDAYS: Weekday[] = ["Mon", "Tue", "Wed", "Thu"], SCHOOLDAYS: Weekday[] = ["Mon", "Tue", "Wed", "Thu", "Fri"];
+  const sdOf = (p: PlanOut, day: Weekday, slot: string) => p.slotDays.find((x) => x.date === dateOf(MON, day) && x.slot === slot)!;
+  /** goodWeek, with the box (the lunch sabzi rolled in a paratha, Mon–Thu), Asha's salad beside the home lunch, and Dadu Ram's
+   *  plain parathas on Tuesday and Thursday dinner. Lunch has Chotu on Friday only (the box takes him off it Mon–Thu). */
+  function boxWeek(): PlanOut {
+    const p = goodWeek();
+    for (const day of SCHOOLDAYS) {
+      const lunch = sdOf(p, day, "Lunch");
+      lunch.people = [...lunch.people.filter((x) => x !== "Chotu" || !BOXDAYS.includes(day)), ...(lunch.people.includes("Asha") ? [] : ["Asha"])];
+      if (BOXDAYS.includes(day)) {
+        const sabzi = lunch.dishes.filter((d) => ["Bhindi", "Aloo gobi"].includes(d.name)).map((d) => ({ name: d.name }));
+        p.slotDays.push({ date: dateOf(MON, day), slot: "Chotu's lunch box", people: ["Chotu"], guests: [], skip: null, dishes: [{ name: "Paratha roll" }, ...sabzi] });
+      }
+      p.slotDays.push({ date: dateOf(MON, day), slot: "Asha's lunch extras", people: ["Asha"], guests: [], skip: null, dishes: [{ name: "Cucumber salad" }] });
+    }
+    for (const day of ["Tue", "Thu"] as Weekday[]) sdOf(p, day, "Dinner").dishes.push({ name: "Plain paratha", for_people: ["Dadu Ram"] } as any);
+    // Wednesday's lunch carries a sabzi for the box to roll.
+    return p;
+  }
+  const rate = (p: PlanOut, field: string, l = boxLoaded()) => scorePlan(H, p, l, { failClosed: false }).rates[field];
+  const note = (p: PlanOut, field: string) => scorePlan(H, p, boxLoaded(), { failClosed: false }).notes.filter((n) => n.startsWith(`${field}:`));
+
+  test("the good box week passes the new checks", () => {
+    const p = boxWeek();
+    for (const f of ["linked_parts", "box_attendance", "no_silent_filler"]) { const r = rate(p, f); expect(r).toBeDefined(); expect(r[0]).toBe(r[1]); }
+    expect(scorePlan(H, p, boxLoaded(), { failClosed: false }).notes.filter((n) => /^(attendance|no_stray|filled)/.test(n))).toEqual([]);
+  });
+
+  describe("linked_parts", () => {
+    test("fails when the box rolls a sabzi lunch did not have", () => {
+      const p = boxWeek();
+      sdOf(p, "Tue", "Chotu's lunch box").dishes = [{ name: "Paratha roll" }, { name: "Bhindi" }];   // Tuesday's lunch has Aloo gobi
+      expect(rate(p, "linked_parts")[0]).toBeLessThan(rate(p, "linked_parts")[1]);
+      expect(note(p, "linked_parts")[0]).toContain("Tue Chotu's lunch box");
+    });
+    test("fails when the box has no sabzi though lunch did", () => {
+      const p = boxWeek();
+      sdOf(p, "Mon", "Chotu's lunch box").dishes = [{ name: "Paratha roll" }];
+      expect(rate(p, "linked_parts")[0]).toBeLessThan(rate(p, "linked_parts")[1]);
+    });
+    test("passes the whole plate of the source, and when the source is skipped that day", () => {
+      const p = boxWeek();
+      sdOf(p, "Mon", "Chotu's lunch box").dishes = [{ name: "Paratha roll" }, { name: "Rice" }, { name: "Toor dal" }, { name: "Bhindi" }];
+      sdOf(p, "Tue", "Lunch").skip = "eaten_out"; sdOf(p, "Tue", "Lunch").dishes = [];
+      sdOf(p, "Tue", "Chotu's lunch box").dishes = [{ name: "Paratha roll" }, { name: "Bhindi" }];
+      const r = rate(p, "linked_parts");
+      expect(r[0]).toBe(r[1]);
+    });
+  });
+
+  describe("real_dish", () => {
+    const HW = structuredClone(H);
+    HW.truth.meals = [...(HW.truth.meals ?? []), { slot: "Lunch", templates: [{ parts: [{ kind: "Sabzi", sub: "Sabzi", words: "dry sabji" }] }, { parts: [{ items: ["Egg paratha roll"] }] }] }];
+    const real = (p: PlanOut) => scorePlan(HW, p, setupOfTruth(HW), { failClosed: false });
+    test("fails on 'Dry sabji', the family's word for a part, and on a bare kind word", () => {
+      const p = boxWeek();
+      sdOf(p, "Mon", "Lunch").dishes = [{ name: "Rice" }, { name: "Toor dal" }, { name: "Dry sabji" }];
+      expect(real(p).notes.filter((n) => n.startsWith("real_dish"))[0]).toContain("Dry sabji");
+    });
+    test("passes a dish of a TRUTH items part, and a real dish", () => {
+      const p = boxWeek();
+      sdOf(p, "Mon", "Lunch").dishes = [{ name: "Rice" }, { name: "Toor dal" }, { name: "Bhindi" }];
+      expect(real(p).notes.filter((n) => n.startsWith("real_dish"))).toEqual([]);
+    });
+  });
+
+  describe("unknowns_asked", () => {
+    const withKadhi = (asked?: string[]) => {
+      const p = boxWeek();
+      sdOf(p, "Wed", "Dinner").dishes.push({ name: "Methi kadhi", new: true });
+      p.library.push({ ...newRow("Methi kadhi", "Dinner", ["dairy"]), contains_read: ["dairy", "sugar"] });   // read for sugar, never for egg
+      if (asked) p.asked = asked;
+      return p;
+    };
+    test("fails when an unread Kadhi for an egg-free elder is not in the question", () => {
+      const p = withKadhi(["I know only a few dishes for dinner. What else do you make for dinner?"]);
+      expect(rate(p, "unknowns_asked")).toEqual([0, 1]);
+      expect(rate(withKadhi(), "unknowns_asked")).toEqual([0, 1]);
+    });
+    test("passes when the question names it, or counts it in its 'more to check'", () => {
+      expect(rate(withKadhi(["Is the Methi kadhi OK for Dadu Ram, no egg?"]), "unknowns_asked")).toEqual([1, 1]);
+      expect(rate(withKadhi(["is the Rajma OK for Asha, no egg, and 1 more to check on the week page?"]), "unknowns_asked")).toEqual([1, 1]);
+    });
+    test("is not scored when every dish was read", () => {
+      expect(rate(boxWeek(), "unknowns_asked")).toBeUndefined();
+    });
+  });
+
+  describe("no_silent_filler", () => {
+    test("fails when Idli is added for the elder with no known break", () => {
+      const p = boxWeek();
+      sdOf(p, "Wed", "Dinner").dishes.push({ name: "Idli", for_people: ["Dadu Ram"] } as any);
+      expect(rate(p, "no_silent_filler")[0]).toBeLessThan(rate(p, "no_silent_filler")[1]);
+      expect(note(p, "no_silent_filler")[0]).toContain("Idli added for Dadu Ram");
+    });
+    test("passes a swap's item for its person, and a dish added where the plate has a known break for them", () => {
+      const p = boxWeek();
+      sdOf(p, "Wed", "Dinner").dishes = [{ name: "Roti" }, { name: "Egg curry", not_for: ["Dadu Ram"] }, { name: "Idli", for_people: ["Dadu Ram"] } as any];
+      const r = rate(p, "no_silent_filler");
+      expect(r[0]).toBe(r[1]);
+    });
+    test("fails a dish kept from someone who has no rule it breaks", () => {
+      const p = boxWeek();
+      sdOf(p, "Mon", "Dinner").dishes.find((d) => d.name === "Toor dal")!.not_for = ["Asha"];
+      expect(note(p, "no_silent_filler")).toHaveLength(1);
+    });
+    test("a swap's item bound to a person who has no swap for it fails", () => {
+      const p = boxWeek();
+      sdOf(p, "Tue", "Dinner").dishes.find((d) => d.name === "Plain paratha")!.for_people = ["Asha"];
+      expect(rate(p, "no_silent_filler")[0]).toBeLessThan(rate(p, "no_silent_filler")[1]);
+    });
+  });
+
+  describe("box_attendance", () => {
+    test("fails when the box leaves its child at Lunch on a box day", () => {
+      const p = boxWeek();
+      sdOf(p, "Tue", "Lunch").people.push("Chotu");
+      expect(note(p, "box_attendance")[0]).toContain("Tue Lunch: Chotu has Chotu's lunch box");
+    });
+    test("fails when a box takes the child off Lunch on a day it is not on", () => {
+      const p = boxWeek();
+      sdOf(p, "Fri", "Lunch").people = sdOf(p, "Fri", "Lunch").people.filter((x) => x !== "Chotu");
+      expect(note(p, "box_attendance")[0]).toContain("Fri Lunch: Chotu is off Lunch");
+    });
+    test("fails when an extras add-on takes its person off the main meal", () => {
+      const p = boxWeek();
+      sdOf(p, "Wed", "Lunch").people = sdOf(p, "Wed", "Lunch").people.filter((x) => x !== "Asha");
+      expect(note(p, "box_attendance")[0]).toContain("Wed Lunch: Asha is off Lunch though Asha's lunch extras is an add-on");
+    });
+  });
+
+  test("a kind target in a hard rule is kept by what the dish is, and a swap's item for one person is eaten by them alone", () => {
+    const h = structuredClone(H);
+    h.truth.rules.push(avoid("no_salad_dadu", "Dadu Ram: no salad", [], /salad/i, { who: "Dadu Ram", targets: [{ kind: "Salad" }] }));
+    const p = boxWeek();
+    sdOf(p, "Tue", "Lunch").dishes.push({ name: "Cucumber salad" });
+    const bad = scorePlan(h, p, setupOfTruth(h), { failClosed: false }).notes.filter((n) => n.startsWith("hard_rules: Dadu Ram: no salad"));
+    expect(bad).toHaveLength(1);
+    sdOf(p, "Tue", "Lunch").dishes.find((d) => d.name === "Cucumber salad")!.not_for = ["Dadu Ram"];
+    expect(scorePlan(h, p, setupOfTruth(h), { failClosed: false }).notes.filter((n) => n.startsWith("hard_rules: Dadu Ram: no salad"))).toEqual([]);
+  });
+
+  test("expectedSlotDays: only a box that replaces Lunch takes its person off it, on its days", () => {
+    const exp = expectedSlotDays(H, MON), e = (d: Weekday, s: string) => exp.find((x) => x.day === d && x.slot === s);
+    expect(e("Tue", "Lunch")!.people).not.toContain("Chotu");
+    expect(e("Fri", "Lunch")!.people).toContain("Chotu");
+    expect(e("Tue", "Lunch")!.people).toContain("Asha");
+    expect(e("Fri", "Chotu's lunch box")).toBeUndefined();
   });
 });

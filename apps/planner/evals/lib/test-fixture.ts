@@ -1,7 +1,7 @@
 // A small made-up household for the scorers' unit tests (not an eval household): three people, a cook Mon–Sat, a child's
 // tiffin, an elder's add-on dinner, one office lunch, a weekly fast, Saturday dinner ordered in.
 import type { Household } from "./truth";
-import { avoid, dish, mains, MON_SAT, note, SCHOOL } from "./truth";
+import { avoid, dish, kindPart, linked, mains, MON_SAT, note, SCHOOL } from "./truth";
 
 export const FIX: Household = {
   id: "t-fixture", title: "unit-test household", owner: "Asha", intro: "You are Asha",
@@ -62,5 +62,31 @@ export const PLAN_FIX: Household = (() => {
   const h = structuredClone(FIX);
   h.truth.library = h.truth.library.map((d) => (d.name === "Dal" ? { ...d, name: "Toor dal" } : ["Bhindi", "Lauki"].includes(d.name) ? { ...d, kind: "Sabzi" } : d));
   h.truth.seed = h.truth.seed.map((r) => ({ ...r, dishes: r.dishes.map((x) => (x === "Dal" ? "Toor dal" : x)) }));
+  return h;
+})();
+
+/** PLAN_FIX with the one meaning model's shapes (spec §5.4): Chotu's lunch box replaces Lunch Mon–Thu and rolls the lunch sabzi
+ *  (a linked part), Asha carries the home lunch and her salad is an add-on whose person stays at Lunch (extras), Dadu Ram has plain
+ *  parathas in place of roti on Tuesday and Thursday (a hard swap with typed targets), and no egg for him by name. */
+export const BOX_FIX: Household = (() => {
+  const h = structuredClone(PLAN_FIX);
+  h.household["household.weekly"] = [{ person: "Asha", where: "office", weekdays: SCHOOL, lunch: "carries" }];
+  h.truth.away = [];
+  h.truth.slots.push(
+    { name: "Chotu's lunch box", kind: "custom", usual_people: ["Chotu"], days: ["Mon", "Tue", "Wed", "Thu"], replaces: "Lunch", match: /lunch box/i },
+    { name: "Asha's lunch extras", kind: "addon", addon_of: "Lunch", usual_people: ["Asha"], days: SCHOOL, extras: true, match: /extras/i },
+  );
+  h.truth.library.push(
+    ...dish("Paratha roll", ["Chotu's lunch box"], { frequency: "daily", kind: "Paratha" }),
+    ...dish("Cucumber salad", ["Asha's lunch extras"], { frequency: "daily" }),
+    ...dish("Plain paratha", ["Dinner"], { days: ["Tue", "Thu"] }),
+  );
+  h.truth.rules.push(
+    avoid("no_egg_dadu", "Dadu Ram: no egg", ["egg"], /egg/i, { who: "Dadu Ram", targets: [{ ingredient: "egg" }] }),
+    { id: "paratha_swap", title: "Dadu Ram: parathas, not rotis", hard: true, what: "swap", who: "Dadu Ram", slots: ["Dinner"], days: ["Tue", "Thu"], items: ["Roti"], to: "Plain paratha",
+      targets: [{ kind: "Roti" }], gives: { item: "Plain paratha", kind: "Paratha" }, quote: /paratha/i },
+  );
+  h.truth.seed.push({ slot: "Chotu's lunch box", dishes: ["Paratha roll"] }, { slot: "Asha's lunch extras", dishes: ["Cucumber salad"] });
+  h.truth.meals = [{ slot: "Chotu's lunch box", templates: [{ parts: [kindPart("Paratha"), linked("Lunch", "Sabzi")] }] }];
   return h;
 })();
