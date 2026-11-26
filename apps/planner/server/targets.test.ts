@@ -16,6 +16,8 @@ describe("rule targets", () => {
     expect(resolveGives("pancakes")).toEqual({ type: "item", item: "Pancakes", kind: null });
     expect(resolveGives("dosa")).toEqual({ type: "item", item: "Plain dosa", kind: "Dosa" });
     expect(resolveGives("upma")).toEqual({ type: "kind", kind: "Upma" });
+    expect(resolveGives("rasam")).toEqual({ type: "item", item: "Tomato rasam", kind: "Rice curry" });
+    expect(resolveGives("sambar")).toEqual({ type: "sub", kind: "Rice curry", sub: "Sambar" });
     expect(resolveGives("paratha")).toEqual({ type: "item", item: "Plain paratha", kind: "Paratha" });
   });
 

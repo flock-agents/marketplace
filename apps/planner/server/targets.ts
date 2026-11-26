@@ -35,15 +35,16 @@ export function resolveTarget(word: string): RuleTarget {
 
 const sentence = (w: string): string => { const s = w.trim().replace(/_/g, " "); return s.charAt(0).toUpperCase() + s.slice(1); };
 
-/** A swap's `to`: as resolveTarget, except a kind word whose bareDish exists gives that item; a word the catalog does not know
+/** A swap's `to`: as resolveTarget, except a kind or sub word whose bareDish exists gives that item; a word the catalog does not know
  *  is the family's own item (kind null). Never an ingredient. */
 export function resolveGives(word: string): Exclude<RuleTarget, { type: "ingredient" }> {
   const m = matchDish(word);
   if (m?.by === "item" && m.item) return { type: "item", item: m.item, kind: m.kind };
-  if (m?.by === "sub" && m.sub) return { type: "sub", kind: m.kind, sub: m.sub };
   if (m) {
-    const bare = bareDish(m.kind);
-    return bare ? { type: "item", item: bare, kind: catalogItem(bare)?.kind.name ?? m.kind } : { type: "kind", kind: m.kind };
+    // A kind or sub-kind word whose bare dish is decided gives that item (spec §5.1); one without stays a kind or sub.
+    const bare = bareDish(m.kind, m.sub);
+    if (bare) return { type: "item", item: bare, kind: catalogItem(bare)?.kind.name ?? m.kind };
+    return m.sub ? { type: "sub", kind: m.kind, sub: m.sub } : { type: "kind", kind: m.kind };
   }
   return { type: "item", item: sentence(word), kind: null };
 }
