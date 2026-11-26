@@ -1805,6 +1805,58 @@ describe("setup checks what a read left out (H1-H3)", () => {
     expect(homeViolations(boxOnly({ home_meal: "a_part" }), { household: householdOf(I_HOUSEHOLD), sentences: [] })).toHaveLength(1);
     expect(homeViolations(boxOnly({ home_meal: "none" }), { household: householdOf(I_HOUSEHOLD), sentences: [] })).toEqual([]);
   });
+  // J10 (task 15 round 5, L1): a custom slot named for a main meal's box with people and no instead_of is a violation, re-read,
+  // then asked; never a default.
+  describe("a main meal's box with no instead_of (J10)", () => {
+    const T_HOUSEHOLD = {
+      "household.people": [{ name: "Rahul", relation: "self", group: "adult" }, { name: "Tara", relation: "daughter", group: "child", age: 7 }],
+      "household.weekly": [{ person: "Tara", where: "school", weekdays: MON_FRI }], "household.speaker": "Rahul",
+    };
+    const tSentences = ["tara carries a breakfast box for school"];
+    const tctx = (sentences = tSentences) => ({ household: householdOf(T_HOUSEHOLD), sentences });
+    const tbox = { name: "Tara's breakfast box", kind: "custom", after: "Breakfast", usual_people: ["Tara"], days: MON_FRI, quote: "Tara carries a breakfast box for school" };
+    const tread = (slot: Record<string, unknown>, sentences = tSentences) => checkedHome({ slots: [...mains, slot] }, sentences, T_HOUSEHOLD);
+    it("homeViolations: a breakfast box with no instead_of is a violation", () => {
+      const v = homeViolations(tread(tbox), tctx());
+      expect(v).toHaveLength(1);
+      expect(v[0].missing).toContain("instead_of of Tara's breakfast box");
+      expect(v[0].ask).toBe("Does Tara also eat the family's breakfast on Mon-Fri, or only the Tara's breakfast box?");
+    });
+    it("homeViolations guards: instead_of set, a snack box, a grown-up's extras add-on, or the family's own 'none'", () => {
+      expect(homeViolations(tread({ ...tbox, instead_of: "Breakfast", home_meal: "as_made" }), tctx())).toEqual([]);
+      expect(homeViolations(tread({ ...tbox, name: "Tara's snack box", quote: "Tara carries a snack box" }, ["tara carries a snack box"]), tctx(["tara carries a snack box"]))).toEqual([]);
+      const rahul = { name: "Rahul's lunch box", kind: "addon", addon_of: "Lunch", usual_people: ["Rahul"], extras: true, days: MON_FRI, quote: "i carry a lunch box with eggs" };
+      expect(homeViolations(tread(rahul, ["i carry a lunch box with eggs"]), tctx(["i carry a lunch box with eggs"]))).toEqual([]);
+      // The re-read's "none": they also eat the family's meal; a field, not an omission.
+      expect(homeViolations(tread({ ...tbox, instead_of: "none" }), tctx())).toEqual([]);
+    });
+    const tTranscript = ["Q: Does Tara carry a box?", "A: Tara carries a breakfast box for school.", "Q: What goes in it?", "A: Fruit and a muffin."];
+    const tHome = (box: Record<string, unknown>) => ({ slots: [...mains, box] });
+    const tRun = async (second: unknown) => {
+      const f = fake({ home: (_r: ModelRequest, n: number) => (n === 1 ? tHome(tbox) : second), rules: { rules: [] }, dishes: { library: [["Muffin", "Tara's breakfast box", "a muffin"]], seed: [], links: [] },
+        often: { often: [] }, contains: containsOf(), lint: { dishes: [] }, kinds: { dishes: [] } });
+      const k = await boot({ model: f.model });
+      const r = await k.op("apply_setup", { household: T_HOUSEHOLD, transcript: tTranscript });
+      expect(r.ok).toBe(true);
+      const fam = (await k.owner("GET", "/api/family")).body;
+      return { f, r, slot: (n: string) => fam.slots.find((s: any) => s.name === n) };
+    };
+    it("applySetup: the re-read gives instead_of Breakfast: the slot sits in place of it, with a link as made", async () => {
+      const { f, slot } = await tRun(tHome({ ...tbox, instead_of: "Breakfast", home_meal: "as_made" }));
+      expect(f.of("home")).toHaveLength(2);
+      expect(JSON.parse(f.of("home")[1].user).missing[0]).toContain("instead_of of Tara's breakfast box");
+      expect(slot("Tara's breakfast box")).toMatchObject({ order: 15 });
+    });
+    it("applySetup: still none: the question is asked, no default instead_of, Breakfast kept", async () => {
+      const { r, slot } = await tRun(tHome(tbox));
+      expect(r.said).toContain("Does Tara also eat the family's breakfast on Mon-Fri, or only the Tara's breakfast box?");
+      expect(slot("Tara's breakfast box")?.order).not.toBe(15);
+    });
+    it("applySetup: the re-read says none: they also eat it, nothing is asked", async () => {
+      const { r } = await tRun(tHome({ ...tbox, instead_of: "none" }));
+      expect(r.said).not.toContain("Does Tara also eat the family's breakfast");
+    });
+  });
   it("the home re-read is taken when it clears a box, though it leaves home_meal out", async () => {
     const { f, slot } = await run({ home: (_req: ModelRequest, n: number) => (n === 1 ? noBoxes : { ...withBoxes, slots: [...mains, sprouts, { ...bbox, home_meal: undefined }, lbox] }) });
     expect(f.of("home")).toHaveLength(2);
@@ -2022,7 +2074,7 @@ describe("apply_setup v2: the prompts", () => {
   });
   it("read a person's own meal in place of the family's as instead, and a meal ordered in for some as its skip when the others have their own (classes 3, 4)", () => {
     const home = SETUP_PARTS.find((p) => p.id === "home")!;
-    expect(JSON.stringify(home.schema)).toContain('"instead_of":{"type":"string","enum":["Breakfast","Lunch","Dinner"]}');
+    expect(JSON.stringify(home.schema)).toContain('"instead_of":{"type":"string","enum":["Breakfast","Lunch","Dinner","none"]}');
     expect(JSON.stringify(home.schema)).not.toContain('"instead":');
     expect(home.system).toContain("instead_of: the main meal such a meal is eaten in place of, when the person does not eat that meal at all");
     expect(home.system).toContain("it is that meal's skip all the same when the others at home have their own meal in its place that day");

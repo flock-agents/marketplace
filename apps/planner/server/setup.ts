@@ -66,7 +66,7 @@ const HOME_SCHEMA = {
     slots: { type: "array", items: { type: "object", required: ["name", "kind"], properties: {
       name: STR, kind: { type: "string", enum: ["main", "custom", "addon"] }, addon_of: STR, after: { type: "string", enum: [...SLOTS] },
       usual_people: STRS, days: DAYS, skip_days: { type: "array", items: { type: "object", required: ["day", "skip"], properties: { day: STR, skip: { type: "string", enum: [...SKIPS] } } } },
-      instead_of: { type: "string", enum: [...SLOTS] }, home_meal: { type: "string", enum: [...HOME_MEALS] }, home_part: STR, extras: { type: "boolean" }, quote: STR } } },
+      instead_of: { type: "string", enum: [...SLOTS, "none"] }, home_meal: { type: "string", enum: [...HOME_MEALS] }, home_part: STR, extras: { type: "boolean" }, quote: STR } } },
     cook: { anyOf: [{ type: "null" }, { type: "object", properties: {
       name: STR, days: DAYS, visits: { type: "array", items: { type: "object", required: ["meals"], properties: { at: STR, meals: STRS } } }, limits_words: STR, quote: STR } }] },
     family_cooks: { type: "array", items: { type: "object", required: ["person", "days"], properties: { person: STR, days: DAYS, quote: STR } } },
@@ -83,7 +83,7 @@ const HOME_PART = `Write this part: the meals (slots), the cook, who of the fami
   kind "custom": a meal the family names besides those: a child's school tiffin, lunch box or snack box ("<child>'s tiffin", or the family's word for a box two children share; usual_people [those children], days the school days), an evening snack ("Evening snack"). after: the main meal it comes after (an evening snack: Lunch). Each box the family names is its own slot: a breakfast box and a lunch box are two slots, also for one child. usual_people: the people the family names for it; a meal said without names is everyone's: usual_people empty. days: the weekdays it is eaten, empty for every day.
   A box or tiffin the family names its own food for, food that is not the home meal ("snack box: sandwiches or pasta", "lunch box: pulao, curd rice"), is always a custom slot, also when it is told in an answer about lunch: its people are the ones it is said of (a box told in answer to a question about the children is the children's). Someone who carries the home meal ("takes roti sabzi from home", "carries his lunch") has no slot: Lunch is cooked for them.
   kind "addon": one person's own plate at a main meal: the family names a dish made for that person at that meal, in place of or beside the shared dishes ("father has two phulkas, no rice at night", "bajra roti for her at night", "her own ragi porridge", "his own soup", a child's different dinner): name "<person>'s <meal>" ("Lalitha's dinner"), addon_of the main meal, usual_people [that person]. It holds only the difference; the person still eats the main meal's shared dishes. Someone who has a dish the others have too ("Kavu has ragi dosa too", "same as us, less spicy") has no add-on.
-  instead_of: the main meal such a meal is eaten in place of, when the person does not eat that meal at all, only their own, at its time or another ("she eats at six, on her own", "he doesn't eat our dinner", "she doesn't sit with us at night", "the baby has his own food every night"): that meal is theirs alone and the main meal is cooked for the others. Left out when they also eat the shared dishes.
+  instead_of: the main meal such a meal is eaten in place of, when the person does not eat that meal at all, only their own, at its time or another ("she eats at six, on her own", "he doesn't eat our dinner", "she doesn't sit with us at night", "the baby has his own food every night"): that meal is theirs alone and the main meal is cooked for the others. Left out when they also eat the shared dishes. A custom meal named for a main meal's box ("breakfast box", "lunch box", "dinner box") always says it: instead_of that meal, or "none" when the family says they also eat that meal.
   A box a child eats in place of a meal is kind "custom", instead_of that meal, its days the school days: a school tiffin or lunch box is instead_of Lunch, unless the family calls it a breakfast box (instead_of Breakfast); a box packed with the home meal's own dish is such a box too. A snack box the child has besides a lunch at home has no instead_of.
   home_meal: on a custom meal with instead_of, always: what it has of the main meal it is in place of, from the family's words. "as_made": that meal as it is cooked at home, the whole plate ("the same as ours", "whatever is cooked that morning"). "a_part": one part of that meal with food of its own; home_part: the family's words for that part ("dal", "the curry"). "none": only food of its own, nothing of that meal.
   extras: true on an add-on that is food the person has beside the home meal, the home meal still theirs ("I take 4 eggs and some salad with my lunch": "<person>'s lunch box", addon_of Lunch, extras true, days the days they carry it). Left out otherwise. An extras add-on's carrying days are its own days, never weekday_lunch: the days the family says they carry it, else their weekdays away (household.weekly).
@@ -274,6 +274,8 @@ export type ReadSlot = { name: string; kind: SlotKind; addon_of: string | null; 
   /** The read: the main meal the person eats this one of theirs in place of (they do not eat that meal at all). After the
    *  checks, a main meal's name (the slot is custom, at its place; the main meal is cooked for the others), else null. */
   instead_of?: string | null;
+  /** The home read's own "none" for instead_of (J10): the family also eats the main meal the box is named for. A field, never an omission. */
+  also_eats?: boolean;
   /** An add-on of food the person has beside the home meal (§5.4: "4 boiled eggs and salad" with the carried lunch). */
   extras?: boolean;
   /** A meal in place of a main meal (H3): what it has of that meal; `home_part` the family's words for the part ("dal"). */
@@ -627,7 +629,8 @@ export function checkRead(read: SetupRead, ctx: { household: Household; said: st
     // "after Breakfast" is in place of Lunch); a box with people and none keeps its place from `after`.
     const instead_of = s.instead_of && usual.length ? SLOTS.find((m) => same(m, s.instead_of!)) ?? null : null;
     if (instead_of) { slots.push({ ...s, kind: "custom", addon_of: null, after: instead_of, usual_people: usual, instead_of }); continue; }
-    slots.push({ ...s, kind, addon_of, after: SLOTS.find((m) => same(m, s.after ?? "")) ?? null, usual_people: usual, instead_of: null });
+    slots.push({ ...s, kind, addon_of, after: SLOTS.find((m) => same(m, s.after ?? "")) ?? null, usual_people: usual, instead_of: null,
+      ...(same(s.instead_of ?? "", "none") && kind === "custom" ? { also_eats: true } : {}) });
   }
   for (const m of SLOTS) if (!slots.some((s) => s.name === m))
     slots.push({ name: m, kind: "main", addon_of: null, after: null, usual_people: [], days: [], skip_days: [], quote: "" });
@@ -932,6 +935,15 @@ export function homeViolations(read: SetupRead, ctx: { household: Household; sen
     if ((ctx.household.weekly ?? []).some((w) => w.person === p) || read.weekday_lunch.some((w) => w.person === p)) continue;
     const what = x.name.replace(/^.*?['’]s\s+/, "") || "lunch";
     add({ missing: `the days of ${x.name}: the days ${p} carries it (its days)`, ask: `Which days does ${p} take the ${what} from home?`, slot: x.name });
+  }
+  // (iv) a custom meal of people, named for a main meal's box, says what it is in place of (J10): the meal, or the family's "none".
+  for (const x of read.slots) if (x.kind === "custom" && !x.instead_of && !x.also_eats && x.usual_people.length) {
+    const ws = plainWords(x.name.replace(/['’]s\b/gi, "")).split(" "), i = ws.findIndex((w, j) => w === "box" && BOX_MEALS.includes(ws[j - 1]) && ws[j - 1] !== "snack");
+    const meal = i > 0 ? SLOTS.find((m) => same(m, ws[i - 1])) : ws.includes("lunchbox") ? "Lunch" : null;
+    if (!meal) continue;
+    const days = !x.days.length || x.days.length === 7 ? "every day" : x.days.join(",") === WEEKDAYS.slice(0, 5).join(",") ? "Mon-Fri" : x.days.join(", ");
+    add({ missing: `instead_of of ${x.name}: the meal it is eaten in place of, or none when they also eat the family's ${meal.toLowerCase()}`,
+      ask: `Does ${x.usual_people.join(" and ")} also eat the family's ${meal.toLowerCase()} on ${days}, or only the ${x.name}?` });
   }
   for (const x of read.slots) if (x.kind === "custom" && x.instead_of && (!x.home_meal || (x.home_meal === "a_part" && !x.home_part?.trim())))
     add({ missing: `home_meal of ${x.name}: the family's ${x.instead_of.toLowerCase()} as made, a part of it (home_part), or none` });

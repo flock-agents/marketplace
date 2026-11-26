@@ -32,6 +32,12 @@ describe("attendance: only a box that replaces a meal takes its person off it", 
     expect(b.why.some((w) => w.includes("Agastya's breakfast box"))).toBe(true);
     for (const w of at(d, MON, "Lunch")!.why) expect(w).not.toContain("breakfast box");
   });
+  it("a box saved after Breakfast (order 20, no instead_of) replaces nothing: the child stays on Breakfast (J10 documents it)", () => {
+    const slots = base().filter((s) => s.name !== "Agastya's lunch box").map((s) => (s.name === "Agastya's breakfast box" ? { ...s, order: SLOT_ORDER.tiffin } : s));
+    const d = run(slots);
+    expect(at(d, MON, "Breakfast")!.people).toContain("Agastya");
+    expect(at(d, MON, "Agastya's breakfast box")!.people).toEqual(["Agastya"]);
+  });
   it("an extras add-on keeps its person at the main meal", () => {
     const d = run(base());
     expect(at(d, MON, "Lunch")!.people).toContain("Shiva");
