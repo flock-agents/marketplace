@@ -1821,14 +1821,14 @@ describe("setup checks what a read left out (H1-H3)", () => {
       dishes: (_req: ModelRequest, n: number) => box(n) }, [...toastTranscript, "A: Or a sandwich."]);
     expect(f.of("dishes")).toHaveLength(2);
     // The sentences no quote cites join this same re-read (H15).
-    expect(JSON.parse(f.of("dishes")[1].user).missing).toEqual(["what goes in Ira's breakfast box", "ira carries a breakfast box for school", "she carries a lunch box",
-      "the breakfast box is our breakfast", "cheese toast is quick on busy days too", "or a sandwich"]);
+    expect(JSON.parse(f.of("dishes")[1].user).missing).toEqual(["what goes in Ira's breakfast box", "the breakfast box is our breakfast",
+      "cheese toast is quick on busy days too", "or a sandwich"]);
     expect(f.of("dishes")[1].system).toContain("A list `missing` names what your last answer left out: write it.");
     expect(JSON.stringify(slot("Ira's breakfast box").templates).toLowerCase()).toContain("sandwich");
     expect(r.asks).not.toContain(boxAsk);
     // A box with its link needs no re-read.
     const { f: f2 } = await run();
-    expect(f2.of("dishes").slice(1).flatMap((x) => JSON.parse(x.user).missing as string[]).filter((m) => m.startsWith("what goes in"))).toEqual([]);
+    expect(f2.of("dishes")).toHaveLength(1);
   });
 
   // H15: each meal sentence that names food is written down (A10).
@@ -1847,6 +1847,15 @@ describe("setup checks what a read left out (H1-H3)", () => {
     const both = readOf(null, { rules: [] }, { library: [["Puri", "Lunch", "His box is usually puri rolled around the sabzi. Or sometimes with paneer or egg inside it"]] });
     expect(uncited(both, sentences)).toEqual([]);
     expect(uncited(read, [sentences[0], "we are four at home"])).toEqual([]);
+  });
+  it("uncited: a sentence with a box word and no food word is cited by a saved box slot's quote (fix round 1)", () => {
+    const read = readOf({ slots: [...mains, lbox] }, { rules: [] }, { library: [["Puri", "Ira's lunch box", "puri rolled around the sabzi"]] });
+    expect(uncited(read, ["she carries a lunch box"])).toEqual([]);
+    // A main meal's quote cites no box sentence; a box sentence that names food needs a dish's quote.
+    expect(uncited(readOf({ slots: [{ ...mains[1], quote: "she carries a lunch box" }] }, { rules: [] }, { library: [] }), ["she carries a lunch box"]))
+      .toEqual(["she carries a lunch box"]);
+    expect(uncited(readOf({ slots: [{ ...lbox, quote: "she carries a lunch box with egg" }] }, { rules: [] }, { library: [] }), ["she carries a lunch box with egg"]))
+      .toEqual(["she carries a lunch box with egg"]);
   });
   it("applySetup re-reads the dishes once for an uncited sentence", async () => {
     const { f, k } = await run({ dishes: (_req: ModelRequest, n: number) => puriDishes(n > 1), often: puriOften, kinds: ownKinds }, puriTranscript);

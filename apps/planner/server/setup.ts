@@ -949,13 +949,16 @@ export function emptyBoxes(read: Pick<SetupRead, "slots" | "links" | "library" |
 const cites = (quote: string, sentence: string): boolean => saidByFamily(quote, [sentence]) || saidByFamily(sentence, [plainWords(quote)]);
 /** The family's sentences that name food (a box word, or a word or two-word phrase the catalog places) and that no read library,
  *  seed, link or rule quote cites (H15): each one is re-read once from the dishes, by its words, then logged; never guessed. */
-export function uncited(read: Pick<SetupRead, "library" | "seed" | "links" | "rules">, sentences: string[]): string[] {
+export function uncited(read: Pick<SetupRead, "library" | "seed" | "links" | "rules"> & Partial<Pick<SetupRead, "slots">>, sentences: string[]): string[] {
   const quotes = [...read.library, ...read.seed, ...read.links, ...read.rules].map((x) => x.quote).filter(Boolean);
-  const namesFood = (s: string) => {
-    const ws = s.split(" ");
-    return ws.some((w, i) => BOX_WORDS.includes(w) || !!matchDish(w) || (i > 0 && !!matchDish(`${ws[i - 1]} ${w}`)));
-  };
-  return uniq(sentences.map(plainWords).filter((s) => s && namesFood(s) && !quotes.some((q) => cites(q, s))));
+  // A sentence with a box word and no food word is about the box: a saved custom slot's quote cites it too.
+  const boxQuotes = (read.slots ?? []).filter((x) => x.kind === "custom" && x.quote).map((x) => x.quote);
+  const food = (ws: string[]) => ws.some((w, i) => !!matchDish(w) || (i > 0 && !!matchDish(`${ws[i - 1]} ${w}`)));
+  return uniq(sentences.map(plainWords).filter((s) => {
+    const ws = s.split(" "), box = ws.some((w) => BOX_WORDS.includes(w)), dish = food(ws);
+    if (!s || !(box || dish) || quotes.some((q) => cites(q, s))) return false;
+    return dish || !boxQuotes.some((q) => cites(q, s));
+  }));
 }
 /** The re-read's rows that write down an uncited sentence (H15) or fill a box read empty (H3), and that the read lacks. */
 function rowsFor(read: SetupRead, again: SetupRead, opts: { sentences: string[]; boxes: string[]; meals: string[] }): Pick<SetupRead, "library" | "seed" | "links"> {
