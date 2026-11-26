@@ -1,6 +1,7 @@
 // Later changes (changes.ts; docs/slot-model-spec.md §6) and the next-day question about an untried dish (§5.7), with a fake
 // model answering by the call's purpose: each operation's checks and writes, what a change re-plans (only the slot-days it
 // touches, never one the family edited or said was made), every outcome of the next-day answer, and the reminder's line.
+import { targetsOf } from "./targets";
 import { describe, it, expect } from "bun:test";
 import { boot } from "./testkit";
 import { feedbackLine } from "./messages";
@@ -197,6 +198,25 @@ describe("set_rule", () => {
     const k = await planned();
     const r = await k.op("set_rule", { hard: true, what: "avoid", items: ["rice"], slots: ["Dinner"], quote: "no rice at night" });
     expect(r.rule.targets).toEqual([{ type: "kind", kind: "Rice" }, { type: "ingredient", tag: "rice" }]);
+  });
+
+  it("veg and no_eggs with items keep their derived expansion", async () => {
+    const k = await planned();
+    const v = await k.op("set_rule", { hard: true, what: "veg", who: "Ravi", items: ["paneer"], quote: "Ravi is vegetarian, no paneer" });
+    expect(v.rule.targets).toEqual([{ type: "ingredient", tag: "meat" }, { type: "ingredient", tag: "fish" }, { type: "ingredient", tag: "paneer" }]);
+    const e = await k.op("set_rule", { hard: true, what: "no_eggs", who: "Ravi", items: ["mayonnaise"], quote: "no eggs, no mayonnaise" });
+    expect(e.rule.targets?.slice(0, 1)).toEqual([{ type: "ingredient", tag: "egg" }]);
+    expect(e.rule.targets?.length).toBeGreaterThan(1);
+  });
+
+  it("a swap on rice saves only the kind target, and the saved rule agrees with targetsOf for each what", async () => {
+    const k = await planned();
+    const s = await k.op("set_rule", { hard: true, what: "swap", who: "Ravi", items: ["rice"], to: "ragi mudde", quote: "ragi mudde for rice" });
+    expect(s.rule.targets).toEqual([{ type: "kind", kind: "Rice" }]);
+    for (const what of ["avoid", "veg", "no_eggs", "egg", "swap", "only", "require"]) {
+      const r = await k.op("set_rule", { hard: true, what, who: "Ravi", items: ["rice", "paneer"], to: what === "swap" ? "ragi" : undefined, quote: `${what} rice paneer` });
+      expect(r.rule.targets).toEqual(targetsOf({ what, items: ["rice", "paneer"], targets: null } as any));
+    }
   });
 
   it("a require rule on rice saves only the kind target", async () => {

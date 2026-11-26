@@ -76,11 +76,13 @@ export function resolveGives(word: string): Exclude<RuleTarget, { type: "ingredi
   return { type: "item", item: sentence(word), kind: null };
 }
 
-/** A rule's targets as saved, else derived from what/items (veg → meat, fish + items; no_eggs → egg + items; egg → items or meat, fish). */
-export function targetsOf(r: Pick<Rule, "what" | "items" | "targets">): RuleTarget[] {
-  if (r.targets) return r.targets;
-  // Only an exclusion also targets the ingredient of a kind word ("no rice"); a swap, only or require rule keeps the one target.
-  const items = (r.items ?? []).flatMap(r.what === "swap" || r.what === "only" || r.what === "require" ? (w: string) => [resolveTarget(w)] : resolveTargets);
+/** Does a rule's word also target its ingredient ("no rice": the Rice kind and rice): the exclusions only. A swap, only or require
+ *  rule keeps the one target (§5.2: a swap targets the swapped part). */
+export const doublesFor = (what: string): boolean => what === "avoid" || what === "veg" || what === "no_eggs" || what === "egg";
+
+/** The targets a rule has from its what and words (veg → meat, fish + items; no_eggs → egg + items; egg → items or meat, fish). */
+export function targetsFor(r: { what: string; items: string[] | null }): RuleTarget[] {
+  const items = (r.items ?? []).flatMap(doublesFor(r.what) ? resolveTargets : (w: string) => [resolveTarget(w)]);
   const ing = (...tags: string[]): RuleTarget[] => tags.map((tag) => ({ type: "ingredient", tag }));
   const out = r.what === "veg" ? [...ing("meat", "fish"), ...items]
     : r.what === "no_eggs" ? [...ing("egg"), ...items]
@@ -88,6 +90,11 @@ export function targetsOf(r: Pick<Rule, "what" | "items" | "targets">): RuleTarg
     : items;
   const seen = new Set<string>();
   return out.filter((t) => { const k = JSON.stringify(t); return seen.has(k) ? false : (seen.add(k), true); });
+}
+
+/** A rule's targets as saved, else derived (targetsFor). */
+export function targetsOf(r: Pick<Rule, "what" | "items" | "targets">): RuleTarget[] {
+  return r.targets ?? targetsFor(r);
 }
 
 export type DishPlace = { kind: string | null; sub: string | null; item: string | null };

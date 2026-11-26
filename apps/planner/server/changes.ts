@@ -23,7 +23,7 @@ import { isObject, name, names, refuse, weekdays, words, writeRoutes, type Db, t
 import type { ModelCall } from "./model";
 import { INGREDIENT_SCHEMA, INGREDIENT_SYSTEM, ingredientsFrom, makePlan, OP_BUDGET_MS, type MakePlanResult } from "./makePlan";
 import { platformPeers, ruleHolds, type PlanDay } from "./planDays";
-import { resolveGives, resolveTarget, resolveTargets } from "./targets";
+import { resolveGives, resolveTarget, targetsFor } from "./targets";
 import { canonTag, checkSlot, forbidden, notFor, readFor, ruleTags, slotFacts, type Week } from "./planChecks";
 import { containsRead, frequencyOf } from "./setup";
 import { addRule, commit, getLibraryDish, getSlot, getSlotDay, listLibrary, listRules, listSlotDays, listSlots, newDishesPerWeek, recent, removeRule,
@@ -319,10 +319,9 @@ export function mountChangeRoutes(hono: Hono<any>, deps: Omit<ChangeDeps, "now">
     if (b.items !== undefined) {
       const said = b.items === null ? null : names(b.items, "items");
       input.items = said && said.map(canonTag);
-      // Resolved once, here: what the rule is about is typed from now on (targets.ts).
-      // Only an exclusion also targets the ingredient ("no rice"); a swap or an only/require rule keeps the one target (§5.2).
+      // Resolved once, here, as targetsOf would derive them (targets.ts targetsFor): what the rule is about is typed from now on.
       const what = input.what ?? before?.what;
-      input.targets = said && said.flatMap(what === "avoid" ? resolveTargets : (w) => [resolveTarget(w)]);
+      input.targets = said && (what ? targetsFor({ what, items: said }) : said.flatMap((w) => [resolveTarget(w)]));
     }
     if (b.to !== undefined) input.to = words(b.to, "to");
     if (b.frequency !== undefined) input.frequency = b.frequency === null ? null : frequencyOf(b.frequency) ?? refuse('frequency must be usually, sometimes, rarely or "<n>/week"');
