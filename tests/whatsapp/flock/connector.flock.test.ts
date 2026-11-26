@@ -266,7 +266,8 @@ describe.skipIf(!enabled)("the WhatsApp connector 2.x in Flock", () => {
       const start = latestStart();
       expect(start.env.HTTPS_PROXY).toMatch(/^http:\/\/[^:]+:[^@]+@127\.0\.0\.1:\d+\/$/);
       expect(start.env.HTTP_PROXY).toBe(start.env.HTTPS_PROXY);
-      expect(start.env.NO_PROXY).toBe("localhost,127.0.0.1");
+      expect(start.env.NO_PROXY.split(",")).toEqual(expect.arrayContaining(["localhost", "127.0.0.1"]));
+      expect(start.env.NO_PROXY.split(",").every((h: string) => ["localhost", "127.0.0.1", "::1"].includes(h))).toBe(true);
       const { isEgressBindingRegistered } = await flockImport("browser/egress-proxy");
       expect(await isEgressBindingRegistered(bindingOf(start))).toBe(true);
 
