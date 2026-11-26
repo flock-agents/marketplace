@@ -3,7 +3,7 @@
   "slug": "whatsapp",
   "icon": "icon.svg",
   "description": "Read your WhatsApp chats and groups, search them, and send a message you approved",
-  "version": "1.1.0",
+  "version": "2.0.0",
   "author": "flock",
   "category": "integration",
   "tags": [
@@ -12,71 +12,58 @@
     "chat",
     "social"
   ],
-  "minFlockVersion": "0.24.0",
+  "minFlockVersion": "0.25.0-beta.99",
   "tier": "installable",
   "requires": [
     {
-      "type": "browser_session",
+      "type": "mcp_server",
       "service": "whatsapp",
-      "loginUrl": "https://web.whatsapp.com/",
-      "description": "Link WhatsApp to Flock's browser with a code on your phone",
-      "recommended": true,
-      "rationale": "WhatsApp has no API for personal accounts: WhatsApp Web, linked as one of your devices, is how the agent reads and sends for you."
+      "description": "Link WhatsApp to Flock with a code on your phone",
+      "mcp": {
+        "archetype": "stdio-nocred",
+        "transport": "stdio",
+        "command": "bun",
+        "args": [
+          "{packageDir}/scripts/server.ts"
+        ],
+        "egress": true,
+        "envVars": [],
+        "credentialsRequired": false,
+        "setupInstructions": "Your agent links WhatsApp with you in chat: you type a link code on your phone."
+      }
     }
   ],
-  "hasScripts": true,
-  "networkAccess": true,
-  "functions": {
-    "list-chats": {
-      "timeoutMs": 120000,
-      "reason": "Opens WhatsApp Web and waits for it to load the chats (up to a minute after a while away), then reads the list."
-    },
-    "read-chat": {
-      "timeoutMs": 240000,
-      "reason": "Opens WhatsApp Web, waits for the chats (up to a minute), finds the chat (by the list, else WhatsApp's search), reads its last messages and downloads up to 5 of their PDFs (up to 20 seconds each)."
-    },
-    "search": {
-      "timeoutMs": 120000,
-      "reason": "Opens WhatsApp Web, waits for the chats (up to a minute), then types the search and reads the results."
-    },
-    "send-message": {
-      "timeoutMs": 150000,
-      "reason": "Opens WhatsApp Web, waits for the chats (up to a minute), opens the chat, types the message, sends it and checks it shows."
-    }
-  },
   "security": {
     "allowedFunctions": [
+      "link",
+      "link-status",
       "list-chats",
       "read-chat",
       "search",
-      "send-message"
+      "send-message",
+      "unlink"
     ],
     "functionEffects": {
+      "link": "write",
+      "link-status": "read",
       "list-chats": "read",
       "read-chat": "read",
       "search": "read",
-      "send-message": "irreversible"
+      "send-message": "irreversible",
+      "unlink": "write"
     },
     "trustLevel": "third-party",
     "networkEndpoints": [
       {
         "hostname": "web.whatsapp.com",
-        "purpose": "WhatsApp Web: the chat list, chats, search and sending",
-        "methods": [
-          "GET",
-          "POST"
-        ]
-      },
-      {
-        "hostname": "mmg.whatsapp.net",
-        "purpose": "WhatsApp's media servers: PDFs posted in a chat (fetched by WhatsApp Web itself)",
+        "purpose": "WhatsApp's linked-device connection (one WebSocket) and its current version",
         "methods": [
           "GET"
         ]
       },
       {
-        "hostname": "*.cdn.whatsapp.net",
-        "purpose": "WhatsApp's media servers (media-<region>.cdn.whatsapp.net): PDFs posted in a chat (fetched by WhatsApp Web itself)",
+        "hostname": "mmg.whatsapp.net",
+        "purpose": "The chat list and a few recent messages WhatsApp sends once, when it is linked (never photos, voice messages or documents)",
         "methods": [
           "GET"
         ]

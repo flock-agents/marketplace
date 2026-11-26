@@ -1,12 +1,13 @@
 /**
- * WhatsApp: how often and how long the skill may use WhatsApp Web, and how many messages it may send,
- * kept in a small JSON file in the skill's data dir so the limits hold across runs and agents (one
- * Flock). Owner 2026-11-25: frequent reading is bad, frequent or mass sending is extremely bad.
+ * WhatsApp: how often and how long the connector may connect to WhatsApp, and how many messages it may
+ * send, kept in limits.json in the connection's own data folder (MCP_DATA_DIR) so they hold across
+ * calls and restarts. Owner 2026-11-25: frequent reading is bad, frequent or mass sending is extremely bad.
  *
- * - Opens: every function loads WhatsApp Web once; at most 10 in a rolling hour and 60 in a rolling
- *   day. The slot is taken before the page loads, so a failed run counts too.
- * - Time: WhatsApp Web open at most 30 minutes a calendar day, in the Flock's timezone
- *   (FLOCK_TIMEZONE, else UTC). Each run adds the time it held the page, failed or not.
+ * - Connections: every connection to WhatsApp (a read, a send, a link, each reconnect) counts; at most
+ *   10 in a rolling hour and 60 in a rolling day. The slot is taken before connecting, so a failed one
+ *   counts too.
+ * - Time: connected at most 30 minutes a calendar day, in the Flock's timezone (FLOCK_TIMEZONE, else
+ *   UTC). Each connection adds the time it was held, failed or not.
  * - Sends: at most 5 in a rolling hour and 20 in a rolling day.
  * A limit hit is a refusal naming when it frees up, never a silent queue.
  */
@@ -18,25 +19,25 @@ const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
 
 export const LIMITS = {
-  opensPerHour: 10,
-  opensPerDay: 60,
-  openMsPerDay: 30 * MINUTE,
+  connectionsPerHour: 10,
+  connectionsPerDay: 60,
+  connectedMsPerDay: 30 * MINUTE,
   sendsPerHour: 5,
   sendsPerDay: 20,
 } as const;
 
-export interface LimitState { opens: number[]; sends: number[]; usage: { day: string; ms: number } }
+export interface LimitState { connections: number[]; sends: number[]; usage: { day: string; ms: number } }
 
-/** A limit that refuses this run, with when it frees up. */
+/** A limit that refuses this call, with when it frees up. */
 export class LimitHit extends Error {
   constructor(public code: string, message: string, public freesAt: number) { super(message); }
 }
 
 export interface LimitOpts { dir?: string; now?: number; timeZone?: string }
 
-const fileIn = (dir: string) => join(dir, "whatsapp", "limits.json");
+const LIMITS_FILE = "limits.json";
 
-/** The Flock's timezone when the run is given one, else UTC. */
+/** The Flock's timezone when one is given, else UTC. */
 export function timeZoneOf(opts: LimitOpts = {}): string {
   const tz = opts.timeZone ?? process.env.FLOCK_TIMEZONE ?? "UTC";
   try { new Intl.DateTimeFormat("en-US", { timeZone: tz }); return tz; } catch { return "UTC"; }
@@ -60,32 +61,33 @@ export function nextMidnight(at: number, tz: string): number {
   return guess - offsetAt(guess - offsetAt(guess, tz), tz);
 }
 
-function dirOf(opts: LimitOpts): string {
-  const dir = opts.dir ?? process.env.SKILL_DATA_DIR ?? "";
-  if (!dir) throw new LimitHit("NO_DATA_DIR", "This run has no data folder to keep its limits in (SKILL_DATA_DIR). Run it with the run_skill tool.", 0);
-  return dir;
+/** The connection's own data folder: never the home folder or the working folder. */
+export function dataDirOf(dir?: string): string {
+  const found = dir ?? process.env.MCP_DATA_DIR ?? "";
+  if (!found) throw new LimitHit("NO_DATA_DIR", "This WhatsApp server has no data folder (MCP_DATA_DIR): Flock starts it with one.", 0);
+  return found;
 }
 
 const numbers = (v: unknown): number[] => (Array.isArray(v) ? v.filter((t): t is number => typeof t === "number") : []);
 
-/** The saved state; a broken file starts fresh rather than failing every run. */
+/** The saved state; a broken file starts fresh rather than failing every call. */
 function load(file: string): LimitState {
   try {
     const v = JSON.parse(readFileSync(file, "utf8"));
     const usage = v?.usage && typeof v.usage.day === "string" && typeof v.usage.ms === "number" ? v.usage : { day: "", ms: 0 };
-    return { opens: numbers(v?.opens), sends: numbers(v?.sends), usage };
-  } catch { return { opens: [], sends: [], usage: { day: "", ms: 0 } }; }
+    return { connections: numbers(v?.connections), sends: numbers(v?.sends), usage };
+  } catch { return { connections: [], sends: [], usage: { day: "", ms: 0 } }; }
 }
 
 const LOCK_STALE_MS = 30_000;
 
-/** One run at a time changes the file: two runs at once must not both take the last slot. */
+/** One change at a time: two calls at once must not both take the last slot. */
 function withLock<T>(file: string, fn: () => T): T {
   const lock = `${file}.lock`;
   for (let tries = 0; ; tries++) {
     try { closeSync(openSync(lock, "wx")); break; } catch {
       try { if (Date.now() - statSync(lock).mtimeMs > LOCK_STALE_MS) { unlinkSync(lock); continue; } } catch { continue; }
-      if (tries > 100) throw new LimitHit("BUSY", "Another WhatsApp run is busy. Try again in a minute.", Date.now() + MINUTE);
+      if (tries > 100) throw new LimitHit("BUSY", "Another WhatsApp call is busy. Try again in a minute.", Date.now() + MINUTE);
       Bun.sleepSync(50);
     }
   }
@@ -94,15 +96,15 @@ function withLock<T>(file: string, fn: () => T): T {
 
 /** Reads, changes and saves the state under the lock, dropping what no limit looks at any more. */
 function update<T>(opts: LimitOpts, fn: (s: LimitState, now: number) => T): T {
-  const dir = dirOf(opts);
-  const file = fileIn(dir);
-  mkdirSync(join(dir, "whatsapp"), { recursive: true });
+  const dir = dataDirOf(opts.dir);
+  mkdirSync(dir, { recursive: true });
+  const file = join(dir, LIMITS_FILE);
   return withLock(file, () => {
     const now = opts.now ?? Date.now();
     const today = dayOf(now, timeZoneOf(opts));
     const loaded = load(file);
     const state: LimitState = {
-      opens: loaded.opens.filter((t) => now - t < DAY),
+      connections: loaded.connections.filter((t) => now - t < DAY),
       sends: loaded.sends.filter((t) => now - t < DAY),
       usage: loaded.usage.day === today ? loaded.usage : { day: today, ms: 0 },
     };
@@ -129,10 +131,10 @@ function windowHit(times: number[], max: number, windowMs: number, now: number):
 }
 
 /**
- * Takes one open of WhatsApp Web (and, for a send, one send), or refuses with when it frees up.
- * Answers the ms of today's open time left: the run caps its own waits to it.
+ * Takes one connection to WhatsApp (and, for a send, one send), or refuses with when it frees up.
+ * Answers the ms of today's connected time left: the call caps its own waits to it.
  */
-export function takeSlot(kind: "read" | "send", opts: LimitOpts = {}): number {
+export function takeSlot(kind: "connect" | "send", opts: LimitOpts = {}): number {
   return update(opts, (s, now) => {
     if (kind === "send") {
       const hour = windowHit(s.sends, LIMITS.sendsPerHour, HOUR, now);
@@ -140,25 +142,30 @@ export function takeSlot(kind: "read" | "send", opts: LimitOpts = {}): number {
       const day = windowHit(s.sends, LIMITS.sendsPerDay, DAY, now);
       if (day) refuse("SEND_LIMIT_DAY", `${LIMITS.sendsPerDay} messages went out in the last 24 hours, the most allowed.`, day, now);
     }
-    const left = LIMITS.openMsPerDay - s.usage.ms;
+    const left = LIMITS.connectedMsPerDay - s.usage.ms;
     if (left <= 0) {
       const tz = timeZoneOf(opts);
-      refuse("TIME_LIMIT_DAY", `WhatsApp was open for ${LIMITS.openMsPerDay / MINUTE} minutes today (${tz} day), the most allowed.`, nextMidnight(now, tz), now);
+      refuse("TIME_LIMIT_DAY", `WhatsApp was connected for ${LIMITS.connectedMsPerDay / MINUTE} minutes today (${tz} day), the most allowed.`, nextMidnight(now, tz), now);
     }
-    const hour = windowHit(s.opens, LIMITS.opensPerHour, HOUR, now);
-    if (hour) refuse("OPEN_LIMIT_HOUR", `WhatsApp was opened ${LIMITS.opensPerHour} times in the last hour, the most allowed.`, hour, now);
-    const day = windowHit(s.opens, LIMITS.opensPerDay, DAY, now);
-    if (day) refuse("OPEN_LIMIT_DAY", `WhatsApp was opened ${LIMITS.opensPerDay} times in the last 24 hours, the most allowed.`, day, now);
-    s.opens.push(now);
+    const hour = windowHit(s.connections, LIMITS.connectionsPerHour, HOUR, now);
+    if (hour) refuse("CONNECT_LIMIT_HOUR", `WhatsApp was connected ${LIMITS.connectionsPerHour} times in the last hour, the most allowed.`, hour, now);
+    const day = windowHit(s.connections, LIMITS.connectionsPerDay, DAY, now);
+    if (day) refuse("CONNECT_LIMIT_DAY", `WhatsApp was connected ${LIMITS.connectionsPerDay} times in the last 24 hours, the most allowed.`, day, now);
+    s.connections.push(now);
     if (kind === "send") s.sends.push(now);
     return left;
   });
 }
 
-/** Adds a run's open time to today's total; answers the whole minutes left today. */
-export function addOpenTime(ms: number, opts: LimitOpts = {}): number {
+/** Adds a connection's time to today's total; answers the whole minutes left today. */
+export function addConnectedTime(ms: number, opts: LimitOpts = {}): number {
   return update(opts, (s) => {
     s.usage.ms += Math.max(0, Math.round(ms));
-    return Math.max(0, Math.floor((LIMITS.openMsPerDay - s.usage.ms) / MINUTE));
+    return Math.max(0, Math.floor((LIMITS.connectedMsPerDay - s.usage.ms) / MINUTE));
   });
+}
+
+/** The whole minutes of connected time left today, without taking anything. */
+export function minutesLeftToday(opts: LimitOpts = {}): number {
+  return update(opts, (s) => Math.max(0, Math.floor((LIMITS.connectedMsPerDay - s.usage.ms) / MINUTE)));
 }

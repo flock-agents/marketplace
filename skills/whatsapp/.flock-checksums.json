@@ -1,20 +1,21 @@
 {
   "version": 1,
-  "generatedAt": "2026-11-26T10:05:00.000Z",
-  "sourceVersion": "1.1.0",
-  "sourceTag": "whatsapp-v1.1.0",
+  "generatedAt": "2026-11-26T12:14:27.512Z",
+  "sourceVersion": "2.0.0",
+  "sourceTag": "whatsapp-v2.0.0-rc1",
   "files": {
-    "CHANGELOG.md": "666bd64d305f5c72667be39d6edc5c8fe90b2e4df550b42ebd1edb96b587665a",
+    "CHANGELOG.md": "77bc9d4b70e62bfa6b3cd7fe4a9654051b7ddec39a2d4402e16edf8c82dd7705",
     "icon.svg": "1d9a927c3ad3cca31305211227611789007bb568d9414e9a78e1be9f84569e9f",
-    "scripts/list-chats.ts": "7c4de88c869b1f56a738b1f5b15ea37e69c882ca2e6ef222ecc6a3e0d43a83bf",
-    "scripts/_limits.ts": "dea75c61d18528ac188d4a174007614fc5f76351c8dd832f00c2ee6abd9a3901",
-    "scripts/search.ts": "8bdd14d937e82e87a9a49bfe50445b09b94e0dfabcc620dbfc932049f48533e8",
-    "scripts/read-chat.ts": "3166df819f03ac95a200349408696b660107a3d08af74800b92d997e0f3d7a62",
-    "scripts/_page.ts": "7f44d94a7a0438f5791aeb70a2704d81259eed81a8e4deaf395912a42a267d6f",
-    "scripts/send-message.ts": "6d2daaca10749f53796bf59249fb2c8858ff6bcc1b8631755f58cec60203a701",
-    "scripts/_whatsapp.ts": "31617f9babe2c514aabbdac8eff25fa48629837d173faefded8f86c3e592f2b6",
-    "flock.skill.json": "017e6115f219c9032f10f4a1bedac772b22520c61d21c037b534844f8def6e48",
-    "instructions.md": "76758cb6f17f945267e9fcc2d07a60f6bc6cba47c0627894e9d0ba56c88169ec",
-    "scripts/_documents.ts": "b6a906a0bda093b94db42fb093783dfcbac165f77ff7ddad2357ef09a284922a"
+    "scripts/_limits.ts": "0b1e69350f3a9739b496d56333d50d58ccbf7f12a5b69a68a3c25b5b69c84db6",
+    "scripts/_messages.ts": "c7174c4754b1ee057ecdcdbafdc4db8b347e01c21008c0852c3b741515c8198f",
+    "scripts/_store.ts": "d912d5bb4827f5a992fe310d3414c4b221305f4fb0fe2fc8e70983511c90f7e6",
+    "scripts/_mcp.ts": "38d08f5d89cd425bacb8ddf22748a3557088a69b96f798fcfdb5309aa81688cf",
+    "scripts/lib/baileys.bundle.js": "aebdcf180e25c13a0b62f12fd526cf386c9d1459440848ab8a9701d6ff1d74f4",
+    "scripts/_tools.ts": "b485fd65587909dca7236d2457c93ddf44d35ea0a441d882f1cfac4665b3da00",
+    "scripts/_socket.ts": "a271564edc238b91a1a3df3a40217250b3139aec9e32801ee9bfa70dd2a94df6",
+    "scripts/server.ts": "1ec48cb2786dd3a9082e122f96101ee70a7a97bbd3d4518f137dd1db928b5437",
+    "scripts/_whatsapp.ts": "cbff13381666923d634167bedb1c7fda527a5e4c61a7a906c04d91c491246a79",
+    "flock.skill.json": "b0d20872bfae8696248ace89284e6f6c2785f6294dbc0c7e7d3bcea4ddfc999a",
+    "instructions.md": "ca3c57de80955894790bfa2ccbedf6415de9d73ba97c3a093849b89c9fbc5410"
   }
 }

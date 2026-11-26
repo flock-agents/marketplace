@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.0.0
+
+Rebuilt on WhatsApp's own linked-device protocol (Baileys 7.0.0-rc14, bundled in `scripts/lib/baileys.bundle.js`) instead of WhatsApp Web in Flock's browser. Needs the Flock release with local-connector egress, `MCP_DATA_DIR` and `{packageDir}`.
+
+- A local MCP server (`scripts/server.ts`) Flock starts per linked WhatsApp; the connection is the connector account (one tap, no form). Tools: `link`, `link-status`, `list-chats`, `read-chat`, `search`, `send-message`, `unlink`, with the names and fields Flock's WhatsApp gate checks.
+- Linking: `link` gives an 8-character link code for the person's number at once (WhatsApp also shows them an "Enter code to link new device" notification), or a QR code picture with `qr: true`; the link waits a few minutes in the server. A finished link reconnects once for WhatsApp's restart; a call reconnects at most 2 times.
+- Connects only inside a call, or while a link waits, then closes. Through Flock's egress when it gives one (`HTTPS_PROXY`, cloud), else direct.
+- Low data use: only the chat list with a few recent messages and contact names when linked (no recent or full history), media never downloaded (placeholders with kind, caption, file name and size), no link previews, no profile pictures, no presence, never shown online.
+- The link, the stored chats (the newest 300 chats, the last 60 messages each) and the limits live in the connection's own data folder.
+- Limits as in 1.x, per connection: 10 connections an hour and 60 a day, 30 minutes connected a day, 5 sends an hour and 20 a day; one existing chat per send.
+- Removed: the WhatsApp Web scripts, and `read-chat`'s PDF download (nothing is downloaded now; there is no single-document fetch).
+
 ## 1.1.0
 
 - `read-chat` downloads the PDFs in the messages it reads (school notices and circulars), in the same WhatsApp Web open, with a real click on each document's download button. Each document now carries `document`: a PDF as `{name, path, size}`, the file in the agent's workspace `downloads/` folder; any other document, or a PDF not downloaded, as `{name, error}` with a short reason. The text stays `[document]`.
