@@ -7,16 +7,18 @@
 //        decides what is cooked, who buys the groceries (separate facts: any may be someone who does not eat at home, the
 //        cook, or shared), the usual food;
 //     improves    fasting and day rules, visitors, goals, tastes, the cook's dishes (asked after the first plan);
-//     later       grocery apps, past orders (only when they come up).
+//     improves    once the first plan exists: the grocery apps (connected one by one with the person's yes), then their
+//                 past orders once one is connected. `done` waits until the grocery apps were asked (answered or declined).
 //   Stage: asking until ready; first_task until today is planned; feedback until the 7 days from the first plan's start are
 //   planned and one round of feedback was saved; then done.
 //
 // Two small writes the setup needs beside the other operations: set_answered (a question answered with nothing to save:
 // "no fasting days") and set_cuisine (the family's usual cuisine, in their words).
 import type { Hono } from "hono";
+import { _settings } from "@flock/app-kit";
 import { and, asc, eq, gt, isNotNull, ne } from "drizzle-orm";
 import { house as house_t, library as library_t, people as people_t, plan_feedback, rules as rules_t, slot_days } from "./db/schema";
-import { FIRST_PLAN_DAYS, SETUP_PLAN_DAYS, SETUP_SETTLED_DAYS } from "./db/constants";
+import { APP_NAMES, type GroceryApp, FIRST_PLAN_DAYS, SETUP_PLAN_DAYS, SETUP_SETTLED_DAYS } from "./db/constants";
 import { addDays, clockText, daysBetween, todayStr } from "./dates";
 import { isAllergyRule } from "./allergy";
 import { cookVisits, daysSaid, getHouse, houseView, list, refuse, writeRoutes, type Db, type Emit } from "./family";
@@ -46,7 +48,8 @@ export type Roles = { menu: string | null; cooking: string | null; shopping: str
 /** The household as the status reads it. `planned`: the dated slot-days' dates, sorted, once each; `feedback`: whether a
  *  round of feedback was saved since the first plan. */
 export type Snapshot = { people: StatusPerson[]; rules: Rule[]; slots: string[]; dishes: Record<string, string[]>; cook: StatusCook | null; roles: Roles; cuisines: string[];
-  answered: string[]; connected: string[]; historyRead: boolean; planned: string[]; feedback: boolean };
+  answered: string[]; connected: string[]; historyRead: boolean;
+  /** The main grocery app, when the family named one (set_shopping_apps); null: not said. */ shopMain?: string | null; planned: string[]; feedback: boolean };
 
 const andList = (xs: string[]) => (xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`);
 const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
@@ -116,6 +119,7 @@ function mealsGroup(s: Snapshot, known: string[], missing: Missing[]): void {
 // ── Asked after the first plan, and only when it comes up ──
 
 type Later = { id: StatusId; what: string; critical: Critical; ask?: string; known: (s: Snapshot) => string | null; when?: (s: Snapshot) => boolean };
+const appName = (id: string): string => APP_NAMES[id as GroceryApp] ?? id;
 const quotes = (rs: Rule[]) => rs.map((r) => r.quote).join("; ");
 const AFTER: Later[] = [
   { id: "fasting", what: "Fasting days and day rules", critical: "improves", ask: "Any fasting days, or days without eggs or non-veg?",
@@ -129,8 +133,11 @@ const AFTER: Later[] = [
     known: (s) => { const d = s.people.filter((p) => p.dislikes); return d.length ? `Dislikes: ${d.map((p) => `${p.name}: ${p.dislikes}`).join("; ")}` : null; } },
   { id: "cook_dishes", what: "What the cook makes", critical: "improves", ask: "What does the cook make well, and anything to skip?", when: (s) => !!s.cook,
     known: (s) => (s.cook?.makes_well || s.cook?.wont_make ? `${s.cook.name} makes well: ${s.cook.makes_well ?? "not said"}${s.cook.wont_make ? `; skips: ${s.cook.wont_make}` : ""}` : null) },
-  { id: "grocery", what: "Grocery apps", critical: "later", known: (s) => (s.connected.length ? `Grocery apps: ${andList(s.connected)}` : null) },
-  { id: "orders", what: "Past orders", critical: "later", known: (s) => (s.historyRead ? "Past orders: read" : null) },
+  { id: "grocery", what: "Grocery apps to connect", critical: "improves", when: (s) => s.planned.length > 0,
+    ask: "Which grocery apps do you use: Zepto, Blinkit, Instamart, BigBasket or Amazon? I can connect them one at a time, to see what you usually buy and fill your carts.",
+    known: (s) => (s.connected.length ? `Grocery apps connected: ${andList(s.connected.map(appName))}` : s.shopMain ? `Grocery app: ${appName(s.shopMain)} (not connected yet)` : null) },
+  { id: "orders", what: "Past orders", critical: "improves", when: (s) => s.connected.length > 0,
+    ask: "Shall I read your past orders on the connected apps, so I know what you usually buy?", known: (s) => (s.historyRead ? "Past orders: read" : null) },
 ];
 
 function afterGroups(s: Snapshot, known: string[], missing: Missing[]): void {
@@ -148,11 +155,14 @@ function afterGroups(s: Snapshot, known: string[], missing: Missing[]): void {
 /** The dates from `start` for `n` days not planned yet. */
 const unplanned = (s: Snapshot, start: string, n: number): string[] => Array.from({ length: n }, (_, i) => addDays(start, i)).filter((d) => !s.planned.includes(d));
 
+/** Were the grocery apps asked about: one connected or named, or the family said none or not now (set_answered). */
+const groceryAsked = (s: Snapshot): boolean => s.connected.length > 0 || !!s.shopMain || s.answered.includes("grocery");
+
 function stageOf(s: Snapshot, ready: boolean, today: string): Stage {
   if (!ready) return "asking";
   const start = s.planned[0];
   if (start && daysBetween(start, today) >= SETUP_SETTLED_DAYS) return "done";
-  if (start && s.feedback && !unplanned(s, start, SETUP_PLAN_DAYS).length) return "done";
+  if (start && s.feedback && !unplanned(s, start, SETUP_PLAN_DAYS).length && groceryAsked(s)) return "done";
   if (!s.planned.includes(today)) return "first_task";
   return "feedback";
 }
@@ -167,7 +177,8 @@ function nextOf(s: Snapshot, stage: Stage, missing: Missing[], today: string): s
   if (stage === "feedback") {
     if (!s.feedback) return "Ask one feedback question about the plan; save what they say, and plan again the days it changes";
     const gap = unplanned(s, s.planned[0], SETUP_PLAN_DAYS);
-    return gap.length ? `Plan the rest of the week: make_plan { from: "${gap[0]}", days: ${daysBetween(gap[0], addDays(s.planned[0], SETUP_PLAN_DAYS - 1)) + 1} }, then ask for feedback once more` : undefined;
+    if (gap.length) return `Plan the rest of the week: make_plan { from: "${gap[0]}", days: ${daysBetween(gap[0], addDays(s.planned[0], SETUP_PLAN_DAYS - 1)) + 1} }, then ask for feedback once more`;
+    if (!groceryAsked(s)) return "Offer to connect the grocery apps the family uses, one at a time with the person's yes; then read their past orders (import_order_history)";
   }
   return undefined;
 }
@@ -216,8 +227,15 @@ export function readSnapshot(db: Db): Snapshot {
     cook: house.cook_name ? { name: house.cook_name, days: view.cook_days, arrival: cookVisits(house.cook_arrival)[0]?.at ?? null, makes_well: house.cook_makes_well, wont_make: house.cook_wont_make, new_recipes: house.cook_new_recipes } : null,
     roles: { menu: house.menu_by, cooking: house.cooking_by, shopping: house.shopping_by },
     cuisines: view.cuisines ?? [], answered, connected: view.connected_apps, historyRead: Object.keys(view.history_synced).length > 0,
+    shopMain: savedSetting(db, "grocery_app"),
     planned, feedback: feedbackSince(db, firstAt, answered),
   };
+}
+
+/** A setting the family saved (none: its default was never changed). */
+function savedSetting(db: Db, key: string): string | null {
+  try { const v = db.select({ value: _settings.value }).from(_settings).where(eq(_settings.key, key)).get()?.value; return v ? String(JSON.parse(v)) : null; }
+  catch { return null; }
 }
 
 // ── The routes ──

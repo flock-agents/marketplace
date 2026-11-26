@@ -84,12 +84,19 @@ A tool that plans meals again answers a `message`: send it word for word. When a
 Then plan the next 4 days, so the 7 days from the first plan are covered: `planner_make_plan { from: the day after the
 last one planned, days: 4 }`. Send its message and ask for feedback once more. Save that feedback the same way.
 
-### 5. Make it theirs, while they are chatting
+### 5. The grocery apps, after the first plan
+
+Never before the first plan and one round of feedback. Then ask which grocery apps they use, and offer to connect them one
+at a time, each only with the person's yes: save the answer with `planner_set_shopping_apps { main, fallback, connected }`,
+and send it again after each sign-in. Once an app is connected, read its past orders with that app's connector and give
+them to `planner_import_order_history` (one app a call, oldest first): they shape the grocery list and the carts. They use
+none, or not now: `planner_set_answered { ids: ["grocery"] }`. The setup is done only once this was asked.
+
+### 6. Make it theirs, while they are chatting
 
 After the first plan, while they keep replying, ask the `improves` items one at a time in `planner_status` order (fasting
 and day rules, visitors, goals, favourites and dislikes, the cook's dishes when there is a cook): one short question a
 message, saved at once, or `planner_set_answered` when there is nothing to save. Stop when they go quiet or say later.
-`later` items (grocery apps, past orders) only when they come up.
 
 ### How to talk
 

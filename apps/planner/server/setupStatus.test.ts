@@ -28,7 +28,7 @@ describe("status: what is known and missing", () => {
     expect(s.missing.find((m: any) => m.id === "meals").default).toBe("lunch and dinner");
     expect(s.missing.find((m: any) => m.id === "meals").ask).not.toContain("tiffin");
     expect(ids(s, "improves")).toEqual(["fasting", "visitors", "goals", "tastes"]);
-    expect(ids(s, "later")).toEqual(["grocery", "orders"]);
+    expect(ids(s, "later")).toEqual([]);
     expect(s.next).toContain("voice note");
   });
 
@@ -111,6 +111,11 @@ describe("status: the stages", () => {
     expect(s.stage).toBe("feedback");
     expect(s.next).toContain('make_plan { from: "2026-12-01", days: 4 }');
     expect((await op("make_plan", { from: "2026-12-01", days: 4 })).ok).toBe(true);
+    // Done waits for the grocery apps to be asked.
+    s = await status();
+    expect(s.stage).toBe("feedback");
+    expect(s.next).toContain("Offer to connect the grocery apps");
+    await op("set_answered", { ids: ["grocery"] });
     expect((await status()).stage).toBe("done");
   });
 
@@ -121,6 +126,7 @@ describe("status: the stages", () => {
     expect((await status()).stage).toBe("feedback");
     const dish = rows("slot_dishes")[0].dish;
     await op("rate_dishes", { ratings: [{ dish, rating: "good", said_by: "Asha" }] });
+    await op("set_shopping_apps", { main: "zepto", connected: [] });
     expect((await status()).stage).toBe("done");
   });
 
@@ -196,5 +202,24 @@ describe("status: households of every shape", () => {
     const placed = (rows("slot_dishes") as any[]).filter((d) => d.slot_day_id !== "old");
     expect(placed.length).toBeGreaterThan(0);
     expect(placed.filter((d) => d.new)).toEqual([]);
+  });
+});
+
+describe("status: the grocery apps, after the first plan", () => {
+  it("are not asked before the first plan; then asked, and past orders follow a connected app", async () => {
+    const { op, status } = await family();
+    await op("set_person", { name: "Asha", group: "adult", diet: "veg", allergies: "none" });
+    expect(ids(await status())).not.toContain("grocery");
+    await op("make_plan", { from: TODAY, days: 3 });
+    let s = await status();
+    const grocery = s.missing.find((m: any) => m.id === "grocery");
+    expect(grocery).toMatchObject({ critical: "improves" });
+    expect(grocery.ask).toContain("one at a time");
+    expect(ids(s)).not.toContain("orders");
+    await op("set_shopping_apps", { main: "Blinkit", connected: ["Blinkit"] });
+    s = await status();
+    expect(ids(s)).not.toContain("grocery");
+    expect(s.known).toContain("Grocery apps connected: Blinkit");
+    expect(s.missing.find((m: any) => m.id === "orders")).toMatchObject({ critical: "improves" });
   });
 });
