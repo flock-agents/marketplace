@@ -960,31 +960,28 @@ export function uncited(read: Pick<SetupRead, "library" | "seed" | "links" | "ru
     return dish || !boxQuotes.some((q) => cites(q, s));
   }));
 }
-/** The re-read's rows that write down an uncited sentence (H15) or fill a box read empty (H3), and that the read lacks. */
-function rowsFor(read: SetupRead, again: SetupRead, opts: { sentences: string[]; boxes: string[]; meals: string[] }): Pick<SetupRead, "library" | "seed" | "links"> {
-  const names = opts.meals;
-  const wanted = (x: { slot: string; quote: string }) => opts.boxes.includes(resolveSlot(x.slot, names) ?? "") || opts.sentences.some((s) => cites(x.quote, s));
-  return {
-    library: again.library.filter((d) => wanted(d) && !read.library.some((x) => dishKey(x.name) === dishKey(d.name) && same(x.slot, d.slot))),
-    seed: again.seed.filter((d) => wanted(d) && !read.seed.some((x) => same(x.slot, d.slot) && x.dishes.map(dishKey).join() === d.dishes.map(dishKey).join())),
-    links: again.links.filter((l) => wanted(l) && !read.links.some((x) => same(x.slot, l.slot) && same(x.from, l.from))),
-  };
+/** The re-read's rows that write down an uncited sentence (H15) or fill a box read empty (H3); mergeDishes lays them on the read. */
+function rowsFor(again: SetupRead, opts: { sentences: string[]; boxes: string[]; meals: string[] }): Pick<SetupRead, "library" | "seed" | "links"> {
+  const wanted = (x: { slot: string; quote: string }) => opts.boxes.includes(resolveSlot(x.slot, opts.meals) ?? "") || opts.sentences.some((s) => cites(x.quote, s));
+  return { library: again.library.filter(wanted), seed: again.seed.filter(wanted), links: again.links.filter(wanted) };
 }
-/** A dishes re-read laid on the read (fix round 1): its rows replace the same dish at the same meal (a seed: the same dishes) and
- *  add the rest; a first-read row it leaves out is kept (the re-read is asked only for what was missing). A dish it puts at a box
- *  in `boxes` leaves the meal the box replaces (fix 3: it sat there only for want of the box). Meals by the checked slots. */
-export function mergeDishes(read: SetupRead, again: Pick<SetupRead, "library" | "seed" | "links">, opts: { slots: ReadSlot[]; boxes: string[] }):
+/** A dishes re-read laid on the read (fix round 1): its rows replace the same dish at the same meal (a seed: the same dishes; a
+ *  link: the slot's link, so a slot never has two) and add the rest; a first-read row it leaves out is kept (the re-read is asked
+ *  only for what was missing). A dish it puts at a box in place of a meal leaves that meal (fix 3: it sat there for want of the
+ *  box; never in both). Meals by the checked slots. */
+export function mergeDishes(read: SetupRead, again: Pick<SetupRead, "library" | "seed" | "links">, opts: { slots: ReadSlot[] }):
   Pick<SetupRead, "library" | "seed" | "links"> {
   const names = opts.slots.map((x) => x.name), at = (slot: string) => resolveSlot(slot, names) ?? slot;
   const sameSlot = (a: string, b: string) => same(at(a), at(b));
-  const replaced = (slot: string) => opts.slots.find((x) => opts.boxes.includes(x.name) && sameSlot(x.name, slot))?.instead_of ?? null;
+  const replaced = (slot: string) => opts.slots.find((x) => x.kind === "custom" && x.instead_of && sameSlot(x.name, slot))?.instead_of ?? null;
   const gone = (d: ReadDish) => again.library.some((x) => dishKey(x.name) === dishKey(d.name)
     && (sameSlot(x.slot, d.slot) || (!!replaced(x.slot) && sameSlot(replaced(x.slot)!, d.slot))));
   const sameSeed = (a: ReadSeed, b: ReadSeed) => sameSlot(a.slot, b.slot) && a.dishes.map(dishKey).join() === b.dishes.map(dishKey).join();
   return {
     library: [...read.library.filter((d) => !gone(d)), ...again.library],
     seed: [...read.seed.filter((d) => !again.seed.some((x) => sameSeed(x, d))), ...again.seed],
-    links: [...read.links.filter((l) => !again.links.some((x) => sameSlot(x.slot, l.slot) && same(x.from, l.from))), ...again.links],
+    links: [...read.links.filter((l) => !again.links.some((x) => sameSlot(x.slot, l.slot))),
+      ...again.links.filter((l, i) => !again.links.slice(i + 1).some((x) => sameSlot(x.slot, l.slot)))],
   };
 }
 
@@ -2307,7 +2304,7 @@ export async function applySetup(deps: { db: Db; emit: Emit; model: ModelCall; p
           const d = await reread(partOf("dishes"), { missing: [...added.map((x) => `what goes in ${x.name}`), ...unwritten], meals: checked.read.slots.map((x) => x.name) });
           const again = d.ok ? readOf(null, null, d.json, oftenJson) : null;
           if (again?.library.length) {
-            read = { ...read, ...mergeDishes(read, again, { slots: checked.read.slots, boxes: added.map((x) => x.name) }) };
+            read = { ...read, ...mergeDishes(read, again, { slots: checked.read.slots }) };
             checked = checkRead(read, { household, said, sentences, oftenFailed });
           } else log(`dishes re-read: ${d.ok ? "no dishes in the answer" : `model ${d.code}: ${d.message.slice(0, 200)}`}; the first dishes read stands`);
         } else boxAsks.push(...added.map((x) => boxAsk(x.name, x.instead_of!)));
@@ -2329,8 +2326,8 @@ export async function applySetup(deps: { db: Db; emit: Emit; model: ModelCall; p
     uncitedAsked = unwritten.length > 0;
     const r = await reread(partOf("dishes"), { missing: [...empty.map((b) => `what goes in ${b}`), ...unwritten] });
     if (r.ok) {
-      const more = rowsFor(read, readOf(null, null, r.json, oftenJson), { sentences: unwritten, boxes: empty, meals: checked.read.slots.map((x) => x.name) });
-      read = { ...read, library: [...read.library, ...more.library], seed: [...read.seed, ...more.seed], links: [...read.links, ...more.links] };
+      const more = rowsFor(readOf(null, null, r.json, oftenJson), { sentences: unwritten, boxes: empty, meals: checked.read.slots.map((x) => x.name) });
+      read = { ...read, ...mergeDishes(read, more, { slots: checked.read.slots }) };
       checked = checkRead(read, { household, said, sentences, oftenFailed });
     } else log(`dishes re-read: model ${r.code}: ${r.message.slice(0, 200)}`);
   }

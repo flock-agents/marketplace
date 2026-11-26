@@ -7,7 +7,7 @@ import { saysNoEggs, buildMeal, codePlace, nearestDish, cuisinesOf, regionalFor,
 import { keptOften, swapItems } from "./setup";
 import { dishKey } from "./dishText";
 import { checkRead, diffSetup, familyLines, familySentences, frequencyOf, householdOf, lunchLine, personOf, plainWords, quoteHasDayOrCount, readOf, resolveSlot,
-  ruleSaid, saidByFamily, savedOf, homeViolations, swapOnly, uncited, kindsRead, kindsAsk, DISHES_ASK, SETUP_PARTS, SETUP_SYSTEM, CONTAINS_BATCH, daysOf, clockOf, itemWord, allergyAsk, answeredIn, mealOf, type Saved, type SetupRead } from "./setup";
+  ruleSaid, saidByFamily, savedOf, homeViolations, swapOnly, uncited, mergeDishes, kindsRead, kindsAsk, DISHES_ASK, SETUP_PARTS, SETUP_SYSTEM, CONTAINS_BATCH, daysOf, clockOf, itemWord, allergyAsk, answeredIn, mealOf, type Saved, type SetupRead } from "./setup";
 import { isAllergyRule } from "./allergy";
 import { houseCook, visitsOf } from "./makePlan";
 import { listRules, listSlots } from "./slotStore";
@@ -1865,6 +1865,19 @@ describe("setup checks what a read left out (H1-H3)", () => {
       .toEqual(["she carries a lunch box"]);
     expect(uncited(readOf({ slots: [{ ...lbox, quote: "she carries a lunch box with egg" }] }, { rules: [] }, { library: [] }), ["she carries a lunch box with egg"]))
       .toEqual(["she carries a lunch box with egg"]);
+  });
+  it("mergeDishes: a re-read link for a box replaces its earlier link; a slot never has two (fix round 1)", () => {
+    const slots = checkedHome(withBoxes, boxSentences).slots;
+    const read = readOf(withBoxes, { rules: [] }, { library: [], links: [["Ira's lunch box", "Lunch", "sabzi", "with the lunch sabzi"]] });
+    const again = readOf(null, null, { library: [], links: [["Ira's lunch box", "Dinner", "", "her lunch box is last night's dinner"]] });
+    expect(mergeDishes(read, again, { slots }).links).toEqual([{ slot: "Ira's lunch box", from: "Dinner", words: "", quote: "her lunch box is last night's dinner" }]);
+  });
+  it("mergeDishes: a dish the re-read puts at a box leaves the meal the box replaces, whichever box it is (fix round 1)", () => {
+    const slots = checkedHome(withBoxes, boxSentences).slots;
+    const read = readOf(withBoxes, { rules: [] }, { library: [["Puri", "Lunch", puriSaid], ["Rice", "Lunch", "Rice, dal and a sabzi"], ["Poha", "Breakfast", "Idli, poha, dosa"]] });
+    const again = readOf(null, null, { library: [["Puri", "Ira's lunch box", puriSaid], ["Poha", "Ira's lunch box", "poha in her box"]] });
+    const merged = mergeDishes(read, again, { slots }).library.map((d) => `${d.name}@${d.slot}`);
+    expect(merged).toEqual(["Rice@Lunch", "Poha@Breakfast", "Puri@Ira's lunch box", "Poha@Ira's lunch box"]);
   });
   it("applySetup re-reads the dishes once for an uncited sentence", async () => {
     const { f, k } = await run({ dishes: (_req: ModelRequest, n: number) => puriDishes(n > 1), often: puriOften, kinds: ownKinds }, puriTranscript);
