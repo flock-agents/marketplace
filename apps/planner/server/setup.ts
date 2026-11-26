@@ -1618,23 +1618,30 @@ export function buildMeal(meal: string, dishes: MealDish[], seeds: string[][], l
     const onto = bare.length ? bare : small ? plates : [];
     // At lunch or dinner each bare plate goes with each plate of sides as its own way of making the meal ("bhakri or poli
     // with usal or pithla": four plates), never every curry on one plate.
+    // A whole dish told with its own how-often ("khichdi once") is a night of its own: a curry told apart with its own how-often
+    // ("rajma or chole twice a week") never goes on its plate (G7); with no other plate it gets the meal's rice or bread.
+    const saidOf = (t: Draft) => t.defining.map((d) => d.said).filter((x): x is string => !!x);
+    const wholeAlone = (t: Draft) => t.parts.length === 1 && "kind" in t.parts[0].part && catalogKind(t.parts[0].part.kind)?.part === "complete";
+    const pairs = (b: Draft, s: Draft) => !(wholeAlone(b) && saidOf(b).length && saidOf(s).length && !saidOf(b).some((x) => saidOf(s).includes(x)));
+    const withBase = (s: Draft): void => {
+      const base = plates.flatMap((t) => t.parts).find((p) => isBase(p.part));
+      if (base && !s.parts.some((p) => partKey(p.part) === partKey(base.part))) s.parts.unshift({ ...base, words: base.words.slice(0, 1) });
+    };
     if (!small && bare.length) {
       const was = [...drafts];
       drafts.length = 0;
       for (const b of was) {
         if (sideOnly.includes(b)) continue;
-        if (!bare.includes(b)) { add(b); continue; }
-        for (const s of sideOnly) add({ parts: [...b.parts.map((p) => ({ ...p, words: [...p.words] })), ...s.parts.filter((p) => !b.parts.some((x) => partKey(x.part) === partKey(p.part))).map((p) => ({ ...p, words: [...p.words] }))],
+        const sides = bare.includes(b) ? sideOnly.filter((s) => pairs(b, s)) : [];
+        if (!sides.length) { add(b); continue; }
+        for (const s of sides) add({ parts: [...b.parts.map((p) => ({ ...p, words: [...p.words] })), ...s.parts.filter((p) => !b.parts.some((x) => partKey(x.part) === partKey(p.part))).map((p) => ({ ...p, words: [...p.words] }))],
           defining: uniq([...b.defining, ...s.defining]) });
       }
+      for (const s of sideOnly) if (!bare.some((b) => pairs(b, s))) { withBase(s); add(s); }
     } else for (const s of sideOnly) {
       if (onto.length) {
         for (const t of onto) for (const p of s.parts) if (!t.parts.some((x) => partKey(x.part) === partKey(p.part))) t.parts.push({ ...p, words: [...p.words] });
-      } else {
-        const base = plates.flatMap((t) => t.parts).find((p) => isBase(p.part));
-        if (base && !s.parts.some((p) => partKey(p.part) === partKey(base.part))) s.parts.unshift({ ...base, words: base.words.slice(0, 1) });
-        continue;
-      }
+      } else { withBase(s); continue; }
       drafts.splice(drafts.indexOf(s), 1);
     }
   }

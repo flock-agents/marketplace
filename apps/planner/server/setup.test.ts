@@ -794,6 +794,26 @@ describe("the kinds model: each dish placed, each meal's templates, the cuisines
     expect(buildMeal("breakfast", [dish("Idli"), dish("Bread omelette")], [["Idli"], ["Bread omelette"]]).templates.map(kinds)).toEqual([["Idli"], ["Egg"]]);
   });
 
+  it("a curry told with its own how-often never joins a whole dish told apart with its own; it gets the meal's base (G7)", () => {
+    const S = "rajma or chole on some nights", K = "khichdi on one night";
+    const d = buildMeal("dinner", [dish("Dal"), dish("Rice"), dish("Roti"), dish("Sabzi"),
+      dish("Rajma", { frequency: "1/week", said: S }), dish("Chole", { frequency: "1/week", said: S }), dish("Moong dal khichdi", { frequency: "1/week", said: K })],
+      [["Dal", "Rice", "Roti", "Sabzi"], ["Rajma"], ["Chole"], ["Moong dal khichdi"]]);
+    const parts = d.templates.map((t) => t.parts);
+    const has = (ps: any[], dishName: string) => ps.some((p) => p.dish === dishName);
+    for (const ps of parts) if (has(ps, "Moong dal khichdi")) expect(has(ps, "Rajma") || has(ps, "Chole")).toBe(false);
+    const kh = d.templates.filter((t) => has(t.parts, "Moong dal khichdi"));
+    expect(kh).toHaveLength(1);
+    expect(kh[0]).toMatchObject({ share: "1/week", said: K });
+    expect(kh[0].parts).toHaveLength(1);
+    for (const n of ["Rajma", "Chole"]) {
+      const t = d.templates.filter((x) => has(x.parts, n));
+      expect(t, n).toHaveLength(1);
+      expect(t[0], n).toMatchObject({ share: "1/week", said: S });
+      expect(t[0].parts.some((p: any) => p.kind === "Rice" || p.kind === "Roti"), n).toBe(true);
+    }
+  });
+
   it("category words are their kind or sub-kind; a named dish is its kind with their dish (variety among it); staples are their kind; each part keeps their words", () => {
     const lunch = buildMeal("lunch", [dish("Rice"), dish("Sambar"), dish("Rasam"), dish("Poriyal", { word: "a poriyal" }), dish("Curd"), dish("Beans poriyal")],
       [["Rice", "Sambar", "Rasam", "Poriyal", "Curd"], ["Rice", "Sambar", "Beans poriyal", "Curd"]]);
