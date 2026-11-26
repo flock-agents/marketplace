@@ -1633,6 +1633,22 @@ describe("setup checks what a read left out (H1-H3)", () => {
     expect(v[0].missing).toContain("Rahul");
     expect(v[0].ask).toContain("Rahul");
   });
+  it("homeViolations: a box said in the first person is the speaker's, never pinned on the only child (fix 1)", () => {
+    const ctx = (sentences: string[]) => ({ household: householdOf(I_HOUSEHOLD), sentences });
+    const read = checkedHome(noBoxes, ["i carry my lunch box with two eggs", "a bowl of sprouts beside it"]);
+    // Rahul (the speaker, a grown-up) carries his box: no box slot of Ira's is asked for.
+    expect(homeViolations(read, ctx(["i carry my lunch box with two eggs"]))).toEqual([]);
+    expect(homeViolations(read, ctx(["my lunch box has sprouts"]))).toEqual([]);
+    // A third person with no name is still the only child.
+    expect(homeViolations(read, ctx(["she carries a lunch box"])).map((v) => v.missing)).toEqual(["lunch box (Ira)"]);
+  });
+  it("homeViolations: a bare box word is any box of that person's (fix 5)", () => {
+    const ctx = (sentences: string[]) => ({ household: householdOf(I_HOUSEHOLD), sentences });
+    const read = checkedHome(withBoxes, boxSentences);
+    for (const s of ["her box has a sandwich", "ira takes a tiffin", "the dabba comes back empty"]) expect(homeViolations(read, ctx([s])), s).toEqual([]);
+    // With no box of hers, a bare box word is still missing.
+    expect(homeViolations(checkedHome(noBoxes, boxSentences), ctx(["her box has a sandwich"])).map((v) => v.missing)).toEqual(["box (Ira)"]);
+  });
   it("applySetup re-reads the home part once", async () => {
     const { f, slot } = await run({ home: (_req: ModelRequest, n: number) => (n === 1 ? noBoxes : withBoxes) });
     expect(f.of("home")).toHaveLength(2);

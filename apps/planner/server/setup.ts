@@ -805,11 +805,15 @@ export type HomeViolation = { missing: string; ask?: string; slot?: string };
 const isChild = (p: HPerson) => p.group === "child" || (p.age !== undefined && p.age < 18);
 /** The meal words a box is named by ("breakfast box"). */
 const BOX_MEALS = ["breakfast", "lunch", "dinner", "snack"];
+/** The words that make a sentence the speaker's own (household.speaker). */
+const FIRST_PERSON = ["i", "my", "me", "mine", "im", "ive", "id"];
+const isBoxName = (name: string) => plainWords(name.replace(/['’]s\b/gi, "")).split(" ").some((w) => BOX_WORDS.includes(w));
 /** The home read checked (H1), structure only:
  *  (i) each family sentence holding a box word names a box that resolves, among its person's meals, to a custom slot. The box
- *  is the box word with the meal word before it ("breakfast box", "lunch box"), else the word alone ("tiffin"); its person the
- *  one the sentence names, else the child the question before it names, else the one child at home. A grown-up's box is no
- *  slot of its own (they carry the home lunch, or an extras add-on: (ii)).
+ *  is the box word with the meal word before it ("breakfast box", "lunch box"), else the word alone ("tiffin": any box of the
+ *  person's); its person the one the sentence names, else the speaker for a sentence in the first person ("I", "my"), else the
+ *  child the question before it names, else the one child at home. A grown-up's box is no slot of its own (they carry the
+ *  home lunch, or an extras add-on: (ii)).
  *  (ii) each extras add-on of Lunch with no days has, for every person on it, a household.weekly or a weekday_lunch entry.
  *  (iii) each meal in place of a main meal says what it has of that meal (home_meal, H3; a part with its words). Left out, it is
  *  re-read, never asked by itself: the box's dishes may still fill it (writeKinds asks when nothing does). */
@@ -826,17 +830,22 @@ export function homeViolations(read: SetupRead, ctx: { household: Household; sen
     for (const s of l.replace(/^A\d*:\s*/i, "").split(/[.!?;]+/).map(plainWords).filter(Boolean)) lines.push({ s, q });
   }
   for (const s of ctx.sentences) if (!lines.some((x) => x.s === s)) lines.push({ s, q: null });
-  const children = people.filter(isChild);
+  const children = people.filter(isChild), speaker = people.find((p) => same(p.name, ctx.household.speaker)) ?? null;
   for (const { s, q } of lines) {
     const ws = s.split(" ");
     ws.forEach((w, i) => {
       if (!BOX_WORDS.includes(w)) return;
       const box = w === "lunchbox" ? "lunch box" : w === "tiffinbox" ? "tiffin" : w === "box" && BOX_MEALS.includes(ws[i - 1]) ? `${ws[i - 1]} box` : w;
       const inLine = named(s), kids = inLine.filter(isChild), inQ = q ? named(q).filter(isChild) : [];
+      // Said in the first person with no one named ("I carry my lunch box"): the speaker's box, never the only child's.
+      const firstPerson = !inLine.length && ws.some((x) => FIRST_PERSON.includes(x));
       const person = inLine.length === 1 ? inLine[0] : kids.length === 1 ? kids[0] : inLine.length ? null
-        : inQ.length === 1 ? inQ[0] : children.length === 1 ? children[0] : null;
+        : firstPerson ? speaker : inQ.length === 1 ? inQ[0] : children.length === 1 ? children[0] : null;
+      if (firstPerson && !person) return;
       if (person && !isChild(person)) return;
       const mine = read.slots.filter((x) => !person || !x.usual_people.length || x.usual_people.includes(person.name));
+      // A box word with no meal word ("her box", "a tiffin") is any box of theirs: one they have is the box said.
+      if (!box.includes(" ") && mine.some((x) => x.kind === "custom" && (person ? x.usual_people.includes(person.name) : isBoxName(x.name)))) return;
       const hit = resolveSlot(box, mine.map((x) => x.name));
       if (hit && mine.find((x) => x.name === hit)?.kind === "custom") return;
       const where = ctx.household.weekly?.find((x) => person && x.person === person.name && x.where !== "home")?.where ?? "school";
