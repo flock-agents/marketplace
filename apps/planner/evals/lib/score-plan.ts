@@ -8,7 +8,7 @@ import { canonTag, hasItem, PARENT, tagsOfName } from "./vocab";
 import { slotMap, type Rates } from "./score-setup";
 import { isBareKindWord, isStapleKind, kindOf, mainTagsOf } from "./catalog";
 import {
-  WEEK, dateOf, dayOf, dishNameOf, frequencyRange, plain, sameName, sameNames, weekdayOfDate,
+  WEEK, dateOf, dayOf, dishNameOf, frequencyRange, plain, sameName, sameNames, schoolLunchAway, weekdayOfDate,
   type Household, type Skip, type TruthDish, type TruthRule, type TruthSlot, type Weekday,
 } from "./truth";
 
@@ -56,6 +56,8 @@ export function expectedSlotDays(h: Household, monday: string): ExpectedSlotDay[
         if (e.kind === "stay" && s.kind === "main" && !people.some((p) => sameName(p, e.person))) people = [...people, e.person];
         if (e.kind === "away") people = people.filter((p) => !sameName(p, e.person));
       }
+      // A school-going child is away at the weekday lunch (owner, 26 Nov), whatever TRUTH says about coming home.
+      if (s.kind === "main" && /^lunch$/i.test(s.name)) people = people.filter((p) => !schoolLunchAway(h, p, day));
       const fasting = t.rules.filter((r) => r.hard && r.what === "fasting" && r.who && r.days?.includes(day) && (!r.slots?.length || r.slots.includes(s.name) || r.slots.includes(base.name)));
       const withFood = fasting.filter((r) => r.fasting_food?.length).map((r) => r.who!);
       people = people.filter((p) => !fasting.some((r) => !r.fasting_food?.length && sameName(r.who!, p)));

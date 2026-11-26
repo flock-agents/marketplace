@@ -451,6 +451,32 @@ describe("attendance: a child with their own box", () => {
   });
 });
 
+describe("attendance: a school child is away at the weekday lunch (owner, 26 Nov)", () => {
+  // "Kids coming home for lunch is not a valid case for now." TRUTH may say the child comes home; the scorer does not expect it.
+  test("a child TRUTH has home for lunch is still left out Mon-Fri; an adult at a school (a teacher) is not", async () => {
+    const { ALL_HOUSEHOLDS } = await import("../households");
+    const lunch = (id: string, d: Weekday) => expectedSlotDays(ALL_HOUSEHOLDS.find((h) => h.id === id)!, MON).find((e) => e.day === d && e.slot === "Lunch")?.people ?? [];
+    for (const d of ["Mon", "Tue", "Wed", "Thu", "Fri"] as Weekday[]) {
+      expect(lunch("h15-gupta", d)).toEqual(["Ankit", "Pooja"]);    // Myra: "home for lunch" in TRUTH
+      expect(lunch("h2-iyer", d)).not.toContain("Ananya");
+      expect(lunch("h6-kulkarni", d)).toContain("Snehal");          // a teacher, home for lunch
+    }
+    expect(lunch("h15-gupta", "Sat")).toContain("Myra");
+    expect(lunch("h2-iyer", "Sun")).toContain("Ananya");
+  });
+  test("a week with the child at the weekday lunch fails attendance; without her it passes", async () => {
+    const { ALL_HOUSEHOLDS } = await import("../households");
+    const h = ALL_HOUSEHOLDS.find((x) => x.id === "h15-gupta")!, setup = setupOfTruth(h);
+    const att = (p: PlanOut) => { const [a, n] = scorePlan(h, p, setup, { failClosed: false }).rates.attendance; return n - a; };
+    const good = baselineWeek(h, MON);
+    expect(good.slotDays.find((x) => x.date === MON && x.slot === "Lunch")!.people).not.toContain("Myra");
+    expect(att(good)).toBe(0);
+    const bad = baselineWeek(h, MON);
+    bad.slotDays.find((x) => x.date === MON && x.slot === "Lunch")!.people.push("Myra");
+    expect(att(bad)).toBe(1);
+  });
+});
+
 describe("scorePlan: a dish named made without an item", () => {
   test("\"Dal without onion and garlic\" breaks no onion-garlic rule by its name", () => {
     const p = goodWeek();
