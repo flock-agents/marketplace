@@ -2075,6 +2075,25 @@ export const swapItems = (rules: (Pick<Rule, "what" | "hard" | "slots" | "to" | 
       keys: uniq([...(byWord ? [dishKey(r.to!)] : []), ...(r.gives?.type === "item" ? [dishKey(r.gives.item)] : [])]) };
   })
   .filter((w) => w.keys.length);
+/** H11: each hard swap's item is a library dish of its meals (§9.4), so its contents are read before planning: a row at each of
+ *  the swap's meals that has none, the family's (setup_named), placed by code when the catalog knows it. It is on no template
+ *  (G1: writeKinds keeps a swap's item off its meal's templates). */
+function swapItemRows(tx: Db, plan: KindsPlan, by: string, changes: Change[], log: (l: string) => void): void {
+  const slots = listSlots(tx);
+  for (const r of listRules(tx)) {
+    if (r.what !== "swap" || !r.hard || r.gives?.type !== "item" || !r.slots?.length) continue;
+    const item = r.gives.item, place = codePlace(item);
+    for (const name of r.slots) {
+      const slot = slots.find((s) => same(s.name, name));
+      if (!slot || getLibraryDish(tx, item, slot.name)) continue;
+      log(`kinds: ${slot.name}: ${item} is a swap's dish with no row; kept in the library, on no template`);
+      upsertLibrary(tx, { name: item, slot: slot.name, origin: "setup_named", kind: place?.kind ?? null, sub: place?.sub ?? null,
+        catalog_item: place && !place.parts ? place.item : null }, by, changes);
+      if (place && plan.slots.some((s) => same(s.name, slot.name))) plan.places.set(placeKey(slot.name, dishKey(item)), place);
+    }
+  }
+}
+
 /** A dish is only a swap's (G1, review 1; H2) when every family sentence that names it holds the swap's words (or lies inside
  *  them): by the family's sentences, never by what a reader wrote of it, so a how-often said in the swap's own sentence is the
  *  swap's too. Named in any other sentence, or in none, it is a dish of the meal. */
@@ -2400,6 +2419,7 @@ export async function applySetup(deps: { db: Db; emit: Emit; model: ModelCall; p
   const before4 = savedOf(deps.db).state;
   const plan = planKinds(deps.db, { first, ops, read: checked.read, cache: before4?.places ?? {}, fresh, lines: said });
   commit(deps.db, deps.emit, (tx, changes) => {
+    swapItemRows(tx, plan, by, changes, log);
     for (const slot of plan.slots) for (const d of familyDishes(tx, slot.name)) {
       const p = plan.places.get(placeKey(slot.name, d.key));
       const c = catalogContents(d, p && !p.parts ? p.item : null);

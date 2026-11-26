@@ -557,6 +557,26 @@ describe("make_plan: plan and ask (one meaning model, Task 10)", () => {
     expect(mon.find((x) => x.dish !== "Pancakes")!.for_people).toEqual([]);
     expect(r.message).toContain("Pancakes (for Agastya)");
   });
+
+  // H11(b): a swap item is only its person's; another's rule never takes from it or notes it.
+  it("a swap item's ingredients keep what someone else at the meal avoids: no note, the egg stays", async () => {
+    const people: [string, string][] = [["Mira", "adult"], ["Nanu", "elder"], ["Ira", "child"]];
+    const swap: RuleInput = { hard: true, what: "swap", who: "Ira", targets: [{ type: "kind", kind: "Upma" }], gives: { type: "item", item: "Bread toast", kind: null },
+      quote: "Ira gets bread toast when we make upma" };
+    const noEgg: RuleInput = { hard: true, what: "no_eggs", who: "Nanu", quote: "Nanu never eats egg" };
+    const k = await home({ people, rules: [swap, noEgg], slots: [{ name: "Breakfast", kind: "main", order: 10, templates: [T({ kind: "Upma" })] }, MAIN[1], MAIN[2]],
+      // Its row was read with no egg (the U2 case): only the day's ingredients name one.
+      library: [{ name: "Bread toast", slot: "Breakfast", origin: "setup_named", contains: [], contains_read: READ }] });
+    const day = (u: any) => ({ dishes: u.dishes.map((d: any) => ({ slot: d.slot, name: d.name, ingredients: d.name === "Bread toast"
+      ? [{ item: "bread", amount: 4, unit: "pc", tags: [] }, { item: "egg", amount: 2, unit: "pc", tags: ["egg"] }, { item: "butter", amount: 20, unit: "g", tags: ["dairy"] }]
+      : [{ item: d.name.toLowerCase(), amount: 200, unit: "g", tags: [] }] })) });
+    const r = await k.plan(fakeModel({ day }).model);
+    if (!r.ok) throw new Error(r.say);
+    const toast = k.at(MON, "Breakfast")!.dishes.find((x) => x.dish === "Bread toast")!;
+    expect(toast).toMatchObject({ for_people: ["Ira"] });
+    expect(toast.note).toBeNull();
+    expect(toast.ingredients.map((i: any) => i.item)).toContain("egg");
+  });
 });
 
 describe("make_plan: a change asks its unknowns right away (Task 10b)", () => {

@@ -1969,6 +1969,19 @@ describe("setup checks what a read left out (H1-H3)", () => {
     expect(box).not.toContain("cheese toast");
     expect(k.rows("library").some((d) => d.name === "Cheese toast" && d.slot === "Ira's breakfast box")).toBe(true);
   });
+
+  // H11(a): a swap's item is a library dish of its meal (§9.4: "in history"), so its contents are read before planning; G1 keeps it
+  // on no template. (The family's "bread toast" gives a kind, Toast, no item: the item here is one the swap gives.)
+  it("applySetup: a hard swap's item with no dish row gets one at its meal, on no template", async () => {
+    const q = "pancakes for Ira when we make poha, she won't eat it";
+    const sw = { hard: true, what: "swap", who: "Ira", items: ["poha"], to: "pancakes", slots: ["Breakfast"], quote: q };
+    const { f, k, slot } = await run({ rules: { rules: [sw] } }, [...I_TRANSCRIPT, "Q: Anything else?", `A: ${q}.`]);
+    const rows = k.rows("library").filter((d) => d.name === "Pancakes");
+    expect(rows.map((d) => [d.slot, d.origin])).toEqual([["Breakfast", "setup_named"]]);
+    expect(JSON.stringify(slot("Breakfast").templates).toLowerCase()).not.toContain("pancakes");
+    expect(JSON.stringify(slot("Breakfast").templates).toLowerCase()).toContain("poha");
+    expect(f.of("contains").some((x) => JSON.parse(x.user).dishes.includes("Pancakes"))).toBe(true);
+  });
 });
 
 describe("apply_setup v2: the prompts", () => {

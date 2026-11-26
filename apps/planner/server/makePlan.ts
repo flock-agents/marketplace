@@ -427,7 +427,9 @@ async function planWeek(deps: MakePlanDeps & { log: (line: string) => void }, in
     if (!list) continue;
     let left = list;
     const notHis = notFor(w, d, dish);
-    for (const p of d.people.filter((x) => !notHis.includes(x))) for (const r of hardAt(d, p)) {
+    // A swap's item is only its person's (for_people): no one else's rule takes from it or notes it.
+    const eaters = forOf(d, dish).length ? forOf(d, dish) : d.people;
+    for (const p of eaters.filter((x) => !notHis.includes(x))) for (const r of hardAt(d, p)) {
       // A family dish one person's allergy is kept aside for: the rest of the family has it as made (its note says so).
       if (isAllergyRule(r) && r.who && vouched(w, r, dish)) continue;
       // Onion and garlic stay bought (contract rule 7): the dish says how their portion is kept.
