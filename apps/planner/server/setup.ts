@@ -1650,6 +1650,20 @@ export function buildMeal(meal: string, dishes: MealDish[], seeds: string[][], l
   // carries the family's words for it (§5.1), the words said for it joined ("beans poriyal or carrot poriyal").
   // A box's filling variant (a plate that is only their own dish of a kind its other plates have: "Egg paratha roll" beside
   // the plain paratha roll) is that fixed dish, never a rotating part of the kind.
+  // In a box with a kind link, the plate named with the link's words ("paratha wrapped with the sabzi") is the box's base, whatever
+  // the order they were said in (G3): its kind with the kind's bare dish, the link joining it below; the others are its variants.
+  // The family's words for the link, else its kind's name.
+  const wordsOf = (s: string) => plainWords(s).split(" ").filter((w) => w.length > 2 && !LINK_STOP.includes(w));
+  const linkWords = opts.box ? uniq(links.filter((l) => l.kind).flatMap((l) => { const w = wordsOf(l.words ?? ""); return w.length ? w : wordsOf(`${l.kind} ${l.sub ?? ""}`); })) : [];
+  const base = linkWords.length ? drafts.find((t) => {
+    const p = t.parts.length === 1 ? t.parts[0].part : null;
+    return !!p && isKindPart(p) && !!p.dish && !catalogItem(p.dish) && plainWords(p.dish).split(" ").some((w) => linkWords.includes(w));
+  }) : undefined;
+  if (base) {
+    const p = base.parts[0].part as Extract<TemplatePart, { kind: string }>;
+    const bare = bareDish(p.kind, p.sub ?? null);
+    base.parts[0] = { ...base.parts[0], part: { kind: p.kind, ...(p.sub ? { sub: p.sub } : {}), ...(bare ? { dish: bare } : {}) } };
+  }
   if (opts.box) for (const t of drafts) {
     if (t.parts.length !== 1) continue;
     const p = t.parts[0].part;
@@ -1690,6 +1704,8 @@ export function buildMeal(meal: string, dishes: MealDish[], seeds: string[][], l
   const line = words.map((w) => `${andWords(w.words.filter((ws) => ws.length).map((ws) => ws.join(" or ")))}${w.share && w.days ? ` (${keptOften(w.share, w.days)})` : w.share ? ` (${frequencyText(w.share)})` : w.days ? ` (${daysSaid(w.days)})` : ""}`).join("; or ");
   return { templates, line, dropped, onParts: [...onParts] };
 }
+/** Words of a link that name no kind: the meal's and the day's words around it ("the sabzi we make that day"). */
+const LINK_STOP = ["the", "our", "that", "this", "day", "days", "with", "and", "for", "whatever", "make", "made", "home", "breakfast", "lunch", "dinner", "same", "what"];
 /** A kind part with the family's words for it; a part with none (the rice of "curd rice") has no words. */
 const withWords = (p: TemplatePart, ws: string[]): TemplatePart => {
   if (!isKindPart(p)) return p;

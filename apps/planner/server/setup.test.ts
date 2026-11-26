@@ -887,6 +887,22 @@ describe("the kinds model: each dish placed, each meal's templates, the cuisines
       .toEqual([{ kind: "Paratha", dish: "Egg paratha roll", words: "egg paratha roll" }]);
   });
 
+  it("a linked box's base plate is the one named with the link's words, in any order; the others are its filling variants (G3)", () => {
+    const own = (n: string): MealDish => dish(n, { place: { kind: "Paratha", sub: null, item: null, own: false, named: "dish", word: n.toLowerCase() } });
+    const names = ["Paratha wrapped with sabzi", "Paratha with paneer", "Paratha with egg"];
+    const link = [{ kind: "Sabzi", sub: "Sabzi", from: "Lunch", words: "sabzi" }];
+    const build = (ns: string[]) => buildMeal("lunch", ns.map(own), ns.map((n) => [n]), link, { box: true }).templates.map((t) => t.parts);
+    const want = [[{ kind: "Paratha", dish: "Plain paratha", words: "paratha wrapped with sabzi" }, { from: "Lunch", kind: "Sabzi", sub: "Sabzi" }],
+      [{ items: ["Paratha with paneer"] }], [{ items: ["Paratha with egg"] }]];
+    expect(build(names)).toEqual(want);
+    const back = build([...names].reverse());
+    expect(back).toHaveLength(3);
+    for (const t of want) expect(back).toContainEqual(t);
+    // No plate named with the link's words: as before (the link joins the kind plate the variant pass leaves).
+    const none = buildMeal("lunch", names.slice(1).map(own), names.slice(1).map((n) => [n]), link, { box: true }).templates.map((t) => t.parts);
+    expect(none.flat().filter((p: any) => "from" in p)).toHaveLength(1);
+  });
+
   it("a dish not placed is itself, never dropped", () => {
     const l = buildMeal("dinner", [dish("Grandma's bake", { place: null })], [["Grandma's bake"]]);
     expect(l.templates).toEqual([{ parts: [{ items: ["Grandma's bake"] }], share: null, said: null }]);
