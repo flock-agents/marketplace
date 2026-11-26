@@ -4,7 +4,7 @@
 // cuisine profile.
 import { describe, it, expect } from "bun:test";
 import { boot } from "./testkit";
-import { CATALOG, bareDish, catalogContains, catalogItem, catalogSub, checkMealShape, matchDish, plannerTags, regionalDish, regionalIn, regionalMeaning, regionalWordOf, suggestable, suggestMeals, type MealKind,
+import { CATALOG, bareDish, catalogContains, catalogItem, catalogSub, checkMealShape, isItemsPart, isKindPart, isLinkedPart, matchDish, mealKinds, plannerTags, regionalDish, regionalIn, regionalMeaning, regionalWordOf, suggestable, suggestMeals, type MealKind,
   type MealTemplate } from "./kinds";
 import { BASE_TAGS } from "./db/constants";
 import { commit, getLibraryDish, getSlot, upsertLibrary, upsertSlot } from "./slotStore";
@@ -108,42 +108,65 @@ describe("suggestable", () => {
 });
 
 describe("checkMealShape", () => {
-  const tamilLunch: MealKind[] = [{ name: "Rice", staple: true }, { name: "Rice curry", subs: ["Sambar", "Rasam"] }, { name: "Sabzi", subs: ["Poriyal/Thoran"] }, { name: "Curd", staple: true }];
-  it("a catalog kind with its own sub-kinds; templates of kinds, sub-kinds and the family's fixed dishes", () => {
+  const ctx = { slot: "Lunch", slots: ["Breakfast", "Lunch", "Dinner"] };
+  it("templates of kinds, sub-kinds and the family's fixed dishes", () => {
     const t: MealTemplate[] = [
       { parts: [{ kind: "Rice" }, { kind: "Rice curry", sub: "Sambar" }, { kind: "Rice curry", sub: "Rasam" }, { kind: "sabzi", sub: "Poriyal/Thoran" }, { kind: "Curd" }] },
       { parts: [{ kind: "Rice" }, { kind: "Rice curry", sub: "Rasam" }, { kind: "Curd" }], share: "1/week", said: "rasam rice once a week" },
+      { parts: [{ kind: "Appam" }, { items: ["Vegetable stew"] }], days: ["Sat", "Sun"] },
     ];
-    expect(checkMealShape(tamilLunch, t)).toEqual([]);
-    // Breakfast: "appam with stew" (a dish named at a meal outside its kind's meals) and "boiled chicken with khichdi" (an own kind).
-    expect(checkMealShape([{ name: "Appam" }, { name: "Boiled chicken", own: true }],
-      [{ parts: [{ kind: "Appam" }, { items: ["Vegetable stew"] }] }, { parts: [{ items: ["Khichdi"] }, { kind: "Boiled chicken" }] }])).toEqual([]);
+    expect(checkMealShape(t, ctx)).toEqual([]);
   });
   it("names what is wrong", () => {
-    expect(checkMealShape([{ name: "Breakfast dish" }], [])).toEqual(["Breakfast dish: not a catalog kind (mark it own if only this family has it)"]);
-    expect(checkMealShape([{ name: "Dal", subs: ["Sambar"] }], [])[0]).toContain("Sambar is not one of its sub-kinds");
-    expect(checkMealShape([{ name: "Dosa", own: true }], [])).toEqual(["Dosa: is a catalog kind, not an own one"]);
-    expect(checkMealShape(tamilLunch, [{ parts: [{ kind: "Dal" }] }])).toEqual(["template 1: Dal is not one of this meal's kinds"]);
-    expect(checkMealShape(tamilLunch, [{ parts: [{ kind: "Rice curry", sub: "Pappu" }] }])).toEqual(["template 1: Pappu is not a sub-kind of Rice curry"]);
-    expect(checkMealShape(tamilLunch, [{ parts: [] }, { parts: [{ items: [] }] }, { parts: [{ kind: "Rice" }], share: "often" as never }])).toEqual([
+    expect(checkMealShape([{ parts: [{ kind: "Rice curry", sub: "Pappu" }] }], ctx)).toEqual(["template 1: Pappu is not a sub-kind of Rice curry"]);
+    expect(checkMealShape([{ parts: [] }, { parts: [{ items: [] }] }, { parts: [{ kind: "Rice" }], share: "often" as never }], ctx)).toEqual([
       "template 1: has no parts", "template 2: a part of items needs their dishes' names",
       "template 3: share often is not usually, sometimes, rarely, daily or \"<n>/week\""]);
+  });
+  it("a kind part may carry the family's words and a dish of that kind", () => {
+    expect(checkMealShape([{ parts: [{ kind: "Dosa", dish: "Plain dosa", words: "dosa" }] }], ctx)).toEqual([]);
+    expect(checkMealShape([{ parts: [{ kind: "Dosa", dish: "Rava upma" }] }], ctx).join("; ")).toContain("Rava upma is not a Dosa");
+  });
+  it("a linked part names another meal of the house, never its own", () => {
+    const c = { slot: "Agastya's lunch box", slots: ["Breakfast", "Lunch", "Dinner", "Agastya's lunch box"] };
+    expect(checkMealShape([{ parts: [{ from: "Lunch", kind: "Sabzi" }] }], c)).toEqual([]);
+    expect(checkMealShape([{ parts: [{ from: "Snack" }] }], c).join("; ")).toContain("Snack is not a meal");
+    expect(checkMealShape([{ parts: [{ from: "Agastya's lunch box" }] }], c).join("; ")).toContain("links to itself");
+  });
+  it("a whole-plate link is the template's only part", () => {
+    expect(checkMealShape([{ parts: [{ from: "Breakfast" }, { items: ["Fruit"] }] }], ctx).join("; ")).toContain("whole plate");
+    expect(checkMealShape([{ parts: [{ from: "Breakfast" }] }], ctx)).toEqual([]);
+  });
+  it("a kind no catalog has is the family's own kind; a sub-kind must be the kind's", () => {
+    expect(checkMealShape([{ parts: [{ kind: "Pancakes" }] }], ctx)).toEqual([]);
+    expect(checkMealShape([{ parts: [{ kind: "Sabzi", sub: "Sambar" }] }], ctx).length).toBe(1);
+  });
+  it("the part guards tell the three shapes apart", () => {
+    expect([isKindPart({ kind: "Rice" }), isItemsPart({ items: ["x"] }), isLinkedPart({ from: "Lunch", kind: "Sabzi" }), isKindPart({ from: "Lunch", kind: "Sabzi" })]).toEqual([true, true, true, false]);
+  });
+});
+
+describe("mealKinds", () => {
+  it("the kinds a meal has are those its templates name", () => {
+    expect(mealKinds([{ parts: [{ kind: "Rice" }, { kind: "Rice curry", sub: "Sambar" }, { from: "Lunch", kind: "Sabzi" }] }]))
+      .toEqual([{ name: "Rice", staple: true }, { name: "Rice curry", subs: ["Sambar"] }]);
+    expect(mealKinds([{ parts: [{ kind: "Pancakes" }] }, { parts: [{ kind: "Rice curry", sub: "Sambar" }] }, { parts: [{ kind: "Rice curry", sub: "Rasam" }, { items: ["Fruit"] }] }]))
+      .toEqual([{ name: "Pancakes", own: true }, { name: "Rice curry", subs: ["Sambar", "Rasam"] }]);
   });
 });
 
 describe("stored", () => {
-  it("a slot's kinds and templates; a wrong shape is refused and nothing changes", async () => {
+  it("a slot's templates; a wrong shape is refused and nothing changes", async () => {
     const { kit } = await boot();
-    const kinds: MealKind[] = [{ name: "Roti", staple: true }, { name: "Sabzi" }, { name: "Dal" }];
     const templates: MealTemplate[] = [{ parts: [{ kind: "Roti" }, { kind: "Sabzi" }] }, { parts: [{ kind: "Roti" }, { kind: "Dal" }, { kind: "Sabzi" }], share: "2/week", said: "dal twice a week" }];
-    commit(kit.db, kit.emitChange, (tx, ch) => upsertSlot(tx, { name: "Dinner", kind: "main", order: 50, kinds, templates }, "app", ch));
-    expect(getSlot(kit.db, "Dinner")).toMatchObject({ kinds, templates });
-    expect(() => commit(kit.db, kit.emitChange, (tx, ch) => upsertSlot(tx, { name: "Dinner", templates: [{ parts: [{ kind: "Rice" }] }] }, "app", ch)))
-      .toThrow("Dinner: template 1: Rice is not one of this meal's kinds");
+    commit(kit.db, kit.emitChange, (tx, ch) => upsertSlot(tx, { name: "Dinner", kind: "main", order: 50, templates }, "app", ch));
+    expect(getSlot(kit.db, "Dinner")).toMatchObject({ templates });
+    expect(() => commit(kit.db, kit.emitChange, (tx, ch) => upsertSlot(tx, { name: "Dinner", templates: [{ parts: [{ kind: "Rice", sub: "Pappu" }] }] }, "app", ch)))
+      .toThrow("Dinner: template 1: Pappu is not a sub-kind of Rice");
     expect(getSlot(kit.db, "Dinner")!.templates).toEqual(templates);
     // A slot from before keeps null: not read yet.
     commit(kit.db, kit.emitChange, (tx, ch) => upsertSlot(tx, { name: "Lunch", kind: "main", order: 30 }, "app", ch));
-    expect(getSlot(kit.db, "Lunch")).toMatchObject({ kinds: null, templates: null });
+    expect(getSlot(kit.db, "Lunch")).toMatchObject({ templates: null });
   });
 
   it("a library dish's kind, sub-kind and catalog item; the house's cuisine profile", async () => {

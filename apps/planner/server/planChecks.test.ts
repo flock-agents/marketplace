@@ -9,14 +9,14 @@ import type { HistoryRow, LibraryDish, Rule, Slot } from "./slotStore";
 
 const WEEK = ["2026-11-30", "2026-12-01", "2026-12-02", "2026-12-03", "2026-12-04", "2026-12-05", "2026-12-06"];
 const READ = ["egg", "meat", "fish", "onion_garlic"];
-const slot = (name: string, o: Partial<Slot> = {}): Slot => ({ id: name, name, kind: "main", addon_of: null, usual_people: [], days: [], skip_days: [], order: 30, active: true, kinds: null, templates: null, ...o });
+const slot = (name: string, o: Partial<Slot> = {}): Slot => ({ id: name, name, kind: "main", addon_of: null, usual_people: [], days: [], skip_days: [], order: 30, active: true, extras: false, templates: null, ...o });
 const dish = (name: string, slotName: string, o: Partial<LibraryDish> = {}): LibraryDish => ({ id: `${slotName}|${name}`, key: dishKey(name), slot: slotName, name, frequency: null, days: null, said: null,
   contains: [], contains_read: READ, origin: "setup_named", suggested: false, untried: false, offers: 0, disliked: false, prep: null, video_url: null, video_title: null,
   video_thumbnail: null, rating: null, rating_note: null, rated_on: null, rated_by: null, ratings: [], kind: null, sub: null, catalog_item: null, ...o });
 const day = (date: string, slotName: string, people = ["Asha", "Ravi"]): PlanDay => ({ date, slot: slotName, people, guests: [], occasion: null, new_dishes_allowed: null, skip: null,
   edited: false, fixed: false, why: [], fasting: [], dishes: [], note: null });
 const seed = (slotName: string, rows: string[][]): HistoryRow[] => rows.map((r) => ({ date: null, status: "confirmed", skip: null, dishes: r.map((d) => ({ dish: d })) }) as HistoryRow);
-const rule = (o: Partial<Rule>): Rule => ({ id: "r", hard: true, what: "avoid", who: null, slots: null, days: null, items: null, to: null, frequency: null, per_meal: null, fasting_food: null, quote: "", ...o });
+const rule = (o: Partial<Rule>): Rule => ({ id: "r", hard: true, what: "avoid", who: null, slots: null, days: null, items: null, to: null, targets: null, gives: null, frequency: null, per_meal: null, fasting_food: null, quote: "", ...o });
 
 /** A week of the given slots, every day for Asha and Ravi. */
 function week(o: { slots: Slot[]; library: LibraryDish[]; rules?: Rule[]; history?: Record<string, HistoryRow[]> }): Week {

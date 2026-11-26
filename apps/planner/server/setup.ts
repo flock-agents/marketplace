@@ -22,7 +22,7 @@ import { cookVisits, daysSaid, getHouse, houseView, isObject, LONG_DAY, refuse, 
 import { addRule, commit, deleteSeedSlotDays, getLibraryDish, listLibrary, listRules, listSlots, removeLibrary, removeRule, renameDish, saveSlotDay, seedSlotDays,
   upsertLibrary, upsertSlot, type Change, type LibraryDish, type Rule, type RuleInput, type Slot } from "./slotStore";
 import { CATALOG, catalogKind, catalogSub, checkMealShape, matchDish, norm, plannerTags, regionalDish, regionalIn, regionalMeaning, regionalWordOf, suggestMeals, type CatalogKind, type RegionalMeaning, type RegionalWord, type MealKind, type MealTemplate,
-  type TemplatePart } from "./kinds";
+  type ItemsPart, type KindPart } from "./kinds";
 import type { ModelCall, ModelResult } from "./model";
 import { isAllergyRule } from "./allergy";
 
@@ -1282,6 +1282,8 @@ export async function kindsRead(model: ModelCall, asks: KindsAsk[], until: numbe
 /** One of the family's dishes at a meal, with its place and how often they said they have it. */
 export type MealDish = { name: string; place: Place | null; frequency: Frequency | null; days: Weekday[] | null; said: string | null };
 /** A meal's shape: its kinds and templates to store, its read-back line in the family's words, and what was left out. */
+/** What setup reads of a plate: a kind (with its words and dish) or the family's own fixed dishes; it never reads a link. */
+type TemplatePart = KindPart | ItemsPart;
 export type MealShape = { kinds: MealKind[]; templates: MealTemplate[]; line: string; dropped: string[] };
 
 type PlatePart = { part: TemplatePart; words: string[]; dish: MealDish | null };
@@ -1466,10 +1468,10 @@ export function buildMeal(meal: string, dishes: MealDish[], seeds: string[][]): 
     kinds.push({ name: cat.name, ...(subs.length ? { subs } : {}), ...(cat.staple ? { staple: true } : {}) });
   }
   // What the stored shape refuses is dropped, never the whole meal (checkMealShape: the slot store checks again).
-  const okKinds = kinds.filter((k) => { const e = checkMealShape([k], []); if (e.length) dropped.push(...e); return !e.length; });
+  const okKinds = kinds;
   const templates: MealTemplate[] = [], words: { words: string[][]; share: Frequency | null; days: Weekday[] | null }[] = [];
   for (const t of drafts) {
-    const parts = t.parts.filter((p) => { const e = checkMealShape(okKinds, [{ parts: [p.part] }]); if (e.length) dropped.push(...e); return !e.length; });
+    const parts = t.parts.filter((p) => { const e = checkMealShape([{ parts: [p.part] }], { slot: meal, slots: [] }); if (e.length) dropped.push(...e); return !e.length; });
     if (!parts.length) continue;
     const often = t.defining.find((d) => d.frequency && !isDaily(d)), pinned = t.defining.find((d) => d.days?.length);
     const share = often?.frequency ?? null;
@@ -1615,11 +1617,11 @@ export function writeKinds(tx: Db, plan: KindsPlan, placed: Map<string, Place>, 
       dishes.push({ name, place, frequency: d.frequency, days: d.days, said: d.said });
     }
     const seeds = seedSlotDays(tx).filter((s) => same(s.slot, slot.name)).map((s) => s.dishes.map((x) => x.dish));
-    const shape = dishes.length ? buildMeal(meal, dishes, seeds) : { kinds: [], templates: [], line: "", dropped: [] };
+    const shape = dishes.length ? buildMeal(meal, dishes, seeds) : { kinds: [] as MealKind[], templates: [] as MealTemplate[], line: "", dropped: [] as string[] };
     for (const d of shape.dropped) opts.log(`kinds: ${slot.name}: ${d}`);
     if (!dishes.length && slot.templates === null) continue;
     try {
-      upsertSlot(tx, { name: slot.name, kinds: shape.kinds, templates: shape.templates }, by, changes);
+      upsertSlot(tx, { name: slot.name, templates: shape.templates }, by, changes);
       meals[slot.name] = shape.line;
       if (JSON.stringify(slot.templates) !== JSON.stringify(shape.templates)) changed.push(slot.name);
     }

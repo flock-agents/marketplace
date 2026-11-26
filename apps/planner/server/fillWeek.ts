@@ -12,7 +12,7 @@
 // `not_for` them and they get their own item for that part. Nobody at a meal is left with nothing. A rule broken only by an
 // ingredient the dish can be made without (onion and garlic, cashews in upma: decided 21) is a note, never a block
 // (planChecks.leaveOutNotes). Pure and deterministic: no database, no model, ties broken by date and slot.
-import { CATALOG, catalogContains, catalogKind, matchDish, norm, regionalWordOf, suggestable, suggestMeals, type CatalogItem, type MealKind, type MealTemplate,
+import { CATALOG, catalogContains, catalogKind, matchDish, norm, regionalWordOf, suggestable, suggestMeals, type CatalogItem, type MealKind, type MealTemplate, isItemsPart, isKindPart, isLinkedPart, mealKinds,
   type TemplatePart } from "./kinds";
 import { INSTEAD_STEP, TEMPLATE_DAYS } from "./db/constants";
 import { addDays, weekdayOf } from "./dates";
@@ -151,17 +151,8 @@ function mealOf(s: Slot, slots: Slot[]): string | null {
   return s.order <= 10 ? "breakfast" : s.order <= 30 ? "lunch" : "dinner";
 }
 
-/** The kinds a set of templates names. */
-function kindsOf(templates: MealTemplate[], own: Set<string>): MealKind[] {
-  const out = new Map<string, MealKind>();
-  for (const t of templates) for (const p of t.parts) {
-    if ("items" in p) continue;
-    const k = out.get(norm(p.kind)) ?? { name: p.kind, ...(catalogKind(p.kind)?.staple ? { staple: true } : {}), ...(own.has(norm(p.kind)) || !catalogKind(p.kind) ? { own: true } : {}) };
-    if (p.sub) k.subs = uniq([...(k.subs ?? []), p.sub]);
-    out.set(norm(p.kind), k);
-  }
-  return [...out.values()];
-}
+/** The kinds of a slot's templates (kinds.ts mealKinds), read through `kindsOf` by the planner's own sites. */
+const kindsOf = (s: Slot): MealKind[] => mealKinds(s.templates ?? []);
 /** A meal set up before templates (or with none): its templates read off its seed and confirmed plates, a part per dish (its
  *  kind, with its sub-kind where the kind has several; a dish the catalog does not know is that dish, `items`); with no
  *  plates, one template per kind of its dishes; with no dishes either, a plain plate of its meal. */
@@ -182,9 +173,9 @@ export function deriveTemplates(s: Slot, plates: string[][], library: LibraryDis
   if (s.kind === "addon") return mine.length ? [{ parts: [{ items: mine.map((r) => r.name) }] }] : [];
   if (mine.length) {
     const parts = mine.map((r) => partOf(r.name));
-    const staple = uniq(parts.filter((p) => "kind" in p && catalogKind(p.kind)?.staple).map((p) => (p as { kind: string }).kind)).map((kind) => ({ kind }));
-    const loose = parts.filter((p) => "items" in p).flatMap((p) => (p as { items: string[] }).items);
-    const kinds = uniq(parts.filter((p) => "kind" in p && !catalogKind(p.kind)?.staple).map((p) => (p as { kind: string }).kind));
+    const staple = uniq(parts.filter(isKindPart).filter((p) => catalogKind(p.kind)?.staple).map((p) => p.kind)).map((kind) => ({ kind }));
+    const loose = parts.filter(isItemsPart).flatMap((p) => p.items);
+    const kinds = uniq(parts.filter(isKindPart).filter((p) => !catalogKind(p.kind)?.staple).map((p) => p.kind));
     const ts: MealTemplate[] = kinds.map((kind) => ({ parts: [...staple, { kind }] }));
     if (loose.length) ts.push({ parts: [...staple, { items: loose }] });
     return ts.length ? ts : staple.length ? [{ parts: staple }] : [];
@@ -229,13 +220,11 @@ export function fillWeek(input: FillInput): FillResult {
   const shaped = input.slots.map((s): Slot => {
     const history = input.history.get(s.name.toLowerCase()) ?? [];
     const plates = slotFacts(s, library, history).plates;
-    const own = new Set((s.kinds ?? []).filter((k) => k.own).map((k) => norm(k.name)));
     const templates = s.templates?.length ? s.templates : deriveTemplates(s, plates, library, mealOf(s, input.slots));
-    const kinds = s.kinds?.length ? s.kinds : kindsOf(templates, own);
-    if (!s.templates?.length) res.log.push(`${s.name}: templates read off its plates: ${templates.map((t) => `[${t.parts.map((p) => ("items" in p ? p.items.join("/") : p.sub ?? p.kind)).join(", ")}]`).join(" ")}`);
+    if (!s.templates?.length) res.log.push(`${s.name}: templates read off its plates: ${templates.map((t) => `[${t.parts.map((p) => (isItemsPart(p) ? p.items.join("/") : isKindPart(p) ? p.sub ?? p.kind : p.from)).join(", ")}]`).join(" ")}`);
     res.templates.set(s.name.toLowerCase(), templates);
-    res.kinds.set(s.name.toLowerCase(), kinds);
-    return { ...s, kinds, templates };
+    res.kinds.set(s.name.toLowerCase(), mealKinds(templates));
+    return { ...s, templates };
   });
   const shapeOf = (slot: string) => shaped.find((s) => same(s.name, slot))!;
 
@@ -375,7 +364,7 @@ export function fillWeek(input: FillInput): FillResult {
   /** The brand-new variants of a kind (one sub-kind when given): the catalog's items outside what the family named; never a
    *  staple's or an own kind's. */
   const newPool = (s: Slot, kind: string, sub: string | null, prefer: string[] = []): Item[] => {
-    const mk = (s.kinds ?? []).find((k) => sameKind(k.name, kind));
+    const mk = kindsOf(s).find((k) => sameKind(k.name, kind));
     return mk?.own || mk?.staple ? [] : catalogPool(s, kind, sub, prefer, false);
   };
   /** The family's usual item of a staple kind at a slot: their dish of it had most at this slot, else any of theirs (never one of
@@ -393,17 +382,18 @@ export function fillWeek(input: FillInput): FillResult {
     return onPlate ?? catalogKind(kind)?.items[0]?.name ?? kind;
   };
 
-  const isStaplePart = (s: Slot, p: TemplatePart) => "kind" in p && (!!(s.kinds ?? []).find((k) => sameKind(k.name, p.kind))?.staple || !!catalogKind(p.kind)?.staple);
+  const isStaplePart = (s: Slot, p: TemplatePart) => isKindPart(p) && (!!kindsOf(s).find((k) => sameKind(k.name, p.kind))?.staple || !!catalogKind(p.kind)?.staple);
   /** A non-staple part's candidates: the family's items of it, and the brand-new variants (of the family's own sub-kinds first:
    *  the meal's, else those of their items). */
   const poolsOf = (s: Slot, p: TemplatePart) => {
-    const kind = "items" in p ? null : p.kind;
-    const sub = "items" in p ? null : p.sub ?? null;
-    const mk = kind ? (s.kinds ?? []).find((x) => sameKind(x.name, kind)) : undefined;
-    const fam: Item[] = "items" in p
-      ? p.items.map((n, i) => { const r = rowAt(s.name, dishKey(n)); const pl = r ? placeOf(r) : null; return { name: n.trim(), key: dishKey(n), kind: pl?.kind ?? n, sub: pl?.sub ?? null, family: true, idx: i, row: r }; })
+    const kp = isKindPart(p) ? p : null;
+    const kind = kp ? kp.kind : null;
+    const sub = kp ? kp.sub ?? null : null;
+    const mk = kind ? kindsOf(s).find((x) => sameKind(x.name, kind)) : undefined;
+    const fam: Item[] = !kp
+      ? !isItemsPart(p) ? [] : p.items.map((n, i) => { const r = rowAt(s.name, dishKey(n)); const pl = r ? placeOf(r) : null; return { name: n.trim(), key: dishKey(n), kind: pl?.kind ?? n, sub: pl?.sub ?? null, family: true, idx: i, row: r }; })
       : familyPool(s, kind!, sub, sub ? [] : mk?.subs ?? []);
-    const neu: Item[] = "items" in p || mk?.own ? [] : newPool(s, kind!, sub, sub ? [] : mk?.subs?.length ? mk.subs : uniq(fam.map((x) => x.sub).filter((x): x is string => !!x)));
+    const neu: Item[] = !kp || mk?.own ? [] : newPool(s, kind!, sub, sub ? [] : mk?.subs?.length ? mk.subs : uniq(fam.map((x) => x.sub).filter((x): x is string => !!x)));
     return { kind, sub, fam, neu };
   };
 
@@ -475,8 +465,8 @@ export function fillWeek(input: FillInput): FillResult {
   // ── Templates for each slot's days ──
   const tplOf = new Map<string, number>();   // slotDayKey → template index
   const pinsOf = new Map<string, LibraryDish[]>();
-  const holds = (t: MealTemplate, r: LibraryDish) => t.parts.some((p) => ("items" in p ? p.items.some((x) => dishKey(x) === r.key)
-    : sameKind(p.kind, placeOf(r)?.kind) && (!p.sub || sameKind(p.sub, placeOf(r)?.sub))));
+  const holds = (t: MealTemplate, r: LibraryDish) => t.parts.some((p) => (isItemsPart(p) ? p.items.some((x) => dishKey(x) === r.key)
+    : isLinkedPart(p) ? false : sameKind(p.kind, placeOf(r)?.kind) && (!p.sub || sameKind(p.sub, placeOf(r)?.sub))));
   for (const s of shaped) {
     const ts = s.templates ?? [];
     const mine = planned.filter((d) => same(d.slot, s.name)).sort((a, b) => a.date.localeCompare(b.date));
@@ -639,7 +629,7 @@ export function fillWeek(input: FillInput): FillResult {
   };
   const label = (d: PlanDay) => `${weekdayOf(d.date)} ${d.slot}`;
   /** The non-staple kinds of a slot, for a person's own item from another part. */
-  const otherKinds = (s: Slot, but: string | null) => (s.kinds ?? []).filter((k) => !k.staple && !catalogKind(k.name)?.staple && !sameKind(k.name, but));
+  const otherKinds = (s: Slot, but: string | null) => kindsOf(s).filter((k) => !k.staple && !catalogKind(k.name)?.staple && !sameKind(k.name, but));
   /** A person (or the guests: `must`) fed where the plate has nothing for them: their own item for the part, else one of
    *  another part of this meal, else any dish of theirs here, else a plain dal or sabzi. */
   const feed = (s: Slot, d: PlanDay, plate: Plate, who: string[], part: number, fam: Item[], neu: Item[], kind: string | null, must?: (name: string) => boolean): boolean => {
@@ -650,7 +640,7 @@ export function fillWeek(input: FillInput): FillResult {
     tries.push(stepsFor(here, []));
     for (const k of otherKinds(s, kind)) tries.push(stepsFor([], newPool(s, k.name, null)));
     // A plain dal or sabzi only at lunch or dinner (never a new kind at breakfast or in a tiffin).
-    if (["lunch", "dinner"].includes(mealOf(s, input.slots) ?? "")) for (const k of ["Dal", "Sabzi"]) tries.push(stepsFor([], newPool({ ...s, kinds: [] }, k, null)));
+    if (["lunch", "dinner"].includes(mealOf(s, input.slots) ?? "")) for (const k of ["Dal", "Sabzi"]) tries.push(stepsFor([], newPool({ ...s, templates: [] }, k, null)));
     for (const steps of tries) {
       const got = choose(s, d, plate, steps, who, true, must);
       if (got) { put(s, d, plate, got.it, part, false); return true; }
@@ -717,7 +707,7 @@ export function fillWeek(input: FillInput): FillResult {
       }
       const { kind, sub, fam, neu } = poolsOf(s, p);
       // A pinned dish of this part, on its day.
-      const pin = pins.find((r) => fam.some((x) => x.key === r.key) || ("items" in p ? false : sameKind(placeOf(r)?.kind, kind) && (!sub || sameKind(placeOf(r)?.sub, sub))));
+      const pin = pins.find((r) => fam.some((x) => x.key === r.key) || (!isKindPart(p) ? false : sameKind(placeOf(r)?.kind, kind) && (!sub || sameKind(placeOf(r)?.sub, sub))));
       let got: { it: Item; ex: string[] } | null = null;
       if (pin) {
         pins.splice(pins.indexOf(pin), 1);
@@ -770,7 +760,7 @@ export function fillWeek(input: FillInput): FillResult {
     // An add-on day with nothing: fine where its people eat the main meal's dishes; else one of its dishes comes back (its fixed
     // dishes, or its own items of a part's kind), one its people may eat first.
     if (s.kind === "addon" && !plate.length && !mainFeeds(w, dayOf(d))) {
-      const fam = uniq((s.templates ?? []).flatMap((x) => x.parts).flatMap((p) => ("items" in p ? p.items : familyPool(s, p.kind, p.sub ?? null).filter((x) => !x.catalog).map((x) => x.name))))
+      const fam = uniq((s.templates ?? []).flatMap((x) => x.parts).flatMap((p) => (isItemsPart(p) ? p.items : isLinkedPart(p) ? [] : familyPool(s, p.kind, p.sub ?? null).filter((x) => !x.catalog).map((x) => x.name))))
         .map((n, i): Item => ({ name: n, key: dishKey(n), kind: n, sub: null, family: true, idx: i }));
       const near = fam.filter((it) => fits(s, d, plate, it, { repeat: true, next: true, zero: false }, true))
         .sort((a, b) => excluded(d, d.people, a.name).length - excluded(d, d.people, b.name).length

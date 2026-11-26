@@ -9,7 +9,7 @@ import { BASE_TAGS, FREQUENCY_DAYS, STAPLES_FROM_PLANNED, TAG_PARENT, UNTRIED_MA
 import { isAllergyRule } from "./allergy";
 import { dishKey } from "./dishText";
 import { looksLike, looksLikeRows, staples, type HistoryRow, type LibraryDish, type Rule, type Slot } from "./slotStore";
-import { catalogIngredients, contentsItem, plannerTags } from "./kinds";
+import { catalogIngredients, contentsItem, mealKinds, plannerTags } from "./kinds";
 import { ruleHolds, type PlanDay } from "./planDays";
 
 const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
@@ -98,7 +98,7 @@ export type SlotFacts = { slot: Slot; library: LibraryDish[]; staples: string[];
 export function slotFacts(slot: Slot, library: LibraryDish[], history: HistoryRow[], _recent?: unknown): SlotFacts {
   const mine = library.filter((d) => same(d.slot, slot.name));
   const daily = mine.filter((d) => d.frequency === "daily" && plannable(d)).map((d) => d.name);
-  const stapleKinds = new Set((slot.kinds ?? []).filter((k) => k.staple).map((k) => k.name.toLowerCase()));
+  const stapleKinds = new Set(mealKinds(slot.templates ?? []).filter((k) => k.staple).map((k) => k.name.toLowerCase()));
   const ofStapleKind = mine.filter((d) => plannable(d) && d.kind && stapleKinds.has(d.kind.toLowerCase())).map((d) => d.name);
   const all = [...staples(stapleRows(history)), ...daily, ...ofStapleKind].filter((x, i, xs) => xs.findIndex((y) => dishKey(y) === dishKey(x)) === i);
   const plates = looksLikeRows(history).map((r) => r.dishes.map((d) => d.dish.trim()));

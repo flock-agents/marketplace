@@ -12,7 +12,7 @@
 //           set_slot_day { date, slot, guests, occasion }   (Eval 2 guests)
 //           add_dish { name, slot }                          (Eval 1 contains accuracy: the contains read of one dish)
 import type { ModelCall } from "../../server/model";
-import { checkMealShape, type MealKind, type MealTemplate } from "../../server/kinds";
+import { checkMealShape, mealKinds, type MealTemplate } from "../../server/kinds";
 import type { PlanOut, SavedDish, SavedRule, SavedSlot, SetupOut } from "./result";
 import { WEEK, dateOf, type Household, type WeekEvent } from "./truth";
 
@@ -45,7 +45,7 @@ export async function runSetup(k: Kit, h: Household, transcript: string[]): Prom
 export function readSetup(k: Kit, res: any = {}): SetupOut {
   const slots: SavedSlot[] = has(k, "slots") ? k.rows("slots").filter((r) => r.active === undefined || r.active === null || bool(r.active)).map((r) => ({
     name: r.name, kind: r.kind, addon_of: r.addon_of ?? null, usual_people: json(r.usual_people, []), days: json(r.days, []), skip_days: json(r.skip_days, []), order: r.order,
-    ...("kinds" in r ? { kinds: json(r.kinds, null) } : {}), ...("templates" in r ? { templates: json(r.templates, null) } : {}),
+    ...("templates" in r ? { templates: json(r.templates, null), kinds: mealKinds(json(r.templates, [])) } : {}),
   })) : [];
   const library: SavedDish[] = has(k, "library") ? k.rows("library").filter((r) => !bool(r.suggested)).map((r) => ({
     slot: r.slot, name: r.name, frequency: r.frequency ?? null, days: json(r.days, null), contains: json(r.contains, []), contains_read: json(r.contains_read, []),
@@ -130,7 +130,7 @@ export function loadSetup(k: Kit, s: SetupOut): string[] {
   // Kinds model: a slot's kinds and templates, a dish's kind, sub-kind and catalog item, when the setup has them (TRUTH with
   // templates); left out (null) otherwise, and the planner derives them from the seed. A shape the app would refuse is reported.
   for (const sl of s.slots) {
-    if (sl.kinds && sl.templates) for (const e of checkMealShape(sl.kinds as MealKind[], sl.templates as MealTemplate[])) refused.push(`slots ${sl.name} shape: ${e}`);
+    if (sl.templates) for (const e of checkMealShape(sl.templates as MealTemplate[], { slot: sl.name, slots: s.slots.map((x) => x.name) })) refused.push(`slots ${sl.name} shape: ${e}`);
     insert("slots", { name: sl.name, kind: sl.kind, addon_of: sl.addon_of, usual_people: sl.usual_people, days: sl.days, skip_days: sl.skip_days, order: sl.order ?? order(sl), active: 1,
       ...(sl.kinds ? { kinds: sl.kinds } : {}), ...(sl.templates ? { templates: sl.templates } : {}) });
   }
@@ -191,5 +191,5 @@ export function readPlan(k: Kit, weekStart: string, res: any = {}): PlanOut {
 /** What the app's own shape check (server/kinds.ts checkMealShape) says of each slot's kinds and templates in a setup: TRUTH
  *  must be a shape the app accepts, or Eval 2 plans from something the app would refuse. */
 export function shapeErrors(s: SetupOut): string[] {
-  return s.slots.flatMap((sl) => (sl.kinds && sl.templates ? checkMealShape(sl.kinds as MealKind[], sl.templates as MealTemplate[]).map((e) => `${sl.name}: ${e}`) : []));
+  return s.slots.flatMap((sl) => (sl.templates ? checkMealShape(sl.templates as MealTemplate[], { slot: sl.name, slots: s.slots.map((x) => x.name) }).map((e) => `${sl.name}: ${e}`) : []));
 }

@@ -157,7 +157,7 @@ describe("make_plan: the week filled by code from the templates", () => {
   });
 
   it("a pinned dish is on its days only; a dish said once a week comes once", async () => {
-    const k = await home({ slots: [{ ...MAIN[0], kinds: [...SHAPES.Breakfast.kinds, { name: "Paratha" }], templates: [...SHAPES.Breakfast.templates, T({ kind: "Paratha" })] }, MAIN[1], MAIN[2]],
+    const k = await home({ slots: [{ ...MAIN[0], templates: [...SHAPES.Breakfast.templates, T({ kind: "Paratha" })] }, MAIN[1], MAIN[2]],
       library: [{ name: "Aloo paratha", slot: "Breakfast", kind: "Paratha", days: ["Sat", "Sun"] }, { name: "Rajma", slot: "Lunch", kind: "Dal", sub: "Rajma/Chole", frequency: "1/week" }] });
     await k.plan(fakeModel().model);
     expect(WEEK.filter((d) => k.dishesAt(d, "Breakfast").includes("Aloo paratha"))).toEqual([WEEK[5], WEEK[6]]);
@@ -230,7 +230,7 @@ describe("make_plan: new dishes (kinds model rule 4)", () => {
 describe("make_plan: hard rules per person, fail closed", () => {
   const GRANDMA: RuleInput = { hard: true, what: "veg", who: "Nani", quote: "Nani is vegetarian" };
   const people: [string, string][] = [["Asha", "adult"], ["Nani", "elder"]];
-  const FISH_LUNCH: SlotInput = { name: "Lunch", kind: "main", order: 30, kinds: [{ name: "Rice", staple: true }, { name: "Fish & seafood" }, { name: "Dal" }],
+  const FISH_LUNCH: SlotInput = { name: "Lunch", kind: "main", order: 30, 
     templates: [T({ kind: "Rice" }, { kind: "Fish & seafood" }, { kind: "Dal" })] };
 
   it("a fish lunch with a vegetarian grandmother: the fish is not for her, she has her own dish for its part, the fish stays in the fish curry", async () => {
@@ -252,7 +252,7 @@ describe("make_plan: hard rules per person, fail closed", () => {
   });
 
   it("a dish never read for her rule's item is not hers (fail closed), read first when setup never read it; she gets a dish of her own", async () => {
-    const k = await home({ people, rules: [GRANDMA], slots: [MAIN[0], { name: "Lunch", kind: "main", order: 30, kinds: [{ name: "Rice", staple: true }], templates: [T({ kind: "Rice" }, { items: ["Mystery curry"] })] }, MAIN[2]],
+    const k = await home({ people, rules: [GRANDMA], slots: [MAIN[0], { name: "Lunch", kind: "main", order: 30, templates: [T({ kind: "Rice" }, { items: ["Mystery curry"] })] }, MAIN[2]],
       library: [{ name: "Mystery curry", slot: "Lunch", contains: [], contains_read: [] }] });
     const f = fakeModel({ contains: (u) => ({ dishes: u.dishes.map((d: string) => ({ dish: d, has: [], not: [] })) }) });
     const r = await k.plan(f.model);
@@ -265,7 +265,7 @@ describe("make_plan: hard rules per person, fail closed", () => {
   });
 
   it("a read that says chicken but not meat still counts as meat (a tag's family is added)", async () => {
-    const k = await home({ people, rules: [GRANDMA], slots: [MAIN[0], { name: "Lunch", kind: "main", order: 30, kinds: [{ name: "Rice", staple: true }], templates: [T({ kind: "Rice" }, { items: ["House special"] })] }, MAIN[2]],
+    const k = await home({ people, rules: [GRANDMA], slots: [MAIN[0], { name: "Lunch", kind: "main", order: 30, templates: [T({ kind: "Rice" }, { items: ["House special"] })] }, MAIN[2]],
       library: [{ name: "House special", slot: "Lunch", contains: [], contains_read: [] }] });
     const f = fakeModel({ contains: (u) => ({ dishes: u.dishes.map((d: string) => ({ dish: d, has: ["chicken"], not: ["meat", "fish", "egg"] })) }) });
     await k.plan(f.model);
@@ -285,7 +285,7 @@ describe("make_plan: hard rules per person, fail closed", () => {
   });
 
   it("guests' food rules are read once into tags: a fish-only dinner for vegetarian guests gets a dish of theirs beside", async () => {
-    const k = await home({ slots: [MAIN[0], MAIN[1], { name: "Dinner", kind: "main", order: 50, kinds: [{ name: "Roti", staple: true }], templates: [T({ kind: "Roti" }, { items: ["Fish fry"] })] }],
+    const k = await home({ slots: [MAIN[0], MAIN[1], { name: "Dinner", kind: "main", order: 50, templates: [T({ kind: "Roti" }, { items: ["Fish fry"] })] }],
       library: [{ name: "Fish fry", slot: "Dinner", kind: "Fish & seafood", contains: ["fish"] }] });
     const SAT = WEEK[5];
     commit(k.kit.db, k.kit.emitChange, (tx, ch) => saveSlotDay(tx, { date: SAT, slot: "Dinner", people: ["Asha", "Ravi", "Kabir"], guests: [{ count: 4, rules: ["Vegetarian"] }], edited: true, dishes: [] }, "app", ch));
@@ -374,7 +374,7 @@ describe("make_plan: an add-on and a box", () => {
 describe("make_plan: allergies (owner 25 Nov)", () => {
   const ALLERGY: RuleInput = { hard: true, what: "avoid", who: "Kabir", items: ["peanut"], quote: "Kabir is allergic to peanuts" };
   const readAll = [...READ, "nuts"];
-  const POHA_ONLY: SlotInput = { name: "Breakfast", kind: "main", order: 10, kinds: [{ name: "Poha" }], templates: [T({ kind: "Poha" })] };
+  const POHA_ONLY: SlotInput = { name: "Breakfast", kind: "main", order: 10, templates: [T({ kind: "Poha" })] };
 
   it("a family dish on their own plates at a slot Kabir eats is his by their word: no careful read, the note keeps his portion aside, its peanuts still bought", async () => {
     const k = await home({ rules: [ALLERGY], seed: [{ slot: "Breakfast", dishes: ["Kanda poha"] }, { slot: "Breakfast", dishes: ["Rava upma"] }],

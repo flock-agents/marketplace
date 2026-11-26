@@ -4,6 +4,7 @@
 // [Roti, Sabzi], [Rice, Sambar, Rasam, Poriyal], [Appam, Vegetable stew]. Decided rules: scripts/kinds/decided.md.
 import catalogJson from "./kinds.json";
 import { FREQUENCY_WORDS, type Frequency } from "./db/constants";
+import type { Weekday } from "./dates";
 
 // ── The catalog ──
 
@@ -132,54 +133,72 @@ export function suggestable(kind: string, opts: { sub?: string | null; cuisines?
  *  item is a new variant). `staple`: comes every day its template has it, never rotated (roti, rice, curd). `own`: a kind only
  *  this family has (a dish with no kind in the catalog): nothing new is ever suggested for it. */
 export type MealKind = { name: string; subs?: string[]; staple?: boolean; own?: boolean };
-/** One part of a template: a kind or one sub-kind of it (filled from the family's items of it, then new ones), or a fixed list
- *  of the family's own dishes (nothing new suggested: a dish they named at a meal outside the catalog's meals for it, decided
- *  18 and 19). */
-export type TemplatePart = { kind: string; sub?: string } | { items: string[] };
+/** One part of a template: a kind or one sub-kind of it (filled from the family's items of it, then new ones). `words`: the
+ *  family's own words for it ("dry sabji", "upma"), kept for the read-back and messages. `dish`: when their bare word names one
+ *  dish of that kind, that dish (theirs, filled first; the rest of the kind's items are new). */
+export type KindPart = { kind: string; sub?: string; words?: string; dish?: string };
+/** A fixed list of the family's own dishes (nothing new suggested: a dish they named at a meal outside the catalog's meals for
+ *  it, decided 18 and 19). */
+export type ItemsPart = { items: string[] };
+/** Linked (§5.1): the item `from` has for `kind` (and `sub`) that day; no kind = the whole plate of `from`. */
+export type LinkedPart = { from: string; kind?: string; sub?: string };
+export type TemplatePart = KindPart | ItemsPart | LinkedPart;
 /** One way the meal is plated. `share`: how often, in the family's words' measure ("2/week", "usually"); null = spread evenly
- *  with the others. `said`: those words ("poha twice a week"). */
-export type MealTemplate = { parts: TemplatePart[]; share?: Frequency | null; said?: string | null };
+ *  with the others. `said`: those words ("poha twice a week"). `days`: only on these days. */
+export type MealTemplate = { parts: TemplatePart[]; share?: Frequency | null; said?: string | null; days?: Weekday[] | null };
+
+export const isItemsPart = (p: TemplatePart): p is ItemsPart => "items" in p;
+export const isLinkedPart = (p: TemplatePart): p is LinkedPart => "from" in p;
+export const isKindPart = (p: TemplatePart): p is KindPart => "kind" in p && !("from" in p);
 
 const isFrequency = (v: unknown): v is Frequency =>
   typeof v === "string" && ((FREQUENCY_WORDS as readonly string[]).includes(v) || /^[1-7]\/week$/.test(v));
 
-/** What is wrong with a slot's kinds and templates, one line each; empty when they are fine. A catalog kind is named as the
- *  catalog names it (any capitals); a sub-kind must be one of its kind's; an own kind must not be a catalog kind; every kind a
- *  template names must be among the slot's kinds. */
-export function checkMealShape(kinds: readonly MealKind[], templates: readonly MealTemplate[]): string[] {
+/** What is wrong with a slot's templates, one line each; empty when they are fine. A kind no catalog has is the family's own
+ *  kind; a sub-kind must be its catalog kind's; a dish of a kind part must be of that kind; a linked part names another meal of
+ *  the house (`ctx.slots`), never its own (`ctx.slot`), and a whole-plate link is its template's only part. */
+export function checkMealShape(templates: readonly MealTemplate[], ctx: { slot: string; slots: readonly string[] }): string[] {
   const errs: string[] = [];
-  const seen = new Map<string, MealKind>();
-  for (const k of kinds) {
-    if (!k?.name?.trim()) { errs.push("a kind has no name"); continue; }
-    if (seen.has(norm(k.name))) errs.push(`${k.name}: named twice`);
-    seen.set(norm(k.name), k);
-    const cat = catalogKind(k.name);
-    if (k.own) {
-      if (cat) errs.push(`${k.name}: is a catalog kind, not an own one`);
-      if (k.subs?.length) errs.push(`${k.name}: an own kind has no sub-kinds`);
-      continue;
-    }
-    if (!cat) { errs.push(`${k.name}: not a catalog kind (mark it own if only this family has it)`); continue; }
-    for (const s of k.subs ?? []) if (!cat.subs.some((x) => norm(x.name) === norm(s))) errs.push(`${k.name}: ${s} is not one of its sub-kinds (${cat.subs.map((x) => x.name).join(", ")})`);
-  }
+  const subOk = (kind: string, sub: string) => { const cat = catalogKind(kind); return !!cat && cat.subs.some((x) => norm(x.name) === norm(sub)); };
   templates.forEach((t, i) => {
     const at = `template ${i + 1}`;
     if (!t?.parts?.length) { errs.push(`${at}: has no parts`); return; }
     if (t.share != null && !isFrequency(t.share)) errs.push(`${at}: share ${String(t.share)} is not usually, sometimes, rarely, daily or "<n>/week"`);
+    if (t.parts.length > 1 && t.parts.some((p) => isLinkedPart(p) && !p.kind)) errs.push(`${at}: a whole plate link is the template's only part`);
     for (const p of t.parts) {
-      if ("items" in p) {
+      if (isItemsPart(p)) {
         if (!Array.isArray(p.items) || !p.items.length || p.items.some((x) => typeof x !== "string" || !x.trim())) errs.push(`${at}: a part of items needs their dishes' names`);
         continue;
       }
-      const k = seen.get(norm(p.kind ?? ""));
-      if (!k) { errs.push(`${at}: ${p.kind} is not one of this meal's kinds`); continue; }
-      if (p.sub) {
-        const cat = k.own ? null : catalogKind(k.name);
-        if (!cat || !cat.subs.some((x) => norm(x.name) === norm(p.sub!))) errs.push(`${at}: ${p.sub} is not a sub-kind of ${k.name}`);
+      if (isLinkedPart(p)) {
+        if (norm(p.from ?? "") === norm(ctx.slot)) errs.push(`${at}: ${ctx.slot} links to itself`);
+        else if (!ctx.slots.some((x) => norm(x) === norm(p.from ?? ""))) errs.push(`${at}: ${p.from} is not a meal of this house`);
+        if (p.sub && (!p.kind || !subOk(p.kind, p.sub))) errs.push(`${at}: ${p.sub} is not a sub-kind of ${p.kind ?? "its link"}`);
+        continue;
+      }
+      if (!p.kind?.trim()) { errs.push(`${at}: a part has no kind`); continue; }
+      if (p.sub && !subOk(p.kind, p.sub)) errs.push(`${at}: ${p.sub} is not a sub-kind of ${p.kind}`);
+      if (p.dish) {
+        const m = matchDish(p.dish);
+        if (m && norm(m.kind) !== norm(p.kind)) errs.push(`${at}: ${p.dish} is not a ${p.kind}`);
       }
     }
   });
   return errs;
+}
+
+/** The kinds a meal has, derived each run from its templates, never stored: staple from the catalog, own = not a catalog kind,
+ *  subs = the sub-kinds its parts name. A linked part's kind is the other meal's, not this one's. */
+export function mealKinds(templates: readonly MealTemplate[]): MealKind[] {
+  const out = new Map<string, MealKind>();
+  for (const t of templates) for (const p of t.parts) {
+    if (!isKindPart(p)) continue;
+    const cat = catalogKind(p.kind);
+    const k = out.get(norm(p.kind)) ?? { name: p.kind, ...(cat?.staple ? { staple: true } : {}), ...(cat ? {} : { own: true }) };
+    if (p.sub && !k.subs?.some((x) => norm(x) === norm(p.sub!))) k.subs = [...(k.subs ?? []), p.sub];
+    out.set(norm(p.kind), k);
+  }
+  return [...out.values()];
 }
 
 // ── For the setup: a sub-kind by the family's words, and an item's contents in the planner's tags ──

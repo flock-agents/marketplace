@@ -13,14 +13,14 @@ import type { LibraryDish, Rule, Slot } from "./slotStore";
 const WEEK = ["2026-11-30", "2026-12-01", "2026-12-02", "2026-12-03", "2026-12-04", "2026-12-05", "2026-12-06"];
 const READ = ["egg", "meat", "fish", "onion_garlic", "nuts", "peanut", "dairy", "white_rice", "root_veg"];
 const slot = (name: string, o: Partial<Slot> = {}): Slot => ({ id: name, name, kind: "main", addon_of: null, usual_people: [], days: [], skip_days: [],
-  order: name === "Breakfast" ? 10 : name === "Lunch" ? 30 : 50, active: true, kinds: null, templates: null, ...o });
+  order: name === "Breakfast" ? 10 : name === "Lunch" ? 30 : 50, active: true, extras: false, templates: null, ...o });
 const dish = (name: string, slotName: string, kind: string | null, o: Partial<LibraryDish> = {}): LibraryDish => ({ id: `${slotName}|${name}`, key: dishKey(name), slot: slotName,
   name, frequency: null, days: null, said: null, contains: [], contains_read: READ, origin: "setup_named", suggested: false, untried: false, offers: 0, disliked: false,
   prep: null, video_url: null, video_title: null, video_thumbnail: null, rating: null, rating_note: null, rated_on: null, rated_by: null, ratings: [], kind, sub: null,
   catalog_item: null, ...o });
 const day = (date: string, slotName: string, people: string[]): PlanDay => ({ date, slot: slotName, people, guests: [], occasion: null, new_dishes_allowed: null, skip: null,
   edited: false, fixed: false, why: [], fasting: [], dishes: [], note: null });
-const rule = (o: Partial<Rule>): Rule => ({ id: `r${Math.random()}`, hard: true, what: "avoid", who: null, slots: null, days: null, items: null, to: null, frequency: null,
+const rule = (o: Partial<Rule>): Rule => ({ id: `r${Math.random()}`, hard: true, what: "avoid", who: null, slots: null, days: null, items: null, to: null, targets: null, gives: null, frequency: null,
   per_meal: null, fasting_food: null, quote: "", ...o });
 const T = (...parts: MealTemplate["parts"]): MealTemplate => ({ parts });
 
@@ -65,7 +65,7 @@ describe("a main ingredient that breaks a rule: not theirs; one the dish can be 
     const w = week({ slot: brk, rules: [jain], people: ["Asha", "Ravi"] });
     expect(notFor(w, w.days[0], "Mooli thepla")).toEqual(["Asha", "Ravi"]);
     expect(notFor(w, w.days[0], "Mooli paratha")).toEqual(["Asha", "Ravi"]);
-    const r = fill({ slots: [slot("Breakfast", { kinds: [{ name: "Thepla" }], templates: [T({ kind: "Thepla" })] })], library: [dish("Thepla", "Breakfast", "Thepla")],
+    const r = fill({ slots: [slot("Breakfast", { templates: [T({ kind: "Thepla" })] })], library: [dish("Thepla", "Breakfast", "Thepla")],
       rules: [jain], people: ["Asha", "Ravi"] });
     const placed = plates(r, "Breakfast");
     expect(placed.length).toBe(7);
@@ -80,7 +80,7 @@ describe("a main ingredient that breaks a rule: not theirs; one the dish can be 
     expect(ruleBreaks(w, w.days[0], "Suji upma")).toEqual([]);
     expect(leaveOutNotes(w, w.days[0], "Suji upma")).toEqual(["make without cashews and peanuts for Anya"]);
     // Placed by the fill from the family's category word, with the note on the plate.
-    const r = fill({ slots: [slot("Breakfast", { kinds: [{ name: "Upma" }], templates: [T({ kind: "Upma" })] })], library: [dish("Upma", "Breakfast", "Upma")],
+    const r = fill({ slots: [slot("Breakfast", { templates: [T({ kind: "Upma" })] })], library: [dish("Upma", "Breakfast", "Upma")],
       rules: [nuts], people: ["Asha", "Anya"], careful: new Map() });
     const upma = plates(r, "Breakfast").find((x) => x.name === "Rava upma")!;
     expect(upma.not_for).toEqual([]);
@@ -125,7 +125,7 @@ describe("a main ingredient that breaks a rule: not theirs; one the dish can be 
 describe("items picked for a category the family named are checked for allergies (decided 21: the vouched hole closed)", () => {
   it("under a house-wide peanut allergy, the family's 'chutney' never brings peanut chutney, and its items are read carefully", () => {
     const peanut = rule({ items: ["peanut"], quote: "nothing at home has peanuts, he is allergic" });
-    const r = fill({ slots: [slot("Lunch", { kinds: [{ name: "Rice", staple: true }, { name: "Chutney" }], templates: [T({ kind: "Rice" }, { kind: "Chutney" })] })],
+    const r = fill({ slots: [slot("Lunch", { templates: [T({ kind: "Rice" }, { kind: "Chutney" })] })],
       library: [dish("Rice", "Lunch", "Rice"), dish("Chutney", "Lunch", "Chutney")], rules: [peanut], people: ["Asha", "Ravi"], careful: new Map() });
     const placed = plates(r, "Lunch");
     expect(placed.map((x) => x.name)).not.toContain("Peanut chutney");
@@ -158,7 +158,7 @@ describe("every planned catalog item is read for every catalog tag (no tag left 
       expect(ruleBreaks(w, w.days[0], d), d).toEqual([]);
     }
     // Placed by the fill with no library row of its own: still nobody's rule fails on it.
-    const r = fill({ slots: [slot("Lunch", { kinds: [{ name: "Rice", staple: true }, { name: "Dal" }], templates: [T({ kind: "Rice" }, { kind: "Dal" })] })],
+    const r = fill({ slots: [slot("Lunch", { templates: [T({ kind: "Rice" }, { kind: "Dal" })] })],
       library: [dish("Moong dal", "Lunch", "Dal")], rules: [noPork, sweet], people: ["Asha", "Ravi"] });
     const rice = plates(r, "Lunch").filter((x) => x.name === "Steamed rice");
     expect(rice.length).toBe(7);

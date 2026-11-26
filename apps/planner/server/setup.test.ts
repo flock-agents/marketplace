@@ -8,7 +8,7 @@ import { checkRead, diffSetup, familyLines, familySentences, frequencyOf, househ
   ruleSaid, saidByFamily, DISHES_ASK, SETUP_PARTS, SETUP_SYSTEM, CONTAINS_BATCH, daysOf, clockOf, itemWord, allergyAsk, answeredIn, mealOf, type Saved, type SetupRead } from "./setup";
 import { isAllergyRule } from "./allergy";
 import { HOUSEHOLDS } from "../evals/households";
-import { regionalWordOf } from "./kinds";
+import { mealKinds, regionalWordOf } from "./kinds";
 import type { ModelRequest, ModelResult } from "./model";
 
 // A made-up test family (not an eval household).
@@ -177,8 +177,8 @@ describe("apply_setup v2: the model reads, code checks and writes", () => {
       { parts: [{ kind: "Rice" }, { kind: "Rice curry", sub: "Sambar" }, { kind: "Sabzi" }, { kind: "Curd" }, { items: ["Salad"] }], share: null, said: null },
       { parts: [{ kind: "Flavoured rice" }, { items: ["Salad"] }], share: null, said: "Lemon rice on Fridays" },
       { parts: [{ kind: "Rice" }, { kind: "Dal" }, { items: ["Salad"] }], share: "2/week", said: "Rajma twice" }]);
-    expect(lunch.kinds).toEqual([{ name: "Rice", staple: true }, { name: "Rice curry", subs: ["Sambar"] }, { name: "Sabzi", subs: ["Poriyal/Thoran"] },
-      { name: "Curd", staple: true }, { name: "Flavoured rice" }, { name: "Dal", subs: ["Rajma/Chole"] }]);
+    expect(mealKinds(lunch.templates)).toEqual([{ name: "Rice", staple: true }, { name: "Rice curry", subs: ["Sambar"] }, { name: "Sabzi" },
+      { name: "Curd", staple: true }, { name: "Flavoured rice" }, { name: "Dal" }]);   // derived from the parts: a sub-kind only where a part names one
     expect(fam.slots.find((s: any) => s.name === "Padma's dinner").templates).toEqual([{ parts: [{ kind: "Roti" }], share: null, said: null }]);
     expect(fam.house.cuisines).toEqual(["south"]);
     // The read-back.
@@ -904,10 +904,10 @@ describe("apply_setup: the kinds model, end to end with a fake model", () => {
       { parts: [{ items: ["Khichdi"] }], share: "usually", said: "Khichdi most days" },
       { parts: [{ kind: "Boiled chicken" }], share: "sometimes", said: "boiled chicken on gym days" },
       { parts: [{ kind: "Appam" }, { items: ["Vegetable stew"] }], share: null, said: "appam with vegetable stew on Sundays" }]);
-    expect(slot("Breakfast").kinds).toEqual([{ name: "Boiled chicken", own: true }, { name: "Appam" }]);
+    expect(mealKinds(slot("Breakfast").templates)).toEqual([{ name: "Boiled chicken", own: true }, { name: "Appam" }]);
     expect(slot("Dinner").templates).toEqual([{ parts: [{ kind: "Roti" }, { kind: "Sabzi" }], share: null, said: null },
       { parts: [{ kind: "Roti" }, { kind: "Chicken" }], share: null, said: null }]);
-    expect(slot("Dinner").kinds).toEqual([{ name: "Roti", staple: true }, { name: "Sabzi", subs: ["Sabzi"] }, { name: "Chicken", subs: ["Curry"] }]);
+    expect(mealKinds(slot("Dinner").templates)).toEqual([{ name: "Roti", staple: true }, { name: "Sabzi" }, { name: "Chicken" }]);
     expect(slot("Lunch").templates).toBeNull();      // no dish said for lunch: not read
     // Cuisines: appam and the stew are Kerala (appam Tamil too), and they said Malayali.
     expect(fam.house.cuisines).toEqual(["tamil", "kerala", "south"]);
@@ -933,7 +933,7 @@ describe("apply_setup: the kinds model, end to end with a fake model", () => {
     expect([stew.kind, stew.sub, stew.catalog_item]).toEqual(["Gravy", "Kerala curry", "Vegetable stew"]);
     const bf = (await k.owner("GET", "/api/family")).body.slots.find((s: any) => s.name === "Breakfast");
     expect(bf.templates.map((t: any) => t.parts)).toEqual([[{ kind: "Idiyappam" }, { items: ["Vegetable stew"] }], [{ kind: "Idiyappam" }, { items: ["Ammachi's curry"] }]]);   // a word the catalog does not hold stays as said
-    expect(bf.kinds.map((x: any) => x.name)).not.toContain("Gravy");
+    expect(mealKinds(bf.templates).map((x: any) => x.name)).not.toContain("Gravy");
     expect(r.said).toContain("Breakfast: idiyappam and stew; or idiyappam and ammachi's curry");
     // A correction that leaves breakfast alone keeps it so, still in their words.
     const NEW = "Also we are four at home.";
@@ -964,8 +964,8 @@ describe("apply_setup: the kinds model, end to end with a fake model", () => {
     expect([row("Cabbage curry").kind, row("Cabbage curry").sub]).toEqual(["Sabzi", "Vepudu"]);
     expect(row("Pachadi").kind).toBe("Chutney");
     const lunch = (await k.owner("GET", "/api/family")).body.slots.find((s: any) => s.name === "Lunch");
-    expect(lunch.kinds.map((x: any) => x.name)).not.toContain("Gravy");
-    expect(lunch.kinds.map((x: any) => x.name)).not.toContain("Raita");
+    expect(mealKinds(lunch.templates).map((x: any) => x.name)).not.toContain("Gravy");
+    expect(mealKinds(lunch.templates).map((x: any) => x.name)).not.toContain("Raita");
     expect(r.said).toContain("a curry");
     expect(r.said).toContain("a pachadi");
   });
