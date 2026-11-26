@@ -390,6 +390,31 @@ describe("make_plan: an add-on and a box", () => {
     expect(again.some((l) => l.includes("templates derived"))).toBe(false);
   });
 
+  it("a suggest-some week never becomes the family's templates: planned again, the meal is still asked or suggested (review fix)", async () => {
+    const k = await home({ slots: [MAIN[0], MAIN[1], { name: "Dinner", kind: "main", order: 50 }], lib: { Breakfast: LIB.Breakfast, Lunch: LIB.Lunch } });
+    expect((await k.plan(fakeModel().model, { suggest_new: true })).ok).toBe(true);
+    const dinner = () => k.rows("slots").find((x: any) => x.name === "Dinner");
+    expect(dinner().templates).toBeNull();
+    // Only the planner's suggestions are at Dinner now: nothing of theirs to derive from.
+    const lines: string[] = [];
+    const r = await k.plan(fakeModel().model, { log: (l) => lines.push(l) });
+    expect(dinner().templates).toBeNull();
+    expect(lines.some((l) => l.includes("templates derived"))).toBe(false);
+    if (!r.ok) throw new Error(r.say);
+    expect(r.asked![0]).toContain("dinner");
+    expect((await k.plan(fakeModel().model, { suggest_new: true })).ok).toBe(true);
+    expect(dinner().templates).toBeNull();
+  });
+
+  it("a meal setup saved with no templates on purpose (an empty list) is never derived (review fix)", async () => {
+    const k = await home({ slots: [...MAIN, { name: "Kabir's tiffin", kind: "custom", order: 20, usual_people: ["Kabir"], templates: [] }],
+      library: [{ name: "Cheese sandwich", slot: "Kabir's tiffin", origin: "family_added" }] });
+    const lines: string[] = [];
+    await k.plan(fakeModel().model, { log: (l) => lines.push(l) });
+    expect(JSON.parse(k.rows("slots").find((x: any) => x.name === "Kabir's tiffin").templates)).toEqual([]);
+    expect(lines.some((l) => l.includes("templates derived"))).toBe(false);
+  });
+
   it("a box with no dishes does not stop the plan: it is left out and named in the one question; nothing known at all is asked", async () => {
     const k = await home({ slots: [...MAIN, { name: "Snack box", kind: "custom", order: 20, usual_people: ["Kabir"], days: ["Mon", "Tue", "Wed", "Thu", "Fri"] }] });
     const lines: string[] = [];

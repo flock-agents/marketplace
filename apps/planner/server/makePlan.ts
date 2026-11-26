@@ -248,13 +248,15 @@ async function planWeek(deps: MakePlanDeps & { log: (line: string) => void }, in
   const histories = new Map(slots.map((s) => [s.name.toLowerCase(), slotHistory(db, s.name, weekStart)]));
   // A meal with no templates but dishes of theirs (one added after setup: no operation saves templates) gets them read off its
   // dishes and plates, the boot migration's step 1, saved once: from then on it reads what was saved, never derived again.
+  // Only templates never set (null): an empty list is setup's own word for a meal with no dishes.
   for (let i = 0; i < slots.length; i++) {
     const s = slots[i];
-    if (s.templates?.length) continue;
+    if (s.templates !== null) continue;
     const history = (histories.get(s.name.toLowerCase()) ?? []).filter((d) => !d.skip && d.dishes.length);
     if (!history.length && !library.some((d) => same(d.slot, s.name))) continue;
     const { templates: ts, kinds } = templatesFromDishes(s, slots, library, history);
-    const errs = ts.length ? checkMealShape(ts, { slot: s.name, slots: slots.map((x) => x.name) }) : ["none read"];
+    if (!ts.length) continue;   // nothing of theirs there (only the planner's suggestions): asked, or suggested again
+    const errs = checkMealShape(ts, { slot: s.name, slots: slots.map((x) => x.name) });
     if (errs.length) { log(`${s.name}: templates not derived from its dishes (${errs.join("; ")})`); continue; }
     slots[i] = commit(db, deps.emit, (tx, ch) => {
       // Their dishes there keep the kind the read gave them, so their own dish fills its part.

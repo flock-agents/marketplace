@@ -110,7 +110,11 @@ export function plainPlate(s: Slot, slots: Slot[]): MealTemplate[] {
  *  gets them read off its plates and dishes, once, and each of its dishes with no kind saved gets the kind (and sub-kind) the
  *  read gave it, so the fill (which never reads words) gives them their dish. The caller saves both. */
 export function templatesFromDishes(s: Slot, slots: Slot[], library: LibraryDish[], history: SlotDay[]): { templates: MealTemplate[]; kinds: { row: LibraryDish; kind: string; sub: string | null }[] } {
-  const templates = deriveTemplates(s, slotFacts(s, library, history.filter((d) => !d.skip && d.dishes.length)).plates, library, mealOf(s, slots));
+  // Only what is theirs: their own dishes at the meal or their plates (seed, confirmed). The planner's suggestions are never
+  // read into their templates, and with nothing of theirs there is none (never the derive's plain plate).
+  const plates = slotFacts(s, library, history.filter((d) => !d.skip && d.dishes.length)).plates;
+  if (!plates.length && !library.some((r) => same(r.slot, s.name) && familyRow(r))) return { templates: [], kinds: [] };
+  const templates = deriveTemplates(s, plates, library, mealOf(s, slots));
   const kinds = library.filter((r) => same(r.slot, s.name) && !r.kind && familyRow(r)).flatMap((row) => {
     const pl = placeOf(row);
     return pl && catalogKind(pl.kind) ? [{ row, kind: catalogKind(pl.kind)!.name, sub: pl.sub }] : [];
