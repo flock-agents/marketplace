@@ -466,7 +466,7 @@ describe("make_plan: failures", () => {
 
 describe("make_plan: who eats (spec §5.1)", () => {
   it("a child carrying a box of their own is not at the home lunch on those days; a parent carrying the home lunch is (owner, 25 Nov)", async () => {
-    const k = await home({ slots: [...MAIN, { name: "Kabir's tiffin", kind: "custom", order: 20, usual_people: ["Kabir"], days: ["Mon", "Tue", "Wed", "Thu", "Fri"] }],
+    const k = await home({ slots: [...MAIN, { name: "Kabir's tiffin", kind: "custom", order: 35, usual_people: ["Kabir"], days: ["Mon", "Tue", "Wed", "Thu", "Fri"] }],
       library: ["Sandwich", "Pasta", "Curd rice"].map((name) => ({ name, slot: "Kabir's tiffin" })) });
     const weekly = [{ person: "Kabir", where: "school", weekdays: ["Mon", "Tue", "Wed", "Thu", "Fri"], from: "08:00", to: "14:00", lunch: "carries" },
       { person: "Ravi", where: "office", weekdays: ["Mon", "Tue", "Wed", "Thu", "Fri"], from: "09:00", to: "18:00", lunch: "carries" }];
