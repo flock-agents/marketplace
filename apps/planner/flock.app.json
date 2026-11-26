@@ -3,7 +3,7 @@
   "usage": "template",
   "icon": "icon.svg",
   "description": "The family's meals for every day of the week, a running-out guess for the things they buy from their order history, and a reminder each afternoon and evening with one cart per shopping app that is ordered only when they say yes; not for school runs, chores or appointments.",
-  "version": "4.0.3",
+  "version": "4.1.0",
   "minFlockVersion": "0.24.0-beta.1",
   "type": "fullstack",
   "access": "private",
@@ -226,393 +226,143 @@
       "help": "mainApp: the app they use most; fallbackApp: the one tried when something is not on it, null for none."
     },
     {
-      "id": "people",
+      "id": "lunchWhere",
       "fixed": true,
-      "ask": "{{householdPeople}} {{householdMeals}} Is that right? Tell me who eats home-cooked food, and at which meals: office lunch out, a school lunch, someone home all day.",
-      "reask": "Who eats the meals cooked at home, and which meals?",
-      "fallback": "Who eats at home? Tell me their names, and who is a child or an elder.",
+      "ask": "{{lunchKnown}} Who carries lunch from home, and who eats out?",
+      "recall": "About weekday lunch you said: {{heard}}. Anything to add?",
+      "reask": "On weekdays, who carries lunch from home, and who eats out?",
+      "fallback": "On weekdays, who has lunch at home, who carries lunch from home, and who eats out?",
       "fills": [
-        "people:list"
+        "lunchWhere:text"
       ],
-      "answer": [
-        {
-          "operation": "set_person",
-          "required": true
-        }
-      ],
-      "help": "The line names who lives with them (household.people) and guesses, from their weekday pattern (household.weekly: office, school, classes and their times), who has which meal at home. people: each { name, relationship?, group: child | adult | elder } after this reply: everyone the line names (a plain \"that's it\" or \"yes\" keeps them all), plus anyone they add, without anyone they take out (someone who never eats at home is taken out). Who eats which meal (\"Kiran has lunch at the office\", \"school gives the boy lunch\", \"Nana is home all day\") is kept word for word in the transcript: apply_setup reads it into the meals' people and weekday lunches. The cook and other help are left out; \"me\", \"I\" or \"myself\" is the person named in you.areTalkingTo, by that name.",
-      "when": "household.people and household.weekly"
-    },
-    {
-      "id": "people",
-      "fixed": true,
-      "ask": "{{householdPeople}} Anyone else who eats at home, or anyone who doesn't?",
-      "reask": "Who eats the meals cooked at home, and which meals?",
-      "fallback": "Who eats at home? Tell me their names, and who is a child or an elder.",
-      "fills": [
-        "people:list"
-      ],
-      "answer": [
-        {
-          "operation": "set_person",
-          "required": true
-        }
-      ],
-      "help": "The line names who lives with them (household.people). people: each { name, relationship?, group: child | adult | elder } after this reply: everyone the line names (a plain \"that's it\" or \"yes\" keeps them all), plus anyone they add, without anyone they take out. The cook and other help are left out; \"me\", \"I\" or \"myself\" is the person named in you.areTalkingTo, by that name.",
-      "when": "household.people"
-    },
-    {
-      "id": "people",
-      "fixed": true,
-      "ask": "Who eats at home? Tell me their names, and who is a child or an elder.",
-      "reask": "Who eats at home? Just names is fine.",
-      "fills": [
-        "people:list"
-      ],
-      "answer": [
-        {
-          "operation": "set_person",
-          "required": true
-        }
-      ],
-      "help": "Read from household.people when it is known. people: each { name, relationship?, group: child | adult | elder }, the cook and other help left out; \"me\", \"I\" or \"myself\" is the person named in you.areTalkingTo, by that name, never \"Me\".",
-      "when": "!household.people"
-    },
-    {
-      "id": "cook",
-      "fixed": true,
-      "when": "household.help has cook and cook.days",
-      "ask": "Which meals does the cook make, and at what time does the cook come for them?",
-      "reask": "Which meals does the cook make, and when does the cook come?",
-      "fills": [
-        "cook.name:text",
-        "cook.days:list",
-        "cook.visits:list"
-      ],
-      "answer": [
-        {
-          "operation": "set_cook",
-          "required": true
-        }
-      ],
-      "help": "Read from household.help's cook ({ role: cook, name?, days?, times?, meals? }) when it is there. cook.name: as said, \"Cook\" when no name was said. cook.days: Mon, Tue, Wed, Thu, Fri, Sat, Sun as said, in that order (\"Mon to Sat\" is six days). cook.visits: one { at: \"HH:MM\" (24-hour; an evening or dinner time is pm), meals: [Breakfast, Lunch, Dinner] } per visit, only when every visit's meals are said. \"Rani comes at 7 for breakfast and lunch and 6 for dinner, Mon to Sat\": name Rani, days Mon..Sat, visits [{\"at\":\"07:00\",\"meals\":[\"Breakfast\",\"Lunch\"]},{\"at\":\"18:00\",\"meals\":[\"Dinner\"]}]."
-    },
-    {
-      "id": "cook",
-      "fixed": true,
-      "when": "household.help has cook and cook.visits",
-      "ask": "Which days of the week does the cook come?",
-      "reask": "Which days does the cook come?",
-      "fills": [
-        "cook.name:text",
-        "cook.days:list",
-        "cook.visits:list"
-      ],
-      "answer": [
-        {
-          "operation": "set_cook",
-          "required": true
-        }
-      ],
-      "help": "Read from household.help's cook ({ role: cook, name?, days?, times?, meals? }) when it is there. cook.name: as said, \"Cook\" when no name was said. cook.days: Mon, Tue, Wed, Thu, Fri, Sat, Sun as said, in that order (\"Mon to Sat\" is six days). cook.visits: one { at: \"HH:MM\" (24-hour; an evening or dinner time is pm), meals: [Breakfast, Lunch, Dinner] } per visit, only when every visit's meals are said. \"Rani comes at 7 for breakfast and lunch and 6 for dinner, Mon to Sat\": name Rani, days Mon..Sat, visits [{\"at\":\"07:00\",\"meals\":[\"Breakfast\",\"Lunch\"]},{\"at\":\"18:00\",\"meals\":[\"Dinner\"]}]."
+      "help": "lunchWhere: who has weekday lunch at home, who carries it from home, and who eats out, in their words, with who and which days."
     },
     {
       "id": "cook",
       "fixed": true,
       "when": "household.help has cook",
-      "ask": "{{householdCook}} Is that right, and does the cook come for any other meals?",
-      "reask": "Which meals does the cook make, and when does the cook come?",
-      "fallback": "Which meals does the cook make, and at what time does the cook come for them?",
+      "ask": "Which meals does {{cookName}} make, and when does she come?",
+      "recall": "About the cook you said: {{heard}}. Anything to add?",
+      "reask": "Which meals does your cook make, and when does she come?",
+      "fallback": "Which meals does your cook make, and when does she come?",
       "fills": [
-        "cook.name:text",
-        "cook.days:list",
-        "cook.visits:list"
+        "cook:text"
       ],
-      "answer": [
-        {
-          "operation": "set_cook",
-          "required": true
-        }
-      ],
-      "help": "The line reads back the cook from the household part. A yes: those days and visits; changes as they say. Read from household.help's cook ({ role: cook, name?, days?, times?, meals? }) when it is there. cook.name: as said, \"Cook\" when no name was said. cook.days: Mon, Tue, Wed, Thu, Fri, Sat, Sun as said, in that order (\"Mon to Sat\" is six days). cook.visits: one { at: \"HH:MM\" (24-hour; an evening or dinner time is pm), meals: [Breakfast, Lunch, Dinner] } per visit, only when every visit's meals are said. \"Rani comes at 7 for breakfast and lunch and 6 for dinner, Mon to Sat\": name Rani, days Mon..Sat, visits [{\"at\":\"07:00\",\"meals\":[\"Breakfast\",\"Lunch\"]},{\"at\":\"18:00\",\"meals\":[\"Dinner\"]}]."
+      "help": "cook: which meals the cook makes and when she comes (days and times), in their words, with her name when said."
     },
     {
       "id": "cookTime",
       "fixed": true,
       "when": "household.help has cook",
-      "ask": "Is the cook short of time, say off to the next house, so only a dish or two in the morning?",
-      "reask": "Does the cook have time for a full meal in the morning, or just a dish or two?",
+      "ask": "Is {{cookName}} short of time, so only a few dishes?",
+      "reask": "Does your cook have time for the whole meal, or only a few dishes?",
+      "fallback": "Is your cook short of time, so only a few dishes?",
       "fills": [
         "cookTime:text"
       ],
-      "answer": [
-        {
-          "operation": "set_cook"
-        }
-      ],
       "default": "assume",
       "assume": "I assumed the cook has time for the full meal.",
-      "help": "cookTime: the cook's time in their words (\"about an hour in the morning, two dishes for lunch\"), \"\" when they have time for the full meal."
+      "help": "cookTime: the cook's time in their words (\"about an hour in the morning, two dishes for lunch\"), \"\" when she has time for the full meal."
     },
     {
-      "id": "cookingDays",
+      "id": "otherDays",
       "fixed": true,
-      "when": "cook.days = mon,tue,wed,thu,fri,sat,sun",
-      "ask": "The cook comes every day: is food cooked at home all seven days?",
-      "reask": "Is food cooked at home every day of the week?",
+      "when": "household.help has cook",
+      "ask": "On her days off, who cooks, and is any meal eaten out or ordered in?",
+      "recall": "You said: {{heard}}. Anything else about eating out or ordering in?",
+      "reask": "Who cooks on her days off, and do you eat out or order in?",
       "fills": [
-        "cookingDays:list"
+        "otherDays:text"
       ],
-      "default": [
-        "mon",
-        "tue",
-        "wed",
-        "thu",
-        "fri",
-        "sat",
-        "sun"
-      ],
-      "assume": "I assumed food is cooked at home every day.",
-      "help": "cookingDays: the days food is cooked at home, mon..sun. Every day is planned: a day the cook does not come, the family cooks, so it stays. Leave out only a day they say nothing at all is cooked at home (all its meals eaten out or ordered in); one meal out (\"Sunday lunch out\") keeps the day."
+      "help": "otherDays: who cooks on the days that need it, and any meal eaten out or ordered in (which meal, which day), in their words; \"\" for nothing."
     },
     {
-      "id": "cookingDays",
+      "id": "otherDays",
       "fixed": true,
-      "when": "cook.days = mon,tue,wed,thu,fri,sat",
-      "ask": "On Sunday, when the cook doesn't come, who cooks? Or is a meal eaten out?",
-      "reask": "Who cooks on Sundays? Or do you eat out?",
+      "when": "!household.help",
+      "ask": "Who cooks at home, and is any meal eaten out or ordered in, on which days?",
+      "recall": "You said: {{heard}}. Anything else about eating out or ordering in?",
+      "reask": "Who does the cooking, and do you eat out or order in on some days?",
       "fills": [
-        "cookingDays:list"
+        "otherDays:text"
       ],
-      "default": [
-        "mon",
-        "tue",
-        "wed",
-        "thu",
-        "fri",
-        "sat",
-        "sun"
-      ],
-      "assume": "I assumed food is cooked at home every day.",
-      "help": "cookingDays: the days food is cooked at home, mon..sun. Every day is planned: a day the cook does not come, the family cooks, so it stays. Leave out only a day they say nothing at all is cooked at home (all its meals eaten out or ordered in); one meal out (\"Sunday lunch out\") keeps the day."
+      "help": "otherDays: who cooks on the days that need it, and any meal eaten out or ordered in (which meal, which day), in their words; \"\" for nothing."
     },
     {
-      "id": "cookingDays",
-      "fixed": true,
-      "when": "cook.days = mon,tue,wed,thu,fri",
-      "ask": "On Saturday and Sunday, when the cook doesn't come, who cooks? Or is a meal eaten out?",
-      "reask": "Who cooks on Saturdays and Sundays? Or do you eat out?",
-      "fills": [
-        "cookingDays:list"
-      ],
-      "default": [
-        "mon",
-        "tue",
-        "wed",
-        "thu",
-        "fri",
-        "sat",
-        "sun"
-      ],
-      "assume": "I assumed food is cooked at home every day.",
-      "help": "cookingDays: the days food is cooked at home, mon..sun. Every day is planned: a day the cook does not come, the family cooks, so it stays. Leave out only a day they say nothing at all is cooked at home (all its meals eaten out or ordered in); one meal out (\"Sunday lunch out\") keeps the day."
-    },
-    {
-      "id": "cookingDays",
-      "fixed": true,
-      "when": "cook.days",
-      "ask": "On the days the cook doesn't come, who cooks? Or is a meal eaten out?",
-      "reask": "Who cooks when the cook doesn't come? Or do you eat out?",
-      "fills": [
-        "cookingDays:list"
-      ],
-      "default": [
-        "mon",
-        "tue",
-        "wed",
-        "thu",
-        "fri",
-        "sat",
-        "sun"
-      ],
-      "assume": "I assumed food is cooked at home every day.",
-      "help": "cookingDays: the days food is cooked at home, mon..sun. Every day is planned: a day the cook does not come, the family cooks, so it stays. Leave out only a day they say nothing at all is cooked at home (all its meals eaten out or ordered in); one meal out (\"Sunday lunch out\") keeps the day."
-    },
-    {
-      "id": "cookingDays",
-      "fixed": true,
-      "when": "!cook.days",
-      "ask": "Who cooks at home, and on which days? Is any day's meal eaten out?",
-      "reask": "Who does the cooking, and on which days?",
-      "fills": [
-        "cookingDays:list"
-      ],
-      "default": [
-        "mon",
-        "tue",
-        "wed",
-        "thu",
-        "fri",
-        "sat",
-        "sun"
-      ],
-      "assume": "I assumed food is cooked at home every day.",
-      "help": "cookingDays: the days food is cooked at home, mon..sun. Every day is planned: a day the cook does not come, the family cooks, so it stays. Leave out only a day they say nothing at all is cooked at home (all its meals eaten out or ordered in); one meal out (\"Sunday lunch out\") keeps the day."
-    },
-    {
-      "id": "kidsBreakfast",
+      "id": "childSame",
       "fixed": true,
       "when": "household.children",
-      "ask": "What did the children have for breakfast over the past week? Tell me in as much detail as you can.",
-      "reask": "What do the children usually eat for breakfast? A few examples from this week are enough.",
+      "ask": "Does {{children}} eat what the family eats, or something else at some meals? Does {{children}} carry a box to school?",
+      "recall": "You said: {{heard}}. Anything else about what {{children}} eats?",
+      "reask": "Do the children eat the family's food, or something else at some meals?",
+      "fallback": "Do the children eat what the family eats, or something else at some meals? Do the children carry a box to school?",
+      "fills": [
+        "childSame:text",
+        "childDiffers:list"
+      ],
+      "help": "childSame: what they said about whether the children eat what the family eats, in their words. childDiffers: one { person, meals: [Breakfast, Lunch, Dinner] (the meals that child has something else), box: true when that child carries a box to school } per child who differs; [] when none does."
+    },
+    {
+      "id": "familyBreakfast",
+      "fixed": true,
+      "ask": "What did the family have for breakfast over the past week? Tell me the dishes.",
+      "recall": "You mentioned {{heard}} for breakfast. Anything else?",
+      "reask": "What do you usually have for breakfast? A few dishes are enough.",
       "multi": true,
       "fills": [
-        "pastWeek.kidsBreakfast:text"
+        "pastWeek.breakfast:text"
       ],
-      "required": false,
-      "help": "pastWeek.kidsBreakfast: what they said the children had, in their words: each dish, who had it when not everyone, and any extra meal (a school tiffin, an evening snack) with whose it is when they say."
+      "help": "pastWeek.breakfast: what they said the family had for breakfast, in their words: each dish, who had it when not everyone, and any extra meal (a school tiffin, an evening snack) with whose it is when they say."
     },
     {
-      "id": "kidsLunch",
+      "id": "familyLunch",
       "fixed": true,
-      "when": "household.children",
-      "ask": "The children's lunch over the past week, or their school tiffin?",
-      "reask": "What did the children eat for lunch, or carry in the tiffin, this week?",
+      "ask": "What did the family have for lunch over the past week? Tell me the dishes.",
+      "recall": "You mentioned {{heard}} for lunch. Anything else?",
+      "reask": "What do you usually have for lunch? A few dishes are enough.",
       "multi": true,
       "fills": [
-        "pastWeek.kidsLunch:text"
+        "pastWeek.lunch:text"
       ],
-      "required": false,
-      "help": "pastWeek.kidsLunch: what they said the children had, in their words: each dish, who had it when not everyone, and any extra meal (a school tiffin, an evening snack) with whose it is when they say. Food at home after school is their lunch."
+      "help": "pastWeek.lunch: what they said the family had for lunch, in their words: each dish, who had it when not everyone, and any extra meal (a school tiffin, an evening snack) with whose it is when they say."
     },
     {
-      "id": "kidsDinner",
+      "id": "familyDinner",
       "fixed": true,
-      "when": "household.children",
-      "ask": "The children's dinner over the past week?",
-      "reask": "What did the children have for dinner on a few nights this week?",
+      "ask": "What did the family have for dinner over the past week? Tell me the dishes.",
+      "recall": "You mentioned {{heard}} for dinner. Anything else?",
+      "reask": "What do you usually have for dinner? A few dishes are enough.",
       "multi": true,
       "fills": [
-        "pastWeek.kidsDinner:text"
+        "pastWeek.dinner:text"
       ],
-      "help": "pastWeek.kidsDinner: what they said the children had, in their words: each dish, who had it when not everyone, and any extra meal (a school tiffin, an evening snack) with whose it is when they say."
+      "help": "pastWeek.dinner: what they said the family had for dinner, in their words: each dish, who had it when not everyone, and any extra meal (a school tiffin, an evening snack) with whose it is when they say."
     },
     {
-      "id": "adultsBreakfast",
+      "id": "childMeals",
       "fixed": true,
-      "ask": "What did the adults have for breakfast over the past week? Tell me in as much detail as you can.",
-      "reask": "What do the adults usually have for breakfast? A few examples are enough.",
+      "when": "childDiffers",
+      "ask": "What does {{children}} have at those meals, and what goes in the box?",
+      "recall": "You mentioned {{heard}}. Anything else in the box?",
+      "reask": "What goes in the school box?",
+      "fallback": "What do the children have at those meals, and what goes in the box?",
       "multi": true,
       "fills": [
-        "pastWeek.adultsBreakfast:text"
+        "childMeals:text"
+      ],
+      "help": "childMeals: what each child who differs has at those meals and what goes in the box, in their words, with whose it is."
+    },
+    {
+      "id": "differently",
+      "fixed": true,
+      "ask": "Does anyone eat differently: something they don't eat, an allergy, less spice or salt, a fasting day, or something extra on their plate?",
+      "recall": "You mentioned {{heard}}. Anything else, for anyone, like an allergy or a fasting day?",
+      "reask": "Is there anything someone at home doesn't eat, or eats differently?",
+      "fills": [
+        "differently:text"
       ],
       "required": false,
-      "help": "pastWeek.adultsBreakfast: what they said the adults had, in their words: each dish, who had it when not everyone, and any extra meal (a school tiffin, an evening snack) with whose it is when they say."
-    },
-    {
-      "id": "adultsLunch",
-      "fixed": true,
-      "ask": "The adults' lunch over the past week?",
-      "reask": "What did the adults have for lunch on a few days this week?",
-      "multi": true,
-      "fills": [
-        "pastWeek.adultsLunch:text"
-      ],
-      "help": "pastWeek.adultsLunch: what they said the adults had, in their words: each dish, who had it when not everyone, and any extra meal (a school tiffin, an evening snack) with whose it is when they say."
-    },
-    {
-      "id": "adultsDinner",
-      "fixed": true,
-      "ask": "The adults' dinner over the past week?",
-      "reask": "What did the adults have for dinner on a few nights this week?",
-      "multi": true,
-      "fills": [
-        "pastWeek.adultsDinner:text"
-      ],
-      "help": "pastWeek.adultsDinner: what they said the adults had, in their words: each dish, who had it when not everyone, and any extra meal (a school tiffin, an evening snack) with whose it is when they say."
-    },
-    {
-      "id": "diet",
-      "fixed": true,
-      "ask": "Is anyone on a diet? High protein, low carb, diabetic, anything a doctor asked for.",
-      "reask": "Does anyone eat to a diet, like diabetic, low carb or high protein?",
-      "fills": [
-        "diet:text",
-        "dietElders:text"
-      ],
-      "answer": [
-        {
-          "operation": "set_person"
-        }
-      ],
-      "required": false,
-      "default": "assume",
-      "assume": "I assumed nobody is on a special diet.",
-      "help": "diet: what they said, in their words, with who it is for; \"\" when nobody is on a diet. dietElders: what it says about how an elder eats, \"\" when nothing."
-    },
-    {
-      "id": "elders",
-      "fixed": true,
-      "when": "household.elders and dietElders",
-      "ask": "Besides that diet, do the elders eat anything differently: less salt, softer food, no onion or garlic, a fasting day?",
-      "reask": "Do the elders need anything different, like less salt or softer food?",
-      "fills": [
-        "elders:text"
-      ],
-      "answer": [
-        {
-          "operation": "set_person"
-        }
-      ],
-      "required": false,
-      "default": "assume",
-      "assume": "I assumed the elders eat what everyone eats.",
-      "help": "elders: what they said about how the elders eat (less salt, softer food, a fast and when), in their words, with who; \"\" for the same as everyone."
-    },
-    {
-      "id": "elders",
-      "fixed": true,
-      "when": "household.elders",
-      "ask": "Do the elders eat anything differently from the rest: less salt, softer food, no onion or garlic, a fasting day?",
-      "reask": "Do the elders need anything different, like less salt or softer food?",
-      "fills": [
-        "elders:text"
-      ],
-      "answer": [
-        {
-          "operation": "set_person"
-        }
-      ],
-      "required": false,
-      "default": "assume",
-      "assume": "I assumed the elders eat what everyone eats.",
-      "help": "elders: what they said about how the elders eat (less salt, softer food, a fast and when), in their words, with who; \"\" for the same as everyone."
-    },
-    {
-      "id": "rules",
-      "fixed": true,
-      "ask": "Any food rules for the house? Veg, egg or non-veg days, fasting days, allergies, a dish someone won't touch.",
-      "reask": "Any food rules at home, like veg days, fasting or allergies?",
-      "fills": [
-        "rules:text"
-      ],
-      "required": false,
-      "help": "rules: every food rule they said, in their words, with who and when it holds; \"\" for none.",
-      "default": "assume",
-      "assume": "I assumed no special food rules."
-    },
-    {
-      "id": "orderIn",
-      "fixed": true,
-      "ask": "How often do you order in, and on which days?",
-      "reask": "Do you order food in? Roughly how often?",
-      "fills": [
-        "orderIn:text"
-      ],
-      "required": false,
-      "help": "orderIn: each meal they order in or eat out and on which day, in their words (\"Sunday dinner from Swiggy\"); \"\" when not on a fixed day.",
-      "default": "assume",
-      "assume": "I assumed you don't order in on a fixed day."
+      "help": "differently: what anyone eats differently (something they don't eat, an allergy, less spice or salt, a fasting day, something extra), in their words, with who; \"\" for nobody."
     },
     {
       "id": "subscriptions",
