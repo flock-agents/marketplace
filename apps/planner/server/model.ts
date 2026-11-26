@@ -11,6 +11,11 @@ export type ModelFailure = "not_declared" | "daily_budget" | "out_of_credits" | 
 export type ModelResult = { ok: true; json?: unknown; text?: string; model: string } | { ok: false; code: ModelFailure; message: string };
 export type ModelCall = (req: ModelRequest) => Promise<ModelResult>;
 
+/** Model calls made by this process so far: an operation's answer says how many it made (agentOps `timing`). */
+export const modelStats = { calls: 0 };
+/** The same model call, counted in modelStats. */
+export const counted = (model: ModelCall): ModelCall => (req) => { modelStats.calls++; return model(req); };
+
 /** A platform with no model call on it (an older Flock's SDK, a run with no platform): Flock's contract maps it to unavailable. */
 export const NO_MODEL: ModelCall = async () => ({ ok: false, code: "unavailable", message: "this Flock gives the app no model call" });
 

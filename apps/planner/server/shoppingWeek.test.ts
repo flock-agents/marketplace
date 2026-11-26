@@ -293,7 +293,7 @@ describe("a week of shopping on the slot model", () => {
     // Friday's dinner is for Arjun's promotion: planned again (no dishes given), by the plan's own steps on the fake.
     const r = await k.op("set_slot_day", { date: FRI, slot: "Dinner", occasion: "Arjun's promotion" });
     expect(r).toMatchObject({ ok: true, replanned: [{ date: FRI, slot: "Dinner" }] });
-    expect(purposes).toContain("meal plan: a day's ingredients");
+    expect(purposes).toContain("meal plan: the dishes' ingredients");
     const fri = listSlotDays(k.kit.db as any, { from: FRI, to: FRI }).find((d) => d.slot === "Dinner")!;
     expect(fri.people).toContain("Gopal");
     const his = fri.dishes.filter((x) => !x.not_for.includes("Gopal"));

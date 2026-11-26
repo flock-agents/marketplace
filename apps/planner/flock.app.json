@@ -1223,7 +1223,7 @@
       },
       {
         "name": "make_plan",
-        "description": "Plan some days, or a whole week, and save them, in one call: { from?: the first day as YYYY-MM-DD (today at the earliest), days?: how many days from it (1 to 14), keep_edited?: false to plan again the meals whose dishes the family set too (true when left out), week_start?: a week's Monday instead of from and days, household?: the household facts (Flock sends them; the app also reads them fresh), suggest_new?: true when the family said to suggest new dishes where it knows none of theirs (the setup's first week does this by itself) }. The setup's first plan is { from: today, days: 3 }; meals not said yet are lunch and dinner. The app plans it in steps itself (who eats each meal from the slots, the weekday patterns and the calendar; each meal slot from the family's own dishes and plates, checked against every food rule per person, how often each dish comes and no dish too soon again; then each day's ingredients), the same way the Sunday run does, and messages nobody. Answers { ok: true, message, intro?, instructions, defaults?, unmet? } (send message word for word, then intro once, as instructions say; defaults: what it assumed, to say once; unmet: what could not be kept, already said in message) or { ok: false, reason, say } (nothing planned: send say word for word; reason no_dishes: say is a question, the planner knows none of the family's dishes for some meals: add their answer with add_dish, then make_plan again, or make_plan with suggest_new: true when they say to suggest some).",
+        "description": "Plan some days, or a whole week, and save them, in one call: { from?: the first day as YYYY-MM-DD (today at the earliest), days?: how many days from it (1 to 14), keep_edited?: false to plan again the meals whose dishes the family set too (true when left out), week_start?: a week's Monday instead of from and days, meals?: [{ date, slot }] only these meals again (the stale ones a rule change answered), household?: the household facts (Flock sends them; the app also reads them fresh), suggest_new?: true when the family said to suggest new dishes where it knows none of theirs (the setup's first week does this by itself) }. The setup's first plan is { from: today, days: 3 }; meals not said yet are lunch and dinner. The app plans it in steps itself (who eats each meal from the slots, the weekday patterns and the calendar; each meal slot from the family's own dishes and plates, checked against every food rule per person, how often each dish comes and no dish too soon again; then each day's ingredients), the same way the Sunday run does, and messages nobody. Answers { ok: true, message, intro?, instructions, defaults?, unmet? } (send message word for word, then intro once, as instructions say; defaults: what it assumed, to say once; unmet: what could not be kept, already said in message) or { ok: false, reason, say } (nothing planned: send say word for word; reason no_dishes: say is a question, the planner knows none of the family's dishes for some meals: add their answer with add_dish, then make_plan again, or make_plan with suggest_new: true when they say to suggest some).",
         "use": "Plan some days or a week: the setup's first plan (3 days from today), the rest of the week after feedback, or \"plan the next few days\".",
         "input": {
           "type": "object",
@@ -1253,6 +1253,27 @@
             "suggest_new": {
               "type": "boolean",
               "description": "Plan new dishes where the family named none of theirs"
+            },
+            "meals": {
+              "description": "Plan only these meals again (a change's stale meals), every other kept",
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "date": {
+                    "type": "string",
+                    "description": "YYYY-MM-DD"
+                  },
+                  "slot": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "date",
+                  "slot"
+                ],
+                "additionalProperties": false
+              }
             }
           },
           "additionalProperties": false
@@ -1550,7 +1571,7 @@
       },
       {
         "name": "set_rule",
-        "description": "Add, change or take away a food rule (an allergy, no onion and garlic, millets twice a week for one person). { id?: the rule's id (to change or take away one; read the rules table), hard?: true for one always kept, what?: veg | egg | no_eggs | avoid | only | swap | require | fasting | cap | note, who?: a person (none: everyone), slots?: [slot names], days?: [\"Mon\", ...], items?: [tags, like \"onion_garlic\", \"peanut\", \"white_rice\"], to?: what a swap puts in place, frequency?: soft only, sometimes | usually | rarely | \"<n>/week\", per_meal?: dishes a meal (cap), fasting_food?: [what they eat when fasting], when_present?: [names]: the rule holds only at meals where one of them is (no eggs when the grandparents visit), quote?: the family's own words (needed for a new rule), remove?: true }. The planned meals from today on are checked again and only those that now fail are planned again. Answers { ok, rule, replanned, message? } (send message word for word) or { ok, rule, planned: false, say }.",
+        "description": "Add, change or take away a food rule (an allergy, no onion and garlic, millets twice a week for one person). { id?: the rule's id (to change or take away one; read the rules table), hard?: true for one always kept, what?: veg | egg | no_eggs | avoid | only | swap | require | fasting | cap | note, who?: a person (none: everyone), slots?: [slot names], days?: [\"Mon\", ...], items?: [tags, like \"onion_garlic\", \"peanut\", \"white_rice\"], to?: what a swap puts in place, frequency?: soft only, sometimes | usually | rarely | \"<n>/week\", per_meal?: dishes a meal (cap), fasting_food?: [what they eat when fasting], when_present?: [names]: the rule holds only at meals where one of them is (no eggs when the grandparents visit), quote?: the family's own words (needed for a new rule), remove?: true }. Saved at once with no model call: the planned meals from today on that now fail come back as stale. Answers { ok, rule, stale?, replan? }: once all of the family's changes are saved, plan the stale meals again with one make_plan { meals: stale } and send its message word for word.",
         "use": "A food rule: a diet, an allergy, a fast or day rule, a rule for when someone visits, a wish (\"millets twice a week\").",
         "input": {
           "type": "object",

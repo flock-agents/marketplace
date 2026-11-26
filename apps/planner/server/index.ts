@@ -19,7 +19,7 @@ import { routineEnv } from "./routines/ctx";
 import { mountMakePlanRoute } from "./makePlan";
 import { mountPlanRangeRoute } from "./planRange";
 import { mountSetupStatusRoutes } from "./setupStatus";
-import { sdkModel } from "./model";
+import { counted, sdkModel } from "./model";
 import { mountSetupRoute } from "./setup";
 import { mountChangeRoutes } from "./changes";
 
@@ -42,14 +42,14 @@ mountFamilyRoutes(flock.hono, kit.db, kit.emitChange, { appToken: flock.env.toke
 mountMealRoutes(flock.hono, kit.db, kit.emitChange, { basePath: flock.env.basePath });
 // make_plan: the week planned in steps with the model call Flock gives the app (model.ts), the same as the Sunday run; the
 // platform gives it the household fresh and the Family Calendar's events, when this Flock has them (planDays.ts platformPeers).
-mountMakePlanRoute(flock.hono, kit.db, kit.emitChange, { basePath: flock.env.basePath, model: (req) => sdkModel(flock.platform)(req), platform: () => flock.platform, sqlite: kit.sqlite });
+mountMakePlanRoute(flock.hono, kit.db, kit.emitChange, { basePath: flock.env.basePath, model: counted((req) => sdkModel(flock.platform)(req)), platform: () => flock.platform, sqlite: kit.sqlite });
 // make_plan from a date ({ from, days }): the setup's first plan, and any few days (planRange.ts).
-mountPlanRangeRoute(flock.hono, kit.db, kit.emitChange, { basePath: flock.env.basePath, model: (req) => sdkModel(flock.platform)(req), platform: () => flock.platform, sqlite: kit.sqlite });
+mountPlanRangeRoute(flock.hono, kit.db, kit.emitChange, { basePath: flock.env.basePath, model: counted((req) => sdkModel(flock.platform)(req)), platform: () => flock.platform, sqlite: kit.sqlite });
 // apply_setup: the whole interview read once by the model and saved by the app's code (setup.ts).
-mountSetupRoute(flock.hono, kit.db, kit.emitChange, { model: (req) => sdkModel(flock.platform)(req) });
+mountSetupRoute(flock.hono, kit.db, kit.emitChange, { model: counted((req) => sdkModel(flock.platform)(req)) });
 // The later changes (set_slot, set_slot_day, add_dish, set_rule, set_setting, record_made, record_feedback): changes.ts; a
 // change re-plans only the slot-days it touches, with the plan's own steps.
-mountChangeRoutes(flock.hono, { db: kit.db, emit: kit.emitChange, basePath: flock.env.basePath, model: (req) => sdkModel(flock.platform)(req),
+mountChangeRoutes(flock.hono, { db: kit.db, emit: kit.emitChange, basePath: flock.env.basePath, model: counted((req) => sdkModel(flock.platform)(req)),
   platform: () => flock.platform, sqlite: kit.sqlite, appToken: flock.env.token ?? process.env.FLOCK_APP_TOKEN ?? null });
 // The setup's checklist for Flock (the status operation) and its two small writes (setupStatus.ts).
 mountSetupStatusRoutes(flock.hono, kit.db, kit.emitChange);

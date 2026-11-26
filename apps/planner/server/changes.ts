@@ -14,7 +14,7 @@
 import type { Context, Hono } from "hono";
 import { asc, eq, gte } from "drizzle-orm";
 import { people as people_t, slot_dishes, slot_days } from "./db/schema";
-import { BASE_TAGS, NEW_DISHES_CHOICES, RULE_WHATS, SKIPS, SLOT_KINDS, SLOT_ORDER, UNTRIED_MAX_OFFERS, type RuleWhat, type Skip, type SlotKind } from "./db/constants";
+import { NEW_DISHES_CHOICES, RULE_WHATS, SKIPS, SLOT_KINDS, SLOT_ORDER, UNTRIED_MAX_OFFERS, type RuleWhat, type Skip, type SlotKind } from "./db/constants";
 import { addDays, mondayOf, todayStr, weekdayOf, type Weekday } from "./dates";
 import { dishKey } from "./dishText";
 import { dateOf, flag } from "./meals";
@@ -22,8 +22,8 @@ import { homePeople, isObject, name, names, refuse, weekdays, words, writeRoutes
 import type { ModelCall } from "./model";
 import { INGREDIENT_SCHEMA, INGREDIENT_SYSTEM, ingredientsFrom, makePlan, OP_BUDGET_MS, type MakePlanResult } from "./makePlan";
 import { platformPeers, presentAt, ruleHolds, type PlanDay } from "./planDays";
-import { canonTag, checkSlot, forbidden, notFor, ruleTags, slotFacts, type Week } from "./planChecks";
-import { containsRead, frequencyOf } from "./setup";
+import { canonTag, checkSlot, notFor, slotFacts, type Week } from "./planChecks";
+import { frequencyOf } from "./setup";
 import { proposeRule, recordFeedback } from "./feedback";
 import { addRule, commit, getLibraryDish, getSlot, getSlotDay, listLibrary, listRules, listSlotDays, listSlots, newDishesPerWeek, recent, removeRule,
   removeSlot, saveSlotDay, slotHistory, updateLibraryByName, updateRule, upsertLibrary, upsertSlot, type Guest, type Rule, type RuleInput, type Slot,
@@ -33,8 +33,6 @@ const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLow
 const uniq = <T>(xs: T[]) => [...new Set(xs)];
 /** feedback_asked once the family answered the next-day question for a placement (1: asked, not answered). */
 export const FEEDBACK_ANSWERED = 2;
-/** A contains read made inside an operation: well inside Flock's wait for it. */
-const CONTAINS_BUDGET_MS = 90_000;
 
 export type ChangeDeps = { db: Db; emit: Emit; model: ModelCall; basePath: string; now: () => Date; platform?: () => unknown;
   sqlite?: { query: (q: string) => { get: () => unknown } }; log?: (line: string) => void };
@@ -123,33 +121,6 @@ async function fillIngredients(deps: ChangeDeps, date: string, slot: string, cou
   }
 }
 
-/** The tags not yet read for these library dishes, read now (setup's contains read) and written. */
-async function readContains(deps: ChangeDeps, dishes: { name: string; slot: string }[], tags: string[]): Promise<void> {
-  const ask = new Map<string, { name: string; tags: Set<string> }>();
-  for (const d of dishes) {
-    const row = getLibraryDish(deps.db, d.name, d.slot);
-    if (!row) continue;
-    const missing = tags.filter((t) => !row.contains_read.map(canonTag).includes(t));
-    if (!missing.length) continue;
-    const had = ask.get(row.key) ?? { name: row.name, tags: new Set<string>() };
-    missing.forEach((t) => had.tags.add(t));
-    ask.set(row.key, had);
-  }
-  if (!ask.size) return;
-  const log = deps.log ?? ((l: string) => console.log(`[planner] ${l}`));
-  const got = await containsRead(deps.model, ask, Date.now() + CONTAINS_BUDGET_MS, log);
-  commit(deps.db, deps.emit, (tx, ch) => {
-    for (const row of listLibrary(tx, { names: dishes.map((d) => d.name) })) {
-      const r = got.get(row.key);
-      if (!r) continue;
-      const read = Object.keys(r).map(canonTag);
-      upsertLibrary(tx, { name: row.name, slot: row.slot, contains_read: uniq([...row.contains_read, ...read]),
-        contains: uniq([...row.contains.filter((t) => r[t] !== false), ...read.filter((t) => r[t])]) }, "app", ch);
-    }
-  });
-}
-/** Every tag the house's rules name, and the base ones. */
-const houseTags = (db: Db) => uniq([...BASE_TAGS, ...ruleTags(listRules(db))].map(canonTag));
 
 // ── The re-check of saved slot-days against the rules (set_rule) ──
 
@@ -301,11 +272,21 @@ export function mountChangeRoutes(hono: Hono<any>, deps: Omit<ChangeDeps, "now">
       // The family's own dish now, not a suggestion; one named in setup keeps its origin.
       ...(had?.origin === "setup_named" ? {} : { origin: "family_added" as const }), suggested: false,
       ...(link ? { video_url: link, ...(had && !had.untried ? {} : { untried: true }) } : had ? {} : { untried: false }) }, by, ch));
-    await readContains(d, [{ name: row.name, slot: row.slot }], houseTags(db));
+    // What it contains is read with the next plan, with every other dish not read yet, in one batch (perf, 27 Nov).
     return { body: { ok: true, dish: getLibraryDish(db, row.name, row.slot) } };
   });
 
-  // set_rule: a food rule added, changed (by its id) or taken away; this week's slot-days re-checked, the failing ones planned again.
+  /** The saved meals from today on that a rule changes: those the rules now fail (code's checks, no model), and those a
+   *  fast of it holds on. */
+  const staleAfter = (db: Db, rule: Rule): Target[] => [...failingSlotDays(db, today()), ...fastingSlotDays(db, today(), rule)];
+  /** What a rule change answers about the plan: the meals to plan again, and how. */
+  const staleAnswer = (db: Db, targets: Target[]) => {
+    const stale = targets.filter((t, i) => targets.findIndex((x) => x.date === t.date && same(x.slot, t.slot)) === i).sort((a, b) => a.date.localeCompare(b.date));
+    if (!stale.length) return { replanned: [] };
+    return { replanned: [], stale, replan: "Plan these meals again once the family's changes are all saved: one make_plan { meals: stale } (every change's stale meals together)." };
+  };
+
+  // set_rule: a food rule added, changed (by its id) or taken away: saved at once; the meals it changes are answered as stale.
   write("/api/rules", async (b, by) => {
     const id = b.id === undefined ? null : name(b.id, "id");
     const before = id ? listRules(db).find((r) => r.id === id) ?? null : null;
@@ -313,7 +294,7 @@ export function mountChangeRoutes(hono: Hono<any>, deps: Omit<ChangeDeps, "now">
     if (b.remove === true) {
       if (!before) refuse("remove needs the rule's id");
       commit(db, emit, (tx, ch) => removeRule(tx, before!.id, by, ch));
-      return { body: { ok: true, removed: before, ...(await replan(d, fastingSlotDays(db, today(), before!))) } };
+      return { body: { ok: true, removed: before, ...staleAnswer(db, fastingSlotDays(db, today(), before!)) } };
     }
     const input: Partial<RuleInput> = {};
     if (b.hard !== undefined) input.hard = flag(b.hard, "hard");
@@ -336,11 +317,19 @@ export function mountChangeRoutes(hono: Hono<any>, deps: Omit<ChangeDeps, "now">
     if (merged.what === "swap" && !merged.to) refuse("a swap needs to: what goes in place of its items");
     if (["avoid", "only", "swap", "require"].includes(merged.what!) && !merged.items?.length) refuse(`a ${merged.what} rule needs items: the tags it names`);
     const rule = commit(db, emit, (tx, ch) => before ? updateRule(tx, before.id, input, by, ch)! : addRule(tx, input as RuleInput, by, ch));
-    // What the dishes contain for the rule's tags, read for every dish of the library first (unknown would fail closed).
-    const tags = uniq([...forbidden(rule), ...(rule.items ?? []), ...(rule.to ? [rule.to] : [])].map(canonTag)).filter(Boolean);
-    if (tags.length) await readContains(d, listLibrary(db).map((x) => ({ name: x.name, slot: x.slot })), tags);
-    const targets = [...failingSlotDays(db, today()), ...fastingSlotDays(db, today(), rule), ...(before ? fastingSlotDays(db, today(), before) : [])];
-    return { body: { ok: true, rule, ...(await replan(d, targets)) } };
+    // Saved and answered at once, no model call (perf, 27 Nov: 19 s a rule): the meals it changes are named, and the next
+    // make_plan reads what the dishes contain for the rule and plans them again, after all of the family's changes.
+    return { body: { ok: true, rule, ...staleAnswer(db, [...staleAfter(db, rule), ...(before ? fastingSlotDays(db, today(), before) : [])]) } };
+  });
+
+  // make_plan { meals: [{ date, slot }] }: those meals planned again (a rule change's stale ones), every other kept.
+  write("/api/plan/meals", async (b) => {
+    if (!Array.isArray(b.meals) || !b.meals.length) refuse("meals must be a list of { date, slot }: the stale meals a change answered");
+    const targets = (b.meals as unknown[]).map((m, i) => {
+      if (!isObject(m)) return refuse(`meals[${i}] must be { date, slot }`);
+      return { date: dateOf(m.date, `meals[${i}].date`), slot: slotNamed(db, m.slot, `meals[${i}].slot`).name };
+    }).filter((t) => t.date >= today());
+    return { body: { ok: true, ...(await replan(d, targets)) } };
   });
 
   // set_setting { new_dishes_per_week }: through the kit's settings route, with its check and change log.

@@ -71,7 +71,7 @@ word for word, or `say` when it answers `planned: false`):
 - One meal, one day (guests, someone away or visiting, "we're eating out on Friday", "make poha on Tuesday"): `set_slot_day`.
 - For good: a meal slot (`set_slot`), a food rule (`set_rule`, with the family's `quote`; its `id` to change or take one
   away), a dish they have (`add_dish`; a reel or recipe link for a dish they have not made yet goes in its `link`), how
-  many new dishes a week (`set_setting`). The app reads what a dish contains itself.
+  many new dishes a week (`set_setting`). A rule is saved at once and answers its `stale` meals: once all changes are saved, one `make_plan { meals }` plans them.
 - "We made khichdi instead" (said by them, never asked): `record_made { date, slot, dishes }`.
 
 - **A plan's question** (at most one, also in its `asked`): a meal with no dishes known at all, left out of the week ("I know only a few dishes for Kabir's tiffin. What else do you make for Kabir's tiffin, or should I suggest a few?"), and any calendar entry it could not read ("does "Dinner out" (Ravi, Thu) change who eats at home?") in the same question. Dishes named → `add_dish { name, slot, quote }` each, at the meal they were named for; "suggest" → `set_slot_day { date, slot, new_dishes_allowed }` on that slot's next days, or `set_setting { new_dishes_per_week }` for more variety everywhere. An add-on (one person's own beside the family's meal) is planned only as often as its dishes are had; its other days have none, which is not a missing meal.

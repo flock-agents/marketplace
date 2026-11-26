@@ -5,6 +5,7 @@
 import type { Hono } from "hono";
 import type { OpHandler } from "@flock/app-sdk";
 import guide from "./agent-guide.md" with { type: "text" };
+import { modelStats } from "./model";
 
 type Call = { method: "GET" | "POST" | "PATCH" | "DELETE"; path: string; body?: unknown };
 type Route = (p: Record<string, unknown>) => Call | { error: string; code: string; status: number };
@@ -21,7 +22,9 @@ export const ROUTES: Record<string, Route> = {
   set_shopping_apps: (p) => ({ method: "POST", path: "/api/family/shopping-apps", body: p }),
   apply_setup: (p) => ({ method: "POST", path: "/api/family/setup", body: p }),
   // From a date ({ from, days }), else a whole week ({ week_start }).
-  make_plan: (p) => p.from !== undefined
+  make_plan: (p) => p.meals !== undefined
+    ? { method: "POST", path: "/api/plan/meals", body: p }
+    : p.from !== undefined
     ? { method: "POST", path: "/api/plan", body: p }
     : typeof p.week_start === "string" || typeof p.week_start === "number"
       ? { method: "POST", path: `/api/weeks/${encodeURIComponent(String(p.week_start))}/make-plan`, body: p }
@@ -79,7 +82,7 @@ export const FIELDS: Record<string, { fields: string[]; need?: string[] }> = {
   set_roles: { fields: ["menu", "cooking", "shopping"] },
   set_shopping_apps: { fields: ["main", "fallback", "connected"], need: ["main", "connected"] },
   apply_setup: { fields: ["household", "transcript"], need: ["transcript"] },
-  make_plan: { fields: ["from", "days", "keep_edited", "week_start", "household", "suggest_new"] },
+  make_plan: { fields: ["from", "days", "keep_edited", "week_start", "meals", "household", "suggest_new"] },
   set_slot: { fields: ["name", "kind", "addon_of", "usual_people", "days", "skip_days", "order", "remove"], need: ["name"] },
   set_slot_day: { fields: ["date", "slot", "people", "add_people", "remove_people", "guests", "occasion", "new_dishes_allowed", "skip", "dishes"], need: ["date", "slot"] },
   add_dish: { fields: ["name", "slot", "frequency", "days", "quote", "link"], need: ["name", "slot"] },
@@ -164,6 +167,9 @@ export function checkFields(op: string, p: Record<string, unknown>): { error: st
   return { error: `${said.join(" ")} Its fields: ${fieldList(op)}. Send it again with those only.`, code: "APP_REFUSED", status: 400 };
 }
 
+/** The operations that answer `timing` { ms, model_calls }: the ones that may plan or read with a model. */
+const TIMED = new Set(["make_plan", "set_rule", "set_slot", "set_slot_day", "add_dish", "record_feedback", "apply_setup"]);
+
 /** Operations that take more than one call, or none. */
 type Multi = (p: Record<string, unknown>, call: (c: Call) => Promise<{ status: number; body: any }>) => Promise<unknown>;
 
@@ -200,7 +206,11 @@ export function agentOps(hono: () => Hono<any>): Record<string, OpHandler> {
       if (bad) return bad;
       const c = route(payload ?? {});
       if ("error" in c) return c;
+      const started = Date.now(), calls = modelStats.calls;
       const res = await caller(ctx.agentId)(c);
+      // How long it took and how many model calls it made, for diagnosis (perf, 27 Nov).
+      if (TIMED.has(name) && res.body && typeof res.body === "object" && !Array.isArray(res.body))
+        res.body = { ...res.body, timing: { ms: Date.now() - started, model_calls: modelStats.calls - calls } };
       // A refusal the route gave its own code (NEEDS_NAME) keeps it, so the agent can tell what to do about it.
       if (res.status >= 400) {
         const refusal = typeof res.body === "object" && res.body ? res.body : null;

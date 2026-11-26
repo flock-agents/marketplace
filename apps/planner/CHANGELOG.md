@@ -18,6 +18,8 @@
   How it all works comes in one short message once setup is done.
 - After the first plan and your first thoughts on it, your Flock offers to connect your grocery apps one at a time, and
   reads your past orders to know what you usually buy. Never before the first plan.
+- Faster changes: a new food rule is saved at once, and the meals it changes are planned again together in one go. A plan
+  asks for all its ingredients at once.
 - Every like, dislike and swap is remembered. A dish turned down twice gets one question: "Should I stop planning it?"
 - Needs a Flock that runs app setups from the app's own checklist.
 

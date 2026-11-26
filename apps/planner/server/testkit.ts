@@ -21,7 +21,7 @@ import { mountReminderRoutes } from "./reminder";
 import { mountMakePlanRoute } from "./makePlan";
 import { mountPlanRangeRoute } from "./planRange";
 import { mountSetupStatusRoutes } from "./setupStatus";
-import { NO_MODEL, type ModelCall } from "./model";
+import { counted, NO_MODEL, type ModelCall } from "./model";
 import { mountSetupRoute } from "./setup";
 import { mountChangeRoutes } from "./changes";
 import { commit, saveSlotDay, type SlotDay } from "./slotStore";
@@ -47,6 +47,7 @@ export function tempDir(prefix = "planner-test-"): string {
 export async function boot(opts: { dbFile?: string; dataDir?: string; token?: string;
   basePath?: string; askAgent?: (intent: string, payload: object) => Promise<unknown>; now?: () => Date; model?: ModelCall; setupBudgetMs?: number } = {}) {
   const now = opts.now ?? (() => new Date());
+  const model = counted(opts.model ?? NO_MODEL);
   const hono = new Hono();
   const dataDir = opts.dataDir ?? tempDir();
   // The kit opens its database inside dataDir, so a file given by its full path is named from there.
@@ -59,11 +60,11 @@ export async function boot(opts: { dbFile?: string; dataDir?: string; token?: st
   mountProductRoutes(hono, kit.db, kit.emitChange);
   mountRecipeRoutes(hono, kit.db, kit.emitChange);
   mountDishBookRoutes(hono, kit.db, kit.emitChange, { now });
-  mountMakePlanRoute(hono, kit.db, kit.emitChange, { basePath: opts.basePath ?? "/a/t", model: opts.model ?? NO_MODEL, now, sqlite: kit.sqlite });
-  mountPlanRangeRoute(hono, kit.db, kit.emitChange, { basePath: opts.basePath ?? "/a/t", model: opts.model ?? NO_MODEL, now, sqlite: kit.sqlite });
+  mountMakePlanRoute(hono, kit.db, kit.emitChange, { basePath: opts.basePath ?? "/a/t", model, now, sqlite: kit.sqlite });
+  mountPlanRangeRoute(hono, kit.db, kit.emitChange, { basePath: opts.basePath ?? "/a/t", model, now, sqlite: kit.sqlite });
   mountSetupStatusRoutes(hono, kit.db, kit.emitChange, { now });
-  mountSetupRoute(hono, kit.db, kit.emitChange, { model: opts.model ?? NO_MODEL, budgetMs: opts.setupBudgetMs });
-  mountChangeRoutes(hono, { db: kit.db, emit: kit.emitChange, basePath: opts.basePath ?? "/a/t", model: opts.model ?? NO_MODEL, now, sqlite: kit.sqlite, appToken: opts.token ?? null, log: () => {} });
+  mountSetupRoute(hono, kit.db, kit.emitChange, { model, budgetMs: opts.setupBudgetMs });
+  mountChangeRoutes(hono, { db: kit.db, emit: kit.emitChange, basePath: opts.basePath ?? "/a/t", model, now, sqlite: kit.sqlite, appToken: opts.token ?? null, log: () => {} });
   /** A request as the owner. */
   const owner = async (method: string, path: string, body?: unknown) => {
     const r = await hono.request(path, { method, headers: { "Content-Type": "application/json", "X-Flock-User": "tester" }, body: body === undefined ? undefined : JSON.stringify(body) });
