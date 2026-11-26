@@ -71,6 +71,8 @@ const HOME_SCHEMA = {
     lunch_unclear: STRS,
   },
 };
+/** A re-read (§2 of task 15 round 3): the same user payload with what the last answer left out, in words. */
+const MISSING_LINE = "A list `missing` names what your last answer left out: write it.";
 const HOME_PART = `Write this part: the meals (slots), the cook, who of the family cooks, shopping.
 - slots: every meal planned at home. Always Breakfast, Lunch and Dinner (kind "main"), each with skip_days when the family said that meal is eaten out or ordered in on a weekday every week ({ day, skip: eaten_out | ordered_in }; "Sunday lunch we eat out" is Lunch skip_days [{ Sun, eaten_out }] only: Sunday's other meals are still cooked) and a quote for that. Said for some of the family ("I order in for myself on Saturdays"), it is that meal's skip all the same when the others at home have their own meal in its place that day (instead, below): their own meal is still cooked.
   kind "custom": a meal the family names besides those: a child's school tiffin, lunch box or snack box ("<child>'s tiffin", or the family's word for a box two children share; usual_people [those children], days the school days), an evening snack ("Evening snack"). after: the main meal it comes after (an evening snack: Lunch). Each box the family names is its own slot: a breakfast box and a lunch box are two slots, also for one child. usual_people: the people the family names for it; a meal said without names is everyone's: usual_people empty. days: the weekdays it is eaten, empty for every day.
@@ -86,7 +88,8 @@ const HOME_PART = `Write this part: the meals (slots), the cook, who of the fami
 - subscriptions: what comes on a subscription: { item, source, note }.
 - weekday_lunch: for someone away on weekdays (household.weekly), where they have lunch when the replies say it: away (eats out or at work), carries (takes lunch from home), home. Only from the family's words.
 - lunch_unclear: the people away on weekdays whose weekday lunch neither household.weekly nor the replies tell.
-Food rules and dishes are not this part: other readers write them.`;
+Food rules and dishes are not this part: other readers write them.
+${MISSING_LINE}`;
 const HOME_EXAMPLE = `gives slots [{ Breakfast, main }, { Lunch, main, skip_days [{ Sun, eaten_out }], quote "Sunday we go to my in-laws for lunch" }, { Dinner, main, skip_days [{ Sun, ordered_in }], quote "dinner we order from Zomato" }, { "Tara's tiffin", custom, instead_of Lunch, usual_people [Tara], days Mon..Fri, quote "Mon-Fri, sandwiches or poha" }, { "Evening snack", custom, after Lunch, quote "We all have a snack at 5" (said for everyone: no usual_people) }, { "Lalitha's dinner", addon, addon_of Dinner, usual_people [Lalitha], quote "Paati has just two phulkas at night" }, { "Lalitha's breakfast", addon, addon_of Breakfast, usual_people [Lalitha], quote "Paati has her own ragi porridge" }] (no add-on for Kavya: her ragi dosa is shared; none for Tara: same dinner), cook { name "Savita", days Mon..Fri, visits [{ at "08:30", meals [Breakfast, Lunch] }, { at "17:00", meals [Dinner] }], quote "Savita comes at 8:30 actually" }, family_cooks [{ person "Kavya", days [Sat], quote "Saturday Kavu cooks everything" }] (who cooks on Sunday was not said: left out), apps { main "Blinkit" }, subscriptions [{ milk, Country Delight, every morning }], lunch_unclear ["Rahul"] (at the office on weekdays, his lunch never said; Tara has her tiffin).
 And "Q: The children's lunch, or their school tiffin? A: Snack box Monday to Friday: sandwiches, pasta or chivda, and fruit. Lunch at home after school, same as ours." with "Q: Rahul's lunch? A: He takes roti sabzi from home" gives the slot { "Snack box", custom, after Breakfast, usual_people [Tara], days Mon..Fri, quote "Snack box Monday to Friday" } (the children's box: Tara is the child; no instead_of: lunch is at home) and weekday_lunch [{ person "Rahul", lunch carries, quote "He takes roti sabzi from home" }], no slot for Rahul: he carries the home lunch.`;
 
@@ -771,6 +774,57 @@ export function checkRead(read: SetupRead, ctx: { household: Household; said: st
   }
 
   return { read: { ...read, slots, rules: rules.map(typed), library, seed, cook, family_cooks, weekday_lunch, lunch_unclear, unplaced, links }, dropped, asks, noted, lint, slotDays };
+}
+
+/** What the home read left out (H1), found over the checked read: `missing` in words for the re-read; `ask` the read-back's
+ *  question when the re-read still leaves it out; `slot` a slot not to save then. */
+export type HomeViolation = { missing: string; ask?: string; slot?: string };
+const isChild = (p: HPerson) => p.group === "child" || (p.age !== undefined && p.age < 18);
+/** The meal words a box is named by ("breakfast box"). */
+const BOX_MEALS = ["breakfast", "lunch", "dinner", "snack"];
+/** The home read checked (H1), structure only:
+ *  (i) each family sentence holding a box word names a box that resolves, among its person's meals, to a custom slot. The box
+ *  is the box word with the meal word before it ("breakfast box", "lunch box"), else the word alone ("tiffin"); its person the
+ *  one the sentence names, else the child the question before it names, else the one child at home. A grown-up's box is no
+ *  slot of its own (they carry the home lunch, or an extras add-on: (ii)).
+ *  (ii) each extras add-on of Lunch with no days has, for every person on it, a household.weekly or a weekday_lunch entry. */
+export function homeViolations(read: SetupRead, ctx: { household: Household; sentences: string[]; transcript?: string[] }): HomeViolation[] {
+  const out: HomeViolation[] = [], people = ctx.household.people;
+  const add = (v: HomeViolation) => { if (!out.some((x) => x.missing === v.missing)) out.push(v); };
+  const named = (line: string) => people.filter((p) => [p.name, ...p.nicknames].some((n) => namedIn(n, [line])));
+  // Each sentence with the question it answers, when the transcript is given; the household facts' with none.
+  const lines: { s: string; q: string | null }[] = [];
+  let q: string | null = null;
+  for (const l of ctx.transcript ?? []) {
+    if (/^Q:/i.test(l)) { q = plainWords(l.replace(/^Q:\s*/i, "")); continue; }
+    if (!/^A\d*:/i.test(l)) continue;
+    for (const s of l.replace(/^A\d*:\s*/i, "").split(/[.!?;]+/).map(plainWords).filter(Boolean)) lines.push({ s, q });
+  }
+  for (const s of ctx.sentences) if (!lines.some((x) => x.s === s)) lines.push({ s, q: null });
+  const children = people.filter(isChild);
+  for (const { s, q } of lines) {
+    const ws = s.split(" ");
+    ws.forEach((w, i) => {
+      if (!BOX_WORDS.includes(w)) return;
+      const box = w === "lunchbox" ? "lunch box" : w === "tiffinbox" ? "tiffin" : w === "box" && BOX_MEALS.includes(ws[i - 1]) ? `${ws[i - 1]} box` : w;
+      const inLine = named(s), kids = inLine.filter(isChild), inQ = q ? named(q).filter(isChild) : [];
+      const person = inLine.length === 1 ? inLine[0] : kids.length === 1 ? kids[0] : inLine.length ? null
+        : inQ.length === 1 ? inQ[0] : children.length === 1 ? children[0] : null;
+      if (person && !isChild(person)) return;
+      const mine = read.slots.filter((x) => !person || !x.usual_people.length || x.usual_people.includes(person.name));
+      const hit = resolveSlot(box, mine.map((x) => x.name));
+      if (hit && mine.find((x) => x.name === hit)?.kind === "custom") return;
+      const where = ctx.household.weekly?.find((x) => person && x.person === person.name && x.where !== "home")?.where ?? "school";
+      add(person ? { missing: `${box} (${person.name})`, ask: `Does ${person.name} carry a ${box} to ${placeText(where)}, and what goes in it?` }
+        : { missing: box, ask: `Who carries the ${box}, and what goes in it?` });
+    });
+  }
+  for (const x of read.slots) if (x.kind === "addon" && x.extras && x.addon_of === "Lunch" && !x.days.length) for (const p of x.usual_people) {
+    if ((ctx.household.weekly ?? []).some((w) => w.person === p) || read.weekday_lunch.some((w) => w.person === p)) continue;
+    const what = x.name.replace(/^.*?['’]s\s+/, "") || "lunch";
+    add({ missing: `the days ${p} takes ${x.name} (weekday_lunch)`, ask: `Which days does ${p} take the ${what} from home?`, slot: x.name });
+  }
+  return out;
 }
 
 // ── Model calls ──
@@ -1991,7 +2045,8 @@ export async function applySetup(deps: { db: Db; emit: Emit; model: ModelCall; p
   const household = householdOf(deps.household);
   let n = 0;
   const numbered = deps.transcript.map((l) => (/^A\d*:/i.test(l) ? `A${++n}: ${l.replace(/^A\d*:\s*/i, "")}` : l));
-  const user = JSON.stringify({ household: deps.household ?? {}, transcript: numbered.join("\n") });
+  const payload = { household: deps.household ?? {}, transcript: numbered.join("\n") };
+  const user = JSON.stringify(payload);
   const t0 = Date.now(), until = t0 + (deps.budgetMs ?? SETUP_BUDGET_MS) - SAVE_MARGIN_MS;
 
   // 1. The four reads at once.
@@ -2008,7 +2063,7 @@ export async function applySetup(deps: { db: Db; emit: Emit; model: ModelCall; p
   }
   const json = (i: number) => (results[i].ok ? (results[i] as Extract<ModelResult, { ok: true }>).json : null);
   const model = (results[0] as Extract<ModelResult, { ok: true }>).model;
-  const read = readOf(json(0), json(1), json(2), json(3));
+  let read = readOf(json(0), json(1), json(2), json(3));
   const noted: string[] = [];
 
 
@@ -2016,7 +2071,30 @@ export async function applySetup(deps: { db: Db; emit: Emit; model: ModelCall; p
   const replies = repliesOf(deps.transcript);
   const said = familyLines(deps.transcript, deps.household);
   const sentences = familySentences(deps.transcript, deps.household);
-  const checked = checkRead(read, { household, said, sentences });
+  let checked = checkRead(read, { household, said, sentences });
+  // H1: what the home read left out (a box the family named, an add-on's carrying days) is asked of the home reader once, with
+  // what is missing; its slots, weekday lunch and cook are taken when that clears something and adds nothing. Still left out:
+  // asked in the read-back, never guessed (an add-on with no carrying days is not saved).
+  const reread = (part: (typeof SETUP_PARTS)[number], missing: string[]) => askOnce(deps.model, { tier: part.tier, purpose: `${part.purpose} (re-read)`, system: part.system,
+    user: JSON.stringify({ ...payload, missing }), schema: part.schema, maxTokens: part.maxTokens }, until, log);
+  const homeCtx = { household, sentences, transcript: deps.transcript };
+  let gaps = homeViolations(checked.read, homeCtx);
+  if (gaps.length && until - Date.now() >= RETRY_FLOOR_MS) {
+    log(`home: the read left out ${gaps.map((v) => v.missing).join("; ")}; asking once more`);
+    const r = await reread(SETUP_PARTS[0], gaps.map((v) => v.missing));
+    if (r.ok) {
+      const h = readOf(r.json, null, null);
+      const next = { ...read, slots: h.slots, weekday_lunch: h.weekday_lunch.length ? h.weekday_lunch : read.weekday_lunch, cook: h.cook ?? read.cook };
+      const nextChecked = checkRead(next, { household, said, sentences });
+      const left = homeViolations(nextChecked.read, homeCtx);
+      if (left.length < gaps.length && left.every((v) => gaps.some((x) => x.missing === v.missing))) { read = next; checked = nextChecked; gaps = left; }
+    } else log(`home re-read: model ${r.code}: ${r.message.slice(0, 200)}`);
+  }
+  if (gaps.some((v) => v.slot)) {
+    read = { ...read, slots: read.slots.filter((s) => !gaps.some((v) => v.slot && same(v.slot, s.name))) };
+    checked = checkRead(read, { household, said, sentences });
+  }
+  for (const v of gaps) if (v.ask && !checked.asks.includes(v.ask)) checked.asks.push(v.ask);
   noted.push(...checked.noted);
   for (const d of checked.dropped) log(`dropped: ${d}`);
   await lintReread(deps.model, checked.lint, replies, until, log, { said: sentences, slotDays: checked.slotDays, dropped: checked.dropped, library: checked.read.library });

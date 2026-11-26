@@ -7,7 +7,7 @@ import { saysNoEggs, buildMeal, codePlace, nearestDish, cuisinesOf, regionalFor,
 import { keptOften, swapItems } from "./setup";
 import { dishKey } from "./dishText";
 import { checkRead, diffSetup, familyLines, familySentences, frequencyOf, householdOf, lunchLine, personOf, plainWords, quoteHasDayOrCount, readOf, resolveSlot,
-  ruleSaid, saidByFamily, savedOf, DISHES_ASK, SETUP_PARTS, SETUP_SYSTEM, CONTAINS_BATCH, daysOf, clockOf, itemWord, allergyAsk, answeredIn, mealOf, type Saved, type SetupRead } from "./setup";
+  ruleSaid, saidByFamily, savedOf, homeViolations, DISHES_ASK, SETUP_PARTS, SETUP_SYSTEM, CONTAINS_BATCH, daysOf, clockOf, itemWord, allergyAsk, answeredIn, mealOf, type Saved, type SetupRead } from "./setup";
 import { isAllergyRule } from "./allergy";
 import { houseCook, visitsOf } from "./makePlan";
 import { listRules, listSlots } from "./slotStore";
@@ -1562,6 +1562,98 @@ describe("setup reads into the one meaning model (§5, §6.4)", () => {
     expect(dishes).not.toContain(`["Rahul's dinner box", "Dinner", "whatever`);   // never a seed row for it
     // Review round 1: no second box example, no flatbread around the day's dish (h18's two-box shape).
     for (const w of ["ira's", "akki roti", "has what we have", "for the whole family", "share of our morning plate"]) expect(dishes.toLowerCase(), w).not.toContain(w);
+  });
+});
+
+// Round 3 (task 15, §2): what the reads leave out is found by code over the saved shape and re-read once, then asked; never
+// guessed. A made-up family (F7): Rahul at the office, Divya, and Ira at school.
+describe("setup checks what a read left out (H1-H3)", () => {
+  const MON_FRI = ["Mon", "Tue", "Wed", "Thu", "Fri"];
+  const I_HOUSEHOLD = {
+    "household.people": [{ name: "Rahul", relation: "self", group: "adult" }, { name: "Divya", relation: "wife", group: "adult" },
+      { name: "Ira", relation: "daughter", group: "child", age: 8 }],
+    "household.weekly": [{ person: "Rahul", where: "office", weekdays: MON_FRI }, { person: "Ira", where: "school", weekdays: MON_FRI }],
+    "household.speaker": "Rahul",
+  };
+  const I_TRANSCRIPT = [
+    "Q: Rahul is at the office on weekdays. Does he carry lunch?", "A: I carry the home lunch, and a bowl of sprouts beside it.",
+    "Q: And Ira on school days?", "A: Ira carries a breakfast box for school. She carries a lunch box.",
+    "Q: What did the family have for breakfast last week?", "A: Idli, poha, dosa.",
+    "Q: And lunch?", "A: Rice, dal and a sabzi.",
+    "Q: And dinner?", "A: Roti, dal and a sabzi.",
+    "Q: What goes in Ira's boxes?", "A: The breakfast box is our breakfast. The lunch box has two rotis with the lunch sabzi.",
+  ];
+  const mains = [{ name: "Breakfast", kind: "main" }, { name: "Lunch", kind: "main" }, { name: "Dinner", kind: "main" }];
+  const sprouts = { name: "Rahul's lunch", kind: "addon", addon_of: "Lunch", usual_people: ["Rahul"], extras: true, quote: "a bowl of sprouts beside it" };
+  const bbox = { name: "Ira's breakfast box", kind: "custom", usual_people: ["Ira"], days: MON_FRI, instead_of: "Breakfast", quote: "Ira carries a breakfast box for school" };
+  const lbox = { name: "Ira's lunch box", kind: "custom", usual_people: ["Ira"], days: MON_FRI, instead_of: "Lunch", quote: "She carries a lunch box" };
+  const I_LUNCH = [{ person: "Rahul", lunch: "carries", quote: "I carry the home lunch" }];
+  const noBoxes = { slots: [...mains, sprouts], weekday_lunch: I_LUNCH };
+  const withBoxes = { slots: [...mains, sprouts, bbox, lbox], weekday_lunch: I_LUNCH };
+  const lq = "Rice, dal and a sabzi", dq = "Roti, dal and a sabzi", bq = "Idli, poha, dosa";
+  const I_DISHES = {
+    library: [["Idli", "Breakfast", bq], ["Poha", "Breakfast", bq], ["Dosa", "Breakfast", bq], ["Rice", "Lunch", lq], ["Dal", "Lunch", lq], ["Sabzi", "Lunch", lq],
+      ["Roti", "Dinner", dq], ["Dal", "Dinner", dq], ["Sabzi", "Dinner", dq], ["Roti", "Ira's lunch box", "two rotis with the lunch sabzi"],
+      ["Sprouts", "Rahul's lunch", "a bowl of sprouts"]],
+    seed: [["Breakfast", "Idli", bq], ["Breakfast", "Poha", bq], ["Breakfast", "Dosa", bq], ["Lunch", "Rice, Dal, Sabzi", lq], ["Dinner", "Roti, Dal, Sabzi", dq]],
+    links: [["Ira's breakfast box", "Breakfast", "", "The breakfast box is our breakfast"], ["Ira's lunch box", "Lunch", "sabzi", "with the lunch sabzi"]],
+  };
+  const iFake = (over: Partial<Record<Part, unknown>> = {}) =>
+    fake({ home: withBoxes, rules: { rules: [] }, dishes: I_DISHES, often: { often: [] }, contains: containsOf(), lint: { dishes: [] }, kinds: { dishes: [] }, ...over });
+  const run = async (over: Partial<Record<Part, unknown>> = {}, transcript = I_TRANSCRIPT) => {
+    const f = iFake(over);
+    const k = await boot({ model: f.model });
+    const r = await k.op("apply_setup", { household: I_HOUSEHOLD, transcript });
+    expect(r.ok).toBe(true);
+    const fam = (await k.owner("GET", "/api/family")).body;
+    return { f, k, r, fam, slot: (n: string) => fam.slots.find((s: any) => s.name === n) };
+  };
+  /** The checked read of a home answer, against these sentences. */
+  const checkedHome = (home: unknown, sentences: string[], household: unknown = I_HOUSEHOLD) =>
+    checkRead(readOf(home, { rules: [] }, { library: [] }), { household: householdOf(household), said: sentences, sentences }).read;
+
+  // H1: the home read is checked and re-read once (A1, A7).
+  const boxSentences = ["ira carries a breakfast box for school", "she carries a lunch box", "a bowl of sprouts beside it"];
+  it("homeViolations finds a named box with no slot", () => {
+    const read = checkedHome(noBoxes, boxSentences);
+    expect(homeViolations(read, { household: householdOf(I_HOUSEHOLD), sentences: boxSentences }).map((v) => v.missing))
+      .toEqual(["breakfast box (Ira)", "lunch box (Ira)"]);
+    // Each box with its slot: nothing missing.
+    expect(homeViolations(checkedHome(withBoxes, boxSentences), { household: householdOf(I_HOUSEHOLD), sentences: boxSentences })
+      .filter((v) => /box/.test(v.missing))).toEqual([]);
+  });
+  it("homeViolations finds an extras add-on with no carrying days", () => {
+    const household = { ...I_HOUSEHOLD, "household.weekly": [{ person: "Ira", where: "school", weekdays: MON_FRI }] };
+    const read = checkedHome({ slots: [...mains, sprouts] }, ["a bowl of sprouts beside it"], household);
+    expect(read.slots.find((s) => s.name === "Rahul's lunch")!.days).toEqual([]);
+    const v = homeViolations(read, { household: householdOf(household), sentences: ["a bowl of sprouts beside it"] });
+    expect(v).toHaveLength(1);
+    expect(v[0].missing).toContain("Rahul");
+    expect(v[0].ask).toContain("Rahul");
+  });
+  it("applySetup re-reads the home part once", async () => {
+    const { f, slot } = await run({ home: (_req: ModelRequest, n: number) => (n === 1 ? noBoxes : withBoxes) });
+    expect(f.of("home")).toHaveLength(2);
+    expect(JSON.parse(f.of("home")[1].user).missing).toEqual(["breakfast box (Ira)", "lunch box (Ira)"]);
+    expect(f.of("home")[1].system).toContain("A list `missing` names what your last answer left out: write it.");
+    expect(slot("Ira's breakfast box")).toMatchObject({ kind: "custom", usual_people: ["Ira"], days: MON_FRI });
+    expect(slot("Ira's lunch box")).toMatchObject({ kind: "custom", usual_people: ["Ira"], days: MON_FRI });
+  });
+  it("applySetup asks when the re-read still misses the box", async () => {
+    const { f, r, fam } = await run({ home: noBoxes });
+    expect(f.of("home")).toHaveLength(2);
+    expect(r.said).toContain("Does Ira carry a breakfast box to school, and what goes in it?");
+    expect(r.said).toContain("Does Ira carry a lunch box to school, and what goes in it?");
+    expect(fam.slots.filter((s: any) => /box/i.test(s.name))).toEqual([]);
+  });
+  it("applySetup asks for the carrying days an extras add-on lacks, and saves no add-on for every day", async () => {
+    const household = { ...I_HOUSEHOLD, "household.weekly": [{ person: "Ira", where: "school", weekdays: MON_FRI }] };
+    const f = iFake({ home: { slots: [...mains, sprouts, bbox, lbox] } });
+    const k = await boot({ model: f.model });
+    const r = await k.op("apply_setup", { household, transcript: I_TRANSCRIPT });
+    expect(f.of("home")).toHaveLength(2);
+    expect(r.said).toContain("Which days does Rahul take");
+    expect((await k.owner("GET", "/api/family")).body.slots.some((s: any) => s.name === "Rahul's lunch")).toBe(false);
   });
 });
 
