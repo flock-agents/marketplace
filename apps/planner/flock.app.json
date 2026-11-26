@@ -170,6 +170,11 @@
       "zomato-blinkit",
       "bigbasket",
       "amazon"
+    ],
+    "helpedBy": "household.mealsBy",
+    "helpedLabel": "Help {{who}} manage meals and groceries",
+    "handles": [
+      "meals"
     ]
   },
   "setupApply": "apply_setup",
