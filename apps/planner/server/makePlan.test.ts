@@ -411,11 +411,14 @@ describe("make_plan: allergies (owner 25 Nov)", () => {
     }
   });
 
-  it("a careful read that leaves a dish out counts as having it (fail closed)", async () => {
+  it("a careful read that leaves a catalog dish out: its ingredients decide, and it is made without peanuts for him (e2e 27 Nov)", async () => {
     const k = await home({ rules: [ALLERGY], slots: [POHA_ONLY, MAIN[1], MAIN[2]], lib: { ...LIB, Breakfast: [["Kanda poha", "Poha"], ["Batata poha", "Poha"]] }, newPerWeek: 0 });
     const f = fakeModel({ careful: (u) => ({ dishes: u.dishes.filter((d: string) => d !== "Kanda poha").map((d: string) => ({ dish: d, has: [] })) }) });
     await k.plan(f.model);
-    for (const d of WEEK) for (const x of k.at(d, "Breakfast")!.dishes) expect(x.not_for).toEqual(x.dish === "Kanda poha" ? ["Kabir"] : []);
+    for (const d of WEEK) for (const x of k.at(d, "Breakfast")!.dishes) {
+      expect(x.not_for).toEqual([]);
+      if (x.dish === "Kanda poha") expect(x.note).toContain("make without peanuts for Kabir");
+    }
   });
 });
 

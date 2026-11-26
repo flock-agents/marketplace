@@ -38,6 +38,24 @@ export type DishFacts = { tags: Set<string>; read: Set<string>; ingredients?: Di
 /** The ingredients that bring a tag into a dish when it can be made without every one of them (decided 21): none of its main
  *  ingredients brings it. Null when one does, when no ingredient of it does (the tag came from a read: it is the dish's), or
  *  when the dish's ingredients are not known. */
+/** Does a main ingredient of a catalog item bring the tag (the dish is not itself without it). */
+export const mainBrings = (f: DishFacts, tag: string): boolean => !!f.ingredients?.some((x) => x.main && x.tags.has(canonTag(tag)));
+/** What a catalog item is made without for someone allergic: the ingredients it can be made without that bring the allergen
+ *  (cashews in upma), or, when a careful read says it has or may have it, or it was not read, the allergen itself (only its
+ *  cooking can bring it: an oil, a garnish, a masala). Null when nothing is to be said, or a main ingredient brings it. */
+export function allergyLeaveOut(w: Week, f: DishFacts, dish: string, tag: string, word: string): string[] | null {
+  if (!f.ingredients?.length || mainBrings(f, tag)) return null;
+  const c = w.careful?.get(dishKey(dish));
+  const suspected = w.careful ? !c || c.has(canonTag(tag)) : f.tags.has(canonTag(tag));
+  if (!suspected && !f.tags.has(canonTag(tag))) return null;
+  const names = f.ingredients.filter((x) => x.tags.has(canonTag(tag))).map((x) => x.name);
+  return names.length ? names : [word];
+}
+/** The family's word for an allergen, from their rule ("peanuts" in "allergic to peanuts"), else the tag's. */
+const allergenWord = (tag: string, quote: string): string => {
+  const t = tag.replace(/_/g, " ").toLowerCase();
+  return new RegExp(`\\b(${t}(?:e?s)?)\\b`, "i").exec(quote)?.[1]?.toLowerCase() ?? t;
+};
 export function leaveOut(f: DishFacts, tag: string): string[] | null {
   if (!f.ingredients?.length) return null;
   const hits = f.ingredients.filter((x) => x.tags.has(canonTag(tag)));
@@ -212,6 +230,13 @@ export function ruleBreaks(w: Week, d: PlanDay, dish: string): string[] {
       // The family's word for their own dish; every other dish by the careful read only (owner 25 Nov), where an allergen
       // that only an ingredient the dish can be made without brings is a note (decided 21: suji upma without cashews).
       if (vouched(w, r, dish)) continue;
+      // A catalog item says by its ingredients (e2e 27 Nov: a careful read wary of peanuts in all Maharashtrian cooking left
+      // a child with nothing at 5 of 6 meals): an allergen a main ingredient brings keeps the dish from them; one it can be
+      // made without, or one only a read suspects (an oil, a garnish), is a note to make theirs without it (allergyLeaveOut).
+      if (f.ingredients?.length) {
+        if (mainBrings(f, t)) out.push(`${dish} has ${t.replace(/_/g, " ")}: against ${p}'s rule "${r.quote}"`);
+        continue;
+      }
       if (w.careful) {
         const c = w.careful.get(dishKey(dish));
         if (!c) out.push(`${dish}: not read carefully for ${t.replace(/_/g, " ")}, so it cannot go to ${p} ("${r.quote}")`);
@@ -252,6 +277,12 @@ export function leaveOutNotes(w: Week, d: PlanDay, dish: string): string[] {
     for (const r of rulesFor(w, d, p)) {
       if (r.what === "swap" || (r.who && ownSlotDish(w, p, dish)) || (isAllergyRule(r) && vouched(w, r, dish))) continue;
       for (const t of forbidden(r)) {
+        if (isAllergyRule(r) && f.ingredients?.length) {
+          const names = allergyLeaveOut(w, f, dish, t, allergenWord(t, r.quote));
+          const k = r.who ? p : "";
+          if (names) without.set(k, new Set([...(without.get(k) ?? []), ...names]));
+          continue;
+        }
         if (!f.tags.has(t)) continue;
         const names = leaveOut(f, t);
         if (t === ONION_GARLIC && !isAllergyRule(r) && (names || (!f.ingredients?.length && !mostlyOnion(dish)))) { if (!onion.includes(p)) onion.push(p); continue; }

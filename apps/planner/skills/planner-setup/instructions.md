@@ -65,7 +65,7 @@ The person setting up who does not eat at home is never saved as a person.
 ### 3. The first plan, in the same turn
 
 As soon as `planner_status` says `ready`, call `planner_make_plan { from: today, days: 3 }` in that same turn, without asking
-first. Send its `message` word for word (one line a meal, the plate's dishes together), then its `intro` once when there is
+first. Send its `message` word for word, with no line of your own before it (it says what it is; one line a meal, the plate's dishes together), then its `intro` once when there is
 one, to whoever decides the menu. When it answers `defaults`, say in one short line what you assumed. Then ask one
 feedback question, like "How does this look? Anything to swap, or something nobody eats?"
 

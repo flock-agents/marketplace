@@ -12,6 +12,9 @@
 - Food goals per person: more protein, fewer carbs, less oil. The plan leans towards dishes that fit, never past a food
   rule. Goals written in words before are kept as they were said.
 - Rules for when someone visits: "no eggs when my parents are here" holds only on the days they are added to a meal.
+- Allergies follow each dish's ingredients: a dish with the allergen at its heart is kept from that person, one that can be
+  made without it says "make without peanuts for Kabir", so everyone has something at every meal.
+- A first plan says once that its dishes are suggestions, instead of listing every new one.
 - Every like, dislike and swap is remembered. A dish turned down twice gets one question: "Should I stop planning it?"
 - Needs a Flock that runs app setups from the app's own checklist.
 

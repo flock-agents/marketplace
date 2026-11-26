@@ -146,7 +146,7 @@ export function weekLink(basePath: string, weekStart?: string): string { return 
  *  this app), the intro once when there is one, and nothing after. */
 export function weekSendText(intro: boolean): string {
   return [
-    "Forward message to the family verbatim, word for word, as one message.",
+    "Forward message to the family verbatim, word for word, as one message, with nothing of your own before it: its first line already says what it is.",
     "It already holds the only links they need (the Week page, signed in to this app, and a dish's video when it has one): send no other link, no link of your own, and do not reword it.",
     intro ? "Then send intro verbatim, once, exactly as given: never paraphrase it, and never send it again." : null,
     `After sending ${intro ? "them" : "it"}, end your turn.`,
@@ -207,6 +207,16 @@ function newDishesText(news: NewDish[]): string[] {
   return [...by.values()].sort((a, b) => first(a).localeCompare(first(b)))
     .map((x) => newDishText(x.n, [...x.dates].sort().map((d) => weekdayOf(d))));
 }
+
+/** Are most of the plan's dishes new to the family (a first plan, before their own dishes are known): then they are said to
+ *  be suggestions once, never listed one by one (e2e 27 Nov: a 13-dish "New this week" list). */
+function mostlyNew(t: PlanText): boolean {
+  const all = new Set(t.days.flatMap((d) => d.meals.flatMap((m) => m.dishes.map((x) => dishKey(x.name)))));
+  const fresh = new Set(t.new_dishes.map((n) => dishKey(newName(n))).filter((k) => all.has(k)));
+  return fresh.size >= 3 && fresh.size * 2 >= all.size;
+}
+const suggestionsLine = (ask: boolean): string =>
+  `These are suggestions for now, as I don't know your usual dishes yet.${ask ? " Tell me what you usually make, or what to swap." : ""}`;
 
 /** The week's brand-new dishes (owner, 25 Nov): "New this week: Ragi puttu on Tue (like your Puttu), Beetroot poriyal on
  *  Thu (like your Beans poriyal)." and, when it is the message's one question, "OK to try these, or should I swap any?".
@@ -295,7 +305,7 @@ export function planMessage(t: PlanText): string {
   const standing = [...new Set([...t.standing, ...allWeek])];
   if (standing.length) lines.push("", `All week: ${standing.join("; ")}`.replace(/\?+\s*$/, "."));
   if (t.unmet.length) lines.push("", `I couldn't keep everything this week: ${t.unmet.join("; ")}. Tell me what to change.`);
-  const news = newThisWeekLine(t.new_dishes, !t.question);
+  const news = mostlyNew(t) ? suggestionsLine(!t.question) : newThisWeekLine(t.new_dishes, !t.question);
   if (news) lines.push("", news);
   if (t.question) lines.push("", t.question);
   lines.push("", `The whole week: [Week page](${t.link})`, "Tell me anything to change.");

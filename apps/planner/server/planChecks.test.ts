@@ -47,19 +47,21 @@ describe("allergies (owner 25 Nov)", () => {
     expect(allergyNotes(w, d, "Poha")).toEqual(["Ravi's Poha without peanut"]);
     expect(allergyNotes(w, d, "Upma")).toEqual([]);
   });
-  it("a family dish only others eat, a new dish and a variant are read carefully; not read, or read as maybe having it, is not his", () => {
+  it("a family dish only others eat, a new dish and a variant are read carefully; a catalog item goes by its ingredients, any other dish not read or read as maybe having it is not his", () => {
     const w = make(peanut);
     const d = w.days.find((x) => x.slot === "Breakfast")!;
     expect(vouched(w, peanut, "Peanut chikki")).toBe(false);   // on Asha's snack plates only
     expect(carefulTags(w, "Peanut chikki")).toEqual(["peanut"]);
     expect(carefulTags(w, "Sabudana khichdi")).toEqual(["peanut"]);
-    expect(ruleBreaks(w, d, "Sabudana khichdi")[0]).toContain("not read carefully for peanut");
+    // A catalog item not read carefully: its peanuts can be left out (e2e 27 Nov), so it is his, made without them.
+    expect(ruleBreaks(w, d, "Sabudana khichdi")).toEqual([]);
+    expect(ruleBreaks(w, d, "Groundnut usili")[0]).toContain("not read carefully for peanut");
     // Peanuts are one of its ingredients the dish can be made without (decided 21): read as having them, it is still his.
     w.careful!.set(dishKey("Sabudana khichdi"), new Set(["peanut"]));
     expect(ruleBreaks(w, d, "Sabudana khichdi")).toEqual([]);
     // A main ingredient (peanut ladoo), or one the dish is not known to be made without (a dish the catalog does not know).
     w.careful!.set(dishKey("Peanut ladoo"), new Set(["peanut"]));
-    expect(ruleBreaks(w, d, "Peanut ladoo")[0]).toContain("may have peanut");
+    expect(ruleBreaks(w, d, "Peanut ladoo")[0]).toContain("has peanut");
     w.careful!.set(dishKey("Groundnut usili"), new Set(["peanut"]));
     expect(ruleBreaks(w, d, "Groundnut usili")[0]).toContain("may have peanut");
     w.careful!.set(dishKey("Rava idli"), new Set());
