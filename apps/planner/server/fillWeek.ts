@@ -149,6 +149,10 @@ const kindsOf = (s: Slot): MealKind[] => mealKinds(s.templates ?? []);
  *  same `said` and share: "Or sometimes gobi paratha, aloo paratha, etc.") have that phrase's days once, spread over them: to
  *  the one had least recently first (`lastHad`, by template: its latest date, "" for never; ties in their order), so a variant
  *  comes again only when all have come. */
+/** A worded share kept to fewer than this many of the week's days comes by recency (F7 review ruling), and how many of its
+ *  last days it may have been had on before it skips one. */
+const RECENCY_DAYS = 3;
+const RECENCY_BACK = { sometimes: 1, rarely: 1, usually: 2 } as const;
 export function templateCounts(templates: MealTemplate[], n: number, lastHad?: readonly string[]): number[] {
   const groups: number[][] = [];
   const byPhrase = new Map<string, number[]>();
@@ -498,15 +502,26 @@ export function fillWeek(input: FillInput): FillResult {
       if (left[i] <= most[i] || !open.length || open.includes(i)) continue;
       for (let x = left[i] - most[i], j = 0; x > 0; x--, j++) { left[open[j % open.length]]++; left[i]--; }
     }
+    // A worded share kept to fewer than RECENCY_DAYS of the week's days ("on saturdays we make egg curry sometimes") comes by
+    // recency, never by count: a count of one day rounds to every week. "sometimes"/"rarely": not when it was had on its last
+    // day before; "usually": not when it was had on each of its last 2 days. Its skipped days go to the other templates.
+    const byRecency = ts.map((t) => !!t.days?.length && !!t.share && t.share in RECENCY_BACK && mine.filter((d) => onDay(t, d.date)).length < RECENCY_DAYS);
+    for (let i = 0; i < ts.length; i++) if (byRecency[i]) left[i] = 0;
+    const hadTpl = (i: number, date: string) => tplOf.get(slotDayKey(date, s.name)) === i || (named[i].size > 0 && [...hadOn(date)].some((k) => named[i].has(k)));
+    const due = (i: number, date: string) => {
+      const back = RECENCY_BACK[ts[i].share as keyof typeof RECENCY_BACK], prev: string[] = [];
+      for (let k = 1; prev.length < back && k <= 7 * (back + 1); k++) { const x = addDays(date, -k); if (onDay(ts[i], x)) prev.push(x); }
+      return prev.length < back || !prev.every((x) => hadTpl(i, x));
+    };
     const weight = [...left];
     // A pinned dish's day takes the template that holds it; a template kept to days takes its days (its share of them).
     const keptTpl = ts.map((t, i) => (t.days?.length ? i : -1)).filter((i) => i >= 0);
-    const keptLeft = new Map(keptTpl.map((i) => [i, ts[i].share ? templateCounts([ts[i]], mine.filter((d) => onDay(ts[i], d.date)).length)[0] : Infinity]));
+    const keptLeft = new Map(keptTpl.map((i) => [i, ts[i].share && !byRecency[i] ? templateCounts([ts[i]], mine.filter((d) => onDay(ts[i], d.date)).length)[0] : Infinity]));
     for (const d of mine) {
       const pins = famRows.filter((r) => same(r.slot, s.name) && r.days?.includes(weekdayOf(d.date)));
       if (pins.length) pinsOf.set(slotDayKey(d.date, s.name), pins);
       let i = pins.length ? ts.findIndex((t) => onDay(t, d.date) && holds(t, pins[0])) : -1;
-      if (i < 0) i = keptTpl.find((j) => onDay(ts[j], d.date) && (keptLeft.get(j) ?? 0) > 0 && allowed(j, d.date)) ?? -1;
+      if (i < 0) i = keptTpl.find((j) => onDay(ts[j], d.date) && (keptLeft.get(j) ?? 0) > 0 && allowed(j, d.date) && (!byRecency[j] || due(j, d.date))) ?? -1;
       if (i < 0) continue;
       if (keptLeft.has(i)) keptLeft.set(i, keptLeft.get(i)! - 1);
       tplOf.set(slotDayKey(d.date, s.name), i);
@@ -524,7 +539,7 @@ export function fillWeek(input: FillInput): FillResult {
       let cand = ts.map((_, i) => i).filter((i) => left[i] > 0 && allowed(i, d.date));
       if (!cand.length) cand = ts.map((_, i) => i).filter((i) => allowed(i, d.date) && !pinnedOnly[i]);
       if (!cand.length) cand = ts.map((_, i) => i).filter((i) => left[i] > 0 && onDay(ts[i], d.date));
-      if (!cand.length) { const any = ts.findIndex((t) => onDay(t, d.date)); if (any >= 0) tplOf.set(k, any); else res.log.push(`${weekdayOf(d.date)} ${s.name}: no template for that day`); continue; }
+      if (!cand.length) { const any = [ts.findIndex((t, i) => onDay(t, d.date) && !byRecency[i]), ts.findIndex((t) => onDay(t, d.date))].find((x) => x >= 0) ?? -1; if (any >= 0) tplOf.set(k, any); else res.log.push(`${weekdayOf(d.date)} ${s.name}: no template for that day`); continue; }
       for (const i of cand) cur[i] += weight[i];
       const total = cand.reduce((n, i) => n + weight[i], 0);
       // A template that keeps the cook's visit within her limit that day comes before one that does not (§9.3).

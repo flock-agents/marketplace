@@ -363,6 +363,37 @@ describe("a template made for a pinned dish, and one that would repeat yesterday
   });
 });
 
+describe("a worded share kept to fewer than 3 days comes by recency (F7 review: \"on saturdays we make egg curry sometimes\")", () => {
+  const lib = [dish("Phulka", "Dinner", "Roti"), ...SABZIS.map((n) => dish(n, "Dinner", "Sabzi")), dish("Egg curry", "Dinner", "Egg")];
+  const slots = (sh: MealTemplate["share"]) => [slot("Dinner", { templates: [T({ kind: "Roti" }, { kind: "Sabzi" }),
+    { parts: [{ kind: "Egg", dish: "Egg curry", words: "egg curry" }], share: sh, said: "on saturdays we make egg curry sometimes", days: ["Sat"] }] })];
+  const back = (r: ReturnType<typeof run>, weeks: number): HistoryRow[] => WEEK.map((d) => {
+    const dt = new Date(`${d}T00:00:00Z`); dt.setUTCDate(dt.getUTCDate() - 7 * weeks);
+    return { date: dt.toISOString().slice(0, 10), status: "confirmed", skip: null, dishes: r.at(d, "Dinner").map((x) => ({ dish: x })) } as HistoryRow;
+  });
+  const weeks = (sh: MealTemplate["share"], n: number) => {
+    const out: ReturnType<typeof run>[] = [];
+    for (let i = 0; i < n; i++) out.push(run({ slots: slots(sh), library: lib, history: { Dinner: out.flatMap((w, j) => back(w, out.length - j)) } }));
+    return out.map((w) => WEEK.filter((d) => w.at(d, "Dinner").includes("Egg curry")));
+  };
+  const SAT = WEEK[5];
+  it("\"sometimes\" on one day: week 1 (never had), not week 2, week 3 again; never on another day", () => {
+    expect(weeks("sometimes", 3)).toEqual([[SAT], [], [SAT]]);
+  });
+  it("\"rarely\" alternates the same way", () => {
+    expect(weeks("rarely", 3)).toEqual([[SAT], [], [SAT]]);
+  });
+  it("\"usually\" on one day: skipped only after the last 2 of its days had it", () => {
+    expect(weeks("usually", 4)).toEqual([[SAT], [SAT], [], [SAT]]);
+  });
+  it("a day it is skipped goes to the other templates; a day kept with no share still comes every week", () => {
+    const w1 = run({ slots: slots("sometimes"), library: lib });
+    const w2 = run({ slots: slots("sometimes"), library: lib, history: { Dinner: back(w1, 1) } });
+    expect(w2.at(SAT, "Dinner")).toContain("Phulka");
+    expect(weeks(null, 3)).toEqual([[SAT], [SAT], [SAT]]);
+  });
+});
+
 describe("a category kept to a day", () => {
   it("'pongal on Sundays' said as the category: a pongal on Sunday, none on other days", () => {
     const lib = [...["Rava idli", "Kanchipuram idli"].map((n) => dish(n, "Breakfast", "Idli")), ...["Masala dosa", "Ghee roast dosa"].map((n) => dish(n, "Breakfast", "Dosa"))];

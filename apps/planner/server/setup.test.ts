@@ -4,6 +4,7 @@
 import { describe, it, expect } from "bun:test";
 import { boot } from "./testkit";
 import { saysNoEggs, buildMeal, codePlace, nearestDish, cuisinesOf, regionalFor, kitchenLine, needsNamed, placeOf, wordOf, KINDS_SYSTEM, type MealDish, type Place } from "./setup";
+import { keptOften } from "./setup";
 import { checkRead, diffSetup, familyLines, familySentences, frequencyOf, householdOf, lunchLine, personOf, plainWords, quoteHasDayOrCount, readOf, resolveSlot,
   ruleSaid, saidByFamily, savedOf, DISHES_ASK, SETUP_PARTS, SETUP_SYSTEM, CONTAINS_BATCH, daysOf, clockOf, itemWord, allergyAsk, answeredIn, mealOf, type Saved, type SetupRead } from "./setup";
 import { isAllergyRule } from "./allergy";
@@ -1355,6 +1356,8 @@ describe("setup reads into the one meaning model (§5, §6.4)", () => {
     const box = fam.slots.find((s: any) => s.name === "Agastya's lunch box");
     expect(box.templates.filter((t: any) => t.share === "sometimes").map((t: any) => t.parts[0].items[0])).toEqual(["Egg paratha roll", "Cheese paratha roll"]);
     expect(r.said).toContain("egg curry (sometimes on Saturdays)");
+    expect([keptOften("usually", ["Sat"]), keptOften("rarely", ["Sat"]), keptOften("2/week", ["Mon", "Thu"])])
+      .toEqual(["most Saturdays", "now and then on Saturdays", "twice a week, Mon and Thu"]);
   });
 
   it("the cook's limit is a cap on her morning visit", async () => {
@@ -1484,26 +1487,30 @@ describe("apply_setup v2: the prompts", () => {
   it("read a dish joined to a list with its own words as that dish's, at any meal (class 5: every day at someone's own dinner)", () => {
     expect(SETUP_PARTS.find((p) => p.id === "often")!.system).toContain("A dish joined to a list with its own words, at any meal and for anyone");
   });
-  it("read who a pronoun is, a person's own bread, a swap \"when we make X\", no rice as the kind, a filling's and a day's \"sometimes\" (F7, G2)", () => {
+  it("read who a pronoun is, a person's own staple, a swap tied to a dish being made, no rice as the kind, a variant's and a day's frequency (F7, G2)", () => {
     const rules = SETUP_PARTS.find((p) => p.id === "rules")!.system, often = SETUP_PARTS.find((p) => p.id === "often")!.system;
+    const dishes = SETUP_PARTS.find((p) => p.id === "dishes")!.system;
     // D1: a pronoun is the person the replies name for that same food.
-    expect(rules).toContain("A \"he\" or \"she\" is the person the replies name for that same food");
-    expect(rules).toContain("\"Others are okay with it\" gives nobody else the rule");
-    expect(rules).toContain("never a rule against a food the replies say that person eats");
-    // D3b: one person's bread differing from the others' is a hard swap at that meal.
-    expect(rules).toContain(`{ hard, swap, who "Rahul", items ["roti"], to "paratha", slots ["Dinner"] }`);
-    expect(rules).toContain("One person's bread that differs from the others' at a meal");
-    // D3c: a swap said "when we make X" is hard; "sometimes" there is how often X comes.
-    expect(rules).toContain("A swap said with \"when we make X\" or \"in case we make X\" is hard");
-    expect(rules).toContain(`{ hard, swap, who "Tara", items ["pongal"], to "toast", slots ["Breakfast"] }`);
+    expect(rules).toContain(`A "he" or "she" is the person the replies name for that same food.`);
+    expect(rules).toContain("Words saying the others eat it give nobody else the rule, and there is never a rule against a food the replies say that person eats.");
+    // D3b: one person's staple differing from the others' is a hard swap at that meal.
+    expect(rules).toContain("A staple named for one person at a meal that differs from the others' (their bread or rice where the rest have another) is a hard swap for that person at that meal");
+    // D3c: a swap tied to another dish being made is hard; a frequency word there is how often that dish comes.
+    expect(rules).toContain("A swap tied to another dish being made (the person has their own dish on the days that dish is made) is hard");
+    expect(rules).toContain("A frequency word said with it tells how often that dish comes, never a soft swap.");
     // D9 / OD4: "no rice" names the Rice kind.
     expect(rules).toContain(`"No rice at night" is avoid ["rice"]`);
     expect(rules).not.toContain(`"No rice at night" is avoid ["white_rice"]`);
-    expect(rules).not.toContain(`items ["white_rice"], slots ["Dinner"], quote "no rice"`);
-    // D4: a filling said "sometimes" gives each filled dish its row; D5: a dish said with a day and "sometimes" keeps both.
-    expect(often).toContain(`["Paneer chapati roll", "Tara's lunch box", "sometimes with paneer or egg inside", "sometimes", "sometimes", ""], ["Egg chapati roll", "Tara's lunch box", "sometimes with paneer or egg inside", "sometimes", "sometimes", ""]`);
-    expect(often).toContain(`["Paneer curry", "Dinner", "on Fridays we make paneer curry sometimes", "on Fridays we make paneer curry sometimes", "sometimes", "Fri"]`);
-    expect(often).toContain("a dish told in any reply, also one about who eats differently, has its row");
+    // D4: a variant said with a frequency word is its own dish with it; D5: weekdays and a frequency word both kept, from any reply.
+    expect(often).toContain("A variant said with a frequency word (a filling, topping or side the dish has only \"sometimes\") is its own dish with those words");
+    expect(often).toContain("A dish said with weekdays and a frequency word keeps both: its frequency and its days");
+    expect(often).toContain("A dish told in any reply has its row");
+    // Review: no trigger phrase or sentence shape lifted from an eval household.
+    for (const w of ["in case we make", "when we make", "who eats differently", "egg inside", "pancakes", "rest of us rotis"]) {
+      expect(rules.toLowerCase(), w).not.toContain(w);
+      expect(often.toLowerCase(), w).not.toContain(w);
+      expect(dishes.toLowerCase(), w).not.toContain(w);
+    }
   });
   it("never name an eval household's people, cook or surname", () => {
     // A cook the family gives no name is written by the role word ("Cook", h18): that word is no name to keep out.
