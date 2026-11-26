@@ -1845,3 +1845,46 @@ describe("the often read's own deadline, and its fallback (H5)", () => {
     expect(lib(k)["Egg curry@Dinner"]).toMatchObject({ frequency: "sometimes", days: ["Sat"] });
   });
 });
+
+describe("a word no read placed is never a fixed dish (H4)", () => {
+  const ASKS = [{ name: "Dry veg", meal: "lunch", words: "dry veg" }, { name: "Kovakkai", meal: "dinner", words: "kovakkai" }];
+  const KOV = { name: "Kovakkai", meal: "dinner", kind: "Sabzi", sub: "Sabzi", named: "dish" }, DRY = { name: "Dry veg", meal: "lunch", kind: "Sabzi", named: "category" };
+  const answers = (...a: unknown[]) => { const asked: ModelRequest[] = [];
+    return { asked, model: async (req: ModelRequest): Promise<ModelResult> => { asked.push(req); return { ok: true, json: a[Math.min(asked.length, a.length) - 1], model: "fake" }; } }; };
+
+  it("kindsRead: no time for a second ask leaves the unanswered dishes left", async () => {
+    const f = answers({ dishes: [KOV] });
+    const r = await kindsRead(f.model, ASKS, Date.now() + 5_000, () => {});
+    expect(f.asked).toHaveLength(1);
+    expect(r.left.map((a) => a.name)).toEqual(["Dry veg"]);
+    expect([...r.placed.keys()]).toEqual(["dinner|kovakkai"]);
+  });
+  it("kindsRead: a second ask runs with KINDS_RETRY_MS left", async () => {
+    const f = answers({ dishes: [KOV] }, { dishes: [DRY] });
+    const r = await kindsRead(f.model, ASKS, Date.now() + 10_000, () => {});
+    expect(f.asked).toHaveLength(2);
+    expect(JSON.parse(f.asked[1].user).dishes.map((d: any) => d.name)).toEqual(["Dry veg"]);
+    expect(r.left).toEqual([]);
+    expect(r.placed.size).toBe(2);
+  });
+
+  it("writeKinds: a left dish is no fixed part", async () => {
+    const FAM = { "household.people": [{ name: "Omkar", group: "adult" }, { name: "Devika", group: "adult" }], "household.speaker": "Omkar" };
+    const T = ["Q: What do you have for lunch?", "A: Lunch is rice, dry veg and sambar. Or rice with kovakkai."];
+    const q = "Lunch is rice, dry veg and sambar", q2 = "Or rice with kovakkai";
+    // The kinds answer places Kovakkai and leaves Dry veg out.
+    const f = fake({ home: { slots: [{ name: "Breakfast", kind: "main" }, { name: "Lunch", kind: "main" }, { name: "Dinner", kind: "main" }] }, rules: { rules: [] },
+      dishes: { library: [["Rice", "Lunch", q], ["Dry veg", "Lunch", q], ["Sambar", "Lunch", q], ["Kovakkai", "Lunch", q2]],
+        seed: [["Lunch", "Rice, Dry veg, Sambar", q], ["Lunch", "Rice, Kovakkai", q2]] },
+      often: { often: [] }, kinds: { dishes: [{ ...KOV, meal: "lunch" }] }, contains: containsOf(), lint: { dishes: [] } });
+    // A setup near its budget's end: no time for the kinds read's second ask.
+    const k = await boot({ model: f.model, setupBudgetMs: 8_000 });
+    const r = await k.op("apply_setup", { household: FAM, transcript: T });
+    expect(r.ok).toBe(true);
+    expect(f.of("kinds")).toHaveLength(1);
+    const lunch = (await k.owner("GET", "/api/family")).body.slots.find((s: any) => s.name === "Lunch");
+    for (const t of lunch.templates) expect(t.parts).not.toContainEqual({ items: ["Dry veg"] });
+    expect(k.rows("library").some((d) => d.name === "Dry veg")).toBe(false);
+    expect(r.asks).toContain(kindsAsk("dry veg", { name: "Lunch", kind: "main" }));
+  });
+});

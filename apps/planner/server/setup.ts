@@ -212,6 +212,9 @@ export const OFTEN_MS = 60_000;
 /** The kinds read's own time: at most KINDS_MS, and done KINDS_MARGIN_MS before the setup's budget ends. */
 export const KINDS_MS = 45_000;
 const KINDS_MARGIN_MS = 3_000;
+/** The kinds read's second ask (a fast call of about 2 s, for only the dishes the first answer left out) runs while this much of
+ *  the setup's time is left (H4), not RETRY_FLOOR_MS. */
+export const KINDS_RETRY_MS = 8_000;
 /** At most this many dishes in one contains call. */
 export const CONTAINS_BATCH = 40;
 const RETRY_CODES: string[] = ["invalid_output", "unavailable", "timeout"];
@@ -1498,7 +1501,7 @@ export function regionalLines(names: string[]): { word: string; meanings: string
 }
 
 /** The kinds read's answer: the dishes it placed, and those an answer came back without, even when asked again (F4: a partial
- *  read). A failed call leaves nothing `left`: what it would place stays as code found it. */
+ *  read) or with no time to ask again (H4). A failed call leaves nothing `left`: what it would place stays as code found it. */
 export type KindsPlaced = { placed: Map<string, Place>; left: KindsAsk[] };
 
 /** The kinds read: one fast call for every dish asked, and one more for the dishes its answer left out. A failed call places
@@ -1509,7 +1512,7 @@ export async function kindsRead(model: ModelCall, asks: KindsAsk[], until: numbe
   // Its own deadline, inside the setup's: never what pushes the setup past its budget (eval h4 ran 150.09 s); on a timeout what
   // it would place stays the family's fixed dish.
   const by = Math.min(until - KINDS_MARGIN_MS, Date.now() + KINDS_MS);
-  const ask = async (these: KindsAsk[], first: boolean): Promise<KindsAsk[] | null> => {
+  const ask = async (these: KindsAsk[], first: boolean, by: number): Promise<KindsAsk[] | null> => {
     const regional = regionalLines(these.map((a) => a.name));
     const user = JSON.stringify({ catalog: catalogLines(), dishes: these.map((a) => ({ name: a.name, meal: a.meal, words: a.words,
       ...(a.known ? { known: [a.known.kind, a.known.sub].filter(Boolean).join(" / ") } : {}) })), ...(regional.length ? { regional, family_dishes: family } : {}) });
@@ -1527,14 +1530,15 @@ export async function kindsRead(model: ModelCall, asks: KindsAsk[], until: numbe
     if (first && left.length === these.length) { log("kinds: the answer placed none of the dishes asked"); return null; }
     return left;
   };
-  const left = await ask(asks, true);
+  const left = await ask(asks, true, by);
   if (!left?.length) return { placed: out, left: [] };
   // An answer that left dishes out (eval h18 rep 3: "Dry sabji" read as nothing, saved as a dish on the plate): asked again,
-  // once, for only those, while a second try's time is left. Left out only when both real answers leave a dish out: no
-  // time, or a failed second call, keeps them as code found them.
-  if (by - Date.now() < RETRY_FLOOR_MS) { log(`kinds: the answer left out ${left.length} dishes; no time to ask again`); return { placed: out, left: [] }; }
+  // once, for only those, while KINDS_RETRY_MS of the setup's time is left. With no time, what the answer left out is left
+  // (H4, eval h18 rep 2: no time is no answer placing it): the family is asked, never a bare word saved as their dish. A
+  // failed second call keeps them as code found them.
+  if (until - Date.now() < KINDS_RETRY_MS) { log(`kinds: the answer left out ${left.length} dishes; no time to ask again`); return { placed: out, left }; }
   log(`kinds: the answer left out ${left.map((a) => `${a.name} (${a.meal})`).join(", ")}; asking once more for them`);
-  const again = await ask(left, false);
+  const again = await ask(left, false, Math.min(until - KINDS_MARGIN_MS, Date.now() + KINDS_MS));
   return { placed: out, left: again ?? [] };
 }
 
