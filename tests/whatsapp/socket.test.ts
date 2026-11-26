@@ -3,11 +3,11 @@
 //
 // Run: bun test tests/whatsapp.
 import { afterEach, describe, expect, it } from "bun:test";
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from "fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import * as bundle from "../../skills/whatsapp/server/lib/baileys.bundle.js";
-import { BROWSER, _resetVersionForTesting, authDirOf, clearAuth, historyFilter, isLinked, proxyOf, socketConfig, waVersion, type BaileysLib } from "../../skills/whatsapp/server/_socket";
+import { BROWSER, _resetVersionForTesting, authDirOf, clearAuth, egressOf, historyFilter, isLinked, loadAuth, proxyOf, realSocketFactory, socketConfig, waVersion, type BaileysLib } from "../../skills/whatsapp/server/_socket";
 
 const lib = bundle as unknown as BaileysLib;
 const T = lib.proto.HistorySync.HistorySyncType;
@@ -20,11 +20,21 @@ const config = (env: Record<string, string>) => socketConfig(fakeLib, { env, aut
 afterEach(() => _resetVersionForTesting());
 
 describe("the egress proxy", () => {
-  it("is used for the connection and for media/history fetches when Flock gives HTTPS_PROXY", () => {
+  it("is the WebSocket's agent when Flock gives HTTPS_PROXY (Bun's fetch reads HTTPS_PROXY itself, so no fetch agent)", () => {
     const c = config({ HTTPS_PROXY: "http://b1:pw@127.0.0.1:41234", HTTP_PROXY: "http://b1:pw@127.0.0.1:41234", NO_PROXY: "localhost,127.0.0.1" });
     expect(c.agent).toBeInstanceOf(FakeAgent);
     expect(c.agent.url).toBe("http://b1:pw@127.0.0.1:41234");
-    expect(c.fetchAgent).toBe(c.agent);
+    expect("fetchAgent" in c).toBe(false);
+  });
+
+  it("refuses a NO_PROXY that would send WhatsApp around the egress", () => {
+    const proxy = "http://127.0.0.1:41234";
+    for (const noProxy of ["*", ".whatsapp.net", "whatsapp.com", "localhost,*.whatsapp.net", "web.whatsapp.com:443"]) {
+      expect(() => egressOf({ HTTPS_PROXY: proxy, NO_PROXY: noProxy })).toThrow(/egress/);
+      expect(() => config({ HTTPS_PROXY: proxy, no_proxy: noProxy })).toThrow(/egress/);
+    }
+    expect(egressOf({ HTTPS_PROXY: proxy, NO_PROXY: "localhost,127.0.0.1,notwhatsapp.com" })).toBe(proxy);
+    expect(egressOf({ NO_PROXY: "*" })).toBe("");
   });
 
   it("is not set at all without HTTPS_PROXY: the connection goes direct, as the browser does off cloud", () => {
@@ -67,9 +77,20 @@ describe("WhatsApp Web's version", () => {
   it("is the current one when it can be had, kept for a while", async () => {
     let asked = 0;
     const l = { ...lib, fetchLatestWaWebVersion: async () => { asked++; return { version: [2, 3000, 99], isLatest: true }; } } as BaileysLib;
-    expect(await waVersion(l, 1000)).toEqual([2, 3000, 99]);
-    expect(await waVersion(l, 2000)).toEqual([2, 3000, 99]);
+    expect(await waVersion(l, "", 1000)).toEqual([2, 3000, 99]);
+    expect(await waVersion(l, "", 2000)).toEqual([2, 3000, 99]);
     expect(asked).toBe(1);
+  });
+
+  it("is asked through the egress proxy when there is one", async () => {
+    const seen: any[] = [];
+    const l = { ...lib, fetchLatestWaWebVersion: async (o: any) => { seen.push(o); return { version: [2, 3000, 99], isLatest: true }; } } as BaileysLib;
+    await waVersion(l, "http://127.0.0.1:41234");
+    expect(seen[0].proxy).toBe("http://127.0.0.1:41234");
+    expect(seen[0].signal).toBeInstanceOf(AbortSignal);
+    _resetVersionForTesting();
+    await waVersion(l);
+    expect("proxy" in seen[1]).toBe(false);
   });
 
   it("falls back to the bundled one", async () => {
@@ -89,6 +110,15 @@ describe("the saved link", () => {
     expect(isLinked({ account: { details: "x" } })).toBe(true);
   });
 
+  it("its folder is the owner's only, even one made earlier with wider access", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "wa-auth-"));
+    try {
+      mkdirSync(authDirOf(dir), { mode: 0o755 });
+      await loadAuth(lib, dir);
+      expect(statSync(authDirOf(dir)).mode & 0o777).toBe(0o700);
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+
   it("lives in the data folder's auth/, and clearing deletes just its files", () => {
     const dir = mkdtempSync(join(tmpdir(), "wa-auth-"));
     try {
@@ -100,5 +130,37 @@ describe("the saved link", () => {
       expect(existsSync(auth)).toBe(false);
       expect(existsSync(join(dir, "store.json"))).toBe(true);
     } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+});
+
+/** A pretend egress proxy on this machine: records each CONNECT it is asked for, then hangs up. Nothing reaches WhatsApp. */
+function connectRecorder() {
+  const asked: string[] = [];
+  const server = Bun.listen({ hostname: "127.0.0.1", port: 0, socket: { data(sock, d) { asked.push(d.toString().split("\r\n")[0]); sock.end(); } } });
+  return { url: `http://127.0.0.1:${server.port}`, asked, stop: () => server.stop(true) };
+}
+
+describe("the egress proxy, for real (a local stand-in proxy; nothing reaches WhatsApp)", () => {
+  it("the real factory asks for the version and opens the WebSocket through the proxy", async () => {
+    const proxy = connectRecorder();
+    try {
+      const creds = (bundle as any).initAuthCreds();
+      const handle = { state: { creds, keys: { get: async () => ({}), set: async () => {} } }, saveCreds: async () => {}, registered: () => false };
+      const sock = await realSocketFactory(lib, { HTTPS_PROXY: proxy.url })(handle);
+      for (let i = 0; i < 100 && proxy.asked.length < 2; i++) await Bun.sleep(20);
+      sock.end(undefined);
+      expect(proxy.asked).toEqual(["CONNECT web.whatsapp.com:443 HTTP/1.1", "CONNECT web.whatsapp.com:443 HTTP/1.1"]);
+    } finally { proxy.stop(); }
+  });
+
+  it("Bun's fetch, as Baileys' history and app-state downloads use it, goes through HTTPS_PROXY from the environment", async () => {
+    const proxy = connectRecorder();
+    try {
+      const child = Bun.spawn(["bun", "-e", "await fetch('https://mmg.whatsapp.net/', { signal: AbortSignal.timeout(5000) }).catch(() => {})"], {
+        env: { PATH: process.env.PATH ?? "", HTTPS_PROXY: proxy.url, NO_PROXY: "localhost,127.0.0.1" }, stdout: "ignore", stderr: "ignore",
+      });
+      await child.exited;
+      expect(proxy.asked).toEqual(["CONNECT mmg.whatsapp.net:443 HTTP/1.1"]);
+    } finally { proxy.stop(); }
   });
 });
