@@ -27,6 +27,7 @@ import { resolveGives, targetsOf, targetText, type RuleTarget } from "./targets"
 import type { ModelCall, ModelResult } from "./model";
 import { isAllergyRule } from "./allergy";
 import { replacedMeal } from "./planDays";
+import { exactCatalogItem } from "./planChecks";
 
 // ── The prompts: one made-up example family for every part (never a test family: the name guard checks) ──
 
@@ -207,6 +208,9 @@ const RETRY_FLOOR_MS = 30_000;
 const SAVE_MARGIN_MS = 2_000;
 /** The how-often lint's own time at most. */
 const LINT_MS = 30_000;
+/** The time kept for the contains read (a safety read) after the lint (a second look), which never eats it (J2): the fast contains
+ *  call took 2-24 s in the evals. With less left than this, the lint is skipped. */
+export const CONTAINS_RESERVE_MS = 25_000;
 /** The often read's own time at most (H5): a runaway (eval h18 rep 2: 136 s of reasoning) fails by then and the lint re-reads in
  *  its place, never eating the time the needed reads share. */
 export const OFTEN_MS = 60_000;
@@ -1012,13 +1016,17 @@ async function askOnce(model: ModelCall, req: Parameters<ModelCall>[0], until: n
 async function lintReread(model: ModelCall, dishes: ReadDish[], replies: string[], until: number, log: (l: string) => void,
   check: { said: string[]; slotDays: Map<string, Weekday[]>; dropped: string[]; library: ReadDish[] }): Promise<void> {
   if (!dishes.length) return;
+  // `until` is the lint's own end, the contains read's reserve already off it (J2): with no time left, it is skipped, and its
+  // dishes are the dropped lines of a failed lint.
+  const skipped = until - Date.now() <= 0;
   // The line the lint reads: the reply holding the quote; a quote with no day or count word (linted because the often read failed,
   // H5) is shown the family's sentence that names the dish with one.
   const reply = (d: ReadDish) => replies.find((l) => plainWords(l).includes(plainWords(d.quote)));
   const words = dishes.map((d) => ({ name: d.name, slot: d.slot, quote: d.quote,
     line: (quoteHasDayOrCount(d.quote ?? "") ? reply(d) : check.said.find((l) => namedIn(d.name, [l]) && quoteHasDayOrCount(l)) ?? reply(d)) ?? d.quote }));
   // Its own deadline (LINT_MS): a second look, never what holds the setup to its budget's end (eval h1, h4: 48–60 s, then out of tokens).
-  const r = await withDeadline(model({ tier: "balanced", purpose: "setup: how often (lint)", system: LINT_SYSTEM, user: JSON.stringify({ dishes: words }), schema: LINT_SCHEMA, maxTokens: 2000 }), Math.min(until - Date.now(), LINT_MS));
+  const r: ModelResult = skipped ? { ok: false, code: "timeout", message: "no time left beside the contains read, skipped" }
+    : await withDeadline(model({ tier: "balanced", purpose: "setup: how often (lint)", system: LINT_SYSTEM, user: JSON.stringify({ dishes: words }), schema: LINT_SCHEMA, maxTokens: 2000 }), Math.min(until - Date.now(), LINT_MS));
   // A linted dish the lint gives no how-often (a failed lint, left out, or nothing read) is a dropped line (H5), never a quiet miss.
   const line = (d: ReadDish) => words.find((w) => w.name === d.name && w.slot === d.slot)?.line ?? d.quote;
   const none = (why: string, d: ReadDish) => check.dropped.push(`how often for ${d.name}: ${why} in "${line(d)}"`);
@@ -2279,7 +2287,7 @@ export type SetupResult =
 /** Read the setup and save it (or, when a setup is saved already, the correction the new replies make). Never refuses the
  *  whole: what does not fit is noted, what was not said is dropped. */
 export async function applySetup(deps: { db: Db; emit: Emit; model: ModelCall; post: Post; household: unknown; transcript: string[]; by?: string;
-  log?: (l: string) => void; budgetMs?: number; oftenMs?: number }): Promise<SetupResult> {
+  log?: (l: string) => void; budgetMs?: number; oftenMs?: number; containsReserveMs?: number }): Promise<SetupResult> {
   const log = deps.log ?? ((l: string) => console.log(`[planner] apply_setup: ${l}`));
   const by = deps.by ?? "app";
   const household = householdOf(deps.household);
@@ -2408,7 +2416,7 @@ export async function applySetup(deps: { db: Db; emit: Emit; model: ModelCall; p
   for (const a of [...gaps.flatMap((v) => (v.ask ? [v.ask] : [])), ...boxAsks]) if (!checked.asks.includes(a)) checked.asks.push(a);
   noted.push(...checked.noted);
   for (const d of checked.dropped) log(`dropped: ${d}`);
-  await lintReread(deps.model, checked.lint, replies, until, log, { said: sentences, slotDays: checked.slotDays, dropped: checked.dropped, library: checked.read.library });
+  await lintReread(deps.model, checked.lint, replies, until - (deps.containsReserveMs ?? CONTAINS_RESERVE_MS), log, { said: sentences, slotDays: checked.slotDays, dropped: checked.dropped, library: checked.read.library });
 
   // 3. The diff: a first setup takes all of it; a correction only what its new replies said.
   const saved = savedOf(deps.db);
@@ -2433,7 +2441,9 @@ export async function applySetup(deps: { db: Db; emit: Emit; model: ModelCall; p
     swapItemRows(tx, plan, by, changes, log);
     for (const slot of plan.slots) for (const d of familyDishes(tx, slot.name)) {
       const p = plan.places.get(placeKey(slot.name, d.key));
-      const c = catalogContents(d, p && !p.parts ? p.item : null);
+      // A dish placed with no item is the item its exact name is, or for a staple named by its kind alone ("Roti") that kind's
+      // everyday item (Phulka): the same reading the planner's checks make (exactCatalogItem), never a word match (J2).
+      const c = catalogContents(d, p?.parts ? null : p?.item ?? exactCatalogItem(d, d.name));
       if (c) upsertLibrary(tx, { name: d.name, slot: d.slot, ...c }, by, changes);
     }
   });
@@ -2508,7 +2518,7 @@ export async function applySetup(deps: { db: Db; emit: Emit; model: ModelCall; p
 }
 
 /** apply_setup { household, transcript }: answers { ok, said, changed, noted, dropped, asks, read } or { ok: false, reason, say }. */
-export function mountSetupRoute(hono: Hono<any>, db: Db, emit: Emit, opts: { model: ModelCall; budgetMs?: number; oftenMs?: number }) {
+export function mountSetupRoute(hono: Hono<any>, db: Db, emit: Emit, opts: { model: ModelCall; budgetMs?: number; oftenMs?: number; containsReserveMs?: number }) {
   const write = writeRoutes(hono);
   write("/api/family/setup", async (b, by, c) => {
     const transcript = transcriptLines(b.transcript);
@@ -2523,6 +2533,6 @@ export function mountSetupRoute(hono: Hono<any>, db: Db, emit: Emit, opts: { mod
       const out = await res.json().catch(() => null) as any;
       return res.ok ? { ok: true, body: out } : { ok: false, reason: out?.reason ?? `refused (${res.status})` };
     };
-    return { body: await applySetup({ db, emit, model: opts.model, post, household: b.household, transcript, by, budgetMs: opts.budgetMs, oftenMs: opts.oftenMs }) };
+    return { body: await applySetup({ db, emit, model: opts.model, post, household: b.household, transcript, by, budgetMs: opts.budgetMs, oftenMs: opts.oftenMs, containsReserveMs: opts.containsReserveMs }) };
   });
 }

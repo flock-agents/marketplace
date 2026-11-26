@@ -12,7 +12,7 @@ import { isAllergyRule } from "./allergy";
 import { houseCook, visitsOf } from "./makePlan";
 import { listRules, listSlots } from "./slotStore";
 import { HOUSEHOLDS } from "../evals/households";
-import { mealKinds, regionalWordOf } from "./kinds";
+import { mealKinds, plannerTags, regionalWordOf } from "./kinds";
 import { resolveGives } from "./targets";
 import type { ModelRequest, ModelResult } from "./model";
 
@@ -2074,7 +2074,7 @@ describe("the often read's own deadline, and its fallback (H5)", () => {
   it("applySetup: an often read past its own deadline fails and the lint re-reads", async () => {
     const f = fake({ home: { slots: SLOTS }, rules: { rules: [] }, dishes: DISHES, often: () => new Promise(() => {}), kinds: { dishes: [] }, contains: containsOf(),
       lint: { dishes: [{ name: "Egg curry", often: "On Saturdays we make egg curry sometimes", frequency: "sometimes", days: ["Sat"] }] } });
-    const k = await boot({ model: f.model, setupBudgetMs: 5000, setupOftenMs: 300 });
+    const k = await boot({ model: f.model, setupBudgetMs: 5000, setupOftenMs: 300, setupContainsReserveMs: 1000 });
     const t0 = Date.now();
     const r = await k.op("apply_setup", { household: FAM, transcript: T });
     // The often read's runaway eats its own time only, never the setup's budget.
@@ -2094,6 +2094,56 @@ describe("the often read's own deadline, and its fallback (H5)", () => {
       expect(lib(k)["Egg curry@Dinner"]).toMatchObject({ frequency: null, days: null });
       expect(r.dropped.filter((d: string) => d.startsWith("how often for Egg curry"))).toHaveLength(1);
     }
+  });
+});
+
+// J2: the contains read is a safety read; the lint is a second look. A late needed read leaves the contains read its time, and
+// a staple dish named by its kind alone ("Roti") takes its everyday item's contents from the catalog, never a model read.
+describe("the contains read keeps its time, and a bare staple takes its catalog contents (J2)", () => {
+  const FAM = { "household.people": [{ name: "Omkar", group: "adult" }, { name: "Devika", group: "adult" }], "household.speaker": "Omkar" };
+  const T = ["Q: What do you have for dinner?", "A: Dinner is roti with lauki kofta curry. Egg curry twice a week."];
+  const SLOTS = [{ name: "Breakfast", kind: "main" }, { name: "Lunch", kind: "main" }, { name: "Dinner", kind: "main" }];
+  const DISHES = { library: [["Roti", "Dinner", "roti with lauki kofta curry"], ["Lauki kofta curry", "Dinner", "roti with lauki kofta curry"], ["Egg curry", "Dinner", "Egg curry twice a week"]],
+    seed: [["Dinner", "Roti, Lauki kofta curry", "roti with lauki kofta curry"]] };
+  const named = (f: ReturnType<typeof fake>) => f.of("contains").flatMap((q) => JSON.parse(q.user).dishes as string[]);
+
+  it("applySetup: a late rules read leaves the contains read its time", async () => {
+    // Scaled down from 150 s: the budget 8 s (calls end 2 s before it), the rules read answers at 1.5 s, the lint never answers,
+    // the contains read answers in 0.6 s. The reserve (3.5 s here, 25 s live) is the contains read's.
+    const f = fake({ home: { slots: SLOTS }, rules: async () => { await Bun.sleep(1500); return { rules: [] }; }, dishes: DISHES, often: { often: [] },
+      lint: () => new Promise(() => {}), kinds: ownKinds,
+      contains: async (req: ModelRequest) => { await Bun.sleep(600); return containsOf({ "Lauki kofta curry": ["dairy"] })(req); } });
+    const k = await boot({ model: f.model, setupBudgetMs: 8000, setupContainsReserveMs: 3500 });
+    const t0 = Date.now();
+    const r = await k.op("apply_setup", { household: FAM, transcript: T });
+    expect(r.ok).toBe(true);
+    expect(Date.now() - t0).toBeLessThan(8000);
+    expect(r.dropped.filter((d: string) => d.startsWith("how often for Egg curry"))).toHaveLength(1);
+    const l = lib(k);
+    expect(l["Roti@Dinner"].read).toContain("white_rice");
+    expect(l["Lauki kofta curry@Dinner"].read).toContain("white_rice");
+    expect(l["Lauki kofta curry@Dinner"].contains).toEqual(["dairy"]);
+  }, 15_000);
+  it("applySetup: with less than the reserve left, the lint is skipped (never called) and its dishes are dropped lines", async () => {
+    const f = fake({ home: { slots: SLOTS }, rules: async () => { await Bun.sleep(3000); return { rules: [] }; }, dishes: DISHES, often: { often: [] },
+      lint: () => new Promise(() => {}), kinds: ownKinds, contains: containsOf() });
+    const k = await boot({ model: f.model, setupBudgetMs: 8000, setupContainsReserveMs: 3500 });
+    const r = await k.op("apply_setup", { household: FAM, transcript: T });
+    expect(r.ok).toBe(true);
+    expect(f.of("lint")).toHaveLength(0);
+    expect(r.dropped.filter((d: string) => d.startsWith("how often for Egg curry"))).toHaveLength(1);
+  }, 15_000);
+
+  it("writeKinds: a bare staple dish takes its everyday item's contents", async () => {
+    const f = fake({ home: { slots: SLOTS }, rules: { rules: [] }, dishes: DISHES, often: { often: [["Egg curry", "Dinner", "Egg curry twice a week", "twice a week", "2/week", ""]] },
+      lint: { dishes: [] }, kinds: ownKinds, contains: containsOf() });
+    const k = await boot({ model: f.model });
+    expect((await k.op("apply_setup", { household: FAM, transcript: T })).ok).toBe(true);
+    const roti = lib(k)["Roti@Dinner"];
+    expect(roti.contains).toEqual(["wheat"]);
+    expect(roti.read).toEqual(plannerTags("Phulka")!.read);
+    expect(named(f)).not.toContain("Roti");
+    expect(named(f)).toContain("Lauki kofta curry");
   });
 });
 

@@ -210,7 +210,7 @@ export function rowFacts(row: LibraryDish): DishFacts {
 /** The catalog item a dish is by exact names only (never a word match: planning never matches a family word to the catalog):
  *  its row's catalog_item, else the catalog item of the dish's own name, else for a staple plate named by its kind alone
  *  ("Rice") that kind's everyday item (Steamed rice); null for the family's own dish ("Bhindi masala" with no catalog_item). */
-function exactCatalogItem(row: LibraryDish | undefined, dish: string): string | null {
+export function exactCatalogItem(row: Pick<LibraryDish, "name" | "catalog_item"> | undefined, dish: string): string | null {
   if (row?.catalog_item) return catalogItem(row.catalog_item)?.item.name ?? null;
   const name = row?.name ?? dish;
   const hit = catalogItem(name);
