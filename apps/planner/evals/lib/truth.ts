@@ -47,7 +47,31 @@ export type TruthDish = {
   contains?: string[]; notContains?: string[]; alsoSlots?: string[]; unsaid?: boolean;
   /** Other names the family uses for this dish ("fish curry" for maacher jhol): Eval 1 recognises a saved row by them. */
   aka?: string[];
+  /** Its catalog kind (and sub-kind) when the catalog cannot place its name ("Bhindi" → Sabzi, Telugu "Beans curry" → Sabzi):
+   *  the eval's judgement, for the rotation checks and for loading TRUTH with kinds. A name that is no catalog kind is a kind
+   *  of the family's own. Absent: lib/catalog.ts kindOf(name). */
+  kind?: string; sub?: string;
 };
+
+/** One part of a meal template in kinds terms (server/kinds.ts TemplatePart, written here from the contract): a catalog kind,
+ *  one sub-kind of it, or a fixed list of the family's own dishes (nothing new suggested). */
+export type TruthPart = { kind: string; sub?: string } | { items: string[] };
+/** One way a meal is plated. `share`: how often, when the family said so ("2/week"). */
+export type TruthTemplate = { parts: TruthPart[]; share?: Frequency };
+/** The expected shape of one slot's meals (kinds model): its templates, which of its kinds are staples (the family's usual
+ *  item every time: roti, rice, curd) and which are kinds of the family's own (no catalog kind; nothing new suggested). Only
+ *  what the household's own seed and facts state plainly; a slot or template not listed is not scored. */
+export type TruthMeal = { slot: string; templates: TruthTemplate[]; staples?: string[]; own?: string[] };
+/** A part: a kind, or a kind and one of its sub-kinds. */
+export const part = (kind: string, sub?: string): TruthPart => (sub ? { kind, sub } : { kind });
+/** A part of the family's fixed dishes. */
+export const items = (...names: string[]): TruthPart => ({ items: names });
+/** A template from its parts, kind names as plain strings ("Rice", "Sabzi/Poriyal/Thoran" = kind Sabzi, sub-kind
+ *  Poriyal/Thoran: the first "/" splits kind from sub-kind). */
+export const tpl = (parts: (string | TruthPart)[], share?: Frequency): TruthTemplate => ({
+  parts: parts.map((x) => (typeof x !== "string" ? x : x.includes("/") ? part(x.slice(0, x.indexOf("/")), x.slice(x.indexOf("/") + 1)) : part(x))),
+  ...(share ? { share } : {}),
+});
 
 /** A rule (spec `rules`). `quote`: what the saved quote must contain (a fragment of the family's words). `also`: other
  *  `what`s that mean the same here (a swap read as require). Items are tags (vocab.ts) or plain words ("brinjal"). */
@@ -87,6 +111,11 @@ export type Truth = {
   seed: TruthSeed[];
   /** Eval 2 only: the week's one-off changes. */
   week?: WeekEvent[];
+  /** The family's cuisine profile in the catalog's cuisine words (lib/catalog.ts CUISINES), judged from what they eat:
+   *  `cuisines` must be read; `cuisinesAlso` may be (a neighbouring region their dishes also point to). */
+  cuisines?: string[]; cuisinesAlso?: string[];
+  /** The expected meal templates per slot, in kinds terms (kinds model, 25 Nov). */
+  meals?: TruthMeal[];
   /** Notes for the judge, in words. */
   judgeNotes: string[];
 };
@@ -172,3 +201,12 @@ export function dateOf(monday: string, day: Weekday): string {
   return d.toISOString().slice(0, 10);
 }
 export const weekdayOfDate = (date: string): Weekday => WEEK[(new Date(`${date}T00:00:00Z`).getUTCDay() + 6) % 7];
+
+/** Owner, 26 Nov: "Kids coming home for lunch is not a valid case for now." A school-going child (a TRUTH child with a
+ *  `household.weekly` school entry) is away at the shared lunch on their school days, whatever the facts say about coming
+ *  home: they carry a box or eat at school. The scorer's expectation only; TRUTH is left as written. */
+export function schoolLunchAway(h: Household, person: string, day: Weekday): boolean {
+  if (!h.truth.people.some((p) => p.group === "child" && sameName(p.name, person))) return false;
+  const weekly = (h.household["household.weekly"] ?? []) as { person: string; where?: string; weekdays?: string[] }[];
+  return weekly.some((w) => sameName(w.person, person) && /school/i.test(w.where ?? "") && (w.weekdays ?? []).includes(day));
+}

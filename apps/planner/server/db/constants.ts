@@ -12,6 +12,8 @@ export const SLOT_KINDS = ["main", "custom", "addon"] as const;
 export type SlotKind = (typeof SLOT_KINDS)[number];
 /** Planning order: Breakfast 10, a custom slot from breakfast (a tiffin) 20, Lunch 30, snacks 40, Dinner 50, add-ons 60 on. */
 export const SLOT_ORDER = { Breakfast: 10, tiffin: 20, Lunch: 30, snack: 40, Dinner: 50, addon: 60 } as const;
+/** A person's own meal in place of a main meal (a custom slot) sits this far after it in the day's order: its meal is that one. */
+export const INSTEAD_STEP = 5;
 /** A slot-day not cooked at home. */
 export const SKIPS = ["eaten_out", "ordered_in"] as const;
 export type Skip = (typeof SKIPS)[number];
@@ -54,15 +56,12 @@ export const STAPLES_FROM_PLANNED = false;
 
 // ── The weekly plan (make_plan, spec §5; decided defaults, tunable) ──
 
-/** The days (inclusive range [min, max]) a week a dish or a soft rule comes, by how often. A dish with nothing said comes on
- *  DEFAULT_DISH_DAYS days at most; a daily dish on every slot-day of its slot. */
+/** The days (inclusive range [min, max]) a week a dish or a soft rule comes, by how often. A daily dish comes on every
+ *  slot-day of its slot. A dish with nothing said has no count: the rotation spreads it (kinds model, owner 25 Nov). */
 export const FREQUENCY_DAYS: Record<"usually" | "sometimes" | "rarely" | "daily", [number, number]> = { usually: [4, 5], sometimes: [2, 3], rarely: [0, 1], daily: [7, 7] };
-export const DEFAULT_DISH_DAYS = 2;
-/** A non-staple dish is not on a slot within this many days of itself; the feasibility check may widen it to the relaxed one. */
-export const REPEAT_WINDOW_DAYS = 3;
-export const REPEAT_WINDOW_RELAXED = 2;
-/** At most this many slot calls run at once. */
-export const SLOT_CALLS_AT_ONCE = 3;
+/** How many days of a 7-day week a meal's template comes when the family said it in words ("usually", "sometimes"): a part
+ *  week has its share of these. "<n>/week" is exactly n. */
+export const TEMPLATE_DAYS: Record<"usually" | "sometimes" | "rarely" | "daily", number> = { usually: 5, sometimes: 2, rarely: 1, daily: 7 };
 /** At most this many dishes a contains read asks about in one call. */
 export const CONTAINS_BATCH = 40;
 /** A tag that is a kind of another: a chicken dish has meat, a peanut dish has nuts. */
@@ -125,9 +124,6 @@ export const appOf = (v: unknown): GroceryApp | null => (typeof v === "string" ?
 /** Can the agent copy a cart into the app? Amazon has no cart tool: its cart is built when the family orders. */
 export const CART_SYNC: Record<GroceryApp, boolean> = { zepto: true, "swiggy-instamart": true, "zomato-blinkit": true, bigbasket: true, amazon: false };
 
-/** Dishes served with most meals: a week may hold them on many days without counting as a repeat. */
-export const STAPLE_DISHES = ["roti", "rotis", "chapati", "chapatis", "phulka", "phulkas", "rice", "plain rice", "steamed rice", "curd", "dahi", "raita",
-  "salad", "papad", "pickle", "buttermilk", "chaas", "milk", "fruit", "fruits"] as const;
 
 /** How often the family has a dish, or keeps a soft rule, in their words (owner, 23 Nov): usually (most days, most nights,
  *  daily), sometimes (sometimes, "when he's tired", now and then), rarely (once in a while, occasionally). */
@@ -138,6 +134,27 @@ export type Often = (typeof OFTEN)[number];
 export const DISH_DAYS_MAX: Record<Often, number> = { usually: 5, sometimes: 2, rarely: 1 };
 /** The meals a week a soft rule is kept at, by how often ("millets are good for him": 2 to 3 meals, not every meal). */
 export const RULE_TIMES: Record<Often, [number, number]> = { usually: [4, 5], sometimes: [2, 3], rarely: [0, 1] };
+
+/** What the family said about a planned dish (plan_feedback): liked, disliked, swapped for another, skipped, or never again. */
+export const FEEDBACK_ACTIONS = ["liked", "disliked", "swapped_to", "skipped", "never"] as const;
+export type FeedbackAction = (typeof FEEDBACK_ACTIONS)[number];
+/** The actions that count against a dish, and how many of them make a rule worth proposing once. */
+export const AGAINST_ACTIONS: readonly FeedbackAction[] = ["disliked", "swapped_to", "never"];
+export const PROPOSE_AFTER = 2;
+
+/** A person's food goals (people.targets): more or less protein, carbs and fat than usual. */
+export const TARGET_LEVELS = { protein: ["high", "normal", "low"], carbs: ["low", "normal", "high"], fat: ["low", "normal", "high"] } as const;
+export type TargetKey = keyof typeof TARGET_LEVELS;
+
+/** The first plan's length from today (the setup's first task), and how many days from its start the setup plans before it is done. */
+export const FIRST_PLAN_DAYS = 3;
+export const SETUP_PLAN_DAYS = 7;
+/** A household whose first plan started this long ago is past setup, feedback or not (an install from before 4.2). */
+export const SETUP_SETTLED_DAYS = 14;
+/** The most days one make_plan call plans from a date. */
+export const PLAN_DAYS_MAX = 14;
+/** The meals planned when the family has not said: lunch and dinner. */
+export const DEFAULT_SLOTS = ["Lunch", "Dinner"] as const;
 
 /** How a dish went, as the family says it: good, okay, or didn't work. */
 export const DISH_RATINGS = ["good", "okay", "didnt_work"] as const;

@@ -40,11 +40,15 @@ function householdNames(): string[] {
   return [...names].map((n) => n.replace(/^./, (c) => c.toUpperCase()));
 }
 
-/** The model-facing text of the planner: its manifests, every Markdown file under server/, and the strings, templates and
+/** The model-facing text of the planner: its manifests, its published skills, every Markdown file under server/, and the strings, templates and
  *  regexes of server code (tests and the test kit excluded; comments are not sent to a model). */
 function modelFacing(): { file: string; line: number; text: string }[] {
   const out: { file: string; line: number; text: string }[] = [];
   for (const f of ["flock.app.json", "flock.marketplace.json", "catalog.json", "settings.json"].map((x) => join(APP, x)).filter(existsSync))
+    readFileSync(f, "utf8").split("\n").forEach((text, i) => out.push({ file: relative(APP, f), line: i + 1, text }));
+  // The published skills (skills/<id>/instructions.md) are read by the agent whole.
+  const skills = join(APP, "skills");
+  if (existsSync(skills)) for (const f of walk(skills).filter((x) => x.endsWith(".md")))
     readFileSync(f, "utf8").split("\n").forEach((text, i) => out.push({ file: relative(APP, f), line: i + 1, text }));
   for (const f of walk(SERVER)) {
     if (/\.test\.ts$|testkit\.ts$/.test(f)) continue;

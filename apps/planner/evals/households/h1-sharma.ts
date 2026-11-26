@@ -1,6 +1,6 @@
 // 1. North Indian, both parents in office, one child with a school tiffin, a paid cook Mon–Sat twice a day; Sunday the mother
 // cooks. Eggs fine, chicken only on weekends. Frequency words: parathas on weekends, rajma twice a week, Maggi on Fridays.
-import { avoid, dish, mains, MON_SAT, note, SCHOOL, veg, type Household } from "../lib/truth";
+import { avoid, dish, mains, MON_SAT, note, SCHOOL, veg, items, tpl, type Household } from "../lib/truth";
 
 export const h1: Household = {
   id: "h1-sharma", title: "North Indian, office parents, cook Mon–Sat, eggs OK, chicken on weekends",
@@ -51,10 +51,10 @@ export const h1: Household = {
     library: [
       ...dish("Poha", ["Breakfast", "Vihaan's tiffin"]), ...dish("Bread omelette", ["Breakfast"]), ...dish("Aloo paratha", ["Breakfast"], { days: ["Sat", "Sun"] }),
       ...dish("Cornflakes", ["Breakfast"], { frequency: "sometimes", contains: ["dairy"] }), ...dish("Besan chilla", ["Breakfast"]),
-      ...dish("Sandwich", ["Vihaan's tiffin"]), ...dish("Paratha roll", ["Vihaan's tiffin"]), ...dish("Maggi", ["Vihaan's tiffin"], { days: ["Fri"] }),
+      ...dish("Sandwich", ["Vihaan's tiffin"]), ...dish("Paratha roll", ["Vihaan's tiffin"], { kind: "Roll" }), ...dish("Maggi", ["Vihaan's tiffin"], { days: ["Fri"] }),
       ...dish("Dal", ["Lunch", "Dinner"]), ...dish("Chawal", ["Lunch"]), ...dish("Roti", ["Lunch", "Dinner"]), ...dish("Raita", ["Lunch"]),
-      ...dish("Rajma chawal", ["Lunch"], { frequency: "2/week" }), ...dish("Aloo gobi", ["Lunch"]), ...dish("Bhindi", ["Lunch"]), ...dish("Lauki", ["Lunch"]),
-      ...dish("Aloo gobi", ["Dinner"], { unsaid: true }), ...dish("Bhindi", ["Dinner"], { unsaid: true }), ...dish("Lauki", ["Dinner"], { unsaid: true }),
+      ...dish("Rajma chawal", ["Lunch"], { frequency: "2/week" }), ...dish("Aloo gobi", ["Lunch"]), ...dish("Bhindi", ["Lunch"], { kind: "Sabzi" }), ...dish("Lauki", ["Lunch"], { kind: "Sabzi" }),
+      ...dish("Aloo gobi", ["Dinner"], { unsaid: true }), ...dish("Bhindi", ["Dinner"], { unsaid: true, kind: "Sabzi" }), ...dish("Lauki", ["Dinner"], { unsaid: true, kind: "Sabzi" }),
       ...dish("Paneer bhurji", ["Dinner"]), ...dish("Matar paneer", ["Dinner"]), ...dish("Chicken curry", ["Dinner"], { days: ["Sat", "Sun"] }),
     ],
     rules: [
@@ -67,6 +67,14 @@ export const h1: Household = {
       { slot: "Vihaan's tiffin", dishes: ["Sandwich"] }, { slot: "Vihaan's tiffin", dishes: ["Paratha roll"] }, { slot: "Vihaan's tiffin", dishes: ["Poha"] }, { slot: "Vihaan's tiffin", dishes: ["Maggi"] },
       { slot: "Lunch", dishes: ["Dal", "Chawal", "Roti", "Aloo gobi", "Raita"] }, { slot: "Lunch", dishes: ["Rajma chawal", "Raita"] }, { slot: "Lunch", dishes: ["Dal", "Chawal", "Roti", "Bhindi", "Raita"] },
       { slot: "Dinner", dishes: ["Roti", "Dal", "Lauki"] }, { slot: "Dinner", dishes: ["Roti", "Matar paneer"] }, { slot: "Dinner", dishes: ["Roti", "Dal", "Paneer bhurji"] },
+    ],
+    cuisines: ["north"], cuisinesAlso: ["punjab", "central", "west", "continental", "indo_chinese"],
+    meals: [
+      { slot: "Breakfast", templates: [tpl(["Poha"]), tpl(["Egg/Eggs"]), tpl(["Paratha"]), tpl(["Chilla"]), tpl(["Cereal"])] },
+      { slot: "Vihaan's tiffin", templates: [tpl(["Poha"]), tpl(["Sandwich"]), tpl(["Roll"]), tpl(["Noodles"])] },
+      // Rajma chawal is their one dish (twice a week), with its raita; every other lunch is the full plate.
+      { slot: "Lunch", staples: ["Roti", "Rice", "Raita"], templates: [tpl(["Roti", "Rice", "Dal", "Sabzi", "Raita"]), tpl([items("Rajma chawal"), "Raita"], "2/week")] },
+      { slot: "Dinner", staples: ["Roti"], templates: [tpl(["Roti", "Dal", "Sabzi"]), tpl(["Roti", "Gravy/Paneer"])] },
     ],
     judgeNotes: ["Chicken only on Saturday and Sunday; eggs any day.", "Vihaan's tiffin Monday to Friday only; he is not home for weekday lunch.", "Sunday dinner is ordered in."],
   },

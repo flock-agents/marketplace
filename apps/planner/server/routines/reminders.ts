@@ -9,7 +9,7 @@ import { addDays, todayStr } from "../dates";
 import { getHouse, houseView, isObject, readUntil, shoppingApps } from "../family";
 import { familyKnown } from "../gate";
 import { buildReminder, type Which } from "../reminder";
-import { wake, type RoutineCtx } from "./ctx";
+import { SEND_TO_LINE, sendTo, wake, type RoutineCtx } from "./ctx";
 
 /** The time of day a routine runs at, as "HH:MM", read from its trigger as Flock sends it (`{ type: "schedule", cron }`, or
  *  the cron itself). `daily`: "0 15 * * *" is 15:00. `weekly`: one day of the week, "0 11 * * 0" is 11:00. Null for anything
@@ -44,7 +44,7 @@ export const REMINDER_PROMPT = (which: Which): string => [
   "3. For each cart in `carts` with sync: true, put the same lines in that app's cart with its connector, then sync_cart what the app's cart now holds (its delivery gap included).",
   `4. Call get_reminder { which: "${which}", date } again with the same date: the same reminder, nothing is asked or added twice, and its delivery_gap is now the app's cart as it is. Send that answer's \`text\` on WhatsApp word for word, or its \`app_text\` with its \`block\` in the app chat.`,
   "5. For each cart in `ordered` (Order without asking is on; a retry lists the same ones): send its `message` word for word, check out on its app as the guide says, then record_order { order_id, placed: true, app_order_ref }.",
-  "6. The family's replies: running low or still in stock (\"1 low, 2 fine for 2 weeks\") is answer_running_low; \"add dal\" is set_cart_line; a yes to a cart is order_cart { app }; the answer to \"Yesterday's plan had <dish>...\" (the afternoon text's last lines, from its `feedback`) is record_feedback { date, slot, dish, made, liked, again } for each dish, nothing when they do not answer. Never ask anything else about what was cooked.",
+  "6. The family's replies: running low or still in stock (\"1 low, 2 fine for 2 weeks\") is answer_running_low; \"add dal\" is set_cart_line; a yes to a cart is order_cart { app }; the answer to \"Yesterday's plan had <dish>...\" (the afternoon text's last lines, from its `feedback`) is record_feedback { date, slot, dish, made, liked, again } for each dish, nothing when they do not answer. The answer to \"Tomorrow's new dish...: OK to make it, or swap?\" (the evening text, from its `new_dishes`) is record_feedback { date, slot, dish, answer: \"ok\" } (they will make it), answer: \"swap\" (plan something else that day) or answer: \"dont_like\" (never suggest it again), one call a dish; a plain \"ok\" covers every dish asked; no reply, no call. Never ask anything else about what was cooked.",
 ].join("\n");
 
 /** One reminder's run: record its time; for a family the app knows, wake the agent when the reminder has something to say
@@ -65,7 +65,8 @@ export async function reminder(ctx: RoutineCtx, which: Which, now: Date = new Da
   const synced = houseView(getHouse(db)).history_synced;
   const mine = (app: string) => (ctx.agentId ? readUntil(synced, app, `agent:${ctx.agentId}`, true) : Object.values(synced[app]).sort()[0] ?? null);
   const since = Object.fromEntries(Object.keys(synced).map((app) => [app, mine(app)]).filter((e): e is [string, string] => !!e[1]));
-  await wake(ctx, REMINDER_PROMPT(which), { which, date, connected, since });
+  const to = sendTo(getHouse(db), "shopping");
+  await wake(ctx, `${REMINDER_PROMPT(which)}${to.send_to ? `\n${SEND_TO_LINE}` : ""}`, { which, date, connected, since, ...to });
 }
 
 export const afternoonReminder = (ctx: RoutineCtx, now?: Date) => reminder(ctx, "afternoon", now);

@@ -6,12 +6,16 @@
 import type { Hono } from "hono";
 import { desc, eq, sql } from "drizzle-orm";
 import { slot_days, slot_dishes } from "./db/schema";
-import { DISH_RATINGS, RATINGS_KEPT, type DishRating } from "./db/constants";
+import { DISH_RATINGS, RATINGS_KEPT, type DishRating, type FeedbackAction } from "./db/constants";
 import { todayStr } from "./dates";
 import { dishKey, type LastTime } from "./dishText";
 import { youtubeThumb } from "./messages";
 import { isObject, name, refuse, words, writeRoutes, type Db, type Emit } from "./family";
 import { listLibrary, updateLibraryByName, upsertLibrary, type LibraryDish } from "./slotStore";
+import { proposeRule, recordFeedback } from "./feedback";
+
+/** What a rating says for plan_feedback: okay says neither way. */
+const FEEDBACK_OF: Record<DishRating, FeedbackAction | null> = { good: "liked", okay: null, didnt_work: "disliked" };
 
 /** What the book reads of a dish: its video and ratings, the same on each of its library rows. */
 export type BookRow = Pick<LibraryDish, "name" | "video_url" | "video_title" | "video_thumbnail" | "rating" | "rating_note" | "rated_on" | "rated_by" | "ratings">;
@@ -148,20 +152,28 @@ export function mountDishBookRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: {
     return { body: { dish: bookView(row, dish) } };
   });
 
-  // rate_dishes { date?, ratings: [{ dish | dish_id, rating, note?, said_by? }] }: how each dish went on a day (today unless
-  // given), all in one call.
+  // rate_dishes { date?, ratings: [{ dish | dish_id, rating, note?, said_by?, again? }] }: how each dish went on a day (today
+  // unless given), all in one call. `again: false`: never planned again (a dish the family turned down). Each is kept in
+  // plan_feedback too; a dish turned down twice answers `proposed_rule` (feedback.ts).
   write("/api/dish-book/ratings", (b, by) => {
-    const shape = "ratings must be a list of { dish, rating: good | okay | didnt_work, note?, said_by? }";
+    const shape = "ratings must be a list of { dish, rating: good | okay | didnt_work, note?, said_by?, again?: false to never plan it again }";
     if (!Array.isArray(b.ratings) || !b.ratings.length) refuse(shape);
     const date = b.date == null ? today() : typeof b.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(b.date) ? b.date : refuse("date must be a date as YYYY-MM-DD");
     if (date > today()) refuse(`date ${date} is after today: rate a dish once it is eaten`);
     const sent = (b.ratings as unknown[]).map((r, n) => {
       if (!isObject(r)) return refuse(shape);
       const dish = dishName(db, r, `ratings[${n}]: `);
-      return { dish, entry: { rating: ratingOf(r.rating, `${dish}: rating`), note: r.note === undefined ? null : words(r.note, `${dish}: note`),
+      if (r.again !== undefined && typeof r.again !== "boolean") refuse(`${dish}: again must be true or false`);
+      return { dish, never: r.again === false, entry: { rating: ratingOf(r.rating, `${dish}: rating`), note: r.note === undefined ? null : words(r.note, `${dish}: note`),
         date, by: r.said_by == null ? null : words(r.said_by, `${dish}: said_by`) } };
     });
-    const rows = commit((tx, ch) => sent.map((s) => rateDish(tx, s.dish, s.entry, by, ch)));
-    return { body: { dishes: rows.map((r) => bookView(r, r.name)) } };
+    const { rows, proposal } = commit((tx, ch) => {
+      const rows = sent.map((s) => rateDish(tx, s.dish, s.entry, by, ch));
+      for (const s of sent.filter((x) => x.never)) updateLibraryByName(tx, s.dish, { disliked: 1 }, by, ch);
+      recordFeedback(tx, sent.flatMap((s) => { const action = s.never ? "never" : FEEDBACK_OF[s.entry.rating];
+        return action ? [{ date, slot: null, dish: s.dish, action, who: s.entry.by, quote: s.entry.note }] : []; }), by, ch);
+      return { rows, proposal: proposeRule(tx, sent.map((s) => s.dish), by, ch) };
+    });
+    return { body: { dishes: rows.map((r) => bookView(r, r.name)), ...proposal } };
   });
 }

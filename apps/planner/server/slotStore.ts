@@ -12,6 +12,7 @@ import { LOOKS_LIKE_MAX, SETTINGS, SLOT_ORDER, STAPLE_MIN_ROWS, STAPLE_SHARE, ST
   type Frequency, type LibraryOrigin, type RuleWhat, type Skip, type SlotDayStatus, type SlotKind } from "./db/constants";
 import { addDays, type Weekday } from "./dates";
 import { dishKey } from "./dishText";
+import { checkMealShape, type MealKind, type MealTemplate } from "./kinds";
 import type { Db, Emit } from "./family";
 
 export type Change = Parameters<Emit>;
@@ -29,8 +30,11 @@ export type RuleRow = typeof rules.$inferSelect;
 
 export type SkipDay = { day: Weekday; skip: Skip };
 export type Slot = { id: string; name: string; kind: SlotKind; addon_of: string | null; usual_people: string[]; days: Weekday[];
-  skip_days: SkipDay[]; order: number; active: boolean };
-export type Guest = { count: number; rules?: string[] };
+  skip_days: SkipDay[]; order: number; active: boolean;
+  /** The dish families this meal is built from, and the ways it is plated (kinds.ts); null = not read yet. */
+  kinds: MealKind[] | null; templates: MealTemplate[] | null };
+/** Unnamed guests at one meal; `as`: the people of the family they count as for a rule's when_present (the parents, visiting). */
+export type Guest = { count: number; rules?: string[]; as?: string[] };
 export type Ingredient = { item: string; amount: number | null; unit: string | null };
 export type SlotDish = { id: string; position: number; dish: string; new: boolean; feedback_asked: boolean; note: string | null; not_for: string[];
   ingredients: (Ingredient & { id: string })[] };
@@ -40,25 +44,30 @@ export type SlotDay = { id: string; date: string | null; slot: string; people: s
   dishes: SlotDish[]; created_at: string | null };
 export type RatingEntry = { rating: string; note: string | null; date: string; by: string | null };
 export type LibraryDish = { id: string; key: string; slot: string; name: string; frequency: Frequency | null; days: Weekday[] | null;
-  contains: string[]; contains_read: string[]; origin: LibraryOrigin; suggested: boolean; untried: boolean; offers: number;
+  /** The family's own words for how often or on which days ("rajma or chole twice a week"), given to the plan call beside them. */
+  said: string | null; contains: string[]; contains_read: string[]; origin: LibraryOrigin; suggested: boolean; untried: boolean; offers: number;
   disliked: boolean; prep: string | null; video_url: string | null; video_title: string | null; video_thumbnail: string | null;
-  rating: string | null; rating_note: string | null; rated_on: string | null; rated_by: string | null; ratings: RatingEntry[] };
+  rating: string | null; rating_note: string | null; rated_on: string | null; rated_by: string | null; ratings: RatingEntry[];
+  /** The kind it is a variant of, its catalog sub-kind and the catalog item it is (kinds.ts); null = not mapped / not in the catalog. */
+  kind: string | null; sub: string | null; catalog_item: string | null };
 export type Rule = { id: string; hard: boolean; what: RuleWhat; who: string | null; slots: string[] | null; days: Weekday[] | null;
-  items: string[] | null; to: string | null; frequency: Frequency | null; per_meal: number | null; fasting_food: string[] | null; quote: string };
+  items: string[] | null; to: string | null; frequency: Frequency | null; per_meal: number | null; fasting_food: string[] | null;
+  /** The rule holds only at slot-days where one of these people is (or a guest counted as them); null: always. */ when_present?: string[] | null; quote: string };
 
 // ── What a write takes: only the fields given change (an update), the rest take their defaults (an insert) ──
 
 export type SlotInput = { name: string; kind?: SlotKind; addon_of?: string | null; usual_people?: string[]; days?: Weekday[];
-  skip_days?: SkipDay[]; order?: number; active?: boolean };
+  skip_days?: SkipDay[]; order?: number; active?: boolean; kinds?: MealKind[] | null; templates?: MealTemplate[] | null };
 export type SlotDishInput = { dish: string; new?: boolean; feedback_asked?: boolean; note?: string | null; not_for?: string[]; ingredients?: Ingredient[] };
 /** `dishes` given: they replace the slot-day's dishes (and their ingredients). `date` null: a seed example, always a new row. */
 export type SlotDayInput = { date: string | null; slot: string; people?: string[]; guests?: Guest[]; occasion?: string | null;
   new_dishes_allowed?: number | null; skip?: Skip | null; status?: SlotDayStatus; edited?: boolean; note?: string | null; dishes?: SlotDishInput[] };
-export type LibraryInput = { name: string; slot: string; origin?: LibraryOrigin; frequency?: Frequency | null; days?: Weekday[] | null;
+export type LibraryInput = { name: string; slot: string; origin?: LibraryOrigin; frequency?: Frequency | null; days?: Weekday[] | null; said?: string | null;
   contains?: string[]; contains_read?: string[]; suggested?: boolean; untried?: boolean; offers?: number; disliked?: boolean;
-  prep?: string | null; video_url?: string | null; video_title?: string | null; video_thumbnail?: string | null };
-export type RuleInput = Omit<Rule, "id" | "who" | "slots" | "days" | "items" | "to" | "frequency" | "per_meal" | "fasting_food"> &
-  Partial<Pick<Rule, "who" | "slots" | "days" | "items" | "to" | "frequency" | "per_meal" | "fasting_food">>;
+  prep?: string | null; video_url?: string | null; video_title?: string | null; video_thumbnail?: string | null;
+  kind?: string | null; sub?: string | null; catalog_item?: string | null };
+export type RuleInput = Omit<Rule, "id" | "who" | "slots" | "days" | "items" | "to" | "frequency" | "per_meal" | "fasting_food" | "when_present"> &
+  Partial<Pick<Rule, "who" | "slots" | "days" | "items" | "to" | "frequency" | "per_meal" | "fasting_food" | "when_present">>;
 
 // ── JSON lists and flags ──
 
@@ -72,13 +81,15 @@ const given = <T extends Record<string, unknown>>(o: T): Partial<T> => Object.fr
 const sameName = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
 
 export const slotOf = (r: SlotRow): Slot => ({ id: r.id, name: r.name, kind: r.kind as SlotKind, addon_of: r.addon_of, usual_people: arr(r.usual_people),
-  days: arr(r.days), skip_days: arr(r.skip_days), order: r.order, active: r.active !== 0 });
+  days: arr(r.days), skip_days: arr(r.skip_days), order: r.order, active: r.active !== 0, kinds: arrOrNull(r.kinds), templates: arrOrNull(r.templates) });
 export const libraryOf = (r: LibraryRow): LibraryDish => ({ id: r.id, key: r.key, slot: r.slot, name: r.name, frequency: (r.frequency as Frequency | null) ?? null,
-  days: arrOrNull(r.days), contains: arr(r.contains), contains_read: arr(r.contains_read), origin: r.origin as LibraryOrigin, suggested: !!r.suggested,
+  days: arrOrNull(r.days), said: r.said ?? null, contains: arr(r.contains), contains_read: arr(r.contains_read), origin: r.origin as LibraryOrigin, suggested: !!r.suggested,
   untried: !!r.untried, offers: r.offers ?? 0, disliked: !!r.disliked, prep: r.prep, video_url: r.video_url, video_title: r.video_title,
-  video_thumbnail: r.video_thumbnail, rating: r.rating, rating_note: r.rating_note, rated_on: r.rated_on, rated_by: r.rated_by, ratings: arr(r.ratings) });
+  video_thumbnail: r.video_thumbnail, rating: r.rating, rating_note: r.rating_note, rated_on: r.rated_on, rated_by: r.rated_by, ratings: arr(r.ratings),
+  kind: r.kind ?? null, sub: r.sub ?? null, catalog_item: r.catalog_item ?? null });
 export const ruleOf = (r: RuleRow): Rule => ({ id: r.id, hard: !!r.hard, what: r.what as RuleWhat, who: r.who, slots: arrOrNull(r.slots), days: arrOrNull(r.days),
-  items: arrOrNull(r.items), to: r.to, frequency: (r.frequency as Frequency | null) ?? null, per_meal: r.per_meal, fasting_food: arrOrNull(r.fasting_food), quote: r.quote });
+  items: arrOrNull(r.items), to: r.to, frequency: (r.frequency as Frequency | null) ?? null, per_meal: r.per_meal, fasting_food: arrOrNull(r.fasting_food),
+  when_present: arrOrNull(r.when_present), quote: r.quote });
 
 /** Run a write in one transaction; the pages hear of its changes only once it is committed. */
 export function commit<T>(db: Db, emit: Emit, run: (tx: Db, changes: Change[]) => T): T {
@@ -103,7 +114,12 @@ export function getSlot(db: Db, name: string): Slot | null {
 export function upsertSlot(tx: Db, s: SlotInput, by: string, changes: Change[]): Slot {
   const had = getSlot(tx, s.name);
   const set = given({ kind: s.kind, addon_of: s.addon_of, usual_people: s.usual_people && js(s.usual_people), days: s.days && js(s.days),
-    skip_days: s.skip_days && js(s.skip_days), order: s.order, active: bit(s.active) });
+    skip_days: s.skip_days && js(s.skip_days), order: s.order, active: bit(s.active),
+    kinds: s.kinds === undefined ? undefined : js(s.kinds), templates: s.templates === undefined ? undefined : js(s.templates) });
+  if (s.kinds !== undefined || s.templates !== undefined) {
+    const errs = checkMealShape(s.kinds ?? had?.kinds ?? [], s.templates ?? had?.templates ?? []);
+    if (errs.length) throw new Error(`${s.name}: ${errs.join("; ")}`);
+  }
   if (had) {
     const row = tx.update(slots).set({ ...set, updated_at: now(), updated_by: by }).where(eq(slots.id, had.id)).returning().get();
     changes.push(["slots", row.id, "update", by]);
@@ -256,9 +272,10 @@ export function getLibraryDish(db: Db, name: string, slot: string): LibraryDish 
  *  one is `family_added` unless an origin is given. */
 export function upsertLibrary(tx: Db, d: LibraryInput, by: string, changes: Change[]): LibraryDish {
   const had = getLibraryDish(tx, d.name, d.slot);
-  const set = given({ origin: d.origin, frequency: d.frequency, days: d.days === undefined ? undefined : js(d.days),
+  const set = given({ origin: d.origin, frequency: d.frequency, days: d.days === undefined ? undefined : js(d.days), said: d.said,
     contains: d.contains && js(d.contains), contains_read: d.contains_read && js(d.contains_read), suggested: bit(d.suggested), untried: bit(d.untried),
-    offers: d.offers, disliked: bit(d.disliked), prep: d.prep, video_url: d.video_url, video_title: d.video_title, video_thumbnail: d.video_thumbnail });
+    offers: d.offers, disliked: bit(d.disliked), prep: d.prep, video_url: d.video_url, video_title: d.video_title, video_thumbnail: d.video_thumbnail,
+    kind: d.kind, sub: d.sub, catalog_item: d.catalog_item });
   if (had) {
     const row = tx.update(library).set({ ...set, updated_at: now(), updated_by: by }).where(eq(library.id, had.id)).returning().get();
     changes.push(["library", row.id, "update", by]);
@@ -284,6 +301,22 @@ export function removeLibrary(tx: Db, name: string, slot: string, by: string, ch
   changes.push(["library", had.id, "delete", by]);
   return true;
 }
+/** A dish at a slot saved under another name: its library row (when a row of that name is at the slot already, that one stays
+ *  and this one goes) and the slot's seed examples. False when it was not there. */
+export function renameDish(tx: Db, name: string, slot: string, to: string, by: string, changes: Change[]): boolean {
+  const had = getLibraryDish(tx, name, slot);
+  if (!had || dishKey(name) === dishKey(to)) return false;
+  if (getLibraryDish(tx, to, slot)) removeLibrary(tx, name, slot, by, changes);
+  else {
+    tx.update(library).set({ name: to.trim(), key: dishKey(to), updated_at: now(), updated_by: by }).where(eq(library.id, had.id)).run();
+    changes.push(["library", had.id, "update", by]);
+  }
+  for (const d of seedSlotDays(tx, slot)) for (const x of d.dishes) if (dishKey(x.dish) === dishKey(name)) {
+    tx.update(slot_dishes).set({ dish: to.trim(), updated_at: now(), updated_by: by }).where(eq(slot_dishes.id, x.id)).run();
+    changes.push(["slot_dishes", x.id, "update", by]);
+  }
+  return true;
+}
 
 // ── Rules ──
 
@@ -292,7 +325,8 @@ export function listRules(db: Db): Rule[] {
 }
 const ruleCols = (r: Partial<RuleInput>) => given({ hard: bit(r.hard), what: r.what, who: r.who, slots: r.slots === undefined ? undefined : js(r.slots),
   days: r.days === undefined ? undefined : js(r.days), items: r.items === undefined ? undefined : js(r.items), to: r.to, frequency: r.frequency,
-  per_meal: r.per_meal, fasting_food: r.fasting_food === undefined ? undefined : js(r.fasting_food), quote: r.quote });
+  per_meal: r.per_meal, fasting_food: r.fasting_food === undefined ? undefined : js(r.fasting_food),
+  when_present: r.when_present === undefined ? undefined : r.when_present?.length ? js(r.when_present) : null, quote: r.quote });
 export function addRule(tx: Db, r: RuleInput, by: string, changes: Change[]): Rule {
   const row = tx.insert(rules).values({ ...ruleCols(r), hard: r.hard ? 1 : 0, what: r.what, quote: r.quote, updated_by: by }).returning().get();
   changes.push(["rules", row.id, "insert", by]);

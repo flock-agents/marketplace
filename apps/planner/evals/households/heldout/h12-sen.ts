@@ -55,7 +55,7 @@ export const h12: Household = {
     library: [
       ...dish("Poha", ["Breakfast"]), ...dish("Besan chilla", ["Breakfast"]), ...dish("Toast", ["Breakfast"]),
       ...dish("Luchi", ["Breakfast"], { days: ["Sun"] }), ...dish("Cholar dal", ["Breakfast"], { days: ["Sun"] }),
-      ...dish("Sandwich", ["Mili's tiffin"]), ...dish("Paratha roll", ["Mili's tiffin"]), ...dish("Pasta", ["Mili's tiffin"], { days: ["Fri"] }),
+      ...dish("Sandwich", ["Mili's tiffin"]), ...dish("Paratha roll", ["Mili's tiffin"], { kind: "Roll" }), ...dish("Pasta", ["Mili's tiffin"], { days: ["Fri"] }),
       ...dish("Rice", ["Lunch"]), ...dish("Dal", ["Lunch", "Dinner"]), ...dish("Aloo posto", ["Lunch"]), ...dish("Gatte ki sabzi", ["Lunch"], { contains: ["dairy"] }),
       ...dish("Roti", ["Lunch", "Dinner"]), ...dish("Kadhi", ["Lunch"], { frequency: "sometimes" }),
       ...dish("Aloo posto", ["Dinner"], { unsaid: true }), ...dish("Gatte ki sabzi", ["Dinner"], { unsaid: true, contains: ["dairy"] }),
@@ -79,6 +79,7 @@ export const h12: Household = {
       { slot: "Debjani and Mili's fish", dishes: ["Macher jhol"] }, { slot: "Papaji's dinner", dishes: ["Bajra roti"] }, { slot: "Papaji's dinner", dishes: ["Jowar roti"] },
     ],
     week: [{ kind: "stay", person: "Shefali", days: ["Fri", "Sat", "Sun"], dated: { person: "Shefali", what: "Debjani's mother staying for the weekend", from: "2026-12-04", to: "2026-12-06" } }],
+    cuisines: ["bengal", "rajasthan"], cuisinesAlso: ["east", "north", "west", "continental"],
     judgeNotes: ["Sanjay and Omprakash vegetarian (Omprakash also no eggs); Debjani and Mili have macher jhol twice a week at dinner, as their own dish.",
       "Omprakash: diabetic, no sugar, never rice at night (bajra or jowar roti), less salt.", "No beef.", "Mili's tiffin Monday to Friday; she is not home for weekday lunch.",
       "Debjani's mother Shefali stays Friday to Sunday this week."],

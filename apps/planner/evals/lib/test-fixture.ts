@@ -55,3 +55,12 @@ export const FIX: Household = {
     judgeNotes: [],
   },
 };
+
+/** The same household for Eval 2's scorer, its dal named the way a plan must name a dish ("Toor dal", not the bare kind
+ *  word "Dal", owner 25 Nov) and its two vegetables placed in the catalog's Sabzi kind (the catalog has no item "Bhindi"). */
+export const PLAN_FIX: Household = (() => {
+  const h = structuredClone(FIX);
+  h.truth.library = h.truth.library.map((d) => (d.name === "Dal" ? { ...d, name: "Toor dal" } : ["Bhindi", "Lauki"].includes(d.name) ? { ...d, kind: "Sabzi" } : d));
+  h.truth.seed = h.truth.seed.map((r) => ({ ...r, dishes: r.dishes.map((x) => (x === "Dal" ? "Toor dal" : x)) }));
+  return h;
+})();

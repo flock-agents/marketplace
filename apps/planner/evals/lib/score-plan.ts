@@ -5,11 +5,34 @@ import type { PlanOut, PlanSlotDay, SavedDish, SetupOut } from "./result";
 import { meanDishes, staplesOf, type HistoryRow } from "./history";
 import { truthTags, weeklyPeople } from "./truth-setup";
 import { canonTag, hasItem, PARENT, tagsOfName } from "./vocab";
-import type { Rates } from "./score-setup";
+import { slotMap, type Rates } from "./score-setup";
+import { isBareKindWord, isStapleKind, kindOf, mainTagsOf } from "./catalog";
 import {
-  WEEK, dateOf, dayOf, dishNameOf, frequencyRange, plain, sameName, sameNames, weekdayOfDate,
-  type Household, type Skip, type TruthRule, type TruthSlot, type Weekday,
+  WEEK, dateOf, dayOf, dishNameOf, frequencyRange, plain, sameName, sameNames, schoolLunchAway, weekdayOfDate,
+  type Household, type Skip, type TruthDish, type TruthPart, type TruthRule, type TruthSlot, type Weekday,
 } from "./truth";
+
+
+/** The scorer's own words for a plate (owner, 25 Nov base minimum). Bread or rice, on its own or in a dish's name. */
+const BREAD_RICE = ["roti", "rotis", "bhakar", "bhaat", "bhat", "poli", "chapatis", "rotli", "fulka", "luchi", "kulcha", "chapati", "chapathi", "phulka", "paratha", "parotta", "puri", "poori", "bhakri", "naan", "luchi", "rice", "chawal", "appam", "dosa", "idiyappam", "thepla", "bread", "kulcha", "bhature", "ragi", "millet"];
+/** A one-pot dish is a whole plate on its own. */
+const ONE_POT = ["khichdi", "khichuri", "pulao", "pulav", "biryani", "pongal", "bisibele", "bisi", "tehri", "upma", "poha", "chawal", "noodles", "pasta", "thali",
+  // A dosa-family dish is a meal with its chutney or sambar.
+  "dosa", "uthappam", "uttapam", "idli", "pesarattu", "adai", "appam", "idiyappam", "paniyaram"];
+/** A dish that is only a staple (a plate of these alone is bare). */
+const PLAIN_STAPLES = ["roti", "rotis", "bhakri", "bhakar", "bhaat", "bhat", "poli", "rotli", "fulka", "chapati", "phulka", "rice", "plain", "steamed", "curd", "dahi", "salad", "papad", "pickle", "achar", "raita", "buttermilk", "chaas", "bread"];
+export const OWN_SHARE = 0.3;
+/** A dish that is mostly onion, by its name (owner rule 7: onion, pyaaz, kanda, vengayam, ulli). */
+const MOSTLY_ONION = /\b(onions?|pyaa?z|pyaza|kanda|vengaya\w*|ulli)\b/i;
+/** A dish's note says it is made without onion and garlic, or the person's portion kept aside (owner rule 7). */
+/** A dish's note says it is made without something for this person (decided 21: "make without cashews for Anya"), or for the
+ *  whole house when no one is named ("make without peanuts"). */
+const withoutNoted = (note: string | null | undefined, person: string): boolean =>
+  !!note && note.split(/;\s*/).some((n) => /\bwithout\b/i.test(n)
+    && (new RegExp(`\\b${person.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(n) || !/\bfor\b/i.test(n)));
+const onionNoted = (note: string | null | undefined, person: string): boolean =>
+  !!note && note.split(/;\s*/).some((n) => /without onion/i.test(n) && /portion aside/i.test(n) && new RegExp(`\\b${person.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(n));
+export const NEW_WHY_MAX = 60;
 
 export type ExpectedSlotDay = { day: Weekday; date: string; slot: string; people: string[]; guests: number; guestItems: string[]; skip: Skip | null; fastingWithFood: string[] };
 
@@ -33,6 +56,8 @@ export function expectedSlotDays(h: Household, monday: string): ExpectedSlotDay[
         if (e.kind === "stay" && s.kind === "main" && !people.some((p) => sameName(p, e.person))) people = [...people, e.person];
         if (e.kind === "away") people = people.filter((p) => !sameName(p, e.person));
       }
+      // A school-going child is away at the weekday lunch (owner, 26 Nov), whatever TRUTH says about coming home.
+      if (s.kind === "main" && /^lunch$/i.test(s.name)) people = people.filter((p) => !schoolLunchAway(h, p, day));
       const fasting = t.rules.filter((r) => r.hard && r.what === "fasting" && r.who && r.days?.includes(day) && (!r.slots?.length || r.slots.includes(s.name) || r.slots.includes(base.name)));
       const withFood = fasting.filter((r) => r.fasting_food?.length).map((r) => r.who!);
       people = people.filter((p) => !fasting.some((r) => !r.fasting_food?.length && sameName(r.who!, p)));
@@ -50,18 +75,36 @@ export type PlanScore = { rates: Rates; tracked: Rates; notes: string[]; facts: 
 
 /** Score one week. `loaded`: the setup the planner was given (TRUTH, or TRUTH with a defect): its library's
  *  `contains_read` decides which tags were known (fail-closed), its seed the staples. Scoring is always against TRUTH. */
-export function scorePlan(h: Household, plan: PlanOut, loaded: SetupOut): PlanScore {
+/** `o.failClosed` (default true): a dish never read for a rule's item counts as a break (Eval 2 tests that the planner fails
+ *  closed). The end-to-end eval sets it false: there the question is whether a forbidden food was served, judged from the
+ *  dish's read and its name; an unread one is counted in facts.unread, not as a break. */
+export function scorePlan(h: Household, plan0: PlanOut, loaded: SetupOut, o: { failClosed?: boolean } = {}): PlanScore {
+  // The planner's own slot names read as TRUTH's ("School tiffin" is the household's "Snack box"), as Eval 1 maps them.
+  const names = new Map([...slotMap(h.truth.slots, (loaded.slots ?? []) as any)].map(([tn, sn]) => [lc(sn), tn]));
+  const asTruth = (x: string) => names.get(lc(x)) ?? x;
+  const plan: PlanOut = { ...plan0, slotDays: plan0.slotDays.map((sd) => ({ ...sd, slot: asTruth(sd.slot) })), library: plan0.library.map((d) => ({ ...d, slot: asTruth(d.slot) })) };
+  loaded = { ...loaded, library: loaded.library.map((d) => ({ ...d, slot: asTruth(d.slot) })) };
   const t = h.truth, rates: Rates = {}, tracked: Rates = {}, notes: string[] = [], facts: PlanScore["facts"] = {};
   const add = (field: string, ok: boolean, why?: string, into = rates) => { const r = (into[field] ??= [0, 0]); r[1]++; if (ok) r[0]++; else if (why) notes.push(`${field}: ${why}`); };
   const exp = expectedSlotDays(h, plan.week_start);
   const at = (date: string, slot: string) => plan.slotDays.find((x) => x.date === date && lc(x.slot) === lc(slot));
   const truthNames = [...new Set(t.library.map((d) => d.name))];
   const history: HistoryRow[] = loaded.seed.map((r) => ({ slot: r.slot, dishes: r.dishes, date: null }));
-  // The seed is the only history a fresh eval week has (planned rows never count); `daily` dishes are staples too.
+  // The seed is the only history a fresh eval week has (planned rows never count); `daily` dishes are staples too. A staple is
+  // the family's: TRUTH's seed makes them as well as the loaded one (in the end-to-end eval the loaded seed is what setup saved,
+  // and a seed row setup missed must not turn the family's every-day dish into one that must rotate).
+  // Only the rotation checks (section 5) use that union; the older checks keep the loaded seed's staples.
+  const truthHistory: HistoryRow[] = t.seed.map((r) => ({ slot: r.slot, dishes: r.dishes, date: null }));
   const staples = new Map(t.slots.map((s) => [s.name, staplesOf(history, s.name, t.library.filter((d) => d.slot === s.name && d.frequency === "daily").map((d) => d.name))]));
+  const truthStaples = new Map(t.slots.map((s) => [s.name, staplesOf(truthHistory, s.name)]));
   const isStaple = (slot: string, dish: string) => !!staples.get(slot)?.has(plain(dish));
+  const isFamilyStaple = (slot: string, dish: string) => isStaple(slot, dish) || !!truthStaples.get(slot)?.has(plain(dish));
   const dayOfSd = (sd: PlanSlotDay) => weekdayOfDate(sd.date);
   const cooked = plan.slotDays.filter((x) => !x.skip && x.dishes.length);
+  const words = (x: string) => plain(x).split(" ").filter(Boolean);
+  const hasWord = (x: string, list: readonly string[]) => words(x).some((w) => list.includes(w));
+  // One staple word ("Rice", "Phulka"), or plain or steamed rice; "Curd rice" is a dish.
+  const isBareStapleName = (x: string) => { const w = words(x); return (w.length === 1 && PLAIN_STAPLES.includes(w[0])) || (w.length === 2 && ["plain", "steamed"].includes(w[0]) && PLAIN_STAPLES.includes(w[1])); };
 
   // ── 1. Slot-days: filled, skips kept, nothing stray, the right people ──
   for (const e of exp) {
@@ -86,13 +129,15 @@ export function scorePlan(h: Household, plan: PlanOut, loaded: SetupOut): PlanSc
   /** What a planned dish has, and which tags are known. TRUTH's own dishes: TRUTH's tags, known as far as the loaded
    *  library read them. Other dishes: the planner's read. The eval's vocabulary of the planned name always counts. */
   const dishFacts = (name: string, slot: string): { tags: Set<string>; known: Set<string> } => {
-    const tags = tagsOfName(name);
+    // "Dal without onion and garlic", "Chivda (no peanuts)": what a name says it is made without is not in it.
+    const tags = tagsOfName(name.replace(/\(?\b(without|no|minus|sans)\b[^()]*\)?/gi, " "));
     const tn = dishNameOf(name, truthNames);
     const tdish = tn ? t.library.find((d) => d.name === tn && lc(d.slot) === lc(slot)) ?? t.library.find((d) => d.name === tn) : undefined;
     const exact = tdish && plain(tdish.name) === plain(name);
     if (tdish && exact) truthTags(tdish).forEach((x) => tags.add(x));
     const row = libRow(loaded.library, name, slot) ?? libRow(plan.library, name, slot);
-    if (row) row.contains.map(canonTag).forEach((x) => tags.add(x));
+    // A family dish has what the family's TRUTH says (a house that cooks without peanuts: its poha has none), not the planner's read.
+    if (row && !(tdish && exact)) row.contains.map(canonTag).forEach((x) => tags.add(x));
     return { tags, known: new Set((row?.contains_read ?? []).map(canonTag)) };
   };
   const knows = (known: Set<string>, item: string) => { for (let x: string | undefined = canonTag(item); x; x = PARENT[x]) if (known.has(x)) return true; return false; };
@@ -105,7 +150,7 @@ export function scorePlan(h: Household, plan: PlanOut, loaded: SetupOut): PlanSc
     const there = [...new Set([...sd.people, ...(e?.people ?? [])])];
     return r.who ? there.filter((p) => sameName(p, r.who!)) : there;
   };
-  let breaks = 0;
+  let breaks = 0, unread = 0;
   for (const r of t.rules.filter((x) => x.hard && x.what !== "note" && x.what !== "cap")) {
     const bad: string[] = [];
     for (const sd of cooked) {
@@ -123,8 +168,15 @@ export function scorePlan(h: Household, plan: PlanOut, loaded: SetupOut): PlanSc
         if (!eaters.length) continue;
         const f = dishFacts(d.name, sd.slot);
         for (const it of items) {
+          // Owner rule 7 (decided 5): onion and garlic never block a dish; it is made without, or their portion kept aside, as
+          // the dish's note says for each of them. Only a dish that is mostly onion breaks the rule.
+          if (canonTag(it) === "onion_garlic" && !MOSTLY_ONION.test(d.name) && eaters.every((p) => onionNoted(d.note, p))) continue;
+          // Decided 21: a catalog dish whose MAIN ingredients keep the rule is theirs when the note says it is made without the
+          // rest for each of them (suji upma without cashews). A main ingredient that breaks it is a break.
+          const main = mainTagsOf(d.name);
+          if (main && !hasItem(new Set(main), it) && eaters.every((p) => withoutNoted(d.note, p))) continue;
           if (hasItem(f.tags, it)) bad.push(`${dayOfSd(sd)} ${sd.slot}: ${d.name} has ${it} (${eaters.join(", ")})`);
-          else if (!knows(f.known, it)) bad.push(`${dayOfSd(sd)} ${sd.slot}: ${d.name}: ${it} unread (fail-closed)`);
+          else if (!knows(f.known, it)) { if (o.failClosed !== false) bad.push(`${dayOfSd(sd)} ${sd.slot}: ${d.name}: ${it} unread (fail-closed)`); else unread++; }
         }
       }
     }
@@ -155,6 +207,7 @@ export function scorePlan(h: Household, plan: PlanOut, loaded: SetupOut): PlanSc
     add("guest_rules", bad.length < sd.dishes.length, `${e.day} ${e.slot}: nothing for the guests (${e.guestItems.join(", ")})`);
   }
   facts.hard_breaks = breaks;
+  facts.unread_items = unread;
 
   // ── 3. Dishes from the slot's library, a staple, or an allowed new dish ──
   const newNames = new Set<string>();
@@ -188,31 +241,17 @@ export function scorePlan(h: Household, plan: PlanOut, loaded: SetupOut): PlanSc
   add("new_budget", counted <= budget, `${newNames.size} new dishes (${[...newNames].join(", ")}), setting ${budget}${allowances.length ? `, short slots' own: ${allowances.map(([s, a]) => `${s} ${a}`).join(", ")}` : ""}`);
   facts.new_dishes = newNames.size;
 
-  // ── 4. Frequency and days per dish, counted across all slots ──
-  /** A slot TRUTH's own dishes cannot fill within the default rules, when the planner says so in unmet (spec §5.2: the
-   *  library is too thin): its non-staple dishes with no frequency or days (k), 2 days each, are fewer than its places (n
-   *  cooked slot-days × m, its usual non-staple count). Such a slot may bring a dish back on an even share of its days,
-   *  ceil(n·m / k), and within floor(k / m) days of itself, and no sooner. null: the slot can be filled. */
-  const thin = (slot: string): { cap: number; gap: number } | null => {
-    const k = t.library.filter((d) => d.slot === slot && !d.frequency && !d.days && !isStaple(slot, d.name)).length;
-    const n = exp.filter((e) => e.slot === slot && !e.skip).length;
-    const rows = history.filter((r) => r.slot === slot && r.dishes.length).map((r) => r.dishes.filter((d) => !isStaple(slot, d)).length).sort((a, b) => a - b);
-    const m = rows.length ? Math.max(1, rows[Math.floor((rows.length - 1) / 2)]) : 1;
-    // The planner says so in unmet (before 23 Nov) or asks about the slot (owner 23 Nov: "I only know N dishes for <slot>").
-    if (!k || k * 2 >= n * m || ![...plan.unmet, ...(plan.asked ?? [])].some((u) => lc(u).includes(lc(slot)))) return null;
-    return { cap: Math.ceil((n * m) / k), gap: Math.max(1, Math.floor(k / m)) };
+  // ── 4. The family's own words on a dish (frequency, days, daily), counted in days across all slots ──
+  // Owner, 25 Nov (kinds model rule 3): the old twice-a-week cap (default_cap, main_twice) is gone; only what the family said
+  // about a dish still limits it.
+  // Owner rule 3 (class 1): words said of a category ("pasta on Sundays", "kurma twice a week": a kind or sub-kind's own word,
+  // no one dish) hold for every item of it, whatever its name ("Macaroni" is a pasta).
+  const categoryOf = (name: string) => { const k = kindOf(name); return k && k.by !== "item" && !isStapleKind(k.kind) ? k : null; };
+  const placements = (name: string) => {
+    const cat = categoryOf(name);
+    const isIt = (x: string) => { if (dishNameOf(x, truthNames) === name) return true; const k = cat && kindOf(x); return !!k && k.kind === cat!.kind && (!cat!.sub || k.sub === cat!.sub); };
+    return cooked.flatMap((sd) => sd.dishes.filter((d) => isIt(d.name)).map(() => sd));
   };
-  /** The default cap of a dish (2 days), more only when every slot it is a non-staple at is thin. */
-  const capOf = (slots: string[]): number => {
-    let cap = 2;
-    for (const slot of slots) {
-      const th = thin(slot);
-      if (!th) return 2;
-      cap = Math.max(cap, th.cap);
-    }
-    return cap;
-  };
-  const placements = (name: string) => cooked.flatMap((sd) => sd.dishes.filter((d) => dishNameOf(d.name, truthNames) === name).map(() => sd));
   for (const name of truthNames) {
     const rows = t.library.filter((d) => d.name === name);
     const freq = rows.find((d) => d.frequency)?.frequency, days = rows.find((d) => d.days)?.days;
@@ -222,45 +261,87 @@ export function scorePlan(h: Household, plan: PlanOut, loaded: SetupOut): PlanSc
         add("daily_dishes", sd.dishes.some((d) => dishNameOf(d.name, truthNames) === name), `${dayOfSd(sd)} ${sd.slot}: no ${name} (every day)`);
       continue;
     }
-    const ps = placements(name);
-    const counted = ps.filter((sd) => !isStaple(sd.slot, name));
-    if (freq || days) {
-      // Room: the slot-days this dish could go to this week (its slots, its days, not skipped).
-      const room = exp.filter((e) => !e.skip && rows.some((d) => lc(d.slot) === lc(e.slot)) && (!days || days.includes(e.day))).length;
-      const [min, max] = frequencyRange(freq);
-      // Counted in days (spec §2.1: "≤2 days", "2–3/wk"): dal at lunch and dinner on Monday is one day.
-      const n = new Set(ps.map((sd) => sd.date)).size;
-      const okCount = !freq || (n <= max && n >= Math.min(min, room));
-      const okDays = !days || ps.every((sd) => days.includes(dayOfSd(sd)));
-      add("dish_frequency", okCount && okDays, `${name} (${[freq, days?.join(",")].filter(Boolean).join(", ")}) on ${ps.map((sd) => `${dayOfSd(sd)} ${sd.slot}`).join(", ") || "no day"}`);
-    } else if (new Set(counted.map((sd) => sd.date)).size > capOf(rows.map((d) => d.slot).filter((x) => !isStaple(x, name)))) add("default_cap", false, `${name} (no frequency, not a staple) on ${new Set(counted.map((sd) => sd.date)).size} days: ${counted.map((sd) => `${dayOfSd(sd)} ${sd.slot}`).join(", ")}`);
-    else if (ps.length) add("default_cap", true);
+    if (!freq && !days) continue;
+    // The family's words on a dish hold across the day's meals (owner rule 3; lead, 26 Nov: "uthappam sometimes" is 2–3 in all),
+    // except at a meal where the family has that dish, or for a category word that category, as their own with no such words:
+    // "dal sometimes" of dinner does not count the lunch dal, nor "uthappam sometimes" of dinner breakfast's own dosas.
+    const said = new Set(rows.filter((d) => d.frequency || d.days).map((d) => lc(d.slot)));
+    const cat = categoryOf(name);
+    const sameCat = (x: string) => { const k = cat && categoryOf(x); return !!k && k.kind === cat!.kind && (!cat!.sub || k.sub === cat!.sub); };
+    const ownThere = (slot: string) => t.library.some((d) => lc(d.slot) === lc(slot) && (d.name === name || sameCat(d.name)));
+    const ps = placements(name).filter((sd) => said.has(lc(sd.slot)) || !ownThere(sd.slot));
+    // Counted in days (spec §2.1: "≤2 days", "2–3/wk"): dal at lunch and dinner on Monday is one day. Never more often than
+    // said; fewer is fine (owner, 25 Nov: "people want variety"). Only on its days when they named days.
+    const n = new Set(ps.map((sd) => sd.date)).size;
+    const okCount = !freq || n <= frequencyRange(freq)[1];
+    const okDays = !days || ps.every((sd) => days.includes(dayOfSd(sd)));
+    add("dish_frequency", okCount && okDays, `${name} (${[freq, days?.join(",")].filter(Boolean).join(", ")}) on ${ps.map((sd) => `${dayOfSd(sd)} ${sd.slot}`).join(", ") || "no day"}`);
   }
 
-  // ── 5. Repeat window per slot (staples exempt), and no same main twice a day across main slots ──
-  for (const s of t.slots.filter((x) => !x.optional)) {
-    const w = Math.min(plan.relaxed?.[s.name] ?? 3, thin(s.name)?.gap ?? 3);
-    const sds = cooked.filter((x) => lc(x.slot) === lc(s.name)).sort((a, b) => a.date.localeCompare(b.date));
-    const last = new Map<string, string>();
-    const bad: string[] = [];
-    for (const sd of sds) for (const d of sd.dishes) {
-      if (isStaple(s.name, d.name)) continue;
-      const k = plain(d.name), prev = last.get(k);
-      if (prev && (Date.parse(sd.date) - Date.parse(prev)) / 86400000 < w) bad.push(`${d.name} ${weekdayOfDate(prev)} and ${dayOfSd(sd)}`);
-      last.set(k, sd.date);
-    }
-    if (sds.length) add("repeat_window", !bad.length, `${s.name} (window ${w}): ${bad.join("; ")}`);
+  // ── 5. Rotation (owner, 25 Nov, kinds model rule 3), staples exempt ──
+  //   no_early_repeat: an item comes back in its slot (Lunch and Dinner together for a kind the family has at both) only once
+  //     every other item of the family's of its kind there has been used this week, unless their words allow it;
+  //   not_next_day: the same item never on consecutive days in its slot group, nor at lunch and dinner the same day.
+  const truthKind = (d: TruthDish) => (d.kind ? { kind: d.kind, sub: d.sub ?? null } : kindOf(d.name));
+  /** The kind of a planned dish: TRUTH's for one of the family's dishes by its name, else the catalog's, else the kind of the
+   *  family dish it is a way of ("Bhindi sabzi" of their "Bhindi"). */
+  const kindAt = (name: string, slot: string): string | null => {
+    const exactRow = t.library.find((d) => plain(d.name) === plain(name) && lc(d.slot) === lc(slot)) ?? t.library.find((d) => plain(d.name) === plain(name));
+    if (exactRow) return truthKind(exactRow)?.kind ?? null;
+    const cat = kindOf(name);
+    if (cat) return cat.kind;
+    const tn = dishNameOf(name, truthNames);
+    const row = tn ? t.library.find((d) => d.name === tn && lc(d.slot) === lc(slot)) ?? t.library.find((d) => d.name === tn) : undefined;
+    return row ? truthKind(row)?.kind ?? null : null;
+  };
+  const exempt = (slot: string, name: string) => isFamilyStaple(slot, name) || isStapleKind(kindAt(name, slot)) || isBareStapleName(name);
+  /** The family's words that let a dish come back: a frequency, days, or daily (the dish_frequency check holds their count). */
+  const saidRow = (name: string) => { const tn = dishNameOf(name, truthNames); return tn ? t.library.find((d) => d.name === tn && (d.frequency || d.days)) : undefined; };
+  /** The family's words as setup read them (lead, 25 Nov): a dish of theirs saved as had every day or usually at that slot
+   *  ("idli most days") may come day after day there. */
+  const setupOften = (name: string, slot: string) => loaded.library.some((d) => lc(d.slot) === lc(slot) && plain(d.name) === plain(name) && (d.frequency === "daily" || d.frequency === "usually"));
+  const famKinds = (slot: string) => new Set(t.library.filter((d) => lc(d.slot) === lc(slot)).map((d) => truthKind(d)?.kind).filter((x): x is string => !!x));
+  const LD = ["lunch", "dinner"];
+  const sharedLD = (kind: string | null) => !!kind && LD.every((s) => famKinds(s).has(kind));
+  type Use = { date: string; slot: string; id: string; name: string; kind: string | null };
+  const uses: Use[] = [];
+  for (const sd of cooked) for (const d of sd.dishes) {
+    if (exempt(sd.slot, d.name)) continue;
+    uses.push({ date: sd.date, slot: sd.slot, id: plain(d.name).replace(/\bvegetable\b/g, "veg"), name: d.name, kind: kindAt(d.name, sd.slot) });
   }
-  const mainNames = t.slots.filter((x) => x.kind === "main").map((x) => lc(x.name));
+  const groupOf = (u: Use) => (LD.includes(lc(u.slot)) && sharedLD(u.kind) ? "Lunch+Dinner" : u.slot);
+  const groupSlots = (g: string) => (g === "Lunch+Dinner" ? ["Lunch", "Dinner"] : [g]);
+  /** A house-wide hard rule keeps this dish off that day ("no meat on weekdays"): it is no option there. */
+  const houseBlocks = (d: TruthDish, day: Weekday, slot: string) => t.rules.some((r) => r.hard && !r.who && ["avoid", "veg", "no_eggs"].includes(r.what)
+    && (!r.days?.length || r.days.includes(day)) && (!r.slots?.length || r.slots.some((x) => lc(x) === lc(slot)))
+    && (r.what === "veg" ? ["meat", "fish", ...(r.items ?? [])] : r.what === "no_eggs" ? ["egg"] : r.items ?? []).some((it) => hasItem(truthTags(d), it)));
+  const days1 = (a: string, b: string) => Math.round((Date.parse(b) - Date.parse(a)) / 86400000);
+  const byGroup = new Map<string, Use[]>();
+  for (const u of uses) { const g = `${groupOf(u)}|${u.id}`; (byGroup.get(g) ?? byGroup.set(g, []).get(g)!).push(u); }
+  for (const [g, us0] of byGroup) {
+    const us = [...us0].sort((a, b) => a.date.localeCompare(b.date) || LD.indexOf(lc(a.slot)) - LD.indexOf(lc(b.slot)));
+    if (us.length < 2) continue;
+    const group = g.split("|")[0], first = us[0], said = saidRow(first.name);
+    // Next day, or lunch and dinner the same day. Their words allow it only when they said it for most days (usually, daily,
+    // 5+ a week) or named both days.
+    const often = (!!said?.frequency && frequencyRange(said.frequency)[0] >= 4) || setupOften(first.name, first.slot);
+    const close = us.slice(1).map((u, i) => [us[i], u] as const).filter(([a, b]) => { const gap = days1(a.date, b.date); return gap === 1 || (gap === 0 && a.slot !== b.slot); })
+      .filter(([a, b]) => !often && !(said?.days?.includes(dayOfSd({ date: a.date } as PlanSlotDay)) && said.days.includes(dayOfSd({ date: b.date } as PlanSlotDay))));
+    add("not_next_day", !close.length, `${group}: ${first.name} on ${close.map(([a, b]) => `${weekdayOfDate(a.date)} ${a.slot} and ${weekdayOfDate(b.date)} ${b.slot}`).join("; ")}`);
+    if (said || !first.kind) continue;
+    // Another of the family's items of this kind in the group, unused all week, that could have gone there instead.
+    const second = us[1], day = weekdayOfDate(second.date);
+    const usedNames = new Set(cooked.filter((sd) => groupSlots(group).some((x) => lc(x) === lc(sd.slot))).flatMap((sd) => sd.dishes.map((d) => dishNameOf(d.name, truthNames))).filter(Boolean));
+    const options = t.library.filter((d) => groupSlots(group).some((x) => lc(x) === lc(d.slot)) && truthKind(d)?.kind === first.kind && !d.days?.length
+      && plain(d.name) !== first.id && dishNameOf(first.name, truthNames) !== d.name && !isBareKindWord(d.name) && !exempt(d.slot, d.name) && !houseBlocks(d, day, second.slot));
+    const unused = [...new Set(options.filter((d) => !usedNames.has(d.name)).map((d) => d.name))];
+    add("no_early_repeat", !unused.length, `${group}: ${first.name} back on ${day} while ${unused.join(", ")} (${first.kind}) unused this week`);
+  }
+  // Lunch and dinner the same day, for an item whose kind is not shared (the group above did not see both).
   for (const date of [...new Set(cooked.map((x) => x.date))]) {
-    const seen = new Map<string, string>(), bad: string[] = [];
-    for (const sd of cooked.filter((x) => x.date === date && mainNames.includes(lc(x.slot)))) for (const d of sd.dishes) {
-      if (isStaple(sd.slot, d.name)) continue;
-      const k = plain(d.name);
-      if (seen.has(k) && seen.get(k) !== sd.slot) bad.push(`${d.name} at ${seen.get(k)} and ${sd.slot}`);
-      seen.set(k, sd.slot);
-    }
-    add("same_day_repeat", !bad.length, `${weekdayOfDate(date)}: ${bad.join("; ")}`);
+    const at2 = (slot: string) => uses.filter((u) => u.date === date && lc(u.slot) === slot && groupOf(u) !== "Lunch+Dinner");
+    const both = at2("lunch").filter((u) => at2("dinner").some((v) => v.id === u.id) && !(saidRow(u.name)?.frequency && frequencyRange(saidRow(u.name)!.frequency)[0] >= 4) && !setupOften(u.name, u.slot));
+    if (both.length) add("not_next_day", false, `${weekdayOfDate(date)}: ${both.map((u) => u.name).join(", ")} at lunch and dinner`);
   }
 
   // ── 6. Soft rules with a frequency, counted across slots; cook limits (cap) ──
@@ -277,6 +358,111 @@ export function scorePlan(h: Household, plan: PlanOut, loaded: SetupOut): PlanSc
       add("cap_rules", n <= r.per_meal!, `${dayOfSd(sd)} ${sd.slot}: ${n} dishes besides staples (${r.title}: at most ${r.per_meal})`);
     }
   }
+
+  // ── 7. The base minimum (owner, 25 Nov): whole plates, no doubled staple, real dishes, mostly their own food and no new kind,
+  //    nobody without food, a clean message. Its own word lists (the scorer reads dish names
+  //    the way a person would, apart from the planner's code).
+  const isBareStaple = isBareStapleName;
+  // Decided 8: the one-pot rice kinds (khichdi, biryani, flavoured rice) are each a whole plate, whatever the dish's name.
+  const onePotKind = (x: string) => ["Khichdi", "Biryani", "Flavoured rice", "Pulao"].includes(kindOf(x)?.kind ?? "");
+  const carb = (x: string) => hasWord(x, BREAD_RICE) || hasWord(x, ONE_POT) || onePotKind(x);
+  // Owner, 26 Nov: "When the user speaks a new dish treat it as the template. No need to check for rice or chapati every
+  // time by default. Different people might be on different diets." A plate is whole when it matches a template the family
+  // described at that meal (by kinds), holds a dish they named there as a whole meal ("Kanji and payar", "Rajma chawal"), or
+  // is as full as the plates they described; only a plate clearly thinner than all of those fails (a side or a staple alone).
+  // A particular way of a family dish ("Bhindi sabzi" of their "Sabzi").
+  const variantOf = (entry: string, dish: string) => { const e = words(entry), d = words(dish); return e.length > 0 && d.length > e.length && e.every((w) => d.includes(w)); };
+  const mealOf = (slot: string) => (t.meals ?? []).find((m) => lc(m.slot) === lc(slot));
+  const seedAt = (slot: string) => t.seed.filter((r) => lc(r.slot) === lc(slot) && r.dishes.length);
+  const kindsHere = (x: string, slot: string) => new Set([kindAt(x, slot), kindOf(x)?.kind].filter((k): k is string => !!k));
+  const partHit = (p: TruthPart, x: string, slot: string) => ("items" in p
+    ? p.items.some((it) => plain(it) === plain(x) || dishNameOf(x, [it]) === it)
+    : kindsHere(x, slot).has(p.kind));
+  const matchesTemplate = (ds: string[], slot: string) => (mealOf(slot)?.templates ?? []).some((tp) => {
+    const used = new Set<number>();
+    return tp.parts.every((p) => { const i = ds.findIndex((x, j) => !used.has(j) && partHit(p, x, slot)); if (i < 0) return false; used.add(i); return true; });
+  });
+  const LINK = new Set(["and", "with", "n"]);
+  /** The family's whole meals at a slot: a seed row of one dish, a template of one fixed-dish part. */
+  const wholeMeals = (slot: string) => [...new Set([...seedAt(slot).filter((r) => r.dishes.length === 1).map((r) => r.dishes[0]),
+    ...(mealOf(slot)?.templates ?? []).filter((tp) => tp.parts.length === 1 && "items" in tp.parts[0]).flatMap((tp) => (tp.parts[0] as { items: string[] }).items)])];
+  // A whole meal of theirs on the plate: by its name, a way of it, or its words across the plate ("Kanji, Payar").
+  const hasWholeMeal = (ds: string[], slot: string) => wholeMeals(slot).some((m) => {
+    const mw = words(m).filter((w) => !LINK.has(w)), pw = new Set(ds.flatMap(words));
+    return ds.some((x) => plain(x) === plain(m) || dishNameOf(x, [m]) === m || variantOf(m, x)) || (mw.length > 1 && mw.every((w) => pw.has(w)));
+  });
+  /** The fewest dishes on a plate of several the family described at the slot (seed rows, templates); 2 when none. */
+  const minPlate = (slot: string) => Math.min(...[...seedAt(slot).map((r) => r.dishes.length), ...(mealOf(slot)?.templates ?? []).map((tp) => tp.parts.length)].filter((n) => n >= 2), 2);
+  /** The family eats exactly this plate (a seed row of the same dishes): never bare to them. */
+  const theirPlate = (ds: string[], slot: string) => seedAt(slot).some((r) => r.dishes.length === ds.length && r.dishes.every((x) => ds.some((y) => plain(y) === plain(x))));
+  const onePotDish = (x: string) => hasWord(x, ONE_POT) || onePotKind(x) || (carb(x) && words(x).length > 1 && !isBareStaple(x));
+  for (const sd of cooked) {
+    const ds = sd.dishes.map((d) => d.name);
+    // An add-on plate holds only the difference ("Dadu's dinner: Phulka"): a staple alone is right there.
+    const addon = t.slots.find((x) => lc(x.name) === lc(sd.slot))?.kind === "addon";
+    const allBare = ds.every(isBareStaple);
+    if (!addon) add("not_bare", !allBare || theirPlate(ds, sd.slot) || hasWholeMeal(ds, sd.slot), `${dayOfSd(sd)} ${sd.slot}: only ${ds.join(", ")}`);
+    if (/^(lunch|dinner)$/i.test(sd.slot)) {
+      const whole = matchesTemplate(ds, sd.slot) || hasWholeMeal(ds, sd.slot) || theirPlate(ds, sd.slot)
+        || (ds.length === 1 ? onePotDish(ds[0]) : !allBare && ds.length >= minPlate(sd.slot));
+      add("whole_plate", whole, `${dayOfSd(sd)} ${sd.slot}: ${ds.join(", ")}`);
+    }
+    // A plain staple beside a dish that already has it ("Dal rice, Rice"; "Roti with aloo gobi, Roti"), or the same twice.
+    const doubled = ds.filter((x) => isBareStaple(x) && (ds.filter((y) => plain(y) === plain(x)).length > 1
+      || ds.some((y) => y !== x && !isBareStaple(y) && words(x).every((w) => words(y).includes(w)))));
+    add("no_doubled_staple", !doubled.length, `${dayOfSd(sd)} ${sd.slot}: ${doubled.join(", ")} beside ${ds.join(", ")}`);
+  }
+  // A real dish (owner, 25 Nov): never a bare kind or sub-kind word ("Sabzi", "Dal", "Curry", "Poriyal"), unless it is the
+  // family's own dish they named for every day or for set days (a fixed dish in their words: "eggs every morning").
+  for (const sd of cooked) for (const d of sd.dishes) {
+    const fixed = () => t.library.some((x) => plain(x.name) === plain(d.name) && lc(x.slot) === lc(sd.slot) && (x.frequency === "daily" || !!x.days?.length));
+    add("real_dish", !isBareKindWord(d.name) || fixed(), `${dayOfSd(sd)} ${sd.slot}: "${d.name}" is a kind, not a dish`);
+  }
+  /** Lead's rule (25 Nov, owner to confirm): a part the family named as a category ("dal", "sabzi", "sambar", "a poriyal": a
+   *  bare kind or sub-kind word in their library at a slot) is filled from the catalog's items of it, and those items are
+   *  theirs. A sub-kind word ("Sambar") makes that sub-kind's items theirs; a kind's own sub-kind word ("Sabzi", "Dal") makes
+   *  the kind's items in the family's sub-kinds at that slot theirs; a kind-level word ("Curry") the whole kind's. */
+  const categoryOwn = (x: string, slot: string): boolean => {
+    const hit = kindOf(x);
+    if (!hit) return false;
+    for (const row of t.library.filter((d) => lc(d.slot) === lc(slot) && isBareKindWord(d.name))) {
+      const cat = kindOf(row.name);
+      if (!cat || cat.kind !== hit.kind) continue;
+      if (!cat.sub) return true;
+      const subs = new Set([cat.sub, ...t.library.filter((d) => lc(d.slot) === lc(slot)).map((d) => truthKind(d)).filter((k) => k?.kind === hit.kind && k.sub).map((k) => k!.sub!)]);
+      if (hit.sub && subs.has(hit.sub)) return true;
+    }
+    return false;
+  };
+  const own = (x: string, slot: string) => !!dishNameOf(x, truthNames) || truthNames.some((n) => variantOf(n, x)) || categoryOwn(x, slot);
+  // At least OWN_SHARE of the week's non-staple items are the family's own (kinds model rule 4).
+  const all = cooked.flatMap((x) => x.dishes.filter((d) => !exempt(x.slot, d.name)).map((d) => ({ name: d.name, slot: x.slot })));
+  const mine = all.filter((x) => own(x.name, x.slot));
+  if (all.length) add("own_share", mine.length / all.length >= OWN_SHARE, `${Math.round((100 * mine.length) / all.length)}% of non-staples their own (want ${OWN_SHARE * 100}%): not theirs ${[...new Set(all.filter((x) => !mine.includes(x)).map((x) => x.name))].join(", ")}`);
+  // Never a new kind (kinds model rule 4): a dish that is not the family's is of a kind their own dishes at that meal are of.
+  // A new dish the catalog cannot place fails (nothing says it is like theirs).
+  const seenNew = new Set<string>();
+  for (const sd of cooked) for (const d of sd.dishes) {
+    if (own(d.name, sd.slot) || exempt(sd.slot, d.name) || seenNew.has(`${lc(sd.slot)}|${plain(d.name)}`)) continue;
+    seenNew.add(`${lc(sd.slot)}|${plain(d.name)}`);
+    const k = kindOf(d.name)?.kind ?? null, theirs = famKinds(sd.slot);
+    add("no_new_kind", !!k && theirs.has(k), `${sd.slot}: ${d.name} is ${k ? `a ${k}` : "of no kind the catalog knows"}${k ? `; their ${sd.slot} kinds: ${[...theirs].join(", ")}` : ""}`);
+  }
+  // Nobody without food: no "nothing to eat" left, and a fasting person's food is there.
+  const hungry = plan.unmet.filter((u) => /nothing to eat|no food|without food/i.test(u));
+  add("nobody_without_food", !hungry.length, hungry.slice(0, 3).join("; "));
+  // The message: no planner reasoning in a day's note, short reasons for new dishes, at most one question.
+  const msg = plan.message ?? "";
+  const leaks = msg.split("\n").filter((l) => /^(breakfast|lunch|dinner|.*'s (tiffin|breakfast|lunch|dinner)):/i.test(l.trim()) && /\b(not for \w+[;,]|instead|because|safe|avoid|so that|he has|she has|replac)/i.test(l.split(/\.\s/).slice(1).join(". ")));
+  add("message_clean", !leaks.length, leaks.slice(0, 2).join(" | "));
+  const newPart = /New this week:([^\n]*)/i.exec(msg)?.[1] ?? "";
+  const longWhy = [...newPart.matchAll(/\(([^)]*)\)/g)].map((m) => m[1]).filter((w) => w.length > NEW_WHY_MAX);
+  add("short_new_reasons", !longWhy.length, `${longWhy.length} reasons over ${NEW_WHY_MAX} characters: ${longWhy[0]?.slice(0, 90) ?? ""}`);
+  // Every new dish is like a dish of theirs at that meal (owner, 25 Nov: "not suddenly pasta"): the message says which.
+  const newItems = newPart.split(/;\s*/).map((x) => x.trim().replace(/\.$/, "")).filter(Boolean);
+  if (newItems.length) add("new_like", newItems.every((x) => /\(like your [^)]+\)/i.test(x)), `new dishes without a dish of theirs: ${newItems.filter((x) => !/\(like your /i.test(x)).join("; ")}`);
+  const questions = msg.split("\n").filter((l) => l.trim().endsWith("?"));
+  add("one_question", questions.length <= 1, `${questions.length} questions: ${questions.slice(0, 2).join(" | ")}`);
 
   // ── Tracked, not gating: shape against the slot's own history ──
   for (const s of t.slots.filter((x) => !x.optional)) {

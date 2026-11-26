@@ -30,6 +30,9 @@ export function mondayOf(date: string): string { return addDays(date, -WEEKDAYS.
 /** The Monday strictly after `date`: a Monday gives the next one. */
 export function nextMonday(date: string): string { return addDays(date, 7 - WEEKDAYS.indexOf(weekdayOf(date))); }
 
+/** How many days from `from` to `to` (0 for the same day; negative when `to` is earlier). */
+export function daysBetween(from: string, to: string): number { return Math.round((parse(to).getTime() - parse(from).getTime()) / 86_400_000); }
+
 /** The seven dates of the week starting on `weekStart`. */
 export function weekDates(weekStart: string): string[] { return WEEKDAYS.map((_, i) => addDays(weekStart, i)); }
 

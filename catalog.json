@@ -745,11 +745,11 @@
       "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "apps/planner",
-      "latestVersion": "4.0.3",
-      "latestTag": "planner-v4.0.3-rc7",
-      "minFlockVersion": "0.25.0-beta.1",
+      "latestVersion": "4.2.0",
+      "latestTag": "planner-v4.2.0-rc1",
+      "minFlockVersion": "0.25.0-beta.8",
       "publishedAt": "2026-10-11T00:00:00Z",
-      "updatedAt": "2026-11-26T00:00:00Z"
+      "updatedAt": "2026-11-27T00:00:00Z"
     },
     {
       "slug": "tracker",

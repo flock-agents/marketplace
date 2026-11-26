@@ -144,3 +144,68 @@ describe("scoreSetup", () => {
     expect(fails(s)).toEqual(["cook_times", "family_cooks"]);
   });
 });
+
+// Kinds model (owner, 25 Nov): the cuisine profile and each meal's templates, read through the adapter. Expectations from the
+// contract: a template is the same plate when its kinds match part for part; a family's fixed dish stays a fixed-dishes part.
+describe("scoreSetup: cuisines and templates", () => {
+  const h2 = async () => (await import("../households")).HOUSEHOLDS.find((h) => h.id === "h2-iyer")!;
+  const h1 = async () => (await import("../households")).HOUSEHOLDS.find((h) => h.id === "h1-sharma")!;
+  const failing = (h: Parameters<typeof scoreSetup>[0], s: SetupOut) => Object.entries(scoreSetup(h, s).rates).filter(([, [p, n]]) => p < n).map(([k]) => k).sort();
+
+  test("TRUTH passes; nothing read yet fails each; an adapter that cannot read them scores nothing", async () => {
+    const h = await h2();
+    expect(failing(h, setupOfTruth(h))).toEqual([]);
+    const r = scoreSetup(h, setupOfTruth(h)).rates;
+    expect(r.cuisines).toEqual([2, 2]);
+    expect(r.templates![1]).toBe(8);
+    const none = setupOfTruth(h);
+    none.cuisines = null;
+    for (const sl of none.slots) { sl.kinds = null; sl.templates = null; }
+    expect(failing(h, none)).toEqual(["cuisines", "template_staples", "templates"]);
+    const unread = setupOfTruth(h);
+    delete unread.cuisines;
+    for (const sl of unread.slots) { delete sl.kinds; delete sl.templates; }
+    const u = scoreSetup(h, unread).rates;
+    expect(u.cuisines).toBeUndefined();
+    expect(u.templates).toBeUndefined();
+  });
+
+  test("cuisines: a neighbouring region of theirs may be read; one they have nothing of may not", async () => {
+    const h = await h2();
+    const s = setupOfTruth(h);
+    s.cuisines = ["south", "tamil", "kerala"];
+    expect(failing(h, s)).toEqual([]);
+    s.cuisines = ["south", "tamil", "punjab"];
+    expect(failing(h, s)).toEqual(["cuisines"]);
+    s.cuisines = ["south"];
+    expect(failing(h, s)).toEqual(["cuisines"]);
+  });
+
+  test("templates: the same kinds part for part; a part missing or a kind changed fails; sub-kinds are reported only", async () => {
+    const h = await h2();
+    const s = setupOfTruth(h);
+    const lunch = s.slots.find((x) => x.name === "Lunch")!;
+    // [Rice, Sambar, Rasam, Poriyal, Curd] saved as kinds without sub-kinds: the same plate (template_subs notes it).
+    lunch.templates![0].parts = [{ kind: "Rice" }, { kind: "Rice curry" }, { kind: "Rice curry" }, { kind: "Sabzi" }, { kind: "Curd" }];
+    expect(failing(h, s)).toEqual([]);
+    expect(scoreSetup(h, s).info.template_subs).toEqual([6, 7]);   // of the 7 templates that name sub-kinds, this one no longer does
+    // One rice curry only: not the plate.
+    lunch.templates![0].parts = [{ kind: "Rice" }, { kind: "Rice curry", sub: "Sambar" }, { kind: "Sabzi" }, { kind: "Curd" }];
+    expect(failing(h, s)).toEqual(["templates"]);
+    // Rice no longer a staple.
+    const t = setupOfTruth(h);
+    t.slots.find((x) => x.name === "Lunch")!.kinds!.find((k) => k.name === "Rice")!.staple = false;
+    expect(failing(h, t)).toEqual(["template_staples"]);
+  });
+
+  test("templates: their fixed dish (rajma chawal twice a week) is a fixed-dishes part, not the kind Dal", async () => {
+    const h = await h1();
+    const s = setupOfTruth(h);
+    expect(failing(h, s)).toEqual([]);
+    const lunch = s.slots.find((x) => x.name === "Lunch")!;
+    lunch.templates![1].parts = [{ kind: "Dal", sub: "Rajma/Chole" }, { kind: "Raita" }];
+    expect(failing(h, s)).toEqual(["templates"]);
+    lunch.templates![1].parts = [{ items: ["Rajma chawal"] }, { kind: "Raita" }];
+    expect(failing(h, s)).toEqual([]);
+  });
+});

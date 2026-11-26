@@ -101,6 +101,15 @@ describe("weekly plan", () => {
     expect((DELIVER_PROMPT(true) + FESTIVAL_PROMPT(MON)).length).toBeLessThanOrEqual(WAKE_MESSAGE_MAX_CHARS);
   });
 
+  it("the plan goes to whoever decides the menu, when the family said who (send_to)", async () => {
+    const k = await app();
+    kitchen(k);
+    await k.op("set_roles", { menu: "Dadi", shopping: "Papa" });
+    await weeklyPlan(k.ctx(WEEKLY), SUN_MORNING, fake);
+    expect(k.wakes[0].data.send_to).toBe("Dadi");
+    expect(k.wakes[0].message).toContain("`send_to`");
+  });
+
   it("a run on a Monday plans the week after", async () => {
     const k = await app();
     kitchen(k);

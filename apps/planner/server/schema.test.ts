@@ -11,7 +11,7 @@ describe("planner data", () => {
   it("shows the new tables to agents and hides the old ones", async () => {
     const { owner } = await boot();
     const s = (await owner("GET", "/api/_data/_schema")).body;
-    expect(Object.keys(s.tables).sort()).toEqual(["dish_ingredients", "house", "item_events", "items", "library", "order_lines", "orders", "people", "products", "regulars",
+    expect(Object.keys(s.tables).sort()).toEqual(["dish_ingredients", "house", "item_events", "items", "library", "order_lines", "orders", "people", "plan_feedback", "products", "regulars",
       "rules", "saved_recipes", "slot_days", "slot_dishes", "slots"]);
   });
 

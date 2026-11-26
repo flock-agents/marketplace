@@ -35,7 +35,7 @@ describe("set_person", () => {
   it("changes one field of a person already there without a group, and clears a field given as null", async () => {
     const { op, rows } = await boot();
     await op("set_person", { name: "Dad", group: "elder", dislikes: "brinjal", diet: "no sugar" });
-    expect((await op("set_person", { name: "dad", dislikes: null, targets: "60 g protein" })).person).toMatchObject({ group: "elder", dislikes: null, targets: "60 g protein" });
+    expect((await op("set_person", { name: "dad", dislikes: null, targets: "60 g protein" })).person).toMatchObject({ group: "elder", dislikes: null, targets: JSON.stringify({ note: "60 g protein" }) });
     expect(rows("people")[0]).toMatchObject({ name: "Dad", diet: "no sugar", dislikes: null });
   });
 
@@ -159,7 +159,7 @@ describe("the house", () => {
 
   it("an operation the app does not have is answered with the closest one and its fields", async () => {
     const { unknownOperation } = await import("./agentOps");
-    expect(unknownOperation("save_person").error).toBe(`save_person is not an operation of this app. Did you mean set_person? Its fields: name, relationship, group, portions, diet, allergies, dislikes, targets, note, remove. The operations: ${Object.keys((await import("./agentOps")).FIELDS).join(", ")}.`);
+    expect(unknownOperation("save_person").error).toBe(`save_person is not an operation of this app. Did you mean set_person? Its fields: name, relationship, group, portions, diet, allergies, dislikes, targets, usually_home, note, remove. The operations: ${Object.keys((await import("./agentOps")).FIELDS).join(", ")}.`);
     expect(unknownOperation("add_cook").error).toContain("Did you mean set_cook?");
     // The old plan operations are gone (the slot model): an agent that still calls one is pointed at make_plan.
     expect(unknownOperation("plan").error).toContain("Did you mean make_plan?");
