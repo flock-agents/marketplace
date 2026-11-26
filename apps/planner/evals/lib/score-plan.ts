@@ -412,10 +412,12 @@ export function scorePlan(h: Household, plan0: PlanOut, loaded: SetupOut, o: { f
       || ds.some((y) => y !== x && !isBareStaple(y) && words(x).every((w) => words(y).includes(w)))));
     add("no_doubled_staple", !doubled.length, `${dayOfSd(sd)} ${sd.slot}: ${doubled.join(", ")} beside ${ds.join(", ")}`);
   }
-  // A real dish (owner, 25 Nov): never a bare kind or sub-kind word ("Sabzi", "Dal", "Curry", "Poriyal"), unless it is the
-  // family's own dish they named for every day or for set days (a fixed dish in their words: "eggs every morning").
+  // A real dish (owner, 25 Nov): never a bare kind or sub-kind word ("Sabzi", "Dal", "Curry", "Poriyal"), unless it is a
+  // dish the family named at that meal in those words.
   for (const sd of cooked) for (const d of sd.dishes) {
-    const fixed = () => t.library.some((x) => plain(x.name) === plain(d.name) && lc(x.slot) === lc(sd.slot) && (x.frequency === "daily" || !!x.days?.length));
+    // Owner, 26 Nov: the family's own word is their dish ("idiyappam with stew" planned as "Stew"): a name that is exactly a
+    // dish they named at that meal (or one of its other names) is real, whatever the catalog calls the word.
+    const fixed = () => t.library.some((x) => lc(x.slot) === lc(sd.slot) && [x.name, ...(x.aka ?? [])].some((n) => plain(n) === plain(d.name)));
     add("real_dish", !isBareKindWord(d.name) || fixed(), `${dayOfSd(sd)} ${sd.slot}: "${d.name}" is a kind, not a dish`);
   }
   /** Lead's rule (25 Nov, owner to confirm): a part the family named as a category ("dal", "sabzi", "sambar", "a poriyal": a

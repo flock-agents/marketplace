@@ -377,7 +377,7 @@ describe("scorePlan: the base minimum", () => {
     expect(fails(p)).toContain("own_share");
     expect(scorePlan(FIX, p, loaded()).notes.find((n) => n.startsWith("own_share"))).toContain("22%");
   });
-  test("a part named as a category (\"sambar\", \"sabzi\") makes the catalog's items of it theirs; the bare word stays no dish", () => {
+  test("a part named as a category (\"sambar\", \"sabzi\") makes the catalog's items of it theirs; their own word is a dish", () => {
     // Lead's rule (25 Nov): their dinner has "Sambar" (a sub-kind) and "Sabzi" (the kind's own sub-kind) as categories.
     const h = structuredClone(FIX);
     h.truth.library.push({ name: "Sambar", slot: "Dinner" }, { name: "Sabzi", slot: "Dinner" });
@@ -399,9 +399,11 @@ describe("scorePlan: the base minimum", () => {
     expect(notTheirs).not.toContain("Aloo methi");
     // Theirs is never new: no_new_kind does not look at them (Pepper rasam is a Rice curry, a kind their Sambar is: passes too).
     expect(sc.notes.filter((n) => n.startsWith("no_new_kind")).join(" ")).not.toMatch(/Drumstick sambar|Aloo methi/);
-    // The bare word itself is still no dish.
-    const q = set(goodWeek(), "Mon", "Dinner", ["Roti", "Sambar"]);
-    expect(Object.entries(scorePlan(h, q, setupOfTruth(h)).rates).filter(([, [a, n]]) => a < n).map(([k]) => k)).toContain("real_dish");
+    // Owner 26 Nov: the family's own word is their dish, so their "Sambar" planned as "Sambar" is real; a bare word they never
+    // said at that meal ("Poriyal") is still no dish.
+    const rd = (x: string) => Object.entries(scorePlan(h, set(goodWeek(), "Mon", "Dinner", ["Roti", x]), setupOfTruth(h)).rates).filter(([, [a, n]]) => a < n).map(([k]) => k);
+    expect(rd("Sambar")).not.toContain("real_dish");
+    expect(rd("Poriyal")).toContain("real_dish");
   });
   test("a category makes a week their own: without it the same week is under 30%", () => {
     const h = structuredClone(FIX);
@@ -499,6 +501,19 @@ describe("no_new_kind: a regional dish of another cuisine is fine when its kind 
   });
   test("a new dish of a kind they never have at that meal still fails", async () => {
     expect((await run("Dinner", "Mon", ["Chapati", "Masala pasta"], "Masala pasta")).join(" ")).toMatch(/Masala pasta is a Pasta/);
+  });
+});
+
+describe("real_dish: the family's own word is their dish (owner, 26 Nov)", () => {
+  test("\"Stew\" at a Kerala breakfast (\"idiyappam with stew\") is their dish; a bare kind word they never said still fails", async () => {
+    const h = (await import("../households")).ALL_HOUSEHOLDS.find((x) => x.id === "h16-pillai")!;
+    const withDishes = (dishes: string[]) => {
+      const p = baselineWeek(h, MON);
+      p.slotDays.find((x) => x.date === dateOf(MON, "Thu") && x.slot === "Breakfast")!.dishes = dishes.map((name) => ({ name }));
+      return scorePlan(h, p, setupOfTruth(h), { failClosed: false }).notes.filter((n) => n.startsWith("real_dish"));
+    };
+    expect(withDishes(["Idiyappam", "Stew"])).toEqual([]);
+    expect(withDishes(["Idiyappam", "Curry"]).join(" ")).toMatch(/"Curry" is a kind/);
   });
 });
 
