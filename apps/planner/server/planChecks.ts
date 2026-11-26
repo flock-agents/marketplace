@@ -160,8 +160,6 @@ export type Week = { days: PlanDay[]; slots: Map<string, SlotFacts>; rules: Rule
   /** The slots whose dishes are settled (fixed ones count always). */ done: Set<string>;
   /** New dishes placed so far, by key, with the slot they were placed at and the family's dish it is like. */ newDishes: Map<string, { name: string; slot: string; why: string; like?: string }>;
   /** What each of the week's guest rules (their words) forbids, as tags, from one read; none read: not checked. */ guestTags?: Map<string, string[]>;
-  /** Unused by these checks (one meaning model: no careful read); still set by makePlan/fillWeek until their careful read goes. */
-  careful?: Map<string, Set<string>>;
   /** What the fill placed each dish as, by dish key: its kind, sub-kind and catalog item (placeOfDish). */
   places?: Map<string, DishPlace>;
   /** The catalog's items of a category the family named ("poha", "dal"): theirs (lead's rule, 25 Nov), by dish key. */
@@ -246,11 +244,6 @@ export function vouched(w: Week, r: Rule, dish: string): boolean {
   if (!r.who) return true;
   return [...w.slots.values()].some((sf) => sf.plates.some((pl) => pl.some((x) => dishKey(x) === key))
     && (sf.slot.usual_people.some((p) => same(p, r.who!)) || w.days.some((d) => same(d.slot, sf.slot.name) && d.people.some((p) => same(p, r.who!)))));
-}
-/** @deprecated One meaning model: no careful read, these checks never read it. Kept only so makePlan's and fillWeek's careful
- *  read (removed in plan Tasks 8 and 10) compile until then: the allergy tags of every allergy rule not vouched for. */
-export function carefulTags(w: Week, dish: string): string[] {
-  return uniq(w.rules.filter((r) => isAllergyRule(r) && !vouched(w, r, dish)).flatMap(forbidden));
 }
 /** The notes on a family dish one person's allergy is kept aside for (it has the item): "<person>'s <dish> without <item>". */
 export function allergyNotes(w: Week, d: PlanDay, dish: string): string[] {

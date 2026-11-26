@@ -5,7 +5,7 @@
 import { describe, expect, it } from "bun:test";
 import { fillWeek, type FillInput } from "./fillWeek";
 import { CATALOG, catalogIngredients, plannerTags, PLANNER_READ_TAGS, type MealTemplate } from "./kinds";
-import { carefulTags, factsOf, leaveOutNotes, notFor, readFor, ruleBreaks, slotFacts, type Week } from "./planChecks";
+import { factsOf, leaveOutNotes, notFor, readFor, ruleBreaks, slotFacts, type Week } from "./planChecks";
 import { slotDayKey, type PlanDay } from "./planDays";
 import { dishKey } from "./dishText";
 import type { LibraryDish, Rule, Slot } from "./slotStore";
@@ -25,9 +25,9 @@ const rule = (o: Partial<Rule>): Rule => ({ id: `r${Math.random()}`, hard: true,
 const T = (...parts: MealTemplate["parts"]): MealTemplate => ({ parts });
 
 /** A hand-made week of one slot for these people, the dishes checked as planChecks reads them. */
-function week(o: { slot: Slot; library?: LibraryDish[]; rules: Rule[]; people: string[]; careful?: Map<string, Set<string>> }): Week {
+function week(o: { slot: Slot; library?: LibraryDish[]; rules: Rule[]; people: string[] }): Week {
   const w: Week = { days: WEEK.map((d) => day(d, o.slot.name, o.people)), slots: new Map(), rules: o.rules, library: o.library ?? [], facts: new Map(), done: new Set(),
-    newDishes: new Map(), ...(o.careful ? { careful: o.careful } : {}) };
+    newDishes: new Map() };
   w.slots.set(o.slot.name.toLowerCase(), slotFacts(o.slot, o.library ?? [], []));
   return w;
 }
@@ -74,14 +74,13 @@ describe("a main ingredient that breaks a rule: not theirs; one the dish can be 
   });
   it("a cashew-allergic child is planned suji upma with a note to make it without cashews for her", () => {
     const nuts = rule({ who: "Anya", items: ["nuts"], quote: "Anya is allergic to cashews and other nuts" });
-    // The careful read says it may have nuts: the catalog says only cashews and peanuts bring them, and it is upma without them.
-    const w = week({ slot: brk, rules: [nuts], people: ["Asha", "Anya"], careful: new Map([[dishKey("Suji upma"), new Set(["nuts"])]]) });
-    expect(carefulTags(w, "Suji upma")).toEqual(["nuts"]);
+    // The catalog says only cashews and peanuts bring nuts, and it is upma without them (no careful read: one meaning model).
+    const w = week({ slot: brk, rules: [nuts], people: ["Asha", "Anya"] });
     expect(ruleBreaks(w, w.days[0], "Suji upma")).toEqual([]);
     expect(leaveOutNotes(w, w.days[0], "Suji upma")).toEqual(["make without cashews and peanuts for Anya"]);
-    // Placed by the fill from the family's category word, with the note on the plate.
-    const r = fill({ slots: [slot("Breakfast", { templates: [T({ kind: "Upma" })] })], library: [dish("Upma", "Breakfast", "Upma")],
-      rules: [nuts], people: ["Asha", "Anya"], careful: new Map() });
+    // Placed by the fill from the family's category part, with the note on the plate.
+    const r = fill({ slots: [slot("Breakfast", { templates: [T({ kind: "Upma", words: "upma" })] })], library: [],
+      rules: [nuts], people: ["Asha", "Anya"] });
     const upma = plates(r, "Breakfast").find((x) => x.name === "Rava upma")!;
     expect(upma.not_for).toEqual([]);
     expect(upma.note).toBe("make without cashews and peanuts for Anya");
@@ -96,7 +95,7 @@ describe("a main ingredient that breaks a rule: not theirs; one the dish can be 
   });
   it("a peanut allergy: poha with peanuts is planned, made without them for him", () => {
     const peanut = rule({ who: "Kabir", items: ["peanut"], quote: "Kabir is allergic to peanuts" });
-    const w = week({ slot: brk, rules: [peanut], people: ["Asha", "Kabir"], careful: new Map([[dishKey("Batata poha"), new Set(["peanut"])], [dishKey("Peanut chutney"), new Set(["peanut"])]]) });
+    const w = week({ slot: brk, rules: [peanut], people: ["Asha", "Kabir"] });
     expect(notFor(w, w.days[0], "Batata poha")).toEqual([]);
     expect(leaveOutNotes(w, w.days[0], "Batata poha")).toEqual(["make without peanuts for Kabir"]);
     // Peanut chutney is peanuts: not his.
@@ -123,23 +122,22 @@ describe("a main ingredient that breaks a rule: not theirs; one the dish can be 
 });
 
 describe("items picked for a category the family named are checked for allergies (decided 21: the vouched hole closed)", () => {
-  it("under a house-wide peanut allergy, the family's 'chutney' never brings peanut chutney, and its items are read carefully", () => {
+  it("under a house-wide peanut allergy, the family's 'chutney' never brings peanut chutney; its items are checked by the catalog, none left unknown", () => {
     const peanut = rule({ items: ["peanut"], quote: "nothing at home has peanuts, he is allergic" });
-    const r = fill({ slots: [slot("Lunch", { templates: [T({ kind: "Rice" }, { kind: "Chutney" })] })],
-      library: [dish("Rice", "Lunch", "Rice"), dish("Chutney", "Lunch", "Chutney")], rules: [peanut], people: ["Asha", "Ravi"], careful: new Map() });
+    const r = fill({ slots: [slot("Lunch", { templates: [T({ kind: "Rice" }, { kind: "Chutney", words: "chutney" })] })],
+      library: [dish("Rice", "Lunch", "Rice")], rules: [peanut], people: ["Asha", "Ravi"] });
     const placed = plates(r, "Lunch");
     expect(placed.map((x) => x.name)).not.toContain("Peanut chutney");
     expect(placed.map((x) => x.name)).not.toContain("Shenga chutney pudi");
     for (const x of placed) expect(x.not_for).toEqual([]);
-    // Each chutney placed was not vouched: it waits for the careful read.
+    // Each chutney placed was not vouched: checked by the catalog's contents, so none is left to ask about.
     const chutneys = uniq(placed.filter((x) => x.name !== "Steamed rice" && x.name !== "Rice").map((x) => x.name));
     expect(chutneys.length).toBeGreaterThan(0);
-    for (const c of chutneys) expect(r.provisional, c).toContain(c);
+    expect(r.unknowns.filter((u) => chutneys.includes(u.dish))).toEqual([]);
     // A category item read as having the allergen where it is main is not theirs.
     const w: Week = { days: WEEK.map((d) => day(d, "Lunch", ["Asha", "Ravi"])), slots: new Map(), rules: [peanut], library: [], facts: new Map(), done: new Set(), newDishes: new Map(),
-      careful: new Map([[dishKey("Thecha"), new Set(["peanut"])]]), ownItems: new Set([dishKey("Thecha")]) };
+      ownItems: new Set([dishKey("Thecha")]) };
     w.slots.set("lunch", slotFacts(slot("Lunch"), [], []));
-    expect(carefulTags(w, "Thecha")).toEqual(["peanut"]);
     // Thecha's peanuts can be left out: a note for the house.
     expect(notFor(w, w.days[0], "Thecha")).toEqual([]);
     expect(leaveOutNotes(w, w.days[0], "Thecha")).toEqual(["make without peanuts"]);

@@ -1,8 +1,9 @@
 // fillWeek.ts on hand-made weeks, no database and no model: the week filled by code from the meals' templates (kinds model
 // contract, owner rules 1–8). Expected plates are worked out from the owner's rules, not read off the code.
 import { describe, expect, it } from "bun:test";
+import { readFileSync } from "node:fs";
 import { fillWeek, templateCounts, type FillInput, type FillResult } from "./fillWeek";
-import { catalogIngredients, suggestable, type MealKind, type MealTemplate } from "./kinds";
+import { catalogIngredients, catalogItem, suggestable, type MealKind, type MealTemplate } from "./kinds";
 import { OWN_SHARE } from "./planChecks";
 import { slotDayKey, type PlanDay } from "./planDays";
 import { dishKey } from "./dishText";
@@ -130,8 +131,8 @@ describe("the same plate (rule 5)", () => {
 });
 
 describe("new variants (rule 4)", () => {
-  const kinds: MealKind[] = [{ name: "Roti", staple: true }, { name: "Dal" }];
-  const slots = [slot("Dinner", { templates: [T({ kind: "Roti" }, { kind: "Dal" })] })];
+  // Their bare word named one dish ("dal tadka"): that dish is theirs, other dals are new (§5.1).
+  const slots = [slot("Dinner", { templates: [T({ kind: "Roti" }, { kind: "Dal", dish: "Dal tadka" })] })];
   const lib = [dish("Phulka", "Dinner", "Roti"), dish("Dal tadka", "Dinner", "Dal", { sub: "Dal" })];
   it("only once the family's own are used; at least 30% of the week's non-staple items their own; of the same kind, like their dish", () => {
     const r = run({ slots, library: lib });
@@ -154,7 +155,7 @@ describe("new variants (rule 4)", () => {
   });
   it("a regional item only to a family of its cuisine", () => {
     const fk: MealKind[] = [{ name: "Rice", staple: true }, { name: "Fish & seafood", subs: ["Fish curry"] }];
-    const fslots = [slot("Lunch", { templates: [T({ kind: "Rice" }, { kind: "Fish & seafood", sub: "Fish curry" })] })];
+    const fslots = [slot("Lunch", { templates: [T({ kind: "Rice" }, { kind: "Fish & seafood", sub: "Fish curry", dish: "Rohu ghar ka curry" })] })];
     const flib = [dish("Rice", "Lunch", "Rice"), dish("Rohu ghar ka curry", "Lunch", "Fish & seafood", { sub: "Fish curry", contains: ["fish"] })];
     const plain = run({ slots: fslots, library: flib });
     expect(plain.placed.map((p) => p.dish)).not.toContain("Macher jhol");
@@ -164,7 +165,7 @@ describe("new variants (rule 4)", () => {
   });
   it("never a new kind, and never one for a kind only this family has or a part of their own dishes", () => {
     const r = run({ slots: [slot("Breakfast", { 
-      templates: [T({ kind: "Appam" }, { items: ["Vegetable stew", "Egg roast"] }), T({ kind: "Boiled chicken" })] })],
+      templates: [T({ kind: "Appam", dish: "Appam" }, { items: ["Vegetable stew", "Egg roast"] }), T({ kind: "Boiled chicken" })] })],
       library: [dish("Appam", "Breakfast", "Appam"), dish("Vegetable stew", "Breakfast", "Gravy"), dish("Egg roast", "Breakfast", "Egg", { contains: ["egg"] }),
         dish("Boiled chicken", "Breakfast", "Boiled chicken", { contains: ["chicken"] })] });
     for (const p of weekOf(r, "Breakfast")) {
@@ -176,23 +177,24 @@ describe("new variants (rule 4)", () => {
     expect(WEEK.filter((d) => r.at(d, "Breakfast").includes("Boiled chicken")).length).toBeGreaterThan(0);
   });
   it("a part named as a bare category (\"Sabzi\") is never a dish on the plate: a real item stands there", () => {
-    const r = run({ slots: [slot("Dinner", { templates: [T({ kind: "Roti" }, { kind: "Sabzi" })] })],
-      library: [dish("Roti", "Dinner", "Roti"), dish("Sabzi", "Dinner", "Sabzi")] });
+    // The category word lives on the template part (its words), never as a library row (§5.3).
+    const r = run({ slots: [slot("Dinner", { templates: [T({ kind: "Roti" }, { kind: "Sabzi", words: "sabzi" })] })],
+      library: [dish("Roti", "Dinner", "Roti")] });
     for (const p of weekOf(r, "Dinner")) { expect(p).toHaveLength(2); expect(p[1]).not.toBe("Sabzi"); }
     // Their word named the category: its items are theirs (lead's rule, 25 Nov), not new, not asked about.
     expect(r.placed).toEqual([]);
     for (const d of WEEK) expect(r.plates.get(slotDayKey(d, "Dinner"))!.every((x) => !x.new)).toBe(true);
   });
-  it("a sub-kind they named (\"sambar\", \"a poriyal\") is filled with its items as theirs; a sub-kind they did not name is new", () => {
-    const kinds: MealKind[] = [{ name: "Rice", staple: true }, { name: "Rice curry" }, { name: "Sabzi" }];
-    const r = run({ slots: [slot("Lunch", { templates: [T({ kind: "Rice" }, { kind: "Rice curry" }, { kind: "Sabzi" })] })],
-      library: [dish("Rice", "Lunch", "Rice"), dish("Sambar", "Lunch", "Rice curry", { sub: "Sambar" }), dish("Poriyal", "Lunch", "Sabzi", { sub: "Poriyal/Thoran" })] });
+  it("a sub-kind they named (\"sambar\", \"a poriyal\") is filled with its items as theirs; nothing new outside it", () => {
+    const r = run({ slots: [slot("Lunch", { templates: [T({ kind: "Rice" }, { kind: "Rice curry", sub: "Sambar", words: "sambar" }, { kind: "Sabzi", sub: "Poriyal/Thoran", words: "a poriyal" })] })],
+      library: [dish("Rice", "Lunch", "Rice")] });
     const sambars = suggestable("Rice curry", { sub: "Sambar" }).map((i) => i.name), poriyals = suggestable("Sabzi", { sub: "Poriyal/Thoran" }).map((i) => i.name);
     const plates = weekOf(r, "Lunch");
     for (const p of plates) expect(sambars).toContain(p[1]);
-    for (const p of plates.slice(0, poriyals.length)) expect(poriyals).toContain(p[2]);
-    // Once the poriyals have all come, a sabzi of another sub-kind is new.
-    expect(r.placed.map((x) => x.dish)).toEqual(plates.map((p) => p[2]).filter((x) => !poriyals.includes(x)));
+    // The poriyals all come before one comes back; never a sabzi of another sub-kind (the "etc." rule).
+    for (const p of plates) expect(poriyals).toContain(p[2]);
+    expect(new Set(plates.slice(0, poriyals.length).map((p) => p[2])).size).toBe(poriyals.length);
+    expect(r.placed).toEqual([]);
   });
 });
 
@@ -264,7 +266,7 @@ describe("food rules (rule 6) and onion and garlic (rule 7)", () => {
 describe("an add-on", () => {
   it("a dish had twice a week comes on two days apart; the other days are empty where the main meal feeds its person", () => {
     const slots = [slot("Dinner", { templates: [T({ kind: "Roti" }, { kind: "Sabzi" })] }),
-      slot("Papa's dinner", { kind: "addon", addon_of: "Dinner", order: 60, usual_people: ["Ravi"] })];
+      slot("Papa's dinner", { kind: "addon", addon_of: "Dinner", order: 60, usual_people: ["Ravi"], templates: [T({ items: ["Jowar bhakri"] })] })];
     const lib = [dish("Phulka", "Dinner", "Roti"), ...SABZIS.map((n) => dish(n, "Dinner", "Sabzi")), dish("Jowar bhakri", "Papa's dinner", "Bhakri", { frequency: "2/week" })];
     const days = [...WEEK.map((d) => day(d, "Dinner", ["Asha", "Ravi"])), ...WEEK.map((d) => day(d, "Papa's dinner", ["Ravi"]))];
     const r = run({ slots, library: lib, days, newCap: 0 });
@@ -275,30 +277,17 @@ describe("an add-on", () => {
   });
 });
 
-describe("an allergy (rule 6: new items read carefully)", () => {
+describe("an allergy (rule 6: checked by what the catalog says; no careful read)", () => {
   const peanut = rule({ who: "Ravi", items: ["peanut"], quote: "Ravi is allergic to peanuts" });
-  const slots = [slot("Breakfast", { templates: [T({ kind: "Poha" })] })];
-  const lib = [dish("Kanda poha", "Breakfast", "Poha")];
-  const base = (o: Partial<FillInput>) => fillWeek({ days: WEEK.map((d) => day(d, "Breakfast", ["Asha", "Ravi"])), slots, library: lib, rules: [peanut], history: new Map(), cuisines: [],
-    careful: new Map([[dishKey("Kanda poha"), new Set<string>()]]), ...o });
-  it("until the careful read, a variant stands on the catalog's contents and is named to be read", () => {
-    const r = base({});
+  it("a new poha is checked by its catalog contents: one with peanuts as a main ingredient is never on Ravi's plate while another fits; nothing is left unknown", () => {
+    const r = fillWeek({ days: WEEK.map((d) => day(d, "Breakfast", ["Asha", "Ravi"])), slots: [slot("Breakfast", { templates: [T({ kind: "Poha", dish: "Kanda poha" })] })],
+      library: [dish("Kanda poha", "Breakfast", "Poha")], rules: [peanut], history: new Map(), cuisines: [] });
     expect(r.placed.length).toBeGreaterThan(0);
-    expect(r.provisional.sort()).toEqual(uniqSorted(r.placed.map((p) => p.dish)));
-  });
-  it("after it, a variant read as maybe having it is not his (unless only an ingredient it can be made without brings it: a note, decided 21), and one never read is not used for him", () => {
-    const first = base({});
-    const bad = first.placed[0].dish;
-    const careful = new Map<string, Set<string>>([[dishKey("Kanda poha"), new Set()], ...first.placed.slice(1).map((p) => [dishKey(p.dish), new Set<string>()] as [string, Set<string>]),
-      [dishKey(bad), new Set(["peanut"])]]);
-    const r = base({ careful, strict: true });
-    const leaveOutPeanuts = (catalogIngredients(bad) ?? []).some((i) => i.name === "peanuts" && !i.main);
     for (const d of WEEK) for (const x of r.plates.get(slotDayKey(d, "Breakfast"))!) {
-      if (x.name === bad) expect(x.not_for).toEqual(leaveOutPeanuts ? [] : ["Ravi"]);
-      if (x.name === bad && leaveOutPeanuts) expect(x.note).toContain("make without peanuts for Ravi");
-      if (!careful.has(dishKey(x.name))) expect(x.not_for).toEqual(["Ravi"]);
+      const main = (catalogIngredients(x.name) ?? []).some((i) => i.name === "peanuts" && i.main);
+      expect(x.not_for).toEqual(main ? ["Ravi"] : []);
     }
-    expect(r.provisional).toEqual([]);
+    expect(r.unknowns).toEqual([]);
     expect(r.unmet.filter((u) => u.includes("nothing to eat"))).toEqual([]);
   });
 });
@@ -359,7 +348,7 @@ describe("a template made for a pinned dish, and one that would repeat yesterday
     const kinds: MealKind[] = [{ name: "Idli" }, { name: "Dosa" }, { name: "Khichdi", subs: ["Pongal"] }];
     const lib = [...["Rava idli", "Kanchipuram idli"].map((n) => dish(n, "Breakfast", "Idli")), ...["Masala dosa", "Ghee roast dosa"].map((n) => dish(n, "Breakfast", "Dosa")),
       dish("Ven pongal", "Breakfast", "Khichdi", { sub: "Pongal", days: ["Sun"] })];
-    const r = run({ slots: [slot("Breakfast", { templates: [T({ kind: "Idli" }), T({ kind: "Dosa" }), T({ kind: "Khichdi", sub: "Pongal" })] })], library: lib });
+    const r = run({ slots: [slot("Breakfast", { templates: [T({ kind: "Idli", dish: "Rava idli" }), T({ kind: "Dosa", dish: "Masala dosa" }), T({ kind: "Khichdi", sub: "Pongal", dish: "Ven pongal" })] })], library: lib });
     expect(r.at(WEEK[6], "Breakfast")).toEqual(["Ven pongal"]);
     for (const d of WEEK.slice(0, 6)) expect(r.at(d, "Breakfast").some((x) => /pongal/i.test(x))).toBe(false);
   });
@@ -375,10 +364,8 @@ describe("a template made for a pinned dish, and one that would repeat yesterday
 
 describe("a category kept to a day", () => {
   it("'pongal on Sundays' said as the category: a pongal on Sunday, none on other days", () => {
-    const kinds: MealKind[] = [{ name: "Idli" }, { name: "Dosa" }, { name: "Khichdi", subs: ["Pongal"] }];
-    const lib = [...["Rava idli", "Kanchipuram idli"].map((n) => dish(n, "Breakfast", "Idli")), ...["Masala dosa", "Ghee roast dosa"].map((n) => dish(n, "Breakfast", "Dosa")),
-      dish("Pongal", "Breakfast", "Khichdi", { sub: "Pongal", days: ["Sun"] })];
-    const r = run({ slots: [slot("Breakfast", { templates: [T({ kind: "Idli" }), T({ kind: "Dosa" }), T({ kind: "Khichdi", sub: "Pongal" })] })], library: lib });
+    const lib = [...["Rava idli", "Kanchipuram idli"].map((n) => dish(n, "Breakfast", "Idli")), ...["Masala dosa", "Ghee roast dosa"].map((n) => dish(n, "Breakfast", "Dosa"))];
+    const r = run({ slots: [slot("Breakfast", { templates: [T({ kind: "Idli" }), T({ kind: "Dosa" }), { parts: [{ kind: "Khichdi", sub: "Pongal", words: "pongal" }], days: ["Sun"] }] })], library: lib });
     expect(r.at(WEEK[6], "Breakfast").some((x) => /pongal/i.test(x))).toBe(true);
     expect(r.at(WEEK[6], "Breakfast")).not.toContain("Pongal");
     for (const d of WEEK.slice(0, 6)) expect(r.at(d, "Breakfast").some((x) => /pongal/i.test(x))).toBe(false);
@@ -388,10 +375,10 @@ describe("a category kept to a day", () => {
 describe("a house-wide allergy and a category the family named (class 1: empty meals)", () => {
   it("the family's 'poha' under 'nothing at home has peanuts': their poha items are checked like any catalog item (decided 21: no longer vouched), made without peanuts; breakfast is never empty", () => {
     const peanut = rule({ items: ["peanut"], quote: "nothing at home has peanuts, he is allergic" });
-    const r = fillWeek({ days: WEEK.map((d) => day(d, "Breakfast", ["Asha", "Ravi"])), slots: [slot("Breakfast", { templates: [T({ kind: "Poha" })] })],
-      library: [dish("Poha", "Breakfast", "Poha")], rules: [peanut], history: new Map(), cuisines: [], careful: new Map() });
-    // Not vouched: each item placed is to be read carefully (here, on the catalog's word until then).
-    expect(r.provisional.length).toBeGreaterThan(0);
+    const r = fillWeek({ days: WEEK.map((d) => day(d, "Breakfast", ["Asha", "Ravi"])), slots: [slot("Breakfast", { templates: [T({ kind: "Poha", words: "poha" })] })],
+      library: [], rules: [peanut], history: new Map(), cuisines: [] });
+    // Not vouched: each item placed is checked by the catalog's contents, and none is left unknown.
+    expect(r.unknowns).toEqual([]);
     for (const d of WEEK) {
       const plate = r.plates.get(slotDayKey(d, "Breakfast"))!;
       expect(plate.length).toBe(1);
@@ -405,9 +392,10 @@ describe("a house-wide allergy and a category the family named (class 1: empty m
 
 describe("a dish had every day (class 2: daily items)", () => {
   it("'eggs every morning', said as the category, comes every day beside whatever the template brings, a different egg dish where it can", () => {
-    const kinds: MealKind[] = [{ name: "Egg", subs: ["Eggs"] }, { name: "Porridge" }, { name: "Toast" }];
-    const lib = [dish("Eggs", "Breakfast", "Egg", { sub: "Eggs", frequency: "daily" }), dish("Oats porridge", "Breakfast", "Porridge"), dish("Butter toast", "Breakfast", "Toast")];
-    const r = run({ slots: [slot("Breakfast", { templates: [T({ kind: "Egg", sub: "Eggs" }), T({ kind: "Porridge" }), T({ kind: "Toast" })] })], library: lib });
+    // The category is a part of every template (setup's shape for "every morning"), never a library row.
+    const eggs = { kind: "Egg", sub: "Eggs", words: "eggs" };
+    const lib = [dish("Oats porridge", "Breakfast", "Porridge"), dish("Butter toast", "Breakfast", "Toast")];
+    const r = run({ slots: [slot("Breakfast", { templates: [T(eggs), T({ kind: "Porridge", dish: "Oats porridge" }, eggs), T({ kind: "Toast", dish: "Butter toast" }, eggs)] })], library: lib });
     for (const d of WEEK) {
       const p = r.at(d, "Breakfast");
       expect(p.filter((x) => /egg|omelette|half fry|bhurji/i.test(x)).length).toBe(1);
@@ -464,7 +452,7 @@ describe("a new item's diet (rule 4: new variants are like the family's own)", (
   it("a house whose only meat is chicken is never suggested a mutton or egg pulao", () => {
     const kinds: MealKind[] = [{ name: "Pulao" }];
     const lib = [dish("Veg pulao", "Tiffin", "Pulao"), dish("Chicken curry", "Lunch", "Chicken", { contains: ["chicken"] })];
-    const r = run({ slots: [slot("Tiffin", { kind: "custom", order: 20, templates: [T({ kind: "Pulao" })] })], library: lib });
+    const r = run({ slots: [slot("Tiffin", { kind: "custom", order: 20, templates: [T({ kind: "Pulao", dish: "Veg pulao" })] })], library: lib });
     const all = WEEK.flatMap((d) => r.at(d, "Tiffin"));
     expect(all.some((x) => /mutton|yakhni|egg|fish|prawn/i.test(x))).toBe(false);
     expect(r.placed.length).toBeGreaterThan(0);
@@ -493,15 +481,15 @@ describe("the family's day and count words hold for whatever stands for the dish
   });
   it("'pasta on Sundays' said as the category: a pasta only on Sunday, never another pasta on a weekday", () => {
     const kinds: MealKind[] = [{ name: "Roti", staple: true }, { name: "Sabzi" }, { name: "Pasta" }];
-    const lib = [dish("Phulka", "Dinner", "Roti"), ...SABZIS.map((n) => dish(n, "Dinner", "Sabzi")), dish("Pasta", "Dinner", "Pasta", { days: ["Sun"] })];
-    const r = run({ slots: [slot("Dinner", { templates: [T({ kind: "Roti" }, { kind: "Sabzi" }), T({ kind: "Pasta" })] })], library: lib });
+    const lib = [dish("Phulka", "Dinner", "Roti"), ...SABZIS.map((n) => dish(n, "Dinner", "Sabzi"))];
+    const r = run({ slots: [slot("Dinner", { templates: [T({ kind: "Roti" }, { kind: "Sabzi" }), { parts: [{ kind: "Pasta", words: "pasta" }], days: ["Sun"] }] })], library: lib });
     for (const d of WEEK.slice(0, 6)) expect(r.at(d, "Dinner").some((x) => /pasta|macaroni|spaghetti|penne/i.test(x))).toBe(false);
     expect(r.at(WEEK[6], "Dinner").length).toBeGreaterThan(0);
   });
   it("'white sauce pasta on Sundays', a dish, in a pasta part: no other pasta stands in for it on a weekday", () => {
     const kinds: MealKind[] = [{ name: "Roti", staple: true }, { name: "Sabzi" }, { name: "Pasta" }];
     const lib = [dish("Phulka", "Dinner", "Roti"), ...SABZIS.map((n) => dish(n, "Dinner", "Sabzi")), dish("White sauce pasta", "Dinner", "Pasta", { days: ["Sun"] })];
-    const r = run({ slots: [slot("Dinner", { templates: [T({ kind: "Roti" }, { kind: "Sabzi" }), T({ kind: "Pasta" })] })], library: lib });
+    const r = run({ slots: [slot("Dinner", { templates: [T({ kind: "Roti" }, { kind: "Sabzi" }), T({ kind: "Pasta", dish: "White sauce pasta" })] })], library: lib });
     for (const d of WEEK.slice(0, 6)) expect(r.at(d, "Dinner").some((x) => /pasta|macaroni|spaghetti|penne/i.test(x))).toBe(false);
     expect(r.at(WEEK[6], "Dinner")).toContain("White sauce pasta");
   });
@@ -518,8 +506,8 @@ describe("the family's day and count words hold for whatever stands for the dish
 describe("a regional word the family used as a category (decided 20)", () => {
   it("'a curry' in an Andhra home, stored as Sabzi / Vepudu: never the bare word on a plate, always a real dry vegetable dish", () => {
     const kinds: MealKind[] = [{ name: "Rice", staple: true }, { name: "Sabzi", subs: ["Vepudu"] }];
-    const lib = [dish("Rice", "Lunch", "Rice"), dish("Curry", "Lunch", "Sabzi", { sub: "Vepudu" }), dish("Cabbage curry", "Lunch", "Sabzi", { sub: "Vepudu" })];
-    const r = run({ slots: [slot("Lunch", { templates: [T({ kind: "Rice" }, { kind: "Sabzi", sub: "Vepudu" })] })], library: lib, cuisines: ["andhra", "south"] });
+    const lib = [dish("Rice", "Lunch", "Rice"), dish("Cabbage curry", "Lunch", "Sabzi", { sub: "Vepudu" })];
+    const r = run({ slots: [slot("Lunch", { templates: [T({ kind: "Rice" }, { kind: "Sabzi", sub: "Vepudu", words: "a curry" })] })], library: lib, cuisines: ["andhra", "south"] });
     for (const d of WEEK) { expect(r.at(d, "Lunch")).not.toContain("Curry"); expect(r.at(d, "Lunch")).toHaveLength(2); }
     expect(r.ownItems?.size).toBeGreaterThan(0);
   });
@@ -539,7 +527,7 @@ describe("a family dish fills places only at the meal it was named for (class 1)
     expect(WEEK.filter((d) => r.at(d, "Dinner").includes("Rasam rice")).length).toBeGreaterThan(0);
   });
   it("a category named at dinner ('uthappam sometimes') makes its items theirs at dinner only: breakfast's dosas are breakfast's own", () => {
-    const bf = slot("Breakfast", { templates: [T({ kind: "Dosa" })] });
+    const bf = slot("Breakfast", { templates: [T({ kind: "Dosa", dish: "Masala dosa" })] });
     const dinner = slot("Dinner", { templates: [T({ kind: "Dosa" }, { kind: "Gravy", sub: "Kurma" })] });
     const lib = [dish("Masala dosa", "Breakfast", "Dosa"), dish("Rava dosa", "Breakfast", "Dosa"), dish("Neer dosa", "Breakfast", "Dosa"),
       dish("Uthappam", "Dinner", "Dosa", { frequency: "sometimes" }), dish("Kurma", "Dinner", "Gravy", { sub: "Kurma" })];
@@ -553,10 +541,10 @@ describe("a count said of a dish holds across the day's meals (class 2)", () => 
     const sabzis = ["Tindora shaak", "Bhindi shaak", "Cabbage shaak", "Lauki shaak"];
     // Lunch is had at home on Monday and the weekend only (the days it is cooked), so its kadhi days fall apart from dinner's.
     const lunch = slot("Lunch", { days: ["Mon", "Sat", "Sun"], 
-      templates: [T({ kind: "Roti" }, { kind: "Dal" }, { kind: "Rice" }, { kind: "Sabzi" }), share(T({ kind: "Roti" }, { kind: "Rice curry", sub: "Kadhi" }, { kind: "Rice" }, { kind: "Sabzi" }), "3/week")] });
+      templates: [T({ kind: "Roti" }, { kind: "Dal", sub: "Dal", words: "dal" }, { kind: "Rice" }, { kind: "Sabzi" }), share(T({ kind: "Roti" }, { kind: "Rice curry", sub: "Kadhi", dish: "Kadhi" }, { kind: "Rice" }, { kind: "Sabzi" }), "3/week")] });
     const dinner = slot("Dinner", { 
-      templates: [share(T({ kind: "Khichdi", sub: "Khichdi" }, { kind: "Rice curry", sub: "Kadhi" }), "2/week"), T({ kind: "Bhakri" }, { kind: "Sabzi" })] });
-    const lib = [dish("Rotli", "Lunch", "Roti"), dish("Bhaat", "Lunch", "Rice"), dish("Dal", "Lunch", "Dal", { sub: "Dal" }), ...sabzis.map((n) => dish(n, "Lunch", "Sabzi")),
+      templates: [share(T({ kind: "Khichdi", sub: "Khichdi", dish: "Khichdi" }, { kind: "Rice curry", sub: "Kadhi", dish: "Kadhi" }), "2/week"), T({ kind: "Bhakri" }, { kind: "Sabzi" })] });
+    const lib = [dish("Rotli", "Lunch", "Roti"), dish("Bhaat", "Lunch", "Rice"), ...sabzis.map((n) => dish(n, "Lunch", "Sabzi")),
       dish("Kadhi", "Lunch", "Rice curry", { sub: "Kadhi", frequency: "3/week" }),
       dish("Khichdi", "Dinner", "Khichdi", { sub: "Khichdi", frequency: "2/week" }), dish("Kadhi", "Dinner", "Rice curry", { sub: "Kadhi", frequency: "2/week" }),
       dish("Bhakri", "Dinner", "Bhakri"), ...sabzis.map((n) => dish(n, "Dinner", "Sabzi"))];
@@ -584,8 +572,8 @@ describe("a dish had every day comes every day it is had there, in any kind of m
     const lib = [dish("Phulka", "Dinner", "Roti"), ...SABZIS.map((n) => dish(n, "Dinner", "Sabzi")),
       dish("Vegetable upma", "Nani's dinner", "Upma"), dish("Ragi roti", "Nani's dinner", "Roti"), dish("Milk", "Nani's dinner", null, { frequency: "daily", contains: ["dairy"] })];
     const days = WEEK.flatMap((d) => [day(d, "Dinner", ["Asha", "Ravi"]), day(d, "Nani's dinner", ["Nani"])]);
-    const r = run({ slots: [slot("Dinner"), own], library: lib, days, history: { Dinner: seed([["Phulka", "Aloo gobi"], ["Phulka", "Lauki sabzi"]]),
-      "Nani's dinner": seed([["Vegetable upma", "Milk"], ["Ragi roti", "Milk"]]) } });
+    const r = run({ slots: [slot("Dinner", { templates: [T({ kind: "Roti" }, { kind: "Sabzi" })] }), { ...own, templates: [T({ items: ["Vegetable upma"] }), T({ items: ["Ragi roti"] })] }],
+      library: lib, days, history: { Dinner: seed([["Phulka", "Aloo gobi"], ["Phulka", "Lauki sabzi"]]), "Nani's dinner": seed([["Vegetable upma", "Milk"], ["Ragi roti", "Milk"]]) } });
     for (const d of WEEK) expect(r.at(d, "Nani's dinner")).toContain("Milk");
   });
 });
@@ -623,7 +611,7 @@ describe("an add-on's own dishes kept to their words still feed its person when 
 describe("a rule kept to days and meals holds in every meal outside them (safety: \"chicken only at Sunday lunch\")", () => {
   const only = ["Ravi", "Karan"].map((who) => rule({ what: "only", who, items: ["chicken"], days: ["Sun"], slots: ["Lunch"], quote: "We eat chicken only on Sunday lunch." }));
   it("a new pulao in a child's tiffin never carries chicken, while Sunday lunch keeps the family's chicken", () => {
-    const tiffin = slot("Karan's tiffin", { kind: "custom", order: 20, usual_people: ["Karan"], templates: [T({ kind: "Pulao" })] });
+    const tiffin = slot("Karan's tiffin", { kind: "custom", order: 20, usual_people: ["Karan"], templates: [T({ kind: "Pulao", dish: "Veg pulao" })] });
     const lunch = slot("Lunch", { templates: [T({ kind: "Rice" }, { kind: "Dal" })] });
     const lib = [dish("Veg pulao", "Karan's tiffin", "Pulao"), dish("Rice", "Lunch", "Rice"), dish("Dal tadka", "Lunch", "Dal"), dish("Moong dal", "Lunch", "Dal"),
       dish("Chicken curry", "Lunch", "Chicken", { contains: ["chicken"], days: ["Sun"] })];
@@ -653,7 +641,7 @@ describe("a rule kept to days and meals holds in every meal outside them (safety
 describe("nobody at a meal is left with nothing (safety)", () => {
   it("a person fed at their own breakfast still counts at the family's: the shared item is one they can eat while one fits", () => {
     const slots = [slot("Breakfast", { templates: [T({ kind: "Toast" })] }),
-      slot("Dadu's breakfast", { kind: "addon", addon_of: "Breakfast", order: 60, usual_people: ["Dadu"] })];
+      slot("Dadu's breakfast", { kind: "addon", addon_of: "Breakfast", order: 60, usual_people: ["Dadu"], templates: [T({ items: ["Ragi malt"] })] })];
     const lib = [dish("French toast", "Breakfast", "Toast", { contains: ["egg", "dairy"] }), dish("Bread butter toast", "Breakfast", "Toast", { contains: ["dairy"] }),
       dish("Ragi malt", "Dadu's breakfast", "Porridge")];
     const days = [...WEEK.map((d) => day(d, "Breakfast", ["Asha", "Ravi", "Dadu"])), ...WEEK.map((d) => day(d, "Dadu's breakfast", ["Dadu"]))];
@@ -670,13 +658,67 @@ describe("nobody at a meal is left with nothing (safety)", () => {
 
 describe("rotation: the family's own items of a kind come before another item of it comes back (rule 3)", () => {
   it("a family that says \"upma\" and \"poha\" gets upmas and pohas, not a sabudana khichdi or avalakki oggarane, before any repeat", () => {
-    const kinds: MealKind[] = [{ name: "Upma" }, { name: "Poha" }];
-    const lib = [dish("Upma", "Breakfast", "Upma"), dish("Poha", "Breakfast", "Poha")];
-    // Regional items of their cuisines rank high among the catalog's; the family's own word still comes first.
-    const r = run({ slots: [slot("Breakfast", { templates: [T({ kind: "Upma" }), T({ kind: "Poha" })] })], library: lib, cuisines: ["maharashtra", "karnataka"], newCap: 0 });
+    // Regional items of their cuisines rank high among the catalog's; the family's own word (the part's words) still comes first.
+    const r = run({ slots: [slot("Breakfast", { templates: [T({ kind: "Upma", words: "upma" }), T({ kind: "Poha", words: "poha" })] })], library: [], cuisines: ["maharashtra", "karnataka"], newCap: 0 });
     const all = WEEK.flatMap((d) => r.at(d, "Breakfast"));
     expect(all).toHaveLength(7);
     for (const x of all) expect(x).toMatch(/\b(upma|poha)\b/i);
     expect(new Set(all).size).toBe(7);
+  });
+});
+
+describe("one meaning model fill", () => {
+  it("a category part is filled with catalog items of its kind, never the family's word", () => {
+    const r = run({ slots: [slot("Lunch", { templates: [T({ kind: "Rice" }, { kind: "Sabzi", words: "dry sabji" })] })], library: [] });
+    for (const p of weekOf(r, "Lunch")) {
+      expect(p).toHaveLength(2);
+      expect(catalogItem(p[1])!.kind.name).toBe("Sabzi");
+      expect(p[1]).not.toBe("Dry sabji");
+    }
+    // The category's items are the family's own: none placed as new.
+    expect(r.placed).toEqual([]);
+    expect(r.places.get(dishKey(r.at(WEEK[0], "Lunch")[1]))).toMatchObject({ kind: "Sabzi" });
+  });
+  it("a part with a dish places that dish first; other items of the kind are new", () => {
+    const r = run({ slots: [slot("Breakfast", { templates: [T({ kind: "Dosa", dish: "Plain dosa", words: "dosa" })] })], library: [] });
+    expect(r.at(WEEK[0], "Breakfast")).toEqual(["Plain dosa"]);
+    const others = WEEK.flatMap((d) => r.at(d, "Breakfast")).filter((x) => x !== "Plain dosa");
+    expect(others.length).toBeGreaterThan(0);
+    for (const x of others) {
+      expect(catalogItem(x)!.kind.name).toBe("Dosa");
+      expect(r.placed.map((p) => p.dish)).toContain(x);
+    }
+  });
+  it("the family's words for a category pick its items first", () => {
+    const r = run({ slots: [slot("Breakfast", { templates: [T({ kind: "Upma", words: "upma" })] })], library: [] });
+    expect(r.at(WEEK[0], "Breakfast")[0]).toMatch(/upma/i);
+  });
+  it("a template kept to days comes only on those days", () => {
+    const r = run({ slots: [slot("Breakfast", { templates: [{ parts: [{ items: ["Bread omelette"] }], days: ["Sun"] }, T({ kind: "Idli" })] })], library: [] });
+    for (const d of WEEK.slice(0, 6)) expect(r.at(d, "Breakfast")).not.toContain("Bread omelette");
+    expect(r.at(WEEK[6], "Breakfast")).toEqual(["Bread omelette"]);
+  });
+  it("one unknown never spreads: the person keeps the plate, the dish is asked once", () => {
+    const gs = rule({ who: "GS", what: "avoid", targets: [{ type: "ingredient", tag: "egg" }], quote: "Dad doesn't eat egg" });
+    const lib = [dish("Rice", "Lunch", "Rice"), dish("Kadhi", "Lunch", "Rice curry", { sub: "Kadhi", contains_read: [] })];
+    const r = run({ slots: [slot("Lunch", { templates: [T({ kind: "Rice" }, { kind: "Rice curry", sub: "Kadhi" })] })], library: lib, people: ["Asha", "GS"], rules: [gs] });
+    for (const p of weekOf(r, "Lunch")) expect(p).toHaveLength(2);
+    const kadhiDays = WEEK.filter((d) => r.at(d, "Lunch").includes("Kadhi"));
+    expect(kadhiDays.length).toBeGreaterThan(0);
+    for (const d of kadhiDays) expect(r.dishAt(d, "Lunch", "Kadhi")!.not_for).toEqual([]);
+    const asked = r.unknowns.filter((u) => u.dish === "Kadhi");
+    expect(asked.map((u) => u.date).sort()).toEqual(kadhiDays);
+    expect(asked.every((u) => u.who === "GS" && u.tag === "egg")).toBe(true);
+    expect(r.unknowns.filter((u) => u.dish !== "Kadhi")).toEqual([]);
+    expect(r.log.filter((l) => l.includes("nothing of its template"))).toEqual([]);
+  });
+  it("a meal with no templates plans nothing", () => {
+    const r = run({ slots: [slot("Dinner")], library: [dish("Phulka", "Dinner", "Roti")] });
+    for (const d of WEEK) expect(r.at(d, "Dinner")).toEqual([]);
+    expect(r.log).toContain("Dinner: no templates");
+  });
+  it("never matches a family word", () => {
+    const src = readFileSync(new URL("./fillWeek.ts", import.meta.url), "utf8");
+    for (const f of ["matchDish(", "regionalWordOf(", "isCategoryName(", "contentsItem("]) expect(src).not.toContain(f);
   });
 });

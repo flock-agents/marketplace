@@ -28,9 +28,10 @@ import { STOP_CODES, stopSaid, type ModelCall, type ModelFailure, type ModelRequ
 import { commit, deleteSlotDays, listLibrary, listRules, listSlotDays, listSlots, saveSlotDay, slotHistory, upsertLibrary, type LibraryDish,
   type Rule } from "./slotStore";
 import { buildDays, slotDayKey, lunchSaid, platformPeers, readEvents, readHousehold, withLunchSaid, type PlanDay, type Peers } from "./planDays";
-import { canonTag, carefulTags, allergyNotes, forbidden, isDropped, mostlyOnion, notFor, plannable, readFor, ruleTags, slotFacts, softSwapNotes, swapNotes,
+import { canonTag, allergyNotes, forbidden, isDropped, mostlyOnion, notFor, plannable, readFor, ruleTags, slotFacts, softSwapNotes, swapNotes,
   ruleBinds, vouched, withParents, type Week } from "./planChecks";
 import { CATALOG_READ, catalogNameOf, fillWeek, type FillResult } from "./fillWeek";
+import { catalogItem } from "./kinds";
 import { isAllergyRule } from "./allergy";
 
 export type MakePlanResult =
@@ -245,7 +246,7 @@ async function planWeek(deps: MakePlanDeps & { log: (line: string) => void }, in
    *  26). A dish the catalog knows is read by it for the catalog's tags. */
   const hardTags = uniq(rules.filter((r) => r.hard).flatMap(forbidden));
   const unreadIn = (d: LibraryDish) => {
-    const read = new Set([...d.contains_read.map(canonTag), ...(catalogNameOf(d) ? CATALOG_READ : [])]);
+    const read = new Set([...d.contains_read.map(canonTag), ...(catalogNameOf(d) || catalogItem(d.name) ? CATALOG_READ : [])]);
     return hardTags.some((t) => !readFor(read, t));
   };
   /** Read what the dishes contain, in batches (what is not read fails closed). */
@@ -273,46 +274,17 @@ async function planWeek(deps: MakePlanDeps & { log: (line: string) => void }, in
     }
     return null;
   };
-  // The careful allergy read (owner 25 Nov): every dish the family does not vouch for under an allergy rule, on the balanced
-  // tier, unsure counted as having it; a dish not read so is not safe for that person.
-  const allergyTags = uniq(rules.filter((r) => isAllergyRule(r)).flatMap(forbidden));
-  const careful = allergyTags.length ? new Map<string, Set<string>>() : undefined;
-  if (careful) w.careful = careful;
-  const carefulRead = async (dishes: string[]): Promise<Failure | null> => {
-    if (!careful) return null;
-    const need = uniq(dishes.map(dishKey)).filter((k) => !careful.has(k)).map((k) => dishes.find((x) => dishKey(x) === k)!).filter((x) => carefulTags(w, x).length);
-    for (let i = 0; i < need.length; i += CONTAINS_BATCH) {
-      const batch = need.slice(i, i + CONTAINS_BATCH);
-      const r = await model({ tier: "balanced", purpose: "meal plan: what dishes contain, carefully (allergies)", system: CAREFUL_SYSTEM, schema: CAREFUL_SCHEMA, maxTokens: 3000,
-        user: JSON.stringify({ tags: allergyTags, dishes: batch }) }, INGREDIENTS_RESERVE_MS);
-      if (!r.ok) { log(`careful read failed (${r.code}) for ${batch.join(", ")}: not safe for the allergy`); if (isStop(r.code)) return r; continue; }
-      const raw = isObject(r.json) && Array.isArray(r.json.dishes) ? r.json.dishes : [];
-      for (const x of raw) if (isObject(x) && typeof x.dish === "string" && batch.some((y) => dishKey(y) === dishKey(x.dish as string)))
-        careful.set(dishKey(x.dish), new Set([...withParents(strs(x.has))].filter((t) => allergyTags.includes(t))));
-    }
-    return null;
-  };
-  // The library's dishes not read for every tag are read now (else every one of them fails closed), then the careful read of
-  // the family's dishes.
+  // (The careful allergy read is gone: one meaning model, unknown = plan and ask, allergies included. Task 10 cleans up the rest.)
+  // The library's dishes not read for every tag are read now.
   const unread = library.filter((d) => !isDropped(d) && !d.disliked && unreadIn(d)).map((d) => d.name);
   if (unread.length) log(`contains: ${unread.length} library dishes not read for every tag: reading them first`);
   const f1 = unread.length ? await readContains(unread) : null;
   if (f1) return stopped(f1);
-  const f2 = await carefulRead(library.filter((d) => !isDropped(d) && !d.disliked && order.some((n) => same(n, d.slot))).map((d) => d.name));
-  if (f2) return stopped(f2);
 
-  // 3. The week filled by code from the templates; where an allergy holds, the variants it placed on the catalog's word are
-  // read carefully, and the week filled again with that read (a variant not read is then not safe).
+  // 3. The week filled by code from the templates (fillWeek: res.unknowns holds what is to be asked; Task 10 says it).
   const t0 = clock();
-  const fill = (strict: boolean): FillResult => fillWeek({ days, slots, library, history: histories, rules, cuisines: houseCuisines(db), newCap: newDishesSet(db),
-    facts: w.facts, careful, strict, guestTags: w.guestTags });
-  let filled = fill(!careful);
-  if (careful && filled.provisional.length) {
-    log(`careful read of ${filled.provisional.length} new dishes placed where an allergy holds`);
-    const f3 = await carefulRead(filled.provisional);
-    if (f3) return stopped(f3);
-    filled = fill(true);
-  }
+  const filled: FillResult = fillWeek({ days, slots, library, history: histories, rules, cuisines: houseCuisines(db), newCap: newDishesSet(db),
+    facts: w.facts, guestTags: w.guestTags });
   for (const line of filled.log) log(line);
   log(`filled ${toPlan.length} slot-days in ${clock() - t0} ms: ${filled.placed.length} new dishes placed`);
   for (const [k, v] of filled.facts) if (!w.facts.has(k)) w.facts.set(k, v);
