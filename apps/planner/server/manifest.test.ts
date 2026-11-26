@@ -251,9 +251,26 @@ describe("the agent's interface", () => {
 
   it("otherDays gates only on facts that something fills: two variants, the cook's presence", () => {
     const days = setup.filter((q) => q.id === "otherDays");
-    expect(days.map((q) => q.when)).toEqual(["household.help has cook", "!household.help"]);
+    expect(days.map((q) => q.when)).toEqual(["household.help has cook", "household.people"]);
     for (const q of setup) expect(q.when ?? "", `${q.id} gates on cook.days, which nothing fills`).not.toMatch(/cook\.(days|visits|name)/);
     expect(setup.some((q) => (q.fills ?? []).some((f) => f.startsWith("cook.")))).toBe(false);
+  });
+
+  // Flock asks the FIRST variant whose `when` holds (engine/spec.ts), so variant 2 catches every home without a cook.
+  it("for a household with only a maid, or no help, exactly the no-cook otherDays is asked; with a cook, the cook's", () => {
+    // The same reading of a `when` as Flock's engine/facts.ts: terms joined by " and "; name; !name; name has word.
+    const holds = (when: string, facts: Record<string, unknown>): boolean => when.split(/\s+and\s+/).every((raw) => {
+      const m = raw.trim().match(/^(!?)([\w.]+)(?:\s+has\s+(.+))?$/)!;
+      const v = facts[m[2]];
+      const ok = m[3] === undefined ? (Array.isArray(v) ? v.length > 0 : !!v)
+        : Array.isArray(v) && v.some((x) => (x && typeof x === "object" ? Object.values(x) : [x]).some((f) => String(f).toLowerCase() === m[3].toLowerCase()));
+      return m[1] ? !ok : ok;
+    });
+    const askedFor = (facts: Record<string, unknown>) => setup.filter((q) => q.id === "otherDays").find((q) => !q.when || holds(q.when, facts))?.ask;
+    const people = [{ name: "Ankita", relation: "self" }];
+    expect(askedFor({ "household.people": people, "household.help": [{ role: "maid" }] })).toStartWith("Who cooks at home");
+    expect(askedFor({ "household.people": people })).toStartWith("Who cooks at home");
+    expect(askedFor({ "household.people": people, "household.help": [{ role: "maid" }, { role: "cook", days: "Mon-Sat" }] })).toStartWith("On her days off");
   });
 
   it("a question that names the cook asks only when there is a cook", () => {
@@ -263,7 +280,7 @@ describe("the agent's interface", () => {
       expect(q.when ?? "", `${q.id} names the cook`).toMatch(/(^|\band\s+)household\.help has cook\b/);
     }
     // The variant that does not name the cook is the one for a home with no help.
-    expect(setup.filter((q) => q.id === "otherDays").at(-1)!.when).toBe("!household.help");
+    expect(setup.filter((q) => q.id === "otherDays").at(-1)!.when).toBe("household.people");
   });
 
   it("a recall carries what was heard and nothing else; {{children}} only where there are children", () => {

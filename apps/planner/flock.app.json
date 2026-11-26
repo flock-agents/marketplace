@@ -279,7 +279,7 @@
     {
       "id": "otherDays",
       "fixed": true,
-      "when": "!household.help",
+      "when": "household.people",
       "ask": "Who cooks at home, and is any meal eaten out or ordered in, on which days?",
       "recall": "You said: {{heard}}. Anything else about eating out or ordering in?",
       "reask": "Who does the cooking, and do you eat out or order in on some days?",
