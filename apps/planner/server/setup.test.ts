@@ -1673,6 +1673,19 @@ describe("setup checks what a read left out (H1-H3)", () => {
     expect(r.said).toContain("Which days does Rahul take");
     expect((await k.owner("GET", "/api/family")).body.slots.some((s: any) => s.name === "Rahul's lunch")).toBe(false);
   });
+  it("an extras add-on's carrying days have one home, its own days, in the prompt and the check: a re-read that gives them clears it (fix 4)", async () => {
+    const home = SETUP_PARTS.find((p) => p.id === "home")!.system;
+    expect(home).toContain("An extras add-on's carrying days are its own days, never weekday_lunch");
+    const household = { ...I_HOUSEHOLD, "household.weekly": [{ person: "Ira", where: "school", weekdays: MON_FRI }] };
+    const read = checkedHome({ slots: [...mains, sprouts] }, ["a bowl of sprouts beside it"], household);
+    expect(homeViolations(read, { household: householdOf(household), sentences: [] })[0].missing).toBe("the days of Rahul's lunch: the days Rahul carries it (its days)");
+    const f = iFake({ home: (_req: ModelRequest, n: number) => ({ slots: [...mains, n === 1 ? sprouts : { ...sprouts, days: ["Mon", "Wed"] }, bbox, lbox] }) });
+    const k = await boot({ model: f.model });
+    const r = await k.op("apply_setup", { household, transcript: I_TRANSCRIPT });
+    expect(f.of("home")).toHaveLength(2);
+    expect(r.said).not.toContain("Which days does Rahul take");
+    expect((await k.owner("GET", "/api/family")).body.slots.find((s: any) => s.name === "Rahul's lunch")).toMatchObject({ extras: true, days: ["Mon", "Wed"] });
+  });
   it("the home re-read is merged: what the first read had and the re-read leaves out is kept (fix 2)", async () => {
     const dinner = { name: "Dinner", kind: "main", skip_days: [{ day: "Sun", skip: "ordered_in" }], quote: "Sunday dinner we order in" };
     const snack = { name: "Evening snack", kind: "custom", after: "Lunch", quote: "we all have a snack at 5" };
