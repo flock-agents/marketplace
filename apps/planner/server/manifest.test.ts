@@ -257,7 +257,7 @@ describe("the agent's interface", () => {
   });
 
   it("the child questions read right for one child or several: no verb agrees with {{children}}", () => {
-    const texts = [first("childSame").ask, first("childSame").recall!, first("childMeals").ask];
+    const texts = [first("childSame").ask, first("childSame").recall, first("childMeals").ask].map((t) => t ?? "");
     expect(first("childSame").recall).toBe("You said: {{heard}}. Anything else about meals for {{children}}?");
     for (const t of texts) {
       expect(t).not.toMatch(/\b[Dd]oes \{\{children\}\}/);
