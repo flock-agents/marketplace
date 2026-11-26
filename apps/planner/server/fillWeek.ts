@@ -146,8 +146,10 @@ const kindsOf = (s: Slot): MealKind[] => mealKinds(s.templates ?? []);
 
 /** How many of `n` days each template has: a share in the family's words exactly ("2/week") or as its words' days (a part
  *  week its share of them); the days left spread evenly over the templates with none. The templates read from one phrase (the
- *  same `said` and share: "Or sometimes gobi paratha, aloo paratha, etc.") have that phrase's days once, spread over them. */
-export function templateCounts(templates: MealTemplate[], n: number): number[] {
+ *  same `said` and share: "Or sometimes gobi paratha, aloo paratha, etc.") have that phrase's days once, spread over them: to
+ *  the one had least recently first (`lastHad`, by template: its latest date, "" for never; ties in their order), so a variant
+ *  comes again only when all have come. */
+export function templateCounts(templates: MealTemplate[], n: number, lastHad?: readonly string[]): number[] {
   const groups: number[][] = [];
   const byPhrase = new Map<string, number[]>();
   templates.forEach((t, i) => {
@@ -159,7 +161,10 @@ export function templateCounts(templates: MealTemplate[], n: number): number[] {
   });
   const counts = countEach(groups.map((g) => templates[g[0]]), n);
   const out = templates.map(() => 0);
-  groups.forEach((g, j) => { for (let x = 0; x < counts[j]; x++) out[g[x % g.length]]++; });
+  groups.forEach((g, j) => {
+    const order = lastHad ? [...g].sort((a, b) => (lastHad[a] ?? "").localeCompare(lastHad[b] ?? "") || a - b) : g;
+    for (let x = 0; x < counts[j]; x++) out[order[x % order.length]]++;
+  });
   return out;
 }
 
@@ -474,9 +479,17 @@ export function fillWeek(input: FillInput): FillResult {
       return fam.length > 0 && fam.every((x) => !!x.row?.days?.length);
     }));
     const free = ts.map((_, i) => i).filter((i) => !pinnedOnly[i]);
+    // When each template was last had: the latest of the dishes it names that its phrase's other templates do not name.
+    const named = ts.map((t) => new Set(t.parts.flatMap((p) => (isItemsPart(p) ? p.items : isKindPart(p) && p.dish ? [p.dish] : []).map(dishKey))));
+    const phrase = (t: MealTemplate) => (t.share && t.said ? `${t.share}|${norm(t.said)}` : null);
+    const lastHad = ts.map((t, i) => {
+      const mates = ts.flatMap((u, j) => (j !== i && phrase(t) && phrase(u) === phrase(t) ? [named[j]] : []));
+      const own = [...named[i]].filter((k) => !mates.length || !mates.every((m) => m.has(k)));
+      return own.reduce((a, k) => { const l = (lastUsed.get(k) ?? "").slice(0, 10); return l > a ? l : a; }, "");
+    });
     const left = free.length && free.length < ts.length
-      ? (() => { const c = templateCounts(free.map((i) => ts[i]), mine.length), out = ts.map(() => 0); free.forEach((i, j) => { out[i] = c[j]; }); return out; })()
-      : templateCounts(ts, mine.length);
+      ? (() => { const c = templateCounts(free.map((i) => ts[i]), mine.length, free.map((i) => lastHad[i])), out = ts.map(() => 0); free.forEach((i, j) => { out[i] = c[j]; }); return out; })()
+      : templateCounts(ts, mine.length, lastHad);
     // A template whose part is held to a count ("chapati and a kurma twice a week") comes at most that often; its other days go
     // to the templates free of such words.
     const most = tplLimits.map((parts) => Math.min(Infinity, ...parts.map((ls) => (ls.every((l) => l.max != null) ? ls.reduce((n, l) => n + l.max!, 0) : Infinity))));

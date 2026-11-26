@@ -446,6 +446,31 @@ describe("template shares (rule 1)", () => {
     expect(some).toBeLessThanOrEqual(3);
     expect(usual).toBeGreaterThanOrEqual(3);
     for (const x of c.slice(0, 4)) expect(x).toBeGreaterThanOrEqual(0);
+    expect(c).toEqual([1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0]);
+    // The phrase's days go to its templates had least recently: never had first, then the oldest; ties in their order.
+    const had = ["", "", "", "", "2026-11-20", "2026-11-21", "", "2026-11-01", "", "", "", ""];
+    expect(templateCounts([...Array.from({ length: 4 }, () => T({ kind: "Roti" })), ...Array.from({ length: 8 }, () => said("sometimes", S))], 6, had))
+      .toEqual([1, 1, 1, 1, 0, 0, 1, 0, 1, 0, 0, 0]);
+  });
+  it("two weeks: week 2 gives the phrase's days to the variants week 1 did not have, until all have come", () => {
+    const PARATHAS = ["Gobi paratha", "Aloo paratha", "Mooli paratha", "Paneer paratha"];
+    const lib = [dish("Phulka", "Dinner", "Roti"), ...SABZIS.map((n) => dish(n, "Dinner", "Sabzi")), ...PARATHAS.map((n) => dish(n, "Dinner", "Paratha"))];
+    const slots = [slot("Dinner", { templates: [T({ kind: "Roti" }, { kind: "Sabzi" }),
+      // Each variant its own fixed dish (an items part), so the week shows which template had the day.
+      ...PARATHAS.map((p) => ({ ...share(T({ items: [p] }), "sometimes"), said: "Or sometimes gobi paratha, aloo paratha, etc." }))] })];
+    const had = (r: ReturnType<typeof run>) => WEEK.flatMap((d) => r.at(d, "Dinner")).filter((x) => PARATHAS.includes(x));
+    /** A week's plates as the history before the next week (a week earlier each time). */
+    const back = (r: ReturnType<typeof run>, weeks: number): HistoryRow[] => WEEK.map((d) => {
+      const dt = new Date(`${d}T00:00:00Z`); dt.setUTCDate(dt.getUTCDate() - 7 * weeks);
+      return { date: dt.toISOString().slice(0, 10), status: "confirmed", skip: null, dishes: r.at(d, "Dinner").map((x) => ({ dish: x })) } as HistoryRow;
+    });
+    const w1 = run({ slots, library: lib });
+    expect(had(w1).sort()).toEqual(["Aloo paratha", "Gobi paratha"]);
+    const w2 = run({ slots, library: lib, history: { Dinner: back(w1, 1) } });
+    expect(had(w2).sort()).toEqual(["Mooli paratha", "Paneer paratha"]);
+    // All four have come: the next week starts again from the ones had longest ago.
+    const w3 = run({ slots, library: lib, history: { Dinner: [...back(w1, 2), ...back(w2, 1)] } });
+    expect(had(w3).sort()).toEqual(["Aloo paratha", "Gobi paratha"]);
   });
   it("two templates of one said 'sometimes' over 6 days: together 2-3 (beside a usual template, and beside a 'usually' one)", () => {
     for (const first of [T({ kind: "Roti" }), share(T({ kind: "Roti" }), "usually")]) {
