@@ -49,6 +49,11 @@ export interface ServiceDeps {
   timings?: Partial<Timings>;
 }
 
+/** The WebSocket itself failed (network down, the egress refusing): Baileys reports it as
+ *  "WebSocket Error (...)", often with code 500 or an HTTP status, though WhatsApp said nothing. Never
+ *  a logout or a refusal by WhatsApp, which come as stream errors or a close on an open connection. */
+export const isTransportFailure = (message: string): boolean => message.startsWith("WebSocket Error");
+
 /** WhatsApp's close codes (Baileys DisconnectReason). */
 const CLOSE = { loggedOut: 401, forbidden: 403, multideviceMismatch: 411, connectionReplaced: 440, badSession: 500, restartRequired: 515 } as const;
 
@@ -252,6 +257,7 @@ export class WhatsAppService {
    * refused the account), or (null) try again.
    */
   private closeOutcome(code: number, message: string): Fail | null {
+    if (isTransportFailure(message)) return null;
     if (code === CLOSE.loggedOut || code === CLOSE.badSession || code === CLOSE.multideviceMismatch) {
       this.deps.clearAuth(); this.store.clear();
       pause("logged_out", "WhatsApp logged this device out (it was unlinked on the phone, or WhatsApp ended it).", this.limitOpts);

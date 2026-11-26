@@ -294,6 +294,28 @@ describe("when WhatsApp pushes back: pause, never retry", () => {
     expect(limits(w).failedConnects).toBe(0);
   });
 
+  it("a WebSocket that cannot connect (code 500 or an HTTP status from the egress) is a failed connect, never a logout", async () => {
+    for (const [code, message] of [[500, "WebSocket Error (WebSocket connection to 'wss://web.whatsapp.com/ws/chat' failed: Failed to connect)"], [500, "WebSocket Error (Proxy connection failed)"], [403, "WebSocket Error (Unexpected server response: 403)"]] as const) {
+      const linking = track(world((sock) => sock.close(code, message)));
+      expect(await codeOf(linking.wa.startLink({ qr: true }))).toBe("CONNECT_FAILED");
+      expect(limits(linking).paused).toBeNull();
+      expect(limits(linking).failedConnects).toBe(1);
+      expect(await codeOf(linking.wa.listChats({}))).toBe("NOT_LINKED");
+      const linked = track(world((sock) => sock.close(code, message), { linked: true }));
+      expect(await codeOf(linked.wa.listChats({}))).toBe("CONNECT_FAILED");
+      expect(linked.auth.linked).toBe(true);
+      expect(linked.auth.cleared).toBe(0);
+      expect(limits(linked).paused).toBeNull();
+      expect(linked.sockets.length).toBe(1 + MAX_RECONNECTS);
+    }
+  });
+
+  it("a bad session WhatsApp itself reports (a stream error, 500) is still a logout", async () => {
+    const w = track(world((sock) => sock.close(500, "Stream Errored (bad-session)"), { linked: true }));
+    expect(await codeOf(w.wa.listChats({}))).toBe("NOT_LINKED");
+    expect(limits(w).paused).toMatchObject({ kind: "logged_out" });
+  });
+
   it("another device taking over is reported, not fought over", async () => {
     const w = track(world((sock) => sock.close(440, "replaced"), { linked: true }));
     expect(await codeOf(w.wa.listChats({}))).toBe("REPLACED");
