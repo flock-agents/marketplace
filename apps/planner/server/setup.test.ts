@@ -1673,6 +1673,51 @@ describe("setup checks what a read left out (H1-H3)", () => {
     expect(r.said).toContain("Which days does Rahul take");
     expect((await k.owner("GET", "/api/family")).body.slots.some((s: any) => s.name === "Rahul's lunch")).toBe(false);
   });
+  it("the home re-read is merged: what the first read had and the re-read leaves out is kept (fix 2)", async () => {
+    const dinner = { name: "Dinner", kind: "main", skip_days: [{ day: "Sun", skip: "ordered_in" }], quote: "Sunday dinner we order in" };
+    const snack = { name: "Evening snack", kind: "custom", after: "Lunch", quote: "we all have a snack at 5" };
+    const cook = { name: "Sunita", days: MON_FRI, visits: [{ at: "08:00", meals: ["Breakfast", "Lunch"] }], quote: "Sunita comes at 8" };
+    const first = { slots: [mains[0], mains[1], dinner, sprouts, snack], cook, weekday_lunch: I_LUNCH };
+    // The re-read gives the boxes and Dinner again, but no skip day, no snack, no cook and no weekday lunch.
+    const second = { slots: [...mains, sprouts, bbox, lbox] };
+    const { f, k, fam, slot } = await run({ home: (_req: ModelRequest, n: number) => (n === 1 ? first : second) },
+      [...I_TRANSCRIPT, "Q: Anything else?", "A: Sunday dinner we order in. Sunita comes at 8, and we all have a snack at 5."]);
+    expect(f.of("home")).toHaveLength(2);
+    expect(slot("Ira's breakfast box")).toBeTruthy();
+    expect(slot("Ira's lunch box")).toBeTruthy();
+    expect(slot("Dinner").skip_days).toEqual([{ day: "Sun", skip: "ordered_in" }]);
+    expect(slot("Evening snack")).toBeTruthy();
+    expect(slot("Rahul's lunch")).toMatchObject({ kind: "addon", extras: true, days: MON_FRI });
+    expect([fam.house.cook_name, fam.house.cook_days]).toEqual(["Sunita", MON_FRI]);
+    expect(JSON.parse(k.rows("house")[0].setup_state).weekday_lunch).toEqual(I_LUNCH);
+  });
+  // The first dishes read had no box to put the roll in, so it put it on Lunch.
+  const rollSaid = "Her lunch box has a paratha roll";
+  const rollTranscript = [...I_TRANSCRIPT, "Q: Anything else?", `A: ${rollSaid}.`];
+  const noBoxDishes = { ...I_DISHES, library: [...I_DISHES.library.filter((d) => !/box/.test(d[1])), ["Paratha roll", "Lunch", rollSaid]], links: [] };
+  const boxDishes = { ...I_DISHES, library: [...I_DISHES.library, ["Paratha roll", "Ira's lunch box", rollSaid]] };
+  it("a box the home re-read adds has the dishes read again once, so its dish moves to the box (fix 3)", async () => {
+    const { f, slot } = await run({ home: (_req: ModelRequest, n: number) => (n === 1 ? noBoxes : withBoxes),
+      dishes: (_req: ModelRequest, n: number) => (n === 1 ? noBoxDishes : boxDishes) }, rollTranscript);
+    expect(f.of("dishes")).toHaveLength(2);
+    const again = JSON.parse(f.of("dishes")[1].user);
+    expect(again.meals).toEqual(expect.arrayContaining(["Ira's breakfast box", "Ira's lunch box", "Lunch"]));
+    expect(again.missing).toEqual(["what goes in Ira's breakfast box", "what goes in Ira's lunch box"]);
+    expect(f.of("dishes")[1].system).toContain("A list `meals`, when given, is the family's meals as read");
+    expect(JSON.stringify(slot("Ira's lunch box").templates).toLowerCase()).toContain("paratha roll");
+    expect(JSON.stringify(slot("Lunch").templates).toLowerCase()).not.toContain("paratha roll");
+  });
+  it("with no time to read the dishes again, a box the home re-read adds is asked about (fix 3, OD7)", async () => {
+    // The home re-read takes the time: the dishes are not read again.
+    const slow = async (_req: ModelRequest, n: number) => { if (n === 1) return noBoxes; await Bun.sleep(150); return withBoxes; };
+    const f = iFake({ home: slow, dishes: noBoxDishes });
+    const k = await boot({ model: f.model, setupBudgetMs: 32_100 });
+    const r = await k.op("apply_setup", { household: I_HOUSEHOLD, transcript: rollTranscript });
+    expect(f.of("home")).toHaveLength(2);
+    expect(f.of("dishes")).toHaveLength(1);
+    expect(r.asks).toEqual(expect.arrayContaining(["What goes in Ira's breakfast box: the family's breakfast as made, or something of its own?",
+      "What goes in Ira's lunch box: the family's lunch as made, or something of its own?"]));
+  });
 
   // H3: a box says whether it carries the home meal, as a field (A8, A9; also the A5 base).
   const boxOnly = (over: Record<string, unknown>) => checkedHome({ slots: [...mains, { ...bbox, ...over }] }, boxSentences);

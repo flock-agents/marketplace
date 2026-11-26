@@ -138,7 +138,7 @@ const DISHES_PART = `Write this part: the family's own dishes, from their answer
 - A filling or stuffing said with a dish makes a dish of its own, named by the filling and the dish, one row for each filling at the meal it is said for: "kozhukattai stuffed with jaggery or with sesame" is Jaggery kozhukattai, Sesame kozhukattai.
 - A dish someone has in place of another (their own dish on the days another is made, or their own staple where the others have another) is their rule's (a swap), never a dish of the meal.
 - A meal the person has beside the home meal is their add-on's ("<person>'s lunch box": what they take with the home lunch), never the shared meal's.
-${MISSING_LINE}`;
+${MISSING_LINE} A list \`meals\`, when given, is the family's meals as read: a dish said for one of them is written at that meal, never at another.`;
 const DISHES_EXAMPLE = `gives library [["Sandwich", "Tara's tiffin", "sandwiches or poha"], ["Poha", "Tara's tiffin", "sandwiches or poha"], ["Phulka", "Lalitha's dinner", "Paati has just two phulkas at night"], ["Rice", "Lunch", "Most days rice"], ["Rasam", "Lunch", "rasam or dal"], ["Dal", "Lunch", "rasam or dal"], ["Poriyal", "Lunch", "a poriyal"], ["Curd", "Lunch", "curd"], ["Pulao", "Lunch", "Pulao twice"], ["Puri", "Lunch", "puri on Sundays"], ["Lemon rice", "Lunch", "Lemon rice every Friday"], ["Salad", "Lunch", "Salad every day"], ["Idli", "Breakfast", "usually idli or dosa"], ["Dosa", "Breakfast", "usually idli or dosa"], ["Upma", "Breakfast", "upma once"], ["Bread toast", "Breakfast", "bread toast on busy days"], ["Ragi dosa", "Breakfast", "Kavu has ragi dosa too"] (the others have it too: shared), ["Ragi porridge", "Lalitha's breakfast", "Paati has her own ragi porridge"]], seed [["Lunch", "Rice, Rasam, Poriyal, Curd", "Most days rice, rasam or dal, a poriyal, curd"], ["Lunch", "Rice, Dal, Poriyal, Curd", "Most days rice, rasam or dal, a poriyal, curd"], ["Breakfast", "Idli", "usually idli or dosa"], ["Breakfast", "Dosa", "usually idli or dosa"], ["Breakfast", "Upma", "upma once"], ["Breakfast", "Bread toast", "bread toast on busy days"] (a breakfast list: one row per morning's dish, never one row of all), ["Tara's tiffin", "Sandwich", "sandwiches or poha"], ["Tara's tiffin", "Poha", "sandwiches or poha"], ["Lalitha's dinner", "Phulka", "Paati has just two phulkas at night"], ["Lalitha's breakfast", "Ragi porridge", "Paati has her own ragi porridge"]].
 And "Kavu and I carry chapati sabzi to office, Paati has rice, dal and curd at home" (one lunch, cooked once, for different people) gives library [["Chapati", "Lunch", "chapati sabzi"], ["Sabzi", "Lunch", "chapati sabzi"], ["Rice", "Lunch", "rice, dal and curd"], ["Dal", "Lunch", "rice, dal and curd"], ["Curd", "Lunch", "rice, dal and curd"]], seed [["Lunch", "Chapati, Sabzi, Rice, Dal, Curd", "Kavu and I carry chapati sabzi to office, Paati has rice, dal and curd at home"]]: one row, never one per person, because it is the same day's one lunch. This joins only one meal told per person, never dishes had on different days.
 And a bare list of the week's breakfasts or tiffins, "Q: The adults' breakfast? A: Upma, idli, pongal, dosa. Puri on Sunday." gives seed [["Breakfast", "Upma", "Upma, idli, pongal, dosa"], ["Breakfast", "Idli", "Upma, idli, pongal, dosa"], ["Breakfast", "Pongal", "Upma, idli, pongal, dosa"], ["Breakfast", "Dosa", "Upma, idli, pongal, dosa"], ["Breakfast", "Puri", "Puri on Sunday"]]: each a different morning, never one row "Upma, Idli, Pongal, Dosa".
@@ -861,6 +861,19 @@ export function homeViolations(read: SetupRead, ctx: { household: Household; sen
   for (const x of read.slots) if (x.kind === "custom" && x.instead_of && (!x.home_meal || (x.home_meal === "a_part" && !x.home_part?.trim())))
     add({ missing: `home_meal of ${x.name}: the family's ${x.instead_of.toLowerCase()} as made, a part of it (home_part), or none` });
   return out;
+}
+
+/** The home re-read laid on the first read (H1, fix round 1): its slots replace the same-named ones field by field where it gives
+ *  them and add new ones; the first read's slots, skip days, cook and weekday lunch it leaves out are kept, its cook and weekday
+ *  lunch winning only where it gives them. Nothing the first read had right is lost. */
+export function mergeHome(first: SetupRead, again: Pick<SetupRead, "slots" | "cook" | "weekday_lunch">): SetupRead {
+  const given = (v: unknown) => v !== null && v !== undefined && v !== "" && !(Array.isArray(v) && !v.length);
+  const over = <T extends object>(a: T, b: T): T => ({ ...a, ...Object.fromEntries(Object.entries(b).filter(([, v]) => given(v))) }) as T;
+  const slots = first.slots.map((s) => { const b = again.slots.find((x) => same(x.name, s.name)); return b ? over(s, b) : s; });
+  for (const b of again.slots) if (!slots.some((s) => same(s.name, b.name))) slots.push(b);
+  const cook = first.cook && again.cook ? over(first.cook, again.cook) : again.cook ?? first.cook;
+  const weekday_lunch = [...first.weekday_lunch.filter((w) => !again.weekday_lunch.some((x) => same(x.person, w.person))), ...again.weekday_lunch];
+  return { ...first, slots, cook, weekday_lunch };
 }
 
 /** The meals in place of a main meal (H3) that the read gives no link and no dish of their own: none, or only a hard swap's item
@@ -2143,24 +2156,42 @@ export async function applySetup(deps: { db: Db; emit: Emit; model: ModelCall; p
   const oftenFailed = !results[SETUP_PARTS.findIndex((p) => p.id === "often")].ok;
   let checked = checkRead(read, { household, said, sentences, oftenFailed });
   // H1: what the home read left out (a box the family named, an add-on's carrying days) is asked of the home reader once, with
-  // what is missing; its slots, weekday lunch and cook are taken when that clears something and adds nothing. Still left out:
-  // asked in the read-back, never guessed (an add-on with no carrying days is not saved).
-  const reread = (part: (typeof SETUP_PARTS)[number], missing: string[]) => askOnce(deps.model, { tier: part.tier, purpose: `${part.purpose} (re-read)`, system: part.system,
-    user: JSON.stringify({ ...payload, missing }), schema: part.schema, maxTokens: part.maxTokens }, until, log);
+  // what is missing; the re-read is merged into the first read (mergeHome: nothing the first had is lost) when that clears
+  // something and adds nothing to ask. Still left out: asked in the read-back, never guessed (an add-on with no carrying days is
+  // not saved).
+  const reread = (part: (typeof SETUP_PARTS)[number], more: Record<string, unknown>) => askOnce(deps.model, { tier: part.tier, purpose: `${part.purpose} (re-read)`,
+    system: part.system, user: JSON.stringify({ ...payload, ...more }), schema: part.schema, maxTokens: part.maxTokens }, until, log);
+  const partOf = (id: string) => SETUP_PARTS.find((p) => p.id === id)!;
+  let dishesReread = false;
+  const boxAsks: string[] = [];
   const homeCtx = { household, sentences, transcript: deps.transcript };
   let gaps = homeViolations(checked.read, homeCtx);
   if (gaps.length && until - Date.now() >= RETRY_FLOOR_MS) {
     log(`home: the read left out ${gaps.map((v) => v.missing).join("; ")}; asking once more`);
-    const r = await reread(SETUP_PARTS[0], gaps.map((v) => v.missing));
+    const r = await reread(partOf("home"), { missing: gaps.map((v) => v.missing) });
     if (r.ok) {
-      const h = readOf(r.json, null, null);
-      const next = { ...read, slots: h.slots, weekday_lunch: h.weekday_lunch.length ? h.weekday_lunch : read.weekday_lunch, cook: h.cook ?? read.cook };
+      const next = mergeHome(read, readOf(r.json, null, null));
       const nextChecked = checkRead(next, { household, said, sentences, oftenFailed });
       const left = homeViolations(nextChecked.read, homeCtx);
       // Taken when it clears something and leaves out nothing more that would be asked (a home_meal it leaves out is no question).
       const asked = (vs: HomeViolation[]) => vs.filter((v) => v.ask || v.slot);
-      if (left.length < gaps.length || asked(left).length < asked(gaps).length) if (asked(left).every((v) => gaps.some((x) => x.missing === v.missing))) {
+      const clears = left.length < gaps.length || asked(left).length < asked(gaps).length;
+      if (clears && asked(left).every((v) => gaps.some((x) => x.missing === v.missing))) {
+        // A box the re-read adds was no meal when the dishes were read (their dish may sit on the shared meal): the dishes are read
+        // once more against the meals as now read, and that read stands for the first; with no time, the box is asked about (OD7).
+        const before = new Set(checked.read.slots.map((x) => x.name));
+        const added = nextChecked.read.slots.filter((x) => x.kind === "custom" && x.instead_of && !before.has(x.name));
         read = next; checked = nextChecked; gaps = left;
+        if (added.length && until - Date.now() >= RETRY_FLOOR_MS) {
+          log(`dishes: ${added.map((x) => x.name).join(", ")} added by the home re-read; reading the dishes again`);
+          dishesReread = true;
+          const d = await reread(partOf("dishes"), { missing: added.map((x) => `what goes in ${x.name}`), meals: checked.read.slots.map((x) => x.name) });
+          const again = d.ok ? readOf(null, null, d.json, json(SETUP_PARTS.findIndex((p) => p.id === "often"))) : null;
+          if (again?.library.length) {
+            read = { ...read, library: again.library, seed: again.seed, links: again.links };
+            checked = checkRead(read, { household, said, sentences, oftenFailed });
+          } else log(`dishes re-read: ${d.ok ? "no dishes in the answer" : `model ${d.code}: ${d.message.slice(0, 200)}`}; the first dishes read stands`);
+        } else boxAsks.push(...added.map((x) => boxAsk(x.name, x.instead_of!)));
       }
     } else log(`home re-read: model ${r.code}: ${r.message.slice(0, 200)}`);
   }
@@ -2171,9 +2202,9 @@ export async function applySetup(deps: { db: Db; emit: Emit; model: ModelCall; p
   // H3: a box in place of a meal with no link and nothing but a swap's item is re-read once from the dishes, naming the box; its
   // rows for that box are taken. Still nothing: writeKinds asks (OD7: no default link).
   const empty = emptyBoxes(checked.read);
-  if (empty.length && until - Date.now() >= RETRY_FLOOR_MS) {
+  if (empty.length && !dishesReread && until - Date.now() >= RETRY_FLOOR_MS) {
     log(`dishes: nothing read for ${empty.join(", ")}; asking once more`);
-    const r = await reread(SETUP_PARTS[2], empty.map((b) => `what goes in ${b}`));
+    const r = await reread(partOf("dishes"), { missing: empty.map((b) => `what goes in ${b}`) });
     if (r.ok) {
       const d = readOf(null, null, r.json), names = checked.read.slots.map((x) => x.name);
       const mine = (slot: string) => empty.includes(resolveSlot(slot, names) ?? "");
@@ -2182,7 +2213,7 @@ export async function applySetup(deps: { db: Db; emit: Emit; model: ModelCall; p
       checked = checkRead(read, { household, said, sentences, oftenFailed });
     } else log(`dishes re-read: model ${r.code}: ${r.message.slice(0, 200)}`);
   }
-  for (const v of gaps) if (v.ask && !checked.asks.includes(v.ask)) checked.asks.push(v.ask);
+  for (const a of [...gaps.flatMap((v) => (v.ask ? [v.ask] : [])), ...boxAsks]) if (!checked.asks.includes(a)) checked.asks.push(a);
   noted.push(...checked.noted);
   for (const d of checked.dropped) log(`dropped: ${d}`);
   await lintReread(deps.model, checked.lint, replies, until, log, { said: sentences, slotDays: checked.slotDays, dropped: checked.dropped, library: checked.read.library });
