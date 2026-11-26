@@ -6,7 +6,7 @@ import { boot } from "./testkit";
 import { saysNoEggs, buildMeal, bareOf, codePlace, nearestDish, cuisinesOf, regionalFor, kitchenLine, needsNamed, placeOf, wordOf, KINDS_SYSTEM, type MealDish, type Place } from "./setup";
 import { keptOften, swapItems } from "./setup";
 import { dishKey } from "./dishText";
-import { checkRead, diffSetup, familyLines, familySentences, frequencyOf, householdOf, lunchLine, personOf, plainWords, quoteHasDayOrCount, readOf, resolveSlot,
+import { checkRead, diffSetup, familyLines, familySentences, frequencyOf, householdOf, lunchLine, personOf, plainWords, quoteHasHowOften, readOf, resolveSlot,
   ruleSaid, saidByFamily, savedOf, homeViolations, swapOnly, uncited, mergeDishes, kindsRead, kindsAsk, DISHES_ASK, SETUP_PARTS, SETUP_SYSTEM, CONTAINS_BATCH, daysOf, clockOf, itemWord, allergyAsk, answeredIn, mealOf, type Saved, type SetupRead } from "./setup";
 import { isAllergyRule } from "./allergy";
 import { houseCook, visitsOf } from "./makePlan";
@@ -614,11 +614,11 @@ describe("apply_setup v2: the checks, pure", () => {
     expect(SETUP_SYSTEM).toContain(`"chole or kadhi twice a week": "1/week"`);
     expect(often).toContain(`"chapati and a kurma twice a week": "2/week" each`);   // eaten together: not shared
   });
-  it("the day/count lint: a quote with a day word or a number", () => {
-    expect(quoteHasDayOrCount("Rajma twice")).toBe(true);
-    expect(quoteHasDayOrCount("Lemon rice on Fridays")).toBe(true);
-    expect(quoteHasDayOrCount("4 eggs every day")).toBe(true);
-    expect(quoteHasDayOrCount("rice, sambar")).toBe(false);
+  it("the how-often lint: a quote with a day word, a number or a frequency word", () => {
+    expect(quoteHasHowOften("Rajma twice")).toBe(true);
+    expect(quoteHasHowOften("Lemon rice on Fridays")).toBe(true);
+    expect(quoteHasHowOften("4 eggs every day")).toBe(true);
+    expect(quoteHasHowOften("rice, sambar")).toBe(false);
   });
   it("the model's formats read leniently", () => {
     expect(daysOf(["Mon-Fri"])).toEqual(["Mon", "Tue", "Wed", "Thu", "Fri"]);
@@ -2065,8 +2065,11 @@ describe("the often read's own deadline, and its fallback (H5)", () => {
   it("checkRead: with the often read failed, a dish named in a day sentence is linted", () => {
     const sentences = familySentences(T, FAM), said = familyLines(T, FAM), household = householdOf(FAM);
     const read = readOf({ slots: SLOTS }, {}, DISHES);
-    // The often read answered: only a dish whose own quote has a day or a count is linted (Egg curry's has neither).
-    expect(checkRead(read, { household, said, sentences }).lint.map((d) => d.name)).toEqual([]);
+    // The often read answered: a dish whose own quote has a day or a count, or whose naming sentence holds a frequency word (J5:
+    // "sometimes"), is linted; a day word alone in the sentence is not enough (Egg curry's quote has none).
+    expect(checkRead(read, { household, said, sentences }).lint.map((d) => d.name)).toEqual(["Egg curry"]);
+    const dayOnly = ["Q: What do you have for dinner?", "A: Dinner is rice and dal. On Saturdays we make egg curry. If we make egg curry, we skip the dal."];
+    expect(checkRead(read, { household, said: familyLines(dayOnly, FAM), sentences: familySentences(dayOnly, FAM) }).lint.map((d) => d.name)).toEqual([]);
     // It failed: every dish named in a family sentence with a day or count word is.
     expect(checkRead(read, { household, said, sentences, oftenFailed: true }).lint.map((d) => d.name)).toEqual(["Egg curry"]);
   });
@@ -2094,6 +2097,33 @@ describe("the often read's own deadline, and its fallback (H5)", () => {
       expect(lib(k)["Egg curry@Dinner"]).toMatchObject({ frequency: null, days: null });
       expect(r.dropped.filter((d: string) => d.startsWith("how often for Egg curry"))).toHaveLength(1);
     }
+  });
+});
+
+// J5 (task 15 round 4): frequency words are linted like day and count words. A made-up family (F7): Tarun and Meera.
+describe("a dish said with a frequency word and saved without it is linted (J5)", () => {
+  const FAM = { "household.people": [{ name: "Tarun", group: "adult" }, { name: "Meera", group: "adult" }], "household.speaker": "Tarun" };
+  const T = ["Q: What do you have for lunch?", "A: Lunch is rice and dal. Or sometimes paneer puri with raita."];
+  const SLOTS = [{ name: "Breakfast", kind: "main" }, { name: "Lunch", kind: "main" }, { name: "Dinner", kind: "main" }];
+  const DISHES = { library: [["Rice", "Lunch", "Lunch is rice and dal"], ["Dal", "Lunch", "Lunch is rice and dal"], ["Paneer puri", "Lunch", "Or sometimes paneer puri"]],
+    seed: [["Lunch", "Rice, Dal", "Lunch is rice and dal"]] };
+  it("checkRead lints a dish said with \"sometimes\" and saved without it", () => {
+    const read = readOf({ slots: SLOTS }, {}, DISHES);
+    expect(checkRead(read, { household: householdOf(FAM), said: familyLines(T, FAM), sentences: familySentences(T, FAM) }).lint.map((d) => d.name)).toEqual(["Paneer puri"]);
+    expect(quoteHasHowOften("or sometimes with paneer inside it")).toBe(true);
+    expect(quoteHasHowOften("mostly the roll")).toBe(true);
+    expect(quoteHasHowOften("rice, sambar")).toBe(false);
+  });
+  it("applySetup: the lint gives it sometimes", async () => {
+    const f = fake({ home: { slots: SLOTS }, rules: { rules: [] }, dishes: DISHES, often: { often: [] }, kinds: ownKinds, contains: containsOf(),
+      lint: { dishes: [{ name: "Paneer puri", often: "Or sometimes paneer puri", frequency: "sometimes" }] } });
+    const k = await boot({ model: f.model });
+    const r = await k.op("apply_setup", { household: FAM, transcript: T });
+    expect(r.ok).toBe(true);
+    expect(f.of("lint")).toHaveLength(1);
+    expect(lib(k)["Paneer puri@Lunch"]).toMatchObject({ frequency: "sometimes" });
+    const lunch = (await k.owner("GET", "/api/family")).body.slots.find((s: any) => s.name === "Lunch");
+    expect(lunch.templates.find((t: any) => JSON.stringify(t.parts).includes("uri"))).toMatchObject({ share: "sometimes" });
   });
 });
 

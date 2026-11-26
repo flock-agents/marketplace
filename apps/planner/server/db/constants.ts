@@ -49,6 +49,10 @@ export const BASE_TAGS = ["egg", "meat", "fish", "onion_garlic", "nuts", "peanut
 export const LINT_DAY_WORDS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday", "mondays", "tuesdays", "wednesdays",
   "thursdays", "fridays", "saturdays", "sundays", "mon", "tue", "tues", "wed", "thu", "thur", "thurs", "fri", "sat", "sun", "weekend", "weekends",
   "weekday", "weekdays", "daily", "everyday", "day", "days", "night", "nights", "morning", "mornings", "evening", "evenings"] as const;
+/** The frequency words a family says (J5): the saved ones, and their everyday forms. A quote with one and no frequency saved is
+ *  linted like a day or count word: words only to spot it, the model reads what they mean. */
+export const LINT_FREQUENCY_WORDS = [...FREQUENCY_WORDS, "mostly", "often", "generally", "normally", "typically", "regularly", "occasionally", "occasional",
+  "seldom", "sometime", "everyday"] as const;
 export const LINT_COUNT_WORDS = ["once", "twice", "thrice", "one", "two", "three", "four", "five", "six", "seven"] as const;
 /** Staples are counted from confirmed slot-days only (the setup seed is stored confirmed, so it counts); a planned slot-day
  *  never feeds a staple (owner, 23 Nov: the plan's own output must not feed back into it). Flip to let planned ones count. */

@@ -14,7 +14,7 @@
 import type { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { house, people as peopleTable } from "./db/schema";
-import { APP_NAMES, appOf, BASE_TAGS, FREQUENCY_WORDS, GROUPS, LINT_COUNT_WORDS, LINT_DAY_WORDS, RULE_WHATS, SKIPS, SLOT_ORDER, SLOTS, INSTEAD_STEP,
+import { APP_NAMES, appOf, BASE_TAGS, FREQUENCY_WORDS, GROUPS, LINT_COUNT_WORDS, LINT_DAY_WORDS, LINT_FREQUENCY_WORDS, RULE_WHATS, SKIPS, SLOT_ORDER, SLOTS, INSTEAD_STEP,
   type Frequency, type GroceryApp, type RuleWhat, type Skip, type SlotKind } from "./db/constants";
 import { WEEKDAYS, clockText, type Weekday } from "./dates";
 import { dishKey } from "./dishText";
@@ -502,11 +502,12 @@ const BOX_WORDS = ["tiffin", "box", "lunchbox", "dabba", "tiffinbox"];
 
 // ── The checks (§4.2): structure only ──
 
-const DAY_TOKENS = new Set<string>(LINT_DAY_WORDS), COUNT_TOKENS = new Set<string>(LINT_COUNT_WORDS);
+const DAY_TOKENS = new Set<string>(LINT_DAY_WORDS), COUNT_TOKENS = new Set<string>(LINT_COUNT_WORDS), FREQUENCY_TOKENS = new Set<string>(LINT_FREQUENCY_WORDS);
+const hasFrequencyWord = (q: string) => plainWords(q).split(" ").some((w) => FREQUENCY_TOKENS.has(w));
 const hasDayWord = (q: string) => plainWords(q).split(" ").some((w) => DAY_TOKENS.has(w));
 const hasCount = (q: string) => /\d/.test(q) || plainWords(q).split(" ").some((w) => COUNT_TOKENS.has(w));
-/** The day/count lint: a quote with a day word or a number. */
-export const quoteHasDayOrCount = (q: string): boolean => hasDayWord(q) || hasCount(q);
+/** The how-often lint (J5): a quote with a day word, a number or a frequency word. */
+export const quoteHasHowOften = (q: string): boolean => hasDayWord(q) || hasCount(q) || hasFrequencyWord(q);
 
 /** Words inside a line, whole words (both in plain words). */
 const wordsIn = (line: string, words: string): boolean => { const w = plainWords(words); return !!w && ` ${line} `.includes(` ${w} `); };
@@ -773,13 +774,15 @@ export function checkRead(read: SetupRead, ctx: { household: Household; said: st
   dropShared(library, dropped);
   // With the often read failed (H5), no dish has its how-often words: every dish named in a family sentence with a day or count
   // word is linted, not only one whose own quote has one ("if we make egg curry" beside "on Saturdays we make egg curry sometimes").
-  const daySentences = ctx.oftenFailed ? (ctx.sentences ?? said).filter(quoteHasDayOrCount) : [];
+  const daySentences = ctx.oftenFailed ? (ctx.sentences ?? said).filter(quoteHasHowOften) : [];
+  // A frequency word (J5) in the sentence that names a dish is spotted with the often read answered too: "usually X ... or sometimes Y".
+  const frequencySentences = (ctx.sentences ?? said).filter(hasFrequencyWord);
   for (const d of library) {
     if (d.frequency || d.days || d.shared) continue;
     // A dish read without its words: the family's sentence that names it ("Sunday dinner ... something simple like pasta").
-    if (!d.quote?.trim()) d.quote = said.find((l) => namedIn(d.name, [l]) && quoteHasDayOrCount(l)) ?? d.quote;
-    if (d.quote && quoteHasDayOrCount(d.quote) && saidByFamily(d.quote, said)) lint.push(d);
-    else if (namedIn(d.name, daySentences)) lint.push(d);
+    if (!d.quote?.trim()) d.quote = said.find((l) => namedIn(d.name, [l]) && quoteHasHowOften(l)) ?? d.quote;
+    if (d.quote && quoteHasHowOften(d.quote) && saidByFamily(d.quote, said)) lint.push(d);
+    else if (namedIn(d.name, daySentences) || namedIn(d.name, frequencySentences)) lint.push(d);
   }
 
   // The seed: the past week's plates, in the family's words; each of its dishes is in the library too.
@@ -1032,7 +1035,7 @@ async function lintReread(model: ModelCall, dishes: ReadDish[], replies: string[
   // H5) is shown the family's sentence that names the dish with one.
   const reply = (d: ReadDish) => replies.find((l) => plainWords(l).includes(plainWords(d.quote)));
   const words = dishes.map((d) => ({ name: d.name, slot: d.slot, quote: d.quote,
-    line: (quoteHasDayOrCount(d.quote ?? "") ? reply(d) : check.said.find((l) => namedIn(d.name, [l]) && quoteHasDayOrCount(l)) ?? reply(d)) ?? d.quote }));
+    line: (quoteHasHowOften(d.quote ?? "") ? reply(d) : check.said.find((l) => namedIn(d.name, [l]) && quoteHasHowOften(l)) ?? reply(d)) ?? d.quote }));
   // Its own deadline (LINT_MS): a second look, never what holds the setup to its budget's end (eval h1, h4: 48–60 s, then out of tokens).
   const r: ModelResult = skipped ? { ok: false, code: "timeout", message: "no time left beside the contains read, skipped" }
     : await withDeadline(model({ tier: "balanced", purpose: "setup: how often (lint)", system: LINT_SYSTEM, user: JSON.stringify({ dishes: words }), schema: LINT_SCHEMA, maxTokens: 2000 }), Math.min(until - Date.now(), LINT_MS));
