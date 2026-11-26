@@ -298,6 +298,22 @@ export function removeLibrary(tx: Db, name: string, slot: string, by: string, ch
   changes.push(["library", had.id, "delete", by]);
   return true;
 }
+/** A dish at a slot saved under another name: its library row (when a row of that name is at the slot already, that one stays
+ *  and this one goes) and the slot's seed examples. False when it was not there. */
+export function renameDish(tx: Db, name: string, slot: string, to: string, by: string, changes: Change[]): boolean {
+  const had = getLibraryDish(tx, name, slot);
+  if (!had || dishKey(name) === dishKey(to)) return false;
+  if (getLibraryDish(tx, to, slot)) removeLibrary(tx, name, slot, by, changes);
+  else {
+    tx.update(library).set({ name: to.trim(), key: dishKey(to), updated_at: now(), updated_by: by }).where(eq(library.id, had.id)).run();
+    changes.push(["library", had.id, "update", by]);
+  }
+  for (const d of seedSlotDays(tx, slot)) for (const x of d.dishes) if (dishKey(x.dish) === dishKey(name)) {
+    tx.update(slot_dishes).set({ dish: to.trim(), updated_at: now(), updated_by: by }).where(eq(slot_dishes.id, x.id)).run();
+    changes.push(["slot_dishes", x.id, "update", by]);
+  }
+  return true;
+}
 
 // ── Rules ──
 

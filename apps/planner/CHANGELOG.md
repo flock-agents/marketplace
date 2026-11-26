@@ -2,9 +2,9 @@
 
 ## 4.1.1
 
-- The kinds model: each meal is a set of templates of dish kinds (from the family's own words), filled by code with no model call per meal (a week in ~1 s). The family's own dishes first; no dish again until every option has been used, never the next day; new dishes only of kinds the family has, asked about in the plan's one question and the day-before reminder.
-- A catalog of Indian dish kinds (kinds.json, 64 kinds, 724 items) with ingredients (main / can be left out): food rules and allergies are checked on the main ingredients; a leave-out ingredient is a "make without X for P" note. Regional words (curry/kari, pachadi) are read in the family's context.
-- Setup builds the meal templates, the family's cuisines and a read-back of "Your usual meals" in their own words.
+- The kinds model: each meal is a set of templates of dish kinds (from the family's own words), filled by code with no model call per meal. The family's own dishes first; no dish again until every option has been used, never the next day; new dishes only of kinds the family has, asked about in the plan's one question and the day-before reminder.
+- A catalog of Indian dish kinds (kinds.json) with ingredients (main / can be left out): rules checked on main ingredients; leave-out ingredients become "make without X for P" notes. Regional words read in context.
+- Setup builds the meal templates, the family's cuisines and a read-back of "Your usual meals" in their own words; a fixed dish takes its nearest catalog name ("stew" → "Vegetable stew"); subscription milk is shopping, not a dish.
 
 ## 4.0.3
 
