@@ -917,8 +917,11 @@ async function lintReread(model: ModelCall, dishes: ReadDish[], replies: string[
     line: (quoteHasDayOrCount(d.quote ?? "") ? reply(d) : check.said.find((l) => namedIn(d.name, [l]) && quoteHasDayOrCount(l)) ?? reply(d)) ?? d.quote }));
   // Its own deadline (LINT_MS): a second look, never what holds the setup to its budget's end (eval h1, h4: 48–60 s, then out of tokens).
   const r = await withDeadline(model({ tier: "balanced", purpose: "setup: how often (lint)", system: LINT_SYSTEM, user: JSON.stringify({ dishes: words }), schema: LINT_SCHEMA, maxTokens: 2000 }), Math.min(until - Date.now(), LINT_MS));
-  if (!r.ok) { log(`lint: model ${r.code}: ${r.message.slice(0, 200)}`); return; }
-  const done = new Set<ReadDish>();
+  // A linted dish the lint gives no how-often (a failed lint, left out, or nothing read) is a dropped line (H5), never a quiet miss.
+  const line = (d: ReadDish) => words.find((w) => w.name === d.name && w.slot === d.slot)?.line ?? d.quote;
+  const none = (why: string, d: ReadDish) => check.dropped.push(`how often for ${d.name}: ${why} in "${line(d)}"`);
+  if (!r.ok) { log(`lint: model ${r.code}: ${r.message.slice(0, 200)}`); for (const d of dishes) none(`the lint re-read failed (${r.code})`, d); return; }
+  const done = new Set<ReadDish>(), read = new Set<ReadDish>();
   for (const x of arr(isObject(r.json) ? r.json.dishes : null).filter(isObject)) {
     // One dish at two meals is asked twice, in order: each answer is the next of that name.
     const d = dishes.find((y) => same(y.name, str(x.name)) && !done.has(y));
@@ -926,11 +929,14 @@ async function lintReread(model: ModelCall, dishes: ReadDish[], replies: string[
     done.add(d);
     const f = frequencyOf(x.frequency), days = daysOf(x.days);
     if (!f && !days.length) continue;
-    const line = words.find((w) => w.name === d.name && w.slot === d.slot)?.line ?? "";
-    Object.assign(d, { frequency: f, days: days.length ? days : null, often: str(x.often), said: saidOf(str(x.often), [d.quote, ...line.split(/[.!?;,]+/), ...line.split(/[.!?;]+/)]) });
+    read.add(d);
+    const text = words.find((w) => w.name === d.name && w.slot === d.slot)?.line ?? "";
+    Object.assign(d, { frequency: f, days: days.length ? days : null, often: str(x.often), said: saidOf(str(x.often), [d.quote, ...text.split(/[.!?;,]+/), ...text.split(/[.!?;]+/)]) });
     backHowOften(d, check.said, check.slotDays.get(d.slot) ?? [], check.dropped);
     if (d.frequency || d.days) log(`lint: ${d.name} re-read as ${d.frequency ?? ""} ${(d.days ?? []).join(",")} ("${d.often}")`.trim());
   }
+  // A dish the answer gave how-often words is backed by backHowOften, which drops with its own line; the rest are dropped here.
+  for (const d of dishes) if (!read.has(d)) none("the lint read none", d);
   dropShared(check.library, check.dropped);
 }
 
@@ -1522,17 +1528,17 @@ export function regionalLines(names: string[]): { word: string; meanings: string
     meanings: r.meanings.map((m) => `${m.cuisines.map((c) => CUISINE_NAMES[c] ?? c).join(", ")}: ${[m.kind, m.sub].filter(Boolean).join(" / ")}`) }));
 }
 
-/** The kinds read's answer: the dishes it placed, and those an answer came back without, even when asked again (F4: a partial
- *  read) or with no time to ask again (H4). A failed call leaves nothing `left`: what it would place stays as code found it. */
+/** The kinds read's answer: the dishes it placed, and those no answer placed (H4): left out by an answer, even when asked again
+ *  (F4: a partial read), with no time to ask again, or asked of a call that failed. Each left dish is asked of the family. */
 export type KindsPlaced = { placed: Map<string, Place>; left: KindsAsk[] };
 
 /** The kinds read: one fast call for every dish asked, and one more for the dishes its answer left out. A failed call places
- *  nothing (the caller keeps what code found, or none). */
+ *  nothing: what it was asked is left (H4). */
 export async function kindsRead(model: ModelCall, asks: KindsAsk[], until: number, log: (l: string) => void, family: string[] = []): Promise<KindsPlaced> {
   const out = new Map<string, Place>();
   if (!asks.length) return { placed: out, left: [] };
-  // Its own deadline, inside the setup's: never what pushes the setup past its budget (eval h4 ran 150.09 s); on a timeout what
-  // it would place stays the family's fixed dish.
+  // Each ask has its own deadline, at most KINDS_MS and inside the setup's (never what pushes the setup past its budget: eval h4
+  // ran 150.09 s): the first from now, the second from when it starts. On a timeout what it would place is left.
   const by = Math.min(until - KINDS_MARGIN_MS, Date.now() + KINDS_MS);
   const ask = async (these: KindsAsk[], first: boolean, by: number): Promise<KindsAsk[] | null> => {
     const regional = regionalLines(these.map((a) => a.name));
@@ -1553,15 +1559,18 @@ export async function kindsRead(model: ModelCall, asks: KindsAsk[], until: numbe
     return left;
   };
   const left = await ask(asks, true, by);
-  if (!left?.length) return { placed: out, left: [] };
+  // No answer (a failed call, or one placing none of the dishes) places nothing: every dish asked with no place of code's is left
+  // (H4: no answer placed it), so the family is asked, never a bare word saved as their dish.
+  if (!left) return { placed: out, left: asks.filter((a) => !a.known) };
+  if (!left.length) return { placed: out, left: [] };
   // An answer that left dishes out (eval h18 rep 3: "Dry sabji" read as nothing, saved as a dish on the plate): asked again,
   // once, for only those, while KINDS_RETRY_MS of the setup's time is left. With no time, what the answer left out is left
-  // (H4, eval h18 rep 2: no time is no answer placing it): the family is asked, never a bare word saved as their dish. A
-  // failed second call keeps them as code found them.
+  // (H4, eval h18 rep 2: no time is no answer placing it): the family is asked, never a bare word saved as their dish.
   if (until - Date.now() < KINDS_RETRY_MS) { log(`kinds: the answer left out ${left.length} dishes; no time to ask again`); return { placed: out, left }; }
   log(`kinds: the answer left out ${left.map((a) => `${a.name} (${a.meal})`).join(", ")}; asking once more for them`);
   const again = await ask(left, false, Math.min(until - KINDS_MARGIN_MS, Date.now() + KINDS_MS));
-  return { placed: out, left: again ?? [] };
+  // A failed second ask leaves what the first answer left out: still no answer placed it.
+  return { placed: out, left: again ?? left };
 }
 
 /** One of the family's dishes at a meal, with its place and how often they said they have it. */

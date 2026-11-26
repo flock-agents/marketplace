@@ -58,14 +58,16 @@ const DISHES = {
     ["Breakfast", "Idli", "idli, dosa, poha, upma"], ["Agastya's tiffin", "Paratha roll", "made into a roll"]],
 };
 
-type Part = "home" | "rules" | "dishes" | "often" | "contains" | "lint" | "plan";
+type Part = "home" | "rules" | "dishes" | "often" | "contains" | "lint" | "kinds" | "plan";
 const partOf = (r: ModelRequest): Part => {
   const p = r.purpose ?? "";
-  return /contains/.test(p) ? "contains" : /lint/.test(p) ? "lint" : /often/.test(p) ? "often" : /rules/.test(p) ? "rules" : /dishes/.test(p) ? "dishes"
+  return /kinds/.test(p) ? "kinds" : /contains/.test(p) ? "contains" : /lint/.test(p) ? "lint" : /often/.test(p) ? "often" : /rules/.test(p) ? "rules" : /dishes/.test(p) ? "dishes"
     : /setup/.test(p) ? "home" : "plan";
 };
 function fake(over: Partial<Record<Part, unknown>> = {}) {
+  // The kinds read places every dish code could not as a kind of its own: a word no answer placed is asked, never saved (H4).
   const answers: Record<Part, unknown> = { home: HOME, rules: RULES, dishes: DISHES, often: { often: [] }, lint: { dishes: [] }, plan: { days: {} },
+    kinds: (r: ModelRequest) => ({ dishes: JSON.parse(r.user).dishes.map((d: { name: string; meal: string }) => ({ name: d.name, meal: d.meal, own: true, named: "dish" })) }),
     contains: (r: ModelRequest) => { const { dishes, tags } = JSON.parse(r.user); return Object.fromEntries(dishes.map((d: string) => [d, Object.fromEntries(tags.map((t: string) => [t, d === "Egg curry" && t === "egg"]))])); },
     ...over };
   const asked: ModelRequest[] = [];

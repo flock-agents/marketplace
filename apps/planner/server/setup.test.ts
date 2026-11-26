@@ -92,6 +92,8 @@ const containsOf = (has: Record<string, string[]> = {}) => (req: ModelRequest) =
   const { dishes, tags } = JSON.parse(req.user) as { dishes: string[]; tags: string[] };
   return Object.fromEntries(dishes.map((d) => [d, Object.fromEntries(tags.map((t) => [t, (has[d] ?? []).includes(t)]))]));
 };
+/** A kinds answer that places every dish asked as a kind of its own (for tests not about the kinds read). */
+const ownKinds = (req: ModelRequest) => ({ dishes: (JSON.parse(req.user).dishes as { name: string; meal: string }[]).map((d) => ({ name: d.name, meal: d.meal, own: true, named: "dish" })) });
 /** A model per part: a JSON answer, a result, or a function of (request, try number). */
 function fake(over: Partial<Record<Part, unknown>> = {}) {
   const answers: Record<Part, unknown> = { home: HOME, rules: RULES, dishes: DISHES, often: OFTEN, contains: containsOf({ Rice: ["white_rice"], "Lemon rice": ["white_rice"], Curd: ["dairy"] }),
@@ -419,7 +421,7 @@ describe("apply_setup v2: the model reads, code checks and writes", () => {
 
   it("contains: at most 40 dishes a call; a dish the answer leaves out stays unread (unknown)", async () => {
     const many = Array.from({ length: 45 }, (_, i) => [`Dish ${i + 1}`, "Lunch", "rice, sambar"]);
-    const f = fake({ dishes: { library: many }, contains: (req: ModelRequest) => {
+    const f = fake({ dishes: { library: many }, kinds: ownKinds, contains: (req: ModelRequest) => {
       const all = containsOf()(req) as Record<string, unknown>;
       delete all["Dish 45"];
       return all;
@@ -1123,7 +1125,8 @@ describe("apply_setup: the kinds model, end to end with a fake model", () => {
     expect(r.said).toContain("Dinner: phulka and kovakkai; or phulka and chicken curry");
   });
 
-  it("the kinds read does not answer: it stops inside the setup's budget, the setup saves, its dishes are fixed parts", async () => {
+  // H4: no answer placed what code could not: the family is asked, never a bare word saved as their dish.
+  it("the kinds read does not answer: it stops inside the setup's budget, the setup saves, what it would place is asked (H4)", async () => {
     const f = fake2({ kinds: () => new Promise(() => {}) });
     const k = await boot({ model: f.model, setupBudgetMs: 5000 });
     const t0 = Date.now();
@@ -1131,17 +1134,22 @@ describe("apply_setup: the kinds model, end to end with a fake model", () => {
     expect(Date.now() - t0).toBeLessThan(5000);
     expect(r.ok).toBe(true);
     const fam = (await k.owner("GET", "/api/family")).body;
-    expect(fam.slots.find((s: any) => s.name === "Dinner").templates[0].parts).toEqual([{ kind: "Roti", words: "phulka" }, { items: ["Kovakkai"] }]);
+    expect(JSON.stringify(fam.slots.find((s: any) => s.name === "Dinner").templates).toLowerCase()).not.toContain("kovakkai");
+    expect(r.asks).toContain(kindsAsk("kovakkai", { name: "Dinner", kind: "main" }));
+    expect(k.rows("library").some((d) => d.name === "Kovakkai")).toBe(false);
   });
 
-  it("the kinds read fails: the setup still saves; what code could not place is the family's fixed dish", async () => {
+  it("the kinds read fails: the setup still saves; what code could not place is asked, what it placed stays (H4)", async () => {
     const f = fake2({ kinds: { ok: false, code: "unavailable", message: "down" } });
     const k = await boot({ model: f.model });
     const r = await k.op("apply_setup", { household: FAMILY, transcript: T });
     expect(r.ok).toBe(true);
     const fam = (await k.owner("GET", "/api/family")).body;
-    expect(fam.slots.find((s: any) => s.name === "Dinner").templates[0].parts).toEqual([{ kind: "Roti", words: "phulka" }, { items: ["Kovakkai"] }]);
-    expect(fam.slots.find((s: any) => s.name === "Breakfast").templates.slice(0, 2).map((t: any) => t.parts)).toEqual([[{ items: ["Moong dal khichdi"] }], [{ items: ["Boiled chicken"] }]]);   // khichdi: placed by code, the decided bare dish
+    const items = (n: string) => fam.slots.find((s: any) => s.name === n).templates.flatMap((t: any) => t.parts).filter((p: any) => "items" in p).flatMap((p: any) => p.items);
+    expect(items("Dinner")).not.toContain("Kovakkai");
+    expect(items("Breakfast")).not.toContain("Boiled chicken");
+    expect(fam.slots.find((s: any) => s.name === "Breakfast").templates[0].parts).toEqual([{ items: ["Moong dal khichdi"] }]);   // khichdi: placed by code, the decided bare dish
+    expect(r.asks).toEqual(expect.arrayContaining([kindsAsk("kovakkai", { name: "Dinner", kind: "main" }), kindsAsk("boiled chicken", { name: "Breakfast", kind: "main" })]));
   });
 });
 
@@ -1268,20 +1276,20 @@ describe("setup reads into the one meaning model (§5, §6.4)", () => {
     expect(slot("Lunch").templates[0].parts).toEqual([{ kind: "Rice", words: "rice" }, { kind: "Rice curry", sub: "Sambar", words: "sambar" }]);
   });
 
-  it("a kinds answer that places none of the dishes asked is no answer: nothing asked, nothing removed (F4 review)", async () => {
+  it("a kinds answer that places none of the dishes asked is no answer, as a failed read is: every dish it was asked is asked (F4 review, H4)", async () => {
     const base = await walk({ kinds: { ok: false, code: "unavailable", message: "down" } });
     const { f, k, r, slot } = await walk({ kinds: { dishes: [] } });
     expect(f.of("kinds")).toHaveLength(1);
     expect(k.rows("library").map((d) => `${d.name}@${d.slot}`).sort()).toEqual(base.k.rows("library").map((d) => `${d.name}@${d.slot}`).sort());
     expect(r.asks).toEqual(base.r.asks);
-    expect(r.asks.join("\n")).not.toContain("What do you mean by");
-    expect(itemsOf(slot("Lunch"))).toContain("Dry sabji");   // as a failed read leaves it: the family's fixed dish
+    expect(itemsOf(slot("Lunch"))).not.toContain("Dry sabji");
+    expect(r.asks.filter((a: string) => a.includes("dry sabji"))).toHaveLength(1);
   });
-  it("a second kinds call that fails keeps the dishes the first left out as code found them (F4 review)", async () => {
+  it("a second kinds call that fails leaves what the first left out asked, never a fixed dish (H4)", async () => {
     const { f, r, slot } = await walk({ kinds: (_req: ModelRequest, n: number) => (n === 1 ? noDry : { ok: false, code: "unavailable", message: "down" }) });
     expect(f.of("kinds")).toHaveLength(3);   // the first, then the second and its one retry (askOnce)
-    expect(r.asks.join("\n")).not.toContain("dry sabji");
-    expect(itemsOf(slot("Lunch"))).toContain("Dry sabji");
+    expect(r.asks.filter((a: string) => a.includes("dry sabji"))).toHaveLength(1);
+    expect(itemsOf(slot("Lunch"))).not.toContain("Dry sabji");
   });
 
   it("a bare dosa is their Plain dosa; a bare upma stays a category", async () => {
@@ -1711,7 +1719,7 @@ describe("setup checks what a read left out (H1-H3)", () => {
   const boxDishes = { ...I_DISHES, library: [...I_DISHES.library, ["Paratha roll", "Ira's lunch box", rollSaid]] };
   it("a box the home re-read adds has the dishes read again once, so its dish moves to the box (fix 3)", async () => {
     const { f, slot } = await run({ home: (_req: ModelRequest, n: number) => (n === 1 ? noBoxes : withBoxes),
-      dishes: (_req: ModelRequest, n: number) => (n === 1 ? noBoxDishes : boxDishes) }, rollTranscript);
+      dishes: (_req: ModelRequest, n: number) => (n === 1 ? noBoxDishes : boxDishes), kinds: ownKinds }, rollTranscript);
     expect(f.of("dishes")).toHaveLength(2);
     const again = JSON.parse(f.of("dishes")[1].user);
     expect(again.meals).toEqual(expect.arrayContaining(["Ira's breakfast box", "Ira's lunch box", "Lunch"]));
@@ -1932,6 +1940,17 @@ describe("the often read's own deadline, and its fallback (H5)", () => {
     expect(JSON.parse(f.of("lint")[0].user).dishes.map((d: any) => d.name)).toEqual(["Egg curry"]);
     expect(lib(k)["Egg curry@Dinner"]).toMatchObject({ frequency: "sometimes", days: ["Sat"] });
   });
+  it("a linted dish the lint gives nothing for, or a failed lint, is a dropped line, never a quiet miss", async () => {
+    for (const lint of [{ dishes: [] }, { dishes: [{ name: "Egg curry", often: "" }] }, { ok: false, code: "unavailable", message: "down" }]) {
+      const f = fake({ home: { slots: SLOTS }, rules: { rules: [] }, dishes: DISHES, often: { ok: false, code: "unavailable", message: "down" }, kinds: { dishes: [] }, contains: containsOf(), lint });
+      const k = await boot({ model: f.model });
+      const r = await k.op("apply_setup", { household: FAM, transcript: T });
+      expect(r.ok).toBe(true);
+      expect(f.of("lint")).toHaveLength(1);
+      expect(lib(k)["Egg curry@Dinner"]).toMatchObject({ frequency: null, days: null });
+      expect(r.dropped.filter((d: string) => d.startsWith("how often for Egg curry"))).toHaveLength(1);
+    }
+  });
 });
 
 describe("a word no read placed is never a fixed dish (H4)", () => {
@@ -1954,6 +1973,21 @@ describe("a word no read placed is never a fixed dish (H4)", () => {
     expect(JSON.parse(f.asked[1].user).dishes.map((d: any) => d.name)).toEqual(["Dry veg"]);
     expect(r.left).toEqual([]);
     expect(r.placed.size).toBe(2);
+  });
+
+  it("kindsRead: a failed first call leaves every dish it was asked", async () => {
+    const f = { model: async (): Promise<ModelResult> => ({ ok: false, code: "unavailable", message: "down" }) };
+    const r = await kindsRead(f.model, [...ASKS, { name: "Puttu", meal: "breakfast", words: "puttu", known: { kind: "Puttu", sub: null, item: null, own: false, named: "dish", word: "puttu" } as Place }], Date.now() + 5_000, () => {});
+    expect(r.left.map((a) => a.name)).toEqual(["Dry veg", "Kovakkai"]);   // one asked only for named keeps code's place
+    expect(r.placed.size).toBe(0);
+  });
+  it("kindsRead: a failed second ask leaves what the first answer left out", async () => {
+    const asked: ModelRequest[] = [];
+    const model = async (req: ModelRequest): Promise<ModelResult> => { asked.push(req); return asked.length === 1 ? { ok: true, json: { dishes: [KOV] }, model: "fake" } : { ok: false, code: "unavailable", message: "down" }; };
+    const r = await kindsRead(model, ASKS, Date.now() + 10_000, () => {});
+    expect(asked.length).toBeGreaterThanOrEqual(2);
+    expect(r.left.map((a) => a.name)).toEqual(["Dry veg"]);
+    expect([...r.placed.keys()]).toEqual(["dinner|kovakkai"]);
   });
 
   it("writeKinds: a left dish is no fixed part", async () => {
