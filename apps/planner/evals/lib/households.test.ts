@@ -213,7 +213,7 @@ describe("households: the one meaning model's shapes", () => {
     // The Q lines are the manifest's asks as Flock fills them (the cook unnamed, the child by name).
     expect(tr).toContain("Q: Which meals does your cook make, and when does she come?");
     expect(tr).toContain("Q: On her days off, who cooks, and is any meal eaten out or ordered in?");
-    expect(tr).toContain("Q: Does Agastya eat what the family eats, or something else at some meals? Does Agastya carry a box to school?");
+    expect(tr).toContain("Q: For Agastya: the family's food, or something else at some meals? And a box for school?");
     expect(tr).toContain("Q: What did the family have for breakfast over the past week? Tell me the dishes.");
   });
 
@@ -254,15 +254,15 @@ describe("interview sim: the new questions, filled as Flock fills them", () => {
     expect(ask("cook")).toBe("Which meals does Lakshmi make, and when does she come?");
     expect(ask("cookTime")).toBe("Is Lakshmi short of time, so only a few dishes?");
     expect(ask("otherDays")).toBe("On her days off, who cooks, and is any meal eaten out or ordered in?");
-    expect(ask("childSame")).toBe("Does Agastya eat what the family eats, or something else at some meals? Does Agastya carry a box to school?");
-    expect(ask("childMeals")).toBe("What does Agastya have at those meals, and what goes in the box?");
+    expect(ask("childSame")).toBe("For Agastya: the family's food, or something else at some meals? And a box for school?");
+    expect(ask("childMeals")).toBe("What's on the plate for Agastya at those meals, and what goes in the box?");
     expect(qs.map((q) => q.id)).toEqual(["pain", "apps", "mainApp", "lunchWhere", "cook", "cookTime", "otherDays", "childSame", "familyBreakfast", "familyLunch", "familyDinner", "childMeals", "differently", "subscriptions"]);
   });
   test("no cook: the no-cook otherDays; two children named together; no children: no child questions", async () => {
     const h2 = await asks("h2-iyer");
     expect(h2.some((q) => q.id === "cook" || q.id === "cookTime")).toBe(false);
     expect(h2.find((q) => q.id === "otherDays")?.ask).toBe("Who cooks at home, and is any meal eaten out or ordered in, on which days?");
-    expect((await asks("h6-kulkarni")).find((q) => q.id === "childSame")?.ask).toBe("Does Aditi and Ishaan eat what the family eats, or something else at some meals? Does Aditi and Ishaan carry a box to school?");
+    expect((await asks("h6-kulkarni")).find((q) => q.id === "childSame")?.ask).toBe("For Aditi and Ishaan: the family's food, or something else at some meals? And a box for school?");
     expect((await asks("h7-menon")).some((q) => q.id === "childSame" || q.id === "childMeals")).toBe(false);
   });
   test("childMeals is asked only when the childSame answer says a child differs", async () => {

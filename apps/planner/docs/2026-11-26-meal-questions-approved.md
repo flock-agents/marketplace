@@ -13,12 +13,14 @@ Rules the owner set: "over the past week" stays; meal questions do not ask "anyo
 | otherDays (cook Mon–Fri) | same with `On Saturday and Sunday` | same |
 | otherDays (other cook days) | `On her days off, who cooks, and is any meal eaten out or ordered in?` | same |
 | otherDays (no cook) | `Who cooks at home, and is any meal eaten out or ordered in, on which days?` | same |
-| childSame | `Does {{children}} eat what the family eats, or something else at some meals? Does {{children}} carry a box to school?` | `You said: {{heard}}. Anything else about what {{children}} eats?` |
+| childSame | `For {{children}}: the family's food, or something else at some meals? And a box for school?` | `You said: {{heard}}. Anything else about meals for {{children}}?` |
 | familyBreakfast | `What did the family have for breakfast over the past week? Tell me the dishes.` | `You mentioned {{heard}} for breakfast. Anything else?` |
 | familyLunch | `What did the family have for lunch over the past week? Tell me the dishes.` | `You mentioned {{heard}} for lunch. Anything else?` |
 | familyDinner | `What did the family have for dinner over the past week? Tell me the dishes.` | `You mentioned {{heard}} for dinner. Anything else?` |
-| childMeals | `What does {{children}} have at those meals, and what goes in the box?` | `You mentioned {{heard}}. Anything else in the box?` |
+| childMeals | `What's on the plate for {{children}} at those meals, and what goes in the box?` | `You mentioned {{heard}}. Anything else in the box?` |
 | differently | `Does anyone eat differently: something they don't eat, an allergy, less spice or salt, a fasting day, or something extra on their plate?` | `You mentioned {{heard}}. Anything else, for anyone, like an allergy or a fasting day?` |
+
+Reworded 26 Nov so the verbs read right for one child or several (Flock joins names); pending owner confirmation. (Applies to the childSame ask and recall and the childMeals ask above.)
 
 Note: the contract lint says a `recall` names only `{{heard}}`; childSame's recall above also names `{{children}}`
 (owner-approved wording). Ruling for the build: allow `{{children}}` in a recall when the question's `when` guarantees

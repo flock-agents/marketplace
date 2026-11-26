@@ -249,11 +249,24 @@ describe("the agent's interface", () => {
     expect(first("cookTime").ask).toBe("Is {{cookName}} short of time, so only a few dishes?");
     expect(ask("otherDays", "household.help has cook").ask).toBe("On her days off, who cooks, and is any meal eaten out or ordered in?");
     expect(setup.filter((q) => q.id === "otherDays").at(-1)!.ask).toBe("Who cooks at home, and is any meal eaten out or ordered in, on which days?");
-    expect(first("childSame").ask).toBe("Does {{children}} eat what the family eats, or something else at some meals? Does {{children}} carry a box to school?");
+    expect(first("childSame").ask).toBe("For {{children}}: the family's food, or something else at some meals? And a box for school?");
     for (const [id, meal] of [["familyBreakfast", "breakfast"], ["familyLunch", "lunch"], ["familyDinner", "dinner"]])
       expect(first(id).ask).toBe(`What did the family have for ${meal} over the past week? Tell me the dishes.`);
-    expect(first("childMeals").ask).toBe("What does {{children}} have at those meals, and what goes in the box?");
+    expect(first("childMeals").ask).toBe("What's on the plate for {{children}} at those meals, and what goes in the box?");
     expect(first("differently").ask).toBe("Does anyone eat differently: something they don't eat, an allergy, less spice or salt, a fasting day, or something extra on their plate?");
+  });
+
+  it("the child questions read right for one child or several: no verb agrees with {{children}}", () => {
+    const texts = [first("childSame").ask, first("childSame").recall!, first("childMeals").ask];
+    expect(first("childSame").recall).toBe("You said: {{heard}}. Anything else about meals for {{children}}?");
+    for (const t of texts) {
+      expect(t).not.toMatch(/\b[Dd]oes \{\{children\}\}/);
+      expect(t).not.toMatch(/\{\{children\}\} eats/);
+      for (const names of ["Aditi and Ishaan", "Agastya"]) {
+        const filled = t.replace(/\{\{children\}\}/g, names).replace("{{heard}}", "idli");
+        expect(filled).not.toMatch(new RegExp(`[Dd]oes ${names}|${names} eats`));
+      }
+    }
   });
 
   it("otherDays gates only on facts that something fills: two variants, the cook's presence", () => {

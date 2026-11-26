@@ -41,11 +41,11 @@ const Q: Record<keyof typeof A, string> = {
   cook: "Which meals does your cook make, and when does she come?",
   cookTime: "Is your cook short of time, so only a few dishes?",
   otherDays: "On her days off, who cooks, and is any meal eaten out or ordered in?",
-  childSame: "Does Agastya eat what the family eats, or something else at some meals? Does Agastya carry a box to school?",
+  childSame: "For Agastya: the family's food, or something else at some meals? And a box for school?",
   familyBreakfast: "What did the family have for breakfast over the past week? Tell me the dishes.",
   familyLunch: "What did the family have for lunch over the past week? Tell me the dishes.",
   familyDinner: "What did the family have for dinner over the past week? Tell me the dishes.",
-  childMeals: "What does Agastya have at those meals, and what goes in the box?",
+  childMeals: "What's on the plate for Agastya at those meals, and what goes in the box?",
   // Dad's egg and salad were heard in the lunch answer: Flock asks the recall form, {{heard}} filled (spec §6.2; lead's ruling F8).
   differently: "You mentioned Dad doesn't eat egg or salad. Anything else, for anyone, like an allergy or a fasting day?",
   subscriptions: "Does anything come on a subscription, like Country Delight or a milkman?",

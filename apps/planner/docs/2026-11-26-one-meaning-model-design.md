@@ -180,8 +180,8 @@ wording, recall and parsing live in Flock.
    time, so only a few dishes?" — the limit saved as the cook's dish limit, not "won't make".
 5. **Other days** (the one question that owns eating out / ordering in): "On her days off, who cooks, and is any meal
    eaten out or ordered in?"
-6. **Does the child eat what the family eats?** "Does Agastya eat what the family eats, or his own food at some meals?
-   Does he carry a box to school?" — the answer decides 8. Several children: asked together, split only if they differ.
+6. **Does the child eat what the family eats?** "For Agastya: the family's food, or something else at some meals?
+   And a box for school?" — the answer decides 8. Several children: asked together, split only if they differ.
 7. **The family's breakfast, lunch, dinner** (one question each), with recall when already mentioned.
 8. **Only where 6 said they differ**: that child's own meal / box ("What goes in Agastya's lunch box?"), with recall.
 9. **Anyone eating differently** — replaces diet, elders and rules: "Does anyone eat differently: something they don't

@@ -32,11 +32,11 @@ const ANSWERS = {
 const TRANSCRIPT = [
   "Q: Is your cook short of time, so only a few dishes?", `A: ${ANSWERS.cookTime}`,
   "Q: On Sunday, when your cook doesn't come, who cooks, and is any meal eaten out or ordered in?", `A: ${ANSWERS.otherDays}`,
-  "Q: Does Agastya eat what the family eats, or something else at some meals? Does Agastya carry a box to school?", `A: ${ANSWERS.childSame}`,
+  "Q: For Agastya: the family's food, or something else at some meals? And a box for school?", `A: ${ANSWERS.childSame}`,
   "Q: What did the family have for breakfast over the past week? Tell me the dishes.", `A: ${ANSWERS.familyBreakfast}`,
   "Q: What did the family have for lunch over the past week? Tell me the dishes.", `A: ${ANSWERS.familyLunch}`,
   "Q: What did the family have for dinner over the past week? Tell me the dishes.", `A: ${ANSWERS.familyDinner}`,
-  "Q: What does Agastya have at those meals, and what goes in the box?", `A: ${ANSWERS.childMeals}`,
+  "Q: What's on the plate for Agastya at those meals, and what goes in the box?", `A: ${ANSWERS.childMeals}`,
   "Q: Does anyone eat differently: something they don't eat, an allergy, less spice or salt, a fasting day, or something extra on their plate?", `A: ${ANSWERS.differently}`,
 ];
 
