@@ -435,11 +435,16 @@ export function scorePlan(h: Household, plan0: PlanOut, loaded: SetupOut, o: { f
   });
   /** The plate is exactly this template's: each part one dish, no dish left over; a fixed dish by its name or a way of it
    *  ("Egg paratha roll" of items(Egg paratha roll)), never a shorter name it holds ("Paratha roll" is no egg roll). */
+  // A roll said another way ("Paratha with egg", "Cheese paratha" for "Egg/Cheese paratha roll"): the same content words once the
+  // filler words are dropped. "Paratha roll" is {paratha}, not {egg, paratha}: still no egg roll.
+  const FILLER = new Set(["roll", "rolls", "rolled", "with", "inside", "stuffed", "and"]);
+  const contentWords = (x: string) => new Set(words(x).filter((w) => !FILLER.has(w)));
+  const sameContent = (a: string, b: string) => { const x = contentWords(a), y = contentWords(b); return x.size > 0 && x.size === y.size && [...x].every((w) => y.has(w)); };
   const plateIs = (ds: string[], slot: string, tp: { parts: TruthPart[] }) => {
     if (tp.parts.length !== ds.length) return false;
     const used = new Set<number>();
     return tp.parts.every((p) => { const i = ds.findIndex((x, j) => !used.has(j) && ("items" in p
-      ? p.items.some((it) => plain(it) === plain(x) || variantOf(it, x)) : partHit(p, x, slot))); if (i < 0) return false; used.add(i); return true; });
+      ? p.items.some((it) => plain(it) === plain(x) || variantOf(it, x) || sameContent(it, x)) : partHit(p, x, slot))); if (i < 0) return false; used.add(i); return true; });
   };
   const LINK = new Set(["and", "with", "n"]);
   /** The family's whole meals at a slot: a seed row of one dish, a template of one fixed-dish part. */

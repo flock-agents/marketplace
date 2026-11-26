@@ -836,6 +836,20 @@ describe("scorePlan: F9 links, newness, categories, fixed extras, staples", () =
     expect(notesOf(h, p, setupOfTruth(h), "linked_parts").map((n) => n.slice(14, 35))).toEqual(["Mon Chotu's lunch box", "Tue Chotu's lunch box"]);
   });
 
+  test("(4a) G5: 'Paratha with egg' and 'Cheese paratha' are the egg and cheese rolls (same words); a bare 'Paratha roll' is no egg roll", () => {
+    const h = structuredClone(BOX_FIX);
+    h.truth.meals![0].templates.push(tpl([items("Egg paratha roll")], "sometimes"), tpl([items("Cheese paratha roll")], "sometimes"));
+    h.truth.library.push(...dish("Egg paratha roll", ["Chotu's lunch box"], { frequency: "sometimes" }), ...dish("Cheese paratha roll", ["Chotu's lunch box"], { frequency: "sometimes" }));
+    const linked = (q: PlanOut) => notesOf(h, q, setupOfTruth(h), "linked_parts");
+    const p = boxWeek4();
+    sdOf(p, "Mon", "Chotu's lunch box").dishes = [{ name: "Paratha with egg" }];
+    sdOf(p, "Tue", "Chotu's lunch box").dishes = [{ name: "Cheese paratha" }];
+    expect(linked(p)).toEqual([]);
+    // Bad: a bare "Paratha roll" is neither roll; it is the linked plate and holds no sabzi here.
+    sdOf(p, "Mon", "Chotu's lunch box").dishes = [{ name: "Paratha roll" }];
+    expect(linked(p).map((n) => n.slice(14, 35))).toEqual(["Mon Chotu's lunch box"]);
+  });
+
   test("(4b) review: the link-free 'sometimes' rolls together stay within 'sometimes' and under the usual linked plate", () => {
     const h = structuredClone(BOX_FIX);
     h.truth.meals![0].templates.push(tpl([items("Egg paratha roll")], "sometimes"), tpl([items("Cheese paratha roll")], "sometimes"));
