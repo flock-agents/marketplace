@@ -331,7 +331,8 @@ describe("add-on days may be empty (owner 23 Nov)", () => {
 describe("scorePlan: the base minimum", () => {
   test("a bare staple, a lunch with no bread or rice, a staple twice", () => {
     expect(fails(set(goodWeek(), "Mon", "Lunch", ["Rice"]))).toEqual(expect.arrayContaining(["not_bare", "whole_plate"]));
-    expect(fails(set(goodWeek(), "Mon", "Lunch", ["Dal", "Bhindi"]))).toContain("whole_plate");
+    // Owner 26 Nov: no rice or bread demanded; a dal and a sabzi is as full as their two-dish lunch.
+    expect(fails(set(goodWeek(), "Mon", "Lunch", ["Toor dal", "Bhindi"]))).not.toContain("whole_plate");
     expect(fails(set(goodWeek(), "Mon", "Dinner", ["Dal rice", "Rice", "Lauki"]))).toContain("no_doubled_staple");
     expect(fails(set(goodWeek(), "Mon", "Dinner", ["Roti with aloo gobi", "Roti", "Rajma"]))).toContain("no_doubled_staple");
     expect(fails(set(goodWeek(), "Mon", "Dinner", ["Khichdi"]))).not.toContain("whole_plate");
@@ -448,6 +449,37 @@ describe("attendance: a child with their own box", () => {
     const bad = baselineWeek(h13, MON);
     bad.slotDays.find((x) => x.date === MON && x.slot === "Lunch")!.people.push("Vivaan");
     expect(att(bad)[1] - att(bad)[0]).toBe(1);
+  });
+});
+
+describe("whole_plate and not_bare: the family's plates are the template (owner, 26 Nov)", () => {
+  // "When the user speaks a new dish treat it as the template. No need to check for rice or chapati every time by default.
+  // Different people might be on different diets."
+  const h16 = async () => (await import("../households")).ALL_HOUSEHOLDS.find((h) => h.id === "h16-pillai")!;
+  const failsIn = (h: Awaited<ReturnType<typeof h16>>, day: Weekday, slot: string, dishes: string[]) => {
+    const p = baselineWeek(h, MON);
+    const sd = p.slotDays.find((x) => x.date === dateOf(MON, day) && x.slot === slot)!;
+    sd.dishes = dishes.map((name) => ({ name }));
+    return Object.entries(scorePlan(h, p, setupOfTruth(h), { failClosed: false }).rates).filter(([, [a, n]]) => a < n).map(([k]) => k);
+  };
+  test("a plate with no rice or bread passes when it is as full as theirs, or one of their whole meals", async () => {
+    const h = await h16();
+    expect(failsIn(h, "Wed", "Dinner", ["Kanji", "Payar"])).not.toContain("whole_plate");   // their "Kanji and payar"
+    expect(failsIn(h, "Wed", "Dinner", ["Kanji and payar"])).not.toContain("whole_plate");
+    expect(failsIn(h, "Mon", "Dinner", ["Chapati", "Chicken curry"])).not.toContain("whole_plate");   // their template
+    expect(failsIn(h, "Mon", "Dinner", ["Egg curry", "Veg kurma"])).not.toContain("whole_plate");    // no bread, still two dishes
+    expect(fails(set(goodWeek(), "Mon", "Dinner", ["Rajma chawal"]))).not.toContain("whole_plate");
+  });
+  test("a plate clearly thinner than every plate they described still fails: a side or a staple alone, one curry alone", async () => {
+    const h = await h16();
+    expect(failsIn(h, "Mon", "Dinner", ["Chicken curry"])).toContain("whole_plate");
+    expect(failsIn(h, "Mon", "Dinner", ["Chapati"])).toEqual(expect.arrayContaining(["not_bare", "whole_plate"]));
+    expect(fails(set(goodWeek(), "Mon", "Lunch", ["Curd"]))).toEqual(expect.arrayContaining(["not_bare", "whole_plate"]));
+    expect(fails(set(goodWeek(), "Mon", "Lunch", ["Rice", "Curd"]))).toContain("whole_plate");
+    expect(fails(set(goodWeek(), "Mon", "Lunch", ["Bhindi"]))).toContain("whole_plate");
+  });
+  test("a staple alone the family eats as such is not bare (their own seed row)", () => {
+    expect(fails(set(goodWeek(), "Mon", "Dinner", ["Roti"]))).not.toContain("not_bare");   // the fixture's seed has a "Roti" dinner
   });
 });
 

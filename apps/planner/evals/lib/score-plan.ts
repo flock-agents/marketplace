@@ -9,7 +9,7 @@ import { slotMap, type Rates } from "./score-setup";
 import { isBareKindWord, isStapleKind, kindOf, mainTagsOf } from "./catalog";
 import {
   WEEK, dateOf, dayOf, dishNameOf, frequencyRange, plain, sameName, sameNames, schoolLunchAway, weekdayOfDate,
-  type Household, type Skip, type TruthDish, type TruthRule, type TruthSlot, type Weekday,
+  type Household, type Skip, type TruthDish, type TruthPart, type TruthRule, type TruthSlot, type Weekday,
 } from "./truth";
 
 
@@ -366,14 +366,45 @@ export function scorePlan(h: Household, plan0: PlanOut, loaded: SetupOut, o: { f
   // Decided 8: the one-pot rice kinds (khichdi, biryani, flavoured rice) are each a whole plate, whatever the dish's name.
   const onePotKind = (x: string) => ["Khichdi", "Biryani", "Flavoured rice", "Pulao"].includes(kindOf(x)?.kind ?? "");
   const carb = (x: string) => hasWord(x, BREAD_RICE) || hasWord(x, ONE_POT) || onePotKind(x);
+  // Owner, 26 Nov: "When the user speaks a new dish treat it as the template. No need to check for rice or chapati every
+  // time by default. Different people might be on different diets." A plate is whole when it matches a template the family
+  // described at that meal (by kinds), holds a dish they named there as a whole meal ("Kanji and payar", "Rajma chawal"), or
+  // is as full as the plates they described; only a plate clearly thinner than all of those fails (a side or a staple alone).
+  // A particular way of a family dish ("Bhindi sabzi" of their "Sabzi").
+  const variantOf = (entry: string, dish: string) => { const e = words(entry), d = words(dish); return e.length > 0 && d.length > e.length && e.every((w) => d.includes(w)); };
+  const mealOf = (slot: string) => (t.meals ?? []).find((m) => lc(m.slot) === lc(slot));
+  const seedAt = (slot: string) => t.seed.filter((r) => lc(r.slot) === lc(slot) && r.dishes.length);
+  const kindsHere = (x: string, slot: string) => new Set([kindAt(x, slot), kindOf(x)?.kind].filter((k): k is string => !!k));
+  const partHit = (p: TruthPart, x: string, slot: string) => ("items" in p
+    ? p.items.some((it) => plain(it) === plain(x) || dishNameOf(x, [it]) === it)
+    : kindsHere(x, slot).has(p.kind));
+  const matchesTemplate = (ds: string[], slot: string) => (mealOf(slot)?.templates ?? []).some((tp) => {
+    const used = new Set<number>();
+    return tp.parts.every((p) => { const i = ds.findIndex((x, j) => !used.has(j) && partHit(p, x, slot)); if (i < 0) return false; used.add(i); return true; });
+  });
+  const LINK = new Set(["and", "with", "n"]);
+  /** The family's whole meals at a slot: a seed row of one dish, a template of one fixed-dish part. */
+  const wholeMeals = (slot: string) => [...new Set([...seedAt(slot).filter((r) => r.dishes.length === 1).map((r) => r.dishes[0]),
+    ...(mealOf(slot)?.templates ?? []).filter((tp) => tp.parts.length === 1 && "items" in tp.parts[0]).flatMap((tp) => (tp.parts[0] as { items: string[] }).items)])];
+  // A whole meal of theirs on the plate: by its name, a way of it, or its words across the plate ("Kanji, Payar").
+  const hasWholeMeal = (ds: string[], slot: string) => wholeMeals(slot).some((m) => {
+    const mw = words(m).filter((w) => !LINK.has(w)), pw = new Set(ds.flatMap(words));
+    return ds.some((x) => plain(x) === plain(m) || dishNameOf(x, [m]) === m || variantOf(m, x)) || (mw.length > 1 && mw.every((w) => pw.has(w)));
+  });
+  /** The fewest dishes on a plate of several the family described at the slot (seed rows, templates); 2 when none. */
+  const minPlate = (slot: string) => Math.min(...[...seedAt(slot).map((r) => r.dishes.length), ...(mealOf(slot)?.templates ?? []).map((tp) => tp.parts.length)].filter((n) => n >= 2), 2);
+  /** The family eats exactly this plate (a seed row of the same dishes): never bare to them. */
+  const theirPlate = (ds: string[], slot: string) => seedAt(slot).some((r) => r.dishes.length === ds.length && r.dishes.every((x) => ds.some((y) => plain(y) === plain(x))));
+  const onePotDish = (x: string) => hasWord(x, ONE_POT) || onePotKind(x) || (carb(x) && words(x).length > 1 && !isBareStaple(x));
   for (const sd of cooked) {
     const ds = sd.dishes.map((d) => d.name);
     // An add-on plate holds only the difference ("Dadu's dinner: Phulka"): a staple alone is right there.
     const addon = t.slots.find((x) => lc(x.name) === lc(sd.slot))?.kind === "addon";
-    if (!addon) add("not_bare", !ds.every(isBareStaple), `${dayOfSd(sd)} ${sd.slot}: only ${ds.join(", ")}`);
+    const allBare = ds.every(isBareStaple);
+    if (!addon) add("not_bare", !allBare || theirPlate(ds, sd.slot) || hasWholeMeal(ds, sd.slot), `${dayOfSd(sd)} ${sd.slot}: only ${ds.join(", ")}`);
     if (/^(lunch|dinner)$/i.test(sd.slot)) {
-      const onePot = ds.some((x) => hasWord(x, ONE_POT) || onePotKind(x) || (carb(x) && words(x).length > 1 && !isBareStaple(x)));
-      const whole = ds.some(carb) && (ds.length >= 2 ? ds.some((x) => !isBareStaple(x)) : onePot);
+      const whole = matchesTemplate(ds, sd.slot) || hasWholeMeal(ds, sd.slot) || theirPlate(ds, sd.slot)
+        || (ds.length === 1 ? onePotDish(ds[0]) : !allBare && ds.length >= minPlate(sd.slot));
       add("whole_plate", whole, `${dayOfSd(sd)} ${sd.slot}: ${ds.join(", ")}`);
     }
     // A plain staple beside a dish that already has it ("Dal rice, Rice"; "Roti with aloo gobi, Roti"), or the same twice.
@@ -387,8 +418,6 @@ export function scorePlan(h: Household, plan0: PlanOut, loaded: SetupOut, o: { f
     const fixed = () => t.library.some((x) => plain(x.name) === plain(d.name) && lc(x.slot) === lc(sd.slot) && (x.frequency === "daily" || !!x.days?.length));
     add("real_dish", !isBareKindWord(d.name) || fixed(), `${dayOfSd(sd)} ${sd.slot}: "${d.name}" is a kind, not a dish`);
   }
-  // Their own food: a family dish, or a particular way of one ("Bhindi sabzi" of their "Sabzi").
-  const variantOf = (entry: string, dish: string) => { const e = words(entry), d = words(dish); return e.length > 0 && d.length > e.length && e.every((w) => d.includes(w)); };
   /** Lead's rule (25 Nov, owner to confirm): a part the family named as a category ("dal", "sabzi", "sambar", "a poriyal": a
    *  bare kind or sub-kind word in their library at a slot) is filled from the catalog's items of it, and those items are
    *  theirs. A sub-kind word ("Sambar") makes that sub-kind's items theirs; a kind's own sub-kind word ("Sabzi", "Dal") makes
