@@ -296,8 +296,9 @@ export type SetupRead = { slots: ReadSlot[]; cook: Cook | null; family_cooks: Fa
 /** The three answers as one read: every list a list, every field its type, nothing thrown away for being a little off. */
 export function readOf(home: unknown, rules: unknown, dishes: unknown, often: unknown = null): SetupRead {
   const h = isObject(home) ? home : {}, r = isObject(rules) ? rules : {}, d = isObject(dishes) ? dishes : {}, o = isObject(often) ? often : {};
-  // A cook is kept without a name (D10: "your cook" by contract) when the read says anything of her: a name, days or a visit.
-  const cook = isObject(h.cook) && (str(h.cook.name) || daysOf(h.cook.days).length || arr(h.cook.visits).length) ? h.cook : null;
+  // A cook is kept without a name (D10: "your cook" by contract) when the read says anything of her: a name, days, a visit, or
+  // her limits (laid on the cook household.help lists, H16; with none listed, checkRead keeps no cook of limits alone).
+  const cook = isObject(h.cook) && (str(h.cook.name) || daysOf(h.cook.days).length || arr(h.cook.visits).length || str(h.cook.limits_words)) ? h.cook : null;
   const kind = (v: unknown): SlotKind => (v === "addon" || v === "custom" || v === "main" ? v : "custom");
   return {
     slots: arr(h.slots).filter(isObject).filter((s) => str(s.name)).map((s) => ({ name: str(s.name), kind: kind(s.kind), addon_of: str(s.addon_of) || null,
@@ -417,7 +418,9 @@ export function transcriptLines(v: unknown): string[] {
 
 export type HPerson = { name: string; group: string; age?: number; relationship?: string; nicknames: string[] };
 export type WeeklyEntry = { person: string; where: string; weekdays: Weekday[]; lunch: "away" | "carries" | "home" | null };
-export type Household = { people: HPerson[]; weekly: WeeklyEntry[] | null; speaker: string };
+/** A cook the household facts list (household.help, role "cook"): one entry per visit, with its days, time and meals as sent. */
+export type HelpCook = { name: string | null; days: Weekday[]; at: string | null; meals: string[] };
+export type Household = { people: HPerson[]; weekly: WeeklyEntry[] | null; speaker: string; cooks?: HelpCook[] };
 
 const fact = (h: unknown, key: string): unknown => (isObject(h) ? h[`household.${key}`] ?? h[key] : undefined);
 /** The facts Flock sent, in the planner's shape. `weekly` that is not a list is unknown (null). */
@@ -433,7 +436,12 @@ export function householdOf(h: unknown): Household {
   }) : null;
   // The speaker is a person (§5.5, contract §10): the one Flock marks "self", else the name it sends.
   const self = people.filter((p) => same(p.relationship ?? "", "self"));
-  return { people, weekly, speaker: self.length === 1 ? self[0].name : str(fact(h, "speaker")) };
+  // The cook's visits as the facts list them ("Mon-Sat", "daily"; "8am", "morning": a clock time only when one is sent).
+  const cooks = arr(fact(h, "help")).filter(isObject).filter((x) => same(str(x.role), "cook")).map((x): HelpCook => {
+    const days = /\b(?:daily|every ?day|all week)\b/i.test(strs(x.days).join(" ")) ? [...WEEKDAYS] : daysOf(x.days);
+    return { name: str(x.name) || null, days, at: strs(x.times).map(clockOf).find((t): t is string => !!t) ?? null, meals: strs(x.meals) };
+  });
+  return { people, weekly, speaker: self.length === 1 ? self[0].name : str(fact(h, "speaker")), ...(cooks.length ? { cooks } : {}) };
 }
 
 /** The person a name the model wrote is: the name itself, one of their nicknames, or their first name when only one person
@@ -809,7 +817,16 @@ export function checkRead(read: SetupRead, ctx: { household: Household; said: st
   }
 
   // The cook, who of the family cooks, lunch.
-  const cook = read.cook ? { ...read.cook, visits: read.cook.visits.flatMap((v): Visit[] => {
+  // H16: a read with no cook (none, or one with no days and no visits) where household.help lists one: that cook, her days and
+  // a visit per entry, with the read's name, limits and words laid on. Help lists a cook, so a cook is saved.
+  const help = ctx.household.cooks ?? [];
+  const thin = !read.cook || (!read.cook.days.length && !read.cook.visits.length);
+  const cook0: Cook | null = thin && help.length
+    ? { name: read.cook?.name ?? help.find((c) => c.name)?.name ?? null, days: WEEKDAYS.filter((d) => help.some((c) => c.days.includes(d))),
+      visits: help.flatMap((c): Visit[] => (c.at || c.meals.length ? [{ ...(c.at ? { at: c.at } : {}), ...(c.meals.length ? { meals: c.meals } : {}) }] : [])),
+      limits_words: read.cook?.limits_words ?? null, quote: read.cook?.quote ?? "" }
+    : read.cook && (read.cook.name || !thin) ? read.cook : null;
+  const cook = cook0 ? { ...cook0, visits: cook0.visits.flatMap((v): Visit[] => {
     const meals = v.meals ? uniq(v.meals.map(slotOf).filter((m): m is string => !!m)) : [];
     return v.at || meals.length ? [{ ...(v.at ? { at: v.at } : {}), ...(meals.length ? { meals } : {}) }] : [];
   }) } : null;
@@ -2172,6 +2189,9 @@ export async function applySetup(deps: { db: Db; emit: Emit; model: ModelCall; p
   const log = deps.log ?? ((l: string) => console.log(`[planner] apply_setup: ${l}`));
   const by = deps.by ?? "app";
   const household = householdOf(deps.household);
+  // H16: the cook household.help lists stands in for a cook the first setup's read left out. On a correction the family's own
+  // words about the cook win: a saved cook stays until a new reply removes her (diffSetup), never put back from the facts.
+  if (savedOf(deps.db).state) delete household.cooks;
   let n = 0;
   const numbered = deps.transcript.map((l) => (/^A\d*:/i.test(l) ? `A${++n}: ${l.replace(/^A\d*:\s*/i, "")}` : l));
   const payload = { household: deps.household ?? {}, transcript: numbered.join("\n") };

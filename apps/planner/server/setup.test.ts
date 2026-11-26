@@ -2108,4 +2108,25 @@ describe("a rule read whole, a require that is an add-on dish, a cook from help 
       { household: hh, said, sentences }).read.rules).toHaveLength(1);
     expect(checkRead(readOf({ slots: [...mains, box] }, { rules: [eggs] }, { library: [] }), { household: hh, said, sentences }).read.rules).toHaveLength(1);
   });
+
+  // H16
+  const help = [{ role: "cook", days: "Mon-Sat", times: "morning", meals: ["Breakfast", "Lunch"] }, { role: "cook", days: "Mon-Sat", times: "afternoon", meals: ["Dinner"] }];
+  const MON_SAT = [...MON_FRI, "Sat"];
+  it("checkRead: a cook in household.help is the cook when the read has none", () => {
+    const c = checkRead(readOf({ slots: mains, cook: null }, { rules: [] }, {}), { household: householdOf({ ...R_HOUSEHOLD, "household.help": help }), said, sentences });
+    expect(c.read.cook).toMatchObject({ name: null, days: MON_SAT, visits: [{ meals: ["Breakfast", "Lunch"] }, { meals: ["Dinner"] }] });
+    // Her clock time and name from help when given; the read's limits laid on.
+    const timed = [{ role: "cook", name: "Savita", days: ["Mon", "Tue"], times: "8am", meals: ["Breakfast"] }, { role: "maid", days: "daily" }];
+    const c2 = checkRead(readOf({ slots: mains, cook: { limits_words: "two hours in the morning" } }, { rules: [] }, {}),
+      { household: householdOf({ ...R_HOUSEHOLD, "household.help": timed }), said, sentences });
+    expect(c2.read.cook).toMatchObject({ name: "Savita", days: ["Mon", "Tue"], visits: [{ at: "08:00", meals: ["Breakfast"] }], limits_words: "two hours in the morning" });
+    // No cook in help, none read: no cook.
+    expect(checkRead(readOf({ slots: mains, cook: null }, { rules: [] }, {}), { household: hh, said, sentences }).read.cook).toBeNull();
+  });
+  it("applySetup saves the cook household.help lists when the home read has none", async () => {
+    const f = rFake({ home: { slots: mains, cook: null } });
+    const k = await boot({ model: f.model });
+    expect((await k.op("apply_setup", { household: { ...R_HOUSEHOLD, "household.help": help }, transcript: R_TRANSCRIPT })).ok).toBe(true);
+    expect(savedOf(k.kit.db).cook).toMatchObject({ name: null, days: MON_SAT, visits: [{ meals: ["Breakfast", "Lunch"] }, { meals: ["Dinner"] }] });
+  });
 });
