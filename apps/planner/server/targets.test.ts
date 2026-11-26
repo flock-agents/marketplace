@@ -36,6 +36,10 @@ describe("rule targets", () => {
     expect(resolveGives("rasam")).toEqual({ type: "item", item: "Tomato rasam", kind: "Rice curry" });
     expect(resolveGives("sambar")).toEqual({ type: "sub", kind: "Rice curry", sub: "Sambar" });
     expect(resolveGives("paratha")).toEqual({ type: "item", item: "Plain paratha", kind: "Paratha" });
+    // H7 fix round 1: one meaning per word. "saaru" is any rasam in setup (Udupi saaru holds it), so a swap to it gives the
+    // Rasam sub-kind, never Tomato rasam; "charu", held only by Tomato rasam's own names, is Tomato rasam.
+    expect(resolveGives("saaru")).toEqual({ type: "sub", kind: "Rice curry", sub: "Rasam" });
+    expect(resolveGives("charu")).toEqual({ type: "item", item: "Tomato rasam", kind: "Rice curry" });
   });
 
   it("a kind target holds for every item of the kind, read from the saved place", () => {

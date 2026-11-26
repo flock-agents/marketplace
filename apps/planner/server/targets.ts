@@ -2,7 +2,7 @@
 // family's words to the catalog (with kinds.ts and the interview's resolver): a rule's words are resolved here once, when the rule
 // is written, and read back typed everywhere else. Pure: no db.
 import { BASE_TAGS, TAG_PARENT } from "./db/constants";
-import { bareDish, catalogItem, CATALOG, matchDish, norm } from "./kinds";
+import { bareDish, bareWord, catalogItem, CATALOG, matchDish, norm } from "./kinds";
 import type { Rule } from "./slotStore";
 
 export type RuleTarget =
@@ -68,8 +68,9 @@ export function resolveGives(word: string): Exclude<RuleTarget, { type: "ingredi
   const m = matchDish(word);
   if (m?.by === "item" && m.item) return { type: "item", item: m.item, kind: m.kind };
   if (m) {
-    // A kind or sub-kind word whose bare dish is decided gives that item (spec §5.1); one without stays a kind or sub.
-    const bare = bareDish(m.kind, m.sub);
+    // A kind or sub-kind word whose bare dish is decided gives that item (spec §5.1); one without stays a kind or sub. A word
+    // another item holds names that family, never the bare dish (H7: "saaru"), as setup reads it.
+    const bare = bareWord(m.kind, word) ? bareDish(m.kind, m.sub) : null;
     if (bare) return { type: "item", item: bare, kind: catalogItem(bare)?.kind.name ?? m.kind };
     return m.sub ? { type: "sub", kind: m.kind, sub: m.sub } : { type: "kind", kind: m.kind };
   }

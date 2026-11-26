@@ -17,7 +17,7 @@ import { INSTEAD_STEP, SLOT_ORDER } from "./db/constants";
 import { todayStr, type Weekday } from "./dates";
 import { dishKey } from "./dishText";
 import { getHouse, type Db } from "./family";
-import { bareDish, catalogKind, checkMealShape, isItemsPart, isKindPart, matchDish, norm, regionalWordOf, type KindPart, type MealTemplate, type TemplatePart } from "./kinds";
+import { bareDish, bareWord, catalogKind, checkMealShape, isItemsPart, isKindPart, matchDish, norm, regionalWordOf, type KindPart, type MealTemplate, type TemplatePart } from "./kinds";
 import { isDropped, slotFacts } from "./planChecks";
 import { mealOf as setupMealOf } from "./setup";
 import { commit, listLibrary, listRules, listSlots, removeLibrary, slotHistory, updateRule, upsertSlot, type LibraryDish, type Slot, type SlotDay } from "./slotStore";
@@ -151,7 +151,7 @@ const isCategoryRow = (r: LibraryDish, slot: Slot | undefined, places: Record<st
 function bareOf(p: KindPart): string | null {
   if (!p.words || p.dish) return null;
   const m = matchDish(p.words);
-  if (!m || m.by === "item" || !sameKind(m.kind, p.kind)) return null;
+  if (!m || m.by === "item" || !sameKind(m.kind, p.kind) || !bareWord(p.kind, p.words)) return null;   // H7: as setup reads it
   if (m.by === "sub" && p.sub && !sameKind(m.sub, p.sub)) return null;
   return bareDish(p.kind, m.by === "sub" ? m.sub : p.sub);
 }

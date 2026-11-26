@@ -70,6 +70,15 @@ describe("migrateMeaning: library category rows become template words", () => {
     expect(k.lib("Breakfast")).toEqual(["Idli"]);
   });
 
+  it("a word another item holds names no bare dish: \"saaru\" stays any rasam, as setup reads it (H7 fix round 1)", async () => {
+    const k = await oldHouse({
+      slots: [{ name: "Lunch", kind: "main", order: 30, templates: [T({ kind: "Rice" }, { kind: "Rice curry", sub: "Rasam" })] }],
+      library: [{ name: "Rice", slot: "Lunch", kind: "Rice", catalog_item: null }, { name: "Saaru", slot: "Lunch", kind: "Rice curry", sub: "Rasam" }],
+    });
+    expect(k.migrate()).toBe("migrated");
+    expect(k.slot("Lunch").templates![0].parts[1]).toEqual({ kind: "Rice curry", sub: "Rasam", words: "saaru" });
+  });
+
   it("two category words on one part are joined", async () => {
     const k = await oldHouse({
       slots: [{ name: "Lunch", kind: "main", order: 30, templates: [T({ kind: "Rice" }, { kind: "Dal" })] }],
