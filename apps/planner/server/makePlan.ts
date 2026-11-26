@@ -28,12 +28,13 @@ import { STOP_CODES, stopSaid, type ModelCall, type ModelFailure, type ModelRequ
 import { commit, deleteSlotDays, listLibrary, listRules, listSlotDays, listSlots, newDishesPerWeek, saveSlotDay, slotHistory, upsertLibrary, upsertSlot, type LibraryDish,
   type Rule, type Slot } from "./slotStore";
 import { buildDays, replacedMeal, slotDayKey, lunchSaid, platformPeers, readEvents, readHousehold, withLunchSaid, type PlanDay, type Peers } from "./planDays";
-import { canonTag, allergyNotes, forbidden, isDropped, mostlyOnion, notFor, plannable, readFor, ruleTags, slotFacts, softSwapNotes, swapNotes,
+import { canonTag, rowFacts, tagKnown, allergyNotes, forbidden, isDropped, mostlyOnion, notFor, plannable, ruleTags, slotFacts, softSwapNotes, swapNotes,
   ruleBinds, vouched, weekSlots, withParents, type Week } from "./planChecks";
-import { CATALOG_READ, catalogNameOf, fillWeek, type FillResult, type Visit } from "./fillWeek";
-import { catalogItem, checkMealShape, isLinkedPart } from "./kinds";
+import { fillWeek, type FillResult, type Visit } from "./fillWeek";
+import { checkMealShape, isLinkedPart } from "./kinds";
 import { isAllergyRule } from "./allergy";
 import { plainPlate, templatesFromDishes } from "./migrateMeaning";
+import { CONTAINS_SCHEMA, CONTAINS_SYSTEM } from "./setup";
 
 export type MakePlanResult =
   | { ok: true; week_start: string; message: string; intro?: string; instructions: string; unmet?: string[]; asked?: string[]; no_ingredients?: string[];
@@ -48,14 +49,10 @@ const uniq = <T>(xs: T[]) => [...new Set(xs)];
 const andList = (xs: string[]) => (xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`);
 const strs = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string" && !!x.trim()).map((x) => x.trim()) : []);
 
-// ── The contains read of a dish not in the library (§5.4 check 2: new dishes get a contains read before the check) ──
+// ── The contains read: one prompt and schema with setup's (J1d), which give the tags their meanings ──
 
-export const CONTAINS_SCHEMA = { type: "object", required: ["dishes"], properties: { dishes: { type: "array", items: { type: "object", required: ["dish", "has"], properties: {
-  dish: { type: "string" }, has: { type: "array", items: { type: "string" } }, not: { type: "array", items: { type: "string" } } } } } } };
-export const CONTAINS_SYSTEM = [
-  "For each Indian dish given, say which of the given tags it has as usually made at home. Answer with JSON only: { dishes: [{ dish, has: [tags], not: [tags] }] }, every dish, its name exactly as given.",
-  "Every tag of `tags` goes in has or in not; a tag you cannot tell for that dish goes in neither.",
-].join("\n");
+export { CONTAINS_SCHEMA, CONTAINS_SYSTEM };
+
 // ── The guests' food rules (their words) → the tags they forbid ──
 
 export const GUESTS_SCHEMA = { type: "object", required: ["rules"], properties: { rules: { type: "array", items: { type: "object", required: ["rule", "never"],
@@ -308,42 +305,48 @@ async function planWeek(deps: MakePlanDeps & { log: (line: string) => void }, in
     }
   }
 
-  /** A library dish not read for every tag the hard rules name (setup ran out of time before it read them: onboarding run
-   *  26). A dish the catalog knows is read by it for the catalog's tags. */
+  /** The tags a library dish is not known for (J1): of the plan's tags, those the checks would not know it for (tagKnown over its
+   *  saved read and its catalog item's ingredients: a catalog item, or a staple named by its kind, is known by the catalog). Read
+   *  only when it is not known for one of the hard rules' tags (setup ran out of time before it read them: onboarding run 26). */
   const hardTags = uniq(rules.filter((r) => r.hard).flatMap(forbidden));
-  const unreadIn = (d: LibraryDish) => {
-    const read = new Set([...d.contains_read.map(canonTag), ...(catalogNameOf(d) || catalogItem(d.name) ? CATALOG_READ : [])]);
-    return hardTags.some((t) => !readFor(read, t));
-  };
-  /** Read what the dishes contain, in batches (what is not read fails closed). */
+  const unknownTags = (d: LibraryDish): string[] => { const f = rowFacts(d); return hardTags.some((t) => !tagKnown(f, t)) ? tags.filter((t) => !tagKnown(f, t)) : []; };
+  /** Read what the dishes contain: each dish asked only its own unknown tags (dishes with the same tags asked together, in
+   *  batches); an answer taken only for a tag asked (a child tag counts for its asked parent: "chicken: yes" is meat), so a tag
+   *  already known keeps its value. What is not read stays unknown (planned and asked). */
   const readNow = new Set<string>();
-  const readContains = async (dishes: string[]): Promise<Failure | null> => {
-    const names = uniq(dishes.map(dishKey)).filter((k) => !w.facts.has(k)).map((k) => dishes.find((x) => dishKey(x) === k)!);
-    for (let i = 0; i < names.length; i += CONTAINS_BATCH) {
-      const batch = names.slice(i, i + CONTAINS_BATCH);
+  const readContains = async (ask: { row: LibraryDish; tags: string[] }[]): Promise<Failure | null> => {
+    const groups = new Map<string, { row: LibraryDish; tags: string[] }[]>();
+    const seen = new Set<string>();
+    for (const a of ask) {
+      if (w.facts.has(a.row.key) || seen.has(a.row.key)) continue;
+      seen.add(a.row.key);
+      const g = [...a.tags].sort().join("|");
+      groups.set(g, [...(groups.get(g) ?? []), a]);
+    }
+    for (const group of groups.values()) for (let i = 0; i < group.length; i += CONTAINS_BATCH) {
+      const batch = group.slice(i, i + CONTAINS_BATCH), asked = batch[0].tags;
       const r = await model({ tier: "fast", purpose: "meal plan: what dishes contain", system: CONTAINS_SYSTEM, schema: CONTAINS_SCHEMA, maxTokens: 3000,
-        user: JSON.stringify({ tags, dishes: batch }) }, INGREDIENTS_RESERVE_MS);
-      if (!r.ok) { log(`contains read failed (${r.code}) for ${batch.join(", ")}`); if (isStop(r.code)) return r; continue; }
-      const raw = isObject(r.json) && Array.isArray(r.json.dishes) ? r.json.dishes : [];
-      for (const x of raw) {
-        if (!isObject(x) || typeof x.dish !== "string" || !batch.some((y) => dishKey(y) === dishKey(x.dish as string))) continue;
-        const key = dishKey(x.dish);
-        // A tag's family counts: "chicken: yes" is meat whatever the read said of meat (a child's yes wins over a parent's no).
-        const has = strs(x.has).map(canonTag).filter((t) => [...withParents([t])].some((y) => tags.includes(y)));
+        user: JSON.stringify({ dishes: batch.map((a) => a.row.name), tags: asked }) }, INGREDIENTS_RESERVE_MS);
+      if (!r.ok) { log(`contains read failed (${r.code}) for ${batch.map((a) => a.row.name).join(", ")}`); if (isStop(r.code)) return r; continue; }
+      const byKey = new Map(isObject(r.json) ? Object.entries(r.json).map(([k, v]) => [dishKey(k), v] as const) : []);
+      for (const { row } of batch) {
+        const v = byKey.get(row.key);
+        if (!isObject(v)) continue;
+        const before = new Set(row.contains_read.map(canonTag));
+        const answered = Object.entries(v).filter((e): e is [string, boolean] => typeof e[1] === "boolean").map(([t, b]) => [canonTag(t), b] as const);
+        const has = answered.filter(([t, b]) => b && (asked.includes(t) || (!before.has(t) && [...withParents([t])].some((y) => asked.includes(y))))).map(([t]) => t);
         const implied = withParents(has);
-        const not = strs(x.not).map(canonTag).filter((t) => tags.includes(t) && !implied.has(t));
-        // A library dish keeps what it was read for already.
-        const row = library.find((d) => d.key === key);
-        w.facts.set(key, { tags: withParents([...(row?.contains ?? []), ...has]), read: new Set([...(row?.contains_read ?? []).map(canonTag), ...implied, ...not]) });
-        readNow.add(key);
+        const not = answered.filter(([t, b]) => !b && asked.includes(t) && !implied.has(t)).map(([t]) => t);
+        w.facts.set(row.key, { tags: withParents([...row.contains, ...has]), read: new Set([...before, ...implied, ...not]) });
+        readNow.add(row.key);
       }
     }
     return null;
   };
-  // The library's dishes not read for every tag are read now (one meaning model: no careful allergy read; what stays unknown
-  // is planned and asked).
-  const unread = library.filter((d) => !isDropped(d) && !d.disliked && unreadIn(d)).map((d) => d.name);
-  if (unread.length) log(`contains: ${unread.length} library dishes not read for every tag: reading them first`);
+  // The library's dishes not known for every hard rule's tag are read now (one meaning model: no careful allergy read; what stays
+  // unknown is planned and asked).
+  const unread = library.filter((d) => !isDropped(d) && !d.disliked).map((row) => ({ row, tags: unknownTags(row) })).filter((a) => a.tags.length);
+  if (unread.length) log(`contains: ${unread.length} library dishes not known for every tag: reading them first`);
   const f1 = unread.length ? await readContains(unread) : null;
   if (f1) return stopped(f1);
 

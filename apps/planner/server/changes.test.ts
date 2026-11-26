@@ -18,7 +18,7 @@ const LIB: Record<string, string[]> = { Breakfast: ["Poha", "Upma", "Idli", "Dos
 const READ = ["egg", "meat", "fish", "onion_garlic", "nuts", "peanut", "sugar", "white_rice", "dairy"];
 
 type Call = { req: ModelRequest; user: any };
-/** A fake model by purpose: slot calls rotate the library (or `slot`), setup's contains read answers from `has` (dish → its
+/** A fake model by purpose: slot calls rotate the library (or `slot`), the contains reads answer from `has` (dish → its
  *  tags; every tag asked is answered), ingredients one line a dish. */
 function fake(o: { slot?: (u: any) => unknown; has?: Record<string, string[]> } = {}) {
   const calls: Call[] = [];
@@ -28,8 +28,8 @@ function fake(o: { slot?: (u: any) => unknown; has?: Record<string, string[]> } 
     const p = req.purpose ?? "";
     const ok = (json: unknown): ModelResult => ({ ok: true, json, model: "fake" });
     if (p.startsWith("meal plan: the week's") || p.startsWith("meal plan: fix the")) return ok((o.slot ?? rotate)(user));
-    if (p.startsWith("setup: contains")) return ok(Object.fromEntries(user.dishes.map((d: string) => [d, Object.fromEntries(user.tags.map((t: string) => [t, (o.has?.[d] ?? []).includes(t)]))])));
-    if (p.includes("contain")) return ok({ dishes: user.dishes.map((d: string) => ({ dish: d, has: o.has?.[d] ?? [], not: user.tags.filter((t: string) => !(o.has?.[d] ?? []).includes(t)) })) });
+    // Setup's contains read and the plan's share one prompt and answer shape (J1).
+    if (p.includes("contain")) return ok(Object.fromEntries(user.dishes.map((d: string) => [d, Object.fromEntries(user.tags.map((t: string) => [t, (o.has?.[d] ?? []).includes(t)]))])));
     if (p.includes("calendar")) return ok({ changes: [] });
     return ok({ dishes: user.dishes.map((d: any) => ({ slot: d.slot, name: d.name, ingredients: [{ item: d.name.toLowerCase(), amount: 100 * (d.people ?? 1), unit: "g", tags: [] }] })) });
   };

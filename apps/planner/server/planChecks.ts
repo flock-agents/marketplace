@@ -80,6 +80,9 @@ export function knownFor(f: DishFacts, tag: string): boolean {
   const brings = ingredientTags(tag);
   return brings.length > 0 && brings.every((b) => readFor(f.read, b) && !f.tags.has(b));
 }
+/** Is it known whether a dish has an ingredient target's tag, the one test of the checks and the plan's contains read (J1): it
+ *  has it (hasTag), or it is known without it (knownFor). */
+export const tagKnown = (f: DishFacts, tag: string): boolean => hasTag(f, tag) || knownFor(f, tag);
 
 /** The targets a hard rule keeps from its person: vegetarian, no eggs, eggs-but-no-meat, an avoid and a swap, their targets
  *  (targetsOf: veg → meat, fish and its items; no eggs → egg and its items); an "only" kept to days or meals, its targets
@@ -199,6 +202,11 @@ export function factsOf(w: Week, slot: string, dish: string): DishFacts {
   const base = run ?? (row ? { tags: withParents(row.contains), read: new Set(row.contains_read.map(canonTag)) } : { tags: new Set<string>(), read: new Set<string>() });
   return withCatalog(base, exactCatalogItem(row, dish));
 }
+/** What a library row contains and was read for, as the checks read it: its saved read, with its catalog item's (exact names
+ *  only, as factsOf) laid over what that read left out. */
+export function rowFacts(row: LibraryDish): DishFacts {
+  return withCatalog({ tags: withParents(row.contains), read: new Set(row.contains_read.map(canonTag)) }, exactCatalogItem(row, row.name));
+}
 /** The catalog item a dish is by exact names only (never a word match: planning never matches a family word to the catalog):
  *  its row's catalog_item, else the catalog item of the dish's own name, else for a staple plate named by its kind alone
  *  ("Rice") that kind's everyday item (Steamed rice); null for the family's own dish ("Bhindi masala" with no catalog_item). */
@@ -315,7 +323,7 @@ export function ruleUnknowns(w: Week, d: PlanDay, dish: string): Unknown[] {
     for (const r of rulesFor(w, d, p)) {
       if (!checked(w, r, p, dish)) continue;
       for (const tag of forbidden(r)) {
-        if (onionSoft(r, f, dish, tag) || hasTag(f, tag) || knownFor(f, tag)) continue;
+        if (onionSoft(r, f, dish, tag) || tagKnown(f, tag)) continue;
         const k = `${p.toLowerCase()}|${tag}`, had = out.get(k), allergy = isAllergyRule(r);
         if (!had || (allergy && !had.allergy)) out.set(k, { dish, who: p, tag, quote: r.quote, allergy, date: d.date, slot: d.slot });
       }

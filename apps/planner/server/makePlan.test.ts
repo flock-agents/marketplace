@@ -14,6 +14,10 @@ import type { MealKind, MealTemplate } from "./kinds";
 import type { ModelRequest, ModelResult } from "./model";
 import { addRule, commit, getLibraryDish, listSlotDays, saveSlotDay, upsertLibrary, upsertSlot, type LibraryInput, type RuleInput, type SlotInput } from "./slotStore";
 import { DELIVER_PROMPT, FESTIVAL_PROMPT } from "./routines/weekly-plan";
+import { CATALOG_READ } from "./fillWeek";
+import { factsOf, type Week } from "./planChecks";
+import { CONTAINS_SYSTEM as SETUP_CONTAINS_SYSTEM } from "./setup";
+import { BASE_TAGS } from "./db/constants";
 
 const MON = "2026-11-30", TODAY = "2026-11-29";
 const WEEK = ["2026-11-30", "2026-12-01", "2026-12-02", "2026-12-03", "2026-12-04", "2026-12-05", "2026-12-06"];
@@ -50,7 +54,7 @@ function fakeModel(h: { contains?: (u: any) => unknown; careful?: (u: any) => un
     if (h.wait) await Bun.sleep(h.wait);
     const p = req.purpose ?? "";
     if (p.includes("carefully")) return wrap((h.careful ?? ((u: any) => ({ dishes: u.dishes.map((d: string) => ({ dish: d, has: [] })) })))(user));
-    if (p.includes("contain")) return wrap((h.contains ?? (() => ({ dishes: [] })))(user));
+    if (p.includes("contain")) return wrap((h.contains ?? (() => ({})))(user));
     if (p.includes("guests")) return wrap((h.guests ?? (() => ({ rules: [] })))(user));
     if (p.includes("calendar")) return wrap((h.events ?? (() => ({ changes: [] })))(user));
     return wrap((h.day ?? ingredients)(user));
@@ -294,7 +298,7 @@ describe("make_plan: hard rules per person, fail closed", () => {
   it("a dish setup never read is read first; still not known, it stays hers and she gets a dish of her own", async () => {
     const k = await home({ people, rules: [GRANDMA], slots: [MAIN[0], { name: "Lunch", kind: "main", order: 30, templates: [T({ kind: "Rice" }, { items: ["Mystery curry"] })] }, MAIN[2]],
       library: [{ name: "Mystery curry", slot: "Lunch", contains: [], contains_read: [] }] });
-    const f = fakeModel({ contains: (u) => ({ dishes: u.dishes.map((d: string) => ({ dish: d, has: [], not: [] })) }) });
+    const f = fakeModel({ contains: (u) => Object.fromEntries(u.dishes.map((d: string) => [d, {}])) });
     const r = await k.plan(f.model);
     expect(f.contains()[0].user.dishes).toEqual(["Mystery curry"]);
     expect(f.contains()[0].req.system).toBe(CONTAINS_SYSTEM);
@@ -308,7 +312,7 @@ describe("make_plan: hard rules per person, fail closed", () => {
   it("a read that says chicken but not meat still counts as meat (a tag's family is added)", async () => {
     const k = await home({ people, rules: [GRANDMA], slots: [MAIN[0], { name: "Lunch", kind: "main", order: 30, templates: [T({ kind: "Rice" }, { items: ["House special"] })] }, MAIN[2]],
       library: [{ name: "House special", slot: "Lunch", contains: [], contains_read: [] }] });
-    const f = fakeModel({ contains: (u) => ({ dishes: u.dishes.map((d: string) => ({ dish: d, has: ["chicken"], not: ["meat", "fish", "egg"] })) }) });
+    const f = fakeModel({ contains: (u) => Object.fromEntries(u.dishes.map((d: string) => [d, { chicken: true, meat: false, fish: false, egg: false }])) });
     await k.plan(f.model);
     expect(k.at(MON, "Lunch")!.dishes.find((x) => x.dish === "House special")!.not_for).toEqual(["Nani"]);
   });
@@ -316,7 +320,7 @@ describe("make_plan: hard rules per person, fail closed", () => {
   it("library dishes setup never read are read before the week is planned; a dish the catalog knows needs no read", async () => {
     const k = await home({ people, rules: [{ hard: true, what: "veg", quote: "we are vegetarian" }],
       library: [{ name: "Grandma's kootu", slot: "Lunch", kind: "Sabzi", contains: [], contains_read: [] }, { name: "Aloo gobi", slot: "Lunch", kind: "Sabzi", contains: [], contains_read: [] }] });
-    const f = fakeModel({ contains: (u) => ({ dishes: u.dishes.map((d: string) => ({ dish: d, has: [], not: ["egg", "meat", "fish", "onion_garlic"] })) }) });
+    const f = fakeModel({ contains: (u) => Object.fromEntries(u.dishes.map((d: string) => [d, { egg: false, meat: false, fish: false, onion_garlic: false }])) });
     const r = await k.plan(f.model);
     expect(r.ok).toBe(true);
     const read = f.contains().flatMap((c) => c.user.dishes);
@@ -643,6 +647,57 @@ describe("make_plan: a change asks its unknowns right away (Task 10b)", () => {
     expect(r.asked).toBeUndefined();
     expect(r.message).not.toContain("OK for");
     expect(r.message).not.toContain("?\n");
+  });
+});
+
+describe("make_plan: the contains read reads only what is unknown (J1)", () => {
+  const people: [string, string][] = [["Asha", "adult"], ["Lalitha", "elder"]];
+  const NO_RICE: RuleInput = { hard: true, what: "avoid", who: "Lalitha", items: ["rice"], slots: ["Dinner"], quote: "no rice at night for Lalitha",
+    targets: [{ type: "kind", kind: "Rice" }, { type: "ingredient", tag: "rice" }] };
+  /** A misreading model: every dish asked has every tag asked. */
+  const misread = () => fakeModel({ contains: (u) => Object.fromEntries(u.dishes.map((d: string) => [d, Object.fromEntries(u.tags.map((t: string) => [t, true]))])) });
+  const DINNER: SlotInput = { name: "Dinner", kind: "main", order: 50, templates: [T({ kind: "Roti" }, { kind: "Gravy" })] };
+
+  it("contains read skips a catalog item known by its ingredients", async () => {
+    const k = await home({ people, rules: [NO_RICE], slots: [MAIN[0], MAIN[1], DINNER], lib: { ...LIB, Dinner: LIB.Dinner.filter(([n]) => n !== "Phulka") },
+      library: [{ name: "Chapati", slot: "Dinner", kind: "Roti", catalog_item: "Chapati", contains: ["wheat", "dairy"], contains_read: [...CATALOG_READ] }] });
+    const f = misread();
+    const r = await k.plan(f.model);
+    if (!r.ok) throw new Error(r.say);
+    expect(f.contains().flatMap((c) => c.user.dishes)).not.toContain("Chapati");
+    expect(getLibraryDish(k.kit.db, "Chapati", "Dinner")!.contains).not.toContain("white_rice");
+    for (const d of WEEK) expect(k.at(d, "Dinner")!.dishes.find((x) => x.dish === "Chapati")?.not_for ?? []).toEqual([]);
+  });
+
+  it("contains read asks a dish only its unread tags and keeps what was read", async () => {
+    // "besan": an ingredient tag no catalog ingredient brings, so a dish read for the base tags is still not read for it.
+    const k = await home({ people, rules: [{ hard: true, what: "avoid", who: "Lalitha", items: ["besan"], quote: "Lalitha keeps off besan",
+      targets: [{ type: "ingredient", tag: "besan" }] }], slots: [MAIN[0], { name: "Lunch", kind: "main", order: 30, templates: [T({ kind: "Rice" }, { items: ["Kadhi pakora"] })] }, MAIN[2]],
+      library: [{ name: "Kadhi pakora", slot: "Lunch", contains: [], contains_read: [...BASE_TAGS] }] });
+    const f = fakeModel({ contains: (u) => Object.fromEntries(u.dishes.map((d: string) => [d, { white_rice: true, besan: true }])) });
+    const r = await k.plan(f.model);
+    if (!r.ok) throw new Error(r.say);
+    const asked = f.contains().filter((c) => c.user.dishes.includes("Kadhi pakora"));
+    expect(asked).toHaveLength(1);
+    expect(asked[0].user.tags).toEqual(["besan"]);
+    expect(asked[0].req.system).toBe(SETUP_CONTAINS_SYSTEM);
+    const row = getLibraryDish(k.kit.db, "Kadhi pakora", "Lunch")!;
+    expect(row.contains).not.toContain("white_rice");
+    expect(row.contains).toContain("besan");
+    expect(row.contains_read).toContain("besan");
+  });
+
+  it("a staple named by its kind takes its everyday item's contents", async () => {
+    const k = await home({ people, rules: [NO_RICE], slots: [MAIN[0], MAIN[1], DINNER], lib: { ...LIB, Dinner: LIB.Dinner.filter(([n]) => n !== "Phulka") },
+      library: [{ name: "Roti", slot: "Dinner", kind: "Roti", contains: [], contains_read: [] }] });
+    const f = misread();
+    const r = await k.plan(f.model);
+    if (!r.ok) throw new Error(r.say);
+    expect(f.contains().flatMap((c) => c.user.dishes)).not.toContain("Roti");
+    expect(k.at(MON, "Dinner")!.dishes.find((x) => x.dish === "Roti")!.not_for).toEqual([]);
+    const row = getLibraryDish(k.kit.db, "Roti", "Dinner")!;
+    const facts = factsOf({ library: [row], facts: new Map() } as unknown as Week, "Dinner", "Roti");
+    expect([...facts.tags]).toEqual(["wheat"]);
   });
 });
 
