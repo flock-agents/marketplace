@@ -483,6 +483,25 @@ describe("whole_plate and not_bare: the family's plates are the template (owner,
   });
 });
 
+describe("no_new_kind: a regional dish of another cuisine is fine when its kind is theirs (owner, 26 Nov)", () => {
+  // "It's okay to suggest other dishes from similar cuisines that fits their preferences. This is anyway a draft."
+  const run = async (slot: string, day: Weekday, dishes: string[], fresh: string) => {
+    const h = (await import("../households")).ALL_HOUSEHOLDS.find((x) => x.id === "h16-pillai")!;
+    const p = baselineWeek(h, MON);
+    const sd = p.slotDays.find((x) => x.date === dateOf(MON, day) && x.slot === slot)!;
+    sd.dishes = dishes.map((name) => ({ name, ...(name === fresh ? { new: true } : {}) }));
+    p.library.push(newRow(fresh, slot, []));
+    return scorePlan(h, p, setupOfTruth(h), { failClosed: false }).notes.filter((n) => n.startsWith("no_new_kind"));
+  };
+  test("Bisi bele bath in a Kerala lunch box of flavoured rice; Chettinad chicken where they have chicken curry", async () => {
+    expect(await run("Advaith's lunch box", "Mon", ["Bisi bele bath"], "Bisi bele bath")).toEqual([]);
+    expect(await run("Dinner", "Mon", ["Chapati", "Chettinad chicken"], "Chettinad chicken")).toEqual([]);
+  });
+  test("a new dish of a kind they never have at that meal still fails", async () => {
+    expect((await run("Dinner", "Mon", ["Chapati", "Masala pasta"], "Masala pasta")).join(" ")).toMatch(/Masala pasta is a Pasta/);
+  });
+});
+
 describe("attendance: a school child is away at the weekday lunch (owner, 26 Nov)", () => {
   // "Kids coming home for lunch is not a valid case for now." TRUTH may say the child comes home; the scorer does not expect it.
   test("a child TRUTH has home for lunch is still left out Mon-Fri; an adult at a school (a teacher) is not", async () => {
