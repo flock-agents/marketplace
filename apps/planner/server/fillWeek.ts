@@ -146,7 +146,7 @@ const kindsOf = (s: Slot): MealKind[] => mealKinds(s.templates ?? []);
 
 /** How many of `n` days each template has: a share in the family's words exactly ("2/week") or as its words' days (a part
  *  week its share of them); the days left spread evenly over the templates with none. The templates read from one phrase (the
- *  same `said` and share: "Or sometimes gobi paratha, aloo paratha, etc.") have that phrase's days once, spread over them: to
+ *  same `said` and worded share: "Or sometimes gobi paratha, aloo paratha, etc.") have that phrase's days once, spread over them: to
  *  the one had least recently first (`lastHad`, by template: its latest date, "" for never; ties in their order), so a variant
  *  comes again only when all have come. */
 /** A worded share kept to fewer than this many of the week's days comes by recency (F7 review ruling), and how many of its
@@ -157,7 +157,9 @@ export function templateCounts(templates: MealTemplate[], n: number, lastHad?: r
   const groups: number[][] = [];
   const byPhrase = new Map<string, number[]>();
   templates.forEach((t, i) => {
-    const said = t.share && t.said ? norm(t.said) : "";
+    // A count said of the phrase and split per dish ("rajma or chole twice a week": each 1/week) is each dish's own: the
+    // phrase keeps the sum of its members' counts. Only a worded share ("sometimes") is the phrase's once.
+    const said = t.share && t.share in TEMPLATE_DAYS && t.said ? norm(t.said) : "";
     if (!said) { groups.push([i]); return; }
     const k = `${t.share}|${said}`;
     const g = byPhrase.get(k);

@@ -511,6 +511,13 @@ describe("template shares (rule 1)", () => {
       expect(c.reduce((a, b) => a + b, 0)).toBe(6);
     }
   });
+  // H10: "beans or lentils twice a week" read as one 1/week template per dish: the phrase keeps its total, each dish its own.
+  it("a count split per dish keeps its total: each template of the phrase keeps its own n", () => {
+    const c = templateCounts([T({ items: ["Dal plate"] }), { ...share(T({ items: ["Khichdi"] }), "1/week"), said: "khichdi once a week" },
+      { ...share(T({ kind: "Rice" }, { items: ["Rajma"] }), "1/week"), said: "rajma or chole twice a week" },
+      { ...share(T({ kind: "Rice" }, { items: ["Chole"] }), "1/week"), said: "rajma or chole twice a week" }], 6);
+    expect(c).toEqual([3, 1, 1, 1]);
+  });
   it("two different said phrases each keep their own share", () => {
     const c = templateCounts([share(T({ kind: "Roti" }), "usually"), said("sometimes", "gobi paratha sometimes"), said("sometimes", "egg curry sometimes")], 7);
     expect(c).toEqual([3, 2, 2]);
