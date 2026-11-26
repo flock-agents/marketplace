@@ -20,13 +20,25 @@ const task = (name: string) => manifest.tasks.find((t: any) => t.name === name);
 const morning = task("Morning Briefing");
 const evening = task("Evening Reminder");
 
+describe("a direct chat (Butler-first, 1.10.0)", () => {
+  it("is named Butler, and the SOUL covers a direct chat and holds no one's own accounts", () => {
+    const soul = read("SOUL.md");
+    expect(manifest.name).toBe("Butler");
+    expect(soul).toContain("# Butler");
+    expect(soul).toContain("**In a direct chat:**");
+    expect(soul).toContain("you hold no one's own accounts");
+    expect(soul).toContain("never offer to connect or reconnect one");
+    expect(soul).not.toContain("Family Butler");
+  });
+});
+
 describe("version", () => {
-  it("is 1.9.0 in the manifest, the changelog's newest entry and the catalog", () => {
-    expect(manifest.version).toBe("1.9.0");
-    expect(read("CHANGELOG.md")).toMatch(/^# Changelog\n\n## 1\.9\.0\n/);
+  it("is 1.10.0 in the manifest, the changelog's newest entry and the catalog", () => {
+    expect(manifest.version).toBe("1.10.0");
+    expect(read("CHANGELOG.md")).toMatch(/^# Changelog\n\n## 1\.10\.0\n/);
     const entry = catalog.items.find((i: any) => i.slug === "family-butler");
-    expect(entry.latestVersion).toBe("1.9.0");
-    expect(entry.latestTag).toBe("family-butler-v1.9.0");
+    expect(entry.latestVersion).toBe("1.10.0");
+    expect(entry.latestTag).toBe("family-butler-v1.10.0");
   });
 });
 
@@ -60,8 +72,8 @@ describe("reminders are group TODOs", () => {
     expect(read("README.md")).not.toMatch(/\| reminders \|/);
   });
 
-  it("the SOUL makes 'remind us' a group TODO through the todos call, at the time asked", () => {
-    expect(soul).toContain('"remind us about X" is a group TODO');
+  it("the SOUL makes 'remind us' a TODO in the chat it was asked in, through the todos call, at the time asked", () => {
+    expect(soul).toContain('"Remind us about X" is a TODO made from the chat it was asked in (the family group, or your direct chat)');
     expect(soul).toContain("`POST /api/internal/todos`");
     expect(soul).toContain("A day with no time: 9 am, and say the time you set");
     expect(soul).toContain('No date at all: ask once, "When?"');

@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.10.0
+
+- **Named Butler.** The template's name, the agent's default name, the catalog entry and its onboarding card say "Butler" (was "Family Butler"), so there is one butler, the family's, beside each person's Personal Assistant. The template's slug stays `family-butler`.
+- **Works in a direct chat.** The family's setup now starts in a direct chat with Butler, before any group (Flock's Butler-first onboarding). The SOUL says so: in a direct chat it helps that one person; it is one agent, so private things belong with their Personal Assistant; a reminder is a TODO in the chat it was asked in.
+- **Holds no one's own accounts.** Mail, personal calendars and WhatsApp are each with the person's Personal Assistant: Butler asks it for them (delegate, mode "request"), never says it checked an account, and never offers to connect or reconnect one.
+- **No intro where Flock greets.** Flock's setup questions open the direct chat with the person who set the family up, and Flock welcomes the family group; the intro line now says "your family's butler" and drops "Tag me".
+- Tasks, apps and schedules are unchanged.
+
 ## 1.9.0
 
 - **The briefs come from the Family Calendar and go to the family group.** The template sets up the Family Calendar app (`family-calendar`, required) beside the Meal Planner, paired with Family Butler. Morning Briefing (8 AM) reads the calendar's `brief` operation with `{"kind":"morning"}`: today's events with their notes and who drops or picks up, anything cancelled or moved, new dates imported from email or school portals, the to-dos now showing, and the weather. Evening Reminder (9 PM) reads it with `{"kind":"evening"}`: tomorrow's events and the to-dos due tomorrow, and any change or new date since the morning (the call moves the calendar's mark, so nobody would hear of them otherwise). It replaces the calendar's per-event "evening before" reminder. Short, WhatsApp-style lines; when every list in the brief is empty the brief replies NOTHING_NEW and the family gets no message. Both post into the family group: Flock binds Family Butler's routines to the Family group (`deliverTo` stays null). Needs Family Calendar 3.0.0 (the `brief` operation).
