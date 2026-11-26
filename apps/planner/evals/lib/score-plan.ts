@@ -92,6 +92,14 @@ export function scorePlan(h: Household, plan0: PlanOut, loaded: SetupOut, o: { f
   const exp = expectedSlotDays(h, plan.week_start);
   const at = (date: string, slot: string) => plan.slotDays.find((x) => x.date === date && lc(x.slot) === lc(slot));
   const truthNames = [...new Set(t.library.map((d) => d.name))];
+  /** dishNameOf, except a near match (the name only holds, or is held by, the family's) of another catalog kind is no match:
+   *  "Moong dal" (a Dal) is not the family's "Moong dal khichdi" (a Khichdi). */
+  const truthDishOf = (name: string, names: readonly string[] = truthNames) => {
+    const m = dishNameOf(name, names);
+    if (!m || plain(m) === plain(name)) return m;
+    const a = kindOf(name)?.kind, b = kindOf(m)?.kind;
+    return a && b && lc(a) !== lc(b) ? null : m;
+  };
   const history: HistoryRow[] = loaded.seed.map((r) => ({ slot: r.slot, dishes: r.dishes, date: null }));
   // The seed is the only history a fresh eval week has (planned rows never count); `daily` dishes are staples too. A staple is
   // the family's: TRUTH's seed makes them as well as the loaded one (in the end-to-end eval the loaded seed is what setup saved,
@@ -273,7 +281,7 @@ export function scorePlan(h: Household, plan0: PlanOut, loaded: SetupOut, o: { f
     const n = cooked.filter((sd) => lc(sd.slot) === lc(slot)).length;
     const rows = history.filter((r) => r.slot === slot && r.dishes.length).map((r) => r.dishes.filter((d) => !isStaple(slot, d)).length).sort((a, b) => a - b);
     const m = rows.length ? Math.max(1, rows[Math.floor((rows.length - 1) / 2)]) : 1;
-    const elsewhere = (name: string) => new Set(cooked.filter((sd) => lc(sd.slot) !== lc(slot) && sd.dishes.some((d) => dishNameOf(d.name, truthNames) === name)).map((sd) => sd.date)).size;
+    const elsewhere = (name: string) => new Set(cooked.filter((sd) => lc(sd.slot) !== lc(slot) && sd.dishes.some((d) => truthDishOf(d.name, truthNames) === name)).map((sd) => sd.date)).size;
     const supply = t.library.filter((d) => d.slot === slot && d.frequency !== "daily" && !isStaple(slot, d.name))
       .reduce((a, d) => a + Math.max(0, Math.min(n, frequencyRange(d.frequency)[1] - elsewhere(d.name))), 0);
     return Math.ceil(Math.max(0, n * m - supply) / Math.max(1, Math.min(2, Math.ceil(n / 2))));
@@ -295,7 +303,7 @@ export function scorePlan(h: Household, plan0: PlanOut, loaded: SetupOut, o: { f
   const categoryOf = (name: string) => { const k = isKindWord(name) ? kindOf(name) : null; return k && k.by !== "item" && !isStapleKind(k.kind) ? k : null; };
   const placements = (name: string) => {
     const cat = categoryOf(name);
-    const isIt = (x: string) => { if (dishNameOf(x, truthNames) === name) return true; const k = cat && kindOf(x); return !!k && k.kind === cat!.kind && (!cat!.sub || k.sub === cat!.sub); };
+    const isIt = (x: string) => { if (truthDishOf(x, truthNames) === name) return true; const k = cat && kindOf(x); return !!k && k.kind === cat!.kind && (!cat!.sub || k.sub === cat!.sub); };
     return cooked.flatMap((sd) => sd.dishes.filter((d) => isIt(d.name)).map(() => sd));
   };
   for (const name of truthNames) {
@@ -304,7 +312,7 @@ export function scorePlan(h: Household, plan0: PlanOut, loaded: SetupOut, o: { f
     if (freq === "daily") {
       // Owner, 23 Nov: a dish said for every day is on every slot-day of its slot (a hard check).
       for (const r of rows) for (const sd of cooked.filter((x) => lc(x.slot) === lc(r.slot)))
-        add("daily_dishes", sd.dishes.some((d) => dishNameOf(d.name, truthNames) === name), `${dayOfSd(sd)} ${sd.slot}: no ${name} (every day)`);
+        add("daily_dishes", sd.dishes.some((d) => truthDishOf(d.name, truthNames) === name), `${dayOfSd(sd)} ${sd.slot}: no ${name} (every day)`);
       continue;
     }
     if (!freq && !days) continue;
@@ -381,9 +389,9 @@ export function scorePlan(h: Household, plan0: PlanOut, loaded: SetupOut, o: { f
     if (said || !first.kind) continue;
     // Another of the family's items of this kind in the group, unused all week, that could have gone there instead.
     const second = us[1], day = weekdayOfDate(second.date);
-    const usedNames = new Set(cooked.filter((sd) => groupSlots(group).some((x) => lc(x) === lc(sd.slot))).flatMap((sd) => sd.dishes.map((d) => dishNameOf(d.name, truthNames))).filter(Boolean));
+    const usedNames = new Set(cooked.filter((sd) => groupSlots(group).some((x) => lc(x) === lc(sd.slot))).flatMap((sd) => sd.dishes.map((d) => truthDishOf(d.name, truthNames))).filter(Boolean));
     const options = t.library.filter((d) => groupSlots(group).some((x) => lc(x) === lc(d.slot)) && truthKind(d)?.kind === first.kind && !d.days?.length
-      && plain(d.name) !== first.id && dishNameOf(first.name, truthNames) !== d.name && !isBareKindWord(d.name) && !exempt(d.slot, d.name) && !houseBlocks(d, day, second.slot));
+      && plain(d.name) !== first.id && truthDishOf(first.name, truthNames) !== d.name && !isBareKindWord(d.name) && !exempt(d.slot, d.name) && !houseBlocks(d, day, second.slot));
     const unused = [...new Set(options.filter((d) => !usedNames.has(d.name)).map((d) => d.name))];
     add("no_early_repeat", !unused.length, `${group}: ${first.name} back on ${day} while ${unused.join(", ")} (${first.kind}) unused this week`);
   }

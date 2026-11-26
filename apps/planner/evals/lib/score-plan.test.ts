@@ -945,3 +945,21 @@ describe("h18 Pancakes: G6", () => {
     expect(nsf(p).length).toBeGreaterThan(0);
   });
 });
+
+describe("h13 khichdi: G8", () => {
+  // "Moong dal" (a Dal) held inside "Moong dal khichdi" (a Khichdi) is a shorter dish of another kind, not the longer dish.
+  const h13 = async () => (await import("../households")).ALL_HOUSEHOLDS.find((x) => x.id === "h13-familyb")!;
+  const notes = (h: Awaited<ReturnType<typeof h13>>, p: PlanOut, field: string) => scorePlan(h, p, setupOfTruth(h), { failClosed: false }).notes.filter((n) => n.startsWith(`${field}:`));
+  const dinner = (p: PlanOut, day: Weekday) => p.slotDays.find((x) => x.date === dateOf(MON, day) && x.slot === "Dinner")!;
+  test("a Moong dal dinner is not a second Moong dal khichdi day", async () => {
+    const h = await h13();
+    const p = baselineWeek(h, MON);
+    for (const d of ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as Weekday[]) { const sd = dinner(p, d); if (sd.dishes.some((x) => /khichdi/i.test(x.name))) sd.dishes = [{ name: "Dal" }, { name: "Rice" }, { name: "Roti" }, { name: "Sabzi" }]; }
+    dinner(p, "Tue").dishes = [{ name: "Moong dal khichdi" }];
+    dinner(p, "Fri").dishes = [{ name: "Moong dal" }, { name: "Rice" }, { name: "Roti" }, { name: "Mixed vegetable sabzi" }];
+    expect(notes(h, p, "dish_frequency").filter((n) => /khichdi/i.test(n))).toEqual([]);
+    // Bad: the khichdi itself on two days is past "once".
+    dinner(p, "Fri").dishes = [{ name: "Moong dal khichdi" }];
+    expect(notes(h, p, "dish_frequency").filter((n) => /khichdi/i.test(n))).toHaveLength(1);
+  });
+});
