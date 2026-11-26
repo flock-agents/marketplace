@@ -2,7 +2,7 @@
 
 ## 2.0.0
 
-Rebuilt on WhatsApp's own linked-device protocol (Baileys 7.0.0-rc14, bundled in `server/lib/baileys.bundle.js`) instead of WhatsApp Web in Flock's browser. Needs the Flock release with local-connector egress, `MCP_DATA_DIR` and `{packageDir}`.
+Rebuilt on WhatsApp's own linked-device protocol (Baileys 7.0.0-rc14, bundled in `server/lib/baileys.bundle.js`) instead of WhatsApp Web in Flock's browser. Needs Flock 0.25.0-beta.8 or newer (local-connector egress, `MCP_DATA_DIR`, `{packageDir}`, `FLOCK_TIMEZONE` and connector call hooks).
 
 - With Flock's egress, refuses to connect on a Bun older than 1.3 (its WebSocket ignores the proxy and would connect direct). Cloud Flocks run Bun 1.3.13; Mac Flocks have no egress and connect direct on any Bun.
 - A local MCP server (`server/server.ts`, outside `scripts/`, which Flock rewrites when an MCP connector connects) Flock starts per linked WhatsApp; the connection is the connector account (one tap, no form). Tools: `link`, `link-status`, `list-chats`, `read-chat`, `search`, `send-message`, `unlink`, with the names and fields Flock's WhatsApp gate checks.

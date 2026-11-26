@@ -12,7 +12,7 @@
     "chat",
     "social"
   ],
-  "minFlockVersion": "0.25.0-beta.99",
+  "minFlockVersion": "0.25.0-beta.8",
   "tier": "installable",
   "requires": [
     {
