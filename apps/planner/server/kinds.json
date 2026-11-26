@@ -8157,42 +8157,6 @@
           "sub": "Dal"
         },
         {
-          "name": "Urad dal",
-          "aka": [
-            "dhuli urad dal"
-          ],
-          "contains": [
-            "onion_garlic",
-            "dairy",
-            "root_veg"
-          ],
-          "contains_main": [],
-          "ingredients": [
-            {
-              "name": "urad dal",
-              "main": true
-            },
-            {
-              "name": "onion",
-              "main": false
-            },
-            {
-              "name": "garlic",
-              "main": false
-            },
-            {
-              "name": "ginger",
-              "main": false
-            },
-            {
-              "name": "ghee",
-              "main": false
-            }
-          ],
-          "suggest": true,
-          "sub": "Dal"
-        },
-        {
           "name": "Mixed dal",
           "aka": [
             "panchratna dal"

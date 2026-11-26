@@ -313,7 +313,6 @@ Moong dal: moong dal | onion, garlic, ghee
 Masoor dal: masoor dal | onion, garlic, tomato
 Toor dal: toor dal | tomato, onion, garlic, ghee
 Chana dal: chana dal | onion, garlic, ghee
-Urad dal: urad dal | onion, garlic, ginger, ghee
 Mixed dal: toor dal, moong dal, masoor dal, chana dal | onion, garlic, ghee
 Panchmel dal: toor dal, moong dal, chana dal, urad dal, masoor dal | ghee, onion, garlic
 Dal tadka: toor dal | ghee, onion, garlic, tomato

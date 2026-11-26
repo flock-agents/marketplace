@@ -307,7 +307,6 @@ K("D","Dal","daal; pappu; paruppu; amti; varan; dali; dalma; tovve; bele; paripp
  "Masoor dal | red lentil dal | og",
  "Toor dal | arhar dal; tuvar dal | og",
  "Chana dal | chane ki dal | og",
- "Urad dal | dhuli urad dal | og",
  "Mixed dal | panchratna dal | og",
  "Panchmel dal | | d og | rajasthan",
  "Dal tadka | yellow dal tadka | d og",
