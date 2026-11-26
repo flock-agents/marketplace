@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-11-26T06:25:11.414Z",
+  "generatedAt": "2026-11-26T10:05:00.000Z",
   "sourceVersion": "1.1.0",
   "sourceTag": "whatsapp-v1.1.0",
   "files": {
@@ -14,7 +14,7 @@
     "scripts/send-message.ts": "6d2daaca10749f53796bf59249fb2c8858ff6bcc1b8631755f58cec60203a701",
     "scripts/_whatsapp.ts": "31617f9babe2c514aabbdac8eff25fa48629837d173faefded8f86c3e592f2b6",
     "flock.skill.json": "017e6115f219c9032f10f4a1bedac772b22520c61d21c037b534844f8def6e48",
-    "instructions.md": "ee93a8867e268ebd9314b62a6b0fab46c1a6a3ff247ceaccc1493625240fea9c",
+    "instructions.md": "76758cb6f17f945267e9fcc2d07a60f6bc6cba47c0627894e9d0ba56c88169ec",
     "scripts/_documents.ts": "b6a906a0bda093b94db42fb093783dfcbac165f77ff7ddad2357ef09a284922a"
   }
 }

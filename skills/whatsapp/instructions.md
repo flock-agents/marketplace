@@ -97,7 +97,7 @@ WhatsApp links Flock's browser as one of the person's devices. You do it with yo
      "type": "info",
      "icon": "🔗",
      "title": "Your WhatsApp link code: K7QD-2M9X",
-     "body": "**Easiest:** WhatsApp will send your phone a notification, *Enter code to link new device*. Tap it, tap **Confirm**, unlock with your fingerprint, face or PIN, then type the code.\n\n**Or from the menu:**\n- Android: ⋮ (top right) > Linked devices > Link a device > Link with phone number instead\n- iPhone: Settings > Linked devices > Link device > Link with phone number instead\n\nUnlock, then type the code. If it doesn't work, just ask me for a new one.\n\nOn a computer and rather scan a QR code? Just say so."
+     "body": "On your phone:\n- Android: ⋮ (top right) > Linked devices > Link a device > Link with phone number instead\n- iPhone: Settings > Linked devices > Link device > Link with phone number instead\n\nUnlock, then type the code. If it doesn't work, just ask me for a new one.\n\nOn a computer and rather scan a QR code? Just say so."
    }
    ```
 

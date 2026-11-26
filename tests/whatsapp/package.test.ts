@@ -123,7 +123,8 @@ describe("what the person reads", () => {
   it("the code card is valid, plain and complete", () => {
     const card = JSON.parse(sendCard);
     expect(card).toMatchObject({ type: "info", title: expect.stringContaining("code") });
-    for (const words of ["Enter code to link new device", "Confirm", "Android", "iPhone", "Linked devices", "Link with phone number instead", "ask me for a new one", "QR code? Just say so"]) expect(card.body).toContain(words);
+    expect(card.body).not.toContain("notification");
+    for (const words of ["Android", "iPhone", "Linked devices", "Link with phone number instead", "ask me for a new one", "QR code? Just say so"]) expect(card.body).toContain(words);
     expect(card.body).not.toMatch(/minute|expires? in/i);
   });
 
