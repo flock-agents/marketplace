@@ -1,8 +1,8 @@
 {
-  "name": "Family Butler",
+  "name": "Butler",
   "slug": "family-butler",
   "description": "A household assistant that manages groceries, meals, and family routines through Telegram",
-  "version": "1.9.0",
+  "version": "1.10.0",
   "author": "flock",
   "icon": "icon.svg",
   "bird": "bird:penguin;color=night;head=tophat;face=monocle",
@@ -12,7 +12,7 @@
   "sortOrder": 0,
 
   "agent": {
-    "defaultName": "Family Butler",
+    "defaultName": "Butler",
     "model": "claude-sonnet-4-6",
     "role": "main",
     "tone": "warm, helpful, concise",

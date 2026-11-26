@@ -106,7 +106,7 @@
     {
       "slug": "family-butler",
       "type": "template",
-      "name": "Family Butler",
+      "name": "Butler",
       "description": "A household assistant that manages groceries, meals, and family routines through Telegram",
       "author": "flock",
       "category": "family",
@@ -119,8 +119,8 @@
       "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "templates/family-butler",
-      "latestVersion": "1.9.0",
-      "latestTag": "family-butler-v1.9.0",
+      "latestVersion": "1.10.0",
+      "latestTag": "family-butler-v1.10.0",
       "minFlockVersion": "0.25.0-beta.1",
       "onboardingCard": {
         "id": "household",
@@ -128,7 +128,7 @@
         "description": "Groceries, meals, family routines",
         "emoji": "🏠",
         "order": 40,
-        "agentName": "Family Butler",
+        "agentName": "Butler",
         "services": [
           "zepto",
           "swiggy-instamart",
@@ -138,7 +138,7 @@
         ]
       },
       "publishedAt": "2026-08-11T17:00:00Z",
-      "updatedAt": "2026-11-22T00:00:00Z"
+      "updatedAt": "2026-11-26T00:00:00Z"
     },
     {
       "slug": "gmail",
