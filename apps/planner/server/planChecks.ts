@@ -110,7 +110,7 @@ export function forbidden(r: Rule): string[] {
 /** Does a hard rule bind at a slot-day: an "only" rule kept to days or meals ("chicken only at Sunday lunch") binds everywhere
  *  outside them, in every kind of meal (a tiffin, someone's own meal), and never inside; every other rule where its days and
  *  meals hold. */
-export function ruleBinds(r: Rule, date: string, slot: Slot | undefined, slotName: string, slots?: Slot[]): boolean {
+export function ruleBinds(r: Rule, date: string, slot: Slot | undefined, slotName: string, slots: Slot[]): boolean {
   if (r.what === "only") return !!(r.days?.length || r.slots?.length) && !ruleHolds(r, date, slot, slotName, slots);
   return ruleHolds(r, date, slot, slotName, slots);
 }
@@ -166,7 +166,7 @@ export type Week = { days: PlanDay[]; slots: Map<string, SlotFacts>; rules: Rule
   ownItems?: Set<string> };
 
 const slotKey = (s: string) => s.toLowerCase();
-const weekSlots = (w: Week): Slot[] => [...w.slots.values()].map((sf) => sf.slot);
+export const weekSlots = (w: Week): Slot[] => [...w.slots.values()].map((sf) => sf.slot);
 export const isStapleAt = (w: Week, slot: string, dish: string): boolean => !!w.slots.get(slotKey(slot))?.staples.some((x) => dishKey(x) === dishKey(dish));
 const libAt = (w: Week, slot: string, dish: string): LibraryDish | undefined => w.library.find((d) => same(d.slot, slot) && d.key === dishKey(dish));
 /** Where a dish sits in the catalog: what the fill placed it as, else its library row's kind, sub-kind and catalog item (at the

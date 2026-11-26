@@ -69,7 +69,4 @@ describe("a meal's rules hold at the box that replaces it", () => {
     expect(ruleHolds(rule, "2026-11-25", slots[3], slots[3].name, slots)).toBe(true);
     expect(ruleHolds(rule, "2026-11-25", slots[4], slots[4].name, slots)).toBe(false);
   });
-  it("without the slots list it does not", () => {
-    expect(ruleHolds(rule, "2026-11-25", slots[3], slots[3].name)).toBe(false);
-  });
 });

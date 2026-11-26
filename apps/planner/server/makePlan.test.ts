@@ -371,6 +371,17 @@ describe("make_plan: an add-on and a box", () => {
     expect(k.week().filter((d) => d.slot === "Ravi's fish")).toHaveLength(2);
   });
 
+  it("a hard avoid kept to Breakfast takes its tag out of dishes in the box that replaces Breakfast", async () => {
+    const k = await home({ slots: [...MAIN, { name: "Kabir's breakfast box", kind: "custom", order: 15, usual_people: ["Kabir"], days: ["Mon", "Tue", "Wed", "Thu", "Fri"], templates: [T({ items: ["Sweet bun"] })] }],
+      library: [{ name: "Sweet bun", slot: "Kabir's breakfast box", kind: "Bread", frequency: "daily" }],
+      rules: [{ hard: true, what: "avoid", who: "Kabir", items: ["sugar"], slots: ["Breakfast"], quote: "no sugar for Kabir at breakfast" }] });
+    const f = fakeModel({ day: (u) => ({ dishes: u.dishes.map((d: any) => ({ slot: d.slot, name: d.name, ingredients: [{ item: "flour", amount: 100, unit: "g", tags: [] },
+      { item: "sugar", amount: 10, unit: "g", tags: ["sugar"] }] })) }) });
+    await k.plan(f.model);
+    const bun = k.at(MON, "Kabir's breakfast box")?.dishes.find((x) => x.dish === "Sweet bun")!;
+    expect(bun.ingredients.map((i) => i.item)).toEqual(["flour"]);
+  });
+
   it("a meal added after setup has its templates derived from its dishes once, at plan time, and saved (controller, Task 10)", async () => {
     const k = await home();
     expect((await k.op("set_slot", { name: "Kabir's tiffin", kind: "custom", usual_people: ["Kabir"], days: ["Mon", "Tue", "Wed", "Thu", "Fri"], order: 20 })).ok).toBe(true);

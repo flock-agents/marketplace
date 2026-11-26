@@ -204,10 +204,10 @@ export type PlanDay = { date: string; slot: string; people: string[]; guests: Gu
   skip: Skip | null; edited: boolean; fixed: boolean; why: string[]; fasting: string[]; dishes: string[]; note: string | null };
 
 /** Does a rule hold on this slot-day: its days, and its slots (an add-on slot is held by its main slot's rules too; so is a box
- *  that replaces the meal, when the week's `slots` are given: a meal's rules hold at the box eaten in its place, §5.4). */
-export function ruleHolds(r: Pick<Rule, "days" | "slots">, date: string, slot: Slot | undefined, slotName: string, slots?: Slot[]): boolean {
+ *  that replaces the meal, the week's `slots`: a meal's rules hold at the box eaten in its place, §5.4). */
+export function ruleHolds(r: Pick<Rule, "days" | "slots">, date: string, slot: Slot | undefined, slotName: string, slots: Slot[]): boolean {
   if (r.days?.length && !r.days.includes(weekdayOf(date))) return false;
-  const meal = slot && slots ? replacedMeal(slot, slots) : null;
+  const meal = slot ? replacedMeal(slot, slots) : null;
   if (r.slots?.length && !r.slots.some((s) => same(s, slotName) || (!!slot?.addon_of && same(s, slot.addon_of)) || (!!meal && same(s, meal.name)))) return false;
   return true;
 }

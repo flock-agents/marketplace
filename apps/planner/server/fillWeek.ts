@@ -27,7 +27,7 @@ import { INSTEAD_STEP, TEMPLATE_DAYS } from "./db/constants";
 import { addDays, weekdayOf, type Weekday } from "./dates";
 import { dishKey } from "./dishText";
 import { canonTag, factsOf, frequencyRange, guestForbids, guestsCan, isDropped, isStapleAt, leaveOutNotes, mainFeeds, notFor, ownAddon, placeOfDish,
-  readFor, ruleUnknowns, slotFacts, swapsAt, withParents, OWN_SHARE, type DishFacts, type Unknown, type Week } from "./planChecks";
+  readFor, ruleUnknowns, slotFacts, swapsAt, weekSlots, withParents, OWN_SHARE, type DishFacts, type Unknown, type Week } from "./planChecks";
 import type { DishPlace } from "./targets";
 import { ruleHolds, slotDayKey, type PlanDay } from "./planDays";
 import type { HistoryRow, LibraryDish, Rule, Slot } from "./slotStore";
@@ -191,6 +191,7 @@ export function fillWeek(input: FillInput): FillResult {
   const w: Week = { days, slots: new Map(), rules, library, facts: new Map(input.facts ?? []), done: new Set(), newDishes: new Map(), places: res.places,
     ...(input.guestTags ? { guestTags: input.guestTags } : {}) };
   for (const s of shaped) w.slots.set(s.name.toLowerCase(), slotFacts(s, library, input.history.get(s.name.toLowerCase()) ?? []));
+  const weekSlotList = weekSlots(w);
 
   /** What a dish contains, made ready before it is checked: a library dish's own read, and its catalog item's (by exact name:
    *  its row's catalog_item, else the dish's own name) for what that read left out. */
@@ -897,7 +898,7 @@ export function fillWeek(input: FillInput): FillResult {
         if (!feed(s, d, plate, [who], t.parts.length, [], [], null)) res.unmet.push(`${label(d)}: ${who} has nothing to eat there`);
       }
       // A require kept: one dish with its item for its person.
-      for (const r of rules.filter((x) => x.hard && x.what === "require" && x.items?.length && x.who && atTable.some((p) => same(p, x.who!)) && ruleHolds(x, d.date, s, s.name, [...w.slots.values()].map((sf) => sf.slot)))) {
+      for (const r of rules.filter((x) => x.hard && x.what === "require" && x.items?.length && x.who && atTable.some((p) => same(p, x.who!)) && ruleHolds(x, d.date, s, s.name, weekSlotList))) {
         const who = atTable.find((p) => same(p, r.who!))!;
         const has = (name: string) => { prep(name); return r.items!.some((i) => factsOf(w, s.name, name).tags.has(canonTag(i))); };
         if (plate.some((x) => has(x.name) && !excluded(d, [who], x.name).length)) continue;

@@ -30,7 +30,7 @@ import { commit, deleteSlotDays, listLibrary, listRules, listSlotDays, listSlots
   type Rule, type Slot } from "./slotStore";
 import { buildDays, replacedMeal, slotDayKey, lunchSaid, platformPeers, readEvents, readHousehold, withLunchSaid, type PlanDay, type Peers } from "./planDays";
 import { canonTag, allergyNotes, forbidden, isDropped, mostlyOnion, notFor, plannable, readFor, ruleTags, slotFacts, softSwapNotes, swapNotes,
-  ruleBinds, vouched, withParents, type Week } from "./planChecks";
+  ruleBinds, vouched, weekSlots, withParents, type Week } from "./planChecks";
 import { CATALOG_READ, catalogNameOf, fillWeek, type FillResult, type Visit } from "./fillWeek";
 import { catalogItem, checkMealShape, isLinkedPart } from "./kinds";
 import { isAllergyRule } from "./allergy";
@@ -393,7 +393,8 @@ async function planWeek(deps: MakePlanDeps & { log: (line: string) => void }, in
   // 5. Each day's ingredients, one fast call a day (all days at once), once more for what it left out.
   const got = new Map<string, (Ingredient & { tags: string[] })[]>();   // date|slot|dish key
   const noIngredients: string[] = [];
-  const hardAt = (d: PlanDay, p: string) => rules.filter((r) => r.hard && r.what !== "swap" && (!r.who || same(r.who, p)) && ruleBinds(r, d.date, w.slots.get(d.slot.toLowerCase())?.slot, d.slot));
+  const allSlots = weekSlots(w);
+  const hardAt = (d: PlanDay, p: string) => rules.filter((r) => r.hard && r.what !== "swap" && (!r.who || same(r.who, p)) && ruleBinds(r, d.date, w.slots.get(d.slot.toLowerCase())?.slot, d.slot, allSlots));
   /** The tags a rule takes out of a dish's ingredients: onion and garlic stay where a portion is kept aside (contract rule 7). */
   const avoided = (r: Rule, dish: string) => forbidden(r).filter((t) => t !== "onion_garlic" || isAllergyRule(r) || mostlyOnion(dish));
   const avoidTags = (d: PlanDay) => uniq(d.people.flatMap((p) => hardAt(d, p).flatMap(forbidden)));
