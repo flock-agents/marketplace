@@ -10,6 +10,21 @@ describe("rule targets", () => {
     expect(targetsOf({ what: "avoid", items: ["rice", "rice"], targets: null })).toEqual(resolveTargets("rice"));
   });
 
+  // H7 fix round 1 (controller ruling): a word naming a family of dishes ("uthappam": the uttapams) is one item's other name in
+  // the catalog. An exclusion of it holds for every dish of the family; a swap or a require on it gives the one item.
+  it("no uthappam: every uttapam, never a dosa; a swap or require to uthappam gives Plain uttapam", () => {
+    const items = (ts: ReturnType<typeof resolveTargets>) => ts.filter((t) => t.type === "item").map((t) => (t as { item: string }).item).sort();
+    const uttapams = ["Mixed vegetable uttapam", "Onion uttapam", "Plain uttapam", "Podi uttapam", "Rava uttapam", "Tomato uttapam"];
+    expect(items(targetsOf({ what: "avoid", items: ["uthappam"], targets: null }))).toEqual(uttapams);
+    expect(items(targetsOf({ what: "avoid", items: ["uthappam"], targets: null }))).not.toContain("Plain dosa");
+    expect(items(targetsOf({ what: "avoid", items: ["adai"], targets: null }))).toEqual(["Adai", "Murungai keerai adai", "Vegetable adai"]);
+    expect(items(targetsOf({ what: "avoid", items: ["payasam"], targets: null }))).toEqual(expect.arrayContaining(["Rice kheer", "Semiya payasam", "Parippu payasam", "Sabudana kheer"]));
+    // A word naming its one dish stays that dish.
+    expect(targetsOf({ what: "avoid", items: ["ghee rice"], targets: null })).toEqual([{ type: "item", item: "Ghee rice", kind: "Pulao" }]);
+    expect(targetsOf({ what: "require", items: ["uthappam"], targets: null })).toEqual([{ type: "item", item: "Plain uttapam", kind: "Dosa" }]);
+    expect(resolveGives("uthappam")).toEqual({ type: "item", item: "Plain uttapam", kind: "Dosa" });
+  });
+
   it("tags are ingredients, dish words land on the catalog", () => {
     expect(resolveTarget("egg")).toEqual({ type: "ingredient", tag: "egg" });
     expect(resolveTarget("eggs")).toEqual({ type: "ingredient", tag: "egg" });

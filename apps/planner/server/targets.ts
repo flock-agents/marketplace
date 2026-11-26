@@ -51,10 +51,30 @@ export function resolveTarget(word: string): RuleTarget {
   return { type: "ingredient", tag: canon(word) };
 }
 
-/** A rule word to all its targets: resolveTarget's, plus, for a kind word the catalog's ingredient lists also name ("rice"), the
- *  ingredient tag, so a dish saved as another kind that lists it (Curd rice, kind Curd) is hit through its facts. */
+/** The dishes a family word names (H7, controller ruling): a word that is one item's other name and also a word of another item
+ *  of its kind ("uthappam": Plain uttapam's, and Onion uttapam's "vengaya uthappam") names that family: every item of the kind
+ *  whose names hold the word or one of that item's own names the family shares ("uttapam"), with the item itself. Null for a
+ *  word naming one dish. */
+function familyOf(word: string, t: Extract<RuleTarget, { type: "item" }>): RuleTarget[] | null {
+  const k = t.kind ? CATALOG.kinds.find((x) => norm(x.name) === norm(t.kind!)) : null;
+  const own = k?.items.find((it) => norm(it.name) === norm(t.item));
+  if (!k || !own) return null;
+  const ws = (s: string) => ` ${norm(s).split(" ").map((w) => (w.length > 3 && w.endsWith("s") ? w.slice(0, -1) : w)).join(" ")} `;
+  const holds = (it: (typeof k.items)[number], w: string) => [it.name, ...(it.aka ?? [])].some((n) => ws(n).includes(ws(w)));
+  const others = k.items.filter((it) => it !== own && holds(it, word));
+  if (!others.length) return null;
+  // The item's own names that its family shares, so every spelling counts ("uttapam" beside "uthappam"); never a name the family
+  // does not share ("dosai", Plain dosa's, beside "dose").
+  const names = [word, ...[own.name, ...(own.aka ?? [])].filter((n) => others.some((it) => holds(it, n)))];
+  return k.items.filter((it) => it === own || names.some((w) => holds(it, w))).map((it) => ({ type: "item", item: it.name, kind: k.name }));
+}
+
+/** A rule word to all its targets, for an exclusion (doublesFor): resolveTarget's; for a word naming a family of dishes, every dish
+ *  of it (familyOf); for a kind word the catalog's ingredient lists also name ("rice"), the ingredient tag too, so a dish saved as
+ *  another kind that lists it (Curd rice, kind Curd) is hit through its facts. */
 export function resolveTargets(word: string): RuleTarget[] {
   const one = resolveTarget(word);
+  if (one.type === "item") return familyOf(word, one) ?? [one];
   if (one.type !== "kind") return [one];
   const tag = ingredientOf(word, true);
   return tag ? [one, { type: "ingredient", tag }] : [one];
