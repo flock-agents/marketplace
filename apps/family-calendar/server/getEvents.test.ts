@@ -2,6 +2,7 @@
 // a trip once with its own days, cancelled events left out, deadlines with their kind, and a bad range refused with a clear word.
 import { describe, it, expect } from "bun:test";
 import { boot } from "./testkit";
+import { dueBetween } from "./routines";
 
 // Monday 23 Nov 2026, 9 am.
 const NOW = new Date(2026, 10, 23, 9, 0);
@@ -72,5 +73,20 @@ describe("get_events", () => {
     // 62 days counting both ends is taken.
     expect((await k.op("get_events", { from: "2026-12-01", to: "2027-01-31" })).events).toEqual([]);
     expect(k.rows("events")).toEqual([]);
+  });
+});
+
+// Setup e2e, 27 Nov: a planner reading a new calendar got the sample family's "School run", "Dentist" and "Grandma's birthday"
+// and asked a family with a toddler about them. The sample rows are the page's example, never what others read.
+describe("the sample family is never read as the family's", () => {
+  it("get_events, the brief and the due reminders leave the sample rows out; a real event is read", async () => {
+    const k = await boot({ seed: true, now: () => NOW });
+    expect((k.rows("events") as any[]).length).toBeGreaterThan(5);
+    expect((await k.op("get_events", { from: "2026-11-23", to: "2026-12-06" })).events).toEqual([]);
+    expect(dueBetween(k.kit.db, "2026-11-23T00:00", "2026-11-30T00:00")).toEqual([]);
+    const brief = await k.op("brief", { kind: "morning" });
+    expect(JSON.stringify(brief)).not.toContain("School run");
+    await k.op("add_events", { events: [{ title: "Evaani's vaccination", date: "2026-11-25", start_time: "10:00" }] });
+    expect((await k.op("get_events", { from: "2026-11-23", to: "2026-12-06" })).events.map((e: any) => e.title)).toEqual(["Evaani's vaccination"]);
   });
 });

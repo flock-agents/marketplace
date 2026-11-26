@@ -15,6 +15,8 @@
 - Allergies follow each dish's ingredients: a dish with the allergen at its heart is kept from that person, one that can be
   made without it says "make without peanuts for Kabir", so everyone has something at every meal.
 - A first plan says once that its dishes are suggestions, instead of listing every new one.
+- After the first plan and your first thoughts on it, your Flock offers to connect your grocery apps one at a time, and
+  reads your past orders to know what you usually buy. Never before the first plan.
 - Every like, dislike and swap is remembered. A dish turned down twice gets one question: "Should I stop planning it?"
 - Needs a Flock that runs app setups from the app's own checklist.
 

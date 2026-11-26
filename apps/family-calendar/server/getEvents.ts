@@ -3,8 +3,9 @@
 // the range; an event over several days (a trip) is one entry with its own first and last day, when any of its days is in the
 // range; cancelled events are left out; deadlines come with kind "deadline". The days are the app's own (`occurrences`, as the
 // Week page, the brief and the schedule widget use), so a monthly-by-weekday event and a 29 February birthday read the same here.
+// The sample family's events are never in it (samples.ts).
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
-import { events } from "./db/schema";
+import { realEvents } from "./samples";
 import { addDays, isoDate, lastDay, occurrences, parseDate } from "../src/pages/dates";
 
 export const GET_EVENTS_FIELDS = ["from", "to"];
@@ -23,7 +24,7 @@ export function getEvents(db: BunSQLiteDatabase<any>, p: Record<string, unknown>
   if (from > to) return refuse(`from (${from}) is after to (${to})`);
   if (addDays(from, MAX_RANGE_DAYS - 1) < to) return refuse(`the range is more than ${MAX_RANGE_DAYS} days: ask for ${from} to ${addDays(from, MAX_RANGE_DAYS - 1)} at most, then the next part`);
   const out: CalendarEntry[] = [];
-  for (const e of db.select().from(events).all()) {
+  for (const e of realEvents(db)) {
     if (e.status === "cancelled") continue;
     const days = occurrences(e, from, to);
     if (!days.length) continue;

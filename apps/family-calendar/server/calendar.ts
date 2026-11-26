@@ -9,6 +9,7 @@ import type { Database } from "bun:sqlite";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import { and, eq } from "drizzle-orm";
 import { events, event_sources, members, members as membersTable, todos } from "./db/schema";
+import { realEvents } from "./samples";
 import { COLOURS, KINDS } from "./db/constants";
 import { addDays, clock12, isoDate, lastDay, nextOccurrence, occurrences, pad, parseClock, parseDate, repeats, shortDate, toMin, weekday } from "../src/pages/dates";
 import { defaultShowFrom, slug } from "./db/reminder-events";
@@ -623,7 +624,7 @@ export function brief(cal: Cal, p: Record<string, unknown>): Record<string, unkn
   const { db, sqlite } = cal.kit;
   const now = cal.now(), today = isoDate(now);
   const day = p.kind === "morning" ? today : addDays(today, 1);
-  const all = db.select().from(events).all();
+  const all = realEvents(db);
   const byId = new Map(all.map((e) => [e.id, e]));
   const openTodos = db.select().from(todos).where(eq(todos.status, "open")).all().filter((t) => byId.get(t.event_id)?.status === "active");
   const onDay = all.filter((e) => occurrences(e, day, day).length)

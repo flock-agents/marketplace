@@ -1,5 +1,13 @@
 # Changelog
 
+## 3.1.2
+
+Needs Flock 0.19.0 or later.
+
+- **The sample family stays on the page.** The example events the calendar opens with (a school run, a dentist visit, a
+  birthday) are no longer read by other apps or agents, nor sent as reminders or in the morning and evening brief. Meal
+  Planner no longer asks about events that are not yours. They stay on the page, marked as samples, until you clear them.
+
 ## 3.1.1
 
 Needs Flock 0.19.0 or later.
