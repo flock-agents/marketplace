@@ -55,13 +55,15 @@ Q: And breakfast? A8: usually idli or dosa, upma once, bread toast on busy days.
 Q: Which grocery app? A9: Blinkit. Milk comes from Country Delight every morning`;
 const NOT_THE_EXAMPLE = "That family is only an example: write what THIS family said, nothing from the example.";
 
+/** What a meal eaten in place of a main meal has of that meal (H3): all of it as made, one part of it, or nothing. */
+const HOME_MEALS = ["as_made", "a_part", "none"] as const;
 const HOME_SCHEMA = {
   type: "object", required: ["slots"],
   properties: {
     slots: { type: "array", items: { type: "object", required: ["name", "kind"], properties: {
       name: STR, kind: { type: "string", enum: ["main", "custom", "addon"] }, addon_of: STR, after: { type: "string", enum: [...SLOTS] },
       usual_people: STRS, days: DAYS, skip_days: { type: "array", items: { type: "object", required: ["day", "skip"], properties: { day: STR, skip: { type: "string", enum: [...SKIPS] } } } },
-      instead_of: { type: "string", enum: [...SLOTS] }, extras: { type: "boolean" }, quote: STR } } },
+      instead_of: { type: "string", enum: [...SLOTS] }, home_meal: { type: "string", enum: [...HOME_MEALS] }, home_part: STR, extras: { type: "boolean" }, quote: STR } } },
     cook: { anyOf: [{ type: "null" }, { type: "object", properties: {
       name: STR, days: DAYS, visits: { type: "array", items: { type: "object", required: ["meals"], properties: { at: STR, meals: STRS } } }, limits_words: STR, quote: STR } }] },
     family_cooks: { type: "array", items: { type: "object", required: ["person", "days"], properties: { person: STR, days: DAYS, quote: STR } } },
@@ -80,6 +82,7 @@ const HOME_PART = `Write this part: the meals (slots), the cook, who of the fami
   kind "addon": one person's own plate at a main meal: the family names a dish made for that person at that meal, in place of or beside the shared dishes ("father has two phulkas, no rice at night", "bajra roti for her at night", "her own ragi porridge", "his own soup", a child's different dinner): name "<person>'s <meal>" ("Lalitha's dinner"), addon_of the main meal, usual_people [that person]. It holds only the difference; the person still eats the main meal's shared dishes. Someone who has a dish the others have too ("Kavu has ragi dosa too", "same as us, less spicy") has no add-on.
   instead_of: the main meal such a meal is eaten in place of, when the person does not eat that meal at all, only their own, at its time or another ("she eats at six, on her own", "he doesn't eat our dinner", "she doesn't sit with us at night", "the baby has his own food every night"): that meal is theirs alone and the main meal is cooked for the others. Left out when they also eat the shared dishes.
   A box a child eats in place of a meal is kind "custom", instead_of that meal, its days the school days: a school tiffin or lunch box is instead_of Lunch, unless the family calls it a breakfast box (instead_of Breakfast); a box packed with the home meal's own dish is such a box too. A snack box the child has besides a lunch at home has no instead_of.
+  home_meal: on a custom meal with instead_of, always: what it has of the main meal it is in place of, from the family's words. "as_made": that meal as it is cooked at home, the whole plate ("the same as ours", "whatever is cooked that morning"). "a_part": one part of that meal with food of its own; home_part: the family's words for that part ("dal", "the curry"). "none": only food of its own, nothing of that meal.
   extras: true on an add-on that is food the person has beside the home meal, the home meal still theirs ("I take 4 eggs and some salad with my lunch": "<person>'s lunch box", addon_of Lunch, extras true, days the days they carry it). Left out otherwise.
   quote: the family's words that name a custom or add-on meal (one the family never named is no slot).
 - cook: the paid cook, or null. name: only the name the family gives her (never "cook" or another role word); left out when none is said. days. visits: each time they come, with the meals that visit makes; at: "HH:MM" 24-hour only when a clock time is said, left out for "morning" or "twice a day". limits_words: the cook's time or skill limits in the family's words. quote: the family's latest words about the cook's days or times.
@@ -90,7 +93,7 @@ const HOME_PART = `Write this part: the meals (slots), the cook, who of the fami
 - lunch_unclear: the people away on weekdays whose weekday lunch neither household.weekly nor the replies tell.
 Food rules and dishes are not this part: other readers write them.
 ${MISSING_LINE}`;
-const HOME_EXAMPLE = `gives slots [{ Breakfast, main }, { Lunch, main, skip_days [{ Sun, eaten_out }], quote "Sunday we go to my in-laws for lunch" }, { Dinner, main, skip_days [{ Sun, ordered_in }], quote "dinner we order from Zomato" }, { "Tara's tiffin", custom, instead_of Lunch, usual_people [Tara], days Mon..Fri, quote "Mon-Fri, sandwiches or poha" }, { "Evening snack", custom, after Lunch, quote "We all have a snack at 5" (said for everyone: no usual_people) }, { "Lalitha's dinner", addon, addon_of Dinner, usual_people [Lalitha], quote "Paati has just two phulkas at night" }, { "Lalitha's breakfast", addon, addon_of Breakfast, usual_people [Lalitha], quote "Paati has her own ragi porridge" }] (no add-on for Kavya: her ragi dosa is shared; none for Tara: same dinner), cook { name "Savita", days Mon..Fri, visits [{ at "08:30", meals [Breakfast, Lunch] }, { at "17:00", meals [Dinner] }], quote "Savita comes at 8:30 actually" }, family_cooks [{ person "Kavya", days [Sat], quote "Saturday Kavu cooks everything" }] (who cooks on Sunday was not said: left out), apps { main "Blinkit" }, subscriptions [{ milk, Country Delight, every morning }], lunch_unclear ["Rahul"] (at the office on weekdays, his lunch never said; Tara has her tiffin).
+const HOME_EXAMPLE = `gives slots [{ Breakfast, main }, { Lunch, main, skip_days [{ Sun, eaten_out }], quote "Sunday we go to my in-laws for lunch" }, { Dinner, main, skip_days [{ Sun, ordered_in }], quote "dinner we order from Zomato" }, { "Tara's tiffin", custom, instead_of Lunch, home_meal none, usual_people [Tara], days Mon..Fri, quote "Mon-Fri, sandwiches or poha" }, { "Evening snack", custom, after Lunch, quote "We all have a snack at 5" (said for everyone: no usual_people) }, { "Lalitha's dinner", addon, addon_of Dinner, usual_people [Lalitha], quote "Paati has just two phulkas at night" }, { "Lalitha's breakfast", addon, addon_of Breakfast, usual_people [Lalitha], quote "Paati has her own ragi porridge" }] (no add-on for Kavya: her ragi dosa is shared; none for Tara: same dinner), cook { name "Savita", days Mon..Fri, visits [{ at "08:30", meals [Breakfast, Lunch] }, { at "17:00", meals [Dinner] }], quote "Savita comes at 8:30 actually" }, family_cooks [{ person "Kavya", days [Sat], quote "Saturday Kavu cooks everything" }] (who cooks on Sunday was not said: left out), apps { main "Blinkit" }, subscriptions [{ milk, Country Delight, every morning }], lunch_unclear ["Rahul"] (at the office on weekdays, his lunch never said; Tara has her tiffin).
 And "Q: The children's lunch, or their school tiffin? A: Snack box Monday to Friday: sandwiches, pasta or chivda, and fruit. Lunch at home after school, same as ours." with "Q: Rahul's lunch? A: He takes roti sabzi from home" gives the slot { "Snack box", custom, after Breakfast, usual_people [Tara], days Mon..Fri, quote "Snack box Monday to Friday" } (the children's box: Tara is the child; no instead_of: lunch is at home) and weekday_lunch [{ person "Rahul", lunch carries, quote "He takes roti sabzi from home" }], no slot for Rahul: he carries the home lunch.`;
 
 const RULES_SCHEMA = {
@@ -134,7 +137,8 @@ const DISHES_PART = `Write this part: the family's own dishes, from their answer
 - A box that has a home meal as it is made is a link to that meal with kind_words "", never its dishes; a box dish named with a part of a home meal is the box's own dish and a link of that part: the part's words are never in its dish name.
 - A filling or stuffing said with a dish makes a dish of its own, named by the filling and the dish, one row for each filling at the meal it is said for: "kozhukattai stuffed with jaggery or with sesame" is Jaggery kozhukattai, Sesame kozhukattai.
 - A dish someone has in place of another (their own dish on the days another is made, or their own staple where the others have another) is their rule's (a swap), never a dish of the meal.
-- A meal the person has beside the home meal is their add-on's ("<person>'s lunch box": what they take with the home lunch), never the shared meal's.`;
+- A meal the person has beside the home meal is their add-on's ("<person>'s lunch box": what they take with the home lunch), never the shared meal's.
+${MISSING_LINE}`;
 const DISHES_EXAMPLE = `gives library [["Sandwich", "Tara's tiffin", "sandwiches or poha"], ["Poha", "Tara's tiffin", "sandwiches or poha"], ["Phulka", "Lalitha's dinner", "Paati has just two phulkas at night"], ["Rice", "Lunch", "Most days rice"], ["Rasam", "Lunch", "rasam or dal"], ["Dal", "Lunch", "rasam or dal"], ["Poriyal", "Lunch", "a poriyal"], ["Curd", "Lunch", "curd"], ["Pulao", "Lunch", "Pulao twice"], ["Puri", "Lunch", "puri on Sundays"], ["Lemon rice", "Lunch", "Lemon rice every Friday"], ["Salad", "Lunch", "Salad every day"], ["Idli", "Breakfast", "usually idli or dosa"], ["Dosa", "Breakfast", "usually idli or dosa"], ["Upma", "Breakfast", "upma once"], ["Bread toast", "Breakfast", "bread toast on busy days"], ["Ragi dosa", "Breakfast", "Kavu has ragi dosa too"] (the others have it too: shared), ["Ragi porridge", "Lalitha's breakfast", "Paati has her own ragi porridge"]], seed [["Lunch", "Rice, Rasam, Poriyal, Curd", "Most days rice, rasam or dal, a poriyal, curd"], ["Lunch", "Rice, Dal, Poriyal, Curd", "Most days rice, rasam or dal, a poriyal, curd"], ["Breakfast", "Idli", "usually idli or dosa"], ["Breakfast", "Dosa", "usually idli or dosa"], ["Breakfast", "Upma", "upma once"], ["Breakfast", "Bread toast", "bread toast on busy days"] (a breakfast list: one row per morning's dish, never one row of all), ["Tara's tiffin", "Sandwich", "sandwiches or poha"], ["Tara's tiffin", "Poha", "sandwiches or poha"], ["Lalitha's dinner", "Phulka", "Paati has just two phulkas at night"], ["Lalitha's breakfast", "Ragi porridge", "Paati has her own ragi porridge"]].
 And "Kavu and I carry chapati sabzi to office, Paati has rice, dal and curd at home" (one lunch, cooked once, for different people) gives library [["Chapati", "Lunch", "chapati sabzi"], ["Sabzi", "Lunch", "chapati sabzi"], ["Rice", "Lunch", "rice, dal and curd"], ["Dal", "Lunch", "rice, dal and curd"], ["Curd", "Lunch", "rice, dal and curd"]], seed [["Lunch", "Chapati, Sabzi, Rice, Dal, Curd", "Kavu and I carry chapati sabzi to office, Paati has rice, dal and curd at home"]]: one row, never one per person, because it is the same day's one lunch. This joins only one meal told per person, never dishes had on different days.
 And a bare list of the week's breakfasts or tiffins, "Q: The adults' breakfast? A: Upma, idli, pongal, dosa. Puri on Sunday." gives seed [["Breakfast", "Upma", "Upma, idli, pongal, dosa"], ["Breakfast", "Idli", "Upma, idli, pongal, dosa"], ["Breakfast", "Pongal", "Upma, idli, pongal, dosa"], ["Breakfast", "Dosa", "Upma, idli, pongal, dosa"], ["Breakfast", "Puri", "Puri on Sunday"]]: each a different morning, never one row "Upma, Idli, Pongal, Dosa".
@@ -258,7 +262,9 @@ export type ReadSlot = { name: string; kind: SlotKind; addon_of: string | null; 
    *  checks, a main meal's name (the slot is custom, at its place; the main meal is cooked for the others), else null. */
   instead_of?: string | null;
   /** An add-on of food the person has beside the home meal (§5.4: "4 boiled eggs and salad" with the carried lunch). */
-  extras?: boolean };
+  extras?: boolean;
+  /** A meal in place of a main meal (H3): what it has of that meal; `home_part` the family's words for the part ("dal"). */
+  home_meal?: (typeof HOME_MEALS)[number]; home_part?: string };
 /** A box or meal that has another meal's dish (§5.4): `words` the family's words for the part it takes ("sabzi"), "" the whole plate. */
 export type ReadLink = { slot: string; from: string; words: string; quote: string };
 /** One time the cook comes: its clock time when said, the meals it makes when said; never neither (spec §6.3, §9.3: "morning"
@@ -292,7 +298,9 @@ export function readOf(home: unknown, rules: unknown, dishes: unknown, often: un
       skip_days: arr(s.skip_days).filter(isObject).flatMap((x) => {
         const skip = str(x.skip) as Skip;
         return (SKIPS as readonly string[]).includes(skip) ? daysOf(x.day).map((day) => ({ day, skip })) : [];
-      }), quote: str(s.quote), ...(str(s.instead_of) ? { instead_of: str(s.instead_of) } : {}), ...(s.extras === true ? { extras: true } : {}) })),
+      }), quote: str(s.quote), ...(str(s.instead_of) ? { instead_of: str(s.instead_of) } : {}), ...(s.extras === true ? { extras: true } : {}),
+      ...((HOME_MEALS as readonly string[]).includes(str(s.home_meal)) ? { home_meal: str(s.home_meal) as ReadSlot["home_meal"] } : {}),
+      ...(str(s.home_part) ? { home_part: str(s.home_part) } : {}) })),
     cook: cook ? { name: str(cook.name) || null, days: daysOf(cook.days), limits_words: str(cook.limits_words) || null, quote: str(cook.quote),
       visits: arr(cook.visits).flatMap((v): Visit[] => {
         // Free text in the clock slot ("morning") is no time: the visit keeps its meals, never a made-up time.
@@ -772,6 +780,11 @@ export function checkRead(read: SetupRead, ctx: { household: Household; said: st
     if (links.some((x) => x.slot === slot && x.from === from && same(x.words, l.words))) continue;
     links.push({ ...l, slot, from });
   }
+  // A box's link from its own field (H3): the meal it is in place of, as made or one part of it, when the dishes read gave none.
+  for (const s of slots) if (s.instead_of && !links.some((l) => l.slot === s.name && l.from === s.instead_of)) {
+    if (s.home_meal === "as_made") links.push({ slot: s.name, from: s.instead_of, words: "", quote: s.quote });
+    else if (s.home_meal === "a_part" && s.home_part?.trim()) links.push({ slot: s.name, from: s.instead_of, words: s.home_part.trim(), quote: s.quote });
+  }
 
   return { read: { ...read, slots, rules: rules.map(typed), library, seed, cook, family_cooks, weekday_lunch, lunch_unclear, unplaced, links }, dropped, asks, noted, lint, slotDays };
 }
@@ -787,7 +800,9 @@ const BOX_MEALS = ["breakfast", "lunch", "dinner", "snack"];
  *  is the box word with the meal word before it ("breakfast box", "lunch box"), else the word alone ("tiffin"); its person the
  *  one the sentence names, else the child the question before it names, else the one child at home. A grown-up's box is no
  *  slot of its own (they carry the home lunch, or an extras add-on: (ii)).
- *  (ii) each extras add-on of Lunch with no days has, for every person on it, a household.weekly or a weekday_lunch entry. */
+ *  (ii) each extras add-on of Lunch with no days has, for every person on it, a household.weekly or a weekday_lunch entry.
+ *  (iii) each meal in place of a main meal says what it has of that meal (home_meal, H3; a part with its words). Left out, it is
+ *  re-read, never asked by itself: the box's dishes may still fill it (writeKinds asks when nothing does). */
 export function homeViolations(read: SetupRead, ctx: { household: Household; sentences: string[]; transcript?: string[] }): HomeViolation[] {
   const out: HomeViolation[] = [], people = ctx.household.people;
   const add = (v: HomeViolation) => { if (!out.some((x) => x.missing === v.missing)) out.push(v); };
@@ -824,7 +839,19 @@ export function homeViolations(read: SetupRead, ctx: { household: Household; sen
     const what = x.name.replace(/^.*?['’]s\s+/, "") || "lunch";
     add({ missing: `the days ${p} takes ${x.name} (weekday_lunch)`, ask: `Which days does ${p} take the ${what} from home?`, slot: x.name });
   }
+  for (const x of read.slots) if (x.kind === "custom" && x.instead_of && (!x.home_meal || (x.home_meal === "a_part" && !x.home_part?.trim())))
+    add({ missing: `home_meal of ${x.name}: the family's ${x.instead_of.toLowerCase()} as made, a part of it (home_part), or none` });
   return out;
+}
+
+/** The meals in place of a main meal (H3) that the read gives no link and no dish of their own: none, or only a hard swap's item
+ *  for its people (at the box or the meal it replaces). Structure only, by the rules' keys. */
+export function emptyBoxes(read: Pick<SetupRead, "slots" | "links" | "library" | "rules">): string[] {
+  const swaps = swapItems(read.rules as Rule[]);
+  return read.slots.filter((s) => s.kind === "custom" && s.instead_of && !read.links.some((l) => l.slot === s.name)).filter((s) => {
+    const keys = swaps.filter((w) => (!w.who || s.usual_people.includes(w.who)) && w.slots.some((x) => same(x, s.name) || same(x, s.instead_of!))).flatMap((w) => w.keys);
+    return read.library.filter((d) => d.slot === s.name).every((d) => keys.includes(dishKey(d.name)));
+  }).map((s) => s.name);
 }
 
 // ── Model calls ──
@@ -1886,12 +1913,12 @@ export function catalogContents(d: Pick<LibraryDish, "contains" | "contains_read
 
 /** Each hard swap with meals: the meals it is said at, its dish's keys (the item it gives; the family's word for it only when
  *  that word names one dish, never a kind word like "bread"), and the words it was said in (its quote and what it replaces). */
-export const swapItems = (rules: Pick<Rule, "what" | "hard" | "slots" | "to" | "gives" | "items" | "quote">[]): { slots: string[]; keys: string[]; quote: string; items: string[] }[] => rules
+export const swapItems = (rules: (Pick<Rule, "what" | "hard" | "slots" | "to" | "gives" | "items" | "quote"> & { who?: string | null })[]): { slots: string[]; keys: string[]; quote: string; items: string[]; who: string | null }[] => rules
   .filter((r) => r.what === "swap" && r.hard && r.slots?.length && (r.to || r.gives?.type === "item"))
   .map((r) => {
     const m = r.to ? matchDish(r.to) : null;
     const byWord = !!r.to && (!m || m.by === "item");
-    return { slots: r.slots!, quote: r.quote, items: r.items ?? [],
+    return { slots: r.slots!, quote: r.quote, items: r.items ?? [], who: r.who ?? null,
       keys: uniq([...(byWord ? [dishKey(r.to!)] : []), ...(r.gives?.type === "item" ? [dishKey(r.gives.item)] : [])]) };
   })
   .filter((w) => w.keys.length);
@@ -1993,8 +2020,21 @@ export function writeKinds(tx: Db, plan: KindsPlan, placed: Map<string, Place>, 
       if (r === undefined) { opts.log(`kinds: ${slot.name}: the link to ${l.from} ("${l.words}") names no kind of it`); return []; }
       return [{ ...(r ?? { kind: null, sub: null }), from: l.from, words: l.words }];
     });
-    const shape = dishes.length || links.length ? buildMeal(meal, dishes, seeds, links, { box: slot.kind === "custom" }) : { templates: [] as MealTemplate[], line: "", dropped: [] as string[], onParts: [] as string[] };
+    let shape = dishes.length || links.length ? buildMeal(meal, dishes, seeds, links, { box: slot.kind === "custom" }) : { templates: [] as MealTemplate[], line: "", dropped: [] as string[], onParts: [] as string[] };
     for (const d of shape.dropped) opts.log(`kinds: ${slot.name}: ${d}`);
+    // H3: a meal in place of a main meal ends with a plate that is not only a swap's item for its people, or it is asked about
+    // and planned empty until the family answers (OD7: no default link, no filler).
+    const replaced = slot.kind === "custom" ? replacedMeal(slot, allSlots) : null;
+    if (replaced) {
+      const keys = swapsHere.filter((w) => !w.who || slot.usual_people.includes(w.who)).flatMap((w) => w.keys);
+      const swapPart = (p: MealTemplate["parts"][number]) => ("items" in p && p.items.every((i) => keys.includes(dishKey(i)))) || (isKindPart(p) && !!p.dish && keys.includes(dishKey(p.dish)));
+      if (!shape.templates.some((t) => !t.parts.length || !t.parts.every(swapPart))) {
+        const a = boxAsk(slot.name, replaced.name);
+        opts.log(`kinds: ${slot.name}: no plate of its own; asked`);
+        if (!asks.includes(a)) asks.push(a);
+        shape = { templates: [], line: "", dropped: [], onParts: [] };
+      }
+    }
     if (!dishes.length && !links.length && slot.templates === null) continue;
     try {
       upsertSlot(tx, { name: slot.name, templates: shape.templates }, by, changes);
@@ -2021,6 +2061,9 @@ export function writeKinds(tx: Db, plan: KindsPlan, placed: Map<string, Place>, 
   changes.push(["house", h.id, "update", by]);
   return { meals, changed, cuisines, asks };
 }
+
+/** The read-back's question for a box in place of a meal with no plate of its own (H3, OD7). */
+export const boxAsk = (box: string, meal: string): string => `What goes in ${box}: the family's ${meal.toLowerCase()} as made, or something of its own?`;
 
 /** The read-back's question for a word the kinds read could not place (F4): one dish of theirs, or any of its kind. */
 export const kindsAsk = (word: string, slot: Pick<Slot, "name" | "kind">): string =>
@@ -2087,12 +2130,30 @@ export async function applySetup(deps: { db: Db; emit: Emit; model: ModelCall; p
       const next = { ...read, slots: h.slots, weekday_lunch: h.weekday_lunch.length ? h.weekday_lunch : read.weekday_lunch, cook: h.cook ?? read.cook };
       const nextChecked = checkRead(next, { household, said, sentences });
       const left = homeViolations(nextChecked.read, homeCtx);
-      if (left.length < gaps.length && left.every((v) => gaps.some((x) => x.missing === v.missing))) { read = next; checked = nextChecked; gaps = left; }
+      // Taken when it clears something and leaves out nothing more that would be asked (a home_meal it leaves out is no question).
+      const asked = (vs: HomeViolation[]) => vs.filter((v) => v.ask || v.slot);
+      if (left.length < gaps.length || asked(left).length < asked(gaps).length) if (asked(left).every((v) => gaps.some((x) => x.missing === v.missing))) {
+        read = next; checked = nextChecked; gaps = left;
+      }
     } else log(`home re-read: model ${r.code}: ${r.message.slice(0, 200)}`);
   }
   if (gaps.some((v) => v.slot)) {
     read = { ...read, slots: read.slots.filter((s) => !gaps.some((v) => v.slot && same(v.slot, s.name))) };
     checked = checkRead(read, { household, said, sentences });
+  }
+  // H3: a box in place of a meal with no link and nothing but a swap's item is re-read once from the dishes, naming the box; its
+  // rows for that box are taken. Still nothing: writeKinds asks (OD7: no default link).
+  const empty = emptyBoxes(checked.read);
+  if (empty.length && until - Date.now() >= RETRY_FLOOR_MS) {
+    log(`dishes: nothing read for ${empty.join(", ")}; asking once more`);
+    const r = await reread(SETUP_PARTS[2], empty.map((b) => `what goes in ${b}`));
+    if (r.ok) {
+      const d = readOf(null, null, r.json), names = checked.read.slots.map((x) => x.name);
+      const mine = (slot: string) => empty.includes(resolveSlot(slot, names) ?? "");
+      read = { ...read, library: [...read.library, ...d.library.filter((x) => mine(x.slot))], seed: [...read.seed, ...d.seed.filter((x) => mine(x.slot))],
+        links: [...read.links, ...d.links.filter((x) => mine(x.slot))] };
+      checked = checkRead(read, { household, said, sentences });
+    } else log(`dishes re-read: model ${r.code}: ${r.message.slice(0, 200)}`);
   }
   for (const v of gaps) if (v.ask && !checked.asks.includes(v.ask)) checked.asks.push(v.ask);
   noted.push(...checked.noted);

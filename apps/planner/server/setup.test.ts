@@ -1585,8 +1585,10 @@ describe("setup checks what a read left out (H1-H3)", () => {
   ];
   const mains = [{ name: "Breakfast", kind: "main" }, { name: "Lunch", kind: "main" }, { name: "Dinner", kind: "main" }];
   const sprouts = { name: "Rahul's lunch", kind: "addon", addon_of: "Lunch", usual_people: ["Rahul"], extras: true, quote: "a bowl of sprouts beside it" };
-  const bbox = { name: "Ira's breakfast box", kind: "custom", usual_people: ["Ira"], days: MON_FRI, instead_of: "Breakfast", quote: "Ira carries a breakfast box for school" };
-  const lbox = { name: "Ira's lunch box", kind: "custom", usual_people: ["Ira"], days: MON_FRI, instead_of: "Lunch", quote: "She carries a lunch box" };
+  const bbox = { name: "Ira's breakfast box", kind: "custom", usual_people: ["Ira"], days: MON_FRI, instead_of: "Breakfast", home_meal: "as_made",
+    quote: "Ira carries a breakfast box for school" };
+  const lbox = { name: "Ira's lunch box", kind: "custom", usual_people: ["Ira"], days: MON_FRI, instead_of: "Lunch", home_meal: "a_part", home_part: "sabzi",
+    quote: "She carries a lunch box" };
   const I_LUNCH = [{ person: "Rahul", lunch: "carries", quote: "I carry the home lunch" }];
   const noBoxes = { slots: [...mains, sprouts], weekday_lunch: I_LUNCH };
   const withBoxes = { slots: [...mains, sprouts, bbox, lbox], weekday_lunch: I_LUNCH };
@@ -1655,6 +1657,66 @@ describe("setup checks what a read left out (H1-H3)", () => {
     expect(r.said).toContain("Which days does Rahul take");
     expect((await k.owner("GET", "/api/family")).body.slots.some((s: any) => s.name === "Rahul's lunch")).toBe(false);
   });
+
+  // H3: a box says whether it carries the home meal, as a field (A8, A9; also the A5 base).
+  const boxOnly = (over: Record<string, unknown>) => checkedHome({ slots: [...mains, { ...bbox, ...over }] }, boxSentences);
+  it("checkRead: home_meal as_made makes a whole link", () => {
+    expect(boxOnly({ home_meal: "as_made" }).links).toEqual([{ slot: "Ira's breakfast box", from: "Breakfast", words: "", quote: bbox.quote }]);
+    // A link the dishes read gave for the box stands; none is added beside it.
+    const read = checkRead(readOf({ slots: [...mains, bbox] }, { rules: [] }, { library: [], links: [["Ira's breakfast box", "Breakfast", "", "ira carries a breakfast box"]] }),
+      { household: householdOf(I_HOUSEHOLD), said: boxSentences, sentences: boxSentences }).read;
+    expect(read.links).toEqual([{ slot: "Ira's breakfast box", from: "Breakfast", words: "", quote: "ira carries a breakfast box" }]);
+  });
+  it("checkRead: home_meal a_part makes a kind link", () => {
+    expect(boxOnly({ home_meal: "a_part", home_part: "sabzi" }).links).toEqual([{ slot: "Ira's breakfast box", from: "Breakfast", words: "sabzi", quote: bbox.quote }]);
+    expect(boxOnly({ home_meal: "none" }).links).toEqual([]);
+  });
+  it("homeViolations: a box in place of a meal with no home_meal is left out (re-read, never asked by itself)", () => {
+    const v = homeViolations(boxOnly({ home_meal: undefined }), { household: householdOf(I_HOUSEHOLD), sentences: ["ira carries a breakfast box for school"] });
+    expect(v).toEqual([{ missing: "home_meal of Ira's breakfast box: the family's breakfast as made, a part of it (home_part), or none" }]);
+    expect(homeViolations(boxOnly({ home_meal: "a_part" }), { household: householdOf(I_HOUSEHOLD), sentences: [] })).toHaveLength(1);
+    expect(homeViolations(boxOnly({ home_meal: "none" }), { household: householdOf(I_HOUSEHOLD), sentences: [] })).toEqual([]);
+  });
+  it("the home re-read is taken when it clears a box, though it leaves home_meal out", async () => {
+    const { f, slot } = await run({ home: (_req: ModelRequest, n: number) => (n === 1 ? noBoxes : { ...withBoxes, slots: [...mains, sprouts, { ...bbox, home_meal: undefined }, lbox] }) });
+    expect(f.of("home")).toHaveLength(2);
+    expect(slot("Ira's breakfast box")).toBeTruthy();
+  });
+
+  // The swap: Ira has cheese toast in place of pongal, at breakfast and so in her breakfast box. Named apart as well.
+  const swapQ = "Ira won't eat pongal, so cheese toast for her when there is pongal";
+  const swap = { hard: true, what: "swap", who: "Ira", items: ["pongal"], to: "cheese toast", slots: ["Breakfast", "Ira's breakfast box"], quote: swapQ };
+  const toastDishes = (box: unknown[][] = [["Cheese toast", "Ira's breakfast box", "cheese toast for her"]]) =>
+    ({ ...I_DISHES, library: [...I_DISHES.library, ["Pongal", "Breakfast", "Pongal some days"], ...box], links: I_DISHES.links.filter((l) => l[0] !== "Ira's breakfast box") });
+  const toastTranscript = [...I_TRANSCRIPT, "Q: Anything else?", `A: Pongal some days. ${swapQ}. Cheese toast is quick on busy days too.`];
+  const boxAsk = "What goes in Ira's breakfast box: the family's breakfast as made, or something of its own?";
+  it("writeKinds: a box whose only dish is a swap's item is asked about", async () => {
+    const { r, k, slot } = await run({ home: { ...withBoxes, slots: [...mains, sprouts, { ...bbox, home_meal: "none" }, lbox] }, rules: { rules: [swap] }, dishes: toastDishes() },
+      toastTranscript);
+    expect(r.asks).toContain(boxAsk);
+    expect(r.said).toContain(boxAsk);
+    expect(slot("Ira's breakfast box").templates ?? []).toEqual([]);
+    expect(k.rows("library").some((d) => d.name === "Cheese toast")).toBe(true);
+    // Kept on the box as a dish in its own right (its own how often), it is still only the swap's item for Ira: asked all the same.
+    const busy = "Cheese toast is quick on busy days too";
+    const kept = await run({ home: { ...withBoxes, slots: [...mains, sprouts, { ...bbox, home_meal: "none" }, lbox] }, rules: { rules: [swap] },
+      dishes: toastDishes([["Cheese toast", "Ira's breakfast box", busy]]), often: { often: [["Cheese toast", "Ira's breakfast box", busy, "on busy days", "sometimes", ""]] } }, toastTranscript);
+    expect(kept.r.asks).toContain(boxAsk);
+    expect(kept.slot("Ira's breakfast box").templates ?? []).toEqual([]);
+  });
+  it("a box with no link and only a swap's item is re-read once from the dishes, naming the box", async () => {
+    const box = (n: number) => toastDishes(n === 1 ? undefined : [["Cheese toast", "Ira's breakfast box", "cheese toast for her"], ["Sandwich", "Ira's breakfast box", "a sandwich"]]);
+    const { f, r, slot } = await run({ home: { ...withBoxes, slots: [...mains, sprouts, { ...bbox, home_meal: "none" }, lbox] }, rules: { rules: [swap] },
+      dishes: (_req: ModelRequest, n: number) => box(n) }, [...toastTranscript, "A: Or a sandwich."]);
+    expect(f.of("dishes")).toHaveLength(2);
+    expect(JSON.parse(f.of("dishes")[1].user).missing).toEqual(["what goes in Ira's breakfast box"]);
+    expect(f.of("dishes")[1].system).toContain("A list `missing` names what your last answer left out: write it.");
+    expect(JSON.stringify(slot("Ira's breakfast box").templates).toLowerCase()).toContain("sandwich");
+    expect(r.asks).not.toContain(boxAsk);
+    // A box with its link needs no re-read.
+    const { f: f2 } = await run();
+    expect(f2.of("dishes")).toHaveLength(1);
+  });
 });
 
 describe("apply_setup v2: the prompts", () => {
@@ -1705,6 +1767,13 @@ describe("apply_setup v2: the prompts", () => {
       expect(often.toLowerCase(), w).not.toContain(w);
       expect(dishes.toLowerCase(), w).not.toContain(w);
     }
+  });
+  it("read whether a box in place of a meal carries the home meal, as a field (H3)", () => {
+    const home = SETUP_PARTS.find((p) => p.id === "home")!;
+    expect(JSON.stringify(home.schema)).toContain('"home_meal":{"type":"string","enum":["as_made","a_part","none"]}');
+    expect(JSON.stringify(home.schema)).toContain('"home_part":{"type":"string"}');
+    expect(home.system).toContain("home_meal: on a custom meal with instead_of, always:");
+    expect(SETUP_PARTS.find((p) => p.id === "dishes")!.system).toContain("A list `missing` names what your last answer left out: write it.");
   });
   it("never name an eval household's people, cook or surname", () => {
     // A cook the family gives no name is written by the role word ("Cook", h18): that word is no name to keep out.
